@@ -3,8 +3,19 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func writeTestConfig(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+	return dir
+}
 
 func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	t.Setenv("PORT", "3010")
@@ -41,12 +52,20 @@ func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	t.Setenv("POSTGRESQL_PASSWORD", "z")
 	t.Setenv("POSTGRESQL_DATABASE", "db")
 
-	cfg, err := Load(".")
+	dir := writeTestConfig(t, `
+worker:
+  count: 2
+`)
+
+	cfg, err := Load(dir)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
 	if cfg.App.Port != 3010 || cfg.Database.Host != "x" || cfg.Database.Name != "db" || cfg.JWT.Secret != "b" {
 		t.Fatalf("legacy env binding failed: %+v", cfg)
+	}
+	if cfg.Worker.Count != 2 {
+		t.Fatalf("worker config should come from config.yaml only: %+v", cfg.Worker)
 	}
 	if cfg.External.OfoxAIBaseURL != "https://proxy.example.com/v1" {
 		t.Fatalf("ofox base url env binding failed: %+v", cfg.External)
@@ -67,15 +86,12 @@ func TestLoadReadsDeepSeekFromYAML(t *testing.T) {
 		}
 	})
 
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.yaml")
-	content := []byte(`
+	dir := writeTestConfig(t, `
 external:
   deepseek_api_key: "yaml-key"
+worker:
+  count: 1
 `)
-	if err := os.WriteFile(configPath, content, 0o600); err != nil {
-		t.Fatalf("write config.yaml: %v", err)
-	}
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -91,7 +107,12 @@ func TestLoadTrimsExternalSecrets(t *testing.T) {
 	t.Setenv("OFOXAI_API_KEY", "\tsk-ofox\n")
 	t.Setenv("DEEPSEEK_API_KEY", " deepseek-key ")
 
-	cfg, err := Load(".")
+	dir := writeTestConfig(t, `
+worker:
+  count: 1
+`)
+
+	cfg, err := Load(dir)
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
@@ -111,19 +132,16 @@ func TestLoadPrefersFileExternalKeysOverEnv(t *testing.T) {
 	t.Setenv("OFOXAI_API_KEY", "bad-ofox")
 	t.Setenv("DEEPSEEK_API_KEY", "bad-deepseek")
 
-	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.yaml")
-	content := []byte(`
+	dir := writeTestConfig(t, `
 app:
   env: "production"
 external:
   dashscope_api_key: "good-dashscope"
   ofoxai_api_key: "good-ofox"
   deepseek_api_key: "good-deepseek"
+worker:
+  count: 1
 `)
-	if err := os.WriteFile(configPath, content, 0o600); err != nil {
-		t.Fatalf("write config.yaml: %v", err)
-	}
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -137,5 +155,83 @@ external:
 	}
 	if cfg.External.DeepSeekAPIKey != "good-deepseek" {
 		t.Fatalf("expected file deepseek key, got %q", cfg.External.DeepSeekAPIKey)
+	}
+}
+
+func TestLoadRequiresWorkerCountInConfig(t *testing.T) {
+	dir := writeTestConfig(t, `
+app:
+  env: "development"
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected missing worker.count to fail")
+	}
+	if !strings.Contains(err.Error(), "worker.count") {
+		t.Fatalf("expected worker.count error, got %v", err)
+	}
+}
+
+func TestLoadAllowsWorkerCountZero(t *testing.T) {
+	dir := writeTestConfig(t, `
+worker:
+  count: 0
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Worker.Count != 0 {
+		t.Fatalf("expected worker count 0, got %+v", cfg.Worker)
+	}
+}
+
+func TestLoadTaskQueueDefaultsToMemory(t *testing.T) {
+	dir := writeTestConfig(t, `
+worker:
+  count: 1
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.TaskQueue.Driver != "memory" {
+		t.Fatalf("expected memory queue driver, got %+v", cfg.TaskQueue)
+	}
+	if cfg.TaskQueue.BufferSize != 1024 {
+		t.Fatalf("expected default queue buffer size, got %+v", cfg.TaskQueue)
+	}
+}
+
+func TestLoadTaskQueueReadsConfigFileOnly(t *testing.T) {
+	t.Setenv("TASK_QUEUE_DRIVER", "kafka")
+
+	dir := writeTestConfig(t, `
+worker:
+  count: 1
+task_queue:
+  driver: "memory"
+  buffer_size: 7
+  topic: "local-analysis"
+  brokers:
+    - "localhost:9092"
+  consumer_group: "local-workers"
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.TaskQueue.Driver != "memory" {
+		t.Fatalf("expected task queue driver from config.yaml, got %+v", cfg.TaskQueue)
+	}
+	if cfg.TaskQueue.BufferSize != 7 || cfg.TaskQueue.Topic != "local-analysis" || cfg.TaskQueue.ConsumerGroup != "local-workers" {
+		t.Fatalf("unexpected task queue config: %+v", cfg.TaskQueue)
+	}
+	if len(cfg.TaskQueue.Brokers) != 1 || cfg.TaskQueue.Brokers[0] != "localhost:9092" {
+		t.Fatalf("unexpected task queue brokers: %+v", cfg.TaskQueue)
 	}
 }

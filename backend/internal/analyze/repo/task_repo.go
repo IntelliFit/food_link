@@ -68,6 +68,46 @@ func (r *TaskRepo) ClaimNextPendingTask(ctx context.Context, taskTypes []string)
 	return claimed, err
 }
 
+func (r *TaskRepo) ClaimTaskByID(ctx context.Context, taskID string, taskTypes []string) (*domain.AnalysisTask, error) {
+	if taskID == "" || len(taskTypes) == 0 {
+		return nil, nil
+	}
+	var claimed *domain.AnalysisTask
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var task domain.AnalysisTask
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+			Where("id = ? AND status = ? AND task_type IN ?", taskID, "pending", taskTypes).
+			Limit(1).
+			First(&task).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		now := time.Now()
+		result := tx.Model(&domain.AnalysisTask{}).
+			Where("id = ? AND status = ?", task.ID, "pending").
+			Updates(map[string]any{
+				"status":        "processing",
+				"error_message": nil,
+				"updated_at":    now,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return nil
+		}
+		task.Status = "processing"
+		task.ErrorMessage = nil
+		task.UpdatedAt = &now
+		claimed = &task
+		return nil
+	})
+	return claimed, err
+}
+
 func (r *TaskRepo) GetTaskByID(ctx context.Context, taskID string) (*domain.AnalysisTask, error) {
 	var task domain.AnalysisTask
 	err := r.db.WithContext(ctx).Where("id = ?", taskID).First(&task).Error

@@ -46,6 +46,7 @@ import (
 	recipeservice "food_link/backend/internal/recipe/service"
 	"food_link/backend/internal/stub"
 	systemhandler "food_link/backend/internal/system/handler"
+	"food_link/backend/internal/taskqueue"
 	testbackendhandler "food_link/backend/internal/testbackend/handler"
 	testbackendrepo "food_link/backend/internal/testbackend/repo"
 	testbackendservice "food_link/backend/internal/testbackend/service"
@@ -55,6 +56,7 @@ import (
 	utilityhandler "food_link/backend/internal/utility/handler"
 	utilityrepo "food_link/backend/internal/utility/repo"
 	utilityservice "food_link/backend/internal/utility/service"
+	workerpkg "food_link/backend/internal/worker"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
 	"food_link/backend/pkg/logger"
@@ -73,6 +75,9 @@ type App struct {
 	db            *gorm.DB
 	log           *zap.Logger
 	shutdownTrace func(context.Context) error
+	workerCancel  context.CancelFunc
+	workerDone    chan struct{}
+	taskQueue     taskqueue.Queue
 }
 
 func New(cfg *config.Config) (*App, error) {
@@ -102,6 +107,10 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	storageClient := storage.New(cfg.Storage)
+	taskQueue, err := taskqueue.New(cfg.TaskQueue, log)
+	if err != nil {
+		return nil, err
+	}
 
 	jwtSvc := authservice.NewJWTService(cfg.JWT.Secret, cfg.JWT.AccessTokenTTLSeconds, cfg.JWT.RefreshTokenTTLSeconds)
 	userRepo := authrepo.NewUserRepo(db)
@@ -117,6 +126,7 @@ func New(cfg *config.Config) (*App, error) {
 	uploadSvc := userservice.NewUploadService(storageClient)
 	ocrSvc := userservice.NewOCRService(cfg, storageClient)
 	analysisTaskSvc := userservice.NewAnalysisTaskService(analysisTaskRepo, storageClient)
+	analysisTaskSvc.ConfigureTaskPublisher(taskQueue)
 
 	userHandler := userhandler.NewUserHandler(userSvc, bindPhoneSvc, uploadSvc, ocrSvc, analysisTaskSvc)
 
@@ -130,6 +140,7 @@ func New(cfg *config.Config) (*App, error) {
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
 	analyzeSvc.ConfigureStorage(storageClient)
 	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)
+	analyzeTaskSvc.ConfigureTaskPublisher(taskQueue)
 	adminKey := os.Getenv("ADMIN_API_KEY")
 	analyzeHandler := analyzehandler.NewAnalyzeHandler(analyzeSvc, analyzeTaskSvc, adminKey)
 
@@ -162,6 +173,7 @@ func New(cfg *config.Config) (*App, error) {
 	statsRepo := healthrepo.NewStatsRepo(db)
 	bodyMetricsSvc := healthservice.NewBodyMetricsService(bodyMetricsRepo)
 	exerciseSvc := healthservice.NewExerciseService(exerciseRepo, cfg)
+	exerciseSvc.ConfigureTaskPublisher(taskQueue)
 	exerciseSvc.ConfigureStorage(storageClient)
 	statsSvc := healthservice.NewStatsService(statsRepo, bodyMetricsSvc, cfg)
 	healthHandler := healthhandler.NewHealthHandler(bodyMetricsSvc, exerciseSvc, statsSvc)
@@ -178,6 +190,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Public food library module DI
 	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
 	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo, storageClient)
+	publicFoodSvc.ConfigureTaskPublisher(taskQueue)
 	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
 
 	// Recipe module DI
@@ -189,6 +202,7 @@ func New(cfg *config.Config) (*App, error) {
 	expiryRepo := expiryrepo.NewExpiryRepo(db)
 	expiryTaskRepo := expiryrepo.NewTaskRepo(db)
 	expiryRecognizer := expiryservice.NewRecognizer(cfg)
+	expiryNotifier := expiryservice.NewNotificationWorker(expiryRepo, cfg)
 	expirySvc := expiryservice.NewExpiryService(expiryRepo, expiryTaskRepo, expiryRecognizer)
 	expirySvc.ConfigureNotificationTemplate(cfg.WechatPay.ExpirySubscribeTemplateID)
 	expirySvc.ConfigureCreditGuard(membershipSvc)
@@ -217,7 +231,9 @@ func New(cfg *config.Config) (*App, error) {
 		db:            db,
 		log:           log,
 		shutdownTrace: traceShutdown,
+		taskQueue:     taskQueue,
 	}
+	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, taskQueue, storageClient)
 
 	engine.POST("/api/login", loginHandler.Login)
 	engine.GET("/api", system.Root)
@@ -411,7 +427,103 @@ func (a *App) Engine() *gin.Engine {
 	return a.engine
 }
 
+func (a *App) startEmbeddedWorker(
+	cfg *config.Config,
+	taskRepo *analyzerepo.TaskRepo,
+	precisionRepo *analyzerepo.PrecisionRepo,
+	publicFoodRepo *publicfoodrepo.PublicFoodRepo,
+	analyzeSvc *analyzeservice.AnalyzeService,
+	ocrSvc *userservice.OCRService,
+	healthDocRepo *userrepo.HealthDocumentRepo,
+	userRepo *authrepo.UserRepo,
+	expiryRecognizer *expiryservice.Recognizer,
+	expiryNotifier *expiryservice.NotificationWorker,
+	exerciseSvc *healthservice.ExerciseService,
+	taskQueue taskqueue.Queue,
+	storageClient *storage.Client,
+) {
+	workerCount := cfg.Worker.Count
+	if workerCount <= 0 {
+		a.log.Info("embedded worker disabled", zap.Int("worker_count", workerCount))
+		return
+	}
+
+	workerID := embeddedWorkerID(cfg)
+	pollInterval := time.Duration(cfg.Worker.PollIntervalSeconds * float64(time.Second))
+	if pollInterval <= 0 {
+		pollInterval = 2 * time.Second
+	}
+
+	runner := workerpkg.NewRunner(
+		taskRepo,
+		precisionRepo,
+		publicFoodRepo,
+		analyzeSvc,
+		ocrSvc,
+		healthDocRepo,
+		userRepo,
+		expiryRecognizer,
+		expiryNotifier,
+		exerciseSvc,
+		taskQueue,
+		a.log,
+		storageClient,
+	)
+
+	workerCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	a.workerCancel = cancel
+	a.workerDone = done
+
+	a.log.Info("embedded worker enabled",
+		zap.String("worker_id", workerID),
+		zap.Strings("task_types", cfg.Worker.TaskTypes),
+		zap.String("task_queue_driver", cfg.TaskQueue.Driver),
+		zap.Duration("poll_interval", pollInterval),
+		zap.Int("worker_count", workerCount),
+	)
+	go func() {
+		defer close(done)
+		err := runner.Run(workerCtx, workerpkg.Options{
+			WorkerID:     workerID,
+			TaskTypes:    cfg.Worker.TaskTypes,
+			PollInterval: pollInterval,
+			WorkerCount:  workerCount,
+		})
+		if err != nil && err != context.Canceled {
+			a.log.Error("embedded worker stopped with error", zap.Error(err))
+			return
+		}
+		a.log.Info("embedded worker stopped")
+	}()
+}
+
+func embeddedWorkerID(cfg *config.Config) string {
+	if cfg.Worker.ID != "" {
+		return cfg.Worker.ID
+	}
+	if host, err := os.Hostname(); err == nil && host != "" {
+		return host + "-embedded"
+	}
+	return "food-link-server-embedded-worker"
+}
+
 func (a *App) Close(ctx context.Context) error {
+	if a.workerCancel != nil {
+		a.workerCancel()
+	}
+	if a.workerDone != nil {
+		select {
+		case <-a.workerDone:
+		case <-ctx.Done():
+			a.log.Warn("embedded worker shutdown timed out", zap.Error(ctx.Err()))
+		}
+	}
+	if a.taskQueue != nil {
+		if err := a.taskQueue.Close(ctx); err != nil {
+			return err
+		}
+	}
 	if a.shutdownTrace != nil {
 		if err := a.shutdownTrace(ctx); err != nil {
 			return err

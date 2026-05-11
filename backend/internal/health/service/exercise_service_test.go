@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"food_link/backend/internal/health/domain"
+	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/config"
 
 	"github.com/stretchr/testify/assert"
@@ -20,6 +21,15 @@ type exerciseRoundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f exerciseRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+type recordingTaskPublisher struct {
+	messages []taskqueue.TaskMessage
+}
+
+func (p *recordingTaskPublisher) PublishTask(ctx context.Context, msg taskqueue.TaskMessage) error {
+	p.messages = append(p.messages, msg)
+	return nil
 }
 
 type mockExerciseRepo struct {
@@ -145,6 +155,8 @@ func TestExerciseService_CreateLog(t *testing.T) {
 		weight:  &domain.BodyWeightRecord{UserID: "u1", WeightKg: 70, RecordedOn: &weightDate},
 	}
 	svc := NewExerciseService(repo)
+	publisher := &recordingTaskPublisher{}
+	svc.ConfigureTaskPublisher(publisher)
 	ctx := context.Background()
 
 	result, err := svc.CreateLog(ctx, "u1", "跑步30分钟")
@@ -155,6 +167,9 @@ func TestExerciseService_CreateLog(t *testing.T) {
 	assert.Len(t, repo.tasks, 1)
 	assert.Equal(t, "exercise", repo.tasks[0].TaskType)
 	assert.NotEmpty(t, repo.tasks[0].Payload["profile_snapshot"])
+	require.Len(t, publisher.messages, 1)
+	assert.Equal(t, result["task_id"], publisher.messages[0].TaskID)
+	assert.Equal(t, "exercise", publisher.messages[0].TaskType)
 }
 
 func TestExerciseService_EstimateCalories(t *testing.T) {

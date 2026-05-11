@@ -17,7 +17,7 @@
 | 优先级 | 检查项 | 操作 | 通过标准 | 结果 |
 |---|---|---|---|---|
 | P0 | Server 启动 | `go run ./cmd/server` | 监听 `0.0.0.0:3010`，无 fatal/panic | TODO |
-| P0 | Worker 启动 | `go run ./cmd/worker` | 持续运行，无数据库连接错误 | TODO |
+| P0 | 内嵌 worker 启动 | `go run ./cmd/server` 且 `config.yaml` 中 `worker.count > 0` | server 启动后内嵌 worker 持续运行，无数据库连接错误 | TODO |
 | P0 | 前端 watch | `npm run dev:weapp` | `dist/` 正常更新，API 指向 `http://127.0.0.1:3010` | TODO |
 | P0 | 端口占用 | 检查 `3010` | 没有旧 `food-link.exe` 或旧 server 抢占端口 | TODO |
 | P0 | 测试账号 | 准备普通新用户、老用户、会员用户、低积分用户 | 至少 3 类账号可登录 | TODO |
@@ -203,7 +203,7 @@
 | P0 | 用户隔离 | 用 A 用户访问 B 用户记录/保质期/统计 | 拒绝或查不到 | TODO |
 | P0 | 支付幂等 | 重复支付回调 | 不重复发会员/积分 | TODO |
 | P0 | 后台保护 | 未登录访问 `/api/test-backend/*` | 被拒绝 | TODO |
-| P1 | 日志敏感信息 | 观察 server/worker 日志 | 不打印密码、私钥、完整 token | TODO |
+| P1 | 日志敏感信息 | 观察 server 日志与 trace event | 不打印密码、私钥、完整 token | TODO |
 
 ## 18. 异常与恢复
 

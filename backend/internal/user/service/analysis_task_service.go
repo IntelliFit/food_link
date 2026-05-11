@@ -2,16 +2,20 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"time"
 
+	"food_link/backend/internal/taskqueue"
 	"food_link/backend/internal/user/domain"
 	"food_link/backend/internal/user/repo"
 	"food_link/backend/pkg/storage"
 )
 
 type AnalysisTaskService struct {
-	tasks   *repo.AnalysisTaskRepo
-	storage *storage.Client
+	tasks     *repo.AnalysisTaskRepo
+	storage   *storage.Client
+	taskQueue taskqueue.Publisher
 }
 
 func NewAnalysisTaskService(tasks *repo.AnalysisTaskRepo, storageClient ...*storage.Client) *AnalysisTaskService {
@@ -20,6 +24,10 @@ func NewAnalysisTaskService(tasks *repo.AnalysisTaskRepo, storageClient ...*stor
 		client = storageClient[0]
 	}
 	return &AnalysisTaskService{tasks: tasks, storage: client}
+}
+
+func (s *AnalysisTaskService) ConfigureTaskPublisher(queue taskqueue.Publisher) {
+	s.taskQueue = queue
 }
 
 type CreateHealthReportTaskInput struct {
@@ -38,7 +46,22 @@ func (s *AnalysisTaskService) CreateHealthReportTask(ctx context.Context, userID
 	if err := s.tasks.Create(ctx, task); err != nil {
 		return "", err
 	}
+	if err := s.enqueueTask(ctx, task.ID, task.TaskType); err != nil {
+		return "", err
+	}
 	return task.ID, nil
+}
+
+func (s *AnalysisTaskService) enqueueTask(ctx context.Context, taskID, taskType string) error {
+	if s.taskQueue == nil || strings.TrimSpace(taskID) == "" || strings.TrimSpace(taskType) == "" {
+		return nil
+	}
+	publishCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := s.taskQueue.PublishTask(publishCtx, taskqueue.TaskMessage{TaskID: taskID, TaskType: taskType}); err != nil {
+		return fmt.Errorf("enqueue health report task: %w", err)
+	}
+	return nil
 }
 
 func (s *AnalysisTaskService) resolveHealthReportURL(value string) string {

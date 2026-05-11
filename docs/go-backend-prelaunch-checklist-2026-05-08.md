@@ -19,14 +19,14 @@
 |---|---|---|---|
 | P0 | 当前发布 commit 确认 | 生产镜像来源 commit 与预期分支/commit 完全一致 | TODO |
 | P0 | Server 能启动 | Go server 在生产同类环境启动成功，无 fatal/panic | TODO |
-| P0 | Worker 能启动 | `food-link-worker` 独立进程/Pod 启动成功并持续消费任务 | TODO |
+| P0 | Worker 能启动 | `worker.count > 0` 时 server 内嵌 worker 能随 server 启动；`task_queue.driver=memory` 下分析任务由同一 server 进程内 worker 消费 | TODO |
 | P0 | 数据库 schema 完整 | 所有 Go 代码依赖表/字段/索引在生产库存在 | TODO |
 | P0 | 核心小程序链路闭环 | 登录、分析、记录、会员、支付、统计、保质期主链路通过 smoke test | TODO |
 | P0 | 支付回调可用 | 微信支付创建订单、签名、回调验签解密、会员激活闭环通过 | TODO |
 | P0 | 回滚路径可执行 | 能在 10 分钟内切回上一稳定后端镜像或旧 Python 服务 | TODO |
 | P1 | 线上监控可观测 | 日志、错误率、任务堆积、支付失败、外部 API 错误可观察 | TODO |
 | P1 | 全量路由对账 | `miniapp-used` 路由无 501/stub，剩余 stub 均为明确非上线阻断 | TODO |
-| P1 | 测试体系收口 | 目标包测试、server/worker build、脚本语法检查通过 | TODO |
+| P1 | 测试体系收口 | 目标包测试、server build、脚本语法检查通过 | TODO |
 
 ## 2. 代码与构建冻结
 
@@ -36,8 +36,8 @@
 | P0 | 分支最新 | `git fetch origin` 后核对 `HEAD` | 本地与远端目标分支一致 | TODO |
 | P0 | 提交号记录 | `git rev-parse --short HEAD` | 记录发布 commit | TODO |
 | P0 | server 编译 | `go build -o %TEMP%\food-link-server-prelaunch.exe ./cmd/server` | 成功 | TODO |
-| P0 | worker 编译 | `go build -o %TEMP%\food-link-worker-prelaunch.exe ./cmd/worker` | 成功 | TODO |
-| P1 | Docker 构建 | `npm run push-docker-ccr` 或先本地 `docker buildx build` | 镜像构建平台为 `linux/amd64`，含 server/worker/static | TODO |
+| P0 | 后台消费者编译 | `go build -o %TEMP%\food-link-server-prelaunch.exe ./cmd/server` | 成功；内嵌 worker 随 server 编译 | TODO |
+| P1 | Docker 构建 | `npm run push-docker-ccr` 或先本地 `docker buildx build` | 镜像构建平台为 `linux/amd64`，含 server/static；worker 为 server 内嵌能力 | TODO |
 | P1 | 静态页语法 | `node --check backend/static/test_backend/app.js` | 成功 | TODO |
 | P1 | Python 运维脚本语法 | `python -m py_compile backend/scripts/*.py` | 成功，无遗留 `__pycache__` | TODO |
 
@@ -45,8 +45,8 @@
 
 | 优先级 | 检查项 | 重点表/字段 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| P0 | 数据库连接 | `POSTGRESQL_*` / DSN 来源 | Go server/worker 均连同一个生产 PostgreSQL | TODO |
-| P0 | `analysis_tasks` schema | `task_type/status/payload/result/error_message/locked_at` | worker claim/complete/fail 正常 | TODO |
+| P0 | 数据库连接 | `POSTGRESQL_*` / DSN 来源 | Go server 及其内嵌 worker 均连同一个生产 PostgreSQL | TODO |
+| P0 | `analysis_tasks` schema | `task_type/status/payload/result/error_message` | DB 存任务状态/结果；队列消息携带 `task_id/task_type`；worker 按 task id claim/complete/fail 正常 | TODO |
 | P0 | 精准模式 schema | `precision_sessions`、`precision_session_rounds`、`precision_item_estimates` | plan/item/aggregate 写入正常 | TODO |
 | P0 | 食物营养库 schema | `food_nutrition_library`、`food_nutrition_aliases`、`food_unresolved_logs` | db_first 命中/未命中/DeepSeek fallback 可写 | TODO |
 | P0 | 会员生产 schema | `membership_plan_config`、`user_pro_memberships`、`pro_membership_payment_records` | plans/me/pay/notify 全链路正常 | TODO |
@@ -62,14 +62,15 @@
 
 | 优先级 | 配置域 | 必查项 | 通过标准 | 状态 |
 |---|---|---|---|---|
-| P0 | 数据库 | `POSTGRESQL_HOST/PORT/USER/PASSWORD/DATABASE` | 指向腾讯云 PostgreSQL 生产库，server/worker 一致 | TODO |
+| P0 | 数据库 | `POSTGRESQL_HOST/PORT/USER/PASSWORD/DATABASE` | 指向腾讯云 PostgreSQL 生产库，server 与内嵌 worker 一致 | TODO |
 | P0 | 对象存储 | COS bucket、region、secret、CDN base URL | 上传/读取图片成功，旧 Supabase URL 可兼容解析 | TODO |
 | P0 | JWT/登录 | JWT secret、微信 appid/secret | 登录、token 校验、openid 绑定正常 | TODO |
 | P0 | 微信支付 | mchid、appid、serial、private key、API v3 key、notify URL | 下单和回调验签解密通过 | TODO |
 | P0 | 小程序码 | stable token appid/secret、env_version、page | `/api/qrcode` 返回真实 PNG | TODO |
 | P0 | LLM/OCR | DashScope、OfoxAI、DeepSeek key/base/model | 食物、精准、健康报告、stats insight fallback 策略可用 | TODO |
 | P0 | 订阅消息 | 保质期模板 ID、access token 获取 | 发送模板字段合法，失败重试可见 | TODO |
-| P1 | Worker | `WORKER_TASK_TYPES`、`WORKER_MAX_CONCURRENT`、`WORKER_POLL_INTERVAL_SECONDS` | 覆盖 `food,food_text,precision_plan,precision_item_estimate,precision_aggregate,public_food_library_text,exercise,health_report,expiry_recognize,expiry_notification` 等目标任务 | TODO |
+| P1 | Worker | `config.yaml` 的 `worker.count`、`worker.task_types`、`worker.poll_interval_seconds` | 覆盖 `food,food_text,precision_plan,precision_item_estimate,precision_aggregate,public_food_library_text,exercise,health_report,expiry_recognize,expiry_notification` 等目标任务；`worker.count=0` 表示关闭内嵌 worker | TODO |
+| P1 | Task queue | `config.yaml` 的 `task_queue.driver`、`task_queue.buffer_size`、预留 `topic/brokers/consumer_group` | 当前支持进程内 `memory`；`kafka` 配置已预留但 adapter 未实现前必须 fail fast | TODO |
 | P1 | 测试后台 | `TEST_BACKEND_PASSWORD` | 生产后台登录密码非默认值 | TODO |
 | P1 | 环境来源 | K8s/服务器 ConfigMap/env | 敏感配置由运行时注入，不进入镜像 | TODO |
 
@@ -79,7 +80,7 @@
 |---|---|---|---|---|
 | P0 | 主链路目标测试 | `go test ./internal/worker ./internal/app ./internal/expiry/handler ./internal/health/service ./internal/health/handler ./internal/membership/domain ./internal/membership/handler ./internal/membership/service ./internal/analyze/handler ./internal/analyze/domain ./internal/testbackend/handler ./internal/testbackend/domain` | 全部通过 | TODO |
 | P0 | server build | `go build -o %TEMP%\food-link-server-prelaunch.exe ./cmd/server` | 成功 | TODO |
-| P0 | worker build | `go build -o %TEMP%\food-link-worker-prelaunch.exe ./cmd/worker` | 成功 | TODO |
+| P0 | 内嵌 worker build | `go build -o %TEMP%\food-link-server-prelaunch.exe ./cmd/server` | 成功 | TODO |
 | P1 | publicfood/recipe | `go test ./internal/publicfood/... ./internal/recipe/...` | 全部通过 | TODO |
 | P1 | qrcode service | `go test ./internal/utility/service -run TestQRCodeService` | 通过 | TODO |
 | P1 | 测试后台 handler | `go test ./internal/testbackend/handler ./internal/testbackend/domain` | 通过 | TODO |
@@ -112,14 +113,14 @@
 
 | 优先级 | 检查项 | 通过标准 | 状态 |
 |---|---|---|---|
-| P0 | worker 独立部署 | 生产部署层实际启动 `/app/food-link-worker`，不是只启动 server | TODO |
-| P0 | 任务领取 | pending task 能变为 processing/done/failed | TODO |
-| P0 | 并发安全 | 多 worker 时无重复消费；`FOR UPDATE SKIP LOCKED` 生效 | TODO |
+| P0 | worker 部署 | 生产路径为 server 内嵌 worker；当前不再提供独立 `/app/food-link-worker` 入口 | TODO |
+| P0 | 任务领取 | submit 发布 `task_id/task_type` 到 `task_queue` 后，pending task 能被同进程 worker claim 为 processing/done/failed | TODO |
+| P0 | 并发安全 | 重复队列消息不会重复处理；DB claim 按 task id 且要求 `status=pending`；本地 memory queue 避免共享 DB 时被其它开发者 worker 消费 | TODO |
 | P0 | 失败可见 | failed task 有 `error_message`，不会无限 silent retry | TODO |
 | P0 | 精准模式聚合 | item 子任务未完成前 aggregate 不提前结束 | TODO |
 | P0 | 通知 job | `expiry_notification` job claim/update/retry 正常 | TODO |
 | P1 | 队列堆积监控 | pending/processing 数量可查，异常堆积有告警或人工检查脚本 | TODO |
-| P1 | worker 停机恢复 | worker 重启后可继续处理历史 pending/超时 processing | TODO |
+| P1 | worker 停机恢复 | `memory` queue 不持久化；历史 pending/processing 恢复需要后续 broker driver 或显式 replay 设计 | TODO |
 
 ## 8. 前端与小程序上线配套
 
@@ -138,7 +139,7 @@
 | 优先级 | 检查项 | 通过标准 | 状态 |
 |---|---|---|---|
 | P0 | server 日志 | 每个请求错误有可读日志和 trace/context | TODO |
-| P0 | worker 日志 | task claim/start/done/fail 有日志 | TODO |
+| P0 | worker 日志 | queue publish、task claim/start/done/fail 有日志 | TODO |
 | P0 | 支付日志 | 下单、notify、验签、金额校验、激活结果可追踪 | TODO |
 | P0 | 外部 API 错误 | LLM/OCR/微信/COS 错误不 panic，返回用户可读错误或 fallback | TODO |
 | P1 | 指标面板 | 请求 5xx、P95、worker pending、支付失败率可查看 | TODO |
@@ -164,7 +165,7 @@
 | 2 | P0 | 确认生产配置 | 核对 ConfigMap/env，不泄露值 | TODO |
 | 3 | P0 | 构建并推送镜像 | `npm run push-docker-ccr` | TODO |
 | 4 | P0 | 等自动更新或手动滚动 | 确认 server 新 Pod/进程 commit/镜像 | TODO |
-| 5 | P0 | 启动/更新 worker | 确认 worker 进程使用同镜像同 commit | TODO |
+| 5 | P0 | 确认内嵌 worker | 确认 server 使用同镜像同 commit，且 `worker.count > 0` 时内嵌 worker 已启动 | TODO |
 | 6 | P0 | 健康检查 | `/health` 或等价接口正常 | TODO |
 | 7 | P0 | 跑 P0 smoke test | 第 6 节 P0 全部通过 | TODO |
 | 8 | P0 | 观察 30-60 分钟 | 5xx、worker 堆积、支付失败、外部 API 错误无异常 | TODO |
@@ -176,7 +177,7 @@
 | 优先级 | 回滚项 | 操作 | 通过标准 | 状态 |
 |---|---|---|---|---|
 | P0 | 镜像回滚 | 将 server deployment 切回上一稳定镜像 | 10 分钟内恢复核心接口 | TODO |
-| P0 | worker 回滚 | 停止 Go worker 或切回上一 worker | 不继续处理错误任务 | TODO |
+| P0 | worker 回滚 | 将 `worker.count` 临时调为 `0` 或回滚 server 镜像 | 不继续处理错误任务 | TODO |
 | P0 | 任务保护 | 对可疑 processing/pending task 做人工标记或暂停 worker | 避免重复扣积分/重复写记录 | TODO |
 | P0 | 支付保护 | 若 notify 异常，临时关闭创建新订单或切回旧服务 | 不产生无法激活的 paid order | TODO |
 | P0 | 数据库备份 | 上线前确认最近备份与恢复方式 | 可恢复关键表 | TODO |

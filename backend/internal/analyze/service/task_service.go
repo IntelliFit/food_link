@@ -12,7 +12,13 @@ import (
 	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/common/dateutil"
 	"food_link/backend/internal/common/errors"
+	"food_link/backend/internal/taskqueue"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
+	apm "food_link/backend/pkg/trace"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.uber.org/zap"
 )
 
 type TaskService struct {
@@ -21,6 +27,7 @@ type TaskService struct {
 	users       *authrepo.UserRepo
 	storage     *storage.Client
 	creditGuard CreditGuard
+	taskQueue   taskqueue.Publisher
 }
 
 const waitingRecordBadgeWindow = 24 * time.Hour
@@ -40,6 +47,10 @@ type CreditGuard interface {
 
 func (s *TaskService) ConfigureCreditGuard(guard CreditGuard) {
 	s.creditGuard = guard
+}
+
+func (s *TaskService) ConfigureTaskPublisher(queue taskqueue.Publisher) {
+	s.taskQueue = queue
 }
 
 type SubmitTaskInput struct {
@@ -125,6 +136,7 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 			return "", err
 		}
 		s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, taskID, "precision_plan")
+		logAnalyzeTaskSubmitted(ctx, userID, taskID, "precision_plan", input, payload)
 		return taskID, nil
 	}
 
@@ -144,7 +156,11 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	if err := s.tasks.CreateTask(ctx, task); err != nil {
 		return "", err
 	}
+	if err := s.enqueueTask(ctx, task); err != nil {
+		return "", err
+	}
 	s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, task.ID, task.TaskType)
+	logAnalyzeTaskSubmitted(ctx, userID, task.ID, task.TaskType, input, payload)
 	return task.ID, nil
 }
 
@@ -204,6 +220,7 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 			return "", err
 		}
 		s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, taskID, "precision_plan")
+		logAnalyzeTaskSubmitted(ctx, userID, taskID, "precision_plan", input, payload)
 		return taskID, nil
 	}
 
@@ -218,8 +235,51 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	if err := s.tasks.CreateTask(ctx, task); err != nil {
 		return "", err
 	}
+	if err := s.enqueueTask(ctx, task); err != nil {
+		return "", err
+	}
 	s.consumeFoodCredits(ctx, userID, creditsInfo, creditCost, task.ID, task.TaskType)
+	logAnalyzeTaskSubmitted(ctx, userID, task.ID, task.TaskType, input, payload)
 	return task.ID, nil
+}
+
+func logAnalyzeTaskSubmitted(ctx context.Context, userID, taskID, taskType string, input SubmitTaskInput, payload map[string]any) {
+	modelName := strings.TrimSpace(input.ModelName)
+	executionMode := stringFromAny(payload["execution_mode"])
+	analysisEngine := stringFromAny(payload["analysis_engine"])
+	sourceType := strings.TrimSpace(input.SourceType)
+	imageCount := imageCountForLog(input.ImageURL, input.ImageURLs)
+	hasText := strings.TrimSpace(input.TextInput) != "" || strings.TrimSpace(input.Text) != ""
+	logger.WithTrace(ctx).Info("analysis task submitted",
+		zap.String("task_id", taskID),
+		zap.String("task_type", taskType),
+		zap.String("user_id", userID),
+		zap.String("model_name", modelName),
+		zap.String("execution_mode", executionMode),
+		zap.String("analysis_engine", analysisEngine),
+		zap.String("source_type", sourceType),
+		zap.Int("image_count", imageCount),
+		zap.Bool("has_text_input", hasText),
+	)
+	apm.SetAttributes(ctx,
+		attribute.String("analysis.task_id", taskID),
+		attribute.String("analysis.task_type", taskType),
+		attribute.String("analysis.user_id", userID),
+		attribute.String("analysis.model_name", modelName),
+		attribute.String("analysis.execution_mode", executionMode),
+		attribute.String("analysis.engine", analysisEngine),
+	)
+	apm.AddEvent(ctx, "analysis task submitted",
+		attribute.String("analysis.task_id", taskID),
+		attribute.String("analysis.task_type", taskType),
+		attribute.String("analysis.user_id", userID),
+		attribute.String("analysis.model_name", modelName),
+		attribute.String("analysis.execution_mode", executionMode),
+		attribute.String("analysis.engine", analysisEngine),
+		attribute.String("analysis.source_type", sourceType),
+		attribute.Int("analysis.image_count", imageCount),
+		attribute.Bool("analysis.has_text_input", hasText),
+	)
 }
 
 func (s *TaskService) applyFoodCreditGuard(ctx context.Context, userID, executionMode, recordedOn string, payload map[string]any) (map[string]any, int, error) {
@@ -314,6 +374,51 @@ func (s *TaskService) consumeFoodCredits(ctx context.Context, userID string, cre
 		"task_id":   taskID,
 		"task_type": taskType,
 	})
+}
+
+func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask) error {
+	if s.taskQueue == nil || task == nil || task.Status != "pending" {
+		return nil
+	}
+	apm.AddEvent(ctx, "analysis task queue publish started",
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+	)
+	publishCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	err := s.taskQueue.PublishTask(publishCtx, taskqueue.TaskMessage{
+		TaskID:   task.ID,
+		TaskType: task.TaskType,
+	})
+	if err == nil {
+		logger.WithTrace(ctx).Info("analysis task enqueued",
+			zap.String("task_id", task.ID),
+			zap.String("task_type", task.TaskType),
+		)
+		apm.AddEvent(ctx, "analysis task queue publish completed",
+			attribute.String("analysis.task_id", task.ID),
+			attribute.String("analysis.task_type", task.TaskType),
+		)
+		return nil
+	}
+	apm.RecordError(ctx, err,
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+	)
+	apm.AddEvent(ctx, "analysis task queue publish failed",
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+	)
+	failCtx, failCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer failCancel()
+	_, failErr := s.tasks.FailTask(failCtx, task.ID, "analysis task enqueue failed")
+	logger.WithTrace(ctx).Error("analysis task enqueue failed",
+		zap.String("task_id", task.ID),
+		zap.String("task_type", task.TaskType),
+		zap.Error(err),
+		zap.NamedError("fail_update_error", failErr),
+	)
+	return fmt.Errorf("enqueue analysis task: %w", err)
 }
 
 func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any) (string, error) {
@@ -427,6 +532,9 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		"current_task_id": task.ID,
 		"updated_at":      time.Now(),
 	}); err != nil {
+		return "", err
+	}
+	if err := s.enqueueTask(ctx, task); err != nil {
 		return "", err
 	}
 	return task.ID, nil

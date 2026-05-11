@@ -1,5 +1,108 @@
 # 当前任务
 
+## 状态：完成源码修改 - 分析任务分发改为本地 task_queue
+
+- 2026-05-11 update:
+  - User 认为把 `analysis_tasks` 当队列不合理：多个开发者共用同一 DB 时，一个人提交的任务可能被另一个人的 worker 用不同算法处理。
+  - 新方案：
+    - `analysis_tasks` 继续作为任务状态/result/error 的持久化表，供前端 `/api/analyze/tasks/:task_id` 轮询读取。
+    - 分发不再依赖 worker 扫描 pending；`/api/analyze/submit` / `/api/analyze-text/submit` 创建 pending task 后发布 `task_id/task_type` 到 `task_queue`。
+    - worker 从 `task_queue` 收到消息后，调用 `ClaimTaskByID()` 原子把这一个 task 从 `pending` 改为 `processing`，再执行模型/营养库逻辑，最后写 `done/failed`。
+    - 本地先实现 `backend/internal/taskqueue` 的进程内 `memory` driver；它是 server 进程内队列，能避免共享 DB 时被其它开发者 worker 抢任务。
+    - `task_queue.driver=kafka`、`topic`、`brokers`、`consumer_group` 已在 config/interface 层预留；当前配置为 kafka 会 fail fast，待后续接入 adapter。
+    - 精准模式 `precision_plan` 创建的 `precision_item_estimate` 和 `precision_aggregate` 子任务也会发布到同一队列，否则子任务会停在 pending。
+    - 保质期订阅通知 `food_expiry_notification_jobs` 暂时保留自身 DB 定时 job 轮询，因为它不是分析算法任务互相抢占的问题。
+  - 已更新：
+    - `backend/internal/taskqueue/*` 新增 queue interface、memory driver、factory、单测。
+    - `backend/pkg/config/config.go` 新增 `task_queue` 配置；`backend/config-example.yaml` 和本地 `backend/config.yaml` 已加入默认 memory 队列配置。
+    - `backend/internal/analyze/service/task_service.go` 创建任务后发布队列消息；发布失败会标记 task failed，避免无声 pending。
+    - `backend/internal/worker/worker.go` 不再调用 `ClaimNextPendingTask()` 扫描 pending，改为消费 queue delivery 后 `ClaimTaskByID()`。
+    - `backend/internal/app/app.go` server 初始化 queue，并注入 TaskService 和内嵌 worker。
+    - `backend/cmd/worker/main.go` 仍保留独立 worker 入口；memory driver 下会记录 warning，因为 standalone 进程无法收到 server 进程内发布的消息。
+    - `docs/go-backend-prelaunch-checklist-2026-05-08.md` 已同步当前 worker/queue 验收口径。
+  - 验证：
+    - `go test ./internal/taskqueue ./pkg/config ./internal/worker ./internal/app -run Test -count=1` passed.
+    - `go test ./internal/analyze/service -run "TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask|TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+    - `go test ./internal/analyze/repo -run "^$" -count=1` passed.
+    - `go test ./internal/analyze/handler -run TestAnalyzeHandler_SubmitAnalyzeTask -count=1` passed.
+    - `go build -o $env:TEMP\food-link-server-taskqueue.exe ./cmd/server` passed.
+    - `go build -o $env:TEMP\food-link-worker-taskqueue.exe ./cmd/worker` passed.
+    - `node --check scripts/run-backend.cjs` and `node --check scripts/run-worker.cjs` passed.
+    - `git diff --check` passed with only CRLF warnings.
+  - Remaining note:
+    - `memory` queue is not durable; server 重启后，旧 pending task 不会自动 replay。后续若要生产级恢复/多实例独立 worker，应接 Kafka/NATS/Redis Stream 等 broker driver，或设计带 instance ownership 的 replay 机制。
+
+## 状态：完成排查、后端日志补强与 server 内置 worker - 食物拍照分析任务一直 pending
+
+- 2026-05-11 update:
+  - User反馈：
+    - `/api/upload-analyze-image-file`、`PUT /api/user/health-profile`、`POST /api/analyze/submit` 均 200。
+    - 前端随后每 2 秒轮询 `/api/analyze/tasks/367af41f-f800-4d07-bf03-a99dd58f8c33`，3 分钟仍无结果。
+    - 要求查看当前食物热量拍照分析实现，并增加日志定位卡点。
+  - Current implementation:
+    - 图片先上传到 `/api/upload-analyze-image-file` 或 `/api/upload-analyze-image`，得到 CDN/COS 图片 URL。
+    - `/api/analyze/submit` 只创建 `analysis_tasks` 异步任务，标准图片任务 `task_type=food`、`status=pending`。
+    - 独立 worker `backend/cmd/worker` 轮询 `analysis_tasks`，用 `FOR UPDATE SKIP LOCKED` 领取 pending 任务并改为 `processing`。
+    - 标准图片任务调用 `AnalyzeService.Analyze()`；默认/历史 `gemini` 请求目前会临时路由到 DashScope `qwen-vl-max`。
+    - 识别第一阶段只让模型输出食物名、估重和 `waterMl`；后端 `db_first` 再查 `food_nutrition_library` / `food_nutrition_aliases` 回算热量和营养。
+  - Findings:
+    - 直接查当前配置 DB：任务 `367af41f-f800-4d07-bf03-a99dd58f8c33` 仍为 `pending | food`，`created_at/updated_at` 都停在 `2026-05-11 23:09:46 +08:00`，说明没有 worker 领取它。
+    - 本机进程只看到 `go run .\cmd\server\main.go` 占用 `3010`，未看到 `cmd/worker` 进程。
+    - 因此本次不是卡在 Qwen/Ofox/营养库，而是异步 worker 未运行或未连接同一 DB。
+  - Fix applied:
+    - `backend/internal/analyze/service/task_service.go`
+      - 提交标准/精准、图片/文字任务后记录 `analysis task submitted`，包含 task_id、task_type、model、execution_mode、analysis_engine、image_count 等。
+    - `backend/internal/worker/worker.go`
+      - worker 领取后增加 `task processing started`。
+      - `food` 任务增加 `food task analyze started/result ready/completed/failed`，记录耗时、图片数、模型、结果项数。
+      - 任务成功/失败统一记录处理耗时。
+      - 失败任务写回状态时使用独立 10 秒上下文，避免任务处理上下文已超时后无法把任务标记为 failed。
+    - `backend/internal/analyze/service/analyze_service.go`
+      - 图片 LLM 调用增加 `food image analyze llm start/completed/failed/finalized`，记录 provider/model、requested_model、fallback_used、图片数、耗时、resolved/unresolved 数。
+    - `package.json`
+      - 新增 `npm run dev:worker`。
+    - `scripts/run-backend.cjs`
+      - 从旧 Python `run_backend.py` 启动方式改为 `go run ./cmd/server`。
+    - `scripts/run-worker.cjs`
+      - 新增跨平台启动 `go run ./cmd/worker` 的脚本。
+    - `scripts/restart-dev.sh`
+      - 一键重启会清理旧 Go server/worker 进程；`dev:backend` 的 Go server 默认内嵌 worker，因此不再额外启动独立 worker。
+    - `backend/pkg/config/config.go`
+      - 新增 `worker.count`，只从 `config.yaml` 读取；`count=0` 关闭 worker，`count>0` 控制 worker 数量。
+      - 缺少 `worker.count` 时启动报错；独立 `cmd/worker` 显式运行时同样遵循 `config.yaml` 的 `worker.count`。
+    - `backend/internal/app/app.go`
+      - Go server 启动时在同进程内按 `cfg.Worker` 创建 `worker.Runner` 并用 goroutine 运行。
+      - server 关闭时先 cancel 内置 worker 并等待退出，再关闭 tracing/DB。
+  - Verification:
+    - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+    - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage_Timeout|TestSanitizeTaskErrorMessage_ResourceExhausted" -count=1` passed.
+    - `go build -o $env:TEMP\food-link-server-logcheck.exe ./cmd/server` passed.
+    - `go build -o $env:TEMP\food-link-worker-logcheck.exe ./cmd/worker` passed.
+    - `node --check scripts/run-backend.cjs` passed.
+    - `node --check scripts/run-worker.cjs` passed.
+    - `git diff --check` for touched files passed with only CRLF warnings.
+  - Follow-up verification after embedded worker:
+    - `go test ./pkg/config -count=1` passed.
+    - `go test ./internal/app -run Test -count=1` passed.
+    - `go build -o $env:TEMP\food-link-server-embedded-worker.exe ./cmd/server` passed.
+    - `go build -o $env:TEMP\food-link-worker-standalone.exe ./cmd/worker` passed.
+  - Follow-up after worker config feedback:
+    - Removed worker env controls; worker configuration now comes from `config.yaml`, not `WORKER_ENABLED` / `WORKER_*`.
+    - `worker.count` is required in `config.yaml`; `count=0` disables worker, `count>0` controls the number of worker loops.
+    - `backend/config-example.yaml` and local `backend/config.yaml` include `worker.count: 1`.
+    - Added config tests for missing `worker.count` and `count=0`.
+    - New diagnostic logs continue to use zap (`logger.L()` / injected `*zap.Logger`), not `print`/`fmt.Println`; current OTel wiring is trace-only.
+    - Verification after this adjustment:
+      - `go test ./pkg/config -count=1` passed.
+      - `go test ./internal/app -run Test -count=1` passed.
+      - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage_Timeout|TestSanitizeTaskErrorMessage_ResourceExhausted" -count=1` passed.
+      - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+      - server and standalone worker builds passed.
+  - Remaining action:
+    - 当前本机任务仍 pending，因为按项目规则本轮未擅自重启常驻 server。
+    - 本地复测只需重启 Go server；server 默认会带内置 worker 并领取现有 pending 任务。
+    - 若线上已有独立 worker 或多副本 server，部署层可在 `config.yaml` 中设置 `worker.count: 0` 关闭 server 内置 worker，继续只让独立 worker 消费队列。
+
 ## 状态：完成排查与后端修复 - 保质期订阅通知未推送
 
 - 2026-05-11 update:
@@ -23,7 +126,7 @@
       - worker task types 包含 `expiry_notification` 时，会在没有普通 `analysis_tasks` 时轮询 `food_expiry_notification_jobs`。
     - 配置来源：
       - 后端：`external.appid` / `external.secret` / `wechat_pay.expiry_subscribe_template_id`
-      - 环境变量覆盖：`APPID` / `SECRET` / `EXPIRY_SUBSCRIBE_TEMPLATE_ID` / `WORKER_TASK_TYPES`
+      - 环境变量覆盖：`APPID` / `SECRET` / `EXPIRY_SUBSCRIBE_TEMPLATE_ID`；worker 配置统一从 `config.yaml` 读取。
       - 前端：`TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`
   - Findings:
     - 本地 `backend/config.yaml` 中后端 `external.appid`、`external.secret`、`wechat_pay.expiry_subscribe_template_id` 均有值；`worker.task_types` 未显式配置，但 Go config 默认包含 `expiry_notification`。
@@ -49,7 +152,7 @@
     - `git diff --check` passed
   - Remaining actions:
     - 发布/体验版构建前必须设置 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`，否则小程序不会发起订阅授权。
-    - 确认线上 systemd/Docker 是否单独启动 `/app/food-link-worker`，且 `WORKER_TASK_TYPES` 未覆盖掉 `expiry_notification`。
+    - 确认线上 systemd/Docker 是否单独启动 `/app/food-link-worker`，且 `config.yaml` 的 `worker.task_types` 未漏掉 `expiry_notification`。
     - 修复 SSH known_hosts 指纹后再查线上服务状态与 `food_expiry_notification_jobs` 状态分布。
 
 ## 状态：完成源码修改 - 注册后引导与健康档案增加作息习惯
@@ -2213,7 +2316,7 @@
     - 新增 `backend/internal/expiry/service/recognizer.go`，使用专用保质期 prompt 调用视觉 LLM，返回前端表单预填 items。
     - `POST /api/expiry/recognize` 现在会同步识别、更新 task 为 `processing -> done/failed`，并返回 `task_id / credits_cost / items / message`。
     - worker 同时支持兜底消费 `expiry_recognize` 任务。
-    - `WORKER_TASK_TYPES` 默认增加 `health_report`、`expiry_recognize`。
+    - `worker.task_types` 默认增加 `health_report`、`expiry_recognize`。
   - 保质期订阅提醒登记已从 stub 推进为真实 job upsert：
     - 新增 `food_expiry_notification_jobs` Go domain/repo 写入能力。
     - `POST /api/expiry/items/:item_id/subscribe` 现在读取订阅状态、openid 与模板 ID。
@@ -2257,7 +2360,7 @@
     - `backend/internal/analyze/repo/task_repo.go` 新增 `ClaimNextPendingTask`、`CompleteTask`、`FailTask`
     - 支持 `analysis_tasks` 原子领取 `pending -> processing`，并写回 `done / failed`
     - 首批 processor 覆盖 `food`、`food_text`、`precision_plan`、`public_food_library_text`、`exercise`
-    - `backend/pkg/config/config.go` 新增 worker 配置：`WORKER_ID`、`WORKER_TASK_TYPES`、`WORKER_POLL_INTERVAL_SECONDS`、`WORKER_MAX_CONCURRENT`
+    - `backend/pkg/config/config.go` 新增 worker 配置：`worker.id`、`worker.count`、`worker.task_types`、`worker.poll_interval_seconds`
     - `backend/Dockerfile` 同时构建 `/app/food-link` 与 `/app/food-link-worker`
   - Phase 3 已完成第一版 `db_first` 营养库后处理：
     - `AnalyzeService` 支持注入 `FoodNutritionRepo`
@@ -6659,3 +6762,57 @@
 - Next step:
   - 优先修复前端结果页保存链路：若存在 `source_task_id`，保存记录时不要再把本地 `wxfile://tmp/...` 作为 `image_path/image_paths` 发给后端，改为仅依赖已上传的分析任务图片。
   - 同时补后端兜底：拒绝或过滤 `wxfile://` / `http://tmp/` 这类小程序本地临时路径，避免再次落库。
+# 2026-05-12 handoff
+
+## 状态：完成源码修改 - 分析任务 trace event 化并删除独立 worker 入口
+
+- User 询问 trace/log 关系，并希望把关键日志尽量写进 Jaeger 可见的 trace；同时要求取消独立 worker。
+- 结论：
+  - 普通 zap log 仍是日志流，不会自动出现在 Jaeger。
+  - Jaeger 主要展示 OpenTelemetry trace/span/event/error，所以本轮把关键分析任务日志同步写成 span event、span attributes 和 `RecordError`。
+  - 为了让 `/api/analyze/submit` 与 server 内嵌后台处理能在同一条 trace 中串起来，`taskqueue.TaskMessage` 新增 `TraceContext`，memory queue 发布时注入 W3C trace context，消费时提取后再启动处理 span。
+- 已更新：
+  - `backend/pkg/trace/events.go`：新增 trace event/error 辅助函数。
+  - `backend/pkg/logger/logger.go`：新增 `WithTrace(ctx)`，zap 日志可带 `trace_id/span_id`。
+  - `backend/internal/taskqueue/*`：队列消息携带 trace context，并新增传播测试。
+  - `backend/internal/analyze/service/task_service.go`：提交、入队成功/失败写入 trace event。
+  - `backend/internal/worker/worker.go`：queue delivery、claim、process、food/food_text 处理和子任务入队写入 trace span/event/error。
+  - `backend/internal/analyze/service/analyze_service.go`：食物图片/文字分析、精准模式 LLM、DB-first 营养库 lookup 写入 trace event/error。
+  - 删除独立 `backend/cmd/worker/main.go` 与 `scripts/run-worker.cjs`；`package.json` 移除 `dev:worker`。
+  - `backend/Dockerfile` 不再构建/复制 `/app/food-link-worker`，镜像只保留 server 入口；server 内嵌 worker 仍由 `config.yaml` 的 `worker.count` 控制。
+- Verification:
+  - `go test ./internal/taskqueue ./pkg/trace ./pkg/logger ./pkg/config -run Test -count=1` passed.
+  - `go test ./internal/worker ./internal/app -run Test -count=1` passed.
+  - `go test ./internal/analyze/service -run "TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask|TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+  - `go test ./internal/analyze/handler -run TestAnalyzeHandler_SubmitAnalyzeTask -count=1` passed.
+  - `go test ./internal/analyze/repo -run "^$" -count=1` passed.
+  - `go build -o $env:TEMP\food-link-server-trace-worker-delete.exe ./cmd/server` passed.
+  - `node --check scripts/run-backend.cjs` passed.
+  - `git diff --check` passed with only CRLF warnings.
+- Remaining note:
+  - 当前未启动或重启本地常驻 server；按项目规则需要用户手动重启后，新 trace event 与删除 worker 入口的行为才会在本地运行态生效。
+
+## 状态：完成文档与补丁 - worker/task_queue 配置说明
+
+- User 询问 `worker.poll_interval_seconds`、`worker.task_types` 和 `task_queue` 各字段含义，并希望写成文档。
+- 已新增文档：
+  - `docs/backend-task-queue-worker-config.md`
+  - 说明当前 server 内嵌 worker + `task_queue` + `analysis_tasks` 状态表的关系。
+  - 明确 `poll_interval_seconds` 不是前端任务轮询间隔，也不是普通 `memory` queue 消息延迟；它主要控制保质期通知 DB job 检查和 idle 日志节奏。
+  - 逐项解释 `food`、`food_text`、`precision_plan`、`precision_item_estimate`、`precision_aggregate`、`public_food_library_text`、`exercise`、`health_report`、`expiry_recognize`、`expiry_notification`。
+  - 逐项解释 `task_queue.driver/buffer_size/topic/brokers/consumer_group`，并标注当前仅 `memory` 真正可用，`kafka` 为 fail-fast 预留。
+- 顺手修复发现的队列发布缺口：
+  - `backend/internal/user/service/analysis_task_service.go`：健康报告 `health_report` 任务创建后发布到 `task_queue`。
+  - `backend/internal/health/service/exercise_service.go`：运动 `exercise` 任务创建后发布到 `task_queue`，发布成功后才继续消费积分。
+  - `backend/internal/publicfood/service/public_food_service.go` 与 `backend/internal/publicfood/repo/public_food_repo.go`：公共食物库文本审核 `public_food_library_text` 任务创建后发布到 `task_queue`。
+  - `backend/internal/app/app.go`：把同一个 `taskQueue` 注入健康报告、运动、公共食物库服务。
+- Verification:
+  - `go test ./internal/health/service -run "TestExerciseService_CreateLog|TestExerciseService_ProcessExerciseTask_CreatesLogWithReasoning" -count=1` passed.
+  - `go test ./internal/publicfood/repo ./internal/publicfood/service -run Test -count=1` passed/no test files.
+  - `go test ./internal/user/service -run "^$" -count=1` passed compile-only.
+  - `go test ./internal/app -run Test -count=1` passed.
+  - `go test ./internal/taskqueue ./internal/worker -run Test -count=1` passed.
+  - `go build -o $env:TEMP\food-link-server-worker-doc.exe ./cmd/server` passed.
+  - `git diff --check` passed with only CRLF warnings.
+- Known verification gap:
+  - `go test ./internal/user/service -run "TestAnalysisTaskService_CreateHealthReportTask|TestAnalysisTaskService_CreateHealthReportTaskNormalizesLegacyURL" -count=1` is blocked by current Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` test environment, same class of existing sqlite test limitation.

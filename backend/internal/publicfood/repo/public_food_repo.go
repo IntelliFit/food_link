@@ -141,7 +141,7 @@ func (r *PublicFoodRepo) GetTaskImagePaths(ctx context.Context, taskID string) (
 	return task.ImagePaths, err
 }
 
-func (r *PublicFoodRepo) CreateModerationTask(ctx context.Context, userID, itemID, text string) error {
+func (r *PublicFoodRepo) CreateModerationTask(ctx context.Context, userID, itemID, text string) (*analyzedomain.AnalysisTask, error) {
 	task := analyzedomain.AnalysisTask{
 		ID:        uuid.New().String(),
 		UserID:    userID,
@@ -150,7 +150,10 @@ func (r *PublicFoodRepo) CreateModerationTask(ctx context.Context, userID, itemI
 		TextInput: &text,
 		Payload:   map[string]any{"item_id": itemID},
 	}
-	return r.db.WithContext(ctx).Create(&task).Error
+	if err := r.db.WithContext(ctx).Create(&task).Error; err != nil {
+		return nil, err
+	}
+	return &task, nil
 }
 
 func (r *PublicFoodRepo) Like(ctx context.Context, userID, itemID string) error {

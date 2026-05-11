@@ -1,9 +1,26 @@
 # DECISIONS
 
+- `2026-05-11`: 食物/健康/运动等 `analysis_tasks` 分析任务不再把 DB pending 扫描当作分发队列：
+  - DB 表 `analysis_tasks` 只作为任务状态、结果、错误信息和前端轮询的持久化来源。
+  - 分发层统一走 `task_queue` 接口；当前唯一可用 driver 是进程内 `memory`，HTTP submit 和 server 内嵌 worker 在同一进程内传递 `task_id/task_type`。
+  - worker 收到消息后按 `task_id` 调用 `ClaimTaskByID()`，只 claim 该条 `status=pending` 的任务，避免共享 DB 时其它开发者 worker 扫走任务。
+  - `task_queue.driver=kafka`、`topic`、`brokers`、`consumer_group` 是预留配置；adapter 未实现前配置为 kafka 必须启动失败，不能静默退回 DB polling。
+  - 独立 `cmd/worker` 暂时保留，但在 `memory` driver 下无法消费 server 进程内发布的任务；本地/当前 Docker 单入口默认使用 server 内嵌 worker。
+  - `food_expiry_notification_jobs` 仍是定时通知 job 的 DB 扫描链路；它和分析算法任务分发是不同问题，后续可单独迁移到 broker。
+  - `memory` queue 不持久化；server 重启后的旧 pending/replay 需要后续真实 broker 或带 instance ownership 的显式恢复设计。
+
+- `2026-05-11`: Go 后端食物拍照分析仍是异步 worker 架构，但 server 默认内嵌启动 worker：
+  - `/api/analyze/submit` 只创建 `analysis_tasks` pending 任务，不会在 HTTP 请求里同步跑模型。
+  - worker 与 server 的通信媒介是数据库表 `analysis_tasks` / `food_expiry_notification_jobs`，不是进程内全局变量，也不是消息队列。
+  - worker 通过 `FOR UPDATE SKIP LOCKED` 原子领取 pending 任务；多 worker 同时跑时不会重复消费同一条任务，但会放大并发和模型调用压力。
+  - server 内置 worker 由 `config.yaml` 中的 `worker.count` 控制；`count=0` 表示不开启，`count>0` 表示启动对应数量 worker，缺少 `worker.count` 直接报错。
+  - 独立 `cmd/worker` 入口保留；显式运行 `npm run dev:worker` 或 `/app/food-link-worker` 时仍可作为独立 worker 消费同一 DB 队列。
+  - worker 诊断日志统一走 zap logger；当前 OTel 只配置 trace exporter，不把这些日志直接作为 OTel logs 上报。
+
 - `2026-05-11`: 保质期订阅通知链路的稳定口径：
   - 前端只有在构建时注入 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 后，才会调用 `Taro.requestSubscribeMessage()` 并继续请求后端 `/api/expiry/items/:item_id/subscribe` 创建提醒 job。
   - 后端订阅模板 ID 读取 `wechat_pay.expiry_subscribe_template_id`，可由环境变量 `EXPIRY_SUBSCRIBE_TEMPLATE_ID` 覆盖；微信 access token 使用 `external.appid` / `external.secret`，可由 `APPID` / `SECRET` 覆盖。
-  - 通知发送依赖独立 worker 进程轮询 `food_expiry_notification_jobs`；Docker 镜像虽然包含 `/app/food-link-worker`，但默认入口是 server，生产部署必须单独启动 worker command。
+  - 通知发送依赖 worker 轮询 `food_expiry_notification_jobs`；当前 server 默认可内嵌 worker，Docker 镜像也保留 `/app/food-link-worker` 独立入口。
   - worker task types 不能覆盖丢 `expiry_notification`，否则通知 job 不会被消费。
   - 到期当天已 due 的 job 不应因为重新计算出 `now + 1min` 被判定为“旧任务作废”；该逻辑已修正。
 
@@ -885,3 +902,32 @@
   - `src/pages/profile/index.tsx` 不再依赖 `userInfo`、`membershipStatus`、`userRegisterTime`、`profile_stats_*` 作为首屏展示缓存
   - 「识别记录」快捷入口不再展示 waiting/unread 红色 badge
   - 与该 badge 相关的 `waiting_record / has_unseen_waiting_record` 前端计数、透传、清零逻辑一并移除
+# 2026-05-12 decisions
+
+- `2026-05-12`: trace 和 log 的口径固定如下：
+  - zap log 是结构化日志流，用于控制台、文件或后续日志系统；它不会因为启用 OTel trace 就自动出现在 Jaeger。
+  - Jaeger 主要展示 trace/span/event/error；需要在 Jaeger 里看到的关键节点，应显式写入 span event、span attribute，错误用 `RecordError`。
+  - 后端关键诊断日志仍走 zap，不使用 `print`/`fmt.Println`；需要与 trace 关联时使用 `logger.WithTrace(ctx)` 增加 `trace_id/span_id`。
+- `2026-05-12`: 分析任务的 trace context 应随 `task_queue` 消息传播：
+  - `/api/analyze/submit` 创建 task 后发布队列消息时注入 W3C trace context。
+  - server 内嵌后台消费者从消息中提取 trace context，再启动 delivery/process/analysis span。
+  - 这样 HTTP submit span 和后续异步处理 span 可在 Jaeger 中落到同一条 trace 下，便于定位卡在 submit、queue、claim、LLM、DB-first、complete 还是 fail update。
+- `2026-05-12`: 独立 Go worker 入口正式删除：
+  - 不再保留 `backend/cmd/worker`、`scripts/run-worker.cjs`、`npm run dev:worker` 或镜像内 `/app/food-link-worker`。
+  - 后台分析消费能力保留在 server 进程内，由 `config.yaml` 的 `worker.count` 控制；`count=0` 关闭，`count>0` 启动对应数量内嵌 worker loop。
+  - 当前本地 `memory` queue 是进程内队列，独立进程无法消费 server 发布的消息；后续若接入 Kafka/NATS/Redis Stream，可在 `task_queue` adapter 层重新评估是否需要独立消费者进程。
+- `2026-05-12`: `worker.poll_interval_seconds` 的稳定口径：
+  - 它不是前端轮询 `/api/analyze/tasks/:task_id` 的间隔，也不是普通 `memory` queue 消息投递延迟。
+  - 当前普通分析任务通过进程内 channel 直接投递给内嵌 worker；消息到达后立即处理。
+  - 该间隔主要控制 worker tick：如果 `task_types` 包含 `expiry_notification`，tick 时检查一条 due 的 `food_expiry_notification_jobs`；同时影响 idle 日志节奏。
+- `2026-05-12`: `worker.task_types` 是 worker 消费和处理任务的白名单：
+  - 对普通队列任务，它同时影响订阅过滤、DB claim 白名单和 worker switch 分支。
+  - `expiry_notification` 不是 `analysis_tasks` 队列消息类型，而是开启保质期通知 DB job 检查。
+  - 不要随意删类型；缺少对应类型会导致相关任务 pending、被跳过或无法发送通知。
+- `2026-05-12`: 所有会创建 `analysis_tasks` pending 且依赖 worker 处理的入口，都应在创建成功后发布 `{task_id, task_type}` 到 `task_queue`：
+  - 当前已覆盖 `food`、`food_text`、`precision_plan`、精准模式子任务、`health_report`、`exercise`、`public_food_library_text`。
+  - `analysis_tasks` 只保留状态/结果/前端轮询职责；新增异步任务类型时不能只写 DB pending，否则在当前取消 DB pending 扫描后任务不会被 worker 领取。
+- `2026-05-12`: `task_queue` 配置语义：
+  - `driver=memory` 是当前唯一实现，适合 server 内嵌 worker；它是进程内队列，不持久化，server 重启不会 replay 旧 pending。
+  - `driver=kafka` 仅为预留，adapter 未实现前必须启动失败，不能静默 fallback 到 DB 扫描。
+  - `buffer_size` 是 memory channel 容量，必须大于 0；`topic/brokers/consumer_group` 当前为未来真实 broker 预留，memory driver 不使用。

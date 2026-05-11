@@ -16,7 +16,10 @@ type Config struct {
 	External  ExternalConfig  `mapstructure:"external"`
 	WechatPay WechatPayConfig `mapstructure:"wechat_pay"`
 	Worker    WorkerConfig    `mapstructure:"worker"`
+	TaskQueue TaskQueueConfig `mapstructure:"task_queue"`
 }
+
+var defaultWorkerTaskTypes = []string{"food", "food_text", "precision_plan", "precision_item_estimate", "precision_aggregate", "public_food_library_text", "exercise", "health_report", "expiry_recognize", "expiry_notification"}
 
 type AppConfig struct {
 	Name string `mapstructure:"name"`
@@ -89,9 +92,17 @@ type WechatPayConfig struct {
 
 type WorkerConfig struct {
 	ID                  string   `mapstructure:"id"`
+	Count               int      `mapstructure:"count"`
 	TaskTypes           []string `mapstructure:"task_types"`
 	PollIntervalSeconds float64  `mapstructure:"poll_interval_seconds"`
-	MaxConcurrent       int      `mapstructure:"max_concurrent"`
+}
+
+type TaskQueueConfig struct {
+	Driver        string   `mapstructure:"driver"`
+	BufferSize    int      `mapstructure:"buffer_size"`
+	Topic         string   `mapstructure:"topic"`
+	Brokers       []string `mapstructure:"brokers"`
+	ConsumerGroup string   `mapstructure:"consumer_group"`
 }
 
 func Load(baseDir string) (*Config, error) {
@@ -118,23 +129,28 @@ func Load(baseDir string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
 	trimExternalConfig(&cfg.External)
-	preferExternalConfigFileValues(v, &cfg)
+	if err := applyConfigFileOnlyValues(v, &cfg); err != nil {
+		return nil, err
+	}
 	cfg.Worker.TaskTypes = normalizeCSV(cfg.Worker.TaskTypes)
 	return &cfg, nil
 }
 
-func preferExternalConfigFileValues(v *viper.Viper, cfg *Config) {
+func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
 	if v.ConfigFileUsed() == "" {
-		return
+		return fmt.Errorf("worker.count must be set in config.yaml")
 	}
 	fileV := viper.New()
 	fileV.SetConfigFile(v.ConfigFileUsed())
 	if err := fileV.ReadInConfig(); err != nil {
-		return
+		return err
+	}
+	if !fileV.IsSet("worker.count") {
+		return fmt.Errorf("worker.count must be set in config.yaml")
 	}
 	var fileCfg Config
 	if err := fileV.Unmarshal(&fileCfg); err != nil {
-		return
+		return err
 	}
 	trimExternalConfig(&fileCfg.External)
 	if fileCfg.External.DashscopeAPIKey != "" {
@@ -145,6 +161,58 @@ func preferExternalConfigFileValues(v *viper.Viper, cfg *Config) {
 	}
 	if fileCfg.External.DeepSeekAPIKey != "" {
 		cfg.External.DeepSeekAPIKey = fileCfg.External.DeepSeekAPIKey
+	}
+	if fileCfg.Worker.Count < 0 {
+		return fmt.Errorf("worker.count must be greater than or equal to 0")
+	}
+	workerCfg := defaultWorkerConfig()
+	if fileV.IsSet("worker.id") {
+		workerCfg.ID = fileCfg.Worker.ID
+	}
+	workerCfg.Count = fileCfg.Worker.Count
+	if fileV.IsSet("worker.poll_interval_seconds") {
+		workerCfg.PollIntervalSeconds = fileCfg.Worker.PollIntervalSeconds
+	}
+	if fileV.IsSet("worker.task_types") {
+		workerCfg.TaskTypes = fileCfg.Worker.TaskTypes
+	}
+	cfg.Worker = workerCfg
+	taskQueueCfg := defaultTaskQueueConfig()
+	if fileV.IsSet("task_queue.driver") {
+		taskQueueCfg.Driver = strings.TrimSpace(fileCfg.TaskQueue.Driver)
+	}
+	if fileV.IsSet("task_queue.buffer_size") {
+		taskQueueCfg.BufferSize = fileCfg.TaskQueue.BufferSize
+	}
+	if fileV.IsSet("task_queue.topic") {
+		taskQueueCfg.Topic = strings.TrimSpace(fileCfg.TaskQueue.Topic)
+	}
+	if fileV.IsSet("task_queue.brokers") {
+		taskQueueCfg.Brokers = normalizeCSV(fileCfg.TaskQueue.Brokers)
+	}
+	if fileV.IsSet("task_queue.consumer_group") {
+		taskQueueCfg.ConsumerGroup = strings.TrimSpace(fileCfg.TaskQueue.ConsumerGroup)
+	}
+	if taskQueueCfg.BufferSize <= 0 {
+		return fmt.Errorf("task_queue.buffer_size must be greater than 0")
+	}
+	cfg.TaskQueue = taskQueueCfg
+	return nil
+}
+
+func defaultWorkerConfig() WorkerConfig {
+	return WorkerConfig{
+		PollIntervalSeconds: 2.0,
+		TaskTypes:           append([]string(nil), defaultWorkerTaskTypes...),
+	}
+}
+
+func defaultTaskQueueConfig() TaskQueueConfig {
+	return TaskQueueConfig{
+		Driver:        "memory",
+		BufferSize:    1024,
+		Topic:         "food-link-analysis-tasks",
+		ConsumerGroup: "food-link-workers",
 	}
 }
 
@@ -192,8 +260,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.insecure", true)
 	v.SetDefault("worker.poll_interval_seconds", 2.0)
-	v.SetDefault("worker.max_concurrent", 4)
-	v.SetDefault("worker.task_types", []string{"food", "food_text", "precision_plan", "precision_item_estimate", "precision_aggregate", "public_food_library_text", "exercise", "health_report", "expiry_recognize", "expiry_notification"})
+	v.SetDefault("worker.task_types", defaultWorkerTaskTypes)
+	v.SetDefault("task_queue.driver", "memory")
+	v.SetDefault("task_queue.buffer_size", 1024)
+	v.SetDefault("task_queue.topic", "food-link-analysis-tasks")
+	v.SetDefault("task_queue.consumer_group", "food-link-workers")
 }
 
 func bindLegacyEnv(v *viper.Viper) {
@@ -233,8 +304,4 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("database.user", "POSTGRESQL_USER")
 	_ = v.BindEnv("database.password", "POSTGRESQL_PASSWORD")
 	_ = v.BindEnv("database.name", "POSTGRESQL_DATABASE")
-	_ = v.BindEnv("worker.id", "WORKER_ID")
-	_ = v.BindEnv("worker.task_types", "WORKER_TASK_TYPES")
-	_ = v.BindEnv("worker.poll_interval_seconds", "WORKER_POLL_INTERVAL_SECONDS")
-	_ = v.BindEnv("worker.max_concurrent", "WORKER_MAX_CONCURRENT")
 }

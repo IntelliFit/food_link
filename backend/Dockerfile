@@ -17,8 +17,7 @@ ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 ENV CGO_ENABLED=0
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o /out/food-link ./cmd/server && \
-    go build -trimpath -ldflags="-s -w" -o /out/food-link-worker ./cmd/worker
+    go build -trimpath -ldflags="-s -w" -o /out/food-link ./cmd/server
 
 FROM scratch
 
@@ -27,7 +26,6 @@ WORKDIR /app
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /out/food-link /app/food-link
-COPY --from=builder /out/food-link-worker /app/food-link-worker
 COPY docs/backend-api-prd/ROUTE_MAP.md /app/docs/backend-api-prd/ROUTE_MAP.md
 COPY static /app/static
 

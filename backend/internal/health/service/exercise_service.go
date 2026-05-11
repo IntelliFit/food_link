@@ -16,6 +16,7 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
 	membershipdomain "food_link/backend/internal/membership/domain"
+	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 )
@@ -40,6 +41,7 @@ type ExerciseService struct {
 	cfg         *config.Config
 	client      *http.Client
 	storage     *storage.Client
+	taskQueue   taskqueue.Publisher
 }
 
 func NewExerciseService(repo ExerciseRepo, cfg ...*config.Config) *ExerciseService {
@@ -69,6 +71,10 @@ func (s *ExerciseService) ConfigureInviteRewardActivator(rewards InviteRewardAct
 
 func (s *ExerciseService) ConfigureStorage(storageClient *storage.Client) {
 	s.storage = storageClient
+}
+
+func (s *ExerciseService) ConfigureTaskPublisher(queue taskqueue.Publisher) {
+	s.taskQueue = queue
 }
 
 func (s *ExerciseService) GetDailyCalories(ctx context.Context, userID string, date string) (map[string]any, error) {
@@ -222,6 +228,9 @@ func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, 
 	if err := s.repo.CreateAnalysisTask(ctx, task); err != nil {
 		return nil, err
 	}
+	if err := s.enqueueTask(ctx, task.ID, task.TaskType); err != nil {
+		return nil, err
+	}
 	if s.creditGuard != nil && creditsInfo != nil {
 		_ = s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, creditCostExerciseLog, "exercise_reward_spend", "exercise:"+task.ID, map[string]any{
 			"task_id":   task.ID,
@@ -233,6 +242,18 @@ func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, 
 		"task_id": task.ID,
 		"message": "运动分析任务已提交，请轮询任务状态直至完成",
 	}, nil
+}
+
+func (s *ExerciseService) enqueueTask(ctx context.Context, taskID, taskType string) error {
+	if s.taskQueue == nil || strings.TrimSpace(taskID) == "" || strings.TrimSpace(taskType) == "" {
+		return nil
+	}
+	publishCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := s.taskQueue.PublishTask(publishCtx, taskqueue.TaskMessage{TaskID: taskID, TaskType: taskType}); err != nil {
+		return fmt.Errorf("enqueue exercise task: %w", err)
+	}
+	return nil
 }
 
 func (s *ExerciseService) EstimateCalories(ctx context.Context, userID string, exerciseDesc string) (map[string]any, error) {

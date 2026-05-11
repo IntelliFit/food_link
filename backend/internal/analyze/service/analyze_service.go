@@ -14,7 +14,9 @@ import (
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
+	apm "food_link/backend/pkg/trace"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
 
@@ -68,13 +70,26 @@ func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Conte
 	if sourceType == "image" {
 		timeout = 90 * time.Second
 	}
-	callCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
 	provider, _ := resolveModelConfig(modelName)
 	if strings.TrimSpace(modelName) == "" {
 		provider = "qwen"
 	}
+	traceCtx, span := apm.StartSpan(ctx, "analysis.precision.llm",
+		attribute.String("analysis.source_type", sourceType),
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.requested_model", strings.TrimSpace(modelName)),
+		attribute.Int("analysis.image_count", len(nonEmptyStrings(imageURLs))),
+	)
+	defer span.End()
+	ctx = traceCtx
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	apm.AddEvent(ctx, "precision llm select provider",
+		attribute.String("analysis.source_type", sourceType),
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.requested_model", strings.TrimSpace(modelName)),
+		attribute.Int("analysis.image_count", len(nonEmptyStrings(imageURLs))),
+	)
 	var client LLMClient
 	switch provider {
 	case "deepseek":
@@ -90,7 +105,9 @@ func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Conte
 		client = s.dashScopeClient
 	}
 	if client == nil {
-		return nil, fmt.Errorf("精准模式 LLM client 未初始化")
+		err := fmt.Errorf("precision LLM client is not initialized")
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "select_client"))
+		return nil, err
 	}
 	if strings.TrimSpace(sourceType) != "image" {
 		imageURLs = nil
@@ -101,23 +118,57 @@ func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Conte
 	if provider == "gemini" && len(imageURLs) > 0 {
 		primaryCtx, primaryCancel = context.WithTimeout(callCtx, visionPrimaryTimeout)
 	}
+	start := time.Now()
+	apm.AddEvent(ctx, "precision llm call started",
+		attribute.String("analysis.source_type", sourceType),
+		attribute.String("analysis.provider", provider),
+		attribute.Int("analysis.image_count", len(imageURLs)),
+		attribute.Float64("analysis.temperature", temperature),
+	)
 	parsed, err := analyzeWithImagesTemperature(primaryCtx, client, prompt, imageURLs, temperature)
 	primaryCancel()
 	if err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.dashScopeClient != nil {
 		fallbackParsed, fallbackErr := analyzeWithImagesTemperature(callCtx, s.dashScopeClient, prompt, imageURLs, temperature)
 		if fallbackErr == nil {
-			logger.L().Warn("precision gemini vision transient error fallback to dashscope",
+			logger.WithTrace(ctx).Warn("precision gemini vision transient error fallback to dashscope",
 				zap.Error(err),
 				zap.Int("image_count", len(imageURLs)),
 			)
+			apm.AddEvent(ctx, "precision llm fallback completed",
+				attribute.String("analysis.primary_provider", provider),
+				attribute.String("analysis.fallback_provider", "qwen"),
+				attribute.Int("analysis.image_count", len(imageURLs)),
+				apm.DurationMS("analysis.duration_ms", time.Since(start)),
+			)
 			return fallbackParsed, nil
 		}
-		logger.L().Warn("precision dashscope fallback failed",
+		logger.WithTrace(ctx).Warn("precision dashscope fallback failed",
 			zap.Error(fallbackErr),
 			zap.Error(err),
 			zap.Int("image_count", len(imageURLs)),
 		)
+		apm.RecordError(ctx, fallbackErr,
+			attribute.String("analysis.stage", "fallback"),
+			attribute.String("analysis.fallback_provider", "qwen"),
+		)
 	}
+	if err != nil {
+		apm.RecordError(ctx, err,
+			attribute.String("analysis.stage", "llm_call"),
+			attribute.String("analysis.provider", provider),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
+		apm.AddEvent(ctx, "precision llm call failed",
+			attribute.String("analysis.provider", provider),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
+		return parsed, err
+	}
+	apm.AddEvent(ctx, "precision llm call completed",
+		attribute.String("analysis.provider", provider),
+		attribute.Int("analysis.image_count", len(imageURLs)),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
 	return parsed, err
 }
 
@@ -193,6 +244,24 @@ func nonEmptyStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func imageCountForLog(primary string, values []string) int {
+	seen := map[string]bool{}
+	count := 0
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		count++
+	}
+	add(primary)
+	for _, value := range values {
+		add(value)
+	}
+	return count
 }
 
 func (s *AnalyzeService) ConfigureStorage(storageClient *storage.Client) {
@@ -894,31 +963,180 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	if provider == "gemini" && strings.TrimSpace(imageURL) != "" {
 		primaryCtx, primaryCancel = context.WithTimeout(ctx, visionPrimaryTimeout)
 	}
+	primaryProvider := provider
+	primaryModel := model
+	imageCount := imageCountForLog(imageURL, input.ImageURLs)
+	ctx, span := apm.StartSpan(ctx, "analysis.food_image",
+		attribute.String("analysis.user_id", userID),
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.model", model),
+		attribute.String("analysis.primary_provider", primaryProvider),
+		attribute.String("analysis.primary_model", primaryModel),
+		attribute.String("analysis.requested_model", strings.TrimSpace(input.ModelName)),
+		attribute.String("analysis.execution_mode", executionMode),
+		attribute.String("analysis.engine", strings.TrimSpace(input.AnalysisEngine)),
+		attribute.Int("analysis.image_count", imageCount),
+	)
+	defer span.End()
+	primaryCancel()
+	primaryCtx = ctx
+	primaryCancel = func() {}
+	if provider == "gemini" && strings.TrimSpace(imageURL) != "" {
+		primaryCtx, primaryCancel = context.WithTimeout(ctx, visionPrimaryTimeout)
+	}
+	apm.AddEvent(ctx, "food image analyze llm start",
+		attribute.String("analysis.user_id", userID),
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.model", model),
+		attribute.String("analysis.requested_model", strings.TrimSpace(input.ModelName)),
+		attribute.String("analysis.execution_mode", executionMode),
+		attribute.String("analysis.engine", strings.TrimSpace(input.AnalysisEngine)),
+		attribute.Int("analysis.image_count", imageCount),
+		attribute.Bool("analysis.has_base64_image", strings.TrimSpace(input.Base64Image) != ""),
+	)
+	logger.WithTrace(ctx).Info("food image analyze llm start",
+		zap.String("user_id", userID),
+		zap.String("provider", provider),
+		zap.String("model", model),
+		zap.String("requested_model", strings.TrimSpace(input.ModelName)),
+		zap.String("execution_mode", executionMode),
+		zap.String("analysis_engine", strings.TrimSpace(input.AnalysisEngine)),
+		zap.Int("image_count", imageCount),
+		zap.Bool("has_base64_image", strings.TrimSpace(input.Base64Image) != ""),
+	)
 	parsed, err := client.Analyze(primaryCtx, prompt, imageURL)
 	primaryCancel()
+	fallbackUsed := false
 	if err != nil && provider == "gemini" && isTransientLLMError(err) && s.dashScopeClient != nil {
 		fallbackParsed, fallbackErr := s.dashScopeClient.Analyze(ctx, prompt, imageURL)
 		if fallbackErr == nil {
-			logger.L().Warn("gemini vision transient error fallback to dashscope",
+			logger.WithTrace(ctx).Warn("gemini vision transient error fallback to dashscope",
 				zap.Error(err),
+			)
+			apm.AddEvent(ctx, "food image analyze llm fallback completed",
+				attribute.String("analysis.primary_provider", primaryProvider),
+				attribute.String("analysis.primary_model", primaryModel),
+				attribute.String("analysis.fallback_provider", "qwen"),
+				attribute.String("analysis.fallback_model", "qwen-vl-max"),
+				apm.DurationMS("analysis.duration_ms", time.Since(start)),
 			)
 			parsed = fallbackParsed
 			err = nil
 			provider = "qwen"
 			model = "qwen-vl-max"
+			fallbackUsed = true
 		} else {
-			logger.L().Warn("dashscope fallback failed",
+			logger.WithTrace(ctx).Warn("dashscope fallback failed",
 				zap.Error(fallbackErr),
 				zap.Error(err),
+			)
+			apm.RecordError(ctx, fallbackErr,
+				attribute.String("analysis.stage", "fallback"),
+				attribute.String("analysis.fallback_provider", "qwen"),
 			)
 		}
 	}
 	if err != nil {
+		apm.RecordError(ctx, err,
+			attribute.String("analysis.stage", "llm_call"),
+			attribute.String("analysis.provider", provider),
+			attribute.String("analysis.model", model),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
+		apm.AddEvent(ctx, "food image analyze llm failed",
+			attribute.String("analysis.provider", provider),
+			attribute.String("analysis.model", model),
+			attribute.String("analysis.primary_provider", primaryProvider),
+			attribute.String("analysis.primary_model", primaryModel),
+			attribute.Int("analysis.image_count", imageCount),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
+		logger.WithTrace(ctx).Warn("food image analyze llm failed",
+			zap.String("user_id", userID),
+			zap.String("provider", provider),
+			zap.String("model", model),
+			zap.String("primary_provider", primaryProvider),
+			zap.String("primary_model", primaryModel),
+			zap.String("requested_model", strings.TrimSpace(input.ModelName)),
+			zap.Int("image_count", imageCount),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err),
+		)
 		return nil, err
 	}
 	durationMs := float64(time.Since(start).Milliseconds())
+	apm.SetAttributes(ctx,
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.model", model),
+		attribute.Bool("analysis.fallback_used", fallbackUsed),
+		apm.DurationMS("analysis.llm_duration_ms", time.Since(start)),
+	)
+	apm.AddEvent(ctx, "food image analyze llm completed",
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.model", model),
+		attribute.String("analysis.primary_provider", primaryProvider),
+		attribute.String("analysis.primary_model", primaryModel),
+		attribute.String("analysis.requested_model", strings.TrimSpace(input.ModelName)),
+		attribute.Int("analysis.image_count", imageCount),
+		attribute.Bool("analysis.fallback_used", fallbackUsed),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	logger.WithTrace(ctx).Info("food image analyze llm completed",
+		zap.String("user_id", userID),
+		zap.String("provider", provider),
+		zap.String("model", model),
+		zap.String("primary_provider", primaryProvider),
+		zap.String("primary_model", primaryModel),
+		zap.String("requested_model", strings.TrimSpace(input.ModelName)),
+		zap.Int("image_count", imageCount),
+		zap.Bool("fallback_used", fallbackUsed),
+		zap.Duration("duration", time.Since(start)),
+	)
 
-	return s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
+	result, err := s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
+	if err != nil {
+		apm.RecordError(ctx, err,
+			attribute.String("analysis.stage", "finalize"),
+			attribute.String("analysis.provider", provider),
+			attribute.String("analysis.model", model),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
+		logger.WithTrace(ctx).Warn("food image analyze finalize failed",
+			zap.String("user_id", userID),
+			zap.String("provider", provider),
+			zap.String("model", model),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+	apm.SetAttributes(ctx,
+		attribute.String("analysis.engine", stringFromAny(result["analysis_engine"])),
+		attribute.Int("analysis.item_count", len(toItems(result["items"]))),
+		attribute.Int("analysis.resolved_count", intFromAny(result["resolved_count"])),
+		attribute.Int("analysis.unresolved_count", intFromAny(result["unresolved_count"])),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	apm.AddEvent(ctx, "food image analyze finalized",
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.model", model),
+		attribute.String("analysis.engine", stringFromAny(result["analysis_engine"])),
+		attribute.Int("analysis.item_count", len(toItems(result["items"]))),
+		attribute.Int("analysis.resolved_count", intFromAny(result["resolved_count"])),
+		attribute.Int("analysis.unresolved_count", intFromAny(result["unresolved_count"])),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	logger.WithTrace(ctx).Info("food image analyze finalized",
+		zap.String("user_id", userID),
+		zap.String("provider", provider),
+		zap.String("model", model),
+		zap.String("analysis_engine", stringFromAny(result["analysis_engine"])),
+		zap.Int("item_count", len(toItems(result["items"]))),
+		zap.Int("resolved_count", intFromAny(result["resolved_count"])),
+		zap.Int("unresolved_count", intFromAny(result["unresolved_count"])),
+		zap.Duration("duration", time.Since(start)),
+	)
+	return result, nil
 }
 
 // AnalyzeText performs text-only analysis.
@@ -952,12 +1170,47 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		client = s.dashScopeClient
 	}
 	start := time.Now()
+	ctx, span := apm.StartSpan(ctx, "analysis.food_text",
+		attribute.String("analysis.user_id", userID),
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.model", model),
+		attribute.String("analysis.requested_model", strings.TrimSpace(input.ModelName)),
+		attribute.String("analysis.execution_mode", executionMode),
+	)
+	defer span.End()
+	apm.AddEvent(ctx, "food text analyze llm start",
+		attribute.String("analysis.user_id", userID),
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.model", model),
+		attribute.String("analysis.requested_model", strings.TrimSpace(input.ModelName)),
+		attribute.String("analysis.execution_mode", executionMode),
+	)
 	parsed, err := client.Analyze(ctx, prompt, "")
 	if err != nil {
+		apm.RecordError(ctx, err,
+			attribute.String("analysis.stage", "llm_call"),
+			attribute.String("analysis.provider", provider),
+			attribute.String("analysis.model", model),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
 		return nil, err
 	}
 	durationMs := float64(time.Since(start).Milliseconds())
-	return s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
+	result, err := s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
+	if err != nil {
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "finalize"))
+		return nil, err
+	}
+	apm.AddEvent(ctx, "food text analyze finalized",
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.model", model),
+		attribute.String("analysis.engine", stringFromAny(result["analysis_engine"])),
+		attribute.Int("analysis.item_count", len(toItems(result["items"]))),
+		attribute.Int("analysis.resolved_count", intFromAny(result["resolved_count"])),
+		attribute.Int("analysis.unresolved_count", intFromAny(result["unresolved_count"])),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	return result, nil
 }
 
 // AnalyzeCompare calls both Qwen and Gemini in parallel.
@@ -1410,11 +1663,11 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	resp["items"] = out
 	resp["resolved_count"] = resolvedCount
 	resp["unresolved_count"] = unresolvedCount
-	logDBFirstNutritionSummary(out, resolvedCount, unresolvedCount)
+	logDBFirstNutritionSummary(ctx, out, resolvedCount, unresolvedCount)
 	return resp
 }
 
-func logDBFirstNutritionSummary(items []map[string]any, resolvedCount, unresolvedCount int) {
+func logDBFirstNutritionSummary(ctx context.Context, items []map[string]any, resolvedCount, unresolvedCount int) {
 	total := resolvedCount + unresolvedCount
 	hitRate := 0.0
 	if total > 0 {
@@ -1439,7 +1692,43 @@ func logDBFirstNutritionSummary(items []map[string]any, resolvedCount, unresolve
 		})
 	}
 	fields = append(fields, zap.Any("items", itemFields))
-	logger.L().Info("db_first nutrition lookup summary", fields...)
+	logger.WithTrace(ctx).Info("db_first nutrition lookup summary", fields...)
+	apm.AddEvent(ctx, "db_first nutrition lookup summary",
+		attribute.Int("nutrition.total", total),
+		attribute.Int("nutrition.resolved", resolvedCount),
+		attribute.Int("nutrition.unresolved", unresolvedCount),
+		attribute.Float64("nutrition.hit_rate_percent", hitRate),
+		attribute.String("nutrition.items", summarizeTraceLookupItems(items, 8)),
+	)
+}
+
+func summarizeTraceLookupItems(items []map[string]any, limit int) string {
+	if limit <= 0 || len(items) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, limit)
+	for _, item := range items {
+		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+		if name == "" {
+			name = "unknown"
+		}
+		status := strings.TrimSpace(fmt.Sprintf("%v", item["resolve_status"]))
+		source := strings.TrimSpace(fmt.Sprintf("%v", item["nutrition_source"]))
+		if status == "" {
+			status = "unknown"
+		}
+		if source == "" {
+			source = "unknown"
+		}
+		parts = append(parts, fmt.Sprintf("%s:%s:%s", name, status, source))
+		if len(parts) >= limit {
+			break
+		}
+	}
+	if len(items) > limit {
+		parts = append(parts, fmt.Sprintf("more=%d", len(items)-limit))
+	}
+	return strings.Join(parts, "|")
 }
 
 func copyAnyMap(in map[string]any) map[string]any {

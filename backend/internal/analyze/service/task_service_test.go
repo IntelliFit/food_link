@@ -8,6 +8,7 @@ import (
 	analyzedomain "food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/repo"
 	authrepo "food_link/backend/internal/auth/repo"
+	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
@@ -16,6 +17,15 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+type recordingTaskPublisher struct {
+	messages []taskqueue.TaskMessage
+}
+
+func (p *recordingTaskPublisher) PublishTask(ctx context.Context, msg taskqueue.TaskMessage) error {
+	p.messages = append(p.messages, msg)
+	return nil
+}
 
 func setupTaskServiceTestDB(t *testing.T) (*gorm.DB, *repo.TaskRepo, *repo.PrecisionRepo, *authrepo.UserRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
@@ -64,6 +74,20 @@ func TestTaskService_SubmitAnalyzeTask_WithImages(t *testing.T) {
 	assert.NotEmpty(t, taskID)
 }
 
+func TestTaskService_EnqueueTaskPublishesQueueMessage(t *testing.T) {
+	svc := &TaskService{}
+	publisher := &recordingTaskPublisher{}
+	svc.ConfigureTaskPublisher(publisher)
+	ctx := context.Background()
+
+	task := &analyzedomain.AnalysisTask{ID: "task-1", TaskType: "food", Status: "pending"}
+	err := svc.enqueueTask(ctx, task)
+	require.NoError(t, err)
+	require.Len(t, publisher.messages, 1)
+	assert.Equal(t, "task-1", publisher.messages[0].TaskID)
+	assert.Equal(t, "food", publisher.messages[0].TaskType)
+}
+
 func TestTaskService_SubmitTextTask_EmptyText(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
@@ -85,6 +109,18 @@ func TestTaskService_SubmitTextTask_Success(t *testing.T) {
 	task, err := taskRepo.GetTaskByID(ctx, taskID)
 	require.NoError(t, err)
 	assert.Equal(t, "food_text", task.TaskType)
+}
+
+func TestTaskService_EnqueueTaskSkipsCompletedTask(t *testing.T) {
+	svc := &TaskService{}
+	publisher := &recordingTaskPublisher{}
+	svc.ConfigureTaskPublisher(publisher)
+	ctx := context.Background()
+
+	task := &analyzedomain.AnalysisTask{ID: "task-1", TaskType: "food_text", Status: "done"}
+	err := svc.enqueueTask(ctx, task)
+	require.NoError(t, err)
+	assert.Empty(t, publisher.messages)
 }
 
 func TestTaskService_ListTasks(t *testing.T) {

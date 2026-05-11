@@ -1,8 +1,10 @@
 package logger
 
 import (
+	"context"
 	"sync"
 
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 )
 
@@ -30,4 +32,17 @@ func L() *zap.Logger {
 		return global
 	}
 	return zap.NewNop()
+}
+
+func WithTrace(ctx context.Context) *zap.Logger {
+	log := L()
+	span := oteltrace.SpanFromContext(ctx)
+	spanContext := span.SpanContext()
+	if !spanContext.IsValid() {
+		return log
+	}
+	return log.With(
+		zap.String("trace_id", spanContext.TraceID().String()),
+		zap.String("span_id", spanContext.SpanID().String()),
+	)
 }

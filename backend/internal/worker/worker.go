@@ -16,11 +16,14 @@ import (
 	expiryservice "food_link/backend/internal/expiry/service"
 	healthservice "food_link/backend/internal/health/service"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
+	"food_link/backend/internal/taskqueue"
 	userdomain "food_link/backend/internal/user/domain"
 	userrepo "food_link/backend/internal/user/repo"
 	userservice "food_link/backend/internal/user/service"
 	"food_link/backend/pkg/storage"
+	apm "food_link/backend/pkg/trace"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
 
@@ -40,15 +43,16 @@ type Runner struct {
 	expiry     *expiryservice.Recognizer
 	notifier   *expiryservice.NotificationWorker
 	exercise   *healthservice.ExerciseService
+	queue      taskqueue.Queue
 	log        *zap.Logger
 	storage    *storage.Client
 }
 
 type Options struct {
-	WorkerID      string
-	TaskTypes     []string
-	PollInterval  time.Duration
-	MaxConcurrent int
+	WorkerID     string
+	TaskTypes    []string
+	PollInterval time.Duration
+	WorkerCount  int
 }
 
 func NewRunner(
@@ -62,6 +66,7 @@ func NewRunner(
 	expiry *expiryservice.Recognizer,
 	notifier *expiryservice.NotificationWorker,
 	exercise *healthservice.ExerciseService,
+	taskQueue taskqueue.Queue,
 	log *zap.Logger,
 	storageClient ...*storage.Client,
 ) *Runner {
@@ -83,6 +88,7 @@ func NewRunner(
 		expiry:     expiry,
 		notifier:   notifier,
 		exercise:   exercise,
+		queue:      taskQueue,
 		log:        log,
 		storage:    client,
 	}
@@ -96,26 +102,33 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 	if opts.PollInterval <= 0 {
 		opts.PollInterval = 2 * time.Second
 	}
-	if opts.MaxConcurrent <= 0 {
-		opts.MaxConcurrent = 4
+	if opts.WorkerCount <= 0 {
+		opts.WorkerCount = 1
 	}
 	if opts.WorkerID == "" {
 		opts.WorkerID = "worker-0"
+	}
+	if r.queue == nil {
+		return fmt.Errorf("worker task queue is not initialized")
+	}
+	deliveries, err := r.queue.Subscribe(ctx, taskqueue.SubscribeOptions{TaskTypes: taskTypes})
+	if err != nil {
+		return fmt.Errorf("subscribe task queue: %w", err)
 	}
 
 	r.log.Info("worker started",
 		zap.String("worker_id", opts.WorkerID),
 		zap.Strings("task_types", taskTypes),
 		zap.Duration("poll_interval", opts.PollInterval),
-		zap.Int("max_concurrent", opts.MaxConcurrent),
+		zap.Int("worker_count", opts.WorkerCount),
 	)
 
 	var wg sync.WaitGroup
-	for i := 0; i < opts.MaxConcurrent; i++ {
+	for i := 0; i < opts.WorkerCount; i++ {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
-			r.loop(ctx, fmt.Sprintf("%s-%d", opts.WorkerID, index), taskTypes, opts.PollInterval)
+			r.loop(ctx, fmt.Sprintf("%s-%d", opts.WorkerID, index), taskTypes, deliveries, opts.PollInterval)
 		}(i)
 	}
 	<-ctx.Done()
@@ -123,7 +136,7 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 	return ctx.Err()
 }
 
-func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, pollInterval time.Duration) {
+func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, deliveries <-chan taskqueue.Delivery, pollInterval time.Duration) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 	idleCount := 0
@@ -132,21 +145,18 @@ func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, 
 		case <-ctx.Done():
 			r.log.Info("worker loop stopped", zap.String("worker_id", workerID))
 			return
-		default:
-		}
-
-		task, err := r.tasks.ClaimNextPendingTask(ctx, taskTypes)
-		if err != nil {
-			r.log.Error("claim task failed", zap.String("worker_id", workerID), zap.Error(err))
-			<-ticker.C
-			continue
-		}
-		if task == nil {
+		case delivery, ok := <-deliveries:
+			if !ok {
+				r.log.Info("worker task queue closed", zap.String("worker_id", workerID))
+				return
+			}
+			idleCount = 0
+			r.handleDelivery(ctx, workerID, taskTypes, delivery)
+		case <-ticker.C:
 			if handlesTaskType(taskTypes, "expiry_notification") || handlesTaskType(taskTypes, "food_expiry_notification_job") {
 				handled, err := r.processExpiryNotification(ctx, workerID)
 				if err != nil {
 					r.log.Error("process expiry notification failed", zap.String("worker_id", workerID), zap.Error(err))
-					<-ticker.C
 					continue
 				}
 				if handled {
@@ -158,12 +168,119 @@ func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, 
 			if idleCount%30 == 0 {
 				r.log.Info("worker idle", zap.String("worker_id", workerID), zap.Strings("task_types", taskTypes))
 			}
-			<-ticker.C
-			continue
 		}
-		idleCount = 0
-		r.log.Info("task claimed", zap.String("worker_id", workerID), zap.String("task_id", task.ID), zap.String("task_type", task.TaskType))
-		r.process(ctx, task)
+	}
+}
+
+func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes []string, delivery taskqueue.Delivery) {
+	msg := delivery.Message
+	ctx = msg.Context(ctx)
+	ctx, span := apm.StartSpan(ctx, "task_queue.delivery",
+		attribute.String("worker.id", workerID),
+		attribute.String("analysis.task_id", strings.TrimSpace(msg.TaskID)),
+		attribute.String("analysis.task_type", strings.TrimSpace(msg.TaskType)),
+		attribute.String("messaging.operation", "receive"),
+	)
+	defer span.End()
+	apm.AddEvent(ctx, "task queue delivery received",
+		attribute.String("worker.id", workerID),
+		attribute.String("analysis.task_id", strings.TrimSpace(msg.TaskID)),
+		attribute.String("analysis.task_type", strings.TrimSpace(msg.TaskType)),
+	)
+	if strings.TrimSpace(msg.TaskID) == "" {
+		r.log.Warn("task queue delivery missing task id", zap.String("worker_id", workerID), zap.String("task_type", msg.TaskType))
+		apm.AddEvent(ctx, "task queue delivery missing task id", attribute.String("analysis.task_type", strings.TrimSpace(msg.TaskType)))
+		_ = delivery.Ack(ctx)
+		return
+	}
+	if !handlesTaskType(taskTypes, msg.TaskType) {
+		r.log.Warn("task queue delivery skipped because worker does not handle task type",
+			zap.String("worker_id", workerID),
+			zap.String("task_id", msg.TaskID),
+			zap.String("task_type", msg.TaskType),
+		)
+		apm.AddEvent(ctx, "task queue delivery skipped",
+			attribute.String("worker.id", workerID),
+			attribute.String("analysis.task_id", msg.TaskID),
+			attribute.String("analysis.task_type", msg.TaskType),
+			attribute.String("reason", "task_type_not_subscribed"),
+		)
+		_ = delivery.Ack(ctx)
+		return
+	}
+	apm.AddEvent(ctx, "analysis task claim started",
+		attribute.String("worker.id", workerID),
+		attribute.String("analysis.task_id", msg.TaskID),
+		attribute.String("analysis.task_type", msg.TaskType),
+	)
+	task, err := r.tasks.ClaimTaskByID(ctx, msg.TaskID, taskTypes)
+	if err != nil {
+		r.log.Error("claim queued task failed",
+			zap.String("worker_id", workerID),
+			zap.String("task_id", msg.TaskID),
+			zap.String("task_type", msg.TaskType),
+			zap.Error(err),
+		)
+		apm.RecordError(ctx, err,
+			attribute.String("worker.id", workerID),
+			attribute.String("analysis.task_id", msg.TaskID),
+			attribute.String("analysis.task_type", msg.TaskType),
+			attribute.String("analysis.stage", "claim"),
+		)
+		apm.AddEvent(ctx, "analysis task claim failed",
+			attribute.String("worker.id", workerID),
+			attribute.String("analysis.task_id", msg.TaskID),
+			attribute.String("analysis.task_type", msg.TaskType),
+		)
+		_ = delivery.Nack(ctx, err)
+		return
+	}
+	if task == nil {
+		r.log.Info("queued task skipped because it is no longer pending or not allowed",
+			zap.String("worker_id", workerID),
+			zap.String("task_id", msg.TaskID),
+			zap.String("task_type", msg.TaskType),
+		)
+		apm.AddEvent(ctx, "analysis task claim skipped",
+			attribute.String("worker.id", workerID),
+			attribute.String("analysis.task_id", msg.TaskID),
+			attribute.String("analysis.task_type", msg.TaskType),
+			attribute.String("reason", "not_pending_or_not_allowed"),
+		)
+		_ = delivery.Ack(ctx)
+		return
+	}
+	r.log.Info("task claimed",
+		zap.String("worker_id", workerID),
+		zap.String("task_id", task.ID),
+		zap.String("task_type", task.TaskType),
+		zap.String("source", "task_queue"),
+	)
+	apm.SetAttributes(ctx,
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+		attribute.String("analysis.user_id", task.UserID),
+	)
+	apm.AddEvent(ctx, "analysis task claimed",
+		attribute.String("worker.id", workerID),
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+		attribute.String("analysis.user_id", task.UserID),
+	)
+	r.process(ctx, workerID, task)
+	if err := delivery.Ack(ctx); err != nil {
+		r.log.Error("ack queued task failed",
+			zap.String("worker_id", workerID),
+			zap.String("task_id", task.ID),
+			zap.String("task_type", task.TaskType),
+			zap.Error(err),
+		)
+		apm.RecordError(ctx, err,
+			attribute.String("worker.id", workerID),
+			attribute.String("analysis.task_id", task.ID),
+			attribute.String("analysis.task_type", task.TaskType),
+			attribute.String("analysis.stage", "ack"),
+		)
 	}
 }
 
@@ -180,9 +297,65 @@ func (r *Runner) processExpiryNotification(ctx context.Context, workerID string)
 	return handled, err
 }
 
-func (r *Runner) process(ctx context.Context, task *domain.AnalysisTask) {
+func (r *Runner) enqueueTask(ctx context.Context, task *domain.AnalysisTask) error {
+	if r.queue == nil || task == nil || task.Status != "pending" {
+		return nil
+	}
+	apm.AddEvent(ctx, "worker child task queue publish started",
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+	)
+	publishCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := r.queue.PublishTask(publishCtx, taskqueue.TaskMessage{TaskID: task.ID, TaskType: task.TaskType}); err != nil {
+		r.log.Error("worker failed to enqueue child task",
+			zap.String("task_id", task.ID),
+			zap.String("task_type", task.TaskType),
+			zap.Error(err),
+		)
+		apm.RecordError(ctx, err,
+			attribute.String("analysis.task_id", task.ID),
+			attribute.String("analysis.task_type", task.TaskType),
+			attribute.String("analysis.stage", "child_enqueue"),
+		)
+		return fmt.Errorf("enqueue child task %s: %w", task.ID, err)
+	}
+	r.log.Info("worker enqueued child task",
+		zap.String("task_id", task.ID),
+		zap.String("task_type", task.TaskType),
+	)
+	apm.AddEvent(ctx, "worker child task queue publish completed",
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+	)
+	return nil
+}
+
+func (r *Runner) process(ctx context.Context, workerID string, task *domain.AnalysisTask) {
+	start := time.Now()
 	taskCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
+	taskCtx, span := apm.StartSpan(taskCtx, "analysis.task.process",
+		attribute.String("worker.id", workerID),
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+		attribute.String("analysis.user_id", task.UserID),
+		attribute.String("analysis.task_status", task.Status),
+	)
+	defer span.End()
+
+	r.log.Info("task processing started",
+		zap.String("worker_id", workerID),
+		zap.String("task_id", task.ID),
+		zap.String("task_type", task.TaskType),
+		zap.String("status", task.Status),
+	)
+	apm.AddEvent(taskCtx, "task processing started",
+		attribute.String("worker.id", workerID),
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+		attribute.String("analysis.task_status", task.Status),
+	)
 
 	var err error
 	switch task.TaskType {
@@ -208,42 +381,179 @@ func (r *Runner) process(ctx context.Context, task *domain.AnalysisTask) {
 		err = fmt.Errorf("unsupported worker task_type: %s", task.TaskType)
 	}
 	if err != nil {
-		r.failTask(taskCtx, task.ID, err)
+		failCtx, failCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer failCancel()
+		r.failTask(failCtx, task.ID, err)
+		apm.RecordError(taskCtx, err,
+			attribute.String("worker.id", workerID),
+			attribute.String("analysis.task_id", task.ID),
+			attribute.String("analysis.task_type", task.TaskType),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
+		apm.AddEvent(taskCtx, "task processing failed",
+			attribute.String("worker.id", workerID),
+			attribute.String("analysis.task_id", task.ID),
+			attribute.String("analysis.task_type", task.TaskType),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
+		r.log.Warn("task processing finished with error",
+			zap.String("worker_id", workerID),
+			zap.String("task_id", task.ID),
+			zap.String("task_type", task.TaskType),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err),
+		)
 		return
 	}
-	r.log.Info("task processed", zap.String("task_id", task.ID), zap.String("task_type", task.TaskType))
+	apm.SetAttributes(taskCtx, apm.DurationMS("analysis.duration_ms", time.Since(start)))
+	apm.AddEvent(taskCtx, "task processing completed",
+		attribute.String("worker.id", workerID),
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	r.log.Info("task processed",
+		zap.String("worker_id", workerID),
+		zap.String("task_id", task.ID),
+		zap.String("task_type", task.TaskType),
+		zap.Duration("duration", time.Since(start)),
+	)
 }
 
 func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) error {
+	ctx, span := apm.StartSpan(ctx, "analysis.task.food",
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+		attribute.String("analysis.user_id", task.UserID),
+	)
+	defer span.End()
 	r.normalizeTaskImages(task, "food-images")
 	if done, err := r.completeCorrectionTask(ctx, task, "", 0, nil); done || err != nil {
+		if err != nil {
+			apm.RecordError(ctx, err, attribute.String("analysis.stage", "correction"))
+		}
 		return err
 	}
 	input := analyzeInputFromTask(task)
 	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
-		return fmt.Errorf("food task missing image_url/image_paths")
-	}
-	result, err := r.analyze.Analyze(ctx, task.UserID, input)
-	if err != nil {
+		err := fmt.Errorf("food task missing image_url/image_paths")
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "validate_input"))
 		return err
 	}
+	start := time.Now()
+	apm.AddEvent(ctx, "food task analyze started",
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.user_id", task.UserID),
+		attribute.String("analysis.model_name", stringFromMap(task.Payload, "modelName")),
+		attribute.String("analysis.execution_mode", stringFromMap(task.Payload, "execution_mode")),
+		attribute.String("analysis.engine", stringFromMap(task.Payload, "analysis_engine")),
+		attribute.Int("analysis.image_count", taskImageCount(task)),
+	)
+	r.log.Info("food task analyze started",
+		zap.String("task_id", task.ID),
+		zap.String("user_id", task.UserID),
+		zap.String("model_name", stringFromMap(task.Payload, "modelName")),
+		zap.String("execution_mode", stringFromMap(task.Payload, "execution_mode")),
+		zap.String("analysis_engine", stringFromMap(task.Payload, "analysis_engine")),
+		zap.Int("image_count", taskImageCount(task)),
+	)
+	result, err := r.analyze.Analyze(ctx, task.UserID, input)
+	if err != nil {
+		apm.RecordError(ctx, err,
+			attribute.String("analysis.stage", "food_analyze"),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
+		apm.AddEvent(ctx, "food task analyze failed",
+			attribute.String("analysis.task_id", task.ID),
+			attribute.String("analysis.user_id", task.UserID),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
+		r.log.Warn("food task analyze failed",
+			zap.String("task_id", task.ID),
+			zap.String("user_id", task.UserID),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err),
+		)
+		return err
+	}
+	apm.AddEvent(ctx, "food task analyze result ready",
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.user_id", task.UserID),
+		attribute.String("analysis.model_name", stringFromMap(result, "model_name")),
+		attribute.String("analysis.engine", stringFromMap(result, "analysis_engine")),
+		attribute.Int("analysis.item_count", len(extractItems(result["items"]))),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	r.log.Info("food task analyze result ready",
+		zap.String("task_id", task.ID),
+		zap.String("user_id", task.UserID),
+		zap.String("model_name", stringFromMap(result, "model_name")),
+		zap.String("analysis_engine", stringFromMap(result, "analysis_engine")),
+		zap.Int("item_count", len(extractItems(result["items"]))),
+		zap.Duration("duration", time.Since(start)),
+	)
 	_, err = r.tasks.CompleteTask(ctx, task.ID, result)
-	return err
+	if err != nil {
+		r.log.Error("food task complete update failed", zap.String("task_id", task.ID), zap.Error(err))
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
+		return err
+	}
+	apm.SetAttributes(ctx,
+		attribute.Int("analysis.item_count", len(extractItems(result["items"]))),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	apm.AddEvent(ctx, "food task completed",
+		attribute.String("analysis.task_id", task.ID),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	r.log.Info("food task completed", zap.String("task_id", task.ID), zap.Duration("duration", time.Since(start)))
+	return nil
 }
 
 func (r *Runner) processFoodText(ctx context.Context, task *domain.AnalysisTask) error {
+	ctx, span := apm.StartSpan(ctx, "analysis.task.food_text",
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.task_type", task.TaskType),
+		attribute.String("analysis.user_id", task.UserID),
+	)
+	defer span.End()
 	if done, err := r.completeCorrectionTask(ctx, task, "", 0, nil); done || err != nil {
+		if err != nil {
+			apm.RecordError(ctx, err, attribute.String("analysis.stage", "correction"))
+		}
 		return err
 	}
 	input := analyzeInputFromTask(task)
 	if strings.TrimSpace(input.Text) == "" {
-		return fmt.Errorf("food_text task missing text_input")
+		err := fmt.Errorf("food_text task missing text_input")
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "validate_input"))
+		return err
 	}
+	start := time.Now()
+	apm.AddEvent(ctx, "food text task analyze started",
+		attribute.String("analysis.task_id", task.ID),
+		attribute.String("analysis.user_id", task.UserID),
+		attribute.String("analysis.model_name", stringFromMap(task.Payload, "modelName")),
+		attribute.String("analysis.execution_mode", stringFromMap(task.Payload, "execution_mode")),
+	)
 	result, err := r.analyze.AnalyzeText(ctx, task.UserID, input)
 	if err != nil {
+		apm.RecordError(ctx, err,
+			attribute.String("analysis.stage", "food_text_analyze"),
+			apm.DurationMS("analysis.duration_ms", time.Since(start)),
+		)
 		return err
 	}
 	_, err = r.tasks.CompleteTask(ctx, task.ID, result)
+	if err != nil {
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
+		return err
+	}
+	apm.AddEvent(ctx, "food text task completed",
+		attribute.String("analysis.task_id", task.ID),
+		attribute.Int("analysis.item_count", len(extractItems(result["items"]))),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
 	return err
 }
 
@@ -639,6 +949,9 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		}); err != nil {
 			return err
 		}
+		if err := r.enqueueTask(ctx, childTask); err != nil {
+			return err
+		}
 	}
 
 	aggregatePayload := map[string]any{
@@ -684,6 +997,9 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		"last_error":            nil,
 		"updated_at":            time.Now(),
 	}); err != nil {
+		return err
+	}
+	if err := r.enqueueTask(ctx, aggregateTask); err != nil {
 		return err
 	}
 	_, err = r.tasks.CompleteTask(ctx, task.ID, result)
@@ -2614,6 +2930,29 @@ func handlesTaskType(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func taskImageCount(task *domain.AnalysisTask) int {
+	if task == nil {
+		return 0
+	}
+	seen := map[string]bool{}
+	count := 0
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		count++
+	}
+	if task.ImageURL != nil {
+		add(*task.ImageURL)
+	}
+	for _, value := range task.ImagePaths {
+		add(value)
+	}
+	return count
 }
 
 func stringFromMap(payload map[string]any, key string) string {

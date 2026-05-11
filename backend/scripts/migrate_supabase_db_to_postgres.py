@@ -1,24 +1,26 @@
 """
 Migrate the latest Supabase PostgreSQL schema and data into a self-hosted PostgreSQL database.
 
-This script treats the source Supabase database as the source of truth and aims to make the
-selected schemas in the target database match it exactly.
+By default this script treats the existing target database as canonical and only inserts
+missing rows from Supabase. Destructive schema rebuild is still available, but it must be
+requested explicitly.
 
 Default behavior:
-1. Dump the selected source schemas with pg_dump into one plain SQL file.
-2. Drop and recreate the same schemas in the target database.
-3. Restore the dump into the target database.
-4. Verify schema objects, runtime objects, sequence state, and row counts between source and target.
+1. Read rows from the selected Supabase source schemas.
+2. Insert source rows that are missing from the target database.
+3. Keep existing target rows, target-only rows, and the target schema unchanged.
+4. Refresh target sequences.
 
 Typical usage:
   backend/.venv/Scripts/python.exe backend/scripts/migrate_supabase_db_to_postgres.py --dry-run
-  backend/.venv/Scripts/python.exe backend/scripts/migrate_supabase_db_to_postgres.py --yes
+  backend/.venv/Scripts/python.exe backend/scripts/migrate_supabase_db_to_postgres.py
   backend/.venv/Scripts/python.exe backend/scripts/migrate_supabase_db_to_postgres.py --data-only
+  backend/.venv/Scripts/python.exe backend/scripts/migrate_supabase_db_to_postgres.py --destructive-rebuild --yes
 
 Important:
-- This is destructive for the selected target schemas.
-- Use --data-only for a non-destructive insert-only data sync into the existing target schema.
-- By default it migrates only the `public` schema, which is the app's business schema.
+- The default mode is non-destructive data-only insert-missing sync.
+- Destructive schema rebuild requires --destructive-rebuild --yes.
+- By default it syncs only the `public` schema, which is the app's business schema.
 - If you need a stronger guarantee, keep the default verification enabled.
 """
 
@@ -63,6 +65,7 @@ class RuntimeConfig:
     dry_run: bool
     verify_only: bool
     data_only: bool
+    tables: List[str]
     update_existing: bool
     batch_size: int
     yes: bool
@@ -121,12 +124,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="Print the plan only.")
     parser.add_argument("--verify-only", action="store_true", help="Only run verification.")
     parser.add_argument(
+        "--tables",
+        default="",
+        help=(
+            "Comma-separated table list for --data-only, e.g. public.user_exercise_logs. "
+            "Unqualified names use the first selected schema."
+        ),
+    )
+    parser.add_argument(
         "--data-only",
         action="store_true",
         help=(
-            "Non-destructive data sync into the existing target schema. "
+            "Non-destructive data sync into the existing target schema. This is the default mode. "
             "By default this inserts missing source rows only and keeps existing target rows unchanged."
         ),
+    )
+    parser.add_argument(
+        "--destructive-rebuild",
+        action="store_true",
+        help="Rebuild selected target schemas from the source schema and data. Requires --yes.",
     )
     parser.add_argument(
         "--update-existing",
@@ -134,7 +150,7 @@ def parse_args() -> argparse.Namespace:
         help="With --data-only, also update rows that already exist in the target. Default: insert missing rows only.",
     )
     parser.add_argument("--batch-size", type=int, default=1000, help="Rows per batch for --data-only. Default: 1000.")
-    parser.add_argument("--yes", action="store_true", help="Confirm destructive schema rebuild.")
+    parser.add_argument("--yes", action="store_true", help="Confirm --destructive-rebuild.")
     parser.add_argument("--pg-dump-path", default="", help="Explicit pg_dump executable path.")
     parser.add_argument("--psql-path", default="", help="Explicit psql executable path.")
     parser.add_argument(
@@ -143,11 +159,15 @@ def parse_args() -> argparse.Namespace:
         help="Optional JSON report path for verification output.",
     )
     args = parser.parse_args()
-    modes = [bool(args.verify_only), bool(args.data_only)]
+    modes = [bool(args.verify_only), bool(args.data_only), bool(args.destructive_rebuild)]
     if sum(modes) > 1:
-        raise SystemExit("--verify-only and --data-only cannot be used together")
+        raise SystemExit("--verify-only, --data-only, and --destructive-rebuild cannot be used together")
     if args.dry_run and args.verify_only:
         raise SystemExit("--dry-run and --verify-only cannot be used together")
+    if not args.verify_only and not args.destructive_rebuild:
+        args.data_only = True
+    if args.tables and not args.data_only:
+        raise SystemExit("--tables can only be used with --data-only")
     if args.update_existing and not args.data_only:
         raise SystemExit("--update-existing can only be used with --data-only")
     if args.batch_size < 1:
@@ -160,6 +180,25 @@ def parse_schemas(raw: str) -> List[str]:
     if not schemas:
         raise RuntimeError("at least one schema is required")
     return schemas
+
+
+def parse_tables(raw: str, schemas: Sequence[str]) -> List[str]:
+    tables: List[str] = []
+    default_schema = schemas[0] if schemas else "public"
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if "." in item:
+            schema, table = item.split(".", 1)
+        else:
+            schema, table = default_schema, item
+        schema = schema.strip()
+        table = table.strip()
+        if not schema or not table:
+            raise RuntimeError(f"invalid --tables entry: {item}")
+        tables.append(f"{schema}.{table}")
+    return tables
 
 
 def build_postgresql_url(*, host: str, port: str, user: str, password: str, database: str, sslmode: str) -> str:
@@ -213,16 +252,18 @@ def load_runtime_config(args: argparse.Namespace) -> RuntimeConfig:
 
     dump_file = Path(args.dump_file).resolve() if args.dump_file else None
     report_file = Path(args.report_file).resolve() if args.report_file else None
+    schemas = parse_schemas(args.schemas)
     return RuntimeConfig(
         env_file=env_file,
         source_url=source_url,
         target_url=target_url,
-        schemas=parse_schemas(args.schemas),
+        schemas=schemas,
         dump_file=dump_file,
         keep_dump=bool(args.keep_dump),
         dry_run=bool(args.dry_run),
         verify_only=bool(args.verify_only),
         data_only=bool(args.data_only),
+        tables=parse_tables(args.tables, schemas),
         update_existing=bool(args.update_existing),
         batch_size=int(args.batch_size),
         yes=bool(args.yes),
@@ -817,6 +858,52 @@ def fetch_table_row_count(conn, schema: str, table: str) -> int:
         return int(cur.fetchone()[0])
 
 
+def fetch_target_primary_key_set(conn, schema: str, table: str, primary_key: Sequence[str]) -> set[Tuple[object, ...]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            sql.SQL("SELECT {} FROM {}.{}").format(
+                sql.SQL(", ").join(sql.Identifier(column) for column in primary_key),
+                sql.Identifier(schema),
+                sql.Identifier(table),
+            )
+        )
+        return {tuple(row) for row in cur.fetchall()}
+
+
+def fetch_source_missing_simple_pks(
+    conn,
+    schema: str,
+    table: str,
+    primary_key: str,
+    existing_pk_set: set[Tuple[object, ...]],
+    batch_size: int,
+) -> Tuple[int, List[object]]:
+    processed_rows = 0
+    missing: List[object] = []
+    query = sql.SQL("SELECT {} FROM {}.{}").format(
+        sql.Identifier(primary_key),
+        sql.Identifier(schema),
+        sql.Identifier(table),
+    )
+    with conn.cursor(name=f"pk_sync_{schema}_{table}") as cur:
+        cur.itersize = batch_size
+        cur.execute(query)
+        while True:
+            rows = cur.fetchmany(batch_size)
+            if not rows:
+                break
+            processed_rows += len(rows)
+            for row in rows:
+                value = row[0]
+                if (value,) not in existing_pk_set:
+                    missing.append(value)
+    return processed_rows, missing
+
+
+def chunks(values: Sequence[object], size: int) -> Sequence[Sequence[object]]:
+    return [values[index : index + size] for index in range(0, len(values), size)]
+
+
 def is_skip_conflict_error(err: psycopg2.Error) -> bool:
     return err.pgcode in {
         errorcodes.UNIQUE_VIOLATION,
@@ -852,6 +939,9 @@ def sync_data_table(
         "mode": "update-existing" if update_existing else "insert-missing",
         "source_rows": 0,
         "processed_rows": 0,
+        "insert_candidate_rows": 0,
+        "filtered_existing_rows": 0,
+        "target_existing_pk_rows": 0,
         "conflict_rows": 0,
         "fallback_row_by_row": False,
         "common_columns": common_columns,
@@ -919,8 +1009,84 @@ def sync_data_table(
     ).as_string(target_conn)
 
     source_types = [source_by_name[column]["udt_name"] for column in common_columns]
-    processed_rows = 0
+    existing_pk_set: set[Tuple[object, ...]] | None = None
+    if not update_existing:
+        existing_pk_set = fetch_target_primary_key_set(target_conn, schema, table_name, primary_key)
+        report["target_existing_pk_rows"] = len(existing_pk_set)
+
     use_row_by_row = False
+
+    def insert_adapted_rows(target_cur, adapted_rows: List[Tuple[object, ...]]) -> None:
+        nonlocal use_row_by_row
+        if update_existing:
+            execute_values(target_cur, insert_query, adapted_rows, page_size=batch_size)
+            return
+        if not use_row_by_row:
+            target_cur.execute("SAVEPOINT data_only_batch")
+            try:
+                execute_values(target_cur, insert_query, adapted_rows, page_size=batch_size)
+                target_cur.execute("RELEASE SAVEPOINT data_only_batch")
+            except psycopg2.errors.ObjectNotInPrerequisiteState as err:
+                if "ON CONFLICT does not support deferrable" not in str(err):
+                    raise
+                target_cur.execute("ROLLBACK TO SAVEPOINT data_only_batch")
+                target_cur.execute("RELEASE SAVEPOINT data_only_batch")
+                use_row_by_row = True
+                report["fallback_row_by_row"] = True
+        if use_row_by_row:
+            target_cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            for row in adapted_rows:
+                target_cur.execute("SAVEPOINT data_only_row")
+                try:
+                    target_cur.execute(insert_one_query, row)
+                    target_cur.execute("RELEASE SAVEPOINT data_only_row")
+                except psycopg2.Error as row_err:
+                    target_cur.execute("ROLLBACK TO SAVEPOINT data_only_row")
+                    target_cur.execute("RELEASE SAVEPOINT data_only_row")
+                    if is_skip_conflict_error(row_err):
+                        report["conflict_rows"] = int(report["conflict_rows"]) + 1
+                        continue
+                    raise
+
+    if existing_pk_set is not None and len(primary_key) == 1:
+        processed_rows, missing_pk_values = fetch_source_missing_simple_pks(
+            source_conn,
+            schema,
+            table_name,
+            primary_key[0],
+            existing_pk_set,
+            batch_size,
+        )
+        report["processed_rows"] = processed_rows
+        report["filtered_existing_rows"] = processed_rows - len(missing_pk_values)
+        report["insert_candidate_rows"] = len(missing_pk_values)
+        if not missing_pk_values:
+            return report
+
+        with source_conn.cursor() as source_cur, target_conn.cursor() as target_cur:
+            for pk_batch in chunks(missing_pk_values, batch_size):
+                placeholders = sql.SQL(", ").join(sql.Placeholder() for _ in pk_batch)
+                missing_select_query = sql.SQL("SELECT {} FROM {}.{} WHERE {} IN ({})").format(
+                    sql.SQL(", ").join(sql.Identifier(column) for column in common_columns),
+                    sql.Identifier(schema),
+                    sql.Identifier(table_name),
+                    sql.Identifier(primary_key[0]),
+                    placeholders,
+                )
+                source_cur.execute(missing_select_query, list(pk_batch))
+                rows = source_cur.fetchall()
+                if not rows:
+                    continue
+                adapted_rows = [
+                    tuple(adapt_value(value, source_types[index]) for index, value in enumerate(row))
+                    for row in rows
+                ]
+                insert_adapted_rows(target_cur, adapted_rows)
+        return report
+
+    pk_indexes = [common_columns.index(column) for column in primary_key]
+    processed_rows = 0
+    insert_candidate_rows = 0
     with source_conn.cursor(name=f"sync_{schema}_{table_name}") as source_cur:
         source_cur.itersize = batch_size
         source_cur.execute(select_query)
@@ -929,10 +1095,25 @@ def sync_data_table(
                 rows = source_cur.fetchmany(batch_size)
                 if not rows:
                     break
+                processed_rows += len(rows)
+                if existing_pk_set is not None:
+                    filtered_rows = []
+                    for row in rows:
+                        pk_value = tuple(row[index] for index in pk_indexes)
+                        if pk_value in existing_pk_set:
+                            report["filtered_existing_rows"] = int(report["filtered_existing_rows"]) + 1
+                            continue
+                        filtered_rows.append(row)
+                    rows = filtered_rows
+                    if not rows:
+                        report["processed_rows"] = processed_rows
+                        continue
                 adapted_rows = [
                     tuple(adapt_value(value, source_types[index]) for index, value in enumerate(row))
                     for row in rows
                 ]
+                insert_candidate_rows += len(adapted_rows)
+                report["insert_candidate_rows"] = insert_candidate_rows
                 if update_existing:
                     execute_values(target_cur, insert_query, adapted_rows, page_size=batch_size)
                 else:
@@ -962,7 +1143,8 @@ def sync_data_table(
                                     report["conflict_rows"] = int(report["conflict_rows"]) + 1
                                     continue
                                 raise
-                processed_rows += len(adapted_rows)
+                if existing_pk_set is not None:
+                    existing_pk_set.update(tuple(row[index] for index in pk_indexes) for row in rows)
                 report["processed_rows"] = processed_rows
     return report
 
@@ -1030,6 +1212,15 @@ def run_data_only_sync(config: RuntimeConfig) -> Dict[str, object]:
             table_key(schema, table) for schema, table in fetch_table_names(metadata_target_conn, config.schemas)
         }
         common_tables = sorted(source_tables & target_tables)
+        if config.tables:
+            requested_tables = set(config.tables)
+            missing_requested = sorted(requested_tables - set(common_tables))
+            if missing_requested:
+                raise RuntimeError(
+                    "requested tables are not present in both source and target: "
+                    + ", ".join(missing_requested)
+                )
+            common_tables = [table for table in common_tables if table in requested_tables]
         ordered_tables = fetch_dependency_order(metadata_target_conn, config.schemas, common_tables)
         source_columns = fetch_column_meta(metadata_source_conn, config.schemas)
         target_columns = fetch_column_meta(metadata_target_conn, config.schemas)
@@ -1045,6 +1236,7 @@ def run_data_only_sync(config: RuntimeConfig) -> Dict[str, object]:
         "schemas": config.schemas,
         "mode": "data-only-update-existing" if config.update_existing else "data-only-insert-missing",
         "batch_size": config.batch_size,
+        "requested_tables": config.tables,
         "source_only_tables": sorted(source_tables - target_tables),
         "target_only_tables": sorted(target_tables - source_tables),
         "tables": [],
@@ -1103,6 +1295,8 @@ def run_data_only_sync(config: RuntimeConfig) -> Dict[str, object]:
             print(
                 f"  processed={table_report['processed_rows']} "
                 f"source_rows={table_report['source_rows']} "
+                f"insert_candidates={table_report['insert_candidate_rows']} "
+                f"filtered_existing={table_report['filtered_existing_rows']} "
                 f"conflicts={table_report['conflict_rows']} "
                 f"fallback_row_by_row={table_report['fallback_row_by_row']} "
                 f"mode={table_report['mode']}"
@@ -1188,6 +1382,8 @@ def print_plan(config: RuntimeConfig) -> None:
     print(f"Source: {redact_url(config.source_url)}")
     print(f"Target: {redact_url(config.target_url)}")
     print(f"Schemas: {', '.join(config.schemas)}")
+    if config.tables:
+        print(f"Tables: {', '.join(config.tables)}")
     print(f"Mode: {mode}")
     print(operation)
     if "pooler.supabase.com" in config.source_url:

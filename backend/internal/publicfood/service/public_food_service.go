@@ -5,16 +5,19 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
+	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/storage"
 )
 
 type PublicFoodService struct {
-	repo    *repo.PublicFoodRepo
-	storage *storage.Client
+	repo      *repo.PublicFoodRepo
+	storage   *storage.Client
+	taskQueue taskqueue.Publisher
 }
 
 const (
@@ -28,6 +31,10 @@ func NewPublicFoodService(repo *repo.PublicFoodRepo, storageClient ...*storage.C
 		client = storageClient[0]
 	}
 	return &PublicFoodService{repo: repo, storage: client}
+}
+
+func (s *PublicFoodService) ConfigureTaskPublisher(queue taskqueue.Publisher) {
+	s.taskQueue = queue
 }
 
 type CreateInput struct {
@@ -135,13 +142,29 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		item.FoodName, item.MerchantName, item.MerchantAddress, item.Description, item.Insight, item.UserNotes,
 	}, " "))
 	if text != "" {
-		if err := s.repo.CreateModerationTask(ctx, userID, item.ID, text); err != nil {
+		task, err := s.repo.CreateModerationTask(ctx, userID, item.ID, text)
+		if err != nil {
+			return "", err
+		}
+		if err := s.enqueueTask(ctx, task.ID, task.TaskType); err != nil {
 			return "", err
 		}
 	} else if err := s.repo.UpdateStatus(ctx, item.ID, "published"); err != nil {
 		return "", err
 	}
 	return item.ID, nil
+}
+
+func (s *PublicFoodService) enqueueTask(ctx context.Context, taskID, taskType string) error {
+	if s.taskQueue == nil || strings.TrimSpace(taskID) == "" || strings.TrimSpace(taskType) == "" {
+		return nil
+	}
+	publishCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	if err := s.taskQueue.PublishTask(publishCtx, taskqueue.TaskMessage{TaskID: taskID, TaskType: taskType}); err != nil {
+		return fmt.Errorf("enqueue public food moderation task: %w", err)
+	}
+	return nil
 }
 
 func (s *PublicFoodService) List(ctx context.Context, userID string, filter repo.ListFilter) ([]domain.PublicFoodView, error) {

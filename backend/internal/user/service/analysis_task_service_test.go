@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"food_link/backend/internal/taskqueue"
 	"food_link/backend/internal/user/domain"
 	"food_link/backend/internal/user/repo"
 	"food_link/backend/pkg/config"
@@ -22,15 +23,29 @@ func setupAnalysisTaskTestDB(t *testing.T) (*gorm.DB, *repo.AnalysisTaskRepo) {
 	return db, repo.NewAnalysisTaskRepo(db)
 }
 
+type recordingTaskPublisher struct {
+	messages []taskqueue.TaskMessage
+}
+
+func (p *recordingTaskPublisher) PublishTask(ctx context.Context, msg taskqueue.TaskMessage) error {
+	p.messages = append(p.messages, msg)
+	return nil
+}
+
 func TestAnalysisTaskService_CreateHealthReportTask(t *testing.T) {
 	_, taskRepo := setupAnalysisTaskTestDB(t)
 	svc := NewAnalysisTaskService(taskRepo)
+	publisher := &recordingTaskPublisher{}
+	svc.ConfigureTaskPublisher(publisher)
 	ctx := context.Background()
 
 	imageURL := "https://example.com/report.jpg"
 	taskID, err := svc.CreateHealthReportTask(ctx, "user-1", CreateHealthReportTaskInput{ImageURL: imageURL})
 	require.NoError(t, err)
 	assert.NotEmpty(t, taskID)
+	require.Len(t, publisher.messages, 1)
+	assert.Equal(t, taskID, publisher.messages[0].TaskID)
+	assert.Equal(t, "health_report", publisher.messages[0].TaskType)
 }
 
 func TestAnalysisTaskService_CreateHealthReportTaskNormalizesLegacyURL(t *testing.T) {

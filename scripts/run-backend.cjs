@@ -1,21 +1,11 @@
 /**
- * 跨平台启动 backend：优先使用 backend/venv 内 Python，否则用 PATH 上的 python。
+ * 跨平台启动 Go backend server。
  */
 const { spawn } = require('child_process')
 const path = require('path')
-const fs = require('fs')
 const net = require('net')
 
 const backendDir = path.join(__dirname, '..', 'backend')
-const isWin = process.platform === 'win32'
-const venvPython = path.join(
-  backendDir,
-  'venv',
-  isWin ? 'Scripts' : 'bin',
-  isWin ? 'python.exe' : 'python'
-)
-
-const python = fs.existsSync(venvPython) ? venvPython : isWin ? 'python' : 'python3'
 const port = Number(process.env.PORT || 3010)
 
 function ensurePortAvailable(targetPort) {
@@ -53,7 +43,7 @@ async function main() {
     process.exit(1)
   }
 
-  const child = spawn(python, ['run_backend.py'], {
+  const child = spawn('go', ['run', './cmd/server'], {
     stdio: 'inherit',
     cwd: backendDir,
     shell: false,
