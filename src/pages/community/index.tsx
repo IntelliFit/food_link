@@ -88,19 +88,65 @@ const FEED_GOAL_OPTIONS: Array<{ value: DietGoal | 'all'; label: string }> = [
   { value: 'maintain', label: '维持' },
 ]
 
-function formatFeedTime(recordTime: string): string {
-  if (!recordTime) return ''
-  try {
-    const d = new Date(recordTime)
-    const now = new Date()
-    const diff = now.getTime() - d.getTime()
-    if (diff < 60000) return '刚刚'
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
-    return d.toLocaleDateString()
-  } catch {
-    return recordTime.slice(0, 16).replace('T', ' ')
+const CHINA_TIMEZONE_OFFSET_MS = 8 * 60 * 60 * 1000
+const ISO_TIMEZONE_SUFFIX_RE = /(Z|[+-]\d{2}:?\d{2})$/i
+const ISO_LOCAL_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/
+
+function parseFeedRecordTime(recordTime: string): Date | null {
+  const raw = String(recordTime || '').trim()
+  if (!raw) return null
+  if (!ISO_TIMEZONE_SUFFIX_RE.test(raw)) {
+    const localMatch = raw.match(ISO_LOCAL_DATETIME_RE)
+    if (localMatch) {
+      const [, y, mo, d, h, mi, s = '0'] = localMatch
+      const utcMs = Date.UTC(
+        Number(y),
+        Number(mo) - 1,
+        Number(d),
+        Number(h),
+        Number(mi),
+        Number(s)
+      ) - CHINA_TIMEZONE_OFFSET_MS
+      return new Date(utcMs)
+    }
   }
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+function getChinaTimeParts(date: Date) {
+  const shifted = new Date(date.getTime() + CHINA_TIMEZONE_OFFSET_MS)
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+  }
+}
+
+function formatChinaDateTime(date: Date): string {
+  const p = getChinaTimeParts(date)
+  const now = getChinaTimeParts(new Date())
+  const timeText = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`
+  if (p.year === now.year && p.month === now.month && p.day === now.day) {
+    return `今天 ${timeText}`
+  }
+  if (p.year === now.year) {
+    return `${p.month}月${p.day}日 ${timeText}`
+  }
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')} ${timeText}`
+}
+
+function formatFeedTime(recordTime: string): string {
+  const d = parseFeedRecordTime(recordTime)
+  if (!d) return recordTime ? recordTime.slice(0, 16).replace('T', ' ') : ''
+  const diff = Date.now() - d.getTime()
+  if (diff < 0 && diff > -60000) return '刚刚'
+  if (diff >= 0 && diff < 60000) return '刚刚'
+  if (diff >= 0 && diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
+  if (diff >= 0 && diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
+  return formatChinaDateTime(d)
 }
 
 /** 与首页一致的细线搜索图标（替代「搜」字） */

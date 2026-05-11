@@ -468,7 +468,7 @@ func (s *ExerciseService) estimateSingleExerciseCalories(ctx context.Context, de
 func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) (ExerciseEstimate, bool) {
 	apiKey := ""
 	if s.cfg != nil {
-		apiKey = strings.TrimSpace(s.cfg.External.OfoxAIAPIKey)
+		apiKey = strings.TrimSpace(s.cfg.External.DashscopeAPIKey)
 	}
 	if apiKey == "" {
 		return ExerciseEstimate{}, false
@@ -492,7 +492,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		}
 	}
 	body := map[string]any{
-		"model": "google/gemini-3.1-flash-lite-preview",
+		"model": "qwen-vl-max",
 		"messages": []map[string]any{
 			{
 				"role":    "system",
@@ -505,7 +505,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		"max_tokens":      320,
 	}
 	bodyBytes, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.ofox.ai/v1/chat/completions", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return ExerciseEstimate{}, false
 	}

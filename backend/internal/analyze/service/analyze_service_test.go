@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -43,32 +44,32 @@ func TestNormalizeExecutionMode(t *testing.T) {
 
 func TestResolveModelConfig(t *testing.T) {
 	p, m := resolveModelConfig("")
-	assert.Equal(t, "gemini", p)
-	assert.Equal(t, "gemini-3-flash-preview", m)
+	assert.Equal(t, "qwen", p)
+	assert.Equal(t, "qwen-vl-max", m)
 
 	p, m = resolveModelConfig("qwen")
-	assert.Equal(t, "gemini", p)
-	assert.Equal(t, "gemini-3-flash-preview", m)
+	assert.Equal(t, "qwen", p)
+	assert.Equal(t, "qwen-vl-max", m)
 
 	p, m = resolveModelConfig("qwen-vl-max")
-	assert.Equal(t, "gemini", p)
-	assert.Equal(t, "gemini-3-flash-preview", m)
+	assert.Equal(t, "qwen", p)
+	assert.Equal(t, "qwen-vl-max", m)
 
 	p, m = resolveModelConfig("deepseek")
 	assert.Equal(t, "deepseek", p)
 	assert.Equal(t, "deepseek-v4-flash", m)
 
 	p, m = resolveModelConfig("gemini")
+	assert.Equal(t, "qwen", p)
+	assert.Equal(t, "qwen-vl-max", m)
+
+	p, m = resolveModelConfig("ofox-gemini")
 	assert.Equal(t, "gemini", p)
 	assert.Equal(t, "gemini-3-flash-preview", m)
-
-	p, m = resolveModelConfig("gemini-custom")
-	assert.Equal(t, "gemini", p)
-	assert.Equal(t, "gemini-custom", m)
 
 	p, m = resolveModelConfig("unknown-model")
-	assert.Equal(t, "gemini", p)
-	assert.Equal(t, "gemini-3-flash-preview", m)
+	assert.Equal(t, "qwen", p)
+	assert.Equal(t, "qwen-vl-max", m)
 }
 
 func TestParseLLMJSON(t *testing.T) {
@@ -283,18 +284,43 @@ func TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault(t *testing.T) {
 	assert.Contains(t, err.Error(), "DEEPSEEK_API_KEY")
 }
 
-func TestAnalyzeService_AnalyzeImageQwenAliasRoutesToGemini(t *testing.T) {
-	dashScopeClient := &mockLLMClient{err: assert.AnError}
-	ofoxClient := &mockLLMClient{result: map[string]any{"description": "gemini image", "items": []any{}}}
+func TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen image", "items": []any{}}}
+	ofoxClient := &mockLLMClient{err: assert.AnError}
 	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
-		ModelName: "qwen-vl-max",
+		ModelName: "gemini",
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "gemini image", result["description"])
+	assert.Equal(t, "qwen image", result["description"])
+}
+
+func TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen fallback", "items": []any{}}}
+	ofoxClient := &mockLLMClient{err: errors.New("ofoxai api error 429: Resource exhausted. Please try again later")}
+	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/img.jpg",
+		ModelName: "ofox-gemini",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "qwen fallback", result["description"])
+}
+
+func TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen precision fallback", "items": []any{}}}
+	ofoxClient := &mockLLMClient{err: errors.New(`Post "https://api.ofox.ai/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)}
+	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+
+	result, err := svc.RunPrecisionJSONWithImages(context.Background(), "image", "prompt", []string{"https://example.com/img.jpg"}, "ofox-gemini")
+
+	require.NoError(t, err)
+	assert.Equal(t, "qwen precision fallback", result["description"])
 }
 
 func TestAnalyzeService_AnalyzeCompare(t *testing.T) {

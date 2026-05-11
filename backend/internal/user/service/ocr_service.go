@@ -17,6 +17,7 @@ import (
 type OCRService struct {
 	cfg     *config.Config
 	storage *storage.Client
+	client  *http.Client
 }
 
 func NewOCRService(cfg *config.Config, storageClient ...*storage.Client) *OCRService {
@@ -24,7 +25,7 @@ func NewOCRService(cfg *config.Config, storageClient ...*storage.Client) *OCRSer
 	if len(storageClient) > 0 {
 		client = storageClient[0]
 	}
-	return &OCRService{cfg: cfg, storage: client}
+	return &OCRService{cfg: cfg, storage: client, client: http.DefaultClient}
 }
 
 func (s *OCRService) ExtractFromBase64(ctx context.Context, base64Image string) (map[string]any, error) {
@@ -57,7 +58,7 @@ func (s *OCRService) callDashScope(ctx context.Context, imageURL string) (map[st
 		return nil, &commonerrors.AppError{Code: 10000, Message: "缺少 DASHSCOPE_API_KEY", HTTPStatus: 500}
 	}
 	payload := map[string]any{
-		"model": "gemini-3-flash-preview",
+		"model": "qwen-vl-max",
 		"messages": []map[string]any{
 			{
 				"role": "user",
@@ -77,7 +78,7 @@ func (s *OCRService) callDashScope(ctx context.Context, imageURL string) (map[st
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
 	}

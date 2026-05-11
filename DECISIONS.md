@@ -29,6 +29,28 @@
   - `waterMl` 表示该食物或饮品本身可计入饮水参考的含水量，单位毫升；无法判断时为 `0`。
   - 后端营养库仍只负责热量、蛋白质、碳水、脂肪等营养回算，`waterMl` 从模型识别结果透传并随前端重量/比例展示调整。
   - 前端和保存链路同时兼容 camelCase `waterMl` 与 snake_case `water_ml`，保存记录 item JSON 使用 `water_ml`。
+- `2026-05-11`: 食物图片分析模型临时切换口径：由于最近 1-2 天 Ofox/Gemini 视觉链路持续 `429/resource exhausted` 或超时，标准图片识别和精准模式图片子任务默认改用 DashScope `qwen-vl-max`。即使前端/任务 payload 仍传历史默认值 `modelName: "gemini"` 或 `gemini-3-flash-preview`，后端也临时路由到 Qwen，避免继续打到 Ofox。Ofox/Gemini 仅保留显式 `modelName: "ofox-gemini"` / `ofox-gemini:<model>` 入口，方便后续上游恢复后切回 Gemini3。worker 仍需归一 timeout/resource exhausted/5xx 等错误为用户可读提示。
+
+- `2026-05-11`: 当前所有默认用户图像识别入口统一走 DashScope `qwen-vl-max`：食物标准图片识别、精准模式图片子任务、批量图片分析、保质期拍照识别、健康报告 OCR、运动图片估算。不得在 DashScope 缺失/失败时隐式 fallback 到 Ofox/Gemini，避免上游限流期偷偷绕回旧链路；Ofox/Gemini 仅作为显式 `ofox-gemini` escape hatch、compare/test-backend 工具或 Ofox client 单元测试保留。
+
+- `2026-05-11`: 切 Qwen 只是临时默认通道切换，不得删除原 Gemini/Ofox 通道。必须保留显式 `ofox-gemini` / `ofox-gemini:<model>` 入口、Ofox client、compare/test-backend 能力和后续切回 Gemini3 所需代码；后续清理或重构时只能调整默认路由，不能把 Gemini 通道整体移除。
+
+- `2026-05-11`: 运行时外部 API key（DashScope/Ofox/DeepSeek 等）从 env/ConfigMap/YAML 读入后必须 trim 首尾空白。生产 `DASHSCOPE_API_KEY` 若来自 `.env`/ConfigMap，`KEY= value` 这类前导空格会成为真实 key 内容并导致 DashScope `401 Incorrect API key`；代码侧要防御，但部署侧仍应保证 ConfigMap 中的值没有多余空格或错误 key。
+
+- `2026-05-11`: Go 后端配置优先级对外部模型 key 做项目内收口：只要运行目录存在 `config.yaml`，`external.dashscope_api_key` / `external.ofoxai_api_key` / `external.deepseek_api_key` 以 YAML 文件值为准，不允许 Windows/User/system 环境变量里的同名 key 偷偷覆盖本地配置。生产 scratch 镜像不包含 `config.yaml`，因此线上仍通过 ConfigMap/env 注入。
+
+- `2026-05-11`: 体重记录允许同一天多次录入时，所有“每日体重 summary / 最新体重 / 体重趋势”展示口径必须统一为“当天最后一次记录”。`user_weight_records` 可保留多条原始记录，`/api/body-metrics/summary` 的按日聚合不得取当天第一条，否则同一用户会在不同位置看到旧值和新值混杂。例如「饭饭」在 `2026-05-09` 依次记录 `47.5kg`、`47.5kg`、`47.4kg`，最新体重应展示 `47.4kg`。
+
+- `2026-05-11`: 圈子「本周打卡排行榜」的统计窗口必须对齐 `dev` 旧后端口径：北京时间自然周，周一 00:00 至下周一 00:00（不含）。Go 代码中不得用 `Time.Truncate(24 * time.Hour)` 计算北京时间自然日/自然周边界，因为 `Truncate` 按绝对 UTC duration 截断，会把北京时间边界偏到 08:00。稳定口径是用 `time.Date(year, month, day, 0, 0, 0, 0, chinaTZ)` 先构造北京时间当天零点，再按 weekday 回退到周一。
+
+- `2026-05-11`: 圈子 feed 的 `record_time` 展示应按中国时间口径稳定输出与格式化。后端返回动态时应把 `record_time` 显式转为 `Asia/Shanghai` 偏移；前端格式化不能依赖设备默认 `toLocaleDateString()`，超过相对时间窗口后要按北京时间格式化，且兼容没有时区后缀的旧 ISO 字符串。
+
+- `2026-05-10`: 保质期拍照识别接口 `/api/expiry/recognize` 的错误口径必须区分用户可处理错误、模型上游错误和后端配置错误，不能让裸 `fmt.Errorf` 穿透到统一响应层后被抹成 `internal server error`：
+  - 缺图、图片里没有识别到可用于保质期录入的食物 → 400，返回可读提示。
+  - 模型上游非 2xx、空响应、返回非 JSON 或结果 JSON 解析失败 → 502，返回“保质期识别服务暂时不可用，请稍后再试”，同时在后端日志记录上游细节。
+  - 模型 key/base URL 等后端配置缺失或错误 → 明确 500 AppError，不要给前端泛化成无信息的 internal server error。
+  - 保质期页涉及 `Taro.showLoading` 时必须本地显式配对，失败路径不能多次 `hideLoading`。
+  - 保质期页写入 `USER_DATA_PATH` 的 `expiry_` 临时文件遇到 quota 错误时，应复用 `cleanupGeneratedUserFiles()` 清理项目生成文件后再重试。
 
 - `2026-05-10`: 当用户反馈“小程序非调试模式报错、调试模式正常”时，排查优先级不能只盯接口域名；要先排除前端同步运行时异常与生产包残留调用。当前已确认一个真实案例：
   - `src/pages/profile/index.tsx` 退出登录回调里残留 `setRegisterDate('--')`

@@ -1,15 +1,26 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
 	"testing"
 	"time"
 
 	"food_link/backend/internal/health/domain"
+	"food_link/backend/pkg/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type exerciseRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f exerciseRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 type mockExerciseRepo struct {
 	logs      []domain.ExerciseLog
@@ -83,6 +94,30 @@ func TestExerciseService_GetDailyCalories(t *testing.T) {
 	result, err := svc.GetDailyCalories(ctx, "u1", "2024-06-15")
 	require.NoError(t, err)
 	assert.Equal(t, 300, result["total_calories_burned"])
+}
+
+func TestExerciseService_EstimateImageUsesQwenDashScope(t *testing.T) {
+	svc := NewExerciseService(&mockExerciseRepo{}, &config.Config{
+		External: config.ExternalConfig{DashscopeAPIKey: "fake-key"},
+	})
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", req.URL.String())
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+		assert.Equal(t, "qwen-vl-max", body["model"])
+		responseBody := `{"choices":[{"message":{"content":"{\"reasoning\":\"图片显示跑步机慢跑\",\"calories_kcal\":180}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	estimate, ok := svc.estimateExerciseCaloriesWithLLM(context.Background(), "", "https://example.com/run.jpg", nil)
+
+	require.True(t, ok)
+	assert.Equal(t, 180, estimate.CaloriesKcal)
+	assert.Equal(t, "llm", estimate.Source)
 }
 
 func TestExerciseService_ListLogs(t *testing.T) {

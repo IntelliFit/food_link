@@ -439,21 +439,23 @@ func parseChinaDate(date string) (time.Time, error) {
 }
 
 func aggregateWeightDaily(rows []domain.BodyWeightRecord) []WeightEntry {
-	seen := make(map[string]bool)
+	byDateIndex := make(map[string]int)
 	entries := make([]WeightEntry, 0)
 	for _, row := range rows {
 		if row.RecordedOn == nil {
 			continue
 		}
 		dateKey := row.RecordedOn.Format("2006-01-02")
-		if seen[dateKey] {
-			continue
-		}
-		seen[dateKey] = true
-		entries = append(entries, WeightEntry{
+		entry := WeightEntry{
 			Date:  dateKey,
 			Value: round1(row.WeightKg),
-		})
+		}
+		if idx, ok := byDateIndex[dateKey]; ok {
+			entries[idx] = entry
+			continue
+		}
+		byDateIndex[dateKey] = len(entries)
+		entries = append(entries, entry)
 	}
 	return entries
 }

@@ -11,7 +11,11 @@ import (
 	"strings"
 	"time"
 
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/logger"
+
+	"go.uber.org/zap"
 )
 
 const expiryCreditCost = 2
@@ -43,7 +47,7 @@ func NewRecognizer(cfg *config.Config) *Recognizer {
 func (r *Recognizer) Recognize(ctx context.Context, input RecognizeInput) (*RecognitionOutput, error) {
 	imageURLs := uniqueNonEmptyStrings(input.ImageURLs)
 	if len(imageURLs) == 0 {
-		return nil, fmt.Errorf("缺少图片")
+		return nil, expiryRecognitionBadRequest("请至少提供 1 张图片")
 	}
 	if len(imageURLs) > 5 {
 		imageURLs = imageURLs[:5]
@@ -71,7 +75,7 @@ func (r *Recognizer) Recognize(ctx context.Context, input RecognizeInput) (*Reco
 		}
 	}
 	if len(items) == 0 {
-		return nil, fmt.Errorf("未识别到可用于保质期录入的食物，请换个角度拍清楚包装或食物主体后再试")
+		return nil, expiryRecognitionBadRequest("未识别到可用于保质期录入的食物，请换个角度拍清楚包装或食物主体后再试")
 	}
 	return &RecognitionOutput{Items: items, RecognizedCount: len(items)}, nil
 }
@@ -101,10 +105,12 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("保质期识别服务请求失败 %d: %s", resp.StatusCode, summarizeExpiryUpstreamBody(respBody, resp.Header.Get("Content-Type")))
+		return nil, expiryRecognitionUpstreamError(
+			fmt.Sprintf("保质期识别服务请求失败 %d: %s", resp.StatusCode, summarizeExpiryUpstreamBody(respBody, resp.Header.Get("Content-Type"))),
+		)
 	}
 	if looksLikeExpiryHTMLResponse(respBody, resp.Header.Get("Content-Type")) {
-		return nil, fmt.Errorf("保质期识别服务返回了网页而不是 JSON，请检查 OFOXAI_BASE_URL")
+		return nil, expiryRecognitionConfigError("保质期识别服务返回了网页而不是 JSON，请检查 OFOXAI_BASE_URL")
 	}
 	var result struct {
 		Choices []struct {
@@ -114,15 +120,15 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("保质期识别服务响应解析失败: %w", err)
+		return nil, expiryRecognitionUpstreamError(fmt.Sprintf("保质期识别服务响应解析失败: %v", err))
 	}
 	if len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
-		return nil, fmt.Errorf("AI 返回了空响应")
+		return nil, expiryRecognitionUpstreamError("AI 返回了空响应")
 	}
 	contentText := expiryCodeFenceRe.ReplaceAllString(result.Choices[0].Message.Content, "")
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(contentText)), &parsed); err != nil {
-		return nil, fmt.Errorf("AI 返回结果格式解析失败: %w", err)
+		return nil, expiryRecognitionUpstreamError(fmt.Sprintf("AI 返回结果格式解析失败: %v", err))
 	}
 	return parsed, nil
 }
@@ -130,22 +136,37 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 func (r *Recognizer) llmConfig() (apiURL, model, apiKey string, err error) {
 	provider := strings.ToLower(strings.TrimSpace(r.cfg.External.LLMProvider))
 	if provider == "" {
-		provider = "gemini"
+		provider = "qwen"
 	}
 	ofoxBaseURL := strings.TrimRight(strings.TrimSpace(r.cfg.External.OfoxAIBaseURL), "/")
 	if ofoxBaseURL == "" {
 		ofoxBaseURL = "https://api.ofox.ai/v1"
 	}
-	if provider == "gemini" && r.cfg.External.OfoxAIAPIKey != "" {
-		return ofoxBaseURL + "/chat/completions", "gemini-3-flash-preview", r.cfg.External.OfoxAIAPIKey, nil
-	}
-	if r.cfg.External.DashscopeAPIKey != "" {
+	if provider == "qwen" && r.cfg.External.DashscopeAPIKey != "" {
 		return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen-vl-max", r.cfg.External.DashscopeAPIKey, nil
 	}
-	if r.cfg.External.OfoxAIAPIKey != "" {
+	if (provider == "gemini" || provider == "ofox-gemini") && r.cfg.External.OfoxAIAPIKey != "" {
 		return ofoxBaseURL + "/chat/completions", "gemini-3-flash-preview", r.cfg.External.OfoxAIAPIKey, nil
 	}
-	return "", "", "", fmt.Errorf("缺少 OFOXAI_API_KEY 或 DASHSCOPE_API_KEY")
+	if provider != "gemini" && provider != "ofox-gemini" && r.cfg.External.DashscopeAPIKey != "" {
+		return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen-vl-max", r.cfg.External.DashscopeAPIKey, nil
+	}
+	return "", "", "", expiryRecognitionConfigError("后端未配置保质期识别模型")
+}
+
+func expiryRecognitionBadRequest(message string) error {
+	return &commonerrors.AppError{Code: 10002, Message: message, HTTPStatus: http.StatusBadRequest}
+}
+
+func expiryRecognitionUpstreamError(logMessage string) error {
+	if log := logger.L(); log != nil {
+		log.Warn("expiry recognition upstream error", zap.String("error", logMessage))
+	}
+	return &commonerrors.AppError{Code: 10006, Message: "保质期识别服务暂时不可用，请稍后再试", HTTPStatus: http.StatusBadGateway}
+}
+
+func expiryRecognitionConfigError(message string) error {
+	return &commonerrors.AppError{Code: 10000, Message: message, HTTPStatus: http.StatusInternalServerError}
 }
 
 func summarizeExpiryUpstreamBody(data []byte, contentType string) string {
