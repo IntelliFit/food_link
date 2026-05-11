@@ -16,6 +16,12 @@
   - server 内置 worker 由 `config.yaml` 中的 `worker.count` 控制；`count=0` 表示不开启，`count>0` 表示启动对应数量 worker，缺少 `worker.count` 直接报错。
   - 独立 `cmd/worker` 入口保留；显式运行 `npm run dev:worker` 或 `/app/food-link-worker` 时仍可作为独立 worker 消费同一 DB 队列。
   - worker 诊断日志统一走 zap logger；当前 OTel 只配置 trace exporter，不把这些日志直接作为 OTel logs 上报。
+- `2026-05-12`: 食物分析提交链路不再请求或保存“分析完成通知”订阅授权：
+  - 图片分析页和文字分析页不调用 `Taro.requestSubscribeMessage()`。
+  - 分析提交/文字分析提交/精准续接协议不再携带 `subscribe_status`。
+  - 前端不再注入 `TARO_APP_ANALYSIS_SUBSCRIBE_TEMPLATE_ID` / `__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__`。
+  - Go 后端不再保留 `wechat_pay.analysis_subscribe_template_id` 配置、`ANALYSIS_SUBSCRIBE_TEMPLATE_ID` env 绑定或 `analysis_tasks.payload.subscribe_status`。
+  - 该决策只影响食物分析通知授权；保质期过期通知订阅链路继续保留。
 
 - `2026-05-11`: 保质期订阅通知链路的稳定口径：
   - 前端只有在构建时注入 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 后，才会调用 `Taro.requestSubscribeMessage()` 并继续请求后端 `/api/expiry/items/:item_id/subscribe` 创建提醒 job。
@@ -31,7 +37,7 @@
   - 后端 `PUT /api/user/health-profile` 接收 `routine_type` 后写入 `weapp_user.health_condition`。
 
 - `2026-05-11`: 食物识别前端提交入口需要保留短时间防重复提交保护：
-  - 相册/拍照后的分析主按钮使用 300ms 前端防抖，并且进入实际提交流程时要尽早置 `isAnalyzing=true`，避免订阅授权弹窗或上传前窗口期重复触发。
+  - 相册/拍照后的分析主按钮使用 300ms 前端防抖，并且进入实际提交流程时要尽早置 `isAnalyzing=true`，避免上传前窗口期重复触发。
   - 结果页纠错抽屉里的「重新智能分析」同样使用 300ms 前端防抖，并在弹确认框前拦截重复点击，避免重复弹窗和重复创建纠错任务。
 
 - `2026-05-11`: 圈子「好友动态」列表缓存只允许在本次小程序启动会话内复用：

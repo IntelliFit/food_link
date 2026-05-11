@@ -80,14 +80,13 @@ type ExternalConfig struct {
 }
 
 type WechatPayConfig struct {
-	MchID                       string `mapstructure:"mchid"`
-	NotifyURL                   string `mapstructure:"notify_url"`
-	SerialNo                    string `mapstructure:"serial_no"`
-	APIV3Key                    string `mapstructure:"api_v3_key"`
-	PrivateKey                  string `mapstructure:"private_key"`
-	PublicKey                   string `mapstructure:"public_key"`
-	ExpirySubscribeTemplateID   string `mapstructure:"expiry_subscribe_template_id"`
-	AnalysisSubscribeTemplateID string `mapstructure:"analysis_subscribe_template_id"`
+	MchID                     string `mapstructure:"mchid"`
+	NotifyURL                 string `mapstructure:"notify_url"`
+	SerialNo                  string `mapstructure:"serial_no"`
+	APIV3Key                  string `mapstructure:"api_v3_key"`
+	PrivateKey                string `mapstructure:"private_key"`
+	PublicKey                 string `mapstructure:"public_key"`
+	ExpirySubscribeTemplateID string `mapstructure:"expiry_subscribe_template_id"`
 }
 
 type WorkerConfig struct {
@@ -287,7 +286,6 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("wechat_pay.private_key", "WECHAT_PAY_PRIVATE_KEY")
 	_ = v.BindEnv("wechat_pay.public_key", "WECHAT_PAY_PUBLIC_KEY")
 	_ = v.BindEnv("wechat_pay.expiry_subscribe_template_id", "EXPIRY_SUBSCRIBE_TEMPLATE_ID")
-	_ = v.BindEnv("wechat_pay.analysis_subscribe_template_id", "ANALYSIS_SUBSCRIBE_TEMPLATE_ID")
 	_ = v.BindEnv("storage.cos_region", "COS_REGION")
 	_ = v.BindEnv("storage.cos_secret_id", "COS_SECRET_ID")
 	_ = v.BindEnv("storage.cos_secret_key", "COS_SECRET_KEY")

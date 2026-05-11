@@ -102,6 +102,42 @@
     - 当前本机任务仍 pending，因为按项目规则本轮未擅自重启常驻 server。
     - 本地复测只需重启 Go server；server 默认会带内置 worker 并领取现有 pending 任务。
     - 若线上已有独立 worker 或多副本 server，部署层可在 `config.yaml` 中设置 `worker.count: 0` 关闭 server 内置 worker，继续只让独立 worker 消费队列。
+## 状态：完成源码修改 - 移除食物分析前订阅通知授权链路
+
+- 2026-05-12 update:
+  - User要求：图片分析页点击食物记录分析识别前，不再请求通知订阅权限，并把对应前后端能力全部去掉。
+  - Fix applied:
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 删除分析前 `Taro.requestSubscribeMessage()` 调用。
+      - 删除分析提交 payload 中的 `subscribe_status`。
+    - `src/packageExtra/pages/record-text/index.tsx`
+      - 同步删除文字分析入口的分析订阅模板依赖、订阅弹窗和 `subscribe_status` 提交，避免后端协议残留。
+    - `src/utils/api.ts`
+      - 删除 `ANALYSIS_SUBSCRIBE_TEMPLATE_ID` 常量。
+      - 删除分析/文字分析提交参数中的 `subscribe_status`。
+    - `config/index.ts`
+      - 删除 `TARO_APP_ANALYSIS_SUBSCRIBE_TEMPLATE_ID` 读取和 `__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__` 注入。
+    - `backend/internal/analyze/service/task_service.go`
+      - 删除 `SubmitTaskInput.SubscribeStatus` 和写入 `analysis_tasks.payload.subscribe_status` 的逻辑。
+    - `backend/internal/analyze/handler/analyze_handler.go`
+      - 删除精准续接接口里分析订阅状态字段的接收与转传。
+    - `backend/pkg/config/config.go`
+      - 删除 `wechat_pay.analysis_subscribe_template_id` 配置字段和 `ANALYSIS_SUBSCRIBE_TEMPLATE_ID` env 绑定。
+    - `backend/docs/backend-api-prd/_shared/models/analyze.md`、`docs/backend-api-prd/_shared/models/analyze.md`
+      - 分析提交请求模型移除 `subscribe_status`。
+  - Scope note:
+    - 保质期过期提醒订阅链路保留不变：`src/packageExtra/pages/expiry-edit/index.tsx`、`FoodExpirySubscribeRequest`、`EXPIRY_SUBSCRIBE_TEMPLATE_ID` 等仍继续存在。
+  - Verification:
+    - `rg -n "ANALYSIS_SUBSCRIBE|analysis_subscribe|__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__|TARO_APP_ANALYSIS" src backend config package.json types tests docs` 无匹配。
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/record-text/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `go test ./internal/analyze/handler -run 'TestAnalyzeHandler_SubmitAnalyzeTask|TestAnalyzeHandler_SubmitTextTask' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask|TestTaskService_SubmitTextTask|TestTaskService_SubmitCorrectionStoresChainRoot' -count=1` passed。
+    - `go test ./internal/analyze/service -run '^$' -count=1` passed，确认包可编译。
+    - `go test ./pkg/config -run 'Test' -count=1` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - `go test ./internal/analyze/handler ./internal/analyze/service ./pkg/config -run 'Test' -count=1` 中 handler/config passed，但 `internal/analyze/service` 全量测试被既有 `TestTaskService_ListTasks` 空指针失败阻断；聚焦测试和包编译均通过。
+    - 微信开发者工具自动化已尝试 `mrc where/relaunch/logs`，但 9420 与 3001 端口均无法连接，提示目标项目窗口未开启自动化服务；本轮无法完成运行时截图/交互验证。
 
 ## 状态：完成排查与后端修复 - 保质期订阅通知未推送
 

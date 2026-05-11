@@ -79,7 +79,6 @@ type SubmitTaskInput struct {
 	CorrectionSourceTaskID string           `json:"correction_source_task_id"`
 	CorrectionRootTaskID   string           `json:"correction_root_task_id"`
 	ReferenceObjects       []map[string]any `json:"reference_objects"`
-	SubscribeStatus        string           `json:"subscribe_status"`
 	SourceType             string           `json:"source_type"`
 }
 
@@ -323,9 +322,6 @@ func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInp
 	}
 	if len(input.ReferenceObjects) > 0 {
 		payload["reference_objects"] = input.ReferenceObjects
-	}
-	if strings.TrimSpace(input.SubscribeStatus) != "" {
-		payload["subscribe_status"] = strings.TrimSpace(input.SubscribeStatus)
 	}
 	if strings.TrimSpace(input.SourceType) != "" {
 		payload["source_type"] = strings.ToLower(strings.TrimSpace(input.SourceType))

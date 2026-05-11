@@ -20,7 +20,6 @@ import {
   PrecisionReferenceDimensions,
   PrecisionReferencePresetConfig,
   PrecisionReferencePresetKey,
-  ANALYSIS_SUBSCRIBE_TEMPLATE_ID,
   showUnifiedApiError,
 } from '../../../utils/api'
 import type { AnalyzeResponse, AnalysisEngine, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
@@ -584,19 +583,6 @@ function AnalyzePage() {
 
     setIsAnalyzing(true)
 
-    // 请求订阅消息授权（在图片上传前调用，避免上传耗时导致弹窗时机不佳）
-    let subscribeStatus: string | undefined
-    if (ANALYSIS_SUBSCRIBE_TEMPLATE_ID) {
-      try {
-        const subscribeRes = await (Taro as any).requestSubscribeMessage({
-          tmplIds: [ANALYSIS_SUBSCRIBE_TEMPLATE_ID],
-        })
-        subscribeStatus = String((subscribeRes as any)?.[ANALYSIS_SUBSCRIBE_TEMPLATE_ID] || '')
-      } catch (_) {
-        // 用户拒绝或接口调用失败，静默继续
-      }
-    }
-
     Taro.showLoading({ title: '上传图片...', mask: true })
 
     try {
@@ -635,7 +621,6 @@ function AnalyzePage() {
         additionalContext: additionalInfo || undefined,
         is_multi_view: isMultiView,
         reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
-        subscribe_status: subscribeStatus,
       }
 
       // 保存图片路径供后续页面使用
