@@ -32,6 +32,23 @@ const (
 	precisionRefineTimeout = 25 * time.Second
 )
 
+var supportedTaskTypes = []string{
+	"food",
+	"food_text",
+	"precision_plan",
+	"precision_item_estimate",
+	"precision_aggregate",
+	"public_food_library_text",
+	"exercise",
+	"health_report",
+	"expiry_recognize",
+	"expiry_notification",
+}
+
+func SupportedTaskTypes() []string {
+	return append([]string(nil), supportedTaskTypes...)
+}
+
 type Runner struct {
 	tasks      *analyzerepo.TaskRepo
 	precision  *analyzerepo.PrecisionRepo
@@ -97,7 +114,7 @@ func NewRunner(
 func (r *Runner) Run(ctx context.Context, opts Options) error {
 	taskTypes := normalizeTaskTypes(opts.TaskTypes)
 	if len(taskTypes) == 0 {
-		return fmt.Errorf("worker task types cannot be empty")
+		taskTypes = SupportedTaskTypes()
 	}
 	if opts.PollInterval <= 0 {
 		opts.PollInterval = 2 * time.Second

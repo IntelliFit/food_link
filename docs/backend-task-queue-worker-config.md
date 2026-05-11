@@ -22,17 +22,6 @@
 worker:
   count: 1
   poll_interval_seconds: 2
-  task_types:
-    - "food"
-    - "food_text"
-    - "precision_plan"
-    - "precision_item_estimate"
-    - "precision_aggregate"
-    - "public_food_library_text"
-    - "exercise"
-    - "health_report"
-    - "expiry_recognize"
-    - "expiry_notification"
 ```
 
 ### count
@@ -49,24 +38,24 @@ worker:
 
 `poll_interval_seconds` 是 worker loop 的定时 tick 间隔，当前主要影响两件事：
 
-- 如果 `task_types` 包含 `expiry_notification`，每个 tick 会尝试处理一条到期的 `food_expiry_notification_jobs` 通知 job。
+- 每个 tick 会尝试处理一条到期的 `food_expiry_notification_jobs` 通知 job。
 - worker 空闲日志按 tick 计数输出，目前每 30 个 tick 打一次 `worker idle`。
 
 它不是前端轮询 `/api/analyze/tasks/:task_id` 的间隔，也不是普通分析任务从 `task_queue` 收消息的等待时间。当前 `task_queue.driver=memory` 时，普通分析任务通过进程内 channel 直接投递，消息到达后 worker 会立即处理。
 
 建议本地和线上先保持 `2` 秒。调小它通常不会让食物识别更快，只会让保质期通知检查更频繁、日志更密。
 
-### task_types
+## worker 支持的任务类型
 
-`task_types` 是这个 worker 愿意消费和处理的任务类型白名单。
+worker 支持的任务类型不再放在 `config.yaml` 中配置。当前所有后台任务类型都由代码统一启用；如果需要新增、删除或禁用某类任务，应改 worker 代码和对应测试，而不是在部署配置里裁剪。
 
-它同时影响：
+代码层面仍会用一组固定任务类型做两件事：
 
-- `task_queue` 订阅过滤：不在列表里的队列消息会被跳过。
-- DB claim 条件：worker 收到消息后，只会 claim `task_type` 在白名单里的 pending task。
+- `task_queue` 订阅过滤：只订阅代码声明支持的任务类型。
+- DB claim 条件：worker 收到消息后，只会 claim 代码声明支持的 pending task。
 - 具体处理分支：worker 根据 `task_type` 进入不同业务处理函数。
 
-不要随意删任务类型。删掉某个类型后，对应任务可能一直停在 `pending`，或者队列消息被跳过。
+不要再加回 `worker.task_types` 这类配置。后台能力是代码契约，运行环境只负责决定 worker 是否启动和启动几个。
 
 当前各类型含义：
 
@@ -153,17 +142,6 @@ brokers:
 worker:
   count: 1
   poll_interval_seconds: 2
-  task_types:
-    - "food"
-    - "food_text"
-    - "precision_plan"
-    - "precision_item_estimate"
-    - "precision_aggregate"
-    - "public_food_library_text"
-    - "exercise"
-    - "health_report"
-    - "expiry_recognize"
-    - "expiry_notification"
 
 task_queue:
   driver: "memory"
@@ -188,7 +166,7 @@ worker:
 
 1. `worker.count` 是否大于 `0`。
 2. server 启动日志里是否有 `embedded worker enabled`。
-3. `task_types` 是否包含对应任务类型，例如食物拍照必须包含 `food`。
+3. server 启动日志里的 `task_types` 是否包含代码支持的完整任务集合。
 4. submit 后是否有 `analysis task enqueued`，worker 侧是否有 `task queue delivery received` / `task claimed`。
 5. Jaeger 中是否能看到 submit span 后续串到 queue delivery、claim、process、LLM、complete/fail。
 

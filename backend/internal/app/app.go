@@ -453,6 +453,7 @@ func (a *App) startEmbeddedWorker(
 	if pollInterval <= 0 {
 		pollInterval = 2 * time.Second
 	}
+	taskTypes := workerpkg.SupportedTaskTypes()
 
 	runner := workerpkg.NewRunner(
 		taskRepo,
@@ -477,7 +478,7 @@ func (a *App) startEmbeddedWorker(
 
 	a.log.Info("embedded worker enabled",
 		zap.String("worker_id", workerID),
-		zap.Strings("task_types", cfg.Worker.TaskTypes),
+		zap.Strings("task_types", taskTypes),
 		zap.String("task_queue_driver", cfg.TaskQueue.Driver),
 		zap.Duration("poll_interval", pollInterval),
 		zap.Int("worker_count", workerCount),
@@ -486,7 +487,7 @@ func (a *App) startEmbeddedWorker(
 		defer close(done)
 		err := runner.Run(workerCtx, workerpkg.Options{
 			WorkerID:     workerID,
-			TaskTypes:    cfg.Worker.TaskTypes,
+			TaskTypes:    taskTypes,
 			PollInterval: pollInterval,
 			WorkerCount:  workerCount,
 		})

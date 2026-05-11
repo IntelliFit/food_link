@@ -6816,3 +6816,19 @@
   - `git diff --check` passed with only CRLF warnings.
 - Known verification gap:
   - `go test ./internal/user/service -run "TestAnalysisTaskService_CreateHealthReportTask|TestAnalysisTaskService_CreateHealthReportTaskNormalizesLegacyURL" -count=1` is blocked by current Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` test environment, same class of existing sqlite test limitation.
+
+## 状态：完成配置收口 - worker 任务类型不再由 config.yaml 配置
+
+- User 认为 `worker.task_types` 不应该暴露在配置文件里；后台应默认支持所有任务类型，若要改动应是代码层改动。
+- 已调整：
+  - `backend/pkg/config/config.go` 移除 `WorkerConfig.TaskTypes`、`defaultWorkerTaskTypes`、`worker.task_types` 默认值和 config 文件读取逻辑。
+  - `backend/internal/worker/worker.go` 新增代码层 `SupportedTaskTypes()`，当前固定包含 `food`、`food_text`、`precision_plan`、`precision_item_estimate`、`precision_aggregate`、`public_food_library_text`、`exercise`、`health_report`、`expiry_recognize`、`expiry_notification`。
+  - `backend/internal/app/app.go` 启动内嵌 worker 时使用 `workerpkg.SupportedTaskTypes()`，不再读取 `cfg.Worker.TaskTypes`。
+  - `backend/config-example.yaml` 移除 `worker.task_types`；本地 `backend/config.yaml` 也已移除该字段。
+  - `docs/backend-task-queue-worker-config.md` 与 `docs/go-backend-prelaunch-checklist-2026-05-08.md` 已同步说明任务类型由代码固定启用。
+- Verification:
+  - `go test ./pkg/config -count=1` passed.
+  - `go test ./internal/worker ./internal/app -run Test -count=1` passed.
+  - `go test ./internal/taskqueue -run Test -count=1` passed.
+  - `go build -o $env:TEMP\food-link-server-no-worker-task-types.exe ./cmd/server` passed.
+  - `git diff --check` passed with only CRLF warnings.

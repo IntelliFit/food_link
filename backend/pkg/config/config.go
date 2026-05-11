@@ -19,8 +19,6 @@ type Config struct {
 	TaskQueue TaskQueueConfig `mapstructure:"task_queue"`
 }
 
-var defaultWorkerTaskTypes = []string{"food", "food_text", "precision_plan", "precision_item_estimate", "precision_aggregate", "public_food_library_text", "exercise", "health_report", "expiry_recognize", "expiry_notification"}
-
 type AppConfig struct {
 	Name string `mapstructure:"name"`
 	Env  string `mapstructure:"env"`
@@ -91,10 +89,9 @@ type WechatPayConfig struct {
 }
 
 type WorkerConfig struct {
-	ID                  string   `mapstructure:"id"`
-	Count               int      `mapstructure:"count"`
-	TaskTypes           []string `mapstructure:"task_types"`
-	PollIntervalSeconds float64  `mapstructure:"poll_interval_seconds"`
+	ID                  string  `mapstructure:"id"`
+	Count               int     `mapstructure:"count"`
+	PollIntervalSeconds float64 `mapstructure:"poll_interval_seconds"`
 }
 
 type TaskQueueConfig struct {
@@ -132,7 +129,6 @@ func Load(baseDir string) (*Config, error) {
 	if err := applyConfigFileOnlyValues(v, &cfg); err != nil {
 		return nil, err
 	}
-	cfg.Worker.TaskTypes = normalizeCSV(cfg.Worker.TaskTypes)
 	return &cfg, nil
 }
 
@@ -173,9 +169,6 @@ func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
 	if fileV.IsSet("worker.poll_interval_seconds") {
 		workerCfg.PollIntervalSeconds = fileCfg.Worker.PollIntervalSeconds
 	}
-	if fileV.IsSet("worker.task_types") {
-		workerCfg.TaskTypes = fileCfg.Worker.TaskTypes
-	}
 	cfg.Worker = workerCfg
 	taskQueueCfg := defaultTaskQueueConfig()
 	if fileV.IsSet("task_queue.driver") {
@@ -203,7 +196,6 @@ func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
 func defaultWorkerConfig() WorkerConfig {
 	return WorkerConfig{
 		PollIntervalSeconds: 2.0,
-		TaskTypes:           append([]string(nil), defaultWorkerTaskTypes...),
 	}
 }
 
@@ -260,7 +252,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.insecure", true)
 	v.SetDefault("worker.poll_interval_seconds", 2.0)
-	v.SetDefault("worker.task_types", defaultWorkerTaskTypes)
 	v.SetDefault("task_queue.driver", "memory")
 	v.SetDefault("task_queue.buffer_size", 1024)
 	v.SetDefault("task_queue.topic", "food-link-analysis-tasks")

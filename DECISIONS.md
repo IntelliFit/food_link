@@ -931,3 +931,7 @@
   - `driver=memory` 是当前唯一实现，适合 server 内嵌 worker；它是进程内队列，不持久化，server 重启不会 replay 旧 pending。
   - `driver=kafka` 仅为预留，adapter 未实现前必须启动失败，不能静默 fallback 到 DB 扫描。
   - `buffer_size` 是 memory channel 容量，必须大于 0；`topic/brokers/consumer_group` 当前为未来真实 broker 预留，memory driver 不使用。
+- `2026-05-12`: `worker.task_types` 不再属于配置契约：
+  - `config.yaml` 只控制 `worker.count` 和 `worker.poll_interval_seconds`，不允许按环境裁剪 worker 可处理的业务任务类型。
+  - worker 支持的任务类型由代码层 `worker.SupportedTaskTypes()` 固定维护；新增、删除或禁用任务类型应改代码和测试。
+  - 这样避免生产/本地配置漏掉某个 `task_type` 后导致任务长期 pending 或提醒不发送。
