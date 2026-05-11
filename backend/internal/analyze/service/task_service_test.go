@@ -35,6 +35,12 @@ type mockTaskCreditGuard struct {
 		reason    string
 		sourceKey string
 	}
+	refundCalls []struct {
+		userID    string
+		cost      int
+		reason    string
+		sourceKey string
+	}
 }
 
 func (m *mockTaskCreditGuard) ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string, units ...int) (map[string]any, error) {
@@ -59,13 +65,26 @@ func (m *mockTaskCreditGuard) ValidateFoodAnalysisCredits(ctx context.Context, u
 	}, nil
 }
 
-func (m *mockTaskCreditGuard) ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error {
+func (m *mockTaskCreditGuard) ConsumeEarnedCreditsOnTaskCreated(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error {
+	if plan, ok := creditsInfo["credit_spend_plan"].(map[string]any); ok && intFromAny(plan["earned_units"]) <= 0 {
+		return nil
+	}
 	m.consumeCalls = append(m.consumeCalls, struct {
 		userID    string
 		cost      int
 		reason    string
 		sourceKey string
 	}{userID: userID, cost: cost, reason: reason, sourceKey: sourceKey})
+	return nil
+}
+
+func (m *mockTaskCreditGuard) RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error {
+	m.refundCalls = append(m.refundCalls, struct {
+		userID    string
+		cost      int
+		reason    string
+		sourceKey string
+	}{userID: userID, cost: cost, reason: refundReason, sourceKey: refundSourceKey})
 	return nil
 }
 
@@ -304,7 +323,7 @@ func TestTaskService_GetTask(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestTaskService_GetTask_SettlesCreditsOnlyForDoneTask(t *testing.T) {
+func TestTaskService_GetTask_RefundsCreditsOnlyForFailedTask(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
 	guard := &mockTaskCreditGuard{}
@@ -317,37 +336,41 @@ func TestTaskService_GetTask_SettlesCreditsOnlyForDoneTask(t *testing.T) {
 		Status:   "done",
 		Payload: map[string]any{
 			"credit_usage": map[string]any{
-				"cost":           2,
-				"system_by_date": map[string]any{now.Format("2006-01-02"): 2},
-				"earned_units":   0,
+				"credit_group_id": "group-done",
+				"cost":            2,
+				"system_by_date":  map[string]any{now.Format("2006-01-02"): 2},
+				"earned_units":    1,
 			},
 		},
 		CreatedAt: &now,
 	}
-	pending := &analyzedomain.AnalysisTask{
+	failed := &analyzedomain.AnalysisTask{
 		UserID:   "user1",
 		TaskType: "food",
-		Status:   "pending",
+		Status:   "failed",
 		Payload: map[string]any{
 			"credit_usage": map[string]any{
-				"cost":           2,
-				"system_by_date": map[string]any{now.Format("2006-01-02"): 2},
+				"credit_group_id": "group-failed",
+				"cost":            2,
+				"system_by_date":  map[string]any{now.Format("2006-01-02"): 1},
+				"earned_units":    1,
 			},
 		},
 		CreatedAt: &now,
 	}
 	require.NoError(t, taskRepo.CreateTask(ctx, done))
-	require.NoError(t, taskRepo.CreateTask(ctx, pending))
+	require.NoError(t, taskRepo.CreateTask(ctx, failed))
 
-	_, err := svc.GetTask(ctx, pending.ID, "user1")
+	_, err := svc.GetTask(ctx, done.ID, "user1")
 	require.NoError(t, err)
 	assert.Empty(t, guard.consumeCalls)
+	assert.Empty(t, guard.refundCalls)
 
-	_, err = svc.GetTask(ctx, done.ID, "user1")
+	_, err = svc.GetTask(ctx, failed.ID, "user1")
 	require.NoError(t, err)
-	require.Len(t, guard.consumeCalls, 1)
-	assert.Equal(t, "food_analysis_reward_spend", guard.consumeCalls[0].reason)
-	assert.Equal(t, "food_analysis:"+done.ID, guard.consumeCalls[0].sourceKey)
+	require.Len(t, guard.refundCalls, 1)
+	assert.Equal(t, "food_analysis_reward_refund", guard.refundCalls[0].reason)
+	assert.Equal(t, "food_analysis_refund:group-failed", guard.refundCalls[0].sourceKey)
 }
 
 func TestTaskService_UpdateTaskResult(t *testing.T) {

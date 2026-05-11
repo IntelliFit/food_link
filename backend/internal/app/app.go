@@ -233,7 +233,7 @@ func New(cfg *config.Config) (*App, error) {
 		shutdownTrace: traceShutdown,
 		taskQueue:     taskQueue,
 	}
-	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, taskQueue, storageClient)
+	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, membershipSvc, taskQueue, storageClient)
 
 	engine.POST("/api/login", loginHandler.Login)
 	engine.GET("/api", system.Root)
@@ -439,6 +439,7 @@ func (a *App) startEmbeddedWorker(
 	expiryRecognizer *expiryservice.Recognizer,
 	expiryNotifier *expiryservice.NotificationWorker,
 	exerciseSvc *healthservice.ExerciseService,
+	membershipSvc *membershipservice.MembershipService,
 	taskQueue taskqueue.Queue,
 	storageClient *storage.Client,
 ) {
@@ -470,6 +471,7 @@ func (a *App) startEmbeddedWorker(
 		a.log,
 		storageClient,
 	)
+	runner.ConfigureCreditGuard(membershipSvc)
 
 	workerCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -432,14 +433,49 @@ func (r *MembershipRepo) CountDailySystemCreditUsage(ctx context.Context, userID
 	end := target.AddDate(0, 0, 3)
 	var rows []analysisTask
 	err = r.db.WithContext(ctx).
-		Where("user_id = ? AND status = ? AND created_at >= ? AND created_at < ?", userID, "done", start, end).
+		Where("user_id = ? AND created_at >= ? AND created_at < ?", userID, start, end).
 		Find(&rows).Error
 	if err != nil {
 		return 0, err
 	}
-	total := 0
+	groups := map[string]*creditUsageGroup{}
 	for _, row := range rows {
-		total += taskSystemCreditUsageUnits(row, chinaDate)
+		groupID := creditGroupID(row)
+		if groupID == "" {
+			if row.Status != "done" {
+				continue
+			}
+			total := taskSystemCreditUsageUnits(row, chinaDate)
+			if total <= 0 {
+				continue
+			}
+			groupID = "legacy:" + row.ID
+		}
+		group := groups[groupID]
+		if group == nil {
+			group = &creditUsageGroup{unitsByDate: map[string]int{}}
+			groups[groupID] = group
+		}
+		if isCreditRefundStatus(row.Status) {
+			group.refunded = true
+		}
+		if !isCreditChargeStatus(row.Status) {
+			continue
+		}
+		if usage := creditUsageFromPayload(row.Payload); len(usage) > 0 {
+			if byDate, ok := usage["system_by_date"].(map[string]any); ok {
+				group.unitsByDate[chinaDate] = maxInt(group.unitsByDate[chinaDate], intFromAny(byDate[chinaDate]))
+				continue
+			}
+		}
+		group.unitsByDate[chinaDate] = maxInt(group.unitsByDate[chinaDate], taskSystemCreditUsageUnits(row, chinaDate))
+	}
+	total := 0
+	for _, group := range groups {
+		if group.refunded {
+			continue
+		}
+		total += group.unitsByDate[chinaDate]
 	}
 	return total, nil
 }
@@ -621,6 +657,45 @@ func isFoodAnalysisTaskTypeForQuota(taskType string, payload map[string]any) boo
 		strings.HasPrefix(taskType, "precision_plan")
 }
 
+type creditUsageGroup struct {
+	refunded    bool
+	unitsByDate map[string]int
+}
+
+func creditUsageFromPayload(payload map[string]any) map[string]any {
+	if usage, ok := payload["credit_usage"].(map[string]any); ok {
+		return usage
+	}
+	return nil
+}
+
+func creditGroupID(row analysisTask) string {
+	if usage := creditUsageFromPayload(row.Payload); len(usage) > 0 {
+		if groupID := stringFromAny(usage["credit_group_id"]); groupID != "" {
+			return groupID
+		}
+	}
+	return stringFromAny(row.Payload["credit_group_id"])
+}
+
+func isCreditChargeStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "pending", "processing", "done":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCreditRefundStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "failed", "timed_out", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
 func taskSystemCreditUsageUnits(row analysisTask, chinaDate string) int {
 	if usage, ok := row.Payload["credit_usage"].(map[string]any); ok {
 		if byDate, ok := usage["system_by_date"].(map[string]any); ok {
@@ -678,6 +753,27 @@ func intFromAny(value any) int {
 	default:
 		return 0
 	}
+}
+
+func stringFromAny(value any) string {
+	if value == nil {
+		return ""
+	}
+	switch v := value.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case fmt.Stringer:
+		return strings.TrimSpace(v.String())
+	default:
+		return strings.TrimSpace(fmt.Sprintf("%v", value))
+	}
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func boolFromAny(value any) bool {

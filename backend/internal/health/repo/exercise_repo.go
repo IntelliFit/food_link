@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"time"
 
 	"food_link/backend/internal/health/domain"
 
@@ -99,4 +100,14 @@ func (r *ExerciseRepo) CreateAnalysisTask(ctx context.Context, task *domain.Anal
 		task.ID = uuid.New().String()
 	}
 	return r.db.WithContext(ctx).Create(task).Error
+}
+
+func (r *ExerciseRepo) FailAnalysisTask(ctx context.Context, taskID, errorMsg string) error {
+	return r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
+		Where("id = ? AND status <> ?", taskID, "cancelled").
+		Updates(map[string]any{
+			"status":        "failed",
+			"error_message": errorMsg,
+			"updated_at":    time.Now(),
+		}).Error
 }

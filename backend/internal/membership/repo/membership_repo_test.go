@@ -129,6 +129,61 @@ func TestMembershipRepo_CountDailySystemCreditUsage(t *testing.T) {
 	assert.Equal(t, 3, used)
 }
 
+func TestMembershipRepo_CountDailySystemCreditUsage_CountsPendingAndRefundsFailedGroup(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewMembershipRepo(db)
+	ctx := context.Background()
+	today := time.Now().In(chinaLocation()).Format("2006-01-02")
+	now := time.Now()
+
+	require.NoError(t, db.Create(&analysisTask{
+		ID:       uuid.New().String(),
+		UserID:   "u1",
+		TaskType: "food",
+		Status:   "pending",
+		Payload: map[string]any{
+			"credit_group_id": "group-active",
+			"credit_usage": map[string]any{
+				"credit_group_id": "group-active",
+				"system_by_date":  map[string]any{today: 4},
+			},
+		},
+		CreatedAt: &now,
+	}).Error)
+	require.NoError(t, db.Create(&analysisTask{
+		ID:       uuid.New().String(),
+		UserID:   "u1",
+		TaskType: "precision_plan",
+		Status:   "done",
+		Payload: map[string]any{
+			"credit_group_id": "group-refund",
+			"credit_usage": map[string]any{
+				"credit_group_id": "group-refund",
+				"system_by_date":  map[string]any{today: 4},
+			},
+		},
+		CreatedAt: &now,
+	}).Error)
+	require.NoError(t, db.Create(&analysisTask{
+		ID:       uuid.New().String(),
+		UserID:   "u1",
+		TaskType: "precision_item_estimate",
+		Status:   "failed",
+		Payload: map[string]any{
+			"credit_group_id": "group-refund",
+			"credit_usage": map[string]any{
+				"credit_group_id": "group-refund",
+				"system_by_date":  map[string]any{today: 4},
+			},
+		},
+		CreatedAt: &now,
+	}).Error)
+
+	used, err := r.CountDailySystemCreditUsage(ctx, "u1", today)
+	require.NoError(t, err)
+	assert.Equal(t, 4, used)
+}
+
 func TestMembershipRepo_ChangeEarnedCredits(t *testing.T) {
 	db := setupTestDB(t)
 	r := NewMembershipRepo(db)

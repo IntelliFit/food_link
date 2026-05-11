@@ -17,6 +17,7 @@ import (
 	"food_link/backend/pkg/storage"
 	apm "food_link/backend/pkg/trace"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 )
@@ -42,7 +43,8 @@ func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *
 
 type CreditGuard interface {
 	ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string, units ...int) (map[string]any, error)
-	ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
+	ConsumeEarnedCreditsOnTaskCreated(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
+	RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error
 }
 
 func (s *TaskService) ConfigureCreditGuard(guard CreditGuard) {
@@ -124,13 +126,14 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	if input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
 	}
-	_, _, err = s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
+	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
 	if err != nil {
 		return "", err
 	}
+	creditGroupID := ensureCreditGroupID(payload)
 
 	if mode == validExecutionMode || input.PrecisionSessionID != nil {
-		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload)
+		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
 		}
@@ -154,7 +157,12 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	if err := s.tasks.CreateTask(ctx, task); err != nil {
 		return "", err
 	}
+	if err := s.consumeTaskCredits(ctx, userID, creditsInfo, creditCost, creditGroupID, task.ID, task.TaskType); err != nil {
+		_, _ = s.tasks.FailTask(ctx, task.ID, "credit reservation failed")
+		return "", err
+	}
 	if err := s.enqueueTask(ctx, task); err != nil {
+		s.refundTaskCredits(ctx, task)
 		return "", err
 	}
 	logAnalyzeTaskSubmitted(ctx, userID, task.ID, task.TaskType, input, payload)
@@ -206,13 +214,14 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	if input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
 	}
-	_, _, err = s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
+	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
 	if err != nil {
 		return "", err
 	}
+	creditGroupID := ensureCreditGroupID(payload)
 
 	if mode == validExecutionMode || input.PrecisionSessionID != nil {
-		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload)
+		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
 		}
@@ -231,7 +240,12 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	if err := s.tasks.CreateTask(ctx, task); err != nil {
 		return "", err
 	}
+	if err := s.consumeTaskCredits(ctx, userID, creditsInfo, creditCost, creditGroupID, task.ID, task.TaskType); err != nil {
+		_, _ = s.tasks.FailTask(ctx, task.ID, "credit reservation failed")
+		return "", err
+	}
 	if err := s.enqueueTask(ctx, task); err != nil {
+		s.refundTaskCredits(ctx, task)
 		return "", err
 	}
 	logAnalyzeTaskSubmitted(ctx, userID, task.ID, task.TaskType, input, payload)
@@ -295,6 +309,81 @@ func (s *TaskService) applyFoodCreditGuard(ctx context.Context, userID, executio
 		}
 	}
 	return creditsInfo, cost, nil
+}
+
+func ensureCreditGroupID(payload map[string]any) string {
+	if payload == nil {
+		return ""
+	}
+	groupID := stringFromAny(payload["credit_group_id"])
+	if groupID == "" {
+		if usage := mapFromAny(payload["credit_usage"]); len(usage) > 0 {
+			groupID = stringFromAny(usage["credit_group_id"])
+		}
+	}
+	if groupID == "" {
+		groupID = uuid.New().String()
+	}
+	payload["credit_group_id"] = groupID
+	if usage := mapFromAny(payload["credit_usage"]); len(usage) > 0 {
+		usage["credit_group_id"] = groupID
+		payload["credit_usage"] = usage
+	}
+	return groupID
+}
+
+func (s *TaskService) consumeTaskCredits(ctx context.Context, userID string, creditsInfo map[string]any, cost int, groupID, taskID, taskType string) error {
+	if s.creditGuard == nil || userID == "" || creditsInfo == nil || groupID == "" {
+		return nil
+	}
+	return s.creditGuard.ConsumeEarnedCreditsOnTaskCreated(ctx, userID, creditsInfo, cost, "food_analysis_reward_spend", "food_analysis:"+groupID, map[string]any{
+		"credit_group_id": groupID,
+		"task_id":         taskID,
+		"task_type":       taskType,
+	})
+}
+
+func (s *TaskService) refundTaskCredits(ctx context.Context, task *domain.AnalysisTask) {
+	if s.creditGuard == nil || task == nil || task.UserID == "" {
+		return
+	}
+	usage := mapFromAny(task.Payload["credit_usage"])
+	if len(usage) == 0 {
+		return
+	}
+	groupID := creditGroupIDFromTask(task)
+	if groupID == "" {
+		return
+	}
+	cost := intFromAny(usage["cost"])
+	if cost <= 0 {
+		return
+	}
+	creditsInfo := map[string]any{
+		"credit_cost":       cost,
+		"credit_spend_plan": usage,
+	}
+	_ = s.creditGuard.RefundEarnedCreditsAfterTaskFailure(ctx, task.UserID, creditsInfo, cost,
+		"food_analysis_reward_spend", "food_analysis:"+groupID,
+		"food_analysis_reward_refund", "food_analysis_refund:"+groupID,
+		map[string]any{
+			"credit_group_id": groupID,
+			"task_id":         task.ID,
+			"task_type":       task.TaskType,
+		},
+	)
+}
+
+func creditGroupIDFromTask(task *domain.AnalysisTask) string {
+	if task == nil {
+		return ""
+	}
+	if usage := mapFromAny(task.Payload["credit_usage"]); len(usage) > 0 {
+		if groupID := stringFromAny(usage["credit_group_id"]); groupID != "" {
+			return groupID
+		}
+	}
+	return stringFromAny(task.Payload["credit_group_id"])
 }
 
 func creditUnitsForInput(input SubmitTaskInput) int {
@@ -413,7 +502,7 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 	return fmt.Errorf("enqueue analysis task: %w", err)
 }
 
-func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any) (string, error) {
+func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any, creditsInfo map[string]any, creditCost int, creditGroupID string) (string, error) {
 	sourceType := precisionSourceType(input)
 	payload["source_type"] = sourceType
 	if input.TextInput != "" {
@@ -526,7 +615,12 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 	}); err != nil {
 		return "", err
 	}
+	if err := s.consumeTaskCredits(ctx, userID, creditsInfo, creditCost, creditGroupID, task.ID, task.TaskType); err != nil {
+		_, _ = s.tasks.FailTask(ctx, task.ID, "credit reservation failed")
+		return "", err
+	}
 	if err := s.enqueueTask(ctx, task); err != nil {
+		s.refundTaskCredits(ctx, task)
 		return "", err
 	}
 	return task.ID, nil
@@ -675,7 +769,6 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 	}
 	s.normalizeTaskImages(task)
 	if task.Status == "done" {
-		s.settleSuccessfulTaskCredits(ctx, task)
 		recordedMap, err := s.tasks.RecordedTaskMap(ctx, userID, []string{task.ID})
 		if err != nil {
 			return nil, err
@@ -684,36 +777,19 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 			task.IsRecorded = true
 			task.RecordID = recordID
 		}
+	} else if isCreditRefundStatus(task.Status) {
+		s.refundTaskCredits(ctx, task)
 	}
 	return task, nil
 }
 
-func (s *TaskService) settleSuccessfulTaskCredits(ctx context.Context, task *domain.AnalysisTask) {
-	if s.creditGuard == nil || task == nil || task.UserID == "" || task.ID == "" || task.Status != "done" {
-		return
+func isCreditRefundStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "failed", "timed_out", "cancelled":
+		return true
+	default:
+		return false
 	}
-	usage, ok := task.Payload["credit_usage"].(map[string]any)
-	if !ok || len(usage) == 0 {
-		return
-	}
-	cost := intFromAny(usage["cost"])
-	if cost <= 0 {
-		return
-	}
-	reason := "food_analysis_reward_spend"
-	sourcePrefix := "food_analysis:"
-	if task.TaskType == "exercise" {
-		reason = "exercise_reward_spend"
-		sourcePrefix = "exercise:"
-	}
-	creditsInfo := map[string]any{
-		"credit_cost":       cost,
-		"credit_spend_plan": usage,
-	}
-	_ = s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, task.UserID, creditsInfo, cost, reason, sourcePrefix+task.ID, map[string]any{
-		"task_id":   task.ID,
-		"task_type": task.TaskType,
-	})
 }
 
 func (s *TaskService) UpdateTaskResult(ctx context.Context, taskID, userID string, result map[string]any) error {
@@ -745,6 +821,8 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID, userID string) (ma
 	// If pending/processing, mark cancelled first
 	if task.Status == "pending" || task.Status == "processing" {
 		_ = s.tasks.UpdateTaskStatus(ctx, taskID, "cancelled", nil)
+		task.Status = "cancelled"
+		s.refundTaskCredits(ctx, task)
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -1008,6 +1086,16 @@ func intFromAny(value any) int {
 	default:
 		return 0
 	}
+}
+
+func mapFromAny(value any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	if typed, ok := value.(map[string]any); ok {
+		return typed
+	}
+	return nil
 }
 
 func stringFromAny(value any) string {

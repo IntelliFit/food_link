@@ -70,6 +70,11 @@ type Runner struct {
 	queue      taskqueue.Queue
 	log        *zap.Logger
 	storage    *storage.Client
+	credit     CreditGuard
+}
+
+type CreditGuard interface {
+	RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error
 }
 
 type Options struct {
@@ -118,6 +123,10 @@ func NewRunner(
 		log:        log,
 		storage:    client,
 	}
+}
+
+func (r *Runner) ConfigureCreditGuard(guard CreditGuard) {
+	r.credit = guard
 }
 
 func (r *Runner) Run(ctx context.Context, opts Options) error {
@@ -1238,6 +1247,12 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 			groupPayload["uncertainty_level"] = groupItems[0]["uncertainty_level"]
 			groupPayload["uncertainty_reason"] = groupItems[0]["uncertainty_reason"]
 		}
+		if creditUsage := mapFromAny(task.Payload["credit_usage"]); len(creditUsage) > 0 {
+			groupPayload["credit_usage"] = creditUsage
+		}
+		if groupID := stringFromAny(task.Payload["credit_group_id"]); groupID != "" {
+			groupPayload["credit_group_id"] = groupID
+		}
 
 		childTask := &domain.AnalysisTask{
 			UserID:   task.UserID,
@@ -1288,6 +1303,9 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 	}
 	if creditUsage := mapFromAny(task.Payload["credit_usage"]); len(creditUsage) > 0 {
 		aggregatePayload["credit_usage"] = creditUsage
+	}
+	if groupID := stringFromAny(task.Payload["credit_group_id"]); groupID != "" {
+		aggregatePayload["credit_group_id"] = groupID
 	}
 	if task.ImageURL != nil && *task.ImageURL != "" {
 		aggregatePayload["image_url"] = *task.ImageURL
@@ -3196,12 +3214,69 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	}
 	task.Status = "failed"
 	task.ErrorMessage = &msg
+	if task.TaskType == "precision_item_estimate" && r.precision != nil {
+		if estimate, err := r.precision.GetItemEstimateBySourceTask(ctx, task.ID); err == nil && estimate != nil {
+			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": msg, "updated_at": time.Now()})
+		}
+	}
+	r.refundTaskCredits(ctx, task)
 	r.log.Error("task failed",
 		zap.String("task_id", task.ID),
 		zap.Stringp("attempt_id", task.AttemptID),
 		zap.String("error", msg),
 	)
 	return nil
+}
+
+func (r *Runner) refundTaskCredits(ctx context.Context, task *domain.AnalysisTask) {
+	if r.credit == nil || task == nil || task.UserID == "" {
+		return
+	}
+	usage := mapFromAny(task.Payload["credit_usage"])
+	if len(usage) == 0 {
+		return
+	}
+	groupID := creditGroupIDFromTask(task)
+	if groupID == "" {
+		return
+	}
+	cost := intFromAny(usage["cost"])
+	if cost <= 0 {
+		return
+	}
+	spendReason := "food_analysis_reward_spend"
+	spendSourceKey := "food_analysis:" + groupID
+	refundReason := "food_analysis_reward_refund"
+	refundSourceKey := "food_analysis_refund:" + groupID
+	if task.TaskType == "exercise" {
+		spendReason = "exercise_reward_spend"
+		spendSourceKey = "exercise:" + groupID
+		refundReason = "exercise_reward_refund"
+		refundSourceKey = "exercise_refund:" + groupID
+	}
+	creditsInfo := map[string]any{
+		"credit_cost":       cost,
+		"credit_spend_plan": usage,
+	}
+	if err := r.credit.RefundEarnedCreditsAfterTaskFailure(ctx, task.UserID, creditsInfo, cost, spendReason, spendSourceKey, refundReason, refundSourceKey, map[string]any{
+		"credit_group_id": groupID,
+		"task_id":         task.ID,
+		"task_type":       task.TaskType,
+	}); err != nil {
+		r.log.Warn("refund earned credits after task failure failed", zap.String("task_id", task.ID), zap.String("credit_group_id", groupID), zap.Error(err))
+	}
+}
+
+func creditGroupIDFromTask(task *domain.AnalysisTask) string {
+	if task == nil {
+		return ""
+	}
+	if usage := mapFromAny(task.Payload["credit_usage"]); len(usage) > 0 {
+		if groupID := stringFromAny(usage["credit_group_id"]); groupID != "" {
+			return groupID
+		}
+	}
+	return stringFromAny(task.Payload["credit_group_id"])
 }
 
 func sanitizeTaskErrorMessage(taskErr error) string {
@@ -3386,6 +3461,14 @@ func intFromMap(payload map[string]any, key string) int {
 		return 0
 	}
 	return int(value)
+}
+
+func intFromAny(value any) int {
+	number, ok := floatFromAny(value)
+	if !ok {
+		return 0
+	}
+	return int(number)
 }
 
 func floatFromAny(value any) (float64, bool) {

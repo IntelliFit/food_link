@@ -14,6 +14,77 @@
   - `docker compose -f backend/docker-compose.kafka.yml config` passed。
   - `git diff --check -- backend/docker-compose.kafka.yml docs/backend-task-queue-worker-config.md CURRENT_TASK.md DECISIONS.md memory/2026-05-12.md` passed with only CRLF warnings。
 
+## 状态：完成提交、拉取远端并合并 - 积分任务组失败返还
+
+- 2026-05-12 update:
+  - User要求：提交代码，并拉取最新代码合并。
+  - Completed:
+    - 已提交本地积分任务组失败返还改动。
+    - 已 `git fetch origin` 并发现远端领先 2 个提交：
+      - `926e27e feat: 移除 worker.task_types 配置，任务类型由代码固定维护`
+      - `8769347 Merge branch 'backend-refactor-sync-migrate-tencent' ...`
+    - 已通过 `git pull --rebase origin backend-refactor-sync-migrate-tencent` 将本地提交接到远端最新提交之后，无冲突。
+  - Verification:
+    - rebase 前：
+      - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker ./internal/app -run 'Test' -count=1` passed。
+      - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_RefundsCreditsOnlyForFailedTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$|TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask' -count=1` passed。
+      - `git diff --check` passed。
+    - rebase 后：
+      - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker ./internal/app -run 'Test' -count=1` passed。
+      - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_RefundsCreditsOnlyForFailedTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$|TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask' -count=1` passed。
+
+## 状态：完成静态梳理 - 保质期过期通知定时 job 生命周期
+
+- 2026-05-12 update:
+  - User 询问食物过期通知在后端如何实现，尤其是定时器状态如何在后端关闭并重新开启后维持，以及生命周期如何管理。
+  - Findings:
+    - 当前实现不是为每个食物条目在 Go 进程内创建持久 `time.Timer`，而是把提醒计划持久化到数据库 `food_expiry_notification_jobs`。
+    - 用户接受小程序订阅后，`POST /api/expiry/items/:item_id/subscribe` 进入 `ExpiryService.SubscribeWithContext()`，校验条目归属、状态、openid 和模板 ID，再由 `reconcileNotificationJob()` 计算到期当天中国时间 09:00 的 `scheduled_at` 并 upsert job。
+    - server 内嵌 worker 启动后，如果 `worker.task_types` 包含 `expiry_notification`，会按 `worker.poll_interval_seconds` 周期调用 `NotificationWorker.ProcessNext()` 扫描 due job。
+    - job claim 使用 `status='pending' AND scheduled_at <= now` + `FOR UPDATE SKIP LOCKED`，claim 后改为 `processing`，避免多个 worker 重复发送同一条提醒。
+    - 成功发送微信订阅消息后 job 置为 `sent`；发送失败按 5min/30min/120min 延迟重试，超过最大次数置为 `failed`；条目不存在、非 active 或已过期等情况置为 `cancelled`。
+    - 重启恢复依赖 DB：未来或已到期的 `pending` job 都还在数据库中，后端重启后内嵌 worker 会继续扫描并处理，不需要恢复进程内定时器。
+  - Current lifecycle gaps:
+    - 如果进程在 job 已从 `pending` claim 成 `processing` 后、写回 `sent/failed/pending` 前崩溃，当前代码没有看到 stale `processing` job 的租约恢复机制，这类 job 可能卡住。
+    - 条目普通更新/状态更新目前未明显主动 reconcile/cancel 已有提醒 job；worker 处理时会再次校验并取消不适用 job，但不是更新瞬间就立即维护。
+  - 本轮为源码静态梳理，没有修改业务代码，未运行测试。
+
+## 状态：完成源码修改 - 积分创建即预扣、失败整组返还
+
+- 2026-05-12 update:
+  - User要求：
+    - 用户只要创建对应异步任务，就扣除对应积分。
+    - 如果任务失败，要返还积分。
+    - 如果一次提交拆成多个异步任务，只要其中一个失败，整次提交的积分都要返还。
+  - Fix applied:
+    - `backend/internal/analyze/service/task_service.go`
+      - 食物图片、文字、精准模式提交在创建 `analysis_tasks` 后立即预扣累计奖励积分。
+      - 每次提交写入统一 `credit_group_id`，并同步写入 `credit_usage.credit_group_id`。
+      - 创建后 enqueue 失败、用户取消、轮询到失败/超时/取消时会幂等触发退款。
+    - `backend/internal/membership/repo/membership_repo.go`
+      - 每日系统积分统计从只看 `done` 改为按 `credit_group_id` 统计 `pending/processing/done`。
+      - 同组任一任务 `failed/timed_out/cancelled` 时整组不计入系统积分，达到返还效果。
+    - `backend/internal/membership/service/membership_service.go`
+      - 新增创建时预扣 earned 积分方法和失败时幂等退款方法。
+      - 退款前会确认原预扣账本存在，避免凭空增加 earned 积分。
+    - `backend/internal/worker/worker.go`
+      - worker 任务失败时触发 earned 积分退款。
+      - 精准模式子任务继承父任务 `credit_usage/credit_group_id`；任一子任务失败会把对应 `precision_item_estimates` 标记 failed，并退款整组。
+    - `backend/internal/health/service/exercise_service.go`
+      - 运动异步任务创建后立即预扣，enqueue 失败时标记 failed 并退款。
+    - `backend/internal/expiry/service/expiry_service.go`
+      - 保质期识别创建任务后立即预扣，识别失败后标记 failed 并退款；成功后不再二次扣。
+    - `backend/internal/app/app.go`
+      - 内嵌 worker 注入 membership service，用于失败退款。
+  - Verification:
+    - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker ./internal/app -run 'Test' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_RefundsCreditsOnlyForFailedTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$|TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask' -count=1` passed。
+    - `go test ./internal/analyze/handler ./internal/health/handler ./internal/expiry/handler ./internal/taskqueue ./pkg/config -run 'Test' -count=1` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 本轮只改后端服务/worker/repo/test，没有修改小程序页面、组件、样式、路由或交互；未运行微信开发者工具截图验证。
+    - `go test ./internal/analyze/service -run 'Test' -count=1` 仍会被既有 `TestTaskService_ListTasks` 空指针问题阻断；本轮相关聚焦测试已通过。
+
 ## 状态：完成提交与远端同步 - 积分扣除优化和分析订阅移除
 
 - 2026-05-12 update:
