@@ -445,6 +445,8 @@ function ProfilePage() {
           Taro.removeStorageSync('community_friends_cache')
           Taro.removeStorageSync('community_requests_cache')
           Taro.removeStorageSync('community_feed_timestamp')
+          Taro.removeStorageSync('community_feed_cache_session_id_v1')
+          Taro.removeStorageSync('community_feed_session_id_v1')
           Taro.removeStorageSync('community_friends_timestamp')
           Taro.removeStorageSync('community_feed_filters_v2')
           Taro.removeStorageSync('community_priority_authors_v1')

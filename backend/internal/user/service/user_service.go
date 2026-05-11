@@ -151,6 +151,7 @@ type UpdateHealthProfileInput struct {
 	DietPreference             *StringList                  `json:"diet_preference"`
 	Allergies                  *StringList                  `json:"allergies"`
 	HealthNotes                *string                      `json:"health_notes"`
+	RoutineType                *string                      `json:"routine_type"`
 	DashboardTargets           *UpdateDashboardTargetsInput `json:"dashboard_targets"`
 	ReportExtract              map[string]any               `json:"report_extract"`
 	ReportImageURL             *string                      `json:"report_image_url"`
@@ -257,6 +258,9 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 	}
 	if input.HealthNotes != nil {
 		healthCondition["health_notes"] = *input.HealthNotes
+	}
+	if input.RoutineType != nil {
+		healthCondition["routine_type"] = strings.TrimSpace(*input.RoutineType)
 	}
 	if input.DashboardTargets != nil {
 		dt := input.DashboardTargets

@@ -1,5 +1,29 @@
 # DECISIONS
 
+- `2026-05-11`: 保质期订阅通知链路的稳定口径：
+  - 前端只有在构建时注入 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 后，才会调用 `Taro.requestSubscribeMessage()` 并继续请求后端 `/api/expiry/items/:item_id/subscribe` 创建提醒 job。
+  - 后端订阅模板 ID 读取 `wechat_pay.expiry_subscribe_template_id`，可由环境变量 `EXPIRY_SUBSCRIBE_TEMPLATE_ID` 覆盖；微信 access token 使用 `external.appid` / `external.secret`，可由 `APPID` / `SECRET` 覆盖。
+  - 通知发送依赖独立 worker 进程轮询 `food_expiry_notification_jobs`；Docker 镜像虽然包含 `/app/food-link-worker`，但默认入口是 server，生产部署必须单独启动 worker command。
+  - worker task types 不能覆盖丢 `expiry_notification`，否则通知 job 不会被消费。
+  - 到期当天已 due 的 job 不应因为重新计算出 `now + 1min` 被判定为“旧任务作废”；该逻辑已修正。
+
+- `2026-05-11`: 注册后健康档案引导中的作息字段采用轻量枚举 `health_condition.routine_type`，不新增数据库列：
+  - 当前选项为 `early_bird`（早睡早起）、`regular`（标准作息）、`night_owl`（晚睡晚起）、`irregular`（不太固定/轮班）。
+  - 首次引导问卷在活动水平之后询问该字段。
+  - 健康档案查看页在基础信息区展示，并通过底部 radio 编辑器修改。
+  - 后端 `PUT /api/user/health-profile` 接收 `routine_type` 后写入 `weapp_user.health_condition`。
+
+- `2026-05-11`: 食物识别前端提交入口需要保留短时间防重复提交保护：
+  - 相册/拍照后的分析主按钮使用 300ms 前端防抖，并且进入实际提交流程时要尽早置 `isAnalyzing=true`，避免订阅授权弹窗或上传前窗口期重复触发。
+  - 结果页纠错抽屉里的「重新智能分析」同样使用 300ms 前端防抖，并在弹确认框前拦截重复点击，避免重复弹窗和重复创建纠错任务。
+
+- `2026-05-11`: 圈子「好友动态」列表缓存只允许在本次小程序启动会话内复用：
+  - `App.useLaunch` 会清理上一次启动留下的 `community_feed_cache / community_feed_timestamp / community_feed_cache_session_id_v1`，并生成新的 `community_feed_session_id_v1`。
+  - Feed 缓存写入时必须记录当前 session id；读取时 session 不一致就丢弃，避免跨冷启动展示旧动态。
+  - `community_feed_filters_v2`、特别关注和好友/申请缓存不属于本条 Feed 列表缓存限制，可继续按各自业务需要保留。
+  - 自己从圈子删除/隐藏的动态不应再通过单条 Feed context、点赞、评论等圈子互动入口访问；后端对 `hidden_from_feed=true` 的记录按 `not_found` 处理。
+- `2026-05-11`: 圈子「好友动态」加载态已有骨架屏时，不再额外叠加 spinner 动画；触底加载也不显示“正在加载”文字，保持安静占位即可。
+
 - `2026-05-11`: 普通模式食物分析的 DB-first 第一阶段模型 item schema 需要长期保留 `waterMl`：
   - 图片/文字普通分析 prompt 均使用 `items:[{"name":"","estimatedWeightGrams":0,"waterMl":0}]` 作为结构口径。
   - `waterMl` 表示该食物或饮品本身可计入饮水参考的含水量，单位毫升；无法判断时为 `0`。

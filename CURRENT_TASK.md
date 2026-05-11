@@ -1,5 +1,168 @@
 # 当前任务
 
+## 状态：完成排查与后端修复 - 保质期订阅通知未推送
+
+- 2026-05-11 update:
+  - User反馈：
+    - 5/6 花卷馒头过期，但没有系统服务通知。
+    - 昨天过期食物当天应该有提示但没有。
+    - 要求查看后端实现位置，以及 secret/key 等变量是否齐全。
+  - Implementation map:
+    - 前端订阅入口：`src/packageExtra/pages/expiry-edit/index.tsx`
+      - 保存食物后 `promptExpirySubscribe()` 调 `Taro.requestSubscribeMessage()`。
+      - 有模板 ID 才会弹订阅；模板 ID 来自 `EXPIRY_SUBSCRIBE_TEMPLATE_ID`。
+    - 前端构建注入：`config/index.ts`
+      - 读取 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 注入 `__EXPIRY_SUBSCRIBE_TEMPLATE_ID__`。
+    - 后端订阅接口：`POST /api/expiry/items/:item_id/subscribe`
+      - `backend/internal/expiry/handler/expiry_handler.go`
+      - `backend/internal/expiry/service/expiry_service.go`
+      - 验证 `subscribe_status`、openid、后端模板 ID 后写 `food_expiry_notification_jobs`。
+    - 后端通知 worker：
+      - `backend/internal/expiry/service/notification_worker.go`
+      - `backend/internal/worker/worker.go`
+      - worker task types 包含 `expiry_notification` 时，会在没有普通 `analysis_tasks` 时轮询 `food_expiry_notification_jobs`。
+    - 配置来源：
+      - 后端：`external.appid` / `external.secret` / `wechat_pay.expiry_subscribe_template_id`
+      - 环境变量覆盖：`APPID` / `SECRET` / `EXPIRY_SUBSCRIBE_TEMPLATE_ID` / `WORKER_TASK_TYPES`
+      - 前端：`TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`
+  - Findings:
+    - 本地 `backend/config.yaml` 中后端 `external.appid`、`external.secret`、`wechat_pay.expiry_subscribe_template_id` 均有值；`worker.task_types` 未显式配置，但 Go config 默认包含 `expiry_notification`。
+    - 当前 shell 中未设置 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`。
+    - `package.json` 的 `dev:weapp`、`dev:weapp:online`、`build:weapp:preview` 都没有注入 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`。
+    - 当前 `dist/common.js` 中 `EXPIRY_SUBSCRIBE_TEMPLATE_ID` 实际为空字符串，因此本地/当前产物会直接跳过订阅弹窗，不会请求后端创建通知 job。
+    - Docker 镜像包含 `/app/food-link-worker`，但默认 `ENTRYPOINT` 是 `/app/food-link`；生产必须部署层单独以 worker command 启动，否则通知 job 不会被消费。
+    - SSH 线上只读检查被 host key changed 拦截，未绕过；因此线上 `food-link-worker` 是否实际启动、线上环境变量是否齐全仍需在主机指纹确认后再查。
+  - Root cause fixed:
+    - `backend/internal/expiry/service/notification_worker.go`
+      - 之前 worker 处理当天 9 点已到期 job 时会重新调用 `buildNotificationSchedule()`。
+      - 该函数在当天 9 点已过时会返回 `now + 1min`。
+      - worker 随后把它判断成“提醒时间已变化，旧任务作废”，导致本该发送的当天到期通知被取消。
+      - 已改为：如果条目到期日就是今天，due job 不因重新计算出的 `now + 1min` 被取消。
+    - `backend/internal/expiry/service/notification_worker_test.go`
+      - 增加当天 due job 不取消、未来改期 job 仍取消的测试。
+    - 顺手更新保质期相关旧测试：
+      - `expiry_service_test.go` 补齐 notification job migration、订阅测试改用 openid/template、识别未初始化按当前行为断言。
+      - `task_repo_test.go` 补齐 `analysis_tasks.is_violated/violation_reason` 测试 schema。
+  - Verification:
+    - `go test ./internal/expiry/service ./internal/expiry/repo ./internal/expiry/handler ./internal/worker -run 'Test' -count=1` passed
+    - `go test ./pkg/config -run 'Test' -count=1` passed
+    - `git diff --check` passed
+  - Remaining actions:
+    - 发布/体验版构建前必须设置 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`，否则小程序不会发起订阅授权。
+    - 确认线上 systemd/Docker 是否单独启动 `/app/food-link-worker`，且 `WORKER_TASK_TYPES` 未覆盖掉 `expiry_notification`。
+    - 修复 SSH known_hosts 指纹后再查线上服务状态与 `food_expiry_notification_jobs` 状态分布。
+
+## 状态：完成源码修改 - 注册后引导与健康档案增加作息习惯
+
+- 2026-05-11 update:
+  - User要求：
+    - 用户注册后的引导页面增加一个作息询问，先随便设置一个。
+    - 这部分数据可以在健康档案中显示和修改。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 问卷总步数从 11 调整为 12。
+      - 在活动水平之后新增「作息习惯」步骤。
+      - 暂定 4 个作息选项：`early_bird` 早睡早起、`regular` 标准作息、`night_owl` 晚睡晚起、`irregular` 不太固定/轮班。
+      - 保存健康档案时提交 `routine_type`。
+    - `src/packageExtra/pages/health-profile-view/index.tsx`
+      - 基础信息区新增「作息习惯」展示行。
+      - 底部编辑器支持修改 `routine_type`。
+    - `src/utils/api.ts`
+      - `HealthCondition` 和 `HealthProfileUpdateRequest` 增加 `routine_type`。
+    - `backend/internal/user/service/user_service.go`
+      - `UpdateHealthProfileInput` 增加 `RoutineType`，写入 `health_condition.routine_type`。
+    - `backend/internal/user/service/user_service_test.go`
+      - 补齐测试 sqlite schema 中已存在于 repo 的邀请/积分字段，避免 `UserRepo.Create` 插入失败。
+      - 新增 `TestUserService_UpdateHealthProfile_WithRoutineType` 覆盖作息字段保存。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/utils/api.ts --max-warnings 0` passed
+    - `go test ./internal/user/service -run 'TestUserService_UpdateHealthProfile_WithRoutineType|TestUserService_UpdateHealthProfile_WithDashboardTargets|TestBuildHealthProfileResponse' -count=1` passed
+    - `git diff --check` passed
+    - `dist/packageExtra/pages/health-profile/index.js` 与 `dist/packageExtra/pages/health-profile-view/index.js` 已包含 `routine_type`、`作息习惯` 与作息选项，说明当前 watch 产物已同步。
+    - 微信开发者工具自动化：
+      - `mrc relaunch /packageExtra/pages/health-profile/index --port 9420` 成功；`.progress-wrap` 与 `.step-card-title` 存在；错误日志 0 条。
+      - `mrc relaunch /packageExtra/pages/health-profile-view/index --port 9420` 成功；`.health-profile-view-page` 与 `.block` 存在；点击 `.row` 可打开 `.editor-modal`；错误日志 0 条。
+  - Runtime validation note:
+    - `mrc screenshot /tmp/foodlink-routine-profile.png --port 9420` 仍卡住未产出文件，已终止截图子进程；本轮有页面/元素/交互验证，但没有截图证据。
+
+## 状态：完成源码优化 - 分析与纠错重分析按钮增加 300ms 防抖
+
+- 2026-05-11 update:
+  - User要求：
+    - 相册上传后「分析」按钮前端增加 300ms 防抖，防止重复发送多个请求。
+    - 识别有误点击纠错里的「重新智能分析」按钮也做同样优化。
+  - Fix applied:
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 新增 `ANALYZE_SUBMIT_DEBOUNCE_MS = 300` 与 `analyzeSubmitDebounceRef`。
+      - `handleAnalyzePress()` 在提交前做 300ms 时间窗拦截。
+      - `doAnalyze()` 将 `setIsAnalyzing(true)` 提前到订阅消息授权和上传 loading 之前，堵住订阅弹窗前的连点窗口。
+    - `src/packageExtra/pages/result/index.tsx`
+      - 新增 `CORRECTION_SUBMIT_DEBOUNCE_MS = 300` 与 `correctionSubmitDebounceRef`。
+      - `handleSubmitCorrection()` 在校验、弹确认框和提交纠错任务前先拦截 `isResubmitting` 与 300ms 内重复点击，避免重复弹窗/重复提交。
+  - Model check:
+    - 当前食物图片识别/精准第一阶段默认仍走 OfoxAI Gemini，模型名 `gemini-3-flash-preview`。
+    - 文字输入模式未显式传模型时默认走 DeepSeek `deepseek-v4-flash`。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - 微信开发者工具自动化：
+      - `mrc where --port 9420` 成功，当前页面为 `packageExtra/pages/result/index`
+      - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+      - 交接前已完成 analyze/result 页面 relaunch 与元素检查；截图命令在当前环境仍容易卡住，本轮未产出截图证据。
+
+## 状态：完成源码微调 - 圈子好友动态去除 spinner 动画
+
+- 2026-05-11 update:
+  - User反馈：好友动态已经有骨架屏，spinner 动画去掉。
+  - Fix applied:
+    - `src/pages/community/index.tsx`
+      - 移除 Feed 刷新已有列表时的 `feed-loading-spinner`。
+      - 移除骨架屏上方额外的初始 spinner。
+      - 触底加载更多时不再渲染 spinner，仅保留安静占位。
+      - 自己动态删除中的 `action-delete-spinner` 也移除，保留禁用态防重复点击。
+    - `src/pages/community/index.scss`
+      - 删除 `feed-loading-spinner`、`feed-refresh-spinner-row`、`feed-initial-spinner-row`、`action-delete-spinner` 和对应旋转 keyframes。
+  - Verification:
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `rg -n "feed-loading-spinner|feed-refresh-spinner-row|feed-initial-spinner-row|action-delete-spinner|community-feed-spin|正在加载" src/pages/community/index.tsx src/pages/community/index.scss` 返回无匹配
+    - 微信开发者工具自动化：
+      - `mrc switchTab /pages/community/index --port 9420` 成功
+      - `.feed-section` 存在
+      - `.feed-loading-spinner` 不存在
+      - `.action-delete-spinner` 不存在
+      - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+
+## 状态：完成源码修改 - 圈子好友动态缓存收口、加载 spinner 与自己动态删除修复
+
+- 2026-05-11 update:
+  - User要求：
+    - 好友动态如果不是本次进入软件，不需要保留缓存。
+    - 加载消息时需要 spinner 加载动画。
+    - 检查并修复圈子内自己动态的删除功能。
+  - Fix applied:
+    - `src/app.ts`
+      - 小程序每次 `useLaunch` 时清理上一启动会话的 `community_feed_cache / community_feed_timestamp / community_feed_cache_session_id_v1`，并生成新的 `community_feed_session_id_v1`。
+    - `src/pages/community/index.tsx` / `index.scss`
+      - Feed 缓存写入时绑定当前启动 session；读取时只接受同 session 的缓存，跨冷启动缓存会被丢弃。
+      - 初次加载、刷新已有列表、触底加载更多均增加旋转 spinner；纯加载态不再展示“正在加载”文字。
+      - 自己动态操作文案从“移除”收口为“删除动态/删除”，并在删除请求进行中显示小 spinner、防重复点击。
+      - 删除成功后立即从当前列表移除、清理 Feed 缓存、重置刷新时间，避免旧缓存把已删除动态顶回来。
+    - `backend/internal/community/service/community_service.go`
+      - `hidden_from_feed=true` 的记录在圈子 context / like / comment 权限链路中按 `not_found` 处理，避免旧通知或旧缓存继续打开已从圈子删除的动态。
+    - `src/pages/profile/index.tsx`
+      - “清除缓存”同步清理新增的 Feed session 缓存键。
+  - Verification:
+    - `npx eslint src/app.ts src/pages/community/index.tsx src/pages/profile/index.tsx --max-warnings 0` passed
+    - `go test ./internal/community/repo ./internal/community/service -count=1` passed
+    - `git diff --check` passed
+    - `dist/pages/community/index.js` / `index.wxss` 已包含 `删除动态`、`feed-loading-spinner` 与 session cache key 产物。
+    - `mrc relaunch /pages/community/index --port 9420` 成功；`.feed-section` 和 `.action-delete` 存在；点击 `.action-delete` 成功；`mrc logs error 20 --port 9420` 返回 0 条错误日志。
+  - Validation notes:
+    - `npm run typecheck` 仍被仓库既有无关类型错误阻断：如 `expiry` 主题类型、`food-library` clipboard typings、`record-manual` 的 `sodium_mg`、`__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__` 声明等；本轮改动文件未出现在错误列表中。
+    - `mrc screenshot /tmp/foodlink-community-delete-check.png --port 9420` 仍卡住未产出文件，已终止截图子进程；本轮无截图证据。
+    - `weapp-dev.log` 显示 Taro watch 的 commonjs service 已退出；按项目规则未擅自启动/重启 `dev:weapp`。
+
 ## 状态：完成源码微调 - 结果页 ratio-slider-shell 黑色主题改为暗色壳
 
 - 2026-05-11 update:

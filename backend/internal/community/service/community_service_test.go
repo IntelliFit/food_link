@@ -270,6 +270,26 @@ func TestFeedContextAllowed(t *testing.T) {
 	assert.Equal(t, "owner", result.Reason)
 }
 
+func TestFeedContextHiddenFromFeedNotFound(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		getFeedRecord: &repo.FeedRecord{ID: "r1", UserID: "u1", HiddenFromFeed: true},
+	}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+	result, err := svc.FeedContext(context.Background(), "u1", "r1")
+	assert.NoError(t, err)
+	assert.False(t, result.Allowed)
+	assert.Equal(t, "not_found", result.Reason)
+}
+
+func TestLikeFeedHiddenFromFeedNotFound(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		getFeedRecord: &repo.FeedRecord{ID: "r1", UserID: "u1", HiddenFromFeed: true},
+	}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+	_, err := svc.LikeFeed(context.Background(), "u1", "r1")
+	assert.ErrorIs(t, err, commonerrors.ErrNotFound)
+}
+
 func TestPostCommentValidation(t *testing.T) {
 	mockFeed := &mockFeedRepo{}
 	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})

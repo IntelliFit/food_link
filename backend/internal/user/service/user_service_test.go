@@ -49,7 +49,10 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		mode_switch_count_30d INTEGER,
 		searchable BOOLEAN,
 		public_records BOOLEAN,
-		last_seen_analyze_history_at TIMESTAMP
+		last_seen_analyze_history_at TIMESTAMP,
+		registration_invite_code TEXT,
+		referred_by_user_id TEXT,
+		points_balance REAL
 	)`)
 	db.Exec(`CREATE TABLE user_health_documents (
 		id TEXT PRIMARY KEY,
@@ -490,6 +493,30 @@ func TestUserService_UpdateHealthProfile_WithDashboardTargets(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, result["health_condition"])
+}
+
+func TestUserService_UpdateHealthProfile_WithRoutineType(t *testing.T) {
+	db := setupTestDB(t)
+	userRepo := repo.NewUserRepo(db)
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
+	ctx := context.Background()
+
+	user := &repo.User{OpenID: "o1"}
+	_ = userRepo.Create(ctx, user)
+
+	patches := ApplyMethod(reflect.TypeOf(userRepo), "UpdateFields", func(_ *repo.UserRepo, _ context.Context, _ string, updates map[string]any) (*repo.User, error) {
+		user.HealthCondition = updates["health_condition"].(map[string]any)
+		return user, nil
+	})
+	defer patches.Reset()
+
+	routineType := "night_owl"
+	result, err := svc.UpdateHealthProfile(ctx, user.ID, UpdateHealthProfileInput{
+		RoutineType: &routineType,
+	})
+	assert.NoError(t, err)
+	hc := result["health_condition"].(map[string]any)
+	assert.Equal(t, "night_owl", hc["routine_type"])
 }
 
 func TestUserService_UpdateHealthProfile_WithReportExtract(t *testing.T) {

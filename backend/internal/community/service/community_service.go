@@ -814,6 +814,9 @@ func (s *CommunityService) getFeedRecordInteractionContext(ctx context.Context, 
 	if record == nil {
 		return &FeedContextResult{Allowed: false, Reason: "not_found"}, nil
 	}
+	if record.HiddenFromFeed {
+		return &FeedContextResult{Allowed: false, Reason: "not_found"}, nil
+	}
 	if userID != "" && record.UserID == userID {
 		return &FeedContextResult{Allowed: true, Reason: "owner"}, nil
 	}

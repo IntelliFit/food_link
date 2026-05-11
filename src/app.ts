@@ -17,9 +17,29 @@ const PUBLIC_PAGES = new Set([
   extraPkgUrl('/pages/about/index'),
 ])
 
+const COMMUNITY_FEED_CACHE_KEYS = [
+  'community_feed_cache',
+  'community_feed_timestamp',
+  'community_feed_cache_session_id_v1',
+]
+const COMMUNITY_FEED_SESSION_ID_KEY = 'community_feed_session_id_v1'
+
+function resetPreviousCommunityFeedSession() {
+  try {
+    COMMUNITY_FEED_CACHE_KEYS.forEach((key) => Taro.removeStorageSync(key))
+    Taro.setStorageSync(
+      COMMUNITY_FEED_SESSION_ID_KEY,
+      `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    )
+  } catch {
+    // ignore startup cache cleanup errors
+  }
+}
+
 function App({ children }: PropsWithChildren<any>) {
   useLaunch((options) => {
     console.log('App launched.')
+    resetPreviousCommunityFeedSession()
     cleanupGeneratedUserFiles().catch(() => { /* ignore startup cleanup errors */ })
     // 小程序码参数在 options.query.scene，不是 options.scene（后者是场景值数字）
     const rawScene = String((options as any)?.query?.scene || '')
