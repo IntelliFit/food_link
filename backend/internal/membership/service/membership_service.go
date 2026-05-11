@@ -82,6 +82,7 @@ type MembershipRepo interface {
 	CountSharePosterClaims(ctx context.Context, userID, chinaDate string) (int, error)
 	GetSharePosterClaim(ctx context.Context, userID, recordID, chinaDate string) (*domain.UserCreditBonusEvent, error)
 	CreateSharePosterBonusEvent(ctx context.Context, userID, recordID, chinaDate string, credits int) (*domain.UserCreditBonusEvent, error)
+	GetEarnedCreditLedgerBySource(ctx context.Context, userID, reason, sourceKey string) (*domain.UserEarnedCreditLedger, error)
 	ChangeEarnedCredits(ctx context.Context, userID string, delta int, reason, sourceKey, relatedDate string, meta map[string]any) (*domain.UserEarnedCreditLedger, bool, error)
 }
 
@@ -1044,6 +1045,10 @@ func (s *MembershipService) dailySystemCreditBaseForDate(ctx context.Context, us
 }
 
 func (s *MembershipService) ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error {
+	return s.ConsumeEarnedCreditsOnTaskCreated(ctx, userID, creditsInfo, cost, reason, sourceKey, meta)
+}
+
+func (s *MembershipService) ConsumeEarnedCreditsOnTaskCreated(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error {
 	earned := earnedCreditsToConsume(creditsInfo, cost)
 	if earned <= 0 {
 		return nil
@@ -1055,6 +1060,25 @@ func (s *MembershipService) ConsumeEarnedCreditsAfterSuccess(ctx context.Context
 		}
 	}
 	_, _, err := s.repo.ChangeEarnedCredits(ctx, userID, -earned, reason, sourceKey, relatedDate, meta)
+	return err
+}
+
+func (s *MembershipService) RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error {
+	earned := earnedCreditsToConsume(creditsInfo, cost)
+	if earned <= 0 {
+		return nil
+	}
+	spend, err := s.repo.GetEarnedCreditLedgerBySource(ctx, userID, spendReason, spendSourceKey)
+	if err != nil || spend == nil {
+		return err
+	}
+	relatedDate := time.Now().In(chinaLocation()).Format("2006-01-02")
+	if plan, ok := creditsInfo["credit_spend_plan"].(map[string]any); ok {
+		if value := strings.TrimSpace(fmt.Sprintf("%v", plan["recorded_on"])); value != "" && value != "<nil>" {
+			relatedDate = value
+		}
+	}
+	_, _, err = s.repo.ChangeEarnedCredits(ctx, userID, earned, refundReason, refundSourceKey, relatedDate, meta)
 	return err
 }
 

@@ -11,6 +11,8 @@ import (
 	"food_link/backend/internal/expiry/domain"
 	"food_link/backend/internal/expiry/repo"
 	"food_link/backend/pkg/storage"
+
+	"github.com/google/uuid"
 )
 
 type ExpiryService struct {
@@ -32,7 +34,8 @@ func NewExpiryService(expiryRepo *repo.ExpiryRepo, taskRepo *repo.TaskRepo, reco
 
 type CreditGuard interface {
 	ValidateFoodAnalysisCredits(ctx context.Context, userID, executionMode, recordedOn string, units ...int) (map[string]any, error)
-	ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
+	ConsumeEarnedCreditsOnTaskCreated(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
+	RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error
 }
 
 func (s *ExpiryService) ConfigureCreditGuard(guard CreditGuard) {
@@ -500,15 +503,32 @@ func (s *ExpiryService) RecognizeWithContext(ctx context.Context, userID string,
 			creditCost = value
 		}
 	}
-	extraPayload := map[string]any{}
+	creditGroupID := uuid.New().String()
+	extraPayload := map[string]any{"credit_group_id": creditGroupID}
 	if creditsInfo != nil {
 		if spendPlan, ok := creditsInfo["credit_spend_plan"]; ok {
-			extraPayload["credit_usage"] = spendPlan
+			if usage, ok := spendPlan.(map[string]any); ok {
+				usage["credit_group_id"] = creditGroupID
+				extraPayload["credit_usage"] = usage
+			} else {
+				extraPayload["credit_usage"] = spendPlan
+			}
 		}
 	}
 	task, err := s.taskRepo.CreateExpiryRecognizeTaskWithPayload(ctx, userID, imageURLs, additionalContext, extraPayload)
 	if err != nil {
 		return nil, err
+	}
+	if s.creditGuard != nil && creditsInfo != nil {
+		if err := s.creditGuard.ConsumeEarnedCreditsOnTaskCreated(ctx, userID, creditsInfo, creditCost, "food_analysis_reward_spend", "food_analysis:"+creditGroupID, map[string]any{
+			"credit_group_id": creditGroupID,
+			"task_id":         task.ID,
+			"task_type":       task.TaskType,
+			"recognize_mode":  "food_expiry",
+		}); err != nil {
+			_, _ = s.taskRepo.FailTask(ctx, task.ID, "credit reservation failed")
+			return nil, err
+		}
 	}
 	_ = s.taskRepo.UpdateTaskStatus(ctx, task.ID, "processing", nil)
 	recognized, err := s.recognizer.Recognize(ctx, RecognizeInput{
@@ -517,6 +537,7 @@ func (s *ExpiryService) RecognizeWithContext(ctx context.Context, userID string,
 	})
 	if err != nil {
 		_, _ = s.taskRepo.FailTask(ctx, task.ID, err.Error())
+		s.refundRecognizeCredits(ctx, userID, creditsInfo, creditCost, creditGroupID, task.ID, task.TaskType)
 		return nil, err
 	}
 	result := map[string]any{
@@ -527,19 +548,28 @@ func (s *ExpiryService) RecognizeWithContext(ctx context.Context, userID string,
 	if err != nil {
 		return nil, err
 	}
-	if s.creditGuard != nil && creditsInfo != nil {
-		_ = s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, creditCost, "food_analysis_reward_spend", "food_analysis:"+task.ID, map[string]any{
-			"task_id":        task.ID,
-			"task_type":      task.TaskType,
-			"recognize_mode": "food_expiry",
-		})
-	}
 	return &RecognizeResult{
 		TaskID:      task.ID,
 		CreditsCost: creditCost,
 		Items:       recognized.Items,
 		Message:     "已识别 " + strconv.Itoa(len(recognized.Items)) + " 项食物，可继续补充后保存",
 	}, nil
+}
+
+func (s *ExpiryService) refundRecognizeCredits(ctx context.Context, userID string, creditsInfo map[string]any, creditCost int, creditGroupID, taskID, taskType string) {
+	if s.creditGuard == nil || creditsInfo == nil || userID == "" || creditGroupID == "" {
+		return
+	}
+	_ = s.creditGuard.RefundEarnedCreditsAfterTaskFailure(ctx, userID, creditsInfo, creditCost,
+		"food_analysis_reward_spend", "food_analysis:"+creditGroupID,
+		"food_analysis_reward_refund", "food_analysis_refund:"+creditGroupID,
+		map[string]any{
+			"credit_group_id": creditGroupID,
+			"task_id":         taskID,
+			"task_type":       taskType,
+			"recognize_mode":  "food_expiry",
+		},
+	)
 }
 
 func (s *ExpiryService) resolveFoodImageURLs(values []string) []string {

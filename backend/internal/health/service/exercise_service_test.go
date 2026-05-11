@@ -89,6 +89,15 @@ func (m *mockExerciseRepo) CreateAnalysisTask(ctx context.Context, task *domain.
 	return nil
 }
 
+func (m *mockExerciseRepo) FailAnalysisTask(ctx context.Context, taskID, errorMsg string) error {
+	for i := range m.tasks {
+		if m.tasks[i].ID == taskID {
+			m.tasks[i].Status = "failed"
+		}
+	}
+	return nil
+}
+
 func TestExerciseService_GetDailyCalories(t *testing.T) {
 	repo := &mockExerciseRepo{}
 	svc := NewExerciseService(repo)

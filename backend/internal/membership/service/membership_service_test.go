@@ -33,6 +33,7 @@ type mockMembershipRepo struct {
 	shareClaimsToday              int
 	shareClaim                    *domain.UserCreditBonusEvent
 	saveMembershipCalls           int
+	ledgerByReasonSource          map[string]*domain.UserEarnedCreditLedger
 }
 
 func (m *mockMembershipRepo) ListActivePlans(ctx context.Context) ([]domain.MembershipPlan, error) {
@@ -192,12 +193,29 @@ func (m *mockMembershipRepo) CreateSharePosterBonusEvent(ctx context.Context, us
 	m.shareClaim = event
 	return event, nil
 }
+func (m *mockMembershipRepo) GetEarnedCreditLedgerBySource(ctx context.Context, userID, reason, sourceKey string) (*domain.UserEarnedCreditLedger, error) {
+	if m.ledgerByReasonSource == nil {
+		return nil, nil
+	}
+	return m.ledgerByReasonSource[reason+"|"+sourceKey], nil
+}
 func (m *mockMembershipRepo) ChangeEarnedCredits(ctx context.Context, userID string, delta int, reason, sourceKey, relatedDate string, meta map[string]any) (*domain.UserEarnedCreditLedger, bool, error) {
 	if m.user == nil {
 		m.user = &membershiprepo.User{ID: userID}
 	}
+	if m.ledgerByReasonSource == nil {
+		m.ledgerByReasonSource = map[string]*domain.UserEarnedCreditLedger{}
+	}
+	if existing := m.ledgerByReasonSource[reason+"|"+sourceKey]; sourceKey != "" && existing != nil {
+		return existing, false, nil
+	}
 	m.user.EarnedCreditsBalance += delta
-	return &domain.UserEarnedCreditLedger{ID: "ledger1", UserID: userID, Delta: delta, BalanceAfter: m.user.EarnedCreditsBalance}, true, nil
+	entry := &domain.UserEarnedCreditLedger{ID: "ledger1", UserID: userID, Delta: delta, BalanceAfter: m.user.EarnedCreditsBalance}
+	if sourceKey != "" {
+		entry.SourceKey = &sourceKey
+		m.ledgerByReasonSource[reason+"|"+sourceKey] = entry
+	}
+	return entry, true, nil
 }
 
 func TestMembershipService_ListPlans(t *testing.T) {
@@ -313,9 +331,17 @@ func TestMembershipService_ValidateFoodAnalysisCredits_UsesEarnedAfterSystem(t *
 	assert.Equal(t, 1, intFromAny(plan["system_units_total"]))
 	assert.Equal(t, 1, intFromAny(plan["earned_units"]))
 
-	err = svc.ConsumeEarnedCreditsAfterSuccess(context.Background(), "u1", credits, 2, "food_analysis_reward_spend", "food_analysis:t1", nil)
+	err = svc.ConsumeEarnedCreditsOnTaskCreated(context.Background(), "u1", credits, 2, "food_analysis_reward_spend", "food_analysis:g1", nil)
 	require.NoError(t, err)
 	assert.Equal(t, 4, user.EarnedCreditsBalance)
+
+	err = svc.RefundEarnedCreditsAfterTaskFailure(context.Background(), "u1", credits, 2, "food_analysis_reward_spend", "food_analysis:g1", "food_analysis_reward_refund", "food_analysis_refund:g1", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 5, user.EarnedCreditsBalance)
+
+	err = svc.RefundEarnedCreditsAfterTaskFailure(context.Background(), "u1", credits, 2, "food_analysis_reward_spend", "food_analysis:g1", "food_analysis_reward_refund", "food_analysis_refund:g1", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 5, user.EarnedCreditsBalance)
 }
 
 func TestMembershipService_ValidateFoodAnalysisCredits_StrictRequiresStandardTier(t *testing.T) {

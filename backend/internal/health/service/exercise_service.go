@@ -19,6 +19,8 @@ import (
 	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
+
+	"github.com/google/uuid"
 )
 
 const creditCostExerciseLog = 1
@@ -32,6 +34,7 @@ type ExerciseRepo interface {
 	GetUserProfile(ctx context.Context, userID string) (*domain.ExerciseUserProfile, error)
 	GetLatestWeightRecord(ctx context.Context, userID string) (*domain.BodyWeightRecord, error)
 	CreateAnalysisTask(ctx context.Context, task *domain.AnalysisTask) error
+	FailAnalysisTask(ctx context.Context, taskID, errorMsg string) error
 }
 
 type ExerciseService struct {
@@ -54,7 +57,8 @@ func NewExerciseService(repo ExerciseRepo, cfg ...*config.Config) *ExerciseServi
 
 type CreditGuard interface {
 	ValidateExerciseCredits(ctx context.Context, userID, recordedOn string) (map[string]any, error)
-	ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
+	ConsumeEarnedCreditsOnTaskCreated(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
+	RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error
 }
 
 func (s *ExerciseService) ConfigureCreditGuard(guard CreditGuard) {
@@ -213,6 +217,8 @@ func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, 
 		},
 		CreatedAt: &now,
 	}
+	creditGroupID := uuid.New().String()
+	task.Payload["credit_group_id"] = creditGroupID
 	if desc != "" {
 		task.TextInput = &desc
 	}
@@ -222,13 +228,30 @@ func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, 
 	}
 	if creditsInfo != nil {
 		if spendPlan, ok := creditsInfo["credit_spend_plan"]; ok {
-			task.Payload["credit_usage"] = spendPlan
+			if usage, ok := spendPlan.(map[string]any); ok {
+				usage["credit_group_id"] = creditGroupID
+				task.Payload["credit_usage"] = usage
+			} else {
+				task.Payload["credit_usage"] = spendPlan
+			}
 		}
 	}
 	if err := s.repo.CreateAnalysisTask(ctx, task); err != nil {
 		return nil, err
 	}
+	if s.creditGuard != nil && creditsInfo != nil {
+		if err := s.creditGuard.ConsumeEarnedCreditsOnTaskCreated(ctx, userID, creditsInfo, creditCostExerciseLog, "exercise_reward_spend", "exercise:"+creditGroupID, map[string]any{
+			"credit_group_id": creditGroupID,
+			"task_id":         task.ID,
+			"task_type":       task.TaskType,
+		}); err != nil {
+			_ = s.repo.FailAnalysisTask(ctx, task.ID, "credit reservation failed")
+			return nil, err
+		}
+	}
 	if err := s.enqueueTask(ctx, task.ID, task.TaskType); err != nil {
+		_ = s.repo.FailAnalysisTask(ctx, task.ID, "exercise task enqueue failed")
+		s.refundExerciseCredits(ctx, userID, creditsInfo, creditGroupID, task.ID)
 		return nil, err
 	}
 
@@ -236,6 +259,21 @@ func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, 
 		"task_id": task.ID,
 		"message": "运动分析任务已提交，请轮询任务状态直至完成",
 	}, nil
+}
+
+func (s *ExerciseService) refundExerciseCredits(ctx context.Context, userID string, creditsInfo map[string]any, creditGroupID, taskID string) {
+	if s.creditGuard == nil || creditsInfo == nil || userID == "" || creditGroupID == "" {
+		return
+	}
+	_ = s.creditGuard.RefundEarnedCreditsAfterTaskFailure(ctx, userID, creditsInfo, creditCostExerciseLog,
+		"exercise_reward_spend", "exercise:"+creditGroupID,
+		"exercise_reward_refund", "exercise_refund:"+creditGroupID,
+		map[string]any{
+			"credit_group_id": creditGroupID,
+			"task_id":         taskID,
+			"task_type":       "exercise",
+		},
+	)
 }
 
 func (s *ExerciseService) enqueueTask(ctx context.Context, taskID, taskType string) error {
