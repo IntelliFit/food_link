@@ -13,10 +13,10 @@ import (
 var ErrClosed = errors.New("task queue is closed")
 
 type TaskMessage struct {
-	TaskID       string
-	TaskType     string
-	CreatedAt    time.Time
-	TraceContext map[string]string
+	TaskID       string            `json:"task_id"`
+	TaskType     string            `json:"task_type"`
+	CreatedAt    time.Time         `json:"created_at"`
+	TraceContext map[string]string `json:"trace_context,omitempty"`
 }
 
 func (m TaskMessage) normalized() TaskMessage {

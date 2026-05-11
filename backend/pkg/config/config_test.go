@@ -234,3 +234,31 @@ task_queue:
 		t.Fatalf("unexpected task queue brokers: %+v", cfg.TaskQueue)
 	}
 }
+
+func TestLoadTaskQueueReadsKafkaConfig(t *testing.T) {
+	dir := writeTestConfig(t, `
+worker:
+  count: 2
+task_queue:
+  driver: "kafka"
+  buffer_size: 1024
+  topic: "food-link-analysis-tasks"
+  brokers:
+    - "kafka-1:9092,kafka-2:9092"
+  consumer_group: "food-link-workers"
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.TaskQueue.Driver != "kafka" {
+		t.Fatalf("expected kafka queue driver, got %+v", cfg.TaskQueue)
+	}
+	if len(cfg.TaskQueue.Brokers) != 2 {
+		t.Fatalf("unexpected task queue brokers: %+v", cfg.TaskQueue)
+	}
+	if cfg.TaskQueue.Topic != "food-link-analysis-tasks" || cfg.TaskQueue.ConsumerGroup != "food-link-workers" {
+		t.Fatalf("unexpected task queue config: %+v", cfg.TaskQueue)
+	}
+}

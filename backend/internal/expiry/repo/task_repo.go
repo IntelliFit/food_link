@@ -70,6 +70,7 @@ func (r *TaskRepo) CompleteTask(ctx context.Context, taskID string, result map[s
 		"status":        "done",
 		"result":        result,
 		"error_message": nil,
+		"lease_until":   nil,
 		"updated_at":    time.Now(),
 	}
 	res := r.db.WithContext(ctx).Model(&analyzedomain.AnalysisTask{}).
@@ -82,6 +83,7 @@ func (r *TaskRepo) FailTask(ctx context.Context, taskID string, errorMsg string)
 	updates := map[string]any{
 		"status":        "failed",
 		"error_message": errorMsg,
+		"lease_until":   nil,
 		"updated_at":    time.Now(),
 	}
 	res := r.db.WithContext(ctx).Model(&analyzedomain.AnalysisTask{}).

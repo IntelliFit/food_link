@@ -18,7 +18,11 @@ func New(cfg config.TaskQueueConfig, log *zap.Logger) (Queue, error) {
 	case "memory", "local", "in_memory", "in-memory":
 		return NewMemoryQueue(cfg.BufferSize, log), nil
 	case "kafka":
-		return nil, fmt.Errorf("task_queue.driver=kafka is reserved but not implemented yet")
+		return NewKafkaQueue(KafkaConfig{
+			Brokers:       cfg.Brokers,
+			Topic:         cfg.Topic,
+			ConsumerGroup: cfg.ConsumerGroup,
+		}, log)
 	default:
 		return nil, fmt.Errorf("unsupported task_queue.driver %q", cfg.Driver)
 	}

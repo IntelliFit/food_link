@@ -485,15 +485,23 @@ func (a *App) startEmbeddedWorker(
 	)
 	go func() {
 		defer close(done)
-		err := runner.Run(workerCtx, workerpkg.Options{
-			WorkerID:     workerID,
-			TaskTypes:    taskTypes,
-			PollInterval: pollInterval,
-			WorkerCount:  workerCount,
-		})
-		if err != nil && err != context.Canceled {
-			a.log.Error("embedded worker stopped with error", zap.Error(err))
-			return
+		for workerCtx.Err() == nil {
+			err := runner.Run(workerCtx, workerpkg.Options{
+				WorkerID:     workerID,
+				TaskTypes:    taskTypes,
+				PollInterval: pollInterval,
+				WorkerCount:  workerCount,
+			})
+			if err == nil || err == context.Canceled || workerCtx.Err() != nil {
+				break
+			}
+			a.log.Error("embedded worker stopped with error; restarting", zap.Error(err))
+			timer := time.NewTimer(2 * time.Second)
+			select {
+			case <-workerCtx.Done():
+				timer.Stop()
+			case <-timer.C:
+			}
 		}
 		a.log.Info("embedded worker stopped")
 	}()

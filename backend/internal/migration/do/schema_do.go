@@ -45,12 +45,17 @@ type AnalysisTaskDO struct {
 	ImageURL        *string        `gorm:"column:image_url;type:text"`
 	ImagePaths      []string       `gorm:"column:image_paths;type:jsonb;serializer:json;default:'[]'::jsonb"`
 	TextInput       *string        `gorm:"column:text_input;type:text"`
-	Status          string         `gorm:"column:status;type:text;not null;default:'pending';index:idx_analysis_tasks_status_type,priority:1"`
+	Status          string         `gorm:"column:status;type:text;not null;default:'pending';index:idx_analysis_tasks_status_type,priority:1;index:idx_analysis_tasks_status_lease,priority:1"`
 	Payload         map[string]any `gorm:"column:payload;type:jsonb;serializer:json;default:'{}'::jsonb"`
 	Result          map[string]any `gorm:"column:result;type:jsonb;serializer:json"`
 	ErrorMessage    *string        `gorm:"column:error_message;type:text"`
 	IsViolated      bool           `gorm:"column:is_violated;type:boolean;not null;default:false"`
 	ViolationReason *string        `gorm:"column:violation_reason;type:text"`
+	WorkerID        *string        `gorm:"column:worker_id;type:text;index:idx_analysis_tasks_worker_id"`
+	AttemptID       *string        `gorm:"column:attempt_id;type:text;index:idx_analysis_tasks_attempt_id"`
+	AttemptCount    int            `gorm:"column:attempt_count;type:integer;not null;default:0"`
+	ProcessingAt    *time.Time     `gorm:"column:processing_started_at;type:timestamptz"`
+	LeaseUntil      *time.Time     `gorm:"column:lease_until;type:timestamptz;index:idx_analysis_tasks_status_lease,priority:2"`
 	CreatedAt       *time.Time     `gorm:"column:created_at;type:timestamptz;default:now();index:idx_analysis_tasks_created_at"`
 	UpdatedAt       *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }

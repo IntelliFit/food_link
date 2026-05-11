@@ -202,6 +202,22 @@ func (r *ExpiryRepo) ClaimNextPendingNotificationJob(ctx context.Context) (*doma
 	return claimed, err
 }
 
+func (r *ExpiryRepo) RecoverStaleNotificationJobs(ctx context.Context, staleAfter time.Duration) (int64, error) {
+	if staleAfter <= 0 {
+		staleAfter = 10 * time.Minute
+	}
+	now := time.Now()
+	res := r.db.WithContext(ctx).Model(&domain.ExpiryNotificationJob{}).
+		Where("status = ? AND updated_at < ?", "processing", now.Add(-staleAfter)).
+		Updates(map[string]any{
+			"status":       "pending",
+			"scheduled_at": now,
+			"last_error":   "recovered stale processing notification job",
+			"updated_at":   now,
+		})
+	return res.RowsAffected, res.Error
+}
+
 func (r *ExpiryRepo) UpdateNotificationJob(ctx context.Context, jobID string, updates map[string]any) (*domain.ExpiryNotificationJob, error) {
 	if len(updates) == 0 {
 		return r.GetNotificationJobByID(ctx, jobID)

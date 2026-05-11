@@ -1,5 +1,23 @@
 # DECISIONS
 
+- `2026-05-12`: 线上 Kafka topic partition 初始建议按后端总 worker 数规划，并给未来 Pod 扩容预留。
+  - 当前若后端 3 个 Pod 且 `worker.count=2`，同一 consumer group 中总消费者为 6。
+  - 后续若扩到 6 个 Pod 且 `worker.count=2`，总消费者为 12。
+  - 建议线上 `food-link-analysis-tasks` topic 初始创建为 12 partitions；当前 6 个消费者可消费 12 partitions，未来扩容到 12 个消费者时无需改 topic。
+  - 单副本 Kafka 仍只能 `replication-factor=1`；若后续 Kafka 扩成 3 broker，应新环境或重建 topic 使用 `replication-factor=3`。
+
+- `2026-05-12`: Kafka consumer 并发口径按“后端 Pod 数 * worker.count”计算，而不是只看单个 Pod。
+  - 同一个 `consumer_group` 内，Kafka 会把 topic partition 分配给消费者；同一 partition 同一时间只会给 group 内一个 consumer。
+  - 如果后端 3 个 Pod 且 `worker.count=8`，实际是 24 个消费者；topic partition 少于 24 时，多出来的消费者会空闲。
+  - 当前模型任务会调用外部 LLM/OCR，生产初始值建议让 partition 数与有效消费者数接近，并从较小并发开始，例如 3 个后端 Pod 时 `worker.count=1~2`、topic partitions 为 3~6，再根据限流和延迟扩容。
+  - 单副本 Kafka 只能用于轻量/过渡环境；生产可靠性需要多 broker、topic replication factor 大于 1、持久化卷和健康检查。
+
+- `2026-05-12`: 本地 Kafka 验证使用仓库内 `backend/docker-compose.kafka.yml` 启动单节点 Kafka。
+  - 本地 Kafka 镜像使用官方 `apache/kafka:3.7.0`；不要使用当前解析不到的 `bitnami/kafka:3.7` 标签。
+  - 本地 Kafka broker 暴露为 `127.0.0.1:9092`，topic 使用 `food-link-analysis-tasks`。
+  - 本地测试时 `backend/config.yaml` 可临时设置 `task_queue.driver: "kafka"`、`brokers: ["127.0.0.1:9092"]`、`consumer_group: "food-link-local-workers"`。
+  - 独立 worker 入口已删除；本地 Kafka 模式仍通过 server 内嵌 worker 消费，必须保持 `worker.count > 0`。
+
 - `2026-05-11`: 食物/健康/运动等 `analysis_tasks` 分析任务不再把 DB pending 扫描当作分发队列：
   - DB 表 `analysis_tasks` 只作为任务状态、结果、错误信息和前端轮询的持久化来源。
   - 分发层统一走 `task_queue` 接口；当前唯一可用 driver 是进程内 `memory`，HTTP submit 和 server 内嵌 worker 在同一进程内传递 `task_id/task_type`。
@@ -955,3 +973,11 @@
   - `config.yaml` 只控制 `worker.count` 和 `worker.poll_interval_seconds`，不允许按环境裁剪 worker 可处理的业务任务类型。
   - worker 支持的任务类型由代码层 `worker.SupportedTaskTypes()` 固定维护；新增、删除或禁用任务类型应改代码和测试。
   - 这样避免生产/本地配置漏掉某个 `task_type` 后导致任务长期 pending 或提醒不发送。
+- `2026-05-12`: 结果页「更多营养」展开区采用两列放大明细卡，不再使用三列小格；触发按钮和明细数值应优先保证小程序手机端阅读与点击舒适度。
+## 2026-05-12 decisions: task_queue Kafka reliability
+
+- `task_queue.driver=kafka` 是生产级队列实现，不再是 fail-fast 占位；worker 使用 `FetchMessage` 读取，只有在 `analysis_tasks` 成功写入 `done` 或 `failed` 后才 `CommitMessages`。
+- `analysis_tasks` 的可靠处理口径固定为 DB attempt lease：claim 写入 `worker_id`、`attempt_id`、`attempt_count`、`processing_started_at`、`lease_until`；complete/fail 必须按当前 `attempt_id` 条件更新，旧 attempt 不允许覆盖新 attempt。
+- `processing` 不应永久存在：worker 处理期间续租；server/worker 挂掉后，lease 过期任务由 recovery 重新发布到 queue；`memory` 本地模式也复用这套 DB recovery。
+- Kafka 只能保证未 commit 消息重新投递，不能单独保证外部副作用 exactly once；项目保证的是 DB 终态幂等与旧 attempt 不覆盖新结果。
+- Go server 内嵌 worker goroutine 会 recover/restart；整个 server 进程崩溃的拉起职责属于 systemd、Docker、K8s 或部署平台。

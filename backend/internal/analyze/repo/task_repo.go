@@ -20,6 +20,31 @@ func NewTaskRepo(db *gorm.DB) *TaskRepo {
 	return &TaskRepo{db: db}
 }
 
+const defaultTaskLeaseDuration = 5 * time.Minute
+
+type ClaimOutcome string
+
+const (
+	ClaimOutcomeClaimed     ClaimOutcome = "claimed"
+	ClaimOutcomeNotFound    ClaimOutcome = "not_found"
+	ClaimOutcomeNotAllowed  ClaimOutcome = "not_allowed"
+	ClaimOutcomeLeaseActive ClaimOutcome = "lease_active"
+	ClaimOutcomeTerminal    ClaimOutcome = "terminal"
+)
+
+type ClaimTaskOptions struct {
+	TaskID        string
+	TaskTypes     []string
+	WorkerID      string
+	LeaseDuration time.Duration
+	Now           time.Time
+}
+
+type ClaimTaskResult struct {
+	Task    *domain.AnalysisTask
+	Outcome ClaimOutcome
+}
+
 func (r *TaskRepo) CreateTask(ctx context.Context, task *domain.AnalysisTask) error {
 	if task.ID == "" {
 		task.ID = uuid.New().String()
@@ -45,67 +70,117 @@ func (r *TaskRepo) ClaimNextPendingTask(ctx context.Context, taskTypes []string)
 		if err != nil {
 			return err
 		}
-		now := time.Now()
-		result := tx.Model(&domain.AnalysisTask{}).
-			Where("id = ? AND status = ?", task.ID, "pending").
-			Updates(map[string]any{
-				"status":        "processing",
-				"error_message": nil,
-				"updated_at":    now,
-			})
-		if result.Error != nil {
-			return result.Error
+		result, err := claimLoadedTask(tx, &task, ClaimTaskOptions{
+			TaskTypes:     taskTypes,
+			WorkerID:      "legacy-worker",
+			LeaseDuration: defaultTaskLeaseDuration,
+		})
+		if err != nil {
+			return err
 		}
-		if result.RowsAffected == 0 {
+		if result.Outcome != ClaimOutcomeClaimed {
 			return nil
 		}
-		task.Status = "processing"
-		task.ErrorMessage = nil
-		task.UpdatedAt = &now
-		claimed = &task
+		claimed = result.Task
 		return nil
 	})
 	return claimed, err
 }
 
-func (r *TaskRepo) ClaimTaskByID(ctx context.Context, taskID string, taskTypes []string) (*domain.AnalysisTask, error) {
-	if taskID == "" || len(taskTypes) == 0 {
-		return nil, nil
+func (r *TaskRepo) ClaimTaskByID(ctx context.Context, opts ClaimTaskOptions) (ClaimTaskResult, error) {
+	if opts.TaskID == "" || len(opts.TaskTypes) == 0 {
+		return ClaimTaskResult{Outcome: ClaimOutcomeNotFound}, nil
 	}
-	var claimed *domain.AnalysisTask
+	result := ClaimTaskResult{Outcome: ClaimOutcomeNotFound}
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var task domain.AnalysisTask
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
-			Where("id = ? AND status = ? AND task_type IN ?", taskID, "pending", taskTypes).
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ?", opts.TaskID).
 			Limit(1).
 			First(&task).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			result.Outcome = ClaimOutcomeNotFound
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		now := time.Now()
-		result := tx.Model(&domain.AnalysisTask{}).
-			Where("id = ? AND status = ?", task.ID, "pending").
-			Updates(map[string]any{
-				"status":        "processing",
-				"error_message": nil,
-				"updated_at":    now,
-			})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return nil
-		}
-		task.Status = "processing"
-		task.ErrorMessage = nil
-		task.UpdatedAt = &now
-		claimed = &task
-		return nil
+		claimResult, err := claimLoadedTask(tx, &task, opts)
+		result = claimResult
+		return err
 	})
-	return claimed, err
+	return result, err
+}
+
+func claimLoadedTask(tx *gorm.DB, task *domain.AnalysisTask, opts ClaimTaskOptions) (ClaimTaskResult, error) {
+	if task == nil {
+		return ClaimTaskResult{Outcome: ClaimOutcomeNotFound}, nil
+	}
+	if !taskTypeAllowed(task.TaskType, opts.TaskTypes) {
+		return ClaimTaskResult{Task: task, Outcome: ClaimOutcomeNotAllowed}, nil
+	}
+	now := opts.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	leaseDuration := opts.LeaseDuration
+	if leaseDuration <= 0 {
+		leaseDuration = defaultTaskLeaseDuration
+	}
+	switch task.Status {
+	case "pending":
+	case "processing":
+		if task.LeaseUntil != nil && task.LeaseUntil.After(now) {
+			return ClaimTaskResult{Task: task, Outcome: ClaimOutcomeLeaseActive}, nil
+		}
+	default:
+		return ClaimTaskResult{Task: task, Outcome: ClaimOutcomeTerminal}, nil
+	}
+
+	workerID := opts.WorkerID
+	if workerID == "" {
+		workerID = "worker"
+	}
+	attemptID := uuid.New().String()
+	leaseUntil := now.Add(leaseDuration)
+	updates := map[string]any{
+		"status":                "processing",
+		"worker_id":             workerID,
+		"attempt_id":            attemptID,
+		"attempt_count":         gorm.Expr("COALESCE(attempt_count, 0) + 1"),
+		"processing_started_at": now,
+		"lease_until":           leaseUntil,
+		"error_message":         nil,
+		"updated_at":            now,
+	}
+	res := tx.Model(&domain.AnalysisTask{}).
+		Where("id = ?", task.ID).
+		Where("status = ? OR (status = ? AND (lease_until IS NULL OR lease_until <= ?))", "pending", "processing", now).
+		Updates(updates)
+	if res.Error != nil {
+		return ClaimTaskResult{}, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ClaimTaskResult{Task: task, Outcome: ClaimOutcomeLeaseActive}, nil
+	}
+	task.Status = "processing"
+	task.WorkerID = &workerID
+	task.AttemptID = &attemptID
+	task.AttemptCount++
+	task.ProcessingAt = &now
+	task.LeaseUntil = &leaseUntil
+	task.ErrorMessage = nil
+	task.UpdatedAt = &now
+	return ClaimTaskResult{Task: task, Outcome: ClaimOutcomeClaimed}, nil
+}
+
+func taskTypeAllowed(taskType string, taskTypes []string) bool {
+	for _, allowed := range taskTypes {
+		if taskType == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *TaskRepo) GetTaskByID(ctx context.Context, taskID string) (*domain.AnalysisTask, error) {
@@ -228,6 +303,7 @@ func (r *TaskRepo) CompleteTask(ctx context.Context, taskID string, result map[s
 		"status":        "done",
 		"result":        result,
 		"error_message": nil,
+		"lease_until":   nil,
 		"updated_at":    time.Now(),
 	}
 	res := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
@@ -236,14 +312,65 @@ func (r *TaskRepo) CompleteTask(ctx context.Context, taskID string, result map[s
 	return res.RowsAffected > 0, res.Error
 }
 
+func (r *TaskRepo) CompleteTaskAttempt(ctx context.Context, taskID, attemptID string, result map[string]any) (bool, error) {
+	if taskID == "" || attemptID == "" {
+		return false, nil
+	}
+	updates := map[string]any{
+		"status":        "done",
+		"result":        result,
+		"error_message": nil,
+		"lease_until":   nil,
+		"updated_at":    time.Now(),
+	}
+	res := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
+		Where("id = ? AND attempt_id = ? AND status = ?", taskID, attemptID, "processing").
+		Updates(updates)
+	return res.RowsAffected > 0, res.Error
+}
+
 func (r *TaskRepo) FailTask(ctx context.Context, taskID string, errorMsg string) (bool, error) {
 	updates := map[string]any{
 		"status":        "failed",
 		"error_message": errorMsg,
+		"lease_until":   nil,
 		"updated_at":    time.Now(),
 	}
 	res := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
 		Where("id = ? AND status <> ?", taskID, "cancelled").
+		Updates(updates)
+	return res.RowsAffected > 0, res.Error
+}
+
+func (r *TaskRepo) FailTaskAttempt(ctx context.Context, taskID, attemptID string, errorMsg string) (bool, error) {
+	if taskID == "" || attemptID == "" {
+		return false, nil
+	}
+	updates := map[string]any{
+		"status":        "failed",
+		"error_message": errorMsg,
+		"lease_until":   nil,
+		"updated_at":    time.Now(),
+	}
+	res := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
+		Where("id = ? AND attempt_id = ? AND status = ?", taskID, attemptID, "processing").
+		Updates(updates)
+	return res.RowsAffected > 0, res.Error
+}
+
+func (r *TaskRepo) ExtendTaskLease(ctx context.Context, taskID, attemptID, workerID string, leaseUntil time.Time) (bool, error) {
+	if taskID == "" || attemptID == "" || leaseUntil.IsZero() {
+		return false, nil
+	}
+	updates := map[string]any{
+		"lease_until": leaseUntil,
+		"updated_at":  time.Now(),
+	}
+	if workerID != "" {
+		updates["worker_id"] = workerID
+	}
+	res := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
+		Where("id = ? AND attempt_id = ? AND status = ?", taskID, attemptID, "processing").
 		Updates(updates)
 	return res.RowsAffected > 0, res.Error
 }
@@ -266,7 +393,27 @@ func (r *TaskRepo) MarkTimedOutTasks(ctx context.Context, timeoutMinutes int) (i
 	}
 	cutoff := time.Now().Add(-time.Duration(timeoutMinutes) * time.Minute)
 	res := r.db.WithContext(ctx).Model(&domain.AnalysisTask{}).
-		Where("status IN ? AND created_at < ?", []string{"pending", "processing"}, cutoff).
+		Where("(status = ? AND created_at < ?) OR (status = ? AND (lease_until IS NULL OR lease_until < ?))", "pending", cutoff, "processing", cutoff).
 		Updates(map[string]any{"status": "timed_out", "updated_at": time.Now()})
 	return res.RowsAffected, res.Error
+}
+
+func (r *TaskRepo) ListRecoverableTasks(ctx context.Context, taskTypes []string, limit int, now time.Time) ([]domain.AnalysisTask, error) {
+	if len(taskTypes) == 0 {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	var tasks []domain.AnalysisTask
+	err := r.db.WithContext(ctx).
+		Where("task_type IN ?", taskTypes).
+		Where("status = ? OR (status = ? AND (lease_until IS NULL OR lease_until <= ?))", "pending", "processing", now).
+		Order("created_at ASC").
+		Limit(limit).
+		Find(&tasks).Error
+	return tasks, err
 }

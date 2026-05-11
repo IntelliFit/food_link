@@ -70,7 +70,7 @@
 | P0 | LLM/OCR | DashScope、OfoxAI、DeepSeek key/base/model | 食物、精准、健康报告、stats insight fallback 策略可用 | TODO |
 | P0 | 订阅消息 | 保质期模板 ID、access token 获取 | 发送模板字段合法，失败重试可见 | TODO |
 | P1 | Worker | `config.yaml` 的 `worker.count`、`worker.poll_interval_seconds` | worker 支持的任务类型由代码固定启用，不再通过配置裁剪；`worker.count=0` 表示关闭内嵌 worker | TODO |
-| P1 | Task queue | `config.yaml` 的 `task_queue.driver`、`task_queue.buffer_size`、预留 `topic/brokers/consumer_group` | 当前支持进程内 `memory`；`kafka` 配置已预留但 adapter 未实现前必须 fail fast | TODO |
+| P1 | Task queue | `config.yaml` 的 `task_queue.driver`、`task_queue.buffer_size`、`topic/brokers/consumer_group` | 当前支持进程内 `memory` 与 Kafka；Kafka 模式在 DB 写入 `done/failed` 后才 commit offset | TODO |
 | P1 | 测试后台 | `TEST_BACKEND_PASSWORD` | 生产后台登录密码非默认值 | TODO |
 | P1 | 环境来源 | K8s/服务器 ConfigMap/env | 敏感配置由运行时注入，不进入镜像 | TODO |
 

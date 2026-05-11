@@ -54,6 +54,114 @@ func TestTaskRepo_GetNotFound(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+func TestTaskRepo_ClaimTaskByIDCreatesAttemptLease(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewTaskRepo(db)
+	ctx := context.Background()
+	now := time.Now()
+	task := &domain.AnalysisTask{UserID: "u1", TaskType: "food", Status: "pending", CreatedAt: &now, UpdatedAt: &now}
+	assert.NoError(t, r.CreateTask(ctx, task))
+
+	claim, err := r.ClaimTaskByID(ctx, ClaimTaskOptions{
+		TaskID:        task.ID,
+		TaskTypes:     []string{"food"},
+		WorkerID:      "worker-a",
+		LeaseDuration: time.Minute,
+		Now:           now,
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, ClaimOutcomeClaimed, claim.Outcome)
+	assert.NotNil(t, claim.Task)
+	assert.Equal(t, "processing", claim.Task.Status)
+	assert.NotNil(t, claim.Task.WorkerID)
+	assert.Equal(t, "worker-a", *claim.Task.WorkerID)
+	assert.NotNil(t, claim.Task.AttemptID)
+	assert.Equal(t, 1, claim.Task.AttemptCount)
+	assert.NotNil(t, claim.Task.LeaseUntil)
+	assert.True(t, claim.Task.LeaseUntil.After(now))
+}
+
+func TestTaskRepo_ClaimTaskByIDSkipsActiveLeaseAndReclaimsExpired(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewTaskRepo(db)
+	ctx := context.Background()
+	now := time.Now()
+	activeLease := now.Add(time.Minute)
+	task := &domain.AnalysisTask{
+		UserID:       "u1",
+		TaskType:     "food",
+		Status:       "processing",
+		WorkerID:     strPtr("worker-a"),
+		AttemptID:    strPtr("attempt-a"),
+		AttemptCount: 1,
+		LeaseUntil:   &activeLease,
+		CreatedAt:    &now,
+		UpdatedAt:    &now,
+	}
+	assert.NoError(t, r.CreateTask(ctx, task))
+
+	active, err := r.ClaimTaskByID(ctx, ClaimTaskOptions{
+		TaskID:        task.ID,
+		TaskTypes:     []string{"food"},
+		WorkerID:      "worker-b",
+		LeaseDuration: time.Minute,
+		Now:           now,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, ClaimOutcomeLeaseActive, active.Outcome)
+
+	expiredNow := activeLease.Add(time.Second)
+	reclaimed, err := r.ClaimTaskByID(ctx, ClaimTaskOptions{
+		TaskID:        task.ID,
+		TaskTypes:     []string{"food"},
+		WorkerID:      "worker-b",
+		LeaseDuration: time.Minute,
+		Now:           expiredNow,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, ClaimOutcomeClaimed, reclaimed.Outcome)
+	assert.NotNil(t, reclaimed.Task)
+	assert.NotNil(t, reclaimed.Task.WorkerID)
+	assert.Equal(t, "worker-b", *reclaimed.Task.WorkerID)
+	assert.NotNil(t, reclaimed.Task.AttemptID)
+	assert.NotEqual(t, "attempt-a", *reclaimed.Task.AttemptID)
+	assert.Equal(t, 2, reclaimed.Task.AttemptCount)
+}
+
+func TestTaskRepo_CompleteTaskAttemptRequiresCurrentAttempt(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewTaskRepo(db)
+	ctx := context.Background()
+	now := time.Now()
+	task := &domain.AnalysisTask{UserID: "u1", TaskType: "food", Status: "pending", CreatedAt: &now, UpdatedAt: &now}
+	assert.NoError(t, r.CreateTask(ctx, task))
+	claim, err := r.ClaimTaskByID(ctx, ClaimTaskOptions{
+		TaskID:        task.ID,
+		TaskTypes:     []string{"food"},
+		WorkerID:      "worker-a",
+		LeaseDuration: time.Minute,
+		Now:           now,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, ClaimOutcomeClaimed, claim.Outcome)
+	assert.NotNil(t, claim.Task.AttemptID)
+
+	ok, err := r.CompleteTaskAttempt(ctx, task.ID, "wrong-attempt", map[string]any{"ok": false})
+	assert.NoError(t, err)
+	assert.False(t, ok)
+	got, err := r.GetTaskByID(ctx, task.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "processing", got.Status)
+
+	ok, err = r.CompleteTaskAttempt(ctx, task.ID, *claim.Task.AttemptID, map[string]any{"ok": true})
+	assert.NoError(t, err)
+	assert.True(t, ok)
+	got, err = r.GetTaskByID(ctx, task.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "done", got.Status)
+}
+
 func TestTaskRepo_ListTasksByUser(t *testing.T) {
 	db := setupTestDB(t)
 	r := NewTaskRepo(db)
@@ -195,4 +303,8 @@ func TestTaskRepo_MarkTimedOutTasks(t *testing.T) {
 
 	got, _ := r.GetTaskByID(ctx, "t1")
 	assert.Equal(t, "timed_out", got.Status)
+}
+
+func strPtr(value string) *string {
+	return &value
 }

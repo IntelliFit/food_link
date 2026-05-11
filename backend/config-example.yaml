@@ -52,7 +52,7 @@ worker:
 
 task_queue:
   # memory is process-local and intended for local/dev server-embedded workers.
-  # kafka is reserved by interface/config and will fail fast until its adapter is implemented.
+  # kafka uses brokers/topic/consumer_group and commits offsets only after task terminal state is persisted.
   driver: "memory"
   buffer_size: 1024
   topic: "food-link-analysis-tasks"

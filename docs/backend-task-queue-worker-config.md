@@ -1,22 +1,37 @@
 # 后端 worker 与 task_queue 配置说明
 
-本文说明 `backend/config.yaml` 中 `worker` 和 `task_queue` 的含义，以及它们在当前 Go 后端里的真实行为。
+本文说明 `backend/config.yaml` 里的 `worker` 与 `task_queue`，以及当前 Go 后端的任务可靠性设计。
 
 ## 当前架构
 
-当前分析任务不是在 HTTP 请求里同步跑模型。
+分析类任务不是在 HTTP 请求里同步跑模型：
 
-1. 接口创建 `analysis_tasks` 记录，状态为 `pending`。
-2. 创建成功后，服务端发布 `{task_id, task_type}` 到 `task_queue`。
-3. server 进程内嵌 worker 从 `task_queue` 收到消息后，按 `task_id` claim 这条任务，把状态从 `pending` 改为 `processing`。
-4. worker 调用模型、营养库、OCR 或其它业务逻辑。
-5. worker 把任务写回 `done` / `failed`，前端继续通过 `/api/analyze/tasks/:task_id` 轮询读取状态和结果。
+1. 接口先创建 `analysis_tasks`，状态为 `pending`。
+2. 创建成功后发布 `{task_id, task_type}` 到 `task_queue`。
+3. worker 收到队列消息后，按 `task_id` claim 这一条任务。
+4. claim 成功时写入 `status=processing`、`worker_id`、`attempt_id`、`attempt_count`、`processing_started_at`、`lease_until`。
+5. worker 执行业务逻辑，成功或失败后先把 DB 写成 `done` 或 `failed`。
+6. DB 终态写入成功后，队列消息才会 ack；Kafka 模式下就是这时才 commit offset。
 
-`analysis_tasks` 仍然是任务状态、结果、错误信息和前端轮询的持久化表，但不再作为“靠扫描 pending 任务来分发工作”的 DB 队列。
+`analysis_tasks` 仍然是前端轮询状态、结果和错误信息的持久化来源，但不再靠“扫描所有 pending”来分发新任务。
+
+## 数据库字段
+
+可靠消费依赖 `analysis_tasks` 的以下字段：
+
+- `worker_id`：当前领取任务的 worker 标识。
+- `attempt_id`：本次处理 attempt 的唯一 ID。
+- `attempt_count`：任务被领取处理的次数。
+- `processing_started_at`：当前 attempt 开始时间。
+- `lease_until`：当前 attempt 的租约过期时间。
+
+部署到新环境或旧库升级时，需要运行后端 migration：
+
+```bash
+go run ./cmd/migration -config-dir .
+```
 
 ## worker 配置
-
-示例：
 
 ```yaml
 worker:
@@ -26,55 +41,42 @@ worker:
 
 ### count
 
-`count` 控制 server 内嵌 worker loop 的数量。
+`count` 控制 server 进程内 worker loop 的数量。
 
-- `count: 0`：不启动 worker。此时异步分析任务会停在 `pending`，前端会一直轮询不到结果。
-- `count: 1`：默认推荐值，本地和当前单实例服务足够。
-- `count > 1`：同一 server 进程里启动多个并发消费者，可以提高吞吐，但会增加模型 API 并发、成本和限流风险。
+- `count: 0`：不启动 worker，异步分析任务会停在 `pending`。
+- `count: 1`：本地和当前单实例服务的推荐值。
+- `count > 1`：同一 server 进程内启动多个消费者。Kafka 模式下会创建多个同 group consumer，由 Kafka 按 partition 分配；并发越高，模型 API 成本和限流风险也越高。
 
-当前代码要求 `config.yaml` 必须显式配置 `worker.count`；缺失会启动报错。不要再用 `WORKER_ENABLED` 这类环境变量控制 worker。
+`worker.count` 必须写在 `config.yaml` 里，不能用 `WORKER_ENABLED` 之类环境变量控制。
 
 ### poll_interval_seconds
 
-`poll_interval_seconds` 是 worker loop 的定时 tick 间隔，当前主要影响两件事：
+它是 worker 定时 tick 的间隔，主要用于：
 
-- 每个 tick 会尝试处理一条到期的 `food_expiry_notification_jobs` 通知 job。
-- worker 空闲日志按 tick 计数输出，目前每 30 个 tick 打一次 `worker idle`。
+- 检查并发送到期的 `food_expiry_notification_jobs`。
+- 输出空闲日志。
+- 触发过期提醒 job 的 stale recovery。
 
-它不是前端轮询 `/api/analyze/tasks/:task_id` 的间隔，也不是普通分析任务从 `task_queue` 收消息的等待时间。当前 `task_queue.driver=memory` 时，普通分析任务通过进程内 channel 直接投递，消息到达后 worker 会立即处理。
-
-建议本地和线上先保持 `2` 秒。调小它通常不会让食物识别更快，只会让保质期通知检查更频繁、日志更密。
+它不是前端轮询 `/api/analyze/tasks/:task_id` 的间隔，也不是普通分析任务的队列延迟。普通分析任务靠 `task_queue` 投递，消息到达后立即处理。
 
 ## worker 支持的任务类型
 
-worker 支持的任务类型不再放在 `config.yaml` 中配置。当前所有后台任务类型都由代码统一启用；如果需要新增、删除或禁用某类任务，应改 worker 代码和对应测试，而不是在部署配置里裁剪。
-
-代码层面仍会用一组固定任务类型做两件事：
-
-- `task_queue` 订阅过滤：只订阅代码声明支持的任务类型。
-- DB claim 条件：worker 收到消息后，只会 claim 代码声明支持的 pending task。
-- 具体处理分支：worker 根据 `task_type` 进入不同业务处理函数。
-
-不要再加回 `worker.task_types` 这类配置。后台能力是代码契约，运行环境只负责决定 worker 是否启动和启动几个。
-
-当前各类型含义：
+任务类型不再放在 `config.yaml` 里配置。worker 支持哪些任务由代码里的 `worker.SupportedTaskTypes()` 固定维护；新增、删除或禁用某类任务应改代码和测试，而不是改部署配置。
 
 | task_type | 含义 |
 | --- | --- |
-| `food` | 普通图片食物分析任务。通常来自 `/api/analyze/submit` 的标准模式。 |
-| `food_text` | 普通文字食物分析任务。通常来自 `/api/analyze-text/submit` 的标准模式。 |
-| `precision_plan` | 精准模式规划任务，负责拆分子任务和决定后续估算步骤。 |
-| `precision_item_estimate` | 精准模式单个食物/单个子项估算任务。 |
-| `precision_aggregate` | 精准模式汇总任务，把多个子项结果聚合成最终结果。 |
+| `food` | 普通图片食物分析任务。 |
+| `food_text` | 普通文字食物分析任务。 |
+| `precision_plan` | 精准模式规划任务，负责拆分子任务。 |
+| `precision_item_estimate` | 精准模式单项估算任务。 |
+| `precision_aggregate` | 精准模式汇总任务。 |
 | `public_food_library_text` | 公共食物库发布前的文本审核任务。 |
-| `exercise` | 运动热量异步估算任务，完成后写入运动记录。 |
+| `exercise` | 运动热量异步估算任务。 |
 | `health_report` | 健康报告 OCR/结构化提取任务。 |
-| `expiry_recognize` | 保质期拍照识别的异步任务处理分支；当前 `/api/expiry/recognize` 仍是同步识别并写完成任务，保留该类型用于兼容或后续异步化。 |
-| `expiry_notification` | 保质期订阅通知发送开关。它不是 `analysis_tasks` 队列消息，而是让 worker 定时扫描并发送 `food_expiry_notification_jobs`。 |
+| `expiry_recognize` | 保质期拍照识别异步任务类型。 |
+| `expiry_notification` | 保质期订阅通知发送开关；它不是 `analysis_tasks` 队列消息，而是让 worker 定时检查 `food_expiry_notification_jobs`。 |
 
 ## task_queue 配置
-
-示例：
 
 ```yaml
 task_queue:
@@ -87,40 +89,24 @@ task_queue:
 
 ### driver
 
-当前真正支持的是 `memory`。
-
-- `memory`：进程内队列，适合当前 server 内嵌 worker。HTTP submit 和 worker 必须在同一个 server 进程里，消息才能被消费。
-- `kafka`：配置和接口已预留，但 adapter 尚未实现；如果设置为 `kafka`，会启动失败，不会静默退回 DB 扫描。
-
-`memory` 队列不持久化。server 重启时，内存中的未消费消息会丢失；已写入 DB 的旧 `pending` task 也不会自动 replay。后续要做生产级可靠性、多副本或独立消费者，应在 `internal/taskqueue` 后面接 Kafka、NATS、Redis Stream 等真实 broker，并设计 pending task replay / 死信 / 重试策略。
+- `memory`：进程内 channel，本地开发默认使用。它不持久化，但 worker 会定时从 DB 找 `pending` 和 lease 过期的 `processing` 任务重新发布到内存队列，避免 server 重启后老任务永远沉没。
+- `kafka`：真实 Kafka 队列。需要配置 `brokers`、`topic`、`consumer_group`。worker 使用 `FetchMessage` 读取，任务写入 `done/failed` 后才 `CommitMessages`。
 
 ### buffer_size
 
-`buffer_size` 是 `memory` 队列 channel 的容量。
-
-- 必须大于 `0`，否则配置加载会报错。
-- 队列满时，发布任务会阻塞，直到发布上下文超时或有 worker 消费。
-- 当前发布任务通常使用 2 秒超时；如果队列长期满，提交接口会失败，而不是让任务无声卡住。
-
-本地默认 `1024` 足够。它只是进程内内存容量，不代表持久化 backlog。
+只对 `memory` 生效，是进程内 channel 容量。必须大于 `0`。
 
 ### topic
 
-`topic` 是未来真实消息队列的主题名，当前 `memory` driver 不使用它。
+Kafka topic 名称。建议稳定使用：
 
-保留它是为了以后接 Kafka/NATS/Redis Stream 时，不需要改配置结构。建议保持稳定值，例如 `food-link-analysis-tasks`。
+```yaml
+topic: "food-link-analysis-tasks"
+```
 
 ### brokers
 
-`brokers` 是未来真实消息队列的 broker 地址列表，当前 `memory` driver 不使用它。
-
-`memory` 模式下可以为空数组：
-
-```yaml
-brokers: []
-```
-
-以后 Kafka 示例可能类似：
+Kafka broker 地址。`memory` 模式可以为空；`kafka` 模式必须非空。
 
 ```yaml
 brokers:
@@ -130,9 +116,28 @@ brokers:
 
 ### consumer_group
 
-`consumer_group` 是未来真实 broker 的消费者组名，当前 `memory` driver 不使用它。
+Kafka consumer group。多个 server/worker 使用同一个 group 时，同一个 topic partition 只会分配给 group 内一个 consumer。不同 group 会各自收到一份消息。
 
-如果以后接 Kafka，这个值会决定多个 worker 实例是否属于同一个消费组。同组消费者会分摊同一个 topic 的消息；不同组会各自收到一份消息。
+## Kafka 处理过程
+
+Kafka 模式下单条消息的处理流程是：
+
+1. Kafka reader `FetchMessage` 取到消息，但不自动提交 offset。
+2. worker 根据 `task_id` 锁定 DB 记录。
+3. 如果任务是 `pending`，或者 `processing` 但 `lease_until` 已过期，则生成新的 `attempt_id` 并开始处理。
+4. 如果任务已经是 `done/failed/cancelled/timed_out/violated`，说明这是重复投递，直接 commit offset。
+5. 如果任务仍处于未过期的 `processing`，说明另一个 attempt 正在处理，当前重复消息会被确认；如果原 attempt 后续挂掉，DB recovery 会在 lease 过期后重新发布任务。
+6. 当前 attempt 完成后，只允许 `WHERE id=? AND attempt_id=? AND status='processing'` 的更新写入 `done/failed`。
+7. DB 终态写入成功后才 commit offset。
+
+这个设计保证：
+
+- 任务不会因为 worker 进程挂掉而永久停在 `processing`。
+- Kafka 消息未 commit 时，consumer group rebalance 后可以重新投递。
+- 即使重复投递，旧 attempt 也不能覆盖新 attempt 的结果。
+- server 内部 worker goroutine panic 会被恢复并重新订阅；整个 server 进程挂掉时，仍依赖 systemd/Docker/K8s 等进程管理器拉起服务。
+
+严格意义上的“外部副作用 exactly once”无法只靠 Kafka 和 DB 保证。例如模型调用完成后、写 DB 前进程崩溃，恢复后可能会再次调用模型。但 DB 终态写入是 attempt 幂等的，用户侧不会看到旧 attempt 覆盖新结果。
 
 ## 推荐配置
 
@@ -151,23 +156,76 @@ task_queue:
   consumer_group: "food-link-workers"
 ```
 
-临时只启动 API、不处理后台任务：
+Kafka 环境：
 
 ```yaml
 worker:
-  count: 0
+  count: 2
+  poll_interval_seconds: 2
+
+task_queue:
+  driver: "kafka"
+  buffer_size: 1024
+  topic: "food-link-analysis-tasks"
+  brokers:
+    - "kafka-1:9092"
+    - "kafka-2:9092"
+  consumer_group: "food-link-workers"
 ```
 
-这种模式下不要测试拍照分析、文字分析、运动异步估算、健康报告 OCR 这类依赖 worker 的功能；它们会创建任务但不会出结果。
+## 本地 Kafka 快速启动
+
+仓库里提供了一个单节点 Kafka 配置，只用于本地开发验证：
+
+```powershell
+docker compose -f backend/docker-compose.kafka.yml up -d
+```
+
+首次启动后可以显式创建 topic。当前 compose 已启用自动创建 topic，所以这一步不是必须的，但手动创建能更早暴露 broker 连接问题：
+
+```powershell
+docker exec food-link-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --create --if-not-exists --topic food-link-analysis-tasks --partitions 3 --replication-factor 1
+```
+
+本地 `backend/config.yaml` 可以临时改成：
+
+```yaml
+worker:
+  count: 1
+  poll_interval_seconds: 2
+
+task_queue:
+  driver: "kafka"
+  buffer_size: 1024
+  topic: "food-link-analysis-tasks"
+  brokers:
+    - "127.0.0.1:9092"
+  consumer_group: "food-link-local-workers"
+```
+
+然后按项目本地流程重启 Go server。现在独立 worker 入口已经删除，server 启动后会按 `worker.count` 启动内嵌 worker。
+
+验证 Kafka 是否可用：
+
+```powershell
+docker exec food-link-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list
+```
+
+不用时关闭本地 Kafka：
+
+```powershell
+docker compose -f backend/docker-compose.kafka.yml down
+```
 
 ## 排查要点
 
 如果前端一直轮询 200 但没有结果，优先看：
 
 1. `worker.count` 是否大于 `0`。
-2. server 启动日志里是否有 `embedded worker enabled`。
-3. server 启动日志里的 `task_types` 是否包含代码支持的完整任务集合。
-4. submit 后是否有 `analysis task enqueued`，worker 侧是否有 `task queue delivery received` / `task claimed`。
-5. Jaeger 中是否能看到 submit span 后续串到 queue delivery、claim、process、LLM、complete/fail。
+2. server 日志里是否有 `embedded worker enabled`。
+3. submit 后是否有 `analysis task enqueued`。
+4. worker 侧是否有 `task queue delivery received`、`task claimed`、`task processed` 或 `task failed`。
+5. DB 里该任务的 `status`、`worker_id`、`attempt_id`、`attempt_count`、`lease_until`。
+6. Jaeger 里是否能看到 submit 后续串到 queue delivery、claim、process、LLM、complete/fail。
 
-普通 zap 日志不会自动出现在 Jaeger。需要在 Jaeger 里看的关键节点，应写入 OpenTelemetry span event / attribute / error；普通日志则用 `trace_id`、`span_id` 做关联。
+普通 zap 日志不会自动出现在 Jaeger；需要在 Jaeger 里看的关键节点应写入 OpenTelemetry span event / attribute / error。

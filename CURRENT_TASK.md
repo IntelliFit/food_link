@@ -1,5 +1,19 @@
 # 当前任务
 
+## 2026-05-12 update: migration 已确认，本地 Kafka 快速启动文档已补充
+
+- User 已在 `backend/` 下执行 `go run ./cmd/migration -config-dir .`，输出 `migration completed: config_dir=. schema=public`。
+- Follow-up：User 执行 `docker compose -f docker-compose.kafka.yml up -d` 时，`bitnami/kafka:3.7` 报 `not found`。已将本地 Kafka compose 改为官方 `apache/kafka:3.7.0`，并将文档中的容器内命令路径改为 `/opt/kafka/bin/kafka-topics.sh`。
+- 已用同一份 `backend/config.yaml` 的数据库连接直接查询 `analysis_tasks`：
+  - 新增列已存在：`worker_id`、`attempt_id`、`attempt_count`、`processing_started_at`、`lease_until`。
+  - 相关索引已存在：`idx_analysis_tasks_attempt_id`、`idx_analysis_tasks_status_lease`、`idx_analysis_tasks_worker_id`。
+- 已新增 `backend/docker-compose.kafka.yml`，用于本地单节点 Kafka 验证；不自动启动，需要用户手动执行 `docker compose -f backend/docker-compose.kafka.yml up -d`。
+- 已更新 `docs/backend-task-queue-worker-config.md`，补充本地 Kafka 启动、topic 创建、`backend/config.yaml` 的 `task_queue.driver=kafka` 配置示例和关闭命令。
+- 已验证：
+  - `go test ./pkg/config ./internal/taskqueue -run Test -count=1` passed。
+  - `docker compose -f backend/docker-compose.kafka.yml config` passed。
+  - `git diff --check -- backend/docker-compose.kafka.yml docs/backend-task-queue-worker-config.md CURRENT_TASK.md DECISIONS.md memory/2026-05-12.md` passed with only CRLF warnings。
+
 ## 状态：完成提交与远端同步 - 积分扣除优化和分析订阅移除
 
 - 2026-05-12 update:
@@ -7028,3 +7042,23 @@
   - `go test ./internal/taskqueue -run Test -count=1` passed.
   - `go build -o $env:TEMP\food-link-server-no-worker-task-types.exe ./cmd/server` passed.
   - `git diff --check` passed with only CRLF warnings.
+
+## 状态：完成源码优化 - 结果页更多营养改为两列放大展示
+
+- User 反馈小程序结果页「展开更多营养」按钮和展开后的更多营养明细太小，三列布局阅读困难，建议改为两列。
+- 已调整：
+  - `src/packageExtra/pages/result/index.scss`
+    - 「展开更多营养 / 收起更多营养」触发区高度、文字和箭头字号放大，提升可点面积和可读性。
+    - 更多营养明细从三列改为两列。
+    - 明细卡片增大间距、内边距、最小高度、标签字号、数值字号和单位字号。
+    - 暗色主题沿用原有颜色覆盖，尺寸跟随主样式放大。
+- Verification:
+  - `git diff --check -- src/packageExtra/pages/result/index.scss` passed with only CRLF warning.
+  - `npx stylelint src/packageExtra/pages/result/index.scss --allow-empty-input` blocked by existing SCSS parser issue at line 181 (`padding: ... // ...` inline comment), not introduced by this change.
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务或端口不可用；本轮未能完成截图/交互验证。
+## 2026-05-12 update: Kafka task_queue + DB attempt/lease worker reliability
+
+- User 要求：按“Kafka 消息在任务写库 done/failed 后再 commit offset”的方案落地，并补 `worker_id`、attempt、超时恢复，避免任务丢失、重复覆盖或永久 `processing`。
+- 已实现：`task_queue.driver=kafka` 已从占位改为真实 adapter；Kafka 消息写 DB 终态后才 commit offset；`analysis_tasks` 增加 `worker_id/attempt_id/attempt_count/processing_started_at/lease_until`；worker claim/complete/fail 都按 attempt lease 幂等处理；worker 周期性 recovery `pending` 和 lease 过期的 `processing` 任务；`food_expiry_notification_jobs` 增加 stale processing 恢复；嵌入式 worker loop 增加 panic recover 和订阅重启。
+- Verification：`go test ./internal/taskqueue ./pkg/config ./internal/worker ./internal/app -run Test -count=1`、分析/运动定向测试、repo/expiry/migration compile-only、server build、`git diff --check` 均已通过；真实 SQLite repo 测试仍被本机 `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞。
+- Follow-up：新增 DB 列需要在目标库执行 `go run ./cmd/migration -config-dir .` 后线上才具备完整 schema。

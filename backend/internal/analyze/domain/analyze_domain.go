@@ -16,6 +16,11 @@ type AnalysisTask struct {
 	ErrorMessage    *string        `json:"error_message,omitempty" gorm:"column:error_message"`
 	IsViolated      bool           `json:"is_violated,omitempty" gorm:"column:is_violated"`
 	ViolationReason *string        `json:"violation_reason,omitempty" gorm:"column:violation_reason"`
+	WorkerID        *string        `json:"worker_id,omitempty" gorm:"column:worker_id"`
+	AttemptID       *string        `json:"attempt_id,omitempty" gorm:"column:attempt_id"`
+	AttemptCount    int            `json:"attempt_count,omitempty" gorm:"column:attempt_count"`
+	ProcessingAt    *time.Time     `json:"processing_started_at,omitempty" gorm:"column:processing_started_at"`
+	LeaseUntil      *time.Time     `json:"lease_until,omitempty" gorm:"column:lease_until"`
 	IsRecorded      bool           `json:"is_recorded" gorm:"-"`
 	RecordID        string         `json:"record_id,omitempty" gorm:"-"`
 	CreatedAt       *time.Time     `json:"created_at,omitempty" gorm:"column:created_at"`

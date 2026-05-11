@@ -45,6 +45,13 @@ func (w *NotificationWorker) ProcessNext(ctx context.Context) (bool, error) {
 	return true, w.ProcessJob(ctx, job)
 }
 
+func (w *NotificationWorker) RecoverStaleProcessingJobs(ctx context.Context, staleAfter time.Duration) (int64, error) {
+	if w == nil || w.repo == nil {
+		return 0, nil
+	}
+	return w.repo.RecoverStaleNotificationJobs(ctx, staleAfter)
+}
+
 func (w *NotificationWorker) ProcessJob(ctx context.Context, job *domain.ExpiryNotificationJob) error {
 	item, err := w.repo.GetByID(ctx, job.ExpiryItemID)
 	if err != nil {
