@@ -28,8 +28,10 @@ const STANDARD_FOOD_ANALYSIS_CREDIT_COST = 2
 const PRECISION_FOOD_ANALYSIS_CREDIT_COST = 4
 const EXERCISE_LOG_CREDIT_COST = 1
 
-export function getFoodAnalysisCreditCost(executionMode?: ExecutionMode | string | null): number {
-  return executionMode === 'strict' ? PRECISION_FOOD_ANALYSIS_CREDIT_COST : STANDARD_FOOD_ANALYSIS_CREDIT_COST
+export function getFoodAnalysisCreditCost(executionMode?: ExecutionMode | string | null, units = 1): number {
+  const normalizedUnits = Number.isFinite(units) && units > 0 ? Math.floor(units) : 1
+  const unitCost = executionMode === 'strict' ? PRECISION_FOOD_ANALYSIS_CREDIT_COST : STANDARD_FOOD_ANALYSIS_CREDIT_COST
+  return unitCost * normalizedUnits
 }
 
 function getFoodAnalysisCreditLabel(executionMode?: ExecutionMode | string | null): string {
@@ -159,9 +161,10 @@ export function getEarnedCreditsBalance(status?: MembershipStatus | null): numbe
 export function isFoodAnalysisCreditExhausted(
   status?: MembershipStatus | null,
   executionMode?: ExecutionMode | string | null,
+  units = 1,
 ): boolean {
   const { hasInfo, max, remaining } = getMembershipCreditSummary(status)
-  const creditCost = getFoodAnalysisCreditCost(executionMode)
+  const creditCost = getFoodAnalysisCreditCost(executionMode, units)
   if (!hasInfo) return false
   if (remaining >= creditCost) return false
   if (max <= 0) return true
@@ -171,12 +174,13 @@ export function isFoodAnalysisCreditExhausted(
 export function getFoodAnalysisCreditBlockMessage(
   status?: MembershipStatus | null,
   executionMode?: ExecutionMode | string | null,
+  units = 1,
 ): string {
   const { hasInfo, max, used, remaining } = getMembershipCreditSummary(status)
   const systemRemaining = getSystemCreditsRemaining(status)
   const earnedBalance = getEarnedCreditsBalance(status)
   const balanceSummary = `当前可用 ${remaining}（系统剩余 ${systemRemaining}，累计奖励 ${earnedBalance}）`
-  const creditCost = getFoodAnalysisCreditCost(executionMode)
+  const creditCost = getFoodAnalysisCreditCost(executionMode, units)
   const analysisLabel = getFoodAnalysisCreditLabel(executionMode)
   if (!hasInfo) {
     return `当前积分不足，${analysisLabel}需 ${creditCost} 积分/次。`

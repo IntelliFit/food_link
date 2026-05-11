@@ -16,6 +16,20 @@
   - server 内置 worker 由 `config.yaml` 中的 `worker.count` 控制；`count=0` 表示不开启，`count>0` 表示启动对应数量 worker，缺少 `worker.count` 直接报错。
   - 独立 `cmd/worker` 入口保留；显式运行 `npm run dev:worker` 或 `/app/food-link-worker` 时仍可作为独立 worker 消费同一 DB 队列。
   - worker 诊断日志统一走 zap logger；当前 OTel 只配置 trace exporter，不把这些日志直接作为 OTel logs 上报。
+- `2026-05-12`: 积分消耗口径改为“成功任务计费”，不再在分析/运动任务创建成功时立即扣除：
+  - 提交接口仍需先校验当前积分是否足够，避免明显不足时创建任务。
+  - 食物图片/文字/精准任务创建时只把本次 `credit_usage` 计划写入 `analysis_tasks.payload`。
+  - 每日系统积分使用量只统计 `status=done` 的可计费任务；失败、超时、违规、取消任务不占用系统积分。
+  - 累计奖励积分余额只在前端轮询 `GET /api/analyze/tasks/:task_id` 拿到 `done` 任务时结算，使用 sourceKey 幂等避免重复扣。
+  - 精准模式中间 `precision_plan` 完成不计费；`credit_usage` 传到 `precision_aggregate`，最终聚合成功才计费。
+  - 计费单位按任务类型和图片数计算：标准食物/保质期识别 `2 * 图片数`，精准模式 `4 * 图片数`，文字分析按 1 个 unit，运动记录 1。
+  - `AnalysisTask` 响应保留 `task_type`、`image_paths`、`payload`，前端可用它们判断任务类型、执行模式和图片数量。
+
+- `2026-05-12`: 首页非今日补录提示不再展示“当前补录日期”这类上下文说明；稳定口径改为低能量补录提醒：
+  - 仅当选中日期属于允许补录窗口、不是今天、且当天摄入低于目标 60% 时展示。
+  - 文案为“检测到当日能量过低，是否需要补录”。
+  - 点击提示色块直接打开首页记录菜单弹窗，沿用拍照识别/相册上传/文本输入/手动输入的补录入口。
+
 - `2026-05-12`: 食物分析提交链路不再请求或保存“分析完成通知”订阅授权：
   - 图片分析页和文字分析页不调用 `Taro.requestSubscribeMessage()`。
   - 分析提交/文字分析提交/精准续接协议不再携带 `subscribe_status`。

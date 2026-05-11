@@ -231,12 +231,6 @@ func (s *ExerciseService) CreateLogWithDate(ctx context.Context, userID string, 
 	if err := s.enqueueTask(ctx, task.ID, task.TaskType); err != nil {
 		return nil, err
 	}
-	if s.creditGuard != nil && creditsInfo != nil {
-		_ = s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, creditCostExerciseLog, "exercise_reward_spend", "exercise:"+task.ID, map[string]any{
-			"task_id":   task.ID,
-			"task_type": task.TaskType,
-		})
-	}
 
 	return map[string]any{
 		"task_id": task.ID,

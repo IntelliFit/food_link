@@ -316,7 +316,8 @@ function AnalyzePage() {
     })
   }
 
-  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode)
+  const creditUnits = Math.max(imagePaths.length, 1)
+  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode, creditUnits)
 
   useEffect(() => {
     if (!membershipStatus) return
@@ -712,7 +713,7 @@ function AnalyzePage() {
     if (now - analyzeSubmitDebounceRef.current < ANALYZE_SUBMIT_DEBOUNCE_MS) return
     analyzeSubmitDebounceRef.current = now
     if (isQuotaExhausted) {
-      const content = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode)
+      const content = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode, creditUnits)
       const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
       const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
       Taro.showModal({
