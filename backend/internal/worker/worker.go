@@ -2519,6 +2519,35 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		strings.Contains(lower, "<body") {
 		return "AI 服务返回了网页而不是 JSON，请检查模型 API base URL 或网关配置"
 	}
+	if strings.Contains(lower, "context deadline exceeded") ||
+		strings.Contains(lower, "client.timeout") ||
+		strings.Contains(lower, "timeout exceeded while awaiting headers") ||
+		strings.Contains(lower, "net/http: timeout") ||
+		strings.Contains(lower, "i/o timeout") ||
+		strings.Contains(lower, "tls handshake timeout") {
+		return "AI 识别服务响应超时，请稍后重试；如果连续失败，可以换一张更清晰的照片再试"
+	}
+	if strings.Contains(lower, "resource exhausted") ||
+		strings.Contains(lower, "ofoxai api error 429") ||
+		strings.Contains(lower, "dashscope api error 429") {
+		return "AI 识别服务当前繁忙，请稍后重试"
+	}
+	if strings.Contains(lower, "incorrect api key") ||
+		strings.Contains(lower, "apikey-error") ||
+		strings.Contains(lower, "dashscope api error 401") ||
+		strings.Contains(lower, "ofoxai api error 401") {
+		return "AI 识别服务配置异常，请联系管理员处理"
+	}
+	if strings.Contains(lower, "ofoxai api error 500") ||
+		strings.Contains(lower, "ofoxai api error 502") ||
+		strings.Contains(lower, "ofoxai api error 503") ||
+		strings.Contains(lower, "ofoxai api error 504") ||
+		strings.Contains(lower, "dashscope api error 500") ||
+		strings.Contains(lower, "dashscope api error 502") ||
+		strings.Contains(lower, "dashscope api error 503") ||
+		strings.Contains(lower, "dashscope api error 504") {
+		return "AI 识别服务暂时不可用，请稍后重试"
+	}
 	runes := []rune(msg)
 	if len(runes) > 300 {
 		return strings.TrimSpace(string(runes[:300])) + "..."

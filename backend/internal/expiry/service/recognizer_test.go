@@ -25,8 +25,7 @@ func (f expiryRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error
 func newTestExpiryRecognizer(handler expiryRoundTripFunc) *Recognizer {
 	recognizer := NewRecognizer(&config.Config{
 		External: config.ExternalConfig{
-			LLMProvider:  "gemini",
-			OfoxAIAPIKey: "fake-key",
+			DashscopeAPIKey: "fake-key",
 		},
 	})
 	recognizer.client = &http.Client{Transport: handler}
@@ -35,10 +34,10 @@ func newTestExpiryRecognizer(handler expiryRoundTripFunc) *Recognizer {
 
 func TestRecognizerRecognizeSuccess(t *testing.T) {
 	recognizer := newTestExpiryRecognizer(func(req *http.Request) (*http.Response, error) {
-		assert.Equal(t, "https://api.ofox.ai/v1/chat/completions", req.URL.String())
+		assert.Equal(t, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", req.URL.String())
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-		assert.Equal(t, "gemini-3-flash-preview", body["model"])
+		assert.Equal(t, "qwen-vl-max", body["model"])
 
 		responseBody := `{"choices":[{"message":{"content":"{\"items\":[{\"food_name\":\"牛奶\",\"category\":\"乳制品\",\"storage_type\":\"refrigerated\",\"quantity_note\":\"1盒\",\"expire_date\":\"2026-05-12\",\"confidence\":0.8}]}"}}]}`
 		return &http.Response{
@@ -98,6 +97,21 @@ func TestRecognizerRecognizeUpstreamErrorReturnsBadGateway(t *testing.T) {
 
 func TestRecognizerRecognizeMissingConfigReturnsServerError(t *testing.T) {
 	recognizer := NewRecognizer(&config.Config{})
+
+	_, err := recognizer.Recognize(context.Background(), RecognizeInput{
+		ImageURLs: []string{"https://example.com/milk.jpg"},
+	})
+
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusInternalServerError, appErr.HTTPStatus)
+	assert.Equal(t, "后端未配置保质期识别模型", appErr.Message)
+}
+
+func TestRecognizerDoesNotFallbackToOfoxWhenQwenMissing(t *testing.T) {
+	recognizer := NewRecognizer(&config.Config{
+		External: config.ExternalConfig{OfoxAIAPIKey: "fake-ofox-key"},
+	})
 
 	_, err := recognizer.Recognize(context.Background(), RecognizeInput{
 		ImageURLs: []string{"https://example.com/milk.jpg"},

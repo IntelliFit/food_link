@@ -29,8 +29,8 @@ func NewDashScopeClient(apiKey, model string) *DashScopeClient {
 		model = "qwen-vl-max"
 	}
 	return &DashScopeClient{
-		APIKey: apiKey,
-		Model:  model,
+		APIKey: strings.TrimSpace(apiKey),
+		Model:  strings.TrimSpace(model),
 		client: &http.Client{Timeout: 90 * time.Second},
 	}
 }

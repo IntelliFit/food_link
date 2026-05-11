@@ -6,11 +6,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"reflect"
 	"strings"
 	"testing"
 
-	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -34,10 +32,9 @@ func mockOCRResponseWithContent(content string) *http.Response {
 }
 
 func TestOCRService_ExtractFromRealReport_Success(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	mockClient := &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		return mockOCRResponse(), nil
-	})
-	defer patches.Reset()
+	})}
 
 	base64Image, err := testutil.LoadImageAsBase64(
 		testutil.GetTestdataPath("health_report/1.png"),
@@ -47,6 +44,7 @@ func TestOCRService_ExtractFromRealReport_Success(t *testing.T) {
 
 	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
+	svc.client = mockClient
 	ctx := context.Background()
 
 	result, err := svc.ExtractFromBase64(ctx, base64Image)
@@ -62,10 +60,9 @@ func TestOCRService_ExtractFromRealReport_MultipleImages(t *testing.T) {
 
 	for _, name := range reports {
 		t.Run(name, func(t *testing.T) {
-			patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+			mockClient := &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 				return mockOCRResponse(), nil
-			})
-			defer patches.Reset()
+			})}
 
 			base64Image, err := testutil.LoadImageAsBase64(
 				testutil.GetTestdataPath("health_report/" + name),
@@ -75,6 +72,7 @@ func TestOCRService_ExtractFromRealReport_MultipleImages(t *testing.T) {
 
 			cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
 			svc := NewOCRService(cfg)
+			svc.client = mockClient
 			ctx := context.Background()
 
 			result, err := svc.ExtractFromBase64(ctx, base64Image)
@@ -85,13 +83,13 @@ func TestOCRService_ExtractFromRealReport_MultipleImages(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromRealReport_URLMode(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	mockClient := &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		return mockOCRResponse(), nil
-	})
-	defer patches.Reset()
+	})}
 
 	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
+	svc.client = mockClient
 	ctx := context.Background()
 
 	result, err := svc.ExtractFromURL(ctx, "https://cdn.example.com/health_report_1.png")
@@ -101,10 +99,9 @@ func TestOCRService_ExtractFromRealReport_URLMode(t *testing.T) {
 
 func TestOCRService_ExtractFromRealReport_ComplexIndicators(t *testing.T) {
 	content := "```json\n{\"indicators\":[{\"name\":\"白细胞\",\"value\":\"7.2\",\"unit\":\"10^9/L\",\"flag\":\"\"},{\"name\":\"红细胞\",\"value\":\"4.8\",\"unit\":\"10^12/L\",\"flag\":\"\"},{\"name\":\"血红蛋白\",\"value\":\"145\",\"unit\":\"g/L\",\"flag\":\"↑\"}],\"conclusions\":[\"血常规未见明显异常\"],\"suggestions\":[\"建议定期复查\"],\"medical_notes\":\"体检日期: 2025-01-15\"}\n```"
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	mockClient := &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		return mockOCRResponseWithContent(content), nil
-	})
-	defer patches.Reset()
+	})}
 
 	base64Image, err := testutil.LoadImageAsBase64(
 		testutil.GetTestdataPath("health_report/2.png"),
@@ -113,6 +110,7 @@ func TestOCRService_ExtractFromRealReport_ComplexIndicators(t *testing.T) {
 
 	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
+	svc.client = mockClient
 	ctx := context.Background()
 
 	result, err := svc.ExtractFromBase64(ctx, base64Image)

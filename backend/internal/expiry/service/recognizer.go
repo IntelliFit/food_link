@@ -136,20 +136,20 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 func (r *Recognizer) llmConfig() (apiURL, model, apiKey string, err error) {
 	provider := strings.ToLower(strings.TrimSpace(r.cfg.External.LLMProvider))
 	if provider == "" {
-		provider = "gemini"
+		provider = "qwen"
 	}
 	ofoxBaseURL := strings.TrimRight(strings.TrimSpace(r.cfg.External.OfoxAIBaseURL), "/")
 	if ofoxBaseURL == "" {
 		ofoxBaseURL = "https://api.ofox.ai/v1"
 	}
-	if provider == "gemini" && r.cfg.External.OfoxAIAPIKey != "" {
-		return ofoxBaseURL + "/chat/completions", "gemini-3-flash-preview", r.cfg.External.OfoxAIAPIKey, nil
-	}
-	if r.cfg.External.DashscopeAPIKey != "" {
+	if provider == "qwen" && r.cfg.External.DashscopeAPIKey != "" {
 		return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen-vl-max", r.cfg.External.DashscopeAPIKey, nil
 	}
-	if r.cfg.External.OfoxAIAPIKey != "" {
+	if (provider == "gemini" || provider == "ofox-gemini") && r.cfg.External.OfoxAIAPIKey != "" {
 		return ofoxBaseURL + "/chat/completions", "gemini-3-flash-preview", r.cfg.External.OfoxAIAPIKey, nil
+	}
+	if provider != "gemini" && provider != "ofox-gemini" && r.cfg.External.DashscopeAPIKey != "" {
+		return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen-vl-max", r.cfg.External.DashscopeAPIKey, nil
 	}
 	return "", "", "", expiryRecognitionConfigError("后端未配置保质期识别模型")
 }

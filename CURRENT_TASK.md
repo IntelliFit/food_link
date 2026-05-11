@@ -1,4 +1,4 @@
-﻿# 当前任务
+# 当前任务
 
 ## 状态：完成源码微调 - 结果页 ratio-slider-shell 黑色主题改为暗色壳
 
@@ -142,6 +142,92 @@
     - `mrc logs error 20 --port 9420` 返回 0 条错误日志
   - Runtime validation note:
     - `mrc screenshot ./result-ingredients-compact.png --port 9420` 本轮卡住未产出文件，已终止该截图进程；因此有页面/元素/交互验证，但没有截图证据。
+## 状态：排查中 - 食物分析 OfoxAI 上游超时
+
+- 2026-05-11 update:
+  - User反馈：食物分析页停在“识别中”后失败，真机截图显示：
+    - `Post "https://api.ofox.ai/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`
+  - User明确要求：先确认 Ofox 是否无法正常访问；只有确认不能访问后再考虑兜底。
+  - Findings:
+    - 当前工作机到 `api.ofox.ai:443` TCP 连通，`Test-NetConnection` 成功。
+    - 不带鉴权请求 `https://api.ofox.ai/v1/chat/completions` 能快速返回 `401`。
+    - 使用本地 `backend/config.yaml` 中 Ofox key 发起 3 次最小模型请求，均返回 `200`：
+      - 第 1 次约 `4449ms`
+      - 第 2 次约 `2908ms`
+      - 第 3 次约 `2912ms`
+    - 按用户要求进一步只测当前代码模型 `gemini-3-flash-preview`：
+      - 纯文本 JSON 调用成功，返回 `{"model":"gemini-3-flash-preview","ok":true,"message":"model reply ok"}`，耗时约 `8056ms`。
+      - 带公网 HTTPS 图片的视觉调用失败，返回 `500 {"error":{"message":"Internal error encountered.","type":"api_error"}}`，耗时约 `1283ms`。
+      - 去掉 `response_format` 后同一视觉调用仍失败，仍返回 `500 Internal error encountered`，耗时约 `1254ms`。
+    - 因此 Ofox 不是整体不可访问；当前关键问题是 `gemini-3-flash-preview` 的视觉/图片输入链路不可用，这正好影响食物拍照分析。
+    - 继续查生产数据库最近 `food` 分析任务：
+      - `2026-05-11 10:27-11:06` 多条图片任务失败，错误多为 `context deadline exceeded (Client.Timeout exceeded while awaiting headers)`。
+      - 同一时间段还有明确 `ofoxai api error 429: Resource exhausted. Please try again later...`。
+      - 最近失败任务使用的是 `https://cdn-food-images.coachlink.fit/...jpg`，图片本身本机 GET 为 `200 image/jpeg`。
+    - 使用今天失败任务里的同一张 CDN 图片重新调用当前模型 `gemini-3-flash-preview`，现在返回 `200` 并能识别出瑞幸咖啡；使用今天 429 失败的同一张图现在也返回 `200`；昨晚成功任务图片也可正常返回 `200`。
+    - 更正后的结论：
+      - 不是 Ofox 整体不可访问。
+      - 不是当前模型永久失去视觉能力。
+      - 不是我们的 CDN 图片永久不可抓取。
+      - 更像是当时 Ofox/Google Vertex 上游发生了资源耗尽/限流，表现为部分请求直接 `429 Resource exhausted`，部分请求长时间排队无响应直到 Go client 90 秒超时。
+  - Blocker:
+    - 直接 SSH `root@coachlink.fit` 检查生产机到 Ofox 的连通性失败：`Permission denied (publickey)`。
+    - 无法读取生产 `food-backend.service` 日志或从生产机执行 curl 验证。
+  - Code note:
+    - 已按用户要求加入 DashScope/Qwen 兜底：
+      - 根据用户最新要求，最近 1-2 天 Ofox/Gemini 连续限流，图片分析主链路临时默认改用 DashScope `qwen-vl-max`。
+      - `resolveModelConfig()` 中空默认值、历史 `modelName: "gemini"`、`gemini-3-flash-preview`、`google/gemini-3-flash-preview` 都临时路由到 `qwen-vl-max`，避免前端仍传 `"gemini"` 时继续打到 Ofox。
+      - Ofox/Gemini 仅保留显式 `modelName: "ofox-gemini"` 或 `ofox-gemini:<model>` 入口，方便后续上游恢复后切回。
+      - 标准图片识别、精准模式 `RunPrecisionJSONWithImages*`、单模型 compare engines、批量图片分析都会按新的默认解析走 Qwen。
+      - 若显式使用 Ofox/Gemini，为避免长时间无响应吃完整个任务窗口，图片主调用最多等待 `45s`，超时后进入 Qwen 兜底。
+      - 如果两边都失败，worker 不再把原始 `Post "https://api.ofox.ai/..." Client.Timeout...` 展示给用户，而是归一为“AI 识别服务响应超时/当前繁忙/暂时不可用”。
+  - Real provider check:
+    - 使用今天失败任务的同一张 CDN 图片直接调用 DashScope `qwen-vl-max`，返回 `200`，耗时约 `7600ms`，确认备用视觉模型可用。
+    - User随后再次测试失败，最新任务 `028ca932-13fb-48e1-ae5f-d6c0250ac700`：
+      - `created_at=2026-05-11T11:25:33+08:00`
+      - `updated_at=2026-05-11T11:27:05+08:00`
+      - 图片为 `http://cdn-food-images.coachlink.fit/181a1760-4f17-450e-b493-ed57281633f1.jpg`
+      - 图片本身可 GET，Ofox/Gemini 对同图 HTTP/HTTPS 均超时到 `120s`，DashScope/Qwen 对同图 HTTP/HTTPS 均约 `8s` 返回 `200`。
+      - 该任务总耗时约 `92s`，符合旧 worker 仅等待 Ofox 90 秒超时后失败；说明线上/当前运行中的 worker 尚未部署或重启到带 Qwen 兜底的版本。
+  - Verification:
+    - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError" -count=1` passed
+    - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage_HTML|TestSanitizeTaskErrorMessage_Timeout|TestSanitizeTaskErrorMessage_ResourceExhausted" -count=1` passed
+    - `go build -o %TEMP%/food-link-qwen-default.exe ./cmd/server` passed
+    - `go build -o %TEMP%/food-link-qwen-default-worker.exe ./cmd/worker` passed
+    - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go backend/internal/worker/worker.go backend/internal/worker/worker_sanitize_test.go` passed with CRLF warnings only
+  - Blocker:
+    - Full `go test ./internal/analyze/service -count=1` remains blocked by existing Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` setup.
+  - Runtime note:
+    - Backend-only worker/service change; no mini program page/component/style/route/interaction change, so no weapp-devtools UI verification required.
+  - Post-compaction recheck:
+    - Re-read project state and re-ran targeted analyze/worker tests plus `cmd/server` and `cmd/worker` builds; all passed.
+    - Current source fix is ready for deployment. Real users will still hit the old Ofox/Gemini path until the backend image is pushed and the running service/worker updates.
+  - Follow-up 401:
+    - User复测后出现 `dashscope api error 401: Incorrect API key provided`，说明请求已切到 DashScope/Qwen，但运行环境里的 `DASHSCOPE_API_KEY` 被 DashScope 判为无效。
+    - 本地 `backend/config.yaml` 中的 DashScope key 用最小 `qwen-vl-max` 请求验证为 `200`，所以更像线上 ConfigMap/env 与本地配置不一致，或值带了前后空白。
+    - 本地 `backend/.env` 发现 `DASHSCOPE_API_KEY=` 后存在前导空格；如果生产 ConfigMap 从同类 env 文件生成，这个空格会进入真实 key。
+    - 已补代码防御：配置加载后 trim 外部 API key；`NewDashScopeClient()` 也 trim key/model；worker 将 `dashscope/ofox 401` 归一为“AI 识别服务配置异常，请联系管理员处理”。
+    - User强调本地也失败；已直接修正本地 `backend/.env` 中 `DASHSCOPE_API_KEY=` 后的前导空格。
+    - 使用修正后的本地 `.env` key 直接调用 DashScope `qwen-vl-max` 图片识别，返回 `HTTP_STATUS=200` 并识别出图片内容。
+    - 当前本地仍在跑旧 `go run ./cmd/server` / `go run ./cmd/worker` 进程；需要重启本地 backend/worker 后才会读到修正后的 env 与新代码。
+    - User 重启后仍失败；进一步读取 worker 进程环境发现 `DASHSCOPE_API_KEY` 被系统/用户环境变量覆盖为另一把无效 key：
+      - `config.yaml` / `backend/.env` key 指纹一致，长度 35，直接请求 DashScope 返回 `200`。
+      - worker 进程环境变量 key 长度 38，指纹不同，直接请求 DashScope 返回 `401 Incorrect API key`。
+      - 本机 User 级环境变量 `DASHSCOPE_API_KEY=sk-sp-...` 正在覆盖本地配置文件。
+    - 已追加配置优先级防护：`backend/pkg/config/config.go` 只要存在 `config.yaml`，外部模型 key 优先使用配置文件值，避免系统脏环境变量覆盖；生产 scratch 镜像没有 `config.yaml`，仍走 ConfigMap/env。
+    - 验证：在当前 shell 仍带坏 `DASHSCOPE_API_KEY` 的情况下，`config.Load(".")` 已加载到 `config.yaml` 的正确 DashScope key 指纹；`go test ./pkg/config`、定向 analyze/worker 测试、server/worker build 均通过。
+  - All image recognition Qwen sweep:
+    - 食物标准图片识别、精准模式图片子任务、批量图片分析、保质期拍照识别、健康报告 OCR、运动图片估算均已切到 DashScope `qwen-vl-max`。
+    - 保质期识别不再在 DashScope 缺失时隐式 fallback 到 Ofox/Gemini；缺 Qwen 配置时直接配置错误，避免偷偷走回 Gemini。
+    - 仍保留的 Gemini/Ofox 代码仅用于显式 `ofox-gemini` escape hatch、对比/测试后台和 Ofox client 单元测试，不属于默认用户图像识别路径。
+    - User补充要求：不要删除原 Gemini 通道；当前口径是临时默认 Qwen，保留 Gemini/Ofox 显式入口和后续切回能力。
+    - Verification:
+      - `go test ./internal/expiry/service -run TestRecognizer -count=1` passed
+      - `go test ./internal/user/service -run TestOCRService -count=1` passed
+      - `go test ./internal/health/service -run "TestExerciseService_EstimateImageUsesQwenDashScope" -count=1` passed
+      - targeted analyze service Qwen routing/fallback tests passed
+      - server/worker builds passed
+
 ## 状态：完成源码修复 - 体重 summary 同日多条记录取值口径不一致
 
 - 2026-05-11 update:

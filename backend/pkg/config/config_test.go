@@ -85,3 +85,57 @@ external:
 		t.Fatalf("expected yaml deepseek key, got %q", cfg.External.DeepSeekAPIKey)
 	}
 }
+
+func TestLoadTrimsExternalSecrets(t *testing.T) {
+	t.Setenv("DASHSCOPE_API_KEY", " sk-test ")
+	t.Setenv("OFOXAI_API_KEY", "\tsk-ofox\n")
+	t.Setenv("DEEPSEEK_API_KEY", " deepseek-key ")
+
+	cfg, err := Load(".")
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.External.DashscopeAPIKey != "sk-test" {
+		t.Fatalf("expected trimmed dashscope key, got %q", cfg.External.DashscopeAPIKey)
+	}
+	if cfg.External.OfoxAIAPIKey != "sk-ofox" {
+		t.Fatalf("expected trimmed ofox key, got %q", cfg.External.OfoxAIAPIKey)
+	}
+	if cfg.External.DeepSeekAPIKey != "deepseek-key" {
+		t.Fatalf("expected trimmed deepseek key, got %q", cfg.External.DeepSeekAPIKey)
+	}
+}
+
+func TestLoadPrefersFileExternalKeysOverEnv(t *testing.T) {
+	t.Setenv("DASHSCOPE_API_KEY", "bad-env-key")
+	t.Setenv("OFOXAI_API_KEY", "bad-ofox")
+	t.Setenv("DEEPSEEK_API_KEY", "bad-deepseek")
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	content := []byte(`
+app:
+  env: "production"
+external:
+  dashscope_api_key: "good-dashscope"
+  ofoxai_api_key: "good-ofox"
+  deepseek_api_key: "good-deepseek"
+`)
+	if err := os.WriteFile(configPath, content, 0o600); err != nil {
+		t.Fatalf("write config.yaml: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.External.DashscopeAPIKey != "good-dashscope" {
+		t.Fatalf("expected file dashscope key, got %q", cfg.External.DashscopeAPIKey)
+	}
+	if cfg.External.OfoxAIAPIKey != "good-ofox" {
+		t.Fatalf("expected file ofox key, got %q", cfg.External.OfoxAIAPIKey)
+	}
+	if cfg.External.DeepSeekAPIKey != "good-deepseek" {
+		t.Fatalf("expected file deepseek key, got %q", cfg.External.DeepSeekAPIKey)
+	}
+}
