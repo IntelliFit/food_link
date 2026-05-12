@@ -196,6 +196,10 @@ function ProfilePage() {
             meta: `已记录 ${days} 天`
           }
           setUserInfo(nextUserInfo)
+          Taro.setStorageSync('userInfo', {
+            ...nextUserInfo,
+            nickname: apiUserInfo.nickname || '用户昵称',
+          })
           const completed = apiUserInfo.onboarding_completed ?? true
           setOnboardingCompleted(completed)
           // 首次登录未填写健康档案时，先跳转到答题页面

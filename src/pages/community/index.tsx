@@ -343,6 +343,8 @@ function CommunityPage() {
   // 评论：当前评论的 recordId、输入内容、提交中、延迟聚焦
   const [expandedCommentRecordId, setExpandedCommentRecordId] = useState<string | null>(null)
   const [commentContent, setCommentContent] = useState('')
+  const commentContentRef = useRef('')
+  const expandedCommentRecordIdRef = useRef<string | null>(null)
   /** 后台发表评论中的请求数，用于发送按钮 spinner（不阻塞继续输入） */
   const [commentInFlightCount, setCommentInFlightCount] = useState(0)
   /** 短锁：与签名防抖一起防止连点 */
@@ -360,6 +362,14 @@ function CommunityPage() {
   /** 动态卡片内评论：超过 3 条时默认只展示 2 条，点此展开/收起（仿微信朋友圈） */
   const [feedCommentPreviewExpanded, setFeedCommentPreviewExpanded] = useState<Record<string, boolean>>({})
   const [hidingFeedIds, setHidingFeedIds] = useState<string[]>([])
+
+  useEffect(() => {
+    commentContentRef.current = commentContent
+  }, [commentContent])
+
+  useEffect(() => {
+    expandedCommentRecordIdRef.current = expandedCommentRecordId
+  }, [expandedCommentRecordId])
 
   // 固定页面高度
   const [pageHeight, setPageHeight] = useState(0)
@@ -1538,6 +1548,7 @@ function CommunityPage() {
     try {
       Taro.removeStorageSync(draftKey(recordId))
     } catch (_) {}
+    commentContentRef.current = ''
     setCommentContent('')
     setReplyTargetComment(null)
 
@@ -1577,6 +1588,12 @@ function CommunityPage() {
         saveToCache(next)
         return next
       })
+      if (expandedCommentRecordIdRef.current === recordId && !commentContentRef.current.trim()) {
+        setCommentInputFocus(false)
+        expandedCommentRecordIdRef.current = null
+        setExpandedCommentRecordId(null)
+        setReplyTargetComment(null)
+      }
     } catch (e) {
       lastCommentSubmitRef.current = { signature: '', timestamp: 0 }
       setFeedList((prev) => {

@@ -58,6 +58,14 @@ func (f *FoodItem) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+	var raw struct {
+		Ratio  *float64 `json:"ratio"`
+		Intake *float64 `json:"intake"`
+		Weight *float64 `json:"weight"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
 	switch {
 	case aux.WaterMlSnake != nil:
 		f.WaterMl = *aux.WaterMlSnake
@@ -68,6 +76,16 @@ func (f *FoodItem) UnmarshalJSON(data []byte) error {
 		if f.WaterMl <= 0 {
 			f.WaterMl = numberFromAny(aux.NutrientsRaw["waterMl"])
 		}
+	}
+	if raw.Ratio == nil {
+		if raw.Intake != nil && raw.Weight != nil && *raw.Intake >= 0 && *raw.Weight > 0 {
+			f.Ratio = *raw.Intake / *raw.Weight * 100
+		} else {
+			f.Ratio = 100
+		}
+	}
+	if raw.Intake == nil && f.Weight > 0 {
+		f.Intake = f.Weight * f.Ratio / 100
 	}
 	return nil
 }

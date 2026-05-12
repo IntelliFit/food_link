@@ -13,6 +13,7 @@ import {
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+import { getCurrentPosterUserProfile, getLocalPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
 
 import './MealRecordPosterModal.scss'
 
@@ -73,12 +74,20 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
     setOwnerInviteCode('')
     setCalorieCompare(null)
     if (visible && record) {
+      const localProfile = getLocalPosterUserProfile(safeUserId)
+      if (localProfile.nickname) setOwnerNickname(localProfile.nickname)
+      if (localProfile.avatar) setOwnerAvatar(localProfile.avatar)
+      getCurrentPosterUserProfile(safeUserId).then(profile => {
+        if (profile.nickname) setOwnerNickname(profile.nickname)
+        if (profile.avatar) setOwnerAvatar(profile.avatar)
+      }).catch(() => {})
       getMyMembership().then(ms => setIsProUser(ms.is_pro)).catch(() => {})
       if (safeUserId) {
         getFriendInviteProfile(safeUserId)
         .then(profile => {
-          setOwnerNickname(profile.nickname || '')
-          setOwnerAvatar(profile.avatar || '')
+          const mergedProfile = mergePosterUserProfile(profile, getLocalPosterUserProfile(safeUserId))
+          setOwnerNickname(mergedProfile.nickname)
+          setOwnerAvatar(mergedProfile.avatar)
           setOwnerInviteCode(profile.invite_code || getInviteCodeFromUserId(safeUserId))
         })
         .catch(() => {

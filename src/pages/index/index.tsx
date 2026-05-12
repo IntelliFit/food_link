@@ -82,6 +82,27 @@ import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, type MealPosterSharePayload } from './components'
 
 const BACKFILL_LOW_ENERGY_RATIO = 0.6
+const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
+const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
+
+function isValidHomeDate(date?: string): date is string {
+  return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
+}
+
+function saveLastHomeSelectedDate(date: string) {
+  if (!isValidHomeDate(date)) return
+  try {
+    Taro.setStorageSync(HOME_SELECTED_DATE_KEY, date)
+  } catch (_) {}
+}
+
+function getLastHomeSelectedDate(fallback: string): string {
+  try {
+    const stored = Taro.getStorageSync(HOME_SELECTED_DATE_KEY)
+    if (isValidHomeDate(stored)) return stored
+  } catch (_) {}
+  return isValidHomeDate(fallback) ? fallback : formatDateKey(new Date())
+}
 
 /** 与记录详情页海报一致：邀请码用于小程序码 scene */
 function getInviteCodeFromUserId(userId: string): string {
@@ -108,15 +129,6 @@ function formatPosterWeekdayLabel(dateKey: string): string {
   const [y, m, d] = parts
   const dt = new Date(y, m - 1, d)
   return `周${SHORT_DAY_NAMES[dt.getDay()] ?? '—'}`
-}
-
-function formatBackfillDateLabel(dateKey: string): string {
-  const parts = dateKey.split('-').map(Number)
-  if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
-    return dateKey
-  }
-  const [_y, m, d] = parts
-  return `${m}月${d}日`
 }
 
 // 与后端/统计周对齐：真实日历为 2026 时，仅在与「可能带错年」的接口字段比对时做归一
@@ -557,6 +569,17 @@ function clearWaterForDate(metrics: BodyMetricsStorage, date: string): BodyMetri
   return next
 }
 
+function getDismissedBackfillDates(): string[] {
+  const stored = Taro.getStorageSync(BACKFILL_HINT_DISMISSED_DATES_KEY)
+  return Array.isArray(stored)
+    ? stored.filter((date): date is string => typeof date === 'string' && date.length > 0)
+    : []
+}
+
+function saveDismissedBackfillDates(dates: string[]) {
+  Taro.setStorageSync(BACKFILL_HINT_DISMISSED_DATES_KEY, Array.from(new Set(dates)))
+}
+
 /** 真机弱网时身体指标接口偶发失败，短延迟重试一次；仍失败则返回 null，由本机缓存 + 日期键规范化兜底 */
 async function fetchBodyMetricsSummaryRetry(): Promise<
   Awaited<ReturnType<typeof getBodyMetricsSummary>> | null
@@ -629,7 +652,8 @@ const MACRO_CONFIGS: Array<{
 
 function IndexPage() {
   const initialSelectedDate = formatDateKey(new Date())
-  const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialSelectedDate)
+  const initialHomeSelectedDate = getLastHomeSelectedDate(initialSelectedDate)
+  const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialHomeSelectedDate)
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(initialLocalSnapshot?.intakeData || DEFAULT_INTAKE)
   const [meals, setMeals] = useState<HomeMealItem[]>(initialLocalSnapshot?.meals || [])
   const [expirySummary, setExpirySummary] = useState<HomeFoodExpirySummary>(initialLocalSnapshot?.expirySummary || DEFAULT_EXPIRY_SUMMARY)
@@ -643,7 +667,7 @@ function IndexPage() {
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
   const targetScaleBaseMacrosRef = useRef<MacroTargets>(getMacroTargetsFromIntake(DEFAULT_INTAKE))
 
-  const [selectedDate, setSelectedDate] = useState(initialSelectedDate)
+  const [selectedDate, setSelectedDate] = useState(initialHomeSelectedDate)
 
   // 体重/喝水状态
   const [bodyMetrics, setBodyMetrics] = useState<BodyMetricsStorage>(getStoredBodyMetrics())
@@ -653,6 +677,7 @@ function IndexPage() {
   const [weightInput, setWeightInput] = useState('')
   const [savingWeight, setSavingWeight] = useState(false)
   const [showWaterEditor, setShowWaterEditor] = useState(false)
+  const [waterEditorDate, setWaterEditorDate] = useState(initialHomeSelectedDate)
   const [waterInput, setWaterInput] = useState('')
   /** 自定义水量输入框聚焦（与草稿数字共同决定是否显示「添加」） */
   const [waterInputFocused, setWaterInputFocused] = useState(false)
@@ -673,16 +698,22 @@ function IndexPage() {
 
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = useState(false)
+  const [dismissedBackfillDates, setDismissedBackfillDates] = useState<string[]>(() => getDismissedBackfillDates())
   const selectedDateRef = useRef(selectedDate)
-  selectedDateRef.current = selectedDate
+  const commitSelectedDate = useCallback((date: string) => {
+    const nextDate = isValidHomeDate(date) ? date : formatDateKey(new Date())
+    selectedDateRef.current = nextDate
+    saveLastHomeSelectedDate(nextDate)
+    setSelectedDate(nextDate)
+    return nextDate
+  }, [])
   const openRecordMenuFromRequest = useCallback(() => {
     const pendingDate = consumeHomeRecordMenuDate()
     if (pendingDate) {
-      selectedDateRef.current = pendingDate
-      setSelectedDate(pendingDate)
+      commitSelectedDate(pendingDate)
     }
     setShowRecordMenu(true)
-  }, [])
+  }, [commitSelectedDate])
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
   const [homeAchievement, setHomeAchievement] = useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
@@ -1743,11 +1774,11 @@ function IndexPage() {
   const handleDateSelect = (date: string) => {
     console.log('[DEBUG] 点击日期:', date, '当前日期:', selectedDate)
     skipNextRefreshRef.current = true
-    setSelectedDate(date)
+    const committedDate = commitSelectedDate(date)
     // 1. 无条件从本地缓存读取并立刻渲染
-    const localSnapshot = getStoredHomeDashboardSnapshotByDate(date)
+    const localSnapshot = getStoredHomeDashboardSnapshotByDate(committedDate)
     if (localSnapshot) {
-      console.log('[DEBUG] 命中本地缓存:', date)
+      console.log('[DEBUG] 命中本地缓存:', committedDate)
       setIntakeData(localSnapshot.intakeData)
       setMeals(localSnapshot.meals || [])
       setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
@@ -1755,7 +1786,7 @@ function IndexPage() {
       setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
     } else {
-      console.log('[DEBUG] 未命中本地缓存, 清空为默认态:', date)
+      console.log('[DEBUG] 未命中本地缓存, 清空为默认态:', committedDate)
       setIntakeData(DEFAULT_INTAKE)
       setMeals([])
       setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
@@ -1767,7 +1798,7 @@ function IndexPage() {
     setLoading(false)
     setIsSwitchingDate(false)
     // 3. 后台异步同步该日数据
-    void syncDashboardForDate(date)
+    void syncDashboardForDate(committedDate)
   }
 
   // 体重/喝水相关回调函数
@@ -1834,27 +1865,31 @@ function IndexPage() {
       redirectToLogin()
       return
     }
+    const recordDate = getLastHomeSelectedDate(selectedDateRef.current || selectedDate || formatDateKey(new Date()))
     if (waterBlurTimerRef.current) {
       clearTimeout(waterBlurTimerRef.current)
       waterBlurTimerRef.current = null
     }
+    setWaterEditorDate(recordDate)
     setWaterInput('')
     setWaterInputFocused(false)
     setShowWaterEditor(true)
   }
 
-  const addWaterAmount = async (amount: number) => {
+  const addWaterAmount = async (amount: number, targetDate = waterEditorDate || selectedDateRef.current || selectedDate) => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
     }
 
+    const recordDate = targetDate || formatDateKey(new Date())
+
     setSavingWater(true)
     try {
-      await addBodyWaterLog(amount, selectedDate)
+      await addBodyWaterLog(amount, recordDate)
 
       setBodyMetrics(prev => {
-        const next = addWaterToMetrics(prev, selectedDate, amount)
+        const next = addWaterToMetrics(prev, recordDate, amount)
         saveBodyMetrics(next)
         return next
       })
@@ -1874,7 +1909,7 @@ function IndexPage() {
       return
     }
 
-    await addWaterAmount(amount)
+    await addWaterAmount(amount, waterEditorDate)
     setShowWaterEditor(false)
     setWaterInput('')
     setWaterInputFocused(false)
@@ -1887,10 +1922,11 @@ function IndexPage() {
     }
 
     try {
-      await resetBodyWaterLogs(selectedDate)
+      const recordDate = waterEditorDate || selectedDateRef.current || selectedDate || formatDateKey(new Date())
+      await resetBodyWaterLogs(recordDate)
 
       setBodyMetrics(prev => {
-        const next = clearWaterForDate(prev, selectedDate)
+        const next = clearWaterForDate(prev, recordDate)
         saveBodyMetrics(next)
         return next
       })
@@ -1973,6 +2009,11 @@ function IndexPage() {
   const todayWater = useMemo(() =>
     getTodayWater(bodyMetrics, selectedDate),
     [bodyMetrics, selectedDate]
+  )
+
+  const waterEditorWater = useMemo(() =>
+    getTodayWater(bodyMetrics, waterEditorDate || selectedDate),
+    [bodyMetrics, selectedDate, waterEditorDate]
   )
 
   const waterProgress = calculateProgressPercent(todayWater.total, bodyMetrics.waterGoalMl)
@@ -2261,15 +2302,31 @@ function IndexPage() {
   ])
 
   const selectedDayEnergyRatio = intakeData.target > 0 ? intakeData.current / intakeData.target : 0
+  const backfillDismissedDateSet = new Set(dismissedBackfillDates)
   const showBackfillHint =
     isAllowedRecordDate(selectedDate) &&
     !isTodayRecordDate(selectedDate) &&
     !dashboardBusy &&
     !isGuest &&
+    !backfillDismissedDateSet.has(selectedDate) &&
     selectedDayEnergyRatio < BACKFILL_LOW_ENERGY_RATIO
-  const backfillDateLabel = formatBackfillDateLabel(selectedDate)
   const openBackfillRecordMenu = () => {
     setShowRecordMenu(true)
+  }
+  const handleDismissBackfillHint = async () => {
+    const { confirm } = await Taro.showModal({
+      title: '取消补录提醒',
+      content: '取消后，本次低能量补录提醒将不再显示。仍可随时通过首页记录入口补录餐食。',
+      confirmText: '确认取消',
+      cancelText: '继续保留',
+      confirmColor: '#5cb896'
+    })
+    if (!confirm) return
+    setDismissedBackfillDates((prev) => {
+      const next = Array.from(new Set([...prev, selectedDate]))
+      saveDismissedBackfillDates(next)
+      return next
+    })
   }
 
   return (
@@ -2306,13 +2363,15 @@ function IndexPage() {
           onSelect={handleDateSelect}
         />
         {showBackfillHint && (
-          <View className='home-backfill-hint home-backfill-hint--tappable' onClick={openBackfillRecordMenu}>
+          <View className='home-backfill-hint'>
             <Text className='home-backfill-hint__dot' />
             <View className='home-backfill-hint__copy'>
               <Text className='home-backfill-hint__text'>检测到当日能量过低，是否需要补录</Text>
-              <Text className='home-backfill-hint__date'>{backfillDateLabel}</Text>
             </View>
-            <Text className='home-backfill-hint__action'>去补录</Text>
+            <View className='home-backfill-hint__actions'>
+              <Text className='home-backfill-hint__action' onClick={openBackfillRecordMenu}>去补录</Text>
+              <Text className='home-backfill-hint__cancel' onClick={handleDismissBackfillHint}>取消</Text>
+            </View>
           </View>
         )}
 
@@ -2623,6 +2682,9 @@ function IndexPage() {
                   : (meal.image_path ? [meal.image_path] : [])
                 const previewImage = mealImageUrls[0] || ''
                 const hasRealImage = mealImageUrls.length > 0
+                const mealRecordCount = Array.isArray(meal.meal_record_entries)
+                  ? meal.meal_record_entries.filter((entry) => entry && String(entry.id || '').trim()).length
+                  : 0
 
 
                 return (
@@ -2649,11 +2711,6 @@ function IndexPage() {
                           <Icon size={24} color={color} />
                         </View>
                       )}
-                      {hasRealImage && mealImageUrls.length > 1 && (
-                        <View className='meal-thumb-badge'>
-                          <Text className='meal-thumb-badge-text'>共 {mealImageUrls.length} 张</Text>
-                        </View>
-                      )}
                     </View>
                     <View className='meal-content'>
                       {/* 第一行：描述 + 时间胶囊 */}
@@ -2661,17 +2718,11 @@ function IndexPage() {
                         <Text className='meal-desc' numberOfLines={1}>
                           {meal.description || meal.meal_record_entries?.map((e) => e.title).filter(Boolean).join('、') || meal.name || label}
                         </Text>
-                        {(() => {
-                          const entryCount = Array.isArray(meal.meal_record_entries) ? meal.meal_record_entries.filter((e) => e && String(e.id || '').trim()).length : 0
-                          if (entryCount > 1) {
-                            return (
-                              <View className='meal-count-badge'>
-                                <Text className='meal-count-badge-text'>{entryCount}次</Text>
-                              </View>
-                            )
-                          }
-                          return null
-                        })()}
+                        {mealRecordCount > 1 ? (
+                          <View className='meal-count-badge'>
+                            <Text className='meal-count-badge-text'>{mealRecordCount}次</Text>
+                          </View>
+                        ) : null}
                         {meal.time ? (
                           <View className='meal-time-pill'>
                             <Text className='meal-time-pill-text'>{meal.time}</Text>
@@ -2721,6 +2772,12 @@ function IndexPage() {
                           <View className='meal-macro-pill'>
                             <Text className='iconfont icon-drink' style={{ color: '#70B8A0', fontSize: '22rpx', marginRight: '4rpx' }} />
                             <Text className='meal-macro-text'>{formatDisplayNumber(Number(meal.water_ml ?? meal.waterMl))}ml</Text>
+                          </View>
+                        )}
+                        {typeof (meal.intake_ratio ?? meal.intakeRatio) === 'number' && (
+                          <View className='meal-macro-pill meal-ratio-pill'>
+                            <Text className='iconfont icon-tubiao-zhuzhuangtu' style={{ color: '#8b5cf6', fontSize: '22rpx', marginRight: '4rpx' }} />
+                            <Text className='meal-macro-text'>摄入 {formatDisplayNumber(Number(meal.intake_ratio ?? meal.intakeRatio))}%</Text>
                           </View>
                         )}
                       </View>
@@ -2901,8 +2958,8 @@ function IndexPage() {
           <View className='target-modal-content water-modal-content'>
             <View className='target-modal-header'>
               <Text className='target-modal-title'>记录喝水</Text>
-              <Text className='target-modal-desc'>今日已喝 {todayWater.total} ml</Text>
-              {todayWater.total > 0 ? (
+              <Text className='target-modal-desc'>{waterEditorDate} 已喝 {waterEditorWater.total} ml</Text>
+              {waterEditorWater.total > 0 ? (
                 <Text
                   className='water-modal-clear-link'
                   onClick={(e) => {
@@ -2921,7 +2978,7 @@ function IndexPage() {
                 <View
                   key={amount}
                   className='water-quick-btn'
-                  onClick={() => addWaterAmount(amount)}
+                  onClick={() => addWaterAmount(amount, waterEditorDate)}
                 >
                   <IconWaterDrop size={16} color='#5c9ed4' />
                   <Text className='water-quick-btn-text'>+{amount}ml</Text>
@@ -2958,9 +3015,9 @@ function IndexPage() {
               </View>
             </View>
 
-            {todayWater.logs.length > 0 ? (
+            {waterEditorWater.logs.length > 0 ? (
               <Text className='water-modal-records-hint'>
-                已记录 {todayWater.logs.length} 次，共 {todayWater.total} ml
+                已记录 {waterEditorWater.logs.length} 次，共 {waterEditorWater.total} ml
               </Text>
             ) : null}
 

@@ -490,6 +490,14 @@ export interface HomeMealRecordEntry {
   id: string
   record_time?: string
   total_calories?: number
+  total_protein?: number
+  total_carbs?: number
+  total_fat?: number
+  water_ml?: number
+  waterMl?: number
+  /** 当前记录内所有食物按实际摄入 / 估算重量汇总后的摄入比例 */
+  intake_ratio?: number
+  intakeRatio?: number
   /** 分析结果餐食标题（描述首行或首条食物名），同餐多选面板与时间与名称同显时会截断 */
   title?: string
   /** 记录图片（单图），供弹层面板直接展示 */
@@ -525,6 +533,9 @@ export interface HomeMealItem {
   /** 该餐次食物含水量聚合（ml） */
   water_ml?: number
   waterMl?: number
+  /** 该餐次所有食物按实际摄入 / 估算重量汇总后的摄入比例 */
+  intake_ratio?: number
+  intakeRatio?: number
   /** 该餐次食物描述（由多条记录标题拼接） */
   description?: string
 }
@@ -544,8 +555,11 @@ export function resolveHomeMealPrimaryRecordId(meal: HomeMealItem | Record<strin
 function normalizeHomeMealItem(raw: unknown): HomeMealItem {
   const row = raw as HomeMealItem
   const entries = Array.isArray(row.meal_record_entries)
-    ? row.meal_record_entries.filter((e) => e && String(e.id || '').trim() !== '')
+    ? row.meal_record_entries
+      .filter((e) => e && String(e.id || '').trim() !== '')
+      .map(normalizeHomeMealRecordEntry)
     : []
+  const fallbackMealRatio = computeMealIntakeRatioFromEntries(entries)
   const images = Array.isArray(row.image_paths)
     ? row.image_paths.filter(Boolean)
     : Array.isArray(row.images)
@@ -562,7 +576,61 @@ function normalizeHomeMealItem(raw: unknown): HomeMealItem {
     fat: row.fat,
     water_ml: typeof row.water_ml === 'number' ? row.water_ml : row.waterMl,
     waterMl: typeof row.waterMl === 'number' ? row.waterMl : row.water_ml,
+    intake_ratio: typeof row.intake_ratio === 'number' ? row.intake_ratio : (typeof row.intakeRatio === 'number' ? row.intakeRatio : fallbackMealRatio),
+    intakeRatio: typeof row.intakeRatio === 'number' ? row.intakeRatio : (typeof row.intake_ratio === 'number' ? row.intake_ratio : fallbackMealRatio),
   }
+}
+
+function normalizeHomeMealRecordEntry(entry: HomeMealRecordEntry): HomeMealRecordEntry {
+  const ratio = typeof entry.intake_ratio === 'number'
+    ? entry.intake_ratio
+    : (typeof entry.intakeRatio === 'number' ? entry.intakeRatio : computeFoodRecordIntakeRatio(entry.full_record))
+  return {
+    ...entry,
+    total_protein: entry.total_protein ?? entry.full_record?.total_protein,
+    total_carbs: entry.total_carbs ?? entry.full_record?.total_carbs,
+    total_fat: entry.total_fat ?? entry.full_record?.total_fat,
+    water_ml: typeof entry.water_ml === 'number' ? entry.water_ml : entry.waterMl,
+    waterMl: typeof entry.waterMl === 'number' ? entry.waterMl : entry.water_ml,
+    intake_ratio: ratio,
+    intakeRatio: ratio,
+  }
+}
+
+function computeMealIntakeRatioFromEntries(entries: HomeMealRecordEntry[]): number | undefined {
+  let totalWeight = 0
+  let totalIntake = 0
+  entries.forEach((entry) => {
+    const totals = computeFoodRecordWeightAndIntake(entry.full_record)
+    totalWeight += totals.weight
+    totalIntake += totals.intake
+  })
+  return totalWeight > 0 ? Math.round((totalIntake / totalWeight) * 1000) / 10 : undefined
+}
+
+function computeFoodRecordIntakeRatio(record?: FoodRecord): number | undefined {
+  const totals = computeFoodRecordWeightAndIntake(record)
+  return totals.weight > 0 ? Math.round((totals.intake / totals.weight) * 1000) / 10 : undefined
+}
+
+function computeFoodRecordWeightAndIntake(record?: FoodRecord): { weight: number; intake: number } {
+  let weightTotal = 0
+  let intakeTotal = 0
+  ;(record?.items || []).forEach((item) => {
+    const weight = Number(item.weight)
+    if (!Number.isFinite(weight) || weight <= 0) return
+    const intake = Number((item as any).intake)
+    const ratio = Number((item as any).ratio)
+    weightTotal += weight
+    if (Number.isFinite(intake) && intake >= 0) {
+      intakeTotal += intake
+    } else if (Number.isFinite(ratio) && ratio >= 0) {
+      intakeTotal += weight * ratio / 100
+    } else {
+      intakeTotal += weight
+    }
+  })
+  return { weight: weightTotal, intake: intakeTotal }
 }
 
 export interface HomeFoodExpiryItem {
@@ -2553,9 +2621,10 @@ export async function saveBodyWeightRecord(value: number, date?: string, clientI
 }
 
 export async function addBodyWaterLog(amountMl: number, date?: string): Promise<{ message: string; item: { id?: string; date: string; amount_ml: number } }> {
+  const apiDate = mapCalendarDateToApi(date)
   const res = await authenticatedRequest('/api/body-metrics/water', {
     method: 'POST',
-    data: { amount_ml: amountMl, date: mapCalendarDateToApi(date) },
+    data: { amount_ml: amountMl, date: apiDate, recorded_on: apiDate },
     timeout: 10000
   })
   if (res.statusCode !== 200) {
@@ -2566,9 +2635,10 @@ export async function addBodyWaterLog(amountMl: number, date?: string): Promise<
 }
 
 export async function resetBodyWaterLogs(date?: string): Promise<{ message: string; deleted_count: number; date: string }> {
+  const apiDate = mapCalendarDateToApi(date)
   const res = await authenticatedRequest('/api/body-metrics/water/reset', {
     method: 'POST',
-    data: { date: mapCalendarDateToApi(date) },
+    data: { date: apiDate, recorded_on: apiDate },
     timeout: 10000
   })
   if (res.statusCode !== 200) {

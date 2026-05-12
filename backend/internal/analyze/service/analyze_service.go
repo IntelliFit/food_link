@@ -354,10 +354,14 @@ func normalizeExecutionMode(mode *string) string {
 
 func (s *AnalyzeService) normalizeFoodImageInput(input *AnalyzeInput) {
 	if input == nil || s.storage == nil {
+		if input != nil {
+			normalizeAnalyzeImageRefs(input)
+		}
 		return
 	}
 	input.ImageURL = s.resolveFoodImageURL(input.ImageURL)
 	input.ImageURLs = s.storage.ResolveReferenceURLs("food-images", input.ImageURLs)
+	normalizeAnalyzeImageRefs(input)
 }
 
 func (s *AnalyzeService) resolveFoodImageURL(value string) string {
@@ -370,6 +374,72 @@ func (s *AnalyzeService) resolveFoodImageURL(value string) string {
 		return value
 	}
 	return resolved
+}
+
+func normalizeAnalyzeImageRefs(input *AnalyzeInput) {
+	if input == nil {
+		return
+	}
+	originalHasImageURLs := len(input.ImageURLs) > 0
+	normalized := make([]string, 0, len(input.ImageURLs)+1)
+	seen := make(map[string]struct{}, len(input.ImageURLs)+1)
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	add(input.ImageURL)
+	for _, value := range input.ImageURLs {
+		add(value)
+	}
+	if len(normalized) == 0 {
+		input.ImageURL = strings.TrimSpace(input.ImageURL)
+		input.ImageURLs = nil
+		return
+	}
+	input.ImageURL = normalized[0]
+	if originalHasImageURLs || len(normalized) > 1 {
+		input.ImageURLs = normalized
+	} else {
+		input.ImageURLs = nil
+	}
+}
+
+func foodAnalyzeImageURLs(input AnalyzeInput) []string {
+	images := make([]string, 0, len(input.ImageURLs)+1)
+	seen := make(map[string]struct{}, len(input.ImageURLs)+1)
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		images = append(images, value)
+	}
+	add(input.ImageURL)
+	for _, value := range input.ImageURLs {
+		add(value)
+	}
+	if len(images) == 0 && strings.TrimSpace(input.Base64Image) != "" {
+		add(normalizeImageURL(input.Base64Image))
+	}
+	return images
+}
+
+func validateFoodAnalyzeImageLimit(count int) error {
+	if count > maxFoodAnalyzeImages {
+		return &errors.AppError{Code: 10002, Message: "最多支持 3 张图片", HTTPStatus: 400}
+	}
+	return nil
 }
 
 func (s *AnalyzeService) resolveExecutionMode(ctx context.Context, userID string, requested *string) string {
@@ -402,6 +472,16 @@ func buildLocationText(province, city, district string) string {
 	return strings.Join(parts, " ")
 }
 
+func buildImageInputHint(input AnalyzeInput) string {
+	if imageCountForLog(input.ImageURL, input.ImageURLs) <= 1 {
+		return ""
+	}
+	if input.IsMultiView {
+		return "本次用户上传了多张图片，并开启了多视角辅助；请把这些图片视为同一份餐食/同一组食物的不同角度，综合判断份量，不要重复计算同一食物。"
+	}
+	return "本次用户上传了多张图片；请把它们作为同一次饮食输入在一个结果中汇总。若多张图明显是同一食物的不同角度，不要重复计算；若是不同食物，请分别识别。"
+}
+
 func mealName(mealType string, tzOffset *int) string {
 	// simplified mapping; extend as needed
 	m := map[string]string{
@@ -432,6 +512,7 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 	if input.AdditionalContext != "" {
 		additionalLine = fmt.Sprintf(`用户补充背景信息: "%s"。请根据此信息调整对隐形成分或烹饪方式的判断。`, input.AdditionalContext)
 	}
+	imageInputHint := buildImageInputHint(input)
 
 	if executionMode != validExecutionMode {
 		compactTags := []string{}
@@ -466,8 +547,8 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 			compact = strings.Join(compactTags, "\n") + "\n"
 		}
 		return fmt.Sprintf(`识别图片中的食物，估算重量和营养，仅返回 JSON。
-%s%s
-估重时请优先看：占盘面积、厚度/高度、堆叠体积、容器大小、透视关系。
+	%s%s%s
+	估重时请优先看：占盘面积、厚度/高度、堆叠体积、容器大小、透视关系。
 若画面里有筷子、勺子、手掌、包装、餐盒、碗盘等参照物，请利用参照物。
 结合常识估算熟食密度、含水量、常见售卖分量，不要只看上表面面积。
 输出要求：
@@ -484,7 +565,7 @@ JSON:
   "description":"",
   "insight":"",
   "context_advice":""
-}`, compact, additionalLine)
+	}`, compact, imageInputHint, additionalLine)
 	}
 
 	// strict mode prompt
@@ -527,8 +608,9 @@ JSON:
 	modeHint := buildExecutionModeHint(executionMode)
 
 	return fmt.Sprintf(`请作为专业的营养师分析这张图片。
+	%s
 
-1. 识别图中所有不同的食物单品。
+	1. 识别图中所有不同的食物单品。
 2. 估算每种食物的重量（克）和详细营养成分。
 3. description: 提供这顿饭的简短中文描述。
 4. insight: 基于该餐营养成分的一句话健康建议。%s
@@ -562,7 +644,7 @@ JSON:
   "pfc_ratio_comment": "PFC 比例评价（简体中文，一两句话）",
   "absorption_notes": "吸收率/生物利用度说明（简体中文，一两句话）",
   "context_advice": "情境建议（简体中文，若无则空字符串）"
-}`, mealHint, goalHint, stateHint, remainHint, locationHint, profileBlock, modeHint, additionalLine)
+	}`, imageInputHint, mealHint, goalHint, stateHint, remainHint, locationHint, profileBlock, modeHint, additionalLine)
 }
 
 func buildContextTags(input AnalyzeInput, user *authrepo.User) []string {
@@ -604,9 +686,10 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 	if input.AdditionalContext != "" {
 		additionalLine = fmt.Sprintf("用户补充背景信息:\n%s\n请根据此信息调整对隐形成分或烹饪方式的判断。", input.AdditionalContext)
 	}
+	imageInputHint := buildImageInputHint(input)
 	correctionBlock := buildCorrectionContextBlock(input)
 	return fmt.Sprintf(`你是专业的食物图像识别与份量估算助手。请识别图片中的食物，只输出实际可见的可食用食物名称、可食部分重量和该食物中可计入饮水参考的含水量；营养成分由后端数据库查表补充，不要自行估算营养。
-%s%s%s
+	%s%s%s%s
 识别规则：
 - 只识别图片中实际可见的食物，不补充看不见的食物
 - 不输出餐具、包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
@@ -639,7 +722,7 @@ JSON:
   "pfc_ratio_comment":"",
   "absorption_notes":"",
   "context_advice":""
-}`, tagBlock, additionalLine, correctionBlock)
+	}`, tagBlock, imageInputHint, additionalLine, correctionBlock)
 }
 
 func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) string {
@@ -1036,17 +1119,15 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		return nil, fmt.Errorf("图片识别 LLM client 未初始化")
 	}
 
-	imageURL := ""
-	if input.ImageURL != "" {
-		imageURL = input.ImageURL
-	} else if input.Base64Image != "" {
-		imageURL = normalizeImageURL(input.Base64Image)
+	imageURLs := foodAnalyzeImageURLs(input)
+	if err := validateFoodAnalyzeImageLimit(len(imageURLs)); err != nil {
+		return nil, err
 	}
 
 	start := time.Now()
 	primaryProvider := provider
 	primaryModel := model
-	imageCount := imageCountForLog(imageURL, input.ImageURLs)
+	imageCount := len(imageURLs)
 	ctx, span := apm.StartSpan(ctx, "analysis.food_image",
 		attribute.String("analysis.user_id", userID),
 		attribute.String("analysis.provider", provider),
@@ -1082,16 +1163,16 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	parsed, err := analyzeWithJSONParseRetry(ctx, "food_image", provider, model, func(callCtx context.Context) (map[string]any, error) {
 		attemptCtx := callCtx
 		attemptCancel := func() {}
-		if provider == "gemini" && strings.TrimSpace(imageURL) != "" {
+		if provider == "gemini" && len(imageURLs) > 0 {
 			attemptCtx, attemptCancel = context.WithTimeout(callCtx, visionPrimaryTimeout)
 		}
 		defer attemptCancel()
-		return client.Analyze(attemptCtx, prompt, imageURL)
+		return analyzeWithImagesTemperature(attemptCtx, client, prompt, imageURLs, 0.3)
 	})
 	fallbackUsed := false
 	if err != nil && provider == "gemini" && isTransientLLMError(err) && s.dashScopeClient != nil {
 		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(ctx, "food_image_fallback", "qwen", "qwen-vl-max", func(retryCtx context.Context) (map[string]any, error) {
-			return s.dashScopeClient.Analyze(retryCtx, prompt, imageURL)
+			return analyzeWithImagesTemperature(retryCtx, s.dashScopeClient, prompt, imageURLs, 0.3)
 		})
 		if fallbackErr == nil {
 			logger.WithTrace(ctx).Warn("gemini vision transient error fallback to dashscope",
@@ -1414,77 +1495,19 @@ func (s *AnalyzeService) AnalyzeCompareEngines(ctx context.Context, userID strin
 	}, nil
 }
 
-// AnalyzeBatch analyzes multiple images with semaphore limit.
+// AnalyzeBatch analyzes multiple images in one model request.
 func (s *AnalyzeService) AnalyzeBatch(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
 	s.normalizeFoodImageInput(&input)
-	if len(input.ImageURLs) == 0 {
+	imageURLs := foodAnalyzeImageURLs(input)
+	if len(imageURLs) == 0 {
 		return nil, errors.ErrBadRequest
 	}
-	if len(input.ImageURLs) > 5 {
-		return nil, &errors.AppError{Code: 10002, Message: "最多支持 5 张图片", HTTPStatus: 400}
+	if err := validateFoodAnalyzeImageLimit(len(imageURLs)); err != nil {
+		return nil, err
 	}
-
-	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
-	var user *authrepo.User
-	if userID != "" {
-		user, _ = s.users.FindByID(ctx, userID)
-	}
-
-	basePrompt := buildPrompt(input, user, executionMode)
-	provider, _ := s.resolveImageModelConfig(input.ModelName)
-	var client LLMClient
-	if provider == "qwen" {
-		client = s.dashScopeClient
-	} else if provider == "gemini" {
-		client = s.ofoxAIClient
-	} else {
-		client = s.dashScopeClient
-	}
-
-	sem := make(chan struct{}, 3)
-	var wg sync.WaitGroup
-	results := make([]map[string]any, len(input.ImageURLs))
-	var mu sync.Mutex
-	var failedIndices []int
-
-	for i, url := range input.ImageURLs {
-		wg.Add(1)
-		go func(idx int, imageURL string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			prompt := basePrompt + fmt.Sprintf("\n\n【批量分析第 %d/%d 张】请仅识别当前这张图片中的食物，不要与其他图片混淆。", idx+1, len(input.ImageURLs))
-			parsed, err := client.Analyze(ctx, prompt, imageURL)
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				failedIndices = append(failedIndices, idx)
-				results[idx] = nil
-				return
-			}
-			results[idx] = parsed
-		}(i, url)
-	}
-	wg.Wait()
-
-	successful := []map[string]any{}
-	for _, r := range results {
-		if r != nil {
-			successful = append(successful, r)
-		}
-	}
-	if len(successful) == 0 {
-		return nil, &errors.AppError{Code: 10000, Message: "所有图片分析均失败，请稍后重试", HTTPStatus: 500}
-	}
-
-	merged := mergeBatchResults(successful, executionMode)
-	if !strings.EqualFold(input.AnalysisEngine, "legacy_direct") {
-		merged = s.applyDBFirstNutrition(ctx, merged, input.AdditionalContext)
-	} else {
-		merged["analysis_engine"] = "legacy_direct"
-	}
-	return merged, nil
+	input.ImageURL = imageURLs[0]
+	input.ImageURLs = imageURLs
+	return s.Analyze(ctx, userID, input)
 }
 
 func buildAnalyzeResponse(parsed map[string]any, executionMode, provider, model string, durationMs float64) map[string]any {

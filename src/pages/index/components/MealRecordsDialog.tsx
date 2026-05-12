@@ -75,9 +75,10 @@ export function MealRecordsDialog({ visible, meal, onClose, onSelectRecord }: Me
             const hasImage = !!imageUrl
             const time = formatEntryTime(entry.record_time)
             const totalCalories = entry.total_calories ?? 0
-            const protein = cachedFull?.total_protein ?? 0
-            const carbs = cachedFull?.total_carbs ?? 0
-            const fat = cachedFull?.total_fat ?? 0
+            const protein = entry.total_protein ?? cachedFull?.total_protein ?? 0
+            const carbs = entry.total_carbs ?? cachedFull?.total_carbs ?? 0
+            const fat = entry.total_fat ?? cachedFull?.total_fat ?? 0
+            const intakeRatio = entry.intake_ratio ?? entry.intakeRatio
             // title 兜底：优先 entry.title，其次缓存的 full_record 中的食物名/description，最后餐次名
             const title = (entry.title || '').trim()
               || (cachedFull?.items?.[0]?.name || '').trim()
@@ -138,6 +139,12 @@ export function MealRecordsDialog({ visible, meal, onClose, onSelectRecord }: Me
                       <Text className='iconfont icon-zhifangyouheruhuazhifangzhipin' style={{ color: '#f0985c', fontSize: '20rpx', marginRight: '4rpx' }} />
                       <Text className='meal-macro-text'>{formatDisplayNumber(fat)}g</Text>
                     </View>
+                    {typeof intakeRatio === 'number' && (
+                      <View className='meal-macro-pill meal-ratio-pill'>
+                        <Text className='iconfont icon-tubiao-zhuzhuangtu' style={{ color: '#8b5cf6', fontSize: '20rpx', marginRight: '4rpx' }} />
+                        <Text className='meal-macro-text'>摄入 {formatDisplayNumber(intakeRatio)}%</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>

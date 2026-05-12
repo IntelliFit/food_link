@@ -17,9 +17,11 @@ import (
 )
 
 type mockBodyMetricsSvc struct {
-	summary    *service.BodyMetricsSummary
-	syncResult map[string]any
-	err        error
+	summary        *service.BodyMetricsSummary
+	syncResult     map[string]any
+	lastAmountMl   int
+	lastRecordedOn string
+	err            error
 }
 
 func (m *mockBodyMetricsSvc) GetSummary(ctx context.Context, userID string, statsRange string) (*service.BodyMetricsSummary, error) {
@@ -31,10 +33,13 @@ func (m *mockBodyMetricsSvc) SyncLocal(ctx context.Context, userID string, input
 }
 
 func (m *mockBodyMetricsSvc) AddWaterLog(ctx context.Context, userID string, amountMl int, recordedOn string) (map[string]any, error) {
+	m.lastAmountMl = amountMl
+	m.lastRecordedOn = recordedOn
 	return map[string]any{"message": "喝水已记录"}, m.err
 }
 
 func (m *mockBodyMetricsSvc) ResetWaterLogs(ctx context.Context, userID string, recordedOn string) (map[string]any, error) {
+	m.lastRecordedOn = recordedOn
 	return map[string]any{"message": "已清空"}, m.err
 }
 
@@ -431,6 +436,22 @@ func TestSaveBodyWaterLogBindError(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
+func TestSaveBodyWaterLogUsesDateFromBody(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"amount_ml": 300, "date": "2026-05-11", "recorded_on": "2026-05-13"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/water", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 300, mockSvc.lastAmountMl)
+	assert.Equal(t, "2026-05-11", mockSvc.lastRecordedOn)
+}
+
 func TestSaveBodyWaterLogError(t *testing.T) {
 	mockSvc := &mockBodyMetricsSvc{err: errors.New("db error")}
 	h := NewHealthHandler(mockSvc, nil, nil)
@@ -456,6 +477,21 @@ func TestResetBodyWaterLogsBindError(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestResetBodyWaterLogsUsesDateFromBody(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"date": "2026-05-11", "recorded_on": "2026-05-13"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/water/reset", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "2026-05-11", mockSvc.lastRecordedOn)
 }
 
 func TestResetBodyWaterLogsError(t *testing.T) {

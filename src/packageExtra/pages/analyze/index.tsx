@@ -10,7 +10,6 @@ import {
   continuePrecisionSession,
   getAccessToken,
   MealType,
-  DietGoal,
   ActivityTiming,
   getHealthProfile,
   updateHealthProfile,
@@ -53,14 +52,6 @@ const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }>
   { value: 'evening_snack', label: '晚加餐', iconClass: 'icon-lingshi' },
 ]
 
-/** 饮食目标（状态一） */
-const DIET_GOAL_OPTIONS: Array<{ value: DietGoal; label: string; iconClass: string }> = [
-  { value: 'fat_loss', label: '减脂期', iconClass: 'icon-huore' },
-  { value: 'muscle_gain', label: '增肌期', iconClass: 'icon-zengji' },
-  { value: 'maintain', label: '维持体重', iconClass: 'icon-tianpingzuo' },
-  { value: 'none', label: '无', iconClass: 'icon-nothing' }
-]
-
 /** 运动时机（状态二） */
 const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; iconClass: string }> = [
   { value: 'post_workout', label: '练后', iconClass: 'icon-juzhong' },
@@ -85,6 +76,7 @@ const REFERENCE_PRESETS: Array<{
 const DEFAULT_REFERENCE_PRESET: ReferencePresetValue = 'hand'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 const ANALYZE_SUBMIT_DEBOUNCE_MS = 300
+const MAX_ANALYZE_IMAGES = 3
 
 const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
   value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
@@ -279,7 +271,6 @@ function AnalyzePage() {
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const [mealType, setMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
-  const [dietGoal, setDietGoal] = useState<DietGoal>('none')
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [isMultiView, setIsMultiView] = useState(false)
@@ -307,16 +298,7 @@ function AnalyzePage() {
   const precisionUpgradeUrl = getStrictModeUpgradeUrl(membershipStatus)
   const precisionUpgradeHint = canUseStrictMode ? '' : getStrictModeLockedHint(membershipStatus)
 
-  const showMultiViewRequiredModal = () => {
-    Taro.showModal({
-      title: '请先开启多视角模式',
-      content: '未开启多视角模式时仅支持上传 1 张图片。若要拍同一份食物的多个视角，请先开启多视角模式。',
-      showCancel: false,
-      confirmText: '我知道了'
-    })
-  }
-
-  const creditUnits = Math.max(imagePaths.length, 1)
+  const creditUnits = 1
   const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode, creditUnits)
 
   useEffect(() => {
@@ -378,20 +360,11 @@ function AnalyzePage() {
       Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
     }
 
-    // 1. 获取饮食目标
-    const initDietGoal = async () => {
+    // 1. 获取分析默认配置
+    const initAnalyzeDefaults = async () => {
       try {
-        const cachedGoal = Taro.getStorageSync('dietGoal')
-        if (cachedGoal) {
-          setDietGoal(cachedGoal as DietGoal)
-        }
-        // 无论是否有缓存，都尝试从健康档案同步执行模式
         if (getAccessToken()) {
           const profile = await getHealthProfile()
-          if (!cachedGoal && profile.diet_goal) {
-            setDietGoal(profile.diet_goal as DietGoal)
-            Taro.setStorageSync('dietGoal', profile.diet_goal)
-          }
           if (!nextSessionId && profile.execution_mode) {
             setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
           }
@@ -407,10 +380,10 @@ function AnalyzePage() {
           }
         }
       } catch (err) {
-        console.error('初始化饮食目标失败:', err)
+        console.error('初始化分析默认配置失败:', err)
       }
     }
-    initDietGoal()
+    initAnalyzeDefaults()
 
     // 2. 从本地存储获取图片路径 (用于拍照/相册后的跳转)
     const initStoredImagePath = async () => {
@@ -512,9 +485,9 @@ function AnalyzePage() {
   }
 
   const handleChooseImage = async () => {
-    const remain = 5 - imagePaths.length
+    const remain = MAX_ANALYZE_IMAGES - imagePaths.length
     if (remain <= 0) {
-      Taro.showToast({ title: '最多支持 5 张图片', icon: 'none' })
+      Taro.showToast({ title: `最多支持 ${MAX_ANALYZE_IMAGES} 张图片`, icon: 'none' })
       return
     }
     try {
@@ -545,10 +518,6 @@ function AnalyzePage() {
     })
   }
 
-  const handleDietGoalSelect = (value: DietGoal) => {
-    setDietGoal(value)
-  }
-
   const handleActivityTimingSelect = (value: ActivityTiming) => {
     setActivityTiming(value)
   }
@@ -577,8 +546,8 @@ function AnalyzePage() {
       Taro.showToast({ title: '请先选择图片', icon: 'none' })
       return
     }
-    if (imagePaths.length > 5) {
-      Taro.showToast({ title: '最多支持 5 张图片', icon: 'none' })
+    if (imagePaths.length > MAX_ANALYZE_IMAGES) {
+      Taro.showToast({ title: `最多支持 ${MAX_ANALYZE_IMAGES} 张图片`, icon: 'none' })
       return
     }
 
@@ -617,7 +586,7 @@ function AnalyzePage() {
       const commonPayload = {
         date: getStoredRecordTargetDate(),
         meal_type: mealType,
-        diet_goal: dietGoal,
+        diet_goal: 'none',
         activity_timing: activityTiming,
         additionalContext: additionalInfo || undefined,
         is_multi_view: isMultiView,
@@ -630,7 +599,7 @@ function AnalyzePage() {
         Taro.setStorageSync('analyzeImagePaths', imagePaths)
       }
       Taro.setStorageSync('analyzeMealType', mealType)
-      Taro.setStorageSync('analyzeDietGoal', dietGoal)
+      Taro.removeStorageSync('analyzeDietGoal')
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
       const analysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
@@ -836,7 +805,7 @@ function AnalyzePage() {
                 </View>
               </View>
             ))}
-            {imagePaths.length < 5 && (
+            {imagePaths.length < MAX_ANALYZE_IMAGES && (
               <View className='grid-item add-btn' onClick={handleChooseImage}>
                 <Text className='add-icon'>+</Text>
                 <Text className='add-text'>添加</Text>
@@ -848,7 +817,7 @@ function AnalyzePage() {
             <View className='placeholder-content'>
               <Text className='iconfont icon-xiangji' style={{ fontSize: '64rpx', color: '#9ca3af', marginBottom: '16rpx' }} />
               <Text className='placeholder-text'>点击拍摄/上传食物</Text>
-              <Text className='placeholder-sub'>相册上传最多支持 5 张，多张将分别识别后累加结果</Text>
+              <Text className='placeholder-sub'>相册上传最多支持 {MAX_ANALYZE_IMAGES} 张，多张将作为一次识别提交</Text>
             </View>
           </View>
         )}
@@ -857,7 +826,7 @@ function AnalyzePage() {
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>多视角辅助</Text>
-            <Text className='multiview-compact-hint'>将多张图片视为同一食物的不同角度，关闭则每张分别识别后累加</Text>
+            <Text className='multiview-compact-hint'>多张图片始终作为一次识别提交；开启后会更强调同一餐食的多角度综合估算</Text>
           </View>
           <View
             className={`multiview-toggle ${isMultiView ? 'multiview-toggle--on' : ''}`}
@@ -1002,30 +971,6 @@ function AnalyzePage() {
             >
               <Text className={`meal-icon iconfont ${opt.iconClass}`} />
               <Text className='meal-label'>{opt.label}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-
-      {/* 饮食目标（状态一） */}
-      <View className='state-section'>
-        <View className='section-header'>
-
-          <Text className='section-title'>饮食目标</Text>
-        </View>
-        <Text className='section-hint'>
-          选择您的饮食目标，AI 将结合目标给出更贴合的建议。
-        </Text>
-        <View className='state-options'>
-          {DIET_GOAL_OPTIONS.map((opt) => (
-            <View
-              key={opt.value}
-              className={`state-option ${dietGoal === opt.value ? 'active' : ''}`}
-              onClick={() => handleDietGoalSelect(opt.value)}
-            >
-              <Text className={`state-icon iconfont ${opt.iconClass}`} />
-              <Text className='state-label'>{opt.label}</Text>
             </View>
           ))}
         </View>
