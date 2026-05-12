@@ -673,6 +673,16 @@ function IndexPage() {
 
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = useState(false)
+  const selectedDateRef = useRef(selectedDate)
+  selectedDateRef.current = selectedDate
+  const openRecordMenuFromRequest = useCallback(() => {
+    const pendingDate = consumeHomeRecordMenuDate()
+    if (pendingDate) {
+      selectedDateRef.current = pendingDate
+      setSelectedDate(pendingDate)
+    }
+    setShowRecordMenu(true)
+  }, [])
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
   const [homeAchievement, setHomeAchievement] = useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
@@ -977,18 +987,8 @@ function IndexPage() {
   }
 
   // 每次显示页面时刷新数据
-  const selectedDateRef = useRef(selectedDate)
-  selectedDateRef.current = selectedDate
   const skipNextRefreshRef = useRef(false)
-  const openRecordMenuFromRequest = useCallback(() => {
-    const pendingDate = consumeHomeRecordMenuDate()
-    if (pendingDate) {
-      selectedDateRef.current = pendingDate
-      setSelectedDate(pendingDate)
-    }
-    setShowRecordMenu(true)
-  }, [])
-  
+
   Taro.useDidShow(() => {
     const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current

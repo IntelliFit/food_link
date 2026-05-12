@@ -2,6 +2,15 @@
 
 ## 状态：完成源码修改 - 移除旧记录页入口并统一到首页记录弹窗
 
+- 2026-05-12 hotfix:
+  - User 反馈首页启动报 `ReferenceError: Cannot access 'openRecordMenuFromRequest' before initialization`，堆栈定位 `src/pages/index/index.tsx:712`。
+  - Fix applied:
+    - 将 `selectedDateRef` 与 `openRecordMenuFromRequest` 定义提前到记录菜单 state 后、所有可能引用它的 hook/callback 之前，彻底消除 TDZ 初始化顺序风险。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/index.tsx` passed。
+    - 已尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
 - 2026-05-12 update:
   - User 询问 `src/pages/record/index.tsx` 当前会被哪些部分引用，指出它是旧拍照文件，不是当前新版记录入口；要求找到哪些文件/按钮会跳该页，并删除或改造成首页点击卡路里弹出的记录对话框。
   - Findings:
