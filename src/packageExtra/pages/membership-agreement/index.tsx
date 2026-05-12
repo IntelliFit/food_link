@@ -58,10 +58,10 @@ export default function MembershipAgreementPage() {
                 <View className='section'>
                     <Text className='section-title'>四、升级与切换</Text>
                     <Text className='paragraph'>
-                        1. 在会员有效期内，您可随时在当前套餐基础上升级档位（如从轻度版升级到标准版或进阶版），或切换订阅周期，按页面提示完成补差即可。
+                        1. 在会员有效期内，您可在当前连续会员期内升级档位或切换至更长周期。升级费用按剩余价值折抵后补差计算，目标套餐周期从当前连续会员期的起算日开始计算。
                     </Text>
                     <Text className='paragraph'>
-                        2. 升级档位后，新的每日积分额度将于次日 00:00 起按新档位发放。
+                        2. 升级成功后，新的每日积分额度即时生效；当日已消耗积分会继续计入当天用量。若所选套餐会缩短当前有效期或剩余价值已覆盖所选套餐，系统可能暂不支持即时切换。
                     </Text>
                 </View>
 

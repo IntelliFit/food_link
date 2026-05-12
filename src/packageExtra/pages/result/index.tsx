@@ -5,6 +5,7 @@ import {
   AnalyzeResponse,
   FoodItem,
   MealType,
+  type Nutrients,
   type SaveFoodRecordRequest,
   saveFoodRecord,
   getAccessToken,
@@ -23,10 +24,10 @@ import {
   type PrecisionReferenceDimensions,
   type PrecisionReferenceObjectInput,
   type PrecisionReferencePresetConfig,
-  type PrecisionReferencePresetKey
+  type PrecisionReferencePresetKey,
+  showUnifiedApiError,
 } from '../../../utils/api'
 import { normalizeAvailableExecutionMode } from '../../../utils/execution-mode'
-import { showUnifiedApiError } from '../../../utils/error-modal'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { withAuth } from '../../../utils/withAuth'
@@ -46,6 +47,7 @@ import './index.scss'
 
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
 /** 判断当前识别会话是否已保存为饮食记录。
  * 优先读取 analyze-history 列表传入的 analyzeTaskIsRecorded 标记；
  * 不再依赖本地 analyze_committed_session 缓存，状态由后端返回。 */
@@ -226,21 +228,149 @@ interface NutritionItem {
   protein: number
   carbs: number
   fat: number
+  waterMl: number
+  nutrients: Nutrients
 }
 
 type MacroField = 'protein' | 'carbs' | 'fat'
+type IngredientMetricField = MacroField | 'waterMl'
 
-const MACRO_FIELDS: MacroField[] = ['protein', 'carbs', 'fat']
+const INGREDIENT_METRIC_FIELDS: IngredientMetricField[] = ['protein', 'carbs', 'fat', 'waterMl']
 
-const MACRO_FIELD_META: Record<MacroField, { label: string; className: string }> = {
-  protein: { label: '蛋白质', className: 'protein' },
-  carbs: { label: '碳水', className: 'carbs' },
-  fat: { label: '脂肪', className: 'fat' }
+const INGREDIENT_METRIC_META: Record<IngredientMetricField, { label: string; className: string; unit: string }> = {
+  protein: { label: '蛋白质', className: 'protein', unit: 'g' },
+  carbs: { label: '碳水', className: 'carbs', unit: 'g' },
+  fat: { label: '脂肪', className: 'fat', unit: 'g' },
+  waterMl: { label: '含水量', className: 'water', unit: 'ml' }
 }
 
 const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
 
 const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixed(1)
+
+const formatWaterDisplay = (value: number) => String(Math.max(0, Math.round(value)))
+
+const formatIngredientMetricDisplay = (field: IngredientMetricField, value: number) => (
+  field === 'waterMl' ? formatWaterDisplay(value) : formatMacroDisplay(value)
+)
+
+const formatWeightDisplay = (value: number) => `${Math.max(0, Math.round(value))}g`
+
+type NutrientDetailKey = keyof Pick<Nutrients,
+  'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg' |
+  'calciumMg' | 'ironMg' | 'magnesiumMg' | 'zincMg' | 'vitaminARaeMcg' | 'vitaminCMg' |
+  'vitaminDMcg' | 'vitaminEMg' | 'vitaminKMcg' | 'thiaminMg' | 'riboflavinMg' |
+  'niacinMg' | 'vitaminB6Mg' | 'folateMcg' | 'vitaminB12Mcg'
+>
+
+const NUTRIENT_DETAIL_META: Array<{ key: NutrientDetailKey; label: string; unit: string }> = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg' },
+  { key: 'sodiumMg', label: '钠', unit: 'mg' },
+  { key: 'potassiumMg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', label: '维生素A', unit: 'mcg' },
+  { key: 'vitaminCMg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素D', unit: 'mcg' },
+  { key: 'vitaminEMg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素K', unit: 'mcg' },
+  { key: 'thiaminMg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'mcg' },
+  { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'mcg' }
+]
+
+const normalizeNutrientValue = (value: unknown) => {
+  const num = Number(value)
+  return Number.isFinite(num) && num > 0 ? num : 0
+}
+
+const normalizeItemNutrients = (nutrients: FoodItem['nutrients'] | undefined, waterMl: number): Nutrients => ({
+  calories: normalizeNutrientValue(nutrients?.calories),
+  protein: normalizeNutrientValue(nutrients?.protein),
+  carbs: normalizeNutrientValue(nutrients?.carbs),
+  fat: normalizeNutrientValue(nutrients?.fat),
+  fiber: normalizeNutrientValue(nutrients?.fiber),
+  sugar: normalizeNutrientValue(nutrients?.sugar),
+  waterMl,
+  water_ml: waterMl,
+  saturatedFat: normalizeNutrientValue(nutrients?.saturatedFat),
+  cholesterolMg: normalizeNutrientValue(nutrients?.cholesterolMg),
+  sodiumMg: normalizeNutrientValue(nutrients?.sodiumMg),
+  sodium_mg: normalizeNutrientValue(nutrients?.sodiumMg ?? nutrients?.sodium_mg),
+  potassiumMg: normalizeNutrientValue(nutrients?.potassiumMg),
+  calciumMg: normalizeNutrientValue(nutrients?.calciumMg),
+  ironMg: normalizeNutrientValue(nutrients?.ironMg),
+  magnesiumMg: normalizeNutrientValue(nutrients?.magnesiumMg),
+  zincMg: normalizeNutrientValue(nutrients?.zincMg),
+  vitaminARaeMcg: normalizeNutrientValue(nutrients?.vitaminARaeMcg),
+  vitaminCMg: normalizeNutrientValue(nutrients?.vitaminCMg),
+  vitaminDMcg: normalizeNutrientValue(nutrients?.vitaminDMcg),
+  vitaminEMg: normalizeNutrientValue(nutrients?.vitaminEMg),
+  vitaminKMcg: normalizeNutrientValue(nutrients?.vitaminKMcg),
+  thiaminMg: normalizeNutrientValue(nutrients?.thiaminMg),
+  riboflavinMg: normalizeNutrientValue(nutrients?.riboflavinMg),
+  niacinMg: normalizeNutrientValue(nutrients?.niacinMg),
+  vitaminB6Mg: normalizeNutrientValue(nutrients?.vitaminB6Mg),
+  folateMcg: normalizeNutrientValue(nutrients?.folateMcg),
+  vitaminB12Mcg: normalizeNutrientValue(nutrients?.vitaminB12Mcg)
+})
+
+const scaleNutrients = (nutrients: Nutrients, factor: number): Nutrients => {
+  const scaled = { ...nutrients }
+  ;(Object.keys(scaled) as Array<keyof Nutrients>).forEach((key) => {
+    const current = scaled[key]
+    if (typeof current === 'number') {
+      scaled[key] = Math.max(0, Math.round(current * factor * 100) / 100) as never
+    }
+  })
+  return scaled
+}
+
+const buildFoodItemNutrients = (item: NutritionItem): Nutrients => ({
+  ...item.nutrients,
+  calories: item.calorie,
+  protein: item.protein,
+  carbs: item.carbs,
+  fat: item.fat,
+  waterMl: item.waterMl,
+  water_ml: item.waterMl,
+  sodium_mg: item.nutrients.sodiumMg || item.nutrients.sodium_mg || 0,
+  fiber: item.nutrients.fiber || 0,
+  sugar: item.nutrients.sugar || 0
+})
+
+const getNutrientDetailRows = (item: NutritionItem) => {
+  const ratio = item.ratio / 100
+  return NUTRIENT_DETAIL_META
+    .map((meta) => ({
+      ...meta,
+      value: normalizeNutrientValue(item.nutrients[meta.key]) * ratio
+    }))
+}
+
+const formatNutrientDetailValue = (value: number) => {
+  if (value >= 10) return String(Math.round(value))
+  if (value >= 1) return String(Math.round(value * 10) / 10)
+  return String(Math.round(value * 100) / 100)
+}
+
+const normalizeWaterMl = (...values: unknown[]) => {
+  for (const value of values) {
+    const num = Number(value)
+    if (Number.isFinite(num) && num > 0) {
+      return Math.round(num)
+    }
+  }
+  return 0
+}
 
 const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
   roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
@@ -278,6 +408,7 @@ function ResultPage() {
   const [imagePath, setImagePath] = useState<string>('') // Keep for compatibility/fallback logic
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
+  const [expandedNutritionDetailIds, setExpandedNutritionDetailIds] = useState<Record<number, boolean>>({})
   const [nutritionStats, setNutritionStats] = useState({
     calories: 0,
     protein: 0,
@@ -344,6 +475,7 @@ function ResultPage() {
   const resultScrollRafRef = useRef<number | null>(null)
   const pendingResultScrollTopRef = useRef(0)
   const precisionDefaultsLoadedRef = useRef(false)
+  const correctionSubmitDebounceRef = useRef(0)
 
   const handleResultScroll = useCallback((e: { detail?: { scrollTop?: number } }) => {
     const st = typeof e.detail?.scrollTop === 'number' ? Math.max(0, e.detail.scrollTop) : 0
@@ -416,14 +548,8 @@ function ResultPage() {
       items: nutritionItems.map((item) => ({
         name: item.name,
         weight: item.weight,
-        nutrients: {
-          calories: item.calorie,
-          protein: item.protein,
-          carbs: item.carbs,
-          fat: item.fat,
-          fiber: 0,
-          sugar: 0
-        }
+        water_ml: item.waterMl,
+        nutrients: buildFoodItemNutrients(item)
       }))
     }
 
@@ -438,6 +564,8 @@ function ResultPage() {
     return items.map((item, index) => {
       const aiWeight = item.originalWeightGrams ?? item.estimatedWeightGrams
       const itemId = item.itemId ?? (index + 1)
+      const waterMl = normalizeWaterMl(item.waterMl, item.water_ml, item.nutrients?.waterMl, item.nutrients?.water_ml)
+      const nutrients = normalizeItemNutrients(item.nutrients, waterMl)
       return {
         id: itemId,
         sourceItemId: itemId,
@@ -445,12 +573,14 @@ function ResultPage() {
         name: item.name,
         weight: item.estimatedWeightGrams,
         originalWeight: aiWeight,
-        calorie: item.nutrients.calories,
+        calorie: nutrients.calories,
         intake: item.estimatedWeightGrams,
         ratio: 100,
-        protein: item.nutrients.protein,
-        carbs: item.nutrients.carbs,
-        fat: item.nutrients.fat
+        protein: nutrients.protein,
+        carbs: nutrients.carbs,
+        fat: nutrients.fat,
+        waterMl,
+        nutrients
       }
     })
   }
@@ -475,6 +605,48 @@ function ResultPage() {
     // 计算总摄入重量
     const total = items.reduce((sum, item) => sum + item.intake, 0)
     setTotalWeight(Math.round(total))
+  }
+
+  const applyAnalyzeResultToPage = (
+    result: AnalyzeResponse,
+    nextTaskId?: string,
+    fallbackPrecisionSessionId = precisionSessionId,
+    resetCommittedState = Boolean(nextTaskId),
+  ) => {
+    setDescription(result.description || '')
+    setHealthAdvice(result.insight || '保持健康饮食！')
+    setPfcRatioComment(result.pfc_ratio_comment ?? null)
+    setAbsorptionNotes(result.absorption_notes ?? null)
+    setContextAdvice(result.context_advice ?? null)
+    setRecognitionOutcome(normalizeRecognitionOutcome(result.recognitionOutcome))
+    setRejectionReason(result.rejectionReason?.trim() || null)
+    setRetakeGuidance(Array.isArray(result.retakeGuidance) ? result.retakeGuidance.filter(Boolean) : [])
+    setAllowedFoodCategory(normalizeAllowedFoodCategory(result.allowedFoodCategory))
+    setFollowupQuestions(Array.isArray(result.followupQuestions) ? result.followupQuestions.filter(Boolean) : [])
+    setPrecisionSessionId(result.precisionSessionId || fallbackPrecisionSessionId)
+    setPrecisionStatus(result.precisionStatus || '')
+    setPendingRequirements(normalizePrecisionStringList(result.pendingRequirements))
+    setRetakeInstructions(normalizePrecisionStringList(result.retakeInstructions))
+    setReferenceObjectNeeded(Boolean(result.referenceObjectNeeded))
+    setReferenceObjectSuggestions(normalizePrecisionStringList(result.referenceObjectSuggestions))
+    setDetectedItemsSummary(normalizePrecisionStringList(result.detectedItemsSummary))
+    setSplitStrategy(String(result.splitStrategy || ''))
+    setUncertaintyNotes(normalizePrecisionStringList(result.uncertaintyNotes))
+
+    const items = convertApiDataToItems(result.items || [])
+    setNutritionItems(items)
+    setCorrectionItems(items)
+    calculateNutritionStats(items)
+
+    Taro.setStorageSync('analyzeResult', JSON.stringify(result))
+    if (nextTaskId) {
+      Taro.setStorageSync('analyzeSourceTaskId', nextTaskId)
+    }
+    if (resetCommittedState) {
+      Taro.removeStorageSync('analyzeTaskIsRecorded')
+      Taro.removeStorageSync('analyzeCommittedRecordId')
+      setCommittedRecordId(null)
+    }
   }
 
   const hydrateCommittedRecord = useCallback(() => {
@@ -525,28 +697,7 @@ function ResultPage() {
       const storedResult = Taro.getStorageSync('analyzeResult')
       if (storedResult) {
         const result: AnalyzeResponse = JSON.parse(storedResult)
-        setDescription(result.description || '')
-        setHealthAdvice(result.insight || '保持健康饮食！')
-        setPfcRatioComment(result.pfc_ratio_comment ?? null)
-        setAbsorptionNotes(result.absorption_notes ?? null)
-        setContextAdvice(result.context_advice ?? null)
-        setRecognitionOutcome(normalizeRecognitionOutcome(result.recognitionOutcome))
-        setRejectionReason(result.rejectionReason?.trim() || null)
-        setRetakeGuidance(Array.isArray(result.retakeGuidance) ? result.retakeGuidance.filter(Boolean) : [])
-        setAllowedFoodCategory(normalizeAllowedFoodCategory(result.allowedFoodCategory))
-        setFollowupQuestions(Array.isArray(result.followupQuestions) ? result.followupQuestions.filter(Boolean) : [])
-        setPrecisionSessionId(result.precisionSessionId || storedPrecisionSessionId)
-        setPrecisionStatus(result.precisionStatus || '')
-        setPendingRequirements(normalizePrecisionStringList(result.pendingRequirements))
-        setRetakeInstructions(normalizePrecisionStringList(result.retakeInstructions))
-        setReferenceObjectNeeded(Boolean(result.referenceObjectNeeded))
-        setReferenceObjectSuggestions(normalizePrecisionStringList(result.referenceObjectSuggestions))
-        setDetectedItemsSummary(normalizePrecisionStringList(result.detectedItemsSummary))
-        setSplitStrategy(String(result.splitStrategy || ''))
-        setUncertaintyNotes(normalizePrecisionStringList(result.uncertaintyNotes))
-        const items = convertApiDataToItems(result.items)
-        setNutritionItems(items)
-        calculateNutritionStats(items)
+        applyAnalyzeResultToPage(result, undefined, storedPrecisionSessionId)
         void hydrateCommittedRecord()
       } else {
         Taro.showModal({
@@ -768,6 +919,8 @@ function ResultPage() {
           const nextProtein = item.protein * weightScale
           const nextCarbs = item.carbs * weightScale
           const nextFat = item.fat * weightScale
+          const nextWaterMl = item.waterMl * weightScale
+          const nextNutrients = scaleNutrients(item.nutrients, weightScale)
           // ratio 保持不变，重新计算 intake
           const newIntake = Math.round(newWeight * (item.ratio / 100))
           return {
@@ -778,7 +931,17 @@ function ResultPage() {
             calorie: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
             protein: nextProtein,
             carbs: nextCarbs,
-            fat: nextFat
+            fat: nextFat,
+            waterMl: nextWaterMl,
+            nutrients: {
+              ...nextNutrients,
+              calories: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
+              protein: nextProtein,
+              carbs: nextCarbs,
+              fat: nextFat,
+              waterMl: nextWaterMl,
+              water_ml: nextWaterMl
+            }
             // ratio 不变
           }
         }
@@ -792,23 +955,41 @@ function ResultPage() {
     })
   }
 
-  const updateMacroField = (
+  const updateIngredientMetricField = (
     id: number,
-    field: MacroField,
+    field: IngredientMetricField,
     nextValue: number | ((currentValue: number) => number)
   ) => {
     setNutritionItems(items => {
       const updatedItems = items.map(item => {
         if (item.id !== id) return item
         const resolvedValue = typeof nextValue === 'function' ? nextValue(item[field]) : nextValue
-        const normalizedValue = Math.max(0, roundToSingleDecimal(resolvedValue))
+        const normalizedValue = field === 'waterMl'
+          ? Math.max(0, Math.round(resolvedValue))
+          : Math.max(0, roundToSingleDecimal(resolvedValue))
         const nextItem = {
           ...item,
-          [field]: normalizedValue
+          [field]: normalizedValue,
+          nutrients: {
+            ...item.nutrients,
+            [field]: normalizedValue,
+            ...(field === 'waterMl' ? { water_ml: normalizedValue } : {})
+          }
         } as NutritionItem
+        if (field === 'waterMl') {
+          return nextItem
+        }
+        const nextCalories = calculateCaloriesFromMacros(nextItem.protein, nextItem.carbs, nextItem.fat)
         return {
           ...nextItem,
-          calorie: calculateCaloriesFromMacros(nextItem.protein, nextItem.carbs, nextItem.fat)
+          calorie: nextCalories,
+          nutrients: {
+            ...nextItem.nutrients,
+            calories: nextCalories,
+            protein: nextItem.protein,
+            carbs: nextItem.carbs,
+            fat: nextItem.fat
+          }
         }
       })
 
@@ -817,14 +998,21 @@ function ResultPage() {
     })
   }
 
-  const handleMacroEdit = (id: number, field: MacroField, currentValue: number) => {
-    const meta = MACRO_FIELD_META[field]
+  const toggleNutritionDetails = (id: number) => {
+    setExpandedNutritionDetailIds(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }))
+  }
+
+  const handleIngredientMetricEdit = (id: number, field: IngredientMetricField, currentValue: number) => {
+    const meta = INGREDIENT_METRIC_META[field]
     Taro.showModal({
-      title: `修改${meta.label}(g)`,
-      content: formatMacroDisplay(currentValue),
+      title: `修改${meta.label}(${meta.unit})`,
+      content: formatIngredientMetricDisplay(field, currentValue),
       // @ts-ignore
       editable: true,
-      placeholderText: '请输入克数',
+      placeholderText: `请输入${meta.unit}`,
       success: (res) => {
         if (!res.confirm) return
 
@@ -838,7 +1026,7 @@ function ResultPage() {
           return
         }
 
-        updateMacroField(id, field, parsed)
+        updateIngredientMetricField(id, field, parsed)
       }
     })
   }
@@ -935,14 +1123,8 @@ function ResultPage() {
                         name: item.name,
                         estimatedWeightGrams: item.weight,
                         originalWeightGrams: item.originalWeight,
-                        nutrients: {
-                          calories: item.calorie,
-                          protein: item.protein,
-                          carbs: item.carbs,
-                          fat: item.fat,
-                          fiber: 0,
-                          sugar: 0
-                        }
+                        waterMl: item.waterMl,
+                        nutrients: buildFoodItemNutrients(item)
                       })),
                       pfc_ratio_comment: pfcRatioComment || undefined,
                       absorption_notes: absorptionNotes || undefined,
@@ -1024,14 +1206,8 @@ function ResultPage() {
             weight: item.weight,
             ratio: item.ratio,
             intake: item.intake,
-            nutrients: {
-              calories: item.calorie,
-              protein: item.protein,
-              carbs: item.carbs,
-              fat: item.fat,
-              fiber: 0,
-              sugar: 0
-            }
+            water_ml: item.waterMl,
+            nutrients: buildFoodItemNutrients(item)
           })),
           total_calories: nutritionStats.calories,
           total_protein: nutritionStats.protein,
@@ -1221,14 +1397,8 @@ function ResultPage() {
               weight: nutritionItem.weight,
               ratio: nutritionItem.ratio,
               intake: nutritionItem.intake,
-              nutrients: {
-                calories: nutritionItem.calorie,
-                protein: nutritionItem.protein,
-                carbs: nutritionItem.carbs,
-                fat: nutritionItem.fat,
-                fiber: 0,
-                sugar: 0
-              }
+              water_ml: nutritionItem.waterMl,
+              nutrients: buildFoodItemNutrients(nutritionItem)
             }))
 
             await createUserRecipe({
@@ -1252,14 +1422,6 @@ function ResultPage() {
               content: '已收藏，可在“我的收藏”中快速复用记录',
               showCancel: false
             })
-            // 更新 profile 页收藏统计缓存
-            try {
-              const cached = Taro.getStorageSync('profile_stats_favorite_count')
-              if (cached !== undefined && cached !== '') {
-                const next = Number(cached) + 1
-                Taro.setStorageSync('profile_stats_favorite_count', String(next))
-              }
-            } catch (_) { /* ignore */ }
           } catch (error: any) {
             Taro.hideLoading()
             Taro.showToast({
@@ -1313,13 +1475,20 @@ function ResultPage() {
         ratio: 100,
         protein: 0,
         carbs: 0,
-        fat: 0
+        fat: 0,
+        waterMl: 0,
+        nutrients: normalizeItemNutrients(undefined, 0)
       }
     ])
   }
 
   // 提交二次纠正重新分析
   const handleSubmitCorrection = async () => {
+    if (isResubmitting) return
+    const now = Date.now()
+    if (now - correctionSubmitDebounceRef.current < CORRECTION_SUBMIT_DEBOUNCE_MS) return
+    correctionSubmitDebounceRef.current = now
+
     const isTextTask = taskType === 'food_text'
 
     if (!isTextTask && correctionItems.length === 0) {
@@ -1343,7 +1512,7 @@ function ResultPage() {
 
         try {
           setIsResubmitting(true)
-          Taro.showLoading({ title: '提交分析中...', mask: true })
+          Taro.showLoading({ title: '提交纠错中...', mask: true })
           const resolvedCorrectionItems = correctionItems.map((item) => ({ ...item }))
           setCorrectionItems(resolvedCorrectionItems)
 
@@ -1353,6 +1522,7 @@ function ResultPage() {
           const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
           const savedExecutionMode = normalizeAvailableExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
           const savedAnalysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
+          const correctionSourceTaskId = String(Taro.getStorageSync('analyzeSourceTaskId') || '').trim()
           const previousResult: AnalyzeResponse = {
             description,
             insight: healthAdvice,
@@ -1361,14 +1531,8 @@ function ResultPage() {
               name: item.name,
               estimatedWeightGrams: item.weight,
               originalWeightGrams: item.originalWeight,
-              nutrients: {
-                calories: item.calorie,
-                protein: item.protein,
-                carbs: item.carbs,
-                fat: item.fat,
-                fiber: 0,
-                sugar: 0
-              }
+              waterMl: item.waterMl,
+              nutrients: buildFoodItemNutrients(item)
             })),
             pfc_ratio_comment: pfcRatioComment || undefined,
             absorption_notes: absorptionNotes || undefined,
@@ -1414,6 +1578,29 @@ function ResultPage() {
           const finalCorrectionContext = correctionParts.length > 0
             ? correctionParts.join('\n')
             : '用户发起了二次纠错，请结合原始内容重新分析。'
+          const correctionPayload = resolvedCorrectionItems.map((item) => {
+            const baseline = baselineMap.get(item.id)
+            const normalizedName = item.name.trim()
+            return {
+              name: normalizedName,
+              weight: Math.round(item.weight || 0),
+              originalWeight: item.originalWeight,
+              calorie: item.calorie,
+              protein: item.protein,
+              carbs: item.carbs,
+              fat: item.fat,
+              waterMl: item.waterMl,
+              nutrients: buildFoodItemNutrients(item),
+              sourceName: baseline?.name || item.sourceName,
+              sourceItemId: item.sourceItemId ?? item.id,
+              nameEdited: baseline
+                ? normalizeFoodNameForCorrection(normalizedName) !== normalizeFoodNameForCorrection(baseline.name)
+                : true,
+              weightEdited: baseline
+                ? Math.round(item.weight || 0) !== Math.round(baseline.weight || 0)
+                : true,
+            }
+          })
 
           let taskId = ''
 
@@ -1431,6 +1618,8 @@ function ResultPage() {
               execution_mode: savedExecutionMode,
               analysis_engine: savedAnalysisEngine,
               previousResult,
+              correction_source_task_id: correctionSourceTaskId || undefined,
+              correctionItems: correctionPayload,
             })
             taskId = res.task_id
           } else {
@@ -1454,23 +1643,26 @@ function ResultPage() {
               activity_timing: savedActivityTiming,
               execution_mode: savedExecutionMode,
               previousResult,
+              correction_source_task_id: correctionSourceTaskId || undefined,
+              correctionItems: correctionPayload,
             })
             taskId = res.task_id
           }
           Taro.removeStorageSync('analyzePendingCorrectionTaskId')
           Taro.removeStorageSync('analyzePendingCorrectionItems')
 
-          Taro.hideLoading()
-          setShowCorrectionDrawer(false)
-
-          // 4. 跳转到 loading 页面重新走解析流程
-          const nextTaskType = shouldResubmitWithImage ? 'food_image' : 'food_text'
+          const nextTaskType = shouldResubmitWithImage ? 'food' : 'food_text'
+          Taro.setStorageSync('analyzeTaskType', nextTaskType)
           if (!shouldResubmitWithImage) {
             Taro.removeStorageSync('analyzeImagePath')
             Taro.removeStorageSync('analyzeImagePaths')
           }
+
+          Taro.hideLoading()
+          setShowCorrectionDrawer(false)
+          setAdditionalContext('')
           Taro.navigateTo({
-            url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${taskId}&task_type=${nextTaskType}&execution_mode=${savedExecutionMode}`
+            url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${taskId}&task_type=${nextTaskType}&execution_mode=${savedExecutionMode}&correction=1`
           })
 
         } catch (e: any) {
@@ -1910,7 +2102,10 @@ function ResultPage() {
             </View>
 
             <View className='ingredients-list'>
-              {nutritionItems.map((item) => (
+              {nutritionItems.map((item) => {
+                const detailRows = getNutrientDetailRows(item)
+                const detailsExpanded = !!expandedNutritionDetailIds[item.id]
+                return (
                 <View key={item.id} className='ingredient-card'>
                   <View className='ingredient-main'>
                     <View className='ingredient-header ingredient-header--title-row'>
@@ -1928,6 +2123,7 @@ function ResultPage() {
 
                   <View className='ingredient-nutrition-strip'>
                     <View className='ingredient-summary-cell ingredient-summary-cell--cal'>
+                      <Text className='ingredient-summary-label'>热量</Text>
                       <View className='ingredient-cal-kcal-line'>
                         <Text className='ingredient-cal-kcal-num'>
                           {Math.round(item.calorie * (item.ratio / 100))}
@@ -1935,26 +2131,50 @@ function ResultPage() {
                         <Text className='ingredient-cal-kcal-unit'>kcal</Text>
                       </View>
                     </View>
-                    {MACRO_FIELDS.map((field) => {
-                      const meta = MACRO_FIELD_META[field]
-                      const intakeMacro = item[field] * (item.ratio / 100)
+                    {INGREDIENT_METRIC_FIELDS.map((field) => {
+                      const meta = INGREDIENT_METRIC_META[field]
+                      const intakeValue = item[field] * (item.ratio / 100)
                       return (
                         <View
                           key={`${item.id}-${field}`}
                           className={`ingredient-summary-cell ingredient-summary-cell--${meta.className}`}
-                          onClick={() => handleMacroEdit(item.id, field, item[field])}
+                          onClick={() => handleIngredientMetricEdit(item.id, field, item[field])}
                         >
-                          <Text className='ingredient-macro-name'>{meta.label}</Text>
+                          <Text className='ingredient-summary-label'>{meta.label}</Text>
                           <View className='ingredient-macro-value-line'>
                             <Text className={`ingredient-macro-num ingredient-macro-num--${meta.className}`}>
-                              {formatMacroDisplay(intakeMacro)}
+                              {formatIngredientMetricDisplay(field, intakeValue)}
                             </Text>
-                            <Text className='ingredient-macro-g'>g</Text>
+                            <Text className='ingredient-macro-g'>{meta.unit}</Text>
                           </View>
                         </View>
                       )
                     })}
                   </View>
+
+                  {detailRows.length > 0 && (
+                    <View className='ingredient-more-section'>
+                      <View className='ingredient-more-toggle' onClick={() => toggleNutritionDetails(item.id)}>
+                        <Text className='ingredient-more-toggle-text'>
+                          {detailsExpanded ? '收起更多营养' : '展开更多营养'}
+                        </Text>
+                        <Text className={`ingredient-more-toggle-icon ${detailsExpanded ? 'expanded' : ''}`}>⌄</Text>
+                      </View>
+                      {detailsExpanded && (
+                        <View className='ingredient-detail-grid'>
+                          {detailRows.map((row) => (
+                            <View key={`${item.id}-${row.key}`} className='ingredient-detail-cell'>
+                              <Text className='ingredient-detail-label'>{row.label}</Text>
+                              <Text className='ingredient-detail-value'>
+                                {formatNutrientDetailValue(row.value)}
+                                <Text className='ingredient-detail-unit'>{row.unit}</Text>
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  )}
 
                   <View className='ingredient-controls'>
                     <View className='weight-control'>
@@ -1964,7 +2184,7 @@ function ResultPage() {
                           className='adjust-btn minus'
                           onClick={() => handleWeightAdjust(item.id, -10)}
                         >–</View>
-                        <Text className='weight-display'>{item.weight}g</Text>
+                        <Text className='weight-display'>{formatWeightDisplay(item.intake)}</Text>
                         <View
                           className='adjust-btn plus'
                           onClick={() => handleWeightAdjust(item.id, 10)}
@@ -1975,25 +2195,31 @@ function ResultPage() {
                     <View className='ratio-control'>
                       <Text className='control-label'>实际摄入</Text>
                       <View className='ratio-control-right'>
-                        <Slider
-                          className='ratio-slider-modern'
-                          value={item.ratio}
-                          min={0}
-                          max={100}
-                          step={5}
-                          activeColor='#00bc7d'
-                          backgroundColor='#e5e7eb'
-                          blockSize={16}
-                          blockColor='#ffffff'
-                          showValue={false}
-                          onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
-                        />
+                        <View className='ratio-slider-shell'>
+                          <View className='ratio-slider-hitbox'>
+                            <Slider
+                              className='ratio-slider-modern'
+                              value={item.ratio}
+                              min={0}
+                              max={100}
+                              step={1}
+                              activeColor='#00bc7d'
+                              backgroundColor={scheme === 'dark' ? '#2d3935' : '#dbe4dd'}
+                              blockSize={24}
+                              blockColor='#ffffff'
+                              showValue={false}
+                              onChanging={(e) => handleRatioAdjust(item.id, e.detail.value)}
+                              onChange={(e) => handleRatioAdjust(item.id, e.detail.value)}
+                            />
+                          </View>
+                        </View>
                         <Text className='ratio-display'>{item.ratio}%</Text>
                       </View>
                     </View>
                   </View>
                 </View>
-              ))}
+                )
+              })}
             </View>
           </View>
         </View>

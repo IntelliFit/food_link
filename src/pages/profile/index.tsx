@@ -8,7 +8,6 @@ import {
   ShieldOutlined,
   InfoOutlined,
   Arrow,
-  ClockOutlined,
   ChatOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
@@ -21,21 +20,18 @@ import {
   getFoodExpiryDashboard,
   friendGetRequestsOverview,
   getAnalyzeTaskCount,
-  getAnalyzeTaskStatusCount,
   getFriendCount,
   getFavoriteCount,
   MembershipStatus,
   FoodExpiryDashboard
 } from '../../utils/api'
 import {
-  getFounderPaidBonusRankLabel,
-  getFounderPaidBonusSourceLabel,
   getCurrentMembershipTier,
-  getMembershipTierLabel,
   getMembershipTierShortLabel,
 } from '../../utils/membership'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
+import { cleanupGeneratedUserFiles } from '../../utils/weapp-user-files'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -46,24 +42,6 @@ interface UserInfo {
   avatar: string
   name: string
   meta: string
-}
-
-/** 注册时间格式化为 YYYY-MM-DD */
-function formatRegisterDate(value: string | undefined | null): string {
-  if (!value) return '--'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return '--'
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function formatExpiry(value?: string | null): string {
-  if (!value) return '--'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return '--'
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 type RewardLevelMeta = {
@@ -128,14 +106,6 @@ function ProfilePage() {
 
   // 记录天数
   const [recordDays, setRecordDays] = useState(0)
-  const [registerDate, setRegisterDate] = useState('--')
-  // 是否有未查看的 waiting_record 任务（用于红点提醒）
-  const [hasUnseenWaitingRecord, setHasUnseenWaitingRecord] = useState(() => {
-    try {
-      const raw = Taro.getStorageSync('analyze_has_unseen_waiting_record')
-      return raw === true || raw === 'true' || raw === 1
-    } catch { return false }
-  })
 
   // 会员状态
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
@@ -144,24 +114,10 @@ function ProfilePage() {
   // 好友请求数量
   const [friendRequestCount, setFriendRequestCount] = useState(0)
 
-  /** 后台静默同步中：左上角微型 spinner，不占文档流 */
-  const [dataSyncing, setDataSyncing] = useState(false)
-
   // 快捷入口统计数字
   const [analyzeCount, setAnalyzeCount] = useState(0)
-  const [analyzeWaitingRecordCount, setAnalyzeWaitingRecordCount] = useState(() => {
-    try { return Number(Taro.getStorageSync('analyze_waiting_record_count') || 0) }
-    catch { return 0 }
-  })
   const [friendCount, setFriendCount] = useState(0)
   const [favoriteCount, setFavoriteCount] = useState(0)
-
-  // 本地缓存 key
-  const PROFILE_STATS_KEYS = {
-    analyze: 'profile_stats_analyze_count',
-    friend: 'profile_stats_friend_count',
-    favorite: 'profile_stats_favorite_count'
-  }
 
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
@@ -174,42 +130,8 @@ function ProfilePage() {
       if (token) {
         setIsLoggedIn(true)
 
-        // 1. 先读本地缓存，零延迟展示旧数据
-        const storedUserInfo = Taro.getStorageSync('userInfo')
-        if (storedUserInfo) {
-          setUserInfo(storedUserInfo)
-        }
-        const storedRegisterTime = Taro.getStorageSync('userRegisterTime')
-        if (storedRegisterTime) {
-          setRegisterDate(formatRegisterDate(storedRegisterTime))
-        }
-        const storedMembership = Taro.getStorageSync('membershipStatus')
-        if (storedMembership) {
-          try {
-            setMembershipStatus(JSON.parse(storedMembership))
-          } catch (_) { /* ignore */ }
-        }
-
-        // 读取快捷入口统计缓存（零延迟展示）
         try {
-          const cachedAnalyze = Taro.getStorageSync(PROFILE_STATS_KEYS.analyze)
-          if (cachedAnalyze !== undefined && cachedAnalyze !== '') {
-            setAnalyzeCount(Number(cachedAnalyze))
-          }
-          const cachedFriend = Taro.getStorageSync(PROFILE_STATS_KEYS.friend)
-          if (cachedFriend !== undefined && cachedFriend !== '') {
-            setFriendCount(Number(cachedFriend))
-          }
-          const cachedFavorite = Taro.getStorageSync(PROFILE_STATS_KEYS.favorite)
-          if (cachedFavorite !== undefined && cachedFavorite !== '') {
-            setFavoriteCount(Number(cachedFavorite))
-          }
-        } catch (_) { /* ignore */ }
-
-        // 2. 异步请求网络，获取最新数据后更新
-        setDataSyncing(true)
-        try {
-          const [apiUserInfo, membershipData, dashboardData, friendRequestsData, statusCount] = await Promise.all([
+          const [apiUserInfo, membershipData, dashboardData, friendRequestsData] = await Promise.all([
             getUserProfile(),
             getMyMembership().catch((err) => {
               console.error('[profile] 获取会员状态失败:', err)
@@ -221,10 +143,6 @@ function ProfilePage() {
             }),
             friendGetRequestsOverview().catch((err) => {
               console.error('[profile] 获取好友请求失败:', err)
-              return null
-            }),
-            getAnalyzeTaskStatusCount().catch((err) => {
-              console.error('[profile] 获取识别任务状态失败:', err)
               return null
             }),
           ])
@@ -242,22 +160,12 @@ function ProfilePage() {
           // 只在成功获取到数据时才更新（避免覆盖已有数据为 null）
           if (membershipData !== null) {
             setMembershipStatus(membershipData)
-            Taro.setStorageSync('membershipStatus', JSON.stringify(membershipData))
           }
           if (dashboardData !== null) {
             setExpiryDashboard(dashboardData as FoodExpiryDashboard)
           }
 
-          // 更新识别记录 waiting_record 数量
-          const waitingRecord = statusCount?.waiting_record ?? 0
-          setAnalyzeWaitingRecordCount(waitingRecord)
-          Taro.setStorageSync('analyze_waiting_record_count', waitingRecord)
-          if (statusCount?.has_unseen_waiting_record != null) {
-            setHasUnseenWaitingRecord(statusCount.has_unseen_waiting_record)
-            Taro.setStorageSync('analyze_has_unseen_waiting_record', statusCount.has_unseen_waiting_record)
-          }
-
-          // 计算底部导航栏"我的"按钮 badge 总数 = 识别记录 + 食物保质期 + 好友请求
+          // 计算底部导航栏"我的"按钮 badge 总数 = 食物保质期 + 好友请求
           try {
             const expiryTodo = dashboardData
               ? ((dashboardData as FoodExpiryDashboard).expired_count || 0)
@@ -268,7 +176,7 @@ function ProfilePage() {
             const today = new Date().toISOString().slice(0, 10)
             const lastSeenFoodExpiry = Taro.getStorageSync('food_expiry_last_seen_date')
             const foodExpiryBadge = lastSeenFoodExpiry === today ? 0 : expiryTodo
-            Taro.setStorageSync('profile_tab_badge_count', waitingRecord + foodExpiryBadge + pendingFriendCount)
+            Taro.setStorageSync('profile_tab_badge_count', foodExpiryBadge + pendingFriendCount)
           } catch (_) { /* ignore */ }
 
           // 获取记录天数
@@ -288,11 +196,6 @@ function ProfilePage() {
             meta: `已记录 ${days} 天`
           }
           setUserInfo(nextUserInfo)
-          const registerTime = apiUserInfo.create_time || storedRegisterTime || ''
-          if (apiUserInfo.create_time) {
-            Taro.setStorageSync('userRegisterTime', apiUserInfo.create_time)
-          }
-          setRegisterDate(formatRegisterDate(registerTime))
           const completed = apiUserInfo.onboarding_completed ?? true
           setOnboardingCompleted(completed)
           // 首次登录未填写健康档案时，先跳转到答题页面
@@ -300,16 +203,11 @@ function ProfilePage() {
             Taro.redirectTo({ url: extraPkgUrl('/pages/health-profile/index') })
             return
           }
-          // 同步到 storage
-          Taro.setStorageSync('userInfo', nextUserInfo)
 
-          // 3. 加载快捷入口统计数字（不阻塞主数据展示）
+          // 加载快捷入口统计数字
           loadQuickStats()
         } catch (error) {
           console.error('获取用户信息失败:', error)
-          // 网络请求失败时，本地缓存已经在上面展示过了，无需额外处理
-        } finally {
-          setDataSyncing(false)
         }
       } else {
         setIsLoggedIn(false)
@@ -320,7 +218,6 @@ function ProfilePage() {
           meta: '已记录 0 天'
         })
         setRecordDays(0)
-        setRegisterDate('--')
         setAnalyzeCount(0)
         setFriendCount(0)
         setFavoriteCount(0)
@@ -341,15 +238,12 @@ function ProfilePage() {
 
       if (analyzeRes) {
         setAnalyzeCount(analyzeRes.count)
-        Taro.setStorageSync(PROFILE_STATS_KEYS.analyze, String(analyzeRes.count))
       }
       if (friendRes) {
         setFriendCount(friendRes.count)
-        Taro.setStorageSync(PROFILE_STATS_KEYS.friend, String(friendRes.count))
       }
       if (favoriteRes) {
         setFavoriteCount(favoriteRes.count)
-        Taro.setStorageSync(PROFILE_STATS_KEYS.favorite, String(favoriteRes.count))
       }
     } catch (error) {
       console.error('加载快捷入口统计失败:', error)
@@ -508,7 +402,7 @@ function ProfilePage() {
     Taro.showModal({
       title: '提示',
       content: '确定要清除缓存吗？这将重置首页、识别记录和朋友圈的本地数据，下次进入时会重新加载。',
-      success: (res) => {
+      success: async (res) => {
         if (!res.confirm) return
         try {
           // 首页相关缓存
@@ -536,8 +430,6 @@ function ProfilePage() {
           Taro.removeStorageSync('analyzePendingCorrectionTaskId')
           Taro.removeStorageSync('analyzeDebugPreview')
           Taro.removeStorageSync('analyzeShareData')
-          Taro.removeStorageSync('analyze_waiting_record_count')
-          Taro.removeStorageSync('analyze_has_unseen_waiting_record')
           Taro.removeStorageSync('analyzeTaskIsRecorded')
           Taro.removeStorageSync('analyzeCommittedRecordId')
 
@@ -553,8 +445,11 @@ function ProfilePage() {
           Taro.removeStorageSync('community_friends_cache')
           Taro.removeStorageSync('community_requests_cache')
           Taro.removeStorageSync('community_feed_timestamp')
+          Taro.removeStorageSync('community_feed_cache_session_id_v1')
+          Taro.removeStorageSync('community_feed_session_id_v1')
           Taro.removeStorageSync('community_friends_timestamp')
           Taro.removeStorageSync('community_feed_filters_v2')
+          Taro.removeStorageSync('community_feed_filters_v3')
           Taro.removeStorageSync('community_priority_authors_v1')
           Taro.removeStorageSync('community_notification_target_v1')
           Taro.removeStorageSync('community_comment_bar_visible')
@@ -568,11 +463,7 @@ function ProfilePage() {
             }
           })
 
-          // 清除快捷入口统计缓存
-          Taro.removeStorageSync(PROFILE_STATS_KEYS.analyze)
-          Taro.removeStorageSync(PROFILE_STATS_KEYS.friend)
-          Taro.removeStorageSync(PROFILE_STATS_KEYS.favorite)
-
+          await cleanupGeneratedUserFiles()
           Taro.showToast({ title: '缓存已清除', icon: 'success' })
         } catch (error) {
           console.error('清除缓存失败:', error)
@@ -599,14 +490,9 @@ function ProfilePage() {
               meta: '已记录 0 天'
             })
             setRecordDays(0)
-            setRegisterDate('--')
             setAnalyzeCount(0)
             setFriendCount(0)
             setFavoriteCount(0)
-            Taro.removeStorageSync(PROFILE_STATS_KEYS.analyze)
-            Taro.removeStorageSync(PROFILE_STATS_KEYS.friend)
-            Taro.removeStorageSync(PROFILE_STATS_KEYS.favorite)
-            Taro.removeStorageSync('userRegisterTime')
             Taro.showToast({ title: '已退出登录', icon: 'success' })
           } catch (error) {
             console.error('退出登录失败:', error)
@@ -685,13 +571,6 @@ function ProfilePage() {
             >
               <View className='quick-action-num-wrap'>
                 <Text className='quick-action-num'>{analyzeCount}</Text>
-                {analyzeWaitingRecordCount > 0 && (
-                  <View className='quick-action-badge'>
-                    <Text className='quick-action-badge-text'>
-                      {analyzeWaitingRecordCount > 99 ? '99+' : analyzeWaitingRecordCount}
-                    </Text>
-                  </View>
-                )}
               </View>
               <Text className='quick-action-text'>识别记录</Text>
             </Navigator>

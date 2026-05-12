@@ -88,6 +88,8 @@ export function stripMealFullRecords(meals: HomeMealItem[]): HomeMealItem[] {
     protein: meal.protein,
     carbs: meal.carbs,
     fat: meal.fat,
+    water_ml: meal.water_ml,
+    waterMl: meal.waterMl,
     meal_record_entries:
       meal.meal_record_entries?.map((entry) => {
         const { full_record: _fr, ...rest } = entry as HomeMealRecordEntry & { full_record?: unknown }
@@ -146,6 +148,27 @@ function clampNumber(value: number): number {
   return Number.isFinite(value) ? value : 0
 }
 
+function normalizeNumber(value: unknown): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+function foodRecordItemWaterMl(item: SaveFoodRecordRequest['items'][number]): number {
+  const waterMl = normalizeNumber(item.water_ml ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl)
+  if (waterMl <= 0) return 0
+  const ratio = normalizeNumber(item.ratio)
+  if (ratio > 0) return waterMl * ratio / 100
+  const intake = normalizeNumber(item.intake)
+  const weight = normalizeNumber(item.weight)
+  if (intake > 0 && weight > 0) return waterMl * intake / weight
+  if (intake === 0 && weight === 0) return waterMl
+  return 0
+}
+
+function calculateFoodRecordWaterMl(payload: SaveFoodRecordRequest): number {
+  return (payload.items || []).reduce((sum, item) => sum + foodRecordItemWaterMl(item), 0)
+}
+
 function formatLocalTimeHHmm(date = new Date()): string {
   const hh = String(date.getHours()).padStart(2, '0')
   const mm = String(date.getMinutes()).padStart(2, '0')
@@ -187,6 +210,7 @@ function buildOptimisticFoodRecord(
       weight: item.weight,
       ratio: item.ratio,
       intake: item.intake,
+      water_ml: item.water_ml ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl,
       nutrients: item.nutrients,
     })),
     total_calories: payload.total_calories,
@@ -230,6 +254,8 @@ export function applyOptimisticFoodRecordToHomeDashboardSnapshot(
       record_time: optimisticRecord.record_time,
       total_calories: payload.total_calories,
       title: recordTitle,
+      image_path: payload.image_path || payload.image_paths?.[0] || null,
+      image_paths: payload.image_paths || (payload.image_path ? [payload.image_path] : null),
       full_record: optimisticRecord,
     },
     ...((existingMeal?.meal_record_entries || []).filter((entry) => String(entry?.id || '').trim() !== recordId)),
@@ -240,6 +266,7 @@ export function applyOptimisticFoodRecordToHomeDashboardSnapshot(
   const nextMealProtein = clampNumber((existingMeal?.protein || 0) + payload.total_protein)
   const nextMealCarbs = clampNumber((existingMeal?.carbs || 0) + payload.total_carbs)
   const nextMealFat = clampNumber((existingMeal?.fat || 0) + payload.total_fat)
+  const nextMealWaterMl = clampNumber((existingMeal?.water_ml ?? existingMeal?.waterMl ?? 0) + calculateFoodRecordWaterMl(payload))
   const nextMealProgress = nextMealTarget > 0 ? Number(((nextMealCalories / nextMealTarget) * 100).toFixed(1)) : 0
   const nextMeal: HomeMealItem = {
     type: payload.meal_type,
@@ -258,6 +285,8 @@ export function applyOptimisticFoodRecordToHomeDashboardSnapshot(
     protein: nextMealProtein,
     carbs: nextMealCarbs,
     fat: nextMealFat,
+    water_ml: Number(nextMealWaterMl.toFixed(1)),
+    waterMl: Number(nextMealWaterMl.toFixed(1)),
     description: payload.description || existingMeal?.description || recordTitle,
   }
 

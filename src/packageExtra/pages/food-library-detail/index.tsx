@@ -13,7 +13,8 @@ import {
   type PublicFoodLibraryItem,
   type PublicFoodLibraryComment,
   collectPublicFoodLibraryItem,
-  uncollectPublicFoodLibraryItem
+  uncollectPublicFoodLibraryItem,
+  deletePublicFoodLibraryItem
 } from '../../../utils/api'
 import {
   ShopOutlined,
@@ -30,6 +31,7 @@ import {
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import './index.scss'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 
 function getLocalUserDisplay(): { nickname: string; avatar: string } {
   try {
@@ -65,6 +67,7 @@ function FoodLibraryDetailPage() {
   const [commentContent, setCommentContent] = useState('')
   const [commentRating, setCommentRating] = useState(0)
   const [submitting, setSubmitting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   // 加载详情
@@ -130,6 +133,36 @@ function FoodLibraryDetailPage() {
       }
     } catch (e: any) {
       await showUnifiedApiError(e, '操作失败')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!item || deleting) return
+    const { confirm } = await Taro.showModal({
+      title: '删除上传',
+      content: '删除后这条食物会从公共库下架，其他用户将无法再查看。',
+      confirmText: '删除',
+      cancelText: '取消',
+      confirmColor: '#ef4444'
+    })
+    if (!confirm) return
+
+    setDeleting(true)
+    Taro.showLoading({ title: '删除中...', mask: true })
+    try {
+      await deletePublicFoodLibraryItem(item.id)
+      Taro.setStorageSync('food_library_need_refresh', '1')
+      Taro.showToast({ title: '已删除', icon: 'success' })
+      setTimeout(() => {
+        Taro.navigateBack({
+          fail: () => Taro.redirectTo({ url: extraPkgUrl('/pages/food-library/index') })
+        })
+      }, 500)
+    } catch (e: any) {
+      await showUnifiedApiError(e, '删除失败')
+    } finally {
+      Taro.hideLoading()
+      setDeleting(false)
     }
   }
 
@@ -275,6 +308,8 @@ function FoodLibraryDetailPage() {
   const imageList: string[] = (item.image_paths && item.image_paths.length > 0)
     ? item.image_paths
     : (item.image_path ? [item.image_path] : [])
+  const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
+  const isOwner = Boolean(currentUserId && item.user_id === currentUserId)
 
   return (
     <View className='food-detail-page'>
@@ -463,6 +498,11 @@ function FoodLibraryDetailPage() {
           <View className={`action-btn icon-action collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
             {item.collected ? <Star size='20' className='star-filled' /> : <StarOutlined size='20' />}
           </View>
+          {isOwner && (
+            <View className='action-btn icon-action delete-btn' onClick={handleDelete}>
+              {deleting ? <View className='delete-spinner' /> : <Text className='iconfont icon-shanchu delete-icon' />}
+            </View>
+          )}
           <View className='action-btn comment-btn' onClick={() => setShowCommentModal(true)}>
             <CommentOutlined size='20' />
             <Text className='action-text'>写评论</Text>

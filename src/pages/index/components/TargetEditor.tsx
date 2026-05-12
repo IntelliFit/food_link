@@ -6,14 +6,19 @@ export function TargetEditor({
   visible,
   targetForm,
   saving,
-  onTargetFormChange,
+  onTargetFieldChange,
   onSave,
   onClose
 }: TargetEditorProps) {
   if (!visible) return null
 
+  const formatAdjustedValue = (value: number) => {
+    const rounded = Math.max(0, Math.round((value + Number.EPSILON) * 10) / 10)
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+  }
+
   const handleFormChange = (key: keyof typeof targetForm, value: string) => {
-    onTargetFormChange({ ...targetForm, [key]: value })
+    onTargetFieldChange(key, value)
   }
 
   // 固定步长：热量 100，蛋白质/碳水 50，脂肪 10
@@ -28,7 +33,7 @@ export function TargetEditor({
     const currentValue = parseFloat(targetForm[key]) || 0
     const step = getStep(key)
     const newValue = Math.max(0, currentValue + delta * step)
-    handleFormChange(key, String(newValue))
+    handleFormChange(key, formatAdjustedValue(newValue))
   }
 
   return (

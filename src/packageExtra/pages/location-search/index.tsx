@@ -1,7 +1,7 @@
 import { View, Text, Input, ScrollView, Map } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { getCurrentInstance } from '@tarojs/taro'
-import { API_BASE_URL, showUnifiedApiError } from '../../../utils/api'
+import { API_BASE_URL, showUnifiedApiError, unwrapResponse } from '../../../utils/api'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 
@@ -75,7 +75,7 @@ function LocationSearchPage() {
       timeout: 8000
     }).then((res) => {
       if (res.statusCode !== 200 || !res.data) return
-      const d = res.data as Record<string, unknown>
+      const d = unwrapResponse<Record<string, unknown>>(res)
       // 天地图逆地理可能返回 address/result 为对象，需安全取字符串避免显示 [object Object]
       const raw = d.address ?? d.formatted_address ?? d.result
       let addr = ''
@@ -111,7 +111,7 @@ function LocationSearchPage() {
         },
         timeout: 12000
       })
-      const data = res.data as SearchResponse
+      const data = unwrapResponse<SearchResponse>(res)
       const pc = data?.prompt?.[0]?.admins?.[0]?.adminName ?? ''
       setPromptCity(pc)
       const pois = Array.isArray(data?.pois) ? data.pois : []

@@ -66,10 +66,15 @@ const MACRO_FIELD_META: Record<MacroField, { label: string; className: string }>
 
 const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
 
+const normalizeNutrientValue = (value: unknown) => {
+  const num = Number(value)
+  return Number.isFinite(num) && num > 0 ? num : 0
+}
+
 const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixed(1)
 
 const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
-  roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
+  Math.max(0, roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9)
 )
 
 function ResultTextPage() {
@@ -96,17 +101,20 @@ function ResultTextPage() {
   )
 
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
-    return items.map((item, index) => ({
-      id: index + 1,
-      name: item.name,
-      weight: item.estimatedWeightGrams,
-      calorie: item.nutrients.calories,
-      intake: item.estimatedWeightGrams,
-      ratio: 100,
-      protein: item.nutrients.protein,
-      carbs: item.nutrients.carbs,
-      fat: item.nutrients.fat
-    }))
+    return items.map((item, index) => {
+      const weight = normalizeNutrientValue(item.estimatedWeightGrams)
+      return {
+        id: index + 1,
+        name: item.name,
+        weight,
+        calorie: normalizeNutrientValue(item.nutrients.calories),
+        intake: weight,
+        ratio: 100,
+        protein: normalizeNutrientValue(item.nutrients.protein),
+        carbs: normalizeNutrientValue(item.nutrients.carbs),
+        fat: normalizeNutrientValue(item.nutrients.fat)
+      }
+    })
   }
 
   const calculateNutritionStats = (items: NutritionItem[]) => {
@@ -370,7 +378,7 @@ function ResultTextPage() {
           <View className='nutrition-overview-card'>
             <View className='nutrition-header'>
               <View className='calories-main'>
-                <Text className='calories-value'>{Math.round(nutritionStats.calories)}</Text>
+                <Text className='calories-value'>{Math.max(0, Math.round(nutritionStats.calories))}</Text>
                 <View className='calories-unit-row'>
                   <Text className='calories-unit'>kcal</Text>
                   <Text className='calories-label'>总热量</Text>
@@ -487,7 +495,7 @@ function ResultTextPage() {
                       <Text className='ingredient-name'>{item.name}</Text>
                     </View>
                     <View className='ingredient-calories'>
-                      <Text className='cal-val'>{Math.round(item.calorie * (item.ratio / 100))}</Text>
+                      <Text className='cal-val'>{Math.max(0, Math.round(item.calorie * (item.ratio / 100)))}</Text>
                       <Text className='cal-unit'>kcal</Text>
                     </View>
                   </View>

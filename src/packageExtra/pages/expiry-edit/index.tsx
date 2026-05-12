@@ -24,6 +24,8 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { cleanupGeneratedUserFiles, isUserFileQuotaExceededError } from '../../../utils/weapp-user-files'
 
 import './index.scss'
 
@@ -219,8 +221,8 @@ const persistImagePathIfNeeded = async (path: string): Promise<string> => {
   for (const tempFilePath of candidates) {
     const ext = (tempFilePath.match(/\.(jpg|jpeg|png|webp|heic|gif)(?:\?.*)?$/i)?.[0] || '.jpg').replace(/\?.*$/, '')
     const targetPath = `${userDataPath}/expiry_${Date.now()}_${Math.floor(Math.random() * 1000000)}${ext}`
-    try {
-      const savedFilePath = await new Promise<string>((resolve, reject) => {
+    const saveTempFile = () =>
+      new Promise<string>((resolve, reject) => {
         Taro.getFileSystemManager().saveFile({
           tempFilePath,
           filePath: targetPath,
@@ -228,10 +230,22 @@ const persistImagePathIfNeeded = async (path: string): Promise<string> => {
           fail: reject,
         })
       })
+    try {
+      const savedFilePath = await saveTempFile()
       if (savedFilePath) return savedFilePath
       return targetPath
-    } catch {
-      // try next candidate
+    } catch (error) {
+      if (!isUserFileQuotaExceededError(error)) {
+        continue
+      }
+      try {
+        await cleanupGeneratedUserFiles()
+        const savedFilePath = await saveTempFile()
+        if (savedFilePath) return savedFilePath
+        return targetPath
+      } catch {
+        // try next candidate
+      }
     }
   }
 
@@ -342,7 +356,7 @@ export default function ExpiryEditPage() {
       return
     }
     try {
-      const res = await Taro.chooseImage({
+      const res = await chooseImageWithPrivacy({
         count: remain,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
@@ -350,8 +364,12 @@ export default function ExpiryEditPage() {
       const rawPaths = (res.tempFilePaths || []).map((path) => String(path || '').trim()).filter(Boolean)
       const newPaths = await persistImagePathsImmediately(rawPaths)
       setImagePaths((prev) => [...prev, ...newPaths])
-    } catch {
-      // user cancelled
+    } catch (error) {
+      if ((error as any)?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(error)) {
+        showPrivacyAuthorizeFailure(error)
+        return
+      }
     }
   }
 
@@ -374,7 +392,20 @@ export default function ExpiryEditPage() {
     }
 
     setRecognizing(true)
-    Taro.showLoading({ title: '上传中...', mask: true })
+    let nativeLoadingVisible = false
+    const showNativeLoading = (title: string) => {
+      if (nativeLoadingVisible) {
+        Taro.hideLoading()
+      }
+      Taro.showLoading({ title, mask: true })
+      nativeLoadingVisible = true
+    }
+    const hideNativeLoading = () => {
+      if (!nativeLoadingVisible) return
+      Taro.hideLoading()
+      nativeLoadingVisible = false
+    }
+    showNativeLoading('上传中...')
     try {
       const imageUrls: string[] = []
       for (const path of imagePaths) {
@@ -395,7 +426,7 @@ export default function ExpiryEditPage() {
         imageUrls.push(imageUrl)
       }
 
-      Taro.showLoading({ title: '识别中...', mask: true })
+      showNativeLoading('识别中...')
       const response = await recognizeManagedFoodExpiryItems(imageUrls, recognitionContext)
       const recognizedDrafts = (response.items || []).map(buildDraftFromRecognition)
       if (recognizedDrafts.length === 0) {
@@ -413,10 +444,10 @@ export default function ExpiryEditPage() {
         return hasOnlyBlankManual ? recognizedDrafts : [...prev, ...recognizedDrafts]
       })
       setLastRecognizedCount(recognizedDrafts.length)
-      Taro.hideLoading()
+      hideNativeLoading()
       Taro.showToast({ title: `已预填 ${recognizedDrafts.length} 项`, icon: 'success' })
     } catch (error: any) {
-      Taro.hideLoading()
+      hideNativeLoading()
       const message = error?.message || '保质期识别失败'
       if (message.includes('积分不足') || message.includes('开通会员') || message.includes('升级')) {
         Taro.showModal({
@@ -434,7 +465,7 @@ export default function ExpiryEditPage() {
         await showUnifiedApiError(error, '保质期识别失败')
       }
     } finally {
-      Taro.hideLoading()
+      hideNativeLoading()
       setRecognizing(false)
     }
   }

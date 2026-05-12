@@ -2,14 +2,12 @@
 const mainPages = [
   'pages/index/index',
   'pages/stats/index',
-  'pages/record/index',
   'pages/community/index',
   'pages/profile/index',
 ]
 
 const extraSubpackagePages = [
   'pages/checkin-leaderboard/index',
-  'pages/record-menu/index',
   'pages/record-text/index',
   'pages/record-manual/index',
   'pages/analyze/index',
@@ -27,7 +25,6 @@ const extraSubpackagePages = [
   'pages/health-profile/index',
   'pages/health-profile-view/index',
   'pages/day-record/index',
-  'pages/stats-metabolic/index',
   'pages/record-detail/index',
   'pages/food-library/index',
   'pages/food-library-detail/index',
@@ -36,16 +33,18 @@ const extraSubpackagePages = [
   'pages/food-library-share/index',
   'pages/location-search/index',
   'pages/login/index',
-  'pages/about/index',
   'pages/agreement/index',
   'pages/membership-agreement/index',
   'pages/privacy/index',
+  // 兼容旧构建/开发者工具缓存仍尝试打开 /packageExtra/pages/about/index 的情况；
+  // 真实业务入口会经 extraPkgUrl() 路由到独立 packageAbout。
+  'pages/about/index',
   'pages/privacy-settings/index',
   'pages/friends/index',
   'pages/invite-friends/index',
-  'pages/user-group/index',
   'pages/profile-settings/index',
   'pages/exercise-record/index',
+  'pages/body-trends/index',
 ]
 
 export default defineAppConfig({
@@ -58,6 +57,24 @@ export default defineAppConfig({
       root: 'packageExtra',
       name: 'extra',
       pages: extraSubpackagePages,
+    },
+    {
+      // ECharts vendor chunk is large; isolate this route in its own top-level subpackage to stay under WeChat package limits.
+      root: 'packageStatsMetabolic',
+      name: 'stats-metabolic',
+      pages: ['pages/stats-metabolic/index'],
+    },
+    {
+      // About page used to pull a very large local logo; keep it isolated even after slimming the asset path.
+      root: 'packageAbout',
+      name: 'about',
+      pages: ['pages/about/index'],
+    },
+    {
+      // User group QR images make this page relatively heavy; isolating it prevents the shared profile subpackage from overflowing.
+      root: 'packageUserGroup',
+      name: 'user-group',
+      pages: ['pages/user-group/index'],
     },
   ],
   window: {
@@ -84,10 +101,6 @@ export default defineAppConfig({
         text: '分析',
       },
       {
-        pagePath: 'pages/record/index',
-        text: '记录',
-      },
-      {
         pagePath: 'pages/community/index',
         text: '圈子',
       },
@@ -101,14 +114,8 @@ export default defineAppConfig({
     'scope.userLocation': {
       desc: '你的位置信息将用于分享食物时标记商家位置',
     },
-    /** 与记录页 <Camera> 组件配套，正式版授权说明（需在隐私指引中声明使用摄像头） */
-    'scope.camera': {
-      desc: '用于拍照识别食物、记录饮食',
-    },
-    /** 保存海报等到相册时，授权弹窗用途说明（与隐私指引中的「保存到相册」声明配合） */
-    'scope.writePhotosAlbum': {
-      desc: '用于将生成的饮食海报保存到手机相册',
-    },
   },
+  // 微信当前只允许在 requiredPrivateInfos 中声明定位/地址类接口；
+  // chooseImage 等选图接口需在小程序后台“用户隐私保护指引”中声明，不能写进 app.json。
   requiredPrivateInfos: ['getLocation'],
 })

@@ -1,43 +1,42 @@
-# food_link 后端（FastAPI + run_backend 多进程 Worker）
-#
-# 构建（推荐在仓库根目录，构建上下文仅为 backend/）：
-#   docker build -f backend/Dockerfile -t food-link-backend ./backend
-#
-# 运行（通过环境变量或挂载 env 文件注入密钥，勿把 .env 打进镜像）：
-#   docker run --rm -p 3010:3010 --env-file path/to/.env food-link-backend
+ARG GO_BUILDER_IMAGE=docker.io/library/golang:1.26.1-bookworm
 
-FROM python:3.12-slim-bookworm
+FROM --platform=$BUILDPLATFORM ${GO_BUILDER_IMAGE} AS builder
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PORT=3010 \
-    HOST=0.0.0.0
+WORKDIR /src
+
+ARG GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=${GOPROXY}
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY cmd ./cmd
+COPY internal ./internal
+COPY pkg ./pkg
+
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ENV CGO_ENABLED=0
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags="-s -w" -o /out/food-link ./cmd/server
+
+FROM scratch
 
 WORKDIR /app
 
-# Pillow 等运行时二进制依赖
-# 注：当前依赖均有 manylinux 预编译 wheel，但为了防御未来版本移除 wheel 或跨平台 QEMU 构建需要编译的情况，
-# 保留编译工具链。如需极致精简镜像，可改用多阶段构建。
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libjpeg62-turbo \
-    zlib1g \
-    gcc \
-    g++ \
-    make \
-    libffi-dev \
-    libssl-dev \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=builder /out/food-link /app/food-link
+COPY docs/backend-api-prd/ROUTE_MAP.md /app/docs/backend-api-prd/ROUTE_MAP.md
+COPY static /app/static
 
-COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
-
-COPY . .
+ENV APP_ENV=production \
+    PORT=3010 \
+    GIN_MODE=release \
+    TZ=Asia/Shanghai
 
 EXPOSE 3010
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-    CMD python -c "import os,urllib.request as u; u.urlopen('http://127.0.0.1:'+os.environ.get('PORT','3010')+'/api/health', timeout=4)"
-
-CMD ["python", "run_backend.py"]
+ENTRYPOINT ["/app/food-link"]

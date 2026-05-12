@@ -42,6 +42,34 @@ function formatExpiry(value?: string | null): string {
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
+function formatCurrencyCompact(amount: number): string {
+  if (!Number.isFinite(amount)) return '0'
+  const rounded = Math.round(amount * 100) / 100
+  return Number.isInteger(rounded)
+    ? rounded.toFixed(0)
+    : rounded.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function addMonthsDate(date: Date, months: number): Date {
+  const next = new Date(date.getTime())
+  const day = next.getDate()
+  next.setDate(1)
+  next.setMonth(next.getMonth() + Math.max(months, 1))
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()
+  next.setDate(Math.min(day, lastDay))
+  return next
+}
+
+function parseDateValue(value?: string | null): Date | null {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatDateShort(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+}
+
 const TIERS: Array<{
   key: MembershipTier
   name: string
@@ -173,10 +201,74 @@ function ProMembershipPage() {
     return { ok: true }
   }
 
+  const selectedPlan = useMemo<MembershipPlan | null>(() => {
+    if (!plans.length) return null
+    return plans.find(p => p.tier === selectedTier && p.period === selectedPeriod) || null
+  }, [plans, selectedTier, selectedPeriod])
+
+  const monthlyPlanForTier = useMemo<MembershipPlan | null>(() => {
+    return plans.find(p => p.tier === selectedTier && p.period === 'monthly') || null
+  }, [plans, selectedTier])
+
+  const paymentEstimate = useMemo(() => {
+    if (!selectedPlan) {
+      return { mode: 'loading', amount: 0, disabled: false, hint: '' }
+    }
+    const currentCode = membership?.current_plan_code || null
+    const currentPlan = plans.find(p => p.code === currentCode) || null
+    const now = new Date()
+    const currentStart = parseDateValue(membership?.current_period_start) || parseDateValue(membership?.first_activated_at)
+    const currentExpires = parseDateValue(membership?.expires_at)
+    if (!membership?.is_pro || !currentPlan || !currentStart || !currentExpires || currentExpires <= now || currentCode === selectedPlan.code) {
+      return { mode: currentCode === selectedPlan.code ? 'renewal' : 'new_purchase', amount: selectedPlan.amount, disabled: false, hint: '' }
+    }
+    const currentDurationEnd = addMonthsDate(currentStart, currentPlan.duration_months || 1)
+    const targetExpires = addMonthsDate(currentStart, selectedPlan.duration_months || 1)
+    if (targetExpires <= now) {
+      return {
+        mode: 'blocked',
+        amount: selectedPlan.amount,
+        disabled: true,
+        hint: '所选套餐周期已短于当前已使用时长，请选择更长周期',
+      }
+    }
+    if (targetExpires < currentExpires) {
+      return {
+        mode: 'blocked',
+        amount: selectedPlan.amount,
+        disabled: true,
+        hint: '所选套餐会缩短当前有效期，请到期后再购买或选择更长周期',
+      }
+    }
+    const currentDuration = Math.max(currentDurationEnd.getTime() - currentStart.getTime(), 1)
+    const targetDuration = Math.max(targetExpires.getTime() - currentStart.getTime(), 1)
+    const currentRemaining = Math.max(currentExpires.getTime() - now.getTime(), 0)
+    const targetRemaining = Math.max(targetExpires.getTime() - now.getTime(), 0)
+    const currentRemainingValue = currentPlan.amount * currentRemaining / currentDuration
+    const targetRemainingValue = selectedPlan.amount * targetRemaining / targetDuration
+    const charge = Math.round((targetRemainingValue - currentRemainingValue) * 100) / 100
+    if (charge <= 0) {
+      return {
+        mode: 'blocked',
+        amount: selectedPlan.amount,
+        disabled: true,
+        hint: '当前套餐剩余价值已覆盖所选套餐，请选择更高档位或更长周期',
+      }
+    }
+    return {
+      mode: 'prorated_current_period_upgrade',
+      amount: charge,
+      disabled: false,
+      hint: `已折抵当前套餐剩余价值约 ¥${formatCurrencyCompact(currentRemainingValue)}，升级后有效期至 ${formatDateShort(targetExpires)}`,
+      targetExpires,
+      currentCredit: currentRemainingValue,
+    }
+  }, [selectedPlan, membership, plans])
+
   const ageCompliance = useMemo<AgeCompliance>(() => {
     const age = calculateAge(healthProfile?.birthday)
-    return checkAgeCompliance(age, selectedPlan?.amount ?? 0)
-  }, [healthProfile, selectedPlan])
+    return checkAgeCompliance(age, paymentEstimate.amount || selectedPlan?.amount || 0)
+  }, [healthProfile, selectedPlan, paymentEstimate])
 
   const loadData = useCallback(async () => {
     const token = getAccessToken()
@@ -229,15 +321,6 @@ function ProMembershipPage() {
     applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4', darkBackground: '#101716' })
   }, [scheme])
 
-  const selectedPlan = useMemo<MembershipPlan | null>(() => {
-    if (!plans.length) return null
-    return plans.find(p => p.tier === selectedTier && p.period === selectedPeriod) || null
-  }, [plans, selectedTier, selectedPeriod])
-
-  const monthlyPlanForTier = useMemo<MembershipPlan | null>(() => {
-    return plans.find(p => p.tier === selectedTier && p.period === 'monthly') || null
-  }, [plans, selectedTier])
-
   const pollMembershipStatus = async () => {
     for (let i = 0; i < 8; i++) {
       await wait(1000)
@@ -259,6 +342,16 @@ function ProMembershipPage() {
       return
     }
     if (!selectedPlan || loading) return
+    if (paymentEstimate.disabled) {
+      await Taro.showModal({
+        title: '暂不可切换',
+        content: paymentEstimate.hint || '当前套餐暂不支持这样切换，请选择更高档位或更长周期。',
+        showCancel: false,
+        confirmText: '知道了',
+        confirmColor: '#00bc7d',
+      })
+      return
+    }
 
     // 年龄合规校验
     if (!ageCompliance.ok) {
@@ -287,7 +380,10 @@ function ProMembershipPage() {
       if (!modalRes.confirm) return
     }
 
-    const confirmContent = `订阅 ${selectedPlan.name}，¥${selectedPlan.amount.toFixed(2)}${PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}，到期后需手动续费。`
+    const payAmount = paymentEstimate.amount || selectedPlan.amount
+    const confirmContent = paymentEstimate.mode === 'prorated_current_period_upgrade'
+      ? `升级 ${selectedPlan.name}，本次补差 ¥${payAmount.toFixed(2)}。${paymentEstimate.hint || '已按当前会员剩余价值折抵'}。到期后需手动续费。`
+      : `订阅 ${selectedPlan.name}，¥${payAmount.toFixed(2)}${PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}，到期后需手动续费。`
 
     const modalRes = await Taro.showModal({
       title: '订阅确认',
@@ -413,14 +509,16 @@ function ProMembershipPage() {
 
   const actionButtonText = useMemo(() => {
     if (!selectedPlan) return '加载中...'
-    const price = `¥${selectedPlan.amount.toFixed(2)}`
+    if (paymentEstimate.disabled) return '当前套餐不可即时切换'
+    const price = `¥${(paymentEstimate.amount || selectedPlan.amount).toFixed(2)}`
     if (!isPro) return `立即开通 · ${price}`
     if (isCurrentSelectedPlan) return `续费当前套餐 · ${price}`
     const tierCompare = compareMembershipTier(selectedTier, currentPlanTier)
+    if (paymentEstimate.mode === 'prorated_current_period_upgrade') return `补差升级 · ${price}`
     if (tierCompare > 0) return `升级到${getMembershipTierLabel(selectedTier)} · ${price}`
     if (tierCompare < 0) return `切换到${selectedPlan.name} · ${price}`
     return `切换周期 · ${price}`
-  }, [selectedPlan, isPro, isCurrentSelectedPlan, selectedTier, currentPlanTier])
+  }, [selectedPlan, paymentEstimate, isPro, isCurrentSelectedPlan, selectedTier, currentPlanTier])
 
   return (
     <View className={`membership-page ${scheme === 'dark' ? 'membership-page--dark' : ''}`}>
@@ -565,12 +663,12 @@ function ProMembershipPage() {
             // 立省：优先用 savings 字段
             let saveTxt: string | null = null
             if (planForPeriod?.savings && planForPeriod.savings > 0) {
-              saveTxt = `立省¥${planForPeriod.savings.toFixed(0)}`
+              saveTxt = `立省¥${formatCurrencyCompact(planForPeriod.savings)}`
             } else if (p.key !== 'monthly') {
               const monthly = plans.find(x => x.tier === selectedTier && x.period === 'monthly')
               if (monthly && planForPeriod) {
                 const diff = monthly.amount * planForPeriod.duration_months - planForPeriod.amount
-                if (diff > 0) saveTxt = `立省¥${diff.toFixed(0)}`
+                if (diff > 0) saveTxt = `立省¥${formatCurrencyCompact(diff)}`
               }
             }
             return (
@@ -615,7 +713,7 @@ function ProMembershipPage() {
           )}
           {savingsAmount && (
             <View className='plan-save-tag'>
-              <Text className='plan-save-tag-text'>立省 ¥{savingsAmount.toFixed(0)}</Text>
+              <Text className='plan-save-tag-text'>立省 ¥{formatCurrencyCompact(savingsAmount)}</Text>
             </View>
           )}
         </View>
@@ -674,7 +772,7 @@ function ProMembershipPage() {
         <Text className='credits-hint-item'>· 精准模式：4 积分 / 次</Text>
         <Text className='credits-hint-item credits-hint-item--muted'>· 系统积分每日发放，次日 00:00 刷新；邀请、分享等奖励积分累计不清零</Text>
         <Text className='credits-hint-item'>· 邀请好友：好友在 7 天内完成 2 个自然日有效使用后，双方各得 15 积分并转入累计余额</Text>
-        <Text className='credits-hint-item'>· 生成分享海报：每日奖励 1 积分，转入累计余额</Text>
+        <Text className='credits-hint-item'>· 分享海报成功：每日奖励 1 积分，转入累计余额</Text>
       </View>
 
       {/* 当前状态 */}
@@ -817,7 +915,7 @@ function ProMembershipPage() {
             : actionButtonText
           }
         </Button>
-        <Text className='subscribe-hint'>到期后不自动续费 · 支持微信支付</Text>
+        <Text className='subscribe-hint'>{paymentEstimate.hint || '到期后不自动续费 · 支持微信支付'}</Text>
       </View>
 
     </View>

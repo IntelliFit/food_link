@@ -20,10 +20,9 @@ import {
   PrecisionReferenceDimensions,
   PrecisionReferencePresetConfig,
   PrecisionReferencePresetKey,
-  ANALYSIS_SUBSCRIBE_TEMPLATE_ID
+  showUnifiedApiError,
 } from '../../../utils/api'
 import type { AnalyzeResponse, AnalysisEngine, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
-import { showUnifiedApiError } from '../../../utils/error-modal'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   canUseStrictModeForMembership,
@@ -40,6 +39,7 @@ import {
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 
@@ -84,6 +84,7 @@ const REFERENCE_PRESETS: Array<{
 
 const DEFAULT_REFERENCE_PRESET: ReferencePresetValue = 'hand'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+const ANALYZE_SUBMIT_DEBOUNCE_MS = 300
 
 const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
   value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
@@ -297,6 +298,7 @@ function AnalyzePage() {
 
   const imagePathsRef = useRef<string[]>([])
   const routeSessionSignatureRef = useRef('')
+  const analyzeSubmitDebounceRef = useRef(0)
   imagePathsRef.current = imagePaths
 
   const canUseStrictMode = canUseStrictModeForMembership(membershipStatus)
@@ -314,7 +316,8 @@ function AnalyzePage() {
     })
   }
 
-  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode)
+  const creditUnits = Math.max(imagePaths.length, 1)
+  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode, creditUnits)
 
   useEffect(() => {
     if (!membershipStatus) return
@@ -516,7 +519,7 @@ function AnalyzePage() {
     }
     try {
       // 使用 chooseImage 避免开发者工具返回 http://tmp 的不可读临时路径
-      const res = await Taro.chooseImage({
+      const res = await chooseImageWithPrivacy({
         count: remain,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
@@ -525,7 +528,11 @@ function AnalyzePage() {
       const newPaths = await persistImagePathsImmediately(rawPaths)
       setImagePaths(prev => [...prev, ...newPaths])
     } catch (e) {
-      // cancelled
+      if ((e as any)?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e)
+        return
+      }
       console.log('选择图片取消/失败', e)
     }
   }
@@ -575,20 +582,8 @@ function AnalyzePage() {
       return
     }
 
-    // 请求订阅消息授权（在图片上传前调用，避免上传耗时导致弹窗时机不佳）
-    let subscribeStatus: string | undefined
-    if (ANALYSIS_SUBSCRIBE_TEMPLATE_ID) {
-      try {
-        const subscribeRes = await (Taro as any).requestSubscribeMessage({
-          tmplIds: [ANALYSIS_SUBSCRIBE_TEMPLATE_ID],
-        })
-        subscribeStatus = String((subscribeRes as any)?.[ANALYSIS_SUBSCRIBE_TEMPLATE_ID] || '')
-      } catch (_) {
-        // 用户拒绝或接口调用失败，静默继续
-      }
-    }
-
     setIsAnalyzing(true)
+
     Taro.showLoading({ title: '上传图片...', mask: true })
 
     try {
@@ -627,7 +622,6 @@ function AnalyzePage() {
         additionalContext: additionalInfo || undefined,
         is_multi_view: isMultiView,
         reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
-        subscribe_status: subscribeStatus,
       }
 
       // 保存图片路径供后续页面使用
@@ -715,8 +709,11 @@ function AnalyzePage() {
   /** 主按钮：无图则唤起选图；有图则直接提交并进入 analyze-loading（与拍照后进页再分析一致） */
   const handleAnalyzePress = () => {
     if (isAnalyzing) return
+    const now = Date.now()
+    if (now - analyzeSubmitDebounceRef.current < ANALYZE_SUBMIT_DEBOUNCE_MS) return
+    analyzeSubmitDebounceRef.current = now
     if (isQuotaExhausted) {
-      const content = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode)
+      const content = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode, creditUnits)
       const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
       const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
       Taro.showModal({

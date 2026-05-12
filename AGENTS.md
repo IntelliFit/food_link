@@ -35,6 +35,14 @@
   - 调试时必须按照依赖层级逐层排查：数据依赖 → 环境依赖 → 版本依赖 → 配置依赖 → 状态依赖 → 网络依赖 → 权限依赖 → 缓存依赖 → 构建依赖 → 运行时依赖
   - 详细规范请参考 `.agents/skills/jinhui-stack-debug/SKILL.md`
 
+## 可用 SKILL（第一优先级）
+- Build production-ready Go backend services following DDD-layered architecture.
+  Covers project scaffolding, config (Viper), database (GORM + MySQL/PostgreSQL),
+  object storage (S3/MinIO), OAuth2 + JWT auth, OpenTelemetry tracing + Jaeger
+  visualization, Zap logging, middleware patterns, and API routing. Use when
+  creating a new Go backend service or adding features to an existing one that
+  follows this architecture.：[ddd-go-backend](.kimi/skills/ddd-go-backend/SKILL.md)
+
 ## 持久化状态
 
 - 不要仅依赖对话记录来维持项目连续性。
@@ -115,15 +123,20 @@ npm run push-docker-ccr
 
 - 该命令会调用：`backend/scripts/push-docker-ccr.mjs`
 - 镜像路径：`ccr.ccs.tencentyun.com/littlehorse/foodlink`
+- 镜像标签：当前 Go 后端迁移阶段固定推送 `:v2`
 - 构建上下文：`backend/`（使用 `backend/Dockerfile`）
 - 默认构建平台：`linux/amd64`（避免 ARM 开发机构建后在 AMD64 服务器不可运行）
 - 如需覆盖平台（例如构建多架构清单），可设置环境变量：
   - PowerShell：`$env:DOCKER_BUILD_PLATFORM="linux/amd64,linux/arm64"; npm run push-docker-ccr`
   - Bash：`DOCKER_BUILD_PLATFORM=linux/amd64,linux/arm64 npm run push-docker-ccr`
-- 分支与标签映射：
-  - `main` → `:latest`、`:main`、`:<7位 commit sha>`
-  - `dev` → `:dev`、`:<7位 commit sha>`
-  - 其他分支 → 脚本会提示先切换到 `main` 或 `dev`
+- 默认 Go builder 基础镜像：`docker.io/library/golang:1.26.1-bookworm`
+- 如 Docker Hub 网络不稳定，可临时覆盖 Go builder 基础镜像：
+  - PowerShell：`$env:DOCKER_GO_BUILDER_IMAGE="docker.m.daocloud.io/library/golang:1.26.1-bookworm"; npm run push-docker-ccr`
+  - Bash：`DOCKER_GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm npm run push-docker-ccr`
+- 标签规则：
+  - 暂不再按 `main` / `dev` 分支映射镜像标签
+  - 任意当前分支执行脚本都会推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`
+  - 脚本仍会打印当前分支和 7 位 commit sha，便于人工确认来源
 - 脚本位置：`backend/scripts/push-docker-ccr.mjs`
 - 依赖要求：
   - 本机已安装并启动 Docker（`docker version` 可用）
@@ -133,7 +146,7 @@ npm run push-docker-ccr
 
 #### 后端部署标准操作（一步步）
 
-1. 确认当前分支为 `main` 或 `dev`，并完成需要发布的提交
+1. 确认当前分支和 commit 是需要发布的 Go 后端版本
 2. 本机确认 Docker/Buildx 可用：
    - `docker version`
    - `docker buildx version`
@@ -154,6 +167,9 @@ npm run push-docker-ccr
   - 重新执行 `docker login ccr.ccs.tencentyun.com`
 - `docker buildx` 不可用
   - 升级或重装 Docker Desktop，确保 Buildx 启用
+- `failed to fetch anonymous token` / `auth.docker.io` / `registry-1.docker.io` / `load metadata for docker.io/library/golang`
+  - 这是拉取 Go builder 基础镜像失败，不是腾讯云 CCR 登录失败
+  - 优先检查 Docker Desktop 代理或 registry mirror；需要临时绕过时设置 `DOCKER_GO_BUILDER_IMAGE`
 - 推送成功但线上未生效
   - 等待自动更新窗口（约 5 分钟）后，再检查 `food-backend.service` 状态与镜像拉取日志
 

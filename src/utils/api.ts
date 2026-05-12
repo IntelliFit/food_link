@@ -18,14 +18,10 @@ function readInjectedString(
 // config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
 export const API_BASE_URL = readInjectedString(
   () => __API_BASE_URL__,
-  'https://healthymax.cn'
+  'https://v2.healthymax.cn'
 )
 export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
-  ''
-)
-export const ANALYSIS_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
-  () => __ANALYSIS_SUBSCRIBE_TEMPLATE_ID__,
   ''
 )
 
@@ -49,6 +45,14 @@ function withNgrokBypassHeaders(
 }
 
 // 基础类型定义
+
+/** 后端标准响应信封 */
+export interface ApiResponse<T = unknown> {
+  code: number
+  message: string
+  data: T
+}
+
 export type CanonicalMealType =
   | 'breakfast'
   | 'morning_snack'
@@ -150,9 +154,12 @@ export interface Nutrients {
   fat: number
   fiber: number
   sugar: number
+  waterMl?: number
+  water_ml?: number
   saturatedFat?: number
   cholesterolMg?: number
   sodiumMg?: number
+  sodium_mg?: number
   potassiumMg?: number
   calciumMg?: number
   ironMg?: number
@@ -179,6 +186,8 @@ export interface FoodItem {
   name: string
   estimatedWeightGrams: number
   originalWeightGrams: number
+  waterMl?: number
+  water_ml?: number
   nutrients: Nutrients
   unit_nutrition_per_100g?: UnitNutritionPer100g
   matched_food_name?: string | null
@@ -309,7 +318,7 @@ async function resolveAnalyzeGeoContext(): Promise<AnalyzeGeoContext | undefined
       return cached
     }
 
-    const data = reverse.data as Record<string, unknown>
+    const data = unwrapResponse<Record<string, unknown>>(reverse)
     const raw = data.address ?? data.formatted_address ?? data.result
     let address = ''
     if (typeof raw === 'string') {
@@ -388,6 +397,7 @@ export interface FoodRecordItemPayload {
   weight: number
   ratio: number
   intake: number
+  water_ml?: number
   nutrients: Nutrients
   manual_source?: 'public_library' | 'nutrition_library'
   manual_source_id?: string
@@ -446,6 +456,8 @@ export interface FoodRecord {
     weight: number
     ratio: number
     intake: number
+    waterMl?: number
+    water_ml?: number
     nutrients: Nutrients
   }>
   total_calories: number
@@ -510,6 +522,9 @@ export interface HomeMealItem {
   protein?: number
   carbs?: number
   fat?: number
+  /** 该餐次食物含水量聚合（ml） */
+  water_ml?: number
+  waterMl?: number
   /** 该餐次食物描述（由多条记录标题拼接） */
   description?: string
 }
@@ -545,6 +560,8 @@ function normalizeHomeMealItem(raw: unknown): HomeMealItem {
     protein: row.protein,
     carbs: row.carbs,
     fat: row.fat,
+    water_ml: typeof row.water_ml === 'number' ? row.water_ml : row.waterMl,
+    waterMl: typeof row.waterMl === 'number' ? row.waterMl : row.water_ml,
   }
 }
 
@@ -603,6 +620,64 @@ export interface DashboardTargetsUpdateResult {
   targets: DashboardTargets
   /** server：已写入数据库；local：仅本机 storage（需部署后端或检查网络） */
   saveScope: 'server' | 'local'
+}
+
+export type DietRecommendationScene = 'eat_out' | 'cook_home'
+
+export interface DietRecommendationMacroContext {
+  calories?: number
+  protein: number
+  carbs: number
+  fat: number
+}
+
+export interface DietRecommendationMealContext {
+  type: string
+  name: string
+  description?: string
+  calories: number
+  protein?: number
+  carbs?: number
+  fat?: number
+}
+
+export interface DietRecommendationRequest {
+  scene: DietRecommendationScene
+  date?: string
+  calorie_remaining: number
+  macro_gaps: DietRecommendationMacroContext
+  targets: DietRecommendationMacroContext
+  current: DietRecommendationMacroContext
+  meals?: DietRecommendationMealContext[]
+  user_goal?: string
+  preference_context?: string
+}
+
+export interface DietRecommendationFoodItem {
+  name: string
+  amount: string
+}
+
+export interface DietRecommendationOption {
+  title: string
+  reason: string
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  items: DietRecommendationFoodItem[]
+  tips?: string[]
+  alternatives?: string[]
+}
+
+export interface DietRecommendationResult {
+  scene: DietRecommendationScene
+  title: string
+  summary: string
+  calorie_remaining: number
+  macro_gaps: DietRecommendationMacroContext
+  recommendations: DietRecommendationOption[]
+  generated_by?: string
 }
 
 const DASHBOARD_TARGETS_STORAGE_KEY = 'food_link_dashboard_targets_v1'
@@ -985,6 +1060,9 @@ export interface CreateMembershipPaymentResponse {
   order_no: string
   plan_code: string
   amount: number
+  original_amount?: number
+  order_mode?: 'new_purchase' | 'renewal' | 'prorated_current_period_upgrade' | string
+  upgrade_terms?: Record<string, any>
   pay_params: {
     timeStamp: string
     nonceStr: string
@@ -1028,6 +1106,7 @@ export interface HealthCondition {
   diet_preference?: string[]
   allergies?: string[]
   health_notes?: string
+  routine_type?: string
   report_extract?: ReportExtract | null
   precision_reference_defaults?: PrecisionReferenceDefaults
   [key: string]: unknown
@@ -1064,6 +1143,7 @@ export interface HealthProfileUpdateRequest {
   diet_preference?: string[]
   allergies?: string[]
   health_notes?: string
+  routine_type?: string
   /** 体检报告 OCR 识别结果，保存时与问卷一并写入 user_health_documents */
   report_extract?: ReportExtract | null
   /** 体检报告图片在 Supabase Storage 的 URL，保存时写入 user_health_documents.image_url */
@@ -1331,6 +1411,23 @@ function normalizeTaroResponseJson(raw: unknown): Record<string, unknown> | null
   return null
 }
 
+/**
+ * 解包后端标准响应 (ApiResponse<T>) {code, message, data}
+ * 当后端返回 {code: 0, data: ...} 时提取 data
+ * 当 code !== 0 时抛出包含 message 的错误
+ * 当响应没有 code 字段时（兼容旧后端/透传接口）原样返回
+ */
+export function unwrapResponse<T>(res: Taro.request.SuccessCallbackResult<any>): T {
+  const parsed = normalizeTaroResponseJson(res.data)
+  if (!parsed) return res.data as T
+  if (typeof parsed.code !== 'number') return res.data as T
+  if (parsed.code !== 0) {
+    const msg = typeof parsed.message === 'string' ? parsed.message : '请求失败'
+    throw new Error(msg)
+  }
+  return parsed.data as T
+}
+
 /** 解析 FastAPI `detail`（字符串或校验错误数组） */
 function parseFastApiDetail(data: unknown): string | undefined {
   const obj = normalizeTaroResponseJson(data)
@@ -1393,48 +1490,47 @@ function getHeaderValueIgnoreCase(headers: Record<string, any> | undefined, key:
   return text || undefined
 }
 
+function isPlaceholderTraceId(value: string | undefined): boolean {
+  const text = String(value || '').trim().toLowerCase()
+  return text === 'no-trace-id' || text === 'none' || text === 'null' || text === 'undefined'
+}
+
+function normalizeTraceId(value: string | undefined): string | undefined {
+  const text = String(value || '').trim()
+  if (!text || isPlaceholderTraceId(text)) return undefined
+  return text
+}
+
 function extractTraceIdFromHeaders(headers: Record<string, any> | undefined): string | undefined {
-  return getHeaderValueIgnoreCase(headers, 'x-trace-id')
+  return normalizeTraceId(getHeaderValueIgnoreCase(headers, 'x-trace-id'))
 }
 
 function formatUserErrorWithTrace(message: string, traceId?: string): string {
   const msg = (message || '').trim() || '网络错误，请稍后重试'
-  if (!traceId) return msg
-  return `${msg}（traceId: ${traceId}）`
+  const normalizedTraceId = normalizeTraceId(traceId)
+  if (!normalizedTraceId) return msg
+  return `${msg}（traceId: ${normalizedTraceId}）`
 }
 
 /** 从文案里去掉已拼接的 traceId 后缀，避免弹窗里重复展示 */
 function stripTraceSuffixFromUserMessage(message: string): string {
   let s = (message || '').trim()
-  s = s.replace(/\s*[\(（]\s*traceId\s*[:：]\s*[a-fA-F0-9]+\s*[\)）]\s*$/gi, '')
-  s = s.replace(/\s*traceId\s*[:：]\s*[a-fA-F0-9]+\s*$/gi, '')
+  s = s.replace(/\s*[\(（]\s*traceId\s*[:：]\s*[\w-]+\s*[\)）]\s*$/gi, '')
+  s = s.replace(/\s*traceId\s*[:：]\s*[\w-]+\s*$/gi, '')
   return s.trim()
-}
-
-/** 统一错误弹窗正文：不展示 traceId，一句一行；点击「复制」后剪贴板仍为 traceId */
-export function formatApiErrorModalBody(summaryLine: string): string {
-  const line1 = stripTraceSuffixFromUserMessage((summaryLine || '').trim()) || '请求失败，请稍后重试'
-  return [
-    line1,
-    '',
-    '请点击下方「复制」按钮。',
-    '将剪贴板内容反馈给工作人员或开发者，便于定位问题。',
-  ].join('\n')
 }
 
 export function getTraceIdFromError(error: unknown): string | undefined {
   const err = error as ErrorLike | undefined
-  const trace = (err?.traceId || '').trim()
+  const trace = normalizeTraceId(err?.traceId)
   if (trace) return trace
   const message = String(err?.message || '')
-  const m = message.match(/traceId\s*[:：]\s*([a-fA-F0-9]+)/i)
-  return m?.[1]
+  const m = message.match(/traceId\s*[:：]\s*([\w-]+)/i)
+  return normalizeTraceId(m?.[1])
 }
 
-/** 微信 `showModal` 的 `content` 过长时可能失败或不展示，统一截断 */
-const UNIFIED_ERROR_MODAL_CONTENT_MAX = 880
-
-function truncateModalContent(text: string, max: number): string {
+/** 微信 toast 文案过长时体验较差，统一截断 */
+function truncateToastTitle(text: string, max = 26): string {
   const t = (text || '').trim()
   if (t.length <= max) return t
   return `${t.slice(0, Math.max(0, max - 1))}…`
@@ -1445,39 +1541,19 @@ export async function showUnifiedApiError(error: unknown, fallback: string = '�
   const traceId = getTraceIdFromError(err)
   const raw = (err?.message || '').trim()
   const userMsg = stripTraceSuffixFromUserMessage(raw) || fallback
-  const traceForCopy = traceId || 'no-trace-id'
-  const content = truncateModalContent(formatApiErrorModalBody(userMsg), UNIFIED_ERROR_MODAL_CONTENT_MAX)
-  // 延后到下一宏任务，避免与首帧渲染 / loading 同步更新冲突导致弹窗不弹出
-  await new Promise<void>((resolve) => {
-    setTimeout(() => resolve(), 0)
-  })
+  if (isPlaceholderTraceId(raw) || isPlaceholderTraceId(userMsg)) {
+    console.warn('[showUnifiedApiError] ignored placeholder trace id error', { message: raw || userMsg })
+    return
+  }
+  console.warn('[showUnifiedApiError]', { message: raw || userMsg, traceId })
   try {
-    await Taro.showModal({
-      title: '请求失败',
-      content,
-      confirmText: '复制',
-      showCancel: false,
+    await Taro.showToast({
+      title: truncateToastTitle(userMsg || '请求失败，请稍后重试'),
+      icon: 'none',
+      duration: 2200,
     })
-    try {
-      await Taro.setClipboardData({ data: traceForCopy })
-      Taro.showToast({ title: '已复制', icon: 'success' })
-    } catch {
-      Taro.showToast({ title: '复制失败，请手动记录', icon: 'none' })
-    }
-  } catch (e) {
-    console.warn('[showUnifiedApiError] 首次 showModal 失败，重试极简弹窗', e)
-    await Taro.showModal({
-      title: '请求失败',
-      content: formatApiErrorModalBody('请求失败，请稍后重试'),
-      confirmText: '复制',
-      showCancel: false,
-    })
-    try {
-      await Taro.setClipboardData({ data: traceForCopy })
-      Taro.showToast({ title: '已复制', icon: 'success' })
-    } catch {
-      Taro.showToast({ title: '复制失败，请手动记录', icon: 'none' })
-    }
+  } catch (toastError) {
+    console.warn('[showUnifiedApiError] showToast failed', toastError)
   }
 }
 
@@ -1513,6 +1589,18 @@ function parseUploadAnalyzeResponseData(rawData: unknown): Record<string, any> |
   }
 }
 
+function unwrapUploadAnalyzePayload(parsedData: Record<string, any> | null): Record<string, any> | null {
+  if (!parsedData) return null
+  if (typeof parsedData.code === 'number') {
+    if (parsedData.code !== 0) return parsedData
+    const data = parsedData.data
+    return data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, any>)
+      : parsedData
+  }
+  return parsedData
+}
+
 export async function uploadAnalyzeImageFile(localPath: string): Promise<{ imageUrl: string }> {
   const filePath = (localPath || '').trim()
   if (!filePath) {
@@ -1534,6 +1622,7 @@ export async function uploadAnalyzeImageFile(localPath: string): Promise<{ image
   })
 
   const parsedData = parseUploadAnalyzeResponseData(response?.data)
+  const payload = unwrapUploadAnalyzePayload(parsedData)
   if (response?.statusCode !== 200) {
     throwHttpErrorWithStatus(
       Number(response?.statusCode || 0),
@@ -1543,7 +1632,7 @@ export async function uploadAnalyzeImageFile(localPath: string): Promise<{ image
     )
   }
 
-  const imageUrl = String(parsedData?.imageUrl || '').trim()
+  const imageUrl = String(payload?.imageUrl || payload?.image_url || payload?.url || '').trim()
   if (!imageUrl) {
     throw new Error('上传图片失败：服务端未返回图片地址')
   }
@@ -1574,7 +1663,7 @@ export async function uploadAnalyzeImage(base64Image: string): Promise<{ imageUr
       response.header as Record<string, any> | undefined
     )
   }
-  return response.data as { imageUrl: string }
+  return unwrapResponse<{ imageUrl: string }>(response)
 }
 
 export async function analyzeFoodImage(
@@ -1616,7 +1705,7 @@ export async function analyzeFoodImage(
       )
     }
 
-    return response.data as AnalyzeResponse
+    return unwrapResponse<AnalyzeResponse>(response)
   } catch (error: any) {
     console.error('API调用失败:', error)
     throw new Error(error.message || '连接服务器失败，请检查网络')
@@ -1669,7 +1758,7 @@ export async function analyzeFoodImageCompare(
       )
     }
 
-    return response.data as CompareAnalyzeResponse
+    return unwrapResponse<CompareAnalyzeResponse>(response)
   } catch (error: any) {
     console.error('双模型对比分析失败:', error)
     throw new Error(error.message || '连接服务器失败，请检查网络')
@@ -1717,7 +1806,7 @@ export async function analyzeFoodText(params: AnalyzeTextParams | string): Promi
         response.header as Record<string, any> | undefined
       )
     }
-    return response.data as AnalyzeResponse
+    return unwrapResponse<AnalyzeResponse>(response)
   } catch (error: any) {
     console.error('analyzeFoodText 失败:', error)
     throw new Error(error.message || '连接服务器失败，请检查网络')
@@ -1756,7 +1845,6 @@ export interface AnalyzeTaskSubmitParams {
   image_url: string
   image_urls?: string[]
   meal_type?: MealType
-  subscribe_status?: string
   date?: string
   timezone_offset_minutes?: number
   province?: string
@@ -1772,11 +1860,19 @@ export interface AnalyzeTaskSubmitParams {
   execution_mode?: ExecutionMode
   analysis_engine?: AnalysisEngine
   previousResult?: AnalyzeResponse
+  correction_source_task_id?: string
+  correction_root_task_id?: string
   precision_session_id?: string
   reference_objects?: PrecisionReferenceObjectInput[]
   correctionItems?: Array<{
     name: string
     weight: number
+    originalWeight?: number
+    calorie?: number
+    protein?: number
+    carbs?: number
+    fat?: number
+    nutrients?: Nutrients
     sourceName?: string
     sourceItemId?: number
     nameEdited?: boolean
@@ -1915,12 +2011,19 @@ export interface AnalyzeTextTaskSubmitParams {
   execution_mode?: ExecutionMode
   analysis_engine?: AnalysisEngine
   previousResult?: AnalyzeResponse
+  correction_source_task_id?: string
+  correction_root_task_id?: string
   precision_session_id?: string
   reference_objects?: PrecisionReferenceObjectInput[]
-  subscribe_status?: string
   correctionItems?: Array<{
     name: string
     weight: number
+    originalWeight?: number
+    calorie?: number
+    protein?: number
+    carbs?: number
+    fat?: number
+    nutrients?: Nutrients
     sourceName?: string
     sourceItemId?: number
     nameEdited?: boolean
@@ -2049,6 +2152,11 @@ export interface DeleteTaskResult {
   images_deleted?: number
 }
 
+export interface DeleteUnrecordedTasksResult {
+  deleted: boolean
+  count: number
+}
+
 export async function deleteAnalysisTask(taskId: string): Promise<DeleteTaskResult> {
   const res = await authenticatedRequest(`/api/analyze/tasks/${taskId}`, {
     method: 'DELETE',
@@ -2059,6 +2167,18 @@ export async function deleteAnalysisTask(taskId: string): Promise<DeleteTaskResu
     throw new Error(msg)
   }
   return res.data as DeleteTaskResult
+}
+
+export async function deleteUnrecordedAnalysisTasks(): Promise<DeleteUnrecordedTasksResult> {
+  const res = await authenticatedRequest('/api/analyze/tasks/unrecorded', {
+    method: 'DELETE',
+    timeout: 30000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '丢弃未记录识别结果失败'
+    throw new Error(msg)
+  }
+  return res.data as DeleteUnrecordedTasksResult
 }
 
 /**
@@ -2113,7 +2233,7 @@ export async function getPosterCalorieCompare(recordId: string): Promise<PosterC
     }),
     timeout: 10000,
   })
-  if (res.statusCode === 200) return res.data as PosterCalorieCompareResponse
+  if (res.statusCode === 200) return unwrapResponse<PosterCalorieCompareResponse>(res)
   return null
 }
 
@@ -2217,7 +2337,7 @@ export async function getSharedFoodRecord(recordId: string): Promise<{ record: F
     const msg = (res.data as any)?.detail || '获取记录详情失败'
     throw new Error(msg)
   }
-  return res.data as { record: FoodRecord }
+  return unwrapResponse<{ record: FoodRecord }>(res)
 }
 
 /**
@@ -2390,6 +2510,21 @@ export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSum
     throw new Error(msg)
   }
   return res.data as StatsSummary
+}
+
+export async function generateDietRecommendation(
+  payload: DietRecommendationRequest
+): Promise<DietRecommendationResult> {
+  const res = await authenticatedRequest('/api/diet/recommendations', {
+    method: 'POST',
+    data: payload,
+    timeout: 45000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '生成推荐失败'
+    throw new Error(msg)
+  }
+  return res.data as DietRecommendationResult
 }
 
 export async function getBodyMetricsSummary(range: 'week' | 'month' = 'month'): Promise<BodyMetricsSummary> {
@@ -2637,6 +2772,16 @@ export async function authenticatedRequest(
     )
   }
 
+  // 解包后端标准响应 {code: 0, message: "ok", data: ...}
+  const parsed = normalizeTaroResponseJson(res.data)
+  if (parsed && typeof parsed.code === 'number') {
+    if (parsed.code !== 0) {
+      const msg = typeof parsed.message === 'string' ? parsed.message : '请求失败'
+      throw new Error(msg)
+    }
+    res.data = parsed.data
+  }
+
   return res
 }
 
@@ -2681,7 +2826,7 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
       )
     }
 
-    const loginData = response.data as LoginResponse
+    const loginData = unwrapResponse<LoginResponse>(response)
 
     // 保存 token 到本地存储
     saveTokens(loginData.access_token, loginData.refresh_token, loginData.user_id)
@@ -2758,7 +2903,7 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
       )
     }
 
-    return ((response.data as MembershipPlansResponse)?.list || []) as MembershipPlan[]
+    return ((unwrapResponse<MembershipPlansResponse>(response))?.list || []) as MembershipPlan[]
   } catch (error: any) {
     console.error('获取会员套餐失败:', error)
     throw new Error(error.message || '获取会员套餐失败')
@@ -3217,7 +3362,7 @@ export async function searchManualFood(q: string, limit: number = 20): Promise<M
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '搜索失败')
   }
-  return ((response.data as any)?.results || []) as ManualFoodSearchResult[]
+  return ((unwrapResponse<any>(response))?.results || []) as ManualFoodSearchResult[]
 }
 
 export interface ManualFoodBrowseResult {
@@ -3245,7 +3390,7 @@ export async function browseManualFood(): Promise<ManualFoodBrowseResult> {
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取食物库失败')
   }
-  return response.data as ManualFoodBrowseResult
+  return unwrapResponse<ManualFoodBrowseResult>(response)
 }
 
 export interface UnresolvedFoodLog {
@@ -3549,7 +3694,7 @@ export async function getFriendInviteProfile(userId: string): Promise<FriendInvi
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取邀请资料失败')
   }
-  return response.data as FriendInviteProfile
+  return unwrapResponse<FriendInviteProfile>(response)
 }
 
 export async function getFriendInviteProfileByCode(code: string): Promise<FriendInviteProfile> {
@@ -3562,7 +3707,7 @@ export async function getFriendInviteProfileByCode(code: string): Promise<Friend
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取邀请资料失败')
   }
-  return response.data as FriendInviteProfile
+  return unwrapResponse<FriendInviteProfile>(response)
 }
 
 /** 登录后解析邀请码 */
@@ -3687,7 +3832,7 @@ export async function communityGetPublicFeed(
     timeout: 10000
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态失败')
-  return response.data as { list: CommunityFeedItem[]; has_more?: boolean }
+  return unwrapResponse<{ list: CommunityFeedItem[]; has_more?: boolean }>(response)
 }
 
 /** 点赞某条动态 */
@@ -3987,6 +4132,15 @@ export async function uncollectPublicFoodLibraryItem(itemId: string): Promise<vo
   }
 }
 
+/** 删除/下架自己上传的公共食物库条目 */
+export async function deletePublicFoodLibraryItem(itemId: string): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}`, { method: 'DELETE', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '删除失败')
+  }
+  return response.data as { message: string }
+}
+
 /** 获取公共食物库条目的评论列表 */
 export async function getPublicFoodLibraryComments(itemId: string): Promise<{ list: PublicFoodLibraryComment[] }> {
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments`, { method: 'GET', timeout: 10000 })
@@ -4043,6 +4197,7 @@ export interface UserRecipe {
     weight: number
     ratio: number
     intake: number
+    water_ml?: number
     nutrients: Nutrients
   }>
   total_calories: number
@@ -4069,6 +4224,7 @@ export interface CreateRecipeRequest {
     weight: number
     ratio: number
     intake: number
+    water_ml?: number
     nutrients: Nutrients
   }>
   total_calories: number
@@ -4091,6 +4247,7 @@ export interface UpdateRecipeRequest {
     weight: number
     ratio: number
     intake: number
+    water_ml?: number
     nutrients: Nutrients
   }>
   total_calories?: number
@@ -4199,8 +4356,9 @@ export interface ExerciseLogItem {
   id: string
   exercise_desc: string
   calories_burned: number
-  recorded_on: string
-  recorded_at: string
+  recorded_on?: string | null
+  recorded_at?: string | null
+  created_at?: string | null
   /** 模型估算时的思考过程（需库表含 ai_reasoning 列） */
   ai_reasoning?: string | null
 }

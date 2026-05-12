@@ -24,9 +24,9 @@ export default defineConfig<'vite'>(async (merge) => {
     process.env.TARO_APP_API_BASE_URL ||
     (process.env.NODE_ENV === 'development'
       ? 'http://127.0.0.1:3010'
-      : 'https://healthymax.cn')
+      : 'https://v2.healthymax.cn')
   const expirySubscribeTemplateId = process.env.TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID || ''
-  const analysisSubscribeTemplateId = process.env.TARO_APP_ANALYSIS_SUBSCRIBE_TEMPLATE_ID || ''
+  const iconCdnBaseUrl = process.env.TARO_APP_ICON_CDN_BASE_URL || ''
 
   const baseConfig: UserConfigExport<'vite'> = {
     projectName: 'food_link',
@@ -45,8 +45,8 @@ export default defineConfig<'vite'>(async (merge) => {
     ],
     defineConstants: {
       __API_BASE_URL__: JSON.stringify(apiBaseUrl),
+      __ICON_CDN_BASE_URL__: JSON.stringify(iconCdnBaseUrl),
       __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(expirySubscribeTemplateId),
-      __ANALYSIS_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(analysisSubscribeTemplateId),
       /** 仅 development 构建为 true；上传/体验版等走 production 构建为 false，用于隐藏调试 UI 与调试保存分支 */
       __ENABLE_DEV_DEBUG_UI__: JSON.stringify(process.env.NODE_ENV === 'development'),
       /** 与 package.json version 同步，发布新版本时随 npm version 一并更新 */
@@ -142,9 +142,9 @@ export default defineConfig<'vite'>(async (merge) => {
             }
           }
         },
-        // 将 ECharts/ZRender 打到分包目录，避免进入主包根目录 vendors（缓解主包 2MB）
+        // 将 ECharts/ZRender 打到代谢页专属分包，避免留在共享分包里继续挤占体积。
         {
-          name: 'echarts-chunk-to-package-extra',
+          name: 'echarts-chunk-to-package-stats-metabolic',
           configResolved(config) {
             const ro = config.build.rollupOptions
             const outs = ro.output
@@ -168,7 +168,7 @@ export default defineConfig<'vite'>(async (merge) => {
               const prevNames = o.chunkFileNames
               o.chunkFileNames = (chunkInfo) => {
                 if (chunkInfo.name === 'echarts-vendor') {
-                  return 'packageExtra/echarts-vendor.js'
+                  return 'packageStatsMetabolic/echarts-vendor.js'
                 }
                 if (typeof prevNames === 'function') {
                   return prevNames(chunkInfo)

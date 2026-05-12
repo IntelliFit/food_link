@@ -4,9 +4,9 @@
 
 ---
 
-## 2026-05-08
+## 2026-05-10
 
-- 🐛 fix: 统计 Tab「AI 风险解读」详情弹窗在缓存需刷新（`insightNeedsRefresh`）时补回「手动更新」按钮，沿用 `handleGenerateInsight` 流程；加载中切换为 spinner，深色主题同步配色 `src/pages/stats/index.tsx` `src/pages/stats/index.scss` `src/styles/fl-color-scheme-dark.scss`
+- 🔧 chore: 发布小程序版本 `3.0.1`（`package.json` / `package-lock.json`；「我的」页版本号继续由 `__APP_VERSION__` 从 package 注入）
 
 ## 2026-05-01
 

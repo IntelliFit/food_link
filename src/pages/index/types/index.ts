@@ -55,7 +55,7 @@ export interface TargetEditorProps {
   visible: boolean
   targetForm: TargetFormState
   saving: boolean
-  onTargetFormChange: (form: TargetFormState) => void
+  onTargetFieldChange: (key: keyof TargetFormState, value: string) => void
   onSave: () => void
   onClose: () => void
 }

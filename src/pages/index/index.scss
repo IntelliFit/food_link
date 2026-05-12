@@ -149,6 +149,69 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   margin-bottom: 16rpx; // 增加间距
 }
 
+.home-backfill-hint {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-height: 64rpx;
+  padding: 10rpx 18rpx 10rpx 22rpx;
+  margin: -2rpx 0 18rpx;
+  border-radius: 18rpx;
+  background: rgb(92 184 150 / 12%);
+  border: 1rpx solid rgb(92 184 150 / 24%);
+  box-sizing: border-box;
+
+  &--tappable {
+    cursor: pointer;
+  }
+
+  &--tappable:active {
+    opacity: 0.82;
+  }
+}
+
+.home-backfill-hint__dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: $primary-color;
+  box-shadow: 0 0 0 6rpx rgb(92 184 150 / 14%);
+  flex-shrink: 0;
+}
+
+.home-backfill-hint__text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 600;
+  color: #2f7f62;
+}
+
+.home-backfill-hint__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2rpx;
+}
+
+.home-backfill-hint__date {
+  font-size: 20rpx;
+  line-height: 28rpx;
+  color: rgb(47 127 98 / 72%);
+}
+
+.home-backfill-hint__action {
+  flex-shrink: 0;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  font-weight: 700;
+  color: #ffffff;
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: $primary-color;
+  box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 22%);
+}
+
 .date-list {
   display: flex;
   justify-content: space-between;
@@ -436,6 +499,411 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 // 合并卡片样式 - 热量+三大营养素
 .combined-card {
   padding-bottom: 24rpx;
+}
+
+.diet-rec-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  min-height: 112rpx;
+  padding: 22rpx 24rpx;
+  margin-bottom: 16rpx;
+  background: #ffffff;
+  border: 1rpx solid rgb(92 184 150 / 18%);
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 18rpx rgb(0 0 0 / 4%);
+  box-sizing: border-box;
+}
+
+.diet-rec-entry-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.diet-rec-entry-icon {
+  width: 64rpx;
+  height: 64rpx;
+  flex-shrink: 0;
+  border-radius: 20rpx;
+  background: rgb(92 184 150 / 12%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diet-rec-entry-icon-text {
+  font-size: 32rpx;
+  color: $primary-color;
+}
+
+.diet-rec-entry-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.diet-rec-entry-title {
+  font-size: 28rpx;
+  line-height: 38rpx;
+  font-weight: 700;
+  color: $text-primary;
+}
+
+.diet-rec-entry-subtitle {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: $text-secondary;
+}
+
+.diet-rec-entry-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.diet-rec-entry-btn {
+  min-width: 104rpx;
+  height: 54rpx;
+  padding: 0 18rpx;
+  border-radius: 16rpx;
+  background: rgb(92 184 150 / 10%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+
+  &.primary {
+    background: $primary-color;
+  }
+
+  &:active {
+    opacity: 0.82;
+  }
+}
+
+.diet-rec-entry-btn-text {
+  font-size: 24rpx;
+  line-height: 32rpx;
+  font-weight: 700;
+  color: #2f7f62;
+
+  &.primary {
+    color: #ffffff;
+  }
+}
+
+.diet-rec-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.diet-rec-mask {
+  position: absolute;
+  inset: 0;
+  background: rgb(15 23 42 / 42%);
+}
+
+.diet-rec-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 86vh;
+  padding: 16rpx 28rpx calc(34rpx + env(safe-area-inset-bottom));
+  border-radius: 32rpx 32rpx 0 0;
+  background: $modal-sheet-bg;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.diet-rec-handle {
+  width: 72rpx;
+  height: 8rpx;
+  margin: 0 auto 22rpx;
+  border-radius: 999rpx;
+  background: #d1d5db;
+}
+
+.diet-rec-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 18rpx;
+}
+
+.diet-rec-kicker {
+  display: block;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: $primary-color;
+  font-weight: 700;
+  margin-bottom: 4rpx;
+}
+
+.diet-rec-title {
+  display: block;
+  font-size: 34rpx;
+  line-height: 44rpx;
+  font-weight: 800;
+  color: $text-primary;
+}
+
+.diet-rec-close {
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 50%;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diet-rec-close-text {
+  font-size: 40rpx;
+  line-height: 48rpx;
+  color: $text-secondary;
+}
+
+.diet-rec-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10rpx;
+  padding: 8rpx;
+  margin-bottom: 18rpx;
+  border-radius: 18rpx;
+  background: #f3f4f6;
+}
+
+.diet-rec-tab {
+  height: 58rpx;
+  border-radius: 14rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.active {
+    background: #ffffff;
+    box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 6%);
+  }
+}
+
+.diet-rec-tab-text {
+  font-size: 25rpx;
+  line-height: 34rpx;
+  color: $text-secondary;
+  font-weight: 700;
+}
+
+.diet-rec-tab.active .diet-rec-tab-text {
+  color: #2f7f62;
+}
+
+.diet-rec-loading {
+  min-height: 420rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diet-rec-spinner {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  border: 5rpx solid rgb(92 184 150 / 20%);
+  border-top-color: $primary-color;
+  animation: spin 0.9s linear infinite;
+}
+
+.diet-rec-summary {
+  display: block;
+  font-size: 26rpx;
+  line-height: 38rpx;
+  color: $text-secondary;
+  margin-bottom: 16rpx;
+}
+
+.diet-rec-gap-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10rpx;
+  margin-bottom: 18rpx;
+}
+
+.diet-rec-gap-pill {
+  min-height: 76rpx;
+  border-radius: 16rpx;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.diet-rec-gap-value {
+  font-size: 26rpx;
+  line-height: 34rpx;
+  font-weight: 800;
+  color: $text-primary;
+}
+
+.diet-rec-gap-label {
+  font-size: 20rpx;
+  line-height: 28rpx;
+  color: $text-tertiary;
+}
+
+.diet-rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.diet-rec-option {
+  padding: 22rpx;
+  border-radius: 20rpx;
+  border: 1rpx solid #e5e7eb;
+  background: #ffffff;
+}
+
+.diet-rec-option-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 8rpx;
+}
+
+.diet-rec-option-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 29rpx;
+  line-height: 38rpx;
+  font-weight: 800;
+  color: $text-primary;
+}
+
+.diet-rec-option-cal {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 800;
+  color: $primary-color;
+}
+
+.diet-rec-option-reason {
+  display: block;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: $text-secondary;
+  margin-bottom: 14rpx;
+}
+
+.diet-rec-foods {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  margin-bottom: 14rpx;
+}
+
+.diet-rec-food {
+  min-height: 48rpx;
+  padding: 0 14rpx;
+  border-radius: 12rpx;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14rpx;
+}
+
+.diet-rec-food-name,
+.diet-rec-food-amount {
+  font-size: 24rpx;
+  line-height: 32rpx;
+  color: $text-primary;
+}
+
+.diet-rec-food-amount {
+  flex-shrink: 0;
+  font-weight: 700;
+  color: $text-secondary;
+}
+
+.diet-rec-macros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rpx;
+  margin-bottom: 10rpx;
+}
+
+.diet-rec-macro {
+  padding: 6rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 10%);
+  font-size: 21rpx;
+  line-height: 28rpx;
+  color: #2f7f62;
+}
+
+.diet-rec-tip,
+.diet-rec-alt {
+  display: block;
+  font-size: 23rpx;
+  line-height: 34rpx;
+  color: $text-secondary;
+}
+
+.diet-rec-alt {
+  color: $text-tertiary;
+}
+
+.diet-rec-actions,
+.diet-rec-empty {
+  display: flex;
+  justify-content: center;
+  padding-top: 20rpx;
+}
+
+.diet-rec-empty {
+  min-height: 260rpx;
+  align-items: center;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.diet-rec-empty-text {
+  font-size: 26rpx;
+  color: $text-secondary;
+}
+
+.diet-rec-refresh {
+  min-width: 180rpx;
+  height: 64rpx;
+  padding: 0 28rpx;
+  border-radius: 18rpx;
+  background: $primary-color;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    opacity: 0.84;
+  }
+}
+
+.diet-rec-refresh-text {
+  color: #ffffff;
+  font-size: 26rpx;
+  line-height: 34rpx;
+  font-weight: 700;
 }
 
 .macros-divider {
@@ -1360,7 +1828,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-variant-numeric: tabular-nums;
 }
 
-// 第三行：三大营养素
+// 第三行：三大营养素 + 含水量
 .meal-macros-row {
   display: flex;
   align-items: center;
@@ -3010,14 +3478,6 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   font-weight: 700;
   color: #ffffff;
   line-height: 1;
-}
-
-.record-menu-dot {
-  width: 16rpx;
-  height: 16rpx;
-  background: #ef4444;
-  border-radius: 50%;
-  flex-shrink: 0;
 }
 
 /* 记录菜单：调试工具（仅 development 构建；预置图 + 假数据测 UI） */

@@ -1,24 +1,13 @@
-# 不把密钥与本地环境打进镜像
 .env
-.env.*
-!.env.example
+config.yaml
+bin/
+.gocache/
 
-__pycache__
-*.py[cod]
-*$py.class
-.Python
-venv
-.venv
-*.egg-info
-.eggs
-dist
-build
-.git
-.gitignore
-*.md
-.pytest_cache
-.mypy_cache
-.ruff_cache
-htmlcov
-.coverage
-coverage.xml
+**/*_test.go
+testdata/
+migrations/
+
+docs/**
+!docs/
+!docs/backend-api-prd/
+!docs/backend-api-prd/ROUTE_MAP.md

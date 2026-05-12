@@ -65,48 +65,9 @@ $community-border-soft: rgb(92 184 150 / 18%);
 
 .load-more-loading {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16rpx;
-}
-
-.loading-spinner {
-  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12rpx;
-}
-
-.spinner-dot {
-  width: 14rpx;
-  height: 14rpx;
-  border-radius: 50%;
-  background: #94a3b8;
-  animation: dotBounce 1.4s ease-in-out infinite both;
-
-  &:nth-child(1) {
-    animation-delay: -0.32s;
-  }
-
-  &:nth-child(2) {
-    animation-delay: -0.16s;
-  }
-
-  &:nth-child(3) {
-    animation-delay: 0s;
-  }
-}
-
-@keyframes dotBounce {
-  0%, 80%, 100% {
-    transform: scale(0.6);
-    opacity: 0.4;
-  }
-
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  min-height: 48rpx;
 }
 
 .load-more-idle,
@@ -1806,6 +1767,11 @@ $feed-body-font-size: 30rpx;
 
 .action-delete {
   margin-left: auto;
+
+  &.is-deleting {
+    opacity: 0.86;
+    pointer-events: none;
+  }
 }
 
 .action-delete-icon {

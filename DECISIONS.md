@@ -1,14 +1,475 @@
 # DECISIONS
 
-- `2026-05-08`: 用户/付费口径的稳定统计优先级暂定为：
-  - “最近 7 天还在用”优先按核心行为表去重统计，而不是直接看 `weapp_user.update_time`
-  - 当前核心行为并集口径为：
-    - `analysis_tasks.created_at`
-    - `user_food_records.record_time`
-    - `user_exercise_logs.recorded_on`
-  - “成功付费用户”优先以 `pro_membership_payment_records.status='paid'` 的真实支付订单为准
-  - `user_pro_memberships` 更适合表示当前权益快照，不应单独作为“成功付费人数”的唯一真源
-  - 若要衡量这个群体是否还在使用，优先看 “最近 7 天活跃的付费用户 / 累计成功付费用户”，不要直接把 “累计付费用户 / 最近 7 天活跃总用户” 当成留存指标
+- `2026-05-12`: 旧主包 `pages/record/index` 不再作为饮食记录入口：
+  - 当前饮食记录主入口是首页 `RecordMenu` 弹窗；底栏中间按钮、首页空餐食按钮、当天记录页空态补录都必须回到首页打开该弹窗。
+  - 旧 `src/pages/record/index.tsx`、旧 `packageExtra/pages/record-menu/index.tsx` 及其样式/配置应移除，避免旧拍照 UI 被误打开。
+  - 自定义 tabBar 中间按钮可以保留视觉项，但 `pagePath` 不应再指向已删除的 `/pages/record/index`。
+  - 登录回跳或旧缓存里的 `/pages/record/index` 统一兼容收口到 `/pages/index/index`。
+
+- `2026-05-12`: `useAppColorScheme()` 在小程序页面 context 断链时不能直接 throw：
+  - App 层仍应使用 `AppColorSchemeProvider` 作为正常主题来源。
+  - 但 Taro 分包页面、hot reload 或页面独立挂载时可能让页面树读不到 provider；此时应从 `fl_app_color_scheme` 本地存储构建 fallback context。
+  - fallback 仍要提供 `setScheme/toggleScheme` 并触发 `APP_COLOR_SCHEME_EVENT`，避免“今日餐食”等 `withAuth` 包裹页面因主题 hook 抛错白屏。
+
+- `2026-05-12`: 首页运动卡片进入身体趋势页后，运动记录的目标日期必须继续沿用路由里的选中日期：
+  - `src/pages/index/index.tsx` 的运动卡片只负责把当前 `selectedDate` 传给 `body-trends`。
+  - `src/packageExtra/pages/body-trends/index.tsx` 不能再把“去记录”按钮硬编码成今天；它要把路由 `date` 再传给 `exercise-record`。
+  - `src/packageExtra/pages/exercise-record/index.tsx` 提交前要重新从当前日期 ref 归一化一次目标日期，避免切日后 state 闭包把记录写到默认今天。
+
+- `2026-05-12`: 圈子好友动态页面已有内存列表时也必须按 `CACHE_DURATION` 自动刷新：
+  - 社区页 `Taro.useDidShow()` 不能因为 `feedList.length > 0` 就直接 return，否则小程序长期挂起/切 tab 回来时会一直展示旧 Feed。
+  - 在已有列表分支中仍应保留临时评论合并，但如果 `Date.now() - lastFeedRefreshTime.current > CACHE_DURATION`，必须静默调用 `refreshFeed(true, false)` 拉取 `/api/community/feed` 最新数据。
+  - `App.useLaunch` 清理跨冷启动缓存只能解决冷启动旧数据；不能替代页面保持挂载时的显示刷新。
+  - 圈子默认排序应为 `latest`，旧筛选缓存 key 升级时需更换版本号，避免历史 `recommended` 缓存影响用户第一屏。
+  - `ScrollView.onScrollToLower` 在微信端不稳定时，必须保留 `onScroll` 近底兜底触发 `loadMoreFeed()`，并给底部加载更多区域提供点击兜底。
+  - 后端 feed 分页不能只取 `limit` 条后再做 `offset` 切片；对于 `latest` 这类非自定义排序，repo 查询候选数量至少要是 `offset + limit`，否则第二页必然为空。
+- `2026-05-12`: 食物营养库 DeepSeek 回填分成两条路径：
+  - 已存在于 `food_nutrition_library` 且已有三大营养素的食物，不应当重新生成整条记录，也不应覆盖已有热量/蛋白/碳水/脂肪；只允许补当前为 0 的扩展营养字段（纤维、糖、矿物质、维生素等）。
+  - 批量待处理目标按“整组维生素为空或整组矿物质为空”筛选，而不是任意单字段为 0；因为胆固醇、维 D、B12 等字段对很多食物天然可能为 0，不能据此判定数据缺失。
+  - 不在营养库里的食物，才通过 DeepSeek 生成完整每 100g 营养条目，并用 `deepseek_auto` 来源插入标准库与 alias。
+  - 批量维护命令使用 `backend/cmd/nutrition-backfill`；默认 dry-run，显式 `--apply` 才写库。DeepSeek 批量默认 `--batch-size 1`，优先保证 JSON 稳定。
+  - 全量执行时建议重复运行 `--apply --limit 100 --batch-size 1` 且保持 `offset=0`，让每轮从当前仍缺失的集合继续处理；`offset` 只用于预览或手动跳过当前批次。
+
+- `2026-05-12`: 后端 Docker 部署构建需要显式使用可配置 `GOPROXY`：
+  - `backend/Dockerfile` 在 builder 阶段设置 `ARG GOPROXY=https://goproxy.cn,direct` 与 `ENV GOPROXY=${GOPROXY}`。
+  - `backend/scripts/push-docker-ccr.mjs` 默认将 `DOCKER_GO_PROXY` / `GOPROXY` / `https://goproxy.cn,direct` 传入 Docker build。
+  - 这样直接运行 `npm run push-docker-ccr` 时，`go mod download` 不再默认依赖容器内访问 `proxy.golang.org`，降低本地网络卡死风险。
+
+- `2026-05-12`: 线上 Kafka topic partition 初始建议按后端总 worker 数规划，并给未来 Pod 扩容预留。
+  - 当前若后端 3 个 Pod 且 `worker.count=2`，同一 consumer group 中总消费者为 6。
+  - 后续若扩到 6 个 Pod 且 `worker.count=2`，总消费者为 12。
+  - 建议线上 `food-link-analysis-tasks` topic 初始创建为 12 partitions；当前 6 个消费者可消费 12 partitions，未来扩容到 12 个消费者时无需改 topic。
+  - 单副本 Kafka 仍只能 `replication-factor=1`；若后续 Kafka 扩成 3 broker，应新环境或重建 topic 使用 `replication-factor=3`。
+
+- `2026-05-12`: Kafka consumer 并发口径按“后端 Pod 数 * worker.count”计算，而不是只看单个 Pod。
+  - 同一个 `consumer_group` 内，Kafka 会把 topic partition 分配给消费者；同一 partition 同一时间只会给 group 内一个 consumer。
+  - 如果后端 3 个 Pod 且 `worker.count=8`，实际是 24 个消费者；topic partition 少于 24 时，多出来的消费者会空闲。
+  - 当前模型任务会调用外部 LLM/OCR，生产初始值建议让 partition 数与有效消费者数接近，并从较小并发开始，例如 3 个后端 Pod 时 `worker.count=1~2`、topic partitions 为 3~6，再根据限流和延迟扩容。
+  - 单副本 Kafka 只能用于轻量/过渡环境；生产可靠性需要多 broker、topic replication factor 大于 1、持久化卷和健康检查。
+
+- `2026-05-12`: 本地 Kafka 验证使用仓库内 `backend/docker-compose.kafka.yml` 启动单节点 Kafka。
+  - 本地 Kafka 镜像使用官方 `apache/kafka:3.7.0`；不要使用当前解析不到的 `bitnami/kafka:3.7` 标签。
+  - 本地 Kafka broker 暴露为 `127.0.0.1:9092`，topic 使用 `food-link-analysis-tasks`。
+  - 本地测试时 `backend/config.yaml` 可临时设置 `task_queue.driver: "kafka"`、`brokers: ["127.0.0.1:9092"]`、`consumer_group: "food-link-local-workers"`。
+  - 独立 worker 入口已删除；本地 Kafka 模式仍通过 server 内嵌 worker 消费，必须保持 `worker.count > 0`。
+- `2026-05-12`: 首页喝水卡片依赖 `bodyMetrics.waterByDate`，不能只靠 `/api/home/dashboard` 刷新：
+  - 删除或更新食物记录会在后端同步维护 AI 饮水日志，但首页喝水卡片来自 `/api/body-metrics/summary` 合并后的本地 `bodyMetrics`。
+  - 因此删除食物记录后的首页轻量同步必须同时刷新 body metrics summary，否则热量/三宏会更新，喝水量仍停留在本地旧值。
+  - 前端合并云端 `water_daily` 时需要把 `total/logs` 钳制为非负数；后端也应保证扣减不低于 0。
+  - `user_water_logs.recorded_on` 是数据库 `date` 字段；后端 exact/sum/delete/reduce 这类单日水日志操作必须按自然日匹配，不能用中国自然日转 UTC 的 `time.Time` 窗口去查，否则 Go/GORM 对 PostgreSQL date 参数可能匹配不到行。
+
+- `2026-05-12`: 食物分析压测脚本的主耗时口径改为后端 processing 窗口：
+  - 20 并发压测日志里的 `task_wait` 只作为辅助字段，因为它包含提交后排队、worker 领取等待和轮询间隔。
+  - 主性能字段使用 `processing`：轮询第一次观察到 `analysis_tasks.status=processing` 时取任务 `updated_at` 作为开始，终态 `done` 的 `updated_at` 作为结束。
+  - 压测汇总优先看 `avg_processing / p95_processing / processing_variance_ms2 / processing_stddev`；`avg_total` 仍包含提交接口和轮询总等待，不应再作为模型性能结论。
+  - 默认轮询间隔使用 `500ms`，降低漏采 processing 开始时间的概率；真实模型压测仍只在显式手动执行 build tag `food_analysis_load` 时运行。
+
+- `2026-05-12`: 食物记录含水量与喝水统计的扣减口径：
+  - 保存食物记录时自动生成的饮水日志统一使用 `source_type='ai'`，用于和用户手动喝水区分。
+  - 删除整条食物记录时，后端按原记录 items 的实际摄入含水量，从该记录日期对应中国自然日的 AI 饮水日志中扣减。
+  - 当天饮食记录页删除单个食物成分实际走 `PUT /api/food-record/:id` 更新 items；后端必须按旧 items 与新 items 的含水量差值同步调整 AI 饮水日志。
+  - 扣减不能影响 `source_type='manual'` 的手动喝水记录；若 AI 饮水不足，只扣到已有 AI 水量为止，整体喝水统计不得小于 0。
+
+- `2026-05-12`: 食物分析压测脚本的稳定口径：
+  - `backend/internal/analyze/loadtest/food_analysis_stability_test.go` 仍使用 `//go:build food_analysis_load`，不进入普通 `go test ./...`。
+  - 每次压测只上传 1 张图片到 `/api/upload-analyze-image-file`，随后所有并发请求复用同一个 image URL 调 `/api/analyze/submit`，用于隔离模型/任务处理并发能力，避免 COS 上传成为主要变量。
+  - 清理阶段需要对 image URL 去重后删除 COS object；任务记录仍逐个调用 `DELETE /api/analyze/tasks/:task_id`。
+  - 模型快速切换优先使用 Go test 参数 `-food.analysis.model=<modelName>`，也兼容环境变量 `FOOD_ANALYSIS_LOAD_MODEL`；执行模式同理支持 `-food.analysis.execution_mode=<mode>` 和 `FOOD_ANALYSIS_LOAD_EXECUTION_MODE`。
+  - 压测结果必须输出 task wait 与 total duration 的 variance/stddev；默认使用 20 个同图输入样本。
+  - 千问专用压测入口放在 `backend/internal/analyze/loadtest/food_analysis_qwen_stability_test.go`，测试名 `TestFoodAnalysisStabilityAndLatencyQwen`，默认 `modelName="qwen"`，后端解析为 DashScope `qwen-vl-max`。
+
+- `2026-05-12`: 食物记录含水量需要同时进入首页今日餐食展示和当天喝水统计：
+  - 保存食物记录时，后端以 `items[].water_ml` 为主，同时兼容 `waterMl`、`nutrients.water_ml`、`nutrients.waterMl`，避免不同前端/旧缓存 payload 丢失水量。
+  - 计入喝水的水量按实际摄入折算：优先 `water_ml * ratio / 100`；缺少 ratio 时用 `water_ml * intake / weight`；缺少摄入上下文时才按整份含水量计。
+  - 自动写入 `user_water_logs`，`source_type='ai'`，日期使用该食物记录的 `record_time` 所在中国自然日。
+  - 首页 `/api/home/dashboard` 的 `meals[]` 必须返回 `water_ml`，同样按该餐下所有 `user_food_records.items` 的实际摄入水量聚合。
+  - 小程序首页今日餐食卡片在蛋白质/碳水/脂肪之后展示含水量，使用 `icon-drink` 和 `ml`；本地乐观缓存和旧缓存刷新判断也要保留该字段。
+
+- `2026-05-12`: 食物分析稳定性/平均响应速度压测采用手动 build tag，不进入普通 Go 测试：
+  - 压测文件放在 `backend/internal/analyze/loadtest/food_analysis_stability_test.go`，使用 `//go:build food_analysis_load`。
+  - 普通 `go test ./...` 不应执行真实上传、模型调用、任务轮询或 COS 删除。
+  - 手动执行时使用 `go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatency -count=1 -timeout=20m -v`。
+  - 食物分析上传接口是 `POST /api/upload-analyze-image-file`（multipart 字段 `file`）和兼容旧入口 `POST /api/upload-analyze-image`（base64）。
+  - 当前没有公开 HTTP 删除 COS 图片接口；`DELETE /api/analyze/tasks/:task_id` 只删除/取消任务记录，不实际删除 COS object。压测清理上传图片时直接使用后端 COS 配置按 URL 解析 key 并删除 `food-images` bucket 对象。
+  - 压测清理可单独运行 `TestFoodAnalysisLoadCleanupUploadedImages`，通过 `FOOD_ANALYSIS_LOAD_CLEANUP_IMAGE_URLS` 删除已知图片 URL；删除 COS 对象时应支持 region fallback 和短重试，避免本地配置/网络抖动导致清理失败。
+
+- `2026-05-12`: 保存食物记录时，食物成分含水量要计入当天饮水：
+  - 后端 `POST /api/food-record/save` 成功创建 `user_food_records` 后，根据 `items[].water_ml` 累计生成 `user_water_logs`。
+  - 计入饮水的水量必须按实际摄入折算：优先 `water_ml * ratio / 100`，缺少 ratio 时用 `water_ml * intake / weight`。
+  - 饮水记录日期使用食物记录的 `record_time` 对应中国自然日，不一定是当天真实日期；补录到昨天/前天时也应加到对应日期。
+  - 自动生成的饮水日志 `source_type='ai'`，用于和用户手动喝水记录区分。
+
+- `2026-05-12`: 食物图片识别默认模型选择必须尊重 `external.llm_provider`：
+  - `backend/config.yaml` 中若设置 `external.llm_provider: "gemini"`，普通食物图片分析、精准图片子任务、图片 engine 对比和批量图片分析在 model 为空或历史 `gemini` 参数时，应走 Ofox/Gemini。
+  - 显式传入 `qwen` / `qwen-vl-max` 时仍走 DashScope/Qwen，不被默认 provider 覆盖。
+  - 这条规则用于避免配置文件已经选择 Gemini、但分析模块仍默认打到缺失/不可用 DashScope key 后返回“AI 识别服务配置异常”。
+
+- `2026-05-11`: 食物/健康/运动等 `analysis_tasks` 分析任务不再把 DB pending 扫描当作分发队列：
+  - DB 表 `analysis_tasks` 只作为任务状态、结果、错误信息和前端轮询的持久化来源。
+  - 分发层统一走 `task_queue` 接口；当前唯一可用 driver 是进程内 `memory`，HTTP submit 和 server 内嵌 worker 在同一进程内传递 `task_id/task_type`。
+  - worker 收到消息后按 `task_id` 调用 `ClaimTaskByID()`，只 claim 该条 `status=pending` 的任务，避免共享 DB 时其它开发者 worker 扫走任务。
+  - `task_queue.driver=kafka`、`topic`、`brokers`、`consumer_group` 是预留配置；adapter 未实现前配置为 kafka 必须启动失败，不能静默退回 DB polling。
+  - 独立 `cmd/worker` 暂时保留，但在 `memory` driver 下无法消费 server 进程内发布的任务；本地/当前 Docker 单入口默认使用 server 内嵌 worker。
+  - `food_expiry_notification_jobs` 仍是定时通知 job 的 DB 扫描链路；它和分析算法任务分发是不同问题，后续可单独迁移到 broker。
+  - `memory` queue 不持久化；server 重启后的旧 pending/replay 需要后续真实 broker 或带 instance ownership 的显式恢复设计。
+
+- `2026-05-11`: Go 后端食物拍照分析仍是异步 worker 架构，但 server 默认内嵌启动 worker：
+  - `/api/analyze/submit` 只创建 `analysis_tasks` pending 任务，不会在 HTTP 请求里同步跑模型。
+  - worker 与 server 的通信媒介是数据库表 `analysis_tasks` / `food_expiry_notification_jobs`，不是进程内全局变量，也不是消息队列。
+  - worker 通过 `FOR UPDATE SKIP LOCKED` 原子领取 pending 任务；多 worker 同时跑时不会重复消费同一条任务，但会放大并发和模型调用压力。
+  - server 内置 worker 由 `config.yaml` 中的 `worker.count` 控制；`count=0` 表示不开启，`count>0` 表示启动对应数量 worker，缺少 `worker.count` 直接报错。
+  - 独立 `cmd/worker` 入口保留；显式运行 `npm run dev:worker` 或 `/app/food-link-worker` 时仍可作为独立 worker 消费同一 DB 队列。
+  - worker 诊断日志统一走 zap logger；当前 OTel 只配置 trace exporter，不把这些日志直接作为 OTel logs 上报。
+- `2026-05-12`: 积分消耗口径改为“创建异步任务即预扣，失败整组返还”：
+  - 提交接口仍需先校验当前积分是否足够；只要成功创建对应 `analysis_tasks` 异步任务，就立即占用本次 `credit_usage`。
+  - 每次提交必须写入统一 `credit_group_id`；标准/文字/运动/保质期通常是一组一个任务，精准模式的 `precision_plan`、`precision_item_estimate`、`precision_aggregate` 共享同一组。
+  - 每日系统积分使用量按 `credit_group_id` 分组统计 `pending / processing / done` 任务，一组只计一次；同组任一任务进入 `failed / timed_out / cancelled`，整组系统积分立即视为返还。
+  - 累计奖励积分在任务创建后用 `food_analysis:<credit_group_id>` 或 `exercise:<credit_group_id>` 幂等预扣；失败时用对应 `*_refund:<credit_group_id>` 幂等返还。
+  - 精准模式中任一子任务失败即触发整组退款；后续 aggregate 再失败时退款仍保持幂等，不会重复返还。
+  - 计费单位按任务类型和图片数计算：标准食物/保质期识别 `2 * 图片数`，精准模式 `4 * 图片数`，文字分析按 1 个 unit，运动记录 1。
+  - `AnalysisTask` 响应保留 `task_type`、`image_paths`、`payload`，前端可用它们判断任务类型、执行模式、图片数量和积分组。
+
+- `2026-05-12`: 首页非今日补录提示不再展示“当前补录日期”这类上下文说明；稳定口径改为低能量补录提醒：
+  - 仅当选中日期属于允许补录窗口、不是今天、且当天摄入低于目标 60% 时展示。
+  - 文案为“检测到当日能量过低，是否需要补录”。
+  - 点击提示色块直接打开首页记录菜单弹窗，沿用拍照识别/相册上传/文本输入/手动输入的补录入口。
+
+- `2026-05-12`: 食物分析提交链路不再请求或保存“分析完成通知”订阅授权：
+  - 图片分析页和文字分析页不调用 `Taro.requestSubscribeMessage()`。
+  - 分析提交/文字分析提交/精准续接协议不再携带 `subscribe_status`。
+  - 前端不再注入 `TARO_APP_ANALYSIS_SUBSCRIBE_TEMPLATE_ID` / `__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__`。
+  - Go 后端不再保留 `wechat_pay.analysis_subscribe_template_id` 配置、`ANALYSIS_SUBSCRIBE_TEMPLATE_ID` env 绑定或 `analysis_tasks.payload.subscribe_status`。
+  - 该决策只影响食物分析通知授权；保质期过期通知订阅链路继续保留。
+
+- `2026-05-11`: 保质期订阅通知链路的稳定口径：
+  - 前端只有在构建时注入 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 后，才会调用 `Taro.requestSubscribeMessage()` 并继续请求后端 `/api/expiry/items/:item_id/subscribe` 创建提醒 job。
+  - 后端订阅模板 ID 读取 `wechat_pay.expiry_subscribe_template_id`，可由环境变量 `EXPIRY_SUBSCRIBE_TEMPLATE_ID` 覆盖；微信 access token 使用 `external.appid` / `external.secret`，可由 `APPID` / `SECRET` 覆盖。
+  - 通知发送依赖 worker 轮询 `food_expiry_notification_jobs`；当前 server 默认可内嵌 worker，Docker 镜像也保留 `/app/food-link-worker` 独立入口。
+  - worker task types 不能覆盖丢 `expiry_notification`，否则通知 job 不会被消费。
+  - 到期当天已 due 的 job 不应因为重新计算出 `now + 1min` 被判定为“旧任务作废”；该逻辑已修正。
+
+- `2026-05-11`: 注册后健康档案引导中的作息字段采用轻量枚举 `health_condition.routine_type`，不新增数据库列：
+  - 当前选项为 `early_bird`（早睡早起）、`regular`（标准作息）、`night_owl`（晚睡晚起）、`irregular`（不太固定/轮班）。
+  - 首次引导问卷在活动水平之后询问该字段。
+  - 健康档案查看页在基础信息区展示，并通过底部 radio 编辑器修改。
+  - 后端 `PUT /api/user/health-profile` 接收 `routine_type` 后写入 `weapp_user.health_condition`。
+
+- `2026-05-11`: 食物识别前端提交入口需要保留短时间防重复提交保护：
+  - 相册/拍照后的分析主按钮使用 300ms 前端防抖，并且进入实际提交流程时要尽早置 `isAnalyzing=true`，避免上传前窗口期重复触发。
+  - 结果页纠错抽屉里的「重新智能分析」同样使用 300ms 前端防抖，并在弹确认框前拦截重复点击，避免重复弹窗和重复创建纠错任务。
+
+- `2026-05-11`: 圈子「好友动态」列表缓存只允许在本次小程序启动会话内复用：
+  - `App.useLaunch` 会清理上一次启动留下的 `community_feed_cache / community_feed_timestamp / community_feed_cache_session_id_v1`，并生成新的 `community_feed_session_id_v1`。
+  - Feed 缓存写入时必须记录当前 session id；读取时 session 不一致就丢弃，避免跨冷启动展示旧动态。
+  - `community_feed_filters_v2`、特别关注和好友/申请缓存不属于本条 Feed 列表缓存限制，可继续按各自业务需要保留。
+  - 自己从圈子删除/隐藏的动态不应再通过单条 Feed context、点赞、评论等圈子互动入口访问；后端对 `hidden_from_feed=true` 的记录按 `not_found` 处理。
+- `2026-05-11`: 圈子「好友动态」加载态已有骨架屏时，不再额外叠加 spinner 动画；触底加载也不显示“正在加载”文字，保持安静占位即可。
+
+- `2026-05-11`: 普通模式食物分析的 DB-first 第一阶段模型 item schema 需要长期保留 `waterMl`：
+  - 图片/文字普通分析 prompt 均使用 `items:[{"name":"","estimatedWeightGrams":0,"waterMl":0}]` 作为结构口径。
+  - `waterMl` 表示该食物或饮品本身可计入饮水参考的含水量，单位毫升；无法判断时为 `0`。
+  - 后端营养库仍只负责热量、蛋白质、碳水、脂肪等营养回算，`waterMl` 从模型识别结果透传并随前端重量/比例展示调整。
+  - 前端和保存链路同时兼容 camelCase `waterMl` 与 snake_case `water_ml`，保存记录 item JSON 使用 `water_ml`。
+- `2026-05-11`: 食物图片分析模型临时切换口径：由于最近 1-2 天 Ofox/Gemini 视觉链路持续 `429/resource exhausted` 或超时，标准图片识别和精准模式图片子任务默认改用 DashScope `qwen-vl-max`。即使前端/任务 payload 仍传历史默认值 `modelName: "gemini"` 或 `gemini-3-flash-preview`，后端也临时路由到 Qwen，避免继续打到 Ofox。Ofox/Gemini 仅保留显式 `modelName: "ofox-gemini"` / `ofox-gemini:<model>` 入口，方便后续上游恢复后切回 Gemini3。worker 仍需归一 timeout/resource exhausted/5xx 等错误为用户可读提示。
+
+- `2026-05-11`: 当前所有默认用户图像识别入口统一走 DashScope `qwen-vl-max`：食物标准图片识别、精准模式图片子任务、批量图片分析、保质期拍照识别、健康报告 OCR、运动图片估算。不得在 DashScope 缺失/失败时隐式 fallback 到 Ofox/Gemini，避免上游限流期偷偷绕回旧链路；Ofox/Gemini 仅作为显式 `ofox-gemini` escape hatch、compare/test-backend 工具或 Ofox client 单元测试保留。
+
+- `2026-05-11`: 切 Qwen 只是临时默认通道切换，不得删除原 Gemini/Ofox 通道。必须保留显式 `ofox-gemini` / `ofox-gemini:<model>` 入口、Ofox client、compare/test-backend 能力和后续切回 Gemini3 所需代码；后续清理或重构时只能调整默认路由，不能把 Gemini 通道整体移除。
+
+- `2026-05-11`: 运行时外部 API key（DashScope/Ofox/DeepSeek 等）从 env/ConfigMap/YAML 读入后必须 trim 首尾空白。生产 `DASHSCOPE_API_KEY` 若来自 `.env`/ConfigMap，`KEY= value` 这类前导空格会成为真实 key 内容并导致 DashScope `401 Incorrect API key`；代码侧要防御，但部署侧仍应保证 ConfigMap 中的值没有多余空格或错误 key。
+
+- `2026-05-11`: Go 后端配置优先级对外部模型 key 做项目内收口：只要运行目录存在 `config.yaml`，`external.dashscope_api_key` / `external.ofoxai_api_key` / `external.deepseek_api_key` 以 YAML 文件值为准，不允许 Windows/User/system 环境变量里的同名 key 偷偷覆盖本地配置。生产 scratch 镜像不包含 `config.yaml`，因此线上仍通过 ConfigMap/env 注入。
+
+- `2026-05-11`: 体重记录允许同一天多次录入时，所有“每日体重 summary / 最新体重 / 体重趋势”展示口径必须统一为“当天最后一次记录”。`user_weight_records` 可保留多条原始记录，`/api/body-metrics/summary` 的按日聚合不得取当天第一条，否则同一用户会在不同位置看到旧值和新值混杂。例如「饭饭」在 `2026-05-09` 依次记录 `47.5kg`、`47.5kg`、`47.4kg`，最新体重应展示 `47.4kg`。
+
+- `2026-05-11`: 圈子「本周打卡排行榜」的统计窗口必须对齐 `dev` 旧后端口径：北京时间自然周，周一 00:00 至下周一 00:00（不含）。Go 代码中不得用 `Time.Truncate(24 * time.Hour)` 计算北京时间自然日/自然周边界，因为 `Truncate` 按绝对 UTC duration 截断，会把北京时间边界偏到 08:00。稳定口径是用 `time.Date(year, month, day, 0, 0, 0, 0, chinaTZ)` 先构造北京时间当天零点，再按 weekday 回退到周一。
+
+- `2026-05-11`: 圈子 feed 的 `record_time` 展示应按中国时间口径稳定输出与格式化。后端返回动态时应把 `record_time` 显式转为 `Asia/Shanghai` 偏移；前端格式化不能依赖设备默认 `toLocaleDateString()`，超过相对时间窗口后要按北京时间格式化，且兼容没有时区后缀的旧 ISO 字符串。
+
+- `2026-05-10`: 保质期拍照识别接口 `/api/expiry/recognize` 的错误口径必须区分用户可处理错误、模型上游错误和后端配置错误，不能让裸 `fmt.Errorf` 穿透到统一响应层后被抹成 `internal server error`：
+  - 缺图、图片里没有识别到可用于保质期录入的食物 → 400，返回可读提示。
+  - 模型上游非 2xx、空响应、返回非 JSON 或结果 JSON 解析失败 → 502，返回“保质期识别服务暂时不可用，请稍后再试”，同时在后端日志记录上游细节。
+  - 模型 key/base URL 等后端配置缺失或错误 → 明确 500 AppError，不要给前端泛化成无信息的 internal server error。
+  - 保质期页涉及 `Taro.showLoading` 时必须本地显式配对，失败路径不能多次 `hideLoading`。
+  - 保质期页写入 `USER_DATA_PATH` 的 `expiry_` 临时文件遇到 quota 错误时，应复用 `cleanupGeneratedUserFiles()` 清理项目生成文件后再重试。
+
+- `2026-05-10`: 当用户反馈“小程序非调试模式报错、调试模式正常”时，排查优先级不能只盯接口域名；要先排除前端同步运行时异常与生产包残留调用。当前已确认一个真实案例：
+  - `src/pages/profile/index.tsx` 退出登录回调里残留 `setRegisterDate('--')`
+  - 该 state 已不存在，正式运行到这条链路会直接抛 `ReferenceError`
+  - 这类错误在真机上可能表现为“只要走到某操作就连续报错”，应优先通过堆栈定位到具体页面回调并消除残留引用
+
+- `2026-05-10`: 首页补录提示的稳定口径：
+  - 首页出现的补录提示不是后端“补录中”任务状态，也不依赖任何接口字段
+  - 它仅由前端当前 `selectedDate` 计算：当日期属于最近 3 天可补录窗口且不是今天时显示
+  - 因为这是页面上下文提示而不是异步处理中状态，文案应避免使用“正在补录”这类会暗示自动消失的措辞；当前收口为“当前补录日期 {date}”
+
+- `2026-05-10`: 首页「编辑今日目标」里总卡路里带动三大营养素联动时，缩放基准必须是“本轮编辑最后一份稳定有效的宏量目标”，不能用每次联动后已经被舍入的临时值继续做下一次缩放，否则用户清空后逐字重输时比例会漂移并把部分目标压到 0。
+
+- `2026-05-10`: 首页「编辑今日目标」弹窗的稳定交互口径：
+  - 输入框在前端层先做字符清洗，只允许数字和单个小数点；空字符串仅作为用户编辑中的临时态存在，不能把其他字符写进目标表单
+  - 所有目标步进和联动展示统一按 1 位小数舍入，避免 `98.00000000003` 这类浮点长尾直接暴露到 UI
+  - 当用户修改总卡路里目标时，蛋白质/碳水/脂肪应始终按比例联动；即使热量输入框刚被清空后再输入/再点加减，也必须从可用的目标基准恢复联动，不能退化成只更新单个字段
+
+- `2026-05-10`: 结果页“实际摄入”滑杆的当前收口口径：
+  - 以较早版本的简洁 slider 观感为基底，不再继续做复杂轨道壳造型
+  - 保留外层圆角矩形框
+  - 外框底色与“估算重量”控件容器保持一致
+  - 可用性优化仅通过放大滑块、增厚轨道、增大热区来完成
+
+- `2026-05-10`: 结果页食物卡片的视觉收口规则：
+  - 单个食物卡片应保持统一底色和同一张“卡片表面”感觉，不要把标题区、营养区、控制区切成明显不同底板
+  - 营养摘要小卡虽参考首页日期胶囊语言，但圆角不能过度夸张；当前稳定口径是中等圆角、竖向胶囊感，而不是 `999rpx` 的鼓包形态
+  - “实际摄入”滑杆优先贴近参考图里的浅色内嵌轨道，视觉上应先像卡内轨道控件，再考虑装饰性
+
+- `2026-05-10`: 结果页里每个食物卡片的营养摘要区，稳定视觉口径不是普通四格方卡，而是更接近首页日期选择器的竖向胶囊卡。单块内容顺序固定为“图标 -> 标签 -> 数据”；其中图标与容器可升级视觉层次，但数值字号、颜色和单位风格尽量保持当前读数习惯不变。
+
+- `2026-05-10`: 分析结果页“实际摄入”滑杆的稳定交互口径：
+  - 视觉上使用内嵌式胶囊轨道，而不是裸露的细线滑杆
+  - 触控热区要明显大于视觉轨道本身，优先通过额外包裹层和更大的滑块提升拖拽命中率
+  - 拖动过程中应实时更新热量、重量和营养展示，不能只在松手后刷新
+  - 步进以细粒度为主，当前口径为 `step=1`
+
+- `2026-05-10`: 分析结果页里「实际摄入」滑杆调节的是 `ratio/intake`，不是直接改整份 `weight`。稳定展示口径是：
+  - 保存/落库仍保留 `weight + ratio` 双字段，避免影响后续记录详情和营养换算
+  - 但结果页食物卡片中的重量数字要跟当前 `intake` 同步展示，保证用户拖动滑杆后看到的热量和重量口径一致
+- `2026-05-10`: 用户明确要求相册/拍照隐私开关这一块“暂时不允许改”。稳定口径：不要重新加入 `__usePrivacyCheck__`，不要把 `scope.camera` / `scope.writePhotosAlbum` 写回 `app.config.ts/app.json`，不要把 `chooseImage` / `getImageInfo` 写进 `requiredPrivateInfos`。除非用户后续明确解除该限制，否则该区域只能做不改变上述口径的旁路修复。
+
+- `2026-05-10`: 小程序 `app.config.ts` 的 `requiredPrivateInfos` 只能声明微信当前允许的定位/地址类隐私接口；当前稳定值只保留 `getLocation`。不要把 `chooseImage`、`getImageInfo` 写进 `requiredPrivateInfos`，否则微信开发者工具 3.15.2 会直接编译失败。若出现 `chooseImage:fail api scope is not declared in the privacy agreement (errno:112)`，解决点是微信小程序后台“用户隐私保护指引”中声明选图/拍照相关信息类型，而不是改 `app.json` 的 `requiredPrivateInfos`。
+
+- `2026-05-10`: 小程序隐私授权的代码侧稳定口径是全局挂载 `PrivacyAuthorizationModal`，监听 `wx.onNeedPrivacyAuthorization`，用官方 `agreePrivacyAuthorization` 按钮完成用户同意，并用 `openPrivacyContract` 打开隐私指引。该代码只能处理“后台隐私指引已声明且已生效，但用户尚未同意”的情况；如果后台隐私指引处于 `审核中` 或没有声明相册/拍照用途，`chooseImage` 仍会被微信基础库直接拦截。
+
+- `2026-05-10`: 小程序所有相册/拍照入口不得直接调用 `Taro.chooseImage`。稳定口径是统一调用 `chooseImageWithPrivacy()`，并在 `api scope is not declared in the privacy agreement` 或用户未同意隐私授权时走 `showPrivacyAuthorizeFailure()`，避免用户只看到笼统的“选择图片失败/上传失败”。新增选图入口时必须复用 `src/utils/weapp-privacy.ts`。
+
+- `2026-05-10`: 首页记录菜单的会员额度预检不能无限阻塞相册/相机拉起。稳定口径是预检最多等待约 1.2 秒；超时或接口失败时先允许用户选图，最终积分/额度由分析提交接口兜底校验。`chooseImageWithPrivacy()` 在拉起选图前应先清理项目生成的 USER_DATA_PATH 文件，遇到文件配额类错误再清理并重试一次。
+
+- `2026-05-10`: 小程序 `permission` 配置只保留微信仍支持的合法权限说明。当前稳定值只包含 `scope.userLocation`；不要再写 `scope.camera` 或 `scope.writePhotosAlbum` 到 `app.config.ts/app.json`，否则微信开发者工具 3.15.2 会提示 invalid permission。相机/相册用途应通过微信后台隐私保护指引声明，代码侧通过 `chooseImageWithPrivacy()` 和隐私授权弹窗兜底。
+
+- `2026-05-10`: `__usePrivacyCheck__` 暂不写入 `app.config.ts/app.json`，development 和 production 都不主动开启。原因是当前优先级是保证拍照/相册流程可用；该字段会在微信后台隐私指引不稳定时把 `chooseImage` 变成硬拦截并报 `errno:112`。这不代表可以无视微信审核和未来运行时规则；发布前仍应在微信后台隐私保护指引中声明相册/拍照用途。若未来后台隐私指引已审核通过且需要主动压测隐私合规，再单独恢复该字段。
+
+- `2026-05-10`: `about` 页主业务入口稳定路由仍是独立分包 `packageAbout/pages/about/index`，但 `packageExtra/pages/about/index` 需要保留为轻量兼容页。原因是微信开发者工具、旧本地缓存、旧 redirect 或历史页面栈可能仍尝试编译/打开 `/packageExtra/pages/about/index`；如果该路径没有 WXML 产物，会触发 `ENOENT dist/packageExtra/pages/about/index.wxml` 并导致登录/导航超时。该兼容页必须继续保持轻量，不得重新 import 本地大图。
+
+- `2026-05-10`: 小程序 `USER_DATA_PATH` 中由项目生成的临时持久文件需要可清理，至少包括 `analyze_`、`expiry_`、`cv_` 前缀。普通 `removeStorageSync` 不会清除文件系统配额；登录前和“我的 -> 清除缓存”应清理这些生成文件，canvas/base64 写文件遇到 quota 类错误时应先清理再重试一次。
+
+- `2026-05-10`: 微信小程序非 Tab 页不再默认全部塞进单一 `packageExtra` 分包。对明显偏重的页面采用“顶层独立分包 + `extraPkgUrl()` 路由映射”的稳定口径，当前已单独拆出：
+  - `packageAbout/pages/about/index`
+  - `packageUserGroup/pages/user-group/index`
+  - `packageStatsMetabolic/pages/stats-metabolic/index`
+  这样可以在不改业务调用口径的前提下控制单分包体积，避免真机调试/预览触发微信包体限制；旧的 `/packageExtra/pages/...` 回跳地址也要继续兼容映射到新分包路径。
+
+- `2026-05-10`: `about` 页 logo 不再 import 本地大图 `src/assets/logo.png`。该资源会被直接打进页面 JS，显著放大编译产物；稳定口径是优先使用 `__ICON_CDN_BASE_URL__`，缺省回退 `https://cdn-food-icon.coachlink.fit/shitan-nobackground.png`。
+
+- `2026-05-09`: 首页「今日餐食 -> 生成分享海报」的稳定交互口径是不再停留在项目自定义的全屏海报预览层。首页只保留隐藏 canvas 用于生成图片；生成成功后立即拉起微信官方图片菜单 `showShareImageMenu`。如本地缺少相册权限，则先通过官方小程序权限接口 `getSetting / authorize / openSetting` 请求或引导开启，再交由微信官方菜单提供发送/保存能力。
+
+- `2026-05-09`: 微信原生图片菜单 `showShareImageMenu` 的 `fail cancel` 属于用户主动关闭菜单，不应当作业务失败提示。稳定口径是：真正拉起失败才提示错误；若当前页面已没有自定义预览层（如首页餐食海报直拉官方菜单），取消时可静默关闭当前分享流程；若当前页面仍停留在自定义预览层，则取消时保持页面原状且不报错。
+
+- `2026-05-10`: `识别记录` 列表中的状态标签（如 `已经记录`、`等待记录`）稳定口径是单行胶囊，不允许在圆角矩形内部换行。样式上应优先通过 `white-space: nowrap`、更宽的横向内边距、适度最小宽度和轻微高光/阴影来保证可读性，而不是依赖更小字体硬塞进去。
+
+- `2026-05-10`: 后端 Docker 构建基础镜像不要使用浮动主版本别名 `golang:1.26-bookworm`。当前稳定口径是固定到 patch tag `docker.io/library/golang:1.26.1-bookworm`，以减少 Docker Hub 别名元数据漂移或损坏导致的 `buildx` 拉取失败；项目代码与本机工具链仍保持 `go 1.26 / go1.26.1`，不因为这类镜像别名问题而回退语言版本。国内网络下如 Docker Hub 不可达，可通过 `DOCKER_GO_BUILDER_IMAGE` 临时覆盖 builder 基础镜像，但默认口径仍保留官方镜像。
+
+- `2026-05-09`: Go 精准模式的分组估重要真正并行执行，不能让 `grouped_parallel` 在本地 worker 默认配置下退化成串行。worker 默认并发和本地配置口径为 `max_concurrent=4`。当前用户要求先不要二次重量复核，因此精准模式默认 `precisionRefineEnabled=false`，只做 planner -> 分项首轮估重 -> db_first 回算 -> aggregate；复核代码可以保留但默认关闭。所有精准子项估计结果都必须按本组 `items_to_estimate` 过滤，不能因为模型输出整餐而扩项或重复累计。
+
+- `2026-05-09`: 精准模式的优先级必须是“先判准食物种类，再估重量”。planner 不能只直接输出单个 `item_name`；对每个主体应先列 2-3 个候选食物，并记录 `candidate_names / alternative_name / visual_evidence` 等内部字段，再基于视觉证据选择主名称。子项估重阶段必须接收这些候选和证据；若 planner 名称与视觉证据冲突，允许把最终 `name` 修正为更可能的候选。典型易混淆项包括莴苣/莴笋片 vs 青菜/小白菜，百叶包/千张包/豆皮包 vs 蒸饺/馄饨，鱼块 vs 鸡块，豆干 vs 肉块。这些候选和证据属于内部识别辅助，不展示到用户结果页。
+
+- `2026-05-09`: `precision_sessions.status` 必须严格使用数据库 check constraint 允许值：`collecting / estimating / needs_user_input / needs_retake / done / cancelled / failed`。精准模式纠错完成时也写 `done`，不得写 `completed`；前端结果字段 `precisionStatus` 同步使用 `done`。
+
+- `2026-05-09`: `识别记录` 列表不应把同一次食物识别的多轮纠错/重识别展示成多条并列记录。稳定口径：纠错任务在 `analysis_tasks.payload` 中记录 `correction_source_task_id` 与 `correction_root_task_id`；列表、总数和等待记录角标按 root 折叠，只展示最新版本。为兼容已经产生的旧任务，如果没有 root 字段，则同一天同一图片或同一文字输入也按同一组折叠为最新一条。该口径不改数据库 schema，只复用已有 JSON payload。
+
+- `2026-05-09`: 体重、喝水、运动的完整趋势统计不继续塞进底部「分析」页。稳定信息架构是：首页作为日常身体状态与行为数据入口，体重/喝水/运动卡点击进入统一分包页 `body-trends`；分析页保持「健康指数 / 饮食相关风险趋势」主叙事，只在需要时引用身体数据摘要或证据，不承载完整录入型统计。该方向第一版只复用已有 `body-metrics` 与 `exercise-logs` 接口，不改数据库 schema。
+
+- `2026-05-09`: 体重趋势页的记录列表必须按“每次记录都显示相对上一条体重的变化量”来呈现。正向增加用红色、下降用绿色；列表可按月分组，并展示月总变化与日均变化，帮助用户快速扫出体重波动方向。
+
+- `2026-05-09`: 食物分析二次纠错必须做 AI 二次分析，不能把前端结构化纠错清单直接当最终结果回算。稳定口径对齐 `dev` Python：任务 payload 携带 `additionalContext / previousResult / correctionItems`；prompt 中明确上一轮餐食描述、上一轮识别结果、用户纠错说明和结构化清单；AI 重新输出名称和重量；后端再走 db_first 营养库回算。精准模式纠错不进入 precision planner/item_estimate/aggregate，而是和普通纠错一样走单次 AI 二次分析，避免扩项和重复累计。
+
+- `2026-05-09`: 首页/我的页「识别记录」角标的稳定口径是“最近 24 小时内已识别完成但未保存为饮食记录的任务数”，不是历史所有未保存任务总数。历史识别记录仍保留在列表和总数里，但不再持续累加到角标；`has_unseen_waiting_record` 也只在最近 24 小时窗口内判断未读。
+
+- `2026-05-09`: 公共食物库允许上传者删除/下架自己上传的条目。实现口径为软下架，不改数据库结构：复用 `public_food_library.status`，用户主动删除写为 `user_deleted`；公共列表/收藏列表不可见，详情读取把 `user_deleted/deleted` 当作 not found，`mine` 列表也排除删除状态。后端必须校验 `item.user_id == 当前登录用户`，非上传者不得删除。过渡期不为此能力新增表、字段、索引或约束。
+
+- `2026-05-09`: 当天饮食记录页删除单个食物时，稳定口径是复用已有饮食记录更新接口 `PUT /api/food-record/:id`，提交删减后的 `items` 与重新汇总的 `total_calories/total_protein/total_carbs/total_fat/total_weight_grams`；不为“记录内单个食物删除”新增表字段或 schema。若一条记录只剩最后一个食物，删除该食物等价于删除整条饮食记录，并在确认文案中明确提示。
+
+- `2026-05-09`: Go 后端使用 `Updates(map[string]any)` 更新 `serializer:json` / JSONB 字段时，不能直接把 slice/map（如 `user_food_records.items`、`image_paths`）放进 map 里依赖 GORM serializer。repo 层应先显式 `json.Marshal` 并写入 `datatypes.JSON`，避免 PostgreSQL JSONB 更新 500。该口径已应用到 `FoodRecordRepo.Update()` 的 `items` / `image_paths`。
+
+- `2026-05-09`: 食物分析二次纠错前端不得再跳转到 `analyze-loading` 走完整长任务页面。后端纠错轻链路完成很快，结果页应在当前页面轮询纠错 task，拿到 `done + result` 后直接刷新当前页面状态和 `analyzeResult/analyzeSourceTaskId` 缓存；否则 loading 页重定向和旧缓存/旧导航栈会让用户看到“提交成功但又退回原结果且无改动”。
+
+- `2026-05-09`: 食物分析二次纠错不再重新走完整识别链路。普通模式和精准模式纠错统一采用“用户结构化纠错清单 -> db_first 营养库回算 -> 完成任务”的轻链路；只要请求带 `correctionItems`，worker 就不得重新识图、不得重新跑精准 planner/item_estimate/refine/aggregate。精准纠错可以更新 precision session 的 final_result/status，但不能再因为重新 planner 把 5 个食物扩成 7-8 个。若纠错项营养库未命中且 DeepSeek fallback 不可用，应保留纠错提交时页面已有的 calories/protein/carbs/fat 作为 `user_correction_fallback`，避免热量显示为 0。
+
+- `2026-05-09`: 会员升级/切换套餐的当前稳定口径：采用“改签当前会员期 + 剩余价值补差”模型，不是新卡叠加。当前连续会员期的起算日不变；目标套餐周期从该起算日开始计算；用户只补“目标套餐从今天到目标到期日的剩余价值 - 当前套餐从今天到当前到期日的剩余价值”。支付成功后立即切换到新档位权益，当日积分额度即时按新档位生效，已消耗积分继续计入当天用量。若所选套餐会缩短当前有效期，或当前套餐剩余价值已覆盖所选套餐，则不允许即时切换，提示选择更高档位/更长周期或到期后再购买。
+
+- `2026-05-09`: 会员套餐优惠展示必须按真实差价展示，不得把 `4.8` 取整宣传成 `5`、把 `59.8` 取整宣传成 `60`。购买页的“立省”金额应保留必要小数并去掉多余 0。
+
+- `2026-05-09`: Python/Supabase -> Go/PostgreSQL 过渡期的开发规则：
+  - 可直接转述的短口径：当前项目处在 Python/Supabase 旧线上版本 -> Go/PostgreSQL 新版本 的过渡期。正式切流前，Supabase 仍是生产数据和 schema 真源。现有 `migrate_supabase_db_to_postgres.py` 是破坏式全量同步：会让目标 PostgreSQL 与 Supabase 完全一致，因此只在 PostgreSQL 手工新增的表/字段，最终同步时可能被覆盖。
+  - 不涉及数据库结构的改动（Go 业务逻辑、前端、接口适配、文案、样式、bug fix）可以正常在 Go 重构分支推进。
+  - 涉及数据库结构的改动不能只手工改本地/服务器 PostgreSQL；当前 `backend/scripts/migrate_supabase_db_to_postgres.py` 会 drop/recreate 目标 schema，并让目标库与 Supabase 源库完全一致，PostgreSQL-only 字段/表会在最终全量同步时被覆盖。
+  - 切流前真实生产 schema 仍以 Supabase/Python 侧为准。新增字段/表如果需要随最终同步保留，要么先作为向后兼容 migration 应用到 Supabase 生产源库，要么在最终全量同步之后、Go 正式启动之前作为正式 Go SQL migration 应用到目标 PostgreSQL。
+  - 体验版/本地 Go 写入 PostgreSQL 的数据默认视为测试数据；如果必须保留为真实用户数据，最终切流不能只做 Supabase 覆盖 PostgreSQL，必须额外做 PostgreSQL delta/upsert 合并。
+
+- `2026-05-09`: 首页 dashboard 的 `expirySummary` 必须保持 Python 旧版前端契约：`pendingCount / soonCount / overdueCount / items[]`，其中 item 至少包含 `food_name / quantity_text / storage_location / note / days_left / deadline_label / urgency_level`。Go 后端不得只返回内部字段 `count/name/urgency`，否则首页保质期卡片会出现标题和 meta 为空。保质期条目当前不显示图片，也不新增 `food_expiry_items.image_url`；旧 Python/Supabase 口径本来没有为保质期条目持久化图片。
+
+- `2026-05-09`: Go 重构分支的积分体系当前目标是先严格对齐 `dev` / Python 旧版逻辑，不在本轮顺手修正旧版自身设计问题。对齐口径包括：食物标准分析 2 分、精准分析 4 分、运动记录 1 分；系统积分按中国自然日计算；补录优先消耗目标日系统积分，再消耗今日系统积分，最后消耗 earned credits；任务/识别成功创建后才扣 earned credits；邀请奖励也必须保留旧版“新用户 7 天内 2 个不同自然日有效使用后双方各得 15 earned credits”的闭环。
+
+- `2026-05-09`: 海报分享奖励不能在“生成海报图片”时发放，只能在用户触发微信图片分享并进入 `showShareImageMenu` 成功回调后调用 `/api/membership/rewards/share-poster/claim`。保存图片、打开海报预览、自动生成海报都不应领取 1 积分；后端仍保持幂等和每日上限校验。
+
+- `2026-05-09`: Go 精准模式必须对齐 Python 当前正在使用的实际流程。稳定口径是：`precision_plan` 使用专用 planner prompt 拆主体并规范化 `itemsToEstimate/splitStrategy`；`precision_item_estimate` 使用专用单项/多项估重 prompt，只解析 `item/items` 的 `name + estimatedWeightGrams`，再挂 planner metadata；随后按 Python 条件触发二次重量复核，触发条件为 `uncertainty_level=high`、`requires_reference=true`、或食物名包含米饭/炒饭/面/粥/红烧肉等易错关键词，复核使用 `temperature=0.1`，失败只记录日志并沿用首次估重；最后走 db_first 营养库回算；`precision_aggregate` 按 `item_index` 聚合子项结果；planner/item estimate 精准 JSON completion 使用多图输入、固定 `temperature=0.2`，图片/文字超时分别为 `90s/60s`。不能再用通用 `Analyze/AnalyzeText` 作为精准子任务主算法，否则会重新识别整餐并造成重复累加。
+
+- `2026-05-09`: 精准模式结果页不得展示内部流程/工程诊断文案。`insight/context_advice` 不能包含“分组精估、估重不确定性、建议补充参考物、数据库命中、AI补全、AI估算非数据库标准值”等内容；这些只允许出现在 worker/server 终端日志或内部调试字段。用户可见结果只展示饮食分析、食物明细、热量和营养构成。
+
+- `2026-05-09`: 精准模式主食估重必须以实际可见体积为准，不能套“常见一碗饭”默认值，也不能把“薄薄一层”直接映射成固定低克重区间。米饭/面条/粉/粥/炒饭/盖饭类必须先判断容器口径、深度、填充比例、可见面积、平均厚度、被菜覆盖程度和松散度，再用体积密度换算重量；薄层但面积很大时重量仍可能不低，小面积薄层才应低。该规则必须同时进入一次估重和二次重量复核 prompt。
+
+- `2026-05-09`: 普通拍照识别和精准拍照识别都不再使用 Qwen 作为默认或别名路由。未指定模型时统一走 Ofox/Gemini `gemini-3-flash-preview`；即使请求里显式传入 `qwen`、`qwen-vl` 或 `qwen-vl-max`，普通/精准识别也要强制归到 Gemini，避免旧前端参数或缓存绕回 DashScope/Qwen。Qwen 仅可保留在模型对比/测试入口中；文字输入模式仍按单独决策默认 DeepSeek `deepseek-v4-flash`。
+
+- `2026-05-09`: 数据分析页「AI 风险解读」遵循缓存优先 + 用户主动刷新口径：打开统计页只读 `ai_stats_insights` 缓存并根据 `analysis_summary_needs_refresh` 提示是否过期；仅在过期时于详情弹窗状态条显示「手动更新」，点击后调用 `/api/stats/insight/generate` 重新生成，再 `save` 入缓存。Go stats insight 生成模型固定为 `deepseek-v4-flash`，不再通过 YAML/env 切换模型名。
+
+- `2026-05-09`: Go 精准模式写入 `precision_sessions / precision_session_rounds / precision_item_estimates` 时，repo 层必须显式补齐非空 JSONB 默认值和时间戳，不能依赖 GORM 对 nil map/slice/*time.Time 与 PostgreSQL DEFAULT 的交互。`pending_requirements/reference_objects/input_payload/payload` 无内容时写空数组或空对象，`created_at/updated_at` 无值时由 repo 设为当前时间，避免精准模式提交在数据库 NOT NULL 约束处返回 500。
+
+- `2026-05-09`: Go 精准模式更新 `precision_sessions` 或 `precision_item_estimates` 的 JSONB 字段时，不能直接把 `[]any{}` / `map[string]any{}` 放进 `Updates(map[string]any)` 依赖 GORM serializer；必须先显式 `json.Marshal` 并以 `datatypes.JSON` 写入。尤其 `pending_requirements`、`reference_objects` 这类 NOT NULL JSONB 空数组字段，更新时也必须落库为 `[]`，不能变成 SQL NULL。
+
+- `2026-05-09`: Go 精准模式的 `precision_item_estimate` 子任务如果继续复用通用食物识别模型，必须在 worker 层按 `items_to_estimate` 做结果过滤，不能把模型返回的整图所有食物直接交给 aggregate。否则多个子任务会各自输出完整餐盘，最终聚合重复计入同一份米饭/菜品。长期 parity 方向是迁回 Python 版专用子项估计 prompt；短期保护栏是按计划项名称 exact/contains/相似度匹配后只保留本组食物。
+
+- `2026-05-09`: 不能再声称当前 Go 精准模式与 Python 版算法 1:1。当前 Go 版只具备任务形态 parity（plan/item_estimate/aggregate）和重复过滤保护；Python 版还有专用 planner prompt、专用单项/多项估重 prompt、结构化 `item/items` 解析、重量复核 `_maybe_refine_precision_weights_sync`、previous rounds/session latest_inputs 参与规划等语义。真正 parity 需要继续迁移这些专用逻辑。
+
+- `2026-05-09`: 食物文字输入模式默认使用 DeepSeek 文本模型，不再默认走 DashScope/Qwen。原因是文字输入不需要视觉模型，而当前 DashScope key 配置错误会导致 `dashscope api error 401`；未指定 `modelName` 时应走 `external.deepseek_api_key`，base URL 固定为 `https://api.deepseek.com`，模型固定为 `deepseek-v4-flash`。如果 DeepSeek key 缺失，后端应返回明确的 `DEEPSEEK_API_KEY` 配置错误，而不是静默回退到 DashScope。图片/拍照分析仍按现有视觉模型 + `db_first` 营养库回算链路执行。
+
+- `2026-05-09`: Go 后端本地开发配置统一从 `backend/config.yaml` 读取，不再自动读取 `backend/.env`。DeepSeek 在 YAML 中只配置 `external.deepseek_api_key`；base URL 固定为 `https://api.deepseek.com`，文字模型固定为 `deepseek-v4-flash`，不再额外暴露 `deepseek_base_url` 或 `deepseek_text_model` 配置项。
+
+- `2026-05-09`: Go 重构版本必须保留 Python 旧版的补录日期口径：记录相关入口只允许近 3 天，即今天、昨天、前天。前端用 `src/utils/record-date.ts` 的 `RECORD_BACKFILL_WINDOW_DAYS = 3` 约束入口日期，后端用 `backend/internal/common/dateutil.ResolveRecordedOnDate` 做最终校验；食物记录保存必须通过 `BuildRecordTime` 把目标中国自然日写入 `user_food_records.record_time`，不能默默落到当天。
+
+- `2026-05-09`: 首页选中昨天或前天时必须显示补录上下文提示，稳定文案为 `正在补录 X月X日`。该提示不是装饰文案，而是防止用户误以为正在记录今天；仅在 `isAllowedRecordDate(selectedDate) && !isTodayRecordDate(selectedDate)` 时显示，未来日期和窗口外日期不能显示补录提示。
+
+- `2026-05-09`: 运动记录的 `user_exercise_logs.recorded_on` 按 PostgreSQL `date` 字段处理，详情列表、当日运动消耗和首页 dashboard 必须使用同一日期口径。查询单日总量用 `recorded_on = YYYY-MM-DD`；查询日期范围用 `recorded_on >= start_date AND recorded_on <= end_date`。不要再把该字段当 `timestamptz` 做中国时区 UTC 窗口查询，否则会出现首页有 kcal、详情列表为空的矛盾。
+
+- `2026-05-09`: Go 后端识别记录接口必须保持 Python 版业务口径：
+  - `GET /api/analyze/tasks` 默认只返回食物识别历史相关任务，排除运动、健康报告、公共食物库审核、保质期识别和精准模式内部子任务。
+  - 完成任务必须通过 `user_food_records.source_task_id` 补齐 `is_recorded` 与 `record_id`，前端据此显示“已经记录/等待记录”并跳转已保存记录详情。
+  - `GET /api/analyze/tasks/status-count` 返回业务状态 `recognizing / waiting_record / recorded / has_unseen_waiting_record`，不是数据库原始状态分组。
+  - 精准模式最终展示与保存应以 `precision_aggregate` 为准；完成后带 `redirectTaskId` 的 `precision_plan` 不应作为一条可点击历史结果展示。
+  - `precision_aggregate` 任务必须继承原始 `source_type / image_url / image_paths / text` 上下文，否则历史页点开会缺少图片或文字输入。
+  - 用户查看识别记录的已读时间字段与 Python 生产 schema 对齐为 `weapp_user.last_seen_analyze_history_at`。
+
+- `2026-05-09`: Go `analysis_tasks` 对外 JSON 契约必须保持 Python/前端使用的 snake_case 字段（`id/status/result/error_message/task_type` 等），不能让 Gin 默认输出 Go 结构体字段名（`ID/Status/Result`）。否则前端轮询会读不到任务完成状态，表现为异步任务一直“分析中”直到超时。
+
+- `2026-05-09`: 运动记录迁移必须保留 Python 旧版的文字与图片双入口：`POST /api/exercise-logs` 允许 `exercise_desc` 或 `image_url` 任一存在；worker 应同时读取 `text_input/payload.exercise_desc` 和 `image_url`；列表响应必须提供 `recorded_at`，前端需对旧数据时间字段做兜底，避免 `NaN:NaN`。
+
+- `2026-05-09`: 运动记录页的前端状态必须按记录日期隔离。服务端记录、pending/failed 本地卡片、统计卡次数与热量都只能展示当前 `recordDate`；日期切换后请求必须显式传入目标日期，不能依赖刚 `setState` 后的旧闭包状态。
+
+- `2026-05-09`: Go 后端调用腾讯云 COS SDK 上传对象时必须传入非 nil `context.Context`。当前 SDK 在 header option 处理里会调用 `ctx.Value(...)`，传 `nil` 会导致 `POST /api/upload-analyze-image-file` 等上传链路 panic；storage 基础设施层统一使用 `context.Background()` 作为当前兼容口径，后续如需请求取消语义，可再把 request context 从 handler/service 逐层传入 storage。
+- `2026-05-09`: 小程序 `Taro.uploadFile` 返回的 `response.data` 在微信端通常是 JSON 字符串；Go 后端标准响应为 `{code,message,data}` 信封。前端文件上传解析必须先 JSON parse，再兼容解包 `data`，不能只从顶层读取业务字段。拍照分析、保质期识别、运动图片上传等复用 `uploadAnalyzeImageFile` 的入口都遵守这个口径。
+
+- `2026-05-09`: Go 后端 Ofox / Gemini 兼容 API 默认 base URL 固定为 `https://api.ofox.ai/v1`，并允许通过 `external.ofoxai_base_url`、`OFOXAI_BASE_URL` 或 `OFOX_BASE_URL` 覆盖。不要再写死 `https://ofoxai.com/v1`，该域名会返回官网 HTML，导致食物识别任务失败或页面展示乱码。所有 worker 落库错误必须清洗 HTML/超长上游响应，不能把外部网页原文返回给小程序。
+
+- `2026-05-09`: `db_first` 数据库命中率属于开发/测试诊断信息，不展示在小程序结果页给用户看。Go 后端应把命中统计输出到 server/worker 终端日志，字段包括总项数、命中数、未命中数、命中率、每个 item 的匹配食物名、匹配状态、匹配分数和营养来源。
+
+- `2026-05-08`: Go 后端 `v2` 上线前必须执行 `docs/go-backend-prelaunch-checklist-2026-05-08.md`：
+  - P0 项是上线阻断项，任何 P0 未完成、证据缺失或结果不确定时，不发布生产流量。
+  - P1 项是强建议项，若上线前未完成，必须记录明确风险接受人和补偿措施。
+  - 清单执行时每项都要留下负责人、执行时间、结果、证据链接或截图、备注。
+  - 敏感配置只核对存在性、格式、来源和指向环境，不把密钥、密码、私钥写入仓库。
+  - 当前文档变更不涉及小程序 UI，因此不触发 `weapp-devtools` 验证要求；真正发布体验版/正式版时仍需按清单跑小程序全链路 smoke test。
+
+- `2026-05-08`: Go 测试后台 Phase 6 兼容口径：
+  - `/test-backend` 继续服务 Python 旧静态页，不要求静态页一次性改成 Go 新统一响应模型。
+  - 测试后台静态 JS 允许在 `authFetch().json()` 层统一解包 Go `{code,message,data}`，并继续向页面逻辑暴露 Python 风格 `{success,data,...}`。
+  - `/api/test-backend/analyze`、`/api/test-backend/batch/prepare`、`/api/test-backend/batch/start` 必须兼容 FormData，因为恢复的旧页面直接上传图片/ZIP。
+  - Go 版批量测试当前可把批次状态和结果写入 `test_batches.results`，后续如需完全复刻 Python，可再改为进程内/后台 goroutine 异步执行；本 checkpoint 先保证页面契约和核心处理可用。
+  - `/api/prompts*` 在测试后台上下文中同时兼容 Go `name/content` 与 Python `prompt_name/prompt_content` 字段。
+- `2026-05-08`: Go stats insight 迁移口径更新：
+  - 统计页摘要接口只读 AI 洞察缓存，不在打开统计页时实时调用大模型。
+  - Go 后端使用 Python 生产表 `ai_stats_insights`，以 `(user_id, range_type, generated_date)` 作为 upsert 唯一口径。
+  - 数据一致性通过 `data_fingerprint = total_calories / avg_calories_per_day / recorded_days / macro_percent` 判断；缓存日期不是当天或指纹不一致时返回 `analysis_summary_needs_refresh=true`。
+  - `generate` / websocket 负责按当前统计数据与健康档案调用 DeepSeek；`save` 负责重新计算指纹并保存前端最终展示的完整文本。
+  - 无 `DEEPSEEK_API_KEY` 时返回可用兜底洞察文本，避免本地/测试环境因缺 key 完全不可用。
+- `2026-05-08`: Go exercise 迁移口径更新：
+  - `POST /api/exercise-logs` 走异步 `analysis_tasks(task_type=exercise)`，不再同步创建 stub exercise log。
+  - 提交时必须保存 `profile_snapshot`，优先使用 `user_weight_records` 最新体重，缺失才回退 `weapp_user.weight`。
+  - worker 成功估算后再写 `user_exercise_logs`，并落库 `ai_reasoning`。
+  - 估算优先走 OfoxAI `google/gemini-3.1-flash-lite-preview` 短 JSON；无 key、调用失败或解析失败时用 MET/时长/体重规则兜底。
+  - 一条描述包含多项运动时，按换行/分号/句号拆分分项估算后求和。
+- `2026-05-08`: Go `db_first` DeepSeek fallback 迁移口径：
+  - 标准模式下图片/文字分析 prompt 应尽量只让模型输出食物名称、重量、描述和简短建议；营养计算统一由 `food_nutrition_library` / aliases / DeepSeek fallback 后处理完成。
+  - `legacy_direct` 与模型对比接口继续使用旧的“模型直接估营养” prompt，避免对比结果因为 db_first 轻 prompt 变成零营养。
+  - 未命中食物先标记 `is_unresolved=true` 并记录 `food_unresolved_logs`；若 DeepSeek fallback 成功，`nutrition_source` 改为 `deepseek_text_fallback`，但仍保留未命中事实用于补库追踪。
+  - DeepSeek fallback 生成的是每 100g 扩展营养字段，Go 返回的 `unit_nutrition_per_100g` 与按重量缩放的 `nutrients` 应保持同一字段集合；没有 fallback 时也返回 zero unit，避免前端/保存链路分叉。
+  - DeepSeek fallback 成功后自动写入 `food_nutrition_library(source=deepseek_auto)` 和 `food_nutrition_aliases`，下一次同名食物优先走库命中。
+- `2026-05-08`: 保质期通知发送 Go worker 口径：
+  - `/api/expiry/items/:item_id/subscribe` 只负责创建/更新/取消 `food_expiry_notification_jobs`；真实微信订阅消息发送由 worker 处理。
+  - worker 通过原子 claim pending job，使用稳定 access token/临时 fallback token 调用微信订阅消息接口。
+  - 发送失败按 `5/30/120` 分钟退避重试，超过最大重试次数后标记 `failed`，避免单个坏 job 阻塞队列。
+
+- `2026-05-08`: Go worker Phase 2 后续决策：
+  - `precision_plan` 不再直接把单次分析结果当最终精准结果；Go worker 需要保留 Python 旧链路的多阶段形态：planner round -> item estimate 子任务 -> aggregate。
+  - `health_report` 应继续保持 Python 主分支的多图兼容：允许逗号分隔 URL，逐张 OCR 后合并并写入 `user_health_documents` 与 `weapp_user.health_condition.report_extract`。
+  - `/api/expiry/recognize` 对前端仍应是同步识别接口：创建 `analysis_tasks` 只是为了历史/配额/审计记录，接口必须直接返回 `items` 给前端预填表单。
+  - `expiry_recognize` 仍加入 worker 默认任务类型，作为历史 pending 任务或后续异步化的兜底消费路径。
+  - 保质期订阅接口不应只是 stub；Go 版应继续沿用 Python 的 `food_expiry_notification_jobs` 队列表。订阅接口负责 upsert/cancel job，实际微信订阅消息发送由后续 worker 处理。
+
+- `2026-05-08`: Go 后端恢复真实 worker 的部署口径更新：
+  - 允许重新创建 `backend/cmd/worker`，因为这次不是旧的空壳 worker，而是真正消费 `analysis_tasks` 的 runtime。
+  - `backend/Dockerfile` 同时构建 `/app/food-link` 和 `/app/food-link-worker`；默认入口仍是 server，worker 由部署层用同镜像不同 command 启动。
+  - worker 默认任务类型先覆盖 `food,food_text,precision_plan,public_food_library_text,exercise`，健康报告 OCR、保质期识别和订阅通知在后续 Phase 接入。
+  - 任务领取必须使用数据库原子锁定，当前采用 GORM transaction + `FOR UPDATE SKIP LOCKED`，避免多 worker 重复消费同一 pending task。
+- `2026-05-08`: Go `db_first` 第一版策略：
+  - 模型识别结果进入后处理后，优先用 `food_nutrition_aliases` / `food_nutrition_library` 回算营养。
+  - 命中库的项以每 100g 营养值按 `estimatedWeightGrams` 缩放，未命中项记录到 `food_unresolved_logs`。
+  - 未完成 DeepSeek fallback 前，未命中项保留原模型营养估计但显式标记 `nutrition_source=unresolved` 与 `is_unresolved=true`，不能伪装成库命中。
+  - 下一步应继续迁移 Python 的 unknown-food per-100g fallback 自动补库，并把 db_first prompt 收窄为“食物名 + 重量”为主。
+
+- `2026-05-08`: 当前 Go 后端迁移状态不能只按 `docs/go-backend-migration-status.md` 的“Migration is COMPLETE”判断；实际代码对账显示：
+  - `main` / `dev` 当前同为 `fcc6b61`，可作为本轮 Python 后端旧基线。
+  - 当前 Go 分支 `434d019` 仍有 `20` 个小程序使用路由依赖 route map stub fallback，且 `/ws/stats/insight` 仍是 websocket 占位。
+  - 行为等价层面，异步 worker、db_first 食物库匹配、会员支付/积分治理、小程序码、stats insight、保质期识别/订阅、测试后台批处理等仍需继续补迁。
+  - 详细对账报告固定记录在 `docs/go-backend-main-gap-analysis-2026-05-08.md`。
+- `2026-05-08`: Go 后端完整迁移采用“一条集中迁移分支 + 分阶段 checkpoint”的策略：
+  - 计划书固定在 `docs/go-backend-full-migration-plan-2026-05-08.md`。
+  - 目标是一口气补完到可替代 Python，但执行过程必须按 Phase 验收，不能无检查地大爆炸写到底。
+  - 优先级固定为：先补 20 个 stub 路由，再补 worker runtime，再补 db_first，再补会员支付/积分治理，然后补二维码、stats insight、保质期、测试后台和运维脚本。
+  - 当前估时以 `15-20` 个工作日为正式计划口径；若加入完整灰度和回滚演练，预留 `20-25` 个工作日。
+- `2026-05-08`: Go 后端 Phase 1 已将 route-map stub 数量从 `20` 清到 `0`：
+  - `/api/public-food-library*` 与 `/api/recipes*` 已按独立 DDD module 注册真实 handler。
+  - `POST /api/precision-sessions/:session_id/continue` 已接入 analyze handler 和 task service。
+  - 这只表示路由不再 501；异步审核/分析任务仍需要 Phase 2 worker runtime 才能闭环。
+
+- `2026-05-08`: 当前 Go backend 数据库访问基线：
+  - 数据库客户端统一为 `GORM + PostgreSQL`，连接入口为 `backend/pkg/database/postgres.go`。
+  - 启动装配由 `backend/internal/app/app.go` 创建一个共享 `*gorm.DB`，再手工注入各模块 repo。
+  - 业务 repo 应继续通过 `db.WithContext(ctx)` 做 GORM 查询；目前未采用 `database/sql`、`sqlx` 或 `pgx` 直连作为业务访问路径。
+  - 数据库配置继续由 `backend/pkg/config` 通过 `config.yaml` 与环境变量绑定提供，生产敏感值不应写入仓库配置文件。
+  - Supabase 当前应视为旧数据/旧存储迁移源和兼容对象 URL 来源；不要把 Supabase 当作 Go 后端运行时主数据源，除非明确执行一次性同步/迁移脚本。
+  - 如 Supabase 上还有新变更，必须主动再次执行“从 Supabase 源库/对象存储同步到当前腾讯云 PostgreSQL/COS”的迁移流程；当前 Go 服务不会自动轮询 Supabase。
+
+- `2026-05-06`: Go backend CCR 推送脚本继续使用 mjs：
+  - 该脚本属于仓库级部署辅助工具，不属于 Go 后端 runtime。
+  - 继续通过根目录 `npm run push-docker-ccr` 调用 `backend/scripts/push-docker-ccr.mjs`。
+  - 当前 Go 后端迁移阶段，镜像标签固定为 `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`。
+  - 暂不再按 `main` / `dev` 分支生成 `latest/main/dev/sha` 标签；脚本只打印当前分支和短 SHA 作为人工确认信息。
+  - 以后只有当部署工具需要成为可分发 CLI、需要复用 Go 内部配置/代码、或需要复杂 CCR/Kubernetes API 编排时，再考虑用 Go 重写。
+
+- `2026-05-06`: Go backend Docker 镜像构建口径：
+  - `backend/Dockerfile` 采用多阶段构建，固定编译 `./cmd/server`。
+  - runtime 镜像不复制本地 `config.yaml` 或 `.env`；业务敏感配置继续通过运行时环境变量 / ConfigMap 注入。
+  - runtime 需要保留 `docs/backend-api-prd/ROUTE_MAP.md`，因为当前 Go 服务启动时会读取它来注册尚未迁移完成的兼容占位路由。
+- `2026-05-06`: 用户明确决定删除 Go backend 的 `cmd/worker` 占位入口：
+  - 当前 `cmd/worker` 只加载配置、打印日志并无限 sleep，没有实际消费队列或执行任务。
+  - `backend/Dockerfile` 收口为固定构建 `./cmd/server`，不再保留 `BUILD_TARGET` 切换到 worker 的口径。
+  - 后续若需要独立异步任务 runtime，应重新按真实任务消费模型创建入口，而不是保留空壳 worker。
+
+- `2026-05-05`: 新 Go 后端第一阶段迁移底座采用“全量路由占位 + 核心链路优先真实实现”的落地方式：
+  - `backend/docs/backend-api-prd/ROUTE_MAP.md` 作为全量路由注册源
+  - 所有 PRD 路由先在 Go 服务中完成路径/方法/鉴权层面的注册覆盖
+  - 未迁移完成的路由统一返回明确的“已注册但尚未迁移”兼容占位响应
+  - 已知前端 gap 路由优先真实补齐：
+    - `GET /api/food-record/{record_id}/poster-calorie-compare`
+    - `DELETE /api/community/feed/{record_id}/comments/{comment_id}`
+
+- `2026-05-05`: 当前分支中的 `backend/` 已被视为新 Go 后端目标路径：
+  - 旧 Python 后端历史代码以 `backend_bak/` 为保留基准
+  - `backend/` 下原被 Git 跟踪的 Python 文件允许在本次迁移中被新的 Go 目录结构取代
+  - SQL 与 PRD 文档需要在新 `backend/` 内另行归档，避免后续会话只依赖根目录版本
+
+- `2026-05-05`: 为当前分支的 Go 后端重构准备，项目内新增第一优先级本地 skill：
+  - 路径：`.kimi/skills/ddd-go-backend/SKILL.md`
+  - 来源仓库：`LSTM-Kirigaya/jinhui-skills`
+  - 安装口径：不仅保存 `SKILL.md`，还要把其相对引用的配套文档递归落地到同一 skill 目录，确保离线可读和后续会话可复用
+  - `AGENTS.md` 需显式登记该 skill，便于后续新会话优先使用
+
 - `2026-05-05`: 为后端跨语言重写准备的接口实现文档集合固定放在 `docs/backend-api-prd/`。该集合不是 Swagger 导出副本，而是迁移蓝图：既记录路由/鉴权/请求响应，也记录数据库依赖、worker/异步链路、外部依赖、前端调用面和已知 drift。
 
 - `2026-05-05`: 后端接口 PRD 文档的覆盖范围按“全量后端 surface”执行，不只包含小程序主业务 API，也包含测试后台 API、WebSocket、后端直出页面和运维/回调类接口；但文档中必须显式区分 `miniapp-used`、`backend-only`、`internal-only`、`frontend-missing-backend`。
@@ -26,7 +487,6 @@
   - `origin/dev` 已出现更收口的单图 DashScope 导向实现
   - 正式重写前必须先选定以哪条链路为准
 
-
 - `2026-05-05`: 「我的」页底部版本号继续以 `package.json` 为唯一版本源：
   - `src/pages/profile/index.tsx` 通过构建常量 `__APP_VERSION__` 展示版本号。
   - `config/index.ts` 从根目录 `package.json` 读取 `version` 并注入 `__APP_VERSION__`。
@@ -38,18 +498,6 @@
   - 路由层优先拆出 `APIRouter` 模块；schema、service、repository 随业务域逐步下沉。
   - 性能问题不能只靠“拆文件”判断，必须结合接口基准、数据库调用次数、缓存和 Supabase 查询结构定位。
   - 当前已有未提交功能改动时，后端重构应尽量单独提交，避免和业务修复混在一起。
-- `2026-05-08`: 后端 `main.py` 继续拆分时优先搬低耦合路由，暂不硬拆分析、用户、会员、支付、统计这些核心链路：
-  - 已拆出的 router 应尽量保持原函数体和错误处理不变，只把 `@app` 改为 `APIRouter` 注册。
-  - 每次拆完至少执行 `py_compile` 和运行时 route registration check。
-  - 对计费、登录、支付、分析任务状态流等高风险路由，除非同时补目标测试或专项验证，否则不要为了降低行数强行搬动。
-- `2026-05-08`: 后端拆文件本身不作为性能优化收益来承诺：
-  - 路由拆分主要改善可维护性、定位速度、代码所有权边界和后续性能优化的落点。
-  - 单个 API 的运行速度主要取决于数据库查询次数、外部模型/支付/存储请求、缓存策略、序列化和同步阻塞调用。
-  - 后续真正提速时应先用 benchmark/日志定位慢接口，再做查询合并、TTL 缓存、N+1 消除和异步化。
-- `2026-05-08`: 后端高耦合分析路由拆分采用 router factory + `globals()` 过渡方案：
-  - 对 `/api/analyze-compare*`、`/api/analyze-text*`、`/api/analyze/submit`、`/api/precision-sessions/{session_id}/continue` 这类依赖大量 `main.py` helper 的路由，先迁移到独立 router 文件，保留原函数体与依赖调用方式。
-  - 该方案用于避免循环 import，并把行为变化降到最低；后续若继续压缩 `main.py`，应再把共享 schema/helper/service 正式下沉到独立模块，而不是长期扩大 `globals()` 依赖。
-  - `/api/analyze` 与 `/api/analyze/batch` 暂留 `main.py`，直到有更完整的图片分析 smoke test 或专项验证。
 
 - `2026-05-05`: 当用户要求“提交当前工作区全部改动并合并到 main”时，默认发布顺序保持为：
   - 先在 `dev` 提交并推送当前工作区改动
@@ -517,6 +965,22 @@
   - 因此生产支付配置（如 `APPID / WECHAT_PAY_MCHID / WECHAT_PAY_SERIAL_NO / WECHAT_PAY_PRIVATE_KEY / WECHAT_PAY_NOTIFY_URL / WECHAT_PAY_API_V3_KEY`）的真源应视为集群中的 `foodlink-main-env`，而不是镜像构建机当前环境
   - 若仅更新镜像、不更新 `foodlink-main-env` 或不重启 Pod，线上仍会继续使用旧支付配置
 
+- `2026-05-08`: Go 后端会员/支付/积分迁移以 Python 生产表为准，不能继续沿用 Go 重构早期 mock schema。稳定口径：
+  - 会员配置表使用 `membership_plan_config`。
+  - 用户权益表使用 `user_pro_memberships`。
+  - 支付流水表使用 `pro_membership_payment_records`。
+  - 额外奖励与 earned credits 使用 `user_credit_bonus_events`、`user_earned_credit_ledger`、`weapp_user.earned_credits_balance`。
+  - `/api/membership/me` 应以最新真实 `paid` 会员订单为真相来源进行 reconcile，避免 mock/手动脏状态覆盖付费事实。
+  - `/api/membership/pay/create` 必须走真实微信 JSAPI 下单；`/api/payment/wechat/notify/membership` 必须按微信支付回调原始 body + headers 验签、AES-GCM 解密 resource、校验金额后再激活或续期会员。
+  - 微信支付 PEM 配置可接受直接 PEM 或文件路径；生产真源仍是运行时 `ConfigMap`，不是镜像构建机环境变量。
+- `2026-05-08`: Go 后端积分额度治理迁移口径：
+  - 食物标准分析和保质期识别消耗 `2` 分；精准分析消耗 `4` 分；运动估算消耗 `1` 分；普通试用每日系统积分为 `8`。
+  - submit/recognize/log 创建成功前只校验并生成 `credit_spend_plan`；成功后才扣 earned credits，避免失败请求吞积分。
+  - `analysis_tasks.payload.credit_usage` 记录系统积分按天使用量，精准模式子任务不再复制 `credit_usage`，避免重复计数。
+  - 历史任务 fallback 计数仍按 `food/food_text=2`、`precision_plan=4`、`exercise=1` 兼容。
+- `2026-05-08`: `/api/qrcode` 在 Go 后端必须调用微信 `stable_token -> getwxacodeunlimit` 生成真实小程序码，token 可缓存约 5400 秒，遇到 token 失效需清缓存重试一次；不得再返回 mock PNG。
+- `2026-05-08`: Go stats insight websocket 不能返回“未迁移”占位。当前先使用 Go 生成文本流式推送；后续若追求完全等价，需要继续迁移 Python `_generate_nutrition_insight` 的 LLM prompt、缓存与数据指纹策略。
+
 - `2026-03-27`: Added persistent state files so `food_link` context survives session resets and compaction better.
 - `2026-03-27`: Project ownership must come from `IDENTITY.md` plus state files, not stale transcript memory.
 - `2026-03-27`: Durable requirements, blockers, and handoffs must be written to files instead of relying on chat history alone.
@@ -536,3 +1000,89 @@
 - `2026-03-28`: 精准模式不再只是提示词差异；分析结果统一新增 `recognitionOutcome`、`rejectionReason`、`retakeGuidance`、`allowedFoodCategory`，由后端在严格模式下做 hard/soft reject 后校验，前端结果页和历史页按结构化状态展示。
 - `2026-03-28`: 文字异步分析任务的 `execution_mode` 必须和图片任务一样做"请求优先、档案回退"的统一合并，避免未传模式时默认掉回 `standard`。
 - `2026-03-29`: 结果页的"上传公共库"必须是独立入口，点击后应直接进入公共库上传页并沿用当前拍照分析结果作为草稿；不要先走"记录餐次/保存记录"链路，也不要在"记录"成功后再弹上传提醒。
+- `2026-05-06`: Supabase 技术栈迁移正式切换为独立 PostgreSQL + 腾讯云 COS + CDN：
+  - 旧 Python 后端归档至 `backend_bak/`，新 Go 后端接管 `backend/`
+  - 数据迁移通过 `backend_bak/scripts/` 下的三套脚本完成：数据库全量迁移、Storage 图片迁移、URL 清洗为 COS key
+  - 数据库只存 COS key，不存完整 URL；CDN 前缀由 `backend/config.yaml` 按 bucket 维度配置
+- `2026-05-06`: 图片存储查询返回口径统一为"数据库只存 key，后端负责拼接 CDN URL"：
+  - 上传链路：`storage.UploadBytes` / `UploadBase64` 内部通过 `BuildAccessURL` 返回完整 CDN URL
+  - 查询链路：Go 后端 service/handler 层必须调用 `BuildAccessURL` 把 key 拼接为完整 CDN URL 后再返回前端
+  - 禁止直接把数据库中的纯 key 透传给前端
+- `2026-05-09`: 智能饮食推荐第一版采用“即时生成、不落库、不改 schema”的保守口径，适配 Python/Supabase -> Go/PostgreSQL 过渡期。前端把当天剩余热量、三大营养素缺口、目标、已吃餐次摘要和场景（`eat_out` / `cook_home`）传给 Go 后端；Go 后端用 DeepSeek `deepseek-v4-flash` 生成结构化 JSON，失败或缺少 `DEEPSEEK_API_KEY` 时返回规则兜底推荐。后续若要引入推荐历史、用户口味画像、外食商家库或收藏替换项，涉及新增表/字段时必须先写正式 migration，并明确 Supabase 源库与最终 PostgreSQL 的应用顺序。
+- `2026-05-09`: 首页「今日餐食」卡片右侧的 `N次` 固定表示该餐次下有 N 条饮食记录，不表示照片数量。照片数量仍只在餐次缩略图角标中用「共 N 张」表达。多记录弹层里的每条 entry 必须展示该记录自己的 `image_path/image_paths`，不能复用餐次级聚合图片。
+- `2026-05-10`: 小程序本地临时图片路径（如 `wxfile://tmp/...`、`http://tmp/...`）不是可持久化的后端图片引用，不能进入 `analysis_tasks` / `user_food_records` / `public_food_library` 的稳定图片字段，也不能作为圈子/公共库展示源。稳定口径是：
+  - 分析页可在前端本地缓存临时路径，仅用于当前会话预览
+  - 一旦进入保存记录、分享到公共库或任何后端持久化链路，必须改用已上传后的 CDN/COS URL，或完全依赖 `source_task_id` 回填
+  - 后端图片归一化逻辑也应过滤这类本地临时 scheme，避免脏数据再次落库
+- `2026-05-09`: 当 `backend-refactor-sync-migrate-tencent` 本地分支同时落后远端又携带旧本地提交时，同步策略以“先 fetch，再 rebase 到远端最新，再只保留仍有独立价值的本地迁移资产”为准：
+  - 已被远端更完整实现覆盖的旧本地提交可跳过，不强行保留历史实现形态
+  - 迁移脚本、状态文档等独立资产需要在 rebase 后继续保留并推回远端
+- `2026-05-09`: 小程序内海报“保存图片/下载图片”的正式口径改为直接使用微信原生图片菜单 `showShareImageMenu`，不再维护项目自己的本地相册保存 helper：
+  - 首页餐食海报、首页今日小结海报、记录详情海报、按日记录海报统一使用原生图片菜单
+  - 项目不再直接调用 `Taro.saveImageToPhotosAlbum` 作为海报下载主路径
+  - `src/utils/weapp-save-image-album.ts` 已删除
+  - `scope.writePhotosAlbum` 权限声明也随之移除
+- `2026-05-09`: 「我的」页正式口径改为“进入即拉后端最新数据”，不再以本地缓存作为展示优先源：
+  - `src/pages/profile/index.tsx` 不再依赖 `userInfo`、`membershipStatus`、`userRegisterTime`、`profile_stats_*` 作为首屏展示缓存
+  - 「识别记录」快捷入口不再展示 waiting/unread 红色 badge
+  - 与该 badge 相关的 `waiting_record / has_unseen_waiting_record` 前端计数、透传、清零逻辑一并移除
+# 2026-05-12 decisions
+
+- `2026-05-12`: trace 和 log 的口径固定如下：
+  - zap log 是结构化日志流，用于控制台、文件或后续日志系统；它不会因为启用 OTel trace 就自动出现在 Jaeger。
+  - Jaeger 主要展示 trace/span/event/error；需要在 Jaeger 里看到的关键节点，应显式写入 span event、span attribute，错误用 `RecordError`。
+  - 后端关键诊断日志仍走 zap，不使用 `print`/`fmt.Println`；需要与 trace 关联时使用 `logger.WithTrace(ctx)` 增加 `trace_id/span_id`。
+- `2026-05-12`: 分析任务的 trace context 应随 `task_queue` 消息传播：
+  - `/api/analyze/submit` 创建 task 后发布队列消息时注入 W3C trace context。
+  - server 内嵌后台消费者从消息中提取 trace context，再启动 delivery/process/analysis span。
+  - 这样 HTTP submit span 和后续异步处理 span 可在 Jaeger 中落到同一条 trace 下，便于定位卡在 submit、queue、claim、LLM、DB-first、complete 还是 fail update。
+- `2026-05-12`: 独立 Go worker 入口正式删除：
+  - 不再保留 `backend/cmd/worker`、`scripts/run-worker.cjs`、`npm run dev:worker` 或镜像内 `/app/food-link-worker`。
+  - 后台分析消费能力保留在 server 进程内，由 `config.yaml` 的 `worker.count` 控制；`count=0` 关闭，`count>0` 启动对应数量内嵌 worker loop。
+  - 当前本地 `memory` queue 是进程内队列，独立进程无法消费 server 发布的消息；后续若接入 Kafka/NATS/Redis Stream，可在 `task_queue` adapter 层重新评估是否需要独立消费者进程。
+- `2026-05-12`: `worker.poll_interval_seconds` 的稳定口径：
+  - 它不是前端轮询 `/api/analyze/tasks/:task_id` 的间隔，也不是普通 `memory` queue 消息投递延迟。
+  - 当前普通分析任务通过进程内 channel 直接投递给内嵌 worker；消息到达后立即处理。
+  - 该间隔主要控制 worker tick：如果 `task_types` 包含 `expiry_notification`，tick 时检查一条 due 的 `food_expiry_notification_jobs`；同时影响 idle 日志节奏。
+- `2026-05-12`: `worker.task_types` 是 worker 消费和处理任务的白名单：
+  - 对普通队列任务，它同时影响订阅过滤、DB claim 白名单和 worker switch 分支。
+  - `expiry_notification` 不是 `analysis_tasks` 队列消息类型，而是开启保质期通知 DB job 检查。
+  - 不要随意删类型；缺少对应类型会导致相关任务 pending、被跳过或无法发送通知。
+- `2026-05-12`: 所有会创建 `analysis_tasks` pending 且依赖 worker 处理的入口，都应在创建成功后发布 `{task_id, task_type}` 到 `task_queue`：
+  - 当前已覆盖 `food`、`food_text`、`precision_plan`、精准模式子任务、`health_report`、`exercise`、`public_food_library_text`。
+  - `analysis_tasks` 只保留状态/结果/前端轮询职责；新增异步任务类型时不能只写 DB pending，否则在当前取消 DB pending 扫描后任务不会被 worker 领取。
+- `2026-05-12`: `task_queue` 配置语义：
+  - `driver=memory` 是当前唯一实现，适合 server 内嵌 worker；它是进程内队列，不持久化，server 重启不会 replay 旧 pending。
+  - `driver=kafka` 仅为预留，adapter 未实现前必须启动失败，不能静默 fallback 到 DB 扫描。
+  - `buffer_size` 是 memory channel 容量，必须大于 0；`topic/brokers/consumer_group` 当前为未来真实 broker 预留，memory driver 不使用。
+- `2026-05-12`: `worker.task_types` 不再属于配置契约：
+  - `config.yaml` 只控制 `worker.count` 和 `worker.poll_interval_seconds`，不允许按环境裁剪 worker 可处理的业务任务类型。
+  - worker 支持的任务类型由代码层 `worker.SupportedTaskTypes()` 固定维护；新增、删除或禁用任务类型应改代码和测试。
+  - 这样避免生产/本地配置漏掉某个 `task_type` 后导致任务长期 pending 或提醒不发送。
+- `2026-05-12`: 结果页「更多营养」展开区采用两列放大明细卡，不再使用三列小格；触发按钮和明细数值应优先保证小程序手机端阅读与点击舒适度。
+## 2026-05-12 decisions: task_queue Kafka reliability
+
+- `task_queue.driver=kafka` 是生产级队列实现，不再是 fail-fast 占位；worker 使用 `FetchMessage` 读取，只有在 `analysis_tasks` 成功写入 `done` 或 `failed` 后才 `CommitMessages`。
+- `analysis_tasks` 的可靠处理口径固定为 DB attempt lease：claim 写入 `worker_id`、`attempt_id`、`attempt_count`、`processing_started_at`、`lease_until`；complete/fail 必须按当前 `attempt_id` 条件更新，旧 attempt 不允许覆盖新 attempt。
+- `processing` 不应永久存在：worker 处理期间续租；server/worker 挂掉后，lease 过期任务由 recovery 重新发布到 queue；`memory` 本地模式也复用这套 DB recovery。
+- Kafka 只能保证未 commit 消息重新投递，不能单独保证外部副作用 exactly once；项目保证的是 DB 终态幂等与旧 attempt 不覆盖新结果。
+- Go server 内嵌 worker goroutine 会 recover/restart；整个 server 进程崩溃的拉起职责属于 systemd、Docker、K8s 或部署平台。
+
+- `2026-05-12`: 文本食物记录积分口径与图片食物分析一致：
+  - `food_text` 创建异步任务时必须写入 `credit_usage` 与 `credit_group_id`，并使用 `food_analysis:<credit_group_id>` 作为 earned 积分预扣 source key。
+  - `food_text` 进入 `failed/timed_out/cancelled` 后，必须使用 `food_analysis_refund:<credit_group_id>` 走幂等退款；worker 失败路径和 `GetTask()` 轮询失败态都应保持这个行为。
+  - 后续重构积分、队列或文本记录入口时，不能把文本任务从食物分析积分分组退款链路中拆出去。
+
+- `2026-05-12`: HTTP 响应 trace/request id 兜底口径：
+  - 生产仍应开启 `otel.enabled=true` 才能在 Jaeger 里看到真实链路。
+  - 但前端用户报错所需的 `X-Trace-Id` 不能完全依赖 OTel；后端必须在 OTel 关闭或没有有效 span 时生成基础 32 位 hex trace id，并同时返回 `X-Request-Id`。
+  - 前端必须把 `no-trace-id/none/null/undefined` 视为占位符，不展示给用户，也不作为真实 trace id 拼接进错误文案。
+
+- `2026-05-12`: 用户可见热量显示不得为负：
+  - 结果页入口应对后端/缓存返回的 calories 和宏量营养做非负归一化，避免负值继续进入页面状态、保存 payload 或首页统计。
+  - 图片结果页已有 `normalizeNutrientValue()` 兜底；文字结果页同样需要保持该口径。
+
+- `2026-05-12`: 识别历史页“一键删除未记录”必须由后端按当前用户全量条件原子执行：
+  - 前端不得基于当前已加载列表逐条调用 `DELETE /api/analyze/tasks/:task_id`，否则会受分页/加载数量和部分请求失败影响，需要多次操作。
+  - 后端批量条件稳定为：历史页可见任务类型 + `status='done'` + 不存在同用户 `user_food_records.source_task_id`。
+  - 该操作不删除 pending/processing/failed/timed_out/cancelled，也不删除已记录任务或精准模式内部估重子任务。

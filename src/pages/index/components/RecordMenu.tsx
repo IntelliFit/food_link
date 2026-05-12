@@ -29,12 +29,12 @@ import {
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
 import { persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 
 interface RecordMenuProps {
   visible: boolean
   onClose: () => void
   selectedDate: string
-  hasUnseenWaitingRecord: boolean
 }
 
 // 顶部2x2网格功能 - 拍照识别、相册上传、文本输入、手动输入
@@ -88,7 +88,18 @@ const QUICK_ACCESS_ITEMS = [
   },
 ] as const
 
-export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRecord }: RecordMenuProps) {
+const MEMBERSHIP_PREFLIGHT_TIMEOUT_MS = 1200
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), timeoutMs)
+    }),
+  ])
+}
+
+export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
   const [devToolsOpen, setDevToolsOpen] = useState(false)
@@ -127,7 +138,10 @@ export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRec
         void (async () => {
           try {
             // 优先使用弹窗打开时预取的结果，未命中则降级发起新请求
-            const membershipStatus = await (membershipPromiseRef.current ?? getMyMembership())
+            const membershipStatus = await withTimeout(
+              membershipPromiseRef.current ?? getMyMembership(),
+              MEMBERSHIP_PREFLIGHT_TIMEOUT_MS
+            )
             if (membershipStatus && isFoodAnalysisCreditExhausted(membershipStatus)) {
               const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
               const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
@@ -149,22 +163,24 @@ export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRec
           } catch {
             // 会员接口失败时仍允许选图，由分析提交接口提示
           }
-          Taro.chooseImage({
+          chooseImageWithPrivacy({
             count: modeId === 'album' ? 5 : 1,
             sizeType: ['compressed'],
             sourceType: modeId === 'camera' ? ['camera'] : ['album'],
-            success: (res) => {
-              const tempPaths = res.tempFilePaths || []
-              if (tempPaths.length > 0) {
-                Taro.setStorageSync('analyzeImagePath', tempPaths[0])
-                Taro.setStorageSync('analyzeImagePaths', tempPaths)
-              }
-              Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
-            },
-            fail: (err) => {
-              if (err.errMsg?.includes('cancel')) return
-              void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
+          }).then((res) => {
+            const tempPaths = res.tempFilePaths || []
+            if (tempPaths.length > 0) {
+              Taro.setStorageSync('analyzeImagePath', tempPaths[0])
+              Taro.setStorageSync('analyzeImagePaths', tempPaths)
             }
+            Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
+          }).catch((err) => {
+            if (err.errMsg?.includes('cancel')) return
+            if (isPrivacyAuthorizeError(err)) {
+              showPrivacyAuthorizeFailure(err)
+              return
+            }
+            void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
           })
         })()
         break
@@ -259,9 +275,6 @@ export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRec
                   </View>
                 </View>
                 <View className='record-menu-list-right'>
-                  {item.id === 'history' && hasUnseenWaitingRecord && (
-                    <View className='record-menu-dot' />
-                  )}
                   <IconChevronRight size={16} color='#d1d5db' />
                 </View>
               </View>

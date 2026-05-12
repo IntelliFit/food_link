@@ -1,4 +1,4 @@
-import { View, Text, Image, Canvas } from '@tarojs/components'
+import { View, Canvas } from '@tarojs/components'
 import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -11,6 +11,7 @@ import {
   type FoodRecord
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
+import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 
 import './MealRecordPosterModal.scss'
@@ -44,19 +45,48 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
   const [ownerInviteCode, setOwnerInviteCode] = useState('')
   const [calorieCompare, setCalorieCompare] = useState<any>(null)
 
+  const safeRecordId = String(record?.id || '').trim()
+  const safeUserId = String(record?.user_id || '').trim()
+
+  const openOfficialImageMenu = useCallback(async (path: string) => {
+    if (!path) return
+    Taro.showShareImageMenu({
+      path,
+      success: () => {
+        onClose()
+      },
+      fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) {
+          onClose()
+          return
+        }
+        console.error('showShareImageMenu fail', err)
+        onClose()
+        void showUnifiedApiError(new Error('打开微信图片菜单失败，请重试'), '打开微信图片菜单失败，请重试')
+      }
+    })
+  }, [onClose])
+
   useEffect(() => {
+    setOwnerNickname('')
+    setOwnerAvatar('')
+    setOwnerInviteCode('')
+    setCalorieCompare(null)
     if (visible && record) {
       getMyMembership().then(ms => setIsProUser(ms.is_pro)).catch(() => {})
-      getFriendInviteProfile(record.user_id)
+      if (safeUserId) {
+        getFriendInviteProfile(safeUserId)
         .then(profile => {
           setOwnerNickname(profile.nickname || '')
           setOwnerAvatar(profile.avatar || '')
-          setOwnerInviteCode(profile.invite_code || getInviteCodeFromUserId(record.user_id))
+          setOwnerInviteCode(profile.invite_code || getInviteCodeFromUserId(safeUserId))
         })
         .catch(() => {
-          setOwnerInviteCode(getInviteCodeFromUserId(record.user_id))
+          setOwnerInviteCode(getInviteCodeFromUserId(safeUserId))
         })
-      getPosterCalorieCompare(record.id)
+      }
+      if (safeRecordId) {
+        getPosterCalorieCompare(safeRecordId)
         .then(data => {
           if (!data) return
           setCalorieCompare({
@@ -67,8 +97,9 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
           })
         })
         .catch(() => {})
+      }
     }
-  }, [visible, record])
+  }, [visible, record, safeRecordId, safeUserId])
 
   useEffect(() => {
     if (visible && record && !posterGenerating && !posterImageUrl) {
@@ -94,16 +125,16 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
 
   useEffect(() => {
     if (!onShareContextChange) return
-    if (visible && posterImageUrl && record) {
-      const oid = record.user_id || ''
+    if (visible && posterImageUrl && record && safeRecordId) {
+      const oid = safeUserId
       const ic = ownerInviteCode || getInviteCodeFromUserId(oid)
-      const path = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}${oid ? `&from_user_id=${encodeURIComponent(oid)}` : ''}${ic ? `&invite_code=${encodeURIComponent(ic)}` : ''}`
+      const path = `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(safeRecordId)}${oid ? `&from_user_id=${encodeURIComponent(oid)}` : ''}${ic ? `&invite_code=${encodeURIComponent(ic)}` : ''}`
       const title = ownerNickname ? `${ownerNickname}邀你来食探，达标后各得15积分` : '加入食探并完成2天打卡，双方各得15积分'
       onShareContextChange({ imageUrl: posterImageUrl, path, title })
     } else {
       onShareContextChange(null)
     }
-  }, [visible, posterImageUrl, record, ownerInviteCode, ownerNickname, onShareContextChange])
+  }, [visible, posterImageUrl, record, safeRecordId, safeUserId, ownerInviteCode, ownerNickname, onShareContextChange])
 
   const handleGeneratePoster = useCallback(() => {
     if (!record || posterGenerating) return
@@ -202,7 +233,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
               isPro: isProUser,
             })
 
-            // JPG + 不透明：部分机型对 PNG/透明通道 saveImageToPhotosAlbum 不稳定；海报本身有底色
+            // JPG + 不透明：海报本身有底色，交给微信官方图片菜单处理分享/保存。
             Taro.canvasToTempFilePath({
               canvas: canvas as any,
               destWidth: POSTER_WIDTH * 2,
@@ -213,6 +244,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
                 Taro.hideLoading()
                 setPosterGenerating(false)
                 setPosterImageUrl(resp.tempFilePath)
+                void openOfficialImageMenu(resp.tempFilePath)
               },
               fail: (err) => {
                 Taro.hideLoading()
@@ -229,93 +261,16 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
           }
         })
       })
-  }, [record, posterGenerating, isProUser, ownerNickname, ownerAvatar, ownerInviteCode, calorieCompare])
-
-  const handleSharePosterImage = useCallback(() => {
-    if (!posterImageUrl) return
-    // @ts-ignore
-    Taro.showShareImageMenu({
-      path: posterImageUrl,
-      fail: (err: { errMsg?: string }) => {
-        console.error('showShareImageMenu fail', err)
-        void showUnifiedApiError(new Error('分享失败，请保存图片后手动发送'), '分享失败，请保存图片后手动发送')
-      }
-    })
-  }, [posterImageUrl])
-
-  const handleSavePoster = useCallback(() => {
-    if (!posterImageUrl) return
-    Taro.saveImageToPhotosAlbum({
-      filePath: posterImageUrl,
-      success: () => {
-        Taro.showToast({ title: '已保存到相册', icon: 'success' })
-        onClose()
-      },
-      fail: (err) => {
-        if (err.errMsg?.includes('auth deny') || err.errMsg?.includes('authorize')) {
-          Taro.showModal({
-            title: '提示',
-            content: '需要您授权保存图片到相册',
-            confirmText: '去设置',
-            success: (r) => {
-              if (r.confirm) Taro.openSetting()
-            }
-          })
-        } else {
-          void showUnifiedApiError(new Error('保存失败'), '保存失败')
-        }
-      }
-    })
-  }, [posterImageUrl, onClose])
+  }, [record, posterGenerating, isProUser, ownerNickname, ownerAvatar, ownerInviteCode, calorieCompare, openOfficialImageMenu])
 
   return (
-    <>
-      <View className='poster-canvas-wrap'>
-        <Canvas
-          type='2d'
-          id='homeMealRecordPosterCanvas'
-          className='poster-canvas'
-          style={{ width: `${POSTER_WIDTH}px`, height: `${POSTER_HEIGHT}px` }}
-        />
-      </View>
-
-      {visible && posterImageUrl && (
-        <View className='poster-modal poster-modal--sheet' catchMove>
-          <View className='poster-modal-shell' catchMove>
-            <View className='poster-modal-topbar poster-modal-topbar--light poster-modal-topbar--title-only'>
-              <Text className='poster-modal-title poster-modal-title--light'>分享今日卡片</Text>
-            </View>
-            <View className='poster-modal-dark-body'>
-              <View className='poster-modal-inline-back' onClick={onClose}>
-                <View className='poster-modal-close poster-modal-inline-close-hit'>
-                  <Text className='poster-modal-close-x'>×</Text>
-                </View>
-              </View>
-              <View className='poster-scroll-area'>
-                <View className='poster-modal-scroll-inner'>
-                  <View className='poster-modal-card-wrap'>
-                    <Image src={posterImageUrl} mode='widthFix' className='poster-modal-image' />
-                  </View>
-                </View>
-              </View>
-            </View>
-            <View className='poster-modal-bottom-bar'>
-              <View className='poster-share-channel' onClick={handleSharePosterImage}>
-                <View className='poster-share-channel-icon poster-share-channel-icon-wechat'>
-                  <Text className='iconfont icon-wechat poster-share-channel-glyph' />
-                </View>
-                <Text className='poster-share-channel-label'>微信</Text>
-              </View>
-              <View className='poster-share-channel' onClick={handleSavePoster}>
-                <View className='poster-share-channel-icon poster-share-channel-icon-save'>
-                  <Text className='iconfont icon-download poster-share-channel-glyph' />
-                </View>
-                <Text className='poster-share-channel-label'>保存图片</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
-    </>
+    <View className='poster-canvas-wrap'>
+      <Canvas
+        type='2d'
+        id='homeMealRecordPosterCanvas'
+        className='poster-canvas'
+        style={{ width: `${POSTER_WIDTH}px`, height: `${POSTER_HEIGHT}px` }}
+      />
+    </View>
   )
 }
