@@ -1,5 +1,24 @@
 # 当前任务
 
+## 状态：完成圈子分页修复提交、推送与后端部署
+
+- 2026-05-12 update:
+  - User 要求提交推送代码，然后部署后端。
+  - Completed:
+    - 已提交并推送圈子动态刷新/触底分页修复：
+      - `a4abf0e fix: repair community feed pagination`
+    - 由于 `package.json` 已包含版本号 `3.0.2`，已同步 `package-lock.json` 并提交推送：
+      - `481a712 chore: sync package lock version`
+    - 已执行 `DOCKER_BUILD_PROGRESS=plain npm run push-docker-ccr`，成功推送后端镜像：
+      - `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`
+      - digest: `sha256:b1f7f6138d10d18daf1a72ddf3d3737b428048d748ea0f1a33ba54f08a4ddfc9`
+      - platform: `linux/amd64`
+      - 构建源码 short SHA: `481a712`
+  - Verification before deploy:
+    - `go test ./internal/community/service ./internal/community/handler -run 'TestFriendFeed|TestPublicFeed|TestFeed|TestFeedWithParams|TestPublicFeedError|TestFeedError|TestScoreFeedRecord|TestComputeFreshnessScore' -count=1` passed。
+    - `npx eslint src/pages/community/index.tsx src/pages/profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+
 ## 状态：完成源码修改 - 圈子好友动态回到页面后不刷新
 
 - 2026-05-12 update:
