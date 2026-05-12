@@ -1698,6 +1698,28 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   flex-shrink: 0;
 }
 
+.meal-media-type-tag {
+  position: absolute;
+  top: 10rpx;
+  left: 10rpx;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28rpx;
+  padding: 0 8rpx;
+  border-radius: 6rpx;
+  background: $primary-color;
+  box-shadow: 0 4rpx 12rpx rgb(15 23 42 / 14%);
+}
+
+.meal-media-type-tag-text {
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 30rpx;
+  color: #ffffff;
+}
+
 .meal-content {
   flex: 1;
   min-width: 0;
@@ -1770,18 +1792,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   gap: 12rpx;
 }
 
-.meal-type-tag {
-  flex-shrink: 0;
-  border-radius: 8rpx;
-  padding: 4rpx 12rpx;
-}
-
-.meal-type-tag-text {
-  font-size: 20rpx;
-  font-weight: 600;
-  line-height: 28rpx;
-}
-
 .meal-calorie-wrap {
   display: flex;
   align-items: center;
@@ -1805,22 +1815,23 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .meal-calorie-extra {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 6rpx;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
-.meal-type-icon-inline {
+.meal-intake-ratio-icon {
   font-size: 20rpx;
   line-height: 32rpx;
-  margin-right: 4rpx;
 }
 
-.meal-type-target {
+.meal-intake-ratio-text {
   font-size: 22rpx;
-  font-weight: 500;
+  font-weight: 600;
   color: $text-secondary;
   line-height: 32rpx;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 // 第三行：三大营养素 + 含水量
@@ -1835,10 +1846,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   display: flex;
   align-items: center;
   gap: 4rpx;
-}
-
-.meal-ratio-pill {
-  padding-left: 2rpx;
 }
 
 .meal-macro-text {

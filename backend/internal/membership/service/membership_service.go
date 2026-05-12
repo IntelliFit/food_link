@@ -159,7 +159,7 @@ func (s *MembershipService) ListPlans(ctx context.Context) ([]map[string]any, er
 	return out, nil
 }
 
-func (s *MembershipService) GetMyMembership(ctx context.Context, userID string) (map[string]any, error) {
+func (s *MembershipService) GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error) {
 	user, err := s.repo.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -178,7 +178,7 @@ func (s *MembershipService) GetMyMembership(ctx context.Context, userID string) 
 	resp["daily_used"] = usedToday
 	resp["daily_remaining"] = nil
 
-	credits, err := s.computeDailyCreditsStatus(ctx, userID, boolValue(resp["is_pro"]), membership, user)
+	credits, err := s.computeDailyCreditsStatus(ctx, userID, boolValue(resp["is_pro"]), membership, user, date)
 	if err != nil {
 		return nil, err
 	}
@@ -265,9 +265,12 @@ func (s *MembershipService) reconcileMembershipFromLatestPaidOrder(ctx context.C
 	})
 }
 
-func (s *MembershipService) computeDailyCreditsStatus(ctx context.Context, userID string, isPro bool, membership *domain.UserMembership, user *membershiprepo.User) (map[string]any, error) {
+func (s *MembershipService) computeDailyCreditsStatus(ctx context.Context, userID string, isPro bool, membership *domain.UserMembership, user *membershiprepo.User, date string) (map[string]any, error) {
 	nowCN := time.Now().In(chinaLocation())
 	today := nowCN.Format("2006-01-02")
+	if strings.TrimSpace(date) != "" {
+		today = strings.TrimSpace(date)
+	}
 	base := 0
 	trialActive := false
 	var trialExpiresAt *time.Time
@@ -854,7 +857,7 @@ func (s *MembershipService) shareRewardResponse(ctx context.Context, userID stri
 	user, _ := s.repo.GetUser(ctx, userID)
 	membership, _ := s.getEffectiveMembership(ctx, userID)
 	base := formatMembershipResponse(membership)
-	creditsInfo, _ := s.computeDailyCreditsStatus(ctx, userID, boolValue(base["is_pro"]), membership, user)
+	creditsInfo, _ := s.computeDailyCreditsStatus(ctx, userID, boolValue(base["is_pro"]), membership, user, "")
 	return map[string]any{
 		"claimed":                   claimed,
 		"already_claimed":           alreadyClaimed,
@@ -917,7 +920,7 @@ func (s *MembershipService) validateCredits(ctx context.Context, userID string, 
 		return nil, err
 	}
 	isPro := membership != nil && formatMembershipResponse(membership)["is_pro"] == true
-	creditsInfo, err := s.computeDailyCreditsStatus(ctx, userID, isPro, membership, user)
+	creditsInfo, err := s.computeDailyCreditsStatus(ctx, userID, isPro, membership, user, "")
 	if err != nil {
 		return nil, err
 	}

@@ -29,7 +29,7 @@ type mockMembershipService struct {
 func (m *mockMembershipService) ListPlans(ctx context.Context) ([]map[string]any, error) {
 	return m.listPlansResult, m.listPlansErr
 }
-func (m *mockMembershipService) GetMyMembership(ctx context.Context, userID string) (map[string]any, error) {
+func (m *mockMembershipService) GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error) {
 	return m.getMyMembershipResult, m.getMyMembershipErr
 }
 func (m *mockMembershipService) CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error) {

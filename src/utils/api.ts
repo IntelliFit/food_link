@@ -2981,24 +2981,30 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
 }
 
 // 会员状态短缓存：避免短时间内（如菜单弹窗→点击）重复请求
-let _membershipCache: { data: MembershipStatus; expiresAt: number } | null = null
+const _membershipCache = new Map<string, { data: MembershipStatus; expiresAt: number }>()
 let _membershipPending: Promise<MembershipStatus> | null = null
+let _membershipPendingKey = ''
 const MEMBERSHIP_CACHE_TTL_MS = 30_000
 
 /**
  * 获取当前用户会员状态（带 30s 缓存，复用 in-flight 请求）
+ * @param date 可选，查询指定日期的积分状态（YYYY-MM-DD），不传则查今天
  */
-export async function getMyMembership(): Promise<MembershipStatus> {
-  if (_membershipCache && Date.now() < _membershipCache.expiresAt) {
-    return _membershipCache.data
+export async function getMyMembership(date?: string): Promise<MembershipStatus> {
+  const key = (date || '').trim()
+  const cached = _membershipCache.get(key)
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.data
   }
-  if (_membershipPending) {
+  if (_membershipPending && _membershipPendingKey === key) {
     return _membershipPending
   }
 
+  _membershipPendingKey = key
   _membershipPending = (async () => {
     try {
-      const response = await authenticatedRequest('/api/membership/me', {
+      const url = key ? `/api/membership/me?date=${encodeURIComponent(key)}` : '/api/membership/me'
+      const response = await authenticatedRequest(url, {
         method: 'GET',
         timeout: 15000
       })
@@ -3009,13 +3015,14 @@ export async function getMyMembership(): Promise<MembershipStatus> {
       }
 
       const data = response.data as MembershipStatus
-      _membershipCache = { data, expiresAt: Date.now() + MEMBERSHIP_CACHE_TTL_MS }
+      _membershipCache.set(key, { data, expiresAt: Date.now() + MEMBERSHIP_CACHE_TTL_MS })
       return data
     } catch (error: any) {
       console.error('获取会员状态失败:', error)
       throw new Error(error.message || '获取会员状态失败')
     } finally {
       _membershipPending = null
+      _membershipPendingKey = ''
     }
   })()
 

@@ -630,12 +630,6 @@ const MEAL_ICON_CONFIG = {
   snack: { Icon: IconSnack, color: '#8b5cf6', bgColor: '#f3e8ff', label: '零食', iconClass: 'icon-lingshi' }
 } as const
 
-const SNACK_MEAL_TYPES = new Set(['morning_snack', 'afternoon_snack', 'evening_snack', 'snack'])
-
-// 餐次进度条颜色：正常为绿色，超过100%为柔和红警示
-const MEAL_PROGRESS_COLOR_NORMAL = '#00bc7d'
-const MEAL_PROGRESS_COLOR_WARNING = HOME_WARNING_RED
-
 // 营养素配置
 const MACRO_CONFIGS: Array<{
   key: MacroKey
@@ -2672,8 +2666,7 @@ function IndexPage() {
             ) : (
               meals.map((meal, index) => {
                 const config = MEAL_ICON_CONFIG[meal.type as keyof typeof MEAL_ICON_CONFIG] ?? MEAL_ICON_CONFIG.snack
-                const { Icon, color, bgColor, label, iconClass } = config
-                const isSnackMeal = SNACK_MEAL_TYPES.has(meal.type)
+                const { Icon, color, bgColor, label } = config
                 const mealCalorie = normalizeDisplayNumber(meal.calorie)
                 const mealTarget = normalizeDisplayNumber(meal.target)
                 const mealProgress = normalizeProgressPercent(meal.progress, mealCalorie, mealTarget)
@@ -2685,6 +2678,9 @@ function IndexPage() {
                 const mealRecordCount = Array.isArray(meal.meal_record_entries)
                   ? meal.meal_record_entries.filter((entry) => entry && String(entry.id || '').trim()).length
                   : 0
+                const mealIntakeRatio = typeof (meal.intake_ratio ?? meal.intakeRatio) === 'number'
+                  ? Number(meal.intake_ratio ?? meal.intakeRatio)
+                  : null
 
 
                 return (
@@ -2700,17 +2696,16 @@ function IndexPage() {
                         previewHomeMealImages(meal)
                       }}
                     >
-                      {hasRealImage ? (
+                      {hasRealImage && (
                         <Image
                           className='meal-thumb-image'
                           src={previewImage}
                           mode='aspectFill'
                         />
-                      ) : (
-                        <View className='meal-icon-wrap' style={{ backgroundColor: bgColor }}>
-                          <Icon size={24} color={color} />
-                        </View>
                       )}
+                      <View className='meal-media-type-tag'>
+                        <Text className='meal-media-type-tag-text'>{label}</Text>
+                      </View>
                     </View>
                     <View className='meal-content'>
                       {/* 第一行：描述 + 时间胶囊 */}
@@ -2739,13 +2734,16 @@ function IndexPage() {
                           </Text>
                         </View>
                         <View className='meal-calorie-extra'>
-                          <Text
-                            className={`iconfont ${iconClass} meal-type-icon-inline`}
-                            style={{ color }}
-                          />
-                          <Text className='meal-type-target'>
-                            {label} {formatDisplayNumber(mealTarget)} kcal
-                          </Text>
+                          {mealIntakeRatio != null ? (
+                            <>
+                              <Text
+                                className='meal-intake-ratio-text'
+                                style={{ color: mealIntakeRatio > 100 ? HOME_WARNING_RED : undefined }}
+                              >
+                                摄入 {formatDisplayNumber(mealIntakeRatio)}%
+                              </Text>
+                            </>
+                          ) : null}
                         </View>
                       </View>
                       {/* 第三行：三大营养素 + 含水量 */}
@@ -2772,12 +2770,6 @@ function IndexPage() {
                           <View className='meal-macro-pill'>
                             <Text className='iconfont icon-drink' style={{ color: '#70B8A0', fontSize: '22rpx', marginRight: '4rpx' }} />
                             <Text className='meal-macro-text'>{formatDisplayNumber(Number(meal.water_ml ?? meal.waterMl))}ml</Text>
-                          </View>
-                        )}
-                        {typeof (meal.intake_ratio ?? meal.intakeRatio) === 'number' && (
-                          <View className='meal-macro-pill meal-ratio-pill'>
-                            <Text className='iconfont icon-tubiao-zhuzhuangtu' style={{ color: '#8b5cf6', fontSize: '22rpx', marginRight: '4rpx' }} />
-                            <Text className='meal-macro-text'>摄入 {formatDisplayNumber(Number(meal.intake_ratio ?? meal.intakeRatio))}%</Text>
                           </View>
                         )}
                       </View>

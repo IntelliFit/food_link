@@ -34,10 +34,11 @@ import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-
 import {
   getFoodAnalysisBlockedActionText,
   getFoodAnalysisCreditBlockMessage,
+  getFoodAnalysisCreditCost,
   getMembershipCreditSummary,
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
-import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
@@ -276,6 +277,7 @@ function AnalyzePage() {
   const [isMultiView, setIsMultiView] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
   const [precisionSessionId, setPrecisionSessionId] = useState('')
   const [savedReferenceDefaults, setSavedReferenceDefaults] = useState<PrecisionReferenceDefaults>(
     () => buildDefaultReferenceDefaults()
@@ -340,6 +342,12 @@ function AnalyzePage() {
     }
     if (getAccessToken()) {
       getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
+      const targetDate = getStoredRecordTargetDate()
+      if (targetDate !== getTodayRecordDateKey()) {
+        getMyMembership(targetDate).then(ms => setTargetDateStatus(ms)).catch(() => {})
+      } else {
+        setTargetDateStatus(null)
+      }
     }
     if (imagePathsRef.current.length === 0) {
       setMealType(inferDefaultMealTypeFromLocalTime())
@@ -375,6 +383,13 @@ function AnalyzePage() {
           try {
             const ms = await getMyMembership()
             setMembershipStatus(ms)
+            const targetDate = getStoredRecordTargetDate()
+            if (targetDate !== getTodayRecordDateKey()) {
+              const tms = await getMyMembership(targetDate)
+              setTargetDateStatus(tms)
+            } else {
+              setTargetDateStatus(null)
+            }
           } catch (err) {
             console.error('获取会员状态失败:', err)
           }
@@ -721,25 +736,59 @@ function AnalyzePage() {
     })
   }
 
+  // 配额提示条文案与样式计算
+  const recordTargetDate = getStoredRecordTargetDate()
+  const isBackfill = recordTargetDate !== getTodayRecordDateKey()
+  const creditCost = getFoodAnalysisCreditCost(executionMode, creditUnits)
+
+  let quotaBarClass = 'quota-bar'
+  let quotaBarText = ''
+  if (isBackfill) {
+    const targetSummary = targetDateStatus ? getMembershipCreditSummary(targetDateStatus) : null
+    const targetHasInfo = targetSummary?.hasInfo ?? false
+    const targetRemaining = targetSummary?.remaining ?? 0
+    const monthDay = `${Number(recordTargetDate.slice(5, 7))}月${Number(recordTargetDate.slice(8, 10))}日`
+    if (!targetHasInfo) {
+      quotaBarText = `${monthDay}积分信息加载中`
+    } else if (targetRemaining < creditCost) {
+      quotaBarClass += ' quota-bar--warn'
+      quotaBarText = `${monthDay}积分不足 · 将扣除今日积分 · 今日剩余 ${creditsRemaining}`
+    } else {
+      if (creditsRemaining <= 2) {
+        quotaBarClass += ' quota-bar--warn'
+      }
+      quotaBarText = `${monthDay} · 已用 ${targetSummary?.used ?? 0}/${targetSummary?.max ?? 0} 积分 · 剩余 ${targetRemaining}${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
+    }
+  } else {
+    if (isQuotaExhausted) {
+      quotaBarClass += ' quota-bar--exhausted'
+      quotaBarText = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode)
+    } else if (hasCreditsInfo) {
+      if (creditsRemaining <= 2) {
+        quotaBarClass += ' quota-bar--warn'
+      }
+      quotaBarText = `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
+    } else {
+      quotaBarText = `今日积分信息加载中${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
+    }
+    if (membershipStatus?.is_pro) {
+      quotaBarClass += ' quota-bar--pro'
+    }
+  }
+
   return (
     <View className='analyze-page'>
       {/* 提示：长按页面任意位置可启用开发者模式 */}
-      {/* 今日配额提示条 */}
+      {/* 配额提示条 */}
       {membershipStatus && (
         <View
-          className={`quota-bar ${isQuotaExhausted ? 'quota-bar--exhausted' : ''} ${membershipStatus.is_pro ? 'quota-bar--pro' : ''} ${!isQuotaExhausted && hasCreditsInfo && creditsRemaining <= 2 ? 'quota-bar--warn' : ''}`}
+          className={quotaBarClass}
           onClick={() => {
             if (isQuotaExhausted) return
             if (!canUseStrictMode) Taro.navigateTo({ url: precisionUpgradeUrl })
           }}
         >
-          <Text className='quota-bar-text'>
-            {isQuotaExhausted
-              ? getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode)
-              : hasCreditsInfo
-                ? `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
-                : `今日积分信息加载中${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`}
-          </Text>
+          <Text className='quota-bar-text'>{quotaBarText}</Text>
         </View>
       )}
 

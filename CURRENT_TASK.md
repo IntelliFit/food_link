@@ -1,3 +1,21 @@
+# 状态：完成源码修改 - 首页今日餐食餐次标签挪到图片角标
+
+- 2026-05-13 update:
+  - User 要求：首页「今日餐食」部分，把当前餐属于早餐/午餐/晚餐/加餐做成小圆角矩形标签放到图片左上角；原来右侧显示餐次的位置改为显示摄入量/摄入比例。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 今日餐食图片区域新增 `meal-media-type-tag`，显示 `早餐/午餐/晚餐/加餐/零食`。
+      - 第二行右侧原 `早餐 xx kcal` 餐次目标位置改为显示 `摄入 xx%`。
+      - 移除第三行营养素后面的摄入比例胶囊，避免重复展示。
+      - 清理不再使用的 `SNACK_MEAL_TYPES` 与餐次进度颜色常量。
+    - `src/pages/index/index.scss`
+      - 新增图片左上角餐次角标样式。
+      - 调整右侧摄入比例文字/图标样式，删除旧餐次目标与旧摄入比例胶囊样式。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/index.tsx src/pages/index/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
 # 状态：完成源码修复 - 身体趋势页喝水按首页传入日期记录
 
 - 2026-05-13 update:
