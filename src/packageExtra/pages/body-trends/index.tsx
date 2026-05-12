@@ -16,6 +16,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
+import { normalizeRecordDate } from '../../../utils/record-date'
 
 import './index.scss'
 
@@ -307,6 +308,10 @@ function TrendStrip({ points, mode, goal = 0, unit }: TrendStripProps) {
 function BodyTrendsPage() {
   const router = useRouter()
   const initialTab = isBodyTrendTab(router.params?.tab) ? router.params.tab : 'weight'
+  const selectedRecordDate = useMemo(
+    () => normalizeRecordDate(String(router.params?.date || '')),
+    [router.params?.date]
+  )
   const [activeTab, setActiveTab] = useState<BodyTrendTab>(initialTab)
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<BodyMetricsSummary | null>(null)
@@ -360,7 +365,8 @@ function BodyTrendsPage() {
   const exerciseTotal = exerciseDays.reduce((sum, item) => sum + item.total, 0)
   const exerciseCount = exerciseDays.reduce((sum, item) => sum + item.count, 0)
   const activeExerciseDays = exerciseDays.filter((item) => item.total > 0).length
-  const todayExercise = exerciseDays.find((item) => item.date === today)?.total || 0
+  const selectedExercise = exerciseDays.find((item) => item.date === selectedRecordDate)?.total || 0
+  const selectedRecordDateLabel = selectedRecordDate === today ? '今日' : formatChineseMonthDay(selectedRecordDate)
 
   const activePoints = activeTab === 'weight'
     ? weightTrend.slice(-21)
@@ -402,7 +408,7 @@ function BodyTrendsPage() {
   }
 
   const openExerciseRecord = () => {
-    Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(today)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(selectedRecordDate)}` })
   }
 
   const recentWeightEntries = [...(summary?.weight_entries || [])].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6)
@@ -566,7 +572,7 @@ function BodyTrendsPage() {
       {activeTab === 'exercise' && (
         <View className='body-trends-section'>
           <View className='metric-grid'>
-            <MetricCard label='今日消耗' value={String(Math.round(todayExercise))} unit='kcal' tone='orange' />
+            <MetricCard label={`${selectedRecordDateLabel}消耗`} value={String(Math.round(selectedExercise))} unit='kcal' tone='orange' />
             <MetricCard label='30天合计' value={String(Math.round(exerciseTotal))} unit='kcal' />
             <MetricCard label='活跃天数' value={String(activeExerciseDays)} unit='天' tone='blue' />
           </View>
@@ -581,7 +587,7 @@ function BodyTrendsPage() {
 
           <View className='action-panel action-panel--exercise'>
             <View>
-              <Text className='action-panel__title'>记录今天运动</Text>
+              <Text className='action-panel__title'>记录{selectedRecordDateLabel}运动</Text>
               <Text className='action-panel__desc'>用文字或图片记录，系统会估算消耗。</Text>
             </View>
             <View className='action-button action-button--wide' onClick={openExerciseRecord}>

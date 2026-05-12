@@ -407,11 +407,16 @@ export default function ExerciseRecordPage() {
           return
         }
       }
+      const targetRecordDate = persistRecordTargetDate(
+        normalizeRecordDate(currentRecordDateRef.current || recordDate)
+      )
+      currentRecordDateRef.current = targetRecordDate
+      setRecordDate(targetRecordDate)
       const displayContent = content || '图片识别运动'
       const { task_id: taskId } = await createExerciseLog({
         exercise_desc: content,
         image_url: uploadedImageUrl || undefined,
-        date: recordDate
+        date: targetRecordDate
       })
       const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       const createdAt = new Date().toISOString()
@@ -419,9 +424,9 @@ export default function ExerciseRecordPage() {
       setSelectedImagePath('')
       setPendingItems((prev) => [
         ...prev,
-        { clientId, taskId, content: displayContent, status: 'pending', createdAt, recordDate }
+        { clientId, taskId, content: displayContent, status: 'pending', createdAt, recordDate: targetRecordDate }
       ])
-      void pollForTask(taskId, clientId, recordDate)
+      void pollForTask(taskId, clientId, targetRecordDate)
     } catch (e) {
       console.error('[exercise-record] send', e)
       const msg = e instanceof Error ? e.message : '提交失败'
