@@ -41,12 +41,33 @@ export function AppColorSchemeProvider({ children }: PropsWithChildren): React.R
   return <AppColorSchemeContext.Provider value={value}>{children}</AppColorSchemeContext.Provider>
 }
 
+function useFallbackAppColorScheme(): AppColorSchemeContextValue {
+  const [scheme, setSchemeState] = useState<AppColorScheme>(() => getStoredAppColorScheme())
+
+  const setScheme = useCallback((next: AppColorScheme): void => {
+    setSchemeState(next)
+    setStoredAppColorScheme(next)
+    try {
+      Taro.eventCenter.trigger(APP_COLOR_SCHEME_EVENT, { scheme: next })
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const toggleScheme = useCallback((): void => {
+    setScheme(scheme === 'dark' ? 'light' : 'dark')
+  }, [scheme, setScheme])
+
+  return useMemo(
+    (): AppColorSchemeContextValue => ({ scheme, setScheme, toggleScheme }),
+    [scheme, setScheme, toggleScheme],
+  )
+}
+
 export function useAppColorScheme(): AppColorSchemeContextValue {
   const ctx = useContext(AppColorSchemeContext)
-  if (!ctx) {
-    throw new Error('useAppColorScheme must be used within AppColorSchemeProvider')
-  }
-  return ctx
+  const fallback = useFallbackAppColorScheme()
+  return ctx ?? fallback
 }
 
 /** 供未挂 Provider 的边界场景（应尽量避免） */
