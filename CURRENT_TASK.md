@@ -7912,3 +7912,25 @@
     - 后端扩展 `FoodItemNutrients`，与前端 `Nutrients` / 分析结果字段保持一致，并补保存/读取回归测试。
     - `record-detail` 页增加与结果页一致的更多营养明细展示，且不要只在 `>0` 时隐藏全部字段。
     - 若需要兼容历史已保存记录，可在详情返回或前端展示时对 `items[].nutrients` 为 0 但 `total_*` 有值的单项记录做明确兜底/标记，避免误导用户。
+
+## 2026-05-12 — dev 分支同步当前功能代码
+
+- Task: 用户要求切换到 `dev`，在不破坏当前功能和需求的前提下，把当前代码同步到远程 `dev`；远程 `dev` 明显落后。
+- Status: completed_pushed
+- Approach:
+  - 先 `fetch origin`，确认原功能分支 `backend-refactor-sync-migrate-tencent` 已包含当前修复，且 `origin/dev` 有少量独立历史、但整体落后较多。
+  - 本地切到 `dev` 并快进到 `origin/dev` 后，创建 merge commit 合入 `backend-refactor-sync-migrate-tencent`。
+  - 合并冲突处理策略为保留 `origin/dev` 历史作为父提交，同时让合并结果以当前功能分支代码为准，避免 dev 旧 Python 后端和旧前端入口覆盖近期功能。
+  - 合并后额外清理少量行尾空格/EOF 空行，避免提交前 `git diff --check` 失败。
+- Verification:
+  - `git diff --name-status backend-refactor-sync-migrate-tencent --` 在清理空白前为空，确认合并树与当前功能分支一致；清理后仅剩空白修正差异。
+  - `git diff --cached --check` passed.
+  - `npx eslint src/pages/index/index.tsx src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/analyze-history/index.tsx src/packageExtra/pages/result-text/index.tsx src/utils/api.ts src/utils/subpackage-extra.ts src/utils/home-record-menu.ts src/app.config.ts --max-warnings 0` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/common/middleware ./internal/app -run 'TestRequestID|Test' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestTaskService_SubmitTextTask|TestTaskService_GetTask_RefundsCredits|TestTaskService_DeleteTask|TestTaskService_DeleteUnrecordedTasks' -count=1` passed.
+- Commit:
+  - `9792497 Merge backend-refactor-sync-migrate-tencent into dev`
+- Push:
+  - `git push origin dev` 已成功，远端从 `fcc6b61` 更新到 `9792497`。
+- Next:
+  - 提交并推送本次状态文件交接记录后，确认本地 `dev` 与 `origin/dev` 同步。

@@ -1086,3 +1086,8 @@
   - 前端不得基于当前已加载列表逐条调用 `DELETE /api/analyze/tasks/:task_id`，否则会受分页/加载数量和部分请求失败影响，需要多次操作。
   - 后端批量条件稳定为：历史页可见任务类型 + `status='done'` + 不存在同用户 `user_food_records.source_task_id`。
   - 该操作不删除 pending/processing/failed/timed_out/cancelled，也不删除已记录任务或精准模式内部估重子任务。
+
+- `2026-05-12`: 将当前功能分支同步到远程 `dev` 时，默认采用非破坏性 merge commit：
+  - 不 force push、不重写 `origin/dev` 历史。
+  - 保留 `origin/dev` 作为合并父提交，便于后续追溯远程 dev 曾经的独立提交。
+  - 合并结果代码以当前已验证功能分支 `backend-refactor-sync-migrate-tencent` 为准，避免远程 dev 的旧 Python 后端、旧记录页入口或旧前端链路覆盖近期需求。
