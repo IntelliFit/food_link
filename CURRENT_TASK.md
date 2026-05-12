@@ -7928,6 +7928,7 @@
   - `npx eslint src/pages/index/index.tsx src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/analyze-history/index.tsx src/packageExtra/pages/result-text/index.tsx src/utils/api.ts src/utils/subpackage-extra.ts src/utils/home-record-menu.ts src/app.config.ts --max-warnings 0` passed.
   - `GOPROXY=https://goproxy.cn,direct go test ./internal/common/middleware ./internal/app -run 'TestRequestID|Test' -count=1` passed.
   - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestTaskService_SubmitTextTask|TestTaskService_GetTask_RefundsCredits|TestTaskService_DeleteTask|TestTaskService_DeleteUnrecordedTasks' -count=1` passed.
+  - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败；9420 无自动化服务，3001 由 `ssh` 监听但不是微信开发者工具自动化目标，因此本轮未能完成截图/交互验证。
 - Commit:
   - `9792497 Merge backend-refactor-sync-migrate-tencent into dev`
 - Push:
