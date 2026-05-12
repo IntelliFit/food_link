@@ -2,7 +2,7 @@ import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useState, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
-import { listAnalyzeTasks, deleteAnalysisTask, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
+import { listAnalyzeTasks, deleteAnalysisTask, deleteUnrecordedAnalysisTasks, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -354,44 +354,29 @@ function AnalyzeHistoryPage() {
   }
 
   const handleDiscardUnrecorded = () => {
-    const discardableTasks = tasks.filter(
-      t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed' ||
-        (t.status === 'done' && t.is_recorded === false)
-    )
-    if (discardableTasks.length === 0) {
-      Taro.showToast({ title: '没有可丢弃的未记录', icon: 'none' })
-      return
-    }
     Taro.showModal({
       title: '确认丢弃',
-      content: `确定丢弃 ${discardableTasks.length} 条未记录的识别结果吗？丢弃后不可恢复。`,
+      content: '将丢弃当前账号所有等待记录的识别结果，不包含识别中、识别失败或已经记录的数据。丢弃后不可恢复。',
       confirmText: '丢弃',
       confirmColor: '#e57373',
       cancelText: '取消',
       success: (res) => {
         if (res.confirm) {
           void (async () => {
-            Taro.showLoading({ title: '丢弃中...', mask: true })
-            const results = await Promise.allSettled(
-              discardableTasks.map(t => deleteAnalysisTask(t.id))
-            )
-            // 收集成功删除的任务 ID
-            const deletedIds: string[] = []
-            results.forEach((r, idx) => {
-              if (r.status === 'fulfilled') {
-                deletedIds.push(discardableTasks[idx].id)
-              }
-            })
-            const successCount = deletedIds.length
-            const failCount = results.length - successCount
-            Taro.hideLoading()
-            if (failCount > 0) {
-              Taro.showToast({ title: `已丢弃 ${successCount} 条，${failCount} 条失败`, icon: 'none' })
-            } else {
-              Taro.showToast({ title: `已丢弃 ${successCount} 条记录`, icon: 'success' })
+            try {
+              Taro.showLoading({ title: '', mask: true })
+              const result = await deleteUnrecordedAnalysisTasks()
+              Taro.hideLoading()
+              Taro.showToast({
+                title: result.count > 0 ? `已丢弃 ${result.count} 条记录` : '没有可丢弃的未记录',
+                icon: result.count > 0 ? 'success' : 'none'
+              })
+              setTasks(prev => prev.filter(t => !(t.status === 'done' && t.is_recorded === false)))
+              void loadTasks()
+            } catch (e: any) {
+              Taro.hideLoading()
+              await showUnifiedApiError(e, '丢弃失败')
             }
-            // 只从列表中移除后端确认删除成功的任务
-            setTasks(prev => prev.filter(t => !deletedIds.includes(t.id)))
           })()
         }
       }

@@ -33,6 +33,7 @@ type TaskService interface {
 	GetTask(ctx context.Context, taskID, userID string) (*domain.AnalysisTask, error)
 	UpdateTaskResult(ctx context.Context, taskID, userID string, result map[string]any) error
 	DeleteTask(ctx context.Context, taskID, userID string) (map[string]any, error)
+	DeleteUnrecordedTasks(ctx context.Context, userID string) (map[string]any, error)
 	CleanupTimeoutTasks(ctx context.Context, timeoutMinutes int, adminKey, expectedAdminKey string) (int64, error)
 }
 
@@ -324,6 +325,17 @@ func (h *AnalyzeHandler) DeleteTask(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	taskID := c.Param("task_id")
 	data, err := h.taskSvc.DeleteTask(c.Request.Context(), taskID, userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+// DELETE /api/analyze/tasks/unrecorded (jwt_required)
+func (h *AnalyzeHandler) DeleteUnrecordedTasks(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	data, err := h.taskSvc.DeleteUnrecordedTasks(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
 		return

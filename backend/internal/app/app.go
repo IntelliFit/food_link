@@ -16,6 +16,7 @@ import (
 	authhandler "food_link/backend/internal/auth/handler"
 	authrepo "food_link/backend/internal/auth/repo"
 	authservice "food_link/backend/internal/auth/service"
+	commonmw "food_link/backend/internal/common/middleware"
 	"food_link/backend/internal/common/routes"
 	communityhandler "food_link/backend/internal/community/handler"
 	communityrepo "food_link/backend/internal/community/repo"
@@ -105,6 +106,7 @@ func New(cfg *config.Config) (*App, error) {
 	if cfg.OTel.Enabled {
 		engine.Use(otelgin.Middleware(cfg.App.Name))
 	}
+	engine.Use(commonmw.RequestID())
 
 	storageClient := storage.New(cfg.Storage)
 	taskQueue, err := taskqueue.New(cfg.TaskQueue, log)
@@ -277,6 +279,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/analyze/tasks", authmw.RequireJWT(jwtSvc), analyzeHandler.ListTasks)
 	engine.GET("/api/analyze/tasks/count", authmw.RequireJWT(jwtSvc), analyzeHandler.CountTasks)
 	engine.GET("/api/analyze/tasks/status-count", authmw.RequireJWT(jwtSvc), analyzeHandler.CountTasksByStatus)
+	engine.DELETE("/api/analyze/tasks/unrecorded", authmw.RequireJWT(jwtSvc), analyzeHandler.DeleteUnrecordedTasks)
 	engine.GET("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.GetTask)
 	engine.PATCH("/api/analyze/tasks/:task_id/result", authmw.RequireJWT(jwtSvc), analyzeHandler.UpdateTaskResult)
 	engine.DELETE("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.DeleteTask)

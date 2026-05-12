@@ -53,6 +53,7 @@ import {
   COMMUNITY_FEED_CHANGED_EVENT,
   HOME_DASHBOARD_CACHE_TTL_MS
 } from '../../utils/home-events'
+import { HOME_RECORD_MENU_FLAG_KEY, consumeHomeRecordMenuDate } from '../../utils/home-record-menu'
 import {
   DEFAULT_EXPIRY_SUMMARY,
   getStoredHomeDashboardSnapshots,
@@ -979,16 +980,24 @@ function IndexPage() {
   const selectedDateRef = useRef(selectedDate)
   selectedDateRef.current = selectedDate
   const skipNextRefreshRef = useRef(false)
+  const openRecordMenuFromRequest = useCallback(() => {
+    const pendingDate = consumeHomeRecordMenuDate()
+    if (pendingDate) {
+      selectedDateRef.current = pendingDate
+      setSelectedDate(pendingDate)
+    }
+    setShowRecordMenu(true)
+  }, [])
   
   Taro.useDidShow(() => {
     const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current
 
     // 检查是否需要显示记录菜单（从底部导航栏中间按钮点击）
-    const shouldShowRecordMenu = Taro.getStorageSync('showRecordMenuModal')
+    const shouldShowRecordMenu = Taro.getStorageSync(HOME_RECORD_MENU_FLAG_KEY)
     if (shouldShowRecordMenu) {
-      Taro.removeStorageSync('showRecordMenuModal')
-      setShowRecordMenu(true)
+      Taro.removeStorageSync(HOME_RECORD_MENU_FLAG_KEY)
+      openRecordMenuFromRequest()
     }
 
     if (skipNextRefreshRef.current) {
@@ -1172,10 +1181,10 @@ function IndexPage() {
   // 监听记录菜单标记变化（解决首页直接点击绿色按钮无响应问题）
   useEffect(() => {
     const checkRecordMenuFlag = () => {
-      const shouldShow = Taro.getStorageSync('showRecordMenuModal')
+      const shouldShow = Taro.getStorageSync(HOME_RECORD_MENU_FLAG_KEY)
       if (shouldShow) {
-        Taro.removeStorageSync('showRecordMenuModal')
-        setShowRecordMenu(true)
+        Taro.removeStorageSync(HOME_RECORD_MENU_FLAG_KEY)
+        openRecordMenuFromRequest()
       }
     }
 
@@ -1195,25 +1204,25 @@ function IndexPage() {
     }, 50)
 
     return () => clearInterval(timer)
-  }, [])
+  }, [openRecordMenuFromRequest])
 
   // 额外：监听全局事件（备用方案，确保可靠性）
   useEffect(() => {
     const showRecordMenuHandler = () => {
       console.log('[DEBUG] 通过全局事件触发显示记录菜单')
-      setShowRecordMenu(true)
+      openRecordMenuFromRequest()
     }
     Taro.eventCenter.on('showRecordMenu', showRecordMenuHandler)
     return () => {
       Taro.eventCenter.off('showRecordMenu', showRecordMenuHandler)
     }
-  }, [])
+  }, [openRecordMenuFromRequest])
 
   // 额外方案：监听 app 实例上的事件中心（供原生组件如 custom-tab-bar 使用）
   useEffect(() => {
     const showRecordMenuHandler = () => {
       console.log('[DEBUG] 通过 app eventCenter 触发显示记录菜单')
-      setShowRecordMenu(true)
+      openRecordMenuFromRequest()
     }
     
     // 注册到 app 实例的事件中心，供 custom-tab-bar 调用
@@ -1242,7 +1251,7 @@ function IndexPage() {
         console.error('[DEBUG] 清理 app eventCenter 失败:', err)
       }
     }
-  }, [])
+  }, [openRecordMenuFromRequest])
 
   const openTargetEditor = () => {
     if (!getAccessToken()) {
@@ -1355,13 +1364,12 @@ function IndexPage() {
     }
   }
 
-  const handleQuickRecord = (type: 'photo' | 'text') => {
-    if (type === 'photo' && !getAccessToken()) {
+  const handleQuickRecord = () => {
+    if (!getAccessToken()) {
       redirectToLogin()
       return
     }
-    Taro.setStorageSync('recordPageTab', type)
-    Taro.switchTab({ url: '/pages/record/index' })
+    setShowRecordMenu(true)
   }
 
   const handleViewAllMeals = () => {
@@ -2596,7 +2604,7 @@ function IndexPage() {
                     shape='round'
                     color='primary'
                     className='empty-record-btn'
-                    onClick={() => handleQuickRecord('photo')}
+                    onClick={handleQuickRecord}
                   >
                     去记录一餐
                   </Button>

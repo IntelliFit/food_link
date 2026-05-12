@@ -1,5 +1,91 @@
 # 当前任务
 
+## 状态：完成源码修改 - 移除旧记录页入口并统一到首页记录弹窗
+
+- 2026-05-12 update:
+  - User 询问 `src/pages/record/index.tsx` 当前会被哪些部分引用，指出它是旧拍照文件，不是当前新版记录入口；要求找到哪些文件/按钮会跳该页，并删除或改造成首页点击卡路里弹出的记录对话框。
+  - Findings:
+    - 旧主包页仍在 `src/app.config.ts` 的 `mainPages` 和 `tabBar.list` 中注册为 `pages/record/index`。
+    - `custom-tab-bar/index.js` 的中间记录按钮数据仍写着 `/pages/record/index`，虽然点击逻辑实际会拦截并打开首页弹窗。
+    - `src/pages/index/index.tsx` 首页空餐食按钮 `handleQuickRecord('photo')` 仍会 `switchTab('/pages/record/index')`。
+    - `src/packageExtra/pages/day-record/index.tsx` 空态“去记录”仍会 `switchTab('/pages/record/index')`。
+    - `src/packageExtra/pages/record-menu/index.tsx` 是另一个旧的全屏记录菜单页，其中拍照入口也会 `switchTab('/pages/record/index')`；当前无业务引用，属于可删除旧入口。
+    - `src/utils/subpackage-extra.ts` 把 `/pages/record/index` 作为主包 Tab 路由保留，导致登录回跳等兼容逻辑不会把旧地址收口到首页。
+  - Fix applied:
+    - 删除旧页面文件：
+      - `src/pages/record/index.tsx`
+      - `src/pages/record/index.scss`
+      - `src/pages/record/index.config.ts`
+    - 删除旧全屏记录菜单页：
+      - `src/packageExtra/pages/record-menu/index.tsx`
+      - `src/packageExtra/pages/record-menu/index.scss`
+      - `src/packageExtra/pages/record-menu/index.config.ts`
+    - `src/app.config.ts`
+      - 从 `mainPages` 删除 `pages/record/index`。
+      - 从 `extraSubpackagePages` 删除 `pages/record-menu/index`。
+      - 从 `tabBar.list` 删除旧“记录”项；保留 custom tab bar 自己的中间按钮视觉。
+    - `custom-tab-bar/index.js`
+      - 中间记录按钮的 `pagePath` 改为 `/pages/index/index`，点击仍走已有拦截逻辑：切首页并打开记录弹窗。
+      - 移除旧记录页/旧 record-menu 页的隐藏底栏判断。
+    - 新增 `src/utils/home-record-menu.ts`
+      - 提供 `requestHomeRecordMenu(date?)`：写入首页弹窗标记、可选目标日期，并切回首页。
+      - 提供 `consumeHomeRecordMenuDate()`：首页消费目标日期后打开现有 `RecordMenu`。
+    - `src/pages/index/index.tsx`
+      - 统一消费 `HOME_RECORD_MENU_FLAG_KEY`，如存在目标日期则先切到该日期再打开弹窗。
+      - 首页“暂无今日餐食 -> 去记录一餐”改为直接打开当前首页 `RecordMenu` 弹窗，不再跳旧记录页。
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 空态“去记录”改为 `requestHomeRecordMenu(selectedDate)`，返回首页后用现有记录弹窗并保持当天日期。
+    - `src/utils/subpackage-extra.ts`
+      - `/pages/record/index` 不再是主包 Tab 路由。
+      - 旧登录回跳 `/pages/record/index` 兼容收口到 `/pages/index/index`。
+  - Verification:
+    - `rg -n "pages/record/index|record-menu/index|recordPageTab" src custom-tab-bar` 仅剩 `/pages/record/index` 的旧登录回跳兼容判断，无业务跳转入口。
+    - `npx eslint src/pages/index/index.tsx src/packageExtra/pages/day-record/index.tsx src/utils/home-record-menu.ts src/utils/subpackage-extra.ts src/app.config.ts --max-warnings 0` passed。
+    - `git diff --check -- custom-tab-bar/index.js src/app.config.ts src/packageExtra/pages/day-record/index.tsx src/pages/index/index.tsx src/pages/record src/packageExtra/pages/record-menu src/utils/home-record-menu.ts src/utils/subpackage-extra.ts` passed。
+    - `npx eslint custom-tab-bar/index.js --max-warnings 0` blocked by existing ESLint/Babel config issue: `No Babel config file detected ... custom-tab-bar/index.js`。
+    - 已尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+## 状态：完成源码修改 - 今日餐食入口白屏 useAppColorScheme provider 断链
+
+- 2026-05-12 update:
+  - User 反馈：进入今日餐食部分空白，并报错 `useAppColorScheme must be used within AppColorSchemeProvider`，堆栈落在 `WithAuthComponent`。
+  - Finding:
+    - `src/utils/withAuth.tsx` 在页面 HOC 顶层调用 `useAppColorScheme()`。
+    - 虽然 `src/app.ts` 已用 `AppColorSchemeProvider` 包裹 `children`，但微信小程序/Taro 分包页面挂载或 hot reload 场景下可能出现页面 context 边界断开，导致 `useAppColorScheme()` 直接 throw，页面白屏。
+    - 项目里还有多个分包页直接调用 `useAppColorScheme()`，只改 `withAuth` 仍可能在其他入口复现。
+  - Fix applied:
+    - `src/components/AppColorSchemeContext.tsx`
+      - `useAppColorScheme()` 改为 provider 存在时使用 context。
+      - provider 缺失时使用本地存储 `fl_app_color_scheme` 构建 fallback scheme/setScheme/toggleScheme，并继续触发主题变更事件。
+      - 不再因 provider 边界缺失抛异常，避免分包页或 hot reload 进入时整页白屏。
+  - Verification:
+    - `npx eslint src/components/AppColorSchemeContext.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/AppColorSchemeContext.tsx` passed。
+    - 已尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+  - Note:
+    - 用户日志中的 `writeFile:fail the maximum size of the file storage limit is exceeded` 是小程序本地文件配额告警，和本次 React 白屏不是同一直接根因。
+
+## 状态：完成源码修改 - 运动趋势页补录日期被写到今天
+
+- 2026-05-12 update:
+  - User 反馈：在首页切换到 11 号后重新录制运动，最终运动记录落到了 12 号；要求查看前端切换日期后的运动板块记录与更新逻辑，并保证更新符合用户选择日期。
+  - Finding:
+    - 首页 `openBodyTrends('exercise')` 会把当前 `selectedDate` 通过 `date` 参数传给 `src/packageExtra/pages/body-trends/index.tsx`。
+    - 运动趋势页收到该参数后没有用于“去记录”按钮，`openExerciseRecord()` 硬编码使用 `today`，所以用户从 11 号运动板块进入趋势页再点“去记录”时会跳到 12 号运动记录页。
+    - `src/packageExtra/pages/exercise-record/index.tsx` 直接使用 React state `recordDate` 提交；为避免刚切日/路由恢复时状态闭包滞后，本轮增加提交前从 `currentRecordDateRef` 重新归一化目标日期的兜底。
+  - Fix applied:
+    - `src/packageExtra/pages/body-trends/index.tsx`
+      - 从路由 `date` 参数归一化出 `selectedRecordDate`。
+      - 运动 tab 的当日消耗卡和“记录运动”文案改为围绕所选日期展示。
+      - “去记录”按钮跳转 `exercise-record` 时携带 `selectedRecordDate`，不再硬编码今天。
+    - `src/packageExtra/pages/exercise-record/index.tsx`
+      - 提交运动任务前用 `currentRecordDateRef.current || recordDate` 归一化并持久化目标日期。
+      - `createExerciseLog()`、pending card 和轮询均使用同一个 `targetRecordDate`。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/body-trends/index.tsx src/packageExtra/pages/exercise-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/body-trends/index.tsx src/packageExtra/pages/exercise-record/index.tsx` passed。
+    - 已尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；未能完成截图/交互验证。
+
 ## 状态：完成圈子分页修复提交、推送与后端部署
 
 - 2026-05-12 update:
@@ -7584,3 +7670,68 @@
 - 已实现：`task_queue.driver=kafka` 已从占位改为真实 adapter；Kafka 消息写 DB 终态后才 commit offset；`analysis_tasks` 增加 `worker_id/attempt_id/attempt_count/processing_started_at/lease_until`；worker claim/complete/fail 都按 attempt lease 幂等处理；worker 周期性 recovery `pending` 和 lease 过期的 `processing` 任务；`food_expiry_notification_jobs` 增加 stale processing 恢复；嵌入式 worker loop 增加 panic recover 和订阅重启。
 - Verification：`go test ./internal/taskqueue ./pkg/config ./internal/worker ./internal/app -run Test -count=1`、分析/运动定向测试、repo/expiry/migration compile-only、server build、`git diff --check` 均已通过；真实 SQLite repo 测试仍被本机 `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞。
 - Follow-up：新增 DB 列需要在目标库执行 `go run ./cmd/migration -config-dir .` 后线上才具备完整 schema。
+
+## 2026-05-12 update: 文本任务积分补偿链路复核
+
+- User 询问：异步任务失败返还积分机制对文本记录是否仍然生效；若没有，需要修改前后端避免文字报错仍扣分。
+- 结论：当前后端 `SubmitTextTask()` 创建的是 `food_text` 异步任务，已写入 `credit_usage` 和统一 `credit_group_id`；worker 失败路径 `failTask()` 和前端轮询 `GetTask()` 看到 failed/timed_out/cancelled 时，都会调用同一套 `RefundEarnedCreditsAfterTaskFailure()`。因此文本任务失败补偿本身已经生效，本轮无需改业务逻辑。
+- Added safeguards:
+  - `backend/internal/analyze/service/task_service_test.go` 新增文本任务提交时预扣/组 ID 测试。
+  - 同文件新增 `food_text` 失败后退款测试，防止后续积分机制重构漏掉文本任务。
+- Verification:
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestTaskService_SubmitTextTask|TestTaskService_GetTask_RefundsCredits' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/membership/repo -run 'TestMembershipRepo_CountDailySystemCreditUsage' -count=1` passed.
+  - `git diff --check` passed.
+
+## 2026-05-12 update: trace id 缺失兜底修复
+
+- User 提供运维反馈：前端会出现 `no-trace-id`，怀疑后端 OTel 未正确产出 span，建议生产开启 OTel，并要求如前端拿到 `no-trace-id` 则不显示对应报错窗口。
+- Finding:
+  - 当前后端 `otelgin` 只在 `cfg.OTel.Enabled=true` 时启用；OTel 关闭时没有统一响应头兜底。
+  - 前端只从 `x-trace-id` 响应头取 trace id；虽然当前没有主动硬编码 `no-trace-id`，但如果后端/代理/旧错误文案返回该占位符，仍可能进入用户提示。
+- Fix applied:
+  - 新增 `backend/internal/common/middleware.RequestID()`：无论 OTel 是否开启，每个 HTTP 响应都写 `X-Trace-Id` 和 `X-Request-Id`。有 OTel span 时使用真实 trace id；否则生成 32 位 hex fallback trace id。
+  - `backend/internal/app/app.go` 全局挂载该 middleware，且放在 `otelgin` 后面，优先承接真实 OTel trace id。
+  - `src/utils/api.ts` 对 `no-trace-id/none/null/undefined` 做占位符过滤：不拼接、不解析为 trace id；统一错误弹窗遇到纯占位符时直接静默返回。
+  - 新增 middleware 单测覆盖 OTel 关闭也有响应头、传入 `no-trace-id` 时会生成新 trace id。
+- Verification:
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/common/middleware ./internal/app -run 'TestRequestID|Test' -count=1` passed.
+  - `npx eslint src/utils/api.ts --max-warnings 0` passed.
+  - `git diff --check` passed.
+  - 已尝试 `mrc where --port 3001` 和 `mrc where --port 9420`，均因微信开发者工具目标窗口未开启自动化服务连接失败，本轮未能截图/交互验证。
+
+## 2026-05-12 update: 文字结果页负热量显示兜底
+
+- User 提供运维反馈：结果页可能显示负热量，要求检查当前代码实践是否仍会出现；如果确实存在才修改。
+- Finding:
+  - `src/packageExtra/pages/result/index.tsx` 图片结果页当前已经通过 `normalizeNutrientValue()` 把 API 返回的负营养值归零，且后续编辑链路也会钳制为非负；该页当前不符合“会直接显示负热量”的描述。
+  - `src/packageExtra/pages/result-text/index.tsx` 文字结果页仍直接使用 `item.nutrients.calories` 进入页面状态，并直接展示 `Math.round(nutritionStats.calories)` / `Math.round(item.calorie * ratio)`，如果后端或缓存给出负 calories，确实可能显示负值并保存负热量。
+- Fix applied:
+  - `src/packageExtra/pages/result-text/index.tsx` 新增 `normalizeNutrientValue()`，将文字结果页入口的 calories/protein/carbs/fat/weight 非法值或负值归零。
+  - `calculateCaloriesFromMacros()` 和总热量/单项热量展示处增加非负钳制，避免后续计算或显示出现负 kcal。
+- Verification:
+  - `npx eslint src/packageExtra/pages/result-text/index.tsx --max-warnings 0` passed.
+  - `git diff --check` passed.
+  - 已尝试 `mrc where --port 9420` 和 `mrc where --port 3001`，均因微信开发者工具目标窗口未开启自动化服务连接失败，本轮未能截图/交互验证。
+
+## 2026-05-12 update: 一键删除未记录识别结果改为后端原子批量删除
+
+- User 反馈：识别记录页“一键删除未记录数据”需要多次操作才能删干净；要求后端原子层面删除当前用户所有满足条件的识别记录，不能只删除前端当前显示的那些。
+- Finding:
+  - 旧前端 `src/packageExtra/pages/analyze-history/index.tsx` 只基于当前已加载的 `tasks` 列表筛选，并逐个调用 `DELETE /api/analyze/tasks/:task_id`。
+  - 旧筛选还把 `pending/processing/failed` 混入“未记录”删除范围；真正列表状态里的“等待记录”应是 `status=done && is_recorded=false`。
+  - 因此旧逻辑会受前端分页/加载数量限制，并且部分请求失败时必须多次点击。
+- Fix applied:
+  - 后端新增 `DELETE /api/analyze/tasks/unrecorded`，鉴权后按当前用户在一个 DB transaction 中批量删除所有：
+    - 历史页可见任务类型；
+    - `status='done'`；
+    - 不存在 `user_food_records.source_task_id = analysis_tasks.id` 的记录。
+  - 该批量删除不会删除已记录、识别中、排队中、失败、超时、取消或精准内部估重子任务。
+  - 前端“一键丢弃未记录”改为调用新批量接口，不再依赖当前列表，也不再逐条请求；删除后刷新任务列表。
+- Verification:
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/repo -run 'TestTaskRepo_DeleteTask|TestTaskRepo_DeleteUnrecordedDoneTasksByUser' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestTaskService_DeleteTask|TestTaskService_DeleteUnrecordedTasks' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/handler -run 'TestAnalyzeHandler_DeleteTask|TestAnalyzeHandler_DeleteUnrecordedTasks' -count=1` passed.
+  - `npx eslint src/packageExtra/pages/analyze-history/index.tsx src/utils/api.ts --max-warnings 0` passed.
+  - `git diff --check` passed.
+  - 已尝试 `mrc where --port 9420` 和 `mrc where --port 3001`，均因微信开发者工具目标窗口未开启自动化服务连接失败，本轮未能截图/交互验证。

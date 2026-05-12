@@ -1488,31 +1488,43 @@ function getHeaderValueIgnoreCase(headers: Record<string, any> | undefined, key:
   return text || undefined
 }
 
+function isPlaceholderTraceId(value: string | undefined): boolean {
+  const text = String(value || '').trim().toLowerCase()
+  return text === 'no-trace-id' || text === 'none' || text === 'null' || text === 'undefined'
+}
+
+function normalizeTraceId(value: string | undefined): string | undefined {
+  const text = String(value || '').trim()
+  if (!text || isPlaceholderTraceId(text)) return undefined
+  return text
+}
+
 function extractTraceIdFromHeaders(headers: Record<string, any> | undefined): string | undefined {
-  return getHeaderValueIgnoreCase(headers, 'x-trace-id')
+  return normalizeTraceId(getHeaderValueIgnoreCase(headers, 'x-trace-id'))
 }
 
 function formatUserErrorWithTrace(message: string, traceId?: string): string {
   const msg = (message || '').trim() || '网络错误，请稍后重试'
-  if (!traceId) return msg
-  return `${msg}（traceId: ${traceId}）`
+  const normalizedTraceId = normalizeTraceId(traceId)
+  if (!normalizedTraceId) return msg
+  return `${msg}（traceId: ${normalizedTraceId}）`
 }
 
 /** 从文案里去掉已拼接的 traceId 后缀，避免弹窗里重复展示 */
 function stripTraceSuffixFromUserMessage(message: string): string {
   let s = (message || '').trim()
-  s = s.replace(/\s*[\(（]\s*traceId\s*[:：]\s*[a-fA-F0-9]+\s*[\)）]\s*$/gi, '')
-  s = s.replace(/\s*traceId\s*[:：]\s*[a-fA-F0-9]+\s*$/gi, '')
+  s = s.replace(/\s*[\(（]\s*traceId\s*[:：]\s*[\w-]+\s*[\)）]\s*$/gi, '')
+  s = s.replace(/\s*traceId\s*[:：]\s*[\w-]+\s*$/gi, '')
   return s.trim()
 }
 
 export function getTraceIdFromError(error: unknown): string | undefined {
   const err = error as ErrorLike | undefined
-  const trace = (err?.traceId || '').trim()
+  const trace = normalizeTraceId(err?.traceId)
   if (trace) return trace
   const message = String(err?.message || '')
-  const m = message.match(/traceId\s*[:：]\s*([a-fA-F0-9]+)/i)
-  return m?.[1]
+  const m = message.match(/traceId\s*[:：]\s*([\w-]+)/i)
+  return normalizeTraceId(m?.[1])
 }
 
 /** 微信 toast 文案过长时体验较差，统一截断 */
@@ -1527,6 +1539,10 @@ export async function showUnifiedApiError(error: unknown, fallback: string = '�
   const traceId = getTraceIdFromError(err)
   const raw = (err?.message || '').trim()
   const userMsg = stripTraceSuffixFromUserMessage(raw) || fallback
+  if (isPlaceholderTraceId(raw) || isPlaceholderTraceId(userMsg)) {
+    console.warn('[showUnifiedApiError] ignored placeholder trace id error', { message: raw || userMsg })
+    return
+  }
   console.warn('[showUnifiedApiError]', { message: raw || userMsg, traceId })
   try {
     await Taro.showToast({
@@ -2134,6 +2150,11 @@ export interface DeleteTaskResult {
   images_deleted?: number
 }
 
+export interface DeleteUnrecordedTasksResult {
+  deleted: boolean
+  count: number
+}
+
 export async function deleteAnalysisTask(taskId: string): Promise<DeleteTaskResult> {
   const res = await authenticatedRequest(`/api/analyze/tasks/${taskId}`, {
     method: 'DELETE',
@@ -2144,6 +2165,18 @@ export async function deleteAnalysisTask(taskId: string): Promise<DeleteTaskResu
     throw new Error(msg)
   }
   return res.data as DeleteTaskResult
+}
+
+export async function deleteUnrecordedAnalysisTasks(): Promise<DeleteUnrecordedTasksResult> {
+  const res = await authenticatedRequest('/api/analyze/tasks/unrecorded', {
+    method: 'DELETE',
+    timeout: 30000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '丢弃未记录识别结果失败'
+    throw new Error(msg)
+  }
+  return res.data as DeleteUnrecordedTasksResult
 }
 
 /**

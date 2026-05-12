@@ -25,7 +25,7 @@ Component({
       },
       { 
         id: 'record',
-        pagePath: '/pages/record/index', 
+        pagePath: '/pages/index/index',
         text: '',
         isCenter: true,
         iconPath: './icons/record.png',
@@ -157,8 +157,6 @@ Component({
           }
 
           const shouldHide =
-            currentPath === '/pages/record/index' ||
-            currentPath === '/packageExtra/pages/record-menu/index' ||
             (currentPath === '/pages/community/index' && communityCommentOpen) ||
             (currentPath === '/pages/index/index' && homePosterModalOpen) ||
             (currentPath === '/pages/stats/index' && statsRiskDetailOpen)

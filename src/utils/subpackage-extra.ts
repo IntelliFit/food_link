@@ -23,7 +23,6 @@ const KNOWN_EXTRA_PACKAGE_ROOTS = [
 export const MAIN_TAB_ROUTES: ReadonlySet<string> = new Set([
   '/pages/index/index',
   '/pages/stats/index',
-  '/pages/record/index',
   '/pages/community/index',
   '/pages/profile/index',
 ])
@@ -57,6 +56,9 @@ export function normalizeRedirectUrlForSubpackage(fullUrl: string): string {
   const pathPart = qIdx === -1 ? t : t.slice(0, qIdx)
   const query = qIdx === -1 ? '' : t.slice(qIdx)
   let clean = pathPart.startsWith('/') ? pathPart : `/${pathPart}`
+  if (clean === '/pages/record/index') {
+    return '/pages/index/index'
+  }
   for (const root of KNOWN_EXTRA_PACKAGE_ROOTS) {
     if (clean.startsWith(`${root}/pages/`)) {
       clean = clean.slice(root.length)

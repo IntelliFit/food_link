@@ -28,6 +28,7 @@ func (p *recordingTaskPublisher) PublishTask(ctx context.Context, msg taskqueue.
 }
 
 type mockTaskCreditGuard struct {
+	earnedUnits   int
 	validateCalls []int
 	consumeCalls  []struct {
 		userID    string
@@ -53,13 +54,14 @@ func (m *mockTaskCreditGuard) ValidateFoodAnalysisCredits(ctx context.Context, u
 	if executionMode == "strict" {
 		cost = 4 * unit
 	}
+	earnedUnits := m.earnedUnits
 	return map[string]any{
 		"credit_cost": cost,
 		"credit_spend_plan": map[string]any{
 			"recorded_on":     recordedOn,
 			"cost":            cost,
 			"system_by_date":  map[string]any{recordedOn: cost},
-			"earned_units":    0,
+			"earned_units":    earnedUnits,
 			"total_available": cost,
 		},
 	}, nil
@@ -179,6 +181,31 @@ func TestTaskService_SubmitTextTask_Success(t *testing.T) {
 	task, err := taskRepo.GetTaskByID(ctx, taskID)
 	require.NoError(t, err)
 	assert.Equal(t, "food_text", task.TaskType)
+}
+
+func TestTaskService_SubmitTextTask_ReservesCreditsWithRefundGroup(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	guard := &mockTaskCreditGuard{earnedUnits: 1}
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+	recordedOn := time.Now().In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02")
+
+	taskID, err := svc.SubmitTextTask(ctx, "user1", SubmitTaskInput{TextInput: "一碗米饭", Date: recordedOn})
+	require.NoError(t, err)
+	require.Equal(t, []int{1}, guard.validateCalls)
+	require.Len(t, guard.consumeCalls, 1)
+
+	task, err := taskRepo.GetTaskByID(ctx, taskID)
+	require.NoError(t, err)
+	assert.Equal(t, "food_text", task.TaskType)
+	groupID := stringFromAny(task.Payload["credit_group_id"])
+	require.NotEmpty(t, groupID)
+	usage := task.Payload["credit_usage"].(map[string]any)
+	assert.Equal(t, groupID, stringFromAny(usage["credit_group_id"]))
+	assert.Equal(t, 2, intFromAny(usage["cost"]))
+	assert.Equal(t, "food_analysis_reward_spend", guard.consumeCalls[0].reason)
+	assert.Equal(t, "food_analysis:"+groupID, guard.consumeCalls[0].sourceKey)
 }
 
 func TestTaskService_EnqueueTaskSkipsCompletedTask(t *testing.T) {
@@ -373,6 +400,36 @@ func TestTaskService_GetTask_RefundsCreditsOnlyForFailedTask(t *testing.T) {
 	assert.Equal(t, "food_analysis_refund:group-failed", guard.refundCalls[0].sourceKey)
 }
 
+func TestTaskService_GetTask_RefundsCreditsForFailedTextTask(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	guard := &mockTaskCreditGuard{}
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+	now := time.Now()
+	failed := &analyzedomain.AnalysisTask{
+		UserID:   "user1",
+		TaskType: "food_text",
+		Status:   "failed",
+		Payload: map[string]any{
+			"credit_usage": map[string]any{
+				"credit_group_id": "text-group-failed",
+				"cost":            2,
+				"system_by_date":  map[string]any{now.Format("2006-01-02"): 2},
+				"earned_units":    1,
+			},
+		},
+		CreatedAt: &now,
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, failed))
+
+	_, err := svc.GetTask(ctx, failed.ID, "user1")
+	require.NoError(t, err)
+	require.Len(t, guard.refundCalls, 1)
+	assert.Equal(t, "food_analysis_reward_refund", guard.refundCalls[0].reason)
+	assert.Equal(t, "food_analysis_refund:text-group-failed", guard.refundCalls[0].sourceKey)
+}
+
 func TestTaskService_UpdateTaskResult(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
@@ -402,6 +459,32 @@ func TestTaskService_DeleteTask(t *testing.T) {
 
 	_, err = svc.DeleteTask(ctx, task.ID, "user2")
 	assert.Error(t, err)
+}
+
+func TestTaskService_DeleteUnrecordedTasks(t *testing.T) {
+	db, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+
+	waiting := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done"}
+	recorded := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done"}
+	failed := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "failed"}
+	require.NoError(t, taskRepo.CreateTask(ctx, waiting))
+	require.NoError(t, taskRepo.CreateTask(ctx, recorded))
+	require.NoError(t, taskRepo.CreateTask(ctx, failed))
+	require.NoError(t, db.Exec(`INSERT INTO user_food_records (id, user_id, source_task_id) VALUES (?, ?, ?)`, "record-1", "user1", recorded.ID).Error)
+
+	result, err := svc.DeleteUnrecordedTasks(ctx, "user1")
+	require.NoError(t, err)
+	assert.Equal(t, true, result["deleted"])
+	assert.Equal(t, int64(1), result["count"])
+
+	gotWaiting, _ := taskRepo.GetTaskByID(ctx, waiting.ID)
+	assert.Nil(t, gotWaiting)
+	gotRecorded, _ := taskRepo.GetTaskByID(ctx, recorded.ID)
+	assert.NotNil(t, gotRecorded)
+	gotFailed, _ := taskRepo.GetTaskByID(ctx, failed.ID)
+	assert.NotNil(t, gotFailed)
 }
 
 func TestTaskService_CleanupTimeoutTasks(t *testing.T) {

@@ -843,6 +843,20 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID, userID string) (ma
 	}, nil
 }
 
+func (s *TaskService) DeleteUnrecordedTasks(ctx context.Context, userID string) (map[string]any, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, errors.ErrForbidden
+	}
+	deleted, err := s.tasks.DeleteUnrecordedDoneTasksByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"deleted": true,
+		"count":   deleted,
+	}, nil
+}
+
 func (s *TaskService) CleanupTimeoutTasks(ctx context.Context, timeoutMinutes int, adminKey, expectedAdminKey string) (int64, error) {
 	if adminKey != expectedAdminKey {
 		return 0, errors.ErrForbidden

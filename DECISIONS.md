@@ -1,5 +1,21 @@
 # DECISIONS
 
+- `2026-05-12`: 旧主包 `pages/record/index` 不再作为饮食记录入口：
+  - 当前饮食记录主入口是首页 `RecordMenu` 弹窗；底栏中间按钮、首页空餐食按钮、当天记录页空态补录都必须回到首页打开该弹窗。
+  - 旧 `src/pages/record/index.tsx`、旧 `packageExtra/pages/record-menu/index.tsx` 及其样式/配置应移除，避免旧拍照 UI 被误打开。
+  - 自定义 tabBar 中间按钮可以保留视觉项，但 `pagePath` 不应再指向已删除的 `/pages/record/index`。
+  - 登录回跳或旧缓存里的 `/pages/record/index` 统一兼容收口到 `/pages/index/index`。
+
+- `2026-05-12`: `useAppColorScheme()` 在小程序页面 context 断链时不能直接 throw：
+  - App 层仍应使用 `AppColorSchemeProvider` 作为正常主题来源。
+  - 但 Taro 分包页面、hot reload 或页面独立挂载时可能让页面树读不到 provider；此时应从 `fl_app_color_scheme` 本地存储构建 fallback context。
+  - fallback 仍要提供 `setScheme/toggleScheme` 并触发 `APP_COLOR_SCHEME_EVENT`，避免“今日餐食”等 `withAuth` 包裹页面因主题 hook 抛错白屏。
+
+- `2026-05-12`: 首页运动卡片进入身体趋势页后，运动记录的目标日期必须继续沿用路由里的选中日期：
+  - `src/pages/index/index.tsx` 的运动卡片只负责把当前 `selectedDate` 传给 `body-trends`。
+  - `src/packageExtra/pages/body-trends/index.tsx` 不能再把“去记录”按钮硬编码成今天；它要把路由 `date` 再传给 `exercise-record`。
+  - `src/packageExtra/pages/exercise-record/index.tsx` 提交前要重新从当前日期 ref 归一化一次目标日期，避免切日后 state 闭包把记录写到默认今天。
+
 - `2026-05-12`: 圈子好友动态页面已有内存列表时也必须按 `CACHE_DURATION` 自动刷新：
   - 社区页 `Taro.useDidShow()` 不能因为 `feedList.length > 0` 就直接 return，否则小程序长期挂起/切 tab 回来时会一直展示旧 Feed。
   - 在已有列表分支中仍应保留临时评论合并，但如果 `Date.now() - lastFeedRefreshTime.current > CACHE_DURATION`，必须静默调用 `refreshFeed(true, false)` 拉取 `/api/community/feed` 最新数据。
@@ -1045,3 +1061,22 @@
 - `processing` 不应永久存在：worker 处理期间续租；server/worker 挂掉后，lease 过期任务由 recovery 重新发布到 queue；`memory` 本地模式也复用这套 DB recovery。
 - Kafka 只能保证未 commit 消息重新投递，不能单独保证外部副作用 exactly once；项目保证的是 DB 终态幂等与旧 attempt 不覆盖新结果。
 - Go server 内嵌 worker goroutine 会 recover/restart；整个 server 进程崩溃的拉起职责属于 systemd、Docker、K8s 或部署平台。
+
+- `2026-05-12`: 文本食物记录积分口径与图片食物分析一致：
+  - `food_text` 创建异步任务时必须写入 `credit_usage` 与 `credit_group_id`，并使用 `food_analysis:<credit_group_id>` 作为 earned 积分预扣 source key。
+  - `food_text` 进入 `failed/timed_out/cancelled` 后，必须使用 `food_analysis_refund:<credit_group_id>` 走幂等退款；worker 失败路径和 `GetTask()` 轮询失败态都应保持这个行为。
+  - 后续重构积分、队列或文本记录入口时，不能把文本任务从食物分析积分分组退款链路中拆出去。
+
+- `2026-05-12`: HTTP 响应 trace/request id 兜底口径：
+  - 生产仍应开启 `otel.enabled=true` 才能在 Jaeger 里看到真实链路。
+  - 但前端用户报错所需的 `X-Trace-Id` 不能完全依赖 OTel；后端必须在 OTel 关闭或没有有效 span 时生成基础 32 位 hex trace id，并同时返回 `X-Request-Id`。
+  - 前端必须把 `no-trace-id/none/null/undefined` 视为占位符，不展示给用户，也不作为真实 trace id 拼接进错误文案。
+
+- `2026-05-12`: 用户可见热量显示不得为负：
+  - 结果页入口应对后端/缓存返回的 calories 和宏量营养做非负归一化，避免负值继续进入页面状态、保存 payload 或首页统计。
+  - 图片结果页已有 `normalizeNutrientValue()` 兜底；文字结果页同样需要保持该口径。
+
+- `2026-05-12`: 识别历史页“一键删除未记录”必须由后端按当前用户全量条件原子执行：
+  - 前端不得基于当前已加载列表逐条调用 `DELETE /api/analyze/tasks/:task_id`，否则会受分页/加载数量和部分请求失败影响，需要多次操作。
+  - 后端批量条件稳定为：历史页可见任务类型 + `status='done'` + 不存在同用户 `user_food_records.source_task_id`。
+  - 该操作不删除 pending/processing/failed/timed_out/cancelled，也不删除已记录任务或精准模式内部估重子任务。

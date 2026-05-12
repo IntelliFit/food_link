@@ -387,6 +387,32 @@ func (r *TaskRepo) DeleteTask(ctx context.Context, taskID, userID string) error 
 	return r.db.WithContext(ctx).Where("id = ? AND user_id = ?", taskID, userID).Delete(&domain.AnalysisTask{}).Error
 }
 
+func (r *TaskRepo) DeleteUnrecordedDoneTasksByUser(ctx context.Context, userID string) (int64, error) {
+	if userID == "" {
+		return 0, nil
+	}
+	var affected int64
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		q := applyAnalyzeHistoryTaskFilter(
+			tx.Model(&domain.AnalysisTask{}).
+				Where("analysis_tasks.user_id = ?", userID).
+				Where("analysis_tasks.status = ?", "done").
+				Where(`NOT EXISTS (
+					SELECT 1 FROM user_food_records
+					WHERE user_food_records.source_task_id = analysis_tasks.id
+						AND user_food_records.user_id = analysis_tasks.user_id
+				)`),
+		)
+		res := q.Delete(&domain.AnalysisTask{})
+		if res.Error != nil {
+			return res.Error
+		}
+		affected = res.RowsAffected
+		return nil
+	})
+	return affected, err
+}
+
 func (r *TaskRepo) MarkTimedOutTasks(ctx context.Context, timeoutMinutes int) (int64, error) {
 	if timeoutMinutes <= 0 {
 		timeoutMinutes = 5

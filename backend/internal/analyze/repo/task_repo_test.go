@@ -288,6 +288,45 @@ func TestTaskRepo_DeleteTask(t *testing.T) {
 	assert.Nil(t, got)
 }
 
+func TestTaskRepo_DeleteUnrecordedDoneTasksByUser(t *testing.T) {
+	db := setupTestDB(t)
+	assert.NoError(t, db.Exec(`CREATE TABLE user_food_records (
+		id TEXT PRIMARY KEY,
+		user_id TEXT,
+		source_task_id TEXT
+	)`).Error)
+	r := NewTaskRepo(db)
+	ctx := context.Background()
+
+	tasks := []*domain.AnalysisTask{
+		{ID: "done-food", UserID: "u1", TaskType: "food", Status: "done"},
+		{ID: "done-text", UserID: "u1", TaskType: "food_text", Status: "done"},
+		{ID: "done-precision", UserID: "u1", TaskType: "precision_aggregate", Status: "done"},
+		{ID: "recorded", UserID: "u1", TaskType: "food", Status: "done"},
+		{ID: "failed", UserID: "u1", TaskType: "food", Status: "failed"},
+		{ID: "pending", UserID: "u1", TaskType: "food", Status: "pending"},
+		{ID: "internal-estimate", UserID: "u1", TaskType: "precision_item_estimate", Status: "done"},
+		{ID: "other-user", UserID: "u2", TaskType: "food", Status: "done"},
+	}
+	for _, task := range tasks {
+		assert.NoError(t, r.CreateTask(ctx, task))
+	}
+	assert.NoError(t, db.Exec(`INSERT INTO user_food_records (id, user_id, source_task_id) VALUES (?, ?, ?)`, "r1", "u1", "recorded").Error)
+
+	deleted, err := r.DeleteUnrecordedDoneTasksByUser(ctx, "u1")
+	assert.NoError(t, err)
+	assert.Equal(t, int64(3), deleted)
+
+	for _, id := range []string{"done-food", "done-text", "done-precision"} {
+		got, _ := r.GetTaskByID(ctx, id)
+		assert.Nil(t, got)
+	}
+	for _, id := range []string{"recorded", "failed", "pending", "internal-estimate", "other-user"} {
+		got, _ := r.GetTaskByID(ctx, id)
+		assert.NotNil(t, got, id)
+	}
+}
+
 func TestTaskRepo_MarkTimedOutTasks(t *testing.T) {
 	db := setupTestDB(t)
 	r := NewTaskRepo(db)

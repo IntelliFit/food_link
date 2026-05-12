@@ -2,14 +2,12 @@
 const mainPages = [
   'pages/index/index',
   'pages/stats/index',
-  'pages/record/index',
   'pages/community/index',
   'pages/profile/index',
 ]
 
 const extraSubpackagePages = [
   'pages/checkin-leaderboard/index',
-  'pages/record-menu/index',
   'pages/record-text/index',
   'pages/record-manual/index',
   'pages/analyze/index',
@@ -101,10 +99,6 @@ export default defineAppConfig({
       {
         pagePath: 'pages/stats/index',
         text: '分析',
-      },
-      {
-        pagePath: 'pages/record/index',
-        text: '记录',
       },
       {
         pagePath: 'pages/community/index',

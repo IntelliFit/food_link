@@ -16,6 +16,7 @@ import {
 } from '../../../utils/api'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { requestHomeRecordMenu } from '../../../utils/home-record-menu'
 import { drawDayRecordPoster, computeDayRecordPosterHeight, POSTER_WIDTH, type DayRecordPosterMeal } from '../../../utils/poster'
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
@@ -347,7 +348,7 @@ function DayRecordPage() {
   }
 
   const openRecordPage = () => {
-    Taro.switchTab({ url: '/pages/record/index' })
+    requestHomeRecordMenu(selectedDate)
   }
 
   // ---- 分享海报 ----
@@ -664,7 +665,7 @@ function DayRecordPage() {
           <View className='day-record-empty'>
             <Text className='iconfont icon-jishiben day-record-empty-icon'></Text>
             <Text className='day-record-empty-title'>这一天还没有饮食记录</Text>
-            <Text className='day-record-empty-desc'>去记录页拍照或文字录入后，这里就会展示当天明细。</Text>
+            <Text className='day-record-empty-desc'>通过首页记录弹窗拍照或文字录入后，这里就会展示当天明细。</Text>
             <View className='day-record-empty-btn' onClick={openRecordPage}>
               <Text className='day-record-empty-btn-text'>去记录</Text>
             </View>
