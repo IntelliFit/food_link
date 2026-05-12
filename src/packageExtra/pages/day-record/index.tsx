@@ -706,7 +706,7 @@ function DayRecordPage() {
                         <Text className='day-record-food-name'>{food.name}</Text>
                         <Text className='day-record-food-amount'>{food.amount}</Text>
                         <Text className={`day-record-food-ratio ${food.intakeRatio > 100 ? 'is-over' : ''}`}>
-                          摄入 {formatNumber(food.intakeRatio)}%
+                          {formatNumber(food.intakeRatio)}%
                         </Text>
                       </View>
                       <View className='day-record-food-side'>
@@ -719,9 +719,18 @@ function DayRecordPage() {
                         </View>
                       </View>
                       <View className='day-record-food-macros'>
-                        <Text className='day-record-food-macro macro-protein'>蛋白质 {Math.round(food.protein)}g</Text>
-                        <Text className='day-record-food-macro macro-carbs'>碳水 {Math.round(food.carbs)}g</Text>
-                        <Text className='day-record-food-macro macro-fat'>脂肪 {Math.round(food.fat)}g</Text>
+                        <View className='day-record-food-macro'>
+                          <Text className='day-record-food-macro-label'>蛋白质</Text>
+                          <Text className='day-record-food-macro-value macro-protein'>{Math.round(food.protein)}g</Text>
+                        </View>
+                        <View className='day-record-food-macro'>
+                          <Text className='day-record-food-macro-label'>碳水</Text>
+                          <Text className='day-record-food-macro-value macro-carbs'>{Math.round(food.carbs)}g</Text>
+                        </View>
+                        <View className='day-record-food-macro'>
+                          <Text className='day-record-food-macro-label'>脂肪</Text>
+                          <Text className='day-record-food-macro-value macro-fat'>{Math.round(food.fat)}g</Text>
+                        </View>
                       </View>
                     </View>
                   ))}

@@ -1,3 +1,52 @@
+# 状态：完成源码修复 - 身体趋势页喝水按首页传入日期记录
+
+- 2026-05-13 update:
+  - User 反馈：首页切换到前几天后点击喝水卡片进入身体趋势页，再点快捷加水时，请求 `/api/body-metrics/water` 的 `date/recorded_on` 仍是今天，例如 `2026-05-13`。
+  - Root cause:
+    - 首页 `openBodyTrends('water')` 已把 `selectedDateRef.current` 作为 `?date=` 传入身体趋势页。
+    - 但 `src/packageExtra/pages/body-trends/index.tsx` 中 `handleAddWater()` 硬编码调用 `addBodyWaterLog(amount, today)`，忽略了路由传入日期。
+    - 同页还用 `normalizeRecordDate()` 解析路由日期；该函数会把不在补录窗口内的合法日期（例如用户说的三天前）归一成今天，进一步导致请求体日期回到当天。
+  - Fix applied:
+    - `src/packageExtra/pages/body-trends/index.tsx`
+      - 改为用 `normalizeRouteDate()` 解析路由日期：只校验日期格式和未来日期，合法过去日期原样保留，不再按补录窗口强制回退今天。
+      - `handleAddWater()` 改为 `addBodyWaterLog(amount, selectedRecordDate)`。
+      - 水量概览卡片和快捷加水标题改为显示选中日期（例如 `05月10日喝水`、`为05月10日快捷加水`），并从 `water_daily` 读取该日期的水量/达成率。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/body-trends/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/body-trends/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修复 - app.ts 恢复 extraPkgUrl 导入
+
+- 2026-05-13 update:
+  - User 反馈小程序启动报错：`ReferenceError: extraPkgUrl is not defined at app.ts:12`。
+  - Root cause:
+    - `src/app.ts` 中 `PUBLIC_PAGES` 和邀请页跳转仍在使用 `extraPkgUrl()`，但导入语句被移除，导致 app service 启动阶段直接 ReferenceError。
+  - Fix applied:
+    - `src/app.ts` 恢复 `import { extraPkgUrl } from './utils/subpackage-extra'`。
+  - Verification:
+    - `npx eslint src/app.ts src/pages/index/components/MealRecordPosterModal.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/app.ts src/pages/index/components/MealRecordPosterModal.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食单餐海报绘制前同步获取头像
+
+- 2026-05-13 update:
+  - User 反馈：首页「今日餐食」单餐分享海报底部左侧仍未显示当前用户头像，但「当天饮食记录」分享今日饮食的卡片头像正常。
+  - Root cause:
+    - 首页单餐海报 `MealRecordPosterModal` 在弹窗打开后异步把头像写入 `ownerAvatar` state，但自动生成海报只延迟 100ms，绘制时可能仍拿到空头像。
+    - 当天饮食记录海报是在 `handleGenerateDayRecordPoster()` 内部现场获取并等待用户资料后再绘制，因此能正常显示头像。
+  - Fix applied:
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - 新增 `resolvePosterOwnerProfile()`，绘制前现场获取当前登录用户资料，并合并公开邀请资料；公开资料空字段不会覆盖当前用户头像/昵称。
+      - `handleGeneratePoster()` 的 canvas 查询回调改为 async，在加载头像图片前先等待资料解析完成。
+      - `drawRecordPoster()` 改用本次解析出的 `posterNickname/posterAvatar`，避免依赖尚未更新的 React state。
+      - 当 `record.user_id` 缺失时，回退使用本地 `user_id`，保证首页当前用户单餐分享也能拿到头像。
+  - Verification:
+    - `npx eslint src/pages/index/components/MealRecordPosterModal.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/MealRecordPosterModal.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
 # 状态：完成三次修复 - 首页日期选择即时持久化供喝水使用
 
 - 2026-05-13 update:
@@ -38,6 +87,25 @@
     - `GOCACHE=/tmp/food-link-go-cache go test ./internal/health/handler -run 'TestSaveBodyWaterLogUsesDateFromBody|TestResetBodyWaterLogsUsesDateFromBody' -count=1` passed（在 `backend/` 目录）。
     - `git diff --check -- src/pages/index/index.tsx src/utils/api.ts backend/internal/health/handler/health_handler_test.go` passed。
     - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；仍未能截图/交互验证。
+
+# 状态：完成源码修改 - 当天饮食记录食物宏量标签与摄入比例颜色调整
+
+- 2026-05-13 update:
+  - User 要求：「当天饮食记录」板块里每个成分的蛋白质/碳水/脂肪文字改成和风险卡片一样的正常前景色；后面的数字和单位继续保留彩色；摄入百分比去掉「摄入」两个字，并改成和左侧重量一样的灰色。
+  - Fix applied:
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 宏量营养行拆成 label 与 value：`蛋白质/碳水/脂肪` 用普通前景色，`xxg` 数字与单位继续使用各自彩色。
+      - 摄入比例文案从 `摄入 xx%` 改为只显示 `xx%`。
+    - `src/packageExtra/pages/day-record/index.scss`
+      - `.day-record-food-macro-label` 使用正常前景色。
+      - `.day-record-food-macro-value` 保留蛋白/碳水/脂肪原有彩色。
+      - `.day-record-food-ratio` 改为和重量 badge 一致的灰色文字与浅灰底。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/day-record/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+  - Note:
+    - 本轮发现工作区另有 `src/app.ts` 未提交异常改动（import 路径被改成包含中文句子的路径），不是本轮修改内容；未回退。
 
 # 状态：完成源码修改 - 分享海报底部用户头像兜底修复
 
