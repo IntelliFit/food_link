@@ -44,6 +44,11 @@
     - `git diff --check -- custom-tab-bar/index.js src/app.config.ts src/packageExtra/pages/day-record/index.tsx src/pages/index/index.tsx src/pages/record src/packageExtra/pages/record-menu src/utils/home-record-menu.ts src/utils/subpackage-extra.ts` passed。
     - `npx eslint custom-tab-bar/index.js --max-warnings 0` blocked by existing ESLint/Babel config issue: `No Babel config file detected ... custom-tab-bar/index.js`。
     - 已尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+  - Commit / Push:
+    - 已提交并推送到 `origin/backend-refactor-sync-migrate-tencent`：
+      - `5f760fc fix: preserve exercise record date`
+      - `3d20476 fix: tolerate missing color scheme provider`
+      - `71ee81d fix: remove legacy record entrypoints`
 
 ## 状态：完成源码修改 - 今日餐食入口白屏 useAppColorScheme provider 断链
 
