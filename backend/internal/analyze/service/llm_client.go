@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,34 @@ import (
 // LLMClient defines the interface for LLM-based analysis.
 type LLMClient interface {
 	Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error)
+}
+
+var ErrLLMJSONParse = errors.New("llm json parse error")
+
+type LLMJSONParseError struct {
+	Err error
+}
+
+func (e *LLMJSONParseError) Error() string {
+	if e == nil || e.Err == nil {
+		return "parse llm json failed"
+	}
+	return fmt.Sprintf("parse llm json failed: %v", e.Err)
+}
+
+func (e *LLMJSONParseError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func (e *LLMJSONParseError) Is(target error) bool {
+	return target == ErrLLMJSONParse
+}
+
+func IsLLMJSONParseError(err error) bool {
+	return errors.Is(err, ErrLLMJSONParse)
 }
 
 // DashScopeClient calls DashScope/Qwen API.
@@ -246,7 +275,7 @@ func parseLLMJSON(content string) (map[string]any, error) {
 	content = strings.TrimSpace(content)
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
-		return nil, fmt.Errorf("parse llm json failed: %w", err)
+		return nil, &LLMJSONParseError{Err: err}
 	}
 	return normalizePayload(parsed), nil
 }

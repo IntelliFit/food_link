@@ -7935,3 +7935,22 @@
   - `git push origin dev` 已成功，远端从 `fcc6b61` 更新到 `9792497`。
 - Next:
   - 提交并推送本次状态文件交接记录后，确认本地 `dev` 与 `origin/dev` 同步。
+
+## 2026-05-12 — 食物识别 LLM JSON 输出异常自动重试
+
+- Task: 用户反馈食物识别单个任务偶发 `识别失败: unexpected end of JSON input`；要求如果判断为模型输出 JSON 不符合规范导致的错误，则重新执行当前任务，重试不消耗用户积分，单任务最多重试 3 次。
+- Status: fixed_verified
+- Root cause:
+  - LLM 返回的 `message.content` 在 `parseLLMJSON()` 中直接 `json.Unmarshal`。
+  - 当模型输出被截断或不是合法 JSON 时，错误会包装为 `parse llm json failed: unexpected end of JSON input`，worker 随后把当前 `analysis_tasks` 标记为 `failed`。
+- Fix:
+  - `backend/internal/analyze/service/llm_client.go` 新增 `ErrLLMJSONParse` / `LLMJSONParseError` / `IsLLMJSONParseError()`，保留原错误文案，同时让上层可稳定识别 JSON 解析失败。
+  - `backend/internal/analyze/service/analyze_service.go` 新增 `analyzeWithJSONParseRetry()`，仅对 LLM JSON 解析失败重试；普通业务校验、超时、HTTP 错误、模型配额等不走这条重试。
+  - 图片识别、文字识别、精准 JSON 调用以及 Gemini transient fallback 到 Qwen 的 fallback 调用均接入同任务内部重试。
+  - 重试发生在 `AnalyzeService` 的同一次 worker 处理内，不新建 `analysis_tasks`，不重新走提交接口或积分扣减；最多额外重试 3 次。
+- Verification:
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestParseLLMJSON|TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON|TestAnalyzeService_AnalyzeStopsAfterInvalidJSONRetries|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run '^$' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/worker -run Test -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/app -run Test -count=1` passed.
+  - `git diff --check` passed for touched files.

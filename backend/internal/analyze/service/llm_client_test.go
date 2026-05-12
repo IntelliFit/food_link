@@ -151,6 +151,8 @@ func TestParseLLMJSON_WithFences(t *testing.T) {
 func TestParseLLMJSON_InvalidJSON(t *testing.T) {
 	_, err := parseLLMJSON("not json")
 	assert.Error(t, err)
+	assert.True(t, IsLLMJSONParseError(err))
+	assert.Contains(t, err.Error(), "parse llm json failed")
 }
 
 func TestNormalizePayload_Map(t *testing.T) {

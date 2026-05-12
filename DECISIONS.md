@@ -1091,3 +1091,8 @@
   - 不 force push、不重写 `origin/dev` 历史。
   - 保留 `origin/dev` 作为合并父提交，便于后续追溯远程 dev 曾经的独立提交。
   - 合并结果代码以当前已验证功能分支 `backend-refactor-sync-migrate-tencent` 为准，避免远程 dev 的旧 Python 后端、旧记录页入口或旧前端链路覆盖近期需求。
+
+- `2026-05-12`: 食物识别模型输出 JSON 不合法时采用同任务内部重试：
+  - 稳定识别 `parse llm json failed` / `unexpected end of JSON input` 等 JSON 解析失败，而不是靠前端错误文案判断。
+  - 重试发生在同一个 `analysis_tasks` 的 worker 处理内，不重新提交任务、不再次扣用户积分。
+  - 单任务最多额外重试 3 次；若 3 次后仍是非法 JSON，才按原失败链路标记任务失败并触发既有退款/失败处理。

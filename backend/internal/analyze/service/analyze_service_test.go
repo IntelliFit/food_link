@@ -26,6 +26,27 @@ func (m *mockLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (m
 	return m.result, m.err
 }
 
+type sequenceLLMClient struct {
+	results []map[string]any
+	errs    []error
+	calls   int
+}
+
+func (m *sequenceLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	index := m.calls
+	m.calls++
+	if index < len(m.errs) && m.errs[index] != nil {
+		return nil, m.errs[index]
+	}
+	if index < len(m.results) && m.results[index] != nil {
+		return m.results[index], nil
+	}
+	if len(m.results) > 0 {
+		return m.results[len(m.results)-1], nil
+	}
+	return map[string]any{}, nil
+}
+
 func setupAnalyzeServiceTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -341,6 +362,48 @@ func TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError(t
 
 	require.NoError(t, err)
 	assert.Equal(t, "qwen fallback", result["description"])
+}
+
+func TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON(t *testing.T) {
+	_, parseErr := parseLLMJSON(`{"description":"broken"`)
+	require.Error(t, parseErr)
+	require.True(t, IsLLMJSONParseError(parseErr))
+	client := &sequenceLLMClient{
+		errs: []error{parseErr, parseErr, nil},
+		results: []map[string]any{
+			nil,
+			nil,
+			{"description": "retry success", "items": []any{}},
+		},
+	}
+	svc := NewAnalyzeService(client, client, nil)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/img.jpg",
+		ModelName: "qwen",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "retry success", result["description"])
+	assert.Equal(t, 3, client.calls)
+}
+
+func TestAnalyzeService_AnalyzeStopsAfterInvalidJSONRetries(t *testing.T) {
+	_, parseErr := parseLLMJSON(`{"description":"broken"`)
+	require.Error(t, parseErr)
+	client := &sequenceLLMClient{
+		errs: []error{parseErr, parseErr, parseErr, parseErr, nil},
+	}
+	svc := NewAnalyzeService(client, client, nil)
+
+	_, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/img.jpg",
+		ModelName: "qwen",
+	})
+
+	require.Error(t, err)
+	assert.True(t, IsLLMJSONParseError(err))
+	assert.Equal(t, maxLLMJSONParseRetries+1, client.calls)
 }
 
 func TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError(t *testing.T) {

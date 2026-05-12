@@ -21,9 +21,10 @@ import (
 )
 
 const (
-	defaultExecutionMode = "standard"
-	validExecutionMode   = "strict"
-	visionPrimaryTimeout = 45 * time.Second
+	defaultExecutionMode   = "standard"
+	validExecutionMode     = "strict"
+	visionPrimaryTimeout   = 45 * time.Second
+	maxLLMJSONParseRetries = 3
 )
 
 type AnalyzeService struct {
@@ -120,11 +121,6 @@ func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Conte
 		imageURLs = nil
 	}
 	imageURLs = nonEmptyStrings(imageURLs)
-	primaryCtx := callCtx
-	primaryCancel := func() {}
-	if provider == "gemini" && len(imageURLs) > 0 {
-		primaryCtx, primaryCancel = context.WithTimeout(callCtx, visionPrimaryTimeout)
-	}
 	start := time.Now()
 	apm.AddEvent(ctx, "precision llm call started",
 		attribute.String("analysis.source_type", sourceType),
@@ -132,10 +128,19 @@ func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Conte
 		attribute.Int("analysis.image_count", len(imageURLs)),
 		attribute.Float64("analysis.temperature", temperature),
 	)
-	parsed, err := analyzeWithImagesTemperature(primaryCtx, client, prompt, imageURLs, temperature)
-	primaryCancel()
+	parsed, err := analyzeWithJSONParseRetry(callCtx, "precision", provider, "", func(retryCtx context.Context) (map[string]any, error) {
+		attemptCtx := retryCtx
+		attemptCancel := func() {}
+		if provider == "gemini" && len(imageURLs) > 0 {
+			attemptCtx, attemptCancel = context.WithTimeout(retryCtx, visionPrimaryTimeout)
+		}
+		defer attemptCancel()
+		return analyzeWithImagesTemperature(attemptCtx, client, prompt, imageURLs, temperature)
+	})
 	if err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.dashScopeClient != nil {
-		fallbackParsed, fallbackErr := analyzeWithImagesTemperature(callCtx, s.dashScopeClient, prompt, imageURLs, temperature)
+		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(callCtx, "precision_fallback", "qwen", "qwen-vl-max", func(retryCtx context.Context) (map[string]any, error) {
+			return analyzeWithImagesTemperature(retryCtx, s.dashScopeClient, prompt, imageURLs, temperature)
+		})
 		if fallbackErr == nil {
 			logger.WithTrace(ctx).Warn("precision gemini vision transient error fallback to dashscope",
 				zap.Error(err),
@@ -237,6 +242,43 @@ func isTransientLLMError(err error) bool {
 		}
 	}
 	return false
+}
+
+func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model string, call func(context.Context) (map[string]any, error)) (map[string]any, error) {
+	var parsed map[string]any
+	var err error
+	for retry := 0; ; retry++ {
+		parsed, err = call(ctx)
+		if err == nil || !IsLLMJSONParseError(err) || retry >= maxLLMJSONParseRetries {
+			return parsed, err
+		}
+		retryNumber := retry + 1
+		apm.AddEvent(ctx, "llm json parse retry",
+			attribute.String("analysis.stage", stage),
+			attribute.String("analysis.provider", provider),
+			attribute.String("analysis.model", model),
+			attribute.Int("analysis.retry_number", retryNumber),
+			attribute.Int("analysis.max_retries", maxLLMJSONParseRetries),
+		)
+		logger.WithTrace(ctx).Warn("llm returned invalid json; retrying same task",
+			zap.String("stage", stage),
+			zap.String("provider", provider),
+			zap.String("model", model),
+			zap.Int("retry_number", retryNumber),
+			zap.Int("max_retries", maxLLMJSONParseRetries),
+			zap.Error(err),
+		)
+		backoff := time.Duration(200*retryNumber) * time.Millisecond
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return parsed, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func nonEmptyStrings(values []string) []string {
@@ -1002,11 +1044,6 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	}
 
 	start := time.Now()
-	primaryCtx := ctx
-	primaryCancel := func() {}
-	if provider == "gemini" && strings.TrimSpace(imageURL) != "" {
-		primaryCtx, primaryCancel = context.WithTimeout(ctx, visionPrimaryTimeout)
-	}
 	primaryProvider := provider
 	primaryModel := model
 	imageCount := imageCountForLog(imageURL, input.ImageURLs)
@@ -1022,12 +1059,6 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		attribute.Int("analysis.image_count", imageCount),
 	)
 	defer span.End()
-	primaryCancel()
-	primaryCtx = ctx
-	primaryCancel = func() {}
-	if provider == "gemini" && strings.TrimSpace(imageURL) != "" {
-		primaryCtx, primaryCancel = context.WithTimeout(ctx, visionPrimaryTimeout)
-	}
 	apm.AddEvent(ctx, "food image analyze llm start",
 		attribute.String("analysis.user_id", userID),
 		attribute.String("analysis.provider", provider),
@@ -1048,11 +1079,20 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		zap.Int("image_count", imageCount),
 		zap.Bool("has_base64_image", strings.TrimSpace(input.Base64Image) != ""),
 	)
-	parsed, err := client.Analyze(primaryCtx, prompt, imageURL)
-	primaryCancel()
+	parsed, err := analyzeWithJSONParseRetry(ctx, "food_image", provider, model, func(callCtx context.Context) (map[string]any, error) {
+		attemptCtx := callCtx
+		attemptCancel := func() {}
+		if provider == "gemini" && strings.TrimSpace(imageURL) != "" {
+			attemptCtx, attemptCancel = context.WithTimeout(callCtx, visionPrimaryTimeout)
+		}
+		defer attemptCancel()
+		return client.Analyze(attemptCtx, prompt, imageURL)
+	})
 	fallbackUsed := false
 	if err != nil && provider == "gemini" && isTransientLLMError(err) && s.dashScopeClient != nil {
-		fallbackParsed, fallbackErr := s.dashScopeClient.Analyze(ctx, prompt, imageURL)
+		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(ctx, "food_image_fallback", "qwen", "qwen-vl-max", func(retryCtx context.Context) (map[string]any, error) {
+			return s.dashScopeClient.Analyze(retryCtx, prompt, imageURL)
+		})
 		if fallbackErr == nil {
 			logger.WithTrace(ctx).Warn("gemini vision transient error fallback to dashscope",
 				zap.Error(err),
@@ -1229,7 +1269,9 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		attribute.String("analysis.requested_model", strings.TrimSpace(input.ModelName)),
 		attribute.String("analysis.execution_mode", executionMode),
 	)
-	parsed, err := client.Analyze(ctx, prompt, "")
+	parsed, err := analyzeWithJSONParseRetry(ctx, "food_text", provider, model, func(callCtx context.Context) (map[string]any, error) {
+		return client.Analyze(callCtx, prompt, "")
+	})
 	if err != nil {
 		apm.RecordError(ctx, err,
 			attribute.String("analysis.stage", "llm_call"),
