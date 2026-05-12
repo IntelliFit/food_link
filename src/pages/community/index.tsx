@@ -67,8 +67,8 @@ const DIET_GOAL_NAMES: Record<string, string> = {
 }
 
 const FEED_SORT_OPTIONS: Array<{ value: CommunityFeedSortBy; label: string }> = [
-  { value: 'recommended', label: '推荐' },
   { value: 'latest', label: '最新' },
+  { value: 'recommended', label: '推荐' },
   { value: 'hot', label: '高赞' },
   { value: 'balanced', label: '均衡' },
 ]
@@ -189,7 +189,7 @@ const CACHE_KEYS = {
   REQUESTS: 'community_requests_cache',
   FEED_TIMESTAMP: 'community_feed_timestamp',
   FRIENDS_TIMESTAMP: 'community_friends_timestamp',
-  FEED_FILTERS: 'community_feed_filters_v2',
+  FEED_FILTERS: 'community_feed_filters_v3',
   PRIORITY_AUTHORS: 'community_priority_authors_v1',
   FEED_SESSION_ID: 'community_feed_session_id_v1',
   FEED_CACHE_SESSION_ID: 'community_feed_cache_session_id_v1'
@@ -383,7 +383,7 @@ function CommunityPage() {
   const [lbPreviewLoading, setLbPreviewLoading] = useState(false)
   /** 任意请求进行中（含静默），用于首次进入时骨架 */
   const [lbPreviewFetching, setLbPreviewFetching] = useState(false)
-  const [feedSortBy, setFeedSortBy] = useState<CommunityFeedSortBy>('recommended')
+  const [feedSortBy, setFeedSortBy] = useState<CommunityFeedSortBy>('latest')
   /** 动态筛选：漏斗展开后再显示排序/餐次/目标，避免占满一屏 */
   const [feedFilterExpanded, setFeedFilterExpanded] = useState(false)
   const [feedMealType, setFeedMealType] = useState<MealType | 'all'>('all')
@@ -404,6 +404,8 @@ function CommunityPage() {
   const refreshFeedPendingRef = useRef(false)
   /** 防止 useDidShow 在极短窗口内被触发两次（微信小程序 tab 切换偶发） */
   const useDidShowTsRef = useRef(0)
+  /** ScrollView 触底事件在部分机型上不稳定，滚动兜底需要节流 */
+  const scrollLoadMoreTsRef = useRef(0)
 
   const loadCheckinPreview = useCallback(async (silent = true) => {
     if (!getAccessToken()) {
@@ -454,7 +456,7 @@ function CommunityPage() {
       if (cachedFeedFilters) {
         try {
           const parsed = typeof cachedFeedFilters === 'string' ? JSON.parse(cachedFeedFilters) : cachedFeedFilters
-          setFeedSortBy((parsed?.sortBy as CommunityFeedSortBy) || 'recommended')
+          setFeedSortBy((parsed?.sortBy as CommunityFeedSortBy) || 'latest')
           setFeedMealType((parsed?.mealType as MealType | 'all') || 'all')
           setFeedDietGoal((parsed?.dietGoal as DietGoal | 'all') || 'all')
           setFeedAuthorScope((parsed?.authorScope as CommunityAuthorScope) || 'all')
@@ -790,6 +792,24 @@ function CommunityPage() {
     }
   }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy, feedSearchAuthorId, hasMore, loadingMore, mergeFeedTempComments, offset, priorityAuthorIds])
 
+  const handleCommunityScroll = useCallback((event) => {
+    if (!hasMore || loadingMore) return
+    const detail = event?.detail || {}
+    const scrollTop = Number(detail.scrollTop)
+    const scrollHeight = Number(detail.scrollHeight)
+    if (!Number.isFinite(scrollTop) || !Number.isFinite(scrollHeight) || scrollHeight <= 0) {
+      return
+    }
+    const viewportHeight = Math.max(pageHeight || 0, 1)
+    const remaining = scrollHeight - scrollTop - viewportHeight
+    if (remaining > 260) return
+
+    const now = Date.now()
+    if (now - scrollLoadMoreTsRef.current < 800) return
+    scrollLoadMoreTsRef.current = now
+    loadMoreFeed()
+  }, [hasMore, loadMoreFeed, loadingMore, pageHeight])
+
   // ScrollView 自带下拉刷新（页面级下拉被内部 ScrollView 接管，需用 refresher）
   const handleRefresherRefresh = useCallback(() => {
     setRefreshing(true)
@@ -940,6 +960,9 @@ function CommunityPage() {
       }
       if (needRefreshFriends) {
         loadFriendsAndRequests(true)
+      }
+      if (now - lastFeedRefreshTime.current > CACHE_DURATION) {
+        refreshFeed(true, false)
       }
       handlePendingNotificationNavigation()
       return
@@ -1159,7 +1182,7 @@ function CommunityPage() {
   const feedFilterIconActive = useMemo(
     () =>
       feedFilterExpanded ||
-      feedSortBy !== 'recommended' ||
+      feedSortBy !== 'latest' ||
       feedMealType !== 'all' ||
       feedDietGoal !== 'all' ||
       (loggedIn && feedAuthorScope !== 'all'),
@@ -1619,6 +1642,7 @@ function CommunityPage() {
           onRefresherRefresh={handleRefresherRefresh}
           refresherDefaultStyle='black'
           onScrollToLower={loadMoreFeed}
+          onScroll={handleCommunityScroll}
           lowerThreshold={100}
         >
           <View
@@ -2172,7 +2196,13 @@ function CommunityPage() {
               )}
               {/* 加载更多提示 */}
               {feedList.length > 0 && (
-                <View className='load-more-wrapper' onClick={(e) => e.stopPropagation()}>
+                <View
+                  className='load-more-wrapper'
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (hasMore && !loadingMore) loadMoreFeed()
+                  }}
+                >
                   {loadingMore ? (
                     <View className='load-more-loading' />
                   ) : hasMore ? (

@@ -1,5 +1,49 @@
 # 当前任务
 
+## 状态：完成源码修改 - 圈子好友动态回到页面后不刷新
+
+- 2026-05-12 update:
+  - User 反馈：圈子好友动态里现在只能看到约 22 小时前的一条消息，最近消息似乎看不到。
+  - Findings:
+    - 按依赖排查先查真实 DB：以当前调试用户好友范围确认 `user_food_records` 中存在 2026-05-12 上午 11:26、10:09、04:37、04:23 等最新未隐藏记录，因此不是服务端数据不存在。
+    - 前端 `src/pages/community/index.tsx` 的 `Taro.useDidShow()` 中，只要 `feedList.length > 0` 就提前 return；这个分支只合并临时评论/同步好友，不会执行后面的 `CACHE_DURATION` 超时刷新判断。
+    - 因此小程序未冷启动、社区页内存列表仍存在时，即使过了 5 分钟甚至 22 小时，回到圈子也不会主动重新请求 `/api/community/feed`，导致用户一直看到旧动态。
+  - Fix applied:
+    - `src/pages/community/index.tsx`
+      - 在 `feedList.length > 0` 的页面显示分支里增加过期判断：若 `Date.now() - lastFeedRefreshTime.current > CACHE_DURATION`，调用 `refreshFeed(true, false)` 静默刷新。
+      - 保留原有临时评论同步、好友申请同步和通知跳转逻辑。
+  - Verification:
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+    - 已尝试 `mrc where --port 9420` 与 `mrc where --port 3001`；均提示目标项目窗口未开启自动化服务，未能截图/交互验证。
+  - Note:
+    - 当前工作区另有既有 `package.json` 版本号变更 `3.0.1 -> 3.0.2`，本轮未修改或回退该文件。
+
+- 2026-05-12 follow-up:
+  - User 反馈：最新数据已经能看到，但圈子页向下滑到最底部时不会继续请求下一页。
+  - Root cause:
+    - 触底事件是一层问题，但真正阻断分页的是后端 `latest` 排序分页窗口。
+    - `CommunityService.FriendFeed/PublicFeed()` 对非推荐排序只向 repo 取 `limit` 条，再在 service 里做 `offset` 切片；当第二页请求 `offset=10&limit=10&sort_by=latest` 时，repo 仍只返回最新前 10 条，随后 `sliceRecords(records, 10, 10)` 必然为空。
+  - Fix applied:
+    - `src/pages/community/index.tsx`
+      - 保留原 `onScrollToLower={loadMoreFeed}`，新增 `onScroll={handleCommunityScroll}` 作为近底检测兜底；当滚动剩余距离小于阈值且未在加载中时，节流触发 `loadMoreFeed()`。
+      - 底部“上拉加载更多”区域增加点击兜底；若 `hasMore && !loadingMore`，点击也会调用 `loadMoreFeed()`。
+      - 默认排序同步改为 `latest`，并将圈子筛选缓存 key 从 `community_feed_filters_v2` 升为 `community_feed_filters_v3`，避免旧缓存继续恢复 `recommended`。
+    - `backend/internal/community/service/community_service.go`
+      - `PublicFeed()` / `FriendFeed()` 的非 custom rank 分支候选数量改为 `offset + limit`，确保第二页、第三页能拿到足够窗口再切片。
+    - `backend/internal/community/service/community_service_test.go`
+      - 新增 `latest + offset` 分页测试，覆盖好友 feed 和公开 feed。
+    - `backend/internal/community/handler/community_handler.go`
+      - `PublicFeed()` / `Feed()` 在 service 返回 nil slice 时统一转为空数组，避免接口返回 `list: null`。
+    - `src/pages/profile/index.tsx`
+      - 清除缓存时同时删除 `community_feed_filters_v3`，并继续兼容删除旧 `community_feed_filters_v2`。
+  - Verification:
+    - 已用当前 3010 旧进程复现 `GET /api/community/feed?offset=10&limit=10&sort_by=latest&author_scope=all` 返回 `list: null`；该进程启动于 11:35，早于本轮后端分页修复，需要重启本地 Go server 后生效。
+    - `go test ./internal/community/service ./internal/community/handler -run 'TestFriendFeed|TestPublicFeed|TestFeed|TestFeedWithParams|TestPublicFeedError|TestFeedError|TestScoreFeedRecord|TestComputeFreshnessScore' -count=1` passed。
+    - `npx eslint src/pages/community/index.tsx src/pages/profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+    - 已尝试 `mrc where --port 9420` 与 `mrc where --port 3001`；仍提示目标项目窗口未开启自动化服务，未能截图/交互验证。
+
 ## 状态：完成后端镜像构建推送部署
 
 - 2026-05-12 update:

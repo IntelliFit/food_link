@@ -16,8 +16,10 @@ import (
 type mockFeedRepo struct {
 	listPublicFeed             []repo.FeedRecord
 	listPublicFeedErr          error
+	listPublicFeedLimit        int
 	listFriendFeed             []repo.FeedRecord
 	listFriendFeedErr          error
+	listFriendFeedLimit        int
 	getFeedRecord              *repo.FeedRecord
 	getFeedRecordErr           error
 	hideFeedErr                error
@@ -45,9 +47,11 @@ type mockFeedRepo struct {
 }
 
 func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, mealType, dietGoal, date string, limit int) ([]repo.FeedRecord, error) {
+	m.listPublicFeedLimit = limit
 	return m.listPublicFeed, m.listPublicFeedErr
 }
 func (m *mockFeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal, date string, limit int) ([]repo.FeedRecord, error) {
+	m.listFriendFeedLimit = limit
 	return m.listFriendFeed, m.listFriendFeedErr
 }
 func (m *mockFeedRepo) GetFeedRecordByID(ctx context.Context, recordID string) (*repo.FeedRecord, error) {
@@ -180,6 +184,75 @@ func TestFriendFeed(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.True(t, items[0].Liked)
+}
+
+func TestFriendFeedLatestUsesOffsetWindow(t *testing.T) {
+	now := time.Now()
+	mockFeed := &mockFeedRepo{
+		listFriendFeed: []repo.FeedRecord{
+			{ID: "r1", UserID: "u1", RecordTime: &now},
+			{ID: "r2", UserID: "u1", RecordTime: &now},
+			{ID: "r3", UserID: "u1", RecordTime: &now},
+			{ID: "r4", UserID: "u1", RecordTime: &now},
+			{ID: "r5", UserID: "u1", RecordTime: &now},
+			{ID: "r6", UserID: "u1", RecordTime: &now},
+			{ID: "r7", UserID: "u1", RecordTime: &now},
+			{ID: "r8", UserID: "u1", RecordTime: &now},
+			{ID: "r9", UserID: "u1", RecordTime: &now},
+			{ID: "r10", UserID: "u1", RecordTime: &now},
+			{ID: "r11", UserID: "u1", RecordTime: &now},
+			{ID: "r12", UserID: "u1", RecordTime: &now},
+		},
+		friendIDs: []string{"u1"},
+		likesMap:  map[string]*repo.LikeInfo{},
+		profiles:  map[string]*repo.UserProfile{"u1": {ID: "u1", Nickname: "Alice"}},
+	}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+
+	items, err := svc.FriendFeed(context.Background(), "viewer", FeedParams{
+		Offset: 10,
+		Limit:  10,
+		SortBy: "latest",
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, 20, mockFeed.listFriendFeedLimit)
+	assert.Len(t, items, 2)
+	assert.Equal(t, "r11", items[0].Record.ID)
+	assert.Equal(t, "r12", items[1].Record.ID)
+}
+
+func TestPublicFeedLatestUsesOffsetWindow(t *testing.T) {
+	now := time.Now()
+	mockFeed := &mockFeedRepo{
+		listPublicFeed: []repo.FeedRecord{
+			{ID: "r1", UserID: "u1", RecordTime: &now},
+			{ID: "r2", UserID: "u1", RecordTime: &now},
+			{ID: "r3", UserID: "u1", RecordTime: &now},
+			{ID: "r4", UserID: "u1", RecordTime: &now},
+			{ID: "r5", UserID: "u1", RecordTime: &now},
+			{ID: "r6", UserID: "u1", RecordTime: &now},
+			{ID: "r7", UserID: "u1", RecordTime: &now},
+			{ID: "r8", UserID: "u1", RecordTime: &now},
+			{ID: "r9", UserID: "u1", RecordTime: &now},
+			{ID: "r10", UserID: "u1", RecordTime: &now},
+			{ID: "r11", UserID: "u1", RecordTime: &now},
+		},
+		likesMap: map[string]*repo.LikeInfo{},
+		profiles: map[string]*repo.UserProfile{"u1": {ID: "u1", Nickname: "Alice"}},
+	}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+
+	items, err := svc.PublicFeed(context.Background(), FeedParams{
+		Offset: 10,
+		Limit:  10,
+		SortBy: "latest",
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, 20, mockFeed.listPublicFeedLimit)
+	assert.Len(t, items, 1)
+	assert.Equal(t, "r11", items[0].Record.ID)
 }
 
 func TestNormalizeFeedRecordUsesChinaTime(t *testing.T) {

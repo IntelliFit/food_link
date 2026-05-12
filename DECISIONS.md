@@ -1,5 +1,13 @@
 # DECISIONS
 
+- `2026-05-12`: 圈子好友动态页面已有内存列表时也必须按 `CACHE_DURATION` 自动刷新：
+  - 社区页 `Taro.useDidShow()` 不能因为 `feedList.length > 0` 就直接 return，否则小程序长期挂起/切 tab 回来时会一直展示旧 Feed。
+  - 在已有列表分支中仍应保留临时评论合并，但如果 `Date.now() - lastFeedRefreshTime.current > CACHE_DURATION`，必须静默调用 `refreshFeed(true, false)` 拉取 `/api/community/feed` 最新数据。
+  - `App.useLaunch` 清理跨冷启动缓存只能解决冷启动旧数据；不能替代页面保持挂载时的显示刷新。
+  - 圈子默认排序应为 `latest`，旧筛选缓存 key 升级时需更换版本号，避免历史 `recommended` 缓存影响用户第一屏。
+  - `ScrollView.onScrollToLower` 在微信端不稳定时，必须保留 `onScroll` 近底兜底触发 `loadMoreFeed()`，并给底部加载更多区域提供点击兜底。
+  - 后端 feed 分页不能只取 `limit` 条后再做 `offset` 切片；对于 `latest` 这类非自定义排序，repo 查询候选数量至少要是 `offset + limit`，否则第二页必然为空。
+
 - `2026-05-12`: 后端 Docker 部署构建需要显式使用可配置 `GOPROXY`：
   - `backend/Dockerfile` 在 builder 阶段设置 `ARG GOPROXY=https://goproxy.cn,direct` 与 `ENV GOPROXY=${GOPROXY}`。
   - `backend/scripts/push-docker-ccr.mjs` 默认将 `DOCKER_GO_PROXY` / `GOPROXY` / `https://goproxy.cn,direct` 传入 Docker build。

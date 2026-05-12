@@ -44,6 +44,9 @@ func (h *CommunityHandler) PublicFeed(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	if items == nil {
+		items = []service.FeedItem{}
+	}
 	response.Success(c, gin.H{"list": items, "has_more": len(items) >= params.Limit})
 }
 
@@ -57,6 +60,9 @@ func (h *CommunityHandler) Feed(c *gin.Context) {
 	if err != nil {
 		response.Error(c, err)
 		return
+	}
+	if items == nil {
+		items = []service.FeedItem{}
 	}
 	response.Success(c, gin.H{"list": items, "has_more": len(items) >= params.Limit})
 }

@@ -146,7 +146,7 @@ type MarkReadResult struct {
 
 func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([]FeedItem, error) {
 	customRank := params.SortBy == "recommended" || params.SortBy == "hot" || params.SortBy == "balanced"
-	candidateLimit := params.Limit
+	candidateLimit := params.Offset + params.Limit
 	if customRank {
 		candidateLimit = max(max(params.Offset+params.Limit+40, params.Limit*3), 60)
 	}
@@ -274,7 +274,7 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 	}
 
 	customRank := params.SortBy == "recommended" || params.SortBy == "hot" || params.SortBy == "balanced"
-	candidateLimit := params.Limit
+	candidateLimit := params.Offset + params.Limit
 	if customRank {
 		candidateLimit = max(max(params.Offset+params.Limit+40, params.Limit*3), 60)
 	}
