@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode"
 
 	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/common/dateutil"
@@ -277,6 +278,7 @@ func (s *FoodRecordService) List(ctx context.Context, userID, date string) ([]do
 			}
 		}
 		records[i].MealType = normalizeMealType(records[i].MealType, records[i].RecordTime)
+		s.hydrateRecordNutrientsFromTask(ctx, &records[i])
 	}
 	return records, nil
 }
@@ -292,7 +294,7 @@ func (s *FoodRecordService) Get(ctx context.Context, userID, recordID string) (*
 	if record.UserID != userID {
 		return nil, commonerrors.ErrForbidden
 	}
-	record = s.hydrateRecord(record)
+	record = s.hydrateRecordWithContext(ctx, record)
 	record.MealType = normalizeMealType(record.MealType, record.RecordTime)
 	return record, nil
 }
@@ -356,7 +358,7 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 			return nil, err
 		}
 	}
-	record = s.hydrateRecord(record)
+	record = s.hydrateRecordWithContext(ctx, record)
 	record.MealType = normalizeMealType(record.MealType, record.RecordTime)
 	return record, nil
 }
@@ -402,7 +404,7 @@ func (s *FoodRecordService) Share(ctx context.Context, recordID string) (*domain
 			return nil, commonerrors.ErrForbidden
 		}
 	}
-	record = s.hydrateRecord(record)
+	record = s.hydrateRecordWithContext(ctx, record)
 	record.MealType = normalizeMealType(record.MealType, record.RecordTime)
 	return record, nil
 }
@@ -438,11 +440,15 @@ func (s *FoodRecordService) buildRecordTime(ctx context.Context, dateStr *string
 }
 
 func (s *FoodRecordService) hydrateRecord(record *domain.FoodRecord) *domain.FoodRecord {
+	return s.hydrateRecordWithContext(context.Background(), record)
+}
+
+func (s *FoodRecordService) hydrateRecordWithContext(ctx context.Context, record *domain.FoodRecord) *domain.FoodRecord {
 	if record == nil {
 		return nil
 	}
 	if len(record.ImagePaths) == 0 && record.SourceTaskID != nil {
-		paths, err := s.taskRepo.GetImagePathsByID(context.Background(), *record.SourceTaskID)
+		paths, err := s.taskRepo.GetImagePathsByID(ctx, *record.SourceTaskID)
 		if err == nil && len(paths) > 0 {
 			record.ImagePaths = paths
 		}
@@ -456,7 +462,184 @@ func (s *FoodRecordService) hydrateRecord(record *domain.FoodRecord) *domain.Foo
 	} else {
 		record.ImagePath = nil
 	}
+	s.hydrateRecordNutrientsFromTask(ctx, record)
 	return record
+}
+
+func (s *FoodRecordService) hydrateRecordNutrientsFromTask(ctx context.Context, record *domain.FoodRecord) {
+	if record == nil || record.SourceTaskID == nil || strings.TrimSpace(*record.SourceTaskID) == "" || s.taskRepo == nil || len(record.Items) == 0 {
+		return
+	}
+	task, err := s.taskRepo.GetByID(ctx, *record.SourceTaskID)
+	if err != nil || task == nil || len(task.Result) == 0 {
+		return
+	}
+	sourceItems := taskResultNutritionItems(task.Result)
+	if len(sourceItems) == 0 {
+		return
+	}
+	used := map[int]bool{}
+	for index := range record.Items {
+		sourceIndex := matchSourceNutritionItem(record.Items[index], index, sourceItems, used)
+		if sourceIndex < 0 {
+			continue
+		}
+		used[sourceIndex] = true
+		source := sourceItems[sourceIndex]
+		fillMissingNutrients(&record.Items[index].Nutrients, source.nutrients)
+		if record.Items[index].WaterMl <= 0 && source.waterMl > 0 {
+			record.Items[index].WaterMl = source.waterMl
+		}
+	}
+}
+
+type sourceNutritionItem struct {
+	name      string
+	nutrients map[string]any
+	waterMl   float64
+}
+
+func taskResultNutritionItems(result map[string]any) []sourceNutritionItem {
+	items := anyItems(result["items"])
+	out := make([]sourceNutritionItem, 0, len(items))
+	for _, item := range items {
+		nutrients := anyMap(item["nutrients"])
+		waterMl := positiveNumberFromAny(item["waterMl"], item["water_ml"], nutrients["waterMl"], nutrients["water_ml"])
+		out = append(out, sourceNutritionItem{
+			name:      strings.TrimSpace(fmt.Sprint(item["name"])),
+			nutrients: nutrients,
+			waterMl:   waterMl,
+		})
+	}
+	return out
+}
+
+func matchSourceNutritionItem(item domain.FoodItem, index int, sourceItems []sourceNutritionItem, used map[int]bool) int {
+	needle := normalizeRecordFoodName(item.Name)
+	if needle != "" {
+		for i, source := range sourceItems {
+			if used[i] {
+				continue
+			}
+			if normalizeRecordFoodName(source.name) == needle {
+				return i
+			}
+		}
+	}
+	if index >= 0 && index < len(sourceItems) && !used[index] {
+		return index
+	}
+	return -1
+}
+
+func normalizeRecordFoodName(raw string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func anyItems(value any) []map[string]any {
+	switch arr := value.(type) {
+	case []map[string]any:
+		return arr
+	case []any:
+		out := make([]map[string]any, 0, len(arr))
+		for _, item := range arr {
+			if m := anyMap(item); len(m) > 0 {
+				out = append(out, m)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func anyMap(value any) map[string]any {
+	if m, ok := value.(map[string]any); ok {
+		return m
+	}
+	return nil
+}
+
+func fillMissingNutrients(target *domain.FoodItemNutrients, nutrients map[string]any) {
+	if target == nil || len(nutrients) == 0 {
+		return
+	}
+	fill := func(current *float64, keys ...string) {
+		if current == nil || *current > 0 {
+			return
+		}
+		if value := positiveNumberFromAnyKeys(nutrients, keys...); value > 0 {
+			*current = value
+		}
+	}
+	fill(&target.Calories, "calories")
+	fill(&target.Protein, "protein")
+	fill(&target.Carbs, "carbs")
+	fill(&target.Fat, "fat")
+	fill(&target.Fiber, "fiber")
+	fill(&target.Sugar, "sugar")
+	fill(&target.SaturatedFat, "saturatedFat", "saturated_fat")
+	fill(&target.CholesterolMg, "cholesterolMg", "cholesterol_mg")
+	fill(&target.SodiumMg, "sodiumMg", "sodium_mg")
+	fill(&target.PotassiumMg, "potassiumMg", "potassium_mg")
+	fill(&target.CalciumMg, "calciumMg", "calcium_mg")
+	fill(&target.IronMg, "ironMg", "iron_mg")
+	fill(&target.MagnesiumMg, "magnesiumMg", "magnesium_mg")
+	fill(&target.ZincMg, "zincMg", "zinc_mg")
+	fill(&target.VitaminARaeMcg, "vitaminARaeMcg", "vitamin_a_rae_mcg")
+	fill(&target.VitaminCMg, "vitaminCMg", "vitamin_c_mg")
+	fill(&target.VitaminDMcg, "vitaminDMcg", "vitamin_d_mcg")
+	fill(&target.VitaminEMg, "vitaminEMg", "vitamin_e_mg")
+	fill(&target.VitaminKMcg, "vitaminKMcg", "vitamin_k_mcg")
+	fill(&target.ThiaminMg, "thiaminMg", "thiamin_mg")
+	fill(&target.RiboflavinMg, "riboflavinMg", "riboflavin_mg")
+	fill(&target.NiacinMg, "niacinMg", "niacin_mg")
+	fill(&target.VitaminB6Mg, "vitaminB6Mg", "vitamin_b6_mg")
+	fill(&target.FolateMcg, "folateMcg", "folate_mcg")
+	fill(&target.VitaminB12Mcg, "vitaminB12Mcg", "vitamin_b12_mcg")
+}
+
+func positiveNumberFromAnyKeys(values map[string]any, keys ...string) float64 {
+	for _, key := range keys {
+		if value := positiveNumberFromAny(values[key]); value > 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func positiveNumberFromAny(values ...any) float64 {
+	for _, value := range values {
+		var number float64
+		switch v := value.(type) {
+		case float64:
+			number = v
+		case float32:
+			number = float64(v)
+		case int:
+			number = float64(v)
+		case int64:
+			number = float64(v)
+		case int32:
+			number = float64(v)
+		case uint:
+			number = float64(v)
+		case uint64:
+			number = float64(v)
+		case uint32:
+			number = float64(v)
+		}
+		if number > 0 {
+			return number
+		}
+	}
+	return 0
 }
 
 func (s *FoodRecordService) normalizeImagePaths(paths []string) []string {

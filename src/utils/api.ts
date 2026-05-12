@@ -159,6 +159,7 @@ export interface Nutrients {
   saturatedFat?: number
   cholesterolMg?: number
   sodiumMg?: number
+  sodium_mg?: number
   potassiumMg?: number
   calciumMg?: number
   ironMg?: number
@@ -455,6 +456,7 @@ export interface FoodRecord {
     weight: number
     ratio: number
     intake: number
+    waterMl?: number
     water_ml?: number
     nutrients: Nutrients
   }>

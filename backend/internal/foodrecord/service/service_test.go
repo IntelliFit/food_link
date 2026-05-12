@@ -980,3 +980,72 @@ func TestFoodRecordService_hydrateRecord_TaskRepoError(t *testing.T) {
 	result := svc.hydrateRecord(record)
 	assert.NotNil(t, result)
 }
+
+func TestFoodRecordService_hydrateRecord_FillsMissingNutrientsFromSourceTask(t *testing.T) {
+	db := setupServiceTestDB(t)
+	r := foodrepo.NewFoodRecordRepo(db)
+	tr := foodrepo.NewAnalysisTaskRepo(db)
+	ur := repo.NewUserRepo(db)
+	svc := NewFoodRecordService(r, tr, ur)
+	ctx := context.Background()
+
+	task := &analyzedomain.AnalysisTask{
+		UserID:   "u1",
+		TaskType: "food",
+		Status:   "done",
+		Result: map[string]any{
+			"items": []any{
+				map[string]any{
+					"name":    "李子",
+					"waterMl": 120.0,
+					"nutrients": map[string]any{
+						"calories":       100.2,
+						"protein":        1.5,
+						"carbs":          25.0,
+						"fat":            0.5,
+						"fiber":          2.6,
+						"sugar":          18.0,
+						"calciumMg":      12.0,
+						"ironMg":         0.4,
+						"vitaminCMg":     8.0,
+						"vitaminARaeMcg": 3.0,
+					},
+				},
+			},
+		},
+	}
+	require.NoError(t, db.Create(task).Error)
+
+	record := &domain.FoodRecord{
+		UserID:       "u1",
+		MealType:     "breakfast",
+		SourceTaskID: &task.ID,
+		Items: []domain.FoodItem{
+			{
+				Name:      "李子",
+				Weight:    180,
+				Ratio:     100,
+				Intake:    180,
+				Nutrients: domain.FoodItemNutrients{},
+			},
+		},
+		TotalCalories: 100.2,
+		TotalProtein:  1.5,
+		TotalCarbs:    25,
+		TotalFat:      0.5,
+	}
+	require.NoError(t, r.Create(ctx, record))
+
+	fetched, err := svc.Get(ctx, "u1", record.ID)
+	require.NoError(t, err)
+	require.Len(t, fetched.Items, 1)
+	assert.Equal(t, 100.2, fetched.Items[0].Nutrients.Calories)
+	assert.Equal(t, 1.5, fetched.Items[0].Nutrients.Protein)
+	assert.Equal(t, 25.0, fetched.Items[0].Nutrients.Carbs)
+	assert.Equal(t, 0.5, fetched.Items[0].Nutrients.Fat)
+	assert.Equal(t, 2.6, fetched.Items[0].Nutrients.Fiber)
+	assert.Equal(t, 12.0, fetched.Items[0].Nutrients.CalciumMg)
+	assert.Equal(t, 0.4, fetched.Items[0].Nutrients.IronMg)
+	assert.Equal(t, 8.0, fetched.Items[0].Nutrients.VitaminCMg)
+	assert.Equal(t, 120.0, fetched.Items[0].WaterMl)
+}

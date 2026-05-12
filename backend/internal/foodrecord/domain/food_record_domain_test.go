@@ -56,6 +56,56 @@ func TestFoodItem_UnmarshalJSONWaterMlAliases(t *testing.T) {
 	assert.Equal(t, 200.0, nested.WaterMl)
 }
 
+func TestFoodItemNutrients_UnmarshalMicronutrients(t *testing.T) {
+	var nutrients FoodItemNutrients
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"calories": 100,
+		"protein": 1.5,
+		"carbs": 25,
+		"fat": 0.5,
+		"saturatedFat": 0.1,
+		"cholesterol_mg": 2,
+		"sodiumMg": 3,
+		"potassium_mg": 120,
+		"calciumMg": 10,
+		"iron_mg": 0.4,
+		"magnesiumMg": 6,
+		"zinc_mg": 0.2,
+		"vitaminARaeMcg": 15,
+		"vitamin_c_mg": 4,
+		"vitaminDMcg": 0.1,
+		"vitamin_e_mg": 0.2,
+		"vitaminKMcg": 3,
+		"thiamin_mg": 0.03,
+		"riboflavinMg": 0.04,
+		"niacin_mg": 0.5,
+		"vitaminB6Mg": 0.06,
+		"folate_mcg": 8,
+		"vitaminB12Mcg": 0.01
+	}`), &nutrients))
+
+	assert.Equal(t, 100.0, nutrients.Calories)
+	assert.Equal(t, 0.1, nutrients.SaturatedFat)
+	assert.Equal(t, 2.0, nutrients.CholesterolMg)
+	assert.Equal(t, 3.0, nutrients.SodiumMg)
+	assert.Equal(t, 120.0, nutrients.PotassiumMg)
+	assert.Equal(t, 10.0, nutrients.CalciumMg)
+	assert.Equal(t, 0.4, nutrients.IronMg)
+	assert.Equal(t, 6.0, nutrients.MagnesiumMg)
+	assert.Equal(t, 0.2, nutrients.ZincMg)
+	assert.Equal(t, 15.0, nutrients.VitaminARaeMcg)
+	assert.Equal(t, 4.0, nutrients.VitaminCMg)
+	assert.Equal(t, 0.1, nutrients.VitaminDMcg)
+	assert.Equal(t, 0.2, nutrients.VitaminEMg)
+	assert.Equal(t, 3.0, nutrients.VitaminKMcg)
+	assert.Equal(t, 0.03, nutrients.ThiaminMg)
+	assert.Equal(t, 0.04, nutrients.RiboflavinMg)
+	assert.Equal(t, 0.5, nutrients.NiacinMg)
+	assert.Equal(t, 0.06, nutrients.VitaminB6Mg)
+	assert.Equal(t, 8.0, nutrients.FolateMcg)
+	assert.Equal(t, 0.01, nutrients.VitaminB12Mcg)
+}
+
 func TestFoodNutrition_Struct(t *testing.T) {
 	food := FoodNutrition{
 		ID:            "food-1",

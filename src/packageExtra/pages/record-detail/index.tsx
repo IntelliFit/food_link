@@ -19,7 +19,7 @@ import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } fr
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 
-import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
+import { IconBreakfast, IconCollapse, IconExpand, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
@@ -95,6 +95,63 @@ const getDisplayedNutrientValue = (item: EditableFoodItem, field: EditableNutrie
   roundToSingleDecimal((item.nutrients?.[field] ?? 0) * getItemRatioFactor(item))
 )
 
+type NutrientDetailKey = keyof Pick<Nutrients,
+  'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg' |
+  'calciumMg' | 'ironMg' | 'magnesiumMg' | 'zincMg' | 'vitaminARaeMcg' | 'vitaminCMg' |
+  'vitaminDMcg' | 'vitaminEMg' | 'vitaminKMcg' | 'thiaminMg' | 'riboflavinMg' |
+  'niacinMg' | 'vitaminB6Mg' | 'folateMcg' | 'vitaminB12Mcg'
+>
+
+const NUTRIENT_DETAIL_META: Array<{ key: NutrientDetailKey; label: string; unit: string }> = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg' },
+  { key: 'sodiumMg', label: '钠', unit: 'mg' },
+  { key: 'potassiumMg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', label: '维生素A', unit: 'mcg' },
+  { key: 'vitaminCMg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素D', unit: 'mcg' },
+  { key: 'vitaminEMg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素K', unit: 'mcg' },
+  { key: 'thiaminMg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'mcg' },
+  { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'mcg' }
+]
+
+const normalizeNutrientValue = (value: unknown) => {
+  const num = Number(value)
+  return Number.isFinite(num) && num > 0 ? num : 0
+}
+
+const formatNutrientDetailValue = (value: number) => {
+  if (value >= 10) return String(Math.round(value))
+  if (value >= 1) return String(Math.round(value * 10) / 10)
+  return String(Math.round(value * 100) / 100)
+}
+
+const getRecordItemWaterMl = (item: FoodRecord['items'][0]) => {
+  const value = Number(item.water_ml ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl ?? 0)
+  return Number.isFinite(value) && value > 0 ? value : 0
+}
+
+const getRecordItemNutrientDetailRows = (item: FoodRecord['items'][0]) => {
+  const ratio = Math.max(0, item.ratio ?? 100) / 100
+  return NUTRIENT_DETAIL_META.map((meta) => ({
+    ...meta,
+    value: normalizeNutrientValue(
+      item.nutrients?.[meta.key] ?? (meta.key === 'sodiumMg' ? item.nutrients?.sodium_mg : undefined)
+    ) * ratio
+  }))
+}
+
 
 
 /** 格式化记录时间 */
@@ -158,6 +215,7 @@ function RecordDetailPage() {
   const [ownerAvatar, setOwnerAvatar] = React.useState('')
   const [ownerInviteCode, setOwnerInviteCode] = React.useState('')
   const [inviteLoading, setInviteLoading] = React.useState(false)
+  const [expandedNutrientDetails, setExpandedNutrientDetails] = React.useState<Record<string, boolean>>({})
   const sharePosterRewardClaimingRef = React.useRef(false)
 
   useEffect(() => {
@@ -553,6 +611,13 @@ function RecordDetailPage() {
     }
   }
 
+  const toggleNutrientDetails = (key: string) => {
+    setExpandedNutrientDetails(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
+
   /** 生成海报并导出为临时图片 */
   const handleGeneratePoster = () => {
     if (!record || posterGenerating) return
@@ -867,8 +932,10 @@ function RecordDetailPage() {
             const protein = ((item.nutrients?.protein ?? 0) * ratio) / 100
             const carbs = ((item.nutrients?.carbs ?? 0) * ratio) / 100
             const fat = ((item.nutrients?.fat ?? 0) * ratio) / 100
-            const fiber = ((item.nutrients?.fiber ?? 0) * ratio) / 100
-            const sugar = ((item.nutrients?.sugar ?? 0) * ratio) / 100
+            const waterMl = (getRecordItemWaterMl(item) * ratio) / 100
+            const detailRows = getRecordItemNutrientDetailRows(item)
+            const detailKey = `${record.id || 'record'}-${index}`
+            const detailsExpanded = Boolean(expandedNutrientDetails[detailKey])
             return (
               <View key={index} className='food-item'>
                 <View className='food-info'>
@@ -881,9 +948,34 @@ function RecordDetailPage() {
                     <Text className='nutrient-item'>蛋白 {protein.toFixed(1)}g</Text>
                     <Text className='nutrient-item'>碳水 {carbs.toFixed(1)}g</Text>
                     <Text className='nutrient-item'>脂肪 {fat.toFixed(1)}g</Text>
-                    {fiber > 0 && <Text className='nutrient-item'>纤维 {fiber.toFixed(1)}g</Text>}
-                    {sugar > 0 && <Text className='nutrient-item'>糖 {sugar.toFixed(1)}g</Text>}
+                    <Text className='nutrient-item'>含水 {Math.round(waterMl)}ml</Text>
                   </View>
+                  <View
+                    className='food-nutrient-toggle'
+                    onClick={() => toggleNutrientDetails(detailKey)}
+                  >
+                    <Text className='food-nutrient-toggle-text'>
+                      {detailsExpanded ? '收起更多营养' : '展开更多营养'}
+                    </Text>
+                    {detailsExpanded ? (
+                      <IconCollapse size={22} color='#94a3b8' className='food-nutrient-toggle-icon' />
+                    ) : (
+                      <IconExpand size={22} color='#94a3b8' className='food-nutrient-toggle-icon' />
+                    )}
+                  </View>
+                  {detailsExpanded && (
+                    <View className='food-nutrient-detail-grid'>
+                      {detailRows.map((row) => (
+                        <View key={row.key} className='food-nutrient-detail-cell'>
+                          <Text className='food-nutrient-detail-label'>{row.label}</Text>
+                          <Text className='food-nutrient-detail-value'>
+                            {formatNutrientDetailValue(row.value)}
+                            <Text className='food-nutrient-detail-unit'>{row.unit}</Text>
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
                 <View className='food-nutrients'>
                   <Text className='food-calorie'>{Math.round(cal * 10) / 10} kcal</Text>

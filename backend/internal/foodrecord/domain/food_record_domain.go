@@ -91,13 +91,120 @@ func numberFromAny(value any) float64 {
 }
 
 type FoodItemNutrients struct {
-	Calories float64 `json:"calories"`
-	Protein  float64 `json:"protein"`
-	Carbs    float64 `json:"carbs"`
-	Fat      float64 `json:"fat"`
-	Fiber    float64 `json:"fiber"`
-	Sugar    float64 `json:"sugar"`
-	SodiumMg float64 `json:"sodium_mg"`
+	Calories       float64 `json:"calories"`
+	Protein        float64 `json:"protein"`
+	Carbs          float64 `json:"carbs"`
+	Fat            float64 `json:"fat"`
+	Fiber          float64 `json:"fiber"`
+	Sugar          float64 `json:"sugar"`
+	SaturatedFat   float64 `json:"saturatedFat"`
+	CholesterolMg  float64 `json:"cholesterolMg"`
+	SodiumMg       float64 `json:"sodiumMg"`
+	PotassiumMg    float64 `json:"potassiumMg"`
+	CalciumMg      float64 `json:"calciumMg"`
+	IronMg         float64 `json:"ironMg"`
+	MagnesiumMg    float64 `json:"magnesiumMg"`
+	ZincMg         float64 `json:"zincMg"`
+	VitaminARaeMcg float64 `json:"vitaminARaeMcg"`
+	VitaminCMg     float64 `json:"vitaminCMg"`
+	VitaminDMcg    float64 `json:"vitaminDMcg"`
+	VitaminEMg     float64 `json:"vitaminEMg"`
+	VitaminKMcg    float64 `json:"vitaminKMcg"`
+	ThiaminMg      float64 `json:"thiaminMg"`
+	RiboflavinMg   float64 `json:"riboflavinMg"`
+	NiacinMg       float64 `json:"niacinMg"`
+	VitaminB6Mg    float64 `json:"vitaminB6Mg"`
+	FolateMcg      float64 `json:"folateMcg"`
+	VitaminB12Mcg  float64 `json:"vitaminB12Mcg"`
+}
+
+func (n *FoodItemNutrients) UnmarshalJSON(data []byte) error {
+	type Alias FoodItemNutrients
+	aux := struct {
+		*Alias
+		SaturatedFatSnake   *float64 `json:"saturated_fat"`
+		CholesterolMgSnake  *float64 `json:"cholesterol_mg"`
+		SodiumMgSnake       *float64 `json:"sodium_mg"`
+		PotassiumMgSnake    *float64 `json:"potassium_mg"`
+		CalciumMgSnake      *float64 `json:"calcium_mg"`
+		IronMgSnake         *float64 `json:"iron_mg"`
+		MagnesiumMgSnake    *float64 `json:"magnesium_mg"`
+		ZincMgSnake         *float64 `json:"zinc_mg"`
+		VitaminARaeMcgSnake *float64 `json:"vitamin_a_rae_mcg"`
+		VitaminCMgSnake     *float64 `json:"vitamin_c_mg"`
+		VitaminDMcgSnake    *float64 `json:"vitamin_d_mcg"`
+		VitaminEMgSnake     *float64 `json:"vitamin_e_mg"`
+		VitaminKMcgSnake    *float64 `json:"vitamin_k_mcg"`
+		ThiaminMgSnake      *float64 `json:"thiamin_mg"`
+		RiboflavinMgSnake   *float64 `json:"riboflavin_mg"`
+		NiacinMgSnake       *float64 `json:"niacin_mg"`
+		VitaminB6MgSnake    *float64 `json:"vitamin_b6_mg"`
+		FolateMcgSnake      *float64 `json:"folate_mcg"`
+		VitaminB12McgSnake  *float64 `json:"vitamin_b12_mcg"`
+	}{
+		Alias: (*Alias)(n),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.SaturatedFatSnake != nil {
+		n.SaturatedFat = *aux.SaturatedFatSnake
+	}
+	if aux.CholesterolMgSnake != nil {
+		n.CholesterolMg = *aux.CholesterolMgSnake
+	}
+	if aux.SodiumMgSnake != nil {
+		n.SodiumMg = *aux.SodiumMgSnake
+	}
+	if aux.PotassiumMgSnake != nil {
+		n.PotassiumMg = *aux.PotassiumMgSnake
+	}
+	if aux.CalciumMgSnake != nil {
+		n.CalciumMg = *aux.CalciumMgSnake
+	}
+	if aux.IronMgSnake != nil {
+		n.IronMg = *aux.IronMgSnake
+	}
+	if aux.MagnesiumMgSnake != nil {
+		n.MagnesiumMg = *aux.MagnesiumMgSnake
+	}
+	if aux.ZincMgSnake != nil {
+		n.ZincMg = *aux.ZincMgSnake
+	}
+	if aux.VitaminARaeMcgSnake != nil {
+		n.VitaminARaeMcg = *aux.VitaminARaeMcgSnake
+	}
+	if aux.VitaminCMgSnake != nil {
+		n.VitaminCMg = *aux.VitaminCMgSnake
+	}
+	if aux.VitaminDMcgSnake != nil {
+		n.VitaminDMcg = *aux.VitaminDMcgSnake
+	}
+	if aux.VitaminEMgSnake != nil {
+		n.VitaminEMg = *aux.VitaminEMgSnake
+	}
+	if aux.VitaminKMcgSnake != nil {
+		n.VitaminKMcg = *aux.VitaminKMcgSnake
+	}
+	if aux.ThiaminMgSnake != nil {
+		n.ThiaminMg = *aux.ThiaminMgSnake
+	}
+	if aux.RiboflavinMgSnake != nil {
+		n.RiboflavinMg = *aux.RiboflavinMgSnake
+	}
+	if aux.NiacinMgSnake != nil {
+		n.NiacinMg = *aux.NiacinMgSnake
+	}
+	if aux.VitaminB6MgSnake != nil {
+		n.VitaminB6Mg = *aux.VitaminB6MgSnake
+	}
+	if aux.FolateMcgSnake != nil {
+		n.FolateMcg = *aux.FolateMcgSnake
+	}
+	if aux.VitaminB12McgSnake != nil {
+		n.VitaminB12Mcg = *aux.VitaminB12McgSnake
+	}
+	return nil
 }
 
 // FoodNutrition — table: food_nutrition_library (read-only)

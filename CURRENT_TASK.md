@@ -1,3 +1,36 @@
+# 状态：进行中 - nutrition library 批量回填维生素/微量营养素
+
+- 2026-05-12 update:
+  - User 进一步澄清：当前目标不是只给“数据库里没有的食物”补营养，而是先把 `food_nutrition_library` 里已有宏量营养素的食物，补齐维生素和其他微量营养素；如果库里根本没有这个食物，则再用 DeepSeek 生成整条完整营养记录。
+  - 已完成：
+    - 新增批量维护命令 `backend/cmd/nutrition-backfill/main.go`
+      - 默认 dry-run，只统计/预览，不写库。
+      - `--apply` 才会调用 DeepSeek v4-flash 并写回。
+      - `--limit` / `--offset` 支持分批扫描，`--batch-size` 默认设为 `1`，优先保证 DeepSeek 输出 JSON 稳定。
+      - `--include-unresolved` 可顺手把 `food_unresolved_logs` 里的未命中名称转成完整营养条目。
+    - `backend/internal/foodrecord/repo/food_nutrition_repo.go`
+      - 新增“已有食物只补缺失字段”的更新入口，写回时只填 0 字段，不覆盖已有三大营养素。
+      - 新增待回填目标统计/列表查询；目标筛选为“已有宏量营养素，且整组维生素或整组矿物质缺失”，避免胆固醇/维 D/B12 这类天然为 0 的字段导致反复重跑。
+    - `backend/internal/analyze/service/deepseek_nutrition.go`
+      - DeepSeek 营养补全请求补上 `max_tokens`、短重试、响应摘要错误，并改用更稳的 JSON 解析路径。
+      - 支持 DeepSeek 返回 camelCase 或 snake_case 微量营养字段，最终统一写入项目内部 camelCase 字段。
+  - 只读验证：
+    - 实际库按“整组维生素/矿物质缺失”dry-run 统计到 `micronutrient_backfill_total=1739` 条。
+    - 已用 `--apply --limit 5 --batch-size 1` 冒烟跑通，5 条中 4 条成功写回，共补 33 个缺失字段；未覆盖已有宏量营养素。
+  - 现状：
+    - 命令和写回逻辑已就绪。
+    - 如果要全量跑，建议反复执行 `go run ./cmd/nutrition-backfill -config-dir . --apply --limit 100 --batch-size 1`，每轮保持 `offset=0`，直到 dry-run total 接近 0；`offset` 只适合预览/人工跳过当前批次。
+
+- 2026-05-12 follow-up:
+  - User 确认营养素代码本身没有问题，是本地修复曾被远端旧错误覆盖/冲掉，要求提交当前代码并让远端以当前修复为准。
+  - 本轮准备提交并推送当前工作区修复，覆盖远端旧的营养素缺失/详情页零值问题。
+  - 已重新验证：
+    - `go test ./internal/foodrecord/domain -run "TestFoodItemNutrients_UnmarshalMicronutrients|TestFoodItem_UnmarshalJSONWaterMlAliases" -count=1` passed。
+    - `go test ./internal/analyze/service -run "TestDeepSeekNutritionEstimator_EstimateParsesMicronutrients|TestResolveModelConfig" -count=1` passed。
+    - `go build ./cmd/server` passed。
+    - `go build ./cmd/nutrition-backfill` passed。
+    - `npx eslint src/packageExtra/pages/record-detail/index.tsx src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed。
+
 # 当前任务
 
 ## 状态：完成源码修改 - 移除旧记录页入口并统一到首页记录弹窗
@@ -162,6 +195,78 @@
     - `npx eslint src/pages/community/index.tsx src/pages/profile/index.tsx --max-warnings 0` passed。
     - `git diff --check` passed。
     - 已尝试 `mrc where --port 9420` 与 `mrc where --port 3001`；仍提示目标项目窗口未开启自动化服务，未能截图/交互验证。
+## 状态：完成源码修复 - 识别记录详情恢复完整营养素与历史兜底
+
+- 2026-05-12 update:
+  - User 要求：把拍照分析保存后食物明细里营养素显示为 0 / 缺少具体营养素的地方全部修正回来。
+  - Fix applied:
+    - `backend/internal/foodrecord/domain/food_record_domain.go`
+      - `FoodItemNutrients` 扩展到完整营养字段：饱和脂肪、胆固醇、钠、钾、钙、铁、镁、锌、维生素 A/C/D/E/K、B1/B2/B3/B6、叶酸、B12 等。
+      - 增加 snake_case 兼容解析，兼容历史或其它链路里的 `sodium_mg`、`vitamin_c_mg` 等字段。
+    - `backend/internal/foodrecord/service/food_record_service.go`
+      - `Get/List/Share/Update` 返回记录时，如果记录带 `source_task_id` 且 `items[].nutrients` 有缺失或 0，会从对应 `analysis_tasks.result.items[].nutrients` 按食物名/顺序补回缺失字段。
+      - 该兜底只填充当前为 0 的字段，不覆盖用户已经修改过的非 0 营养值。
+    - `src/packageExtra/pages/record-detail/index.tsx/scss`
+      - 识别记录详情页食物明细增加含水量与完整扩展营养素网格展示，不再只显示三宏和 fiber/sugar。
+      - 深色模式同步补齐样式。
+    - `src/packageExtra/pages/result/index.tsx`、`src/utils/api.ts`
+      - 补齐 `sodium_mg` / `waterMl` 类型兼容，避免相关页面继续把别名字段视为不存在。
+  - Verification:
+    - `gofmt` completed.
+    - `go test ./internal/foodrecord/domain -run 'TestFoodItemNutrients_UnmarshalMicronutrients|TestFoodItem_UnmarshalJSONWaterMlAliases' -count=1` passed.
+    - `go test ./internal/foodrecord/service -run '^$' -count=1` passed compile-only.
+    - `go build -o $env:TEMP\food-link-nutrients-record-detail.exe ./cmd/server` passed.
+    - `npx eslint src/packageExtra/pages/record-detail/index.tsx src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed.
+    - `git diff --check` passed for touched files, CRLF warnings only.
+  - Known blockers:
+    - `go test ./internal/foodrecord/service -run 'TestFoodRecordService_hydrateRecord_FillsMissingNutrientsFromSourceTask|TestFoodRecordService_Save|TestFoodRecordService_Update_Items' -count=1` blocked by existing Windows test env: `CGO_ENABLED=0` + `go-sqlite3 requires cgo to work`.
+    - `npx tsc --noEmit --pretty false` still blocked by existing unrelated type errors in expiry / food-library / health-profile-view files; nutrient-related type errors are gone.
+    - `mrc where --port 9420` and `mrc where --port 3001` both failed because WeChat DevTools automation service is not connected, so no runtime screenshot/interaction evidence this round.
+
+## 状态：完成前端优化 - 识别记录详情更多营养默认折叠
+
+- 2026-05-12 update:
+  - User 反馈：识别记录详情的食物明细里完整营养素直接展开太长，希望改成折叠。
+  - Fix applied:
+    - `src/packageExtra/pages/record-detail/index.tsx`
+      - 每条食物的扩展营养素默认收起，只展示食物名、摄入量、热量、蛋白/碳水/脂肪/含水量。
+      - 新增「展开更多营养 / 收起更多营养」切换，逐条食物独立控制展开状态。
+    - `src/packageExtra/pages/record-detail/index.scss`
+      - 补充折叠按钮样式与深色模式颜色。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/record-detail/index.tsx --max-warnings 0` passed.
+    - `git diff --check -- src/packageExtra/pages/record-detail/index.tsx src/packageExtra/pages/record-detail/index.scss` passed with CRLF warnings only.
+  - Runtime verification:
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；本轮仍未能截图/交互验证。
+
+## 状态：完成切回千问 - 移除本地 Gemini 临时测试改动
+
+- 2026-05-12 update:
+  - User 要求：本地 Gemini 测试先暂时去掉，切回千问模型。
+  - Completed:
+    - 已撤销本地临时 Gemini 测试改动，恢复 `backend/internal/analyze/service/analyze_service.go` 与 `backend/internal/analyze/service/analyze_service_test.go` 到远端当前口径。
+    - 当前 `resolveModelConfig()` 中历史 `gemini` / `gemini-flash` / `gemini-vision` / `gemini-3-flash-preview` / `google/gemini-3-flash-preview` 别名继续路由到 `provider=qwen`、`model=qwen-vl-max`。
+    - 显式 `ofox-gemini` / `ofox-gemini-3-flash-preview` 入口仍保留，用于后续需要时测试 Ofox/Gemini。
+  - Runtime note:
+    - 如本地后端正在运行，需要用户手动重启 `npm run dev:backend` 后新路由才会在运行态生效。
+
+## 状态：完成拉取远端最新并恢复本地 Gemini 测试改动
+
+- 2026-05-12 update:
+  - User 要求拉取最新代码。
+  - Completed:
+    - 已先用临时 stash 保护本地未提交的 Gemini 测试改动。
+    - 已 `git fetch origin backend-refactor-sync-migrate-tencent`，远端从 `af8da94` 更新到 `1fdf0c0`。
+    - 已执行 `git pull --ff-only origin backend-refactor-sync-migrate-tencent`，本地快进到 `1fdf0c0 chore: record backend deployment status`。
+    - 已 `git stash pop` 恢复本地 Gemini 测试改动；代码文件自动合并成功，冲突仅在 `CURRENT_TASK.md` 与 `memory/2026-05-12.md`，已保留双方记录并移除冲突标记。
+    - 已删除本次临时 stash，历史 stash 未动。
+  - Verification:
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasUsesOfoxGemini|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go build -o $env:TEMP\food-link-gemini-after-pull.exe ./cmd/server` passed。
+    - `git diff --check -- CURRENT_TASK.md memory/2026-05-12.md backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go` passed。
+  - Current local changes:
+    - `backend/internal/analyze/service/analyze_service.go` 与测试仍保留“`gemini` 别名实际走 Ofox/Gemini”的临时测试改动。
+    - `CURRENT_TASK.md`、`memory/2026-05-12.md` 记录本轮交接。
 
 ## 状态：完成后端镜像构建推送部署
 
@@ -564,6 +669,25 @@
     - `go test ./internal/analyze/service ./internal/app ./internal/worker -run 'Test' -count=1` 中 app/worker 通过，但 `internal/analyze/service` 全量仍被既有 `TestTaskService_ListTasks` 空指针问题阻断。
   - Runtime note:
     - 本轮只改后端配置选择逻辑；按项目规则未擅自重启本地后端服务。需要用户手动重启 Go server 后，本地上传识别才会走新逻辑。
+## 状态：完成源码切换 - 图片分析临时改回 Gemini 测试
+
+- 2026-05-12 update:
+  - User要求：把当前图片分析从 Qwen 改成 Gemini 试一下，方便测试。
+  - 当前前端图片分析页 `src/packageExtra/pages/analyze/index.tsx` 提交 `modelName: 'gemini'`。
+  - Fix applied:
+    - `backend/internal/analyze/service/analyze_service.go`
+      - `resolveModelConfig()` 中 `gemini` / `gemini-flash` / `gemini-vision` / `gemini-3-flash-preview` / `google/gemini-3-flash-preview` 不再临时映射到 Qwen。
+      - 上述别名现在返回 `provider=gemini`、`model=gemini-3-flash-preview`，走 Ofox/Gemini client。
+      - 显式 `qwen` / `qwen-vl-max` 入口仍保留；Gemini 图片调用遇到 transient error 时仍保留 DashScope/Qwen fallback。
+    - `backend/internal/analyze/service/analyze_service_test.go`
+      - 更新 `TestResolveModelConfig` 与 Gemini alias 测试，锁定 `gemini` 会走 Ofox/Gemini。
+  - Verification:
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasUsesOfoxGemini|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed.
+    - `go build -o $env:TEMP\food-link-gemini-test-server.exe ./cmd/server` passed.
+    - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go` passed with CRLF warnings only.
+  - Runtime note:
+    - 后端代码改动；需要重启 `npm run dev:backend` 后本地测试才会生效。
+    - 本轮未改小程序 UI 页面/样式，未做 weapp-devtools 运行态验证。
 
 ## 状态：完成提交、拉取远端并合并 - 积分任务组失败返还
 
@@ -1170,6 +1294,30 @@
     - 未命中营养库时记录 unresolved；若 DeepSeek fallback 可用，则估每 100g 营养并写回营养库，当前 item 标记 `deepseek_text_fallback`。
     - 前端轮询 `/api/analyze/tasks/:task_id` 获取完成结果；保存饮食记录时调用 `/api/food-record/save` 写入 `user_food_records`。
   - 本轮仅阅读和解释代码，未改业务代码，未运行测试。
+## 状态：完成静态判断 - Go 后端 worker 架构调整范围
+
+- 2026-05-12 update:
+  - User询问：当前 Go worker 是否直接从数据库拉任务；如果启动了某个 worker，用户上传的数据是否可能被该 worker 处理；这种设计是否导致没有 worker 时永远等不到分析结果；若改成 Go 进程内队列/协程池大概需要多久。
+  - 静态确认：
+    - 当前 `cmd/server` 只创建 `analysis_tasks(status=pending)` 并返回 `task_id`，不启动内置 worker。
+    - 独立 `cmd/worker` 通过 `TaskRepo.ClaimNextPendingTask()` 使用 `FOR UPDATE SKIP LOCKED` 从数据库领取 `pending` 任务并处理。
+    - 默认任务类型包含 `food / food_text / precision_plan / precision_item_estimate / precision_aggregate / public_food_library_text / exercise / health_report / expiry_recognize / expiry_notification`。
+    - 因此只要有任意连接同一数据库且 task_types 匹配的 worker 在跑，新任务就可能被它处理；如果没有 worker 在跑，异步任务会停留在 `pending`，前端轮询拿不到结果。
+    - 当前 `npm run dev:backend` 仍指向已不存在的 `backend/run_backend.py`，本地开发脚本与 Go server/worker 双入口现状不一致，也会放大“忘开 worker”的问题。
+  - 建议调整：
+    - 短期优先把任务执行器嵌入 Go server：server 启动时创建内存队列/协程池，提交接口创建任务后立即 enqueue，新任务由同进程 goroutine 消费。
+    - 保留数据库 `analysis_tasks` 作为状态表和恢复来源，启动时扫描历史 `pending/processing` 任务补回队列，避免进程重启后任务永久丢失。
+    - 暂时不引入 Redis/RabbitMQ/Kafka；后续出现多实例、丢消息、上百万用户或需要跨 Pod 均衡时，再替换为正式消息队列。
+  - 工期判断：
+    - 只覆盖食物分析主链路并保持接口不变：约 0.5-1 天。
+    - 覆盖当前全部 worker 任务类型、补齐恢复/超时/并发/测试：约 1.5-2 天。
+    - 若再做真正消息队列、监控指标和生产部署编排：约 3-5 天。
+  - 并行开发判断：
+    - 不改 worker 架构时，只要 worker 进程没有启动、配置 task_types 不覆盖、worker 卡死/崩溃或处理能力不足，异步任务就可能无法完成或长时间 pending；已领取后卡住的 `processing` 任务还依赖超时清理/恢复机制。
+    - 其他功能可以并行开发，但应避开异步任务公共链路：`backend/internal/worker/*`、`backend/internal/analyze/service/task_service.go`、`backend/internal/analyze/repo/task_repo.go`、`cmd/server/cmd/worker` 装配、`analysis_tasks` schema/migration、前端分析轮询/任务状态页面。
+    - 如果新功能需要新建/消费 `analysis_tasks`、改积分扣减时机、改任务状态语义或改精准模式链路，应等 worker 架构改完或先和改 worker 的人对齐接口契约。
+    - 与 worker 无直接关系的前端页面、普通 CRUD、统计展示、会员/支付、社区等可在独立分支并行做，最后合并时重点看 shared API 类型和 app wiring 冲突。
+  - 本轮仅静态阅读和判断，未改业务代码，未运行测试。
 
 ## 状态：完成源码微调 - 结果页 ratio-slider-shell 黑色主题改为暗色壳
 
@@ -7749,3 +7897,18 @@
   - `npx eslint src/packageExtra/pages/analyze-history/index.tsx src/utils/api.ts --max-warnings 0` passed.
   - `git diff --check` passed.
   - 已尝试 `mrc where --port 9420` 和 `mrc where --port 3001`，均因微信开发者工具目标窗口未开启自动化服务连接失败，本轮未能截图/交互验证。
+## 状态：完成只读定位 - 保存后的识别记录详情缺少扩展营养素
+
+- 2026-05-12 update:
+  - User 反馈：拍照分析结果本身有具体营养素，但最终生成的「识别记录详情 / 食物明细」里没有很多营养素，截图中单项食物明细还显示蛋白/碳水/脂肪/热量为 0，而营养汇总有值。
+  - Scope:
+    - 本轮按用户要求只分析 bug，不修改业务代码。
+  - Findings:
+    - 分析结果链路会从 `food_nutrition_library` 生成扩展营养字段，`result` 页也有「更多营养」字段定义和保存 payload 承接。
+    - 保存饮食记录时，后端 `SaveFoodRecord` 直接把请求 JSON 绑定到 `domain.FoodItem`；其中 `FoodItemNutrients` 当前只定义 `calories/protein/carbs/fat/fiber/sugar/sodium_mg`，没有钙、铁、镁、锌、维生素等字段，导致扩展营养素在保存到 `user_food_records.items` 前被结构体反序列化丢弃。
+    - `record-detail` 页当前也只展示单项热量、蛋白/碳水/脂肪，以及 fiber/sugar 大于 0 时的两项；没有复用结果页的完整更多营养明细展示。
+    - 截图中「营养汇总」来自 `record.total_*` 顶层字段，而「食物明细」来自 `record.items[].nutrients`，两者数据源不同；因此会出现汇总有值但单项明细为 0 的表现。需要进一步用具体 record id 对比 `analysis_tasks.result.items[].nutrients` 与 `user_food_records.items[].nutrients` 确认该条记录是否已经在保存阶段丢失单项三宏。
+  - Suggested fix direction:
+    - 后端扩展 `FoodItemNutrients`，与前端 `Nutrients` / 分析结果字段保持一致，并补保存/读取回归测试。
+    - `record-detail` 页增加与结果页一致的更多营养明细展示，且不要只在 `>0` 时隐藏全部字段。
+    - 若需要兼容历史已保存记录，可在详情返回或前端展示时对 `items[].nutrients` 为 0 但 `total_*` 有值的单项记录做明确兜底/标记，避免误导用户。

@@ -57,36 +57,11 @@ func (e *DeepSeekNutritionEstimator) Analyze(ctx context.Context, prompt, imageU
 		"temperature":     0.2,
 		"stream":          false,
 	}
-	bodyBytes, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+	content, err := e.chatCompletion(ctx, body)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+e.APIKey)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := e.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("DeepSeek API 错误: %d", resp.StatusCode)
-	}
-	var response struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(respBody, &response); err != nil {
-		return nil, err
-	}
-	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
-		return nil, fmt.Errorf("DeepSeek 返回了空响应")
-	}
-	return parseLLMJSON(response.Choices[0].Message.Content)
+	return parseLLMJSON(content)
 }
 
 func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
@@ -136,41 +111,16 @@ func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []
 		},
 		"response_format": map[string]string{"type": "json_object"},
 		"temperature":     0.2,
+		"max_tokens":      estimateMaxTokens(len(payloadItems)),
 		"stream":          false,
 	}
-	bodyBytes, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+	content, err := e.chatCompletion(ctx, body)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+e.APIKey)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := e.client.Do(req)
+	parsed, err := parseLLMJSON(content)
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("DeepSeek API 错误: %d", resp.StatusCode)
-	}
-	var response struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(respBody, &response); err != nil {
-		return nil, err
-	}
-	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
-		return nil, fmt.Errorf("DeepSeek 返回了空响应")
-	}
-	content := deepSeekFenceRe.ReplaceAllString(response.Choices[0].Message.Content, "")
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &parsed); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("解析 DeepSeek 营养 JSON 失败: %w", err)
 	}
 	rawItems, ok := parsed["items"].([]any)
 	if !ok {
@@ -192,6 +142,86 @@ func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []
 	return out, nil
 }
 
+func (e *DeepSeekNutritionEstimator) chatCompletion(ctx context.Context, body map[string]any) (string, error) {
+	bodyBytes, _ := json.Marshal(body)
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
+		if err != nil {
+			return "", err
+		}
+		req.Header.Set("Authorization", "Bearer "+e.APIKey)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := e.client.Do(req)
+		if err != nil {
+			lastErr = err
+		} else {
+			content, retry, err := readDeepSeekChatContent(resp)
+			if err == nil {
+				return content, nil
+			}
+			lastErr = err
+			if !retry {
+				return "", err
+			}
+		}
+		if attempt < 3 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(time.Duration(attempt) * time.Second):
+			}
+		}
+	}
+	return "", lastErr
+}
+
+func readDeepSeekChatContent(resp *http.Response) (string, bool, error) {
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		err := fmt.Errorf("DeepSeek API 错误: %d body=%s", resp.StatusCode, summarizeDeepSeekBody(respBody))
+		return "", resp.StatusCode >= 500 || resp.StatusCode == http.StatusTooManyRequests, err
+	}
+	var response struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return "", true, fmt.Errorf("解析 DeepSeek API 响应失败: %w body=%s", err, summarizeDeepSeekBody(respBody))
+	}
+	if len(response.Choices) == 0 || strings.TrimSpace(response.Choices[0].Message.Content) == "" {
+		return "", true, fmt.Errorf("DeepSeek 返回了空响应 body=%s", summarizeDeepSeekBody(respBody))
+	}
+	return response.Choices[0].Message.Content, false, nil
+}
+
+func summarizeDeepSeekBody(data []byte) string {
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		return "empty"
+	}
+	runes := []rune(text)
+	if len(runes) > 300 {
+		return string(runes[:300]) + "..."
+	}
+	return text
+}
+
+func estimateMaxTokens(itemCount int) int {
+	if itemCount <= 0 {
+		return 1200
+	}
+	tokens := 1200 + itemCount*700
+	if tokens > 12000 {
+		return 12000
+	}
+	return tokens
+}
+
 func zeroUnitNutritionPer100g() map[string]any {
 	return map[string]any{
 		"calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0, "sugar": 0,
@@ -203,12 +233,45 @@ func zeroUnitNutritionPer100g() map[string]any {
 	}
 }
 
+var nutritionKeyAliases = map[string][]string{
+	"saturatedFat":   {"saturatedFat", "saturated_fat"},
+	"cholesterolMg":  {"cholesterolMg", "cholesterol_mg"},
+	"sodiumMg":       {"sodiumMg", "sodium_mg"},
+	"potassiumMg":    {"potassiumMg", "potassium_mg"},
+	"calciumMg":      {"calciumMg", "calcium_mg"},
+	"ironMg":         {"ironMg", "iron_mg"},
+	"magnesiumMg":    {"magnesiumMg", "magnesium_mg"},
+	"zincMg":         {"zincMg", "zinc_mg"},
+	"vitaminARaeMcg": {"vitaminARaeMcg", "vitamin_a_rae_mcg"},
+	"vitaminCMg":     {"vitaminCMg", "vitamin_c_mg"},
+	"vitaminDMcg":    {"vitaminDMcg", "vitamin_d_mcg"},
+	"vitaminEMg":     {"vitaminEMg", "vitamin_e_mg"},
+	"vitaminKMcg":    {"vitaminKMcg", "vitamin_k_mcg"},
+	"thiaminMg":      {"thiaminMg", "thiamin_mg"},
+	"riboflavinMg":   {"riboflavinMg", "riboflavin_mg"},
+	"niacinMg":       {"niacinMg", "niacin_mg"},
+	"vitaminB6Mg":    {"vitaminB6Mg", "vitamin_b6_mg"},
+	"folateMcg":      {"folateMcg", "folate_mcg"},
+	"vitaminB12Mcg":  {"vitaminB12Mcg", "vitamin_b12_mcg"},
+}
+
 func coerceExtendedNutrients(unit map[string]any) map[string]any {
 	out := zeroUnitNutritionPer100g()
 	for key := range out {
-		out[key] = round4(numberFromAny(unit[key]))
+		out[key] = round4(numberFromAny(nutritionValue(unit, key)))
 	}
 	return out
+}
+
+func nutritionValue(unit map[string]any, key string) any {
+	if aliases, ok := nutritionKeyAliases[key]; ok {
+		for _, alias := range aliases {
+			if value, exists := unit[alias]; exists {
+				return value
+			}
+		}
+	}
+	return unit[key]
 }
 
 func round2(value float64) float64 {

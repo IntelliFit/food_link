@@ -27,6 +27,77 @@ type ResolveResult struct {
 	Score       float64
 }
 
+type nutrientFillColumn struct {
+	UnitKey string
+	Column  string
+	Current func(domain.FoodNutrition) float64
+}
+
+var deepSeekFillOnlyColumns = []nutrientFillColumn{
+	{UnitKey: "fiber", Column: "fiber_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.FiberPer100g }},
+	{UnitKey: "sugar", Column: "sugar_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.SugarPer100g }},
+	{UnitKey: "saturatedFat", Column: "saturated_fat_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.SaturatedFatPer100g }},
+	{UnitKey: "cholesterolMg", Column: "cholesterol_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.CholesterolMgPer100g }},
+	{UnitKey: "sodiumMg", Column: "sodium_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.SodiumMgPer100g }},
+	{UnitKey: "potassiumMg", Column: "potassium_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.PotassiumMgPer100g }},
+	{UnitKey: "calciumMg", Column: "calcium_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.CalciumMgPer100g }},
+	{UnitKey: "ironMg", Column: "iron_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.IronMgPer100g }},
+	{UnitKey: "magnesiumMg", Column: "magnesium_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.MagnesiumMgPer100g }},
+	{UnitKey: "zincMg", Column: "zinc_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.ZincMgPer100g }},
+	{UnitKey: "vitaminARaeMcg", Column: "vitamin_a_rae_mcg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.VitaminARaeMcgPer100g }},
+	{UnitKey: "vitaminCMg", Column: "vitamin_c_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.VitaminCMgPer100g }},
+	{UnitKey: "vitaminDMcg", Column: "vitamin_d_mcg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.VitaminDMcgPer100g }},
+	{UnitKey: "vitaminEMg", Column: "vitamin_e_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.VitaminEMgPer100g }},
+	{UnitKey: "vitaminKMcg", Column: "vitamin_k_mcg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.VitaminKMcgPer100g }},
+	{UnitKey: "thiaminMg", Column: "thiamin_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.ThiaminMgPer100g }},
+	{UnitKey: "riboflavinMg", Column: "riboflavin_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.RiboflavinMgPer100g }},
+	{UnitKey: "niacinMg", Column: "niacin_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.NiacinMgPer100g }},
+	{UnitKey: "vitaminB6Mg", Column: "vitamin_b6_mg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.VitaminB6MgPer100g }},
+	{UnitKey: "folateMcg", Column: "folate_mcg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.FolateMcgPer100g }},
+	{UnitKey: "vitaminB12Mcg", Column: "vitamin_b12_mcg_per_100g", Current: func(f domain.FoodNutrition) float64 { return f.VitaminB12McgPer100g }},
+}
+
+const macroNutritionBackfillWhere = `
+is_active = ?
+AND COALESCE(kcal_per_100g, 0) + COALESCE(protein_per_100g, 0) + COALESCE(carbs_per_100g, 0) + COALESCE(fat_per_100g, 0) > 0
+`
+
+var vitaminBackfillColumns = []string{
+	"vitamin_a_rae_mcg_per_100g",
+	"vitamin_c_mg_per_100g",
+	"vitamin_d_mcg_per_100g",
+	"vitamin_e_mg_per_100g",
+	"vitamin_k_mcg_per_100g",
+	"thiamin_mg_per_100g",
+	"riboflavin_mg_per_100g",
+	"niacin_mg_per_100g",
+	"vitamin_b6_mg_per_100g",
+	"folate_mcg_per_100g",
+	"vitamin_b12_mcg_per_100g",
+}
+
+var mineralBackfillColumns = []string{
+	"sodium_mg_per_100g",
+	"potassium_mg_per_100g",
+	"calcium_mg_per_100g",
+	"iron_mg_per_100g",
+	"magnesium_mg_per_100g",
+	"zinc_mg_per_100g",
+}
+
+func micronutrientBackfillWhere() string {
+	return macroNutritionBackfillWhere +
+		"\nAND ((" + missingColumnGroupCondition(vitaminBackfillColumns) + ") OR (" + missingColumnGroupCondition(mineralBackfillColumns) + "))"
+}
+
+func missingColumnGroupCondition(columns []string) string {
+	parts := make([]string, 0, len(columns))
+	for _, column := range columns {
+		parts = append(parts, fmt.Sprintf("COALESCE(%s, 0)", column))
+	}
+	return strings.Join(parts, " + ") + " <= 0"
+}
+
 func (r *FoodNutritionRepo) ResolveFood(ctx context.Context, name string) (*ResolveResult, error) {
 	raw := strings.TrimSpace(name)
 	if raw == "" {
@@ -245,6 +316,67 @@ func (r *FoodNutritionRepo) UpsertDeepSeekNutrition(ctx context.Context, rawName
 		_ = r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(alias).Error
 	}
 	return food.ID, nil
+}
+
+func (r *FoodNutritionRepo) ListFoodsNeedingVitaminBackfill(ctx context.Context, limit int, offsets ...int) ([]domain.FoodNutrition, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	offset := 0
+	if len(offsets) > 0 && offsets[0] > 0 {
+		offset = offsets[0]
+	}
+	var foods []domain.FoodNutrition
+	err := r.db.WithContext(ctx).
+		Where(micronutrientBackfillWhere(), true).
+		Order("canonical_name ASC, id ASC").
+		Offset(offset).
+		Limit(limit).
+		Find(&foods).Error
+	return foods, err
+}
+
+func (r *FoodNutritionRepo) CountFoodsNeedingVitaminBackfill(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&domain.FoodNutrition{}).
+		Where(micronutrientBackfillWhere(), true).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *FoodNutritionRepo) FillMissingDeepSeekNutrients(ctx context.Context, foodID string, unit map[string]any) ([]string, error) {
+	foodID = strings.TrimSpace(foodID)
+	if foodID == "" || len(unit) == 0 {
+		return nil, nil
+	}
+	var food domain.FoodNutrition
+	if err := r.db.WithContext(ctx).Where("id = ?", foodID).First(&food).Error; err != nil {
+		return nil, err
+	}
+	updates := map[string]any{}
+	filled := make([]string, 0, len(deepSeekFillOnlyColumns))
+	for _, column := range deepSeekFillOnlyColumns {
+		if column.Current(food) > 0 {
+			continue
+		}
+		value := number(unit[column.UnitKey])
+		if value <= 0 {
+			continue
+		}
+		updates[column.Column] = value
+		filled = append(filled, column.Column)
+	}
+	if len(updates) == 0 {
+		return filled, nil
+	}
+	if err := r.db.WithContext(ctx).
+		Model(&domain.FoodNutrition{}).
+		Where("id = ?", foodID).
+		Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	return filled, nil
 }
 
 func number(value any) float64 {

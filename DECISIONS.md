@@ -23,6 +23,12 @@
   - 圈子默认排序应为 `latest`，旧筛选缓存 key 升级时需更换版本号，避免历史 `recommended` 缓存影响用户第一屏。
   - `ScrollView.onScrollToLower` 在微信端不稳定时，必须保留 `onScroll` 近底兜底触发 `loadMoreFeed()`，并给底部加载更多区域提供点击兜底。
   - 后端 feed 分页不能只取 `limit` 条后再做 `offset` 切片；对于 `latest` 这类非自定义排序，repo 查询候选数量至少要是 `offset + limit`，否则第二页必然为空。
+- `2026-05-12`: 食物营养库 DeepSeek 回填分成两条路径：
+  - 已存在于 `food_nutrition_library` 且已有三大营养素的食物，不应当重新生成整条记录，也不应覆盖已有热量/蛋白/碳水/脂肪；只允许补当前为 0 的扩展营养字段（纤维、糖、矿物质、维生素等）。
+  - 批量待处理目标按“整组维生素为空或整组矿物质为空”筛选，而不是任意单字段为 0；因为胆固醇、维 D、B12 等字段对很多食物天然可能为 0，不能据此判定数据缺失。
+  - 不在营养库里的食物，才通过 DeepSeek 生成完整每 100g 营养条目，并用 `deepseek_auto` 来源插入标准库与 alias。
+  - 批量维护命令使用 `backend/cmd/nutrition-backfill`；默认 dry-run，显式 `--apply` 才写库。DeepSeek 批量默认 `--batch-size 1`，优先保证 JSON 稳定。
+  - 全量执行时建议重复运行 `--apply --limit 100 --batch-size 1` 且保持 `offset=0`，让每轮从当前仍缺失的集合继续处理；`offset` 只用于预览或手动跳过当前批次。
 
 - `2026-05-12`: 后端 Docker 部署构建需要显式使用可配置 `GOPROXY`：
   - `backend/Dockerfile` 在 builder 阶段设置 `ARG GOPROXY=https://goproxy.cn,direct` 与 `ENV GOPROXY=${GOPROXY}`。

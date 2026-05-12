@@ -304,6 +304,7 @@ const normalizeItemNutrients = (nutrients: FoodItem['nutrients'] | undefined, wa
   saturatedFat: normalizeNutrientValue(nutrients?.saturatedFat),
   cholesterolMg: normalizeNutrientValue(nutrients?.cholesterolMg),
   sodiumMg: normalizeNutrientValue(nutrients?.sodiumMg),
+  sodium_mg: normalizeNutrientValue(nutrients?.sodiumMg ?? nutrients?.sodium_mg),
   potassiumMg: normalizeNutrientValue(nutrients?.potassiumMg),
   calciumMg: normalizeNutrientValue(nutrients?.calciumMg),
   ironMg: normalizeNutrientValue(nutrients?.ironMg),
@@ -341,6 +342,7 @@ const buildFoodItemNutrients = (item: NutritionItem): Nutrients => ({
   fat: item.fat,
   waterMl: item.waterMl,
   water_ml: item.waterMl,
+  sodium_mg: item.nutrients.sodiumMg || item.nutrients.sodium_mg || 0,
   fiber: item.nutrients.fiber || 0,
   sugar: item.nutrients.sugar || 0
 })
