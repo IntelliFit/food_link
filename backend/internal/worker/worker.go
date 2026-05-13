@@ -3345,6 +3345,7 @@ func analyzeInputFromTask(task *domain.AnalysisTask) analyzeservice.AnalyzeInput
 		ActivityTiming:    stringFromMap(payload, "activity_timing"),
 		ModelName:         stringFromMap(payload, "modelName"),
 		AnalysisEngine:    stringFromMap(payload, "analysis_engine"),
+		IsMultiView:       boolFromAny(payload["is_multi_view"]),
 		PreviousResult:    mapFromAny(payload["previousResult"]),
 		CorrectionItems:   extractItems(payload["correctionItems"]),
 	}

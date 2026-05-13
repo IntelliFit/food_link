@@ -21,6 +21,13 @@ import './index.scss'
 import HeightRuler from '../../../components/HeightRuler'
 import AgePicker from '../../../components/AgePicker'
 import WeightRuler from '../../../components/WeightRuler'
+import RoutineHourPicker, {
+  COMMON_ROUTINE_PRESETS,
+  DEFAULT_ROUTINE_HOURS,
+  formatRoutineHours,
+  parseRoutineHours,
+  type RoutineHours,
+} from '../../../components/RoutineHourPicker'
 
 /** 活动水平选项 */
 const ACTIVITY_OPTIONS = [
@@ -29,14 +36,6 @@ const ACTIVITY_OPTIONS = [
   { label: '中度', desc: '每周 3-5 天运动', value: 'moderate', icon: '🏃' },
   { label: '高度', desc: '每周 6-7 天运动', value: 'active', icon: '💪' },
   { label: '极高', desc: '体力劳动/每天训练', value: 'very_active', icon: '🔥' }
-]
-
-/** 作息选项 */
-const ROUTINE_OPTIONS = [
-  { label: '早睡早起', desc: '通常 22:30 前睡，7:00 前起', value: 'early_bird', icon: '🌅' },
-  { label: '标准作息', desc: '通常 23:00 左右睡，7:00-8:00 起', value: 'regular', icon: '🕰️' },
-  { label: '晚睡晚起', desc: '经常 0 点后睡，起床也偏晚', value: 'night_owl', icon: '🌙' },
-  { label: '不太固定', desc: '轮班、带娃或经常变化', value: 'irregular', icon: '🔁' }
 ]
 
 /** 既往病史选项（无图标） */
@@ -78,7 +77,24 @@ const GOAL_OPTIONS = [
   { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: '💪' }
 ]
 
-const TOTAL_STEPS = 12 // 性别、生日、身高、体重、目标、活动、作息、病史、饮食、过敏、特殊情况、体检报告
+const PROFILE_STEPS = [
+  'gender',
+  'age',
+  'height',
+  'weight',
+  'goal',
+  'activity',
+  'routine',
+  'medical',
+  'diet',
+  'allergy',
+  'notes',
+  'report',
+] as const
+const PROFILE_STEP_WIDTH_RPX = 750
+const TOTAL_STEPS = PROFILE_STEPS.length
+const DEFAULT_HEIGHT_CM = 170
+const DEFAULT_WEIGHT_KG = 60
 
 function HealthProfilePage() {
   const { scheme } = useAppColorScheme()
@@ -93,7 +109,7 @@ function HealthProfilePage() {
   const [weight, setWeight] = useState<string>('')
   const [dietGoal, setDietGoal] = useState<string>('')
   const [activityLevel, setActivityLevel] = useState<string>('')
-  const [routineType, setRoutineType] = useState<string>('')
+  const [routineHours, setRoutineHours] = useState<RoutineHours>(DEFAULT_ROUTINE_HOURS)
   const [medicalHistory, setMedicalHistory] = useState<string[]>([])
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergyList, setAllergyList] = useState<string[]>([])
@@ -135,10 +151,13 @@ function HealthProfilePage() {
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
       if (hc?.allergies?.length) setAllergyList(hc.allergies as string[])
       if (hc?.health_notes) setHealthNotes(hc.health_notes)
-      if (hc?.routine_type) setRoutineType(String(hc.routine_type))
+      if (hc?.routine_type) {
+        setRoutineHours(parseRoutineHours(hc.routine_type))
+      }
     } catch (err: any) {
       await showUnifiedApiError(err, '获取档案失败')
     } finally {
+      setCurrentStep(0)
       setLoading(false)
     }
   }
@@ -299,13 +318,14 @@ function HealthProfilePage() {
     setActivityLevel(value)
   }
 
-  const handleSelectRoutine = (value: string) => {
-    setRoutineType(value)
-  }
-
   const handleSelectDietGoal = (value: string) => {
     setDietGoal(value)
   }
+
+  const effectiveHeight = height ? Number(height) : DEFAULT_HEIGHT_CM
+  const effectiveWeight = weight ? Number(weight) : DEFAULT_WEIGHT_KG
+  const isHeightValid = Number.isFinite(effectiveHeight) && effectiveHeight >= 100 && effectiveHeight <= 250
+  const isWeightValid = Number.isFinite(effectiveWeight) && effectiveWeight >= 30 && effectiveWeight <= 200
 
   const canProceed = () => {
     switch (currentStep) {
@@ -314,15 +334,15 @@ function HealthProfilePage() {
       case 1:
         return !!birthday
       case 2:
-        return !!height && Number(height) >= 100 && Number(height) <= 250
+        return isHeightValid
       case 3:
-        return !!weight && Number(weight) >= 30 && Number(weight) <= 200
+        return isWeightValid
       case 4:
         return !!dietGoal
       case 5:
         return !!activityLevel
       case 6:
-        return !!routineType
+        return Number.isFinite(routineHours.sleepHour) && Number.isFinite(routineHours.wakeHour)
       case 7:
       case 8:
       case 9:
@@ -337,11 +357,12 @@ function HealthProfilePage() {
     // 合并预设病史和选中的自定义病史
     const allMedicalHistory = [...medicalHistory.filter(v => v !== 'none'), ...selectedCustomMedical]
     const allAllergies = [...allergyList.filter(v => v !== 'none'), ...selectedCustomAllergy]
+    const finalRoutine = formatRoutineHours(routineHours)
     const req: HealthProfileUpdateRequest = {
       gender: gender || undefined,
       birthday: birthday || undefined,
-      height: height ? Number(height) : undefined,
-      weight: weight ? Number(weight) : undefined,
+      height: isHeightValid ? effectiveHeight : undefined,
+      weight: isWeightValid ? effectiveWeight : undefined,
       diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
       execution_mode: 'standard',
@@ -349,7 +370,7 @@ function HealthProfilePage() {
       diet_preference: dietPreference.length ? dietPreference : undefined,
       allergies: allAllergies.length ? allAllergies : undefined,
       health_notes: healthNotes || undefined,
-      routine_type: routineType || undefined,
+      routine_type: finalRoutine || undefined,
       report_image_url: reportImageUrl || undefined
     }
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
@@ -437,7 +458,8 @@ function HealthProfilePage() {
         <View
           className='cards-track'
           style={{
-            transform: `translateX(-${currentStep * 750}rpx)`,
+            width: `${TOTAL_STEPS * PROFILE_STEP_WIDTH_RPX}rpx`,
+            transform: `translateX(-${currentStep * PROFILE_STEP_WIDTH_RPX}rpx)`,
             transition: 'transform 0.3s ease-out'
           }}
         >
@@ -500,7 +522,7 @@ function HealthProfilePage() {
             {/* 使用 HeightRuler 替换原有的输入 */}
             <View style={{ width: '100%', marginBottom: '24px' }}>
               <HeightRuler
-                value={height ? Number(height) : 170}
+                value={effectiveHeight}
                 onChange={(val) => setHeight(String(val))}
                 min={100}
                 max={250}
@@ -508,7 +530,7 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${height ? 'ready' : ''}`} onClick={goNext} disabled={!height}>
+              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
@@ -520,15 +542,15 @@ function HealthProfilePage() {
             <Text className='step-card-subtitle'>你的体重是多少？</Text>
             {/* Title is handled inside WeightRuler for better layout */}
             <WeightRuler
-              value={weight ? Number(weight) : 60}
+              value={effectiveWeight}
               onChange={(val) => setWeight(String(val))}
               min={30}
               max={200}
-              height={height ? Number(height) : 170}
+              height={effectiveHeight}
             />
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${weight ? 'ready' : ''}`} onClick={goNext} disabled={!weight}>
+              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
@@ -589,25 +611,15 @@ function HealthProfilePage() {
           {/* Step 6: 作息习惯 */}
           <View className='card step-card'>
             <Text className='step-card-title'>作息习惯</Text>
-            <Text className='step-card-subtitle'>你的日常睡眠和起床时间更接近哪一种？</Text>
-            <View className='option-list'>
-              {ROUTINE_OPTIONS.map((o) => (
-                <View
-                  key={o.value}
-                  className={`option-card with-desc ${routineType === o.value ? 'active' : ''}`}
-                  onClick={() => handleSelectRoutine(o.value)}
-                >
-                  <Text className='option-icon'>{o.icon}</Text>
-                  <View className='option-info'>
-                    <Text className='option-label'>{o.label}</Text>
-                    <Text className='option-desc'>{o.desc}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
+            <Text className='step-card-subtitle'>了解你的作息，让算法更加懂你</Text>
+            <RoutineHourPicker
+              value={routineHours}
+              onChange={setRoutineHours}
+              presets={COMMON_ROUTINE_PRESETS}
+            />
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${routineType ? 'ready' : ''}`} onClick={goNext} disabled={!routineType}>
+              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>

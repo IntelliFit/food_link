@@ -1,3 +1,522 @@
+# 状态：完成源码修改 - 作息选择器去除当前作息摘要
+
+- 2026-05-13 update:
+  - User 要求：去除作息组件里的 `routine-picker-summary`；“睡觉”“起床”两个字放大一点。
+  - Fix applied:
+    - `src/components/RoutineHourPicker/index.tsx`
+      - 移除“当前作息”摘要条 JSX。
+    - `src/components/RoutineHourPicker/index.scss`
+      - 删除 `.routine-picker-summary*` 和 `.routine-summary-part` 样式。
+      - `.routine-wheel-title` 从 `28rpx/38rpx` 放大到 `34rpx/44rpx`。
+  - Verification:
+    - `npx eslint src/components/RoutineHourPicker/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/RoutineHourPicker/index.tsx src/components/RoutineHourPicker/index.scss` passed。
+    - `rg` 确认 `routine-picker-summary/routine-summary-part/当前作息` 无残留。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 作息滚轮对齐年龄选择器样式
+
+- 2026-05-13 update:
+  - User 要求：作息习惯的拨动组件需要和年龄部分保持一致；当前作息“几点睡/几点醒”部分给睡觉和起床添加 emoji 图标；作息习惯说明文案改为“了解你的作息，让算法更加懂你”。
+  - Fix applied:
+    - `src/components/RoutineHourPicker/index.tsx/scss`
+      - 作息滚轮改为接近 `AgePicker` 的透明大字号滚轮：选中项 48px、普通项 32px、隐藏默认 indicator 边线，单位“点”固定浮在滚轮中心旁。
+      - 睡觉和起床保留两个并排小时滚轮，分别绑定 `sleepHour` 和 `wakeHour`。
+      - 当前作息摘要改为两段展示：`😴 HH:00 睡`、`🌤️ HH:00 醒`。
+      - 滚轮标题同步加 emoji：`😴 睡觉`、`🌤️ 起床`。
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 作息步骤副标题改为：`了解你的作息，让算法更加懂你`。
+  - Verification:
+    - `npx eslint src/components/RoutineHourPicker/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/RoutineHourPicker/index.tsx src/components/RoutineHourPicker/index.scss src/packageExtra/pages/health-profile/index.tsx` passed。
+    - 已手动复查 JSX，确认睡觉滚轮使用 `sleepPick/sleepHour`，起床滚轮使用 `wakePick/wakeHour`。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 用户画像非选项题默认可继续
+
+- 2026-05-13 update:
+  - User 要求：用户画像中，除了选项类型外的其他类型都需要默认就能点击下一步。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 身高和体重步骤不再因为用户未手动拨动而禁用“下一步”。
+      - 新增默认身高 `170cm`、默认体重 `60kg` 常量，并统一用于拨动条显示、步骤校验和最终提交。
+      - 保存健康档案时，如果用户没有操作身高/体重拨动条，也会提交当前默认值，避免能跳过但最后保存失败。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/health-profile/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 作息习惯改为入睡/起床小时拨动选择
+
+- 2026-05-13 update:
+  - User 要求：引导页面和健康档案里的作息调整组件不要再用单选/多选框形式，改为两个类似身高选择的拨动选择器，分别选择入睡小时和起床小时；只精确到小时；引导页提供常见作息选项快速填充。
+  - Fix applied:
+    - 新增 `src/components/RoutineHourPicker/index.tsx/scss`
+      - 提供两个小时级 `PickerView`：入睡和起床，范围 0-23 点。
+      - 显示当前作息摘要，如 `23:00 睡，07:00 起`。
+      - 引导页可传入常见作息 presets：早睡早起、标准作息、晚睡晚起、轮班作息，一键填充两个小时。
+      - 保留兼容解析：旧枚举 `early_bird/regular/night_owl/irregular` 和旧文本中可识别的两个小时会转成新小时值。
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 移除作息单选卡片和 emoji 图标。
+      - 作息步骤改用 `RoutineHourPicker` 并展示快速填充选项。
+      - 保存时继续复用 `health_condition.routine_type`，写入格式化文本 `HH:00 睡，HH:00 起`。
+    - `src/packageExtra/pages/health-profile-view/index.tsx/scss`
+      - 健康档案作息编辑弹窗改为同一小时选择器的 compact 形态，不展示预设快捷项。
+      - 作息展示值通过新解析/格式化函数统一显示，旧枚举会被友好转为小时作息。
+      - 清理旧自定义作息输入样式与旧作息单选常量。
+  - Verification:
+    - `npx eslint src/components/RoutineHourPicker/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/RoutineHourPicker/index.tsx src/components/RoutineHourPicker/index.scss src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile/index.scss src/packageExtra/pages/health-profile-view/index.tsx src/packageExtra/pages/health-profile-view/index.scss` passed。
+    - `rg` 确认作息旧单选/旧自定义文本相关标识无残留。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - `npx stylelint ...` 针对相关 scss 仍失败，但报错均为这些页面既有样式规范问题（如旧 `rgba()` 写法、旧 overflow longhand、旧空行规则），新组件样式本身没有报错。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修复 - 健康档案引导页步骤错位与作息 emoji
+
+- 2026-05-13 update:
+  - User 反馈：健康档案用户引导页显示很奇怪，一共 12 个步骤但最后的体检报告像是在第 6 步；第一步性别/基础信息没看到；作息习惯选项里的 emoji icon 需要去除。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 新增 `PROFILE_STEPS`，`TOTAL_STEPS` 改为从步骤数组推导，避免步骤数与页面卡片/进度文案脱节。
+      - 新增 `PROFILE_STEP_WIDTH_RPX`，卡片轨道宽度和位移都由 `TOTAL_STEPS * PROFILE_STEP_WIDTH_RPX` 与 `currentStep * PROFILE_STEP_WIDTH_RPX` 推导，不再依赖硬编码 `9000rpx`。
+      - `loadProfile()` 完成后显式 `setCurrentStep(0)`，保证进入引导页从第 1 步基础信息开始，避免热更新或重进页状态停在中间步骤。
+      - 移除 `ROUTINE_OPTIONS` 中作息选项的 emoji icon 字段，并删除作息选项渲染里的 emoji icon。
+    - `src/packageExtra/pages/health-profile/index.scss`
+      - 移除 `.cards-track` 的硬编码 `width: 9000rpx`，改由 JSX 内联宽度与步骤数同源控制。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile/index.scss` passed。
+    - 已手动检查作息步骤渲染片段，确认作息选项无 emoji icon。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 我的页功能入口图标低饱和配色
+
+- 2026-05-13 update:
+  - User 要求：「我的」部分，从健康档案到关于我们这些按钮，仿照微信给不同按钮图标添加不同颜色；禁止高饱和、花哨配色，并适配当前 UI 风格。
+  - Fix applied:
+    - `src/pages/profile/index.tsx`
+      - 新增功能列表图标 tone 配置：健康档案柔绿、食物保质期米金、公共食物库灰蓝、加入用户群灰紫、隐私设置青绿、关于我们暖灰棕。
+      - 每个 tone 同时配置亮色/暗色模式的前景色与淡色底。
+      - 列表渲染从纯文字色改为 `color + backgroundColor` 的低饱和图标块。
+    - `src/pages/profile/index.scss`
+      - 列表图标尺寸调整为 56rpx，增加 16rpx 圆角与轻微内描边，让淡色底和当前卡片列表风格融合。
+  - Verification:
+    - `npx eslint src/pages/profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/profile/index.tsx src/pages/profile/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 修改食物参数弹层移除饮食目标
+
+- 2026-05-13 update:
+  - User 要求：在“修改食物参数”板块里也去除“饮食目标”。
+  - Fix applied:
+    - `src/pages/index/components/MealRecordEditModal.tsx`
+      - 移除“饮食目标”选项卡片、`DIET_GOAL_OPTIONS`、`dietGoal` state 和保存时的 `diet_goal` 提交。
+      - 保存食物参数时仍保留餐次、运动时机和食物明细编辑；不再通过该弹层修改记录的饮食目标。
+    - 复查 `src/packageExtra/pages/record-detail/index.tsx` 的同名编辑弹层，本来没有饮食目标编辑项，无需修改。
+  - Verification:
+    - `npx eslint src/pages/index/components/MealRecordEditModal.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/MealRecordEditModal.tsx` passed。
+    - `rg` 确认首页与记录详情两个“修改食物参数”弹层中不再存在 `饮食目标/DIET_GOAL_OPTIONS/dietGoal/setDietGoal`。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 健康指数记录门槛与作息自定义
+
+- 2026-05-13 update:
+  - User 要求：
+    - 分析页健康指数板块：新注册/记录不足用户若记录小于 2 天，不显示健康指数，改为提示连续记录两天以上后展示。
+    - 健康档案引导页和健康档案修改页：作息习惯既保留已有预设，也允许用户自定义文本，例如几点睡几点起。
+    - 后端：确认健康指数计算逻辑并记录；把用户档案里的作息习惯作为后端 AI 风险解读 prompt 的一部分。
+  - Fix applied:
+    - `src/pages/stats/index.tsx/scss`
+      - 使用 `recorded_days`（兼容本地 `daily_calories` 推导）作为健康指数展示门槛。
+      - 记录天数小于 2 时隐藏健康指数、关注风险卡片、行动建议和 AI 风险解读入口，展示“连续记录两天后显示健康指数”的提示卡。
+    - `src/packageExtra/pages/health-profile/index.tsx/scss`
+      - 引导页作息步骤新增“自定义作息”，可输入纯文本，提交时写入 `routine_type`。
+      - 加载旧档案时，若 `routine_type` 不是预设值，会自动进入自定义并回填文本。
+    - `src/packageExtra/pages/health-profile-view/index.tsx/scss`
+      - 健康档案修改页作息编辑器新增自定义作息输入，保存时校验非空并写回 `routine_type`。
+      - 健康档案展示继续兼容预设映射和自定义文本。
+    - `src/utils/api.ts`
+      - `StatsSummary` 增加 `recorded_days` 类型。
+      - `ReportExtract` 补 `_image_urls` 类型，消除本轮触碰页面的类型缺口。
+    - `backend/internal/health/handler/health_handler.go`
+      - `/api/stats/summary` 返回 `recorded_days`。
+    - `backend/internal/health/service/stats_service.go`
+      - AI 风险解读 prompt 中作息改为预设中文描述或用户自定义文本。
+      - 作息内容加入洞察缓存 fingerprint，用户修改作息后旧洞察会标记为需刷新。
+    - `docs/health-index-logic.md`
+      - 记录当前健康指数前端计算逻辑、后端数据来源和 AI 风险解读 prompt 组成。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/health/service ./internal/health/handler -run 'TestStats|TestGetStatsSummary|TestGenerateStatsInsight|TestSaveStatsInsight' -count=1` passed（在 `backend/` 目录）。
+    - `git diff --check` passed for touched files。
+    - `npm run typecheck -- --pretty false` 仍失败，但剩余错误都在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 的主题类型、`food-library` 的 `Taro.chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食餐次标签挪到图片角标
+
+- 2026-05-13 update:
+  - User 要求：首页「今日餐食」部分，把当前餐属于早餐/午餐/晚餐/加餐做成小圆角矩形标签放到图片左上角；原来右侧显示餐次的位置改为显示摄入量/摄入比例。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 今日餐食图片区域新增 `meal-media-type-tag`，显示 `早餐/午餐/晚餐/加餐/零食`。
+      - 第二行右侧原 `早餐 xx kcal` 餐次目标位置改为显示 `摄入 xx%`。
+      - 移除第三行营养素后面的摄入比例胶囊，避免重复展示。
+      - 清理不再使用的 `SNACK_MEAL_TYPES` 与餐次进度颜色常量。
+    - `src/pages/index/index.scss`
+      - 新增图片左上角餐次角标样式。
+      - 调整右侧摄入比例文字/图标样式，删除旧餐次目标与旧摄入比例胶囊样式。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/index.tsx src/pages/index/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修复 - 身体趋势页喝水按首页传入日期记录
+
+- 2026-05-13 update:
+  - User 反馈：首页切换到前几天后点击喝水卡片进入身体趋势页，再点快捷加水时，请求 `/api/body-metrics/water` 的 `date/recorded_on` 仍是今天，例如 `2026-05-13`。
+  - Root cause:
+    - 首页 `openBodyTrends('water')` 已把 `selectedDateRef.current` 作为 `?date=` 传入身体趋势页。
+    - 但 `src/packageExtra/pages/body-trends/index.tsx` 中 `handleAddWater()` 硬编码调用 `addBodyWaterLog(amount, today)`，忽略了路由传入日期。
+    - 同页还用 `normalizeRecordDate()` 解析路由日期；该函数会把不在补录窗口内的合法日期（例如用户说的三天前）归一成今天，进一步导致请求体日期回到当天。
+  - Fix applied:
+    - `src/packageExtra/pages/body-trends/index.tsx`
+      - 改为用 `normalizeRouteDate()` 解析路由日期：只校验日期格式和未来日期，合法过去日期原样保留，不再按补录窗口强制回退今天。
+      - `handleAddWater()` 改为 `addBodyWaterLog(amount, selectedRecordDate)`。
+      - 水量概览卡片和快捷加水标题改为显示选中日期（例如 `05月10日喝水`、`为05月10日快捷加水`），并从 `water_daily` 读取该日期的水量/达成率。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/body-trends/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/body-trends/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修复 - app.ts 恢复 extraPkgUrl 导入
+
+- 2026-05-13 update:
+  - User 反馈小程序启动报错：`ReferenceError: extraPkgUrl is not defined at app.ts:12`。
+  - Root cause:
+    - `src/app.ts` 中 `PUBLIC_PAGES` 和邀请页跳转仍在使用 `extraPkgUrl()`，但导入语句被移除，导致 app service 启动阶段直接 ReferenceError。
+  - Fix applied:
+    - `src/app.ts` 恢复 `import { extraPkgUrl } from './utils/subpackage-extra'`。
+  - Verification:
+    - `npx eslint src/app.ts src/pages/index/components/MealRecordPosterModal.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/app.ts src/pages/index/components/MealRecordPosterModal.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食单餐海报绘制前同步获取头像
+
+- 2026-05-13 update:
+  - User 反馈：首页「今日餐食」单餐分享海报底部左侧仍未显示当前用户头像，但「当天饮食记录」分享今日饮食的卡片头像正常。
+  - Root cause:
+    - 首页单餐海报 `MealRecordPosterModal` 在弹窗打开后异步把头像写入 `ownerAvatar` state，但自动生成海报只延迟 100ms，绘制时可能仍拿到空头像。
+    - 当天饮食记录海报是在 `handleGenerateDayRecordPoster()` 内部现场获取并等待用户资料后再绘制，因此能正常显示头像。
+  - Fix applied:
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - 新增 `resolvePosterOwnerProfile()`，绘制前现场获取当前登录用户资料，并合并公开邀请资料；公开资料空字段不会覆盖当前用户头像/昵称。
+      - `handleGeneratePoster()` 的 canvas 查询回调改为 async，在加载头像图片前先等待资料解析完成。
+      - `drawRecordPoster()` 改用本次解析出的 `posterNickname/posterAvatar`，避免依赖尚未更新的 React state。
+      - 当 `record.user_id` 缺失时，回退使用本地 `user_id`，保证首页当前用户单餐分享也能拿到头像。
+  - Verification:
+    - `npx eslint src/pages/index/components/MealRecordPosterModal.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/MealRecordPosterModal.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成三次修复 - 首页日期选择即时持久化供喝水使用
+
+- 2026-05-13 update:
+  - User 提供实际请求体：11 号点击饮水，请求 `/api/body-metrics/water` 仍为 `amount_ml:250,date:"2026-05-13",recorded_on:"2026-05-13"`，证明问题在前端传出日期仍是今天。
+  - Root cause analysis:
+    - `selectedDateRef.current = selectedDate` 放在组件 render 主体里，可能在点击日期后又被旧 `selectedDate` 覆盖回今天。
+    - 喝水弹窗依赖 `selectedDateRef/current state`，而不是日期选择组件点击瞬间的日期事实。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 新增 `HOME_SELECTED_DATE_KEY`、`saveLastHomeSelectedDate()`、`getLastHomeSelectedDate()`。
+      - 初始 `selectedDate`/`waterEditorDate` 从最后一次首页点击日期恢复。
+      - 删除 render 主体里每次渲染都执行的 `selectedDateRef.current = selectedDate`，改为只有 `commitSelectedDate()` 能更新 ref/state/storage。
+      - `handleDateSelect()` 改为调用 `commitSelectedDate()`，后台同步和本地缓存也用提交后的日期。
+      - `openWaterEditor()` 从最后一次首页点击日期读取目标日期，避免拿到今天。
+    - `src/pages/index/components/DateSelector.tsx`
+      - 日期项点击瞬间就把 `cell.date` 写入 `home_selected_date_v1`，再调用父组件 `onSelect()`，确保喝水入口有最早、最真实的日期来源。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/pages/index/components/DateSelector.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/health/handler -run 'TestSaveBodyWaterLogUsesDateFromBody|TestResetBodyWaterLogsUsesDateFromBody' -count=1` passed（在 `backend/` 目录）。
+    - `git diff --check -- src/pages/index/index.tsx src/pages/index/components/DateSelector.tsx src/utils/api.ts backend/internal/health/handler/health_handler_test.go` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；仍未能截图/交互验证。
+
+# 状态：完成二次修复 - 首页喝水弹窗固定选中日期快照
+
+- 2026-05-13 update:
+  - User 反馈：重启前后端后，选中某一天记录喝水仍写到了今天，前一版修复未成功。
+  - Root cause analysis:
+    - 按 `jinhui-stack-debug` 依赖链复查：后端 handler/service 已支持 `date/recorded_on`，API 封装也能传日期；问题更像前端状态依赖。
+    - 首页喝水弹窗打开后，快捷按钮和自定义保存仍可能依赖外层 `selectedDate`/ref 的实时值；如果切日、弹层、异步状态刷新交错，可能拿到今天或旧值。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 新增 `waterEditorDate`，在 `openWaterEditor()` 时立刻把当前选中日期固化为弹窗日期快照。
+      - `handleDateSelect()` 中同步更新 `selectedDateRef.current = date`，避免 setState 异步期间 ref 仍是旧日期。
+      - 快捷水量按钮、自定义水量保存、清空喝水记录全部显式使用 `waterEditorDate`，不再依赖外层实时日期。
+      - 喝水弹窗文案改为显示 `{waterEditorDate} 已喝 xxx ml`，并且弹窗内统计也按 `waterEditorDate` 读取，便于运行时直接确认当前记录目标日期。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/health/handler -run 'TestSaveBodyWaterLogUsesDateFromBody|TestResetBodyWaterLogsUsesDateFromBody' -count=1` passed（在 `backend/` 目录）。
+    - `git diff --check -- src/pages/index/index.tsx src/utils/api.ts backend/internal/health/handler/health_handler_test.go` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；仍未能截图/交互验证。
+
+# 状态：完成源码修改 - 当天饮食记录食物宏量标签与摄入比例颜色调整
+
+- 2026-05-13 update:
+  - User 要求：「当天饮食记录」板块里每个成分的蛋白质/碳水/脂肪文字改成和风险卡片一样的正常前景色；后面的数字和单位继续保留彩色；摄入百分比去掉「摄入」两个字，并改成和左侧重量一样的灰色。
+  - Fix applied:
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 宏量营养行拆成 label 与 value：`蛋白质/碳水/脂肪` 用普通前景色，`xxg` 数字与单位继续使用各自彩色。
+      - 摄入比例文案从 `摄入 xx%` 改为只显示 `xx%`。
+    - `src/packageExtra/pages/day-record/index.scss`
+      - `.day-record-food-macro-label` 使用正常前景色。
+      - `.day-record-food-macro-value` 保留蛋白/碳水/脂肪原有彩色。
+      - `.day-record-food-ratio` 改为和重量 badge 一致的灰色文字与浅灰底。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/day-record/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+  - Note:
+    - 本轮发现工作区另有 `src/app.ts` 未提交异常改动（import 路径被改成包含中文句子的路径），不是本轮修改内容；未回退。
+
+# 状态：完成源码修改 - 分享海报底部用户头像兜底修复
+
+- 2026-05-13 update:
+  - User 反馈：当前页面分享卡片左下角没有正确加载当前用户头像，要求可从「我的」页或缓存中找头像并修复海报渲染。
+  - Fix applied:
+    - 新增 `src/utils/poster-profile.ts`
+      - 统一读取本地 `userInfo`，兼容 `name/nickname/nickName` 与 `avatar/avatarUrl/avatar_url`。
+      - 当前登录用户场景会调用 `/api/user/profile` 获取最新头像和昵称，并回写 `userInfo` 缓存。
+      - 提供 `mergePosterUserProfile()`，避免公开邀请资料接口返回空昵称/空头像时覆盖本地/当前用户资料。
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - 首页单餐分享海报先用本地/当前用户资料兜底，再和 `getFriendInviteProfile()` 结果合并；远端空字段不再覆盖头像。
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 当天饮食海报使用同一头像/昵称兜底逻辑。
+    - `src/packageExtra/pages/record-detail/index.tsx`
+      - 识别记录详情分享海报使用同一头像/昵称兜底逻辑；先展示当前用户资料，再合并公开邀请资料。
+    - `src/pages/profile/index.tsx`
+      - 「我的」页成功拉取用户资料后同步写入 `userInfo` 缓存，让海报可以稳定复用当前头像。
+  - Verification:
+    - `npx eslint src/utils/poster-profile.ts src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/record-detail/index.tsx src/pages/profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/utils/poster-profile.ts src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/record-detail/index.tsx src/pages/profile/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 食物识别多图一次模型请求且按单次计积分
+
+- 2026-05-13 update:
+  - User 要求：食物识别用户输入多张图片时，后端必须使用一次大模型请求；无论是否开启多视角模型，前后端最多 3 张图片；传入多张图时消耗积分逻辑和 1 张图一样。
+  - Fix applied:
+    - `backend/internal/analyze/service/task_service.go`
+      - 新增食物识别图片上限 `maxFoodAnalyzeImages = 3`，`SubmitAnalyzeTask()` 归一化/去重后超过 3 张直接返回 400。
+      - `creditUnitsForInput()` 固定返回 1，多图标准模式仍按 2 积分/次、精准模式仍按 4 积分/次，不再按图片数倍增。
+      - 归一化提交图片时把 `image_url` 和 `image_urls` 合并去重，确保多图任务的 `ImagePaths` 保留完整输入。
+    - `backend/internal/analyze/service/analyze_service.go`
+      - 标准图片识别 `Analyze()` 改为收集去重后的图片列表，并通过 `analyzeWithImagesTemperature()` 一次性传给支持多图的 LLM client。
+      - `/api/analyze/batch` 的同步 batch 入口也收口为一次多图模型请求，并统一最多 3 张。
+      - prompt 增加多图提示：多图作为同一次饮食输入汇总；开启多视角时强调同一餐食/同一组食物的多角度综合估算，不重复计算同一食物。
+    - `backend/internal/worker/worker.go`
+      - worker 从任务 payload 恢复 `is_multi_view`，让多图 prompt 能识别前端开关状态。
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 图片选择、提交前校验、添加按钮、占位提示统一最多 3 张。
+      - 前端积分预估固定按 1 次识别计算，不再用图片数作为 units。
+      - 多视角文案改为“多张图片始终作为一次识别提交”，避免继续表达为分别识别后累加。
+  - Verification:
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/analyze/service ./internal/worker -count=1` passed。
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- backend/internal/analyze/service/task_service.go backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/task_service_test.go backend/internal/analyze/service/analyze_service_test.go backend/internal/worker/worker.go src/packageExtra/pages/analyze/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页喝水记录按选中日期写入
+
+- 2026-05-13 update:
+  - User 反馈：首页选中 11 号记录饮水量时，后端实际记录到了 13 号当天；要求喝水记录时把首页点击的日期也作为参数传到后端并正确记录。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - `addWaterAmount()` 增加 `targetDate` 快照参数，默认取 `selectedDateRef.current || selectedDate`，避免异步/弹层操作读到当天或旧 state。
+      - 快捷水量与自定义水量保存都使用首页当前选中日期快照写入本地和后端。
+      - 清空喝水记录也使用同一日期快照，避免清错当天记录。
+    - `src/utils/api.ts`
+      - `addBodyWaterLog()` 与 `resetBodyWaterLogs()` 统一先将日期映射为 API 日期。
+      - 请求体同时发送 `date` 与 `recorded_on`，确保后端按首页选中日期记录，并兼容后端两个字段口径。
+    - `backend/internal/health/handler/health_handler_test.go`
+      - 增加 handler 定向测试，确认请求体同时有 `date`/`recorded_on` 时优先使用 `date`，不会落到当天。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/health/handler -run 'TestSaveBodyWaterLogUsesDateFromBody|TestResetBodyWaterLogsUsesDateFromBody' -count=1` passed（在 `backend/` 目录）。
+    - `git diff --check -- src/pages/index/index.tsx src/utils/api.ts backend/internal/health/handler/health_handler_test.go` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 圈子评论发送成功后收起输入框
+
+- 2026-05-13 update:
+  - User 要求：圈子评论成功发送后，输入框需要消失，效果等同输入框出现时点击其它空白区域。
+  - Fix applied:
+    - `src/pages/community/index.tsx`
+      - 新增 `commentContentRef` 与 `expandedCommentRecordIdRef` 跟踪评论输入框当前内容和目标动态，避免异步提交成功后误关用户新打开/新输入的评论框。
+      - 评论提交请求成功并替换乐观评论后，如果当前仍停留在同一条动态且输入内容为空，则关闭评论输入栏、取消聚焦并清空回复目标。
+      - 成功收起时不调用草稿保存逻辑，避免已发送内容被重新写入 `comment_draft_*`。
+  - Verification:
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/community/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 当天饮食记录食物显示摄入比例
+
+- 2026-05-13 update:
+  - User 要求：「当天饮食记录」里每个记录的不同食物需要渲染用户记录的摄入比例。
+  - Fix applied:
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 每个 food item 生成 `intakeRatio`，优先使用已记录 `ratio`，缺失时沿用 `intake/weight` 推导和默认 100% 的兼容逻辑。
+      - 当天记录卡片的每个食物名称旁新增「摄入 xx%」显示；超过 100% 时加警示样式。
+    - `src/packageExtra/pages/day-record/index.scss`
+      - 新增 `day-record-food-ratio` 胶囊样式和超过 100% 的警示态。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/day-record/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食移除数量徽章
+
+- 2026-05-13 update:
+  - User 要求：首页「今日餐食」部分去掉 `meal-count-badge`，即不再显示记录“几次/几条”的数量提示。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 移除今日餐食卡片标题行里的 `meal-count-badge` 渲染逻辑，不再显示 `N次`。
+      - 同步移除食物缩略图上的“共 N 张”角标，避免今日餐食继续暴露图片/记录数量。
+    - `src/pages/index/index.scss`
+      - 删除 `meal-count-badge`、`meal-count-badge-text`、`meal-thumb-badge`、`meal-thumb-badge-text` 未使用样式。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/index.tsx src/pages/index/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 今日餐食分享海报恢复底部头像并调整比例位置
+
+- 2026-05-13 update:
+  - User 要求：今日餐食分享卡片最下侧左侧恢复用户头像；摄入百分比不要再放在右侧信息里，移动到当前食物名称右侧括号内，字号稍小并使用灰色。
+  - Fix applied:
+    - `src/utils/poster.ts`
+      - `drawRecordPoster()` 食物列表中，右侧信息恢复为 `g · kcal`；摄入比例改为食物名右侧小号灰色 `（xx%）`。
+      - 底部 footer 固定保留左侧头像位置；头像图片加载失败时绘制圆形首字占位，避免头像位消失。
+      - 同步调整 `drawDayRecordPoster()`：当天饮食海报餐食名称右侧显示小号灰色 `（xx%）`，右侧恢复只显示 kcal；底部也固定保留头像位。
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - 读取本地 `userInfo` 作为昵称/头像兜底，再用 `getFriendInviteProfile()` 返回值覆盖，提升首页今日餐食单餐海报头像显示稳定性。
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 当天饮食海报用户资料读取也增加本地 `userInfo` 兜底。
+  - Verification:
+    - `npx eslint src/utils/poster.ts src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食多记录次数徽标恢复
+
+- 2026-05-13 update:
+  - User 要求：首页今日餐食中同一餐次有多条记录时，和之前一样在右上角时间左边显示当前记录了多少次，圆角矩形主题色背景。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 每个餐次卡片根据 `meal.meal_record_entries` 计算有效记录数。
+      - 当记录数大于 1 时，在时间胶囊左侧渲染 `{n}次` 徽标。
+    - `src/pages/index/index.scss`
+      - 新增 `.meal-count-badge` / `.meal-count-badge-text`，使用主题绿背景、圆角矩形、白色加粗数字文本。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/index.tsx src/pages/index/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 当日饮食分享按钮对齐单餐海报并显示摄入比例
+
+- 2026-05-13 update:
+  - User 要求：将「分享今日餐食/饮食」部分的分享按钮权限访问和生成卡片逻辑改为和首页今日餐食点击后「生成分享海报」逻辑完全相同，并且两个海报都要显示不同成分的摄入比例。
+  - Fix applied:
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 当天记录页「分享今日饮食」按钮不再先打开自定义预览弹层；改为生成 JPG 海报后直接调用 `Taro.showShareImageMenu()`，成功/取消/失败后都按单餐海报逻辑清理海报状态。
+      - 生成海报时为每条记录计算聚合 `intakeRatio`，兼容旧数据：优先用 `ratio`，缺失时用 `intake/weight`，再缺失则按 100%。
+    - `src/utils/poster.ts`
+      - `drawRecordPoster()` 的食物明细行增加「摄入xx%」，并兼容旧 item 缺少 `ratio` 时用 `intake/weight` 或 100% 兜底。
+      - `DayRecordPosterMeal` 增加 `intakeRatio`，`drawDayRecordPoster()` 的餐食行右侧显示 `kcal · 摄入xx%`。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 图片分析页删除饮食目标板块
+
+- 2026-05-13 update:
+  - User 要求删除图片分析板块里的「饮食目标」部分。
+  - Fix applied:
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 删除图片分析页「饮食目标」选项 UI。
+      - 删除 `DietGoal` 类型导入、`DIET_GOAL_OPTIONS`、`dietGoal` state、`handleDietGoalSelect()` 和从健康档案/本地缓存初始化饮食目标的逻辑。
+      - 图片分析提交继续兼容后端字段，固定传 `diet_goal: 'none'`。
+      - 提交时移除旧 `analyzeDietGoal` 缓存，避免结果页沿用历史选择。
+    - `src/packageExtra/pages/analyze/index.scss`
+      - 更新状态区域注释为运动时机。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/analyze/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页低能量补录提示去日期并增加取消确认
+
+- 2026-05-13 update:
+  - User 要求：首页检测到当日能量过低的补录提示去除日期；在「去补录」右侧增加「取消」按钮；点击取消时弹对话框提醒用户。同时查看数据库如何存储当天能量/食量视图。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 删除补录提示第二行日期渲染和 `formatBackfillDateLabel()`。
+      - 将补录入口收敛为独立「去补录」按钮，点击仍打开首页 `RecordMenu`。
+      - 新增「取消」按钮，点击先 `Taro.showModal()` 提醒；用户确认后把当前选中日期写入本地 `home_backfill_hint_dismissed_dates_v1`，该日期的低能量补录提醒不再显示。
+    - `src/pages/index/index.scss`
+      - 调整补录提示布局为文案 + 双按钮，移除日期样式，补齐「取消」按钮样式。
+  - Database finding:
+    - 当前没有独立的“某天食量/能量日报表”存储每日能量视图。
+    - 每餐/每次识别保存到 `user_food_records`，其中 `total_calories/total_protein/total_carbs/total_fat/items/record_time` 是饮食记录的事实来源。
+    - 首页 `/api/home/dashboard` 通过 `HomeRepo.ListFoodRecordsByDate()` 按中国自然日的 `record_time >= start && record_time < end` 查询 `user_food_records`，再在 `DashboardService.HomeDashboard()` 中按当天记录聚合总热量和三大营养素。
+    - 日期型日志表存在于其它指标：`user_water_logs.recorded_on`、`user_exercise_logs.recorded_on`、`user_weight_records.recorded_on`。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食与识别记录详情显示摄入比例
+
+- 2026-05-12 update:
+  - User 要求确认首页「今日餐食」营养成分是否在数据库和后端返回，并确认/补齐用户输入的摄入比例记录与展示；重点页面为首页今日餐食、识别记录详情。
+  - Findings:
+    - 数据库 `user_food_records.items` 已保存每个食物 item 的 `ratio/intake/nutrients`。只读抽样查 2026-05-12：22 条记录、62 个 item，62 个均包含 `ratio`、`intake`、`nutrients`。
+    - 后端 `/api/home/dashboard` 已返回餐次聚合热量、蛋白、碳水、脂肪、含水量，但此前没有返回餐次/记录摄入比例。
+    - 识别记录详情页实际已用 `item.ratio` 参与单项营养换算，但 100% 时不显式展示比例；首页今日餐食也没有比例 UI。
+  - Fix applied:
+    - `backend/internal/foodrecord/domain/food_record_domain.go`
+      - 读取旧 `user_food_records.items` JSON 时，若 item 缺少 `ratio`，优先用 `intake/weight` 推导；若 `ratio/intake` 都缺失但有 `weight`，默认按 100% 摄入并补 `intake=weight`。
+      - 显式保存的 `ratio:0` 仍保留为 0，不被默认值覆盖。
+    - `backend/internal/home/service/dashboard_service.go`
+      - 首页 dashboard 的每个 meal 返回 `intake_ratio`，按该餐所有 items 的 `sum(intake)/sum(weight)*100` 汇总。
+      - `meal_record_entries[]` 直接返回 `total_protein/total_carbs/total_fat/water_ml/intake_ratio`，不再依赖前端从 `full_record` 缓存里猜。
+      - 兼容旧 item 缺少 `ratio/intake` 的情况：餐次比例和含水量按整份 100% 计算。
+    - `backend/internal/home/handler/dashboard_handler_test.go`
+      - 增加 dashboard 返回 entry 营养字段、含水量和摄入比例的断言。
+    - `src/utils/api.ts`
+      - `HomeMealItem` 与 `HomeMealRecordEntry` 增加 `intake_ratio/intakeRatio`，entry 增加三大营养素和含水量字段。
+    - `src/pages/index/index.tsx`
+      - 首页今日餐食卡片在三大营养素/含水量之后显示「摄入 xx%」。
+    - `src/pages/index/components/MealRecordsDialog.tsx`
+      - 同餐多记录选择弹层直接使用 entry 返回的三大营养素，并显示每条记录的「摄入 xx%」。
+    - `src/packageExtra/pages/record-detail/index.tsx/scss`
+      - 每个食物明细显式显示「摄入比例 xx%」，包括 100%；超过 100% 使用警示样式；深色模式同步补齐。
+      - 前端详情页对旧缓存/旧接口数据也做兜底：缺 `ratio` 时用 `intake/weight` 推导，否则默认 100%。
+    - `src/utils/api.ts`
+      - 首页 dashboard normalize 阶段从 `full_record.items` 兜底推导 entry/meal `intake_ratio`，兼容本地旧缓存或旧网关响应。
+  - Verification:
+    - `go test ./internal/foodrecord/domain ./internal/foodrecord/repo ./internal/foodrecord/handler ./internal/foodrecord/service ./internal/home/... -run 'Test' -count=1` passed；顺手修正了两处旧 repo/service 测试断言，使其匹配当前完整营养字段和 source task 测试数据。
+    - `npx eslint src/pages/index/index.tsx src/pages/index/components/MealRecordsDialog.tsx src/packageExtra/pages/record-detail/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `git diff --check` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；本轮未能截图/交互验证。
+  - Note:
+    - `src/pages/index/index.scss` 在本轮开始前已有未提交改动；本轮只在同文件追加比例 pill 样式，未回退既有改动。
+
 # 状态：进行中 - nutrition library 批量回填维生素/微量营养素
 
 - 2026-05-12 update:

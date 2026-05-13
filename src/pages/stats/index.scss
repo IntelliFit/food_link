@@ -97,6 +97,53 @@ $stats-blue-soft: #7aa9ce;
   color: #fff;
 }
 
+.health-index-gate-card {
+  margin: 28rpx 32rpx 0;
+  padding: 36rpx 32rpx;
+  display: flex;
+  align-items: flex-start;
+  gap: 24rpx;
+  background: #fff;
+  border: 1rpx solid rgb(92 184 150 / 16%);
+}
+
+.health-index-gate-icon {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 20rpx;
+  background: rgb(92 158 212 / 12%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.health-index-gate-icon-text {
+  font-size: 38rpx;
+  color: $stats-macro-protein;
+}
+
+.health-index-gate-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.health-index-gate-title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1f2937;
+  line-height: 1.35;
+  margin-bottom: 12rpx;
+}
+
+.health-index-gate-desc {
+  display: block;
+  font-size: 26rpx;
+  color: #64748b;
+  line-height: 1.55;
+}
+
 // 页面头部已移除
 
 // 日期选择器 - 首页风格

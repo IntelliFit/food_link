@@ -31,7 +31,10 @@ type TaskService struct {
 	taskQueue   taskqueue.Publisher
 }
 
-const waitingRecordBadgeWindow = 24 * time.Hour
+const (
+	waitingRecordBadgeWindow = 24 * time.Hour
+	maxFoodAnalyzeImages     = 3
+)
 
 func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *authrepo.UserRepo, storageClient ...*storage.Client) *TaskService {
 	var client *storage.Client
@@ -88,6 +91,9 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	s.normalizeSubmitImages(&input)
 	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
 		return "", &errors.AppError{Code: 10002, Message: "image_url 或 image_urls 不能为空", HTTPStatus: 400}
+	}
+	if imageCountForLog(input.ImageURL, input.ImageURLs) > maxFoodAnalyzeImages {
+		return "", &errors.AppError{Code: 10002, Message: "最多支持 3 张图片", HTTPStatus: 400}
 	}
 
 	recordedOn, err := dateutil.ResolveRecordedOnDate(input.Date, "date")
@@ -387,12 +393,6 @@ func creditGroupIDFromTask(task *domain.AnalysisTask) string {
 }
 
 func creditUnitsForInput(input SubmitTaskInput) int {
-	if len(input.ImageURLs) > 0 {
-		return len(input.ImageURLs)
-	}
-	if strings.TrimSpace(input.ImageURL) != "" {
-		return 1
-	}
 	return 1
 }
 
@@ -929,29 +929,43 @@ func (s *TaskService) normalizeSubmitImages(input *SubmitTaskInput) {
 	if input == nil {
 		return
 	}
-	input.ImageURL = s.resolveFoodImageURL(input.ImageURL)
+	originalHasImageURLs := len(input.ImageURLs) > 0
+	resolvedPrimary := s.resolveFoodImageURL(input.ImageURL)
+	resolvedURLs := input.ImageURLs
 	if s.storage != nil {
-		input.ImageURLs = s.storage.ResolveReferenceURLs("food-images", input.ImageURLs)
-		return
+		resolvedURLs = s.storage.ResolveReferenceURLs("food-images", input.ImageURLs)
 	}
-	normalized := make([]string, 0, len(input.ImageURLs))
-	seen := make(map[string]struct{}, len(input.ImageURLs))
-	for _, value := range input.ImageURLs {
+	normalized := make([]string, 0, len(resolvedURLs)+1)
+	seen := make(map[string]struct{}, len(resolvedURLs)+1)
+	add := func(value string) {
 		value = strings.TrimSpace(value)
 		if value == "" {
-			continue
+			return
 		}
 		if _, ok := seen[value]; ok {
-			continue
+			return
 		}
 		seen[value] = struct{}{}
 		normalized = append(normalized, value)
 	}
+	add(resolvedPrimary)
+	for _, value := range resolvedURLs {
+		if s.storage == nil {
+			value = s.resolveFoodImageURL(value)
+		}
+		add(value)
+	}
 	if len(normalized) == 0 {
+		input.ImageURL = ""
 		input.ImageURLs = nil
 		return
 	}
-	input.ImageURLs = normalized
+	input.ImageURL = normalized[0]
+	if originalHasImageURLs || len(normalized) > 1 {
+		input.ImageURLs = normalized
+	} else {
+		input.ImageURLs = nil
+	}
 }
 
 func filterAnalyzeHistoryTasks(tasks []domain.AnalysisTask) []domain.AnalysisTask {

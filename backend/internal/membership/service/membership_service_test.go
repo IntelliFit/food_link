@@ -249,7 +249,7 @@ func TestMembershipService_GetMyMembership_NoMembershipTrial(t *testing.T) {
 		usedByDate: map[string]int{today: 3},
 	})
 
-	data, err := svc.GetMyMembership(context.Background(), "u1")
+	data, err := svc.GetMyMembership(context.Background(), "u1", "")
 	require.NoError(t, err)
 	assert.Equal(t, "inactive", data["status"])
 	assert.Equal(t, trialDailyCredits, data["daily_credits_max"])
@@ -266,7 +266,7 @@ func TestMembershipService_GetMyMembership_EarlyTop500TrialMeta(t *testing.T) {
 		earlyUserRank: 42,
 	})
 
-	data, err := svc.GetMyMembership(context.Background(), "u1")
+	data, err := svc.GetMyMembership(context.Background(), "u1", "")
 	require.NoError(t, err)
 	assert.Equal(t, trialDailyCredits, data["daily_credits_max"])
 	assert.Equal(t, 7, data["system_credits_remaining"])
@@ -303,7 +303,7 @@ func TestMembershipService_GetMyMembership_EarlyPaidDoublesPlanCreditsAndBonusBr
 		shareBonusCredits:  2,
 	})
 
-	data, err := svc.GetMyMembership(context.Background(), "u1")
+	data, err := svc.GetMyMembership(context.Background(), "u1", "")
 	require.NoError(t, err)
 	assert.Equal(t, 80, data["daily_credits_max"])
 	assert.Equal(t, 75, data["system_credits_remaining"])
@@ -437,7 +437,7 @@ func TestMembershipService_GetMyMembershipMaterializesLegacyInviteAndShareReward
 	}
 	svc := NewMembershipService(repo)
 
-	data, err := svc.GetMyMembership(context.Background(), "u1")
+	data, err := svc.GetMyMembership(context.Background(), "u1", "")
 	require.NoError(t, err)
 	assert.Equal(t, 6, data["earned_credits_balance"])
 	assert.Equal(t, 14, data["total_credits_available"])
@@ -506,7 +506,7 @@ func TestMembershipService_GetMyMembership_ManualUpgradeKeepsHigherTierOnReconci
 	}
 	svc := NewMembershipService(mockRepo)
 
-	data, err := svc.GetMyMembership(context.Background(), "cafa4614-9453-4eb0-bf60-51f442ce0f4a")
+	data, err := svc.GetMyMembership(context.Background(), "cafa4614-9453-4eb0-bf60-51f442ce0f4a", "")
 	require.NoError(t, err)
 	assert.Equal(t, advanced, *mockRepo.membership.CurrentPlanCode)
 	assert.Equal(t, 200, mockRepo.membership.DailyCredits)

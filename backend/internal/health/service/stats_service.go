@@ -63,6 +63,7 @@ type StatsSummary struct {
 	EndDate                      string              `json:"end_date"`
 	TDEE                         int                 `json:"tdee"`
 	StreakDays                   int                 `json:"streak_days"`
+	RecordedDays                 int                 `json:"recorded_days"`
 	TotalCalories                float64             `json:"total_calories"`
 	AvgCaloriesPerDay            float64             `json:"avg_calories_per_day"`
 	CalSurplusDeficit            float64             `json:"cal_surplus_deficit"`
@@ -130,6 +131,7 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 		EndDate:                      comp.EndDate,
 		TDEE:                         comp.TDEE,
 		StreakDays:                   comp.StreakDays,
+		RecordedDays:                 comp.RecordedDays,
 		TotalCalories:                round1(comp.TotalCalories),
 		AvgCaloriesPerDay:            comp.AvgCaloriesPerDay,
 		CalSurplusDeficit:            comp.CalSurplusDeficit,
@@ -241,7 +243,7 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 		pctF = round1(totalFat * 9 / totalMacros * 100)
 	}
 	macroPercent := map[string]float64{"protein": pctP, "carbs": pctC, "fat": pctF}
-	dataFingerprint := fmt.Sprintf("%.0f_%.1f_%d_%.1f_%.1f_%.1f", totalCal, avgCalPerDay, recordedDays, pctP, pctC, pctF)
+	dataFingerprint := fmt.Sprintf("%.0f_%.1f_%d_%.1f_%.1f_%.1f_%s", totalCal, avgCalPerDay, recordedDays, pctP, pctC, pctF, statsProfileFingerprint(user))
 
 	return &statsComputation{
 		StatsRange:        statsRange,
@@ -490,6 +492,9 @@ func formatStatsHealthProfile(user *domain.StatsUserProfile, latestWeight *Weigh
 
 	hc := user.HealthCondition
 	if len(hc) > 0 {
+		if routine := statsRoutineText(hc["routine_type"]); routine != "" {
+			lines = append(lines, "· 作息习惯："+routine)
+		}
 		if medical := joinStatsStringList(hc["medical_history"]); medical != "" {
 			lines = append(lines, "· 既往病史："+medical)
 		}
@@ -650,6 +655,32 @@ func activityLevelLabel(value string) string {
 	default:
 		return value
 	}
+}
+
+func statsRoutineText(value any) string {
+	raw := strings.TrimSpace(fmt.Sprintf("%v", value))
+	if raw == "" || raw == "<nil>" {
+		return ""
+	}
+	switch raw {
+	case "early_bird":
+		return "早睡早起（通常 22:30 前睡，7:00 前起）"
+	case "regular":
+		return "标准作息（通常 23:00 左右睡，7:00-8:00 起）"
+	case "night_owl":
+		return "晚睡晚起（经常 0 点后睡，起床也偏晚）"
+	case "irregular":
+		return "不太固定/轮班"
+	default:
+		return raw
+	}
+}
+
+func statsProfileFingerprint(user *domain.StatsUserProfile) string {
+	if user == nil || len(user.HealthCondition) == 0 {
+		return "profile:none"
+	}
+	return "routine:" + statsRoutineText(user.HealthCondition["routine_type"])
 }
 
 func latestWeightFromBodyMetrics(summary *BodyMetricsSummary) *WeightEntry {

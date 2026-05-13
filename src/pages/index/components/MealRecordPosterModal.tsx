@@ -13,6 +13,7 @@ import {
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+import { getCurrentPosterUserProfile, getLocalPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
 
 import './MealRecordPosterModal.scss'
 
@@ -48,6 +49,31 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
   const safeRecordId = String(record?.id || '').trim()
   const safeUserId = String(record?.user_id || '').trim()
 
+  const resolvePosterOwnerProfile = useCallback(async () => {
+    const ownerUserId = safeUserId || String(Taro.getStorageSync('user_id') || '').trim()
+    const fallbackInviteCode = ownerUserId ? getInviteCodeFromUserId(ownerUserId) : ''
+    const currentProfile = await getCurrentPosterUserProfile(ownerUserId)
+    if (!ownerUserId) {
+      return { nickname: currentProfile.nickname, avatar: currentProfile.avatar, inviteCode: '' }
+    }
+
+    try {
+      const remoteProfile = await getFriendInviteProfile(ownerUserId)
+      const mergedProfile = mergePosterUserProfile(remoteProfile, currentProfile)
+      return {
+        nickname: mergedProfile.nickname,
+        avatar: mergedProfile.avatar,
+        inviteCode: remoteProfile.invite_code || fallbackInviteCode,
+      }
+    } catch {
+      return {
+        nickname: currentProfile.nickname,
+        avatar: currentProfile.avatar,
+        inviteCode: fallbackInviteCode,
+      }
+    }
+  }, [safeUserId])
+
   const openOfficialImageMenu = useCallback(async (path: string) => {
     if (!path) return
     Taro.showShareImageMenu({
@@ -73,16 +99,25 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
     setOwnerInviteCode('')
     setCalorieCompare(null)
     if (visible && record) {
+      const ownerUserId = safeUserId || String(Taro.getStorageSync('user_id') || '').trim()
+      const localProfile = getLocalPosterUserProfile(ownerUserId)
+      if (localProfile.nickname) setOwnerNickname(localProfile.nickname)
+      if (localProfile.avatar) setOwnerAvatar(localProfile.avatar)
+      getCurrentPosterUserProfile(ownerUserId).then(profile => {
+        if (profile.nickname) setOwnerNickname(profile.nickname)
+        if (profile.avatar) setOwnerAvatar(profile.avatar)
+      }).catch(() => {})
       getMyMembership().then(ms => setIsProUser(ms.is_pro)).catch(() => {})
-      if (safeUserId) {
-        getFriendInviteProfile(safeUserId)
+      if (ownerUserId) {
+        getFriendInviteProfile(ownerUserId)
         .then(profile => {
-          setOwnerNickname(profile.nickname || '')
-          setOwnerAvatar(profile.avatar || '')
-          setOwnerInviteCode(profile.invite_code || getInviteCodeFromUserId(safeUserId))
+          const mergedProfile = mergePosterUserProfile(profile, getLocalPosterUserProfile(ownerUserId))
+          setOwnerNickname(mergedProfile.nickname)
+          setOwnerAvatar(mergedProfile.avatar)
+          setOwnerInviteCode(profile.invite_code || getInviteCodeFromUserId(ownerUserId))
         })
         .catch(() => {
-          setOwnerInviteCode(getInviteCodeFromUserId(safeUserId))
+          setOwnerInviteCode(getInviteCodeFromUserId(ownerUserId))
         })
       }
       if (safeRecordId) {
@@ -145,7 +180,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
     query
       .select('#homeMealRecordPosterCanvas')
       .fields({ node: true, size: true })
-      .exec((res) => {
+      .exec(async (res) => {
         if (!res?.[0]?.node) {
           Taro.hideLoading()
           setPosterGenerating(false)
@@ -177,8 +212,16 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
           })
         }
 
+        const resolvedProfile = await resolvePosterOwnerProfile()
+        const posterNickname = resolvedProfile.nickname
+        const posterAvatar = resolvedProfile.avatar
+        const posterInviteCode = resolvedProfile.inviteCode || ownerInviteCode
+        if (posterNickname) setOwnerNickname(posterNickname)
+        if (posterAvatar) setOwnerAvatar(posterAvatar)
+        if (posterInviteCode) setOwnerInviteCode(posterInviteCode)
+
         const loadQRImage = async () => {
-          const scene = ownerInviteCode ? `fi=${ownerInviteCode}` : 'share=1'
+          const scene = posterInviteCode ? `fi=${posterInviteCode}` : 'share=1'
           const isDevelopmentEnv = typeof process !== 'undefined' && process?.env?.NODE_ENV === 'development'
           const envCandidates: Array<'develop' | 'trial' | 'release'> = isDevelopmentEnv
             ? ['develop', 'trial', 'release']
@@ -199,7 +242,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         Promise.all([
           loadImage(record.image_path || ''),
           loadQRImage(),
-          loadImage(ownerAvatar || '')
+          loadImage(posterAvatar)
         ]).then(([mainImg, qrImg, avatarImg]) => {
           try {
             const ctx = canvas.getContext('2d')
@@ -228,7 +271,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
               calorieCompare: calorieCompare || undefined,
               image: mainImg,
               qrCodeImage: qrImg,
-              sharerNickname: ownerNickname,
+              sharerNickname: posterNickname,
               sharerAvatarImage: avatarImg,
               isPro: isProUser,
             })
@@ -261,7 +304,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
           }
         })
       })
-  }, [record, posterGenerating, isProUser, ownerNickname, ownerAvatar, ownerInviteCode, calorieCompare, openOfficialImageMenu])
+  }, [record, posterGenerating, isProUser, ownerInviteCode, calorieCompare, openOfficialImageMenu, resolvePosterOwnerProfile])
 
   return (
     <View className='poster-canvas-wrap'>

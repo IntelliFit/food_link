@@ -639,6 +639,9 @@ function StatsPage() {
     }
   })
   const recordedDays = d.daily_calories.filter(item => toSafeNumber(item.calories) > 0).length
+  const serverRecordedDays = toSafeNumber(d.recorded_days, recordedDays)
+  const healthIndexRecordedDays = Math.max(recordedDays, serverRecordedDays)
+  const hasEnoughHealthIndexData = healthIndexRecordedDays >= 2
   const surplusDays = heatmapCells.filter(item => item.calories > 0 && item.delta > 0).length
   const surplusRate = recordedDays > 0 ? surplusDays / recordedDays : 0
   const breakfastCombined = byMeal.breakfast + byMeal.morning_snack
@@ -913,6 +916,20 @@ function StatsPage() {
           </View>
         </View>
 
+        {!hasEnoughHealthIndexData ? (
+          <View className='stats-card health-index-gate-card'>
+            <View className='health-index-gate-icon'>
+              <Text className='iconfont icon-shangzhang health-index-gate-icon-text' />
+            </View>
+            <View className='health-index-gate-copy'>
+              <Text className='health-index-gate-title'>连续记录两天后显示健康指数</Text>
+              <Text className='health-index-gate-desc'>
+                当前已记录 {healthIndexRecordedDays} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <>
         <View className='stats-card risk-overview-card'>
           <View className='risk-overview-top'>
             <View className='risk-overview-copy'>
@@ -1196,6 +1213,8 @@ function StatsPage() {
               </View>
             </View>
           </View>
+        )}
+          </>
         )}
 
         <View className='stats-section-head'>

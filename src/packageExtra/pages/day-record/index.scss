@@ -271,6 +271,22 @@
   flex-shrink: 0;
 }
 
+.day-record-food-ratio {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 999rpx;
+  padding: 4rpx 12rpx;
+  flex-shrink: 0;
+  font-weight: 500;
+
+  &.is-over {
+    color: #64748b;
+    background: #f8fafc;
+  }
+}
+
 .day-record-food-calorie {
   font-size: 26rpx;
   line-height: 36rpx;
@@ -315,10 +331,19 @@
 }
 
 .day-record-food-macro {
+  display: flex;
+  align-items: baseline;
+  gap: 4rpx;
   font-size: 20rpx;
   line-height: 28rpx;
   font-weight: 600;
+}
 
+.day-record-food-macro-label {
+  color: #1e293b;
+}
+
+.day-record-food-macro-value {
   &.macro-protein {
     color: #5c9ed4;
   }

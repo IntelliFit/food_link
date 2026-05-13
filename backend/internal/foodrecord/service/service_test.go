@@ -990,6 +990,7 @@ func TestFoodRecordService_hydrateRecord_FillsMissingNutrientsFromSourceTask(t *
 	ctx := context.Background()
 
 	task := &analyzedomain.AnalysisTask{
+		ID:       "task-nutrients",
 		UserID:   "u1",
 		TaskType: "food",
 		Status:   "done",

@@ -137,13 +137,33 @@ func TestTaskService_SubmitAnalyzeTask_WithImages(t *testing.T) {
 	taskID, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{ImageURLs: []string{"https://example.com/1.jpg", "https://example.com/2.jpg"}})
 	require.NoError(t, err)
 	assert.NotEmpty(t, taskID)
-	require.Equal(t, []int{2}, guard.validateCalls)
+	require.Equal(t, []int{1}, guard.validateCalls)
 	assert.Empty(t, guard.consumeCalls)
 
 	task, err := taskRepo.GetTaskByID(ctx, taskID)
 	require.NoError(t, err)
 	usage := task.Payload["credit_usage"].(map[string]any)
-	assert.Equal(t, 4, intFromAny(usage["cost"]))
+	assert.Equal(t, 2, intFromAny(usage["cost"]))
+	assert.Equal(t, []string{"https://example.com/1.jpg", "https://example.com/2.jpg"}, task.ImagePaths)
+}
+
+func TestTaskService_SubmitAnalyzeTask_RejectsMoreThanThreeImages(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	guard := &mockTaskCreditGuard{}
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+
+	_, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{ImageURLs: []string{
+		"https://example.com/1.jpg",
+		"https://example.com/2.jpg",
+		"https://example.com/3.jpg",
+		"https://example.com/4.jpg",
+	}})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "最多支持 3 张图片")
+	assert.Empty(t, guard.validateCalls)
 }
 
 func TestTaskService_EnqueueTaskPublishesQueueMessage(t *testing.T) {
@@ -233,8 +253,16 @@ func TestTaskService_ListTasks(t *testing.T) {
 	tasks, err := svc.ListTasks(ctx, "user1", "food", "", 10)
 	require.NoError(t, err)
 	assert.Len(t, tasks, 2)
-	assert.Equal(t, "https://cdn.example.com/food/legacy.jpg", *tasks[0].ImageURL)
-	assert.Equal(t, []string{"https://cdn.example.com/food/legacy.jpg"}, tasks[0].ImagePaths)
+	var imageTask *analyzedomain.AnalysisTask
+	for i := range tasks {
+		if tasks[i].ImageURL != nil {
+			imageTask = &tasks[i]
+			break
+		}
+	}
+	require.NotNil(t, imageTask)
+	assert.Equal(t, "https://cdn.example.com/food/legacy.jpg", *imageTask.ImageURL)
+	assert.Equal(t, []string{"https://cdn.example.com/food/legacy.jpg"}, imageTask.ImagePaths)
 }
 
 func TestTaskService_ListTasksCollapsesRepeatedSameDayInput(t *testing.T) {

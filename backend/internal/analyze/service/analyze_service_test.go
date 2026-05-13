@@ -47,6 +47,24 @@ func (m *sequenceLLMClient) Analyze(ctx context.Context, prompt, imageURL string
 	return map[string]any{}, nil
 }
 
+type multiImageLLMClient struct {
+	result        map[string]any
+	err           error
+	imageURLCalls []string
+	imageSetCalls [][]string
+}
+
+func (m *multiImageLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	m.imageURLCalls = append(m.imageURLCalls, imageURL)
+	return m.result, m.err
+}
+
+func (m *multiImageLLMClient) AnalyzeWithImages(ctx context.Context, prompt string, imageURLs []string) (map[string]any, error) {
+	copied := append([]string(nil), imageURLs...)
+	m.imageSetCalls = append(m.imageSetCalls, copied)
+	return m.result, m.err
+}
+
 func setupAnalyzeServiceTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -278,6 +296,23 @@ func TestAnalyzeService_Analyze(t *testing.T) {
 	assert.Equal(t, "test", result["description"])
 }
 
+func TestAnalyzeService_AnalyzeUsesSingleLLMRequestForMultipleImages(t *testing.T) {
+	client := &multiImageLLMClient{result: map[string]any{"description": "multi", "items": []any{}}}
+	svc := NewAnalyzeService(client, client, nil)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/1.jpg",
+		ImageURLs: []string{"https://example.com/1.jpg", "https://example.com/2.jpg", "https://example.com/3.jpg"},
+		ModelName: "qwen",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "multi", result["description"])
+	require.Len(t, client.imageSetCalls, 1)
+	assert.Equal(t, []string{"https://example.com/1.jpg", "https://example.com/2.jpg", "https://example.com/3.jpg"}, client.imageSetCalls[0])
+	assert.Empty(t, client.imageURLCalls)
+}
+
 func TestAnalyzeService_AnalyzeText(t *testing.T) {
 	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "text test", "items": []any{}}}
 	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, nil)
@@ -444,7 +479,7 @@ func TestAnalyzeService_AnalyzeCompareEngines(t *testing.T) {
 
 func TestAnalyzeService_AnalyzeBatch(t *testing.T) {
 	_, userRepo := setupAnalyzeServiceTestDB(t)
-	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "batch", "items": []any{map[string]any{"name": "apple", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 50.0}}}}}
+	dashScopeClient := &multiImageLLMClient{result: map[string]any{"description": "batch", "items": []any{map[string]any{"name": "apple", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 50.0}}}}}
 	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, userRepo)
 	ctx := context.Background()
 
@@ -454,6 +489,8 @@ func TestAnalyzeService_AnalyzeBatch(t *testing.T) {
 	result, err := svc.AnalyzeBatch(ctx, "", AnalyzeInput{ImageURLs: []string{"https://example.com/1.jpg", "https://example.com/2.jpg"}})
 	require.NoError(t, err)
 	assert.NotNil(t, result["description"])
+	require.Len(t, dashScopeClient.imageSetCalls, 1)
+	assert.Equal(t, []string{"https://example.com/1.jpg", "https://example.com/2.jpg"}, dashScopeClient.imageSetCalls[0])
 }
 
 func TestAnalyzeService_AnalyzeBatch_TooMany(t *testing.T) {

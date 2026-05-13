@@ -223,11 +223,13 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 				timeLabel = record.RecordTime.In(homerepo.ChinaTZ()).Format("15:04")
 			}
 		}
+		recordWater := totalFoodRecordWaterMl(record.Items)
+		recordRatio := foodRecordIntakeRatio(record.Items)
 		mealCal += record.TotalCalories
 		mealProtein += record.TotalProtein
 		mealCarbs += record.TotalCarbs
 		mealFat += record.TotalFat
-		mealWater += totalFoodRecordWaterMl(record.Items)
+		mealWater += recordWater
 		recordImagePaths := make([]string, 0)
 		recordSeen := map[string]bool{}
 		for _, imagePath := range record.ImagePaths {
@@ -265,6 +267,11 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 			"id":             record.ID,
 			"record_time":    record.RecordTime,
 			"total_calories": round1(record.TotalCalories),
+			"total_protein":  round1(record.TotalProtein),
+			"total_carbs":    round1(record.TotalCarbs),
+			"total_fat":      round1(record.TotalFat),
+			"water_ml":       round1(recordWater),
+			"intake_ratio":   round1(recordRatio),
 			"title":          title,
 			"image_path":     firstOrNil(recordImagePaths),
 			"image_paths":    recordImagePaths,
@@ -294,6 +301,7 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 		"carbs":               round1(mealCarbs),
 		"fat":                 round1(mealFat),
 		"water_ml":            round1(mealWater),
+		"intake_ratio":        round1(foodRecordIntakeRatioFromRecords(records)),
 		"target":              round1(mealTarget),
 		"progress":            progress,
 		"tags":                tags,
@@ -305,6 +313,51 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 	}
 }
 
+func foodRecordIntakeRatioFromRecords(records []homerepo.FoodRecord) float64 {
+	totalWeight, totalIntake := 0.0, 0.0
+	for _, record := range records {
+		weight, intake := foodItemsWeightAndIntake(record.Items)
+		totalWeight += weight
+		totalIntake += intake
+	}
+	if totalWeight <= 0 {
+		return 100
+	}
+	return totalIntake / totalWeight * 100
+}
+
+func foodRecordIntakeRatio(items []map[string]any) float64 {
+	weight, intake := foodItemsWeightAndIntake(items)
+	if weight <= 0 {
+		return 100
+	}
+	return intake / weight * 100
+}
+
+func foodItemsWeightAndIntake(items []map[string]any) (float64, float64) {
+	totalWeight, totalIntake := 0.0, 0.0
+	for _, item := range items {
+		weight, weightOK := toFloat64(item["weight"])
+		if !weightOK || weight <= 0 {
+			continue
+		}
+		intake, intakeOK := toFloat64(item["intake"])
+		if !intakeOK {
+			if ratio, ok := toFloat64(item["ratio"]); ok && ratio >= 0 {
+				intake = weight * ratio / 100
+			} else {
+				intake = weight
+			}
+		}
+		if intake < 0 {
+			intake = 0
+		}
+		totalWeight += weight
+		totalIntake += intake
+	}
+	return totalWeight, totalIntake
+}
+
 func totalFoodRecordWaterMl(items []map[string]any) float64 {
 	total := 0.0
 	for _, item := range items {
@@ -312,7 +365,7 @@ func totalFoodRecordWaterMl(items []map[string]any) float64 {
 		if waterMl <= 0 {
 			continue
 		}
-		if ratio, ok := toFloat64(item["ratio"]); ok && ratio > 0 {
+		if ratio, ok := toFloat64(item["ratio"]); ok && ratio >= 0 {
 			total += waterMl * ratio / 100
 			continue
 		}
@@ -322,9 +375,7 @@ func totalFoodRecordWaterMl(items []map[string]any) float64 {
 			total += waterMl * intake / weight
 			continue
 		}
-		if (!intakeOK || intake == 0) && (!weightOK || weight == 0) {
-			total += waterMl
-		}
+		total += waterMl
 	}
 	return total
 }

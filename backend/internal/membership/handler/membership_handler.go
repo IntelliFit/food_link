@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"strings"
 
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
@@ -14,7 +15,7 @@ import (
 
 type MembershipService interface {
 	ListPlans(ctx context.Context) ([]map[string]any, error)
-	GetMyMembership(ctx context.Context, userID string) (map[string]any, error)
+	GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error)
 	CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error)
 	WechatNotify(ctx context.Context, paymentID string) error
 	HandleWechatNotify(ctx context.Context, headers http.Header, body []byte) (map[string]any, error)
@@ -46,7 +47,8 @@ func (h *MembershipHandler) GetMyMembership(c *gin.Context) {
 		response.Error(c, commonerrors.ErrUnauthorized)
 		return
 	}
-	data, err := h.svc.GetMyMembership(c.Request.Context(), userID)
+	date := strings.TrimSpace(c.Query("date"))
+	data, err := h.svc.GetMyMembership(c.Request.Context(), userID, date)
 	if err != nil {
 		response.Error(c, err)
 		return
