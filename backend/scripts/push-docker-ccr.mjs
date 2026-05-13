@@ -3,7 +3,11 @@
  * 在本机构建 food_link Go 后端 Docker 镜像并推送到腾讯云 CCR。
  *
  * 镜像路径固定为：ccr.ccs.tencentyun.com/littlehorse/foodlink。
- * 当前 Go 后端迁移阶段统一推送标签：v2。
+ *
+ * 分支与标签：
+ *   main -> :main
+ *   dev  -> :dev
+ *   其它分支拒绝执行
  *
  * 用法（在仓库根目录）：
  *   npm run push-docker-ccr
@@ -28,7 +32,6 @@ const BACKEND_ROOT = path.resolve(__dirname, '..');
 const REGISTRY = 'ccr.ccs.tencentyun.com';
 const IMAGE_NAMESPACE = 'littlehorse';
 const IMAGE_REPOSITORY = 'foodlink';
-const IMAGE_TAG = 'v2';
 const DEFAULT_GO_BUILDER_IMAGE = 'docker.io/library/golang:1.26.1-bookworm';
 
 function findGitRoot(startDir) {
@@ -114,12 +117,6 @@ function git(args) {
 function main() {
   print('=== food_link：本地构建 Go 后端镜像并推送腾讯云 CCR ===\n');
 
-  const dockerCheck = hasDocker();
-  if (!dockerCheck.ok) die('无法执行 docker', dockerCheck.hint);
-
-  const buildxCheck = hasBuildx();
-  if (!buildxCheck.ok) die('无法执行 docker buildx', buildxCheck.hint);
-
   if (!GIT_ROOT) {
     die(
       '未找到 Git 仓库（自 backend/ 向上未见到 .git）',
@@ -132,8 +129,25 @@ function main() {
   const branch = branchResult.ok ? branchResult.stdout : 'unknown';
   const shortSha = shaResult.ok ? shaResult.stdout : 'unknown';
 
+  if (branch !== 'main' && branch !== 'dev') {
+    die(
+      `当前分支为「${branch}」，本脚本只支持在 main 或 dev 上打对应标签。`,
+      '请切换到需要发布的分支后再运行：\n' +
+        '  git checkout main   # 推送 :main\n' +
+        '  或\n' +
+        '  git checkout dev    # 推送 :dev\n' +
+        '然后再运行：npm run push-docker-ccr',
+    );
+  }
+
+  const dockerCheck = hasDocker();
+  if (!dockerCheck.ok) die('无法执行 docker', dockerCheck.hint);
+
+  const buildxCheck = hasBuildx();
+  if (!buildxCheck.ok) die('无法执行 docker buildx', buildxCheck.hint);
+
   const imageBase = `${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}`;
-  const imageTag = `${imageBase}:${IMAGE_TAG}`;
+  const imageTag = `${imageBase}:${branch}`;
   const buildPlatform = (process.env.DOCKER_BUILD_PLATFORM || 'linux/amd64').trim() || 'linux/amd64';
   const buildProgress = (process.env.DOCKER_BUILD_PROGRESS || 'auto').trim() || 'auto';
   const goBuilderImage =
@@ -142,7 +156,7 @@ function main() {
 
   print(`Registry:   ${REGISTRY}`);
   print(`镜像基名:   ${imageBase}`);
-  print(`镜像标签:   ${IMAGE_TAG}`);
+  print(`镜像标签:   ${branch}`);
   print(`当前分支:   ${branch}`);
   print(`Git 短 SHA: ${shortSha}`);
   print(`构建平台:   ${buildPlatform}`);
