@@ -502,8 +502,9 @@
 - `2026-05-06`: Go backend CCR 推送脚本继续使用 mjs：
   - 该脚本属于仓库级部署辅助工具，不属于 Go 后端 runtime。
   - 继续通过根目录 `npm run push-docker-ccr` 调用 `backend/scripts/push-docker-ccr.mjs`。
-  - 当前 Go 后端迁移阶段，镜像标签固定为 `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`。
-  - 暂不再按 `main` / `dev` 分支生成 `latest/main/dev/sha` 标签；脚本只打印当前分支和短 SHA 作为人工确认信息。
+  - 迁移完成后恢复按当前分支生成镜像标签：`main` 分支推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink:main`，`dev` 分支推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink:dev`。
+  - 其它分支拒绝执行；脚本仍打印当前分支和短 SHA 作为人工确认信息。
+  - 迁移期新增的 Docker 构建环境变量能力继续保留，包括 `DOCKER_BUILD_PLATFORM`、`DOCKER_GO_BUILDER_IMAGE`、`DOCKER_GO_PROXY` / `GOPROXY` 和 `DOCKER_BUILD_PROGRESS`。
   - 以后只有当部署工具需要成为可分发 CLI、需要复用 Go 内部配置/代码、或需要复杂 CCR/Kubernetes API 编排时，再考虑用 Go 重写。
 
 - `2026-05-06`: Go backend Docker 镜像构建口径：

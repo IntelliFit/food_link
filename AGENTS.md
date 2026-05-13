@@ -130,7 +130,7 @@ npm run push-docker-ccr
 
 - 该命令会调用：`backend/scripts/push-docker-ccr.mjs`
 - 镜像路径：`ccr.ccs.tencentyun.com/littlehorse/foodlink`
-- 镜像标签：当前 Go 后端迁移阶段固定推送 `:v2`
+- 镜像标签：按当前分支映射，`main` 分支推送 `:main`，`dev` 分支推送 `:dev`
 - 构建上下文：`backend/`（使用 `backend/Dockerfile`）
 - 默认构建平台：`linux/amd64`（避免 ARM 开发机构建后在 AMD64 服务器不可运行）
 - 如需覆盖平台（例如构建多架构清单），可设置环境变量：
@@ -141,8 +141,9 @@ npm run push-docker-ccr
   - PowerShell：`$env:DOCKER_GO_BUILDER_IMAGE="docker.m.daocloud.io/library/golang:1.26.1-bookworm"; npm run push-docker-ccr`
   - Bash：`DOCKER_GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm npm run push-docker-ccr`
 - 标签规则：
-  - 暂不再按 `main` / `dev` 分支映射镜像标签
-  - 任意当前分支执行脚本都会推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`
+  - `main` 分支推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink:main`
+  - `dev` 分支推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink:dev`
+  - 其它分支拒绝执行
   - 脚本仍会打印当前分支和 7 位 commit sha，便于人工确认来源
 - 脚本位置：`backend/scripts/push-docker-ccr.mjs`
 - 依赖要求：

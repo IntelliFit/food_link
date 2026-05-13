@@ -8473,3 +8473,22 @@
   - `GOPROXY=https://goproxy.cn,direct go test ./internal/worker -run Test -count=1` passed.
   - `GOPROXY=https://goproxy.cn,direct go test ./internal/app -run Test -count=1` passed.
   - `git diff --check` passed for touched files.
+# 2026-05-13 update: backend Docker CCR script branch/tag check
+
+- User asked to inspect `backend/scripts/push-docker-ccr.mjs` and compare it with the old main/dev deployment behavior.
+- Confirmed current worktree is detached at `48fd3a7`, matching latest `origin/main`; current script also matches `origin/dev` after `git fetch origin --prune`.
+- Current script always pushes `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2` regardless of branch, while old local `main` / `origin/old_main` / `origin/old_dev` used branch-based tags: `main -> latest/main/<sha>`, `dev -> dev/<sha>`, other branches refused.
+- Current script additionally supports `DOCKER_GO_BUILDER_IMAGE`, `DOCKER_GO_PROXY`/`GOPROXY`, and `DOCKER_BUILD_PROGRESS`, and passes `GO_BUILDER_IMAGE`/`GOPROXY` as Docker build args.
+
+# 2026-05-13 update: restore branch-based CCR image tags
+
+- User clarified migration is complete and requested restoring branch-based Docker tag behavior while keeping the newer environment variable features.
+- Updated `backend/scripts/push-docker-ccr.mjs`:
+  - `main` branch pushes `ccr.ccs.tencentyun.com/littlehorse/foodlink:main`.
+  - `dev` branch pushes `ccr.ccs.tencentyun.com/littlehorse/foodlink:dev`.
+  - any other branch is rejected before build/push.
+  - kept `DOCKER_BUILD_PLATFORM`, `DOCKER_GO_BUILDER_IMAGE`, `DOCKER_GO_PROXY` / `GOPROXY`, and `DOCKER_BUILD_PROGRESS`.
+- Updated `AGENTS.md` deployment notes and `DECISIONS.md` to replace the old migration-period fixed `:v2` rule.
+- Verification:
+  - `node --check backend/scripts/push-docker-ccr.mjs` passed.
+  - In the current detached worktree, `node backend/scripts/push-docker-ccr.mjs` exits before Docker checks with `当前分支为「HEAD」...只支持在 main 或 dev 上打对应标签`, confirming non-branch execution is rejected before build/push.
