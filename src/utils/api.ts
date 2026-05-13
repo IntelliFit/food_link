@@ -815,6 +815,7 @@ export interface StatsSummary {
   end_date: string
   tdee: number
   streak_days: number
+  recorded_days?: number
   total_calories: number
   avg_calories_per_day: number
   cal_surplus_deficit: number
@@ -1166,6 +1167,7 @@ export interface ReportExtract {
   conclusions?: string[]
   suggestions?: string[]
   medical_notes?: string
+  _image_urls?: string[]
 }
 
 /** 健康档案中的病史/饮食/过敏等 JSON */

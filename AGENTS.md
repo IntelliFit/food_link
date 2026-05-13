@@ -34,6 +34,13 @@
   - **核心理念**：很多问题表象在前端，根源在依赖层。先验证依赖，再调试本体。
   - 调试时必须按照依赖层级逐层排查：数据依赖 → 环境依赖 → 版本依赖 → 配置依赖 → 状态依赖 → 网络依赖 → 权限依赖 → 缓存依赖 → 构建依赖 → 运行时依赖
   - 详细规范请参考 `.agents/skills/jinhui-stack-debug/SKILL.md`
+- **go-api-loadtest**: Go 后端食物分析 API 负载与稳定性测试工具
+  - 基于 `backend/internal/analyze/loadtest/food_analysis_stability_test.go`，默认 20 个并发样例
+  - 支持 `stagger`（间隔启动）和 `burst`（并发爆发）两种压测模式
+  - 自动上传测试图片、提交分析任务、轮询结果、统计全链路延迟（submit / queue / processing / total）
+  - 测试后自动清理 COS 对象和分析任务记录
+  - 需使用 build tag `-tags=food_analysis_load` 运行，支持通过环境变量和 flag 灵活配置目标地址、请求数、模型、执行模式等
+  - 详细规范请参考 `.agents/skills/go-api-loadtest/SKILL.md`
 
 ## 可用 SKILL（第一优先级）
 - Build production-ready Go backend services following DDD-layered architecture.

@@ -602,12 +602,14 @@
   }
 
   .list-icon {
-    width: 44rpx;
-    height: 44rpx;
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 16rpx;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    box-shadow: inset 0 0 0 1rpx rgb(255 255 255 / 42%);
   }
 
   .list-title {

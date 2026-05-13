@@ -159,7 +159,7 @@ func TestStatsService_GetSummaryUsesCachedInsightFingerprint(t *testing.T) {
 			UserID:          "u1",
 			RangeType:       "week",
 			GeneratedDate:   time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, chinaTZ),
-			DataFingerprint: "500_500.0_1_17.6_52.7_29.7",
+			DataFingerprint: "500_500.0_1_17.6_52.7_29.7_profile:none",
 			InsightText:     "cached insight",
 		}},
 	}
@@ -169,4 +169,19 @@ func TestStatsService_GetSummaryUsesCachedInsightFingerprint(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "cached insight", summary.AnalysisSummary)
 	assert.False(t, summary.AnalysisSummaryNeedsRefresh)
+}
+
+func TestStatsHealthProfileIncludesRoutineLabelAndCustomText(t *testing.T) {
+	user := &domain.StatsUserProfile{
+		HealthCondition: map[string]any{"routine_type": "regular"},
+	}
+
+	text := formatStatsHealthProfile(user, nil)
+	assert.Contains(t, text, "作息习惯：标准作息")
+	assert.Contains(t, text, "23:00")
+
+	user.HealthCondition["routine_type"] = "00:30 睡，08:30 起"
+	text = formatStatsHealthProfile(user, nil)
+	assert.Contains(t, text, "作息习惯：00:30 睡，08:30 起")
+	assert.Contains(t, statsProfileFingerprint(user), "00:30 睡")
 }

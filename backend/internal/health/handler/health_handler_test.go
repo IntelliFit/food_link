@@ -224,6 +224,7 @@ func TestGetStatsSummary(t *testing.T) {
 			TotalCalories:     3500,
 			AvgCaloriesPerDay: 500,
 			StreakDays:        7,
+			RecordedDays:      3,
 		},
 	}
 	h := NewHealthHandler(nil, nil, mockSvc)
@@ -234,6 +235,10 @@ func TestGetStatsSummary(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, float64(3), data["recorded_days"])
 }
 
 func TestGenerateStatsInsight(t *testing.T) {

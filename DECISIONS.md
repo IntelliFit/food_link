@@ -1,5 +1,23 @@
 # DECISIONS
 
+- `2026-05-13`: “修改食物参数”弹层不再提供饮食目标编辑：
+  - 首页今日餐食的 `MealRecordEditModal` 只保留餐次、运动时机和食物明细参数编辑。
+  - 该弹层保存时不再提交 `diet_goal`，避免用户在食物参数编辑里继续修改饮食目标。
+  - 记录详情页同名编辑弹层本来只编辑食物明细，继续保持不展示饮食目标。
+
+- `2026-05-13`: 健康档案作息习惯改为小时级入睡/起床选择：
+  - 作息仍复用 `health_condition.routine_type` 字段，不新增数据库列。
+  - 前端保存统一写入格式化文本 `HH:00 睡，HH:00 起`，例如 `23:00 睡，07:00 起`。
+  - 引导页展示常见作息快捷项用于快速填充两个小时；健康档案修改页只展示两个小时拨动选择器，不展示快捷项。
+  - 旧枚举 `early_bird/regular/night_owl/irregular` 需要继续被前端解析成对应小时，避免旧用户档案打开编辑时丢失可用值。
+
+- `2026-05-13`: 分析页健康指数与作息字段稳定口径：
+  - 健康指数需要至少 2 个有饮食记录的自然日；`recorded_days < 2` 时，分析页不展示健康指数、关注风险卡片、行动建议和 AI 风险解读入口，改为提示用户连续记录两天以上后再显示。
+  - `/api/stats/summary` 需要返回 `recorded_days`，前端也可用 `daily_calories` 本地推导兜底。
+  - 健康档案作息仍复用 `health_condition.routine_type` 字段；当前前端采用小时级入睡/起床选择，保存为 `HH:00 睡，HH:00 起` 文本。
+  - 后端 AI 风险解读 prompt 使用作息时，预设值要转为中文说明，自定义文本原样进入 prompt；作息内容进入洞察缓存 fingerprint，修改作息后旧洞察应提示刷新。
+  - 当前健康指数公式主要在前端 `src/pages/stats/index.tsx` 即时计算，完整口径记录在 `docs/health-index-logic.md`。
+
 - `2026-05-13`: 分享海报底部头像资料来源：
   - 海报底部头像/昵称优先使用当前登录用户的 `/api/user/profile` 最新资料，并回写本地 `userInfo`。
   - 本地 `userInfo` 作为离线兜底，需兼容 `name/nickname/nickName` 与 `avatar/avatarUrl/avatar_url`。

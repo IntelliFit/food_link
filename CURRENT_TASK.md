@@ -1,3 +1,112 @@
+# 状态：完成源码修改 - 作息习惯改为入睡/起床小时拨动选择
+
+- 2026-05-13 update:
+  - User 要求：引导页面和健康档案里的作息调整组件不要再用单选/多选框形式，改为两个类似身高选择的拨动选择器，分别选择入睡小时和起床小时；只精确到小时；引导页提供常见作息选项快速填充。
+  - Fix applied:
+    - 新增 `src/components/RoutineHourPicker/index.tsx/scss`
+      - 提供两个小时级 `PickerView`：入睡和起床，范围 0-23 点。
+      - 显示当前作息摘要，如 `23:00 睡，07:00 起`。
+      - 引导页可传入常见作息 presets：早睡早起、标准作息、晚睡晚起、轮班作息，一键填充两个小时。
+      - 保留兼容解析：旧枚举 `early_bird/regular/night_owl/irregular` 和旧文本中可识别的两个小时会转成新小时值。
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 移除作息单选卡片和 emoji 图标。
+      - 作息步骤改用 `RoutineHourPicker` 并展示快速填充选项。
+      - 保存时继续复用 `health_condition.routine_type`，写入格式化文本 `HH:00 睡，HH:00 起`。
+    - `src/packageExtra/pages/health-profile-view/index.tsx/scss`
+      - 健康档案作息编辑弹窗改为同一小时选择器的 compact 形态，不展示预设快捷项。
+      - 作息展示值通过新解析/格式化函数统一显示，旧枚举会被友好转为小时作息。
+      - 清理旧自定义作息输入样式与旧作息单选常量。
+  - Verification:
+    - `npx eslint src/components/RoutineHourPicker/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/RoutineHourPicker/index.tsx src/components/RoutineHourPicker/index.scss src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile/index.scss src/packageExtra/pages/health-profile-view/index.tsx src/packageExtra/pages/health-profile-view/index.scss` passed。
+    - `rg` 确认作息旧单选/旧自定义文本相关标识无残留。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - `npx stylelint ...` 针对相关 scss 仍失败，但报错均为这些页面既有样式规范问题（如旧 `rgba()` 写法、旧 overflow longhand、旧空行规则），新组件样式本身没有报错。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修复 - 健康档案引导页步骤错位与作息 emoji
+
+- 2026-05-13 update:
+  - User 反馈：健康档案用户引导页显示很奇怪，一共 12 个步骤但最后的体检报告像是在第 6 步；第一步性别/基础信息没看到；作息习惯选项里的 emoji icon 需要去除。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 新增 `PROFILE_STEPS`，`TOTAL_STEPS` 改为从步骤数组推导，避免步骤数与页面卡片/进度文案脱节。
+      - 新增 `PROFILE_STEP_WIDTH_RPX`，卡片轨道宽度和位移都由 `TOTAL_STEPS * PROFILE_STEP_WIDTH_RPX` 与 `currentStep * PROFILE_STEP_WIDTH_RPX` 推导，不再依赖硬编码 `9000rpx`。
+      - `loadProfile()` 完成后显式 `setCurrentStep(0)`，保证进入引导页从第 1 步基础信息开始，避免热更新或重进页状态停在中间步骤。
+      - 移除 `ROUTINE_OPTIONS` 中作息选项的 emoji icon 字段，并删除作息选项渲染里的 emoji icon。
+    - `src/packageExtra/pages/health-profile/index.scss`
+      - 移除 `.cards-track` 的硬编码 `width: 9000rpx`，改由 JSX 内联宽度与步骤数同源控制。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile/index.scss` passed。
+    - 已手动检查作息步骤渲染片段，确认作息选项无 emoji icon。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 我的页功能入口图标低饱和配色
+
+- 2026-05-13 update:
+  - User 要求：「我的」部分，从健康档案到关于我们这些按钮，仿照微信给不同按钮图标添加不同颜色；禁止高饱和、花哨配色，并适配当前 UI 风格。
+  - Fix applied:
+    - `src/pages/profile/index.tsx`
+      - 新增功能列表图标 tone 配置：健康档案柔绿、食物保质期米金、公共食物库灰蓝、加入用户群灰紫、隐私设置青绿、关于我们暖灰棕。
+      - 每个 tone 同时配置亮色/暗色模式的前景色与淡色底。
+      - 列表渲染从纯文字色改为 `color + backgroundColor` 的低饱和图标块。
+    - `src/pages/profile/index.scss`
+      - 列表图标尺寸调整为 56rpx，增加 16rpx 圆角与轻微内描边，让淡色底和当前卡片列表风格融合。
+  - Verification:
+    - `npx eslint src/pages/profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/profile/index.tsx src/pages/profile/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 修改食物参数弹层移除饮食目标
+
+- 2026-05-13 update:
+  - User 要求：在“修改食物参数”板块里也去除“饮食目标”。
+  - Fix applied:
+    - `src/pages/index/components/MealRecordEditModal.tsx`
+      - 移除“饮食目标”选项卡片、`DIET_GOAL_OPTIONS`、`dietGoal` state 和保存时的 `diet_goal` 提交。
+      - 保存食物参数时仍保留餐次、运动时机和食物明细编辑；不再通过该弹层修改记录的饮食目标。
+    - 复查 `src/packageExtra/pages/record-detail/index.tsx` 的同名编辑弹层，本来没有饮食目标编辑项，无需修改。
+  - Verification:
+    - `npx eslint src/pages/index/components/MealRecordEditModal.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/MealRecordEditModal.tsx` passed。
+    - `rg` 确认首页与记录详情两个“修改食物参数”弹层中不再存在 `饮食目标/DIET_GOAL_OPTIONS/dietGoal/setDietGoal`。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 健康指数记录门槛与作息自定义
+
+- 2026-05-13 update:
+  - User 要求：
+    - 分析页健康指数板块：新注册/记录不足用户若记录小于 2 天，不显示健康指数，改为提示连续记录两天以上后展示。
+    - 健康档案引导页和健康档案修改页：作息习惯既保留已有预设，也允许用户自定义文本，例如几点睡几点起。
+    - 后端：确认健康指数计算逻辑并记录；把用户档案里的作息习惯作为后端 AI 风险解读 prompt 的一部分。
+  - Fix applied:
+    - `src/pages/stats/index.tsx/scss`
+      - 使用 `recorded_days`（兼容本地 `daily_calories` 推导）作为健康指数展示门槛。
+      - 记录天数小于 2 时隐藏健康指数、关注风险卡片、行动建议和 AI 风险解读入口，展示“连续记录两天后显示健康指数”的提示卡。
+    - `src/packageExtra/pages/health-profile/index.tsx/scss`
+      - 引导页作息步骤新增“自定义作息”，可输入纯文本，提交时写入 `routine_type`。
+      - 加载旧档案时，若 `routine_type` 不是预设值，会自动进入自定义并回填文本。
+    - `src/packageExtra/pages/health-profile-view/index.tsx/scss`
+      - 健康档案修改页作息编辑器新增自定义作息输入，保存时校验非空并写回 `routine_type`。
+      - 健康档案展示继续兼容预设映射和自定义文本。
+    - `src/utils/api.ts`
+      - `StatsSummary` 增加 `recorded_days` 类型。
+      - `ReportExtract` 补 `_image_urls` 类型，消除本轮触碰页面的类型缺口。
+    - `backend/internal/health/handler/health_handler.go`
+      - `/api/stats/summary` 返回 `recorded_days`。
+    - `backend/internal/health/service/stats_service.go`
+      - AI 风险解读 prompt 中作息改为预设中文描述或用户自定义文本。
+      - 作息内容加入洞察缓存 fingerprint，用户修改作息后旧洞察会标记为需刷新。
+    - `docs/health-index-logic.md`
+      - 记录当前健康指数前端计算逻辑、后端数据来源和 AI 风险解读 prompt 组成。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/health/service ./internal/health/handler -run 'TestStats|TestGetStatsSummary|TestGenerateStatsInsight|TestSaveStatsInsight' -count=1` passed（在 `backend/` 目录）。
+    - `git diff --check` passed for touched files。
+    - `npm run typecheck -- --pretty false` 仍失败，但剩余错误都在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 的主题类型、`food-library` 的 `Taro.chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
 # 状态：完成源码修改 - 首页今日餐食餐次标签挪到图片角标
 
 - 2026-05-13 update:

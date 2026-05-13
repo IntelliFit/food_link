@@ -939,6 +939,9 @@ func formatHealthProfile(user *authrepo.User) string {
 
 	hc := user.HealthCondition
 	lines := []string{line1, line2}
+	if routine := strings.TrimSpace(fmt.Sprintf("%v", hc["routine_type"])); routine != "" && routine != "<nil>" {
+		lines = append(lines, "· 作息习惯："+routine)
+	}
 	if medical, ok := hc["medical_history"].([]any); ok && len(medical) > 0 {
 		items := []string{}
 		for _, m := range medical {

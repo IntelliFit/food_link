@@ -62,9 +62,6 @@
 
 .cards-track {
   display: flex;
-
-  /* 可见区 750rpx，12 张卡 */
-  width: 9000rpx;
   height: 100%;
   will-change: transform;
 }
