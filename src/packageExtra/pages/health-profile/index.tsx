@@ -93,6 +93,8 @@ const PROFILE_STEPS = [
 ] as const
 const PROFILE_STEP_WIDTH_RPX = 750
 const TOTAL_STEPS = PROFILE_STEPS.length
+const DEFAULT_HEIGHT_CM = 170
+const DEFAULT_WEIGHT_KG = 60
 
 function HealthProfilePage() {
   const { scheme } = useAppColorScheme()
@@ -320,6 +322,11 @@ function HealthProfilePage() {
     setDietGoal(value)
   }
 
+  const effectiveHeight = height ? Number(height) : DEFAULT_HEIGHT_CM
+  const effectiveWeight = weight ? Number(weight) : DEFAULT_WEIGHT_KG
+  const isHeightValid = Number.isFinite(effectiveHeight) && effectiveHeight >= 100 && effectiveHeight <= 250
+  const isWeightValid = Number.isFinite(effectiveWeight) && effectiveWeight >= 30 && effectiveWeight <= 200
+
   const canProceed = () => {
     switch (currentStep) {
       case 0:
@@ -327,9 +334,9 @@ function HealthProfilePage() {
       case 1:
         return !!birthday
       case 2:
-        return !!height && Number(height) >= 100 && Number(height) <= 250
+        return isHeightValid
       case 3:
-        return !!weight && Number(weight) >= 30 && Number(weight) <= 200
+        return isWeightValid
       case 4:
         return !!dietGoal
       case 5:
@@ -354,8 +361,8 @@ function HealthProfilePage() {
     const req: HealthProfileUpdateRequest = {
       gender: gender || undefined,
       birthday: birthday || undefined,
-      height: height ? Number(height) : undefined,
-      weight: weight ? Number(weight) : undefined,
+      height: isHeightValid ? effectiveHeight : undefined,
+      weight: isWeightValid ? effectiveWeight : undefined,
       diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
       execution_mode: 'standard',
@@ -515,7 +522,7 @@ function HealthProfilePage() {
             {/* 使用 HeightRuler 替换原有的输入 */}
             <View style={{ width: '100%', marginBottom: '24px' }}>
               <HeightRuler
-                value={height ? Number(height) : 170}
+                value={effectiveHeight}
                 onChange={(val) => setHeight(String(val))}
                 min={100}
                 max={250}
@@ -523,7 +530,7 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${height ? 'ready' : ''}`} onClick={goNext} disabled={!height}>
+              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
@@ -535,15 +542,15 @@ function HealthProfilePage() {
             <Text className='step-card-subtitle'>你的体重是多少？</Text>
             {/* Title is handled inside WeightRuler for better layout */}
             <WeightRuler
-              value={weight ? Number(weight) : 60}
+              value={effectiveWeight}
               onChange={(val) => setWeight(String(val))}
               min={30}
               max={200}
-              height={height ? Number(height) : 170}
+              height={effectiveHeight}
             />
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${weight ? 'ready' : ''}`} onClick={goNext} disabled={!weight}>
+              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
@@ -604,7 +611,7 @@ function HealthProfilePage() {
           {/* Step 6: 作息习惯 */}
           <View className='card step-card'>
             <Text className='step-card-title'>作息习惯</Text>
-            <Text className='step-card-subtitle'>选择你通常几点睡、几点起，只需精确到小时。</Text>
+            <Text className='step-card-subtitle'>了解你的作息，让算法更加懂你</Text>
             <RoutineHourPicker
               value={routineHours}
               onChange={setRoutineHours}

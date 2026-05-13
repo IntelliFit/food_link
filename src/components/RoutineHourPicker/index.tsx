@@ -1,5 +1,5 @@
 import { View, Text, PickerView, PickerViewColumn } from '@tarojs/components'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './index.scss'
 
 export type RoutineHours = {
@@ -106,8 +106,6 @@ export default function RoutineHourPicker({
     setWakePick([next.wakeHour])
   }, [value.sleepHour, value.wakeHour])
 
-  const summary = useMemo(() => formatRoutineHours(normalized), [normalized.sleepHour, normalized.wakeHour])
-
   const applyChange = (patch: Partial<RoutineHours>) => {
     onChange(normalizeRoutineHours({ ...normalized, ...patch }))
   }
@@ -132,58 +130,85 @@ export default function RoutineHourPicker({
         </View>
       ) : null}
 
-      <View className='routine-picker-summary'>
-        <Text className='routine-picker-summary-label'>当前作息</Text>
-        <Text className='routine-picker-summary-value'>{summary}</Text>
-      </View>
-
       <View className='routine-wheel-row'>
-        <View className='routine-wheel-card'>
-          <Text className='routine-wheel-title'>入睡</Text>
-          <PickerView
-            className='routine-wheel-view'
-            indicatorClass='routine-wheel-indicator'
-            indicatorStyle='height: 88rpx;'
-            value={sleepPick}
-            onChange={(e) => {
-              const hour = Number(e.detail.value?.[0] ?? normalized.sleepHour)
-              setSleepPick([hour])
-              applyChange({ sleepHour: hour })
-            }}
-          >
-            <PickerViewColumn>
-              {HOURS.map(hour => (
-                <View key={hour} className='routine-wheel-item'>
-                  <Text className={`routine-wheel-hour ${hour === normalized.sleepHour ? 'active' : ''}`}>{hour}</Text>
-                  <Text className='routine-wheel-unit'>点</Text>
-                </View>
-              ))}
-            </PickerViewColumn>
-          </PickerView>
+        <View className='routine-wheel-panel'>
+          <Text className='routine-wheel-title'>😴 睡觉</Text>
+          <View className='routine-wheel-container'>
+            <PickerView
+              className='routine-wheel-view'
+              indicatorClass='routine-wheel-indicator'
+              indicatorStyle='height: 120px;'
+              style={{ width: '100%', height: '100%' }}
+              value={sleepPick}
+              onChange={(e) => {
+                const hour = Number(e.detail.value?.[0] ?? normalized.sleepHour)
+                setSleepPick([hour])
+                applyChange({ sleepHour: hour })
+              }}
+            >
+              <PickerViewColumn>
+                {HOURS.map(hour => {
+                  const isSelected = hour === normalized.sleepHour
+                  return (
+                    <View key={hour} className='routine-wheel-item'>
+                      <Text
+                        className='routine-wheel-hour'
+                        style={{
+                          fontSize: isSelected ? '48px' : '32px',
+                          fontWeight: isSelected ? '600' : '400',
+                          color: isSelected ? '#111827' : '#9ca3af',
+                          transform: isSelected ? 'scale(1.2)' : 'scale(1)'
+                        }}
+                      >
+                        {hour}
+                      </Text>
+                    </View>
+                  )
+                })}
+              </PickerViewColumn>
+            </PickerView>
+            <Text className='routine-wheel-unit'>点</Text>
+          </View>
         </View>
 
-        <View className='routine-wheel-card'>
-          <Text className='routine-wheel-title'>起床</Text>
-          <PickerView
-            className='routine-wheel-view'
-            indicatorClass='routine-wheel-indicator'
-            indicatorStyle='height: 88rpx;'
-            value={wakePick}
-            onChange={(e) => {
-              const hour = Number(e.detail.value?.[0] ?? normalized.wakeHour)
-              setWakePick([hour])
-              applyChange({ wakeHour: hour })
-            }}
-          >
-            <PickerViewColumn>
-              {HOURS.map(hour => (
-                <View key={hour} className='routine-wheel-item'>
-                  <Text className={`routine-wheel-hour ${hour === normalized.wakeHour ? 'active' : ''}`}>{hour}</Text>
-                  <Text className='routine-wheel-unit'>点</Text>
-                </View>
-              ))}
-            </PickerViewColumn>
-          </PickerView>
+        <View className='routine-wheel-panel'>
+          <Text className='routine-wheel-title'>🌤️ 起床</Text>
+          <View className='routine-wheel-container'>
+            <PickerView
+              className='routine-wheel-view'
+              indicatorClass='routine-wheel-indicator'
+              indicatorStyle='height: 120px;'
+              style={{ width: '100%', height: '100%' }}
+              value={wakePick}
+              onChange={(e) => {
+                const hour = Number(e.detail.value?.[0] ?? normalized.wakeHour)
+                setWakePick([hour])
+                applyChange({ wakeHour: hour })
+              }}
+            >
+              <PickerViewColumn>
+                {HOURS.map(hour => {
+                  const isSelected = hour === normalized.wakeHour
+                  return (
+                    <View key={hour} className='routine-wheel-item'>
+                      <Text
+                        className='routine-wheel-hour'
+                        style={{
+                          fontSize: isSelected ? '48px' : '32px',
+                          fontWeight: isSelected ? '600' : '400',
+                          color: isSelected ? '#111827' : '#9ca3af',
+                          transform: isSelected ? 'scale(1.2)' : 'scale(1)'
+                        }}
+                      >
+                        {hour}
+                      </Text>
+                    </View>
+                  )
+                })}
+              </PickerViewColumn>
+            </PickerView>
+            <Text className='routine-wheel-unit'>点</Text>
+          </View>
         </View>
       </View>
     </View>

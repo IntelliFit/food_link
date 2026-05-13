@@ -41,106 +41,87 @@
   line-height: 30rpx;
 }
 
-.routine-picker-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 24rpx;
-  border-radius: 18rpx;
-  background: #eef8f3;
-  border: 1rpx solid rgb(92 184 150 / 18%);
-  gap: 20rpx;
-}
-
-.routine-picker-summary-label {
-  font-size: 24rpx;
-  color: #64748b;
-  flex-shrink: 0;
-}
-
-.routine-picker-summary-value {
-  font-size: 28rpx;
-  font-weight: 700;
-  color: #347a60;
-  text-align: right;
-}
-
 .routine-wheel-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18rpx;
+  gap: 16rpx;
 }
 
-.routine-wheel-card {
+.routine-wheel-panel {
   min-width: 0;
-  height: 360rpx;
-  border-radius: 22rpx;
-  background: #fff;
-  border: 2rpx solid #e2e8f0;
-  box-sizing: border-box;
-  overflow: hidden;
-  position: relative;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  gap: 10rpx;
 }
 
 .routine-wheel-title {
   display: block;
-  padding: 22rpx 0 8rpx;
-  font-size: 26rpx;
+  font-size: 34rpx;
   font-weight: 600;
-  color: #64748b;
+  color: #4b5563;
   text-align: center;
+  line-height: 44rpx;
   flex-shrink: 0;
 }
 
-.routine-wheel-view {
-  flex: 1;
+.routine-wheel-container {
   width: 100%;
+  height: 420px;
+  position: relative;
+  background: transparent;
+}
+
+.routine-wheel-view {
+  width: 100%;
+  height: 100%;
 }
 
 .routine-wheel-indicator {
-  background: rgb(92 184 150 / 8%);
+  background: transparent;
 
   &::before,
   &::after {
-    border-color: rgb(92 184 150 / 18%) !important;
+    border: none !important;
+    display: none !important;
   }
 }
 
 .routine-wheel-item {
-  height: 88rpx;
+  height: 120px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6rpx;
+  line-height: 120px;
+  transition: all 0.3s ease;
 }
 
 .routine-wheel-hour {
-  min-width: 52rpx;
-  text-align: right;
-  font-size: 34rpx;
-  font-weight: 500;
+  min-width: 80px;
+  text-align: center;
+  font-size: 32px;
+  font-weight: 400;
   color: #9ca3af;
-  line-height: 44rpx;
-
-  &.active {
-    font-size: 42rpx;
-    font-weight: 700;
-    color: #1f2937;
-  }
+  line-height: 1;
+  transition: all 0.2s;
 }
 
 .routine-wheel-unit {
+  position: absolute;
+  top: 50%;
+  left: 72%;
+  transform: translateY(-50%);
   font-size: 24rpx;
-  color: #94a3b8;
+  color: #6b7280;
   line-height: 34rpx;
+  pointer-events: none;
+  margin-top: 5px;
 }
 
 .routine-hour-picker--compact {
   gap: 20rpx;
 
-  .routine-wheel-card {
-    height: 320rpx;
+  .routine-wheel-container {
+    height: 340px;
   }
 }

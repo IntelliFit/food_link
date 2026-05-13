@@ -1,3 +1,51 @@
+# 状态：完成源码修改 - 作息选择器去除当前作息摘要
+
+- 2026-05-13 update:
+  - User 要求：去除作息组件里的 `routine-picker-summary`；“睡觉”“起床”两个字放大一点。
+  - Fix applied:
+    - `src/components/RoutineHourPicker/index.tsx`
+      - 移除“当前作息”摘要条 JSX。
+    - `src/components/RoutineHourPicker/index.scss`
+      - 删除 `.routine-picker-summary*` 和 `.routine-summary-part` 样式。
+      - `.routine-wheel-title` 从 `28rpx/38rpx` 放大到 `34rpx/44rpx`。
+  - Verification:
+    - `npx eslint src/components/RoutineHourPicker/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/RoutineHourPicker/index.tsx src/components/RoutineHourPicker/index.scss` passed。
+    - `rg` 确认 `routine-picker-summary/routine-summary-part/当前作息` 无残留。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 作息滚轮对齐年龄选择器样式
+
+- 2026-05-13 update:
+  - User 要求：作息习惯的拨动组件需要和年龄部分保持一致；当前作息“几点睡/几点醒”部分给睡觉和起床添加 emoji 图标；作息习惯说明文案改为“了解你的作息，让算法更加懂你”。
+  - Fix applied:
+    - `src/components/RoutineHourPicker/index.tsx/scss`
+      - 作息滚轮改为接近 `AgePicker` 的透明大字号滚轮：选中项 48px、普通项 32px、隐藏默认 indicator 边线，单位“点”固定浮在滚轮中心旁。
+      - 睡觉和起床保留两个并排小时滚轮，分别绑定 `sleepHour` 和 `wakeHour`。
+      - 当前作息摘要改为两段展示：`😴 HH:00 睡`、`🌤️ HH:00 醒`。
+      - 滚轮标题同步加 emoji：`😴 睡觉`、`🌤️ 起床`。
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 作息步骤副标题改为：`了解你的作息，让算法更加懂你`。
+  - Verification:
+    - `npx eslint src/components/RoutineHourPicker/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/RoutineHourPicker/index.tsx src/components/RoutineHourPicker/index.scss src/packageExtra/pages/health-profile/index.tsx` passed。
+    - 已手动复查 JSX，确认睡觉滚轮使用 `sleepPick/sleepHour`，起床滚轮使用 `wakePick/wakeHour`。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 用户画像非选项题默认可继续
+
+- 2026-05-13 update:
+  - User 要求：用户画像中，除了选项类型外的其他类型都需要默认就能点击下一步。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 身高和体重步骤不再因为用户未手动拨动而禁用“下一步”。
+      - 新增默认身高 `170cm`、默认体重 `60kg` 常量，并统一用于拨动条显示、步骤校验和最终提交。
+      - 保存健康档案时，如果用户没有操作身高/体重拨动条，也会提交当前默认值，避免能跳过但最后保存失败。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/health-profile/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
 # 状态：完成源码修改 - 作息习惯改为入睡/起床小时拨动选择
 
 - 2026-05-13 update:
