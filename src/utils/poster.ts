@@ -844,8 +844,8 @@ export function computeDayRecordPosterHeight(mealCount: number): number {
   const TOP = 48
   const HEADER_ROW = 32   // date pill + energy dots row
   const HEADER_GAP = 18
-  const INTAKE_ROW = 28
-  const INTAKE_GAP = 16
+  const INTAKE_ROW = 58
+  const INTAKE_GAP = 18
   const MACRO_CARD_H = 64
   const MACRO_GAP = 16
   const HEADER = TOP + HEADER_ROW + HEADER_GAP + INTAKE_ROW + INTAKE_GAP + MACRO_CARD_H + MACRO_GAP
@@ -957,18 +957,63 @@ export function drawDayRecordPoster(
 
   cy += 32 + 18
 
-  // ---- 今日摄入：标签和数值同一基线对齐，数值不加粗 ----
-  const intakeVal = `${formatDRKcal(d.totalIntake)} / ${formatDRKcal(d.targetIntake)} kcal`
+  // ---- 今日摄入进度：已摄入与目标放在进度条上方，提升一眼判断感 ----
+  const safeTarget = d.targetIntake > 0 ? d.targetIntake : 1
+  const intakeRatio = Math.max(0, d.totalIntake / safeTarget)
+  const progressPct = Math.min(intakeRatio, 1)
+  const intakeColor = intakeRatio > 1.05 ? DR_FAT : DR_ACCENT
+  const progressX = PAD
+  const progressW = contentW
+  const progressTrackH = 10
+  const progressTrackY = cy + 40
+  const progressFillW = Math.max(progressTrackH, progressW * progressPct)
+
+  ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
-  ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = DR_SUB
-  ctx.font = '14px sans-serif'
-  ctx.fillText('今日摄入', PAD, cy + 18)
-  const intakeLabelW = ctx.measureText('今日摄入').width + 10
+  ctx.font = '12px sans-serif'
+  ctx.fillText('今日摄入', progressX, cy + 9)
+
   ctx.fillStyle = DR_TITLE
-  ctx.font = '24px sans-serif'
-  ctx.fillText(intakeVal, PAD + intakeLabelW, cy + 20)
-  cy += 28 + 16
+  ctx.font = 'bold 22px sans-serif'
+  const intakeNumberText = formatDRKcal(d.totalIntake)
+  ctx.fillText(intakeNumberText, progressX, cy + 30)
+  const intakeNumberW = ctx.measureText(intakeNumberText).width
+  ctx.fillStyle = DR_SUB
+  ctx.font = '12px sans-serif'
+  ctx.fillText('kcal', progressX + intakeNumberW + 5, cy + 31)
+
+  ctx.textAlign = 'right'
+  ctx.fillStyle = DR_SUB
+  ctx.font = '12px sans-serif'
+  ctx.fillText('目标', progressX + progressW, cy + 9)
+  ctx.fillStyle = DR_MUTED
+  ctx.font = '600 14px sans-serif'
+  ctx.fillText(`${formatDRKcal(d.targetIntake)} kcal`, progressX + progressW, cy + 30)
+
+  drawRoundedRect(ctx, progressX, progressTrackY, progressW, progressTrackH, progressTrackH / 2)
+  ctx.fillStyle = 'rgba(92, 184, 150, 0.12)'
+  ctx.fill()
+
+  ctx.save()
+  drawRoundedRect(ctx, progressX, progressTrackY, progressW, progressTrackH, progressTrackH / 2)
+  ctx.clip()
+  const progressGrad = ctx.createLinearGradient(progressX, 0, progressX + progressW, 0)
+  progressGrad.addColorStop(0, 'rgba(92, 184, 150, 0.88)')
+  progressGrad.addColorStop(1, intakeColor)
+  ctx.fillStyle = progressGrad
+  ctx.fillRect(progressX, progressTrackY, progressFillW, progressTrackH)
+  ctx.restore()
+
+  const markerX = progressX + progressW * progressPct
+  ctx.beginPath()
+  ctx.arc(markerX, progressTrackY + progressTrackH / 2, 5, 0, Math.PI * 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  ctx.lineWidth = 2
+  ctx.strokeStyle = intakeColor
+  ctx.stroke()
+  cy += 58 + 18
 
   // 三张宏量小卡片（一行，无图标，文字加大）
   const macroCardW = (contentW - 12) / 3

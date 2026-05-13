@@ -8492,3 +8492,31 @@
 - Verification:
   - `node --check backend/scripts/push-docker-ccr.mjs` passed.
   - In the current detached worktree, `node backend/scripts/push-docker-ccr.mjs` exits before Docker checks with `当前分支为「HEAD」...只支持在 main 或 dev 上打对应标签`, confirming non-branch execution is rejected before build/push.
+
+## 2026-05-13 — 当天饮食记录与分享今日饮食按时间升序
+
+- Task: 用户要求「当天饮食记录」页面本身，以及点击「分享今日饮食」后生成的当天饮食海报，餐食都按时间排序，先吃的在前面，最晚吃的在最后面。
+- Status: fixed_code_verified
+- Fix:
+  - `src/packageExtra/pages/day-record/index.tsx` 新增按 `record.record_time` 升序的稳定排序兜底。
+  - `loadDayRecords()` 从接口拿到记录并映射成页面卡片后，先排序再写入 `records`。
+  - 页面列表和 `drawDayRecordPoster()` 使用同一份已排序 `records`，因此分享海报餐食顺序与页面一致。
+  - 本轮没有修改全局 `GET /api/food-records` 后端默认顺序，避免影响公共食物库分享等可能需要“最近记录优先”的选择器。
+- Verification:
+  - `npx eslint src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/packageExtra/pages/day-record/index.tsx` passed.
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务或端口不可用；本轮未能截图/交互验证。
+
+## 2026-05-13 — 分享今日饮食海报顶部摄入量改为进度条
+
+- Task: 用户要求优化「分享今日饮食」海报顶部区域的今日摄入卡路里展示，把当前摄入量/总量做成更好看的进度条。
+- Status: fixed_code_verified
+- Fix:
+  - `src/utils/poster.ts` 的 `drawDayRecordPoster()` 将原来的单行 `今日摄入 xxx / yyy kcal` 改为进度条模块。
+  - 模块上方左侧显示「今日摄入」和已摄入 kcal，右侧显示「目标」和目标 kcal；下方用圆角进度条展示摄入进度。
+  - 超过目标较多时进度颜色切到暖色，目标内保持绿色。
+  - `computeDayRecordPosterHeight()` 同步增高顶部区域，避免进度条模块挤压宏量卡片和餐食列表。
+- Verification:
+  - `npx eslint src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts --max-warnings 0` passed.
+  - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts` passed.
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务或端口不可用；本轮未能截图/交互验证。

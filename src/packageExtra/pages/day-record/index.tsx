@@ -155,6 +155,11 @@ function formatRecordTime(recordTime: string) {
   }
 }
 
+function getRecordTimeValue(recordTime?: string) {
+  const timestamp = new Date(recordTime || '').getTime()
+  return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY
+}
+
 type DayRecordCard = {
   id: string
   record: FoodRecord
@@ -171,6 +176,17 @@ type DayRecordCard = {
   totalCarbs: number
   totalFat: number
   intakeRatio: number
+}
+
+function sortDayRecordCardsByTime(items: DayRecordCard[]) {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const timeDiff = getRecordTimeValue(a.item.record.record_time) - getRecordTimeValue(b.item.record.record_time)
+      if (timeDiff !== 0) return timeDiff
+      return a.index - b.index
+    })
+    .map(({ item }) => item)
 }
 
 function DayRecordPage() {
@@ -219,7 +235,7 @@ function DayRecordPage() {
         getHomeDashboard(listDate).catch(() => null),
         getHomeDashboard(yesterdayStr).catch(() => null),
       ])
-      const nextRecords = (recordRes.records || []).map((record: FoodRecord) => {
+      const nextRecords = sortDayRecordCardsByTime((recordRes.records || []).map((record: FoodRecord) => {
         const imageUrls = ((record.image_paths && record.image_paths.length > 0)
           ? record.image_paths.filter(Boolean)
           : (record.image_path ? [record.image_path] : []))
@@ -262,7 +278,7 @@ function DayRecordPage() {
           totalFat: Math.round((record.total_fat ?? 0) * 10) / 10,
           intakeRatio: computeFoodRecordIntakeRatio(record),
         }
-      })
+      }))
 
       setRecords(nextRecords)
       setHistoryTotalCalorie(Math.round(nextRecords.reduce((sum, item) => sum + item.totalCalorie, 0) * 10) / 10)
