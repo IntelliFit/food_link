@@ -98,8 +98,8 @@ type AnalysisPanelKey = 'health' | 'nutrition' | 'structure'
 
 const ANALYSIS_PANEL_TABS: Array<{ key: AnalysisPanelKey; label: string }> = [
   { key: 'health', label: '健康指数' },
-  { key: 'nutrition', label: '营养证据' },
-  { key: 'structure', label: '结构指标' },
+  { key: 'nutrition', label: 'AI分析' },
+  { key: 'structure', label: '热量分布' },
 ]
 
 const DEFAULT_RISK_KEYS = ['hypertension', 'diabetes', 'cardio', 'weight']
@@ -228,13 +228,12 @@ function StatsPage() {
   const rangeRef = useRef(range)
   rangeRef.current = range
   const [riskDetailModal, setRiskDetailModal] = useState<{ visible: boolean; card: RiskCardModel | null }>({ visible: false, card: null })
-  const [aiDetailVisible, setAiDetailVisible] = useState(false)
   const [riskPickerVisible, setRiskPickerVisible] = useState(false)
 
   // 自定义 tabBar 显隐同步：弹窗打开时隐藏底栏
   useEffect(() => {
     try {
-      if (riskDetailModal.visible || aiDetailVisible || riskPickerVisible) {
+      if (riskDetailModal.visible || riskPickerVisible) {
         Taro.setStorageSync('stats_risk_detail_visible', '1')
       } else {
         Taro.removeStorageSync('stats_risk_detail_visible')
@@ -249,7 +248,7 @@ function StatsPage() {
         // ignore
       }
     }
-  }, [riskDetailModal.visible, aiDetailVisible, riskPickerVisible])
+  }, [riskDetailModal.visible, riskPickerVisible])
   const [selectedRiskKeys, setSelectedRiskKeys] = useState<string[]>(() => {
     try {
       const stored = Taro.getStorageSync(RISK_PREF_STORAGE_KEY)
@@ -632,6 +631,23 @@ function StatsPage() {
   const maxWaterValue = waterTrend.length > 0
     ? Math.max(waterGoalMl, ...waterTrend.map(item => toSafeNumber(item.total)))
     : waterGoalMl
+  const weightChartEntries = weightTrend.slice(-(range === 'week' ? 7 : 10))
+  const weightChartValues = weightChartEntries.map(item => toSafeNumber(item.value))
+  const weightChartMin = weightChartValues.length > 0 ? Math.min(...weightChartValues) : 0
+  const weightChartMax = weightChartValues.length > 0 ? Math.max(...weightChartValues) : 0
+  const weightChartRange = Math.max(weightChartMax - weightChartMin, 1)
+  const weightChartPoints = weightChartEntries.map((item, index) => {
+    const x = weightChartEntries.length <= 1
+      ? 300
+      : 32 + (index / (weightChartEntries.length - 1)) * 536
+    const y = 154 - ((toSafeNumber(item.value) - weightChartMin) / weightChartRange) * 112
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+  const weightChartSvg = weightChartEntries.length > 1
+    ? `url("data:image/svg+xml,${encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 180'><line x1='32' y1='42' x2='568' y2='42' stroke='#e2e8f0' stroke-width='2'/><line x1='32' y1='98' x2='568' y2='98' stroke='#e2e8f0' stroke-width='2'/><line x1='32' y1='154' x2='568' y2='154' stroke='#e2e8f0' stroke-width='2'/><polyline points='${weightChartPoints}' fill='none' stroke='#5cb896' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/></svg>`
+    )}")`
+    : ''
   const heatmapCells: HeatmapCell[] = d.daily_calories.map((item) => {
     const hasRecord = item.calories > 0
     const delta = hasRecord ? item.calories - tdee : 0
@@ -1161,106 +1177,78 @@ function StatsPage() {
           </View>
         </View>
 
-        <View
-          className='stats-card ai-insight-card'
-          onClick={() => setAiDetailVisible(true)}
-        >
-          <View className='ai-insight-card-top'>
-            <View className='ai-insight-card-title-wrap'>
-              <Text className='ai-insight-card-title'>AI 风险解读</Text>
-              <Text className='ai-insight-card-summary'>
-                {displayInsightText
-                  ? `${displayInsightText.slice(0, 46)}${displayInsightText.length > 46 ? '...' : ''}`
-                  : '用于把统计结果翻译成更容易理解的长期趋势结论'}
-              </Text>
-            </View>
-          </View>
-          <View className='ai-insight-card-more-btn'>
-            <Text className='ai-insight-card-more-text'>查看详情</Text>
-          </View>
-        </View>
-
-        {/* AI 风险解读详情底部弹窗 */}
-        {aiDetailVisible && (
-          <View
-            className='ai-detail-modal'
-            onClick={() => setAiDetailVisible(false)}
-          >
-            <View className='ai-detail-backdrop' />
-            <View
-              className='ai-detail-panel'
-              onClick={(e) => e.stopPropagation()}
-            >
-              <View className='ai-detail-handle' />
-              <View className='ai-detail-header'>
-                <Text className='ai-detail-title'>AI 风险解读</Text>
-                <Text className='ai-detail-subtitle'>用于把统计结果翻译成更容易理解的长期趋势结论</Text>
-              </View>
-              <View className='ai-detail-body'>
-                <View className='ai-disclaimer'>
-                  <Text className='ai-disclaimer-text'>本页表达的是饮食相关风险趋势，不构成医学诊断或治疗建议。</Text>
-                </View>
-                {insightGeneratedDate ? (
-                  <View className={`analysis-status${insightNeedsRefresh ? ' warning' : ''}`}>
-                    <Text className='analysis-status-text'>
-                      {insightNeedsRefresh
-                        ? `当前展示的是 ${insightGeneratedDate} 生成的缓存，你最近新增了饮食记录，可按需手动更新。`
-                        : `当前展示的是 ${insightGeneratedDate} 生成的缓存。`}
-                    </Text>
-                    {insightNeedsRefresh ? (
-                      <View
-                        className={`analysis-status-action${insightActionLoading ? ' is-loading' : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (!insightActionLoading) handleGenerateInsight()
-                        }}
-                      >
-                        {insightActionLoading ? (
-                          <Text className='iconfont icon-jiazaixiao analysis-status-action-icon' />
-                        ) : (
-                          <Text className='analysis-status-action-text'>手动更新</Text>
-                        )}
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
-                {insightError ? (
-                  <View className='analysis-error'>
-                    <Text className='analysis-error-text'>{insightError}</Text>
-                  </View>
-                ) : null}
-                {displayInsightText ? (
-                  <Text className='analysis-content'>{displayInsightText}</Text>
-                ) : insightActionLoading || isTyping ? (
-                  <View className='analysis-loading'>
-                    <Text className='iconfont icon-jiazaixiao analysis-loading-icon' />
-                    <Text className='analysis-loading-text'>
-                      {insightActionLoading ? 'AI 正在生成当前统计周期的营养洞察，请稍候...' : '正在展示已生成的洞察...'}
-                    </Text>
-                  </View>
-                ) : (
-                  <View className='analysis-empty'>
-                    <Text className='analysis-empty-text'>这里不会在每次打开页面时自动重新分析。你可以在需要时手动生成一次。</Text>
-                    <View className='analysis-empty-action' onClick={handleGenerateInsight}>
-                      <Text className='analysis-empty-action-text'>生成本{range === 'week' ? '周' : '月'}洞察</Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-              <View
-                className='ai-detail-close-btn'
-                onClick={() => setAiDetailVisible(false)}
-              >
-                <Text className='ai-detail-close-text'>知道了</Text>
-              </View>
-            </View>
-          </View>
-        )}
           </>
           )
         ) : null}
 
         {analysisPanel === 'nutrition' ? (
+          <>
+        <View className='stats-card ai-insight-card'>
+          <View className='ai-insight-card-top'>
+            <View className='ai-insight-card-title-wrap'>
+              <Text className='ai-insight-card-title'>AI 风险解读</Text>
+              <Text className='ai-insight-card-summary'>
+                用于把统计结果翻译成更容易理解的长期趋势结论
+              </Text>
+            </View>
+          </View>
+          <View className='ai-insight-card-body'>
+            <View className='ai-disclaimer'>
+              <Text className='ai-disclaimer-text'>本页表达的是饮食相关风险趋势，不构成医学诊断或治疗建议。</Text>
+            </View>
+            {insightGeneratedDate ? (
+              <View className={`analysis-status${insightNeedsRefresh ? ' warning' : ''}`}>
+                <Text className='analysis-status-text'>
+                  {insightNeedsRefresh
+                    ? `当前展示的是 ${insightGeneratedDate} 生成的缓存，你最近新增了饮食记录，可按需手动更新。`
+                    : `当前展示的是 ${insightGeneratedDate} 生成的缓存。`}
+                </Text>
+                {insightNeedsRefresh ? (
+                  <View
+                    className={`analysis-status-action${insightActionLoading ? ' is-loading' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (!insightActionLoading) handleGenerateInsight()
+                    }}
+                  >
+                    {insightActionLoading ? (
+                      <Text className='iconfont icon-jiazaixiao analysis-status-action-icon' />
+                    ) : (
+                      <Text className='analysis-status-action-text'>手动更新</Text>
+                    )}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+            {insightError ? (
+              <View className='analysis-error'>
+                <Text className='analysis-error-text'>{insightError}</Text>
+              </View>
+            ) : null}
+            {displayInsightText ? (
+              <Text className='analysis-content'>{displayInsightText}</Text>
+            ) : insightActionLoading || isTyping ? (
+              <View className='analysis-loading'>
+                <Text className='iconfont icon-jiazaixiao analysis-loading-icon' />
+                <Text className='analysis-loading-text'>
+                  {insightActionLoading ? 'AI 正在生成当前统计周期的营养洞察，请稍候...' : '正在展示已生成的洞察...'}
+                </Text>
+              </View>
+            ) : (
+              <View className='analysis-empty'>
+                <Text className='analysis-empty-text'>这里不会在每次打开页面时自动重新分析。你可以在需要时手动生成一次。</Text>
+                <View className='analysis-empty-action' onClick={handleGenerateInsight}>
+                  <Text className='analysis-empty-action-text'>生成本{range === 'week' ? '周' : '月'}洞察</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
+          </>
+        ) : null}
+
+        {analysisPanel === 'structure' ? (
           <>
         <View className='stats-card chart-card evidence-card'>
           <View className='card-header chart-card-header card-header--collapsible' onClick={() => toggleSection('calories')}>
@@ -1372,11 +1360,6 @@ function StatsPage() {
           ) : null}
         </View>
 
-          </>
-        ) : null}
-
-        {analysisPanel === 'structure' ? (
-          <>
         <View className='stats-card meal-structure-card evidence-card'>
           <View className='card-header card-header--collapsible' onClick={() => toggleSection('meals')}>
             <Text className='iconfont icon-canciguanli chart-title-icon' />
@@ -1463,14 +1446,40 @@ function StatsPage() {
                         : '已开始累计体重趋势'}
                     </Text>
                   ) : null}
-                  {weightTrend.length > 0 ? (
-                    <View className='weight-chip-row'>
-                      {weightTrend.slice(-(range === 'week' ? 7 : 10)).map((item) => (
-                        <View key={item.date} className='weight-chip'>
-                          <Text className='weight-chip-date'>{item.date.slice(5)}</Text>
-                          <Text className='weight-chip-value'>{item.value.toFixed(1)}</Text>
+                  {weightChartEntries.length > 0 ? (
+                    <View className='weight-line-chart-wrap'>
+                      <View
+                        className={`weight-line-chart ${weightChartEntries.length <= 1 ? 'single-point' : ''}`}
+                        style={weightChartSvg ? { backgroundImage: weightChartSvg } : undefined}
+                      >
+                        {weightChartEntries.length === 1 ? (
+                          <View className='weight-line-single-dot' />
+                        ) : null}
+                        <View className='weight-line-point-layer'>
+                          {weightChartEntries.map((item, index) => {
+                            const left = weightChartEntries.length <= 1
+                              ? 50
+                              : 5.3 + (index / (weightChartEntries.length - 1)) * 89.4
+                            const top = weightChartEntries.length <= 1
+                              ? 50
+                              : 23.3 + (1 - ((toSafeNumber(item.value) - weightChartMin) / weightChartRange)) * 62.2
+                            return (
+                              <View
+                                key={item.date}
+                                className='weight-line-point'
+                                style={{ left: `${left}%`, top: `${top}%` }}
+                              >
+                                <Text className='weight-line-point-value'>{item.value.toFixed(1)}</Text>
+                              </View>
+                            )
+                          })}
                         </View>
-                      ))}
+                      </View>
+                      <View className='weight-line-label-row'>
+                        {weightChartEntries.map((item) => (
+                          <Text key={item.date} className='weight-line-label'>{item.date.slice(5)}</Text>
+                        ))}
+                      </View>
                     </View>
                   ) : null}
                 </View>

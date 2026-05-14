@@ -95,6 +95,7 @@ const PROFILE_STEP_WIDTH_RPX = 750
 const TOTAL_STEPS = PROFILE_STEPS.length
 const DEFAULT_HEIGHT_CM = 170
 const DEFAULT_WEIGHT_KG = 60
+const MAX_REPORT_IMAGE_COUNT = 3
 
 function HealthProfilePage() {
   const { scheme } = useAppColorScheme()
@@ -113,7 +114,7 @@ function HealthProfilePage() {
   const [medicalHistory, setMedicalHistory] = useState<string[]>([])
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergyList, setAllergyList] = useState<string[]>([])
-  const [reportImageUrl, setReportImageUrl] = useState<string | null>(null)
+  const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
 
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
@@ -358,6 +359,7 @@ function HealthProfilePage() {
     const allMedicalHistory = [...medicalHistory.filter(v => v !== 'none'), ...selectedCustomMedical]
     const allAllergies = [...allergyList.filter(v => v !== 'none'), ...selectedCustomAllergy]
     const finalRoutine = formatRoutineHours(routineHours)
+    const reportImageUrl = reportImageUrls.join(',')
     const req: HealthProfileUpdateRequest = {
       gender: gender || undefined,
       birthday: birthday || undefined,
@@ -380,7 +382,7 @@ function HealthProfilePage() {
 
     const { confirm } = await Taro.showModal({
       title: '确认保存',
-      content: reportImageUrl
+      content: reportImageUrls.length > 0
         ? '确定保存健康档案吗？体检报告将在后台自动识别，完成后会更新到档案中。'
         : '确定将当前填写的健康信息保存到个人档案吗？'
     })
@@ -405,16 +407,22 @@ function HealthProfilePage() {
     }
   }
 
-  /** 上传体检报告：仅上传到 Supabase 并展示，不解析；点击「保存健康档案」时在后台提交病历提取任务 */
+  /** 上传体检报告：仅上传图片并展示，点击「保存健康档案」时提交病历提取任务 */
   const handleReportUpload = async () => {
     try {
-      const res = await chooseImageWithPrivacy({ count: 1, sizeType: ['compressed'] })
-      const base64 = await imageToBase64(res.tempFilePaths[0])
+      const res = await chooseImageWithPrivacy({ count: MAX_REPORT_IMAGE_COUNT, sizeType: ['compressed'] })
+      const tempPaths = (res.tempFilePaths || []).slice(0, MAX_REPORT_IMAGE_COUNT)
+      if (tempPaths.length === 0) return
       Taro.showLoading({ title: '上传中...', mask: true })
-      const { imageUrl } = await uploadReportImage(base64)
+      const urls: string[] = []
+      for (const path of tempPaths) {
+        const base64 = await imageToBase64(path)
+        const { imageUrl } = await uploadReportImage(base64)
+        urls.push(imageUrl)
+      }
       Taro.hideLoading()
-      setReportImageUrl(imageUrl)
-      Taro.showToast({ title: '上传成功，保存时将自动识别', icon: 'success' })
+      setReportImageUrls(urls)
+      Taro.showToast({ title: `上传成功 ${urls.length} 张`, icon: 'success' })
     } catch (e: any) {
       Taro.hideLoading()
       if (e?.errMsg?.includes('cancel')) return
@@ -800,22 +808,29 @@ function HealthProfilePage() {
             </View>
 
             <View
-              className={`upload-area ${reportImageUrl ? 'has-image' : ''}`}
+              className={`upload-area ${reportImageUrls.length > 0 ? 'has-image' : ''}`}
               onClick={handleReportUpload}
             >
-              {reportImageUrl ? (
+              {reportImageUrls.length > 0 ? (
                 <>
-                  <Image src={reportImageUrl} mode='aspectFit' className='preview-image' />
+                  <View className={`report-preview-grid count-${reportImageUrls.length}`}>
+                    {reportImageUrls.map((url, index) => (
+                      <View className='report-preview-item' key={`${url}-${index}`}>
+                        <Image src={url} mode='aspectFit' className='preview-image' />
+                        <Text className='report-preview-index'>{index + 1}</Text>
+                      </View>
+                    ))}
+                  </View>
                   <View className='reupload-mask'>
                     <Text className='iconfont icon-xiangji' style={{ fontSize: '48rpx', color: '#fff' }}></Text>
-                    <Text className='reupload-text'>点击更换图片</Text>
+                    <Text className='reupload-text'>重新选择报告</Text>
                   </View>
                 </>
               ) : (
                 <View className='upload-placeholder'>
                   <Text className='upload-icon-font iconfont icon-paizhao-xianxing'></Text>
                   <Text className='upload-title'>点击上传报告</Text>
-                  <Text className='upload-desc'>支持 JPG / PNG 格式图片</Text>
+                  <Text className='upload-desc'>支持 JPG / PNG 格式，最多 {MAX_REPORT_IMAGE_COUNT} 张</Text>
                 </View>
               )}
             </View>
@@ -860,7 +875,7 @@ function HealthProfilePage() {
                 onClick={handleSubmit}
                 loading={saving}
               >
-                {reportImageUrl ? '确认并开启分析' : '以后再说，直接完成'}
+                {reportImageUrls.length > 0 ? '确认并开启分析' : '以后再说，直接完成'}
               </Button>
             </View>
           </View>

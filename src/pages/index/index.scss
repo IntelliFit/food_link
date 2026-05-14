@@ -3364,6 +3364,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   padding: 32rpx 24rpx;
   border-radius: 16rpx;
   gap: 12rpx;
+  border: 1rpx solid transparent;
 }
 
 .record-menu-new-badge {
@@ -3385,6 +3386,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .record-menu-grid-icon-wrap {
   width: 64rpx;
   height: 64rpx;
+  border-radius: 18rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3432,7 +3434,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .record-menu-list-left {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  min-width: 0;
 }
 
 .record-menu-list-texts {
@@ -3467,6 +3469,12 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   display: flex;
   align-items: center;
   gap: 16rpx;
+}
+
+.record-menu-list-arrow-v2 {
+  font-size: 28rpx;
+  line-height: 1;
+  color: #cbd5e1;
 }
 
 .record-menu-badge {

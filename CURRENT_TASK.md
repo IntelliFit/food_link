@@ -1,3 +1,126 @@
+# 状态：完成源码修改 - AI分析风险解读直接展开
+
+- 2026-05-15 follow-up 6:
+  - User 要求：`AI分析` 面板里的 `AI 风险解读` 不要折叠，不要边框，不要背景渐变，直接正常显示全部内容；完成后提交并推送代码。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`
+      - 移除 `AI 风险解读` 的点击卡片和底部详情弹层结构。
+      - 将原弹层里的免责声明、缓存状态、手动更新、错误态、正文、生成入口直接内联到 `AI分析` 面板中。
+      - 移除不再需要的 `aiDetailVisible` 状态和自定义 tabBar 隐藏依赖。
+    - `src/pages/stats/index.scss`
+      - `AI 风险解读` 卡片改为无边框、无渐变白底。
+      - 摘要不再强制省略，正文区域直接展开。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - 提交前综合校验 `npx eslint src/pages/stats/index.tsx src/pages/index/components/RecordMenu.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed。
+    - 提交前综合校验 `npx stylelint src/pages/stats/index.scss src/packageExtra/pages/health-profile/index.scss --allow-empty-input` passed。
+    - 提交前 `git diff --check` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 记录菜单快捷入口去除左侧图标
+
+- 2026-05-15 follow-up 5:
+  - User 要求：底部导航栏卡路里按钮点击后弹出的记录菜单里，`我的收藏` 和 `识别记录` 左侧图标去除；同一行最右侧图标改为项目图标系统的向右箭头。
+  - Fix applied:
+    - `src/pages/index/components/RecordMenu.tsx`
+      - 移除 `QUICK_ACCESS_ITEMS` 中 `我的收藏/识别记录` 的左侧图标配置和渲染。
+      - 右侧箭头从组件 `IconChevronRight` 改为 `Text className='iconfont icon-right-arrow record-menu-list-arrow-v2'`。
+    - `src/pages/index/index.scss`
+      - 快捷入口左侧布局取消图标间距依赖。
+      - 新增 `.record-menu-list-arrow-v2` 样式。
+  - Verification:
+    - `npx eslint src/pages/index/components/RecordMenu.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/RecordMenu.tsx src/pages/index/index.scss` passed。
+    - `npx stylelint src/pages/index/index.scss --allow-empty-input` 仍失败于该文件开头既有 SCSS 变量解析问题：`Unknown word $purple-color`。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 分析页面板重组与体重折线图
+
+- 2026-05-15 follow-up 4:
+  - User 要求：`结构指标` 改名为 `热量分布`；原 `营养证据` 的热量趋势和宏量结构移动到热量分布顶部，使热量分布包含 4 个板块；健康指数底部的 `AI 风险解读` 移动到原营养证据面板；`营养证据` 改为 `AI分析`；长期健康指标里的体重趋势改用折线图。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`
+      - 分析页 Tab 改为 `健康指数 / AI分析 / 热量分布`。
+      - `AI 风险解读` 卡片和底部弹层从健康指数面板移动到 `AI分析` 面板。
+      - `热量分布` 面板现在依次展示：`热量摄入趋势`、`宏量营养结构`、`餐次热量分布`、`长期健康指标`。
+      - `长期健康指标` 的体重趋势从日期/数值胶囊改为折线图，保留每个点的体重数值和日期标签。
+    - `src/pages/stats/index.scss`
+      - 新增体重折线图容器、点位、数值浮标和日期轴样式。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 健康档案引导页体检报告多图上传
+
+- 2026-05-15 follow-up 3:
+  - User 要求：用户引导页面里的体检报告逻辑需要和健康档案里的体检报告逻辑一致，并支持最多上传 3 张图片。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 引导页体检报告从单张 `reportImageUrl` 改为 `reportImageUrls: string[]`。
+      - 上传时调用 `chooseImageWithPrivacy({ count: 3 })`，按健康档案页方式逐张 `imageToBase64 -> uploadReportImage`。
+      - 保存健康档案时将图片 URL 用逗号拼接写入 `report_image_url`，并用同一个逗号拼接字符串提交 `submitReportExtractionTask()`。
+      - 上传区文案更新为最多 3 张，按钮状态根据是否已选图片切换。
+    - `src/packageExtra/pages/health-profile/index.scss`
+      - 上传区支持 1/2/3 张报告预览，图片编号角标展示。
+      - 顺手修正该文件一个旧 `rgba()` 写法以通过当前 stylelint。
+    - `src/packageExtra/pages/health-profile-view/index.tsx`
+      - 健康档案查看页直接上传和编辑弹窗上传都统一限制为最多 3 张，文案同步。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed。
+    - `npx stylelint src/packageExtra/pages/health-profile/index.scss --allow-empty-input` passed。
+    - `git diff --check -- src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile/index.scss src/packageExtra/pages/health-profile-view/index.tsx` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 记录菜单入口低饱和图标配色
+
+- 2026-05-15 follow-up 2:
+  - User 要求：记录菜单中 `我的收藏` 和 `识别记录` 左侧图标颜色也按低饱和要求改造。
+  - Fix applied:
+    - `src/pages/index/components/RecordMenu.tsx`
+      - `我的收藏` 改为米金前景 + 米金淡色图标槽。
+      - `识别记录` 改为灰蓝前景 + 灰蓝淡色图标槽。
+      - 两个快捷入口同步增加暗色模式下的低透明度图标槽和低饱和前景色。
+  - Verification:
+    - `npx eslint src/pages/index/components/RecordMenu.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/RecordMenu.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+- 2026-05-15 follow-up:
+  - User 要求：分析页健康指数卡片中的 4 个指标（已记录、超出消耗、晚餐热量占比、连续记录）不要两行两列，改为一行四列，并去掉指标块背景色和外边框，只保持间距。
+  - Fix applied:
+    - `src/pages/stats/index.scss`
+      - `.risk-overview-chip-row` 改为 `repeat(4, minmax(0, 1fr))`。
+      - `.risk-overview-chip` 去掉 padding、圆角、背景和边框，仅保留最小宽度控制。
+      - 指标值字号微调并加 `nowrap/ellipsis`，避免一行四列时撑开布局。
+  - Verification:
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` passed。
+    - `git diff --check -- src/pages/stats/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+- 2026-05-15 update:
+  - User 要求：首页点击卡路里/记录按钮后弹出的记录菜单中，从“拍照识别”到“手动输入”的入口不要再五彩斑斓，改成仿照“我的”页功能入口图标的低饱和配色。
+  - Fix applied:
+    - `src/pages/index/components/RecordMenu.tsx`
+      - 顶部 2x2 入口颜色改为柔绿、灰蓝、米金、灰紫四组低饱和 tone。
+      - 每个入口新增浅色卡片背景、浅色边框和图标槽背景。
+      - 同步配置暗色模式下的低透明度前景/背景/边框颜色。
+    - `src/pages/index/index.scss`
+      - `record-menu-grid-card` 增加透明边框以承载 inline tone 边框色。
+      - `record-menu-grid-icon-wrap` 增加圆角，形成类似“我的”页的淡色图标块。
+  - Verification:
+    - `npx eslint src/pages/index/components/RecordMenu.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/RecordMenu.tsx src/pages/index/index.scss` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - `npx stylelint src/pages/index/index.scss --allow-empty-input` 无法解析该 SCSS 文件开头变量（`Unknown word $purple-color`），未能作为有效校验；该阻塞与本轮新增样式无关。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
 # 状态：完成源码修改 - 分析页周期下拉与三段面板布局
 
 - 2026-05-15 follow-up 3:

@@ -74,6 +74,8 @@ const ALLERGY_MAP: Record<string, string> = {
   none: '无'
 }
 
+const MAX_REPORT_IMAGE_COUNT = 3
+
 /* ========== 编辑选项常量 ========== */
 const GOAL_OPTIONS = [
   { label: '减重', value: 'fat_loss' },
@@ -207,8 +209,8 @@ function HealthProfileViewPage() {
 
   const handleDirectReportUpload = async () => {
     try {
-      const res = await chooseImageWithPrivacy({ count: 9, sizeType: ['compressed'] })
-      const tempPaths = res.tempFilePaths || []
+      const res = await chooseImageWithPrivacy({ count: MAX_REPORT_IMAGE_COUNT, sizeType: ['compressed'] })
+      const tempPaths = (res.tempFilePaths || []).slice(0, MAX_REPORT_IMAGE_COUNT)
       if (tempPaths.length === 0) return
       Taro.showLoading({ title: '上传中...', mask: true })
       const urls: string[] = []
@@ -740,8 +742,8 @@ function HealthProfileViewPage() {
 
         const handleReportUpload = async () => {
           try {
-            const res = await chooseImageWithPrivacy({ count: 9, sizeType: ['compressed'] })
-            const tempPaths = res.tempFilePaths || []
+            const res = await chooseImageWithPrivacy({ count: MAX_REPORT_IMAGE_COUNT, sizeType: ['compressed'] })
+            const tempPaths = (res.tempFilePaths || []).slice(0, MAX_REPORT_IMAGE_COUNT)
             if (tempPaths.length === 0) return
             Taro.showLoading({ title: '上传中...', mask: true })
             const urls: string[] = []
@@ -1080,7 +1082,7 @@ function HealthProfileViewPage() {
             <View className='report-upload-trigger' onClick={handleDirectReportUpload}>
               <Text className='iconfont icon-paizhao-xianxing report-upload-icon'></Text>
               <Text className='report-upload-title'>点击上传体检报告</Text>
-              <Text className='report-upload-desc'>支持 JPG / PNG 格式，可多选</Text>
+              <Text className='report-upload-desc'>支持 JPG / PNG 格式，最多 {MAX_REPORT_IMAGE_COUNT} 张</Text>
             </View>
           )}
         </View>
