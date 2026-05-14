@@ -10,16 +10,23 @@ import (
 )
 
 type Suite struct {
+	ID          string            `yaml:"id"`
 	Name        string            `yaml:"name"`
+	Desc        string            `yaml:"desc"`
 	ConfigDir   string            `yaml:"config_dir"`
 	TempDB      TempDBConfig      `yaml:"temp_db"`
 	Auth        AuthConfig        `yaml:"auth"`
 	SeedSQL     []string          `yaml:"seed_sql"`
 	RouteSmoke  RouteSmokeConfig  `yaml:"route_smoke"`
 	DefaultVars map[string]string `yaml:"default_vars"`
+	CaseFiles   []string          `yaml:"case_files"`
 	Cases       []Case            `yaml:"cases"`
 
 	path string
+}
+
+type caseFile struct {
+	Cases []Case `yaml:"cases"`
 }
 
 type TempDBConfig struct {
@@ -53,7 +60,9 @@ type RouteSmokeConfig struct {
 }
 
 type Case struct {
+	ID      string            `yaml:"id"`
 	Name    string            `yaml:"name"`
+	Desc    string            `yaml:"desc"`
 	Group   string            `yaml:"group"`
 	Method  string            `yaml:"method"`
 	Path    string            `yaml:"path"`
@@ -84,8 +93,17 @@ func LoadSuite(path string) (*Suite, error) {
 		return nil, err
 	}
 	suite.path = path
+	if suite.ID == "" {
+		suite.ID = suite.Name
+	}
+	if suite.ID == "" {
+		suite.ID = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	}
 	if suite.Name == "" {
-		suite.Name = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		suite.Name = suite.ID
+	}
+	if suite.Desc == "" {
+		suite.Desc = suite.Name
 	}
 	if suite.ConfigDir == "" {
 		suite.ConfigDir = "."
@@ -109,30 +127,76 @@ func LoadSuite(path string) (*Suite, error) {
 	if suite.DefaultVars == nil {
 		suite.DefaultVars = map[string]string{}
 	}
+	if err := suite.loadCaseFiles(); err != nil {
+		return nil, err
+	}
 	if err := suite.validate(); err != nil {
 		return nil, err
 	}
 	return &suite, nil
 }
 
-func (s *Suite) validate() error {
-	seen := map[string]bool{}
-	for i, c := range s.Cases {
-		if c.Name == "" {
-			return fmt.Errorf("cases[%d].name is required", i)
+func (s *Suite) loadCaseFiles() error {
+	for _, pattern := range s.CaseFiles {
+		matches, err := filepath.Glob(s.resolvePath(pattern))
+		if err != nil {
+			return fmt.Errorf("invalid case_files pattern %q: %w", pattern, err)
 		}
-		if seen[c.Name] {
-			return fmt.Errorf("duplicate case name %q", c.Name)
+		if len(matches) == 0 {
+			return fmt.Errorf("case_files pattern %q matched no files", pattern)
 		}
-		seen[c.Name] = true
-		if c.Method == "" {
-			return fmt.Errorf("case %q method is required", c.Name)
-		}
-		if c.Path == "" {
-			return fmt.Errorf("case %q path is required", c.Name)
+		for _, path := range matches {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("read case file %s: %w", path, err)
+			}
+			var file caseFile
+			if err := yaml.Unmarshal(data, &file); err != nil {
+				return fmt.Errorf("parse case file %s: %w", path, err)
+			}
+			for i := range file.Cases {
+				if file.Cases[i].Group == "" {
+					file.Cases[i].Group = strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+				}
+			}
+			s.Cases = append(s.Cases, file.Cases...)
 		}
 	}
 	return nil
+}
+
+func (s *Suite) validate() error {
+	seen := map[string]bool{}
+	for i, c := range s.Cases {
+		id := c.caseID()
+		if id == "" {
+			return fmt.Errorf("cases[%d].id is required", i)
+		}
+		if seen[id] {
+			return fmt.Errorf("duplicate case id %q", id)
+		}
+		seen[id] = true
+		if c.Method == "" {
+			return fmt.Errorf("case %q method is required", id)
+		}
+		if c.Path == "" {
+			return fmt.Errorf("case %q path is required", id)
+		}
+		if c.Name == "" {
+			return fmt.Errorf("case %q name is required", id)
+		}
+		if c.Desc == "" {
+			return fmt.Errorf("case %q desc is required", id)
+		}
+	}
+	return nil
+}
+
+func (c Case) caseID() string {
+	if strings.TrimSpace(c.ID) != "" {
+		return strings.TrimSpace(c.ID)
+	}
+	return strings.TrimSpace(c.Name)
 }
 
 func (s *Suite) baseDir() string {

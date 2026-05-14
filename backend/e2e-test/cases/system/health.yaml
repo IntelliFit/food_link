@@ -1,0 +1,13 @@
+cases:
+  - id: system.health
+    name: "健康检查"
+    desc: "验证 /api/health 可以正常返回服务健康状态，并带有追踪响应头。"
+    group: system
+    method: GET
+    path: /api/health
+    expect:
+      status: 200
+      headers:
+        X-Trace-Id: not_empty
+      json:
+        status: ok

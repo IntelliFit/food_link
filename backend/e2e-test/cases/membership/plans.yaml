@@ -1,0 +1,12 @@
+cases:
+  - id: membership.plans.public
+    name: "会员套餐列表"
+    desc: "验证未登录也可以获取可用会员套餐列表。"
+    group: membership
+    method: GET
+    path: /api/membership/plans
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.list: type:array

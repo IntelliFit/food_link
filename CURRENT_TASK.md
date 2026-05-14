@@ -8525,14 +8525,16 @@
 - Task: User requested a backend end-to-end/API contract test MVP where future API tests can be added by editing one config file, with auth support, seeded data, and a fresh temporary database per run.
 - Status: implemented_verified_documented
 - Implementation:
-  - Added `backend/cmd/api-contract-test` CLI.
-  - Added YAML-driven runner under `backend/internal/e2e`.
-  - Added suite config at `backend/testdata/api-contract/suite.yaml` and seed data at `backend/testdata/api-contract/fixtures/base.sql`.
-  - Added docs at `backend/docs/api-contract-tests.md`.
-  - Added full human/AI-readable guide at `docs/backend-api-e2e-contract-tests.md`.
+  - Added `backend/e2e-test/cmd/api-contract-test` CLI.
+  - Added YAML-driven runner under `backend/e2e-test/runner`.
+  - Added suite config at `backend/e2e-test/suite.yaml` and seed data at `backend/e2e-test/fixtures/base.sql`.
+  - Consolidated E2E test assets under `backend/e2e-test/`.
+  - Split explicit cases into route/module files under `backend/e2e-test/cases/`.
+  - Added `id/name/desc` metadata: `id` is the stable machine-readable selector, `name` is the short Chinese display name, and `desc` is the detailed human-readable behavior description.
+  - Added full human/AI-readable guide at `backend/e2e-test/README.md`.
   - Added root script `npm run test:backend:api-contract`.
 - Verification:
-  - `go test ./internal/e2e ./cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
   - `npm run test:backend:api-contract -- --timeout 5m` passed with `Total: 161, Passed: 161, Failed: 0`.
   - `git diff --check` passed; only CRLF conversion warnings were reported for modified files.
 # 2026-05-14 update: loadtest default users made self-contained

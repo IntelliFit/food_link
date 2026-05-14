@@ -20,7 +20,7 @@ import (
 type Options struct {
 	SuitePath string
 	ConfigDir string
-	CaseName  string
+	CaseID    string
 	Group     string
 	List      bool
 	KeepDB    bool
@@ -28,6 +28,8 @@ type Options struct {
 
 type Result struct {
 	Suite       string
+	SuiteName   string
+	SuiteDesc   string
 	TempDBName  string
 	Total       int
 	Passed      int
@@ -37,7 +39,9 @@ type Result struct {
 }
 
 type CaseResult struct {
+	ID     string
 	Name   string
+	Desc   string
 	Group  string
 	Method string
 	Path   string
@@ -56,14 +60,14 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 		suite.TempDB.Keep = true
 	}
 	if opts.List {
-		cases := filterCases(suite.Cases, opts.CaseName, opts.Group)
+		cases := filterCases(suite.Cases, opts.CaseID, opts.Group)
 		for _, c := range cases {
-			fmt.Printf("%s\t%s\t%s\t%s\n", c.Name, c.Group, strings.ToUpper(c.Method), c.Path)
+			fmt.Printf("%s\t%s\t%s\t%s\t%s\t%s\n", c.caseID(), c.Name, c.Desc, c.Group, strings.ToUpper(c.Method), c.Path)
 		}
-		if suite.RouteSmoke.Enabled && (opts.Group == "" || opts.Group == suite.RouteSmoke.Group) && opts.CaseName == "" {
+		if suite.RouteSmoke.Enabled && (opts.Group == "" || opts.Group == suite.RouteSmoke.Group) && opts.CaseID == "" {
 			fmt.Printf("(route smoke enabled; generated route cases are listed when the suite is run)\n")
 		}
-		return &Result{Suite: suite.Name, Total: len(cases)}, nil
+		return &Result{Suite: suite.ID, SuiteName: suite.Name, SuiteDesc: suite.Desc, Total: len(cases)}, nil
 	}
 
 	cfg, err := config.Load(suite.ConfigDir)
@@ -102,9 +106,9 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 	defer application.Close(context.Background())
 
 	cases := expandCases(suite, application.Engine())
-	cases = filterCases(cases, opts.CaseName, opts.Group)
+	cases = filterCases(cases, opts.CaseID, opts.Group)
 
-	result := &Result{Suite: suite.Name, TempDBName: tempDB.Name}
+	result := &Result{Suite: suite.ID, SuiteName: suite.Name, SuiteDesc: suite.Desc, TempDBName: tempDB.Name}
 	for _, c := range cases {
 		caseResult, failures := runCase(ctx, suite, cfg, application.Engine(), c)
 		result.Total++
@@ -120,9 +124,10 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 }
 
 func runCase(ctx context.Context, suite *Suite, cfg *config.Config, engine http.Handler, c Case) (CaseResult, []caseFailure) {
-	reporter := &caseReporter{caseName: c.Name}
+	caseID := c.caseID()
+	reporter := &caseReporter{caseName: caseID}
 	expect := httpexpect.WithConfig(httpexpect.Config{
-		TestName: c.Name,
+		TestName: caseID,
 		BaseURL:  "http://api-contract.local",
 		Client: &http.Client{
 			Transport: httpexpect.NewBinder(engine),
@@ -156,24 +161,26 @@ func runCase(ctx context.Context, suite *Suite, cfg *config.Config, engine http.
 	body := resp.Body().Raw()
 	failures := append([]caseFailure{}, reporter.failures...)
 	if authFailure != nil {
-		authFailure.Case = c.Name
+		authFailure.Case = caseID
 		failures = append(failures, *authFailure)
 	}
 	if len(c.Expect.Headers) > 0 {
-		failures = append(failures, assertHeaders(c.Name, resp.Raw().Header, c.Expect.Headers)...)
+		failures = append(failures, assertHeaders(caseID, resp.Raw().Header, c.Expect.Headers)...)
 	}
 	if len(c.Expect.JSON) > 0 {
-		failures = append(failures, assertJSON(c.Name, body, c.Expect.JSON)...)
+		failures = append(failures, assertJSON(caseID, body, c.Expect.JSON)...)
 	}
 	if len(c.Expect.BodyContains) > 0 {
-		failures = append(failures, assertBodyContains(c.Name, body, c.Expect.BodyContains)...)
+		failures = append(failures, assertBodyContains(caseID, body, c.Expect.BodyContains)...)
 	}
 	if c.Expect.BodyNotEmpty && strings.TrimSpace(body) == "" {
-		failures = append(failures, caseFailure{Case: c.Name, Message: "expected non-empty body"})
+		failures = append(failures, caseFailure{Case: caseID, Message: "expected non-empty body"})
 	}
 
 	return CaseResult{
+		ID:     caseID,
 		Name:   c.Name,
+		Desc:   c.Desc,
 		Group:  c.Group,
 		Method: strings.ToUpper(c.Method),
 		Path:   c.Path,
@@ -208,13 +215,13 @@ func applyAuth(req *httpexpect.Request, suite *Suite, cfg *config.Config, authNa
 	}
 }
 
-func filterCases(cases []Case, caseName, group string) []Case {
-	if caseName == "" && group == "" {
+func filterCases(cases []Case, caseID, group string) []Case {
+	if caseID == "" && group == "" {
 		return cases
 	}
 	out := []Case{}
 	for _, c := range cases {
-		if caseName != "" && c.Name != caseName {
+		if caseID != "" && c.caseID() != caseID {
 			continue
 		}
 		if group != "" && c.Group != group {
@@ -253,7 +260,9 @@ func expandCases(suite *Suite, engine *gin.Engine) []Case {
 			body = map[string]any{}
 		}
 		cases = append(cases, Case{
-			Name:   "route-smoke." + route.Method + "." + sanitizeName(route.Path),
+			ID:     "route-smoke." + route.Method + "." + sanitizeName(route.Path),
+			Name:   routeSmokeName(route.Method, route.Path),
+			Desc:   fmt.Sprintf("自动生成的路由冒烟用例：请求 %s %s，验证路由不会 panic，状态码在允许列表内，并返回 X-Trace-Id。", route.Method, route.Path),
 			Group:  suite.RouteSmoke.Group,
 			Method: route.Method,
 			Path:   materializeRoutePath(route.Path, suite.RouteSmoke.PathParams),
@@ -311,6 +320,10 @@ func matchesExclude(value string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+func routeSmokeName(method, routePath string) string {
+	return fmt.Sprintf("路由冒烟 %s %s", method, routePath)
 }
 
 func sanitizeName(value string) string {

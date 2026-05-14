@@ -1,0 +1,59 @@
+id: food-link-api-contract
+name: "后端 API 契约测试"
+desc: "使用临时 PostgreSQL 数据库和真实 Gin 路由验证后端 API 的请求、认证、响应头和响应体。"
+config_dir: "."
+
+temp_db:
+  enabled: true
+  admin_database: "postgres"
+  name_prefix: "food_link_e2e"
+  keep: false
+
+auth:
+  users:
+    user1:
+      id: "00000000-0000-0000-0000-000000000001"
+      openid: "e2e-openid-user1"
+      unionid: "e2e-unionid-user1"
+    user2:
+      id: "00000000-0000-0000-0000-000000000002"
+      openid: "e2e-openid-user2"
+      unionid: "e2e-unionid-user2"
+  test_backend_cookie: "api-contract-test"
+
+default_vars:
+  record.lunch.id: "00000000-0000-0000-0000-000000000011"
+  expiry.milk.id: "00000000-0000-0000-0000-000000000021"
+  recipe.basic.id: "00000000-0000-0000-0000-000000000031"
+
+seed_sql:
+  - "fixtures/base.sql"
+
+route_smoke:
+  enabled: true
+  group: "route-smoke"
+  auth: "none"
+  path_params:
+    user_id: "00000000-0000-0000-0000-000000000001"
+    record_id: "00000000-0000-0000-0000-000000000011"
+    item_id: "00000000-0000-0000-0000-000000000021"
+    recipe_id: "00000000-0000-0000-0000-000000000031"
+    log_id: "00000000-0000-0000-0000-000000000041"
+    request_id: "00000000-0000-0000-0000-000000000051"
+    prompt_id: "00000000-0000-0000-0000-000000000071"
+    model_type: "food"
+    batch_id: "00000000-0000-0000-0000-000000000081"
+    dataset_id: "00000000-0000-0000-0000-000000000091"
+    session_id: "00000000-0000-0000-0000-0000000000a1"
+    comment_id: "00000000-0000-0000-0000-0000000000b1"
+  query:
+    date: "2026-05-14"
+  body: {}
+  expect_status: [200, 201, 202, 204, 302, 400, 401, 403, 404, 405]
+  exclude:
+    - "/api/login"
+    - "/ws/stats/insight"
+    - "/static/test_backend/*filepath"
+
+case_files:
+  - "cases/*/*.yaml"

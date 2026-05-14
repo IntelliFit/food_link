@@ -1,0 +1,12 @@
+cases:
+  - id: system.root
+    name: "API 根信息"
+    desc: "验证 /api 根路径返回 Go 后端服务标识。"
+    group: system
+    method: GET
+    path: /api
+    expect:
+      status: 200
+      json:
+        status: ok
+        service: "food_link backend (go)"

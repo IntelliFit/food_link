@@ -1,0 +1,15 @@
+cases:
+  - id: home.dashboard.success
+    name: "首页仪表盘"
+    desc: "验证登录用户按日期获取首页仪表盘数据，包含餐次列表和当前摄入数据。"
+    group: home
+    method: GET
+    path: /api/home/dashboard
+    auth: user1
+    query:
+      date: "2026-05-14"
+    expect:
+      status: 200
+      json:
+        meals: type:array
+        intakeData.current: type:number
