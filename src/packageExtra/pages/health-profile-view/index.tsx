@@ -145,6 +145,13 @@ const FIELD_CONFIG: Record<string, FieldConfig> = {
   report_extract: { title: '体检/病例识别结果', type: 'report' },
 }
 
+function formatProfileDateOnly(value?: string | null): string {
+  const raw = String(value || '').trim()
+  if (!raw) return '—'
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : raw
+}
+
 function HealthProfileViewPage() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<HealthProfile | null>(null)
@@ -981,7 +988,7 @@ function HealthProfileViewPage() {
           <EditableRow
             label='出生日期'
             field='birthday'
-            value={profile.birthday || '—'}
+            value={formatProfileDateOnly(profile.birthday)}
           />
           <EditableRow
             label='身高'

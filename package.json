@@ -46,7 +46,8 @@
     "dev:jd": "npm run build:jd -- --watch",
     "dev:harmony-hybrid": "npm run build:harmony-hybrid -- --watch",
     "iconfont": "iconfont-taro",
-    "push-docker-ccr": "node backend/scripts/push-docker-ccr.mjs"
+    "push-docker-ccr": "node backend/scripts/push-docker-ccr.mjs",
+    "debug:feedback-samples": "bash scripts/query-analysis-feedback-samples.sh"
   },
   "browserslist": {
     "development": [

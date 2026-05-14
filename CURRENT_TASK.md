@@ -8581,3 +8581,30 @@
 - Remote recorded verification:
   - API contract E2E: `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed; `npm run test:backend:api-contract -- --timeout 5m` passed with `Total: 161, Passed: 161, Failed: 0`.
   - Loadtest: `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed; 1-run smoke against local backend passed and cleaned temp users.
+
+## 2026-05-15 — 健康档案出生日期仅显示年月日
+
+- Task: 用户反馈健康档案基础信息里的出生日期显示为 `2001-01-01T00:00:00Z`，要求只显示到年月日。
+- Status: fixed_code_verified_static
+- Fix:
+  - `src/packageExtra/pages/health-profile-view/index.tsx` 新增 `formatProfileDateOnly()`，从接口返回的日期/ISO 字符串中提取 `YYYY-MM-DD`。
+  - 基础信息“出生日期”展示改为使用该格式化值。
+- Verification:
+  - `npx eslint src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/packageExtra/pages/health-profile-view/index.tsx` passed.
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 和 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+## 2026-05-15 — 纠错反馈样本最新记录查询脚本
+
+- Task: 用户要求写一个脚本获取“点击重新智能分析后录入的数据库”最新 10 条，用于后续 debug。
+- Status: fixed_code_verified_static
+- Fix:
+  - 新增 `scripts/query-analysis-feedback-samples.sh`。
+  - 默认从 `backend/config.yaml` 读取 PostgreSQL 连接，也支持 `POSTGRESQL_HOST/PORT/USER/PASSWORD/DATABASE/SSLMODE` 环境变量覆盖。
+  - 默认查询 `analysis_feedback_samples` 最新 10 条；可传入 `1-100` 的 limit。
+  - 输出字段包括任务链路 ID、模型信息、错误信息，以及 `before_result.items`、`user_correction_items`、`after_result.items` 的 pretty JSON。
+  - `package.json` 新增 `npm run debug:feedback-samples`。
+- Verification:
+  - `bash -n scripts/query-analysis-feedback-samples.sh` passed.
+  - `npm pkg get scripts.debug:feedback-samples` passed.
+  - `git diff --check -- scripts/query-analysis-feedback-samples.sh package.json` passed.
