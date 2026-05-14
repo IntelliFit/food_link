@@ -1,0 +1,13 @@
+cases:
+  - id: recipes.list.success
+    name: "菜谱列表"
+    desc: "验证登录用户可以获取自己的菜谱列表。"
+    group: recipe
+    method: GET
+    path: /api/recipes
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.recipes: type:array

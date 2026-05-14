@@ -1,0 +1,13 @@
+cases:
+  - id: expiry.dashboard.success
+    name: "保质期仪表盘"
+    desc: "验证登录用户可以获取保质期首页数据，并返回预览条目列表。"
+    group: expiry
+    method: GET
+    path: /api/expiry/dashboard
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.preview_items: type:array

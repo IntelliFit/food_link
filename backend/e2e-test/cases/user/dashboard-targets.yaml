@@ -1,0 +1,14 @@
+cases:
+  - id: user.dashboard-targets.success
+    name: "获取首页目标"
+    desc: "验证登录用户可以获取首页所需的热量和蛋白质目标。"
+    group: user
+    method: GET
+    path: /api/user/dashboard-targets
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.calorie_target: type:number
+        data.protein_target: type:number

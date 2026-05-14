@@ -8568,3 +8568,16 @@
   - `node --check custom-tab-bar/index.js` passed.
   - `git diff --check -- src/pages/community/index.tsx src/pages/community/index.scss custom-tab-bar/index.js` passed.
   - 已再次尝试 `weapp-devtools`：`mrc where --port 3001/9420` 均因目标项目窗口未开启自动化服务连接失败。
+
+## 2026-05-14 — merged latest origin/dev
+
+- Merge source:
+  - Pulled latest `origin/dev` after local commit `f7a9058 feat: capture correction feedback samples`.
+- Remote additions preserved:
+  - Backend API contract E2E MVP under `backend/e2e-test/`, with YAML suite/cases, temp PostgreSQL DB runner, fixtures, CLI, README, and root script `npm run test:backend:api-contract`.
+  - Food analysis loadtest default-user path: when no tokens/user IDs are provided, the loadtest now creates temporary UUID `weapp_user` rows, issues local JWTs, and cleans temporary data.
+- Conflict resolution:
+  - Conflicts were only in `CURRENT_TASK.md` and `memory/2026-05-14.md`; preserved the local correction-feedback/community-filter notes and appended the remote E2E/loadtest handoff notes.
+- Remote recorded verification:
+  - API contract E2E: `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed; `npm run test:backend:api-contract -- --timeout 5m` passed with `Total: 161, Passed: 161, Failed: 0`.
+  - Loadtest: `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed; 1-run smoke against local backend passed and cleaned temp users.

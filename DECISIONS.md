@@ -1,3 +1,12 @@
+- `2026-05-14`: Backend API contract tests use a Go-native YAML-driven runner:
+  - Global settings stay in `backend/e2e-test/suite.yaml`; new route-specific cases should be added under `backend/e2e-test/cases/<route-or-module>/*.yaml`; shared fixture data belongs under `backend/e2e-test/fixtures/`.
+  - The E2E CLI, runner, assets, and guide are kept together under `backend/e2e-test/`; use `go run ./e2e-test/cmd/api-contract-test` from `backend/`.
+  - E2E metadata uses `id` for stable machine-readable selection, `name` for short human-readable Chinese output, and `desc` for detailed human-readable behavior notes.
+  - The runner builds the real Gin app through `internal/app.New`, disables OTel and background workers, and sends requests in-process through `httpexpect`.
+  - Each default run creates a fresh PostgreSQL database using the configured server, runs the existing Go AutoMigrate, applies seed SQL, and drops the database afterward. `--keep-db` is only for debugging.
+  - Authenticated cases use named users from the YAML suite and signed JWTs generated with the configured JWT secret; `test_backend_cookie` is reserved for internal test-backend routes.
+  - Route smoke cases are shallow reachability checks; explicit YAML cases remain the source of real response contract assertions.
+
 # DECISIONS
 
 - `2026-05-14`: 二次纠错样本不再复用 `critical_samples_weapp`：

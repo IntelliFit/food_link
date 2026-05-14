@@ -23,6 +23,7 @@
     "test:coverage": "jest --coverage",
     "test:backend": "cd backend && source venv/bin/activate && pytest",
     "test:backend:coverage": "cd backend && source venv/bin/activate && pytest --cov=. --cov-report=html",
+    "test:backend:api-contract": "cd backend && go run ./e2e-test/cmd/api-contract-test",
     "build:weapp": "taro build --type weapp",
     "build:weapp:preview": "cross-env NODE_ENV=production TARO_APP_API_BASE_URL=https://v2.healthymax.cn npm run build:weapp",
     "build:weapp:debug": "cross-env NODE_ENV=development TARO_APP_API_BASE_URL=https://v2.healthymax.cn npm run build:weapp -- --no-check",

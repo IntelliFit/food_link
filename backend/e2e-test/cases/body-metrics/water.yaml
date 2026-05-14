@@ -1,0 +1,18 @@
+cases:
+  - id: health.water.create.success
+    name: "新增饮水记录"
+    desc: "验证登录用户可以为指定日期新增饮水记录，且响应中的日期和饮水量符合请求。"
+    group: health
+    method: POST
+    path: /api/body-metrics/water
+    auth: user1
+    body:
+      amount_ml: 120
+      date: "2026-05-14"
+      recorded_on: "2026-05-14"
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.item.date: "2026-05-14"
+        data.item.amount_ml: 120
