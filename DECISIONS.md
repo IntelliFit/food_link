@@ -1,5 +1,10 @@
 # DECISIONS
 
+- `2026-05-14`: 二次纠错样本不再复用 `critical_samples_weapp`：
+  - `critical_samples_weapp` 只适合旧式单食物重量偏差样本，不能承载“纠错前结果数组 / 用户纠错数组 / 二次分析结果数组”。
+  - 新增稳定表 `analysis_feedback_samples` 存 AI 纠错反馈样本，核心字段包括 `source_task_id`、`correction_task_id`、`root_task_id`、`model_name`、`analysis_engine`、`before_result`、`user_correction_items`、`after_result`、`payload_snapshot`、`error_message`。
+  - 用户在结果页点击“识别有误？点击纠错”并执行“重新智能分析”后，后端以 `analysis_tasks.payload.is_correction=true` 为准，在 worker 完成或失败纠错任务时自动 upsert 一条样本；`correction_task_id` 是唯一键，失败后重试成功可覆盖同一条样本。
+
 - `2026-05-13`: 健康档案引导页非选项题默认可继续：
   - 用户画像/健康档案引导页中，身高、体重、作息、补充信息、体检报告等非选项题应默认允许点击下一步。
   - 身高默认值为 `170cm`，体重默认值为 `60kg`；如果用户没有拨动对应组件，提交健康档案时也应保存这些默认值，不能只让页面跳过但最终保存失败。

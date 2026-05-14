@@ -3175,6 +3175,12 @@ func (r *Runner) completeTask(ctx context.Context, task *domain.AnalysisTask, re
 	}
 	task.Status = "done"
 	task.Result = result
+	if err := r.captureCorrectionFeedbackSample(ctx, task, result, ""); err != nil {
+		r.log.Warn("capture correction feedback sample failed",
+			zap.String("task_id", task.ID),
+			zap.Error(err),
+		)
+	}
 	return nil
 }
 
@@ -3214,6 +3220,12 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	}
 	task.Status = "failed"
 	task.ErrorMessage = &msg
+	if err := r.captureCorrectionFeedbackSample(ctx, task, nil, msg); err != nil {
+		r.log.Warn("capture failed correction feedback sample failed",
+			zap.String("task_id", task.ID),
+			zap.Error(err),
+		)
+	}
 	if task.TaskType == "precision_item_estimate" && r.precision != nil {
 		if estimate, err := r.precision.GetItemEstimateBySourceTask(ctx, task.ID); err == nil && estimate != nil {
 			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": msg, "updated_at": time.Now()})
@@ -3226,6 +3238,57 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 		zap.String("error", msg),
 	)
 	return nil
+}
+
+func (r *Runner) captureCorrectionFeedbackSample(ctx context.Context, task *domain.AnalysisTask, result map[string]any, errorMessage string) error {
+	if r == nil || r.tasks == nil || task == nil || task.Payload == nil {
+		return nil
+	}
+	if !boolFromAny(task.Payload["is_correction"]) {
+		return nil
+	}
+	sourceTaskID := strings.TrimSpace(stringFromMap(task.Payload, "correction_source_task_id"))
+	if sourceTaskID == "" {
+		return nil
+	}
+	rootTaskID := strings.TrimSpace(stringFromMap(task.Payload, "correction_root_task_id"))
+	if rootTaskID == "" {
+		rootTaskID = sourceTaskID
+	}
+	modelName := firstNonEmptyString(result, "model_name")
+	if modelName == "" {
+		modelName = stringFromMap(task.Payload, "modelName")
+	}
+	analysisEngine := firstNonEmptyString(result, "analysis_engine")
+	if analysisEngine == "" {
+		analysisEngine = stringFromMap(task.Payload, "analysis_engine")
+	}
+	feedbackType := "correction"
+	var errPtr *string
+	if strings.TrimSpace(errorMessage) != "" {
+		feedbackType = "failed"
+		errPtr = stringPtr(errorMessage)
+	}
+	afterResult := result
+	if afterResult == nil {
+		afterResult = map[string]any{}
+	}
+	sample := &domain.AnalysisFeedbackSample{
+		UserID:              task.UserID,
+		FeedbackType:        feedbackType,
+		SourceTaskID:        stringPtr(sourceTaskID),
+		CorrectionTaskID:    stringPtr(task.ID),
+		RootTaskID:          stringPtr(rootTaskID),
+		TaskType:            task.TaskType,
+		ModelName:           optionalStringPtr(modelName),
+		AnalysisEngine:      optionalStringPtr(analysisEngine),
+		BeforeResult:        mapFromAny(task.Payload["previousResult"]),
+		UserCorrectionItems: extractItems(task.Payload["correctionItems"]),
+		AfterResult:         afterResult,
+		PayloadSnapshot:     task.Payload,
+		ErrorMessage:        errPtr,
+	}
+	return r.tasks.UpsertFeedbackSample(ctx, sample)
 }
 
 func (r *Runner) refundTaskCredits(ctx context.Context, task *domain.AnalysisTask) {
@@ -3420,6 +3483,18 @@ func stringPtrValue(value *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*value)
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func optionalStringPtr(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func taskImageCount(task *domain.AnalysisTask) int {

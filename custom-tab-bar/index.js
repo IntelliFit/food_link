@@ -142,6 +142,13 @@ Component({
             // ignore
           }
 
+          let communityFilterDrawerOpen = false
+          try {
+            communityFilterDrawerOpen = wx.getStorageSync('community_filter_drawer_visible') === '1'
+          } catch (e) {
+            // ignore
+          }
+
           let homePosterModalOpen = false
           try {
             homePosterModalOpen = wx.getStorageSync('home_poster_modal_visible') === '1'
@@ -157,7 +164,7 @@ Component({
           }
 
           const shouldHide =
-            (currentPath === '/pages/community/index' && communityCommentOpen) ||
+            (currentPath === '/pages/community/index' && (communityCommentOpen || communityFilterDrawerOpen)) ||
             (currentPath === '/pages/index/index' && homePosterModalOpen) ||
             (currentPath === '/pages/stats/index' && statsRiskDetailOpen)
 
