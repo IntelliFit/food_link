@@ -15,6 +15,7 @@ import (
 
 	"github.com/gavv/httpexpect/v2"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type Options struct {
@@ -110,7 +111,7 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 
 	result := &Result{Suite: suite.ID, SuiteName: suite.Name, SuiteDesc: suite.Desc, TempDBName: tempDB.Name}
 	for _, c := range cases {
-		caseResult, failures := runCase(ctx, suite, cfg, application.Engine(), c)
+		caseResult, failures := runCase(ctx, suite, cfg, tempDB.DB(), application.Engine(), c, vars)
 		result.Total++
 		result.CaseResults = append(result.CaseResults, caseResult)
 		if len(failures) == 0 {
@@ -123,8 +124,23 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 	return result, nil
 }
 
-func runCase(ctx context.Context, suite *Suite, cfg *config.Config, engine http.Handler, c Case) (CaseResult, []caseFailure) {
+func runCase(ctx context.Context, suite *Suite, cfg *config.Config, db *gorm.DB, engine http.Handler, input Case, vars map[string]string) (CaseResult, []caseFailure) {
+	c := materializeCase(input, vars)
 	caseID := c.caseID()
+	if names := caseRequestUnresolvedVars(c); len(names) > 0 {
+		return CaseResult{
+				ID:     caseID,
+				Name:   c.Name,
+				Desc:   c.Desc,
+				Group:  c.Group,
+				Method: strings.ToUpper(c.Method),
+				Path:   c.Path,
+				Passed: false,
+			}, []caseFailure{{
+				Case:    caseID,
+				Message: fmt.Sprintf("unresolved variable(s): %s; define them in default_vars/auth users or create them in an earlier capture step", strings.Join(names, ", ")),
+			}}
+	}
 	reporter := &caseReporter{caseName: caseID}
 	expect := httpexpect.WithConfig(httpexpect.Config{
 		TestName: caseID,
@@ -175,6 +191,12 @@ func runCase(ctx context.Context, suite *Suite, cfg *config.Config, engine http.
 	}
 	if c.Expect.BodyNotEmpty && strings.TrimSpace(body) == "" {
 		failures = append(failures, caseFailure{Case: caseID, Message: "expected non-empty body"})
+	}
+	if len(c.Capture) > 0 {
+		failures = append(failures, captureJSON(caseID, body, c.Capture, vars)...)
+	}
+	if len(c.DBAssert) > 0 {
+		failures = append(failures, assertDatabase(ctx, db, caseID, c.DBAssert, vars)...)
 	}
 
 	return CaseResult{

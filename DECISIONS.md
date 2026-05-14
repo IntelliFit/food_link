@@ -6,6 +6,7 @@
   - Each default run creates a fresh PostgreSQL database using the configured server, runs the existing Go AutoMigrate, applies seed SQL, and drops the database afterward. `--keep-db` is only for debugging.
   - Authenticated cases use named users from the YAML suite and signed JWTs generated with the configured JWT secret; `test_backend_cookie` is reserved for internal test-backend routes.
   - Route smoke cases are shallow reachability checks; explicit YAML cases remain the source of real response contract assertions.
+  - Workflow cases can use `capture` to save response JSON fields, `{{var}}` substitution to pass values into later requests/assertions, and `db_assert` to verify side effects in the same temporary database. Dependent workflow steps should stay in the same case file and in execution order.
 
 # DECISIONS
 

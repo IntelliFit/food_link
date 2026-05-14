@@ -1,0 +1,46 @@
+cases:
+  - id: expiry.item.create.workflow
+    name: "创建保质期条目"
+    desc: "创建一条保质期记录，捕获响应里的 item id，并在临时数据库中确认记录已经落库且归属于当前登录用户。"
+    group: expiry
+    method: POST
+    path: /api/expiry/items
+    auth: user1
+    body:
+      food_name: "E2E Workflow Milk"
+      quantity_note: "1 bottle"
+      storage_type: "refrigerated"
+      source_type: "manual"
+      expire_date: "2026-05-20"
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.item.id: not_empty
+        data.item.food_name: "E2E Workflow Milk"
+        data.item.status: "active"
+        data.item.expire_date: "2026-05-20"
+    capture:
+      expiry.workflow_item_id: data.item.id
+    db_assert:
+      - query: "select count(*) from food_expiry_items where id = ? and user_id = ? and food_name = ?"
+        args:
+          - "{{expiry.workflow_item_id}}"
+          - "{{auth.user1.id}}"
+          - "E2E Workflow Milk"
+        equals: 1
+
+  - id: expiry.item.detail.after-create
+    name: "查询刚创建的保质期条目"
+    desc: "使用上一个用例捕获的 item id 调用详情接口，确认创建出来的记录可以被后续 API 读取。"
+    group: expiry
+    method: GET
+    path: /api/expiry/items/{{expiry.workflow_item_id}}
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.item.id: "{{expiry.workflow_item_id}}"
+        data.item.food_name: "E2E Workflow Milk"
+        data.item.expire_date: "2026-05-20"
