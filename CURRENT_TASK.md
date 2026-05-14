@@ -8520,3 +8520,30 @@
   - `npx eslint src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts --max-warnings 0` passed.
   - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts` passed.
   - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务或端口不可用；本轮未能截图/交互验证。
+## 2026-05-14 - Backend API contract E2E MVP
+
+- Task: User requested a backend end-to-end/API contract test MVP where future API tests can be added by editing one config file, with auth support, seeded data, and a fresh temporary database per run.
+- Status: implemented_verified_documented
+- Implementation:
+  - Added `backend/cmd/api-contract-test` CLI.
+  - Added YAML-driven runner under `backend/internal/e2e`.
+  - Added suite config at `backend/testdata/api-contract/suite.yaml` and seed data at `backend/testdata/api-contract/fixtures/base.sql`.
+  - Added docs at `backend/docs/api-contract-tests.md`.
+  - Added full human/AI-readable guide at `docs/backend-api-e2e-contract-tests.md`.
+  - Added root script `npm run test:backend:api-contract`.
+- Verification:
+  - `go test ./internal/e2e ./cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+  - `npm run test:backend:api-contract -- --timeout 5m` passed with `Total: 161, Passed: 161, Failed: 0`.
+  - `git diff --check` passed; only CRLF conversion warnings were reported for modified files.
+# 2026-05-14 update: loadtest default users made self-contained
+
+- User asked to improve the existing food analysis API stability script so direct execution no longer fails without env vars.
+- Updated `backend/internal/analyze/loadtest/food_analysis_stability_test.go`:
+  - If `FOOD_ANALYSIS_LOAD_TOKENS` is set, behavior is unchanged.
+  - If `FOOD_ANALYSIS_LOAD_USER_IDS` is set, behavior is unchanged except for clearer log text; supplied IDs must already exist and match DB ID type.
+  - If neither is set, the test now opens the database from `backend/config.yaml`, creates `FOOD_ANALYSIS_LOAD_COUNT` temporary UUID `weapp_user` rows, issues local JWTs for them, and registers `t.Cleanup` to delete temporary `user_earned_credit_ledger`, `analysis_tasks`, and `weapp_user` rows.
+- Verification:
+  - `gofmt -w backend/internal/analyze/loadtest/food_analysis_stability_test.go`
+  - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed from `backend/`.
+  - 1-run smoke against existing local backend with no `FOOD_ANALYSIS_LOAD_USER_IDS`/`FOOD_ANALYSIS_LOAD_TOKENS` passed: temporary UUID user auto-created, `total=1 success=1 failed=0`, COS image cleanup `deleted=1`.
+  - DB residual check for `weapp_user.openid LIKE 'food-analysis-load-20260514T%'` returned `0`.

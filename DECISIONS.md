@@ -1,3 +1,10 @@
+- `2026-05-14`: Backend API contract tests use a Go-native YAML-driven runner:
+  - New cases should be added to `backend/testdata/api-contract/suite.yaml`; shared fixture data belongs under `backend/testdata/api-contract/fixtures/`.
+  - The runner builds the real Gin app through `internal/app.New`, disables OTel and background workers, and sends requests in-process through `httpexpect`.
+  - Each default run creates a fresh PostgreSQL database using the configured server, runs the existing Go AutoMigrate, applies seed SQL, and drops the database afterward. `--keep-db` is only for debugging.
+  - Authenticated cases use named users from the YAML suite and signed JWTs generated with the configured JWT secret; `test_backend_cookie` is reserved for internal test-backend routes.
+  - Route smoke cases are shallow reachability checks; explicit YAML cases remain the source of real response contract assertions.
+
 # DECISIONS
 
 - `2026-05-13`: 健康档案引导页非选项题默认可继续：

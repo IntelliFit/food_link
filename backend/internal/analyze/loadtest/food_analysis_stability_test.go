@@ -26,9 +26,12 @@ import (
 
 	authservice "food_link/backend/internal/auth/service"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/database"
 	"food_link/backend/pkg/storage"
 
+	"github.com/google/uuid"
 	"github.com/tencentyun/cos-go-sdk-v5"
+	"gorm.io/gorm"
 )
 
 const (
@@ -213,13 +216,13 @@ func loadFoodAnalysisConfig(t *testing.T) loadConfig {
 	if len(tokens) == 0 {
 		userIDs := parseCSV(os.Getenv("FOOD_ANALYSIS_LOAD_USER_IDS"))
 		if len(userIDs) == 0 {
-			userIDs = make([]string, requestCount)
-			for i := 0; i < requestCount; i++ {
-				userIDs[i] = fmt.Sprintf("food-analysis-load-user-%02d", i+1)
-			}
+			userIDs = createTemporaryLoadTestUsers(t, cfgFile.Database, requestCount)
+			t.Logf("FOOD_ANALYSIS_LOAD_TOKENS and FOOD_ANALYSIS_LOAD_USER_IDS are empty; created %d temporary UUID users in the configured database and registered cleanup.", len(userIDs))
+		} else {
+			validateLoadTestUserIDs(t, userIDs)
+			t.Logf("FOOD_ANALYSIS_LOAD_TOKENS is empty; generated local JWTs for %d FOOD_ANALYSIS_LOAD_USER_IDS. Those IDs must exist in the configured database.", len(userIDs))
 		}
 		tokens = issueLocalTokens(t, cfgFile.JWT, userIDs)
-		t.Log("FOOD_ANALYSIS_LOAD_TOKENS is empty; generated local JWTs from backend/config.yaml. Ensure those user_id rows exist in the target database, or submit will fail at membership/user checks.")
 	}
 
 	return loadConfig{
@@ -764,6 +767,113 @@ func issueLocalTokens(t *testing.T, cfg config.JWTConfig, userIDs []string) []st
 		t.Fatal("no usable tokens generated")
 	}
 	return tokens
+}
+
+func validateLoadTestUserIDs(t *testing.T, userIDs []string) {
+	t.Helper()
+	for _, userID := range userIDs {
+		userID = strings.TrimSpace(userID)
+		if userID == "" {
+			continue
+		}
+		if _, err := uuid.Parse(userID); err != nil {
+			t.Fatalf("FOOD_ANALYSIS_LOAD_USER_IDS contains non-UUID user id %q. Unset FOOD_ANALYSIS_LOAD_USER_IDS to let the loadtest create temporary UUID users automatically, or provide real weapp_user.id UUIDs.", userID)
+		}
+	}
+}
+
+func createTemporaryLoadTestUsers(t *testing.T, cfg config.DatabaseConfig, count int) []string {
+	t.Helper()
+	if count <= 0 {
+		t.Fatal("temporary loadtest user count must be greater than 0")
+	}
+	db, err := database.Open(cfg)
+	if err != nil {
+		t.Fatalf("open configured database for temporary loadtest users: %v", err)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sql db for temporary loadtest users: %v", err)
+	}
+	tag := fmt.Sprintf("food-analysis-load-%s-%d", time.Now().UTC().Format("20060102T150405"), os.Getpid())
+	type userRow struct {
+		ID string `gorm:"column:id"`
+	}
+	var rows []userRow
+	if err := db.Raw(`
+WITH ins AS (
+  INSERT INTO weapp_user (
+    openid,
+    nickname,
+    avatar,
+    earned_credits_balance,
+    onboarding_completed,
+    execution_mode,
+    health_condition,
+    create_time,
+    update_time
+  )
+  SELECT
+    ? || '-' || gs::text,
+    'Food Analysis Load Test',
+    '',
+    100,
+    true,
+    'standard',
+    '{}'::jsonb,
+    now(),
+    now()
+  FROM generate_series(1, ?) AS gs
+  RETURNING id
+)
+SELECT id::text AS id FROM ins
+`, tag, count).Scan(&rows).Error; err != nil {
+		_ = sqlDB.Close()
+		t.Fatalf("create temporary loadtest users: %v", err)
+	}
+	userIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if strings.TrimSpace(row.ID) != "" {
+			userIDs = append(userIDs, row.ID)
+		}
+	}
+	if len(userIDs) != count {
+		_ = cleanupTemporaryLoadTestUsers(context.Background(), db, tag)
+		_ = sqlDB.Close()
+		t.Fatalf("created %d temporary loadtest users, want %d", len(userIDs), count)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if err := cleanupTemporaryLoadTestUsers(ctx, db, tag); err != nil {
+			t.Logf("cleanup temporary loadtest users with openid prefix %s failed: %v", tag, err)
+		}
+		if err := sqlDB.Close(); err != nil {
+			t.Logf("close temporary loadtest database connection failed: %v", err)
+		}
+	})
+	return userIDs
+}
+
+func cleanupTemporaryLoadTestUsers(ctx context.Context, db *gorm.DB, tag string) error {
+	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`
+DELETE FROM user_earned_credit_ledger
+WHERE user_id IN (SELECT id FROM weapp_user WHERE openid LIKE ?)
+`, tag+"-%").Error; err != nil {
+			return fmt.Errorf("delete temporary earned credit ledger rows: %w", err)
+		}
+		if err := tx.Exec(`
+DELETE FROM analysis_tasks
+WHERE user_id IN (SELECT id FROM weapp_user WHERE openid LIKE ?)
+`, tag+"-%").Error; err != nil {
+			return fmt.Errorf("delete temporary analysis tasks: %w", err)
+		}
+		if err := tx.Exec(`DELETE FROM weapp_user WHERE openid LIKE ?`, tag+"-%").Error; err != nil {
+			return fmt.Errorf("delete temporary users: %w", err)
+		}
+		return nil
+	})
 }
 
 func setBearer(req *http.Request, token string) {
