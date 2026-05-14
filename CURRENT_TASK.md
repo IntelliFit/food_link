@@ -8520,7 +8520,6 @@
   - `npx eslint src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts --max-warnings 0` passed.
   - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts` passed.
   - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务或端口不可用；本轮未能截图/交互验证。
-## 2026-05-14 - Backend API contract E2E MVP
 
 - Task: User requested a backend end-to-end/API contract test MVP where future API tests can be added by editing one config file, with auth support, seeded data, and a fresh temporary database per run.
 - Status: implemented_verified_documented
@@ -8595,14 +8594,63 @@
   - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
   - `git diff --check -- backend/e2e-test/runner/vars.go backend/e2e-test/runner/runner.go backend/e2e-test/runner/db_assert.go backend/e2e-test/cases/expiry/not-exist.yaml` passed; only CRLF conversion warning was reported.
 # 2026-05-14 update: loadtest default users made self-contained
+## 2026-05-14 — 识别失败/纠错样本落表确认
 
-- User asked to improve the existing food analysis API stability script so direct execution no longer fails without env vars.
-- Updated `backend/internal/analyze/loadtest/food_analysis_stability_test.go`:
-  - If `FOOD_ANALYSIS_LOAD_TOKENS` is set, behavior is unchanged.
-  - If `FOOD_ANALYSIS_LOAD_USER_IDS` is set, behavior is unchanged except for clearer log text; supplied IDs must already exist and match DB ID type.
-  - If neither is set, the test now opens the database from `backend/config.yaml`, creates `FOOD_ANALYSIS_LOAD_COUNT` temporary UUID `weapp_user` rows, issues local JWTs for them, and registers `t.Cleanup` to delete temporary `user_earned_credit_ledger`, `analysis_tasks`, and `weapp_user` rows.
+- User asked which table was intended for recognition failure/manual correction/re-recognition sample capture with large-model metadata.
+- Finding:
+  - Current implemented deviation sample endpoint is `POST /api/critical-samples`, writing to `critical_samples_weapp`.
+  - Current `critical_samples_weapp` fields are only `id/user_id/image_path/food_name/ai_weight/user_weight/deviation_percent/created_at`; it does not store model provider/name/engine/error/task metadata.
+  - Recognition task metadata and failure state currently live in `analysis_tasks` (`payload.modelName`, `payload.analysis_engine`, `status`, `result`, `error_message`, etc.).
+  - If the intended requirement was a unified table for failed recognition, manual data entry, and retry samples with LLM info, current Go code has not implemented that as a dedicated table yet; it should be added or `critical_samples_weapp` should be extended.
+- Follow-up finding:
+  - Result page correction flow builds `previousResult` as an object containing `items[]` and builds `correctionItems[]` from user edits, then sends both with `correction_source_task_id`.
+  - Backend `TaskService` stores those arrays only inside `analysis_tasks.payload`, marks `payload.is_correction=true`, and worker writes the second analysis output into `analysis_tasks.result`.
+  - No backend trigger writes correction comparison snapshots into `critical_samples_weapp`; that table is structurally wrong for array/object comparison because it only has scalar `ai_weight/user_weight`.
+
+## 2026-05-14 — 二次纠错反馈样本表与圈子筛选抽屉
+
+- Task:
+  - 用户要求纠错后“重新智能分析”时保存纠错前结果、用户纠错对象数组和二次分析结果，不能继续用 `critical_samples_weapp` 标量字段表达。
+  - 用户还要求圈子好友动态“更多筛选”改成从下往上弹出的对话框，并更换添加好友图标。
+- Status: fixed_code_verified_static
+- Fix:
+  - 新增 `analysis_feedback_samples` schema/domain，使用 JSONB 保存 `before_result`、`user_correction_items`、`after_result`、`payload_snapshot`。
+  - `TaskRepo.UpsertFeedbackSample()` 以 `correction_task_id` 为唯一键 upsert 样本。
+  - Worker 在纠错任务完成时写入 `feedback_type=correction` 样本；纠错任务失败时写入 `feedback_type=failed` 和 `error_message`。
+  - 圈子页“更多筛选”改为底部抽屉；筛选项在抽屉内点击选择，点击遮罩或“完成”关闭。
+  - “添加好友”快捷入口图标从单个 `icon-zengji` 换为 `icon-user` + `icon-plus` 组合图标。
 - Verification:
-  - `gofmt -w backend/internal/analyze/loadtest/food_analysis_stability_test.go`
-  - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed from `backend/`.
-  - 1-run smoke against existing local backend with no `FOOD_ANALYSIS_LOAD_USER_IDS`/`FOOD_ANALYSIS_LOAD_TOKENS` passed: temporary UUID user auto-created, `total=1 success=1 failed=0`, COS image cleanup `deleted=1`.
-  - DB residual check for `weapp_user.openid LIKE 'food-analysis-load-20260514T%'` returned `0`.
+  - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed.
+  - `GOCACHE=/tmp/food-link-go-cache go test ./internal/analyze/domain ./internal/analyze/repo ./internal/worker -run '^$' -count=1` passed.
+  - `git diff --check` passed.
+  - `GOCACHE=/tmp/food-link-go-cache go test ./internal/analyze/domain ./internal/analyze/repo ./internal/worker -run 'Test' -count=1` 中 `internal/worker` passed，但 `internal/analyze/repo` 的既有 sqlite 用例 `TestTaskRepo_CompleteTaskAttemptRequiresCurrentAttempt` 仍因 `map[string]any` result 更新 unsupported map 失败，和本次新增样本表无关。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 和 `mrc where --port 9420` 均连接失败，提示微信开发者工具目标窗口未开启自动化服务，未能截图/交互验证。
+
+### 2026-05-14 follow-up
+
+- User requested:
+  - 添加好友快捷入口图标改为 `icon-tianjiahaoyou`。
+  - 修复好友动态“更多筛选”底部抽屉层级太低、被底部导航栏盖住的问题。
+- Fix:
+  - `src/pages/community/index.tsx` 添加好友图标改用 `iconfont icon-tianjiahaoyou`。
+  - `src/pages/community/index.tsx` 在筛选抽屉打开时写入 `community_filter_drawer_visible` storage，关闭/卸载时清理。
+  - `custom-tab-bar/index.js` 读取 `community_filter_drawer_visible`，在圈子页筛选抽屉打开时隐藏自定义 tabBar。
+  - `src/pages/community/index.scss` 将筛选抽屉遮罩层级提升到 `z-index: 100001`，并增加底部 padding。
+- Verification:
+  - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed.
+  - `node --check custom-tab-bar/index.js` passed.
+  - `git diff --check -- src/pages/community/index.tsx src/pages/community/index.scss custom-tab-bar/index.js` passed.
+  - 已再次尝试 `weapp-devtools`：`mrc where --port 3001/9420` 均因目标项目窗口未开启自动化服务连接失败。
+
+## 2026-05-14 — merged latest origin/dev
+
+- Merge source:
+  - Pulled latest `origin/dev` after local commit `f7a9058 feat: capture correction feedback samples`.
+- Remote additions preserved:
+  - Backend API contract E2E MVP under `backend/e2e-test/`, with YAML suite/cases, temp PostgreSQL DB runner, fixtures, CLI, README, and root script `npm run test:backend:api-contract`.
+  - Food analysis loadtest default-user path: when no tokens/user IDs are provided, the loadtest now creates temporary UUID `weapp_user` rows, issues local JWTs, and cleans temporary data.
+- Conflict resolution:
+  - Conflicts were only in `CURRENT_TASK.md` and `memory/2026-05-14.md`; preserved the local correction-feedback/community-filter notes and appended the remote E2E/loadtest handoff notes.
+- Remote recorded verification:
+  - API contract E2E: `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed; `npm run test:backend:api-contract -- --timeout 5m` passed with `Total: 161, Passed: 161, Failed: 0`.
+  - Loadtest: `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed; 1-run smoke against local backend passed and cleaned temp users.

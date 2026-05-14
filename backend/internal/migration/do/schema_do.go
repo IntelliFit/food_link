@@ -62,6 +62,27 @@ type AnalysisTaskDO struct {
 
 func (AnalysisTaskDO) TableName() string { return "analysis_tasks" }
 
+type AnalysisFeedbackSampleDO struct {
+	ID                  string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID              string           `gorm:"column:user_id;type:uuid;not null;index:idx_analysis_feedback_samples_user_id"`
+	FeedbackType        string           `gorm:"column:feedback_type;type:text;not null;index:idx_analysis_feedback_samples_type"`
+	SourceTaskID        *string          `gorm:"column:source_task_id;type:uuid;index:idx_analysis_feedback_samples_source_task_id"`
+	CorrectionTaskID    *string          `gorm:"column:correction_task_id;type:uuid;uniqueIndex:idx_analysis_feedback_samples_correction_task_id"`
+	RootTaskID          *string          `gorm:"column:root_task_id;type:uuid;index:idx_analysis_feedback_samples_root_task_id"`
+	TaskType            string           `gorm:"column:task_type;type:text;not null"`
+	ModelName           *string          `gorm:"column:model_name;type:text"`
+	AnalysisEngine      *string          `gorm:"column:analysis_engine;type:text"`
+	BeforeResult        map[string]any   `gorm:"column:before_result;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	UserCorrectionItems []map[string]any `gorm:"column:user_correction_items;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	AfterResult         map[string]any   `gorm:"column:after_result;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	PayloadSnapshot     map[string]any   `gorm:"column:payload_snapshot;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ErrorMessage        *string          `gorm:"column:error_message;type:text"`
+	CreatedAt           *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_analysis_feedback_samples_created_at"`
+	UpdatedAt           *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (AnalysisFeedbackSampleDO) TableName() string { return "analysis_feedback_samples" }
+
 type PrecisionSessionDO struct {
 	ID                  string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID              string         `gorm:"column:user_id;type:uuid;not null;index:idx_precision_sessions_user_created_at,priority:1;index:idx_precision_sessions_user_status,priority:1"`
@@ -700,6 +721,7 @@ func AllModels() []any {
 		&UserDO{},
 		&MembershipPlanDO{},
 		&AnalysisTaskDO{},
+		&AnalysisFeedbackSampleDO{},
 		&FoodRecordDO{},
 		&FoodNutritionDO{},
 		&FoodNutritionAliasDO{},

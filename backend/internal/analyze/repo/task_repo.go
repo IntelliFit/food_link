@@ -52,6 +52,37 @@ func (r *TaskRepo) CreateTask(ctx context.Context, task *domain.AnalysisTask) er
 	return r.db.WithContext(ctx).Create(task).Error
 }
 
+func (r *TaskRepo) UpsertFeedbackSample(ctx context.Context, sample *domain.AnalysisFeedbackSample) error {
+	if sample == nil {
+		return nil
+	}
+	if sample.ID == "" {
+		sample.ID = uuid.New().String()
+	}
+	now := time.Now()
+	if sample.CreatedAt == nil {
+		sample.CreatedAt = &now
+	}
+	sample.UpdatedAt = &now
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "correction_task_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"feedback_type",
+			"source_task_id",
+			"root_task_id",
+			"task_type",
+			"model_name",
+			"analysis_engine",
+			"before_result",
+			"user_correction_items",
+			"after_result",
+			"payload_snapshot",
+			"error_message",
+			"updated_at",
+		}),
+	}).Create(sample).Error
+}
+
 func (r *TaskRepo) ClaimNextPendingTask(ctx context.Context, taskTypes []string) (*domain.AnalysisTask, error) {
 	if len(taskTypes) == 0 {
 		return nil, nil
