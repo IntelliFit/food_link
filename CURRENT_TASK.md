@@ -1,3 +1,68 @@
+# 状态：完成源码修改 - 分析页周期下拉与三段面板布局
+
+- 2026-05-15 follow-up 3:
+  - User 要求：营养证据和结构指标面板里所有折叠卡片的标题/简介左对齐；健康指数 6 个友好度卡片删除底部横线和“查看更多”，改为右下角 `图标 + 更多`，整卡点击仍打开详情；友好度详情弹层和 AI 风险解读弹层的实现/样式与“我的关注”弹层对齐。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`
+      - 6 个健康友好度卡片的动作文案改为 `icon-right-arrow + 更多`。
+    - `src/pages/stats/index.scss`
+      - `.evidence-card` 内标题和副标题统一左对齐。
+      - 健康友好度卡片改为 flex 纵向布局，`更多` 固定在右下角，不再有顶部横线。
+      - 风险详情弹层和 AI 风险解读弹层统一调整为 `z-index: 10000`、`rgb(0 0 0 / 45%)` 遮罩、同“我的关注”一致的底部浮层最大高度与安全区留白。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+- 2026-05-15 follow-up 2:
+  - User 要求：左上角 `近一周/近一个月` 下拉箭头必须使用项目图标系统，不使用字符。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`：将字符 `⌄` 替换为 `iconfont icon-right-arrow`。
+    - `src/pages/stats/index.scss`：通过 `.stats-range-dropdown__arrow { transform: rotate(90deg); }` 将右箭头旋转为向下箭头。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - `rg` 确认 `stats` 页不再有字符 `⌄`。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+- 2026-05-15 follow-up:
+  - User 要求：三段 Tab 下方主体区域需要上侧间距；健康指数里的“我的关注”改成类似首页“编辑目标”的小按钮，放在健康指数卡片右侧，点击后从底部弹出对话框且图层必须高于底部导航；弹窗内可定制 6 个关注选项；营养证据和结构指标里的卡片默认展开，卡片标题去掉“证据”口吻。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`
+      - `analysis-tabs-container` 下方内容增加间距。
+      - “我的关注”从独立卡片改为健康指数卡片右上区域的胶囊按钮，按钮样式仿首页“编辑目标”。
+      - 点击“我的关注”打开底部浮层，浮层内展示 6 个可选关注方向，并沿用原有至少保留 1 项的选择逻辑。
+      - 弹层打开时复用 `stats_risk_detail_visible` storage 隐藏自定义 tabBar，浮层自身 `z-index: 10000`，确保盖过底部导航。
+      - `calories/macro/meals/body` 默认展开。
+      - 卡片标题改为：`热量摄入趋势`、`宏量营养结构`、`餐次热量分布`、`长期健康指标`；对应副标题改成正常描述。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` 仍失败，剩余 9 个为该文件既有样式规则问题（旧 `rgba()` 写法、旧 overflow longhand、旧空行规则）。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+- 2026-05-15 update:
+  - User 要求：分析页顶部 `近一周/近一个月` 从内容区分段控件移到左上角，并和微信小程序右上角默认工具同一行；页面顶部间距缩小到 `182rpx`；原位置改为面板分区，默认展示健康指数，第二块展示热量证据和宏量结构证据，第三块展示餐次分布和长期健康指标。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`
+      - 新增固定左上角周期下拉，点击通过 `Taro.showActionSheet()` 切换 `近一周/近一个月`。
+      - 原顶部周期分段控件改为三段分析面板：`健康指数`、`营养证据`、`结构指标`。
+      - 默认面板为 `健康指数`；`营养证据` 只承载热量证据和宏量结构证据；`结构指标` 只承载餐次分布和长期健康指标。
+      - 移除当前渲染中的记录分布和连续记录卡片，减少分析页板块堆叠。
+    - `src/pages/stats/index.scss`
+      - 保持页面 `padding-top: 182rpx`。
+      - 新增左上角周期下拉样式，并把后台同步 spinner 避开下拉区域。
+      - 原周期控件位置复用为面板 Tab。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` 仍失败，剩余 9 个为该文件既有样式规则问题（旧 `rgba()` 写法、旧 overflow longhand、旧空行规则）。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
 # 状态：完成源码修改 - 作息选择器去除当前作息摘要
 
 - 2026-05-13 update:
