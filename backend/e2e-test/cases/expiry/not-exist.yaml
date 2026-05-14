@@ -1,0 +1,12 @@
+  cases:
+    - id: expiry.item.not-exist
+      name: "查询不存在的保质期条目"
+      desc: "查询一个不存在的保质期条目，确认返回相应的错误信息。"
+      group: expiry
+      method: GET
+      path: /api/expiry/items/00000000-0000-0000-0000-00000000ffff
+      auth: user1
+      expect:
+        status: 404
+        json:
+          code: 10001

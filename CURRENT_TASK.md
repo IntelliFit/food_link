@@ -8521,6 +8521,79 @@
   - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts` passed.
   - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务或端口不可用；本轮未能截图/交互验证。
 
+- Task: User requested a backend end-to-end/API contract test MVP where future API tests can be added by editing one config file, with auth support, seeded data, and a fresh temporary database per run.
+- Status: implemented_verified_documented
+- Implementation:
+  - Added `backend/e2e-test/cmd/api-contract-test` CLI.
+  - Added YAML-driven runner under `backend/e2e-test/runner`.
+  - Added suite config at `backend/e2e-test/suite.yaml` and seed data at `backend/e2e-test/fixtures/base.sql`.
+  - Consolidated E2E test assets under `backend/e2e-test/`.
+  - Split explicit cases into route/module files under `backend/e2e-test/cases/`.
+  - Added `id/name/desc` metadata: `id` is the stable machine-readable selector, `name` is the short Chinese display name, and `desc` is the detailed human-readable behavior description.
+  - Added full human/AI-readable guide at `backend/e2e-test/README.md`.
+  - Added root script `npm run test:backend:api-contract`.
+- Verification:
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+  - `npm run test:backend:api-contract -- --timeout 5m` passed with `Total: 161, Passed: 161, Failed: 0`.
+  - `git diff --check` passed; only CRLF conversion warnings were reported for modified files.
+
+## 2026-05-14 update: Backend API contract workflow assertions
+
+- Task: User asked to add workflow-style E2E test capabilities so a test can create data, capture returned values, reuse them in later API calls, and verify side effects against the temporary database.
+- Status: implemented_verified_documented
+- Implementation:
+  - Added `capture` support to case YAML. It reads response JSON with `gjson` and stores named runtime variables.
+  - Added recursive `{{var}}` substitution for case path, query, headers, body, response expectations, body contains, and DB assertion arguments.
+  - Added `db_assert` support. It runs SQL against the same temporary PostgreSQL database and compares the first column of the first row using the existing expectation matcher.
+  - Added workflow examples under `backend/e2e-test/cases/expiry/items.yaml`: create expiry item, capture its id, assert DB insertion, then query the detail API with the captured id.
+  - Updated `backend/e2e-test/README.md` with workflow, capture, variable substitution, and DB assertion usage.
+- Verification:
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+  - `go run ./e2e-test/cmd/api-contract-test --case expiry.item.create.workflow --timeout 5m` passed with `Total: 1, Passed: 1, Failed: 0`.
+  - `npm run test:backend:api-contract -- --timeout 5m` passed with `Total: 163, Passed: 163, Failed: 0`.
+  - `git diff --check` passed; only CRLF conversion warnings were reported.
+
+## 2026-05-14 update: Backend E2E README translated to Chinese
+
+- Task: User asked to replace `backend/e2e-test/README.md` with Chinese documentation.
+- Status: completed_verified
+- Implementation:
+  - Rewrote the README in Chinese while preserving the existing structure, commands, YAML examples, auth rules, fixtures, assertions, workflow testing, route smoke, AI maintenance rules, and troubleshooting sections.
+  - Updated the documented baseline to `Total: 163, Passed: 163, Failed: 0`.
+- Verification:
+  - `git diff --check -- backend/e2e-test/README.md` passed; only CRLF conversion warning was reported.
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+
+## 2026-05-14 update: E2E unresolved variable guard
+
+- Task: User deleted the workflow create/capture case and kept only the dependent detail query, then asked why the run sent `/api/expiry/items/{{expiry.workflow_item_id}}` and got a backend 500 instead of a 404.
+- Finding:
+  - The variable `{{expiry.workflow_item_id}}` was created only by the deleted `capture` step.
+  - The old runner left unresolved placeholders unchanged, so the request path became URL-encoded braces and the backend received an invalid UUID path parameter.
+  - A valid but missing UUID should be used for a true 404 test; a missing runtime variable is an E2E configuration/dependency error.
+- Fix:
+  - Added runner preflight detection for unresolved `{{var}}` placeholders across path, query, headers, body, expectations, and DB assertions.
+  - Such cases now fail before sending HTTP with `unresolved variable(s): ...`.
+  - Updated `backend/e2e-test/README.md` troubleshooting with the missing-capture explanation and a fixed-UUID 404 example.
+- Verification:
+  - `go run ./e2e-test/cmd/api-contract-test --case expiry.item.detail.after-create --timeout 5m` now fails before request with `unresolved variable(s): expiry.workflow_item_id`.
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+
+## 2026-05-15 update: E2E DB assert unresolved variable timing
+
+- Task: User reported `expiry.item.create.workflow` still failed with unresolved variables including `auth.user1.id` and `expiry.workflow_item_id`.
+- Finding:
+  - The request preflight was incorrectly scanning `db_assert` before the HTTP request and before same-case `capture`.
+  - `db_assert` is allowed to use values captured from the same response, so it must be checked after capture, not before request.
+  - A separate not-found test used `/api/expiry/items/999999`, which is not a valid UUID and triggers PostgreSQL invalid UUID instead of a true 404.
+- Fix:
+  - Split unresolved variable checks: request/expect fields are checked before HTTP; `db_assert` is checked after response capture and before SQL execution.
+  - Updated `backend/e2e-test/cases/expiry/not-exist.yaml` to use valid nonexistent UUID `00000000-0000-0000-0000-00000000ffff` and expect `code: 10001`.
+- Verification:
+  - `go run ./e2e-test/cmd/api-contract-test --group expiry --timeout 5m` passed with `Total: 4, Passed: 4, Failed: 0`.
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+  - `git diff --check -- backend/e2e-test/runner/vars.go backend/e2e-test/runner/runner.go backend/e2e-test/runner/db_assert.go backend/e2e-test/cases/expiry/not-exist.yaml` passed; only CRLF conversion warning was reported.
+# 2026-05-14 update: loadtest default users made self-contained
 ## 2026-05-14 — 识别失败/纠错样本落表确认
 
 - User asked which table was intended for recognition failure/manual correction/re-recognition sample capture with large-model metadata.

@@ -60,17 +60,19 @@ type RouteSmokeConfig struct {
 }
 
 type Case struct {
-	ID      string            `yaml:"id"`
-	Name    string            `yaml:"name"`
-	Desc    string            `yaml:"desc"`
-	Group   string            `yaml:"group"`
-	Method  string            `yaml:"method"`
-	Path    string            `yaml:"path"`
-	Query   map[string]string `yaml:"query"`
-	Headers map[string]string `yaml:"headers"`
-	Auth    string            `yaml:"auth"`
-	Body    any               `yaml:"body"`
-	Expect  Expect            `yaml:"expect"`
+	ID       string            `yaml:"id"`
+	Name     string            `yaml:"name"`
+	Desc     string            `yaml:"desc"`
+	Group    string            `yaml:"group"`
+	Method   string            `yaml:"method"`
+	Path     string            `yaml:"path"`
+	Query    map[string]string `yaml:"query"`
+	Headers  map[string]string `yaml:"headers"`
+	Auth     string            `yaml:"auth"`
+	Body     any               `yaml:"body"`
+	Expect   Expect            `yaml:"expect"`
+	Capture  map[string]string `yaml:"capture"`
+	DBAssert []DBAssert        `yaml:"db_assert"`
 }
 
 type Expect struct {
@@ -81,6 +83,12 @@ type Expect struct {
 	JSONSchema   any            `yaml:"json_schema"`
 	BodyContains []string       `yaml:"body_contains"`
 	BodyNotEmpty bool           `yaml:"body_not_empty"`
+}
+
+type DBAssert struct {
+	Query  string `yaml:"query"`
+	Args   []any  `yaml:"args"`
+	Equals any    `yaml:"equals"`
 }
 
 func LoadSuite(path string) (*Suite, error) {
