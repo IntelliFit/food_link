@@ -1,5 +1,37 @@
 # 当前任务
 
+## 状态：完成 - 2026-05-10 已确认 dev 为最新
+
+- 2026-05-10 update:
+  - User asked to pull the latest code.
+  - Current branch is `dev`.
+  - Ran `git fetch origin dev` and `git pull --ff-only origin dev`.
+  - Local `dev` and `origin/dev` are both at `fcc6b61`; Git reported `Already up to date.`
+  - No code files were changed by this pull.
+  - Working tree still contains only project state/memory updates from local agent bookkeeping.
+
+## 状态：完成 - 已拉取最新 dev 并启动本地开发
+
+- 2026-05-09 update:
+  - User asked to pull the latest code and run the `dev` branch.
+  - Repository was already on `dev`; fetched and fast-forwarded `dev` to `origin/dev` at `fcc6b61`.
+  - Preserved pre-existing local state-file edits by temporarily stashing, then merged the local `CURRENT_TASK.md` and `memory/2026-05-05.md` notes back after the pull.
+  - `npm run dev:restart` could not run directly because `scripts/restart-dev.sh` has CRLF line endings in this Windows workspace and bash failed on `set -euo pipefail`.
+  - Started the same dev services manually with hidden PowerShell background processes:
+    - `npm run dev:backend` -> `backend-dev.log`
+    - `npm run dev:weapp` -> `weapp-dev.log`
+  - Backend verification: `http://127.0.0.1:3010/api/health` returned `{"status":"healthy"}`.
+  - Taro weapp watch process is running under `D:\projects\food_link`; first build completed in watch mode and refreshed `dist/` at about `2026-05-09 04:14`.
+  - Weapp build log only showed existing iconfont runtime-resolution warnings, not a build failure.
+  - Working tree intentionally retains state-file updates only: `CURRENT_TASK.md` and `memory/2026-05-05.md`.
+
+- 2026-05-05 analysis:
+  - User asked to analyze a possible coach/student subscription profit-sharing system.
+  - Current repository implements WeChat Mini Program membership payment only: frontend calls `/api/membership/pay/create`, backend creates a JSAPI order, stores `pro_membership_payment_records`, and activates `user_pro_memberships` after WeChat pay notify.
+  - No implemented coach/student subscription domain was found: no coach profile/relationship tables, no coach-specific order table, no wallet/withdrawal/settlement ledger, no delayed profit-sharing worker, and no WeChat Pay profit-sharing API calls.
+  - Current payment payload does not set a profit-sharing flag and does not attach receivers; paid money is treated as platform membership revenue.
+  - If coach subscription revenue sharing is required, it needs new domain model + payment split/settlement workflow rather than a small patch to existing membership payment.
+
 ## 状态：完成 - 7 日活跃与成功付费用户口径核对
 
 - 2026-05-08 update:
@@ -351,7 +383,6 @@
     - `cmd /c ".\node_modules\.bin\eslint.cmd src/packageExtra/pages/login/index.tsx --max-warnings 0"` passed.
     - `rg` confirmed no login-page frontend `testOpenid` / test-openid UI remnants.
     - WeApp DevTools runtime verification was attempted but blocked because `mrc` is not installed or on PATH, and the expected WeChat DevTools CLI paths were not accessible/found in this environment.
-
 ## 状态：进行中 - 等待用户反馈调试日志
 
 - 2026-05-05 update:
@@ -4238,3 +4269,28 @@
   - 点击后 `mrc pageInfo` 显示 `packageExtra/pages/health-profile/index` → 跳转正确 ✅
   - 编译产物 `dist/pages/index/index.js` 确认包含 `openDebugHealthProfileFromMenu` 和新调试项 ✅
   - 编译产物 `dist/pages/profile/index.js` 确认已无调试按钮代码 ✅
+## Status: done - 2026-05-11 backend line count snapshot
+- User asked how many lines of backend code there are in total.
+- Counted git-tracked files under `backend/` only, avoiding untracked/cache/temp files.
+- Current snapshot:
+  - Python files: 73 files, 37908 physical lines.
+  - Production Python excluding `backend/tests/` and `backend/test_backend/`: 50 files, 33066 physical lines.
+  - Source-like backend files (`.py`, `.sql`, `.mjs`, `.js`, `.css`, `.html`, `.sh`, `Dockerfile`): 158 files, 45165 physical lines.
+  - All git-tracked text files under `backend/`: 179 files, 95497 physical lines.
+  - Skipped binary files: 3 test images under `backend/tests/test_images/`.
+- No code changes were made.
+
+## Status: done - 2026-05-11 Go backend branch static analysis
+- User said there is a Go backend branch and asked to analyze it.
+- Fetched remotes and found no branch literally named `go`; the Go backend is on `origin/backend-refactor-sync-migrate-tencent`.
+- Static snapshot from that branch:
+  - `backend/` is a Go service with `cmd/server`, `cmd/worker`, `internal/*`, `pkg/*`, docs, migrations, static test backend, and migration scripts.
+  - Go files: 212 files, 46893 physical lines.
+  - Production Go excluding `_test.go`: 117 files, 29581 physical lines.
+  - Go tests: 95 files, 17312 physical lines.
+  - All backend text files in that branch: 446 files, 68571 physical lines.
+  - Explicit Gin route registrations: 147 routes; route map specs: 143; effectively all route-map surfaces are implemented explicitly, plus several extra gap/new routes.
+  - Largest production areas by total Go lines include `internal/analyze`, `internal/health`, `internal/testbackend`, `internal/membership`, `internal/community`, `internal/worker`.
+- Verification blocker:
+  - Created a temporary worktree at `D:\projects\food_link_go_analysis`, but local environment has no `go` executable (`go` not recognized), so `go test ./...` could not be run.
+  - Temporary worktree was removed after static analysis.
