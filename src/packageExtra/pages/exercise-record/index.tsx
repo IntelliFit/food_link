@@ -11,6 +11,7 @@ import {
   getMyMembership,
   uploadAnalyzeImageFile,
   compressImagePathForUpload,
+  showUnifiedApiError,
   type ExerciseLogItem,
   type ExerciseTaskResultPayload,
   type MembershipStatus,
@@ -21,10 +22,10 @@ import {
   isExerciseLogCreditExhausted,
 } from '../../../utils/membership'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
-import { showUnifiedApiError } from '../../../utils/error-modal'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 
 /** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
@@ -46,6 +47,7 @@ interface ExerciseRecord {
   content: string
   calories: number
   createdAt: string
+  recordDate: string
   /** 模型思考过程（有则展示） */
   reasoning?: string | null
 }
@@ -58,16 +60,26 @@ interface PendingExerciseCard {
   status: 'pending' | 'failed'
   errorMessage?: string
   createdAt: string
+  recordDate: string
 }
 
 function mapLogToRecord(log: ExerciseLogItem): ExerciseRecord {
+  const fallbackDate = getTodayRecordDateKey()
   return {
     id: log.id,
     content: log.exercise_desc,
     calories: log.calories_burned,
-    createdAt: log.recorded_at,
+    createdAt: log.recorded_at || log.created_at || log.recorded_on || new Date().toISOString(),
+    recordDate: normalizeRecordDate(log.recorded_on || fallbackDate),
     reasoning: log.ai_reasoning ?? undefined
   }
+}
+
+function dateKeyFromTimestamp(value: string | undefined, fallbackDate: string): string {
+  if (!value) return fallbackDate
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return fallbackDate
+  return normalizeRecordDate(formatDateKey(parsed))
 }
 
 function applyExerciseTaskResult(task: { result?: unknown }): ExerciseTaskResultPayload | null {
@@ -112,21 +124,24 @@ export default function ExerciseRecordPage() {
   const [submitting, setSubmitting] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [selectedImagePath, setSelectedImagePath] = useState('')
-  const [selectedImageUrl, setSelectedImageUrl] = useState('')
+  const currentRecordDateRef = useRef(recordDate)
   const pollingTaskIdsRef = useRef<Set<string>>(new Set())
 
-  const loadTodayRecords = useCallback(async (): Promise<void> => {
+  const loadRecordsForDate = useCallback(async (targetDate: string): Promise<void> => {
     if (!getAccessToken()) {
       setRecords([])
       return
     }
     try {
-      const { logs } = await getExerciseLogs({ date: recordDate })
-      setRecords(logs.map(mapLogToRecord))
+      const normalizedDate = normalizeRecordDate(targetDate)
+      const { logs } = await getExerciseLogs({ date: normalizedDate })
+      if (currentRecordDateRef.current === normalizedDate) {
+        setRecords(logs.map(mapLogToRecord).filter((log) => log.recordDate === normalizedDate))
+      }
     } catch (e) {
       console.error('[exercise-record] load logs', e)
     }
-  }, [recordDate])
+  }, [])
 
   const persistPendingOnly = useCallback((items: PendingExerciseCard[]) => {
     try {
@@ -134,7 +149,8 @@ export default function ExerciseRecordPage() {
         clientId: p.clientId,
         taskId: p.taskId,
         content: p.content,
-        createdAt: p.createdAt
+        createdAt: p.createdAt,
+        recordDate: p.recordDate
       }))
       Taro.setStorageSync(EXERCISE_PENDING_TASKS_KEY, JSON.stringify(toSave))
     } catch (e) {
@@ -155,6 +171,7 @@ export default function ExerciseRecordPage() {
         taskId: string
         content: string
         createdAt: string
+        recordDate?: string
       }>
       if (!Array.isArray(parsed)) return
       setPendingItems(
@@ -163,7 +180,8 @@ export default function ExerciseRecordPage() {
           taskId: row.taskId,
           content: row.content,
           status: 'pending' as const,
-          createdAt: row.createdAt
+          createdAt: row.createdAt,
+          recordDate: normalizeRecordDate(row.recordDate || dateKeyFromTimestamp(row.createdAt, getTodayRecordDateKey()))
         }))
       )
     } catch (e) {
@@ -172,10 +190,11 @@ export default function ExerciseRecordPage() {
   }, [])
 
   const pollForTask = useCallback(
-    async (taskId: string, clientId: string): Promise<void> => {
+    async (taskId: string, clientId: string, taskRecordDate?: string): Promise<void> => {
       if (pollingTaskIdsRef.current.has(taskId)) return
       pollingTaskIdsRef.current.add(taskId)
       const maxAttempts = 120
+      const targetDate = normalizeRecordDate(taskRecordDate || currentRecordDateRef.current)
       try {
         for (let i = 0; i < maxAttempts; i++) {
           if (i > 0) {
@@ -186,7 +205,9 @@ export default function ExerciseRecordPage() {
           if (task.status === 'done' && payload) {
             setPendingItems((prev) => prev.filter((p) => p.clientId !== clientId))
             setInputValue('')
-            await loadTodayRecords()
+            if (currentRecordDateRef.current === targetDate) {
+              await loadRecordsForDate(targetDate)
+            }
             Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
             Taro.showToast({
               title: `已记录 ${payload.estimated_calories} kcal`,
@@ -194,7 +215,7 @@ export default function ExerciseRecordPage() {
             })
             return
           }
-          if (task.status === 'failed' || task.status === 'violated') {
+          if (['failed', 'violated', 'timed_out', 'cancelled'].includes(task.status)) {
             const msg = normalizeTaskErrorMessage(task.error_message)
             setPendingItems((prev) =>
               prev.map((p) =>
@@ -228,21 +249,22 @@ export default function ExerciseRecordPage() {
         pollingTaskIdsRef.current.delete(taskId)
       }
     },
-    [loadTodayRecords]
+    [loadRecordsForDate]
   )
 
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
     const nextDate = normalizeRecordDate(String(params?.date || ''))
     persistRecordTargetDate(nextDate)
+    currentRecordDateRef.current = nextDate
     setRecordDate(nextDate)
-    void loadTodayRecords()
+    void loadRecordsForDate(nextDate)
     loadPendingFromStorage()
-  }, [loadPendingFromStorage, loadTodayRecords])
+  }, [loadPendingFromStorage, loadRecordsForDate])
 
   useEffect(() => {
     pendingItems.filter((p) => p.status === 'pending').forEach((p) => {
-      void pollForTask(p.taskId, p.clientId)
+      void pollForTask(p.taskId, p.clientId, p.recordDate)
     })
   }, [pendingItems, pollForTask])
 
@@ -250,17 +272,21 @@ export default function ExerciseRecordPage() {
     const params = Taro.getCurrentInstance().router?.params
     const nextDate = normalizeRecordDate(String(params?.date || ''))
     persistRecordTargetDate(nextDate)
+    currentRecordDateRef.current = nextDate
     setRecordDate(nextDate)
-    void loadTodayRecords()
+    void loadRecordsForDate(nextDate)
     if (getAccessToken()) {
       getMyMembership().then(setMembershipStatus).catch(() => {})
     }
     try {
       const raw = Taro.getStorageSync(EXERCISE_PENDING_TASKS_KEY)
       if (!raw || typeof raw !== 'string') return
-      const parsed = JSON.parse(raw) as Array<{ taskId: string; clientId: string }>
+      const parsed = JSON.parse(raw) as Array<{ taskId: string; clientId: string; createdAt?: string; recordDate?: string }>
       if (!Array.isArray(parsed)) return
-      parsed.forEach((row) => void pollForTask(row.taskId, row.clientId))
+      parsed.forEach((row) => {
+        const taskDate = normalizeRecordDate(row.recordDate || dateKeyFromTimestamp(row.createdAt, nextDate))
+        void pollForTask(row.taskId, row.clientId, taskDate)
+      })
     } catch {
       /* ignore */
     }
@@ -268,17 +294,21 @@ export default function ExerciseRecordPage() {
 
   const displayRows: DisplayRow[] = useMemo(() => {
     const rows: DisplayRow[] = []
-    records.forEach((r) => rows.push({ key: `s-${r.id}`, kind: 'server', record: r }))
-    pendingItems.forEach((p) => rows.push({ key: `p-${p.clientId}`, kind: 'pending', item: p }))
+    records.filter((r) => r.recordDate === recordDate).forEach((r) => rows.push({ key: `s-${r.id}`, kind: 'server', record: r }))
+    pendingItems
+      .filter((p) => p.recordDate === recordDate)
+      .forEach((p) => rows.push({ key: `p-${p.clientId}`, kind: 'pending', item: p }))
     return rows.sort(
       (a, b) =>
-        new Date(a.kind === 'server' ? a.record.createdAt : a.item.createdAt).getTime() -
-        new Date(b.kind === 'server' ? b.record.createdAt : b.item.createdAt).getTime()
+        new Date(b.kind === 'server' ? b.record.createdAt : b.item.createdAt).getTime() -
+        new Date(a.kind === 'server' ? a.record.createdAt : a.item.createdAt).getTime()
     )
-  }, [records, pendingItems])
+  }, [records, pendingItems, recordDate])
 
-  const totalCalories = records.reduce((sum, r) => sum + r.calories, 0)
-  const recordCount = records.length + pendingItems.filter((p) => p.status === 'pending').length
+  const visibleRecordCount = records.filter((r) => r.recordDate === recordDate).length
+  const visiblePendingCount = pendingItems.filter((p) => p.status === 'pending' && p.recordDate === recordDate).length
+  const totalCalories = records.filter((r) => r.recordDate === recordDate).reduce((sum, r) => sum + r.calories, 0)
+  const recordCount = visibleRecordCount + visiblePendingCount
   const statsLabel = recordDate === getTodayRecordDateKey() ? '今日消耗' : `${recordDate} 消耗`
 
   const handleAddImage = (): void => {
@@ -290,20 +320,22 @@ export default function ExerciseRecordPage() {
       itemList: ['拍照', '从相册选择'],
       success: (res) => {
         const sourceType: Array<'album' | 'camera'> = res.tapIndex === 0 ? ['camera'] : ['album']
-        Taro.chooseImage({
+        void chooseImageWithPrivacy({
           count: 1,
           sizeType: ['compressed'],
           sourceType,
-          success: (chooseRes) => {
-            const paths = chooseRes.tempFilePaths || []
-            if (paths.length > 0) {
-              setSelectedImagePath(paths[0])
-            }
-          },
-          fail: (err) => {
-            if (err.errMsg?.includes('cancel')) return
-            console.error('[exercise-record] chooseImage', err)
+        }).then((chooseRes) => {
+          const paths = chooseRes.tempFilePaths || []
+          if (paths.length > 0) {
+            setSelectedImagePath(paths[0])
           }
+        }).catch((err) => {
+          if (err.errMsg?.includes('cancel')) return
+          if (isPrivacyAuthorizeError(err)) {
+            showPrivacyAuthorizeFailure(err)
+            return
+          }
+          console.error('[exercise-record] chooseImage', err)
         })
       }
     })
@@ -311,7 +343,6 @@ export default function ExerciseRecordPage() {
 
   const clearSelectedImage = (): void => {
     setSelectedImagePath('')
-    setSelectedImageUrl('')
   }
 
   const runSubmitFlow = async (): Promise<void> => {
@@ -326,12 +357,12 @@ export default function ExerciseRecordPage() {
       return
     }
     if (isExerciseLogCreditExhausted(membershipStatus)) {
-      const blockContent = getExerciseLogCreditBlockMessage(membershipStatus)
+      const content = getExerciseLogCreditBlockMessage(membershipStatus)
       const confirmText = getExerciseLogBlockedActionText(membershipStatus)
-      const showUpgrade = blockContent.includes('开通') || blockContent.includes('升级') || membershipStatus?.is_pro
+      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
       Taro.showModal({
         title: '积分不足',
-        content: blockContent,
+        content,
         showCancel: showUpgrade,
         confirmText: showUpgrade ? confirmText : '知道了',
         cancelText: '取消',
@@ -347,27 +378,23 @@ export default function ExerciseRecordPage() {
 
     setSubmitting(true)
     Taro.showLoading({ title: '提交中...', mask: true })
-
     let uploadedImageUrl = ''
     try {
-      // 如果有图片，先上传
       if (hasImage) {
         const compressedPath = await compressImagePathForUpload(selectedImagePath)
         const { imageUrl } = await uploadAnalyzeImageFile(compressedPath)
         uploadedImageUrl = imageUrl
-        setSelectedImageUrl(imageUrl)
       }
-
       const membership = await getMyMembership().catch(() => null)
       if (membership) {
         setMembershipStatus(membership)
         if (isExerciseLogCreditExhausted(membership)) {
-          const blockContent = getExerciseLogCreditBlockMessage(membership)
+          const content = getExerciseLogCreditBlockMessage(membership)
           const confirmText = getExerciseLogBlockedActionText(membership)
-          const showUpgrade = blockContent.includes('开通') || blockContent.includes('升级') || membership.is_pro
+          const showUpgrade = content.includes('开通') || content.includes('升级') || membership.is_pro
           Taro.showModal({
             title: '积分不足',
-            content: blockContent,
+            content,
             showCancel: showUpgrade,
             confirmText: showUpgrade ? confirmText : '知道了',
             cancelText: '取消',
@@ -380,23 +407,26 @@ export default function ExerciseRecordPage() {
           return
         }
       }
-
+      const targetRecordDate = persistRecordTargetDate(
+        normalizeRecordDate(currentRecordDateRef.current || recordDate)
+      )
+      currentRecordDateRef.current = targetRecordDate
+      setRecordDate(targetRecordDate)
       const displayContent = content || '图片识别运动'
       const { task_id: taskId } = await createExerciseLog({
         exercise_desc: content,
         image_url: uploadedImageUrl || undefined,
-        date: recordDate
+        date: targetRecordDate
       })
       const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
       const createdAt = new Date().toISOString()
       setInputValue('')
       setSelectedImagePath('')
-      setSelectedImageUrl('')
       setPendingItems((prev) => [
         ...prev,
-        { clientId, taskId, content: displayContent, status: 'pending', createdAt }
+        { clientId, taskId, content: displayContent, status: 'pending', createdAt, recordDate: targetRecordDate }
       ])
-      void pollForTask(taskId, clientId)
+      void pollForTask(taskId, clientId, targetRecordDate)
     } catch (e) {
       console.error('[exercise-record] send', e)
       const msg = e instanceof Error ? e.message : '提交失败'
@@ -459,6 +489,9 @@ export default function ExerciseRecordPage() {
 
   const formatTime = (isoString: string): string => {
     const date = new Date(isoString)
+    if (Number.isNaN(date.getTime())) {
+      return '--:--'
+    }
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
   }
 
@@ -497,7 +530,7 @@ export default function ExerciseRecordPage() {
               <IconExercise size={80} color='#d1d5db' />
             </View>
             <Text className='empty-title'>还没有运动记录</Text>
-            <Text className='empty-desc'>在下方输入你今天做了什么运动，或拍照识别{'\n'}例如：&quot;跑步30分钟&quot; 或 &quot;游泳1小时&quot;</Text>
+            <Text className='empty-desc'>在下方输入你今天做了什么运动{'\n'}例如：&quot;跑步30分钟&quot; 或 &quot;游泳1小时&quot;</Text>
           </View>
         ) : (
           <View className='records-list'>

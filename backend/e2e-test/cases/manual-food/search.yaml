@@ -1,0 +1,14 @@
+cases:
+  - id: manual-food.search.public
+    name: "手动食物搜索"
+    desc: "验证按关键词搜索手动食物库时返回食物条目列表。"
+    group: utility
+    method: GET
+    path: /api/manual-food/search
+    query:
+      q: "绫抽キ"
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.items: type:array

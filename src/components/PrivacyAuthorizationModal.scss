@@ -1,0 +1,69 @@
+.privacy-auth-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.privacy-auth-dialog {
+  width: 100%;
+  max-width: 640rpx;
+  padding: 40rpx;
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: 0 24rpx 80rpx rgba(15, 23, 42, 0.18);
+}
+
+.privacy-auth-title {
+  display: block;
+  color: #111827;
+  font-size: 36rpx;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.privacy-auth-desc {
+  display: block;
+  margin-top: 20rpx;
+  color: #4b5563;
+  font-size: 28rpx;
+  line-height: 1.7;
+}
+
+.privacy-auth-link {
+  color: #00a870;
+  font-weight: 600;
+}
+
+.privacy-auth-actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 36rpx;
+}
+
+.privacy-auth-btn {
+  flex: 1;
+  height: 88rpx;
+  border-radius: 44rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 88rpx;
+}
+
+.privacy-auth-btn::after {
+  border: 0;
+}
+
+.privacy-auth-btn--ghost {
+  color: #4b5563;
+  background: #f3f4f6;
+}
+
+.privacy-auth-btn--primary {
+  color: #fff;
+  background: #00bc7d;
+}

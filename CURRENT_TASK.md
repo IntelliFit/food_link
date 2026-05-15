@@ -1,68 +1,4301 @@
+# 状态：完成源码修改 - AI分析风险解读直接展开
+
+- 2026-05-15 follow-up 6:
+  - User 要求：`AI分析` 面板里的 `AI 风险解读` 不要折叠，不要边框，不要背景渐变，直接正常显示全部内容；完成后提交并推送代码。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`
+      - 移除 `AI 风险解读` 的点击卡片和底部详情弹层结构。
+      - 将原弹层里的免责声明、缓存状态、手动更新、错误态、正文、生成入口直接内联到 `AI分析` 面板中。
+      - 移除不再需要的 `aiDetailVisible` 状态和自定义 tabBar 隐藏依赖。
+    - `src/pages/stats/index.scss`
+      - `AI 风险解读` 卡片改为无边框、无渐变白底。
+      - 摘要不再强制省略，正文区域直接展开。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - 提交前综合校验 `npx eslint src/pages/stats/index.tsx src/pages/index/components/RecordMenu.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed。
+    - 提交前综合校验 `npx stylelint src/pages/stats/index.scss src/packageExtra/pages/health-profile/index.scss --allow-empty-input` passed。
+    - 提交前 `git diff --check` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 记录菜单快捷入口去除左侧图标
+
+- 2026-05-15 follow-up 5:
+  - User 要求：底部导航栏卡路里按钮点击后弹出的记录菜单里，`我的收藏` 和 `识别记录` 左侧图标去除；同一行最右侧图标改为项目图标系统的向右箭头。
+  - Fix applied:
+    - `src/pages/index/components/RecordMenu.tsx`
+      - 移除 `QUICK_ACCESS_ITEMS` 中 `我的收藏/识别记录` 的左侧图标配置和渲染。
+      - 右侧箭头从组件 `IconChevronRight` 改为 `Text className='iconfont icon-right-arrow record-menu-list-arrow-v2'`。
+    - `src/pages/index/index.scss`
+      - 快捷入口左侧布局取消图标间距依赖。
+      - 新增 `.record-menu-list-arrow-v2` 样式。
+  - Verification:
+    - `npx eslint src/pages/index/components/RecordMenu.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/RecordMenu.tsx src/pages/index/index.scss` passed。
+    - `npx stylelint src/pages/index/index.scss --allow-empty-input` 仍失败于该文件开头既有 SCSS 变量解析问题：`Unknown word $purple-color`。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 分析页面板重组与体重折线图
+
+- 2026-05-15 follow-up 4:
+  - User 要求：`结构指标` 改名为 `热量分布`；原 `营养证据` 的热量趋势和宏量结构移动到热量分布顶部，使热量分布包含 4 个板块；健康指数底部的 `AI 风险解读` 移动到原营养证据面板；`营养证据` 改为 `AI分析`；长期健康指标里的体重趋势改用折线图。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`
+      - 分析页 Tab 改为 `健康指数 / AI分析 / 热量分布`。
+      - `AI 风险解读` 卡片和底部弹层从健康指数面板移动到 `AI分析` 面板。
+      - `热量分布` 面板现在依次展示：`热量摄入趋势`、`宏量营养结构`、`餐次热量分布`、`长期健康指标`。
+      - `长期健康指标` 的体重趋势从日期/数值胶囊改为折线图，保留每个点的体重数值和日期标签。
+    - `src/pages/stats/index.scss`
+      - 新增体重折线图容器、点位、数值浮标和日期轴样式。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 健康档案引导页体检报告多图上传
+
+- 2026-05-15 follow-up 3:
+  - User 要求：用户引导页面里的体检报告逻辑需要和健康档案里的体检报告逻辑一致，并支持最多上传 3 张图片。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 引导页体检报告从单张 `reportImageUrl` 改为 `reportImageUrls: string[]`。
+      - 上传时调用 `chooseImageWithPrivacy({ count: 3 })`，按健康档案页方式逐张 `imageToBase64 -> uploadReportImage`。
+      - 保存健康档案时将图片 URL 用逗号拼接写入 `report_image_url`，并用同一个逗号拼接字符串提交 `submitReportExtractionTask()`。
+      - 上传区文案更新为最多 3 张，按钮状态根据是否已选图片切换。
+    - `src/packageExtra/pages/health-profile/index.scss`
+      - 上传区支持 1/2/3 张报告预览，图片编号角标展示。
+      - 顺手修正该文件一个旧 `rgba()` 写法以通过当前 stylelint。
+    - `src/packageExtra/pages/health-profile-view/index.tsx`
+      - 健康档案查看页直接上传和编辑弹窗上传都统一限制为最多 3 张，文案同步。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed。
+    - `npx stylelint src/packageExtra/pages/health-profile/index.scss --allow-empty-input` passed。
+    - `git diff --check -- src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile/index.scss src/packageExtra/pages/health-profile-view/index.tsx` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 记录菜单入口低饱和图标配色
+
+- 2026-05-15 follow-up 2:
+  - User 要求：记录菜单中 `我的收藏` 和 `识别记录` 左侧图标颜色也按低饱和要求改造。
+  - Fix applied:
+    - `src/pages/index/components/RecordMenu.tsx`
+      - `我的收藏` 改为米金前景 + 米金淡色图标槽。
+      - `识别记录` 改为灰蓝前景 + 灰蓝淡色图标槽。
+      - 两个快捷入口同步增加暗色模式下的低透明度图标槽和低饱和前景色。
+  - Verification:
+    - `npx eslint src/pages/index/components/RecordMenu.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/RecordMenu.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+- 2026-05-15 follow-up:
+  - User 要求：分析页健康指数卡片中的 4 个指标（已记录、超出消耗、晚餐热量占比、连续记录）不要两行两列，改为一行四列，并去掉指标块背景色和外边框，只保持间距。
+  - Fix applied:
+    - `src/pages/stats/index.scss`
+      - `.risk-overview-chip-row` 改为 `repeat(4, minmax(0, 1fr))`。
+      - `.risk-overview-chip` 去掉 padding、圆角、背景和边框，仅保留最小宽度控制。
+      - 指标值字号微调并加 `nowrap/ellipsis`，避免一行四列时撑开布局。
+  - Verification:
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` passed。
+    - `git diff --check -- src/pages/stats/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+- 2026-05-15 update:
+  - User 要求：首页点击卡路里/记录按钮后弹出的记录菜单中，从“拍照识别”到“手动输入”的入口不要再五彩斑斓，改成仿照“我的”页功能入口图标的低饱和配色。
+  - Fix applied:
+    - `src/pages/index/components/RecordMenu.tsx`
+      - 顶部 2x2 入口颜色改为柔绿、灰蓝、米金、灰紫四组低饱和 tone。
+      - 每个入口新增浅色卡片背景、浅色边框和图标槽背景。
+      - 同步配置暗色模式下的低透明度前景/背景/边框颜色。
+    - `src/pages/index/index.scss`
+      - `record-menu-grid-card` 增加透明边框以承载 inline tone 边框色。
+      - `record-menu-grid-icon-wrap` 增加圆角，形成类似“我的”页的淡色图标块。
+  - Verification:
+    - `npx eslint src/pages/index/components/RecordMenu.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/RecordMenu.tsx src/pages/index/index.scss` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - `npx stylelint src/pages/index/index.scss --allow-empty-input` 无法解析该 SCSS 文件开头变量（`Unknown word $purple-color`），未能作为有效校验；该阻塞与本轮新增样式无关。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 分析页周期下拉与三段面板布局
+
+- 2026-05-15 follow-up 3:
+  - User 要求：营养证据和结构指标面板里所有折叠卡片的标题/简介左对齐；健康指数 6 个友好度卡片删除底部横线和“查看更多”，改为右下角 `图标 + 更多`，整卡点击仍打开详情；友好度详情弹层和 AI 风险解读弹层的实现/样式与“我的关注”弹层对齐。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`
+      - 6 个健康友好度卡片的动作文案改为 `icon-right-arrow + 更多`。
+    - `src/pages/stats/index.scss`
+      - `.evidence-card` 内标题和副标题统一左对齐。
+      - 健康友好度卡片改为 flex 纵向布局，`更多` 固定在右下角，不再有顶部横线。
+      - 风险详情弹层和 AI 风险解读弹层统一调整为 `z-index: 10000`、`rgb(0 0 0 / 45%)` 遮罩、同“我的关注”一致的底部浮层最大高度与安全区留白。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+- 2026-05-15 follow-up 2:
+  - User 要求：左上角 `近一周/近一个月` 下拉箭头必须使用项目图标系统，不使用字符。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`：将字符 `⌄` 替换为 `iconfont icon-right-arrow`。
+    - `src/pages/stats/index.scss`：通过 `.stats-range-dropdown__arrow { transform: rotate(90deg); }` 将右箭头旋转为向下箭头。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - `rg` 确认 `stats` 页不再有字符 `⌄`。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+- 2026-05-15 follow-up:
+  - User 要求：三段 Tab 下方主体区域需要上侧间距；健康指数里的“我的关注”改成类似首页“编辑目标”的小按钮，放在健康指数卡片右侧，点击后从底部弹出对话框且图层必须高于底部导航；弹窗内可定制 6 个关注选项；营养证据和结构指标里的卡片默认展开，卡片标题去掉“证据”口吻。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`
+      - `analysis-tabs-container` 下方内容增加间距。
+      - “我的关注”从独立卡片改为健康指数卡片右上区域的胶囊按钮，按钮样式仿首页“编辑目标”。
+      - 点击“我的关注”打开底部浮层，浮层内展示 6 个可选关注方向，并沿用原有至少保留 1 项的选择逻辑。
+      - 弹层打开时复用 `stats_risk_detail_visible` storage 隐藏自定义 tabBar，浮层自身 `z-index: 10000`，确保盖过底部导航。
+      - `calories/macro/meals/body` 默认展开。
+      - 卡片标题改为：`热量摄入趋势`、`宏量营养结构`、`餐次热量分布`、`长期健康指标`；对应副标题改成正常描述。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` 仍失败，剩余 9 个为该文件既有样式规则问题（旧 `rgba()` 写法、旧 overflow longhand、旧空行规则）。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+- 2026-05-15 update:
+  - User 要求：分析页顶部 `近一周/近一个月` 从内容区分段控件移到左上角，并和微信小程序右上角默认工具同一行；页面顶部间距缩小到 `182rpx`；原位置改为面板分区，默认展示健康指数，第二块展示热量证据和宏量结构证据，第三块展示餐次分布和长期健康指标。
+  - Fix applied:
+    - `src/pages/stats/index.tsx`
+      - 新增固定左上角周期下拉，点击通过 `Taro.showActionSheet()` 切换 `近一周/近一个月`。
+      - 原顶部周期分段控件改为三段分析面板：`健康指数`、`营养证据`、`结构指标`。
+      - 默认面板为 `健康指数`；`营养证据` 只承载热量证据和宏量结构证据；`结构指标` 只承载餐次分布和长期健康指标。
+      - 移除当前渲染中的记录分布和连续记录卡片，减少分析页板块堆叠。
+    - `src/pages/stats/index.scss`
+      - 保持页面 `padding-top: 182rpx`。
+      - 新增左上角周期下拉样式，并把后台同步 spinner 避开下拉区域。
+      - 原周期控件位置复用为面板 Tab。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/stats/index.tsx src/pages/stats/index.scss` passed。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - `npx stylelint src/pages/stats/index.scss --allow-empty-input` 仍失败，剩余 9 个为该文件既有样式规则问题（旧 `rgba()` 写法、旧 overflow longhand、旧空行规则）。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 作息选择器去除当前作息摘要
+
+- 2026-05-13 update:
+  - User 要求：去除作息组件里的 `routine-picker-summary`；“睡觉”“起床”两个字放大一点。
+  - Fix applied:
+    - `src/components/RoutineHourPicker/index.tsx`
+      - 移除“当前作息”摘要条 JSX。
+    - `src/components/RoutineHourPicker/index.scss`
+      - 删除 `.routine-picker-summary*` 和 `.routine-summary-part` 样式。
+      - `.routine-wheel-title` 从 `28rpx/38rpx` 放大到 `34rpx/44rpx`。
+  - Verification:
+    - `npx eslint src/components/RoutineHourPicker/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/RoutineHourPicker/index.tsx src/components/RoutineHourPicker/index.scss` passed。
+    - `rg` 确认 `routine-picker-summary/routine-summary-part/当前作息` 无残留。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 作息滚轮对齐年龄选择器样式
+
+- 2026-05-13 update:
+  - User 要求：作息习惯的拨动组件需要和年龄部分保持一致；当前作息“几点睡/几点醒”部分给睡觉和起床添加 emoji 图标；作息习惯说明文案改为“了解你的作息，让算法更加懂你”。
+  - Fix applied:
+    - `src/components/RoutineHourPicker/index.tsx/scss`
+      - 作息滚轮改为接近 `AgePicker` 的透明大字号滚轮：选中项 48px、普通项 32px、隐藏默认 indicator 边线，单位“点”固定浮在滚轮中心旁。
+      - 睡觉和起床保留两个并排小时滚轮，分别绑定 `sleepHour` 和 `wakeHour`。
+      - 当前作息摘要改为两段展示：`😴 HH:00 睡`、`🌤️ HH:00 醒`。
+      - 滚轮标题同步加 emoji：`😴 睡觉`、`🌤️ 起床`。
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 作息步骤副标题改为：`了解你的作息，让算法更加懂你`。
+  - Verification:
+    - `npx eslint src/components/RoutineHourPicker/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/RoutineHourPicker/index.tsx src/components/RoutineHourPicker/index.scss src/packageExtra/pages/health-profile/index.tsx` passed。
+    - 已手动复查 JSX，确认睡觉滚轮使用 `sleepPick/sleepHour`，起床滚轮使用 `wakePick/wakeHour`。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 用户画像非选项题默认可继续
+
+- 2026-05-13 update:
+  - User 要求：用户画像中，除了选项类型外的其他类型都需要默认就能点击下一步。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 身高和体重步骤不再因为用户未手动拨动而禁用“下一步”。
+      - 新增默认身高 `170cm`、默认体重 `60kg` 常量，并统一用于拨动条显示、步骤校验和最终提交。
+      - 保存健康档案时，如果用户没有操作身高/体重拨动条，也会提交当前默认值，避免能跳过但最后保存失败。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/health-profile/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 作息习惯改为入睡/起床小时拨动选择
+
+- 2026-05-13 update:
+  - User 要求：引导页面和健康档案里的作息调整组件不要再用单选/多选框形式，改为两个类似身高选择的拨动选择器，分别选择入睡小时和起床小时；只精确到小时；引导页提供常见作息选项快速填充。
+  - Fix applied:
+    - 新增 `src/components/RoutineHourPicker/index.tsx/scss`
+      - 提供两个小时级 `PickerView`：入睡和起床，范围 0-23 点。
+      - 显示当前作息摘要，如 `23:00 睡，07:00 起`。
+      - 引导页可传入常见作息 presets：早睡早起、标准作息、晚睡晚起、轮班作息，一键填充两个小时。
+      - 保留兼容解析：旧枚举 `early_bird/regular/night_owl/irregular` 和旧文本中可识别的两个小时会转成新小时值。
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 移除作息单选卡片和 emoji 图标。
+      - 作息步骤改用 `RoutineHourPicker` 并展示快速填充选项。
+      - 保存时继续复用 `health_condition.routine_type`，写入格式化文本 `HH:00 睡，HH:00 起`。
+    - `src/packageExtra/pages/health-profile-view/index.tsx/scss`
+      - 健康档案作息编辑弹窗改为同一小时选择器的 compact 形态，不展示预设快捷项。
+      - 作息展示值通过新解析/格式化函数统一显示，旧枚举会被友好转为小时作息。
+      - 清理旧自定义作息输入样式与旧作息单选常量。
+  - Verification:
+    - `npx eslint src/components/RoutineHourPicker/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/RoutineHourPicker/index.tsx src/components/RoutineHourPicker/index.scss src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile/index.scss src/packageExtra/pages/health-profile-view/index.tsx src/packageExtra/pages/health-profile-view/index.scss` passed。
+    - `rg` 确认作息旧单选/旧自定义文本相关标识无残留。
+    - `npm run typecheck -- --pretty false` 仍失败，剩余错误在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 主题类型、`food-library`/`food-library-detail` 的 `chooseMessageFile` 类型声明。
+    - `npx stylelint ...` 针对相关 scss 仍失败，但报错均为这些页面既有样式规范问题（如旧 `rgba()` 写法、旧 overflow longhand、旧空行规则），新组件样式本身没有报错。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修复 - 健康档案引导页步骤错位与作息 emoji
+
+- 2026-05-13 update:
+  - User 反馈：健康档案用户引导页显示很奇怪，一共 12 个步骤但最后的体检报告像是在第 6 步；第一步性别/基础信息没看到；作息习惯选项里的 emoji icon 需要去除。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 新增 `PROFILE_STEPS`，`TOTAL_STEPS` 改为从步骤数组推导，避免步骤数与页面卡片/进度文案脱节。
+      - 新增 `PROFILE_STEP_WIDTH_RPX`，卡片轨道宽度和位移都由 `TOTAL_STEPS * PROFILE_STEP_WIDTH_RPX` 与 `currentStep * PROFILE_STEP_WIDTH_RPX` 推导，不再依赖硬编码 `9000rpx`。
+      - `loadProfile()` 完成后显式 `setCurrentStep(0)`，保证进入引导页从第 1 步基础信息开始，避免热更新或重进页状态停在中间步骤。
+      - 移除 `ROUTINE_OPTIONS` 中作息选项的 emoji icon 字段，并删除作息选项渲染里的 emoji icon。
+    - `src/packageExtra/pages/health-profile/index.scss`
+      - 移除 `.cards-track` 的硬编码 `width: 9000rpx`，改由 JSX 内联宽度与步骤数同源控制。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile/index.scss` passed。
+    - 已手动检查作息步骤渲染片段，确认作息选项无 emoji icon。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 我的页功能入口图标低饱和配色
+
+- 2026-05-13 update:
+  - User 要求：「我的」部分，从健康档案到关于我们这些按钮，仿照微信给不同按钮图标添加不同颜色；禁止高饱和、花哨配色，并适配当前 UI 风格。
+  - Fix applied:
+    - `src/pages/profile/index.tsx`
+      - 新增功能列表图标 tone 配置：健康档案柔绿、食物保质期米金、公共食物库灰蓝、加入用户群灰紫、隐私设置青绿、关于我们暖灰棕。
+      - 每个 tone 同时配置亮色/暗色模式的前景色与淡色底。
+      - 列表渲染从纯文字色改为 `color + backgroundColor` 的低饱和图标块。
+    - `src/pages/profile/index.scss`
+      - 列表图标尺寸调整为 56rpx，增加 16rpx 圆角与轻微内描边，让淡色底和当前卡片列表风格融合。
+  - Verification:
+    - `npx eslint src/pages/profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/profile/index.tsx src/pages/profile/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 修改食物参数弹层移除饮食目标
+
+- 2026-05-13 update:
+  - User 要求：在“修改食物参数”板块里也去除“饮食目标”。
+  - Fix applied:
+    - `src/pages/index/components/MealRecordEditModal.tsx`
+      - 移除“饮食目标”选项卡片、`DIET_GOAL_OPTIONS`、`dietGoal` state 和保存时的 `diet_goal` 提交。
+      - 保存食物参数时仍保留餐次、运动时机和食物明细编辑；不再通过该弹层修改记录的饮食目标。
+    - 复查 `src/packageExtra/pages/record-detail/index.tsx` 的同名编辑弹层，本来没有饮食目标编辑项，无需修改。
+  - Verification:
+    - `npx eslint src/pages/index/components/MealRecordEditModal.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/MealRecordEditModal.tsx` passed。
+    - `rg` 确认首页与记录详情两个“修改食物参数”弹层中不再存在 `饮食目标/DIET_GOAL_OPTIONS/dietGoal/setDietGoal`。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 健康指数记录门槛与作息自定义
+
+- 2026-05-13 update:
+  - User 要求：
+    - 分析页健康指数板块：新注册/记录不足用户若记录小于 2 天，不显示健康指数，改为提示连续记录两天以上后展示。
+    - 健康档案引导页和健康档案修改页：作息习惯既保留已有预设，也允许用户自定义文本，例如几点睡几点起。
+    - 后端：确认健康指数计算逻辑并记录；把用户档案里的作息习惯作为后端 AI 风险解读 prompt 的一部分。
+  - Fix applied:
+    - `src/pages/stats/index.tsx/scss`
+      - 使用 `recorded_days`（兼容本地 `daily_calories` 推导）作为健康指数展示门槛。
+      - 记录天数小于 2 时隐藏健康指数、关注风险卡片、行动建议和 AI 风险解读入口，展示“连续记录两天后显示健康指数”的提示卡。
+    - `src/packageExtra/pages/health-profile/index.tsx/scss`
+      - 引导页作息步骤新增“自定义作息”，可输入纯文本，提交时写入 `routine_type`。
+      - 加载旧档案时，若 `routine_type` 不是预设值，会自动进入自定义并回填文本。
+    - `src/packageExtra/pages/health-profile-view/index.tsx/scss`
+      - 健康档案修改页作息编辑器新增自定义作息输入，保存时校验非空并写回 `routine_type`。
+      - 健康档案展示继续兼容预设映射和自定义文本。
+    - `src/utils/api.ts`
+      - `StatsSummary` 增加 `recorded_days` 类型。
+      - `ReportExtract` 补 `_image_urls` 类型，消除本轮触碰页面的类型缺口。
+    - `backend/internal/health/handler/health_handler.go`
+      - `/api/stats/summary` 返回 `recorded_days`。
+    - `backend/internal/health/service/stats_service.go`
+      - AI 风险解读 prompt 中作息改为预设中文描述或用户自定义文本。
+      - 作息内容加入洞察缓存 fingerprint，用户修改作息后旧洞察会标记为需刷新。
+    - `docs/health-index-logic.md`
+      - 记录当前健康指数前端计算逻辑、后端数据来源和 AI 风险解读 prompt 组成。
+  - Verification:
+    - `npx eslint src/pages/stats/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/health/service ./internal/health/handler -run 'TestStats|TestGetStatsSummary|TestGenerateStatsInsight|TestSaveStatsInsight' -count=1` passed（在 `backend/` 目录）。
+    - `git diff --check` passed for touched files。
+    - `npm run typecheck -- --pretty false` 仍失败，但剩余错误都在未触碰页面：`analyze-history` 的 `loadTasks`、`expiry/expiry-edit` 的主题类型、`food-library` 的 `Taro.chooseMessageFile` 类型声明。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食餐次标签挪到图片角标
+
+- 2026-05-13 update:
+  - User 要求：首页「今日餐食」部分，把当前餐属于早餐/午餐/晚餐/加餐做成小圆角矩形标签放到图片左上角；原来右侧显示餐次的位置改为显示摄入量/摄入比例。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 今日餐食图片区域新增 `meal-media-type-tag`，显示 `早餐/午餐/晚餐/加餐/零食`。
+      - 第二行右侧原 `早餐 xx kcal` 餐次目标位置改为显示 `摄入 xx%`。
+      - 移除第三行营养素后面的摄入比例胶囊，避免重复展示。
+      - 清理不再使用的 `SNACK_MEAL_TYPES` 与餐次进度颜色常量。
+    - `src/pages/index/index.scss`
+      - 新增图片左上角餐次角标样式。
+      - 调整右侧摄入比例文字/图标样式，删除旧餐次目标与旧摄入比例胶囊样式。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/index.tsx src/pages/index/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修复 - 身体趋势页喝水按首页传入日期记录
+
+- 2026-05-13 update:
+  - User 反馈：首页切换到前几天后点击喝水卡片进入身体趋势页，再点快捷加水时，请求 `/api/body-metrics/water` 的 `date/recorded_on` 仍是今天，例如 `2026-05-13`。
+  - Root cause:
+    - 首页 `openBodyTrends('water')` 已把 `selectedDateRef.current` 作为 `?date=` 传入身体趋势页。
+    - 但 `src/packageExtra/pages/body-trends/index.tsx` 中 `handleAddWater()` 硬编码调用 `addBodyWaterLog(amount, today)`，忽略了路由传入日期。
+    - 同页还用 `normalizeRecordDate()` 解析路由日期；该函数会把不在补录窗口内的合法日期（例如用户说的三天前）归一成今天，进一步导致请求体日期回到当天。
+  - Fix applied:
+    - `src/packageExtra/pages/body-trends/index.tsx`
+      - 改为用 `normalizeRouteDate()` 解析路由日期：只校验日期格式和未来日期，合法过去日期原样保留，不再按补录窗口强制回退今天。
+      - `handleAddWater()` 改为 `addBodyWaterLog(amount, selectedRecordDate)`。
+      - 水量概览卡片和快捷加水标题改为显示选中日期（例如 `05月10日喝水`、`为05月10日快捷加水`），并从 `water_daily` 读取该日期的水量/达成率。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/body-trends/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/body-trends/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修复 - app.ts 恢复 extraPkgUrl 导入
+
+- 2026-05-13 update:
+  - User 反馈小程序启动报错：`ReferenceError: extraPkgUrl is not defined at app.ts:12`。
+  - Root cause:
+    - `src/app.ts` 中 `PUBLIC_PAGES` 和邀请页跳转仍在使用 `extraPkgUrl()`，但导入语句被移除，导致 app service 启动阶段直接 ReferenceError。
+  - Fix applied:
+    - `src/app.ts` 恢复 `import { extraPkgUrl } from './utils/subpackage-extra'`。
+  - Verification:
+    - `npx eslint src/app.ts src/pages/index/components/MealRecordPosterModal.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/app.ts src/pages/index/components/MealRecordPosterModal.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食单餐海报绘制前同步获取头像
+
+- 2026-05-13 update:
+  - User 反馈：首页「今日餐食」单餐分享海报底部左侧仍未显示当前用户头像，但「当天饮食记录」分享今日饮食的卡片头像正常。
+  - Root cause:
+    - 首页单餐海报 `MealRecordPosterModal` 在弹窗打开后异步把头像写入 `ownerAvatar` state，但自动生成海报只延迟 100ms，绘制时可能仍拿到空头像。
+    - 当天饮食记录海报是在 `handleGenerateDayRecordPoster()` 内部现场获取并等待用户资料后再绘制，因此能正常显示头像。
+  - Fix applied:
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - 新增 `resolvePosterOwnerProfile()`，绘制前现场获取当前登录用户资料，并合并公开邀请资料；公开资料空字段不会覆盖当前用户头像/昵称。
+      - `handleGeneratePoster()` 的 canvas 查询回调改为 async，在加载头像图片前先等待资料解析完成。
+      - `drawRecordPoster()` 改用本次解析出的 `posterNickname/posterAvatar`，避免依赖尚未更新的 React state。
+      - 当 `record.user_id` 缺失时，回退使用本地 `user_id`，保证首页当前用户单餐分享也能拿到头像。
+  - Verification:
+    - `npx eslint src/pages/index/components/MealRecordPosterModal.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/components/MealRecordPosterModal.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 状态：完成三次修复 - 首页日期选择即时持久化供喝水使用
+
+- 2026-05-13 update:
+  - User 提供实际请求体：11 号点击饮水，请求 `/api/body-metrics/water` 仍为 `amount_ml:250,date:"2026-05-13",recorded_on:"2026-05-13"`，证明问题在前端传出日期仍是今天。
+  - Root cause analysis:
+    - `selectedDateRef.current = selectedDate` 放在组件 render 主体里，可能在点击日期后又被旧 `selectedDate` 覆盖回今天。
+    - 喝水弹窗依赖 `selectedDateRef/current state`，而不是日期选择组件点击瞬间的日期事实。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 新增 `HOME_SELECTED_DATE_KEY`、`saveLastHomeSelectedDate()`、`getLastHomeSelectedDate()`。
+      - 初始 `selectedDate`/`waterEditorDate` 从最后一次首页点击日期恢复。
+      - 删除 render 主体里每次渲染都执行的 `selectedDateRef.current = selectedDate`，改为只有 `commitSelectedDate()` 能更新 ref/state/storage。
+      - `handleDateSelect()` 改为调用 `commitSelectedDate()`，后台同步和本地缓存也用提交后的日期。
+      - `openWaterEditor()` 从最后一次首页点击日期读取目标日期，避免拿到今天。
+    - `src/pages/index/components/DateSelector.tsx`
+      - 日期项点击瞬间就把 `cell.date` 写入 `home_selected_date_v1`，再调用父组件 `onSelect()`，确保喝水入口有最早、最真实的日期来源。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/pages/index/components/DateSelector.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/health/handler -run 'TestSaveBodyWaterLogUsesDateFromBody|TestResetBodyWaterLogsUsesDateFromBody' -count=1` passed（在 `backend/` 目录）。
+    - `git diff --check -- src/pages/index/index.tsx src/pages/index/components/DateSelector.tsx src/utils/api.ts backend/internal/health/handler/health_handler_test.go` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；仍未能截图/交互验证。
+
+# 状态：完成二次修复 - 首页喝水弹窗固定选中日期快照
+
+- 2026-05-13 update:
+  - User 反馈：重启前后端后，选中某一天记录喝水仍写到了今天，前一版修复未成功。
+  - Root cause analysis:
+    - 按 `jinhui-stack-debug` 依赖链复查：后端 handler/service 已支持 `date/recorded_on`，API 封装也能传日期；问题更像前端状态依赖。
+    - 首页喝水弹窗打开后，快捷按钮和自定义保存仍可能依赖外层 `selectedDate`/ref 的实时值；如果切日、弹层、异步状态刷新交错，可能拿到今天或旧值。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 新增 `waterEditorDate`，在 `openWaterEditor()` 时立刻把当前选中日期固化为弹窗日期快照。
+      - `handleDateSelect()` 中同步更新 `selectedDateRef.current = date`，避免 setState 异步期间 ref 仍是旧日期。
+      - 快捷水量按钮、自定义水量保存、清空喝水记录全部显式使用 `waterEditorDate`，不再依赖外层实时日期。
+      - 喝水弹窗文案改为显示 `{waterEditorDate} 已喝 xxx ml`，并且弹窗内统计也按 `waterEditorDate` 读取，便于运行时直接确认当前记录目标日期。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/health/handler -run 'TestSaveBodyWaterLogUsesDateFromBody|TestResetBodyWaterLogsUsesDateFromBody' -count=1` passed（在 `backend/` 目录）。
+    - `git diff --check -- src/pages/index/index.tsx src/utils/api.ts backend/internal/health/handler/health_handler_test.go` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；仍未能截图/交互验证。
+
+# 状态：完成源码修改 - 当天饮食记录食物宏量标签与摄入比例颜色调整
+
+- 2026-05-13 update:
+  - User 要求：「当天饮食记录」板块里每个成分的蛋白质/碳水/脂肪文字改成和风险卡片一样的正常前景色；后面的数字和单位继续保留彩色；摄入百分比去掉「摄入」两个字，并改成和左侧重量一样的灰色。
+  - Fix applied:
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 宏量营养行拆成 label 与 value：`蛋白质/碳水/脂肪` 用普通前景色，`xxg` 数字与单位继续使用各自彩色。
+      - 摄入比例文案从 `摄入 xx%` 改为只显示 `xx%`。
+    - `src/packageExtra/pages/day-record/index.scss`
+      - `.day-record-food-macro-label` 使用正常前景色。
+      - `.day-record-food-macro-value` 保留蛋白/碳水/脂肪原有彩色。
+      - `.day-record-food-ratio` 改为和重量 badge 一致的灰色文字与浅灰底。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/day-record/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+  - Note:
+    - 本轮发现工作区另有 `src/app.ts` 未提交异常改动（import 路径被改成包含中文句子的路径），不是本轮修改内容；未回退。
+
+# 状态：完成源码修改 - 分享海报底部用户头像兜底修复
+
+- 2026-05-13 update:
+  - User 反馈：当前页面分享卡片左下角没有正确加载当前用户头像，要求可从「我的」页或缓存中找头像并修复海报渲染。
+  - Fix applied:
+    - 新增 `src/utils/poster-profile.ts`
+      - 统一读取本地 `userInfo`，兼容 `name/nickname/nickName` 与 `avatar/avatarUrl/avatar_url`。
+      - 当前登录用户场景会调用 `/api/user/profile` 获取最新头像和昵称，并回写 `userInfo` 缓存。
+      - 提供 `mergePosterUserProfile()`，避免公开邀请资料接口返回空昵称/空头像时覆盖本地/当前用户资料。
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - 首页单餐分享海报先用本地/当前用户资料兜底，再和 `getFriendInviteProfile()` 结果合并；远端空字段不再覆盖头像。
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 当天饮食海报使用同一头像/昵称兜底逻辑。
+    - `src/packageExtra/pages/record-detail/index.tsx`
+      - 识别记录详情分享海报使用同一头像/昵称兜底逻辑；先展示当前用户资料，再合并公开邀请资料。
+    - `src/pages/profile/index.tsx`
+      - 「我的」页成功拉取用户资料后同步写入 `userInfo` 缓存，让海报可以稳定复用当前头像。
+  - Verification:
+    - `npx eslint src/utils/poster-profile.ts src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/record-detail/index.tsx src/pages/profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/utils/poster-profile.ts src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/record-detail/index.tsx src/pages/profile/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 食物识别多图一次模型请求且按单次计积分
+
+- 2026-05-13 update:
+  - User 要求：食物识别用户输入多张图片时，后端必须使用一次大模型请求；无论是否开启多视角模型，前后端最多 3 张图片；传入多张图时消耗积分逻辑和 1 张图一样。
+  - Fix applied:
+    - `backend/internal/analyze/service/task_service.go`
+      - 新增食物识别图片上限 `maxFoodAnalyzeImages = 3`，`SubmitAnalyzeTask()` 归一化/去重后超过 3 张直接返回 400。
+      - `creditUnitsForInput()` 固定返回 1，多图标准模式仍按 2 积分/次、精准模式仍按 4 积分/次，不再按图片数倍增。
+      - 归一化提交图片时把 `image_url` 和 `image_urls` 合并去重，确保多图任务的 `ImagePaths` 保留完整输入。
+    - `backend/internal/analyze/service/analyze_service.go`
+      - 标准图片识别 `Analyze()` 改为收集去重后的图片列表，并通过 `analyzeWithImagesTemperature()` 一次性传给支持多图的 LLM client。
+      - `/api/analyze/batch` 的同步 batch 入口也收口为一次多图模型请求，并统一最多 3 张。
+      - prompt 增加多图提示：多图作为同一次饮食输入汇总；开启多视角时强调同一餐食/同一组食物的多角度综合估算，不重复计算同一食物。
+    - `backend/internal/worker/worker.go`
+      - worker 从任务 payload 恢复 `is_multi_view`，让多图 prompt 能识别前端开关状态。
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 图片选择、提交前校验、添加按钮、占位提示统一最多 3 张。
+      - 前端积分预估固定按 1 次识别计算，不再用图片数作为 units。
+      - 多视角文案改为“多张图片始终作为一次识别提交”，避免继续表达为分别识别后累加。
+  - Verification:
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/analyze/service ./internal/worker -count=1` passed。
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- backend/internal/analyze/service/task_service.go backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/task_service_test.go backend/internal/analyze/service/analyze_service_test.go backend/internal/worker/worker.go src/packageExtra/pages/analyze/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页喝水记录按选中日期写入
+
+- 2026-05-13 update:
+  - User 反馈：首页选中 11 号记录饮水量时，后端实际记录到了 13 号当天；要求喝水记录时把首页点击的日期也作为参数传到后端并正确记录。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - `addWaterAmount()` 增加 `targetDate` 快照参数，默认取 `selectedDateRef.current || selectedDate`，避免异步/弹层操作读到当天或旧 state。
+      - 快捷水量与自定义水量保存都使用首页当前选中日期快照写入本地和后端。
+      - 清空喝水记录也使用同一日期快照，避免清错当天记录。
+    - `src/utils/api.ts`
+      - `addBodyWaterLog()` 与 `resetBodyWaterLogs()` 统一先将日期映射为 API 日期。
+      - 请求体同时发送 `date` 与 `recorded_on`，确保后端按首页选中日期记录，并兼容后端两个字段口径。
+    - `backend/internal/health/handler/health_handler_test.go`
+      - 增加 handler 定向测试，确认请求体同时有 `date`/`recorded_on` 时优先使用 `date`，不会落到当天。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `GOCACHE=/tmp/food-link-go-cache go test ./internal/health/handler -run 'TestSaveBodyWaterLogUsesDateFromBody|TestResetBodyWaterLogsUsesDateFromBody' -count=1` passed（在 `backend/` 目录）。
+    - `git diff --check -- src/pages/index/index.tsx src/utils/api.ts backend/internal/health/handler/health_handler_test.go` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 圈子评论发送成功后收起输入框
+
+- 2026-05-13 update:
+  - User 要求：圈子评论成功发送后，输入框需要消失，效果等同输入框出现时点击其它空白区域。
+  - Fix applied:
+    - `src/pages/community/index.tsx`
+      - 新增 `commentContentRef` 与 `expandedCommentRecordIdRef` 跟踪评论输入框当前内容和目标动态，避免异步提交成功后误关用户新打开/新输入的评论框。
+      - 评论提交请求成功并替换乐观评论后，如果当前仍停留在同一条动态且输入内容为空，则关闭评论输入栏、取消聚焦并清空回复目标。
+      - 成功收起时不调用草稿保存逻辑，避免已发送内容被重新写入 `comment_draft_*`。
+  - Verification:
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/community/index.tsx` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 当天饮食记录食物显示摄入比例
+
+- 2026-05-13 update:
+  - User 要求：「当天饮食记录」里每个记录的不同食物需要渲染用户记录的摄入比例。
+  - Fix applied:
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 每个 food item 生成 `intakeRatio`，优先使用已记录 `ratio`，缺失时沿用 `intake/weight` 推导和默认 100% 的兼容逻辑。
+      - 当天记录卡片的每个食物名称旁新增「摄入 xx%」显示；超过 100% 时加警示样式。
+    - `src/packageExtra/pages/day-record/index.scss`
+      - 新增 `day-record-food-ratio` 胶囊样式和超过 100% 的警示态。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/day-record/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食移除数量徽章
+
+- 2026-05-13 update:
+  - User 要求：首页「今日餐食」部分去掉 `meal-count-badge`，即不再显示记录“几次/几条”的数量提示。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 移除今日餐食卡片标题行里的 `meal-count-badge` 渲染逻辑，不再显示 `N次`。
+      - 同步移除食物缩略图上的“共 N 张”角标，避免今日餐食继续暴露图片/记录数量。
+    - `src/pages/index/index.scss`
+      - 删除 `meal-count-badge`、`meal-count-badge-text`、`meal-thumb-badge`、`meal-thumb-badge-text` 未使用样式。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/index.tsx src/pages/index/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 今日餐食分享海报恢复底部头像并调整比例位置
+
+- 2026-05-13 update:
+  - User 要求：今日餐食分享卡片最下侧左侧恢复用户头像；摄入百分比不要再放在右侧信息里，移动到当前食物名称右侧括号内，字号稍小并使用灰色。
+  - Fix applied:
+    - `src/utils/poster.ts`
+      - `drawRecordPoster()` 食物列表中，右侧信息恢复为 `g · kcal`；摄入比例改为食物名右侧小号灰色 `（xx%）`。
+      - 底部 footer 固定保留左侧头像位置；头像图片加载失败时绘制圆形首字占位，避免头像位消失。
+      - 同步调整 `drawDayRecordPoster()`：当天饮食海报餐食名称右侧显示小号灰色 `（xx%）`，右侧恢复只显示 kcal；底部也固定保留头像位。
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - 读取本地 `userInfo` 作为昵称/头像兜底，再用 `getFriendInviteProfile()` 返回值覆盖，提升首页今日餐食单餐海报头像显示稳定性。
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 当天饮食海报用户资料读取也增加本地 `userInfo` 兜底。
+  - Verification:
+    - `npx eslint src/utils/poster.ts src/pages/index/components/MealRecordPosterModal.tsx src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食多记录次数徽标恢复
+
+- 2026-05-13 update:
+  - User 要求：首页今日餐食中同一餐次有多条记录时，和之前一样在右上角时间左边显示当前记录了多少次，圆角矩形主题色背景。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 每个餐次卡片根据 `meal.meal_record_entries` 计算有效记录数。
+      - 当记录数大于 1 时，在时间胶囊左侧渲染 `{n}次` 徽标。
+    - `src/pages/index/index.scss`
+      - 新增 `.meal-count-badge` / `.meal-count-badge-text`，使用主题绿背景、圆角矩形、白色加粗数字文本。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/index.tsx src/pages/index/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 当日饮食分享按钮对齐单餐海报并显示摄入比例
+
+- 2026-05-13 update:
+  - User 要求：将「分享今日餐食/饮食」部分的分享按钮权限访问和生成卡片逻辑改为和首页今日餐食点击后「生成分享海报」逻辑完全相同，并且两个海报都要显示不同成分的摄入比例。
+  - Fix applied:
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 当天记录页「分享今日饮食」按钮不再先打开自定义预览弹层；改为生成 JPG 海报后直接调用 `Taro.showShareImageMenu()`，成功/取消/失败后都按单餐海报逻辑清理海报状态。
+      - 生成海报时为每条记录计算聚合 `intakeRatio`，兼容旧数据：优先用 `ratio`，缺失时用 `intake/weight`，再缺失则按 100%。
+    - `src/utils/poster.ts`
+      - `drawRecordPoster()` 的食物明细行增加「摄入xx%」，并兼容旧 item 缺少 `ratio` 时用 `intake/weight` 或 100% 兜底。
+      - `DayRecordPosterMeal` 增加 `intakeRatio`，`drawDayRecordPoster()` 的餐食行右侧显示 `kcal · 摄入xx%`。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 图片分析页删除饮食目标板块
+
+- 2026-05-13 update:
+  - User 要求删除图片分析板块里的「饮食目标」部分。
+  - Fix applied:
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 删除图片分析页「饮食目标」选项 UI。
+      - 删除 `DietGoal` 类型导入、`DIET_GOAL_OPTIONS`、`dietGoal` state、`handleDietGoalSelect()` 和从健康档案/本地缓存初始化饮食目标的逻辑。
+      - 图片分析提交继续兼容后端字段，固定传 `diet_goal: 'none'`。
+      - 提交时移除旧 `analyzeDietGoal` 缓存，避免结果页沿用历史选择。
+    - `src/packageExtra/pages/analyze/index.scss`
+      - 更新状态区域注释为运动时机。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/analyze/index.scss` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页低能量补录提示去日期并增加取消确认
+
+- 2026-05-13 update:
+  - User 要求：首页检测到当日能量过低的补录提示去除日期；在「去补录」右侧增加「取消」按钮；点击取消时弹对话框提醒用户。同时查看数据库如何存储当天能量/食量视图。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 删除补录提示第二行日期渲染和 `formatBackfillDateLabel()`。
+      - 将补录入口收敛为独立「去补录」按钮，点击仍打开首页 `RecordMenu`。
+      - 新增「取消」按钮，点击先 `Taro.showModal()` 提醒；用户确认后把当前选中日期写入本地 `home_backfill_hint_dismissed_dates_v1`，该日期的低能量补录提醒不再显示。
+    - `src/pages/index/index.scss`
+      - 调整补录提示布局为文案 + 双按钮，移除日期样式，补齐「取消」按钮样式。
+  - Database finding:
+    - 当前没有独立的“某天食量/能量日报表”存储每日能量视图。
+    - 每餐/每次识别保存到 `user_food_records`，其中 `total_calories/total_protein/total_carbs/total_fat/items/record_time` 是饮食记录的事实来源。
+    - 首页 `/api/home/dashboard` 通过 `HomeRepo.ListFoodRecordsByDate()` 按中国自然日的 `record_time >= start && record_time < end` 查询 `user_food_records`，再在 `DashboardService.HomeDashboard()` 中按当天记录聚合总热量和三大营养素。
+    - 日期型日志表存在于其它指标：`user_water_logs.recorded_on`、`user_exercise_logs.recorded_on`、`user_weight_records.recorded_on`。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+# 状态：完成源码修改 - 首页今日餐食与识别记录详情显示摄入比例
+
+- 2026-05-12 update:
+  - User 要求确认首页「今日餐食」营养成分是否在数据库和后端返回，并确认/补齐用户输入的摄入比例记录与展示；重点页面为首页今日餐食、识别记录详情。
+  - Findings:
+    - 数据库 `user_food_records.items` 已保存每个食物 item 的 `ratio/intake/nutrients`。只读抽样查 2026-05-12：22 条记录、62 个 item，62 个均包含 `ratio`、`intake`、`nutrients`。
+    - 后端 `/api/home/dashboard` 已返回餐次聚合热量、蛋白、碳水、脂肪、含水量，但此前没有返回餐次/记录摄入比例。
+    - 识别记录详情页实际已用 `item.ratio` 参与单项营养换算，但 100% 时不显式展示比例；首页今日餐食也没有比例 UI。
+  - Fix applied:
+    - `backend/internal/foodrecord/domain/food_record_domain.go`
+      - 读取旧 `user_food_records.items` JSON 时，若 item 缺少 `ratio`，优先用 `intake/weight` 推导；若 `ratio/intake` 都缺失但有 `weight`，默认按 100% 摄入并补 `intake=weight`。
+      - 显式保存的 `ratio:0` 仍保留为 0，不被默认值覆盖。
+    - `backend/internal/home/service/dashboard_service.go`
+      - 首页 dashboard 的每个 meal 返回 `intake_ratio`，按该餐所有 items 的 `sum(intake)/sum(weight)*100` 汇总。
+      - `meal_record_entries[]` 直接返回 `total_protein/total_carbs/total_fat/water_ml/intake_ratio`，不再依赖前端从 `full_record` 缓存里猜。
+      - 兼容旧 item 缺少 `ratio/intake` 的情况：餐次比例和含水量按整份 100% 计算。
+    - `backend/internal/home/handler/dashboard_handler_test.go`
+      - 增加 dashboard 返回 entry 营养字段、含水量和摄入比例的断言。
+    - `src/utils/api.ts`
+      - `HomeMealItem` 与 `HomeMealRecordEntry` 增加 `intake_ratio/intakeRatio`，entry 增加三大营养素和含水量字段。
+    - `src/pages/index/index.tsx`
+      - 首页今日餐食卡片在三大营养素/含水量之后显示「摄入 xx%」。
+    - `src/pages/index/components/MealRecordsDialog.tsx`
+      - 同餐多记录选择弹层直接使用 entry 返回的三大营养素，并显示每条记录的「摄入 xx%」。
+    - `src/packageExtra/pages/record-detail/index.tsx/scss`
+      - 每个食物明细显式显示「摄入比例 xx%」，包括 100%；超过 100% 使用警示样式；深色模式同步补齐。
+      - 前端详情页对旧缓存/旧接口数据也做兜底：缺 `ratio` 时用 `intake/weight` 推导，否则默认 100%。
+    - `src/utils/api.ts`
+      - 首页 dashboard normalize 阶段从 `full_record.items` 兜底推导 entry/meal `intake_ratio`，兼容本地旧缓存或旧网关响应。
+  - Verification:
+    - `go test ./internal/foodrecord/domain ./internal/foodrecord/repo ./internal/foodrecord/handler ./internal/foodrecord/service ./internal/home/... -run 'Test' -count=1` passed；顺手修正了两处旧 repo/service 测试断言，使其匹配当前完整营养字段和 source task 测试数据。
+    - `npx eslint src/pages/index/index.tsx src/pages/index/components/MealRecordsDialog.tsx src/packageExtra/pages/record-detail/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `git diff --check` passed。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；本轮未能截图/交互验证。
+  - Note:
+    - `src/pages/index/index.scss` 在本轮开始前已有未提交改动；本轮只在同文件追加比例 pill 样式，未回退既有改动。
+
+# 状态：进行中 - nutrition library 批量回填维生素/微量营养素
+
+- 2026-05-12 update:
+  - User 进一步澄清：当前目标不是只给“数据库里没有的食物”补营养，而是先把 `food_nutrition_library` 里已有宏量营养素的食物，补齐维生素和其他微量营养素；如果库里根本没有这个食物，则再用 DeepSeek 生成整条完整营养记录。
+  - 已完成：
+    - 新增批量维护命令 `backend/cmd/nutrition-backfill/main.go`
+      - 默认 dry-run，只统计/预览，不写库。
+      - `--apply` 才会调用 DeepSeek v4-flash 并写回。
+      - `--limit` / `--offset` 支持分批扫描，`--batch-size` 默认设为 `1`，优先保证 DeepSeek 输出 JSON 稳定。
+      - `--include-unresolved` 可顺手把 `food_unresolved_logs` 里的未命中名称转成完整营养条目。
+    - `backend/internal/foodrecord/repo/food_nutrition_repo.go`
+      - 新增“已有食物只补缺失字段”的更新入口，写回时只填 0 字段，不覆盖已有三大营养素。
+      - 新增待回填目标统计/列表查询；目标筛选为“已有宏量营养素，且整组维生素或整组矿物质缺失”，避免胆固醇/维 D/B12 这类天然为 0 的字段导致反复重跑。
+    - `backend/internal/analyze/service/deepseek_nutrition.go`
+      - DeepSeek 营养补全请求补上 `max_tokens`、短重试、响应摘要错误，并改用更稳的 JSON 解析路径。
+      - 支持 DeepSeek 返回 camelCase 或 snake_case 微量营养字段，最终统一写入项目内部 camelCase 字段。
+  - 只读验证：
+    - 实际库按“整组维生素/矿物质缺失”dry-run 统计到 `micronutrient_backfill_total=1739` 条。
+    - 已用 `--apply --limit 5 --batch-size 1` 冒烟跑通，5 条中 4 条成功写回，共补 33 个缺失字段；未覆盖已有宏量营养素。
+  - 现状：
+    - 命令和写回逻辑已就绪。
+    - 如果要全量跑，建议反复执行 `go run ./cmd/nutrition-backfill -config-dir . --apply --limit 100 --batch-size 1`，每轮保持 `offset=0`，直到 dry-run total 接近 0；`offset` 只适合预览/人工跳过当前批次。
+
+- 2026-05-12 follow-up:
+  - User 确认营养素代码本身没有问题，是本地修复曾被远端旧错误覆盖/冲掉，要求提交当前代码并让远端以当前修复为准。
+  - 本轮准备提交并推送当前工作区修复，覆盖远端旧的营养素缺失/详情页零值问题。
+  - 已重新验证：
+    - `go test ./internal/foodrecord/domain -run "TestFoodItemNutrients_UnmarshalMicronutrients|TestFoodItem_UnmarshalJSONWaterMlAliases" -count=1` passed。
+    - `go test ./internal/analyze/service -run "TestDeepSeekNutritionEstimator_EstimateParsesMicronutrients|TestResolveModelConfig" -count=1` passed。
+    - `go build ./cmd/server` passed。
+    - `go build ./cmd/nutrition-backfill` passed。
+    - `npx eslint src/packageExtra/pages/record-detail/index.tsx src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed。
+
 # 当前任务
 
-## 状态：完成 - 2026-05-10 已确认 dev 为最新
+## 状态：完成源码修改 - 移除旧记录页入口并统一到首页记录弹窗
+
+- 2026-05-12 hotfix:
+  - User 反馈首页启动报 `ReferenceError: Cannot access 'openRecordMenuFromRequest' before initialization`，堆栈定位 `src/pages/index/index.tsx:712`。
+  - Fix applied:
+    - 将 `selectedDateRef` 与 `openRecordMenuFromRequest` 定义提前到记录菜单 state 后、所有可能引用它的 hook/callback 之前，彻底消除 TDZ 初始化顺序风险。
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/pages/index/index.tsx` passed。
+    - 已尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+- 2026-05-12 update:
+  - User 询问 `src/pages/record/index.tsx` 当前会被哪些部分引用，指出它是旧拍照文件，不是当前新版记录入口；要求找到哪些文件/按钮会跳该页，并删除或改造成首页点击卡路里弹出的记录对话框。
+  - Findings:
+    - 旧主包页仍在 `src/app.config.ts` 的 `mainPages` 和 `tabBar.list` 中注册为 `pages/record/index`。
+    - `custom-tab-bar/index.js` 的中间记录按钮数据仍写着 `/pages/record/index`，虽然点击逻辑实际会拦截并打开首页弹窗。
+    - `src/pages/index/index.tsx` 首页空餐食按钮 `handleQuickRecord('photo')` 仍会 `switchTab('/pages/record/index')`。
+    - `src/packageExtra/pages/day-record/index.tsx` 空态“去记录”仍会 `switchTab('/pages/record/index')`。
+    - `src/packageExtra/pages/record-menu/index.tsx` 是另一个旧的全屏记录菜单页，其中拍照入口也会 `switchTab('/pages/record/index')`；当前无业务引用，属于可删除旧入口。
+    - `src/utils/subpackage-extra.ts` 把 `/pages/record/index` 作为主包 Tab 路由保留，导致登录回跳等兼容逻辑不会把旧地址收口到首页。
+  - Fix applied:
+    - 删除旧页面文件：
+      - `src/pages/record/index.tsx`
+      - `src/pages/record/index.scss`
+      - `src/pages/record/index.config.ts`
+    - 删除旧全屏记录菜单页：
+      - `src/packageExtra/pages/record-menu/index.tsx`
+      - `src/packageExtra/pages/record-menu/index.scss`
+      - `src/packageExtra/pages/record-menu/index.config.ts`
+    - `src/app.config.ts`
+      - 从 `mainPages` 删除 `pages/record/index`。
+      - 从 `extraSubpackagePages` 删除 `pages/record-menu/index`。
+      - 从 `tabBar.list` 删除旧“记录”项；保留 custom tab bar 自己的中间按钮视觉。
+    - `custom-tab-bar/index.js`
+      - 中间记录按钮的 `pagePath` 改为 `/pages/index/index`，点击仍走已有拦截逻辑：切首页并打开记录弹窗。
+      - 移除旧记录页/旧 record-menu 页的隐藏底栏判断。
+    - 新增 `src/utils/home-record-menu.ts`
+      - 提供 `requestHomeRecordMenu(date?)`：写入首页弹窗标记、可选目标日期，并切回首页。
+      - 提供 `consumeHomeRecordMenuDate()`：首页消费目标日期后打开现有 `RecordMenu`。
+    - `src/pages/index/index.tsx`
+      - 统一消费 `HOME_RECORD_MENU_FLAG_KEY`，如存在目标日期则先切到该日期再打开弹窗。
+      - 首页“暂无今日餐食 -> 去记录一餐”改为直接打开当前首页 `RecordMenu` 弹窗，不再跳旧记录页。
+    - `src/packageExtra/pages/day-record/index.tsx`
+      - 空态“去记录”改为 `requestHomeRecordMenu(selectedDate)`，返回首页后用现有记录弹窗并保持当天日期。
+    - `src/utils/subpackage-extra.ts`
+      - `/pages/record/index` 不再是主包 Tab 路由。
+      - 旧登录回跳 `/pages/record/index` 兼容收口到 `/pages/index/index`。
+  - Verification:
+    - `rg -n "pages/record/index|record-menu/index|recordPageTab" src custom-tab-bar` 仅剩 `/pages/record/index` 的旧登录回跳兼容判断，无业务跳转入口。
+    - `npx eslint src/pages/index/index.tsx src/packageExtra/pages/day-record/index.tsx src/utils/home-record-menu.ts src/utils/subpackage-extra.ts src/app.config.ts --max-warnings 0` passed。
+    - `git diff --check -- custom-tab-bar/index.js src/app.config.ts src/packageExtra/pages/day-record/index.tsx src/pages/index/index.tsx src/pages/record src/packageExtra/pages/record-menu src/utils/home-record-menu.ts src/utils/subpackage-extra.ts` passed。
+    - `npx eslint custom-tab-bar/index.js --max-warnings 0` blocked by existing ESLint/Babel config issue: `No Babel config file detected ... custom-tab-bar/index.js`。
+    - 已尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+  - Commit / Push:
+    - 已提交并推送到 `origin/backend-refactor-sync-migrate-tencent`：
+      - `5f760fc fix: preserve exercise record date`
+      - `3d20476 fix: tolerate missing color scheme provider`
+      - `71ee81d fix: remove legacy record entrypoints`
+
+## 状态：完成源码修改 - 今日餐食入口白屏 useAppColorScheme provider 断链
+
+- 2026-05-12 update:
+  - User 反馈：进入今日餐食部分空白，并报错 `useAppColorScheme must be used within AppColorSchemeProvider`，堆栈落在 `WithAuthComponent`。
+  - Finding:
+    - `src/utils/withAuth.tsx` 在页面 HOC 顶层调用 `useAppColorScheme()`。
+    - 虽然 `src/app.ts` 已用 `AppColorSchemeProvider` 包裹 `children`，但微信小程序/Taro 分包页面挂载或 hot reload 场景下可能出现页面 context 边界断开，导致 `useAppColorScheme()` 直接 throw，页面白屏。
+    - 项目里还有多个分包页直接调用 `useAppColorScheme()`，只改 `withAuth` 仍可能在其他入口复现。
+  - Fix applied:
+    - `src/components/AppColorSchemeContext.tsx`
+      - `useAppColorScheme()` 改为 provider 存在时使用 context。
+      - provider 缺失时使用本地存储 `fl_app_color_scheme` 构建 fallback scheme/setScheme/toggleScheme，并继续触发主题变更事件。
+      - 不再因 provider 边界缺失抛异常，避免分包页或 hot reload 进入时整页白屏。
+  - Verification:
+    - `npx eslint src/components/AppColorSchemeContext.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/components/AppColorSchemeContext.tsx` passed。
+    - 已尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+  - Note:
+    - 用户日志中的 `writeFile:fail the maximum size of the file storage limit is exceeded` 是小程序本地文件配额告警，和本次 React 白屏不是同一直接根因。
+
+## 状态：完成源码修改 - 运动趋势页补录日期被写到今天
+
+- 2026-05-12 update:
+  - User 反馈：在首页切换到 11 号后重新录制运动，最终运动记录落到了 12 号；要求查看前端切换日期后的运动板块记录与更新逻辑，并保证更新符合用户选择日期。
+  - Finding:
+    - 首页 `openBodyTrends('exercise')` 会把当前 `selectedDate` 通过 `date` 参数传给 `src/packageExtra/pages/body-trends/index.tsx`。
+    - 运动趋势页收到该参数后没有用于“去记录”按钮，`openExerciseRecord()` 硬编码使用 `today`，所以用户从 11 号运动板块进入趋势页再点“去记录”时会跳到 12 号运动记录页。
+    - `src/packageExtra/pages/exercise-record/index.tsx` 直接使用 React state `recordDate` 提交；为避免刚切日/路由恢复时状态闭包滞后，本轮增加提交前从 `currentRecordDateRef` 重新归一化目标日期的兜底。
+  - Fix applied:
+    - `src/packageExtra/pages/body-trends/index.tsx`
+      - 从路由 `date` 参数归一化出 `selectedRecordDate`。
+      - 运动 tab 的当日消耗卡和“记录运动”文案改为围绕所选日期展示。
+      - “去记录”按钮跳转 `exercise-record` 时携带 `selectedRecordDate`，不再硬编码今天。
+    - `src/packageExtra/pages/exercise-record/index.tsx`
+      - 提交运动任务前用 `currentRecordDateRef.current || recordDate` 归一化并持久化目标日期。
+      - `createExerciseLog()`、pending card 和轮询均使用同一个 `targetRecordDate`。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/body-trends/index.tsx src/packageExtra/pages/exercise-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check -- src/packageExtra/pages/body-trends/index.tsx src/packageExtra/pages/exercise-record/index.tsx` passed。
+    - 已尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；未能完成截图/交互验证。
+
+## 状态：完成圈子分页修复提交、推送与后端部署
+
+- 2026-05-12 update:
+  - User 要求提交推送代码，然后部署后端。
+  - Completed:
+    - 已提交并推送圈子动态刷新/触底分页修复：
+      - `a4abf0e fix: repair community feed pagination`
+    - 由于 `package.json` 已包含版本号 `3.0.2`，已同步 `package-lock.json` 并提交推送：
+      - `481a712 chore: sync package lock version`
+    - 已执行 `DOCKER_BUILD_PROGRESS=plain npm run push-docker-ccr`，成功推送后端镜像：
+      - `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`
+      - digest: `sha256:b1f7f6138d10d18daf1a72ddf3d3737b428048d748ea0f1a33ba54f08a4ddfc9`
+      - platform: `linux/amd64`
+      - 构建源码 short SHA: `481a712`
+  - Verification before deploy:
+    - `go test ./internal/community/service ./internal/community/handler -run 'TestFriendFeed|TestPublicFeed|TestFeed|TestFeedWithParams|TestPublicFeedError|TestFeedError|TestScoreFeedRecord|TestComputeFreshnessScore' -count=1` passed。
+    - `npx eslint src/pages/community/index.tsx src/pages/profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+
+## 状态：完成源码修改 - 圈子好友动态回到页面后不刷新
+
+- 2026-05-12 update:
+  - User 反馈：圈子好友动态里现在只能看到约 22 小时前的一条消息，最近消息似乎看不到。
+  - Findings:
+    - 按依赖排查先查真实 DB：以当前调试用户好友范围确认 `user_food_records` 中存在 2026-05-12 上午 11:26、10:09、04:37、04:23 等最新未隐藏记录，因此不是服务端数据不存在。
+    - 前端 `src/pages/community/index.tsx` 的 `Taro.useDidShow()` 中，只要 `feedList.length > 0` 就提前 return；这个分支只合并临时评论/同步好友，不会执行后面的 `CACHE_DURATION` 超时刷新判断。
+    - 因此小程序未冷启动、社区页内存列表仍存在时，即使过了 5 分钟甚至 22 小时，回到圈子也不会主动重新请求 `/api/community/feed`，导致用户一直看到旧动态。
+  - Fix applied:
+    - `src/pages/community/index.tsx`
+      - 在 `feedList.length > 0` 的页面显示分支里增加过期判断：若 `Date.now() - lastFeedRefreshTime.current > CACHE_DURATION`，调用 `refreshFeed(true, false)` 静默刷新。
+      - 保留原有临时评论同步、好友申请同步和通知跳转逻辑。
+  - Verification:
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+    - 已尝试 `mrc where --port 9420` 与 `mrc where --port 3001`；均提示目标项目窗口未开启自动化服务，未能截图/交互验证。
+  - Note:
+    - 当前工作区另有既有 `package.json` 版本号变更 `3.0.1 -> 3.0.2`，本轮未修改或回退该文件。
+
+- 2026-05-12 follow-up:
+  - User 反馈：最新数据已经能看到，但圈子页向下滑到最底部时不会继续请求下一页。
+  - Root cause:
+    - 触底事件是一层问题，但真正阻断分页的是后端 `latest` 排序分页窗口。
+    - `CommunityService.FriendFeed/PublicFeed()` 对非推荐排序只向 repo 取 `limit` 条，再在 service 里做 `offset` 切片；当第二页请求 `offset=10&limit=10&sort_by=latest` 时，repo 仍只返回最新前 10 条，随后 `sliceRecords(records, 10, 10)` 必然为空。
+  - Fix applied:
+    - `src/pages/community/index.tsx`
+      - 保留原 `onScrollToLower={loadMoreFeed}`，新增 `onScroll={handleCommunityScroll}` 作为近底检测兜底；当滚动剩余距离小于阈值且未在加载中时，节流触发 `loadMoreFeed()`。
+      - 底部“上拉加载更多”区域增加点击兜底；若 `hasMore && !loadingMore`，点击也会调用 `loadMoreFeed()`。
+      - 默认排序同步改为 `latest`，并将圈子筛选缓存 key 从 `community_feed_filters_v2` 升为 `community_feed_filters_v3`，避免旧缓存继续恢复 `recommended`。
+    - `backend/internal/community/service/community_service.go`
+      - `PublicFeed()` / `FriendFeed()` 的非 custom rank 分支候选数量改为 `offset + limit`，确保第二页、第三页能拿到足够窗口再切片。
+    - `backend/internal/community/service/community_service_test.go`
+      - 新增 `latest + offset` 分页测试，覆盖好友 feed 和公开 feed。
+    - `backend/internal/community/handler/community_handler.go`
+      - `PublicFeed()` / `Feed()` 在 service 返回 nil slice 时统一转为空数组，避免接口返回 `list: null`。
+    - `src/pages/profile/index.tsx`
+      - 清除缓存时同时删除 `community_feed_filters_v3`，并继续兼容删除旧 `community_feed_filters_v2`。
+  - Verification:
+    - 已用当前 3010 旧进程复现 `GET /api/community/feed?offset=10&limit=10&sort_by=latest&author_scope=all` 返回 `list: null`；该进程启动于 11:35，早于本轮后端分页修复，需要重启本地 Go server 后生效。
+    - `go test ./internal/community/service ./internal/community/handler -run 'TestFriendFeed|TestPublicFeed|TestFeed|TestFeedWithParams|TestPublicFeedError|TestFeedError|TestScoreFeedRecord|TestComputeFreshnessScore' -count=1` passed。
+    - `npx eslint src/pages/community/index.tsx src/pages/profile/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+    - 已尝试 `mrc where --port 9420` 与 `mrc where --port 3001`；仍提示目标项目窗口未开启自动化服务，未能截图/交互验证。
+## 状态：完成源码修复 - 识别记录详情恢复完整营养素与历史兜底
+
+- 2026-05-12 update:
+  - User 要求：把拍照分析保存后食物明细里营养素显示为 0 / 缺少具体营养素的地方全部修正回来。
+  - Fix applied:
+    - `backend/internal/foodrecord/domain/food_record_domain.go`
+      - `FoodItemNutrients` 扩展到完整营养字段：饱和脂肪、胆固醇、钠、钾、钙、铁、镁、锌、维生素 A/C/D/E/K、B1/B2/B3/B6、叶酸、B12 等。
+      - 增加 snake_case 兼容解析，兼容历史或其它链路里的 `sodium_mg`、`vitamin_c_mg` 等字段。
+    - `backend/internal/foodrecord/service/food_record_service.go`
+      - `Get/List/Share/Update` 返回记录时，如果记录带 `source_task_id` 且 `items[].nutrients` 有缺失或 0，会从对应 `analysis_tasks.result.items[].nutrients` 按食物名/顺序补回缺失字段。
+      - 该兜底只填充当前为 0 的字段，不覆盖用户已经修改过的非 0 营养值。
+    - `src/packageExtra/pages/record-detail/index.tsx/scss`
+      - 识别记录详情页食物明细增加含水量与完整扩展营养素网格展示，不再只显示三宏和 fiber/sugar。
+      - 深色模式同步补齐样式。
+    - `src/packageExtra/pages/result/index.tsx`、`src/utils/api.ts`
+      - 补齐 `sodium_mg` / `waterMl` 类型兼容，避免相关页面继续把别名字段视为不存在。
+  - Verification:
+    - `gofmt` completed.
+    - `go test ./internal/foodrecord/domain -run 'TestFoodItemNutrients_UnmarshalMicronutrients|TestFoodItem_UnmarshalJSONWaterMlAliases' -count=1` passed.
+    - `go test ./internal/foodrecord/service -run '^$' -count=1` passed compile-only.
+    - `go build -o $env:TEMP\food-link-nutrients-record-detail.exe ./cmd/server` passed.
+    - `npx eslint src/packageExtra/pages/record-detail/index.tsx src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed.
+    - `git diff --check` passed for touched files, CRLF warnings only.
+  - Known blockers:
+    - `go test ./internal/foodrecord/service -run 'TestFoodRecordService_hydrateRecord_FillsMissingNutrientsFromSourceTask|TestFoodRecordService_Save|TestFoodRecordService_Update_Items' -count=1` blocked by existing Windows test env: `CGO_ENABLED=0` + `go-sqlite3 requires cgo to work`.
+    - `npx tsc --noEmit --pretty false` still blocked by existing unrelated type errors in expiry / food-library / health-profile-view files; nutrient-related type errors are gone.
+    - `mrc where --port 9420` and `mrc where --port 3001` both failed because WeChat DevTools automation service is not connected, so no runtime screenshot/interaction evidence this round.
+
+## 状态：完成前端优化 - 识别记录详情更多营养默认折叠
+
+- 2026-05-12 update:
+  - User 反馈：识别记录详情的食物明细里完整营养素直接展开太长，希望改成折叠。
+  - Fix applied:
+    - `src/packageExtra/pages/record-detail/index.tsx`
+      - 每条食物的扩展营养素默认收起，只展示食物名、摄入量、热量、蛋白/碳水/脂肪/含水量。
+      - 新增「展开更多营养 / 收起更多营养」切换，逐条食物独立控制展开状态。
+    - `src/packageExtra/pages/record-detail/index.scss`
+      - 补充折叠按钮样式与深色模式颜色。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/record-detail/index.tsx --max-warnings 0` passed.
+    - `git diff --check -- src/packageExtra/pages/record-detail/index.tsx src/packageExtra/pages/record-detail/index.scss` passed with CRLF warnings only.
+  - Runtime verification:
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；本轮仍未能截图/交互验证。
+
+## 状态：完成切回千问 - 移除本地 Gemini 临时测试改动
+
+- 2026-05-12 update:
+  - User 要求：本地 Gemini 测试先暂时去掉，切回千问模型。
+  - Completed:
+    - 已撤销本地临时 Gemini 测试改动，恢复 `backend/internal/analyze/service/analyze_service.go` 与 `backend/internal/analyze/service/analyze_service_test.go` 到远端当前口径。
+    - 当前 `resolveModelConfig()` 中历史 `gemini` / `gemini-flash` / `gemini-vision` / `gemini-3-flash-preview` / `google/gemini-3-flash-preview` 别名继续路由到 `provider=qwen`、`model=qwen-vl-max`。
+    - 显式 `ofox-gemini` / `ofox-gemini-3-flash-preview` 入口仍保留，用于后续需要时测试 Ofox/Gemini。
+  - Runtime note:
+    - 如本地后端正在运行，需要用户手动重启 `npm run dev:backend` 后新路由才会在运行态生效。
+
+## 状态：完成拉取远端最新并恢复本地 Gemini 测试改动
+
+- 2026-05-12 update:
+  - User 要求拉取最新代码。
+  - Completed:
+    - 已先用临时 stash 保护本地未提交的 Gemini 测试改动。
+    - 已 `git fetch origin backend-refactor-sync-migrate-tencent`，远端从 `af8da94` 更新到 `1fdf0c0`。
+    - 已执行 `git pull --ff-only origin backend-refactor-sync-migrate-tencent`，本地快进到 `1fdf0c0 chore: record backend deployment status`。
+    - 已 `git stash pop` 恢复本地 Gemini 测试改动；代码文件自动合并成功，冲突仅在 `CURRENT_TASK.md` 与 `memory/2026-05-12.md`，已保留双方记录并移除冲突标记。
+    - 已删除本次临时 stash，历史 stash 未动。
+  - Verification:
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasUsesOfoxGemini|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go build -o $env:TEMP\food-link-gemini-after-pull.exe ./cmd/server` passed。
+    - `git diff --check -- CURRENT_TASK.md memory/2026-05-12.md backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go` passed。
+  - Current local changes:
+    - `backend/internal/analyze/service/analyze_service.go` 与测试仍保留“`gemini` 别名实际走 Ofox/Gemini”的临时测试改动。
+    - `CURRENT_TASK.md`、`memory/2026-05-12.md` 记录本轮交接。
+
+## 状态：完成后端镜像构建推送部署
+
+- 2026-05-12 update:
+  - User 要求完成后部署后端，并进一步要求想办法运行成功 `npm run push-docker-ccr`。
+  - Completed:
+    - 初次运行 `npm run push-docker-ccr` 卡在 Docker build 的 `go mod download` 阶段。
+    - 已更新 `backend/Dockerfile` 与 `backend/scripts/push-docker-ccr.mjs`，为 Docker 构建增加可配置 `GOPROXY`，默认 `https://goproxy.cn,direct`，并提交推送：
+      - `4ebf0c5 chore: make backend docker push use go proxy`
+    - 已重新执行 `DOCKER_BUILD_PROGRESS=plain npm run push-docker-ccr` 并成功。
+    - 已推送镜像：`ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`
+    - 本次镜像构建对应 Git short SHA：`4ebf0c5`
+    - 镜像 digest：`sha256:61637ad8c0fb5262a254a6bd8bd60a0decade1fed717c984ec20d56a8188e3f1`
+    - 平台：`linux/amd64`
+  - Note:
+    - 部署端按项目约定会在约 5 分钟内自动拉取 `:v2` 镜像并更新服务。
+
+## 状态：完成 rebase 合并、验证与推送 - 食物喝水扣减与压测统计修复
+
+- 2026-05-12 update:
+  - User 要求提交代码、推送代码并进行合并。
+  - Completed:
+    - 已将本地提交 rebase 到远端 `origin/backend-refactor-sync-migrate-tencent` 最新 `ee93cf5` 之后。
+    - rebase 冲突仅发生在 `CURRENT_TASK.md`、`DECISIONS.md`、`memory/2026-05-12.md` 等状态记录文件；已保留远端 Kafka 线上验证记录和本地食物喝水/压测修复记录。
+    - 已推送业务提交到远端：
+      - `6758e3c fix: sync food water tracking with record changes`
+      - `f21781e fix: sync water totals after food deletion`
+  - Verification:
+    - `go test ./internal/health/repo -run 'TestBodyMetricsRepo_ReduceWaterLogsByDateSource|TestBodyMetricsRepo_WaterCRUD' -count=1` passed。
+    - `go test ./internal/foodrecord/service ./internal/app -run 'TestFoodRecordService_Save|TestFoodRecordService_Update|TestFoodRecordService_Delete|TestTotalFoodWaterIntakeMl|Test' -count=1`：`foodrecord/service` passed；`app` 首次因 `proxy.golang.org` 下载 `kafka-go` 超时失败，随后用 `GOPROXY=https://goproxy.cn,direct go test ./internal/app -run 'Test' -count=1` passed。
+    - `go test ./internal/analyze/loadtest -count=1` passed/no test files。
+    - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed。
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Runtime verification:
+    - 已尝试 `mrc where --port 9420` 与 `mrc where --port 3001`；均提示目标项目窗口未开启自动化服务，未能进行小程序截图/交互验证。
+
+## 状态：待用户在线上执行验证 - Kafka task_queue 与 worker 崩溃恢复
+
+- 2026-05-12 update:
+  - User 已同步线上并提供 `foodlink-v2` 三个 Running Pod 与 `kafka` Pod，询问如何验证线上是否真的使用 Kafka，以及此前担心的 worker 拿到任务后进程挂掉是否会丢任务/卡住是否已解决。
+  - Plan:
+    - 只读验证：检查 `foodlink-v2` 启动日志是否有 `embedded worker enabled` 且 `task_queue_driver=kafka`，检查 worker 是否有 `task queue delivery received`、`task claimed`、`source=task_queue`，检查 Kafka consumer group `food-link-workers` 是否存在并有消费者。
+    - 功能验证：提交一条图片分析任务，观察 submit 日志、worker delivery/claim/process 日志、Kafka consumer lag、DB `analysis_tasks` 的 `worker_id/attempt_id/attempt_count/lease_until`。
+    - 故障注入验证：在测试任务进入 `processing` 后删除 claim 该任务的 `foodlink-v2` pod；预期任务先保持 processing 到 lease 过期，随后 recovery 重新 publish，新的 worker 以 `attempt_count=2` 重新 claim 并完成。
+  - Note:
+    - 本地无 kube context，无法直接替用户连线上集群；需要用户在 `~/littlehorse-deployment` 服务器上执行 kubectl 命令。
+    - 当前 Dockerfile 使用 scratch 镜像，不能依赖 `kubectl exec foodlink-v2 -- sh` 进入应用容器检查文件；应通过 `kubectl logs`、`kubectl get deploy -o yaml`、Kafka Pod 内工具和 DB SQL 验证。
+
+## 状态：完成手动 merge 复核、远端同步与推送
+
+- 2026-05-12 update:
+  - User 表示因冲突做过一次手动 merge，要求确认是否有问题；随后要求拉取远端最新代码并合并，只负责本轮相关内容，合并时保留双方功能。
+  - Completed:
+    - 复核初始工作区：无未提交文件、无 Git 未解决冲突、无真实冲突标记；分支为 `backend-refactor-sync-migrate-tencent`，本地领先 1、落后远端 1。
+    - 拉取远端后发现本地 `64de20b feat: 增加 Kafka 驱动的可靠分析任务处理` 与远端 `af8da94 fix: refund credits for failed task groups` 分叉。
+    - 执行普通 merge，冲突文件为 `CURRENT_TASK.md` 和 `backend/internal/worker/worker.go`。
+    - `worker.go` 合并口径：保留本地 Kafka/DB attempt lease 的 `CompleteTaskAttempt/FailTaskAttempt` 幂等所有权检查，同时合入远端失败任务积分返还、精准子任务失败状态更新逻辑。
+    - 已提交 merge commit：`4f5b73a Merge remote-tracking branch 'origin/backend-refactor-sync-migrate-tencent' into backend-refactor-sync-migrate-tencent`。
+    - 已推送到 `origin/backend-refactor-sync-migrate-tencent`，本地与远端 HEAD 均为 `4f5b73a`。
+  - Verification:
+    - `go test ./internal/taskqueue ./pkg/config ./pkg/trace ./pkg/logger -run Test -count=1` passed。
+    - `go test ./internal/worker ./internal/app -run Test -count=1` passed。
+    - `go test ./internal/membership/service ./internal/health/service ./internal/analyze/handler ./internal/worker ./internal/app -run Test -count=1` passed。
+    - `go test ./internal/expiry/service -run 'TestNotificationWorker|TestSchedule|TestReconcile|TestRecognize|TestStale' -count=1` passed。
+    - `go test ./internal/analyze/service -run '^$' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go test ./internal/analyze/repo ./internal/expiry/repo ./internal/migration -run "^$" -count=1` passed/no test files。
+    - `go test ./internal/health/repo ./internal/membership/repo -run '^$' -count=1` passed/no tests to run。
+    - `go build -o $env:TEMP\food-link-server-merge-check.exe ./cmd/server` passed。
+    - `git diff --cached --check` passed。
+  - Known local test blocker:
+    - 包含 sqlite 真实用例的完整 `membership/repo`、`expiry/service`、`analyze/service` 聚焦测试被当前 Windows Go 环境阻断：`CGO_ENABLED=0` 且本机无 `gcc`，`go-sqlite3 requires cgo to work`。这是环境限制，不是本次合并新增编译错误。
+
+## 2026-05-12 update: migration 已确认，本地 Kafka 快速启动文档已补充
+
+- User 已在 `backend/` 下执行 `go run ./cmd/migration -config-dir .`，输出 `migration completed: config_dir=. schema=public`。
+- Follow-up：User 执行 `docker compose -f docker-compose.kafka.yml up -d` 时，`bitnami/kafka:3.7` 报 `not found`。已将本地 Kafka compose 改为官方 `apache/kafka:3.7.0`，并将文档中的容器内命令路径改为 `/opt/kafka/bin/kafka-topics.sh`。
+- 已用同一份 `backend/config.yaml` 的数据库连接直接查询 `analysis_tasks`：
+  - 新增列已存在：`worker_id`、`attempt_id`、`attempt_count`、`processing_started_at`、`lease_until`。
+  - 相关索引已存在：`idx_analysis_tasks_attempt_id`、`idx_analysis_tasks_status_lease`、`idx_analysis_tasks_worker_id`。
+- 已新增 `backend/docker-compose.kafka.yml`，用于本地单节点 Kafka 验证；不自动启动，需要用户手动执行 `docker compose -f backend/docker-compose.kafka.yml up -d`。
+- 已更新 `docs/backend-task-queue-worker-config.md`，补充本地 Kafka 启动、topic 创建、`backend/config.yaml` 的 `task_queue.driver=kafka` 配置示例和关闭命令。
+- 已验证：
+  - `go test ./pkg/config ./internal/taskqueue -run Test -count=1` passed。
+  - `docker compose -f backend/docker-compose.kafka.yml config` passed。
+  - `git diff --check -- backend/docker-compose.kafka.yml docs/backend-task-queue-worker-config.md CURRENT_TASK.md DECISIONS.md memory/2026-05-12.md` passed with only CRLF warnings。
+## 状态：完成源码修改 - 删除食物后首页喝水量同步扣减
+
+- 2026-05-12 update:
+  - User 反馈：前端删除食物成功后，首页其他营养成分会扣除，但喝水栏目没有扣除该食物含水量；需要保证喝水量不小于 0。
+  - Finding:
+    - 首页删除记录后调用 `syncDashboardForDate()` 只重新拉 `/api/home/dashboard` 和运动日志；首页喝水卡片实际来自本地 `bodyMetrics.waterByDate`，需要重新拉 `/api/body-metrics/summary` 才会拿到后端扣减后的 `water_daily`。
+    - 用户复测后仍不变；只读查库发现用户 `2026-05-12` 已无食物记录，但 `user_water_logs` 仍有 `source_type='ai'` 的 860ml 孤儿水日志。
+    - 进一步用本地 Go 后端做临时闭环：保存含水量食物记录会新增 AI 水日志，但 DELETE 后水日志不减少。
+    - 根因在 `BodyMetricsRepo`：`user_water_logs.recorded_on` 是 PostgreSQL `date` 字段，但 repo 的 exact/reduce/sum/delete 路径使用中国自然日转 UTC 的 `time.Time` 窗口查询；Go/GORM 参数下没有匹配到 date 行，导致扣减实际为 0。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - `syncDashboardForDate()` 同步 dashboard 时一并请求 `getBodyMetricsSummary('week')`，成功后用 `applyCloudBodyMetrics()` 更新 `bodyMetrics` 与本地缓存。
+      - `applyCloudBodyMetrics()` 合并云端 `water_daily` 时对 `total` 和 `logs` 做非负钳制，确保前端展示喝水量不会小于 0。
+      - 删除前读取被删记录含水量；删除后如云端水量未变化，则本地按该含水量做一次兜底扣减，且不低于 0，避免旧后端/未部署后端时首页立即显示错误。
+    - `backend/internal/health/repo/body_metrics_repo.go`
+      - `ReduceWaterLogsByDateSource()`、`GetWaterLogsByExactDate()`、`DeleteWaterLogsByDate()`、`SumWaterByDate()` 改为 `DATE(recorded_on) = ?` 精确匹配自然日，符合 `recorded_on date` 表结构。
+  - Verification:
+    - 真实库临时闭环验证：保存一条 `66ml` 食物水记录后水量增加，调用 `FoodRecordService.Delete()` 后水量恢复原值；调试临时记录和水日志已清理。
+    - 已清理用户 `8826bc8d-81ad-40a4-bc42-6cc30506b8c3` 在 `2026-05-12` 已确认无食物记录情况下残留的 3 条 AI 水日志，共 860ml；手动喝水记录未动。
+    - `go test ./internal/health/repo -run 'TestBodyMetricsRepo_ReduceWaterLogsByDateSource|TestBodyMetricsRepo_WaterCRUD' -count=1` passed。
+    - `go test ./internal/foodrecord/service ./internal/app -run 'TestFoodRecordService_Save|TestFoodRecordService_Update|TestFoodRecordService_Delete|TestTotalFoodWaterIntakeMl|Test' -count=1` passed。
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Runtime verification:
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；本轮未能截图/交互验证。
+
+## 状态：完成定位 - llm_provider 改 qwen 后日志仍显示 gemini
+
+- 2026-05-12 update:
+  - User 反馈：已把配置文件 `external.llm_provider` 改成 qwen，但后端日志仍显示 `provider=gemini`、`requested_model=gemini`。
+  - Diagnosis:
+    - 当前本地 `backend/config.yaml` 确认为 `external.llm_provider: "qwen"`。
+    - 当前代码 `app.New()` 会调用 `analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)`。
+    - 当前代码 `resolveImageModelConfig()` 在 image provider 为 qwen 时，即使请求 `modelName/requested_model` 为 `gemini`，也应路由到 qwen。
+    - 当前运行中的后端进程：
+      - `go run cmd/server/main.go` 启动时间约 `03:16`，cwd 为 `/Users/kirigaya/project/food_link/backend`。
+      - `backend/config.yaml` 修改时间为 `03:42:34`。
+      - 用户贴出的日志时间为 `03:43:33`。
+    - 因为 Go 后端只在启动时 `config.Load(".")` 读取配置，03:16 启动的进程不会自动感知 03:42 的配置修改，所以它仍在使用旧的 `llm_provider=gemini`。
+    - 当前 shell 未发现 `LLM_PROVIDER` 环境变量覆盖。
+  - Verification:
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen' -count=1` passed。
+    - `go test ./pkg/config -run Test -count=1` passed。
+  - Next step:
+    - 需要用户按项目规则手动重启本地 Go 后端；重启后新分析日志应显示 `provider=qwen`、`model=qwen-vl-max`。
+
+## 状态：完成源码修改与编译验证 - 修正食物分析压测耗时统计口径
+
+- 2026-05-12 update:
+  - User 反馈：之前 20 样本并发压测脚本的时间统计明显偏大；千问实际常在 10 秒内出结果，但脚本统计远超实际。用户只关心任务真正提交给大模型后，到最终完成营养/能量结果的耗时，不关心整段脚本运行耗时。
+  - Finding:
+    - 旧脚本 `taskDuration/task_wait` 从 `/api/analyze/submit` 返回 task_id 后开始，到轮询到 `done` 为止，包含任务排队、worker 领取等待和轮询间隔。
+    - 旧脚本 `totalDuration/total` 又额外包含提交接口耗时；不包含共享图片上传，但仍不是“模型处理 + 后处理”口径。
+  - Fix applied:
+    - `backend/internal/analyze/loadtest/food_analysis_stability_test.go`
+      - `analysisTaskResponse` 增加 `created_at/updated_at` 解析。
+      - 轮询过程中第一次观察到 `status=processing` 时，记录后端返回的 `updated_at` 作为 `processingStartedAt`。
+      - 任务终态 `done` 时使用终态 `updated_at` 作为完成时间，计算 `processDuration = done.updated_at - processing.updated_at`。
+      - summary 主指标改为 `avg_processing / p95_processing / processing_variance_ms2 / processing_stddev / processing_samples`。
+      - `avg_task_wait / avg_total` 保留为辅助诊断字段，避免误读。
+      - 默认轮询间隔从 `2s` 降到 `500ms`，减少错过 processing 状态的概率。
+  - Verification:
+    - `go test ./internal/analyze/loadtest -count=1` passed，仍为 `[no test files]`。
+    - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed。
+    - `git diff --check` passed。
+  - Runtime note:
+    - 本轮未实际发起 20 并发真实模型压测，避免未经要求再次消耗模型/COS 资源。
+
+## 状态：完成源码修改与验证 - 删除/更新食物记录同步扣减喝水量
+
+- 2026-05-12 update:
+  - User 要求：删除食物时，如果食物带有含水量，需要同步从喝水栏目扣除；喝水量不能小于 0；当前首页其他营养成分已经扣除，但喝水没有扣除；完成后提交代码。
+  - Fix applied:
+    - `backend/internal/foodrecord/service/food_record_service.go`
+      - `Delete()` 删除食物记录前读取原记录 items，按含水量和实际摄入比例计算应扣减水量；删除成功后从当天 AI 自动饮水日志中扣减。
+      - `Update()` 在 items 变更时读取旧记录并计算新旧含水量差值，用于当天记录页删除单个食物成分时同步增减喝水量。
+      - 扣减只作用于 `source_type='ai'` 的饮水日志，不影响用户手动喝水记录。
+    - `backend/internal/health/repo/body_metrics_repo.go`
+      - 新增 `ReduceWaterLogsByDateSource()`，按中国自然日和来源扣减饮水日志；不足扣时只扣到已有 AI 水量为止，保证总喝水不会被扣成负数。
+    - `backend/internal/foodrecord/service/service_test.go`
+      - 新增更新 items 调整食物含水量差值、删除记录扣减食物含水量测试。
+    - `backend/internal/health/repo/body_metrics_repo_test.go`
+      - 新增只扣 AI 水日志、不动 manual 手动喝水、且不足扣不低于 0 的 repo 测试。
+  - Verification:
+    - `go test ./internal/foodrecord/service ./internal/app -run 'TestFoodRecordService_Save|TestFoodRecordService_Update|TestFoodRecordService_Delete|TestTotalFoodWaterIntakeMl|Test' -count=1` passed。
+    - `go test ./internal/health/repo -run 'TestBodyMetricsRepo_ReduceWaterLogsByDateSource|TestBodyMetricsRepo_WaterCRUD' -count=1` passed。
+    - `npx eslint src/pages/index/index.tsx src/packageExtra/pages/day-record/index.tsx src/utils/api.ts src/utils/home-dashboard-local-cache.ts --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 本轮核心修改是后端删除/更新记录后的水量同步；未擅自启动或重启本地前后端服务。
+
+## 状态：完成源码修改与实测 - qwen 食物分析 20 并发压测
+
+- 2026-05-12 update:
+  - User 要求：
+    - 给食物分析压测脚本添加参数，快速切换测试大模型。
+    - 测试 qwen 模型性能并返回表格结果。
+    - 确认测试脚本算法是否与当前主程序食物分析算法一致，不要在测试里重写算法。
+    - 输入食物必须是同一个，输出 20 个样本方差。
+    - 测试成功后图片链接必须删除，避免占用 OSS/COS 资源。
+  - Fix applied:
+    - `backend/internal/analyze/loadtest/food_analysis_stability_test.go`
+      - 新增 Go test 参数：
+        - `-food.analysis.model=qwen`：直接覆盖提交给 `/api/analyze/submit` 的 `modelName`。
+        - `-food.analysis.execution_mode=standard|precision`：直接覆盖 `execution_mode`。
+      - 保留环境变量 `FOOD_ANALYSIS_LOAD_MODEL` 和 `FOOD_ANALYSIS_LOAD_EXECUTION_MODE`，优先级低于 Go test 参数。
+      - 测试开始只上传 1 张图片，所有并发请求复用同一个 `sharedImageURL`，并日志注明 same-food guarantee。
+      - 结果汇总新增：
+        - `task_variance_ms2` / `task_stddev`
+        - `total_variance_ms2` / `total_stddev`
+      - 清理 COS 图片时对共享 image URL 去重，只删除 1 个对象。
+    - `backend/internal/analyze/loadtest/food_analysis_qwen_stability_test.go`
+      - 保留 qwen 专用入口 `TestFoodAnalysisStabilityAndLatencyQwen`，默认 `modelName="qwen"`；也可用 `-food.analysis.model` 覆盖。
+  - Algorithm parity:
+    - 当前压测脚本没有重写食物识别算法。
+    - 它通过真实后端 HTTP 链路执行：`POST /api/upload-analyze-image-file` -> `POST /api/analyze/submit` -> 轮询 `GET /api/analyze/tasks/:task_id`。
+    - `/api/analyze/submit` 进入主程序 `TaskService.SubmitAnalyzeTask()`，server 内嵌 worker 再调用当前业务里的 `AnalyzeService.Analyze()` / DB-first 营养库逻辑，并访问真实数据库。
+    - 因此主业务算法、模型路由、任务队列、积分校验、营养库 DB-first 等后续变化都会反映到该 HTTP 集成压测里。
+  - qwen real run:
+    - Command:
+      - `FOOD_ANALYSIS_LOAD_USER_IDS='20个临时压测用户UUID' FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 FOOD_ANALYSIS_LOAD_TASK_TIMEOUT=20m go test -tags food_analysis_load ./internal/analyze/loadtest -run '^TestFoodAnalysisStabilityAndLatencyQwen$' -food.analysis.model=qwen -count=1 -timeout=30m -v`
+    - Input:
+      - 同一张图片：`backend/testdata/food/6781F1707431AC4E3BAB1416242E433D.jpg`
+      - 共享图片 URL：`http://cdn-food-images.coachlink.fit/706a09d0-917b-454c-9942-951a839b6e9e.jpg`
+      - 只上传一次，20 个并发任务复用该 URL。
+    - Result:
+      - 20/20 成功，success rate `100.0%`。
+      - shared upload `355.623875ms`。
+      - avg submit `1.512151222s`。
+      - avg task wait `1m19.716098387s`，p95 task wait `2m15.310774333s`。
+      - task wait variance `1,566,089,646.37 ms^2`，stddev `39.573850537s`。
+      - avg total `1m21.228250402s`，p95 total `2m17.374845709s`。
+      - total variance `1,601,369,195.37 ms^2`，stddev `40.017111282s`。
+      - avg calories `819.5 kcal`。
+  - Cleanup:
+    - 压测脚本日志显示 `cleanup COS food images: deleted=1`，已删除本次唯一共享上传图片。
+    - 本次 20 个 `analysis_tasks` 任务 ID 复查数据库计数为 `0`。
+    - 本轮临时创建的 20 个 qwen load test 用户已从 `weapp_user` 删除。
+  - Verification:
+    - `go test ./internal/analyze/loadtest -count=1` passed，仍为 `[no test files]`。
+    - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed。
+    - `git diff --check` passed。
+
+## 状态：完成源码修改 - 食物分析压测复用单张图片 URL，并新增千问专用测试
+
+- 2026-05-12 update:
+  - User 要求：之前 Go 语言 20 次并发食物分析压测中，不要每个请求都上传图片；改为每次测试只上传 1 张图片，然后 20 个并发请求复用该图片链接。同时复制一份脚本用于测试千问模型，并先梳理当前后端可用大模型的 API/model name 信息。
+  - Model findings from code/config:
+    - 当前本地 `backend/config.yaml` 为 `external.llm_provider: "gemini"`，因此食物图片分析在未显式指定模型或历史 `gemini` 参数时，默认走 OfoxAI/Gemini。
+    - 千问链路为 DashScope compatible API，模型名 `qwen-vl-max`；提交 payload 传 `modelName: "qwen"` 会强制使用该链路。
+    - OfoxAI/Gemini 链路模型名为 `gemini-3-flash-preview`，endpoint 使用 `external.ofoxai_base_url` 或默认 `https://api.ofox.ai/v1`。
+    - DeepSeek 文本链路模型名为 `deepseek-v4-flash`，主要用于文字输入、营养库 fallback、统计/推荐文本生成，不是当前图片压测的视觉主链路。
+  - Fix applied:
+    - `backend/internal/analyze/loadtest/food_analysis_stability_test.go`
+      - `TestFoodAnalysisStabilityAndLatency` 现在测试开始时只调用一次 `POST /api/upload-analyze-image-file`。
+      - 20 个并发/错峰请求复用同一个 `sharedImageURL` 提交 `/api/analyze/submit`。
+      - 清理 COS 图片时对 image URL 去重，避免同一对象被删除 20 次。
+      - 日志汇总从 `avg_upload` 改为 `shared_upload`，避免把一次上传误解为每个请求的上传耗时。
+    - 新增 `backend/internal/analyze/loadtest/food_analysis_qwen_stability_test.go`
+      - `TestFoodAnalysisStabilityAndLatencyQwen` 复用同一套 loadtest helper，默认设置 `modelName="qwen"`，用于千问/DashScope `qwen-vl-max` 压测。
+  - Verification:
+    - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed。
+    - `go test ./internal/analyze/loadtest -count=1` passed，仍为 `[no test files]`，确认普通 Go 测试不会执行压测。
+    - `git diff --check` passed。
+  - Run examples:
+    - 默认/当前配置模型：`cd backend && FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatency -count=1 -timeout=20m -v`
+    - 千问模型：`cd backend && FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatencyQwen -count=1 -timeout=20m -v`
+
+## 状态：完成源码修改 - 今日餐食含水量展示与保存记录计入喝水
+
+- 2026-05-12 update:
+  - User 反馈：首页「今日餐食」卡片底部仍未显示食物含水量；点击保存食物记录后，含水量也没有累加到首页喝水板块。
+  - Findings:
+    - 前端结果页保存 payload 已发送 `items[].water_ml`，但后端 `FoodItem` 只稳定接收 snake_case，旧/兼容 payload 中的 `waterMl` 或 `nutrients.water_ml` 可能无法进入保存后的水量累计。
+    - 首页 dashboard 的 `meals[]` 原本只聚合热量、蛋白质、碳水、脂肪，没有返回该餐次含水量字段，因此前端即便想展示也拿不到稳定数据。
+  - Fix applied:
+    - `backend/internal/foodrecord/domain/food_record_domain.go`
+      - `FoodItem` 自定义 JSON 解析，兼容 `water_ml`、`waterMl`、`nutrients.water_ml`、`nutrients.waterMl`。
+    - `backend/internal/foodrecord/service/food_record_service.go`
+      - 保存食物记录成功后按实际摄入比例累计含水量，并通过 `user_water_logs` 写入当天喝水；日期使用食物记录 `record_time` 对应中国自然日。
+    - `backend/internal/app/app.go`
+      - 将 `healthrepo.BodyMetricsRepo` 注入 `FoodRecordService`，复用现有喝水日志写入。
+    - `backend/internal/home/service/dashboard_service.go`
+      - 首页 dashboard 的每个 `meals[]` 增加 `water_ml` 聚合字段，按记录 items 中的含水量和实际摄入比例计算。
+    - `src/utils/api.ts` / `src/utils/home-dashboard-local-cache.ts`
+      - 首页餐食类型和本地缓存保留 `water_ml/waterMl`；保存成功后的乐观餐食缓存也同步加上本次含水量。
+    - `src/pages/index/index.tsx` / `src/pages/index/index.scss`
+      - 今日餐食卡片底部在蛋白质/碳水/脂肪右侧展示含水量，使用 `icon-drink` 和 `ml` 单位；旧缓存缺水量字段时强制云端刷新。
+  - Verification:
+    - `go test ./internal/foodrecord/domain ./internal/foodrecord/service ./internal/home/service ./internal/app -run 'TestFoodItem_UnmarshalJSONWaterMlAliases|TestFoodRecordService_Save|TestTotalFoodWaterIntakeMl|TestFoodRecordService_hydrateRecord|TestDashboardService_HomeDashboard|TestBuildMealItem|TestTotalFoodRecordWaterMl|Test' -count=1` passed。
+    - `npx eslint src/pages/index/index.tsx src/utils/api.ts src/utils/home-dashboard-local-cache.ts src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Runtime verification:
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420`、`mrc where --port 3001` 和 `mrc logs error 20 --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；本轮未能截图/交互验证。
+
+## 状态：完成源码修改 - 当天饮食记录页图片误显示无图片
+
+- 2026-05-12 update:
+  - User 反馈：当天饮食记录页中图片显示“无图片”，但首页今日餐食同一记录能看到图片。
+  - Finding:
+    - 页面位置：`src/packageExtra/pages/day-record/index.tsx`。
+    - 该页 `normalizeDisplayImageUrl()` 会把所有 `http://...` URL 过滤为空字符串。
+    - 当前食物图片 CDN/后端返回为 `http://cdn-food-images.coachlink.fit/...`；首页没有这个过滤，所以首页能显示，当天记录页被误判为无图。
+  - Fix applied:
+    - 删除当天记录页对普通 `http://` 图片的全量过滤。
+    - 保留 `http(s)://tmp/` 小程序临时路径转换为 `wxfile://tmp/` 的兼容逻辑。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Runtime verification:
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；本轮未能截图/交互验证。
+
+## 状态：完成源码修改 - 食物分析稳定性/平均响应速度手动压测
+
+- 2026-05-12 update:
+  - User 要求：编写一个 Go 的独特测试，模拟不同用户同时或按间隔发起 20 次食物分析请求，走当前上传图片到 OSS/COS、提交分析任务、轮询结果、统计响应速度和能量结果、最后清理上传图片的完整流程；该测试不能进入普通 Go 测试集合。
+  - API findings:
+    - 当前图片上传接口：
+      - `POST /api/upload-analyze-image-file`：multipart/form-data，字段名 `file`，小程序当前主要使用该接口。
+      - `POST /api/upload-analyze-image`：JSON body `{ "base64Image": "..." }`，兼容 base64 上传。
+    - 当前没有单独公开的“删除 OSS/COS 图片”HTTP 接口。
+    - `DELETE /api/analyze/tasks/:task_id` 只删除/取消分析任务记录，并返回关联图片数量计数；当前后端代码没有实际删除 COS object。
+  - Fix applied:
+    - 新增 `backend/internal/analyze/loadtest/doc.go`，让普通 `go test ./...` 遍历该目录时不会报“无可构建文件”。
+    - 新增 `backend/internal/analyze/loadtest/food_analysis_stability_test.go`，带 build tag `food_analysis_load`。
+    - 测试默认 20 次请求，支持 `stagger` 间隔启动或 `burst` 同时启动。
+    - 每个请求会：
+      - 上传测试图片到 `/api/upload-analyze-image-file`。
+      - 调 `/api/analyze/submit` 创建分析任务。
+      - 轮询 `/api/analyze/tasks/:task_id` 到终态。
+      - 记录 upload/submit/task wait/total duration、任务状态、分析热量。
+    - 清理阶段会：
+      - 调 `DELETE /api/analyze/tasks/:task_id` 清理任务。
+      - 使用后端同一套 COS 配置直接解析图片 URL 的 object key，并删除 `food-images` bucket 中本轮上传的对象。
+  - Run command:
+    - 编译检查：`cd backend && go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1`
+    - 实际压测示例：
+      - `cd backend && FOOD_ANALYSIS_LOAD_TOKENS='token1,token2' FOOD_ANALYSIS_LOAD_PATTERN=burst go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatency -count=1 -timeout=20m -v`
+      - 若不用真实 tokens，可传 `FOOD_ANALYSIS_LOAD_USER_IDS`，测试会用本地 `config.yaml` 的 JWT secret 生成 token；但这些 user_id 必须已存在于目标数据库，否则会员/积分校验会失败。
+  - Verification:
+    - `go test ./internal/analyze/loadtest -count=1` passed，输出 `[no test files]`，确认普通测试不执行压测。
+    - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed，确认带 tag 时压测测试可编译。
+    - `git diff --check` passed。
+  - Follow-up actual run:
+    - User 要求实际运行该测试并以表格返回结果。
+    - 初次真实运行发现测试构造 bug：multipart file part 未设置 `Content-Type: image/jpeg`，后端按当前规则返回 `400 仅支持图片文件上传`；已修复为显式 `CreatePart` 并设置图片 content type。
+    - 重新运行命令：
+      - `FOOD_ANALYSIS_LOAD_USER_IDS='...' FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 FOOD_ANALYSIS_LOAD_TASK_TIMEOUT=20m go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatency -count=1 -timeout=30m -v`
+    - Run result:
+      - 20 个 burst 请求均完成上传和任务提交。
+      - 11 个请求轮询到 `done`；9 个请求在约 10.5 分钟时轮询 `GET /api/analyze/tasks/:task_id` 得到 500，测试失败。
+      - 测试日志汇总：success rate `55.0%`，成功样本平均 upload `746ms`，平均 submit `1.153s`，平均 task wait `5m19.978s`，p95 task wait `9m50.234s`，平均 total `5m21.877s`，p95 total `9m52.521s`。
+      - DB 二次核算成功样本平均能量约 `724.9 kcal`，范围 `640.3-960.2 kcal`；测试日志中的 `avg_calories=0.0` 是压测工具未读取嵌套 `items[].nutrients.calories` 的统计 bug，已修复。
+    - Cleanup:
+      - 原测试内任务 cleanup 调 `DELETE /api/analyze/tasks/:task_id` 返回 500；原 COS cleanup 因删除 region/DNS 失败未删图。
+      - 已新增 cleanup-only 测试 `TestFoodAnalysisLoadCleanupUploadedImages`，支持 `FOOD_ANALYSIS_LOAD_CLEANUP_IMAGE_URLS` 删除指定图片 URL。
+      - 已运行 cleanup-only 测试，成功删除本次上传的 20 张 COS 图片。
+      - 已手动删除本次压测创建的 20 条 `analysis_tasks` 测试记录，避免继续占用测试用户当日积分/任务统计。
+    - Additional hardening:
+      - 压测工具热量提取兼容 `items[].nutrients.calories`。
+      - COS 删除增加 region candidates 和重试。
+
+## 状态：完成源码修改 - 保存食物记录时将食物含水量计入当天饮水
+
+- 2026-05-12 update:
+  - User 要求：当前用户点击食物记录时，如果每个成分有含水量，需要将含水量累加起来，并加到用户当天喝水里面。
+  - Fix applied:
+    - `backend/internal/foodrecord/service/food_record_service.go`
+      - 新增 `WaterLogRecorder` 依赖和 `ConfigureWaterLogRecorder()`。
+      - 保存食物记录成功后，按 `record.RecordTime` 的中国自然日，将各食物成分的含水量累计写入 `user_water_logs`。
+      - 含水量按实际摄入折算：优先使用 `water_ml * ratio / 100`；缺少 ratio 时使用 `water_ml * intake / weight`；无摄入比例上下文时按整份水量计。
+      - 饮水记录 `source_type` 标记为 `ai`；单条超过 5000ml 时拆分，符合 `user_water_logs` 约束。
+    - `backend/internal/app/app.go`
+      - 将 `healthrepo.BodyMetricsRepo` 注入 `FoodRecordService`，复用现有 `CreateWaterLog()`。
+    - `backend/internal/foodrecord/service/service_test.go`
+      - 新增保存食物记录自动创建饮水日志测试。
+      - 新增含水量按比例/摄入重量折算的单元测试。
+  - Verification:
+    - `go test ./internal/foodrecord/service -run 'TestFoodRecordService_Save|TestTotalFoodWaterIntakeMl' -count=1` passed。
+    - `go test ./internal/app -run Test -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go test ./internal/foodrecord/handler ./internal/health/service ./internal/worker -run Test -count=1` passed。
+    - `go build -o /tmp/food-link-server-food-water ./cmd/server` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 本轮只改后端保存链路和测试，没有修改小程序页面、组件、样式、路由或交互；未运行 weapp-devtools。
+    - 按项目规则未擅自重启本地后端服务，改动需用户手动重启后生效。
+
+## 状态：完成源码修改 - 食物图片识别尊重 llm_provider 配置
+
+- 2026-05-12 update:
+  - User 反馈上传食物进行分析时，前端结果页显示“识别失败：AI 识别服务配置异常，请联系管理员处理”。
+  - Findings:
+    - 前端展示的错误文案来自后端 worker 的 `sanitizeTaskErrorMessage()`，通常由 DashScope/Ofox key 或 base URL 配置错误触发。
+    - 当前本地 `backend/config.yaml` 配置了 `external.llm_provider: "gemini"` 和 OfoxAI key，但食物图片分析模块没有读取该配置，仍把空 model 或历史 `gemini` 参数默认路由到 Qwen/DashScope。
+    - 在 DashScope key 缺失或不可用的环境下，上传食物图片会调用 DashScope 失败并被清洗成用户看到的配置异常。
+  - Fix applied:
+    - `backend/internal/analyze/service/analyze_service.go`
+      - 新增 `ConfigureImageProvider()`，支持从配置指定默认图片识别 provider。
+      - 普通图片分析、精准图片子任务、图片 engine 对比和批量图片分析在 model 为空或历史 `gemini` 参数时，优先尊重配置的 `llm_provider`。
+      - 显式传 `qwen` 时仍走 Qwen，不被 `llm_provider=gemini` 覆盖。
+    - `backend/internal/app/app.go`
+      - 初始化 `AnalyzeService` 后调用 `ConfigureImageProvider(cfg.External.LLMProvider)`。
+    - `backend/internal/analyze/service/analyze_service_test.go`
+      - 新增配置 `gemini` 时走 Ofox/Gemini、显式 `qwen` 不被覆盖的测试。
+  - Verification:
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go test ./internal/app -run Test -count=1` passed。
+    - `go test ./internal/worker -run 'Test' -count=1` passed。
+    - `go build -o /tmp/food-link-server-llm-provider ./cmd/server` passed。
+    - `git diff --check` passed。
+  - Known unrelated test gap:
+    - `go test ./internal/analyze/service ./internal/app ./internal/worker -run 'Test' -count=1` 中 app/worker 通过，但 `internal/analyze/service` 全量仍被既有 `TestTaskService_ListTasks` 空指针问题阻断。
+  - Runtime note:
+    - 本轮只改后端配置选择逻辑；按项目规则未擅自重启本地后端服务。需要用户手动重启 Go server 后，本地上传识别才会走新逻辑。
+## 状态：完成源码切换 - 图片分析临时改回 Gemini 测试
+
+- 2026-05-12 update:
+  - User要求：把当前图片分析从 Qwen 改成 Gemini 试一下，方便测试。
+  - 当前前端图片分析页 `src/packageExtra/pages/analyze/index.tsx` 提交 `modelName: 'gemini'`。
+  - Fix applied:
+    - `backend/internal/analyze/service/analyze_service.go`
+      - `resolveModelConfig()` 中 `gemini` / `gemini-flash` / `gemini-vision` / `gemini-3-flash-preview` / `google/gemini-3-flash-preview` 不再临时映射到 Qwen。
+      - 上述别名现在返回 `provider=gemini`、`model=gemini-3-flash-preview`，走 Ofox/Gemini client。
+      - 显式 `qwen` / `qwen-vl-max` 入口仍保留；Gemini 图片调用遇到 transient error 时仍保留 DashScope/Qwen fallback。
+    - `backend/internal/analyze/service/analyze_service_test.go`
+      - 更新 `TestResolveModelConfig` 与 Gemini alias 测试，锁定 `gemini` 会走 Ofox/Gemini。
+  - Verification:
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasUsesOfoxGemini|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed.
+    - `go build -o $env:TEMP\food-link-gemini-test-server.exe ./cmd/server` passed.
+    - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go` passed with CRLF warnings only.
+  - Runtime note:
+    - 后端代码改动；需要重启 `npm run dev:backend` 后本地测试才会生效。
+    - 本轮未改小程序 UI 页面/样式，未做 weapp-devtools 运行态验证。
+
+## 状态：完成提交、拉取远端并合并 - 积分任务组失败返还
+
+- 2026-05-12 update:
+  - User要求：提交代码，并拉取最新代码合并。
+  - Completed:
+    - 已提交本地积分任务组失败返还改动。
+    - 已 `git fetch origin` 并发现远端领先 2 个提交：
+      - `926e27e feat: 移除 worker.task_types 配置，任务类型由代码固定维护`
+      - `8769347 Merge branch 'backend-refactor-sync-migrate-tencent' ...`
+    - 已通过 `git pull --rebase origin backend-refactor-sync-migrate-tencent` 将本地提交接到远端最新提交之后，无冲突。
+  - Verification:
+    - rebase 前：
+      - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker ./internal/app -run 'Test' -count=1` passed。
+      - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_RefundsCreditsOnlyForFailedTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$|TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask' -count=1` passed。
+      - `git diff --check` passed。
+    - rebase 后：
+      - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker ./internal/app -run 'Test' -count=1` passed。
+      - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_RefundsCreditsOnlyForFailedTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$|TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask' -count=1` passed。
+
+## 状态：完成静态梳理 - 保质期过期通知定时 job 生命周期
+
+- 2026-05-12 update:
+  - User 询问食物过期通知在后端如何实现，尤其是定时器状态如何在后端关闭并重新开启后维持，以及生命周期如何管理。
+  - Findings:
+    - 当前实现不是为每个食物条目在 Go 进程内创建持久 `time.Timer`，而是把提醒计划持久化到数据库 `food_expiry_notification_jobs`。
+    - 用户接受小程序订阅后，`POST /api/expiry/items/:item_id/subscribe` 进入 `ExpiryService.SubscribeWithContext()`，校验条目归属、状态、openid 和模板 ID，再由 `reconcileNotificationJob()` 计算到期当天中国时间 09:00 的 `scheduled_at` 并 upsert job。
+    - server 内嵌 worker 启动后，如果 `worker.task_types` 包含 `expiry_notification`，会按 `worker.poll_interval_seconds` 周期调用 `NotificationWorker.ProcessNext()` 扫描 due job。
+    - job claim 使用 `status='pending' AND scheduled_at <= now` + `FOR UPDATE SKIP LOCKED`，claim 后改为 `processing`，避免多个 worker 重复发送同一条提醒。
+    - 成功发送微信订阅消息后 job 置为 `sent`；发送失败按 5min/30min/120min 延迟重试，超过最大次数置为 `failed`；条目不存在、非 active 或已过期等情况置为 `cancelled`。
+    - 重启恢复依赖 DB：未来或已到期的 `pending` job 都还在数据库中，后端重启后内嵌 worker 会继续扫描并处理，不需要恢复进程内定时器。
+  - Current lifecycle gaps:
+    - 如果进程在 job 已从 `pending` claim 成 `processing` 后、写回 `sent/failed/pending` 前崩溃，当前代码没有看到 stale `processing` job 的租约恢复机制，这类 job 可能卡住。
+    - 条目普通更新/状态更新目前未明显主动 reconcile/cancel 已有提醒 job；worker 处理时会再次校验并取消不适用 job，但不是更新瞬间就立即维护。
+  - 本轮为源码静态梳理，没有修改业务代码，未运行测试。
+
+## 状态：完成源码修改 - 积分创建即预扣、失败整组返还
+
+- 2026-05-12 update:
+  - User要求：
+    - 用户只要创建对应异步任务，就扣除对应积分。
+    - 如果任务失败，要返还积分。
+    - 如果一次提交拆成多个异步任务，只要其中一个失败，整次提交的积分都要返还。
+  - Fix applied:
+    - `backend/internal/analyze/service/task_service.go`
+      - 食物图片、文字、精准模式提交在创建 `analysis_tasks` 后立即预扣累计奖励积分。
+      - 每次提交写入统一 `credit_group_id`，并同步写入 `credit_usage.credit_group_id`。
+      - 创建后 enqueue 失败、用户取消、轮询到失败/超时/取消时会幂等触发退款。
+    - `backend/internal/membership/repo/membership_repo.go`
+      - 每日系统积分统计从只看 `done` 改为按 `credit_group_id` 统计 `pending/processing/done`。
+      - 同组任一任务 `failed/timed_out/cancelled` 时整组不计入系统积分，达到返还效果。
+    - `backend/internal/membership/service/membership_service.go`
+      - 新增创建时预扣 earned 积分方法和失败时幂等退款方法。
+      - 退款前会确认原预扣账本存在，避免凭空增加 earned 积分。
+    - `backend/internal/worker/worker.go`
+      - worker 任务失败时触发 earned 积分退款。
+      - 精准模式子任务继承父任务 `credit_usage/credit_group_id`；任一子任务失败会把对应 `precision_item_estimates` 标记 failed，并退款整组。
+    - `backend/internal/health/service/exercise_service.go`
+      - 运动异步任务创建后立即预扣，enqueue 失败时标记 failed 并退款。
+    - `backend/internal/expiry/service/expiry_service.go`
+      - 保质期识别创建任务后立即预扣，识别失败后标记 failed 并退款；成功后不再二次扣。
+    - `backend/internal/app/app.go`
+      - 内嵌 worker 注入 membership service，用于失败退款。
+  - Verification:
+    - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker ./internal/app -run 'Test' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_RefundsCreditsOnlyForFailedTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$|TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask' -count=1` passed。
+    - `go test ./internal/analyze/handler ./internal/health/handler ./internal/expiry/handler ./internal/taskqueue ./pkg/config -run 'Test' -count=1` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 本轮只改后端服务/worker/repo/test，没有修改小程序页面、组件、样式、路由或交互；未运行微信开发者工具截图验证。
+    - `go test ./internal/analyze/service -run 'Test' -count=1` 仍会被既有 `TestTaskService_ListTasks` 空指针问题阻断；本轮相关聚焦测试已通过。
+
+## 状态：完成提交与远端同步 - 积分扣除优化和分析订阅移除
+
+- 2026-05-12 update:
+  - User要求：提交当前代码，并完成与远端同步。
+  - Completed:
+    - 已在 `backend-refactor-sync-migrate-tencent` 上完成 rebase，解决远端 task_queue/trace/首页补录提示记录与本地提交的冲突。
+    - 已保留远端 `task_queue` 发布/内嵌 worker 逻辑，同时保留积分扣除优化：提交时只校验和写 `credit_usage`，任务 `done` 后再幂等结算累计奖励积分。
+    - 已保留运动任务创建后的 queue publish，移除创建成功后的即时累计奖励积分扣除。
+    - 已推送提交：
+      - `2a5654a fix: remove analysis notification subscription`
+      - `011ae75 fix: defer credit settlement until task success`
+  - Verification after rebase:
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/record-text/index.tsx src/utils/api.ts src/utils/membership.ts src/pages/index/index.tsx --max-warnings 0` passed。
+    - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker ./internal/app ./internal/analyze/handler -run Test -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_SettlesCreditsOnlyForDoneTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$|TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask' -count=1` passed。
+    - `go test ./pkg/config ./internal/taskqueue ./pkg/trace ./pkg/logger -run Test -count=1` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 微信开发者工具自动化已尝试 `mrc where --port 9420` 和 `mrc where --port 3001`，两个端口均无法连接，提示目标项目窗口未开启自动化服务；本轮无法完成小程序运行时截图/交互验证。
+
+## 状态：完成源码修改 - 分析任务分发改为本地 task_queue
+
+- 2026-05-11 update:
+  - User 认为把 `analysis_tasks` 当队列不合理：多个开发者共用同一 DB 时，一个人提交的任务可能被另一个人的 worker 用不同算法处理。
+  - 新方案：
+    - `analysis_tasks` 继续作为任务状态/result/error 的持久化表，供前端 `/api/analyze/tasks/:task_id` 轮询读取。
+    - 分发不再依赖 worker 扫描 pending；`/api/analyze/submit` / `/api/analyze-text/submit` 创建 pending task 后发布 `task_id/task_type` 到 `task_queue`。
+    - worker 从 `task_queue` 收到消息后，调用 `ClaimTaskByID()` 原子把这一个 task 从 `pending` 改为 `processing`，再执行模型/营养库逻辑，最后写 `done/failed`。
+    - 本地先实现 `backend/internal/taskqueue` 的进程内 `memory` driver；它是 server 进程内队列，能避免共享 DB 时被其它开发者 worker 抢任务。
+    - `task_queue.driver=kafka`、`topic`、`brokers`、`consumer_group` 已在 config/interface 层预留；当前配置为 kafka 会 fail fast，待后续接入 adapter。
+    - 精准模式 `precision_plan` 创建的 `precision_item_estimate` 和 `precision_aggregate` 子任务也会发布到同一队列，否则子任务会停在 pending。
+    - 保质期订阅通知 `food_expiry_notification_jobs` 暂时保留自身 DB 定时 job 轮询，因为它不是分析算法任务互相抢占的问题。
+  - 已更新：
+    - `backend/internal/taskqueue/*` 新增 queue interface、memory driver、factory、单测。
+    - `backend/pkg/config/config.go` 新增 `task_queue` 配置；`backend/config-example.yaml` 和本地 `backend/config.yaml` 已加入默认 memory 队列配置。
+    - `backend/internal/analyze/service/task_service.go` 创建任务后发布队列消息；发布失败会标记 task failed，避免无声 pending。
+    - `backend/internal/worker/worker.go` 不再调用 `ClaimNextPendingTask()` 扫描 pending，改为消费 queue delivery 后 `ClaimTaskByID()`。
+    - `backend/internal/app/app.go` server 初始化 queue，并注入 TaskService 和内嵌 worker。
+    - `backend/cmd/worker/main.go` 仍保留独立 worker 入口；memory driver 下会记录 warning，因为 standalone 进程无法收到 server 进程内发布的消息。
+    - `docs/go-backend-prelaunch-checklist-2026-05-08.md` 已同步当前 worker/queue 验收口径。
+  - 验证：
+    - `go test ./internal/taskqueue ./pkg/config ./internal/worker ./internal/app -run Test -count=1` passed.
+    - `go test ./internal/analyze/service -run "TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask|TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+    - `go test ./internal/analyze/repo -run "^$" -count=1` passed.
+    - `go test ./internal/analyze/handler -run TestAnalyzeHandler_SubmitAnalyzeTask -count=1` passed.
+    - `go build -o $env:TEMP\food-link-server-taskqueue.exe ./cmd/server` passed.
+    - `go build -o $env:TEMP\food-link-worker-taskqueue.exe ./cmd/worker` passed.
+    - `node --check scripts/run-backend.cjs` and `node --check scripts/run-worker.cjs` passed.
+    - `git diff --check` passed with only CRLF warnings.
+  - Remaining note:
+    - `memory` queue is not durable; server 重启后，旧 pending task 不会自动 replay。后续若要生产级恢复/多实例独立 worker，应接 Kafka/NATS/Redis Stream 等 broker driver，或设计带 instance ownership 的 replay 机制。
+
+## 状态：完成排查、后端日志补强与 server 内置 worker - 食物拍照分析任务一直 pending
+
+- 2026-05-11 update:
+  - User反馈：
+    - `/api/upload-analyze-image-file`、`PUT /api/user/health-profile`、`POST /api/analyze/submit` 均 200。
+    - 前端随后每 2 秒轮询 `/api/analyze/tasks/367af41f-f800-4d07-bf03-a99dd58f8c33`，3 分钟仍无结果。
+    - 要求查看当前食物热量拍照分析实现，并增加日志定位卡点。
+  - Current implementation:
+    - 图片先上传到 `/api/upload-analyze-image-file` 或 `/api/upload-analyze-image`，得到 CDN/COS 图片 URL。
+    - `/api/analyze/submit` 只创建 `analysis_tasks` 异步任务，标准图片任务 `task_type=food`、`status=pending`。
+    - 独立 worker `backend/cmd/worker` 轮询 `analysis_tasks`，用 `FOR UPDATE SKIP LOCKED` 领取 pending 任务并改为 `processing`。
+    - 标准图片任务调用 `AnalyzeService.Analyze()`；默认/历史 `gemini` 请求目前会临时路由到 DashScope `qwen-vl-max`。
+    - 识别第一阶段只让模型输出食物名、估重和 `waterMl`；后端 `db_first` 再查 `food_nutrition_library` / `food_nutrition_aliases` 回算热量和营养。
+  - Findings:
+    - 直接查当前配置 DB：任务 `367af41f-f800-4d07-bf03-a99dd58f8c33` 仍为 `pending | food`，`created_at/updated_at` 都停在 `2026-05-11 23:09:46 +08:00`，说明没有 worker 领取它。
+    - 本机进程只看到 `go run .\cmd\server\main.go` 占用 `3010`，未看到 `cmd/worker` 进程。
+    - 因此本次不是卡在 Qwen/Ofox/营养库，而是异步 worker 未运行或未连接同一 DB。
+  - Fix applied:
+    - `backend/internal/analyze/service/task_service.go`
+      - 提交标准/精准、图片/文字任务后记录 `analysis task submitted`，包含 task_id、task_type、model、execution_mode、analysis_engine、image_count 等。
+    - `backend/internal/worker/worker.go`
+      - worker 领取后增加 `task processing started`。
+      - `food` 任务增加 `food task analyze started/result ready/completed/failed`，记录耗时、图片数、模型、结果项数。
+      - 任务成功/失败统一记录处理耗时。
+      - 失败任务写回状态时使用独立 10 秒上下文，避免任务处理上下文已超时后无法把任务标记为 failed。
+    - `backend/internal/analyze/service/analyze_service.go`
+      - 图片 LLM 调用增加 `food image analyze llm start/completed/failed/finalized`，记录 provider/model、requested_model、fallback_used、图片数、耗时、resolved/unresolved 数。
+    - `package.json`
+      - 新增 `npm run dev:worker`。
+    - `scripts/run-backend.cjs`
+      - 从旧 Python `run_backend.py` 启动方式改为 `go run ./cmd/server`。
+    - `scripts/run-worker.cjs`
+      - 新增跨平台启动 `go run ./cmd/worker` 的脚本。
+    - `scripts/restart-dev.sh`
+      - 一键重启会清理旧 Go server/worker 进程；`dev:backend` 的 Go server 默认内嵌 worker，因此不再额外启动独立 worker。
+    - `backend/pkg/config/config.go`
+      - 新增 `worker.count`，只从 `config.yaml` 读取；`count=0` 关闭 worker，`count>0` 控制 worker 数量。
+      - 缺少 `worker.count` 时启动报错；独立 `cmd/worker` 显式运行时同样遵循 `config.yaml` 的 `worker.count`。
+    - `backend/internal/app/app.go`
+      - Go server 启动时在同进程内按 `cfg.Worker` 创建 `worker.Runner` 并用 goroutine 运行。
+      - server 关闭时先 cancel 内置 worker 并等待退出，再关闭 tracing/DB。
+  - Verification:
+    - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+    - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage_Timeout|TestSanitizeTaskErrorMessage_ResourceExhausted" -count=1` passed.
+    - `go build -o $env:TEMP\food-link-server-logcheck.exe ./cmd/server` passed.
+    - `go build -o $env:TEMP\food-link-worker-logcheck.exe ./cmd/worker` passed.
+    - `node --check scripts/run-backend.cjs` passed.
+    - `node --check scripts/run-worker.cjs` passed.
+    - `git diff --check` for touched files passed with only CRLF warnings.
+  - Follow-up verification after embedded worker:
+    - `go test ./pkg/config -count=1` passed.
+    - `go test ./internal/app -run Test -count=1` passed.
+    - `go build -o $env:TEMP\food-link-server-embedded-worker.exe ./cmd/server` passed.
+    - `go build -o $env:TEMP\food-link-worker-standalone.exe ./cmd/worker` passed.
+  - Follow-up after worker config feedback:
+    - Removed worker env controls; worker configuration now comes from `config.yaml`, not `WORKER_ENABLED` / `WORKER_*`.
+    - `worker.count` is required in `config.yaml`; `count=0` disables worker, `count>0` controls the number of worker loops.
+    - `backend/config-example.yaml` and local `backend/config.yaml` include `worker.count: 1`.
+    - Added config tests for missing `worker.count` and `count=0`.
+    - New diagnostic logs continue to use zap (`logger.L()` / injected `*zap.Logger`), not `print`/`fmt.Println`; current OTel wiring is trace-only.
+    - Verification after this adjustment:
+      - `go test ./pkg/config -count=1` passed.
+      - `go test ./internal/app -run Test -count=1` passed.
+      - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage_Timeout|TestSanitizeTaskErrorMessage_ResourceExhausted" -count=1` passed.
+      - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+      - server and standalone worker builds passed.
+  - Remaining action:
+    - 当前本机任务仍 pending，因为按项目规则本轮未擅自重启常驻 server。
+    - 本地复测只需重启 Go server；server 默认会带内置 worker 并领取现有 pending 任务。
+    - 若线上已有独立 worker 或多副本 server，部署层可在 `config.yaml` 中设置 `worker.count: 0` 关闭 server 内置 worker，继续只让独立 worker 消费队列。
+## 状态：完成源码修改 - 积分消耗延后到任务成功返回
+
+- 2026-05-12 update:
+  - User要求：
+    - 确认前端轮询获取识别结果时是否能知道任务类型与图片数量。
+    - 优化积分扣除机制：根据任务类型（标准/精准）和图片数量，在任务成功返回结果后再扣积分，而不是创建任务后立即扣，因为任务可能失败。
+  - Confirmation:
+    - `GET /api/analyze/tasks/:task_id` 返回的 `AnalysisTask` 已包含 `task_type`、`image_paths`、`payload`、`result`。
+    - 前端 `analyze-loading` 已从 task/payload 中读取任务类型与执行模式；图片数量可由 `image_paths.length` 判断。
+  - Fix applied:
+    - `backend/internal/membership/service/membership_service.go`
+      - `ValidateFoodAnalysisCredits()` 支持传入本次计费 units。
+      - 标准食物分析成本为 `2 * units`；精准模式为 `4 * units`。
+    - `backend/internal/analyze/service/task_service.go`
+      - 食物图片/文字/精准提交仍在提交时校验积分是否足够，并把 `credit_usage` 写入任务 payload。
+      - 删除创建 `analysis_tasks` 成功后立即扣累计奖励积分的逻辑。
+      - `GetTask()` 仅在任务 `status=done` 时结算累计奖励积分，sourceKey 幂等避免重复扣。
+    - `backend/internal/membership/repo/membership_repo.go`
+      - 每日系统积分统计只统计 `status=done` 的任务。
+      - `precision_plan` 不再因为中间规划完成就计入积分；精准最终成功由 `precision_aggregate` 计入。
+    - `backend/internal/worker/worker.go`
+      - 精准模式把原始任务的 `credit_usage` 透传到 `precision_aggregate`，只有最终聚合成功后才计入系统积分。
+    - `backend/internal/health/service/exercise_service.go`
+      - 运动任务创建后不再立即扣累计奖励积分；成功结果由 `GetTask()` 结算。
+    - `backend/internal/expiry/service/expiry_service.go`
+      - 保质期同步识别按图片数量校验/返回成本；只有识别成功并完成任务后才扣累计奖励积分。
+    - `src/utils/membership.ts`、`src/packageExtra/pages/analyze/index.tsx`
+      - 前端分析页积分不足预检查按当前图片数量计算；首页入口未选图前仍按 1 张做预检查。
+  - Cost rule:
+    - 标准食物/保质期识别：`2 积分 * 图片数`。
+    - 精准模式：`4 积分 * 图片数`。
+    - 文字分析：按 1 个 unit。
+    - 运动记录：1 积分。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/utils/membership.ts --max-warnings 0` passed。
+    - `go test ./internal/membership/service ./internal/membership/repo ./internal/health/service ./internal/expiry/service ./internal/worker -run 'Test' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask_WithImages|TestTaskService_GetTask_SettlesCreditsOnlyForDoneTask|TestTaskService_SubmitAnalyzeTask_Success|TestTaskService_SubmitTextTask_Success|TestTaskService_GetTask$' -count=1` passed。
+    - `go test ./internal/analyze/handler ./internal/app ./internal/health/handler ./internal/expiry/handler -run 'Test' -count=1` passed。
+    - `git diff --check` passed。
+  - Validation notes:
+    - `go test ./internal/analyze/service -run 'Test' -count=1` 仍被既有 `TestTaskService_ListTasks` 空指针失败阻断；本轮相关新增/修改用例均通过。
+    - 微信开发者工具自动化尝试连接 9420 与 3001 均失败，提示目标项目窗口未开启自动化服务；本轮无法完成小程序运行时截图/交互验证。
+
+## 状态：完成静态梳理 - 前端积分扣除触发链路
+
+- 2026-05-12 update:
+  - User要求：查看前端目前如何执行积分扣除机制，即当前用户每日积分额度是在点击什么按钮、什么接口成功之后扣除。
+  - Findings:
+    - 前端不直接调用“扣积分”接口；前端只通过 `getMyMembership()` / `GET /api/membership/me` 获取积分状态并在按钮点击前做不足拦截。
+    - 食物图片分析：
+      - 首页 `RecordMenu` 的「拍照识别/相册上传」只做积分预检查和选图，不扣积分。
+      - `src/packageExtra/pages/analyze/index.tsx` 底部「分析 X 张图片」按钮触发 `handleAnalyzePress()` -> `doAnalyze()`。
+      - 图片上传成功后调用 `submitAnalyzeTask()` -> `POST /api/analyze/submit`；若是继续精准会话则调用 `continuePrecisionSession()` -> `POST /api/precision-sessions/:session_id/continue`。
+      - 后端 `TaskService.SubmitAnalyzeTask()` 在创建 `analysis_tasks` 成功后调用 `consumeFoodCredits()`。
+    - 食物文字分析：
+      - `src/packageExtra/pages/record-text/index.tsx` 底部「开始智能分析」按钮触发 `handleSubmit()`。
+      - 调用 `submitTextAnalyzeTask()` -> `POST /api/analyze-text/submit`。
+      - 后端 `TaskService.SubmitTextTask()` 在创建 `analysis_tasks` 成功后调用 `consumeFoodCredits()`。
+    - 纠错/重新智能分析：
+      - `src/packageExtra/pages/result/index.tsx` 的纠错重分析继续调用 `submitAnalyzeTask()` 或 `submitTextAnalyzeTask()`，因此会按新任务再次消耗积分。
+      - 结果页继续精准估计调用 `continuePrecisionSession()`，同样走后端提交任务扣分链路。
+    - 运动记录：
+      - `src/packageExtra/pages/exercise-record/index.tsx` 发送按钮或输入框确认触发 `runSubmitFlow()`。
+      - 调用 `createExerciseLog()` -> `POST /api/exercise-logs`。
+      - 后端 `ExerciseService.CreateLogWithDate()` 创建 `analysis_tasks(task_type=exercise)` 成功后扣 1 积分。
+    - 保质期拍照识别：
+      - `src/packageExtra/pages/expiry-edit/index.tsx`「识别并预填」按钮触发 `handleRecognize()`。
+      - 调用 `recognizeManagedFoodExpiryItems()` -> `POST /api/expiry/recognize`。
+      - 后端 `ExpiryService.RecognizeWithContext()` 在识别成功并 `CompleteTask` 后扣 2 积分。
+  - Backend mechanism:
+    - 积分校验统一由 `MembershipService.ValidateFoodAnalysisCredits()` / `ValidateExerciseCredits()` 完成。
+    - 食物标准分析成本 2，精准模式 4，运动记录 1，保质期识别 2。
+    - 每日“系统积分”不是直接写一个扣减字段，而是通过 `analysis_tasks.payload.credit_usage.system_by_date` 和任务类型统计当日已用。
+    - 累计奖励积分余额会通过 `ConsumeEarnedCreditsAfterSuccess()` 写 `user_earned_credit_ledger` 并更新 `weapp_user.earned_credits_balance`。
+  - Verification:
+    - 本轮为源码静态梳理，未修改业务代码，未运行测试。
+
+## 状态：完成静态定位 - 食物过期通知推送实现链路
+
+- 2026-05-12 update:
+  - User要求：用户反馈食物过期通知推送失败，先找到通知推送相关的前端和后端实现位置，尤其是后端实现。
+  - Frontend implementation map:
+    - `src/packageExtra/pages/expiry-edit/index.tsx`
+      - `promptExpirySubscribe()` 保存保质期条目后弹订阅确认，调用 `Taro.requestSubscribeMessage()`。
+      - 成功后对每个条目调用 `subscribeManagedFoodExpiryItem()`。
+    - `src/utils/api.ts`
+      - `EXPIRY_SUBSCRIBE_TEMPLATE_ID` 读取构建常量。
+      - `FoodExpirySubscribeRequest/Response` 定义订阅接口协议。
+      - `subscribeManagedFoodExpiryItem()` 调 `POST /api/expiry/items/:id/subscribe`。
+    - `config/index.ts`
+      - 从 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 注入 `__EXPIRY_SUBSCRIBE_TEMPLATE_ID__`。
+  - Backend implementation map:
+    - `backend/internal/app/app.go`
+      - 路由注册 `POST /api/expiry/items/:item_id/subscribe`。
+      - `expirySvc.ConfigureNotificationTemplate(cfg.WechatPay.ExpirySubscribeTemplateID)` 注入后端模板 ID。
+    - `backend/internal/expiry/handler/expiry_handler.go`
+      - `Subscribe()` 从 JWT context 取 `userID/openID`，接收 `subscribe_status/err_msg`。
+    - `backend/internal/expiry/service/expiry_service.go`
+      - `SubscribeWithContext()` 校验条目归属、状态、订阅状态、openid、模板 ID。
+      - `reconcileNotificationJob()` 计算到期日当天北京时间 09:00 的提醒时间，写 `food_expiry_notification_jobs`。
+    - `backend/internal/expiry/repo/expiry_repo.go`
+      - `UpsertNotificationJob()` 创建/更新 job。
+      - `ClaimNextPendingNotificationJob()` 按 `status=pending AND scheduled_at<=now` 领取 due job。
+    - `backend/internal/expiry/service/notification_worker.go`
+      - `NotificationWorker.ProcessNext/ProcessJob()` 消费 job。
+      - `sendSubscribeMessage()` 调微信 `message/subscribe/send`。
+      - `getAccessToken()` 用 `external.appid/external.secret` 获取微信 access_token。
+    - `backend/internal/worker/worker.go` + `backend/cmd/worker/main.go`
+      - 独立 worker 进程在空闲时处理 `expiry_notification` job。
+  - Key risk points confirmed:
+    - 前端构建必须注入 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`，否则不会弹订阅，也不会创建后端 job。
+    - 后端需要 `APPID/SECRET` 和 `EXPIRY_SUBSCRIBE_TEMPLATE_ID` 或对应 YAML 配置。
+    - 生产必须单独启动 `/app/food-link-worker`，且 `WORKER_TASK_TYPES` 不能漏掉 `expiry_notification`。
+    - 当前 `dist/common.js` 里模板 ID 为空字符串，说明当前本地产物不会发起过期提醒订阅。
+  - Verification:
+    - 本轮为源码静态定位，未修改业务代码，未运行测试。
+
+## 状态：完成源码修改 - 首页补录提示改为低能量补录入口
+
+- 2026-05-12 update:
+  - User要求：
+    - 将页面里的「当前补录日期」提示改为「检测到当日能量过低，是否需要补录」。
+    - 用户点击这个色块后，直接弹出点击卡路里后对应的补录对话框。
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 旧文案「当前补录日期」已删除。
+      - 补录提示改为低能量提示：可补录的非今日日期，且当天摄入低于目标 60% 时展示。
+      - 点击提示色块直接 `setShowRecordMenu(true)`，打开首页记录菜单弹窗（拍照识别/相册上传/文本输入/手动输入）。
+    - `src/pages/index/index.scss`
+      - 提示块改为可点击样式，增加日期副文案和「去补录」胶囊。
+    - `src/styles/fl-color-scheme-dark.scss`
+      - 补齐暗色主题下日期副文案与「去补录」胶囊颜色。
+  - Verification:
+    - `rg -n "当前补录日期|正在补录" src/pages src/packageExtra/pages src/components src/styles -g '*.{tsx,ts,scss}'` 无匹配。
+    - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - 微信开发者工具自动化尝试连接 9420 与 3001 均失败，提示项目窗口未开启自动化服务；本轮无法完成运行时截图/交互验证。
+    - `npx stylelint src/pages/index/index.scss src/styles/fl-color-scheme-dark.scss --allow-empty-input` 被仓库既有 SCSS/parser 与旧样式规则问题阻断，例如 `index.scss` 开头 SCSS 变量被当作 Unknown word、暗色样式旧空块/rgba 规则等。
+
+## 状态：完成源码修改 - 移除食物分析前订阅通知授权链路
+
+- 2026-05-12 update:
+  - User要求：图片分析页点击食物记录分析识别前，不再请求通知订阅权限，并把对应前后端能力全部去掉。
+  - Fix applied:
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 删除分析前 `Taro.requestSubscribeMessage()` 调用。
+      - 删除分析提交 payload 中的 `subscribe_status`。
+    - `src/packageExtra/pages/record-text/index.tsx`
+      - 同步删除文字分析入口的分析订阅模板依赖、订阅弹窗和 `subscribe_status` 提交，避免后端协议残留。
+    - `src/utils/api.ts`
+      - 删除 `ANALYSIS_SUBSCRIBE_TEMPLATE_ID` 常量。
+      - 删除分析/文字分析提交参数中的 `subscribe_status`。
+    - `config/index.ts`
+      - 删除 `TARO_APP_ANALYSIS_SUBSCRIBE_TEMPLATE_ID` 读取和 `__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__` 注入。
+    - `backend/internal/analyze/service/task_service.go`
+      - 删除 `SubmitTaskInput.SubscribeStatus` 和写入 `analysis_tasks.payload.subscribe_status` 的逻辑。
+    - `backend/internal/analyze/handler/analyze_handler.go`
+      - 删除精准续接接口里分析订阅状态字段的接收与转传。
+    - `backend/pkg/config/config.go`
+      - 删除 `wechat_pay.analysis_subscribe_template_id` 配置字段和 `ANALYSIS_SUBSCRIBE_TEMPLATE_ID` env 绑定。
+    - `backend/docs/backend-api-prd/_shared/models/analyze.md`、`docs/backend-api-prd/_shared/models/analyze.md`
+      - 分析提交请求模型移除 `subscribe_status`。
+  - Scope note:
+    - 保质期过期提醒订阅链路保留不变：`src/packageExtra/pages/expiry-edit/index.tsx`、`FoodExpirySubscribeRequest`、`EXPIRY_SUBSCRIBE_TEMPLATE_ID` 等仍继续存在。
+  - Verification:
+    - `rg -n "ANALYSIS_SUBSCRIBE|analysis_subscribe|__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__|TARO_APP_ANALYSIS" src backend config package.json types tests docs` 无匹配。
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/record-text/index.tsx src/utils/api.ts --max-warnings 0` passed。
+    - `go test ./internal/analyze/handler -run 'TestAnalyzeHandler_SubmitAnalyzeTask|TestAnalyzeHandler_SubmitTextTask' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestTaskService_SubmitAnalyzeTask|TestTaskService_SubmitTextTask|TestTaskService_SubmitCorrectionStoresChainRoot' -count=1` passed。
+    - `go test ./internal/analyze/service -run '^$' -count=1` passed，确认包可编译。
+    - `go test ./pkg/config -run 'Test' -count=1` passed。
+    - `git diff --check` passed。
+  - Validation note:
+    - `go test ./internal/analyze/handler ./internal/analyze/service ./pkg/config -run 'Test' -count=1` 中 handler/config passed，但 `internal/analyze/service` 全量测试被既有 `TestTaskService_ListTasks` 空指针失败阻断；聚焦测试和包编译均通过。
+    - 微信开发者工具自动化已尝试 `mrc where/relaunch/logs`，但 9420 与 3001 端口均无法连接，提示目标项目窗口未开启自动化服务；本轮无法完成运行时截图/交互验证。
+
+## 状态：完成排查与后端修复 - 保质期订阅通知未推送
+
+- 2026-05-11 update:
+  - User反馈：
+    - 5/6 花卷馒头过期，但没有系统服务通知。
+    - 昨天过期食物当天应该有提示但没有。
+    - 要求查看后端实现位置，以及 secret/key 等变量是否齐全。
+  - Implementation map:
+    - 前端订阅入口：`src/packageExtra/pages/expiry-edit/index.tsx`
+      - 保存食物后 `promptExpirySubscribe()` 调 `Taro.requestSubscribeMessage()`。
+      - 有模板 ID 才会弹订阅；模板 ID 来自 `EXPIRY_SUBSCRIBE_TEMPLATE_ID`。
+    - 前端构建注入：`config/index.ts`
+      - 读取 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID` 注入 `__EXPIRY_SUBSCRIBE_TEMPLATE_ID__`。
+    - 后端订阅接口：`POST /api/expiry/items/:item_id/subscribe`
+      - `backend/internal/expiry/handler/expiry_handler.go`
+      - `backend/internal/expiry/service/expiry_service.go`
+      - 验证 `subscribe_status`、openid、后端模板 ID 后写 `food_expiry_notification_jobs`。
+    - 后端通知 worker：
+      - `backend/internal/expiry/service/notification_worker.go`
+      - `backend/internal/worker/worker.go`
+      - worker task types 包含 `expiry_notification` 时，会在没有普通 `analysis_tasks` 时轮询 `food_expiry_notification_jobs`。
+    - 配置来源：
+      - 后端：`external.appid` / `external.secret` / `wechat_pay.expiry_subscribe_template_id`
+      - 环境变量覆盖：`APPID` / `SECRET` / `EXPIRY_SUBSCRIBE_TEMPLATE_ID`；worker 配置统一从 `config.yaml` 读取。
+      - 前端：`TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`
+  - Findings:
+    - 本地 `backend/config.yaml` 中后端 `external.appid`、`external.secret`、`wechat_pay.expiry_subscribe_template_id` 均有值；`worker.task_types` 未显式配置，但 Go config 默认包含 `expiry_notification`。
+    - 当前 shell 中未设置 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`。
+    - `package.json` 的 `dev:weapp`、`dev:weapp:online`、`build:weapp:preview` 都没有注入 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`。
+    - 当前 `dist/common.js` 中 `EXPIRY_SUBSCRIBE_TEMPLATE_ID` 实际为空字符串，因此本地/当前产物会直接跳过订阅弹窗，不会请求后端创建通知 job。
+    - Docker 镜像包含 `/app/food-link-worker`，但默认 `ENTRYPOINT` 是 `/app/food-link`；生产必须部署层单独以 worker command 启动，否则通知 job 不会被消费。
+    - SSH 线上只读检查被 host key changed 拦截，未绕过；因此线上 `food-link-worker` 是否实际启动、线上环境变量是否齐全仍需在主机指纹确认后再查。
+  - Root cause fixed:
+    - `backend/internal/expiry/service/notification_worker.go`
+      - 之前 worker 处理当天 9 点已到期 job 时会重新调用 `buildNotificationSchedule()`。
+      - 该函数在当天 9 点已过时会返回 `now + 1min`。
+      - worker 随后把它判断成“提醒时间已变化，旧任务作废”，导致本该发送的当天到期通知被取消。
+      - 已改为：如果条目到期日就是今天，due job 不因重新计算出的 `now + 1min` 被取消。
+    - `backend/internal/expiry/service/notification_worker_test.go`
+      - 增加当天 due job 不取消、未来改期 job 仍取消的测试。
+    - 顺手更新保质期相关旧测试：
+      - `expiry_service_test.go` 补齐 notification job migration、订阅测试改用 openid/template、识别未初始化按当前行为断言。
+      - `task_repo_test.go` 补齐 `analysis_tasks.is_violated/violation_reason` 测试 schema。
+  - Verification:
+    - `go test ./internal/expiry/service ./internal/expiry/repo ./internal/expiry/handler ./internal/worker -run 'Test' -count=1` passed
+    - `go test ./pkg/config -run 'Test' -count=1` passed
+    - `git diff --check` passed
+  - Remaining actions:
+    - 发布/体验版构建前必须设置 `TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID`，否则小程序不会发起订阅授权。
+    - 确认线上 systemd/Docker 是否单独启动 `/app/food-link-worker`，且 `config.yaml` 的 `worker.task_types` 未漏掉 `expiry_notification`。
+    - 修复 SSH known_hosts 指纹后再查线上服务状态与 `food_expiry_notification_jobs` 状态分布。
+
+## 状态：完成源码修改 - 注册后引导与健康档案增加作息习惯
+
+- 2026-05-11 update:
+  - User要求：
+    - 用户注册后的引导页面增加一个作息询问，先随便设置一个。
+    - 这部分数据可以在健康档案中显示和修改。
+  - Fix applied:
+    - `src/packageExtra/pages/health-profile/index.tsx`
+      - 问卷总步数从 11 调整为 12。
+      - 在活动水平之后新增「作息习惯」步骤。
+      - 暂定 4 个作息选项：`early_bird` 早睡早起、`regular` 标准作息、`night_owl` 晚睡晚起、`irregular` 不太固定/轮班。
+      - 保存健康档案时提交 `routine_type`。
+    - `src/packageExtra/pages/health-profile-view/index.tsx`
+      - 基础信息区新增「作息习惯」展示行。
+      - 底部编辑器支持修改 `routine_type`。
+    - `src/utils/api.ts`
+      - `HealthCondition` 和 `HealthProfileUpdateRequest` 增加 `routine_type`。
+    - `backend/internal/user/service/user_service.go`
+      - `UpdateHealthProfileInput` 增加 `RoutineType`，写入 `health_condition.routine_type`。
+    - `backend/internal/user/service/user_service_test.go`
+      - 补齐测试 sqlite schema 中已存在于 repo 的邀请/积分字段，避免 `UserRepo.Create` 插入失败。
+      - 新增 `TestUserService_UpdateHealthProfile_WithRoutineType` 覆盖作息字段保存。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/utils/api.ts --max-warnings 0` passed
+    - `go test ./internal/user/service -run 'TestUserService_UpdateHealthProfile_WithRoutineType|TestUserService_UpdateHealthProfile_WithDashboardTargets|TestBuildHealthProfileResponse' -count=1` passed
+    - `git diff --check` passed
+    - `dist/packageExtra/pages/health-profile/index.js` 与 `dist/packageExtra/pages/health-profile-view/index.js` 已包含 `routine_type`、`作息习惯` 与作息选项，说明当前 watch 产物已同步。
+    - 微信开发者工具自动化：
+      - `mrc relaunch /packageExtra/pages/health-profile/index --port 9420` 成功；`.progress-wrap` 与 `.step-card-title` 存在；错误日志 0 条。
+      - `mrc relaunch /packageExtra/pages/health-profile-view/index --port 9420` 成功；`.health-profile-view-page` 与 `.block` 存在；点击 `.row` 可打开 `.editor-modal`；错误日志 0 条。
+  - Runtime validation note:
+    - `mrc screenshot /tmp/foodlink-routine-profile.png --port 9420` 仍卡住未产出文件，已终止截图子进程；本轮有页面/元素/交互验证，但没有截图证据。
+
+## 状态：完成源码优化 - 分析与纠错重分析按钮增加 300ms 防抖
+
+- 2026-05-11 update:
+  - User要求：
+    - 相册上传后「分析」按钮前端增加 300ms 防抖，防止重复发送多个请求。
+    - 识别有误点击纠错里的「重新智能分析」按钮也做同样优化。
+  - Fix applied:
+    - `src/packageExtra/pages/analyze/index.tsx`
+      - 新增 `ANALYZE_SUBMIT_DEBOUNCE_MS = 300` 与 `analyzeSubmitDebounceRef`。
+      - `handleAnalyzePress()` 在提交前做 300ms 时间窗拦截。
+      - `doAnalyze()` 将 `setIsAnalyzing(true)` 提前到订阅消息授权和上传 loading 之前，堵住订阅弹窗前的连点窗口。
+    - `src/packageExtra/pages/result/index.tsx`
+      - 新增 `CORRECTION_SUBMIT_DEBOUNCE_MS = 300` 与 `correctionSubmitDebounceRef`。
+      - `handleSubmitCorrection()` 在校验、弹确认框和提交纠错任务前先拦截 `isResubmitting` 与 300ms 内重复点击，避免重复弹窗/重复提交。
+  - Model check:
+    - 当前食物图片识别/精准第一阶段默认仍走 OfoxAI Gemini，模型名 `gemini-3-flash-preview`。
+    - 文字输入模式未显式传模型时默认走 DeepSeek `deepseek-v4-flash`。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - 微信开发者工具自动化：
+      - `mrc where --port 9420` 成功，当前页面为 `packageExtra/pages/result/index`
+      - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+      - 交接前已完成 analyze/result 页面 relaunch 与元素检查；截图命令在当前环境仍容易卡住，本轮未产出截图证据。
+
+## 状态：完成源码微调 - 圈子好友动态去除 spinner 动画
+
+- 2026-05-11 update:
+  - User反馈：好友动态已经有骨架屏，spinner 动画去掉。
+  - Fix applied:
+    - `src/pages/community/index.tsx`
+      - 移除 Feed 刷新已有列表时的 `feed-loading-spinner`。
+      - 移除骨架屏上方额外的初始 spinner。
+      - 触底加载更多时不再渲染 spinner，仅保留安静占位。
+      - 自己动态删除中的 `action-delete-spinner` 也移除，保留禁用态防重复点击。
+    - `src/pages/community/index.scss`
+      - 删除 `feed-loading-spinner`、`feed-refresh-spinner-row`、`feed-initial-spinner-row`、`action-delete-spinner` 和对应旋转 keyframes。
+  - Verification:
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `rg -n "feed-loading-spinner|feed-refresh-spinner-row|feed-initial-spinner-row|action-delete-spinner|community-feed-spin|正在加载" src/pages/community/index.tsx src/pages/community/index.scss` 返回无匹配
+    - 微信开发者工具自动化：
+      - `mrc switchTab /pages/community/index --port 9420` 成功
+      - `.feed-section` 存在
+      - `.feed-loading-spinner` 不存在
+      - `.action-delete-spinner` 不存在
+      - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+
+## 状态：完成源码修改 - 圈子好友动态缓存收口、加载 spinner 与自己动态删除修复
+
+- 2026-05-11 update:
+  - User要求：
+    - 好友动态如果不是本次进入软件，不需要保留缓存。
+    - 加载消息时需要 spinner 加载动画。
+    - 检查并修复圈子内自己动态的删除功能。
+  - Fix applied:
+    - `src/app.ts`
+      - 小程序每次 `useLaunch` 时清理上一启动会话的 `community_feed_cache / community_feed_timestamp / community_feed_cache_session_id_v1`，并生成新的 `community_feed_session_id_v1`。
+    - `src/pages/community/index.tsx` / `index.scss`
+      - Feed 缓存写入时绑定当前启动 session；读取时只接受同 session 的缓存，跨冷启动缓存会被丢弃。
+      - 初次加载、刷新已有列表、触底加载更多均增加旋转 spinner；纯加载态不再展示“正在加载”文字。
+      - 自己动态操作文案从“移除”收口为“删除动态/删除”，并在删除请求进行中显示小 spinner、防重复点击。
+      - 删除成功后立即从当前列表移除、清理 Feed 缓存、重置刷新时间，避免旧缓存把已删除动态顶回来。
+    - `backend/internal/community/service/community_service.go`
+      - `hidden_from_feed=true` 的记录在圈子 context / like / comment 权限链路中按 `not_found` 处理，避免旧通知或旧缓存继续打开已从圈子删除的动态。
+    - `src/pages/profile/index.tsx`
+      - “清除缓存”同步清理新增的 Feed session 缓存键。
+  - Verification:
+    - `npx eslint src/app.ts src/pages/community/index.tsx src/pages/profile/index.tsx --max-warnings 0` passed
+    - `go test ./internal/community/repo ./internal/community/service -count=1` passed
+    - `git diff --check` passed
+    - `dist/pages/community/index.js` / `index.wxss` 已包含 `删除动态`、`feed-loading-spinner` 与 session cache key 产物。
+    - `mrc relaunch /pages/community/index --port 9420` 成功；`.feed-section` 和 `.action-delete` 存在；点击 `.action-delete` 成功；`mrc logs error 20 --port 9420` 返回 0 条错误日志。
+  - Validation notes:
+    - `npm run typecheck` 仍被仓库既有无关类型错误阻断：如 `expiry` 主题类型、`food-library` clipboard typings、`record-manual` 的 `sodium_mg`、`__ANALYSIS_SUBSCRIBE_TEMPLATE_ID__` 声明等；本轮改动文件未出现在错误列表中。
+    - `mrc screenshot /tmp/foodlink-community-delete-check.png --port 9420` 仍卡住未产出文件，已终止截图子进程；本轮无截图证据。
+    - `weapp-dev.log` 显示 Taro watch 的 commonjs service 已退出；按项目规则未擅自启动/重启 `dev:weapp`。
+
+## 状态：完成源码修改 - 结果页支持展开更多维生素/矿物质营养数据
+
+- 2026-05-11 update:
+  - User要求：
+    - 查看 `food_nutrition_library` 中除热量、蛋白质、碳水、脂肪外的更多营养字段。
+    - 后端也返回这些维生素/矿物质数据。
+    - 小程序结果页默认仍保持当前展示，只增加“展开更多”展示维生素等数据。
+  - Source check:
+    - `backend/internal/foodrecord/domain/food_record_domain.go` 的 `FoodNutrition` 已包含：
+      - 膳食纤维、糖、饱和脂肪、胆固醇、钠、钾、钙、铁、镁、锌。
+      - 维生素 A/C/D/E/K、B1、B2、烟酸、B6、叶酸、B12。
+    - `backend/internal/analyze/service/analyze_service.go` 的 `nutritionUnit()` 已把上述字段放入 `unit_nutrition_per_100g`，`scaleNutrition()` 会按重量缩放后放入 `nutrients`。
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - `NutritionItem` 保留完整 `nutrients`。
+      - 前端从后端 `item.nutrients` 读取纤维、糖、矿物质和维生素字段。
+      - 每个食物卡片新增“展开更多营养/收起更多营养”折叠区；默认不展开。
+      - 展开后仅显示值大于 0 的更多营养项，并按实际摄入比例 `ratio` 缩放展示。
+      - 重量调整时同步缩放完整 `nutrients`；保存、纠错、食谱草稿等链路不再把 fiber/sugar 重置为 0，而是透传完整 nutrients。
+    - `src/packageExtra/pages/result/index.scss`
+      - 新增更多营养折叠区、三列明细格样式，并补充暗色主题覆盖。
+    - `src/utils/api.ts`
+      - 纠错 payload 的 nutrients 类型从 `Record<string, number>` 改为现有 `Nutrients`，兼容完整营养字段。
+    - `backend/internal/analyze/service/analyze_service_test.go`
+      - 新增 `TestNutritionUnitIncludesMicronutrients`，断言钙、铁、维生素 A/C/B12 会被返回并按重量缩放。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed.
+    - `go test ./internal/analyze/service -run 'TestNutritionUnitIncludesMicronutrients|TestBuildAnalyzeResponse|TestParseItems' -count=1` passed.
+    - `git diff --check` passed.
+    - `npx tsc --noEmit --pretty false` 仍被项目既有历史类型错误阻塞；本轮 `result/index.tsx` 不再报错。
+  - Runtime validation blocker:
+    - 已按项目要求尝试 `weapp-devtools`，但当前 Windows 环境 `mrc` 命令不存在：`The term 'mrc' is not recognized...`。
+    - 因此本轮未能完成微信开发者工具截图/交互验证；需要在安装/配置 `mrc` 或打开 DevTools 自动化后复测结果页“展开更多营养”。
+
+- 2026-05-11 follow-up:
+  - User明确：即使更多营养字段为 0 也要展示，数据后续会优化。
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - `getNutrientDetailRows()` 去掉 `value > 0` 过滤。
+      - 每个食物卡片的“展开更多营养”会固定展示全部扩展营养项，包括 0。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed.
+    - `git diff --check` passed.
+    - `weapp-devtools` 仍因当前环境没有 `mrc` 命令无法运行态验证。
+
+## 状态：完成静态梳理 - 小程序分析结果页展示内容
+
+- 2026-05-11 update:
+  - User询问当前小程序端分析结果展示了哪些内容。
+  - 已静态核对 `src/packageExtra/pages/result/index.tsx`：
+    - 顶部营养总览展示：总热量 kcal、总摄入重量约 g、蛋白质 g、碳水 g、脂肪 g，并用宏量柱状条展示三大营养素能量占比。
+    - `AI 饮食分析` 卡片按后端返回字段条件展示：餐食描述 `description`、健康提示/亮点 `insight`、营养比例 `pfc_ratio_comment`、吸收与利用 `absorption_notes`、情境建议 `context_advice`。
+    - `包含成分` 列表展示识别到的食物数量与每个食物卡片。
+    - 每个食物卡片展示：食物名称、热量 kcal、蛋白质 g、碳水 g、脂肪 g、含水量 ml、估算重量、实际摄入比例 slider。
+    - 食物名称支持编辑/删除；蛋白质、碳水、脂肪、含水量格可点击编辑；重量可用加减调整；实际摄入 slider 会按比例联动热量/重量/营养展示。
+  - 本轮仅阅读和解释代码，未改业务代码，未运行测试。
+
+## 状态：完成静态梳理 - backend 拍照食物热量分析链路
+
+- 2026-05-11 update:
+  - User询问当前 backend 后端如何进行食物热量拍照分析。
+  - 已静态核对当前 Go 后端源码：
+    - 图片先通过 `/api/upload-analyze-image-file` 或 `/api/upload-analyze-image` 上传，返回 `imageUrl`。
+    - 拍照分析提交 `/api/analyze/submit`，由 `TaskService.SubmitAnalyzeTask()` 创建 `analysis_tasks` 异步任务。
+    - 标准模式任务类型为 `food`；精准模式任务类型为 `precision_plan`，后续拆成 `precision_item_estimate` 与 `precision_aggregate`。
+    - worker 通过 `ClaimNextPendingTask()` 使用 `FOR UPDATE SKIP LOCKED` 领取 pending 任务并置为 processing。
+    - 标准图片任务调用 `AnalyzeService.Analyze()`；默认模型配置为 Gemini provider / `gemini-3-flash-preview`，实际 client 为 OfoxAI Gemini client。
+    - 当前标准链路默认 `db_first`：提示词要求模型只输出可见食物名称、估算克重 `estimatedWeightGrams` 和含水量 `waterMl`，不要自行估算营养。
+    - 后端 `applyDBFirstNutrition()` 使用 `food_nutrition_aliases` / `food_nutrition_library` 解析食物名，取每 100g 营养值，再按 `estimatedWeightGrams / 100` 缩放得到 calories/protein/carbs/fat。
+    - 未命中营养库时记录 unresolved；若 DeepSeek fallback 可用，则估每 100g 营养并写回营养库，当前 item 标记 `deepseek_text_fallback`。
+    - 前端轮询 `/api/analyze/tasks/:task_id` 获取完成结果；保存饮食记录时调用 `/api/food-record/save` 写入 `user_food_records`。
+  - 本轮仅阅读和解释代码，未改业务代码，未运行测试。
+## 状态：完成静态判断 - Go 后端 worker 架构调整范围
+
+- 2026-05-12 update:
+  - User询问：当前 Go worker 是否直接从数据库拉任务；如果启动了某个 worker，用户上传的数据是否可能被该 worker 处理；这种设计是否导致没有 worker 时永远等不到分析结果；若改成 Go 进程内队列/协程池大概需要多久。
+  - 静态确认：
+    - 当前 `cmd/server` 只创建 `analysis_tasks(status=pending)` 并返回 `task_id`，不启动内置 worker。
+    - 独立 `cmd/worker` 通过 `TaskRepo.ClaimNextPendingTask()` 使用 `FOR UPDATE SKIP LOCKED` 从数据库领取 `pending` 任务并处理。
+    - 默认任务类型包含 `food / food_text / precision_plan / precision_item_estimate / precision_aggregate / public_food_library_text / exercise / health_report / expiry_recognize / expiry_notification`。
+    - 因此只要有任意连接同一数据库且 task_types 匹配的 worker 在跑，新任务就可能被它处理；如果没有 worker 在跑，异步任务会停留在 `pending`，前端轮询拿不到结果。
+    - 当前 `npm run dev:backend` 仍指向已不存在的 `backend/run_backend.py`，本地开发脚本与 Go server/worker 双入口现状不一致，也会放大“忘开 worker”的问题。
+  - 建议调整：
+    - 短期优先把任务执行器嵌入 Go server：server 启动时创建内存队列/协程池，提交接口创建任务后立即 enqueue，新任务由同进程 goroutine 消费。
+    - 保留数据库 `analysis_tasks` 作为状态表和恢复来源，启动时扫描历史 `pending/processing` 任务补回队列，避免进程重启后任务永久丢失。
+    - 暂时不引入 Redis/RabbitMQ/Kafka；后续出现多实例、丢消息、上百万用户或需要跨 Pod 均衡时，再替换为正式消息队列。
+  - 工期判断：
+    - 只覆盖食物分析主链路并保持接口不变：约 0.5-1 天。
+    - 覆盖当前全部 worker 任务类型、补齐恢复/超时/并发/测试：约 1.5-2 天。
+    - 若再做真正消息队列、监控指标和生产部署编排：约 3-5 天。
+  - 并行开发判断：
+    - 不改 worker 架构时，只要 worker 进程没有启动、配置 task_types 不覆盖、worker 卡死/崩溃或处理能力不足，异步任务就可能无法完成或长时间 pending；已领取后卡住的 `processing` 任务还依赖超时清理/恢复机制。
+    - 其他功能可以并行开发，但应避开异步任务公共链路：`backend/internal/worker/*`、`backend/internal/analyze/service/task_service.go`、`backend/internal/analyze/repo/task_repo.go`、`cmd/server/cmd/worker` 装配、`analysis_tasks` schema/migration、前端分析轮询/任务状态页面。
+    - 如果新功能需要新建/消费 `analysis_tasks`、改积分扣减时机、改任务状态语义或改精准模式链路，应等 worker 架构改完或先和改 worker 的人对齐接口契约。
+    - 与 worker 无直接关系的前端页面、普通 CRUD、统计展示、会员/支付、社区等可在独立分支并行做，最后合并时重点看 shared API 类型和 app wiring 冲突。
+  - 本轮仅静态阅读和判断，未改业务代码，未运行测试。
+
+## 状态：完成源码微调 - 结果页 ratio-slider-shell 黑色主题改为暗色壳
+
+- 2026-05-11 update:
+  - User反馈：`ratio-slider-shell` 黑色主题下仍是白色透明度背景。
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.scss`
+      - `result-page--dark .ratio-slider-shell` 从浅色半透明背景改为暗色控件底，并同步使用暗色边框和内高光。
+    - `src/packageExtra/pages/result/index.tsx`
+      - `Slider` 的 `backgroundColor` 在 dark 模式下切换为深灰绿 `#2d3935`，避免未激活轨道仍显示浅灰白。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc evaluate` 设置 `fl_app_color_scheme=dark` 成功
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc exists .result-page--dark --port 9420` 为 true
+    - `mrc exists .ratio-slider-shell --port 9420` 为 true
+    - `mrc click .ratio-slider-modern --port 9420` 成功
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation note:
+    - `mrc screenshot /tmp/foodlink-ratio-slider-dark.png --port 9420` 仍卡住未产出文件，已仅终止截图子进程；本轮有页面/元素/交互验证，但没有截图证据。
+
+## 状态：完成源码修改 - 分析结果页成分卡支持黑色主题
+
+- 2026-05-11 update:
+  - User提供黑色主题截图，要求分析结果页面支持黑色主题，重点是「包含成分」卡片内的营养小格、估算重量和实际摄入控件。
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.scss`
+      - 在 `result-page--dark` 下补齐成分卡暗色背景、边框和阴影。
+      - 五个营养小格改为暗色渐变底、弱高光边框，并补充热量/蛋白质/碳水/脂肪/含水量各自的暗色边框与数值色。
+      - 成分卡标题区、营养区、控件区保持同一张暗色卡片表面，不再套亮色背景。
+      - 估算重量按钮和容器补充暗色背景、边框与阴影；实际摄入 slider 外壳调整为黑色主题下可读的浅色轨道壳。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc evaluate` 设置 `fl_app_color_scheme=dark` 并注入普通分析结果缓存成功
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc exists .result-page--dark --port 9420` 为 true
+    - `mrc exists .ingredient-summary-cell--water --port 9420` 为 true
+    - `mrc exists .ratio-slider-shell --port 9420` 为 true
+    - `mrc click .ingredient-summary-cell--water --port 9420` 成功，点击后 `mrc exists input --port 9420` 为 true
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation note:
+    - `mrc screenshot /tmp/foodlink-result-dark.png --port 9420` 仍卡住未产出文件，已仅终止截图子进程；本轮有页面/元素/交互验证，但没有截图证据。
+
+## 状态：完成源码修改 - 普通模式食物识别增加每项含水量输出与结果页编辑
+
+- 2026-05-11 update:
+  - User要求：
+    - 实物检测普通模式下，第一阶段大模型 `items` 数组中每个对象从 `{"name":"","estimatedWeightGrams":0}` 增加 `waterMl`，单位毫升，默认 0。
+    - 该字段需要保留到最终结果，不破坏现有前端响应。
+    - 结果页「识别结果/包含成分」同一行增加含水量展示，并允许用户修改。
+  - Fix applied:
+    - `backend/internal/analyze/service/analyze_service.go`
+      - 标准图片 DB-first prompt 增加 `waterMl` 输出字段、单位和估算规则。
+      - 文字 DB-first prompt 同步支持 `waterMl`，保持普通分析链路一致。
+      - `parseItems()` 兼容解析 `waterMl` / `water_ml`，缺失或非法时归零。
+      - DB-first 后处理和多结果合并保留 `waterMl`，不参与热量/三大营养素回算。
+    - `backend/internal/analyze/service/analyze_service_test.go`
+      - 增加 prompt schema、解析和合并保留水量字段的断言。
+    - `backend/internal/foodrecord/domain/food_record_domain.go`
+      - 保存记录 item JSON 增加 `water_ml,omitempty`，避免保存时丢字段。
+    - `src/utils/api.ts`
+      - 前端 API 类型增加 `waterMl` / `water_ml` 兼容字段。
+    - `src/packageExtra/pages/result/index.tsx`
+      - 结果页 `NutritionItem` 增加 `waterMl`。
+      - 「包含成分」营养行从热量+蛋白质/碳水/脂肪扩展为热量+蛋白质/碳水/脂肪/含水量。
+      - 含水量随实际摄入比例展示，随估算重量调整等比例缩放，并可点击弹窗编辑。
+      - 保存、纠错、收藏菜谱、快速上传草稿等结果传递链路保留水量字段。
+    - `src/packageExtra/pages/result/index.scss`
+      - 成分营养行改为 5 列，并补充含水量颜色/点击态。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed
+    - `go test ./internal/analyze/service -run 'TestBuildDBFirstPromptIncludesCorrectionContext|TestParseItems|TestMergeBatchResults|TestBuildAnalyzeResponse' -count=1` passed
+    - `go test ./internal/foodrecord/domain -count=1` passed
+    - `go test ./internal/worker -run 'Test' -count=1` passed
+    - `go build -o /tmp/food-link-water-server ./cmd/server` passed
+    - `go build -o /tmp/food-link-water-worker ./cmd/worker` passed
+    - `git diff --check` passed
+    - `mrc evaluate` 注入带 `waterMl:210` 的普通食物分析缓存成功
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc exists .ingredient-summary-cell--water --port 9420` 为 true
+    - `mrc click .ingredient-summary-cell--water --port 9420` 成功
+    - 点击后 `mrc exists input --port 9420` 为 true
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation note:
+    - `mrc screenshot /tmp/foodlink-water-result.png --port 9420` 本轮仍卡住未产出文件，已仅终止截图子进程；因此有页面/元素/交互验证，但没有截图证据。
+
+## 状态：准备提交推送 - 结果页成分营养格紧凑化与流程梳理记录
+
+- 2026-05-11 update:
+  - User要求先提交代码、推送远端，并与远端代码合并。
+  - 当前分支：`backend-refactor-sync-migrate-tencent`
+  - 已执行 `git fetch origin`，`git rev-list --left-right --count HEAD...@{u}` 返回 `0 0`，说明本地与远端提交基线一致，没有需要合并的远端提交。
+  - 待提交范围：
+    - 结果页「包含成分」营养格去除图标并压缩高度。
+    - `CURRENT_TASK.md` / `memory/2026-05-10.md` / `memory/2026-05-11.md` 项目状态与记忆更新。
+  - Verification before commit:
+    - 根目录临时文件清理已执行。
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+
+## 状态：完成静态梳理 - 当前食物能量分析后端流程
+
+- 2026-05-11 update:
+  - User询问当前系统中“食物能量分析”的后端流程如何实现。
+  - 已静态追踪链路：
+    - 前端图片页上传图片到 `/api/upload-analyze-image-file`，失败时回退 `/api/upload-analyze-image`。
+    - 当前图片分析主链路提交 `/api/analyze/submit`，文字分析提交 `/api/analyze-text/submit`，后端立即返回 `task_id`，前端进入 loading 页轮询 `/api/analyze/tasks/:task_id`。
+    - Go 后端 `TaskService` 创建 `analysis_tasks`：
+      - 标准模式：`task_type=food` 或 `food_text`
+      - 精准模式：`task_type=precision_plan`，并创建/续接 `precision_sessions`
+    - worker 通过 `FOR UPDATE SKIP LOCKED` 领取 pending 任务并更新为 processing。
+    - 标准模式 worker 调 `AnalyzeService.Analyze/AnalyzeText`；图片默认使用 OfoxAI Gemini，文字默认使用 DeepSeek。
+    - 标准模式默认 `db_first`：prompt 主要让模型输出食物名称和重量，营养由后端 `food_nutrition_library / food_nutrition_aliases` 查库回算。
+    - 热量计算口径：每 100g 营养值按 `estimatedWeightGrams / 100` 缩放，得到每项 `nutrients.calories/protein/carbs/fat`。
+    - 未命中食物会记录 `food_unresolved_logs`；若 DeepSeek fallback 可用，则让 DeepSeek 估每 100g 营养，写入 `food_nutrition_library(source=deepseek_auto)` 以便下次命中。
+    - 精准模式为多阶段：`precision_plan` 识别/拆分主体 → 创建 `precision_item_estimate` 子任务逐项估重 → DB-first 回算营养 → `precision_aggregate` 聚合最终结果。
+    - 用户点击保存后，前端把结果提交 `/api/food-record/save`，后端保存到 `user_food_records`，包含 `items`、`total_calories`、P/C/F 汇总、`source_task_id` 等。
+  - 本轮未改代码、未运行测试。
+
+## 状态：完成源码优化 - 分析结果页「包含成分」营养格去除图标并压缩高度
 
 - 2026-05-10 update:
-  - User asked to pull the latest code.
-  - Current branch is `dev`.
-  - Ran `git fetch origin dev` and `git pull --ff-only origin dev`.
-  - Local `dev` and `origin/dev` are both at `fcc6b61`; Git reported `Already up to date.`
-  - No code files were changed by this pull.
-  - Working tree still contains only project state/memory updates from local agent bookkeeping.
+  - User要求：
+    - 食物分析结果页「包含成分」部分，把卡路里到脂肪的全部图标去除，让整个卡片更加紧凑。
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - 删除成分营养四格中的热量/蛋白质/碳水/脂肪图标节点。
+      - 删除仅供这些图标使用的 `NUTRITION_CARD_META`。
+    - `src/packageExtra/pages/result/index.scss`
+      - 删除 `ingredient-summary-icon-*` 相关图标样式。
+      - 将四格营养条的间距、内边距、圆角、最小高度与数值字号整体收紧，使单个食物卡片更紧凑。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc exists .ingredient-nutrition-strip --port 9420` 为 true
+    - `mrc exists .ingredient-summary-icon --port 9420` 为 false
+    - `mrc click .ingredient-summary-cell--protein --port 9420` 成功，点击后 `.correction-drawer-content` 存在
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation note:
+    - `mrc screenshot ./result-ingredients-compact.png --port 9420` 本轮卡住未产出文件，已终止该截图进程；因此有页面/元素/交互验证，但没有截图证据。
+## 状态：排查中 - 食物分析 OfoxAI 上游超时
 
-## 状态：完成 - 已拉取最新 dev 并启动本地开发
+- 2026-05-11 update:
+  - User反馈：食物分析页停在“识别中”后失败，真机截图显示：
+    - `Post "https://api.ofox.ai/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`
+  - User明确要求：先确认 Ofox 是否无法正常访问；只有确认不能访问后再考虑兜底。
+  - Findings:
+    - 当前工作机到 `api.ofox.ai:443` TCP 连通，`Test-NetConnection` 成功。
+    - 不带鉴权请求 `https://api.ofox.ai/v1/chat/completions` 能快速返回 `401`。
+    - 使用本地 `backend/config.yaml` 中 Ofox key 发起 3 次最小模型请求，均返回 `200`：
+      - 第 1 次约 `4449ms`
+      - 第 2 次约 `2908ms`
+      - 第 3 次约 `2912ms`
+    - 按用户要求进一步只测当前代码模型 `gemini-3-flash-preview`：
+      - 纯文本 JSON 调用成功，返回 `{"model":"gemini-3-flash-preview","ok":true,"message":"model reply ok"}`，耗时约 `8056ms`。
+      - 带公网 HTTPS 图片的视觉调用失败，返回 `500 {"error":{"message":"Internal error encountered.","type":"api_error"}}`，耗时约 `1283ms`。
+      - 去掉 `response_format` 后同一视觉调用仍失败，仍返回 `500 Internal error encountered`，耗时约 `1254ms`。
+    - 因此 Ofox 不是整体不可访问；当前关键问题是 `gemini-3-flash-preview` 的视觉/图片输入链路不可用，这正好影响食物拍照分析。
+    - 继续查生产数据库最近 `food` 分析任务：
+      - `2026-05-11 10:27-11:06` 多条图片任务失败，错误多为 `context deadline exceeded (Client.Timeout exceeded while awaiting headers)`。
+      - 同一时间段还有明确 `ofoxai api error 429: Resource exhausted. Please try again later...`。
+      - 最近失败任务使用的是 `https://cdn-food-images.coachlink.fit/...jpg`，图片本身本机 GET 为 `200 image/jpeg`。
+    - 使用今天失败任务里的同一张 CDN 图片重新调用当前模型 `gemini-3-flash-preview`，现在返回 `200` 并能识别出瑞幸咖啡；使用今天 429 失败的同一张图现在也返回 `200`；昨晚成功任务图片也可正常返回 `200`。
+    - 更正后的结论：
+      - 不是 Ofox 整体不可访问。
+      - 不是当前模型永久失去视觉能力。
+      - 不是我们的 CDN 图片永久不可抓取。
+      - 更像是当时 Ofox/Google Vertex 上游发生了资源耗尽/限流，表现为部分请求直接 `429 Resource exhausted`，部分请求长时间排队无响应直到 Go client 90 秒超时。
+  - Blocker:
+    - 直接 SSH `root@coachlink.fit` 检查生产机到 Ofox 的连通性失败：`Permission denied (publickey)`。
+    - 无法读取生产 `food-backend.service` 日志或从生产机执行 curl 验证。
+  - Code note:
+    - 已按用户要求加入 DashScope/Qwen 兜底：
+      - 根据用户最新要求，最近 1-2 天 Ofox/Gemini 连续限流，图片分析主链路临时默认改用 DashScope `qwen-vl-max`。
+      - `resolveModelConfig()` 中空默认值、历史 `modelName: "gemini"`、`gemini-3-flash-preview`、`google/gemini-3-flash-preview` 都临时路由到 `qwen-vl-max`，避免前端仍传 `"gemini"` 时继续打到 Ofox。
+      - Ofox/Gemini 仅保留显式 `modelName: "ofox-gemini"` 或 `ofox-gemini:<model>` 入口，方便后续上游恢复后切回。
+      - 标准图片识别、精准模式 `RunPrecisionJSONWithImages*`、单模型 compare engines、批量图片分析都会按新的默认解析走 Qwen。
+      - 若显式使用 Ofox/Gemini，为避免长时间无响应吃完整个任务窗口，图片主调用最多等待 `45s`，超时后进入 Qwen 兜底。
+      - 如果两边都失败，worker 不再把原始 `Post "https://api.ofox.ai/..." Client.Timeout...` 展示给用户，而是归一为“AI 识别服务响应超时/当前繁忙/暂时不可用”。
+  - Real provider check:
+    - 使用今天失败任务的同一张 CDN 图片直接调用 DashScope `qwen-vl-max`，返回 `200`，耗时约 `7600ms`，确认备用视觉模型可用。
+    - User随后再次测试失败，最新任务 `028ca932-13fb-48e1-ae5f-d6c0250ac700`：
+      - `created_at=2026-05-11T11:25:33+08:00`
+      - `updated_at=2026-05-11T11:27:05+08:00`
+      - 图片为 `http://cdn-food-images.coachlink.fit/181a1760-4f17-450e-b493-ed57281633f1.jpg`
+      - 图片本身可 GET，Ofox/Gemini 对同图 HTTP/HTTPS 均超时到 `120s`，DashScope/Qwen 对同图 HTTP/HTTPS 均约 `8s` 返回 `200`。
+      - 该任务总耗时约 `92s`，符合旧 worker 仅等待 Ofox 90 秒超时后失败；说明线上/当前运行中的 worker 尚未部署或重启到带 Qwen 兜底的版本。
+  - Verification:
+    - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError" -count=1` passed
+    - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage_HTML|TestSanitizeTaskErrorMessage_Timeout|TestSanitizeTaskErrorMessage_ResourceExhausted" -count=1` passed
+    - `go build -o %TEMP%/food-link-qwen-default.exe ./cmd/server` passed
+    - `go build -o %TEMP%/food-link-qwen-default-worker.exe ./cmd/worker` passed
+    - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go backend/internal/worker/worker.go backend/internal/worker/worker_sanitize_test.go` passed with CRLF warnings only
+  - Blocker:
+    - Full `go test ./internal/analyze/service -count=1` remains blocked by existing Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` setup.
+  - Runtime note:
+    - Backend-only worker/service change; no mini program page/component/style/route/interaction change, so no weapp-devtools UI verification required.
+  - Post-compaction recheck:
+    - Re-read project state and re-ran targeted analyze/worker tests plus `cmd/server` and `cmd/worker` builds; all passed.
+    - Current source fix is ready for deployment. Real users will still hit the old Ofox/Gemini path until the backend image is pushed and the running service/worker updates.
+  - Follow-up 401:
+    - User复测后出现 `dashscope api error 401: Incorrect API key provided`，说明请求已切到 DashScope/Qwen，但运行环境里的 `DASHSCOPE_API_KEY` 被 DashScope 判为无效。
+    - 本地 `backend/config.yaml` 中的 DashScope key 用最小 `qwen-vl-max` 请求验证为 `200`，所以更像线上 ConfigMap/env 与本地配置不一致，或值带了前后空白。
+    - 本地 `backend/.env` 发现 `DASHSCOPE_API_KEY=` 后存在前导空格；如果生产 ConfigMap 从同类 env 文件生成，这个空格会进入真实 key。
+    - 已补代码防御：配置加载后 trim 外部 API key；`NewDashScopeClient()` 也 trim key/model；worker 将 `dashscope/ofox 401` 归一为“AI 识别服务配置异常，请联系管理员处理”。
+    - User强调本地也失败；已直接修正本地 `backend/.env` 中 `DASHSCOPE_API_KEY=` 后的前导空格。
+    - 使用修正后的本地 `.env` key 直接调用 DashScope `qwen-vl-max` 图片识别，返回 `HTTP_STATUS=200` 并识别出图片内容。
+    - 当前本地仍在跑旧 `go run ./cmd/server` / `go run ./cmd/worker` 进程；需要重启本地 backend/worker 后才会读到修正后的 env 与新代码。
+    - User 重启后仍失败；进一步读取 worker 进程环境发现 `DASHSCOPE_API_KEY` 被系统/用户环境变量覆盖为另一把无效 key：
+      - `config.yaml` / `backend/.env` key 指纹一致，长度 35，直接请求 DashScope 返回 `200`。
+      - worker 进程环境变量 key 长度 38，指纹不同，直接请求 DashScope 返回 `401 Incorrect API key`。
+      - 本机 User 级环境变量 `DASHSCOPE_API_KEY=sk-sp-...` 正在覆盖本地配置文件。
+    - 已追加配置优先级防护：`backend/pkg/config/config.go` 只要存在 `config.yaml`，外部模型 key 优先使用配置文件值，避免系统脏环境变量覆盖；生产 scratch 镜像没有 `config.yaml`，仍走 ConfigMap/env。
+    - 验证：在当前 shell 仍带坏 `DASHSCOPE_API_KEY` 的情况下，`config.Load(".")` 已加载到 `config.yaml` 的正确 DashScope key 指纹；`go test ./pkg/config`、定向 analyze/worker 测试、server/worker build 均通过。
+  - All image recognition Qwen sweep:
+    - 食物标准图片识别、精准模式图片子任务、批量图片分析、保质期拍照识别、健康报告 OCR、运动图片估算均已切到 DashScope `qwen-vl-max`。
+    - 保质期识别不再在 DashScope 缺失时隐式 fallback 到 Ofox/Gemini；缺 Qwen 配置时直接配置错误，避免偷偷走回 Gemini。
+    - 仍保留的 Gemini/Ofox 代码仅用于显式 `ofox-gemini` escape hatch、对比/测试后台和 Ofox client 单元测试，不属于默认用户图像识别路径。
+    - User补充要求：不要删除原 Gemini 通道；当前口径是临时默认 Qwen，保留 Gemini/Ofox 显式入口和后续切回能力。
+    - Verification:
+      - `go test ./internal/expiry/service -run TestRecognizer -count=1` passed
+      - `go test ./internal/user/service -run TestOCRService -count=1` passed
+      - `go test ./internal/health/service -run "TestExerciseService_EstimateImageUsesQwenDashScope" -count=1` passed
+      - targeted analyze service Qwen routing/fallback tests passed
+      - server/worker builds passed
+
+## 状态：完成源码修复 - 体重 summary 同日多条记录取值口径不一致
+
+- 2026-05-11 update:
+  - User反馈：用户「饭饭」上一次记录体重到底是多少；当前代码有时显示 `47.4kg`、有时显示 `47.5kg`。
+  - Data check:
+    - 「饭饭」用户当前 `weapp_user.weight` 为 `47.4kg`。
+    - `user_weight_records` 中最近记录都在 `2026-05-09`：
+      - `07:35:40 +08:00` 记录 `47.5kg`
+      - `07:35:52 +08:00` 记录 `47.5kg`
+      - `07:36:00 +08:00` 记录 `47.4kg`
+    - 因此“最后一次/最新一次”体重应为 `47.4kg`；同一天上一条和前一天 `2026-05-08` 都是 `47.5kg`。
+  - Root cause:
+    - `BodyMetricsRepo.ListWeightRecords()` 按 `recorded_on asc, created_at asc` 返回同一天多条记录。
+    - `aggregateWeightDaily()` 旧逻辑用 `seen` 跳过同日期后续记录，导致 `/api/body-metrics/summary` 的 `weight_entries/latest_weight` 取到当天第一条 `47.5kg`。
+    - `GetLatestWeightRecord()` 和 `buildWeightTrendDaily()` 则取当天最后一条，所以其他位置会显示 `47.4kg`。
+  - Fix applied:
+    - `backend/internal/health/service/body_metrics_service.go`
+      - `aggregateWeightDaily()` 改为同日期后续记录覆盖前一条，保持每日只输出一条，但取当天最后一次记录。
+    - `backend/internal/health/service/body_metrics_service_test.go`
+      - 新增同日多条体重记录回归测试，锁定最新值为 `47.4kg`、较上次变化为 `-0.1kg`。
+  - Verification:
+    - `go test ./internal/health/service -run "TestBodyMetricsService_GetSummary|TestBodyMetricsService_GetSummaryUsesLatestWeightForSameDate" -count=1` passed
+    - `go test ./internal/health/service -count=1` passed
+    - `go test ./internal/health/handler -run TestGetBodyMetricsSummary -count=1` passed
+    - `git diff --check -- backend/internal/health/service/body_metrics_service.go backend/internal/health/service/body_metrics_service_test.go` passed with CRLF warnings only
+  - Blocker:
+    - `go test ./internal/health/repo -run TestBodyMetricsRepo_WeightCRUD -count=1` remains blocked by existing Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` setup.
+  - Runtime note:
+    - Backend-only service fix; no mini program page/component/style/route/interaction change this round, so no weapp-devtools UI verification was required.
+
+## 状态：完成源码修复 - 圈子时间按中国时间展示，周榜按北京时间自然周统计
+
+- 2026-05-11 follow-up:
+  - User复测反馈：
+    - 排行榜没问题了。
+    - 圈子动态时间仍不对，例如 `kk` 的动态应是约 5 小时前，但显示约 1 小时前。
+  - Clarification:
+    - User随后明确：圈子动态就应该按照“记录时间”算。
+    - 因此如果 `kk` 这条饮食记录的 `user_food_records.record_time` 是 1 小时前，那么页面显示 1 小时前是符合产品口径的，不应改成识别任务时间。
+  - Reverted:
+    - 撤回了“用 `analysis_tasks.created_at` 修正 source task 记录时间”的临时改法。
+    - 撤回范围包括：
+      - `backend/internal/common/dateutil/dateutil.go` 的 `BuildRecordTimeWithClock`
+      - `backend/internal/foodrecord/service/food_record_service.go` 中读取 source task created_at 的逻辑
+      - `backend/internal/community/repo/feed_repo.go` 的 `source_task_id`/`GetTaskCreatedAtByIDs`
+      - `backend/internal/community/service/community_service.go` 的 feed 返回层 source task 时间修正
+      - 对应 source task 时间修正测试
+  - Verification:
+    - `go test ./internal/common/dateutil -count=1` passed
+    - `go test ./internal/foodrecord/service -run "TestBuildRecordTime|TestNormalizeMealType" -count=1` passed
+    - `go test ./internal/community/service -run "TestNormalizeFeedRecordUsesChinaTime|TestChinaWeekWindow|TestCheckinLeaderboard" -count=1` passed
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed
+    - `git diff --check -- backend/internal/community/service/community_service.go backend/internal/community/service/community_service_test.go src/pages/community/index.tsx backend/internal/common/dateutil/dateutil.go backend/internal/foodrecord/service/food_record_service.go` passed with CRLF warnings only
+  - Runtime validation blocker:
+    - `mrc where --port 9420` failed to connect to WeChat DevTools automation.
+    - `mrc where --port 3001` failed to connect to WeChat DevTools automation.
+  - Note:
+    - 当前保留的有效改动是：周榜北京时间自然周、动态 `record_time` 按中国时间输出/格式化。
+    - 圈子动态相对时间仍以 `record_time` 为准。
+
+- 2026-05-11 update:
+  - User反馈：
+    - 圈子里显示的时间不是中国时间
+    - 本周打卡排行榜不是自然周
+    - 用户补充：`dev` 分支是正确的，可以模仿 `dev`
+  - Root cause:
+    - `dev` Python 后端周榜窗口是北京时间自然周：周一 00:00 到下周一 00:00（不含）。
+    - 当前 Go 后端使用 `nowCN.AddDate(...).Truncate(24 * time.Hour)` 计算周起点；Go 的 `Truncate` 按绝对 UTC 时刻截断，落到北京时间会变成 08:00 边界，导致周榜不是自然周。
+    - 圈子 feed 前端此前在超过 24 小时后使用设备环境的 `toLocaleDateString()`，且后端返回 `record_time` 未显式转为 `+08:00` 输出，容易受运行环境时区影响。
+  - Fix applied:
+    - `backend/internal/community/service/community_service.go`
+      - 新增 `chinaWeekWindow()`，用 `time.Date(..., 00:00, chinaTZ)` 生成北京时间周一零点，替代 `Truncate(24h)`。
+      - `CheckinLeaderboard()` 使用该自然周窗口查询，统计周期与 `dev` 对齐。
+      - `normalizeFeedRecord()` 将 `record_time` 显式转为 `Asia/Shanghai` 偏移后返回。
+    - `backend/internal/community/service/community_service_test.go`
+      - 新增周一/周日自然周窗口测试，锁定边界为北京时间 00:00。
+      - 新增 feed record time 输出 `+08:00` 测试。
+    - `src/pages/community/index.tsx`
+      - `formatFeedTime()` 改为使用北京时间解析/格式化兜底，不再依赖设备默认 `toLocaleDateString()`。
+      - 对没有时区后缀的 ISO 时间按北京时间本地时间处理，兼容潜在旧数据。
+  - Verification:
+    - `go test ./internal/community/service -run "TestNormalizeFeedRecordUsesChinaTime|TestChinaWeekWindow|TestCheckinLeaderboard" -count=1` passed
+    - `go test ./internal/community/service -count=1` passed
+    - `go test ./internal/community/handler -run "TestCommunityHandler_CheckinLeaderboard|TestCheckinLeaderboard|CheckinLeaderboard" -count=1` passed
+    - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed
+    - `git diff --check -- backend/internal/community/service/community_service.go backend/internal/community/service/community_service_test.go src/pages/community/index.tsx` passed with CRLF warnings only
+  - Runtime validation blocker:
+    - `mrc where --port 3001` failed to connect to WeChat DevTools automation.
+    - `mrc where --port 9420` failed to connect to WeChat DevTools automation.
+    - No screenshot/click evidence this round because automation was unavailable; no local dev server/watch process was started or restarted.
+    - Full `go test ./internal/community/handler -count=1` remains blocked by existing Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` test setup; targeted leaderboard handler test passed.
+
+## 状态：完成源码修复 - 保质期拍照识别 500 只返回 `internal server error`
+
+- 2026-05-10 update:
+  - User提供小程序日志：
+    - `POST https://v2.healthymax.cn/api/expiry/recognize 500`
+    - 前端只收到 `{ code, message: "internal server error" }`
+    - 同时出现 `showLoading 与 hideLoading 必须配对使用` 与 `writeFile:fail the maximum size of the file storage limit is exceeded`
+  - Findings:
+    - `/api/expiry/recognize` 已打到 Go 后端，问题主链路是后端接口或模型上游，不是前端路由未命中。
+    - 保质期 recognizer 里“缺图 / 未识别到食物 / 模型上游失败 / 配置缺失”等错误此前都是裸 `fmt.Errorf`；统一响应层会把裸 error 全部隐藏成 500 `internal server error`，导致前端无法显示真实可处理原因。
+    - 线上 SSH 日志读取尝试被 host key 校验阻塞，未拿到生产服务实际上游错误正文。
+  - Fix applied:
+    - `backend/internal/expiry/service/recognizer.go`
+      - 将“缺图/未识别到可录入食物”转为 400 AppError，给用户可读提示。
+      - 将模型上游失败/空响应/JSON 解析失败转为 502 AppError，前端不再只看到 `internal server error`。
+      - 将模型配置缺失/错误转为明确 500 AppError，并记录上游错误日志。
+    - `backend/internal/expiry/service/recognizer_test.go`
+      - 新增 recognizer 成功、无识别项、上游失败、缺配置测试。
+    - `src/packageExtra/pages/expiry-edit/index.tsx`
+      - 保质期图片持久化遇到小程序 USER_DATA_PATH 配额错误时，先清理项目生成的 `analyze_ / expiry_ / cv_` 文件再重试。
+      - 识别流程里的原生 `showLoading/hideLoading` 改为显式配对，避免失败路径多 hide 触发微信警告。
+  - Verification:
+    - `go test ./internal/expiry/service -run TestRecognizer -count=1` passed
+    - `go test ./internal/expiry/handler -run TestRecognize -count=1` passed
+    - `go build -o %TEMP%\food-link-expiry-recognize-fix.exe ./cmd/server` passed
+    - `npx eslint src/packageExtra/pages/expiry-edit/index.tsx --ext .ts,.tsx --max-warnings 0` passed
+    - `git diff --check` passed with CRLF warnings only
+  - Runtime validation blocker:
+    - `mrc where --port 3001` and `mrc where --port 9420` both failed to connect to WeChat DevTools automation, so no screenshot/click evidence this round.
+    - `go test ./internal/expiry/service -run TestExpiryService_Recognize -count=1` remains blocked by the existing Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` issue.
+  - Deployment note:
+    - This is backend + frontend source fix. For `https://v2.healthymax.cn` to change behavior, the Go backend image/service must be redeployed and the mini program dev/preview bundle must include the updated `expiry-edit` page.
+
+## 状态：完成源码修复 - 我的页退出登录残留调用 `setRegisterDate` 导致正式环境 ReferenceError
+
+- 2026-05-10 update:
+  - User提供真机报错：
+    - `ReferenceError: setRegisterDate is not defined`
+    - 调用栈落在某个 `success` 回调里
+  - Root cause:
+    - `src/pages/profile/index.tsx` 的退出登录逻辑里仍保留 `setRegisterDate('--')`
+    - 但当前 Profile 页已经没有 `registerDate` / `setRegisterDate` 这组 state
+    - 因此用户触发退出登录链路时会直接抛 `ReferenceError`
+  - Fix applied:
+    - `src/pages/profile/index.tsx`
+      - 删除退出登录回调中的残留 `setRegisterDate('--')`
+  - Verification:
+    - `rg -n "setRegisterDate|registerDate" src` 仅剩该处旧引用，现已清除
+    - `npx eslint src/pages/profile/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+  - Note:
+    - 这条错误说明“非调试模式疯狂报错”里至少有一部分是前端同步运行时异常，不是单纯接口或白名单问题
+
+## 状态：完成源码修复 - 首页目标联动基准稳定化，并修正文案“正在补录”的误导
+
+- 2026-05-10 update:
+  - User反馈：
+    - 今日摄入目标卡路里清空后再输入，仍会出现只有碳水上涨、蛋白质和脂肪保持 0 的问题
+    - 首页一直显示“正在补录”，想确认这段文案与哪个接口有关，以及为什么不会消失
+  - Root cause:
+    - 首页目标弹窗在用户逐字输入总卡路里时，三大营养素联动一直使用“上一步已经被四舍五入过的临时宏量值”继续缩放；清空后重新输入时，比例会快速漂移，导致某些宏量目标被压成 0 后持续沿用错误基准
+    - 首页“正在补录”不是接口返回的任务状态，而是前端仅根据 `selectedDate` 是否为“最近 3 天内的非今天日期”本地计算出来的提示，所以只要当前停留在补录日期，它就会持续显示
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 新增 `getMacroTargetsFromIntake()` 和 `targetScaleBaseMacrosRef`
+      - 打开目标弹窗时，把当前 intake target 记为本轮编辑的稳定联动基准
+      - 编辑总卡路里时，三大营养素始终基于这份稳定基准按比例缩放，不再基于上一步已舍入的临时值连环缩放
+      - 只有当用户显式编辑蛋白质/碳水/脂肪字段时，才更新这份联动基准
+      - 首页提示文案从“正在补录 {date}”改为“当前补录日期 {date}”，避免误导为后台仍在处理中
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/pages/index/components/TargetEditor.tsx src/pages/index/types/index.ts --max-warnings 0` passed
+    - `git diff --check` passed
+    - `rg -n "showBackfillHint|isAllowedRecordDate|isTodayRecordDate"` 已确认“补录提示”链路只依赖前端 `selectedDate` 计算
+    - `mrc where --port 9420` 成功，当前页面为 `pages/index/index`
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation blocker:
+    - 当前自动化环境仍无法稳定读取首页目标弹窗输入框的显示值，也未稳定产出截图文件
+    - 因此本轮已完成静态逻辑校验与首页运行态连通性确认，但缺少“清空后逐字重新输入”在自动化里直接读值的落盘证据
+
+## 状态：完成源码修复 - 首页编辑今日目标弹窗输入校验、步进精度与清空后联动恢复
+
+- 2026-05-10 update:
+  - User要求：
+    - 目标输入框只能输入数字，不能输入其他字符
+    - 点击加减时避免出现 `98.00000000003` 这类浮点误差
+    - 今日总卡路里清空后，再点加号或手动输入时，蛋白质/碳水/脂肪要继续按比例联动，不能只剩单个营养素目标
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - 新增 `sanitizeTargetInput()`，统一过滤非数字字符，仅保留合法数字与单个小数点
+      - 新增 `roundTargetValue()`，目标数值统一按 1 位小数舍入，避免步进后的浮点残值泄露到输入框
+      - `handleTargetInput()` 改为先清洗输入，再处理联动
+      - 当编辑热量目标时，如果当前三大营养素输入暂时不可解析，会回退到当前首页 intake target 作为联动基准，保证清空后再次输入/加减仍能按比例缩放三大营养素
+    - `src/pages/index/components/TargetEditor.tsx`
+      - 子组件不再回传整份表单给父组件“猜测”变更字段，改为直接回传 `key + value`
+      - 加减按钮改为走统一格式化后的字符串输出，避免 `parseFloat + step` 直接产生长尾小数
+    - `src/pages/index/types/index.ts`
+      - `TargetEditorProps` 改为 `onTargetFieldChange`
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/pages/index/components/TargetEditor.tsx src/pages/index/types/index.ts --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc where --port 9420` 成功，确认当前页面为 `pages/index/index`
+    - `mrc click .target-edit-text --port 9420` 成功，已打开首页“编辑今日目标”弹窗
+    - `mrc exists .target-modal-title --port 9420` 为 true
+    - `mrc type input 1800 --port 9420` 成功，已跑通输入链路
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation blocker:
+    - 当前 `mrc screenshot` 命令仍未稳定返回截图文件
+    - `mrc elements input --port 9420` 返回 `displayed: 0`，在该弹窗环境下无法稳定读取输入框显示值，因此本轮做到了页面导航、弹窗打开与输入链路验证，但缺少自动化读取输入值/截图证据
+
+## 状态：完成源码微调 - 实际摄入滑杆回退为更接近原版样式，仅放大滑块与轨道
+
+- 2026-05-10 update:
+  - User要求：
+    - slider 恢复成更接近之前的样子
+    - 保留圆角矩形外框
+    - 只把按钮调大、轨道宽度调大
+    - 外框背景色改成和“估算重量”控件容器一致
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.scss`
+      - `ratio-slider-shell` 背景、边框、内阴影改为与 `weight-adjuster` 同套颜色和质感
+      - 保留外层圆角矩形框，但从上版的更强“内嵌轨道壳”收回到更接近原版的简洁样式
+      - `ratio-slider-hitbox` 高度增大到 `76rpx`
+      - 滑轨厚度从 `10rpx` 提升到 `14rpx`
+      - 滑块从 `40rpx` 提升到 `48rpx`
+  - Verification:
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc where --port 9420` 确认当前页面为 `packageExtra/pages/result/index`
+    - `mrc exists .ratio-slider-shell --port 9420` 为 true
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+
+## 状态：完成源码调整 - 结果页营养卡与滑杆样式向参考图收敛，降低弧度并统一卡片底色
+
+- 2026-05-10 update:
+  - User反馈：
+    - 上一版结果页改得“非常奇怪”
+    - “实际摄入”滑杆希望更像参考图里的内嵌轨道
+    - 四个营养块圆角过大，需要更像首页日期区的胶囊形体
+    - 单个食物卡片缺少整体性，希望整张卡片背景保持统一
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.scss`
+      - `ratio-slider-shell` 改为更克制的浅灰绿内嵌轨道外壳，增加统一外边框与更接近参考图的滑块尺寸
+      - 四个营养块从超大弧度收窄为中等圆角，降低“过度鼓包”的观感
+      - 整个 `ingredient-card` 改成统一的浅灰绿底色，并让 `ingredient-main / ingredient-nutrition-strip / ingredient-controls` 使用同一张卡片背景体系
+      - `weight-adjuster` 也同步改成同一套卡内浅色控件底，提升整体一致性
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc where --port 9420` 确认当前页面为 `packageExtra/pages/result/index`
+    - `mrc exists .ingredient-card --port 9420` 为 true
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation blocker:
+    - 本轮 `mrc screenshot` 仍未稳定返回可用截图文件
+
+## 状态：完成源码优化 - 结果页食物营养四宫格改为首页日期风格的竖向胶囊卡
+
+- 2026-05-10 update:
+  - User要求：
+    - 结果页每个食物卡片里那一排四个营养块，改成更像首页日期选择器那种胶囊感
+    - 从上到下依次显示图标、说明文字、数据
+    - 数据样式尽量保持当前版本一致
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - 为热量/蛋白质/碳水/脂肪四块新增统一的图标与标题结构
+      - 每块内容改为纵向排布：图标 → 标签 → 数据
+      - 保留现有的数值字号、配色与单位呈现方式
+    - `src/packageExtra/pages/result/index.scss`
+      - 原来的四格小方卡改为更接近首页日期胶囊语言的高圆角竖向胶囊卡
+      - 增加顶部圆形图标底、浅渐变底色、轻高光和柔和阴影
+      - 不同营养项延续各自的强调色体系
+      - 同步修正深色主题下该区域的文字颜色映射
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc where --port 9420` 确认当前页面为 `packageExtra/pages/result/index`
+    - `mrc exists .ingredient-controls --port 9420` 为 true
+    - `mrc exists .ingredient-nutrition-strip --port 9420` 为 true
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation blocker:
+    - 结果页依赖本地分析缓存，自动化重启后偶尔会回退首页，需要等待 `relaunch` 完成后再次确认
+    - 本轮 `mrc screenshot` 仍未稳定返回可用截图文件，因此没有截图落盘证据
+
+## 状态：完成源码优化 - 分析结果页“实际摄入”滑杆改为内嵌轨道并扩大触控热区
+
+- 2026-05-10 update:
+  - User要求：
+    - 优化分析结果页里“实际摄入”进度条的交互效果
+    - 视觉上更像内嵌轨道
+    - 让整体可触控范围更大，拖动更顺手
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - 给结果页滑杆新增 `ratio-slider-shell` / `ratio-slider-hitbox` 包裹层
+      - 滑杆步进从 `5` 调整为 `1`，细调更顺滑
+      - 同时监听 `onChanging` 与 `onChange`，拖动过程中实时联动热量、重量和营养显示，不必等松手后才更新
+      - `blockSize` 从 `16` 提升到 `24`，提升拖拽命中率
+    - `src/packageExtra/pages/result/index.scss`
+      - 将滑杆容器改成浅绿系内嵌胶囊轨道
+      - 增加 `56rpx` 高度的命中区和额外横向内边距
+      - 加粗轨道、放大滑块、补充内阴影和高光，让视觉更像嵌入式轨道控件
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc exists .ratio-slider-shell --port 9420` 为 true
+    - `mrc exists .ratio-slider-hitbox --port 9420` 为 true
+    - `mrc exists .ratio-slider-modern --port 9420` 为 true
+    - `mrc click .ratio-slider-modern --port 9420` 成功
+    - `mrc logs error 20 --port 9420` 返回 0 条错误日志
+  - Runtime validation note:
+    - 结果页依赖本地分析缓存，自动化重启后偶尔会短暂回退首页，需要等待 `relaunch` 真正完成
+    - 本轮 `mrc screenshot` 命令未稳定返回可用截图结果，仍缺截图落盘证据
+
+## 状态：完成源码修复 - 分析结果页拖动实际摄入滑杆时同步更新重量展示
+
+- 2026-05-10 update:
+  - User反馈：
+    - 实物分析成功后的结果页里，拖动「实际摄入」进度条时，上方卡路里会按比例减少
+    - 但每个食物卡片中的重量数字没有同步减少，导致展示口径不一致
+  - Root cause:
+    - 结果页前端同时维护 `weight`（整份估算重量）和 `ratio/intake`（实际摄入量）
+    - 滑杆只更新了 `ratio` 与 `intake`，卡片里的重量展示仍固定读取 `item.weight`
+  - Fix applied:
+    - `src/packageExtra/pages/result/index.tsx`
+      - 新增 `formatWeightDisplay()`
+      - 食物卡片「估算重量」展示改为读取当前 `item.intake`，让重量展示与滑杆、顶部热量汇总保持同步
+    - 保持保存链路原有 `weight + ratio` 数据结构不变，避免影响后续记录详情和营养换算口径
+  - Verification:
+    - `npx eslint src/packageExtra/pages/result/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/result/index --port 9420` 成功
+    - `mrc where --port 9420` 确认当前页面为 `packageExtra/pages/result/index`
+    - `mrc exists .weight-display --port 9420` 为 true
+    - `mrc exists .ratio-slider-modern --port 9420` 为 true
+    - 已执行一次 `mrc click .ratio-slider-modern --port 9420` 交互检查，`mrc logs error 20 --port 9420` 为 0
+  - Runtime validation blocker:
+    - 当前 `mrc screenshot ./result-page-verify.png --port 9420` 返回 `fail to capture screenshot`
+    - `mrc elements` 在该结果页环境里未返回可读的 displayed 文本，因此本轮有页面导航与交互验证，但没有截图落盘证据
+## 状态：完成版本号更新 - 3.0.1
+
+- 2026-05-10 update:
+  - User is preparing to build/upload the mini program and requested version `3.0.1`.
+  - Ran `npm version 3.0.1 --no-git-tag-version`, updating root `package.json` and `package-lock.json`.
+  - Confirmed profile page displays `__APP_VERSION__`, injected from `config/index.ts` by reading root `package.json`; no hardcoded profile version edit needed.
+  - Updated `PROGRESS.md` with release log for `3.0.1`.
+
+## 状态：已准备提交 - 相册/拍照隐私检查开关冻结
+
+- 2026-05-10 update:
+  - User asked to commit the current code and explicitly said this area is temporarily not allowed to change.
+  - Frozen scope:
+    - Do not restore `__usePrivacyCheck__` in `src/app.config.ts`.
+    - Do not restore `permission['scope.camera']` or `permission['scope.writePhotosAlbum']`.
+    - Do not add `chooseImage` / `getImageInfo` to `requiredPrivateInfos`.
+  - Rationale:
+    - Current local image/photo behavior is working after removing forced privacy checking and matching the working development branch's direct `chooseImage` call shape.
+    - Future privacy/admin-console work must not re-enable code-side hard checks unless the user explicitly approves.
+
+## 状态：完成源码收口 - 全量相册/拍照入口接入小程序隐私授权封装
+
+- 2026-05-10 update:
+  - User continued to report album/camera image selection failing with:
+    - `chooseImage:fail api scope is not declared in the privacy agreement`
+    - `errno:112`
+  - Findings:
+    - `requiredPrivateInfos` is not the fix for image selection; WeChat DevTools 3.15.2 rejects `chooseImage/getImageInfo` there.
+    - The code-side fix is to let all image selection flows pass through the global privacy authorization flow, while the WeChat admin console privacy guide must declare and approve the photo/camera usage.
+  - Fix applied:
+    - Added `isPrivacyAuthorizeError()` to `src/utils/weapp-privacy.ts`.
+    - Replaced all remaining direct `Taro.chooseImage` call sites with `chooseImageWithPrivacy()`.
+    - Converted privacy errors to the explicit `showPrivacyAuthorizeFailure()` modal instead of generic `选择图片失败/上传失败`.
+    - Covered these entry points:
+      - `src/pages/index/components/RecordMenu.tsx`
+      - `src/utils/weapp-open-analyze-image.ts`
+      - `src/packageExtra/pages/analyze/index.tsx`
+      - `src/packageExtra/pages/exercise-record/index.tsx`
+      - `src/packageExtra/pages/expiry-edit/index.tsx`
+      - `src/packageExtra/pages/food-library-share/index.tsx`
+      - `src/packageExtra/pages/health-profile/index.tsx`
+      - `src/packageExtra/pages/health-profile-view/index.tsx`
+      - `src/pages/community/index.tsx`
+      - `src/pages/record/index.tsx`
+    - While linting touched files, fixed existing lint issues in `health-profile-view`: replaced global `isNaN` with `Number.isNaN` and imported `Image`.
+  - Verification:
+    - `npx eslint src/utils/weapp-privacy.ts src/components/PrivacyAuthorizationModal.tsx src/app.ts src/pages/index/components/RecordMenu.tsx src/utils/weapp-open-analyze-image.ts src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/exercise-record/index.tsx src/packageExtra/pages/expiry-edit/index.tsx src/packageExtra/pages/food-library-share/index.tsx src/packageExtra/pages/health-profile/index.tsx src/packageExtra/pages/health-profile-view/index.tsx src/pages/community/index.tsx src/pages/record/index.tsx --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Runtime validation blocker:
+    - `mrc where --port 3001` failed: target project window not opened with automation enabled.
+    - `mrc where --port 9420` failed: target project window not opened with automation enabled.
+  - Follow-up:
+    - User still needs the WeChat Mini Program admin console privacy guide to finish approval/effective publication for photo/camera usage.
+    - After the backend privacy guide is effective, restart or let `npm run dev:weapp` watch regenerate dist, then clear DevTools cache and retest image selection.
+
+- 2026-05-10 follow-up:
+  - User reported privacy error no longer appears, but tapping photo/album seems to do nothing, while DevTools still repeatedly logs:
+    - `writeFile:fail the maximum size of the file storage limit is exceeded`
+  - Fix applied:
+    - `chooseImageWithPrivacy()` now runs `cleanupGeneratedUserFiles()` before `Taro.chooseImage`.
+    - If `Taro.chooseImage` fails with a quota-like error, it cleans generated files again and retries once.
+    - Homepage `RecordMenu` membership preflight is capped at 1.2s; if membership status is slow/unavailable, it proceeds to image selection and lets the submit API enforce quota/credits later.
+    - Shared `pickImageAndOpenAnalyze()` uses the same 1.2s membership preflight cap.
+    - App launch now silently cleans generated user files once to reduce repeated file-storage quota failures during hot reload/navigation.
+  - Verification:
+    - `npx eslint src/app.ts src/utils/weapp-privacy.ts src/utils/weapp-open-analyze-image.ts src/pages/index/components/RecordMenu.tsx --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Runtime validation blocker:
+    - `mrc where --port 3001` and `mrc where --port 9420` still cannot connect to WeChat DevTools automation.
+
+- 2026-05-10 follow-up 2:
+  - User logs still show:
+    - `invalid app.json permission["scope.camera"]`
+    - tapping photo/album still has no visible response
+  - Findings:
+    - Current `src/app.config.ts` still had invalid `permission['scope.camera']`, so `dist/app.json` was correctly being generated with the invalid field.
+    - `dev` branch also contains `scope.camera`, and also contains old `scope.writePhotosAlbum`, so switching to `dev` is not a good fix for this issue.
+    - `chooseImageWithPrivacy()` was still proactively awaiting `ensureWeappPrivacyAuthorized()` before calling `Taro.chooseImage`; if WeChat privacy APIs hang in DevTools/backend-review state, this can make the click look like a no-op.
+  - Fix applied:
+    - Removed `permission['scope.camera']` from `src/app.config.ts`; only `scope.userLocation` remains in app config permissions.
+    - `chooseImageWithPrivacy()` no longer blocks on proactive `ensureWeappPrivacyAuthorized()` before `Taro.chooseImage`; WeChat's actual privacy interception now happens on the real API call, and errors still flow to `showPrivacyAuthorizeFailure()`.
+  - Verification:
+    - `npx eslint src/app.config.ts src/utils/weapp-privacy.ts src/app.ts src/pages/index/components/RecordMenu.tsx src/utils/weapp-open-analyze-image.ts --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Follow-up:
+    - Because app config changes regenerate `app.json`, current dev watch may need restart (`npm run dev:weapp`) if it does not update `dist/app.json` automatically.
+
+- 2026-05-10 follow-up 3:
+  - User tested a development version and reported that photo/album works there, asking whether to sync/mimic the development version.
+  - Comparison with `dev`:
+    - `dev` uses direct `Taro.chooseImage({ success, fail })` callback style for RecordMenu and shared image entry points.
+    - `dev` still has invalid `permission['scope.camera']`, and also still has old `scope.writePhotosAlbum`, so copying the whole `dev` app config would reintroduce known warnings.
+  - Fix applied:
+    - `chooseImageWithPrivacy()` now mimics the development version's runtime shape: it calls `Taro.chooseImage({ ...options, success, fail })` immediately inside a Promise executor, instead of awaiting cleanup or privacy preflight before invoking the native API.
+    - Quota cleanup is now only attempted after a quota-like `chooseImage` failure, then it retries once.
+    - This keeps privacy-specific error handling while preserving the direct native call behavior that works in `dev`.
+  - Verification:
+    - `npx eslint src/utils/weapp-privacy.ts src/pages/index/components/RecordMenu.tsx src/utils/weapp-open-analyze-image.ts --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Runtime validation blocker:
+    - `mrc where --port 3001` and `mrc where --port 9420` still failed to connect to WeChat DevTools automation.
+
+- 2026-05-10 follow-up 5:
+  - User asked whether production privacy check is necessary, and whether image choose/save can just work regardless of the privacy guide state.
+  - Decision / fix:
+    - Removed `__usePrivacyCheck__` entirely from `src/app.config.ts`, rather than enabling it only in production.
+    - Rationale: current priority is keeping photo/album flows usable; `__usePrivacyCheck__` is a local/app.json opt-in hard check that can force `chooseImage` errno 112 before the WeChat admin privacy guide is stable.
+    - This does not guarantee bypassing WeChat review or future runtime enforcement; the admin privacy guide should still declare photo/camera usage before release.
+    - Confirmed there are no remaining direct `Taro.saveImageToPhotosAlbum` calls.
+    - Removed homepage meal poster's proactive `scope.writePhotosAlbum` authorization preflight before `showShareImageMenu`; the project now relies on WeChat's official image menu rather than direct album-save APIs.
+  - Verification:
+    - Search over `src,config` found no `__usePrivacyCheck__`, `scope.camera`, `scope.writePhotosAlbum`, or `saveImageToPhotosAlbum`.
+    - `npx eslint src/app.config.ts src/pages/index/components/MealRecordPosterModal.tsx --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+
+- 2026-05-10 follow-up 4:
+  - User correctly questioned why `dev` branch can choose images if the issue is purely WeChat backend privacy agreement.
+  - Key finding:
+    - Current branch had `__usePrivacyCheck__: true` in `src/app.config.ts`.
+    - `dev` branch does not have this switch.
+    - Therefore the same WeChat backend privacy status can behave differently by branch in DevTools: current branch forces local privacy API checking, while `dev` does not.
+  - Fix applied:
+    - Changed app config to only include `__usePrivacyCheck__: true` for production builds:
+      - `...(process.env.NODE_ENV === 'production' ? { __usePrivacyCheck__: true } : {})`
+    - Local `npm run dev:weapp` now matches the working development branch behavior and should not force local privacy checking.
+    - Production/preview builds can still enable privacy checking after the WeChat admin privacy guide is approved/effective.
+  - Verification:
+    - `npx eslint src/app.config.ts --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Follow-up:
+    - Since this changes `app.json`, user must restart `npm run dev:weapp` if watch does not regenerate `dist/app.json`.
+    - In local dev, `dist/app.json` should no longer contain `__usePrivacyCheck__`.
+
+## 状态：已纠正 - 相册/拍照隐私声明不能写入 requiredPrivateInfos
+
+- 2026-05-10 update:
+  - User reported all album/camera image selection flows fail with:
+    - `chooseImage:fail api scope is not declared in the privacy agreement`
+    - `errno:112`
+  - Then user reported the attempted code-side fix made compilation fail:
+    - `dist/app.json: requiredPrivateInfos[1] 字段需为 chooseAddress,chooseLocation,choosePoi,getFuzzyLocation,getLocation,onLocationChange,startLocationUpdate,startLocationUpdateBackground`
+  - Findings:
+    - Project image upload/photo entry points mainly use `Taro.chooseImage`.
+    - Several follow-up paths call `Taro.getImageInfo` to normalize devtools/tmp/network image paths before upload or canvas use.
+    - WeChat DevTools 3.15.2 only allows location/address APIs in `requiredPrivateInfos`; `chooseImage` / `getImageInfo` are invalid there.
+    - The `chooseImage` errno 112 issue must be handled by the WeChat Mini Program admin console privacy agreement, not by app.json `requiredPrivateInfos`.
+  - Fix applied:
+    - Reverted `src/app.config.ts` to `requiredPrivateInfos: ['getLocation']`.
+    - Added an inline comment explaining that image selection privacy declaration belongs in the Mini Program admin console privacy guide, not in app.json.
+    - Added a global `PrivacyAuthorizationModal` wired through `wx.onNeedPrivacyAuthorization`.
+    - The modal uses the official `agreePrivacyAuthorization` button path and opens the privacy contract through `openPrivacyContract`.
+    - `src/app.ts` now mounts this modal globally so any privacy-gated API call can trigger the consent flow.
+  - Verification:
+    - `npx eslint src/app.ts src/components/PrivacyAuthorizationModal.tsx src/app.config.ts --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only Windows CRLF warnings.
+  - Runtime validation blocker:
+    - `mrc where --port 3001` and `mrc where --port 9420` both failed to connect to WeChat DevTools automation, so screenshot/click validation could not be completed.
+  - Follow-up:
+    - Need Taro watch to regenerate `dist/app.json`; if watch does not pick up app config changes, restart `npm run dev:weapp`.
+    - To fix runtime `chooseImage` errno 112, update the WeChat Mini Program admin console privacy agreement to include the image-selection/privacy item corresponding to choosing photos/videos and camera usage.
+    - Screenshot shows the privacy guide is `审核中`; while it is pending, WeChat may still reject `chooseImage` before the app code can complete the consent flow.
+
+## 状态：完成源码修复 - 登录点击触发旧 about 分包 WXML 缺失与文件配额清理
+
+- 2026-05-10 update:
+  - User reported clicking login now fails with:
+    - `WXML 文件编译错误 ENOENT ... dist/packageExtra/pages/about/index.wxml`
+    - `writeFile:fail the maximum size of the file storage limit is exceeded`
+    - `navigateTo:fail timeout`
+  - Root cause / findings:
+    - `about` page was recently moved to independent `packageAbout`, but old source `src/packageExtra/pages/about` still exists and WeChat DevTools / cached routes can still try to open `/packageExtra/pages/about/index`.
+    - Because `packageExtra` no longer registered `pages/about/index`, Taro no longer generated `dist/packageExtra/pages/about/index.wxml`, so any stale route to the old path triggers ENOENT and can cascade into navigation timeout.
+    - The file quota message is likely from accumulated generated files under mini-program `USER_DATA_PATH` (`analyze_`, `expiry_`, `cv_`), which normal `removeStorageSync` does not clear.
+  - Fix applied:
+    - `src/app.config.ts` re-registers `pages/about/index` in shared `packageExtra` as a lightweight compatibility route; normal business routing still maps `/pages/about/index` to independent `packageAbout` through `extraPkgUrl()`.
+    - Added `src/utils/weapp-user-files.ts` to clean project-generated user files in `USER_DATA_PATH` and detect quota errors.
+    - Login page calls this cleanup before `Taro.login()` so stale generated files do not block login storage/file writes.
+    - Profile page “清除缓存” now also removes generated user files, not just key-value storage.
+    - Canvas data URI writes now retry once after generated-file cleanup when quota is exceeded.
+  - Verification:
+    - `npx eslint src/app.config.ts src/utils/weapp-user-files.ts src/utils/weapp-canvas-image.ts src/packageExtra/pages/login/index.tsx src/pages/profile/index.tsx --ext .ts,.tsx --max-warnings 0` passed.
+    - `git diff --check` passed with only existing Windows CRLF warnings.
+  - Runtime validation blocker:
+    - `mrc where --port 3001` and `mrc where --port 9420` both failed to connect to WeChat DevTools automation, so screenshot/click validation could not be completed in this session.
+  - Follow-up:
+    - Taro watch must regenerate `dist/app.json` and `dist/packageExtra/pages/about/index.wxml`; if watch does not pick up config changes, user should restart local `npm run dev:weapp`.
+
+## 状态：完成源码修改 - 「我的」页改为每次直连后端，移除识别记录未读 badge
 
 - 2026-05-09 update:
-  - User asked to pull the latest code and run the `dev` branch.
-  - Repository was already on `dev`; fetched and fast-forwarded `dev` to `origin/dev` at `fcc6b61`.
-  - Preserved pre-existing local state-file edits by temporarily stashing, then merged the local `CURRENT_TASK.md` and `memory/2026-05-05.md` notes back after the pull.
-  - `npm run dev:restart` could not run directly because `scripts/restart-dev.sh` has CRLF line endings in this Windows workspace and bash failed on `set -euo pipefail`.
-  - Started the same dev services manually with hidden PowerShell background processes:
-    - `npm run dev:backend` -> `backend-dev.log`
-    - `npm run dev:weapp` -> `weapp-dev.log`
-  - Backend verification: `http://127.0.0.1:3010/api/health` returned `{"status":"healthy"}`.
-  - Taro weapp watch process is running under `D:\projects\food_link`; first build completed in watch mode and refreshed `dist/` at about `2026-05-09 04:14`.
-  - Weapp build log only showed existing iconfont runtime-resolution warnings, not a build failure.
-  - Working tree intentionally retains state-file updates only: `CURRENT_TASK.md` and `memory/2026-05-05.md`.
+  - User要求：
+    - 「我的」页不要再优先读本地缓存，每次进入直接从后端获取最新数据
+    - 移除「识别记录」右上角 unread 红色 badge，以及相关等待记录未读数量计算链路
+  - 已完成：
+    - `src/pages/profile/index.tsx` 删除本地缓存优先展示逻辑，不再以 `userInfo`、`membershipStatus`、`userRegisterTime`、`profile_stats_*` 作为页面展示源
+    - 「我的」页顶部快捷入口中的「识别记录」仅展示总数，不再展示右上角 waiting/unread badge
+    - 首页 `RecordMenu` 的「识别记录」红点移除
+    - 删除 `waiting_record / has_unseen_waiting_record` 在首页、识别记录页、保质期页中的前端 badge 计算与清零链路
+    - 保留好友请求与食物保质期自身 badge 逻辑
+  - 静态验证：
+    - `npx eslint` 针对相关改动文件通过
+  - 运行时验证阻塞：
+    - `mrc` 无法连接 `ws://localhost:9420`
+    - 当前无法通过微信开发者工具自动化确认界面，需要用户本地开启开发者工具自动化后复验
 
-- 2026-05-05 analysis:
-  - User asked to analyze a possible coach/student subscription profit-sharing system.
-  - Current repository implements WeChat Mini Program membership payment only: frontend calls `/api/membership/pay/create`, backend creates a JSAPI order, stores `pro_membership_payment_records`, and activates `user_pro_memberships` after WeChat pay notify.
-  - No implemented coach/student subscription domain was found: no coach profile/relationship tables, no coach-specific order table, no wallet/withdrawal/settlement ledger, no delayed profit-sharing worker, and no WeChat Pay profit-sharing API calls.
-  - Current payment payload does not set a profit-sharing flag and does not attach receivers; paid money is treated as platform membership revenue.
-  - If coach subscription revenue sharing is required, it needs new domain model + payment split/settlement workflow rather than a small patch to existing membership payment.
+## 状态：完成源码修复 - 正式版首页餐食海报保存触发隐私 API 拦截
 
-## 状态：完成 - 7 日活跃与成功付费用户口径核对
+- 2026-05-09 update:
+  - User reported that in release builds, tapping the save/download button after opening the homepage meal share poster failed with:
+    - `MiniProgramError errno:1025 errMsg:savelmageToPhotosAlbum:fail appid privacy api banned`
+  - Root cause:
+    - poster save flows still called `Taro.saveImageToPhotosAlbum` directly
+    - release builds require mini-program privacy authorization before calling album APIs, while local/dev may not expose the same failure path
+  - Fix applied:
+    - first tried a unified custom save helper path for release privacy handling
+    - then, per latest user request, removed the custom local-save helper entirely and switched poster download/save actions to WeChat native `showShareImageMenu`
+    - current poster save/download behavior now relies on the built-in image menu window instead of project-local album save logic
+    - switched these poster save entries to the native image menu:
+      - homepage meal poster `src/pages/index/components/MealRecordPosterModal.tsx`
+      - homepage daily summary poster `src/pages/index/index.tsx`
+      - record detail poster `src/packageExtra/pages/record-detail/index.tsx`
+      - day-record poster `src/packageExtra/pages/day-record/index.tsx`
+    - removed `src/utils/weapp-save-image-album.ts`
+    - removed `scope.writePhotosAlbum` app permission config because the project no longer directly calls the album save API
+  - Verification:
+    - `npx eslint` passed for the touched files
+    - `git diff --check` passed
+    - WeApp DevTools automation service started on port `9420`
+    - `mrc where --port 9420` connected successfully and confirmed current page `pages/index/index`
+    - `mrc relaunch /pages/index/index --port 9420` succeeded
+    - `mrc logs error 20 --port 9420` returned 0 runtime errors
+
+## 状态：完成源码修复 - 首页今日餐食分享海报错误请求 `undefined`
+
+- 2026-05-09 update:
+  - User reported that tapping homepage `今日餐食 -> 生成分享海报` triggered:
+    - `/api/food-record/undefined/poster-calorie-compare`
+    - `/api/friend/invite/profile/undefined`
+  - Root cause:
+    - homepage poster flow could consume a cached `full_record` missing stable `id` / `user_id`
+    - poster modal requested compare/invite APIs without guarding these identifiers
+  - Fix applied:
+    - `src/pages/index/index.tsx`
+      - homepage edit/poster flow now validates cached record identifiers before using cache
+      - poster flow falls back to `getFoodRecordById(mealActionRecordId)` for a complete record instead of relying on the share endpoint
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - added `safeRecordId` / `safeUserId` guards
+      - compare/invite requests only fire when required identifiers are present
+      - modal resets poster-related derived state when record changes to avoid stale carry-over
+  - Verification:
+    - `npx eslint src/pages/index/index.tsx src/pages/index/components/MealRecordPosterModal.tsx --max-warnings 0` passed
+    - `git diff --check` passed for touched files
+    - `mrc relaunch /pages/index/index --port 9420` succeeded
+    - `mrc logs error 30 --port 9420` returned 0 runtime errors
+
+## 状态：完成源码修复 - 首页今日餐食海报生成后直接进入微信官方图片菜单
+
+- 2026-05-09 update:
+  - User clarified that homepage `今日餐食 -> 生成分享海报` should not stop on the project-custom full-screen preview sheet first.
+  - Target behavior:
+    - poster image still needs to be generated on the homepage
+    - once generated, it should directly enter the WeChat official image menu UI
+    - if album permission is missing, request it through official mini-program permission APIs first
+  - Fix applied:
+    - `src/pages/index/components/MealRecordPosterModal.tsx`
+      - removed the custom homepage poster preview sheet UI from the render path
+      - kept the hidden canvas generation flow only
+      - after `canvasToTempFilePath` succeeds, immediately calls WeChat native `showShareImageMenu`
+      - added official album permission preflight via `getSetting` / `authorize` / `openSetting`
+      - keeps the previous `safeRecordId` / `safeUserId` guards so poster compare/invite requests do not hit `undefined`
+  - Verification:
+    - `npx eslint src/pages/index/components/MealRecordPosterModal.tsx src/pages/index/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc where --port 9420` connected successfully
+    - `mrc relaunch /pages/index/index --port 9420` succeeded
+    - `mrc logs error 20 --port 9420` returned 0 runtime errors
+    - `mrc exists .poster-modal --port 9420` returned false in the current homepage state, confirming the custom preview layer is no longer present by default
+  - Runtime validation blocker:
+    - current automated homepage state is `meals-empty`
+    - `mrc exists .empty-record-btn --port 9420` and `mrc exists .meals-empty --port 9420` are both true
+    - because there is no real meal card in this environment, automation could not trigger the full `今日餐食 -> 生成分享海报` click path end-to-end
+
+## 状态：完成源码修复 - 微信官方图片菜单取消不再误报失败
+
+- 2026-05-09 update:
+  - User reported `MealRecordPosterModal.tsx` logging:
+    - `showShareImageMenu fail { errMsg: "showShareImageMenu:fail cancel" }`
+  - Root cause:
+    - current poster flows treated WeChat native image menu cancel as a real failure
+    - fail handlers showed error UI even when the user simply dismissed the menu
+  - Fix applied:
+    - added `src/utils/weapp-share-image.ts` with `isShowShareImageMenuCancel()`
+    - homepage meal poster:
+      - cancel now closes silently because this flow has no custom preview layer anymore
+    - homepage daily summary / record detail / day-record poster:
+      - cancel is now ignored silently, real failures still show their original error prompt
+  - Verification:
+    - `npx eslint src/utils/weapp-share-image.ts src/pages/index/components/MealRecordPosterModal.tsx src/pages/index/index.tsx src/packageExtra/pages/record-detail/index.tsx src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc where --port 9420` connected successfully
+    - `mrc logs error 20 --port 9420` returned 0 runtime errors
+
+## 状态：完成源码修改 - 识别记录状态标签单行展示并增强胶囊样式
+
+- 2026-05-10 update:
+  - User requested that the `识别记录` page status labels such as `已经记录` / `等待记录` should never wrap inside the rounded rectangle and should look slightly more refined.
+  - Fix applied:
+    - `src/packageExtra/pages/analyze-history/index.scss`
+      - status badges now use larger horizontal padding and a slightly wider minimum width
+      - `status-text` now forces single-line rendering with `white-space: nowrap` and `word-break: keep-all`
+      - added a subtle inset highlight and soft shadow to make the capsule feel more intentional
+  - Verification:
+    - `npx eslint src/packageExtra/pages/analyze-history/index.tsx --max-warnings 0` passed
+    - `git diff --check` passed
+    - `mrc relaunch /packageExtra/pages/analyze-history/index --port 9420` succeeded
+    - `mrc where --port 9420` confirmed current page `packageExtra/pages/analyze-history/index`
+    - `mrc exists .status-badge --port 9420` returned true
+  - Runtime validation note:
+    - attempted `mrc screenshot` did not produce a file in the current environment, so this round has navigation/elements verification but no screenshot artifact
+
+## 状态：运行环境可用 - 微信开发者工具自动化服务已启动
+
+- 2026-05-10 update:
+  - 用户要求启动微信开发者服务器。
+  - 已使用微信开发者工具 CLI 启动自动化服务：
+    - `/Applications/wechatwebdevtools.app/Contents/MacOS/cli auto --project /Users/kirigaya/project/food_link --auto-port 9420`
+  - 运行态确认：
+    - `mrc where --port 9420` 连接成功
+    - 当前页面为 `pages/index/index`
+    - `lsof -i :9420` 确认 `wechatweb` 正在监听 `9420`
+
+## 状态：已修复 - 真机调试提示小程序编译产物过大
+
+- 2026-05-10 update:
+  - 用户反馈：
+    - 真机调试/编译时提示微信小程序编译产物过大
+    - 平行 `dev` 分支同类版本没有这个问题，希望在不破坏功能前提下定位并修复
+  - 根因排查：
+    - 对比 `dev` 分支发现，当前分支 `src/packageExtra/pages/about/index.tsx` 新增了对本地 `src/assets/logo.png` 的 import；该图片约 `838KB`，被直接内联进 `about` 页 JS，导致 `about` 页构建产物一度达到约 `1.1MB`
+    - 同时 `about`、`user-group`、`stats-metabolic(ECharts)` 都堆在同一个 `packageExtra` 分包里，使共享分包逼近/触发微信包体限制
+  - 修复方案：
+    - `src/packageExtra/pages/about/index.tsx`
+      - 去掉本地大图 import
+      - 改为优先使用 `__ICON_CDN_BASE_URL__`，缺省回退 `https://cdn-food-icon.coachlink.fit/shitan-nobackground.png`
+    - `src/app.config.ts`
+      - 保留原有功能页路由语义，但把重页面拆到独立顶层分包：
+        - `packageAbout/pages/about/index`
+        - `packageUserGroup/pages/user-group/index`
+        - `packageStatsMetabolic/pages/stats-metabolic/index`
+      - 从共享 `packageExtra` 中移除 `stats-metabolic`
+    - `src/utils/subpackage-extra.ts`
+      - 为上述三个页面增加路由映射，业务侧仍调用 `extraPkgUrl('/pages/...')`
+      - 兼容旧的 `/packageExtra/pages/...` 回跳地址，避免已有登录回跳/缓存路径失效
+    - 新增包装入口：
+      - `src/packageAbout/pages/about/*`
+      - `src/packageUserGroup/pages/user-group/*`
+      - `src/packageStatsMetabolic/pages/stats-metabolic/*`
+      - 这些入口仅转发到原页面实现，不复制业务逻辑
+    - `config/index.ts`
+      - ECharts vendor chunk 输出从 `packageExtra/echarts-vendor.js` 改为 `packageStatsMetabolic/echarts-vendor.js`
+  - 构建验证：
+    - `npm run build:weapp:preview` 通过
+    - 关键产物体积降幅：
+      - `packageAbout` 约 `5,414` bytes
+      - `packageUserGroup` 约 `531,909` bytes
+      - `packageStatsMetabolic` 约 `901,785` bytes
+      - 共享 `packageExtra` 约 `1,198,082` bytes
+    - `about` 页 JS 从约 `1.1MB` 降到约 `3.3KB`
+  - 微信开发者工具自动化验证：
+    - `mrc relaunch /packageAbout/pages/about/index --port 9420` 成功
+    - `mrc relaunch /packageUserGroup/pages/user-group/index --port 9420` 成功
+    - `mrc logs error 10 --port 9420` 和 `mrc logs warn 10 --port 9420` 均返回 `0` 条
+  - 运行态验证阻塞：
+    - `mrc screenshot ./user-group-verify.png --port 9420` 当前环境仍会在连接成功后超时，未能产出截图文件
+
+## 状态：完成源码修复 - Docker 基础镜像改为固定 Go patch tag
+
+- 2026-05-10 update 3:
+  - User asked the agent to run `npm run push-docker-ccr` until success.
+  - Executed with current network workaround:
+    - PowerShell env: `DOCKER_GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm`
+    - command: `npm run push-docker-ccr`
+  - Result:
+    - Docker buildx completed successfully and pushed `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`.
+    - Source branch printed by script: `backend-refactor-sync-migrate-tencent`
+    - Source short SHA printed by script: `2e3a281`
+    - Remote CCR inspect confirms manifest digest `sha256:59ac6f87bd4ffd92357b43ca94abe727f5a6f01e9847f1bc1b45d79d70d4ab5f`.
+    - Remote manifest includes `linux/amd64` image digest `sha256:03b5643e6124a29ebe1b14f2dc4af1e9e58321ce0228145b21d5faac1538da1f`.
+
+- 2026-05-10 update 2:
+  - User reran `npm run push-docker-ccr` after CCR login and now failed while resolving `docker.io/library/golang:1.26.1-bookworm`.
+  - Verified locally:
+    - `docker buildx imagetools inspect docker.io/library/golang:1.26.1-bookworm` fails on network timeout to Docker Hub.
+    - `docker buildx imagetools inspect ccr.ccs.tencentyun.com/library/golang:1.26.1-bookworm` returns not found.
+    - `docker buildx imagetools inspect docker.m.daocloud.io/library/golang:1.26.1-bookworm` resolves and includes `linux/amd64`.
+    - `docker buildx build --platform linux/amd64 --progress plain --build-arg GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm -t foodlink-test:v2 backend` succeeds without `--push`.
+  - Fix applied:
+    - `backend/Dockerfile` now accepts `GO_BUILDER_IMAGE`, defaulting to `docker.io/library/golang:1.26.1-bookworm`.
+    - `backend/scripts/push-docker-ccr.mjs` passes `DOCKER_GO_BUILDER_IMAGE` into the Docker build and prints it in the release banner.
+    - Push failure hints now distinguish Docker Hub base-image pull failures from Tencent CCR auth failures.
+    - `AGENTS.md` documents the override command and the new failure mode.
+  - Remaining action:
+    - Run `npm run push-docker-ccr` normally if Docker Hub is reachable, or set `DOCKER_GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm` before rerun in the current network. This session verified local build only and did not push CCR.
+
+- 2026-05-10 update:
+  - User ran `npm run push-docker-ccr` and hit Docker build failure while resolving:
+    - `docker.io/library/golang:1.26-bookworm`
+  - Findings:
+    - local toolchain is `go1.26.1 darwin/arm64`
+    - backend codebase is aligned to `go 1.26`
+    - the failure is not evidence that the backend must downgrade Go; it is more consistent with Docker Hub alias / metadata instability around the floating tag `1.26-bookworm`
+  - Fix applied:
+    - `backend/Dockerfile`
+      - changed `ARG GO_VERSION=1.26` to `ARG GO_VERSION=1.26.1`
+      - builder image now resolves as `golang:1.26.1-bookworm`, avoiding the floating alias
+  - Verification:
+    - local `go version` confirmed `go1.26.1`
+    - local `docker buildx build --platform linux/amd64 --progress plain -t foodlink-test:v2 backend` reached the same metadata resolution step for `golang:1.26.1-bookworm`
+  - Remaining blocker:
+    - Docker Hub access in the current environment is unstable/intermittent, so the validation build did not finish end-to-end in this session
+
+## 状态：完成 - 当前分支已同步推送到远端
+
+- 2026-05-10 update:
+  - 用户要求提交并推送当前代码。
+  - 检查结果：
+    - 工作区无未提交改动
+    - 当前分支 `backend-refactor-sync-migrate-tencent` 初始状态为相对远端 `ahead 6`
+    - 首次 `git push` 被拒绝，原因是远端新增了 1 个提交 `00458d0 feat: 迁移脚本增加dataonly模式`
+  - 已处理：
+    - `git fetch origin backend-refactor-sync-migrate-tencent`
+    - `git rebase origin/backend-refactor-sync-migrate-tencent`
+    - rebase 6 个本地提交成功，无冲突
+    - `git push origin backend-refactor-sync-migrate-tencent` 成功
+  - 推送后：
+    - 远端已更新到 `d884837 fix(weapp): reduce package size for device debug`
+    - 当前分支与远端已重新对齐
+
+## 状态：完成 - 同步 `backend-refactor-sync-migrate-tencent` 分支代码
+
+- 2026-05-09 update:
+  - User requested to sync the current branch with remote.
+  - Before sync:
+    - local branch: `backend-refactor-sync-migrate-tencent`
+    - tracking state: ahead 2, behind 14 relative to `origin/backend-refactor-sync-migrate-tencent`
+  - Actions taken:
+    - fetched latest remote refs
+    - rebased local branch onto `origin/backend-refactor-sync-migrate-tencent`
+    - skipped local commit `6e728fd` because its membership / WeChat Pay / analyze changes were already superseded by newer upstream implementations
+    - retained and rebased local migration-script work as new commit `71bf30a`
+    - resolved conflicts by keeping newer upstream Go runtime code and preserving durable migration/state updates
+    - pushed synced branch back to `origin/backend-refactor-sync-migrate-tencent`
+  - After sync:
+    - local and remote branch are aligned at `71bf30a`
+    - preserved assets include `backend/scripts/migrate_supabase_postgres_to_postgresql.py`
+    - `DECISIONS.md` and `PROJECT_STATE.md` now retain the Supabase -> PostgreSQL/COS migration context for future sessions
+
+## 状态：已修复 - 精准模式分组估重加速
+
+- 2026-05-09 precision speed fix:
+  - 用户反馈：精准模式从 UI 看等待 4-5 分钟才完成，终端里早已出现部分识别结果，整体太慢。
+  - 定位：
+    - `precision_plan` 会把食物拆成多个 `precision_item_estimate` 子任务，但当前 worker 日志显示 `max_concurrent: 1`，所以 `grouped_parallel` 实际被串行执行。
+    - 每个子任务在首轮估重后还会做可选二次重量复核；复核失败/上游超时时此前可能吃满接近 2 分钟，导致 UI 一直等最终 `precision_aggregate`。
+    - 复核模型有时会从单个计划项扩展输出整餐食物，既拖慢又可能造成重复/扩项。
+  - 修复：
+    - Go worker 默认并发从 `1` 改为 `4`；`cmd/worker` fallback 和 `pkg/config` 默认值同步调整。本地 `backend/config.yaml` 也已写入 `worker.max_concurrent: 4`。
+    - 用户确认当前先不要二次重量复核；已将 `precisionRefineEnabled=false`，精准子任务只做首轮分项估重 + db_first 回算。
+    - 精准二次重量复核代码暂时保留为关闭状态；以后如需重新启用，仍有 `25s` 短超时，超时只跳过复核并沿用首轮估重。
+    - `parsePrecisionEstimateItems` 和 `parsePrecisionRefinedItems` 都按本组 `items_to_estimate` 做过滤，复核结果不能比本组计划食物扩项。
+  - Verification:
+    - `go test ./internal/worker -count=1` 通过；关闭二次复核后再次通过。
+    - `go test ./pkg/config -count=1` 通过。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration -count=1` 通过。
+    - `go build -o %TEMP%\food-link-worker-speed.exe ./cmd/worker` 通过；关闭二次复核后 `go build -o %TEMP%\food-link-worker-no-refine.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-speed.exe ./cmd/server` 通过。
+    - `git diff --check` 针对本轮文件通过，仅有 Windows CRLF warning。
+  - 复测要求：用户需重启 Go worker；重启后日志应显示 `max_concurrent: 4`。精准模式 3 个分组应并行推进，并且不再出现 `precision refine` / `precision refine skipped` 日志。
+
+## 状态：已修复 - 精准模式先做食物种类候选判别
+
+- 2026-05-09 precision food type candidates:
+  - 用户反馈：精准模式把莴苣识别成青菜、百叶包识别成蒸饺；强调“先把食物种类识别对，后面重量估计才有意义”。
+  - 判断：此前精准模式主要加强分组和估重，planner 直接输出单个 `item_name`，没有强迫模型在相似食物之间给候选、视觉证据和最终选择。
+  - 修复：
+    - `buildPrecisionPlanPrompt()` 新增强约束：每个主体必须先列 2-3 个候选食物，再根据视觉证据选择主名称。
+    - 明确要求比较切法、形状、边缘/皮、是否有馅、颜色、纹理、菜梗/叶片比例、包裹方式和烹饪方式。
+    - 明确提示易混淆项：莴苣/莴笋片 vs 青菜/小白菜，百叶包/千张包/豆皮包 vs 蒸饺/馄饨，鱼块 vs 鸡块，豆干 vs 肉块。
+    - `itemsToEstimate` 支持并保留内部字段 `candidate_names / alternative_name / visual_evidence`，这些字段用于后续子任务，不展示在结果页。
+    - `buildPrecisionItemEstimatePromptSingle/Multi()` 会把候选和视觉证据带入分项估重；如果 planner 名称和视觉证据不一致，子任务允许修正 `name` 为更可能的候选食物。
+  - Verification:
+    - `go test ./internal/worker -count=1` 通过。
+    - `go build -o %TEMP%\food-link-worker-foodtype.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-foodtype.exe ./cmd/server` 通过。
+    - `git diff --check` 针对本轮 worker 文件通过，仅有 Windows CRLF warning。
+
+## 状态：已修复 - 精准模式纠错 session 状态写库失败
+
+- 2026-05-09 precision correction status fix:
+  - 用户反馈：精准模式纠错等待很久后失败，前端显示 `new row for relation "precision_sessions" violates check constraint "precision_sessions_status_check"`。
+  - 根因：Go worker 的精准纠错完成分支把 `precision_sessions.status` 和返回结果 `precisionStatus` 写成了 `completed`；但 PostgreSQL check constraint 只允许 `collecting / estimating / needs_user_input / needs_retake / done / cancelled / failed`。
+  - 修复：
+    - `completeCorrectionTask()` 中精准 session 完成状态从 `completed` 改为 `done`。
+    - `precision_repo_test` 中对应 UpdateSession 测试期望同步改为 `done`。
+  - Verification:
+    - `go test ./internal/worker -count=1` 通过。
+    - `go build -o %TEMP%\food-link-worker-precision-correction-status.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-precision-correction-status.exe ./cmd/server` 通过。
+    - `git diff --check` 针对本轮文件通过，仅有 Windows CRLF warning。
+    - `go test ./internal/analyze/repo -run TestPrecisionRepo_UpdateSession -count=1` 仍被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞，未能运行 sqlite repo 单测。
+  - 备注：精准纠错当前仍是“单次 AI 二次分析 + db_first 回算”，不是完整 precision planner/item/aggregate 链路；因此耗时主要取决于视觉模型调用。如果后续要进一步加速，需要产品上确认是否允许对结构化纠错清单走直接 db_first 回算。
+
+## 状态：已实现 - 识别记录列表折叠同一输入的重复纠错/重识别
+
+- 2026-05-09 analyze history duplicate collapse:
+  - 用户反馈：同一个食物/同一张图识别后，如果因为结果有误进行了 2 次修改或 2 次重新识别，`识别记录` 列表会显示多条几乎相同的记录，造成列表噪音。
+  - 过渡期 schema 判断：本轮只改 Go 后端列表聚合口径和前端纠错提交 payload，不新增/修改表、字段、索引、约束或字段类型。
+  - 修复：
+    - 纠错提交时，前端把当前 `analyzeSourceTaskId` 作为 `correction_source_task_id` 传给后端。
+    - Go 后端提交任务时校验 source task 属于当前用户，并写入 `is_correction/correction_source_task_id/correction_root_task_id` 到已有 `analysis_tasks.payload` JSON，不改 schema。
+    - `ListTasks/CountTasks/CountTasksByStatus` 对识别历史任务做折叠：优先按 `correction_root_task_id` 分组；兼容旧数据时，按同一天同一图片/同一文字输入分组，只保留最新一条。
+    - 识别记录列表、总数和最近 24 小时等待记录角标都使用折叠后的任务集，避免纠错/重识别重复堆叠。
+  - Verification:
+    - `go build -o %TEMP%\food-link-analyze-history-collapse-server.exe ./cmd/server` 通过。
+    - `.\node_modules\.bin\eslint.cmd src\packageExtra\pages\result\index.tsx src\utils\api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `go test ./internal/analyze/handler -run TestAnalyzeHandler_CountTasksByStatus -count=1` 通过。
+    - `git diff --check` 通过，仅有 Windows CRLF warning。
+    - 已补 service 单测覆盖“同一天同一图片只展示最新”和“纠错任务写 root 链路”，但当前 Windows Go 环境 `CGO_ENABLED=0` 下 `go-sqlite3 requires cgo`，无法运行 service/sqlite 单测。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均连接失败，未能截图/交互验证。
+
+## 状态：已修复 - 食物分析纠错恢复 AI 二次分析
+
+- 2026-05-09 correction AI reanalysis fix:
+  - 用户明确指出：纠错不是直接显示“已更新”，而是必须让 AI 基于纠错提示再次分析；需要参考 `dev` 分支 Python 设计。
+  - 已核对 `dev:backend/worker.py`：
+    - Python 纠错会把 `additionalContext`、`previousResult` 和 `correctionItems` 写入任务 payload。
+    - 图片/文字 db_first prompt 会把“上一轮餐食描述、上一轮识别结果、用户本轮纠错说明、结构化纠错清单”放进 prompt。
+    - AI 重新输出食物名称和重量；后端再走 db_first 营养库回算。
+    - 不是把前端纠错列表直接作为最终结果，也不是简单更新本地页面。
+  - 修复：
+    - `backend/internal/analyze/service/analyze_service.go` 的 `AnalyzeInput` 增加 `PreviousResult/CorrectionItems`。
+    - 图片和文字 db_first prompt 新增二次纠错上下文块，明确“基于原始输入 + 上一轮结果 + 用户纠错说明”重新分析，并禁止机械照抄上一轮或仅原样返回前端列表。
+    - `backend/internal/worker/worker.go` 的 `completeCorrectionTask` 改为真正调用 AI：普通图片走 `Analyze`，文字走 `AnalyzeText`，精准纠错也短路为同一套单次 AI 二次分析，不再进入 precision planner/item_estimate/aggregate。
+    - AI 输出后继续走 db_first；如果库未命中且输出为 0，仍保留纠错提交时页面已有营养作为 `user_correction_fallback`，避免热量归零。
+    - 前端结果页保留上一轮修复：纠错任务完成后当前页直接刷新结果，不再跳 loading 页。
+  - Verification:
+    - `go test ./internal/analyze/service -run '^(TestBuildDBFirstPromptIncludesCorrectionContext|TestBuildPromptStandardMode|TestBuildPromptStrictMode|TestParseLLMJSON|TestNormalizePayload)$'` 通过。
+    - `go test ./internal/worker -count=1` 通过。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-correction-ai-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-correction-ai-worker.exe ./cmd/worker` 通过。
+    - `eslint src/packageExtra/pages/result/index.tsx src/utils/api.ts` 通过。
+    - `git diff --check` 通过，仅有 Windows CRLF warning。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能截图/交互验证。
+  - 复测要求：用户需重启 Go server + Go worker，并保持前端 watch 更新；重新发起一条新的纠错任务。预期会等待 AI 二次分析结果，结果页当前页刷新为新识别结果，而不是立刻“已更新”但内容不变。
+  - 2026-05-09 follow-up:
+    - 用户复测后反馈纠错一直显示提交中，随后提示“纠错处理超时”。
+    - 定位：前端 `waitForCorrectionTaskResult` 仍沿用上一版轻链路的 15 秒超时，但当前纠错已恢复 AI 二次分析，15 秒过短。
+    - 修复：结果页纠错等待超时从 15 秒改为 120 秒，轮询间隔从 700ms 改为 1200ms，loading 文案从“提交分析中...”改为“纠错分析中...”；超时文案改为“纠错分析仍在处理中，请稍后到识别记录查看”。
+    - 用户要求本轮不用跑测试，由用户自行复测。
+  - 2026-05-09 correction waiting page:
+    - 用户指出纠错也应该有专门等待页，像正常分析等待页一样。
+    - 当前项目没有独立的纠错等待页面文件；已复用现有 `packageExtra/pages/analyze-loading` 并增加 `correction=1` 模式。
+    - `src/packageExtra/pages/result/index.tsx` 纠错提交成功后不再在结果页轮询，改为跳转 `analyze-loading?correction=1`。
+    - `src/packageExtra/pages/analyze-loading/index.tsx` 新增纠错等待态：导航栏标题为“纠错分析中”，阶段文案为“理解纠错说明 → 重新分析食物 → 更新营养结果”，底部模式 badge 显示“纠错分析”，稍后查看文案也改为纠错分析语境。
+    - Verification: `eslint src/packageExtra/pages/result/index.tsx src/packageExtra/pages/analyze-loading/index.tsx src/utils/api.ts` 通过；`git diff --check` 通过，仅有 Windows CRLF warning。
+
+## 状态：已实现 - 首页体重/喝水/运动进入身体趋势页
+
+- 2026-05-09 health metrics stats IA discussion:
+  - 用户反馈：体重、喝水、运动目前缺少一个很好的统计页面；如果塞进底部「分析」页，会让已经很重的分析页继续膨胀。
+  - 当前产品背景：底部「分析」页已经开始从传统营养统计页转为「健康指数 / 饮食相关风险趋势」页面，主叙事更偏长期健康方向与风险参考。
+  - 用户初步设想：把体重、喝水、运动的长期趋势统计直接做在首页相关卡片后面，例如首页点击「体重」进入一个长期趋势页。
+  - 已实现第一版：
+    - 新增分包页 `src/packageExtra/pages/body-trends/`，路由为 `packageExtra/pages/body-trends/index`。
+    - `src/app.config.ts` 注册 `pages/body-trends/index`。
+    - 首页体重/喝水/运动三张状态卡点击后分别进入 `body-trends?tab=weight|water|exercise`。
+    - 新页面提供 3 个 tab：体重、喝水、运动；展示近 30 天摘要和近 21 天趋势图。
+    - 体重 tab 支持直接记录今日体重；喝水 tab 支持快捷加水；运动 tab 提供“去记录”跳转到既有记运动页。
+    - 不改数据库结构、不新增 migration、不新增表字段；只复用已有 `body-metrics` 与 `exercise-logs` 接口。
+  - Verification:
+    - `eslint src/packageExtra/pages/body-trends/index.tsx src/pages/index/index.tsx` 通过。
+    - `git diff --check` 针对本轮文件通过，仅有 Windows CRLF warning。
+    - `npx tsc --noEmit --pretty false --skipLibCheck` 仍被项目既有历史类型错误阻塞；过滤 `body-trends` / 首页本轮入口没有新增报错。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均连接失败，目标项目窗口自动化链路不可用，未能完成截图/交互验证。
+- 2026-05-09 body-trends weight delta refinement:
+  - 用户参考体重记录 App 截图指出：身体重量每次记录都要显示“比上次增加/减少多少”，而不是只在顶部展示一次。
+  - 已调整 `src/packageExtra/pages/body-trends/index.tsx` / `index.scss`：
+    - 体重 tab 的「最近记录」改成按月份分组。
+    - 每条体重记录右侧显示相对上一条记录的变化量，正数用红色、负数用绿色、无上一条显示 `--`。
+    - 月份头展示该月「总变化」和「日均变化」，样式靠近用户提供的示例。
+  - Verification:
+    - `eslint src/packageExtra/pages/body-trends/index.tsx` 通过。
+    - `git diff --check` 针对 body-trends 文件通过。
+    - `npx tsc --noEmit --pretty false --skipLibCheck` 仍被历史类型错误阻塞；过滤 `body-trends` 无新增报错。
+    - 再次尝试 `weapp-devtools`：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均连接失败，未能截图/交互验证。
+
+## 状态：已实现 - 识别记录角标只统计最近 24 小时未记录任务
+
+- 2026-05-09 analyze waiting badge recent-window fix:
+  - 用户反馈：「我的」页/首页入口里的「识别记录」角标会显示 `99+`，实际表示历史所有已识别但未保存为饮食记录的任务数量，会长期堆积，不合理。
+  - 过渡期 schema 判断：本轮只修改 Go 后端统计口径，不新增/修改表、字段、索引、约束或字段类型。
+  - 修复：
+    - `GET /api/analyze/tasks/status-count` 的 `waiting_record` 改为只统计过去 24 小时内 `done` 且没有关联 `user_food_records.source_task_id` 的识别任务。
+    - `has_unseen_waiting_record` 同步受 24 小时窗口约束；如果用户已经看过识别记录，只对“最近 24 小时且晚于 last_seen”的未记录任务显示未读红点。
+    - 历史识别记录总数与列表不变，仍可在识别记录页查看历史；只是不再让历史未保存任务持续推高角标。
+  - Verification:
+    - `go test ./internal/analyze/handler -run TestAnalyzeHandler_CountTasksByStatus -count=1` 通过。
+    - `go build -o %TEMP%\food-link-analyze-badge-server.exe ./cmd/server` 通过。
+    - `git diff --check` 通过，仅有 Windows CRLF warning。
+    - 新增 repo/service sqlite 单测已写入，但当前 Windows Go 环境 `CGO_ENABLED=0` 下 `go-sqlite3 requires cgo`，目标测试无法运行；这是项目既有环境阻塞。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均连接失败，未能截图/交互验证。
+
+## 状态：已实现 - 当天饮食记录页支持单个食物删除
+
+- 2026-05-09 day-record item delete:
+  - 用户反馈：`当天饮食记录` 页面每条记录只有“整条记录删除”按钮；用户希望直接在当天列表里删除某一样食物，不必点进记录详情页。
+  - 过渡期 schema 判断：本轮只复用已有 `PUT /api/food-record/:id` 更新记录 items 与营养汇总，以及既有 `DELETE /api/food-record/:id` 删除整条记录；不涉及新增表、字段、索引、约束或字段类型。
+  - 修复：
+    - `src/packageExtra/pages/day-record/index.tsx` 引入 `updateFoodRecord`，在列表映射时保留原始 `FoodRecord`。
+    - 每个食物行新增删除按钮；点击后弹确认框，只删除该食物并保留同一记录内其他食物。
+    - 删除后按剩余 items 重新汇总 `total_calories/total_protein/total_carbs/total_fat/total_weight_grams` 并提交更新。
+    - 若该食物是记录里的最后一项，确认文案提示会一并删除整条记录，并复用现有整条记录删除接口。
+    - `src/packageExtra/pages/day-record/index.scss` 为食物行右侧新增 calories + 删除图标布局，避免与宏量营养行挤压。
+  - Verification:
+    - `.\node_modules\.bin\eslint.cmd src\packageExtra\pages\day-record\index.tsx --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git diff --check -- src\packageExtra\pages\day-record\index.tsx src\packageExtra\pages\day-record\index.scss` 通过，仅有 Windows CRLF warning。
+    - `npx tsc --noEmit --pretty false --skipLibCheck` 仍被项目既有历史类型错误阻塞，报错位于 `expiry*`、`food-library*`、`health-profile-view`、`record-manual`、`src/utils/api.ts` 的历史问题，本轮 `day-record` 文件没有出现在报错中。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示微信开发者工具目标项目窗口未开启自动化或端口不可用，未能完成截图/交互验证。
+  - 复测建议：用户保持 `npm run dev:weapp` watch 更新后，进入当天饮食记录页，点击某个食物行右侧删除图标；预期只移除该食物，整条记录总热量和页面总摄入随之下降；删除最后一个食物时整条记录被删除。
+
+- 2026-05-09 day-record item delete 500 follow-up:
+  - 用户复测删除单个食物时，前端请求 `PUT /api/food-record/:id` 返回 500；同时微信开发者工具提示 `<wx-image>` 不再支持 HTTP 图片链接。
+  - 根因判断：Go `FoodRecordRepo.Update()` 使用 `Updates(map[string]any)` 更新 `items`，而 `items` 是 `serializer:json` 字段；map 更新路径不会稳定走 GORM serializer，PostgreSQL JSONB 更新容易触发服务端错误。该问题与新增 schema 无关。
+  - 修复：
+    - `backend/internal/foodrecord/repo/food_record_repo.go` 新增 `normalizeFoodRecordJSONUpdates()`，对 `items` / `image_paths` 显式 `json.Marshal` 后写入 `datatypes.JSON`。
+    - `backend/internal/foodrecord/repo/food_record_repo_test.go` 新增 `TestNormalizeFoodRecordJSONUpdates_MarshalsItems`，锁住记录内 items 更新必须转 JSON。
+    - `src/packageExtra/pages/day-record/index.tsx` 增加 `normalizeDisplayImageUrl()`：`http://tmp/...` 转 `wxfile://tmp/...`；普通 `http://...` 图片不再传给 `<Image>`，降级为占位，避免微信端 HTTP 图片 warning。
+  - Verification:
+    - `C:\Program Files\Go\bin\go.exe test ./internal/foodrecord/repo -run TestNormalizeFoodRecordJSONUpdates_MarshalsItems -count=1` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-foodrecord-update.exe ./cmd/server` 通过。
+    - `.\node_modules\.bin\eslint.cmd src\packageExtra\pages\day-record\index.tsx --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git diff --check` 针对本轮 day-record 与 foodrecord repo 文件通过，仅有 Windows CRLF warning。
+    - `C:\Program Files\Go\bin\go.exe test ./internal/foodrecord/handler ./internal/foodrecord/service -count=1` 中 handler 通过，service 包仍被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 历史测试环境阻塞。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能完成截图/交互验证。
+  - 复测要求：用户需重启 Go server 后再次删除当天记录中的单个食物；前端 watch 也需确保 day-record 新代码已编译到 `dist`。
+
+## 状态：已修复 - 结果页纠错提交后不再跳 loading 页
+
+- 2026-05-09 correction result-page UX fix:
+  - 用户反馈：点击纠错后提示任务提交成功，进入分析中后突然退回原结果页，页面没有任何改动。
+  - 根因：上一轮后端已把纠错改成轻链路快速完成，但前端结果页仍按“长时间重新分析”跳转到 `analyze-loading`。loading 页完成后再重定向结果页，容易受到导航栈、旧 `analyzeResult` 缓存和旧 source task 状态影响，表现为回到原页面且看不到改动。
+  - 修复：
+    - `src/packageExtra/pages/result/index.tsx` 引入 `getAnalyzeTask`。
+    - 纠错提交后不再 `navigateTo('/pages/analyze-loading')`。
+    - 当前结果页直接轮询纠错 task，拿到 `done + result` 后在本页更新 description/insight/营养项/总营养/精准字段，并写回 `analyzeResult` 与新的 `analyzeSourceTaskId`。
+    - 纠错成功后关闭抽屉、清空本轮补充说明并提示“已更新”。
+  - Verification:
+    - `.\node_modules\.bin\eslint.cmd src/packageExtra/pages/result/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git diff --check -- src/packageExtra/pages/result/index.tsx src/utils/api.ts` 通过，仅有 Windows CRLF warning。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示微信开发者工具目标项目窗口未开启自动化或端口不可用，未能完成截图/交互验证。
+  - 复测要求：用户保持前端 watch 更新后，重新打开结果页发起一条新的纠错；预期停留在当前结果页，抽屉关闭后食物与营养数据直接刷新，不再跳到 loading 页再退回旧结果。
+
+## 状态：已核查 - 圈子评论删除能力
+
+- 2026-05-09 community comment delete check:
+  - 用户询问当前在「圈子」里评论后，是否能删除自己的评论。
+  - 结论：
+    - 圈子主列表页 `src/pages/community/index.tsx` 已接入评论删除：对评论长按会触发「删除评论」确认弹窗。
+    - 删除入口允许“评论作者本人”删除自己的评论；同时动态作者也可以删除自己动态下的别人评论。
+    - 前端 API `communityDeleteComment(recordId, commentId)` 已存在，并请求 `DELETE /api/community/feed/:record_id/comments/:comment_id`。
+    - Go 后端 `backend/internal/community/handler/comment_handler.go` 已注册并实现删除接口，权限判断为 `target.UserID == currentUserID || record.UserID == currentUserID`；删除时会级联删除该评论的一层子回复。
+    - 当前 `dist/pages/community/index.js` 和 `dist/common.js` 也已包含对应长按删除逻辑，说明当前构建产物里圈子主列表已有该功能。
+  - 限制/缺口：
+    - 互动消息跳转后的动态详情页 `src/packageExtra/pages/interaction-feed-detail/index.tsx` 只支持点击评论回复，未导入 `communityDeleteComment`，也没有长按删除入口；如果用户从互动消息详情页进入评论区，目前看不到删除自己的评论入口。
+    - 后端 PRD gap 文档 `backend/docs/backend-api-prd/api/community/feed/[record_id]-comment-[comment_id]-gap.md` 已过期，仍写着后端缺 DELETE route，但实际 Go 后端已经实现并注册。
+  - Verification:
+    - 只读核查源码与 `dist` 产物通过。
+    - 尝试 `go test ./internal/community/handler -run TestCommentHandler_DeleteComment -count=1`：`CGO_ENABLED=0` 下被 `go-sqlite3 requires cgo` 阻塞；再试 `CGO_ENABLED=1` 被本机缺 `gcc` 阻塞，未能运行该 sqlite 单测。
+
+## 状态：已修复 - 公共食物库上传者删除/下架能力
+
+- 2026-05-09 public food delete capability check:
+  - 用户询问：自己上传到公共食物库的食物如果上传错，作为上传者能否删除。
+  - 当前代码结论：暂时不能。Go 后端公共食物库已提供创建、列表、我的上传、收藏、点赞、评论、反馈/修正接口，但没有 `DELETE /api/public-food-library/:item_id` 或等价下架接口；前端详情页也只有点赞、收藏、评论和“信息有误？点击修正”，没有上传者删除按钮。
+  - 代码依据：
+    - `backend/internal/app/app.go` 公共食物库路由只注册 list/create/mine/collections/feedback/get/like/collect/comments。
+    - `backend/internal/publicfood/service/public_food_service.go` 只有 `Create/List/Mine/Collections/Get/Like/Unlike/Collect/Uncollect/Comments/AddComment/Feedback`。
+    - `src/utils/api.ts` 只有 `getMyPublicFoodLibrary`、`submitPublicFoodLibraryFeedback` 等公共库 API，没有删除公共库条目的客户端函数。
+  - 建议实现口径：上传者应允许删除/下架自己的条目；优先做软删除或下架（如 `status=user_deleted/deleted`），立即从公共列表、详情、收藏列表中不可见，同时保留后台审计、评论/点赞历史或可按需清理。
+  - 用户确认该能力合理，已实现：
+    - 后端新增 `DELETE /api/public-food-library/:item_id`，service 先读取条目并校验 `item.user_id == 当前登录用户`；非上传者返回 forbidden；不存在或已删除返回 not found。
+    - 删除采用已有 `public_food_library.status` 软下架为 `user_deleted`，不新增表/字段/索引/约束，符合 Python/Supabase -> Go/PostgreSQL 过渡期 schema 保守规则。
+    - `Get` 会把 `user_deleted/deleted` 视为不存在；`Mine` 也排除删除状态；公共列表和收藏列表原本只查 `published`，删除后自然不可见。
+    - 前端 `src/utils/api.ts` 新增 `deletePublicFoodLibraryItem()`。
+    - `src/packageExtra/pages/food-library-detail/index.tsx` 仅当 `item.user_id === Taro.getStorageSync('user_id')` 时显示删除按钮，删除前二次确认，成功后写入 `food_library_need_refresh` 并返回列表。
+    - 暗黑模式补充删除按钮样式。
+  - Verification:
+    - `go test ./internal/publicfood/... ./internal/app` 通过。
+    - `go build -o %TEMP%\food-link-publicfood-delete-server.exe ./cmd/server` 通过。
+    - `eslint src/packageExtra/pages/food-library-detail/index.tsx src/utils/api.ts` 通过。
+    - `git diff --check` 公共库删除相关文件通过，仅有 Windows CRLF warning。
+    - 误将 SCSS 传给 eslint 时失败，原因是项目 eslint/Babel 不解析 SCSS；随后已按 TS/TSX 文件重新 lint 通过。
+    - `weapp-devtools` 自动化验证失败：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均无法连接目标项目窗口自动化，未能截图/交互验证。
+
+## 状态：已修复 - 食物分析纠错统一为结构化清单回算
+
+- 2026-05-09 correction flow fix:
+  - 用户反馈精准模式纠错后会把原本 5 个食物扩成 7-8 个食物；普通模式纠错后被纠错食物热量/营养可能显示为 0。
+  - 定位：
+    - 结果页二次纠错虽然维护了 `correctionItems`，但重新提交任务时没有把结构化纠错清单传给后端，只把用户修改拼成 `additionalContext`。
+    - 普通模式因此会重新走 Gemini/DeepSeek 识别；精准模式会重新走 `precision_plan -> item_estimate -> refine -> aggregate`，模型会基于原图再次拆食物，容易引入额外项。
+    - 营养为 0 的原因是重新识别后 db_first 未命中且 fallback 不可用时会按 zero unit 输出；纠错页已有的用户当前营养值没有被作为兜底传给后端。
+  - 修复：
+    - `src/packageExtra/pages/result/index.tsx` 二次纠错提交时传入完整 `correctionItems`，包含名称、重量、原始重量、当前 calories/protein/carbs/fat、sourceName/sourceItemId、nameEdited/weightEdited。
+    - `src/utils/api.ts` 补充 `correctionItems` 类型字段。
+    - `backend/internal/worker/worker.go` 新增统一纠错轻链路：`food`、`food_text`、`precision_plan` 任务只要检测到 `correctionItems`，直接按用户清单构建 items，走 `ApplyDBFirstToItems` 营养库回算并完成任务，不再重新识图、不再走精准 planner/分组/复核。
+    - 对数据库未命中的纠错项，若 db_first 输出 zero nutrition，则保留纠错提交时页面已有的 calories/protein/carbs/fat，标记 `nutrition_source=user_correction_fallback`，避免用户修正后热量变 0。
+    - 精准纠错仍会更新 precision session final_result/status，但不会再创建 item estimate/aggregate 子任务。
+  - Verification:
+    - `go test ./internal/worker -count=1` 通过。
+    - `go test ./internal/analyze/service -run '^(TestResolveModelConfig|TestAnalyzeService_AnalyzeText|TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault|TestAnalyzeService_AnalyzeImageQwenAliasRoutesToGemini|TestOfoxAIClient_Analyze_Success|TestDashScopeClient_Analyze_Success|TestParseLLMJSON|TestNormalizeExecutionMode)$'` 通过。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-correction-server.exe ./cmd/server`、`go build -o %TEMP%\food-link-correction-worker.exe ./cmd/worker` 通过。
+    - `.\node_modules\.bin\eslint.cmd src/packageExtra/pages/result/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git diff --check -- src/packageExtra/pages/result/index.tsx src/utils/api.ts backend/internal/worker/worker.go backend/internal/worker/worker_sanitize_test.go` 通过，仅有 Windows CRLF warning。
+  - Runtime validation:
+    - 已按项目要求读取并使用 `.agents/skills/weapp-devtools/SKILL.md`，尝试 `mrc where --port 3001` 与 `mrc where --port 9420`，均连接失败，提示微信开发者工具目标项目窗口未开启自动化或端口不可用；未能完成截图/交互验证。
+  - 复测要求：用户需重启 Go server + Go worker，并确保前端 watch 产物更新后重新发起一条新的纠错任务；旧纠错任务仍保留旧结果。
+
+## 状态：已修复 - 会员支付优惠金额展示与中途升级补差
+
+- 2026-05-09 membership payment/pricing fix:
+  - 用户指出会员页宣传优惠金额不够严谨：季度/年度套餐当前写“省 5 元 / 省 60 元”，按实际价格应为“省 4.8 元 / 省 59.8 元”。
+  - 定位：`src/packageExtra/pages/pro-membership/index.tsx` 对 `savings` 和按月卡折算差价使用 `toFixed(0)`，导致小数优惠金额被取整展示。
+  - 修复：新增 `formatCurrencyCompact()`，优惠金额保留真实小数但去掉多余 0；周期 tab 和已选套餐卡都使用该格式。
+  - 用户同时指出套餐升级当前体验粗糙：例如先买 19.9 月度会员，使用 10 天后升级到 29.9 时，不应简单吞掉原套餐剩余价值，也不能让旧套餐剩余期直接免费升级成高档权益。
+  - 最终采用口径：中途升级/切换按“改签当前会员期 + 剩余价值补差”计算，会员期起算日保持第一次开通当前连续会员期的时间不变，目标套餐周期也从这个起算日开始算。
+  - 补差公式：`应付金额 = 目标套餐剩余价值 - 当前套餐剩余价值`；其中剩余价值按“套餐金额 × 从今天到对应到期日的剩余时长 / 套餐总时长”计算。
+  - 示例：5 月 1 日买轻度月卡，5 月 11 日升级标准月卡，则补 5 月 11 日到原月卡到期日之间的档位差价，到期日不变；若升级标准年卡，则目标年卡从 5 月 1 日起算到次年 5 月 1 日，只补这段目标年卡剩余价值减去轻度月卡剩余价值。
+  - 后端实现：
+    - `CreatePayment()` 会先读取当前会员和目标套餐，用 `buildMembershipPaymentTerms()` 计算动态应付金额，微信下单金额和 `pro_membership_payment_records.amount` 都写补差金额。
+    - 支付记录 `extra.upgrade_terms` 保存补差订单的起算日、目标到期日、当前剩余价值、目标剩余价值和本次应付金额；不新增 schema。
+    - `activateMembershipFromPayment()` 和 `/membership/me` reconcile 会读取 `extra.upgrade_terms`，支付成功后把 `current_period_start` 保持为原起算日，把 `expires_at` 设为“原起算日 + 目标套餐周期”，避免叠加新卡或吞掉旧价值。
+    - 若目标套餐周期已短于当前已使用时长、会缩短当前有效期，或当前套餐剩余价值已覆盖目标套餐，则拒绝即时切换。
+  - 前端实现：
+    - `src/packageExtra/pages/pro-membership/index.tsx` 增加同口径的预估展示：按钮显示“补差升级 · ¥x”，确认弹窗展示“本次补差”和“已折抵当前套餐剩余价值约 ¥x”；实际支付金额仍以后端返回为准。
+    - `src/utils/api.ts` 的 `CreateMembershipPaymentResponse` 补充 `original_amount/order_mode/upgrade_terms` 可选字段。
+    - `src/packageExtra/pages/membership-agreement/index.tsx` 的升级规则更新为“按剩余价值折抵后补差，目标套餐从当前连续会员期起算日开始计算”；会员页“生成分享海报”奖励文案改为“分享海报成功”。
+  - Verification:
+    - `go test ./internal/membership/service` 通过。
+    - `go build -o %TEMP%\food-link-membership-proration.exe ./cmd/server` 通过。
+    - `.\node_modules\.bin\eslint.cmd src\packageExtra\pages\pro-membership\index.tsx src\packageExtra\pages\membership-agreement\index.tsx src\utils\api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化或端口不可用，未能完成截图/交互验证。
+  - 备注：本轮不涉及新增表/字段/索引/约束；补差信息写入已有支付记录 `extra` JSON 字段，符合 Python/Supabase -> Go/PostgreSQL 过渡期 schema 保守规则。
+
+## 状态：已修复 - 分享海报奖励从生成时机改为分享成功时机
+
+- 2026-05-09 share poster reward trigger fix:
+  - 用户反馈当前分享海报积分有 bug：只要生成分享图就奖励 1 积分，但正确口径应是分享动作完成后才奖励。
+  - 定位：`src/packageExtra/pages/record-detail/index.tsx` 在 `Taro.canvasToTempFilePath.success` 中生成海报临时文件后立即调用 `claimSharePosterReward(record.id)`，导致“自动生成海报/打开预览”也会发放奖励。
+  - 修复：删除生成成功回调里的领奖调用；新增 `claimSharePosterRewardAfterShare()`，只在用户点击海报弹窗的「微信」分享并进入 `Taro.showShareImageMenu.success` 后调用领奖接口。保存图片和生成预览不会领奖；后端幂等、重复领取、每日上限仍由现有接口校验。
+  - Verification:
+    - `.\node_modules\.bin\eslint.cmd src/packageExtra/pages/record-detail/index.tsx --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git grep` 确认 `claimSharePosterReward(...)` 只剩分享成功后的调用点。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001`、`mrc where --port 9420`、`mrc errors 10 --port 9420` 均连接失败，提示微信开发者工具目标项目窗口未开启自动化或端口不可用，未能完成截图/交互验证。
+  - 复测建议：用户保持 `npm run dev:weapp` watch 更新后，进入一条自己的饮食记录详情页生成海报；只生成海报时会员积分不应变化；点击「微信」并完成分享后，首次同一记录当天应显示 `海报奖励 +1 积分`，重复分享同一记录不再加分。
+
+## 状态：进行中 - Python/Supabase 到 Go/PostgreSQL 过渡期开发规则
+
+- 2026-05-09 transition/dev-rule:
+  - 用户询问 Go 后端基本重构完成后，过渡期新增功能或 schema 改动应该如何处理。
+  - 已确认 `backend/scripts/migrate_supabase_db_to_postgres.py` 是 destructive full sync：dump Supabase 源库后 drop/recreate 目标 schema，再 restore 并校验，使目标 PostgreSQL 与 Supabase 完全一致。
+  - 结论：
+    - 非 schema 改动可以正常在 Go 分支开发和测试。
+    - schema 改动不能只改 PostgreSQL；否则最终从 Supabase 全量同步时会被覆盖。
+    - 切流前生产 schema 以 Supabase/Python 为真源；新增表/字段若要被最终同步保留，应先以向后兼容方式进入 Supabase，或在最终同步后、Go 正式启动前作为正式 SQL migration 应用到 PostgreSQL。
+    - 体验版/本地 Go 写入 PostgreSQL 的数据默认是测试数据；若要保留真实用户体验版数据，最终切流必须做双源增量合并，不能只跑 Supabase 覆盖 PostgreSQL。
+
+## 状态：已修复 - 首页底部食物保质期字段展示
+
+  - 2026-05-09 home expiry summary fix:
+  - 用户反馈首页底部「食物保质期」卡片图片没有显示；截图同时显示卡片标题为空、只剩「点击编辑」。
+  - 定位：
+    - Go 首页 dashboard 的 `expirySummary` 与 Python 旧版契约不一致：Go 返回 `count/name/urgency`，前端读取的是 `pendingCount/food_name/quantity_text/storage_location/deadline_label/urgency_level`，导致标题和 meta 为空。
+    - 进一步核对后确认：旧 Python/Supabase 版保质期条目本来不显示图片，也没有图片持久化字段；用户确认无需显示图片。
+  - 修复：
+    - `backend/internal/home/service/dashboard_service.go` 的 `buildExpirySummary` 恢复 Python 旧版字段口径。
+    - `backend/internal/home/repo/home_repo.go` 首页保质期查询补 `quantity_note/note`，用于首页 meta 展示。
+    - 已撤回本轮尝试加入的 `food_expiry_items.image_url`、前端保存图片 URL、首页缩略图渲染等图片相关改动；保质期区块继续显示 icon。
+  - Verification:
+    - `go test ./internal/home/service -run TestBuildExpirySummary` 通过。
+    - `go test ./internal/expiry/handler` 通过。
+    - `go build -o %TEMP%\food-link-expiry-image-server.exe ./cmd/server` 通过。
+    - `.\node_modules\.bin\eslint.cmd src\pages\index\index.tsx src\packageExtra\pages\expiry-edit\index.tsx src\utils\api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+  - Known blockers:
+    - `go test ./internal/home/service ./internal/expiry/service` 的全包测试仍被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞在 sqlite 初始化。
+    - `npx tsc --noEmit --pretty false --skipLibCheck` 仍被项目既有历史类型错误阻塞，未发现本轮文件新增相关错误。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化或端口不可用，未能完成截图/交互验证。
+  - 2026-05-09 schema clarification:
+    - 用户追问当前数据库是否已有图片列，以及旧 Supabase/Python 版使用什么字段。
+    - 已核对旧 Python `create_food_expiry_item_v2()`：写入字段只有 `user_id/food_name/category/storage_type/quantity_note/expire_date/opened_date/note/source_type/status`，没有图片字段；旧首页 `_build_food_expiry_summary()` 也未输出图片字段。
+    - 已只读查询当前 PostgreSQL `information_schema.columns`：`food_expiry_items` 真实列为 `id/user_id/food_name/category/storage_type/quantity_note/expire_date/opened_date/note/source_type/status/created_at/updated_at`，没有 `image_url`。
+    - 用户确认此处本来就不用显示图片；已按要求恢复图片相关改动，避免引入 schema 变更。
+
+## 状态：已修复 - Go 积分体系补齐 dev/Python 邀请奖励闭环
+
+- 2026-05-09 credit parity review:
+  - 用户说明当前分支是基于最新 `dev/main` Python 后端能力做 Go 重构后的测试分支，要求先把积分体系逻辑做到与 `dev` 一模一样；`dev` 自身已有的问题暂不处理。
+  - 已静态对照 `dev` 的 `backend/main.py`、`backend/database.py`、`backend/routers/*` 与当前 Go `backend/internal/membership/*`、`backend/internal/analyze/service/task_service.go`、`backend/internal/expiry/service/expiry_service.go`、`backend/internal/health/service/exercise_service.go`、`backend/internal/foodrecord/service/food_record_service.go`。
+  - 当前 Go 已基本覆盖：标准食物分析 2 分、精准分析 4 分、运动记录 1 分；每日系统积分 + earned credits 拆分；补录日期优先使用目标日系统积分、再用今日系统积分、最后用长期奖励积分；付费会员/试用/前 1000 注册/前 100 付费翻倍；海报奖励每日每条记录一次、每人最多 3 分；任务创建成功后再扣 earned credits。
+  - 主要缺口：`dev` 在保存饮食记录和创建运动记录后会调用 `activate_pending_invite_referral_on_first_valid_use_sync`，新用户 7 天内完成 2 个不同自然日有效使用后，邀请双方各得 15 earned credits；当前 Go 只创建 `user_invite_referrals` 绑定并在会员接口统计已有 ledger，缺少“有效使用推进邀请状态 + 发 15 分”的闭环。
+  - 次级差异：Go 的 `CountDailyMembershipBonusCredits` 只统计 ledger，不像 `dev.get_daily_membership_bonus_breakdown()` 会先 materialize 历史 `reward_active` 邀请奖励和海报事件；当前海报领取路径已立即写 ledger，问题主要落在邀请奖励兼容/补偿。
+  - Verification:
+    - `go test ./internal/membership/domain ./internal/membership/handler ./internal/membership/service` 通过。
+    - `go test ./internal/membership/...` 仍被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞在 repo 测试。
+  - 下一步建议：先补 Go 邀请奖励闭环与 materialize 兼容，再补 repo/集成测试或真实 PostgreSQL 事务验证。
+  - 2026-05-09 credit parity fix:
+    - 已补 Go `membership` 的邀请奖励闭环：
+      - `ActivatePendingInviteReferralOnFirstValidUse` 复刻 `dev.record_invite_referral_valid_use_sync`：只处理 `pending_qualified`；7 天窗口过期标记 `reward_blocked/qualification_window_expired`；第一天有效使用只记录 `first_effective_action_at/type`；第二个不同中国自然日检查邀请人当月已完成奖励数，超过 10 人则 `reward_blocked/monthly_limit_reached`；未超限则邀请双方各得 15 earned credits，source_key 分别为 `invite-qualified:{referral_id}:inviter/invitee`，然后 referral 标记 `reward_completed`。
+      - `GetMyMembership` 计算积分前新增 materialize 兼容：对 `reward_active` 老邀请奖励按每天 5 分写入 `invite_daily_reward` ledger；对 `user_credit_bonus_events` 的海报事件补写 `share_poster_reward` ledger，保持与 `dev.get_daily_membership_bonus_breakdown()` 的副作用一致。
+    - 已把奖励激活接入主业务：
+      - `FoodRecordService.Save` 饮食记录保存成功后触发 `food_record` 有效使用。
+      - `ExerciseService.ProcessExerciseTask` 运动 worker 真正创建运动记录成功后触发 `exercise_log` 有效使用。
+      - 两处都按 Python 口径：奖励失败只打印并忽略，不阻塞记录保存/运动任务完成。
+    - Verification:
+      - `go test ./internal/membership/domain ./internal/membership/handler ./internal/membership/service` 通过。
+      - `go test ./internal/app ./internal/worker ./internal/health/service` 通过。
+      - `go build -o %TEMP%\food-link-credit-parity-server.exe ./cmd/server` 通过。
+      - `go build -o %TEMP%\food-link-credit-parity-worker.exe ./cmd/worker` 通过。
+      - `git diff --check` 通过，仅有 Windows CRLF warning。
+    - Known blockers:
+      - `go test ./internal/foodrecord/service ...` 与涉及 repo/sqlite 的全量测试仍被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞。
+
+## 状态：已修复 - Go 精准模式对齐 Python 实际流程
+
+- 2026-05-09 precision parity:
+  - 用户要求精准模式必须按 Python 当前正在使用的流程迁移；进一步确认 Python 实际运行路径会按条件触发 `_maybe_refine_precision_weights_sync` 二次重量复核，因此 Go 也已补回。
+  - 已对照 `main:backend/worker.py` 迁移 Go worker 精准模式主链路：
+    - `precision_plan` 不再复用通用食物分析 prompt，改为 Python 版专用 planner prompt，读取 session/latest_inputs/reference_objects/previous_rounds，输出并规范化 `precisionStatus=ready_for_estimate`、`splitStrategy`、`itemsToEstimate`。
+    - `precision_item_estimate` 不再复用通用 `Analyze/AnalyzeText`，改为 Python 版专用单项/多项估重 prompt，只解析 `item/items` 中的 `name + estimatedWeightGrams`，再挂回 planner metadata，并走 db_first 营养库回算。
+    - `precision_item_estimate` 已补回 Python 条件式二次重量复核：`uncertainty_level=high`、`requires_reference=true`、或食物名包含米饭/炒饭/面/粥/红烧肉等关键词时触发；复核使用 `temperature=0.1`，失败只打日志并继续使用首次估重。
+    - `precision_aggregate` 按 `item_index` 汇总子项结果，补 `originalWeightGrams`、`dbLookupSummary`、single_shot/grouped_parallel/high uncertainty/deepseek fallback insight 和终端结构化日志。
+    - 精准图片 JSON 调用支持多图 `image_urls/image_paths`，并将精准 JSON completion 的 temperature 固定为 `0.2`、图片/文字超时分别设为 `90s/60s`，与 Python content_parts / `_run_json_completion_sync` 行为对齐。
+  - Verification:
+    - `go test ./internal/worker -count=1` 通过。
+    - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeText|TestResolveModelConfig|TestOfoxAIClient|TestDashScopeClient|TestParseLLMJSON|TestNormalize'` 通过。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-precision-refine-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-precision-refine-worker.exe ./cmd/worker` 通过。
+    - `git diff --check` 通过，仅有 Windows CRLF warning。
+  - 复测要求：用户重启 Go server 和 Go worker 后，提交新的精准模式任务；期望 planner 识别 5 项时，estimate/aggregate 不再把两个子任务各自识别出的整餐叠加成 10 项。
+  - 用户复测后发现结果页 `insight/context_advice` 暴露“分组精估、估计不确定性、AI估算、数据库命中/AI补全”等内部流程/诊断文案。
+  - 已修复：`buildPrecisionFinalResult` 的用户可见 `insight` 改为普通饮食分析文案，`context_advice` 不再输出内部参考物/不确定性提示；`dbLookupSummary` 继续保留在结果对象中供内部调试，worker 终端日志继续输出命中率。
+  - 追加验证：
+    - `go test ./internal/worker -count=1` 通过，新增测试锁定用户可见 insight 不能包含 `数据库命中/AI补全/AI估算/分组/参考物/不确定性`。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-precision-user-facing-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-precision-user-facing-worker.exe ./cmd/worker` 通过。
+  - 主食估重优化：
+    - 用户反馈精准模式对主食仍容易估高，尤其薄薄一层米饭、浅碗饭、深碗饭没有按容器大小/填充深度区分。
+    - 已在单项估重、多项估重、二次重量复核 prompt 中加入主食体积规则：必须先判断 `容器容量 × 填充比例 × 食物厚度/松散度`，不能套常见一碗饭 `180g/200g`。
+    - 按用户纠正，已删除“薄层米饭固定 50-120g”这类硬区间；薄层如果面积很大，体积和重量仍可能不小。现在 prompt 要求先估可见面积和平均厚度得到体积，再按熟米饭/面/粥的体积密度换算重量。
+    - 追加验证：`go test ./internal/worker -count=1`、相关 Go 包测试、server/worker build 均通过，新增测试确保三类 prompt 都包含主食体积/面积/厚度规则，并禁止重新硬编码 `50-120g`。
+  - 模型路由收口：
+    - 用户明确要求普通拍照和精准拍照都不要再使用 Qwen，默认统一用 `gemini-3-flash-preview`。
+    - 已将 `resolveModelConfig("")` 默认改为 `gemini / gemini-3-flash-preview`，并把 `qwen/qwen-vl/qwen-vl-max` 显式别名也强制归到 Gemini，防止前端旧参数或缓存绕回 DashScope/Qwen。
+    - 普通图片 `Analyze` 改为使用已装配的 Gemini/Ofox client；精准模式 `RunPrecisionJSONWithImages*` 未传模型时走 Gemini，传 Qwen 别名也会走 Gemini。
+    - Qwen client 仅保留给 `AnalyzeCompare` 这类专门模型对比/测试入口，不再作为普通模式或精准模式路由。
+    - 文字输入模式保持前序决策：默认 DeepSeek `deepseek-v4-flash`，不受本次视觉模型默认值影响。
+    - Verification:
+      - `go test ./internal/analyze/service -run '^(TestResolveModelConfig|TestAnalyzeService_AnalyzeText|TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault|TestAnalyzeService_AnalyzeImageQwenAliasRoutesToGemini|TestOfoxAIClient_Analyze_Success|TestDashScopeClient_Analyze_Success|TestParseLLMJSON|TestNormalizeExecutionMode)$'` 通过。
+      - `go test ./internal/worker -count=1` 通过。
+      - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+      - `go build -o %TEMP%\food-link-gemini-default-server.exe ./cmd/server`、`go build -o %TEMP%\food-link-gemini-default-worker.exe ./cmd/worker` 通过。
+      - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go backend/internal/app/app.go` 通过，仅有 Windows CRLF warning。
+    - Known blocker:
+      - 误跑包含 sqlite 初始化的 `AnalyzeService` 老测试时仍会被当前 Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞；本轮已用不依赖 sqlite 的专项测试锁定模型路由。
+
+## 状态：排查中 - 本地开发内存持续上涨
+
+- 2026-05-09 local dev memory diagnosis:
+  - 用户反馈本地开发时内存会越来越大，最终爆掉。
+  - 已按 `jinhui-stack-debug` 口径先看环境/运行时/构建依赖，不重启或停止用户进程，仅做只读诊断。
+  - 当前现场证据：
+    - Go 后端 `go run ./cmd/server` 子进程 `server.exe` private memory 约 `59MB`，`go run ./cmd/worker` 子进程 `worker.exe` private memory 约 `56MB`；60 秒采样基本稳定，暂未看到 Go server/worker 明显泄漏。
+    - `npm run dev:weapp` 的 Taro watch 核心子进程 `taro build --type weapp --watch --no-check` private memory 约 `1.86GB`，是项目内最可疑的持续涨内存来源。
+    - 当前 dev 配置在 development 下同时开启 `mini.enableSourceMap=true` 和 Vite `config.build.sourcemap=true`，大项目 watch 下容易推高 Taro/Vite 内存。
+    - 微信开发者工具本身有多个 renderer/GPU 进程，占用也较高；另外本机存在大量与 `food_link` 无关的 `xcodebuildmcp` Node 进程，合计 private memory 约 `5.8GB`，会显著增加整机内存压力。
+  - 初步结论：当前更像“前端 Taro watch / 微信开发者工具 / 本机额外 MCP 进程叠加导致的本地开发内存膨胀”，而不是 Go 后端业务代码的明确内存泄漏。
+  - 建议后续：
+    - 本地开发默认用轻量 watch：关闭或改成可选 source map，必要时另设 `dev:weapp:debug` 才开启完整 sourcemap。
+    - 增加一个只读内存诊断脚本，快速输出 Taro、Go server/worker、微信开发者工具、项目相关 Node 进程的 private/working set。
+    - 若需要确认“持续上涨曲线”，再做 10-30 分钟采样日志，而不是只看单点占用。
+
+## 状态：进行中 - Go 重构后端功能测试与问题修复
+
+- 2026-05-09 issue #9 / stats AI risk insight manual refresh:
+  - 测试问题：数据分析页「AI 风险解读」缓存过期提示缺少「手动更新」按钮；该洞察生成应使用固定 DeepSeek 模型 `deepseek-v4-flash`。
+  - 定位：
+    - dev 分支统计页在 `analysis_summary_needs_refresh=true` 时，会在缓存状态条右侧显示「手动更新」并调用 `/api/stats/insight/generate`。
+    - 当前 Go 重构测试分支页面保留了生成逻辑和空态「生成本周/月洞察」入口，但缓存过期状态条缺少该 action JSX；样式中也缺少 `analysis-status-action*`。
+    - Go 后端 stats insight 模型应固定为 `deepseek-v4-flash`，不再通过 YAML/env 切换。
+  - 修复：
+    - `src/pages/stats/index.tsx` 恢复 dev 口径：仅当 `insightNeedsRefresh` 为 true 时，在 AI 风险解读详情弹窗缓存状态条内显示「手动更新」按钮，点击触发 `handleGenerateInsight()`，生成中显示 spinner icon。
+    - `src/pages/stats/index.scss` 补回 `analysis-status` flex 布局和 `analysis-status-action*` 按钮样式。
+    - `src/styles/fl-color-scheme-dark.scss` 补暗黑模式下手动更新按钮颜色。
+    - `backend/internal/health/service/stats_service.go` 将 stats insight DeepSeek 模型名收口为常量 `statsInsightDeepSeekModel = "deepseek-v4-flash"`，并补测试锁定模型名。
+  - Verification:
+    - `C:\Program Files\Go\bin\go.exe test ./internal/health/service` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-stats-insight-fix.exe ./cmd/server` 通过。
+    - `.\node_modules\.bin\eslint.cmd src/pages/stats/index.tsx --ext .ts,.tsx --max-warnings 0` 通过。
+    - `git diff --check -- ...` 通过，仅提示工作区 CRLF 警告。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示微信开发者工具目标窗口未开启自动化或端口不可用；未能完成截图/交互验证。
+  - 复测要求：用户需要确保当前 `npm run dev:weapp` watch 产物已更新，并在微信开发者工具中打开「分析」页 -> AI 风险解读详情；当后端返回 `analysis_summary_needs_refresh=true` 时，应看到「手动更新」按钮。
+
+- 2026-05-09 issue #8 / precision photo submit:
+  - 测试问题：拍照识别的精准模式提交失败，`POST /api/analyze/submit` 返回 500，小程序只显示 `internal server error`。
+  - 定位：
+    - 普通拍照提交只写 `analysis_tasks`；精准模式提交会额外创建 `precision_sessions` 和 `precision_session_rounds`。
+    - 真实 PostgreSQL schema 中 `precision_sessions.pending_requirements`、`precision_sessions.reference_objects`、`precision_sessions.created_at`、`precision_sessions.updated_at`、`precision_session_rounds.input_payload`、`precision_session_rounds.created_at`、`precision_item_estimates.payload/created_at/updated_at` 等字段是 `NOT NULL` 或依赖默认值。
+    - Go domain 使用 `map/slice/*time.Time`，nil 时 GORM 可能显式写入 `NULL`，从而在精准模式入口直接触发数据库错误；普通拍照不碰这些表，所以不会报同样的错。
+  - 修复：
+    - `PrecisionRepo.CreateSession` 在入库前补齐默认 `execution_mode/status/round_index/latest_inputs/pending_requirements/reference_objects/created_at/updated_at`。
+    - `PrecisionRepo.CreateRound` 在入库前补齐空 `input_payload` 和 `created_at`。
+    - `PrecisionRepo.CreateItemEstimate` 在入库前补齐默认 `status/payload/created_at/updated_at`。
+    - `referenceObjectsAsAny` 在无参考物时返回空数组而不是 nil，避免写入 JSONB NULL。
+  - 复测后续定位：
+    - 用户再次提交精准模式后，`POST /api/analyze/submit` 已返回 200，但前端轮询显示任务失败：`precision_sessions.pending_requirements` 违反 NOT NULL。
+    - 终端日志显示 `precision_item_estimate` 与 `precision_aggregate` 子任务已处理，说明失败点不在提交接口，而在 worker 的 `precision_plan` 更新 session 阶段。
+    - 根因：`PrecisionRepo.UpdateSession` 使用 `Updates(map[string]any)` 写入 `pending_requirements: []any{}` 等 JSONB 字段时，GORM map 更新不会稳定走 struct serializer，空 slice 可能落成 SQL NULL。
+  - 追加修复：
+    - `PrecisionRepo.UpdateSession` 对 `latest_inputs/pending_requirements/reference_objects/split_plan/latest_planner_result/final_result` 显式 JSON marshal 后写 `datatypes.JSON`。
+    - `PrecisionRepo.UpdateItemEstimate` 对 `payload/result` 使用同一 JSON 更新规范。
+    - `precision_repo_test` 增加 `TestNormalizePrecisionJSONUpdates`，锁定空数组应编码为 JSON `[]`。
+  - Verification:
+    - 只读查询真实 PostgreSQL schema，确认 precision 相关 NOT NULL 字段存在。
+    - 真实 PostgreSQL 事务检查通过：临时创建 session 并更新 `pending_requirements/reference_objects/latest_planner_result`，查询结果为 `[] / [] / {"ok": true, "items": []}`，事务已回滚。
+    - `go test ./internal/analyze/repo -run TestNormalizePrecisionJSONUpdates` 通过。
+    - `go test ./pkg/config` 通过。
+    - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeText|TestDeepSeekNutritionEstimator|TestResolveModelConfig'` 通过。
+    - `go test ./internal/app ./internal/worker ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-precision-json-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-precision-json-worker.exe ./cmd/worker` 通过。
+  - Known blockers:
+    - `go test ./internal/analyze/repo -run 'TestPrecisionRepo|TestTaskRepo_CountTasksByStatus'` 在当前 Windows 环境被 SQLite CGO 阻塞：`CGO_ENABLED=0` 时 go-sqlite3 是 stub；设置 `CGO_ENABLED=1` 后本机缺少 `gcc`。
+    - `go test ./internal/analyze/service -run TestTaskService_SubmitAnalyzeTask` 被本机 `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞。
+  - 第三轮复测问题：
+    - 用户反馈精准模式已成功，但结果里同一份食物重复出现两遍，整餐总量偏大；worker 日志显示 `precision_plan` 先识别出 5 项，随后两个 `precision_item_estimate` 子任务各自又识别出完整 5 项，`precision_aggregate` 聚合后变成约 10 项。
+    - 对照 Python `main:backend/worker.py` 后确认：Python 版子项估计使用专门的 `_build_precision_item_estimate_prompt/_multi`，要求只返回当前主体的 `item/items`；当前 Go 版临时复用了普通 `Analyze`，即使 AdditionalContext 写了“只估这些主体”，模型仍可能重新输出整图所有食物。因此 Go 版精准模式此前并非与 Python 版 1:1。
+  - 第三轮修复：
+    - `processPrecisionItemEstimate` 在 attach metadata 前新增计划项过滤保护：根据 `payload.items_to_estimate` 对子任务结果做名称相似度匹配，只保留本组应估计的食物；单项任务会把返回的整图 `items` 收口为单个 `item`。
+    - 新增 `filterPrecisionResultToPlanned`、`plannedItemMatchScore` 等工具函数，支持 exact/contains/中文字符集合相似度匹配，避免 `青椒炒鸡块` vs `辣椒炒鸡肉` 这类近似名被误删。
+    - `attachPlannedItemMetadata` 补单 item 结果的 metadata 附加。
+  - 第三轮 Verification:
+    - `go test ./internal/worker` 通过，新增覆盖“子任务返回整盘 5 项只保留本组计划项”和“单计划项从整图结果中挑出相似食物”的测试。
+    - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-precision-dedupe-worker.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-precision-dedupe-server.exe ./cmd/server` 通过。
+    - `git diff --check -- backend/internal/worker/worker.go backend/internal/worker/worker_sanitize_test.go` 通过，仅有 CRLF warning。
+  - Python parity 复核：
+    - Python 版精准模式不是普通 strict 食物分析的重复调用，而是三段专用链路：`_build_precision_plan_prompt` 做 planner，`_build_precision_item_estimate_prompt/_multi` 做子项估重，`_maybe_refine_precision_weights_sync` 做高不确定食物重量复核，最后 `_build_precision_final_result` 聚合。
+    - 当前 Go 版只复刻了 `precision_plan -> precision_item_estimate -> precision_aggregate` 的任务形态和分组/聚合骨架；planner 与 item estimate 仍复用通用 `Analyze/AnalyzeText` prompt，缺少 Python 专用 prompt、专用解析、重量复核、部分 session latest_inputs/previous_rounds 语义，因此不能声称与 Python 版 1:1。
+    - 结论：第三轮过滤修复只解决“子任务整图重复输出导致 aggregate 重复累加”的 P0 问题，不代表精准模式算法 parity 完成。
+    - 后续应把 Python 版 `_build_precision_plan_prompt`、`_build_precision_item_estimate_prompt`、`_build_precision_item_estimate_prompt_multi`、`_maybe_refine_precision_weights_sync` 的语义迁入 Go worker/service，再做样例对齐测试。
+  - 复测要求：用户重启 Go worker 后重新提交一条新的精准模式任务；这次 aggregate 最终项数应接近 planner 识别的项数，不应再把每个子任务的整图结果叠加。
+
+- 2026-05-09 issue #7 / text analyze model:
+  - 测试问题：文字输入模式识别失败，错误为 `dashscope api error 401`，提示 DashScope API key 不正确。
+  - 定位：这是配置依赖问题。Go 文字分析默认仍可能落到 DashScope/Qwen；当前本地 DashScope key 无效，所以文字模式失败。
+  - 修复：
+    - 文字输入模式在未指定 `modelName` 时默认走 DeepSeek，而不是 DashScope。
+    - 如果文字模式未配置 `DEEPSEEK_API_KEY`，直接返回清晰配置错误，不再静默回退 DashScope 造成 401 误导。
+    - 显式 `modelName=deepseek/deepseek-*` 也走 DeepSeek；显式选择其它模型时仍保留原有模型路由能力。
+    - worker 启动时已注入 DeepSeek 配置，异步 `food_text` 任务和同步 `/api/analyze-text` 使用同一口径。
+    - DeepSeek 默认 text model 统一为 `deepseek-chat`，`backend/config-example.yaml` 已补 `deepseek_api_key/deepseek_base_url/deepseek_text_model` 示例。
+  - 复测后续定位：
+    - 用户确认 `backend/.env` 中已有 `DEEPSEEK_API_KEY`，但 Go `config.Load` 原先只读取 `config.yaml` 和当前进程环境变量，不会自动加载 `.env`。
+    - 当前 `backend/config.yaml` 中没有 `deepseek_api_key`，因此直接启动 Go server/worker 时，worker 拿不到 DeepSeek key，文字任务报“请配置 DEEPSEEK_API_KEY”。
+  - 追加修复：
+    - 按用户要求，本地 Go 后端配置统一收口到 `backend/config.yaml`，不再自动读取 `.env`。
+    - DeepSeek 配置只保留 `external.deepseek_api_key` 一项；base URL 固定为 `https://api.deepseek.com`，文字模型固定为 `deepseek-v4-flash`，不再通过 YAML / env 配置。
+    - 已把本地 DeepSeek key 迁入 `backend/config.yaml` 的 `external.deepseek_api_key`，未在终端输出密钥。
+  - Verification:
+    - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeText|TestDeepSeekNutritionEstimator|TestResolveModelConfig|TestOfoxAIClient|TestDashScopeClient|TestParseLLMJSON|TestNormalize'` 通过。
+    - `go test ./pkg/config` 通过，覆盖 DeepSeek API key 从 YAML 读取。
+    - `go test ./internal/worker ./internal/app ./pkg/config` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/health/service ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-text-deepseek-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-text-deepseek-worker.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-deepseek-yaml-key-only-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-deepseek-yaml-key-only-worker.exe ./cmd/worker` 通过。
+  - 复测要求：用户需要重启 Go server 和 Go worker；然后重新提交一条文字输入任务。
+
+- 2026-05-09 issue #4 / expiry data source:
+  - 测试问题：用户在线上版本新增/修改的食物保质期数据，在本地 Go 重构测试版看不到。
+  - 定位：
+    - 当前 `dev/main` Python 后端保质期链路通过 Supabase client 读写 `food_expiry_items` / `food_expiry_notification_jobs`。
+    - 当前 Go 后端保质期链路通过 GORM 直连 PostgreSQL，`/api/expiry/*` 读写同名表 `food_expiry_items` / `food_expiry_notification_jobs`。
+    - 本地前端 `npm run dev:weapp` 默认 API 为 `http://127.0.0.1:3010`；生产/线上构建默认 API 为 `https://v2.healthymax.cn`。
+    - 本地 `backend/config.yaml` 当前数据库配置指向独立 PostgreSQL 主机，而不是 Supabase REST/SDK。
+  - 结论：如果线上仍运行 Python/Supabase，而本地测试运行 Go/PostgreSQL，那么新写入线上 Supabase 的保质期数据不会自动出现在本地 Go 连接的 PostgreSQL 中。这是数据源分叉/环境差异，不是保质期列表页本地缓存导致；保质期列表页进入时会直接请求 `/api/expiry/dashboard` 和 `/api/expiry/items`。
+  - 后续选择：
+    - 若要测试 Go 行为，用本地小程序在 Go 后端里重新创建同一条数据，或把本地 Go 配置临时指向与线上同一套 PostgreSQL。
+    - 若要对比线上历史/最新 Supabase 数据，需要先执行一次 Supabase -> PostgreSQL 的迁移/同步；当前 Go 服务不会自动同步 Supabase 新变更。
+  - 迁移脚本口径：
+    - `backend/scripts/migrate_supabase_db_to_postgres.py` 是全量 schema/data 同步脚本，默认会 dump Supabase 源库、drop/recreate 目标 schema、restore 并做对象/行数校验。
+    - 该脚本适合迁移前、切流前或测试前手动同步，不适合在 Go 目标库已经承接真实写入后继续定期全量覆盖，否则可能覆盖/丢失 Go 侧新写数据。
+    - 正式生产应采用“一次最终同步 + 切流到 Go/PostgreSQL”的口径；如果需要长期双环境并行，则要另做增量同步/双写/CDC，而不是使用当前 destructive 全量脚本。
+  - Schema drift 处理口径：
+    - 迁移期若 Supabase/Python 侧或 Go/PostgreSQL 侧 schema 发生变化，不能直接带着差异切流。
+    - 切流前先冻结 Python/Supabase schema 变更，只允许必要数据写入；执行迁移脚本 dry-run/verify-only/测试库恢复，脚本会对表、字段、约束、索引、视图、序列、触发器、RLS、policy、函数、enum 和行数做比对。
+    - 如果发现 schema 不一致，先判断“谁是 schema 真源”：切流前通常以 Supabase 当前生产 schema 为源，Go 代码/迁移/结构体必须跟它对齐；Go 侧新增但生产未存在的表或字段必须整理成正式 SQL migration，再应用到 Supabase 源库或纳入最终目标库变更计划。
+    - 处理顺序固定为：在临时目标库演练恢复 -> 修 Go domain/repo/migration 或补 SQL migration -> 重跑自动化和迁移校验 -> 最终同步 -> 切流。不要在生产目标库上边失败边手工热修。
+  - 切流窗口解释：
+    - “新版本刚上有一小段时间用户发现旧数据丢失”通常不是数据真的删除，而是最后一次同步后的旧库新增数据尚未进入新 PostgreSQL，导致新 Go 版暂时读不到。
+    - 示例：T0 执行 Supabase -> PostgreSQL 同步；T1 用户继续在旧 Python/Supabase 写入新保质期数据；T2 小程序/API 切到 Go/PostgreSQL；T1-T2 之间写入的数据不在 T0 快照里，因此新版本暂时不可见。
+    - 当前全量 destructive 同步脚本如果在 T2 后再跑，要避免覆盖 T2 后 Go/PostgreSQL 新写入的数据；更安全口径是短暂停写/维护窗口：停旧写入 -> 最终同步 -> 校验 -> 切流 -> 开新写入。
+  - 双版本/体验版并行口径：
+    - 若体验版写 Go/PostgreSQL、正式线上旧版仍写 Python/Supabase，则数据会分散到两个库。
+    - 在这种并行期，不能再把当前 destructive 全量脚本直接跑到“已经承接体验版写入”的 PostgreSQL 上，否则可能把体验版/本地 Go 侧新写入覆盖掉。
+    - 无丢失流程应采用“单写入真源优先”：正式切流前普通用户继续写 Supabase，Go/PostgreSQL 仅做测试库，测试数据可丢弃或单独备份；最终切流时停写旧库、从 Supabase 全量同步到干净目标库、校验、切流。
+    - 如果体验版期间产生了必须保留的真实用户数据，则最终同步不能只做 Supabase -> PostgreSQL 全量覆盖；必须先备份 PostgreSQL，再执行双源合并/增量 upsert，把 Supabase 最终数据和 Go 侧 delta 都合并进最终目标库。
+
+- 2026-05-09 issue #6:
+  - 测试问题：5 月 9 日首页/dashboard 显示运动消耗 `585 kcal`，但点进运动记录详情页为空，显示 `0 次记录`。
+  - 定位：
+    - 首页 `GetExerciseBurned` 用 `user_exercise_logs.recorded_on = ?` 精确日期匹配，因此能统计到当天 `585 kcal`。
+    - 运动详情 `ListExerciseLogsByDate` 和 `/api/exercise-calories/daily` 用中国时区 UTC 时间窗口查询 `recorded_on >= startTime AND recorded_on < endTime`。
+    - 生产 schema 中 `user_exercise_logs.recorded_on` 是 `date` 字段，迁移后列表接口把 date 字段当 timestamp 窗口查，导致统计和列表口径不一致。
+  - 修复：
+    - `backend/internal/health/repo/exercise_repo.go` 中运动列表改为 date 语义：`recorded_on >= startDate` 且 `recorded_on <= endDate`。
+    - 当日运动总消耗改为 `recorded_on = recordedOn`，与首页 dashboard 统计口径一致。
+    - 新增 repo 测试用例覆盖同一天两条运动合计 `585 kcal` 时，列表必须返回两条记录。
+  - Verification:
+    - `C:\Program Files\Go\bin\gofmt.exe -w backend/internal/health/repo/exercise_repo.go backend/internal/health/repo/exercise_repo_test.go` 通过。
+    - `C:\Program Files\Go\bin\go.exe test ./internal/health/service ./internal/health/handler ./internal/app` 通过；合并命令中 `home/repo`、`home/service` 仍被既有 sqlite CGO 阻塞。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-server-exercise-date-fix.exe ./cmd/server` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-worker-exercise-date-fix.exe ./cmd/worker` 通过。
+    - `go test ./internal/health/repo` 和单跑 `TestExerciseRepo` 仍被本机环境阻塞：默认 `CGO_ENABLED=0` 下 `go-sqlite3 requires cgo`，开启 `CGO_ENABLED=1` 后又缺少 `gcc`。
+  - 复测要求：用户需要重启 Go server 后再打开 5 月 9 日运动记录详情页；worker 只影响新提交的运动任务消费，列表口径修复本身只需要 server 生效。
+
+- 2026-05-09 issue #3:
+  - 测试问题：两个「识别记录」入口（「我的」页底部快捷入口、拍照分析页按钮下方入口）进入后看不到实际识别内容或内容不完整。
+  - 定位：
+    - 两个入口最终都进入 `src/packageExtra/pages/analyze-history/index.tsx`。
+    - 前端只调用 `GET /api/analyze/tasks` 读取 `analysis_tasks`，不是读取已保存饮食记录表。
+    - Go 后端迁移时 `/api/analyze/tasks` / `count` / `status-count` 少迁了 Python 版业务口径：默认列表没有限制为识别记录相关任务，没有补 `is_recorded/record_id`，`status-count` 没有返回前端需要的业务状态，精准模式聚合任务没有继承原始图片/文字上下文，已读字段名也与 Python 生产字段不一致。
+  - 修复：
+    - `AnalysisTask` 补齐 snake_case JSON 字段、违规字段、非持久化 `is_recorded/record_id`。
+    - 默认任务列表只查询识别记录相关 task type，并通过 `user_food_records.source_task_id` 批量补齐已记录状态。
+    - `status-count` 返回 `recognizing/waiting_record/recorded/has_unseen_waiting_record`。
+    - 过滤不应展示的内部/保质期/运动任务，并隐藏已重定向到聚合任务的 `precision_plan`。
+    - `precision_aggregate` 继承 `source_type/image_url/image_paths/text`。
+    - 已读字段统一为 `last_seen_analyze_history_at`。
+  - 验证：
+    - `gofmt` 已执行。
+    - `go test ./internal/analyze/handler ./internal/analyze/domain` 通过。
+    - `go build -o %TEMP%\food-link-history-fix-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-history-fix-worker.exe ./cmd/worker` 通过。
+    - `go test ./internal/analyze/service -run 'TestTaskService|TestBuild|TestParse|TestAnalyze'` 仍被既有 `CGO_ENABLED=0` + `go-sqlite3 requires cgo` 阻塞；尝试 `CGO_ENABLED=1` 后又被本机缺少 `gcc` 阻塞。
+    - `go test ./internal/worker ./internal/auth/repo ./internal/user/service` 中 `internal/auth/repo` / `internal/user/service` 仍被同类 sqlite CGO 和既有 OCR 外部服务测试阻塞；server/worker build 已通过。
+    - 已尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，当前微信开发者工具自动化未开启，无法截图/交互验证。
+  - 后续：
+    - 用户需重启/重新部署 Go server 和 worker 后，再复测两个「识别记录」入口。
+
+- 2026-05-09 live testing checkpoint:
+  - 用户说明当前分支是基于最新 `dev` 和 `main` 的 Python 后端能力，用 Go 重构后的测试分支。
+  - 当前阶段以功能测试和缺陷修复为主，暂不插入新功能开发。
+  - 测试中发现问题后，与用户一起按依赖层级定位：优先确认数据、环境、版本、配置、状态、网络、权限、缓存、构建、运行时，再修改业务代码。
+  - 涉及小程序页面、组件、样式、路由或交互变更后，按项目规则尝试 `weapp-devtools` 运行态验证；若工具链不可用，需要在最终回复说明阻塞原因。
+  - 本轮仅记录测试协作口径，未改业务代码。
+- 2026-05-09 backfill record capability check:
+  - 用户询问 Go 重构版本是否仍支持 Python 旧版的补录能力：补录昨天和前天的饮食内容。
+  - 代码检查结论：当前 Go 版保留了“近 3 天”补录窗口，即今天、昨天、前天。
+  - 前端链路：
+    - `src/utils/record-date.ts` 中 `RECORD_BACKFILL_WINDOW_DAYS = 3`，只允许今天、昨天、前天，非法日期会回退到今天。
+    - 首页 `RecordMenu` 会把当前选中的 `selectedDate` 通过 `persistRecordTargetDate(selectedDate)` 保存，并带 `?date=` 跳转到拍照、文字记录、手动补录入口。
+    - 拍照分析、文字记录、手动补录、结果保存页都会读取 `getStoredRecordTargetDate()` 并随提交/保存请求传给后端。
+  - Go 后端链路：
+    - `backend/internal/common/dateutil.ResolveRecordedOnDate` 用 `backfillRecordWindowDays = 3` 校验日期，允许今天/昨天/前天，拒绝未来日期和三天前及更早日期。
+    - 食物分析提交、文字分析提交、`POST /api/food-record/save`、运动记录提交都接入该日期解析口径。
+    - 食物记录保存会使用 `dateutil.BuildRecordTime` 把目标自然日与当前中国时区时分秒组合后写入 `user_food_records.record_time`。
+  - Verification:
+    - `go test ./internal/common/dateutil` 通过，覆盖前天允许、未来日期和三天前拒绝。
+    - `go test ./internal/foodrecord/service -run ...` 与 `go test ./internal/analyze/service -run TestTaskService` 仍被本机 `CGO_ENABLED=0` + `go-sqlite3 requires cgo` 既有环境问题阻塞，不代表补录逻辑失败。
+- 2026-05-09 backfill hint UI regression:
+  - 用户补充：旧版在首页选中昨天/前天时会显示“正在补录 X月X日”，当前 Go 测试分支前端没有该提示。
+  - 定位：`src/pages/index/index.tsx` 中日期选择器下方留下了“补录提示已移除”的注释，属于前端展示回归，不是后端补录能力缺失。
+  - 修复：
+    - 首页 `DateSelector` 下方恢复补录提示。
+    - 仅当 `selectedDate` 属于允许补录窗口且不是今天时显示，避免未来日期或窗口外日期误提示。
+    - 文案为 `正在补录 X月X日`。
+    - 新增浅色与暗黑模式样式。
+  - Verification:
+    - `.\node_modules\.bin\eslint.cmd src/pages/index/index.tsx --ext .ts,.tsx --max-warnings 0` 通过。
+    - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化或端口不可用，未能截图/交互验证。
+- 2026-05-09 issue #2:
+  - 测试问题：拍照分析食物时，`POST /api/upload-analyze-image-file` 上传图片失败，Gin recovery 捕获 panic。
+  - 根因：`backend/pkg/storage/storage.go` 中腾讯云 COS SDK `client.Object.Put(nil, ...)` 传入了 `nil` context；当前 SDK 版本在 `addHeaderOptions` 内调用 `ctx.Value(...)`，导致 nil pointer dereference。
+  - 修复：`UploadBytes` 改为传入 `context.Background()`，所有经 storage 客户端走 COS 的上传链路都不再触发 nil context panic。
+  - 验证：
+    - `C:\Program Files\Go\bin\gofmt.exe -w backend/pkg/storage/storage.go` 通过。
+    - `C:\Program Files\Go\bin\go.exe test ./pkg/storage ./internal/foodrecord/handler` 通过。
+    - `C:\Program Files\Go\bin\go.exe test ./internal/foodrecord/service -run 'TestUploadService'` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-upload-fix.exe ./cmd/server` 通过。
+  - 备注：
+    - 合并跑 `go test ./pkg/storage ./internal/foodrecord/handler ./internal/foodrecord/service` 时，`internal/foodrecord/service` 中非上传相关 sqlite 测试仍被既有 `CGO_ENABLED=0` / `go-sqlite3 requires cgo` 阻塞；上传专项测试已通过。
+    - 本轮只改 Go 后端 storage 基础设施，不涉及小程序页面、组件、样式、路由或交互，因此未触发 `weapp-devtools` 运行态验证。
+- 2026-05-09 issue #2 follow-up:
+  - 用户复测后上传接口已不 panic，后端日志显示 `POST /api/upload-analyze-image-file` 返回 200，但小程序仍提示“服务端未返回图片地址”。
+  - 根因：`Taro.uploadFile` 返回的 `response.data` 被解析成 Go 标准响应信封 `{code:0,message:"ok",data:{imageUrl:"..."}}` 后，前端 `uploadAnalyzeImageFile` 只从顶层读取 `imageUrl`，没有解包 `data`。
+  - 修复：`src/utils/api.ts` 新增文件上传响应解包逻辑，兼容 Go 标准信封和旧直出响应，并兼容 `imageUrl / image_url / url` 字段。
+  - 验证：
+    - `.\node_modules\.bin\eslint.cmd src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `npm run lint -- src/utils/api.ts` 仍会触发项目脚本固定 lint 全量 `src`，被既有 `health-profile-view` / `pro-membership` 历史 lint 错误阻塞，非本次改动引入。
+    - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 与 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化或端口不可用；本轮未能获得运行态截图/交互验证。
+  - 备注：前端源码变更需要当前 `npm run dev:weapp` watch 重新编译到 `dist/` 后，微信开发者工具里复测才会生效；不要使用 `npm run build:weapp` 做开发迭代验证。
+- 2026-05-09 issue #3:
+  - 测试问题：运动历史时间显示 `NaN:NaN`；输入 `跑步疯了30分钟` 后前端轮询到“分析超时，请稍后下拉刷新”；Python 旧版的拍照/相册运动热量分析入口在 Go 迁移后缺失。
+  - 根因：
+    - Go `GET /api/exercise-logs` 未返回前端读取的 `recorded_at`。
+    - Go `AnalysisTask` 未声明 JSON tag，任务详情接口输出 `ID/Status/Result`，而前端轮询读取 `id/status/result`，因此可能看不到已完成状态。
+    - Go exercise worker 与前端只保留了文字路径，遗漏 Python 旧版 `image_url` 运动分析链路。
+  - 修复：
+    - `user_exercise_logs` domain 增加 `recorded_at` 映射；列表接口返回 `recorded_at`，前端按 `recorded_at -> created_at -> recorded_on -> now` 兜底，非法时间显示 `--:--`。
+    - `backend/internal/analyze/domain.AnalysisTask` 增加 lowercase JSON tag，恢复前端任务轮询契约。
+    - `POST /api/exercise-logs`、worker、运动估算 service 恢复 `image_url`；支持纯图片或文字+图片，图片任务走 OfoxAI 多模态，失败时仍规则兜底。
+    - `src/packageExtra/pages/exercise-record` 恢复“拍照 / 从相册选择”、图片预览、清除图片、上传后创建运动任务。
+  - Verification:
+    - `C:\Program Files\Go\bin\go.exe test ./internal/health/service ./internal/health/handler ./internal/worker ./internal/analyze/handler ./internal/analyze/domain ./internal/app` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-server-exercise-fix.exe ./cmd/server` 通过。
+    - `C:\Program Files\Go\bin\go.exe build -o %TEMP%\food-link-worker-exercise-fix.exe ./cmd/worker` 通过。
+    - `npx eslint src/packageExtra/pages/exercise-record/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `npx tsc --noEmit --pretty false --skipLibCheck` 仍被既有历史类型错误阻塞，未发现本次运动页新增类型错误。
+    - 已尝试 `weapp-devtools`：`mrc where/logs/screenshot --port 3001` 和 `mrc where/errors --port 9420` 均连接失败，当前开发者工具自动化端口不可用，未能完成截图与交互验证。
+  - 复测要求：用户需重启 Go server 和 Go worker 后再测；只重启 server 不够，运动任务仍需要 worker 消费。
+- 2026-05-09 issue #4:
+  - 用户继续测试发现：非今天的运动记录仍留在页面；今天刚记录的运动反而没有显示。
+  - 根因：运动记录页前端在 `setRecordDate(nextDate)` 后立即调用旧闭包 `loadTodayRecords()`，实际请求仍可能使用上一个 `recordDate`；同时本地 pending/failed 运动卡片没有保存所属日期，导致其它日期的本地任务卡混入当前日期页面。
+  - 修复：
+    - 运动记录页改为显式 `loadRecordsForDate(targetDate)`，日期切换和页面显示时都用 `nextDate` 直接请求，避免 React state 异步更新导致拉错日期。
+    - pending 任务新增 `recordDate` 字段并写入本地缓存；旧缓存按 `createdAt` 推导日期。
+    - 页面只展示当前 `recordDate` 的服务端记录和 pending 卡片，统计卡的次数/热量也只统计当前日期。
+    - 列表排序改为新记录在前，避免刚记录的运动落在列表底部不明显。
+  - Verification:
+    - `npx eslint src/packageExtra/pages/exercise-record/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `C:\Program Files\Go\bin\go.exe test ./internal/health/service ./internal/health/handler ./internal/app` 通过。
+    - 已尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，当前自动化端口不可用，未能完成截图与交互验证。
+  - 复测要求：需要 `npm run dev:weapp` watch 重新编译到 `dist` 后，在小程序里重新进入运动记录页测试今天/非今天切换。
+- 2026-05-09 issue #5:
+  - 测试问题：拍照分析食物提交任务成功后一直卡在识别中，页面出现 Ofox 官网 HTML 片段乱码。
+  - 根因：
+    - Go 食物分析 `OfoxAIClient` 写死请求 `https://ofoxai.com/v1/chat/completions`，这是官网域名，会返回 HTML 页面；正确 API 域名应走 `https://api.ofox.ai/v1/chat/completions`。
+    - 保质期识别也存在同类 Ofox 官网域名写死问题。
+    - worker 失败落库时直接保存上游原始错误，导致小程序错误页展示大段 HTML。
+  - 修复：
+    - 新增 `external.ofoxai_base_url` 配置与 `OFOXAI_BASE_URL` / `OFOX_BASE_URL` 环境变量绑定，默认 base URL 为 `https://api.ofox.ai/v1`。
+    - `OfoxAIClient` 改为使用可配置 base URL，并默认请求 `https://api.ofox.ai/v1/chat/completions`。
+    - server / worker 装配均传入 `cfg.External.OfoxAIBaseURL`。
+    - 保质期识别同样改用 `OfoxAIBaseURL` 默认 API 域名。
+    - Ofox client / expiry recognizer 对 HTML 响应和上游错误体做摘要，不再把网页原文作为错误返回。
+    - worker `failTask` 增加错误清洗和截断，前端 `analyze-loading` 也对任务错误做 HTML/长度兜底清洗。
+  - Verification:
+    - `gofmt` 已执行。
+    - `.\node_modules\.bin\eslint.cmd src/packageExtra/pages/analyze-loading/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
+    - `go test ./internal/analyze/service -run 'TestOfoxAIClient|TestDashScopeClient|TestParseLLMJSON|TestNormalize'` 通过。
+    - `go test ./internal/worker -run 'TestSanitizeTaskErrorMessage'` 通过。
+    - `go test ./pkg/config` 通过。
+    - `go build -o %TEMP%\food-link-ofox-fix-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-ofox-fix-worker.exe ./cmd/worker` 通过。
+    - 组合跑 `go test ./internal/analyze/service ./internal/worker ./pkg/config ./internal/expiry/service` 时，`analyze/service` 与 `expiry/service` 仍被既有 `CGO_ENABLED=0` + sqlite/go-sqlite3 测试阻塞；本次相关专项测试已通过。
+    - 已尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能完成运行态截图/交互验证。
+  - 复测要求：
+    - 需要重启 Go server 和 Go worker。
+    - 旧的卡住/失败任务可能仍保留旧错误或 processing 状态；请重新发起一条新的拍照分析任务验证。
+    - 如果运行环境显式配置过错误的 `OFOXAI_BASE_URL` / `OFOX_BASE_URL`，需要改为 `https://api.ofox.ai/v1` 或移除该变量使用默认值。
+- 2026-05-09 db_first diagnostics:
+  - 用户询问拍照识别是否走数据库算法，以及是否有命中率输出。
+  - 确认当前默认流程为“AI 识别食物和克重 + `db_first` 数据库优先回算营养”，不是纯数据库看图。
+  - 用户明确不希望把数据库命中率展示到结果页；该信息只用于测试诊断，输出到后端终端日志。
+  - 已在 `backend/internal/analyze/service/analyze_service.go` 的 `applyDBFirstNutrition` 后处理末尾增加 `db_first nutrition lookup summary` 日志。
+  - 日志字段：
+    - `total`
+    - `resolved`
+    - `unresolved`
+    - `hit_rate_percent`
+    - `items`：包含 `name / weight_g / matched_food_name / resolve_status / resolve_score / nutrition_source / is_unresolved`
+  - Verification:
+    - `gofmt` 已执行。
+    - `go build -o %TEMP%\food-link-dbfirst-log-server.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-dbfirst-log-worker.exe ./cmd/worker` 通过。
+  - 备注：本轮只改 Go 后端日志，不涉及小程序页面、组件、样式、路由或交互，未触发 `weapp-devtools` 运行态验证。
+
+## 状态：完成 - 商业化代码成熟度快速体检
+
+- 2026-05-09 commercial readiness review:
+  - 用户要求分析当前代码是否达到商业化程度。
+  - 结论：当前项目已经具备商业化试运营/小范围付费验证的工程基础，但尚未达到可放心大规模商业化上线的程度。
+  - 已确认的正向基础：
+    - Go 后端已形成 DDD 分层、server/worker 双入口、Docker 镜像、PostgreSQL/GORM、JWT、支付、积分、对象存储、外部 AI/OCR 等核心架构。
+    - 核心小程序业务面较完整，包含登录、食物分析、记录、统计、会员支付、保质期、社区/好友、公共食物库、食谱和测试后台。
+    - 已有上线前 P0/P1/P2 清单 `docs/go-backend-prelaunch-checklist-2026-05-08.md`。
+  - 当前商业化阻断：
+    - 本地 `npm run typecheck` 失败，涉及 expiry、food-library、health-profile-view、pro-membership、record-manual、`src/utils/api.ts` 等类型错误。
+    - 本地 `npm run lint` 失败，涉及 `health-profile-view` 的 `isNaN` 和未定义 `Image`，以及 `pro-membership` 的 use-before-define warning。
+    - 当前环境 `go` 不在 PATH，无法重新跑 Go 目标测试和 server/worker build；此前状态文件记录过多轮 Go 测试/构建通过，但本轮未能复验。
+    - `docs/go-backend-prelaunch-checklist-2026-05-08.md` 仍全部 TODO，真实环境 smoke test、支付回调、worker 部署、回滚、监控等上线证据未闭环。
+    - 安全边界需收口：`/ws/stats/insight` 目前通过 query `user_id` 使用数据且 websocket origin 全放行；测试后台 cookie 校验只检查 cookie 存在，且未配置 `TEST_BACKEND_PASSWORD` 时仍接受 `123456` fallback。
+    - 前端仍有少量未落地 TODO，例如 `src/packageExtra/pages/recipe-edit/index.tsx` 中加载/保存/删除食谱 API 尚未接入。
+  - 建议商业化分级：
+    - 可做：内部测试、小范围白名单试运营、有限付费验证。
+    - 暂不建议：面向陌生用户大规模投放、正式承诺 SLA、扩大支付规模。
+  - 下一步优先级：
+    - 先修复 typecheck/lint。
+    - 安装/恢复 Go 工具链并重新跑 P0 Go tests 与 server/worker build。
+    - 修复 stats websocket 鉴权与测试后台 cookie/session/password 策略。
+    - 按 prelaunch checklist 完成真实环境 smoke test、支付闭环、worker 部署、监控和回滚证据。
+
+## 状态：完成 - 本地分支同步远端最新代码
+
+- 2026-05-09 git sync checkpoint:
+  - 已执行 `git fetch --all --prune`。
+  - 当前分支 `backend-refactor-sync-migrate-tencent` 已通过 `git pull --ff-only` 更新到 `origin/backend-refactor-sync-migrate-tencent` 的 `94f0649 feat(backend): add gorm migration command`。
+  - 已检查并同步有 upstream 的本地分支；`dev`、`main`、`feat/food-database`、`feature/friend-merge-handoff` 均已与对应远端一致。
+  - 未自动处理的分支：
+    - `codex/food-db-on-dev`：相对 `origin/dev` ahead 1 / behind 81，且在另一个 worktree `D:/files/food_link_devmerge` 中被检出；需人工决定 merge/rebase。
+    - `xry-dev`：相对 `origin/xry-dev` ahead 1 / behind 42；需人工决定 merge/rebase。
+    - `codex/merge-main-dev`、`test/history-calendar-marker-5c7f8582`：无 upstream。
+    - `test/custom-food-reuse-20260318`、`test/custom-nutrition-targets-20260318`、`test/history-calendar-marker-5c7f8582-final`：对应 upstream 已被远端删除。
+  - 同步前工作区已有本地未提交/未跟踪文件：`CURRENT_TASK.md`、`memory/2026-05-09.md`、`backend/food-link.exe`；本轮未清理或覆盖这些内容。
+  - 本轮只做 git 同步和状态记录，没有改前端 UI，不触发 `weapp-devtools` 验证。
+
+## 状态：准备中 - Go 后端全面测试与新功能开发前验收
+
+- 2026-05-09 testing checkpoint:
+  - 用户准备对当前 Go 后端迁移版本做全面测试，测试结束后再继续开发新功能。
+  - 推荐测试顺序：
+    - 先保证本地环境稳定：server、worker、前端 watch 都启动，且 3010 端口无旧进程占用。
+    - 再跑自动化与构建：Go 目标包测试、server/worker build、静态页语法和脚本语法检查。
+    - 再按 `docs/go-backend-prelaunch-checklist-2026-05-08.md` 跑 P0 smoke test。
+    - 最后做 P1/P2、体验版/生产配置与回滚演练。
+  - 已新增更细的手工测试清单：`docs/go-backend-manual-test-checklist-2026-05-09.md`。
+    - 覆盖环境、登录、首页、图片/文字/精准分析、记录、会员支付积分、运动、保质期、健康档案、统计、社区、公共食物库、菜谱、测试后台、安全权限和异常恢复。
+  - 原则：全面测试期间先不插入新功能开发；测试发现问题按 P0/P1/P2 记录，P0 立即修，P1 评估后修或明确风险接受，P2 可排到上线后或新功能前。
+  - 本轮为测试策略讨论和状态记录，未改前端 UI，不触发 `weapp-devtools` 验证。
+- 2026-05-09 update:
+  - 用户已完成第二步自动化测试，进入第三步 P0 主链路手工 smoke test。
+  - 当前建议按真实用户路径逐项测试：登录 -> 首页 -> 图片/文字/精准分析 -> 保存记录 -> 会员/积分 -> 运动 -> 保质期 -> 统计 -> 社区 -> 公共食物库 -> 菜谱 -> 测试后台。
+  - 手工测试发现第一个 P0 问题时应停下来记录并优先修复，不继续往后糊流程。
+
+## 状态：完成 - Go 后端上线前万无一失清单
+
+- 2026-05-08 prelaunch checklist checkpoint:
+  - 用户要求把后续上线前所有需要做的工作写成清单，并提交到当前分支，确保上线版本尽量无遗漏。
+  - 已新增上线前检查清单：`docs/go-backend-prelaunch-checklist-2026-05-08.md`。
+  - 清单覆盖：
+    - Go/No-Go 总门槛。
+    - 代码与构建冻结。
+    - 数据库 schema 与数据一致性。
+    - 生产配置核对。
+    - 后端自动化验证。
+    - 真实环境 smoke test。
+    - worker 专项验收。
+    - 前端与小程序上线配套。
+    - 观测、告警、排障。
+    - 安全权限。
+    - 部署执行步骤。
+    - 回滚预案。
+    - 上线后 24 小时巡检。
+  - 本轮仅为文档和项目状态更新，没有改动前端页面、组件、样式、路由或交互，因此不需要执行 `weapp-devtools` 运行态验证。
+  - Remaining:
+    - 发布 Go 后端 `v2` 前必须逐项执行该清单。
+    - P0 未完成不得上线；P1 未完成必须有明确风险接受人。
+
+## 状态：阶段性收尾 - Go 后端完整迁移 Phase 6：测试后台与运维脚本 parity checkpoint
+
+- 2026-05-08 Phase 6 checkpoint:
+  - 测试后台静态页已从 Python `main` 恢复到 Go 后端镜像：
+    - `backend/static/test_backend/index.html`
+    - `backend/static/test_backend/login.html`
+    - `backend/static/test_backend/app.js`
+    - `backend/static/test_backend/style.css`
+    - `backend/Dockerfile` 已复制 `/app/static`，server 同镜像可直出 `/test-backend`。
+  - `/test-backend` / `/test-backend/login` 不再返回占位 HTML：
+    - 未登录访问 `/test-backend` 会跳转登录页。
+    - 登录页兼容 Go 包装响应 `{code,message,data}`。
+    - 静态 `app.js` 新增统一 API 解包层，兼容 Go `{code:0,data:...}` 与 Python 旧 `{success,data,...}`。
+  - 测试后台核心接口恢复 multipart/旧契约兼容：
+    - `/api/test-backend/analyze` 支持 FormData 多图上传、模型选择、prompt ids、reference weight、expected items。
+    - `/api/test-backend/batch/prepare` 支持 ZIP 上传并解析 `labels.txt`。
+    - `/api/test-backend/batch/start` 支持 FormData 启动批次，当前 Go 版同步处理并把结果写入 `test_batches.results`。
+    - `/api/test-backend/batch/:batch_id` 返回静态页需要的 `batch_id/status/summary/progress/items` 结构。
+    - `/api/prompts*` 兼容前端使用的 `prompt_name/prompt_content` 字段，同时保留 Go domain 的 `name/content`。
+  - legacy test API 不再是 stub：
+    - `/api/test/batch-upload` 可接 ZIP 或 JSON `image_urls`，逐项调用分析并返回 summary/results。
+    - `/api/test/single-image` 可接 multipart 图片 + `trueWeight` 或 JSON `image_url`，返回 estimated/true/deviation/items/model metadata。
+  - 运维脚本 parity：
+    - 已从 Python `main` 恢复 `backend/scripts/apply_exercise_migration.py`、`enrich_top_missing_foods.py`、`import_usda_fooddata.py`、`reconcile_membership_truth.py`、`translate_usda_aliases.py`、`wechat_pay_show_cert_serial.py`。
+  - Verification:
+    - `go test ./internal/testbackend/handler ./internal/testbackend/domain` 通过。
+    - `go test ./internal/analyze/handler ./internal/analyze/domain ./internal/app` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/expiry/handler ./internal/health/service ./internal/health/handler ./internal/membership/domain ./internal/membership/handler ./internal/membership/service ./internal/analyze/handler ./internal/analyze/domain ./internal/testbackend/handler ./internal/testbackend/domain` 通过。
+    - `go build -o %TEMP%\food-link-server-phase6.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-phase6.exe ./cmd/worker` 通过。
+    - `node --check backend/static/test_backend/app.js` 通过。
+    - `python -m py_compile backend/scripts/*.py` 通过，并已清理本轮产生的 `backend/scripts/__pycache__`。
+  - Known blockers still present:
+    - 当前环境 `go env CGO_ENABLED=0`，full service/repo sqlite 测试仍会被 `go-sqlite3 requires cgo` 阻塞。
+    - 部分历史 utility/analyze service 测试仍依赖外部服务响应；全量 `go test ./...` 仍不能作为本轮通过标准。
+  - Remaining:
+    - 如果追求更严格的“完全等价”，后续可继续把测试后台批量处理改为 Python 一样的后台异步 goroutine，而不是当前 start 请求内同步处理。
+    - 全量回归前仍需决定 sqlite 测试 driver/CGO 策略。
+
+## 状态：进行中 - Go 后端完整迁移 Phase 4/5：会员支付积分治理、二维码与 stats websocket
+
+- 2026-05-08 continuation checkpoint:
+  - 会员早鸟/创始人权益 parity 已补齐：
+    - 早鸟 trial rank：前 500 名 `founding_top_500_bonus_month` 60 天，501-1000 名 `early_first_1000` 30 天，普通新用户 3 天。
+    - 早期付费用户 rank 与 meta 已返回：`early_user_rank`、`early_paid_user_rank`、`early_user_paid_bonus_multiplier`、`early_user_paid_bonus_*`。
+    - 早期付费用户每日系统积分按 Python 旧逻辑翻倍。
+    - 付费订单 reconcile 继续以最新真实 paid membership order 为准；手动升级白名单保留更高档位和更高 daily credits。
+  - 运动估算已从 Go stub 推进为 Python-like 异步闭环：
+    - `POST /api/exercise-logs` 不再立即创建 stub log，而是创建 `analysis_tasks(task_type=exercise)` pending task。
+    - task payload 写入 `recorded_on`、`profile_snapshot`、`credit_usage`、`estimation_source=go_exercise_worker`。
+    - worker 消费 `exercise` 后调用 `ProcessExerciseTask`，结合画像快照估算 calories，写入 `user_exercise_logs`，并保存 `ai_reasoning`。
+    - `POST /api/exercise-logs/estimate-calories` 会返回画像快照、reasoning 和 estimated_calories；有 `OFOXAI_API_KEY` 时走 `google/gemini-3.1-flash-lite-preview` 短 JSON，失败/无 key 时走规则兜底。
+    - 多项运动描述会按换行/分号/句号拆分分项估算再求和。
+  - stats insight 已从 Go 文本 stub 升级为 Python 缓存/LLM 策略：
+    - domain/repo 切到生产表 `ai_stats_insights`，字段为 `range_type / generated_date / data_fingerprint / insight_text`。
+    - `GET /api/stats/summary` 只读当天缓存或最近缓存，并按 `data_fingerprint` 判断 `analysis_summary_needs_refresh`。
+    - `POST /api/stats/insight/generate` 会组织用户健康档案、TDEE、饮食目标、餐次分布、宏量占比、体重趋势，调用 DeepSeek 生成 200-300 字洞察；无 key 时返回可用兜底文本。
+    - `POST /api/stats/insight/save` 会重新计算指纹并 upsert 当天缓存。
+    - `/ws/stats/insight` 继续复用同一生成逻辑并按 8 字小块推送。
+  - 测试清理：
+    - `backend/internal/expiry/handler/expiry_handler_test.go` 已从旧 `ExpiryItem.Name` 同步到当前生产字段 `FoodName`。
+  - Verification:
+    - `go test ./internal/health/service` 通过。
+    - `go test ./internal/health/domain ./internal/health/handler ./internal/app` 通过。
+    - `go test ./internal/worker ./internal/analyze/handler ./internal/analyze/domain` 通过。
+    - `go test ./internal/expiry/handler` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/expiry/handler ./internal/health/service ./internal/health/handler ./internal/membership/domain ./internal/membership/handler ./internal/membership/service ./internal/analyze/handler ./internal/analyze/domain` 通过。
+    - `go build -o %TEMP%\food-link-server-checkpoint.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-checkpoint.exe ./cmd/worker` 通过。
+  - Known blockers still present:
+    - `go test ./internal/health/repo` 当前仍被环境 `CGO_ENABLED=0` + `go-sqlite3 requires cgo` 阻塞。
+    - `go test ./internal/membership/repo` 同类 sqlite CGO 阻塞仍存在。
+    - 部分 utility/analyze service 历史测试仍含外部服务或 sqlite CGO 依赖。
+  - Remaining:
+    - Phase 6：测试后台 batch/legacy API、运维脚本与剩余 Python ops parity。
+    - 精准模式 planner prompt 还可继续向 Python 专用 prompt 靠拢。
+    - 全量回归前仍需处理 sqlite CGO 测试策略或切换测试 sqlite driver。
+
+- 2026-05-08 latest checkpoint:
+  - Phase 4 会员/支付/积分治理已从旧 mock schema 切到 Python 生产 schema：
+    - `membership_plan_config`
+    - `user_pro_memberships`
+    - `pro_membership_payment_records`
+    - `user_credit_bonus_events`
+    - `user_earned_credit_ledger`
+    - `weapp_user.earned_credits_balance`
+  - Go membership repo/service/handler 已补齐：
+    - `/api/membership/plans` 返回前端需要的 `data.list`。
+    - `/api/membership/me` 会按最新 paid 会员订单 reconcile 会员状态，并返回系统积分、earned credits、total available 等字段。
+    - `/api/membership/pay/create` 改为真实微信 JSAPI 下单，支持 `plan_code`，返回 `order_no / plan_code / amount / pay_params`。
+    - `/api/payment/wechat/notify/membership` 改为读取微信原始 body + headers，验签、AES-GCM 解密 resource、校验金额、更新订单、激活/续期会员，并返回微信要求的原始 `{code:"SUCCESS", message:"成功"}`。
+    - RSA 签名/验签使用 `crypto.SHA256`；私钥/公钥配置支持直接 PEM 或文件路径。
+    - 海报分享奖励写 `user_credit_bonus_events`，并通过 `user_earned_credit_ledger` 累加 earned credits。
+  - 积分额度治理已接入 Go 提交流程：
+    - `Analyze TaskService` 注入 membership credit guard。
+    - 图片/文字/精准模式提交会先生成 `credit_spend_plan` 并写入 `analysis_tasks.payload.credit_usage`。
+    - 精准模式子任务不再携带 `credit_usage`，避免 `precision_item_estimate` / `precision_aggregate` 重复计分。
+    - `expiry_recognize` 会按食物分析标准成本校验额度，成功识别后按 spend plan 扣 earned credits。
+    - `exercise` 提交会按 1 分校验额度，task payload 写 `credit_usage`，成功创建任务后扣 earned credits。
+  - Phase 5 外部能力继续补齐：
+    - `/api/qrcode` 已从 mock base64 改为真实微信 `stable_token -> getwxacodeunlimit`，支持 token 缓存 5400 秒、token 失效清缓存重试一次、`width/check_path/env_version/page` 参数。
+    - `/ws/stats/insight` 不再返回“未迁移”占位；现在按 query 的 `user_id/range` 生成 Go stats insight，并按小块文本通过 websocket 推送。
+    - `/api/stats/insight/generate` / `save` 已兼容前端实际字段 `range` / `analysis_summary`，同时保留旧 `date_range` / `content`。
+  - Verification:
+    - `go build -o %TEMP%\food-link-server-membership-tests.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-membership-tests.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-qrcode.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-qrcode.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-stats-contract.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-stats-contract.exe ./cmd/worker` 通过。
+    - `go test ./internal/membership/domain ./internal/membership/handler ./internal/membership/service ./internal/app` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/membership/domain ./internal/membership/handler ./internal/membership/service` 通过。
+    - `go test ./internal/analyze/handler ./internal/analyze/domain` 通过。
+    - `go test ./internal/utility/service -run "TestQRCodeService"` 通过。
+    - `go test ./internal/health/handler ./internal/health/service ./internal/app` 通过。
+  - Known blockers still present:
+    - `go test ./internal/membership/repo` 当前被环境 `CGO_ENABLED=0` + sqlite driver 阻塞，但测试代码已更新到新生产 schema。
+    - `go test ./internal/utility/service -run "TestQRCode|TestLocation|TestManualFood"` 中非二维码项仍被历史 location 外部响应和 sqlite CGO 阻塞。
+    - `go test ./internal/analyze/service -run "TestTaskService"` 仍被既有 sqlite CGO 阻塞。
+  - Remaining:
+    - 会员早鸟/创始翻倍 meta 仍是简化版，后续要补 `early_user_rank / early_paid_user_rank / multiplier` 完整 Python 逻辑。
+    - stats insight 目前使用 Go stub 文本生成，不是 Python `_generate_nutrition_insight` 的真实 LLM prompt/cache 指纹完整等价。
+    - 运动估算仍是 Go 兼容估算，尚未恢复 Python 画像快照 + LLM fallback 细节。
+    - 继续 Phase 6：测试后台 batch/legacy API、运维脚本和剩余 Python ops parity。
+
+## 状态：进行中 - Go 后端完整迁移 Phase 2/3：worker runtime 与 db_first 第一版
+
+- 2026-05-08 follow-up checkpoint:
+  - 精准模式已从单个 `precision_plan` 任务推进为 Go worker 多阶段链路：
+    - `precision_plan` 生成 planner round 与待估计主体。
+    - `precision_item_estimate` 子任务按主体/分组并行估计。
+    - `precision_aggregate` 等待子任务完成后聚合最终结果，并写回 `precision_sessions.final_result`。
+    - 新增 `precision_item_estimates` repo 读写方法，任务 payload 会保留 source/text/image 与分组信息。
+  - worker 已继续接入 `health_report`：
+    - 支持单图或逗号分隔多图 URL。
+    - 调用现有 DashScope OCR，合并 indicators/conclusions/suggestions/medical_notes。
+    - 写入 `user_health_documents(document_type=report)`。
+    - 回写 `weapp_user.health_condition.report_extract`。
+    - 完成 `analysis_tasks.result={"extracted_content": ...}`。
+  - 保质期识别已从“仅创建 pending 任务”补成可用链路：
+    - 新增 `backend/internal/expiry/service/recognizer.go`，使用专用保质期 prompt 调用视觉 LLM，返回前端表单预填 items。
+    - `POST /api/expiry/recognize` 现在会同步识别、更新 task 为 `processing -> done/failed`，并返回 `task_id / credits_cost / items / message`。
+    - worker 同时支持兜底消费 `expiry_recognize` 任务。
+    - `worker.task_types` 默认增加 `health_report`、`expiry_recognize`。
+  - 保质期订阅提醒登记已从 stub 推进为真实 job upsert：
+    - 新增 `food_expiry_notification_jobs` Go domain/repo 写入能力。
+    - `POST /api/expiry/items/:item_id/subscribe` 现在读取订阅状态、openid 与模板 ID。
+    - active 条目会按到期日中国时间 09:00（当天已过则 +1 分钟）创建/更新提醒任务。
+    - 非 active 条目会取消未完成提醒任务；拒绝订阅时返回未创建。
+  - 保质期订阅通知发送 worker 已补齐：
+    - 新增 `backend/internal/expiry/service/notification_worker.go`。
+    - repo 支持 claim `food_expiry_notification_jobs` pending job，并更新状态/错误/重试时间。
+    - worker 默认任务类型包含 `expiry_notification`，会轮询到期 job 并调用微信订阅消息接口发送。
+    - 失败按 `5/30/120` 分钟退避重试，超过最大次数后标记 `failed`。
+  - Phase 3 `unknown-food DeepSeek fallback` 已迁移：
+    - `AnalyzeService` 现在可配置 `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_TEXT_MODEL`。
+    - db_first 未命中食物会调用 DeepSeek 估算每 100g 扩展营养字段，返回 `nutrition_source=deepseek_text_fallback`。
+    - DeepSeek 结果会写入 `food_nutrition_library`，并写 `food_nutrition_aliases`，后续同名食物可直接命中。
+    - `food_nutrition_library` / alias lookup 已使用 `normalized_name` / `normalized_alias`，返回项的 `unit_nutrition_per_100g` 与 `nutrients` 覆盖完整扩展字段；未兜底时也返回 zero unit。
+    - 标准 db_first 图片/文字 prompt 已收窄为“食物名称 + 重量”为主，营养由后端查库/DeepSeek fallback 统一计算；`legacy_direct` 和 model compare 保留旧的直接营养估算 prompt。
+  - Verification:
+    - `go build -o %TEMP%\food-link-worker-health-expiry.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-health-expiry.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-server-expiry-subscribe.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-expiry-subscribe.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-deepseek.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-deepseek.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-dbfirst-prompt.exe ./cmd/server` 通过。
+    - `go build -o %TEMP%\food-link-worker-dbfirst-prompt.exe ./cmd/worker` 通过。
+    - `go test ./internal/worker ./internal/app` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/analyze/handler ./internal/analyze/domain` 通过。
+    - `go test ./internal/analyze/service -run "TestBuildPrompt|TestParseItems|TestBuildAnalyzeResponse"` 通过。
+    - `go test ./internal/analyze/... ./internal/foodrecord/...` 已尝试，仍被既有历史环境阻塞：`CGO_ENABLED=0` 下 sqlite 测试不可运行，LLM client 测试访问真实外部 API 并返回鉴权/404。
+    - `go test ./internal/expiry/handler` 已尝试，仍被既有历史测试字段阻塞：测试还引用旧 `ExpiryItem.Name` 字段，而当前 domain 已使用 `FoodName`。
+  - Remaining:
+    - 精准模式 planner prompt 还需进一步贴近 Python planner 专用 prompt。
+    - Phase 4：会员支付、积分额度、权益治理仍未开始。
+
+- 2026-05-08 implementation:
+  - 用户要求开始“一口气”迁移，并希望尽量持续推进到 Go 后端完整替代 Python 后端。
+  - 已承诺按阶段连续推进：每个 checkpoint 完成后编译、记录状态，再继续下一块；不无验证地大爆炸写到底。
+  - Phase 2 已完成第一版真实 Go worker runtime：
+    - 新增 `backend/cmd/worker/main.go`
+    - 新增 `backend/internal/worker/worker.go`
+    - `backend/internal/analyze/repo/task_repo.go` 新增 `ClaimNextPendingTask`、`CompleteTask`、`FailTask`
+    - 支持 `analysis_tasks` 原子领取 `pending -> processing`，并写回 `done / failed`
+    - 首批 processor 覆盖 `food`、`food_text`、`precision_plan`、`public_food_library_text`、`exercise`
+    - `backend/pkg/config/config.go` 新增 worker 配置：`worker.id`、`worker.count`、`worker.task_types`、`worker.poll_interval_seconds`
+    - `backend/Dockerfile` 同时构建 `/app/food-link` 与 `/app/food-link-worker`
+  - Phase 3 已完成第一版 `db_first` 营养库后处理：
+    - `AnalyzeService` 支持注入 `FoodNutritionRepo`
+    - `food_nutrition_aliases` / `food_nutrition_library` 命中后按估重回算营养
+    - 未命中项写入 `food_unresolved_logs`
+    - 返回项补充 `matched_food_id`、`matched_food_name`、`resolve_status`、`resolve_score`、`nutrition_source`、`unit_nutrition_per_100g`、`is_unresolved`
+    - `AnalyzeCompareEngines` 现在能体现 `legacy_direct` 与 `db_first` 真实差异
+  - 顺手修复：
+    - 文字分析 prompt 现在会包含用户原始文字，避免 `food_text` 任务只拿通用图片分析 prompt。
+    - 精准模式 submit payload / latest_inputs 会保留 `source_type`、`text`、`image_url(s)`，供 worker 消费。
+  - Verification:
+    - `go build -o %TEMP%\food-link-worker-phase2.exe ./cmd/worker` 通过。
+    - `go build -o %TEMP%\food-link-server-phase2.exe ./cmd/server` 通过。
+    - `go test ./internal/worker ./internal/app ./internal/publicfood/... ./internal/recipe/...` 通过。
+    - `go test ./internal/analyze/... ./internal/worker/...` 已尝试，仍被既有 `CGO_ENABLED=0` sqlite 测试和真实外部 LLM 测试阻塞。
+  - Remaining:
+    - Phase 2 后续：恢复精准模式 planner -> item estimate -> aggregate 的多阶段并行模型；接入 health_report OCR、expiry recognize、通知调度。
+    - Phase 3 后续：迁移 DeepSeek unknown-food per-100g fallback 自动补库，并进一步收口 db_first prompt。
+    - Phase 4：会员支付、积分额度、权益治理仍未开始。
+
+## 状态：完成 - 对账当前 Go 后端分支相对主分支 Python 后端的迁移缺口
 
 - 2026-05-08 update:
-  - User asked to estimate:
-    - recent 7-day users who are still actively using the product
-    - users who have successfully paid
-    - whether the ratio between them is meaningful
-  - This round used a read-only Supabase query against production data.
-  - Window used for “最近 7 天”:
-    - `2026-05-02 00:00:00` to `2026-05-08` current time, Asia/Shanghai
-    - i.e. 7 natural days including today
-  - “7 日还在用” current working definition:
-    - distinct users with at least one core behavior in the window
-    - union of:
-      - `analysis_tasks.created_at`
-      - `user_food_records.record_time`
-      - `user_exercise_logs.recorded_on`
-  - “成功付费用户” current working definition:
-    - distinct users with at least one `pro_membership_payment_records.status='paid'`
-    - count by paid order truth rather than only `user_pro_memberships` snapshot
-  - Result snapshot:
-    - 7-day active core users: `35`
-    - ever successful paid membership users: `12`
-    - paid users active in the same 7-day window: `7`
-    - active membership snapshot users in `user_pro_memberships`: `13`
-  - Ratio notes:
-    - `12 / 35 = 34.3%` can be read as paid-user penetration inside the recent active base, but it mixes current activity with cumulative historical payment and is not a clean retention metric.
-    - `7 / 12 = 58.3%` is more meaningful as a rough “paid users still active in the last 7 days” indicator.
-    - `10 / 13 = 76.9%` can describe recent activity among current membership snapshots, but snapshot truth can include manual/legacy repaired memberships and is weaker than paid-order truth for “成功付费”.
-  - Data caveat found during validation:
-    - `user_pro_memberships` currently has `3` active paid-like snapshot users without matching paid membership order rows, so “成功付费” should continue to prefer payment-order truth.
+  - 用户要求比较当前 `backend-refactor-sync-migrate-tencent` 分支与原主分支，找出 Go 重构时还遗漏哪些 Python 后端能力。
+  - 已确认当前分支为 `434d019`，本地 `main` / `dev` 均为 `fcc6b61`，因此本次以 `main` 作为主分支/开发分支同基线对账。
+  - 已按项目规则读取身份、状态、当天记忆，并使用 `.kimi/skills/ddd-go-backend/SKILL.md` 的 Go DDD 结构口径辅助判断。
+  - 静态对账结论：
+    - 当前 Go 后端手写真实注册路由约 `125` 个。
+    - 仍有 `20` 个小程序使用路由由 `ROUTE_MAP.md` 自动注册到 `backend/internal/stub/handler.go`，请求会返回 `501 已注册但尚未迁移`：
+      - `POST /api/precision-sessions/{session_id}/continue`
+      - 公共食物库 `/api/public-food-library*` 共 `12` 个路由
+      - 菜谱 `/api/recipes*` 共 `7` 个路由
+    - `GET /ws/stats/insight` 仍是 websocket 占位实现，返回 `websocket route registered but not migrated yet`。
+    - 若按行为等价而非路由存在判断，Go 版还明显缺：
+      - 异步 worker runtime：`/api/analyze/submit`、`/api/analyze-text/submit`、精准模式、保质期识别等只创建 pending task，没有等价 Python `worker.py` 的消费处理闭环。
+      - `db_first` 食物营养库匹配：当前 Go 中 `legacy_direct` / `db_first` 用同一次 LLM 调用近似，未真正接 `food_nutrition_library` / aliases / unresolved logs。
+      - 会员支付：当前返回 mock prepay / mock paySign，notify 不是微信回调验签解密链路。
+      - 会员积分与额度治理：`ValidateQuota` 仍是 stub，旧系统积分、earned credits、邀请奖励、订单 reconciliation 未闭环。
+      - `/api/qrcode` 返回 mock base64，不调用微信小程序码接口。
+      - stats insight、expiry subscribe/recognize、测试后台 batch/legacy API 均有简化或占位。
+      - 主分支的若干 Python 运维脚本未迁入当前 Go backend，例如会员治理、微信支付证书 serial、USDA/缺词补库脚本等。
+  - 已新增详细报告：
+    - `docs/go-backend-main-gap-analysis-2026-05-08.md`
+- 2026-05-08 follow-up:
+  - 用户询问如果要把 Go 后端迁到与原 Python 主分支“完全一样”需要多久，并表示准备开始迁移，争取一次性迁移完毕。
+  - 当前估时口径：
+    - 只做到小程序线上核心链路可替换 Python：约 `7-10` 个高强度工作日。
+    - 做到后端行为完整等价，包含公共食物库、菜谱、worker、db_first、会员支付积分、二维码、保质期、stats insight、测试后台和运维脚本：约 `15-20` 个工作日。
+    - 若要求充分 E2E 回归、灰度部署和线上事故预案，建议预留 `20-25` 个工作日更稳。
+  - 建议执行方式：在一个迁移分支内集中完成，但按业务域设置 checkpoint 和测试门槛，不建议无检查地一次性写到底。
+- 2026-05-08 plan:
+  - 用户要求写好重构计划书，准备一口气把 Go 后端迁移补完。
+  - 已新增计划书：
+    - `docs/go-backend-full-migration-plan-2026-05-08.md`
+  - 计划分为 8 个阶段：
+    - Phase 0：迁移准备与冻结基线
+    - Phase 1：补齐 20 个 stub 小程序路由
+    - Phase 2：恢复异步 worker runtime
+    - Phase 3：迁移 db_first 营养库算法
+    - Phase 4：会员、支付、积分和权益治理
+    - Phase 5：补齐二维码、stats insight、保质期识别/订阅等外部能力
+    - Phase 6：测试后台与运维脚本
+    - Phase 7：全量回归与上线准备
+
+## 状态：进行中 - Go 后端完整迁移 Phase 1：清除 miniapp-used route stubs
+
+- 2026-05-08 implementation:
+  - 已开始按 `docs/go-backend-full-migration-plan-2026-05-08.md` 执行完整迁移。
+  - Phase 1 目标：先让 20 个原本走 route-map stub 的小程序路由拥有真实 Go handler。
+  - 新增公共食物库模块：
+    - `backend/internal/publicfood/domain/public_food_domain.go`
+    - `backend/internal/publicfood/repo/public_food_repo.go`
+    - `backend/internal/publicfood/service/public_food_service.go`
+    - `backend/internal/publicfood/handler/public_food_handler.go`
+  - 新增菜谱模块：
+    - `backend/internal/recipe/domain/recipe_domain.go`
+    - `backend/internal/recipe/repo/recipe_repo.go`
+    - `backend/internal/recipe/service/recipe_service.go`
+    - `backend/internal/recipe/handler/recipe_handler.go`
+  - 补齐 precision continue：
+    - `backend/internal/analyze/handler/analyze_handler.go` 新增 `ContinuePrecisionSession`
+    - `backend/internal/analyze/service/task_service.go` 支持继续已有 precision session 的活跃状态判断
+    - `backend/internal/analyze/domain/analyze_domain.go` 补齐 `precision_sessions` / `precision_session_rounds` 当前 schema 字段
+  - `backend/internal/app/app.go` 已注册：
+    - `/api/public-food-library*` 12 个路由
+    - `/api/recipes*` 7 个路由
+    - `POST /api/precision-sessions/:session_id/continue`
+  - 静态 route-map 对账结果：
+    - `real=145`
+    - `stub_from_route_map=0`
+  - Verification:
+    - `C:\Program Files\Go\bin\gofmt.exe` 已格式化新增/修改 Go 文件。
+    - `go test ./internal/publicfood/... ./internal/recipe/... ./internal/app` 通过。
+    - `go build -o %TEMP%\food-link-server-phase1.exe ./cmd/server` 通过。
+    - `go test ./...` 已尝试，仍被既有测试环境/历史问题阻塞：`CGO_ENABLED=0` 下 sqlite 测试不可运行，部分 LLM/OCR/location 测试访问真实外部服务失败，expiry 历史测试引用旧字段。
+  - Remaining note:
+    - Phase 1 只清除 route stub；公共食物库文字审核、precision 任务、保质期识别等异步任务仍依赖 Phase 2 的 Go worker runtime 才能完整闭环。
+
+## 状态：完成 - 拉取远端代码并分析 Go 后端数据库访问方式
+
+- 2026-05-08 update:
+  - 用户要求“拉取最新代码覆盖本地，然后分析 Go 项目如何访问数据库”。
+  - 已执行 `git fetch --all --prune` 并用上游分支 `@{u}` 硬重置本地工作区。
+  - 当前分支：`backend-refactor-sync-migrate-tencent`，同步后 HEAD 为 `434d019 feat(storage): 添加存储客户端的图像路径解析和引用 URL 解析功能`。
+  - 分析结论：
+    - Go 后端使用 `GORM + PostgreSQL` 访问数据库，入口在 `backend/pkg/database/postgres.go`。
+    - 配置由 `backend/pkg/config/config.go` 读取 `config.yaml` / 环境变量，数据库相关旧环境变量包括 `POSTGRESQL_HOST`、`POSTGRESQL_PORT`、`POSTGRESQL_USER`、`POSTGRESQL_PASSWORD`、`POSTGRESQL_DATABASE`。
+    - `backend/internal/app/app.go` 在启动时调用 `database.Open(cfg.Database)` 创建一个共享 `*gorm.DB`，再手工注入各业务 repo。
+    - 各业务 repo 通过 `db.WithContext(ctx)` 执行 GORM 查询，常见模式为 `Where/First/Find/Create/Updates/Delete/Table/Raw/Scan`。
+    - 未发现业务代码绕开 GORM 使用 `database/sql`、`sql.Open`、`sqlx` 或 `pgx.Connect` 直连数据库。
+
+## 状态：完成 - 恢复 Go backend CCR 推送脚本并固定 v2 标签
+
+- 2026-05-06 update:
+  - 用户确认后端已迁移为 Go，但部署辅助脚本继续使用 mjs，不改写为 Go。
+  - 已恢复 `backend/scripts/push-docker-ccr.mjs`，继续由根目录 `npm run push-docker-ccr` 调用。
+  - 新脚本构建上下文固定为 `backend/`，使用当前 `backend/Dockerfile`。
+  - 镜像路径固定为 `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`。
+  - 已取消旧的分支标签映射：
+    - 不再按 `main -> latest/main/sha`
+    - 不再按 `dev -> dev/sha`
+    - 当前阶段任意分支执行脚本都会推送 `:v2`
+  - 脚本仍会打印当前 Git 分支和 7 位短 SHA，便于发布前人工确认来源。
+  - 已同步更新 `AGENTS.md` 的后端部署说明。
+  - Verification:
+    - `node --check backend/scripts/push-docker-ccr.mjs` 通过。
+    - 未执行真实 `docker buildx build --push`，避免在本次脚本编写中直接触发镜像构建和推送。
+
+## 状态：完成 - 删除 Go backend cmd/worker 占位入口
+
+- 2026-05-06 update:
+  - 用户明确要求删除 `backend/cmd/worker`。
+  - 已删除当前仅作占位的 worker 入口：
+    - `backend/cmd/worker/main.go`
+    - `backend/cmd/worker/main_test.go`
+  - `backend/Dockerfile` 已收口为固定构建 `./cmd/server`，不再保留 `BUILD_TARGET=worker` 的构建口径。
+  - 后续若需要独立异步任务 runtime，应按真实任务消费模型重新创建入口。
+  - Verification:
+    - `go build -o %TEMP%\\food-link-server-test.exe ./cmd/server` 通过（使用项目内临时 `GOCACHE`，已清理）。
+    - `go test ./...` 已尝试，但被既有测试环境/测试断言问题阻塞：当前环境 `CGO_ENABLED=0` 下 sqlite 测试不可运行，expiry domain 相关测试引用了已不存在的 `Name/ExpiryDate` 字段，另有 LLM/OCR/location 测试访问真实外部服务失败。
+
+## 状态：完成 - Go backend Dockerfile 镜像构建入口
+
+- 2026-05-06 update:
+  - 用户要求完成 `backend/Dockerfile`，将当前 Go backend 编译成 Docker 镜像。
+  - 已新增多阶段 Dockerfile：
+    - build stage 使用 `golang:${GO_VERSION}-bookworm`
+    - 默认 `GO_VERSION=1.26`
+    - 固定构建 `./cmd/server`
+    - 默认支持 BuildKit 注入的 `TARGETOS/TARGETARCH`，线上脚本仍可构建 `linux/amd64`
+    - runtime stage 使用 `scratch`，只复制静态二进制、CA 证书、zoneinfo 和 `docs/backend-api-prd/ROUTE_MAP.md`
+    - 不复制本地 `config.yaml` 或 `.env`，继续遵守运行时由环境变量/ConfigMap 注入敏感配置的部署口径
+  - 已新增 `backend/.dockerignore`：
+    - 排除 `.env`、`config.yaml`、测试文件、测试图片、迁移归档、构建缓存等
+    - 仅保留 runtime 需要的 `docs/backend-api-prd/ROUTE_MAP.md`
+  - Verification:
+    - Windows 本地普通 `go build` 起初被用户目录 Go build cache 异常阻塞，改用项目内临时 `GOCACHE` 后通过。
+    - `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o bin/food-link-linux-test ./cmd/server` 通过。
+    - 已清理本次生成的临时二进制和 `.gocache`。
+    - `docker version` 显示 Docker CLI 可用，但 Docker daemon 未启动：无法连接 `npipe:////./pipe/docker_engine`，因此未能实际执行 `docker build`。
+
+## 状态：进行中 - Go backend 初始化与 PRD 驱动迁移底座
+
+- 2026-05-05 update:
+  - 已在 `backend/` 下建立新的 Go 后端初始化底座，方向为：
+    - 以 `docs/backend-api-prd/` 为第一真相
+    - 以 `.kimi/skills/ddd-go-backend` 为项目结构和基础设施参考
+    - 以 `backend_bak/` 作为旧 Python 逻辑/SQL/边界行为补源
+  - 当前已完成：
+    - Go module 初始化：`backend/go.mod`
+    - DDD / infra 基础目录：`cmd/`、`internal/`、`pkg/`、`migrations/`、`docs/`
+    - 配置层：
+      - `pkg/config` 支持 `config.yaml` + `.env` + 旧 33 个环境变量键名绑定
+      - 已复制 `backend_bak/.env` 到 `backend/.env`
+      - 已新增 `backend/.env.example`
+    - 数据库层：
+      - `pkg/database` 已可连接 PostgreSQL、执行 `Ping()`、做 schema readiness 检查
+    - 鉴权层：
+      - 已落地 JWT 签发/解析
+      - 已支持 `jwt_required` / `jwt_optional` / `test_backend_cookie` 三类中间件
+    - 路由层：
+      - 新服务会读取 `backend/docs/backend-api-prd/ROUTE_MAP.md`
+      - 自动注册全量 PRD 路由为“兼容占位 handler”
+      - 当前 route map 解析测试验证数量为 `143`（138 API + 1 WS + 4 non-api）
+    - 已真实实现的兼容链路：
+      - `POST /api/login`
+      - `GET /api`
+      - `GET /api/health`
+      - `GET /map-picker`
+      - `GET /test-backend`
+      - `GET /test-backend/login`
+      - `GET /ws/stats/insight`（当前为 websocket 占位响应）
+      - `GET /api/user/profile`
+      - `GET /api/home/dashboard`
+      - `GET /api/food-record/{record_id}/poster-calorie-compare`
+      - `DELETE /api/community/feed/{record_id}/comments/{comment_id}`
+    - 档案迁移：
+      - 已复制 `docs/backend-api-prd/` 到 `backend/docs/backend-api-prd/`
+      - 已归档旧 SQL 到：
+        - `backend/migrations/archive/database/`
+        - `backend/migrations/archive/sql/`
+      - 已新增 `backend/migrations/MANIFEST.md`
+    - 验证：
+      - `cd backend && GOSUMDB=off GOPROXY=https://goproxy.cn,direct go test ./...` 通过
+  - 重要事实：
+    - 当前 Git 工作树里，`backend/` 原先仍是被跟踪的旧 Python 后端路径
+    - 本次改动等价于“用新的 Go backend 替换 `backend/` 路径”
+    - 旧 Python 后端源代码当前仍完整保存在 `backend_bak/`
+  - Remaining work:
+    - 绝大多数 PRD 路由当前仍为已注册但未迁移的兼容占位，需要继续按业务域补真实 service/repo/handler
+    - worker / async task runtime 目前仅完成入口骨架，尚未把旧任务链路迁完
+    - 微信支付回调、位置检索、OCR、会员、社区、公共食物库等复杂域尚未落成真实逻辑
+  - Progress snapshot:
+    - 已将当前 PRD 对账结果沉淀到：
+      - `docs/go-backend-migration-status.md`
+    - 文档内容包括：
+      - 按模块统计 PRD 路由总数
+      - 当前已真实迁移数量
+      - 已实现接口清单
+      - 当前主要风险与建议迁移顺序
+
+
+## 状态：进行中 - 新分支初始化 Go 后端重构准备
+
+- 2026-05-05 update:
+  - User要求在当前新分支中为后端跨语言重构做准备：
+    - 旧 Python 后端后续将移动到 `backend_bak/`
+    - 计划基于既有重构文档初始化新的 Go `backend/`
+  - 本次已先完成 skill 安装准备工作：
+    - 新增项目内 skill 目录：`.kimi/skills/ddd-go-backend/`
+    - 从 `https://raw.githubusercontent.com/LSTM-Kirigaya/jinhui-skills/main/skills/ddd-go-backend/SKILL.md` 对应仓库内容安装 `ddd-go-backend`
+    - 已连同 `SKILL.md` 内部相对引用的文档资源一并落地，包括：
+      - `project-structure/PROJECT_STRUCTURE.md`
+      - `config/CONFIG.md`
+      - `database/DATABASE.md`
+      - `storage/STORAGE.md`
+      - `auth/AUTH.md`
+      - `observability/OBSERVABILITY.md`
+      - `architecture/ARCHITECTURE.md`
+      - `middleware/MIDDLEWARE.md`
+      - `api/API.md`
+      - `.skill-examples.json`
+    - 已校验当前 markdown 相对链接均可在本地解析成功
+  - 同步动作：
+    - 已按用户要求把 `ddd-go-backend` 入口写入 `AGENTS.md`
+  - Next step:
+    - 等待继续执行 `backend -> backend_bak` 迁移与新的 Go `backend/` 初始化
+
 ## 状态：完成 - 后端接口实现 PRD 文档集合生成
 
 - 2026-05-05 update:
@@ -91,7 +4324,6 @@
   - 备注：
     - 文档数量当前为 133 个，因为多方法同路径和部分内部接口按专题文档聚合，而不是一条路由一个文件。
 
-
 ## 状态：完成 - “我的”页版本号更新为 2.2.0
 
 - 2026-05-05 update:
@@ -106,134 +4338,6 @@
     - At that time, current `dist/pages/profile/index.js` still showed `2.1.2`, indicating the running build artifact had not yet been refreshed from the updated source version.
 
 ## 状态：待启动 - 后端大文件拆分与性能整理
-
-- 2026-05-08 latest update:
-  - Continued backend route split after user asked to keep splitting aggressively while preserving business logic.
-  - Added and registered these additional router modules:
-    - `backend/routers/health_profile.py` for `/api/user/health-profile*`.
-    - `backend/routers/stats.py` for `/api/stats*` and `/ws/stats/insight`.
-    - `backend/routers/membership.py` for `/api/membership*` and `/api/payment/wechat/notify/membership`.
-    - `backend/routers/wechat_auth.py` for `/api/qrcode` and `/api/login`.
-    - `backend/routers/system.py` for `/api` and `/api/health`.
-    - `backend/routers/uploads.py` for `/api/upload-analyze-image*`.
-    - `backend/routers/analyze_compare.py` for `/api/analyze-compare*`.
-    - `backend/routers/precision_sessions.py` for `/api/precision-sessions/{session_id}/continue`.
-    - `backend/routers/analyze_text.py` for `/api/analyze-text*`.
-    - `backend/routers/analyze_submit.py` for `/api/analyze/submit`.
-  - `backend/main.py` is now 4307 lines, down from the original 12444 lines.
-  - All files under `backend/routers/` are currently below 2000 lines; largest router is `test_backend.py` at 1267 lines.
-  - Remaining direct `@app` routes in `backend/main.py`:
-    - HTTP middleware.
-    - `/api/analyze`.
-    - `/api/analyze/batch`.
-  - Verification:
-    - `python -m py_compile backend\main.py backend\routers\*.py backend\database.py` equivalent command passed for the touched router set.
-    - Runtime import route check confirmed each moved route is registered exactly once, including upload, compare, text analyze, image submit, precision continue, login/qrcode, membership, stats, health profile, and analysis task routes.
-  - No frontend/UI changes were made; no dev server was started.
-  - Next safe direction:
-    - To push `main.py` below 2000 lines, the next phase should split image-analysis core helpers/schemas/services, not just route decorators.
-    - That phase has higher business risk and should be paired with targeted tests or endpoint smoke tests for `/api/analyze`, `/api/analyze/batch`, and `/api/analyze/submit`.
-
-- 2026-05-08 update:
-  - User clarified that Go rewrite is not needed for now.
-  - Current direction is to first apply the simplest practical optimizations to the existing Python backend.
-  - Recommended first batch should focus on measurable, low-risk changes:
-    - Add/standardize slow endpoint timing and query-count visibility.
-    - Benchmark the hottest endpoints before changing logic.
-    - Reduce repeated Supabase calls and obvious N+1 paths.
-    - Add tiny in-process TTL caches only for stable, read-heavy data.
-    - Extract the lowest-risk route modules only when it makes future fixes easier, not as a big rewrite.
-  - First low-risk split implemented:
-    - Added `backend/routers/__init__.py`.
-    - Added `backend/routers/prompts.py` with the 8 prompt-management endpoints.
-    - `backend/main.py` now imports `create_prompts_router(...)` and registers it with `app.include_router(...)`.
-    - Kept test-backend auth in `main.py` and passed it into the router factory to avoid circular imports.
-    - Kept `get_active_prompt` / `get_prompt_by_id` imported in `main.py` because test-backend analysis helpers still use them.
-    - `backend/main.py` line count reduced from 12444 to 12275; new prompt router is 177 lines.
-  - Continued backend route split after user said the first change was too small:
-    - Added `backend/routers/recipes.py` for 7 `/api/recipes*` routes.
-    - Added `backend/routers/exercise.py` for 4 `/api/exercise-logs*` routes.
-    - Added `backend/routers/test_backend.py` for 13 test-backend routes/pages and shared `require_test_backend_auth`.
-    - Added `backend/routers/public_food_library.py` for 12 `/api/public-food-library*` routes.
-    - Added `backend/routers/expiry.py` for 8 `/api/expiry*` routes.
-    - `backend/main.py` is now 9882 lines, down from the original 12444 lines.
-    - New router sizes:
-      - `test_backend.py`: 1267 lines
-      - `public_food_library.py`: 445 lines
-      - `expiry.py`: 435 lines
-      - `exercise.py`: 247 lines
-      - `recipes.py`: 199 lines
-      - `prompts.py`: 177 lines
-  - Verification:
-    - `python -m py_compile backend\main.py backend\routers\__init__.py backend\routers\expiry.py backend\routers\public_food_library.py backend\routers\test_backend.py backend\routers\prompts.py backend\routers\recipes.py backend\routers\exercise.py backend\database.py` passed.
-    - Runtime import checks confirmed migrated route counts are still registered:
-      - `/api/expiry`: 8
-      - `/api/public-food-library`: 12
-      - `/api/test-backend`: 9
-      - `/api/test/`: 2
-      - `/test-backend`: 2
-      - `/api/prompts`: 8
-      - `/api/recipes`: 7
-      - `/api/exercise-logs`: 4
-  - Further route split after user asked to continue without affecting business logic:
-    - Added `backend/routers/social.py` for 14 `/api/friend*` routes and 12 `/api/community*` routes.
-    - Added `backend/routers/body_metrics.py` for 5 `/api/body-metrics*` routes.
-    - Added `backend/routers/location.py` for 2 `/api/location*` routes and `/map-picker`.
-    - Added `backend/routers/manual_food.py` for 2 `/api/food-nutrition*` routes and 2 `/api/manual-food*` routes.
-    - `backend/main.py` is now 8530 lines, down from the original 12444 lines.
-    - Current extracted router sizes:
-      - `test_backend.py`: 1267 lines
-      - `social.py`: 785 lines
-      - `public_food_library.py`: 445 lines
-      - `expiry.py`: 435 lines
-      - `body_metrics.py`: 289 lines
-      - `location.py`: 277 lines
-      - `exercise.py`: 247 lines
-      - `recipes.py`: 199 lines
-      - `prompts.py`: 177 lines
-      - `manual_food.py`: 95 lines
-    - Verification:
-      - `python -m py_compile backend\main.py backend\routers\manual_food.py backend\routers\location.py backend\routers\body_metrics.py backend\routers\social.py backend\routers\expiry.py backend\routers\public_food_library.py backend\routers\test_backend.py backend\routers\prompts.py backend\routers\recipes.py backend\routers\exercise.py backend\database.py` passed.
-      - Runtime import checks confirmed migrated route counts are still registered:
-        - `/api/body-metrics`: 5
-        - `/api/location`: 2
-        - `/map-picker`: 1
-        - `/api/food-nutrition`: 2
-        - `/api/manual-food`: 2
-        - `/api/expiry`: 8
-        - `/api/public-food-library`: 12
-        - `/api/friend`: 14
-        - `/api/community`: 12
-        - `/api/recipes`: 7
-        - `/api/exercise-logs`: 4
-        - `/api/test-backend`: 9
-        - `/api/test/`: 2
-        - `/test-backend`: 2
-        - `/api/prompts`: 8
-  - Continued split after user asked to reduce files toward <2000 lines:
-    - Added `backend/routers/food_records.py` for 6 `/api/food-record*` routes and `/api/critical-samples`.
-    - Added `backend/routers/dashboard.py` for `/api/user/dashboard-targets`, `/api/home/dashboard`, and `/api/exercise-calories/daily`.
-    - Added `backend/routers/user_profile.py` for basic user profile, record days, phone binding, and avatar upload.
-    - Added `backend/routers/analysis_tasks.py` for analysis task list/count/status/detail/result/delete/timeout cleanup and `/api/user/last-seen-analyze-history`.
-    - `backend/main.py` is now 7537 lines, down from the original 12444 lines.
-    - All extracted router files are currently below 2000 lines:
-      - `test_backend.py`: 1267 lines
-      - `social.py`: 785 lines
-      - `public_food_library.py`: 445 lines
-      - `expiry.py`: 435 lines
-      - `food_records.py`: 409 lines
-      - `body_metrics.py`: 289 lines
-      - `dashboard.py`: 281 lines
-      - `location.py`: 277 lines
-      - `exercise.py`: 247 lines
-      - `analysis_tasks.py`: 204 lines
-      - `user_profile.py`: 200 lines
-      - `recipes.py`: 199 lines
-      - `prompts.py`: 177 lines
-      - `manual_food.py`: 95 lines
-    - Verification:
-      - `python -m py_compile backend\main.py backend\routers\analysis_tasks.py backend\routers\user_profile.py backend\routers\dashboard.py backend\routers\food_records.py backend\routers\manual_food.py backend\routers\location.py backend\routers\body_metrics.py backend\routers\social.py backend\routers\expiry.py backend\routers\public_food_library.py backend\routers\test_backend.py backend\routers\prompts.py backend\routers\recipes.py backend\routers\exercise.py backend\database.py` passed.
-      - Runtime import checks confirmed migrated route counts are still registered, including `/api/analyze/tasks`: 7, `/api/user/last-seen-analyze-history`: 1, `/api/user/profile`: 2, `/api/user/record-days`: 1, `/api/user/bind-phone`: 1, `/api/user/upload-avatar`: 1, `/api/user/dashboard-targets`: 2, `/api/home/dashboard`: 1, `/api/exercise-calories/daily`: 1, `/api/food-record`: 6, and `/api/critical-samples`: 1.
 
 - 2026-05-05 discussion:
   - User指出当前后端代码存在明显结构问题：
@@ -383,6 +4487,7 @@
     - `cmd /c ".\node_modules\.bin\eslint.cmd src/packageExtra/pages/login/index.tsx --max-warnings 0"` passed.
     - `rg` confirmed no login-page frontend `testOpenid` / test-openid UI remnants.
     - WeApp DevTools runtime verification was attempted but blocked because `mrc` is not installed or on PATH, and the expected WeChat DevTools CLI paths were not accessible/found in this environment.
+
 ## 状态：进行中 - 等待用户反馈调试日志
 
 - 2026-05-05 update:
@@ -4269,28 +8374,498 @@
   - 点击后 `mrc pageInfo` 显示 `packageExtra/pages/health-profile/index` → 跳转正确 ✅
   - 编译产物 `dist/pages/index/index.js` 确认包含 `openDebugHealthProfileFromMenu` 和新调试项 ✅
   - 编译产物 `dist/pages/profile/index.js` 确认已无调试按钮代码 ✅
-## Status: done - 2026-05-11 backend line count snapshot
-- User asked how many lines of backend code there are in total.
-- Counted git-tracked files under `backend/` only, avoiding untracked/cache/temp files.
-- Current snapshot:
-  - Python files: 73 files, 37908 physical lines.
-  - Production Python excluding `backend/tests/` and `backend/test_backend/`: 50 files, 33066 physical lines.
-  - Source-like backend files (`.py`, `.sql`, `.mjs`, `.js`, `.css`, `.html`, `.sh`, `Dockerfile`): 158 files, 45165 physical lines.
-  - All git-tracked text files under `backend/`: 179 files, 95497 physical lines.
-  - Skipped binary files: 3 test images under `backend/tests/test_images/`.
-- No code changes were made.
+---
 
-## Status: done - 2026-05-11 Go backend branch static analysis
-- User said there is a Go backend branch and asked to analyze it.
-- Fetched remotes and found no branch literally named `go`; the Go backend is on `origin/backend-refactor-sync-migrate-tencent`.
-- Static snapshot from that branch:
-  - `backend/` is a Go service with `cmd/server`, `cmd/worker`, `internal/*`, `pkg/*`, docs, migrations, static test backend, and migration scripts.
-  - Go files: 212 files, 46893 physical lines.
-  - Production Go excluding `_test.go`: 117 files, 29581 physical lines.
-  - Go tests: 95 files, 17312 physical lines.
-  - All backend text files in that branch: 446 files, 68571 physical lines.
-  - Explicit Gin route registrations: 147 routes; route map specs: 143; effectively all route-map surfaces are implemented explicitly, plus several extra gap/new routes.
-  - Largest production areas by total Go lines include `internal/analyze`, `internal/health`, `internal/testbackend`, `internal/membership`, `internal/community`, `internal/worker`.
-- Verification blocker:
-  - Created a temporary worktree at `D:\projects\food_link_go_analysis`, but local environment has no `go` executable (`go` not recognized), so `go test ./...` could not be run.
-  - Temporary worktree was removed after static analysis.
+## 2026-05-09 — 智能饮食推荐（基于剩余热量）产品方案讨论
+
+- Task: 讨论“剩余热量不知道吃什么”功能怎么做更合适。
+- Status: implemented_minimal_v1（已按用户后续要求实现最简单版本；未新增/修改数据库结构）
+- User feedback:
+  - 用户希望在用户设置目标后，根据“剩余热量/营养缺口”推荐接下来吃什么。
+  - 推荐需要区分“外面吃”和“自己做”两个场景。
+  - 自己做推荐食材与重量；外面吃推荐可点的餐品/组合。
+  - 目标是辅助用户把当天摄入补到目标附近，而不是只展示统计。
+- Initial product direction:
+  - P1 先做规则 + 食物库匹配：按剩余 calories、protein/carbs/fat 缺口、餐次、时间段和用户目标，推荐具体食物/重量与替换选项。
+  - P1 需接入现有 food nutrition library / public food library，优先复用库中可计算营养的食物。
+  - P2 再接用户历史偏好、口味、禁忌、外食品牌/场景做个性化。
+- Notes:
+  - 初版应避免直接承诺“最健康/治疗疾病”，产品表达应是“帮你补齐今日目标”“更接近你的热量和营养目标”。
+  - 与统计页“饮食健康参考/风险趋势”可以形成闭环：看差距 -> 给可执行吃法 -> 记录后刷新目标。
+- Implementation:
+  - Go 后端新增 `POST /api/diet/recommendations`，挂在 health handler 下，复用现有 DeepSeek `deepseek-v4-flash` 配置。
+  - 前端首页热量卡下方新增“今天吃什么”入口，支持 `外面吃` / `自己做` 两个场景。
+  - 前端弹层展示 3 个推荐方案：食物/份量、预计热量、蛋白/碳水/脂肪、执行提示和替换项。
+  - DeepSeek 不可用时后端返回规则兜底方案，保证功能不断链。
+- Verification:
+  - `go test ./internal/health/service ./internal/health/handler ./internal/app` 通过。
+  - `go build -o %TEMP%\food-link-diet-rec-server.exe ./cmd/server` 通过。
+  - `eslint src/pages/index/index.tsx src/pages/index/components/DietRecommendationSheet.tsx src/utils/api.ts` 通过。
+  - `git diff --check` 通过（仅 CRLF warning）。
+  - 已尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能完成截图/交互验证。
+
+## 2026-05-09 — 首页今日餐食多记录缩略图串图修复
+
+- Task: 解释首页「今日餐食」卡片右侧 `2次` 的含义，并修复点击后两条记录显示同一张照片的问题。
+- Status: fixed_code_verified_runtime_blocked
+- Explanation:
+  - `2次` 表示该餐次下有 2 条饮食记录，不是 2 张照片。
+  - 照片数量仍由缩略图角标「共 N 张」表达。
+- Root cause:
+  - Go 首页 dashboard 在 `buildMealItem()` 中构造 `meal_record_entries` 时，用了餐次级累计 `imagePaths` 的第一张图作为每条 entry 的 `image_path`。
+  - 同餐次多条记录时，弹层里的每条记录因此都会显示餐次第一张图。
+- Changes:
+  - `backend/internal/home/service/dashboard_service.go`：为每条 record 单独收集 `recordImagePaths`；entry 的 `image_path/image_paths` 使用该记录自己的图片，餐次级 `image_paths` 继续保留去重聚合列表。
+  - `src/utils/home-dashboard-local-cache.ts`：本地乐观首页缓存的新 entry 也写入自己的 `image_path/image_paths`。
+  - `backend/internal/home/handler/dashboard_handler_test.go`：新增同餐次两记录不同图片的接口级回归用例。
+  - `backend/internal/home/service/dashboard_service_test.go`：扩展 `TestBuildMealItem` 锁定 entry 级图片独立。
+- Verification:
+  - `go test ./internal/home/service -run TestBuildMealItem -count=1` 通过。
+  - `go build -o %TEMP%\food-link-home-meal-images.exe ./cmd/server` 通过。
+  - `eslint src/utils/home-dashboard-local-cache.ts` 通过。
+  - `git diff --check` 针对本轮触达文件通过，仅有 CRLF warning。
+  - 完整 `go test ./internal/home/handler ./internal/home/service` 被当前 Windows `CGO_ENABLED=0` + `go-sqlite3 requires cgo` 阻塞；设置 `CGO_ENABLED=1` 后本机又缺少 `gcc`。
+  - `mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，未能完成微信开发者工具截图/交互验证。
+
+## 2026-05-10 — 圈子/公共库链路出现 `wxfile://tmp...` 图片路径排查
+
+- Task: 解释为什么“进入圈子”相关请求里会出现：
+  - `image_path: "wxfile://tmp_....jpg"`
+  - `image_paths: ["wxfile://tmp_....jpg"]`
+- Status: root_cause_confirmed_not_fixed
+- Root cause:
+  - 分析页提交识别前会先把图片上传到后端，拿到正式 `imageUrl`；但同时也把本地临时路径缓存到 `analyzeImagePath/analyzeImagePaths`，供结果页本地预览继续使用。
+  - 结果页初始化时优先从这两个本地缓存恢复图片，因此页面内持有的是 `wxfile://tmp/...`。
+  - 结果页保存饮食记录时，把当前 `image_path/image_paths` 原样带入 `SaveFoodRecordRequest`，即使同时也带了 `source_task_id`。
+  - Go 后端 `food-record/save` 与后续 `public-food-library/create` 都会对图片字段做“非空即保留”的引用归一化；`storage.ResolveReferenceURL()` 对无法识别为 COS/CDN/Supabase 对象的公开 URL 不会丢弃，而是直接返回原值，因此 `wxfile://tmp/...` 被当成合法字符串保留下来。
+  - 后续分享到公共库/圈子时，如果来源记录已经存了这类本地路径，请求体和展示链路就会继续带出它。
+- Key code points:
+  - `src/packageExtra/pages/analyze/index.tsx`：上传成功后仍缓存本地 `analyzeImagePath/analyzeImagePaths`
+  - `src/packageExtra/pages/result/index.tsx`：结果页从缓存恢复本地路径，并在保存记录时直接发送
+  - `backend/internal/analyze/service/task_service.go`：分析任务提交前会做图片归一化，但无法识别的公开 scheme 会继续保留
+  - `backend/pkg/storage/storage.go`：`ResolveReferenceURL()` 对非私有 bucket 的未知 scheme 最终 `return raw`
+  - `backend/internal/foodrecord/service/food_record_service.go`：保存记录时继续接受归一化后的 `image_path/image_paths`
+  - `backend/internal/publicfood/service/public_food_service.go`：上传公共库时继续沿用来源记录里的图片字段
+- Next step:
+  - 优先修复前端结果页保存链路：若存在 `source_task_id`，保存记录时不要再把本地 `wxfile://tmp/...` 作为 `image_path/image_paths` 发给后端，改为仅依赖已上传的分析任务图片。
+  - 同时补后端兜底：拒绝或过滤 `wxfile://` / `http://tmp/` 这类小程序本地临时路径，避免再次落库。
+# 2026-05-12 handoff
+
+## 状态：完成源码修改 - 分析任务 trace event 化并删除独立 worker 入口
+
+- User 询问 trace/log 关系，并希望把关键日志尽量写进 Jaeger 可见的 trace；同时要求取消独立 worker。
+- 结论：
+  - 普通 zap log 仍是日志流，不会自动出现在 Jaeger。
+  - Jaeger 主要展示 OpenTelemetry trace/span/event/error，所以本轮把关键分析任务日志同步写成 span event、span attributes 和 `RecordError`。
+  - 为了让 `/api/analyze/submit` 与 server 内嵌后台处理能在同一条 trace 中串起来，`taskqueue.TaskMessage` 新增 `TraceContext`，memory queue 发布时注入 W3C trace context，消费时提取后再启动处理 span。
+- 已更新：
+  - `backend/pkg/trace/events.go`：新增 trace event/error 辅助函数。
+  - `backend/pkg/logger/logger.go`：新增 `WithTrace(ctx)`，zap 日志可带 `trace_id/span_id`。
+  - `backend/internal/taskqueue/*`：队列消息携带 trace context，并新增传播测试。
+  - `backend/internal/analyze/service/task_service.go`：提交、入队成功/失败写入 trace event。
+  - `backend/internal/worker/worker.go`：queue delivery、claim、process、food/food_text 处理和子任务入队写入 trace span/event/error。
+  - `backend/internal/analyze/service/analyze_service.go`：食物图片/文字分析、精准模式 LLM、DB-first 营养库 lookup 写入 trace event/error。
+  - 删除独立 `backend/cmd/worker/main.go` 与 `scripts/run-worker.cjs`；`package.json` 移除 `dev:worker`。
+  - `backend/Dockerfile` 不再构建/复制 `/app/food-link-worker`，镜像只保留 server 入口；server 内嵌 worker 仍由 `config.yaml` 的 `worker.count` 控制。
+- Verification:
+  - `go test ./internal/taskqueue ./pkg/trace ./pkg/logger ./pkg/config -run Test -count=1` passed.
+  - `go test ./internal/worker ./internal/app -run Test -count=1` passed.
+  - `go test ./internal/analyze/service -run "TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask|TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+  - `go test ./internal/analyze/handler -run TestAnalyzeHandler_SubmitAnalyzeTask -count=1` passed.
+  - `go test ./internal/analyze/repo -run "^$" -count=1` passed.
+  - `go build -o $env:TEMP\food-link-server-trace-worker-delete.exe ./cmd/server` passed.
+  - `node --check scripts/run-backend.cjs` passed.
+  - `git diff --check` passed with only CRLF warnings.
+- Remaining note:
+  - 当前未启动或重启本地常驻 server；按项目规则需要用户手动重启后，新 trace event 与删除 worker 入口的行为才会在本地运行态生效。
+
+## 状态：完成文档与补丁 - worker/task_queue 配置说明
+
+- User 询问 `worker.poll_interval_seconds`、`worker.task_types` 和 `task_queue` 各字段含义，并希望写成文档。
+- 已新增文档：
+  - `docs/backend-task-queue-worker-config.md`
+  - 说明当前 server 内嵌 worker + `task_queue` + `analysis_tasks` 状态表的关系。
+  - 明确 `poll_interval_seconds` 不是前端任务轮询间隔，也不是普通 `memory` queue 消息延迟；它主要控制保质期通知 DB job 检查和 idle 日志节奏。
+  - 逐项解释 `food`、`food_text`、`precision_plan`、`precision_item_estimate`、`precision_aggregate`、`public_food_library_text`、`exercise`、`health_report`、`expiry_recognize`、`expiry_notification`。
+  - 逐项解释 `task_queue.driver/buffer_size/topic/brokers/consumer_group`，并标注当前仅 `memory` 真正可用，`kafka` 为 fail-fast 预留。
+- 顺手修复发现的队列发布缺口：
+  - `backend/internal/user/service/analysis_task_service.go`：健康报告 `health_report` 任务创建后发布到 `task_queue`。
+  - `backend/internal/health/service/exercise_service.go`：运动 `exercise` 任务创建后发布到 `task_queue`，发布成功后才继续消费积分。
+  - `backend/internal/publicfood/service/public_food_service.go` 与 `backend/internal/publicfood/repo/public_food_repo.go`：公共食物库文本审核 `public_food_library_text` 任务创建后发布到 `task_queue`。
+  - `backend/internal/app/app.go`：把同一个 `taskQueue` 注入健康报告、运动、公共食物库服务。
+- Verification:
+  - `go test ./internal/health/service -run "TestExerciseService_CreateLog|TestExerciseService_ProcessExerciseTask_CreatesLogWithReasoning" -count=1` passed.
+  - `go test ./internal/publicfood/repo ./internal/publicfood/service -run Test -count=1` passed/no test files.
+  - `go test ./internal/user/service -run "^$" -count=1` passed compile-only.
+  - `go test ./internal/app -run Test -count=1` passed.
+  - `go test ./internal/taskqueue ./internal/worker -run Test -count=1` passed.
+  - `go build -o $env:TEMP\food-link-server-worker-doc.exe ./cmd/server` passed.
+  - `git diff --check` passed with only CRLF warnings.
+- Known verification gap:
+  - `go test ./internal/user/service -run "TestAnalysisTaskService_CreateHealthReportTask|TestAnalysisTaskService_CreateHealthReportTaskNormalizesLegacyURL" -count=1` is blocked by current Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` test environment, same class of existing sqlite test limitation.
+
+## 状态：完成配置收口 - worker 任务类型不再由 config.yaml 配置
+
+- User 认为 `worker.task_types` 不应该暴露在配置文件里；后台应默认支持所有任务类型，若要改动应是代码层改动。
+- 已调整：
+  - `backend/pkg/config/config.go` 移除 `WorkerConfig.TaskTypes`、`defaultWorkerTaskTypes`、`worker.task_types` 默认值和 config 文件读取逻辑。
+  - `backend/internal/worker/worker.go` 新增代码层 `SupportedTaskTypes()`，当前固定包含 `food`、`food_text`、`precision_plan`、`precision_item_estimate`、`precision_aggregate`、`public_food_library_text`、`exercise`、`health_report`、`expiry_recognize`、`expiry_notification`。
+  - `backend/internal/app/app.go` 启动内嵌 worker 时使用 `workerpkg.SupportedTaskTypes()`，不再读取 `cfg.Worker.TaskTypes`。
+  - `backend/config-example.yaml` 移除 `worker.task_types`；本地 `backend/config.yaml` 也已移除该字段。
+  - `docs/backend-task-queue-worker-config.md` 与 `docs/go-backend-prelaunch-checklist-2026-05-08.md` 已同步说明任务类型由代码固定启用。
+- Verification:
+  - `go test ./pkg/config -count=1` passed.
+  - `go test ./internal/worker ./internal/app -run Test -count=1` passed.
+  - `go test ./internal/taskqueue -run Test -count=1` passed.
+  - `go build -o $env:TEMP\food-link-server-no-worker-task-types.exe ./cmd/server` passed.
+  - `git diff --check` passed with only CRLF warnings.
+
+## 状态：完成源码优化 - 结果页更多营养改为两列放大展示
+
+- User 反馈小程序结果页「展开更多营养」按钮和展开后的更多营养明细太小，三列布局阅读困难，建议改为两列。
+- 已调整：
+  - `src/packageExtra/pages/result/index.scss`
+    - 「展开更多营养 / 收起更多营养」触发区高度、文字和箭头字号放大，提升可点面积和可读性。
+    - 更多营养明细从三列改为两列。
+    - 明细卡片增大间距、内边距、最小高度、标签字号、数值字号和单位字号。
+    - 暗色主题沿用原有颜色覆盖，尺寸跟随主样式放大。
+- Verification:
+  - `git diff --check -- src/packageExtra/pages/result/index.scss` passed with only CRLF warning.
+  - `npx stylelint src/packageExtra/pages/result/index.scss --allow-empty-input` blocked by existing SCSS parser issue at line 181 (`padding: ... // ...` inline comment), not introduced by this change.
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务或端口不可用；本轮未能完成截图/交互验证。
+## 2026-05-12 update: Kafka task_queue + DB attempt/lease worker reliability
+
+- User 要求：按“Kafka 消息在任务写库 done/failed 后再 commit offset”的方案落地，并补 `worker_id`、attempt、超时恢复，避免任务丢失、重复覆盖或永久 `processing`。
+- 已实现：`task_queue.driver=kafka` 已从占位改为真实 adapter；Kafka 消息写 DB 终态后才 commit offset；`analysis_tasks` 增加 `worker_id/attempt_id/attempt_count/processing_started_at/lease_until`；worker claim/complete/fail 都按 attempt lease 幂等处理；worker 周期性 recovery `pending` 和 lease 过期的 `processing` 任务；`food_expiry_notification_jobs` 增加 stale processing 恢复；嵌入式 worker loop 增加 panic recover 和订阅重启。
+- Verification：`go test ./internal/taskqueue ./pkg/config ./internal/worker ./internal/app -run Test -count=1`、分析/运动定向测试、repo/expiry/migration compile-only、server build、`git diff --check` 均已通过；真实 SQLite repo 测试仍被本机 `CGO_ENABLED=0 + go-sqlite3 requires cgo` 阻塞。
+- Follow-up：新增 DB 列需要在目标库执行 `go run ./cmd/migration -config-dir .` 后线上才具备完整 schema。
+
+## 2026-05-12 update: 文本任务积分补偿链路复核
+
+- User 询问：异步任务失败返还积分机制对文本记录是否仍然生效；若没有，需要修改前后端避免文字报错仍扣分。
+- 结论：当前后端 `SubmitTextTask()` 创建的是 `food_text` 异步任务，已写入 `credit_usage` 和统一 `credit_group_id`；worker 失败路径 `failTask()` 和前端轮询 `GetTask()` 看到 failed/timed_out/cancelled 时，都会调用同一套 `RefundEarnedCreditsAfterTaskFailure()`。因此文本任务失败补偿本身已经生效，本轮无需改业务逻辑。
+- Added safeguards:
+  - `backend/internal/analyze/service/task_service_test.go` 新增文本任务提交时预扣/组 ID 测试。
+  - 同文件新增 `food_text` 失败后退款测试，防止后续积分机制重构漏掉文本任务。
+- Verification:
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestTaskService_SubmitTextTask|TestTaskService_GetTask_RefundsCredits' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/membership/repo -run 'TestMembershipRepo_CountDailySystemCreditUsage' -count=1` passed.
+  - `git diff --check` passed.
+
+## 2026-05-12 update: trace id 缺失兜底修复
+
+- User 提供运维反馈：前端会出现 `no-trace-id`，怀疑后端 OTel 未正确产出 span，建议生产开启 OTel，并要求如前端拿到 `no-trace-id` 则不显示对应报错窗口。
+- Finding:
+  - 当前后端 `otelgin` 只在 `cfg.OTel.Enabled=true` 时启用；OTel 关闭时没有统一响应头兜底。
+  - 前端只从 `x-trace-id` 响应头取 trace id；虽然当前没有主动硬编码 `no-trace-id`，但如果后端/代理/旧错误文案返回该占位符，仍可能进入用户提示。
+- Fix applied:
+  - 新增 `backend/internal/common/middleware.RequestID()`：无论 OTel 是否开启，每个 HTTP 响应都写 `X-Trace-Id` 和 `X-Request-Id`。有 OTel span 时使用真实 trace id；否则生成 32 位 hex fallback trace id。
+  - `backend/internal/app/app.go` 全局挂载该 middleware，且放在 `otelgin` 后面，优先承接真实 OTel trace id。
+  - `src/utils/api.ts` 对 `no-trace-id/none/null/undefined` 做占位符过滤：不拼接、不解析为 trace id；统一错误弹窗遇到纯占位符时直接静默返回。
+  - 新增 middleware 单测覆盖 OTel 关闭也有响应头、传入 `no-trace-id` 时会生成新 trace id。
+- Verification:
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/common/middleware ./internal/app -run 'TestRequestID|Test' -count=1` passed.
+  - `npx eslint src/utils/api.ts --max-warnings 0` passed.
+  - `git diff --check` passed.
+  - 已尝试 `mrc where --port 3001` 和 `mrc where --port 9420`，均因微信开发者工具目标窗口未开启自动化服务连接失败，本轮未能截图/交互验证。
+
+## 2026-05-12 update: 文字结果页负热量显示兜底
+
+- User 提供运维反馈：结果页可能显示负热量，要求检查当前代码实践是否仍会出现；如果确实存在才修改。
+- Finding:
+  - `src/packageExtra/pages/result/index.tsx` 图片结果页当前已经通过 `normalizeNutrientValue()` 把 API 返回的负营养值归零，且后续编辑链路也会钳制为非负；该页当前不符合“会直接显示负热量”的描述。
+  - `src/packageExtra/pages/result-text/index.tsx` 文字结果页仍直接使用 `item.nutrients.calories` 进入页面状态，并直接展示 `Math.round(nutritionStats.calories)` / `Math.round(item.calorie * ratio)`，如果后端或缓存给出负 calories，确实可能显示负值并保存负热量。
+- Fix applied:
+  - `src/packageExtra/pages/result-text/index.tsx` 新增 `normalizeNutrientValue()`，将文字结果页入口的 calories/protein/carbs/fat/weight 非法值或负值归零。
+  - `calculateCaloriesFromMacros()` 和总热量/单项热量展示处增加非负钳制，避免后续计算或显示出现负 kcal。
+- Verification:
+  - `npx eslint src/packageExtra/pages/result-text/index.tsx --max-warnings 0` passed.
+  - `git diff --check` passed.
+  - 已尝试 `mrc where --port 9420` 和 `mrc where --port 3001`，均因微信开发者工具目标窗口未开启自动化服务连接失败，本轮未能截图/交互验证。
+
+## 2026-05-12 update: 一键删除未记录识别结果改为后端原子批量删除
+
+- User 反馈：识别记录页“一键删除未记录数据”需要多次操作才能删干净；要求后端原子层面删除当前用户所有满足条件的识别记录，不能只删除前端当前显示的那些。
+- Finding:
+  - 旧前端 `src/packageExtra/pages/analyze-history/index.tsx` 只基于当前已加载的 `tasks` 列表筛选，并逐个调用 `DELETE /api/analyze/tasks/:task_id`。
+  - 旧筛选还把 `pending/processing/failed` 混入“未记录”删除范围；真正列表状态里的“等待记录”应是 `status=done && is_recorded=false`。
+  - 因此旧逻辑会受前端分页/加载数量限制，并且部分请求失败时必须多次点击。
+- Fix applied:
+  - 后端新增 `DELETE /api/analyze/tasks/unrecorded`，鉴权后按当前用户在一个 DB transaction 中批量删除所有：
+    - 历史页可见任务类型；
+    - `status='done'`；
+    - 不存在 `user_food_records.source_task_id = analysis_tasks.id` 的记录。
+  - 该批量删除不会删除已记录、识别中、排队中、失败、超时、取消或精准内部估重子任务。
+  - 前端“一键丢弃未记录”改为调用新批量接口，不再依赖当前列表，也不再逐条请求；删除后刷新任务列表。
+- Verification:
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/repo -run 'TestTaskRepo_DeleteTask|TestTaskRepo_DeleteUnrecordedDoneTasksByUser' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestTaskService_DeleteTask|TestTaskService_DeleteUnrecordedTasks' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/handler -run 'TestAnalyzeHandler_DeleteTask|TestAnalyzeHandler_DeleteUnrecordedTasks' -count=1` passed.
+  - `npx eslint src/packageExtra/pages/analyze-history/index.tsx src/utils/api.ts --max-warnings 0` passed.
+  - `git diff --check` passed.
+  - 已尝试 `mrc where --port 9420` 和 `mrc where --port 3001`，均因微信开发者工具目标窗口未开启自动化服务连接失败，本轮未能截图/交互验证。
+## 状态：完成只读定位 - 保存后的识别记录详情缺少扩展营养素
+
+- 2026-05-12 update:
+  - User 反馈：拍照分析结果本身有具体营养素，但最终生成的「识别记录详情 / 食物明细」里没有很多营养素，截图中单项食物明细还显示蛋白/碳水/脂肪/热量为 0，而营养汇总有值。
+  - Scope:
+    - 本轮按用户要求只分析 bug，不修改业务代码。
+  - Findings:
+    - 分析结果链路会从 `food_nutrition_library` 生成扩展营养字段，`result` 页也有「更多营养」字段定义和保存 payload 承接。
+    - 保存饮食记录时，后端 `SaveFoodRecord` 直接把请求 JSON 绑定到 `domain.FoodItem`；其中 `FoodItemNutrients` 当前只定义 `calories/protein/carbs/fat/fiber/sugar/sodium_mg`，没有钙、铁、镁、锌、维生素等字段，导致扩展营养素在保存到 `user_food_records.items` 前被结构体反序列化丢弃。
+    - `record-detail` 页当前也只展示单项热量、蛋白/碳水/脂肪，以及 fiber/sugar 大于 0 时的两项；没有复用结果页的完整更多营养明细展示。
+    - 截图中「营养汇总」来自 `record.total_*` 顶层字段，而「食物明细」来自 `record.items[].nutrients`，两者数据源不同；因此会出现汇总有值但单项明细为 0 的表现。需要进一步用具体 record id 对比 `analysis_tasks.result.items[].nutrients` 与 `user_food_records.items[].nutrients` 确认该条记录是否已经在保存阶段丢失单项三宏。
+  - Suggested fix direction:
+    - 后端扩展 `FoodItemNutrients`，与前端 `Nutrients` / 分析结果字段保持一致，并补保存/读取回归测试。
+    - `record-detail` 页增加与结果页一致的更多营养明细展示，且不要只在 `>0` 时隐藏全部字段。
+    - 若需要兼容历史已保存记录，可在详情返回或前端展示时对 `items[].nutrients` 为 0 但 `total_*` 有值的单项记录做明确兜底/标记，避免误导用户。
+
+## 2026-05-12 — dev 分支同步当前功能代码
+
+- Task: 用户要求切换到 `dev`，在不破坏当前功能和需求的前提下，把当前代码同步到远程 `dev`；远程 `dev` 明显落后。
+- Status: completed_pushed
+- Approach:
+  - 先 `fetch origin`，确认原功能分支 `backend-refactor-sync-migrate-tencent` 已包含当前修复，且 `origin/dev` 有少量独立历史、但整体落后较多。
+  - 本地切到 `dev` 并快进到 `origin/dev` 后，创建 merge commit 合入 `backend-refactor-sync-migrate-tencent`。
+  - 合并冲突处理策略为保留 `origin/dev` 历史作为父提交，同时让合并结果以当前功能分支代码为准，避免 dev 旧 Python 后端和旧前端入口覆盖近期功能。
+  - 合并后额外清理少量行尾空格/EOF 空行，避免提交前 `git diff --check` 失败。
+- Verification:
+  - `git diff --name-status backend-refactor-sync-migrate-tencent --` 在清理空白前为空，确认合并树与当前功能分支一致；清理后仅剩空白修正差异。
+  - `git diff --cached --check` passed.
+  - `npx eslint src/pages/index/index.tsx src/packageExtra/pages/day-record/index.tsx src/packageExtra/pages/analyze-history/index.tsx src/packageExtra/pages/result-text/index.tsx src/utils/api.ts src/utils/subpackage-extra.ts src/utils/home-record-menu.ts src/app.config.ts --max-warnings 0` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/common/middleware ./internal/app -run 'TestRequestID|Test' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestTaskService_SubmitTextTask|TestTaskService_GetTask_RefundsCredits|TestTaskService_DeleteTask|TestTaskService_DeleteUnrecordedTasks' -count=1` passed.
+  - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败；9420 无自动化服务，3001 由 `ssh` 监听但不是微信开发者工具自动化目标，因此本轮未能完成截图/交互验证。
+- Commit:
+  - `9792497 Merge backend-refactor-sync-migrate-tencent into dev`
+- Push:
+  - `git push origin dev` 已成功，远端从 `fcc6b61` 更新到 `9792497`。
+- Next:
+  - 提交并推送本次状态文件交接记录后，确认本地 `dev` 与 `origin/dev` 同步。
+
+## 2026-05-12 — 食物识别 LLM JSON 输出异常自动重试
+
+- Task: 用户反馈食物识别单个任务偶发 `识别失败: unexpected end of JSON input`；要求如果判断为模型输出 JSON 不符合规范导致的错误，则重新执行当前任务，重试不消耗用户积分，单任务最多重试 3 次。
+- Status: fixed_verified
+- Root cause:
+  - LLM 返回的 `message.content` 在 `parseLLMJSON()` 中直接 `json.Unmarshal`。
+  - 当模型输出被截断或不是合法 JSON 时，错误会包装为 `parse llm json failed: unexpected end of JSON input`，worker 随后把当前 `analysis_tasks` 标记为 `failed`。
+- Fix:
+  - `backend/internal/analyze/service/llm_client.go` 新增 `ErrLLMJSONParse` / `LLMJSONParseError` / `IsLLMJSONParseError()`，保留原错误文案，同时让上层可稳定识别 JSON 解析失败。
+  - `backend/internal/analyze/service/analyze_service.go` 新增 `analyzeWithJSONParseRetry()`，仅对 LLM JSON 解析失败重试；普通业务校验、超时、HTTP 错误、模型配额等不走这条重试。
+  - 图片识别、文字识别、精准 JSON 调用以及 Gemini transient fallback 到 Qwen 的 fallback 调用均接入同任务内部重试。
+  - 重试发生在 `AnalyzeService` 的同一次 worker 处理内，不新建 `analysis_tasks`，不重新走提交接口或积分扣减；最多额外重试 3 次。
+- Verification:
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestParseLLMJSON|TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON|TestAnalyzeService_AnalyzeStopsAfterInvalidJSONRetries|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run '^$' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/worker -run Test -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/app -run Test -count=1` passed.
+  - `git diff --check` passed for touched files.
+# 2026-05-13 update: backend Docker CCR script branch/tag check
+
+- User asked to inspect `backend/scripts/push-docker-ccr.mjs` and compare it with the old main/dev deployment behavior.
+- Confirmed current worktree is detached at `48fd3a7`, matching latest `origin/main`; current script also matches `origin/dev` after `git fetch origin --prune`.
+- Current script always pushes `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2` regardless of branch, while old local `main` / `origin/old_main` / `origin/old_dev` used branch-based tags: `main -> latest/main/<sha>`, `dev -> dev/<sha>`, other branches refused.
+- Current script additionally supports `DOCKER_GO_BUILDER_IMAGE`, `DOCKER_GO_PROXY`/`GOPROXY`, and `DOCKER_BUILD_PROGRESS`, and passes `GO_BUILDER_IMAGE`/`GOPROXY` as Docker build args.
+
+# 2026-05-13 update: restore branch-based CCR image tags
+
+- User clarified migration is complete and requested restoring branch-based Docker tag behavior while keeping the newer environment variable features.
+- Updated `backend/scripts/push-docker-ccr.mjs`:
+  - `main` branch pushes `ccr.ccs.tencentyun.com/littlehorse/foodlink:main`.
+  - `dev` branch pushes `ccr.ccs.tencentyun.com/littlehorse/foodlink:dev`.
+  - any other branch is rejected before build/push.
+  - kept `DOCKER_BUILD_PLATFORM`, `DOCKER_GO_BUILDER_IMAGE`, `DOCKER_GO_PROXY` / `GOPROXY`, and `DOCKER_BUILD_PROGRESS`.
+- Updated `AGENTS.md` deployment notes and `DECISIONS.md` to replace the old migration-period fixed `:v2` rule.
+- Verification:
+  - `node --check backend/scripts/push-docker-ccr.mjs` passed.
+  - In the current detached worktree, `node backend/scripts/push-docker-ccr.mjs` exits before Docker checks with `当前分支为「HEAD」...只支持在 main 或 dev 上打对应标签`, confirming non-branch execution is rejected before build/push.
+
+## 2026-05-13 — 当天饮食记录与分享今日饮食按时间升序
+
+- Task: 用户要求「当天饮食记录」页面本身，以及点击「分享今日饮食」后生成的当天饮食海报，餐食都按时间排序，先吃的在前面，最晚吃的在最后面。
+- Status: fixed_code_verified
+- Fix:
+  - `src/packageExtra/pages/day-record/index.tsx` 新增按 `record.record_time` 升序的稳定排序兜底。
+  - `loadDayRecords()` 从接口拿到记录并映射成页面卡片后，先排序再写入 `records`。
+  - 页面列表和 `drawDayRecordPoster()` 使用同一份已排序 `records`，因此分享海报餐食顺序与页面一致。
+  - 本轮没有修改全局 `GET /api/food-records` 后端默认顺序，避免影响公共食物库分享等可能需要“最近记录优先”的选择器。
+- Verification:
+  - `npx eslint src/packageExtra/pages/day-record/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/packageExtra/pages/day-record/index.tsx` passed.
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务或端口不可用；本轮未能截图/交互验证。
+
+## 2026-05-13 — 分享今日饮食海报顶部摄入量改为进度条
+
+- Task: 用户要求优化「分享今日饮食」海报顶部区域的今日摄入卡路里展示，把当前摄入量/总量做成更好看的进度条。
+- Status: fixed_code_verified
+- Fix:
+  - `src/utils/poster.ts` 的 `drawDayRecordPoster()` 将原来的单行 `今日摄入 xxx / yyy kcal` 改为进度条模块。
+  - 模块上方左侧显示「今日摄入」和已摄入 kcal，右侧显示「目标」和目标 kcal；下方用圆角进度条展示摄入进度。
+  - 超过目标较多时进度颜色切到暖色，目标内保持绿色。
+  - `computeDayRecordPosterHeight()` 同步增高顶部区域，避免进度条模块挤压宏量卡片和餐食列表。
+- Verification:
+  - `npx eslint src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts --max-warnings 0` passed.
+  - `git diff --check -- src/packageExtra/pages/day-record/index.tsx src/utils/poster.ts` passed.
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务或端口不可用；本轮未能截图/交互验证。
+
+- Task: User requested a backend end-to-end/API contract test MVP where future API tests can be added by editing one config file, with auth support, seeded data, and a fresh temporary database per run.
+- Status: implemented_verified_documented
+- Implementation:
+  - Added `backend/e2e-test/cmd/api-contract-test` CLI.
+  - Added YAML-driven runner under `backend/e2e-test/runner`.
+  - Added suite config at `backend/e2e-test/suite.yaml` and seed data at `backend/e2e-test/fixtures/base.sql`.
+  - Consolidated E2E test assets under `backend/e2e-test/`.
+  - Split explicit cases into route/module files under `backend/e2e-test/cases/`.
+  - Added `id/name/desc` metadata: `id` is the stable machine-readable selector, `name` is the short Chinese display name, and `desc` is the detailed human-readable behavior description.
+  - Added full human/AI-readable guide at `backend/e2e-test/README.md`.
+  - Added root script `npm run test:backend:api-contract`.
+- Verification:
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+  - `npm run test:backend:api-contract -- --timeout 5m` passed with `Total: 161, Passed: 161, Failed: 0`.
+  - `git diff --check` passed; only CRLF conversion warnings were reported for modified files.
+
+## 2026-05-14 update: Backend API contract workflow assertions
+
+- Task: User asked to add workflow-style E2E test capabilities so a test can create data, capture returned values, reuse them in later API calls, and verify side effects against the temporary database.
+- Status: implemented_verified_documented
+- Implementation:
+  - Added `capture` support to case YAML. It reads response JSON with `gjson` and stores named runtime variables.
+  - Added recursive `{{var}}` substitution for case path, query, headers, body, response expectations, body contains, and DB assertion arguments.
+  - Added `db_assert` support. It runs SQL against the same temporary PostgreSQL database and compares the first column of the first row using the existing expectation matcher.
+  - Added workflow examples under `backend/e2e-test/cases/expiry/items.yaml`: create expiry item, capture its id, assert DB insertion, then query the detail API with the captured id.
+  - Updated `backend/e2e-test/README.md` with workflow, capture, variable substitution, and DB assertion usage.
+- Verification:
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+  - `go run ./e2e-test/cmd/api-contract-test --case expiry.item.create.workflow --timeout 5m` passed with `Total: 1, Passed: 1, Failed: 0`.
+  - `npm run test:backend:api-contract -- --timeout 5m` passed with `Total: 163, Passed: 163, Failed: 0`.
+  - `git diff --check` passed; only CRLF conversion warnings were reported.
+
+## 2026-05-14 update: Backend E2E README translated to Chinese
+
+- Task: User asked to replace `backend/e2e-test/README.md` with Chinese documentation.
+- Status: completed_verified
+- Implementation:
+  - Rewrote the README in Chinese while preserving the existing structure, commands, YAML examples, auth rules, fixtures, assertions, workflow testing, route smoke, AI maintenance rules, and troubleshooting sections.
+  - Updated the documented baseline to `Total: 163, Passed: 163, Failed: 0`.
+- Verification:
+  - `git diff --check -- backend/e2e-test/README.md` passed; only CRLF conversion warning was reported.
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+
+## 2026-05-14 update: E2E unresolved variable guard
+
+- Task: User deleted the workflow create/capture case and kept only the dependent detail query, then asked why the run sent `/api/expiry/items/{{expiry.workflow_item_id}}` and got a backend 500 instead of a 404.
+- Finding:
+  - The variable `{{expiry.workflow_item_id}}` was created only by the deleted `capture` step.
+  - The old runner left unresolved placeholders unchanged, so the request path became URL-encoded braces and the backend received an invalid UUID path parameter.
+  - A valid but missing UUID should be used for a true 404 test; a missing runtime variable is an E2E configuration/dependency error.
+- Fix:
+  - Added runner preflight detection for unresolved `{{var}}` placeholders across path, query, headers, body, expectations, and DB assertions.
+  - Such cases now fail before sending HTTP with `unresolved variable(s): ...`.
+  - Updated `backend/e2e-test/README.md` troubleshooting with the missing-capture explanation and a fixed-UUID 404 example.
+- Verification:
+  - `go run ./e2e-test/cmd/api-contract-test --case expiry.item.detail.after-create --timeout 5m` now fails before request with `unresolved variable(s): expiry.workflow_item_id`.
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+
+## 2026-05-15 update: E2E DB assert unresolved variable timing
+
+- Task: User reported `expiry.item.create.workflow` still failed with unresolved variables including `auth.user1.id` and `expiry.workflow_item_id`.
+- Finding:
+  - The request preflight was incorrectly scanning `db_assert` before the HTTP request and before same-case `capture`.
+  - `db_assert` is allowed to use values captured from the same response, so it must be checked after capture, not before request.
+  - A separate not-found test used `/api/expiry/items/999999`, which is not a valid UUID and triggers PostgreSQL invalid UUID instead of a true 404.
+- Fix:
+  - Split unresolved variable checks: request/expect fields are checked before HTTP; `db_assert` is checked after response capture and before SQL execution.
+  - Updated `backend/e2e-test/cases/expiry/not-exist.yaml` to use valid nonexistent UUID `00000000-0000-0000-0000-00000000ffff` and expect `code: 10001`.
+- Verification:
+  - `go run ./e2e-test/cmd/api-contract-test --group expiry --timeout 5m` passed with `Total: 4, Passed: 4, Failed: 0`.
+  - `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed.
+  - `git diff --check -- backend/e2e-test/runner/vars.go backend/e2e-test/runner/runner.go backend/e2e-test/runner/db_assert.go backend/e2e-test/cases/expiry/not-exist.yaml` passed; only CRLF conversion warning was reported.
+# 2026-05-14 update: loadtest default users made self-contained
+## 2026-05-14 — 识别失败/纠错样本落表确认
+
+- User asked which table was intended for recognition failure/manual correction/re-recognition sample capture with large-model metadata.
+- Finding:
+  - Current implemented deviation sample endpoint is `POST /api/critical-samples`, writing to `critical_samples_weapp`.
+  - Current `critical_samples_weapp` fields are only `id/user_id/image_path/food_name/ai_weight/user_weight/deviation_percent/created_at`; it does not store model provider/name/engine/error/task metadata.
+  - Recognition task metadata and failure state currently live in `analysis_tasks` (`payload.modelName`, `payload.analysis_engine`, `status`, `result`, `error_message`, etc.).
+  - If the intended requirement was a unified table for failed recognition, manual data entry, and retry samples with LLM info, current Go code has not implemented that as a dedicated table yet; it should be added or `critical_samples_weapp` should be extended.
+- Follow-up finding:
+  - Result page correction flow builds `previousResult` as an object containing `items[]` and builds `correctionItems[]` from user edits, then sends both with `correction_source_task_id`.
+  - Backend `TaskService` stores those arrays only inside `analysis_tasks.payload`, marks `payload.is_correction=true`, and worker writes the second analysis output into `analysis_tasks.result`.
+  - No backend trigger writes correction comparison snapshots into `critical_samples_weapp`; that table is structurally wrong for array/object comparison because it only has scalar `ai_weight/user_weight`.
+
+## 2026-05-14 — 二次纠错反馈样本表与圈子筛选抽屉
+
+- Task:
+  - 用户要求纠错后“重新智能分析”时保存纠错前结果、用户纠错对象数组和二次分析结果，不能继续用 `critical_samples_weapp` 标量字段表达。
+  - 用户还要求圈子好友动态“更多筛选”改成从下往上弹出的对话框，并更换添加好友图标。
+- Status: fixed_code_verified_static
+- Fix:
+  - 新增 `analysis_feedback_samples` schema/domain，使用 JSONB 保存 `before_result`、`user_correction_items`、`after_result`、`payload_snapshot`。
+  - `TaskRepo.UpsertFeedbackSample()` 以 `correction_task_id` 为唯一键 upsert 样本。
+  - Worker 在纠错任务完成时写入 `feedback_type=correction` 样本；纠错任务失败时写入 `feedback_type=failed` 和 `error_message`。
+  - 圈子页“更多筛选”改为底部抽屉；筛选项在抽屉内点击选择，点击遮罩或“完成”关闭。
+  - “添加好友”快捷入口图标从单个 `icon-zengji` 换为 `icon-user` + `icon-plus` 组合图标。
+- Verification:
+  - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed.
+  - `GOCACHE=/tmp/food-link-go-cache go test ./internal/analyze/domain ./internal/analyze/repo ./internal/worker -run '^$' -count=1` passed.
+  - `git diff --check` passed.
+  - `GOCACHE=/tmp/food-link-go-cache go test ./internal/analyze/domain ./internal/analyze/repo ./internal/worker -run 'Test' -count=1` 中 `internal/worker` passed，但 `internal/analyze/repo` 的既有 sqlite 用例 `TestTaskRepo_CompleteTaskAttemptRequiresCurrentAttempt` 仍因 `map[string]any` result 更新 unsupported map 失败，和本次新增样本表无关。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 和 `mrc where --port 9420` 均连接失败，提示微信开发者工具目标窗口未开启自动化服务，未能截图/交互验证。
+
+### 2026-05-14 follow-up
+
+- User requested:
+  - 添加好友快捷入口图标改为 `icon-tianjiahaoyou`。
+  - 修复好友动态“更多筛选”底部抽屉层级太低、被底部导航栏盖住的问题。
+- Fix:
+  - `src/pages/community/index.tsx` 添加好友图标改用 `iconfont icon-tianjiahaoyou`。
+  - `src/pages/community/index.tsx` 在筛选抽屉打开时写入 `community_filter_drawer_visible` storage，关闭/卸载时清理。
+  - `custom-tab-bar/index.js` 读取 `community_filter_drawer_visible`，在圈子页筛选抽屉打开时隐藏自定义 tabBar。
+  - `src/pages/community/index.scss` 将筛选抽屉遮罩层级提升到 `z-index: 100001`，并增加底部 padding。
+- Verification:
+  - `npx eslint src/pages/community/index.tsx --max-warnings 0` passed.
+  - `node --check custom-tab-bar/index.js` passed.
+  - `git diff --check -- src/pages/community/index.tsx src/pages/community/index.scss custom-tab-bar/index.js` passed.
+  - 已再次尝试 `weapp-devtools`：`mrc where --port 3001/9420` 均因目标项目窗口未开启自动化服务连接失败。
+
+## 2026-05-14 — merged latest origin/dev
+
+- Merge source:
+  - Pulled latest `origin/dev` after local commit `f7a9058 feat: capture correction feedback samples`.
+- Remote additions preserved:
+  - Backend API contract E2E MVP under `backend/e2e-test/`, with YAML suite/cases, temp PostgreSQL DB runner, fixtures, CLI, README, and root script `npm run test:backend:api-contract`.
+  - Food analysis loadtest default-user path: when no tokens/user IDs are provided, the loadtest now creates temporary UUID `weapp_user` rows, issues local JWTs, and cleans temporary data.
+- Conflict resolution:
+  - Conflicts were only in `CURRENT_TASK.md` and `memory/2026-05-14.md`; preserved the local correction-feedback/community-filter notes and appended the remote E2E/loadtest handoff notes.
+- Remote recorded verification:
+  - API contract E2E: `go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1` passed; `npm run test:backend:api-contract -- --timeout 5m` passed with `Total: 161, Passed: 161, Failed: 0`.
+  - Loadtest: `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed; 1-run smoke against local backend passed and cleaned temp users.
+
+## 2026-05-15 — 健康档案出生日期仅显示年月日
+
+- Task: 用户反馈健康档案基础信息里的出生日期显示为 `2001-01-01T00:00:00Z`，要求只显示到年月日。
+- Status: fixed_code_verified_static
+- Fix:
+  - `src/packageExtra/pages/health-profile-view/index.tsx` 新增 `formatProfileDateOnly()`，从接口返回的日期/ISO 字符串中提取 `YYYY-MM-DD`。
+  - 基础信息“出生日期”展示改为使用该格式化值。
+- Verification:
+  - `npx eslint src/packageExtra/pages/health-profile-view/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/packageExtra/pages/health-profile-view/index.tsx` passed.
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 和 `mrc where --port 9420` 均连接失败，提示目标项目窗口未开启自动化服务；未能截图/交互验证。
+
+## 2026-05-15 — 纠错反馈样本最新记录查询脚本
+
+- Task: 用户要求写一个脚本获取“点击重新智能分析后录入的数据库”最新 10 条，用于后续 debug。
+- Status: fixed_code_verified_static
+- Fix:
+  - 新增 `scripts/query-analysis-feedback-samples.sh`。
+  - 默认从 `backend/config.yaml` 读取 PostgreSQL 连接，也支持 `POSTGRESQL_HOST/PORT/USER/PASSWORD/DATABASE/SSLMODE` 环境变量覆盖。
+  - 默认查询 `analysis_feedback_samples` 最新 10 条；可传入 `1-100` 的 limit。
+  - 输出字段包括任务链路 ID、模型信息、错误信息，以及 `before_result.items`、`user_correction_items`、`after_result.items` 的 pretty JSON。
+  - `package.json` 新增 `npm run debug:feedback-samples`。
+- Verification:
+  - `bash -n scripts/query-analysis-feedback-samples.sh` passed.
+  - `npm pkg get scripts.debug:feedback-samples` passed.
+  - `git diff --check -- scripts/query-analysis-feedback-samples.sh package.json` passed.

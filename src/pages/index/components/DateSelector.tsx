@@ -1,5 +1,8 @@
 import { View, Text } from '@tarojs/components'
+import Taro from '@tarojs/taro'
 import { type WeekHeatmapCell } from '../types'
+
+const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
 
 interface DateSelectorProps {
   cells: WeekHeatmapCell[]
@@ -8,6 +11,13 @@ interface DateSelectorProps {
 }
 
 export function DateSelector({ cells, selectedDate, onSelect }: DateSelectorProps) {
+  const handleSelect = (date: string) => {
+    try {
+      Taro.setStorageSync(HOME_SELECTED_DATE_KEY, date)
+    } catch (_) {}
+    onSelect(date)
+  }
+
   return (
     <View className='date-selector-section'>
       <View className='date-list'>
@@ -27,7 +37,7 @@ export function DateSelector({ cells, selectedDate, onSelect }: DateSelectorProp
             <View
               key={cell.date}
               className={`date-item ${selectedDate === cell.date ? 'is-selected' : ''}`}
-              onClick={() => onSelect(cell.date)}
+              onClick={() => handleSelect(cell.date)}
             >
               <Text className='date-day-name'>{cell.dayName}</Text>
               <View className={`date-day-circle ${circleClass}`}>

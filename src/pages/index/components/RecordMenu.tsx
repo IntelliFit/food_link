@@ -14,8 +14,6 @@ import {
   IconAlbum,
   IconText,
   IconEdit,
-  IconHistory,
-  IconFavorite,
   IconChevronRight,
   IconTrendingUp
 } from '../../../components/iconfont'
@@ -29,12 +27,12 @@ import {
 import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../utils/dev-debug-storage'
 import { persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 
 interface RecordMenuProps {
   visible: boolean
   onClose: () => void
   selectedDate: string
-  hasUnseenWaitingRecord: boolean
 }
 
 // 顶部2x2网格功能 - 拍照识别、相册上传、文本输入、手动输入
@@ -42,31 +40,66 @@ const GRID_FEATURES: Array<{
   id: string
   label: string
   color: string
+  backgroundColor: string
+  borderColor: string
+  iconBackgroundColor: string
+  darkColor: string
+  darkBackgroundColor: string
+  darkBorderColor: string
+  darkIconBackgroundColor: string
   Icon: typeof IconCamera
   isNew?: boolean
 }> = [
   {
     id: 'camera',
     label: '拍照识别',
-    color: '#e85d75',
+    color: '#4f9478',
+    backgroundColor: '#f4faf7',
+    borderColor: '#dcefe6',
+    iconBackgroundColor: '#eaf5ef',
+    darkColor: '#8ecdb2',
+    darkBackgroundColor: 'rgba(142, 205, 178, 0.08)',
+    darkBorderColor: 'rgba(142, 205, 178, 0.18)',
+    darkIconBackgroundColor: 'rgba(142, 205, 178, 0.14)',
     Icon: IconCamera,
   },
   {
     id: 'album',
     label: '相册上传',
-    color: '#10b981',
+    color: '#5b8da5',
+    backgroundColor: '#f4f9fb',
+    borderColor: '#dbeaf0',
+    iconBackgroundColor: '#e9f2f6',
+    darkColor: '#9ac5d8',
+    darkBackgroundColor: 'rgba(154, 197, 216, 0.08)',
+    darkBorderColor: 'rgba(154, 197, 216, 0.18)',
+    darkIconBackgroundColor: 'rgba(154, 197, 216, 0.14)',
     Icon: IconAlbum,
   },
   {
     id: 'text',
     label: '文本输入',
-    color: '#f59e0b',
+    color: '#8c7a4f',
+    backgroundColor: '#fbf8f1',
+    borderColor: '#eee4cf',
+    iconBackgroundColor: '#f5f0e4',
+    darkColor: '#d2bf86',
+    darkBackgroundColor: 'rgba(210, 191, 134, 0.08)',
+    darkBorderColor: 'rgba(210, 191, 134, 0.18)',
+    darkIconBackgroundColor: 'rgba(210, 191, 134, 0.14)',
     Icon: IconText,
   },
   {
     id: 'manual',
     label: '手动输入',
-    color: '#3b82f6',
+    color: '#7f7898',
+    backgroundColor: '#f8f7fb',
+    borderColor: '#e5e1ef',
+    iconBackgroundColor: '#f0eef5',
+    darkColor: '#bbb2d6',
+    darkBackgroundColor: 'rgba(187, 178, 214, 0.08)',
+    darkBorderColor: 'rgba(187, 178, 214, 0.18)',
+    darkIconBackgroundColor: 'rgba(187, 178, 214, 0.14)',
     Icon: IconEdit,
   },
 ]
@@ -76,19 +109,26 @@ const QUICK_ACCESS_ITEMS = [
     id: 'favorites',
     label: '我的收藏',
     desc: '快速记录常吃餐食',
-    Icon: IconFavorite,
-    color: '#f59e0b',
   },
   {
     id: 'history',
     label: '识别记录',
     desc: '查看以往识别记录',
-    Icon: IconHistory,
-    color: '#6b7280',
   },
 ] as const
 
-export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRecord }: RecordMenuProps) {
+const MEMBERSHIP_PREFLIGHT_TIMEOUT_MS = 1200
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), timeoutMs)
+    }),
+  ])
+}
+
+export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) {
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
   const [devToolsOpen, setDevToolsOpen] = useState(false)
@@ -127,7 +167,10 @@ export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRec
         void (async () => {
           try {
             // 优先使用弹窗打开时预取的结果，未命中则降级发起新请求
-            const membershipStatus = await (membershipPromiseRef.current ?? getMyMembership())
+            const membershipStatus = await withTimeout(
+              membershipPromiseRef.current ?? getMyMembership(),
+              MEMBERSHIP_PREFLIGHT_TIMEOUT_MS
+            )
             if (membershipStatus && isFoodAnalysisCreditExhausted(membershipStatus)) {
               const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
               const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
@@ -149,22 +192,24 @@ export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRec
           } catch {
             // 会员接口失败时仍允许选图，由分析提交接口提示
           }
-          Taro.chooseImage({
+          chooseImageWithPrivacy({
             count: modeId === 'album' ? 5 : 1,
             sizeType: ['compressed'],
             sourceType: modeId === 'camera' ? ['camera'] : ['album'],
-            success: (res) => {
-              const tempPaths = res.tempFilePaths || []
-              if (tempPaths.length > 0) {
-                Taro.setStorageSync('analyzeImagePath', tempPaths[0])
-                Taro.setStorageSync('analyzeImagePaths', tempPaths)
-              }
-              Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
-            },
-            fail: (err) => {
-              if (err.errMsg?.includes('cancel')) return
-              void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
+          }).then((res) => {
+            const tempPaths = res.tempFilePaths || []
+            if (tempPaths.length > 0) {
+              Taro.setStorageSync('analyzeImagePath', tempPaths[0])
+              Taro.setStorageSync('analyzeImagePaths', tempPaths)
             }
+            Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
+          }).catch((err) => {
+            if (err.errMsg?.includes('cancel')) return
+            if (isPrivacyAuthorizeError(err)) {
+              showPrivacyAuthorizeFailure(err)
+              return
+            }
+            void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
           })
         })()
         break
@@ -215,10 +260,15 @@ export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRec
         <View className='record-menu-grid-v2'>
           {GRID_FEATURES.map((feature) => {
             const IconComponent = feature.Icon
+            const featureColor = isDark ? feature.darkColor : feature.color
+            const featureBackground = isDark ? feature.darkBackgroundColor : feature.backgroundColor
+            const featureBorder = isDark ? feature.darkBorderColor : feature.borderColor
+            const iconBackground = isDark ? feature.darkIconBackgroundColor : feature.iconBackgroundColor
             return (
               <View
                 key={feature.id}
                 className='record-menu-grid-card'
+                style={{ backgroundColor: featureBackground, borderColor: featureBorder }}
                 onClick={() => handleGridClick(feature.id)}
               >
                 {feature.isNew && (
@@ -226,11 +276,11 @@ export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRec
                     <Text className='record-menu-new-text'>NEW</Text>
                   </View>
                 )}
-                <View className='record-menu-grid-icon-wrap'>
-                  <IconComponent size={40} color={feature.color} />
+                <View className='record-menu-grid-icon-wrap' style={{ backgroundColor: iconBackground }}>
+                  <IconComponent size={40} color={featureColor} />
                 </View>
                 <View className='record-menu-grid-text-wrap'>
-                  <Text className='record-menu-grid-label' style={{ color: feature.color }}>
+                  <Text className='record-menu-grid-label' style={{ color: featureColor }}>
                     {feature.label}
                   </Text>
                 </View>
@@ -241,32 +291,23 @@ export function RecordMenu({ visible, onClose, selectedDate, hasUnseenWaitingRec
 
         {/* 底部快捷入口 */}
         <View className='record-menu-list-v2'>
-          {QUICK_ACCESS_ITEMS.map((item) => {
-            const IconComponent = item.Icon
-            return (
-              <View
-                key={item.id}
-                className='record-menu-list-item-v2'
-                onClick={() => handleQuickAccessClick(item.id)}
-              >
-                <View className='record-menu-list-left'>
-                  <View className='record-menu-list-icon-wrap' style={{ backgroundColor: `${item.color}15` }}>
-                    <IconComponent size={24} color={item.color} />
-                  </View>
-                  <View className='record-menu-list-texts'>
-                    <Text className='record-menu-list-label-v2'>{item.label}</Text>
-                    <Text className='record-menu-list-desc-v2'>{item.desc}</Text>
-                  </View>
-                </View>
-                <View className='record-menu-list-right'>
-                  {item.id === 'history' && hasUnseenWaitingRecord && (
-                    <View className='record-menu-dot' />
-                  )}
-                  <IconChevronRight size={16} color='#d1d5db' />
+          {QUICK_ACCESS_ITEMS.map((item) => (
+            <View
+              key={item.id}
+              className='record-menu-list-item-v2'
+              onClick={() => handleQuickAccessClick(item.id)}
+            >
+              <View className='record-menu-list-left'>
+                <View className='record-menu-list-texts'>
+                  <Text className='record-menu-list-label-v2'>{item.label}</Text>
+                  <Text className='record-menu-list-desc-v2'>{item.desc}</Text>
                 </View>
               </View>
-            )
-          })}
+              <View className='record-menu-list-right'>
+                <Text className='iconfont icon-right-arrow record-menu-list-arrow-v2' />
+              </View>
+            </View>
+          ))}
 
           {__ENABLE_DEV_DEBUG_UI__ && (
             <View className='record-menu-dev-toolkit'>

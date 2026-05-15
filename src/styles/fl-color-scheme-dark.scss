@@ -65,6 +65,30 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: $fl-dark-text2 !important;
 }
 
+.fl-page-theme-root--dark .home-backfill-hint {
+  background: rgb(125 211 176 / 12%) !important;
+  border-color: rgb(125 211 176 / 26%) !important;
+}
+
+.fl-page-theme-root--dark .home-backfill-hint__dot {
+  background: $fl-dark-accent !important;
+  box-shadow: 0 0 0 6rpx rgb(125 211 176 / 12%) !important;
+}
+
+.fl-page-theme-root--dark .home-backfill-hint__text {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .home-backfill-hint__date {
+  color: rgb(191 242 219 / 72%) !important;
+}
+
+.fl-page-theme-root--dark .home-backfill-hint__action {
+  color: #062a1f !important;
+  background: $fl-dark-accent !important;
+  box-shadow: 0 4rpx 12rpx rgb(125 211 176 / 20%) !important;
+}
+
 .fl-page-theme-root--dark .main-card,
 .fl-page-theme-root--dark .combined-card,
 .fl-page-theme-root--dark .macro-card,
@@ -197,6 +221,71 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 
 .fl-page-theme-root--dark .target-edit-text {
   color: #7dd3b0 !important;
+}
+
+.fl-page-theme-root--dark .diet-rec-entry,
+.fl-page-theme-root--dark .diet-rec-sheet,
+.fl-page-theme-root--dark .diet-rec-option {
+  background: $fl-dark-panel-bg !important;
+  border-color: $fl-dark-border !important;
+  box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .diet-rec-entry-icon,
+.fl-page-theme-root--dark .diet-rec-entry-btn,
+.fl-page-theme-root--dark .diet-rec-macro {
+  background: rgb(125 211 176 / 14%) !important;
+}
+
+.fl-page-theme-root--dark .diet-rec-entry-title,
+.fl-page-theme-root--dark .diet-rec-title,
+.fl-page-theme-root--dark .diet-rec-gap-value,
+.fl-page-theme-root--dark .diet-rec-option-title,
+.fl-page-theme-root--dark .diet-rec-food-name {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .diet-rec-entry-subtitle,
+.fl-page-theme-root--dark .diet-rec-summary,
+.fl-page-theme-root--dark .diet-rec-option-reason,
+.fl-page-theme-root--dark .diet-rec-food-amount,
+.fl-page-theme-root--dark .diet-rec-tip,
+.fl-page-theme-root--dark .diet-rec-alt,
+.fl-page-theme-root--dark .diet-rec-empty-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .diet-rec-kicker,
+.fl-page-theme-root--dark .diet-rec-entry-icon-text,
+.fl-page-theme-root--dark .diet-rec-entry-btn-text,
+.fl-page-theme-root--dark .diet-rec-option-cal,
+.fl-page-theme-root--dark .diet-rec-macro {
+  color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .diet-rec-entry-btn.primary,
+.fl-page-theme-root--dark .diet-rec-refresh {
+  background: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .diet-rec-entry-btn-text.primary,
+.fl-page-theme-root--dark .diet-rec-refresh-text {
+  color: #10201a !important;
+}
+
+.fl-page-theme-root--dark .diet-rec-tabs,
+.fl-page-theme-root--dark .diet-rec-close,
+.fl-page-theme-root--dark .diet-rec-gap-pill,
+.fl-page-theme-root--dark .diet-rec-food {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-page-theme-root--dark .diet-rec-tab.active {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .diet-rec-tab.active .diet-rec-tab-text {
+  color: $fl-dark-accent !important;
 }
 
 .fl-page-theme-root--dark .section-title,
@@ -954,14 +1043,14 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 .fl-page-theme-root--dark .analysis-status-action {
-  background: #2a3a36 !important;
+  background: #2a211b !important;
   border-color: #8c5d40 !important;
-  box-shadow: 0 4rpx 10rpx rgb(0 0 0 / 35%) !important;
+  box-shadow: 0 4rpx 10rpx rgb(0 0 0 / 24%) !important;
 }
 
 .fl-page-theme-root--dark .analysis-status-action-text,
 .fl-page-theme-root--dark .analysis-status-action-icon {
-  color: #f5b48b !important;
+  color: #f0b98a !important;
 }
 
 .fl-page-theme-root--dark .ai-disclaimer-text {
@@ -2678,6 +2767,11 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 
 .fl-page-theme-root--dark .food-detail-page .correction-link {
   color: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .food-detail-page .delete-btn {
+  background: rgb(248 113 113 / 12%) !important;
+  color: #f87171 !important;
 }
 
 .fl-page-theme-root--dark .recipes-page .page-header {

@@ -15,11 +15,19 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 
 import './index.scss'
 import HeightRuler from '../../../components/HeightRuler'
 import AgePicker from '../../../components/AgePicker'
 import WeightRuler from '../../../components/WeightRuler'
+import RoutineHourPicker, {
+  COMMON_ROUTINE_PRESETS,
+  DEFAULT_ROUTINE_HOURS,
+  formatRoutineHours,
+  parseRoutineHours,
+  type RoutineHours,
+} from '../../../components/RoutineHourPicker'
 
 /** 活动水平选项 */
 const ACTIVITY_OPTIONS = [
@@ -69,7 +77,25 @@ const GOAL_OPTIONS = [
   { label: '增重', desc: '增加肌肉/体重', value: 'muscle_gain', icon: '💪' }
 ]
 
-const TOTAL_STEPS = 11 // 性别、生日、身高、体重、目标、活动、病史、饮食、过敏、特殊情况、体检报告
+const PROFILE_STEPS = [
+  'gender',
+  'age',
+  'height',
+  'weight',
+  'goal',
+  'activity',
+  'routine',
+  'medical',
+  'diet',
+  'allergy',
+  'notes',
+  'report',
+] as const
+const PROFILE_STEP_WIDTH_RPX = 750
+const TOTAL_STEPS = PROFILE_STEPS.length
+const DEFAULT_HEIGHT_CM = 170
+const DEFAULT_WEIGHT_KG = 60
+const MAX_REPORT_IMAGE_COUNT = 3
 
 function HealthProfilePage() {
   const { scheme } = useAppColorScheme()
@@ -84,10 +110,11 @@ function HealthProfilePage() {
   const [weight, setWeight] = useState<string>('')
   const [dietGoal, setDietGoal] = useState<string>('')
   const [activityLevel, setActivityLevel] = useState<string>('')
+  const [routineHours, setRoutineHours] = useState<RoutineHours>(DEFAULT_ROUTINE_HOURS)
   const [medicalHistory, setMedicalHistory] = useState<string[]>([])
   const [dietPreference, setDietPreference] = useState<string[]>([])
   const [allergyList, setAllergyList] = useState<string[]>([])
-  const [reportImageUrl, setReportImageUrl] = useState<string | null>(null)
+  const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
 
   const [customMedical, setCustomMedical] = useState<string>('') // 自定义病史输入
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
@@ -125,9 +152,13 @@ function HealthProfilePage() {
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
       if (hc?.allergies?.length) setAllergyList(hc.allergies as string[])
       if (hc?.health_notes) setHealthNotes(hc.health_notes)
+      if (hc?.routine_type) {
+        setRoutineHours(parseRoutineHours(hc.routine_type))
+      }
     } catch (err: any) {
       await showUnifiedApiError(err, '获取档案失败')
     } finally {
+      setCurrentStep(0)
       setLoading(false)
     }
   }
@@ -292,6 +323,11 @@ function HealthProfilePage() {
     setDietGoal(value)
   }
 
+  const effectiveHeight = height ? Number(height) : DEFAULT_HEIGHT_CM
+  const effectiveWeight = weight ? Number(weight) : DEFAULT_WEIGHT_KG
+  const isHeightValid = Number.isFinite(effectiveHeight) && effectiveHeight >= 100 && effectiveHeight <= 250
+  const isWeightValid = Number.isFinite(effectiveWeight) && effectiveWeight >= 30 && effectiveWeight <= 200
+
   const canProceed = () => {
     switch (currentStep) {
       case 0:
@@ -299,17 +335,19 @@ function HealthProfilePage() {
       case 1:
         return !!birthday
       case 2:
-        return !!height && Number(height) >= 100 && Number(height) <= 250
+        return isHeightValid
       case 3:
-        return !!weight && Number(weight) >= 30 && Number(weight) <= 200
+        return isWeightValid
       case 4:
         return !!dietGoal
       case 5:
         return !!activityLevel
       case 6:
+        return Number.isFinite(routineHours.sleepHour) && Number.isFinite(routineHours.wakeHour)
       case 7:
       case 8:
       case 9:
+      case 10:
         return true
       default:
         return true
@@ -320,11 +358,13 @@ function HealthProfilePage() {
     // 合并预设病史和选中的自定义病史
     const allMedicalHistory = [...medicalHistory.filter(v => v !== 'none'), ...selectedCustomMedical]
     const allAllergies = [...allergyList.filter(v => v !== 'none'), ...selectedCustomAllergy]
+    const finalRoutine = formatRoutineHours(routineHours)
+    const reportImageUrl = reportImageUrls.join(',')
     const req: HealthProfileUpdateRequest = {
       gender: gender || undefined,
       birthday: birthday || undefined,
-      height: height ? Number(height) : undefined,
-      weight: weight ? Number(weight) : undefined,
+      height: isHeightValid ? effectiveHeight : undefined,
+      weight: isWeightValid ? effectiveWeight : undefined,
       diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
       execution_mode: 'standard',
@@ -332,6 +372,7 @@ function HealthProfilePage() {
       diet_preference: dietPreference.length ? dietPreference : undefined,
       allergies: allAllergies.length ? allAllergies : undefined,
       health_notes: healthNotes || undefined,
+      routine_type: finalRoutine || undefined,
       report_image_url: reportImageUrl || undefined
     }
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
@@ -341,7 +382,7 @@ function HealthProfilePage() {
 
     const { confirm } = await Taro.showModal({
       title: '确认保存',
-      content: reportImageUrl
+      content: reportImageUrls.length > 0
         ? '确定保存健康档案吗？体检报告将在后台自动识别，完成后会更新到档案中。'
         : '确定将当前填写的健康信息保存到个人档案吗？'
     })
@@ -366,18 +407,29 @@ function HealthProfilePage() {
     }
   }
 
-  /** 上传体检报告：仅上传到 Supabase 并展示，不解析；点击「保存健康档案」时在后台提交病历提取任务 */
+  /** 上传体检报告：仅上传图片并展示，点击「保存健康档案」时提交病历提取任务 */
   const handleReportUpload = async () => {
     try {
-      const res = await Taro.chooseImage({ count: 1, sizeType: ['compressed'] })
-      const base64 = await imageToBase64(res.tempFilePaths[0])
+      const res = await chooseImageWithPrivacy({ count: MAX_REPORT_IMAGE_COUNT, sizeType: ['compressed'] })
+      const tempPaths = (res.tempFilePaths || []).slice(0, MAX_REPORT_IMAGE_COUNT)
+      if (tempPaths.length === 0) return
       Taro.showLoading({ title: '上传中...', mask: true })
-      const { imageUrl } = await uploadReportImage(base64)
+      const urls: string[] = []
+      for (const path of tempPaths) {
+        const base64 = await imageToBase64(path)
+        const { imageUrl } = await uploadReportImage(base64)
+        urls.push(imageUrl)
+      }
       Taro.hideLoading()
-      setReportImageUrl(imageUrl)
-      Taro.showToast({ title: '上传成功，保存时将自动识别', icon: 'success' })
+      setReportImageUrls(urls)
+      Taro.showToast({ title: `上传成功 ${urls.length} 张`, icon: 'success' })
     } catch (e: any) {
       Taro.hideLoading()
+      if (e?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e)
+        return
+      }
       await showUnifiedApiError(e, '上传失败')
     }
   }
@@ -414,7 +466,8 @@ function HealthProfilePage() {
         <View
           className='cards-track'
           style={{
-            transform: `translateX(-${currentStep * 750}rpx)`,
+            width: `${TOTAL_STEPS * PROFILE_STEP_WIDTH_RPX}rpx`,
+            transform: `translateX(-${currentStep * PROFILE_STEP_WIDTH_RPX}rpx)`,
             transition: 'transform 0.3s ease-out'
           }}
         >
@@ -477,7 +530,7 @@ function HealthProfilePage() {
             {/* 使用 HeightRuler 替换原有的输入 */}
             <View style={{ width: '100%', marginBottom: '24px' }}>
               <HeightRuler
-                value={height ? Number(height) : 170}
+                value={effectiveHeight}
                 onChange={(val) => setHeight(String(val))}
                 min={100}
                 max={250}
@@ -485,7 +538,7 @@ function HealthProfilePage() {
             </View>
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${height ? 'ready' : ''}`} onClick={goNext} disabled={!height}>
+              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
@@ -497,15 +550,15 @@ function HealthProfilePage() {
             <Text className='step-card-subtitle'>你的体重是多少？</Text>
             {/* Title is handled inside WeightRuler for better layout */}
             <WeightRuler
-              value={weight ? Number(weight) : 60}
+              value={effectiveWeight}
               onChange={(val) => setWeight(String(val))}
               min={30}
               max={200}
-              height={height ? Number(height) : 170}
+              height={effectiveHeight}
             />
             <View className='card-footer'>
               <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
-              <Button block color='primary' shape='round' className={`card-next-btn ${weight ? 'ready' : ''}`} onClick={goNext} disabled={!weight}>
+              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
                 下一步 <Text className='iconfont icon-right' />
               </Button>
             </View>
@@ -563,7 +616,24 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 6: 既往病史（多选） */}
+          {/* Step 6: 作息习惯 */}
+          <View className='card step-card'>
+            <Text className='step-card-title'>作息习惯</Text>
+            <Text className='step-card-subtitle'>了解你的作息，让算法更加懂你</Text>
+            <RoutineHourPicker
+              value={routineHours}
+              onChange={setRoutineHours}
+              presets={COMMON_ROUTINE_PRESETS}
+            />
+            <View className='card-footer'>
+              <View className='card-prev-btn' onClick={goPrev}><Text className='card-prev-arrow iconfont icon-left' />上一步</View>
+              <Button block color='primary' shape='round' className={`card-next-btn ${canProceed() ? 'ready' : ''}`} onClick={goNext} disabled={!canProceed()}>
+                下一步 <Text className='iconfont icon-right' />
+              </Button>
+            </View>
+          </View>
+
+          {/* Step 7: 既往病史（多选） */}
           <View className='card step-card'>
             <Text className='step-card-title'>既往病史</Text>
             <Text className='step-card-subtitle'>是否有以下病史？（可多选）</Text>
@@ -621,7 +691,7 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 7: 特殊饮食（多选） */}
+          {/* Step 8: 特殊饮食（多选） */}
           <View className='card step-card'>
             <Text className='step-card-title'>饮食习惯</Text>
             <Text className='step-card-subtitle'>你有特殊的饮食习惯吗？（可多选）</Text>
@@ -645,7 +715,7 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 8: 过敏源 */}
+          {/* Step 9: 过敏源 */}
           <View className='card step-card'>
             <Text className='step-card-title'>过敏源</Text>
             <Text className='step-card-subtitle'>有过敏源吗？（可多选）</Text>
@@ -704,7 +774,7 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 9: 特殊情况和问题补充 */}
+          {/* Step 10: 特殊情况和问题补充 */}
           <View className='card step-card'>
             <Text className='step-card-title'>补充信息</Text>
             <Text className='step-card-subtitle'>有其他特殊情况需要补充吗？（选填）</Text>
@@ -727,7 +797,7 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 10: 体检报告上传 */}
+          {/* Step 11: 体检报告上传 */}
           <View className='card step-card upload-step'>
             <View className='upload-hero'>
               <View className='hero-icon-wrapper'>
@@ -738,22 +808,29 @@ function HealthProfilePage() {
             </View>
 
             <View
-              className={`upload-area ${reportImageUrl ? 'has-image' : ''}`}
+              className={`upload-area ${reportImageUrls.length > 0 ? 'has-image' : ''}`}
               onClick={handleReportUpload}
             >
-              {reportImageUrl ? (
+              {reportImageUrls.length > 0 ? (
                 <>
-                  <Image src={reportImageUrl} mode='aspectFit' className='preview-image' />
+                  <View className={`report-preview-grid count-${reportImageUrls.length}`}>
+                    {reportImageUrls.map((url, index) => (
+                      <View className='report-preview-item' key={`${url}-${index}`}>
+                        <Image src={url} mode='aspectFit' className='preview-image' />
+                        <Text className='report-preview-index'>{index + 1}</Text>
+                      </View>
+                    ))}
+                  </View>
                   <View className='reupload-mask'>
                     <Text className='iconfont icon-xiangji' style={{ fontSize: '48rpx', color: '#fff' }}></Text>
-                    <Text className='reupload-text'>点击更换图片</Text>
+                    <Text className='reupload-text'>重新选择报告</Text>
                   </View>
                 </>
               ) : (
                 <View className='upload-placeholder'>
                   <Text className='upload-icon-font iconfont icon-paizhao-xianxing'></Text>
                   <Text className='upload-title'>点击上传报告</Text>
-                  <Text className='upload-desc'>支持 JPG / PNG 格式图片</Text>
+                  <Text className='upload-desc'>支持 JPG / PNG 格式，最多 {MAX_REPORT_IMAGE_COUNT} 张</Text>
                 </View>
               )}
             </View>
@@ -798,7 +875,7 @@ function HealthProfilePage() {
                 onClick={handleSubmit}
                 loading={saving}
               >
-                {reportImageUrl ? '确认并开启分析' : '以后再说，直接完成'}
+                {reportImageUrls.length > 0 ? '确认并开启分析' : '以后再说，直接完成'}
               </Button>
             </View>
           </View>

@@ -1,0 +1,15 @@
+cases:
+  - id: membership.me.success
+    name: "当前会员状态"
+    desc: "验证登录用户可以获取自己的会员状态，fixture 用户应为 active。"
+    group: membership
+    method: GET
+    path: /api/membership/me
+    auth: user1
+    query:
+      date: "2026-05-14"
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.status: active

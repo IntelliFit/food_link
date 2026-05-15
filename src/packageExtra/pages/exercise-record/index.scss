@@ -428,7 +428,6 @@ $border-color: #e5e7eb;
   align-items: center;
 }
 
-// 图片预览
 .image-preview-wrap {
   width: 100%;
   box-sizing: border-box;
@@ -483,19 +482,6 @@ $border-color: #e5e7eb;
   padding: 12rpx 12rpx 12rpx 16rpx;
 }
 
-.chat-input {
-  flex: 1;
-  height: 64rpx;
-  font-size: 30rpx;
-  color: $text-primary;
-  line-height: 44rpx;
-}
-
-.input-placeholder {
-  color: $text-tertiary;
-}
-
-// 添加图片按钮
 .exercise-image-trigger {
   width: 56rpx;
   height: 56rpx;
@@ -519,6 +505,18 @@ $border-color: #e5e7eb;
     font-weight: 300;
     margin-top: -4rpx;
   }
+}
+
+.chat-input {
+  flex: 1;
+  height: 64rpx;
+  font-size: 30rpx;
+  color: $text-primary;
+  line-height: 44rpx;
+}
+
+.input-placeholder {
+  color: $text-tertiary;
 }
 
 /** 记运动输入框右侧发送：图标仅用 iconfont icon-send，不用 send-btn 类名 */

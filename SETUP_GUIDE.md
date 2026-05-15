@@ -23,22 +23,22 @@
 
 ---
 
-### 2. Supabase（数据库）
+### 2. PostgreSQL（数据库）
 
 **用途**：存储用户信息等数据
 
 **申请步骤**：
-1. 访问 [Supabase](https://supabase.com/)
-2. 注册/登录账号（可用 GitHub 账号登录）
-3. 点击 "New Project" 创建新项目
-4. 等待项目初始化完成（约 2 分钟）
-5. 在项目设置 -> API 中找到：
-   - **Project URL** → 复制到 `SUPABASE_URL`
-   - **service_role key** → 复制到 `SUPABASE_SERVICE_ROLE_KEY`
-   - ⚠️ 注意：要使用 `service_role` key，不是 `anon` key
+1. 准备一个可直连的 PostgreSQL 实例（本地、云主机或托管服务均可）
+2. 创建数据库和业务账号
+3. 记录以下连接信息：
+   - **Host** → 写入 `POSTGRESQL_HOST`
+   - **Port** → 写入 `POSTGRESQL_PORT`
+   - **User** → 写入 `POSTGRESQL_USER`
+   - **Password** → 写入 `POSTGRESQL_PASSWORD`
+   - **Database** → 写入 `POSTGRESQL_DATABASE`
 
 **初始化数据库**：
-在 Supabase SQL Editor 中执行以下 SQL 创建用户表：
+在你的 PostgreSQL 客户端中执行以下 SQL 创建用户表：
 
 ```sql
 CREATE TABLE weapp_user (
@@ -53,9 +53,9 @@ CREATE TABLE weapp_user (
 );
 ```
 
-**费用**：免费版有 500MB 数据库空间，足够开发使用
+**费用**：取决于你使用的 PostgreSQL 部署方式
 
-**文档**：https://supabase.com/docs
+**文档**：可参考你所选 PostgreSQL 服务商或 [PostgreSQL 官方文档](https://www.postgresql.org/docs/)
 
 ---
 
@@ -131,9 +131,12 @@ touch .env
 # DashScope API 配置
 DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxx
 
-# Supabase 配置
-SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# PostgreSQL 配置
+POSTGRESQL_HOST=127.0.0.1
+POSTGRESQL_PORT=5432
+POSTGRESQL_USER=postgres
+POSTGRESQL_PASSWORD=your-password
+POSTGRESQL_DATABASE=food_link
 
 # JWT 配置
 JWT_SECRET_KEY=your-random-secret-key-at-least-32-chars
@@ -172,7 +175,7 @@ uvicorn main:app --reload --port 8888
 
 4. **费用控制**
    - DashScope 按量付费，注意控制调用次数
-   - Supabase 免费版有配额限制，注意监控使用量
+   - PostgreSQL 实例需要关注连接数、磁盘容量与备份策略
 
 ---
 
@@ -183,9 +186,9 @@ uvicorn main:app --reload --port 8888
 - 检查环境变量名称是否正确（区分大小写）
 - 检查是否有拼写错误
 
-### Supabase 连接失败
-- 检查 `SUPABASE_URL` 格式是否正确（应该以 `https://` 开头，以 `.supabase.co` 结尾）
-- 检查 `SUPABASE_SERVICE_ROLE_KEY` 是否使用了 `service_role` key（不是 `anon` key）
+### PostgreSQL 连接失败
+- 检查 `POSTGRESQL_HOST/PORT/USER/PASSWORD/DATABASE` 是否填写正确
+- 检查数据库实例是否允许当前服务器访问
 - 检查网络连接是否正常
 
 ### 微信登录失败

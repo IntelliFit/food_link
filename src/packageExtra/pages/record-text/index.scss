@@ -22,6 +22,11 @@
     border-color: #fecaca;
     pointer-events: none;
   }
+
+  &--warn {
+    background: #fff7ed;
+    border-color: #fed7aa;
+  }
 }
 
 .record-text-quota-bar-text {

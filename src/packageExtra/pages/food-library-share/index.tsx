@@ -20,6 +20,7 @@ import {
 } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 
 const QUICK_TAGS = ['少油', '少盐', '高蛋白', '低碳水', '清淡', '外卖', '健身餐']
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
@@ -301,7 +302,7 @@ function FoodLibrarySharePage() {
     const remain = MAX_IMAGES - imagePaths.length
     if (remain <= 0) return
     try {
-      const res = await Taro.chooseImage({
+      const res = await chooseImageWithPrivacy({
         count: remain,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera']
@@ -352,6 +353,11 @@ function FoodLibrarySharePage() {
         setAnalyzing(false)
       }
     } catch (e) {
+      if ((e as any)?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e)
+        return
+      }
       console.error('选择图片失败', e)
     }
   }

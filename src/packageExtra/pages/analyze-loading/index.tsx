@@ -4,13 +4,13 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAnalyzeTask,
+  showUnifiedApiError,
   type AnalysisTask,
   type AnalysisEngine,
   type AnalyzeResponse,
   type ExecutionMode,
   type ExerciseTaskResultPayload
 } from '../../../utils/api'
-import { showUnifiedApiError } from '../../../utils/error-modal'
 import { IconExercise } from '../../../components/iconfont'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
@@ -174,6 +174,7 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }
 const FOOD_STANDARD_STAGE_LABELS = ['识别食物/份量', '匹配营养库', '整理结果']
 const FOOD_STRICT_STAGE_LABELS = ['拆分食物', '精估份量', '匹配营养库']
 const FOOD_TEXT_STAGE_LABELS = ['解析文字', '匹配营养库', '整理结果']
+const CORRECTION_STAGE_LABELS = ['理解纠错说明', '重新分析食物', '更新营养结果']
 const EXERCISE_STAGE_LABELS = ['理解运动', '估算消耗', '写入记录']
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => (
@@ -184,6 +185,21 @@ const normalizeTaskType = (value: unknown): 'food' | 'food_text' | 'exercise' =>
   if (value === 'food_text') return 'food_text'
   if (value === 'exercise') return 'exercise'
   return 'food'
+}
+
+const normalizeAnalyzeTaskErrorMessage = (value: unknown): string => {
+  const raw = String(value || '').trim()
+  if (!raw) return '识别失败，请稍后重试'
+  const lower = raw.toLowerCase()
+  if (
+    lower.includes('<html') ||
+    lower.includes('<!doctype html') ||
+    lower.includes('<head') ||
+    lower.includes('<body')
+  ) {
+    return 'AI 服务返回异常网页，请检查模型 API 配置后重试'
+  }
+  return raw.length > 160 ? `${raw.slice(0, 160)}…` : raw
 }
 
 const pickSourceTaskTypeFromTask = (task: AnalysisTask): 'food' | 'food_text' => {
@@ -254,6 +270,9 @@ function AnalyzeLoadingPage() {
   const [interactionIndex, setInteractionIndex] = useState(0)
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null)
   const [isDebugMode, setIsDebugMode] = useState(false)
+  const [isCorrectionMode, setIsCorrectionMode] = useState(() =>
+    Taro.getCurrentInstance().router?.params?.correction === '1'
+  )
   const [imagePath, setImagePath] = useState<string>('')
   const [currentStep, setCurrentStep] = useState(1) // 当前进行的步骤索引
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -313,10 +332,12 @@ function AnalyzeLoadingPage() {
     const modeFromStorage = Taro.getStorageSync('analyzeExecutionMode')
     const mode = normalizeExecutionMode(params?.execution_mode || modeFromStorage)
     const requestedAnalysisEngine = String(params?.analysis_engine || '').trim()
-    const nextSignature = `${String(id || '')}|${type}|${mode}|${requestedAnalysisEngine}`
+    const correctionMode = params?.correction === '1'
+    const nextSignature = `${String(id || '')}|${type}|${mode}|${requestedAnalysisEngine}|${correctionMode ? 'correction' : 'normal'}`
 
     const isDebug = id?.startsWith('debug-') || false
     setIsDebugMode(isDebug)
+    setIsCorrectionMode(correctionMode)
 
     if (!id) {
       void showUnifiedApiError(new Error('缺少任务 ID'), '缺少任务 ID')
@@ -330,13 +351,14 @@ function AnalyzeLoadingPage() {
         task_type: type,
         execution_mode: mode,
         analysis_engine: requestedAnalysisEngine || '(from storage)',
+        correction: correctionMode,
       })
       setStatus('loading')
       setErrorMessage('')
       setViolationReason('')
       setCurrentStep(1)
       setElapsedSeconds(0)
-      setLastTaskStatusText('已提交')
+      setLastTaskStatusText(correctionMode ? '已提交纠错' : '已提交')
       setInteractionIndex((prev) => (prev + 1) % WAITING_INTERACTION_CARDS.length)
       setSelectedQuizOption(null)
       setTipIndex(getNextTipIndex())
@@ -350,7 +372,9 @@ function AnalyzeLoadingPage() {
     if (requestedAnalysisEngine) {
       Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
     }
-    if (type === 'exercise') {
+    if (correctionMode) {
+      Taro.setNavigationBarTitle({ title: '纠错分析中' })
+    } else if (type === 'exercise') {
       Taro.setNavigationBarTitle({ title: '分析中' })
     }
 
@@ -431,7 +455,7 @@ function AnalyzeLoadingPage() {
         timeoutTimerRef.current = null
       }
     }
-  }, [taskId, status, isDebugMode])
+  }, [taskId, status, isDebugMode, isCorrectionMode])
 
   useEffect(() => {
     if (!taskId || status !== 'loading') return
@@ -558,7 +582,7 @@ function AnalyzeLoadingPage() {
         }
         if (task.status === 'failed' || task.status === 'timed_out') {
           setStatus('failed')
-          setErrorMessage(task.error_message || (task.status === 'timed_out' ? '分析超时，请重试' : '识别失败'))
+          setErrorMessage(normalizeAnalyzeTaskErrorMessage(task.error_message || (task.status === 'timed_out' ? (isCorrectionMode ? '纠错分析超时，请重试' : '分析超时，请重试') : (isCorrectionMode ? '纠错失败' : '识别失败'))))
           if (timeoutTimerRef.current) {
             clearTimeout(timeoutTimerRef.current)
             timeoutTimerRef.current = null
@@ -637,7 +661,7 @@ function AnalyzeLoadingPage() {
     }
     Taro.showModal({
       title: '稍后查看',
-      content: '分析将在后台继续，完成后可在「识别记录」中查看结果。',
+      content: isCorrectionMode ? '纠错分析将在后台继续，完成后可在「我的」「识别记录」中查看结果。' : '分析将在后台继续，完成后可在「我的」「识别记录」中查看结果。',
       showCancel: true,
       confirmText: '去历史',
       success: res => {
@@ -708,13 +732,15 @@ function AnalyzeLoadingPage() {
   const isTextFoodTask = taskType === 'food_text'
   const textRecordPreview = textRecordInput || '文字记录，未提供实物照片'
   const interactionCard = WAITING_INTERACTION_CARDS[interactionIndex]
-  const compactStageLabels = taskType === 'exercise'
-    ? EXERCISE_STAGE_LABELS
-    : taskType === 'food_text'
-      ? FOOD_TEXT_STAGE_LABELS
-      : executionMode === 'strict'
-        ? FOOD_STRICT_STAGE_LABELS
-        : FOOD_STANDARD_STAGE_LABELS
+  const compactStageLabels = isCorrectionMode
+    ? CORRECTION_STAGE_LABELS
+    : taskType === 'exercise'
+      ? EXERCISE_STAGE_LABELS
+      : taskType === 'food_text'
+        ? FOOD_TEXT_STAGE_LABELS
+        : executionMode === 'strict'
+          ? FOOD_STRICT_STAGE_LABELS
+          : FOOD_STANDARD_STAGE_LABELS
   const currentCompactStage = compactStageLabels[Math.min(currentStep, compactStageLabels.length - 1)]
 
   return (
@@ -783,7 +809,7 @@ function AnalyzeLoadingPage() {
             <Text className='stage-summary-time'>已等待 {formatElapsed(elapsedSeconds)}</Text>
           </View>
           <View className='compact-stage-row'>
-            <Text className='compact-stage-status'>任务{lastTaskStatusText}</Text>
+            <Text className='compact-stage-status'>{isCorrectionMode ? '纠错任务' : '任务'}{lastTaskStatusText}</Text>
             <Text className='compact-stage-flow'>{compactStageLabels.join(' → ')}</Text>
           </View>
         </View>
@@ -828,7 +854,7 @@ function AnalyzeLoadingPage() {
 
         {taskType !== 'exercise' && (
           <View className={`mode-badge ${executionMode}`}>
-            <Text className='mode-badge-text'>{EXECUTION_MODE_META[executionMode].title}</Text>
+            <Text className='mode-badge-text'>{isCorrectionMode ? '纠错分析' : EXECUTION_MODE_META[executionMode].title}</Text>
           </View>
         )}
 

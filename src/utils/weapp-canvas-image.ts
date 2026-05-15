@@ -1,4 +1,5 @@
 import Taro from '@tarojs/taro'
+import { retryAfterGeneratedUserFileCleanup } from './weapp-user-files'
 
 /**
  * 将 data URL / 网络图转为 Canvas 2D createImage 可用的本地路径。
@@ -16,7 +17,7 @@ export async function resolveCanvasImageSrc(src: string): Promise<string> {
     if (!userDataPath) return raw
     const path = `${userDataPath}/cv_${Date.now()}_${Math.random().toString(36).slice(2, 10)}.jpg`
     try {
-      await new Promise<void>((resolve, reject) => {
+      const writeFile = () => new Promise<void>((resolve, reject) => {
         Taro.getFileSystemManager().writeFile({
           filePath: path,
           data: m[1],
@@ -25,6 +26,7 @@ export async function resolveCanvasImageSrc(src: string): Promise<string> {
           fail: reject
         })
       })
+      await writeFile().catch((error) => retryAfterGeneratedUserFileCleanup(writeFile, error))
       return path
     } catch (e) {
       console.warn('[resolveCanvasImageSrc] data URI writeFile failed', e)

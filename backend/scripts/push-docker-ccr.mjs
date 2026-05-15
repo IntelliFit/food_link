@@ -1,21 +1,24 @@
 #!/usr/bin/env node
 /**
- * 在本机构建 food_link 后端 Docker 镜像并推送到腾讯云 CCR（绕过 GitHub Actions 跨境推送过慢）。
+ * 在本机构建 food_link Go 后端 Docker 镜像并推送到腾讯云 CCR。
  *
- * 镜像路径固定为：ccr.ccs.tencentyun.com/littlehorse/foodlink（命名空间 littlehorse，镜像仓库名 foodlink）。
- * 运行时配置由部署侧 .env 注入，勿把密钥打进镜像。
+ * 镜像路径固定为：ccr.ccs.tencentyun.com/littlehorse/foodlink。
+ *
+ * 分支与标签：
+ *   main -> :main
+ *   dev  -> :dev
+ *   其它分支拒绝执行
  *
  * 用法（在仓库根目录）：
  *   npm run push-docker-ccr
  *
- * 构建上下文为 backend/（与 backend/Dockerfile 注释一致）。
- * 默认强制构建 linux/amd64，避免 ARM 开发机推送后在 AMD64 服务器无法运行。
+ * 构建上下文为 backend/（含 backend/Dockerfile）。
+ * 默认强制构建 linux/amd64，避免 ARM 开发机推送后在 AMD64 服务器不可运行。
  * 如需覆盖平台，可传入环境变量 DOCKER_BUILD_PLATFORM（例如 linux/amd64,linux/arm64）。
+ * 如 Docker Hub 访问不稳定，可传入 DOCKER_GO_BUILDER_IMAGE 覆盖 Go builder 基础镜像。
+ * 如 Go module 下载不稳定，可传入 DOCKER_GO_PROXY 覆盖 GOPROXY。
  *
- * 分支与标签：
- *   main → :latest、:main、:<7位 sha>
- *   dev  → :dev、:<7位 sha>
- *   其它分支 → 提示切换到 main 或 dev
+ * 运行时配置由部署侧环境变量 / ConfigMap 注入，勿把密钥打进镜像。
  */
 
 import { spawnSync } from 'node:child_process';
@@ -24,8 +27,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-/** Docker 构建目录（backend/，含 Dockerfile） */
 const BACKEND_ROOT = path.resolve(__dirname, '..');
+
+const REGISTRY = 'ccr.ccs.tencentyun.com';
+const IMAGE_NAMESPACE = 'littlehorse';
+const IMAGE_REPOSITORY = 'foodlink';
+const DEFAULT_GO_BUILDER_IMAGE = 'docker.io/library/golang:1.26.1-bookworm';
 
 function findGitRoot(startDir) {
   let dir = path.resolve(startDir);
@@ -39,11 +46,6 @@ function findGitRoot(startDir) {
 
 const GIT_ROOT = findGitRoot(BACKEND_ROOT);
 
-/** 个人版 CCR 默认域名；命名空间 littlehorse，镜像仓库名 foodlink */
-const REGISTRY = 'ccr.ccs.tencentyun.com';
-const IMAGE_NAMESPACE = 'littlehorse';
-const IMAGE_REPOSITORY = 'foodlink';
-
 function print(...args) {
   console.log(...args);
 }
@@ -54,46 +56,50 @@ function die(msg, hint) {
   process.exit(1);
 }
 
-function run(name, cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, {
+function run(cmd, args, opts = {}) {
+  const result = spawnSync(cmd, args, {
     cwd: opts.cwd ?? BACKEND_ROOT,
     encoding: 'utf-8',
     stdio: opts.inherit === false ? ['ignore', 'pipe', 'pipe'] : 'inherit',
-    shell: opts.shell ?? false,
+    shell: false,
     env: { ...process.env, ...opts.env },
   });
-  if (r.status !== 0) {
-    const err = (r.stderr || '').trim();
-    const out = (r.stdout || '').trim();
+
+  if (result.status !== 0) {
     return {
       ok: false,
-      code: r.status,
-      signal: r.signal,
-      stderr: err,
-      stdout: out,
+      code: result.status,
+      signal: result.signal,
+      stdout: (result.stdout || '').trim(),
+      stderr: (result.stderr || '').trim(),
     };
   }
-  return { ok: true, stdout: (r.stdout || '').trim(), stderr: (r.stderr || '').trim() };
+
+  return {
+    ok: true,
+    stdout: (result.stdout || '').trim(),
+    stderr: (result.stderr || '').trim(),
+  };
 }
 
 function hasDocker() {
-  const r = run('docker version', 'docker', ['version'], { inherit: false });
-  if (!r.ok) {
+  const result = run('docker', ['version'], { inherit: false });
+  if (!result.ok) {
     return {
       ok: false,
       hint:
         '未检测到可用的 Docker。\n' +
-        '  • Windows / macOS：请安装并启动 Docker Desktop（托盘图标就绪后再试）。\n' +
-        '  • Linux：请安装 docker.io 或 Docker Engine，并确保当前用户在 docker 组或使用 sudo。\n' +
-        '  安装后在本终端执行 `docker version` 应能同时看到 Client 与 Server。',
+        '  Windows / macOS：请安装并启动 Docker Desktop（托盘图标就绪后再试）。\n' +
+        '  Linux：请安装 Docker Engine，并确保当前用户有权限访问 Docker daemon。\n' +
+        '安装后在本终端执行 `docker version` 应能同时看到 Client 与 Server。',
     };
   }
   return { ok: true };
 }
 
 function hasBuildx() {
-  const r = run('docker buildx version', 'docker', ['buildx', 'version'], { inherit: false });
-  if (!r.ok) {
+  const result = run('docker', ['buildx', 'version'], { inherit: false });
+  if (!result.ok) {
     return {
       ok: false,
       hint:
@@ -104,22 +110,12 @@ function hasBuildx() {
   return { ok: true };
 }
 
-function git(args, inherit = false) {
-  return run(`git ${args.join(' ')}`, 'git', args, { inherit, cwd: GIT_ROOT ?? BACKEND_ROOT });
+function git(args) {
+  return run('git', args, { inherit: false, cwd: GIT_ROOT ?? BACKEND_ROOT });
 }
 
 function main() {
-  print('=== food_link：本地构建后端镜像并推送腾讯云 CCR ===\n');
-
-  const dockerCheck = hasDocker();
-  if (!dockerCheck.ok) {
-    die('无法执行 docker', dockerCheck.hint);
-  }
-
-  const buildxCheck = hasBuildx();
-  if (!buildxCheck.ok) {
-    die('无法执行 docker buildx', buildxCheck.hint);
-  }
+  print('=== food_link：本地构建 Go 后端镜像并推送腾讯云 CCR ===\n');
 
   if (!GIT_ROOT) {
     die(
@@ -128,45 +124,51 @@ function main() {
     );
   }
 
-  const br = git(['rev-parse', '--abbrev-ref', 'HEAD'], false);
-  if (!br.ok) {
-    die('无法读取当前 Git 分支', '请确认已安装 git 且在本仓库内执行。');
-  }
-  const branch = (br.stdout || '').trim();
-  const shaR = git(['rev-parse', '--short=7', 'HEAD'], false);
-  const shortSha = shaR.ok ? (shaR.stdout || '').trim() : 'unknown';
+  const branchResult = git(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const shaResult = git(['rev-parse', '--short=7', 'HEAD']);
+  const branch = branchResult.ok ? branchResult.stdout : 'unknown';
+  const shortSha = shaResult.ok ? shaResult.stdout : 'unknown';
 
   if (branch !== 'main' && branch !== 'dev') {
     die(
       `当前分支为「${branch}」，本脚本只支持在 main 或 dev 上打对应标签。`,
-      '请执行：\n' +
-        '  git checkout main   # 要打 latest + main + sha\n' +
+      '请切换到需要发布的分支后再运行：\n' +
+        '  git checkout main   # 推送 :main\n' +
         '  或\n' +
-        '  git checkout dev    # 要打 dev + sha\n' +
+        '  git checkout dev    # 推送 :dev\n' +
         '然后再运行：npm run push-docker-ccr',
     );
   }
 
+  const dockerCheck = hasDocker();
+  if (!dockerCheck.ok) die('无法执行 docker', dockerCheck.hint);
+
+  const buildxCheck = hasBuildx();
+  if (!buildxCheck.ok) die('无法执行 docker buildx', buildxCheck.hint);
+
   const imageBase = `${REGISTRY}/${IMAGE_NAMESPACE}/${IMAGE_REPOSITORY}`;
-  const tags =
-    branch === 'main'
-      ? [`${imageBase}:latest`, `${imageBase}:main`, `${imageBase}:${shortSha}`]
-      : [`${imageBase}:dev`, `${imageBase}:${shortSha}`];
+  const imageTag = `${imageBase}:${branch}`;
   const buildPlatform = (process.env.DOCKER_BUILD_PLATFORM || 'linux/amd64').trim() || 'linux/amd64';
   const buildProgress = (process.env.DOCKER_BUILD_PROGRESS || 'auto').trim() || 'auto';
+  const goBuilderImage =
+    (process.env.DOCKER_GO_BUILDER_IMAGE || DEFAULT_GO_BUILDER_IMAGE).trim() || DEFAULT_GO_BUILDER_IMAGE;
+  const goProxy = (process.env.DOCKER_GO_PROXY || process.env.GOPROXY || 'https://goproxy.cn,direct').trim();
 
   print(`Registry:   ${REGISTRY}`);
-  print(`镜像基名:   ${imageBase}（命名空间 littlehorse，仓库名 foodlink）`);
+  print(`镜像基名:   ${imageBase}`);
+  print(`镜像标签:   ${branch}`);
   print(`当前分支:   ${branch}`);
   print(`Git 短 SHA: ${shortSha}`);
   print(`构建平台:   ${buildPlatform}`);
+  print(`Go 构建镜像: ${goBuilderImage}`);
+  print(`Go module proxy: ${goProxy || '(go default)'}`);
   if (buildProgress !== 'auto') {
-    print(`进度模式:   ${buildProgress}（如需默认进度条，去掉 DOCKER_BUILD_PROGRESS 环境变量）`);
+    print(`进度模式:   ${buildProgress}`);
   }
-  print(`将打标签:   ${tags.join(', ')}\n`);
+  print(`将推送:     ${imageTag}\n`);
 
   print('--- 登录（推送前须已登录腾讯云 CCR）---');
-  print('若尚未登录，请先在本机执行（用户名一般为腾讯云账号 ID）：');
+  print('若尚未登录，请先在本机执行：');
   print(`  docker login ${REGISTRY}`);
   print('然后再运行本脚本。\n');
 
@@ -174,30 +176,35 @@ function main() {
   if (buildProgress !== 'auto') {
     buildArgs.push('--progress', buildProgress);
   }
-  for (const t of tags) {
-    buildArgs.push('-t', t);
+  buildArgs.push('--build-arg', `GO_BUILDER_IMAGE=${goBuilderImage}`);
+  if (goProxy) {
+    buildArgs.push('--build-arg', `GOPROXY=${goProxy}`);
   }
-  buildArgs.push('--push');
-  buildArgs.push('.');
+  buildArgs.push('-t', imageTag, '--push', '.');
 
   print('--- docker buildx build --push ---');
-  const build = run('docker buildx build --push', 'docker', buildArgs, { inherit: true });
+  const build = run('docker', buildArgs, { inherit: true });
   if (!build.ok) {
     const tip =
-      '常见原因：未登录腾讯云 CCR、账号或密码错误、网络问题。\n' +
-      `请先执行: docker login ${REGISTRY}\n` +
-      '用户名一般为腾讯云账号 ID；密码为容器镜像服务控制台为实例设置的登录密码。\n' +
+      '常见原因：未登录腾讯云 CCR、账号或密码错误、Docker daemon 未启动、网络问题。\n' +
+      `若报错包含 auth.docker.io、registry-1.docker.io 或 load metadata for ${DEFAULT_GO_BUILDER_IMAGE}，这是拉取 Go 基础镜像失败，不是腾讯云 CCR 登录失败。\n` +
+      `CCR 鉴权问题请先执行: docker login ${REGISTRY}\n` +
       '\n' +
-      '若上方 docker 原始报错信息不够，可使用以下命令查看每个构建步骤的完整输出：\n' +
-      `  DOCKER_BUILD_PROGRESS=plain npm run push-docker-ccr\n` +
+      'Docker Hub 访问不稳定时，可临时覆盖 Go builder 基础镜像后重试：\n' +
+      `  PowerShell: $env:DOCKER_GO_BUILDER_IMAGE="docker.m.daocloud.io/library/golang:1.26.1-bookworm"; npm run push-docker-ccr\n` +
+      `  Bash:       DOCKER_GO_BUILDER_IMAGE=docker.m.daocloud.io/library/golang:1.26.1-bookworm npm run push-docker-ccr\n` +
+      '\n' +
+      '若上方 docker 原始报错信息不够，可打开完整构建输出：\n' +
+      '  PowerShell: $env:DOCKER_BUILD_PROGRESS="plain"; npm run push-docker-ccr\n' +
+      '  Bash:       DOCKER_BUILD_PROGRESS=plain npm run push-docker-ccr\n' +
       '\n' +
       '也可以单独调试构建（不推送）：\n' +
-      `  docker buildx build --platform ${buildPlatform} --progress plain -t ${tags[0]} ${BACKEND_ROOT}`;
+      `  docker buildx build --platform ${buildPlatform} --progress plain --build-arg GO_BUILDER_IMAGE=${goBuilderImage} -t ${imageTag} ${BACKEND_ROOT}`;
     die('docker buildx build --push 失败', tip);
   }
 
   print('\n全部构建并推送完成。');
-  print(`示例拉取: docker pull ${tags[0]}`);
+  print(`示例拉取: docker pull ${imageTag}`);
 }
 
 main();

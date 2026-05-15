@@ -2,7 +2,7 @@ import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useState, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
-import { listAnalyzeTasks, deleteAnalysisTask, showUnifiedApiError, getAnalyzeTaskStatusCount, markAnalyzeHistorySeen, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
+import { listAnalyzeTasks, deleteAnalysisTask, deleteUnrecordedAnalysisTasks, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -327,34 +327,14 @@ function AnalyzeHistoryPage() {
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
     void load()
-    // 刷新 waiting_record badge 计数
-    void (async () => {
-      try {
-        const sc = await getAnalyzeTaskStatusCount()
-        Taro.setStorageSync('analyze_waiting_record_count', sc.waiting_record || 0)
-        Taro.setStorageSync('analyze_has_unseen_waiting_record', sc.has_unseen_waiting_record || false)
-      } catch {
-        // 静默失败
-      }
-    })()
   })
 
   useDidHide(() => {
-    // 页面隐藏时：识别记录 + 食物保质期 未读全部一笔勾销
-    void (async () => {
-      try {
-        await markAnalyzeHistorySeen()
-      } catch {
-        // 静默失败
-      }
-      // 清零识别记录 + 食物保质期未读，保留好友请求 badge
-      const today = new Date().toISOString().slice(0, 10)
-      Taro.setStorageSync('analyze_has_unseen_waiting_record', false)
-      Taro.setStorageSync('analyze_waiting_record_count', 0)
-      Taro.setStorageSync('food_expiry_last_seen_date', today)
-      const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
-      Taro.setStorageSync('profile_tab_badge_count', friendBadge)
-    })()
+    // 页面隐藏时：食物保质期已读继续沿用原逻辑
+    const today = new Date().toISOString().slice(0, 10)
+    Taro.setStorageSync('food_expiry_last_seen_date', today)
+    const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
+    Taro.setStorageSync('profile_tab_badge_count', friendBadge)
   })
 
   const handleDelete = async (taskId: string) => {
@@ -368,82 +348,34 @@ function AnalyzeHistoryPage() {
       }
       // 从列表中移除
       setTasks(prev => prev.filter(t => t.id !== taskId))
-      // 更新 profile 页识别记录统计缓存
-      try {
-        const cached = Taro.getStorageSync('profile_stats_analyze_count')
-        if (cached !== undefined && cached !== '') {
-          const next = Math.max(0, Number(cached) - 1)
-          Taro.setStorageSync('profile_stats_analyze_count', String(next))
-        }
-      } catch (_) { /* ignore */ }
     } catch (e: any) {
       await showUnifiedApiError(e, '删除失败')
     }
   }
 
   const handleDiscardUnrecorded = () => {
-    const discardableTasks = tasks.filter(
-      t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed' ||
-        (t.status === 'done' && t.is_recorded === false)
-    )
-    if (discardableTasks.length === 0) {
-      Taro.showToast({ title: '没有可丢弃的未记录', icon: 'none' })
-      return
-    }
     Taro.showModal({
       title: '确认丢弃',
-      content: `确定丢弃 ${discardableTasks.length} 条未记录的识别结果吗？丢弃后不可恢复。`,
+      content: '将丢弃当前账号所有等待记录的识别结果，不包含识别中、识别失败或已经记录的数据。丢弃后不可恢复。',
       confirmText: '丢弃',
       confirmColor: '#e57373',
       cancelText: '取消',
       success: (res) => {
         if (res.confirm) {
           void (async () => {
-            Taro.showLoading({ title: '丢弃中...', mask: true })
-            const results = await Promise.allSettled(
-              discardableTasks.map(t => deleteAnalysisTask(t.id))
-            )
-            // 收集成功删除的任务 ID
-            const deletedIds: string[] = []
-            results.forEach((r, idx) => {
-              if (r.status === 'fulfilled') {
-                deletedIds.push(discardableTasks[idx].id)
-              }
-            })
-            const successCount = deletedIds.length
-            const failCount = results.length - successCount
-            Taro.hideLoading()
-            if (failCount > 0) {
-              Taro.showToast({ title: `已丢弃 ${successCount} 条，${failCount} 条失败`, icon: 'none' })
-            } else {
-              Taro.showToast({ title: `已丢弃 ${successCount} 条记录`, icon: 'success' })
-            }
-            // 只从列表中移除后端确认删除成功的任务
-            setTasks(prev => prev.filter(t => !deletedIds.includes(t.id)))
-            // 更新 profile 页识别记录统计缓存
             try {
-              const cached = Taro.getStorageSync('profile_stats_analyze_count')
-              if (cached !== undefined && cached !== '') {
-                const next = Math.max(0, Number(cached) - successCount)
-                Taro.setStorageSync('profile_stats_analyze_count', String(next))
-              }
-            } catch (_) { /* ignore */ }
-            // 刷新 waiting_record badge 计数并清除未读消息
-            try {
-              const sc = await getAnalyzeTaskStatusCount()
-              Taro.setStorageSync('analyze_waiting_record_count', sc.waiting_record || 0)
-              Taro.setStorageSync('analyze_has_unseen_waiting_record', sc.has_unseen_waiting_record || false)
-              // 更新 profile tab badge：只替换 waiting_record 部分，保留食物保质期 + 好友请求部分
-              const today = new Date().toISOString().slice(0, 10)
-              const lastSeenFoodExpiry = Taro.getStorageSync('food_expiry_last_seen_date')
-              const oldProfileBadge = Number(Taro.getStorageSync('profile_tab_badge_count') || 0)
-              const oldWaitingRecord = Number(Taro.getStorageSync('analyze_waiting_record_count') || 0)
-              const friendBadge = Number(Taro.getStorageSync('profile_tab_badge_friend_count') || 0)
-              const oldFoodExpiryBadge = Math.max(0, oldProfileBadge - oldWaitingRecord - friendBadge)
-              const foodExpiryBadge = lastSeenFoodExpiry === today ? 0 : oldFoodExpiryBadge
-              Taro.setStorageSync('profile_tab_badge_count', (sc.waiting_record || 0) + foodExpiryBadge + friendBadge)
-            } catch {
-              // 静默失败
+              Taro.showLoading({ title: '', mask: true })
+              const result = await deleteUnrecordedAnalysisTasks()
+              Taro.hideLoading()
+              Taro.showToast({
+                title: result.count > 0 ? `已丢弃 ${result.count} 条记录` : '没有可丢弃的未记录',
+                icon: result.count > 0 ? 'success' : 'none'
+              })
+              setTasks(prev => prev.filter(t => !(t.status === 'done' && t.is_recorded === false)))
+              void loadTasks()
+            } catch (e: any) {
+              Taro.hideLoading()
+              await showUnifiedApiError(e, '丢弃失败')
             }
           })()
         }

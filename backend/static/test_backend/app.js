@@ -1637,7 +1637,108 @@ async function authFetch(url, options = {}) {
         window.location.href = '/test-backend/login';
         throw new Error('未登录');
     }
+    const originalJson = response.json.bind(response);
+    response.json = async () => normalizeApiPayload(await originalJson());
     return response;
+}
+
+function normalizeApiPayload(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return payload;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, 'code')) {
+        if (payload.code === 0) {
+            return normalizeSuccessPayload(payload.data);
+        }
+        return {
+            success: false,
+            code: payload.code,
+            message: payload.message || '请求失败',
+            detail: payload.message || '请求失败',
+            data: payload.data,
+        };
+    }
+    return normalizeLegacyPayload(payload);
+}
+
+function normalizeSuccessPayload(data) {
+    const normalized = normalizeLegacyPayload(data);
+    if (normalized && typeof normalized === 'object' && !Array.isArray(normalized)) {
+        if (Object.prototype.hasOwnProperty.call(normalized, 'success')) {
+            return {
+                ...normalized,
+                success: normalized.success !== false,
+            };
+        }
+        return {
+            success: true,
+            ...normalized,
+            data: normalized.data ?? normalized,
+        };
+    }
+    return { success: true, data: normalized };
+}
+
+function normalizeLegacyPayload(payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+        return payload;
+    }
+    const next = { ...payload };
+    if (Array.isArray(next.prompts)) {
+        next.prompts = next.prompts.map(normalizePromptRecord);
+        next.data = next.prompts;
+    }
+    if (Array.isArray(next.datasets)) {
+        next.datasets = next.datasets.map(normalizeDatasetRecord);
+        next.data = next.datasets;
+    }
+    if (next.prompt && typeof next.prompt === 'object') {
+        next.prompt = normalizePromptRecord(next.prompt);
+        next.data = next.prompt;
+    }
+    if (next.dataset && typeof next.dataset === 'object') {
+        next.dataset = normalizeDatasetRecord(next.dataset);
+    }
+    if (Array.isArray(next.data)) {
+        next.data = next.data.map((item) => {
+            if (item && typeof item === 'object' && ('content' in item || 'prompt_content' in item)) {
+                return normalizePromptRecord(item);
+            }
+            if (item && typeof item === 'object' && ('image_paths' in item || 'itemCount' in item)) {
+                return normalizeDatasetRecord(item);
+            }
+            return item;
+        });
+    }
+    if (next.data && typeof next.data === 'object' && !Array.isArray(next.data) && ('content' in next.data || 'prompt_content' in next.data)) {
+        next.data = normalizePromptRecord(next.data);
+    }
+    return next;
+}
+
+function normalizePromptRecord(prompt) {
+    if (!prompt || typeof prompt !== 'object') return prompt;
+    return {
+        ...prompt,
+        prompt_name: prompt.prompt_name ?? prompt.name ?? '',
+        prompt_content: prompt.prompt_content ?? prompt.content ?? '',
+        description: prompt.description ?? '',
+        created_at: prompt.created_at ?? prompt.createdAt,
+        updated_at: prompt.updated_at ?? prompt.updatedAt,
+    };
+}
+
+function normalizeDatasetRecord(dataset) {
+    if (!dataset || typeof dataset !== 'object') return dataset;
+    const imagePaths = Array.isArray(dataset.image_paths) ? dataset.image_paths : [];
+    return {
+        ...dataset,
+        itemCount: dataset.itemCount ?? dataset.item_count ?? imagePaths.length,
+        labeledCount: dataset.labeledCount ?? dataset.labeled_count ?? imagePaths.length,
+        sourceRef: dataset.sourceRef ?? dataset.source_ref ?? '',
+        createdAt: dataset.createdAt ?? dataset.created_at,
+        updatedAt: dataset.updatedAt ?? dataset.updated_at,
+    };
 }
 
 async function logout() {

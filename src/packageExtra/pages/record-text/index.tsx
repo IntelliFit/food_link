@@ -1,7 +1,7 @@
 import { View, Text, Textarea, ScrollView } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getAccessToken, submitTextAnalyzeTask, getMyMembership, ANALYSIS_SUBSCRIBE_TEMPLATE_ID, type CanonicalMealType, type MembershipStatus } from '../../../utils/api'
+import { getAccessToken, submitTextAnalyzeTask, getMyMembership, type CanonicalMealType, type MembershipStatus } from '../../../utils/api'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import {
   getFoodAnalysisBlockedActionText,
@@ -11,7 +11,7 @@ import {
 } from '../../../utils/membership'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
-import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -45,6 +45,7 @@ function RecordTextPage() {
   const [activityTiming, setActivityTiming] = useState('none')
   const [loading, setLoading] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
   const { hasInfo: hasCreditsInfo, max: creditsMax, used: creditsUsed, remaining: creditsRemaining } =
     getMembershipCreditSummary(membershipStatus)
 
@@ -53,6 +54,12 @@ function RecordTextPage() {
   const refreshMembership = () => {
     if (getAccessToken()) {
       getMyMembership().then(setMembershipStatus).catch(() => {})
+      const targetDate = getStoredRecordTargetDate()
+      if (targetDate !== getTodayRecordDateKey()) {
+        getMyMembership(targetDate).then(setTargetDateStatus).catch(() => {})
+      } else {
+        setTargetDateStatus(null)
+      }
     }
   }
 
@@ -128,19 +135,6 @@ function RecordTextPage() {
     let inputText = trimmed
     if (foodAmount.trim()) inputText += `\n数量：${foodAmount.trim()}`
 
-    // 请求订阅消息授权
-    let subscribeStatus: string | undefined
-    if (ANALYSIS_SUBSCRIBE_TEMPLATE_ID) {
-      try {
-        const subscribeRes = await (Taro as any).requestSubscribeMessage({
-          tmplIds: [ANALYSIS_SUBSCRIBE_TEMPLATE_ID],
-        })
-        subscribeStatus = String((subscribeRes as any)?.[ANALYSIS_SUBSCRIBE_TEMPLATE_ID] || '')
-      } catch (_) {
-        // 静默失败
-      }
-    }
-
     setLoading(true)
     Taro.showLoading({ title: '提交任务中...', mask: true })
 
@@ -155,7 +149,6 @@ function RecordTextPage() {
         meal_type: selectedMeal as any,
         diet_goal: dietGoal as any,
         activity_timing: activityTiming as any,
-        subscribe_status: subscribeStatus,
       })
       Taro.hideLoading()
       Taro.navigateTo({
@@ -194,23 +187,54 @@ function RecordTextPage() {
     }
   }
 
+  // 配额提示条文案计算
+  const recordTargetDate = getStoredRecordTargetDate()
+  const isBackfill = recordTargetDate !== getTodayRecordDateKey()
+  const creditCost = 2 // 文字分析固定为 2 积分
+
+  let quotaBarClass = 'record-text-quota-bar'
+  let quotaBarText = ''
+  if (isBackfill) {
+    const targetSummary = targetDateStatus ? getMembershipCreditSummary(targetDateStatus) : null
+    const targetHasInfo = targetSummary?.hasInfo ?? false
+    const targetRemaining = targetSummary?.remaining ?? 0
+    const monthDay = `${Number(recordTargetDate.slice(5, 7))}月${Number(recordTargetDate.slice(8, 10))}日`
+    if (!targetHasInfo) {
+      quotaBarText = `${monthDay}积分信息加载中`
+    } else if (targetRemaining < creditCost) {
+      quotaBarClass += ' record-text-quota-bar--warn'
+      quotaBarText = `${monthDay}积分不足 · 将扣除今日积分 · 今日剩余 ${creditsRemaining}`
+    } else {
+      if (creditsRemaining <= 2) {
+        quotaBarClass += ' record-text-quota-bar--warn'
+      }
+      quotaBarText = `${monthDay} · 已用 ${targetSummary?.used ?? 0}/${targetSummary?.max ?? 0} 积分 · 剩余 ${targetRemaining}${!membershipStatus?.is_pro ? '  →开通会员享更高额度' : ''}`
+    }
+  } else {
+    if (isQuotaExhausted) {
+      quotaBarClass += ' record-text-quota-bar--exhausted'
+      quotaBarText = getFoodAnalysisCreditBlockMessage(membershipStatus)
+    } else if (hasCreditsInfo) {
+      if (creditsRemaining <= 2) {
+        quotaBarClass += ' record-text-quota-bar--warn'
+      }
+      quotaBarText = `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${!membershipStatus?.is_pro ? '  →开通会员享更高额度' : ''}`
+    } else {
+      quotaBarText = `今日积分信息加载中${!membershipStatus?.is_pro ? '  →开通会员享更高额度' : ''}`
+    }
+  }
+
   return (
     <View className='record-text-page'>
       {membershipStatus && (
         <View
-          className={`record-text-quota-bar ${isQuotaExhausted ? 'record-text-quota-bar--exhausted' : ''}`}
+          className={quotaBarClass}
           onClick={() => {
             if (isQuotaExhausted) return
             if (!membershipStatus.is_pro) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
           }}
         >
-          <Text className='record-text-quota-bar-text'>
-            {isQuotaExhausted
-              ? getFoodAnalysisCreditBlockMessage(membershipStatus)
-              : hasCreditsInfo
-                ? `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${!membershipStatus.is_pro ? '  →开通会员享更高额度' : ''}`
-                : `今日积分信息加载中${!membershipStatus.is_pro ? '  →开通会员享更高额度' : ''}`}
-          </Text>
+          <Text className='record-text-quota-bar-text'>{quotaBarText}</Text>
         </View>
       )}
       <ScrollView className='content-scroll' scrollY>

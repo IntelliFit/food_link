@@ -161,7 +161,13 @@
                     body: JSON.stringify({ username, password })
                 });
                 
-                const result = await response.json();
+                const payload = await response.json();
+                const result = payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'code')
+                    ? {
+                        success: payload.code === 0,
+                        message: payload.message || payload.data?.message
+                    }
+                    : payload;
                 
                 if (result.success) {
                     window.location.href = '/test-backend';

@@ -10,7 +10,6 @@ import {
   continuePrecisionSession,
   getAccessToken,
   MealType,
-  DietGoal,
   ActivityTiming,
   getHealthProfile,
   updateHealthProfile,
@@ -20,10 +19,9 @@ import {
   PrecisionReferenceDimensions,
   PrecisionReferencePresetConfig,
   PrecisionReferencePresetKey,
-  ANALYSIS_SUBSCRIBE_TEMPLATE_ID
+  showUnifiedApiError,
 } from '../../../utils/api'
 import type { AnalyzeResponse, AnalysisEngine, ExecutionMode, PrecisionReferenceObjectInput } from '../../../utils/api'
-import { showUnifiedApiError } from '../../../utils/error-modal'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
   canUseStrictModeForMembership,
@@ -36,10 +34,12 @@ import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-
 import {
   getFoodAnalysisBlockedActionText,
   getFoodAnalysisCreditBlockMessage,
+  getFoodAnalysisCreditCost,
   getMembershipCreditSummary,
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
-import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 
@@ -51,14 +51,6 @@ const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }>
   { value: 'afternoon_snack', label: '午加餐', iconClass: 'icon-lingshi' },
   { value: 'dinner', label: '晚餐', iconClass: 'icon-wancan' },
   { value: 'evening_snack', label: '晚加餐', iconClass: 'icon-lingshi' },
-]
-
-/** 饮食目标（状态一） */
-const DIET_GOAL_OPTIONS: Array<{ value: DietGoal; label: string; iconClass: string }> = [
-  { value: 'fat_loss', label: '减脂期', iconClass: 'icon-huore' },
-  { value: 'muscle_gain', label: '增肌期', iconClass: 'icon-zengji' },
-  { value: 'maintain', label: '维持体重', iconClass: 'icon-tianpingzuo' },
-  { value: 'none', label: '无', iconClass: 'icon-nothing' }
 ]
 
 /** 运动时机（状态二） */
@@ -84,6 +76,8 @@ const REFERENCE_PRESETS: Array<{
 
 const DEFAULT_REFERENCE_PRESET: ReferencePresetValue = 'hand'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+const ANALYZE_SUBMIT_DEBOUNCE_MS = 300
+const MAX_ANALYZE_IMAGES = 3
 
 const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
   value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
@@ -278,12 +272,12 @@ function AnalyzePage() {
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const [mealType, setMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
-  const [dietGoal, setDietGoal] = useState<DietGoal>('none')
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [isMultiView, setIsMultiView] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
   const [precisionSessionId, setPrecisionSessionId] = useState('')
   const [savedReferenceDefaults, setSavedReferenceDefaults] = useState<PrecisionReferenceDefaults>(
     () => buildDefaultReferenceDefaults()
@@ -297,6 +291,7 @@ function AnalyzePage() {
 
   const imagePathsRef = useRef<string[]>([])
   const routeSessionSignatureRef = useRef('')
+  const analyzeSubmitDebounceRef = useRef(0)
   imagePathsRef.current = imagePaths
 
   const canUseStrictMode = canUseStrictModeForMembership(membershipStatus)
@@ -305,16 +300,8 @@ function AnalyzePage() {
   const precisionUpgradeUrl = getStrictModeUpgradeUrl(membershipStatus)
   const precisionUpgradeHint = canUseStrictMode ? '' : getStrictModeLockedHint(membershipStatus)
 
-  const showMultiViewRequiredModal = () => {
-    Taro.showModal({
-      title: '请先开启多视角模式',
-      content: '未开启多视角模式时仅支持上传 1 张图片。若要拍同一份食物的多个视角，请先开启多视角模式。',
-      showCancel: false,
-      confirmText: '我知道了'
-    })
-  }
-
-  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode)
+  const creditUnits = 1
+  const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode, creditUnits)
 
   useEffect(() => {
     if (!membershipStatus) return
@@ -355,6 +342,12 @@ function AnalyzePage() {
     }
     if (getAccessToken()) {
       getMyMembership().then(ms => setMembershipStatus(ms)).catch(() => {})
+      const targetDate = getStoredRecordTargetDate()
+      if (targetDate !== getTodayRecordDateKey()) {
+        getMyMembership(targetDate).then(ms => setTargetDateStatus(ms)).catch(() => {})
+      } else {
+        setTargetDateStatus(null)
+      }
     }
     if (imagePathsRef.current.length === 0) {
       setMealType(inferDefaultMealTypeFromLocalTime())
@@ -375,20 +368,11 @@ function AnalyzePage() {
       Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
     }
 
-    // 1. 获取饮食目标
-    const initDietGoal = async () => {
+    // 1. 获取分析默认配置
+    const initAnalyzeDefaults = async () => {
       try {
-        const cachedGoal = Taro.getStorageSync('dietGoal')
-        if (cachedGoal) {
-          setDietGoal(cachedGoal as DietGoal)
-        }
-        // 无论是否有缓存，都尝试从健康档案同步执行模式
         if (getAccessToken()) {
           const profile = await getHealthProfile()
-          if (!cachedGoal && profile.diet_goal) {
-            setDietGoal(profile.diet_goal as DietGoal)
-            Taro.setStorageSync('dietGoal', profile.diet_goal)
-          }
           if (!nextSessionId && profile.execution_mode) {
             setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
           }
@@ -399,15 +383,22 @@ function AnalyzePage() {
           try {
             const ms = await getMyMembership()
             setMembershipStatus(ms)
+            const targetDate = getStoredRecordTargetDate()
+            if (targetDate !== getTodayRecordDateKey()) {
+              const tms = await getMyMembership(targetDate)
+              setTargetDateStatus(tms)
+            } else {
+              setTargetDateStatus(null)
+            }
           } catch (err) {
             console.error('获取会员状态失败:', err)
           }
         }
       } catch (err) {
-        console.error('初始化饮食目标失败:', err)
+        console.error('初始化分析默认配置失败:', err)
       }
     }
-    initDietGoal()
+    initAnalyzeDefaults()
 
     // 2. 从本地存储获取图片路径 (用于拍照/相册后的跳转)
     const initStoredImagePath = async () => {
@@ -509,14 +500,14 @@ function AnalyzePage() {
   }
 
   const handleChooseImage = async () => {
-    const remain = 5 - imagePaths.length
+    const remain = MAX_ANALYZE_IMAGES - imagePaths.length
     if (remain <= 0) {
-      Taro.showToast({ title: '最多支持 5 张图片', icon: 'none' })
+      Taro.showToast({ title: `最多支持 ${MAX_ANALYZE_IMAGES} 张图片`, icon: 'none' })
       return
     }
     try {
       // 使用 chooseImage 避免开发者工具返回 http://tmp 的不可读临时路径
-      const res = await Taro.chooseImage({
+      const res = await chooseImageWithPrivacy({
         count: remain,
         sizeType: ['compressed'],
         sourceType: ['album', 'camera'],
@@ -525,7 +516,11 @@ function AnalyzePage() {
       const newPaths = await persistImagePathsImmediately(rawPaths)
       setImagePaths(prev => [...prev, ...newPaths])
     } catch (e) {
-      // cancelled
+      if ((e as any)?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e)
+        return
+      }
       console.log('选择图片取消/失败', e)
     }
   }
@@ -536,10 +531,6 @@ function AnalyzePage() {
       newPaths.splice(index, 1)
       return newPaths
     })
-  }
-
-  const handleDietGoalSelect = (value: DietGoal) => {
-    setDietGoal(value)
   }
 
   const handleActivityTimingSelect = (value: ActivityTiming) => {
@@ -570,25 +561,13 @@ function AnalyzePage() {
       Taro.showToast({ title: '请先选择图片', icon: 'none' })
       return
     }
-    if (imagePaths.length > 5) {
-      Taro.showToast({ title: '最多支持 5 张图片', icon: 'none' })
+    if (imagePaths.length > MAX_ANALYZE_IMAGES) {
+      Taro.showToast({ title: `最多支持 ${MAX_ANALYZE_IMAGES} 张图片`, icon: 'none' })
       return
     }
 
-    // 请求订阅消息授权（在图片上传前调用，避免上传耗时导致弹窗时机不佳）
-    let subscribeStatus: string | undefined
-    if (ANALYSIS_SUBSCRIBE_TEMPLATE_ID) {
-      try {
-        const subscribeRes = await (Taro as any).requestSubscribeMessage({
-          tmplIds: [ANALYSIS_SUBSCRIBE_TEMPLATE_ID],
-        })
-        subscribeStatus = String((subscribeRes as any)?.[ANALYSIS_SUBSCRIBE_TEMPLATE_ID] || '')
-      } catch (_) {
-        // 用户拒绝或接口调用失败，静默继续
-      }
-    }
-
     setIsAnalyzing(true)
+
     Taro.showLoading({ title: '上传图片...', mask: true })
 
     try {
@@ -622,12 +601,11 @@ function AnalyzePage() {
       const commonPayload = {
         date: getStoredRecordTargetDate(),
         meal_type: mealType,
-        diet_goal: dietGoal,
+        diet_goal: 'none',
         activity_timing: activityTiming,
         additionalContext: additionalInfo || undefined,
         is_multi_view: isMultiView,
         reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
-        subscribe_status: subscribeStatus,
       }
 
       // 保存图片路径供后续页面使用
@@ -636,7 +614,7 @@ function AnalyzePage() {
         Taro.setStorageSync('analyzeImagePaths', imagePaths)
       }
       Taro.setStorageSync('analyzeMealType', mealType)
-      Taro.setStorageSync('analyzeDietGoal', dietGoal)
+      Taro.removeStorageSync('analyzeDietGoal')
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
       const analysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
@@ -715,8 +693,11 @@ function AnalyzePage() {
   /** 主按钮：无图则唤起选图；有图则直接提交并进入 analyze-loading（与拍照后进页再分析一致） */
   const handleAnalyzePress = () => {
     if (isAnalyzing) return
+    const now = Date.now()
+    if (now - analyzeSubmitDebounceRef.current < ANALYZE_SUBMIT_DEBOUNCE_MS) return
+    analyzeSubmitDebounceRef.current = now
     if (isQuotaExhausted) {
-      const content = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode)
+      const content = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode, creditUnits)
       const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
       const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
       Taro.showModal({
@@ -755,25 +736,59 @@ function AnalyzePage() {
     })
   }
 
+  // 配额提示条文案与样式计算
+  const recordTargetDate = getStoredRecordTargetDate()
+  const isBackfill = recordTargetDate !== getTodayRecordDateKey()
+  const creditCost = getFoodAnalysisCreditCost(executionMode, creditUnits)
+
+  let quotaBarClass = 'quota-bar'
+  let quotaBarText = ''
+  if (isBackfill) {
+    const targetSummary = targetDateStatus ? getMembershipCreditSummary(targetDateStatus) : null
+    const targetHasInfo = targetSummary?.hasInfo ?? false
+    const targetRemaining = targetSummary?.remaining ?? 0
+    const monthDay = `${Number(recordTargetDate.slice(5, 7))}月${Number(recordTargetDate.slice(8, 10))}日`
+    if (!targetHasInfo) {
+      quotaBarText = `${monthDay}积分信息加载中`
+    } else if (targetRemaining < creditCost) {
+      quotaBarClass += ' quota-bar--warn'
+      quotaBarText = `${monthDay}积分不足 · 将扣除今日积分 · 今日剩余 ${creditsRemaining}`
+    } else {
+      if (creditsRemaining <= 2) {
+        quotaBarClass += ' quota-bar--warn'
+      }
+      quotaBarText = `${monthDay} · 已用 ${targetSummary?.used ?? 0}/${targetSummary?.max ?? 0} 积分 · 剩余 ${targetRemaining}${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
+    }
+  } else {
+    if (isQuotaExhausted) {
+      quotaBarClass += ' quota-bar--exhausted'
+      quotaBarText = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode)
+    } else if (hasCreditsInfo) {
+      if (creditsRemaining <= 2) {
+        quotaBarClass += ' quota-bar--warn'
+      }
+      quotaBarText = `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
+    } else {
+      quotaBarText = `今日积分信息加载中${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
+    }
+    if (membershipStatus?.is_pro) {
+      quotaBarClass += ' quota-bar--pro'
+    }
+  }
+
   return (
     <View className='analyze-page'>
       {/* 提示：长按页面任意位置可启用开发者模式 */}
-      {/* 今日配额提示条 */}
+      {/* 配额提示条 */}
       {membershipStatus && (
         <View
-          className={`quota-bar ${isQuotaExhausted ? 'quota-bar--exhausted' : ''} ${membershipStatus.is_pro ? 'quota-bar--pro' : ''} ${!isQuotaExhausted && hasCreditsInfo && creditsRemaining <= 2 ? 'quota-bar--warn' : ''}`}
+          className={quotaBarClass}
           onClick={() => {
             if (isQuotaExhausted) return
             if (!canUseStrictMode) Taro.navigateTo({ url: precisionUpgradeUrl })
           }}
         >
-          <Text className='quota-bar-text'>
-            {isQuotaExhausted
-              ? getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode)
-              : hasCreditsInfo
-                ? `今日已用 ${creditsUsed}/${creditsMax} 积分 · 剩余 ${creditsRemaining}${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`
-                : `今日积分信息加载中${precisionUpgradeHint ? `  →${precisionUpgradeHint}` : ''}`}
-          </Text>
+          <Text className='quota-bar-text'>{quotaBarText}</Text>
         </View>
       )}
 
@@ -839,7 +854,7 @@ function AnalyzePage() {
                 </View>
               </View>
             ))}
-            {imagePaths.length < 5 && (
+            {imagePaths.length < MAX_ANALYZE_IMAGES && (
               <View className='grid-item add-btn' onClick={handleChooseImage}>
                 <Text className='add-icon'>+</Text>
                 <Text className='add-text'>添加</Text>
@@ -851,7 +866,7 @@ function AnalyzePage() {
             <View className='placeholder-content'>
               <Text className='iconfont icon-xiangji' style={{ fontSize: '64rpx', color: '#9ca3af', marginBottom: '16rpx' }} />
               <Text className='placeholder-text'>点击拍摄/上传食物</Text>
-              <Text className='placeholder-sub'>相册上传最多支持 5 张，多张将分别识别后累加结果</Text>
+              <Text className='placeholder-sub'>相册上传最多支持 {MAX_ANALYZE_IMAGES} 张，多张将作为一次识别提交</Text>
             </View>
           </View>
         )}
@@ -860,7 +875,7 @@ function AnalyzePage() {
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>多视角辅助</Text>
-            <Text className='multiview-compact-hint'>将多张图片视为同一食物的不同角度，关闭则每张分别识别后累加</Text>
+            <Text className='multiview-compact-hint'>多张图片始终作为一次识别提交；开启后会更强调同一餐食的多角度综合估算</Text>
           </View>
           <View
             className={`multiview-toggle ${isMultiView ? 'multiview-toggle--on' : ''}`}
@@ -1005,30 +1020,6 @@ function AnalyzePage() {
             >
               <Text className={`meal-icon iconfont ${opt.iconClass}`} />
               <Text className='meal-label'>{opt.label}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-
-      {/* 饮食目标（状态一） */}
-      <View className='state-section'>
-        <View className='section-header'>
-
-          <Text className='section-title'>饮食目标</Text>
-        </View>
-        <Text className='section-hint'>
-          选择您的饮食目标，AI 将结合目标给出更贴合的建议。
-        </Text>
-        <View className='state-options'>
-          {DIET_GOAL_OPTIONS.map((opt) => (
-            <View
-              key={opt.value}
-              className={`state-option ${dietGoal === opt.value ? 'active' : ''}`}
-              onClick={() => handleDietGoalSelect(opt.value)}
-            >
-              <Text className={`state-icon iconfont ${opt.iconClass}`} />
-              <Text className='state-label'>{opt.label}</Text>
             </View>
           ))}
         </View>

@@ -6,8 +6,11 @@ import '@taroify/icons/style'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import './index.scss'
 
+const DEFAULT_ICON_CDN_BASE_URL = 'https://cdn-food-icon.coachlink.fit'
+
 export default function AboutPage() {
-    const APP_LOGO_URL = 'https://ocijuywmkalfmfxquzzf.supabase.co/storage/v1/object/public/icon/shitan-nobackground.png'
+    const iconCdnBaseUrl = (__ICON_CDN_BASE_URL__ || DEFAULT_ICON_CDN_BASE_URL).replace(/\/+$/, '')
+    const APP_LOGO_URL = `${iconCdnBaseUrl}/shitan-nobackground.png`
 
     const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
 

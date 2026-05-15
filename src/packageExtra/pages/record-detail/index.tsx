@@ -16,9 +16,11 @@ import {
   type Nutrients
 } from '../../../utils/api'
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
+import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+import { getCurrentPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
 
-import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
+import { IconBreakfast, IconCollapse, IconExpand, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
@@ -94,6 +96,82 @@ const getDisplayedNutrientValue = (item: EditableFoodItem, field: EditableNutrie
   roundToSingleDecimal((item.nutrients?.[field] ?? 0) * getItemRatioFactor(item))
 )
 
+const resolveRecordItemRatio = (item: Pick<FoodRecord['items'][0], 'ratio' | 'intake' | 'weight'>): number => {
+  const ratio = Number(item.ratio)
+  if (Number.isFinite(ratio) && ratio > 0) return ratio
+  const intake = Number(item.intake)
+  const weight = Number(item.weight)
+  if (Number.isFinite(intake) && Number.isFinite(weight) && intake >= 0 && weight > 0) {
+    return Math.round((intake / weight) * 1000) / 10
+  }
+  return 100
+}
+
+const resolveRecordItemIntake = (item: Pick<FoodRecord['items'][0], 'ratio' | 'intake' | 'weight'>): number => {
+  const intake = Number(item.intake)
+  if (Number.isFinite(intake) && intake > 0) return intake
+  const weight = Number(item.weight)
+  if (!Number.isFinite(weight) || weight <= 0) return 0
+  return Math.round((weight * resolveRecordItemRatio(item) / 100) * 10) / 10
+}
+
+type NutrientDetailKey = keyof Pick<Nutrients,
+  'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg' |
+  'calciumMg' | 'ironMg' | 'magnesiumMg' | 'zincMg' | 'vitaminARaeMcg' | 'vitaminCMg' |
+  'vitaminDMcg' | 'vitaminEMg' | 'vitaminKMcg' | 'thiaminMg' | 'riboflavinMg' |
+  'niacinMg' | 'vitaminB6Mg' | 'folateMcg' | 'vitaminB12Mcg'
+>
+
+const NUTRIENT_DETAIL_META: Array<{ key: NutrientDetailKey; label: string; unit: string }> = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg' },
+  { key: 'sodiumMg', label: '钠', unit: 'mg' },
+  { key: 'potassiumMg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', label: '维生素A', unit: 'mcg' },
+  { key: 'vitaminCMg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素D', unit: 'mcg' },
+  { key: 'vitaminEMg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素K', unit: 'mcg' },
+  { key: 'thiaminMg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'mcg' },
+  { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'mcg' }
+]
+
+const normalizeNutrientValue = (value: unknown) => {
+  const num = Number(value)
+  return Number.isFinite(num) && num > 0 ? num : 0
+}
+
+const formatNutrientDetailValue = (value: number) => {
+  if (value >= 10) return String(Math.round(value))
+  if (value >= 1) return String(Math.round(value * 10) / 10)
+  return String(Math.round(value * 100) / 100)
+}
+
+const getRecordItemWaterMl = (item: FoodRecord['items'][0]) => {
+  const value = Number(item.water_ml ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl ?? 0)
+  return Number.isFinite(value) && value > 0 ? value : 0
+}
+
+const getRecordItemNutrientDetailRows = (item: FoodRecord['items'][0]) => {
+  const ratio = Math.max(0, resolveRecordItemRatio(item)) / 100
+  return NUTRIENT_DETAIL_META.map((meta) => ({
+    ...meta,
+    value: normalizeNutrientValue(
+      item.nutrients?.[meta.key] ?? (meta.key === 'sodiumMg' ? item.nutrients?.sodium_mg : undefined)
+    ) * ratio
+  }))
+}
+
 
 
 /** 格式化记录时间 */
@@ -157,6 +235,8 @@ function RecordDetailPage() {
   const [ownerAvatar, setOwnerAvatar] = React.useState('')
   const [ownerInviteCode, setOwnerInviteCode] = React.useState('')
   const [inviteLoading, setInviteLoading] = React.useState(false)
+  const [expandedNutrientDetails, setExpandedNutrientDetails] = React.useState<Record<string, boolean>>({})
+  const sharePosterRewardClaimingRef = React.useRef(false)
 
   useEffect(() => {
     // 加载会员状态（用于海报样式判断）
@@ -175,10 +255,14 @@ function RecordDetailPage() {
           const res = await getSharedFoodRecord(recordId)
           const fetchedRecord = res.record
           setRecord(fetchedRecord)
+          const localProfile = await getCurrentPosterUserProfile(fetchedRecord.user_id)
+          if (localProfile.nickname) setOwnerNickname(localProfile.nickname)
+          if (localProfile.avatar) setOwnerAvatar(localProfile.avatar)
           try {
             const inviterProfile = await getFriendInviteProfile(fetchedRecord.user_id)
-            setOwnerNickname(inviterProfile.nickname || '')
-            setOwnerAvatar(inviterProfile.avatar || '')
+            const mergedProfile = mergePosterUserProfile(inviterProfile, localProfile)
+            setOwnerNickname(mergedProfile.nickname)
+            setOwnerAvatar(mergedProfile.avatar)
             setOwnerInviteCode(inviterProfile.invite_code || getInviteCodeFromUserId(fetchedRecord.user_id))
           } catch {
             setOwnerInviteCode(getInviteCodeFromUserId(fetchedRecord.user_id))
@@ -261,8 +345,8 @@ function RecordDetailPage() {
       (record.items || []).map(item => ({
         name: item.name,
         weight: item.weight,
-        ratio: item.ratio ?? 100,
-        intake: item.intake ?? 0,
+        ratio: resolveRecordItemRatio(item),
+        intake: resolveRecordItemIntake(item),
         nutrients: { ...(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }) }
       }))
     )
@@ -401,17 +485,39 @@ function RecordDetailPage() {
     setEditItems(prev => prev.filter((_, i) => i !== index))
   }, [editItems])
 
+  const claimSharePosterRewardAfterShare = useCallback(async () => {
+    if (!isOwner || !record?.id || sharePosterRewardClaimingRef.current) return
+    sharePosterRewardClaimingRef.current = true
+    try {
+      const rewardRes = await claimSharePosterReward(record.id)
+      if (rewardRes.claimed && rewardRes.credits > 0) {
+        Taro.showToast({
+          title: `海报奖励 +${rewardRes.credits} 积分`,
+          icon: 'success'
+        })
+      }
+    } catch (rewardErr) {
+      console.warn('claimSharePosterReward failed', rewardErr)
+    } finally {
+      sharePosterRewardClaimingRef.current = false
+    }
+  }, [isOwner, record?.id])
+
   const handleSharePosterImage = useCallback(() => {
     if (!posterImageUrl) return
     // @ts-ignore
     Taro.showShareImageMenu({
       path: posterImageUrl,
+      success: () => {
+        void claimSharePosterRewardAfterShare()
+      },
       fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) return
         console.error('showShareImageMenu fail', err)
         void showUnifiedApiError(new Error('分享失败，请保存图片后手动发送'), '分享失败，请保存图片后手动发送')
       }
     })
-  }, [posterImageUrl])
+  }, [claimSharePosterRewardAfterShare, posterImageUrl])
 
   if (loading || !record) {
     return (
@@ -492,7 +598,7 @@ function RecordDetailPage() {
 
   /** 单条食物实际摄入热量（按 ratio） */
   const itemCalorie = (item: FoodRecord['items'][0]) => {
-    const ratio = (item.ratio ?? 100) / 100
+    const ratio = resolveRecordItemRatio(item) / 100
     return ((item.nutrients?.calories ?? 0) * ratio)
   }
 
@@ -527,6 +633,13 @@ function RecordDetailPage() {
     } finally {
       setInviteLoading(false)
     }
+  }
+
+  const toggleNutrientDetails = (key: string) => {
+    setExpandedNutrientDetails(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
   }
 
   /** 生成海报并导出为临时图片 */
@@ -646,20 +759,6 @@ function RecordDetailPage() {
                 setPosterGenerating(false)
                 setPosterImageUrl(resp.tempFilePath)
                 setShowPosterModal(true)
-                if (isOwner && record?.id) {
-                  claimSharePosterReward(record.id)
-                    .then((rewardRes) => {
-                      if (rewardRes.claimed && rewardRes.credits > 0) {
-                        Taro.showToast({
-                          title: `海报奖励 +${rewardRes.credits} 积分`,
-                          icon: 'success'
-                        })
-                      }
-                    })
-                    .catch((rewardErr) => {
-                      console.warn('claimSharePosterReward failed', rewardErr)
-                    })
-                }
               },
               fail: (err) => {
                 Taro.hideLoading()
@@ -680,25 +779,12 @@ function RecordDetailPage() {
 
   const handleSavePoster = () => {
     if (!posterImageUrl) return
-    Taro.saveImageToPhotosAlbum({
-      filePath: posterImageUrl,
-      success: () => {
-        Taro.showToast({ title: '已保存到相册', icon: 'success' })
-        setShowPosterModal(false)
-      },
-      fail: (err) => {
-        if (err.errMsg?.includes('auth deny') || err.errMsg?.includes('authorize')) {
-          Taro.showModal({
-            title: '提示',
-            content: '需要您授权保存图片到相册',
-            confirmText: '去设置',
-            success: (r) => {
-              if (r.confirm) Taro.openSetting()
-            }
-          })
-        } else {
-          void showUnifiedApiError(new Error('保存失败'), '保存失败')
-        }
+    Taro.showShareImageMenu({
+      path: posterImageUrl,
+      fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) return
+        console.error('showShareImageMenu fail', err)
+        void showUnifiedApiError(new Error('打开图片菜单失败，请重试'), '打开图片菜单失败，请重试')
       }
     })
   }
@@ -866,27 +952,57 @@ function RecordDetailPage() {
         {items.length > 0 ? (
           items.map((item, index) => {
             const cal = itemCalorie(item)
-            const ratio = item.ratio ?? 100
+            const ratio = resolveRecordItemRatio(item)
             const protein = ((item.nutrients?.protein ?? 0) * ratio) / 100
             const carbs = ((item.nutrients?.carbs ?? 0) * ratio) / 100
             const fat = ((item.nutrients?.fat ?? 0) * ratio) / 100
-            const fiber = ((item.nutrients?.fiber ?? 0) * ratio) / 100
-            const sugar = ((item.nutrients?.sugar ?? 0) * ratio) / 100
+            const waterMl = (getRecordItemWaterMl(item) * ratio) / 100
+            const detailRows = getRecordItemNutrientDetailRows(item)
+            const detailKey = `${record.id || 'record'}-${index}`
+            const detailsExpanded = Boolean(expandedNutrientDetails[detailKey])
             return (
               <View key={index} className='food-item'>
                 <View className='food-info'>
                   <Text className='food-name'>{item.name}</Text>
                   <Text className='food-meta'>
                     摄入 {item.intake ?? 0}g
-                    {ratio !== 100 ? ` · 约 ${ratio}%` : ''}
                   </Text>
+                  <View className={`food-ratio-badge ${ratio > 100 ? 'food-ratio-badge--over' : ''}`}>
+                    <Text className='iconfont icon-tubiao-zhuzhuangtu food-ratio-icon' />
+                    <Text className='food-ratio-text'>摄入比例 {normalizeDisplayNumber(ratio)}%</Text>
+                  </View>
                   <View className='food-nutrients-detail'>
                     <Text className='nutrient-item'>蛋白 {protein.toFixed(1)}g</Text>
                     <Text className='nutrient-item'>碳水 {carbs.toFixed(1)}g</Text>
                     <Text className='nutrient-item'>脂肪 {fat.toFixed(1)}g</Text>
-                    {fiber > 0 && <Text className='nutrient-item'>纤维 {fiber.toFixed(1)}g</Text>}
-                    {sugar > 0 && <Text className='nutrient-item'>糖 {sugar.toFixed(1)}g</Text>}
+                    <Text className='nutrient-item'>含水 {Math.round(waterMl)}ml</Text>
                   </View>
+                  <View
+                    className='food-nutrient-toggle'
+                    onClick={() => toggleNutrientDetails(detailKey)}
+                  >
+                    <Text className='food-nutrient-toggle-text'>
+                      {detailsExpanded ? '收起更多营养' : '展开更多营养'}
+                    </Text>
+                    {detailsExpanded ? (
+                      <IconCollapse size={22} color='#94a3b8' className='food-nutrient-toggle-icon' />
+                    ) : (
+                      <IconExpand size={22} color='#94a3b8' className='food-nutrient-toggle-icon' />
+                    )}
+                  </View>
+                  {detailsExpanded && (
+                    <View className='food-nutrient-detail-grid'>
+                      {detailRows.map((row) => (
+                        <View key={row.key} className='food-nutrient-detail-cell'>
+                          <Text className='food-nutrient-detail-label'>{row.label}</Text>
+                          <Text className='food-nutrient-detail-value'>
+                            {formatNutrientDetailValue(row.value)}
+                            <Text className='food-nutrient-detail-unit'>{row.unit}</Text>
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
                 <View className='food-nutrients'>
                   <Text className='food-calorie'>{Math.round(cal * 10) / 10} kcal</Text>
@@ -928,7 +1044,7 @@ function RecordDetailPage() {
             </View>
             {(() => {
               const totalFiber = items.reduce((sum, item) => {
-                const ratio = (item.ratio ?? 100) / 100
+                const ratio = resolveRecordItemRatio(item) / 100
                 return sum + ((item.nutrients?.fiber ?? 0) * ratio)
               }, 0)
               return totalFiber > 0 ? (
@@ -941,7 +1057,7 @@ function RecordDetailPage() {
             })()}
             {(() => {
               const totalSugar = items.reduce((sum, item) => {
-                const ratio = (item.ratio ?? 100) / 100
+                const ratio = resolveRecordItemRatio(item) / 100
                 return sum + ((item.nutrients?.sugar ?? 0) * ratio)
               }, 0)
               return totalSugar > 0 ? (

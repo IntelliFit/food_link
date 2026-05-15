@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Input, Textarea, PickerView, PickerViewColumn } from '@tarojs/components'
+import { View, Text, ScrollView, Input, Textarea, PickerView, PickerViewColumn, Image } from '@tarojs/components'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 // Popup removed — using custom bottom sheet instead
@@ -20,6 +20,12 @@ import {
 } from '../../../utils/execution-mode'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import RoutineHourPicker, {
+  formatRoutineHours,
+  parseRoutineHours,
+  type RoutineHours,
+} from '../../../components/RoutineHourPicker'
 
 import './index.scss'
 
@@ -68,6 +74,8 @@ const ALLERGY_MAP: Record<string, string> = {
   none: '无'
 }
 
+const MAX_REPORT_IMAGE_COUNT = 3
+
 /* ========== 编辑选项常量 ========== */
 const GOAL_OPTIONS = [
   { label: '减重', value: 'fat_loss' },
@@ -115,7 +123,7 @@ const ALLERGY_OPTIONS = [
 /* ========== 字段配置 ========== */
 interface FieldConfig {
   title: string
-  type: 'radio' | 'multi' | 'number' | 'text' | 'date' | 'report'
+  type: 'radio' | 'routine' | 'multi' | 'number' | 'text' | 'date' | 'report'
   options?: Array<{ label: string; value: string }>
   unit?: string
   min?: number
@@ -130,12 +138,20 @@ const FIELD_CONFIG: Record<string, FieldConfig> = {
   weight: { title: '体重', type: 'number', unit: 'kg', min: 30, max: 200, placeholder: '30-200' },
   diet_goal: { title: '饮食目标', type: 'radio', options: GOAL_OPTIONS },
   activity_level: { title: '活动水平', type: 'radio', options: ACTIVITY_OPTIONS },
+  routine_type: { title: '作息习惯', type: 'routine' },
   execution_mode: { title: '执行模式', type: 'radio', options: EXECUTION_MODE_OPTIONS.map(o => ({ label: o.label, value: o.value })) },
   medical_history: { title: '既往病史', type: 'multi', options: MEDICAL_OPTIONS },
   diet_preference: { title: '饮食偏好', type: 'multi', options: DIET_OPTIONS },
   allergies: { title: '过敏源', type: 'multi', options: ALLERGY_OPTIONS },
   health_notes: { title: '特殊情况和补充', type: 'text', placeholder: '例如：孕期、哺乳期、手术恢复期等' },
   report_extract: { title: '体检/病例识别结果', type: 'report' },
+}
+
+function formatProfileDateOnly(value?: string | null): string {
+  const raw = String(value || '').trim()
+  if (!raw) return '—'
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : raw
 }
 
 function HealthProfileViewPage() {
@@ -193,8 +209,8 @@ function HealthProfileViewPage() {
 
   const handleDirectReportUpload = async () => {
     try {
-      const res = await Taro.chooseImage({ count: 9, sizeType: ['compressed'] })
-      const tempPaths = res.tempFilePaths || []
+      const res = await chooseImageWithPrivacy({ count: MAX_REPORT_IMAGE_COUNT, sizeType: ['compressed'] })
+      const tempPaths = (res.tempFilePaths || []).slice(0, MAX_REPORT_IMAGE_COUNT)
       if (tempPaths.length === 0) return
       Taro.showLoading({ title: '上传中...', mask: true })
       const urls: string[] = []
@@ -215,6 +231,11 @@ function HealthProfileViewPage() {
       }, 1500)
     } catch (e: any) {
       Taro.hideLoading()
+      if (e?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e)
+        return
+      }
       await showUnifiedApiError(e, '上传失败')
     }
   }
@@ -320,6 +341,10 @@ function HealthProfileViewPage() {
       case 'weight': currentValue = profile?.weight != null ? String(profile.weight) : ''; break
       case 'diet_goal': currentValue = profile?.diet_goal || ''; break
       case 'activity_level': currentValue = profile?.activity_level || ''; break
+      case 'routine_type': {
+        currentValue = parseRoutineHours(profile?.health_condition?.routine_type || '')
+        break
+      }
       case 'execution_mode': currentValue = profile?.execution_mode || 'standard'; break
       case 'medical_history': {
         const list = (profile?.health_condition?.medical_history as string[]) || []
@@ -400,6 +425,7 @@ function HealthProfileViewPage() {
       diet_goal: profile.diet_goal || undefined,
       activity_level: profile.activity_level || undefined,
       execution_mode: profile.execution_mode || 'standard',
+      routine_type: profile.health_condition?.routine_type || undefined,
       medical_history: (profile.health_condition?.medical_history as string[]) || [],
       diet_preference: (profile.health_condition?.diet_preference as string[]) || [],
       allergies: ((profile.health_condition?.allergies as string[]) || []).length > 0
@@ -413,7 +439,7 @@ function HealthProfileViewPage() {
       case 'birthday': req.birthday = value || undefined; break
       case 'height': {
         const h = Number(value)
-        if (isNaN(h) || h < 100 || h > 250) {
+        if (Number.isNaN(h) || h < 100 || h > 250) {
           Taro.showToast({ title: '请输入 100-250 之间的身高', icon: 'none' })
           return
         }
@@ -422,7 +448,7 @@ function HealthProfileViewPage() {
       }
       case 'weight': {
         const w = Number(value)
-        if (isNaN(w) || w < 30 || w > 200) {
+        if (Number.isNaN(w) || w < 30 || w > 200) {
           Taro.showToast({ title: '请输入 30-200 之间的体重', icon: 'none' })
           return
         }
@@ -431,6 +457,10 @@ function HealthProfileViewPage() {
       }
       case 'diet_goal': req.diet_goal = value || undefined; break
       case 'activity_level': req.activity_level = value || undefined; break
+      case 'routine_type': {
+        req.routine_type = formatRoutineHours(value as RoutineHours)
+        break
+      }
       case 'execution_mode': req.execution_mode = value; break
       case 'medical_history': {
         const preset = (value as string[]).filter((v: string) => v !== 'none')
@@ -467,6 +497,9 @@ function HealthProfileViewPage() {
           case 'diet_goal': next.diet_goal = req.diet_goal; break
           case 'activity_level': next.activity_level = req.activity_level; break
           case 'execution_mode': next.execution_mode = req.execution_mode; break
+          case 'routine_type':
+            next.health_condition = { ...(next.health_condition || {}), routine_type: req.routine_type }
+            break
           case 'medical_history':
           case 'diet_preference':
           case 'allergies':
@@ -527,6 +560,17 @@ function HealthProfileViewPage() {
                 </View>
               )
             })}
+          </View>
+        )
+
+      case 'routine':
+        return (
+          <View className='editor-routine-body'>
+            <RoutineHourPicker
+              value={editValue as RoutineHours}
+              onChange={setEditValue}
+              compact
+            />
           </View>
         )
 
@@ -698,8 +742,8 @@ function HealthProfileViewPage() {
 
         const handleReportUpload = async () => {
           try {
-            const res = await Taro.chooseImage({ count: 9, sizeType: ['compressed'] })
-            const tempPaths = res.tempFilePaths || []
+            const res = await chooseImageWithPrivacy({ count: MAX_REPORT_IMAGE_COUNT, sizeType: ['compressed'] })
+            const tempPaths = (res.tempFilePaths || []).slice(0, MAX_REPORT_IMAGE_COUNT)
             if (tempPaths.length === 0) return
             Taro.showLoading({ title: '上传中...', mask: true })
             const urls: string[] = []
@@ -718,6 +762,11 @@ function HealthProfileViewPage() {
             setTimeout(() => closeEditor(), 1500)
           } catch (e: any) {
             Taro.hideLoading()
+            if (e?.errMsg?.includes('cancel')) return
+            if (isPrivacyAuthorizeError(e)) {
+              showPrivacyAuthorizeFailure(e)
+              return
+            }
             await showUnifiedApiError(e, '上传失败')
           }
         }
@@ -915,6 +964,8 @@ function HealthProfileViewPage() {
   const dietPreference = (hc?.diet_preference as string[] | undefined) || []
   const allergies = (hc?.allergies as string[] | undefined) || []
   const healthNotes = hc?.health_notes as string | undefined
+  const routineRaw = hc?.routine_type as string | undefined
+  const routineDisplay = routineRaw ? formatRoutineHours(parseRoutineHours(routineRaw)) : '—'
   const reportExtract = hc?.report_extract
 
   const hasIndicators = reportExtract?.indicators && reportExtract.indicators.length > 0
@@ -939,7 +990,7 @@ function HealthProfileViewPage() {
           <EditableRow
             label='出生日期'
             field='birthday'
-            value={profile.birthday || '—'}
+            value={formatProfileDateOnly(profile.birthday)}
           />
           <EditableRow
             label='身高'
@@ -961,6 +1012,11 @@ function HealthProfileViewPage() {
             label='活动水平'
             field='activity_level'
             value={profile.activity_level ? ACTIVITY_MAP[profile.activity_level] || profile.activity_level : '—'}
+          />
+          <EditableRow
+            label='作息习惯'
+            field='routine_type'
+            value={routineDisplay}
           />
           <EditableRow
             label='执行模式'
@@ -1026,7 +1082,7 @@ function HealthProfileViewPage() {
             <View className='report-upload-trigger' onClick={handleDirectReportUpload}>
               <Text className='iconfont icon-paizhao-xianxing report-upload-icon'></Text>
               <Text className='report-upload-title'>点击上传体检报告</Text>
-              <Text className='report-upload-desc'>支持 JPG / PNG 格式，可多选</Text>
+              <Text className='report-upload-desc'>支持 JPG / PNG 格式，最多 {MAX_REPORT_IMAGE_COUNT} 张</Text>
             </View>
           )}
         </View>
