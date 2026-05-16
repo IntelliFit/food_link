@@ -18,7 +18,7 @@ function readInjectedString(
 // config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
 export const API_BASE_URL = readInjectedString(
   () => __API_BASE_URL__,
-  'https://v2.healthymax.cn'
+  'https://dev.healthymax.cn'
 )
 export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
@@ -1411,15 +1411,13 @@ export async function compressImagePathForUpload(localPath: string): Promise<str
     return raw
   }
 
-  // Keep a comfortable margin below common 1MB gateway limits. Multipart
-  // upload adds headers/boundaries, so aiming too close to 1MB still trips 413.
-  const targetBytes = 640 * 1024
+  const targetBytes = 760 * 1024
   const originalSize = await getLocalFileSize(raw)
   if (originalSize !== null && originalSize <= targetBytes) {
     return raw
   }
 
-  const qualities = [72, 60, 48, 36, 28, 20]
+  const qualities = [72, 60, 48, 36]
   let bestPath = raw
   let bestSize = originalSize
 
@@ -1446,10 +1444,6 @@ export async function compressImagePathForUpload(localPath: string): Promise<str
     } catch (e) {
       console.warn(`compressImagePathForUpload 质量 ${quality} 压缩失败，尝试下一档:`, e)
     }
-  }
-
-  if (bestSize !== null && bestSize > targetBytes) {
-    throw new Error('图片体积过大，请重新拍照或选择较小的图片后再试')
   }
 
   return bestPath || raw

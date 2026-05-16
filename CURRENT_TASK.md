@@ -1,3 +1,17 @@
+# 2026-05-16 — 小程序线上请求域名修正
+
+- User 反馈：`v2.healthymax.cn` 已弃用，完整后端地址应为 `https://dev.healthymax.cn/`；本地调试和 build 后结果不一致，很可能是请求域名错了。要求撤回刚刚的上传体积/Nginx 判断改动。
+- Status: fixed_config_pending_commit
+- Fix:
+  - 已撤回上一轮 `src/utils/api.ts` 上传压缩阈值从 760KB 降到 640KB、低质量档扩展、压缩后主动抛“图片体积过大”的改动。
+  - 已撤回 `deploy/nginx/healthymax.cn.conf` 的 `client_max_body_size 10m` 模板改动。
+  - `package.json` 中 `build:weapp:preview`、`build:weapp:debug`、`dev:weapp:online` 的 `TARO_APP_API_BASE_URL` 改为 `https://dev.healthymax.cn`。
+  - `config/index.ts` production 默认 API 改为 `https://dev.healthymax.cn`。
+  - `src/utils/api.ts` 注入失败兜底 API 改为 `https://dev.healthymax.cn`，避免任何兜底路径继续请求已弃用的 `v2`。
+  - `AGENTS.md` 同步更新小程序线上/预览构建说明。
+- Verification:
+  - 待执行静态检查；用户明确说不用 weapp 运行验证。
+
 # 2026-05-16 — 线上小程序图片上传 413 排查
 
 - User 反馈：本地调试已生效，但上传线上后不生效；本地 build 后图片上传失败，截图提示“图片体积过大，请重新拍照或选择较小的图片后再试”。
