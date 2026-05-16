@@ -1,3 +1,16 @@
+# 2026-05-16 — 线上小程序图片上传 413 排查
+
+- User 反馈：本地调试已生效，但上传线上后不生效；本地 build 后图片上传失败，截图提示“图片体积过大，请重新拍照或选择较小的图片后再试”。
+- Finding:
+  - 该提示来自图片上传接口返回 HTTP 413 时的前端文案，优先指向线上 API 网关/Nginx 请求体大小限制，而不是识别接口本身。
+  - `build:weapp:preview` / `dev:weapp:online` 会请求 `https://v2.healthymax.cn`；`dev:weapp` 请求本地 `http://127.0.0.1:3010`，因此本地调试成功不代表线上上传链路限制一致。
+- Fix in progress:
+  - `src/utils/api.ts` 将小程序上传前图片压缩目标从 760KB 降到 640KB，并增加更低质量档；若能确认压缩后仍超过目标，前端提前提示，不再把超大图直接打到线上网关。
+  - `deploy/nginx/healthymax.cn.conf` 模板增加 `client_max_body_size 10m`；线上 `v2.healthymax.cn` 实际 Nginx 配置也需要同步设置并 reload。
+- Verification:
+  - `npx eslint src/utils/api.ts --max-warnings 0` passed。
+  - `git diff --check -- src/utils/api.ts deploy/nginx/healthymax.cn.conf` passed（仅 LF/CRLF 提示）。
+
 # 2026-05-16 — 本地修改提交
 
 - User 要求：提交本地修改并写好 commit 信息。
