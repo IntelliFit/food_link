@@ -1,3 +1,15 @@
+# 2026-05-16 — dev 域名图片上传 413 根因
+
+- User 反馈：build 后仍提示“图片体积过大”，本地调试没有问题。
+- Finding:
+  - 当前 `dist/common.js` 已确认注入 `https://dev.healthymax.cn`，不是废弃的 `v2.healthymax.cn`。
+  - `dev.healthymax.cn` 的 Nginx 模板没有 `client_max_body_size`，Nginx 默认请求体限制约 1MB；小程序 build 包请求 dev 域名会先过 Nginx，因此较大图片上传被拦截并返回 413。
+  - 本地调试直连本机后端 `127.0.0.1:3010`，不经过 dev Nginx，所以同图本地可上传、build 包不可上传。
+- Fix:
+  - `deploy/nginx/dev.healthymax.cn.conf` 增加 `client_max_body_size 10m`。
+- Required deployment:
+  - 需要把该 Nginx 配置同步到线上 dev 服务器并执行 `nginx -t && systemctl reload nginx`；仅重新上传小程序无法修复 Nginx 413。
+
 # 2026-05-16 — 小程序线上请求域名修正
 
 - User 反馈：`v2.healthymax.cn` 已弃用，完整后端地址应为 `https://dev.healthymax.cn/`；本地调试和 build 后结果不一致，很可能是请求域名错了。要求撤回刚刚的上传体积/Nginx 判断改动。
