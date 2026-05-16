@@ -356,7 +356,11 @@ export default function ExerciseRecordPage() {
       Taro.navigateTo({ url: '/pages/login/index' })
       return
     }
-    if (isExerciseLogCreditExhausted(membershipStatus)) {
+    const targetRecordDate = persistRecordTargetDate(
+      normalizeRecordDate(currentRecordDateRef.current || recordDate)
+    )
+    const isTodayRecord = targetRecordDate === getTodayRecordDateKey()
+    if (isTodayRecord && isExerciseLogCreditExhausted(membershipStatus)) {
       const content = getExerciseLogCreditBlockMessage(membershipStatus)
       const confirmText = getExerciseLogBlockedActionText(membershipStatus)
       const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
@@ -388,7 +392,7 @@ export default function ExerciseRecordPage() {
       const membership = await getMyMembership().catch(() => null)
       if (membership) {
         setMembershipStatus(membership)
-        if (isExerciseLogCreditExhausted(membership)) {
+        if (isTodayRecord && isExerciseLogCreditExhausted(membership)) {
           const content = getExerciseLogCreditBlockMessage(membership)
           const confirmText = getExerciseLogBlockedActionText(membership)
           const showUpgrade = content.includes('开通') || content.includes('升级') || membership.is_pro
@@ -407,9 +411,6 @@ export default function ExerciseRecordPage() {
           return
         }
       }
-      const targetRecordDate = persistRecordTargetDate(
-        normalizeRecordDate(currentRecordDateRef.current || recordDate)
-      )
       currentRecordDateRef.current = targetRecordDate
       setRecordDate(targetRecordDate)
       const displayContent = content || '图片识别运动'

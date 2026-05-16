@@ -14,8 +14,6 @@ import {
   IconAlbum,
   IconText,
   IconEdit,
-  IconHistory,
-  IconFavorite,
   IconChevronRight,
   IconTrendingUp
 } from '../../../components/iconfont'
@@ -42,31 +40,66 @@ const GRID_FEATURES: Array<{
   id: string
   label: string
   color: string
+  backgroundColor: string
+  borderColor: string
+  iconBackgroundColor: string
+  darkColor: string
+  darkBackgroundColor: string
+  darkBorderColor: string
+  darkIconBackgroundColor: string
   Icon: typeof IconCamera
   isNew?: boolean
 }> = [
   {
     id: 'camera',
     label: '拍照识别',
-    color: '#e85d75',
+    color: '#4f9478',
+    backgroundColor: '#fafffc',
+    borderColor: '#d9fcec',
+    iconBackgroundColor: '#ecfdf4',
+    darkColor: '#6ff6bc',
+    darkBackgroundColor: 'rgba(111, 246, 188, 0.08)',
+    darkBorderColor: 'rgba(111, 246, 188, 0.18)',
+    darkIconBackgroundColor: 'rgba(111, 246, 188, 0.14)',
     Icon: IconCamera,
   },
   {
     id: 'album',
     label: '相册上传',
-    color: '#10b981',
+    color: '#5b8da5',
+    backgroundColor: '#fafeff',
+    borderColor: '#d8f3fd',
+    iconBackgroundColor: '#ebf8fe',
+    darkColor: '#81d6fb',
+    darkBackgroundColor: 'rgba(129, 214, 251, 0.08)',
+    darkBorderColor: 'rgba(129, 214, 251, 0.18)',
+    darkIconBackgroundColor: 'rgba(129, 214, 251, 0.14)',
     Icon: IconAlbum,
   },
   {
     id: 'text',
     label: '文本输入',
-    color: '#f59e0b',
+    color: '#8c7a4f',
+    backgroundColor: '#fffdf7',
+    borderColor: '#feedc9',
+    iconBackgroundColor: '#fef7e5',
+    darkColor: '#fcd666',
+    darkBackgroundColor: 'rgba(252, 214, 102, 0.08)',
+    darkBorderColor: 'rgba(252, 214, 102, 0.18)',
+    darkIconBackgroundColor: 'rgba(252, 214, 102, 0.14)',
     Icon: IconText,
   },
   {
     id: 'manual',
     label: '手动输入',
-    color: '#3b82f6',
+    color: '#7f7898',
+    backgroundColor: '#fefdff',
+    borderColor: '#e7dffb',
+    iconBackgroundColor: '#f4f0fd',
+    darkColor: '#b39ef4',
+    darkBackgroundColor: 'rgba(179, 158, 244, 0.08)',
+    darkBorderColor: 'rgba(179, 158, 244, 0.18)',
+    darkIconBackgroundColor: 'rgba(179, 158, 244, 0.14)',
     Icon: IconEdit,
   },
 ]
@@ -76,15 +109,11 @@ const QUICK_ACCESS_ITEMS = [
     id: 'favorites',
     label: '我的收藏',
     desc: '快速记录常吃餐食',
-    Icon: IconFavorite,
-    color: '#f59e0b',
   },
   {
     id: 'history',
     label: '识别记录',
     desc: '查看以往识别记录',
-    Icon: IconHistory,
-    color: '#6b7280',
   },
 ] as const
 
@@ -231,10 +260,15 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
         <View className='record-menu-grid-v2'>
           {GRID_FEATURES.map((feature) => {
             const IconComponent = feature.Icon
+            const featureColor = isDark ? feature.darkColor : feature.color
+            const featureBackground = isDark ? feature.darkBackgroundColor : feature.backgroundColor
+            const featureBorder = isDark ? feature.darkBorderColor : feature.borderColor
+            const iconBackground = isDark ? feature.darkIconBackgroundColor : feature.iconBackgroundColor
             return (
               <View
                 key={feature.id}
                 className='record-menu-grid-card'
+                style={{ backgroundColor: featureBackground, borderColor: featureBorder }}
                 onClick={() => handleGridClick(feature.id)}
               >
                 {feature.isNew && (
@@ -242,11 +276,11 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
                     <Text className='record-menu-new-text'>NEW</Text>
                   </View>
                 )}
-                <View className='record-menu-grid-icon-wrap'>
-                  <IconComponent size={40} color={feature.color} />
+                <View className='record-menu-grid-icon-wrap' style={{ backgroundColor: iconBackground }}>
+                  <IconComponent size={40} color={featureColor} />
                 </View>
                 <View className='record-menu-grid-text-wrap'>
-                  <Text className='record-menu-grid-label' style={{ color: feature.color }}>
+                  <Text className='record-menu-grid-label' style={{ color: featureColor }}>
                     {feature.label}
                   </Text>
                 </View>
@@ -257,29 +291,23 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
 
         {/* 底部快捷入口 */}
         <View className='record-menu-list-v2'>
-          {QUICK_ACCESS_ITEMS.map((item) => {
-            const IconComponent = item.Icon
-            return (
-              <View
-                key={item.id}
-                className='record-menu-list-item-v2'
-                onClick={() => handleQuickAccessClick(item.id)}
-              >
-                <View className='record-menu-list-left'>
-                  <View className='record-menu-list-icon-wrap' style={{ backgroundColor: `${item.color}15` }}>
-                    <IconComponent size={24} color={item.color} />
-                  </View>
-                  <View className='record-menu-list-texts'>
-                    <Text className='record-menu-list-label-v2'>{item.label}</Text>
-                    <Text className='record-menu-list-desc-v2'>{item.desc}</Text>
-                  </View>
-                </View>
-                <View className='record-menu-list-right'>
-                  <IconChevronRight size={16} color='#d1d5db' />
+          {QUICK_ACCESS_ITEMS.map((item) => (
+            <View
+              key={item.id}
+              className='record-menu-list-item-v2'
+              onClick={() => handleQuickAccessClick(item.id)}
+            >
+              <View className='record-menu-list-left'>
+                <View className='record-menu-list-texts'>
+                  <Text className='record-menu-list-label-v2'>{item.label}</Text>
+                  <Text className='record-menu-list-desc-v2'>{item.desc}</Text>
                 </View>
               </View>
-            )
-          })}
+              <View className='record-menu-list-right'>
+                <Text className='iconfont icon-right-arrow record-menu-list-arrow-v2' />
+              </View>
+            </View>
+          ))}
 
           {__ENABLE_DEV_DEBUG_UI__ && (
             <View className='record-menu-dev-toolkit'>

@@ -20,6 +20,7 @@ import { requestHomeRecordMenu } from '../../../utils/home-record-menu'
 import { drawDayRecordPoster, computeDayRecordPosterHeight, POSTER_WIDTH, type DayRecordPosterMeal } from '../../../utils/poster'
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+import { getCurrentPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
 
 /** 格式化数字，最多保留1位小数，避免浮点精度溢出 */
 function formatNumber(value: number): string {
@@ -66,6 +67,37 @@ function normalizeDisplayImageUrl(url: string): string {
     return raw.replace(/^https?:\/\/tmp\//i, 'wxfile://tmp/')
   }
   return raw
+}
+
+function resolveFoodItemIntakeRatio(item: FoodRecord['items'][number]): number {
+  const explicitRatio = Number((item as any).ratio)
+  if (Number.isFinite(explicitRatio) && explicitRatio >= 0) {
+    return explicitRatio
+  }
+  const intake = Number((item as any).intake)
+  const weight = Number((item as any).weight)
+  if (Number.isFinite(intake) && intake >= 0 && Number.isFinite(weight) && weight > 0) {
+    return (intake / weight) * 100
+  }
+  return 100
+}
+
+function computeFoodRecordIntakeRatio(record: FoodRecord): number {
+  let weightTotal = 0
+  let intakeTotal = 0
+  ;(record.items || []).forEach((item) => {
+    const weight = normalizeNumber((item as any).weight)
+    if (weight <= 0) return
+    weightTotal += weight
+    const intake = Number((item as any).intake)
+    if (Number.isFinite(intake) && intake >= 0) {
+      intakeTotal += intake
+      return
+    }
+    intakeTotal += weight * resolveFoodItemIntakeRatio(item) / 100
+  })
+  if (weightTotal <= 0) return 100
+  return Math.round((intakeTotal / weightTotal) * 1000) / 10
 }
 
 import './index.scss'
@@ -123,6 +155,11 @@ function formatRecordTime(recordTime: string) {
   }
 }
 
+function getRecordTimeValue(recordTime?: string) {
+  const timestamp = new Date(recordTime || '').getTime()
+  return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY
+}
+
 type DayRecordCard = {
   id: string
   record: FoodRecord
@@ -133,11 +170,23 @@ type DayRecordCard = {
   imageUrls: string[]
   previewImage: string
   hasRealImage: boolean
-  foods: Array<{ name: string; amount: string; calorie: number; protein: number; carbs: number; fat: number }>
+  foods: Array<{ name: string; amount: string; calorie: number; protein: number; carbs: number; fat: number; intakeRatio: number }>
   totalCalorie: number
   totalProtein: number
   totalCarbs: number
   totalFat: number
+  intakeRatio: number
+}
+
+function sortDayRecordCardsByTime(items: DayRecordCard[]) {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const timeDiff = getRecordTimeValue(a.item.record.record_time) - getRecordTimeValue(b.item.record.record_time)
+      if (timeDiff !== 0) return timeDiff
+      return a.index - b.index
+    })
+    .map(({ item }) => item)
 }
 
 function DayRecordPage() {
@@ -186,7 +235,7 @@ function DayRecordPage() {
         getHomeDashboard(listDate).catch(() => null),
         getHomeDashboard(yesterdayStr).catch(() => null),
       ])
-      const nextRecords = (recordRes.records || []).map((record: FoodRecord) => {
+      const nextRecords = sortDayRecordCardsByTime((recordRes.records || []).map((record: FoodRecord) => {
         const imageUrls = ((record.image_paths && record.image_paths.length > 0)
           ? record.image_paths.filter(Boolean)
           : (record.image_path ? [record.image_path] : []))
@@ -194,7 +243,7 @@ function DayRecordPage() {
           .filter(Boolean)
 
         const foodItems = (record.items || []).map((item) => {
-          const ratio = item.ratio ?? 100
+          const ratio = resolveFoodItemIntakeRatio(item)
           const fullCalorie = item.nutrients?.calories ?? 0
           const consumedCalorie = fullCalorie * (ratio / 100)
           const fullProtein = item.nutrients?.protein ?? 0
@@ -207,6 +256,7 @@ function DayRecordPage() {
             protein: Math.round(fullProtein * (ratio / 100) * 10) / 10,
             carbs: Math.round(fullCarbs * (ratio / 100) * 10) / 10,
             fat: Math.round(fullFat * (ratio / 100) * 10) / 10,
+            intakeRatio: Math.round(ratio * 10) / 10,
           }
         })
         const foodName = foodItems.map(f => f.name).filter(Boolean).join('、') || '未命名食物'
@@ -226,8 +276,9 @@ function DayRecordPage() {
           totalProtein: Math.round((record.total_protein ?? 0) * 10) / 10,
           totalCarbs: Math.round((record.total_carbs ?? 0) * 10) / 10,
           totalFat: Math.round((record.total_fat ?? 0) * 10) / 10,
+          intakeRatio: computeFoodRecordIntakeRatio(record),
         }
-      })
+      }))
 
       setRecords(nextRecords)
       setHistoryTotalCalorie(Math.round(nextRecords.reduce((sum, item) => sum + item.totalCalorie, 0) * 10) / 10)
@@ -353,13 +404,40 @@ function DayRecordPage() {
 
   // ---- 分享海报 ----
 
+  const closeDayRecordPoster = useCallback(() => {
+    setPosterVisible(false)
+    setPosterImageUrl(null)
+    setPosterGenerating(false)
+  }, [])
+
+  const openOfficialDayRecordImageMenu = useCallback((path: string) => {
+    if (!path) return
+    Taro.showShareImageMenu({
+      path,
+      success: () => {
+        closeDayRecordPoster()
+      },
+      fail: (err: { errMsg?: string }) => {
+        if (isShowShareImageMenuCancel(err)) {
+          closeDayRecordPoster()
+          return
+        }
+        console.error('showShareImageMenu fail', err)
+        closeDayRecordPoster()
+        void showUnifiedApiError(new Error('打开微信图片菜单失败，请重试'), '打开微信图片菜单失败，请重试')
+      }
+    })
+  }, [closeDayRecordPoster])
+
   const handleShareDayRecord = useCallback(() => {
     if (posterGenerating) return
-    setPosterVisible(true)
-    // 延迟触发生成，让弹窗先出现
-    setTimeout(() => {
-      handleGenerateDayRecordPoster()
-    }, 100)
+    if (records.length === 0) {
+      Taro.showToast({ title: '暂无饮食记录可分享', icon: 'none' })
+      return
+    }
+    setPosterVisible(false)
+    setPosterImageUrl(null)
+    handleGenerateDayRecordPoster()
   }, [posterGenerating, records, historyTotalCalorie, targetCalories])
 
   const handleGenerateDayRecordPoster = useCallback(() => {
@@ -411,11 +489,18 @@ function DayRecordPage() {
           const [mealImages, profile, qrImg] = await Promise.all([
             Promise.all(mealImagePromises),
             (async () => {
+              const localProfile = await getCurrentPosterUserProfile(uid)
               if (!uid) return { nickname: '', avatar: '', invite_code: '' }
               try {
-                return await getFriendInviteProfile(uid)
+                const remoteProfile = await getFriendInviteProfile(uid)
+                const mergedProfile = mergePosterUserProfile(remoteProfile, localProfile)
+                return {
+                  ...remoteProfile,
+                  nickname: mergedProfile.nickname,
+                  avatar: mergedProfile.avatar,
+                }
               } catch {
-                return { nickname: '', avatar: '', invite_code: '' }
+                return { nickname: localProfile.nickname, avatar: localProfile.avatar, invite_code: '' }
               }
             })(),
             (async () => {
@@ -465,6 +550,7 @@ function DayRecordPage() {
             protein: meal.totalProtein,
             carbs: meal.totalCarbs,
             fat: meal.totalFat,
+            intakeRatio: meal.intakeRatio,
           }))
 
           drawDayRecordPoster(ctx, {
@@ -497,6 +583,7 @@ function DayRecordPage() {
               Taro.hideLoading()
               setPosterGenerating(false)
               setPosterImageUrl(resp.tempFilePath)
+              openOfficialDayRecordImageMenu(resp.tempFilePath)
             },
             fail: (err) => {
               Taro.hideLoading()
@@ -512,13 +599,7 @@ function DayRecordPage() {
           console.error('drawDayRecordPoster error', e)
         }
       })
-  }, [records, historyTotalCalorie, targetCalories, selectedDate, yesterdayIntake, posterGenerating])
-
-  const closeDayRecordPoster = useCallback(() => {
-    setPosterVisible(false)
-    setPosterImageUrl(null)
-    setPosterGenerating(false)
-  }, [])
+  }, [records, historyTotalCalorie, targetCalories, selectedDate, yesterdayIntake, posterGenerating, openOfficialDayRecordImageMenu])
 
   const handleShareDayRecordPosterImage = useCallback(() => {
     if (!posterImageUrl) return
@@ -640,6 +721,9 @@ function DayRecordPage() {
                       <View className='day-record-food-main'>
                         <Text className='day-record-food-name'>{food.name}</Text>
                         <Text className='day-record-food-amount'>{food.amount}</Text>
+                        <Text className={`day-record-food-ratio ${food.intakeRatio > 100 ? 'is-over' : ''}`}>
+                          {formatNumber(food.intakeRatio)}%
+                        </Text>
                       </View>
                       <View className='day-record-food-side'>
                         <Text className='day-record-food-calorie'>{formatNumber(food.calorie)} kcal</Text>
@@ -651,9 +735,18 @@ function DayRecordPage() {
                         </View>
                       </View>
                       <View className='day-record-food-macros'>
-                        <Text className='day-record-food-macro macro-protein'>蛋白质 {Math.round(food.protein)}g</Text>
-                        <Text className='day-record-food-macro macro-carbs'>碳水 {Math.round(food.carbs)}g</Text>
-                        <Text className='day-record-food-macro macro-fat'>脂肪 {Math.round(food.fat)}g</Text>
+                        <View className='day-record-food-macro'>
+                          <Text className='day-record-food-macro-label'>蛋白质</Text>
+                          <Text className='day-record-food-macro-value macro-protein'>{Math.round(food.protein)}g</Text>
+                        </View>
+                        <View className='day-record-food-macro'>
+                          <Text className='day-record-food-macro-label'>碳水</Text>
+                          <Text className='day-record-food-macro-value macro-carbs'>{Math.round(food.carbs)}g</Text>
+                        </View>
+                        <View className='day-record-food-macro'>
+                          <Text className='day-record-food-macro-label'>脂肪</Text>
+                          <Text className='day-record-food-macro-value macro-fat'>{Math.round(food.fat)}g</Text>
+                        </View>
                       </View>
                     </View>
                   ))}

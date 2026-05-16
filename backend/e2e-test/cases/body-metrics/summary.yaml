@@ -1,0 +1,15 @@
+cases:
+  - id: health.body-metrics.summary.success
+    name: "身体指标汇总"
+    desc: "验证登录用户按日期获取身体指标汇总，并返回饮水日数据列表。"
+    group: health
+    method: GET
+    path: /api/body-metrics/summary
+    auth: user1
+    query:
+      date: "2026-05-14"
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.water_daily: type:array

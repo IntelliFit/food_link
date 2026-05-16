@@ -139,6 +139,7 @@ func New(cfg *config.Config) (*App, error) {
 	dashScopeClient := analyzeservice.NewDashScopeClient(cfg.External.DashscopeAPIKey, "qwen-vl-max")
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(dashScopeClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
+	analyzeSvc.ConfigureDoubaoClient(cfg.External.DoubaoAPIKey, cfg.External.DoubaoBaseURL, "")
 	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
 	analyzeSvc.ConfigureStorage(storageClient)
@@ -185,6 +186,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Membership module DI
 	membershipRepo := membershiprepo.NewMembershipRepo(db)
 	membershipSvc := membershipservice.NewMembershipService(membershipRepo, cfg)
+	statsSvc.ConfigureCreditGuard(membershipSvc)
 	analyzeTaskSvc.ConfigureCreditGuard(membershipSvc)
 	exerciseSvc.ConfigureCreditGuard(membershipSvc)
 	exerciseSvc.ConfigureInviteRewardActivator(membershipSvc)

@@ -214,6 +214,7 @@ func (h *HealthHandler) GetStatsSummary(c *gin.Context) {
 		"end_date":                        summary.EndDate,
 		"tdee":                            summary.TDEE,
 		"streak_days":                     summary.StreakDays,
+		"recorded_days":                   summary.RecordedDays,
 		"total_calories":                  summary.TotalCalories,
 		"avg_calories_per_day":            summary.AvgCaloriesPerDay,
 		"cal_surplus_deficit":             summary.CalSurplusDeficit,

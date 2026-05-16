@@ -70,7 +70,34 @@ type DietRecommendationFoodItem struct {
 
 var dietRecommendationFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")
 
+const creditCostDietRecommendation = 1
+
 func (s *StatsService) GenerateDietRecommendation(ctx context.Context, userID string, input DietRecommendationInput) (*DietRecommendationResult, error) {
+	var creditsInfo map[string]any
+	var err error
+	if s.creditGuard != nil && userID != "" {
+		creditsInfo, err = s.creditGuard.ValidateDietRecommendationCredits(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	result, err := s.generateDietRecommendationCore(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+
+	if s.creditGuard != nil && creditsInfo != nil {
+		_ = s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, creditCostDietRecommendation, "diet_recommendation_spend", "diet_rec:"+input.Date+":"+input.Scene, map[string]any{
+			"date":  input.Date,
+			"scene": input.Scene,
+		})
+	}
+
+	return result, nil
+}
+
+func (s *StatsService) generateDietRecommendationCore(ctx context.Context, input DietRecommendationInput) (*DietRecommendationResult, error) {
 	input = normalizeDietRecommendationInput(input)
 	apiKey := ""
 	if s.cfg != nil {
@@ -124,6 +151,7 @@ func (s *StatsService) GenerateDietRecommendation(ctx context.Context, userID st
 	if len(result.Recommendations) == 0 {
 		return fallbackDietRecommendation(input, "rule_fallback"), nil
 	}
+
 	return &result, nil
 }
 

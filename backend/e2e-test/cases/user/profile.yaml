@@ -1,0 +1,28 @@
+cases:
+  - id: user.profile.requires-auth
+    name: "用户资料需要登录"
+    desc: "未携带登录态访问 /api/user/profile 时，应返回 401 和错误详情。"
+    group: auth
+    method: GET
+    path: /api/user/profile
+    expect:
+      status: 401
+      json:
+        detail: exists
+
+  - id: user.profile.success
+    name: "获取用户资料"
+    desc: "使用测试用户 user1 的 JWT 访问用户资料接口，验证返回当前用户基础资料。"
+    group: user
+    method: GET
+    path: /api/user/profile
+    auth: user1
+    expect:
+      status: 200
+      headers:
+        X-Trace-Id: not_empty
+      json:
+        code: 0
+        data.id: "00000000-0000-0000-0000-000000000001"
+        data.nickname: "E2E User"
+        data.avatar: type:string

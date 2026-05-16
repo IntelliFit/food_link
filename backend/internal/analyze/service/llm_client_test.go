@@ -148,6 +148,14 @@ func TestParseLLMJSON_WithFences(t *testing.T) {
 	assert.Equal(t, "apple", result["name"])
 }
 
+func TestParseLLMJSON_ArrayPayload(t *testing.T) {
+	result, err := parseLLMJSON(`[{"name":"apple"},{"name":"banana"}]`)
+	assert.NoError(t, err)
+	items, ok := result["items"].([]any)
+	assert.True(t, ok)
+	assert.Len(t, items, 2)
+}
+
 func TestParseLLMJSON_InvalidJSON(t *testing.T) {
 	_, err := parseLLMJSON("not json")
 	assert.Error(t, err)

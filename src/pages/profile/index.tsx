@@ -51,6 +51,13 @@ type RewardLevelMeta = {
   max: number | null
 }
 
+type ProfileListIconTone = {
+  color: string
+  backgroundColor: string
+  darkColor: string
+  darkBackgroundColor: string
+}
+
 const REWARD_LEVELS: RewardLevelMeta[] = [
   { level: 1, title: '探味新芽', min: 0, max: 10 },
   { level: 2, title: '零食巡逻队', min: 10, max: 50 },
@@ -59,6 +66,32 @@ const REWARD_LEVELS: RewardLevelMeta[] = [
   { level: 5, title: '热量驯龙师', min: 1000, max: 3000 },
   { level: 6, title: '传说食探长', min: 3000, max: null },
 ]
+
+const SERVICE_ICON_TONES: Record<number, ProfileListIconTone> = {
+  0: { color: '#4f9478', backgroundColor: '#ecfdf4', darkColor: '#6ff6bc', darkBackgroundColor: 'rgba(111, 246, 188, 0.14)' },
+  2: { color: '#8c7a4f', backgroundColor: '#fef7e5', darkColor: '#fcd666', darkBackgroundColor: 'rgba(252, 214, 102, 0.14)' },
+  5: { color: '#5b8da5', backgroundColor: '#ebf8fe', darkColor: '#81d6fb', darkBackgroundColor: 'rgba(129, 214, 251, 0.14)' },
+  8: { color: '#7f7898', backgroundColor: '#f4f0fd', darkColor: '#b39ef4', darkBackgroundColor: 'rgba(179, 158, 244, 0.14)' },
+}
+
+const SETTING_ICON_TONES: Record<number, ProfileListIconTone> = {
+  3: { color: '#5f8b7d', backgroundColor: '#effdf8', darkColor: '#7df0cc', darkBackgroundColor: 'rgba(125, 240, 204, 0.14)' },
+  5: { color: '#8b7664', backgroundColor: '#fcf5eb', darkColor: '#f1bc8a', darkBackgroundColor: 'rgba(241, 188, 138, 0.14)' },
+}
+
+function getProfileListIconStyle(id: number, tones: Record<number, ProfileListIconTone>, scheme: string) {
+  const tone = tones[id] || {
+    color: '#6b7280',
+    backgroundColor: '#f1f5f9',
+    darkColor: '#cbd5e1',
+    darkBackgroundColor: 'rgba(203, 213, 225, 0.12)',
+  }
+  const isDark = scheme === 'dark'
+  return {
+    color: isDark ? tone.darkColor : tone.color,
+    backgroundColor: isDark ? tone.darkBackgroundColor : tone.backgroundColor,
+  }
+}
 
 function getRewardLevelMeta(points: number): RewardLevelMeta {
   const normalized = Math.max(Number(points || 0), 0)
@@ -196,6 +229,10 @@ function ProfilePage() {
             meta: `已记录 ${days} 天`
           }
           setUserInfo(nextUserInfo)
+          Taro.setStorageSync('userInfo', {
+            ...nextUserInfo,
+            nickname: apiUserInfo.nickname || '用户昵称',
+          })
           const completed = apiUserInfo.onboarding_completed ?? true
           setOnboardingCompleted(completed)
           // 首次登录未填写健康档案时，先跳转到答题页面
@@ -502,27 +539,6 @@ function ProfilePage() {
     })
   }
 
-  const getServiceColor = (id: number) => {
-    const colors: Record<number, string> = {
-      0: '#10b981', // 健康档案 - 绿
-      2: '#8b5cf6', // 食物管理 - 紫
-      3: '#3b82f6', // 饮食记录 - 蓝
-      4: '#f59e0b', // 邀请有礼 - 金
-      5: '#10b981', // 公共食物库 - 绿
-      7: '#6b7280', // 识别历史 - 灰
-      8: '#22c55e'  // 用户群 - 绿
-    }
-    return colors[id] || '#6b7280'
-  }
-
-  const getSettingColor = (id: number) => {
-    const colors: Record<number, string> = {
-      3: '#10b981', // 隐私设置 - 绿
-      5: '#8b5cf6'  // 关于我们 - 紫
-    }
-    return colors[id] || '#6b7280'
-  }
-
   return (
     <View className={`profile-page ${scheme === 'dark' ? 'profile-page--dark' : ''}`}>
       {/* 顶部用户信息区域（仿知乎风格） */}
@@ -685,7 +701,7 @@ function ProfilePage() {
         {/* 核心功能 */}
         {services.map((service) => (
           <View key={service.id} className='list-item' onClick={() => handleServiceClick(service)}>
-            <View className='list-icon' style={{ color: getServiceColor(service.id) }}>
+            <View className='list-icon' style={getProfileListIconStyle(service.id, SERVICE_ICON_TONES, scheme)}>
               {service.icon}
             </View>
             <Text className='list-title'>{service.title}</Text>
@@ -703,7 +719,7 @@ function ProfilePage() {
         {/* 设置 */}
         {settings.map((setting) => (
           <View key={setting.id} className='list-item' onClick={() => handleSettingClick(setting)}>
-            <View className='list-icon' style={{ color: getSettingColor(setting.id) }}>
+            <View className='list-icon' style={getProfileListIconStyle(setting.id, SETTING_ICON_TONES, scheme)}>
               {setting.icon}
             </View>
             <Text className='list-title'>{setting.title}</Text>

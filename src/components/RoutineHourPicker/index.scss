@@ -1,0 +1,127 @@
+.routine-hour-picker {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.routine-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.routine-preset {
+  min-width: 0;
+  padding: 18rpx 20rpx;
+  border-radius: 18rpx;
+  background: #fff;
+  border: 2rpx solid #e2e8f0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+
+  &.active {
+    border-color: #5cb896;
+    background: #eef8f3;
+  }
+}
+
+.routine-preset-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 34rpx;
+}
+
+.routine-preset-desc {
+  font-size: 22rpx;
+  color: #64748b;
+  line-height: 30rpx;
+}
+
+.routine-wheel-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.routine-wheel-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.routine-wheel-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #4b5563;
+  text-align: center;
+  line-height: 44rpx;
+  flex-shrink: 0;
+}
+
+.routine-wheel-container {
+  width: 100%;
+  height: 420px;
+  position: relative;
+  background: transparent;
+}
+
+.routine-wheel-view {
+  width: 100%;
+  height: 100%;
+}
+
+.routine-wheel-indicator {
+  background: transparent;
+
+  &::before,
+  &::after {
+    border: none !important;
+    display: none !important;
+  }
+}
+
+.routine-wheel-item {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 120px;
+  transition: all 0.3s ease;
+}
+
+.routine-wheel-hour {
+  min-width: 80px;
+  text-align: center;
+  font-size: 32px;
+  font-weight: 400;
+  color: #9ca3af;
+  line-height: 1;
+  transition: all 0.2s;
+}
+
+.routine-wheel-unit {
+  position: absolute;
+  top: 50%;
+  left: 72%;
+  transform: translateY(-50%);
+  font-size: 24rpx;
+  color: #6b7280;
+  line-height: 34rpx;
+  pointer-events: none;
+  margin-top: 5px;
+}
+
+.routine-hour-picker--compact {
+  gap: 20rpx;
+
+  .routine-wheel-container {
+    height: 340px;
+  }
+}

@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, Button, Input, Slider } from '@tarojs/components'
 import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { updateFoodRecord, showUnifiedApiError, type FoodRecord, type Nutrients, type MealType, type DietGoal, type ActivityTiming } from '../../../utils/api'
+import { updateFoodRecord, showUnifiedApiError, type FoodRecord, type Nutrients, type MealType, type ActivityTiming } from '../../../utils/api'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
 import './MealRecordEditModal.scss'
@@ -32,13 +32,6 @@ const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }>
   { value: 'afternoon_snack', label: '午加餐', iconClass: 'icon-lingshi' },
   { value: 'dinner', label: '晚餐', iconClass: 'icon-wancan' },
   { value: 'evening_snack', label: '晚加餐', iconClass: 'icon-lingshi' },
-]
-
-const DIET_GOAL_OPTIONS: Array<{ value: DietGoal; label: string; iconClass: string }> = [
-  { value: 'fat_loss', label: '减脂期', iconClass: 'icon-huore' },
-  { value: 'muscle_gain', label: '增肌期', iconClass: 'icon-zengji' },
-  { value: 'maintain', label: '维持体重', iconClass: 'icon-tianpingzuo' },
-  { value: 'none', label: '无', iconClass: 'icon-nothing' }
 ]
 
 const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; iconClass: string }> = [
@@ -74,7 +67,6 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
   const [editItems, setEditItems] = useState<EditableFoodItem[]>([])
   const [editSaving, setEditSaving] = useState(false)
   const [mealType, setMealType] = useState<MealType>('breakfast')
-  const [dietGoal, setDietGoal] = useState<DietGoal>('none')
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
 
   useEffect(() => {
@@ -89,7 +81,6 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
         }))
       )
       setMealType((record.meal_type as MealType) || 'breakfast')
-      setDietGoal((record.diet_goal as DietGoal) || 'none')
       setActivityTiming((record.activity_timing as ActivityTiming) || 'none')
     } else if (!visible) {
       // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
@@ -256,7 +247,6 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
         total_fat: Math.round(totalFat * 10) / 10,
         total_weight_grams: Math.round(totalWeight),
         meal_type: mealType,
-        diet_goal: dietGoal,
         activity_timing: activityTiming
       })
       Taro.hideLoading()
@@ -294,23 +284,6 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
                 >
                   <Text className={`meal-icon iconfont ${opt.iconClass}`} />
                   <Text className='meal-label'>{opt.label}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* 饮食目标 */}
-          <View className='edit-meta-card'>
-            <Text className='edit-section-label'>饮食目标</Text>
-            <View className='state-options'>
-              {DIET_GOAL_OPTIONS.map((opt) => (
-                <View
-                  key={opt.value}
-                  className={`state-option ${dietGoal === opt.value ? 'active' : ''}`}
-                  onClick={() => setDietGoal(opt.value)}
-                >
-                  <Text className={`state-icon iconfont ${opt.iconClass}`} />
-                  <Text className='state-label'>{opt.label}</Text>
                 </View>
               ))}
             </View>

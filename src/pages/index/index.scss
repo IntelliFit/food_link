@@ -160,14 +160,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   background: rgb(92 184 150 / 12%);
   border: 1rpx solid rgb(92 184 150 / 24%);
   box-sizing: border-box;
-
-  &--tappable {
-    cursor: pointer;
-  }
-
-  &--tappable:active {
-    opacity: 0.82;
-  }
 }
 
 .home-backfill-hint__dot {
@@ -190,18 +182,17 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2rpx;
+  align-items: center;
 }
 
-.home-backfill-hint__date {
-  font-size: 20rpx;
-  line-height: 28rpx;
-  color: rgb(47 127 98 / 72%);
+.home-backfill-hint__actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
 }
 
 .home-backfill-hint__action {
-  flex-shrink: 0;
   font-size: 22rpx;
   line-height: 32rpx;
   font-weight: 700;
@@ -210,6 +201,26 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   border-radius: 999rpx;
   background: $primary-color;
   box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 22%);
+
+  &:active {
+    opacity: 0.82;
+  }
+}
+
+.home-backfill-hint__cancel {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  font-weight: 700;
+  color: #2f7f62;
+  padding: 8rpx 16rpx;
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 76%);
+  border: 1rpx solid rgb(92 184 150 / 24%);
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.82;
+  }
 }
 
 .date-list {
@@ -1687,24 +1698,26 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   flex-shrink: 0;
 }
 
-.meal-thumb-badge {
+.meal-media-type-tag {
   position: absolute;
-  right: 8rpx;
-  top: 8rpx;
-  min-width: 38rpx;
-  padding: 4rpx 10rpx;
-  border-radius: 9999rpx;
-  background: rgb(0 188 125 / 90%);
+  top: 10rpx;
+  left: 10rpx;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 28rpx;
+  padding: 0 8rpx;
+  border-radius: 6rpx;
+  background: $primary-color;
+  box-shadow: 0 4rpx 12rpx rgb(15 23 42 / 14%);
 }
 
-.meal-thumb-badge-text {
+.meal-media-type-tag-text {
   font-size: 18rpx;
-  line-height: 24rpx;
-  color: #fff;
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 30rpx;
+  color: #ffffff;
 }
 
 .meal-content {
@@ -1738,10 +1751,29 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .meal-time-pill {
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
   background: #f3f4f6;
   border-radius: 9999rpx;
   padding: 4rpx 14rpx;
+}
+
+.meal-count-badge {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 4rpx 14rpx;
+  border-radius: 9999rpx;
+  background: $primary-color;
+}
+
+.meal-count-badge-text {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 28rpx;
+  font-variant-numeric: tabular-nums;
 }
 
 .meal-time-pill-text {
@@ -1752,39 +1784,12 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-variant-numeric: tabular-nums;
 }
 
-// 同一餐次多条记录的计数徽章
-.meal-count-badge {
-  flex-shrink: 0;
-  background: $primary-light;
-  border-radius: 9999rpx;
-  padding: 4rpx 14rpx;
-}
-
-.meal-count-badge-text {
-  font-size: 20rpx;
-  font-weight: 600;
-  color: $primary-color;
-  line-height: 28rpx;
-}
-
 // 第二行：🔥 卡路里
 .meal-calorie-row {
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 12rpx;
-}
-
-.meal-type-tag {
-  flex-shrink: 0;
-  border-radius: 8rpx;
-  padding: 4rpx 12rpx;
-}
-
-.meal-type-tag-text {
-  font-size: 20rpx;
-  font-weight: 600;
-  line-height: 28rpx;
 }
 
 .meal-calorie-wrap {
@@ -1810,22 +1815,23 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .meal-calorie-extra {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  gap: 6rpx;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
-.meal-type-icon-inline {
+.meal-intake-ratio-icon {
   font-size: 20rpx;
   line-height: 32rpx;
-  margin-right: 4rpx;
 }
 
-.meal-type-target {
+.meal-intake-ratio-text {
   font-size: 22rpx;
-  font-weight: 500;
+  font-weight: 600;
   color: $text-secondary;
   line-height: 32rpx;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 // 第三行：三大营养素 + 含水量
@@ -2370,6 +2376,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   font-size: 20rpx;
   color: $text-tertiary;
   line-height: 30rpx;
+  white-space: nowrap;
 }
 
 .body-status-progress-wrap {
@@ -3357,6 +3364,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   padding: 32rpx 24rpx;
   border-radius: 16rpx;
   gap: 12rpx;
+  border: 1rpx solid transparent;
 }
 
 .record-menu-new-badge {
@@ -3378,6 +3386,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .record-menu-grid-icon-wrap {
   width: 64rpx;
   height: 64rpx;
+  border-radius: 18rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3425,7 +3434,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .record-menu-list-left {
   display: flex;
   align-items: center;
-  gap: 16rpx;
+  min-width: 0;
 }
 
 .record-menu-list-texts {
@@ -3460,6 +3469,12 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   display: flex;
   align-items: center;
   gap: 16rpx;
+}
+
+.record-menu-list-arrow-v2 {
+  font-size: 28rpx;
+  line-height: 1;
+  color: #cbd5e1;
 }
 
 .record-menu-badge {

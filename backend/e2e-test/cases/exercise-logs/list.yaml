@@ -1,0 +1,15 @@
+cases:
+  - id: exercise.logs.list.success
+    name: "运动记录列表"
+    desc: "验证登录用户可以按日期获取运动记录列表。"
+    group: health
+    method: GET
+    path: /api/exercise-logs
+    auth: user1
+    query:
+      date: "2026-05-14"
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.logs: type:array

@@ -18,6 +18,7 @@ import {
 import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } from '../../../utils/poster'
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+import { getCurrentPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
 
 import { IconBreakfast, IconCollapse, IconExpand, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { withAuth } from '../../../utils/withAuth'
@@ -95,6 +96,25 @@ const getDisplayedNutrientValue = (item: EditableFoodItem, field: EditableNutrie
   roundToSingleDecimal((item.nutrients?.[field] ?? 0) * getItemRatioFactor(item))
 )
 
+const resolveRecordItemRatio = (item: Pick<FoodRecord['items'][0], 'ratio' | 'intake' | 'weight'>): number => {
+  const ratio = Number(item.ratio)
+  if (Number.isFinite(ratio) && ratio > 0) return ratio
+  const intake = Number(item.intake)
+  const weight = Number(item.weight)
+  if (Number.isFinite(intake) && Number.isFinite(weight) && intake >= 0 && weight > 0) {
+    return Math.round((intake / weight) * 1000) / 10
+  }
+  return 100
+}
+
+const resolveRecordItemIntake = (item: Pick<FoodRecord['items'][0], 'ratio' | 'intake' | 'weight'>): number => {
+  const intake = Number(item.intake)
+  if (Number.isFinite(intake) && intake > 0) return intake
+  const weight = Number(item.weight)
+  if (!Number.isFinite(weight) || weight <= 0) return 0
+  return Math.round((weight * resolveRecordItemRatio(item) / 100) * 10) / 10
+}
+
 type NutrientDetailKey = keyof Pick<Nutrients,
   'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg' |
   'calciumMg' | 'ironMg' | 'magnesiumMg' | 'zincMg' | 'vitaminARaeMcg' | 'vitaminCMg' |
@@ -143,7 +163,7 @@ const getRecordItemWaterMl = (item: FoodRecord['items'][0]) => {
 }
 
 const getRecordItemNutrientDetailRows = (item: FoodRecord['items'][0]) => {
-  const ratio = Math.max(0, item.ratio ?? 100) / 100
+  const ratio = Math.max(0, resolveRecordItemRatio(item)) / 100
   return NUTRIENT_DETAIL_META.map((meta) => ({
     ...meta,
     value: normalizeNutrientValue(
@@ -235,10 +255,14 @@ function RecordDetailPage() {
           const res = await getSharedFoodRecord(recordId)
           const fetchedRecord = res.record
           setRecord(fetchedRecord)
+          const localProfile = await getCurrentPosterUserProfile(fetchedRecord.user_id)
+          if (localProfile.nickname) setOwnerNickname(localProfile.nickname)
+          if (localProfile.avatar) setOwnerAvatar(localProfile.avatar)
           try {
             const inviterProfile = await getFriendInviteProfile(fetchedRecord.user_id)
-            setOwnerNickname(inviterProfile.nickname || '')
-            setOwnerAvatar(inviterProfile.avatar || '')
+            const mergedProfile = mergePosterUserProfile(inviterProfile, localProfile)
+            setOwnerNickname(mergedProfile.nickname)
+            setOwnerAvatar(mergedProfile.avatar)
             setOwnerInviteCode(inviterProfile.invite_code || getInviteCodeFromUserId(fetchedRecord.user_id))
           } catch {
             setOwnerInviteCode(getInviteCodeFromUserId(fetchedRecord.user_id))
@@ -321,8 +345,8 @@ function RecordDetailPage() {
       (record.items || []).map(item => ({
         name: item.name,
         weight: item.weight,
-        ratio: item.ratio ?? 100,
-        intake: item.intake ?? 0,
+        ratio: resolveRecordItemRatio(item),
+        intake: resolveRecordItemIntake(item),
         nutrients: { ...(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }) }
       }))
     )
@@ -574,7 +598,7 @@ function RecordDetailPage() {
 
   /** 单条食物实际摄入热量（按 ratio） */
   const itemCalorie = (item: FoodRecord['items'][0]) => {
-    const ratio = (item.ratio ?? 100) / 100
+    const ratio = resolveRecordItemRatio(item) / 100
     return ((item.nutrients?.calories ?? 0) * ratio)
   }
 
@@ -928,7 +952,7 @@ function RecordDetailPage() {
         {items.length > 0 ? (
           items.map((item, index) => {
             const cal = itemCalorie(item)
-            const ratio = item.ratio ?? 100
+            const ratio = resolveRecordItemRatio(item)
             const protein = ((item.nutrients?.protein ?? 0) * ratio) / 100
             const carbs = ((item.nutrients?.carbs ?? 0) * ratio) / 100
             const fat = ((item.nutrients?.fat ?? 0) * ratio) / 100
@@ -942,8 +966,11 @@ function RecordDetailPage() {
                   <Text className='food-name'>{item.name}</Text>
                   <Text className='food-meta'>
                     摄入 {item.intake ?? 0}g
-                    {ratio !== 100 ? ` · 约 ${ratio}%` : ''}
                   </Text>
+                  <View className={`food-ratio-badge ${ratio > 100 ? 'food-ratio-badge--over' : ''}`}>
+                    <Text className='iconfont icon-tubiao-zhuzhuangtu food-ratio-icon' />
+                    <Text className='food-ratio-text'>摄入比例 {normalizeDisplayNumber(ratio)}%</Text>
+                  </View>
                   <View className='food-nutrients-detail'>
                     <Text className='nutrient-item'>蛋白 {protein.toFixed(1)}g</Text>
                     <Text className='nutrient-item'>碳水 {carbs.toFixed(1)}g</Text>
@@ -1017,7 +1044,7 @@ function RecordDetailPage() {
             </View>
             {(() => {
               const totalFiber = items.reduce((sum, item) => {
-                const ratio = (item.ratio ?? 100) / 100
+                const ratio = resolveRecordItemRatio(item) / 100
                 return sum + ((item.nutrients?.fiber ?? 0) * ratio)
               }, 0)
               return totalFiber > 0 ? (
@@ -1030,7 +1057,7 @@ function RecordDetailPage() {
             })()}
             {(() => {
               const totalSugar = items.reduce((sum, item) => {
-                const ratio = (item.ratio ?? 100) / 100
+                const ratio = resolveRecordItemRatio(item) / 100
                 return sum + ((item.nutrients?.sugar ?? 0) * ratio)
               }, 0)
               return totalSugar > 0 ? (

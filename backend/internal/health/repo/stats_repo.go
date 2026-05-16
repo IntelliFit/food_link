@@ -121,3 +121,17 @@ func (r *StatsRepo) GetLatestCachedInsight(ctx context.Context, userID string, r
 	}
 	return &row, nil
 }
+
+func (r *StatsRepo) CountInsightGenerationsToday(ctx context.Context, userID string) (int64, error) {
+	loc := time.FixedZone("Asia/Shanghai", 8*60*60)
+	now := time.Now().In(loc)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	end := start.Add(24 * time.Hour)
+
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table((&domain.StatsInsight{}).TableName()).
+		Where("user_id = ? AND created_at >= ? AND created_at < ?", userID, start.UTC(), end.UTC()).
+		Count(&count).Error
+	return count, err
+}

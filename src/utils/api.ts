@@ -186,6 +186,7 @@ export interface FoodItem {
   name: string
   estimatedWeightGrams: number
   originalWeightGrams: number
+  suggestedRatio?: number
   waterMl?: number
   water_ml?: number
   nutrients: Nutrients
@@ -490,6 +491,14 @@ export interface HomeMealRecordEntry {
   id: string
   record_time?: string
   total_calories?: number
+  total_protein?: number
+  total_carbs?: number
+  total_fat?: number
+  water_ml?: number
+  waterMl?: number
+  /** 当前记录内所有食物按实际摄入 / 估算重量汇总后的摄入比例 */
+  intake_ratio?: number
+  intakeRatio?: number
   /** 分析结果餐食标题（描述首行或首条食物名），同餐多选面板与时间与名称同显时会截断 */
   title?: string
   /** 记录图片（单图），供弹层面板直接展示 */
@@ -525,6 +534,9 @@ export interface HomeMealItem {
   /** 该餐次食物含水量聚合（ml） */
   water_ml?: number
   waterMl?: number
+  /** 该餐次所有食物按实际摄入 / 估算重量汇总后的摄入比例 */
+  intake_ratio?: number
+  intakeRatio?: number
   /** 该餐次食物描述（由多条记录标题拼接） */
   description?: string
 }
@@ -544,8 +556,11 @@ export function resolveHomeMealPrimaryRecordId(meal: HomeMealItem | Record<strin
 function normalizeHomeMealItem(raw: unknown): HomeMealItem {
   const row = raw as HomeMealItem
   const entries = Array.isArray(row.meal_record_entries)
-    ? row.meal_record_entries.filter((e) => e && String(e.id || '').trim() !== '')
+    ? row.meal_record_entries
+      .filter((e) => e && String(e.id || '').trim() !== '')
+      .map(normalizeHomeMealRecordEntry)
     : []
+  const fallbackMealRatio = computeMealIntakeRatioFromEntries(entries)
   const images = Array.isArray(row.image_paths)
     ? row.image_paths.filter(Boolean)
     : Array.isArray(row.images)
@@ -562,7 +577,61 @@ function normalizeHomeMealItem(raw: unknown): HomeMealItem {
     fat: row.fat,
     water_ml: typeof row.water_ml === 'number' ? row.water_ml : row.waterMl,
     waterMl: typeof row.waterMl === 'number' ? row.waterMl : row.water_ml,
+    intake_ratio: typeof row.intake_ratio === 'number' ? row.intake_ratio : (typeof row.intakeRatio === 'number' ? row.intakeRatio : fallbackMealRatio),
+    intakeRatio: typeof row.intakeRatio === 'number' ? row.intakeRatio : (typeof row.intake_ratio === 'number' ? row.intake_ratio : fallbackMealRatio),
   }
+}
+
+function normalizeHomeMealRecordEntry(entry: HomeMealRecordEntry): HomeMealRecordEntry {
+  const ratio = typeof entry.intake_ratio === 'number'
+    ? entry.intake_ratio
+    : (typeof entry.intakeRatio === 'number' ? entry.intakeRatio : computeFoodRecordIntakeRatio(entry.full_record))
+  return {
+    ...entry,
+    total_protein: entry.total_protein ?? entry.full_record?.total_protein,
+    total_carbs: entry.total_carbs ?? entry.full_record?.total_carbs,
+    total_fat: entry.total_fat ?? entry.full_record?.total_fat,
+    water_ml: typeof entry.water_ml === 'number' ? entry.water_ml : entry.waterMl,
+    waterMl: typeof entry.waterMl === 'number' ? entry.waterMl : entry.water_ml,
+    intake_ratio: ratio,
+    intakeRatio: ratio,
+  }
+}
+
+function computeMealIntakeRatioFromEntries(entries: HomeMealRecordEntry[]): number | undefined {
+  let totalWeight = 0
+  let totalIntake = 0
+  entries.forEach((entry) => {
+    const totals = computeFoodRecordWeightAndIntake(entry.full_record)
+    totalWeight += totals.weight
+    totalIntake += totals.intake
+  })
+  return totalWeight > 0 ? Math.round((totalIntake / totalWeight) * 1000) / 10 : undefined
+}
+
+function computeFoodRecordIntakeRatio(record?: FoodRecord): number | undefined {
+  const totals = computeFoodRecordWeightAndIntake(record)
+  return totals.weight > 0 ? Math.round((totals.intake / totals.weight) * 1000) / 10 : undefined
+}
+
+function computeFoodRecordWeightAndIntake(record?: FoodRecord): { weight: number; intake: number } {
+  let weightTotal = 0
+  let intakeTotal = 0
+  ;(record?.items || []).forEach((item) => {
+    const weight = Number(item.weight)
+    if (!Number.isFinite(weight) || weight <= 0) return
+    const intake = Number((item as any).intake)
+    const ratio = Number((item as any).ratio)
+    weightTotal += weight
+    if (Number.isFinite(intake) && intake >= 0) {
+      intakeTotal += intake
+    } else if (Number.isFinite(ratio) && ratio >= 0) {
+      intakeTotal += weight * ratio / 100
+    } else {
+      intakeTotal += weight
+    }
+  })
+  return { weight: weightTotal, intake: intakeTotal }
 }
 
 export interface HomeFoodExpiryItem {
@@ -747,6 +816,7 @@ export interface StatsSummary {
   end_date: string
   tdee: number
   streak_days: number
+  recorded_days?: number
   total_calories: number
   avg_calories_per_day: number
   cal_surplus_deficit: number
@@ -1098,6 +1168,7 @@ export interface ReportExtract {
   conclusions?: string[]
   suggestions?: string[]
   medical_notes?: string
+  _image_urls?: string[]
 }
 
 /** 健康档案中的病史/饮食/过敏等 JSON */
@@ -2553,9 +2624,10 @@ export async function saveBodyWeightRecord(value: number, date?: string, clientI
 }
 
 export async function addBodyWaterLog(amountMl: number, date?: string): Promise<{ message: string; item: { id?: string; date: string; amount_ml: number } }> {
+  const apiDate = mapCalendarDateToApi(date)
   const res = await authenticatedRequest('/api/body-metrics/water', {
     method: 'POST',
-    data: { amount_ml: amountMl, date: mapCalendarDateToApi(date) },
+    data: { amount_ml: amountMl, date: apiDate, recorded_on: apiDate },
     timeout: 10000
   })
   if (res.statusCode !== 200) {
@@ -2566,9 +2638,10 @@ export async function addBodyWaterLog(amountMl: number, date?: string): Promise<
 }
 
 export async function resetBodyWaterLogs(date?: string): Promise<{ message: string; deleted_count: number; date: string }> {
+  const apiDate = mapCalendarDateToApi(date)
   const res = await authenticatedRequest('/api/body-metrics/water/reset', {
     method: 'POST',
-    data: { date: mapCalendarDateToApi(date) },
+    data: { date: apiDate, recorded_on: apiDate },
     timeout: 10000
   })
   if (res.statusCode !== 200) {
@@ -2911,24 +2984,30 @@ export async function getMembershipPlans(): Promise<MembershipPlan[]> {
 }
 
 // 会员状态短缓存：避免短时间内（如菜单弹窗→点击）重复请求
-let _membershipCache: { data: MembershipStatus; expiresAt: number } | null = null
+const _membershipCache = new Map<string, { data: MembershipStatus; expiresAt: number }>()
 let _membershipPending: Promise<MembershipStatus> | null = null
+let _membershipPendingKey = ''
 const MEMBERSHIP_CACHE_TTL_MS = 30_000
 
 /**
  * 获取当前用户会员状态（带 30s 缓存，复用 in-flight 请求）
+ * @param date 可选，查询指定日期的积分状态（YYYY-MM-DD），不传则查今天
  */
-export async function getMyMembership(): Promise<MembershipStatus> {
-  if (_membershipCache && Date.now() < _membershipCache.expiresAt) {
-    return _membershipCache.data
+export async function getMyMembership(date?: string): Promise<MembershipStatus> {
+  const key = (date || '').trim()
+  const cached = _membershipCache.get(key)
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.data
   }
-  if (_membershipPending) {
+  if (_membershipPending && _membershipPendingKey === key) {
     return _membershipPending
   }
 
+  _membershipPendingKey = key
   _membershipPending = (async () => {
     try {
-      const response = await authenticatedRequest('/api/membership/me', {
+      const url = key ? `/api/membership/me?date=${encodeURIComponent(key)}` : '/api/membership/me'
+      const response = await authenticatedRequest(url, {
         method: 'GET',
         timeout: 15000
       })
@@ -2939,13 +3018,14 @@ export async function getMyMembership(): Promise<MembershipStatus> {
       }
 
       const data = response.data as MembershipStatus
-      _membershipCache = { data, expiresAt: Date.now() + MEMBERSHIP_CACHE_TTL_MS }
+      _membershipCache.set(key, { data, expiresAt: Date.now() + MEMBERSHIP_CACHE_TTL_MS })
       return data
     } catch (error: any) {
       console.error('获取会员状态失败:', error)
       throw new Error(error.message || '获取会员状态失败')
     } finally {
       _membershipPending = null
+      _membershipPendingKey = ''
     }
   })()
 
@@ -4425,6 +4505,8 @@ export interface ExerciseTaskResultPayload {
   /** 估算时使用的用户画像快照 */
   profile_snapshot?: Record<string, any> | null
   today_total: number
+  /** AI 自动识别的运动类型（如跑步、游泳等） */
+  exercise_type?: string | null
 }
 
 /** 提交运动分析任务（后台 Worker 调用大模型并落库；返回 task_id，需轮询 getAnalyzeTask） */

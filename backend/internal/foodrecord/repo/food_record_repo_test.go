@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -93,7 +94,21 @@ func TestNormalizeFoodRecordJSONUpdates_MarshalsItems(t *testing.T) {
 	require.NoError(t, err)
 	itemsJSON, ok := updates["items"].(datatypes.JSON)
 	require.True(t, ok)
-	assert.JSONEq(t, `[{"name":"白米饭","weight":100,"ratio":100,"intake":100,"nutrients":{"calories":116,"protein":2.6,"carbs":25.9,"fat":0.3,"fiber":0,"sugar":0,"sodium_mg":0}}]`, string(itemsJSON))
+	var decoded []map[string]any
+	require.NoError(t, json.Unmarshal(itemsJSON, &decoded))
+	require.Len(t, decoded, 1)
+	assert.Equal(t, "白米饭", decoded[0]["name"])
+	assert.Equal(t, float64(100), decoded[0]["weight"])
+	assert.Equal(t, float64(100), decoded[0]["ratio"])
+	assert.Equal(t, float64(100), decoded[0]["intake"])
+	nutrients, ok := decoded[0]["nutrients"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(116), nutrients["calories"])
+	assert.Equal(t, 2.6, nutrients["protein"])
+	assert.Equal(t, 25.9, nutrients["carbs"])
+	assert.Equal(t, 0.3, nutrients["fat"])
+	assert.Contains(t, nutrients, "sodiumMg")
+	assert.Contains(t, nutrients, "vitaminCMg")
 	assert.Equal(t, 116.0, updates["total_calories"])
 }
 

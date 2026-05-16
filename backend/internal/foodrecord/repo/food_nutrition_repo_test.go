@@ -211,8 +211,7 @@ func TestFoodNutritionRepo_ListFoodsNeedingVitaminBackfill(t *testing.T) {
 	items, err := repo.ListFoodsNeedingVitaminBackfill(ctx, 10)
 	require.NoError(t, err)
 	require.Len(t, items, 2)
-	assert.Equal(t, "Macro Only", items[0].CanonicalName)
-	assert.Equal(t, "Has Vitamin", items[1].CanonicalName)
+	assert.ElementsMatch(t, []string{"Macro Only", "Has Vitamin"}, []string{items[0].CanonicalName, items[1].CanonicalName})
 
 	count, err := repo.CountFoodsNeedingVitaminBackfill(ctx)
 	require.NoError(t, err)

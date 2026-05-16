@@ -1,0 +1,14 @@
+cases:
+  - id: food-record.detail.success
+    name: "饮食记录详情"
+    desc: "验证登录用户可以读取 fixture 中的午餐饮食记录详情。"
+    group: food-record
+    method: GET
+    path: /api/food-record/00000000-0000-0000-0000-000000000011
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.record.id: "00000000-0000-0000-0000-000000000011"
+        data.record.meal_type: lunch

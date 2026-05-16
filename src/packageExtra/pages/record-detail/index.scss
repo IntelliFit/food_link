@@ -289,6 +289,34 @@
     line-height: 1.5;
   }
 
+  .food-ratio-badge {
+    width: fit-content;
+    min-height: 40rpx;
+    display: flex;
+    align-items: center;
+    gap: 6rpx;
+    padding: 4rpx 12rpx;
+    border-radius: 8rpx;
+    background: #f5f3ff;
+    color: #7c3aed;
+
+    &.food-ratio-badge--over {
+      background: #fffbeb;
+      color: #d97706;
+    }
+  }
+
+  .food-ratio-icon {
+    font-size: 20rpx;
+    line-height: 1;
+  }
+
+  .food-ratio-text {
+    font-size: 22rpx;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
   .food-nutrients-detail {
     display: flex;
     flex-wrap: wrap;
@@ -1322,6 +1350,16 @@ button.poster-share-channel--btn {
   .food-info .food-meta,
   .food-info .food-nutrients-detail .nutrient-item {
     color: rgba(214, 226, 220, 0.58);
+  }
+
+  .food-info .food-ratio-badge {
+    background: rgba(139, 92, 246, 0.16);
+    color: #c4b5fd;
+
+    &.food-ratio-badge--over {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fbbf24;
+    }
   }
 
   .food-nutrient-toggle-text {

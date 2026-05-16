@@ -25,6 +25,79 @@ function normalizeDisplayNumber(value: unknown): number {
   return Number.isFinite(numeric) ? numeric : 0
 }
 
+function resolveFoodItemIntakeRatio(item: FoodRecord['items'][number]): number {
+  const explicitRatio = Number((item as any).ratio)
+  if (Number.isFinite(explicitRatio) && explicitRatio >= 0) {
+    return explicitRatio
+  }
+  const intake = Number((item as any).intake)
+  const weight = Number((item as any).weight)
+  if (Number.isFinite(intake) && intake >= 0 && Number.isFinite(weight) && weight > 0) {
+    return (intake / weight) * 100
+  }
+  return 100
+}
+
+function resolveFoodItemIntakeGrams(item: FoodRecord['items'][number]): number {
+  const intake = Number((item as any).intake)
+  if (Number.isFinite(intake) && intake >= 0) return intake
+  const weight = Number((item as any).weight)
+  if (!Number.isFinite(weight) || weight <= 0) return 0
+  return weight * resolveFoodItemIntakeRatio(item) / 100
+}
+
+function formatIntakeRatioForPoster(value: unknown): string {
+  const ratio = Number(value)
+  if (!Number.isFinite(ratio)) return '100%'
+  const rounded = Math.round(ratio * 10) / 10
+  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}%`
+}
+
+function truncatePosterText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  const source = String(text || '')
+  if (maxWidth <= 0) return ''
+  if (ctx.measureText(source).width <= maxWidth) return source
+  const ellipsis = '…'
+  let lo = 0
+  let hi = source.length
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    if (ctx.measureText(source.slice(0, mid) + ellipsis).width <= maxWidth) {
+      lo = mid
+    } else {
+      hi = mid - 1
+    }
+  }
+  return source.slice(0, lo) + ellipsis
+}
+
+function drawPosterAvatar(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  avatarImage: { width: number; height: number } | null | undefined,
+  displayName: string
+): void {
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2)
+  ctx.clip()
+  if (avatarImage) {
+    ctx.drawImage(avatarImage as CanvasImageSource, x, y, size, size)
+  } else {
+    ctx.fillStyle = '#dbece5'
+    ctx.fillRect(x, y, size, size)
+    ctx.fillStyle = '#2f6b55'
+    ctx.font = 'bold 15px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    const initial = (displayName || '食').trim().slice(0, 1) || '食'
+    ctx.fillText(initial, x + size / 2, y + size / 2 + 0.5)
+  }
+  ctx.restore()
+}
+
 export const POSTER_WIDTH  = 375
 export const POSTER_HEIGHT = 812
 
@@ -455,24 +528,39 @@ export function drawRecordPoster(
   
   for (let i = 0; i < Math.min(items.length, maxItems); i++) {
     const item = items[i]
-    const ratio = (item.ratio ?? 100) / 100
+    const ratioValue = resolveFoodItemIntakeRatio(item)
+    const ratio = ratioValue / 100
     const itemCal = Math.round((item.nutrients?.calories ?? 0) * ratio)
-    const nm = item.name.length > 12 ? item.name.slice(0, 12) + '…' : item.name
     
     const itemY = cy
     const itemH = 40
+    const rightInfoText = `${Math.round(resolveFoodItemIntakeGrams(item))}g · ${itemCal} kcal`
+    ctx.font = '14px sans-serif'
+    const rightInfoW = ctx.measureText(rightInfoText).width
+    const nameRatioGap = 3
+    const ratioText = `（${formatIntakeRatioForPoster(ratioValue)}）`
+    ctx.font = '12px sans-serif'
+    const ratioTextW = ctx.measureText(ratioText).width
+    const leftMaxW = Math.max(72, contentW - rightInfoW - 16)
+    ctx.font = '600 16px sans-serif'
+    const nm = truncatePosterText(ctx, item.name, Math.max(24, leftMaxW - ratioTextW - nameRatioGap))
     
-    // 食物名称（左侧，放大）
+    // 食物名称 + 摄入比例（比例小号灰色，贴在名称右侧）
     ctx.fillStyle = TEXT_INK
     ctx.font = '600 16px sans-serif'
-    ctx.fillText(nm, cx, itemY + itemH / 2)
+    ctx.textAlign = 'left'
+    const nameY = itemY + itemH / 2
+    ctx.fillText(nm, cx, nameY)
+    const nameW = ctx.measureText(nm).width
+    ctx.fillStyle = TEXT_SUB
+    ctx.font = '12px sans-serif'
+    ctx.fillText(ratioText, cx + nameW + nameRatioGap, nameY)
     
     // 右侧信息：克数 · 热量（放大）
     ctx.textAlign = 'right'
     ctx.fillStyle = TEXT_MUTED
     ctx.font = '14px sans-serif'
-    const infoText = `${item.intake ?? 0}g · ${itemCal} kcal`
-    ctx.fillText(infoText, cx + contentW, itemY + itemH / 2)
+    ctx.fillText(rightInfoText, cx + contentW, itemY + itemH / 2)
     
     ctx.textAlign = 'left'
     cy += itemH + 2
@@ -491,22 +579,15 @@ export function drawRecordPoster(
   // Footer：紧跟食物列表，避免大块留白（总高度 H 由 computePosterHeight 与之一致）
   const footerY = cy + LAYOUT_FOOTER_GAP_AFTER_LIST
   const avatarSz = 36
-  const titleX = sharerAvatarImage ? cx + avatarSz + 12 : cx
+  const displayName = (sharerNickname || '').trim()
+  const titleX = cx + avatarSz + 12
 
-  if (sharerAvatarImage) {
-    ctx.save()
-    ctx.beginPath()
-    ctx.arc(cx + avatarSz / 2, footerY + avatarSz / 2, avatarSz / 2, 0, Math.PI * 2)
-    ctx.clip()
-    ctx.drawImage(sharerAvatarImage as CanvasImageSource, cx, footerY, avatarSz, avatarSz)
-    ctx.restore()
-  }
+  drawPosterAvatar(ctx, cx, footerY, avatarSz, sharerAvatarImage, displayName)
 
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = TEXT_INK
   ctx.font = 'bold 15px sans-serif'
-  const displayName = (sharerNickname || '').trim()
   const nameText = displayName ? `${displayName} 的饮食分享` : '智健食探'
   ctx.fillText(nameText, titleX, footerY + 16)
 
@@ -709,6 +790,7 @@ export interface DayRecordPosterMeal {
   protein: number
   carbs: number
   fat: number
+  intakeRatio?: number
 }
 
 export interface DayRecordPosterInput {
@@ -762,8 +844,8 @@ export function computeDayRecordPosterHeight(mealCount: number): number {
   const TOP = 48
   const HEADER_ROW = 32   // date pill + energy dots row
   const HEADER_GAP = 18
-  const INTAKE_ROW = 28
-  const INTAKE_GAP = 16
+  const INTAKE_ROW = 58
+  const INTAKE_GAP = 18
   const MACRO_CARD_H = 64
   const MACRO_GAP = 16
   const HEADER = TOP + HEADER_ROW + HEADER_GAP + INTAKE_ROW + INTAKE_GAP + MACRO_CARD_H + MACRO_GAP
@@ -875,18 +957,63 @@ export function drawDayRecordPoster(
 
   cy += 32 + 18
 
-  // ---- 今日摄入：标签和数值同一基线对齐，数值不加粗 ----
-  const intakeVal = `${formatDRKcal(d.totalIntake)} / ${formatDRKcal(d.targetIntake)} kcal`
+  // ---- 今日摄入进度：已摄入与目标放在进度条上方，提升一眼判断感 ----
+  const safeTarget = d.targetIntake > 0 ? d.targetIntake : 1
+  const intakeRatio = Math.max(0, d.totalIntake / safeTarget)
+  const progressPct = Math.min(intakeRatio, 1)
+  const intakeColor = intakeRatio > 1.05 ? DR_FAT : DR_ACCENT
+  const progressX = PAD
+  const progressW = contentW
+  const progressTrackH = 10
+  const progressTrackY = cy + 40
+  const progressFillW = Math.max(progressTrackH, progressW * progressPct)
+
+  ctx.textBaseline = 'middle'
   ctx.textAlign = 'left'
-  ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = DR_SUB
-  ctx.font = '14px sans-serif'
-  ctx.fillText('今日摄入', PAD, cy + 18)
-  const intakeLabelW = ctx.measureText('今日摄入').width + 10
+  ctx.font = '12px sans-serif'
+  ctx.fillText('今日摄入', progressX, cy + 9)
+
   ctx.fillStyle = DR_TITLE
-  ctx.font = '24px sans-serif'
-  ctx.fillText(intakeVal, PAD + intakeLabelW, cy + 20)
-  cy += 28 + 16
+  ctx.font = 'bold 22px sans-serif'
+  const intakeNumberText = formatDRKcal(d.totalIntake)
+  ctx.fillText(intakeNumberText, progressX, cy + 30)
+  const intakeNumberW = ctx.measureText(intakeNumberText).width
+  ctx.fillStyle = DR_SUB
+  ctx.font = '12px sans-serif'
+  ctx.fillText('kcal', progressX + intakeNumberW + 5, cy + 31)
+
+  ctx.textAlign = 'right'
+  ctx.fillStyle = DR_SUB
+  ctx.font = '12px sans-serif'
+  ctx.fillText('目标', progressX + progressW, cy + 9)
+  ctx.fillStyle = DR_MUTED
+  ctx.font = '600 14px sans-serif'
+  ctx.fillText(`${formatDRKcal(d.targetIntake)} kcal`, progressX + progressW, cy + 30)
+
+  drawRoundedRect(ctx, progressX, progressTrackY, progressW, progressTrackH, progressTrackH / 2)
+  ctx.fillStyle = 'rgba(92, 184, 150, 0.12)'
+  ctx.fill()
+
+  ctx.save()
+  drawRoundedRect(ctx, progressX, progressTrackY, progressW, progressTrackH, progressTrackH / 2)
+  ctx.clip()
+  const progressGrad = ctx.createLinearGradient(progressX, 0, progressX + progressW, 0)
+  progressGrad.addColorStop(0, 'rgba(92, 184, 150, 0.88)')
+  progressGrad.addColorStop(1, intakeColor)
+  ctx.fillStyle = progressGrad
+  ctx.fillRect(progressX, progressTrackY, progressFillW, progressTrackH)
+  ctx.restore()
+
+  const markerX = progressX + progressW * progressPct
+  ctx.beginPath()
+  ctx.arc(markerX, progressTrackY + progressTrackH / 2, 5, 0, Math.PI * 2)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  ctx.lineWidth = 2
+  ctx.strokeStyle = intakeColor
+  ctx.stroke()
+  cy += 58 + 18
 
   // 三张宏量小卡片（一行，无图标，文字加大）
   const macroCardW = (contentW - 12) / 3
@@ -978,8 +1105,20 @@ export function drawDayRecordPoster(
     ctx.fillStyle = DR_TITLE
     ctx.font = 'bold 14px sans-serif'
     const maxNameW = tagX - textLeft - 8
-    const foodName = truncateDRText(ctx, meal.foodName || '未命名食物', maxNameW)
+    const ratioText = typeof meal.intakeRatio === 'number'
+      ? `（${formatIntakeRatioForPoster(meal.intakeRatio)}）`
+      : ''
+    ctx.font = '12px sans-serif'
+    const ratioTextW = ratioText ? ctx.measureText(ratioText).width : 0
+    ctx.font = 'bold 14px sans-serif'
+    const foodName = truncateDRText(ctx, meal.foodName || '未命名食物', Math.max(32, maxNameW - ratioTextW - 3))
     ctx.fillText(foodName, textLeft, row1Y)
+    if (ratioText) {
+      const foodNameW = ctx.measureText(foodName).width
+      ctx.fillStyle = DR_SUB
+      ctx.font = '12px sans-serif'
+      ctx.fillText(ratioText, textLeft + foodNameW + 3, row1Y)
+    }
 
     // 第二行：时间 + 热量
     const row2Y = cy + 48
@@ -1022,22 +1161,15 @@ export function drawDayRecordPoster(
   // ---- Footer：完全复用 drawRecordPoster 的底部设计 ----
   const footerY = cy + 45
   const avatarSz = 36
-  const titleX = sharerAvatarImage ? cx + avatarSz + 12 : cx
+  const displayName = (sharerNickname || '').trim()
+  const titleX = cx + avatarSz + 12
 
-  if (sharerAvatarImage) {
-    ctx.save()
-    ctx.beginPath()
-    ctx.arc(cx + avatarSz / 2, footerY + avatarSz / 2, avatarSz / 2, 0, Math.PI * 2)
-    ctx.clip()
-    ctx.drawImage(sharerAvatarImage as CanvasImageSource, cx, footerY, avatarSz, avatarSz)
-    ctx.restore()
-  }
+  drawPosterAvatar(ctx, cx, footerY, avatarSz, sharerAvatarImage, displayName)
 
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
   ctx.fillStyle = TEXT_INK
   ctx.font = 'bold 15px sans-serif'
-  const displayName = (sharerNickname || '').trim()
   const nameText = displayName ? `${displayName} 的饮食分享` : '智健食探'
   ctx.fillText(nameText, titleX, footerY + 16)
 

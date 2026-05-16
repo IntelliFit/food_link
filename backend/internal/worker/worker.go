@@ -29,12 +29,14 @@ import (
 )
 
 const (
-	precisionRefineEnabled = false
-	precisionRefineTimeout = 25 * time.Second
-	taskLeaseDuration      = 5 * time.Minute
-	taskLeaseExtendEvery   = 30 * time.Second
-	taskRecoveryInterval   = 30 * time.Second
-	taskRecoveryBatchSize  = 200
+	precisionPlanModelName   = "doubao"
+	precisionWeightModelName = "ofox-gemini"
+	precisionRefineEnabled   = true
+	precisionRefineTimeout   = 25 * time.Second
+	taskLeaseDuration        = 5 * time.Minute
+	taskLeaseExtendEvery     = 30 * time.Second
+	taskRecoveryInterval     = 30 * time.Second
+	taskRecoveryBatchSize    = 200
 )
 
 var errTaskAttemptLost = errors.New("task attempt no longer owns task")
@@ -904,6 +906,7 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 		input.PreviousResult = mapFromAny(firstNonNil(task.Payload["previousResult"], latestInputs["previousResult"]))
 	}
 	input.AnalysisEngine = "db_first"
+	input.ModelName = precisionPlanModelName
 	standardMode := "standard"
 	input.ExecutionMode = &standardMode
 
@@ -1192,7 +1195,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		imageURLs = []string{imageURL}
 	}
 	prompt := buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext, referenceObjects, previousRounds)
-	result, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, stringFromMap(task.Payload, "modelName"))
+	result, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, precisionPlanModelName)
 	if err != nil {
 		return err
 	}
@@ -1234,7 +1237,8 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 			"image_url":            imageURL,
 			"image_urls":           imageURLs,
 			"text":                 firstNonEmptyString(latestInputs, "text"),
-			"modelName":            stringFromMap(task.Payload, "modelName"),
+			"modelName":            precisionWeightModelName,
+			"planner_modelName":    precisionPlanModelName,
 		}
 		groupPayload["round_index"] = roundIndex
 		groupPayload["group_index"] = groupIndex
@@ -1393,7 +1397,7 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 		}
 		return err
 	}
-	parsed, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, stringFromMap(task.Payload, "modelName"))
+	parsed, err := r.analyze.RunPrecisionJSONWithImagesNoFallback(ctx, sourceType, prompt, imageURLs, precisionWeightModelName)
 	if err != nil {
 		if estimate != nil {
 			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": err.Error()})
@@ -1417,7 +1421,7 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 	}
 	initialWeights := precisionWeightSnapshot(parsedItems)
 	refinedNotes := []string{}
-	refinedItems, notes, refineErr := r.maybeRefinePrecisionWeights(ctx, sourceType, parsedItems, plannedItems, rawInputForRefine, additionalContext, referenceObjects, imageURLs, stringFromMap(task.Payload, "modelName"))
+	refinedItems, notes, refineErr := r.maybeRefinePrecisionWeights(ctx, sourceType, parsedItems, plannedItems, rawInputForRefine, additionalContext, referenceObjects, imageURLs, precisionWeightModelName)
 	if refineErr != nil {
 		r.log.Warn("precision refine skipped",
 			zap.String("task_id", task.ID),
@@ -2157,21 +2161,7 @@ var precisionWeightRefinementKeywords = []string{
 }
 
 func shouldRefinePrecisionWeights(plannedItems []map[string]any) bool {
-	for _, item := range plannedItems {
-		if item == nil {
-			continue
-		}
-		name := firstNonEmptyString(item, "item_name", "name")
-		if stringFromMap(item, "uncertainty_level") == "high" || boolFromAny(item["requires_reference"]) {
-			return true
-		}
-		for _, keyword := range precisionWeightRefinementKeywords {
-			if strings.Contains(name, keyword) {
-				return true
-			}
-		}
-	}
-	return false
+	return len(plannedItems) > 0
 }
 
 func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, additionalContext string, referenceObjects []map[string]any) string {
@@ -2336,7 +2326,7 @@ func (r *Runner) maybeRefinePrecisionWeights(
 	prompt := buildPrecisionWeightRefinePrompt(parsedItems, rawInput, additionalContext, referenceObjects)
 	refineCtx, cancel := context.WithTimeout(ctx, precisionRefineTimeout)
 	defer cancel()
-	parsed, err := r.analyze.RunPrecisionJSONWithImagesTemperature(refineCtx, sourceType, prompt, imageURLs, modelName, 0.1)
+	parsed, err := r.analyze.RunPrecisionJSONWithImagesTemperatureNoFallback(refineCtx, sourceType, prompt, imageURLs, modelName, 0.1)
 	if err != nil {
 		return parsedItems, nil, err
 	}
@@ -3175,6 +3165,12 @@ func (r *Runner) completeTask(ctx context.Context, task *domain.AnalysisTask, re
 	}
 	task.Status = "done"
 	task.Result = result
+	if err := r.captureCorrectionFeedbackSample(ctx, task, result, ""); err != nil {
+		r.log.Warn("capture correction feedback sample failed",
+			zap.String("task_id", task.ID),
+			zap.Error(err),
+		)
+	}
 	return nil
 }
 
@@ -3214,6 +3210,12 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	}
 	task.Status = "failed"
 	task.ErrorMessage = &msg
+	if err := r.captureCorrectionFeedbackSample(ctx, task, nil, msg); err != nil {
+		r.log.Warn("capture failed correction feedback sample failed",
+			zap.String("task_id", task.ID),
+			zap.Error(err),
+		)
+	}
 	if task.TaskType == "precision_item_estimate" && r.precision != nil {
 		if estimate, err := r.precision.GetItemEstimateBySourceTask(ctx, task.ID); err == nil && estimate != nil {
 			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": msg, "updated_at": time.Now()})
@@ -3226,6 +3228,57 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 		zap.String("error", msg),
 	)
 	return nil
+}
+
+func (r *Runner) captureCorrectionFeedbackSample(ctx context.Context, task *domain.AnalysisTask, result map[string]any, errorMessage string) error {
+	if r == nil || r.tasks == nil || task == nil || task.Payload == nil {
+		return nil
+	}
+	if !boolFromAny(task.Payload["is_correction"]) {
+		return nil
+	}
+	sourceTaskID := strings.TrimSpace(stringFromMap(task.Payload, "correction_source_task_id"))
+	if sourceTaskID == "" {
+		return nil
+	}
+	rootTaskID := strings.TrimSpace(stringFromMap(task.Payload, "correction_root_task_id"))
+	if rootTaskID == "" {
+		rootTaskID = sourceTaskID
+	}
+	modelName := firstNonEmptyString(result, "model_name")
+	if modelName == "" {
+		modelName = stringFromMap(task.Payload, "modelName")
+	}
+	analysisEngine := firstNonEmptyString(result, "analysis_engine")
+	if analysisEngine == "" {
+		analysisEngine = stringFromMap(task.Payload, "analysis_engine")
+	}
+	feedbackType := "correction"
+	var errPtr *string
+	if strings.TrimSpace(errorMessage) != "" {
+		feedbackType = "failed"
+		errPtr = stringPtr(errorMessage)
+	}
+	afterResult := result
+	if afterResult == nil {
+		afterResult = map[string]any{}
+	}
+	sample := &domain.AnalysisFeedbackSample{
+		UserID:              task.UserID,
+		FeedbackType:        feedbackType,
+		SourceTaskID:        stringPtr(sourceTaskID),
+		CorrectionTaskID:    stringPtr(task.ID),
+		RootTaskID:          stringPtr(rootTaskID),
+		TaskType:            task.TaskType,
+		ModelName:           optionalStringPtr(modelName),
+		AnalysisEngine:      optionalStringPtr(analysisEngine),
+		BeforeResult:        mapFromAny(task.Payload["previousResult"]),
+		UserCorrectionItems: extractItems(task.Payload["correctionItems"]),
+		AfterResult:         afterResult,
+		PayloadSnapshot:     task.Payload,
+		ErrorMessage:        errPtr,
+	}
+	return r.tasks.UpsertFeedbackSample(ctx, sample)
 }
 
 func (r *Runner) refundTaskCredits(ctx context.Context, task *domain.AnalysisTask) {
@@ -3345,6 +3398,7 @@ func analyzeInputFromTask(task *domain.AnalysisTask) analyzeservice.AnalyzeInput
 		ActivityTiming:    stringFromMap(payload, "activity_timing"),
 		ModelName:         stringFromMap(payload, "modelName"),
 		AnalysisEngine:    stringFromMap(payload, "analysis_engine"),
+		IsMultiView:       boolFromAny(payload["is_multi_view"]),
 		PreviousResult:    mapFromAny(payload["previousResult"]),
 		CorrectionItems:   extractItems(payload["correctionItems"]),
 	}
@@ -3419,6 +3473,18 @@ func stringPtrValue(value *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*value)
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func optionalStringPtr(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func taskImageCount(task *domain.AnalysisTask) int {

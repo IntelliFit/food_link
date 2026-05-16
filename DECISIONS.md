@@ -1,4 +1,129 @@
+- `2026-05-14`: Backend API contract tests use a Go-native YAML-driven runner:
+  - Global settings stay in `backend/e2e-test/suite.yaml`; new route-specific cases should be added under `backend/e2e-test/cases/<route-or-module>/*.yaml`; shared fixture data belongs under `backend/e2e-test/fixtures/`.
+  - The E2E CLI, runner, assets, and guide are kept together under `backend/e2e-test/`; use `go run ./e2e-test/cmd/api-contract-test` from `backend/`.
+  - E2E metadata uses `id` for stable machine-readable selection, `name` for short human-readable Chinese output, and `desc` for detailed human-readable behavior notes.
+  - The runner builds the real Gin app through `internal/app.New`, disables OTel and background workers, and sends requests in-process through `httpexpect`.
+  - Each default run creates a fresh PostgreSQL database using the configured server, runs the existing Go AutoMigrate, applies seed SQL, and drops the database afterward. `--keep-db` is only for debugging.
+  - Authenticated cases use named users from the YAML suite and signed JWTs generated with the configured JWT secret; `test_backend_cookie` is reserved for internal test-backend routes.
+  - Route smoke cases are shallow reachability checks; explicit YAML cases remain the source of real response contract assertions.
+  - Workflow cases can use `capture` to save response JSON fields, `{{var}}` substitution to pass values into later requests/assertions, and `db_assert` to verify side effects in the same temporary database. Dependent workflow steps should stay in the same case file and in execution order.
+
 # DECISIONS
+
+- `2026-05-16`: 食物分析等待页互动卡口径：
+  - 等待页的 `WAITING_INTERACTION_CARDS` 应保持大题库，不再只放少量固定题。
+  - 互动内容优先覆盖用户高频饮食决策：进食顺序、主食份量、蛋白质、控油控糖、外卖、火锅、奶茶、夜宵、聚餐、轻食、记录习惯等。
+  - 展示逻辑应优先从本地未看过的互动卡中随机抽取，整套题库看完后再重置新一轮，避免用户连续看到同一张卡。
+
+- `2026-05-16`: 食物识别模型分工口径：
+  - 普通图片模式固定走 Doubao 识别食物名称、克重和 waterMl，然后继续用 db_first 营养库回算营养。
+  - 纠错任务固定走 Doubao，并保持 db_first；纠错不使用 Gemini 估重链路。
+  - 精准模式拆成两阶段：Doubao 负责 planner/食物主体与中国菜种类识别；Gemini (`ofox-gemini`) 负责分项重量估计。
+  - 精准模式的 Gemini 估重调用不允许静默 fallback 到 Doubao，避免重量质量退回普通识别水平。
+  - 精准模式对所有 planned items 启用重量复核，复核同样使用 Gemini no-fallback；营养仍由后端 db_first 统一回算。
+
+- `2026-05-15`: 分析页面板命名与归类口径：
+  - 分析页三段面板为 `健康指数 / AI分析 / 热量分布`。
+  - `AI分析` 面板承载 `AI 风险解读`，不再放在健康指数底部；该内容直接展开显示完整正文，不使用点击卡片、折叠或底部详情弹层。
+  - `AI 风险解读` 在 `AI分析` 中不使用独立边框或渐变背景，保持普通内容卡片呈现。
+  - `热量分布` 面板按顺序承载 `热量摄入趋势`、`宏量营养结构`、`餐次热量分布`、`长期健康指标` 四个板块。
+  - 长期健康指标中的体重趋势使用折线图表达，不再使用日期/体重胶囊列表作为主要可视化。
+
+- `2026-05-15`: 体检报告上传统一最多 3 张：
+  - 健康档案引导页和健康档案查看/编辑页的体检报告上传都应限制为最多 3 张图片。
+  - 多张报告图片按逐张上传后的 URL 数组处理，提交识别任务和档案字段时使用逗号拼接字符串，保持后端当前 `report_image_url` / `submitReportExtractionTask()` 协议不变。
+  - 引导页允许用户在保存健康档案前预览 1/2/3 张报告图片；保存成功后再后台提交识别任务，不阻塞档案保存。
+
+- `2026-05-15`: 首页记录菜单入口配色口径：
+  - 点击卡路里/记录按钮后打开的记录菜单，顶部 `拍照识别 / 相册上传 / 文本输入 / 手动输入` 四个入口使用低饱和 tone，不再使用高饱和红绿橙蓝。
+  - 配色风格对齐“我的”页功能入口：柔绿、灰蓝、米金、灰紫；每个入口同时具备浅色卡片背景、浅边框和淡色图标槽。
+  - 记录菜单底部快捷入口（`我的收藏`、`识别记录`）不展示左侧图标槽；同一行最右侧统一使用项目 iconfont 的向右箭头。
+  - 暗色模式下使用同色相低透明度背景/边框，保持克制而可辨识。
+
+- `2026-05-15`: 分析页布局分区口径：
+  - 周期选择（`近一周/近一个月`）放在页面左上角固定区域，通过下拉/ActionSheet 切换，不再占用内容区第一行分段控件。
+  - 分析页内容区顶部使用三段面板：`健康指数`、`营养证据`、`结构指标`。
+  - 默认展示 `健康指数`；`营养证据` 承载热量证据和宏量结构证据；`结构指标` 承载餐次分布和长期健康指标。
+  - 为减少板块堆叠，记录分布和连续记录卡片不再作为当前分析页面板中的可见卡片。
+  - `我的关注` 不再作为整张卡片展示；应作为健康指数卡片右侧的小按钮，点击后用底部浮层定制 6 个关注方向，浮层需要盖过并隐藏底部导航。
+  - 营养/结构面板内部卡片默认展开；卡片标题应描述内容本身，避免继续使用“证据”作为标题后缀。
+  - 营养/结构面板内卡片标题区统一左对齐。
+  - 健康友好度小卡片的详情入口应为右下角 `图标 + 更多`，不使用居中的“查看更多”横线分隔；整卡仍可点击打开详情。
+  - 分析页底部弹层（我的关注、友好度详情、AI 风险解读）层级、遮罩、最大高度和安全区留白应保持一致，避免被自定义 tabBar 覆盖。
+  - 健康指数主卡中的 4 个概览指标应一行四列展示，不使用独立块背景和边框，仅保留文字层级与间距。
+
+- `2026-05-14`: 二次纠错样本不再复用 `critical_samples_weapp`：
+  - `critical_samples_weapp` 只适合旧式单食物重量偏差样本，不能承载“纠错前结果数组 / 用户纠错数组 / 二次分析结果数组”。
+  - 新增稳定表 `analysis_feedback_samples` 存 AI 纠错反馈样本，核心字段包括 `source_task_id`、`correction_task_id`、`root_task_id`、`model_name`、`analysis_engine`、`before_result`、`user_correction_items`、`after_result`、`payload_snapshot`、`error_message`。
+  - 用户在结果页点击“识别有误？点击纠错”并执行“重新智能分析”后，后端以 `analysis_tasks.payload.is_correction=true` 为准，在 worker 完成或失败纠错任务时自动 upsert 一条样本；`correction_task_id` 是唯一键，失败后重试成功可覆盖同一条样本。
+
+- `2026-05-13`: 健康档案引导页非选项题默认可继续：
+  - 用户画像/健康档案引导页中，身高、体重、作息、补充信息、体检报告等非选项题应默认允许点击下一步。
+  - 身高默认值为 `170cm`，体重默认值为 `60kg`；如果用户没有拨动对应组件，提交健康档案时也应保存这些默认值，不能只让页面跳过但最终保存失败。
+  - 性别、饮食目标、活动水平等选项题仍按当前业务要求等待用户选择。
+
+- `2026-05-13`: “修改食物参数”弹层不再提供饮食目标编辑：
+  - 首页今日餐食的 `MealRecordEditModal` 只保留餐次、运动时机和食物明细参数编辑。
+  - 该弹层保存时不再提交 `diet_goal`，避免用户在食物参数编辑里继续修改饮食目标。
+  - 记录详情页同名编辑弹层本来只编辑食物明细，继续保持不展示饮食目标。
+
+- `2026-05-13`: 健康档案作息习惯改为小时级入睡/起床选择：
+  - 作息仍复用 `health_condition.routine_type` 字段，不新增数据库列。
+  - 前端保存统一写入格式化文本 `HH:00 睡，HH:00 起`，例如 `23:00 睡，07:00 起`。
+  - 引导页展示常见作息快捷项用于快速填充两个小时；健康档案修改页只展示两个小时拨动选择器，不展示快捷项。
+  - 旧枚举 `early_bird/regular/night_owl/irregular` 需要继续被前端解析成对应小时，避免旧用户档案打开编辑时丢失可用值。
+
+- `2026-05-13`: 分析页健康指数与作息字段稳定口径：
+  - 健康指数需要至少 2 个有饮食记录的自然日；`recorded_days < 2` 时，分析页不展示健康指数、关注风险卡片、行动建议和 AI 风险解读入口，改为提示用户连续记录两天以上后再显示。
+  - `/api/stats/summary` 需要返回 `recorded_days`，前端也可用 `daily_calories` 本地推导兜底。
+  - 健康档案作息仍复用 `health_condition.routine_type` 字段；当前前端采用小时级入睡/起床选择，保存为 `HH:00 睡，HH:00 起` 文本。
+  - 后端 AI 风险解读 prompt 使用作息时，预设值要转为中文说明，自定义文本原样进入 prompt；作息内容进入洞察缓存 fingerprint，修改作息后旧洞察应提示刷新。
+  - 当前健康指数公式主要在前端 `src/pages/stats/index.tsx` 即时计算，完整口径记录在 `docs/health-index-logic.md`。
+
+- `2026-05-13`: 分享海报底部头像资料来源：
+  - 海报底部头像/昵称优先使用当前登录用户的 `/api/user/profile` 最新资料，并回写本地 `userInfo`。
+  - 本地 `userInfo` 作为离线兜底，需兼容 `name/nickname/nickName` 与 `avatar/avatarUrl/avatar_url`。
+  - 公开邀请资料 `getFriendInviteProfile()` 只能作为补充来源；若其昵称或头像为空，不能覆盖当前用户资料或本地缓存。
+  - 首页单餐海报、识别记录详情海报、当天饮食海报都应走同一套合并逻辑。
+
+- `2026-05-13`: 食物图片识别多图输入的稳定口径：
+  - 食物识别前后端最多允许 3 张图片；超过 3 张应在前端阻止，后端服务层也必须返回 400 防御。
+  - 多张图片无论是否开启 `is_multi_view`，都作为同一次识别提交，后端只发起一次大模型请求。
+  - `is_multi_view=true` 只影响模型理解方式：把多张图片更明确地视为同一餐食/同一组食物的多角度输入；不再触发多次请求或不同积分倍率。
+  - 食物识别积分消耗按“提交一次识别”计算，不按图片数倍增；标准模式仍为 2 积分/次，精准模式仍为 4 积分/次。
+
+- `2026-05-13`: 今日餐食分享海报的摄入比例位置与底部头像口径：
+  - 单餐海报 `drawRecordPoster()` 中，每个食物的摄入比例放在食物名右侧括号内，使用小号灰色文字，例如 `米饭（80%）`。
+  - 右侧信息只保留实际摄入克数与热量，例如 `120g · 180 kcal`，避免右侧过挤。
+  - 海报底部左侧必须保留用户头像区域；头像图片加载失败时画圆形首字占位，不让底部标题顶到最左。
+  - 生成海报时可用本地 `userInfo` 作为昵称/头像兜底，再用接口资料覆盖。
+
+- `2026-05-13`: 当天饮食分享海报按钮对齐首页单餐海报分享口径：
+  - `packageExtra/pages/day-record` 的「分享今日饮食」按钮生成海报后直接调用微信官方 `Taro.showShareImageMenu()`，不再把自定义预览弹层作为主路径。
+  - 成功、取消或失败后都清理本次海报状态，和首页今日餐食卡片点击「生成分享海报」的单餐海报行为一致。
+  - 分享海报里的摄入比例要显示并兼容旧数据：优先 `items[].ratio`，缺失时用 `intake/weight` 推导，仍缺失按 100%。
+  - 单餐海报 `drawRecordPoster()` 在每个食物明细行显示「摄入xx%」；当天饮食海报 `drawDayRecordPoster()` 在每条餐食行显示聚合「摄入xx%」。
+
+- `2026-05-13`: 图片分析页不再暴露「饮食目标」选择：
+  - `src/packageExtra/pages/analyze/index.tsx` 不再从健康档案或本地缓存初始化饮食目标，也不再展示目标选项。
+  - 为兼容后端和结果页既有字段，图片分析提交继续传 `diet_goal: 'none'`，并在提交时清理旧 `analyzeDietGoal` 缓存。
+
+- `2026-05-13`: 首页低能量补录提示不再展示具体日期：
+  - 提示文案保持“检测到当日能量过低，是否需要补录”，不再渲染 `M月D日` 这类日期副文案。
+  - 补录操作使用独立「去补录」按钮打开首页 `RecordMenu`；「取消」按钮必须先弹确认框提醒用户。
+  - 用户确认取消后，以本地存储 `home_backfill_hint_dismissed_dates_v1` 按选中日期记住不再展示该低能量补录提醒；用户仍可通过首页记录入口自行补录。
+  - 当天能量/食量没有独立日报表；首页按日视图来自 `user_food_records.record_time` 中国自然日窗口聚合，`total_calories` 等字段存在每条食物记录上。
+
+- `2026-05-12`: 摄入比例的稳定来源是 `user_food_records.items[].ratio/intake/weight`：
+  - 保存识别结果和后续编辑记录时，必须继续把每个食物 item 的 `ratio` 与 `intake` 写入 `items` JSON。
+  - 老数据可能没有 `ratio`；读取和渲染时必须兼容：优先用 `intake/weight` 推导比例，若 `ratio/intake` 都不存在则按 100% 摄入处理，不能渲染成 0% 或把营养折算成 0。
+  - 首页 `/api/home/dashboard` 需要返回餐次级 `intake_ratio`，按该餐所有 item 的 `sum(intake)/sum(weight)*100` 聚合；缺少 intake 时可用 `weight * ratio / 100` 兜底。
+  - 首页 `meal_record_entries[]` 也需要返回每条记录的 `intake_ratio` 以及 `total_protein/total_carbs/total_fat/water_ml`，便于同餐多记录弹层不依赖 `full_record` 缓存即可展示。
+  - 识别记录详情页按每个 item 的 `ratio` 渲染「摄入比例 xx%」，即使为 100% 也显式展示；营养值继续按 ratio 折算实际摄入。
+- `2026-05-12`: 分支命名与基线口径更新：
+  - 原 `main` 已保留为 `old_main`，对应提交 `fcc6b61`。
+  - 新 `main` 与新 `dev` 保持同一基线，当前均指向 `48fd3a7`。
+  - 后续开发默认基于新的 `dev` / `main` 这条线继续，不再把旧 `main` 当作当前产品基线。
 
 - `2026-05-12`: 旧主包 `pages/record/index` 不再作为饮食记录入口：
   - 当前饮食记录主入口是首页 `RecordMenu` 弹窗；底栏中间按钮、首页空餐食按钮、当天记录页空态补录都必须回到首页打开该弹窗。
@@ -28,7 +153,8 @@
   - 批量待处理目标按“整组维生素为空或整组矿物质为空”筛选，而不是任意单字段为 0；因为胆固醇、维 D、B12 等字段对很多食物天然可能为 0，不能据此判定数据缺失。
   - 不在营养库里的食物，才通过 DeepSeek 生成完整每 100g 营养条目，并用 `deepseek_auto` 来源插入标准库与 alias。
   - 批量维护命令使用 `backend/cmd/nutrition-backfill`；默认 dry-run，显式 `--apply` 才写库。DeepSeek 批量默认 `--batch-size 1`，优先保证 JSON 稳定。
-  - 全量执行时建议重复运行 `--apply --limit 100 --batch-size 1` 且保持 `offset=0`，让每轮从当前仍缺失的集合继续处理；`offset` 只用于预览或手动跳过当前批次。
+  - 回填顺序优先处理 `source LIKE '历史%'` 的历史识别食物，避免 USDA 冷门酒水等低微量食物长期占住批次前排。
+  - 全量执行时建议重复运行 `--apply --limit 50 --batch-size 5` 且保持 `offset=0`，让每轮从当前仍缺失的集合继续处理；`offset` 只用于预览或手动跳过当前批次。
 
 - `2026-05-12`: 后端 Docker 部署构建需要显式使用可配置 `GOPROXY`：
   - `backend/Dockerfile` 在 builder 阶段设置 `ARG GOPROXY=https://goproxy.cn,direct` 与 `ENV GOPROXY=${GOPROXY}`。
@@ -438,8 +564,9 @@
 - `2026-05-06`: Go backend CCR 推送脚本继续使用 mjs：
   - 该脚本属于仓库级部署辅助工具，不属于 Go 后端 runtime。
   - 继续通过根目录 `npm run push-docker-ccr` 调用 `backend/scripts/push-docker-ccr.mjs`。
-  - 当前 Go 后端迁移阶段，镜像标签固定为 `ccr.ccs.tencentyun.com/littlehorse/foodlink:v2`。
-  - 暂不再按 `main` / `dev` 分支生成 `latest/main/dev/sha` 标签；脚本只打印当前分支和短 SHA 作为人工确认信息。
+  - 迁移完成后恢复按当前分支生成镜像标签：`main` 分支推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink:main`，`dev` 分支推送 `ccr.ccs.tencentyun.com/littlehorse/foodlink:dev`。
+  - 其它分支拒绝执行；脚本仍打印当前分支和短 SHA 作为人工确认信息。
+  - 迁移期新增的 Docker 构建环境变量能力继续保留，包括 `DOCKER_BUILD_PLATFORM`、`DOCKER_GO_BUILDER_IMAGE`、`DOCKER_GO_PROXY` / `GOPROXY` 和 `DOCKER_BUILD_PROGRESS`。
   - 以后只有当部署工具需要成为可分发 CLI、需要复用 Go 内部配置/代码、或需要复杂 CCR/Kubernetes API 编排时，再考虑用 Go 重写。
 
 - `2026-05-06`: Go backend Docker 镜像构建口径：
@@ -1096,3 +1223,31 @@
   - 稳定识别 `parse llm json failed` / `unexpected end of JSON input` 等 JSON 解析失败，而不是靠前端错误文案判断。
   - 重试发生在同一个 `analysis_tasks` 的 worker 处理内，不重新提交任务、不再次扣用户积分。
   - 单任务最多额外重试 3 次；若 3 次后仍是非法 JSON，才按原失败链路标记任务失败并触发既有退款/失败处理。
+
+- `2026-05-13`: 首页「今日餐食」卡片不展示数量徽章：
+  - 标题行不再展示同一餐次 `N次` / 记录数量徽章。
+  - 缩略图不再展示“共 N 张”图片数量角标；仍保留卡片点击详情和图片预览能力。
+
+- `2026-05-13`: 用户记录的食物摄入比例需要在饮食明细类页面显式展示：
+  - 「当天饮食记录」每个食物 item 都展示「摄入 xx%」，不能只在识别记录详情页展示。
+  - 历史数据缺 `ratio` 时继续按 `intake/weight` 推导；仍缺失时默认展示 100%。
+
+- `2026-05-13`: 圈子评论输入栏成功发送后应自动收起：
+  - 行为等同用户点击空白区域收起输入栏，但成功发送后的收起不能把已发送内容重新存成草稿。
+  - 异步发送期间若用户已经切换到其它动态或输入了新内容，不应误关闭当前新输入态。
+
+- `2026-05-13`: 首页身体指标写入必须使用首页选中日期：
+  - 喝水新增/清空不能默认写入后端当天，必须传首页当前选中日期快照。
+  - 身体指标日期请求体同时带 `date` 与 `recorded_on`，后端 handler 保持 `date` 优先，兼容历史字段。
+  - 对弹窗类写入，必须在打开弹窗时固化目标日期快照；弹窗内所有快捷按钮、自定义保存、清空操作都使用该快照，不能再读取可能变化的外层实时 `selectedDate`。
+  - 首页日期选择不得在 render 主体里用旧 state 覆盖 ref；日期变更必须通过单一 `commitSelectedDate()` 同步 ref/state/storage。日期选择组件点击瞬间也要持久化 `home_selected_date_v1`，供后续弹窗写入兜底读取。
+
+- `2026-05-13`: 「当天饮食记录」页面及其「分享今日饮食」海报的餐食顺序应按 `record_time` 升序展示：
+  - 先吃/先记录的餐食在前，最晚吃/最晚记录的餐食在后。
+  - 页面列表和当天饮食海报必须使用同一份已排序数据，避免截图/分享顺序与页面顺序不一致。
+  - 不因这个页面需求修改全局饮食记录接口默认排序，避免影响其它“最近记录优先”的选择器。
+
+- `2026-05-13`: 「分享今日饮食」海报顶部今日摄入量采用进度条表达：
+  - 左侧展示已摄入 kcal，右侧展示目标 kcal，下方圆角进度条表达进度。
+  - 目标内使用绿色，明显超过目标时使用暖色提示。
+  - 调整海报顶部模块时必须同步更新 `computeDayRecordPosterHeight()`，避免导出图片裁剪或内容重叠。

@@ -16,7 +16,6 @@ import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
-import { normalizeRecordDate } from '../../../utils/record-date'
 
 import './index.scss'
 
@@ -87,6 +86,19 @@ function formatChineseMonthDay(dateKey: string): string {
   return `${month}月${day}日`
 }
 
+function normalizeRouteDate(value?: string | null): string {
+  const raw = String(value || '').trim()
+  const matched = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matched) return formatDateKey(new Date())
+  const [, yearText, monthText, dayText] = matched
+  const parsed = new Date(Number(yearText), Number(monthText) - 1, Number(dayText))
+  if (Number.isNaN(parsed.getTime())) return formatDateKey(new Date())
+  const normalized = formatDateKey(parsed)
+  const today = formatDateKey(new Date())
+  if (normalized !== raw || normalized > today) return today
+  return normalized
+}
+
 function toNumber(value: unknown, fallback = 0): number {
   const n = typeof value === 'number' ? value : Number(value)
   return Number.isFinite(n) ? n : fallback
@@ -140,6 +152,14 @@ function buildWaterTrend(summary: BodyMetricsSummary | null, dates: string[]): T
   const byDate = new Map<string, BodyMetricWaterDay>()
   ;(summary?.water_daily || []).forEach((item) => byDate.set(item.date, item))
   return dates.map((date) => ({ date, value: byDate.get(date)?.total ?? 0 }))
+}
+
+function getWaterDay(summary: BodyMetricsSummary | null, date: string): BodyMetricWaterDay {
+  const normalized = date.slice(0, 10)
+  const day = (summary?.water_daily || []).find((item) => item.date === normalized)
+  if (day) return day
+  if (summary?.today_water?.date === normalized) return summary.today_water
+  return { date: normalized, total: 0, logs: [] }
 }
 
 function formatSigned(value: number | null | undefined, unit = ''): string {
@@ -309,7 +329,7 @@ function BodyTrendsPage() {
   const router = useRouter()
   const initialTab = isBodyTrendTab(router.params?.tab) ? router.params.tab : 'weight'
   const selectedRecordDate = useMemo(
-    () => normalizeRecordDate(String(router.params?.date || '')),
+    () => normalizeRouteDate(String(router.params?.date || '')),
     [router.params?.date]
   )
   const [activeTab, setActiveTab] = useState<BodyTrendTab>(initialTab)
@@ -359,9 +379,13 @@ function BodyTrendsPage() {
 
   const latestWeight = summary?.latest_weight || null
   const weightChange = summary?.weight_change ?? null
-  const todayWater = summary?.today_water?.total || 0
+  const selectedWaterDay = useMemo(
+    () => getWaterDay(summary, selectedRecordDate),
+    [summary, selectedRecordDate]
+  )
+  const selectedWaterTotal = selectedWaterDay.total || 0
   const waterGoal = summary?.water_goal_ml || 2000
-  const waterProgress = waterGoal > 0 ? Math.round((todayWater / waterGoal) * 100) : 0
+  const waterProgress = waterGoal > 0 ? Math.round((selectedWaterTotal / waterGoal) * 100) : 0
   const exerciseTotal = exerciseDays.reduce((sum, item) => sum + item.total, 0)
   const exerciseCount = exerciseDays.reduce((sum, item) => sum + item.count, 0)
   const activeExerciseDays = exerciseDays.filter((item) => item.total > 0).length
@@ -382,7 +406,7 @@ function BodyTrendsPage() {
     }
     setSavingWeight(true)
     try {
-      await saveBodyWeightRecord(value, today, `body-trends-${today}-${Date.now()}`)
+      await saveBodyWeightRecord(value, selectedRecordDate, `body-trends-${selectedRecordDate}-${Date.now()}`)
       Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
       Taro.showToast({ title: '已记录体重', icon: 'success' })
       await loadData()
@@ -396,7 +420,7 @@ function BodyTrendsPage() {
   const handleAddWater = async (amount: number) => {
     setSavingWaterAmount(amount)
     try {
-      await addBodyWaterLog(amount, today)
+      await addBodyWaterLog(amount, selectedRecordDate)
       Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
       Taro.showToast({ title: `已加 ${amount}ml`, icon: 'success' })
       await loadData()
@@ -528,8 +552,8 @@ function BodyTrendsPage() {
       {activeTab === 'water' && (
         <View className='body-trends-section'>
           <View className='metric-grid'>
-            <MetricCard label='今日喝水' value={String(Math.round(todayWater))} unit='ml' tone='blue' />
-            <MetricCard label='今日达成' value={`${Math.min(999, waterProgress)}%`} />
+            <MetricCard label={`${selectedRecordDateLabel}喝水`} value={String(Math.round(selectedWaterTotal))} unit='ml' tone='blue' />
+            <MetricCard label={`${selectedRecordDateLabel}达成`} value={`${Math.min(999, waterProgress)}%`} />
             <MetricCard label='日均喝水' value={String(Math.round(summary?.avg_daily_water_ml || 0))} unit='ml' tone='orange' />
           </View>
 
@@ -542,7 +566,7 @@ function BodyTrendsPage() {
           </View>
 
           <View className='action-panel'>
-            <Text className='action-panel__title'>快捷加水</Text>
+            <Text className='action-panel__title'>为{selectedRecordDateLabel}快捷加水</Text>
             <View className='water-preset-grid'>
               {WATER_PRESETS.map((amount) => (
                 <View

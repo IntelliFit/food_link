@@ -352,6 +352,12 @@
   }
 }
 
+.editor-routine-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
 /* ========== 多选选项网格（仿照引导页 option-grid） ========== */
 .editor-option-grid {
   display: flex;

@@ -56,6 +56,23 @@ func TestFoodItem_UnmarshalJSONWaterMlAliases(t *testing.T) {
 	assert.Equal(t, 200.0, nested.WaterMl)
 }
 
+func TestFoodItem_UnmarshalJSONDefaultsMissingRatio(t *testing.T) {
+	var fromIntake FoodItem
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"米饭","weight":200,"intake":50,"nutrients":{"calories":100}}`), &fromIntake))
+	assert.Equal(t, 25.0, fromIntake.Ratio)
+	assert.Equal(t, 50.0, fromIntake.Intake)
+
+	var wholeItem FoodItem
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"苹果","weight":120,"nutrients":{"calories":60}}`), &wholeItem))
+	assert.Equal(t, 100.0, wholeItem.Ratio)
+	assert.Equal(t, 120.0, wholeItem.Intake)
+
+	var explicitZero FoodItem
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"苹果","weight":120,"ratio":0,"nutrients":{"calories":60}}`), &explicitZero))
+	assert.Equal(t, 0.0, explicitZero.Ratio)
+	assert.Equal(t, 0.0, explicitZero.Intake)
+}
+
 func TestFoodItemNutrients_UnmarshalMicronutrients(t *testing.T) {
 	var nutrients FoodItemNutrients
 	require.NoError(t, json.Unmarshal([]byte(`{

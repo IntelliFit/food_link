@@ -109,6 +109,318 @@ const WAITING_INTERACTION_CARDS: WaitingInteractionCard[] = [
   {
     type: 'quiz',
     eyebrow: '快问快答',
+    title: '吃盖饭时，哪个小动作更利于控热量？',
+    options: ['酱汁少浇一点', '先把饭拌匀'],
+    answerIndex: 0,
+    reveal: '少浇酱汁更稳。盖饭里的油、糖、盐常藏在酱汁里，先少放一半更容易控量。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '同样一碗面，哪个选择通常更轻？',
+    options: ['汤面少喝汤', '拌面多加酱'],
+    answerIndex: 0,
+    reveal: '汤面少喝汤通常更友好。拌面酱料油脂密度高，容易让热量悄悄上去。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃火锅时，哪个顺序更不容易吃超？',
+    options: ['先蔬菜蛋白', '先主食丸子'],
+    answerIndex: 0,
+    reveal: '先蔬菜和蛋白质更稳。先垫一点饱腹感，后面主食、丸子和蘸料更容易自然少吃。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '奶茶想减负，优先改哪一项？',
+    options: ['少糖少奶盖', '只换大杯'],
+    answerIndex: 0,
+    reveal: '少糖、少奶盖更有效。杯型变大通常只会让总摄入更多。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '减脂期吃肉，哪个做法通常更友好？',
+    options: ['去皮少油', '裹粉油炸'],
+    answerIndex: 0,
+    reveal: '去皮少油更友好。蛋白质本身很好，额外裹粉和油炸会明显抬高热量。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '米饭吃不完时，哪个处理更适合控量？',
+    options: ['先分出半碗', '边吃边续饭'],
+    answerIndex: 0,
+    reveal: '先分出半碗更好。提前定量比吃到一半再判断更不容易超。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '早餐想更抗饿，优先补什么？',
+    options: ['蛋白质', '纯甜饮'],
+    answerIndex: 0,
+    reveal: '蛋白质更抗饿。鸡蛋、牛奶、豆浆、瘦肉这类能让上午更稳定。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '沙拉热量容易高在哪里？',
+    options: ['酱和坚果', '生菜本身'],
+    answerIndex: 0,
+    reveal: '主要常在酱和坚果。生菜热量低，但沙拉酱、培根碎、坚果一多就会变重。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '外卖备注哪个更实用？',
+    options: ['少油少酱', '多放汤汁'],
+    answerIndex: 0,
+    reveal: '少油少酱更实用。很多外卖热量差异不在主菜，而在油和酱汁。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '晚餐很晚才吃，哪个选择更稳？',
+    options: ['清淡少油', '重油重辣'],
+    answerIndex: 0,
+    reveal: '清淡少油更稳。太晚吃得重，容易影响睡眠和第二天食欲节奏。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃自助餐先拿什么更不容易失控？',
+    options: ['蔬菜蛋白', '甜点炸物'],
+    answerIndex: 0,
+    reveal: '先拿蔬菜和蛋白质更好。先稳定饱腹感，再决定要不要吃高热量选择。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '同样是鸡蛋，哪个通常更轻？',
+    options: ['水煮蛋', '煎蛋多油'],
+    answerIndex: 0,
+    reveal: '水煮蛋通常更轻。煎蛋吸油后热量会明显增加。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想减少隐形热量，先盯哪类？',
+    options: ['饮料酱料', '绿叶菜'],
+    answerIndex: 0,
+    reveal: '饮料和酱料更值得先盯。它们不占胃，但很容易贡献不少热量。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '运动后太饿，哪个组合更稳？',
+    options: ['蛋白加主食', '只喝甜饮'],
+    answerIndex: 0,
+    reveal: '蛋白加主食更稳。这样更利于恢复，也不容易很快再次饿。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃烤肉时，哪个搭配更平衡？',
+    options: ['肉配生菜', '肉配甜饮'],
+    answerIndex: 0,
+    reveal: '肉配生菜更平衡。生菜能增加体积和纤维，也能让油腻感下降。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '下午想吃零食，哪个更抗饿？',
+    options: ['酸奶鸡蛋', '含糖饼干'],
+    answerIndex: 0,
+    reveal: '酸奶、鸡蛋这类更抗饿。只吃甜饼干容易血糖起伏，过会儿又想吃。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '主食不是不能吃，关键看什么？',
+    options: ['总量和搭配', '完全不碰'],
+    answerIndex: 0,
+    reveal: '看总量和搭配。主食提供能量，和蛋白、蔬菜搭好，比完全不吃更可持续。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '炒菜出锅前，哪个习惯更友好？',
+    options: ['少淋明油', '再加一勺油'],
+    answerIndex: 0,
+    reveal: '少淋明油更友好。最后那一圈油看着不多，热量密度却很高。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃粉面时，哪个加料更稳？',
+    options: ['加蛋加青菜', '加油条炸串'],
+    answerIndex: 0,
+    reveal: '加蛋和青菜更稳。能补蛋白和纤维，比炸物加料更利于控制总热量。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '一餐吃太咸，下一步更建议？',
+    options: ['补水清淡', '继续重口'],
+    answerIndex: 0,
+    reveal: '补水并让下一餐清淡些更好。短期体重上浮可能只是水分变化。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想看一餐是否均衡，先看哪三样？',
+    options: ['碳蛋脂', '只看辣度'],
+    answerIndex: 0,
+    reveal: '先看碳水、蛋白质、脂肪。它们决定这餐的大方向。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃粥时容易饿，通常缺什么？',
+    options: ['蛋白质', '更多糖'],
+    answerIndex: 0,
+    reveal: '常见是蛋白质不够。粥配鸡蛋、豆制品或瘦肉，会比单喝粥更顶饿。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想降低餐后困，哪个更可能有帮助？',
+    options: ['主食少一点', '甜饮加满'],
+    answerIndex: 0,
+    reveal: '主食适当少一点、搭配蛋白蔬菜，通常更不容易餐后发困。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '称体重更建议看什么？',
+    options: ['多日趋势', '单天波动'],
+    answerIndex: 0,
+    reveal: '多日趋势更可靠。盐分、饮水、作息都会让单天体重上下波动。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '同样想吃甜，哪个更容易控量？',
+    options: ['小份慢吃', '边看剧边吃'],
+    answerIndex: 0,
+    reveal: '小份慢吃更容易控量。边看剧边吃很容易忽略已经吃了多少。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '点轻食时，哪个细节要注意？',
+    options: ['酱汁分装', '酱全拌入'],
+    answerIndex: 0,
+    reveal: '酱汁分装更好。先加一半，不够再补，通常就能少吃不少隐藏热量。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '聚餐前很饿，哪个策略更稳？',
+    options: ['先垫点蛋白', '空腹硬扛'],
+    answerIndex: 0,
+    reveal: '先垫点蛋白更稳。空腹到聚餐现场，往往更容易吃得太快太多。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '一餐蛋白质不足，哪个补法更方便？',
+    options: ['加蛋或豆腐', '多加白饭'],
+    answerIndex: 0,
+    reveal: '加蛋、豆腐、鸡胸、鱼虾都方便。多加白饭主要补碳水，不补蛋白。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '减脂时最不建议长期做什么？',
+    options: ['极端节食', '稳定记录'],
+    answerIndex: 0,
+    reveal: '极端节食最不可持续。稳定记录和小幅调整，往往比猛一下更有效。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想少吃油，哪个烹饪方式更友好？',
+    options: ['蒸煮炖烤', '反复油炸'],
+    answerIndex: 0,
+    reveal: '蒸、煮、炖、烤通常更友好。油炸会大幅提高热量密度。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '记录饮食时，哪项最容易被漏掉？',
+    options: ['蘸料饮料', '主菜名称'],
+    answerIndex: 0,
+    reveal: '蘸料和饮料很容易被漏掉。它们看似边角料，却常影响总热量判断。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想让晚餐轻一点，优先减少什么？',
+    options: ['油炸和甜饮', '绿叶蔬菜'],
+    answerIndex: 0,
+    reveal: '优先减少油炸和甜饮。绿叶蔬菜通常可以保留，甚至能提高饱腹感。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃包子馒头时，哪个搭配更稳？',
+    options: ['配蛋和豆浆', '只配甜饮'],
+    answerIndex: 0,
+    reveal: '配蛋和豆浆更稳。纯主食加甜饮容易饿得快。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想减少夜宵影响，哪个做法更好？',
+    options: ['提前吃够晚餐', '深夜硬加餐'],
+    answerIndex: 0,
+    reveal: '晚餐吃够蛋白和蔬菜更好。夜里饿到失控，常是白天或晚餐没吃稳。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '同样是坚果，关键要注意什么？',
+    options: ['小把定量', '整袋随手吃'],
+    answerIndex: 0,
+    reveal: '坚果健康但热量密度高，小把定量更合适。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃寿司时，哪个组合更均衡？',
+    options: ['鱼虾加蔬菜', '只点甜酱卷'],
+    answerIndex: 0,
+    reveal: '鱼虾加蔬菜更均衡。甜酱、蛋黄酱和炸物卷会让热量更高。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '饭后想活动，哪个更合适？',
+    options: ['散步十分钟', '立刻剧烈跑'],
+    answerIndex: 0,
+    reveal: '饭后轻松散步更合适。刚吃完就剧烈运动，胃肠会很不舒服。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '午餐容易吃撑，先调整什么？',
+    options: ['进食速度', '直接不吃'],
+    answerIndex: 0,
+    reveal: '先放慢速度更现实。大脑接收到饱腹信号需要时间。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃麻辣烫时，哪个选择更稳？',
+    options: ['清汤少酱', '重油麻酱'],
+    answerIndex: 0,
+    reveal: '清汤少酱更稳。麻酱和红油都很好吃，但热量密度也高。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
     title: '想让饭后血糖更平稳，哪种顺序更友好？',
     options: ['先菜肉后主食', '先主食后菜肉'],
     answerIndex: 0,
@@ -123,6 +435,30 @@ const WAITING_INTERACTION_CARDS: WaitingInteractionCard[] = [
     reveal: '周平均趋势更重要。偶尔一餐波动正常，长期能量平衡才决定方向。'
   },
   {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '减脂餐里最该保留的饱腹来源是？',
+    options: ['蛋白和纤维', '只剩清汤'],
+    answerIndex: 0,
+    reveal: '蛋白和纤维要保留。吃得太空，后面更容易报复性进食。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想估算一餐是否偏油，看哪里最直观？',
+    options: ['盘底油光', '餐具颜色'],
+    answerIndex: 0,
+    reveal: '盘底油光很有参考。汤汁、盘底和酱料能透露不少油脂信息。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '控制热量时，哪个心态更可持续？',
+    options: ['每餐微调', '一错全放弃'],
+    answerIndex: 0,
+    reveal: '每餐微调更可持续。一餐吃多了，下一餐回到正常节奏就好。'
+  },
+  {
     type: 'fact',
     eyebrow: '等一下顺手看',
     title: '这次结果出来后，优先看什么？',
@@ -135,8 +471,533 @@ const WAITING_INTERACTION_CARDS: WaitingInteractionCard[] = [
     title: '饮料和酱料常是隐藏热量',
     reveal: '奶茶、果汁、沙拉酱、拌面酱这类东西体积不大，但很容易把一餐热量往上推。',
     actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '看到“健康”两个字也要看配料',
+    reveal: '全麦、低脂、无糖都只是线索，最终还是要看配料和总量。健康标签不等于可以无限吃。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '拍照结果最该核对的是份量',
+    reveal: '菜名识别对了还不够，份量才决定热量。结果出来后，先看看克重是否符合你眼前这份。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '菜汤拌饭会放大摄入',
+    reveal: '菜汤里往往有油和盐，拌进饭里很香，但也会让主食不知不觉吃更多。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '“只吃菜”也可能热量高',
+    reveal: '干锅、红烧、油焖这类做法，即使主角是蔬菜，也可能因为油多而热量不低。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '蛋白质不只看肉',
+    reveal: '鸡蛋、牛奶、豆腐、鱼虾、瘦肉都能补蛋白。换着吃，比长期只靠一种更容易坚持。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '外食不用追求完美',
+    reveal: '外食先做到少油少酱、主食定量、加一份蛋白或蔬菜，就已经能明显改善一餐结构。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '汤不一定等于低热量',
+    reveal: '清汤通常没问题，但浓汤、奶油汤、肉汤和火锅汤底可能含有不少油脂。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '一餐里有“撑场面”的食物',
+    reveal: '蔬菜、菌菇、海带这类体积大、能量密度低，能帮一餐更有满足感。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '别让周末抵消工作日',
+    reveal: '很多人的热量差不是每天都大，而是周末两三餐拉开了差距。记录能帮你看见趋势。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '水果也有份量概念',
+    reveal: '水果很好，但果汁、果盘和超大份水果会让糖分和热量上升。完整水果、小份吃更稳。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '吃得慢不是玄学',
+    reveal: '放慢速度能给饱腹信号留时间。你可能不是意志力差，只是吃得太快了。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '高蛋白不等于随便吃',
+    reveal: '蛋白质有帮助，但烹饪油、蘸料和份量仍然重要。烤鸡翅和水煮虾不是一个热量逻辑。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '“无糖”不代表无热量',
+    reveal: '无糖饮料热量通常低，但无糖点心、无糖酸奶仍可能有脂肪、淀粉或总热量。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '复盘别只看超没超标',
+    reveal: '还要看为什么超：主食多了、油多了、饮料多了，还是蛋白不够导致后面加餐。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '加餐可以提前设计',
+    reveal: '如果下午总饿，可以准备酸奶、鸡蛋、豆制品或水果，别等饿急了再随机买。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '“半份主食”很实用',
+    reveal: '外食时不一定要不吃主食，先吃半份，饭后状态更可控，也更容易坚持。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '记录不是为了审判自己',
+    reveal: '记录是为了看清模式。知道哪类餐最容易超，下一次就能改一个小动作。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '睡眠会影响食欲',
+    reveal: '睡少了，第二天更想吃高糖高油并不奇怪。饮食管理也需要把睡眠算进去。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '别忽略“尝几口”',
+    reveal: '做饭试味、同事零食、孩子剩饭这些小口小口，累积起来也会影响一天总量。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '一餐里先找蛋白质',
+    reveal: '结果出来后可以先问自己：这餐有没有稳定蛋白？没有的话，下餐补回来就行。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '粗粮也要看总量',
+    reveal: '糙米、玉米、红薯比精制主食更有纤维，但它们仍然是主食，份量同样重要。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '低卡酱料也别倒太多',
+    reveal: '单次热量低不代表无限量。能分装、能蘸着吃，就比全拌进去更容易控。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '别被“体积小”骗了',
+    reveal: '坚果、巧克力、糕点、酱料体积都不大，但能量密度很高，最适合提前定量。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '今天吃多了不需要惩罚',
+    reveal: '下一餐回到正常结构就好。过度补偿容易让饮食节奏更乱。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '“看起来清淡”也要看做法',
+    reveal: '白色、浅色不一定低热量。比如奶油、椰浆、浓汤都可能看着清淡但脂肪不低。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '把目标拆成一餐动作',
+    reveal: '比起“我要吃健康”，更好执行的是“今天午餐少半份饭，加一个蛋白”。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '餐后散步很划算',
+    reveal: '不用很久，饭后轻松走一走，对血糖节奏和消化感受都更友好。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '拍照时把餐具也拍进去',
+    reveal: '碗、盘、勺子能提供比例参照，份量判断会更稳。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '同一餐多图会更好判断',
+    reveal: '如果菜被遮挡或容器很深，多角度能帮助识别食物和估算份量。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '蛋白质分散到每餐更舒服',
+    reveal: '不用把蛋白都堆到晚餐。早餐和午餐各补一点，全天饱腹感会更稳定。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃炒饭时，哪个做法更利于控量？',
+    options: ['先装小碗', '整盘随便吃'],
+    answerIndex: 0,
+    reveal: '先装小碗更稳。炒饭油和主食都集中，提前定量比边吃边判断靠谱。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '点汉堡时，哪个组合通常更轻？',
+    options: ['汉堡配无糖茶', '汉堡配薯条可乐'],
+    answerIndex: 0,
+    reveal: '汉堡配无糖茶通常更轻。薯条和含糖饮料会把套餐热量拉高不少。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃饺子时，哪个细节更值得注意？',
+    options: ['蘸料少油', '红油倒满'],
+    answerIndex: 0,
+    reveal: '蘸料少油更稳。饺子本身有主食和馅料，红油蘸料很容易额外加热量。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想让早餐更均衡，哪个搭配更好？',
+    options: ['包子加鸡蛋', '面包加奶茶'],
+    answerIndex: 0,
+    reveal: '包子加鸡蛋更均衡。主食配蛋白质，比主食配甜饮更抗饿。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃烧烤时，哪个选择更友好？',
+    options: ['瘦肉蔬菜', '肥肉甜饮'],
+    answerIndex: 0,
+    reveal: '瘦肉和蔬菜更友好。烧烤的油、糖、酱料已经不少，甜饮会继续加码。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '一餐主食偏多，下一餐更建议？',
+    options: ['正常吃清淡些', '完全不吃'],
+    answerIndex: 0,
+    reveal: '正常吃、清淡些更稳。完全不吃容易让后面更饿，节奏反而乱。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '喝咖啡想少摄入，优先选哪个？',
+    options: ['美式拿铁少糖', '加糖奶盖咖啡'],
+    answerIndex: 0,
+    reveal: '美式或少糖拿铁更稳。奶盖、糖浆和奶油才是咖啡里的热量大头。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃拌饭时，哪个动作更聪明？',
+    options: ['酱料分次加', '一次全倒入'],
+    answerIndex: 0,
+    reveal: '分次加更聪明。先加一半，通常味道已经够了，还能少吃很多酱。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想提高饱腹感，哪个更有帮助？',
+    options: ['加蔬菜菌菇', '只喝甜饮'],
+    answerIndex: 0,
+    reveal: '蔬菜和菌菇更有帮助。它们增加体积和纤维，让一餐更扎实。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃炸鸡时，哪个小动作能减负？',
+    options: ['少吃皮和酱', '蘸酱加倍'],
+    answerIndex: 0,
+    reveal: '少吃皮和酱会轻一些。炸皮和甜辣酱都是热量密度很高的部分。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '点麻辣香锅时，哪个备注更实用？',
+    options: ['少油少盐', '多油多辣'],
+    answerIndex: 0,
+    reveal: '少油少盐更实用。香锅好吃的关键常是油和调料，备注能帮你留点余地。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想控制晚餐热量，先看哪一项？',
+    options: ['油炸甜饮', '清炒蔬菜'],
+    answerIndex: 0,
+    reveal: '先看油炸和甜饮。它们最容易在晚餐里把热量悄悄推高。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃三明治时，哪个更可能偏高热量？',
+    options: ['多酱培根款', '鸡蛋蔬菜款'],
+    answerIndex: 0,
+    reveal: '多酱培根款更容易偏高。三明治差异常在酱、培根、芝士和份量。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '一天总觉得饿，先检查什么？',
+    options: ['蛋白是否够', '是不是太自律'],
+    answerIndex: 0,
+    reveal: '先看蛋白和纤维够不够。吃得太“空”，饥饿感会追着你跑。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃面包时，哪个搭配更稳？',
+    options: ['配牛奶鸡蛋', '配含糖饮料'],
+    answerIndex: 0,
+    reveal: '配牛奶或鸡蛋更稳。纯面包加甜饮，通常饱得快也饿得快。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '点酸菜鱼时，哪个习惯更友好？',
+    options: ['少喝汤汁', '汤汁拌饭'],
+    answerIndex: 0,
+    reveal: '少喝汤汁更友好。鱼肉是好蛋白，但汤里的油盐也很容易一起吃进去。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '水果什么时候吃更好控量？',
+    options: ['提前分一份', '边刷手机边吃'],
+    answerIndex: 0,
+    reveal: '提前分一份更好控量。边刷手机边吃，很容易从一小份变成一大盘。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想让午餐下午不犯困，哪个更值得试？',
+    options: ['少油主食适量', '重油大份主食'],
+    answerIndex: 0,
+    reveal: '少油、主食适量更值得试。午餐太重，下午犯困往往更明显。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '饭局上想少喝酒，哪个方式更自然？',
+    options: ['慢喝多补水', '空腹快喝'],
+    answerIndex: 0,
+    reveal: '慢喝、多补水更自然。酒精本身有热量，也会降低控食的判断力。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃早餐油条豆浆，怎么更平衡？',
+    options: ['加个鸡蛋', '再来甜豆浆'],
+    answerIndex: 0,
+    reveal: '加个鸡蛋会更平衡。油条主要是油和碳水，补点蛋白更抗饿。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想减少外卖热量波动，哪个习惯有效？',
+    options: ['固定几家店', '每天盲点'],
+    answerIndex: 0,
+    reveal: '固定几家靠谱店更有效。熟悉份量和口味后，记录和调整都更容易。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃豆制品时，哪个通常更轻？',
+    options: ['清炖豆腐', '油炸豆泡'],
+    answerIndex: 0,
+    reveal: '清炖豆腐通常更轻。豆泡吸油能力强，热量密度会明显上去。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '想让一餐更像“正餐”，至少要有？',
+    options: ['主食蛋白蔬菜', '只有零食'],
+    answerIndex: 0,
+    reveal: '主食、蛋白、蔬菜至少要尽量齐。只有零食很容易热量不低但不满足。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
+    title: '吃汤粉时，哪个细节更影响热量？',
+    options: ['油辣子和汤', '葱花香菜'],
+    answerIndex: 0,
+    reveal: '油辣子和汤更影响热量。葱花香菜主要是风味，热量通常很低。'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '同样热量，饱腹感可以差很多',
+    reveal: '含蛋白、纤维和水分多的食物，通常比同热量的甜点饮料更顶饿。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '周末聚餐前别饿太久',
+    reveal: '饿太久再去聚餐，往往会吃得更快更多。提前垫一点蛋白会更稳。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '识别结果不是考试卷',
+    reveal: '如果份量或菜名不对，直接纠正它。越多真实反馈，后续记录越贴近你。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '别把“清淡”理解成没味道',
+    reveal: '少油少糖不等于难吃。醋、蒜、香草、辣椒、胡椒都能增加风味。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '坚果适合当配角',
+    reveal: '坚果营养不错，但更适合小把点缀。把它当主零食，很容易超量。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '先改最容易的一件事',
+    reveal: '饮食调整不用一次全改。先从少一杯甜饮、少半份饭或多一个蛋开始。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '外卖照片也能帮复盘',
+    reveal: '每次拍照记录，会慢慢看出哪类外卖最容易超标，下一次就更好选。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '别把运动当作无限额度',
+    reveal: '运动很重要，但一杯高糖饮或一份炸物，可能很快抵消不少消耗。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '看趋势比看单次更温柔',
+    reveal: '一餐吃多不代表失败。连续几天的平均趋势，才更接近真实状态。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '拍深碗食物时加个侧面',
+    reveal: '粉、面、粥、盖饭这类深碗食物，侧面或俯拍结合更有利于判断份量。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '少踩一个坑',
+    title: '“低脂”也可能高糖',
+    reveal: '低脂酸奶和低脂零食常用糖来补口感，买的时候最好顺手看下配料表。',
+    actionText: '再看一条'
+  },
+  {
+    type: 'fact',
+    eyebrow: '等一下顺手看',
+    title: '身体反馈也是数据',
+    reveal: '饭后困、很快饿、口渴、睡不好，都能反过来提示这餐结构可能要调整。',
+    actionText: '换一张'
+  },
+  {
+    type: 'fact',
+    eyebrow: '小提醒',
+    title: '先满足，再优化',
+    reveal: '一餐吃得满足，才更容易长期坚持。健康饮食不是把快乐全部删掉。',
+    actionText: '再看一条'
   }
 ]
+
+const SHOWN_INTERACTION_CARDS_KEY = 'analyze_shown_interaction_cards'
+
+const getNextInteractionIndex = (current?: number) => {
+  try {
+    let shown: number[] = Taro.getStorageSync(SHOWN_INTERACTION_CARDS_KEY) || []
+    if (shown.length >= WAITING_INTERACTION_CARDS.length) {
+      shown = current !== undefined ? [current] : []
+    }
+    let available = WAITING_INTERACTION_CARDS.map((_, i) => i).filter(i => !shown.includes(i))
+    if (current !== undefined && available.length > 1) {
+      available = available.filter(i => i !== current)
+    }
+    if (available.length === 0) {
+      available = WAITING_INTERACTION_CARDS.map((_, i) => i).filter(i => i !== current)
+    }
+    if (available.length === 0) available = WAITING_INTERACTION_CARDS.map((_, i) => i)
+
+    const nextIdx = available[Math.floor(Math.random() * available.length)]
+    Taro.setStorageSync(SHOWN_INTERACTION_CARDS_KEY, [...shown, nextIdx])
+    return nextIdx
+  } catch (e) {
+    if (WAITING_INTERACTION_CARDS.length <= 1) return 0
+    let nextIdx = Math.floor(Math.random() * WAITING_INTERACTION_CARDS.length)
+    if (current !== undefined) {
+      while (nextIdx === current) {
+        nextIdx = Math.floor(Math.random() * WAITING_INTERACTION_CARDS.length)
+      }
+    }
+    return nextIdx
+  }
+}
 
 const getNextTipIndex = (current?: number) => {
   try {
@@ -267,7 +1128,7 @@ function AnalyzeLoadingPage() {
   const [tipIndex, setTipIndex] = useState(() => getNextTipIndex())
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [lastTaskStatusText, setLastTaskStatusText] = useState('已提交')
-  const [interactionIndex, setInteractionIndex] = useState(0)
+  const [interactionIndex, setInteractionIndex] = useState(() => getNextInteractionIndex())
   const [selectedQuizOption, setSelectedQuizOption] = useState<number | null>(null)
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [isCorrectionMode, setIsCorrectionMode] = useState(() =>
@@ -359,7 +1220,7 @@ function AnalyzeLoadingPage() {
       setCurrentStep(1)
       setElapsedSeconds(0)
       setLastTaskStatusText(correctionMode ? '已提交纠错' : '已提交')
-      setInteractionIndex((prev) => (prev + 1) % WAITING_INTERACTION_CARDS.length)
+      setInteractionIndex(prev => getNextInteractionIndex(prev))
       setSelectedQuizOption(null)
       setTipIndex(getNextTipIndex())
       startTimeRef.current = Date.now()
@@ -677,7 +1538,7 @@ function AnalyzeLoadingPage() {
   }
 
   const handleNextInteraction = () => {
-    setInteractionIndex(prev => (prev + 1) % WAITING_INTERACTION_CARDS.length)
+    setInteractionIndex(prev => getNextInteractionIndex(prev))
     setSelectedQuizOption(null)
   }
 
@@ -742,6 +1603,7 @@ function AnalyzeLoadingPage() {
           ? FOOD_STRICT_STAGE_LABELS
           : FOOD_STANDARD_STAGE_LABELS
   const currentCompactStage = compactStageLabels[Math.min(currentStep, compactStageLabels.length - 1)]
+  const showPrecisionLongWaitNotice = taskType === 'food' && executionMode === 'strict' && !isCorrectionMode
 
   return (
     <View className='analyze-loading-page-v3'>
@@ -812,6 +1674,11 @@ function AnalyzeLoadingPage() {
             <Text className='compact-stage-status'>{isCorrectionMode ? '纠错任务' : '任务'}{lastTaskStatusText}</Text>
             <Text className='compact-stage-flow'>{compactStageLabels.join(' → ')}</Text>
           </View>
+          {showPrecisionLongWaitNotice && (
+            <Text className='precision-long-wait-notice'>
+              精准模式会分项识别并复核份量，可能需要更久；你可以先离开，完成后到识别记录查看。
+            </Text>
+          )}
         </View>
 
         <View className='waiting-interaction-card'>

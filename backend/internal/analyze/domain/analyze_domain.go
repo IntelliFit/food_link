@@ -29,6 +29,28 @@ type AnalysisTask struct {
 
 func (AnalysisTask) TableName() string { return "analysis_tasks" }
 
+// AnalysisFeedbackSample — table: analysis_feedback_samples
+type AnalysisFeedbackSample struct {
+	ID                  string           `json:"id" gorm:"column:id"`
+	UserID              string           `json:"user_id" gorm:"column:user_id"`
+	FeedbackType        string           `json:"feedback_type" gorm:"column:feedback_type"`
+	SourceTaskID        *string          `json:"source_task_id,omitempty" gorm:"column:source_task_id"`
+	CorrectionTaskID    *string          `json:"correction_task_id,omitempty" gorm:"column:correction_task_id"`
+	RootTaskID          *string          `json:"root_task_id,omitempty" gorm:"column:root_task_id"`
+	TaskType            string           `json:"task_type" gorm:"column:task_type"`
+	ModelName           *string          `json:"model_name,omitempty" gorm:"column:model_name"`
+	AnalysisEngine      *string          `json:"analysis_engine,omitempty" gorm:"column:analysis_engine"`
+	BeforeResult        map[string]any   `json:"before_result,omitempty" gorm:"column:before_result;serializer:json"`
+	UserCorrectionItems []map[string]any `json:"user_correction_items,omitempty" gorm:"column:user_correction_items;serializer:json"`
+	AfterResult         map[string]any   `json:"after_result,omitempty" gorm:"column:after_result;serializer:json"`
+	PayloadSnapshot     map[string]any   `json:"payload_snapshot,omitempty" gorm:"column:payload_snapshot;serializer:json"`
+	ErrorMessage        *string          `json:"error_message,omitempty" gorm:"column:error_message"`
+	CreatedAt           *time.Time       `json:"created_at,omitempty" gorm:"column:created_at"`
+	UpdatedAt           *time.Time       `json:"updated_at,omitempty" gorm:"column:updated_at"`
+}
+
+func (AnalysisFeedbackSample) TableName() string { return "analysis_feedback_samples" }
+
 // PrecisionSession — table: precision_sessions
 type PrecisionSession struct {
 	ID                  string         `gorm:"column:id"`
