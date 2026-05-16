@@ -186,6 +186,7 @@ export interface FoodItem {
   name: string
   estimatedWeightGrams: number
   originalWeightGrams: number
+  suggestedRatio?: number
   waterMl?: number
   water_ml?: number
   nutrients: Nutrients

@@ -567,6 +567,8 @@ function ResultPage() {
       const itemId = item.itemId ?? (index + 1)
       const waterMl = normalizeWaterMl(item.waterMl, item.water_ml, item.nutrients?.waterMl, item.nutrients?.water_ml)
       const nutrients = normalizeItemNutrients(item.nutrients, waterMl)
+      const suggestedRatio = Math.max(0, Math.min(100, Math.round(item.suggestedRatio ?? 100)))
+      const intake = Math.round(item.estimatedWeightGrams * (suggestedRatio / 100))
       return {
         id: itemId,
         sourceItemId: itemId,
@@ -575,8 +577,8 @@ function ResultPage() {
         weight: item.estimatedWeightGrams,
         originalWeight: aiWeight,
         calorie: nutrients.calories,
-        intake: item.estimatedWeightGrams,
-        ratio: 100,
+        intake,
+        ratio: suggestedRatio,
         protein: nutrients.protein,
         carbs: nutrients.carbs,
         fat: nutrients.fat,

@@ -561,7 +561,7 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "context_advice":""
@@ -587,7 +587,7 @@ JSON:
 	}
 	remainHint := ""
 	if input.RemainingCalories != nil {
-		remainHint = fmt.Sprintf("\n用户当日剩余热量预算约 %g kcal，可在 context_advice 中提示本餐占比或下一餐建议。", *input.RemainingCalories)
+		remainHint = fmt.Sprintf("\n用户当日剩余热量预算约 %g kcal。请在每个食物的 suggestedRatio 中给出建议摄入比例（0-100）：若剩余热量充足可按100；若接近或超出预算，建议降低主食/高热量食物的比例；若用户目标是减脂且本餐热量较高，可适当建议控制。", *input.RemainingCalories)
 	}
 	mealHint := ""
 	if input.MealType != "" {
@@ -703,6 +703,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - 只估算可见可食部分，不把餐具、包装、骨头、壳、果核计入重量
 - waterMl 表示该食物/饮品本身含有的水量，单位毫升，必须是数字；固体食物按常见含水率保守估算，无法判断时填 0
 - 饮品、汤、粥、奶、茶、咖啡等液体或半流体应估算 waterMl；干货、油炸物、酱料难判断时可填 0
+- suggestedRatio 表示建议用户实际摄入该食物的比例（0-100 的整数），请结合用户当日剩余热量预算和饮食目标给出建议：减脂且剩余热量不足时降低主食/高热量食物比例；增肌且热量充足时可按100；默认100
 
 输出要求：
 - 简体中文
@@ -716,7 +717,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0}],
+  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -775,10 +776,11 @@ func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode stri
 - 重量可基于常见份量估算
 - description <= 24字
 - insight/context_advice 各 1-2 句，<= 40字
+- suggestedRatio：每个食物的建议摄入比例（0-100），结合用户剩余热量和饮食目标给出建议，默认100
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -823,7 +825,7 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0}],
+  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -1615,11 +1617,16 @@ func parseItems(parsed map[string]any) []map[string]any {
 					}
 				}
 			}
+			suggestedRatio := 100.0
+			if sr, ok := item["suggestedRatio"].(float64); ok && sr >= 0 && sr <= 100 {
+				suggestedRatio = sr
+			}
 			out = append(out, map[string]any{
 				"name":                 name,
 				"estimatedWeightGrams": weight,
 				"originalWeightGrams":  weight,
 				"waterMl":              waterMl,
+				"suggestedRatio":       suggestedRatio,
 				"nutrients":            nutrients,
 			})
 		}
