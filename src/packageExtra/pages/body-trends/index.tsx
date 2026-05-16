@@ -406,7 +406,7 @@ function BodyTrendsPage() {
     }
     setSavingWeight(true)
     try {
-      await saveBodyWeightRecord(value, today, `body-trends-${today}-${Date.now()}`)
+      await saveBodyWeightRecord(value, selectedRecordDate, `body-trends-${selectedRecordDate}-${Date.now()}`)
       Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
       Taro.showToast({ title: '已记录体重', icon: 'success' })
       await loadData()
