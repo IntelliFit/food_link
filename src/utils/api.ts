@@ -186,6 +186,7 @@ export interface FoodItem {
   name: string
   estimatedWeightGrams: number
   originalWeightGrams: number
+  suggestedRatio?: number
   waterMl?: number
   water_ml?: number
   nutrients: Nutrients
@@ -4504,6 +4505,8 @@ export interface ExerciseTaskResultPayload {
   /** 估算时使用的用户画像快照 */
   profile_snapshot?: Record<string, any> | null
   today_total: number
+  /** AI 自动识别的运动类型（如跑步、游泳等） */
+  exercise_type?: string | null
 }
 
 /** 提交运动分析任务（后台 Worker 调用大模型并落库；返回 task_id，需轮询 getAnalyzeTask） */

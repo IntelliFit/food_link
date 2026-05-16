@@ -73,3 +73,26 @@ func TestStatsRepo_Insight(t *testing.T) {
 	assert.Equal(t, "Updated insight", latest.InsightText)
 	assert.Equal(t, "fp-2", latest.DataFingerprint)
 }
+
+func TestStatsRepo_CountInsightGenerationsToday(t *testing.T) {
+	db := setupStatsTestDB(t)
+	r := NewStatsRepo(db)
+	ctx := context.Background()
+
+	count, err := r.CountInsightGenerationsToday(ctx, "user-1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count)
+
+	err = r.UpsertInsightCache(ctx, "user-1", "week", "2024-06-15", "fp-1", "Insight 1")
+	require.NoError(t, err)
+	err = r.UpsertInsightCache(ctx, "user-1", "month", "2024-06-15", "fp-2", "Insight 2")
+	require.NoError(t, err)
+
+	count, err = r.CountInsightGenerationsToday(ctx, "user-1")
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), count)
+
+	count, err = r.CountInsightGenerationsToday(ctx, "user-2")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), count)
+}
