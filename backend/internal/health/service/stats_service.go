@@ -33,6 +33,7 @@ type BodyMetricsSummaryProvider interface {
 type StatsService struct {
 	repo        StatsRepo
 	bodyMetrics BodyMetricsSummaryProvider
+	creditGuard CreditGuard
 	cfg         *config.Config
 	client      *http.Client
 }
@@ -50,6 +51,10 @@ func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg
 		cfg:         c,
 		client:      &http.Client{Timeout: 60 * time.Second},
 	}
+}
+
+func (s *StatsService) ConfigureCreditGuard(guard CreditGuard) {
+	s.creditGuard = guard
 }
 
 type DailyCalories struct {

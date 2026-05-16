@@ -185,6 +185,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Membership module DI
 	membershipRepo := membershiprepo.NewMembershipRepo(db)
 	membershipSvc := membershipservice.NewMembershipService(membershipRepo, cfg)
+	statsSvc.ConfigureCreditGuard(membershipSvc)
 	analyzeTaskSvc.ConfigureCreditGuard(membershipSvc)
 	exerciseSvc.ConfigureCreditGuard(membershipSvc)
 	exerciseSvc.ConfigureInviteRewardActivator(membershipSvc)
