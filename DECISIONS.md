@@ -10,6 +10,11 @@
 
 # DECISIONS
 
+- `2026-05-16`: 小程序线上/体验版后端域名口径：
+  - `v2.healthymax.cn` 已弃用，小程序生产/预览构建不得再请求该域名。
+  - `build:weapp:preview`、`build:weapp:debug`、`dev:weapp:online` 统一注入 `TARO_APP_API_BASE_URL=https://dev.healthymax.cn`。
+  - `config/index.ts` 的 production 默认值和 `src/utils/api.ts` 的注入失败兜底也统一为 `https://dev.healthymax.cn`，避免构建脚本漏传环境变量时回退到旧域名。
+
 - `2026-05-16`: 食物分析等待页互动卡口径：
   - 等待页的 `WAITING_INTERACTION_CARDS` 应保持大题库，不再只放少量固定题。
   - 互动内容优先覆盖用户高频饮食决策：进食顺序、主食份量、蛋白质、控油控糖、外卖、火锅、奶茶、夜宵、聚餐、轻食、记录习惯等。

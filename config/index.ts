@@ -24,7 +24,7 @@ export default defineConfig<'vite'>(async (merge) => {
     process.env.TARO_APP_API_BASE_URL ||
     (process.env.NODE_ENV === 'development'
       ? 'http://127.0.0.1:3010'
-      : 'https://v2.healthymax.cn')
+      : 'https://dev.healthymax.cn')
   const expirySubscribeTemplateId = process.env.TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID || ''
   const iconCdnBaseUrl = process.env.TARO_APP_ICON_CDN_BASE_URL || ''
 
