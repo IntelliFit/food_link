@@ -398,7 +398,10 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 	reasoning := estimate.Reasoning
 	logDesc := desc
 	if logDesc == "" {
-		logDesc = "图片识别运动"
+		logDesc = strings.TrimSpace(estimate.ExerciseType)
+		if logDesc == "" {
+			logDesc = "图片识别运动"
+		}
 	}
 	log := &domain.ExerciseLog{
 		UserID:         userID,
@@ -432,6 +435,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		"reasoning":          reasoning,
 		"profile_snapshot":   profileSnapshot,
 		"today_total":        total,
+		"exercise_type":      estimate.ExerciseType,
 	}, nil
 }
 
@@ -445,10 +449,11 @@ func (s *ExerciseService) activateInviteReward(ctx context.Context, userID, acti
 }
 
 type ExerciseEstimate struct {
-	CaloriesKcal int
-	Raw          string
-	Reasoning    string
-	Source       string
+	CaloriesKcal  int
+	Raw           string
+	Reasoning     string
+	Source        string
+	ExerciseType  string
 }
 
 type exerciseMetRule struct {
@@ -538,9 +543,9 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		userPrompt += "\n\n" + profileText + "\n\n请结合这些真实信息估算；只有缺失字段才允许合理假设。"
 	}
 	userContent := any(userPrompt)
-	systemPrompt := "你是运动热量估算助手。只输出 JSON 对象，不要 markdown。格式为 {\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。reasoning 不超过 80 个汉字。"
+	systemPrompt := "你是运动热量估算助手。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 为识别出的运动类型名称（如跑步、游泳等），不超过 20 字；reasoning 不超过 80 个汉字。"
 	if imageURL != "" {
-		systemPrompt = "你是运动热量估算助手。可根据图片识别运动类型、强度和可能时长，并结合文字描述估算热量。只输出 JSON 对象，不要 markdown。格式为 {\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。reasoning 不超过 80 个汉字。"
+		systemPrompt = "你是运动热量估算助手。可根据图片识别运动类型、强度和可能时长，并结合文字描述估算热量。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 为识别出的运动类型名称（如跑步、游泳等），不超过 20 字；reasoning 不超过 80 个汉字。"
 		userContent = []map[string]any{
 			{"type": "text", "text": userPrompt},
 			{"type": "image_url", "image_url": map[string]string{"url": imageURL}},
@@ -633,7 +638,11 @@ func parseExerciseEstimateJSON(raw string) (ExerciseEstimate, error) {
 	if reasoning == "" || reasoning == "<nil>" {
 		reasoning = "基于运动类型、时长和用户画像估算"
 	}
-	return ExerciseEstimate{CaloriesKcal: clampInt(calories, 1, 5000), Reasoning: reasoning}, nil
+	exerciseType := strings.TrimSpace(fmt.Sprintf("%v", payload["exercise_type"]))
+	if exerciseType == "" || exerciseType == "<nil>" {
+		exerciseType = ""
+	}
+	return ExerciseEstimate{CaloriesKcal: clampInt(calories, 1, 5000), Reasoning: reasoning, ExerciseType: exerciseType}, nil
 }
 
 func exerciseLogRecordedAt(log domain.ExerciseLog) any {
@@ -661,7 +670,7 @@ func ruleEstimateExerciseCalories(desc string, profileSnapshot map[string]any) E
 		calories = clampInt(calories, 1, 5000)
 		reasoning := fmt.Sprintf("规则估算：%s约%d分钟，按%.1fkg体重计算", label, int(math.Round(minutes)), weight)
 		rawBytes, _ := json.Marshal(map[string]any{"reasoning": reasoning, "calories_kcal": calories, "source": "rule_met"})
-		return ExerciseEstimate{CaloriesKcal: calories, Raw: string(rawBytes), Reasoning: reasoning, Source: "rule_met"}
+		return ExerciseEstimate{CaloriesKcal: calories, Raw: string(rawBytes), Reasoning: reasoning, Source: "rule_met", ExerciseType: label}
 	}
 	length := len([]rune(desc))
 	calories := 50.0 + float64(length)*1.5
@@ -671,7 +680,7 @@ func ruleEstimateExerciseCalories(desc string, profileSnapshot map[string]any) E
 	value := clampInt(int(math.Round(math.Min(calories, 800))), 1, 5000)
 	reasoning := fmt.Sprintf("规则兜底：%s缺少明确时长，按描述强度粗估", label)
 	rawBytes, _ := json.Marshal(map[string]any{"reasoning": reasoning, "calories_kcal": value, "source": "rule_fallback"})
-	return ExerciseEstimate{CaloriesKcal: value, Raw: string(rawBytes), Reasoning: reasoning, Source: "rule_fallback"}
+	return ExerciseEstimate{CaloriesKcal: value, Raw: string(rawBytes), Reasoning: reasoning, Source: "rule_fallback", ExerciseType: label}
 }
 
 func splitExerciseSegments(desc string) []string {
