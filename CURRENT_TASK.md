@@ -1,3 +1,58 @@
+# 2026-05-16 — 本地修改提交
+
+- User 要求：提交本地修改并写好 commit 信息。
+- Status: committing
+- Scope:
+  - 后端食物分析模型路由与 Doubao/Gemini 精准模式分工。
+  - 分析等待页互动题库扩充与精准模式长等待提示。
+  - 已解决 `DECISIONS.md` 中暂存恢复产生的冲突标记，保留两侧有效决策。
+- Verification before commit:
+  - `git diff --check` passed（仅 LF/CRLF 提示）。
+  - 根目录未发现需清理的临时 `.png/.html/.py/.js` 文件。
+
+# 2026-05-16 — 精准模式等待时长提示
+
+- User 要求：精准模式等待时间比较久，需要在等待页提醒用户。
+- Status: fixed_code_static_verified_runtime_blocked
+- Fix:
+  - `src/packageExtra/pages/analyze-loading/index.tsx` 在食物分析 `strict` 精准模式且非纠错任务时展示等待提示。
+  - `src/packageExtra/pages/analyze-loading/index.scss` 新增 `.precision-long-wait-notice` 样式，使提示跟随当前等待面板视觉。
+  - 提示文案：精准模式会分项识别并复核份量，可能需要更久；用户可以先离开，完成后到识别记录查看。
+- Verification:
+  - `npx eslint src/packageExtra/pages/analyze-loading/index.tsx --max-warnings 0` passed。
+  - `git diff --check -- src/packageExtra/pages/analyze-loading/index.tsx src/packageExtra/pages/analyze-loading/index.scss` passed（仅 Git 提示 LF/CRLF 转换）。
+  - `npx stylelint src/packageExtra/pages/analyze-loading/index.scss --allow-empty-input` 未通过，失败来自该 SCSS 文件既有 stylelint 问题；本次新增样式已按现代 color notation 调整。
+  - `mrc where --port 9420` 与 `mrc where --port 3001` 均无法连接微信开发者工具自动化服务，运行时截图验证被阻塞。
+
+# 2026-05-16 — 分析等待页互动题库扩充
+
+- User 要求：食物分析等待过程中展示的互动文字/快问快答题库太少，需要大量扩充，并尽量保证用户每次看到都不一样。
+- Status: fixed_code_no_runtime_verification_by_user_request
+- Fix:
+  - `src/packageExtra/pages/analyze-loading/index.tsx` 扩充 `WAITING_INTERACTION_CARDS`，新增大量饮食互动题与提示卡，覆盖进食顺序、控油控糖、主食份量、蛋白质、外卖、火锅、奶茶、夜宵、聚餐、轻食、记录习惯等场景。
+  - 2026-05-16 follow-up: 用户要求“稍微再扩充一下”，继续追加炒饭、汉堡、饺子、烧烤、麻辣香锅、酸菜鱼、酒局、汤粉、外卖习惯等生活化场景；当前互动题库共 116 条（70 quiz + 46 fact）。
+  - 新增 `SHOWN_INTERACTION_CARDS_KEY` 与 `getNextInteractionIndex()`，用本地 storage 记录已展示的互动卡；每次进入等待页、切换任务或点击“换一个”时优先从未展示过的卡片中随机抽取。
+  - 当整套题库看完后才重置为新一轮，并避免紧接着重复当前卡片。
+- Verification:
+  - 用户明确要求“不用验证，直接理解好代码然后修改代码就行”，本轮不再继续运行 weapp-devtools 或额外测试。
+
+# 2026-05-16 — 食物识别算法与 Doubao/Gemini 差异分析
+
+- User observation: Doubao 识别中国菜更准，但估重较差；Gemini 识别中国菜略差，但估重更准。
+- 2026-05-16 follow-up implemented:
+  - 普通图片模式固定使用 Doubao 识别，再走后端 db_first 营养库回算。
+  - 纠错任务固定使用 Doubao，并保持 db_first，不继承精准估重的 Gemini 路由。
+  - 精准模式 planner 固定使用 Doubao 做食物主体/菜品种类识别。
+  - 精准模式分项估重固定使用 Gemini (`ofox-gemini`)，并新增无 fallback 调用，避免 Gemini 估重失败时静默降级到 Doubao。
+  - 精准模式重量复核改为对所有 planned items 启用，复核也使用 Gemini 且不 fallback。
+  - Verification: `go test ./internal/worker -run Test -count=1` passed；`go test ./internal/analyze/service` 的非 sqlite 定向用例 passed；完整 service 包因本机缺少 CGO/gcc 无法运行 sqlite 用例。
+- Current finding:
+  - 标准图片识别默认不从前端传 `modelName`，后端按配置走 Doubao。
+  - 标准链路是 db_first：LLM 输出食物名称、`estimatedWeightGrams`、`waterMl`，营养由后端营养库按名称和克重回算。
+  - 因此当前总热量误差主要来自两处：食物名是否命中正确菜品，以及 `estimatedWeightGrams` 是否准。
+  - 精准模式已有“先规划主体，再分项估重”的结构，但重量复核 `precisionRefineEnabled` 当前为 `false`，所以不会实际执行二次估重复核。
+- Follow-up suggestion: 可以设计 Doubao 负责菜品识别、Gemini 负责克重复核/估重的混合链路，并用 `analysis_feedback_samples` 或专门评测集统计每个模型在菜名和重量上的偏差。
+
 # 状态：完成源码修改 - AI分析风险解读直接展开
 
 - 2026-05-15 follow-up 6:
@@ -707,6 +762,14 @@
 
 # 状态：进行中 - nutrition library 批量回填维生素/微量营养素
 
+- 2026-05-12 branch update:
+  - User 要求把当前 `main` 降级为 `old_main`，并将新的 `dev` 复制为新的 `main`。
+  - 已完成：
+    - 本地/远端 `old_main` 已创建，指向原 `origin/main`：`fcc6b61`。
+    - 本地/远端 `main` 已更新到 `origin/dev`：`48fd3a7`。
+    - 远端 `main` 与 `dev` 当前同指向 `48fd3a7`；本地 `old_main` 已改为跟踪 `origin/old_main`，本地 `main` 跟踪 `origin/main`。
+  - 注意：当前工作区仍在 `dev` 分支，且保留了既有未提交改动；本次分支操作未提交或回退这些改动。
+
 - 2026-05-12 update:
   - User 进一步澄清：当前目标不是只给“数据库里没有的食物”补营养，而是先把 `food_nutrition_library` 里已有宏量营养素的食物，补齐维生素和其他微量营养素；如果库里根本没有这个食物，则再用 DeepSeek 生成整条完整营养记录。
   - 已完成：
@@ -721,12 +784,16 @@
     - `backend/internal/analyze/service/deepseek_nutrition.go`
       - DeepSeek 营养补全请求补上 `max_tokens`、短重试、响应摘要错误，并改用更稳的 JSON 解析路径。
       - 支持 DeepSeek 返回 camelCase 或 snake_case 微量营养字段，最终统一写入项目内部 camelCase 字段。
+    - `backend/internal/analyze/service/llm_client.go`
+      - 通用 LLM JSON 解析器支持顶层数组，兼容 DeepSeek 批量时直接返回 `[{index, unitNutritionPer100g}]` 的情况。
   - 只读验证：
-    - 实际库按“整组维生素/矿物质缺失”dry-run 统计到 `micronutrient_backfill_total=1739` 条。
+    - 实际库按“整组维生素/矿物质缺失”dry-run 初始统计到 `micronutrient_backfill_total=1739` 条。
     - 已用 `--apply --limit 5 --batch-size 1` 冒烟跑通，5 条中 4 条成功写回，共补 33 个缺失字段；未覆盖已有宏量营养素。
+    - 又按历史识别记录优先排序执行 `--apply --limit 50 --batch-size 5`，成功写回 39 条、586 个字段。
+    - 当前 dry-run 剩余 `micronutrient_backfill_total=1682` 条。
   - 现状：
     - 命令和写回逻辑已就绪。
-    - 如果要全量跑，建议反复执行 `go run ./cmd/nutrition-backfill -config-dir . --apply --limit 100 --batch-size 1`，每轮保持 `offset=0`，直到 dry-run total 接近 0；`offset` 只适合预览/人工跳过当前批次。
+    - 如果要全量跑，建议反复执行 `go run ./cmd/nutrition-backfill -config-dir . --apply --limit 50 --batch-size 5`，优先处理历史识别食物；遇到 DeepSeek 空响应的批次可重复运行。
 
 - 2026-05-12 follow-up:
   - User 确认营养素代码本身没有问题，是本地修复曾被远端旧错误覆盖/冲掉，要求提交当前代码并让远端以当前修复为准。

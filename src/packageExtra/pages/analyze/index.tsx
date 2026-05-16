@@ -638,7 +638,7 @@ function AnalyzePage() {
         : await submitAnalyzeTask({
             image_url: primaryImageUrl,
             image_urls: imageUrls,
-            modelName: 'gemini',
+            // modelName: 'ofox-gemini', // 默认不传，后端使用 doubao
             execution_mode: executionMode,
             analysis_engine: analysisEngine,
             ...commonPayload,

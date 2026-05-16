@@ -10,6 +10,18 @@
 
 # DECISIONS
 
+- `2026-05-16`: 食物分析等待页互动卡口径：
+  - 等待页的 `WAITING_INTERACTION_CARDS` 应保持大题库，不再只放少量固定题。
+  - 互动内容优先覆盖用户高频饮食决策：进食顺序、主食份量、蛋白质、控油控糖、外卖、火锅、奶茶、夜宵、聚餐、轻食、记录习惯等。
+  - 展示逻辑应优先从本地未看过的互动卡中随机抽取，整套题库看完后再重置新一轮，避免用户连续看到同一张卡。
+
+- `2026-05-16`: 食物识别模型分工口径：
+  - 普通图片模式固定走 Doubao 识别食物名称、克重和 waterMl，然后继续用 db_first 营养库回算营养。
+  - 纠错任务固定走 Doubao，并保持 db_first；纠错不使用 Gemini 估重链路。
+  - 精准模式拆成两阶段：Doubao 负责 planner/食物主体与中国菜种类识别；Gemini (`ofox-gemini`) 负责分项重量估计。
+  - 精准模式的 Gemini 估重调用不允许静默 fallback 到 Doubao，避免重量质量退回普通识别水平。
+  - 精准模式对所有 planned items 启用重量复核，复核同样使用 Gemini no-fallback；营养仍由后端 db_first 统一回算。
+
 - `2026-05-15`: 分析页面板命名与归类口径：
   - 分析页三段面板为 `健康指数 / AI分析 / 热量分布`。
   - `AI分析` 面板承载 `AI 风险解读`，不再放在健康指数底部；该内容直接展开显示完整正文，不使用点击卡片、折叠或底部详情弹层。
@@ -108,6 +120,10 @@
   - 首页 `/api/home/dashboard` 需要返回餐次级 `intake_ratio`，按该餐所有 item 的 `sum(intake)/sum(weight)*100` 聚合；缺少 intake 时可用 `weight * ratio / 100` 兜底。
   - 首页 `meal_record_entries[]` 也需要返回每条记录的 `intake_ratio` 以及 `total_protein/total_carbs/total_fat/water_ml`，便于同餐多记录弹层不依赖 `full_record` 缓存即可展示。
   - 识别记录详情页按每个 item 的 `ratio` 渲染「摄入比例 xx%」，即使为 100% 也显式展示；营养值继续按 ratio 折算实际摄入。
+- `2026-05-12`: 分支命名与基线口径更新：
+  - 原 `main` 已保留为 `old_main`，对应提交 `fcc6b61`。
+  - 新 `main` 与新 `dev` 保持同一基线，当前均指向 `48fd3a7`。
+  - 后续开发默认基于新的 `dev` / `main` 这条线继续，不再把旧 `main` 当作当前产品基线。
 
 - `2026-05-12`: 旧主包 `pages/record/index` 不再作为饮食记录入口：
   - 当前饮食记录主入口是首页 `RecordMenu` 弹窗；底栏中间按钮、首页空餐食按钮、当天记录页空态补录都必须回到首页打开该弹窗。
@@ -137,7 +153,8 @@
   - 批量待处理目标按“整组维生素为空或整组矿物质为空”筛选，而不是任意单字段为 0；因为胆固醇、维 D、B12 等字段对很多食物天然可能为 0，不能据此判定数据缺失。
   - 不在营养库里的食物，才通过 DeepSeek 生成完整每 100g 营养条目，并用 `deepseek_auto` 来源插入标准库与 alias。
   - 批量维护命令使用 `backend/cmd/nutrition-backfill`；默认 dry-run，显式 `--apply` 才写库。DeepSeek 批量默认 `--batch-size 1`，优先保证 JSON 稳定。
-  - 全量执行时建议重复运行 `--apply --limit 100 --batch-size 1` 且保持 `offset=0`，让每轮从当前仍缺失的集合继续处理；`offset` 只用于预览或手动跳过当前批次。
+  - 回填顺序优先处理 `source LIKE '历史%'` 的历史识别食物，避免 USDA 冷门酒水等低微量食物长期占住批次前排。
+  - 全量执行时建议重复运行 `--apply --limit 50 --batch-size 5` 且保持 `offset=0`，让每轮从当前仍缺失的集合继续处理；`offset` 只用于预览或手动跳过当前批次。
 
 - `2026-05-12`: 后端 Docker 部署构建需要显式使用可配置 `GOPROXY`：
   - `backend/Dockerfile` 在 builder 阶段设置 `ARG GOPROXY=https://goproxy.cn,direct` 与 `ENV GOPROXY=${GOPROXY}`。

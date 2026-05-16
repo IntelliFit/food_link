@@ -256,6 +256,110 @@ func summarizeUpstreamBody(data []byte, contentType string) string {
 	return text
 }
 
+// DoubaoClient calls Volcano Engine Ark API (OpenAI-compatible).
+type DoubaoClient struct {
+	APIKey  string
+	Model   string
+	BaseURL string
+	client  *http.Client
+}
+
+func NewDoubaoClient(apiKey, model string, baseURLs ...string) *DoubaoClient {
+	if model == "" {
+		model = "doubao-seed-2-0-lite-260428"
+	}
+	baseURL := "https://ark.cn-beijing.volces.com/api/v3"
+	if len(baseURLs) > 0 && strings.TrimSpace(baseURLs[0]) != "" {
+		baseURL = strings.TrimRight(strings.TrimSpace(baseURLs[0]), "/")
+	}
+	return &DoubaoClient{
+		APIKey:  apiKey,
+		Model:   model,
+		BaseURL: baseURL,
+		client:  &http.Client{Timeout: 90 * time.Second},
+	}
+}
+
+func (c *DoubaoClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	imageURLs := []string{}
+	if strings.TrimSpace(imageURL) != "" {
+		imageURLs = append(imageURLs, imageURL)
+	}
+	return c.AnalyzeWithImages(ctx, prompt, imageURLs)
+}
+
+func (c *DoubaoClient) AnalyzeWithImages(ctx context.Context, prompt string, imageURLs []string) (map[string]any, error) {
+	return c.AnalyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0.3)
+}
+
+func (c *DoubaoClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {
+	content := []map[string]any{
+		{"type": "text", "text": prompt},
+	}
+	for _, imageURL := range imageURLs {
+		imageURL = strings.TrimSpace(imageURL)
+		if imageURL == "" {
+			continue
+		}
+		content = append(content, map[string]any{
+			"type": "image_url",
+			"image_url": map[string]string{
+				"url": imageURL,
+			},
+		})
+	}
+	body := map[string]any{
+		"model":            c.Model,
+		"messages":         []map[string]any{{"role": "user", "content": content}},
+		"temperature":      temperature,
+		"reasoning_effort": "minimal",
+	}
+	return c.doRequest(ctx, c.BaseURL+"/chat/completions", body)
+}
+
+func (c *DoubaoClient) doRequest(ctx context.Context, url string, body map[string]any) (map[string]any, error) {
+	b, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, readErr
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("doubao api error %d: %s", resp.StatusCode, summarizeUpstreamBody(data, resp.Header.Get("Content-Type")))
+	}
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if looksLikeHTMLResponse(data, contentType) {
+		return nil, fmt.Errorf("doubao api returned html instead of json; check DOUBAO_BASE_URL, current base URL: %s", c.BaseURL)
+	}
+
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("decode doubao response failed: %w", err)
+	}
+	if len(result.Choices) == 0 {
+		return nil, fmt.Errorf("empty response from doubao")
+	}
+	return parseLLMJSON(result.Choices[0].Message.Content)
+}
+
 func looksLikeHTMLResponse(data []byte, contentType string) bool {
 	if strings.Contains(strings.ToLower(contentType), "text/html") {
 		return true
@@ -273,7 +377,7 @@ func parseLLMJSON(content string) (map[string]any, error) {
 	content = strings.TrimSpace(content)
 	content = codeFenceRe.ReplaceAllString(content, "")
 	content = strings.TrimSpace(content)
-	var parsed map[string]any
+	var parsed any
 	if err := json.Unmarshal([]byte(content), &parsed); err != nil {
 		return nil, &LLMJSONParseError{Err: err}
 	}
@@ -288,7 +392,10 @@ func normalizePayload(parsed any) map[string]any {
 		dictItems := make([]any, 0)
 		for _, item := range arr {
 			if it, ok2 := item.(map[string]any); ok2 {
-				if _, hasName := it["name"]; hasName {
+				_, hasName := it["name"]
+				_, hasIndex := it["index"]
+				_, hasUnit := it["unitNutritionPer100g"]
+				if hasName || hasIndex || hasUnit {
 					dictItems = append(dictItems, it)
 				}
 			}

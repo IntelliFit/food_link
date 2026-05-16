@@ -359,6 +359,15 @@
   text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.35);
 }
 
+.precision-long-wait-notice {
+  display: block;
+  margin-top: 14rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: rgb(254 240 138 / 94%);
+  text-shadow: 0 2rpx 8rpx rgb(0 0 0 / 35%);
+}
+
 .waiting-interaction-card {
   width: 100%;
   max-width: 630rpx;

@@ -235,19 +235,20 @@ func TestAttachPrecisionItemMetadata_MatchesByNameThenIndex(t *testing.T) {
 	}
 }
 
-func TestShouldRefinePrecisionWeights_TriggersForPythonConditions(t *testing.T) {
+func TestShouldRefinePrecisionWeights_RefinesEveryPrecisionItem(t *testing.T) {
 	cases := [][]map[string]any{
 		{{"item_name": "白米饭", "uncertainty_level": "low"}},
 		{{"item_name": "清炒冬瓜", "uncertainty_level": "high"}},
 		{{"item_name": "苹果", "requires_reference": true}},
+		{{"item_name": "鸡蛋", "uncertainty_level": "low"}},
 	}
 	for _, items := range cases {
 		if !shouldRefinePrecisionWeights(items) {
 			t.Fatalf("expected refine trigger for %#v", items)
 		}
 	}
-	if shouldRefinePrecisionWeights([]map[string]any{{"item_name": "鸡蛋", "uncertainty_level": "low"}}) {
-		t.Fatalf("did not expect refine for simple low uncertainty item")
+	if shouldRefinePrecisionWeights(nil) {
+		t.Fatalf("did not expect refine for empty plan")
 	}
 }
 

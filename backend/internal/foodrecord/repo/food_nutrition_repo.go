@@ -329,7 +329,7 @@ func (r *FoodNutritionRepo) ListFoodsNeedingVitaminBackfill(ctx context.Context,
 	var foods []domain.FoodNutrition
 	err := r.db.WithContext(ctx).
 		Where(micronutrientBackfillWhere(), true).
-		Order("canonical_name ASC, id ASC").
+		Order("CASE WHEN source LIKE '历史%' THEN 0 ELSE 1 END, canonical_name ASC, id ASC").
 		Offset(offset).
 		Limit(limit).
 		Find(&foods).Error

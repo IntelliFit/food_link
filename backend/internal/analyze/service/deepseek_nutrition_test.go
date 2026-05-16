@@ -60,3 +60,25 @@ func TestDeepSeekNutritionEstimator_EstimateParsesSnakeCaseMicronutrients(t *tes
 	assert.Equal(t, 6.0, rows[0]["vitaminCMg"])
 	assert.Equal(t, 0.2, rows[0]["vitaminB12Mcg"])
 }
+
+func TestDeepSeekNutritionEstimator_EstimateParsesArrayContent(t *testing.T) {
+	estimator := NewDeepSeekNutritionEstimator("test-key", "", "")
+	estimator.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"choices":[{"message":{"content":"[{\"index\":0,\"unitNutritionPer100g\":{\"calories\":90,\"protein\":2,\"carbs\":12,\"fat\":1,\"calciumMg\":22,\"vitaminCMg\":6}}]"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{
+		Index:                0,
+		Name:                 "测试食物",
+		EstimatedWeightGrams: 100,
+	}}, "")
+	require.NoError(t, err)
+	require.Contains(t, rows, 0)
+	assert.Equal(t, 22.0, rows[0]["calciumMg"])
+	assert.Equal(t, 6.0, rows[0]["vitaminCMg"])
+}

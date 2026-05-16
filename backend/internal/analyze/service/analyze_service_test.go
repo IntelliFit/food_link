@@ -84,32 +84,32 @@ func TestNormalizeExecutionMode(t *testing.T) {
 
 func TestResolveModelConfig(t *testing.T) {
 	p, m := resolveModelConfig("")
-	assert.Equal(t, "qwen", p)
-	assert.Equal(t, "qwen-vl-max", m)
+	assert.Equal(t, "doubao", p)
+	assert.Equal(t, "doubao-seed-2-0-lite-260428", m)
 
 	p, m = resolveModelConfig("qwen")
-	assert.Equal(t, "qwen", p)
-	assert.Equal(t, "qwen-vl-max", m)
+	assert.Equal(t, "doubao", p)
+	assert.Equal(t, "doubao-seed-2-0-lite-260428", m)
 
 	p, m = resolveModelConfig("qwen-vl-max")
-	assert.Equal(t, "qwen", p)
-	assert.Equal(t, "qwen-vl-max", m)
+	assert.Equal(t, "doubao", p)
+	assert.Equal(t, "doubao-seed-2-0-lite-260428", m)
 
 	p, m = resolveModelConfig("deepseek")
 	assert.Equal(t, "deepseek", p)
 	assert.Equal(t, "deepseek-v4-flash", m)
 
 	p, m = resolveModelConfig("gemini")
-	assert.Equal(t, "qwen", p)
-	assert.Equal(t, "qwen-vl-max", m)
+	assert.Equal(t, "doubao", p)
+	assert.Equal(t, "doubao-seed-2-0-lite-260428", m)
 
 	p, m = resolveModelConfig("ofox-gemini")
 	assert.Equal(t, "gemini", p)
 	assert.Equal(t, "gemini-3-flash-preview", m)
 
 	p, m = resolveModelConfig("unknown-model")
-	assert.Equal(t, "qwen", p)
-	assert.Equal(t, "qwen-vl-max", m)
+	assert.Equal(t, "doubao", p)
+	assert.Equal(t, "doubao-seed-2-0-lite-260428", m)
 }
 
 func TestParseLLMJSON(t *testing.T) {
@@ -289,6 +289,7 @@ func TestAnalyzeService_Analyze(t *testing.T) {
 	_, userRepo := setupAnalyzeServiceTestDB(t)
 	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "test", "items": []any{map[string]any{"name": "rice", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 130.0}}}}}
 	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, userRepo)
+	svc.doubaoClient = dashScopeClient
 	ctx := context.Background()
 
 	result, err := svc.Analyze(ctx, "", AnalyzeInput{ImageURL: "https://example.com/img.jpg"})
@@ -299,6 +300,7 @@ func TestAnalyzeService_Analyze(t *testing.T) {
 func TestAnalyzeService_AnalyzeUsesSingleLLMRequestForMultipleImages(t *testing.T) {
 	client := &multiImageLLMClient{result: map[string]any{"description": "multi", "items": []any{}}}
 	svc := NewAnalyzeService(client, client, nil)
+	svc.doubaoClient = client
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/1.jpg",
@@ -341,10 +343,11 @@ func TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault(t *testing.T) {
 	assert.Contains(t, err.Error(), "DEEPSEEK_API_KEY")
 }
 
-func TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily(t *testing.T) {
-	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen image", "items": []any{}}}
+func TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubao(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
 	ofoxClient := &mockLLMClient{err: assert.AnError}
 	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+	svc.doubaoClient = dashScopeClient
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
@@ -352,13 +355,14 @@ func TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily(t *testin
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "qwen image", result["description"])
+	assert.Equal(t, "doubao image", result["description"])
 }
 
-func TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider(t *testing.T) {
-	dashScopeClient := &mockLLMClient{err: assert.AnError}
+func TestAnalyzeService_AnalyzeImageStandardIgnoresConfiguredGeminiProvider(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
 	ofoxClient := &mockLLMClient{result: map[string]any{"description": "gemini image", "items": []any{}}}
 	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+	svc.doubaoClient = dashScopeClient
 	svc.ConfigureImageProvider("gemini")
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
@@ -367,13 +371,14 @@ func TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider(t *testing.T)
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "gemini image", result["description"])
+	assert.Equal(t, "doubao image", result["description"])
 }
 
-func TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen(t *testing.T) {
-	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen image", "items": []any{}}}
+func TestAnalyzeService_AnalyzeImageStandardUsesDoubaoForExplicitQwen(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
 	ofoxClient := &mockLLMClient{err: assert.AnError}
 	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+	svc.doubaoClient = dashScopeClient
 	svc.ConfigureImageProvider("gemini")
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
@@ -382,13 +387,14 @@ func TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen(
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "qwen image", result["description"])
+	assert.Equal(t, "doubao image", result["description"])
 }
 
-func TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError(t *testing.T) {
-	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen fallback", "items": []any{}}}
+func TestAnalyzeService_AnalyzeImageStandardForcesDoubaoInsteadOfGemini(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "doubao standard", "items": []any{}}}
 	ofoxClient := &mockLLMClient{err: errors.New("ofoxai api error 429: Resource exhausted. Please try again later")}
 	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+	svc.doubaoClient = dashScopeClient
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
@@ -396,7 +402,7 @@ func TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError(t
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "qwen fallback", result["description"])
+	assert.Equal(t, "doubao standard", result["description"])
 }
 
 func TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON(t *testing.T) {
@@ -412,6 +418,7 @@ func TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON(t *testing.T) {
 		},
 	}
 	svc := NewAnalyzeService(client, client, nil)
+	svc.doubaoClient = client
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
@@ -430,6 +437,7 @@ func TestAnalyzeService_AnalyzeStopsAfterInvalidJSONRetries(t *testing.T) {
 		errs: []error{parseErr, parseErr, parseErr, parseErr, nil},
 	}
 	svc := NewAnalyzeService(client, client, nil)
+	svc.doubaoClient = client
 
 	_, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
@@ -441,27 +449,41 @@ func TestAnalyzeService_AnalyzeStopsAfterInvalidJSONRetries(t *testing.T) {
 	assert.Equal(t, maxLLMJSONParseRetries+1, client.calls)
 }
 
-func TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError(t *testing.T) {
-	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen precision fallback", "items": []any{}}}
+func TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "doubao precision fallback", "items": []any{}}}
 	ofoxClient := &mockLLMClient{err: errors.New(`Post "https://api.ofox.ai/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)}
 	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+	svc.doubaoClient = dashScopeClient
 
 	result, err := svc.RunPrecisionJSONWithImages(context.Background(), "image", "prompt", []string{"https://example.com/img.jpg"}, "ofox-gemini")
 
 	require.NoError(t, err)
-	assert.Equal(t, "qwen precision fallback", result["description"])
+	assert.Equal(t, "doubao precision fallback", result["description"])
+}
+
+func TestAnalyzeService_RunPrecisionJSONNoFallbackKeepsGeminiError(t *testing.T) {
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "doubao fallback", "items": []any{}}}
+	ofoxClient := &mockLLMClient{err: errors.New(`Post "https://api.ofox.ai/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)}
+	svc := NewAnalyzeService(dashScopeClient, ofoxClient, nil)
+	svc.doubaoClient = dashScopeClient
+
+	_, err := svc.RunPrecisionJSONWithImagesNoFallback(context.Background(), "image", "prompt", []string{"https://example.com/img.jpg"}, "ofox-gemini")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "context deadline exceeded")
 }
 
 func TestAnalyzeService_AnalyzeCompare(t *testing.T) {
 	_, userRepo := setupAnalyzeServiceTestDB(t)
-	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "qwen result", "items": []any{}}}
+	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "doubao result", "items": []any{}}}
 	ofoxClient := &mockLLMClient{result: map[string]any{"description": "gemini result", "items": []any{}}}
 	svc := NewAnalyzeService(dashScopeClient, ofoxClient, userRepo)
+	svc.doubaoClient = dashScopeClient
 	ctx := context.Background()
 
 	result, err := svc.AnalyzeCompare(ctx, "", AnalyzeInput{ImageURL: "https://example.com/img.jpg"})
 	require.NoError(t, err)
-	assert.NotNil(t, result["qwen_result"])
+	assert.NotNil(t, result["doubao_result"])
 	assert.NotNil(t, result["gemini_result"])
 }
 
@@ -469,6 +491,7 @@ func TestAnalyzeService_AnalyzeCompareEngines(t *testing.T) {
 	_, userRepo := setupAnalyzeServiceTestDB(t)
 	dashScopeClient := &mockLLMClient{result: map[string]any{"description": "test", "items": []any{}}}
 	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, userRepo)
+	svc.doubaoClient = dashScopeClient
 	ctx := context.Background()
 
 	result, err := svc.AnalyzeCompareEngines(ctx, "", AnalyzeInput{ImageURL: "https://example.com/img.jpg"})
@@ -481,6 +504,7 @@ func TestAnalyzeService_AnalyzeBatch(t *testing.T) {
 	_, userRepo := setupAnalyzeServiceTestDB(t)
 	dashScopeClient := &multiImageLLMClient{result: map[string]any{"description": "batch", "items": []any{map[string]any{"name": "apple", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 50.0}}}}}
 	svc := NewAnalyzeService(dashScopeClient, dashScopeClient, userRepo)
+	svc.doubaoClient = dashScopeClient
 	ctx := context.Background()
 
 	_, err := svc.AnalyzeBatch(ctx, "", AnalyzeInput{ImageURLs: []string{}})
