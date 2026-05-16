@@ -48,6 +48,7 @@ import './index.scss'
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
+const MAX_ANALYZE_IMAGES = 3
 /** 判断当前识别会话是否已保存为饮食记录。
  * 优先读取 analyze-history 列表传入的 analyzeTaskIsRecorded 标记；
  * 不再依赖本地 analyze_committed_session 缓存，状态由后端返回。 */
@@ -1499,6 +1500,13 @@ function ResultPage() {
     // 检查是否有空名称
     if (!isTextTask && correctionItems.some(item => !item.name.trim())) {
       Taro.showToast({ title: '请填写所有食物名称', icon: 'none' })
+      return
+    }
+
+    // 图片数量限制校验
+    const draftImageCount = imagePaths.length > 0 ? imagePaths.length : (imagePath ? 1 : 0)
+    if (draftImageCount > MAX_ANALYZE_IMAGES) {
+      Taro.showToast({ title: `最多支持 ${MAX_ANALYZE_IMAGES} 张图片`, icon: 'none' })
       return
     }
 
