@@ -81,7 +81,6 @@ import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTarget
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, type MealPosterSharePayload } from './components'
 
-const BACKFILL_LOW_ENERGY_RATIO = 0.6
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
 
@@ -1175,6 +1174,7 @@ function IndexPage() {
   /** 饮食/运动/保质期等变更：仅标记脏数据，回到首页或由 useDidShow 再拉，避免重复请求 */
   useEffect(() => {
     const markHomeStale = (): void => {
+      skipNextRefreshRef.current = false
       homeDataStaleRef.current = true
       const today = formatDateKey(new Date())
       const currentSelected = selectedDateRef.current || today
@@ -1584,7 +1584,7 @@ function IndexPage() {
       redirectToLogin()
       return
     }
-    Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
+    Taro.switchTab({ url: '/pages/expiry/index' })
   }
 
   const openFoodExpiryEdit = (id: string) => {
@@ -1604,14 +1604,19 @@ function IndexPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}?date=${encodeURIComponent(date)}` })
   }
 
-  const openBodyTrends = (tab: 'weight' | 'water' | 'exercise') => {
+  const openBodyMetricRecord = (type: 'weight' | 'water' | 'exercise') => {
     if (!getAccessToken()) {
       redirectToLogin()
       return
     }
     const date = selectedDateRef.current || formatDateKey(new Date())
+    const page = type === 'weight'
+      ? '/pages/weight-record/index'
+      : type === 'water'
+        ? '/pages/water-record/index'
+        : '/pages/exercise-record/index'
     Taro.navigateTo({
-      url: `${extraPkgUrl('/pages/body-trends/index')}?tab=${encodeURIComponent(tab)}&date=${encodeURIComponent(date)}`
+      url: `${extraPkgUrl(page)}?date=${encodeURIComponent(date)}`
     })
   }
 
@@ -2295,22 +2300,20 @@ function IndexPage() {
     homeAchievement
   ])
 
-  const selectedDayEnergyRatio = intakeData.target > 0 ? intakeData.current / intakeData.target : 0
   const backfillDismissedDateSet = new Set(dismissedBackfillDates)
   const showBackfillHint =
     isAllowedRecordDate(selectedDate) &&
     !isTodayRecordDate(selectedDate) &&
     !dashboardBusy &&
     !isGuest &&
-    !backfillDismissedDateSet.has(selectedDate) &&
-    selectedDayEnergyRatio < BACKFILL_LOW_ENERGY_RATIO
+    !backfillDismissedDateSet.has(selectedDate)
   const openBackfillRecordMenu = () => {
     setShowRecordMenu(true)
   }
   const handleDismissBackfillHint = async () => {
     const { confirm } = await Taro.showModal({
       title: '取消补录提醒',
-      content: '取消后，本次低能量补录提醒将不再显示。仍可随时通过首页记录入口补录餐食。',
+      content: '取消后，这一天的补录提醒将不再显示。仍可随时通过首页记录入口补录历史餐食。',
       confirmText: '确认取消',
       cancelText: '继续保留',
       confirmColor: '#5cb896'
@@ -2360,7 +2363,7 @@ function IndexPage() {
           <View className='home-backfill-hint'>
             <Text className='home-backfill-hint__dot' />
             <View className='home-backfill-hint__copy'>
-              <Text className='home-backfill-hint__text'>检测到当日能量过低，是否需要补录</Text>
+              <Text className='home-backfill-hint__text'>可补录这一天的食物、体重、喝水和运动记录</Text>
             </View>
             <View className='home-backfill-hint__actions'>
               <Text className='home-backfill-hint__action' onClick={openBackfillRecordMenu}>去补录</Text>
@@ -2519,7 +2522,7 @@ function IndexPage() {
         {/* 体重/喝水状态卡片 */}
         <View className='body-status-section'>
           {/* 体重卡片 */}
-          <View className='body-status-card weight-card' onClick={() => openBodyTrends('weight')} onLongPress={openWeightEditor}>
+          <View className='body-status-card weight-card' onClick={() => openBodyMetricRecord('weight')} onLongPress={openWeightEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
                 <Text className='iconfont icon-weight-scale' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#6b7280' }} />
@@ -2553,12 +2556,12 @@ function IndexPage() {
                 ? '记录体重，追踪变化'
                 : weightSummary.latestWeight
                   ? `上次记录: ${weightSummary.latestWeight.date.slice(5)}`
-                  : '查看趋势，记录体重'}
+                  : '点击记录体重'}
             </Text>
           </View>
 
           {/* 喝水卡片 */}
-          <View className='body-status-card water-card' onClick={() => openBodyTrends('water')} onLongPress={openWaterEditor}>
+          <View className='body-status-card water-card' onClick={() => openBodyMetricRecord('water')} onLongPress={openWaterEditor}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
                 <Text className='iconfont icon-drink' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#5c9ed4' }} />
@@ -2581,12 +2584,12 @@ function IndexPage() {
               )}
             </View>
             <Text className='body-status-hint'>
-              {dashboardBusy || isGuest ? '查看喝水趋势' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
+              {dashboardBusy || isGuest ? '点击记录喝水' : `${Math.round(animatedWaterProgress)}% / 目标 ${bodyMetrics.waterGoalMl}ml`}
             </Text>
           </View>
 
           {/* 运动卡片 */}
-          <View className='body-status-card exercise-card' onClick={() => openBodyTrends('exercise')} onLongPress={openExerciseRecord}>
+          <View className='body-status-card exercise-card' onClick={() => openBodyMetricRecord('exercise')} onLongPress={openExerciseRecord}>
             <View className='body-status-header'>
               <View className='body-status-title-wrap'>
                 <Text className='iconfont icon-dumbbell' style={{ marginRight: '6rpx', fontSize: '26rpx', color: '#f0985c' }} />
@@ -2611,7 +2614,7 @@ function IndexPage() {
               )}
             </View>
             <Text className='body-status-hint'>
-              查看运动趋势
+              点击记录运动
             </Text>
           </View>
         </View>

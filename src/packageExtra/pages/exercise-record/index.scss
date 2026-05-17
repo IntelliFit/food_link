@@ -139,7 +139,7 @@ $border-color: #e5e7eb;
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 16rpx 24rpx;
+  padding: 8rpx 24rpx 24rpx;
   overflow-y: auto;
 
   &--empty {
@@ -415,17 +415,54 @@ $border-color: #e5e7eb;
   }
 }
 
-// 输入区域（与屏幕同宽，内容水平居中）
+// 记录主操作卡
 .input-section {
-  width: 100%;
-  max-width: 100%;
+  margin: 0 24rpx 16rpx;
   box-sizing: border-box;
-  padding: 16rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+  padding: 24rpx;
   background: $card-bg;
-  border-top: 2rpx solid $border-color;
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 20rpx rgb(0 0 0 / 4%);
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+}
+
+.exercise-compose-header {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin-bottom: 18rpx;
+}
+
+.exercise-compose-kicker {
+  display: block;
+  margin-bottom: 6rpx;
+  font-size: 24rpx;
+  color: $exercise-color;
+  font-weight: 700;
+}
+
+.exercise-compose-title {
+  display: block;
+  font-size: 38rpx;
+  line-height: 1.2;
+  color: $text-primary;
+  font-weight: 800;
+}
+
+.exercise-trend-link {
+  flex: 0 0 auto;
+  padding: 14rpx 20rpx;
+  border-radius: 999rpx;
+  background: $exercise-light;
+}
+
+.exercise-trend-link-text {
+  font-size: 24rpx;
+  color: $exercise-color;
+  font-weight: 700;
 }
 
 .image-preview-wrap {

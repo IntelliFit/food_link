@@ -35,6 +35,20 @@ func (m *mockBodyMetricsRepo) GetLatestWeightRecord(ctx context.Context, userID 
 	return &m.weightRecords[len(m.weightRecords)-1], nil
 }
 
+func (m *mockBodyMetricsRepo) DeleteWeightRecordByID(ctx context.Context, userID string, recordID string) (int64, error) {
+	filtered := make([]domain.BodyWeightRecord, 0)
+	deleted := int64(0)
+	for _, record := range m.weightRecords {
+		if record.UserID == userID && record.ID == recordID {
+			deleted++
+			continue
+		}
+		filtered = append(filtered, record)
+	}
+	m.weightRecords = filtered
+	return deleted, nil
+}
+
 func (m *mockBodyMetricsRepo) CreateWaterLog(ctx context.Context, log *domain.BodyWaterLog) error {
 	m.waterLogs = append(m.waterLogs, *log)
 	return nil
@@ -53,6 +67,20 @@ func (m *mockBodyMetricsRepo) DeleteWaterLogsByDate(ctx context.Context, userID 
 		} else {
 			filtered = append(filtered, log)
 		}
+	}
+	m.waterLogs = filtered
+	return deleted, nil
+}
+
+func (m *mockBodyMetricsRepo) DeleteWaterLogByID(ctx context.Context, userID string, logID string) (int64, error) {
+	filtered := make([]domain.BodyWaterLog, 0)
+	deleted := int64(0)
+	for _, log := range m.waterLogs {
+		if log.UserID == userID && log.ID == logID {
+			deleted++
+			continue
+		}
+		filtered = append(filtered, log)
 	}
 	m.waterLogs = filtered
 	return deleted, nil
@@ -171,6 +199,24 @@ func TestBodyMetricsService_ResetWaterLogs(t *testing.T) {
 	assert.Len(t, repo.waterLogs, 0)
 }
 
+func TestBodyMetricsService_DeleteWaterLog(t *testing.T) {
+	repo := &mockBodyMetricsRepo{}
+	svc := NewBodyMetricsService(repo)
+	ctx := context.Background()
+
+	recordedOn := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+	repo.waterLogs = []domain.BodyWaterLog{
+		{ID: "wl1", UserID: "u1", AmountMl: 250, RecordedOn: &recordedOn},
+		{ID: "wl2", UserID: "u1", AmountMl: 500, RecordedOn: &recordedOn},
+	}
+
+	result, err := svc.DeleteWaterLog(ctx, "u1", "wl1")
+	require.NoError(t, err)
+	assert.Equal(t, "喝水记录已删除", result["message"])
+	assert.Len(t, repo.waterLogs, 1)
+	assert.Equal(t, "wl2", repo.waterLogs[0].ID)
+}
+
 func TestBodyMetricsService_SaveWeightRecord(t *testing.T) {
 	repo := &mockBodyMetricsRepo{}
 	svc := NewBodyMetricsService(repo)
@@ -181,6 +227,24 @@ func TestBodyMetricsService_SaveWeightRecord(t *testing.T) {
 	assert.Equal(t, "体重已保存", result["message"])
 	assert.Len(t, repo.weightRecords, 1)
 	assert.Equal(t, 72.5, repo.weightRecords[0].WeightKg)
+}
+
+func TestBodyMetricsService_DeleteWeightRecord(t *testing.T) {
+	repo := &mockBodyMetricsRepo{}
+	svc := NewBodyMetricsService(repo)
+	ctx := context.Background()
+
+	recordedOn := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+	repo.weightRecords = []domain.BodyWeightRecord{
+		{ID: "w1", UserID: "u1", WeightKg: 72.5, RecordedOn: &recordedOn},
+		{ID: "w2", UserID: "u2", WeightKg: 68.0, RecordedOn: &recordedOn},
+	}
+
+	result, err := svc.DeleteWeightRecord(ctx, "u1", "w1")
+	require.NoError(t, err)
+	assert.Equal(t, "体重记录已删除", result["message"])
+	assert.Len(t, repo.weightRecords, 1)
+	assert.Equal(t, "w2", repo.weightRecords[0].ID)
 }
 
 func TestBodyMetricsService_SyncLocal(t *testing.T) {

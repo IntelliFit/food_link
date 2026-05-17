@@ -1,0 +1,237 @@
+$weight-primary: #5cb896;
+$weight-deep: #3f9474;
+$weight-text: #1f2937;
+$weight-muted: #6b7280;
+$weight-faint: #9ca3af;
+
+.weight-record-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 28rpx 28rpx 72rpx;
+  background: linear-gradient(180deg, rgb(92 184 150 / 10%) 0%, #f0f3f6 100%);
+}
+
+.weight-record-topbar,
+.weight-main-card,
+.weight-day-card {
+  border-radius: 24rpx;
+  background: #fff;
+  border: 1rpx solid rgb(31 41 55 / 5%);
+  box-shadow: 0 10rpx 30rpx rgb(31 41 55 / 6%);
+}
+
+.weight-record-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 28rpx;
+}
+
+.weight-record-kicker {
+  display: block;
+  margin-bottom: 8rpx;
+  font-size: 24rpx;
+  color: $weight-deep;
+  font-weight: 700;
+}
+
+.weight-record-title {
+  display: block;
+  font-size: 44rpx;
+  line-height: 1.15;
+  color: $weight-text;
+  font-weight: 800;
+}
+
+.weight-trend-link {
+  flex: 0 0 auto;
+  padding: 14rpx 20rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 10%);
+}
+
+.weight-trend-link-text {
+  font-size: 24rpx;
+  color: $weight-deep;
+  font-weight: 700;
+}
+
+.weight-main-card {
+  margin-top: 20rpx;
+  padding: 32rpx 28rpx 28rpx;
+}
+
+.weight-main-label {
+  display: block;
+  font-size: 28rpx;
+  color: $weight-muted;
+  line-height: 1.35;
+}
+
+.weight-main-input-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12rpx;
+  margin: 26rpx 0 28rpx;
+  min-height: 118rpx;
+}
+
+.weight-main-input {
+  width: 300rpx;
+  height: 118rpx;
+  text-align: center;
+  font-size: 76rpx;
+  line-height: 118rpx;
+  color: $weight-text;
+  font-weight: 800;
+  background: #f3f7f6;
+  border-radius: 24rpx;
+  font-variant-numeric: tabular-nums;
+}
+
+.weight-main-unit {
+  font-size: 30rpx;
+  color: $weight-muted;
+  font-weight: 700;
+}
+
+.weight-save-btn {
+  height: 92rpx;
+  border-radius: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(90deg, $weight-primary 0%, #8dd3bf 100%);
+  box-shadow: 0 10rpx 26rpx rgb(92 184 150 / 24%);
+}
+
+.weight-save-btn.is-disabled,
+.weight-delete-btn.is-disabled {
+  opacity: 0.55;
+}
+
+.weight-save-btn-text {
+  font-size: 31rpx;
+  font-weight: 800;
+  color: #fff;
+}
+
+.weight-main-helper {
+  display: block;
+  margin-top: 18rpx;
+  font-size: 24rpx;
+  line-height: 1.45;
+  color: $weight-faint;
+  text-align: center;
+}
+
+.weight-day-card {
+  margin-top: 20rpx;
+  padding: 24rpx;
+}
+
+.weight-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.weight-day-title {
+  font-size: 29rpx;
+  line-height: 1.35;
+  color: $weight-text;
+  font-weight: 800;
+}
+
+.weight-mini-spinner {
+  width: 26rpx;
+  height: 26rpx;
+  border: 3rpx solid rgb(92 184 150 / 24%);
+  border-top-color: $weight-primary;
+  border-radius: 50%;
+  animation: weight-spin 0.8s linear infinite;
+}
+
+.weight-day-list {
+  margin-top: 18rpx;
+  border-top: 1rpx solid #eef2f4;
+}
+
+.weight-day-row {
+  min-height: 104rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  border-bottom: 1rpx solid #eef2f4;
+}
+
+.weight-day-value {
+  display: block;
+  font-size: 34rpx;
+  line-height: 1.2;
+  color: $weight-text;
+  font-weight: 800;
+}
+
+.weight-day-date {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 23rpx;
+  color: $weight-faint;
+}
+
+.weight-delete-btn {
+  flex: 0 0 auto;
+  padding: 12rpx 16rpx;
+  border-radius: 14rpx;
+  background: rgb(212 92 92 / 9%);
+}
+
+.weight-delete-btn-text {
+  font-size: 23rpx;
+  color: #d45c5c;
+  font-weight: 600;
+}
+
+.weight-empty {
+  display: block;
+  padding: 34rpx 0 8rpx;
+  font-size: 25rpx;
+  color: $weight-faint;
+}
+
+@keyframes weight-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.fl-page-theme-root--dark .weight-record-page {
+  background: transparent;
+}
+
+.fl-page-theme-root--dark .weight-record-topbar,
+.fl-page-theme-root--dark .weight-main-card,
+.fl-page-theme-root--dark .weight-day-card {
+  background: #18211f;
+  border-color: #3d5d51;
+}
+
+.fl-page-theme-root--dark .weight-record-title,
+.fl-page-theme-root--dark .weight-main-input,
+.fl-page-theme-root--dark .weight-day-title,
+.fl-page-theme-root--dark .weight-day-value {
+  color: #e8ece9;
+}
+
+.fl-page-theme-root--dark .weight-main-input {
+  background: #222c29;
+}
+
+.fl-page-theme-root--dark .weight-day-list,
+.fl-page-theme-root--dark .weight-day-row {
+  border-color: #30413d;
+}

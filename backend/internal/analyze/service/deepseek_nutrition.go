@@ -14,6 +14,8 @@ import (
 
 var deepSeekFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")
 
+const deepSeekNutritionFallbackModel = "deepseek-v4-pro"
+
 type DeepSeekNutritionEstimator struct {
 	APIKey  string
 	BaseURL string
@@ -34,7 +36,7 @@ func NewDeepSeekNutritionEstimator(apiKey, baseURL, model string) *DeepSeekNutri
 	}
 	model = strings.TrimSpace(model)
 	if model == "" {
-		model = "deepseek-v4-flash"
+		model = deepSeekNutritionFallbackModel
 	}
 	return &DeepSeekNutritionEstimator{
 		APIKey:  strings.TrimSpace(apiKey),
@@ -69,11 +71,13 @@ func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []
 		return map[int]map[string]any{}, nil
 	}
 	payloadItems := []map[string]any{}
+	candidateNames := map[int]string{}
 	for _, candidate := range candidates {
 		name := strings.TrimSpace(candidate.Name)
 		if name == "" || candidate.EstimatedWeightGrams <= 0 {
 			continue
 		}
+		candidateNames[candidate.Index] = name
 		payloadItems = append(payloadItems, map[string]any{
 			"index":                candidate.Index,
 			"name":                 name,
@@ -83,15 +87,19 @@ func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []
 	if len(payloadItems) == 0 {
 		return map[int]map[string]any{}, nil
 	}
-	systemPrompt := "你是营养数据库补全助手。用户已通过视觉模型识别出食物名称和重量，现在只需要你基于食物名称、烹饪方式和重量，补充每100g营养估计。请尽量保守、贴近日常熟食。只返回 JSON，不要附加解释。"
+	systemPrompt := "你是营养数据库补全助手。用户已通过视觉模型识别出食物名称和重量，现在只需要你基于食物名称、烹饪方式和重量，补充每100g营养估计。请尽量使用可靠营养知识、品牌/包装常识和常见食物数据库口径交叉校验；不确定时保守估计并保持热量与宏量营养一致。只返回 JSON，不要附加解释。"
 	userPrompt := map[string]any{
 		"task": "为未命中食物补充每100g营养估计",
 		"requirements": []string{
 			"根据食物名称和常见烹饪方式估算每100g营养，不需要重新判断重量。",
 			"输出字段使用 camelCase。",
-			"所有字段必须为数字；未知时填 0。",
+			"所有字段必须为数字；不要因为不确定就把热量或宏量营养随意填 0，只有该营养天然接近 0 时才填 0。",
 			"如果名称带有烹饪信息，例如 清炒/清蒸/炖/红烧，请结合该烹饪方式估算。",
 			"热量单位 kcal，其余蛋白质/碳水/脂肪/纤维/糖单位 g，微量元素单位按字段名中的 Mg/Mcg。",
+			"热量必须与宏量营养一致：calories 应大致不低于 protein*4 + carbs*4 + fat*9；如果无法确定热量，用该公式的结果作为下限。",
+			"每100g 的 protein/carbs/fat/fiber/sugar/saturatedFat 不得为负，也不得超过 100g；sugar 不得超过 carbs，saturatedFat 不得超过 fat。",
+			"无糖黑咖啡/美式咖啡/纯茶/白水每100g可接近 0 kcal；但如果名称包含拿铁、奶、糖、糖浆、奶油、椰乳等，应估算对应碳水/脂肪和热量。",
+			"品牌饮品如果无法确认配方，应按同类常见产品估算，并保证热量和宏量营养自洽。",
 		},
 		"additionalContext": strings.TrimSpace(additionalContext),
 		"items":             payloadItems,
@@ -137,7 +145,7 @@ func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []
 		if !ok {
 			continue
 		}
-		out[index] = coerceExtendedNutrients(unit)
+		out[index] = normalizeFallbackUnitNutrition(candidateNames[index], coerceExtendedNutrients(unit))
 	}
 	return out, nil
 }
@@ -261,6 +269,49 @@ func coerceExtendedNutrients(unit map[string]any) map[string]any {
 		out[key] = round4(numberFromAny(nutritionValue(unit, key)))
 	}
 	return out
+}
+
+func normalizeFallbackUnitNutrition(foodName string, unit map[string]any) map[string]any {
+	out := zeroUnitNutritionPer100g()
+	for key := range out {
+		out[key] = clampMin(round4(numberFromAny(unit[key])), 0)
+	}
+	_ = foodName
+
+	out["protein"] = clampRange(numberFromAny(out["protein"]), 0, 100)
+	out["carbs"] = clampRange(numberFromAny(out["carbs"]), 0, 100)
+	out["fat"] = clampRange(numberFromAny(out["fat"]), 0, 100)
+	out["fiber"] = clampRange(numberFromAny(out["fiber"]), 0, 100)
+	out["sugar"] = clampRange(numberFromAny(out["sugar"]), 0, numberFromAny(out["carbs"]))
+	out["saturatedFat"] = clampRange(numberFromAny(out["saturatedFat"]), 0, numberFromAny(out["fat"]))
+
+	macroCalories := round4(numberFromAny(out["protein"])*4 + numberFromAny(out["carbs"])*4 + numberFromAny(out["fat"])*9)
+	calories := clampRange(numberFromAny(out["calories"]), 0, 900)
+	if macroCalories > 0 && calories < macroCalories*0.85 {
+		calories = macroCalories
+	}
+	out["calories"] = clampRange(round4(calories), 0, 900)
+	return out
+}
+
+func clampMin(value, min float64) float64 {
+	if value < min {
+		return min
+	}
+	return value
+}
+
+func clampRange(value, min, max float64) float64 {
+	if max < min {
+		max = min
+	}
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func nutritionValue(unit map[string]any, key string) any {

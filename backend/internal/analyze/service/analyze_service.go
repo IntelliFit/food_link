@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -25,29 +26,29 @@ const (
 	validExecutionMode     = "strict"
 	visionPrimaryTimeout   = 45 * time.Second
 	maxLLMJSONParseRetries = 3
+	maxLLMTransientRetries = 2
 )
 
 type AnalyzeService struct {
-	dashScopeClient LLMClient
-	ofoxAIClient    LLMClient
-	doubaoClient    LLMClient
-	imageProvider   string
-	users           *authrepo.UserRepo
-	nutrition       *foodrecordrepo.FoodNutritionRepo
-	deepseek        *DeepSeekNutritionEstimator
-	storage         *storage.Client
+	ofoxAIClient  LLMClient
+	doubaoClient  LLMClient
+	imageProvider string
+	users         *authrepo.UserRepo
+	nutrition     *foodrecordrepo.FoodNutritionRepo
+	deepseek      *DeepSeekNutritionEstimator
+	storage       *storage.Client
 }
 
-func NewAnalyzeService(dashScopeClient, ofoxAIClient LLMClient, users *authrepo.UserRepo, nutrition ...*foodrecordrepo.FoodNutritionRepo) *AnalyzeService {
+func NewAnalyzeService(doubaoClient, ofoxAIClient LLMClient, users *authrepo.UserRepo, nutrition ...*foodrecordrepo.FoodNutritionRepo) *AnalyzeService {
 	var nutritionRepo *foodrecordrepo.FoodNutritionRepo
 	if len(nutrition) > 0 {
 		nutritionRepo = nutrition[0]
 	}
 	return &AnalyzeService{
-		dashScopeClient: dashScopeClient,
-		ofoxAIClient:    ofoxAIClient,
-		users:           users,
-		nutrition:       nutritionRepo,
+		doubaoClient: doubaoClient,
+		ofoxAIClient: ofoxAIClient,
+		users:        users,
+		nutrition:    nutritionRepo,
 	}
 }
 
@@ -255,12 +256,19 @@ func isTransientLLMError(err error) bool {
 		"temporary failure",
 		"resource exhausted",
 		"please try again later",
+		"internalserviceerror",
 		"ofoxai api error 408",
 		"ofoxai api error 429",
 		"ofoxai api error 500",
 		"ofoxai api error 502",
 		"ofoxai api error 503",
 		"ofoxai api error 504",
+		"doubao api error 408",
+		"doubao api error 429",
+		"doubao api error 500",
+		"doubao api error 502",
+		"doubao api error 503",
+		"doubao api error 504",
 	}
 	for _, hint := range hints {
 		if strings.Contains(msg, hint) {
@@ -273,25 +281,45 @@ func isTransientLLMError(err error) bool {
 func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model string, call func(context.Context) (map[string]any, error)) (map[string]any, error) {
 	var parsed map[string]any
 	var err error
-	for retry := 0; ; retry++ {
+	jsonRetries := 0
+	transientRetries := 0
+	for {
 		parsed, err = call(ctx)
-		if err == nil || !IsLLMJSONParseError(err) || retry >= maxLLMJSONParseRetries {
+		if err == nil {
 			return parsed, err
 		}
-		retryNumber := retry + 1
-		apm.AddEvent(ctx, "llm json parse retry",
+		retryReason := ""
+		retryNumber := 0
+		maxRetries := 0
+		switch {
+		case IsLLMJSONParseError(err) && jsonRetries < maxLLMJSONParseRetries:
+			jsonRetries++
+			retryReason = "json_parse"
+			retryNumber = jsonRetries
+			maxRetries = maxLLMJSONParseRetries
+		case isTransientLLMError(err) && transientRetries < maxLLMTransientRetries:
+			transientRetries++
+			retryReason = "transient"
+			retryNumber = transientRetries
+			maxRetries = maxLLMTransientRetries
+		default:
+			return parsed, err
+		}
+		apm.AddEvent(ctx, "llm retry",
 			attribute.String("analysis.stage", stage),
 			attribute.String("analysis.provider", provider),
 			attribute.String("analysis.model", model),
+			attribute.String("analysis.retry_reason", retryReason),
 			attribute.Int("analysis.retry_number", retryNumber),
-			attribute.Int("analysis.max_retries", maxLLMJSONParseRetries),
+			attribute.Int("analysis.max_retries", maxRetries),
 		)
-		logger.WithTrace(ctx).Warn("llm returned invalid json; retrying same task",
+		logger.WithTrace(ctx).Warn("llm call failed; retrying same task",
 			zap.String("stage", stage),
 			zap.String("provider", provider),
 			zap.String("model", model),
+			zap.String("retry_reason", retryReason),
 			zap.Int("retry_number", retryNumber),
-			zap.Int("max_retries", maxLLMJSONParseRetries),
+			zap.Int("max_retries", maxRetries),
 			zap.Error(err),
 		)
 		backoff := time.Duration(200*retryNumber) * time.Millisecond
@@ -1066,10 +1094,10 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	if strings.HasPrefix(normalized, "doubao") {
 		return "doubao", raw
 	}
-	if normalized == "qwen" || normalized == "qwen-vl" || normalized == "qwen-vl-max" {
-		return "doubao", "doubao-seed-2-0-lite-260428"
+	if normalized == "deepseek" || normalized == "deepseek-v4-pro" {
+		return "deepseek", deepSeekNutritionFallbackModel
 	}
-	if normalized == "deepseek" || normalized == "deepseek-v4-flash" {
+	if normalized == "deepseek-v4-flash" {
 		return "deepseek", "deepseek-v4-flash"
 	}
 	if strings.HasPrefix(normalized, "deepseek") {
@@ -1090,7 +1118,7 @@ func resolveModelConfig(modelName string) (provider, model string) {
 
 func normalizeImageProviderPreference(provider string) string {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "qwen", "dashscope", "qwen-vl", "qwen-vl-max", "doubao":
+	case "doubao":
 		return "doubao"
 	case "gemini", "ofox", "ofoxai", "ofox-gemini":
 		return "gemini"
@@ -1420,7 +1448,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	return result, nil
 }
 
-// AnalyzeCompare calls both Qwen and Gemini in parallel.
+// AnalyzeCompare calls both Doubao and Gemini in parallel.
 func (s *AnalyzeService) AnalyzeCompare(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
@@ -1471,7 +1499,6 @@ func (s *AnalyzeService) AnalyzeCompare(ctx context.Context, userID string, inpu
 
 	return map[string]any{
 		"doubao_result": doubaoResult,
-		"qwen_result":   doubaoResult,
 		"gemini_result": geminiResult,
 	}, nil
 }
@@ -1766,13 +1793,18 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	}
 
 	fallbacks := map[int]map[string]any{}
-	if s.deepseek != nil && len(fallbackCandidates) > 0 {
+	if len(fallbackCandidates) > 0 {
 		contextText := ""
 		if len(additionalContext) > 0 {
 			contextText = additionalContext[0]
 		}
-		if rows, err := s.deepseek.Estimate(ctx, fallbackCandidates, contextText); err == nil {
+		if rows, err := s.estimateNutritionWithGemini(ctx, fallbackCandidates, contextText); err == nil {
 			fallbacks = rows
+		} else {
+			logger.WithTrace(ctx).Warn("gemini nutrition fallback failed",
+				zap.Error(err),
+				zap.Int("candidate_count", len(fallbackCandidates)),
+			)
 		}
 	}
 
@@ -1791,8 +1823,23 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 			next["nutrition_source"] = "unresolved"
 			if fallbackUnit, ok := fallbacks[lookup.index]; ok && len(fallbackUnit) > 0 {
 				unit = fallbackUnit
-				next["nutrition_source"] = "deepseek_text_fallback"
-				_, _ = s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, unit)
+				next["nutrition_source"] = "gemini_generated"
+				next["nutrition_persisted"] = false
+				if foodID, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, fallbackUnit, "gemini_generated"); err != nil {
+					logger.WithTrace(ctx).Warn("gemini nutrition upsert failed",
+						zap.Error(err),
+						zap.String("food_name", lookup.name),
+						zap.Any("unit_nutrition_per_100g", fallbackUnit),
+					)
+				} else {
+					next["nutrition_persisted"] = true
+					next["matched_food_id"] = foodID
+					logger.WithTrace(ctx).Info("gemini nutrition upsert succeeded",
+						zap.String("food_name", lookup.name),
+						zap.String("food_id", foodID),
+						zap.Any("unit_nutrition_per_100g", unit),
+					)
+				}
 			}
 			next["unit_nutrition_per_100g"] = unit
 			next["nutrients"] = scaleNutrition(unit, lookup.weight)
@@ -1820,6 +1867,81 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	resp["unresolved_count"] = unresolvedCount
 	logDBFirstNutritionSummary(ctx, out, resolvedCount, unresolvedCount)
 	return resp
+}
+
+func (s *AnalyzeService) estimateNutritionWithGemini(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
+	if s.ofoxAIClient == nil {
+		return nil, fmt.Errorf("gemini nutrition fallback client is not configured")
+	}
+	payloadItems := []map[string]any{}
+	candidateNames := map[int]string{}
+	for _, candidate := range candidates {
+		name := strings.TrimSpace(candidate.Name)
+		if name == "" || candidate.EstimatedWeightGrams <= 0 {
+			continue
+		}
+		candidateNames[candidate.Index] = name
+		payloadItems = append(payloadItems, map[string]any{
+			"index":                candidate.Index,
+			"name":                 name,
+			"estimatedWeightGrams": round2(candidate.EstimatedWeightGrams),
+		})
+	}
+	if len(payloadItems) == 0 {
+		return map[int]map[string]any{}, nil
+	}
+
+	promptPayload := map[string]any{
+		"task": "为未命中营养库的食物生成每100g营养数据，用于写入数据库",
+		"requirements": []string{
+			"你只负责根据食物名称、品牌信息、烹饪方式和常识生成每100g营养数据，不要重新判断重量。",
+			"输出字段使用 camelCase，所有字段必须为数字。",
+			"不要因为不确定就把热量或宏量营养随意填 0；只有该营养天然接近 0 时才填 0。",
+			"热量单位 kcal，其余蛋白质/碳水/脂肪/纤维/糖单位 g，微量元素单位按字段名中的 Mg/Mcg。",
+			"热量必须与宏量营养一致：calories 应大致不低于 protein*4 + carbs*4 + fat*9；如果无法确定热量，用该公式的结果作为下限。",
+			"每100g 的 protein/carbs/fat/fiber/sugar/saturatedFat 不得为负，也不得超过 100g；sugar 不得超过 carbs，saturatedFat 不得超过 fat。",
+			"品牌饮品或包装食品无法确认配方时，应按同类常见产品保守估算，并保持热量和宏量营养自洽。",
+		},
+		"additionalContext": strings.TrimSpace(additionalContext),
+		"items":             payloadItems,
+		"responseSchema": map[string]any{
+			"items": []map[string]any{{
+				"index":                0,
+				"unitNutritionPer100g": zeroUnitNutritionPer100g(),
+			}},
+		},
+	}
+	promptBytes, _ := json.Marshal(promptPayload)
+	prompt := "你是营养数据库补全助手。请尽量给出可落库的每100g营养数据；只返回 JSON，不要附加解释。\n" + string(promptBytes)
+
+	modelName := "gemini"
+	if client, ok := s.ofoxAIClient.(*OfoxAIClient); ok && strings.TrimSpace(client.Model) != "" {
+		modelName = client.Model
+	}
+	parsed, err := analyzeWithJSONParseRetry(ctx, "nutrition_fallback", "gemini", modelName, func(callCtx context.Context) (map[string]any, error) {
+		return s.ofoxAIClient.Analyze(callCtx, prompt, "")
+	})
+	if err != nil {
+		return nil, err
+	}
+	rawItems, ok := parsed["items"].([]any)
+	if !ok {
+		return map[int]map[string]any{}, nil
+	}
+	out := map[int]map[string]any{}
+	for _, raw := range rawItems {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		index := int(numberFromAny(row["index"]))
+		unit, ok := row["unitNutritionPer100g"].(map[string]any)
+		if !ok {
+			continue
+		}
+		out[index] = normalizeFallbackUnitNutrition(candidateNames[index], coerceExtendedNutrients(unit))
+	}
+	return out, nil
 }
 
 func logDBFirstNutritionSummary(ctx context.Context, items []map[string]any, resolvedCount, unresolvedCount int) {

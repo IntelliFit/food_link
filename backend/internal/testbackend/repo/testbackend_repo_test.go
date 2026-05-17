@@ -54,10 +54,10 @@ func TestPromptRepo_GetActivePromptByModelType(t *testing.T) {
 	r := NewPromptRepo(db)
 	ctx := context.Background()
 
-	require.NoError(t, r.CreatePrompt(ctx, &domain.Prompt{Name: "active", Content: "c", ModelType: "qwen", IsActive: true}))
-	require.NoError(t, r.CreatePrompt(ctx, &domain.Prompt{Name: "inactive", Content: "c", ModelType: "qwen", IsActive: false}))
+	require.NoError(t, r.CreatePrompt(ctx, &domain.Prompt{Name: "active", Content: "c", ModelType: "doubao", IsActive: true}))
+	require.NoError(t, r.CreatePrompt(ctx, &domain.Prompt{Name: "inactive", Content: "c", ModelType: "doubao", IsActive: false}))
 
-	found, err := r.GetActivePromptByModelType(ctx, "qwen")
+	found, err := r.GetActivePromptByModelType(ctx, "doubao")
 	require.NoError(t, err)
 	require.NotNil(t, found)
 	assert.Equal(t, "active", found.Name)
@@ -104,12 +104,12 @@ func TestPromptRepo_DeactivateByModelType(t *testing.T) {
 	r := NewPromptRepo(db)
 	ctx := context.Background()
 
-	require.NoError(t, r.CreatePrompt(ctx, &domain.Prompt{Name: "a", Content: "c", ModelType: "qwen", IsActive: true}))
-	require.NoError(t, r.CreatePrompt(ctx, &domain.Prompt{Name: "b", Content: "c", ModelType: "qwen", IsActive: true}))
+	require.NoError(t, r.CreatePrompt(ctx, &domain.Prompt{Name: "a", Content: "c", ModelType: "doubao", IsActive: true}))
+	require.NoError(t, r.CreatePrompt(ctx, &domain.Prompt{Name: "b", Content: "c", ModelType: "doubao", IsActive: true}))
 
-	require.NoError(t, r.DeactivateByModelType(ctx, "qwen"))
+	require.NoError(t, r.DeactivateByModelType(ctx, "doubao"))
 
-	found, err := r.GetActivePromptByModelType(ctx, "qwen")
+	found, err := r.GetActivePromptByModelType(ctx, "doubao")
 	require.NoError(t, err)
 	assert.Nil(t, found)
 }

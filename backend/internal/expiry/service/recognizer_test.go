@@ -25,7 +25,7 @@ func (f expiryRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, error
 func newTestExpiryRecognizer(handler expiryRoundTripFunc) *Recognizer {
 	recognizer := NewRecognizer(&config.Config{
 		External: config.ExternalConfig{
-			DashscopeAPIKey: "fake-key",
+			DoubaoAPIKey: "fake-key",
 		},
 	})
 	recognizer.client = &http.Client{Transport: handler}
@@ -34,10 +34,11 @@ func newTestExpiryRecognizer(handler expiryRoundTripFunc) *Recognizer {
 
 func TestRecognizerRecognizeSuccess(t *testing.T) {
 	recognizer := newTestExpiryRecognizer(func(req *http.Request) (*http.Response, error) {
-		assert.Equal(t, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", req.URL.String())
+		assert.Equal(t, "https://ark.cn-beijing.volces.com/api/v3/chat/completions", req.URL.String())
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-		assert.Equal(t, "qwen-vl-max", body["model"])
+		assert.Equal(t, "doubao-seed-2-0-lite-260428", body["model"])
+		assert.Equal(t, "medium", body["reasoning_effort"])
 
 		responseBody := `{"choices":[{"message":{"content":"{\"items\":[{\"food_name\":\"牛奶\",\"category\":\"乳制品\",\"storage_type\":\"refrigerated\",\"quantity_note\":\"1盒\",\"expire_date\":\"2026-05-12\",\"confidence\":0.8}]}"}}]}`
 		return &http.Response{
@@ -108,7 +109,7 @@ func TestRecognizerRecognizeMissingConfigReturnsServerError(t *testing.T) {
 	assert.Equal(t, "后端未配置保质期识别模型", appErr.Message)
 }
 
-func TestRecognizerDoesNotFallbackToOfoxWhenQwenMissing(t *testing.T) {
+func TestRecognizerDoesNotFallbackToOfoxWhenDoubaoMissing(t *testing.T) {
 	recognizer := NewRecognizer(&config.Config{
 		External: config.ExternalConfig{OfoxAIAPIKey: "fake-ofox-key"},
 	})

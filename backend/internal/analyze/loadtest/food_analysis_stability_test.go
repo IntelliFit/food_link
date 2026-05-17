@@ -41,7 +41,7 @@ const (
 )
 
 var (
-	foodAnalysisLoadModelFlag         = flag.String("food.analysis.model", "", "food analysis modelName submitted to /api/analyze/submit, for example qwen, ofox-gemini, or empty for backend default")
+	foodAnalysisLoadModelFlag         = flag.String("food.analysis.model", "", "food analysis modelName submitted to /api/analyze/submit, for example doubao, ofox-gemini, or empty for backend default")
 	foodAnalysisLoadExecutionModeFlag = flag.String("food.analysis.execution_mode", "", "food analysis execution_mode, for example standard or precision; empty uses FOOD_ANALYSIS_LOAD_EXECUTION_MODE/default")
 )
 

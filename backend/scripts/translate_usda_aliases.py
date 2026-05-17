@@ -165,15 +165,15 @@ class Translator:
             empty_message="DeepSeek returned empty content",
         )
 
-    def _request_dashscope(self, prompt: str) -> Dict[str, Any]:
+    def _request_doubao(self, prompt: str) -> Dict[str, Any]:
         return self._request_openai_compatible(
             prompt,
-            api_key_envs=["DASHSCOPE_API_KEY", "API_KEY"],
+            api_key_envs=["DOUBAO_API_KEY", "API_KEY"],
             default_base_url=os.getenv(
-                "DASHSCOPE_BASE_URL",
-                "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "DOUBAO_BASE_URL",
+                "https://ark.cn-beijing.volces.com/api/v3",
             ),
-            empty_message="DashScope returned empty content",
+            empty_message="Doubao returned empty content",
         )
 
     def _request_ofox(self, prompt: str) -> Dict[str, Any]:
@@ -190,7 +190,7 @@ class Translator:
             return self._request_deepseek(prompt)
         if self.provider == "ofox":
             return self._request_ofox(prompt)
-        return self._request_dashscope(prompt)
+        return self._request_doubao(prompt)
 
     def _build_prompt(self, items: Sequence[Dict[str, str]]) -> str:
         payload = json.dumps(list(items), ensure_ascii=False, indent=2)
@@ -708,7 +708,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Translate USDA English foods into Chinese aliases")
     parser.add_argument(
         "--provider",
-        choices=["deepseek", "dashscope", "ofox"],
+        choices=["deepseek", "doubao", "ofox"],
         default=os.getenv("TRANSLATION_PROVIDER", "deepseek"),
         help="Translation provider, default deepseek",
     )

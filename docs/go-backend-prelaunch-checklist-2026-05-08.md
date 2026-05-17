@@ -67,7 +67,7 @@
 | P0 | JWT/登录 | JWT secret、微信 appid/secret | 登录、token 校验、openid 绑定正常 | TODO |
 | P0 | 微信支付 | mchid、appid、serial、private key、API v3 key、notify URL | 下单和回调验签解密通过 | TODO |
 | P0 | 小程序码 | stable token appid/secret、env_version、page | `/api/qrcode` 返回真实 PNG | TODO |
-| P0 | LLM/OCR | DashScope、OfoxAI、DeepSeek key/base/model | 食物、精准、健康报告、stats insight fallback 策略可用 | TODO |
+| P0 | LLM/OCR | Doubao、OfoxAI、DeepSeek key/base/model | 食物、精准、健康报告、stats insight fallback 策略可用 | TODO |
 | P0 | 订阅消息 | 保质期模板 ID、access token 获取 | 发送模板字段合法，失败重试可见 | TODO |
 | P1 | Worker | `config.yaml` 的 `worker.count`、`worker.poll_interval_seconds` | worker 支持的任务类型由代码固定启用，不再通过配置裁剪；`worker.count=0` 表示关闭内嵌 worker | TODO |
 | P1 | Task queue | `config.yaml` 的 `task_queue.driver`、`task_queue.buffer_size`、`topic/brokers/consumer_group` | 当前支持进程内 `memory` 与 Kafka；Kafka 模式在 DB 写入 `done/failed` 后才 commit offset | TODO |

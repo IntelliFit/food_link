@@ -78,7 +78,7 @@ func main() {
 		*batchSize = 1
 	}
 
-	estimator := analyzeservice.NewDeepSeekNutritionEstimator(cfg.External.DeepSeekAPIKey, "", "deepseek-v4-flash")
+	estimator := analyzeservice.NewDeepSeekNutritionEstimator(cfg.External.DeepSeekAPIKey, "", "deepseek-v4-pro")
 	updatedRows, updatedFields := backfillExistingFoods(ctx, repo, estimator, foods, *batchSize)
 	fmt.Printf("existing_backfill_done rows=%d fields=%d\n", updatedRows, updatedFields)
 

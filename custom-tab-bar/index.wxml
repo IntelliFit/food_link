@@ -15,8 +15,8 @@
       <block wx:elif="{{item.id === 'stats'}}">
         <text class="iconfont icon-weibiaoti1 tab-icon"></text>
       </block>
-      <block wx:elif="{{item.id === 'community'}}">
-        <text class="iconfont icon-quanzi tab-icon"></text>
+      <block wx:elif="{{item.id === 'expiry'}}">
+        <text class="iconfont icon-shizhong tab-icon"></text>
       </block>
       <block wx:elif="{{item.id === 'profile'}}">
         <view class="profile-icon-wrapper">

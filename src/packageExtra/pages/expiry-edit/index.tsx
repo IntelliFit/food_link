@@ -582,7 +582,7 @@ export default function ExpiryEditPage() {
           Taro.navigateBack()
           return
         }
-        Taro.redirectTo({ url: extraPkgUrl('/pages/expiry/index') })
+        Taro.switchTab({ url: '/pages/expiry/index' })
       }, 300)
     } catch (error: any) {
       Taro.hideLoading()

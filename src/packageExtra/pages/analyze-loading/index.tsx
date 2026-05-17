@@ -1060,6 +1060,44 @@ const normalizeAnalyzeTaskErrorMessage = (value: unknown): string => {
   ) {
     return 'AI 服务返回异常网页，请检查模型 API 配置后重试'
   }
+  if (
+    lower.includes('context deadline exceeded') ||
+    lower.includes('client.timeout') ||
+    lower.includes('timeout exceeded while awaiting headers') ||
+    lower.includes('net/http: timeout') ||
+    lower.includes('i/o timeout') ||
+    lower.includes('tls handshake timeout')
+  ) {
+    return 'AI 识别服务响应超时，请稍后重试'
+  }
+  if (
+    lower.includes('resource exhausted') ||
+    lower.includes('doubao api error 429') ||
+    lower.includes('ofoxai api error 429')
+  ) {
+    return 'AI 识别服务当前繁忙，请稍后重试'
+  }
+  if (
+    lower.includes('incorrect api key') ||
+    lower.includes('apikey-error') ||
+    lower.includes('doubao api error 401') ||
+    lower.includes('ofoxai api error 401')
+  ) {
+    return 'AI 识别服务配置异常，请联系管理员处理'
+  }
+  if (
+    lower.includes('internalserviceerror') ||
+    lower.includes('doubao api error 500') ||
+    lower.includes('doubao api error 502') ||
+    lower.includes('doubao api error 503') ||
+    lower.includes('doubao api error 504') ||
+    lower.includes('ofoxai api error 500') ||
+    lower.includes('ofoxai api error 502') ||
+    lower.includes('ofoxai api error 503') ||
+    lower.includes('ofoxai api error 504')
+  ) {
+    return 'AI 识别服务暂时不可用，请稍后重试'
+  }
   return raw.length > 160 ? `${raw.slice(0, 160)}…` : raw
 }
 

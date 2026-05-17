@@ -497,6 +497,10 @@ export default function ExerciseRecordPage() {
   }
 
   const listEmpty = displayRows.length === 0
+  const recordDateLabel = recordDate === getTodayRecordDateKey() ? '今天' : recordDate
+  const openTrend = () => {
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-trend/index')}?date=${encodeURIComponent(recordDate)}` })
+  }
 
   return (
     <View className='exercise-record-page'>
@@ -517,6 +521,79 @@ export default function ExerciseRecordPage() {
         </View>
       </View>
 
+      <View className='input-section'>
+        <View className='exercise-compose-header'>
+          <View>
+            <Text className='exercise-compose-kicker'>{recordDateLabel}</Text>
+            <Text className='exercise-compose-title'>记录运动</Text>
+          </View>
+          <View className='exercise-trend-link' onClick={openTrend}>
+            <Text className='exercise-trend-link-text'>查看趋势</Text>
+          </View>
+        </View>
+        <View className='quick-examples-strip'>
+          <Text className='quick-examples-title'>试试这样说：</Text>
+          <ScrollView
+            className='quick-chips-scroll'
+            scrollX
+            enhanced
+            showScrollbar={false}
+          >
+            <View className='quick-chips-inner'>
+              {EXERCISE_QUICK_PRESETS.map((example) => (
+                <View
+                  key={example}
+                  className='example-tag'
+                  onClick={() => setInputValue(example)}
+                >
+                  <Text className='example-tag-text'>{example}</Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+        {selectedImagePath ? (
+          <View className='image-preview-wrap'>
+            <Image
+              className='image-preview-thumb'
+              src={selectedImagePath}
+              mode='aspectFill'
+            />
+            <View className='image-preview-remove' onClick={clearSelectedImage}>
+              <Text className='image-preview-remove-text'>×</Text>
+            </View>
+          </View>
+        ) : null}
+        <View className='input-wrap'>
+          <View
+            className='exercise-image-trigger'
+            onClick={handleAddImage}
+          >
+            <Text className='exercise-image-trigger-text'>+</Text>
+          </View>
+          <Input
+            className='chat-input'
+            value={inputValue}
+            onInput={(e) => setInputValue(e.detail.value)}
+            placeholder={selectedImagePath ? '补充描述（可选）' : '今天做了什么运动？'}
+            placeholderClass='input-placeholder'
+            confirmType='send'
+            onConfirm={runSubmitFlow}
+            disabled={submitting}
+          />
+          <View
+            className={`exercise-send-trigger ${(!inputValue.trim() && !selectedImagePath) || submitting ? 'is-disabled' : ''}`}
+            onClick={runSubmitFlow}
+          >
+            {submitting ? (
+              <View className='exercise-send-spinner' />
+            ) : (
+              <Text className='iconfont icon-send' />
+            )}
+          </View>
+        </View>
+      </View>
+
       <ScrollView
         className={`records-scroll ${listEmpty ? 'records-scroll--empty' : ''}`}
         scrollY
@@ -530,8 +607,8 @@ export default function ExerciseRecordPage() {
             <View className='empty-icon-wrap'>
               <IconExercise size={80} color='#d1d5db' />
             </View>
-            <Text className='empty-title'>还没有运动记录</Text>
-            <Text className='empty-desc'>在下方输入你今天做了什么运动{'\n'}例如：&quot;跑步30分钟&quot; 或 &quot;游泳1小时&quot;</Text>
+            <Text className='empty-title'>{recordDateLabel}还没有运动记录</Text>
+            <Text className='empty-desc'>上方输入运动内容或添加图片，系统会估算消耗。</Text>
           </View>
         ) : (
           <View className='records-list'>
@@ -599,70 +676,6 @@ export default function ExerciseRecordPage() {
         )}
         <View style={{ height: '20rpx' }} />
       </ScrollView>
-
-      <View className='input-section'>
-        <View className='quick-examples-strip'>
-          <Text className='quick-examples-title'>试试这样说：</Text>
-          <ScrollView
-            className='quick-chips-scroll'
-            scrollX
-            enhanced
-            showScrollbar={false}
-          >
-            <View className='quick-chips-inner'>
-              {EXERCISE_QUICK_PRESETS.map((example) => (
-                <View
-                  key={example}
-                  className='example-tag'
-                  onClick={() => setInputValue(example)}
-                >
-                  <Text className='example-tag-text'>{example}</Text>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-        {selectedImagePath ? (
-          <View className='image-preview-wrap'>
-            <Image
-              className='image-preview-thumb'
-              src={selectedImagePath}
-              mode='aspectFill'
-            />
-            <View className='image-preview-remove' onClick={clearSelectedImage}>
-              <Text className='image-preview-remove-text'>×</Text>
-            </View>
-          </View>
-        ) : null}
-        <View className='input-wrap'>
-          <View
-            className='exercise-image-trigger'
-            onClick={handleAddImage}
-          >
-            <Text className='exercise-image-trigger-text'>+</Text>
-          </View>
-          <Input
-            className='chat-input'
-            value={inputValue}
-            onInput={(e) => setInputValue(e.detail.value)}
-            placeholder={selectedImagePath ? '补充描述（可选）' : '今天做了什么运动？'}
-            placeholderClass='input-placeholder'
-            confirmType='send'
-            onConfirm={runSubmitFlow}
-            disabled={submitting}
-          />
-          <View
-            className={`exercise-send-trigger ${(!inputValue.trim() && !selectedImagePath) || submitting ? 'is-disabled' : ''}`}
-            onClick={runSubmitFlow}
-          >
-            {submitting ? (
-              <View className='exercise-send-spinner' />
-            ) : (
-              <Text className='iconfont icon-send' />
-            )}
-          </View>
-        </View>
-      </View>
     </View>
   )
 }

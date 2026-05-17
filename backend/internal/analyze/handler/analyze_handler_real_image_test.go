@@ -70,7 +70,7 @@ func TestAnalyzeCompare_WithRealFoodImages(t *testing.T) {
 
 	mockSvc := &mockAnalyzeService{
 		analyzeCompareResult: map[string]any{
-			"qwen":   map[string]any{"description": "Qwen分析结果"},
+			"doubao": map[string]any{"description": "Doubao分析结果"},
 			"gemini": map[string]any{"description": "Gemini分析结果"},
 		},
 	}
@@ -88,7 +88,7 @@ func TestAnalyzeCompare_WithRealFoodImages(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.Equal(t, float64(0), resp["code"])
 	data := resp["data"].(map[string]any)
-	assert.Contains(t, data, "qwen")
+	assert.Contains(t, data, "doubao")
 	assert.Contains(t, data, "gemini")
 }
 

@@ -42,7 +42,7 @@ func TestOCRService_ExtractFromRealReport_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(base64Image, "data:image/png;base64,"))
 
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
 	svc.client = mockClient
 	ctx := context.Background()
@@ -70,7 +70,7 @@ func TestOCRService_ExtractFromRealReport_MultipleImages(t *testing.T) {
 			require.NoError(t, err)
 			assert.NotEmpty(t, base64Image)
 
-			cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+			cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: "fake-key"}}
 			svc := NewOCRService(cfg)
 			svc.client = mockClient
 			ctx := context.Background()
@@ -87,7 +87,7 @@ func TestOCRService_ExtractFromRealReport_URLMode(t *testing.T) {
 		return mockOCRResponse(), nil
 	})}
 
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
 	svc.client = mockClient
 	ctx := context.Background()
@@ -108,7 +108,7 @@ func TestOCRService_ExtractFromRealReport_ComplexIndicators(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
 	svc.client = mockClient
 	ctx := context.Background()

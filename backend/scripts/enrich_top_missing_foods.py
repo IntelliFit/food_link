@@ -1,4 +1,4 @@
-﻿"""
+"""
 Backfill top missing foods from historical records into the nutrition library.
 
 Workflow:
@@ -928,12 +928,12 @@ class AiEstimateProvider:
                 ["DEEPSEEK_API_KEY"],
                 os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
             )
-        if self.provider == "dashscope":
+        if self.provider == "doubao":
             return self._request_openai_compatible(
-                prompt,
-                ["DASHSCOPE_API_KEY", "API_KEY"],
-                os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
-            )
+				prompt,
+				["DOUBAO_API_KEY", "API_KEY"],
+				os.getenv("DOUBAO_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+			)
         return self._request_openai_compatible(
             prompt,
             ["OFOXAI_API_KEY", "ofox_ai_apikey"],
@@ -943,8 +943,8 @@ class AiEstimateProvider:
     def _provider_source_label(self) -> str:
         if self.provider == "deepseek":
             return "AI估算（DeepSeek）"
-        if self.provider == "dashscope":
-            return "AI估算（通义千问）"
+		if self.provider == "doubao":
+			return "AI估算（豆包）"
         return "AI估算（OFOX）"
 
     def resolve(self, raw_name: str, normalized_name: str) -> Optional[ProviderResult]:
@@ -1338,7 +1338,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--history-lookback-days", type=int, default=3650, help="Lookback days for historical nutrition averaging")
     parser.add_argument("--history-min-samples", type=int, default=1, help="Minimum historical samples before using historical average")
     parser.add_argument("--history-min-total-weight-g", type=float, default=100.0, help="Minimum total historical weight before using historical average")
-    parser.add_argument("--ai-provider", choices=["deepseek", "dashscope", "ofox"], default=os.getenv("AI_ESTIMATE_PROVIDER", "deepseek"), help="AI provider for fallback estimation")
+    parser.add_argument("--ai-provider", choices=["deepseek", "doubao", "ofox"], default=os.getenv("AI_ESTIMATE_PROVIDER", "deepseek"), help="AI provider for fallback estimation")
     parser.add_argument("--ai-model", default=os.getenv("AI_ESTIMATE_MODEL") or "deepseek-chat", help="AI model for fallback estimation")
     return parser.parse_args()
 

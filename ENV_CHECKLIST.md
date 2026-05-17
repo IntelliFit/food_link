@@ -8,19 +8,19 @@
 
 ## ✅ 必需的环境变量（7个）
 
-### 1. DashScope API Key
+### 1. Doubao API Key
 ```env
-DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxx
+DOUBAO_API_KEY=sk-xxxxxxxxxxxxx
 ```
-- **用途**：阿里云 DashScope AI 服务，用于食物图片识别和分析
+- **用途**：火山引擎豆包 AI 服务，用于食物图片识别和分析
 - **位置**：`backend/main.py` 第 94 行
-- **备选**：如果没有 `DASHSCOPE_API_KEY`，也可以使用 `API_KEY`
+- **备选**：如果没有 `DOUBAO_API_KEY`，也可以使用 `API_KEY`
 
-### 2. DashScope Base URL（可选）
+### 2. Doubao Base URL（可选）
 ```env
-DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+DOUBAO_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
 ```
-- **用途**：DashScope API 的基础 URL
+- **用途**：Doubao API 的基础 URL
 - **位置**：`backend/main.py` 第 108-111 行
 - **说明**：如果不提供，会使用默认值
 
@@ -71,9 +71,9 @@ SECRET=abcdef1234567890abcdef1234567890
 从同事那里获取到所有值后，创建 `backend/.env` 文件，格式如下：
 
 ```env
-# DashScope API 配置
-DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxx
-# DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1  # 可选
+# Doubao API 配置
+DOUBAO_API_KEY=sk-xxxxxxxxxxxxx
+# DOUBAO_BASE_URL=https://ark.cn-beijing.volces.com/api/v3  # 可选
 
 # Supabase 配置
 SUPABASE_URL=https://xxxxx.supabase.co
@@ -93,7 +93,7 @@ SECRET=abcdef1234567890abcdef1234567890
 
 获取到环境变量后，请确认：
 
-- [ ] `DASHSCOPE_API_KEY` 或 `API_KEY` 已配置
+- [ ] `DOUBAO_API_KEY` 或 `API_KEY` 已配置
 - [ ] `SUPABASE_URL` 格式正确（以 `https://` 开头，以 `.supabase.co` 结尾）
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` 是 service_role key（不是 anon key）
 - [ ] `JWT_SECRET_KEY` 至少 32 字符
@@ -121,7 +121,7 @@ SECRET=abcdef1234567890abcdef1234567890
 
 > 你好，我需要获取项目的环境变量配置来运行后端服务。请提供以下配置：
 > 
-> 1. DashScope API Key (`DASHSCOPE_API_KEY`)
+> 1. Doubao API Key (`DOUBAO_API_KEY`)
 > 2. Supabase URL (`SUPABASE_URL`)
 > 3. Supabase Service Role Key (`SUPABASE_SERVICE_ROLE_KEY`)
 > 4. JWT Secret Key (`JWT_SECRET_KEY`)

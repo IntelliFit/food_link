@@ -179,7 +179,7 @@ func TestGetActivePrompt(t *testing.T) {
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/prompts/active/qwen", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/prompts/active/doubao", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -570,7 +570,7 @@ func TestGetActivePromptError(t *testing.T) {
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/prompts/active/qwen", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/prompts/active/doubao", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
