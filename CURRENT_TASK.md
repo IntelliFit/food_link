@@ -1,3 +1,94 @@
+# 2026-05-17 — 审核避险：底部圈子入口临时替换为保质期页
+
+- Task: 用户反馈微信小程序审核因底部「圈子」涉及 UGC 发布与交流、当前未申请社交/社区/论坛类目而失败，希望先隐藏圈子，同时保持底部 5 项导航的左右对称。
+- Status: fixed_code_static_verified_runtime_blocked
+- Fix:
+  - 撤回上一版错误的「工具」/「档案」中转页思路，不再新增泛化工具 tab，也不把健康档案做成二次入口。
+  - 新增主包页面 `src/pages/expiry/`，作为底部第四项「保质期」入口；该页直接复用现有 `packageExtra/pages/expiry` 的完整保质期页面内容，点击底部 tab 后直接看到食物保质期列表和新增入口。
+  - `src/app.config.ts` 主包 pages 与原生 tabBar list 从 `pages/community/index` 改为 `pages/expiry/index`，底部文案从「圈子」改为「保质期」。
+  - `custom-tab-bar/` 自定义底栏第四项从 `community` 改为 `expiry`，图标改用 `icon-shizhong`。
+  - `src/utils/subpackage-extra.ts` 的主 tab 路由白名单同步从 community 改为 expiry。
+  - 首页和「我的」页原保质期列表入口改为 `Taro.switchTab({ url: '/pages/expiry/index' })`。
+  - 保质期编辑保存后的回跳、旧 `/pages/food-expiry/index` 兼容页也改为 `switchTab` 到新的保质期 tab。
+  - 好友页空态移除「去圈子」按钮，避免隐藏底部入口后仍有旧跳转回到圈子页。
+- Verification:
+  - `npx eslint src/pages/expiry/index.tsx src/pages/index/index.tsx src/pages/profile/index.tsx src/packageExtra/pages/expiry-edit/index.tsx src/packageExtra/pages/food-expiry/index.tsx src/packageExtra/pages/friends/index.tsx --max-warnings 0` passed.
+  - `node --check custom-tab-bar/index.js` passed.
+  - `git diff --check -- src/app.config.ts src/pages/expiry/index.config.ts src/pages/expiry/index.tsx custom-tab-bar/index.js custom-tab-bar/index.wxml custom-tab-bar/index.wxss src/utils/subpackage-extra.ts src/pages/index/index.tsx src/pages/profile/index.tsx src/packageExtra/pages/expiry-edit/index.tsx src/packageExtra/pages/food-expiry/index.tsx src/packageExtra/pages/friends/index.tsx` passed.
+  - `rg` 确认上述 tab 相关文件中不再存在 `pages/health/index` / `pages/tools/index` / `pages/community/index` / `text: '圈子'` / `id: 'community'`。
+  - `rg` 确认前端源码中不再存在 `extraPkgUrl('/pages/expiry/index')` 或 `navigateTo/redirectTo` 到保质期列表页的用法。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+# 2026-05-17 — 热金奖深烘美式咖啡营养为 0 排查
+
+- Task: 用户询问“热金奖深烘美式咖啡”识别结果热量/宏量营养多次不同，是否来自数据库 0 值或 DeepSeek 补录。
+- Finding:
+  - 日志显示 `db_first nutrition lookup summary` 中 `resolved: 0`、`matched_food_name: null`、`resolve_status: unresolved`、`nutrition_source: deepseek_text_fallback`，说明该食物没有命中营养库，不是数据库已有条目热量为 0。
+  - 标准图片模式先由 Doubao 输出名称与重量/含水量，再走 db_first 营养库回算；未命中时进入 DeepSeek 文本营养兜底，并尝试 `UpsertDeepSeekNutrition` 写入 `food_nutrition_library`。
+  - DeepSeek 兜底 prompt 要求“未知时填 0”，因此咖啡这类“无糖/黑咖啡/美式”会被模型估成 0 kcal 或极低值；同名未稳定命中库前，多次调用会出现 0、碳水 45g、蛋白 0.9g/碳水 18g 等抖动。
+  - 前端结果页只是展示后端返回的 `nutrients`；不是前端随机或前端数据库造成。
+- Follow-up:
+  - 建议给“美式咖啡/黑咖啡/无糖美式/热金奖深烘美式咖啡”建立人工稳定营养库别名，或在后端对 `deepseek_text_fallback` 的 0/异常宏量结果做校验与置信提示。
+
+## 2026-05-17 follow-up — 未命中食物营养补全机制
+
+- User direction: 用户希望某个食物未命中营养库时，系统用尽量准确的方法获取营养素，写入数据库，并明确标注该条目是后补/AI 生成/其它来源；下次识别同一食物时可以直接命中。
+- Current state:
+  - 当前 `db_first` 已有基础机制：未命中时走 DeepSeek 文本营养兜底，成功后调用 `UpsertDeepSeekNutrition()` 写入 `food_nutrition_library`，`source` 标为 `deepseek_auto`，并写入同名 alias。
+  - 缺口是缺少质量闸门、来源细分、置信度、模型元数据、审核状态，以及“宏量营养与热量矛盾”这类结果校验。
+- Proposed direction:
+  - 营养来源优先级：人工/权威库 > 包装营养标签 OCR/条码 > 已审核 AI 补全 > 未审核 AI 估算。
+  - AI 补全写库时必须保留 provenance：source/source_detail/model/confidence/review_status/generated_at/raw_name/normalized_name。
+  - 未审核 AI 估算可供下次命中，但前端/后台应能识别其来源，并允许后续人工修正升级为 verified。
+- 2026-05-17 implementation:
+  - `DeepSeekNutritionEstimator` 默认模型从 `deepseek-v4-flash` 改为 `deepseek-v4-pro`。
+  - `resolveModelConfig("deepseek")` 默认解析为 `deepseek-v4-pro`，仍保留显式 `deepseek-v4-flash` 请求兼容。
+  - `backend/cmd/nutrition-backfill` 的批量营养补全模型改为 `deepseek-v4-pro`。
+  - DeepSeek 营养补全 prompt 增加校验规则：不要随意填 0、热量需与宏量营养自洽、宏量每 100g 合理范围、糖/饱和脂肪不得超过对应总量、无糖咖啡/纯茶/水允许接近 0 但含奶糖饮品不能按 0。
+  - 服务端新增 `normalizeFallbackUnitNutrition()`，对 AI 返回的每 100g 营养做非负/范围校验，并在宏量营养有值但热量过低时按 `protein*4 + carbs*4 + fat*9` 修正热量。
+  - AI 自动补库 `source` 从 `deepseek_auto` 改为 `deepseek_v4_pro_auto`，便于后续区分这是 v4-pro AI 后补数据。
+- Verification:
+  - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestDeepSeekNutritionEstimator' -count=1` passed.
+  - `git diff --check` passed for touched backend files（仅 CRLF 提示）。
+  - `go test ./internal/foodrecord/repo -run 'TestFoodNutritionRepo_UpsertDeepSeekNutritionInsertsFullProfile' -count=1` blocked by local `CGO_ENABLED=0` / `go-sqlite3 requires cgo`，不是本次逻辑失败。
+- 2026-05-17 follow-up fix:
+  - 用户复测同一咖啡，日志出现两类情况：`deepseek_text_fallback` 但营养全 0；以及 `nutrition_source=unresolved` 且耗时约 1m20，说明 DeepSeek 补全失败/超时会被静默吞掉并回落到全 0。
+  - 已在 `applyDBFirstNutrition()` 中为 DeepSeek 兜底失败和补库失败增加 warn 日志，后续可直接从日志看到 DeepSeek 错误或写库错误。
+  - 对纯美式/黑咖啡/冷萃类名称增加确定性规则：若 DeepSeek 返回核心营养全 0，则每 100g 按 `1 kcal / protein 0.1g / carbs 0 / fat 0` 归一化；若 DeepSeek 完全失败，也使用该规则并标记 `nutrition_source=rule_plain_coffee_fallback`。
+  - 规则兜底写库 source 使用 `rule_plain_coffee_auto`；DeepSeek v4-pro 兜底继续使用 `deepseek_v4_pro_auto`。
+  - `UpsertDeepSeekNutrition()` 支持传入 source，并在遇到同 normalized_name 但 `is_active=false` 的旧条目时用本次补全营养更新并重新激活，避免“存在旧条目但 ResolveFood 不命中、同时 Upsert 又跳过”的死角。
+- Verification:
+  - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestDeepSeekNutritionEstimator' -count=1` passed.
+  - `git diff --check -- backend/internal/analyze/service/deepseek_nutrition.go backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/deepseek_nutrition_test.go backend/internal/foodrecord/repo/food_nutrition_repo.go` passed（仅 CRLF 提示）。
+
+# 2026-05-17 — 首页非今日日期补录提示
+
+- Task: 用户要求首页选择当天时保持正常；选择昨天或其他可记录日期时，无论当前能量是否偏低，都展示补录提示，并把“可补以前/昨天漏记记录”交代清楚。
+- Status: fixed_code_static_verified_runtime_blocked
+- Fix:
+  - `src/pages/index/index.tsx` 移除补录提示对低能量比例 `< 0.6` 的依赖。
+  - 现在只要选中日期是允许记录的非当天、用户非游客、页面不忙且该日期未被用户取消提醒，就展示补录提示。
+  - 补录提示文案改为“可补录这一天的食物、体重、喝水和运动记录”。
+  - 取消提醒弹窗文案同步改为“这一天的补录提醒”，不再提低能量。
+  - 2026-05-17 follow-up: 用户反馈补录喝水后首页当前日期的喝水值不立刻更新，需切换日期才变。已按状态依赖排查定位：选中历史日期时 `handleDateSelect()` 设置的 `skipNextRefreshRef` 可能在从身体趋势页返回时跳过本该发生的脏数据刷新。现在 `HOME_DASHBOARD_REFRESH_EVENT` 标记首页数据变脏时会同时清掉 `skipNextRefreshRef`，确保补录体重/喝水/运动后返回首页会刷新当前选中日期。
+- Verification:
+  - `npx eslint src/pages/index/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/pages/index/index.tsx` passed（仅 Git 提示 LF/CRLF 转换）。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 和 `mrc where --port 9420` 均连接失败，提示微信开发者工具目标窗口未开启自动化服务，未能截图/交互验证。
+
+# 2026-05-16 — 小程序体验版后端数据源修正
+
+- User 反馈：所有后端数据都是没有的。
+- Finding:
+  - `dev.healthymax.cn` 是开发后端，数据为空/不完整；体验版指向该域名会导致首页、历史记录等看起来“数据都没了”。
+  - `healthymax.cn` `/api/health` 返回 `{"status":"healthy"}`，是当前有正式业务数据的后端域名。
+  - `v2.healthymax.cn` 仍保持弃用，不应恢复。
+- Fix:
+  - `package.json` 中 `build:weapp:preview`、`build:weapp:debug`、`dev:weapp:online` 改为注入 `https://healthymax.cn`。
+  - `config/index.ts` production 默认 API 改为 `https://healthymax.cn`。
+  - `src/utils/api.ts` 注入失败兜底 API 改为 `https://healthymax.cn`。
+  - `AGENTS.md`、`DECISIONS.md` 同步记录：dev 后端为空库，不用于体验版/正式包。
+
 # 2026-05-16 — dev 域名图片上传 413 根因
 
 - User 反馈：build 后仍提示“图片体积过大”，本地调试没有问题。
@@ -7,6 +98,10 @@
   - 本地调试直连本机后端 `127.0.0.1:3010`，不经过 dev Nginx，所以同图本地可上传、build 包不可上传。
 - Fix:
   - `deploy/nginx/dev.healthymax.cn.conf` 增加 `client_max_body_size 10m`。
+- Verification:
+  - 2026-05-16 进一步远程 HTTP 验证：向 `https://dev.healthymax.cn/api/upload-analyze-image-file` 发送 2MB multipart 文本文件，返回 `413`。
+  - 同接口发送 512KB multipart 文本文件，返回后端业务错误 `400 {"code":10002,"message":"仅支持图片文件上传"}`，说明小请求已穿过 Nginx 到达 Go 后端。
+  - 因此微信后台 request/uploadFile/downloadFile 合法域名配置不是当前上传失败根因；dev 域名线上 Nginx 实际配置仍未放开 body size。
 - Required deployment:
   - 需要把该 Nginx 配置同步到线上 dev 服务器并执行 `nginx -t && systemctl reload nginx`；仅重新上传小程序无法修复 Nginx 413。
 
@@ -1058,7 +1153,7 @@
   - User 要求：本地 Gemini 测试先暂时去掉，切回千问模型。
   - Completed:
     - 已撤销本地临时 Gemini 测试改动，恢复 `backend/internal/analyze/service/analyze_service.go` 与 `backend/internal/analyze/service/analyze_service_test.go` 到远端当前口径。
-    - 当前 `resolveModelConfig()` 中历史 `gemini` / `gemini-flash` / `gemini-vision` / `gemini-3-flash-preview` / `google/gemini-3-flash-preview` 别名继续路由到 `provider=qwen`、`model=qwen-vl-max`。
+    - 当前 `resolveModelConfig()` 中历史 `gemini` / `gemini-flash` / `gemini-vision` / `gemini-3-flash-preview` / `google/gemini-3-flash-preview` 别名继续路由到 `provider=doubao`、`model=doubao-seed-2-0-lite-260428`。
     - 显式 `ofox-gemini` / `ofox-gemini-3-flash-preview` 入口仍保留，用于后续需要时测试 Ofox/Gemini。
   - Runtime note:
     - 如本地后端正在运行，需要用户手动重启 `npm run dev:backend` 后新路由才会在运行态生效。
@@ -1074,7 +1169,7 @@
     - 已 `git stash pop` 恢复本地 Gemini 测试改动；代码文件自动合并成功，冲突仅在 `CURRENT_TASK.md` 与 `memory/2026-05-12.md`，已保留双方记录并移除冲突标记。
     - 已删除本次临时 stash，历史 stash 未动。
   - Verification:
-    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasUsesOfoxGemini|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasUsesOfoxGemini|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError' -count=1` passed。
     - `go build -o $env:TEMP\food-link-gemini-after-pull.exe ./cmd/server` passed。
     - `git diff --check -- CURRENT_TASK.md memory/2026-05-12.md backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go` passed。
   - Current local changes:
@@ -1146,7 +1241,7 @@
     - `go test ./internal/membership/service ./internal/health/service ./internal/analyze/handler ./internal/worker ./internal/app -run Test -count=1` passed。
     - `go test ./internal/expiry/service -run 'TestNotificationWorker|TestSchedule|TestReconcile|TestRecognize|TestStale' -count=1` passed。
     - `go test ./internal/analyze/service -run '^$' -count=1` passed。
-    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubaoTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError' -count=1` passed。
     - `go test ./internal/analyze/repo ./internal/expiry/repo ./internal/migration -run "^$" -count=1` passed/no test files。
     - `go test ./internal/health/repo ./internal/membership/repo -run '^$' -count=1` passed/no tests to run。
     - `go build -o $env:TEMP\food-link-server-merge-check.exe ./cmd/server` passed。
@@ -1193,14 +1288,14 @@
   - Runtime verification:
     - 已按项目规则尝试 `weapp-devtools`：`mrc where --port 9420` 和 `mrc where --port 3001` 均连接失败，提示目标项目窗口未开启自动化服务；本轮未能截图/交互验证。
 
-## 状态：完成定位 - llm_provider 改 qwen 后日志仍显示 gemini
+## 状态：完成定位 - llm_provider 改 doubao 后日志仍显示 gemini
 
 - 2026-05-12 update:
-  - User 反馈：已把配置文件 `external.llm_provider` 改成 qwen，但后端日志仍显示 `provider=gemini`、`requested_model=gemini`。
+  - User 反馈：已把配置文件 `external.llm_provider` 改成 doubao，但后端日志仍显示 `provider=gemini`、`requested_model=gemini`。
   - Diagnosis:
-    - 当前本地 `backend/config.yaml` 确认为 `external.llm_provider: "qwen"`。
+    - 当前本地 `backend/config.yaml` 确认为 `external.llm_provider: "doubao"`。
     - 当前代码 `app.New()` 会调用 `analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)`。
-    - 当前代码 `resolveImageModelConfig()` 在 image provider 为 qwen 时，即使请求 `modelName/requested_model` 为 `gemini`，也应路由到 qwen。
+    - 当前代码 `resolveImageModelConfig()` 在 image provider 为 doubao 时，即使请求 `modelName/requested_model` 为 `gemini`，也应路由到 doubao。
     - 当前运行中的后端进程：
       - `go run cmd/server/main.go` 启动时间约 `03:16`，cwd 为 `/Users/kirigaya/project/food_link/backend`。
       - `backend/config.yaml` 修改时间为 `03:42:34`。
@@ -1208,10 +1303,10 @@
     - 因为 Go 后端只在启动时 `config.Load(".")` 读取配置，03:16 启动的进程不会自动感知 03:42 的配置修改，所以它仍在使用旧的 `llm_provider=gemini`。
     - 当前 shell 未发现 `LLM_PROVIDER` 环境变量覆盖。
   - Verification:
-    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubaoTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitDoubao' -count=1` passed。
     - `go test ./pkg/config -run Test -count=1` passed。
   - Next step:
-    - 需要用户按项目规则手动重启本地 Go 后端；重启后新分析日志应显示 `provider=qwen`、`model=qwen-vl-max`。
+    - 需要用户按项目规则手动重启本地 Go 后端；重启后新分析日志应显示 `provider=doubao`、`model=doubao-seed-2-0-lite-260428`。
 
 ## 状态：完成源码修改与编译验证 - 修正食物分析压测耗时统计口径
 
@@ -1258,19 +1353,19 @@
   - Validation note:
     - 本轮核心修改是后端删除/更新记录后的水量同步；未擅自启动或重启本地前后端服务。
 
-## 状态：完成源码修改与实测 - qwen 食物分析 20 并发压测
+## 状态：完成源码修改与实测 - doubao 食物分析 20 并发压测
 
 - 2026-05-12 update:
   - User 要求：
     - 给食物分析压测脚本添加参数，快速切换测试大模型。
-    - 测试 qwen 模型性能并返回表格结果。
+    - 测试 doubao 模型性能并返回表格结果。
     - 确认测试脚本算法是否与当前主程序食物分析算法一致，不要在测试里重写算法。
     - 输入食物必须是同一个，输出 20 个样本方差。
     - 测试成功后图片链接必须删除，避免占用 OSS/COS 资源。
   - Fix applied:
     - `backend/internal/analyze/loadtest/food_analysis_stability_test.go`
       - 新增 Go test 参数：
-        - `-food.analysis.model=qwen`：直接覆盖提交给 `/api/analyze/submit` 的 `modelName`。
+        - `-food.analysis.model=doubao`：直接覆盖提交给 `/api/analyze/submit` 的 `modelName`。
         - `-food.analysis.execution_mode=standard|precision`：直接覆盖 `execution_mode`。
       - 保留环境变量 `FOOD_ANALYSIS_LOAD_MODEL` 和 `FOOD_ANALYSIS_LOAD_EXECUTION_MODE`，优先级低于 Go test 参数。
       - 测试开始只上传 1 张图片，所有并发请求复用同一个 `sharedImageURL`，并日志注明 same-food guarantee。
@@ -1278,16 +1373,16 @@
         - `task_variance_ms2` / `task_stddev`
         - `total_variance_ms2` / `total_stddev`
       - 清理 COS 图片时对共享 image URL 去重，只删除 1 个对象。
-    - `backend/internal/analyze/loadtest/food_analysis_qwen_stability_test.go`
-      - 保留 qwen 专用入口 `TestFoodAnalysisStabilityAndLatencyQwen`，默认 `modelName="qwen"`；也可用 `-food.analysis.model` 覆盖。
+    - `backend/internal/analyze/loadtest/food_analysis_doubao_stability_test.go`
+      - 保留 doubao 专用入口 `TestFoodAnalysisStabilityAndLatencyDoubao`，默认 `modelName="doubao"`；也可用 `-food.analysis.model` 覆盖。
   - Algorithm parity:
     - 当前压测脚本没有重写食物识别算法。
     - 它通过真实后端 HTTP 链路执行：`POST /api/upload-analyze-image-file` -> `POST /api/analyze/submit` -> 轮询 `GET /api/analyze/tasks/:task_id`。
     - `/api/analyze/submit` 进入主程序 `TaskService.SubmitAnalyzeTask()`，server 内嵌 worker 再调用当前业务里的 `AnalyzeService.Analyze()` / DB-first 营养库逻辑，并访问真实数据库。
     - 因此主业务算法、模型路由、任务队列、积分校验、营养库 DB-first 等后续变化都会反映到该 HTTP 集成压测里。
-  - qwen real run:
+  - doubao real run:
     - Command:
-      - `FOOD_ANALYSIS_LOAD_USER_IDS='20个临时压测用户UUID' FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 FOOD_ANALYSIS_LOAD_TASK_TIMEOUT=20m go test -tags food_analysis_load ./internal/analyze/loadtest -run '^TestFoodAnalysisStabilityAndLatencyQwen$' -food.analysis.model=qwen -count=1 -timeout=30m -v`
+      - `FOOD_ANALYSIS_LOAD_USER_IDS='20个临时压测用户UUID' FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 FOOD_ANALYSIS_LOAD_TASK_TIMEOUT=20m go test -tags food_analysis_load ./internal/analyze/loadtest -run '^TestFoodAnalysisStabilityAndLatencyDoubao$' -food.analysis.model=doubao -count=1 -timeout=30m -v`
     - Input:
       - 同一张图片：`backend/testdata/food/6781F1707431AC4E3BAB1416242E433D.jpg`
       - 共享图片 URL：`http://cdn-food-images.coachlink.fit/706a09d0-917b-454c-9942-951a839b6e9e.jpg`
@@ -1304,7 +1399,7 @@
   - Cleanup:
     - 压测脚本日志显示 `cleanup COS food images: deleted=1`，已删除本次唯一共享上传图片。
     - 本次 20 个 `analysis_tasks` 任务 ID 复查数据库计数为 `0`。
-    - 本轮临时创建的 20 个 qwen load test 用户已从 `weapp_user` 删除。
+    - 本轮临时创建的 20 个 doubao load test 用户已从 `weapp_user` 删除。
   - Verification:
     - `go test ./internal/analyze/loadtest -count=1` passed，仍为 `[no test files]`。
     - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed。
@@ -1316,7 +1411,7 @@
   - User 要求：之前 Go 语言 20 次并发食物分析压测中，不要每个请求都上传图片；改为每次测试只上传 1 张图片，然后 20 个并发请求复用该图片链接。同时复制一份脚本用于测试千问模型，并先梳理当前后端可用大模型的 API/model name 信息。
   - Model findings from code/config:
     - 当前本地 `backend/config.yaml` 为 `external.llm_provider: "gemini"`，因此食物图片分析在未显式指定模型或历史 `gemini` 参数时，默认走 OfoxAI/Gemini。
-    - 千问链路为 DashScope compatible API，模型名 `qwen-vl-max`；提交 payload 传 `modelName: "qwen"` 会强制使用该链路。
+    - 千问链路为 Doubao compatible API，模型名 `doubao-seed-2-0-lite-260428`；提交 payload 传 `modelName: "doubao"` 会强制使用该链路。
     - OfoxAI/Gemini 链路模型名为 `gemini-3-flash-preview`，endpoint 使用 `external.ofoxai_base_url` 或默认 `https://api.ofox.ai/v1`。
     - DeepSeek 文本链路模型名为 `deepseek-v4-flash`，主要用于文字输入、营养库 fallback、统计/推荐文本生成，不是当前图片压测的视觉主链路。
   - Fix applied:
@@ -1325,15 +1420,15 @@
       - 20 个并发/错峰请求复用同一个 `sharedImageURL` 提交 `/api/analyze/submit`。
       - 清理 COS 图片时对 image URL 去重，避免同一对象被删除 20 次。
       - 日志汇总从 `avg_upload` 改为 `shared_upload`，避免把一次上传误解为每个请求的上传耗时。
-    - 新增 `backend/internal/analyze/loadtest/food_analysis_qwen_stability_test.go`
-      - `TestFoodAnalysisStabilityAndLatencyQwen` 复用同一套 loadtest helper，默认设置 `modelName="qwen"`，用于千问/DashScope `qwen-vl-max` 压测。
+    - 新增 `backend/internal/analyze/loadtest/food_analysis_doubao_stability_test.go`
+      - `TestFoodAnalysisStabilityAndLatencyDoubao` 复用同一套 loadtest helper，默认设置 `modelName="doubao"`，用于千问/Doubao `doubao-seed-2-0-lite-260428` 压测。
   - Verification:
     - `go test -tags food_analysis_load ./internal/analyze/loadtest -run '^$' -count=1` passed。
     - `go test ./internal/analyze/loadtest -count=1` passed，仍为 `[no test files]`，确认普通 Go 测试不会执行压测。
     - `git diff --check` passed。
   - Run examples:
     - 默认/当前配置模型：`cd backend && FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatency -count=1 -timeout=20m -v`
-    - 千问模型：`cd backend && FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatencyQwen -count=1 -timeout=20m -v`
+    - 千问模型：`cd backend && FOOD_ANALYSIS_LOAD_PATTERN=burst FOOD_ANALYSIS_LOAD_COUNT=20 go test -tags food_analysis_load ./internal/analyze/loadtest -run TestFoodAnalysisStabilityAndLatencyDoubao -count=1 -timeout=20m -v`
 
 ## 状态：完成源码修改 - 今日餐食含水量展示与保存记录计入喝水
 
@@ -1447,7 +1542,7 @@
   - Verification:
     - `go test ./internal/foodrecord/service -run 'TestFoodRecordService_Save|TestTotalFoodWaterIntakeMl' -count=1` passed。
     - `go test ./internal/app -run Test -count=1` passed。
-    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubaoTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitDoubao|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError' -count=1` passed。
     - `go test ./internal/foodrecord/handler ./internal/health/service ./internal/worker -run Test -count=1` passed。
     - `go build -o /tmp/food-link-server-food-water ./cmd/server` passed。
     - `git diff --check` passed。
@@ -1460,20 +1555,20 @@
 - 2026-05-12 update:
   - User 反馈上传食物进行分析时，前端结果页显示“识别失败：AI 识别服务配置异常，请联系管理员处理”。
   - Findings:
-    - 前端展示的错误文案来自后端 worker 的 `sanitizeTaskErrorMessage()`，通常由 DashScope/Ofox key 或 base URL 配置错误触发。
-    - 当前本地 `backend/config.yaml` 配置了 `external.llm_provider: "gemini"` 和 OfoxAI key，但食物图片分析模块没有读取该配置，仍把空 model 或历史 `gemini` 参数默认路由到 Qwen/DashScope。
-    - 在 DashScope key 缺失或不可用的环境下，上传食物图片会调用 DashScope 失败并被清洗成用户看到的配置异常。
+    - 前端展示的错误文案来自后端 worker 的 `sanitizeTaskErrorMessage()`，通常由 Doubao/Ofox key 或 base URL 配置错误触发。
+    - 当前本地 `backend/config.yaml` 配置了 `external.llm_provider: "gemini"` 和 OfoxAI key，但食物图片分析模块没有读取该配置，仍把空 model 或历史 `gemini` 参数默认路由到 Doubao/Doubao。
+    - 在 Doubao key 缺失或不可用的环境下，上传食物图片会调用 Doubao 失败并被清洗成用户看到的配置异常。
   - Fix applied:
     - `backend/internal/analyze/service/analyze_service.go`
       - 新增 `ConfigureImageProvider()`，支持从配置指定默认图片识别 provider。
       - 普通图片分析、精准图片子任务、图片 engine 对比和批量图片分析在 model 为空或历史 `gemini` 参数时，优先尊重配置的 `llm_provider`。
-      - 显式传 `qwen` 时仍走 Qwen，不被 `llm_provider=gemini` 覆盖。
+      - 显式传 `doubao` 时仍走 Doubao，不被 `llm_provider=gemini` 覆盖。
     - `backend/internal/app/app.go`
       - 初始化 `AnalyzeService` 后调用 `ConfigureImageProvider(cfg.External.LLMProvider)`。
     - `backend/internal/analyze/service/analyze_service_test.go`
-      - 新增配置 `gemini` 时走 Ofox/Gemini、显式 `qwen` 不被覆盖的测试。
+      - 新增配置 `gemini` 时走 Ofox/Gemini、显式 `doubao` 不被覆盖的测试。
   - Verification:
-    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitQwen|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed。
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubaoTemporarily|TestAnalyzeService_AnalyzeImageHonorsConfiguredGeminiProvider|TestAnalyzeService_AnalyzeImageConfiguredGeminiDoesNotOverrideExplicitDoubao|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError' -count=1` passed。
     - `go test ./internal/app -run Test -count=1` passed。
     - `go test ./internal/worker -run 'Test' -count=1` passed。
     - `go build -o /tmp/food-link-server-llm-provider ./cmd/server` passed。
@@ -1485,17 +1580,17 @@
 ## 状态：完成源码切换 - 图片分析临时改回 Gemini 测试
 
 - 2026-05-12 update:
-  - User要求：把当前图片分析从 Qwen 改成 Gemini 试一下，方便测试。
+  - User要求：把当前图片分析从 Doubao 改成 Gemini 试一下，方便测试。
   - 当前前端图片分析页 `src/packageExtra/pages/analyze/index.tsx` 提交 `modelName: 'gemini'`。
   - Fix applied:
     - `backend/internal/analyze/service/analyze_service.go`
-      - `resolveModelConfig()` 中 `gemini` / `gemini-flash` / `gemini-vision` / `gemini-3-flash-preview` / `google/gemini-3-flash-preview` 不再临时映射到 Qwen。
+      - `resolveModelConfig()` 中 `gemini` / `gemini-flash` / `gemini-vision` / `gemini-3-flash-preview` / `google/gemini-3-flash-preview` 不再临时映射到 Doubao。
       - 上述别名现在返回 `provider=gemini`、`model=gemini-3-flash-preview`，走 Ofox/Gemini client。
-      - 显式 `qwen` / `qwen-vl-max` 入口仍保留；Gemini 图片调用遇到 transient error 时仍保留 DashScope/Qwen fallback。
+      - 显式 `doubao` / `doubao-seed-2-0-lite-260428` 入口仍保留；Gemini 图片调用遇到 transient error 时仍保留 Doubao/Doubao fallback。
     - `backend/internal/analyze/service/analyze_service_test.go`
       - 更新 `TestResolveModelConfig` 与 Gemini alias 测试，锁定 `gemini` 会走 Ofox/Gemini。
   - Verification:
-    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasUsesOfoxGemini|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed.
+    - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasUsesOfoxGemini|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError' -count=1` passed.
     - `go build -o $env:TEMP\food-link-gemini-test-server.exe ./cmd/server` passed.
     - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go` passed with CRLF warnings only.
   - Runtime note:
@@ -1615,7 +1710,7 @@
     - `docs/go-backend-prelaunch-checklist-2026-05-08.md` 已同步当前 worker/queue 验收口径。
   - 验证：
     - `go test ./internal/taskqueue ./pkg/config ./internal/worker ./internal/app -run Test -count=1` passed.
-    - `go test ./internal/analyze/service -run "TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask|TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+    - `go test ./internal/analyze/service -run "TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask|TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubaoTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError" -count=1` passed.
     - `go test ./internal/analyze/repo -run "^$" -count=1` passed.
     - `go test ./internal/analyze/handler -run TestAnalyzeHandler_SubmitAnalyzeTask -count=1` passed.
     - `go build -o $env:TEMP\food-link-server-taskqueue.exe ./cmd/server` passed.
@@ -1636,12 +1731,12 @@
     - 图片先上传到 `/api/upload-analyze-image-file` 或 `/api/upload-analyze-image`，得到 CDN/COS 图片 URL。
     - `/api/analyze/submit` 只创建 `analysis_tasks` 异步任务，标准图片任务 `task_type=food`、`status=pending`。
     - 独立 worker `backend/cmd/worker` 轮询 `analysis_tasks`，用 `FOR UPDATE SKIP LOCKED` 领取 pending 任务并改为 `processing`。
-    - 标准图片任务调用 `AnalyzeService.Analyze()`；默认/历史 `gemini` 请求目前会临时路由到 DashScope `qwen-vl-max`。
+    - 标准图片任务调用 `AnalyzeService.Analyze()`；默认/历史 `gemini` 请求目前会临时路由到 Doubao `doubao-seed-2-0-lite-260428`。
     - 识别第一阶段只让模型输出食物名、估重和 `waterMl`；后端 `db_first` 再查 `food_nutrition_library` / `food_nutrition_aliases` 回算热量和营养。
   - Findings:
     - 直接查当前配置 DB：任务 `367af41f-f800-4d07-bf03-a99dd58f8c33` 仍为 `pending | food`，`created_at/updated_at` 都停在 `2026-05-11 23:09:46 +08:00`，说明没有 worker 领取它。
     - 本机进程只看到 `go run .\cmd\server\main.go` 占用 `3010`，未看到 `cmd/worker` 进程。
-    - 因此本次不是卡在 Qwen/Ofox/营养库，而是异步 worker 未运行或未连接同一 DB。
+    - 因此本次不是卡在 Doubao/Ofox/营养库，而是异步 worker 未运行或未连接同一 DB。
   - Fix applied:
     - `backend/internal/analyze/service/task_service.go`
       - 提交标准/精准、图片/文字任务后记录 `analysis task submitted`，包含 task_id、task_type、model、execution_mode、analysis_engine、image_count 等。
@@ -1667,7 +1762,7 @@
       - Go server 启动时在同进程内按 `cfg.Worker` 创建 `worker.Runner` 并用 goroutine 运行。
       - server 关闭时先 cancel 内置 worker 并等待退出，再关闭 tracing/DB。
   - Verification:
-    - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+    - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubaoTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError" -count=1` passed.
     - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage_Timeout|TestSanitizeTaskErrorMessage_ResourceExhausted" -count=1` passed.
     - `go build -o $env:TEMP\food-link-server-logcheck.exe ./cmd/server` passed.
     - `go build -o $env:TEMP\food-link-worker-logcheck.exe ./cmd/worker` passed.
@@ -1689,7 +1784,7 @@
       - `go test ./pkg/config -count=1` passed.
       - `go test ./internal/app -run Test -count=1` passed.
       - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage_Timeout|TestSanitizeTaskErrorMessage_ResourceExhausted" -count=1` passed.
-      - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+      - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubaoTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError" -count=1` passed.
       - server and standalone worker builds passed.
   - Remaining action:
     - 当前本机任务仍 pending，因为按项目规则本轮未擅自重启常驻 server。
@@ -2306,26 +2401,26 @@
     - 直接 SSH `root@coachlink.fit` 检查生产机到 Ofox 的连通性失败：`Permission denied (publickey)`。
     - 无法读取生产 `food-backend.service` 日志或从生产机执行 curl 验证。
   - Code note:
-    - 已按用户要求加入 DashScope/Qwen 兜底：
-      - 根据用户最新要求，最近 1-2 天 Ofox/Gemini 连续限流，图片分析主链路临时默认改用 DashScope `qwen-vl-max`。
-      - `resolveModelConfig()` 中空默认值、历史 `modelName: "gemini"`、`gemini-3-flash-preview`、`google/gemini-3-flash-preview` 都临时路由到 `qwen-vl-max`，避免前端仍传 `"gemini"` 时继续打到 Ofox。
+    - 已按用户要求加入 Doubao/Doubao 兜底：
+      - 根据用户最新要求，最近 1-2 天 Ofox/Gemini 连续限流，图片分析主链路临时默认改用 Doubao `doubao-seed-2-0-lite-260428`。
+      - `resolveModelConfig()` 中空默认值、历史 `modelName: "gemini"`、`gemini-3-flash-preview`、`google/gemini-3-flash-preview` 都临时路由到 `doubao-seed-2-0-lite-260428`，避免前端仍传 `"gemini"` 时继续打到 Ofox。
       - Ofox/Gemini 仅保留显式 `modelName: "ofox-gemini"` 或 `ofox-gemini:<model>` 入口，方便后续上游恢复后切回。
-      - 标准图片识别、精准模式 `RunPrecisionJSONWithImages*`、单模型 compare engines、批量图片分析都会按新的默认解析走 Qwen。
-      - 若显式使用 Ofox/Gemini，为避免长时间无响应吃完整个任务窗口，图片主调用最多等待 `45s`，超时后进入 Qwen 兜底。
+      - 标准图片识别、精准模式 `RunPrecisionJSONWithImages*`、单模型 compare engines、批量图片分析都会按新的默认解析走 Doubao。
+      - 若显式使用 Ofox/Gemini，为避免长时间无响应吃完整个任务窗口，图片主调用最多等待 `45s`，超时后进入 Doubao 兜底。
       - 如果两边都失败，worker 不再把原始 `Post "https://api.ofox.ai/..." Client.Timeout...` 展示给用户，而是归一为“AI 识别服务响应超时/当前繁忙/暂时不可用”。
   - Real provider check:
-    - 使用今天失败任务的同一张 CDN 图片直接调用 DashScope `qwen-vl-max`，返回 `200`，耗时约 `7600ms`，确认备用视觉模型可用。
+    - 使用今天失败任务的同一张 CDN 图片直接调用 Doubao `doubao-seed-2-0-lite-260428`，返回 `200`，耗时约 `7600ms`，确认备用视觉模型可用。
     - User随后再次测试失败，最新任务 `028ca932-13fb-48e1-ae5f-d6c0250ac700`：
       - `created_at=2026-05-11T11:25:33+08:00`
       - `updated_at=2026-05-11T11:27:05+08:00`
       - 图片为 `http://cdn-food-images.coachlink.fit/181a1760-4f17-450e-b493-ed57281633f1.jpg`
-      - 图片本身可 GET，Ofox/Gemini 对同图 HTTP/HTTPS 均超时到 `120s`，DashScope/Qwen 对同图 HTTP/HTTPS 均约 `8s` 返回 `200`。
-      - 该任务总耗时约 `92s`，符合旧 worker 仅等待 Ofox 90 秒超时后失败；说明线上/当前运行中的 worker 尚未部署或重启到带 Qwen 兜底的版本。
+      - 图片本身可 GET，Ofox/Gemini 对同图 HTTP/HTTPS 均超时到 `120s`，Doubao/Doubao 对同图 HTTP/HTTPS 均约 `8s` 返回 `200`。
+      - 该任务总耗时约 `92s`，符合旧 worker 仅等待 Ofox 90 秒超时后失败；说明线上/当前运行中的 worker 尚未部署或重启到带 Doubao 兜底的版本。
   - Verification:
-    - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError" -count=1` passed
+    - `go test ./internal/analyze/service -run "TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubaoTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError" -count=1` passed
     - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage_HTML|TestSanitizeTaskErrorMessage_Timeout|TestSanitizeTaskErrorMessage_ResourceExhausted" -count=1` passed
-    - `go build -o %TEMP%/food-link-qwen-default.exe ./cmd/server` passed
-    - `go build -o %TEMP%/food-link-qwen-default-worker.exe ./cmd/worker` passed
+    - `go build -o %TEMP%/food-link-doubao-default.exe ./cmd/server` passed
+    - `go build -o %TEMP%/food-link-doubao-default-worker.exe ./cmd/worker` passed
     - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go backend/internal/worker/worker.go backend/internal/worker/worker_sanitize_test.go` passed with CRLF warnings only
   - Blocker:
     - Full `go test ./internal/analyze/service -count=1` remains blocked by existing Windows `CGO_ENABLED=0 + go-sqlite3 requires cgo` setup.
@@ -2335,29 +2430,29 @@
     - Re-read project state and re-ran targeted analyze/worker tests plus `cmd/server` and `cmd/worker` builds; all passed.
     - Current source fix is ready for deployment. Real users will still hit the old Ofox/Gemini path until the backend image is pushed and the running service/worker updates.
   - Follow-up 401:
-    - User复测后出现 `dashscope api error 401: Incorrect API key provided`，说明请求已切到 DashScope/Qwen，但运行环境里的 `DASHSCOPE_API_KEY` 被 DashScope 判为无效。
-    - 本地 `backend/config.yaml` 中的 DashScope key 用最小 `qwen-vl-max` 请求验证为 `200`，所以更像线上 ConfigMap/env 与本地配置不一致，或值带了前后空白。
-    - 本地 `backend/.env` 发现 `DASHSCOPE_API_KEY=` 后存在前导空格；如果生产 ConfigMap 从同类 env 文件生成，这个空格会进入真实 key。
-    - 已补代码防御：配置加载后 trim 外部 API key；`NewDashScopeClient()` 也 trim key/model；worker 将 `dashscope/ofox 401` 归一为“AI 识别服务配置异常，请联系管理员处理”。
-    - User强调本地也失败；已直接修正本地 `backend/.env` 中 `DASHSCOPE_API_KEY=` 后的前导空格。
-    - 使用修正后的本地 `.env` key 直接调用 DashScope `qwen-vl-max` 图片识别，返回 `HTTP_STATUS=200` 并识别出图片内容。
+    - User复测后出现 `doubao api error 401: Incorrect API key provided`，说明请求已切到 Doubao/Doubao，但运行环境里的 `DOUBAO_API_KEY` 被 Doubao 判为无效。
+    - 本地 `backend/config.yaml` 中的 Doubao key 用最小 `doubao-seed-2-0-lite-260428` 请求验证为 `200`，所以更像线上 ConfigMap/env 与本地配置不一致，或值带了前后空白。
+    - 本地 `backend/.env` 发现 `DOUBAO_API_KEY=` 后存在前导空格；如果生产 ConfigMap 从同类 env 文件生成，这个空格会进入真实 key。
+    - 已补代码防御：配置加载后 trim 外部 API key；`NewDoubaoClient()` 也 trim key/model；worker 将 `doubao/ofox 401` 归一为“AI 识别服务配置异常，请联系管理员处理”。
+    - User强调本地也失败；已直接修正本地 `backend/.env` 中 `DOUBAO_API_KEY=` 后的前导空格。
+    - 使用修正后的本地 `.env` key 直接调用 Doubao `doubao-seed-2-0-lite-260428` 图片识别，返回 `HTTP_STATUS=200` 并识别出图片内容。
     - 当前本地仍在跑旧 `go run ./cmd/server` / `go run ./cmd/worker` 进程；需要重启本地 backend/worker 后才会读到修正后的 env 与新代码。
-    - User 重启后仍失败；进一步读取 worker 进程环境发现 `DASHSCOPE_API_KEY` 被系统/用户环境变量覆盖为另一把无效 key：
-      - `config.yaml` / `backend/.env` key 指纹一致，长度 35，直接请求 DashScope 返回 `200`。
-      - worker 进程环境变量 key 长度 38，指纹不同，直接请求 DashScope 返回 `401 Incorrect API key`。
-      - 本机 User 级环境变量 `DASHSCOPE_API_KEY=sk-sp-...` 正在覆盖本地配置文件。
+    - User 重启后仍失败；进一步读取 worker 进程环境发现 `DOUBAO_API_KEY` 被系统/用户环境变量覆盖为另一把无效 key：
+      - `config.yaml` / `backend/.env` key 指纹一致，长度 35，直接请求 Doubao 返回 `200`。
+      - worker 进程环境变量 key 长度 38，指纹不同，直接请求 Doubao 返回 `401 Incorrect API key`。
+      - 本机 User 级环境变量 `DOUBAO_API_KEY=sk-sp-...` 正在覆盖本地配置文件。
     - 已追加配置优先级防护：`backend/pkg/config/config.go` 只要存在 `config.yaml`，外部模型 key 优先使用配置文件值，避免系统脏环境变量覆盖；生产 scratch 镜像没有 `config.yaml`，仍走 ConfigMap/env。
-    - 验证：在当前 shell 仍带坏 `DASHSCOPE_API_KEY` 的情况下，`config.Load(".")` 已加载到 `config.yaml` 的正确 DashScope key 指纹；`go test ./pkg/config`、定向 analyze/worker 测试、server/worker build 均通过。
-  - All image recognition Qwen sweep:
-    - 食物标准图片识别、精准模式图片子任务、批量图片分析、保质期拍照识别、健康报告 OCR、运动图片估算均已切到 DashScope `qwen-vl-max`。
-    - 保质期识别不再在 DashScope 缺失时隐式 fallback 到 Ofox/Gemini；缺 Qwen 配置时直接配置错误，避免偷偷走回 Gemini。
+    - 验证：在当前 shell 仍带坏 `DOUBAO_API_KEY` 的情况下，`config.Load(".")` 已加载到 `config.yaml` 的正确 Doubao key 指纹；`go test ./pkg/config`、定向 analyze/worker 测试、server/worker build 均通过。
+  - All image recognition Doubao sweep:
+    - 食物标准图片识别、精准模式图片子任务、批量图片分析、保质期拍照识别、健康报告 OCR、运动图片估算均已切到 Doubao `doubao-seed-2-0-lite-260428`。
+    - 保质期识别不再在 Doubao 缺失时隐式 fallback 到 Ofox/Gemini；缺 Doubao 配置时直接配置错误，避免偷偷走回 Gemini。
     - 仍保留的 Gemini/Ofox 代码仅用于显式 `ofox-gemini` escape hatch、对比/测试后台和 Ofox client 单元测试，不属于默认用户图像识别路径。
-    - User补充要求：不要删除原 Gemini 通道；当前口径是临时默认 Qwen，保留 Gemini/Ofox 显式入口和后续切回能力。
+    - User补充要求：不要删除原 Gemini 通道；当前口径是临时默认 Doubao，保留 Gemini/Ofox 显式入口和后续切回能力。
     - Verification:
       - `go test ./internal/expiry/service -run TestRecognizer -count=1` passed
       - `go test ./internal/user/service -run TestOCRService -count=1` passed
-      - `go test ./internal/health/service -run "TestExerciseService_EstimateImageUsesQwenDashScope" -count=1` passed
-      - targeted analyze service Qwen routing/fallback tests passed
+      - `go test ./internal/health/service -run "TestExerciseService_EstimateImageUsesDoubaoDoubao" -count=1` passed
+      - targeted analyze service Doubao routing/fallback tests passed
       - server/worker builds passed
 
 ## 状态：完成源码修复 - 体重 summary 同日多条记录取值口径不一致
@@ -3412,7 +3507,7 @@
     - 精准纠错仍会更新 precision session final_result/status，但不会再创建 item estimate/aggregate 子任务。
   - Verification:
     - `go test ./internal/worker -count=1` 通过。
-    - `go test ./internal/analyze/service -run '^(TestResolveModelConfig|TestAnalyzeService_AnalyzeText|TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault|TestAnalyzeService_AnalyzeImageQwenAliasRoutesToGemini|TestOfoxAIClient_Analyze_Success|TestDashScopeClient_Analyze_Success|TestParseLLMJSON|TestNormalizeExecutionMode)$'` 通过。
+    - `go test ./internal/analyze/service -run '^(TestResolveModelConfig|TestAnalyzeService_AnalyzeText|TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault|TestAnalyzeService_AnalyzeImageDoubaoAliasRoutesToGemini|TestOfoxAIClient_Analyze_Success|TestDoubaoClient_Analyze_Success|TestParseLLMJSON|TestNormalizeExecutionMode)$'` 通过。
     - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
     - `go build -o %TEMP%\food-link-correction-server.exe ./cmd/server`、`go build -o %TEMP%\food-link-correction-worker.exe ./cmd/worker` 通过。
     - `.\node_modules\.bin\eslint.cmd src/packageExtra/pages/result/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
@@ -3537,7 +3632,7 @@
     - 精准图片 JSON 调用支持多图 `image_urls/image_paths`，并将精准 JSON completion 的 temperature 固定为 `0.2`、图片/文字超时分别设为 `90s/60s`，与 Python content_parts / `_run_json_completion_sync` 行为对齐。
   - Verification:
     - `go test ./internal/worker -count=1` 通过。
-    - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeText|TestResolveModelConfig|TestOfoxAIClient|TestDashScopeClient|TestParseLLMJSON|TestNormalize'` 通过。
+    - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeText|TestResolveModelConfig|TestOfoxAIClient|TestDoubaoClient|TestParseLLMJSON|TestNormalize'` 通过。
     - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
     - `go build -o %TEMP%\food-link-precision-refine-server.exe ./cmd/server` 通过。
     - `go build -o %TEMP%\food-link-precision-refine-worker.exe ./cmd/worker` 通过。
@@ -3556,13 +3651,13 @@
     - 按用户纠正，已删除“薄层米饭固定 50-120g”这类硬区间；薄层如果面积很大，体积和重量仍可能不小。现在 prompt 要求先估可见面积和平均厚度得到体积，再按熟米饭/面/粥的体积密度换算重量。
     - 追加验证：`go test ./internal/worker -count=1`、相关 Go 包测试、server/worker build 均通过，新增测试确保三类 prompt 都包含主食体积/面积/厚度规则，并禁止重新硬编码 `50-120g`。
   - 模型路由收口：
-    - 用户明确要求普通拍照和精准拍照都不要再使用 Qwen，默认统一用 `gemini-3-flash-preview`。
-    - 已将 `resolveModelConfig("")` 默认改为 `gemini / gemini-3-flash-preview`，并把 `qwen/qwen-vl/qwen-vl-max` 显式别名也强制归到 Gemini，防止前端旧参数或缓存绕回 DashScope/Qwen。
-    - 普通图片 `Analyze` 改为使用已装配的 Gemini/Ofox client；精准模式 `RunPrecisionJSONWithImages*` 未传模型时走 Gemini，传 Qwen 别名也会走 Gemini。
-    - Qwen client 仅保留给 `AnalyzeCompare` 这类专门模型对比/测试入口，不再作为普通模式或精准模式路由。
+    - 用户明确要求普通拍照和精准拍照都不要再使用 Doubao，默认统一用 `gemini-3-flash-preview`。
+    - 已将 `resolveModelConfig("")` 默认改为 `gemini / gemini-3-flash-preview`，并把 `doubao/doubao/doubao-seed-2-0-lite-260428` 显式别名也强制归到 Gemini，防止前端旧参数或缓存绕回 Doubao/Doubao。
+    - 普通图片 `Analyze` 改为使用已装配的 Gemini/Ofox client；精准模式 `RunPrecisionJSONWithImages*` 未传模型时走 Gemini，传 Doubao 别名也会走 Gemini。
+    - Doubao client 仅保留给 `AnalyzeCompare` 这类专门模型对比/测试入口，不再作为普通模式或精准模式路由。
     - 文字输入模式保持前序决策：默认 DeepSeek `deepseek-v4-flash`，不受本次视觉模型默认值影响。
     - Verification:
-      - `go test ./internal/analyze/service -run '^(TestResolveModelConfig|TestAnalyzeService_AnalyzeText|TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault|TestAnalyzeService_AnalyzeImageQwenAliasRoutesToGemini|TestOfoxAIClient_Analyze_Success|TestDashScopeClient_Analyze_Success|TestParseLLMJSON|TestNormalizeExecutionMode)$'` 通过。
+      - `go test ./internal/analyze/service -run '^(TestResolveModelConfig|TestAnalyzeService_AnalyzeText|TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault|TestAnalyzeService_AnalyzeImageDoubaoAliasRoutesToGemini|TestOfoxAIClient_Analyze_Success|TestDoubaoClient_Analyze_Success|TestParseLLMJSON|TestNormalizeExecutionMode)$'` 通过。
       - `go test ./internal/worker -count=1` 通过。
       - `go test ./internal/app ./internal/analyze/handler ./internal/analyze/domain ./internal/migration ./pkg/config` 通过。
       - `go build -o %TEMP%\food-link-gemini-default-server.exe ./cmd/server`、`go build -o %TEMP%\food-link-gemini-default-worker.exe ./cmd/worker` 通过。
@@ -3659,11 +3754,11 @@
   - 复测要求：用户重启 Go worker 后重新提交一条新的精准模式任务；这次 aggregate 最终项数应接近 planner 识别的项数，不应再把每个子任务的整图结果叠加。
 
 - 2026-05-09 issue #7 / text analyze model:
-  - 测试问题：文字输入模式识别失败，错误为 `dashscope api error 401`，提示 DashScope API key 不正确。
-  - 定位：这是配置依赖问题。Go 文字分析默认仍可能落到 DashScope/Qwen；当前本地 DashScope key 无效，所以文字模式失败。
+  - 测试问题：文字输入模式识别失败，错误为 `doubao api error 401`，提示 Doubao API key 不正确。
+  - 定位：这是配置依赖问题。Go 文字分析默认仍可能落到 Doubao/Doubao；当前本地 Doubao key 无效，所以文字模式失败。
   - 修复：
-    - 文字输入模式在未指定 `modelName` 时默认走 DeepSeek，而不是 DashScope。
-    - 如果文字模式未配置 `DEEPSEEK_API_KEY`，直接返回清晰配置错误，不再静默回退 DashScope 造成 401 误导。
+    - 文字输入模式在未指定 `modelName` 时默认走 DeepSeek，而不是 Doubao。
+    - 如果文字模式未配置 `DEEPSEEK_API_KEY`，直接返回清晰配置错误，不再静默回退 Doubao 造成 401 误导。
     - 显式 `modelName=deepseek/deepseek-*` 也走 DeepSeek；显式选择其它模型时仍保留原有模型路由能力。
     - worker 启动时已注入 DeepSeek 配置，异步 `food_text` 任务和同步 `/api/analyze-text` 使用同一口径。
     - DeepSeek 默认 text model 统一为 `deepseek-chat`，`backend/config-example.yaml` 已补 `deepseek_api_key/deepseek_base_url/deepseek_text_model` 示例。
@@ -3675,7 +3770,7 @@
     - DeepSeek 配置只保留 `external.deepseek_api_key` 一项；base URL 固定为 `https://api.deepseek.com`，文字模型固定为 `deepseek-v4-flash`，不再通过 YAML / env 配置。
     - 已把本地 DeepSeek key 迁入 `backend/config.yaml` 的 `external.deepseek_api_key`，未在终端输出密钥。
   - Verification:
-    - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeText|TestDeepSeekNutritionEstimator|TestResolveModelConfig|TestOfoxAIClient|TestDashScopeClient|TestParseLLMJSON|TestNormalize'` 通过。
+    - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeText|TestDeepSeekNutritionEstimator|TestResolveModelConfig|TestOfoxAIClient|TestDoubaoClient|TestParseLLMJSON|TestNormalize'` 通过。
     - `go test ./pkg/config` 通过，覆盖 DeepSeek API key 从 YAML 读取。
     - `go test ./internal/worker ./internal/app ./pkg/config` 通过。
     - `go test ./internal/worker ./internal/app ./internal/health/service ./pkg/config` 通过。
@@ -3857,7 +3952,7 @@
   - Verification:
     - `gofmt` 已执行。
     - `.\node_modules\.bin\eslint.cmd src/packageExtra/pages/analyze-loading/index.tsx src/utils/api.ts --ext .ts,.tsx --max-warnings 0` 通过。
-    - `go test ./internal/analyze/service -run 'TestOfoxAIClient|TestDashScopeClient|TestParseLLMJSON|TestNormalize'` 通过。
+    - `go test ./internal/analyze/service -run 'TestOfoxAIClient|TestDoubaoClient|TestParseLLMJSON|TestNormalize'` 通过。
     - `go test ./internal/worker -run 'TestSanitizeTaskErrorMessage'` 通过。
     - `go test ./pkg/config` 通过。
     - `go build -o %TEMP%\food-link-ofox-fix-server.exe ./cmd/server` 通过。
@@ -4101,7 +4196,7 @@
     - 新增 `precision_item_estimates` repo 读写方法，任务 payload 会保留 source/text/image 与分组信息。
   - worker 已继续接入 `health_report`：
     - 支持单图或逗号分隔多图 URL。
-    - 调用现有 DashScope OCR，合并 indicators/conclusions/suggestions/medical_notes。
+    - 调用现有 Doubao OCR，合并 indicators/conclusions/suggestions/medical_notes。
     - 写入 `user_health_documents(document_type=report)`。
     - 回写 `weapp_user.health_condition.report_extract`。
     - 完成 `analysis_tasks.result={"extracted_content": ...}`。
@@ -5856,7 +5951,7 @@
 - Scope:
   - `backend/main.py`
     - 鏂板 `_resolve_food_vision_model_config(...)`锛岀粺涓€鎶婏細
-      - `qwen / qwen-vl-max` 瑙ｆ瀽鍒?DashScope
+      - `doubao / doubao-seed-2-0-lite-260428` 瑙ｆ瀽鍒?Doubao
       - `gemini / gemini-*` 瑙ｆ瀽鍒?OfoxAI Gemini
     - `analyze_food(...)` 涓?`analyze_batch(...)` 鐜板湪閮戒細鎸?`modelName` 姝ｇ‘閫夋嫨 provider
     - `_analyze_single_image_for_batch(...)` 鍦?`gemini` 妯″紡涓嬬洿鎺ヨ蛋 `_analyze_with_gemini(...)`
@@ -5894,7 +5989,7 @@
   - `source backend/venv/bin/activate && pytest backend/tests/integration/test_food_analysis_batch_api.py -q`锛歚3 passed`
   - `python -m py_compile backend/main.py`锛氶€氳繃
 - Notes:
-  - 杩欐娌℃湁璺戠湡瀹?DashScope live 璇锋眰锛涘綋鍓嶉獙璇佸彛寰勬槸鍚庣鎺ュ彛娴嬭瘯 + 璇硶妫€鏌?
+  - 杩欐娌℃湁璺戠湡瀹?Doubao live 璇锋眰锛涘綋鍓嶉獙璇佸彛寰勬槸鍚庣鎺ュ彛娴嬭瘯 + 璇硶妫€鏌?
 
 - Task: 搴旂敤鎴疯姹傚惎鍔ㄦ湰鍦板墠鍚庣骞舵墦寮€寰俊寮€鍙戣€呭伐鍏?
 - Status: done锛堝墠绔?watch 涓?DevTools 鑷姩鍖栧凡鎷夎捣锛涘悗绔渶缁堝凡鎭㈠鍒?`3010` 鐩戝惉锛?
@@ -6341,11 +6436,11 @@
   - 杩欐槸鏈湴鏁版嵁闆嗘暣鐞嗕笌鍚庡彴涓婁紶锛屼笉娑夊強寰俊灏忕▼搴忛〉闈紝鍥犳鏈娇鐢?`weapp-devtools`
 
 - Task: 椋熺墿璇嗗埆娴嬭瘯鍚庡彴鏀归€狅紙澶氭ā鍨嬪姣?+ 姣忛鐗╂爣鍑嗘爣绛撅級
-- Status: done锛堜竴鏈熷凡钀藉湴锛氬悗鍙板崟鍥?鎵归噺鍧囨敮鎸?Qwen/Gemini 鍚屾椂娴嬭瘯锛涙爣鍑嗘爣绛炬寮忔敮鎸佷袱绉嶆ā寮忥細鏁撮鎬婚噸閲?total銆佹瘡绉嶉鐗╁厠閲?items锛涙壒閲?ZIP `labels.txt` 鍙贩鐢ㄤ袱绉嶆牸寮忥級
+- Status: done锛堜竴鏈熷凡钀藉湴锛氬悗鍙板崟鍥?鎵归噺鍧囨敮鎸?Doubao/Gemini 鍚屾椂娴嬭瘯锛涙爣鍑嗘爣绛炬寮忔敮鎸佷袱绉嶆ā寮忥細鏁撮鎬婚噸閲?total銆佹瘡绉嶉鐗╁厠閲?items锛涙壒閲?ZIP `labels.txt` 鍙贩鐢ㄤ袱绉嶆牸寮忥級
 - Scope:
   - 鍚庣锛?
     - `backend/test_backend/utils.py`锛氭柊澧炰袱绫绘爣绛捐В鏋愩€丅OM 鍏煎銆丣SON/inline/鏃ф牸寮忓吋瀹癸紱`calculate_item_weight_evaluation` 鏀寔 total 妯″紡鍙畻鏁撮鎬诲亸宸€乮tems 妯″紡璁＄畻閫愰」鍖归厤/鍋忓樊
-    - `backend/main.py`锛歚/api/test-backend/analyze` 涓?`/api/test-backend/batch/*` 鏂板 `models`銆乣execution_mode`銆乣expected_items_json`锛涘悓涓€杈撳叆鍙苟鍙戣窇 `qwen/gemini`
+    - `backend/main.py`锛歚/api/test-backend/analyze` 涓?`/api/test-backend/batch/*` 鏂板 `models`銆乣execution_mode`銆乣expected_items_json`锛涘悓涓€杈撳叆鍙苟鍙戣窇 `doubao/gemini`
     - 娴嬭瘯鍚庡彴妯″瀷璋冪敤鏀逛负澶嶇敤 `backend/worker.py::_build_food_prompt` 鐢熸垚涓婚摼璺姩鎬?prompt锛屼笉鍐嶇敤 `model_prompts` 鏃ф彁绀鸿瘝鍋氳瘎娴?
     - 鎵归噺浠诲姟缁撴灉鏂板 `labelMode`銆乣expectedItems`銆乣modelResults`銆侀€愰」鍖归厤/缂哄け/棰濆璇嗗埆/鎬婚噸閲忓亸宸?
   - 鍚庡彴椤甸潰锛?
@@ -7269,7 +7364,7 @@
     - 褰撳ぉ璁板綍鍗＄墖鏄惁宸插嚭鐜板浘鐗囩缉鐣ュ浘锛屽苟涓旂偣灏忓浘鍙洿鎺ラ瑙堢収鐗?
 
 - Task: 鍒囨崲璇勮瀹℃牳鍒?OfoxAI `openai/gpt-5.4-nano` 骞舵斁瀹藉鏍?
-- Status: done锛堣瘎璁哄鏍稿凡浠?`qwen-plus + DashScope` 鍒囧埌 `openai/gpt-5.4-nano + OfoxAI`锛涗笌 Gemini 鐑噺璇嗗埆鍏辩敤 OfoxAI key/base_url锛涘鏍告彁绀鸿瘝鍜屾湰鍦板厹搴曞凡鏀逛负鈥滄槑纭繚瑙勬墠鎷︹€濓級
+- Status: done锛堣瘎璁哄鏍稿凡浠?`doubao-plus + Doubao` 鍒囧埌 `openai/gpt-5.4-nano + OfoxAI`锛涗笌 Gemini 鐑噺璇嗗埆鍏辩敤 OfoxAI key/base_url锛涘鏍告彁绀鸿瘝鍜屾湰鍦板厹搴曞凡鏀逛负鈥滄槑纭繚瑙勬墠鎷︹€濓級
 - Scope:
   - `backend/worker.py`
     - 璇勮瀹℃牳璇锋眰鏀逛负璧?`https://api.ofox.ai/v1/chat/completions`
@@ -7839,11 +7934,11 @@
     - `run_food_analysis_sync(...)` 涓 `983-1029` 琛屼細瀵逛笂娓告ā鍨嬫帴鍙ｆ渶澶氶噸璇?3 娆?
     - 鐢ㄦ埛鎻愪緵鐨勭嚎涓婃棩蹇?`Food analysis attempt 3 exception: API 璇锋眰澶辫触` 瀵瑰簲鈥? 娆¤姹傞兘娌℃嬁鍒版垚鍔熷搷搴斺€?
     - 鑻ョ嚎涓?`LLM_PROVIDER=gemini`锛屽垯璇ヨ姹傜洰鏍囨槸 `https://api.ofox.ai/v1/chat/completions`
-    - 鑻ョ嚎涓?`LLM_PROVIDER=qwen`锛屽垯璇ヨ姹傜洰鏍囨槸 DashScope `.../chat/completions`
+    - 鑻ョ嚎涓?`LLM_PROVIDER=doubao`锛屽垯璇ヨ姹傜洰鏍囨槸 Doubao `.../chat/completions`
   - 褰撳墠浼樺厛鎺掓煡椤哄簭锛?
     - 鍏堝尯鍒嗗け璐ュ仠鍦ㄢ€滀笂浼?鎻愪氦鍓嶁€濊繕鏄€渨orker 璋冩ā鍨嬫椂鈥?
     - 瀵逛簬杩欐壒鏈€鏂板け璐ユ牱鏈紝浼樺厛鐪嬪悗绔?worker stdout/stderr 鏄惁鍑虹幇 `SSL` / `EOF` / `ConnectError` / `ReadError`
-    - 纭绾夸笂 `LLM_PROVIDER` 褰撳墠瀹為檯鍊硷紝浠ュ強瀵瑰簲涓婃父锛圤foxAI 鎴?DashScope锛夊湪澶辫触鏃舵鏄惁鏈夋尝鍔?
+    - 纭绾夸笂 `LLM_PROVIDER` 褰撳墠瀹為檯鍊硷紝浠ュ強瀵瑰簲涓婃父锛圤foxAI 鎴?Doubao锛夊湪澶辫触鏃舵鏄惁鏈夋尝鍔?
     - 鑻ュけ璐ユ椂 `/api/analyze/submit` 宸叉垚鍔熶笖妯″瀷 usage 鏃犳柊澧烇紝缁х画鏍稿璇?usage 闈㈡澘鏄惁鐪熷搴?worker 褰撳墠浣跨敤鐨勪笂娓稿钩鍙?
 - Verification:
   - 宸查噸鏂伴槄璇荤姸鎬佹枃浠朵笌褰撳墠瀹炵幇浠ｇ爜锛屾湭鍋氫唬鐮佷慨鏀?
@@ -7854,7 +7949,7 @@
   - 璁╃敤鎴风‘璁ょ嚎涓?`LLM_PROVIDER`
   - 鍦ㄦ湇鍔″櫒澶辫触鏃舵 grep worker 鏃ュ織閲岀殑 `SSL|EOF|ConnectError|ReadError|Food analysis attempt`
   - 鑻ュ綋鍓嶈蛋 `gemini -> api.ofox.ai`锛屼紭鍏堟€€鐤?OfoxAI 閾捐矾娉㈠姩鎴栨湇鍔″櫒鍒拌鍩熷悕鐨?TLS 杩炴帴寮傚父
-  - 鑻ュ綋鍓嶈蛋 `qwen -> dashscope`锛屽垯鏀规煡 DashScope 閾捐矾
+  - 鑻ュ綋鍓嶈蛋 `doubao -> doubao`锛屽垯鏀规煡 Doubao 閾捐矾
 
 - Task: 璁板綍鏃朵笉鍐嶉噸澶嶅脊鍑洪娆￠€夋嫨
 - Status: done锛堢粨鏋滈〉鈥滆褰曗€濅細浼樺厛浣跨敤鍒嗘瀽鍓嶅凡閫夐娆＄洿鎺ヤ繚瀛橈紱鍙湁鎷夸笉鍒伴娆＄紦瀛樻椂鎵嶅厹搴曞脊绐楋級
@@ -8576,7 +8671,7 @@
 - Verification:
   - `go test ./internal/taskqueue ./pkg/trace ./pkg/logger ./pkg/config -run Test -count=1` passed.
   - `go test ./internal/worker ./internal/app -run Test -count=1` passed.
-  - `go test ./internal/analyze/service -run "TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask|TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToQwenTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError" -count=1` passed.
+  - `go test ./internal/analyze/service -run "TestTaskService_EnqueueTaskPublishesQueueMessage|TestTaskService_EnqueueTaskSkipsCompletedTask|TestResolveModelConfig|TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubaoTemporarily|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError" -count=1` passed.
   - `go test ./internal/analyze/handler -run TestAnalyzeHandler_SubmitAnalyzeTask -count=1` passed.
   - `go test ./internal/analyze/repo -run "^$" -count=1` passed.
   - `go build -o $env:TEMP\food-link-server-trace-worker-delete.exe ./cmd/server` passed.
@@ -8759,10 +8854,10 @@
 - Fix:
   - `backend/internal/analyze/service/llm_client.go` 新增 `ErrLLMJSONParse` / `LLMJSONParseError` / `IsLLMJSONParseError()`，保留原错误文案，同时让上层可稳定识别 JSON 解析失败。
   - `backend/internal/analyze/service/analyze_service.go` 新增 `analyzeWithJSONParseRetry()`，仅对 LLM JSON 解析失败重试；普通业务校验、超时、HTTP 错误、模型配额等不走这条重试。
-  - 图片识别、文字识别、精准 JSON 调用以及 Gemini transient fallback 到 Qwen 的 fallback 调用均接入同任务内部重试。
+  - 图片识别、文字识别、精准 JSON 调用以及 Gemini transient fallback 到 Doubao 的 fallback 调用均接入同任务内部重试。
   - 重试发生在 `AnalyzeService` 的同一次 worker 处理内，不新建 `analysis_tasks`，不重新走提交接口或积分扣减；最多额外重试 3 次。
 - Verification:
-  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestParseLLMJSON|TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON|TestAnalyzeService_AnalyzeStopsAfterInvalidJSONRetries|TestAnalyzeService_AnalyzeImageFallsBackToDashScopeOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDashScopeOnGeminiTransientError' -count=1` passed.
+  - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run 'TestParseLLMJSON|TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON|TestAnalyzeService_AnalyzeStopsAfterInvalidJSONRetries|TestAnalyzeService_AnalyzeImageFallsBackToDoubaoOnGeminiTransientError|TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError' -count=1` passed.
   - `GOPROXY=https://goproxy.cn,direct go test ./internal/analyze/service -run '^$' -count=1` passed.
   - `GOPROXY=https://goproxy.cn,direct go test ./internal/worker -run Test -count=1` passed.
   - `GOPROXY=https://goproxy.cn,direct go test ./internal/app -run Test -count=1` passed.
@@ -8975,3 +9070,81 @@
   - `bash -n scripts/query-analysis-feedback-samples.sh` passed.
   - `npm pkg get scripts.debug:feedback-samples` passed.
   - `git diff --check -- scripts/query-analysis-feedback-samples.sh package.json` passed.
+
+## 2026-05-17 — 全仓库移除 旧视觉模型通道 口径
+
+- Task: 用户明确要求整个仓库不再出现 旧视觉模型，凡是原来使用 旧视觉模型通道 的地方改为 Doubao 或 Gemini 3 Flash。
+- Status: fixed_code_verified_static
+- Changes:
+  - 删除 `AnalyzeService` 中旧 旧视觉服务 客户端依赖，食物分析与测试后台只保留 Doubao + Gemini/Ofox 通道。
+  - 保质期 AI 识别默认改为 Doubao；如 `llm_provider=gemini/ofox-gemini` 且配置 Ofox key，可走 `gemini-3-flash-preview`。
+  - 运动记录 AI 热量估算改为 Doubao OpenAI-compatible 调用；失败仍回退本地 MET 规则估算。
+  - 体检报告 OCR 改为 Doubao 调用，缺 key 报 `DOUBAO_API_KEY` 配置错误。
+  - 配置层移除旧 `旧视觉服务_api_key` / `旧视觉服务_API_KEY` 绑定；示例配置与环境检查改为 Doubao。
+  - 测试后台、模型对比、压测入口、脚本、文档和历史状态文件中的旧模型命名全部改为 Doubao/Gemini 口径。
+  - `backend/internal/analyze/loadtest/food_analysis_旧视觉模型_stability_test.go` 重命名为 `food_analysis_doubao_stability_test.go`。
+- Verification:
+  - `rg --files | Select-String -Pattern "旧模型关键字"` 无结果。
+  - `rg -n "旧模型关键字或旧错误域名" .` 无结果。
+  - `go test ./pkg/config ./internal/health/service ./internal/testbackend/handler ./internal/expiry/service ./internal/user/service ./internal/analyze/service -run '^(TestLoad|TestExerciseService_EstimateImageUsesDoubao|TestSanitize|TestRecognizer|TestOCRService|TestResolveModelConfig|TestDoubaoClient|TestOfoxAIClient|TestParseLLMJSON|TestNormalizeExecutionMode)' -count=1` passed。
+  - `go test ./internal/worker -run '^TestSanitizeTaskErrorMessage' -count=1` passed。
+  - `go test ./internal/app -run '^$' -count=1` passed。
+  - `go test ./... -run '^$' -count=1` passed。
+  - `git diff --check` passed（仅 CRLF warning）。
+
+## 2026-05-17 — Doubao reasoning_effort 场景化调整
+
+- Task: 用户询问记录运动和保质期 Doubao 思考强度当前多高，并希望运动记录这类困难场景提高思考强度。
+- Status: fixed_code_verified
+- Finding:
+  - 食物普通 Doubao 客户端当前 `reasoning_effort=minimal`，用于保持普通识别速度。
+  - 运动记录 Doubao 估算此前也是 `reasoning_effort=minimal`。
+  - 保质期识别此前没有显式传 `reasoning_effort`。
+- Changes:
+  - `backend/internal/health/service/exercise_service.go`：运动记录 Doubao 调用改为 `reasoning_effort=high`，用于更认真结合文字/图片、运动强度、持续时间和用户画像估算消耗。
+  - `backend/internal/expiry/service/recognizer.go`：保质期识别 Doubao 调用新增 `reasoning_effort=medium`，在日期/包装信息解析上更稳，但不拉到最高以控制延迟。
+  - 对应测试断言已更新。
+- Verification:
+  - `go test ./internal/health/service -run '^TestExerciseService_EstimateImageUsesDoubao$' -count=1` passed。
+  - `go test ./internal/expiry/service -run '^TestRecognizerRecognizeSuccess$' -count=1` passed。
+  - `git diff --check -- backend/internal/health/service/exercise_service.go backend/internal/health/service/exercise_service_test.go backend/internal/expiry/service/recognizer.go backend/internal/expiry/service/recognizer_test.go` passed（仅 CRLF warning）。
+# 2026-05-17 — 首页体重/喝水/运动快捷入口重做
+
+- Task: 用户反馈首页「体重 / 喝水 / 运动」快捷卡点击后当前进入统一「身体趋势」分析页，记录入口埋在页面中下部或需要二次点击，和用户“立刻记录体重/喝水/运动”的预期不一致。
+- Status: fixed_code_static_verified_runtime_blocked
+- User preference:
+  - 首页点击「体重」应直接进入体重记录语境，点击「喝水」应直接进入喝水记录语境，点击「运动」应直接进入当天运动记录语境。
+  - 趋势/更多分析可以存在，但应作为记录页里的「查看更多」或次级入口，不应抢占首屏主任务。
+  - 用户倾向不把体重、喝水、运动混在一个「身体趋势」页里，担心信息混乱；当前正在讨论是拆成 3 个轻量页面，还是保留合并页但做深链与记录优先。
+- Implementation:
+  - 新增 `packageExtra/pages/weight-record`，首屏直接记录指定日期体重；展示最近体重、较上次变化、近 30 天趋势和历史记录；历史记录支持删除。
+  - 新增 `packageExtra/pages/water-record`，首屏直接为指定日期快捷加水/自定义加水；展示喝水目标进度、近 30 天趋势和最近喝水记录；支持清空指定日期喝水记录。
+  - 运动继续使用 `packageExtra/pages/exercise-record` 作为记录页，保留文字/图片记录、异步估算、删除能力，并新增近 14 天运动趋势预览。
+  - 首页三张卡不再进入统一 `body-trends`，而是分别跳到 `weight-record`、`water-record`、`exercise-record`，并继续传递首页选中的日期。
+  - 旧 `packageExtra/pages/body-trends` 保留为兼容页：按旧 query `tab/date` 自动 redirect 到对应新记录页，避免旧缓存路径白屏。
+  - 后端补充 `DELETE /api/body-metrics/weight/:record_id`，并让 `/api/body-metrics/summary` 的 `weight_entries` 返回 `id/client_id/recorded_at`，支持前端真实删除体重记录。
+- Verification:
+  - `npx eslint src/packageExtra/pages/weight-record/index.tsx src/packageExtra/pages/water-record/index.tsx src/packageExtra/pages/body-trends/index.tsx src/packageExtra/pages/exercise-record/index.tsx src/pages/index/index.tsx src/utils/api.ts --max-warnings 0` passed.
+  - `go test ./internal/health/service ./internal/health/handler -run 'TestBodyMetricsService|TestSaveBodyWeightRecord|TestDeleteBodyWeightRecord|TestSaveBodyWaterLog|TestResetBodyWaterLogs' -count=1` passed.
+  - `go test ./internal/app ./internal/health/service ./internal/health/handler -run '^(TestDoesNotExist|TestBodyMetricsService|TestSaveBodyWeightRecord|TestDeleteBodyWeightRecord|TestSaveBodyWaterLog|TestResetBodyWaterLogs)' -count=1` passed.
+  - `git diff --check` passed for touched files（仅 CRLF warning）。
+  - `npm run typecheck` blocked by pre-existing unrelated TS errors in analyze-history, expiry, and food-library pages.
+  - `go test ./internal/health/repo -run 'TestBodyMetricsRepo_WeightCRUD' -count=1` blocked by local `CGO_ENABLED=0` / `go-sqlite3 requires cgo`。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 和 `mrc where --port 9420` 均因微信开发者工具自动化服务未连接失败，未能截图/交互验证。
+- 2026-05-17 critique / redesign direction:
+  - 用户明确指出当前运动页设计不合格：把「近期运动」图表放在记录页首屏会分散注意力，图也不好看；应该通过「查看更多/查看趋势」按钮进入单独趋势页。
+  - 用户希望记录页的记录动作极度凸显：点击体重记录后，页面主任务必须是记录体重；喝水和运动同理。
+  - 下一步讨论方向：记录页只承载「记录 + 当天记录管理/删除」，趋势/分析放到二级页面；若保留趋势入口，也只能是弱化的次级按钮，不在首屏展示图表。
+
+## 2026-05-17 — 运动记录标题兜底与思考强度调整
+
+- Task: 用户再次确认运动图片分析是否已经改成高思考强度；用户认为不一定要 high，但至少 medium，并希望用户未输入好标题时根据图片内容自动生成运动标题。
+- Status: fixed_code_verified
+- Finding:
+  - 上一轮代码中运动 Doubao 请求确实已经是 `reasoning_effort=high`。
+- Changes:
+  - `backend/internal/health/service/exercise_service.go` 将运动 Doubao `reasoning_effort` 从 `high` 调整为 `medium`，在准确性和延迟之间折中。
+  - 新增 `resolveExerciseLogDesc()` / `isWeakExerciseTitle()`：当用户标题为空，或只填“运动/锻炼/健身/打卡/图片/照片/图片识别运动/exercise/workout”等弱标题时，使用模型返回的 `exercise_type` 作为保存后的运动标题；如果用户填写了“跑步30分钟”这类有效标题，则保留用户原文。
+- Verification:
+  - `go test ./internal/health/service -run 'TestExerciseService_(EstimateImageUsesDoubao|ProcessExerciseTaskUsesDetectedTypeForWeakTitle|ProcessExerciseTaskKeepsUsefulUserTitle)$' -count=1` passed。
+  - `git diff --check -- backend/internal/health/service/exercise_service.go backend/internal/health/service/exercise_service_test.go` passed（仅 CRLF warning）。

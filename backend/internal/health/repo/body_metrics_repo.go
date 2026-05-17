@@ -50,6 +50,11 @@ func (r *BodyMetricsRepo) GetLatestWeightRecord(ctx context.Context, userID stri
 	return &row, nil
 }
 
+func (r *BodyMetricsRepo) DeleteWeightRecordByID(ctx context.Context, userID string, recordID string) (int64, error) {
+	result := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", recordID, userID).Delete(&domain.BodyWeightRecord{})
+	return result.RowsAffected, result.Error
+}
+
 func (r *BodyMetricsRepo) CountWeightRecordsByClientID(ctx context.Context, userID, clientID string) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&domain.BodyWeightRecord{}).Where("user_id = ? AND client_record_id = ?", userID, clientID).Count(&count).Error

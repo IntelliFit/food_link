@@ -28,26 +28,25 @@ const (
 )
 
 type AnalyzeService struct {
-	dashScopeClient LLMClient
-	ofoxAIClient    LLMClient
-	doubaoClient    LLMClient
-	imageProvider   string
-	users           *authrepo.UserRepo
-	nutrition       *foodrecordrepo.FoodNutritionRepo
-	deepseek        *DeepSeekNutritionEstimator
-	storage         *storage.Client
+	ofoxAIClient  LLMClient
+	doubaoClient  LLMClient
+	imageProvider string
+	users         *authrepo.UserRepo
+	nutrition     *foodrecordrepo.FoodNutritionRepo
+	deepseek      *DeepSeekNutritionEstimator
+	storage       *storage.Client
 }
 
-func NewAnalyzeService(dashScopeClient, ofoxAIClient LLMClient, users *authrepo.UserRepo, nutrition ...*foodrecordrepo.FoodNutritionRepo) *AnalyzeService {
+func NewAnalyzeService(doubaoClient, ofoxAIClient LLMClient, users *authrepo.UserRepo, nutrition ...*foodrecordrepo.FoodNutritionRepo) *AnalyzeService {
 	var nutritionRepo *foodrecordrepo.FoodNutritionRepo
 	if len(nutrition) > 0 {
 		nutritionRepo = nutrition[0]
 	}
 	return &AnalyzeService{
-		dashScopeClient: dashScopeClient,
-		ofoxAIClient:    ofoxAIClient,
-		users:           users,
-		nutrition:       nutritionRepo,
+		doubaoClient: doubaoClient,
+		ofoxAIClient: ofoxAIClient,
+		users:        users,
+		nutrition:    nutritionRepo,
 	}
 }
 
@@ -1066,10 +1065,10 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	if strings.HasPrefix(normalized, "doubao") {
 		return "doubao", raw
 	}
-	if normalized == "qwen" || normalized == "qwen-vl" || normalized == "qwen-vl-max" {
-		return "doubao", "doubao-seed-2-0-lite-260428"
+	if normalized == "deepseek" || normalized == "deepseek-v4-pro" {
+		return "deepseek", deepSeekNutritionFallbackModel
 	}
-	if normalized == "deepseek" || normalized == "deepseek-v4-flash" {
+	if normalized == "deepseek-v4-flash" {
 		return "deepseek", "deepseek-v4-flash"
 	}
 	if strings.HasPrefix(normalized, "deepseek") {
@@ -1090,7 +1089,7 @@ func resolveModelConfig(modelName string) (provider, model string) {
 
 func normalizeImageProviderPreference(provider string) string {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "qwen", "dashscope", "qwen-vl", "qwen-vl-max", "doubao":
+	case "doubao":
 		return "doubao"
 	case "gemini", "ofox", "ofoxai", "ofox-gemini":
 		return "gemini"
@@ -1420,7 +1419,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	return result, nil
 }
 
-// AnalyzeCompare calls both Qwen and Gemini in parallel.
+// AnalyzeCompare calls both Doubao and Gemini in parallel.
 func (s *AnalyzeService) AnalyzeCompare(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
@@ -1471,7 +1470,6 @@ func (s *AnalyzeService) AnalyzeCompare(ctx context.Context, userID string, inpu
 
 	return map[string]any{
 		"doubao_result": doubaoResult,
-		"qwen_result":   doubaoResult,
 		"gemini_result": geminiResult,
 	}, nil
 }
@@ -1773,6 +1771,11 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		}
 		if rows, err := s.deepseek.Estimate(ctx, fallbackCandidates, contextText); err == nil {
 			fallbacks = rows
+		} else {
+			logger.WithTrace(ctx).Warn("deepseek nutrition fallback failed",
+				zap.Error(err),
+				zap.Int("candidate_count", len(fallbackCandidates)),
+			)
 		}
 	}
 
@@ -1792,7 +1795,23 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 			if fallbackUnit, ok := fallbacks[lookup.index]; ok && len(fallbackUnit) > 0 {
 				unit = fallbackUnit
 				next["nutrition_source"] = "deepseek_text_fallback"
-				_, _ = s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, unit)
+				if _, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, unit); err != nil {
+					logger.WithTrace(ctx).Warn("deepseek nutrition upsert failed",
+						zap.Error(err),
+						zap.String("food_name", lookup.name),
+						zap.Any("unit_nutrition_per_100g", unit),
+					)
+				}
+			} else if ruleUnit := plainCoffeeFallbackUnitNutrition(lookup.name); len(ruleUnit) > 0 {
+				unit = ruleUnit
+				next["nutrition_source"] = "rule_plain_coffee_fallback"
+				if _, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, unit, "rule_plain_coffee_auto"); err != nil {
+					logger.WithTrace(ctx).Warn("rule nutrition upsert failed",
+						zap.Error(err),
+						zap.String("food_name", lookup.name),
+						zap.Any("unit_nutrition_per_100g", unit),
+					)
+				}
 			}
 			next["unit_nutrition_per_100g"] = unit
 			next["nutrients"] = scaleNutrition(unit, lookup.weight)

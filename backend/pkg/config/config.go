@@ -65,18 +65,17 @@ type StorageConfig struct {
 }
 
 type ExternalConfig struct {
-	DashscopeAPIKey string `mapstructure:"dashscope_api_key"`
-	AppID           string `mapstructure:"appid"`
-	Secret          string `mapstructure:"secret"`
-	SupabaseURL     string `mapstructure:"supabase_url"`
-	SupabaseKey     string `mapstructure:"supabase_service_role_key"`
-	TiandituTK      string `mapstructure:"tianditu_tk"`
-	OfoxAIAPIKey    string `mapstructure:"ofoxai_api_key"`
-	OfoxAIBaseURL   string `mapstructure:"ofoxai_base_url"`
-	LLMProvider     string `mapstructure:"llm_provider"`
-	DeepSeekAPIKey  string `mapstructure:"deepseek_api_key"`
-	DoubaoAPIKey    string `mapstructure:"doubao_api_key"`
-	DoubaoBaseURL   string `mapstructure:"doubao_base_url"`
+	AppID          string `mapstructure:"appid"`
+	Secret         string `mapstructure:"secret"`
+	SupabaseURL    string `mapstructure:"supabase_url"`
+	SupabaseKey    string `mapstructure:"supabase_service_role_key"`
+	TiandituTK     string `mapstructure:"tianditu_tk"`
+	OfoxAIAPIKey   string `mapstructure:"ofoxai_api_key"`
+	OfoxAIBaseURL  string `mapstructure:"ofoxai_base_url"`
+	LLMProvider    string `mapstructure:"llm_provider"`
+	DeepSeekAPIKey string `mapstructure:"deepseek_api_key"`
+	DoubaoAPIKey   string `mapstructure:"doubao_api_key"`
+	DoubaoBaseURL  string `mapstructure:"doubao_base_url"`
 }
 
 type WechatPayConfig struct {
@@ -150,8 +149,11 @@ func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
 		return err
 	}
 	trimExternalConfig(&fileCfg.External)
-	if fileCfg.External.DashscopeAPIKey != "" {
-		cfg.External.DashscopeAPIKey = fileCfg.External.DashscopeAPIKey
+	if fileCfg.External.DoubaoAPIKey != "" {
+		cfg.External.DoubaoAPIKey = fileCfg.External.DoubaoAPIKey
+	}
+	if fileCfg.External.DoubaoBaseURL != "" {
+		cfg.External.DoubaoBaseURL = fileCfg.External.DoubaoBaseURL
 	}
 	if fileCfg.External.OfoxAIAPIKey != "" {
 		cfg.External.OfoxAIAPIKey = fileCfg.External.OfoxAIAPIKey
@@ -210,7 +212,6 @@ func defaultTaskQueueConfig() TaskQueueConfig {
 }
 
 func trimExternalConfig(cfg *ExternalConfig) {
-	cfg.DashscopeAPIKey = strings.TrimSpace(cfg.DashscopeAPIKey)
 	cfg.AppID = strings.TrimSpace(cfg.AppID)
 	cfg.Secret = strings.TrimSpace(cfg.Secret)
 	cfg.SupabaseURL = strings.TrimSpace(cfg.SupabaseURL)
@@ -263,7 +264,6 @@ func setDefaults(v *viper.Viper) {
 
 func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("app.port", "PORT")
-	_ = v.BindEnv("external.dashscope_api_key", "DASHSCOPE_API_KEY")
 	_ = v.BindEnv("external.appid", "APPID")
 	_ = v.BindEnv("external.secret", "SECRET")
 	_ = v.BindEnv("jwt.secret", "JWT_SECRET_KEY")

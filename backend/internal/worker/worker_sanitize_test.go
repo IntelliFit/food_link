@@ -36,8 +36,8 @@ func TestSanitizeTaskErrorMessage_ResourceExhausted(t *testing.T) {
 }
 
 func TestSanitizeTaskErrorMessage_APIKey(t *testing.T) {
-	msg := sanitizeTaskErrorMessage(errors.New(`dashscope api error 401: {"error":{"message":"Incorrect API key provided. For details, see: https://help.aliyun.com/zh/model-studio/error-code#apikey-error"}}`))
-	if strings.Contains(strings.ToLower(msg), "apikey") || strings.Contains(msg, "help.aliyun.com") {
+	msg := sanitizeTaskErrorMessage(errors.New(`doubao api error 401: {"error":{"message":"Incorrect API key provided. For details, see: https://www.volcengine.com/docs/error-code#apikey-error"}}`))
+	if strings.Contains(strings.ToLower(msg), "apikey") || strings.Contains(msg, "volcengine.com") {
 		t.Fatalf("raw api key error leaked into sanitized error: %s", msg)
 	}
 	if !strings.Contains(msg, "AI 识别服务配置异常") {

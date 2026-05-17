@@ -10,10 +10,34 @@
 
 # DECISIONS
 
+- `2026-05-17`: 首页「体重 / 喝水 / 运动」快捷卡稳定口径：
+  - 这三个入口是高频记录入口，不再承接统一「身体趋势」总览页。
+  - 首页点击「体重」进入独立轻量 `weight-record`，首屏直接记录首页选中日期的体重；历史体重必须可删除。
+  - 首页点击「喝水」进入独立轻量 `water-record`，首屏直接为首页选中日期加水；当天/指定日期喝水记录必须可清空。
+  - 首页点击「运动」进入 `exercise-record`，首屏直接记录首页选中日期运动；已有删除能力必须保留。
+  - 趋势只作为各记录页中的轻量预览或次级内容，不再让用户先进入混合分析页再寻找记录入口。
+  - 旧 `body-trends` 路由只保留兼容重定向，避免旧缓存路径白屏；不要再把它作为新的业务入口。
+
+- `2026-05-17`: 小程序审核避险期间，底部导航不再暴露「圈子」入口；第四个 tab 临时替换为主包 `pages/expiry/index`，文案为「保质期」，直接展示现有食物保质期管理页面。不要新增泛化「工具」tab，也不要把健康档案做成底部中转入口；底部导航优先承载高频动作。原 `src/pages/community` 代码暂不删除，后续取得社交/社区/论坛等资质类目后可再评估恢复；恢复前不要把 `/pages/community/index` 重新放回 tabBar 或其它显眼入口。
+
+- `2026-05-17`: 未命中食物营养 AI 补全口径：
+  - 标准 db_first 营养库未命中后，AI 营养补全默认使用 `deepseek-v4-pro`，不再默认使用 `deepseek-v4-flash`。
+  - AI 补全写入 `food_nutrition_library` 时，当前先通过 `source=deepseek_v4_pro_auto` 标记为 v4-pro 自动后补数据；后续如做审核后台，应继续扩展 `source_detail/model/confidence/review_status/generated_at/raw_name` 等 provenance 字段。
+  - AI 补全结果必须经过服务端校验：营养值非负、每 100g 宏量营养不超过合理上限、糖不超过碳水、饱和脂肪不超过脂肪；若宏量营养有值但热量过低，应按 `protein*4 + carbs*4 + fat*9` 修正热量，避免出现“碳水有数值但热量为 0”的矛盾结果。
+  - Prompt 中需要明确告诉模型：未知不能随意填 0；无糖黑咖啡/美式/纯茶/白水可接近 0，但含奶、糖、糖浆、奶油、椰乳等饮品必须估算对应营养。
+  - Web search 可作为后续增强：优先用于品牌包装食品/饮品获取公开营养标签；在没有稳定工具协议前，不把未经验证的搜索摘要直接当作权威库覆盖人工/已审核数据。
+
+- `2026-05-17`: 首页非今日日期补录提示口径：
+  - 首页选择当天日期时不展示补录提示，保持当天视图正常。
+  - 首页选择昨天或其它允许记录的历史日期时，只要页面数据不忙、用户非游客且该日期没有被用户取消提醒，就展示补录提示；不再依赖当天摄入是否低于能量目标。
+  - 补录提示文案应明确这是给历史日期补记食物、体重、喝水和运动记录，避免继续把补录提示解释成“能量过低”告警。
+  - 身体趋势页或运动记录页触发 `HOME_DASHBOARD_REFRESH_EVENT` 后，首页必须刷新当前选中日期；历史日期选择留下的 `skipNextRefreshRef` 不能吞掉补录后的返回刷新。
+
 - `2026-05-16`: 小程序线上/体验版后端域名口径：
   - `v2.healthymax.cn` 已弃用，小程序生产/预览构建不得再请求该域名。
-  - `build:weapp:preview`、`build:weapp:debug`、`dev:weapp:online` 统一注入 `TARO_APP_API_BASE_URL=https://dev.healthymax.cn`。
-  - `config/index.ts` 的 production 默认值和 `src/utils/api.ts` 的注入失败兜底也统一为 `https://dev.healthymax.cn`，避免构建脚本漏传环境变量时回退到旧域名。
+  - `dev.healthymax.cn` 是开发后端，业务数据不完整/可能为空，不应用于用户体验版或正式发布包。
+  - `build:weapp:preview`、`build:weapp:debug`、`dev:weapp:online` 统一注入 `TARO_APP_API_BASE_URL=https://healthymax.cn`。
+  - `config/index.ts` 的 production 默认值和 `src/utils/api.ts` 的注入失败兜底也统一为 `https://healthymax.cn`，避免构建脚本漏传环境变量时回退到旧域名或开发空库。
 
 - `2026-05-16`: 食物分析等待页互动卡口径：
   - 等待页的 `WAITING_INTERACTION_CARDS` 应保持大题库，不再只放少量固定题。
@@ -207,7 +231,7 @@
   - 清理阶段需要对 image URL 去重后删除 COS object；任务记录仍逐个调用 `DELETE /api/analyze/tasks/:task_id`。
   - 模型快速切换优先使用 Go test 参数 `-food.analysis.model=<modelName>`，也兼容环境变量 `FOOD_ANALYSIS_LOAD_MODEL`；执行模式同理支持 `-food.analysis.execution_mode=<mode>` 和 `FOOD_ANALYSIS_LOAD_EXECUTION_MODE`。
   - 压测结果必须输出 task wait 与 total duration 的 variance/stddev；默认使用 20 个同图输入样本。
-  - 千问专用压测入口放在 `backend/internal/analyze/loadtest/food_analysis_qwen_stability_test.go`，测试名 `TestFoodAnalysisStabilityAndLatencyQwen`，默认 `modelName="qwen"`，后端解析为 DashScope `qwen-vl-max`。
+  - 千问专用压测入口放在 `backend/internal/analyze/loadtest/food_analysis_doubao_stability_test.go`，测试名 `TestFoodAnalysisStabilityAndLatencyDoubao`，默认 `modelName="doubao"`，后端解析为 Doubao `doubao-seed-2-0-lite-260428`。
 
 - `2026-05-12`: 食物记录含水量需要同时进入首页今日餐食展示和当天喝水统计：
   - 保存食物记录时，后端以 `items[].water_ml` 为主，同时兼容 `waterMl`、`nutrients.water_ml`、`nutrients.waterMl`，避免不同前端/旧缓存 payload 丢失水量。
@@ -232,8 +256,8 @@
 
 - `2026-05-12`: 食物图片识别默认模型选择必须尊重 `external.llm_provider`：
   - `backend/config.yaml` 中若设置 `external.llm_provider: "gemini"`，普通食物图片分析、精准图片子任务、图片 engine 对比和批量图片分析在 model 为空或历史 `gemini` 参数时，应走 Ofox/Gemini。
-  - 显式传入 `qwen` / `qwen-vl-max` 时仍走 DashScope/Qwen，不被默认 provider 覆盖。
-  - 这条规则用于避免配置文件已经选择 Gemini、但分析模块仍默认打到缺失/不可用 DashScope key 后返回“AI 识别服务配置异常”。
+  - 显式传入 `doubao` / `doubao-seed-2-0-lite-260428` 时仍走 Doubao/Doubao，不被默认 provider 覆盖。
+  - 这条规则用于避免配置文件已经选择 Gemini、但分析模块仍默认打到缺失/不可用 Doubao key 后返回“AI 识别服务配置异常”。
 
 - `2026-05-11`: 食物/健康/运动等 `analysis_tasks` 分析任务不再把 DB pending 扫描当作分发队列：
   - DB 表 `analysis_tasks` 只作为任务状态、结果、错误信息和前端轮询的持久化来源。
@@ -301,15 +325,15 @@
   - `waterMl` 表示该食物或饮品本身可计入饮水参考的含水量，单位毫升；无法判断时为 `0`。
   - 后端营养库仍只负责热量、蛋白质、碳水、脂肪等营养回算，`waterMl` 从模型识别结果透传并随前端重量/比例展示调整。
   - 前端和保存链路同时兼容 camelCase `waterMl` 与 snake_case `water_ml`，保存记录 item JSON 使用 `water_ml`。
-- `2026-05-11`: 食物图片分析模型临时切换口径：由于最近 1-2 天 Ofox/Gemini 视觉链路持续 `429/resource exhausted` 或超时，标准图片识别和精准模式图片子任务默认改用 DashScope `qwen-vl-max`。即使前端/任务 payload 仍传历史默认值 `modelName: "gemini"` 或 `gemini-3-flash-preview`，后端也临时路由到 Qwen，避免继续打到 Ofox。Ofox/Gemini 仅保留显式 `modelName: "ofox-gemini"` / `ofox-gemini:<model>` 入口，方便后续上游恢复后切回 Gemini3。worker 仍需归一 timeout/resource exhausted/5xx 等错误为用户可读提示。
+- `2026-05-11`: 食物图片分析模型临时切换口径：由于最近 1-2 天 Ofox/Gemini 视觉链路持续 `429/resource exhausted` 或超时，标准图片识别和精准模式图片子任务默认改用 Doubao `doubao-seed-2-0-lite-260428`。即使前端/任务 payload 仍传历史默认值 `modelName: "gemini"` 或 `gemini-3-flash-preview`，后端也临时路由到 Doubao，避免继续打到 Ofox。Ofox/Gemini 仅保留显式 `modelName: "ofox-gemini"` / `ofox-gemini:<model>` 入口，方便后续上游恢复后切回 Gemini3。worker 仍需归一 timeout/resource exhausted/5xx 等错误为用户可读提示。
 
-- `2026-05-11`: 当前所有默认用户图像识别入口统一走 DashScope `qwen-vl-max`：食物标准图片识别、精准模式图片子任务、批量图片分析、保质期拍照识别、健康报告 OCR、运动图片估算。不得在 DashScope 缺失/失败时隐式 fallback 到 Ofox/Gemini，避免上游限流期偷偷绕回旧链路；Ofox/Gemini 仅作为显式 `ofox-gemini` escape hatch、compare/test-backend 工具或 Ofox client 单元测试保留。
+- `2026-05-11`: 当前所有默认用户图像识别入口统一走 Doubao `doubao-seed-2-0-lite-260428`：食物标准图片识别、精准模式图片子任务、批量图片分析、保质期拍照识别、健康报告 OCR、运动图片估算。不得在 Doubao 缺失/失败时隐式 fallback 到 Ofox/Gemini，避免上游限流期偷偷绕回旧链路；Ofox/Gemini 仅作为显式 `ofox-gemini` escape hatch、compare/test-backend 工具或 Ofox client 单元测试保留。
 
-- `2026-05-11`: 切 Qwen 只是临时默认通道切换，不得删除原 Gemini/Ofox 通道。必须保留显式 `ofox-gemini` / `ofox-gemini:<model>` 入口、Ofox client、compare/test-backend 能力和后续切回 Gemini3 所需代码；后续清理或重构时只能调整默认路由，不能把 Gemini 通道整体移除。
+- `2026-05-11`: 切 Doubao 只是临时默认通道切换，不得删除原 Gemini/Ofox 通道。必须保留显式 `ofox-gemini` / `ofox-gemini:<model>` 入口、Ofox client、compare/test-backend 能力和后续切回 Gemini3 所需代码；后续清理或重构时只能调整默认路由，不能把 Gemini 通道整体移除。
 
-- `2026-05-11`: 运行时外部 API key（DashScope/Ofox/DeepSeek 等）从 env/ConfigMap/YAML 读入后必须 trim 首尾空白。生产 `DASHSCOPE_API_KEY` 若来自 `.env`/ConfigMap，`KEY= value` 这类前导空格会成为真实 key 内容并导致 DashScope `401 Incorrect API key`；代码侧要防御，但部署侧仍应保证 ConfigMap 中的值没有多余空格或错误 key。
+- `2026-05-11`: 运行时外部 API key（Doubao/Ofox/DeepSeek 等）从 env/ConfigMap/YAML 读入后必须 trim 首尾空白。生产 `DOUBAO_API_KEY` 若来自 `.env`/ConfigMap，`KEY= value` 这类前导空格会成为真实 key 内容并导致 Doubao `401 Incorrect API key`；代码侧要防御，但部署侧仍应保证 ConfigMap 中的值没有多余空格或错误 key。
 
-- `2026-05-11`: Go 后端配置优先级对外部模型 key 做项目内收口：只要运行目录存在 `config.yaml`，`external.dashscope_api_key` / `external.ofoxai_api_key` / `external.deepseek_api_key` 以 YAML 文件值为准，不允许 Windows/User/system 环境变量里的同名 key 偷偷覆盖本地配置。生产 scratch 镜像不包含 `config.yaml`，因此线上仍通过 ConfigMap/env 注入。
+- `2026-05-11`: Go 后端配置优先级对外部模型 key 做项目内收口：只要运行目录存在 `config.yaml`，`external.doubao_api_key` / `external.ofoxai_api_key` / `external.deepseek_api_key` 以 YAML 文件值为准，不允许 Windows/User/system 环境变量里的同名 key 偷偷覆盖本地配置。生产 scratch 镜像不包含 `config.yaml`，因此线上仍通过 ConfigMap/env 注入。
 
 - `2026-05-11`: 体重记录允许同一天多次录入时，所有“每日体重 summary / 最新体重 / 体重趋势”展示口径必须统一为“当天最后一次记录”。`user_weight_records` 可保留多条原始记录，`/api/body-metrics/summary` 的按日聚合不得取当天第一条，否则同一用户会在不同位置看到旧值和新值混杂。例如「饭饭」在 `2026-05-09` 依次记录 `47.5kg`、`47.5kg`、`47.4kg`，最新体重应展示 `47.4kg`。
 
@@ -446,7 +470,7 @@
 
 - `2026-05-09`: 精准模式主食估重必须以实际可见体积为准，不能套“常见一碗饭”默认值，也不能把“薄薄一层”直接映射成固定低克重区间。米饭/面条/粉/粥/炒饭/盖饭类必须先判断容器口径、深度、填充比例、可见面积、平均厚度、被菜覆盖程度和松散度，再用体积密度换算重量；薄层但面积很大时重量仍可能不低，小面积薄层才应低。该规则必须同时进入一次估重和二次重量复核 prompt。
 
-- `2026-05-09`: 普通拍照识别和精准拍照识别都不再使用 Qwen 作为默认或别名路由。未指定模型时统一走 Ofox/Gemini `gemini-3-flash-preview`；即使请求里显式传入 `qwen`、`qwen-vl` 或 `qwen-vl-max`，普通/精准识别也要强制归到 Gemini，避免旧前端参数或缓存绕回 DashScope/Qwen。Qwen 仅可保留在模型对比/测试入口中；文字输入模式仍按单独决策默认 DeepSeek `deepseek-v4-flash`。
+- `2026-05-09`: 普通拍照识别和精准拍照识别都不再使用 Doubao 作为默认或别名路由。未指定模型时统一走 Ofox/Gemini `gemini-3-flash-preview`；即使请求里显式传入 `doubao`、`doubao` 或 `doubao-seed-2-0-lite-260428`，普通/精准识别也要强制归到 Gemini，避免旧前端参数或缓存绕回 Doubao/Doubao。Doubao 仅可保留在模型对比/测试入口中；文字输入模式仍按单独决策默认 DeepSeek `deepseek-v4-flash`。
 
 - `2026-05-09`: 数据分析页「AI 风险解读」遵循缓存优先 + 用户主动刷新口径：打开统计页只读 `ai_stats_insights` 缓存并根据 `analysis_summary_needs_refresh` 提示是否过期；仅在过期时于详情弹窗状态条显示「手动更新」，点击后调用 `/api/stats/insight/generate` 重新生成，再 `save` 入缓存。Go stats insight 生成模型固定为 `deepseek-v4-flash`，不再通过 YAML/env 切换模型名。
 
@@ -458,7 +482,7 @@
 
 - `2026-05-09`: 不能再声称当前 Go 精准模式与 Python 版算法 1:1。当前 Go 版只具备任务形态 parity（plan/item_estimate/aggregate）和重复过滤保护；Python 版还有专用 planner prompt、专用单项/多项估重 prompt、结构化 `item/items` 解析、重量复核 `_maybe_refine_precision_weights_sync`、previous rounds/session latest_inputs 参与规划等语义。真正 parity 需要继续迁移这些专用逻辑。
 
-- `2026-05-09`: 食物文字输入模式默认使用 DeepSeek 文本模型，不再默认走 DashScope/Qwen。原因是文字输入不需要视觉模型，而当前 DashScope key 配置错误会导致 `dashscope api error 401`；未指定 `modelName` 时应走 `external.deepseek_api_key`，base URL 固定为 `https://api.deepseek.com`，模型固定为 `deepseek-v4-flash`。如果 DeepSeek key 缺失，后端应返回明确的 `DEEPSEEK_API_KEY` 配置错误，而不是静默回退到 DashScope。图片/拍照分析仍按现有视觉模型 + `db_first` 营养库回算链路执行。
+- `2026-05-09`: 食物文字输入模式默认使用 DeepSeek 文本模型，不再默认走 Doubao/Doubao。原因是文字输入不需要视觉模型，而当前 Doubao key 配置错误会导致 `doubao api error 401`；未指定 `modelName` 时应走 `external.deepseek_api_key`，base URL 固定为 `https://api.deepseek.com`，模型固定为 `deepseek-v4-flash`。如果 DeepSeek key 缺失，后端应返回明确的 `DEEPSEEK_API_KEY` 配置错误，而不是静默回退到 Doubao。图片/拍照分析仍按现有视觉模型 + `db_first` 营养库回算链路执行。
 
 - `2026-05-09`: Go 后端本地开发配置统一从 `backend/config.yaml` 读取，不再自动读取 `backend/.env`。DeepSeek 在 YAML 中只配置 `external.deepseek_api_key`；base URL 固定为 `https://api.deepseek.com`，文字模型固定为 `deepseek-v4-flash`，不再额外暴露 `deepseek_base_url` 或 `deepseek_text_model` 配置项。
 
@@ -616,7 +640,7 @@
 
 - `2026-05-05`: 健康档案 OCR 目前属于 branch drift 区域：
   - 本地 `main` 仍体现较宽的多图 / provider-switch worker 路径
-  - `origin/dev` 已出现更收口的单图 DashScope 导向实现
+  - `origin/dev` 已出现更收口的单图 Doubao 导向实现
   - 正式重写前必须先选定以哪条链路为准
 
 - `2026-05-05`: 「我的」页底部版本号继续以 `package.json` 为唯一版本源：
@@ -839,9 +863,9 @@
 - `2026-04-26`: 结果页顶部多图 `Swiper` 不能放在透明滚动层下面。正式口径是：即使页面主体使用全屏 `ScrollView` 覆盖布局，头图固定层也必须保持更高 `z-index`，让横向手势优先到 `Swiper`；否则会出现“界面显示有 1/N 计数，但左右滑没反应”的假多图状态。
 - `2026-04-26`: 食物分析页后续不再为“多图实物分析”保留同步直出结果的特例。正式口径是：无论单图还是多图，图片分析都统一先提交后台任务，再进入 `analyze-loading`；用户可直接离开当前页，完成后去分析历史或结果页查看，不再让多图请求把用户卡在分析页原地等待。
 - `2026-04-26`: 分析结果页的多图查看正式口径继续使用顶部 `Swiper` 左右切换，而不是把多图压成单张静态封面。多图结果至少保留两处反馈：头图左右滑动切换，以及右下角 `1/N` 计数；当 `imagePaths` 变化时，需要把当前索引纠正回合法范围，避免重进结果页时停在越界索引。
-- `2026-04-26`: 食物分析接口中的 `modelName` 不能再被直接当成单一 provider 的“裸模型名”透传。正式口径是：`qwen / qwen-vl-max` 走 DashScope 千问视觉链路；`gemini / gemini-*` 走 OfoxAI Gemini 链路。这个口径同时适用于 `/api/analyze` 和 `/api/analyze/batch`，否则前端传 `modelName: "gemini"` 时，多图 batch 会把 Gemini 错发到 DashScope，导致整批失败。
+- `2026-04-26`: 食物分析接口中的 `modelName` 不能再被直接当成单一 provider 的“裸模型名”透传。正式口径是：`doubao / doubao-seed-2-0-lite-260428` 走 Doubao 千问视觉链路；`gemini / gemini-*` 走 OfoxAI Gemini 链路。这个口径同时适用于 `/api/analyze` 和 `/api/analyze/batch`，否则前端传 `modelName: "gemini"` 时，多图 batch 会把 Gemini 错发到 Doubao，导致整批失败。
 - `2026-04-26`: 多图食物分析 `/api/analyze/batch` 的正式口径是“复用单张分析结果结构，而不是另起一套返回形状”。稳定字段至少要与单张 `AnalyzeResponse` 对齐：`description / insight / items / pfc_ratio_comment / absorption_notes / context_advice`，以及严格模式下的 `recognitionOutcome / rejectionReason / retakeGuidance / allowedFoodCategory / followupQuestions`。
-- `2026-04-26`: 批量食物分析不应对所有图片做无限并发直打模型。正式口径改为：批量识别最多并发 `3` 张，并对单张识别做有限重试；否则在 DashScope 限流或短时波动下，很容易把整批请求一起打成失败。
+- `2026-04-26`: 批量食物分析不应对所有图片做无限并发直打模型。正式口径改为：批量识别最多并发 `3` 张，并对单张识别做有限重试；否则在 Doubao 限流或短时波动下，很容易把整批请求一起打成失败。
 - `2026-04-26`: 多图批量分析允许“部分成功”。正式口径是：只要至少有 1 张图成功，就应返回汇总结果并把失败图片下标写入任务 `payload.failed_indices`，不要因为其中 1 张失败就整批直接返回 500；只有全部图片都失败时，才返回“所有图片分析均失败，请稍后重试”。
 
 - `2026-04-25`: 小程序页面里凡是“底部 fixed/sticky 操作区”都不能只改外层页面背景，必须单独做暗色适配。正式口径是：像 `analyze-page .confirm-section` 这类固定底栏，需要同时覆盖容器本身、主按钮、禁用态、次级入口按钮和内部开关控件；否则黑色主题下会出现底栏发白、禁用按钮像浅色残留、开关控件跳出页面体系的问题。
@@ -873,7 +897,7 @@
 - `2026-04-24`: 用户已再次明确：当前这轮只需要把代码写好，不需要本地运行验证或端口排查；除非用户后续单独要求，否则这次“可复用测试集”改造按代码交付口径推进。
 - `2026-04-24`: 对于“可复用测试集”，未标注样本既然导入时已忽略，就不应继续出现在样本数展示里。测试集列表的 `itemCount` 必须表示“实际可测样本数”，而不是源目录总图片数；像 `33/37` 这种展示口径视为错误。
 - `2026-04-24`: 为了降低食物回归测试成本，可以在完整测试集之外维护一个“小型回归集”。当前口径允许从完整已标注样本集中按固定随机种子抽样生成，例如 `mini10`；抽样必须可复现，并作为独立的可复用测试集保存。
-- `2026-04-24`: 食物测试后台里的“测试模型”选项收口为两个 Gemini 具体型号：`gemini-3-flash-preview` 与 `gemini-3.1-flash-lite-preview`。Qwen 及其他模型不再出现在测试后台单图/批量/测试集批次的可选项中。
+- `2026-04-24`: 食物测试后台里的“测试模型”选项收口为两个 Gemini 具体型号：`gemini-3-flash-preview` 与 `gemini-3.1-flash-lite-preview`。Doubao 及其他模型不再出现在测试后台单图/批量/测试集批次的可选项中。
 - `2026-04-24`: 为方便做 prompt 实验，食物测试后台的“分析体验 / 批量测试 / 可复用测试集批次”后续默认优先读取 `model_prompts` 表中当前激活的 `gemini` 提示词，不再默认走 `backend/worker.py::_build_food_prompt`。仅当 Gemini 激活提示词为空时，才允许回退到 worker 默认 prompt。`standard/strict` 暂时保留为实验标记字段，不再决定测试后台实际使用的 prompt 文本。
 - `2026-04-27`: 食物测试后台的正式口径改为“三模式并存”：`standard`、`strict` 继续保留并实际生效，仍走原有主链路 prompt 逻辑；新增 `custom` 自定义模式，才读取 `提示词管理` 中的 Gemini 自定义提示词。后端按 `execution_mode + prompt_id` 执行，只有 `custom` 且提示词为空时才回退 `backend/worker.py::_build_food_prompt`。
 - `2026-04-27`: 提示词管理页不再承担第二套“模型选择”职责。测试后台实际使用哪个模型，只看“分析体验 / 批量测试”页中的模型勾选；提示词管理页仅维护 `custom` 模式使用的 Gemini 自定义提示词。
@@ -898,7 +922,7 @@
 - `2026-04-28`: 本地脱敏测试集的标签口径进一步收紧：凡是“单食物 / 单菜品且有明确名称”的样本，不应再写成纯 `total`，而应写成单项 `items`（如 `sample_xxx | 黑咖啡=245g`）。只有“多食物但缺逐项分重”“未知食物无法可靠命名”“空包装/非食物 0g”这类样本，才继续保留 `total` 口径。
 - `2026-04-24`: 本轮本地 `food_test` 脱敏数据集整理中，未标注样本直接忽略，不纳入上传包，也不作为当前待补标签任务。
 - `2026-04-23`: 测试后台的“分析体验/批量测试”必须使用当前食物识别主链路 prompt，即 `backend/worker.py::_build_food_prompt` 按 `execution_mode=standard|strict` 动态生成。`model_prompts` 表仍可保留为提示词管理/后台配置能力，但不得让用户误以为它就是当前拍照识别主链路 prompt。
-- `2026-04-23`: 食物识别模型评测需支持同一输入同时跑多个 provider（当前 `qwen`、`gemini`），并在结果里保留每个模型的总重量偏差、逐项克重偏差、缺失项与额外识别项，方便 prompt 或模型变更后的回归对比。
+- `2026-04-23`: 食物识别模型评测需支持同一输入同时跑多个 provider（当前 `doubao`、`gemini`），并在结果里保留每个模型的总重量偏差、逐项克重偏差、缺失项与额外识别项，方便 prompt 或模型变更后的回归对比。
 
 - `2026-04-21`（实现口径）：三档 × 三周期会员已在本代码库落地一期。正式实现口径：
   - 9 档套餐落在 `membership_plan_config`，每档带 `tier ∈ {light, standard, advanced}` + `period ∈ {monthly, quarterly, yearly}` + `daily_credits` + `original_amount` + `sort_order`；订阅成功时把所选套餐 `daily_credits` 快照写入 `user_pro_memberships`，之后一律以快照为准，不随后台配置改动而改变已购用户权益
@@ -1256,3 +1280,9 @@
   - 左侧展示已摄入 kcal，右侧展示目标 kcal，下方圆角进度条表达进度。
   - 目标内使用绿色，明显超过目标时使用暖色提示。
   - 调整海报顶部模块时必须同步更新 `computeDayRecordPosterHeight()`，避免导出图片裁剪或内容重叠。
+
+- `2026-05-17`: 全仓库模型口径更新：不再保留 旧视觉模型通道 命名、配置或运行时代码。旧视觉/图文调用统一迁移到 Doubao 或 Gemini 3 Flash：食物标准链路默认 Doubao，精准估重继续可使用 Gemini 3 Flash，保质期默认 Doubao 且可按 provider 走 Gemini，运动估算与体检 OCR 改为 Doubao；配置统一使用 `DOUBAO_API_KEY` / `doubao_api_key`，不再使用旧 旧视觉服务 key。
+
+- `2026-05-17`: Doubao `reasoning_effort` 场景化口径：普通食物识别继续用 `minimal` 以控制速度；运动记录使用 `medium`，因为需要综合运动类型、强度、时长和用户画像估算热量，同时避免最高档带来的延迟；保质期识别也使用 `medium`，提升日期/包装信息解析稳定性。
+
+- `2026-05-17`: 运动记录 Doubao 思考强度采用 `medium`，不再使用最高档 `high` 作为默认，以平衡准确性和延迟。运动记录标题兜底口径：用户标题为空或只是泛标题（如“运动/打卡/图片”等）时，后端使用模型返回的 `exercise_type` 自动生成保存标题；用户输入了具体标题时保留用户原文。

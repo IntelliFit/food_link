@@ -348,7 +348,7 @@ function ProfilePage() {
     }
     // 食物管理
     if (service.id === 2) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
+      Taro.switchTab({ url: '/pages/expiry/index' })
       return
     }
     // 识别记录

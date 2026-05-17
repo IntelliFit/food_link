@@ -26,6 +26,7 @@ import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { buildDateRange, buildExerciseDays } from '../body-metrics-shared'
 import './index.scss'
 
 /** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
@@ -120,6 +121,7 @@ export default function ExerciseRecordPage() {
   )
   const [inputValue, setInputValue] = useState('')
   const [records, setRecords] = useState<ExerciseRecord[]>([])
+  const [trendRecords, setTrendRecords] = useState<ExerciseRecord[]>([])
   const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
@@ -142,6 +144,23 @@ export default function ExerciseRecordPage() {
       console.error('[exercise-record] load logs', e)
     }
   }, [])
+
+  const exerciseTrendDates = useMemo(() => buildDateRange(14), [])
+
+  const loadTrendRecords = useCallback(async (): Promise<void> => {
+    if (!getAccessToken()) {
+      setTrendRecords([])
+      return
+    }
+    try {
+      const startDate = exerciseTrendDates[0]
+      const endDate = exerciseTrendDates[exerciseTrendDates.length - 1]
+      const { logs } = await getExerciseLogs({ start_date: startDate, end_date: endDate })
+      setTrendRecords(logs.map(mapLogToRecord))
+    } catch (e) {
+      console.error('[exercise-record] load trend logs', e)
+    }
+  }, [exerciseTrendDates])
 
   const persistPendingOnly = useCallback((items: PendingExerciseCard[]) => {
     try {
@@ -208,6 +227,7 @@ export default function ExerciseRecordPage() {
             if (currentRecordDateRef.current === targetDate) {
               await loadRecordsForDate(targetDate)
             }
+            await loadTrendRecords()
             Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
             Taro.showToast({
               title: `已记录 ${payload.estimated_calories} kcal`,
@@ -249,7 +269,7 @@ export default function ExerciseRecordPage() {
         pollingTaskIdsRef.current.delete(taskId)
       }
     },
-    [loadRecordsForDate]
+    [loadRecordsForDate, loadTrendRecords]
   )
 
   useEffect(() => {
@@ -259,8 +279,9 @@ export default function ExerciseRecordPage() {
     currentRecordDateRef.current = nextDate
     setRecordDate(nextDate)
     void loadRecordsForDate(nextDate)
+    void loadTrendRecords()
     loadPendingFromStorage()
-  }, [loadPendingFromStorage, loadRecordsForDate])
+  }, [loadPendingFromStorage, loadRecordsForDate, loadTrendRecords])
 
   useEffect(() => {
     pendingItems.filter((p) => p.status === 'pending').forEach((p) => {
@@ -275,6 +296,7 @@ export default function ExerciseRecordPage() {
     currentRecordDateRef.current = nextDate
     setRecordDate(nextDate)
     void loadRecordsForDate(nextDate)
+    void loadTrendRecords()
     if (getAccessToken()) {
       getMyMembership().then(setMembershipStatus).catch(() => {})
     }
@@ -305,6 +327,15 @@ export default function ExerciseRecordPage() {
     )
   }, [records, pendingItems, recordDate])
 
+  const exerciseTrendDays = useMemo(() => buildExerciseDays(trendRecords.map((record) => ({
+    id: record.id,
+    exercise_desc: record.content,
+    calories_burned: record.calories,
+    recorded_on: record.recordDate,
+    recorded_at: record.createdAt,
+    created_at: record.createdAt,
+  } as ExerciseLogItem)), exerciseTrendDates), [trendRecords, exerciseTrendDates])
+  const maxTrendCalories = Math.max(120, ...exerciseTrendDays.map((item) => item.total))
   const visibleRecordCount = records.filter((r) => r.recordDate === recordDate).length
   const visiblePendingCount = pendingItems.filter((p) => p.status === 'pending' && p.recordDate === recordDate).length
   const totalCalories = records.filter((r) => r.recordDate === recordDate).reduce((sum, r) => sum + r.calories, 0)
@@ -473,6 +504,7 @@ export default function ExerciseRecordPage() {
         try {
           await deleteExerciseLog(id)
           setRecords((prev) => prev.filter((r) => r.id !== id))
+          setTrendRecords((prev) => prev.filter((r) => r.id !== id))
           Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
           Taro.showToast({ title: '已删除', icon: 'success' })
         } catch (e) {
@@ -514,6 +546,26 @@ export default function ExerciseRecordPage() {
             </View>
           </View>
           <Text className='stats-count'>{recordCount} 次记录</Text>
+        </View>
+      </View>
+
+      <View className='exercise-trend-card'>
+        <View className='exercise-trend-card__header'>
+          <Text className='exercise-trend-card__title'>近期运动</Text>
+          <Text className='exercise-trend-card__meta'>近 14 天</Text>
+        </View>
+        <View className='exercise-trend-bars'>
+          {exerciseTrendDays.map((item) => {
+            const pct = item.total > 0 ? Math.max(8, Math.min(100, (item.total / maxTrendCalories) * 100)) : 5
+            return (
+              <View key={item.date} className='exercise-trend-bar-item'>
+                <View className='exercise-trend-bar-wrap'>
+                  <View className={`exercise-trend-bar ${item.total > 0 ? '' : 'is-empty'}`} style={{ height: `${pct}%` }} />
+                </View>
+                <Text className='exercise-trend-bar-label'>{item.date.slice(5)}</Text>
+              </View>
+            )
+          })}
         </View>
       </View>
 

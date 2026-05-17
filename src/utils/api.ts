@@ -18,7 +18,7 @@ function readInjectedString(
 // config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
 export const API_BASE_URL = readInjectedString(
   () => __API_BASE_URL__,
-  'https://dev.healthymax.cn'
+  'https://healthymax.cn'
 )
 export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
@@ -388,7 +388,7 @@ export interface ModelAnalyzeResult {
 
 /** 双模型对比分析响应 */
 export interface CompareAnalyzeResponse {
-  qwen_result: ModelAnalyzeResult
+  doubao_result: ModelAnalyzeResult
   gemini_result: ModelAnalyzeResult
 }
 
@@ -2621,6 +2621,18 @@ export async function saveBodyWeightRecord(value: number, date?: string, clientI
     throw new Error(msg)
   }
   return res.data as { message: string; item: BodyMetricWeightEntry }
+}
+
+export async function deleteBodyWeightRecord(recordId: string): Promise<{ message: string; deleted_count: number; id: string }> {
+  const res = await authenticatedRequest(`/api/body-metrics/weight/${encodeURIComponent(recordId)}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '删除体重记录失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; deleted_count: number; id: string }
 }
 
 export async function addBodyWaterLog(amountMl: number, date?: string): Promise<{ message: string; item: { id?: string; date: string; amount_ml: number } }> {

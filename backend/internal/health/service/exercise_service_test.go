@@ -115,16 +115,17 @@ func TestExerciseService_GetDailyCalories(t *testing.T) {
 	assert.Equal(t, 300, result["total_calories_burned"])
 }
 
-func TestExerciseService_EstimateImageUsesQwenDashScope(t *testing.T) {
+func TestExerciseService_EstimateImageUsesDoubao(t *testing.T) {
 	svc := NewExerciseService(&mockExerciseRepo{}, &config.Config{
-		External: config.ExternalConfig{DashscopeAPIKey: "fake-key"},
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
 	})
 	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		assert.Equal(t, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", req.URL.String())
+		assert.Equal(t, "https://ark.cn-beijing.volces.com/api/v3/chat/completions", req.URL.String())
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-		assert.Equal(t, "qwen-vl-max", body["model"])
-		responseBody := `{"choices":[{"message":{"content":"{\"reasoning\":\"图片显示跑步机慢跑\",\"calories_kcal\":180}"}}]}`
+		assert.Equal(t, "doubao-seed-2-0-lite-260428", body["model"])
+		assert.Equal(t, "medium", body["reasoning_effort"])
+		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"跑步机慢跑\",\"reasoning\":\"图片显示跑步机慢跑\",\"calories_kcal\":180}"}}]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
@@ -137,6 +138,55 @@ func TestExerciseService_EstimateImageUsesQwenDashScope(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, 180, estimate.CaloriesKcal)
 	assert.Equal(t, "llm", estimate.Source)
+	assert.Equal(t, "跑步机慢跑", estimate.ExerciseType)
+}
+
+func TestExerciseService_ProcessExerciseTaskUsesDetectedTypeForWeakTitle(t *testing.T) {
+	repo := &mockExerciseRepo{}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
+	})
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"椭圆机训练\",\"reasoning\":\"图片显示用户在椭圆机上训练\",\"calories_kcal\":220}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	result, err := svc.ProcessExerciseTask(context.Background(), "u1", "运动", "https://example.com/exercise.jpg", "2024-06-15", map[string]any{
+		"profile_snapshot": map[string]any{"weight_kg": 70},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, repo.logs, 1)
+	assert.Equal(t, "椭圆机训练", repo.logs[0].ExerciseDesc)
+	exerciseLog := result["exercise_log"].(map[string]any)
+	assert.Equal(t, "椭圆机训练", exerciseLog["exercise_desc"])
+}
+
+func TestExerciseService_ProcessExerciseTaskKeepsUsefulUserTitle(t *testing.T) {
+	repo := &mockExerciseRepo{}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
+	})
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"跑步机慢跑\",\"reasoning\":\"图片显示跑步机慢跑\",\"calories_kcal\":180}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	_, err := svc.ProcessExerciseTask(context.Background(), "u1", "跑步30分钟", "https://example.com/run.jpg", "2024-06-15", map[string]any{
+		"profile_snapshot": map[string]any{"weight_kg": 70},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, repo.logs, 1)
+	assert.Equal(t, "跑步30分钟", repo.logs[0].ExerciseDesc)
 }
 
 func TestExerciseService_ListLogs(t *testing.T) {

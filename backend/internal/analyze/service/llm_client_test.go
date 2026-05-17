@@ -18,8 +18,8 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
-func TestDashScopeClient_Analyze_Success(t *testing.T) {
-	client := NewDashScopeClient("fake-key", "qwen-vl-max")
+func TestDoubaoClient_Analyze_Success(t *testing.T) {
+	client := NewDoubaoClient("fake-key", "doubao-seed-2-0-lite-260428")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body := `{"choices":[{"message":{"content":"{\"description\":\"test\",\"items\":[{\"name\":\"rice\",\"estimatedWeightGrams\":100,\"nutrients\":{\"calories\":130}}]}"}}]}`
 		return &http.Response{
@@ -34,8 +34,8 @@ func TestDashScopeClient_Analyze_Success(t *testing.T) {
 	assert.Equal(t, "test", result["description"])
 }
 
-func TestDashScopeClient_Analyze_HTTPError(t *testing.T) {
-	client := NewDashScopeClient("fake-key", "")
+func TestDoubaoClient_Analyze_HTTPError(t *testing.T) {
+	client := NewDoubaoClient("fake-key", "")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return nil, assert.AnError
 	})}
@@ -44,8 +44,8 @@ func TestDashScopeClient_Analyze_HTTPError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDashScopeClient_Analyze_StatusError(t *testing.T) {
-	client := NewDashScopeClient("fake-key", "")
+func TestDoubaoClient_Analyze_StatusError(t *testing.T) {
+	client := NewDoubaoClient("fake-key", "")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusInternalServerError,
@@ -58,8 +58,8 @@ func TestDashScopeClient_Analyze_StatusError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestDashScopeClient_Analyze_EmptyChoices(t *testing.T) {
-	client := NewDashScopeClient("fake-key", "")
+func TestDoubaoClient_Analyze_EmptyChoices(t *testing.T) {
+	client := NewDoubaoClient("fake-key", "")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		body := `{"choices":[]}`
 		return &http.Response{

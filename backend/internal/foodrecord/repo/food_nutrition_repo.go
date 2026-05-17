@@ -253,16 +253,59 @@ func normalizeFoodName(raw string) string {
 	return b.String()
 }
 
-func (r *FoodNutritionRepo) UpsertDeepSeekNutrition(ctx context.Context, rawName string, unit map[string]any) (string, error) {
+func (r *FoodNutritionRepo) UpsertDeepSeekNutrition(ctx context.Context, rawName string, unit map[string]any, sources ...string) (string, error) {
 	raw := strings.TrimSpace(rawName)
 	normalized := normalizeFoodName(raw)
 	if raw == "" || normalized == "" || len(unit) == 0 {
 		return "", nil
 	}
+	source := "deepseek_v4_pro_auto"
+	if len(sources) > 0 && strings.TrimSpace(sources[0]) != "" {
+		source = strings.TrimSpace(sources[0])
+	}
 	var existing domain.FoodNutrition
 	err := r.db.WithContext(ctx).Where("normalized_name = ?", normalized).First(&existing).Error
 	if err == nil {
-		return "", nil
+		if !existing.IsActive {
+			updates := map[string]any{
+				"kcal_per_100g":              number(unit["calories"]),
+				"protein_per_100g":           number(unit["protein"]),
+				"carbs_per_100g":             number(unit["carbs"]),
+				"fat_per_100g":               number(unit["fat"]),
+				"fiber_per_100g":             number(unit["fiber"]),
+				"sugar_per_100g":             number(unit["sugar"]),
+				"saturated_fat_per_100g":     number(unit["saturatedFat"]),
+				"cholesterol_mg_per_100g":    number(unit["cholesterolMg"]),
+				"sodium_mg_per_100g":         number(unit["sodiumMg"]),
+				"potassium_mg_per_100g":      number(unit["potassiumMg"]),
+				"calcium_mg_per_100g":        number(unit["calciumMg"]),
+				"iron_mg_per_100g":           number(unit["ironMg"]),
+				"magnesium_mg_per_100g":      number(unit["magnesiumMg"]),
+				"zinc_mg_per_100g":           number(unit["zincMg"]),
+				"vitamin_a_rae_mcg_per_100g": number(unit["vitaminARaeMcg"]),
+				"vitamin_c_mg_per_100g":      number(unit["vitaminCMg"]),
+				"vitamin_d_mcg_per_100g":     number(unit["vitaminDMcg"]),
+				"vitamin_e_mg_per_100g":      number(unit["vitaminEMg"]),
+				"vitamin_k_mcg_per_100g":     number(unit["vitaminKMcg"]),
+				"thiamin_mg_per_100g":        number(unit["thiaminMg"]),
+				"riboflavin_mg_per_100g":     number(unit["riboflavinMg"]),
+				"niacin_mg_per_100g":         number(unit["niacinMg"]),
+				"vitamin_b6_mg_per_100g":     number(unit["vitaminB6Mg"]),
+				"folate_mcg_per_100g":        number(unit["folateMcg"]),
+				"vitamin_b12_mcg_per_100g":   number(unit["vitaminB12Mcg"]),
+				"source":                     source,
+				"is_active":                  true,
+			}
+			if err := r.db.WithContext(ctx).Model(&domain.FoodNutrition{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
+				return "", err
+			}
+			_ = r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&domain.FoodNutritionAlias{
+				FoodID:          existing.ID,
+				AliasName:       raw,
+				NormalizedAlias: normalized,
+			}).Error
+		}
+		return existing.ID, nil
 	}
 	if err != gorm.ErrRecordNotFound {
 		return "", err
@@ -295,7 +338,7 @@ func (r *FoodNutritionRepo) UpsertDeepSeekNutrition(ctx context.Context, rawName
 		VitaminB6MgPer100g:    number(unit["vitaminB6Mg"]),
 		FolateMcgPer100g:      number(unit["folateMcg"]),
 		VitaminB12McgPer100g:  number(unit["vitaminB12Mcg"]),
-		Source:                "deepseek_auto",
+		Source:                source,
 		IsActive:              true,
 	}
 	if err := r.db.WithContext(ctx).Create(food).Error; err != nil {

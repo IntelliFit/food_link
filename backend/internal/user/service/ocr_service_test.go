@@ -36,13 +36,13 @@ func mockOCRResponse() *http.Response {
 }
 
 func TestOCRService_ExtractFromBase64_Success(t *testing.T) {
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
 	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(req *http.Request) (*http.Response, error) {
-		assert.Equal(t, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", req.URL.String())
+		assert.Equal(t, "https://ark.cn-beijing.volces.com/api/v3/chat/completions", req.URL.String())
 		var payload map[string]any
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
-		assert.Equal(t, "qwen-vl-max", payload["model"])
+		assert.Equal(t, "doubao-seed-2-0-lite-260428", payload["model"])
 		return mockOCRResponse(), nil
 	})}
 	ctx := context.Background()
@@ -56,7 +56,7 @@ func TestOCRService_ExtractFromBase64_Success(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromURL_Success(t *testing.T) {
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
 	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(req *http.Request) (*http.Response, error) {
 		return mockOCRResponse(), nil
@@ -69,7 +69,7 @@ func TestOCRService_ExtractFromURL_Success(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromBase64_MissingKey(t *testing.T) {
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: ""}}
+	cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: ""}}
 	svc := NewOCRService(cfg)
 	ctx := context.Background()
 
@@ -78,7 +78,7 @@ func TestOCRService_ExtractFromBase64_MissingKey(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromBase64_HTTPError(t *testing.T) {
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
 	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		return nil, assert.AnError
@@ -91,7 +91,7 @@ func TestOCRService_ExtractFromBase64_HTTPError(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromBase64_StatusError(t *testing.T) {
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
 	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -108,7 +108,7 @@ func TestOCRService_ExtractFromBase64_StatusError(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromBase64_EmptyChoices(t *testing.T) {
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
 	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		body := `{"choices":[]}`
@@ -126,7 +126,7 @@ func TestOCRService_ExtractFromBase64_EmptyChoices(t *testing.T) {
 }
 
 func TestOCRService_ExtractFromBase64_InvalidJSON(t *testing.T) {
-	cfg := &config.Config{External: config.ExternalConfig{DashscopeAPIKey: "fake-key"}}
+	cfg := &config.Config{External: config.ExternalConfig{DoubaoAPIKey: "fake-key"}}
 	svc := NewOCRService(cfg)
 	svc.client = &http.Client{Transport: ocrRoundTripFunc(func(_ *http.Request) (*http.Response, error) {
 		body := `{"choices":[{"message":{"content":"not json"}}]}`

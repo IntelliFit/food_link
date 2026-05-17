@@ -52,7 +52,7 @@ This document summarizes the health-profile report-recognition flow across synch
 
 - removes the multi-image merge flow
 - removes provider switching in the async worker path
-- hardens the async worker path toward a single-image DashScope execution flow
+- hardens the async worker path toward a single-image Doubao execution flow
 - keeps the same broad persistence targets: `user_health_documents` and `weapp_user.health_condition.report_extract`
 
 This means the migration docs should treat health-report OCR as an active drift zone rather than a fully settled design.

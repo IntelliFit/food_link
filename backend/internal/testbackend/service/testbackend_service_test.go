@@ -82,9 +82,9 @@ func TestTestBackendService_GetActivePrompt(t *testing.T) {
 	svc, pr, _, _ := newService(t)
 	ctx := context.Background()
 
-	require.NoError(t, pr.CreatePrompt(ctx, &domain.Prompt{Name: "active", Content: "c", ModelType: "qwen", IsActive: true}))
+	require.NoError(t, pr.CreatePrompt(ctx, &domain.Prompt{Name: "active", Content: "c", ModelType: "doubao", IsActive: true}))
 
-	found, err := svc.GetActivePrompt(ctx, "qwen")
+	found, err := svc.GetActivePrompt(ctx, "doubao")
 	require.NoError(t, err)
 	assert.Equal(t, "active", found.Name)
 
@@ -138,8 +138,8 @@ func TestTestBackendService_ActivatePrompt(t *testing.T) {
 	svc, pr, _, _ := newService(t)
 	ctx := context.Background()
 
-	require.NoError(t, pr.CreatePrompt(ctx, &domain.Prompt{Name: "a", Content: "c", ModelType: "qwen", IsActive: true}))
-	p2 := &domain.Prompt{Name: "b", Content: "c", ModelType: "qwen", IsActive: false}
+	require.NoError(t, pr.CreatePrompt(ctx, &domain.Prompt{Name: "a", Content: "c", ModelType: "doubao", IsActive: true}))
+	p2 := &domain.Prompt{Name: "b", Content: "c", ModelType: "doubao", IsActive: false}
 	require.NoError(t, pr.CreatePrompt(ctx, p2))
 
 	activated, err := svc.ActivatePrompt(ctx, p2.ID)
@@ -180,7 +180,7 @@ func TestTestBackendService_Analyze(t *testing.T) {
 	_, err := svc.Analyze(ctx, AnalyzeInput{ImageURL: ""})
 	require.Error(t, err)
 
-	result, err := svc.Analyze(ctx, AnalyzeInput{ImageURL: "https://example.com/img.jpg", ModelName: "qwen"})
+	result, err := svc.Analyze(ctx, AnalyzeInput{ImageURL: "https://example.com/img.jpg", ModelName: "doubao"})
 	require.NoError(t, err)
 	assert.NotNil(t, result["result"])
 }
@@ -189,7 +189,7 @@ func TestTestBackendService_AnalyzeWithPrompt(t *testing.T) {
 	svc, pr, _, _ := newService(t)
 	ctx := context.Background()
 
-	p := &domain.Prompt{Name: "custom", Content: "custom prompt", ModelType: "qwen", IsActive: true}
+	p := &domain.Prompt{Name: "custom", Content: "custom prompt", ModelType: "doubao", IsActive: true}
 	require.NoError(t, pr.CreatePrompt(ctx, p))
 
 	result, err := svc.Analyze(ctx, AnalyzeInput{ImageURL: "https://example.com/img.jpg", PromptID: p.ID})
@@ -206,7 +206,7 @@ func TestTestBackendService_PrepareBatch(t *testing.T) {
 	_, err := svc.PrepareBatch(ctx, PrepareBatchInput{DatasetID: ""})
 	require.Error(t, err)
 
-	b, err := svc.PrepareBatch(ctx, PrepareBatchInput{DatasetID: "ds-1", Config: map[string]any{"model": "qwen"}})
+	b, err := svc.PrepareBatch(ctx, PrepareBatchInput{DatasetID: "ds-1", Config: map[string]any{"model": "doubao"}})
 	require.NoError(t, err)
 	assert.Equal(t, "pending", b.Status)
 	assert.Equal(t, "ds-1", b.DatasetID)
@@ -351,8 +351,8 @@ func TestTestBackendService_LegacySingleImage(t *testing.T) {
 
 func TestResolveModelConfig(t *testing.T) {
 	provider, model := resolveModelConfig("")
-	assert.Equal(t, "qwen", provider)
-	assert.Equal(t, "qwen-vl-max", model)
+	assert.Equal(t, "doubao", provider)
+	assert.Equal(t, "doubao-seed-2-0-lite-260428", model)
 
 	provider, model = resolveModelConfig("gemini")
 	assert.Equal(t, "gemini", provider)

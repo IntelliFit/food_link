@@ -33,11 +33,11 @@ func (s *OCRService) ExtractFromBase64(ctx context.Context, base64Image string) 
 	if idx := strings.Index(imageData, ","); idx != -1 {
 		imageData = imageData[idx+1:]
 	}
-	return s.callDashScope(ctx, fmt.Sprintf("data:image/jpeg;base64,%s", imageData))
+	return s.callDoubao(ctx, fmt.Sprintf("data:image/jpeg;base64,%s", imageData))
 }
 
 func (s *OCRService) ExtractFromURL(ctx context.Context, imageURL string) (map[string]any, error) {
-	return s.callDashScope(ctx, s.resolveHealthReportURL(imageURL))
+	return s.callDoubao(ctx, s.resolveHealthReportURL(imageURL))
 }
 
 func (s *OCRService) resolveHealthReportURL(value string) string {
@@ -52,13 +52,17 @@ func (s *OCRService) resolveHealthReportURL(value string) string {
 	return resolved
 }
 
-func (s *OCRService) callDashScope(ctx context.Context, imageURL string) (map[string]any, error) {
-	apiKey := s.cfg.External.DashscopeAPIKey
+func (s *OCRService) callDoubao(ctx context.Context, imageURL string) (map[string]any, error) {
+	apiKey := strings.TrimSpace(s.cfg.External.DoubaoAPIKey)
 	if apiKey == "" {
-		return nil, &commonerrors.AppError{Code: 10000, Message: "缺少 DASHSCOPE_API_KEY", HTTPStatus: 500}
+		return nil, &commonerrors.AppError{Code: 10000, Message: "缺少 DOUBAO_API_KEY", HTTPStatus: 500}
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(s.cfg.External.DoubaoBaseURL), "/")
+	if baseURL == "" {
+		baseURL = "https://ark.cn-beijing.volces.com/api/v3"
 	}
 	payload := map[string]any{
-		"model": "qwen-vl-max",
+		"model": "doubao-seed-2-0-lite-260428",
 		"messages": []map[string]any{
 			{
 				"role": "user",
@@ -68,11 +72,12 @@ func (s *OCRService) callDashScope(ctx context.Context, imageURL string) (map[st
 				},
 			},
 		},
-		"response_format": map[string]string{"type": "json_object"},
-		"temperature":     0.3,
+		"response_format":  map[string]string{"type": "json_object"},
+		"temperature":      0.3,
+		"reasoning_effort": "minimal",
 	}
 	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}

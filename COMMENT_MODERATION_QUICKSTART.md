@@ -87,7 +87,7 @@ npm run build:weapp
 - ✅ **离线支持**：评论缓存在本地，下次打开自动同步
 
 ### 审核机制
-- ✅ **AI 驱动**：使用 DashScope qwen-plus 模型
+- ✅ **AI 驱动**：使用 Doubao doubao-plus 模型
 - ✅ **审核标准**：色情/暴力/政治/人身攻击/广告/垃圾信息
 - ✅ **违规记录**：所有违规评论记录到 content_violations 表
 - ✅ **高性能**：异步处理，不阻塞用户操作

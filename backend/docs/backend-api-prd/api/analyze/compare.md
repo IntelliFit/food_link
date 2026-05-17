@@ -34,14 +34,14 @@ Covers food analysis submission, task lookup, and result mutation behavior used 
 
 ## Main Flow
 
-- `POST /api/analyze-compare`: reads/writes via `get_user_by_id`; local helper chain includes `CompareAnalyzeResponse, ModelAnalyzeResult, _analyze_with_gemini, _analyze_with_qwen, _build_execution_mode_hint, _build_gemini_prompt, _format_health_profile_for_analysis, _format_health_risk_summary_for_analysis`
+- `POST /api/analyze-compare`: reads/writes via `get_user_by_id`; local helper chain includes `CompareAnalyzeResponse, ModelAnalyzeResult, _analyze_with_gemini, _analyze_with_doubao, _build_execution_mode_hint, _build_gemini_prompt, _format_health_profile_for_analysis, _format_health_risk_summary_for_analysis`
 
 ## Dependencies & Side Effects
 
 - Database dependencies: get_user_by_id
 - Worker dependencies: None
 - External dependencies: LLM Provider, Supabase, Supabase Storage
-- Local helper chain: CompareAnalyzeResponse, ModelAnalyzeResult, _analyze_with_gemini, _analyze_with_qwen, _build_execution_mode_hint, _build_gemini_prompt, _format_health_profile_for_analysis, _format_health_risk_summary_for_analysis, _meal_name, _normalize_execution_mode, _parse_analyze_result, _parse_execution_mode_or_raise, _strip_standard_mode_extras
+- Local helper chain: CompareAnalyzeResponse, ModelAnalyzeResult, _analyze_with_gemini, _analyze_with_doubao, _build_execution_mode_hint, _build_gemini_prompt, _format_health_profile_for_analysis, _format_health_risk_summary_for_analysis, _meal_name, _normalize_execution_mode, _parse_analyze_result, _parse_execution_mode_or_raise, _strip_standard_mode_extras
 
 ## Data Reads/Writes
 

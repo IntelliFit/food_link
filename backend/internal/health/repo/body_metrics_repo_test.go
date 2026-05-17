@@ -51,6 +51,14 @@ func TestBodyMetricsRepo_WeightCRUD(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, latest)
 	assert.Equal(t, 70.5, latest.WeightKg)
+
+	deleted, err := r.DeleteWeightRecordByID(ctx, "user-1", record.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), deleted)
+
+	records, err = r.ListWeightRecords(ctx, "user-1", "", "")
+	require.NoError(t, err)
+	assert.Empty(t, records)
 }
 
 func TestBodyMetricsRepo_WaterCRUD(t *testing.T) {

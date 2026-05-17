@@ -290,5 +290,5 @@ func TestFoodNutritionRepo_UpsertDeepSeekNutritionInsertsFullProfile(t *testing.
 	assert.Equal(t, 20.0, food.VitaminARaeMcgPer100g)
 	assert.Equal(t, 10.0, food.VitaminCMgPer100g)
 	assert.Equal(t, 0.4, food.VitaminB12McgPer100g)
-	assert.Equal(t, "deepseek_auto", food.Source)
+	assert.Equal(t, "deepseek_v4_pro_auto", food.Source)
 }

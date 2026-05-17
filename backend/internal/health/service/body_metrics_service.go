@@ -20,6 +20,7 @@ type BodyMetricsRepo interface {
 	CreateWeightRecord(ctx context.Context, record *domain.BodyWeightRecord) error
 	ListWeightRecords(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWeightRecord, error)
 	GetLatestWeightRecord(ctx context.Context, userID string) (*domain.BodyWeightRecord, error)
+	DeleteWeightRecordByID(ctx context.Context, userID string, recordID string) (int64, error)
 	CreateWaterLog(ctx context.Context, log *domain.BodyWaterLog) error
 	GetWaterLogsByDate(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWaterLog, error)
 	DeleteWaterLogsByDate(ctx context.Context, userID string, recordedOn string) (int64, error)
@@ -39,8 +40,11 @@ func NewBodyMetricsService(repo BodyMetricsRepo) *BodyMetricsService {
 }
 
 type WeightEntry struct {
-	Date  string  `json:"date"`
-	Value float64 `json:"value"`
+	ID         string  `json:"id,omitempty"`
+	Date       string  `json:"date"`
+	Value      float64 `json:"value"`
+	ClientID   *string `json:"client_id,omitempty"`
+	RecordedAt *string `json:"recorded_at,omitempty"`
 }
 
 type WaterDaily struct {
@@ -363,6 +367,26 @@ func (s *BodyMetricsService) SaveWeightRecordWithMeta(ctx context.Context, userI
 	}, nil
 }
 
+func (s *BodyMetricsService) DeleteWeightRecord(ctx context.Context, userID string, recordID string) (map[string]any, error) {
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "体重记录不存在", HTTPStatus: 400}
+	}
+	deletedCount, err := s.repo.DeleteWeightRecordByID(ctx, userID, recordID)
+	if err != nil {
+		return nil, err
+	}
+	if deletedCount == 0 {
+		return nil, &commonerrors.AppError{Code: 10001, Message: "体重记录不存在", HTTPStatus: 404}
+	}
+	_ = s.syncProfileWeightFromLatest(ctx, userID)
+	return map[string]any{
+		"message":       "体重记录已删除",
+		"deleted_count": deletedCount,
+		"id":            recordID,
+	}, nil
+}
+
 // Helpers
 
 func normalizeBodyMetricSourceType(value string) string {
@@ -447,8 +471,14 @@ func aggregateWeightDaily(rows []domain.BodyWeightRecord) []WeightEntry {
 		}
 		dateKey := row.RecordedOn.Format("2006-01-02")
 		entry := WeightEntry{
-			Date:  dateKey,
-			Value: round1(row.WeightKg),
+			ID:       row.ID,
+			Date:     dateKey,
+			Value:    round1(row.WeightKg),
+			ClientID: row.ClientRecordID,
+		}
+		if row.CreatedAt != nil {
+			recordedAt := row.CreatedAt.In(chinaTZ).Format(time.RFC3339)
+			entry.RecordedAt = &recordedAt
 		}
 		if idx, ok := byDateIndex[dateKey]; ok {
 			entries[idx] = entry

@@ -86,10 +86,11 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 		return nil, err
 	}
 	body := map[string]any{
-		"model":           model,
-		"messages":        []map[string]any{{"role": "user", "content": content}},
-		"response_format": map[string]string{"type": "json_object"},
-		"temperature":     temperature,
+		"model":            model,
+		"messages":         []map[string]any{{"role": "user", "content": content}},
+		"response_format":  map[string]string{"type": "json_object"},
+		"temperature":      temperature,
+		"reasoning_effort": "medium",
 	}
 	b, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(b))
@@ -136,20 +137,21 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 func (r *Recognizer) llmConfig() (apiURL, model, apiKey string, err error) {
 	provider := strings.ToLower(strings.TrimSpace(r.cfg.External.LLMProvider))
 	if provider == "" {
-		provider = "qwen"
+		provider = "doubao"
 	}
 	ofoxBaseURL := strings.TrimRight(strings.TrimSpace(r.cfg.External.OfoxAIBaseURL), "/")
 	if ofoxBaseURL == "" {
 		ofoxBaseURL = "https://api.ofox.ai/v1"
 	}
-	if provider == "qwen" && r.cfg.External.DashscopeAPIKey != "" {
-		return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen-vl-max", r.cfg.External.DashscopeAPIKey, nil
-	}
 	if (provider == "gemini" || provider == "ofox-gemini") && r.cfg.External.OfoxAIAPIKey != "" {
 		return ofoxBaseURL + "/chat/completions", "gemini-3-flash-preview", r.cfg.External.OfoxAIAPIKey, nil
 	}
-	if provider != "gemini" && provider != "ofox-gemini" && r.cfg.External.DashscopeAPIKey != "" {
-		return "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen-vl-max", r.cfg.External.DashscopeAPIKey, nil
+	if provider == "doubao" && r.cfg.External.DoubaoAPIKey != "" {
+		baseURL := strings.TrimRight(strings.TrimSpace(r.cfg.External.DoubaoBaseURL), "/")
+		if baseURL == "" {
+			baseURL = "https://ark.cn-beijing.volces.com/api/v3"
+		}
+		return baseURL + "/chat/completions", "doubao-seed-2-0-lite-260428", r.cfg.External.DoubaoAPIKey, nil
 	}
 	return "", "", "", expiryRecognitionConfigError("后端未配置保质期识别模型")
 }

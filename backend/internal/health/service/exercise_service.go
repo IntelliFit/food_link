@@ -396,13 +396,7 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 	}
 	calories := float64(estimate.CaloriesKcal)
 	reasoning := estimate.Reasoning
-	logDesc := desc
-	if logDesc == "" {
-		logDesc = strings.TrimSpace(estimate.ExerciseType)
-		if logDesc == "" {
-			logDesc = "图片识别运动"
-		}
-	}
+	logDesc := resolveExerciseLogDesc(desc, estimate)
 	log := &domain.ExerciseLog{
 		UserID:         userID,
 		ExerciseDesc:   logDesc,
@@ -449,11 +443,11 @@ func (s *ExerciseService) activateInviteReward(ctx context.Context, userID, acti
 }
 
 type ExerciseEstimate struct {
-	CaloriesKcal  int
-	Raw           string
-	Reasoning     string
-	Source        string
-	ExerciseType  string
+	CaloriesKcal int
+	Raw          string
+	Reasoning    string
+	Source       string
+	ExerciseType string
 }
 
 type exerciseMetRule struct {
@@ -481,6 +475,42 @@ var (
 		{[]string{"步行", "走路", "快走"}, 3.8, "步行"},
 	}
 )
+
+func resolveExerciseLogDesc(inputDesc string, estimate ExerciseEstimate) string {
+	desc := strings.TrimSpace(inputDesc)
+	exerciseType := strings.TrimSpace(estimate.ExerciseType)
+	if isWeakExerciseTitle(desc) && exerciseType != "" {
+		return trimRunes(exerciseType, 20)
+	}
+	if desc != "" {
+		return desc
+	}
+	return "图片识别运动"
+}
+
+func isWeakExerciseTitle(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return true
+	}
+	normalized = strings.ReplaceAll(normalized, " ", "")
+	weakTitles := map[string]struct{}{
+		"运动":       {},
+		"锻炼":       {},
+		"健身":       {},
+		"打卡":       {},
+		"运动打卡":     {},
+		"今日运动":     {},
+		"今天运动":     {},
+		"图片":       {},
+		"照片":       {},
+		"图片识别运动":   {},
+		"exercise": {},
+		"workout":  {},
+	}
+	_, ok := weakTitles[normalized]
+	return ok
+}
 
 func (s *ExerciseService) estimateExerciseCalories(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) ExerciseEstimate {
 	imageURL = strings.TrimSpace(imageURL)
@@ -527,8 +557,13 @@ func (s *ExerciseService) estimateSingleExerciseCalories(ctx context.Context, de
 
 func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) (ExerciseEstimate, bool) {
 	apiKey := ""
+	baseURL := "https://ark.cn-beijing.volces.com/api/v3"
+	model := "doubao-seed-2-0-lite-260428"
 	if s.cfg != nil {
-		apiKey = strings.TrimSpace(s.cfg.External.DashscopeAPIKey)
+		apiKey = strings.TrimSpace(s.cfg.External.DoubaoAPIKey)
+		if configuredBaseURL := strings.TrimSpace(s.cfg.External.DoubaoBaseURL); configuredBaseURL != "" {
+			baseURL = strings.TrimRight(configuredBaseURL, "/")
+		}
 	}
 	if apiKey == "" {
 		return ExerciseEstimate{}, false
@@ -552,7 +587,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		}
 	}
 	body := map[string]any{
-		"model": "qwen-vl-max",
+		"model": model,
 		"messages": []map[string]any{
 			{
 				"role":    "system",
@@ -560,12 +595,13 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 			},
 			{"role": "user", "content": userContent},
 		},
-		"response_format": map[string]string{"type": "json_object"},
-		"temperature":     0.25,
-		"max_tokens":      320,
+		"response_format":  map[string]string{"type": "json_object"},
+		"temperature":      0.25,
+		"max_tokens":       320,
+		"reasoning_effort": "medium",
 	}
 	bodyBytes, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return ExerciseEstimate{}, false
 	}
