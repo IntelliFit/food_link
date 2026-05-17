@@ -26,7 +26,6 @@ import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
-import { buildDateRange, buildExerciseDays } from '../body-metrics-shared'
 import './index.scss'
 
 /** 仅 status=pending 的项会写入，用于杀进程后恢复轮询 */
@@ -121,7 +120,6 @@ export default function ExerciseRecordPage() {
   )
   const [inputValue, setInputValue] = useState('')
   const [records, setRecords] = useState<ExerciseRecord[]>([])
-  const [trendRecords, setTrendRecords] = useState<ExerciseRecord[]>([])
   const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
@@ -144,23 +142,6 @@ export default function ExerciseRecordPage() {
       console.error('[exercise-record] load logs', e)
     }
   }, [])
-
-  const exerciseTrendDates = useMemo(() => buildDateRange(14), [])
-
-  const loadTrendRecords = useCallback(async (): Promise<void> => {
-    if (!getAccessToken()) {
-      setTrendRecords([])
-      return
-    }
-    try {
-      const startDate = exerciseTrendDates[0]
-      const endDate = exerciseTrendDates[exerciseTrendDates.length - 1]
-      const { logs } = await getExerciseLogs({ start_date: startDate, end_date: endDate })
-      setTrendRecords(logs.map(mapLogToRecord))
-    } catch (e) {
-      console.error('[exercise-record] load trend logs', e)
-    }
-  }, [exerciseTrendDates])
 
   const persistPendingOnly = useCallback((items: PendingExerciseCard[]) => {
     try {
@@ -227,7 +208,6 @@ export default function ExerciseRecordPage() {
             if (currentRecordDateRef.current === targetDate) {
               await loadRecordsForDate(targetDate)
             }
-            await loadTrendRecords()
             Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
             Taro.showToast({
               title: `已记录 ${payload.estimated_calories} kcal`,
@@ -269,7 +249,7 @@ export default function ExerciseRecordPage() {
         pollingTaskIdsRef.current.delete(taskId)
       }
     },
-    [loadRecordsForDate, loadTrendRecords]
+    [loadRecordsForDate]
   )
 
   useEffect(() => {
@@ -279,9 +259,8 @@ export default function ExerciseRecordPage() {
     currentRecordDateRef.current = nextDate
     setRecordDate(nextDate)
     void loadRecordsForDate(nextDate)
-    void loadTrendRecords()
     loadPendingFromStorage()
-  }, [loadPendingFromStorage, loadRecordsForDate, loadTrendRecords])
+  }, [loadPendingFromStorage, loadRecordsForDate])
 
   useEffect(() => {
     pendingItems.filter((p) => p.status === 'pending').forEach((p) => {
@@ -296,7 +275,6 @@ export default function ExerciseRecordPage() {
     currentRecordDateRef.current = nextDate
     setRecordDate(nextDate)
     void loadRecordsForDate(nextDate)
-    void loadTrendRecords()
     if (getAccessToken()) {
       getMyMembership().then(setMembershipStatus).catch(() => {})
     }
@@ -327,15 +305,6 @@ export default function ExerciseRecordPage() {
     )
   }, [records, pendingItems, recordDate])
 
-  const exerciseTrendDays = useMemo(() => buildExerciseDays(trendRecords.map((record) => ({
-    id: record.id,
-    exercise_desc: record.content,
-    calories_burned: record.calories,
-    recorded_on: record.recordDate,
-    recorded_at: record.createdAt,
-    created_at: record.createdAt,
-  } as ExerciseLogItem)), exerciseTrendDates), [trendRecords, exerciseTrendDates])
-  const maxTrendCalories = Math.max(120, ...exerciseTrendDays.map((item) => item.total))
   const visibleRecordCount = records.filter((r) => r.recordDate === recordDate).length
   const visiblePendingCount = pendingItems.filter((p) => p.status === 'pending' && p.recordDate === recordDate).length
   const totalCalories = records.filter((r) => r.recordDate === recordDate).reduce((sum, r) => sum + r.calories, 0)
@@ -504,7 +473,6 @@ export default function ExerciseRecordPage() {
         try {
           await deleteExerciseLog(id)
           setRecords((prev) => prev.filter((r) => r.id !== id))
-          setTrendRecords((prev) => prev.filter((r) => r.id !== id))
           Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
           Taro.showToast({ title: '已删除', icon: 'success' })
         } catch (e) {
@@ -529,6 +497,10 @@ export default function ExerciseRecordPage() {
   }
 
   const listEmpty = displayRows.length === 0
+  const recordDateLabel = recordDate === getTodayRecordDateKey() ? '今天' : recordDate
+  const openTrend = () => {
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-trend/index')}?date=${encodeURIComponent(recordDate)}` })
+  }
 
   return (
     <View className='exercise-record-page'>
@@ -549,23 +521,76 @@ export default function ExerciseRecordPage() {
         </View>
       </View>
 
-      <View className='exercise-trend-card'>
-        <View className='exercise-trend-card__header'>
-          <Text className='exercise-trend-card__title'>近期运动</Text>
-          <Text className='exercise-trend-card__meta'>近 14 天</Text>
+      <View className='input-section'>
+        <View className='exercise-compose-header'>
+          <View>
+            <Text className='exercise-compose-kicker'>{recordDateLabel}</Text>
+            <Text className='exercise-compose-title'>记录运动</Text>
+          </View>
+          <View className='exercise-trend-link' onClick={openTrend}>
+            <Text className='exercise-trend-link-text'>查看趋势</Text>
+          </View>
         </View>
-        <View className='exercise-trend-bars'>
-          {exerciseTrendDays.map((item) => {
-            const pct = item.total > 0 ? Math.max(8, Math.min(100, (item.total / maxTrendCalories) * 100)) : 5
-            return (
-              <View key={item.date} className='exercise-trend-bar-item'>
-                <View className='exercise-trend-bar-wrap'>
-                  <View className={`exercise-trend-bar ${item.total > 0 ? '' : 'is-empty'}`} style={{ height: `${pct}%` }} />
+        <View className='quick-examples-strip'>
+          <Text className='quick-examples-title'>试试这样说：</Text>
+          <ScrollView
+            className='quick-chips-scroll'
+            scrollX
+            enhanced
+            showScrollbar={false}
+          >
+            <View className='quick-chips-inner'>
+              {EXERCISE_QUICK_PRESETS.map((example) => (
+                <View
+                  key={example}
+                  className='example-tag'
+                  onClick={() => setInputValue(example)}
+                >
+                  <Text className='example-tag-text'>{example}</Text>
                 </View>
-                <Text className='exercise-trend-bar-label'>{item.date.slice(5)}</Text>
-              </View>
-            )
-          })}
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+        {selectedImagePath ? (
+          <View className='image-preview-wrap'>
+            <Image
+              className='image-preview-thumb'
+              src={selectedImagePath}
+              mode='aspectFill'
+            />
+            <View className='image-preview-remove' onClick={clearSelectedImage}>
+              <Text className='image-preview-remove-text'>×</Text>
+            </View>
+          </View>
+        ) : null}
+        <View className='input-wrap'>
+          <View
+            className='exercise-image-trigger'
+            onClick={handleAddImage}
+          >
+            <Text className='exercise-image-trigger-text'>+</Text>
+          </View>
+          <Input
+            className='chat-input'
+            value={inputValue}
+            onInput={(e) => setInputValue(e.detail.value)}
+            placeholder={selectedImagePath ? '补充描述（可选）' : '今天做了什么运动？'}
+            placeholderClass='input-placeholder'
+            confirmType='send'
+            onConfirm={runSubmitFlow}
+            disabled={submitting}
+          />
+          <View
+            className={`exercise-send-trigger ${(!inputValue.trim() && !selectedImagePath) || submitting ? 'is-disabled' : ''}`}
+            onClick={runSubmitFlow}
+          >
+            {submitting ? (
+              <View className='exercise-send-spinner' />
+            ) : (
+              <Text className='iconfont icon-send' />
+            )}
+          </View>
         </View>
       </View>
 
@@ -582,8 +607,8 @@ export default function ExerciseRecordPage() {
             <View className='empty-icon-wrap'>
               <IconExercise size={80} color='#d1d5db' />
             </View>
-            <Text className='empty-title'>还没有运动记录</Text>
-            <Text className='empty-desc'>在下方输入你今天做了什么运动{'\n'}例如：&quot;跑步30分钟&quot; 或 &quot;游泳1小时&quot;</Text>
+            <Text className='empty-title'>{recordDateLabel}还没有运动记录</Text>
+            <Text className='empty-desc'>上方输入运动内容或添加图片，系统会估算消耗。</Text>
           </View>
         ) : (
           <View className='records-list'>
@@ -651,70 +676,6 @@ export default function ExerciseRecordPage() {
         )}
         <View style={{ height: '20rpx' }} />
       </ScrollView>
-
-      <View className='input-section'>
-        <View className='quick-examples-strip'>
-          <Text className='quick-examples-title'>试试这样说：</Text>
-          <ScrollView
-            className='quick-chips-scroll'
-            scrollX
-            enhanced
-            showScrollbar={false}
-          >
-            <View className='quick-chips-inner'>
-              {EXERCISE_QUICK_PRESETS.map((example) => (
-                <View
-                  key={example}
-                  className='example-tag'
-                  onClick={() => setInputValue(example)}
-                >
-                  <Text className='example-tag-text'>{example}</Text>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-        {selectedImagePath ? (
-          <View className='image-preview-wrap'>
-            <Image
-              className='image-preview-thumb'
-              src={selectedImagePath}
-              mode='aspectFill'
-            />
-            <View className='image-preview-remove' onClick={clearSelectedImage}>
-              <Text className='image-preview-remove-text'>×</Text>
-            </View>
-          </View>
-        ) : null}
-        <View className='input-wrap'>
-          <View
-            className='exercise-image-trigger'
-            onClick={handleAddImage}
-          >
-            <Text className='exercise-image-trigger-text'>+</Text>
-          </View>
-          <Input
-            className='chat-input'
-            value={inputValue}
-            onInput={(e) => setInputValue(e.detail.value)}
-            placeholder={selectedImagePath ? '补充描述（可选）' : '今天做了什么运动？'}
-            placeholderClass='input-placeholder'
-            confirmType='send'
-            onConfirm={runSubmitFlow}
-            disabled={submitting}
-          />
-          <View
-            className={`exercise-send-trigger ${(!inputValue.trim() && !selectedImagePath) || submitting ? 'is-disabled' : ''}`}
-            onClick={runSubmitFlow}
-          >
-            {submitting ? (
-              <View className='exercise-send-spinner' />
-            ) : (
-              <Text className='iconfont icon-send' />
-            )}
-          </View>
-        </View>
-      </View>
     </View>
   )
 }

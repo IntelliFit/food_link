@@ -3373,7 +3373,8 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		strings.Contains(lower, "doubao api error 500") ||
 		strings.Contains(lower, "doubao api error 502") ||
 		strings.Contains(lower, "doubao api error 503") ||
-		strings.Contains(lower, "doubao api error 504") {
+		strings.Contains(lower, "doubao api error 504") ||
+		strings.Contains(lower, "internalserviceerror") {
 		return "AI 识别服务暂时不可用，请稍后重试"
 	}
 	runes := []rune(msg)

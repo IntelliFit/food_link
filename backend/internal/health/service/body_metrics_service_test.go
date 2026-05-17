@@ -72,6 +72,20 @@ func (m *mockBodyMetricsRepo) DeleteWaterLogsByDate(ctx context.Context, userID 
 	return deleted, nil
 }
 
+func (m *mockBodyMetricsRepo) DeleteWaterLogByID(ctx context.Context, userID string, logID string) (int64, error) {
+	filtered := make([]domain.BodyWaterLog, 0)
+	deleted := int64(0)
+	for _, log := range m.waterLogs {
+		if log.UserID == userID && log.ID == logID {
+			deleted++
+			continue
+		}
+		filtered = append(filtered, log)
+	}
+	m.waterLogs = filtered
+	return deleted, nil
+}
+
 func (m *mockBodyMetricsRepo) GetBodyMetricSettings(ctx context.Context, userID string) (*domain.BodyMetricSettings, error) {
 	return m.settings, nil
 }
@@ -183,6 +197,24 @@ func TestBodyMetricsService_ResetWaterLogs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), result["deleted_count"])
 	assert.Len(t, repo.waterLogs, 0)
+}
+
+func TestBodyMetricsService_DeleteWaterLog(t *testing.T) {
+	repo := &mockBodyMetricsRepo{}
+	svc := NewBodyMetricsService(repo)
+	ctx := context.Background()
+
+	recordedOn := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+	repo.waterLogs = []domain.BodyWaterLog{
+		{ID: "wl1", UserID: "u1", AmountMl: 250, RecordedOn: &recordedOn},
+		{ID: "wl2", UserID: "u1", AmountMl: 500, RecordedOn: &recordedOn},
+	}
+
+	result, err := svc.DeleteWaterLog(ctx, "u1", "wl1")
+	require.NoError(t, err)
+	assert.Equal(t, "喝水记录已删除", result["message"])
+	assert.Len(t, repo.waterLogs, 1)
+	assert.Equal(t, "wl2", repo.waterLogs[0].ID)
 }
 
 func TestBodyMetricsService_SaveWeightRecord(t *testing.T) {

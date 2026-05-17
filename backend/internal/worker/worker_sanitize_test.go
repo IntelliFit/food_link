@@ -35,6 +35,16 @@ func TestSanitizeTaskErrorMessage_ResourceExhausted(t *testing.T) {
 	}
 }
 
+func TestSanitizeTaskErrorMessage_InternalServiceError(t *testing.T) {
+	msg := sanitizeTaskErrorMessage(errors.New(`doubao api error 500: {"error":{"code":"InternalServiceError","message":"The service encountered an unexpected internal error","request_id":"0217790020120823db2ae"}}`))
+	if strings.Contains(msg, "InternalServiceError") || strings.Contains(msg, "request_id") {
+		t.Fatalf("raw upstream error leaked into sanitized error: %s", msg)
+	}
+	if !strings.Contains(msg, "AI 识别服务暂时不可用") {
+		t.Fatalf("unexpected sanitized internal service error: %s", msg)
+	}
+}
+
 func TestSanitizeTaskErrorMessage_APIKey(t *testing.T) {
 	msg := sanitizeTaskErrorMessage(errors.New(`doubao api error 401: {"error":{"message":"Incorrect API key provided. For details, see: https://www.volcengine.com/docs/error-code#apikey-error"}}`))
 	if strings.Contains(strings.ToLower(msg), "apikey") || strings.Contains(msg, "volcengine.com") {

@@ -44,8 +44,11 @@ const extraSubpackagePages = [
   'pages/invite-friends/index',
   'pages/profile-settings/index',
   'pages/weight-record/index',
+  'pages/weight-trend/index',
   'pages/water-record/index',
+  'pages/water-trend/index',
   'pages/exercise-record/index',
+  'pages/exercise-trend/index',
   'pages/body-trends/index',
 ]
 

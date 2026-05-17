@@ -111,27 +111,3 @@ func TestDeepSeekNutritionEstimator_NormalizesFallbackEnergyConsistency(t *testi
 	assert.Equal(t, 2.0, rows[0]["sugar"])
 	assert.Equal(t, 0.0, rows[0]["saturatedFat"])
 }
-
-func TestDeepSeekNutritionEstimator_UsesPlainCoffeeRuleForZeroCoreNutrition(t *testing.T) {
-	estimator := NewDeepSeekNutritionEstimator("test-key", "", "")
-	estimator.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"unitNutritionPer100g\":{\"calories\":0,\"protein\":0,\"carbs\":0,\"fat\":0}}]}"}}]}`
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(bytes.NewBufferString(body)),
-			Header:     make(http.Header),
-		}, nil
-	})}
-
-	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{
-		Index:                0,
-		Name:                 "热金奖深烘美式咖啡",
-		EstimatedWeightGrams: 900,
-	}}, "")
-	require.NoError(t, err)
-	require.Contains(t, rows, 0)
-	assert.Equal(t, 1.0, rows[0]["calories"])
-	assert.Equal(t, 0.1, rows[0]["protein"])
-	assert.Equal(t, 0.0, rows[0]["carbs"])
-	assert.Equal(t, 0.0, rows[0]["fat"])
-}

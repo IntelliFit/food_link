@@ -1,3 +1,47 @@
+## 2026-05-17 — 体重/喝水/运动趋势页重做与历史纠错
+
+- Task: 用户确认按“记录页只负责记录，趋势页二级承接分析/回看/纠错”的方向继续执行；同时指出 30 天点图/柱图在手机窄屏里不合适，要求历史趋势里可删除错误记录，喝水必须能删除某一天里的单次喝水 log。
+- Status: fixed_code_static_verified_runtime_blocked
+- Changes:
+  - 后端 `GET /api/body-metrics/summary` 的 `water_daily[].log_items` 返回每次喝水记录的 `id/date/amount_ml/recorded_at`，保留旧 `logs: number[]` 兼容字段。
+  - 新增后端 `DELETE /api/body-metrics/water/:log_id`，按当前用户和 log id 删除单次喝水记录；service/handler/repo 测试补齐。
+  - 前端 `src/utils/api.ts` 增加 `BodyMetricWaterLogItem` 和 `deleteBodyWaterLog()`；`body-metrics-shared.ts` 增加 `getWaterLogItems()`，兼容旧 `logs` 数据。
+  - `water-record` 当天喝水记录改为逐条展示，带 id 的单条可删除；保留“清空当天”兜底。
+  - `weight-trend` 去掉窄屏 30 点图，先改为近 30 天区间概览（最低/最高/最新/变化）+ 历史记录删除。
+  - `water-trend` 去掉横向柱状图，改为 30 天热力日历；点击某天后展示当天明细，并可逐条删除喝水 log。
+  - `exercise-trend` 去掉横向柱状图，改为 30 天活跃热力图 + 最近运动列表删除；运动类型深分析暂不提前复杂化。
+- Verification:
+  - `npx eslint src/app.config.ts src/utils/api.ts src/packageExtra/pages/body-metrics-shared.ts src/packageExtra/pages/weight-record/index.tsx src/packageExtra/pages/water-record/index.tsx src/packageExtra/pages/exercise-record/index.tsx src/packageExtra/pages/weight-trend/index.tsx src/packageExtra/pages/water-trend/index.tsx src/packageExtra/pages/exercise-trend/index.tsx src/packageExtra/pages/body-trends/index.tsx --max-warnings 0` passed.
+  - `go test ./internal/health/service ./internal/health/handler -run "TestBodyMetricsService|TestSaveBodyWeightRecord|TestDeleteBodyWeightRecord|TestSaveBodyWaterLog|TestResetBodyWaterLogs|TestDeleteBodyWaterLog" -count=1` passed.
+  - `go test ./internal/app -run "^$" -count=1` passed.
+  - `git diff --check` passed（仅 CRLF warning）。
+  - `go test ./internal/health/repo -run "TestBodyMetricsRepo_WaterCRUD" -count=1` blocked by local `CGO_ENABLED=0` / `go-sqlite3 requires cgo`。
+  - `npm run typecheck` still blocked by existing unrelated TS errors in `analyze-history`, `expiry`, and `food-library` pages.
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 和 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+- Follow-up:
+  - 用户指出体重趋势的“区间概览”比原来更难理解，无法表达 30 天趋势。已撤掉区间条，改为小屏紧凑折线图：左侧 Y 轴最小/最大体重、底部 X 轴关键日期、30 天连续折线和最新点高亮。
+  - `npx eslint src/packageExtra/pages/weight-trend/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/packageExtra/pages/weight-trend/index.tsx src/packageExtra/pages/weight-trend/index.scss` passed.
+  - 再次尝试 `weapp-devtools` 3001/9420，仍因目标窗口未开启自动化服务连接失败。
+
+## 2026-05-17 — 拍照食物识别 Doubao 500 失败排查
+
+- Task: 用户提供手机截图，拍照分析食物后等待页显示 `识别失败：doubao api error 500 ... InternalServiceError ... Request id: 0217790020120823db2ae...`。
+- User clarification: 用户随后明确指出本轮只是询问“这是什么问题”，没有要求改代码；本轮代码改动属于越界执行，后续应先解释问题，不应默认实施修复。
+- Finding:
+  - 这是后端调用 Doubao/火山 Ark 视觉模型时，上游返回 HTTP 500 `InternalServiceError`，不属于前端渲染问题，也不像图片上传 413 或微信域名白名单问题。
+  - 当前源码 worker 已有 `doubao api error 500` 清洗逻辑，但截图仍显示原始 JSON，说明线上/体验版可能还未部署该后端版本，或该错误来自旧任务/旧链路。
+- Fix:
+  - `isTransientLLMError()` 增加 Doubao 408/429/5xx 与 `InternalServiceError`，`analyzeWithJSONParseRetry()` 对临时 LLM 错误增加最多 2 次同任务重试。
+  - `sanitizeTaskErrorMessage()` 增加 `InternalServiceError` 兜底，避免 raw request id / upstream JSON 暴露给用户。
+  - `analyze-loading` 前端等待页增加 raw LLM 错误兜底清洗，即使旧后端写入原始错误，也展示友好文案。
+- Verification:
+  - `npx eslint src/packageExtra/pages/analyze-loading/index.tsx --max-warnings 0` passed.
+  - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON|TestAnalyzeService_AnalyzeStopsAfterInvalidJSONRetries|TestAnalyzeWithJSONParseRetry_RetriesTransientDoubaoError|TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError' -count=1` passed.
+  - `go test ./internal/worker -run 'TestSanitizeTaskErrorMessage' -count=1` passed.
+  - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go backend/internal/worker/worker.go backend/internal/worker/worker_sanitize_test.go src/packageExtra/pages/analyze-loading/index.tsx` passed（仅 CRLF warning）。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
 # 2026-05-17 — 审核避险：底部圈子入口临时替换为保质期页
 
 - Task: 用户反馈微信小程序审核因底部「圈子」涉及 UGC 发布与交流、当前未申请社交/社区/论坛类目而失败，希望先隐藏圈子，同时保持底部 5 项导航的左右对称。
@@ -60,6 +104,31 @@
 - Verification:
   - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestDeepSeekNutritionEstimator' -count=1` passed.
   - `git diff --check -- backend/internal/analyze/service/deepseek_nutrition.go backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/deepseek_nutrition_test.go backend/internal/foodrecord/repo/food_nutrition_repo.go` passed（仅 CRLF 提示）。
+- 2026-05-17 follow-up change:
+  - 用户明确不需要咖啡规则兜底，只希望模型生成对应真实营养素；建议未命中时改用 Gemini 补全，并要求补全数据必须落库成功，`source` 标明 Gemini 生成。
+  - 已撤掉 `plainCoffeeFallbackUnitNutrition` / `rule_plain_coffee_fallback` / `rule_plain_coffee_auto` 相关逻辑和测试。
+  - `applyDBFirstNutrition()` 未命中时改为调用 `estimateNutritionWithGemini()`，复用当前 Gemini/Ofox 客户端生成 `unitNutritionPer100g`。
+  - Gemini 返回后先执行 `UpsertDeepSeekNutrition(..., "gemini_generated")`；只有 upsert 成功，当前结果才使用该营养并标记 `nutrition_source=gemini_generated`，同时记录 `gemini nutrition upsert succeeded` 和 food_id。
+  - upsert 失败时记录 `gemini nutrition upsert failed`，保持该 item 为 `unresolved`，避免出现“展示了但没落库”的不一致。
+- Verification:
+  - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestDeepSeekNutritionEstimator|TestAnalyzeService_AnalyzeText' -count=1` passed.
+  - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/deepseek_nutrition.go backend/internal/analyze/service/deepseek_nutrition_test.go backend/internal/foodrecord/repo/food_nutrition_repo.go` passed（仅 CRLF 提示）。
+- 2026-05-17 Gemini upsert failure fix:
+  - 用户复测日志显示 Gemini 已生成营养数据，但 `gemini nutrition upsert failed`，错误为 `ERROR: invalid input syntax for type uuid: "" (SQLSTATE 22P02)`。
+  - 根因：`FoodNutrition` / `FoodNutritionAlias` domain 的 `ID` 是普通 string，GORM `Create(struct)` 时把零值 `""` 作为 uuid id 插入，导致 PostgreSQL 拒绝，而不是 Gemini 未调用。
+  - Fix: `UpsertDeepSeekNutrition()` 新增 map-based insert：向 `food_nutrition_library` 和 `food_nutrition_aliases` 插入时显式 omit `id`，让数据库默认 `gen_random_uuid()` 生成主键；插入后按 `normalized_name` 回查生成的 food id。
+  - Alias 创建也改为 `createNutritionAlias()` map insert，避免 alias id 也写入空字符串。
+- Verification:
+  - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestDeepSeekNutritionEstimator|TestAnalyzeService_AnalyzeText' -count=1` passed.
+  - `git diff --check -- backend/internal/foodrecord/repo/food_nutrition_repo.go backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/deepseek_nutrition.go backend/internal/analyze/service/deepseek_nutrition_test.go` passed（仅 CRLF 提示）。
+  - 本机无 `psql`，Node `pg` 包缺失，且 `CGO_ENABLED=0` 阻塞 sqlite repo 测试；未直接连库插入临时记录验证。
+- 2026-05-17 display/persistence separation:
+  - 用户指出：Gemini 当场生成营养素后应立即用于前端展示；写入数据库是同步的另一个操作，写库失败不应导致本次展示回退为 0。
+  - Fix: Gemini fallback 生成成功后立即设置 `unit=fallbackUnit`、`nutrition_source=gemini_generated`，并用于本次 `scaleNutrition()` 展示。
+  - 新增 `nutrition_persisted` 标记：upsert 前默认 `false`，upsert 成功后改为 `true` 并写入 `matched_food_id`；upsert 失败只记录 warn，不再影响本次营养展示。
+- Verification:
+  - `go test ./internal/analyze/service -run 'TestResolveModelConfig|TestDeepSeekNutritionEstimator|TestAnalyzeService_AnalyzeText' -count=1` passed.
+  - `git diff --check -- backend/internal/analyze/service/analyze_service.go` passed（仅 CRLF 提示）。
 
 # 2026-05-17 — 首页非今日日期补录提示
 
@@ -9078,7 +9147,7 @@
 - Changes:
   - 删除 `AnalyzeService` 中旧 旧视觉服务 客户端依赖，食物分析与测试后台只保留 Doubao + Gemini/Ofox 通道。
   - 保质期 AI 识别默认改为 Doubao；如 `llm_provider=gemini/ofox-gemini` 且配置 Ofox key，可走 `gemini-3-flash-preview`。
-  - 运动记录 AI 热量估算改为 Doubao OpenAI-compatible 调用；失败仍回退本地 MET 规则估算。
+  - 运动记录 AI 热量估算改为 Doubao OpenAI-compatible 调用；注意：本条最初曾保留失败回退本地 MET 规则估算，已在后续 2026-05-17 “运动分析禁止静默规则兜底”中废弃并删除。
   - 体检报告 OCR 改为 Doubao 调用，缺 key 报 `DOUBAO_API_KEY` 配置错误。
   - 配置层移除旧 `旧视觉服务_api_key` / `旧视觉服务_API_KEY` 绑定；示例配置与环境检查改为 Doubao。
   - 测试后台、模型对比、压测入口、脚本、文档和历史状态文件中的旧模型命名全部改为 Doubao/Gemini 口径。
@@ -9111,7 +9180,7 @@
 # 2026-05-17 — 首页体重/喝水/运动快捷入口重做
 
 - Task: 用户反馈首页「体重 / 喝水 / 运动」快捷卡点击后当前进入统一「身体趋势」分析页，记录入口埋在页面中下部或需要二次点击，和用户“立刻记录体重/喝水/运动”的预期不一致。
-- Status: fixed_code_static_verified_runtime_blocked
+- Status: redesigned_record_first_static_verified_runtime_blocked
 - User preference:
   - 首页点击「体重」应直接进入体重记录语境，点击「喝水」应直接进入喝水记录语境，点击「运动」应直接进入当天运动记录语境。
   - 趋势/更多分析可以存在，但应作为记录页里的「查看更多」或次级入口，不应抢占首屏主任务。
@@ -9135,6 +9204,25 @@
   - 用户明确指出当前运动页设计不合格：把「近期运动」图表放在记录页首屏会分散注意力，图也不好看；应该通过「查看更多/查看趋势」按钮进入单独趋势页。
   - 用户希望记录页的记录动作极度凸显：点击体重记录后，页面主任务必须是记录体重；喝水和运动同理。
   - 下一步讨论方向：记录页只承载「记录 + 当天记录管理/删除」，趋势/分析放到二级页面；若保留趋势入口，也只能是弱化的次级按钮，不在首屏展示图表。
+- 2026-05-17 redesign implementation:
+  - 用户要求先提交 checkpoint；已提交并推送 `27ffd4e chore: checkpoint current health record flow` 到 `origin/dev`，作为本轮重做前回退点。
+  - `weight-record` 移除趋势图和跨日历史，首屏改为大号体重输入 +「保存体重」主按钮；只展示当前选中日期的体重记录并支持删除；「查看趋势」作为弱入口进入二级页。
+  - `water-record` 移除趋势图和跨日历史，首屏改为当日已喝水总量 + 大号快捷加水/自定义加水；只展示当前选中日期喝水 log chips，并支持清空；「查看趋势」作为弱入口进入二级页。
+  - `exercise-record` 移除首屏「近期运动」图表和额外趋势请求；把运动输入区上移成主记录卡，保留图片/文字记录、异步估算、当天记录列表和删除能力；「查看趋势」作为弱入口进入二级页。
+  - 新增 `weight-trend`、`water-trend`、`exercise-trend` 三个二级趋势页，分别承载近 30 天趋势、摘要和跨日历史。
+  - 旧 `body-trends` 兼容页按旧 query 重定向到对应二级趋势页。
+- 2026-05-17 redesign verification:
+  - `npx eslint src/packageExtra/pages/weight-record/index.tsx src/packageExtra/pages/water-record/index.tsx src/packageExtra/pages/exercise-record/index.tsx src/packageExtra/pages/weight-trend/index.tsx src/packageExtra/pages/water-trend/index.tsx src/packageExtra/pages/exercise-trend/index.tsx src/packageExtra/pages/body-trends/index.tsx src/app.config.ts --max-warnings 0` passed.
+  - `rg` 确认记录页里不再有 `近期运动`、趋势图 class 或 `近 30 天` 等趋势内容；趋势内容只在 `*-trend` 二级页。
+  - `git diff --check` passed for touched frontend files（仅 CRLF warning）。
+  - `npm run typecheck` 仍被既有无关 TS 错误阻塞：`analyze-history/loadTasks`、`expiry` AppColorScheme 类型、`food-library` editable/content 类型。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 和 `mrc where --port 9420` 均因微信开发者工具自动化服务未连接失败，未能截图/交互验证。
+- 2026-05-17 trend-page critique / next design discussion:
+  - 用户反馈三个趋势页的可视化仍不合适：手机窄屏里展示 30 天点图/柱图信息密度太高，体重趋势尤其不适合当前横向点阵形式；喝水和运动趋势也需要重新思考可视化方式。
+  - 趋势页需要支持回看和纠错：历史趋势列表里应能进入某一天详情，查看当天具体记录并删除错误记录。
+  - 喝水需要支持按单次 log 删除：当天记录了 4 次喝水时，若其中 1 次记错，应可删除该单次记录；在历史趋势里点击 5/17 也应看到 4 次明细并逐条删除。
+  - 体重历史趋势也应可删除历史记录；记录页和趋势页的删除能力要保持一致。
+  - 运动趋势的展示方式暂不急着定，后续需要结合运动类型、消耗、频次等重新研究，不宜简单套柱状图。
 
 ## 2026-05-17 — 运动记录标题兜底与思考强度调整
 
@@ -9148,3 +9236,34 @@
 - Verification:
   - `go test ./internal/health/service -run 'TestExerciseService_(EstimateImageUsesDoubao|ProcessExerciseTaskUsesDetectedTypeForWeakTitle|ProcessExerciseTaskKeepsUsefulUserTitle)$' -count=1` passed。
   - `git diff --check -- backend/internal/health/service/exercise_service.go backend/internal/health/service/exercise_service_test.go` passed（仅 CRLF warning）。
+
+## 2026-05-17 — 运动分析禁止静默规则兜底
+
+- Task: 用户上传复杂训记打卡图后，运动记录 1-2 秒出结果，标题为“一般运动”，仅 59 kcal；用户判断明显不对。
+- Status: fixed_code_verified
+- Finding:
+  - 59 kcal 符合当前规则兜底公式：图片大模型未成功时，空文本会被替换为“图片识别运动”，再走 `50 + 文本长度*1.5` 的本地粗估，导致看起来像成功保存了一个低热量结果。
+  - 这说明该场景大概率不是 Doubao 认真分析图片，而是 LLM 调用失败/未生效后静默 fallback。
+- Changes:
+  - `backend/internal/health/service/exercise_service.go`：运动记录不再保留任何本地规则估算兜底；文字和图片都必须由 Doubao 成功返回可解析 JSON 才创建运动记录。
+  - `estimateSingleExerciseCalories()` 在 Doubao 失败、未配置、非 2xx、JSON 解析失败时直接返回错误，让 exercise task 失败并触发既有失败/退款链路。
+  - 删除 `ruleEstimateExerciseCalories()`、MET 规则表、时长提取和强度粗估函数，避免后续误调用。
+  - 移除运动 Doubao 请求中的 `response_format=json_object`，避免火山 Ark 对当前视觉/模型组合返回 400；继续用 prompt 约束 JSON，并由后端解析校验。
+  - 训练打卡图 prompt 强化：若图片是训练打卡截图/健身记录卡，必须 OCR 读取每个动作、重量、次数、组数、总耗时、截图中的消耗热量，并综合估算；多项动作不能只按“一般运动”粗估；`exercise_type` 需输出如“卧推力量训练/背部力量训练/跑步机慢跑”等标题，不要输出“一般运动”。
+  - 新增/更新测试保证图片 LLM 失败不会创建低热量兜底记录，文字缺 Doubao 配置也不会规则估算成功。
+- Verification:
+  - `go test ./internal/health/service -run 'TestExerciseService_' -count=1` passed。
+
+## 2026-05-17 — 提交并同步 dev/main
+
+- Task: 用户要求把当前所有修改提交，推送远端，合并到主分支后再回到开发分支，并写好 commit 信息。
+- Status: in_progress
+- Planned flow:
+  - 在 `dev` 提交当前全部修改并推送 `origin/dev`。
+  - 切换 `main`，合并 `dev`，推送 `origin/main`。
+  - 最后切回 `dev` 继续作为开发分支。
+- Pre-check:
+  - `git fetch origin` completed。
+  - `dev...origin/dev` 为 `0 0`，`main...origin/main` 为 `0 0`。
+  - `git diff --check` passed（仅 CRLF warning）。
+  - 行首冲突标记检查无结果。

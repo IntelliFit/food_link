@@ -125,6 +125,7 @@ func TestExerciseService_EstimateImageUsesDoubao(t *testing.T) {
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
 		assert.Equal(t, "doubao-seed-2-0-lite-260428", body["model"])
 		assert.Equal(t, "medium", body["reasoning_effort"])
+		assert.NotContains(t, body, "response_format")
 		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"跑步机慢跑\",\"reasoning\":\"图片显示跑步机慢跑\",\"calories_kcal\":180}"}}]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -133,12 +134,33 @@ func TestExerciseService_EstimateImageUsesDoubao(t *testing.T) {
 		}, nil
 	})}
 
-	estimate, ok := svc.estimateExerciseCaloriesWithLLM(context.Background(), "", "https://example.com/run.jpg", nil)
+	estimate, err := svc.estimateExerciseCaloriesWithLLM(context.Background(), "", "https://example.com/run.jpg", nil)
 
-	require.True(t, ok)
+	require.NoError(t, err)
 	assert.Equal(t, 180, estimate.CaloriesKcal)
 	assert.Equal(t, "llm", estimate.Source)
 	assert.Equal(t, "跑步机慢跑", estimate.ExerciseType)
+}
+
+func TestExerciseService_ProcessExerciseTaskDoesNotFallbackForImageLLMFailure(t *testing.T) {
+	repo := &mockExerciseRepo{}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
+	})
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Body:       io.NopCloser(bytes.NewBufferString(`{"error":"bad upstream"}`)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	_, err := svc.ProcessExerciseTask(context.Background(), "u1", "", "https://example.com/exercise.jpg", "2024-06-15", map[string]any{
+		"profile_snapshot": map[string]any{"weight_kg": 70},
+	})
+
+	require.Error(t, err)
+	assert.Empty(t, repo.logs)
 }
 
 func TestExerciseService_ProcessExerciseTaskUsesDetectedTypeForWeakTitle(t *testing.T) {
@@ -233,21 +255,51 @@ func TestExerciseService_CreateLog(t *testing.T) {
 
 func TestExerciseService_EstimateCalories(t *testing.T) {
 	repo := &mockExerciseRepo{profile: &domain.ExerciseUserProfile{ID: "u1"}}
-	svc := NewExerciseService(repo)
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
+	})
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"跑步\",\"reasoning\":\"按跑步30分钟估算\",\"calories_kcal\":240}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
+			Header:     make(http.Header),
+		}, nil
+	})}
 	ctx := context.Background()
 
 	result, err := svc.EstimateCalories(ctx, "u1", "跑步30分钟")
 	require.NoError(t, err)
-	assert.Greater(t, result["estimated_calories"].(int), 0)
+	assert.Equal(t, 240, result["estimated_calories"].(int))
 	assert.Equal(t, "跑步30分钟", result["exercise_desc"])
 	assert.NotEmpty(t, result["reasoning"])
 	assert.NotNil(t, result["profile_snapshot"])
 }
 
+func TestExerciseService_EstimateCaloriesDoesNotFallbackWhenLLMUnavailable(t *testing.T) {
+	repo := &mockExerciseRepo{profile: &domain.ExerciseUserProfile{ID: "u1"}}
+	svc := NewExerciseService(repo)
+
+	_, err := svc.EstimateCalories(context.Background(), "u1", "跑步30分钟")
+
+	require.Error(t, err)
+	assert.Empty(t, repo.logs)
+}
+
 func TestExerciseService_ProcessExerciseTask_CreatesLogWithReasoning(t *testing.T) {
 	recordedOn := time.Now().In(chinaTZ).Format("2006-01-02")
 	repo := &mockExerciseRepo{}
-	svc := NewExerciseService(repo)
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
+	})
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"跑步\",\"reasoning\":\"按跑步30分钟估算\",\"calories_kcal\":240}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
+			Header:     make(http.Header),
+		}, nil
+	})}
 
 	result, err := svc.ProcessExerciseTask(context.Background(), "u1", "跑步30分钟", "", recordedOn, map[string]any{
 		"profile_snapshot": map[string]any{"weight_kg": 70.0},
@@ -262,13 +314,23 @@ func TestExerciseService_ProcessExerciseTask_CreatesLogWithReasoning(t *testing.
 
 func TestExerciseService_EstimateCalories_SplitsMultiItemDescription(t *testing.T) {
 	repo := &mockExerciseRepo{}
-	svc := NewExerciseService(repo)
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
+	})
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"分项运动\",\"reasoning\":\"按单项运动估算\",\"calories_kcal\":100}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
+			Header:     make(http.Header),
+		}, nil
+	})}
 	desc := "慢跑30分钟；跳绳10分钟；拉伸15分钟"
 
 	result, err := svc.EstimateCalories(context.Background(), "u1", desc)
 	require.NoError(t, err)
 	assert.Contains(t, result["reasoning"], "分项估算")
-	assert.Greater(t, result["estimated_calories"].(int), 0)
+	assert.Equal(t, 300, result["estimated_calories"].(int))
 }
 
 func TestExerciseService_DeleteLog(t *testing.T) {

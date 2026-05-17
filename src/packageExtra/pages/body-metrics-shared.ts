@@ -1,6 +1,7 @@
 import { formatDateKey } from '../../pages/index/utils/helpers'
 import type {
   BodyMetricWaterDay,
+  BodyMetricWaterLogItem,
   BodyMetricWeightEntry,
   BodyMetricsSummary,
   ExerciseLogItem,
@@ -90,6 +91,28 @@ export function getWaterDay(summary: BodyMetricsSummary | null, date: string): B
   if (day) return day
   if (summary?.today_water?.date === normalized) return summary.today_water
   return { date: normalized, total: 0, logs: [] }
+}
+
+export function getWaterLogItems(day: BodyMetricWaterDay | null | undefined): BodyMetricWaterLogItem[] {
+  if (!day) return []
+  if (Array.isArray(day.log_items) && day.log_items.length > 0) {
+    return day.log_items
+      .filter((item) => Number.isFinite(toNumber(item.amount_ml, NaN)) && toNumber(item.amount_ml) > 0)
+      .map((item) => ({
+        ...item,
+        date: item.date || day.date,
+        amount_ml: Math.round(toNumber(item.amount_ml)),
+      }))
+  }
+  return (day.logs || [])
+    .filter((amount) => Number.isFinite(toNumber(amount, NaN)) && toNumber(amount) > 0)
+    .map((amount, index) => ({
+      id: undefined,
+      date: day.date,
+      amount_ml: Math.round(toNumber(amount)),
+      recorded_at: null,
+      _fallback_index: index,
+    } as BodyMetricWaterLogItem & { _fallback_index: number }))
 }
 
 export function buildWeightTrend(summary: BodyMetricsSummary | null, dates: string[]): TrendPoint[] {

@@ -12,23 +12,22 @@ $water-faint: #9ca3af;
   background: linear-gradient(180deg, rgb(92 158 212 / 10%) 0%, #eef4f7 100%);
 }
 
-.water-record-hero,
+.water-record-topbar,
 .water-progress-card,
 .water-action-card,
-.water-trend-card,
-.water-history-card {
+.water-day-card {
   border-radius: 24rpx;
   background: #fff;
   border: 1rpx solid rgb(31 41 55 / 5%);
   box-shadow: 0 10rpx 30rpx rgb(31 41 55 / 6%);
 }
 
-.water-record-hero {
+.water-record-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24rpx;
-  padding: 30rpx 28rpx;
+  padding: 28rpx;
 }
 
 .water-record-kicker {
@@ -41,63 +40,56 @@ $water-faint: #9ca3af;
 
 .water-record-title {
   display: block;
-  font-size: 46rpx;
+  font-size: 44rpx;
   line-height: 1.15;
   color: $water-text;
   font-weight: 800;
 }
 
-.water-record-total {
+.water-trend-link {
   flex: 0 0 auto;
-  text-align: right;
+  padding: 14rpx 20rpx;
+  border-radius: 999rpx;
+  background: rgb(92 158 212 / 10%);
 }
 
-.water-record-total-value {
-  font-size: 48rpx;
-  line-height: 1;
-  color: $water-text;
-  font-weight: 800;
-}
-
-.water-record-total-unit {
-  margin-left: 6rpx;
-  font-size: 22rpx;
-  color: $water-faint;
+.water-trend-link-text {
+  font-size: 24rpx;
+  color: $water-deep;
+  font-weight: 700;
 }
 
 .water-progress-card,
 .water-action-card,
-.water-trend-card,
-.water-history-card {
+.water-day-card {
   margin-top: 20rpx;
   padding: 24rpx;
 }
 
-.water-progress-header,
-.section-title-row {
+.water-total-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16rpx;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10rpx;
+  min-height: 112rpx;
 }
 
-.water-progress-title,
-.section-title {
-  font-size: 29rpx;
-  line-height: 1.35;
+.water-total-value {
+  font-size: 78rpx;
+  line-height: 1.1;
   color: $water-text;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
-.water-progress-meta {
+.water-total-unit {
   font-size: 28rpx;
-  color: $water-deep;
-  font-weight: 800;
+  color: $water-muted;
+  font-weight: 700;
 }
 
 .water-progress-track {
-  height: 18rpx;
-  margin-top: 20rpx;
+  height: 20rpx;
   border-radius: 999rpx;
   background: #e6edf2;
   overflow: hidden;
@@ -111,36 +103,46 @@ $water-faint: #9ca3af;
 
 .water-progress-note {
   display: block;
-  margin-top: 14rpx;
+  margin-top: 16rpx;
   font-size: 24rpx;
   color: $water-muted;
+  text-align: center;
 }
 
-.water-clear-link {
-  flex: 0 0 auto;
-  padding: 8rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgb(212 92 92 / 9%);
-  color: #d45c5c;
-  font-size: 23rpx;
-  font-weight: 600;
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
 }
 
-.water-clear-link.is-disabled {
-  opacity: 0.55;
+.section-title {
+  font-size: 29rpx;
+  line-height: 1.35;
+  color: $water-text;
+  font-weight: 800;
+}
+
+.water-mini-spinner {
+  width: 26rpx;
+  height: 26rpx;
+  border: 3rpx solid rgb(92 158 212 / 24%);
+  border-top-color: $water-primary;
+  border-radius: 50%;
+  animation: water-spin 0.8s linear infinite;
 }
 
 .water-preset-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12rpx;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14rpx;
   margin-top: 20rpx;
 }
 
 .water-preset {
   min-width: 0;
-  height: 82rpx;
-  border-radius: 18rpx;
+  height: 104rpx;
+  border-radius: 22rpx;
   background: rgb(92 158 212 / 12%);
   display: flex;
   align-items: center;
@@ -148,12 +150,13 @@ $water-faint: #9ca3af;
 }
 
 .water-preset.is-saving,
-.water-custom-btn.is-saving {
+.water-custom-btn.is-saving,
+.water-clear-link.is-disabled {
   opacity: 0.55;
 }
 
 .water-preset-text {
-  font-size: 24rpx;
+  font-size: 31rpx;
   color: $water-deep;
   font-weight: 800;
 }
@@ -168,20 +171,20 @@ $water-faint: #9ca3af;
 .water-custom-input {
   flex: 1;
   min-width: 0;
-  height: 78rpx;
+  height: 86rpx;
   padding: 0 22rpx;
-  border-radius: 18rpx;
+  border-radius: 20rpx;
   background: #f3f7fa;
   color: $water-text;
-  font-size: 28rpx;
+  font-size: 30rpx;
   box-sizing: border-box;
 }
 
 .water-custom-btn {
   flex: 0 0 auto;
-  min-width: 128rpx;
-  height: 78rpx;
-  border-radius: 18rpx;
+  min-width: 136rpx;
+  height: 86rpx;
+  border-radius: 20rpx;
   background: linear-gradient(90deg, $water-primary 0%, #83c4dd 100%);
   display: flex;
   align-items: center;
@@ -189,130 +192,66 @@ $water-faint: #9ca3af;
 }
 
 .water-custom-btn-text {
-  font-size: 26rpx;
+  font-size: 27rpx;
   color: #fff;
   font-weight: 800;
 }
 
-.section-meta {
-  font-size: 23rpx;
-  color: $water-faint;
-}
-
-.water-trend-scroll {
-  width: 100%;
-  margin-top: 18rpx;
-  white-space: nowrap;
-}
-
-.water-trend-strip {
-  display: flex;
-  gap: 10rpx;
-  min-width: 900rpx;
-  height: 230rpx;
-}
-
-.water-trend-item {
-  width: 34rpx;
-  height: 220rpx;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
+.water-clear-link {
   flex: 0 0 auto;
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgb(212 92 92 / 9%);
+  color: #d45c5c;
+  font-size: 23rpx;
+  font-weight: 600;
 }
 
-.water-trend-bar-wrap {
-  width: 30rpx;
-  height: 150rpx;
+.water-log-list {
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 20rpx;
 }
 
-.water-trend-bar {
-  width: 22rpx;
-  min-height: 8rpx;
-  border-radius: 999rpx 999rpx 6rpx 6rpx;
-  background: linear-gradient(180deg, $water-primary 0%, $water-green 100%);
-}
-
-.water-trend-bar.is-empty {
-  background: #e5e7eb;
-}
-
-.water-trend-value {
-  height: 30rpx;
-  margin-top: 8rpx;
-  font-size: 17rpx;
-  line-height: 30rpx;
-  color: $water-faint;
-  transform: scale(0.86);
-}
-
-.water-trend-date {
-  height: 30rpx;
-  font-size: 18rpx;
-  line-height: 30rpx;
-  color: $water-faint;
-  transform: scale(0.9);
-}
-
-.water-card-skeleton {
-  height: 220rpx;
-  margin-top: 18rpx;
-  border-radius: 20rpx;
-  background: linear-gradient(90deg, #ebf2f7 25%, #f7fbff 50%, #ebf2f7 75%);
-  background-size: 400% 100%;
-  animation: water-shimmer 1.2s ease-in-out infinite;
-}
-
-.water-history-list {
-  margin-top: 18rpx;
-  border-top: 1rpx solid #eef2f4;
-}
-
-.water-history-row {
-  min-height: 74rpx;
+.water-log-chip {
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  border-bottom: 1rpx solid #eef2f4;
+  gap: 10rpx;
+  padding: 14rpx 16rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 10%);
 }
 
-.water-history-date {
-  flex: 0 0 94rpx;
-  font-size: 23rpx;
-  color: $water-faint;
+.water-log-chip.is-deleting {
+  opacity: 0.55;
 }
 
-.water-history-main {
-  flex: 1;
-  font-size: 27rpx;
-  color: $water-text;
+.water-log-chip-text {
+  font-size: 25rpx;
+  color: #3f9474;
   font-weight: 700;
 }
 
-.water-history-sub {
-  flex: 0 0 auto;
-  font-size: 24rpx;
-  color: $water-muted;
+.water-log-delete {
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+  background: rgb(212 92 92 / 9%);
+  color: #d45c5c;
+  font-size: 21rpx;
+  font-weight: 700;
 }
 
 .water-empty {
   display: block;
-  padding: 30rpx 0 8rpx;
+  padding: 34rpx 0 8rpx;
   font-size: 25rpx;
   color: $water-faint;
 }
 
-@keyframes water-shimmer {
-  0% {
-    background-position: 100% 0;
-  }
-
-  100% {
-    background-position: 0 0;
+@keyframes water-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -320,33 +259,21 @@ $water-faint: #9ca3af;
   background: transparent;
 }
 
-.fl-page-theme-root--dark .water-record-hero,
+.fl-page-theme-root--dark .water-record-topbar,
 .fl-page-theme-root--dark .water-progress-card,
 .fl-page-theme-root--dark .water-action-card,
-.fl-page-theme-root--dark .water-trend-card,
-.fl-page-theme-root--dark .water-history-card {
+.fl-page-theme-root--dark .water-day-card {
   background: #18211f;
   border-color: #3d5d51;
 }
 
 .fl-page-theme-root--dark .water-record-title,
-.fl-page-theme-root--dark .water-record-total-value,
-.fl-page-theme-root--dark .water-progress-title,
+.fl-page-theme-root--dark .water-total-value,
 .fl-page-theme-root--dark .section-title,
-.fl-page-theme-root--dark .water-history-main {
+.fl-page-theme-root--dark .water-custom-input {
   color: #e8ece9;
 }
 
 .fl-page-theme-root--dark .water-custom-input {
   background: #222c29;
-  color: #e8ece9;
-}
-
-.fl-page-theme-root--dark .water-trend-bar.is-empty {
-  background: #3d4a46;
-}
-
-.fl-page-theme-root--dark .water-history-list,
-.fl-page-theme-root--dark .water-history-row {
-  border-color: #30413d;
 }

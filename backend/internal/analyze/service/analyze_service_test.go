@@ -449,6 +449,21 @@ func TestAnalyzeService_AnalyzeStopsAfterInvalidJSONRetries(t *testing.T) {
 	assert.Equal(t, maxLLMJSONParseRetries+1, client.calls)
 }
 
+func TestAnalyzeWithJSONParseRetry_RetriesTransientDoubaoError(t *testing.T) {
+	calls := 0
+	result, err := analyzeWithJSONParseRetry(context.Background(), "food_image", "doubao", "doubao-seed-2-0-lite-260428", func(context.Context) (map[string]any, error) {
+		calls++
+		if calls == 1 {
+			return nil, errors.New(`doubao api error 500: {"error":{"code":"InternalServiceError","message":"The service encountered an unexpected internal error"}}`)
+		}
+		return map[string]any{"description": "retry success", "items": []any{}}, nil
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "retry success", result["description"])
+	assert.Equal(t, 2, calls)
+}
+
 func TestAnalyzeService_RunPrecisionJSONFallsBackToDoubaoOnGeminiTransientError(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao precision fallback", "items": []any{}}}
 	ofoxClient := &mockLLMClient{err: errors.New(`Post "https://api.ofox.ai/v1/chat/completions": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)}

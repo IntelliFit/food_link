@@ -276,13 +276,7 @@ func normalizeFallbackUnitNutrition(foodName string, unit map[string]any) map[st
 	for key := range out {
 		out[key] = clampMin(round4(numberFromAny(unit[key])), 0)
 	}
-
-	if isPlainCoffeeName(foodName) && isZeroCoreNutrition(out) {
-		out["calories"] = 1.0
-		out["protein"] = 0.1
-		out["carbs"] = 0.0
-		out["fat"] = 0.0
-	}
+	_ = foodName
 
 	out["protein"] = clampRange(numberFromAny(out["protein"]), 0, 100)
 	out["carbs"] = clampRange(numberFromAny(out["carbs"]), 0, 100)
@@ -298,47 +292,6 @@ func normalizeFallbackUnitNutrition(foodName string, unit map[string]any) map[st
 	}
 	out["calories"] = clampRange(round4(calories), 0, 900)
 	return out
-}
-
-func plainCoffeeFallbackUnitNutrition(foodName string) map[string]any {
-	if !isPlainCoffeeName(foodName) {
-		return nil
-	}
-	unit := zeroUnitNutritionPer100g()
-	unit["calories"] = 1.0
-	unit["protein"] = 0.1
-	return unit
-}
-
-func isPlainCoffeeName(foodName string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(foodName))
-	if normalized == "" {
-		return false
-	}
-	hasCoffee := strings.Contains(normalized, "咖啡") ||
-		strings.Contains(normalized, "美式") ||
-		strings.Contains(normalized, "americano") ||
-		strings.Contains(normalized, "black coffee") ||
-		strings.Contains(normalized, "cold brew") ||
-		strings.Contains(normalized, "冷萃")
-	if !hasCoffee {
-		return false
-	}
-	for _, marker := range []string{"拿铁", "latte", "摩卡", "mocha", "卡布", "cappuccino", "奶", "乳", "糖", "糖浆", "奶油", "椰乳", "燕麦"} {
-		if strings.Contains(normalized, marker) {
-			return false
-		}
-	}
-	return true
-}
-
-func isZeroCoreNutrition(unit map[string]any) bool {
-	for _, key := range []string{"calories", "protein", "carbs", "fat"} {
-		if numberFromAny(unit[key]) > 0 {
-			return false
-		}
-	}
-	return true
 }
 
 func clampMin(value, min float64) float64 {

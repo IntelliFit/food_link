@@ -336,6 +336,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/body-metrics/sync-local", authmw.RequireJWT(jwtSvc), healthHandler.SyncLocalBodyMetrics)
 	engine.POST("/api/body-metrics/water", authmw.RequireJWT(jwtSvc), healthHandler.SaveBodyWaterLog)
 	engine.POST("/api/body-metrics/water/reset", authmw.RequireJWT(jwtSvc), healthHandler.ResetBodyWaterLogs)
+	engine.DELETE("/api/body-metrics/water/:log_id", authmw.RequireJWT(jwtSvc), healthHandler.DeleteBodyWaterLog)
 	engine.POST("/api/body-metrics/weight", authmw.RequireJWT(jwtSvc), healthHandler.SaveBodyWeightRecord)
 	engine.DELETE("/api/body-metrics/weight/:record_id", authmw.RequireJWT(jwtSvc), healthHandler.DeleteBodyWeightRecord)
 	engine.GET("/api/stats/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetStatsSummary)

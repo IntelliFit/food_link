@@ -152,6 +152,11 @@ func (r *BodyMetricsRepo) DeleteWaterLogsByDate(ctx context.Context, userID stri
 	return result.RowsAffected, result.Error
 }
 
+func (r *BodyMetricsRepo) DeleteWaterLogByID(ctx context.Context, userID string, logID string) (int64, error) {
+	result := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", logID, userID).Delete(&domain.BodyWaterLog{})
+	return result.RowsAffected, result.Error
+}
+
 func (r *BodyMetricsRepo) GetWaterLogDates(ctx context.Context, userID string, startDate, endDate string) ([]string, error) {
 	var dates []string
 	q := r.db.WithContext(ctx).Model(&domain.BodyWaterLog{}).Distinct("recorded_on").Where("user_id = ?", userID)

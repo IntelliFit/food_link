@@ -1,53 +1,28 @@
-import { Input, ScrollView, Text, View } from '@tarojs/components'
+import { Input, Text, View } from '@tarojs/components'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro, { useDidShow, useRouter } from '@tarojs/taro'
 import {
   addBodyWaterLog,
+  deleteBodyWaterLog,
   getBodyMetricsSummary,
   resetBodyWaterLogs,
   showUnifiedApiError,
+  type BodyMetricWaterLogItem,
   type BodyMetricsSummary,
 } from '../../../utils/api'
-import { withAuth } from '../../../utils/withAuth'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { withAuth } from '../../../utils/withAuth'
 import {
-  buildDateRange,
-  buildWaterTrend,
-  formatMonthDay,
   getRouteDateLabel,
   getWaterDay,
+  getWaterLogItems,
   normalizeRouteDate,
-  type TrendPoint,
 } from '../body-metrics-shared'
 
 import './index.scss'
 
 const WATER_PRESETS = [150, 250, 350, 500]
-
-function WaterTrendPreview({ points, goal }: { points: TrendPoint[]; goal: number }) {
-  const values = points.map((item) => item.value).filter((value): value is number => value != null && Number.isFinite(value))
-  const max = Math.max(goal, ...values, 1)
-
-  return (
-    <ScrollView scrollX className='water-trend-scroll' enhanced showScrollbar={false}>
-      <View className='water-trend-strip'>
-        {points.map((item, index) => {
-          const value = item.value || 0
-          const height = value > 0 ? Math.max(8, Math.min(100, (value / max) * 100)) : 5
-          return (
-            <View key={item.date} className='water-trend-item'>
-              <View className='water-trend-bar-wrap'>
-                <View className={`water-trend-bar ${value > 0 ? '' : 'is-empty'}`} style={{ height: `${height}%` }} />
-              </View>
-              <Text className='water-trend-value'>{value > 0 ? `${Math.round(value)}` : ''}</Text>
-              <Text className='water-trend-date'>{index % 5 === 0 || index === points.length - 1 ? formatMonthDay(item.date) : ''}</Text>
-            </View>
-          )
-        })}
-      </View>
-    </ScrollView>
-  )
-}
 
 function WaterRecordPage() {
   const router = useRouter()
@@ -58,8 +33,8 @@ function WaterRecordPage() {
   const [customAmount, setCustomAmount] = useState('')
   const [savingAmount, setSavingAmount] = useState<number | 'custom' | null>(null)
   const [clearing, setClearing] = useState(false)
+  const [deletingLogId, setDeletingLogId] = useState<string | null>(null)
 
-  const dates = useMemo(() => buildDateRange(30), [])
   const routeDateLabel = getRouteDateLabel(recordDate)
 
   const loadData = useCallback(async () => {
@@ -88,17 +63,10 @@ function WaterRecordPage() {
 
   const waterGoal = summary?.water_goal_ml || 2000
   const currentDay = useMemo(() => getWaterDay(summary, recordDate), [summary, recordDate])
+  const currentLogs = useMemo(() => getWaterLogItems(currentDay), [currentDay])
   const currentTotal = currentDay.total || 0
   const progress = waterGoal > 0 ? Math.round((currentTotal / waterGoal) * 100) : 0
   const remaining = Math.max(0, waterGoal - currentTotal)
-  const trendPoints = useMemo(() => buildWaterTrend(summary, dates).slice(-21), [summary, dates])
-  const recentDays = useMemo(
-    () => [...(summary?.water_daily || [])]
-      .filter((item) => item.total > 0)
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 10),
-    [summary?.water_daily]
-  )
 
   const addWater = async (amount: number, marker: number | 'custom') => {
     if (!Number.isFinite(amount) || amount <= 0 || amount > 5000) {
@@ -147,40 +115,67 @@ function WaterRecordPage() {
     })
   }
 
+  const deleteWaterLog = (item: BodyMetricWaterLogItem) => {
+    const logId = String(item.id || '').trim()
+    if (!logId) {
+      Taro.showToast({ title: '这条旧记录只能清空当天', icon: 'none' })
+      return
+    }
+    Taro.showModal({
+      title: '删除这次喝水',
+      content: `确定删除 ${Math.round(item.amount_ml)}ml 这次记录吗？`,
+      confirmText: '删除',
+      confirmColor: '#d45c5c',
+      success: async (res) => {
+        if (!res.confirm) return
+        setDeletingLogId(logId)
+        try {
+          await deleteBodyWaterLog(logId)
+          Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
+          Taro.showToast({ title: '已删除', icon: 'success' })
+          await loadData()
+        } catch (err) {
+          await showUnifiedApiError(err, '删除喝水记录失败')
+        } finally {
+          setDeletingLogId(null)
+        }
+      },
+    })
+  }
+
+  const openTrend = () => {
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/water-trend/index')}?date=${encodeURIComponent(recordDate)}` })
+  }
+
   return (
     <View className='water-record-page'>
-      <View className='water-record-hero'>
+      <View className='water-record-topbar'>
         <View>
-          <Text className='water-record-kicker'>{routeDateLabel}记录</Text>
-          <Text className='water-record-title'>记喝水</Text>
+          <Text className='water-record-kicker'>{routeDateLabel}</Text>
+          <Text className='water-record-title'>记录喝水</Text>
         </View>
-        <View className='water-record-total'>
-          <Text className='water-record-total-value'>{Math.round(currentTotal)}</Text>
-          <Text className='water-record-total-unit'>ml</Text>
+        <View className='water-trend-link' onClick={openTrend}>
+          <Text className='water-trend-link-text'>查看趋势</Text>
         </View>
       </View>
 
       <View className='water-progress-card'>
-        <View className='water-progress-header'>
-          <Text className='water-progress-title'>喝水进度</Text>
-          <Text className='water-progress-meta'>{Math.min(999, progress)}%</Text>
+        <View className='water-total-row'>
+          <Text className='water-total-value'>{Math.round(currentTotal)}</Text>
+          <Text className='water-total-unit'>ml</Text>
         </View>
         <View className='water-progress-track'>
           <View className='water-progress-fill' style={{ width: `${Math.min(100, progress)}%` }} />
         </View>
         <Text className='water-progress-note'>
-          {remaining > 0 ? `距离目标还差 ${Math.round(remaining)}ml` : '今天已达到喝水目标'}
+          {remaining > 0 ? `距离目标还差 ${Math.round(remaining)}ml` : '这一天已达到喝水目标'}
         </Text>
       </View>
 
       <View className='water-action-card'>
         <View className='section-title-row'>
           <Text className='section-title'>快捷加水</Text>
-          {currentTotal > 0 ? (
-            <Text className={`water-clear-link ${clearing ? 'is-disabled' : ''}`} onClick={() => !clearing && clearWater()}>
-              清空
-            </Text>
-          ) : null}
+          {loading ? <View className='water-mini-spinner' /> : null}
         </View>
         <View className='water-preset-grid'>
           {WATER_PRESETS.map((amount) => (
@@ -210,32 +205,30 @@ function WaterRecordPage() {
         </View>
       </View>
 
-      <View className='water-trend-card'>
+      <View className='water-day-card'>
         <View className='section-title-row'>
-          <Text className='section-title'>喝水趋势</Text>
-          <Text className='section-meta'>目标 {waterGoal}ml</Text>
+          <Text className='section-title'>{routeDateLabel}记录</Text>
+          {currentTotal > 0 ? (
+            <Text className={`water-clear-link ${clearing ? 'is-disabled' : ''}`} onClick={() => !clearing && clearWater()}>
+              清空
+            </Text>
+          ) : null}
         </View>
-        {loading ? (
-          <View className='water-card-skeleton' />
-        ) : (
-          <WaterTrendPreview points={trendPoints} goal={waterGoal} />
-        )}
-      </View>
-
-      <View className='water-history-card'>
-        <Text className='section-title'>最近喝水</Text>
-        {recentDays.length > 0 ? (
-          <View className='water-history-list'>
-            {recentDays.map((item) => (
-              <View key={item.date} className='water-history-row'>
-                <Text className='water-history-date'>{formatMonthDay(item.date)}</Text>
-                <Text className='water-history-main'>{Math.round(item.total)} ml</Text>
-                <Text className='water-history-sub'>{item.logs.length} 次</Text>
+        {currentLogs.length > 0 ? (
+          <View className='water-log-list'>
+            {currentLogs.map((item, index) => {
+              const logId = item.id || `${index}-${item.amount_ml}`
+              const isDeleting = item.id && deletingLogId === item.id
+              return (
+              <View key={logId} className={`water-log-chip ${isDeleting ? 'is-deleting' : ''}`}>
+                <Text className='water-log-chip-text'>+{Math.round(item.amount_ml)}ml</Text>
+                <Text className='water-log-delete' onClick={() => !isDeleting && deleteWaterLog(item)}>删除</Text>
               </View>
-            ))}
+              )
+            })}
           </View>
         ) : (
-          <Text className='water-empty'>还没有喝水记录</Text>
+          <Text className='water-empty'>这一天还没有喝水记录</Text>
         )}
       </View>
     </View>

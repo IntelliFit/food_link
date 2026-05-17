@@ -18,10 +18,10 @@ function BodyTrendsCompatPage() {
     const tab = normalizeTab(router.params?.tab)
     const date = normalizeRouteDate(String(router.params?.date || ''))
     const page = tab === 'weight'
-      ? '/pages/weight-record/index'
+      ? '/pages/weight-trend/index'
       : tab === 'water'
-        ? '/pages/water-record/index'
-        : '/pages/exercise-record/index'
+        ? '/pages/water-trend/index'
+        : '/pages/exercise-trend/index'
     Taro.redirectTo({ url: `${extraPkgUrl(page)}?date=${encodeURIComponent(date)}` })
   }, [router.params?.date, router.params?.tab])
 

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"regexp"
 	"strings"
@@ -300,7 +299,10 @@ func (s *ExerciseService) EstimateCalories(ctx context.Context, userID string, e
 	if err != nil {
 		return nil, err
 	}
-	estimate := s.estimateExerciseCalories(ctx, desc, "", profileSnapshot)
+	estimate, err := s.estimateExerciseCalories(ctx, desc, "", profileSnapshot)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"estimated_calories": estimate.CaloriesKcal,
 		"exercise_desc":      desc,
@@ -388,7 +390,10 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 			return nil, err
 		}
 	}
-	estimate := s.estimateExerciseCalories(ctx, desc, imageURL, profileSnapshot)
+	estimate, err := s.estimateExerciseCalories(ctx, desc, imageURL, profileSnapshot)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	recordedDate, err := parseChinaDate(recordedOn)
 	if err != nil {
@@ -450,30 +455,10 @@ type ExerciseEstimate struct {
 	ExerciseType string
 }
 
-type exerciseMetRule struct {
-	keywords []string
-	met      float64
-	label    string
-}
-
 var (
 	exerciseSegmentSplitRe = regexp.MustCompile(`[\r\n;；。]+`)
-	exerciseMinuteRe       = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(分钟|min)`)
-	exerciseHourRe         = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(小时|h|hour)`)
 	exerciseJSONFenceRe    = regexp.MustCompile("(?s)```json?\\s*\\n?|```")
 	exerciseJSONObjRe      = regexp.MustCompile(`(?s)\{.*\}`)
-	exerciseMetRules       = []exerciseMetRule{
-		{[]string{"跳绳"}, 11.0, "跳绳"},
-		{[]string{"跑步", "慢跑", "晨跑"}, 8.3, "跑步"},
-		{[]string{"冲刺"}, 11.5, "冲刺跑"},
-		{[]string{"骑车", "骑行", "单车", "cycle"}, 6.8, "骑行"},
-		{[]string{"游泳", "swim"}, 8.0, "游泳"},
-		{[]string{"俯卧撑", "引体", "臂屈伸"}, 8.0, "徒手力量训练"},
-		{[]string{"深蹲", "硬拉", "卧推"}, 6.0, "力量训练"},
-		{[]string{"瑜伽"}, 3.0, "瑜伽"},
-		{[]string{"拉伸", "放松"}, 2.3, "拉伸"},
-		{[]string{"步行", "走路", "快走"}, 3.8, "步行"},
-	}
 )
 
 func resolveExerciseLogDesc(inputDesc string, estimate ExerciseEstimate) string {
@@ -512,7 +497,7 @@ func isWeakExerciseTitle(value string) bool {
 	return ok
 }
 
-func (s *ExerciseService) estimateExerciseCalories(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) ExerciseEstimate {
+func (s *ExerciseService) estimateExerciseCalories(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) (ExerciseEstimate, error) {
 	imageURL = strings.TrimSpace(imageURL)
 	if imageURL != "" {
 		return s.estimateSingleExerciseCalories(ctx, desc, imageURL, profileSnapshot)
@@ -522,7 +507,10 @@ func (s *ExerciseService) estimateExerciseCalories(ctx context.Context, desc, im
 		total := 0
 		rows := make([]map[string]any, 0, len(segments))
 		for _, segment := range segments {
-			estimate := s.estimateSingleExerciseCalories(ctx, segment, "", profileSnapshot)
+			estimate, err := s.estimateSingleExerciseCalories(ctx, segment, "", profileSnapshot)
+			if err != nil {
+				return ExerciseEstimate{}, err
+			}
 			total += estimate.CaloriesKcal
 			rows = append(rows, map[string]any{
 				"segment":       segment,
@@ -540,22 +528,20 @@ func (s *ExerciseService) estimateExerciseCalories(ctx context.Context, desc, im
 			reasoning = trimRunes(reasoning, 200) + "..."
 		}
 		rawBytes, _ := json.Marshal(map[string]any{"segments": rows, "calories_kcal": total, "reasoning": reasoning})
-		return ExerciseEstimate{CaloriesKcal: total, Raw: string(rawBytes), Reasoning: reasoning, Source: "segmented"}
+		return ExerciseEstimate{CaloriesKcal: total, Raw: string(rawBytes), Reasoning: reasoning, Source: "segmented"}, nil
 	}
 	return s.estimateSingleExerciseCalories(ctx, desc, "", profileSnapshot)
 }
 
-func (s *ExerciseService) estimateSingleExerciseCalories(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) ExerciseEstimate {
-	if estimate, ok := s.estimateExerciseCaloriesWithLLM(ctx, desc, imageURL, profileSnapshot); ok {
-		return estimate
+func (s *ExerciseService) estimateSingleExerciseCalories(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) (ExerciseEstimate, error) {
+	estimate, err := s.estimateExerciseCaloriesWithLLM(ctx, desc, imageURL, profileSnapshot)
+	if err == nil {
+		return estimate, nil
 	}
-	if strings.TrimSpace(desc) == "" && strings.TrimSpace(imageURL) != "" {
-		desc = "图片识别运动"
-	}
-	return ruleEstimateExerciseCalories(desc, profileSnapshot)
+	return ExerciseEstimate{}, err
 }
 
-func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) (ExerciseEstimate, bool) {
+func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) (ExerciseEstimate, error) {
 	apiKey := ""
 	baseURL := "https://ark.cn-beijing.volces.com/api/v3"
 	model := "doubao-seed-2-0-lite-260428"
@@ -566,7 +552,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		}
 	}
 	if apiKey == "" {
-		return ExerciseEstimate{}, false
+		return ExerciseEstimate{}, &commonerrors.AppError{Code: 10000, Message: "运动分析服务未配置，请联系管理员处理", HTTPStatus: 500}
 	}
 	desc = strings.TrimSpace(desc)
 	imageURL = strings.TrimSpace(imageURL)
@@ -580,7 +566,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	userContent := any(userPrompt)
 	systemPrompt := "你是运动热量估算助手。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 为识别出的运动类型名称（如跑步、游泳等），不超过 20 字；reasoning 不超过 80 个汉字。"
 	if imageURL != "" {
-		systemPrompt = "你是运动热量估算助手。可根据图片识别运动类型、强度和可能时长，并结合文字描述估算热量。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 为识别出的运动类型名称（如跑步、游泳等），不超过 20 字；reasoning 不超过 80 个汉字。"
+		systemPrompt = "你是运动热量估算助手。可根据图片识别运动类型、强度和可能时长，并结合文字描述估算热量。若图片是训练打卡截图或健身记录卡，必须先 OCR 读取每个动作、重量、次数、组数、总耗时、截图中的消耗热量，再综合估算；多项动作不要只按一个普通运动粗估。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型标题\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 应概括图片里的主要训练内容，例如 卧推力量训练、背部力量训练、跑步机慢跑，不要输出 一般运动；不超过 20 字。reasoning 不超过 80 个汉字。"
 		userContent = []map[string]any{
 			{"type": "text", "text": userPrompt},
 			{"type": "image_url", "image_url": map[string]string{"url": imageURL}},
@@ -595,7 +581,6 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 			},
 			{"role": "user", "content": userContent},
 		},
-		"response_format":  map[string]string{"type": "json_object"},
 		"temperature":      0.25,
 		"max_tokens":       320,
 		"reasoning_effort": "medium",
@@ -603,18 +588,18 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	bodyBytes, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
-		return ExerciseEstimate{}, false
+		return ExerciseEstimate{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return ExerciseEstimate{}, false
+		return ExerciseEstimate{}, fmt.Errorf("运动分析服务请求失败: %w", err)
 	}
 	defer resp.Body.Close()
 	respBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return ExerciseEstimate{}, false
+		return ExerciseEstimate{}, fmt.Errorf("运动分析服务返回异常 %d", resp.StatusCode)
 	}
 	var parsed struct {
 		Choices []struct {
@@ -624,16 +609,16 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(respBytes, &parsed); err != nil || len(parsed.Choices) == 0 {
-		return ExerciseEstimate{}, false
+		return ExerciseEstimate{}, fmt.Errorf("运动分析服务响应解析失败")
 	}
 	raw := strings.TrimSpace(parsed.Choices[0].Message.Content)
 	estimate, err := parseExerciseEstimateJSON(raw)
 	if err != nil {
-		return ExerciseEstimate{}, false
+		return ExerciseEstimate{}, fmt.Errorf("运动分析结果格式解析失败: %w", err)
 	}
 	estimate.Raw = raw
 	estimate.Source = "llm"
-	return estimate, true
+	return estimate, nil
 }
 
 func (s *ExerciseService) resolveFoodImageURL(value string) string {
@@ -694,31 +679,6 @@ func exerciseLogRecordedAt(log domain.ExerciseLog) any {
 	return nil
 }
 
-func ruleEstimateExerciseCalories(desc string, profileSnapshot map[string]any) ExerciseEstimate {
-	minutes, hasDuration := extractDurationMinutes(desc)
-	met, label := pickExerciseMET(desc)
-	weight := 70.0
-	if v, ok := floatFromAny(profileSnapshot["weight_kg"]); ok && v > 0 {
-		weight = v
-	}
-	if hasDuration {
-		calories := int(math.Round(met * 3.5 * weight / 200.0 * minutes))
-		calories = clampInt(calories, 1, 5000)
-		reasoning := fmt.Sprintf("规则估算：%s约%d分钟，按%.1fkg体重计算", label, int(math.Round(minutes)), weight)
-		rawBytes, _ := json.Marshal(map[string]any{"reasoning": reasoning, "calories_kcal": calories, "source": "rule_met"})
-		return ExerciseEstimate{CaloriesKcal: calories, Raw: string(rawBytes), Reasoning: reasoning, Source: "rule_met", ExerciseType: label}
-	}
-	length := len([]rune(desc))
-	calories := 50.0 + float64(length)*1.5
-	if isIntenseExercise(desc) {
-		calories += 100
-	}
-	value := clampInt(int(math.Round(math.Min(calories, 800))), 1, 5000)
-	reasoning := fmt.Sprintf("规则兜底：%s缺少明确时长，按描述强度粗估", label)
-	rawBytes, _ := json.Marshal(map[string]any{"reasoning": reasoning, "calories_kcal": value, "source": "rule_fallback"})
-	return ExerciseEstimate{CaloriesKcal: value, Raw: string(rawBytes), Reasoning: reasoning, Source: "rule_fallback", ExerciseType: label}
-}
-
 func splitExerciseSegments(desc string) []string {
 	parts := exerciseSegmentSplitRe.Split(strings.TrimSpace(desc), -1)
 	segments := []string{}
@@ -757,43 +717,6 @@ func compactExerciseDesc(desc string) string {
 		out = append(out, trimRunes(strings.ReplaceAll(segment, " ", ""), 60))
 	}
 	return strings.Join(out, "；")
-}
-
-func extractDurationMinutes(desc string) (float64, bool) {
-	total := 0.0
-	for _, match := range exerciseHourRe.FindAllStringSubmatch(desc, -1) {
-		if len(match) > 1 {
-			total += floatFromString(match[1]) * 60
-		}
-	}
-	for _, match := range exerciseMinuteRe.FindAllStringSubmatch(desc, -1) {
-		if len(match) > 1 {
-			total += floatFromString(match[1])
-		}
-	}
-	return total, total > 0
-}
-
-func pickExerciseMET(desc string) (float64, string) {
-	lower := strings.ToLower(desc)
-	for _, rule := range exerciseMetRules {
-		for _, keyword := range rule.keywords {
-			if strings.Contains(lower, strings.ToLower(keyword)) {
-				return rule.met, rule.label
-			}
-		}
-	}
-	return 5.0, "一般运动"
-}
-
-func isIntenseExercise(desc string) bool {
-	lower := strings.ToLower(desc)
-	for _, keyword := range []string{"跑步", "游泳", "跳绳", "hiit", "高强度", "sprint", "run", "swim", "cycle"} {
-		if strings.Contains(lower, strings.ToLower(keyword)) {
-			return true
-		}
-	}
-	return false
 }
 
 func formatExerciseProfileSnapshot(snapshot map[string]any) string {
@@ -866,12 +789,6 @@ func intFromAny(value any) int {
 		return int(f)
 	}
 	return 0
-}
-
-func floatFromString(value string) float64 {
-	var parsed float64
-	_, _ = fmt.Sscanf(value, "%f", &parsed)
-	return parsed
 }
 
 func clampInt(value, min, max int) int {

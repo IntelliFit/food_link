@@ -849,10 +849,18 @@ export interface BodyMetricWeightEntry {
   recorded_at?: string | null
 }
 
+export interface BodyMetricWaterLogItem {
+  id?: string
+  date: string
+  amount_ml: number
+  recorded_at?: string | null
+}
+
 export interface BodyMetricWaterDay {
   date: string
   total: number
   logs: number[]
+  log_items?: BodyMetricWaterLogItem[]
 }
 
 export interface BodyMetricsSummary {
@@ -2635,7 +2643,7 @@ export async function deleteBodyWeightRecord(recordId: string): Promise<{ messag
   return res.data as { message: string; deleted_count: number; id: string }
 }
 
-export async function addBodyWaterLog(amountMl: number, date?: string): Promise<{ message: string; item: { id?: string; date: string; amount_ml: number } }> {
+export async function addBodyWaterLog(amountMl: number, date?: string): Promise<{ message: string; item: BodyMetricWaterLogItem }> {
   const apiDate = mapCalendarDateToApi(date)
   const res = await authenticatedRequest('/api/body-metrics/water', {
     method: 'POST',
@@ -2646,7 +2654,7 @@ export async function addBodyWaterLog(amountMl: number, date?: string): Promise<
     const msg = (res.data as any)?.detail || '保存喝水记录失败'
     throw new Error(msg)
   }
-  return res.data as { message: string; item: { id?: string; date: string; amount_ml: number } }
+  return res.data as { message: string; item: BodyMetricWaterLogItem }
 }
 
 export async function resetBodyWaterLogs(date?: string): Promise<{ message: string; deleted_count: number; date: string }> {
@@ -2661,6 +2669,18 @@ export async function resetBodyWaterLogs(date?: string): Promise<{ message: stri
     throw new Error(msg)
   }
   return res.data as { message: string; deleted_count: number; date: string }
+}
+
+export async function deleteBodyWaterLog(logId: string): Promise<{ message: string; deleted_count: number; id: string }> {
+  const res = await authenticatedRequest(`/api/body-metrics/water/${encodeURIComponent(logId)}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '删除喝水记录失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; deleted_count: number; id: string }
 }
 
 export async function syncLocalBodyMetrics(snapshot: BodyMetricsLocalSnapshot): Promise<{ message: string; imported_weight_count: number; imported_water_count: number }> {

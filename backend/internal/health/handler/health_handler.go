@@ -17,6 +17,7 @@ type BodyMetricsService interface {
 	SyncLocal(ctx context.Context, userID string, input service.SyncLocalInput) (map[string]any, error)
 	AddWaterLog(ctx context.Context, userID string, amountMl int, recordedOn string) (map[string]any, error)
 	ResetWaterLogs(ctx context.Context, userID string, recordedOn string) (map[string]any, error)
+	DeleteWaterLog(ctx context.Context, userID string, logID string) (map[string]any, error)
 	SaveWeightRecord(ctx context.Context, userID string, weightKg float64, recordedOn string) (map[string]any, error)
 	DeleteWeightRecord(ctx context.Context, userID string, recordID string) (map[string]any, error)
 }
@@ -151,6 +152,18 @@ func (h *HealthHandler) ResetBodyWaterLogs(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	recordedOn := firstNonEmpty(body.Date, body.RecordedOn)
 	result, err := h.bodyMetrics.ResetWaterLogs(c.Request.Context(), userID, recordedOn)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+// DELETE /api/body-metrics/water/:log_id
+func (h *HealthHandler) DeleteBodyWaterLog(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logID := c.Param("log_id")
+	result, err := h.bodyMetrics.DeleteWaterLog(c.Request.Context(), userID, logID)
 	if err != nil {
 		response.Error(c, err)
 		return
