@@ -86,6 +86,7 @@ type StatsSummary struct {
 	AnalysisSummaryGeneratedDate *string             `json:"analysis_summary_generated_date"`
 	AnalysisSummaryNeedsRefresh  bool                `json:"analysis_summary_needs_refresh"`
 	BodyMetrics                  *BodyMetricsSummary `json:"body_metrics"`
+	HealthIndex                  *HealthIndex        `json:"health_index"`
 }
 
 type statsComputation struct {
@@ -154,6 +155,7 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 		AnalysisSummaryGeneratedDate: analysisSummaryGeneratedDate,
 		AnalysisSummaryNeedsRefresh:  needsRefresh,
 		BodyMetrics:                  comp.BodyMetrics,
+		HealthIndex:                  computeHealthIndex(comp, statsRange),
 	}, nil
 }
 

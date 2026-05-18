@@ -254,6 +254,7 @@ func (h *HealthHandler) GetStatsSummary(c *gin.Context) {
 		"analysis_summary_generated_date": summary.AnalysisSummaryGeneratedDate,
 		"analysis_summary_needs_refresh":  summary.AnalysisSummaryNeedsRefresh,
 		"body_metrics":                    summary.BodyMetrics,
+		"health_index":                    summary.HealthIndex,
 	})
 }
 

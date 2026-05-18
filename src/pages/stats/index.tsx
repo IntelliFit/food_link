@@ -12,6 +12,10 @@ import {
   type StatsSummary,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
+  type HealthIndex,
+  type RiskCard,
+  type RiskOption,
+  type RiskTone,
 } from '../../utils/api'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconExpand, IconCollapse } from '../../components/iconfont'
 import '../../assets/iconfont/iconfont.css'
@@ -74,26 +78,6 @@ type HeatmapCell = {
   state: 'none' | 'surplus' | 'deficit'
 }
 
-type RiskTone = 'positive' | 'neutral' | 'warning' | 'danger'
-
-type RiskCardModel = {
-  key: string
-  title: string
-  score: number
-  tone: RiskTone
-  brief: string
-  summary: string
-  basis: string
-  action: string
-  delta: number
-}
-
-type RiskPreferenceItem = {
-  key: string
-  title: string
-  short: string
-}
-
 type AnalysisPanelKey = 'health' | 'nutrition' | 'structure'
 
 const ANALYSIS_PANEL_TABS: Array<{ key: AnalysisPanelKey; label: string }> = [
@@ -114,10 +98,6 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value))
 }
 
-function clampScore(value: number): number {
-  return Math.max(0, Math.min(100, Math.round(value)))
-}
-
 function scoreToTone(score: number): RiskTone {
   if (score >= 78) return 'positive'
   if (score >= 60) return 'neutral'
@@ -130,17 +110,6 @@ function scoreToLabel(score: number): string {
   if (score >= 60) return '基本中性'
   if (score >= 42) return '需要关注'
   return '重点关注'
-}
-
-function scoreToTrendCopy(score: number): string {
-  if (score >= 78) return '这段时间的饮食模式整体更偏向保护。'
-  if (score >= 60) return '总体还算稳，但已经出现一些可逆转的拖累项。'
-  if (score >= 42) return '最近的吃法已经在把你推向更高风险区。'
-  return '如果继续这样吃，长期风险趋势会比较不友好。'
-}
-
-function formatPercent(value: number): string {
-  return `${Math.round(value)}%`
 }
 
 const WATER_GOAL_DEFAULT = 2000
@@ -227,7 +196,7 @@ function StatsPage() {
   const [analysisPanel, setAnalysisPanel] = useState<AnalysisPanelKey>('health')
   const rangeRef = useRef(range)
   rangeRef.current = range
-  const [riskDetailModal, setRiskDetailModal] = useState<{ visible: boolean; card: RiskCardModel | null }>({ visible: false, card: null })
+  const [riskDetailModal, setRiskDetailModal] = useState<{ visible: boolean; card: RiskCard | null }>({ visible: false, card: null })
   const [riskPickerVisible, setRiskPickerVisible] = useState(false)
 
   // 自定义 tabBar 显隐同步：弹窗打开时隐藏底栏
@@ -662,225 +631,29 @@ function StatsPage() {
       state: !hasRecord ? 'none' : delta > 0 ? 'surplus' : 'deficit'
     }
   })
-  const recordedDays = d.daily_calories.filter(item => toSafeNumber(item.calories) > 0).length
-  const serverRecordedDays = toSafeNumber(d.recorded_days, recordedDays)
-  const healthIndexRecordedDays = Math.max(recordedDays, serverRecordedDays)
-  const hasEnoughHealthIndexData = healthIndexRecordedDays >= 2
-  const surplusDays = heatmapCells.filter(item => item.calories > 0 && item.delta > 0).length
-  const surplusRate = recordedDays > 0 ? surplusDays / recordedDays : 0
-  const breakfastCombined = byMeal.breakfast + byMeal.morning_snack
-  const dinnerCombined = byMeal.dinner + byMeal.evening_snack
-  const snackCombined = byMeal.morning_snack + byMeal.afternoon_snack + byMeal.evening_snack
-  const breakfastPct = totalCalories > 0 ? (breakfastCombined / totalCalories) * 100 : 0
-  const dinnerPct = totalCalories > 0 ? (dinnerCombined / totalCalories) * 100 : 0
-  const snackPct = totalCalories > 0 ? (snackCombined / totalCalories) * 100 : 0
-  const energyOverRatio = tdee > 0 ? Math.max(0, avgCaloriesPerDay - tdee) / tdee : 0
-  const carbGap = Math.max(0, macroPercent.carbs - 50)
-  const fatGap = Math.max(0, macroPercent.fat - 32)
-  const proteinGap = Math.max(0, 20 - macroPercent.protein)
-  const dinnerPenalty = Math.max(0, dinnerPct - 38)
-  const snackPenalty = Math.max(0, snackPct - 18)
+  const healthIndex = d.health_index
+  const hasEnoughHealthIndexData = healthIndex?.has_enough_data ?? false
+  const overallRiskScore = healthIndex?.overall_score ?? 0
+  const projectedOverallScore = healthIndex?.projected_score ?? 0
+  const overallTrendLabel = healthIndex?.overall_trend_label ?? ''
+  const overviewCopy = healthIndex?.overview_copy ?? ''
+  const signalChips = healthIndex?.signal_chips ?? []
+  const riskCards = healthIndex?.risk_cards ?? []
+  const allRiskOptions = healthIndex?.all_risk_options ?? []
 
-  const hypertensionScore = clampScore(
-    82
-    - surplusRate * 18
-    - dinnerPenalty * 0.8
-    - snackPenalty * 0.45
-    - energyOverRatio * 26
-    + (breakfastPct >= 18 ? 3 : 0)
-  )
-  const diabetesScore = clampScore(
-    80
-    - carbGap * 1.25
-    - proteinGap * 1.4
-    - surplusRate * 16
-    - snackPenalty * 0.65
-    + (macroPercent.protein >= 20 && macroPercent.protein <= 30 ? 4 : 0)
-  )
-  const cardioScore = clampScore(
-    79
-    - fatGap * 1.15
-    - surplusRate * 14
-    - dinnerPenalty * 0.7
-    - energyOverRatio * 20
-    + (macroPercent.protein >= 18 && macroPercent.protein <= 28 ? 3 : 0)
-  )
-  const weightScore = clampScore(
-    78
-    - energyOverRatio * 38
-    - surplusRate * 22
-    - snackPenalty * 0.45
-    - Math.max(0, dinnerPct - 40) * 0.55
-    + (recordedDays >= (range === 'week' ? 5 : 18) ? 4 : 0)
-  )
-  const overallRiskScore = clampScore((hypertensionScore + diabetesScore + cardioScore + weightScore) / 4)
-  const projectedOverallScore = clampScore(
-    overallRiskScore
-    + (surplusRate > 0.45 ? 8 : 0)
-    + (dinnerPct > 40 ? 7 : 0)
-    + (macroPercent.protein < 20 ? 6 : 0)
-    + (macroPercent.carbs > 50 ? 5 : 0)
-  )
-  const overallTrendLabel = scoreToLabel(overallRiskScore)
-  const overviewCopy = scoreToTrendCopy(overallRiskScore)
-  const signalChips = [
-    { label: '已记录', value: `${recordedDays} 天` },
-    { label: '超出消耗', value: `${surplusDays} 天` },
-    { label: '晚餐热量占比', value: formatPercent(dinnerPct) },
-    { label: '连续记录', value: `${d.streak_days} 天` },
-  ]
-  const riskCards: RiskCardModel[] = [
-    {
-      key: 'hypertension',
-      title: '血压管理友好度',
-      score: hypertensionScore,
-      tone: scoreToTone(hypertensionScore),
-      brief: dinnerPct > 40 ? '晚间负担偏重。' : '分布基本可控。',
-      summary: dinnerPct > 40
-        ? '晚餐与夜间热量偏集中，长期更容易把饮食结构推向不友好区。'
-        : '热量分布还算可控，但仍需避免把超标集中压在晚餐。',
-      basis: `最近 ${recordedDays} 天里有 ${surplusDays} 天摄入高于消耗，晚餐/夜间占比 ${formatPercent(dinnerPct)}。`,
-      action: dinnerPct > 40 ? '把晚餐主食或高油部分前移一部分到早餐/午餐。' : '继续维持白天优先，避免晚间补偿性进食。',
-      delta: clampScore((dinnerPct > 40 ? 12 : 7) + (surplusRate > 0.45 ? 6 : 0)),
-    },
-    {
-      key: 'diabetes',
-      title: '血糖稳定友好度',
-      score: diabetesScore,
-      tone: scoreToTone(diabetesScore),
-      brief: macroPercent.carbs > 50 ? '主食偏重，支撑偏弱。' : '代谢压力暂时可控。',
-      summary: macroPercent.carbs > 50
-        ? '当前主要拖累是碳水占比偏高，同时蛋白质支撑不足。'
-        : '代谢结构不算差，但还可以把蛋白质和饱腹感做得更稳。',
-      basis: `碳水 ${formatPercent(macroPercent.carbs)}，蛋白质 ${formatPercent(macroPercent.protein)}，加餐热量占比 ${formatPercent(snackPct)}。`,
-      action: macroPercent.carbs > 50
-        ? '把一部分主食换成蛋白质或蔬菜，先从最常超标的一餐改起。'
-        : '保留当前主食量的同时，每餐补一个更稳定的蛋白来源。',
-      delta: clampScore((macroPercent.carbs > 50 ? 12 : 8) + (macroPercent.protein < 20 ? 6 : 0)),
-    },
-    {
-      key: 'cardio',
-      title: '心血管友好度',
-      score: cardioScore,
-      tone: scoreToTone(cardioScore),
-      brief: macroPercent.fat > 32 ? '高油频率偏多。' : '整体还在中性区。',
-      summary: macroPercent.fat > 32
-        ? '脂肪占比和连续超标频率一起拖累了心血管保护趋势。'
-        : '总体还在可接受区，但连续超标天数已经开始拉低长期保护感。',
-      basis: `脂肪 ${formatPercent(macroPercent.fat)}，超出消耗天数 ${surplusDays}/${recordedDays}，晚餐占比 ${formatPercent(dinnerPct)}。`,
-      action: macroPercent.fat > 32
-        ? '优先减少最常出现的高油菜和夜间加餐，不必一次性大幅节食。'
-        : '先把每周最容易超标的 2-3 餐压下来，保护分会更明显回升。',
-      delta: clampScore((macroPercent.fat > 32 ? 10 : 7) + (surplusRate > 0.45 ? 5 : 0)),
-    },
-    {
-      key: 'weight',
-      title: '体重管理友好度',
-      score: weightScore,
-      tone: scoreToTone(weightScore),
-      brief: energyOverRatio > 0.08 ? '重复超标在累积。' : '总量接近目标。',
-      summary: energyOverRatio > 0.08
-        ? '平均摄入已经高于当前消耗，体重管理压力主要来自重复性超标。'
-        : '热量总体接近目标，但餐次集中和加餐结构仍有优化空间。',
-      basis: `日均摄入 ${avgCaloriesPerDay.toFixed(0)} kcal，对比 TDEE ${tdee.toFixed(0)} kcal；饮食打卡 ${d.streak_days} 天。`,
-      action: energyOverRatio > 0.08
-        ? '先把最常超标的一餐减少约 1/4 主食或高油部分，再观察 1 周。'
-        : '保持总量不大改，优先优化晚餐和加餐的时段分布。',
-      delta: clampScore((energyOverRatio > 0.08 ? 13 : 8) + (dinnerPct > 40 ? 5 : 0)),
-    },
-    {
-      key: 'colorectal',
-      title: '肠道状态友好度',
-      score: clampScore(
-        76
-        - fatGap * 0.9
-        - carbGap * 0.45
-        - snackPenalty * 0.6
-        - surplusRate * 10
-        + (macroPercent.protein >= 18 && macroPercent.protein <= 28 ? 4 : 0)
-      ),
-      tone: scoreToTone(clampScore(
-        76
-        - fatGap * 0.9
-        - carbGap * 0.45
-        - snackPenalty * 0.6
-        - surplusRate * 10
-        + (macroPercent.protein >= 18 && macroPercent.protein <= 28 ? 4 : 0)
-      )),
-      brief: snackPct > 18 ? '结构偏散，重复性偏高。' : '整体还算整齐。',
-      summary: snackPct > 18
-        ? '加餐偏多、结构偏散时，长期饮食质量通常会被一点点拖低。'
-        : '这段时间的饮食结构还算整齐，但仍要警惕高油高精制主食的重复出现。',
-      basis: `加餐占比 ${formatPercent(snackPct)}，脂肪 ${formatPercent(macroPercent.fat)}，连续超标 ${surplusDays}/${recordedDays} 天。`,
-      action: '优先减少最容易重复出现的重油重加工那一类餐食，让整体结构更干净。',
-      delta: clampScore((snackPct > 18 ? 9 : 6) + (fatGap > 0 ? 4 : 0)),
-    },
-    {
-      key: 'longevity',
-      title: '长期状态趋势',
-      score: clampScore(
-        78
-        - energyOverRatio * 24
-        - surplusRate * 15
-        - dinnerPenalty * 0.55
-        - fatGap * 0.75
-        - carbGap * 0.55
-        + (recordedDays >= (range === 'week' ? 5 : 18) ? 5 : 0)
-      ),
-      tone: scoreToTone(clampScore(
-        78
-        - energyOverRatio * 24
-        - surplusRate * 15
-        - dinnerPenalty * 0.55
-        - fatGap * 0.75
-        - carbGap * 0.55
-        + (recordedDays >= (range === 'week' ? 5 : 18) ? 5 : 0)
-      )),
-      brief: surplusRate > 0.45 ? '重复性问题在拖分。' : '长期趋势还能再修。',
-      summary: surplusRate > 0.45
-        ? '拖累长期趋势的，不是某一顿，而是反复出现的超标和晚间集中。'
-        : '只要继续把主要问题控制住，这段时间的长期趋势还有往上修的空间。',
-      basis: `已记录 ${recordedDays} 天，超出消耗 ${surplusDays} 天，晚餐/夜间占比 ${formatPercent(dinnerPct)}。`,
-      action: '先把重复出现的问题降频，比偶尔一次“吃得特别完美”更有用。',
-      delta: clampScore((surplusRate > 0.45 ? 10 : 7) + (recordedDays >= (range === 'week' ? 5 : 18) ? 3 : 0)),
-    },
-  ]
-  const allRiskOptions: RiskPreferenceItem[] = [
-    { key: 'hypertension', title: '血压管理友好度', short: '血压' },
-    { key: 'diabetes', title: '血糖稳定友好度', short: '血糖' },
-    { key: 'cardio', title: '心血管友好度', short: '心血管' },
-    { key: 'weight', title: '体重管理友好度', short: '体重' },
-    { key: 'colorectal', title: '肠道状态友好度', short: '肠道' },
-    { key: 'longevity', title: '长期状态趋势', short: '长期' },
-  ]
   const selectedRiskItems = selectedRiskKeys
     .map(key => allRiskOptions.find(item => item.key === key))
-    .filter((item): item is RiskPreferenceItem => Boolean(item))
+    .filter((item): item is RiskOption => Boolean(item))
   const orderedRiskOptions = [
     ...selectedRiskItems,
     ...allRiskOptions.filter(item => !selectedRiskKeys.includes(item.key)),
   ]
   const visibleRiskCards = selectedRiskKeys
     .map(key => riskCards.find(card => card.key === key))
-    .filter((card): card is RiskCardModel => Boolean(card))
+    .filter((card): card is RiskCard => Boolean(card))
   const selectedRiskSummary = selectedRiskItems.map(item => item.short).join('、')
-  const topIssues = [
-    ...(surplusRate > 0.45 ? [{ title: '连续超出消耗', detail: `${surplusDays}/${recordedDays} 天摄入高于 TDEE` }] : []),
-    ...(dinnerPct > 40 ? [{ title: '晚餐过于集中', detail: `晚餐与夜间占全天 ${formatPercent(dinnerPct)}` }] : []),
-    ...(macroPercent.carbs > 50 ? [{ title: '碳水占比偏高', detail: `当前碳水占比 ${formatPercent(macroPercent.carbs)}` }] : []),
-    ...(macroPercent.protein < 20 ? [{ title: '蛋白质支撑偏弱', detail: `当前蛋白质占比 ${formatPercent(macroPercent.protein)}` }] : []),
-    ...(snackPct > 18 ? [{ title: '加餐热量偏多', detail: `加餐已占全天 ${formatPercent(snackPct)}` }] : []),
-  ].slice(0, 3)
-  const minimalActions = [
-    ...(surplusRate > 0.45 ? ['先把每周最容易超标的 2-3 餐压下来，不求每餐都完美。'] : []),
-    ...(dinnerPct > 40 ? ['把晚餐的一部分主食或高油菜前移到早餐/午餐。'] : []),
-    ...(macroPercent.carbs > 50 ? ['主食先减 1/4，补一份更稳定的蛋白质或蔬菜。'] : []),
-    ...(macroPercent.protein < 20 ? ['每餐固定补一个蛋白来源，先从早餐或午餐开始。'] : []),
-  ]
-  const actionList = minimalActions.length > 0
-    ? minimalActions.slice(0, 3)
-    : ['先保持记录连续 1 周，再根据超标天数和晚餐占比做微调。']
-
+  const topIssues = healthIndex?.top_issues ?? []
+  const actionList = healthIndex?.action_list ?? []
   const toggleSection = (key: string) => {
     setExpandedSections(prev => ({
       ...prev,
@@ -962,7 +735,7 @@ function StatsPage() {
             <View className='health-index-gate-copy'>
               <Text className='health-index-gate-title'>连续记录两天后显示健康指数</Text>
               <Text className='health-index-gate-desc'>
-                当前已记录 {healthIndexRecordedDays} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。
+                当前已记录 {d.recorded_days ?? 0} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。
               </Text>
             </View>
           </View>

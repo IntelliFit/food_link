@@ -544,128 +544,6 @@ function RecordDetailPage() {
     })
   }, [isOwner, record?.id])
 
-  if (loading || !record) {
-    return (
-      <View className={`record-detail-root ${scheme === 'dark' ? 'record-detail-root--dark' : ''}`}>
-        <CustomNavBar
-          title='识别记录详情'
-          showBack
-          onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
-          color={scheme === 'dark' ? '#ffffff' : '#000000'}
-          background={scheme === 'dark' ? '#101716' : '#f8fafc'}
-        />
-        <View className='record-detail-below-nav record-detail-loading-placeholder'>
-          <View className='empty-tip'>
-            {loading ? <View className='loading-spinner-md' /> : '记录不存在'}
-          </View>
-        </View>
-      </View>
-    )
-  }
-
-  /** 提交编辑 */
-  const handleSaveEdit = async () => {
-    if (editItems.length === 0) {
-      Taro.showToast({ title: '至少保留一项食物', icon: 'none' })
-      return
-    }
-    if (!record) return
-    const { confirm } = await Taro.showModal({
-      title: '确认修改',
-      content: '确定保存对食物参数的修改吗？',
-      confirmText: '确定',
-      confirmColor: '#00bc7d'
-    })
-    if (!confirm) return
-    setEditSaving(true)
-    Taro.showLoading({ title: '保存中...', mask: true })
-    try {
-      const totalCalories = editItems.reduce((sum, item) => {
-        return sum + (item.nutrients.calories * (item.ratio / 100))
-      }, 0)
-      const totalProtein = editItems.reduce((sum, item) => {
-        return sum + (item.nutrients.protein * (item.ratio / 100))
-      }, 0)
-      const totalCarbs = editItems.reduce((sum, item) => {
-        return sum + (item.nutrients.carbs * (item.ratio / 100))
-      }, 0)
-      const totalFat = editItems.reduce((sum, item) => {
-        return sum + (item.nutrients.fat * (item.ratio / 100))
-      }, 0)
-      const totalWeight = editItems.reduce((sum, item) => sum + item.intake, 0)
-
-      const { record: updated } = await updateFoodRecord(record.id, {
-        items: editItems,
-        total_calories: Math.round(totalCalories * 10) / 10,
-        total_protein: Math.round(totalProtein * 10) / 10,
-        total_carbs: Math.round(totalCarbs * 10) / 10,
-        total_fat: Math.round(totalFat * 10) / 10,
-        total_weight_grams: Math.round(totalWeight)
-      })
-      setRecord(updated)
-      setShowEditModal(false)
-      Taro.hideLoading()
-      Taro.showToast({ title: '修改成功', icon: 'success' })
-    } catch (e: any) {
-      Taro.hideLoading()
-      await showUnifiedApiError(e, '保存失败')
-    } finally {
-      setEditSaving(false)
-    }
-  }
-
-  const mealName = MEAL_TYPE_NAMES[record.meal_type] || record.meal_type
-  const mealIconConfig = MEAL_ICON_CONFIG[record.meal_type as keyof typeof MEAL_ICON_CONFIG] || MEAL_ICON_CONFIG.snack
-  const timeStr = formatRecordTime(record.record_time)
-  const items = record.items || []
-  const hasRealRecordImage = Boolean(record.image_path)
-  const recordDisplayImage = record.image_path || ''
-
-  /** 单条食物实际摄入热量（按 ratio） */
-  const itemCalorie = (item: FoodRecord['items'][0]) => {
-    const ratio = resolveRecordItemRatio(item) / 100
-    return ((item.nutrients?.calories ?? 0) * ratio)
-  }
-
-  const handleAcceptInvite = async () => {
-    if (!inviteCode) {
-      Taro.showToast({ title: '邀请码无效', icon: 'none' })
-      return
-    }
-    if (!getAccessToken()) {
-      const redirectUrl = sharePath
-      Taro.navigateTo({
-        url: `${extraPkgUrl('/pages/login/index')}?invite_code=${encodeURIComponent(inviteCode)}&redirect=${encodeURIComponent(redirectUrl)}`
-      })
-      return
-    }
-    if (inviteLoading) return
-    setInviteLoading(true)
-    try {
-      const res = await acceptFriendInvite(inviteCode)
-      Taro.showToast({
-        title: res.status === 'request_sent' ? `已向${res.nickname || '对方'}发送申请` : '你们已是好友',
-        icon: 'success'
-      })
-    } catch (e: any) {
-      const msg = e?.message || '添加好友失败'
-      Taro.showModal({
-        title: '添加好友失败',
-        content: msg.length > 280 ? `${msg.slice(0, 280)}...` : msg,
-        showCancel: false,
-        confirmText: '我知道了'
-      })
-    } finally {
-      setInviteLoading(false)
-    }
-  }
-
-  const toggleNutrientDetails = (key: string) => {
-    setExpandedNutrientDetails(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }))
-  }
 
   /** 生成海报并导出为临时图片（完全对齐首页 MealRecordPosterModal 逻辑） */
   const handleGeneratePoster = useCallback(() => {
@@ -803,6 +681,130 @@ function RecordDetailPage() {
       })
   }, [record, posterGenerating, isProUser, ownerInviteCode, calorieCompare, openOfficialImageMenu, resolvePosterOwnerProfile])
   handleGeneratePosterRef.current = handleGeneratePoster
+
+  if (loading || !record) {
+    return (
+      <View className={`record-detail-root ${scheme === 'dark' ? 'record-detail-root--dark' : ''}`}>
+        <CustomNavBar
+          title='识别记录详情'
+          showBack
+          onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
+          color={scheme === 'dark' ? '#ffffff' : '#000000'}
+          background={scheme === 'dark' ? '#101716' : '#f8fafc'}
+        />
+        <View className='record-detail-below-nav record-detail-loading-placeholder'>
+          <View className='empty-tip'>
+            {loading ? <View className='loading-spinner-md' /> : '记录不存在'}
+          </View>
+        </View>
+      </View>
+    )
+  }
+
+  /** 提交编辑 */
+  const handleSaveEdit = async () => {
+    if (editItems.length === 0) {
+      Taro.showToast({ title: '至少保留一项食物', icon: 'none' })
+      return
+    }
+    if (!record) return
+    const { confirm } = await Taro.showModal({
+      title: '确认修改',
+      content: '确定保存对食物参数的修改吗？',
+      confirmText: '确定',
+      confirmColor: '#00bc7d'
+    })
+    if (!confirm) return
+    setEditSaving(true)
+    Taro.showLoading({ title: '保存中...', mask: true })
+    try {
+      const totalCalories = editItems.reduce((sum, item) => {
+        return sum + (item.nutrients.calories * (item.ratio / 100))
+      }, 0)
+      const totalProtein = editItems.reduce((sum, item) => {
+        return sum + (item.nutrients.protein * (item.ratio / 100))
+      }, 0)
+      const totalCarbs = editItems.reduce((sum, item) => {
+        return sum + (item.nutrients.carbs * (item.ratio / 100))
+      }, 0)
+      const totalFat = editItems.reduce((sum, item) => {
+        return sum + (item.nutrients.fat * (item.ratio / 100))
+      }, 0)
+      const totalWeight = editItems.reduce((sum, item) => sum + item.intake, 0)
+
+      const { record: updated } = await updateFoodRecord(record.id, {
+        items: editItems,
+        total_calories: Math.round(totalCalories * 10) / 10,
+        total_protein: Math.round(totalProtein * 10) / 10,
+        total_carbs: Math.round(totalCarbs * 10) / 10,
+        total_fat: Math.round(totalFat * 10) / 10,
+        total_weight_grams: Math.round(totalWeight)
+      })
+      setRecord(updated)
+      setShowEditModal(false)
+      Taro.hideLoading()
+      Taro.showToast({ title: '修改成功', icon: 'success' })
+    } catch (e: any) {
+      Taro.hideLoading()
+      await showUnifiedApiError(e, '保存失败')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const mealName = MEAL_TYPE_NAMES[record.meal_type] || record.meal_type
+  const mealIconConfig = MEAL_ICON_CONFIG[record.meal_type as keyof typeof MEAL_ICON_CONFIG] || MEAL_ICON_CONFIG.snack
+  const timeStr = formatRecordTime(record.record_time)
+  const items = record.items || []
+  const hasRealRecordImage = Boolean(record.image_path)
+  const recordDisplayImage = record.image_path || ''
+
+  /** 单条食物实际摄入热量（按 ratio） */
+  const itemCalorie = (item: FoodRecord['items'][0]) => {
+    const ratio = resolveRecordItemRatio(item) / 100
+    return ((item.nutrients?.calories ?? 0) * ratio)
+  }
+
+  const handleAcceptInvite = async () => {
+    if (!inviteCode) {
+      Taro.showToast({ title: '邀请码无效', icon: 'none' })
+      return
+    }
+    if (!getAccessToken()) {
+      const redirectUrl = sharePath
+      Taro.navigateTo({
+        url: `${extraPkgUrl('/pages/login/index')}?invite_code=${encodeURIComponent(inviteCode)}&redirect=${encodeURIComponent(redirectUrl)}`
+      })
+      return
+    }
+    if (inviteLoading) return
+    setInviteLoading(true)
+    try {
+      const res = await acceptFriendInvite(inviteCode)
+      Taro.showToast({
+        title: res.status === 'request_sent' ? `已向${res.nickname || '对方'}发送申请` : '你们已是好友',
+        icon: 'success'
+      })
+    } catch (e: any) {
+      const msg = e?.message || '添加好友失败'
+      Taro.showModal({
+        title: '添加好友失败',
+        content: msg.length > 280 ? `${msg.slice(0, 280)}...` : msg,
+        showCancel: false,
+        confirmText: '我知道了'
+      })
+    } finally {
+      setInviteLoading(false)
+    }
+  }
+
+  const toggleNutrientDetails = (key: string) => {
+    setExpandedNutrientDetails(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
+
 
   const navBarHeight = getNavBarHeight()
 

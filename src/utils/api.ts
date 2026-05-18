@@ -839,6 +839,50 @@ export interface StatsSummary {
   analysis_summary_generated_date?: string | null
   analysis_summary_needs_refresh?: boolean
   body_metrics?: BodyMetricsSummary
+  health_index?: HealthIndex
+}
+
+export interface SignalChip {
+  label: string
+  value: string
+}
+
+export type RiskTone = 'positive' | 'neutral' | 'warning' | 'danger'
+
+export interface RiskCard {
+  key: string
+  title: string
+  score: number
+  tone: RiskTone
+  brief: string
+  summary: string
+  basis: string
+  action: string
+  delta: number
+}
+
+export interface RiskOption {
+  key: string
+  title: string
+  short: string
+}
+
+export interface TopIssue {
+  title: string
+  detail: string
+}
+
+export interface HealthIndex {
+  has_enough_data: boolean
+  overall_score: number
+  projected_score: number
+  overall_trend_label: string
+  overview_copy: string
+  signal_chips: SignalChip[]
+  risk_cards: RiskCard[]
+  all_risk_options: RiskOption[]
+  top_issues: TopIssue[]
+  action_list: string[]
 }
 
 export interface BodyMetricWeightEntry {
