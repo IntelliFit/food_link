@@ -1368,3 +1368,4 @@
   - 队列观测由 queue wrapper 和 Kafka/memory adapter 共同负责：应用内只统计 publish、delivery age、settlement、component health 和 memory depth；Kafka partition lag/backlog 后续应接 Kafka exporter，而不是在业务进程里扫描 broker。
   - 食物/运动分析业务指标只统计总耗时、LLM 调用、重试、解析/落库结果和 item 数，不记录用户输入内容；指标清单维护在 `backend/docs/observability-metrics.md`。
   - `app.name` 映射 OTel `service.name`，用于区分 dev/main 部署；不再提供 host name 覆盖配置。`host.name` 和 `service.instance.id` 固定读取系统 hostname，不要把实例维度配置成 `app.name`，否则会丢失多实例定位能力。
+  - Grafana 中低频业务耗时面板的“平均耗时”不要用 `rate(*_sum) / clamp_min(rate(*_count), 1)`；这会在单次/少量事件时把耗时摊薄。应使用 `increase(*_sum[窗口]) / clamp_min(increase(*_count[窗口]), 1)` 或 `sum(rate(*_sum[窗口])) / sum(rate(*_count[窗口]))` 且不把 count rate clamp 到 1。低频成功率也优先用 `increase(success[窗口]) / increase(total[窗口])`。

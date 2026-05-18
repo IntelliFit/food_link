@@ -9341,3 +9341,15 @@
   - 在 `dev` 提交 `26ebdc9 feat: refine health trends and AI fallbacks` 并推送到 `origin/dev`。
   - 在 `main` 合并 `dev`，生成 merge commit `9415c67 Merge branch 'dev'`。
   - 后续需将完成状态提交并同步 `origin/main`，再回到 `dev`。
+
+## 2026-05-18 — Grafana 食物分析平均耗时排查
+
+- Task: 用户在 dev 环境手动触发一次食物分析后，Grafana 中“食物分析平均耗时 / LLM 调用平均耗时 / Worker 任务平均耗时”只显示约 200ms，明显低于真实 LLM 调用耗时；“食物分析成功率”仍无明显数据。
+- Status: diagnosed_dashboard_query_issue_no_code_change
+- Finding:
+  - 后端埋点代码中 LLM、食物分析、worker、队列投递延迟都使用 `duration.Seconds()` 上报；食物分析从进入 `Analyze()` 后开始计时，到 `finalizeAnalyzeResponse()` 成功后才记录 `success`，理论上应包含 LLM 和 finalize 耗时。
+  - 当前 Grafana 平均耗时更像是 PromQL 写法问题：如果用 `rate(*_sum) / clamp_min(rate(*_count), 1)`，低频事件下 `rate(count)` 小于 1 后被强行变成 1，会把一次几秒的请求摊薄成几百毫秒。
+  - 低频业务面板的平均耗时和成功率应优先使用 `increase(*_sum[窗口]) / increase(*_count[窗口])`、`increase(success[窗口]) / increase(total[窗口])`；p95/p99 仍可用 histogram bucket + `histogram_quantile`，但窗口要放大到 15m/30m/1h。
+- Dashboard review:
+  - 当前 dashboard 中食物分析成功率、食物分析平均耗时、LLM 调用平均耗时已基本改对。
+  - 数据库错误率、数据库平均等待耗时、队列发布平均耗时、队列投递平均延迟、Worker 任务平均耗时仍有 `rate + clamp_min(...,1)` 或“秒值配毫秒单位”的问题，需要替换为 `increase` 版本或取消错误 clamp，并修正单位。
