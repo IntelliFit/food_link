@@ -17,6 +17,7 @@ type HealthIndex struct {
 	AllRiskOptions    []RiskOption `json:"all_risk_options"`
 	TopIssues         []TopIssue   `json:"top_issues"`
 	ActionList        []string     `json:"action_list"`
+	ShowDisclaimer    bool         `json:"show_disclaimer"`
 }
 
 // SignalChip 信号芯片
@@ -157,7 +158,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	signalChips := []SignalChip{
 		{Label: "已记录", Value: fmt.Sprintf("%d 天", recordedDays)},
 		{Label: "超出消耗", Value: fmt.Sprintf("%d 天", surplusDays)},
-		{Label: "晚餐热量占比", Value: formatPercent(dinnerPct)},
+		{Label: "睡前餐占比", Value: formatPercent(dinnerPct)},
 		{Label: "连续记录", Value: fmt.Sprintf("%d 天", streakDays)},
 	}
 
@@ -213,7 +214,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 			Tone:    scoreToTone(cardioScore),
 			Brief:   ifElseStr(macroPercent["fat"] > 32, "高油频率偏多。", "整体还在中性区。"),
 			Summary: ifElseStr(macroPercent["fat"] > 32, "脂肪占比和连续超标频率一起拖累了心血管保护趋势。", "总体还在可接受区，但连续超标天数已经开始拉低长期保护感。"),
-			Basis:   fmt.Sprintf("脂肪 %s，超出消耗天数 %d/%d，晚餐占比 %s。", formatPercent(macroPercent["fat"]), surplusDays, recordedDays, formatPercent(dinnerPct)),
+			Basis:   fmt.Sprintf("脂肪 %s，超出消耗天数 %d/%d，睡前餐占比 %s。", formatPercent(macroPercent["fat"]), surplusDays, recordedDays, formatPercent(dinnerPct)),
 			Action:  ifElseStr(macroPercent["fat"] > 32, "优先减少最常出现的高油菜和夜间加餐，不必一次性大幅节食。", "先把每周最容易超标的 2-3 餐压下来，保护分会更明显回升。"),
 			Delta:   clampScore(ifElseFloat(macroPercent["fat"] > 32, 10, 7) + ifElseFloat(surplusRate > 0.45, 5, 0)),
 		},
@@ -225,7 +226,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 			Brief:   ifElseStr(energyOverRatio > 0.08, "重复超标在累积。", "总量接近目标。"),
 			Summary: ifElseStr(energyOverRatio > 0.08, "平均摄入已经高于当前消耗，体重管理压力主要来自重复性超标。", "热量总体接近目标，但餐次集中和加餐结构仍有优化空间。"),
 			Basis:   fmt.Sprintf("日均摄入 %.0f kcal，对比 TDEE %.0f kcal；饮食打卡 %d 天。", avgCaloriesPerDay, tdee, streakDays),
-			Action:  ifElseStr(energyOverRatio > 0.08, "先把最常超标的一餐减少约 1/4 主食或高油部分，再观察 1 周。", "保持总量不大改，优先优化晚餐和加餐的时段分布。"),
+			Action:  ifElseStr(energyOverRatio > 0.08, "先把最常超标的一餐减少约 1/4 主食或高油部分，再观察 1 周。", "保持总量不大改，优先优化睡前餐和加餐的时段分布。"),
 			Delta:   clampScore(ifElseFloat(energyOverRatio > 0.08, 13, 8) + ifElseFloat(dinnerPct > 40, 5, 0)),
 		},
 		{
@@ -246,7 +247,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 			Tone:    scoreToTone(longevityScore),
 			Brief:   ifElseStr(surplusRate > 0.45, "重复性问题在拖分。", "长期趋势还能再修。"),
 			Summary: ifElseStr(surplusRate > 0.45, "拖累长期趋势的，不是某一顿，而是反复出现的超标和晚间集中。", "只要继续把主要问题控制住，这段时间的长期趋势还有往上修的空间。"),
-			Basis:   fmt.Sprintf("已记录 %d 天，超出消耗 %d 天，晚餐/夜间占比 %s。", recordedDays, surplusDays, formatPercent(dinnerPct)),
+			Basis:   fmt.Sprintf("已记录 %d 天，超出消耗 %d 天，睡前餐/夜间占比 %s。", recordedDays, surplusDays, formatPercent(dinnerPct)),
 			Action:  "先把重复出现的问题降频，比偶尔一次\"吃得特别完美\"更有用。",
 			Delta:   clampScore(ifElseFloat(surplusRate > 0.45, 10, 7) + ifElseFloat(recordedDays >= thresholdDays(statsRange), 3, 0)),
 		},
@@ -267,7 +268,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		topIssues = append(topIssues, TopIssue{Title: "连续超出消耗", Detail: fmt.Sprintf("%d/%d 天摄入高于 TDEE", surplusDays, recordedDays)})
 	}
 	if dinnerPct > 40 {
-		topIssues = append(topIssues, TopIssue{Title: "晚餐过于集中", Detail: fmt.Sprintf("晚餐与夜间占全天 %s", formatPercent(dinnerPct))})
+		topIssues = append(topIssues, TopIssue{Title: "睡前餐过于集中", Detail: fmt.Sprintf("睡前餐与夜间占全天 %s", formatPercent(dinnerPct))})
 	}
 	if macroPercent["carbs"] > 50 {
 		topIssues = append(topIssues, TopIssue{Title: "碳水占比偏高", Detail: fmt.Sprintf("当前碳水占比 %s", formatPercent(macroPercent["carbs"]))})
@@ -288,7 +289,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		actionList = append(actionList, "先把每周最容易超标的 2-3 餐压下来，不求每餐都完美。")
 	}
 	if dinnerPct > 40 {
-		actionList = append(actionList, "把晚餐的一部分主食或高油菜前移到早餐/午餐。")
+		actionList = append(actionList, "把睡前餐的一部分主食或高油菜前移到起床后第一餐/中间餐。")
 	}
 	if macroPercent["carbs"] > 50 {
 		actionList = append(actionList, "主食先减 1/4，补一份更稳定的蛋白质或蔬菜。")
@@ -297,7 +298,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		actionList = append(actionList, "每餐固定补一个蛋白来源，先从早餐或午餐开始。")
 	}
 	if len(actionList) == 0 {
-		actionList = []string{"先保持记录连续 1 周，再根据超标天数和晚餐占比做微调。"}
+		actionList = []string{"先保持记录连续 1 周，再根据超标天数和睡前餐占比做微调。"}
 	} else if len(actionList) > 3 {
 		actionList = actionList[:3]
 	}
@@ -313,6 +314,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		AllRiskOptions:    allRiskOptions,
 		TopIssues:         topIssues,
 		ActionList:        actionList,
+		ShowDisclaimer:    comp.User != nil && comp.User.HealthDisclaimerAcknowledgedAt == nil,
 	}
 }
 

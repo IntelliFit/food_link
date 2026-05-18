@@ -8,8 +8,11 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"reflect"
+	"regexp"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -288,6 +291,13 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 		bodyMetricsSummary, _ = s.bodyMetrics.GetSummary(ctx, userID, statsRange)
 	}
 
+	// 解析用户作息，用于餐次重分类
+	var routineSleepHour, routineWakeHour int
+	routineOK := false
+	if user != nil && len(user.HealthCondition) > 0 {
+		routineSleepHour, routineWakeHour, routineOK = parseRoutineHoursFromHealthCondition(user.HealthCondition)
+	}
+
 	totalCal := 0.0
 	totalProtein := 0.0
 	totalCarbs := 0.0
@@ -304,6 +314,12 @@ func (s *StatsService) buildStatsComputation(ctx context.Context, userID string,
 		if mealType == "" {
 			mealType = "unknown"
 		}
+
+		// 若作息解析成功，基于记录时间重新分类餐次
+		if routineOK && r.RecordTime != nil {
+			mealType = reclassifyMealByRoutine(mealType, *r.RecordTime, routineSleepHour, routineWakeHour)
+		}
+
 		byMeal[mealType] = byMeal[mealType] + r.TotalCalories
 
 		if r.RecordTime != nil {
@@ -744,6 +760,32 @@ func activityLevelLabel(value string) string {
 	}
 }
 
+// reclassifyMealByRoutine 根据用户作息和记录时间重新分类餐次。
+// 规则基于相对时间而非固定钟点：
+//   - 起床后 0-3 小时：breakfast（该用户的早餐）
+//   - 起床后 3-8 小时：lunch
+//   - 睡前 4 小时内：dinner
+//   - 其他：snack
+func reclassifyMealByRoutine(originalMealType string, recordTime time.Time, sleepHour, wakeHour int) string {
+	hour := recordTime.Hour()
+
+	// 计算从起床到记录时间的偏移小时数（跨天处理）
+	hoursSinceWake := (hour - wakeHour + 24) % 24
+	// 计算从记录时间到睡觉的偏移小时数（跨天处理）
+	hoursUntilSleep := (sleepHour - hour + 24) % 24
+
+	if hoursSinceWake <= 3 {
+		return "breakfast"
+	}
+	if hoursUntilSleep <= 4 {
+		return "dinner"
+	}
+	if hoursSinceWake <= 8 {
+		return "lunch"
+	}
+	return "snack"
+}
+
 func statsRoutineText(value any) string {
 	raw := strings.TrimSpace(fmt.Sprintf("%v", value))
 	if raw == "" || raw == "<nil>" {
@@ -761,6 +803,76 @@ func statsRoutineText(value any) string {
 	default:
 		return raw
 	}
+}
+
+// parseRoutineHoursFromHealthCondition 优先从 routine_sleep_hour / routine_wake_hour 读取数字作息，
+// 缺失时回退到解析 routine_type 文本（兼容存量数据）。
+func parseRoutineHoursFromHealthCondition(hc map[string]any) (sleepHour, wakeHour int, ok bool) {
+	if len(hc) == 0 {
+		return 0, 0, false
+	}
+
+	// 优先读取数字字段
+	if v, exists := hc["routine_sleep_hour"]; exists {
+		switch val := v.(type) {
+		case int:
+			sleepHour = val
+		case int8, int16, int32, int64:
+			sleepHour = int(reflect.ValueOf(val).Int())
+		case float32, float64:
+			sleepHour = int(reflect.ValueOf(val).Float())
+		case json.Number:
+			if h, err := val.Int64(); err == nil {
+				sleepHour = int(h)
+			}
+		}
+	}
+	if v, exists := hc["routine_wake_hour"]; exists {
+		switch val := v.(type) {
+		case int:
+			wakeHour = val
+		case int8, int16, int32, int64:
+			wakeHour = int(reflect.ValueOf(val).Int())
+		case float32, float64:
+			wakeHour = int(reflect.ValueOf(val).Float())
+		case json.Number:
+			if h, err := val.Int64(); err == nil {
+				wakeHour = int(h)
+			}
+		}
+	}
+	if sleepHour >= 0 && sleepHour <= 23 && wakeHour >= 0 && wakeHour <= 23 {
+		return sleepHour, wakeHour, true
+	}
+
+	// 回退：解析 routine_type 文本
+	raw := strings.TrimSpace(fmt.Sprintf("%v", hc["routine_type"]))
+	if raw == "" || raw == "<nil>" {
+		return 0, 0, false
+	}
+	switch raw {
+	case "early_bird":
+		return 22, 6, true
+	case "regular":
+		return 23, 7, true
+	case "night_owl":
+		return 1, 9, true
+	case "irregular":
+		return 0, 0, false
+	}
+
+	// 正则匹配 HH:00 睡，HH:00 起
+	re := regexp.MustCompile(`(\d{1,2})(?::\d{1,2})?`)
+	matches := re.FindAllStringSubmatch(raw, -1)
+	if len(matches) >= 2 {
+		if h1, err := strconv.Atoi(matches[0][1]); err == nil && h1 >= 0 && h1 <= 23 {
+			if h2, err := strconv.Atoi(matches[1][1]); err == nil && h2 >= 0 && h2 <= 23 {
+				return h1, h2, true
+			}
+		}
+	}
+
+	return 0, 0, false
 }
 
 func statsProfileFingerprint(user *domain.StatsUserProfile) string {

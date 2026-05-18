@@ -434,6 +434,8 @@ function HealthProfileViewPage() {
       daily_life_activity_level: getDailyLifeActivityLevel(profile) || undefined,
       execution_mode: profile.execution_mode || 'standard',
       routine_type: profile.health_condition?.routine_type || undefined,
+      routine_sleep_hour: profile.health_condition?.routine_sleep_hour as number | undefined,
+      routine_wake_hour: profile.health_condition?.routine_wake_hour as number | undefined,
       medical_history: (profile.health_condition?.medical_history as string[]) || [],
       diet_preference: (profile.health_condition?.diet_preference as string[]) || [],
       allergies: ((profile.health_condition?.allergies as string[]) || []).length > 0
@@ -469,7 +471,10 @@ function HealthProfileViewPage() {
         req.daily_life_activity_level = value || undefined
         break
       case 'routine_type': {
-        req.routine_type = formatRoutineHours(value as RoutineHours)
+        const rh = value as RoutineHours
+        req.routine_type = formatRoutineHours(rh)
+        req.routine_sleep_hour = rh.sleepHour
+        req.routine_wake_hour = rh.wakeHour
         break
       }
       case 'execution_mode': req.execution_mode = value; break
@@ -509,7 +514,12 @@ function HealthProfileViewPage() {
           case 'activity_level': next.activity_level = req.activity_level; break
           case 'execution_mode': next.execution_mode = req.execution_mode; break
           case 'routine_type':
-            next.health_condition = { ...(next.health_condition || {}), routine_type: req.routine_type }
+            next.health_condition = {
+              ...(next.health_condition || {}),
+              routine_type: req.routine_type,
+              routine_sleep_hour: req.routine_sleep_hour,
+              routine_wake_hour: req.routine_wake_hour,
+            }
             break
           case 'medical_history':
           case 'diet_preference':

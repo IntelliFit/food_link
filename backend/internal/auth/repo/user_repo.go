@@ -37,10 +37,11 @@ type User struct {
 	ModeSwitchCount30d     *int           `gorm:"column:mode_switch_count_30d"`
 	Searchable             *bool          `gorm:"column:searchable"`
 	PublicRecords          *bool          `gorm:"column:public_records"`
-	LastSeenAnalyzeHistory *time.Time     `gorm:"column:last_seen_analyze_history_at"`
-	RegistrationInviteCode *string        `gorm:"column:registration_invite_code"`
-	ReferredByUserID       *string        `gorm:"column:referred_by_user_id"`
-	PointsBalance          *float64       `gorm:"column:points_balance"`
+	LastSeenAnalyzeHistory           *time.Time     `gorm:"column:last_seen_analyze_history_at"`
+	RegistrationInviteCode           *string        `gorm:"column:registration_invite_code"`
+	ReferredByUserID                 *string        `gorm:"column:referred_by_user_id"`
+	PointsBalance                    *float64       `gorm:"column:points_balance"`
+	HealthDisclaimerAcknowledgedAt   *time.Time     `gorm:"column:health_disclaimer_acknowledged_at"`
 }
 
 func (User) TableName() string { return "weapp_user" }
@@ -112,6 +113,10 @@ func (r *UserRepo) ExchangeCode(ctx context.Context, appID, secret, code string)
 
 func (r *UserRepo) UpdateLastSeenAnalyzeHistory(ctx context.Context, userID string) error {
 	return r.db.WithContext(ctx).Table("weapp_user").Where("id = ?", userID).Update("last_seen_analyze_history_at", time.Now()).Error
+}
+
+func (r *UserRepo) UpdateHealthDisclaimerAcknowledged(ctx context.Context, userID string) error {
+	return r.db.WithContext(ctx).Table("weapp_user").Where("id = ?", userID).Update("health_disclaimer_acknowledged_at", time.Now()).Error
 }
 
 func (r *UserRepo) CountFoodRecordDays(ctx context.Context, userID string) (int64, error) {
