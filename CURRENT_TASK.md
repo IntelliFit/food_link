@@ -9271,3 +9271,25 @@
   - 在 `dev` 提交 `26ebdc9 feat: refine health trends and AI fallbacks` 并推送到 `origin/dev`。
   - 在 `main` 合并 `dev`，生成 merge commit `9415c67 Merge branch 'dev'`。
   - 后续需将完成状态提交并同步 `origin/main`，再回到 `dev`。
+
+## 2026-05-18 — 根据首页主色调提升 RecordMenu 与「我的」页板块颜色饱和度
+
+- Task: 用户要求根据首页截图提取主要颜色饱和度范围，对以下两处配色进行同比例协调提升：
+  1. 首页点击卡路里后弹出的 RecordMenu 对话框中「拍照识别→手动输入」4 个板块
+  2. 「我的」页中从「健康档案」到「关于我们」的功能入口图标配色
+- 首页主色饱和度分析（HSL）：
+  - 主题绿 `#5cb896`: S=39.3%
+  - 主题绿渐变 end `#8dd3bf`: S=44.3%
+  - 蛋白质蓝 `#5c9ed4`: S=58.3%
+  - 碳水橙 `#f0985c`: S=83.1%
+  - 首页大面积绿色系饱和度在 39–44% 区间
+- 调整策略：
+  - 前景色 `color`/`darkColor` 饱和度从当前的 13–30% 提升至 38–43%，对齐首页主题绿
+  - 背景色/边框/图标底保持极浅亮度，饱和度适度上调 15–25%，暗色模式透明度从 0.08→0.10、0.14→0.16、0.18→0.22 等比例提升
+- Fix applied:
+  - `src/pages/index/components/RecordMenu.tsx`: GRID_FEATURES 4 项颜色全面更新
+  - `src/pages/profile/index.tsx`: SERVICE_ICON_TONES (id 0/2/5/8) 和 SETTING_ICON_TONES (id 3/5) 全面更新
+- Verification:
+  - `npx eslint src/pages/index/components/RecordMenu.tsx src/pages/profile/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/pages/index/components/RecordMenu.tsx src/pages/profile/index.tsx` passed.
+  - `weapp-devtools` (`mrc where --port 9420` 与 `--port 3001`) 均因微信开发者工具目标窗口未开启自动化服务连接失败，运行时截图验证被阻塞。

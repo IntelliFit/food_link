@@ -68,15 +68,15 @@ const REWARD_LEVELS: RewardLevelMeta[] = [
 ]
 
 const SERVICE_ICON_TONES: Record<number, ProfileListIconTone> = {
-  0: { color: '#4f9478', backgroundColor: '#ecfdf4', darkColor: '#6ff6bc', darkBackgroundColor: 'rgba(111, 246, 188, 0.14)' },
-  2: { color: '#8c7a4f', backgroundColor: '#fef7e5', darkColor: '#fcd666', darkBackgroundColor: 'rgba(252, 214, 102, 0.14)' },
-  5: { color: '#5b8da5', backgroundColor: '#ebf8fe', darkColor: '#81d6fb', darkBackgroundColor: 'rgba(129, 214, 251, 0.14)' },
-  8: { color: '#7f7898', backgroundColor: '#f4f0fd', darkColor: '#b39ef4', darkBackgroundColor: 'rgba(179, 158, 244, 0.14)' },
+  0: { color: '#41a17a', backgroundColor: '#ecfcf4', darkColor: '#6ff6bc', darkBackgroundColor: 'rgba(111, 246, 188, 0.16)' },
+  2: { color: '#987f42', backgroundColor: '#faf5e8', darkColor: '#fcd666', darkBackgroundColor: 'rgba(252, 214, 102, 0.16)' },
+  5: { color: '#4c92b3', backgroundColor: '#ecf7fc', darkColor: '#81d6fb', darkBackgroundColor: 'rgba(129, 214, 251, 0.16)' },
+  8: { color: '#6e5ab5', backgroundColor: '#f4f0fc', darkColor: '#b39ef4', darkBackgroundColor: 'rgba(179, 158, 244, 0.16)' },
 }
 
 const SETTING_ICON_TONES: Record<number, ProfileListIconTone> = {
-  3: { color: '#5f8b7d', backgroundColor: '#effdf8', darkColor: '#7df0cc', darkBackgroundColor: 'rgba(125, 240, 204, 0.14)' },
-  5: { color: '#8b7664', backgroundColor: '#fcf5eb', darkColor: '#f1bc8a', darkBackgroundColor: 'rgba(241, 188, 138, 0.14)' },
+  3: { color: '#48a185', backgroundColor: '#effcf7', darkColor: '#7df0cc', darkBackgroundColor: 'rgba(125, 240, 204, 0.16)' },
+  5: { color: '#a4744a', backgroundColor: '#fcf5ea', darkColor: '#f1bc8a', darkBackgroundColor: 'rgba(241, 188, 138, 0.16)' },
 }
 
 function getProfileListIconStyle(id: number, tones: Record<number, ProfileListIconTone>, scheme: string) {
