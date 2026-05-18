@@ -795,15 +795,16 @@ function StatsPage() {
                 <View className='risk-overview-copy'>
                   <Text className='risk-overview-title'>健康得分</Text>
                 </View>
-                <View className='risk-overview-actions' />
+                <View className='risk-overview-actions'>
+                  <View className={`risk-overview-badge tone-${scoreToTone(overallRiskScore)}`}>
+                    <Text className='risk-overview-badge-label'>{overallTrendLabel}</Text>
+                  </View>
+                </View>
               </View>
 
               <View className='risk-overview-score-row'>
                 <Text className='risk-overview-score'>{overallRiskScore}</Text>
                 <Text className='risk-overview-score-unit'>/ 100</Text>
-                <View className={`risk-overview-badge tone-${scoreToTone(overallRiskScore)}`}>
-                  <Text className='risk-overview-badge-label'>{overallTrendLabel}</Text>
-                </View>
               </View>
 
               <Text className='risk-overview-summary'>{overviewCopy}</Text>
@@ -815,12 +816,6 @@ function StatsPage() {
                     <Text className='risk-overview-chip-value'>{chip.value}</Text>
                   </View>
                 ))}
-              </View>
-
-              <View className='risk-overview-footer'>
-                <Text className='risk-overview-footer-text'>
-                  如果先改掉当前最明显的 1-2 个拖累项，预计总分可从 {overallRiskScore} 提升到 {projectedOverallScore}。
-                </Text>
               </View>
             </View>
             {Taro.getStorageSync('health_disclaimer_dismissed') !== '1' && (
@@ -997,21 +992,15 @@ function StatsPage() {
         <View className='action-section-header'>
           <View className='action-section-title-wrap'>
             <Text className='action-section-title'>这段时间最值得先改的地方</Text>
-            <Text className='action-section-subtitle'>别同时改十件事，先动最拖分的 1-2 个动作</Text>
-          </View>
-          <View className='action-section-score'>
-            <Text className='action-section-score__before'>{overallRiskScore}</Text>
-            <Text className='action-section-score__arrow'>→</Text>
-            <Text className='action-section-score__after'>{projectedOverallScore}</Text>
           </View>
         </View>
         <View className='action-plan-grid'>
-            <View className='action-plan-panel'>
+            <View className='action-plan-panel action-plan-panel--red'>
               <Text className='action-plan-panel__title'>当前主要拖累项</Text>
               {topIssues.length > 0 ? (
                 topIssues.map((issue) => (
                   <View key={issue.title} className='action-plan-item'>
-                    <Text className='action-plan-item__bullet'>•</Text>
+                    <Text className='action-plan-item__bullet action-plan-item__bullet--error'>×</Text>
                     <View className='action-plan-item__copy'>
                       <Text className='action-plan-item__title'>{issue.title}</Text>
                       <Text className='action-plan-item__detail'>{issue.detail}</Text>
@@ -1034,6 +1023,10 @@ function StatsPage() {
                 </View>
               ))}
             </View>
+          </View>
+          <View className='action-score-delta'>
+            <Text className='action-score-delta__dot' />
+            <Text className='action-score-delta__text'>如果完成修改，分数的变化为 {overallRiskScore} → {projectedOverallScore}</Text>
           </View>
 
           </>
