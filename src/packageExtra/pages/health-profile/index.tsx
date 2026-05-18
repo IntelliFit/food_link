@@ -29,13 +29,12 @@ import RoutineHourPicker, {
   type RoutineHours,
 } from '../../../components/RoutineHourPicker'
 
-/** 活动水平选项 */
+/** 日常活动选项，不包含专门运动 */
 const ACTIVITY_OPTIONS = [
-  { label: '久坐', desc: '几乎不运动', value: 'sedentary', icon: '🛋️' },
-  { label: '轻度', desc: '每周 1-3 天运动', value: 'light', icon: '🚶' },
-  { label: '中度', desc: '每周 3-5 天运动', value: 'moderate', icon: '🏃' },
-  { label: '高度', desc: '每周 6-7 天运动', value: 'active', icon: '💪' },
-  { label: '极高', desc: '体力劳动/每天训练', value: 'very_active', icon: '🔥' }
+  { label: '久坐办公', desc: '大部分时间坐着，日常走动少', value: 'sedentary', icon: '🛋️' },
+  { label: '日常走动', desc: '通勤、家务或走路较多', value: 'light', icon: '🚶' },
+  { label: '经常站立', desc: '工作中站立、来回走动较多', value: 'moderate', icon: '🏃' },
+  { label: '体力劳动', desc: '搬运、巡店、户外等体力消耗明显', value: 'active', icon: '💪' }
 ]
 
 /** 既往病史选项（无图标） */
@@ -145,9 +144,13 @@ function HealthProfilePage() {
       }
       if (profile.height != null) setHeight(String(profile.height))
       if (profile.weight != null) setWeight(String(profile.weight))
-      if (profile.diet_goal) setDietGoal(profile.diet_goal)
-      if (profile.activity_level) setActivityLevel(profile.activity_level)
       const hc = profile.health_condition
+      if (profile.diet_goal) setDietGoal(profile.diet_goal)
+      if (typeof hc?.daily_life_activity_level === 'string' && hc.daily_life_activity_level.trim()) {
+        setActivityLevel(hc.daily_life_activity_level)
+      } else if (profile.activity_level) {
+        setActivityLevel(profile.activity_level)
+      }
       if (hc?.medical_history?.length) setMedicalHistory(hc.medical_history)
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
       if (hc?.allergies?.length) setAllergyList(hc.allergies as string[])
@@ -367,6 +370,7 @@ function HealthProfilePage() {
       weight: isWeightValid ? effectiveWeight : undefined,
       diet_goal: dietGoal || undefined,
       activity_level: activityLevel || undefined,
+      daily_life_activity_level: activityLevel || undefined,
       execution_mode: 'standard',
       medical_history: allMedicalHistory.length ? allMedicalHistory : undefined,
       diet_preference: dietPreference.length ? dietPreference : undefined,
@@ -591,10 +595,10 @@ function HealthProfilePage() {
             </View>
           </View>
 
-          {/* Step 5: 活动水平 */}
+          {/* Step 5: 日常活动 */}
           <View className='card step-card'>
-            <Text className='step-card-title'>活动水平</Text>
-            <Text className='step-card-subtitle'>你平时有多少运动量？</Text>
+            <Text className='step-card-title'>日常活动</Text>
+            <Text className='step-card-subtitle'>不算专门健身，你平时的一天更接近哪种状态？</Text>
             <View className='option-list'>
               {ACTIVITY_OPTIONS.map((o) => (
                 <View

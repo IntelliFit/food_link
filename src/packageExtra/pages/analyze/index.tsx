@@ -76,12 +76,20 @@ const REFERENCE_PRESETS: Array<{
 
 const DEFAULT_REFERENCE_PRESET: ReferencePresetValue = 'hand'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const ANALYZE_SUBMIT_DEBOUNCE_MS = 300
 const MAX_ANALYZE_IMAGES = 3
 
 const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
   value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
 )
+
+const readSuggestRatioPreference = (): boolean => {
+  const saved = Taro.getStorageSync(SUGGEST_RATIO_STORAGE_KEY)
+  if (saved === false || saved === '0' || saved === 'false') return false
+  if (saved === true || saved === '1' || saved === 'true') return true
+  return true
+}
 
 const normalizePositiveReferenceDimension = (value: unknown): number | undefined => {
   const num = Number(value)
@@ -275,6 +283,7 @@ function AnalyzePage() {
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [isMultiView, setIsMultiView] = useState(false)
+  const [suggestRatioEnabled, setSuggestRatioEnabled] = useState<boolean>(() => readSuggestRatioPreference())
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
@@ -318,6 +327,12 @@ function AnalyzePage() {
 
   const toggleMultiView = () => {
     handleMultiViewSwitchChange({ detail: { value: !isMultiView } })
+  }
+
+  const toggleSuggestRatio = () => {
+    const nextValue = !suggestRatioEnabled
+    setSuggestRatioEnabled(nextValue)
+    Taro.setStorageSync(SUGGEST_RATIO_STORAGE_KEY, nextValue ? '1' : '0')
   }
 
   // 每次进入拍照页都刷新配额（从分析结果页返回时）；无图时按当前时间刷新默认餐次
@@ -605,6 +620,7 @@ function AnalyzePage() {
         activity_timing: activityTiming,
         additionalContext: additionalInfo || undefined,
         is_multi_view: isMultiView,
+        suggest_ratio_enabled: suggestRatioEnabled,
         reference_objects: referenceObjects.length > 0 ? referenceObjects : undefined,
       }
 
@@ -617,6 +633,7 @@ function AnalyzePage() {
       Taro.removeStorageSync('analyzeDietGoal')
       Taro.setStorageSync('analyzeActivityTiming', activityTiming)
       Taro.setStorageSync('analyzeExecutionMode', executionMode)
+      Taro.setStorageSync(SUGGEST_RATIO_STORAGE_KEY, suggestRatioEnabled ? '1' : '0')
       const analysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
       Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, analysisEngine)
       setSavedReferenceDefaults(nextReferenceDefaults)
@@ -829,6 +846,19 @@ function AnalyzePage() {
               <Text className='mode-tip-text'>{tip}</Text>
             </View>
           ))}
+        </View>
+
+        <View className='multiview-compact suggest-ratio-compact'>
+          <View className='multiview-compact-left'>
+            <Text className='multiview-compact-title'>AI摄入比例</Text>
+            <Text className='multiview-compact-hint'>结果页自动给出每项食物的滑块比例</Text>
+          </View>
+          <View
+            className={`multiview-toggle ${suggestRatioEnabled ? 'multiview-toggle--on' : ''}`}
+            onClick={toggleSuggestRatio}
+          >
+            <View className='multiview-toggle-knob' />
+          </View>
         </View>
       </View>
 

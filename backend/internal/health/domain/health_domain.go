@@ -58,10 +58,11 @@ type ExerciseUserProfile struct {
 func (ExerciseUserProfile) TableName() string { return "weapp_user" }
 
 type BodyMetricUserProfile struct {
-	ID            string   `gorm:"column:id"`
-	Weight        *float64 `gorm:"column:weight"`
-	Gender        *string  `gorm:"column:gender"`
-	ActivityLevel *string  `gorm:"column:activity_level"`
+	ID              string         `gorm:"column:id"`
+	Weight          *float64       `gorm:"column:weight"`
+	Gender          *string        `gorm:"column:gender"`
+	ActivityLevel   *string        `gorm:"column:activity_level"`
+	HealthCondition map[string]any `gorm:"column:health_condition;serializer:json"`
 }
 
 func (BodyMetricUserProfile) TableName() string { return "weapp_user" }
@@ -108,17 +109,38 @@ func (StatsUserProfile) TableName() string { return "weapp_user" }
 
 // FoodRecord — minimal projection for stats aggregation (table: user_food_records)
 type FoodRecord struct {
-	ID            string     `gorm:"column:id"`
-	UserID        string     `gorm:"column:user_id"`
-	MealType      string     `gorm:"column:meal_type"`
-	TotalCalories float64    `gorm:"column:total_calories"`
-	TotalProtein  float64    `gorm:"column:total_protein"`
-	TotalCarbs    float64    `gorm:"column:total_carbs"`
-	TotalFat      float64    `gorm:"column:total_fat"`
-	RecordTime    *time.Time `gorm:"column:record_time"`
+	ID            string           `gorm:"column:id"`
+	UserID        string           `gorm:"column:user_id"`
+	MealType      string           `gorm:"column:meal_type"`
+	Description   *string          `gorm:"column:description"`
+	Items         []map[string]any `gorm:"column:items;serializer:json"`
+	TotalCalories float64          `gorm:"column:total_calories"`
+	TotalProtein  float64          `gorm:"column:total_protein"`
+	TotalCarbs    float64          `gorm:"column:total_carbs"`
+	TotalFat      float64          `gorm:"column:total_fat"`
+	RecordTime    *time.Time       `gorm:"column:record_time"`
 }
 
 func (FoodRecord) TableName() string { return "user_food_records" }
+
+type DietRecommendationFoodItem struct {
+	Name     string `json:"name"`
+	Amount   string `json:"amount"`
+	Source   string `json:"source,omitempty"`
+	SourceID string `json:"source_id,omitempty"`
+}
+
+type DietRecommendationCandidate struct {
+	Source      string                       `json:"source"`
+	SourceID    string                       `json:"source_id,omitempty"`
+	Title       string                       `json:"title"`
+	Description string                       `json:"description,omitempty"`
+	Calories    float64                      `json:"calories"`
+	Protein     float64                      `json:"protein"`
+	Carbs       float64                      `json:"carbs"`
+	Fat         float64                      `json:"fat"`
+	Items       []DietRecommendationFoodItem `json:"items"`
+}
 
 // AnalysisTask — table: analysis_tasks
 type AnalysisTask struct {

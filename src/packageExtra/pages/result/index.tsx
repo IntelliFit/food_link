@@ -47,6 +47,7 @@ import './index.scss'
 
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
+const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
 const MAX_ANALYZE_IMAGES = 3
 /** 判断当前识别会话是否已保存为饮食记录。
@@ -61,6 +62,13 @@ function isAnalyzeSessionCommitted(): boolean {
   } catch {
     return false
   }
+}
+
+const readSuggestRatioPreference = (): boolean => {
+  const saved = Taro.getStorageSync(SUGGEST_RATIO_STORAGE_KEY)
+  if (saved === false || saved === '0' || saved === 'false') return false
+  if (saved === true || saved === '1' || saved === 'true') return true
+  return true
 }
 
 const MEAL_OPTIONS = [
@@ -226,6 +234,8 @@ interface NutritionItem {
   calorie: number // 基于 weight 的总热量
   intake: number // 实际摄入量 = weight × ratio
   ratio: number // 摄入比例（0-100%，独立调节）
+  suggestedRatioReason?: string
+  suggestedRatioSource?: string
   protein: number
   carbs: number
   fat: number
@@ -579,6 +589,8 @@ function ResultPage() {
         calorie: nutrients.calories,
         intake,
         ratio: suggestedRatio,
+        suggestedRatioReason: item.suggestedRatioReason,
+        suggestedRatioSource: item.suggestedRatioSource,
         protein: nutrients.protein,
         carbs: nutrients.carbs,
         fat: nutrients.fat,
@@ -852,6 +864,7 @@ function ResultPage() {
         meal_type: savedMealType,
         diet_goal: savedDietGoal,
         activity_timing: savedActivityTiming,
+        suggest_ratio_enabled: readSuggestRatioPreference(),
         reference_objects: buildPrecisionReferenceObjects(),
       }
       const { task_id } = await continuePrecisionSession(precisionSessionId, payload)
@@ -1046,7 +1059,9 @@ function ResultPage() {
           return {
             ...item,
             ratio: clampedRatio,
-            intake: newIntake
+            intake: newIntake,
+            suggestedRatioSource: item.suggestedRatioSource === 'ai' ? 'manual' : item.suggestedRatioSource,
+            suggestedRatioReason: item.suggestedRatioSource === 'ai' ? undefined : item.suggestedRatioReason
             // weight 不变
           }
         }
@@ -1627,6 +1642,7 @@ function ResultPage() {
               activity_timing: savedActivityTiming,
               execution_mode: savedExecutionMode,
               analysis_engine: savedAnalysisEngine,
+              suggest_ratio_enabled: readSuggestRatioPreference(),
               previousResult,
               correction_source_task_id: correctionSourceTaskId || undefined,
               correctionItems: correctionPayload,
@@ -1652,6 +1668,7 @@ function ResultPage() {
               diet_goal: savedDietGoal,
               activity_timing: savedActivityTiming,
               execution_mode: savedExecutionMode,
+              suggest_ratio_enabled: readSuggestRatioPreference(),
               previousResult,
               correction_source_task_id: correctionSourceTaskId || undefined,
               correctionItems: correctionPayload,
@@ -2203,7 +2220,12 @@ function ResultPage() {
                     </View>
 
                     <View className='ratio-control'>
-                      <Text className='control-label'>实际摄入</Text>
+                      <View className='ratio-label-wrap'>
+                        <Text className='control-label'>实际摄入</Text>
+                        {item.suggestedRatioSource === 'ai' && (
+                          <Text className='ratio-suggestion-badge'>AI建议</Text>
+                        )}
+                      </View>
                       <View className='ratio-control-right'>
                         <View className='ratio-slider-shell'>
                           <View className='ratio-slider-hitbox'>

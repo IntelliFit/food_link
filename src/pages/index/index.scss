@@ -459,6 +459,79 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-weight: 600;
 }
 
+.nutrition-target-compact {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 10rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 10%);
+}
+
+.nutrition-target-compact-text {
+  color: #2f7f62;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 700;
+}
+
+.nutrition-target-compact-icon {
+  margin-left: 4rpx;
+  color: #2f7f62;
+  font-size: 18rpx;
+  line-height: 28rpx;
+}
+
+.nutrition-target-sheet {
+  max-height: calc(70vh - env(safe-area-inset-bottom));
+}
+
+.nutrition-target-sheet-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10rpx;
+  margin-top: 10rpx;
+}
+
+.nutrition-target-sheet-item {
+  padding: 14rpx 12rpx;
+  border-radius: 8rpx;
+  background: rgb(92 184 150 / 8%);
+  border: 1rpx solid rgb(92 184 150 / 16%);
+}
+
+.nutrition-target-sheet-label {
+  display: block;
+  color: $text-tertiary;
+  font-size: 20rpx;
+  line-height: 28rpx;
+}
+
+.nutrition-target-sheet-value {
+  display: block;
+  margin-top: 4rpx;
+  color: $text-primary;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 700;
+}
+
+.nutrition-target-sheet-desc {
+  display: block;
+  margin-top: 16rpx;
+  color: $text-secondary;
+  font-size: 24rpx;
+  line-height: 36rpx;
+
+  &.muted {
+    margin-top: 8rpx;
+    color: $text-tertiary;
+    font-size: 22rpx;
+    line-height: 32rpx;
+  }
+}
+
 // 进度条
 .progress-section {
   margin-top: 8rpx;
@@ -814,7 +887,19 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-size: 24rpx;
   line-height: 34rpx;
   color: $text-secondary;
+  margin-bottom: 8rpx;
+}
+
+.diet-rec-option-source {
+  display: inline-flex;
+  align-self: flex-start;
   margin-bottom: 14rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 10%);
+  font-size: 20rpx;
+  line-height: 28rpx;
+  color: #2f7f62;
 }
 
 .diet-rec-foods {

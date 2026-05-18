@@ -57,6 +57,7 @@ func NewExerciseService(repo ExerciseRepo, cfg ...*config.Config) *ExerciseServi
 type CreditGuard interface {
 	ValidateExerciseCredits(ctx context.Context, userID, recordedOn string) (map[string]any, error)
 	ValidateDietRecommendationCredits(ctx context.Context, userID string) (map[string]any, error)
+	ValidateStatsInsightCredits(ctx context.Context, userID string) (map[string]any, error)
 	ConsumeEarnedCreditsOnTaskCreated(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
 	ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error
 	RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error

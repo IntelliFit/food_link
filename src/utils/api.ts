@@ -18,7 +18,7 @@ function readInjectedString(
 // config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
 export const API_BASE_URL = readInjectedString(
   () => __API_BASE_URL__,
-  'https://healthymax.cn'
+  'https://dev.healthymax.cn'
 )
 export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
@@ -187,6 +187,8 @@ export interface FoodItem {
   estimatedWeightGrams: number
   originalWeightGrams: number
   suggestedRatio?: number
+  suggestedRatioReason?: string
+  suggestedRatioSource?: string
   waterMl?: number
   water_ml?: number
   nutrients: Nutrients
@@ -203,6 +205,9 @@ export interface AnalyzeResponse {
   description: string
   insight: string
   items: FoodItem[]
+  suggest_ratio_enabled?: boolean
+  suggest_ratio_status?: string
+  suggest_ratio_applied_count?: number
   pfc_ratio_comment?: string
   absorption_notes?: string
   context_advice?: string
@@ -486,6 +491,22 @@ export interface HomeIntakeData {
   }
 }
 
+export interface HomeNutritionTarget {
+  source?: 'manual' | 'dynamic' | 'profile' | 'default' | string
+  diet_goal?: string
+  base_calorie_target?: number
+  suggested_calorie_target?: number
+  today_exercise_kcal?: number
+  exercise_added_kcal?: number
+  exercise_surplus_kcal?: number
+  exercise_threshold_kcal?: number
+  recent_exercise_avg_kcal?: number
+  recent_exercise_days?: number
+  activity_multiplier?: number
+  explanation?: string
+  macro_explanation?: string
+}
+
 /** 首页同一餐次下的单条饮食记录摘要（用于多选跳转） */
 export interface HomeMealRecordEntry {
   id: string
@@ -674,6 +695,7 @@ export interface HomeDashboard {
   /** 当日运动消耗汇总（千卡），来自 user_exercise_logs */
   exerciseBurnedKcal?: number
   achievement?: HomeAchievement
+  nutritionTarget?: HomeNutritionTarget
 }
 
 /** 首页仪表盘可编辑目标值 */
@@ -725,11 +747,15 @@ export interface DietRecommendationRequest {
 export interface DietRecommendationFoodItem {
   name: string
   amount: string
+  source?: string
+  source_id?: string
 }
 
 export interface DietRecommendationOption {
   title: string
   reason: string
+  source?: string
+  source_id?: string
   calories: number
   protein: number
   carbs: number
@@ -838,6 +864,8 @@ export interface StatsSummary {
   analysis_summary: string
   analysis_summary_generated_date?: string | null
   analysis_summary_needs_refresh?: boolean
+  analysis_summary_daily_limit?: number
+  analysis_summary_used_today?: number
   body_metrics?: BodyMetricsSummary
 }
 
@@ -1186,6 +1214,7 @@ export interface HealthCondition {
   allergies?: string[]
   health_notes?: string
   routine_type?: string
+  daily_life_activity_level?: string
   report_extract?: ReportExtract | null
   precision_reference_defaults?: PrecisionReferenceDefaults
   [key: string]: unknown
@@ -1218,6 +1247,7 @@ export interface HealthProfileUpdateRequest {
   height?: number
   weight?: number
   activity_level?: string
+  daily_life_activity_level?: string
   medical_history?: string[]
   diet_preference?: string[]
   allergies?: string[]
@@ -1852,6 +1882,7 @@ export interface AnalyzeTextParams {
   diet_goal?: 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
   activity_timing?: 'post_workout' | 'daily' | 'before_sleep' | 'none'
   remaining_calories?: number
+  suggest_ratio_enabled?: boolean
   analysis_engine?: AnalysisEngine
 }
 
@@ -1867,6 +1898,7 @@ export async function analyzeFoodText(params: AnalyzeTextParams | string): Promi
     ...(params.diet_goal != null && { diet_goal: params.diet_goal }),
     ...(params.activity_timing != null && { activity_timing: params.activity_timing }),
     ...(params.remaining_calories != null && { remaining_calories: params.remaining_calories }),
+    ...(params.suggest_ratio_enabled != null && { suggest_ratio_enabled: params.suggest_ratio_enabled }),
     ...(params.analysis_engine != null && { analysis_engine: params.analysis_engine })
   }
   try {
@@ -1933,6 +1965,7 @@ export interface AnalyzeTaskSubmitParams {
   activity_timing?: string
   user_goal?: string
   remaining_calories?: number
+  suggest_ratio_enabled?: boolean
   additionalContext?: string
   modelName?: string
   is_multi_view?: boolean
@@ -2032,6 +2065,7 @@ export interface AnalyzeBatchSubmitParams {
   activity_timing?: string
   user_goal?: string
   remaining_calories?: number
+  suggest_ratio_enabled?: boolean
   additionalContext?: string
   modelName?: string
   execution_mode?: ExecutionMode
@@ -2086,6 +2120,7 @@ export interface AnalyzeTextTaskSubmitParams {
   activity_timing?: string
   user_goal?: string
   remaining_calories?: number
+  suggest_ratio_enabled?: boolean
   additionalContext?: string
   execution_mode?: ExecutionMode
   analysis_engine?: AnalysisEngine
@@ -2148,6 +2183,7 @@ export interface ContinuePrecisionSessionParams {
   activity_timing?: string
   user_goal?: string
   remaining_calories?: number
+  suggest_ratio_enabled?: boolean
   is_multi_view?: boolean
   reference_objects?: PrecisionReferenceObjectInput[]
 }
@@ -2541,6 +2577,9 @@ export async function updateDashboardTargets(data: DashboardTargets): Promise<Da
         height: profile.height ?? undefined,
         weight: profile.weight ?? undefined,
         activity_level: profile.activity_level ?? undefined,
+        daily_life_activity_level: typeof hc.daily_life_activity_level === 'string'
+          ? hc.daily_life_activity_level
+          : profile.activity_level ?? undefined,
         diet_goal: profile.diet_goal ?? undefined,
         medical_history: Array.isArray(hc.medical_history) ? (hc.medical_history as string[]) : [],
         diet_preference: Array.isArray(hc.diet_preference) ? (hc.diet_preference as string[]) : [],
@@ -2576,7 +2615,7 @@ export async function updateDashboardTargets(data: DashboardTargets): Promise<Da
 }
 
 /**
- * 获取数据统计（周/月摄入、TDEE、连续天数、饮食结构及简单分析）
+ * 获取数据统计（周/月摄入、日常消耗估算、连续天数、饮食结构及简单分析）
  * @param range 'week' | 'month'
  */
 export async function getStatsSummary(range: 'week' | 'month'): Promise<StatsSummary> {
@@ -2699,7 +2738,13 @@ export async function syncLocalBodyMetrics(snapshot: BodyMetricsLocalSnapshot): 
 /**
  * 请求大模型生成当前统计周期的 AI 营养洞察（不落库）
  */
-export async function generateStatsInsight(range: 'week' | 'month'): Promise<{ analysis_summary: string }> {
+export async function generateStatsInsight(range: 'week' | 'month'): Promise<{
+  analysis_summary: string
+  analysis_summary_generated_date?: string
+  analysis_summary_needs_refresh?: boolean
+  analysis_summary_daily_limit?: number
+  analysis_summary_used_today?: number
+}> {
   const res = await authenticatedRequest(
     '/api/stats/insight/generate',
     {
@@ -2709,10 +2754,15 @@ export async function generateStatsInsight(range: 'week' | 'month'): Promise<{ a
     }
   )
   if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.detail || 'AI 洞察生成失败'
-    throw new Error(msg)
+    throwHttpErrorWithStatus(res.statusCode, res.data, 'AI 洞察生成失败', res.header as Record<string, any> | undefined)
   }
-  return res.data as { analysis_summary: string }
+  return unwrapResponse<{
+    analysis_summary: string
+    analysis_summary_generated_date?: string
+    analysis_summary_needs_refresh?: boolean
+    analysis_summary_daily_limit?: number
+    analysis_summary_used_today?: number
+  }>(res)
 }
 
 /**
@@ -3302,7 +3352,7 @@ export async function getHealthProfile(): Promise<HealthProfile> {
 }
 
 /**
- * 提交/更新健康档案问卷（后端自动计算 BMR、TDEE）
+ * 提交/更新健康档案问卷（后端自动计算 BMR、日常消耗估算）
  * @param data 问卷数据
  * @returns Promise<HealthProfile>
  */

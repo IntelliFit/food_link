@@ -1,3 +1,62 @@
+## 2026-05-17 — 用户留存/习惯循环设计讨论
+
+- Task: 用户提出当前 `food_link` 流失率较快，想从心理学、游戏化和产品机制角度思考，除了曾经的「圈子」好友动态和现有积分体系之外，是否能设计一个让用户每天主动打开小程序的核心吸引点。
+- Status: design_discussion_no_code
+- Context:
+  - 「圈子」原本有朋友吃什么、社交反馈和内容流潜力，但当前因微信审核类目问题已从底部导航临时隐藏。
+  - 积分体系已经存在，但用户感知和奖励闭环还不够明显。
+  - 讨论重点应放在健康产品的可持续习惯循环，而不是伤害用户的暗黑上瘾机制。
+- Direction under discussion:
+  - 优先设计“记录即反馈、每日开奖、连续身份、轻社交/挑战、积分可兑换特权”的组合闭环，让用户每天有明确打开理由。
+  - 需要避免羞辱式减肥、过强负反馈和纯打卡压力，否则短期打开率可能提升但长期留存和信任会下降。
+
+## 2026-05-17 — 首页按剩余目标推荐餐食轻量候选增强
+
+- Task: 用户询问当前“按剩余目标推荐餐食”的数据来源，并进一步提出公共食物库、营养库、用户饮食记录都可作为 DeepSeek 推荐上下文，但不能全量塞入模型，需先思考检索/候选生成方案；随后要求先实现最轻量版本，保证推荐食物有来源、不要每次都一样、候选方案约 5 个。
+- Status: fixed_code_static_verified_runtime_blocked
+- Current finding:
+  - 当前实现是前端传今日剩余 kcal、三大营养缺口、目标、已吃餐次和场景（外面吃/自己做），后端调用 DeepSeek 即时生成 3 个方案；失败时走少量规则兜底。
+  - 当前未真正使用 `public_food_library`、`food_nutrition_library` 或全局/个人 `user_food_records` 作为推荐候选库。
+- Direction under discussion:
+  - 后续更合适的方向是“后端检索候选 + 模型重排/组合/解释”，而不是把全库数据直接放进 prompt。
+  - 候选来源可分层：标准营养库负责基础食材/营养真实值，公共食物库负责真实菜品/外食经验，用户个人历史负责偏好和可接受食物，全局饮食记录只做聚合趋势/热门组合，不直接泄露个人记录。
+- Implementation:
+  - 后端 `StatsRepo.GetDietRecommendationCandidates()` 轻量检索候选：`public_food_library` 随机取已发布公共食物，当前用户 `user_food_records` 取近期历史餐食，`food_nutrition_library` 随机取活跃标准营养条目；外面吃优先公共库，自己做优先营养库。
+  - DeepSeek prompt 增加“可用候选 JSON”，要求优先使用候选并原样返回 `source/source_id`；推荐数量从 3 个改为 5 个。
+  - 后端 normalize 会补齐方案和食物 item 的来源；DeepSeek 不可用时，优先从候选库按剩余热量/蛋白缺口/脂肪约束生成 5 个兜底方案，再退回旧规则兜底。
+  - 前端 `DietRecommendationSheet` 展示来源标签：公共食物库、历史记录、营养库、组合候选、规则兜底或 AI 补充。
+- Verification:
+  - `go test ./internal/health/service ./internal/health/handler -run 'TestStatsService_GenerateDietRecommendation|TestGenerateDietRecommendation' -count=1` passed.
+  - `go test ./internal/app -run '^$' -count=1` passed.
+  - `npx eslint src/pages/index/components/DietRecommendationSheet.tsx src/utils/api.ts --max-warnings 0` passed.
+  - `git diff --check` passed for touched files（仅 CRLF warning）。
+  - `go test ./internal/health/repo -run 'TestStatsRepo' -count=1` blocked by local `CGO_ENABLED=0` / `go-sqlite3 requires cgo`。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+## 2026-05-17 — 食物结果页 AI 建议摄入比例设计澄清
+
+- Task: 用户澄清“饮食比例建议”不是单纯展示文案，而是 AI 根据用户上下文直接生成每个食物的实际摄入比例，并与结果页现有滑块比例一致；未开启或无法生成时默认 100%，由用户自行调节。
+- Status: implemented_static_verified_runtime_blocked
+- Requirement:
+  - 比例生成需要综合用户目标、当日剩余热量、当前餐次目标、本餐食物组成、各食物热量/宏量营养等上下文。
+  - 后端应输出每个 item 的建议摄入比例，前端用它初始化现有 `ratio` / `intake`，让用户无需手动选择。
+  - 需要有开关控制是否启用 AI 建议摄入比例；关闭时所有 item 仍默认 `100%`。
+  - 如果模型没有生成合法建议或上下文不足，也应回退到 `100%`，不能影响原有手动调节能力。
+- Implementation:
+  - 后端 `AnalyzeInput` / `SubmitTaskInput` 新增 `suggest_ratio_enabled`，异步任务 payload、worker、精准模式 continue 链路均会透传该开关。
+  - `finalizeAnalyzeResponse()` 在 db_first 营养库回算后新增二阶段 `applySuggestedRatios()`，用 Gemini/Ofox 基于最终 item 营养、用户目标、餐次、运动时机、剩余热量和补充上下文生成每项 `suggestedRatio`。
+  - 二阶段比例建议 20 秒超时；关闭开关、无客户端、模型失败、无合法结果时统一把所有 item `suggestedRatio` 设为 `100`，并写入 `suggest_ratio_status` 便于排查。
+  - 分析页新增“AI摄入比例”开关，默认开启并持久化到 `analyzeSuggestRatioEnabled`；文字记录和纠错/精准继续使用同一偏好。
+  - 结果页继续用 `suggestedRatio` 初始化 `ratio/intake`，AI 来源时显示小的“AI建议”标记；用户手动拖动滑块后该标记转为 manual，不再误导当前值仍是 AI。
+- Verification:
+  - `go test ./internal/analyze/service -run 'TestAnalyzeService_ApplySuggestedRatios|TestParseItems|TestMergeBatchResults' -count=1` passed.
+  - `go test ./internal/analyze/service ./internal/analyze/handler ./internal/worker -run 'TestAnalyzeService_ApplySuggestedRatios|TestAnalyzeHandler_SubmitAnalyzeTask|TestAnalyzeHandler_SubmitTextTask|TestSanitizeTaskErrorMessage' -count=1` passed.
+  - `go test ./internal/app -run '^$' -count=1` passed.
+  - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/record-text/index.tsx src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed.
+  - `git diff --check` passed for touched files（仅 CRLF warning）。
+  - `npm run typecheck` 仍被既有无关错误阻塞：`analyze-history/loadTasks`、`expiry` AppColorScheme 类型、`food-library` editable/content 类型。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具自动化服务未连接失败，未能截图/交互验证。
+
 ## 2026-05-17 — 体重/喝水/运动趋势页重做与历史纠错
 
 - Task: 用户确认按“记录页只负责记录，趋势页二级承接分析/回看/纠错”的方向继续执行；同时指出 30 天点图/柱图在手机窄屏里不合适，要求历史趋势里可删除错误记录，喝水必须能删除某一天里的单次喝水 log。
@@ -9271,3 +9330,180 @@
   - 在 `dev` 提交 `26ebdc9 feat: refine health trends and AI fallbacks` 并推送到 `origin/dev`。
   - 在 `main` 合并 `dev`，生成 merge commit `9415c67 Merge branch 'dev'`。
   - 后续需将完成状态提交并同步 `origin/main`，再回到 `dev`。
+## 2026-05-17 — 小程序 build/体验版与开发模式数据不一致排查
+
+- Task: 用户反馈本地 build 并上传体验版后，体验版数据与开发模式不同步，线上/体验版原有记录看起来消失。
+- Status: corrected_preview_api_domain
+- Finding:
+  - 用户纠正项目口径：体验版请求应该是 `https://dev.healthymax.cn`，不是 `https://healthymax.cn`。
+  - 之前 `dist/common.js` 注入的 API 为 `https://healthymax.cn`，原因是 2026-05-16 的旧状态/决策文件曾写入“体验版走 healthymax”的错误口径。
+  - `npm run dev:weapp` 注入的 API 为 `http://127.0.0.1:3010`。
+  - 因此用户刚刚 build 上传体验版后，实际访问了正式线上 `healthymax.cn`，而不是预期的 `dev.healthymax.cn`，导致体验版数据看起来不对。
+  - 小程序本地 storage 中的 `access_token/user_id/userInfo` 可能跨构建残留；API 域名切换后旧 token/cache 也可能让用户看起来像登录到另一套身份或旧状态。
+- Fix:
+  - `package.json` 中 `build:weapp`、`build:weapp:preview`、`build:weapp:debug` 改为注入 `https://dev.healthymax.cn`。
+  - 新增 `build:weapp:release`，正式版发布时显式注入 `https://healthymax.cn`。
+  - 新增 `dev:weapp:preview`，watch 模式联调体验版 API。
+  - `config/index.ts` production 默认 API 和 `src/utils/api.ts` 注入失败兜底改回 `https://dev.healthymax.cn`，避免普通 build 误连正式域名。
+  - `AGENTS.md`、`DECISIONS.md` 同步修正体验版/正式版域名口径。
+- Next:
+  - 重新执行 `npm run build:weapp:preview` 或普通 `npm run build:weapp` 后再上传体验版。
+  - 切换回 dev 域名后，建议清除小程序 storage/token 并重新登录验证体验版数据。
+
+## 2026-05-17 — 食物分析带壳/带骨食物重量口径
+
+- Task: 用户指出食物分析估重应与营养库口径一致；带壳食物如果营养库按可食部/去壳后数据计算，则识别重量也应使用去壳后的可食重量。
+- Status: fixed_prompt_verified
+- Decision:
+  - 食物分析中的 `estimatedWeightGrams` 统一作为营养计算使用的可食部净重。
+  - 带壳、带骨、带核食物按去壳/去骨/去核后的可食重量估算，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
+- Changes:
+  - 普通图片 db_first prompt 强化“营养库按可食部计算”和虾/螃蟹/贝类、花生/瓜子/坚果、水果等示例。
+  - 文本解析 prompt 强化即使用户描述整只/整份，也要换算为可食部净重。
+  - 精准模式 planner、分项估重和重量复核 prompt 均补充可食部净重口径。
+- Verification:
+  - `go test ./internal/analyze/service -run "TestBuildDBFirstPromptsUseEdibleNetWeight|TestBuildDBFirstPromptIncludesCorrectionContext" -count=1` passed。
+  - `go test ./internal/worker -run "TestPrecisionPrompts_ForceEdibleNetWeight|TestPrecisionStaplePrompts_ForceContainerDepthAndThinLayer" -count=1` passed。
+  - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go backend/internal/worker/worker.go backend/internal/worker/worker_sanitize_test.go` passed（仅 CRLF warning）。
+## 2026-05-18 — 食物分析算法链路梳理
+
+- Task: 用户询问当前食物算法整体实现过程，希望先分析普通模式/精准模式、纠错过程，以及图片模式和纯文本输入模式。
+- Status: implemented_backend_static_verified
+- Finding:
+  - 普通图片模式：前端上传 1-3 张图片后提交 `food` 异步任务；后端固定 Doubao 识别食物名称、可食部净重和 waterMl，再走 `db_first` 营养库回算；未命中时调用 Gemini 生成每 100g 营养，并尝试以 `source=gemini_generated` 写入营养库。
+  - 纯文本模式：前端提交 `food_text` 异步任务；默认 DeepSeek 解析自然语言为食物名称、可食部净重和 waterMl，再同样走 `db_first` 和 Gemini 未命中补全。
+  - 精准模式：提交 `precision_plan`；Doubao 负责规划/拆分主体和候选食物，Gemini/Ofox 负责分项估重和重量复核；每个分项估重后调用 `ApplyDBFirstToItems()` 回算营养，最后 `precision_aggregate` 聚合结果。
+  - 纠错：结果页构造 `previousResult`、结构化 `correctionItems` 和自由文本说明后重新提交；后端标记 `is_correction`，worker 优先进入 `completeCorrectionTask()`，强制 `db_first`、普通模式、Doubao 重新分析，并将纠错样本写入 `analysis_feedback_samples`。
+  - 注意点：普通图片/文字模式会在 db_first 后二阶段生成 `suggestedRatio`；精准模式聚合链路当前没有再次调用普通模式的二阶段 `applySuggestedRatios()`。
+- Follow-up discussion:
+  - 用户指出模型能力互补：Doubao 食物种类识别相对强，但重量估计弱；Gemini/Ofox 对重量、逻辑推理、包装文字和世界知识更强，但食物类别识别可能略弱。
+  - 算法改进方向应从“单模型包办”改为“分工 + 仲裁 + 证据化”：Doubao 做视觉候选识别，Gemini 做 OCR/包装信息/重量推理，后端做结构化合并、营养库回算和纠错样本沉淀。
+  - 效果优先阶段可先接受更长耗时；之后再基于置信度和冲突程度做动态跳过、并行和缓存优化。
+- 2026-05-18 implementation:
+  - 普通图片模式新增 hybrid 复核链路：Doubao 仍作为首轮视觉识别，输出食物名称/重量/waterMl 草稿；Gemini/Ofox 在标准模式、非纠错、非 legacy_direct 且客户端可用时基于原图和 Doubao 草稿做 OCR/包装文字/重量证据复核。
+  - Gemini 复核 prompt 要求优先利用包装文字、品牌名、品名、净含量、营养成分表、规格、份数和已食用比例；无包装时以 Doubao 候选为重要参考，重点重新估算可食部净重。
+  - Gemini 复核结果会替换首轮 parsed items 后继续走现有 `db_first` 营养库回算；不会改变精准模式、纯文本模式和纠错模式。
+  - Gemini 复核失败、不可用、返回空 items 时不阻断普通识别，回退 Doubao 草稿并在结果中写 `hybrid_review.status`。
+  - 结果新增 `food_image_strategy` 和 `hybrid_review` 元数据；item 解析保留 `weightEvidence/recognitionEvidence/alternativeNames/confidence` 等证据字段，便于后续 debug。
+- Verification:
+  - `go test ./internal/analyze/service -run 'TestAnalyzeService_AnalyzeImageStandard(HybridUsesGeminiWeightReview|HybridFallsBackToDoubaoWhenGeminiFails|IgnoresConfiguredGeminiProvider|UsesDoubaoForExplicitDoubao|ForcesDoubaoInsteadOfGemini)$|TestBuildDBFirstPromptsUseEdibleNetWeight|TestBuildDBFirstPromptIncludesCorrectionContext' -count=1` passed.
+  - `go test ./internal/app -run '^$' -count=1` passed.
+  - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go CURRENT_TASK.md memory/2026-05-18.md` passed（仅 CRLF warning）。
+  - `go test ./internal/analyze/service -run 'TestAnalyzeService_Analyze|TestAnalyzeService_AnalyzeImage|TestBuildDBFirst|TestParseItems|TestAnalyzeWithJSONParseRetry|TestResolveModelConfig' -count=1` blocked by local `CGO_ENABLED=0` / `go-sqlite3 requires cgo` in existing sqlite-backed tests.
+## 2026-05-18 — 首页热量目标与动态营养模型讨论
+
+- Project rule update:
+  - 用户明确：不需要代理验证；只要作者是 `littlthorsebrother`，所有验证由用户手动完成。
+  - 后续此类任务完成后不要主动跑自动化/本地验证或 weapp-devtools，只在最终回复说明未验证、由用户手动验证即可；除非用户在当轮明确要求代理验证。
+
+- Task: 用户希望系统性梳理注册档案、BMR/TDEE、首页每日摄入目标、蛋白/碳水/脂肪分配，以及是否应根据当天健身/不健身动态变化。
+- Status: first_version_implemented_static_verified_runtime_blocked
+- Context:
+  - 当前实现中注册/健康档案会计算 BMR/TDEE；首页摄入目标主要读取 `health_condition.dashboard_targets`，没有目标时首页 dashboard 默认 `2000 kcal / 蛋白 120g / 碳水 250g / 脂肪 65g`。
+  - 用户希望目标更像一个动态模型，而不是固定目标：训练日可能多吃，休息日可能少吃，同时宏量营养也要合理变化。
+- Discussion direction:
+  - 需要区分“平均日 TDEE”（由基础信息和活动水平得到）与“当天实际运动消耗”（由运动记录得到），避免把运动消耗重复计算。
+  - 推荐后续设计为：长期目标给出周预算/平均目标，当天根据真实运动、目标类型、训练强度和已摄入情况做温和动态调整；蛋白目标相对稳定，碳水更多承担训练日/休息日波动，脂肪设置健康下限。
+  - 用户进一步提出：大多数用户对 `久坐/轻度/中等/活跃/非常活跃` 活动系数没有概念，产品应鼓励用户在平台记录运动，并根据近 1-2 周运动记录自动调整活动系数或目标热量。
+  - 后续模型应让用户充分理解“为什么今天建议吃这么多”，同时由系统托管目标热量与蛋白/碳水/脂肪分配，减少用户手动计算负担。
+- Implementation:
+  - 后端 `HomeRepo` 新增近 14 天运动消耗查询；`HomeDashboard` 在取当日运动消耗后同时拉近 14 天运动历史。
+  - 后端 `DashboardService` 增加第一版动态营养目标引擎：手动 `health_condition.dashboard_targets` 优先；无手动目标时，用 TDEE/体重/饮食目标/今日运动消耗计算今日建议热量，并按蛋白稳定、脂肪下限、碳水动态的口径分配三大营养素。
+  - 减脂目标按 TDEE 保留温和热量缺口；增肌目标增加少量盈余；今日运动按目标类型加回部分消耗（减脂 45%、维持 50%、增肌 70%，最高 600 kcal）。
+  - 首页接口新增 `nutritionTarget`，返回来源、基础目标、今日建议目标、运动补偿、近 14 天运动天数/日均消耗和解释文案。
+  - 前端 `HomeIntakeData` 继续保持兼容；新增 `HomeNutritionTarget` 类型，本地首页快照同步保存该字段；首页热量卡展示“今日建议/手动目标/档案目标”、基础热量和运动补偿解释。
+- Verification:
+  - `go test ./internal/home/service -run 'TestDashboardTargets|TestBuildNutritionTargetPlan|TestBuildMealTargets|TestNormalizeMealType|TestRound1|TestToFloat64' -count=1` passed。
+  - `go test ./internal/app -run '^$' -count=1` passed。
+  - `npx eslint src/pages/index/index.tsx src/utils/api.ts src/utils/home-dashboard-local-cache.ts --max-warnings 0` passed。
+  - `git diff --check -- backend/internal/home/repo/home_repo.go backend/internal/home/service/dashboard_service.go backend/internal/home/service/dashboard_service_test.go src/utils/api.ts src/utils/home-dashboard-local-cache.ts src/pages/index/index.tsx src/pages/index/index.scss` passed（仅 CRLF warning）。
+  - `go test ./internal/home/repo ./internal/home/service ...` 的 sqlite 集成测试被本机 `CGO_ENABLED=0` 阻塞；尝试 `CGO_ENABLED=1` 后因本机缺少 `gcc` 仍无法运行。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 和 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+- 2026-05-18 model correction:
+  - 用户指出“今日运动补偿”难理解：目标热量本身可能已经通过活动系数包含基础运动量，如果再按今日运动加回，会有重复计算风险。
+  - 需要修正模型口径：活动系数应尽量表示非运动日常活动/生活方式；平台记录的显式运动应单独进入运动预算。
+  - 若仍使用包含运动的 TDEE，则今日运动补偿不能按总运动加回，而应只加回“今日运动高于近期平均/预期运动”的部分，或改成周预算模型。
+- 2026-05-18 follow-up fix:
+  - 用户指出首页出现“手动目标”提示很奇怪，且当前 2140 kcal / 营养素未变化，说明旧 `dashboard_targets` 阻挡了系统重算。
+  - 已改为：旧历史 `dashboard_targets` 不再默认挡住动态目标；只有 `health_condition.dashboard_targets_mode = manual` 时，才把用户新保存的目标视作自定义目标。
+  - 首页提示从“手动目标”改为“今日建议 / 系统目标 / 自定义目标”；普通动态目标不再展示“手动目标”。
+  - 今日运动补偿改为基于 `max(0, 今日运动 - 近14天日均运动)` 的增量补偿，避免把基础活动/TDEE 中已包含的运动重复加回。
+  - 验证：`go test ./internal/home/service -run 'TestDashboardTargets|TestBuildNutritionTargetPlan|TestBuildMealTargets|TestNormalizeMealType|TestRound1|TestToFloat64' -count=1` passed；`go test ./internal/app -run '^$' -count=1` passed；首页相关 eslint passed；user service sqlite 测试仍被本机 CGO 阻塞；weapp-devtools 仍无法连接。
+- 2026-05-18 UI follow-up:
+  - 用户指出首页热量卡里直接展示“今日建议”大段解释占空间且奇怪，应该点开后再看。
+  - 已将首页卡内大段说明收起为小胶囊入口，仅显示“今日建议/系统目标/自定义目标”；点击后用底部弹层展示当前目标、基础目标、运动增量补偿和解释文案。
+  - 验证：`npx eslint src/pages/index/index.tsx src/utils/api.ts src/utils/home-dashboard-local-cache.ts --max-warnings 0` passed；`git diff --check -- src/pages/index/index.tsx src/pages/index/index.scss` passed；`go test ./internal/app -run '^$' -count=1` passed；weapp-devtools 仍无法连接 3001/9420。
+- 2026-05-18 implementation direction:
+  - 用户询问完整“日常生活活动 + 单独运动记录”模型如何实现。
+  - 口径：注册/健康档案不再让用户理解传统包含运动的活动系数，而是采集“不专门运动时的日常活动强度”；显式运动由平台运动记录进入运动预算。
+  - 技术落点应包括：健康档案新增/复用日常活动字段、后端目标引擎改用 `BMR × daily_life_multiplier` 作为基础消耗、运动记录生成近 14 天运动预算、首页显示今日目标但把说明折叠到弹层。
+- 2026-05-18 implementation:
+  - 注册/健康档案活动问题已改为“日常活动”：久坐办公、日常走动、经常站立、体力劳动，不再以每周运动次数描述。
+  - 后端 `CalculateTDEE` / 首页目标 / 体重同步重算统一使用日常活动系数：久坐 1.20、日常走动 1.30、经常站立 1.40、体力劳动 1.55；`very_active` 兼容映射到体力劳动。
+  - 首页动态目标基础热量已改为 `BMR × 日常活动系数`，不再直接拿旧 TDEE 当基础目标；手动目标仍只在 `dashboard_targets_mode=manual` 时覆盖。
+  - 运动补偿已改为只补“明显超量”的运动增量：`surplus = max(0, 今日运动 - 近14天日均运动)`，且 `surplus >= max(120 kcal, 近14天日均运动 × 30%)` 才按目标类型温和补偿。
+  - 首页目标说明接口返回 `exercise_surplus_kcal` 与 `exercise_threshold_kcal`；前端底部说明在未补偿时可展示“明显超量门槛”。
+  - 验证：home/user/health service 定向测试、`go test ./internal/app -run '^$' -count=1`、相关前端 eslint、diff-check 均通过；包含 sqlite 的首页集成测试仍被本机 `CGO_ENABLED=0` 阻塞；weapp-devtools 3001/9420 自动化连接失败，未能截图/交互验证。
+
+## 2026-05-18 — 食物分析纠错积分半价
+
+- Task: 用户希望食物识别在纠错过程中改为普通模式纠错消耗 1 积分，精准模式纠错消耗 2 积分；普通/精准首次识别仍保持原有 2/4 积分。
+- Status: fixed_backend_verified_ui_not_applicable
+- Changes:
+  - 后端会员积分服务新增纠错扣费模式：`standard_correction=1`、`strict_correction=2`。
+  - `TaskService` 在确认 payload 已标记 `is_correction` 后，将普通纠错积分校验切到 `standard_correction`，精准/精准继续纠错切到 `strict_correction`。
+  - 纠错任务仍沿用原 `credit_usage`、`credit_group_id`、失败退款链路；payload 中的 `cost` 会写入实际纠错扣费，失败时按实际 cost 退款。
+  - 精准纠错仍保留精准模式会员门槛校验。
+- Verification:
+  - `go test ./internal/membership/service -run 'TestMembershipService_ValidateFoodAnalysisCredits_(UsesEarnedAfterSystem|StrictRequiresStandardTier|CorrectionCosts|StrictCorrectionRequiresStandardTier)' -count=1` passed。
+  - `go test ./internal/analyze/service -run '^TestDoesNotExist$' -count=1` passed。
+  - `go test ./internal/app -run '^$' -count=1` passed。
+  - `git diff --check -- backend/internal/membership/service/membership_service.go backend/internal/membership/service/membership_service_test.go backend/internal/analyze/service/task_service.go backend/internal/analyze/service/task_service_test.go` passed（仅 CRLF warning）。
+  - `go test ./internal/analyze/service -run 'TestTaskService_SubmitCorrectionUsesOneCredit|TestTaskService_SubmitPrecisionCorrectionUsesTwoCredits|TestTaskService_SubmitCorrectionStoresChainRoot|TestTaskService_SubmitTextTask_ReservesCreditsWithRefundGroup' -count=1` blocked by local `CGO_ENABLED=0` / `go-sqlite3 requires cgo`，不是本次逻辑编译失败。
+
+## 2026-05-18 — 分析页 AI 风险解读手动更新 500 排查
+
+- Task: 用户提供分析页 AI 风险解读截图，点击「手动更新」后页面显示 `internal server error (traceId: c116e3c5578844febe5aeabb8d70a87a)`，询问原因。
+- Status: fixed_backend_verified
+- Finding:
+  - 前端「手动更新」调用 `POST /api/stats/insight/generate`，对应 `HealthHandler.GenerateStatsInsight()` -> `StatsService.GenerateInsight()`。
+  - 生成阶段会先 `CountInsightGenerationsToday()`，再构建统计数据，最后调用 `generateNutritionInsight()`；若配置了 `DEEPSEEK_API_KEY`，这里会请求 DeepSeek `deepseek-v4-flash` 生成洞察。
+  - 当前错误是后端返回 HTTP 500 的通用未处理错误，不是底部导航、页面样式或缓存展示问题；截图中的 traceId 是后端 RequestID 中间件生成的排查编号。
+  - 用户随后补充本地 Gin 日志尾部：`POST /api/stats/insight/generate` 约 684ms 返回 500，并带 `net/http.serverHandler.ServeHTTP` 栈尾；这说明更像服务端生成阶段快速错误或 panic，而不是前端问题，也不像 DeepSeek 长超时。
+  - 由于 `GenerateInsight()` 失败后前端不会继续调用 `SaveInsight()`，本次还没进入缓存保存步骤。
+- Fix:
+  - `StatsService.GenerateInsight()` 增加外层 panic recovery：记录 user_id、range 和 stack；若统计数据已经构建完成，则返回 `fallbackStatsInsight(comp)`，避免非关键 AI 洞察生成把接口打成 500。
+  - DeepSeek/LLM 生成失败时不再返回错误给前端，而是 warn 日志记录错误并使用本地兜底洞察。
+  - `StatsService` 增加可替换的 `deepSeekBaseURL`，便于单测模拟 DeepSeek 5xx。
+- Verification:
+  - `go test ./internal/health/service -run "TestStatsService_GenerateInsight|TestStatsInsight" -count=1` passed。
+  - `go test ./internal/health/service -count=1` passed。
+  - `go test ./internal/health/handler -count=1` passed。
+  - `go test ./internal/app -run "^$" -count=1` passed。
+  - `git diff --check -- backend/internal/health/service/stats_service.go backend/internal/health/service/stats_service_test.go` passed（仅 CRLF warning）。
+  - 本次只改后端接口容错和单测，未改小程序页面/组件/样式/路由/交互；未进行 weapp-devtools UI 验证。
+
+## 2026-05-18 — AI 风险解读深度、积分和手动更新次数修正
+
+- Task: 用户指出 AI 分析结果太短，而该功能应类似 deep research，因为会消耗 1 积分；同时页面写着每天可手动更新 3 次，但更新 1 次后「手动更新」按钮消失。
+- Status: fixed_code_static_verified_runtime_blocked
+- Finding:
+  - 后端原 prompt 要求 `200-300 字`，因此模型会生成短总结，不符合“1 积分深度解读”的产品预期。
+  - 前端按钮只在 `analysis_summary_needs_refresh=true` 时展示；生成当天缓存后该字段变成 false，所以按钮消失。这个条件表达的是“缓存是否过期”，不是“今日是否还有更新次数”。
+  - 生成接口此前只生成，不直接保存/扣费；前端再单独调用保存接口。对消耗积分的动作来说，这不够原子。
+- Fix:
+  - 后端 AI 风险解读 prompt 改为 `650-900 字`、5 个小节，要求覆盖总体结论、热量/TDEE、宏量结构、餐次风险、3 条优先行动，并基于数据推理。
+  - `StatsService.GenerateInsight()` 生成成功后直接写入 `ai_stats_insights` 缓存，并通过 `ValidateStatsInsightCredits()` / `ConsumeEarnedCreditsAfterSuccess()` 消耗 1 积分。
+  - 会员积分服务新增 `ValidateStatsInsightCredits()`，`creditCostStatsInsight=1`，错误文案使用「AI 风险解读」。
+  - `/api/stats/summary` 和 `/api/stats/insight/generate` 返回 `analysis_summary_daily_limit` 与 `analysis_summary_used_today`。
+  - 前端按钮逻辑改为：只要今日剩余次数 > 0，就显示「手动更新」；状态区显示「深度解读每次消耗 1 积分，今日还可更新 X / 3 次」。
+  - 前端不再二次调用 `saveStatsInsight()`；生成接口已经完成保存和扣费。
+- Verification:
+  - `npx eslint src/pages/stats/index.tsx src/utils/api.ts --max-warnings 0` passed。
+  - `go test ./internal/health/service -run "TestStatsService|TestStatsInsight" -count=1` passed。
+  - `go test ./internal/health/handler -run "TestGetStatsSummary|TestGenerateStatsInsight" -count=1` passed。
+  - `go test ./internal/membership/service -run "TestMembershipService_ValidateStatsInsightCredits|TestMembershipService_ValidateFoodAnalysisCredits" -count=1` passed。
+  - `go test ./internal/app -run "^$" -count=1` passed。
+  - `go test ./internal/health/service ./internal/health/handler ./internal/membership/service -run "TestStatsService|TestStatsInsight|TestGetStatsSummary|TestGenerateStatsInsight|TestMembershipService_ValidateStatsInsightCredits|TestMembershipService_ValidateFoodAnalysisCredits" -count=1` passed。
+  - `git diff --check` passed for touched files（仅 CRLF warning）。
+  - 按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。

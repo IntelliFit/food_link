@@ -30,6 +30,7 @@ func (p *recordingTaskPublisher) PublishTask(ctx context.Context, msg taskqueue.
 type mockTaskCreditGuard struct {
 	earnedUnits   int
 	validateCalls []int
+	validateModes []string
 	consumeCalls  []struct {
 		userID    string
 		cost      int
@@ -50,9 +51,14 @@ func (m *mockTaskCreditGuard) ValidateFoodAnalysisCredits(ctx context.Context, u
 		unit = units[0]
 	}
 	m.validateCalls = append(m.validateCalls, unit)
+	m.validateModes = append(m.validateModes, executionMode)
 	cost := 2 * unit
 	if executionMode == "strict" {
 		cost = 4 * unit
+	} else if executionMode == "standard_correction" {
+		cost = 1 * unit
+	} else if executionMode == "strict_correction" {
+		cost = 2 * unit
 	}
 	earnedUnits := m.earnedUnits
 	return map[string]any{
@@ -304,6 +310,61 @@ func TestTaskService_SubmitCorrectionStoresChainRoot(t *testing.T) {
 	assert.Equal(t, true, task.Payload["is_correction"])
 	assert.Equal(t, source.ID, task.Payload["correction_source_task_id"])
 	assert.Equal(t, source.ID, task.Payload["correction_root_task_id"])
+}
+
+func TestTaskService_SubmitCorrectionUsesOneCredit(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	guard := &mockTaskCreditGuard{}
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+	imageURL := "https://example.com/meal.jpg"
+	source := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done", ImageURL: &imageURL}
+	require.NoError(t, taskRepo.CreateTask(ctx, source))
+
+	taskID, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{
+		ImageURL:               imageURL,
+		CorrectionSourceTaskID: source.ID,
+		PreviousResult:         map[string]any{"description": "old"},
+		CorrectionItems:        []map[string]any{{"name": "米饭", "weight": 100}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"standard_correction"}, guard.validateModes)
+
+	task, err := taskRepo.GetTaskByID(ctx, taskID)
+	require.NoError(t, err)
+	usage := task.Payload["credit_usage"].(map[string]any)
+	assert.Equal(t, 1, intFromAny(usage["cost"]))
+	assert.Equal(t, true, task.Payload["is_correction"])
+}
+
+func TestTaskService_SubmitPrecisionCorrectionUsesTwoCredits(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	guard := &mockTaskCreditGuard{}
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+	imageURL := "https://example.com/meal.jpg"
+	source := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "precision_plan", Status: "done", ImageURL: &imageURL}
+	require.NoError(t, taskRepo.CreateTask(ctx, source))
+	strict := "strict"
+
+	taskID, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{
+		ImageURL:               imageURL,
+		ExecutionMode:          &strict,
+		CorrectionSourceTaskID: source.ID,
+		PreviousResult:         map[string]any{"description": "old"},
+		CorrectionItems:        []map[string]any{{"name": "米饭", "weight": 100}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"strict_correction"}, guard.validateModes)
+
+	task, err := taskRepo.GetTaskByID(ctx, taskID)
+	require.NoError(t, err)
+	assert.Equal(t, "precision_plan", task.TaskType)
+	usage := task.Payload["credit_usage"].(map[string]any)
+	assert.Equal(t, 2, intFromAny(usage["cost"]))
+	assert.Equal(t, true, task.Payload["is_correction"])
 }
 
 func TestTaskService_CountTasks(t *testing.T) {
