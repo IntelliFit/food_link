@@ -68,7 +68,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("precision_item_estimates", "precision_item_estimates_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'done'::text,'failed'::text])`),
 		dropAndAddCheck("precision_item_estimates", "precision_item_estimates_round_index_check", `round_index >= 1`),
 		dropAndAddCheck("precision_item_estimates", "precision_item_estimates_item_index_check", `item_index >= 0`),
-		dropAndAddCheck("public_food_library", "public_food_library_status_check", `status = ANY (ARRAY['pending'::text,'published'::text,'rejected'::text])`),
+		dropAndAddCheck("public_food_library", "public_food_library_status_check", `status = ANY (ARRAY['pending'::text,'published'::text,'rejected'::text,'user_deleted'::text,'deleted'::text])`),
 		dropAndAddCheck("public_food_library", "public_food_library_taste_rating_check", `taste_rating IS NULL OR (taste_rating >= 1 AND taste_rating <= 5)`),
 		dropAndAddCheck("public_food_library_comments", "public_food_library_comments_rating_check", `rating IS NULL OR (rating >= 1 AND rating <= 5)`),
 		dropAndAddCheck("feed_interaction_notifications", "feed_interaction_notifications_type_check", `notification_type = ANY (ARRAY['like_received'::text,'comment_received'::text,'reply_received'::text,'comment_rejected'::text])`),
