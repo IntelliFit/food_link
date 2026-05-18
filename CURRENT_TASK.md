@@ -9271,3 +9271,25 @@
   - 在 `dev` 提交 `26ebdc9 feat: refine health trends and AI fallbacks` 并推送到 `origin/dev`。
   - 在 `main` 合并 `dev`，生成 merge commit `9415c67 Merge branch 'dev'`。
   - 后续需将完成状态提交并同步 `origin/main`，再回到 `dev`。
+
+## 2026-05-18 - OTel 指标接入
+
+- Task: 用户已在部署服务器部署 OTel Collector、Prometheus 和 Grafana，要求后端增加 HTTP、数据库、消息队列、worker、外部 AI/LLM 和食物/运动分析业务指标，并统一走 OTel -> Collector -> Prometheus -> Grafana 链路。
+- Status: code_verified
+- Changes:
+  - 后端不再暴露业务 `/metrics`；业务指标改为 OpenTelemetry Metrics，经 OTLP gRPC 推送到 Collector，由 Collector 的 Prometheus exporter 暴露 `/metrics`。
+  - 新增 `backend/pkg/metrics` 统一指标包，集中维护 HTTP、DB、队列、worker、LLM、食物分析、营养解析和运动分析 OTel instruments。
+  - `backend/pkg/trace` 扩展为 trace + metrics 统一初始化：`otel.enabled=true` 时默认启用 trace/metrics；新增 `otel.traces_enabled`、`otel.metrics_enabled`、`otel.metric_export_interval_seconds`。
+  - `app.env` 恢复为运行模式语义，只使用 `development` / `production`；服务器上的 dev/main 都应使用 `production`。Grafana dev/main 切换改用 `app.name` 映射出的 `service_name`，建议配置为 `food_link-backend-dev` / `food_link-backend-main`。已移除 OTel 下的环境和主机名配置，`host.name` / `service.instance.id` 固定从系统 hostname 自动读取。
+  - 数据库接入 GORM callback 操作耗时/结果指标、连接池状态 observable metrics、启动/显式 DB ping 指标。
+  - task queue 接入 publish、delivery age、ack/nack/skip/decode_error、memory depth、Kafka consumer health 等指标；worker 接入 configured/active loop、claim outcome、task active/duration、lease heartbeat、recovery publish 指标。
+  - 食物分析链路接入 LLM 调用耗时/错误/重试、food analysis 总耗时与 item 数、DB-first 营养解析命中/未命中/Gemini fallback 结果；运动分析接入 task 和 Doubao LLM 阶段耗时/状态。
+  - `backend/docs/observability-metrics.md` 改为 OTel/Collector 链路说明，列出后端配置、Collector 要点、所有指标、标签、说明和 Grafana/PromQL 建议。
+- Verification:
+  - `go test ./... -run '^$' -count=1` passed。
+  - `go test ./pkg/config ./pkg/trace ./internal/app -count=1` passed。
+  - `go test ./pkg/config ./pkg/trace ./internal/taskqueue -count=1` passed。
+  - `go test ./internal/taskqueue -count=1` passed。
+  - `go test ./internal/analyze/service -run 'TestAnalyzeWithJSONParseRetry|TestResolveModelConfig|TestDeepSeekNutritionEstimator' -count=1` passed。
+  - `go test ./internal/health/service -count=1` passed。
+  - `go test ./internal/analyze/service ./internal/health/service -count=1` 中 health service passed，但 analyze service 的完整 sqlite 相关测试仍被当前 shell 的 `CGO_ENABLED=0` 阻塞，报错为 `go-sqlite3 requires cgo to work`。

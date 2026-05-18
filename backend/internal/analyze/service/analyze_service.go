@@ -14,6 +14,7 @@ import (
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	"food_link/backend/pkg/logger"
+	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
 	apm "food_link/backend/pkg/trace"
 
@@ -284,7 +285,20 @@ func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model strin
 	jsonRetries := 0
 	transientRetries := 0
 	for {
+		attemptStart := time.Now()
 		parsed, err = call(ctx)
+		attemptStatus := "success"
+		if err != nil {
+			switch {
+			case IsLLMJSONParseError(err):
+				attemptStatus = "json_parse_error"
+			case isTransientLLMError(err):
+				attemptStatus = "transient_error"
+			default:
+				attemptStatus = "error"
+			}
+		}
+		metrics.ObserveLLMCall(stage, provider, model, attemptStatus, time.Since(attemptStart))
 		if err == nil {
 			return parsed, err
 		}
@@ -295,11 +309,13 @@ func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model strin
 		case IsLLMJSONParseError(err) && jsonRetries < maxLLMJSONParseRetries:
 			jsonRetries++
 			retryReason = "json_parse"
+			metrics.ObserveLLMRetry(stage, provider, model, retryReason)
 			retryNumber = jsonRetries
 			maxRetries = maxLLMJSONParseRetries
 		case isTransientLLMError(err) && transientRetries < maxLLMTransientRetries:
 			transientRetries++
 			retryReason = "transient"
+			metrics.ObserveLLMRetry(stage, provider, model, retryReason)
 			retryNumber = transientRetries
 			maxRetries = maxLLMTransientRetries
 		default:
@@ -1270,6 +1286,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		}
 	}
 	if err != nil {
+		metrics.ObserveFoodAnalysis("image", provider, model, "llm_error", time.Since(start), -1)
 		apm.RecordError(ctx, err,
 			attribute.String("analysis.stage", "llm_call"),
 			attribute.String("analysis.provider", provider),
@@ -1328,6 +1345,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 
 	result, err := s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
 	if err != nil {
+		metrics.ObserveFoodAnalysis("image", provider, model, "finalize_error", time.Since(start), -1)
 		apm.RecordError(ctx, err,
 			attribute.String("analysis.stage", "finalize"),
 			attribute.String("analysis.provider", provider),
@@ -1369,6 +1387,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		zap.Int("unresolved_count", intFromAny(result["unresolved_count"])),
 		zap.Duration("duration", time.Since(start)),
 	)
+	metrics.ObserveFoodAnalysis("image", provider, model, "success", time.Since(start), len(toItems(result["items"])))
 	return result, nil
 }
 
@@ -1422,6 +1441,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		return client.Analyze(callCtx, prompt, "")
 	})
 	if err != nil {
+		metrics.ObserveFoodAnalysis("text", provider, model, "llm_error", time.Since(start), -1)
 		apm.RecordError(ctx, err,
 			attribute.String("analysis.stage", "llm_call"),
 			attribute.String("analysis.provider", provider),
@@ -1433,6 +1453,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	durationMs := float64(time.Since(start).Milliseconds())
 	result, err := s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
 	if err != nil {
+		metrics.ObserveFoodAnalysis("text", provider, model, "finalize_error", time.Since(start), -1)
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "finalize"))
 		return nil, err
 	}
@@ -1445,6 +1466,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		attribute.Int("analysis.unresolved_count", intFromAny(result["unresolved_count"])),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
+	metrics.ObserveFoodAnalysis("text", provider, model, "success", time.Since(start), len(toItems(result["items"])))
 	return result, nil
 }
 
@@ -1751,14 +1773,21 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, parsed map
 }
 
 func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[string]any, additionalContext ...string) map[string]any {
+	start := time.Now()
+	resolveStatus := "success"
+	defer func() {
+		metrics.ObserveNutritionResolve("db_first", resolveStatus, time.Since(start))
+	}()
 	resp["analysis_engine"] = "db_first"
 	if s.nutrition == nil {
+		resolveStatus = "skipped_no_repo"
 		return resp
 	}
 	items := toItems(resp["items"])
 	if len(items) == 0 {
 		resp["resolved_count"] = 0
 		resp["unresolved_count"] = 0
+		resolveStatus = "empty"
 		return resp
 	}
 
@@ -1801,6 +1830,7 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		if rows, err := s.estimateNutritionWithGemini(ctx, fallbackCandidates, contextText); err == nil {
 			fallbacks = rows
 		} else {
+			metrics.AddNutritionResolveItems("db_first", "gemini_fallback_failed", len(fallbackCandidates))
 			logger.WithTrace(ctx).Warn("gemini nutrition fallback failed",
 				zap.Error(err),
 				zap.Int("candidate_count", len(fallbackCandidates)),
@@ -1809,6 +1839,9 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	}
 
 	out := make([]map[string]any, 0, len(items))
+	geminiGeneratedCount := 0
+	geminiPersistedCount := 0
+	geminiPersistFailedCount := 0
 	for _, lookup := range lookups {
 		next := copyAnyMap(lookup.item)
 		resolve := lookup.resolve
@@ -1822,16 +1855,19 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 			next["resolve_score"] = 0
 			next["nutrition_source"] = "unresolved"
 			if fallbackUnit, ok := fallbacks[lookup.index]; ok && len(fallbackUnit) > 0 {
+				geminiGeneratedCount++
 				unit = fallbackUnit
 				next["nutrition_source"] = "gemini_generated"
 				next["nutrition_persisted"] = false
 				if foodID, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, fallbackUnit, "gemini_generated"); err != nil {
+					geminiPersistFailedCount++
 					logger.WithTrace(ctx).Warn("gemini nutrition upsert failed",
 						zap.Error(err),
 						zap.String("food_name", lookup.name),
 						zap.Any("unit_nutrition_per_100g", fallbackUnit),
 					)
 				} else {
+					geminiPersistedCount++
 					next["nutrition_persisted"] = true
 					next["matched_food_id"] = foodID
 					logger.WithTrace(ctx).Info("gemini nutrition upsert succeeded",
@@ -1865,6 +1901,11 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	resp["items"] = out
 	resp["resolved_count"] = resolvedCount
 	resp["unresolved_count"] = unresolvedCount
+	metrics.AddNutritionResolveItems("db_first", "resolved", resolvedCount)
+	metrics.AddNutritionResolveItems("db_first", "unresolved", unresolvedCount)
+	metrics.AddNutritionResolveItems("db_first", "gemini_generated", geminiGeneratedCount)
+	metrics.AddNutritionResolveItems("db_first", "gemini_persisted", geminiPersistedCount)
+	metrics.AddNutritionResolveItems("db_first", "gemini_persist_failed", geminiPersistFailedCount)
 	logDBFirstNutritionSummary(ctx, out, resolvedCount, unresolvedCount)
 	return resp
 }

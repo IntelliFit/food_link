@@ -1309,3 +1309,11 @@
 
 - `2026-05-17`: 运动记录不得静默回退本地规则估算。无论文字输入还是文字+图片/纯图片，Doubao 运动分析失败、未配置、返回非 2xx、JSON 不可解析时，都应让任务失败并走既有失败/退款链路，不能保存“图片识别运动/一般运动/约 59 kcal”这类假成功结果。运动 Doubao 请求暂不使用 `response_format=json_object`，避免火山 Ark 当前模型组合返回 400；继续通过 prompt 要求 JSON 并在后端解析校验。
 - `2026-05-17`: 训练打卡截图识别 prompt 必须要求 OCR 多动作、重量、次数、组数、总耗时和截图消耗；`exercise_type` 应概括主要训练内容，不允许泛化成“一般运动”。
+
+- `2026-05-18`: 后端可观测指标统一走 OpenTelemetry Metrics：Go 服务通过 OTLP gRPC 推送到 OTel Collector，由 Collector 的 Prometheus exporter 暴露 `/metrics` 给 Prometheus scrape；业务服务自身不再暴露 Prometheus `/metrics`。
+  - `otel.enabled=true` 默认同时启用 trace 和 metrics；可用 `otel.traces_enabled` / `otel.metrics_enabled` 分别关闭。`app.env` 固定表示运行模式，只使用 `development`/`production`；服务器上的 dev/main 都应使用 `production`。Grafana dev/main 切换不再使用单独 environment 字段，改用 `app.name` 映射出的 `service_name`，建议为 `food_link-backend-dev` / `food_link-backend-main`。
+  - 指标标签不得包含 `user_id`、`task_id`、图片 URL、prompt 原文、SQL 原文等高基数或隐私字段；HTTP route 使用 Gin 路由模板，DB 只暴露 operation/table/status，业务只暴露 source/provider/model/status 等低基数维度。
+  - 数据库观测分三层：Collector collection 时的 `db_up` + 连接池状态；启动/显式 ping 的 `db_ping_*`；GORM callback 的操作耗时与结果。Grafana 面板优先用这三类指标组合判断 DB 可用性、连接池压力和慢表/慢操作。
+  - 队列观测由 queue wrapper 和 Kafka/memory adapter 共同负责：应用内只统计 publish、delivery age、settlement、component health 和 memory depth；Kafka partition lag/backlog 后续应接 Kafka exporter，而不是在业务进程里扫描 broker。
+  - 食物/运动分析业务指标只统计总耗时、LLM 调用、重试、解析/落库结果和 item 数，不记录用户输入内容；指标清单维护在 `backend/docs/observability-metrics.md`。
+  - `app.name` 映射 OTel `service.name`，用于区分 dev/main 部署；不再提供 host name 覆盖配置。`host.name` 和 `service.instance.id` 固定读取系统 hostname，不要把实例维度配置成 `app.name`，否则会丢失多实例定位能力。
