@@ -101,8 +101,9 @@ type StatsUserProfile struct {
 	ActivityLevel   *string        `gorm:"column:activity_level"`
 	BMR             *float64       `gorm:"column:bmr"`
 	TDEE            *float64       `gorm:"column:tdee"`
-	DietGoal        *string        `gorm:"column:diet_goal"`
-	HealthCondition map[string]any `gorm:"column:health_condition;serializer:json"`
+	DietGoal                         *string        `gorm:"column:diet_goal"`
+	HealthCondition                  map[string]any `gorm:"column:health_condition;serializer:json"`
+	HealthDisclaimerAcknowledgedAt   *time.Time     `gorm:"column:health_disclaimer_acknowledged_at"`
 }
 
 func (StatsUserProfile) TableName() string { return "weapp_user" }

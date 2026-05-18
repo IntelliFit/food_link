@@ -267,6 +267,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/user/health-profile/upload-report-image", authmw.RequireJWT(jwtSvc), userHandler.UploadReportImage)
 	engine.GET("/api/user/record-days", authmw.RequireJWT(jwtSvc), userHandler.GetRecordDays)
 	engine.POST("/api/user/last-seen-analyze-history", authmw.RequireJWT(jwtSvc), userHandler.UpdateLastSeenAnalyzeHistory)
+	engine.POST("/api/user/acknowledge-health-disclaimer", authmw.RequireJWT(jwtSvc), userHandler.AcknowledgeHealthDisclaimer)
 
 	engine.GET("/api/home/dashboard", authmw.RequireJWT(jwtSvc), dashboardHandler.HomeDashboard)
 	engine.GET("/api/food-record/:record_id/poster-calorie-compare", authmw.RequireJWT(jwtSvc), dashboardHandler.PosterCalorieCompare)

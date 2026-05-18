@@ -154,6 +154,8 @@ type UpdateHealthProfileInput struct {
 	Allergies                  *StringList                  `json:"allergies"`
 	HealthNotes                *string                      `json:"health_notes"`
 	RoutineType                *string                      `json:"routine_type"`
+	RoutineSleepHour           *int                         `json:"routine_sleep_hour"`
+	RoutineWakeHour            *int                         `json:"routine_wake_hour"`
 	DashboardTargets           *UpdateDashboardTargetsInput `json:"dashboard_targets"`
 	ReportExtract              map[string]any               `json:"report_extract"`
 	ReportImageURL             *string                      `json:"report_image_url"`
@@ -263,6 +265,12 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 	}
 	if input.RoutineType != nil {
 		healthCondition["routine_type"] = strings.TrimSpace(*input.RoutineType)
+	}
+	if input.RoutineSleepHour != nil {
+		healthCondition["routine_sleep_hour"] = *input.RoutineSleepHour
+	}
+	if input.RoutineWakeHour != nil {
+		healthCondition["routine_wake_hour"] = *input.RoutineWakeHour
 	}
 	if input.DailyLifeActivityLevel != nil {
 		normalized := NormalizeDailyLifeActivityLevel(*input.DailyLifeActivityLevel)
@@ -378,6 +386,10 @@ func (s *UserService) GetRecordDays(ctx context.Context, userID string) (int64, 
 
 func (s *UserService) UpdateLastSeenAnalyzeHistory(ctx context.Context, userID string) error {
 	return s.users.UpdateLastSeenAnalyzeHistory(ctx, userID)
+}
+
+func (s *UserService) AcknowledgeHealthDisclaimer(ctx context.Context, userID string) error {
+	return s.users.UpdateHealthDisclaimerAcknowledged(ctx, userID)
 }
 
 func (s *UserService) buildProfileResponse(user *repo.User) map[string]any {

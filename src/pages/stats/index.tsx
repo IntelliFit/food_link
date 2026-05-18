@@ -111,6 +111,76 @@ function scoreToLabel(score: number): string {
   return '重点关注'
 }
 
+function riskCardIcon(key: string): string {
+  switch (key) {
+    case 'hypertension': return 'tianpingzuo'
+    case 'diabetes': return 'tanshui-dabiao'
+    case 'cardio': return 'dumbbell'
+    case 'weight': return 'weight-scale'
+    case 'colorectal': return 'a-144-lvye'
+    case 'longevity': return 'shangzhang'
+    default: return 'target'
+  }
+}
+
+function riskCardIconColor(key: string, isDark: boolean): string {
+  if (isDark) {
+    switch (key) {
+      case 'hypertension': return '#f87171'
+      case 'diabetes': return '#60a5fa'
+      case 'cardio': return '#fbbf24'
+      case 'weight': return '#4ade80'
+      case 'colorectal': return '#a3e635'
+      case 'longevity': return '#c084fc'
+      default: return '#34d399'
+    }
+  }
+  switch (key) {
+    case 'hypertension': return '#c45c5c'
+    case 'diabetes': return '#5a9bc7'
+    case 'cardio': return '#c9965c'
+    case 'weight': return '#5aa86e'
+    case 'colorectal': return '#8ab060'
+    case 'longevity': return '#a070b0'
+    default: return '#5aa896'
+  }
+}
+
+function riskCardIconBgColor(key: string, isDark: boolean): string {
+  if (isDark) {
+    switch (key) {
+      case 'hypertension': return 'rgba(248, 113, 113, 0.16)'
+      case 'diabetes': return 'rgba(96, 165, 250, 0.16)'
+      case 'cardio': return 'rgba(251, 191, 36, 0.16)'
+      case 'weight': return 'rgba(74, 222, 128, 0.16)'
+      case 'colorectal': return 'rgba(163, 230, 53, 0.16)'
+      case 'longevity': return 'rgba(192, 132, 252, 0.16)'
+      default: return 'rgba(52, 211, 153, 0.16)'
+    }
+  }
+  switch (key) {
+    case 'hypertension': return '#fdf2f2'
+    case 'diabetes': return '#eff6fc'
+    case 'cardio': return '#fef7ed'
+    case 'weight': return '#f0fdf4'
+    case 'colorectal': return '#f4fbea'
+    case 'longevity': return '#faf5ff'
+    default: return '#f0fdf9'
+  }
+}
+
+function riskCardBgGradient(key: string): string {
+  switch (key) {
+    case 'hypertension': return 'linear-gradient(145deg, #fee2e2 0%, #ffffff 22%, #ffffff 100%)'
+    case 'diabetes': return 'linear-gradient(145deg, #dbeafe 0%, #ffffff 22%, #ffffff 100%)'
+    case 'cardio': return 'linear-gradient(145deg, #ffedd5 0%, #ffffff 22%, #ffffff 100%)'
+    case 'weight': return 'linear-gradient(145deg, #dcfce7 0%, #ffffff 22%, #ffffff 100%)'
+    case 'colorectal': return 'linear-gradient(145deg, #ecfccb 0%, #ffffff 22%, #ffffff 100%)'
+    case 'longevity': return 'linear-gradient(145deg, #f3e8ff 0%, #ffffff 22%, #ffffff 100%)'
+    default: return 'linear-gradient(145deg, #dcfce7 0%, #ffffff 22%, #ffffff 100%)'
+  }
+}
+
 const WATER_GOAL_DEFAULT = 2000
 
 type StoredBodyMetrics = {
@@ -706,6 +776,70 @@ function StatsPage() {
         <Text className='iconfont icon-right-arrow stats-range-dropdown__arrow' />
       </View>
       <ScrollView className='scroll-wrap' scrollY enhanced showScrollbar={false}>
+        {!hasEnoughHealthIndexData ? (
+          <View className='stats-card health-index-gate-card'>
+            <View className='health-index-gate-icon'>
+              <Text className='iconfont icon-shangzhang health-index-gate-icon-text' />
+            </View>
+            <View className='health-index-gate-copy'>
+              <Text className='health-index-gate-title'>连续记录两天后显示健康指数</Text>
+              <Text className='health-index-gate-desc'>
+                当前已记录 {d.recorded_days ?? 0} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <>
+            <View className='stats-card risk-overview-card'>
+              <View className='risk-overview-top'>
+                <View className='risk-overview-copy'>
+                  <Text className='risk-overview-title'>健康得分</Text>
+                </View>
+                <View className='risk-overview-actions' />
+              </View>
+
+              <View className='risk-overview-score-row'>
+                <Text className='risk-overview-score'>{overallRiskScore}</Text>
+                <Text className='risk-overview-score-unit'>/ 100</Text>
+                <View className={`risk-overview-badge tone-${scoreToTone(overallRiskScore)}`}>
+                  <Text className='risk-overview-badge-label'>{overallTrendLabel}</Text>
+                </View>
+              </View>
+
+              <Text className='risk-overview-summary'>{overviewCopy}</Text>
+
+              <View className='risk-overview-chip-row'>
+                {signalChips.map((chip) => (
+                  <View key={chip.label} className='risk-overview-chip'>
+                    <Text className='risk-overview-chip-label'>{chip.label}</Text>
+                    <Text className='risk-overview-chip-value'>{chip.value}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View className='risk-overview-footer'>
+                <Text className='risk-overview-footer-text'>
+                  如果先改掉当前最明显的 1-2 个拖累项，预计总分可从 {overallRiskScore} 提升到 {projectedOverallScore}。
+                </Text>
+              </View>
+            </View>
+            {Taro.getStorageSync('health_disclaimer_dismissed') !== '1' && (
+              <View className='health-disclaimer-banner'>
+                <Text className='health-disclaimer-banner__dot' />
+                <Text className='health-disclaimer-banner__text'>结果仅供参考，不代替医学判断</Text>
+                <Text
+                  className='health-disclaimer-banner__btn'
+                  onClick={() => {
+                    Taro.setStorageSync('health_disclaimer_dismissed', '1')
+                    Taro.showToast({ title: '已确认', icon: 'success' })
+                  }}
+                >
+                  我知道了
+                </Text>
+              </View>
+            )}
+          </>
+        )}
         <View className='analysis-tabs-container'>
           <View className={`segmented-control analysis-panel-control ${loading ? 'is-loading' : ''}`}>
             {loading && (
@@ -726,66 +860,18 @@ function StatsPage() {
         </View>
 
         {analysisPanel === 'health' ? (
-          !hasEnoughHealthIndexData ? (
-          <View className='stats-card health-index-gate-card'>
-            <View className='health-index-gate-icon'>
-              <Text className='iconfont icon-shangzhang health-index-gate-icon-text' />
-            </View>
-            <View className='health-index-gate-copy'>
-              <Text className='health-index-gate-title'>连续记录两天后显示健康指数</Text>
-              <Text className='health-index-gate-desc'>
-                当前已记录 {d.recorded_days ?? 0} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。
-              </Text>
-            </View>
-          </View>
-          ) : (
           <>
-        <View className='stats-card risk-overview-card'>
-          <View className='risk-overview-top'>
-            <View className='risk-overview-copy'>
-              <Text className='risk-overview-title'>{range === 'week' ? '最近 7 天' : '最近 30 天'}饮食健康参考指数</Text>
-              <Text className='risk-overview-subtitle'>
-                用更直观的方式看清这段时间的吃法，正在保护你，还是在慢慢消耗你。
-              </Text>
-            </View>
-            <View className='risk-overview-actions'>
-              <View className={`risk-overview-badge tone-${scoreToTone(overallRiskScore)}`}>
-                <Text className='risk-overview-badge-label'>{overallTrendLabel}</Text>
-              </View>
-              <View
-                className='risk-focus-edit-btn'
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setRiskPickerVisible(true)
-                }}
-              >
-                <Text className='iconfont icon-target risk-focus-edit-icon' />
-                <Text className='risk-focus-edit-text'>我的关注</Text>
-              </View>
-            </View>
-          </View>
-
-          <View className='risk-overview-score-row'>
-            <Text className='risk-overview-score'>{overallRiskScore}</Text>
-            <Text className='risk-overview-score-unit'>/ 100</Text>
-          </View>
-
-          <Text className='risk-overview-summary'>{overviewCopy}</Text>
-
-          <View className='risk-overview-chip-row'>
-            {signalChips.map((chip) => (
-              <View key={chip.label} className='risk-overview-chip'>
-                <Text className='risk-overview-chip-label'>{chip.label}</Text>
-                <Text className='risk-overview-chip-value'>{chip.value}</Text>
-              </View>
-            ))}
-          </View>
-
-          <View className='risk-overview-footer'>
-            <Text className='risk-overview-footer-text'>
-              如果先改掉当前最明显的 1-2 个拖累项，预计总分可从 {overallRiskScore} 提升到 {projectedOverallScore}。
-            </Text>
-            <Text className='risk-overview-footer-note'>结果仅供参考，用于观察饮食趋势，不代替医学判断。</Text>
+        <View className='risk-section-header'>
+          <Text className='risk-section-title'>健康指标关注</Text>
+          <View
+            className='risk-focus-edit-btn'
+            onClick={(e) => {
+              e.stopPropagation()
+              setRiskPickerVisible(true)
+            }}
+          >
+            <Text className='iconfont icon-target risk-focus-edit-icon' />
+            <Text className='risk-focus-edit-text'>我的关注</Text>
           </View>
         </View>
 
@@ -793,23 +879,27 @@ function StatsPage() {
           {visibleRiskCards.map((card) => (
             <View
               key={card.key}
-              className={`stats-card risk-card tone-${card.tone}`}
+              className='stats-card risk-card'
+              style={{ background: riskCardBgGradient(card.key) }}
               onClick={() => setRiskDetailModal({ visible: true, card })}
             >
-              <View className='risk-card-top'>
-                <View className='risk-card-title-wrap'>
-                  <Text className='risk-card-title'>{card.title}</Text>
-                  <Text className='risk-card-summary'>{card.brief}</Text>
+              <View className='risk-card-main-row'>
+                <View
+                  className='risk-card-icon-circle'
+                  style={{ background: riskCardIconBgColor(card.key, scheme === 'dark') }}
+                >
+                  <Text
+                    className={`iconfont icon-${riskCardIcon(card.key)} risk-card-icon`}
+                    style={{ color: riskCardIconColor(card.key, scheme === 'dark') }}
+                  />
                 </View>
                 <View className='risk-card-score-wrap'>
                   <Text className='risk-card-score'>{card.score}</Text>
                   <Text className='risk-card-score-unit'>分</Text>
                 </View>
               </View>
-              <View className='risk-card-more-btn'>
-                <Text className='iconfont icon-right-arrow risk-card-more-icon' />
-                <Text className='risk-card-more-text'>更多</Text>
-              </View>
+              <Text className='risk-card-title'>{card.title}</Text>
+              <Text className='risk-card-summary'>{card.brief}</Text>
             </View>
           ))}
         </View>
@@ -904,20 +994,18 @@ function StatsPage() {
           </View>
         )}
 
-        <View className='stats-card action-plan-card'>
-          <View className='card-header action-plan-card__header'>
-            <View className='card-header-copy'>
-              <Text className='card-title'>这段时间最值得先改的地方</Text>
-              <Text className='card-subtitle'>别同时改十件事，先动最拖分的 1-2 个动作</Text>
-            </View>
-            <View className='action-plan-card__score'>
-              <Text className='action-plan-card__score-before'>{overallRiskScore}</Text>
-              <Text className='action-plan-card__arrow'>→</Text>
-              <Text className='action-plan-card__score-after'>{projectedOverallScore}</Text>
-            </View>
+        <View className='action-section-header'>
+          <View className='action-section-title-wrap'>
+            <Text className='action-section-title'>这段时间最值得先改的地方</Text>
+            <Text className='action-section-subtitle'>别同时改十件事，先动最拖分的 1-2 个动作</Text>
           </View>
-
-          <View className='action-plan-grid'>
+          <View className='action-section-score'>
+            <Text className='action-section-score__before'>{overallRiskScore}</Text>
+            <Text className='action-section-score__arrow'>→</Text>
+            <Text className='action-section-score__after'>{projectedOverallScore}</Text>
+          </View>
+        </View>
+        <View className='action-plan-grid'>
             <View className='action-plan-panel'>
               <Text className='action-plan-panel__title'>当前主要拖累项</Text>
               {topIssues.length > 0 ? (
@@ -947,10 +1035,8 @@ function StatsPage() {
               ))}
             </View>
           </View>
-        </View>
 
           </>
-          )
         ) : null}
 
         {analysisPanel === 'nutrition' ? (

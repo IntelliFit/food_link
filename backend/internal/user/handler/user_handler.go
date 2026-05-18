@@ -20,6 +20,7 @@ type UserService interface {
 	UpdateHealthProfile(ctx context.Context, userID string, input service.UpdateHealthProfileInput) (map[string]any, error)
 	GetRecordDays(ctx context.Context, userID string) (int64, error)
 	UpdateLastSeenAnalyzeHistory(ctx context.Context, userID string) error
+	AcknowledgeHealthDisclaimer(ctx context.Context, userID string) error
 }
 
 type BindPhoneService interface {
@@ -288,6 +289,15 @@ func (h *UserHandler) GetRecordDays(c *gin.Context) {
 func (h *UserHandler) UpdateLastSeenAnalyzeHistory(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	if err := h.userSvc.UpdateLastSeenAnalyzeHistory(c.Request.Context(), userID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, map[string]bool{"success": true})
+}
+
+func (h *UserHandler) AcknowledgeHealthDisclaimer(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if err := h.userSvc.AcknowledgeHealthDisclaimer(c.Request.Context(), userID); err != nil {
 		response.Error(c, err)
 		return
 	}
