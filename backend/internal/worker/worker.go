@@ -21,6 +21,7 @@ import (
 	userdomain "food_link/backend/internal/user/domain"
 	userrepo "food_link/backend/internal/user/repo"
 	userservice "food_link/backend/internal/user/service"
+	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
 	apm "food_link/backend/pkg/trace"
 
@@ -86,6 +87,7 @@ type Options struct {
 	WorkerCount      int
 	LeaseDuration    time.Duration
 	RecoveryInterval time.Duration
+	QueueDriver      string
 }
 
 func NewRunner(
@@ -151,9 +153,14 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 	if opts.RecoveryInterval <= 0 {
 		opts.RecoveryInterval = taskRecoveryInterval
 	}
+	queueDriver := strings.TrimSpace(opts.QueueDriver)
+	if queueDriver == "" {
+		queueDriver = "unknown"
+	}
 	if r.queue == nil {
 		return fmt.Errorf("worker task queue is not initialized")
 	}
+	metrics.SetWorkerConfigured(queueDriver, opts.WorkerCount)
 
 	r.log.Info("worker started",
 		zap.String("worker_id", opts.WorkerID),
@@ -162,6 +169,7 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 		zap.Int("worker_count", opts.WorkerCount),
 		zap.Duration("lease_duration", opts.LeaseDuration),
 		zap.Duration("recovery_interval", opts.RecoveryInterval),
+		zap.String("task_queue_driver", queueDriver),
 	)
 
 	var wg sync.WaitGroup
@@ -174,7 +182,7 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
-			r.runLoop(ctx, fmt.Sprintf("%s-%d", opts.WorkerID, index), taskTypes, opts.PollInterval, opts.LeaseDuration)
+			r.runLoop(ctx, fmt.Sprintf("%s-%d", opts.WorkerID, index), taskTypes, opts.PollInterval, opts.LeaseDuration, queueDriver)
 		}(i)
 	}
 	<-ctx.Done()
@@ -182,7 +190,9 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 	return ctx.Err()
 }
 
-func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []string, pollInterval, leaseDuration time.Duration) {
+func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []string, pollInterval, leaseDuration time.Duration, queueDriver string) {
+	metrics.IncWorkerLoop(queueDriver)
+	defer metrics.DecWorkerLoop(queueDriver)
 	backoff := time.Second
 	for ctx.Err() == nil {
 		deliveries, err := r.queue.Subscribe(ctx, taskqueue.SubscribeOptions{TaskTypes: taskTypes})
@@ -343,11 +353,13 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 			attribute.String("analysis.task_id", msg.TaskID),
 			attribute.String("analysis.task_type", msg.TaskType),
 		)
+		metrics.ObserveWorkerTaskClaim(msg.TaskType, "error")
 		_ = nackDelivery(err)
 		return
 	}
 	task := claim.Task
 	if task == nil {
+		metrics.ObserveWorkerTaskClaim(msg.TaskType, string(claim.Outcome))
 		r.log.Info("queued task skipped because it is no longer pending or not allowed",
 			zap.String("worker_id", workerID),
 			zap.String("task_id", msg.TaskID),
@@ -364,6 +376,7 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		return
 	}
 	if claim.Outcome != analyzerepo.ClaimOutcomeClaimed {
+		metrics.ObserveWorkerTaskClaim(task.TaskType, string(claim.Outcome))
 		r.log.Info("queued task skipped after claim check",
 			zap.String("worker_id", workerID),
 			zap.String("task_id", task.ID),
@@ -383,6 +396,7 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		_ = ackDelivery()
 		return
 	}
+	metrics.ObserveWorkerTaskClaim(task.TaskType, "claimed")
 	r.log.Info("task claimed",
 		zap.String("worker_id", workerID),
 		zap.String("task_id", task.ID),
@@ -537,10 +551,12 @@ func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
 		if task.ID == "" || task.TaskType == "" {
 			continue
 		}
+		metrics.AddWorkerRecoveredTasks(task.TaskType, "candidate", 1)
 		publishCtx, publishCancel := context.WithTimeout(ctx, 2*time.Second)
 		err := r.queue.PublishTask(publishCtx, taskqueue.TaskMessage{TaskID: task.ID, TaskType: task.TaskType})
 		publishCancel()
 		if err != nil {
+			metrics.AddWorkerRecoveredTasks(task.TaskType, "publish_failed", 1)
 			r.log.Error("recover queued analysis task publish failed",
 				zap.String("task_id", task.ID),
 				zap.String("task_type", task.TaskType),
@@ -555,6 +571,7 @@ func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
 			)
 			continue
 		}
+		metrics.AddWorkerRecoveredTasks(task.TaskType, "published", 1)
 		published++
 	}
 	if published > 0 {
@@ -603,6 +620,7 @@ func (r *Runner) startLeaseHeartbeat(ctx context.Context, cancel context.CancelF
 				ok, err := r.tasks.ExtendTaskLease(extendCtx, task.ID, attemptID, workerID, leaseUntil)
 				extendCancel()
 				if err != nil {
+					metrics.ObserveWorkerLeaseHeartbeat(task.TaskType, "error")
 					r.log.Error("task lease heartbeat failed",
 						zap.String("worker_id", workerID),
 						zap.String("task_id", task.ID),
@@ -613,6 +631,7 @@ func (r *Runner) startLeaseHeartbeat(ctx context.Context, cancel context.CancelF
 					continue
 				}
 				if !ok {
+					metrics.ObserveWorkerLeaseHeartbeat(task.TaskType, "lost")
 					r.log.Warn("task lease heartbeat lost ownership",
 						zap.String("worker_id", workerID),
 						zap.String("task_id", task.ID),
@@ -622,6 +641,7 @@ func (r *Runner) startLeaseHeartbeat(ctx context.Context, cancel context.CancelF
 					cancel()
 					return
 				}
+				metrics.ObserveWorkerLeaseHeartbeat(task.TaskType, "success")
 				task.LeaseUntil = &leaseUntil
 			}
 		}
@@ -631,6 +651,12 @@ func (r *Runner) startLeaseHeartbeat(ctx context.Context, cancel context.CancelF
 
 func (r *Runner) process(ctx context.Context, workerID string, task *domain.AnalysisTask, leaseDuration time.Duration) error {
 	start := time.Now()
+	taskStatus := "done"
+	metrics.IncWorkerTask(task.TaskType)
+	defer func() {
+		metrics.DecWorkerTask(task.TaskType)
+		metrics.ObserveWorkerTask(task.TaskType, taskStatus, time.Since(start))
+	}()
 	taskCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	stopHeartbeat := r.startLeaseHeartbeat(taskCtx, cancel, workerID, task, leaseDuration)
@@ -683,6 +709,7 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 	}
 	if err != nil {
 		if errors.Is(err, errTaskAttemptLost) {
+			taskStatus = "attempt_lost"
 			r.log.Warn("task attempt lost before completion; acknowledging stale delivery",
 				zap.String("worker_id", workerID),
 				zap.String("task_id", task.ID),
@@ -701,6 +728,7 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 		defer failCancel()
 		if failErr := r.failTask(failCtx, task, err); failErr != nil {
 			if errors.Is(failErr, errTaskAttemptLost) {
+				taskStatus = "attempt_lost"
 				apm.AddEvent(taskCtx, "task attempt lost while writing failure",
 					attribute.String("worker.id", workerID),
 					attribute.String("analysis.task_id", task.ID),
@@ -709,6 +737,7 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 				)
 				return nil
 			}
+			taskStatus = "terminal_update_error"
 			apm.RecordError(taskCtx, failErr,
 				attribute.String("worker.id", workerID),
 				attribute.String("analysis.task_id", task.ID),
@@ -718,6 +747,7 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 			)
 			return failErr
 		}
+		taskStatus = "failed"
 		apm.RecordError(taskCtx, err,
 			attribute.String("worker.id", workerID),
 			attribute.String("analysis.task_id", task.ID),

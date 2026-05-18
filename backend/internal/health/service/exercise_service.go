@@ -17,6 +17,7 @@ import (
 	membershipdomain "food_link/backend/internal/membership/domain"
 	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
 
 	"github.com/google/uuid"
@@ -375,9 +376,21 @@ func (s *ExerciseService) BuildExerciseProfileSnapshot(ctx context.Context, user
 }
 
 func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerciseDesc, imageURL, recordedOn string, payload map[string]any) (map[string]any, error) {
+	start := time.Now()
+	status := "success"
 	desc := strings.TrimSpace(exerciseDesc)
 	imageURL = s.resolveFoodImageURL(imageURL)
+	source := "text"
+	if desc == "" && imageURL != "" {
+		source = "image"
+	} else if desc != "" && imageURL != "" {
+		source = "text_image"
+	}
+	defer func() {
+		metrics.ObserveExerciseAnalysis("task", source, status, time.Since(start))
+	}()
 	if desc == "" && imageURL == "" {
+		status = "validation_error"
 		return nil, &commonerrors.AppError{Code: 10002, Message: "运动描述和图片不能同时为空", HTTPStatus: 400}
 	}
 	if recordedOn == "" {
@@ -388,11 +401,13 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		var err error
 		profileSnapshot, err = s.BuildExerciseProfileSnapshot(ctx, userID)
 		if err != nil {
+			status = "profile_error"
 			return nil, err
 		}
 	}
 	estimate, err := s.estimateExerciseCalories(ctx, desc, imageURL, profileSnapshot)
 	if err != nil {
+		status = "estimate_error"
 		return nil, err
 	}
 	now := time.Now().UTC()
@@ -413,11 +428,13 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 		CreatedAt:      &now,
 	}
 	if err := s.repo.CreateExerciseLog(ctx, log); err != nil {
+		status = "persist_error"
 		return nil, err
 	}
 	s.activateInviteReward(ctx, userID, "exercise_log")
 	total, err := s.repo.GetDailyCaloriesBurned(ctx, userID, recordedOn)
 	if err != nil {
+		status = "daily_total_error"
 		return nil, err
 	}
 	exerciseLog := map[string]any{
@@ -543,6 +560,12 @@ func (s *ExerciseService) estimateSingleExerciseCalories(ctx context.Context, de
 }
 
 func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, desc, imageURL string, profileSnapshot map[string]any) (ExerciseEstimate, error) {
+	start := time.Now()
+	status := "success"
+	source := "unknown"
+	defer func() {
+		metrics.ObserveExerciseAnalysis("llm", source, status, time.Since(start))
+	}()
 	apiKey := ""
 	baseURL := "https://ark.cn-beijing.volces.com/api/v3"
 	model := "doubao-seed-2-0-lite-260428"
@@ -553,10 +576,17 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		}
 	}
 	if apiKey == "" {
+		status = "config_error"
 		return ExerciseEstimate{}, &commonerrors.AppError{Code: 10000, Message: "运动分析服务未配置，请联系管理员处理", HTTPStatus: 500}
 	}
 	desc = strings.TrimSpace(desc)
 	imageURL = strings.TrimSpace(imageURL)
+	source = "text"
+	if desc == "" && imageURL != "" {
+		source = "image"
+	} else if desc != "" && imageURL != "" {
+		source = "text_image"
+	}
 	userPrompt := "用户运动描述：" + compactExerciseDesc(desc)
 	if desc == "" {
 		userPrompt = "用户上传了一张运动图片，请识别主要运动类型、估算持续时长和消耗热量。"
@@ -589,17 +619,22 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	bodyBytes, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
+		status = "request_build_error"
 		return ExerciseEstimate{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {
+		status = "request_error"
+		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
 		return ExerciseEstimate{}, fmt.Errorf("运动分析服务请求失败: %w", err)
 	}
 	defer resp.Body.Close()
 	respBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		status = fmt.Sprintf("http_%d", resp.StatusCode)
+		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
 		return ExerciseEstimate{}, fmt.Errorf("运动分析服务返回异常 %d", resp.StatusCode)
 	}
 	var parsed struct {
@@ -610,15 +645,20 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(respBytes, &parsed); err != nil || len(parsed.Choices) == 0 {
+		status = "response_parse_error"
+		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
 		return ExerciseEstimate{}, fmt.Errorf("运动分析服务响应解析失败")
 	}
 	raw := strings.TrimSpace(parsed.Choices[0].Message.Content)
 	estimate, err := parseExerciseEstimateJSON(raw)
 	if err != nil {
+		status = "result_parse_error"
+		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
 		return ExerciseEstimate{}, fmt.Errorf("运动分析结果格式解析失败: %w", err)
 	}
 	estimate.Raw = raw
 	estimate.Source = "llm"
+	metrics.ObserveLLMCall("exercise", "doubao", model, "success", time.Since(start))
 	return estimate, nil
 }
 

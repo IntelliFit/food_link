@@ -187,6 +187,27 @@ worker:
 	}
 }
 
+func TestLoadOTelDefaultsEnableTraceAndMetricsWhenEnabled(t *testing.T) {
+	dir := writeTestConfig(t, `
+otel:
+  enabled: true
+  collector_endpoint: "otel-collector:4317"
+worker:
+  count: 1
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.OTel.Enabled || !cfg.OTel.TracesEnabled || !cfg.OTel.MetricsEnabled {
+		t.Fatalf("expected otel traces and metrics enabled by default, got %+v", cfg.OTel)
+	}
+	if cfg.OTel.MetricExportIntervalSeconds != 15 {
+		t.Fatalf("expected default metric export interval, got %+v", cfg.OTel)
+	}
+}
+
 func TestLoadTaskQueueDefaultsToMemory(t *testing.T) {
 	dir := writeTestConfig(t, `
 worker:

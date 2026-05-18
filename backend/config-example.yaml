@@ -1,5 +1,5 @@
 app:
-  name: "food_link-backend"
+  name: "food_link-backend-local"
   env: "development"
   host: "0.0.0.0"
   port: 3010
@@ -21,9 +21,11 @@ jwt:
 
 otel:
   enabled: false
+  traces_enabled: true
+  metrics_enabled: true
   collector_endpoint: "localhost:4317"
   insecure: true
-  host_name: "food-link-local"
+  metric_export_interval_seconds: 15
 
 storage:
   cos_region: "ap-beijing"

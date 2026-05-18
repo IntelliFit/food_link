@@ -90,6 +90,14 @@
 
 **正式版发布**：正式发布包才使用 `npm run build:weapp:release`，该命令显式注入 `https://healthymax.cn`。
 
+### 后端数据库结构变更
+
+- 修改后端数据库结构（新增、删除、重命名表/字段/索引/约束、调整字段类型、默认值、check、外键、触发器等）时，**禁止把手动执行 SQL 当作最终方案**，也不要只在终端里临时 `ALTER TABLE` / `CREATE INDEX` / `DROP ...` 修库后结束。
+- 必须先把结构变更落到 Go 后端对应的数据模型中：优先修改 `backend/internal/migration/do/schema_do.go` 里的迁移 DO，让 DO 结构准确表达数据库表结构；如果业务读写也需要新字段，再按 DDD 分层同步调整对应 domain、repo、service、DTO/handler。不要用 domain struct 替代迁移 DO，也不要让数据库结构只存在于临时 SQL 里。
+- 对 AutoMigrate 不能可靠表达或必须稳定命名的内容（例如已有约束名、唯一索引、partial index、check 约束、外键、触发器、数据修正步骤），应在 `backend/internal/migration/migration.go` 中补充幂等迁移逻辑，保证重复运行安全。
+- 完成模型/迁移代码后，从 `backend/` 目录运行 `go run ./cmd/migration -config-dir .` 更新当前配置指向的数据库。运行前必须确认 `backend/config.yaml` 与环境变量实际指向的目标库；如果是非本地库、线上库或不确定目标库，先获得用户明确确认，再执行。
+- 只读查询可用于诊断和验证；修复性 SQL 只能作为迁移命令中的幂等步骤落代码。确有紧急人工 SQL 需求时，必须先说明风险并获得用户明确授权，事后仍要把等价变更补回迁移 DO/迁移代码并运行迁移命令验证。
+
 ### 代码修改后重启前后端（默认由用户自行执行）
 
 - 默认不要替用户自动启动、停止、重启、常驻任何本地前后端进程。

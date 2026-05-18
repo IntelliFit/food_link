@@ -44,10 +44,12 @@ type JWTConfig struct {
 }
 
 type OTelConfig struct {
-	Enabled           bool   `mapstructure:"enabled"`
-	CollectorEndpoint string `mapstructure:"collector_endpoint"`
-	Insecure          bool   `mapstructure:"insecure"`
-	HostName          string `mapstructure:"host_name"`
+	Enabled                     bool    `mapstructure:"enabled"`
+	TracesEnabled               bool    `mapstructure:"traces_enabled"`
+	MetricsEnabled              bool    `mapstructure:"metrics_enabled"`
+	CollectorEndpoint           string  `mapstructure:"collector_endpoint"`
+	Insecure                    bool    `mapstructure:"insecure"`
+	MetricExportIntervalSeconds float64 `mapstructure:"metric_export_interval_seconds"`
 }
 
 type StorageConfig struct {
@@ -254,7 +256,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("jwt.access_token_ttl_seconds", int64(36525*24*60*60))
 	v.SetDefault("jwt.refresh_token_ttl_seconds", int64(36525*24*60*60))
 	v.SetDefault("otel.enabled", false)
+	v.SetDefault("otel.traces_enabled", true)
+	v.SetDefault("otel.metrics_enabled", true)
 	v.SetDefault("otel.insecure", true)
+	v.SetDefault("otel.metric_export_interval_seconds", 15.0)
 	v.SetDefault("worker.poll_interval_seconds", 2.0)
 	v.SetDefault("task_queue.driver", "memory")
 	v.SetDefault("task_queue.buffer_size", 1024)

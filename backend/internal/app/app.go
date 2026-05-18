@@ -61,6 +61,7 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
 	"food_link/backend/pkg/logger"
+	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
 	tracing "food_link/backend/pkg/trace"
 
@@ -91,17 +92,18 @@ func New(cfg *config.Config) (*App, error) {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	db, err := database.Open(cfg.Database)
+	traceShutdown, err := tracing.Init(cfg.OTel, cfg.App.Name, cfg.App.Env)
 	if err != nil {
 		return nil, err
 	}
-	traceShutdown, err := tracing.Init(cfg.OTel, cfg.App.Name)
+	db, err := database.Open(cfg.Database)
 	if err != nil {
 		return nil, err
 	}
 
 	engine := gin.New()
 	engine.Use(gin.Logger())
+	engine.Use(metrics.GinMiddleware())
 	engine.Use(gin.Recovery())
 	if cfg.OTel.Enabled {
 		engine.Use(otelgin.Middleware(cfg.App.Name))
@@ -454,6 +456,7 @@ func (a *App) startEmbeddedWorker(
 	storageClient *storage.Client,
 ) {
 	workerCount := cfg.Worker.Count
+	metrics.SetWorkerConfigured(cfg.TaskQueue.Driver, workerCount)
 	if workerCount <= 0 {
 		a.log.Info("embedded worker disabled", zap.Int("worker_count", workerCount))
 		return
@@ -503,6 +506,7 @@ func (a *App) startEmbeddedWorker(
 				TaskTypes:    taskTypes,
 				PollInterval: pollInterval,
 				WorkerCount:  workerCount,
+				QueueDriver:  cfg.TaskQueue.Driver,
 			})
 			if err == nil || err == context.Canceled || workerCtx.Err() != nil {
 				break

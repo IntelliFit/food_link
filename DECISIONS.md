@@ -41,6 +41,12 @@
   - 推荐方案应带 `source/source_id`，前端可展示来源；DeepSeek 不可用时也优先从候选库生成 5 个兜底方案，再退回规则兜底。
   - “外面吃”优先公共食物库和个人历史外食，“自己做”优先标准营养库和个人历史；后续可继续引入收藏、地区、餐次、重复食物降权等信号。
 
+- `2026-05-18`: 后端数据库结构变更必须模型优先、迁移命令落地：
+  - 禁止把手动 SQL 当作最终修复方案；修复性 SQL 不能只停留在终端操作或聊天记录里。
+  - 先修改 `backend/internal/migration/do/schema_do.go` 中对应迁移 DO，让数据库表结构由 Go 代码表达；业务层需要读写时，再同步调整 domain/repo/service/DTO/handler，但不把 domain struct 当作迁移 DO。
+  - AutoMigrate 覆盖不了或命名必须稳定的约束、索引、check、外键、触发器、数据修正步骤，要写入 `backend/internal/migration/migration.go` 的幂等迁移逻辑。
+  - 最后从 `backend/` 执行 `go run ./cmd/migration -config-dir .`；运行前确认 `backend/config.yaml` 与环境变量指向的目标库，非本地/线上/不确定目标库必须先获得用户明确确认。
+
 - `2026-05-17`: 食物识别调用 Doubao/火山 Ark 返回上游临时错误时的口径：
   - `doubao api error 408/429/5xx` 和 `InternalServiceError` 视为临时 LLM 上游错误，后端可在同一任务内做有限重试，不能要求用户立刻重新提交。
   - 写入 `analysis_tasks.error_message` 前必须清洗上游原始 JSON、request id、API 域名等细节；用户侧统一看到“AI 识别服务暂时不可用/繁忙/超时”等友好提示。
@@ -1354,3 +1360,11 @@
   - `estimatedWeightGrams` 是后端营养计算使用的重量，不是整只/整份毛重。
   - 带壳、带骨、带核食物必须按去壳/去骨/去核后的可食重量估算；虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核等不可食部分不计入重量，也不作为单独食物输出。
   - 普通图片、文字解析、精准模式 planner、精准分项估重和重量复核 prompt 都应保留该规则；后续新增识别链路也要继承这个口径。
+
+- `2026-05-18`: 后端可观测指标统一走 OpenTelemetry Metrics：Go 服务通过 OTLP gRPC 推送到 OTel Collector，由 Collector 的 Prometheus exporter 暴露 `/metrics` 给 Prometheus scrape；业务服务自身不再暴露 Prometheus `/metrics`。
+  - `otel.enabled=true` 默认同时启用 trace 和 metrics；可用 `otel.traces_enabled` / `otel.metrics_enabled` 分别关闭。`app.env` 固定表示运行模式，只使用 `development`/`production`；服务器上的 dev/main 都应使用 `production`。Grafana dev/main 切换不再使用单独 environment 字段，改用 `app.name` 映射出的 `service_name`，建议为 `food_link-backend-dev` / `food_link-backend-main`。
+  - 指标标签不得包含 `user_id`、`task_id`、图片 URL、prompt 原文、SQL 原文等高基数或隐私字段；HTTP route 使用 Gin 路由模板，DB 只暴露 operation/table/status，业务只暴露 source/provider/model/status 等低基数维度。
+  - 数据库观测分三层：Collector collection 时的 `db_up` + 连接池状态；启动/显式 ping 的 `db_ping_*`；GORM callback 的操作耗时与结果。Grafana 面板优先用这三类指标组合判断 DB 可用性、连接池压力和慢表/慢操作。
+  - 队列观测由 queue wrapper 和 Kafka/memory adapter 共同负责：应用内只统计 publish、delivery age、settlement、component health 和 memory depth；Kafka partition lag/backlog 后续应接 Kafka exporter，而不是在业务进程里扫描 broker。
+  - 食物/运动分析业务指标只统计总耗时、LLM 调用、重试、解析/落库结果和 item 数，不记录用户输入内容；指标清单维护在 `backend/docs/observability-metrics.md`。
+  - `app.name` 映射 OTel `service.name`，用于区分 dev/main 部署；不再提供 host name 覆盖配置。`host.name` 和 `service.instance.id` 固定读取系统 hostname，不要把实例维度配置成 `app.name`，否则会丢失多实例定位能力。
