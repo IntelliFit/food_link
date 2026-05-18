@@ -10,6 +10,7 @@ import (
 	"food_link/backend/internal/common/dateutil"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
+	usersvc "food_link/backend/internal/user/service"
 )
 
 var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
@@ -441,10 +442,7 @@ func (s *BodyMetricsService) syncProfileWeightFromLatest(ctx context.Context, us
 		gender = strings.ToLower(strings.TrimSpace(*profile.Gender))
 	}
 	if gender == "male" || gender == "female" {
-		activity := "sedentary"
-		if profile.ActivityLevel != nil && strings.TrimSpace(*profile.ActivityLevel) != "" {
-			activity = strings.TrimSpace(*profile.ActivityLevel)
-		}
+		activity := bodyMetricDailyLifeActivityLevel(profile)
 		bmr := calculateBodyMetricBMR(gender, latest.WeightKg)
 		tdee := calculateBodyMetricTDEE(bmr, activity)
 		updates["bmr"] = round1(bmr)
@@ -461,17 +459,19 @@ func calculateBodyMetricBMR(gender string, weightKg float64) float64 {
 }
 
 func calculateBodyMetricTDEE(bmr float64, activityLevel string) float64 {
-	mult := map[string]float64{
-		"sedentary":   1.2,
-		"light":       1.375,
-		"moderate":    1.55,
-		"active":      1.725,
-		"very_active": 1.9,
-	}[activityLevel]
-	if mult == 0 {
-		mult = 1.2
+	return bmr * usersvc.DailyLifeActivityMultiplier(activityLevel)
+}
+
+func bodyMetricDailyLifeActivityLevel(profile *domain.BodyMetricUserProfile) string {
+	if profile != nil && profile.HealthCondition != nil {
+		if value, ok := profile.HealthCondition["daily_life_activity_level"].(string); ok && strings.TrimSpace(value) != "" {
+			return usersvc.NormalizeDailyLifeActivityLevel(value)
+		}
 	}
-	return bmr * mult
+	if profile != nil && profile.ActivityLevel != nil {
+		return usersvc.NormalizeDailyLifeActivityLevel(*profile.ActivityLevel)
+	}
+	return "sedentary"
 }
 
 func resolveStatsRangeDates(statsRange string) (string, string) {

@@ -6,7 +6,6 @@ import { Switch } from '@taroify/core'
 import {
   getStatsSummary,
   generateStatsInsight,
-  saveStatsInsight,
   getBodyMetricsSummary,
   showUnifiedApiError,
   type StatsSummary,
@@ -437,18 +436,14 @@ function StatsPage() {
         const next: StatsSummary = {
           ...prev,
           analysis_summary: full,
-          analysis_summary_generated_date: formatLocalDate(),
-          analysis_summary_needs_refresh: false,
+          analysis_summary_generated_date: res.analysis_summary_generated_date || formatLocalDate(),
+          analysis_summary_needs_refresh: Boolean(res.analysis_summary_needs_refresh),
+          analysis_summary_daily_limit: res.analysis_summary_daily_limit ?? prev.analysis_summary_daily_limit,
+          analysis_summary_used_today: res.analysis_summary_used_today ?? ((prev.analysis_summary_used_today || 0) + 1),
         }
         writeStatsPageCache(range, next)
         return next
       })
-
-      try {
-        await saveStatsInsight(range, full)
-      } catch (saveError) {
-        console.error('保存 AI 洞察失败:', saveError)
-      }
 
       Taro.showToast({
         title: '洞察已更新',
@@ -566,6 +561,10 @@ function StatsPage() {
   const hasInsight = Boolean(d.analysis_summary?.trim())
   const insightGeneratedDate = d.analysis_summary_generated_date || ''
   const insightNeedsRefresh = Boolean(d.analysis_summary_needs_refresh)
+  const insightDailyLimit = Math.max(1, toSafeNumber(d.analysis_summary_daily_limit, 3))
+  const insightUsedToday = Math.max(0, toSafeNumber(d.analysis_summary_used_today, 0))
+  const insightRemainingToday = Math.max(0, insightDailyLimit - insightUsedToday)
+  const canGenerateInsight = insightRemainingToday > 0
   const displayInsightText = aiDisplayText || (hasInsight && !isTyping ? d.analysis_summary : '')
   const bodyMetrics = d.body_metrics
   const macroPercent = {
@@ -971,12 +970,17 @@ function StatsPage() {
             </View>
             {insightGeneratedDate ? (
               <View className={`analysis-status${insightNeedsRefresh ? ' warning' : ''}`}>
-                <Text className='analysis-status-text'>
-                  {insightNeedsRefresh
-                    ? `当前展示的是 ${insightGeneratedDate} 生成的缓存，你最近新增了饮食记录，可按需手动更新。`
-                    : `当前展示的是 ${insightGeneratedDate} 生成的缓存。`}
-                </Text>
-                {insightNeedsRefresh ? (
+                <View className='analysis-status-copy'>
+                  <Text className='analysis-status-text'>
+                    {insightNeedsRefresh
+                      ? `当前展示的是 ${insightGeneratedDate} 生成的缓存，你最近新增了饮食记录，可按需手动更新。`
+                      : `当前展示的是 ${insightGeneratedDate} 生成的缓存。`}
+                  </Text>
+                  <Text className='analysis-status-subtext'>
+                    深度解读每次消耗 1 积分，今日还可更新 {insightRemainingToday} / {insightDailyLimit} 次。
+                  </Text>
+                </View>
+                {canGenerateInsight ? (
                   <View
                     className={`analysis-status-action${insightActionLoading ? ' is-loading' : ''}`}
                     onClick={(e) => {
@@ -990,7 +994,11 @@ function StatsPage() {
                       <Text className='analysis-status-action-text'>手动更新</Text>
                     )}
                   </View>
-                ) : null}
+                ) : (
+                  <View className='analysis-status-action is-disabled'>
+                    <Text className='analysis-status-action-text'>今日已用完</Text>
+                  </View>
+                )}
               </View>
             ) : null}
             {insightError ? (
@@ -1010,8 +1018,17 @@ function StatsPage() {
             ) : (
               <View className='analysis-empty'>
                 <Text className='analysis-empty-text'>这里不会在每次打开页面时自动重新分析。你可以在需要时手动生成一次。</Text>
-                <View className='analysis-empty-action' onClick={handleGenerateInsight}>
-                  <Text className='analysis-empty-action-text'>生成本{range === 'week' ? '周' : '月'}洞察</Text>
+                <View
+                  className={`analysis-empty-action${!canGenerateInsight ? ' is-disabled' : ''}`}
+                  onClick={() => {
+                    if (canGenerateInsight) handleGenerateInsight()
+                  }}
+                >
+                  <Text className='analysis-empty-action-text'>
+                    {canGenerateInsight
+                      ? `生成本${range === 'week' ? '周' : '月'}深度解读（1积分）`
+                      : '今日生成次数已用完'}
+                  </Text>
                 </View>
               </View>
             )}

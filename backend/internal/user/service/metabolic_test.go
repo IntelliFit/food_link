@@ -31,16 +31,35 @@ func TestCalculateTDEE(t *testing.T) {
 		expected float64
 	}{
 		{"sedentary", 1500 * 1.2},
-		{"light", 1500 * 1.375},
-		{"moderate", 1500 * 1.55},
-		{"active", 1500 * 1.725},
-		{"very_active", 1500 * 1.9},
+		{"light", 1500 * 1.3},
+		{"moderate", 1500 * 1.4},
+		{"active", 1500 * 1.55},
+		{"very_active", 1500 * 1.55},
 		{"unknown", 1500 * 1.2},
 	}
 	for _, c := range cases {
 		got := CalculateTDEE(bmr, c.activity)
 		if math.Abs(got-c.expected) > 0.01 {
 			t.Errorf("CalculateTDEE(%f, %s) = %f, want %f", bmr, c.activity, got, c.expected)
+		}
+	}
+}
+
+func TestNormalizeDailyLifeActivityLevel(t *testing.T) {
+	cases := map[string]string{
+		"sedentary":      "sedentary",
+		"久坐办公":           "sedentary",
+		"walking":        "light",
+		"日常走动":           "light",
+		"standing":       "moderate",
+		"经常站立":           "moderate",
+		"very_active":    "active",
+		"physical_labor": "active",
+		"unknown":        "sedentary",
+	}
+	for input, expected := range cases {
+		if got := NormalizeDailyLifeActivityLevel(input); got != expected {
+			t.Errorf("NormalizeDailyLifeActivityLevel(%q) = %q, want %q", input, got, expected)
 		}
 	}
 }

@@ -298,7 +298,7 @@ function ProfilePage() {
       id: 0,
       icon: <TodoListOutlined size='20' />,
       title: '健康档案',
-      desc: '生理指标、BMR/TDEE、病史与饮食偏好'
+      desc: '生理指标、日常消耗、病史与饮食偏好'
     },
     {
       id: 2,

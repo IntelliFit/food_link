@@ -32,11 +32,11 @@ import './index.scss'
 /* ========== 显示映射 ========== */
 const GENDER_MAP: Record<string, string> = { male: '男', female: '女' }
 const ACTIVITY_MAP: Record<string, string> = {
-  sedentary: '久坐 (几乎不运动)',
-  light: '轻度 (每周 1-3 天)',
-  moderate: '中度 (每周 3-5 天)',
-  active: '高度 (每周 6-7 天)',
-  very_active: '极高 (体力劳动/每天训练)'
+  sedentary: '久坐办公',
+  light: '日常走动较多',
+  moderate: '经常站立走动',
+  active: '体力劳动',
+  very_active: '体力劳动'
 }
 const GOAL_MAP: Record<string, string> = {
   fat_loss: '减重',
@@ -83,11 +83,10 @@ const GOAL_OPTIONS = [
   { label: '增重', value: 'muscle_gain' }
 ]
 const ACTIVITY_OPTIONS = [
-  { label: '久坐（几乎不运动）', value: 'sedentary' },
-  { label: '轻度（每周 1-3 天）', value: 'light' },
-  { label: '中度（每周 3-5 天）', value: 'moderate' },
-  { label: '高度（每周 6-7 天）', value: 'active' },
-  { label: '极高（体力劳动/每天训练）', value: 'very_active' }
+  { label: '久坐办公', value: 'sedentary' },
+  { label: '日常走动较多', value: 'light' },
+  { label: '经常站立走动', value: 'moderate' },
+  { label: '体力劳动', value: 'active' }
 ]
 const EXECUTION_MODE_OPTIONS: Array<{ label: string; value: ExecutionMode }> = [
   { label: '精准模式', value: 'strict' },
@@ -120,6 +119,14 @@ const ALLERGY_OPTIONS = [
   { label: '无', value: 'none' }
 ]
 
+function getDailyLifeActivityLevel(profile?: HealthProfile | null): string {
+  const fromHealthCondition = profile?.health_condition?.daily_life_activity_level
+  if (typeof fromHealthCondition === 'string' && fromHealthCondition.trim()) {
+    return fromHealthCondition
+  }
+  return profile?.activity_level || ''
+}
+
 /* ========== 字段配置 ========== */
 interface FieldConfig {
   title: string
@@ -137,7 +144,7 @@ const FIELD_CONFIG: Record<string, FieldConfig> = {
   height: { title: '身高', type: 'number', unit: 'cm', min: 100, max: 250, placeholder: '100-250' },
   weight: { title: '体重', type: 'number', unit: 'kg', min: 30, max: 200, placeholder: '30-200' },
   diet_goal: { title: '饮食目标', type: 'radio', options: GOAL_OPTIONS },
-  activity_level: { title: '活动水平', type: 'radio', options: ACTIVITY_OPTIONS },
+  activity_level: { title: '日常活动', type: 'radio', options: ACTIVITY_OPTIONS },
   routine_type: { title: '作息习惯', type: 'routine' },
   execution_mode: { title: '执行模式', type: 'radio', options: EXECUTION_MODE_OPTIONS.map(o => ({ label: o.label, value: o.value })) },
   medical_history: { title: '既往病史', type: 'multi', options: MEDICAL_OPTIONS },
@@ -340,7 +347,7 @@ function HealthProfileViewPage() {
       case 'height': currentValue = profile?.height != null ? String(profile.height) : ''; break
       case 'weight': currentValue = profile?.weight != null ? String(profile.weight) : ''; break
       case 'diet_goal': currentValue = profile?.diet_goal || ''; break
-      case 'activity_level': currentValue = profile?.activity_level || ''; break
+      case 'activity_level': currentValue = getDailyLifeActivityLevel(profile); break
       case 'routine_type': {
         currentValue = parseRoutineHours(profile?.health_condition?.routine_type || '')
         break
@@ -423,7 +430,8 @@ function HealthProfileViewPage() {
       height: profile.height != null ? Number(profile.height) : undefined,
       weight: profile.weight != null ? Number(profile.weight) : undefined,
       diet_goal: profile.diet_goal || undefined,
-      activity_level: profile.activity_level || undefined,
+      activity_level: getDailyLifeActivityLevel(profile) || undefined,
+      daily_life_activity_level: getDailyLifeActivityLevel(profile) || undefined,
       execution_mode: profile.execution_mode || 'standard',
       routine_type: profile.health_condition?.routine_type || undefined,
       medical_history: (profile.health_condition?.medical_history as string[]) || [],
@@ -456,7 +464,10 @@ function HealthProfileViewPage() {
         break
       }
       case 'diet_goal': req.diet_goal = value || undefined; break
-      case 'activity_level': req.activity_level = value || undefined; break
+      case 'activity_level':
+        req.activity_level = value || undefined
+        req.daily_life_activity_level = value || undefined
+        break
       case 'routine_type': {
         req.routine_type = formatRoutineHours(value as RoutineHours)
         break
@@ -1009,9 +1020,9 @@ function HealthProfileViewPage() {
             highlight
           />
           <EditableRow
-            label='活动水平'
+            label='日常活动'
             field='activity_level'
-            value={profile.activity_level ? ACTIVITY_MAP[profile.activity_level] || profile.activity_level : '—'}
+            value={getDailyLifeActivityLevel(profile) ? ACTIVITY_MAP[getDailyLifeActivityLevel(profile)] || getDailyLifeActivityLevel(profile) : '—'}
           />
           <EditableRow
             label='作息习惯'
@@ -1037,7 +1048,7 @@ function HealthProfileViewPage() {
             )}
             {profile.tdee != null && (
               <ReadOnlyRow
-                label='TDEE（每日总消耗）'
+                label='日常消耗估算'
                 value={`${profile.tdee.toFixed(0)} kcal/天`}
               />
             )}

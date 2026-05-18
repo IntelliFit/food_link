@@ -200,6 +200,7 @@ export function MetabolicProfileSheet({
         weight: w,
         birthday: b,
         activity_level: activity,
+        daily_life_activity_level: activity,
       })
 
       const user = await getUserProfile()

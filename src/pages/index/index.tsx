@@ -27,6 +27,7 @@ import {
   type HomeAchievement,
   type HomeIntakeData,
   type HomeMealItem,
+  type HomeNutritionTarget,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
@@ -648,6 +649,7 @@ function IndexPage() {
   const initialHomeSelectedDate = getLastHomeSelectedDate(initialSelectedDate)
   const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialHomeSelectedDate)
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(initialLocalSnapshot?.intakeData || DEFAULT_INTAKE)
+  const [nutritionTarget, setNutritionTarget] = useState<HomeNutritionTarget | null>(initialLocalSnapshot?.nutritionTarget || null)
   const [meals, setMeals] = useState<HomeMealItem[]>(initialLocalSnapshot?.meals || [])
   const [expirySummary, setExpirySummary] = useState<HomeFoodExpirySummary>(initialLocalSnapshot?.expirySummary || DEFAULT_EXPIRY_SUMMARY)
   const [weekHeatmapCells, setWeekHeatmapCells] = useState<WeekHeatmapCell[]>(() => buildWeekHeatmapCellsFromStorage())
@@ -656,6 +658,7 @@ function IndexPage() {
   /** 后台静默同步中：左上角微型 spinner，不占文档流 */
   const [dataSyncing, setDataSyncing] = useState(false)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
+  const [showNutritionTargetSheet, setShowNutritionTargetSheet] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
   const targetScaleBaseMacrosRef = useRef<MacroTargets>(getMacroTargetsFromIntake(DEFAULT_INTAKE))
@@ -774,6 +777,7 @@ function IndexPage() {
 
     if (!getAccessToken()) {
       setIntakeData(DEFAULT_INTAKE)
+      setNutritionTarget(null)
       setMeals([])
       setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
       setExerciseBurnedKcal(0)
@@ -826,6 +830,7 @@ function IndexPage() {
         })
       }
       setIntakeData(intake)
+      setNutritionTarget(res.nutritionTarget || null)
       setMeals(res.meals || [])
       setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
       const nextExerciseKcal = mergeExerciseKcalFromDashboardAndLogs(res.exerciseBurnedKcal, exerciseLogsRes?.total_calories)
@@ -843,7 +848,8 @@ function IndexPage() {
         meals: res.meals || [],
         expirySummary: res.expirySummary || DEFAULT_EXPIRY_SUMMARY,
         exerciseBurnedKcal: nextExerciseKcal,
-        achievement: nextAchievement
+        achievement: nextAchievement,
+        nutritionTarget: res.nutritionTarget || null
       }
       const currentSnapshot = getStoredHomeDashboardSnapshotByDate(normalizedDate)
       console.log('[DEBUG] about to save snapshot, date=', normalizedDate, 'currentSnapshotExists=', !!currentSnapshot)
@@ -852,13 +858,15 @@ function IndexPage() {
         meals: currentSnapshot.meals,
         expirySummary: currentSnapshot.expirySummary,
         exerciseBurnedKcal: currentSnapshot.exerciseBurnedKcal,
-        achievement: currentSnapshot.achievement
+        achievement: currentSnapshot.achievement,
+        nutritionTarget: currentSnapshot.nutritionTarget || null
       }) !== JSON.stringify({
         intakeData: nextSnapshot.intakeData,
         meals: nextSnapshot.meals,
         expirySummary: nextSnapshot.expirySummary,
         exerciseBurnedKcal: nextSnapshot.exerciseBurnedKcal,
-        achievement: nextSnapshot.achievement
+        achievement: nextSnapshot.achievement,
+        nutritionTarget: nextSnapshot.nutritionTarget || null
       })) {
         saveHomeDashboardSnapshot(nextSnapshot)
       } else {
@@ -922,6 +930,7 @@ function IndexPage() {
       const localFallback = getStoredHomeDashboardSnapshotByDate(resolvedDate)
       if (localFallback) {
         setIntakeData(localFallback.intakeData)
+        setNutritionTarget(localFallback.nutritionTarget || null)
         setMeals(localFallback.meals || [])
         setExpirySummary(localFallback.expirySummary || DEFAULT_EXPIRY_SUMMARY)
         setExerciseBurnedKcal(localFallback.exerciseBurnedKcal || 0)
@@ -930,6 +939,7 @@ function IndexPage() {
         setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
       } else {
         setIntakeData(DEFAULT_INTAKE)
+        setNutritionTarget(null)
         setMeals([])
         setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
         setExerciseBurnedKcal(0)
@@ -980,7 +990,8 @@ function IndexPage() {
               meals: dayRes.meals || [],
               expirySummary: dayRes.expirySummary || DEFAULT_EXPIRY_SUMMARY,
               exerciseBurnedKcal: dayRes.exerciseBurnedKcal || 0,
-              achievement: dayRes.achievement || { streak_days: 0, green_days: 0 }
+              achievement: dayRes.achievement || { streak_days: 0, green_days: 0 },
+              nutritionTarget: dayRes.nutritionTarget || null
             } as HomeDashboardLocalSnapshot
           } catch (err) {
             console.error('[dashboard-backfill] fetch failed for', date, err)
@@ -998,6 +1009,7 @@ function IndexPage() {
       const refreshed = getStoredHomeDashboardSnapshotByDate(currentDate)
       if (refreshed) {
         setIntakeData(refreshed.intakeData)
+        setNutritionTarget(refreshed.nutritionTarget || null)
         setMeals(refreshed.meals || [])
         setExpirySummary(refreshed.expirySummary || DEFAULT_EXPIRY_SUMMARY)
         setExerciseBurnedKcal(refreshed.exerciseBurnedKcal || 0)
@@ -1088,6 +1100,7 @@ function IndexPage() {
     }
     if (localSnapshot) {
       setIntakeData(localSnapshot.intakeData)
+      setNutritionTarget(localSnapshot.nutritionTarget || null)
       setMeals(localSnapshot.meals || [])
       setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
       setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
@@ -1186,6 +1199,7 @@ function IndexPage() {
         return
       }
       setIntakeData(localSnapshot.intakeData)
+      setNutritionTarget(localSnapshot.nutritionTarget || null)
       setMeals(localSnapshot.meals || [])
       setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
       setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
@@ -1722,12 +1736,14 @@ function IndexPage() {
       setExpirySummary(res.expirySummary || DEFAULT_EXPIRY_SUMMARY)
       setExerciseBurnedKcal(nextExerciseKcal)
       setHomeAchievement(nextAchievement)
+      setNutritionTarget(res.nutritionTarget || null)
       setTargetForm(createTargetForm(intake))
       const normalizedDate = mapCalendarDateToApi(date) || date
       saveHomeDashboardSnapshot({
         date: normalizedDate,
         updatedAt: Date.now(),
         intakeData: intake,
+        nutritionTarget: res.nutritionTarget || null,
         meals: res.meals || [],
         expirySummary: res.expirySummary || DEFAULT_EXPIRY_SUMMARY,
         exerciseBurnedKcal: nextExerciseKcal,
@@ -1779,6 +1795,7 @@ function IndexPage() {
     if (localSnapshot) {
       console.log('[DEBUG] 命中本地缓存:', committedDate)
       setIntakeData(localSnapshot.intakeData)
+      setNutritionTarget(localSnapshot.nutritionTarget || null)
       setMeals(localSnapshot.meals || [])
       setExpirySummary(localSnapshot.expirySummary || DEFAULT_EXPIRY_SUMMARY)
       setExerciseBurnedKcal(localSnapshot.exerciseBurnedKcal || 0)
@@ -1787,6 +1804,7 @@ function IndexPage() {
     } else {
       console.log('[DEBUG] 未命中本地缓存, 清空为默认态:', committedDate)
       setIntakeData(DEFAULT_INTAKE)
+      setNutritionTarget(null)
       setMeals([])
       setExpirySummary(DEFAULT_EXPIRY_SUMMARY)
       setExerciseBurnedKcal(0)
@@ -1985,6 +2003,10 @@ function IndexPage() {
 
   /** 与主热量条、三大营养素圆环同为 600ms + easeOutCubic，避免数字与条不同步 */
   const animatedHeadlineCalories = useAnimatedNumber(calorieHeadlineBase, 600, 0, dashboardAnimResetKey)
+  /** 登录用户展示食物保质期区块（无数据时显示引导） */
+  const showFoodExpiryBlock = Boolean(getAccessToken())
+  /** 未登录访客态 */
+  const isGuest = !getAccessToken()
 
   const calorieInputValue = parseCompleteNumber(targetForm.calorieTarget)
   const macroInputValues = parseMacroTargets(targetForm)
@@ -1994,10 +2016,20 @@ function IndexPage() {
       ? Number((calorieInputValue - caloriesFromMacroInputs).toFixed(1))
       : null
   const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
-  /** 登录用户展示食物保质期区块（无数据时显示引导） */
-  const showFoodExpiryBlock = Boolean(getAccessToken())
-  /** 未登录访客态 */
-  const isGuest = !getAccessToken()
+  const nutritionTargetSource = nutritionTarget?.source || ''
+  const nutritionTargetLabel = nutritionTargetSource === 'manual'
+    ? '自定义目标'
+    : nutritionTargetSource === 'dynamic'
+      ? '今日建议'
+      : '系统目标'
+  const nutritionTargetBase = normalizeDisplayNumber(nutritionTarget?.base_calorie_target)
+  const nutritionTargetAdded = normalizeDisplayNumber(nutritionTarget?.exercise_added_kcal)
+  const nutritionTargetSurplus = normalizeDisplayNumber(nutritionTarget?.exercise_surplus_kcal)
+  const nutritionTargetThreshold = normalizeDisplayNumber(nutritionTarget?.exercise_threshold_kcal)
+  const nutritionTargetHint = !dashboardBusy && !isGuest && nutritionTarget
+    ? (nutritionTarget.explanation || nutritionTarget.macro_explanation || '')
+    : ''
+  const nutritionTargetMacroHint = nutritionTarget?.macro_explanation || ''
 
   // 体重/喝水计算
   const weightSummary = useMemo(() =>
@@ -2415,10 +2447,17 @@ function IndexPage() {
               )}
               <View className='target-edit-btn' onClick={openTargetEditor}>
                 <Text className='iconfont icon-target target-edit-icon' />
-                <Text className='target-edit-text'>编辑目标</Text>
+                <Text className='target-edit-text'>目标设置</Text>
               </View>
             </View>
           </View>
+
+          {!dashboardBusy && !isGuest && nutritionTarget && (
+            <View className='nutrition-target-compact' onClick={() => setShowNutritionTargetSheet(true)}>
+              <Text className='nutrition-target-compact-text'>{nutritionTargetLabel}</Text>
+              <Text className='iconfont icon-xiangyou nutrition-target-compact-icon' />
+            </View>
+          )}
 
           <View className='progress-section'>
             <View className={`progress-bar-bg thick${dashboardBusy ? ' loading-pulse' : ''}`}>
@@ -2887,6 +2926,53 @@ function IndexPage() {
         onSave={handleSaveTargets}
         onClose={() => setShowTargetEditor(false)}
       />
+
+      {showNutritionTargetSheet && nutritionTarget && (
+        <View className='target-modal' catchMove>
+          <View className='target-modal-mask' onClick={() => setShowNutritionTargetSheet(false)} />
+          <View className='target-modal-content nutrition-target-sheet'>
+            <View className='target-modal-header'>
+              <Text className='target-modal-title'>目标说明</Text>
+              <Text className='target-modal-desc'>系统会根据档案、目标和运动记录更新今日目标</Text>
+            </View>
+            <View className='nutrition-target-sheet-summary'>
+              <View className='nutrition-target-sheet-item'>
+                <Text className='nutrition-target-sheet-label'>当前目标</Text>
+                <Text className='nutrition-target-sheet-value'>{formatDisplayNumber(Math.round(totalTarget))} kcal</Text>
+              </View>
+              {nutritionTargetBase > 0 && (
+                <View className='nutrition-target-sheet-item'>
+                  <Text className='nutrition-target-sheet-label'>基础目标</Text>
+                  <Text className='nutrition-target-sheet-value'>{formatDisplayNumber(Math.round(nutritionTargetBase))} kcal</Text>
+                </View>
+              )}
+              {nutritionTargetAdded > 0 && (
+                <View className='nutrition-target-sheet-item'>
+                  <Text className='nutrition-target-sheet-label'>运动增量补偿</Text>
+                  <Text className='nutrition-target-sheet-value'>{formatDisplayNumber(Math.round(nutritionTargetAdded))} kcal</Text>
+                </View>
+              )}
+              {nutritionTargetSurplus > 0 && nutritionTargetAdded <= 0 && nutritionTargetThreshold > 0 && (
+                <View className='nutrition-target-sheet-item'>
+                  <Text className='nutrition-target-sheet-label'>明显超量门槛</Text>
+                  <Text className='nutrition-target-sheet-value'>{formatDisplayNumber(Math.round(nutritionTargetThreshold))} kcal</Text>
+                </View>
+              )}
+            </View>
+            {nutritionTargetHint && (
+              <Text className='nutrition-target-sheet-desc'>{nutritionTargetHint}</Text>
+            )}
+            {nutritionTargetMacroHint && (
+              <Text className='nutrition-target-sheet-desc muted'>{nutritionTargetMacroHint}</Text>
+            )}
+            <View className='target-modal-actions'>
+              <View className='target-modal-btn primary' onClick={() => setShowNutritionTargetSheet(false)}>
+                <Text className='target-modal-btn-text primary'>知道了</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* 体重编辑弹窗 */}
       {showWeightEditor && (

@@ -1,13 +1,16 @@
 package service
 
-import "math"
+import (
+	"math"
+	"strings"
+)
 
 var activityMultipliers = map[string]float64{
 	"sedentary":   1.2,
-	"light":       1.375,
-	"moderate":    1.55,
-	"active":      1.725,
-	"very_active": 1.9,
+	"light":       1.3,
+	"moderate":    1.4,
+	"active":      1.55,
+	"very_active": 1.55,
 }
 
 func CalculateBMR(gender string, weightKg float64) float64 {
@@ -21,11 +24,35 @@ func CalculateBMR(gender string, weightKg float64) float64 {
 }
 
 func CalculateTDEE(bmr float64, activityLevel string) float64 {
-	mult := activityMultipliers[activityLevel]
+	mult := DailyLifeActivityMultiplier(activityLevel)
 	if mult == 0 {
 		mult = 1.2
 	}
 	return bmr * mult
+}
+
+func NormalizeDailyLifeActivityLevel(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "sedentary", "office", "desk", "久坐", "久坐办公":
+		return "sedentary"
+	case "light", "walking", "daily_walk", "日常走动", "轻体力":
+		return "light"
+	case "moderate", "standing", "often_standing", "经常站立":
+		return "moderate"
+	case "active", "very_active", "physical", "physical_labor", "体力劳动":
+		return "active"
+	default:
+		return "sedentary"
+	}
+}
+
+func DailyLifeActivityMultiplier(value string) float64 {
+	level := NormalizeDailyLifeActivityLevel(value)
+	mult := activityMultipliers[level]
+	if mult == 0 {
+		return 1.2
+	}
+	return mult
 }
 
 var dashboardDefaultMacroTargets = map[string]float64{

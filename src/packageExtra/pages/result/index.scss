@@ -1186,6 +1186,27 @@ transitiontransition
   gap: 16rpx;
 }
 
+.ratio-label-wrap {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6rpx;
+}
+
+.ratio-suggestion-badge {
+  display: flex;
+  align-items: center;
+  height: 30rpx;
+  padding: 0 10rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 188, 125, 0.1);
+  color: #059669;
+  font-size: 20rpx;
+  font-weight: 600;
+  line-height: 30rpx;
+}
+
 .ratio-control-right {
   flex: 1;
   display: flex;
