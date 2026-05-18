@@ -51,6 +51,14 @@ func TestBodyMetricsRepo_WeightCRUD(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, latest)
 	assert.Equal(t, 70.5, latest.WeightKg)
+
+	deleted, err := r.DeleteWeightRecordByID(ctx, "user-1", record.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), deleted)
+
+	records, err = r.ListWeightRecords(ctx, "user-1", "", "")
+	require.NoError(t, err)
+	assert.Empty(t, records)
 }
 
 func TestBodyMetricsRepo_WaterCRUD(t *testing.T) {
@@ -80,7 +88,18 @@ func TestBodyMetricsRepo_WaterCRUD(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(250), total)
 
-	deleted, err := r.DeleteWaterLogsByDate(ctx, "user-1", "2024-06-15")
+	deleted, err := r.DeleteWaterLogByID(ctx, "user-1", log.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), deleted)
+
+	logs, err = r.GetWaterLogsByExactDate(ctx, "user-1", "2024-06-15")
+	require.NoError(t, err)
+	assert.Empty(t, logs)
+
+	err = r.CreateWaterLog(ctx, log)
+	require.NoError(t, err)
+
+	deleted, err = r.DeleteWaterLogsByDate(ctx, "user-1", "2024-06-15")
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), deleted)
 }

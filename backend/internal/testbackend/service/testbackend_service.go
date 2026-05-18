@@ -26,26 +26,26 @@ type LLMClient interface {
 }
 
 type TestBackendService struct {
-	promptRepo      *repo.PromptRepo
-	batchRepo       *repo.BatchRepo
-	datasetRepo     *repo.DatasetRepo
-	dashScopeClient LLMClient
-	ofoxAIClient    LLMClient
+	promptRepo   *repo.PromptRepo
+	batchRepo    *repo.BatchRepo
+	datasetRepo  *repo.DatasetRepo
+	doubaoClient LLMClient
+	ofoxAIClient LLMClient
 }
 
 func NewTestBackendService(
 	promptRepo *repo.PromptRepo,
 	batchRepo *repo.BatchRepo,
 	datasetRepo *repo.DatasetRepo,
-	dashScopeClient LLMClient,
+	doubaoClient LLMClient,
 	ofoxAIClient LLMClient,
 ) *TestBackendService {
 	return &TestBackendService{
-		promptRepo:      promptRepo,
-		batchRepo:       batchRepo,
-		datasetRepo:     datasetRepo,
-		dashScopeClient: dashScopeClient,
-		ofoxAIClient:    ofoxAIClient,
+		promptRepo:   promptRepo,
+		batchRepo:    batchRepo,
+		datasetRepo:  datasetRepo,
+		doubaoClient: doubaoClient,
+		ofoxAIClient: ofoxAIClient,
 	}
 }
 
@@ -223,8 +223,8 @@ type AnalyzeInput struct {
 func resolveModelConfig(modelName string) (provider, model string) {
 	raw := strings.TrimSpace(modelName)
 	normalized := strings.ToLower(raw)
-	if raw == "" || normalized == "qwen" || normalized == "qwen-vl" || normalized == "qwen-vl-max" {
-		return "qwen", "qwen-vl-max"
+	if raw == "" || normalized == "doubao" {
+		return "doubao", "doubao-seed-2-0-lite-260428"
 	}
 	if normalized == "gemini" || normalized == "gemini-flash" || normalized == "gemini-vision" {
 		return "gemini", "gemini-3-flash-preview"
@@ -232,7 +232,10 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	if strings.HasPrefix(normalized, "gemini") {
 		return "gemini", raw
 	}
-	return "qwen", raw
+	if strings.HasPrefix(normalized, "doubao") {
+		return "doubao", raw
+	}
+	return "doubao", "doubao-seed-2-0-lite-260428"
 }
 
 func (s *TestBackendService) Analyze(ctx context.Context, input AnalyzeInput) (map[string]any, error) {
@@ -289,7 +292,7 @@ func (s *TestBackendService) Analyze(ctx context.Context, input AnalyzeInput) (m
 			if provider == "gemini" {
 				client = s.ofoxAIClient
 			} else {
-				client = s.dashScopeClient
+				client = s.doubaoClient
 			}
 
 			rawResult, err := client.Analyze(ctx, promptContent, imageURLs[0])
@@ -753,7 +756,7 @@ func (s *TestBackendService) LegacySingleImage(ctx context.Context, input Legacy
 		return nil, &commonerrors.AppError{Code: 10002, Message: "真实重量必须大于 0", HTTPStatus: 400}
 	}
 
-	result, err := s.Analyze(ctx, AnalyzeInput{ImageURL: imageURL, ModelName: "qwen"})
+	result, err := s.Analyze(ctx, AnalyzeInput{ImageURL: imageURL, ModelName: "doubao"})
 	if err != nil {
 		return nil, err
 	}

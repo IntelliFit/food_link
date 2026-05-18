@@ -6,20 +6,20 @@
 
 ## ✅ 需要配置的服务
 
-### 1. 阿里云 DashScope（AI 图片分析）
+### 1. 火山引擎豆包（AI 图片分析）
 
 **用途**：用于食物图片识别和营养成分分析
 
 **申请步骤**：
-1. 访问 [阿里云 DashScope](https://dashscope.aliyun.com/)
+1. 访问 [火山引擎豆包](https://www.volcengine.com/product/doubao)
 2. 注册/登录阿里云账号
-3. 开通 DashScope 服务
+3. 开通 Doubao 服务
 4. 在控制台 -> API-KEY 管理中创建 API Key
 5. 复制 API Key 到 `backend/.env` 文件
 
 **费用**：按量付费，有免费额度
 
-**文档**：https://help.aliyun.com/zh/dashscope/
+**文档**：https://www.volcengine.com/docs/82379
 
 ---
 
@@ -128,8 +128,8 @@ touch .env
 填入你申请到的所有配置：
 
 ```env
-# DashScope API 配置
-DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxx
+# Doubao API 配置
+DOUBAO_API_KEY=sk-xxxxxxxxxxxxx
 
 # PostgreSQL 配置
 POSTGRESQL_HOST=127.0.0.1
@@ -174,7 +174,7 @@ uvicorn main:app --reload --port 8888
    - 如果密钥泄露，立即重新生成
 
 4. **费用控制**
-   - DashScope 按量付费，注意控制调用次数
+   - Doubao 按量付费，注意控制调用次数
    - PostgreSQL 实例需要关注连接数、磁盘容量与备份策略
 
 ---
@@ -196,7 +196,7 @@ uvicorn main:app --reload --port 8888
 - 检查小程序是否已发布（开发阶段可使用测试号）
 - 查看后端日志获取详细错误信息
 
-### DashScope API 调用失败
+### Doubao API 调用失败
 - 检查 API Key 是否有效
 - 检查账户余额是否充足
 - 检查 API 调用频率是否超限

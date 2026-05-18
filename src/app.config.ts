@@ -2,7 +2,7 @@
 const mainPages = [
   'pages/index/index',
   'pages/stats/index',
-  'pages/community/index',
+  'pages/expiry/index',
   'pages/profile/index',
 ]
 
@@ -43,7 +43,12 @@ const extraSubpackagePages = [
   'pages/friends/index',
   'pages/invite-friends/index',
   'pages/profile-settings/index',
+  'pages/weight-record/index',
+  'pages/weight-trend/index',
+  'pages/water-record/index',
+  'pages/water-trend/index',
   'pages/exercise-record/index',
+  'pages/exercise-trend/index',
   'pages/body-trends/index',
 ]
 
@@ -101,8 +106,8 @@ export default defineAppConfig({
         text: '分析',
       },
       {
-        pagePath: 'pages/community/index',
-        text: '圈子',
+        pagePath: 'pages/expiry/index',
+        text: '保质期',
       },
       {
         pagePath: 'pages/profile/index',

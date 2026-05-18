@@ -20,9 +20,11 @@ type BodyMetricsRepo interface {
 	CreateWeightRecord(ctx context.Context, record *domain.BodyWeightRecord) error
 	ListWeightRecords(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWeightRecord, error)
 	GetLatestWeightRecord(ctx context.Context, userID string) (*domain.BodyWeightRecord, error)
+	DeleteWeightRecordByID(ctx context.Context, userID string, recordID string) (int64, error)
 	CreateWaterLog(ctx context.Context, log *domain.BodyWaterLog) error
 	GetWaterLogsByDate(ctx context.Context, userID string, startDate, endDate string) ([]domain.BodyWaterLog, error)
 	DeleteWaterLogsByDate(ctx context.Context, userID string, recordedOn string) (int64, error)
+	DeleteWaterLogByID(ctx context.Context, userID string, logID string) (int64, error)
 	GetBodyMetricSettings(ctx context.Context, userID string) (*domain.BodyMetricSettings, error)
 	UpsertBodyMetricSettings(ctx context.Context, settings *domain.BodyMetricSettings) error
 	SumWaterByDate(ctx context.Context, userID string, recordedOn string) (int64, error)
@@ -39,14 +41,25 @@ func NewBodyMetricsService(repo BodyMetricsRepo) *BodyMetricsService {
 }
 
 type WeightEntry struct {
-	Date  string  `json:"date"`
-	Value float64 `json:"value"`
+	ID         string  `json:"id,omitempty"`
+	Date       string  `json:"date"`
+	Value      float64 `json:"value"`
+	ClientID   *string `json:"client_id,omitempty"`
+	RecordedAt *string `json:"recorded_at,omitempty"`
 }
 
 type WaterDaily struct {
-	Date  string `json:"date"`
-	Total int    `json:"total"`
-	Logs  []int  `json:"logs"`
+	Date     string          `json:"date"`
+	Total    int             `json:"total"`
+	Logs     []int           `json:"logs"`
+	LogItems []WaterLogEntry `json:"log_items"`
+}
+
+type WaterLogEntry struct {
+	ID         string  `json:"id,omitempty"`
+	Date       string  `json:"date"`
+	AmountMl   int     `json:"amount_ml"`
+	RecordedAt *string `json:"recorded_at,omitempty"`
 }
 
 type BodyMetricsSummary struct {
@@ -321,6 +334,25 @@ func (s *BodyMetricsService) ResetWaterLogs(ctx context.Context, userID string, 
 	}, nil
 }
 
+func (s *BodyMetricsService) DeleteWaterLog(ctx context.Context, userID string, logID string) (map[string]any, error) {
+	logID = strings.TrimSpace(logID)
+	if logID == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "喝水记录不存在", HTTPStatus: 400}
+	}
+	deletedCount, err := s.repo.DeleteWaterLogByID(ctx, userID, logID)
+	if err != nil {
+		return nil, err
+	}
+	if deletedCount == 0 {
+		return nil, &commonerrors.AppError{Code: 10001, Message: "喝水记录不存在", HTTPStatus: 404}
+	}
+	return map[string]any{
+		"message":       "喝水记录已删除",
+		"deleted_count": deletedCount,
+		"id":            logID,
+	}, nil
+}
+
 func (s *BodyMetricsService) SaveWeightRecord(ctx context.Context, userID string, weightKg float64, recordedOn string) (map[string]any, error) {
 	return s.SaveWeightRecordWithMeta(ctx, userID, weightKg, recordedOn, "", "manual")
 }
@@ -360,6 +392,26 @@ func (s *BodyMetricsService) SaveWeightRecordWithMeta(ctx context.Context, userI
 			"weight_kg": round1(weightKg),
 			"client_id": clientID,
 		},
+	}, nil
+}
+
+func (s *BodyMetricsService) DeleteWeightRecord(ctx context.Context, userID string, recordID string) (map[string]any, error) {
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "体重记录不存在", HTTPStatus: 400}
+	}
+	deletedCount, err := s.repo.DeleteWeightRecordByID(ctx, userID, recordID)
+	if err != nil {
+		return nil, err
+	}
+	if deletedCount == 0 {
+		return nil, &commonerrors.AppError{Code: 10001, Message: "体重记录不存在", HTTPStatus: 404}
+	}
+	_ = s.syncProfileWeightFromLatest(ctx, userID)
+	return map[string]any{
+		"message":       "体重记录已删除",
+		"deleted_count": deletedCount,
+		"id":            recordID,
 	}, nil
 }
 
@@ -447,8 +499,14 @@ func aggregateWeightDaily(rows []domain.BodyWeightRecord) []WeightEntry {
 		}
 		dateKey := row.RecordedOn.Format("2006-01-02")
 		entry := WeightEntry{
-			Date:  dateKey,
-			Value: round1(row.WeightKg),
+			ID:       row.ID,
+			Date:     dateKey,
+			Value:    round1(row.WeightKg),
+			ClientID: row.ClientRecordID,
+		}
+		if row.CreatedAt != nil {
+			recordedAt := row.CreatedAt.In(chinaTZ).Format(time.RFC3339)
+			entry.RecordedAt = &recordedAt
 		}
 		if idx, ok := byDateIndex[dateKey]; ok {
 			entries[idx] = entry
@@ -517,27 +575,39 @@ func aggregateWaterDaily(rows []domain.BodyWaterLog, startDate, endDate string) 
 		return []WaterDaily{}
 	}
 
-	dateLogs := make(map[string][]int)
+	dateLogs := make(map[string][]WaterLogEntry)
 	for _, row := range rows {
 		if row.RecordedOn == nil {
 			continue
 		}
 		dateKey := row.RecordedOn.Format("2006-01-02")
-		dateLogs[dateKey] = append(dateLogs[dateKey], row.AmountMl)
+		entry := WaterLogEntry{
+			ID:       row.ID,
+			Date:     dateKey,
+			AmountMl: row.AmountMl,
+		}
+		if row.CreatedAt != nil {
+			recordedAt := row.CreatedAt.In(chinaTZ).Format(time.RFC3339)
+			entry.RecordedAt = &recordedAt
+		}
+		dateLogs[dateKey] = append(dateLogs[dateKey], entry)
 	}
 
 	result := make([]WaterDaily, 0)
 	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
 		dateKey := d.Format("2006-01-02")
-		logs := dateLogs[dateKey]
+		logItems := dateLogs[dateKey]
+		logs := make([]int, 0, len(logItems))
 		total := 0
-		for _, v := range logs {
-			total += v
+		for _, item := range logItems {
+			logs = append(logs, item.AmountMl)
+			total += item.AmountMl
 		}
 		result = append(result, WaterDaily{
-			Date:  dateKey,
-			Total: total,
-			Logs:  logs,
+			Date:     dateKey,
+			Total:    total,
+			Logs:     logs,
+			LogItems: logItems,
 		})
 	}
 	return result

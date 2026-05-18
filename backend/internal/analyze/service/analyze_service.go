@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -25,28 +26,29 @@ const (
 	validExecutionMode     = "strict"
 	visionPrimaryTimeout   = 45 * time.Second
 	maxLLMJSONParseRetries = 3
+	maxLLMTransientRetries = 2
 )
 
 type AnalyzeService struct {
-	dashScopeClient LLMClient
-	ofoxAIClient    LLMClient
-	imageProvider   string
-	users           *authrepo.UserRepo
-	nutrition       *foodrecordrepo.FoodNutritionRepo
-	deepseek        *DeepSeekNutritionEstimator
-	storage         *storage.Client
+	ofoxAIClient  LLMClient
+	doubaoClient  LLMClient
+	imageProvider string
+	users         *authrepo.UserRepo
+	nutrition     *foodrecordrepo.FoodNutritionRepo
+	deepseek      *DeepSeekNutritionEstimator
+	storage       *storage.Client
 }
 
-func NewAnalyzeService(dashScopeClient, ofoxAIClient LLMClient, users *authrepo.UserRepo, nutrition ...*foodrecordrepo.FoodNutritionRepo) *AnalyzeService {
+func NewAnalyzeService(doubaoClient, ofoxAIClient LLMClient, users *authrepo.UserRepo, nutrition ...*foodrecordrepo.FoodNutritionRepo) *AnalyzeService {
 	var nutritionRepo *foodrecordrepo.FoodNutritionRepo
 	if len(nutrition) > 0 {
 		nutritionRepo = nutrition[0]
 	}
 	return &AnalyzeService{
-		dashScopeClient: dashScopeClient,
-		ofoxAIClient:    ofoxAIClient,
-		users:           users,
-		nutrition:       nutritionRepo,
+		doubaoClient: doubaoClient,
+		ofoxAIClient: ofoxAIClient,
+		users:        users,
+		nutrition:    nutritionRepo,
 	}
 }
 
@@ -56,6 +58,19 @@ func (s *AnalyzeService) ConfigureImageProvider(provider string) {
 
 func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey string) {
 	s.deepseek = NewDeepSeekNutritionEstimator(apiKey, "", "")
+}
+
+func (s *AnalyzeService) ConfigureDoubaoClient(apiKey, baseURL, model string) {
+	if strings.TrimSpace(apiKey) != "" {
+		s.doubaoClient = NewDoubaoClient(apiKey, model, baseURL)
+		m := model
+		if m == "" {
+			m = "doubao-seed-2-0-lite-260428"
+		}
+		logger.L().Info("doubao client initialized", zap.String("base_url", baseURL), zap.String("model", m))
+	} else {
+		logger.L().Warn("doubao client not initialized: empty api key")
+	}
 }
 
 func (s *AnalyzeService) RunPrecisionJSON(ctx context.Context, sourceType, prompt, imageURL, modelName string) (map[string]any, error) {
@@ -71,6 +86,18 @@ func (s *AnalyzeService) RunPrecisionJSONWithImages(ctx context.Context, sourceT
 }
 
 func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64) (map[string]any, error) {
+	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, true)
+}
+
+func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperatureNoFallback(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64) (map[string]any, error) {
+	return s.runPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, temperature, false)
+}
+
+func (s *AnalyzeService) RunPrecisionJSONWithImagesNoFallback(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
+	return s.RunPrecisionJSONWithImagesTemperatureNoFallback(ctx, sourceType, prompt, imageURLs, modelName, 0.2)
+}
+
+func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64, allowFallback bool) (map[string]any, error) {
 	sourceType = strings.TrimSpace(sourceType)
 	timeout := 60 * time.Second
 	if sourceType == "image" {
@@ -80,7 +107,7 @@ func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Conte
 	if sourceType == "image" {
 		provider, _ = s.resolveImageModelConfig(modelName)
 	} else if strings.TrimSpace(modelName) == "" {
-		provider = "qwen"
+		provider = "doubao"
 	}
 	traceCtx, span := apm.StartSpan(ctx, "analysis.precision.llm",
 		attribute.String("analysis.source_type", sourceType),
@@ -105,12 +132,12 @@ func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Conte
 			return nil, fmt.Errorf("精准模式文字模型使用 DeepSeek 时，请配置 DEEPSEEK_API_KEY")
 		}
 		client = s.deepseek
-	case "qwen":
-		client = s.dashScopeClient
+	case "doubao":
+		client = s.doubaoClient
 	case "gemini":
 		client = s.ofoxAIClient
 	default:
-		client = s.dashScopeClient
+		client = s.doubaoClient
 	}
 	if client == nil {
 		err := fmt.Errorf("precision LLM client is not initialized")
@@ -137,31 +164,31 @@ func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Conte
 		defer attemptCancel()
 		return analyzeWithImagesTemperature(attemptCtx, client, prompt, imageURLs, temperature)
 	})
-	if err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.dashScopeClient != nil {
-		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(callCtx, "precision_fallback", "qwen", "qwen-vl-max", func(retryCtx context.Context) (map[string]any, error) {
-			return analyzeWithImagesTemperature(retryCtx, s.dashScopeClient, prompt, imageURLs, temperature)
+	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.doubaoClient != nil {
+		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(callCtx, "precision_fallback", "doubao", "doubao-seed-2-0-lite-260428", func(retryCtx context.Context) (map[string]any, error) {
+			return analyzeWithImagesTemperature(retryCtx, s.doubaoClient, prompt, imageURLs, temperature)
 		})
 		if fallbackErr == nil {
-			logger.WithTrace(ctx).Warn("precision gemini vision transient error fallback to dashscope",
+			logger.WithTrace(ctx).Warn("precision gemini vision transient error fallback to doubao",
 				zap.Error(err),
 				zap.Int("image_count", len(imageURLs)),
 			)
 			apm.AddEvent(ctx, "precision llm fallback completed",
 				attribute.String("analysis.primary_provider", provider),
-				attribute.String("analysis.fallback_provider", "qwen"),
+				attribute.String("analysis.fallback_provider", "doubao"),
 				attribute.Int("analysis.image_count", len(imageURLs)),
 				apm.DurationMS("analysis.duration_ms", time.Since(start)),
 			)
 			return fallbackParsed, nil
 		}
-		logger.WithTrace(ctx).Warn("precision dashscope fallback failed",
+		logger.WithTrace(ctx).Warn("precision doubao fallback failed",
 			zap.Error(fallbackErr),
 			zap.Error(err),
 			zap.Int("image_count", len(imageURLs)),
 		)
 		apm.RecordError(ctx, fallbackErr,
 			attribute.String("analysis.stage", "fallback"),
-			attribute.String("analysis.fallback_provider", "qwen"),
+			attribute.String("analysis.fallback_provider", "doubao"),
 		)
 	}
 	if err != nil {
@@ -229,12 +256,19 @@ func isTransientLLMError(err error) bool {
 		"temporary failure",
 		"resource exhausted",
 		"please try again later",
+		"internalserviceerror",
 		"ofoxai api error 408",
 		"ofoxai api error 429",
 		"ofoxai api error 500",
 		"ofoxai api error 502",
 		"ofoxai api error 503",
 		"ofoxai api error 504",
+		"doubao api error 408",
+		"doubao api error 429",
+		"doubao api error 500",
+		"doubao api error 502",
+		"doubao api error 503",
+		"doubao api error 504",
 	}
 	for _, hint := range hints {
 		if strings.Contains(msg, hint) {
@@ -247,25 +281,45 @@ func isTransientLLMError(err error) bool {
 func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model string, call func(context.Context) (map[string]any, error)) (map[string]any, error) {
 	var parsed map[string]any
 	var err error
-	for retry := 0; ; retry++ {
+	jsonRetries := 0
+	transientRetries := 0
+	for {
 		parsed, err = call(ctx)
-		if err == nil || !IsLLMJSONParseError(err) || retry >= maxLLMJSONParseRetries {
+		if err == nil {
 			return parsed, err
 		}
-		retryNumber := retry + 1
-		apm.AddEvent(ctx, "llm json parse retry",
+		retryReason := ""
+		retryNumber := 0
+		maxRetries := 0
+		switch {
+		case IsLLMJSONParseError(err) && jsonRetries < maxLLMJSONParseRetries:
+			jsonRetries++
+			retryReason = "json_parse"
+			retryNumber = jsonRetries
+			maxRetries = maxLLMJSONParseRetries
+		case isTransientLLMError(err) && transientRetries < maxLLMTransientRetries:
+			transientRetries++
+			retryReason = "transient"
+			retryNumber = transientRetries
+			maxRetries = maxLLMTransientRetries
+		default:
+			return parsed, err
+		}
+		apm.AddEvent(ctx, "llm retry",
 			attribute.String("analysis.stage", stage),
 			attribute.String("analysis.provider", provider),
 			attribute.String("analysis.model", model),
+			attribute.String("analysis.retry_reason", retryReason),
 			attribute.Int("analysis.retry_number", retryNumber),
-			attribute.Int("analysis.max_retries", maxLLMJSONParseRetries),
+			attribute.Int("analysis.max_retries", maxRetries),
 		)
-		logger.WithTrace(ctx).Warn("llm returned invalid json; retrying same task",
+		logger.WithTrace(ctx).Warn("llm call failed; retrying same task",
 			zap.String("stage", stage),
 			zap.String("provider", provider),
 			zap.String("model", model),
+			zap.String("retry_reason", retryReason),
 			zap.Int("retry_number", retryNumber),
-			zap.Int("max_retries", maxLLMJSONParseRetries),
+			zap.Int("max_retries", maxRetries),
 			zap.Error(err),
 		)
 		backoff := time.Duration(200*retryNumber) * time.Millisecond
@@ -561,7 +615,7 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "context_advice":""
@@ -587,7 +641,7 @@ JSON:
 	}
 	remainHint := ""
 	if input.RemainingCalories != nil {
-		remainHint = fmt.Sprintf("\n用户当日剩余热量预算约 %g kcal，可在 context_advice 中提示本餐占比或下一餐建议。", *input.RemainingCalories)
+		remainHint = fmt.Sprintf("\n用户当日剩余热量预算约 %g kcal。请在每个食物的 suggestedRatio 中给出建议摄入比例（0-100）：若剩余热量充足可按100；若接近或超出预算，建议降低主食/高热量食物的比例；若用户目标是减脂且本餐热量较高，可适当建议控制。", *input.RemainingCalories)
 	}
 	mealHint := ""
 	if input.MealType != "" {
@@ -703,6 +757,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - 只估算可见可食部分，不把餐具、包装、骨头、壳、果核计入重量
 - waterMl 表示该食物/饮品本身含有的水量，单位毫升，必须是数字；固体食物按常见含水率保守估算，无法判断时填 0
 - 饮品、汤、粥、奶、茶、咖啡等液体或半流体应估算 waterMl；干货、油炸物、酱料难判断时可填 0
+- suggestedRatio 表示建议用户实际摄入该食物的比例（0-100 的整数），请结合用户当日剩余热量预算和饮食目标给出建议：减脂且剩余热量不足时降低主食/高热量食物比例；增肌且热量充足时可按100；默认100
 
 输出要求：
 - 简体中文
@@ -716,7 +771,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0}],
+  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -775,10 +830,11 @@ func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode stri
 - 重量可基于常见份量估算
 - description <= 24字
 - insight/context_advice 各 1-2 句，<= 40字
+- suggestedRatio：每个食物的建议摄入比例（0-100），结合用户剩余热量和饮食目标给出建议，默认100
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -823,7 +879,7 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0}],
+  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -1030,12 +1086,18 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	raw := strings.TrimSpace(modelName)
 	normalized := strings.ToLower(raw)
 	if raw == "" {
-		return "qwen", "qwen-vl-max"
+		return "doubao", "doubao-seed-2-0-lite-260428"
 	}
-	if normalized == "qwen" || normalized == "qwen-vl" || normalized == "qwen-vl-max" {
-		return "qwen", "qwen-vl-max"
+	if normalized == "doubao" || normalized == "doubao-seed-2-0-lite" || normalized == "doubao-seed-2-0-lite-260428" {
+		return "doubao", "doubao-seed-2-0-lite-260428"
 	}
-	if normalized == "deepseek" || normalized == "deepseek-v4-flash" {
+	if strings.HasPrefix(normalized, "doubao") {
+		return "doubao", raw
+	}
+	if normalized == "deepseek" || normalized == "deepseek-v4-pro" {
+		return "deepseek", deepSeekNutritionFallbackModel
+	}
+	if normalized == "deepseek-v4-flash" {
 		return "deepseek", "deepseek-v4-flash"
 	}
 	if strings.HasPrefix(normalized, "deepseek") {
@@ -1043,7 +1105,7 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	}
 	if normalized == "gemini" || normalized == "gemini-flash" || normalized == "gemini-vision" ||
 		normalized == "gemini-3-flash-preview" || normalized == "google/gemini-3-flash-preview" {
-		return "qwen", "qwen-vl-max"
+		return "doubao", "doubao-seed-2-0-lite-260428"
 	}
 	if normalized == "ofox-gemini" || normalized == "ofox-gemini-3-flash-preview" {
 		return "gemini", "gemini-3-flash-preview"
@@ -1051,13 +1113,13 @@ func resolveModelConfig(modelName string) (provider, model string) {
 	if strings.HasPrefix(normalized, "ofox-gemini:") {
 		return "gemini", strings.TrimSpace(strings.TrimPrefix(raw, "ofox-gemini:"))
 	}
-	return "qwen", "qwen-vl-max"
+	return "doubao", "doubao-seed-2-0-lite-260428"
 }
 
 func normalizeImageProviderPreference(provider string) string {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "qwen", "dashscope", "qwen-vl", "qwen-vl-max":
-		return "qwen"
+	case "doubao":
+		return "doubao"
 	case "gemini", "ofox", "ofoxai", "ofox-gemini":
 		return "gemini"
 	default:
@@ -1068,7 +1130,7 @@ func normalizeImageProviderPreference(provider string) string {
 func shouldUseImageProviderPreference(modelName string) bool {
 	raw := strings.TrimSpace(modelName)
 	if raw == "" {
-		return true
+		return false
 	}
 	normalized := strings.ToLower(raw)
 	switch normalized {
@@ -1084,8 +1146,8 @@ func (s *AnalyzeService) resolveImageModelConfig(modelName string) (provider, mo
 		switch s.imageProvider {
 		case "gemini":
 			return "gemini", "gemini-3-flash-preview"
-		case "qwen":
-			return "qwen", "qwen-vl-max"
+		case "doubao":
+			return "doubao", "doubao-seed-2-0-lite-260428"
 		}
 	}
 	return resolveModelConfig(modelName)
@@ -1095,6 +1157,9 @@ func (s *AnalyzeService) resolveImageModelConfig(modelName string) (provider, mo
 func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
+	if executionMode != validExecutionMode {
+		input.ModelName = "doubao"
+	}
 
 	var user *authrepo.User
 	if userID != "" {
@@ -1106,8 +1171,8 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	provider, model := s.resolveImageModelConfig(input.ModelName)
 	var client LLMClient
 	switch provider {
-	case "qwen":
-		client = s.dashScopeClient
+	case "doubao":
+		client = s.doubaoClient
 	case "gemini":
 		client = s.ofoxAIClient
 	case "deepseek":
@@ -1116,7 +1181,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		}
 		client = s.deepseek
 	default:
-		client = s.dashScopeClient
+		client = s.doubaoClient
 	}
 	if client == nil {
 		return nil, fmt.Errorf("图片识别 LLM client 未初始化")
@@ -1173,34 +1238,34 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		return analyzeWithImagesTemperature(attemptCtx, client, prompt, imageURLs, 0.3)
 	})
 	fallbackUsed := false
-	if err != nil && provider == "gemini" && isTransientLLMError(err) && s.dashScopeClient != nil {
-		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(ctx, "food_image_fallback", "qwen", "qwen-vl-max", func(retryCtx context.Context) (map[string]any, error) {
-			return analyzeWithImagesTemperature(retryCtx, s.dashScopeClient, prompt, imageURLs, 0.3)
+	if err != nil && provider == "gemini" && isTransientLLMError(err) && s.doubaoClient != nil {
+		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(ctx, "food_image_fallback", "doubao", "doubao-seed-2-0-lite-260428", func(retryCtx context.Context) (map[string]any, error) {
+			return analyzeWithImagesTemperature(retryCtx, s.doubaoClient, prompt, imageURLs, 0.3)
 		})
 		if fallbackErr == nil {
-			logger.WithTrace(ctx).Warn("gemini vision transient error fallback to dashscope",
+			logger.WithTrace(ctx).Warn("gemini vision transient error fallback to doubao",
 				zap.Error(err),
 			)
 			apm.AddEvent(ctx, "food image analyze llm fallback completed",
 				attribute.String("analysis.primary_provider", primaryProvider),
 				attribute.String("analysis.primary_model", primaryModel),
-				attribute.String("analysis.fallback_provider", "qwen"),
-				attribute.String("analysis.fallback_model", "qwen-vl-max"),
+				attribute.String("analysis.fallback_provider", "doubao"),
+				attribute.String("analysis.fallback_model", "doubao-seed-2-0-lite-260428"),
 				apm.DurationMS("analysis.duration_ms", time.Since(start)),
 			)
 			parsed = fallbackParsed
 			err = nil
-			provider = "qwen"
-			model = "qwen-vl-max"
+			provider = "doubao"
+			model = "doubao-seed-2-0-lite-260428"
 			fallbackUsed = true
 		} else {
-			logger.WithTrace(ctx).Warn("dashscope fallback failed",
+			logger.WithTrace(ctx).Warn("doubao fallback failed",
 				zap.Error(fallbackErr),
 				zap.Error(err),
 			)
 			apm.RecordError(ctx, fallbackErr,
 				attribute.String("analysis.stage", "fallback"),
-				attribute.String("analysis.fallback_provider", "qwen"),
+				attribute.String("analysis.fallback_provider", "doubao"),
 			)
 		}
 	}
@@ -1330,12 +1395,12 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		}
 		client = s.deepseek
 		model = s.deepseek.Model
-	} else if provider == "qwen" {
-		client = s.dashScopeClient
+	} else if provider == "doubao" {
+		client = s.doubaoClient
 	} else if provider == "gemini" {
 		client = s.ofoxAIClient
 	} else {
-		client = s.dashScopeClient
+		client = s.doubaoClient
 	}
 	start := time.Now()
 	ctx, span := apm.StartSpan(ctx, "analysis.food_text",
@@ -1383,7 +1448,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	return result, nil
 }
 
-// AnalyzeCompare calls both Qwen and Gemini in parallel.
+// AnalyzeCompare calls both Doubao and Gemini in parallel.
 func (s *AnalyzeService) AnalyzeCompare(ctx context.Context, userID string, input AnalyzeInput) (map[string]any, error) {
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
@@ -1403,19 +1468,19 @@ func (s *AnalyzeService) AnalyzeCompare(ctx context.Context, userID string, inpu
 	}
 
 	var wg sync.WaitGroup
-	var qwenRes, geminiRes map[string]any
-	var qwenErr, geminiErr error
+	var doubaoRes, geminiRes map[string]any
+	var doubaoErr, geminiErr error
 
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		start := time.Now()
-		parsed, err := s.dashScopeClient.Analyze(ctx, prompt, imageURL)
+		parsed, err := s.doubaoClient.Analyze(ctx, prompt, imageURL)
 		if err != nil {
-			qwenErr = err
+			doubaoErr = err
 			return
 		}
-		qwenRes = buildAnalyzeResponse(parsed, executionMode, "qwen", "qwen-vl-max", float64(time.Since(start).Milliseconds()))
+		doubaoRes = buildAnalyzeResponse(parsed, executionMode, "doubao", "doubao-seed-2-0-lite-260428", float64(time.Since(start).Milliseconds()))
 	}()
 	go func() {
 		defer wg.Done()
@@ -1429,11 +1494,11 @@ func (s *AnalyzeService) AnalyzeCompare(ctx context.Context, userID string, inpu
 	}()
 	wg.Wait()
 
-	qwenResult := modelResultFrom(qwenRes, qwenErr, "qwen-vl-max")
+	doubaoResult := modelResultFrom(doubaoRes, doubaoErr, "doubao-seed-2-0-lite-260428")
 	geminiResult := modelResultFrom(geminiRes, geminiErr, "gemini-3-flash-preview")
 
 	return map[string]any{
-		"qwen_result":   qwenResult,
+		"doubao_result": doubaoResult,
 		"gemini_result": geminiResult,
 	}, nil
 }
@@ -1461,12 +1526,12 @@ func (s *AnalyzeService) AnalyzeCompareEngines(ctx context.Context, userID strin
 
 	provider, model := s.resolveImageModelConfig(input.ModelName)
 	var client LLMClient
-	if provider == "qwen" {
-		client = s.dashScopeClient
+	if provider == "doubao" {
+		client = s.doubaoClient
 	} else if provider == "gemini" {
 		client = s.ofoxAIClient
 	} else {
-		client = s.dashScopeClient
+		client = s.doubaoClient
 	}
 
 	start := time.Now()
@@ -1615,11 +1680,16 @@ func parseItems(parsed map[string]any) []map[string]any {
 					}
 				}
 			}
+			suggestedRatio := 100.0
+			if sr, ok := item["suggestedRatio"].(float64); ok && sr >= 0 && sr <= 100 {
+				suggestedRatio = sr
+			}
 			out = append(out, map[string]any{
 				"name":                 name,
 				"estimatedWeightGrams": weight,
 				"originalWeightGrams":  weight,
 				"waterMl":              waterMl,
+				"suggestedRatio":       suggestedRatio,
 				"nutrients":            nutrients,
 			})
 		}
@@ -1723,13 +1793,18 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	}
 
 	fallbacks := map[int]map[string]any{}
-	if s.deepseek != nil && len(fallbackCandidates) > 0 {
+	if len(fallbackCandidates) > 0 {
 		contextText := ""
 		if len(additionalContext) > 0 {
 			contextText = additionalContext[0]
 		}
-		if rows, err := s.deepseek.Estimate(ctx, fallbackCandidates, contextText); err == nil {
+		if rows, err := s.estimateNutritionWithGemini(ctx, fallbackCandidates, contextText); err == nil {
 			fallbacks = rows
+		} else {
+			logger.WithTrace(ctx).Warn("gemini nutrition fallback failed",
+				zap.Error(err),
+				zap.Int("candidate_count", len(fallbackCandidates)),
+			)
 		}
 	}
 
@@ -1748,8 +1823,23 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 			next["nutrition_source"] = "unresolved"
 			if fallbackUnit, ok := fallbacks[lookup.index]; ok && len(fallbackUnit) > 0 {
 				unit = fallbackUnit
-				next["nutrition_source"] = "deepseek_text_fallback"
-				_, _ = s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, unit)
+				next["nutrition_source"] = "gemini_generated"
+				next["nutrition_persisted"] = false
+				if foodID, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, fallbackUnit, "gemini_generated"); err != nil {
+					logger.WithTrace(ctx).Warn("gemini nutrition upsert failed",
+						zap.Error(err),
+						zap.String("food_name", lookup.name),
+						zap.Any("unit_nutrition_per_100g", fallbackUnit),
+					)
+				} else {
+					next["nutrition_persisted"] = true
+					next["matched_food_id"] = foodID
+					logger.WithTrace(ctx).Info("gemini nutrition upsert succeeded",
+						zap.String("food_name", lookup.name),
+						zap.String("food_id", foodID),
+						zap.Any("unit_nutrition_per_100g", unit),
+					)
+				}
 			}
 			next["unit_nutrition_per_100g"] = unit
 			next["nutrients"] = scaleNutrition(unit, lookup.weight)
@@ -1777,6 +1867,81 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	resp["unresolved_count"] = unresolvedCount
 	logDBFirstNutritionSummary(ctx, out, resolvedCount, unresolvedCount)
 	return resp
+}
+
+func (s *AnalyzeService) estimateNutritionWithGemini(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
+	if s.ofoxAIClient == nil {
+		return nil, fmt.Errorf("gemini nutrition fallback client is not configured")
+	}
+	payloadItems := []map[string]any{}
+	candidateNames := map[int]string{}
+	for _, candidate := range candidates {
+		name := strings.TrimSpace(candidate.Name)
+		if name == "" || candidate.EstimatedWeightGrams <= 0 {
+			continue
+		}
+		candidateNames[candidate.Index] = name
+		payloadItems = append(payloadItems, map[string]any{
+			"index":                candidate.Index,
+			"name":                 name,
+			"estimatedWeightGrams": round2(candidate.EstimatedWeightGrams),
+		})
+	}
+	if len(payloadItems) == 0 {
+		return map[int]map[string]any{}, nil
+	}
+
+	promptPayload := map[string]any{
+		"task": "为未命中营养库的食物生成每100g营养数据，用于写入数据库",
+		"requirements": []string{
+			"你只负责根据食物名称、品牌信息、烹饪方式和常识生成每100g营养数据，不要重新判断重量。",
+			"输出字段使用 camelCase，所有字段必须为数字。",
+			"不要因为不确定就把热量或宏量营养随意填 0；只有该营养天然接近 0 时才填 0。",
+			"热量单位 kcal，其余蛋白质/碳水/脂肪/纤维/糖单位 g，微量元素单位按字段名中的 Mg/Mcg。",
+			"热量必须与宏量营养一致：calories 应大致不低于 protein*4 + carbs*4 + fat*9；如果无法确定热量，用该公式的结果作为下限。",
+			"每100g 的 protein/carbs/fat/fiber/sugar/saturatedFat 不得为负，也不得超过 100g；sugar 不得超过 carbs，saturatedFat 不得超过 fat。",
+			"品牌饮品或包装食品无法确认配方时，应按同类常见产品保守估算，并保持热量和宏量营养自洽。",
+		},
+		"additionalContext": strings.TrimSpace(additionalContext),
+		"items":             payloadItems,
+		"responseSchema": map[string]any{
+			"items": []map[string]any{{
+				"index":                0,
+				"unitNutritionPer100g": zeroUnitNutritionPer100g(),
+			}},
+		},
+	}
+	promptBytes, _ := json.Marshal(promptPayload)
+	prompt := "你是营养数据库补全助手。请尽量给出可落库的每100g营养数据；只返回 JSON，不要附加解释。\n" + string(promptBytes)
+
+	modelName := "gemini"
+	if client, ok := s.ofoxAIClient.(*OfoxAIClient); ok && strings.TrimSpace(client.Model) != "" {
+		modelName = client.Model
+	}
+	parsed, err := analyzeWithJSONParseRetry(ctx, "nutrition_fallback", "gemini", modelName, func(callCtx context.Context) (map[string]any, error) {
+		return s.ofoxAIClient.Analyze(callCtx, prompt, "")
+	})
+	if err != nil {
+		return nil, err
+	}
+	rawItems, ok := parsed["items"].([]any)
+	if !ok {
+		return map[int]map[string]any{}, nil
+	}
+	out := map[int]map[string]any{}
+	for _, raw := range rawItems {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		index := int(numberFromAny(row["index"]))
+		unit, ok := row["unitNutritionPer100g"].(map[string]any)
+		if !ok {
+			continue
+		}
+		out[index] = normalizeFallbackUnitNutrition(candidateNames[index], coerceExtendedNutrients(unit))
+	}
+	return out, nil
 }
 
 func logDBFirstNutritionSummary(ctx context.Context, items []map[string]any, resolvedCount, unresolvedCount int) {

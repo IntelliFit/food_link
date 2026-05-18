@@ -1,0 +1,279 @@
+$water-primary: #5c9ed4;
+$water-deep: #3278ab;
+$water-green: #5cb896;
+$water-text: #1f2937;
+$water-muted: #6b7280;
+$water-faint: #9ca3af;
+
+.water-record-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 28rpx 28rpx 72rpx;
+  background: linear-gradient(180deg, rgb(92 158 212 / 10%) 0%, #eef4f7 100%);
+}
+
+.water-record-topbar,
+.water-progress-card,
+.water-action-card,
+.water-day-card {
+  border-radius: 24rpx;
+  background: #fff;
+  border: 1rpx solid rgb(31 41 55 / 5%);
+  box-shadow: 0 10rpx 30rpx rgb(31 41 55 / 6%);
+}
+
+.water-record-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 28rpx;
+}
+
+.water-record-kicker {
+  display: block;
+  margin-bottom: 8rpx;
+  font-size: 24rpx;
+  color: $water-deep;
+  font-weight: 700;
+}
+
+.water-record-title {
+  display: block;
+  font-size: 44rpx;
+  line-height: 1.15;
+  color: $water-text;
+  font-weight: 800;
+}
+
+.water-trend-link {
+  flex: 0 0 auto;
+  padding: 14rpx 20rpx;
+  border-radius: 999rpx;
+  background: rgb(92 158 212 / 10%);
+}
+
+.water-trend-link-text {
+  font-size: 24rpx;
+  color: $water-deep;
+  font-weight: 700;
+}
+
+.water-progress-card,
+.water-action-card,
+.water-day-card {
+  margin-top: 20rpx;
+  padding: 24rpx;
+}
+
+.water-total-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10rpx;
+  min-height: 112rpx;
+}
+
+.water-total-value {
+  font-size: 78rpx;
+  line-height: 1.1;
+  color: $water-text;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.water-total-unit {
+  font-size: 28rpx;
+  color: $water-muted;
+  font-weight: 700;
+}
+
+.water-progress-track {
+  height: 20rpx;
+  border-radius: 999rpx;
+  background: #e6edf2;
+  overflow: hidden;
+}
+
+.water-progress-fill {
+  height: 100%;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, $water-primary 0%, $water-green 100%);
+}
+
+.water-progress-note {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: $water-muted;
+  text-align: center;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.section-title {
+  font-size: 29rpx;
+  line-height: 1.35;
+  color: $water-text;
+  font-weight: 800;
+}
+
+.water-mini-spinner {
+  width: 26rpx;
+  height: 26rpx;
+  border: 3rpx solid rgb(92 158 212 / 24%);
+  border-top-color: $water-primary;
+  border-radius: 50%;
+  animation: water-spin 0.8s linear infinite;
+}
+
+.water-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14rpx;
+  margin-top: 20rpx;
+}
+
+.water-preset {
+  min-width: 0;
+  height: 104rpx;
+  border-radius: 22rpx;
+  background: rgb(92 158 212 / 12%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.water-preset.is-saving,
+.water-custom-btn.is-saving,
+.water-clear-link.is-disabled {
+  opacity: 0.55;
+}
+
+.water-preset-text {
+  font-size: 31rpx;
+  color: $water-deep;
+  font-weight: 800;
+}
+
+.water-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-top: 18rpx;
+}
+
+.water-custom-input {
+  flex: 1;
+  min-width: 0;
+  height: 86rpx;
+  padding: 0 22rpx;
+  border-radius: 20rpx;
+  background: #f3f7fa;
+  color: $water-text;
+  font-size: 30rpx;
+  box-sizing: border-box;
+}
+
+.water-custom-btn {
+  flex: 0 0 auto;
+  min-width: 136rpx;
+  height: 86rpx;
+  border-radius: 20rpx;
+  background: linear-gradient(90deg, $water-primary 0%, #83c4dd 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.water-custom-btn-text {
+  font-size: 27rpx;
+  color: #fff;
+  font-weight: 800;
+}
+
+.water-clear-link {
+  flex: 0 0 auto;
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgb(212 92 92 / 9%);
+  color: #d45c5c;
+  font-size: 23rpx;
+  font-weight: 600;
+}
+
+.water-log-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 20rpx;
+}
+
+.water-log-chip {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  padding: 14rpx 16rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 10%);
+}
+
+.water-log-chip.is-deleting {
+  opacity: 0.55;
+}
+
+.water-log-chip-text {
+  font-size: 25rpx;
+  color: #3f9474;
+  font-weight: 700;
+}
+
+.water-log-delete {
+  padding: 4rpx 10rpx;
+  border-radius: 999rpx;
+  background: rgb(212 92 92 / 9%);
+  color: #d45c5c;
+  font-size: 21rpx;
+  font-weight: 700;
+}
+
+.water-empty {
+  display: block;
+  padding: 34rpx 0 8rpx;
+  font-size: 25rpx;
+  color: $water-faint;
+}
+
+@keyframes water-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.fl-page-theme-root--dark .water-record-page {
+  background: transparent;
+}
+
+.fl-page-theme-root--dark .water-record-topbar,
+.fl-page-theme-root--dark .water-progress-card,
+.fl-page-theme-root--dark .water-action-card,
+.fl-page-theme-root--dark .water-day-card {
+  background: #18211f;
+  border-color: #3d5d51;
+}
+
+.fl-page-theme-root--dark .water-record-title,
+.fl-page-theme-root--dark .water-total-value,
+.fl-page-theme-root--dark .section-title,
+.fl-page-theme-root--dark .water-custom-input {
+  color: #e8ece9;
+}
+
+.fl-page-theme-root--dark .water-custom-input {
+  background: #222c29;
+}

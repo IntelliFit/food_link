@@ -18,7 +18,7 @@ function readInjectedString(
 // config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
 export const API_BASE_URL = readInjectedString(
   () => __API_BASE_URL__,
-  'https://v2.healthymax.cn'
+  'https://healthymax.cn'
 )
 export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
@@ -186,6 +186,7 @@ export interface FoodItem {
   name: string
   estimatedWeightGrams: number
   originalWeightGrams: number
+  suggestedRatio?: number
   waterMl?: number
   water_ml?: number
   nutrients: Nutrients
@@ -387,7 +388,7 @@ export interface ModelAnalyzeResult {
 
 /** 双模型对比分析响应 */
 export interface CompareAnalyzeResponse {
-  qwen_result: ModelAnalyzeResult
+  doubao_result: ModelAnalyzeResult
   gemini_result: ModelAnalyzeResult
 }
 
@@ -848,10 +849,18 @@ export interface BodyMetricWeightEntry {
   recorded_at?: string | null
 }
 
+export interface BodyMetricWaterLogItem {
+  id?: string
+  date: string
+  amount_ml: number
+  recorded_at?: string | null
+}
+
 export interface BodyMetricWaterDay {
   date: string
   total: number
   logs: number[]
+  log_items?: BodyMetricWaterLogItem[]
 }
 
 export interface BodyMetricsSummary {
@@ -2622,7 +2631,19 @@ export async function saveBodyWeightRecord(value: number, date?: string, clientI
   return res.data as { message: string; item: BodyMetricWeightEntry }
 }
 
-export async function addBodyWaterLog(amountMl: number, date?: string): Promise<{ message: string; item: { id?: string; date: string; amount_ml: number } }> {
+export async function deleteBodyWeightRecord(recordId: string): Promise<{ message: string; deleted_count: number; id: string }> {
+  const res = await authenticatedRequest(`/api/body-metrics/weight/${encodeURIComponent(recordId)}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '删除体重记录失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; deleted_count: number; id: string }
+}
+
+export async function addBodyWaterLog(amountMl: number, date?: string): Promise<{ message: string; item: BodyMetricWaterLogItem }> {
   const apiDate = mapCalendarDateToApi(date)
   const res = await authenticatedRequest('/api/body-metrics/water', {
     method: 'POST',
@@ -2633,7 +2654,7 @@ export async function addBodyWaterLog(amountMl: number, date?: string): Promise<
     const msg = (res.data as any)?.detail || '保存喝水记录失败'
     throw new Error(msg)
   }
-  return res.data as { message: string; item: { id?: string; date: string; amount_ml: number } }
+  return res.data as { message: string; item: BodyMetricWaterLogItem }
 }
 
 export async function resetBodyWaterLogs(date?: string): Promise<{ message: string; deleted_count: number; date: string }> {
@@ -2648,6 +2669,18 @@ export async function resetBodyWaterLogs(date?: string): Promise<{ message: stri
     throw new Error(msg)
   }
   return res.data as { message: string; deleted_count: number; date: string }
+}
+
+export async function deleteBodyWaterLog(logId: string): Promise<{ message: string; deleted_count: number; id: string }> {
+  const res = await authenticatedRequest(`/api/body-metrics/water/${encodeURIComponent(logId)}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '删除喝水记录失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string; deleted_count: number; id: string }
 }
 
 export async function syncLocalBodyMetrics(snapshot: BodyMetricsLocalSnapshot): Promise<{ message: string; imported_weight_count: number; imported_water_count: number }> {
@@ -4504,6 +4537,8 @@ export interface ExerciseTaskResultPayload {
   /** 估算时使用的用户画像快照 */
   profile_snapshot?: Record<string, any> | null
   today_total: number
+  /** AI 自动识别的运动类型（如跑步、游泳等） */
+  exercise_type?: string | null
 }
 
 /** 提交运动分析任务（后台 Worker 调用大模型并落库；返回 task_id，需轮询 getAnalyzeTask） */

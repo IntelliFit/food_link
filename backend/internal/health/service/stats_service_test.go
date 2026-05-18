@@ -73,6 +73,10 @@ func (m *mockStatsRepo) GetLatestCachedInsight(ctx context.Context, userID strin
 	return nil, nil
 }
 
+func (m *mockStatsRepo) CountInsightGenerationsToday(ctx context.Context, userID string) (int64, error) {
+	return 0, nil
+}
+
 type mockBodyMetricsProvider struct {
 	summary *BodyMetricsSummary
 }

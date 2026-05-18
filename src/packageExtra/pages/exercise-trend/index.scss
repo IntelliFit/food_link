@@ -1,0 +1,243 @@
+$primary: #f97316;
+$light: #fff7ed;
+$text: #1f2937;
+$muted: #6b7280;
+$faint: #9ca3af;
+
+.exercise-trend-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 28rpx 28rpx 72rpx;
+  background: linear-gradient(180deg, rgb(249 115 22 / 10%) 0%, #f8fafc 100%);
+}
+
+.trend-hero,
+.trend-summary-card,
+.trend-card,
+.history-card {
+  border-radius: 24rpx;
+  background: #fff;
+  border: 1rpx solid rgb(31 41 55 / 5%);
+  box-shadow: 0 10rpx 30rpx rgb(31 41 55 / 6%);
+}
+
+.trend-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24rpx;
+  padding: 28rpx;
+}
+
+.trend-kicker {
+  display: block;
+  margin-bottom: 8rpx;
+  font-size: 24rpx;
+  color: $primary;
+  font-weight: 700;
+}
+
+.trend-title {
+  display: block;
+  font-size: 42rpx;
+  color: $text;
+  font-weight: 800;
+}
+
+.trend-total {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.trend-total-value {
+  font-size: 44rpx;
+  color: $text;
+  font-weight: 800;
+}
+
+.trend-total-unit {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 21rpx;
+  color: $faint;
+}
+
+.trend-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.trend-summary-card,
+.trend-card,
+.history-card {
+  padding: 24rpx;
+}
+
+.trend-card,
+.history-card {
+  margin-top: 20rpx;
+}
+
+.trend-summary-label {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 23rpx;
+  color: $muted;
+}
+
+.trend-summary-value {
+  font-size: 38rpx;
+  color: $text;
+  font-weight: 800;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title {
+  font-size: 29rpx;
+  color: $text;
+  font-weight: 800;
+}
+
+.trend-spinner {
+  width: 26rpx;
+  height: 26rpx;
+  border: 3rpx solid rgb(249 115 22 / 24%);
+  border-top-color: $primary;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.exercise-heatmap {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 10rpx;
+  margin-top: 20rpx;
+}
+
+.exercise-heatmap-cell {
+  min-width: 0;
+  aspect-ratio: 1;
+  border-radius: 12rpx;
+  background: #edf0f3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exercise-heatmap-cell.level-1 {
+  background: rgb(249 115 22 / 18%);
+}
+
+.exercise-heatmap-cell.level-2 {
+  background: rgb(249 115 22 / 34%);
+}
+
+.exercise-heatmap-cell.level-3 {
+  background: rgb(249 115 22 / 54%);
+}
+
+.exercise-heatmap-cell.level-4 {
+  background: linear-gradient(135deg, $primary 0%, #fbad6b 100%);
+}
+
+.exercise-heatmap-day {
+  font-size: 19rpx;
+  color: #fff;
+  font-weight: 800;
+}
+
+.exercise-heatmap-cell.level-0 .exercise-heatmap-day,
+.exercise-heatmap-cell.level-1 .exercise-heatmap-day {
+  color: $muted;
+}
+
+.exercise-heatmap-legend {
+  grid-column: 1 / -1;
+  margin-top: 4rpx;
+}
+
+.exercise-heatmap-note {
+  font-size: 22rpx;
+  color: $muted;
+}
+
+.exercise-history-row {
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  border-top: 1rpx solid #eef2f4;
+}
+
+.exercise-history-row.is-deleting {
+  opacity: 0.55;
+}
+
+.exercise-history-row:first-of-type {
+  margin-top: 18rpx;
+}
+
+.exercise-history-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.exercise-history-title {
+  display: block;
+  font-size: 27rpx;
+  color: $text;
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+.exercise-history-date {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: $faint;
+}
+
+.exercise-history-kcal {
+  display: block;
+  flex: 0 0 auto;
+  font-size: 26rpx;
+  color: $primary;
+  font-weight: 800;
+  text-align: right;
+}
+
+.exercise-history-side {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.exercise-delete-link {
+  display: inline-block;
+  margin-top: 8rpx;
+  padding: 5rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgb(212 92 92 / 9%);
+  color: #d45c5c;
+  font-size: 21rpx;
+  font-weight: 700;
+}
+
+.history-empty {
+  display: block;
+  padding: 30rpx 0 8rpx;
+  font-size: 25rpx;
+  color: $faint;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

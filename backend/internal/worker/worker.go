@@ -29,12 +29,14 @@ import (
 )
 
 const (
-	precisionRefineEnabled = false
-	precisionRefineTimeout = 25 * time.Second
-	taskLeaseDuration      = 5 * time.Minute
-	taskLeaseExtendEvery   = 30 * time.Second
-	taskRecoveryInterval   = 30 * time.Second
-	taskRecoveryBatchSize  = 200
+	precisionPlanModelName   = "doubao"
+	precisionWeightModelName = "ofox-gemini"
+	precisionRefineEnabled   = true
+	precisionRefineTimeout   = 25 * time.Second
+	taskLeaseDuration        = 5 * time.Minute
+	taskLeaseExtendEvery     = 30 * time.Second
+	taskRecoveryInterval     = 30 * time.Second
+	taskRecoveryBatchSize    = 200
 )
 
 var errTaskAttemptLost = errors.New("task attempt no longer owns task")
@@ -904,6 +906,7 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 		input.PreviousResult = mapFromAny(firstNonNil(task.Payload["previousResult"], latestInputs["previousResult"]))
 	}
 	input.AnalysisEngine = "db_first"
+	input.ModelName = precisionPlanModelName
 	standardMode := "standard"
 	input.ExecutionMode = &standardMode
 
@@ -1192,7 +1195,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		imageURLs = []string{imageURL}
 	}
 	prompt := buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext, referenceObjects, previousRounds)
-	result, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, stringFromMap(task.Payload, "modelName"))
+	result, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, precisionPlanModelName)
 	if err != nil {
 		return err
 	}
@@ -1234,7 +1237,8 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 			"image_url":            imageURL,
 			"image_urls":           imageURLs,
 			"text":                 firstNonEmptyString(latestInputs, "text"),
-			"modelName":            stringFromMap(task.Payload, "modelName"),
+			"modelName":            precisionWeightModelName,
+			"planner_modelName":    precisionPlanModelName,
 		}
 		groupPayload["round_index"] = roundIndex
 		groupPayload["group_index"] = groupIndex
@@ -1393,7 +1397,7 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 		}
 		return err
 	}
-	parsed, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, stringFromMap(task.Payload, "modelName"))
+	parsed, err := r.analyze.RunPrecisionJSONWithImagesNoFallback(ctx, sourceType, prompt, imageURLs, precisionWeightModelName)
 	if err != nil {
 		if estimate != nil {
 			_ = r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "failed", "error_message": err.Error()})
@@ -1417,7 +1421,7 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 	}
 	initialWeights := precisionWeightSnapshot(parsedItems)
 	refinedNotes := []string{}
-	refinedItems, notes, refineErr := r.maybeRefinePrecisionWeights(ctx, sourceType, parsedItems, plannedItems, rawInputForRefine, additionalContext, referenceObjects, imageURLs, stringFromMap(task.Payload, "modelName"))
+	refinedItems, notes, refineErr := r.maybeRefinePrecisionWeights(ctx, sourceType, parsedItems, plannedItems, rawInputForRefine, additionalContext, referenceObjects, imageURLs, precisionWeightModelName)
 	if refineErr != nil {
 		r.log.Warn("precision refine skipped",
 			zap.String("task_id", task.ID),
@@ -2157,21 +2161,7 @@ var precisionWeightRefinementKeywords = []string{
 }
 
 func shouldRefinePrecisionWeights(plannedItems []map[string]any) bool {
-	for _, item := range plannedItems {
-		if item == nil {
-			continue
-		}
-		name := firstNonEmptyString(item, "item_name", "name")
-		if stringFromMap(item, "uncertainty_level") == "high" || boolFromAny(item["requires_reference"]) {
-			return true
-		}
-		for _, keyword := range precisionWeightRefinementKeywords {
-			if strings.Contains(name, keyword) {
-				return true
-			}
-		}
-	}
-	return false
+	return len(plannedItems) > 0
 }
 
 func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, additionalContext string, referenceObjects []map[string]any) string {
@@ -2336,7 +2326,7 @@ func (r *Runner) maybeRefinePrecisionWeights(
 	prompt := buildPrecisionWeightRefinePrompt(parsedItems, rawInput, additionalContext, referenceObjects)
 	refineCtx, cancel := context.WithTimeout(ctx, precisionRefineTimeout)
 	defer cancel()
-	parsed, err := r.analyze.RunPrecisionJSONWithImagesTemperature(refineCtx, sourceType, prompt, imageURLs, modelName, 0.1)
+	parsed, err := r.analyze.RunPrecisionJSONWithImagesTemperatureNoFallback(refineCtx, sourceType, prompt, imageURLs, modelName, 0.1)
 	if err != nil {
 		return parsedItems, nil, err
 	}
@@ -3367,12 +3357,12 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 	}
 	if strings.Contains(lower, "resource exhausted") ||
 		strings.Contains(lower, "ofoxai api error 429") ||
-		strings.Contains(lower, "dashscope api error 429") {
+		strings.Contains(lower, "doubao api error 429") {
 		return "AI 识别服务当前繁忙，请稍后重试"
 	}
 	if strings.Contains(lower, "incorrect api key") ||
 		strings.Contains(lower, "apikey-error") ||
-		strings.Contains(lower, "dashscope api error 401") ||
+		strings.Contains(lower, "doubao api error 401") ||
 		strings.Contains(lower, "ofoxai api error 401") {
 		return "AI 识别服务配置异常，请联系管理员处理"
 	}
@@ -3380,10 +3370,11 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		strings.Contains(lower, "ofoxai api error 502") ||
 		strings.Contains(lower, "ofoxai api error 503") ||
 		strings.Contains(lower, "ofoxai api error 504") ||
-		strings.Contains(lower, "dashscope api error 500") ||
-		strings.Contains(lower, "dashscope api error 502") ||
-		strings.Contains(lower, "dashscope api error 503") ||
-		strings.Contains(lower, "dashscope api error 504") {
+		strings.Contains(lower, "doubao api error 500") ||
+		strings.Contains(lower, "doubao api error 502") ||
+		strings.Contains(lower, "doubao api error 503") ||
+		strings.Contains(lower, "doubao api error 504") ||
+		strings.Contains(lower, "internalserviceerror") {
 		return "AI 识别服务暂时不可用，请稍后重试"
 	}
 	runes := []rune(msg)

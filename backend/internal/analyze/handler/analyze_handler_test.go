@@ -166,7 +166,7 @@ func TestAnalyzeHandler_AnalyzeText(t *testing.T) {
 }
 
 func TestAnalyzeHandler_AnalyzeCompare(t *testing.T) {
-	mockSvc := &mockAnalyzeService{analyzeCompareResult: map[string]any{"qwen_result": map[string]any{"success": true}}}
+	mockSvc := &mockAnalyzeService{analyzeCompareResult: map[string]any{"doubao_result": map[string]any{"success": true}}}
 	mockTask := &mockTaskService{}
 	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
 	r := setupRouter(h)

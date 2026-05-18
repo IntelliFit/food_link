@@ -24,6 +24,7 @@ type StatsRepo interface {
 	UpsertInsightCache(ctx context.Context, userID, rangeType, generatedDate, dataFingerprint, insightText string) error
 	GetCachedInsight(ctx context.Context, userID string, rangeType string, generatedDate string) (*domain.StatsInsight, error)
 	GetLatestCachedInsight(ctx context.Context, userID string, rangeType string) (*domain.StatsInsight, error)
+	CountInsightGenerationsToday(ctx context.Context, userID string) (int64, error)
 }
 
 type BodyMetricsSummaryProvider interface {
@@ -33,11 +34,15 @@ type BodyMetricsSummaryProvider interface {
 type StatsService struct {
 	repo        StatsRepo
 	bodyMetrics BodyMetricsSummaryProvider
+	creditGuard CreditGuard
 	cfg         *config.Config
 	client      *http.Client
 }
 
-const statsInsightDeepSeekModel = "deepseek-v4-flash"
+const (
+	statsInsightDeepSeekModel = "deepseek-v4-flash"
+	statsInsightDailyLimit    = 3
+)
 
 func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg ...*config.Config) *StatsService {
 	var c *config.Config
@@ -50,6 +55,10 @@ func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg
 		cfg:         c,
 		client:      &http.Client{Timeout: 60 * time.Second},
 	}
+}
+
+func (s *StatsService) ConfigureCreditGuard(guard CreditGuard) {
+	s.creditGuard = guard
 }
 
 type DailyCalories struct {
@@ -149,6 +158,13 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 }
 
 func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateRange string, fallbackTDEE int, fallbackStreakDays int) (map[string]any, error) {
+	count, err := s.repo.CountInsightGenerationsToday(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if count >= statsInsightDailyLimit {
+		return nil, &commonerrors.AppError{Code: 10005, Message: "今日 AI 解读次数已达上限，请明天再试", HTTPStatus: 429}
+	}
 	comp, err := s.buildStatsComputation(ctx, userID, dateRange, fallbackTDEE, fallbackStreakDays)
 	if err != nil {
 		return nil, err

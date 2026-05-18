@@ -43,8 +43,16 @@ func (m *mockBodyMetricsSvc) ResetWaterLogs(ctx context.Context, userID string, 
 	return map[string]any{"message": "已清空"}, m.err
 }
 
+func (m *mockBodyMetricsSvc) DeleteWaterLog(ctx context.Context, userID string, logID string) (map[string]any, error) {
+	return map[string]any{"message": "喝水记录已删除", "id": logID}, m.err
+}
+
 func (m *mockBodyMetricsSvc) SaveWeightRecord(ctx context.Context, userID string, weightKg float64, recordedOn string) (map[string]any, error) {
 	return map[string]any{"message": "体重已保存"}, m.err
+}
+
+func (m *mockBodyMetricsSvc) DeleteWeightRecord(ctx context.Context, userID string, recordID string) (map[string]any, error) {
+	return map[string]any{"message": "体重记录已删除", "id": recordID}, m.err
 }
 
 type mockExerciseSvc struct {
@@ -111,7 +119,9 @@ func setupHealthRouter(h *HealthHandler) *gin.Engine {
 	r.POST("/api/body-metrics/sync-local", h.SyncLocalBodyMetrics)
 	r.POST("/api/body-metrics/water", h.SaveBodyWaterLog)
 	r.POST("/api/body-metrics/water/reset", h.ResetBodyWaterLogs)
+	r.DELETE("/api/body-metrics/water/:log_id", h.DeleteBodyWaterLog)
 	r.POST("/api/body-metrics/weight", h.SaveBodyWeightRecord)
+	r.DELETE("/api/body-metrics/weight/:record_id", h.DeleteBodyWeightRecord)
 	r.GET("/api/stats/summary", h.GetStatsSummary)
 	r.POST("/api/stats/insight/generate", h.GenerateStatsInsight)
 	r.POST("/api/stats/insight/save", h.SaveStatsInsight)
@@ -203,6 +213,18 @@ func TestResetBodyWaterLogs(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestDeleteBodyWaterLog(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/body-metrics/water/wl1", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
 func TestSaveBodyWeightRecord(t *testing.T) {
 	mockSvc := &mockBodyMetricsSvc{}
 	h := NewHealthHandler(mockSvc, nil, nil)
@@ -212,6 +234,18 @@ func TestSaveBodyWeightRecord(t *testing.T) {
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/body-metrics/weight", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestDeleteBodyWeightRecord(t *testing.T) {
+	mockSvc := &mockBodyMetricsSvc{}
+	h := NewHealthHandler(mockSvc, nil, nil)
+	r := setupHealthRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/body-metrics/weight/w1", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)

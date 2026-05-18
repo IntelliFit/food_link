@@ -19,7 +19,7 @@ func writeTestConfig(t *testing.T, content string) string {
 
 func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	t.Setenv("PORT", "3010")
-	t.Setenv("DASHSCOPE_API_KEY", "a")
+	t.Setenv("DOUBAO_API_KEY", "a")
 	t.Setenv("APPID", "a")
 	t.Setenv("SECRET", "a")
 	t.Setenv("JWT_SECRET_KEY", "b")
@@ -102,7 +102,7 @@ worker:
 }
 
 func TestLoadTrimsExternalSecrets(t *testing.T) {
-	t.Setenv("DASHSCOPE_API_KEY", " sk-test ")
+	t.Setenv("DOUBAO_API_KEY", " sk-test ")
 	t.Setenv("OFOXAI_API_KEY", "\tsk-ofox\n")
 	t.Setenv("DEEPSEEK_API_KEY", " deepseek-key ")
 
@@ -115,8 +115,8 @@ worker:
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.External.DashscopeAPIKey != "sk-test" {
-		t.Fatalf("expected trimmed dashscope key, got %q", cfg.External.DashscopeAPIKey)
+	if cfg.External.DoubaoAPIKey != "sk-test" {
+		t.Fatalf("expected trimmed doubao key, got %q", cfg.External.DoubaoAPIKey)
 	}
 	if cfg.External.OfoxAIAPIKey != "sk-ofox" {
 		t.Fatalf("expected trimmed ofox key, got %q", cfg.External.OfoxAIAPIKey)
@@ -127,7 +127,7 @@ worker:
 }
 
 func TestLoadPrefersFileExternalKeysOverEnv(t *testing.T) {
-	t.Setenv("DASHSCOPE_API_KEY", "bad-env-key")
+	t.Setenv("DOUBAO_API_KEY", "bad-env-key")
 	t.Setenv("OFOXAI_API_KEY", "bad-ofox")
 	t.Setenv("DEEPSEEK_API_KEY", "bad-deepseek")
 
@@ -135,7 +135,7 @@ func TestLoadPrefersFileExternalKeysOverEnv(t *testing.T) {
 app:
   env: "production"
 external:
-  dashscope_api_key: "good-dashscope"
+  doubao_api_key: "good-doubao"
   ofoxai_api_key: "good-ofox"
   deepseek_api_key: "good-deepseek"
 worker:
@@ -146,8 +146,8 @@ worker:
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if cfg.External.DashscopeAPIKey != "good-dashscope" {
-		t.Fatalf("expected file dashscope key, got %q", cfg.External.DashscopeAPIKey)
+	if cfg.External.DoubaoAPIKey != "good-doubao" {
+		t.Fatalf("expected file doubao key, got %q", cfg.External.DoubaoAPIKey)
 	}
 	if cfg.External.OfoxAIAPIKey != "good-ofox" {
 		t.Fatalf("expected file ofox key, got %q", cfg.External.OfoxAIAPIKey)

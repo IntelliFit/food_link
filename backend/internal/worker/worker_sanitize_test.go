@@ -35,9 +35,19 @@ func TestSanitizeTaskErrorMessage_ResourceExhausted(t *testing.T) {
 	}
 }
 
+func TestSanitizeTaskErrorMessage_InternalServiceError(t *testing.T) {
+	msg := sanitizeTaskErrorMessage(errors.New(`doubao api error 500: {"error":{"code":"InternalServiceError","message":"The service encountered an unexpected internal error","request_id":"0217790020120823db2ae"}}`))
+	if strings.Contains(msg, "InternalServiceError") || strings.Contains(msg, "request_id") {
+		t.Fatalf("raw upstream error leaked into sanitized error: %s", msg)
+	}
+	if !strings.Contains(msg, "AI 识别服务暂时不可用") {
+		t.Fatalf("unexpected sanitized internal service error: %s", msg)
+	}
+}
+
 func TestSanitizeTaskErrorMessage_APIKey(t *testing.T) {
-	msg := sanitizeTaskErrorMessage(errors.New(`dashscope api error 401: {"error":{"message":"Incorrect API key provided. For details, see: https://help.aliyun.com/zh/model-studio/error-code#apikey-error"}}`))
-	if strings.Contains(strings.ToLower(msg), "apikey") || strings.Contains(msg, "help.aliyun.com") {
+	msg := sanitizeTaskErrorMessage(errors.New(`doubao api error 401: {"error":{"message":"Incorrect API key provided. For details, see: https://www.volcengine.com/docs/error-code#apikey-error"}}`))
+	if strings.Contains(strings.ToLower(msg), "apikey") || strings.Contains(msg, "volcengine.com") {
 		t.Fatalf("raw api key error leaked into sanitized error: %s", msg)
 	}
 	if !strings.Contains(msg, "AI 识别服务配置异常") {
@@ -235,19 +245,20 @@ func TestAttachPrecisionItemMetadata_MatchesByNameThenIndex(t *testing.T) {
 	}
 }
 
-func TestShouldRefinePrecisionWeights_TriggersForPythonConditions(t *testing.T) {
+func TestShouldRefinePrecisionWeights_RefinesEveryPrecisionItem(t *testing.T) {
 	cases := [][]map[string]any{
 		{{"item_name": "白米饭", "uncertainty_level": "low"}},
 		{{"item_name": "清炒冬瓜", "uncertainty_level": "high"}},
 		{{"item_name": "苹果", "requires_reference": true}},
+		{{"item_name": "鸡蛋", "uncertainty_level": "low"}},
 	}
 	for _, items := range cases {
 		if !shouldRefinePrecisionWeights(items) {
 			t.Fatalf("expected refine trigger for %#v", items)
 		}
 	}
-	if shouldRefinePrecisionWeights([]map[string]any{{"item_name": "鸡蛋", "uncertainty_level": "low"}}) {
-		t.Fatalf("did not expect refine for simple low uncertainty item")
+	if shouldRefinePrecisionWeights(nil) {
+		t.Fatalf("did not expect refine for empty plan")
 	}
 }
 

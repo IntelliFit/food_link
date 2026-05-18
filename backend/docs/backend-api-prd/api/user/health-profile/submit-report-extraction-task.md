@@ -59,7 +59,7 @@ Covers health profile read/write and OCR-related subflows that enrich analysis a
 ## Migration Notes
 
 - `POST /api/user/health-profile/submit-report-extraction-task`: preserve async task semantics and queue contract
-- Remote `origin/dev` currently shows a narrower OCR worker path than local `main` (single-image DashScope-oriented flow instead of broader multi-image/provider-switch behavior). Reconcile this branch drift before freezing the rewrite target.
+- Remote `origin/dev` currently shows a narrower OCR worker path than local `main` (single-image Doubao-oriented flow instead of broader multi-image/provider-switch behavior). Reconcile this branch drift before freezing the rewrite target.
 
 ## Open Questions / Drift
 

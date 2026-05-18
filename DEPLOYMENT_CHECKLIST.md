@@ -4,7 +4,7 @@
 
 ### 环境准备
 - [ ] 确认 PostgreSQL 数据库连接正常
-- [ ] 确认 `DASHSCOPE_API_KEY` 已配置
+- [ ] 确认 `DOUBAO_API_KEY` 已配置
 - [ ] 确认后端服务运行正常
 - [ ] 备份当前数据库（可选但推荐）
 
@@ -55,7 +55,7 @@ WHERE constraint_name = 'analysis_tasks_task_type_check';
 ### 步骤 2: 环境变量
 - [ ] 检查 `.env` 文件包含必需的环境变量：
   ```bash
-  DASHSCOPE_API_KEY=your_key
+  DOUBAO_API_KEY=your_key
   TEXT_WORKER_COUNT=1  # 可选，默认 1
   ```
 

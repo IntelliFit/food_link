@@ -68,15 +68,15 @@ const REWARD_LEVELS: RewardLevelMeta[] = [
 ]
 
 const SERVICE_ICON_TONES: Record<number, ProfileListIconTone> = {
-  0: { color: '#4f9478', backgroundColor: '#eaf5ef', darkColor: '#8ecdb2', darkBackgroundColor: 'rgba(142, 205, 178, 0.14)' },
-  2: { color: '#8c7a4f', backgroundColor: '#f5f0e4', darkColor: '#d2bf86', darkBackgroundColor: 'rgba(210, 191, 134, 0.14)' },
-  5: { color: '#5b8da5', backgroundColor: '#e9f2f6', darkColor: '#9ac5d8', darkBackgroundColor: 'rgba(154, 197, 216, 0.14)' },
-  8: { color: '#7f7898', backgroundColor: '#f0eef5', darkColor: '#bbb2d6', darkBackgroundColor: 'rgba(187, 178, 214, 0.14)' },
+  0: { color: '#4f9478', backgroundColor: '#ecfdf4', darkColor: '#6ff6bc', darkBackgroundColor: 'rgba(111, 246, 188, 0.14)' },
+  2: { color: '#8c7a4f', backgroundColor: '#fef7e5', darkColor: '#fcd666', darkBackgroundColor: 'rgba(252, 214, 102, 0.14)' },
+  5: { color: '#5b8da5', backgroundColor: '#ebf8fe', darkColor: '#81d6fb', darkBackgroundColor: 'rgba(129, 214, 251, 0.14)' },
+  8: { color: '#7f7898', backgroundColor: '#f4f0fd', darkColor: '#b39ef4', darkBackgroundColor: 'rgba(179, 158, 244, 0.14)' },
 }
 
 const SETTING_ICON_TONES: Record<number, ProfileListIconTone> = {
-  3: { color: '#5f8b7d', backgroundColor: '#edf5f2', darkColor: '#9bc8ba', darkBackgroundColor: 'rgba(155, 200, 186, 0.14)' },
-  5: { color: '#8b7664', backgroundColor: '#f3efea', darkColor: '#cdb8a4', darkBackgroundColor: 'rgba(205, 184, 164, 0.14)' },
+  3: { color: '#5f8b7d', backgroundColor: '#effdf8', darkColor: '#7df0cc', darkBackgroundColor: 'rgba(125, 240, 204, 0.14)' },
+  5: { color: '#8b7664', backgroundColor: '#fcf5eb', darkColor: '#f1bc8a', darkBackgroundColor: 'rgba(241, 188, 138, 0.14)' },
 }
 
 function getProfileListIconStyle(id: number, tones: Record<number, ProfileListIconTone>, scheme: string) {
@@ -348,7 +348,7 @@ function ProfilePage() {
     }
     // 食物管理
     if (service.id === 2) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
+      Taro.switchTab({ url: '/pages/expiry/index' })
       return
     }
     // 识别记录

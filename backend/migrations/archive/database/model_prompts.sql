@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS model_prompts (
     id SERIAL PRIMARY KEY,
-    model_type VARCHAR(50) NOT NULL,          -- 模型类型: 'qwen' 或 'gemini'
+    model_type VARCHAR(50) NOT NULL,          -- 模型类型: 'doubao' 或 'gemini'
     prompt_name VARCHAR(100) NOT NULL,         -- 提示词名称（用于标识）
     prompt_content TEXT NOT NULL,              -- 提示词内容
     is_active BOOLEAN DEFAULT FALSE,           -- 是否启用（当前使用的提示词）
@@ -23,7 +23,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_prompt
 
 -- 插入默认提示词 - 千问
 INSERT INTO model_prompts (model_type, prompt_name, prompt_content, is_active, description) VALUES
-('qwen', '默认食物分析提示词', '请作为专业的营养师分析这张食物图片。
+('doubao', '默认食物分析提示词', '请作为专业的营养师分析这张食物图片。
 1. 识别图中所有不同的食物单品。
 2. 估算每种食物的重量（克）和详细营养成分。
 3. description: 提供这顿饭的简短中文描述。
