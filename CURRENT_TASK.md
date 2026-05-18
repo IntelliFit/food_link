@@ -1,3 +1,26 @@
+# 状态：完成 Phase 1 MVP — 微信小程序端到端自动化测试系统
+
+- 2026-05-15 e2e-weapp:
+  - User 要求：利用 weapp-devtools skill 结合现有 Go E2E 测试数据库，构建一套微信小程序自动化测试系统。
+  - 架构设计：Go Test Server（真实 HTTP + 临时 PostgreSQL DB + fixture）+ Node.js Runner（mrc CLI 编排 + YAML 场景 + 断言引擎）。
+  - 新增文件：
+    - `backend/e2e-test/cmd/api-test-server/main.go` — Go 测试服务端
+    - `backend/e2e-test/runner/fixtures.go` — 导出 SuiteVars()
+    - `backend/e2e-test/runner/runner.go` — 适配 SuiteVars() 调用
+    - `e2e-weapp/package.json` / `tsconfig.json` — Node.js 项目骨架
+    - `e2e-weapp/src/types.ts` — 类型定义
+    - `e2e-weapp/src/mrc.ts` — mrc CLI 封装层
+    - `e2e-weapp/src/backend-client.ts` — 后端 HTTP 客户端
+    - `e2e-weapp/src/runner.ts` — 主运行器
+    - `e2e-weapp/scenarios/home-dashboard.yaml` — 首个测试场景
+    - `package.json` — 新增 `test:e2e-weapp` 脚本
+  - 端到端验证：
+    - Go Test Server 启动成功，临时数据库创建、JWT 签发正常。
+    - mrc evaluate 注入 token → relaunch 首页 → wait → screenshot 全链路成功。
+    - 截图 780x1688px，首页正确渲染。
+  - 使用方式：`DATABASE_HOST=127.0.0.1 DATABASE_USER=kirigaya npm run test:e2e-weapp`
+  - 待后续 Phase：断言引擎截图对比、多场景扩展、HTML 报告、CI 集成。
+
 # 状态：完成源码修改 - AI分析风险解读直接展开
 
 - 2026-05-15 follow-up 6:

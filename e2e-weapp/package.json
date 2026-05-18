@@ -1,0 +1,25 @@
+{
+  "name": "e2e-weapp",
+  "version": "1.0.0",
+  "description": "微信小程序端到端自动化测试运行器",
+  "private": true,
+  "scripts": {
+    "runner": "ts-node src/runner.ts",
+    "test": "ts-node src/runner.ts --scenario scenarios/home-dashboard.yaml"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "execa": "^5.1.1",
+    "js-yaml": "^4.1.0",
+    "pixelmatch": "^5.3.0",
+    "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "@types/pixelmatch": "^5.2.6",
+    "@types/pngjs": "^6.0.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}

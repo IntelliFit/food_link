@@ -43,7 +43,7 @@ func replaceVars(input string, vars map[string]string) string {
 	})
 }
 
-func suiteVars(suite *Suite) map[string]string {
+func SuiteVars(suite *Suite) map[string]string {
 	vars := map[string]string{}
 	for k, v := range suite.DefaultVars {
 		vars[k] = v
