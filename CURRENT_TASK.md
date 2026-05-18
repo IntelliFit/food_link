@@ -9341,3 +9341,23 @@
   - 在 `dev` 提交 `26ebdc9 feat: refine health trends and AI fallbacks` 并推送到 `origin/dev`。
   - 在 `main` 合并 `dev`，生成 merge commit `9415c67 Merge branch 'dev'`。
   - 后续需将完成状态提交并同步 `origin/main`，再回到 `dev`。
+## 2026-05-18 - General food_nutrition_library missing nutrient enrich script
+
+- Task: Add a command and script to scan `food_nutrition_library` rows where any tracked nutrient field is 0/NULL, call the configured OpenAI-compatible LLM, and fill only missing zero fields.
+- Status: implemented_static_verified_no_db_run
+- Changes:
+  - Added `scripts/enrich_missing_nutrients.py`.
+  - Added npm command `nutrition:enrich-missing` -> `python scripts/enrich_missing_nutrients.py`.
+  - Added `.gitignore` entry for `scripts/enrich_missing_nutrients.state.json`.
+- Behavior:
+  - Reuses the same config chain as `scripts/enrich_vitamins.py`: DB from `backend/config.yaml` or `DATABASE_URL`/`SUPABASE_DB_URL`; AI from `backend/develop-config.yaml` or `AI_API_URL`/`AI_API_KEY`/`AI_MODEL`.
+  - Selects active foods where any tracked nutrient column is 0/NULL.
+  - Sends non-zero existing values as locked context and asks the model to return only currently missing fields.
+  - Writes back only returned values greater than 0 and uses SQL `CASE WHEN COALESCE(column,0)=0` so non-zero DB values are preserved.
+  - If the model returns 0 for a field, DB is not changed, but the row can still be marked processed so naturally-zero foods are skipped on later runs.
+  - Default skip state file is `scripts/enrich_missing_nutrients.state.json`; `--no-skip-processed` ignores it; dry-run does not write DB or state.
+- Verification:
+  - `python -m py_compile scripts\enrich_missing_nutrients.py` passed.
+  - `npm run nutrition:enrich-missing -- --help` passed.
+  - `python scripts\enrich_missing_nutrients.py --help` passed.
+  - DB/AI run was not executed in this turn to avoid mutating the configured database.

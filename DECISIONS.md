@@ -1368,3 +1368,9 @@
   - 队列观测由 queue wrapper 和 Kafka/memory adapter 共同负责：应用内只统计 publish、delivery age、settlement、component health 和 memory depth；Kafka partition lag/backlog 后续应接 Kafka exporter，而不是在业务进程里扫描 broker。
   - 食物/运动分析业务指标只统计总耗时、LLM 调用、重试、解析/落库结果和 item 数，不记录用户输入内容；指标清单维护在 `backend/docs/observability-metrics.md`。
   - `app.name` 映射 OTel `service.name`，用于区分 dev/main 部署；不再提供 host name 覆盖配置。`host.name` 和 `service.instance.id` 固定读取系统 hostname，不要把实例维度配置成 `app.name`，否则会丢失多实例定位能力。
+- `2026-05-18`: `food_nutrition_library` missing-nutrient batch enrich script contract:
+  - Use `scripts/enrich_missing_nutrients.py` / `npm run nutrition:enrich-missing` for broad zero-field nutrient backfill; keep `scripts/enrich_vitamins.py` as the older vitamin-only script.
+  - The script must preserve all existing non-zero DB values and update only fields that are still 0/NULL at write time.
+  - AI prompts must explicitly allow true zero values; returned 0 values should not be written to DB.
+  - A row whose missing fields were fully returned by AI, including all-zero results, is considered processed and is recorded in `scripts/enrich_missing_nutrients.state.json` so future runs skip it by default.
+  - Do not commit the generated state JSON; use `--no-skip-processed` only when deliberately rechecking already processed rows.

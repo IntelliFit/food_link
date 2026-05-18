@@ -50,7 +50,8 @@
     "dev:harmony-hybrid": "npm run build:harmony-hybrid -- --watch",
     "iconfont": "iconfont-taro",
     "push-docker-ccr": "node backend/scripts/push-docker-ccr.mjs",
-    "debug:feedback-samples": "bash scripts/query-analysis-feedback-samples.sh"
+    "debug:feedback-samples": "bash scripts/query-analysis-feedback-samples.sh",
+    "nutrition:enrich-missing": "python scripts/enrich_missing_nutrients.py"
   },
   "browserslist": {
     "development": [

@@ -126,3 +126,4 @@ tmp/
 backend/migration-db-*.json
 backend/migration-storage-*.json
 backend/develop-config.yaml
+scripts/enrich_missing_nutrients.state.json
