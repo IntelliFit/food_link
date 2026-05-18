@@ -218,10 +218,9 @@ func (c *DoubaoClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prom
 		})
 	}
 	body := map[string]any{
-		"model":            c.Model,
-		"messages":         []map[string]any{{"role": "user", "content": content}},
-		"temperature":      temperature,
-		"reasoning_effort": "minimal",
+		"model":       c.Model,
+		"messages":    []map[string]any{{"role": "user", "content": content}},
+		"temperature": temperature,
 	}
 	return c.doRequest(ctx, c.BaseURL+"/chat/completions", body)
 }
