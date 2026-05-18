@@ -1,3 +1,73 @@
+## 2026-05-17 — 用户留存/习惯循环设计讨论
+
+- Task: 用户提出当前 `food_link` 流失率较快，想从心理学、游戏化和产品机制角度思考，除了曾经的「圈子」好友动态和现有积分体系之外，是否能设计一个让用户每天主动打开小程序的核心吸引点。
+- Status: design_discussion_no_code
+- Context:
+  - 「圈子」原本有朋友吃什么、社交反馈和内容流潜力，但当前因微信审核类目问题已从底部导航临时隐藏。
+  - 积分体系已经存在，但用户感知和奖励闭环还不够明显。
+  - 讨论重点应放在健康产品的可持续习惯循环，而不是伤害用户的暗黑上瘾机制。
+- Direction under discussion:
+  - 优先设计“记录即反馈、每日开奖、连续身份、轻社交/挑战、积分可兑换特权”的组合闭环，让用户每天有明确打开理由。
+  - 需要避免羞辱式减肥、过强负反馈和纯打卡压力，否则短期打开率可能提升但长期留存和信任会下降。
+
+## 2026-05-17 — 首页按剩余目标推荐餐食轻量候选增强
+
+- Task: 用户询问当前“按剩余目标推荐餐食”的数据来源，并进一步提出公共食物库、营养库、用户饮食记录都可作为 DeepSeek 推荐上下文，但不能全量塞入模型，需先思考检索/候选生成方案；随后要求先实现最轻量版本，保证推荐食物有来源、不要每次都一样、候选方案约 5 个。
+- Status: fixed_code_static_verified_runtime_blocked
+- Current finding:
+  - 当前实现是前端传今日剩余 kcal、三大营养缺口、目标、已吃餐次和场景（外面吃/自己做），后端调用 DeepSeek 即时生成 3 个方案；失败时走少量规则兜底。
+  - 当前未真正使用 `public_food_library`、`food_nutrition_library` 或全局/个人 `user_food_records` 作为推荐候选库。
+- Direction under discussion:
+  - 后续更合适的方向是“后端检索候选 + 模型重排/组合/解释”，而不是把全库数据直接放进 prompt。
+  - 候选来源可分层：标准营养库负责基础食材/营养真实值，公共食物库负责真实菜品/外食经验，用户个人历史负责偏好和可接受食物，全局饮食记录只做聚合趋势/热门组合，不直接泄露个人记录。
+- Implementation:
+  - 后端 `StatsRepo.GetDietRecommendationCandidates()` 轻量检索候选：`public_food_library` 随机取已发布公共食物，当前用户 `user_food_records` 取近期历史餐食，`food_nutrition_library` 随机取活跃标准营养条目；外面吃优先公共库，自己做优先营养库。
+  - DeepSeek prompt 增加“可用候选 JSON”，要求优先使用候选并原样返回 `source/source_id`；推荐数量从 3 个改为 5 个。
+  - 后端 normalize 会补齐方案和食物 item 的来源；DeepSeek 不可用时，优先从候选库按剩余热量/蛋白缺口/脂肪约束生成 5 个兜底方案，再退回旧规则兜底。
+  - 前端 `DietRecommendationSheet` 展示来源标签：公共食物库、历史记录、营养库、组合候选、规则兜底或 AI 补充。
+- Verification:
+  - `go test ./internal/health/service ./internal/health/handler -run 'TestStatsService_GenerateDietRecommendation|TestGenerateDietRecommendation' -count=1` passed.
+  - `go test ./internal/app -run '^$' -count=1` passed.
+  - `npx eslint src/pages/index/components/DietRecommendationSheet.tsx src/utils/api.ts --max-warnings 0` passed.
+  - `git diff --check` passed for touched files（仅 CRLF warning）。
+  - `go test ./internal/health/repo -run 'TestStatsRepo' -count=1` blocked by local `CGO_ENABLED=0` / `go-sqlite3 requires cgo`。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具目标窗口未开启自动化服务连接失败，未能截图/交互验证。
+
+## 2026-05-17 — 食物结果页 AI 建议摄入比例设计澄清
+
+- Task: 用户澄清“饮食比例建议”不是单纯展示文案，而是 AI 根据用户上下文直接生成每个食物的实际摄入比例，并与结果页现有滑块比例一致；未开启或无法生成时默认 100%，由用户自行调节。
+- Status: implemented_static_verified_runtime_blocked
+- Requirement:
+  - 比例生成需要综合用户目标、当日剩余热量、当前餐次目标、本餐食物组成、各食物热量/宏量营养等上下文。
+  - 后端应输出每个 item 的建议摄入比例，前端用它初始化现有 `ratio` / `intake`，让用户无需手动选择。
+  - 需要有开关控制是否启用 AI 建议摄入比例；关闭时所有 item 仍默认 `100%`。
+  - 如果模型没有生成合法建议或上下文不足，也应回退到 `100%`，不能影响原有手动调节能力。
+- Implementation:
+  - 后端 `AnalyzeInput` / `SubmitTaskInput` 新增 `suggest_ratio_enabled`，异步任务 payload、worker、精准模式 continue 链路均会透传该开关。
+  - `finalizeAnalyzeResponse()` 在 db_first 营养库回算后新增二阶段 `applySuggestedRatios()`，用 Gemini/Ofox 基于最终 item 营养、用户目标、餐次、运动时机、剩余热量和补充上下文生成每项 `suggestedRatio`。
+  - 二阶段比例建议 20 秒超时；关闭开关、无客户端、模型失败、无合法结果时统一把所有 item `suggestedRatio` 设为 `100`，并写入 `suggest_ratio_status` 便于排查。
+  - 分析页新增“AI摄入比例”开关，默认开启并持久化到 `analyzeSuggestRatioEnabled`；文字记录和纠错/精准继续使用同一偏好。
+  - 结果页继续用 `suggestedRatio` 初始化 `ratio/intake`，AI 来源时显示小的“AI建议”标记；用户手动拖动滑块后该标记转为 manual，不再误导当前值仍是 AI。
+- Verification:
+  - `go test ./internal/analyze/service -run 'TestAnalyzeService_ApplySuggestedRatios|TestParseItems|TestMergeBatchResults' -count=1` passed.
+  - `go test ./internal/analyze/service ./internal/analyze/handler ./internal/worker -run 'TestAnalyzeService_ApplySuggestedRatios|TestAnalyzeHandler_SubmitAnalyzeTask|TestAnalyzeHandler_SubmitTextTask|TestSanitizeTaskErrorMessage' -count=1` passed.
+  - `go test ./internal/app -run '^$' -count=1` passed.
+  - `npx eslint src/packageExtra/pages/analyze/index.tsx src/packageExtra/pages/record-text/index.tsx src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed.
+  - `git diff --check` passed for touched files（仅 CRLF warning）。
+  - `npm run typecheck` 仍被既有无关错误阻塞：`analyze-history/loadTasks`、`expiry` AppColorScheme 类型、`food-library` editable/content 类型。
+  - 已按项目要求尝试 `weapp-devtools`：`mrc where --port 3001` 与 `mrc where --port 9420` 均因微信开发者工具自动化服务未连接失败，未能截图/交互验证。
+
+## 2026-05-18 - AGENTS.md 后端数据库变更规则
+
+- Task: 用户要求在当前目录 `AGENTS.md` 增加一条项目规则，约束后端数据库结构修改流程。
+- Status: completed_doc_only
+- Change:
+  - 已在 `AGENTS.md` 的开发工作流程中新增“后端数据库结构变更”小节。
+  - 规则明确：禁止把手动 SQL 作为最终方案；必须先修改 `backend/internal/migration/do/schema_do.go` 的迁移 DO；AutoMigrate 覆盖不了的约束/索引/check/FK/触发器等要写入 `backend/internal/migration/migration.go` 的幂等迁移逻辑；最后从 `backend/` 执行 `go run ./cmd/migration -config-dir .`。
+  - 运行迁移前必须确认 `backend/config.yaml` 与环境变量实际指向的数据库；非本地或不确定目标库需先获得用户明确确认。
+- Verification:
+  - 文档规则变更，无需启动前后端或运行小程序 UI 验证。
+
 ## 2026-05-17 — 体重/喝水/运动趋势页重做与历史纠错
 
 - Task: 用户确认按“记录页只负责记录，趋势页二级承接分析/回看/纠错”的方向继续执行；同时指出 30 天点图/柱图在手机窄屏里不合适，要求历史趋势里可删除错误记录，喝水必须能删除某一天里的单次喝水 log。

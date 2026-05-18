@@ -18,11 +18,17 @@ import (
 )
 
 type mockLLMClient struct {
-	result map[string]any
-	err    error
+	result   map[string]any
+	err      error
+	calls    int
+	prompt   string
+	imageURL string
 }
 
 func (m *mockLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	m.calls++
+	m.prompt = prompt
+	m.imageURL = imageURL
 	return m.result, m.err
 }
 
@@ -52,6 +58,7 @@ type multiImageLLMClient struct {
 	err           error
 	imageURLCalls []string
 	imageSetCalls [][]string
+	prompts       []string
 }
 
 func (m *multiImageLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
@@ -62,6 +69,7 @@ func (m *multiImageLLMClient) Analyze(ctx context.Context, prompt, imageURL stri
 func (m *multiImageLLMClient) AnalyzeWithImages(ctx context.Context, prompt string, imageURLs []string) (map[string]any, error) {
 	copied := append([]string(nil), imageURLs...)
 	m.imageSetCalls = append(m.imageSetCalls, copied)
+	m.prompts = append(m.prompts, prompt)
 	return m.result, m.err
 }
 
@@ -211,6 +219,18 @@ func TestBuildDBFirstPromptIncludesCorrectionContext(t *testing.T) {
 	assert.Contains(t, prompt, `"waterMl":0`)
 }
 
+func TestBuildDBFirstPromptsUseEdibleNetWeight(t *testing.T) {
+	imagePrompt := buildImageDBFirstPrompt(AnalyzeInput{ImageURL: "https://example.com/shrimp.jpg"}, nil)
+	for _, expected := range []string{"营养库按可食部计算", "去壳/去骨/去核后的可食净重", "虾/螃蟹/贝类按去壳肉重", "花生/瓜子/坚果按去壳仁重"} {
+		assert.Contains(t, imagePrompt, expected)
+	}
+
+	textPrompt := buildTextDBFirstPrompt(AnalyzeInput{Text: "吃了十只虾和一把花生"}, nil)
+	for _, expected := range []string{"可食部净重", "带壳、带骨、带核食物", "去壳/去骨/去核后的可食重量"} {
+		assert.Contains(t, textPrompt, expected)
+	}
+}
+
 func TestMergeBatchResults(t *testing.T) {
 	results := []map[string]any{
 		{
@@ -261,6 +281,63 @@ func TestParseItems(t *testing.T) {
 	assert.Equal(t, 126.0, items[0]["waterMl"])
 }
 
+func TestAnalyzeService_ApplySuggestedRatiosDisabledDefaultsTo100(t *testing.T) {
+	svc := NewAnalyzeService(nil, nil, nil)
+	resp := map[string]any{
+		"items": []map[string]any{
+			{"name": "rice", "estimatedWeightGrams": 180.0, "suggestedRatio": 35.0},
+		},
+	}
+
+	result := svc.applySuggestedRatios(context.Background(), resp, AnalyzeInput{SuggestRatioEnabled: false})
+	items := result["items"].([]map[string]any)
+
+	assert.Equal(t, false, result["suggest_ratio_enabled"])
+	assert.Equal(t, "disabled", result["suggest_ratio_status"])
+	assert.Equal(t, 100.0, items[0]["suggestedRatio"])
+	assert.Equal(t, "disabled", items[0]["suggestedRatioSource"])
+}
+
+func TestAnalyzeService_ApplySuggestedRatiosUsesGeminiSuggestion(t *testing.T) {
+	ratioClient := &mockLLMClient{result: map[string]any{
+		"items": []any{
+			map[string]any{"index": 0.0, "suggestedRatio": 70.0, "reason": "主食稍微控制"},
+			map[string]any{"index": 1.0, "suggestedRatio": 100.0, "reason": "保留蛋白质"},
+		},
+	}}
+	svc := NewAnalyzeService(nil, ratioClient, nil)
+	resp := map[string]any{
+		"items": []map[string]any{
+			{
+				"name":                 "米饭",
+				"estimatedWeightGrams": 200.0,
+				"nutrients":            map[string]any{"calories": 260.0, "protein": 5.0, "carbs": 56.0, "fat": 0.6},
+			},
+			{
+				"name":                 "鸡胸肉",
+				"estimatedWeightGrams": 120.0,
+				"nutrients":            map[string]any{"calories": 198.0, "protein": 37.0, "carbs": 0.0, "fat": 4.0},
+			},
+		},
+	}
+
+	result := svc.applySuggestedRatios(context.Background(), resp, AnalyzeInput{
+		SuggestRatioEnabled: true,
+		DietGoal:            "fat_loss",
+		RemainingCalories:   floatPtr(400),
+	})
+	items := result["items"].([]map[string]any)
+
+	assert.Equal(t, true, result["suggest_ratio_enabled"])
+	assert.Equal(t, "applied", result["suggest_ratio_status"])
+	assert.Equal(t, 2, result["suggest_ratio_applied_count"])
+	assert.Equal(t, 70.0, items[0]["suggestedRatio"])
+	assert.Equal(t, "主食稍微控制", items[0]["suggestedRatioReason"])
+	assert.Equal(t, "ai", items[0]["suggestedRatioSource"])
+	assert.Equal(t, 100.0, items[1]["suggestedRatio"])
+	assert.Equal(t, "ai", items[1]["suggestedRatioSource"])
+}
+
 func TestMergeUniqueTextLists(t *testing.T) {
 	result := mergeUniqueTextLists([]string{"a", "b"}, []string{"b", "c"})
 	assert.Equal(t, []string{"a", "b", "c"}, result)
@@ -299,7 +376,7 @@ func TestAnalyzeService_Analyze(t *testing.T) {
 
 func TestAnalyzeService_AnalyzeUsesSingleLLMRequestForMultipleImages(t *testing.T) {
 	client := &multiImageLLMClient{result: map[string]any{"description": "multi", "items": []any{}}}
-	svc := NewAnalyzeService(client, client, nil)
+	svc := NewAnalyzeService(client, nil, nil)
 	svc.doubaoClient = client
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
@@ -372,6 +449,9 @@ func TestAnalyzeService_AnalyzeImageStandardIgnoresConfiguredGeminiProvider(t *t
 
 	require.NoError(t, err)
 	assert.Equal(t, "doubao image", result["description"])
+	assert.Equal(t, 1, doubaoClient.calls)
+	assert.Equal(t, 1, ofoxClient.calls)
+	assert.Contains(t, ofoxClient.prompt, "Doubao 初识别结果")
 }
 
 func TestAnalyzeService_AnalyzeImageStandardUsesDoubaoForExplicitDoubao(t *testing.T) {
@@ -388,6 +468,8 @@ func TestAnalyzeService_AnalyzeImageStandardUsesDoubaoForExplicitDoubao(t *testi
 
 	require.NoError(t, err)
 	assert.Equal(t, "doubao image", result["description"])
+	assert.Equal(t, 1, doubaoClient.calls)
+	assert.Equal(t, 1, ofoxClient.calls)
 }
 
 func TestAnalyzeService_AnalyzeImageStandardForcesDoubaoInsteadOfGemini(t *testing.T) {
@@ -403,6 +485,72 @@ func TestAnalyzeService_AnalyzeImageStandardForcesDoubaoInsteadOfGemini(t *testi
 
 	require.NoError(t, err)
 	assert.Equal(t, "doubao standard", result["description"])
+}
+
+func TestAnalyzeService_AnalyzeImageStandardHybridUsesGeminiWeightReview(t *testing.T) {
+	doubaoClient := &multiImageLLMClient{result: map[string]any{
+		"description": "豆包草稿",
+		"items": []any{
+			map[string]any{"name": "鸡胸肉", "estimatedWeightGrams": 180.0, "waterMl": 20.0},
+		},
+	}}
+	ofoxClient := &multiImageLLMClient{result: map[string]any{
+		"description":    "包装鸡胸肉",
+		"modelAgreement": "weight_changed",
+		"ocrText":        []any{"净含量100g"},
+		"items": []any{
+			map[string]any{
+				"name":                 "即食鸡胸肉",
+				"estimatedWeightGrams": 100.0,
+				"waterMl":              55.0,
+				"weightEvidence":       "包装标注净含量100g",
+			},
+		},
+	}}
+	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/chicken.jpg",
+		ModelName: "doubao",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "包装鸡胸肉", result["description"])
+	assert.Equal(t, "doubao_visual_gemini_weight_db_first", result["food_image_strategy"])
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "applied", meta["status"])
+	items := toItems(result["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "即食鸡胸肉", items[0]["name"])
+	assert.Equal(t, 100.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "包装标注净含量100g", items[0]["weightEvidence"])
+	require.Len(t, doubaoClient.imageSetCalls, 1)
+	require.Len(t, ofoxClient.imageSetCalls, 1)
+	assert.Contains(t, ofoxClient.prompts[0], "包装文字")
+}
+
+func TestAnalyzeService_AnalyzeImageStandardHybridFallsBackToDoubaoWhenGeminiFails(t *testing.T) {
+	doubaoClient := &multiImageLLMClient{result: map[string]any{
+		"description": "豆包结果",
+		"items": []any{
+			map[string]any{"name": "米饭", "estimatedWeightGrams": 120.0},
+		},
+	}}
+	ofoxClient := &multiImageLLMClient{err: errors.New("gemini timeout")}
+	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL: "https://example.com/rice.jpg",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "豆包结果", result["description"])
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "failed", meta["status"])
+	items := toItems(result["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "米饭", items[0]["name"])
+	assert.Equal(t, 120.0, items[0]["estimatedWeightGrams"])
 }
 
 func TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON(t *testing.T) {

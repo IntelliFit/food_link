@@ -14,6 +14,7 @@ import (
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	"food_link/backend/pkg/logger"
+	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
 	apm "food_link/backend/pkg/trace"
 
@@ -27,6 +28,8 @@ const (
 	visionPrimaryTimeout   = 45 * time.Second
 	maxLLMJSONParseRetries = 3
 	maxLLMTransientRetries = 2
+	ratioSuggestionTimeout = 20 * time.Second
+	standardHybridTimeout  = 60 * time.Second
 )
 
 type AnalyzeService struct {
@@ -284,7 +287,20 @@ func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model strin
 	jsonRetries := 0
 	transientRetries := 0
 	for {
+		attemptStart := time.Now()
 		parsed, err = call(ctx)
+		attemptStatus := "success"
+		if err != nil {
+			switch {
+			case IsLLMJSONParseError(err):
+				attemptStatus = "json_parse_error"
+			case isTransientLLMError(err):
+				attemptStatus = "transient_error"
+			default:
+				attemptStatus = "error"
+			}
+		}
+		metrics.ObserveLLMCall(stage, provider, model, attemptStatus, time.Since(attemptStart))
 		if err == nil {
 			return parsed, err
 		}
@@ -295,11 +311,13 @@ func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model strin
 		case IsLLMJSONParseError(err) && jsonRetries < maxLLMJSONParseRetries:
 			jsonRetries++
 			retryReason = "json_parse"
+			metrics.ObserveLLMRetry(stage, provider, model, retryReason)
 			retryNumber = jsonRetries
 			maxRetries = maxLLMJSONParseRetries
 		case isTransientLLMError(err) && transientRetries < maxLLMTransientRetries:
 			transientRetries++
 			retryReason = "transient"
+			metrics.ObserveLLMRetry(stage, provider, model, retryReason)
 			retryNumber = transientRetries
 			maxRetries = maxLLMTransientRetries
 		default:
@@ -387,6 +405,7 @@ type AnalyzeInput struct {
 	DietGoal              string           `json:"diet_goal"`
 	ActivityTiming        string           `json:"activity_timing"`
 	RemainingCalories     *float64         `json:"remaining_calories"`
+	SuggestRatioEnabled   bool             `json:"suggest_ratio_enabled"`
 	ExecutionMode         *string          `json:"execution_mode"`
 	ModelName             string           `json:"modelName"`
 	AnalysisEngine        string           `json:"analysis_engine"`
@@ -605,6 +624,7 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 	估重时请优先看：占盘面积、厚度/高度、堆叠体积、容器大小、透视关系。
 若画面里有筷子、勺子、手掌、包装、餐盒、碗盘等参照物，请利用参照物。
 结合常识估算熟食密度、含水量、常见售卖分量，不要只看上表面面积。
+重量口径必须与营养数据库一致：estimatedWeightGrams 表示可食部净重。带壳、带骨、带核食物按去壳/去骨/去核后的可食重量估算，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
 输出要求：
 - 简体中文
 - description <= 16字
@@ -665,7 +685,7 @@ JSON:
 	%s
 
 	1. 识别图中所有不同的食物单品。
-2. 估算每种食物的重量（克）和详细营养成分。
+2. 估算每种食物的重量（克）和详细营养成分；重量必须是可食部净重，带壳/带骨/带核食物按去壳、去骨、去核后的重量估算。
 3. description: 提供这顿饭的简短中文描述。
 4. insight: 基于该餐营养成分的一句话健康建议。%s
 5. pfc_ratio_comment: 本餐蛋白质(P)、脂肪(F)、碳水(C) 占比的简要评价（是否均衡、适合增肌/减脂/维持）。%s
@@ -747,6 +767,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 识别规则：
 - 只识别图片中实际可见的食物，不补充看不见的食物
 - 不输出餐具、包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
+- 营养库按可食部计算；如果食物带壳、带骨或带核，name 仍写食物本身，estimatedWeightGrams 必须换算为去壳/去骨/去核后的可食净重，不把壳、骨头、果核单独输出为食物
 - 相同食物合并为一项，明显不同食物分开
 - 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
 - 混合菜无法可靠拆分时，作为一道常见菜名输出，不要猜测不可见成分
@@ -754,7 +775,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 重量规则：
 - estimatedWeightGrams 必须是数字，单位克，不要输出范围或单位字符串
 - 综合可见面积、厚度、高度、容器、餐具、手掌、包装等参照物估算
-- 只估算可见可食部分，不把餐具、包装、骨头、壳、果核计入重量
+- 只估算可见可食部分，不把餐具、包装、骨头、壳、果核计入重量；例如虾/螃蟹/贝类按去壳肉重，花生/瓜子/坚果按去壳仁重，水果按去核后可食部分
 - waterMl 表示该食物/饮品本身含有的水量，单位毫升，必须是数字；固体食物按常见含水率保守估算，无法判断时填 0
 - 饮品、汤、粥、奶、茶、咖啡等液体或半流体应估算 waterMl；干货、油炸物、酱料难判断时可填 0
 - suggestedRatio 表示建议用户实际摄入该食物的比例（0-100 的整数），请结合用户当日剩余热量预算和饮食目标给出建议：减脂且剩余热量不足时降低主食/高热量食物比例；增肌且热量充足时可按100；默认100
@@ -827,7 +848,7 @@ func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode stri
 输出要求：
 - 简体中文
 - 根据自然语言拆分食物，不要虚构用户没有提到的主食物
-- 重量可基于常见份量估算
+- 重量可基于常见份量估算，但必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量，不把壳、骨头、果核计入营养计算
 - description <= 24字
 - insight/context_advice 各 1-2 句，<= 40字
 - suggestedRatio：每个食物的建议摄入比例（0-100），结合用户剩余热量和饮食目标给出建议，默认100
@@ -862,6 +883,7 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 %s%s解析规则：
 - 只输出用户明确描述的食物，不补充没有出现的食物
 - 如果用户写了明确重量、个数、半份、一碗、一杯等份量，请换算为克；没有明确重量时按日常熟食份量保守估算
+- estimatedWeightGrams 是营养计算使用的可食部净重；带壳、带骨、带核食物即使用户描述的是整只/整份，也要换算为去壳/去骨/去核后的可食重量
 - 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
 - 相同食物合并为一项，重量为合计重量
 - 混合菜无法可靠拆分时，作为一道常见菜名输出
@@ -1270,6 +1292,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		}
 	}
 	if err != nil {
+		metrics.ObserveFoodAnalysis("image", provider, model, "llm_error", time.Since(start), -1)
 		apm.RecordError(ctx, err,
 			attribute.String("analysis.stage", "llm_call"),
 			attribute.String("analysis.provider", provider),
@@ -1298,10 +1321,33 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		return nil, err
 	}
 	durationMs := float64(time.Since(start).Milliseconds())
+	hybridMeta := map[string]any{
+		"status":          "skipped",
+		"strategy":        "doubao_db_first",
+		"base_provider":   provider,
+		"base_model":      model,
+		"review_provider": nil,
+		"review_model":    nil,
+	}
+	if shouldRunStandardImageHybridReview(input, executionMode, provider) {
+		reviewed, meta := s.reviewStandardImageWithGemini(ctx, input, parsed, imageURLs)
+		if len(meta) > 0 {
+			hybridMeta = meta
+		}
+		if reviewed != nil {
+			parsed = reviewed
+			if stringFromAny(hybridMeta["status"]) == "applied" {
+				provider = "hybrid"
+				model = fmt.Sprintf("%s+%s", model, stringFromAny(hybridMeta["review_model"]))
+			}
+		}
+	}
+	durationMs = float64(time.Since(start).Milliseconds())
 	apm.SetAttributes(ctx,
 		attribute.String("analysis.provider", provider),
 		attribute.String("analysis.model", model),
 		attribute.Bool("analysis.fallback_used", fallbackUsed),
+		attribute.String("analysis.hybrid_status", stringFromAny(hybridMeta["status"])),
 		apm.DurationMS("analysis.llm_duration_ms", time.Since(start)),
 	)
 	apm.AddEvent(ctx, "food image analyze llm completed",
@@ -1312,6 +1358,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		attribute.String("analysis.requested_model", strings.TrimSpace(input.ModelName)),
 		attribute.Int("analysis.image_count", imageCount),
 		attribute.Bool("analysis.fallback_used", fallbackUsed),
+		attribute.String("analysis.hybrid_status", stringFromAny(hybridMeta["status"])),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
 	logger.WithTrace(ctx).Info("food image analyze llm completed",
@@ -1323,11 +1370,13 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		zap.String("requested_model", strings.TrimSpace(input.ModelName)),
 		zap.Int("image_count", imageCount),
 		zap.Bool("fallback_used", fallbackUsed),
+		zap.Any("hybrid_review", hybridMeta),
 		zap.Duration("duration", time.Since(start)),
 	)
 
 	result, err := s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
 	if err != nil {
+		metrics.ObserveFoodAnalysis("image", provider, model, "finalize_error", time.Since(start), -1)
 		apm.RecordError(ctx, err,
 			attribute.String("analysis.stage", "finalize"),
 			attribute.String("analysis.provider", provider),
@@ -1343,6 +1392,8 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		)
 		return nil, err
 	}
+	result["food_image_strategy"] = hybridMeta["strategy"]
+	result["hybrid_review"] = hybridMeta
 	apm.SetAttributes(ctx,
 		attribute.String("analysis.engine", stringFromAny(result["analysis_engine"])),
 		attribute.Int("analysis.item_count", len(toItems(result["items"]))),
@@ -1369,7 +1420,211 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		zap.Int("unresolved_count", intFromAny(result["unresolved_count"])),
 		zap.Duration("duration", time.Since(start)),
 	)
+	metrics.ObserveFoodAnalysis("image", provider, model, "success", time.Since(start), len(toItems(result["items"])))
 	return result, nil
+}
+
+func shouldRunStandardImageHybridReview(input AnalyzeInput, executionMode, provider string) bool {
+	if executionMode == validExecutionMode {
+		return false
+	}
+	if !strings.EqualFold(provider, "doubao") {
+		return false
+	}
+	if strings.EqualFold(input.AnalysisEngine, "legacy_direct") {
+		return false
+	}
+	if len(input.CorrectionItems) == 0 && len(input.PreviousResult) == 0 && strings.TrimSpace(input.Text) != "" {
+		return false
+	}
+	if len(input.CorrectionItems) > 0 || len(input.PreviousResult) > 0 {
+		return false
+	}
+	return true
+}
+
+func (s *AnalyzeService) reviewStandardImageWithGemini(ctx context.Context, input AnalyzeInput, doubaoParsed map[string]any, imageURLs []string) (map[string]any, map[string]any) {
+	modelName := "gemini"
+	if client, ok := s.ofoxAIClient.(*OfoxAIClient); ok && strings.TrimSpace(client.Model) != "" {
+		modelName = client.Model
+	}
+	meta := map[string]any{
+		"status":          "skipped",
+		"strategy":        "doubao_db_first",
+		"base_provider":   "doubao",
+		"base_model":      "doubao-seed-2-0-lite-260428",
+		"review_provider": "gemini",
+		"review_model":    modelName,
+	}
+	if s.ofoxAIClient == nil {
+		meta["status"] = "unavailable"
+		meta["error"] = "gemini client is not configured"
+		return nil, meta
+	}
+	if s.ofoxAIClient == s.doubaoClient {
+		meta["status"] = "unavailable"
+		meta["error"] = "gemini client equals doubao client"
+		return nil, meta
+	}
+	imageURLs = nonEmptyStrings(imageURLs)
+	if len(imageURLs) == 0 {
+		meta["status"] = "no_images"
+		return nil, meta
+	}
+	prompt := buildStandardImageHybridReviewPrompt(input, doubaoParsed)
+	callCtx, cancel := context.WithTimeout(ctx, standardHybridTimeout)
+	defer cancel()
+	reviewed, err := analyzeWithJSONParseRetry(callCtx, "food_image_hybrid_review", "gemini", modelName, func(retryCtx context.Context) (map[string]any, error) {
+		return analyzeWithImagesTemperature(retryCtx, s.ofoxAIClient, prompt, imageURLs, 0.2)
+	})
+	if err != nil {
+		logger.WithTrace(ctx).Warn("standard image hybrid review failed",
+			zap.Error(err),
+			zap.Int("image_count", len(imageURLs)),
+		)
+		meta["status"] = "failed"
+		meta["error"] = err.Error()
+		return nil, meta
+	}
+	merged := mergeHybridReviewParsed(doubaoParsed, reviewed)
+	if len(parseItems(merged)) == 0 {
+		meta["status"] = "empty"
+		return nil, meta
+	}
+	meta["status"] = "applied"
+	meta["strategy"] = "doubao_visual_gemini_weight_db_first"
+	meta["review_item_count"] = len(parseItems(merged))
+	if agreement := strings.TrimSpace(fmt.Sprintf("%v", reviewed["modelAgreement"])); agreement != "" && agreement != "<nil>" {
+		meta["model_agreement"] = agreement
+	}
+	logger.WithTrace(ctx).Info("standard image hybrid review applied",
+		zap.Int("image_count", len(imageURLs)),
+		zap.Int("item_count", len(parseItems(merged))),
+		zap.Any("hybrid_review", meta),
+	)
+	return merged, meta
+}
+
+func buildStandardImageHybridReviewPrompt(input AnalyzeInput, doubaoParsed map[string]any) string {
+	type doubaoItem struct {
+		Index                int     `json:"index"`
+		Name                 string  `json:"name"`
+		EstimatedWeightGrams float64 `json:"estimatedWeightGrams"`
+		WaterMl              float64 `json:"waterMl"`
+	}
+	items := []doubaoItem{}
+	for index, item := range parseItems(doubaoParsed) {
+		items = append(items, doubaoItem{
+			Index:                index,
+			Name:                 strings.TrimSpace(fmt.Sprintf("%v", item["name"])),
+			EstimatedWeightGrams: numberFromAny(item["estimatedWeightGrams"]),
+			WaterMl:              numberFromAny(item["waterMl"]),
+		})
+	}
+	contextPayload := map[string]any{
+		"task": "基于原图和 Doubao 初识别结果，复核食物名称并重点重新估算可食部净重。营养由后端数据库计算，不要输出营养。",
+		"doubaoInitialResult": map[string]any{
+			"description": doubaoParsed["description"],
+			"items":       items,
+		},
+		"userContext": map[string]any{
+			"mealType":          input.MealType,
+			"dietGoal":          input.DietGoal,
+			"activityTiming":    input.ActivityTiming,
+			"remainingCalories": input.RemainingCalories,
+			"additionalContext": strings.TrimSpace(input.AdditionalContext),
+			"isMultiView":       input.IsMultiView,
+		},
+		"rules": []string{
+			"只返回 JSON，不要输出解释性正文。",
+			"优先利用包装文字、品牌名、品名、净含量、营养成分表、规格、份数、已食用比例等文字证据；包装食品不要只靠外观猜。",
+			"没有包装文字时，以 Doubao 的视觉候选作为重要参考，但必须结合原图重新判断食物名称和重量。",
+			"estimatedWeightGrams 必须是营养计算使用的可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后估算。",
+			"重量必须有 evidence：包装净含量、剩余比例、数量、容器体积、厚度、面积、参照物、常见熟重等至少写一条。",
+			"如果 Doubao 名称明显不对，可以修正；如果不确定，选择最可能名称，并在 alternativeNames 中保留候选。",
+			"waterMl 只表示食物/饮品本身可计入饮水参考的水量；无法判断填 0。",
+			"不要输出餐具、包装、骨头、壳、果核等不可食或非食物部分。",
+		},
+		"responseSchema": map[string]any{
+			"description":    "简短餐食描述",
+			"insight":        "一句自然健康建议",
+			"context_advice": "",
+			"modelAgreement": "agree|name_changed|weight_changed|conflict",
+			"ocrText":        []string{},
+			"items": []map[string]any{{
+				"name":                 "食物名称",
+				"estimatedWeightGrams": 100,
+				"waterMl":              0,
+				"confidence":           0.8,
+				"recognitionEvidence":  "为什么是这个食物",
+				"weightEvidence":       "为什么是这个重量",
+				"alternativeNames":     []string{},
+			}},
+		},
+	}
+	bytes, _ := json.Marshal(contextPayload)
+	return "你是食物图像复核与重量推理专家。请把 Doubao 的食物识别优势作为候选参考，同时发挥你的 OCR、包装理解、世界知识和重量推理能力，输出最终用于营养库查询的食物名称与可食部净重。\n" + string(bytes)
+}
+
+func mergeHybridReviewParsed(base, review map[string]any) map[string]any {
+	merged := copyAnyMap(base)
+	for _, key := range []string{"description", "insight", "context_advice", "pfc_ratio_comment", "absorption_notes"} {
+		if text := strings.TrimSpace(fmt.Sprintf("%v", review[key])); text != "" && text != "<nil>" {
+			merged[key] = text
+		}
+	}
+	reviewItems := extractRawItems(review["items"])
+	if len(reviewItems) > 0 {
+		merged["items"] = reviewItems
+	}
+	for _, key := range []string{"ocrText", "modelAgreement"} {
+		if value, ok := review[key]; ok && !isEmptyAnalyzeAny(value) {
+			merged[key] = value
+		}
+	}
+	return merged
+}
+
+func extractRawItems(value any) []any {
+	switch arr := value.(type) {
+	case []any:
+		out := make([]any, 0, len(arr))
+		for _, item := range arr {
+			if m, ok := item.(map[string]any); ok && strings.TrimSpace(fmt.Sprintf("%v", m["name"])) != "" {
+				out = append(out, m)
+			}
+		}
+		return out
+	case []map[string]any:
+		out := make([]any, 0, len(arr))
+		for _, item := range arr {
+			if item != nil && strings.TrimSpace(fmt.Sprintf("%v", item["name"])) != "" {
+				out = append(out, item)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func isEmptyAnalyzeAny(value any) bool {
+	if value == nil {
+		return true
+	}
+	switch v := value.(type) {
+	case string:
+		text := strings.TrimSpace(v)
+		return text == "" || text == "<nil>"
+	case []any:
+		return len(v) == 0
+	case []string:
+		return len(v) == 0
+	case []map[string]any:
+		return len(v) == 0
+	default:
+		return false
+	}
 }
 
 // AnalyzeText performs text-only analysis.
@@ -1422,6 +1677,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		return client.Analyze(callCtx, prompt, "")
 	})
 	if err != nil {
+		metrics.ObserveFoodAnalysis("text", provider, model, "llm_error", time.Since(start), -1)
 		apm.RecordError(ctx, err,
 			attribute.String("analysis.stage", "llm_call"),
 			attribute.String("analysis.provider", provider),
@@ -1433,6 +1689,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 	durationMs := float64(time.Since(start).Milliseconds())
 	result, err := s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
 	if err != nil {
+		metrics.ObserveFoodAnalysis("text", provider, model, "finalize_error", time.Since(start), -1)
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "finalize"))
 		return nil, err
 	}
@@ -1445,6 +1702,7 @@ func (s *AnalyzeService) AnalyzeText(ctx context.Context, userID string, input A
 		attribute.Int("analysis.unresolved_count", intFromAny(result["unresolved_count"])),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
+	metrics.ObserveFoodAnalysis("text", provider, model, "success", time.Since(start), len(toItems(result["items"])))
 	return result, nil
 }
 
@@ -1650,6 +1908,7 @@ func parseItems(parsed map[string]any) []map[string]any {
 	out := make([]map[string]any, 0, len(raw))
 	for _, v := range raw {
 		if item, ok := v.(map[string]any); ok {
+			next := copyAnyMap(item)
 			name := "未知食物"
 			if n, ok := item["name"].(string); ok && n != "" {
 				name = n
@@ -1684,14 +1943,13 @@ func parseItems(parsed map[string]any) []map[string]any {
 			if sr, ok := item["suggestedRatio"].(float64); ok && sr >= 0 && sr <= 100 {
 				suggestedRatio = sr
 			}
-			out = append(out, map[string]any{
-				"name":                 name,
-				"estimatedWeightGrams": weight,
-				"originalWeightGrams":  weight,
-				"waterMl":              waterMl,
-				"suggestedRatio":       suggestedRatio,
-				"nutrients":            nutrients,
-			})
+			next["name"] = name
+			next["estimatedWeightGrams"] = weight
+			next["originalWeightGrams"] = weight
+			next["waterMl"] = waterMl
+			next["suggestedRatio"] = suggestedRatio
+			next["nutrients"] = nutrients
+			out = append(out, next)
 		}
 	}
 	return out
@@ -1745,20 +2003,28 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, parsed map
 	resp := buildAnalyzeResponse(parsed, executionMode, provider, model, durationMs)
 	if strings.EqualFold(input.AnalysisEngine, "legacy_direct") {
 		resp["analysis_engine"] = "legacy_direct"
-		return resp, nil
+		return s.applySuggestedRatios(ctx, resp, input), nil
 	}
-	return s.applyDBFirstNutrition(ctx, resp, input.AdditionalContext), nil
+	resp = s.applyDBFirstNutrition(ctx, resp, input.AdditionalContext)
+	return s.applySuggestedRatios(ctx, resp, input), nil
 }
 
 func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[string]any, additionalContext ...string) map[string]any {
+	start := time.Now()
+	resolveStatus := "success"
+	defer func() {
+		metrics.ObserveNutritionResolve("db_first", resolveStatus, time.Since(start))
+	}()
 	resp["analysis_engine"] = "db_first"
 	if s.nutrition == nil {
+		resolveStatus = "skipped_no_repo"
 		return resp
 	}
 	items := toItems(resp["items"])
 	if len(items) == 0 {
 		resp["resolved_count"] = 0
 		resp["unresolved_count"] = 0
+		resolveStatus = "empty"
 		return resp
 	}
 
@@ -1801,6 +2067,7 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		if rows, err := s.estimateNutritionWithGemini(ctx, fallbackCandidates, contextText); err == nil {
 			fallbacks = rows
 		} else {
+			metrics.AddNutritionResolveItems("db_first", "gemini_fallback_failed", len(fallbackCandidates))
 			logger.WithTrace(ctx).Warn("gemini nutrition fallback failed",
 				zap.Error(err),
 				zap.Int("candidate_count", len(fallbackCandidates)),
@@ -1809,6 +2076,9 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	}
 
 	out := make([]map[string]any, 0, len(items))
+	geminiGeneratedCount := 0
+	geminiPersistedCount := 0
+	geminiPersistFailedCount := 0
 	for _, lookup := range lookups {
 		next := copyAnyMap(lookup.item)
 		resolve := lookup.resolve
@@ -1822,16 +2092,19 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 			next["resolve_score"] = 0
 			next["nutrition_source"] = "unresolved"
 			if fallbackUnit, ok := fallbacks[lookup.index]; ok && len(fallbackUnit) > 0 {
+				geminiGeneratedCount++
 				unit = fallbackUnit
 				next["nutrition_source"] = "gemini_generated"
 				next["nutrition_persisted"] = false
 				if foodID, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, fallbackUnit, "gemini_generated"); err != nil {
+					geminiPersistFailedCount++
 					logger.WithTrace(ctx).Warn("gemini nutrition upsert failed",
 						zap.Error(err),
 						zap.String("food_name", lookup.name),
 						zap.Any("unit_nutrition_per_100g", fallbackUnit),
 					)
 				} else {
+					geminiPersistedCount++
 					next["nutrition_persisted"] = true
 					next["matched_food_id"] = foodID
 					logger.WithTrace(ctx).Info("gemini nutrition upsert succeeded",
@@ -1865,8 +2138,221 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	resp["items"] = out
 	resp["resolved_count"] = resolvedCount
 	resp["unresolved_count"] = unresolvedCount
+	metrics.AddNutritionResolveItems("db_first", "resolved", resolvedCount)
+	metrics.AddNutritionResolveItems("db_first", "unresolved", unresolvedCount)
+	metrics.AddNutritionResolveItems("db_first", "gemini_generated", geminiGeneratedCount)
+	metrics.AddNutritionResolveItems("db_first", "gemini_persisted", geminiPersistedCount)
+	metrics.AddNutritionResolveItems("db_first", "gemini_persist_failed", geminiPersistFailedCount)
 	logDBFirstNutritionSummary(ctx, out, resolvedCount, unresolvedCount)
 	return resp
+}
+
+func (s *AnalyzeService) applySuggestedRatios(ctx context.Context, resp map[string]any, input AnalyzeInput) map[string]any {
+	items := toItems(resp["items"])
+	if len(items) == 0 {
+		resp["suggest_ratio_enabled"] = input.SuggestRatioEnabled
+		resp["suggest_ratio_status"] = "no_items"
+		return resp
+	}
+	if !input.SuggestRatioEnabled {
+		resp["items"] = withDefaultSuggestedRatios(items, "disabled")
+		resp["suggest_ratio_enabled"] = false
+		resp["suggest_ratio_status"] = "disabled"
+		return resp
+	}
+	if s.ofoxAIClient == nil {
+		resp["items"] = withDefaultSuggestedRatios(items, "unavailable")
+		resp["suggest_ratio_enabled"] = true
+		resp["suggest_ratio_status"] = "unavailable"
+		return resp
+	}
+
+	prompt := buildSuggestedRatioPrompt(items, input)
+	modelName := "gemini"
+	if client, ok := s.ofoxAIClient.(*OfoxAIClient); ok && strings.TrimSpace(client.Model) != "" {
+		modelName = client.Model
+	}
+	callCtx, cancel := context.WithTimeout(ctx, ratioSuggestionTimeout)
+	defer cancel()
+	parsed, err := analyzeWithJSONParseRetry(callCtx, "suggest_ratio", "gemini", modelName, func(innerCtx context.Context) (map[string]any, error) {
+		return s.ofoxAIClient.Analyze(innerCtx, prompt, "")
+	})
+	if err != nil {
+		logger.WithTrace(ctx).Warn("suggested ratio generation failed",
+			zap.Error(err),
+			zap.Int("item_count", len(items)),
+		)
+		resp["items"] = withDefaultSuggestedRatios(items, "failed")
+		resp["suggest_ratio_enabled"] = true
+		resp["suggest_ratio_status"] = "failed"
+		return resp
+	}
+
+	suggestions := parseSuggestedRatioRows(parsed)
+	out := make([]map[string]any, 0, len(items))
+	applied := 0
+	for index, item := range items {
+		next := copyAnyMap(item)
+		if row, ok := suggestions[index]; ok {
+			next["suggestedRatio"] = row.ratio
+			if row.reason != "" {
+				next["suggestedRatioReason"] = row.reason
+			} else {
+				delete(next, "suggestedRatioReason")
+			}
+			next["suggestedRatioSource"] = "ai"
+			applied++
+		} else {
+			next["suggestedRatio"] = 100.0
+			delete(next, "suggestedRatioReason")
+			next["suggestedRatioSource"] = "fallback"
+		}
+		out = append(out, next)
+	}
+	if applied == 0 {
+		out = withDefaultSuggestedRatios(items, "empty")
+		resp["suggest_ratio_status"] = "empty"
+	} else {
+		resp["suggest_ratio_status"] = "applied"
+	}
+	resp["items"] = out
+	resp["suggest_ratio_enabled"] = true
+	resp["suggest_ratio_applied_count"] = applied
+	return resp
+}
+
+type suggestedRatioRow struct {
+	ratio  float64
+	reason string
+}
+
+func withDefaultSuggestedRatios(items []map[string]any, source string) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		next := copyAnyMap(item)
+		next["suggestedRatio"] = 100.0
+		next["suggestedRatioSource"] = source
+		delete(next, "suggestedRatioReason")
+		out = append(out, next)
+	}
+	return out
+}
+
+func parseSuggestedRatioRows(parsed map[string]any) map[int]suggestedRatioRow {
+	out := map[int]suggestedRatioRow{}
+	rawItems, ok := parsed["items"].([]any)
+	if !ok {
+		return out
+	}
+	for _, raw := range rawItems {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, exists := row["index"]; !exists {
+			continue
+		}
+		index := int(numberFromAny(row["index"]))
+		if index < 0 {
+			continue
+		}
+		if _, exists := row["suggestedRatio"]; !exists {
+			continue
+		}
+		rawRatio := numberFromAny(row["suggestedRatio"])
+		if rawRatio < 0 || rawRatio > 100 {
+			continue
+		}
+		reason := strings.TrimSpace(fmt.Sprintf("%v", row["reason"]))
+		if reason == "<nil>" {
+			reason = ""
+		}
+		out[index] = suggestedRatioRow{
+			ratio:  math.Round(rawRatio),
+			reason: truncateSuggestedRatioReason(reason),
+		}
+	}
+	return out
+}
+
+func truncateSuggestedRatioReason(value string) string {
+	runes := []rune(strings.TrimSpace(value))
+	if len(runes) <= 36 {
+		return string(runes)
+	}
+	return string(runes[:36])
+}
+
+func buildSuggestedRatioPrompt(items []map[string]any, input AnalyzeInput) string {
+	payloadItems := make([]map[string]any, 0, len(items))
+	totalCalories := 0.0
+	totalProtein := 0.0
+	totalCarbs := 0.0
+	totalFat := 0.0
+	for index, item := range items {
+		nutrients := map[string]any{}
+		if raw, ok := item["nutrients"].(map[string]any); ok {
+			nutrients = raw
+		}
+		calories := numberFromAny(nutrients["calories"])
+		protein := numberFromAny(nutrients["protein"])
+		carbs := numberFromAny(nutrients["carbs"])
+		fat := numberFromAny(nutrients["fat"])
+		totalCalories += calories
+		totalProtein += protein
+		totalCarbs += carbs
+		totalFat += fat
+		payloadItems = append(payloadItems, map[string]any{
+			"index":                index,
+			"name":                 strings.TrimSpace(fmt.Sprintf("%v", item["name"])),
+			"estimatedWeightGrams": round2(numberFromAny(item["estimatedWeightGrams"])),
+			"nutrients": map[string]any{
+				"calories": round2(calories),
+				"protein":  round2(protein),
+				"carbs":    round2(carbs),
+				"fat":      round2(fat),
+				"fiber":    round2(numberFromAny(nutrients["fiber"])),
+				"sugar":    round2(numberFromAny(nutrients["sugar"])),
+			},
+			"nutritionSource": item["nutrition_source"],
+		})
+	}
+
+	contextPayload := map[string]any{
+		"task": "为本餐每个食物生成实际摄入比例。这个比例会直接作为结果页滑块初始值。",
+		"rules": []string{
+			"只返回 JSON，不要输出解释性正文。",
+			"suggestedRatio 必须是 0 到 100 的整数；无法判断时填 100。",
+			"不要平均削减所有食物。优先保留蛋白质、蔬菜和低能量密度食物；需要控制时优先降低高油、高糖、高热量密度、过量主食或甜饮甜点。",
+			"如果 remainingCalories 缺失或本餐总热量并不明显超出目标，建议应保守，通常保持 100。",
+			"如果用户目标是减脂且剩余热量不足，应让总摄入更接近预算；如果是增肌且热量充足，可更多保持 100。",
+			"reason 用 20 个中文字以内说明，不确定或保持 100 时可以为空。",
+		},
+		"context": map[string]any{
+			"mealType":          input.MealType,
+			"userGoal":          input.UserGoal,
+			"dietGoal":          input.DietGoal,
+			"activityTiming":    input.ActivityTiming,
+			"remainingCalories": input.RemainingCalories,
+			"additionalContext": strings.TrimSpace(input.AdditionalContext),
+			"currentMealTotals": map[string]any{
+				"calories": round2(totalCalories),
+				"protein":  round2(totalProtein),
+				"carbs":    round2(totalCarbs),
+				"fat":      round2(totalFat),
+			},
+		},
+		"items": payloadItems,
+		"responseSchema": map[string]any{
+			"items": []map[string]any{{
+				"index":          0,
+				"suggestedRatio": 100,
+				"reason":         "",
+			}},
+		},
+	}
+	bytes, _ := json.Marshal(contextPayload)
+	return "你是健康饮食决策助手。请根据用户上下文和本餐最终营养数据，给出每个食物的实际摄入比例建议。\n" + string(bytes)
 }
 
 func (s *AnalyzeService) estimateNutritionWithGemini(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
@@ -2152,6 +2638,7 @@ func mergeBatchResults(results []map[string]any, executionMode string) map[strin
 			"estimatedWeightGrams": item["estimatedWeightGrams"],
 			"originalWeightGrams":  item["estimatedWeightGrams"],
 			"waterMl":              numberFromAny(item["waterMl"]),
+			"suggestedRatio":       100.0,
 			"nutrients":            nutrients,
 		})
 	}

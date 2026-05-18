@@ -21,6 +21,7 @@ import (
 	userdomain "food_link/backend/internal/user/domain"
 	userrepo "food_link/backend/internal/user/repo"
 	userservice "food_link/backend/internal/user/service"
+	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
 	apm "food_link/backend/pkg/trace"
 
@@ -86,6 +87,7 @@ type Options struct {
 	WorkerCount      int
 	LeaseDuration    time.Duration
 	RecoveryInterval time.Duration
+	QueueDriver      string
 }
 
 func NewRunner(
@@ -151,9 +153,14 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 	if opts.RecoveryInterval <= 0 {
 		opts.RecoveryInterval = taskRecoveryInterval
 	}
+	queueDriver := strings.TrimSpace(opts.QueueDriver)
+	if queueDriver == "" {
+		queueDriver = "unknown"
+	}
 	if r.queue == nil {
 		return fmt.Errorf("worker task queue is not initialized")
 	}
+	metrics.SetWorkerConfigured(queueDriver, opts.WorkerCount)
 
 	r.log.Info("worker started",
 		zap.String("worker_id", opts.WorkerID),
@@ -162,6 +169,7 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 		zap.Int("worker_count", opts.WorkerCount),
 		zap.Duration("lease_duration", opts.LeaseDuration),
 		zap.Duration("recovery_interval", opts.RecoveryInterval),
+		zap.String("task_queue_driver", queueDriver),
 	)
 
 	var wg sync.WaitGroup
@@ -174,7 +182,7 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
-			r.runLoop(ctx, fmt.Sprintf("%s-%d", opts.WorkerID, index), taskTypes, opts.PollInterval, opts.LeaseDuration)
+			r.runLoop(ctx, fmt.Sprintf("%s-%d", opts.WorkerID, index), taskTypes, opts.PollInterval, opts.LeaseDuration, queueDriver)
 		}(i)
 	}
 	<-ctx.Done()
@@ -182,7 +190,9 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 	return ctx.Err()
 }
 
-func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []string, pollInterval, leaseDuration time.Duration) {
+func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []string, pollInterval, leaseDuration time.Duration, queueDriver string) {
+	metrics.IncWorkerLoop(queueDriver)
+	defer metrics.DecWorkerLoop(queueDriver)
 	backoff := time.Second
 	for ctx.Err() == nil {
 		deliveries, err := r.queue.Subscribe(ctx, taskqueue.SubscribeOptions{TaskTypes: taskTypes})
@@ -343,11 +353,13 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 			attribute.String("analysis.task_id", msg.TaskID),
 			attribute.String("analysis.task_type", msg.TaskType),
 		)
+		metrics.ObserveWorkerTaskClaim(msg.TaskType, "error")
 		_ = nackDelivery(err)
 		return
 	}
 	task := claim.Task
 	if task == nil {
+		metrics.ObserveWorkerTaskClaim(msg.TaskType, string(claim.Outcome))
 		r.log.Info("queued task skipped because it is no longer pending or not allowed",
 			zap.String("worker_id", workerID),
 			zap.String("task_id", msg.TaskID),
@@ -364,6 +376,7 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		return
 	}
 	if claim.Outcome != analyzerepo.ClaimOutcomeClaimed {
+		metrics.ObserveWorkerTaskClaim(task.TaskType, string(claim.Outcome))
 		r.log.Info("queued task skipped after claim check",
 			zap.String("worker_id", workerID),
 			zap.String("task_id", task.ID),
@@ -383,6 +396,7 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		_ = ackDelivery()
 		return
 	}
+	metrics.ObserveWorkerTaskClaim(task.TaskType, "claimed")
 	r.log.Info("task claimed",
 		zap.String("worker_id", workerID),
 		zap.String("task_id", task.ID),
@@ -537,10 +551,12 @@ func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
 		if task.ID == "" || task.TaskType == "" {
 			continue
 		}
+		metrics.AddWorkerRecoveredTasks(task.TaskType, "candidate", 1)
 		publishCtx, publishCancel := context.WithTimeout(ctx, 2*time.Second)
 		err := r.queue.PublishTask(publishCtx, taskqueue.TaskMessage{TaskID: task.ID, TaskType: task.TaskType})
 		publishCancel()
 		if err != nil {
+			metrics.AddWorkerRecoveredTasks(task.TaskType, "publish_failed", 1)
 			r.log.Error("recover queued analysis task publish failed",
 				zap.String("task_id", task.ID),
 				zap.String("task_type", task.TaskType),
@@ -555,6 +571,7 @@ func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
 			)
 			continue
 		}
+		metrics.AddWorkerRecoveredTasks(task.TaskType, "published", 1)
 		published++
 	}
 	if published > 0 {
@@ -603,6 +620,7 @@ func (r *Runner) startLeaseHeartbeat(ctx context.Context, cancel context.CancelF
 				ok, err := r.tasks.ExtendTaskLease(extendCtx, task.ID, attemptID, workerID, leaseUntil)
 				extendCancel()
 				if err != nil {
+					metrics.ObserveWorkerLeaseHeartbeat(task.TaskType, "error")
 					r.log.Error("task lease heartbeat failed",
 						zap.String("worker_id", workerID),
 						zap.String("task_id", task.ID),
@@ -613,6 +631,7 @@ func (r *Runner) startLeaseHeartbeat(ctx context.Context, cancel context.CancelF
 					continue
 				}
 				if !ok {
+					metrics.ObserveWorkerLeaseHeartbeat(task.TaskType, "lost")
 					r.log.Warn("task lease heartbeat lost ownership",
 						zap.String("worker_id", workerID),
 						zap.String("task_id", task.ID),
@@ -622,6 +641,7 @@ func (r *Runner) startLeaseHeartbeat(ctx context.Context, cancel context.CancelF
 					cancel()
 					return
 				}
+				metrics.ObserveWorkerLeaseHeartbeat(task.TaskType, "success")
 				task.LeaseUntil = &leaseUntil
 			}
 		}
@@ -631,6 +651,12 @@ func (r *Runner) startLeaseHeartbeat(ctx context.Context, cancel context.CancelF
 
 func (r *Runner) process(ctx context.Context, workerID string, task *domain.AnalysisTask, leaseDuration time.Duration) error {
 	start := time.Now()
+	taskStatus := "done"
+	metrics.IncWorkerTask(task.TaskType)
+	defer func() {
+		metrics.DecWorkerTask(task.TaskType)
+		metrics.ObserveWorkerTask(task.TaskType, taskStatus, time.Since(start))
+	}()
 	taskCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	stopHeartbeat := r.startLeaseHeartbeat(taskCtx, cancel, workerID, task, leaseDuration)
@@ -683,6 +709,7 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 	}
 	if err != nil {
 		if errors.Is(err, errTaskAttemptLost) {
+			taskStatus = "attempt_lost"
 			r.log.Warn("task attempt lost before completion; acknowledging stale delivery",
 				zap.String("worker_id", workerID),
 				zap.String("task_id", task.ID),
@@ -701,6 +728,7 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 		defer failCancel()
 		if failErr := r.failTask(failCtx, task, err); failErr != nil {
 			if errors.Is(failErr, errTaskAttemptLost) {
+				taskStatus = "attempt_lost"
 				apm.AddEvent(taskCtx, "task attempt lost while writing failure",
 					attribute.String("worker.id", workerID),
 					attribute.String("analysis.task_id", task.ID),
@@ -709,6 +737,7 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 				)
 				return nil
 			}
+			taskStatus = "terminal_update_error"
 			apm.RecordError(taskCtx, failErr,
 				attribute.String("worker.id", workerID),
 				attribute.String("analysis.task_id", task.ID),
@@ -718,6 +747,7 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 			)
 			return failErr
 		}
+		taskStatus = "failed"
 		apm.RecordError(taskCtx, err,
 			attribute.String("worker.id", workerID),
 			attribute.String("analysis.task_id", task.ID),
@@ -1959,6 +1989,7 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 要求：
 - 如果有多个主体食物，请拆成 itemsToEstimate，后续并行估计。
 - 食物种类识别优先于重量估计。每个主体先列出 2-3 个最可能的候选食物，再根据视觉证据选择 item_name。
+- 重量口径必须与营养数据库一致：后续 estimatedWeightGrams 只计算可食部净重。遇到带壳、带骨、带核食物时，itemsToEstimate 仍列食物本身，但 visual_evidence/item_hint 需要提示后续按去壳/去骨/去核后的可食重量估算，不把壳、骨头、果核计入重量。
 - 候选筛选必须看具体视觉证据：切法、形状、边缘/皮、是否有馅、颜色、纹理、菜梗/叶片比例、包裹方式、烹饪方式和所在区域；不要只按常见菜名猜。
 - 对容易混淆的食物必须显式区分：莴苣/莴笋片 vs 青菜/小白菜，百叶包/千张包/豆皮包 vs 蒸饺/馄饨，鱼块 vs 鸡块，豆干 vs 肉块。
 - 如果最可能名称不确定，item_name 填最可能的那个，candidate_names 保留 2-3 个候选，alternative_name 填次可能名称，visual_evidence 写选择依据。
@@ -2054,6 +2085,7 @@ func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawI
 - 参考物和尺寸如果可用，请务必用于精确估重。
 - 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示，不能当精确比例尺。
 - 估重时必须同时考虑：可见面积、堆叠高度/厚度、容器占比、与餐具/手掌/碗盘的相对大小。
+- estimatedWeightGrams 必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量估算，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
 - 主食和混合菜（米饭、面条、炒饭、盖饭、粥、带酱汁菜）不要套用保守默认值，必须根据容器填充深度和实际视觉占比修正。
 %s
 - 对以下容易估计错误的食物要特别仔细：混合菜（如炒饭、炒面）、带酱汁的食物、油炸食物、无固定形状的食物（如粥、汤）。
@@ -2118,6 +2150,7 @@ func buildPrecisionItemEstimatePromptMulti(sourceType string, items []map[string
 - 参考物和尺寸如果可用，请务必用于精确估重。
 - 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示，不能当精确比例尺。
 - 每个食物都必须根据自身可见面积、厚度/高度、容器占比、与餐具/碗盘/手掌的相对大小估重。
+- estimatedWeightGrams 必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量估算，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
 - 主食和混合菜（米饭、面条、炒饭、盖饭、粥、带酱汁菜）不要套用保守默认值，必须根据容器填充深度和实际视觉占比修正。
 %s
 - 对标记为【注意】的难估食物要特别仔细。
@@ -2205,6 +2238,7 @@ func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, addition
 - 只复核重量，不要补充营养。
 - 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示。
 - 必须根据可见面积、容器填充深度、堆积高度/厚度、与餐具/碗盘/手掌的相对大小重新审视重量。
+- estimatedWeightGrams 必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量复核，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
 - 主食和混合菜（米饭、面条、炒饭、盖饭、粥、带酱汁菜）绝不能套用保守默认值。
 %s
 - 如果当前估计明显与视觉占比不符，必须修正；如果没有足够依据修正，可以保留原值，但要在 uncertaintyNotes 里写明原因。
@@ -3387,21 +3421,22 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 func analyzeInputFromTask(task *domain.AnalysisTask) analyzeservice.AnalyzeInput {
 	payload := task.Payload
 	input := analyzeservice.AnalyzeInput{
-		ImageURLs:         task.ImagePaths,
-		Text:              "",
-		AdditionalContext: stringFromMap(payload, "additionalContext"),
-		MealType:          stringFromMap(payload, "meal_type"),
-		Province:          stringFromMap(payload, "province"),
-		City:              stringFromMap(payload, "city"),
-		District:          stringFromMap(payload, "district"),
-		UserGoal:          stringFromMap(payload, "user_goal"),
-		DietGoal:          stringFromMap(payload, "diet_goal"),
-		ActivityTiming:    stringFromMap(payload, "activity_timing"),
-		ModelName:         stringFromMap(payload, "modelName"),
-		AnalysisEngine:    stringFromMap(payload, "analysis_engine"),
-		IsMultiView:       boolFromAny(payload["is_multi_view"]),
-		PreviousResult:    mapFromAny(payload["previousResult"]),
-		CorrectionItems:   extractItems(payload["correctionItems"]),
+		ImageURLs:           task.ImagePaths,
+		Text:                "",
+		AdditionalContext:   stringFromMap(payload, "additionalContext"),
+		MealType:            stringFromMap(payload, "meal_type"),
+		Province:            stringFromMap(payload, "province"),
+		City:                stringFromMap(payload, "city"),
+		District:            stringFromMap(payload, "district"),
+		UserGoal:            stringFromMap(payload, "user_goal"),
+		DietGoal:            stringFromMap(payload, "diet_goal"),
+		ActivityTiming:      stringFromMap(payload, "activity_timing"),
+		SuggestRatioEnabled: boolFromAny(payload["suggest_ratio_enabled"]),
+		ModelName:           stringFromMap(payload, "modelName"),
+		AnalysisEngine:      stringFromMap(payload, "analysis_engine"),
+		IsMultiView:         boolFromAny(payload["is_multi_view"]),
+		PreviousResult:      mapFromAny(payload["previousResult"]),
+		CorrectionItems:     extractItems(payload["correctionItems"]),
 	}
 	if task.ImageURL != nil {
 		input.ImageURL = *task.ImageURL

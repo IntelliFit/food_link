@@ -1,0 +1,43 @@
+id: home-dashboard
+name: "首页仪表盘"
+desc: "验证登录用户首页正确渲染，能够截图存档"
+setup:
+  backend:
+    suite: "backend/e2e-test/suite.yaml"
+  miniprogram:
+    build_mode: "development"
+    devtools_port: 9420
+
+steps:
+  # Step 1: 注入登录态
+  - action: "evaluate"
+    name: "注入测试用户 Token"
+    script: |
+      wx.setStorageSync('access_token', '{{backend.token.user1}}');
+      wx.setStorageSync('user_id', '{{backend.auth.user1.id}}');
+      wx.setStorageSync('isLoggedIn', true);
+    assert:
+      type: "evaluate_equals"
+      script: "wx.getStorageSync('access_token')"
+      expected: "not_empty"
+
+  # Step 2: 重新启动首页
+  - action: "relaunch"
+    name: "进入首页"
+    url: "/pages/index/index"
+
+  # Step 3: 等待页面加载
+  - action: "wait"
+    name: "等待首页渲染"
+    ms: 3000
+
+  # Step 4: 截图存档
+  - action: "screenshot"
+    name: "首页截图"
+    path: "./e2e-weapp/screenshots/actual/home-dashboard.png"
+
+  # Step 5: 断言关键元素存在
+  - action: "assert_element"
+    name: "页面主体 view 存在"
+    selector: "view"
+    exists: true

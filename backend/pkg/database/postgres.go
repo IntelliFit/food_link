@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/metrics"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -22,9 +23,17 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 		cfg.Name,
 		cfg.SSLMode,
 	)
-	return gorm.Open(postgres.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: glogger.Default.LogMode(glogger.Silent),
 	})
+	if err != nil {
+		return nil, err
+	}
+	metrics.RegisterGORMCallbacks(db)
+	if sqlDB, err := db.DB(); err == nil {
+		metrics.RegisterDatabase(cfg.Name, sqlDB)
+	}
+	return db, nil
 }
 
 func Ping(ctx context.Context, db *gorm.DB) error {
@@ -35,7 +44,18 @@ func Ping(ctx context.Context, db *gorm.DB) error {
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	sqlDB.SetMaxOpenConns(10)
 	sqlDB.SetMaxIdleConns(5)
-	return sqlDB.PingContext(ctx)
+	start := time.Now()
+	err = sqlDB.PingContext(ctx)
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	driver := "unknown"
+	if db.Dialector != nil {
+		driver = db.Dialector.Name()
+	}
+	metrics.ObserveDBPing(driver, status, time.Since(start))
+	return err
 }
 
 func CheckSchemaReady(ctx context.Context, db *gorm.DB, tables ...string) error {

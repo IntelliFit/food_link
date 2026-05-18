@@ -37,6 +37,15 @@ const ACTIVITY_TIMINGS = [
   { value: 'none', label: '无' },
 ]
 
+const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
+
+const readSuggestRatioPreference = (): boolean => {
+  const saved = Taro.getStorageSync(SUGGEST_RATIO_STORAGE_KEY)
+  if (saved === false || saved === '0' || saved === 'false') return false
+  if (saved === true || saved === '1' || saved === 'true') return true
+  return true
+}
+
 function RecordTextPage() {
   const [foodText, setFoodText] = useState('')
   const [foodAmount, setFoodAmount] = useState('')
@@ -149,6 +158,7 @@ function RecordTextPage() {
         meal_type: selectedMeal as any,
         diet_goal: dietGoal as any,
         activity_timing: activityTiming as any,
+        suggest_ratio_enabled: readSuggestRatioPreference(),
       })
       Taro.hideLoading()
       Taro.navigateTo({

@@ -94,7 +94,7 @@ func Run(ctx context.Context, opts Options) (*Result, error) {
 	}()
 	cfg.Database = tempDB.Config
 
-	vars := suiteVars(suite)
+	vars := SuiteVars(suite)
 	if err := ApplySeedSQL(ctx, suite, tempDB.DB(), vars); err != nil {
 		return nil, err
 	}

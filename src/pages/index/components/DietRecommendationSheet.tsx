@@ -17,6 +17,20 @@ const SCENE_LABELS: Record<DietRecommendationScene, string> = {
   cook_home: '自己做'
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  public_food_library: '公共食物库',
+  user_food_records: '历史记录',
+  food_nutrition_library: '营养库',
+  mixed: '组合候选',
+  rule_fallback: '规则兜底',
+  ai_generated: 'AI 补充'
+}
+
+function getSourceLabel(source?: string) {
+  if (!source) return ''
+  return SOURCE_LABELS[source] || source
+}
+
 export function DietRecommendationSheet({
   visible,
   scene,
@@ -89,6 +103,11 @@ export function DietRecommendationSheet({
                     <Text className='diet-rec-option-cal'>{formatDisplayNumber(Math.round(option.calories || 0))} kcal</Text>
                   </View>
                   <Text className='diet-rec-option-reason'>{option.reason}</Text>
+                  {!!getSourceLabel(option.source || option.items?.[0]?.source) && (
+                    <Text className='diet-rec-option-source'>
+                      来源：{getSourceLabel(option.source || option.items?.[0]?.source)}
+                    </Text>
+                  )}
                   <View className='diet-rec-foods'>
                     {(option.items || []).map((food, idx) => (
                       <View key={`${food.name}-${idx}`} className='diet-rec-food'>

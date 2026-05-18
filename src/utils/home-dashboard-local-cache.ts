@@ -14,6 +14,7 @@ import {
   type HomeIntakeData,
   type HomeMealItem,
   type HomeMealRecordEntry,
+  type HomeNutritionTarget,
   type SaveFoodRecordRequest
 } from './api'
 
@@ -28,6 +29,7 @@ export interface HomeDashboardLocalSnapshot {
   expirySummary: HomeFoodExpirySummary
   exerciseBurnedKcal: number
   achievement: HomeAchievement
+  nutritionTarget?: HomeNutritionTarget | null
 }
 
 export const DEFAULT_EXPIRY_SUMMARY: HomeFoodExpirySummary = {
@@ -357,7 +359,8 @@ export async function refreshHomeDashboardLocalSnapshotFromCloud(calendarDate: s
       meals: res.meals || [],
       expirySummary: res.expirySummary || DEFAULT_EXPIRY_SUMMARY,
       exerciseBurnedKcal: nextExerciseKcal,
-      achievement: nextAchievement
+      achievement: nextAchievement,
+      nutritionTarget: res.nutritionTarget || null
     })
     return true
   } catch (e) {

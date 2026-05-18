@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"food_link/backend/pkg/metrics"
+
 	"go.uber.org/zap"
 )
 
@@ -23,11 +25,13 @@ func NewMemoryQueue(bufferSize int, log *zap.Logger) *MemoryQueue {
 	if log == nil {
 		log = zap.NewNop()
 	}
-	return &MemoryQueue{
+	queue := &MemoryQueue{
 		messages: make(chan TaskMessage, bufferSize),
 		done:     make(chan struct{}),
 		log:      log,
 	}
+	metrics.SetTaskQueueDepth("memory", "default", 0)
+	return queue
 }
 
 func (q *MemoryQueue) PublishTask(ctx context.Context, msg TaskMessage) error {
@@ -49,6 +53,7 @@ func (q *MemoryQueue) PublishTask(ctx context.Context, msg TaskMessage) error {
 	case <-q.done:
 		return ErrClosed
 	case q.messages <- msg:
+		metrics.SetTaskQueueDepth("memory", "default", len(q.messages))
 		return nil
 	}
 }
@@ -65,6 +70,7 @@ func (q *MemoryQueue) Subscribe(ctx context.Context, opts SubscribeOptions) (<-c
 			case <-q.done:
 				return
 			case msg := <-q.messages:
+				metrics.SetTaskQueueDepth("memory", "default", len(q.messages))
 				if len(allowed) > 0 && !allowed[msg.TaskType] {
 					q.log.Warn("task queue message skipped because task type is not subscribed",
 						zap.String("task_id", msg.TaskID),

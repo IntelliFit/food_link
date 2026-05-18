@@ -78,14 +78,25 @@
 
 - 开发时必须使用 `npm run dev:weapp` 启动开发服务器，**禁止用 `npm run build:weapp` 构建**。
 - 该命令会正确设置 `NODE_ENV=development` 和 `TARO_APP_API_BASE_URL=http://127.0.0.1:3010`
-- 需要**请求线上后端**（真机、或本机模拟器联调生产 API）时：用 `npm run build:weapp:preview` 一次性构建，或 `npm run dev:weapp:online`（watch + `https://healthymax.cn`，与 `build:weapp:preview` 同源注入）
+- 需要**请求体验版后端**（真机体验版、或本机模拟器联调体验版 API）时：用 `npm run build:weapp:preview` 一次性构建，或 `npm run dev:weapp:preview`（watch + `https://dev.healthymax.cn`，与 `build:weapp:preview` 同源注入）
+- 需要**请求正式线上后端**时：用 `npm run build:weapp:release` 一次性构建，或 `npm run dev:weapp:online`（watch + `https://healthymax.cn`）。
 - 不要直接使用 `taro build --type weapp --watch`，这可能导致 API 地址错误
 
-**真机预览 / 上传体验版**：必须使用生产 API，勿用本机 `127.0.0.1`（真机无法访问电脑环回地址）。请使用：
+**真机预览 / 上传体验版**：必须使用体验版 API，勿用本机 `127.0.0.1`（真机无法访问电脑环回地址）。请使用：
 
-- `npm run build:weapp:preview`（显式 `NODE_ENV=production` + `TARO_APP_API_BASE_URL=https://healthymax.cn`）
+- `npm run build:weapp:preview`（显式 `NODE_ENV=production` + `TARO_APP_API_BASE_URL=https://dev.healthymax.cn`）
 
-或普通 `npm run build:weapp`（Taro 生产构建默认走 `config/index.ts` 中的 `https://healthymax.cn`）。**不要**用 `dev:weapp` 的产物去真机扫码。
+或普通 `npm run build:weapp`（Taro 生产构建默认走 `config/index.ts` 中的 `https://dev.healthymax.cn`）。**不要**用 `dev:weapp` 的产物去真机扫码。
+
+**正式版发布**：正式发布包才使用 `npm run build:weapp:release`，该命令显式注入 `https://healthymax.cn`。
+
+### 后端数据库结构变更
+
+- 修改后端数据库结构（新增、删除、重命名表/字段/索引/约束、调整字段类型、默认值、check、外键、触发器等）时，**禁止把手动执行 SQL 当作最终方案**，也不要只在终端里临时 `ALTER TABLE` / `CREATE INDEX` / `DROP ...` 修库后结束。
+- 必须先把结构变更落到 Go 后端对应的数据模型中：优先修改 `backend/internal/migration/do/schema_do.go` 里的迁移 DO，让 DO 结构准确表达数据库表结构；如果业务读写也需要新字段，再按 DDD 分层同步调整对应 domain、repo、service、DTO/handler。不要用 domain struct 替代迁移 DO，也不要让数据库结构只存在于临时 SQL 里。
+- 对 AutoMigrate 不能可靠表达或必须稳定命名的内容（例如已有约束名、唯一索引、partial index、check 约束、外键、触发器、数据修正步骤），应在 `backend/internal/migration/migration.go` 中补充幂等迁移逻辑，保证重复运行安全。
+- 完成模型/迁移代码后，从 `backend/` 目录运行 `go run ./cmd/migration -config-dir .` 更新当前配置指向的数据库。运行前必须确认 `backend/config.yaml` 与环境变量实际指向的目标库；如果是非本地库、线上库或不确定目标库，先获得用户明确确认，再执行。
+- 只读查询可用于诊断和验证；修复性 SQL 只能作为迁移命令中的幂等步骤落代码。确有紧急人工 SQL 需求时，必须先说明风险并获得用户明确授权，事后仍要把等价变更补回迁移 DO/迁移代码并运行迁移命令验证。
 
 ### 代码修改后重启前后端（默认由用户自行执行）
 

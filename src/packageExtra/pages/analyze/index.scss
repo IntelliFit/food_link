@@ -682,6 +682,11 @@
   }
 }
 
+.suggest-ratio-compact {
+  border-top-color: rgb(0 188 125 / 10%);
+  background: #f6fffb;
+}
+
 // 与系统 Switch 视觉接近的纯 View 开关（不依赖 components/Switch，避免小程序端 react 解析异常）
 .multiview-toggle {
   position: relative;

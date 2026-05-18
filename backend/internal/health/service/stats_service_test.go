@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"food_link/backend/internal/health/domain"
+	"food_link/backend/pkg/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,6 +19,7 @@ type mockStatsRepo struct {
 	user        *domain.StatsUserProfile
 	recordDates []string
 	insights    []domain.StatsInsight
+	candidates  []domain.DietRecommendationCandidate
 }
 
 func (m *mockStatsRepo) GetFoodRecordsForDateRange(ctx context.Context, userID string, startUTC, endUTC time.Time) ([]domain.FoodRecord, error) {
@@ -77,12 +81,55 @@ func (m *mockStatsRepo) CountInsightGenerationsToday(ctx context.Context, userID
 	return 0, nil
 }
 
+func (m *mockStatsRepo) GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, limit int) ([]domain.DietRecommendationCandidate, error) {
+	return m.candidates, nil
+}
+
 type mockBodyMetricsProvider struct {
 	summary *BodyMetricsSummary
 }
 
 func (m *mockBodyMetricsProvider) GetSummary(ctx context.Context, userID string, statsRange string) (*BodyMetricsSummary, error) {
 	return m.summary, nil
+}
+
+type mockStatsCreditGuard struct {
+	validateCalls int
+	consumeCalls  int
+}
+
+func (m *mockStatsCreditGuard) ValidateExerciseCredits(ctx context.Context, userID, recordedOn string) (map[string]any, error) {
+	return map[string]any{}, nil
+}
+
+func (m *mockStatsCreditGuard) ValidateDietRecommendationCredits(ctx context.Context, userID string) (map[string]any, error) {
+	return map[string]any{}, nil
+}
+
+func (m *mockStatsCreditGuard) ValidateStatsInsightCredits(ctx context.Context, userID string) (map[string]any, error) {
+	m.validateCalls++
+	return map[string]any{
+		"credit_cost": 1,
+		"credit_spend_plan": map[string]any{
+			"cost":            1,
+			"system_by_date":  map[string]any{time.Now().In(chinaTZ).Format("2006-01-02"): 1},
+			"earned_units":    0,
+			"total_available": 8,
+		},
+	}, nil
+}
+
+func (m *mockStatsCreditGuard) ConsumeEarnedCreditsOnTaskCreated(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error {
+	return nil
+}
+
+func (m *mockStatsCreditGuard) ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error {
+	m.consumeCalls++
+	return nil
+}
+
+func (m *mockStatsCreditGuard) RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error {
+	return nil
 }
 
 func TestStatsService_GetSummary(t *testing.T) {
@@ -120,6 +167,51 @@ func TestStatsService_GenerateInsight(t *testing.T) {
 	assert.NotEmpty(t, result["analysis_summary"])
 }
 
+func TestStatsService_GenerateInsightSavesCacheAndConsumesCredit(t *testing.T) {
+	recordTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	repo := &mockStatsRepo{
+		records: []domain.FoodRecord{
+			{UserID: "u1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &recordTime},
+		},
+	}
+	guard := &mockStatsCreditGuard{}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{})
+	svc.ConfigureCreditGuard(guard)
+
+	result, err := svc.GenerateInsight(context.Background(), "u1", "week", 2000, 5)
+	require.NoError(t, err)
+	assert.NotEmpty(t, result["analysis_summary"])
+	assert.Equal(t, statsInsightDailyLimit, result["analysis_summary_daily_limit"])
+	assert.Equal(t, 1, result["analysis_summary_used_today"])
+	assert.Len(t, repo.insights, 1)
+	assert.Equal(t, 1, guard.validateCalls)
+	assert.Equal(t, 1, guard.consumeCalls)
+}
+
+func TestStatsService_GenerateInsightFallsBackWhenDeepSeekFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":{"message":"upstream unavailable"}}`, http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	recordTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	repo := &mockStatsRepo{
+		records: []domain.FoodRecord{
+			{UserID: "u1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &recordTime},
+		},
+	}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{}, &config.Config{
+		External: config.ExternalConfig{DeepSeekAPIKey: "test-key"},
+	})
+	svc.deepSeekBaseURL = server.URL
+
+	result, err := svc.GenerateInsight(context.Background(), "u1", "week", 2000, 5)
+	require.NoError(t, err)
+	text, _ := result["analysis_summary"].(string)
+	assert.NotEmpty(t, text)
+	assert.Contains(t, text, "本期日均摄入")
+}
+
 func TestStatsInsightUsesDeepSeekV4FlashModel(t *testing.T) {
 	assert.Equal(t, "deepseek-v4-flash", statsInsightDeepSeekModel)
 }
@@ -136,6 +228,30 @@ func TestStatsService_GenerateDietRecommendationFallback(t *testing.T) {
 	assert.Equal(t, "rule_fallback", result.GeneratedBy)
 	assert.NotEmpty(t, result.Recommendations)
 	assert.NotEmpty(t, result.Recommendations[0].Items)
+}
+
+func TestStatsService_GenerateDietRecommendationUsesCandidatesFallback(t *testing.T) {
+	repo := &mockStatsRepo{
+		candidates: []domain.DietRecommendationCandidate{
+			{Source: "public_food_library", SourceID: "p1", Title: "便利店鸡胸饭团", Calories: 380, Protein: 30, Carbs: 45, Fat: 7, Items: []domain.DietRecommendationFoodItem{{Name: "鸡胸肉饭团", Amount: "1份"}}},
+			{Source: "user_food_records", SourceID: "r1", Title: "常吃牛肉面", Calories: 430, Protein: 25, Carbs: 58, Fat: 9, Items: []domain.DietRecommendationFoodItem{{Name: "牛肉面", Amount: "半份面"}}},
+			{Source: "food_nutrition_library", SourceID: "n1", Title: "北豆腐", Calories: 90, Protein: 8, Carbs: 3, Fat: 5, Items: []domain.DietRecommendationFoodItem{{Name: "北豆腐", Amount: "100g"}}},
+			{Source: "food_nutrition_library", SourceID: "n2", Title: "鸡蛋", Calories: 140, Protein: 13, Carbs: 1, Fat: 10, Items: []domain.DietRecommendationFoodItem{{Name: "鸡蛋", Amount: "100g"}}},
+			{Source: "food_nutrition_library", SourceID: "n3", Title: "米饭", Calories: 116, Protein: 2.6, Carbs: 25, Fat: 0.3, Items: []domain.DietRecommendationFoodItem{{Name: "米饭", Amount: "100g"}}},
+			{Source: "food_nutrition_library", SourceID: "n4", Title: "西兰花", Calories: 34, Protein: 2.8, Carbs: 7, Fat: 0.4, Items: []domain.DietRecommendationFoodItem{{Name: "西兰花", Amount: "100g"}}},
+		},
+	}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{})
+	result, err := svc.GenerateDietRecommendation(context.Background(), "u1", DietRecommendationInput{
+		Scene:            "eat_out",
+		CalorieRemaining: 420,
+		MacroGaps:        DietRecommendationMacro{Protein: 30, Carbs: 40, Fat: 6},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "rule_fallback", result.GeneratedBy)
+	assert.Len(t, result.Recommendations, 5)
+	assert.NotEmpty(t, result.Recommendations[0].Source)
+	assert.NotEmpty(t, result.Recommendations[0].Items[0].Source)
 }
 
 func TestStatsService_SaveInsight(t *testing.T) {

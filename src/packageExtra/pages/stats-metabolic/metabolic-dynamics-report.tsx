@@ -181,14 +181,13 @@ function isMaleGender(g: string | null | undefined): boolean {
 }
 
 function activityToPal(level: string | null | undefined): number {
-  if (!level) return 1.375
+  if (!level) return 1.3
   const s = `${level}`.toLowerCase()
   if (s.includes('久坐') || s.includes('sedentary')) return 1.2
-  if (s.includes('轻度') || s.includes('light')) return 1.375
-  if (s.includes('中等') || s.includes('moderate')) return 1.55
-  if (s.includes('高度') || s.includes('active') && !s.includes('very')) return 1.725
-  if (s.includes('极高') || s.includes('very')) return 1.9
-  return 1.375
+  if (s.includes('走动') || s.includes('light')) return 1.3
+  if (s.includes('站立') || s.includes('moderate')) return 1.4
+  if (s.includes('体力') || s.includes('active') || s.includes('very')) return 1.55
+  return 1.3
 }
 
 /** Mifflin-St Jeor（千卡/日） */
@@ -587,7 +586,7 @@ function MetabolicPhysiologyPopup({
     >
       <View className='metabolic-phys-popup' onClick={(e) => e.stopPropagation()}>
         <Text className='metabolic-phys-popup__title'>模拟所用基础数据</Text>
-        <Text className='metabolic-phys-popup__hint'>与当日示意模型一致；BMR 为档案基础代谢，TDEE 含活动系数。</Text>
+        <Text className='metabolic-phys-popup__hint'>与当日示意模型一致；BMR 为档案基础代谢，日常消耗只包含非运动生活活动。</Text>
         <View className='metabolic-phys-popup__row'>
           <Text className='metabolic-phys-popup__label'>性别</Text>
           <Text className='metabolic-phys-popup__value'>{formatGenderLabel(user.gender)}</Text>
@@ -609,11 +608,11 @@ function MetabolicPhysiologyPopup({
           <Text className='metabolic-phys-popup__value'>{formatNutritionOneDecimal(physiology.bmrMifflin)} kcal/日</Text>
         </View>
         <View className='metabolic-phys-popup__row'>
-          <Text className='metabolic-phys-popup__label'>TDEE</Text>
+          <Text className='metabolic-phys-popup__label'>日常消耗</Text>
           <Text className='metabolic-phys-popup__value'>{formatNutritionOneDecimal(physiology.tdeeKcal)} kcal/日</Text>
         </View>
         <View className='metabolic-phys-popup__row'>
-          <Text className='metabolic-phys-popup__label'>活动系数 PAL</Text>
+          <Text className='metabolic-phys-popup__label'>日常活动系数</Text>
           <Text className='metabolic-phys-popup__value'>{formatNutritionOneDecimal(physiology.pal)}</Text>
         </View>
         <View className='metabolic-phys-popup__foot'>

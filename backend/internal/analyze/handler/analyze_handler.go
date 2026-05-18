@@ -376,6 +376,7 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		ActivityTiming        string           `json:"activity_timing"`
 		UserGoal              string           `json:"user_goal"`
 		RemainingCalories     *float64         `json:"remaining_calories"`
+		SuggestRatioEnabled   bool             `json:"suggest_ratio_enabled"`
 		IsMultiView           bool             `json:"is_multi_view"`
 		PreviousResult        map[string]any   `json:"previousResult"`
 		CorrectionItems       []map[string]any `json:"correctionItems"`
@@ -405,6 +406,7 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		ActivityTiming:        body.ActivityTiming,
 		UserGoal:              body.UserGoal,
 		RemainingCalories:     body.RemainingCalories,
+		SuggestRatioEnabled:   body.SuggestRatioEnabled,
 		AdditionalContext:     body.AdditionalContext,
 		ExecutionMode:         &mode,
 		PrecisionSessionID:    &sessionID,

@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"food_link/backend/pkg/metrics"
+
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 )
@@ -121,12 +123,15 @@ func (q *KafkaQueue) Subscribe(ctx context.Context, opts SubscribeOptions) (<-ch
 				if ctx.Err() != nil {
 					return
 				}
+				metrics.SetTaskQueueComponentUp("kafka", "consumer", false)
 				q.log.Error("kafka task queue fetch failed", zap.Error(err))
 				time.Sleep(time.Second)
 				continue
 			}
+			metrics.SetTaskQueueComponentUp("kafka", "consumer", true)
 			msg, err := decodeKafkaTaskMessage(kmsg.Value)
 			if err != nil {
+				metrics.ObserveTaskQueueSettlement("kafka", "unknown", "decode_error")
 				q.log.Error("kafka task queue message decode failed",
 					zap.String("topic", kmsg.Topic),
 					zap.Int("partition", kmsg.Partition),
@@ -140,6 +145,7 @@ func (q *KafkaQueue) Subscribe(ctx context.Context, opts SubscribeOptions) (<-ch
 				continue
 			}
 			if len(allowed) > 0 && !allowed[msg.TaskType] {
+				metrics.ObserveTaskQueueSettlement("kafka", msg.TaskType, "skipped")
 				q.log.Warn("kafka task queue message skipped because task type is not subscribed",
 					zap.String("task_id", msg.TaskID),
 					zap.String("task_type", msg.TaskType),
