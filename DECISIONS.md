@@ -10,6 +10,37 @@
 
 # DECISIONS
 
+- `2026-05-18`: 验证责任口径：
+  - 当当前工作/提交作者是 `littlthorsebrother` 时，代理不需要执行自动化、本地运行或 weapp-devtools 验证；代码完成后只需说明“未验证，由用户手动验证”。
+  - 这条优先于项目默认的前端验证要求，避免重复占用时间；若用户在具体任务中明确要求代理验证，再按用户当轮要求执行。
+
+- `2026-05-18`: 食物分析纠错积分口径：
+  - 首次普通食物分析继续消耗 2 积分，首次精准模式继续消耗 4 积分。
+  - 纠错任务按半价扣费：普通模式纠错消耗 1 积分，精准模式纠错消耗 2 积分。
+  - 后端以任务 payload 中确认的 `is_correction=true` 为准切换扣费模式，不依赖前端文案或页面状态。
+  - 纠错任务仍必须写入 `credit_usage` 和 `credit_group_id`，失败、超时或取消时按实际纠错 cost 走幂等退款。
+
+- `2026-05-18`: 首页热量与营养目标模型设计方向：
+  - 不应长期要求用户理解并手选抽象活动系数（如久坐/轻度/中等/活跃/非常活跃）；注册阶段可以用生活方式问题给初始估计，但后续应根据用户在平台记录的近 1-2 周运动行为自动校准。
+  - 模型需区分“基础生活消耗/非运动活动”与“平台记录的显式运动消耗”，避免活动系数已包含运动后又把运动热量 100% 叠加到当天摄入目标。
+  - 首页应逐步从固定 `2000 kcal / 120g 蛋白 / 250g 碳水 / 65g 脂肪` 演进为：注册档案生成基础目标，饮食目标生成热量赤字/盈余，运动记录生成今日建议目标，宏量营养按体重、目标和训练状态动态分配。
+  - 产品表达上应保留“基础目标”和“今日建议目标”的区别，并解释调整原因，例如“今天记录训练，建议额外补充部分碳水用于恢复”，而不是无提示地改变用户目标。
+  - 第一版实现中，用户手动保存的 `health_condition.dashboard_targets` 仍拥有最高优先级；动态目标只在未设置手动目标时生效，避免已有用户目标被突然覆盖。
+  - 第一版今日运动补偿采用温和加回：减脂约 45%、维持约 50%、增肌约 70%，单日补偿上限 600 kcal；该补偿主要进入碳水目标。
+  - 后续需要修正“运动补偿”口径：如果基础目标使用的 TDEE 已经包含运动活动系数，则不能再把当天运动总消耗直接加回。更合理的长期口径是把活动拆成“非运动日常活动系数”和“平台记录运动预算”，或只对“今日运动超过近期平均/预期运动”的增量部分做补偿。
+  - 旧版本曾保存到 `health_condition.dashboard_targets` 的历史目标不得长期阻挡系统动态重算；只有显式带 `dashboard_targets_mode=manual` 的新目标设置才视为用户自定义覆盖。
+  - 首页不展示“手动目标”作为默认解释；系统动态目标展示“今日建议”，真正新保存的覆盖目标展示“自定义目标”。
+  - 已落地口径：注册/健康档案里的 `activity_level` 产品语义改为“日常活动水平”，即不包含专门健身/训练的生活活动强度；前端同时提交 `daily_life_activity_level` 到 `health_condition` 作为稳定语义字段。
+  - 首页动态目标基础热量不再直接使用旧 `TDEE`，而是用 `BMR × 日常活动系数` 估算日常消耗，再按饮食目标调整；显式运动记录只作为运动预算信号。
+  - 今日运动补偿只针对 `今日运动消耗 - 近14天日均运动消耗` 的正增量，并且必须达到“明显超量门槛”才补偿；当前门槛为 `max(120 kcal, 近14天日均运动 × 30%)`，低于门槛不改变今日目标。
+
+- `2026-05-17`: 首页“按剩余目标推荐餐食”采用轻量候选增强口径：
+  - 推荐不再只让模型凭空生成；后端应先检索小候选集，再把候选作为 DeepSeek 上下文。
+  - 当前候选来源优先为 `public_food_library`（真实公共餐食/外食参考）、当前用户 `user_food_records`（个人历史偏好）、`food_nutrition_library`（标准营养库/自己做基础食材）。
+  - 不把全量公共库或全量用户饮食记录直接放进 prompt；全局用户记录后续只能用聚合/热门组合，不直接暴露原始个人记录。
+  - 推荐方案应带 `source/source_id`，前端可展示来源；DeepSeek 不可用时也优先从候选库生成 5 个兜底方案，再退回规则兜底。
+  - “外面吃”优先公共食物库和个人历史外食，“自己做”优先标准营养库和个人历史；后续可继续引入收藏、地区、餐次、重复食物降权等信号。
+
 - `2026-05-18`: 后端数据库结构变更必须模型优先、迁移命令落地：
   - 禁止把手动 SQL 当作最终修复方案；修复性 SQL 不能只停留在终端操作或聊天记录里。
   - 先修改 `backend/internal/migration/do/schema_do.go` 中对应迁移 DO，让数据库表结构由 Go 代码表达；业务层需要读写时，再同步调整 domain/repo/service/DTO/handler，但不把 domain struct 当作迁移 DO。
@@ -59,11 +90,20 @@
   - 补录提示文案应明确这是给历史日期补记食物、体重、喝水和运动记录，避免继续把补录提示解释成“能量过低”告警。
   - 身体趋势页或运动记录页触发 `HOME_DASHBOARD_REFRESH_EVENT` 后，首页必须刷新当前选中日期；历史日期选择留下的 `skipNextRefreshRef` 不能吞掉补录后的返回刷新。
 
-- `2026-05-16`: 小程序线上/体验版后端域名口径：
+- `2026-05-17`: 小程序体验版/正式版后端域名口径修正：
   - `v2.healthymax.cn` 已弃用，小程序生产/预览构建不得再请求该域名。
-  - `dev.healthymax.cn` 是开发后端，业务数据不完整/可能为空，不应用于用户体验版或正式发布包。
-  - `build:weapp:preview`、`build:weapp:debug`、`dev:weapp:online` 统一注入 `TARO_APP_API_BASE_URL=https://healthymax.cn`。
-  - `config/index.ts` 的 production 默认值和 `src/utils/api.ts` 的注入失败兜底也统一为 `https://healthymax.cn`，避免构建脚本漏传环境变量时回退到旧域名或开发空库。
+  - 体验版/真机预览包应请求 `https://dev.healthymax.cn`，不能请求正式线上域名。
+  - 正式发布包才请求 `https://healthymax.cn`。
+  - `build:weapp` 与 `build:weapp:preview` 统一注入 `TARO_APP_API_BASE_URL=https://dev.healthymax.cn`，用于体验版上传。
+  - `build:weapp:release` 显式注入 `TARO_APP_API_BASE_URL=https://healthymax.cn`，用于正式版发布。
+  - `config/index.ts` 的 production 默认值和 `src/utils/api.ts` 的注入失败兜底统一为 `https://dev.healthymax.cn`，避免普通 build 上传体验版时误连正式线上数据。
+
+- `2026-05-17`: 食物结果页 AI 摄入比例建议口径：
+  - AI 摄入比例不是展示文案，而是直接写入每个 item 的 `suggestedRatio`，前端用它初始化结果页现有 `ratio/intake` 滑块。
+  - 比例建议必须在 db_first 营养库回算之后执行，基于最终营养数据、餐次、用户目标、运动时机、剩余热量和补充上下文生成，不能只依赖第一轮视觉识别的粗营养。
+  - 开关字段为 `suggest_ratio_enabled`；前端偏好保存在 `analyzeSuggestRatioEnabled`，默认开启。关闭、无模型客户端、模型失败、超时或返回非法比例时，所有 item 必须回退 `suggestedRatio=100`。
+  - 后端需要返回 `suggest_ratio_status` 便于排查，且二阶段建议失败不得导致整个食物识别任务失败。
+  - 结果页可显示轻量“AI建议”标记，但用户手动拖动滑块后应转为 manual，不再暗示当前比例仍由 AI 决定。
 
 - `2026-05-16`: 食物分析等待页互动卡口径：
   - 等待页的 `WAITING_INTERACTION_CARDS` 应保持大题库，不再只放少量固定题。
@@ -969,7 +1009,7 @@
 - `2026-04-21`: `food_link` 对外商业计划书与品牌沟通中，统一使用 `食探（智健食探）` 表达；其中 `食探` 作为品牌简称，`智健食探` 作为小程序正式名称建议。商业计划书风格采用“精简、抓核心痛点、弱化尚未正式付费验证”的对外口径，不把早期自愿付费样本作为核心卖点。
 - `2026-04-21`: `食探（智健食探）` 会员订阅草案采用三档订阅 + 每日积分清零：轻度版 `9.9/月、27.9/季、99/年`，每天 `8` 积分；标准版 `19.9/月、56.9/季、199/年`，每天 `20` 积分；进阶版 `29.9/月、84.9/季、299/年`，每天 `40` 积分。新用户免费体验 `3` 天，每天 `8` 积分。积分当天有效、不累计。运动记录 `1` 积分/次，基础记录/基础分析 `2` 积分/次。超额后等待次日恢复、升级更高会员或邀请好友获取额外积分。邀请双方在被邀请人完成 1 次有效使用后，连续 3 天每天 `+5` 积分，每月设置上限防刷。分享海报奖励 `1` 积分，建议每日上限 1 次。订阅支持自动续费，月卡/季卡/年卡同时提供，页面展示“立省 xx 元”。
 
-- `2026-04-10`: `food_link` 真机调试不得继续使用 `dev:weapp` 默认注入的 `http://127.0.0.1:3010`。在真机上，`127.0.0.1` 永远指向手机自身；若要联本地后端，必须改成开发电脑的局域网 IP，或直接使用 `build:weapp:preview / dev:weapp:online` 走 `https://healthymax.cn`。
+- `2026-04-10`: `food_link` 真机调试不得继续使用 `dev:weapp` 默认注入的 `http://127.0.0.1:3010`。在真机上，`127.0.0.1` 永远指向手机自身；若要联本地后端，必须改成开发电脑的局域网 IP；若要联体验版后端，使用 `build:weapp:preview / dev:weapp:preview` 走 `https://dev.healthymax.cn`；若要联正式线上后端，使用 `build:weapp:release / dev:weapp:online` 走 `https://healthymax.cn`。
 - `2026-04-10`: 小程序端应避免直接在页面 JSX 中渲染原生 `<svg>` 作为常规图标方案。当前 `tmpl_0_svg not found` 已定位到多处直接 `<svg>` 写法；后续图标实现优先使用 iconfont、图片资源或其它 weapp 兼容方案。
 - `2026-04-10`: 互动消息点击动态的定位链路不能再依赖社区页当前 Feed 的筛选、缓存列表或分页 offset。正式口径改为：通知跳转优先按 `record_id` 直取单条动态上下文，再在社区页插入并滚动到目标动态；评论/回复类通知再按 `comment_id / parent_comment_id` 补拉完整评论区并打开输入框。
 
@@ -1094,10 +1134,10 @@
 - `2026-03-29`: 食物识别模型返回值不能再默认信任为顶层 `dict`；图片/文字识别解析前必须先做响应归一化。若模型偶发直接返回食物数组，则先包成 `{"items": [...]}`；若结构仍异常，返回用户可读错误，不能把 Python 原始 `.get` 异常直接暴露到前端。
 
 - `2026-03-29`: `food_link` 微信小程序在开发者工具中显示时，默认直接运行 `project.config.json` 指向的 `dist/` 构建产物；`dev:weapp` 只是 Taro 的 watch 编译，不是必须常驻的前端 dev server。
-- `2026-03-29`: 前端未显式配置开发环境地址时，`src/utils/api.ts` 默认把 `API_BASE_URL` 指向 `https://healthymax.cn`；因此只要本地还保留 `access_token`，小程序就会直接请求线上后端，而不是依赖本地 Python 服务。
-- `2026-03-29`: 本地联调默认应走"开发编译 + 本地后端"链路；前端在 development 下若未显式配置 `TARO_APP_API_BASE_URL`，默认回退到 `http://127.0.0.1:3010`，production 继续使用 `https://healthymax.cn`。
+- `2026-03-29`: 前端未显式配置生产构建地址时，`src/utils/api.ts` 当前兜底指向 `https://dev.healthymax.cn`，用于避免普通 build 上传体验版时误连正式线上。
+- `2026-03-29`: 本地联调默认应走"开发编译 + 本地后端"链路；前端在 development 下若未显式配置 `TARO_APP_API_BASE_URL`，默认回退到 `http://127.0.0.1:3010`，production 默认用于体验版并回退到 `https://dev.healthymax.cn`。
 - `2026-03-29`: `backend/run_backend.py` 与本地开发文档统一使用 `3010` 作为默认端口，避免再出现 `3010 / 8000 / 8888` 多套口径并存。
-- `2026-03-29`: `npm run build:weapp` 生成的是生产 `dist`，当前会指向 `https://healthymax.cn`；`npm run dev:weapp` 才是开发 watch 构建，首轮编译后 `dist/common.js` 会注入 `http://127.0.0.1:3010`。
+- `2026-03-29`: `npm run build:weapp` 生成的是体验版上传用 `dist`，当前会指向 `https://dev.healthymax.cn`；`npm run build:weapp:release` 才生成正式线上域名 `https://healthymax.cn` 的发布包；`npm run dev:weapp` 是本地开发 watch 构建，会注入 `http://127.0.0.1:3010`。
 - `2026-03-29`: 微信开发者工具当前项目私有配置里 `useStaticServer=false`、`useLanDebug=false`，不存在"开发者工具替你起本地服务"的机制；工具之所以能打开页面，是因为它直接读取现成的 `dist/` 产物。
 - `2026-03-29`: `compileHotReLoad=true` 只会在 `dist/` 已经变化时帮助热刷新，不会代替 `npm run dev:weapp` 做源码编译。
 
@@ -1315,6 +1355,11 @@
 
 - `2026-05-17`: 运动记录不得静默回退本地规则估算。无论文字输入还是文字+图片/纯图片，Doubao 运动分析失败、未配置、返回非 2xx、JSON 不可解析时，都应让任务失败并走既有失败/退款链路，不能保存“图片识别运动/一般运动/约 59 kcal”这类假成功结果。运动 Doubao 请求暂不使用 `response_format=json_object`，避免火山 Ark 当前模型组合返回 400；继续通过 prompt 要求 JSON 并在后端解析校验。
 - `2026-05-17`: 训练打卡截图识别 prompt 必须要求 OCR 多动作、重量、次数、组数、总耗时和截图消耗；`exercise_type` 应概括主要训练内容，不允许泛化成“一般运动”。
+
+- `2026-05-17`: 食物分析重量与营养库口径统一为可食部净重：
+  - `estimatedWeightGrams` 是后端营养计算使用的重量，不是整只/整份毛重。
+  - 带壳、带骨、带核食物必须按去壳/去骨/去核后的可食重量估算；虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核等不可食部分不计入重量，也不作为单独食物输出。
+  - 普通图片、文字解析、精准模式 planner、精准分项估重和重量复核 prompt 都应保留该规则；后续新增识别链路也要继承这个口径。
 
 - `2026-05-18`: 后端可观测指标统一走 OpenTelemetry Metrics：Go 服务通过 OTLP gRPC 推送到 OTel Collector，由 Collector 的 Prometheus exporter 暴露 `/metrics` 给 Prometheus scrape；业务服务自身不再暴露 Prometheus `/metrics`。
   - `otel.enabled=true` 默认同时启用 trace 和 metrics；可用 `otel.traces_enabled` / `otel.metrics_enabled` 分别关闭。`app.env` 固定表示运行模式，只使用 `development`/`production`；服务器上的 dev/main 都应使用 `production`。Grafana dev/main 切换不再使用单独 environment 字段，改用 `app.name` 映射出的 `service_name`，建议为 `food_link-backend-dev` / `food_link-backend-main`。

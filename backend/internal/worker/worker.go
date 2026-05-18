@@ -1989,6 +1989,7 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 要求：
 - 如果有多个主体食物，请拆成 itemsToEstimate，后续并行估计。
 - 食物种类识别优先于重量估计。每个主体先列出 2-3 个最可能的候选食物，再根据视觉证据选择 item_name。
+- 重量口径必须与营养数据库一致：后续 estimatedWeightGrams 只计算可食部净重。遇到带壳、带骨、带核食物时，itemsToEstimate 仍列食物本身，但 visual_evidence/item_hint 需要提示后续按去壳/去骨/去核后的可食重量估算，不把壳、骨头、果核计入重量。
 - 候选筛选必须看具体视觉证据：切法、形状、边缘/皮、是否有馅、颜色、纹理、菜梗/叶片比例、包裹方式、烹饪方式和所在区域；不要只按常见菜名猜。
 - 对容易混淆的食物必须显式区分：莴苣/莴笋片 vs 青菜/小白菜，百叶包/千张包/豆皮包 vs 蒸饺/馄饨，鱼块 vs 鸡块，豆干 vs 肉块。
 - 如果最可能名称不确定，item_name 填最可能的那个，candidate_names 保留 2-3 个候选，alternative_name 填次可能名称，visual_evidence 写选择依据。
@@ -2084,6 +2085,7 @@ func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawI
 - 参考物和尺寸如果可用，请务必用于精确估重。
 - 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示，不能当精确比例尺。
 - 估重时必须同时考虑：可见面积、堆叠高度/厚度、容器占比、与餐具/手掌/碗盘的相对大小。
+- estimatedWeightGrams 必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量估算，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
 - 主食和混合菜（米饭、面条、炒饭、盖饭、粥、带酱汁菜）不要套用保守默认值，必须根据容器填充深度和实际视觉占比修正。
 %s
 - 对以下容易估计错误的食物要特别仔细：混合菜（如炒饭、炒面）、带酱汁的食物、油炸食物、无固定形状的食物（如粥、汤）。
@@ -2148,6 +2150,7 @@ func buildPrecisionItemEstimatePromptMulti(sourceType string, items []map[string
 - 参考物和尺寸如果可用，请务必用于精确估重。
 - 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示，不能当精确比例尺。
 - 每个食物都必须根据自身可见面积、厚度/高度、容器占比、与餐具/碗盘/手掌的相对大小估重。
+- estimatedWeightGrams 必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量估算，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
 - 主食和混合菜（米饭、面条、炒饭、盖饭、粥、带酱汁菜）不要套用保守默认值，必须根据容器填充深度和实际视觉占比修正。
 %s
 - 对标记为【注意】的难估食物要特别仔细。
@@ -2235,6 +2238,7 @@ func buildPrecisionWeightRefinePrompt(items []map[string]any, rawInput, addition
 - 只复核重量，不要补充营养。
 - 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示。
 - 必须根据可见面积、容器填充深度、堆积高度/厚度、与餐具/碗盘/手掌的相对大小重新审视重量。
+- estimatedWeightGrams 必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量复核，不把虾壳、蟹壳、贝壳、花生壳、瓜子壳、骨头、果核计入重量。
 - 主食和混合菜（米饭、面条、炒饭、盖饭、粥、带酱汁菜）绝不能套用保守默认值。
 %s
 - 如果当前估计明显与视觉占比不符，必须修正；如果没有足够依据修正，可以保留原值，但要在 uncertaintyNotes 里写明原因。
@@ -3417,21 +3421,22 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 func analyzeInputFromTask(task *domain.AnalysisTask) analyzeservice.AnalyzeInput {
 	payload := task.Payload
 	input := analyzeservice.AnalyzeInput{
-		ImageURLs:         task.ImagePaths,
-		Text:              "",
-		AdditionalContext: stringFromMap(payload, "additionalContext"),
-		MealType:          stringFromMap(payload, "meal_type"),
-		Province:          stringFromMap(payload, "province"),
-		City:              stringFromMap(payload, "city"),
-		District:          stringFromMap(payload, "district"),
-		UserGoal:          stringFromMap(payload, "user_goal"),
-		DietGoal:          stringFromMap(payload, "diet_goal"),
-		ActivityTiming:    stringFromMap(payload, "activity_timing"),
-		ModelName:         stringFromMap(payload, "modelName"),
-		AnalysisEngine:    stringFromMap(payload, "analysis_engine"),
-		IsMultiView:       boolFromAny(payload["is_multi_view"]),
-		PreviousResult:    mapFromAny(payload["previousResult"]),
-		CorrectionItems:   extractItems(payload["correctionItems"]),
+		ImageURLs:           task.ImagePaths,
+		Text:                "",
+		AdditionalContext:   stringFromMap(payload, "additionalContext"),
+		MealType:            stringFromMap(payload, "meal_type"),
+		Province:            stringFromMap(payload, "province"),
+		City:                stringFromMap(payload, "city"),
+		District:            stringFromMap(payload, "district"),
+		UserGoal:            stringFromMap(payload, "user_goal"),
+		DietGoal:            stringFromMap(payload, "diet_goal"),
+		ActivityTiming:      stringFromMap(payload, "activity_timing"),
+		SuggestRatioEnabled: boolFromAny(payload["suggest_ratio_enabled"]),
+		ModelName:           stringFromMap(payload, "modelName"),
+		AnalysisEngine:      stringFromMap(payload, "analysis_engine"),
+		IsMultiView:         boolFromAny(payload["is_multi_view"]),
+		PreviousResult:      mapFromAny(payload["previousResult"]),
+		CorrectionItems:     extractItems(payload["correctionItems"]),
 	}
 	if task.ImageURL != nil {
 		input.ImageURL = *task.ImageURL

@@ -279,6 +279,21 @@ func TestPrecisionStaplePrompts_ForceContainerDepthAndThinLayer(t *testing.T) {
 	}
 }
 
+func TestPrecisionPrompts_ForceEdibleNetWeight(t *testing.T) {
+	plan := buildPrecisionPlanPrompt("image", "图片输入", "", nil, nil)
+	single := buildPrecisionItemEstimatePromptSingle("image", "带壳虾", "", "图片输入", "", nil)
+	multi := buildPrecisionItemEstimatePromptMulti("image", []map[string]any{{"item_name": "花生"}}, "图片输入", "", nil)
+	refine := buildPrecisionWeightRefinePrompt([]map[string]any{{"name": "螃蟹", "estimatedWeightGrams": 300}}, "图片输入", "", nil)
+
+	for label, prompt := range map[string]string{"plan": plan, "single": single, "multi": multi, "refine": refine} {
+		for _, expected := range []string{"可食部净重", "带壳", "去壳/去骨/去核", "果核"} {
+			if !strings.Contains(prompt, expected) {
+				t.Fatalf("%s prompt missing edible-weight rule %q:\n%s", label, expected, prompt)
+			}
+		}
+	}
+}
+
 func TestPrecisionPrompts_ForceFoodTypeCandidates(t *testing.T) {
 	plan := buildPrecisionPlanPrompt("image", "图片输入", "", nil, nil)
 	for _, expected := range []string{"候选食物", "莴苣", "百叶包", "蒸饺", "visual_evidence", "alternative_name"} {

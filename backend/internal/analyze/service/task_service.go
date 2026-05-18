@@ -72,6 +72,7 @@ type SubmitTaskInput struct {
 	ActivityTiming         string           `json:"activity_timing"`
 	UserGoal               string           `json:"user_goal"`
 	RemainingCalories      *float64         `json:"remaining_calories"`
+	SuggestRatioEnabled    bool             `json:"suggest_ratio_enabled"`
 	AdditionalContext      string           `json:"additionalContext"`
 	ModelName              string           `json:"modelName"`
 	ExecutionMode          *string          `json:"execution_mode"`
@@ -111,19 +112,20 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	}
 
 	payload := map[string]any{
-		"meal_type":          input.MealType,
-		"province":           input.Province,
-		"city":               input.City,
-		"district":           input.District,
-		"diet_goal":          input.DietGoal,
-		"activity_timing":    input.ActivityTiming,
-		"user_goal":          input.UserGoal,
-		"remaining_calories": input.RemainingCalories,
-		"additionalContext":  input.AdditionalContext,
-		"modelName":          input.ModelName,
-		"execution_mode":     mode,
-		"analysis_engine":    input.AnalysisEngine,
-		"recorded_on":        recordedOn,
+		"meal_type":             input.MealType,
+		"province":              input.Province,
+		"city":                  input.City,
+		"district":              input.District,
+		"diet_goal":             input.DietGoal,
+		"activity_timing":       input.ActivityTiming,
+		"user_goal":             input.UserGoal,
+		"remaining_calories":    input.RemainingCalories,
+		"suggest_ratio_enabled": input.SuggestRatioEnabled,
+		"additionalContext":     input.AdditionalContext,
+		"modelName":             input.ModelName,
+		"execution_mode":        mode,
+		"analysis_engine":       input.AnalysisEngine,
+		"recorded_on":           recordedOn,
 	}
 	applySubmitCompatibilityPayload(payload, input)
 	s.attachCorrectionChain(ctx, userID, input, payload)
@@ -131,6 +133,9 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	creditMode := mode
 	if input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
+	}
+	if boolFromAny(payload["is_correction"]) {
+		creditMode = correctionCreditMode(creditMode)
 	}
 	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
 	if err != nil {
@@ -199,19 +204,20 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	}
 
 	payload := map[string]any{
-		"meal_type":          input.MealType,
-		"province":           input.Province,
-		"city":               input.City,
-		"district":           input.District,
-		"diet_goal":          input.DietGoal,
-		"activity_timing":    input.ActivityTiming,
-		"user_goal":          input.UserGoal,
-		"remaining_calories": input.RemainingCalories,
-		"additionalContext":  input.AdditionalContext,
-		"modelName":          input.ModelName,
-		"execution_mode":     mode,
-		"analysis_engine":    input.AnalysisEngine,
-		"recorded_on":        recordedOn,
+		"meal_type":             input.MealType,
+		"province":              input.Province,
+		"city":                  input.City,
+		"district":              input.District,
+		"diet_goal":             input.DietGoal,
+		"activity_timing":       input.ActivityTiming,
+		"user_goal":             input.UserGoal,
+		"remaining_calories":    input.RemainingCalories,
+		"suggest_ratio_enabled": input.SuggestRatioEnabled,
+		"additionalContext":     input.AdditionalContext,
+		"modelName":             input.ModelName,
+		"execution_mode":        mode,
+		"analysis_engine":       input.AnalysisEngine,
+		"recorded_on":           recordedOn,
 	}
 	applySubmitCompatibilityPayload(payload, input)
 	s.attachCorrectionChain(ctx, userID, input, payload)
@@ -219,6 +225,9 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	creditMode := mode
 	if input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
+	}
+	if boolFromAny(payload["is_correction"]) {
+		creditMode = correctionCreditMode(creditMode)
 	}
 	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
 	if err != nil {
@@ -394,6 +403,13 @@ func creditGroupIDFromTask(task *domain.AnalysisTask) string {
 
 func creditUnitsForInput(input SubmitTaskInput) int {
 	return 1
+}
+
+func correctionCreditMode(mode string) string {
+	if mode == validExecutionMode {
+		return "strict_correction"
+	}
+	return "standard_correction"
 }
 
 func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInput) {

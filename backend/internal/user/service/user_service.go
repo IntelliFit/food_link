@@ -119,6 +119,7 @@ func (s *UserService) UpdateDashboardTargets(ctx context.Context, userID string,
 		"carbs_target":   math.Round(input.CarbsTarget*10) / 10,
 		"fat_target":     math.Round(input.FatTarget*10) / 10,
 	}
+	healthCondition["dashboard_targets_mode"] = "manual"
 	updated, err := s.users.UpdateFields(ctx, userID, map[string]any{"health_condition": healthCondition})
 	if err != nil {
 		return nil, err
@@ -143,6 +144,7 @@ type UpdateHealthProfileInput struct {
 	Height                     *float64                     `json:"height"`
 	Weight                     *float64                     `json:"weight"`
 	ActivityLevel              *string                      `json:"activity_level"`
+	DailyLifeActivityLevel     *string                      `json:"daily_life_activity_level"`
 	DietGoal                   *string                      `json:"diet_goal"`
 	ExecutionMode              *string                      `json:"execution_mode"`
 	ModeSetBy                  *string                      `json:"mode_set_by"`
@@ -201,7 +203,7 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 		updates["weight"] = *input.Weight
 	}
 	if input.ActivityLevel != nil {
-		updates["activity_level"] = *input.ActivityLevel
+		updates["activity_level"] = NormalizeDailyLifeActivityLevel(*input.ActivityLevel)
 	}
 	if input.DietGoal != nil {
 		updates["diet_goal"] = *input.DietGoal
@@ -262,6 +264,13 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 	if input.RoutineType != nil {
 		healthCondition["routine_type"] = strings.TrimSpace(*input.RoutineType)
 	}
+	if input.DailyLifeActivityLevel != nil {
+		normalized := NormalizeDailyLifeActivityLevel(*input.DailyLifeActivityLevel)
+		healthCondition["daily_life_activity_level"] = normalized
+		updates["activity_level"] = normalized
+	} else if input.ActivityLevel != nil {
+		healthCondition["daily_life_activity_level"] = NormalizeDailyLifeActivityLevel(*input.ActivityLevel)
+	}
 	if input.DashboardTargets != nil {
 		dt := input.DashboardTargets
 		healthCondition["dashboard_targets"] = map[string]float64{
@@ -308,11 +317,11 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 	if weight == nil {
 		weight = user.Weight
 	}
-	activityLevel := "sedentary"
-	if input.ActivityLevel != nil {
-		activityLevel = *input.ActivityLevel
-	} else if user.ActivityLevel != nil {
-		activityLevel = *user.ActivityLevel
+	activityLevel := resolveDailyLifeActivityLevel(user, healthCondition)
+	if input.DailyLifeActivityLevel != nil {
+		activityLevel = NormalizeDailyLifeActivityLevel(*input.DailyLifeActivityLevel)
+	} else if input.ActivityLevel != nil {
+		activityLevel = NormalizeDailyLifeActivityLevel(*input.ActivityLevel)
 	}
 
 	if gender != nil && weight != nil {
@@ -456,6 +465,18 @@ func buildHealthProfileResponse(user *repo.User) map[string]any {
 		"mode_commitment_days":  user.ModeCommitmentDays,
 		"mode_switch_count_30d": user.ModeSwitchCount30d,
 	}
+}
+
+func resolveDailyLifeActivityLevel(user *repo.User, healthCondition map[string]any) string {
+	if healthCondition != nil {
+		if value, ok := healthCondition["daily_life_activity_level"].(string); ok && strings.TrimSpace(value) != "" {
+			return NormalizeDailyLifeActivityLevel(value)
+		}
+	}
+	if user != nil && user.ActivityLevel != nil {
+		return NormalizeDailyLifeActivityLevel(*user.ActivityLevel)
+	}
+	return "sedentary"
 }
 
 func buildDashboardTargets(user *repo.User) map[string]float64 {

@@ -31,8 +31,11 @@ import (
 const (
 	creditCostStandardFoodAnalysis  = 2
 	creditCostPrecisionFoodAnalysis = 4
+	creditCostStandardCorrection    = 1
+	creditCostPrecisionCorrection   = 2
 	creditCostExerciseLog           = 1
 	creditCostDietRecommendation    = 1
+	creditCostStatsInsight          = 1
 	trialDailyCredits               = 8
 	earlyUserTop500Limit            = 500
 	earlyUserTrialLimit             = 1000
@@ -880,6 +883,12 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 	if mode == "strict" {
 		cost = creditCostPrecisionFoodAnalysis
 		analysisLabel = "精准分析"
+	} else if mode == "standard_correction" {
+		cost = creditCostStandardCorrection
+		analysisLabel = "食物纠错"
+	} else if mode == "strict_correction" {
+		cost = creditCostPrecisionCorrection
+		analysisLabel = "精准纠错"
 	}
 	cost *= normalizeCreditUnits(units...)
 	membership, err := s.getEffectiveMembership(ctx, userID)
@@ -890,7 +899,7 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 	if err != nil {
 		return nil, err
 	}
-	if mode == "strict" && !canUsePrecisionMode(membership) {
+	if (mode == "strict" || mode == "strict_correction") && !canUsePrecisionMode(membership) {
 		return nil, &commonerrors.AppError{Code: 10005, Message: "精准模式仅对标准版和进阶版开放，请升级或开通后再试。", HTTPStatus: 402}
 	}
 	return s.validateCredits(ctx, userID, cost, analysisLabel, recordedOn, membership, user)
@@ -925,6 +934,18 @@ func (s *MembershipService) ValidateDietRecommendationCredits(ctx context.Contex
 		return nil, err
 	}
 	return s.validateCredits(ctx, userID, creditCostDietRecommendation, "推荐吃什么", "", membership, user)
+}
+
+func (s *MembershipService) ValidateStatsInsightCredits(ctx context.Context, userID string) (map[string]any, error) {
+	membership, err := s.getEffectiveMembership(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.repo.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return s.validateCredits(ctx, userID, creditCostStatsInsight, "AI 风险解读", "", membership, user)
 }
 
 func (s *MembershipService) validateCredits(ctx context.Context, userID string, cost int, label, recordedOn string, membership *domain.UserMembership, user *membershiprepo.User) (map[string]any, error) {
@@ -1825,6 +1846,10 @@ func normalizeFoodExecutionMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "strict", "precision":
 		return "strict"
+	case "standard_correction", "correction":
+		return "standard_correction"
+	case "strict_correction", "precision_correction":
+		return "strict_correction"
 	default:
 		return "standard"
 	}

@@ -48,7 +48,8 @@ type ExpiryItem struct {
 func (ExpiryItem) TableName() string { return "food_expiry_items" }
 
 type ExerciseLog struct {
-	CaloriesBurned int `gorm:"column:calories_burned"`
+	CaloriesBurned int        `gorm:"column:calories_burned"`
+	RecordedOn     *time.Time `gorm:"column:recorded_on"`
 }
 
 func (ExerciseLog) TableName() string { return "user_exercise_logs" }
@@ -101,6 +102,26 @@ func (r *HomeRepo) GetExerciseBurned(ctx context.Context, userID, date string) (
 		total += row.CaloriesBurned
 	}
 	return total, nil
+}
+
+func (r *HomeRepo) ListExerciseBurnedByDateRange(ctx context.Context, userID, startDate, endDate string) (map[string]int, error) {
+	var rows []ExerciseLog
+	if err := r.db.WithContext(ctx).
+		Table("user_exercise_logs").
+		Select("calories_burned, recorded_on").
+		Where("user_id = ? AND recorded_on >= ? AND recorded_on <= ?", userID, startDate, endDate).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := map[string]int{}
+	for _, row := range rows {
+		if row.RecordedOn == nil {
+			continue
+		}
+		date := row.RecordedOn.In(ChinaTZ()).Format("2006-01-02")
+		out[date] += row.CaloriesBurned
+	}
+	return out, nil
 }
 
 func (r *HomeRepo) ListRecordComments(ctx context.Context, recordID string) ([]FeedComment, error) {

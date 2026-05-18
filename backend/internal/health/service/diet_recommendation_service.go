@@ -9,7 +9,10 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
+
+	"food_link/backend/internal/health/domain"
 )
 
 type DietRecommendationInput struct {
@@ -23,6 +26,8 @@ type DietRecommendationInput struct {
 	UserGoal          string                   `json:"user_goal"`
 	PreferenceContext string                   `json:"preference_context"`
 }
+
+type DietRecommendationCandidate = domain.DietRecommendationCandidate
 
 type DietRecommendationMacro struct {
 	Calories float64 `json:"calories"`
@@ -54,6 +59,8 @@ type DietRecommendationResult struct {
 type DietRecommendationOption struct {
 	Title        string                       `json:"title"`
 	Reason       string                       `json:"reason"`
+	Source       string                       `json:"source,omitempty"`
+	SourceID     string                       `json:"source_id,omitempty"`
 	Calories     float64                      `json:"calories"`
 	Protein      float64                      `json:"protein"`
 	Carbs        float64                      `json:"carbs"`
@@ -63,10 +70,7 @@ type DietRecommendationOption struct {
 	Alternatives []string                     `json:"alternatives"`
 }
 
-type DietRecommendationFoodItem struct {
-	Name   string `json:"name"`
-	Amount string `json:"amount"`
-}
+type DietRecommendationFoodItem = domain.DietRecommendationFoodItem
 
 var dietRecommendationFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")
 
@@ -82,7 +86,7 @@ func (s *StatsService) GenerateDietRecommendation(ctx context.Context, userID st
 		}
 	}
 
-	result, err := s.generateDietRecommendationCore(ctx, input)
+	result, err := s.generateDietRecommendationCore(ctx, userID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -97,20 +101,21 @@ func (s *StatsService) GenerateDietRecommendation(ctx context.Context, userID st
 	return result, nil
 }
 
-func (s *StatsService) generateDietRecommendationCore(ctx context.Context, input DietRecommendationInput) (*DietRecommendationResult, error) {
+func (s *StatsService) generateDietRecommendationCore(ctx context.Context, userID string, input DietRecommendationInput) (*DietRecommendationResult, error) {
 	input = normalizeDietRecommendationInput(input)
 	apiKey := ""
 	if s.cfg != nil {
 		apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
 	}
+	candidates := s.fetchDietRecommendationCandidates(ctx, userID, input)
 	if apiKey == "" {
-		return fallbackDietRecommendation(input, "rule_fallback"), nil
+		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 
 	body := map[string]any{
 		"model": statsInsightDeepSeekModel,
 		"messages": []map[string]string{
-			{"role": "user", "content": buildDietRecommendationPrompt(input)},
+			{"role": "user", "content": buildDietRecommendationPrompt(input, candidates)},
 		},
 		"temperature": 0.5,
 		"max_tokens":  1600,
@@ -125,12 +130,12 @@ func (s *StatsService) generateDietRecommendationCore(ctx context.Context, input
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return fallbackDietRecommendation(input, "rule_fallback"), nil
+		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fallbackDietRecommendation(input, "rule_fallback"), nil
+		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 	var parsed struct {
 		Choices []struct {
@@ -140,16 +145,16 @@ func (s *StatsService) generateDietRecommendationCore(ctx context.Context, input
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(respBody, &parsed); err != nil || len(parsed.Choices) == 0 {
-		return fallbackDietRecommendation(input, "rule_fallback"), nil
+		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 	content := strings.TrimSpace(dietRecommendationFenceRe.ReplaceAllString(parsed.Choices[0].Message.Content, ""))
 	var result DietRecommendationResult
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		return fallbackDietRecommendation(input, "rule_fallback"), nil
+		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
-	result = normalizeDietRecommendationResult(input, result, "deepseek-v4-flash")
+	result = normalizeDietRecommendationResult(input, result, "deepseek-v4-flash", candidates)
 	if len(result.Recommendations) == 0 {
-		return fallbackDietRecommendation(input, "rule_fallback"), nil
+		return fallbackDietRecommendation(input, "rule_fallback", candidates), nil
 	}
 
 	return &result, nil
@@ -180,7 +185,7 @@ func normalizeDietRecommendationInput(input DietRecommendationInput) DietRecomme
 	return input
 }
 
-func buildDietRecommendationPrompt(input DietRecommendationInput) string {
+func buildDietRecommendationPrompt(input DietRecommendationInput, candidates []DietRecommendationCandidate) string {
 	sceneLabel := "外面吃"
 	sceneConstraint := "优先给便利店、快餐、面馆、轻食店、食堂都容易执行的点餐组合；说明少油少酱、半份主食、加蛋白等点餐要点。"
 	if input.Scene == "cook_home" {
@@ -188,6 +193,7 @@ func buildDietRecommendationPrompt(input DietRecommendationInput) string {
 		sceneConstraint = "优先给常见食材和克重组合；每个方案必须有蛋白质食材、可选主食、蔬菜或低热量配菜。"
 	}
 	mealsJSON, _ := json.Marshal(input.Meals)
+	candidatesJSON, _ := json.Marshal(limitDietRecommendationCandidates(candidates, 24))
 	return fmt.Sprintf(`你是食探小程序里的智能饮食推荐助手。用户想知道“今天剩余热量还能吃什么”。
 
 请基于以下上下文给出 %s 场景的饮食建议：
@@ -198,6 +204,7 @@ func buildDietRecommendationPrompt(input DietRecommendationInput) string {
 - 用户目标：%s
 - 偏好补充：%s
 - 今日已吃餐次摘要 JSON：%s
+- 可用候选 JSON：%s
 
 推荐原则：
 1. 目标是“更接近今日热量和三大营养素目标”，不是医学诊断或治疗建议。
@@ -206,6 +213,8 @@ func buildDietRecommendationPrompt(input DietRecommendationInput) string {
 4. 如果蛋白质缺口明显，优先安排高蛋白低脂来源。
 5. 如果剩余热量低于 120 kcal，给轻量加餐或建议不必硬吃。
 6. 每个方案必须给具体食物和份量，不要只写“吃点蛋白质”。
+7. 优先使用“可用候选 JSON”里的真实候选；如果用了候选，必须把候选的 source 和 source_id 原样写入方案。
+8. 如果需要微调份量，可以调整 amount 和营养数值，但不要凭空发明没有来源的主食物；确实补充少量配菜时，也要说明为补充建议。
 
 只输出 JSON，不要 markdown，不要解释。格式必须是：
 {
@@ -218,17 +227,19 @@ func buildDietRecommendationPrompt(input DietRecommendationInput) string {
     {
       "title": "方案名",
       "reason": "为什么适合当前缺口",
+      "source": "public_food_library / user_food_records / food_nutrition_library / mixed",
+      "source_id": "候选 ID，如有",
       "calories": 0,
       "protein": 0,
       "carbs": 0,
       "fat": 0,
-      "items": [{"name":"食物名","amount":"具体重量或份量"}],
+      "items": [{"name":"食物名","amount":"具体重量或份量","source":"来源","source_id":"来源 ID"}],
       "tips": ["执行提示"],
       "alternatives": ["替换选择"]
     }
   ]
 }
-recommendations 给 3 个。所有数字用阿拉伯数字。`,
+recommendations 给 5 个。所有数字用阿拉伯数字。`,
 		sceneLabel,
 		input.Date,
 		input.Current.Calories,
@@ -246,12 +257,16 @@ recommendations 给 3 个。所有数字用阿拉伯数字。`,
 		defaultIfEmpty(input.UserGoal, "未设置"),
 		defaultIfEmpty(input.PreferenceContext, "无"),
 		string(mealsJSON),
+		string(candidatesJSON),
 		sceneConstraint,
 		input.Scene,
 	)
 }
 
-func fallbackDietRecommendation(input DietRecommendationInput, generatedBy string) *DietRecommendationResult {
+func fallbackDietRecommendation(input DietRecommendationInput, generatedBy string, candidates []DietRecommendationCandidate) *DietRecommendationResult {
+	if len(candidates) > 0 {
+		return fallbackDietRecommendationFromCandidates(input, generatedBy, candidates)
+	}
 	title := "按今日缺口补一餐"
 	summary := "优先补蛋白，热量控制在剩余额度附近。"
 	options := []DietRecommendationOption{}
@@ -261,7 +276,8 @@ func fallbackDietRecommendation(input DietRecommendationInput, generatedBy strin
 			Title:    "轻量收尾",
 			Reason:   "剩余热量较少，避免为了补齐目标而超额。",
 			Calories: 80, Protein: 6, Carbs: 8, Fat: 2,
-			Items:        []DietRecommendationFoodItem{{Name: "无糖酸奶", Amount: "100g"}},
+			Source:       "rule_fallback",
+			Items:        []DietRecommendationFoodItem{{Name: "无糖酸奶", Amount: "100g", Source: "rule_fallback"}},
 			Tips:         []string{"如果不饿，可以跳过加餐。"},
 			Alternatives: []string{"水煮蛋 1 个", "无糖豆浆 200ml"},
 		})
@@ -271,7 +287,8 @@ func fallbackDietRecommendation(input DietRecommendationInput, generatedBy strin
 				Title:    "鸡胸肉蔬菜饭",
 				Reason:   "蛋白质足，主食份量可控，适合补齐大多数热量缺口。",
 				Calories: clampDietCalories(input.CalorieRemaining, 360), Protein: 35, Carbs: 42, Fat: 6,
-				Items:        []DietRecommendationFoodItem{{Name: "鸡胸肉", Amount: "120g"}, {Name: "米饭", Amount: "100g"}, {Name: "西兰花", Amount: "200g"}},
+				Source:       "rule_fallback",
+				Items:        []DietRecommendationFoodItem{{Name: "鸡胸肉", Amount: "120g", Source: "rule_fallback"}, {Name: "米饭", Amount: "100g", Source: "rule_fallback"}, {Name: "西兰花", Amount: "200g", Source: "rule_fallback"}},
 				Tips:         []string{"少油煎或水煮，调味以酱油、黑胡椒为主。"},
 				Alternatives: []string{"鸡胸肉可换虾仁 150g", "米饭可换红薯 180g"},
 			},
@@ -279,7 +296,8 @@ func fallbackDietRecommendation(input DietRecommendationInput, generatedBy strin
 				Title:    "豆腐鸡蛋简餐",
 				Reason:   "食材容易准备，脂肪不过高，适合晚餐补蛋白。",
 				Calories: clampDietCalories(input.CalorieRemaining, 300), Protein: 24, Carbs: 20, Fat: 12,
-				Items:        []DietRecommendationFoodItem{{Name: "北豆腐", Amount: "200g"}, {Name: "鸡蛋", Amount: "1个"}, {Name: "玉米", Amount: "半根"}},
+				Source:       "rule_fallback",
+				Items:        []DietRecommendationFoodItem{{Name: "北豆腐", Amount: "200g", Source: "rule_fallback"}, {Name: "鸡蛋", Amount: "1个", Source: "rule_fallback"}, {Name: "玉米", Amount: "半根", Source: "rule_fallback"}},
 				Tips:         []string{"如果脂肪已偏高，鸡蛋可只用蛋白。"},
 				Alternatives: []string{"豆腐可换鱼肉 120g", "玉米可换全麦面包 1 片"},
 			},
@@ -290,7 +308,8 @@ func fallbackDietRecommendation(input DietRecommendationInput, generatedBy strin
 				Title:    "便利店高蛋白组合",
 				Reason:   "外食可执行性高，热量和蛋白质比较好控制。",
 				Calories: clampDietCalories(input.CalorieRemaining, 380), Protein: 32, Carbs: 45, Fat: 7,
-				Items:        []DietRecommendationFoodItem{{Name: "即食鸡胸肉", Amount: "1包"}, {Name: "饭团", Amount: "1个"}, {Name: "无糖豆浆", Amount: "1瓶"}},
+				Source:       "rule_fallback",
+				Items:        []DietRecommendationFoodItem{{Name: "即食鸡胸肉", Amount: "1包", Source: "rule_fallback"}, {Name: "饭团", Amount: "1个", Source: "rule_fallback"}, {Name: "无糖豆浆", Amount: "1瓶", Source: "rule_fallback"}},
 				Tips:         []string{"优先选原味鸡胸和无糖饮品。"},
 				Alternatives: []string{"饭团可换玉米", "鸡胸可换茶叶蛋 2 个"},
 			},
@@ -298,7 +317,8 @@ func fallbackDietRecommendation(input DietRecommendationInput, generatedBy strin
 				Title:    "轻食店鸡肉沙拉",
 				Reason:   "适合脂肪缺口不多、蛋白质仍需补齐的情况。",
 				Calories: clampDietCalories(input.CalorieRemaining, 320), Protein: 28, Carbs: 25, Fat: 10,
-				Items:        []DietRecommendationFoodItem{{Name: "鸡肉沙拉", Amount: "1份"}, {Name: "酱料", Amount: "半份或另放"}},
+				Source:       "rule_fallback",
+				Items:        []DietRecommendationFoodItem{{Name: "鸡肉沙拉", Amount: "1份", Source: "rule_fallback"}, {Name: "酱料", Amount: "半份或另放", Source: "rule_fallback"}},
 				Tips:         []string{"避开油炸配料，酱料减半。"},
 				Alternatives: []string{"鸡肉可换虾仁", "主食不足时加半份玉米"},
 			},
@@ -309,7 +329,8 @@ func fallbackDietRecommendation(input DietRecommendationInput, generatedBy strin
 			Title:    "面馆清爽吃法",
 			Reason:   "控制主食份量，同时通过加蛋白提升饱腹感。",
 			Calories: clampDietCalories(input.CalorieRemaining, 430), Protein: 25, Carbs: 58, Fat: 9,
-			Items:        []DietRecommendationFoodItem{{Name: "牛肉面", Amount: "半份面"}, {Name: "牛肉", Amount: "加一份"}, {Name: "汤", Amount: "少喝"}},
+			Source:       "rule_fallback",
+			Items:        []DietRecommendationFoodItem{{Name: "牛肉面", Amount: "半份面", Source: "rule_fallback"}, {Name: "牛肉", Amount: "加一份", Source: "rule_fallback"}, {Name: "汤", Amount: "少喝", Source: "rule_fallback"}},
 			Tips:         []string{"少油辣，优先吃肉和菜。"},
 			Alternatives: []string{"可换鸡丝面", "可加青菜或鸡蛋"},
 		})
@@ -325,7 +346,7 @@ func fallbackDietRecommendation(input DietRecommendationInput, generatedBy strin
 	}
 }
 
-func normalizeDietRecommendationResult(input DietRecommendationInput, result DietRecommendationResult, generatedBy string) DietRecommendationResult {
+func normalizeDietRecommendationResult(input DietRecommendationInput, result DietRecommendationResult, generatedBy string, candidates []DietRecommendationCandidate) DietRecommendationResult {
 	result.Scene = input.Scene
 	if strings.TrimSpace(result.Title) == "" {
 		result.Title = "按今日缺口补一餐"
@@ -338,6 +359,7 @@ func normalizeDietRecommendationResult(input DietRecommendationInput, result Die
 	result.GeneratedBy = generatedBy
 	for i := range result.Recommendations {
 		opt := &result.Recommendations[i]
+		attachDietRecommendationSource(opt, candidates)
 		opt.Calories = roundDietNumber(math.Max(0, opt.Calories))
 		opt.Protein = roundDietNumber(math.Max(0, opt.Protein))
 		opt.Carbs = roundDietNumber(math.Max(0, opt.Carbs))
@@ -349,10 +371,226 @@ func normalizeDietRecommendationResult(input DietRecommendationInput, result Die
 			opt.Alternatives = opt.Alternatives[:4]
 		}
 	}
-	if len(result.Recommendations) > 3 {
-		result.Recommendations = result.Recommendations[:3]
+	if len(result.Recommendations) > 5 {
+		result.Recommendations = result.Recommendations[:5]
 	}
 	return result
+}
+
+func (s *StatsService) fetchDietRecommendationCandidates(ctx context.Context, userID string, input DietRecommendationInput) []DietRecommendationCandidate {
+	if s.repo == nil {
+		return nil
+	}
+	candidates, err := s.repo.GetDietRecommendationCandidates(ctx, userID, input.Scene, 24)
+	if err != nil {
+		return nil
+	}
+	return rankDietRecommendationCandidates(input, candidates)
+}
+
+func fallbackDietRecommendationFromCandidates(input DietRecommendationInput, generatedBy string, candidates []DietRecommendationCandidate) *DietRecommendationResult {
+	candidates = rankDietRecommendationCandidates(input, candidates)
+	options := make([]DietRecommendationOption, 0, 5)
+	for _, candidate := range candidates {
+		if len(options) >= 5 {
+			break
+		}
+		if strings.TrimSpace(candidate.Title) == "" || candidate.Calories <= 0 {
+			continue
+		}
+		option := DietRecommendationOption{
+			Title:    candidate.Title,
+			Reason:   "来自" + dietRecommendationSourceLabel(candidate.Source) + "，营养值更接近今天剩余目标。",
+			Source:   candidate.Source,
+			SourceID: candidate.SourceID,
+			Calories: clampCandidateCalories(input.CalorieRemaining, candidate.Calories),
+			Protein:  candidate.Protein,
+			Carbs:    candidate.Carbs,
+			Fat:      candidate.Fat,
+			Items:    candidate.Items,
+			Tips:     []string{"可按饥饿程度微调份量。"},
+		}
+		if len(option.Items) == 0 {
+			option.Items = []DietRecommendationFoodItem{{
+				Name:     candidate.Title,
+				Amount:   "1份",
+				Source:   candidate.Source,
+				SourceID: candidate.SourceID,
+			}}
+		}
+		options = append(options, option)
+	}
+	if len(options) == 0 {
+		return fallbackDietRecommendation(input, generatedBy, nil)
+	}
+	return &DietRecommendationResult{
+		Scene:            input.Scene,
+		Title:            "按今日缺口补一餐",
+		Summary:          "优先从已有食物数据中挑选，更贴近真实记录和营养值。",
+		CalorieRemaining: input.CalorieRemaining,
+		MacroGaps:        input.MacroGaps,
+		Recommendations:  options,
+		GeneratedBy:      generatedBy,
+	}
+}
+
+func normalizeDietRecommendationCandidates(candidates []DietRecommendationCandidate) []DietRecommendationCandidate {
+	out := make([]DietRecommendationCandidate, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		candidate.Source = strings.TrimSpace(candidate.Source)
+		candidate.SourceID = strings.TrimSpace(candidate.SourceID)
+		candidate.Title = strings.TrimSpace(candidate.Title)
+		if candidate.Source == "" || candidate.Title == "" {
+			continue
+		}
+		key := candidate.Source + ":" + candidate.SourceID + ":" + candidate.Title
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		candidate.Calories = roundDietNumber(math.Max(0, candidate.Calories))
+		candidate.Protein = roundDietNumber(math.Max(0, candidate.Protein))
+		candidate.Carbs = roundDietNumber(math.Max(0, candidate.Carbs))
+		candidate.Fat = roundDietNumber(math.Max(0, candidate.Fat))
+		for i := range candidate.Items {
+			if strings.TrimSpace(candidate.Items[i].Source) == "" {
+				candidate.Items[i].Source = candidate.Source
+			}
+			if strings.TrimSpace(candidate.Items[i].SourceID) == "" {
+				candidate.Items[i].SourceID = candidate.SourceID
+			}
+		}
+		out = append(out, candidate)
+	}
+	return out
+}
+
+func rankDietRecommendationCandidates(input DietRecommendationInput, candidates []DietRecommendationCandidate) []DietRecommendationCandidate {
+	candidates = normalizeDietRecommendationCandidates(candidates)
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return dietRecommendationCandidateScore(input, candidates[i]) > dietRecommendationCandidateScore(input, candidates[j])
+	})
+	return candidates
+}
+
+func dietRecommendationCandidateScore(input DietRecommendationInput, candidate DietRecommendationCandidate) float64 {
+	score := 1000.0
+	remaining := input.CalorieRemaining
+	if remaining <= 0 {
+		remaining = candidate.Calories
+	}
+	score -= math.Abs(candidate.Calories-remaining) * 1.2
+	if input.MacroGaps.Protein > 15 {
+		score += candidate.Protein * 8
+	}
+	if input.MacroGaps.Fat <= 5 && candidate.Fat > 12 {
+		score -= candidate.Fat * 10
+	}
+	if input.Scene == "eat_out" && candidate.Source == "public_food_library" {
+		score += 120
+	}
+	if input.Scene == "cook_home" && candidate.Source == "food_nutrition_library" {
+		score += 80
+	}
+	if candidate.Source == "user_food_records" {
+		score += 60
+	}
+	return score
+}
+
+func limitDietRecommendationCandidates(candidates []DietRecommendationCandidate, limit int) []DietRecommendationCandidate {
+	if limit <= 0 || len(candidates) <= limit {
+		return candidates
+	}
+	return candidates[:limit]
+}
+
+func attachDietRecommendationSource(option *DietRecommendationOption, candidates []DietRecommendationCandidate) {
+	if option == nil {
+		return
+	}
+	source := strings.TrimSpace(option.Source)
+	sourceID := strings.TrimSpace(option.SourceID)
+	if source != "" {
+		for i := range option.Items {
+			if strings.TrimSpace(option.Items[i].Source) == "" {
+				option.Items[i].Source = source
+			}
+			if strings.TrimSpace(option.Items[i].SourceID) == "" {
+				option.Items[i].SourceID = sourceID
+			}
+		}
+		return
+	}
+	matched := findDietRecommendationCandidate(option, candidates)
+	if matched == nil {
+		option.Source = "ai_generated"
+		return
+	}
+	option.Source = matched.Source
+	option.SourceID = matched.SourceID
+	for i := range option.Items {
+		if strings.TrimSpace(option.Items[i].Source) == "" {
+			option.Items[i].Source = matched.Source
+		}
+		if strings.TrimSpace(option.Items[i].SourceID) == "" {
+			option.Items[i].SourceID = matched.SourceID
+		}
+	}
+}
+
+func findDietRecommendationCandidate(option *DietRecommendationOption, candidates []DietRecommendationCandidate) *DietRecommendationCandidate {
+	title := normalizeDietRecommendationText(option.Title)
+	for i := range candidates {
+		if title != "" && normalizeDietRecommendationText(candidates[i].Title) == title {
+			return &candidates[i]
+		}
+		for _, item := range option.Items {
+			itemName := normalizeDietRecommendationText(item.Name)
+			if itemName != "" && normalizeDietRecommendationText(candidates[i].Title) == itemName {
+				return &candidates[i]
+			}
+			for _, candidateItem := range candidates[i].Items {
+				if itemName != "" && normalizeDietRecommendationText(candidateItem.Name) == itemName {
+					return &candidates[i]
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func normalizeDietRecommendationText(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.ReplaceAll(value, " ", "")
+	value = strings.ReplaceAll(value, "　", "")
+	return value
+}
+
+func dietRecommendationSourceLabel(source string) string {
+	switch source {
+	case "public_food_library":
+		return "公共食物库"
+	case "user_food_records":
+		return "你的历史记录"
+	case "food_nutrition_library":
+		return "标准营养库"
+	case "rule_fallback":
+		return "规则兜底"
+	default:
+		return "候选库"
+	}
+}
+
+func clampCandidateCalories(remaining, value float64) float64 {
+	if remaining <= 0 || value <= 0 {
+		return roundDietNumber(value)
+	}
+	if value > remaining*1.25 && remaining >= 120 {
+		return roundDietNumber(remaining)
+	}
+	return roundDietNumber(value)
 }
 
 func roundDietNumber(v float64) float64 {

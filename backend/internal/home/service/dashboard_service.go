@@ -9,6 +9,7 @@ import (
 
 	userrepo "food_link/backend/internal/auth/repo"
 	homerepo "food_link/backend/internal/home/repo"
+	usersvc "food_link/backend/internal/user/service"
 	"food_link/backend/pkg/storage"
 )
 
@@ -55,8 +56,13 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 	if err != nil {
 		return nil, err
 	}
+	exerciseHistory, err := s.exerciseHistory(ctx, userID, date)
+	if err != nil {
+		return nil, err
+	}
 
-	targets := dashboardTargets(user)
+	targetPlan := buildNutritionTargetPlan(user, date, exerciseBurned, exerciseHistory)
+	targets := targetPlan.Targets
 	totalCal, totalProtein, totalCarbs, totalFat := 0.0, 0.0, 0.0, 0.0
 	byMeal := map[string][]homerepo.FoodRecord{}
 	for _, record := range records {
@@ -98,7 +104,18 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 		"meals":              meals,
 		"expirySummary":      buildExpirySummary(expiryItems),
 		"exerciseBurnedKcal": round1(float64(exerciseBurned)),
+		"nutritionTarget":    targetPlan.Response(),
 	}, nil
+}
+
+func (s *DashboardService) exerciseHistory(ctx context.Context, userID, date string) (map[string]int, error) {
+	parsed, err := time.ParseInLocation("2006-01-02", date, homerepo.ChinaTZ())
+	if err != nil {
+		parsed = time.Now().In(homerepo.ChinaTZ())
+	}
+	endDate := parsed.Format("2006-01-02")
+	startDate := parsed.AddDate(0, 0, -13).Format("2006-01-02")
+	return s.home.ListExerciseBurnedByDateRange(ctx, userID, startDate, endDate)
 }
 
 func (s *DashboardService) PosterCalorieCompare(ctx context.Context, userID, recordID string) (map[string]any, error) {
@@ -147,7 +164,93 @@ func (s *DashboardService) PosterCalorieCompare(ctx context.Context, userID, rec
 	}, nil
 }
 
+type nutritionTargetPlan struct {
+	Targets               map[string]float64
+	BaseCalorieTarget     float64
+	SuggestedCalorie      float64
+	TodayExerciseKcal     float64
+	ExerciseAddedKcal     float64
+	ExerciseSurplusKcal   float64
+	ExerciseThresholdKcal float64
+	RecentExerciseAvg     float64
+	RecentExerciseDays    int
+	ActivityMultiplier    float64
+	TargetSource          string
+	DietGoal              string
+	Explanation           string
+	MacroExplanation      string
+}
+
+func (p nutritionTargetPlan) Response() map[string]any {
+	return map[string]any{
+		"source":                   p.TargetSource,
+		"diet_goal":                p.DietGoal,
+		"base_calorie_target":      round1(p.BaseCalorieTarget),
+		"suggested_calorie_target": round1(p.SuggestedCalorie),
+		"today_exercise_kcal":      round1(p.TodayExerciseKcal),
+		"exercise_added_kcal":      round1(p.ExerciseAddedKcal),
+		"exercise_surplus_kcal":    round1(p.ExerciseSurplusKcal),
+		"exercise_threshold_kcal":  round1(p.ExerciseThresholdKcal),
+		"recent_exercise_avg_kcal": round1(p.RecentExerciseAvg),
+		"recent_exercise_days":     p.RecentExerciseDays,
+		"activity_multiplier":      round1(p.ActivityMultiplier),
+		"explanation":              p.Explanation,
+		"macro_explanation":        p.MacroExplanation,
+	}
+}
+
+func buildNutritionTargetPlan(user *userrepo.User, date string, todayExerciseKcal int, exerciseHistory map[string]int) nutritionTargetPlan {
+	targets, source := dashboardTargetsWithSource(user)
+	plan := nutritionTargetPlan{
+		Targets:            targets,
+		BaseCalorieTarget:  targets["calorie_target"],
+		SuggestedCalorie:   targets["calorie_target"],
+		TodayExerciseKcal:  float64(todayExerciseKcal),
+		TargetSource:       source,
+		DietGoal:           userDietGoal(user),
+		ActivityMultiplier: userDailyLifeActivityMultiplier(user),
+	}
+	plan.RecentExerciseAvg, plan.RecentExerciseDays = summarizeExerciseHistory(exerciseHistory)
+	if source == "manual" {
+		plan.Explanation = "使用你在目标设置中保存的自定义目标。"
+		plan.MacroExplanation = "三大营养素沿用自定义目标。"
+		return plan
+	}
+
+	base := baseCalorieTarget(user)
+	base = applyDietGoalCalorieAdjustment(base, plan.DietGoal)
+	exerciseSurplus := math.Max(0, float64(todayExerciseKcal)-plan.RecentExerciseAvg)
+	exerciseThreshold := exerciseCompensationThreshold(plan.RecentExerciseAvg)
+	added := 0.0
+	if exerciseSurplus >= exerciseThreshold {
+		added = exerciseCalorieCompensation(exerciseSurplus, plan.DietGoal)
+	}
+	suggested := clampFloat(base+added, 900, 5000)
+	macros := distributeMacroTargets(suggested, userWeightKg(user), plan.DietGoal, added)
+
+	plan.Targets = map[string]float64{
+		"calorie_target": round1(suggested),
+		"protein_target": round1(macros["protein"]),
+		"carbs_target":   round1(macros["carbs"]),
+		"fat_target":     round1(macros["fat"]),
+	}
+	plan.BaseCalorieTarget = round1(base)
+	plan.SuggestedCalorie = round1(suggested)
+	plan.ExerciseAddedKcal = round1(added)
+	plan.ExerciseSurplusKcal = round1(exerciseSurplus)
+	plan.ExerciseThresholdKcal = round1(exerciseThreshold)
+	plan.TargetSource = "dynamic"
+	plan.Explanation = buildTargetExplanation(plan)
+	plan.MacroExplanation = "蛋白按体重和目标保持稳定，脂肪保留健康下限，训练日增加的热量主要分配给碳水。"
+	return plan
+}
+
 func dashboardTargets(user *userrepo.User) map[string]float64 {
+	targets, _ := dashboardTargetsWithSource(user)
+	return targets
+}
+
+func dashboardTargetsWithSource(user *userrepo.User) (map[string]float64, string) {
 	targets := map[string]float64{
 		"calorie_target": 2000,
 		"protein_target": 120,
@@ -155,21 +258,200 @@ func dashboardTargets(user *userrepo.User) map[string]float64 {
 		"fat_target":     65,
 	}
 	if user == nil {
-		return targets
+		return targets, "default"
 	}
 	healthCondition := user.HealthCondition
 	if healthCondition == nil {
-		return targets
+		if user.TDEE != nil && *user.TDEE > 0 {
+			targets["calorie_target"] = round1(*user.TDEE)
+			return targets, "profile"
+		}
+		return targets, "default"
 	}
-	dashboard, _ := healthCondition["dashboard_targets"].(map[string]any)
-	for _, key := range []string{"calorie_target", "protein_target", "carbs_target", "fat_target"} {
-		if val, ok := dashboard[key]; ok {
-			if num, ok := toFloat64(val); ok && num > 0 {
-				targets[key] = num
+	if value, _ := healthCondition["dashboard_targets_mode"].(string); value == "manual" {
+		dashboard, _ := healthCondition["dashboard_targets"].(map[string]any)
+		hasManual := false
+		for _, key := range []string{"calorie_target", "protein_target", "carbs_target", "fat_target"} {
+			if val, ok := dashboard[key]; ok {
+				if num, ok := toFloat64(val); ok && num > 0 {
+					targets[key] = num
+					hasManual = true
+				}
 			}
 		}
+		if hasManual {
+			return targets, "manual"
+		}
 	}
-	return targets
+	if user.TDEE != nil && *user.TDEE > 0 {
+		targets["calorie_target"] = round1(*user.TDEE)
+		return targets, "profile"
+	}
+	return targets, "default"
+}
+
+func baseCalorieTarget(user *userrepo.User) float64 {
+	weight := userWeightKg(user)
+	if weight <= 0 {
+		weight = 60
+	}
+	gender := ""
+	if user != nil && user.Gender != nil {
+		gender = *user.Gender
+	}
+	bmr := calculateBMRForHome(gender, weight)
+	if user != nil && user.BMR != nil && *user.BMR > 0 {
+		bmr = *user.BMR
+	}
+	return bmr * userDailyLifeActivityMultiplier(user)
+}
+
+func applyDietGoalCalorieAdjustment(tdee float64, goal string) float64 {
+	switch goal {
+	case "fat_loss":
+		return tdee - clampFloat(tdee*0.16, 250, 500)
+	case "muscle_gain":
+		return tdee + clampFloat(tdee*0.10, 150, 300)
+	default:
+		return tdee
+	}
+}
+
+func distributeMacroTargets(calorieTarget, weightKg float64, goal string, exerciseAdded float64) map[string]float64 {
+	if weightKg <= 0 {
+		weightKg = 60
+	}
+	proteinPerKg := 1.5
+	switch goal {
+	case "fat_loss":
+		proteinPerKg = 1.8
+	case "muscle_gain":
+		proteinPerKg = 1.8
+	}
+	protein := clampFloat(weightKg*proteinPerKg, 60, 220)
+	fat := clampFloat(weightKg*0.8, 40, calorieTarget*0.3/9)
+	if goal == "fat_loss" {
+		fat = clampFloat(weightKg*0.7, 35, calorieTarget*0.28/9)
+	}
+	remaining := calorieTarget - protein*4 - fat*9
+	if remaining < calorieTarget*0.25 {
+		fat = clampFloat((calorieTarget-protein*4-calorieTarget*0.25)/9, 35, fat)
+		remaining = calorieTarget - protein*4 - fat*9
+	}
+	carbs := math.Max(0, remaining/4)
+	if exerciseAdded > 0 {
+		carbs = carbs + math.Min(exerciseAdded*0.2/4, 25)
+	}
+	return map[string]float64{"protein": protein, "carbs": carbs, "fat": fat}
+}
+
+func exerciseCalorieCompensation(todayExercise float64, goal string) float64 {
+	if todayExercise <= 0 {
+		return 0
+	}
+	rate := 0.5
+	switch goal {
+	case "fat_loss":
+		rate = 0.45
+	case "muscle_gain":
+		rate = 0.7
+	}
+	return math.Min(todayExercise*rate, 600)
+}
+
+func exerciseCompensationThreshold(recentExerciseAvg float64) float64 {
+	return math.Max(120, recentExerciseAvg*0.3)
+}
+
+func summarizeExerciseHistory(history map[string]int) (float64, int) {
+	if len(history) == 0 {
+		return 0, 0
+	}
+	total := 0
+	days := 0
+	for _, kcal := range history {
+		if kcal <= 0 {
+			continue
+		}
+		total += kcal
+		days++
+	}
+	return float64(total) / 14.0, days
+}
+
+func userDailyLifeActivityMultiplier(user *userrepo.User) float64 {
+	return usersvc.DailyLifeActivityMultiplier(userDailyLifeActivityLevel(user))
+}
+
+func userDailyLifeActivityLevel(user *userrepo.User) string {
+	if user != nil && user.HealthCondition != nil {
+		if value, ok := user.HealthCondition["daily_life_activity_level"].(string); ok && strings.TrimSpace(value) != "" {
+			return usersvc.NormalizeDailyLifeActivityLevel(value)
+		}
+	}
+	if user != nil && user.ActivityLevel != nil {
+		return usersvc.NormalizeDailyLifeActivityLevel(*user.ActivityLevel)
+	}
+	return "sedentary"
+}
+
+func userDietGoal(user *userrepo.User) string {
+	if user == nil || user.DietGoal == nil {
+		return "maintain"
+	}
+	goal := strings.TrimSpace(*user.DietGoal)
+	if goal == "" || goal == "none" {
+		return "maintain"
+	}
+	return goal
+}
+
+func userWeightKg(user *userrepo.User) float64 {
+	if user != nil && user.Weight != nil && *user.Weight > 0 {
+		return *user.Weight
+	}
+	return 60
+}
+
+func calculateBMRForHome(gender string, weightKg float64) float64 {
+	if gender == "male" {
+		return math.Max(0, (48.5*weightKg+2954.7)/4.184)
+	}
+	return math.Max(0, (41.9*weightKg+2869.1)/4.184)
+}
+
+func buildTargetExplanation(plan nutritionTargetPlan) string {
+	parts := []string{}
+	switch plan.DietGoal {
+	case "fat_loss":
+		parts = append(parts, "已在日常消耗基础上保留温和热量缺口")
+	case "muscle_gain":
+		parts = append(parts, "已在日常消耗基础上增加少量盈余")
+	default:
+		parts = append(parts, "按维持体重目标估算基础摄入")
+	}
+	if plan.RecentExerciseDays > 0 {
+		parts = append(parts, "近14天运动记录用于判断常规运动水平")
+	}
+	if plan.ExerciseAddedKcal > 0 {
+		parts = append(parts, "今天运动明显高于近期日均水平，已补充部分增量用于恢复")
+	} else if plan.ExerciseSurplusKcal > 0 && plan.ExerciseSurplusKcal < plan.ExerciseThresholdKcal {
+		parts = append(parts, "今天运动略高于近期日均，但未达到明显超量门槛")
+	}
+	return strings.Join(parts, "；") + "。"
+}
+
+func clampFloat(value, min, max float64) float64 {
+	if max < min {
+		max = min
+	}
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func buildMealTargets(calorieTarget float64) map[string]float64 {

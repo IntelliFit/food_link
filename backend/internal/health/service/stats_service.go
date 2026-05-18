@@ -8,6 +8,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +16,9 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/health/domain"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/logger"
+
+	"go.uber.org/zap"
 )
 
 type StatsRepo interface {
@@ -25,6 +29,7 @@ type StatsRepo interface {
 	GetCachedInsight(ctx context.Context, userID string, rangeType string, generatedDate string) (*domain.StatsInsight, error)
 	GetLatestCachedInsight(ctx context.Context, userID string, rangeType string) (*domain.StatsInsight, error)
 	CountInsightGenerationsToday(ctx context.Context, userID string) (int64, error)
+	GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, limit int) ([]domain.DietRecommendationCandidate, error)
 }
 
 type BodyMetricsSummaryProvider interface {
@@ -32,16 +37,18 @@ type BodyMetricsSummaryProvider interface {
 }
 
 type StatsService struct {
-	repo        StatsRepo
-	bodyMetrics BodyMetricsSummaryProvider
-	creditGuard CreditGuard
-	cfg         *config.Config
-	client      *http.Client
+	repo            StatsRepo
+	bodyMetrics     BodyMetricsSummaryProvider
+	creditGuard     CreditGuard
+	cfg             *config.Config
+	client          *http.Client
+	deepSeekBaseURL string
 }
 
 const (
 	statsInsightDeepSeekModel = "deepseek-v4-flash"
 	statsInsightDailyLimit    = 3
+	statsInsightCreditCost    = 1
 )
 
 func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg ...*config.Config) *StatsService {
@@ -50,10 +57,11 @@ func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg
 		c = cfg[0]
 	}
 	return &StatsService{
-		repo:        repo,
-		bodyMetrics: bodyMetrics,
-		cfg:         c,
-		client:      &http.Client{Timeout: 60 * time.Second},
+		repo:            repo,
+		bodyMetrics:     bodyMetrics,
+		cfg:             c,
+		client:          &http.Client{Timeout: 60 * time.Second},
+		deepSeekBaseURL: "https://api.deepseek.com",
 	}
 }
 
@@ -85,7 +93,10 @@ type StatsSummary struct {
 	AnalysisSummary              string              `json:"analysis_summary"`
 	AnalysisSummaryGeneratedDate *string             `json:"analysis_summary_generated_date"`
 	AnalysisSummaryNeedsRefresh  bool                `json:"analysis_summary_needs_refresh"`
+	AnalysisSummaryDailyLimit    int                 `json:"analysis_summary_daily_limit"`
+	AnalysisSummaryUsedToday     int                 `json:"analysis_summary_used_today"`
 	BodyMetrics                  *BodyMetricsSummary `json:"body_metrics"`
+	HealthIndex                  *HealthIndex        `json:"health_index"`
 }
 
 type statsComputation struct {
@@ -121,6 +132,10 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 	if cached == nil {
 		cached, _ = s.repo.GetLatestCachedInsight(ctx, userID, comp.StatsRange)
 	}
+	usedToday := 0
+	if count, err := s.repo.CountInsightGenerationsToday(ctx, userID); err == nil && count > 0 {
+		usedToday = int(count)
+	}
 
 	analysisSummary := ""
 	var analysisSummaryGeneratedDate *string
@@ -153,11 +168,32 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 		AnalysisSummary:              analysisSummary,
 		AnalysisSummaryGeneratedDate: analysisSummaryGeneratedDate,
 		AnalysisSummaryNeedsRefresh:  needsRefresh,
+		AnalysisSummaryDailyLimit:    statsInsightDailyLimit,
+		AnalysisSummaryUsedToday:     usedToday,
 		BodyMetrics:                  comp.BodyMetrics,
+		HealthIndex:                  computeHealthIndex(comp, statsRange),
 	}, nil
 }
 
-func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateRange string, fallbackTDEE int, fallbackStreakDays int) (map[string]any, error) {
+func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateRange string, fallbackTDEE int, fallbackStreakDays int) (result map[string]any, err error) {
+	var comp *statsComputation
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			logger.L().Error("stats insight generation panic",
+				zap.Any("panic", recovered),
+				zap.String("user_id", userID),
+				zap.String("range", normalizeStatsRange(dateRange)),
+				zap.ByteString("stack", debug.Stack()),
+			)
+			if comp != nil {
+				result = map[string]any{"analysis_summary": fallbackStatsInsight(comp)}
+				err = nil
+				return
+			}
+			err = &commonerrors.AppError{Code: 10000, Message: "AI 解读服务暂时不可用，请稍后重试", HTTPStatus: 503}
+		}
+	}()
+
 	count, err := s.repo.CountInsightGenerationsToday(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -165,15 +201,47 @@ func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateR
 	if count >= statsInsightDailyLimit {
 		return nil, &commonerrors.AppError{Code: 10005, Message: "今日 AI 解读次数已达上限，请明天再试", HTTPStatus: 429}
 	}
-	comp, err := s.buildStatsComputation(ctx, userID, dateRange, fallbackTDEE, fallbackStreakDays)
+	comp, err = s.buildStatsComputation(ctx, userID, dateRange, fallbackTDEE, fallbackStreakDays)
 	if err != nil {
 		return nil, err
+	}
+	var creditsInfo map[string]any
+	if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
+		creditsInfo, err = s.creditGuard.ValidateStatsInsightCredits(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	insight, err := s.generateNutritionInsight(ctx, comp)
 	if err != nil {
+		logger.L().Warn("stats insight llm generation failed, using fallback",
+			zap.Error(err),
+			zap.String("user_id", userID),
+			zap.String("range", comp.StatsRange),
+			zap.Int("recorded_days", comp.RecordedDays),
+		)
+		insight = fallbackStatsInsight(comp)
+	}
+	today := time.Now().In(chinaTZ).Format("2006-01-02")
+	if err := s.repo.UpsertInsightCache(ctx, userID, comp.StatsRange, today, comp.DataFingerprint, insight); err != nil {
 		return nil, err
 	}
-	return map[string]any{"analysis_summary": insight}, nil
+	if s.creditGuard != nil && creditsInfo != nil {
+		sourceKey := fmt.Sprintf("stats_insight:%s:%s:%d", comp.StatsRange, today, count+1)
+		if err := s.creditGuard.ConsumeEarnedCreditsAfterSuccess(ctx, userID, creditsInfo, statsInsightCreditCost, "stats_insight_reward_spend", sourceKey, map[string]any{
+			"range":          comp.StatsRange,
+			"generated_date": today,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return map[string]any{
+		"analysis_summary":                insight,
+		"analysis_summary_generated_date": today,
+		"analysis_summary_needs_refresh":  false,
+		"analysis_summary_daily_limit":    statsInsightDailyLimit,
+		"analysis_summary_used_today":     int(count) + 1,
+	}, nil
 }
 
 func (s *StatsService) SaveInsight(ctx context.Context, userID string, content string, dateRange string) error {
@@ -322,7 +390,10 @@ func (s *StatsService) getStreakDays(ctx context.Context, userID string) int {
 
 func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *statsComputation) (string, error) {
 	apiKey := ""
-	baseURL := "https://api.deepseek.com"
+	baseURL := s.deepSeekBaseURL
+	if strings.TrimSpace(baseURL) == "" {
+		baseURL = "https://api.deepseek.com"
+	}
 	model := statsInsightDeepSeekModel
 	if s.cfg != nil {
 		apiKey = strings.TrimSpace(s.cfg.External.DeepSeekAPIKey)
@@ -387,13 +458,13 @@ func buildNutritionInsightPrompt(comp *statsComputation) string {
 	}
 
 	statsText := fmt.Sprintf(`统计周期：%s（%s 至 %s）
-用户 TDEE：%d kcal/天
+日常消耗估算：%d kcal/天
 饮食目标：%s
 
 本期数据：
 - 总热量：%.0f kcal
 - 日均摄入：%.0f kcal
-- 日均与 TDEE 差值：%+.0f kcal（正为盈余，负为亏损）
+- 日均与日常消耗估算差值：%+.0f kcal（正为盈余，负为亏损）
 - 连续记录天数：%d 天
 - 餐次分布：早餐 %.0f kcal、早加餐 %.0f kcal、午餐 %.0f kcal、午加餐 %.0f kcal、晚餐 %.0f kcal、晚加餐 %.0f kcal
 - 宏量营养素占比：蛋白质 %.1f%%、碳水 %.1f%%、脂肪 %.1f%%
@@ -440,19 +511,19 @@ func buildNutritionInsightPrompt(comp *statsComputation) string {
 		statsText += "\n身体指标：\n" + weightBlock
 	}
 
-	return fmt.Sprintf(`你是一位专业的营养师。请根据以下用户健康档案和饮食统计数据，生成一段 200-300 字的个性化营养洞察。
+	return fmt.Sprintf(`你是一位专业的营养师和饮食行为研究员。请根据以下用户健康档案、饮食统计和身体指标，生成一份“深度 AI 风险解读”，质量要接近 deep research 风格，但保持普通用户能读懂。
 
 %s
 
 %s
 
 要求：
-1. 用温暖、鼓励的语气，结合用户体质和饮食目标
-2. 分析本期热量摄入与 TDEE 的关系，给出建议
-3. 简要评价宏量营养素比例是否合理
-4. 若有连续打卡，给予肯定
-5. 如果提供了体重趋势数据，结合体重变化评价饮食计划效果
-6. 输出纯中文，不要 JSON 或代码块，直接输出正文
+1. 输出 650-900 字，分成 5 个小节，每节使用清晰短标题。
+2. 必须覆盖：总体结论、热量与日常消耗估算、蛋白/碳水/脂肪结构、餐次结构与可能风险、下一步 3 条优先行动。
+3. 要像研究报告一样基于数据推理，明确写出“为什么这么判断”，不要只给空泛鼓励。
+4. 结合用户体重、作息、体检/病史/过敏/饮食目标等可用信息；没有数据时明确说“本期证据不足”。
+5. 风险表达要谨慎：这是饮食相关风险趋势，不构成医学诊断或治疗建议。
+6. 输出纯中文，不要 JSON 或代码块，直接输出正文；不要使用 Markdown 符号。
 `, formatStatsHealthProfile(comp.User, latestWeightFromBodyMetrics(comp.BodyMetrics)), statsText)
 }
 
@@ -461,7 +532,7 @@ func fallbackStatsInsight(comp *statsComputation) string {
 		return "本期还没有足够的饮食记录生成完整洞察。可以先保持每日记录，积累几天后再查看趋势。"
 	}
 	return fmt.Sprintf(
-		"本期日均摄入 %.0f 千卡，与 TDEE 差值 %+.0f 千卡。蛋白质占比 %.1f%%，碳水 %.1f%%，脂肪 %.1f%%。连续记录 %d 天，整体节奏已经建立起来了，接下来可以继续关注餐次稳定性和蛋白质摄入质量。",
+		"本期日均摄入 %.0f 千卡，与日常消耗估算差值 %+.0f 千卡。蛋白质占比 %.1f%%，碳水 %.1f%%，脂肪 %.1f%%。连续记录 %d 天，整体节奏已经建立起来了，接下来可以继续关注餐次稳定性和蛋白质摄入质量。",
 		comp.AvgCaloriesPerDay,
 		comp.CalSurplusDeficit,
 		comp.MacroPercent["protein"],
@@ -504,7 +575,7 @@ func formatStatsHealthProfile(user *domain.StatsUserProfile, latestWeight *Weigh
 	if user.ActivityLevel != nil && *user.ActivityLevel != "" {
 		activity = activityLevelLabel(*user.ActivityLevel)
 	}
-	lines = append(lines, "· 活动水平："+activity)
+	lines = append(lines, "· 日常活动："+activity)
 
 	hc := user.HealthCondition
 	if len(hc) > 0 {
@@ -530,7 +601,7 @@ func formatStatsHealthProfile(user *domain.StatsUserProfile, latestWeight *Weigh
 		if user.TDEE != nil {
 			tdee = fmt.Sprintf("%.0f kcal/天", *user.TDEE)
 		}
-		lines = append(lines, fmt.Sprintf("· 基础代谢(BMR)：%s；每日总消耗(TDEE)：%s", bmr, tdee))
+		lines = append(lines, fmt.Sprintf("· 基础代谢(BMR)：%s；日常消耗估算：%s", bmr, tdee))
 	}
 	if report := formatStatsReportExtract(hc); report != "" {
 		lines = append(lines, "· 体检/病历摘要："+report)
@@ -659,15 +730,15 @@ func dietGoalLabel(value string) string {
 func activityLevelLabel(value string) string {
 	switch strings.TrimSpace(value) {
 	case "sedentary":
-		return "久坐"
+		return "久坐办公"
 	case "light":
-		return "轻度活动"
+		return "日常走动较多"
 	case "moderate":
-		return "中度活动"
+		return "经常站立走动"
 	case "active":
-		return "高度活动"
+		return "体力劳动"
 	case "very_active":
-		return "极高活动"
+		return "体力劳动"
 	default:
 		return value
 	}

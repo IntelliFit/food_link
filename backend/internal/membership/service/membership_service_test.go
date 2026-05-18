@@ -12,6 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func ptrTime(t time.Time) *time.Time {
+	return &t
+}
+
 type mockMembershipRepo struct {
 	plans                         []domain.MembershipPlan
 	planByCode                    map[string]*domain.MembershipPlan
@@ -367,6 +371,66 @@ func TestMembershipService_ValidateFoodAnalysisCredits_StrictRequiresStandardTie
 	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict", "")
 	require.NoError(t, err)
 	assert.Equal(t, creditCostPrecisionFoodAnalysis, credits["credit_cost"])
+}
+
+func TestMembershipService_ValidateFoodAnalysisCredits_CorrectionCosts(t *testing.T) {
+	future := time.Now().Add(24 * time.Hour)
+	user := &membershiprepo.User{ID: "u1"}
+	standard := "standard_monthly"
+	svc := NewMembershipService(&mockMembershipRepo{
+		user: user,
+		membership: &domain.UserMembership{
+			ID:              "um1",
+			UserID:          "u1",
+			CurrentPlanCode: &standard,
+			Status:          "active",
+			ExpiresAt:       &future,
+			DailyCredits:    20,
+		},
+	})
+
+	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "standard_correction", "")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostStandardCorrection, credits["credit_cost"])
+
+	credits, err = svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict_correction", "")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostPrecisionCorrection, credits["credit_cost"])
+}
+
+func TestMembershipService_ValidateStatsInsightCredits(t *testing.T) {
+	now := time.Now()
+	repo := &mockMembershipRepo{
+		membership: &domain.UserMembership{
+			Status:    "active",
+			ExpiresAt: ptrTime(now.AddDate(0, 1, 0)),
+		},
+		user: &membershiprepo.User{ID: "u1", CreatedAt: &now},
+	}
+	svc := NewMembershipService(repo, nil)
+
+	credits, err := svc.ValidateStatsInsightCredits(context.Background(), "u1")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostStatsInsight, credits["credit_cost"])
+}
+
+func TestMembershipService_ValidateFoodAnalysisCredits_StrictCorrectionRequiresStandardTier(t *testing.T) {
+	future := time.Now().Add(24 * time.Hour)
+	light := "light_monthly"
+	svc := NewMembershipService(&mockMembershipRepo{
+		user: &membershiprepo.User{ID: "u1"},
+		membership: &domain.UserMembership{
+			ID:              "um1",
+			UserID:          "u1",
+			CurrentPlanCode: &light,
+			Status:          "active",
+			ExpiresAt:       &future,
+			DailyCredits:    20,
+		},
+	})
+
+	_, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict_correction", "")
+	assert.Error(t, err)
 }
 
 func TestMembershipService_ActivateInviteReferralRecordsFirstValidUse(t *testing.T) {
