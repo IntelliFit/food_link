@@ -10,6 +10,12 @@
 
 # DECISIONS
 
+- `2026-05-18`: 后端数据库结构变更必须模型优先、迁移命令落地：
+  - 禁止把手动 SQL 当作最终修复方案；修复性 SQL 不能只停留在终端操作或聊天记录里。
+  - 先修改 `backend/internal/migration/do/schema_do.go` 中对应迁移 DO，让数据库表结构由 Go 代码表达；业务层需要读写时，再同步调整 domain/repo/service/DTO/handler，但不把 domain struct 当作迁移 DO。
+  - AutoMigrate 覆盖不了或命名必须稳定的约束、索引、check、外键、触发器、数据修正步骤，要写入 `backend/internal/migration/migration.go` 的幂等迁移逻辑。
+  - 最后从 `backend/` 执行 `go run ./cmd/migration -config-dir .`；运行前确认 `backend/config.yaml` 与环境变量指向的目标库，非本地/线上/不确定目标库必须先获得用户明确确认。
+
 - `2026-05-17`: 食物识别调用 Doubao/火山 Ark 返回上游临时错误时的口径：
   - `doubao api error 408/429/5xx` 和 `InternalServiceError` 视为临时 LLM 上游错误，后端可在同一任务内做有限重试，不能要求用户立刻重新提交。
   - 写入 `analysis_tasks.error_message` 前必须清洗上游原始 JSON、request id、API 域名等细节；用户侧统一看到“AI 识别服务暂时不可用/繁忙/超时”等友好提示。

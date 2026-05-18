@@ -1,3 +1,14 @@
+## 2026-05-18 - AGENTS.md 后端数据库变更规则
+
+- Task: 用户要求在当前目录 `AGENTS.md` 增加一条项目规则，约束后端数据库结构修改流程。
+- Status: completed_doc_only
+- Change:
+  - 已在 `AGENTS.md` 的开发工作流程中新增“后端数据库结构变更”小节。
+  - 规则明确：禁止把手动 SQL 作为最终方案；必须先修改 `backend/internal/migration/do/schema_do.go` 的迁移 DO；AutoMigrate 覆盖不了的约束/索引/check/FK/触发器等要写入 `backend/internal/migration/migration.go` 的幂等迁移逻辑；最后从 `backend/` 执行 `go run ./cmd/migration -config-dir .`。
+  - 运行迁移前必须确认 `backend/config.yaml` 与环境变量实际指向的数据库；非本地或不确定目标库需先获得用户明确确认。
+- Verification:
+  - 文档规则变更，无需启动前后端或运行小程序 UI 验证。
+
 ## 2026-05-17 — 体重/喝水/运动趋势页重做与历史纠错
 
 - Task: 用户确认按“记录页只负责记录，趋势页二级承接分析/回看/纠错”的方向继续执行；同时指出 30 天点图/柱图在手机窄屏里不合适，要求历史趋势里可删除错误记录，喝水必须能删除某一天里的单次喝水 log。
