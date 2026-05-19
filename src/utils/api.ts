@@ -1634,6 +1634,8 @@ function parseFastApiDetail(data: unknown): string | undefined {
 type ErrorLike = Error & {
   statusCode?: number
   traceId?: string
+  requestId?: string
+  hostName?: string
 }
 
 function getHeaderValueIgnoreCase(headers: Record<string, any> | undefined, key: string): string | undefined {
@@ -1660,6 +1662,14 @@ function normalizeTraceId(value: string | undefined): string | undefined {
 
 function extractTraceIdFromHeaders(headers: Record<string, any> | undefined): string | undefined {
   return normalizeTraceId(getHeaderValueIgnoreCase(headers, 'x-trace-id'))
+}
+
+function extractRequestIdFromHeaders(headers: Record<string, any> | undefined): string | undefined {
+  return getHeaderValueIgnoreCase(headers, 'x-request-id')
+}
+
+function extractHostNameFromHeaders(headers: Record<string, any> | undefined): string | undefined {
+  return getHeaderValueIgnoreCase(headers, 'x-host-name')
 }
 
 function formatUserErrorWithTrace(message: string, traceId?: string): string {
@@ -1702,7 +1712,12 @@ export async function showUnifiedApiError(error: unknown, fallback: string = '�
     console.warn('[showUnifiedApiError] ignored placeholder trace id error', { message: raw || userMsg })
     return
   }
-  console.warn('[showUnifiedApiError]', { message: raw || userMsg, traceId })
+  console.warn('[showUnifiedApiError]', {
+    message: raw || userMsg,
+    traceId,
+    requestId: err?.requestId,
+    hostName: err?.hostName,
+  })
   try {
     await Taro.showToast({
       title: truncateToastTitle(userMsg || '请求失败，请稍后重试'),
@@ -1719,13 +1734,27 @@ function throwHttpErrorWithStatus(
   statusCode: number,
   data: unknown,
   fallback: string,
-  headers?: Record<string, any>
+  headers?: Record<string, any>,
+  url?: string
 ): never {
   const msg = parseFastApiDetail(data) || fallback
   const traceId = extractTraceIdFromHeaders(headers)
+  const requestId = extractRequestIdFromHeaders(headers)
+  const hostName = extractHostNameFromHeaders(headers)
+  console.error('[API DIAGNOSTIC]', {
+    url,
+    statusCode,
+    message: msg,
+    traceId,
+    requestId,
+    hostName,
+    responseData: data,
+  })
   const err = new Error(formatUserErrorWithTrace(msg, traceId)) as ErrorLike
   err.statusCode = statusCode
   if (traceId) err.traceId = traceId
+  if (requestId) err.requestId = requestId
+  if (hostName) err.hostName = hostName
   throw err
 }
 
@@ -2971,7 +3000,8 @@ export async function authenticatedRequest(
       res.statusCode,
       res.data,
       '请求失败，请稍后重试',
-      res.header as Record<string, any> | undefined
+      res.header as Record<string, any> | undefined,
+      url
     )
   }
 

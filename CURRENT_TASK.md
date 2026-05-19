@@ -9394,3 +9394,34 @@
 - Verification:
   - `go test ./internal/common/middleware -run 'TestRequestID' -count=1` passed.
   - `git diff --check -- backend/internal/common/middleware/request_id.go backend/internal/common/middleware/request_id_test.go` passed with CRLF warnings only.
+
+## 2026-05-19 - Mini program console API diagnostics
+
+- Task: Keep normal users from seeing trace details in error UI, but print enough diagnostics in the mini program console for experience-version debugging.
+- Status: implemented_static_verified_runtime_blocked
+- Changes:
+  - `src/utils/api.ts` now extracts `X-Trace-Id`, `X-Request-Id`, and `X-Host-Name` from failed HTTP responses.
+  - Failed HTTP responses handled by `throwHttpErrorWithStatus()` print a structured `[API DIAGNOSTIC]` console error with URL, status, user-facing message, trace id, request id, host/pod name, and response data.
+  - The thrown error object carries `traceId`, `requestId`, and `hostName`; unified UI error logging prints those fields, while the toast still strips trace text from the user-visible message.
+  - `authenticatedRequest()` passes the relative API URL into diagnostics for authenticated API failures.
+- Verification:
+  - `npx eslint src/utils/api.ts --max-warnings 0` passed.
+  - `go test ./internal/common/middleware -run 'TestRequestID' -count=1` passed.
+  - `git diff --check -- src/utils/api.ts backend/internal/common/middleware/request_id.go backend/internal/common/middleware/request_id_test.go` passed with CRLF warnings only.
+  - `weapp-devtools` runtime verification was attempted via `mrc where --port 3001` and `mrc where --port 9420`; both failed because the WeChat DevTools automation service was not reachable.
+
+### 2026-05-19 update - packaged snack enrichment seed mode
+
+- Changed `scripts/enrich_packaged_foods.py` to not require manual `--query`/`--input`.
+- Default run now uses built-in common snack seeds across cookies, chips, candy/chocolate, nuts, meat/seafood snacks, bakery snacks, drinks/dairy, and instant foods.
+- Script flow: seed product list -> public web snippet search -> AI extraction; incomplete public data can be AI-completed unless `--no-ai-completion` is set.
+- Rows are marked by source: `web_ai_extracted`, `web_ai_completed`, or `ai_estimated_seed`.
+- Verification: `python -m py_compile scripts/enrich_packaged_foods.py` and `python scripts/enrich_packaged_foods.py --help` passed.
+
+### 2026-05-19 update - packaged snack enrichment skip existing
+
+- Added default skip support to `scripts/enrich_packaged_foods.py`.
+- Local processed state: `scripts/enrich_packaged_foods.state.json` records processed/skipped/dry-run queries and is gitignored.
+- Non-dry-run mode also checks `packaged_food_library.normalized_name` and skips active existing rows by default.
+- Reprocess switches: `--no-skip-processed` ignores state; `--no-skip-existing` ignores DB-existing skip.
+- Verification: `python -m py_compile scripts/enrich_packaged_foods.py`, `python scripts/enrich_packaged_foods.py --help`, and `git diff --check -- scripts/enrich_packaged_foods.py .gitignore` passed.

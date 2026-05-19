@@ -1386,3 +1386,10 @@
   - Every backend response should include `X-Trace-Id`, `X-Request-Id`, and `X-Host-Name` from the global RequestID middleware.
   - `X-Host-Name` must use `os.Hostname()`, the same source as OTel `host.name` / `service.instance.id`; in Kubernetes this identifies the current Pod name.
   - Do not add a configurable hostname override for this header unless there is a specific deployment need, because overriding it would weaken per-instance debugging.
+
+- `2026-05-19`: Mini program error diagnostics should prefer console output over user-visible trace text:
+  - Normal user-facing toast/modal copy should stay friendly and should not require users to read trace ids, request ids, pod names, stack traces, or raw response JSON.
+  - Experience-version debugging should rely on structured console logs, especially `[API DIAGNOSTIC]`, containing URL, status, message, `X-Trace-Id`, `X-Request-Id`, `X-Host-Name`, and response data.
+  - When adding new API wrappers, route non-2xx responses through `throwHttpErrorWithStatus()` where feasible so diagnostics stay consistent.
+
+- `2026-05-19`: Packaged snack DB enrichment should default to a maintained common-snack seed list rather than requiring manual product names. Search public web snippets first; when public data is incomplete, AI may complete missing fields with explicit provenance (`web_ai_completed` / `ai_estimated_seed`). Use `--no-ai-completion` only for stricter web-evidence-only runs.
