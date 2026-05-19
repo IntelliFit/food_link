@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -68,26 +69,26 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 type App struct {
 	engine        *gin.Engine
 	db            *gorm.DB
-	log           *zap.Logger
+	log           *logger.Logger
 	shutdownTrace func(context.Context) error
+	shutdownLog   logger.ShutdownFunc
 	workerCancel  context.CancelFunc
 	workerDone    chan struct{}
 	taskQueue     taskqueue.Queue
 }
 
 func New(cfg *config.Config) (*App, error) {
-	log, err := logger.New(cfg.App.Env)
+	logShutdown, err := logger.Init(context.Background(), cfg.App, cfg.Log, cfg.OTel)
 	if err != nil {
 		return nil, err
 	}
-	logger.SetGlobal(log)
+	log := logger.L()
 	if cfg.App.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -102,7 +103,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	engine := gin.New()
-	engine.Use(gin.Logger())
+	engine.Use(logger.RequestLogger())
 	engine.Use(metrics.GinMiddleware())
 	engine.Use(gin.Recovery())
 	if cfg.OTel.Enabled {
@@ -239,6 +240,7 @@ func New(cfg *config.Config) (*App, error) {
 		db:            db,
 		log:           log,
 		shutdownTrace: traceShutdown,
+		shutdownLog:   logShutdown,
 		taskQueue:     taskQueue,
 	}
 	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, membershipSvc, taskQueue, storageClient)
@@ -429,7 +431,7 @@ func New(cfg *config.Config) (*App, error) {
 		}
 		registerSpecs(engine, specs, jwtSvc)
 	} else {
-		log.Warn("route map missing, skipped stub registration", zap.String("path", routeMapPath))
+		log.Warn("路由映射文件缺失，已跳过存根路由注册", slog.String("path", routeMapPath))
 	}
 
 	return app, nil
@@ -458,7 +460,7 @@ func (a *App) startEmbeddedWorker(
 	workerCount := cfg.Worker.Count
 	metrics.SetWorkerConfigured(cfg.TaskQueue.Driver, workerCount)
 	if workerCount <= 0 {
-		a.log.Info("embedded worker disabled", zap.Int("worker_count", workerCount))
+		a.log.Info("内嵌 worker 已禁用", slog.Int("worker_count", workerCount))
 		return
 	}
 
@@ -491,12 +493,12 @@ func (a *App) startEmbeddedWorker(
 	a.workerCancel = cancel
 	a.workerDone = done
 
-	a.log.Info("embedded worker enabled",
-		zap.String("worker_id", workerID),
-		zap.Strings("task_types", taskTypes),
-		zap.String("task_queue_driver", cfg.TaskQueue.Driver),
-		zap.Duration("poll_interval", pollInterval),
-		zap.Int("worker_count", workerCount),
+	a.log.Info("内嵌 worker 已启用",
+		slog.String("worker_id", workerID),
+		slog.Any("task_types", taskTypes),
+		slog.String("task_queue_driver", cfg.TaskQueue.Driver),
+		slog.Duration("poll_interval", pollInterval),
+		slog.Int("worker_count", workerCount),
 	)
 	go func() {
 		defer close(done)
@@ -511,7 +513,7 @@ func (a *App) startEmbeddedWorker(
 			if err == nil || err == context.Canceled || workerCtx.Err() != nil {
 				break
 			}
-			a.log.Error("embedded worker stopped with error; restarting", zap.Error(err))
+			a.log.Error("内嵌 worker 异常停止，准备重启", logger.Err(err))
 			timer := time.NewTimer(2 * time.Second)
 			select {
 			case <-workerCtx.Done():
@@ -519,7 +521,7 @@ func (a *App) startEmbeddedWorker(
 			case <-timer.C:
 			}
 		}
-		a.log.Info("embedded worker stopped")
+		a.log.Info("内嵌 worker 已停止")
 	}()
 }
 
@@ -541,7 +543,7 @@ func (a *App) Close(ctx context.Context) error {
 		select {
 		case <-a.workerDone:
 		case <-ctx.Done():
-			a.log.Warn("embedded worker shutdown timed out", zap.Error(ctx.Err()))
+			a.log.Warn("内嵌 worker 关闭超时", logger.Err(ctx.Err()))
 		}
 	}
 	if a.taskQueue != nil {
@@ -551,6 +553,11 @@ func (a *App) Close(ctx context.Context) error {
 	}
 	if a.shutdownTrace != nil {
 		if err := a.shutdownTrace(ctx); err != nil {
+			return err
+		}
+	}
+	if a.shutdownLog != nil {
+		if err := a.shutdownLog(ctx); err != nil {
 			return err
 		}
 	}

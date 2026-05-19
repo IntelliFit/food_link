@@ -19,7 +19,7 @@ import (
 	apm "food_link/backend/pkg/trace"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.uber.org/zap"
+	"log/slog"
 )
 
 const (
@@ -70,9 +70,9 @@ func (s *AnalyzeService) ConfigureDoubaoClient(apiKey, baseURL, model string) {
 		if m == "" {
 			m = "doubao-seed-2-0-lite-260428"
 		}
-		logger.L().Info("doubao client initialized", zap.String("base_url", baseURL), zap.String("model", m))
+		logger.L().Info("豆包客户端已初始化", slog.String("base_url", baseURL), slog.String("model", m))
 	} else {
-		logger.L().Warn("doubao client not initialized: empty api key")
+		logger.L().Warn("豆包客户端未初始化：API key 为空")
 	}
 }
 
@@ -172,9 +172,9 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 			return analyzeWithImagesTemperature(retryCtx, s.doubaoClient, prompt, imageURLs, temperature)
 		})
 		if fallbackErr == nil {
-			logger.WithTrace(ctx).Warn("precision gemini vision transient error fallback to doubao",
-				zap.Error(err),
-				zap.Int("image_count", len(imageURLs)),
+			logger.WithTrace(ctx).Warn("精确模式 Gemini 视觉临时错误，回退到豆包",
+				logger.Err(err),
+				slog.Int("image_count", len(imageURLs)),
 			)
 			apm.AddEvent(ctx, "precision llm fallback completed",
 				attribute.String("analysis.primary_provider", provider),
@@ -184,10 +184,10 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 			)
 			return fallbackParsed, nil
 		}
-		logger.WithTrace(ctx).Warn("precision doubao fallback failed",
-			zap.Error(fallbackErr),
-			zap.Error(err),
-			zap.Int("image_count", len(imageURLs)),
+		logger.WithTrace(ctx).Warn("精确模式豆包兜底失败",
+			logger.Err(fallbackErr),
+			logger.Err(err),
+			slog.Int("image_count", len(imageURLs)),
 		)
 		apm.RecordError(ctx, fallbackErr,
 			attribute.String("analysis.stage", "fallback"),
@@ -331,14 +331,14 @@ func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model strin
 			attribute.Int("analysis.retry_number", retryNumber),
 			attribute.Int("analysis.max_retries", maxRetries),
 		)
-		logger.WithTrace(ctx).Warn("llm call failed; retrying same task",
-			zap.String("stage", stage),
-			zap.String("provider", provider),
-			zap.String("model", model),
-			zap.String("retry_reason", retryReason),
-			zap.Int("retry_number", retryNumber),
-			zap.Int("max_retries", maxRetries),
-			zap.Error(err),
+		logger.WithTrace(ctx).Warn("大模型调用失败，正在同一任务内重试",
+			slog.String("stage", stage),
+			slog.String("provider", provider),
+			slog.String("model", model),
+			slog.String("retry_reason", retryReason),
+			slog.Int("retry_number", retryNumber),
+			slog.Int("max_retries", maxRetries),
+			logger.Err(err),
 		)
 		backoff := time.Duration(200*retryNumber) * time.Millisecond
 		timer := time.NewTimer(backoff)
@@ -1240,15 +1240,15 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		attribute.Int("analysis.image_count", imageCount),
 		attribute.Bool("analysis.has_base64_image", strings.TrimSpace(input.Base64Image) != ""),
 	)
-	logger.WithTrace(ctx).Info("food image analyze llm start",
-		zap.String("user_id", userID),
-		zap.String("provider", provider),
-		zap.String("model", model),
-		zap.String("requested_model", strings.TrimSpace(input.ModelName)),
-		zap.String("execution_mode", executionMode),
-		zap.String("analysis_engine", strings.TrimSpace(input.AnalysisEngine)),
-		zap.Int("image_count", imageCount),
-		zap.Bool("has_base64_image", strings.TrimSpace(input.Base64Image) != ""),
+	logger.WithTrace(ctx).Info("食物图片分析大模型调用开始",
+		slog.String("user_id", userID),
+		slog.String("provider", provider),
+		slog.String("model", model),
+		slog.String("requested_model", strings.TrimSpace(input.ModelName)),
+		slog.String("execution_mode", executionMode),
+		slog.String("analysis_engine", strings.TrimSpace(input.AnalysisEngine)),
+		slog.Int("image_count", imageCount),
+		slog.Bool("has_base64_image", strings.TrimSpace(input.Base64Image) != ""),
 	)
 	parsed, err := analyzeWithJSONParseRetry(ctx, "food_image", provider, model, func(callCtx context.Context) (map[string]any, error) {
 		attemptCtx := callCtx
@@ -1265,8 +1265,8 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			return analyzeWithImagesTemperature(retryCtx, s.doubaoClient, prompt, imageURLs, 0.3)
 		})
 		if fallbackErr == nil {
-			logger.WithTrace(ctx).Warn("gemini vision transient error fallback to doubao",
-				zap.Error(err),
+			logger.WithTrace(ctx).Warn("Gemini 视觉临时错误，回退到豆包",
+				logger.Err(err),
 			)
 			apm.AddEvent(ctx, "food image analyze llm fallback completed",
 				attribute.String("analysis.primary_provider", primaryProvider),
@@ -1281,9 +1281,9 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			model = "doubao-seed-2-0-lite-260428"
 			fallbackUsed = true
 		} else {
-			logger.WithTrace(ctx).Warn("doubao fallback failed",
-				zap.Error(fallbackErr),
-				zap.Error(err),
+			logger.WithTrace(ctx).Warn("豆包兜底失败",
+				logger.Err(fallbackErr),
+				logger.Err(err),
 			)
 			apm.RecordError(ctx, fallbackErr,
 				attribute.String("analysis.stage", "fallback"),
@@ -1307,16 +1307,16 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			attribute.Int("analysis.image_count", imageCount),
 			apm.DurationMS("analysis.duration_ms", time.Since(start)),
 		)
-		logger.WithTrace(ctx).Warn("food image analyze llm failed",
-			zap.String("user_id", userID),
-			zap.String("provider", provider),
-			zap.String("model", model),
-			zap.String("primary_provider", primaryProvider),
-			zap.String("primary_model", primaryModel),
-			zap.String("requested_model", strings.TrimSpace(input.ModelName)),
-			zap.Int("image_count", imageCount),
-			zap.Duration("duration", time.Since(start)),
-			zap.Error(err),
+		logger.WithTrace(ctx).Warn("食物图片分析大模型调用失败",
+			slog.String("user_id", userID),
+			slog.String("provider", provider),
+			slog.String("model", model),
+			slog.String("primary_provider", primaryProvider),
+			slog.String("primary_model", primaryModel),
+			slog.String("requested_model", strings.TrimSpace(input.ModelName)),
+			slog.Int("image_count", imageCount),
+			slog.Duration("duration", time.Since(start)),
+			logger.Err(err),
 		)
 		return nil, err
 	}
@@ -1361,17 +1361,17 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		attribute.String("analysis.hybrid_status", stringFromAny(hybridMeta["status"])),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
-	logger.WithTrace(ctx).Info("food image analyze llm completed",
-		zap.String("user_id", userID),
-		zap.String("provider", provider),
-		zap.String("model", model),
-		zap.String("primary_provider", primaryProvider),
-		zap.String("primary_model", primaryModel),
-		zap.String("requested_model", strings.TrimSpace(input.ModelName)),
-		zap.Int("image_count", imageCount),
-		zap.Bool("fallback_used", fallbackUsed),
-		zap.Any("hybrid_review", hybridMeta),
-		zap.Duration("duration", time.Since(start)),
+	logger.WithTrace(ctx).Info("食物图片分析大模型调用完成",
+		slog.String("user_id", userID),
+		slog.String("provider", provider),
+		slog.String("model", model),
+		slog.String("primary_provider", primaryProvider),
+		slog.String("primary_model", primaryModel),
+		slog.String("requested_model", strings.TrimSpace(input.ModelName)),
+		slog.Int("image_count", imageCount),
+		slog.Bool("fallback_used", fallbackUsed),
+		slog.Any("hybrid_review", hybridMeta),
+		slog.Duration("duration", time.Since(start)),
 	)
 
 	result, err := s.finalizeAnalyzeResponse(ctx, parsed, input, executionMode, provider, model, durationMs)
@@ -1383,12 +1383,12 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			attribute.String("analysis.model", model),
 			apm.DurationMS("analysis.duration_ms", time.Since(start)),
 		)
-		logger.WithTrace(ctx).Warn("food image analyze finalize failed",
-			zap.String("user_id", userID),
-			zap.String("provider", provider),
-			zap.String("model", model),
-			zap.Duration("duration", time.Since(start)),
-			zap.Error(err),
+		logger.WithTrace(ctx).Warn("食物图片分析结果整理失败",
+			slog.String("user_id", userID),
+			slog.String("provider", provider),
+			slog.String("model", model),
+			slog.Duration("duration", time.Since(start)),
+			logger.Err(err),
 		)
 		return nil, err
 	}
@@ -1410,15 +1410,15 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		attribute.Int("analysis.unresolved_count", intFromAny(result["unresolved_count"])),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
-	logger.WithTrace(ctx).Info("food image analyze finalized",
-		zap.String("user_id", userID),
-		zap.String("provider", provider),
-		zap.String("model", model),
-		zap.String("analysis_engine", stringFromAny(result["analysis_engine"])),
-		zap.Int("item_count", len(toItems(result["items"]))),
-		zap.Int("resolved_count", intFromAny(result["resolved_count"])),
-		zap.Int("unresolved_count", intFromAny(result["unresolved_count"])),
-		zap.Duration("duration", time.Since(start)),
+	logger.WithTrace(ctx).Info("食物图片分析结果已整理",
+		slog.String("user_id", userID),
+		slog.String("provider", provider),
+		slog.String("model", model),
+		slog.String("analysis_engine", stringFromAny(result["analysis_engine"])),
+		slog.Int("item_count", len(toItems(result["items"]))),
+		slog.Int("resolved_count", intFromAny(result["resolved_count"])),
+		slog.Int("unresolved_count", intFromAny(result["unresolved_count"])),
+		slog.Duration("duration", time.Since(start)),
 	)
 	metrics.ObserveFoodAnalysis("image", provider, model, "success", time.Since(start), len(toItems(result["items"])))
 	return result, nil
@@ -1478,9 +1478,9 @@ func (s *AnalyzeService) reviewStandardImageWithGemini(ctx context.Context, inpu
 		return analyzeWithImagesTemperature(retryCtx, s.ofoxAIClient, prompt, imageURLs, 0.2)
 	})
 	if err != nil {
-		logger.WithTrace(ctx).Warn("standard image hybrid review failed",
-			zap.Error(err),
-			zap.Int("image_count", len(imageURLs)),
+		logger.WithTrace(ctx).Warn("标准图片混合复核失败",
+			logger.Err(err),
+			slog.Int("image_count", len(imageURLs)),
 		)
 		meta["status"] = "failed"
 		meta["error"] = err.Error()
@@ -1497,10 +1497,10 @@ func (s *AnalyzeService) reviewStandardImageWithGemini(ctx context.Context, inpu
 	if agreement := strings.TrimSpace(fmt.Sprintf("%v", reviewed["modelAgreement"])); agreement != "" && agreement != "<nil>" {
 		meta["model_agreement"] = agreement
 	}
-	logger.WithTrace(ctx).Info("standard image hybrid review applied",
-		zap.Int("image_count", len(imageURLs)),
-		zap.Int("item_count", len(parseItems(merged))),
-		zap.Any("hybrid_review", meta),
+	logger.WithTrace(ctx).Info("标准图片混合复核已应用",
+		slog.Int("image_count", len(imageURLs)),
+		slog.Int("item_count", len(parseItems(merged))),
+		slog.Any("hybrid_review", meta),
 	)
 	return merged, meta
 }
@@ -2078,7 +2078,7 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 				continue
 			}
 			if err != nil {
-				logger.WithTrace(ctx).Warn("packaged food lookup failed", zap.Error(err), zap.String("food_name", name))
+				logger.WithTrace(ctx).Warn("包装食品查询失败", logger.Err(err), slog.String("food_name", name))
 			}
 		}
 		resolve, err := s.nutrition.ResolveFood(ctx, name)
@@ -2104,9 +2104,9 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 			fallbacks = rows
 		} else {
 			metrics.AddNutritionResolveItems("db_first", "gemini_fallback_failed", len(fallbackCandidates))
-			logger.WithTrace(ctx).Warn("gemini nutrition fallback failed",
-				zap.Error(err),
-				zap.Int("candidate_count", len(fallbackCandidates)),
+			logger.WithTrace(ctx).Warn("Gemini 营养兜底失败",
+				logger.Err(err),
+				slog.Int("candidate_count", len(fallbackCandidates)),
 			)
 		}
 	}
@@ -2160,19 +2160,19 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 				next["nutrition_persisted"] = false
 				if foodID, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, fallbackUnit, "gemini_generated"); err != nil {
 					geminiPersistFailedCount++
-					logger.WithTrace(ctx).Warn("gemini nutrition upsert failed",
-						zap.Error(err),
-						zap.String("food_name", lookup.name),
-						zap.Any("unit_nutrition_per_100g", fallbackUnit),
+					logger.WithTrace(ctx).Warn("Gemini 营养写入失败",
+						logger.Err(err),
+						slog.String("food_name", lookup.name),
+						slog.Any("unit_nutrition_per_100g", fallbackUnit),
 					)
 				} else {
 					geminiPersistedCount++
 					next["nutrition_persisted"] = true
 					next["matched_food_id"] = foodID
-					logger.WithTrace(ctx).Info("gemini nutrition upsert succeeded",
-						zap.String("food_name", lookup.name),
-						zap.String("food_id", foodID),
-						zap.Any("unit_nutrition_per_100g", unit),
+					logger.WithTrace(ctx).Info("Gemini 营养写入成功",
+						slog.String("food_name", lookup.name),
+						slog.String("food_id", foodID),
+						slog.Any("unit_nutrition_per_100g", unit),
 					)
 				}
 			}
@@ -2240,9 +2240,9 @@ func (s *AnalyzeService) applySuggestedRatios(ctx context.Context, resp map[stri
 		return s.ofoxAIClient.Analyze(innerCtx, prompt, "")
 	})
 	if err != nil {
-		logger.WithTrace(ctx).Warn("suggested ratio generation failed",
-			zap.Error(err),
-			zap.Int("item_count", len(items)),
+		logger.WithTrace(ctx).Warn("建议摄入比例生成失败",
+			logger.Err(err),
+			slog.Int("item_count", len(items)),
 		)
 		resp["items"] = withDefaultSuggestedRatios(items, "failed")
 		resp["suggest_ratio_enabled"] = true
@@ -2498,11 +2498,11 @@ func logDBFirstNutritionSummary(ctx context.Context, items []map[string]any, res
 	if total > 0 {
 		hitRate = math.Round((float64(resolvedCount)/float64(total))*10000) / 100
 	}
-	fields := []zap.Field{
-		zap.Int("total", total),
-		zap.Int("resolved", resolvedCount),
-		zap.Int("unresolved", unresolvedCount),
-		zap.Float64("hit_rate_percent", hitRate),
+	fields := []slog.Attr{
+		slog.Int("total", total),
+		slog.Int("resolved", resolvedCount),
+		slog.Int("unresolved", unresolvedCount),
+		slog.Float64("hit_rate_percent", hitRate),
 	}
 	itemFields := make([]map[string]any, 0, len(items))
 	for _, item := range items {
@@ -2516,9 +2516,9 @@ func logDBFirstNutritionSummary(ctx context.Context, items []map[string]any, res
 			"is_unresolved":     item["is_unresolved"],
 		})
 	}
-	fields = append(fields, zap.Any("items", itemFields))
-	logger.WithTrace(ctx).Info("db_first nutrition lookup summary", fields...)
-	apm.AddEvent(ctx, "db_first nutrition lookup summary",
+	fields = append(fields, slog.Any("items", itemFields))
+	logger.WithTrace(ctx).Info("营养库优先匹配汇总", fields...)
+	apm.AddEvent(ctx, "营养库优先匹配汇总",
 		attribute.Int("nutrition.total", total),
 		attribute.Int("nutrition.resolved", resolvedCount),
 		attribute.Int("nutrition.unresolved", unresolvedCount),

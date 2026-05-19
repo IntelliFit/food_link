@@ -21,7 +21,7 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 
-	"go.uber.org/zap"
+	"log/slog"
 )
 
 type StatsRepo interface {
@@ -182,11 +182,11 @@ func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateR
 	var comp *statsComputation
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			logger.L().Error("stats insight generation panic",
-				zap.Any("panic", recovered),
-				zap.String("user_id", userID),
-				zap.String("range", normalizeStatsRange(dateRange)),
-				zap.ByteString("stack", debug.Stack()),
+			logger.L().Error("统计洞察生成发生 panic",
+				slog.Any("panic", recovered),
+				slog.String("user_id", userID),
+				slog.String("range", normalizeStatsRange(dateRange)),
+				slog.String("stack", string(debug.Stack())),
 			)
 			if comp != nil {
 				result = map[string]any{"analysis_summary": fallbackStatsInsight(comp)}
@@ -217,11 +217,11 @@ func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateR
 	}
 	insight, err := s.generateNutritionInsight(ctx, comp)
 	if err != nil {
-		logger.L().Warn("stats insight llm generation failed, using fallback",
-			zap.Error(err),
-			zap.String("user_id", userID),
-			zap.String("range", comp.StatsRange),
-			zap.Int("recorded_days", comp.RecordedDays),
+		logger.L().Warn("统计洞察大模型生成失败，使用兜底结果",
+			logger.Err(err),
+			slog.String("user_id", userID),
+			slog.String("range", comp.StatsRange),
+			slog.Int("recorded_days", comp.RecordedDays),
 		)
 		insight = fallbackStatsInsight(comp)
 	}

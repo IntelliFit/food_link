@@ -3,27 +3,27 @@ package taskqueue
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
-
-	"go.uber.org/zap"
 )
 
 type MemoryQueue struct {
 	messages chan TaskMessage
 	done     chan struct{}
 	once     sync.Once
-	log      *zap.Logger
+	log      *logger.Logger
 }
 
-func NewMemoryQueue(bufferSize int, log *zap.Logger) *MemoryQueue {
+func NewMemoryQueue(bufferSize int, log *logger.Logger) *MemoryQueue {
 	if bufferSize <= 0 {
 		bufferSize = 1024
 	}
 	if log == nil {
-		log = zap.NewNop()
+		log = logger.L()
 	}
 	queue := &MemoryQueue{
 		messages: make(chan TaskMessage, bufferSize),
@@ -72,9 +72,9 @@ func (q *MemoryQueue) Subscribe(ctx context.Context, opts SubscribeOptions) (<-c
 			case msg := <-q.messages:
 				metrics.SetTaskQueueDepth("memory", "default", len(q.messages))
 				if len(allowed) > 0 && !allowed[msg.TaskType] {
-					q.log.Warn("task queue message skipped because task type is not subscribed",
-						zap.String("task_id", msg.TaskID),
-						zap.String("task_type", msg.TaskType),
+					q.log.Warn("任务队列消息因任务类型未订阅而跳过",
+						slog.String("task_id", msg.TaskID),
+						slog.String("task_type", msg.TaskType),
 					)
 					continue
 				}

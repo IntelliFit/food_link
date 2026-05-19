@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"go.uber.org/zap"
+	"log/slog"
 )
 
 func Success(c *gin.Context, data any) {
@@ -30,12 +30,12 @@ func Error(c *gin.Context, err error) {
 	var appErr *commonerrors.AppError
 	if errors.As(err, &appErr) {
 		if log != nil {
-			log.Warn("app error",
-				zap.Int("http_status", appErr.HTTPStatus),
-				zap.Int("code", appErr.Code),
-				zap.String("message", appErr.Message),
-				zap.String("path", c.Request.URL.Path),
-				zap.String("method", c.Request.Method),
+			log.Warn("应用错误",
+				slog.Int("http_status", appErr.HTTPStatus),
+				slog.Int("code", appErr.Code),
+				slog.String("message", appErr.Message),
+				slog.String("path", c.Request.URL.Path),
+				slog.String("method", c.Request.Method),
 			)
 		}
 		c.JSON(appErr.HTTPStatus, gin.H{
@@ -48,11 +48,11 @@ func Error(c *gin.Context, err error) {
 	var ginErr *gin.Error
 	if errors.As(err, &ginErr) {
 		if log != nil {
-			log.Warn("gin binding error",
-				zap.Int("code", 400),
-				zap.String("message", err.Error()),
-				zap.String("path", c.Request.URL.Path),
-				zap.String("method", c.Request.Method),
+			log.Warn("Gin 参数绑定错误",
+				slog.Int("code", 400),
+				slog.String("message", err.Error()),
+				slog.String("path", c.Request.URL.Path),
+				slog.String("method", c.Request.Method),
 			)
 		}
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -65,11 +65,11 @@ func Error(c *gin.Context, err error) {
 	var jsonErr *json.SyntaxError
 	if errors.As(err, &jsonErr) {
 		if log != nil {
-			log.Warn("json parse error",
-				zap.Int("code", 400),
-				zap.String("message", err.Error()),
-				zap.String("path", c.Request.URL.Path),
-				zap.String("method", c.Request.Method),
+			log.Warn("JSON 解析错误",
+				slog.Int("code", 400),
+				slog.String("message", err.Error()),
+				slog.String("path", c.Request.URL.Path),
+				slog.String("method", c.Request.Method),
 			)
 		}
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -82,11 +82,11 @@ func Error(c *gin.Context, err error) {
 	var valErr validator.ValidationErrors
 	if errors.As(err, &valErr) {
 		if log != nil {
-			log.Warn("validation error",
-				zap.Int("code", 400),
-				zap.String("message", err.Error()),
-				zap.String("path", c.Request.URL.Path),
-				zap.String("method", c.Request.Method),
+			log.Warn("参数校验错误",
+				slog.Int("code", 400),
+				slog.String("message", err.Error()),
+				slog.String("path", c.Request.URL.Path),
+				slog.String("method", c.Request.Method),
 			)
 		}
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -96,10 +96,10 @@ func Error(c *gin.Context, err error) {
 		return
 	}
 	if log != nil {
-		log.Error("unhandled error",
-			zap.Error(err),
-			zap.String("path", c.Request.URL.Path),
-			zap.String("method", c.Request.Method),
+		log.Error("未处理错误",
+			logger.Err(err),
+			slog.String("path", c.Request.URL.Path),
+			slog.String("method", c.Request.Method),
 		)
 	}
 	c.JSON(http.StatusInternalServerError, gin.H{

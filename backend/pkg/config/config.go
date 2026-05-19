@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	App       AppConfig       `mapstructure:"app"`
+	Log       LogConfig       `mapstructure:"log"`
 	Database  DatabaseConfig  `mapstructure:"database"`
 	JWT       JWTConfig       `mapstructure:"jwt"`
 	OTel      OTelConfig      `mapstructure:"otel"`
@@ -24,6 +25,13 @@ type AppConfig struct {
 	Env  string `mapstructure:"env"`
 	Host string `mapstructure:"host"`
 	Port int    `mapstructure:"port"`
+}
+
+type LogConfig struct {
+	Level    string `mapstructure:"level"`
+	Format   string `mapstructure:"format"`
+	Output   string `mapstructure:"output"`
+	FilePath string `mapstructure:"file_path"`
 }
 
 type DatabaseConfig struct {
@@ -249,6 +257,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("app.env", "development")
 	v.SetDefault("app.host", "0.0.0.0")
 	v.SetDefault("app.port", 3010)
+	v.SetDefault("log.level", "info")
+	v.SetDefault("log.format", "json")
+	v.SetDefault("log.output", "stdout")
+	v.SetDefault("log.file_path", "logs/food-link-backend.log")
 	v.SetDefault("database.driver", "postgres")
 	v.SetDefault("database.port", 5432)
 	v.SetDefault("database.sslmode", "disable")

@@ -1393,3 +1393,6 @@
   - When adding new API wrappers, route non-2xx responses through `throwHttpErrorWithStatus()` where feasible so diagnostics stay consistent.
 
 - `2026-05-19`: Packaged snack DB enrichment should default to a maintained common-snack seed list rather than requiring manual product names. Search public web snippets first; when public data is incomplete, AI may complete missing fields with explicit provenance (`web_ai_completed` / `ai_estimated_seed`). Use `--no-ai-completion` only for stricter web-evidence-only runs.
+
+- `2026-05-20`: Backend logging is standardized on `pkg/logger` backed by Go `log/slog`; do not add new `zap` usage or Gin default `gin.Logger()`. App startup initializes logging through `logger.Init`, request access logs use `logger.RequestLogger`, and business code should prefer `logger.Info/Warn/Error(ctx, ...)` with `slog.Attr` fields. Log config lives under `log:` in `backend/config.yaml`; `otel.enabled=true` also enables OTLP log export through `otelslog`.
+- `2026-05-20`: Backend log message text must be Chinese. Structured field names, metric labels, status enums, and script-oriented machine-readable keys should remain English where they are used for filtering, aggregation, or parsing.

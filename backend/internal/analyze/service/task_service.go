@@ -19,7 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
-	"go.uber.org/zap"
+	"log/slog"
 )
 
 type TaskService struct {
@@ -274,16 +274,16 @@ func logAnalyzeTaskSubmitted(ctx context.Context, userID, taskID, taskType strin
 	sourceType := strings.TrimSpace(input.SourceType)
 	imageCount := imageCountForLog(input.ImageURL, input.ImageURLs)
 	hasText := strings.TrimSpace(input.TextInput) != "" || strings.TrimSpace(input.Text) != ""
-	logger.WithTrace(ctx).Info("analysis task submitted",
-		zap.String("task_id", taskID),
-		zap.String("task_type", taskType),
-		zap.String("user_id", userID),
-		zap.String("model_name", modelName),
-		zap.String("execution_mode", executionMode),
-		zap.String("analysis_engine", analysisEngine),
-		zap.String("source_type", sourceType),
-		zap.Int("image_count", imageCount),
-		zap.Bool("has_text_input", hasText),
+	logger.WithTrace(ctx).Info("分析任务已提交",
+		slog.String("task_id", taskID),
+		slog.String("task_type", taskType),
+		slog.String("user_id", userID),
+		slog.String("model_name", modelName),
+		slog.String("execution_mode", executionMode),
+		slog.String("analysis_engine", analysisEngine),
+		slog.String("source_type", sourceType),
+		slog.Int("image_count", imageCount),
+		slog.Bool("has_text_input", hasText),
 	)
 	apm.SetAttributes(ctx,
 		attribute.String("analysis.task_id", taskID),
@@ -488,9 +488,9 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 		TaskType: task.TaskType,
 	})
 	if err == nil {
-		logger.WithTrace(ctx).Info("analysis task enqueued",
-			zap.String("task_id", task.ID),
-			zap.String("task_type", task.TaskType),
+		logger.WithTrace(ctx).Info("分析任务已入队",
+			slog.String("task_id", task.ID),
+			slog.String("task_type", task.TaskType),
 		)
 		apm.AddEvent(ctx, "analysis task queue publish completed",
 			attribute.String("analysis.task_id", task.ID),
@@ -509,11 +509,11 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 	failCtx, failCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer failCancel()
 	_, failErr := s.tasks.FailTask(failCtx, task.ID, "analysis task enqueue failed")
-	logger.WithTrace(ctx).Error("analysis task enqueue failed",
-		zap.String("task_id", task.ID),
-		zap.String("task_type", task.TaskType),
-		zap.Error(err),
-		zap.NamedError("fail_update_error", failErr),
+	logger.WithTrace(ctx).Error("分析任务入队失败",
+		slog.String("task_id", task.ID),
+		slog.String("task_type", task.TaskType),
+		logger.Err(err),
+		logger.NamedErr("fail_update_error", failErr),
 	)
 	return fmt.Errorf("enqueue analysis task: %w", err)
 }

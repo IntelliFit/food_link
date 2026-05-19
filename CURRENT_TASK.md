@@ -9425,3 +9425,35 @@
 - Non-dry-run mode also checks `packaged_food_library.normalized_name` and skips active existing rows by default.
 - Reprocess switches: `--no-skip-processed` ignores state; `--no-skip-existing` ignores DB-existing skip.
 - Verification: `python -m py_compile scripts/enrich_packaged_foods.py`, `python scripts/enrich_packaged_foods.py --help`, and `git diff --check -- scripts/enrich_packaged_foods.py .gitignore` passed.
+
+## 2026-05-20 - backend slog structured logging migration
+
+- Task: Replace backend zap logging with pkg/logger based on log/slog, add structured request logger, add log config, and document the rule in AGENTS.md.
+- Status: implemented_verified
+- Changes:
+  - backend/pkg/logger now wraps log/slog, supports json/text output, stdout/file/both, trace/span enrichment from context, Gin request logging, and optional OTLP log export through otelslog when otel.enabled is true.
+  - backend/internal/app initializes logger through logger.Init and uses logger.RequestLogger instead of gin.Logger().
+  - Existing zap field calls in app, taskqueue, worker, analyze, response, expiry, and health service paths were migrated to slog.Attr fields.
+  - backend config now includes log.level/log.format/log.output/log.file_path defaults and config.yaml block.
+  - go.uber.org/zap was removed from Go module dependencies.
+  - AGENTS.md now includes the backend logging convention adapted for food_link.
+- Verification:
+  - rg found no go.uber.org/zap, zap.*, *zap.Logger, gin.Logger(), logger.New(), or logger.SetGlobal() references under backend.
+  - go test ./pkg/logger ./pkg/config ./internal/taskqueue ./internal/app ./internal/analyze/service ./internal/analyze/handler ./internal/worker ./internal/common/response ./internal/expiry/service ./internal/health/service -run '^$' -count=1 passed.
+  - go test ./pkg/logger ./pkg/config -count=1 passed.
+  - git diff --check passed with CRLF warnings only.
+## 2026-05-20 - 后端日志消息中文化
+
+- Task: 用户要求“所有的日志都要用中文，把现在的英文日志全部改成中文”。
+- Status: fixed_code_verified_static
+- Changes:
+  - 已将后端当前结构化日志中的英文消息改为中文，覆盖 `pkg/logger` 访问日志、`internal/app`、`internal/worker`、`internal/taskqueue`、`internal/analyze/service`、`internal/common/response`、`internal/expiry/service`、`internal/health/service`。
+  - 已将 `cmd/migration` 和 `cmd/nutrition-backfill` 中使用标准库 `log.Printf/Fatalf` 的英文日志改为中文。
+  - 保留结构化字段名、枚举值、指标标签和机器可读输出的英文，避免破坏日志平台过滤、业务状态判断和脚本解析。
+  - 与日志语义相邻的部分 trace event 名称同步改为中文，便于日志和链路事件对齐。
+- Verification:
+  - `rg` 扫描确认当前 `logger.Info/Warn/Error`、`*.log.Info/Warn/Error`、`log.Printf/Fatalf` 不再存在以英文开头的日志消息。
+  - `rg` 扫描确认相关 `AddEvent` 不再存在以英文开头的事件名。
+  - `go test ./pkg/logger ./pkg/config ./internal/taskqueue ./internal/app ./internal/analyze/service ./internal/analyze/handler ./internal/worker ./internal/common/response ./internal/expiry/service ./internal/health/service -run '^$' -count=1` passed.
+  - `go test ./pkg/logger ./pkg/config -count=1` passed.
+  - `git diff --check` passed，仅有 CRLF 提示。
