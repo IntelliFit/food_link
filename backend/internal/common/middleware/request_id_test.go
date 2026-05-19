@@ -3,6 +3,8 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +19,9 @@ func TestRequestIDAddsTraceAndRequestHeadersWithoutOTel(t *testing.T) {
 	r.GET("/ping", func(c *gin.Context) {
 		assert.NotEmpty(t, c.GetString("trace_id"))
 		assert.NotEmpty(t, c.GetString("request_id"))
+		if hostName := strings.TrimSpace(c.GetString("host_name")); hostName != "" {
+			assert.Equal(t, expectedHostName(t), hostName)
+		}
 		c.Status(http.StatusNoContent)
 	})
 
@@ -28,6 +33,9 @@ func TestRequestIDAddsTraceAndRequestHeadersWithoutOTel(t *testing.T) {
 	assert.Len(t, w.Header().Get(HeaderTraceID), 32)
 	assert.NotEqual(t, "no-trace-id", w.Header().Get(HeaderTraceID))
 	assert.NotEmpty(t, w.Header().Get(HeaderRequestID))
+	if hostName := expectedHostName(t); hostName != "" {
+		assert.Equal(t, hostName, w.Header().Get(HeaderHostName))
+	}
 }
 
 func TestRequestIDIgnoresNoTraceIDPlaceholder(t *testing.T) {
@@ -44,4 +52,11 @@ func TestRequestIDIgnoresNoTraceIDPlaceholder(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, w.Code)
 	assert.Len(t, w.Header().Get(HeaderTraceID), 32)
 	assert.NotEqual(t, "no-trace-id", w.Header().Get(HeaderTraceID))
+}
+
+func expectedHostName(t *testing.T) string {
+	t.Helper()
+	hostName, err := os.Hostname()
+	require.NoError(t, err)
+	return strings.TrimSpace(hostName)
 }

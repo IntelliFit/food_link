@@ -9382,3 +9382,15 @@
   - `git diff --check` passed with CRLF warnings only.
   - Repo/analyze sqlite-backed tests for packaged lookup were attempted but blocked by local `CGO_ENABLED=0` / `go-sqlite3 requires cgo`.
   - `go run ./cmd/migration -config-dir .` was not run because the current configured database target was not confirmed in this turn.
+
+## 2026-05-19 - HTTP host name response header
+
+- Task: Add a backend response header that exposes the current host name, matching the source used by OTel `host.name` / `service.instance.id`; in K8s this should be the Pod name.
+- Status: implemented_verified
+- Changes:
+  - `backend/internal/common/middleware/request_id.go` now defines and returns `X-Host-Name` from `os.Hostname()` on every response handled by the global RequestID middleware.
+  - The middleware also stores the value in Gin context as `host_name`.
+  - Updated RequestID middleware tests to assert the host header/context value when hostname is available.
+- Verification:
+  - `go test ./internal/common/middleware -run 'TestRequestID' -count=1` passed.
+  - `git diff --check -- backend/internal/common/middleware/request_id.go backend/internal/common/middleware/request_id_test.go` passed with CRLF warnings only.

@@ -1381,3 +1381,8 @@
   - `snack` must first query `packaged_food_library` / `packaged_food_aliases`; on hit, backend overrides model weight with `serving_weight_g` or `net_weight_g` from the database and recalculates nutrients from packaged per-100g values.
   - If a `snack` is not found in packaged food DB, it may fall back to the existing `food_nutrition_library` path, but should remain visibly marked with `type=snack` for debugging and future backfill.
   - Packaged snack data enrichment should use `scripts/enrich_packaged_foods.py` / `npm run nutrition:enrich-packaged`; extracted public web data must have product name, net weight, calories, at least one macro, and confidence >= 0.6 before writing.
+
+- `2026-05-19`: HTTP observability response headers:
+  - Every backend response should include `X-Trace-Id`, `X-Request-Id`, and `X-Host-Name` from the global RequestID middleware.
+  - `X-Host-Name` must use `os.Hostname()`, the same source as OTel `host.name` / `service.instance.id`; in Kubernetes this identifies the current Pod name.
+  - Do not add a configurable hostname override for this header unless there is a specific deployment need, because overriding it would weaken per-instance debugging.
