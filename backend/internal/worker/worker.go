@@ -1934,6 +1934,9 @@ func precisionCandidateNames(item map[string]any) []string {
 
 func buildPrecisionCandidateHint(item map[string]any) string {
 	parts := []string{}
+	if itemType := normalizePrecisionFoodType(firstNonEmptyString(item, "type", "foodType", "food_type")); itemType == "snack" {
+		parts = append(parts, "类型：snack，包装零食/预包装食品，后端会优先用零食库重量")
+	}
 	if candidates := precisionCandidateNames(item); len(candidates) > 1 {
 		parts = append(parts, "候选："+strings.Join(candidates, "/"))
 	}
@@ -1944,6 +1947,16 @@ func buildPrecisionCandidateHint(item map[string]any) string {
 		parts = append(parts, "备选："+alt)
 	}
 	return strings.Join(parts, "；")
+}
+
+func normalizePrecisionFoodType(raw string) string {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	switch text {
+	case "snack", "packaged_snack", "packaged", "packaged_food", "零食", "包装零食", "包装食品", "预包装食品":
+		return "snack"
+	default:
+		return "daily_food"
+	}
 }
 
 func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, referenceObjects []map[string]any, previousRounds []domain.PrecisionSessionRound) string {
@@ -2452,7 +2465,7 @@ func attachPrecisionItemMetadata(parsedItems, plannedItems []map[string]any) []m
 			continue
 		}
 		used[matchIndex] = true
-		for _, key := range []string{"item_key", "item_hint", "uncertainty_level", "uncertainty_reason"} {
+		for _, key := range []string{"item_key", "item_hint", "uncertainty_level", "uncertainty_reason", "type"} {
 			if value, ok := planned[key]; ok && !isEmptyAny(value) {
 				enriched[matchIndex][key] = value
 			}

@@ -47,6 +47,7 @@ func setupFoodNutritionFullTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&domain.FoodNutrition{}, &domain.FoodNutritionAlias{}, &domain.FoodUnresolvedLog{}))
+	require.NoError(t, db.AutoMigrate(&domain.PackagedFood{}, &domain.PackagedFoodAlias{}))
 	return db
 }
 
@@ -291,4 +292,35 @@ func TestFoodNutritionRepo_UpsertDeepSeekNutritionInsertsFullProfile(t *testing.
 	assert.Equal(t, 10.0, food.VitaminCMgPer100g)
 	assert.Equal(t, 0.4, food.VitaminB12McgPer100g)
 	assert.Equal(t, "deepseek_v4_pro_auto", food.Source)
+}
+
+func TestFoodNutritionRepo_ResolvePackagedFood(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.PackagedFood{
+		ID:             "p1",
+		Brand:          "BrandA",
+		ProductName:    "BrandA Protein Bar",
+		NormalizedName: normalizeFoodName("BrandA Protein Bar"),
+		NetWeightG:     60,
+		KcalPer100g:    400,
+		ProteinPer100g: 30,
+		CarbsPer100g:   40,
+		FatPer100g:     12,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.PackagedFoodAlias{
+		ID:              "pa1",
+		FoodID:          "p1",
+		AliasName:       "protein bar",
+		NormalizedAlias: normalizeFoodName("protein bar"),
+	}).Error)
+
+	result, err := repo.ResolvePackagedFood(ctx, "protein bar")
+	require.NoError(t, err)
+	require.NotNil(t, result.Food)
+	assert.Equal(t, "p1", result.Food.ID)
+	assert.Equal(t, "exact_alias", result.Status)
 }

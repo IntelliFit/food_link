@@ -3,38 +3,38 @@ package do
 import "time"
 
 type UserDO struct {
-	ID                     string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	OpenID                 string         `gorm:"column:openid;type:text;not null;unique;index:idx_weapp_user_openid"`
-	UnionID                *string        `gorm:"column:unionid;type:text;unique;index:idx_weapp_user_unionid,where:unionid IS NOT NULL"`
-	Avatar                 *string        `gorm:"column:avatar;type:text;default:''"`
-	Nickname               *string        `gorm:"column:nickname;type:text;default:''"`
-	Telephone              *string        `gorm:"column:telephone;type:text"`
-	CreatedAt              *time.Time     `gorm:"column:create_time;type:timestamptz;default:now()"`
-	UpdatedAt              *time.Time     `gorm:"column:update_time;type:timestamptz;default:now()"`
-	Height                 *float64       `gorm:"column:height;type:numeric"`
-	Weight                 *float64       `gorm:"column:weight;type:numeric"`
-	Birthday               *time.Time     `gorm:"column:birthday;type:date"`
-	Gender                 *string        `gorm:"column:gender;type:text"`
-	ActivityLevel          *string        `gorm:"column:activity_level;type:text"`
-	HealthCondition        map[string]any `gorm:"column:health_condition;type:jsonb;serializer:json;default:'{}'::jsonb"`
-	BMR                    *float64       `gorm:"column:bmr;type:numeric"`
-	TDEE                   *float64       `gorm:"column:tdee;type:numeric"`
-	OnboardingCompleted    *bool          `gorm:"column:onboarding_completed;type:boolean;default:false"`
-	DietGoal               *string        `gorm:"column:diet_goal;type:varchar(50)"`
-	Searchable             *bool          `gorm:"column:searchable;type:boolean;default:true"`
-	PublicRecords          *bool          `gorm:"column:public_records;type:boolean;default:true"`
-	LastSeenAnalyzeHistory *time.Time     `gorm:"column:last_seen_analyze_history_at;type:timestamptz"`
-	ExecutionMode          *string        `gorm:"column:execution_mode;type:text;default:'standard'"`
-	ModeSetBy              *string        `gorm:"column:mode_set_by;type:text;default:'system'"`
-	ModeSetAt              *time.Time     `gorm:"column:mode_set_at;type:timestamptz"`
-	ModeReason             *string        `gorm:"column:mode_reason;type:text"`
-	ModeCommitmentDays     *int           `gorm:"column:mode_commitment_days;type:integer;default:14"`
-	ModeSwitchCount30d     *int           `gorm:"column:mode_switch_count_30d;type:integer;default:0"`
-	PointsBalance          *float64       `gorm:"column:points_balance;type:numeric;default:100"`
-	RegistrationInviteCode *string        `gorm:"column:registration_invite_code;type:text;index:idx_weapp_user_registration_invite_code"`
-	ReferredByUserID       *string        `gorm:"column:referred_by_user_id;type:uuid;index:idx_weapp_user_referred_by_user_id"`
-	EarnedCreditsBalance             int            `gorm:"column:earned_credits_balance;type:integer;not null;default:0"`
-	HealthDisclaimerAcknowledgedAt   *time.Time     `gorm:"column:health_disclaimer_acknowledged_at;type:timestamptz"`
+	ID                             string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	OpenID                         string         `gorm:"column:openid;type:text;not null;unique;index:idx_weapp_user_openid"`
+	UnionID                        *string        `gorm:"column:unionid;type:text;unique;index:idx_weapp_user_unionid,where:unionid IS NOT NULL"`
+	Avatar                         *string        `gorm:"column:avatar;type:text;default:''"`
+	Nickname                       *string        `gorm:"column:nickname;type:text;default:''"`
+	Telephone                      *string        `gorm:"column:telephone;type:text"`
+	CreatedAt                      *time.Time     `gorm:"column:create_time;type:timestamptz;default:now()"`
+	UpdatedAt                      *time.Time     `gorm:"column:update_time;type:timestamptz;default:now()"`
+	Height                         *float64       `gorm:"column:height;type:numeric"`
+	Weight                         *float64       `gorm:"column:weight;type:numeric"`
+	Birthday                       *time.Time     `gorm:"column:birthday;type:date"`
+	Gender                         *string        `gorm:"column:gender;type:text"`
+	ActivityLevel                  *string        `gorm:"column:activity_level;type:text"`
+	HealthCondition                map[string]any `gorm:"column:health_condition;type:jsonb;serializer:json;default:'{}'::jsonb"`
+	BMR                            *float64       `gorm:"column:bmr;type:numeric"`
+	TDEE                           *float64       `gorm:"column:tdee;type:numeric"`
+	OnboardingCompleted            *bool          `gorm:"column:onboarding_completed;type:boolean;default:false"`
+	DietGoal                       *string        `gorm:"column:diet_goal;type:varchar(50)"`
+	Searchable                     *bool          `gorm:"column:searchable;type:boolean;default:true"`
+	PublicRecords                  *bool          `gorm:"column:public_records;type:boolean;default:true"`
+	LastSeenAnalyzeHistory         *time.Time     `gorm:"column:last_seen_analyze_history_at;type:timestamptz"`
+	ExecutionMode                  *string        `gorm:"column:execution_mode;type:text;default:'standard'"`
+	ModeSetBy                      *string        `gorm:"column:mode_set_by;type:text;default:'system'"`
+	ModeSetAt                      *time.Time     `gorm:"column:mode_set_at;type:timestamptz"`
+	ModeReason                     *string        `gorm:"column:mode_reason;type:text"`
+	ModeCommitmentDays             *int           `gorm:"column:mode_commitment_days;type:integer;default:14"`
+	ModeSwitchCount30d             *int           `gorm:"column:mode_switch_count_30d;type:integer;default:0"`
+	PointsBalance                  *float64       `gorm:"column:points_balance;type:numeric;default:100"`
+	RegistrationInviteCode         *string        `gorm:"column:registration_invite_code;type:text;index:idx_weapp_user_registration_invite_code"`
+	ReferredByUserID               *string        `gorm:"column:referred_by_user_id;type:uuid;index:idx_weapp_user_referred_by_user_id"`
+	EarnedCreditsBalance           int            `gorm:"column:earned_credits_balance;type:integer;not null;default:0"`
+	HealthDisclaimerAcknowledgedAt *time.Time     `gorm:"column:health_disclaimer_acknowledged_at;type:timestamptz"`
 }
 
 func (UserDO) TableName() string { return "weapp_user" }
@@ -199,6 +199,58 @@ type FoodNutritionDO struct {
 }
 
 func (FoodNutritionDO) TableName() string { return "food_nutrition_library" }
+
+type PackagedFoodDO struct {
+	ID                    string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	Brand                 string    `gorm:"column:brand;type:text;not null;default:'';index:idx_packaged_food_library_brand"`
+	ProductName           string    `gorm:"column:product_name;type:text;not null;index:idx_packaged_food_library_product_name"`
+	NormalizedName        string    `gorm:"column:normalized_name;type:text;not null;unique"`
+	NetWeightG            float64   `gorm:"column:net_weight_g;type:numeric;not null;default:0"`
+	ServingWeightG        float64   `gorm:"column:serving_weight_g;type:numeric;not null;default:0"`
+	KcalPer100g           float64   `gorm:"column:kcal_per_100g;type:numeric;not null;default:0"`
+	ProteinPer100g        float64   `gorm:"column:protein_per_100g;type:numeric;not null;default:0"`
+	CarbsPer100g          float64   `gorm:"column:carbs_per_100g;type:numeric;not null;default:0"`
+	FatPer100g            float64   `gorm:"column:fat_per_100g;type:numeric;not null;default:0"`
+	FiberPer100g          float64   `gorm:"column:fiber_per_100g;type:numeric;not null;default:0"`
+	SugarPer100g          float64   `gorm:"column:sugar_per_100g;type:numeric;not null;default:0"`
+	SaturatedFatPer100g   float64   `gorm:"column:saturated_fat_per_100g;type:numeric;not null;default:0"`
+	CholesterolMgPer100g  float64   `gorm:"column:cholesterol_mg_per_100g;type:numeric;not null;default:0"`
+	SodiumMgPer100g       float64   `gorm:"column:sodium_mg_per_100g;type:numeric;not null;default:0"`
+	PotassiumMgPer100g    float64   `gorm:"column:potassium_mg_per_100g;type:numeric;not null;default:0"`
+	CalciumMgPer100g      float64   `gorm:"column:calcium_mg_per_100g;type:numeric;not null;default:0"`
+	IronMgPer100g         float64   `gorm:"column:iron_mg_per_100g;type:numeric;not null;default:0"`
+	MagnesiumMgPer100g    float64   `gorm:"column:magnesium_mg_per_100g;type:numeric;not null;default:0"`
+	ZincMgPer100g         float64   `gorm:"column:zinc_mg_per_100g;type:numeric;not null;default:0"`
+	VitaminARaeMcgPer100g float64   `gorm:"column:vitamin_a_rae_mcg_per_100g;type:numeric;not null;default:0"`
+	VitaminCMgPer100g     float64   `gorm:"column:vitamin_c_mg_per_100g;type:numeric;not null;default:0"`
+	VitaminDMcgPer100g    float64   `gorm:"column:vitamin_d_mcg_per_100g;type:numeric;not null;default:0"`
+	VitaminEMgPer100g     float64   `gorm:"column:vitamin_e_mg_per_100g;type:numeric;not null;default:0"`
+	VitaminKMcgPer100g    float64   `gorm:"column:vitamin_k_mcg_per_100g;type:numeric;not null;default:0"`
+	ThiaminMgPer100g      float64   `gorm:"column:thiamin_mg_per_100g;type:numeric;not null;default:0"`
+	RiboflavinMgPer100g   float64   `gorm:"column:riboflavin_mg_per_100g;type:numeric;not null;default:0"`
+	NiacinMgPer100g       float64   `gorm:"column:niacin_mg_per_100g;type:numeric;not null;default:0"`
+	VitaminB6MgPer100g    float64   `gorm:"column:vitamin_b6_mg_per_100g;type:numeric;not null;default:0"`
+	FolateMcgPer100g      float64   `gorm:"column:folate_mcg_per_100g;type:numeric;not null;default:0"`
+	VitaminB12McgPer100g  float64   `gorm:"column:vitamin_b12_mcg_per_100g;type:numeric;not null;default:0"`
+	SourceURL             *string   `gorm:"column:source_url;type:text"`
+	Source                *string   `gorm:"column:source;type:text"`
+	IsActive              bool      `gorm:"column:is_active;type:boolean;not null;default:true;index:idx_packaged_food_library_is_active"`
+	CreatedAt             time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt             time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (PackagedFoodDO) TableName() string { return "packaged_food_library" }
+
+type PackagedFoodAliasDO struct {
+	ID              string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	FoodID          string    `gorm:"column:food_id;type:uuid;not null;index:idx_packaged_food_aliases_food_id"`
+	AliasName       string    `gorm:"column:alias_name;type:text;not null"`
+	NormalizedAlias string    `gorm:"column:normalized_alias;type:text;not null;unique"`
+	CreatedAt       time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt       time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (PackagedFoodAliasDO) TableName() string { return "packaged_food_aliases" }
 
 type FoodNutritionAliasDO struct {
 	ID              string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -725,6 +777,8 @@ func AllModels() []any {
 		&AnalysisFeedbackSampleDO{},
 		&FoodRecordDO{},
 		&FoodNutritionDO{},
+		&PackagedFoodDO{},
+		&PackagedFoodAliasDO{},
 		&FoodNutritionAliasDO{},
 		&FoodUnresolvedLogDO{},
 		&CriticalSampleDO{},

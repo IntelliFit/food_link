@@ -104,6 +104,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("user_food_records_user_id_fkey", "user_food_records", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_food_records_source_task_id_fkey", "user_food_records", "source_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("food_nutrition_aliases_food_id_fkey", "food_nutrition_aliases", "food_id", "food_nutrition_library", "id", "CASCADE"),
+		addFK("packaged_food_aliases_food_id_fkey", "packaged_food_aliases", "food_id", "packaged_food_library", "id", "CASCADE"),
 		addFK("food_unresolved_logs_task_id_fkey", "food_unresolved_logs", "task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("critical_samples_weapp_user_id_fkey", "critical_samples_weapp", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("precision_sessions_user_id_fkey", "precision_sessions", "user_id", "weapp_user", "id", "CASCADE"),

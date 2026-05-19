@@ -27,6 +27,13 @@ type ResolveResult struct {
 	Score       float64
 }
 
+type PackagedResolveResult struct {
+	Food        *domain.PackagedFood
+	Status      string
+	MatchSource string
+	Score       float64
+}
+
 type nutrientFillColumn struct {
 	UnitKey string
 	Column  string
@@ -140,6 +147,107 @@ func (r *FoodNutritionRepo) ResolveFood(ctx context.Context, name string) (*Reso
 		return &ResolveResult{Food: &candidates[0], Status: "fuzzy", MatchSource: "fuzzy", Score: 0.72}, nil
 	}
 	return &ResolveResult{Status: "unresolved", Score: 0}, nil
+}
+
+func (r *FoodNutritionRepo) ResolvePackagedFood(ctx context.Context, name string) (*PackagedResolveResult, error) {
+	raw := strings.TrimSpace(name)
+	if raw == "" {
+		return &PackagedResolveResult{Status: "unresolved", Score: 0}, nil
+	}
+	lower := strings.ToLower(raw)
+	normalized := normalizeFoodName(raw)
+
+	var alias domain.PackagedFoodAlias
+	err := r.db.WithContext(ctx).
+		Where("LOWER(alias_name) = ? OR normalized_alias = ?", lower, normalized).
+		First(&alias).Error
+	if err == nil && alias.FoodID != "" {
+		var food domain.PackagedFood
+		if foodErr := r.db.WithContext(ctx).Where("is_active = ? AND id = ?", true, alias.FoodID).First(&food).Error; foodErr == nil {
+			return &PackagedResolveResult{Food: &food, Status: "exact_alias", MatchSource: "alias", Score: 1}, nil
+		} else if foodErr != gorm.ErrRecordNotFound {
+			return nil, foodErr
+		}
+	} else if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	var food domain.PackagedFood
+	err = r.db.WithContext(ctx).
+		Where("is_active = ? AND (LOWER(product_name) = ? OR normalized_name = ?)", true, lower, normalized).
+		First(&food).Error
+	if err == nil {
+		return &PackagedResolveResult{Food: &food, Status: "exact_canonical", MatchSource: "canonical", Score: 1}, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	candidates, err := r.SearchPackagedFood(ctx, raw, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) > 0 {
+		return &PackagedResolveResult{Food: &candidates[0], Status: "fuzzy", MatchSource: "fuzzy", Score: 0.72}, nil
+	}
+	return &PackagedResolveResult{Status: "unresolved", Score: 0}, nil
+}
+
+func (r *FoodNutritionRepo) SearchPackagedFood(ctx context.Context, query string, limit int) ([]domain.PackagedFood, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	pattern := fmt.Sprintf("%%%s%%", strings.ToLower(query))
+	normalizedPattern := fmt.Sprintf("%%%s%%", normalizeFoodName(query))
+	var foods []domain.PackagedFood
+	err := r.db.WithContext(ctx).
+		Where("is_active = ? AND (LOWER(product_name) LIKE ? OR LOWER(brand) LIKE ?)", true, pattern, pattern).
+		Limit(limit).
+		Find(&foods).Error
+	if err != nil {
+		return nil, err
+	}
+
+	var aliases []domain.PackagedFoodAlias
+	err = r.db.WithContext(ctx).
+		Where("LOWER(alias_name) LIKE ? OR normalized_alias LIKE ?", pattern, normalizedPattern).
+		Limit(limit).
+		Find(&aliases).Error
+	if err != nil {
+		return nil, err
+	}
+
+	seen := map[string]bool{}
+	for _, f := range foods {
+		seen[f.ID] = true
+	}
+	if len(aliases) > 0 {
+		foodIDs := make([]string, 0, len(aliases))
+		for _, a := range aliases {
+			if !seen[a.FoodID] {
+				foodIDs = append(foodIDs, a.FoodID)
+			}
+		}
+		if len(foodIDs) > 0 {
+			var extra []domain.PackagedFood
+			err = r.db.WithContext(ctx).
+				Where("is_active = ? AND id IN ?", true, foodIDs).
+				Find(&extra).Error
+			if err != nil {
+				return nil, err
+			}
+			for _, f := range extra {
+				if !seen[f.ID] {
+					foods = append(foods, f)
+					seen[f.ID] = true
+				}
+			}
+		}
+	}
+	if len(foods) > limit {
+		foods = foods[:limit]
+	}
+	return foods, nil
 }
 
 func (r *FoodNutritionRepo) Search(ctx context.Context, query string, limit int) ([]domain.FoodNutrition, error) {

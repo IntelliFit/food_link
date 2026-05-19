@@ -1374,3 +1374,10 @@
   - AI prompts must explicitly allow true zero values; returned 0 values should not be written to DB.
   - A row whose missing fields were fully returned by AI, including all-zero results, is considered processed and is recorded in `scripts/enrich_missing_nutrients.state.json` so future runs skip it by default.
   - Do not commit the generated state JSON; use `--no-skip-processed` only when deliberately rechecking already processed rows.
+
+- `2026-05-19`: Packaged snack recognition contract:
+  - Food analysis item `type` uses `daily_food` for normal home/restaurant food and `snack` for branded packaged snacks or prepackaged foods with readable net weight/specification.
+  - `daily_food` must keep the existing DB-first nutrition path and model-estimated edible weight behavior.
+  - `snack` must first query `packaged_food_library` / `packaged_food_aliases`; on hit, backend overrides model weight with `serving_weight_g` or `net_weight_g` from the database and recalculates nutrients from packaged per-100g values.
+  - If a `snack` is not found in packaged food DB, it may fall back to the existing `food_nutrition_library` path, but should remain visibly marked with `type=snack` for debugging and future backfill.
+  - Packaged snack data enrichment should use `scripts/enrich_packaged_foods.py` / `npm run nutrition:enrich-packaged`; extracted public web data must have product name, net weight, calories, at least one macro, and confidence >= 0.6 before writing.

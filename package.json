@@ -51,7 +51,8 @@
     "iconfont": "iconfont-taro",
     "push-docker-ccr": "node backend/scripts/push-docker-ccr.mjs",
     "debug:feedback-samples": "bash scripts/query-analysis-feedback-samples.sh",
-    "nutrition:enrich-missing": "python scripts/enrich_missing_nutrients.py"
+      "nutrition:enrich-missing": "python scripts/enrich_missing_nutrients.py",
+      "nutrition:enrich-packaged": "python scripts/enrich_packaged_foods.py"
   },
   "browserslist": {
     "development": [

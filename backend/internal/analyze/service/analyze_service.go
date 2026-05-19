@@ -635,7 +635,7 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","type":"daily_food|snack","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "context_advice":""
@@ -792,7 +792,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
+  "items":[{"name":"","type":"daily_food|snack","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -855,7 +855,7 @@ func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode stri
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","type":"daily_food|snack","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -901,7 +901,7 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
+  "items":[{"name":"","type":"daily_food|snack","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -1553,6 +1553,7 @@ func buildStandardImageHybridReviewPrompt(input AnalyzeInput, doubaoParsed map[s
 			"ocrText":        []string{},
 			"items": []map[string]any{{
 				"name":                 "食物名称",
+				"type":                 "daily_food|snack",
 				"estimatedWeightGrams": 100,
 				"waterMl":              0,
 				"confidence":           0.8,
@@ -1944,6 +1945,7 @@ func parseItems(parsed map[string]any) []map[string]any {
 				suggestedRatio = sr
 			}
 			next["name"] = name
+			next["type"] = normalizeFoodItemType(firstNonEmptyStringAny(item, "type", "foodType", "food_type"))
 			next["estimatedWeightGrams"] = weight
 			next["originalWeightGrams"] = weight
 			next["waterMl"] = waterMl
@@ -1953,6 +1955,28 @@ func parseItems(parsed map[string]any) []map[string]any {
 		}
 	}
 	return out
+}
+
+func firstNonEmptyStringAny(item map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := item[key]; ok {
+			text := strings.TrimSpace(fmt.Sprintf("%v", value))
+			if text != "" && text != "<nil>" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func normalizeFoodItemType(raw string) string {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	switch text {
+	case "snack", "packaged_snack", "packaged", "packaged_food", "零食", "包装零食", "包装食品", "预包装食品":
+		return "snack"
+	default:
+		return "daily_food"
+	}
 }
 
 func toStringSlice(v any) []string {
@@ -2029,11 +2053,12 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	}
 
 	type lookupItem struct {
-		index   int
-		item    map[string]any
-		name    string
-		weight  float64
-		resolve *foodrecordrepo.ResolveResult
+		index           int
+		item            map[string]any
+		name            string
+		weight          float64
+		resolve         *foodrecordrepo.ResolveResult
+		packagedResolve *foodrecordrepo.PackagedResolveResult
 	}
 	lookups := make([]lookupItem, 0, len(items))
 	fallbackCandidates := []UnresolvedNutritionCandidate{}
@@ -2044,6 +2069,17 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		weight := numberFromAny(item["estimatedWeightGrams"])
 		if weight <= 0 {
 			weight = numberFromAny(item["originalWeightGrams"])
+		}
+		if normalizeFoodItemType(firstNonEmptyStringAny(item, "type", "foodType", "food_type")) == "snack" {
+			packaged, err := s.nutrition.ResolvePackagedFood(ctx, name)
+			if err == nil && packaged != nil && packaged.Food != nil {
+				resolvedCount++
+				lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, packagedResolve: packaged})
+				continue
+			}
+			if err != nil {
+				logger.WithTrace(ctx).Warn("packaged food lookup failed", zap.Error(err), zap.String("food_name", name))
+			}
 		}
 		resolve, err := s.nutrition.ResolveFood(ctx, name)
 		if err != nil || resolve == nil || resolve.Food == nil {
@@ -2081,6 +2117,32 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	geminiPersistFailedCount := 0
 	for _, lookup := range lookups {
 		next := copyAnyMap(lookup.item)
+		if lookup.packagedResolve != nil && lookup.packagedResolve.Food != nil {
+			packaged := lookup.packagedResolve.Food
+			unit := packagedNutritionUnit(packaged)
+			weight := packaged.ServingWeightG
+			if weight <= 0 {
+				weight = packaged.NetWeightG
+			}
+			next["type"] = "snack"
+			next["matched_food_id"] = packaged.ID
+			next["matched_food_name"] = packaged.ProductName
+			next["matched_packaged_food_id"] = packaged.ID
+			next["matched_packaged_food_name"] = packaged.ProductName
+			next["matched_packaged_food_brand"] = packaged.Brand
+			next["resolve_status"] = "packaged_" + lookup.packagedResolve.Status
+			next["resolve_score"] = lookup.packagedResolve.Score
+			next["is_unresolved"] = false
+			next["nutrition_source"] = "packaged_food_library"
+			next["unit_nutrition_per_100g"] = unit
+			next["nutrients"] = scaleNutrition(unit, weight)
+			next["estimatedWeightGrams"] = weight
+			next["originalWeightGrams"] = weight
+			next["packageNetWeightGrams"] = packaged.NetWeightG
+			next["packageServingWeightGrams"] = packaged.ServingWeightG
+			out = append(out, next)
+			continue
+		}
 		resolve := lookup.resolve
 		if resolve == nil || resolve.Food == nil {
 			_ = s.nutrition.LogUnresolved(ctx, lookup.name)
@@ -2520,6 +2582,36 @@ func numberFromAny(value any) float64 {
 }
 
 func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
+	return map[string]any{
+		"calories":       food.KcalPer100g,
+		"protein":        food.ProteinPer100g,
+		"carbs":          food.CarbsPer100g,
+		"fat":            food.FatPer100g,
+		"fiber":          food.FiberPer100g,
+		"sugar":          food.SugarPer100g,
+		"saturatedFat":   food.SaturatedFatPer100g,
+		"cholesterolMg":  food.CholesterolMgPer100g,
+		"sodiumMg":       food.SodiumMgPer100g,
+		"potassiumMg":    food.PotassiumMgPer100g,
+		"calciumMg":      food.CalciumMgPer100g,
+		"ironMg":         food.IronMgPer100g,
+		"magnesiumMg":    food.MagnesiumMgPer100g,
+		"zincMg":         food.ZincMgPer100g,
+		"vitaminARaeMcg": food.VitaminARaeMcgPer100g,
+		"vitaminCMg":     food.VitaminCMgPer100g,
+		"vitaminDMcg":    food.VitaminDMcgPer100g,
+		"vitaminEMg":     food.VitaminEMgPer100g,
+		"vitaminKMcg":    food.VitaminKMcgPer100g,
+		"thiaminMg":      food.ThiaminMgPer100g,
+		"riboflavinMg":   food.RiboflavinMgPer100g,
+		"niacinMg":       food.NiacinMgPer100g,
+		"vitaminB6Mg":    food.VitaminB6MgPer100g,
+		"folateMcg":      food.FolateMcgPer100g,
+		"vitaminB12Mcg":  food.VitaminB12McgPer100g,
+	}
+}
+
+func packagedNutritionUnit(food *foodrecorddomain.PackagedFood) map[string]any {
 	return map[string]any{
 		"calories":       food.KcalPer100g,
 		"protein":        food.ProteinPer100g,

@@ -10,6 +10,7 @@ import (
 
 	authrepo "food_link/backend/internal/auth/repo"
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
+	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -732,6 +733,45 @@ func TestNutritionUnitIncludesMicronutrients(t *testing.T) {
 	assert.Equal(t, 6.0, scaled["vitaminCMg"])
 	assert.Equal(t, 15.0, scaled["vitaminARaeMcg"])
 	assert.Equal(t, 0.3, scaled["vitaminB12Mcg"])
+}
+
+func TestAnalyzeService_ApplyDBFirstUsesPackagedFoodWeightForSnack(t *testing.T) {
+	db, userRepo := setupAnalyzeServiceTestDB(t)
+	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	require.NoError(t, db.Create(&foodrecorddomain.PackagedFood{
+		ID:             "snack-1",
+		Brand:          "BrandA",
+		ProductName:    "BrandA 蛋白棒",
+		NormalizedName: "branda蛋白棒",
+		NetWeightG:     100,
+		KcalPer100g:    420,
+		ProteinPer100g: 28,
+		CarbsPer100g:   42,
+		FatPer100g:     14,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&foodrecorddomain.PackagedFoodAlias{
+		ID:              "alias-1",
+		FoodID:          "snack-1",
+		AliasName:       "蛋白棒",
+		NormalizedAlias: "蛋白棒",
+	}).Error)
+
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"name":                 "蛋白棒",
+		"type":                 "snack",
+		"estimatedWeightGrams": 80.0,
+	}}, "")
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "snack", items[0]["type"])
+	assert.Equal(t, "packaged_food_library", items[0]["nutrition_source"])
+	assert.Equal(t, 100.0, items[0]["estimatedWeightGrams"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.Equal(t, 420.0, nutrients["calories"])
+	assert.Equal(t, 28.0, nutrients["protein"])
 }
 
 func TestParseItems_Empty(t *testing.T) {

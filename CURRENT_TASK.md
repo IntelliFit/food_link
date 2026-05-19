@@ -9361,3 +9361,24 @@
   - `npm run nutrition:enrich-missing -- --help` passed.
   - `python scripts\enrich_missing_nutrients.py --help` passed.
   - DB/AI run was not executed in this turn to avoid mutating the configured database.
+
+## 2026-05-19 - Packaged snack recognition path
+
+- Task: Improve food photo recognition so packaged snacks use package/database weight instead of model-estimated weight, while daily food keeps the existing flow.
+- Status: implemented_static_verified_no_migration_run
+- Changes:
+  - Added `packaged_food_library` and `packaged_food_aliases` migration DOs plus FK migration logic.
+  - Added packaged food domain structs and repo lookup methods.
+  - Normal image/text prompts and hybrid review schema now include item `type` (`daily_food|snack`); parse logic normalizes missing/unknown type to `daily_food`.
+  - `applyDBFirstNutrition()` now checks `type=snack` first against packaged food library. On hit it overrides `estimatedWeightGrams` with `serving_weight_g` or `net_weight_g`, recalculates nutrients from packaged per-100g data, and marks `nutrition_source=packaged_food_library`.
+  - Precision metadata now carries `type`, so precision item estimates can also flow into the same packaged lookup.
+  - Added `scripts/enrich_packaged_foods.py` and npm command `nutrition:enrich-packaged`; the script searches public web snippets, asks the configured AI to extract label data, and upserts packaged food rows/aliases.
+- Verification:
+  - `go test ./internal/app -run '^$' -count=1` passed.
+  - `go test ./internal/worker -run 'TestPrecisionPrompts|TestBuildPrecisionFinalResult' -count=1` passed.
+  - `python -m py_compile scripts/enrich_packaged_foods.py` passed.
+  - `python scripts/enrich_packaged_foods.py --help` passed.
+  - `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package json ok')"` passed.
+  - `git diff --check` passed with CRLF warnings only.
+  - Repo/analyze sqlite-backed tests for packaged lookup were attempted but blocked by local `CGO_ENABLED=0` / `go-sqlite3 requires cgo`.
+  - `go run ./cmd/migration -config-dir .` was not run because the current configured database target was not confirmed in this turn.
