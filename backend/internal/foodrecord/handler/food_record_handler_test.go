@@ -18,17 +18,17 @@ import (
 )
 
 type mockFoodRecordService struct {
-	saveRecord          *domain.FoodRecord
-	saveErr             error
-	listRecords         []domain.FoodRecord
-	listErr             error
-	getRecord           *domain.FoodRecord
-	getErr              error
-	updateRecord        *domain.FoodRecord
-	updateErr           error
-	deleteErr           error
-	shareRecord         *domain.FoodRecord
-	shareErr            error
+	saveRecord             *domain.FoodRecord
+	saveErr                error
+	listRecords            []domain.FoodRecord
+	listErr                error
+	getRecord              *domain.FoodRecord
+	getErr                 error
+	updateRecord           *domain.FoodRecord
+	updateErr              error
+	deleteErr              error
+	shareRecord            *domain.FoodRecord
+	shareErr               error
 	saveCriticalSamplesErr error
 }
 
@@ -69,6 +69,7 @@ func (m *mockUploadService) UploadFile(fileBytes []byte, ext, contentType string
 type mockNutritionService struct {
 	items []map[string]any
 	logs  []domain.FoodUnresolvedLog
+	item  *domain.PackagedFood
 	err   error
 }
 
@@ -77,6 +78,12 @@ func (m *mockNutritionService) Search(ctx context.Context, query string, limit i
 }
 func (m *mockNutritionService) GetUnresolvedTop(ctx context.Context, limit int) ([]domain.FoodUnresolvedLog, error) {
 	return m.logs, m.err
+}
+func (m *mockNutritionService) CreatePackagedFood(ctx context.Context, input service.PackagedFoodInput) (*domain.PackagedFood, error) {
+	if m.item != nil || m.err != nil {
+		return m.item, m.err
+	}
+	return &domain.PackagedFood{ID: "p1", ProductName: input.ProductName, NetWeightG: input.NetWeightG, IsActive: true}, nil
 }
 
 func setupRouter(h *FoodRecordHandler) *gin.Engine {
@@ -96,6 +103,7 @@ func setupRouter(h *FoodRecordHandler) *gin.Engine {
 	r.POST("/api/upload-analyze-image-file", h.UploadAnalyzeImageFile)
 	r.GET("/api/food-nutrition/search", h.SearchFoodNutrition)
 	r.GET("/api/food-nutrition/unresolved/top", h.GetUnresolvedTop)
+	r.POST("/api/packaged-food", h.CreatePackagedFood)
 	r.POST("/api/critical-samples", h.SaveCriticalSamples)
 	return r
 }
@@ -240,6 +248,34 @@ func TestGetUnresolvedTop(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 }
 
+func TestCreatePackagedFood(t *testing.T) {
+	mockSvc := &mockNutritionService{}
+	h := NewFoodRecordHandler(nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"product_name":       "蛋白棒",
+		"net_weight_g":       60,
+		"kcal_per_100g":      420,
+		"protein_per_100g":   28,
+		"carbs_per_100g":     42,
+		"fat_per_100g":       14,
+		"sodium_mg_per_100g": 200,
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/packaged-food", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	item := data["item"].(map[string]any)
+	assert.Equal(t, "蛋白棒", item["product_name"])
+	assert.Equal(t, float64(60), item["net_weight_g"])
+}
+
 func TestSaveCriticalSamples(t *testing.T) {
 	mockSvc := &mockFoodRecordService{}
 	h := NewFoodRecordHandler(mockSvc, nil, nil)
@@ -274,7 +310,6 @@ func TestSaveFoodRecordValidationError(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
-
 
 func TestUploadAnalyzeImageFile(t *testing.T) {
 	mockSvc := &mockUploadService{url: "https://cdn.example.com/file.jpg"}

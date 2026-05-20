@@ -893,7 +893,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
+  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -926,7 +926,7 @@ func buildLiteImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string
 
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100,"confidence":0.8,"recognitionEvidence":"","weightEvidence":"","alternativeNames":[]}],
+  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100,"confidence":0.8,"recognitionEvidence":"","weightEvidence":"","alternativeNames":[]}],
   "description":"",
   "insight":"",
   "ocrText":[],
@@ -984,6 +984,7 @@ JSON:
   "items":[
     {
       "name":"",
+      "type":"normal",
       "estimatedWeightGrams":0,
       "waterMl":0,
       "suggestedRatio":100,
@@ -1045,6 +1046,7 @@ JSON:
   "items":[
     {
       "name":"",
+      "type":"normal",
       "estimatedWeightGrams":0,
       "waterMl":0,
       "suggestedRatio":100,
@@ -1951,7 +1953,7 @@ func buildGemini35GroupedWeightPrompt(input AnalyzeInput, plan map[string]any) s
 
 只返回 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100,"groupId":1,"confidence":0.8,"recognitionEvidence":"","weightEvidence":"","alternativeNames":[]}],
+  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100,"groupId":1,"confidence":0.8,"recognitionEvidence":"","weightEvidence":"","alternativeNames":[]}],
   "groups":[{"groupId":1,"description":"","estimatedWeightGrams":0,"weightEvidence":""}],
   "description":"",
   "insight":"",
@@ -1974,6 +1976,7 @@ func gemini35GroupedPlanItemsForPrompt(items []map[string]any, limit int) []map[
 		row := map[string]any{
 			"index":               index,
 			"name":                strings.TrimSpace(fmt.Sprintf("%v", item["name"])),
+			"type":                strings.TrimSpace(fmt.Sprintf("%v", item["type"])),
 			"groupId":             normalizeGemini35GroupID(item["groupId"]),
 			"position":            strings.TrimSpace(fmt.Sprintf("%v", item["position"])),
 			"recognitionEvidence": strings.TrimSpace(fmt.Sprintf("%v", item["recognitionEvidence"])),
@@ -2960,11 +2963,12 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	}
 
 	type lookupItem struct {
-		index   int
-		item    map[string]any
-		name    string
-		weight  float64
-		resolve *foodrecordrepo.ResolveResult
+		index    int
+		item     map[string]any
+		name     string
+		weight   float64
+		resolve  *foodrecordrepo.ResolveResult
+		packaged *foodrecordrepo.PackagedResolveResult
 	}
 	lookups := make([]lookupItem, 0, len(items))
 	fallbackCandidates := []UnresolvedNutritionCandidate{}
@@ -2975,6 +2979,18 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		weight := numberFromAny(item["estimatedWeightGrams"])
 		if weight <= 0 {
 			weight = numberFromAny(item["originalWeightGrams"])
+		}
+		if markSnackTypeForAnalyzeItem(item) {
+			if packagedResolve, packagedErr := s.nutrition.ResolvePackagedFood(ctx, name); packagedErr != nil {
+				logger.WithTrace(ctx).Warn("零食营养库查询失败",
+					logger.Err(packagedErr),
+					slog.String("food_name", name),
+				)
+			} else if packagedResolve != nil && packagedResolve.Food != nil {
+				resolvedCount++
+				lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, resolve: &foodrecordrepo.ResolveResult{Status: packagedResolve.Status, Score: packagedResolve.Score}, packaged: packagedResolve})
+				continue
+			}
 		}
 		resolve, err := s.nutrition.ResolveFood(ctx, name)
 		if err != nil || resolve == nil || resolve.Food == nil {
@@ -3012,6 +3028,23 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	deepseekPersistFailedCount := 0
 	for _, lookup := range lookups {
 		next := copyAnyMap(lookup.item)
+		if lookup.packaged != nil && lookup.packaged.Food != nil {
+			food := lookup.packaged.Food
+			unit := packagedNutritionUnit(food)
+			next["type"] = "snack"
+			next["matched_food_id"] = food.ID
+			next["matched_food_name"] = food.ProductName
+			next["resolve_status"] = lookup.packaged.Status
+			next["resolve_score"] = lookup.packaged.Score
+			next["is_unresolved"] = false
+			next["nutrition_source"] = "packaged_food_library"
+			next["unit_nutrition_per_100g"] = unit
+			next["nutrients"] = scaleNutrition(unit, lookup.weight)
+			next["estimatedWeightGrams"] = lookup.weight
+			next["originalWeightGrams"] = lookup.weight
+			out = append(out, next)
+			continue
+		}
 		resolve := lookup.resolve
 		if resolve == nil || resolve.Food == nil {
 			_ = s.nutrition.LogUnresolved(ctx, lookup.name)
@@ -3410,6 +3443,90 @@ func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
 		"folateMcg":      food.FolateMcgPer100g,
 		"vitaminB12Mcg":  food.VitaminB12McgPer100g,
 	}
+}
+
+func packagedNutritionUnit(food *foodrecorddomain.PackagedFood) map[string]any {
+	return map[string]any{
+		"calories":       food.KcalPer100g,
+		"protein":        food.ProteinPer100g,
+		"carbs":          food.CarbsPer100g,
+		"fat":            food.FatPer100g,
+		"fiber":          food.FiberPer100g,
+		"sugar":          food.SugarPer100g,
+		"saturatedFat":   food.SaturatedFatPer100g,
+		"cholesterolMg":  food.CholesterolMgPer100g,
+		"sodiumMg":       food.SodiumMgPer100g,
+		"potassiumMg":    food.PotassiumMgPer100g,
+		"calciumMg":      food.CalciumMgPer100g,
+		"ironMg":         food.IronMgPer100g,
+		"magnesiumMg":    food.MagnesiumMgPer100g,
+		"zincMg":         food.ZincMgPer100g,
+		"vitaminARaeMcg": food.VitaminARaeMcgPer100g,
+		"vitaminCMg":     food.VitaminCMgPer100g,
+		"vitaminDMcg":    food.VitaminDMcgPer100g,
+		"vitaminEMg":     food.VitaminEMgPer100g,
+		"vitaminKMcg":    food.VitaminKMcgPer100g,
+		"thiaminMg":      food.ThiaminMgPer100g,
+		"riboflavinMg":   food.RiboflavinMgPer100g,
+		"niacinMg":       food.NiacinMgPer100g,
+		"vitaminB6Mg":    food.VitaminB6MgPer100g,
+		"folateMcg":      food.FolateMcgPer100g,
+		"vitaminB12Mcg":  food.VitaminB12McgPer100g,
+	}
+}
+
+func markSnackTypeForAnalyzeItem(item map[string]any) bool {
+	itemType := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["type"], item["food_type"]))))
+	if itemType == "snack" || strings.Contains(itemType, "packaged") || strings.Contains(itemType, "package") {
+		item["type"] = "snack"
+		return true
+	}
+	text := strings.ToLower(strings.Join([]string{
+		fmt.Sprintf("%v", item["name"]),
+		fmt.Sprintf("%v", item["category"]),
+		fmt.Sprintf("%v", item["recognitionEvidence"]),
+		fmt.Sprintf("%v", item["ocrText"]),
+		fmt.Sprintf("%v", item["alternativeNames"]),
+	}, " "))
+	for _, keyword := range snackAnalyzeKeywords {
+		if strings.Contains(text, keyword) {
+			item["type"] = "snack"
+			return true
+		}
+	}
+	return false
+}
+
+var snackAnalyzeKeywords = []string{
+	"snack",
+	"packaged",
+	"package",
+	"nutrition facts",
+	"营养成分",
+	"净含量",
+	"零食",
+	"预包装",
+	"袋装",
+	"盒装",
+	"饼干",
+	"薯片",
+	"巧克力",
+	"糖果",
+	"坚果",
+	"果干",
+	"肉干",
+	"牛肉干",
+	"蛋白棒",
+	"能量棒",
+	"辣条",
+	"海苔",
+	"话梅",
+	"果冻",
+	"威化",
+	"沙琪玛",
+	"麻薯",
+	"阿胶糕",
+	"糕点",
 }
 
 func scaleNutrition(unit map[string]any, weight float64) map[string]any {

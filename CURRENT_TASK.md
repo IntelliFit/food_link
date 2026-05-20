@@ -1,5 +1,87 @@
 # CURRENT_TASK
 
+## 2026-05-21 - 拍照结果页零食补库入口
+
+- Task: 拍照分析识别到零食时，结果页提示用户当前仍按普通食物流程估算营养，并邀请用户补充零食名称、重量和营养成分，提交后保存到 `packaged_food_library`。
+- Status: implemented_static_verified_runtime_blocked
+- Change:
+  - 拍照分析提示词补充 `item.type` 字段；后端 `db_first` 在判断为零食/预包装食品时先查 `packaged_food_library`，命中则返回 `nutrition_source=packaged_food_library`，未命中继续回退到普通食物库和 DeepSeek fallback。
+  - 后端新增 `POST /api/packaged-food`，登录用户可提交零食/预包装食品数据，服务层校验名称、重量和基础营养字段，仓储层按 `normalized_name` 幂等 upsert 到 `packaged_food_library`，并写入 `packaged_food_aliases`。
+  - 前端结果页保留分析 item 的 `type/category/nutrition_source/unit_nutrition_per_100g` 元数据，按 `snack/packaged` 标记或零食关键词识别零食；如果尚未命中 `packaged_food_library`，在该 item 下显示“识别为零食 / 添加零食”提示。
+  - “添加零食”弹层预填当前识别名称、重量和每 100g 营养值，允许用户编辑品牌、名称、重量、热量、蛋白质、碳水、脂肪、膳食纤维、糖、钠并保存到零食库。
+- Verification:
+  - `go test ./internal/analyze/service -run '^$' -count=1` passed.
+  - `go test ./internal/foodrecord/handler -run "TestCreatePackagedFood|TestSearchFoodNutrition|TestGetUnresolvedTop" -count=1` passed.
+  - `go test ./internal/foodrecord/handler ./internal/foodrecord/service ./internal/app -run '^$' -count=1` passed.
+  - `npx eslint src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed.
+  - 目标 `git diff --check` passed，仅 CRLF warnings。
+- Runtime verification:
+  - 已按项目要求尝试 `mrc where --port 3001` 与 `mrc where --port 9420`，均因微信开发者工具自动化端口未连接失败，未能截图/交互验证。
+- Next step:
+  - 重启 Go 后端后新接口生效；让小程序吃到最新 dev 产物后，在拍照结果页用零食样例确认提示卡、弹层编辑和保存链路。
+
+## 2026-05-21 - 用户 ID 复制入口视觉收敛
+
+- Task: 用户认为在“我的”页直接显示完整用户 ID 过丑，要求首页只保留“复制用户ID”按钮，并把完整 ID 放到“编辑资料”页。
+- Status: fixed_static_verified_runtime_blocked
+- Change:
+  - `src/pages/profile/index.tsx` 不再在头像昵称区显示完整用户 ID，只保留登录后的“复制用户ID”轻量按钮。
+  - `src/pages/profile/index.scss` 删除首页用户 ID 文本行样式，改为单按钮样式，并补充深色模式。
+  - `src/packageExtra/pages/profile-settings/index.tsx` 新增 `userId` 状态，优先从本地 `userInfo.id` 读取，兜底读取 `user_id`；编辑资料页显示完整用户 ID，并提供复制按钮。
+  - 编辑资料保存时继续把 `id` 写回本地 `userInfo`，避免保存头像/昵称后丢失用户 ID 缓存。
+  - `src/packageExtra/pages/profile-settings/index.scss` 新增完整 ID 展示区样式，长 UUID 使用自动换行避免溢出。
+- Verification:
+  - `npx eslint src/pages/profile/index.tsx src/packageExtra/pages/profile-settings/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/pages/profile/index.tsx src/pages/profile/index.scss src/packageExtra/pages/profile-settings/index.tsx src/packageExtra/pages/profile-settings/index.scss` passed, only CRLF warnings.
+  - 已按项目要求尝试 `mrc where --port 3001` 和 `mrc where --port 9420`，均因微信开发者工具自动化端口未连接失败，未能截图/交互验证。
+- Next step:
+  - 需要用户让小程序吃到最新 dev 产物后，在“我的”页确认只显示复制按钮，并进入“编辑资料”页确认完整用户 ID 展示与复制可用。
+
+## 2026-05-21 - 我的页显示并复制用户 ID
+
+- Task: 为了配合 Jaeger 按 `user.id` / `enduser.id` 反查 trace，用户要求小程序登录后在「我的」页显示自己的用户 ID，并提供复制按钮。
+- Status: fixed_static_verified_runtime_blocked
+- Change:
+  - `src/pages/profile/index.tsx` 新增 `userId` 状态，登录后优先读取 `/api/user/profile` 返回的 `id`，接口刷新前兜底显示本地 `user_id`。
+  - 在「我的」页头像昵称区域下方展示 `用户ID`、完整 ID 的单行省略文本和 `复制` 按钮。
+  - `复制` 按钮调用 `Taro.setClipboardData`，成功提示 `已复制用户ID`，失败提示 `复制失败`。
+  - `src/pages/profile/index.scss` 补充浅色/深色模式样式，确保长 UUID 不撑开布局。
+- Verification:
+  - `npx eslint src/pages/profile/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/pages/profile/index.tsx src/pages/profile/index.scss` passed, only CRLF warnings.
+  - 已尝试 `mrc where --port 3001` 和 `mrc where --port 9420`，均因微信开发者工具自动化端口未连接失败，未能截图/交互验证。
+- Next step:
+  - 需要用户让小程序吃到最新 dev 产物后，在「我的」页确认用户 ID 展示与复制按钮。
+
+## 2026-05-21 - Jaeger trace 按用户筛选
+
+- Task: 用户希望在用户无法打开微信小程序控制台复制 trace_id 的情况下，仍能用用户 ID 在 Jaeger 中筛选相关 trace。
+- Status: fixed_static_verified_restart_required
+- Finding:
+  - HTTP 入口已通过 `otelgin.Middleware` 自动生成请求 span，并通过 `X-Trace-Id` 响应头把 trace id 返回给小程序。
+  - 分析任务链路已有 `analysis.user_id`、`analysis.task_id`、`analysis.task_type` 等自定义 span tag。
+  - 鉴权中间件此前只把 `user_id/openid/unionid` 写入 Gin context，没有把登录用户写入当前 OTel span，所以普通登录接口 trace 不能直接按用户 ID 搜。
+- Change:
+  - `RequireJWT` 与 `OptionalJWT` 在 JWT 解析成功后，对当前 span 设置 `user.id` 与 `enduser.id` tag。
+  - 不写入 openid/unionid，避免把额外身份标识扩散到 trace tag。
+- Verification:
+  - `cd backend && go test ./internal/auth -count=1` passed.
+  - `cd backend && go test ./internal/app -run '^$' -count=1` passed.
+- Next step:
+  - 重启 Go 后端后生效；Jaeger 中新 trace 可用 `user.id=<用户UUID>` 或 `enduser.id=<用户UUID>` 筛选 HTTP 请求，用 `analysis.user_id=<用户UUID>` 筛选分析 worker 相关 span。
+
+### Follow-up: 健康检查不生成 trace
+
+- Task: `/api/health` 健康检查频率高，Jaeger 中几乎全是健康检查 trace，需要作为例外跳过采集。
+- Change:
+  - `backend/internal/app/app.go` 的 `otelgin.Middleware` 增加 `WithFilter(shouldTraceHTTPRequest)`。
+  - `shouldTraceHTTPRequest` 对精确路径 `/api/health` 返回 `false`，其它请求继续生成 trace。
+- Verification:
+  - `cd backend && go test ./internal/app -run 'TestShouldTraceHTTPRequest|TestAppPackage' -count=1` passed.
+  - `cd backend && go test ./internal/auth -count=1` passed.
+- Next step:
+  - 重启 Go 后端后生效；健康检查响应头仍会由 `RequestID` 兜底返回 `X-Trace-Id`，但不会创建/上报 OTel server span。
+
 ## 2026-05-21 — 会员支付创建接口 `/api/membership/pay/create` 返回 500
 
 - Task: 用户发起会员支付时，后端日志报 `ERROR: null value in column "notify_payload" of relation "pro_membership_payment_records" violates not-null constraint (SQLSTATE 23502)`，接口 `/api/membership/pay/create` 返回 500。

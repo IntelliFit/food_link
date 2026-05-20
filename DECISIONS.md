@@ -1,5 +1,25 @@
 # DECISIONS
 
+- `2026-05-21`: 零食拍照分析的实际查询顺序是 `packaged_food_library` 优先、普通食物库回退。识别 item 若带 `type=snack` 或命中零食/预包装关键词，后端先调用 `ResolvePackagedFood`；命中时返回 `nutrition_source=packaged_food_library` 并不再显示前端补库提示，未命中时继续沿用普通 `db_first` + DeepSeek fallback。
+
+- `2026-05-21`: 拍照分析的零食识别仍沿用普通 `db_first` 营养估算链路，但结果页需要给用户明确的补库入口。
+  - 只要识别结果像零食/预包装食品且当前没有命中 `packaged_food_library`，前端就在该 item 下提示“识别为零食”，并邀请用户补充包装上的名称、重量和营养成分。
+  - 用户提交的数据写入 `packaged_food_library` 和 `packaged_food_aliases`，作为零食专用库沉淀；不改变当前普通食物营养补全和 DeepSeek fallback 主链路。
+  - 未来如果拍照分析主链路接入 `ResolvePackagedFood` 并返回 `nutrition_source=packaged_food_library`，前端不再对该 item 显示补库提示。
+
+- `2026-05-21`: “我的”页只保留复制用户 ID 的入口，完整用户 ID 放到“编辑资料”页。
+  - 用户 ID 主要用于排障和 Jaeger tag 反查，不应在“我的”页头像昵称区直接占用视觉空间。
+  - 首页只显示“复制用户ID”按钮；完整 UUID 在编辑资料页展示，并允许复制。
+  - 资料保存逻辑需要保留本地 `userInfo.id`，避免保存头像/昵称后丢失后续展示和复制所需的用户 ID。
+
+- `2026-05-21`: `/api/health` 健康检查不生成 OTel trace。
+  - 健康检查频率高且没有业务排障价值，必须通过 `otelgin.WithFilter` 在入口跳过采集，避免 Jaeger 被健康检查 trace 淹没。
+  - 只精确排除 `/api/health`；其它 API 仍需保留 trace，尤其是登录后请求的 `user.id` / `enduser.id` tag。
+
+- `2026-05-21`: 登录用户 ID 必须作为 trace tag 写入 HTTP 请求 span。
+  - `RequireJWT` 与 `OptionalJWT` 成功解析 JWT 后，统一给当前 OTel span 设置 `user.id` 和 `enduser.id`，方便在用户无法打开小程序控制台复制 trace_id 时，通过 Jaeger tag 反查该用户相关请求。
+  - 分析任务/worker 链路继续保留 `analysis.user_id`，用于分析任务维度筛选；不要把 openid/unionid/token 等更敏感或无必要的身份标识写入 trace tag。
+
 - `2026-05-21`: 会员支付记录创建必须在仓库层补齐非空 JSON 字段默认值。
   - `pro_membership_payment_records.notify_payload` 和 `extra` 在数据库层都是 JSON 非空字段；即使调用方漏传，`MembershipRepo.CreatePayment` 也要把它们初始化为 `{}`，不能依赖数据库默认值或上层 service 恰好传值。
   - 这样可以避免 `/api/membership/pay/create` 在会员支付单落库阶段因 `SQLSTATE 23502` 返回 500。
