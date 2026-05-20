@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"food_link/backend/internal/foodrecord/domain"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -60,6 +61,63 @@ func TestBuildRecordTime(t *testing.T) {
 	assert.Equal(t, now.Month(), tm.In(chinaTZ).Month())
 	assert.Equal(t, now.Day(), tm.In(chinaTZ).Day())
 	assert.Equal(t, now.Hour(), tm.In(chinaTZ).Hour())
+}
+
+func TestFillMissingNutrientsAcceptsStringNumbers(t *testing.T) {
+	target := &domain.FoodItemNutrients{}
+	fillMissingNutrients(target, map[string]any{
+		"calories": "18",
+		"protein":  "0.9",
+		"carbs":    "2.7",
+		"fat":      "0.5",
+	})
+
+	assert.Equal(t, 18.0, target.Calories)
+	assert.Equal(t, 0.9, target.Protein)
+	assert.Equal(t, 2.7, target.Carbs)
+	assert.Equal(t, 0.5, target.Fat)
+}
+
+func TestHydrateManualRecordNutrientsForExistingZeroItems(t *testing.T) {
+	source := "nutrition_library"
+	sourceIDRice := "catalog:白米饭"
+	sourceTitleRice := "白米饭"
+	sourceIDEgg := "catalog:水煮蛋"
+	sourceTitleEgg := "水煮蛋"
+	record := &domain.FoodRecord{
+		TotalCalories: 347.7,
+		TotalProtein:  15.6,
+		TotalCarbs:    59.5,
+		TotalFat:      6.1,
+		Items: []domain.FoodItem{
+			{
+				Name:              "白米饭",
+				Weight:            177,
+				Ratio:             100,
+				Intake:            177,
+				ManualSource:      &source,
+				ManualSourceID:    &sourceIDRice,
+				ManualSourceTitle: &sourceTitleRice,
+			},
+			{
+				Name:              "水煮蛋",
+				Weight:            85,
+				Ratio:             100,
+				Intake:            85,
+				ManualSource:      &source,
+				ManualSourceID:    &sourceIDEgg,
+				ManualSourceTitle: &sourceTitleEgg,
+			},
+		},
+	}
+
+	hydrateManualRecordNutrients(record)
+
+	assert.InDelta(t, 267.3, record.Items[0].Nutrients.Calories, 0.1)
+	assert.InDelta(t, 80.8, record.Items[1].Nutrients.Calories, 0.1)
+	assert.Greater(t, record.Items[0].Nutrients.Carbs, 0.0)
+	assert.Greater(t, record.Items[1].Nutrients.Protein, 0.0)
+	assert.Greater(t, record.Items[1].Nutrients.Fat, 0.0)
 }
 
 func ptr(t time.Time) *time.Time {

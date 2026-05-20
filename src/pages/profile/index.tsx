@@ -348,7 +348,7 @@ function ProfilePage() {
     }
     // 食物管理
     if (service.id === 2) {
-      Taro.switchTab({ url: '/pages/expiry/index' })
+      Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
       return
     }
     // 识别记录
@@ -472,6 +472,9 @@ function ProfilePage() {
 
           // 食物保质期已读标记
           Taro.removeStorageSync('food_expiry_last_seen_date')
+
+          // 健康指数免责声明已读标记
+          Taro.removeStorageSync('health_disclaimer_dismissed')
 
           // 底部导航栏 badge 计数
           Taro.removeStorageSync('profile_tab_badge_count')

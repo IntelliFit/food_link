@@ -19,7 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
-	"go.uber.org/zap"
+	"log/slog"
 )
 
 type TaskService struct {
@@ -35,6 +35,8 @@ const (
 	waitingRecordBadgeWindow = 24 * time.Hour
 	maxFoodAnalyzeImages     = 3
 )
+
+const experimentalExecutionMode = "experimental"
 
 func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *authrepo.UserRepo, storageClient ...*storage.Client) *TaskService {
 	var client *storage.Client
@@ -131,7 +133,7 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	s.attachCorrectionChain(ctx, userID, input, payload)
 
 	creditMode := mode
-	if input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
 	}
 	if boolFromAny(payload["is_correction"]) {
@@ -143,7 +145,7 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	}
 	creditGroupID := ensureCreditGroupID(payload)
 
-	if mode == validExecutionMode || input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
@@ -223,7 +225,7 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	s.attachCorrectionChain(ctx, userID, input, payload)
 
 	creditMode := mode
-	if input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
 	}
 	if boolFromAny(payload["is_correction"]) {
@@ -235,7 +237,7 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	}
 	creditGroupID := ensureCreditGroupID(payload)
 
-	if mode == validExecutionMode || input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
@@ -274,16 +276,16 @@ func logAnalyzeTaskSubmitted(ctx context.Context, userID, taskID, taskType strin
 	sourceType := strings.TrimSpace(input.SourceType)
 	imageCount := imageCountForLog(input.ImageURL, input.ImageURLs)
 	hasText := strings.TrimSpace(input.TextInput) != "" || strings.TrimSpace(input.Text) != ""
-	logger.WithTrace(ctx).Info("analysis task submitted",
-		zap.String("task_id", taskID),
-		zap.String("task_type", taskType),
-		zap.String("user_id", userID),
-		zap.String("model_name", modelName),
-		zap.String("execution_mode", executionMode),
-		zap.String("analysis_engine", analysisEngine),
-		zap.String("source_type", sourceType),
-		zap.Int("image_count", imageCount),
-		zap.Bool("has_text_input", hasText),
+	logger.WithTrace(ctx).Info("分析任务已提交",
+		slog.String("task_id", taskID),
+		slog.String("task_type", taskType),
+		slog.String("user_id", userID),
+		slog.String("model_name", modelName),
+		slog.String("execution_mode", executionMode),
+		slog.String("analysis_engine", analysisEngine),
+		slog.String("source_type", sourceType),
+		slog.Int("image_count", imageCount),
+		slog.Bool("has_text_input", hasText),
 	)
 	apm.SetAttributes(ctx,
 		attribute.String("analysis.task_id", taskID),
@@ -406,7 +408,7 @@ func creditUnitsForInput(input SubmitTaskInput) int {
 }
 
 func correctionCreditMode(mode string) string {
-	if mode == validExecutionMode {
+	if mode == experimentalExecutionMode || mode == validExecutionMode || mode == gemini35GroupedExecutionMode {
 		return "strict_correction"
 	}
 	return "standard_correction"
@@ -488,9 +490,9 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 		TaskType: task.TaskType,
 	})
 	if err == nil {
-		logger.WithTrace(ctx).Info("analysis task enqueued",
-			zap.String("task_id", task.ID),
-			zap.String("task_type", task.TaskType),
+		logger.WithTrace(ctx).Info("分析任务已入队",
+			slog.String("task_id", task.ID),
+			slog.String("task_type", task.TaskType),
 		)
 		apm.AddEvent(ctx, "analysis task queue publish completed",
 			attribute.String("analysis.task_id", task.ID),
@@ -509,11 +511,11 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 	failCtx, failCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer failCancel()
 	_, failErr := s.tasks.FailTask(failCtx, task.ID, "analysis task enqueue failed")
-	logger.WithTrace(ctx).Error("analysis task enqueue failed",
-		zap.String("task_id", task.ID),
-		zap.String("task_type", task.TaskType),
-		zap.Error(err),
-		zap.NamedError("fail_update_error", failErr),
+	logger.WithTrace(ctx).Error("分析任务入队失败",
+		slog.String("task_id", task.ID),
+		slog.String("task_type", task.TaskType),
+		logger.Err(err),
+		logger.NamedErr("fail_update_error", failErr),
 	)
 	return fmt.Errorf("enqueue analysis task: %w", err)
 }
@@ -581,7 +583,7 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		newSession := &domain.PrecisionSession{
 			UserID:           userID,
 			SourceType:       sourceType,
-			ExecutionMode:    "strict",
+			ExecutionMode:    "experimental",
 			Status:           "collecting",
 			RoundIndex:       1,
 			LatestInputs:     payload,
@@ -856,20 +858,6 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID, userID string) (ma
 		"deleted":        true,
 		"task_id":        taskID,
 		"deleted_images": deletedImages,
-	}, nil
-}
-
-func (s *TaskService) DeleteUnrecordedTasks(ctx context.Context, userID string) (map[string]any, error) {
-	if strings.TrimSpace(userID) == "" {
-		return nil, errors.ErrForbidden
-	}
-	deleted, err := s.tasks.DeleteUnrecordedDoneTasksByUser(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"deleted": true,
-		"count":   deleted,
 	}, nil
 }
 

@@ -2,7 +2,7 @@
 const mainPages = [
   'pages/index/index',
   'pages/stats/index',
-  'pages/expiry/index',
+  'pages/community/index',
   'pages/profile/index',
 ]
 
@@ -15,7 +15,6 @@ const extraSubpackagePages = [
   'pages/analyze-history/index',
   'pages/result/index',
   'pages/result-text/index',
-  'pages/expiry/index',
   'pages/expiry-edit/index',
   // 兼容旧入口：历史缓存可能仍尝试打开 pages/food-expiry/index
   'pages/food-expiry/index',
@@ -106,8 +105,8 @@ export default defineAppConfig({
         text: '分析',
       },
       {
-        pagePath: 'pages/expiry/index',
-        text: '保质期',
+        pagePath: 'pages/community/index',
+        text: '圈子',
       },
       {
         pagePath: 'pages/profile/index',

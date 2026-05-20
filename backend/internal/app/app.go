@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -39,6 +40,9 @@ import (
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
+	pethandler "food_link/backend/internal/pet/handler"
+	petrepo "food_link/backend/internal/pet/repo"
+	petservice "food_link/backend/internal/pet/service"
 	publicfoodhandler "food_link/backend/internal/publicfood/handler"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
@@ -68,26 +72,26 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 type App struct {
 	engine        *gin.Engine
 	db            *gorm.DB
-	log           *zap.Logger
+	log           *logger.Logger
 	shutdownTrace func(context.Context) error
+	shutdownLog   logger.ShutdownFunc
 	workerCancel  context.CancelFunc
 	workerDone    chan struct{}
 	taskQueue     taskqueue.Queue
 }
 
 func New(cfg *config.Config) (*App, error) {
-	log, err := logger.New(cfg.App.Env)
+	logShutdown, err := logger.Init(context.Background(), cfg.App, cfg.Log, cfg.OTel)
 	if err != nil {
 		return nil, err
 	}
-	logger.SetGlobal(log)
+	log := logger.L()
 	if cfg.App.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -102,7 +106,7 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	engine := gin.New()
-	engine.Use(gin.Logger())
+	engine.Use(logger.RequestLogger())
 	engine.Use(metrics.GinMiddleware())
 	engine.Use(gin.Recovery())
 	if cfg.OTel.Enabled {
@@ -142,6 +146,11 @@ func New(cfg *config.Config) (*App, error) {
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(doubaoClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
 	analyzeSvc.ConfigureDoubaoClient(cfg.External.DoubaoAPIKey, cfg.External.DoubaoBaseURL, "")
+	analyzeSvc.ConfigureGemini31LiteClient(cfg.External.OfoxAIAPIKey, cfg.External.OfoxAIBaseURL, "gemini-3.1-flash-lite")
+	analyzeSvc.ConfigureGemini35Client(cfg.External.Gemini35APIKey, cfg.External.Gemini35BaseURL, cfg.External.Gemini35Model)
+	if cfg.External.DoubaoWebSearchAPIKey != "" {
+		analyzeSvc.ConfigureDoubaoWebSearchClient(cfg.External.DoubaoWebSearchAPIKey, cfg.External.DoubaoBaseURL, "")
+	}
 	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
 	analyzeSvc.ConfigureStorage(storageClient)
@@ -195,6 +204,11 @@ func New(cfg *config.Config) (*App, error) {
 	frSvc.ConfigureInviteRewardActivator(membershipSvc)
 	membershipHandler := membershiphandler.NewMembershipHandler(membershipSvc)
 
+	// Pet companion module DI
+	petRepo := petrepo.NewPetRepo(db)
+	petSvc := petservice.NewService(petRepo)
+	petHandler := pethandler.NewPetHandler(petSvc)
+
 	// Public food library module DI
 	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
 	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo, storageClient)
@@ -204,6 +218,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Recipe module DI
 	recipeRepo := reciperepo.NewRecipeRepo(db)
 	recipeSvc := recipeservice.NewRecipeService(recipeRepo, storageClient)
+	recipeSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	recipeHandler := recipehandler.NewRecipeHandler(recipeSvc)
 
 	// Expiry module DI
@@ -220,7 +235,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Utility module DI
 	locationSvc := utilityservice.NewLocationService(cfg)
 	qrcodeSvc := utilityservice.NewQRCodeService(cfg)
-	manualFoodRepo := utilityrepo.NewManualFoodRepo(db)
+	manualFoodRepo := utilityrepo.NewManualFoodRepo(db, storageClient)
 	manualFoodSvc := utilityservice.NewManualFoodService(manualFoodRepo)
 	utilityHandler := utilityhandler.NewUtilityHandler(locationSvc, qrcodeSvc, manualFoodSvc)
 
@@ -239,6 +254,7 @@ func New(cfg *config.Config) (*App, error) {
 		db:            db,
 		log:           log,
 		shutdownTrace: traceShutdown,
+		shutdownLog:   logShutdown,
 		taskQueue:     taskQueue,
 	}
 	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, membershipSvc, taskQueue, storageClient)
@@ -267,6 +283,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/user/health-profile/upload-report-image", authmw.RequireJWT(jwtSvc), userHandler.UploadReportImage)
 	engine.GET("/api/user/record-days", authmw.RequireJWT(jwtSvc), userHandler.GetRecordDays)
 	engine.POST("/api/user/last-seen-analyze-history", authmw.RequireJWT(jwtSvc), userHandler.UpdateLastSeenAnalyzeHistory)
+	engine.POST("/api/user/acknowledge-health-disclaimer", authmw.RequireJWT(jwtSvc), userHandler.AcknowledgeHealthDisclaimer)
 
 	engine.GET("/api/home/dashboard", authmw.RequireJWT(jwtSvc), dashboardHandler.HomeDashboard)
 	engine.GET("/api/food-record/:record_id/poster-calorie-compare", authmw.RequireJWT(jwtSvc), dashboardHandler.PosterCalorieCompare)
@@ -283,7 +300,6 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/analyze/tasks", authmw.RequireJWT(jwtSvc), analyzeHandler.ListTasks)
 	engine.GET("/api/analyze/tasks/count", authmw.RequireJWT(jwtSvc), analyzeHandler.CountTasks)
 	engine.GET("/api/analyze/tasks/status-count", authmw.RequireJWT(jwtSvc), analyzeHandler.CountTasksByStatus)
-	engine.DELETE("/api/analyze/tasks/unrecorded", authmw.RequireJWT(jwtSvc), analyzeHandler.DeleteUnrecordedTasks)
 	engine.GET("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.GetTask)
 	engine.PATCH("/api/analyze/tasks/:task_id/result", authmw.RequireJWT(jwtSvc), analyzeHandler.UpdateTaskResult)
 	engine.DELETE("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.DeleteTask)
@@ -358,6 +374,10 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
 
+	// Pet companion routes
+	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
+	engine.POST("/api/pet/events/:event_id/claim", authmw.RequireJWT(jwtSvc), petHandler.ClaimEvent)
+
 	// Public food library routes
 	engine.GET("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.List)
 	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.Create)
@@ -397,6 +417,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/location/search", utilityHandler.LocationSearch)
 	engine.POST("/api/qrcode", utilityHandler.QRCode)
 	engine.GET("/api/manual-food/browse", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodBrowse)
+	engine.GET("/api/manual-food/catalog", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodCatalog)
 	engine.GET("/api/manual-food/search", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodSearch)
 
 	// TestBackend routes
@@ -428,7 +449,7 @@ func New(cfg *config.Config) (*App, error) {
 		}
 		registerSpecs(engine, specs, jwtSvc)
 	} else {
-		log.Warn("route map missing, skipped stub registration", zap.String("path", routeMapPath))
+		log.Warn("路由映射文件缺失，已跳过存根路由注册", slog.String("path", routeMapPath))
 	}
 
 	return app, nil
@@ -457,7 +478,7 @@ func (a *App) startEmbeddedWorker(
 	workerCount := cfg.Worker.Count
 	metrics.SetWorkerConfigured(cfg.TaskQueue.Driver, workerCount)
 	if workerCount <= 0 {
-		a.log.Info("embedded worker disabled", zap.Int("worker_count", workerCount))
+		a.log.Info("内嵌 worker 已禁用", slog.Int("worker_count", workerCount))
 		return
 	}
 
@@ -490,12 +511,12 @@ func (a *App) startEmbeddedWorker(
 	a.workerCancel = cancel
 	a.workerDone = done
 
-	a.log.Info("embedded worker enabled",
-		zap.String("worker_id", workerID),
-		zap.Strings("task_types", taskTypes),
-		zap.String("task_queue_driver", cfg.TaskQueue.Driver),
-		zap.Duration("poll_interval", pollInterval),
-		zap.Int("worker_count", workerCount),
+	a.log.Info("内嵌 worker 已启用",
+		slog.String("worker_id", workerID),
+		slog.Any("task_types", taskTypes),
+		slog.String("task_queue_driver", cfg.TaskQueue.Driver),
+		slog.Duration("poll_interval", pollInterval),
+		slog.Int("worker_count", workerCount),
 	)
 	go func() {
 		defer close(done)
@@ -510,7 +531,7 @@ func (a *App) startEmbeddedWorker(
 			if err == nil || err == context.Canceled || workerCtx.Err() != nil {
 				break
 			}
-			a.log.Error("embedded worker stopped with error; restarting", zap.Error(err))
+			a.log.Error("内嵌 worker 异常停止，准备重启", logger.Err(err))
 			timer := time.NewTimer(2 * time.Second)
 			select {
 			case <-workerCtx.Done():
@@ -518,7 +539,7 @@ func (a *App) startEmbeddedWorker(
 			case <-timer.C:
 			}
 		}
-		a.log.Info("embedded worker stopped")
+		a.log.Info("内嵌 worker 已停止")
 	}()
 }
 
@@ -540,7 +561,7 @@ func (a *App) Close(ctx context.Context) error {
 		select {
 		case <-a.workerDone:
 		case <-ctx.Done():
-			a.log.Warn("embedded worker shutdown timed out", zap.Error(ctx.Err()))
+			a.log.Warn("内嵌 worker 关闭超时", logger.Err(ctx.Err()))
 		}
 	}
 	if a.taskQueue != nil {
@@ -550,6 +571,11 @@ func (a *App) Close(ctx context.Context) error {
 	}
 	if a.shutdownTrace != nil {
 		if err := a.shutdownTrace(ctx); err != nil {
+			return err
+		}
+	}
+	if a.shutdownLog != nil {
+		if err := a.shutdownLog(ctx); err != nil {
 			return err
 		}
 	}

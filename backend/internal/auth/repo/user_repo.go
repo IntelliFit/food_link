@@ -12,35 +12,36 @@ import (
 )
 
 type User struct {
-	ID                     string         `gorm:"column:id"`
-	OpenID                 string         `gorm:"column:openid"`
-	UnionID                *string        `gorm:"column:unionid"`
-	Nickname               string         `gorm:"column:nickname"`
-	Avatar                 string         `gorm:"column:avatar"`
-	Telephone              *string        `gorm:"column:telephone"`
-	DietGoal               *string        `gorm:"column:diet_goal"`
-	HealthCondition        map[string]any `gorm:"column:health_condition;serializer:json"`
-	CreatedAt              *time.Time     `gorm:"column:create_time"`
-	OnboardingCompleted    *bool          `gorm:"column:onboarding_completed"`
-	Height                 *float64       `gorm:"column:height"`
-	Weight                 *float64       `gorm:"column:weight"`
-	Birthday               *string        `gorm:"column:birthday"`
-	Gender                 *string        `gorm:"column:gender"`
-	ActivityLevel          *string        `gorm:"column:activity_level"`
-	BMR                    *float64       `gorm:"column:bmr"`
-	TDEE                   *float64       `gorm:"column:tdee"`
-	ExecutionMode          *string        `gorm:"column:execution_mode"`
-	ModeSetBy              *string        `gorm:"column:mode_set_by"`
-	ModeSetAt              *time.Time     `gorm:"column:mode_set_at"`
-	ModeReason             *string        `gorm:"column:mode_reason"`
-	ModeCommitmentDays     *int           `gorm:"column:mode_commitment_days"`
-	ModeSwitchCount30d     *int           `gorm:"column:mode_switch_count_30d"`
-	Searchable             *bool          `gorm:"column:searchable"`
-	PublicRecords          *bool          `gorm:"column:public_records"`
-	LastSeenAnalyzeHistory *time.Time     `gorm:"column:last_seen_analyze_history_at"`
-	RegistrationInviteCode *string        `gorm:"column:registration_invite_code"`
-	ReferredByUserID       *string        `gorm:"column:referred_by_user_id"`
-	PointsBalance          *float64       `gorm:"column:points_balance"`
+	ID                             string         `gorm:"column:id"`
+	OpenID                         string         `gorm:"column:openid"`
+	UnionID                        *string        `gorm:"column:unionid"`
+	Nickname                       string         `gorm:"column:nickname"`
+	Avatar                         string         `gorm:"column:avatar"`
+	Telephone                      *string        `gorm:"column:telephone"`
+	DietGoal                       *string        `gorm:"column:diet_goal"`
+	HealthCondition                map[string]any `gorm:"column:health_condition;serializer:json"`
+	CreatedAt                      *time.Time     `gorm:"column:create_time"`
+	OnboardingCompleted            *bool          `gorm:"column:onboarding_completed"`
+	Height                         *float64       `gorm:"column:height"`
+	Weight                         *float64       `gorm:"column:weight"`
+	Birthday                       *string        `gorm:"column:birthday"`
+	Gender                         *string        `gorm:"column:gender"`
+	ActivityLevel                  *string        `gorm:"column:activity_level"`
+	BMR                            *float64       `gorm:"column:bmr"`
+	TDEE                           *float64       `gorm:"column:tdee"`
+	ExecutionMode                  *string        `gorm:"column:execution_mode"`
+	ModeSetBy                      *string        `gorm:"column:mode_set_by"`
+	ModeSetAt                      *time.Time     `gorm:"column:mode_set_at"`
+	ModeReason                     *string        `gorm:"column:mode_reason"`
+	ModeCommitmentDays             *int           `gorm:"column:mode_commitment_days"`
+	ModeSwitchCount30d             *int           `gorm:"column:mode_switch_count_30d"`
+	Searchable                     *bool          `gorm:"column:searchable"`
+	PublicRecords                  *bool          `gorm:"column:public_records"`
+	LastSeenAnalyzeHistory         *time.Time     `gorm:"column:last_seen_analyze_history_at"`
+	RegistrationInviteCode         *string        `gorm:"column:registration_invite_code"`
+	ReferredByUserID               *string        `gorm:"column:referred_by_user_id"`
+	PointsBalance                  *float64       `gorm:"column:points_balance"`
+	HealthDisclaimerAcknowledgedAt *time.Time     `gorm:"column:health_disclaimer_acknowledged_at"`
 }
 
 func (User) TableName() string { return "weapp_user" }
@@ -51,6 +52,13 @@ type UserRepo struct {
 
 func NewUserRepo(db *gorm.DB) *UserRepo {
 	return &UserRepo{db: db}
+}
+
+func (r *UserRepo) DB() *gorm.DB {
+	if r == nil {
+		return nil
+	}
+	return r.db
 }
 
 func (r *UserRepo) FindByOpenID(ctx context.Context, openID string) (*User, error) {
@@ -112,6 +120,10 @@ func (r *UserRepo) ExchangeCode(ctx context.Context, appID, secret, code string)
 
 func (r *UserRepo) UpdateLastSeenAnalyzeHistory(ctx context.Context, userID string) error {
 	return r.db.WithContext(ctx).Table("weapp_user").Where("id = ?", userID).Update("last_seen_analyze_history_at", time.Now()).Error
+}
+
+func (r *UserRepo) UpdateHealthDisclaimerAcknowledged(ctx context.Context, userID string) error {
+	return r.db.WithContext(ctx).Table("weapp_user").Where("id = ?", userID).Update("health_disclaimer_acknowledged_at", time.Now()).Error
 }
 
 func (r *UserRepo) CountFoodRecordDays(ctx context.Context, userID string) (int64, error) {

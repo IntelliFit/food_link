@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -157,4 +158,11 @@ func TestHomeRepo_DeleteCommentCascade(t *testing.T) {
 	affected, err := repo.DeleteCommentCascade(ctx, "r1", "c1")
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), affected)
+}
+
+func TestIsUndefinedTableError(t *testing.T) {
+	require.True(t, isUndefinedTableError(errors.New(`ERROR: relation "user_daily_nutrition_targets" does not exist (SQLSTATE 42P01)`)))
+	require.True(t, isUndefinedTableError(errors.New("no such table: user_daily_nutrition_targets")))
+	require.False(t, isUndefinedTableError(errors.New("connection refused")))
+	require.False(t, isUndefinedTableError(nil))
 }

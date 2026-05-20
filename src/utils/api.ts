@@ -66,7 +66,7 @@ export type MealType = CanonicalMealType | 'snack'
 export type DietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 export type ActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
 export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
-export type ExecutionMode = 'standard' | 'strict'
+export type ExecutionMode = 'lite' | 'standard' | 'strict' | 'experimental' | 'gemini35_flash' | 'gemini35_flash_grouped'
 export type AnalysisEngine = 'legacy_direct' | 'db_first'
 export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
 export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
@@ -492,7 +492,7 @@ export interface HomeIntakeData {
 }
 
 export interface HomeNutritionTarget {
-  source?: 'manual' | 'dynamic' | 'profile' | 'default' | string
+  source?: 'daily_manual' | 'manual' | 'dynamic' | 'profile' | 'default' | string
   diet_goal?: string
   base_calorie_target?: number
   suggested_calorie_target?: number
@@ -698,12 +698,80 @@ export interface HomeDashboard {
   nutritionTarget?: HomeNutritionTarget
 }
 
+export interface PetProfile {
+  id: string
+  pet_seed: string
+  name: string
+  color: string
+  shape: string
+  pattern: string
+  accessory: string
+  personality: string
+  level: number
+  experience: number
+  level_exp: number
+  next_level_exp: number
+  level_progress: number
+  total_events: number
+}
+
+export interface PetDailyScore {
+  date: string
+  habit_score: number
+  exp_gained: number
+  details: Record<string, any>
+}
+
+export interface PetStatus {
+  mood: 'happy' | 'calm' | 'sleepy' | 'surprised' | string
+  message: string
+  task_text: string
+}
+
+export interface PetOfflineEvent {
+  id: string
+  event_date: string
+  event_type: string
+  title: string
+  message: string
+  task_text: string
+  habit_score: number
+  exp_reward: number
+  credit_reward: number
+  can_claim: boolean
+  is_read: boolean
+  is_claimed: boolean
+  details?: Record<string, any>
+}
+
+export interface PetSummary {
+  pet: PetProfile
+  today: PetDailyScore
+  status: PetStatus
+  event?: PetOfflineEvent | null
+  rewards: {
+    daily_credit_cap: number
+  }
+}
+
+export interface PetClaimResult {
+  pet: PetProfile
+  event: PetOfflineEvent
+  credits_awarded: number
+  exp_awarded: number
+  earned_credits_balance?: number
+}
+
 /** 首页仪表盘可编辑目标值 */
 export interface DashboardTargets {
   calorie_target: number
   protein_target: number
   carbs_target: number
   fat_target: number
+}
+
+export interface DashboardTargetsUpdateInput extends DashboardTargets {
+  target_date?: string
 }
 
 /** 更新首页目标的结果：服务端成功或仅写入本机（线上未升级接口时） */
@@ -1258,6 +1326,8 @@ export interface HealthCondition {
   allergies?: string[]
   health_notes?: string
   routine_type?: string
+  routine_sleep_hour?: number
+  routine_wake_hour?: number
   daily_life_activity_level?: string
   report_extract?: ReportExtract | null
   precision_reference_defaults?: PrecisionReferenceDefaults
@@ -1297,6 +1367,8 @@ export interface HealthProfileUpdateRequest {
   allergies?: string[]
   health_notes?: string
   routine_type?: string
+  routine_sleep_hour?: number
+  routine_wake_hour?: number
   /** 体检报告 OCR 识别结果，保存时与问卷一并写入 user_health_documents */
   report_extract?: ReportExtract | null
   /** 体检报告图片在 Supabase Storage 的 URL，保存时写入 user_health_documents.image_url */
@@ -1630,6 +1702,8 @@ function parseFastApiDetail(data: unknown): string | undefined {
 type ErrorLike = Error & {
   statusCode?: number
   traceId?: string
+  requestId?: string
+  hostName?: string
 }
 
 function getHeaderValueIgnoreCase(headers: Record<string, any> | undefined, key: string): string | undefined {
@@ -1656,6 +1730,14 @@ function normalizeTraceId(value: string | undefined): string | undefined {
 
 function extractTraceIdFromHeaders(headers: Record<string, any> | undefined): string | undefined {
   return normalizeTraceId(getHeaderValueIgnoreCase(headers, 'x-trace-id'))
+}
+
+function extractRequestIdFromHeaders(headers: Record<string, any> | undefined): string | undefined {
+  return getHeaderValueIgnoreCase(headers, 'x-request-id')
+}
+
+function extractHostNameFromHeaders(headers: Record<string, any> | undefined): string | undefined {
+  return getHeaderValueIgnoreCase(headers, 'x-host-name')
 }
 
 function formatUserErrorWithTrace(message: string, traceId?: string): string {
@@ -1698,7 +1780,12 @@ export async function showUnifiedApiError(error: unknown, fallback: string = '�
     console.warn('[showUnifiedApiError] ignored placeholder trace id error', { message: raw || userMsg })
     return
   }
-  console.warn('[showUnifiedApiError]', { message: raw || userMsg, traceId })
+  console.warn('[showUnifiedApiError]', {
+    message: raw || userMsg,
+    traceId,
+    requestId: err?.requestId,
+    hostName: err?.hostName,
+  })
   try {
     await Taro.showToast({
       title: truncateToastTitle(userMsg || '请求失败，请稍后重试'),
@@ -1715,13 +1802,27 @@ function throwHttpErrorWithStatus(
   statusCode: number,
   data: unknown,
   fallback: string,
-  headers?: Record<string, any>
+  headers?: Record<string, any>,
+  url?: string
 ): never {
   const msg = parseFastApiDetail(data) || fallback
   const traceId = extractTraceIdFromHeaders(headers)
+  const requestId = extractRequestIdFromHeaders(headers)
+  const hostName = extractHostNameFromHeaders(headers)
+  console.error('[API DIAGNOSTIC]', {
+    url,
+    statusCode,
+    message: msg,
+    traceId,
+    requestId,
+    hostName,
+    responseData: data,
+  })
   const err = new Error(formatUserErrorWithTrace(msg, traceId)) as ErrorLike
   err.statusCode = statusCode
   if (traceId) err.traceId = traceId
+  if (requestId) err.requestId = requestId
+  if (hostName) err.hostName = hostName
   throw err
 }
 
@@ -2243,7 +2344,7 @@ export async function continuePrecisionSession(
     timeout: 10000
   })
   if (res.statusCode !== 200) {
-    throwHttpErrorWithStatus(res.statusCode, res.data, '继续精准模式失败')
+    throwHttpErrorWithStatus(res.statusCode, res.data, '继续试验模式失败')
   }
   const data = normalizeTaroResponseJson(res.data)
   const taskId = String(data?.task_id ?? data?.taskId ?? '').trim()
@@ -2311,11 +2412,6 @@ export interface DeleteTaskResult {
   images_deleted?: number
 }
 
-export interface DeleteUnrecordedTasksResult {
-  deleted: boolean
-  count: number
-}
-
 export async function deleteAnalysisTask(taskId: string): Promise<DeleteTaskResult> {
   const res = await authenticatedRequest(`/api/analyze/tasks/${taskId}`, {
     method: 'DELETE',
@@ -2326,18 +2422,6 @@ export async function deleteAnalysisTask(taskId: string): Promise<DeleteTaskResu
     throw new Error(msg)
   }
   return res.data as DeleteTaskResult
-}
-
-export async function deleteUnrecordedAnalysisTasks(): Promise<DeleteUnrecordedTasksResult> {
-  const res = await authenticatedRequest('/api/analyze/tasks/unrecorded', {
-    method: 'DELETE',
-    timeout: 30000
-  })
-  if (res.statusCode !== 200) {
-    const msg = (res.data as any)?.detail || '丢弃未记录识别结果失败'
-    throw new Error(msg)
-  }
-  return res.data as DeleteUnrecordedTasksResult
 }
 
 /**
@@ -2582,6 +2666,27 @@ export async function getHomeDashboard(date?: string): Promise<HomeDashboard> {
   }
 }
 
+export async function getPetSummary(date?: string): Promise<PetSummary> {
+  const apiDate = mapCalendarDateToApi(date)
+  const query = apiDate ? `?date=${encodeURIComponent(apiDate)}` : ''
+  const res = await authenticatedRequest(`/api/pet/summary${query}`, { method: 'GET', timeout: 10000 })
+  if (res.statusCode !== 200) {
+    throw new Error('获取宠物状态失败')
+  }
+  return res.data as PetSummary
+}
+
+export async function claimPetEvent(eventId: string): Promise<PetClaimResult> {
+  const res = await authenticatedRequest(`/api/pet/events/${encodeURIComponent(eventId)}/claim`, {
+    method: 'POST',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throw new Error('领取宠物奖励失败')
+  }
+  return res.data as PetClaimResult
+}
+
 /**
  * 获取首页可编辑目标值
  */
@@ -2600,7 +2705,7 @@ export async function getDashboardTargets(): Promise<DashboardTargets> {
  * - 若线上返回 404（旧后端），则回退为 PUT /api/user/health-profile 并携带 dashboard_targets
  * - 若服务端仍未持久化（极旧版本），则写入本机 storage 并返回 saveScope: 'local'
  */
-export async function updateDashboardTargets(data: DashboardTargets): Promise<DashboardTargetsUpdateResult> {
+export async function updateDashboardTargets(data: DashboardTargetsUpdateInput): Promise<DashboardTargetsUpdateResult> {
   const res = await authenticatedRequest('/api/user/dashboard-targets', {
     method: 'PUT',
     data,
@@ -2967,7 +3072,8 @@ export async function authenticatedRequest(
       res.statusCode,
       res.data,
       '请求失败，请稍后重试',
-      res.header as Record<string, any> | undefined
+      res.header as Record<string, any> | undefined,
+      url
     )
   }
 
@@ -3521,6 +3627,7 @@ export interface ManualFoodSearchResult {
   source: 'public_library' | 'nutrition_library'
   title: string
   subtitle: string
+  category?: string
   default_weight_grams: number
   total_calories: number
   total_protein: number
@@ -3554,6 +3661,26 @@ export interface ManualFoodSearchResult {
   match_score?: number
 }
 
+export interface ManualFoodCatalogCategory {
+  key: string
+  label: string
+  count?: number
+}
+
+export interface ManualFoodCatalogResult {
+  categories: ManualFoodCatalogCategory[]
+  items: ManualFoodSearchResult[]
+  category: string
+  page: number
+  page_size: number
+  has_more: boolean
+  stats?: {
+    nutrition_food_count: number
+    nutrition_alias_count: number
+    public_food_count: number
+  }
+}
+
 export async function searchManualFood(q: string, limit: number = 20): Promise<ManualFoodSearchResult[]> {
   const token = getAccessToken()
   const params = new URLSearchParams({ q: q.trim(), limit: String(limit) })
@@ -3569,6 +3696,31 @@ export async function searchManualFood(q: string, limit: number = 20): Promise<M
     throw new Error((response.data as any)?.detail || '搜索失败')
   }
   return ((unwrapResponse<any>(response))?.results || []) as ManualFoodSearchResult[]
+}
+
+export async function fetchManualFoodCatalog(
+  category: string = 'common',
+  page: number = 1,
+  pageSize: number = 30
+): Promise<ManualFoodCatalogResult> {
+  const token = getAccessToken()
+  const params = new URLSearchParams({
+    category,
+    page: String(page),
+    page_size: String(pageSize),
+  })
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/manual-food/catalog?${params.toString()}`,
+    method: 'GET',
+    header: withNgrokBypassHeaders({
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }),
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取食物目录失败')
+  }
+  return unwrapResponse<ManualFoodCatalogResult>(response)
 }
 
 export interface ManualFoodBrowseResult {

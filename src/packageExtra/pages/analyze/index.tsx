@@ -153,20 +153,59 @@ const normalizeReferenceDefaults = (value: unknown): PrecisionReferenceDefaults 
 }
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; tips: string[] }> = {
-  strict: {
-    title: '精准模式',
-    desc: '更适合做分项精估：主体少、边界清楚时更准，复杂整餐会提醒你拆拍。',
+  lite: {
+    title: '普通模式',
+    desc: '快速识别食物和重量，适合日常记录。',
+    tips: [
+      '尽量让食物主体完整入镜',
+      '有包装袋时尽量让文字正着、清晰入镜',
+      '复杂菜可在下方补充烹饪信息',
+      '多角度拍摄可打开多视角辅助'
+    ]
+  },
+  experimental: {
+    title: '普通模式',
+    desc: '快速识别食物和重量，适合日常记录。',
     tips: [
       '单个食物最准确，先让主体完整入镜',
+      '包装文字倒着拍会降低识别率',
       '混合餐最多保留 2-3 个主体，尽量拨开后再拍',
       '菜太多或互相遮挡时，请分开拍；旁边放餐具会更稳'
     ]
   },
+  gemini35_flash: {
+    title: '精准模式',
+    desc: '更细致识别包装文字、小众食物和复杂场景。',
+    tips: [
+      '包装袋文字尽量正着拍，配料表清晰会更准',
+      '复杂图片可补充品名或购买信息',
+      '结果仍会走后端营养库统一回算'
+    ]
+  },
+  gemini35_flash_grouped: {
+    title: '精准模式',
+    desc: '更细致识别包装文字、小众食物和复杂场景。',
+    tips: [
+      '包装袋文字尽量正着拍，配料表清晰会更准',
+      '复杂图片可补充品名或购买信息',
+      '结果仍会走后端营养库统一回算'
+    ]
+  },
+  strict: {
+    title: '精准模式',
+    desc: '更细致识别包装文字、小众食物和复杂场景。',
+    tips: [
+      '包装袋文字尽量正着拍，配料表清晰会更准',
+      '复杂菜可在下方补充烹饪方式和份量信息',
+      '多角度拍摄可打开多视角辅助'
+    ]
+  },
   standard: {
-    title: '标准模式',
-    desc: '更强调记录效率，允许常规估算，适合快速记一餐。',
+    title: '普通模式',
+    desc: '快速识别食物和重量，适合日常记录。',
     tips: [
       '尽量让食物主体完整入镜',
+      '有包装袋时尽量让文字正着、清晰入镜',
       '复杂菜可在下方补充烹饪信息',
       '多角度拍摄可打开多视角辅助'
     ]
@@ -349,7 +388,7 @@ function AnalyzePage() {
       })
       setPrecisionSessionId(nextSessionId)
       if (nextSessionId) {
-        setExecutionMode('strict')
+        setExecutionMode('experimental')
       }
       if (requestedAnalysisEngine) {
         Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
@@ -377,7 +416,7 @@ function AnalyzePage() {
     routeSessionSignatureRef.current = `${nextSessionId}|${requestedAnalysisEngine}`
     setPrecisionSessionId(nextSessionId)
     if (nextSessionId) {
-      setExecutionMode('strict')
+      setExecutionMode('experimental')
     }
     if (requestedAnalysisEngine) {
       Taro.setStorageSync(ANALYSIS_ENGINE_STORAGE_KEY, normalizeAnalysisEngine(requestedAnalysisEngine))
@@ -496,7 +535,7 @@ function AnalyzePage() {
   }
 
   const buildReferenceObjects = (): PrecisionReferenceObjectInput[] => {
-    if (executionMode !== 'strict') return []
+    if (executionMode !== 'experimental') return []
     const name = referenceName.trim()
     if (!name) return []
     const length = normalizePositiveReferenceDimension(referenceLength)
@@ -655,7 +694,7 @@ function AnalyzePage() {
         : await submitAnalyzeTask({
             image_url: primaryImageUrl,
             image_urls: imageUrls,
-            // modelName: 'ofox-gemini', // 默认不传，后端使用 doubao
+            // modelName 默认不传，由后端按当前模式选择识别通道。
             execution_mode: executionMode,
             analysis_engine: analysisEngine,
             ...commonPayload,
@@ -821,20 +860,20 @@ function AnalyzePage() {
 
         <View className='mode-switch-row'>
           <View
+            className={`mode-switch-item ${executionMode === 'standard' ? 'active' : ''}`}
+            onClick={() => setExecutionMode('standard')}
+          >
+            普通
+          </View>
+          <View
             className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
             onClick={handleStrictModeTap}
           >
             {membershipStatus?.is_pro && !canUseStrictMode ? '精准（需升级）' : '精准'}
           </View>
-          <View
-            className={`mode-switch-item ${executionMode === 'standard' ? 'active' : ''}`}
-            onClick={() => setExecutionMode('standard')}
-          >
-            标准
-          </View>
         </View>
 
-        {!!precisionUpgradeHint && executionMode !== 'strict' && (
+        {!!precisionUpgradeHint && executionMode === 'standard' && (
           <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
         )}
 
@@ -942,13 +981,13 @@ function AnalyzePage() {
         </View>
       </View>
 
-      {executionMode === 'strict' && (
+      {executionMode === 'experimental' && (
         <View className='details-section'>
         <View className='section-header'>
           <Text className='section-title'>参考物</Text>
         </View>
         <Text className='section-hint'>
-          精准模式下可录入一个参考物和尺寸。默认会记住你常用的手掌或卡片大小，下次直接复用。
+          可录入一个参考物和尺寸。默认会记住你常用的手掌或卡片大小，下次直接复用。
         </Text>
 
           {precisionSessionId ? (

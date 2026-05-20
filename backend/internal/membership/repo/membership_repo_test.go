@@ -90,6 +90,34 @@ func TestMembershipRepo_CreatePaymentAndLookupByOrderNo(t *testing.T) {
 	assert.Equal(t, "pending", found.Status)
 }
 
+func TestMembershipRepo_CreatePaymentInitializesNonNullJSONFields(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewMembershipRepo(db)
+	ctx := context.Background()
+
+	p := &domain.MembershipPayment{
+		UserID:         "u1",
+		PlanCode:       "standard_monthly",
+		OrderNo:        "PM202605210001",
+		Amount:         99,
+		Currency:       "CNY",
+		DurationMonths: 1,
+		Status:         "pending",
+	}
+	require.NoError(t, r.CreatePayment(ctx, p))
+
+	require.NotNil(t, p.NotifyPayload)
+	require.NotNil(t, p.Extra)
+	assert.Equal(t, 0, len(p.NotifyPayload))
+	assert.Equal(t, 0, len(p.Extra))
+
+	found, err := r.GetPaymentByOrderNo(ctx, "PM202605210001")
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	require.NotNil(t, found.NotifyPayload)
+	require.NotNil(t, found.Extra)
+}
+
 func TestMembershipRepo_CountDailySystemCreditUsage(t *testing.T) {
 	db := setupTestDB(t)
 	r := NewMembershipRepo(db)

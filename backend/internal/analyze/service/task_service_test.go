@@ -53,7 +53,7 @@ func (m *mockTaskCreditGuard) ValidateFoodAnalysisCredits(ctx context.Context, u
 	m.validateCalls = append(m.validateCalls, unit)
 	m.validateModes = append(m.validateModes, executionMode)
 	cost := 2 * unit
-	if executionMode == "strict" {
+	if executionMode == "strict" || executionMode == "experimental" {
 		cost = 4 * unit
 	} else if executionMode == "standard_correction" {
 		cost = 1 * unit
@@ -347,11 +347,11 @@ func TestTaskService_SubmitPrecisionCorrectionUsesTwoCredits(t *testing.T) {
 	imageURL := "https://example.com/meal.jpg"
 	source := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "precision_plan", Status: "done", ImageURL: &imageURL}
 	require.NoError(t, taskRepo.CreateTask(ctx, source))
-	strict := "strict"
+	experimental := "experimental"
 
 	taskID, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{
 		ImageURL:               imageURL,
-		ExecutionMode:          &strict,
+		ExecutionMode:          &experimental,
 		CorrectionSourceTaskID: source.ID,
 		PreviousResult:         map[string]any{"description": "old"},
 		CorrectionItems:        []map[string]any{{"name": "米饭", "weight": 100}},
@@ -548,32 +548,6 @@ func TestTaskService_DeleteTask(t *testing.T) {
 
 	_, err = svc.DeleteTask(ctx, task.ID, "user2")
 	assert.Error(t, err)
-}
-
-func TestTaskService_DeleteUnrecordedTasks(t *testing.T) {
-	db, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
-	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
-	ctx := context.Background()
-
-	waiting := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done"}
-	recorded := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done"}
-	failed := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "failed"}
-	require.NoError(t, taskRepo.CreateTask(ctx, waiting))
-	require.NoError(t, taskRepo.CreateTask(ctx, recorded))
-	require.NoError(t, taskRepo.CreateTask(ctx, failed))
-	require.NoError(t, db.Exec(`INSERT INTO user_food_records (id, user_id, source_task_id) VALUES (?, ?, ?)`, "record-1", "user1", recorded.ID).Error)
-
-	result, err := svc.DeleteUnrecordedTasks(ctx, "user1")
-	require.NoError(t, err)
-	assert.Equal(t, true, result["deleted"])
-	assert.Equal(t, int64(1), result["count"])
-
-	gotWaiting, _ := taskRepo.GetTaskByID(ctx, waiting.ID)
-	assert.Nil(t, gotWaiting)
-	gotRecorded, _ := taskRepo.GetTaskByID(ctx, recorded.ID)
-	assert.NotNil(t, gotRecorded)
-	gotFailed, _ := taskRepo.GetTaskByID(ctx, failed.ID)
-	assert.NotNil(t, gotFailed)
 }
 
 func TestTaskService_CleanupTimeoutTasks(t *testing.T) {

@@ -11,6 +11,7 @@ import {
   collectPublicFoodLibraryItem,
   uncollectPublicFoodLibraryItem,
   submitPublicFoodLibraryFeedback,
+  deletePublicFoodLibraryItem,
   showUnifiedApiError,
   type PublicFoodLibraryItem
 } from '../../../utils/api'
@@ -57,6 +58,7 @@ function FoodLibraryPage() {
   const lastRefreshTime = useRef<number>(0)
   const touchStartX = useRef(0)
   const touchStartY = useRef(0)
+  const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
 
   /**
    * 从缓存加载数据
@@ -351,6 +353,30 @@ function FoodLibraryPage() {
   }
 
   // 收藏/取消（乐观更新）
+  const handleDelete = async (e: any, item: PublicFoodLibraryItem) => {
+    e.stopPropagation()
+    const { confirm } = await Taro.showModal({
+      title: '删除上传',
+      content: '删除后这条食物会从公共库下架，其他用户将无法再查看。',
+      confirmText: '删除',
+      cancelText: '取消',
+      confirmColor: '#ef4444'
+    })
+    if (!confirm) return
+
+    try {
+      await deletePublicFoodLibraryItem(item.id)
+      const newList = list.filter(it => it.id !== item.id)
+      const newCollectionList = collectionList.filter(it => it.id !== item.id)
+      setList(newList)
+      setCollectionList(newCollectionList)
+      saveToCache(newList)
+      Taro.showToast({ title: '已删除', icon: 'success' })
+    } catch (e: any) {
+      await showUnifiedApiError(e, '删除失败')
+    }
+  }
+
   const handleCollect = async (e: any, item: PublicFoodLibraryItem) => {
     e.stopPropagation()
 
@@ -616,7 +642,9 @@ function FoodLibraryPage() {
               <View className='empty-btn' onClick={goShare}>去分享</View>
             </View>
           ) : (
-            displayList.map((item, index) => (
+          displayList.map((item, index) => {
+            const isOwner = Boolean(currentUserId && item.user_id === currentUserId)
+            return (
               <View
                 key={item.id}
                 className={`food-card ${fromRecord ? 'is-pick-mode' : ''}`}
@@ -690,10 +718,19 @@ function FoodLibraryPage() {
                         <Text className='stat-count'>{item.avg_rating.toFixed(1)}</Text>
                       </View>
                     )}
+                    {isOwner && (
+                      <View
+                        className='stat-item delete-stat'
+                        onClick={e => handleDelete(e, item)}
+                      >
+                        <Text className='stat-icon iconfont icon-shanchu delete-stat-icon' />
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
-            ))
+            )
+          })
           )}
         </View>
       </ScrollView>

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -21,6 +22,14 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func TestDoubaoClient_Analyze_Success(t *testing.T) {
 	client := NewDoubaoClient("fake-key", "doubao-seed-2-0-lite-260428")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var payload map[string]any
+		assert.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
+		assert.Equal(t, "low", payload["reasoning_effort"])
+		messages := payload["messages"].([]any)
+		content := messages[0].(map[string]any)["content"].([]any)
+		image := content[1].(map[string]any)["image_url"].(map[string]any)
+		assert.Equal(t, "https://example.com/img.jpg", image["url"])
+		assert.NotContains(t, image, "detail")
 		body := `{"choices":[{"message":{"content":"{\"description\":\"test\",\"items\":[{\"name\":\"rice\",\"estimatedWeightGrams\":100,\"nutrients\":{\"calories\":130}}]}"}}]}`
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -71,6 +80,60 @@ func TestDoubaoClient_Analyze_EmptyChoices(t *testing.T) {
 
 	_, err := client.Analyze(context.Background(), "test", "")
 	assert.Error(t, err)
+}
+
+func TestDoubaoClient_AnalyzeWithImagesWebSearch_Success(t *testing.T) {
+	client := NewDoubaoClient("fake-key", "doubao-seed-2-0-lite-260428")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://ark.cn-beijing.volces.com/api/v3/responses", req.URL.String())
+		var body map[string]any
+		assert.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+		assert.Equal(t, "doubao-seed-2-0-lite-260428", body["model"])
+		tools := body["tools"].([]any)
+		assert.Equal(t, "web_search", tools[0].(map[string]any)["type"])
+		input := body["input"].([]any)
+		content := input[0].(map[string]any)["content"].([]any)
+		assert.Equal(t, "input_text", content[0].(map[string]any)["type"])
+		assert.Equal(t, "input_image", content[1].(map[string]any)["type"])
+		assert.NotContains(t, content[1].(map[string]any), "detail")
+		response := `{
+			"id":"resp_1",
+			"model":"doubao-seed-2-0-lite-260428",
+			"output_text":"{\"description\":\"轻量识别\",\"items\":[{\"name\":\"龙宫果\",\"estimatedWeightGrams\":45}]}",
+			"usage":{"tool_usage":{"web_search":1},"tool_usage_details":{"web_search":{"search_engine":1}}}
+		}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(response)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	result, meta, err := client.AnalyzeWithImagesWebSearch(context.Background(), "test prompt", []string{"https://example.com/img.jpg"}, DoubaoWebSearchOptions{MaxKeyword: 2, Limit: 5, MaxToolCalls: 1})
+
+	assert.NoError(t, err)
+	assert.Equal(t, "轻量识别", result["description"])
+	assert.Equal(t, "resp_1", meta["response_id"])
+	assert.NotNil(t, meta["tool_usage"])
+}
+
+func TestDoubaoClient_AnalyzeWithImagesWebSearch_ToolNotOpen(t *testing.T) {
+	client := NewDoubaoClient("fake-key", "doubao-seed-2-0-lite-260428")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"error":{"code":"ToolNotOpen","message":"Your account has not activated web search. You may activate it at https://console.volcengine.com/"}}`
+		return &http.Response{
+			StatusCode: http.StatusNotFound,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+		}, nil
+	})}
+
+	_, _, err := client.AnalyzeWithImagesWebSearch(context.Background(), "test prompt", []string{"https://example.com/img.jpg"}, DoubaoWebSearchOptions{})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "doubao web search tool not activated")
+	assert.NotContains(t, err.Error(), "ToolNotOpen")
+	assert.NotContains(t, err.Error(), "volcengine.com")
 }
 
 func TestOfoxAIClient_Analyze_Success(t *testing.T) {

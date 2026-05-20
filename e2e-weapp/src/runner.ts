@@ -180,17 +180,16 @@ async function startBackendServer(scenario: Scenario, port: number): Promise<any
 }
 
 async function buildMiniprogram(mode: string, apiBaseUrl: string): Promise<void> {
-  const isDev = mode === 'development';
-  const script = 'build:weapp';
+  const script = 'build:weapp:e2e';
   const env = {
     ...process.env,
-    NODE_ENV: isDev ? 'development' : 'production',
     TARO_APP_API_BASE_URL: apiBaseUrl,
   };
 
+  console.log(`   Build script: ${script}`);
   console.log(`   API Base URL: ${apiBaseUrl}`);
 
-  const proc = execa('npm', ['run', script, '--', '--no-check'], {
+  const proc = execa('npm', ['run', script], {
     cwd: PROJECT_ROOT,
     env,
   });

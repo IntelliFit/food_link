@@ -28,6 +28,7 @@ type FoodRecord struct {
 	SourceTaskID     *string    `gorm:"column:source_task_id" json:"source_task_id,omitempty"`
 	RecordTime       *time.Time `gorm:"column:record_time" json:"record_time"`
 	CreatedAt        *time.Time `gorm:"column:created_at" json:"created_at"`
+	AlreadySaved     bool       `gorm:"-" json:"-"`
 }
 
 func (FoodRecord) TableName() string { return "user_food_records" }
@@ -49,9 +50,8 @@ func (f *FoodItem) UnmarshalJSON(data []byte) error {
 	type Alias FoodItem
 	aux := struct {
 		*Alias
-		WaterMlCamel *float64       `json:"waterMl"`
-		WaterMlSnake *float64       `json:"water_ml"`
-		NutrientsRaw map[string]any `json:"nutrients"`
+		WaterMlCamel *float64 `json:"waterMl"`
+		WaterMlSnake *float64 `json:"water_ml"`
 	}{
 		Alias: (*Alias)(f),
 	}
@@ -66,15 +66,28 @@ func (f *FoodItem) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+	var nutrients struct {
+		Values FoodItemNutrients `json:"nutrients"`
+	}
+	if err := json.Unmarshal(data, &nutrients); err != nil {
+		return err
+	}
+	f.Nutrients = nutrients.Values
+	var nutrientsRaw struct {
+		Values map[string]any `json:"nutrients"`
+	}
+	if err := json.Unmarshal(data, &nutrientsRaw); err != nil {
+		return err
+	}
 	switch {
 	case aux.WaterMlSnake != nil:
 		f.WaterMl = *aux.WaterMlSnake
 	case aux.WaterMlCamel != nil:
 		f.WaterMl = *aux.WaterMlCamel
-	case f.WaterMl <= 0 && aux.NutrientsRaw != nil:
-		f.WaterMl = numberFromAny(aux.NutrientsRaw["water_ml"])
+	case f.WaterMl <= 0 && nutrientsRaw.Values != nil:
+		f.WaterMl = numberFromAny(nutrientsRaw.Values["water_ml"])
 		if f.WaterMl <= 0 {
-			f.WaterMl = numberFromAny(aux.NutrientsRaw["waterMl"])
+			f.WaterMl = numberFromAny(nutrientsRaw.Values["waterMl"])
 		}
 	}
 	if raw.Ratio == nil {
@@ -260,6 +273,56 @@ type FoodNutrition struct {
 }
 
 func (FoodNutrition) TableName() string { return "food_nutrition_library" }
+
+// PackagedFood — table: packaged_food_library
+type PackagedFood struct {
+	ID                    string  `gorm:"column:id" json:"id"`
+	Brand                 string  `gorm:"column:brand" json:"brand"`
+	ProductName           string  `gorm:"column:product_name" json:"product_name"`
+	NormalizedName        string  `gorm:"column:normalized_name" json:"normalized_name"`
+	NetWeightG            float64 `gorm:"column:net_weight_g" json:"net_weight_g"`
+	ServingWeightG        float64 `gorm:"column:serving_weight_g" json:"serving_weight_g"`
+	KcalPer100g           float64 `gorm:"column:kcal_per_100g" json:"kcal_per_100g"`
+	ProteinPer100g        float64 `gorm:"column:protein_per_100g" json:"protein_per_100g"`
+	CarbsPer100g          float64 `gorm:"column:carbs_per_100g" json:"carbs_per_100g"`
+	FatPer100g            float64 `gorm:"column:fat_per_100g" json:"fat_per_100g"`
+	FiberPer100g          float64 `gorm:"column:fiber_per_100g" json:"fiber_per_100g"`
+	SugarPer100g          float64 `gorm:"column:sugar_per_100g" json:"sugar_per_100g"`
+	SaturatedFatPer100g   float64 `gorm:"column:saturated_fat_per_100g" json:"saturated_fat_per_100g"`
+	CholesterolMgPer100g  float64 `gorm:"column:cholesterol_mg_per_100g" json:"cholesterol_mg_per_100g"`
+	SodiumMgPer100g       float64 `gorm:"column:sodium_mg_per_100g" json:"sodium_mg_per_100g"`
+	PotassiumMgPer100g    float64 `gorm:"column:potassium_mg_per_100g" json:"potassium_mg_per_100g"`
+	CalciumMgPer100g      float64 `gorm:"column:calcium_mg_per_100g" json:"calcium_mg_per_100g"`
+	IronMgPer100g         float64 `gorm:"column:iron_mg_per_100g" json:"iron_mg_per_100g"`
+	MagnesiumMgPer100g    float64 `gorm:"column:magnesium_mg_per_100g" json:"magnesium_mg_per_100g"`
+	ZincMgPer100g         float64 `gorm:"column:zinc_mg_per_100g" json:"zinc_mg_per_100g"`
+	VitaminARaeMcgPer100g float64 `gorm:"column:vitamin_a_rae_mcg_per_100g" json:"vitamin_a_rae_mcg_per_100g"`
+	VitaminCMgPer100g     float64 `gorm:"column:vitamin_c_mg_per_100g" json:"vitamin_c_mg_per_100g"`
+	VitaminDMcgPer100g    float64 `gorm:"column:vitamin_d_mcg_per_100g" json:"vitamin_d_mcg_per_100g"`
+	VitaminEMgPer100g     float64 `gorm:"column:vitamin_e_mg_per_100g" json:"vitamin_e_mg_per_100g"`
+	VitaminKMcgPer100g    float64 `gorm:"column:vitamin_k_mcg_per_100g" json:"vitamin_k_mcg_per_100g"`
+	ThiaminMgPer100g      float64 `gorm:"column:thiamin_mg_per_100g" json:"thiamin_mg_per_100g"`
+	RiboflavinMgPer100g   float64 `gorm:"column:riboflavin_mg_per_100g" json:"riboflavin_mg_per_100g"`
+	NiacinMgPer100g       float64 `gorm:"column:niacin_mg_per_100g" json:"niacin_mg_per_100g"`
+	VitaminB6MgPer100g    float64 `gorm:"column:vitamin_b6_mg_per_100g" json:"vitamin_b6_mg_per_100g"`
+	FolateMcgPer100g      float64 `gorm:"column:folate_mcg_per_100g" json:"folate_mcg_per_100g"`
+	VitaminB12McgPer100g  float64 `gorm:"column:vitamin_b12_mcg_per_100g" json:"vitamin_b12_mcg_per_100g"`
+	SourceURL             string  `gorm:"column:source_url" json:"source_url"`
+	Source                string  `gorm:"column:source" json:"source"`
+	IsActive              bool    `gorm:"column:is_active" json:"is_active"`
+}
+
+func (PackagedFood) TableName() string { return "packaged_food_library" }
+
+// PackagedFoodAlias — table: packaged_food_aliases
+type PackagedFoodAlias struct {
+	ID              string `gorm:"column:id" json:"id"`
+	FoodID          string `gorm:"column:food_id" json:"food_id"`
+	AliasName       string `gorm:"column:alias_name" json:"alias_name"`
+	NormalizedAlias string `gorm:"column:normalized_alias" json:"normalized_alias"`
+}
+
+func (PackagedFoodAlias) TableName() string { return "packaged_food_aliases" }
 
 // FoodNutritionAlias — table: food_nutrition_aliases
 type FoodNutritionAlias struct {

@@ -77,7 +77,7 @@ func TestPrecisionRepo_CreateSession(t *testing.T) {
 	err := repo.CreateSession(ctx, session)
 	require.NoError(t, err)
 	assert.NotEmpty(t, session.ID)
-	assert.Equal(t, "strict", session.ExecutionMode)
+	assert.Equal(t, "experimental", session.ExecutionMode)
 	assert.Equal(t, []any{}, session.PendingRequirements)
 	assert.Equal(t, []any{}, session.ReferenceObjects)
 	assert.NotNil(t, session.CreatedAt)

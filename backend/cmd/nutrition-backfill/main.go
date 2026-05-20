@@ -28,32 +28,32 @@ func main() {
 
 	cfg, err := config.Load(*configDir)
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		log.Fatalf("加载配置失败: %v", err)
 	}
 	db, err := database.Open(cfg.Database)
 	if err != nil {
-		log.Fatalf("open database: %v", err)
+		log.Fatalf("打开数据库失败: %v", err)
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Fatalf("get sql db: %v", err)
+		log.Fatalf("获取 SQL 数据库连接失败: %v", err)
 	}
 	defer sqlDB.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 	if err := database.Ping(ctx, db); err != nil {
-		log.Fatalf("ping database: %v", err)
+		log.Fatalf("数据库 ping 失败: %v", err)
 	}
 
 	repo := foodrecordrepo.NewFoodNutritionRepo(db)
 	totalTargets, err := repo.CountFoodsNeedingVitaminBackfill(ctx)
 	if err != nil {
-		log.Fatalf("count foods needing vitamin backfill: %v", err)
+		log.Fatalf("统计需要微量营养补全的食物失败: %v", err)
 	}
 	foods, err := repo.ListFoodsNeedingVitaminBackfill(ctx, *limit, *offset)
 	if err != nil {
-		log.Fatalf("list foods needing vitamin backfill: %v", err)
+		log.Fatalf("查询需要微量营养补全的食物失败: %v", err)
 	}
 	fmt.Printf("micronutrient_backfill_total=%d selected=%d offset=%d limit=%d apply=%v\n", totalTargets, len(foods), *offset, *limit, *apply)
 	if *apply && *offset > 0 {
@@ -72,7 +72,7 @@ func main() {
 		return
 	}
 	if cfg.External.DeepSeekAPIKey == "" {
-		log.Fatalf("missing external.deepseek_api_key or DEEPSEEK_API_KEY")
+		log.Fatalf("缺少 external.deepseek_api_key 或 DEEPSEEK_API_KEY")
 	}
 	if *batchSize <= 0 {
 		*batchSize = 1
@@ -113,24 +113,24 @@ func backfillExistingFoods(
 		}
 		estimates, err := estimator.Estimate(ctx, candidates, existingFoodContext(chunk))
 		if err != nil {
-			log.Printf("estimate existing chunk failed start=%d size=%d error=%v", start, len(chunk), err)
+			log.Printf("估算已有食物分片失败 start=%d size=%d error=%v", start, len(chunk), err)
 			continue
 		}
 		for i, food := range chunk {
 			unit := estimates[i]
 			if len(unit) == 0 {
-				log.Printf("estimate missing for existing id=%s name=%s", food.ID, food.CanonicalName)
+				log.Printf("已有食物未返回估算结果 id=%s name=%s", food.ID, food.CanonicalName)
 				continue
 			}
 			fields, err := repo.FillMissingDeepSeekNutrients(ctx, food.ID, unit)
 			if err != nil {
-				log.Printf("update existing failed id=%s name=%s error=%v", food.ID, food.CanonicalName, err)
+				log.Printf("更新已有食物失败 id=%s name=%s error=%v", food.ID, food.CanonicalName, err)
 				continue
 			}
 			if len(fields) > 0 {
 				updatedRows++
 				updatedFields += len(fields)
-				log.Printf("updated existing id=%s name=%s fields=%d", food.ID, food.CanonicalName, len(fields))
+				log.Printf("已有食物已更新 id=%s name=%s fields=%d", food.ID, food.CanonicalName, len(fields))
 			}
 		}
 	}
@@ -146,7 +146,7 @@ func backfillUnresolvedFoods(
 ) int {
 	logs, err := repo.GetUnresolvedTop(ctx, limit)
 	if err != nil {
-		log.Printf("list unresolved failed: %v", err)
+		log.Printf("查询未解析食物失败: %v", err)
 		return 0
 	}
 	inserted := 0
@@ -166,23 +166,23 @@ func backfillUnresolvedFoods(
 		}
 		estimates, err := estimator.Estimate(ctx, candidates, "这些名称来自 food_unresolved_logs，不在当前营养库中；请生成每100g完整营养，包括三大营养素、纤维、糖、矿物质和维生素。")
 		if err != nil {
-			log.Printf("estimate unresolved chunk failed start=%d size=%d error=%v", start, len(chunk), err)
+			log.Printf("估算未解析食物分片失败 start=%d size=%d error=%v", start, len(chunk), err)
 			continue
 		}
 		for i, item := range chunk {
 			unit := estimates[i]
 			if len(unit) == 0 {
-				log.Printf("estimate missing for unresolved name=%s", item.RawName)
+				log.Printf("未解析食物未返回估算结果 name=%s", item.RawName)
 				continue
 			}
 			id, err := repo.UpsertDeepSeekNutrition(ctx, item.RawName, unit)
 			if err != nil {
-				log.Printf("upsert unresolved failed name=%s error=%v", item.RawName, err)
+				log.Printf("写入未解析食物补全结果失败 name=%s error=%v", item.RawName, err)
 				continue
 			}
 			if id != "" {
 				inserted++
-				log.Printf("inserted unresolved name=%s food_id=%s", item.RawName, id)
+				log.Printf("未解析食物补全结果已写入 name=%s food_id=%s", item.RawName, id)
 			}
 		}
 	}

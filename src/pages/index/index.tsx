@@ -1,4 +1,4 @@
-import { View, Text, Input, Image, Canvas } from '@tarojs/components'
+import { View, Text, Input, Image, Canvas, PageMeta } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
@@ -13,6 +13,8 @@ import {
   getFriendInviteProfile,
   getSharedFoodRecord,
   getFoodRecordById,
+  getPetSummary,
+  claimPetEvent,
   saveBodyWeightRecord,
   addBodyWaterLog,
   resetBodyWaterLogs,
@@ -22,12 +24,14 @@ import {
   getFoodExpiryDashboard,
   generateDietRecommendation,
   type DashboardTargets,
+  type DashboardTargetsUpdateInput,
   type DietRecommendationResult,
   type DietRecommendationScene,
   type HomeAchievement,
   type HomeIntakeData,
   type HomeMealItem,
   type HomeNutritionTarget,
+  type PetSummary,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
@@ -84,6 +88,8 @@ import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, Me
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
+const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v1'
+const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v1'
 
 function isValidHomeDate(date?: string): date is string {
   return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
@@ -256,6 +262,76 @@ function getMacroTargetsFromIntake(intake: HomeIntakeData): MacroTargets {
     carbs: roundTargetValue(intake.macros.carbs.target),
     fat: roundTargetValue(intake.macros.fat.target)
   }
+}
+
+function getStoredPetCollapsed(): boolean {
+  try {
+    return Taro.getStorageSync(HOME_PET_COLLAPSED_KEY) === '1'
+  } catch (_) {
+    return false
+  }
+}
+
+function getPetFloatMetrics(collapsed: boolean) {
+  const info = Taro.getSystemInfoSync()
+  const rpx = info.windowWidth / 750
+  const width = (collapsed ? 108 : 520) * rpx
+  const height = (collapsed ? 108 : 124) * rpx
+  const margin = 24 * rpx
+  return {
+    windowWidth: info.windowWidth,
+    windowHeight: info.windowHeight,
+    width,
+    height,
+    margin,
+    defaultTop: 214 * rpx,
+    defaultLeft: Math.max(margin, info.windowWidth - width - 28 * rpx)
+  }
+}
+
+function clampPetFloatPosition(left: number, top: number, collapsed: boolean) {
+  const metrics = getPetFloatMetrics(collapsed)
+  return {
+    left: Math.max(metrics.margin, Math.min(left, metrics.windowWidth - metrics.width - metrics.margin)),
+    top: Math.max(metrics.margin, Math.min(top, metrics.windowHeight - metrics.height - metrics.margin))
+  }
+}
+
+function getStoredPetFloatPosition(collapsed: boolean): { left: number; top: number } {
+  try {
+    const stored = Taro.getStorageSync(HOME_PET_FLOAT_POSITION_KEY)
+    if (stored && typeof stored === 'object') {
+      const left = Number(stored.left)
+      const top = Number(stored.top)
+      if (Number.isFinite(left) && Number.isFinite(top)) {
+        return clampPetFloatPosition(left, top, collapsed)
+      }
+    }
+  } catch (_) {}
+  const metrics = getPetFloatMetrics(collapsed)
+  return { left: metrics.defaultLeft, top: metrics.defaultTop }
+}
+
+function savePetFloatPosition(position: { left: number; top: number }) {
+  try {
+    Taro.setStorageSync(HOME_PET_FLOAT_POSITION_KEY, position)
+  } catch (_) {}
+}
+
+const PET_COLORS = ['mint', 'berry', 'sunny', 'aqua', 'grape', 'peach', 'cream', 'matcha'] as const
+const PET_SHAPES = ['round', 'bean', 'puff', 'drop'] as const
+const PET_ACCESSORIES = ['leaf', 'sprout', 'scarf', 'drop', 'star', 'cap', 'bow', 'halo'] as const
+const PET_PATTERNS = ['pattern-0', 'pattern-1', 'pattern-2', 'pattern-3', 'pattern-4'] as const
+
+const PET_NAME_PREFIXES = ['薄荷', '小麦', '莓果', '云朵', '暖阳', '青柚', '米粒', '水滴', '芝麻', '奶油', '栗栗', '桃桃'] as const
+const PET_NAME_SUFFIXES = ['团子', '咕咕', '豆豆', '粒粒', '泡泡', '阿福', '小满', '栗子', '糯糯', '啵啵', '小圆', '布丁'] as const
+
+function stableHash(input: string): number {
+  let hash = 0
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 31 + input.charCodeAt(i)) >>> 0
+  }
+  return hash
 }
 
 function alignPayloadWithCalorieTarget(payload: DashboardTargets): { payload: DashboardTargets; adjusted: boolean } {
@@ -657,6 +733,20 @@ function IndexPage() {
   const [isSwitchingDate, setIsSwitchingDate] = useState(false)
   /** 后台静默同步中：左上角微型 spinner，不占文档流 */
   const [dataSyncing, setDataSyncing] = useState(false)
+  const [petCollapsed, setPetCollapsed] = useState(getStoredPetCollapsed)
+  const [petFloatPosition, setPetFloatPosition] = useState(() => getStoredPetFloatPosition(getStoredPetCollapsed()))
+  const [petDragging, setPetDragging] = useState(false)
+  const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
+  const [petClaiming, setPetClaiming] = useState(false)
+  const petSummarySeqRef = useRef(0)
+  const petDragRef = useRef<{
+    pointerId: number
+    startClientX: number
+    startClientY: number
+    startLeft: number
+    startTop: number
+    moved: boolean
+  } | null>(null)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [showNutritionTargetSheet, setShowNutritionTargetSheet] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
@@ -1090,11 +1180,14 @@ function IndexPage() {
     void ensureHomeDashboardCache()
 
     const last = homeLastLoadRef.current
+    const localSnapshotChangedAfterLastLoad =
+      !!(localSnapshot && last && (localSnapshot.updatedAt || 0) > last.ts)
     const canCache =
       !homeDataStaleRef.current &&
       last !== null &&
       last.date === targetDate &&
-      Date.now() - last.ts < HOME_DASHBOARD_CACHE_TTL_MS
+      Date.now() - last.ts < HOME_DASHBOARD_CACHE_TTL_MS &&
+      !localSnapshotChangedAfterLastLoad
     if (canCache) {
       return
     }
@@ -1184,18 +1277,22 @@ function IndexPage() {
     }
   }, [showDailyPosterModal])
 
-  /** 饮食/运动/保质期等变更：仅标记脏数据，回到首页或由 useDidShow 再拉，避免重复请求 */
+  /** 饮食/运动/保质期等变更：标记脏数据，并在需要时立即同步首页与身体指标 */
   useEffect(() => {
-    const markHomeStale = (): void => {
+    const markHomeStale = (payload?: { date?: string; force?: boolean }): void => {
       skipNextRefreshRef.current = false
       homeDataStaleRef.current = true
       const today = formatDateKey(new Date())
       const currentSelected = selectedDateRef.current || today
-      if (currentSelected !== today) {
+      const changedDate = payload?.date || today
+      if (currentSelected !== changedDate) {
         return
       }
-      const localSnapshot = getStoredHomeDashboardSnapshotByDate(today)
+      const localSnapshot = getStoredHomeDashboardSnapshotByDate(changedDate)
       if (!localSnapshot) {
+        if (payload?.force) {
+          void loadDashboard(changedDate, true)
+        }
         return
       }
       setIntakeData(localSnapshot.intakeData)
@@ -1206,6 +1303,9 @@ function IndexPage() {
       setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
       setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
+      if (payload?.force) {
+        void loadDashboard(changedDate, true)
+      }
     }
     Taro.eventCenter.on(FOOD_EXPIRY_CHANGED_EVENT, markHomeStale)
     Taro.eventCenter.on(HOME_DASHBOARD_REFRESH_EVENT, markHomeStale)
@@ -1375,11 +1475,14 @@ function IndexPage() {
     }
 
     const normalized = alignPayloadWithCalorieTarget(payload)
-    payload = normalized.payload
+    const savePayload: DashboardTargetsUpdateInput = {
+      ...normalized.payload,
+      target_date: selectedDateRef.current || formatDateKey(new Date())
+    }
 
     setSavingTargets(true)
     try {
-      const { saveScope } = await updateDashboardTargets(payload)
+      const { saveScope } = await updateDashboardTargets(savePayload)
       setShowTargetEditor(false)
       await loadDashboard(selectedDateRef.current || formatDateKey(new Date()))
       if (saveScope === 'local') {
@@ -1392,7 +1495,7 @@ function IndexPage() {
         })
       } else {
         Taro.showToast({
-          title: normalized.adjusted ? '已按热量自动校准并保存' : '目标已更新',
+          title: normalized.adjusted ? '已按热量自动校准并保存当天目标' : '当天目标已更新',
           icon: 'success'
         })
       }
@@ -1473,13 +1576,7 @@ function IndexPage() {
 
   const handleMealEdit = async () => {
     if (!mealActionRecordId) return
-    const cachedRecord = getCachedMealFullRecord(mealActionRecordId)
-    if (cachedRecord && String(cachedRecord.id || '').trim()) {
-      setMealActionRecord(cachedRecord)
-      setShowRecordEditModal(true)
-      return
-    }
-    Taro.showLoading({ title: '加载中...', mask: true })
+    Taro.showLoading({ title: '', mask: true })
     try {
       const res = await getFoodRecordById(mealActionRecordId)
       setMealActionRecord(res.record)
@@ -1598,7 +1695,7 @@ function IndexPage() {
       redirectToLogin()
       return
     }
-    Taro.switchTab({ url: '/pages/expiry/index' })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/expiry/index') })
   }
 
   const openFoodExpiryEdit = (id: string) => {
@@ -2017,7 +2114,9 @@ function IndexPage() {
       : null
   const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
   const nutritionTargetSource = nutritionTarget?.source || ''
-  const nutritionTargetLabel = nutritionTargetSource === 'manual'
+  const nutritionTargetLabel = nutritionTargetSource === 'daily_manual'
+    ? '当天自定义'
+    : nutritionTargetSource === 'manual'
     ? '自定义目标'
     : nutritionTargetSource === 'dynamic'
       ? '今日建议'
@@ -2089,6 +2188,168 @@ function IndexPage() {
   /** 运动消耗：默认 0，数据就绪后从 0 缓动到接口值（与喝水一致） */
   const exerciseAnimTarget = dashboardBusy ? 0 : exerciseBurnedKcal
   const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0, dashboardAnimResetKey)
+  const loadPetSummary = useCallback(async (date: string) => {
+    if (!getAccessToken()) {
+      setPetSummary(null)
+      return
+    }
+    const seq = ++petSummarySeqRef.current
+    try {
+      const summary = await getPetSummary(date)
+      if (seq === petSummarySeqRef.current) {
+        setPetSummary(summary)
+      }
+    } catch (error) {
+      console.warn('宠物状态加载失败，使用本地原型兜底:', error)
+      if (seq === petSummarySeqRef.current) {
+        setPetSummary(null)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadPetSummary(selectedDate)
+  }, [loadPetSummary, selectedDate])
+
+  const petSeed = useMemo(() => {
+    try {
+      return petSummary?.pet?.pet_seed || String(Taro.getStorageSync('user_id') || Taro.getStorageSync('openid') || 'guest')
+    } catch (_) {
+      return petSummary?.pet?.pet_seed || 'guest'
+    }
+  }, [petSummary?.pet?.pet_seed])
+  const fallbackPetColor = PET_COLORS[stableHash(`${petSeed}:color`) % PET_COLORS.length]
+  const fallbackPetShape = PET_SHAPES[stableHash(`${petSeed}:shape`) % PET_SHAPES.length]
+  const fallbackPetAccessory = PET_ACCESSORIES[stableHash(`${petSeed}:accessory`) % PET_ACCESSORIES.length]
+  const petHash = stableHash(`${petSeed}:name`)
+  const fallbackPetPattern = PET_PATTERNS[stableHash(`${petSeed}:pattern`) % PET_PATTERNS.length]
+  const fallbackPetName = `${PET_NAME_PREFIXES[petHash % PET_NAME_PREFIXES.length]}${PET_NAME_SUFFIXES[Math.floor(petHash / PET_NAME_PREFIXES.length) % PET_NAME_SUFFIXES.length]}`
+  const petColor = petSummary?.pet?.color || fallbackPetColor
+  const petShape = petSummary?.pet?.shape || fallbackPetShape
+  const petAccessory = petSummary?.pet?.accessory || fallbackPetAccessory
+  const petPattern = petSummary?.pet?.pattern || fallbackPetPattern
+  const petName = petSummary?.pet?.name || fallbackPetName
+  const healthyHabitScore = useMemo(() => {
+    if (dashboardBusy || isGuest) return 0
+    let score = 0
+    if (totalCurrent > 0 && totalTarget > 0 && totalCurrent <= totalTarget) score += 1
+    if (proteinTargetRaw > 0 && proteinCur >= proteinTargetRaw * 0.75) score += 1
+    if (todayWater.total >= bodyMetrics.waterGoalMl * 0.6) score += 1
+    if (exerciseBurnedKcal > 0) score += 1
+    return score
+  }, [
+    bodyMetrics.waterGoalMl,
+    dashboardBusy,
+    exerciseBurnedKcal,
+    isGuest,
+    proteinCur,
+    proteinTargetRaw,
+    todayWater.total,
+    totalCurrent,
+    totalTarget
+  ])
+  const petEvent = petSummary?.event && !petSummary.event.is_claimed ? petSummary.event : null
+  const petMood = petSummary?.status?.mood || (dashboardBusy || isGuest
+    ? 'calm'
+    : healthyHabitScore >= 3
+      ? 'happy'
+      : healthyHabitScore >= 1
+        ? 'calm'
+        : 'sleepy')
+  const petLevelProgress = petSummary?.pet?.level_progress ?? Math.min(100, healthyHabitScore * 25)
+  const petLevelText = petSummary?.pet?.level ? `Lv.${petSummary.pet.level} · 成长 ${petLevelProgress}%` : `成长 ${petLevelProgress}%`
+  const petMessage = petEvent?.message || petSummary?.status?.message || (dashboardBusy
+    ? '我正在看你今天的状态'
+    : isGuest
+      ? '登录后我会记住你的成长'
+      : healthyHabitScore >= 3
+        ? '今天习惯很稳，我长大了一点'
+        : healthyHabitScore >= 1
+          ? '再完成一个小习惯，我会更有精神'
+          : '先记录一餐，我就知道怎么陪你啦')
+  const petTaskText = petEvent?.task_text || petSummary?.status?.task_text || (dashboardBusy || isGuest
+    ? '今日成长任务'
+    : healthyHabitScore >= 3
+      ? '已点亮多个好习惯'
+      : proteinTargetRaw > 0 && proteinCur < proteinTargetRaw * 0.75
+        ? '补一点蛋白质'
+        : todayWater.total < bodyMetrics.waterGoalMl * 0.6
+          ? '喝水达到 60%'
+          : totalCurrent <= 0
+            ? '记录一餐'
+            : '保持今日节奏')
+  const handleClaimPetEvent = useCallback(async () => {
+    if (!petEvent || petClaiming) return
+    setPetClaiming(true)
+    try {
+      const result = await claimPetEvent(petEvent.id)
+      setPetSummary((prev) => prev ? { ...prev, pet: result.pet, event: result.event, status: { ...prev.status, message: '奖励已收下，我又长大了一点。' } } : prev)
+      const parts: string[] = []
+      if (result.credits_awarded > 0) parts.push(`+${result.credits_awarded}积分`)
+      if (result.exp_awarded > 0) parts.push(`+${result.exp_awarded}经验`)
+      Taro.showToast({ title: parts.length ? `领取成功 ${parts.join(' ')}` : '已领取', icon: 'none' })
+    } catch (error) {
+      await showUnifiedApiError(error, '领取宠物奖励失败')
+    } finally {
+      setPetClaiming(false)
+    }
+  }, [petClaiming, petEvent])
+  const togglePetCollapsed = useCallback(() => {
+    setPetCollapsed((prev) => {
+      const next = !prev
+      try {
+        Taro.setStorageSync(HOME_PET_COLLAPSED_KEY, next ? '1' : '0')
+      } catch (_) {}
+      setPetFloatPosition((current) => {
+        const adjusted = clampPetFloatPosition(current.left, current.top, next)
+        savePetFloatPosition(adjusted)
+        return adjusted
+      })
+      return next
+    })
+  }, [])
+  const handlePetTouchStart = useCallback((event) => {
+    const touch = event.touches?.[0]
+    if (!touch) return
+    petDragRef.current = {
+      pointerId: touch.identifier ?? 0,
+      startClientX: touch.clientX,
+      startClientY: touch.clientY,
+      startLeft: petFloatPosition.left,
+      startTop: petFloatPosition.top,
+      moved: false
+    }
+    setPetDragging(true)
+  }, [petFloatPosition.left, petFloatPosition.top])
+
+  const handlePetTouchMove = useCallback((event) => {
+    const drag = petDragRef.current
+    if (!drag) return
+    const touches = Array.from(event.touches || [])
+    const touch = touches.find((item: any) => (item.identifier ?? 0) === drag.pointerId) || touches[0]
+    if (!touch) return
+    const dx = touch.clientX - drag.startClientX
+    const dy = touch.clientY - drag.startClientY
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+      drag.moved = true
+    }
+    setPetFloatPosition(clampPetFloatPosition(drag.startLeft + dx, drag.startTop + dy, petCollapsed))
+  }, [petCollapsed])
+
+  const handlePetTouchEnd = useCallback(() => {
+    const drag = petDragRef.current
+    petDragRef.current = null
+    setPetDragging(false)
+    setPetFloatPosition((current) => {
+      const adjusted = clampPetFloatPosition(current.left, current.top, petCollapsed)
+      savePetFloatPosition(adjusted)
+      return adjusted
+    })
+    if (!drag) return
+    if (petCollapsed && !drag.moved) {
+      togglePetCollapsed()
+    }
+  }, [petCollapsed, togglePetCollapsed])
 
   const handleShareDailyPosterImage = useCallback(() => {
     if (!dailyPosterImageUrl) return
@@ -2359,13 +2620,71 @@ function IndexPage() {
   }
 
   return (
-    <View className='home-page'>
+    <View className={`home-page ${showRecordEditModal ? 'home-page--modal-open' : ''}`}>
+      <PageMeta pageStyle={showRecordEditModal ? 'overflow: hidden; height: 100vh;' : 'overflow: visible;'} />
       {/* 后台静默同步中：左上角微型 spinner */}
       {dataSyncing ? (
         <View className='home-page__data-sync'>
           <View className='home-page__data-sync-spinner' />
         </View>
       ) : null}
+      <View
+        className={`pet-companion-float ${petCollapsed ? 'is-collapsed' : 'is-expanded'} ${petDragging ? 'is-dragging' : ''}`}
+        style={{
+          left: `${petFloatPosition.left}px`,
+          top: `${petFloatPosition.top}px`
+        }}
+        onTouchStart={handlePetTouchStart}
+        onTouchMove={handlePetTouchMove}
+        onTouchEnd={handlePetTouchEnd}
+        onTouchCancel={handlePetTouchEnd}
+      >
+        <View className={`pet-companion-card ${petColor} ${petShape} ${petPattern} mood-${petMood}`}>
+          <View className='pet-companion-avatar'>
+            <View className='pet-companion-shadow' />
+            <View className='pet-body'>
+              <View className='pet-ear left' />
+              <View className='pet-ear right' />
+              <View className='pet-accessory'>
+                <View className={`pet-accessory-shape ${petAccessory}`} />
+              </View>
+              <View className='pet-face'>
+                <View className='pet-eye left' />
+                <View className='pet-eye right' />
+                <View className='pet-cheek left' />
+                <View className='pet-cheek right' />
+                <View className='pet-mouth' />
+              </View>
+            </View>
+          </View>
+          {!petCollapsed && (
+            <View className='pet-companion-content'>
+              <View className='pet-companion-header'>
+                <Text className='pet-companion-kicker'>健康伙伴</Text>
+                <Text className='pet-companion-name'>{petName}</Text>
+                <Text className='pet-companion-progress-text'>{petLevelText}</Text>
+              </View>
+              <Text className='pet-companion-message'>{petMessage}</Text>
+              <View className='pet-companion-task'>
+                <Text className='pet-companion-task-dot' />
+                <Text className='pet-companion-task-text'>{petTaskText}</Text>
+              </View>
+              {petEvent?.can_claim && (
+                <View className='pet-companion-reward' onClick={handleClaimPetEvent}>
+                  <Text className='pet-companion-reward-text'>
+                    {petClaiming ? '领取中' : petEvent.credit_reward > 0 ? `领取 +${petEvent.credit_reward}积分` : `领取 +${petEvent.exp_reward}经验`}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+          {!petCollapsed && (
+            <View className='pet-companion-collapse' onClick={togglePetCollapsed}>
+              <Text className='pet-companion-collapse-text'>收起</Text>
+            </View>
+          )}
+        </View>
+      </View>
       {/* 页面内容 */}
       <View className='page-content'>
         {/* 问候区 */}

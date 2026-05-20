@@ -10,7 +10,7 @@
 
 .content-scroll {
   flex: 1;
-  padding: 24rpx 24rpx 0;
+  padding: 20rpx 20rpx 0;
   box-sizing: border-box;
   width: 100%;
 }
@@ -25,14 +25,13 @@
 
 .workspace-card,
 .selected-section,
-.config-card,
-.section-block {
+.config-card {
   background: rgba(255, 255, 255, 0.92);
   border: 1rpx solid rgba(16, 185, 129, 0.12);
-  border-radius: 28rpx;
-  box-shadow: 0 12rpx 36rpx rgba(15, 23, 42, 0.05);
-  padding: 28rpx;
-  margin-bottom: 24rpx;
+  border-radius: 22rpx;
+  box-shadow: 0 10rpx 28rpx rgba(15, 23, 42, 0.04);
+  padding: 22rpx;
+  margin-bottom: 20rpx;
 }
 
 .workspace-header,
@@ -60,12 +59,12 @@
 }
 
 .workspace-header {
-  margin-bottom: 24rpx;
+  margin-bottom: 18rpx;
 }
 
 .workspace-title {
   display: block;
-  font-size: 36rpx;
+  font-size: 34rpx;
   font-weight: 700;
   color: #0f172a;
   margin-bottom: 6rpx;
@@ -102,30 +101,29 @@
   color: #6b7280;
 }
 
-.meal-selector {
+.meal-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14rpx;
-  margin-bottom: 20rpx;
-}
-
-.meal-selector.compact .meal-item {
-  padding: 18rpx 12rpx;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-bottom: 16rpx;
 }
 
 .meal-item {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 10rpx;
-  padding: 22rpx 14rpx;
+  justify-content: center;
+  gap: 8rpx;
+  height: 68rpx;
+  padding: 0 10rpx;
   background: #fff;
-  border-radius: 20rpx;
+  border-radius: 999rpx;
   border: 2rpx solid rgba(16, 185, 129, 0.1);
+  box-sizing: border-box;
 }
 
 .meal-item .meal-icon {
-  font-size: 36rpx;
+  font-size: 28rpx;
   color: #94a3b8;
 }
 
@@ -149,8 +147,8 @@
   display: flex;
   align-items: center;
   background: #fff;
-  border-radius: 20rpx;
-  padding: 18rpx 22rpx;
+  border-radius: 18rpx;
+  padding: 16rpx 20rpx;
   border: 1rpx solid rgba(16, 185, 129, 0.14);
   box-sizing: border-box;
 }
@@ -167,7 +165,7 @@
 
 .search-input {
   flex: 1;
-  font-size: 30rpx;
+  font-size: 28rpx;
   color: #0f172a;
 }
 
@@ -180,24 +178,78 @@
   color: #9ca3af;
 }
 
-.filter-scroll {
+.catalog-shell {
+  display: flex;
+  align-items: stretch;
+  min-height: 820rpx;
+  margin: 0 -20rpx 20rpx;
+  background: #fff;
+  border-top: 1rpx solid rgba(15, 23, 42, 0.04);
+  border-bottom: 1rpx solid rgba(15, 23, 42, 0.04);
+}
+
+.catalog-sidebar {
+  flex: 0 0 168rpx;
+  width: 168rpx;
+  max-height: 960rpx;
+  background: #f4f6fb;
+}
+
+.catalog-tab {
+  min-height: 92rpx;
+  padding: 0 20rpx;
+  display: flex;
+  align-items: center;
+  border-radius: 0 28rpx 28rpx 0;
+}
+
+.catalog-tab text {
+  font-size: 27rpx;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.catalog-tab.active {
+  background: #fff;
+  box-shadow: 0 10rpx 22rpx rgba(15, 23, 42, 0.04);
+}
+
+.catalog-tab.active text {
+  color: #0f172a;
+}
+
+.catalog-main {
+  flex: 1;
+  min-width: 0;
+  padding: 28rpx 20rpx 32rpx 26rpx;
+  box-sizing: border-box;
+}
+
+.filter-scroll,
+.category-scroll {
   white-space: nowrap;
 }
 
-.filter-row {
+.filter-row,
+.category-row {
   display: inline-flex;
-  gap: 14rpx;
+  gap: 12rpx;
   padding-right: 16rpx;
 }
 
+.filter-scroll {
+  margin-bottom: 14rpx;
+}
+
 .filter-chip,
+.category-chip,
 .serving-chip,
 .quick-adjust-chip,
 .option-item {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 16rpx 24rpx;
+  padding: 14rpx 22rpx;
   border-radius: 999rpx;
   background: #fff;
   border: 1rpx solid rgba(16, 185, 129, 0.14);
@@ -205,6 +257,7 @@
 }
 
 .filter-chip text,
+.category-chip text,
 .serving-chip text,
 .quick-adjust-chip text,
 .option-item text {
@@ -213,6 +266,7 @@
 }
 
 .filter-chip.active,
+.category-chip.active,
 .serving-chip.active,
 .option-item.active {
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
@@ -220,6 +274,7 @@
 }
 
 .filter-chip.active text,
+.category-chip.active text,
 .serving-chip.active text,
 .option-item.active text {
   color: #fff;
@@ -227,24 +282,29 @@
 }
 
 .food-library-section {
-  margin-bottom: 24rpx;
+  margin-bottom: 20rpx;
 }
 
 .library-header {
-  margin-bottom: 18rpx;
+  align-items: flex-start;
+  gap: 16rpx;
+  margin-bottom: 14rpx;
 }
 
 .food-list {
   background: #fff;
-  border-radius: 24rpx;
+  border-radius: 0;
   overflow: hidden;
-  border: 1rpx solid rgba(16, 185, 129, 0.08);
+  border: 0;
 }
 
 .food-item {
-  gap: 18rpx;
-  padding: 22rpx;
+  align-items: center;
+  gap: 16rpx;
+  min-height: 136rpx;
+  padding: 20rpx 0;
   border-bottom: 1rpx solid rgba(15, 23, 42, 0.05);
+  box-sizing: border-box;
 }
 
 .food-item:last-child {
@@ -253,16 +313,16 @@
 
 .food-cover,
 .selected-thumb {
-  flex: 0 0 100rpx;
-  width: 100rpx;
-  height: 100rpx;
+  flex: 0 0 82rpx;
+  width: 82rpx;
+  height: 82rpx;
 }
 
 .food-cover-image,
 .selected-thumb-image {
   width: 100%;
   height: 100%;
-  border-radius: 22rpx;
+  border-radius: 16rpx;
   background: #f3f4f6;
 }
 
@@ -270,7 +330,7 @@
 .selected-thumb-placeholder {
   width: 100%;
   height: 100%;
-  border-radius: 22rpx;
+  border-radius: 16rpx;
   background: rgba(16, 185, 129, 0.08);
   display: flex;
   align-items: center;
@@ -292,7 +352,7 @@
 .food-name-row,
 .item-name-row {
   gap: 10rpx;
-  margin-bottom: 6rpx;
+  margin-bottom: 4rpx;
 }
 
 .food-name,
@@ -300,33 +360,40 @@
   flex: 1;
   min-width: 0;
   font-size: 30rpx;
-  font-weight: 600;
+  font-weight: 700;
   color: #0f172a;
+  line-height: 1.25;
 }
 
 .food-sub,
 .item-cal {
   display: block;
-  font-size: 24rpx;
+  font-size: 25rpx;
   color: #6b7280;
+  line-height: 1.35;
+}
+
+.food-sub {
+  color: #9ca3af;
 }
 
 .food-hint,
 .item-hint {
-  margin-top: 6rpx;
+  margin-top: 2rpx;
+  line-height: 1.35;
 }
 
 .source-badge,
 .item-tag {
   flex: 0 0 auto;
-  padding: 8rpx 14rpx;
+  padding: 6rpx 12rpx;
   border-radius: 999rpx;
   background: #eef2ff;
 }
 
 .source-badge text,
 .item-tag {
-  font-size: 20rpx;
+  font-size: 19rpx;
   color: #475569;
 }
 
@@ -348,11 +415,12 @@
 
 .add-btn {
   flex: 0 0 auto;
-  min-width: 92rpx;
-  height: 64rpx;
+  min-width: 58rpx;
+  width: 58rpx;
+  height: 58rpx;
   padding: 0 16rpx;
   border-radius: 999rpx;
-  background: rgba(16, 185, 129, 0.1);
+  background: #f8fafc;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -366,6 +434,17 @@
 
 .add-btn.active {
   background: rgba(16, 185, 129, 0.18);
+}
+
+.load-more {
+  padding: 28rpx 0 8rpx;
+  text-align: center;
+}
+
+.load-more text {
+  font-size: 25rpx;
+  color: #059669;
+  font-weight: 600;
 }
 
 .selected-list {
@@ -499,19 +578,6 @@
 
 .config-section:last-child {
   margin-bottom: 0;
-}
-
-.section-block-header {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6rpx;
-  margin-bottom: 16rpx;
-}
-
-.section-block-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #0f172a;
 }
 
 .loading-state,

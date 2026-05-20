@@ -39,16 +39,21 @@ func (m *mockQRCodeService) GenerateQRCode(ctx context.Context, scene, page stri
 }
 
 type mockManualFoodService struct {
-	browseItems []domain.ManualFood
+	browseItems *domain.ManualFoodBrowseResult
 	browseErr   error
-	searchItems []domain.ManualFood
+	catalog     *domain.ManualFoodCatalogResult
+	catalogErr  error
+	searchItems []domain.ManualFoodResult
 	searchErr   error
 }
 
-func (m *mockManualFoodService) Browse(ctx context.Context, category string, limit int) ([]domain.ManualFood, error) {
+func (m *mockManualFoodService) Browse(ctx context.Context, userID string, limit int) (*domain.ManualFoodBrowseResult, error) {
 	return m.browseItems, m.browseErr
 }
-func (m *mockManualFoodService) Search(ctx context.Context, keyword string, limit int) ([]domain.ManualFood, error) {
+func (m *mockManualFoodService) Catalog(ctx context.Context, userID string, category string, page int, pageSize int) (*domain.ManualFoodCatalogResult, error) {
+	return m.catalog, m.catalogErr
+}
+func (m *mockManualFoodService) Search(ctx context.Context, userID string, keyword string, limit int) ([]domain.ManualFoodResult, error) {
 	return m.searchItems, m.searchErr
 }
 
@@ -59,6 +64,7 @@ func setupRouter(h *UtilityHandler) *gin.Engine {
 	r.POST("/api/location/search", h.LocationSearch)
 	r.POST("/api/qrcode", h.QRCode)
 	r.GET("/api/manual-food/browse", h.ManualFoodBrowse)
+	r.GET("/api/manual-food/catalog", h.ManualFoodCatalog)
 	r.GET("/api/manual-food/search", h.ManualFoodSearch)
 	return r
 }
@@ -114,36 +120,63 @@ func TestQRCode(t *testing.T) {
 }
 
 func TestManualFoodBrowse(t *testing.T) {
-	mockFood := &mockManualFoodService{browseItems: []domain.ManualFood{{ID: "f1", Name: "apple"}}}
+	mockFood := &mockManualFoodService{browseItems: &domain.ManualFoodBrowseResult{
+		PublicLibrary: []domain.ManualFoodResult{{ID: "f1", Title: "apple", Source: "public_library"}},
+	}}
 	h := NewUtilityHandler(nil, nil, mockFood)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/browse?category=fruit&limit=10", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/browse?limit=10", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
-	items := data["items"].([]any)
+	items := data["public_library"].([]any)
 	assert.Len(t, items, 1)
 }
 
-func TestManualFoodSearch(t *testing.T) {
-	mockFood := &mockManualFoodService{searchItems: []domain.ManualFood{{ID: "f1", Name: "green apple"}}}
+func TestManualFoodCatalog(t *testing.T) {
+	mockFood := &mockManualFoodService{catalog: &domain.ManualFoodCatalogResult{
+		Categories: []domain.ManualFoodCatalogCategory{{Key: "common", Label: "常见"}},
+		Items:      []domain.ManualFoodResult{{ID: "catalog:米饭", Title: "米饭", Source: "nutrition_library"}},
+		Category:   "common",
+		Page:       1,
+		PageSize:   30,
+		HasMore:    true,
+	}}
 	h := NewUtilityHandler(nil, nil, mockFood)
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/search?keyword=apple&limit=5", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/catalog?category=common&page=1&page_size=30", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
-	items := data["items"].([]any)
+	assert.Equal(t, "common", data["category"])
+	assert.Equal(t, true, data["has_more"])
+	assert.Len(t, data["items"].([]any), 1)
+}
+
+func TestManualFoodSearch(t *testing.T) {
+	mockFood := &mockManualFoodService{searchItems: []domain.ManualFoodResult{{ID: "f1", Title: "green apple", Source: "nutrition_library"}}}
+	h := NewUtilityHandler(nil, nil, mockFood)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/search?q=apple&limit=5", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	items := data["results"].([]any)
 	assert.Len(t, items, 1)
 }
 
@@ -208,7 +241,7 @@ func TestManualFoodBrowseError(t *testing.T) {
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/browse?category=fruit&limit=10", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/browse?limit=10", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
@@ -220,7 +253,7 @@ func TestManualFoodSearchError(t *testing.T) {
 	r := setupRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/search?keyword=apple&limit=5", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/search?q=apple&limit=5", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)

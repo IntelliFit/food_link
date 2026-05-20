@@ -6,8 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"food_link/backend/internal/utility/domain"
-	"food_link/backend/internal/utility/repo"
+	fooddomain "food_link/backend/internal/foodrecord/domain"
+	publicdomain "food_link/backend/internal/publicfood/domain"
+	utilityrepo "food_link/backend/internal/utility/repo"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,11 +16,24 @@ import (
 	"gorm.io/gorm"
 )
 
-func setupUtilityTestDB(t *testing.T) (*gorm.DB, *repo.ManualFoodRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
+func setupUtilityTestDB(t *testing.T) (*gorm.DB, *utilityrepo.ManualFoodRepo) {
+	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.ManualFood{}))
-	return db, repo.NewManualFoodRepo(db)
+	require.NoError(t, db.AutoMigrate(
+		&fooddomain.FoodNutrition{},
+		&fooddomain.FoodNutritionAlias{},
+		&publicdomain.PublicFoodItem{},
+		&publicdomain.PublicFoodCollection{},
+	))
+	require.NoError(t, db.Exec(`
+		CREATE TABLE user_food_records (
+			id TEXT PRIMARY KEY,
+			user_id TEXT,
+			items JSON,
+			record_time DATETIME
+		)
+	`).Error)
+	return db, utilityrepo.NewManualFoodRepo(db)
 }
 
 func TestManualFoodService_Browse(t *testing.T) {
@@ -27,22 +41,37 @@ func TestManualFoodService_Browse(t *testing.T) {
 	svc := NewManualFoodService(foodRepo)
 	ctx := context.Background()
 
-	require.NoError(t, db.Create(&domain.ManualFood{ID: "f1", Name: "apple", Category: "fruit"}).Error)
-	require.NoError(t, db.Create(&domain.ManualFood{ID: "f2", Name: "carrot", Category: "vegetable"}).Error)
+	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
+		ID:             "n1",
+		CanonicalName:  "香蕉",
+		NormalizedName: "香蕉",
+		KcalPer100g:    89,
+		ProteinPer100g: 1.1,
+		CarbsPer100g:   22.8,
+		FatPer100g:     0.3,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&publicdomain.PublicFoodItem{
+		ID:            "p1",
+		UserID:        "u2",
+		FoodName:      "香蕉燕麦杯",
+		TotalCalories: 260,
+		TotalProtein:  9,
+		TotalCarbs:    44,
+		TotalFat:      6,
+		Status:        "published",
+	}).Error)
+	require.NoError(t, db.Exec(`
+		INSERT INTO user_food_records (id, user_id, items, record_time) VALUES
+		('r1', 'u1', '[{"name":"香蕉","manual_source":"nutrition_library","manual_source_id":"n1","manual_source_title":"香蕉","manual_portion_label":"100g","intake":100,"nutrients":{"calories":89,"protein":1.1,"carbs":22.8,"fat":0.3}}]', CURRENT_TIMESTAMP)
+	`).Error)
 
-	items, err := svc.Browse(ctx, "", 0)
+	items, err := svc.Browse(ctx, "u1", 0)
 	require.NoError(t, err)
-	assert.Len(t, items, 2)
-
-	fruitItems, err := svc.Browse(ctx, "fruit", 0)
-	require.NoError(t, err)
-	assert.Len(t, fruitItems, 1)
-	assert.Equal(t, "apple", fruitItems[0].Name)
-
-	// Test limit clamping
-	limited, err := svc.Browse(ctx, "", 5)
-	require.NoError(t, err)
-	assert.Len(t, limited, 2)
+	require.NotNil(t, items)
+	assert.Len(t, items.RecentItems, 1)
+	assert.Len(t, items.NutritionLibrary, 1)
+	assert.Len(t, items.PublicLibrary, 1)
 }
 
 func TestManualFoodService_Search(t *testing.T) {
@@ -50,17 +79,30 @@ func TestManualFoodService_Search(t *testing.T) {
 	svc := NewManualFoodService(foodRepo)
 	ctx := context.Background()
 
-	require.NoError(t, db.Create(&domain.ManualFood{ID: "f1", Name: "green apple"}).Error)
-	require.NoError(t, db.Create(&domain.ManualFood{ID: "f2", Name: "red apple"}).Error)
-	require.NoError(t, db.Create(&domain.ManualFood{ID: "f3", Name: "banana"}).Error)
+	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
+		ID:             "n1",
+		CanonicalName:  "苹果",
+		NormalizedName: "苹果",
+		KcalPer100g:    52,
+		ProteinPer100g: 0.3,
+		CarbsPer100g:   14,
+		FatPer100g:     0.2,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&publicdomain.PublicFoodItem{
+		ID:            "p1",
+		UserID:        "u2",
+		FoodName:      "苹果酸奶杯",
+		TotalCalories: 220,
+		TotalProtein:  8,
+		TotalCarbs:    36,
+		TotalFat:      4,
+		Status:        "published",
+	}).Error)
 
-	items, err := svc.Search(ctx, "apple", 0)
+	items, err := svc.Search(ctx, "u1", "苹果", 0)
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
-
-	limited, err := svc.Search(ctx, "app", 1)
-	require.NoError(t, err)
-	assert.Len(t, limited, 1)
 }
 
 func TestQRCodeService_GenerateQRCode(t *testing.T) {

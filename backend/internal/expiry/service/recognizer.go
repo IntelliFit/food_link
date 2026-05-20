@@ -15,7 +15,7 @@ import (
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/logger"
 
-	"go.uber.org/zap"
+	"log/slog"
 )
 
 const expiryCreditCost = 2
@@ -162,7 +162,7 @@ func expiryRecognitionBadRequest(message string) error {
 
 func expiryRecognitionUpstreamError(logMessage string) error {
 	if log := logger.L(); log != nil {
-		log.Warn("expiry recognition upstream error", zap.String("error", logMessage))
+		log.Warn("保质期识别上游错误", slog.String("error", logMessage))
 	}
 	return &commonerrors.AppError{Code: 10006, Message: "保质期识别服务暂时不可用，请稍后再试", HTTPStatus: http.StatusBadGateway}
 }

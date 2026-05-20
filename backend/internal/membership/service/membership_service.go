@@ -880,8 +880,15 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 	mode := normalizeFoodExecutionMode(executionMode)
 	cost := creditCostStandardFoodAnalysis
 	analysisLabel := "食物分析"
-	if mode == "strict" {
+	if mode == "experimental" {
 		cost = creditCostPrecisionFoodAnalysis
+		analysisLabel = "试验分析"
+	} else if mode == "gemini35_flash" {
+		analysisLabel = "Gemini 3.5 Flash 分析"
+	} else if mode == "gemini35_flash_grouped" {
+		cost = creditCostPrecisionFoodAnalysis
+		analysisLabel = "Gemini 3.5 分组分析"
+	} else if mode == "strict" {
 		analysisLabel = "精准分析"
 	} else if mode == "standard_correction" {
 		cost = creditCostStandardCorrection
@@ -899,7 +906,7 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 	if err != nil {
 		return nil, err
 	}
-	if (mode == "strict" || mode == "strict_correction") && !canUsePrecisionMode(membership) {
+	if (mode == "strict" || mode == "experimental" || mode == "gemini35_flash_grouped" || mode == "strict_correction") && !canUsePrecisionMode(membership) {
 		return nil, &commonerrors.AppError{Code: 10005, Message: "精准模式仅对标准版和进阶版开放，请升级或开通后再试。", HTTPStatus: 402}
 	}
 	return s.validateCredits(ctx, userID, cost, analysisLabel, recordedOn, membership, user)
@@ -1844,8 +1851,16 @@ func isMembershipPlanCode(planCode string) bool {
 
 func normalizeFoodExecutionMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "lite", "lightweight":
+		return "lite"
 	case "strict", "precision":
 		return "strict"
+	case "experimental", "experiment":
+		return "experimental"
+	case "gemini35_flash", "gemini35", "gemini_35_flash":
+		return "gemini35_flash"
+	case "gemini35_flash_grouped", "gemini35_grouped", "gemini_35_flash_grouped":
+		return "gemini35_flash_grouped"
 	case "standard_correction", "correction":
 		return "standard_correction"
 	case "strict_correction", "precision_correction":

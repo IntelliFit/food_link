@@ -2,12 +2,18 @@ import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useState, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
-import { listAnalyzeTasks, deleteAnalysisTask, deleteUnrecordedAnalysisTasks, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult } from '../../../utils/api'
+import { listAnalyzeTasks, deleteAnalysisTask, createUserRecipe, getAccessToken, saveFoodRecord, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult, type MealType, type Nutrients } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
+import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
+import {
+  applyOptimisticFoodRecordToHomeDashboardSnapshot,
+  refreshHomeDashboardLocalSnapshotFromCloud
+} from '../../../utils/home-dashboard-local-cache'
+import { formatDateKey } from '../../../pages/index/utils/helpers'
 
 const STATUS_MAP: Record<string, string> = {
   pending: '排队中',
@@ -33,8 +39,53 @@ const pickDisplayStatus = (task: AnalysisTask): { text: string; className: strin
 }
 
 const EXECUTION_MODE_LABEL: Record<ExecutionMode, string> = {
+  lite: '普通模式',
+  experimental: '普通模式',
+  gemini35_flash: '精准模式',
+  gemini35_flash_grouped: '精准模式',
   strict: '精准模式',
-  standard: '标准模式'
+  standard: '普通模式'
+}
+
+const MEAL_TYPE_LABELS: Record<string, string> = {
+  breakfast: '早餐',
+  morning_snack: '早加餐',
+  lunch: '午餐',
+  afternoon_snack: '午加餐',
+  dinner: '晚餐',
+  evening_snack: '晚加餐',
+  snack: '午加餐'
+}
+
+const normalizeMealType = (value: unknown): MealType | undefined => {
+  if (value === 'snack') return 'afternoon_snack'
+  return typeof value === 'string' && MEAL_TYPE_LABELS[value] ? (value as MealType) : undefined
+}
+
+const readTaskPayloadValue = (task: AnalysisTask, ...keys: string[]): unknown => {
+  const payload = (task.payload || {}) as Record<string, unknown>
+  for (const key of keys) {
+    const value = payload[key]
+    if (value != null && value !== '') return value
+  }
+  return undefined
+}
+
+const getTaskMealType = (task: AnalysisTask): MealType | undefined => (
+  normalizeMealType(readTaskPayloadValue(task, 'meal_type', 'mealType'))
+)
+
+const getTaskDietGoal = (task: AnalysisTask): string => (
+  String(readTaskPayloadValue(task, 'diet_goal', 'dietGoal') || 'none')
+)
+
+const getTaskActivityTiming = (task: AnalysisTask): string => (
+  String(readTaskPayloadValue(task, 'activity_timing', 'activityTiming') || 'none')
+)
+
+const getTaskRecordDate = (task: AnalysisTask): string | undefined => {
+  const value = readTaskPayloadValue(task, 'date', 'recorded_on', 'recordedOn')
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
 const normalizeRecognitionOutcome = (value: unknown): AnalyzeRecognitionOutcome => (
@@ -54,11 +105,15 @@ const pickRecognitionOutcome = (task: AnalysisTask): AnalyzeRecognitionOutcome =
 
 const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
-  if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'standard') {
-    return taskAny.execution_mode
+  if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'gemini35_flash' || taskAny.execution_mode === 'gemini35_flash_grouped') {
+    return 'strict'
+  }
+  if (taskAny.execution_mode === 'standard') {
+    return 'standard'
   }
   const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
-  return payloadMode === 'strict' ? 'strict' : 'standard'
+  if (payloadMode === 'strict' || payloadMode === 'gemini35_flash' || payloadMode === 'gemini35_flash_grouped') return 'strict'
+  return 'standard'
 }
 
 const pickTextAvatar = (text: string | null | undefined): string => {
@@ -105,6 +160,72 @@ const getTotalCalories = (task: AnalysisTask): number => {
   const result = task.result as AnalyzeResponse
   return result.items?.reduce((sum, item) => sum + (item.nutrients?.calories || 0), 0) || 0
 }
+
+const normalizeNumber = (value: unknown): number => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : 0
+}
+
+const buildRecipeNutrients = (nutrients: Partial<Nutrients> | undefined, waterMl: number): Nutrients => ({
+  ...(nutrients || {}),
+  calories: normalizeNumber(nutrients?.calories),
+  protein: normalizeNumber(nutrients?.protein),
+  carbs: normalizeNumber(nutrients?.carbs),
+  fat: normalizeNumber(nutrients?.fat),
+  fiber: normalizeNumber(nutrients?.fiber),
+  sugar: normalizeNumber(nutrients?.sugar),
+  waterMl,
+  water_ml: waterMl,
+  sodium_mg: normalizeNumber(nutrients?.sodium_mg ?? nutrients?.sodiumMg)
+})
+
+const buildDefaultRecipeName = (task: AnalysisTask): string => {
+  const result = task.result as AnalyzeResponse | undefined
+  const firstName = result?.items?.[0]?.name?.trim()
+  if (firstName) return firstName
+  const desc = result?.description?.trim()
+  if (desc) return desc.slice(0, 20)
+  return pickTaskHeadline(task)
+}
+
+const pickTaskImageUrls = (task: AnalysisTask): string[] => {
+  const urls = task.image_paths && task.image_paths.length > 0
+    ? task.image_paths
+    : (task.image_url ? [task.image_url] : [])
+  return urls.map((url) => String(url || '').trim()).filter(Boolean)
+}
+
+const buildTaskFoodItems = (result: AnalyzeResponse) => (
+  (result.items || []).map((item) => {
+    const weight = normalizeNumber(item.estimatedWeightGrams || item.originalWeightGrams)
+    const ratio = normalizeNumber(item.suggestedRatio) || 100
+    const intake = weight * ratio / 100
+    const waterMl = normalizeNumber(item.water_ml ?? item.waterMl ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl)
+    return {
+      name: item.name || '未命名食物',
+      weight,
+      ratio,
+      intake,
+      water_ml: waterMl,
+      nutrients: buildRecipeNutrients(item.nutrients, waterMl)
+    }
+  })
+)
+
+const buildTaskNutritionTotals = (items: ReturnType<typeof buildTaskFoodItems>) => (
+  items.reduce(
+    (acc, item) => {
+      const ratio = item.ratio / 100
+      acc.totalCalories += item.nutrients.calories * ratio
+      acc.totalProtein += item.nutrients.protein * ratio
+      acc.totalCarbs += item.nutrients.carbs * ratio
+      acc.totalFat += item.nutrients.fat * ratio
+      acc.totalWeight += item.intake > 0 ? item.intake : item.weight
+      return acc
+    },
+    { totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFat: 0, totalWeight: 0 }
+  )
+)
 
 const pickSourceTaskType = (task: AnalysisTask): 'food' | 'food_text' => {
   const tt = task.task_type || ''
@@ -238,11 +359,6 @@ function TaskCard({ task, onTap, onMore }: TaskCardProps) {
                     <Text className='mode-tag-text'>精准</Text>
                   </View>
                 )}
-                {mode === 'strict' && task.status === 'done' && (
-                  <View className={`recognition-tag recognition-${recognitionOutcome}`}>
-                    <Text className='recognition-tag-text'>{RECOGNITION_OUTCOME_LABEL[recognitionOutcome]}</Text>
-                  </View>
-                )}
               </View>
             </View>
             <View className='right-content'>
@@ -353,44 +469,12 @@ function AnalyzeHistoryPage() {
     }
   }
 
-  const handleDiscardUnrecorded = () => {
-    Taro.showModal({
-      title: '确认丢弃',
-      content: '将丢弃当前账号所有等待记录的识别结果，不包含识别中、识别失败或已经记录的数据。丢弃后不可恢复。',
-      confirmText: '丢弃',
-      confirmColor: '#e57373',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) {
-          void (async () => {
-            try {
-              Taro.showLoading({ title: '', mask: true })
-              const result = await deleteUnrecordedAnalysisTasks()
-              Taro.hideLoading()
-              Taro.showToast({
-                title: result.count > 0 ? `已丢弃 ${result.count} 条记录` : '没有可丢弃的未记录',
-                icon: result.count > 0 ? 'success' : 'none'
-              })
-              setTasks(prev => prev.filter(t => !(t.status === 'done' && t.is_recorded === false)))
-              void loadTasks()
-            } catch (e: any) {
-              Taro.hideLoading()
-              await showUnifiedApiError(e, '丢弃失败')
-            }
-          })()
-        }
-      }
-    })
-  }
-
   const handleShare = (task: AnalysisTask) => {
     // 分享功能：跳转到分享页面
     if (task.status === 'done' && task.result) {
       const result = task.result as AnalyzeResponse
       // 准备分享数据：自动填充到公共食物库分享页
-      const imageUrls = task.image_paths && task.image_paths.length > 0
-        ? task.image_paths
-        : (task.image_url ? [task.image_url] : [])
+      const imageUrls = pickTaskImageUrls(task)
       const items = (result.items || []).map(it => ({
         name: it.name || '',
         weight: it.estimatedWeightGrams ?? it.originalWeightGrams ?? 0,
@@ -432,6 +516,192 @@ function AnalyzeHistoryPage() {
       Taro.showToast({ title: '只能分享已完成的任务', icon: 'none' })
     }
     closeActionSheet()
+  }
+
+  const actionSheetSaveRecipe = () => {
+    if (!activeTask) return
+    const task = activeTask
+    closeActionSheet()
+
+    if (task.status !== 'done' || !task.result) {
+      Taro.showToast({ title: '只能收藏已完成的任务', icon: 'none' })
+      return
+    }
+    if (!getAccessToken()) {
+      Taro.showToast({ title: '请先登录', icon: 'none' })
+      return
+    }
+
+    const result = task.result as AnalyzeResponse
+    const payload = (task.payload || {}) as Record<string, unknown>
+    const defaultName = buildDefaultRecipeName(task)
+
+    Taro.showModal({
+      title: '收藏餐食',
+      content: '给这份餐食起个名字，之后可在“我的收藏”里快速记录。',
+      // @ts-ignore
+      editable: true,
+      // @ts-ignore
+      placeholderText: defaultName || '例如：我的标配早餐',
+      success: async (res) => {
+        if (!res.confirm) return
+        const recipeName = String((res as any).content || defaultName || '').trim()
+        if (!recipeName) {
+          Taro.showToast({ title: '请输入收藏名称', icon: 'none' })
+          return
+        }
+
+        const items = (result.items || []).map((item) => {
+          const weight = normalizeNumber(item.estimatedWeightGrams || item.originalWeightGrams)
+          const waterMl = normalizeNumber(item.water_ml ?? item.waterMl ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl)
+          return {
+            name: item.name || '未命名食物',
+            weight,
+            ratio: normalizeNumber(item.suggestedRatio) || 100,
+            intake: weight,
+            water_ml: waterMl,
+            nutrients: buildRecipeNutrients(item.nutrients, waterMl)
+          }
+        })
+
+        if (items.length === 0) {
+          Taro.showToast({ title: '没有可收藏的食物', icon: 'none' })
+          return
+        }
+
+        const totalWeight = items.reduce((sum, item) => sum + item.weight, 0)
+        const totalCalories = items.reduce((sum, item) => sum + item.nutrients.calories, 0)
+        const totalProtein = items.reduce((sum, item) => sum + item.nutrients.protein, 0)
+        const totalCarbs = items.reduce((sum, item) => sum + item.nutrients.carbs, 0)
+        const totalFat = items.reduce((sum, item) => sum + item.nutrients.fat, 0)
+
+        try {
+          Taro.showLoading({ title: '', mask: true })
+          await createUserRecipe({
+            recipe_name: recipeName,
+            description: result.description || '',
+            image_path: task.image_url || (task.image_paths && task.image_paths[0]) || undefined,
+            items,
+            total_calories: totalCalories,
+            total_protein: totalProtein,
+            total_carbs: totalCarbs,
+            total_fat: totalFat,
+            total_weight_grams: totalWeight,
+            meal_type: typeof payload.meal_type === 'string' ? payload.meal_type : undefined,
+            tags: ['识别记录'],
+            is_favorite: true
+          })
+          Taro.hideLoading()
+          Taro.showModal({
+            title: '收藏成功',
+            content: '已收藏到“我的收藏”，之后可以直接复用到餐食记录。',
+            showCancel: false
+          })
+        } catch (e: any) {
+          Taro.hideLoading()
+          await showUnifiedApiError(e, '收藏失败')
+        }
+      }
+    })
+  }
+
+  const actionSheetQuickRecord = () => {
+    if (!activeTask) return
+    const task = activeTask
+    closeActionSheet()
+
+    if (task.status !== 'done' || !task.result) {
+      Taro.showToast({ title: '只能记录已完成的任务', icon: 'none' })
+      return
+    }
+    if (task.is_recorded) {
+      Taro.showToast({ title: '该餐已记录', icon: 'none' })
+      return
+    }
+    if (!getAccessToken()) {
+      Taro.showToast({ title: '请先登录', icon: 'none' })
+      return
+    }
+
+    const mealType = getTaskMealType(task)
+    if (!mealType) {
+      Taro.showToast({ title: '未找到餐次，请点进详情记录', icon: 'none' })
+      return
+    }
+
+    const result = task.result as AnalyzeResponse
+    const items = buildTaskFoodItems(result)
+    if (items.length === 0) {
+      Taro.showToast({ title: '没有可记录的食物', icon: 'none' })
+      return
+    }
+    const imageUrls = pickTaskImageUrls(task)
+    const totals = buildTaskNutritionTotals(items)
+    const mealLabel = MEAL_TYPE_LABELS[mealType] || mealType
+
+    Taro.showModal({
+      title: '快速记录',
+      content: `记录为${mealLabel}？`,
+      confirmText: '记录',
+      cancelText: '取消',
+      success: (res) => {
+        if (!res.confirm) return
+        void (async () => {
+          try {
+            Taro.showLoading({ title: '', mask: true })
+            const payload = {
+              meal_type: mealType,
+              image_path: imageUrls[0] || undefined,
+              image_paths: imageUrls.length > 0 ? imageUrls : undefined,
+              description: result.description || undefined,
+              insight: result.insight || undefined,
+              items,
+              total_calories: totals.totalCalories,
+              total_protein: totals.totalProtein,
+              total_carbs: totals.totalCarbs,
+              total_fat: totals.totalFat,
+              total_weight_grams: Math.round(totals.totalWeight),
+              diet_goal: getTaskDietGoal(task) as any,
+              activity_timing: getTaskActivityTiming(task) as any,
+              pfc_ratio_comment: result.pfc_ratio_comment || undefined,
+              absorption_notes: result.absorption_notes || undefined,
+              context_advice: result.context_advice || undefined,
+              source_task_id: task.id,
+              date: getTaskRecordDate(task)
+            }
+            const saveResult = await saveFoodRecord(payload)
+            Taro.hideLoading()
+            const targetDateKey = payload.date || formatDateKey(new Date())
+            if (!saveResult.already_saved) {
+              applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
+            }
+            setTasks(prev => prev.map(item => (
+              item.id === task.id
+                ? { ...item, is_recorded: true, record_id: saveResult.id }
+                : item
+            )))
+            try {
+              Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey })
+            } catch {
+              /* ignore */
+            }
+            await refreshHomeDashboardLocalSnapshotFromCloud(targetDateKey)
+            try {
+              Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey, force: true })
+            } catch {
+              /* ignore */
+            }
+            Taro.showToast({
+              title: saveResult.already_saved ? '该餐已记录' : '记录成功',
+              icon: saveResult.already_saved ? 'none' : 'success'
+            })
+          } catch (e: any) {
+            Taro.hideLoading()
+            await showUnifiedApiError(e, '记录失败')
+          }
+        })()
+      }
+    })
   }
 
   const actionSheetDelete = () => {
@@ -486,9 +756,9 @@ function AnalyzeHistoryPage() {
       }
       Taro.setStorageSync('analyzeResult', JSON.stringify(result))
       Taro.setStorageSync('analyzeCompareMode', false)
-      Taro.setStorageSync('analyzeMealType', payload.meal_type || 'breakfast')
-      Taro.setStorageSync('analyzeDietGoal', payload.diet_goal || 'none')
-      Taro.setStorageSync('analyzeActivityTiming', payload.activity_timing || 'none')
+      Taro.setStorageSync('analyzeMealType', getTaskMealType(task) || 'breakfast')
+      Taro.setStorageSync('analyzeDietGoal', getTaskDietGoal(task))
+      Taro.setStorageSync('analyzeActivityTiming', getTaskActivityTiming(task))
       Taro.setStorageSync('analyzeExecutionMode', pickExecutionMode(task))
       if (result.precisionSessionId) {
         Taro.setStorageSync('analyzePrecisionSessionId', result.precisionSessionId)
@@ -557,23 +827,14 @@ function AnalyzeHistoryPage() {
             <Text className='empty-text'>暂时没有记录，快去拍一张吧~</Text>
           </View>
         ) : (
-          <>
-            <View className='list-header'>
-              <View className='list-header-spacer' />
-              <View className='bulk-delete-btn' onClick={handleDiscardUnrecorded}>
-                <Text className='iconfont icon-shanchu bulk-delete-icon' />
-                <Text className='bulk-delete-text'>一键删除未记录</Text>
-              </View>
-            </View>
-            {tasks.map(t => (
-              <TaskCard
-                key={t.id}
-                task={t}
-                onTap={onTaskTap}
-                onMore={handleMore}
-              />
-            ))}
-          </>
+          tasks.map(t => (
+            <TaskCard
+              key={t.id}
+              task={t}
+              onTap={onTaskTap}
+              onMore={handleMore}
+            />
+          ))
         )}
       </ScrollView>
 
@@ -584,6 +845,26 @@ function AnalyzeHistoryPage() {
           <View className='action-sheet-content'>
             <View className='action-sheet-handle-bar' />
             <View className='action-sheet-actions'>
+              <View
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result && !activeTask.is_recorded ? '' : 'action-sheet-item--disabled'}`}
+                onClick={actionSheetQuickRecord}
+              >
+                <Text className='iconfont icon-canciguanli action-sheet-icon action-sheet-icon--record' />
+                <Text className='action-sheet-label'>
+                  {getTaskMealType(activeTask)
+                    ? `快速记录到${MEAL_TYPE_LABELS[getTaskMealType(activeTask) || ''] || '餐食'}`
+                    : '快速记录'}
+                </Text>
+              </View>
+              <View className='action-sheet-divider' />
+              <View
+                className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result ? '' : 'action-sheet-item--disabled'}`}
+                onClick={actionSheetSaveRecipe}
+              >
+                <Text className='iconfont icon-shoucang-yishoucang action-sheet-icon action-sheet-icon--favorite' />
+                <Text className='action-sheet-label'>收藏到我的餐食</Text>
+              </View>
+              <View className='action-sheet-divider' />
               <View
                 className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetShare}

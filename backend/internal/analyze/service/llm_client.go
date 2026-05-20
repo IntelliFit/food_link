@@ -18,6 +18,12 @@ type LLMClient interface {
 	Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error)
 }
 
+type DoubaoWebSearchOptions struct {
+	MaxKeyword   int
+	Limit        int
+	MaxToolCalls int
+}
+
 var ErrLLMJSONParse = errors.New("llm json parse error")
 
 type LLMJSONParseError struct {
@@ -165,6 +171,13 @@ func summarizeUpstreamBody(data []byte, contentType string) string {
 	return text
 }
 
+func isDoubaoWebSearchNotActivatedError(data []byte) bool {
+	lower := strings.ToLower(string(data))
+	return strings.Contains(lower, "toolnotopen") ||
+		strings.Contains(lower, "not activated web search") ||
+		strings.Contains(lower, "activate web search")
+}
+
 // DoubaoClient calls Volcano Engine Ark API (OpenAI-compatible).
 type DoubaoClient struct {
 	APIKey  string
@@ -221,9 +234,92 @@ func (c *DoubaoClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prom
 		"model":            c.Model,
 		"messages":         []map[string]any{{"role": "user", "content": content}},
 		"temperature":      temperature,
-		"reasoning_effort": "minimal",
+		"reasoning_effort": "low",
 	}
 	return c.doRequest(ctx, c.BaseURL+"/chat/completions", body)
+}
+
+func (c *DoubaoClient) AnalyzeWithImagesWebSearch(ctx context.Context, prompt string, imageURLs []string, options DoubaoWebSearchOptions) (map[string]any, map[string]any, error) {
+	if options.MaxKeyword <= 0 {
+		options.MaxKeyword = 2
+	}
+	if options.Limit <= 0 {
+		options.Limit = 5
+	}
+	if options.MaxToolCalls <= 0 {
+		options.MaxToolCalls = 1
+	}
+	content := []map[string]any{
+		{"type": "input_text", "text": prompt},
+	}
+	for _, imageURL := range imageURLs {
+		imageURL = strings.TrimSpace(imageURL)
+		if imageURL == "" {
+			continue
+		}
+		content = append(content, map[string]any{
+			"type":      "input_image",
+			"image_url": imageURL,
+		})
+	}
+	body := map[string]any{
+		"model": c.Model,
+		"input": []map[string]any{{
+			"role":    "user",
+			"content": content,
+		}},
+		"tools": []map[string]any{{
+			"type":        "web_search",
+			"max_keyword": options.MaxKeyword,
+			"limit":       options.Limit,
+		}},
+		"max_tool_calls": options.MaxToolCalls,
+	}
+	return c.doResponsesRequest(ctx, c.BaseURL+"/responses", body)
+}
+
+func (c *DoubaoClient) doResponsesRequest(ctx context.Context, url string, body map[string]any) (map[string]any, map[string]any, error) {
+	b, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+	data, readErr := io.ReadAll(resp.Body)
+	if readErr != nil {
+		return nil, nil, readErr
+	}
+	if resp.StatusCode != http.StatusOK {
+		if isDoubaoWebSearchNotActivatedError(data) {
+			return nil, nil, fmt.Errorf("doubao web search tool not activated")
+		}
+		return nil, nil, fmt.Errorf("doubao responses api error %d: %s", resp.StatusCode, summarizeUpstreamBody(data, resp.Header.Get("Content-Type")))
+	}
+	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	if looksLikeHTMLResponse(data, contentType) {
+		return nil, nil, fmt.Errorf("doubao responses api returned html instead of json; check DOUBAO_BASE_URL, current base URL: %s", c.BaseURL)
+	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, nil, fmt.Errorf("decode doubao responses response failed: %w", err)
+	}
+	text := extractResponsesOutputText(raw)
+	if strings.TrimSpace(text) == "" {
+		return nil, nil, fmt.Errorf("empty output_text from doubao responses")
+	}
+	parsed, err := parseLLMJSON(text)
+	if err != nil {
+		return nil, nil, err
+	}
+	return parsed, extractResponsesUsageMeta(raw), nil
 }
 
 func (c *DoubaoClient) doRequest(ctx context.Context, url string, body map[string]any) (map[string]any, error) {
@@ -278,6 +374,82 @@ func looksLikeHTMLResponse(data []byte, contentType string) bool {
 		strings.HasPrefix(text, "<html") ||
 		strings.Contains(text, "<head") ||
 		strings.Contains(text, "<body")
+}
+
+func extractResponsesOutputText(raw map[string]any) string {
+	if text := strings.TrimSpace(fmt.Sprintf("%v", raw["output_text"])); text != "" && text != "<nil>" {
+		return text
+	}
+	var parts []string
+	if output, ok := raw["output"].([]any); ok {
+		for _, itemAny := range output {
+			item, ok := itemAny.(map[string]any)
+			if !ok {
+				continue
+			}
+			if item["type"] != "message" {
+				continue
+			}
+			content, ok := item["content"].([]any)
+			if !ok {
+				continue
+			}
+			for _, contentAny := range content {
+				contentItem, ok := contentAny.(map[string]any)
+				if !ok {
+					continue
+				}
+				text := strings.TrimSpace(fmt.Sprintf("%v", contentItem["text"]))
+				if text != "" && text != "<nil>" {
+					parts = append(parts, text)
+				}
+			}
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+func extractResponsesUsageMeta(raw map[string]any) map[string]any {
+	meta := map[string]any{}
+	if id := strings.TrimSpace(fmt.Sprintf("%v", raw["id"])); id != "" && id != "<nil>" {
+		meta["response_id"] = id
+	}
+	if model := strings.TrimSpace(fmt.Sprintf("%v", raw["model"])); model != "" && model != "<nil>" {
+		meta["model"] = model
+	}
+	if usage, ok := raw["usage"].(map[string]any); ok {
+		for _, key := range []string{"tool_usage", "tool_usage_details", "input_tokens", "output_tokens", "total_tokens"} {
+			if value, exists := usage[key]; exists {
+				meta[key] = value
+			}
+		}
+	}
+	if output, ok := raw["output"].([]any); ok {
+		calls := []map[string]any{}
+		for _, itemAny := range output {
+			item, ok := itemAny.(map[string]any)
+			if !ok {
+				continue
+			}
+			if fmt.Sprintf("%v", item["type"]) != "web_search_call" {
+				continue
+			}
+			call := map[string]any{}
+			for _, key := range []string{"id", "status", "type"} {
+				if value, exists := item[key]; exists {
+					call[key] = value
+				}
+			}
+			if action, ok := item["action"].(map[string]any); ok {
+				call["action"] = action
+			}
+			calls = append(calls, call)
+		}
+		if len(calls) > 0 {
+			meta["web_search_calls"] = calls
+		}
+	}
+	return meta
 }
 
 var codeFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")

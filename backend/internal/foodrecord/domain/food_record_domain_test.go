@@ -46,14 +46,17 @@ func TestFoodItem_UnmarshalJSONWaterMlAliases(t *testing.T) {
 	var camel FoodItem
 	require.NoError(t, json.Unmarshal([]byte(`{"name":"粥","waterMl":120,"nutrients":{"calories":10}}`), &camel))
 	assert.Equal(t, 120.0, camel.WaterMl)
+	assert.Equal(t, 10.0, camel.Nutrients.Calories)
 
 	var snake FoodItem
 	require.NoError(t, json.Unmarshal([]byte(`{"name":"粥","water_ml":85,"nutrients":{"calories":10}}`), &snake))
 	assert.Equal(t, 85.0, snake.WaterMl)
+	assert.Equal(t, 10.0, snake.Nutrients.Calories)
 
 	var nested FoodItem
 	require.NoError(t, json.Unmarshal([]byte(`{"name":"汤","nutrients":{"calories":10,"water_ml":200}}`), &nested))
 	assert.Equal(t, 200.0, nested.WaterMl)
+	assert.Equal(t, 10.0, nested.Nutrients.Calories)
 }
 
 func TestFoodItem_UnmarshalJSONDefaultsMissingRatio(t *testing.T) {
@@ -71,6 +74,41 @@ func TestFoodItem_UnmarshalJSONDefaultsMissingRatio(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(`{"name":"苹果","weight":120,"ratio":0,"nutrients":{"calories":60}}`), &explicitZero))
 	assert.Equal(t, 0.0, explicitZero.Ratio)
 	assert.Equal(t, 0.0, explicitZero.Intake)
+}
+
+func TestFoodItem_UnmarshalJSONManualRecordNutrients(t *testing.T) {
+	var item FoodItem
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"name": "白米饭",
+		"weight": 177,
+		"ratio": 100,
+		"intake": 177,
+		"nutrients": {
+			"calories": 225.0,
+			"protein": 4.7,
+			"carbs": 49.2,
+			"fat": 0.6,
+			"fiber": 0,
+			"sugar": 0,
+			"sodium_mg": 1.8
+		},
+		"manual_source": "nutrition_library",
+		"manual_source_id": "food-1",
+		"manual_source_title": "白米饭",
+		"manual_portion_label": "100g"
+	}`), &item))
+
+	assert.Equal(t, "白米饭", item.Name)
+	assert.Equal(t, 177.0, item.Weight)
+	assert.Equal(t, 100.0, item.Ratio)
+	assert.Equal(t, 177.0, item.Intake)
+	assert.Equal(t, 225.0, item.Nutrients.Calories)
+	assert.Equal(t, 4.7, item.Nutrients.Protein)
+	assert.Equal(t, 49.2, item.Nutrients.Carbs)
+	assert.Equal(t, 0.6, item.Nutrients.Fat)
+	assert.Equal(t, 1.8, item.Nutrients.SodiumMg)
+	require.NotNil(t, item.ManualSource)
+	assert.Equal(t, "nutrition_library", *item.ManualSource)
 }
 
 func TestFoodItemNutrients_UnmarshalMicronutrients(t *testing.T) {

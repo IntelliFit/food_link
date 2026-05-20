@@ -2,10 +2,14 @@ import { View, Text } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
 import './index.scss'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
+
+const TARGET_URL = extraPkgUrl('/pages/expiry/index')
 
 function LegacyFoodExpiryRedirectPage() {
   useDidShow(() => {
-    Taro.switchTab({ url: '/pages/expiry/index' })
+    Taro.redirectTo({ url: TARGET_URL })
+      .catch(() => Taro.navigateTo({ url: TARGET_URL }))
       .catch(() => Taro.switchTab({ url: '/pages/profile/index' }))
       .catch(() => {})
   })

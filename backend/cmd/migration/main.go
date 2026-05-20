@@ -21,16 +21,16 @@ func main() {
 
 	cfg, resolvedDir, err := loadConfig(*configDir)
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		log.Fatalf("加载配置失败: %v", err)
 	}
 
 	db, err := database.Open(cfg.Database)
 	if err != nil {
-		log.Fatalf("open database: %v", err)
+		log.Fatalf("打开数据库失败: %v", err)
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Fatalf("get sql db: %v", err)
+		log.Fatalf("获取 SQL 数据库连接失败: %v", err)
 	}
 	defer sqlDB.Close()
 
@@ -38,16 +38,16 @@ func main() {
 	defer cancel()
 
 	if err := database.Ping(ctx, db); err != nil {
-		log.Fatalf("ping database: %v", err)
+		log.Fatalf("数据库 ping 失败: %v", err)
 	}
 	if err := migration.AutoMigrate(ctx, db, cfg.Database.Schema); err != nil {
-		log.Fatalf("auto migrate: %v", err)
+		log.Fatalf("自动迁移失败: %v", err)
 	}
 	schema := cfg.Database.Schema
 	if schema == "" {
 		schema = "public"
 	}
-	log.Printf("migration completed: config_dir=%s schema=%s", resolvedDir, schema)
+	log.Printf("数据库迁移完成: config_dir=%s schema=%s", resolvedDir, schema)
 }
 
 func loadConfig(configDir string) (*config.Config, string, error) {

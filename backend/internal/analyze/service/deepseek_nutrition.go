@@ -14,7 +14,7 @@ import (
 
 var deepSeekFenceRe = regexp.MustCompile("(?s)```json?\\s*\\n?|```")
 
-const deepSeekNutritionFallbackModel = "deepseek-v4-pro"
+const deepSeekNutritionFallbackModel = "deepseek-v4-flash"
 
 type DeepSeekNutritionEstimator struct {
 	APIKey  string

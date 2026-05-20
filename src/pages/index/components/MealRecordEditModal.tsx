@@ -1,7 +1,7 @@
 import { View, Text, ScrollView, Button, Input, Slider } from '@tarojs/components'
 import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { updateFoodRecord, showUnifiedApiError, type FoodRecord, type Nutrients, type MealType, type ActivityTiming } from '../../../utils/api'
+import { updateFoodRecord, showUnifiedApiError, type FoodRecord, type Nutrients } from '../../../utils/api'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
 import './MealRecordEditModal.scss'
@@ -25,22 +25,6 @@ const EDITABLE_NUTRIENT_META: Record<EditableNutrientField, { label: string; uni
   fat: { label: '脂肪', unit: 'g' }
 }
 
-const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
-  { value: 'breakfast', label: '早餐', iconClass: 'icon-zaocan1' },
-  { value: 'morning_snack', label: '早加餐', iconClass: 'icon-lingshi' },
-  { value: 'lunch', label: '午餐', iconClass: 'icon-wucan' },
-  { value: 'afternoon_snack', label: '午加餐', iconClass: 'icon-lingshi' },
-  { value: 'dinner', label: '晚餐', iconClass: 'icon-wancan' },
-  { value: 'evening_snack', label: '晚加餐', iconClass: 'icon-lingshi' },
-]
-
-const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; iconClass: string }> = [
-  { value: 'post_workout', label: '练后', iconClass: 'icon-juzhong' },
-  { value: 'daily', label: '日常', iconClass: 'icon-duoren' },
-  { value: 'before_sleep', label: '睡前', iconClass: 'icon-shuijue' },
-  { value: 'none', label: '无', iconClass: 'icon-nothing' }
-]
-
 const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
 
 const normalizeDisplayNumber = (value: number) => {
@@ -55,6 +39,56 @@ const getDisplayedNutrientValue = (item: EditableFoodItem, field: EditableNutrie
   roundToSingleDecimal((item.nutrients?.[field] ?? 0) * getItemRatioFactor(item))
 )
 
+const hasVisibleMacroData = (nutrients?: Nutrients | null) => (
+  Boolean(
+    nutrients &&
+    (
+      Number(nutrients.calories) > 0 ||
+      Number(nutrients.protein) > 0 ||
+      Number(nutrients.carbs) > 0 ||
+      Number(nutrients.fat) > 0
+    )
+  )
+)
+
+const resolveRecordItemRatio = (item: Pick<FoodRecord['items'][0], 'ratio' | 'intake' | 'weight'>): number => {
+  const ratio = Number(item.ratio)
+  if (Number.isFinite(ratio) && ratio > 0) return ratio
+  const intake = Number(item.intake)
+  const weight = Number(item.weight)
+  if (Number.isFinite(intake) && Number.isFinite(weight) && intake >= 0 && weight > 0) {
+    return Math.round((intake / weight) * 1000) / 10
+  }
+  return 100
+}
+
+const resolveRecordItemIntake = (item: Pick<FoodRecord['items'][0], 'ratio' | 'intake' | 'weight'>): number => {
+  const intake = Number(item.intake)
+  if (Number.isFinite(intake) && intake > 0) return intake
+  const weight = Number(item.weight)
+  if (!Number.isFinite(weight) || weight <= 0) return 0
+  return Math.round((weight * resolveRecordItemRatio(item) / 100) * 10) / 10
+}
+
+function resolveEditableItemNutrients(
+  item: FoodRecord['items'][0],
+  record: FoodRecord,
+  ratio: number
+): Nutrients {
+  const raw = { ...(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }) }
+  if (hasVisibleMacroData(raw)) return raw
+  if ((record.items || []).length !== 1) return raw
+
+  const ratioFactor = Math.max(0.01, ratio / 100)
+  return {
+    ...raw,
+    calories: roundToSingleDecimal((record.total_calories || 0) / ratioFactor),
+    protein: roundToSingleDecimal((record.total_protein || 0) / ratioFactor),
+    carbs: roundToSingleDecimal((record.total_carbs || 0) / ratioFactor),
+    fat: roundToSingleDecimal((record.total_fat || 0) / ratioFactor)
+  }
+}
+
 interface MealRecordEditModalProps {
   visible: boolean
   record: FoodRecord | null
@@ -66,22 +100,21 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
   const { scheme } = useAppColorScheme()
   const [editItems, setEditItems] = useState<EditableFoodItem[]>([])
   const [editSaving, setEditSaving] = useState(false)
-  const [mealType, setMealType] = useState<MealType>('breakfast')
-  const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
 
   useEffect(() => {
     if (visible && record) {
       setEditItems(
-        (record.items || []).map(item => ({
-          name: item.name,
-          weight: item.weight,
-          ratio: item.ratio ?? 100,
-          intake: item.intake ?? 0,
-          nutrients: { ...(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }) }
-        }))
+        (record.items || []).map(item => {
+          const ratio = resolveRecordItemRatio(item)
+          return {
+            name: item.name,
+            weight: item.weight,
+            ratio,
+            intake: resolveRecordItemIntake(item),
+            nutrients: resolveEditableItemNutrients(item, record, ratio)
+          }
+        })
       )
-      setMealType((record.meal_type as MealType) || 'breakfast')
-      setActivityTiming((record.activity_timing as ActivityTiming) || 'none')
     } else if (!visible) {
       // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
@@ -245,9 +278,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
         total_protein: Math.round(totalProtein * 10) / 10,
         total_carbs: Math.round(totalCarbs * 10) / 10,
         total_fat: Math.round(totalFat * 10) / 10,
-        total_weight_grams: Math.round(totalWeight),
-        meal_type: mealType,
-        activity_timing: activityTiming
+        total_weight_grams: Math.round(totalWeight)
       })
       Taro.hideLoading()
       setEditSaving(false)
@@ -266,46 +297,18 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
   return (
     <View className={`edit-modal ${scheme === 'dark' ? 'edit-modal--dark' : ''}`} catchMove>
       <View className='edit-modal-mask' onClick={onClose} />
-      <View className='edit-modal-content'>
+      <View className='edit-modal-content' catchMove>
         <View className='edit-modal-header'>
-          <Text className='edit-modal-title'>修改食物参数</Text>
+          <Text className='edit-modal-title'>修改饮食数据</Text>
           <View className='edit-modal-close' onClick={onClose} />
         </View>
-        <ScrollView scrollY enhanced showScrollbar={false} className='edit-modal-body'>
-          {/* 餐次选择 */}
-          <View className='edit-meta-card'>
-            <Text className='edit-section-label'>餐次</Text>
-            <View className='meal-options'>
-              {MEAL_OPTIONS.map((opt) => (
-                <View
-                  key={opt.value}
-                  className={`meal-option ${mealType === opt.value ? 'active' : ''}`}
-                  onClick={() => setMealType(opt.value)}
-                >
-                  <Text className={`meal-icon iconfont ${opt.iconClass}`} />
-                  <Text className='meal-label'>{opt.label}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
-          {/* 运动时机 */}
-          <View className='edit-meta-card'>
-            <Text className='edit-section-label'>运动时机</Text>
-            <View className='state-options'>
-              {ACTIVITY_TIMING_OPTIONS.map((opt) => (
-                <View
-                  key={opt.value}
-                  className={`state-option ${activityTiming === opt.value ? 'active' : ''}`}
-                  onClick={() => setActivityTiming(opt.value)}
-                >
-                  <Text className={`state-icon iconfont ${opt.iconClass}`} />
-                  <Text className='state-label'>{opt.label}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-
+        <ScrollView
+          scrollY
+          enhanced
+          showScrollbar={false}
+          className='edit-modal-body'
+          catchMove
+        >
           {editItems.map((item, idx) => {
             return (
               <View key={idx} className='edit-food-card'>

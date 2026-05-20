@@ -22,7 +22,7 @@ import (
 func setupDashboardTestDB(t *testing.T) (*gorm.DB, *userrepo.UserRepo, *repo.HomeRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&userrepo.User{}, &repo.FoodRecord{}, &repo.ExpiryItem{}))
+	require.NoError(t, db.AutoMigrate(&userrepo.User{}, &repo.FoodRecord{}, &repo.ExpiryItem{}, &repo.DailyNutritionTarget{}))
 	// user_exercise_logs table is queried with user_id and recorded_on but ExerciseLog model doesn't define them
 	require.NoError(t, db.Exec("CREATE TABLE IF NOT EXISTS user_exercise_logs (calories_burned INTEGER, user_id TEXT, recorded_on TEXT)").Error)
 	return db, userrepo.NewUserRepo(db), repo.NewHomeRepo(db)

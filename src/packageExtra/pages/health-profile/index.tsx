@@ -377,6 +377,8 @@ function HealthProfilePage() {
       allergies: allAllergies.length ? allAllergies : undefined,
       health_notes: healthNotes || undefined,
       routine_type: finalRoutine || undefined,
+      routine_sleep_hour: routineHours.sleepHour,
+      routine_wake_hour: routineHours.wakeHour,
       report_image_url: reportImageUrl || undefined
     }
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {

@@ -19,7 +19,7 @@ import (
 func setupDashboardTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo, *homerepo.HomeRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&authrepo.User{}, &homerepo.FoodRecord{}, &homerepo.ExpiryItem{}))
+	require.NoError(t, db.AutoMigrate(&authrepo.User{}, &homerepo.FoodRecord{}, &homerepo.ExpiryItem{}, &homerepo.DailyNutritionTarget{}))
 	// ExerciseLog model doesn't have user_id/recorded_on, create table manually
 	db.Exec(`CREATE TABLE user_exercise_logs (
 		id INTEGER PRIMARY KEY,
@@ -233,6 +233,29 @@ func TestBuildNutritionTargetPlan_ManualModeWins(t *testing.T) {
 	assert.Equal(t, "manual", plan.TargetSource)
 	assert.Equal(t, 1800.0, plan.Targets["calorie_target"])
 	assert.Equal(t, 100.0, plan.Targets["protein_target"])
+	assert.Equal(t, 0.0, plan.ExerciseAddedKcal)
+}
+
+func TestBuildNutritionTargetPlan_DailyManualWinsOverGlobalManual(t *testing.T) {
+	hc := map[string]any{
+		"dashboard_targets_mode": "manual",
+		"dashboard_targets": map[string]any{
+			"calorie_target": 1800.0,
+			"protein_target": 100.0,
+			"carbs_target":   200.0,
+			"fat_target":     55.0,
+		},
+	}
+	user := &authrepo.User{OpenID: "o1", HealthCondition: hc}
+	plan := buildNutritionTargetPlan(user, "2024-06-15", 500, map[string]int{"2024-06-15": 500}, &homerepo.DailyNutritionTarget{
+		CalorieTarget: 2100,
+		ProteinTarget: 130,
+		CarbsTarget:   260,
+		FatTarget:     70,
+	})
+	assert.Equal(t, "daily_manual", plan.TargetSource)
+	assert.Equal(t, 2100.0, plan.Targets["calorie_target"])
+	assert.Equal(t, 130.0, plan.Targets["protein_target"])
 	assert.Equal(t, 0.0, plan.ExerciseAddedKcal)
 }
 

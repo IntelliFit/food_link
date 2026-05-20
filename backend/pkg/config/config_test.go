@@ -103,7 +103,11 @@ worker:
 
 func TestLoadTrimsExternalSecrets(t *testing.T) {
 	t.Setenv("DOUBAO_API_KEY", " sk-test ")
+	t.Setenv("DOUBAO_WEB_SEARCH_API_KEY", "\tweb-search-key\n")
 	t.Setenv("OFOXAI_API_KEY", "\tsk-ofox\n")
+	t.Setenv("GEMINI35_API_KEY", "\tsk-gemini35\n")
+	t.Setenv("GEMINI35_BASE_URL", "\thttps://yunwu.ai/v1\n")
+	t.Setenv("GEMINI35_MODEL", "\tgemini-3.5-flash\n")
 	t.Setenv("DEEPSEEK_API_KEY", " deepseek-key ")
 
 	dir := writeTestConfig(t, `
@@ -118,8 +122,20 @@ worker:
 	if cfg.External.DoubaoAPIKey != "sk-test" {
 		t.Fatalf("expected trimmed doubao key, got %q", cfg.External.DoubaoAPIKey)
 	}
+	if cfg.External.DoubaoWebSearchAPIKey != "web-search-key" {
+		t.Fatalf("expected trimmed doubao web search key, got %q", cfg.External.DoubaoWebSearchAPIKey)
+	}
 	if cfg.External.OfoxAIAPIKey != "sk-ofox" {
 		t.Fatalf("expected trimmed ofox key, got %q", cfg.External.OfoxAIAPIKey)
+	}
+	if cfg.External.Gemini35APIKey != "sk-gemini35" {
+		t.Fatalf("expected trimmed gemini35 key, got %q", cfg.External.Gemini35APIKey)
+	}
+	if cfg.External.Gemini35BaseURL != "https://yunwu.ai/v1" {
+		t.Fatalf("expected trimmed gemini35 base URL, got %q", cfg.External.Gemini35BaseURL)
+	}
+	if cfg.External.Gemini35Model != "gemini-3.5-flash" {
+		t.Fatalf("expected trimmed gemini35 model, got %q", cfg.External.Gemini35Model)
 	}
 	if cfg.External.DeepSeekAPIKey != "deepseek-key" {
 		t.Fatalf("expected trimmed deepseek key, got %q", cfg.External.DeepSeekAPIKey)
@@ -128,7 +144,11 @@ worker:
 
 func TestLoadPrefersFileExternalKeysOverEnv(t *testing.T) {
 	t.Setenv("DOUBAO_API_KEY", "bad-env-key")
+	t.Setenv("DOUBAO_WEB_SEARCH_API_KEY", "bad-web-search")
 	t.Setenv("OFOXAI_API_KEY", "bad-ofox")
+	t.Setenv("GEMINI35_API_KEY", "bad-gemini35")
+	t.Setenv("GEMINI35_BASE_URL", "https://bad.example.com")
+	t.Setenv("GEMINI35_MODEL", "bad-model")
 	t.Setenv("DEEPSEEK_API_KEY", "bad-deepseek")
 
 	dir := writeTestConfig(t, `
@@ -136,7 +156,11 @@ app:
   env: "production"
 external:
   doubao_api_key: "good-doubao"
+  doubao_web_search_api_key: "good-web-search"
   ofoxai_api_key: "good-ofox"
+  gemini35_api_key: "good-gemini35"
+  gemini35_base_url: "https://good.example.com/v1"
+  gemini35_model: "gemini-3.5-flash"
   deepseek_api_key: "good-deepseek"
 worker:
   count: 1
@@ -149,8 +173,20 @@ worker:
 	if cfg.External.DoubaoAPIKey != "good-doubao" {
 		t.Fatalf("expected file doubao key, got %q", cfg.External.DoubaoAPIKey)
 	}
+	if cfg.External.DoubaoWebSearchAPIKey != "good-web-search" {
+		t.Fatalf("expected file doubao web search key, got %q", cfg.External.DoubaoWebSearchAPIKey)
+	}
 	if cfg.External.OfoxAIAPIKey != "good-ofox" {
 		t.Fatalf("expected file ofox key, got %q", cfg.External.OfoxAIAPIKey)
+	}
+	if cfg.External.Gemini35APIKey != "good-gemini35" {
+		t.Fatalf("expected file gemini35 key, got %q", cfg.External.Gemini35APIKey)
+	}
+	if cfg.External.Gemini35BaseURL != "https://good.example.com/v1" {
+		t.Fatalf("expected file gemini35 base URL, got %q", cfg.External.Gemini35BaseURL)
+	}
+	if cfg.External.Gemini35Model != "gemini-3.5-flash" {
+		t.Fatalf("expected file gemini35 model, got %q", cfg.External.Gemini35Model)
 	}
 	if cfg.External.DeepSeekAPIKey != "good-deepseek" {
 		t.Fatalf("expected file deepseek key, got %q", cfg.External.DeepSeekAPIKey)

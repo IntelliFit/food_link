@@ -1,32 +1,38 @@
 package logger
 
 import (
+	"bytes"
+	"context"
+	"log/slog"
+	"strings"
 	"testing"
+
+	"food_link/backend/pkg/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNew_Production(t *testing.T) {
-	log, err := New("production")
+func TestInitJSONLogger(t *testing.T) {
+	shutdown, err := Init(context.Background(), config.AppConfig{Name: "test", Env: "test"}, config.LogConfig{
+		Level:  "info",
+		Format: "json",
+		Output: "stdout",
+	}, config.OTelConfig{})
 	require.NoError(t, err)
-	require.NotNil(t, log)
-	assert.NotNil(t, log.Core())
-	_ = log.Sync()
+	require.NotNil(t, shutdown)
+	assert.NotNil(t, L())
+	require.NoError(t, shutdown(context.Background()))
 }
 
-func TestNew_Development(t *testing.T) {
-	log, err := New("development")
-	require.NoError(t, err)
-	require.NotNil(t, log)
-	assert.NotNil(t, log.Core())
-	_ = log.Sync()
-}
+func TestLoggerWritesAttrs(t *testing.T) {
+	var buf bytes.Buffer
+	SetGlobal(slog.New(slog.NewJSONHandler(&buf, nil)))
 
-func TestNew_OtherEnv(t *testing.T) {
-	log, err := New("test")
-	require.NoError(t, err)
-	require.NotNil(t, log)
-	assert.NotNil(t, log.Core())
-	_ = log.Sync()
+	Info(context.Background(), "测试日志", slog.String("user_id", "u1"))
+
+	out := buf.String()
+	assert.Contains(t, out, "测试日志")
+	assert.Contains(t, out, "user_id")
+	assert.True(t, strings.Contains(out, "u1"))
 }

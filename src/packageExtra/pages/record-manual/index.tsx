@@ -4,11 +4,12 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAccessToken,
   saveFoodRecord,
-  browseManualFood,
+  fetchManualFoodCatalog,
   searchManualFood,
   showUnifiedApiError,
   type CanonicalMealType,
-  type ManualFoodBrowseResult,
+  type ManualFoodCatalogCategory,
+  type ManualFoodCatalogResult,
   type ManualFoodSearchResult,
   type Nutrients,
 } from '../../../utils/api'
@@ -45,15 +46,18 @@ const ACTIVITY_TIMINGS = [
   { value: 'none', label: '无' },
 ]
 
-const SOURCE_FILTERS = [
-  { value: 'all', label: '全部' },
-  { value: 'recent', label: '最近常吃' },
-  { value: 'favorites', label: '收藏餐食' },
-  { value: 'public_library', label: '真实餐食' },
-  { value: 'nutrition_library', label: '标准食物' },
-] as const
-
-type SourceFilter = (typeof SOURCE_FILTERS)[number]['value']
+const DEFAULT_CATALOG_CATEGORIES: ManualFoodCatalogCategory[] = [
+  { key: 'common', label: '常见' },
+  { key: 'recent', label: '最近' },
+  { key: 'favorites', label: '收藏' },
+  { key: 'staple', label: '主食' },
+  { key: 'protein', label: '肉蛋奶' },
+  { key: 'vegetable', label: '蔬菜' },
+  { key: 'fruit', label: '水果' },
+  { key: 'dairy', label: '乳品' },
+  { key: 'meal', label: '菜肴' },
+  { key: 'other', label: '其他' },
+]
 
 interface SelectedItem {
   id: string
@@ -71,13 +75,6 @@ interface SelectedItem {
   recommendReason?: string
   usageCount: number
   collected: boolean
-}
-
-interface BrowseSection {
-  key: string
-  title: string
-  subtitle: string
-  items: ManualFoodSearchResult[]
 }
 
 function formatDateKey(date: Date) {
@@ -132,9 +129,13 @@ function RecordManualPage() {
   const [dietGoal, setDietGoal] = useState('none')
   const [activityTiming, setActivityTiming] = useState('none')
   const [searchText, setSearchText] = useState('')
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
-  const [browseData, setBrowseData] = useState<ManualFoodBrowseResult | null>(null)
-  const [browseLoading, setBrowseLoading] = useState(false)
+  const [activeCategory, setActiveCategory] = useState('common')
+  const [catalogData, setCatalogData] = useState<ManualFoodCatalogResult | null>(null)
+  const [catalogItems, setCatalogItems] = useState<ManualFoodSearchResult[]>([])
+  const [catalogPage, setCatalogPage] = useState(1)
+  const [catalogHasMore, setCatalogHasMore] = useState(false)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogLoadingMore, setCatalogLoadingMore] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<ManualFoodSearchResult[]>([])
   const [saving, setSaving] = useState(false)
@@ -153,7 +154,7 @@ function RecordManualPage() {
     } else {
       setSelectedMeal(inferDefaultMealTypeFromLocalTime())
     }
-    loadBrowseData()
+    loadCatalog('common', 1, true)
   }, [])
 
   useDidShow(() => {
@@ -164,17 +165,37 @@ function RecordManualPage() {
     applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4' })
   }, [scheme])
 
-  const loadBrowseData = async () => {
-    if (browseData) return
-    setBrowseLoading(true)
-    try {
-      const data = await browseManualFood()
-      setBrowseData(data)
-    } catch (e: any) {
-      await showUnifiedApiError(e, '加载食物库失败')
-    } finally {
-      setBrowseLoading(false)
+  const loadCatalog = async (category: string, page: number = 1, replace: boolean = true) => {
+    if (replace) {
+      setCatalogLoading(true)
+    } else {
+      setCatalogLoadingMore(true)
     }
+    try {
+      const data = await fetchManualFoodCatalog(category, page, 30)
+      setCatalogData(data)
+      setCatalogPage(data.page)
+      setCatalogHasMore(Boolean(data.has_more))
+      setCatalogItems((prev) => replace ? data.items : [...prev, ...data.items])
+    } catch (e: any) {
+      await showUnifiedApiError(e, '加载食物目录失败')
+    } finally {
+      setCatalogLoading(false)
+      setCatalogLoadingMore(false)
+    }
+  }
+
+  const handleSelectCategory = (category: string) => {
+    if (category === activeCategory) return
+    setActiveCategory(category)
+    setSearchText('')
+    setSearchResults([])
+    loadCatalog(category, 1, true)
+  }
+
+  const handleLoadMoreCatalog = () => {
+    if (catalogLoading || catalogLoadingMore || !catalogHasMore || normalizedQuery) return
+    loadCatalog(activeCategory, catalogPage + 1, false)
   }
 
   useEffect(() => {
@@ -207,61 +228,29 @@ function RecordManualPage() {
     return map
   }, [selectedItems])
 
-  const filteredItems = useMemo(() => {
-    const items = normalizedQuery ? searchResults : []
-    return items.filter((item) => {
-      if (sourceFilter === 'all') return true
-      if (sourceFilter === 'favorites') return Boolean(item.collected)
-      if (sourceFilter === 'recent') return Number(item.usage_count || 0) > 0
-      return item.source === sourceFilter
-    })
-  }, [normalizedQuery, searchResults, sourceFilter])
+  const visibleItems = useMemo(() => {
+    const items = normalizedQuery ? searchResults : catalogItems
+    const seen = new Set<string>()
+    return items
+      .filter((item) => {
+        const key = getItemKey(item)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+  }, [catalogItems, normalizedQuery, searchResults])
 
-  const browseSections = useMemo<BrowseSection[]>(() => {
-    if (!browseData) return []
-    const sections: BrowseSection[] = []
-    const maybePush = (section: BrowseSection, enabled: boolean) => {
-      if (enabled && section.items.length > 0) sections.push(section)
+  const statsText = useMemo(() => {
+    const nutritionCount = catalogData?.stats?.nutrition_food_count || 0
+    const publicCount = catalogData?.stats?.public_food_count || 0
+    if (normalizedQuery) {
+      return `已找到 ${visibleItems.length} 个结果`
     }
+    return `${catalogItems.length} 个常用食物 · ${nutritionCount} 个标准食物 · ${publicCount} 个真实餐食`
+  }, [catalogData, catalogItems.length, normalizedQuery, visibleItems.length])
 
-    maybePush(
-      {
-        key: 'recent',
-        title: '最近常吃',
-        subtitle: '从标准食物库和真实餐食库里优先找回你最近常用的食物',
-        items: browseData.recent_items || [],
-      },
-      sourceFilter === 'all' || sourceFilter === 'recent'
-    )
-    maybePush(
-      {
-        key: 'favorites',
-        title: '收藏餐食',
-        subtitle: '复用你已经收藏过的真实餐食',
-        items: browseData.collected_public_library || [],
-      },
-      sourceFilter === 'all' || sourceFilter === 'favorites'
-    )
-    maybePush(
-      {
-        key: 'public_library',
-        title: '真实餐食库',
-        subtitle: '适合直接补录整份饭、外卖或商家餐',
-        items: browseData.public_library || [],
-      },
-      sourceFilter === 'all' || sourceFilter === 'public_library'
-    )
-    maybePush(
-      {
-        key: 'nutrition_library',
-        title: '标准食物库',
-        subtitle: '适合单食物、单原料，按克重精调营养',
-        items: browseData.nutrition_library || [],
-      },
-      sourceFilter === 'all' || sourceFilter === 'nutrition_library'
-    )
-    return sections
-  }, [browseData, sourceFilter])
+  const categories = catalogData?.categories?.length ? catalogData.categories : DEFAULT_CATALOG_CATEGORIES
+  const activeCategoryLabel = categories.find((item) => item.key === activeCategory)?.label || '常见'
 
   const handleAddItem = (item: ManualFoodSearchResult) => {
     const key = getItemKey(item)
@@ -521,7 +510,7 @@ function RecordManualPage() {
           <View className='workspace-header'>
             <View>
               <Text className='workspace-title'>单餐工作台</Text>
-              <Text className='workspace-subtitle'>双库模式：标准食物库 + 真实餐食库</Text>
+              <Text className='workspace-subtitle'>{statsText}</Text>
             </View>
             <View className='workspace-calories'>
               <Text className='workspace-calories-value'>{Math.round(totalNutrients.calories)}</Text>
@@ -529,8 +518,7 @@ function RecordManualPage() {
             </View>
           </View>
 
-          <Text className='section-title'>本餐餐次</Text>
-          <View className='meal-selector compact'>
+          <View className='meal-grid'>
             {MEALS.map((meal) => (
               <View
                 key={meal.id}
@@ -559,19 +547,6 @@ function RecordManualPage() {
             )}
           </View>
 
-          <ScrollView className='filter-scroll' scrollX showScrollbar={false}>
-            <View className='filter-row'>
-              {SOURCE_FILTERS.map((filter) => (
-                <View
-                  key={filter.value}
-                  className={`filter-chip ${sourceFilter === filter.value ? 'active' : ''}`}
-                  onClick={() => setSourceFilter(filter.value)}
-                >
-                  <Text>{filter.label}</Text>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
         </View>
 
         {selectedItems.length > 0 && (
@@ -681,47 +656,52 @@ function RecordManualPage() {
           </View>
         )}
 
-        <View className='food-library-section'>
-          <View className='library-header'>
-            <Text className='section-title'>{normalizedQuery ? '搜索结果' : '推荐食物'}</Text>
-            <Text className='library-subtitle'>
-              {normalizedQuery
-                ? `围绕“${normalizedQuery}”统一混排结果`
-                : `当前以 ${browseData?.stats?.nutrition_food_count || 0} 条标准食物和 ${browseData?.stats?.public_food_count || 0} 条真实餐食为主库`}
-            </Text>
-          </View>
-
-          {(browseLoading || searchLoading) ? (
-            <View className='loading-state'>
-              <View className='loading-spinner' />
-            </View>
-          ) : normalizedQuery ? (
-            <View className='food-list'>
-              {filteredItems.length > 0 ? (
-                filteredItems.map(renderResultItem)
-              ) : (
-                <View className='empty-state'>
-                  <Text>没有找到匹配食物，试试更短的关键词</Text>
+        <View className='catalog-shell'>
+          {!normalizedQuery && (
+            <ScrollView className='catalog-sidebar' scrollY>
+              {categories.map((category) => (
+                <View
+                  key={category.key}
+                  className={`catalog-tab ${activeCategory === category.key ? 'active' : ''}`}
+                  onClick={() => handleSelectCategory(category.key)}
+                >
+                  <Text>{category.label}</Text>
                 </View>
-              )}
-            </View>
-          ) : browseSections.length > 0 ? (
-            browseSections.map((section) => (
-              <View key={section.key} className='section-block'>
-                <View className='section-block-header'>
-                  <Text className='section-block-title'>{section.title}</Text>
-                  <Text className='section-block-subtitle'>{section.subtitle}</Text>
-                </View>
-                <View className='food-list'>
-                  {section.items.map(renderResultItem)}
-                </View>
-              </View>
-            ))
-          ) : (
-            <View className='empty-state'>
-              <Text>暂无可用食物数据</Text>
-            </View>
+              ))}
+            </ScrollView>
           )}
+
+          <View className='catalog-main'>
+            <View className='library-header'>
+              <View>
+                <Text className='section-title'>{normalizedQuery ? '搜索结果' : activeCategoryLabel}</Text>
+                <Text className='library-subtitle'>
+                  {normalizedQuery
+                    ? `围绕“${normalizedQuery}”优先展示高频食物`
+                    : statsText}
+                </Text>
+              </View>
+            </View>
+
+            {(catalogLoading || searchLoading) ? (
+              <View className='loading-state'>
+                <View className='loading-spinner' />
+              </View>
+            ) : visibleItems.length > 0 ? (
+              <View className='food-list compact-list'>
+                {visibleItems.map(renderResultItem)}
+                {!normalizedQuery && catalogHasMore && (
+                  <View className='load-more' onClick={handleLoadMoreCatalog}>
+                    <Text>{catalogLoadingMore ? '加载中' : '加载更多'}</Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View className='empty-state'>
+                <Text>{normalizedQuery ? '没有找到匹配食物，试试“米饭”“鸡蛋”这类关键词' : '暂无可用食物数据'}</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {selectedItems.length > 0 && (

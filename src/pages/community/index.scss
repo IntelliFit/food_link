@@ -689,30 +689,27 @@ $community-border-soft: rgb(92 184 150 / 18%);
   line-height: 1.2;
 }
 
-// 当前登录用户在预览条中：头像与昵称放大，便于辨认
+// 当前登录用户在预览条中仅做高亮，不改变尺寸，避免前三头像大小不一致
 .ranking-preview-cell.is-me {
   .ranking-preview-rank {
-    font-size: 22rpx;
+    color: #fff7cc;
   }
 
   .ranking-preview-avatar-wrap {
-    width: 96rpx;
-    height: 96rpx;
-    border-width: 4rpx;
+    border-color: #fff7cc;
+    box-shadow: 0 0 0 4rpx rgb(255 247 204 / 22%), 0 8rpx 20rpx rgb(15 23 42 / 12%);
   }
 
   .ranking-preview-avatar-ico {
-    font-size: 44rpx;
+    color: #fff;
   }
 
   .ranking-preview-name {
-    font-size: 28rpx;
     font-weight: 700;
-    line-height: 1.35;
   }
 
   .ranking-preview-count {
-    font-size: 22rpx;
+    color: #fff7cc;
   }
 }
 

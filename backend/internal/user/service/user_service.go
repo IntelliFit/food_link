@@ -16,14 +16,18 @@ import (
 )
 
 const (
-	defaultExecutionMode = "standard"
-	validExecutionMode   = "strict"
+	defaultExecutionMode      = "standard"
+	validExecutionMode        = "strict"
+	experimentalExecutionMode = "experimental"
+	gemini35FlashMode         = "gemini35_flash"
+	gemini35GroupedMode       = "gemini35_flash_grouped"
 )
 
 var validModeSetBy = map[string]bool{"system": true, "user_manual": true, "coach_manual": true}
 
 type UserService struct {
 	users         *repo.UserRepo
+	dailyTargets  *userrepo.DailyNutritionTargetRepo
 	healthDocs    *userrepo.HealthDocumentRepo
 	modeSwitchLog *userrepo.ModeSwitchLogRepo
 	storage       *storage.Client
@@ -34,7 +38,11 @@ func NewUserService(users *repo.UserRepo, healthDocs *userrepo.HealthDocumentRep
 	if len(storageClient) > 0 {
 		client = storageClient[0]
 	}
-	return &UserService{users: users, healthDocs: healthDocs, modeSwitchLog: modeSwitchLog, storage: client}
+	var dailyTargets *userrepo.DailyNutritionTargetRepo
+	if users != nil && users.DB() != nil {
+		dailyTargets = userrepo.NewDailyNutritionTargetRepo(users.DB())
+	}
+	return &UserService{users: users, dailyTargets: dailyTargets, healthDocs: healthDocs, modeSwitchLog: modeSwitchLog, storage: client}
 }
 
 func (s *UserService) GetProfile(ctx context.Context, userID string) (map[string]any, error) {
@@ -99,6 +107,7 @@ type UpdateDashboardTargetsInput struct {
 	ProteinTarget float64 `json:"protein_target"`
 	CarbsTarget   float64 `json:"carbs_target"`
 	FatTarget     float64 `json:"fat_target"`
+	TargetDate    string  `json:"target_date"`
 }
 
 func (s *UserService) UpdateDashboardTargets(ctx context.Context, userID string, input UpdateDashboardTargetsInput) (map[string]float64, error) {
@@ -109,16 +118,36 @@ func (s *UserService) UpdateDashboardTargets(ctx context.Context, userID string,
 	if user == nil {
 		return nil, commonerrors.ErrNotFound
 	}
-	healthCondition := user.HealthCondition
-	if healthCondition == nil {
-		healthCondition = map[string]any{}
-	}
-	healthCondition["dashboard_targets"] = map[string]float64{
+	targets := map[string]float64{
 		"calorie_target": math.Round(input.CalorieTarget*10) / 10,
 		"protein_target": math.Round(input.ProteinTarget*10) / 10,
 		"carbs_target":   math.Round(input.CarbsTarget*10) / 10,
 		"fat_target":     math.Round(input.FatTarget*10) / 10,
 	}
+	if strings.TrimSpace(input.TargetDate) != "" && s.dailyTargets != nil {
+		targetDate, err := time.Parse("2006-01-02", strings.TrimSpace(input.TargetDate))
+		if err != nil {
+			return nil, &commonerrors.AppError{Code: 10002, Message: "目标日期格式不正确", HTTPStatus: 400}
+		}
+		_, err = s.dailyTargets.Upsert(ctx, &domain.DailyNutritionTarget{
+			UserID:        userID,
+			TargetDate:    targetDate,
+			CalorieTarget: targets["calorie_target"],
+			ProteinTarget: targets["protein_target"],
+			CarbsTarget:   targets["carbs_target"],
+			FatTarget:     targets["fat_target"],
+			Source:        "user_manual",
+		})
+		if err != nil {
+			return nil, err
+		}
+		return targets, nil
+	}
+	healthCondition := user.HealthCondition
+	if healthCondition == nil {
+		healthCondition = map[string]any{}
+	}
+	healthCondition["dashboard_targets"] = targets
 	healthCondition["dashboard_targets_mode"] = "manual"
 	updated, err := s.users.UpdateFields(ctx, userID, map[string]any{"health_condition": healthCondition})
 	if err != nil {
@@ -154,6 +183,8 @@ type UpdateHealthProfileInput struct {
 	Allergies                  *StringList                  `json:"allergies"`
 	HealthNotes                *string                      `json:"health_notes"`
 	RoutineType                *string                      `json:"routine_type"`
+	RoutineSleepHour           *int                         `json:"routine_sleep_hour"`
+	RoutineWakeHour            *int                         `json:"routine_wake_hour"`
 	DashboardTargets           *UpdateDashboardTargetsInput `json:"dashboard_targets"`
 	ReportExtract              map[string]any               `json:"report_extract"`
 	ReportImageURL             *string                      `json:"report_image_url"`
@@ -263,6 +294,12 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 	}
 	if input.RoutineType != nil {
 		healthCondition["routine_type"] = strings.TrimSpace(*input.RoutineType)
+	}
+	if input.RoutineSleepHour != nil {
+		healthCondition["routine_sleep_hour"] = *input.RoutineSleepHour
+	}
+	if input.RoutineWakeHour != nil {
+		healthCondition["routine_wake_hour"] = *input.RoutineWakeHour
 	}
 	if input.DailyLifeActivityLevel != nil {
 		normalized := NormalizeDailyLifeActivityLevel(*input.DailyLifeActivityLevel)
@@ -378,6 +415,10 @@ func (s *UserService) GetRecordDays(ctx context.Context, userID string) (int64, 
 
 func (s *UserService) UpdateLastSeenAnalyzeHistory(ctx context.Context, userID string) error {
 	return s.users.UpdateLastSeenAnalyzeHistory(ctx, userID)
+}
+
+func (s *UserService) AcknowledgeHealthDisclaimer(ctx context.Context, userID string) error {
+	return s.users.UpdateHealthDisclaimerAcknowledged(ctx, userID)
 }
 
 func (s *UserService) buildProfileResponse(user *repo.User) map[string]any {
@@ -604,7 +645,7 @@ func normalizeExecutionMode(mode *string) string {
 		return defaultExecutionMode
 	}
 	m := *mode
-	if m == validExecutionMode {
+	if m == validExecutionMode || m == experimentalExecutionMode || m == gemini35FlashMode || m == gemini35GroupedMode {
 		return m
 	}
 	return defaultExecutionMode

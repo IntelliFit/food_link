@@ -30,12 +30,15 @@ const EXERCISE_LOG_CREDIT_COST = 1
 
 export function getFoodAnalysisCreditCost(executionMode?: ExecutionMode | string | null, units = 1): number {
   const normalizedUnits = Number.isFinite(units) && units > 0 ? Math.floor(units) : 1
-  const unitCost = executionMode === 'strict' ? PRECISION_FOOD_ANALYSIS_CREDIT_COST : STANDARD_FOOD_ANALYSIS_CREDIT_COST
+  const unitCost = executionMode === 'experimental' || executionMode === 'gemini35_flash_grouped' ? PRECISION_FOOD_ANALYSIS_CREDIT_COST : STANDARD_FOOD_ANALYSIS_CREDIT_COST
   return unitCost * normalizedUnits
 }
 
 function getFoodAnalysisCreditLabel(executionMode?: ExecutionMode | string | null): string {
-  return executionMode === 'strict' ? '精准分析' : '食物分析'
+  if (executionMode === 'experimental') return '试验分析'
+  if (executionMode === 'strict') return '精准分析'
+  if (executionMode === 'gemini35_flash' || executionMode === 'gemini35_flash_grouped') return '精准分析'
+  return '食物分析'
 }
 
 export function getMembershipTierFromPlanCode(planCode?: string | null): MembershipTier | null {

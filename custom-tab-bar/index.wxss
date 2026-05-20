@@ -16,7 +16,6 @@
 .icon-quanzi:before { content: "\ee17"; }
 .icon-user:before { content: "\e7ae"; }
 .icon-kcal:before { content: "\e831"; }
-.icon-shizhong:before { content: "\e74f"; }
 
 
 /* 底部导航栏 - 优雅下凹曲线 + 悬浮按钮 + 底部阴影 */

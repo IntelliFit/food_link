@@ -5,12 +5,11 @@ import (
 	"strings"
 
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
-
-	"go.uber.org/zap"
 )
 
-func New(cfg config.TaskQueueConfig, log *zap.Logger) (Queue, error) {
+func New(cfg config.TaskQueueConfig, log *logger.Logger) (Queue, error) {
 	driver := strings.ToLower(strings.TrimSpace(cfg.Driver))
 	if driver == "" {
 		driver = "memory"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -21,12 +22,12 @@ import (
 	userdomain "food_link/backend/internal/user/domain"
 	userrepo "food_link/backend/internal/user/repo"
 	userservice "food_link/backend/internal/user/service"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
 	apm "food_link/backend/pkg/trace"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.uber.org/zap"
 )
 
 const (
@@ -71,7 +72,7 @@ type Runner struct {
 	notifier   *expiryservice.NotificationWorker
 	exercise   *healthservice.ExerciseService
 	queue      taskqueue.Queue
-	log        *zap.Logger
+	log        *logger.Logger
 	storage    *storage.Client
 	credit     CreditGuard
 }
@@ -102,11 +103,11 @@ func NewRunner(
 	notifier *expiryservice.NotificationWorker,
 	exercise *healthservice.ExerciseService,
 	taskQueue taskqueue.Queue,
-	log *zap.Logger,
+	log *logger.Logger,
 	storageClient ...*storage.Client,
 ) *Runner {
 	if log == nil {
-		log = zap.NewNop()
+		log = logger.L()
 	}
 	var client *storage.Client
 	if len(storageClient) > 0 {
@@ -162,14 +163,14 @@ func (r *Runner) Run(ctx context.Context, opts Options) error {
 	}
 	metrics.SetWorkerConfigured(queueDriver, opts.WorkerCount)
 
-	r.log.Info("worker started",
-		zap.String("worker_id", opts.WorkerID),
-		zap.Strings("task_types", taskTypes),
-		zap.Duration("poll_interval", opts.PollInterval),
-		zap.Int("worker_count", opts.WorkerCount),
-		zap.Duration("lease_duration", opts.LeaseDuration),
-		zap.Duration("recovery_interval", opts.RecoveryInterval),
-		zap.String("task_queue_driver", queueDriver),
+	r.log.Info("工作器已启动",
+		slog.String("worker_id", opts.WorkerID),
+		slog.Any("task_types", taskTypes),
+		slog.Duration("poll_interval", opts.PollInterval),
+		slog.Int("worker_count", opts.WorkerCount),
+		slog.Duration("lease_duration", opts.LeaseDuration),
+		slog.Duration("recovery_interval", opts.RecoveryInterval),
+		slog.String("task_queue_driver", queueDriver),
 	)
 
 	var wg sync.WaitGroup
@@ -200,16 +201,16 @@ func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []strin
 			if ctx.Err() != nil {
 				return
 			}
-			r.log.Error("worker subscribe task queue failed", zap.String("worker_id", workerID), zap.Error(err))
+			r.log.Error("工作器订阅任务队列失败", slog.String("worker_id", workerID), logger.Err(err))
 			sleepContext(ctx, backoff)
 			continue
 		}
 		func() {
 			defer func() {
 				if recovered := recover(); recovered != nil {
-					r.log.Error("worker loop panic recovered",
-						zap.String("worker_id", workerID),
-						zap.Any("panic", recovered),
+					r.log.Error("工作器循环 panic 已恢复",
+						slog.String("worker_id", workerID),
+						slog.Any("panic", recovered),
 					)
 				}
 			}()
@@ -218,7 +219,7 @@ func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []strin
 		if ctx.Err() != nil {
 			return
 		}
-		r.log.Warn("worker loop exited unexpectedly; restarting subscription", zap.String("worker_id", workerID))
+		r.log.Warn("工作器循环意外退出，准备重新订阅", slog.String("worker_id", workerID))
 		sleepContext(ctx, backoff)
 	}
 }
@@ -230,11 +231,11 @@ func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, 
 	for {
 		select {
 		case <-ctx.Done():
-			r.log.Info("worker loop stopped", zap.String("worker_id", workerID))
+			r.log.Info("工作器循环已停止", slog.String("worker_id", workerID))
 			return
 		case delivery, ok := <-deliveries:
 			if !ok {
-				r.log.Info("worker task queue closed", zap.String("worker_id", workerID))
+				r.log.Info("工作器任务队列已关闭", slog.String("worker_id", workerID))
 				return
 			}
 			idleCount = 0
@@ -243,7 +244,7 @@ func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, 
 			if handlesTaskType(taskTypes, "expiry_notification") || handlesTaskType(taskTypes, "food_expiry_notification_job") {
 				handled, err := r.processExpiryNotification(ctx, workerID)
 				if err != nil {
-					r.log.Error("process expiry notification failed", zap.String("worker_id", workerID), zap.Error(err))
+					r.log.Error("处理保质期提醒失败", slog.String("worker_id", workerID), logger.Err(err))
 					continue
 				}
 				if handled {
@@ -253,7 +254,7 @@ func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, 
 			}
 			idleCount++
 			if idleCount%30 == 0 {
-				r.log.Info("worker idle", zap.String("worker_id", workerID), zap.Strings("task_types", taskTypes))
+				r.log.Info("工作器空闲", slog.String("worker_id", workerID), slog.Any("task_types", taskTypes))
 			}
 		}
 	}
@@ -274,11 +275,11 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err := fmt.Errorf("task queue delivery panic: %v", recovered)
-			r.log.Error("task queue delivery panic recovered",
-				zap.String("worker_id", workerID),
-				zap.String("task_id", msg.TaskID),
-				zap.String("task_type", msg.TaskType),
-				zap.Any("panic", recovered),
+			r.log.Error("任务队列投递处理 panic 已恢复",
+				slog.String("worker_id", workerID),
+				slog.String("task_id", msg.TaskID),
+				slog.String("task_type", msg.TaskType),
+				slog.Any("panic", recovered),
 			)
 			apm.RecordError(ctx, err,
 				attribute.String("worker.id", workerID),
@@ -298,24 +299,24 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		attribute.String("messaging.operation", "receive"),
 	)
 	defer span.End()
-	apm.AddEvent(ctx, "task queue delivery received",
+	apm.AddEvent(ctx, "收到任务队列投递",
 		attribute.String("worker.id", workerID),
 		attribute.String("analysis.task_id", strings.TrimSpace(msg.TaskID)),
 		attribute.String("analysis.task_type", strings.TrimSpace(msg.TaskType)),
 	)
 	if strings.TrimSpace(msg.TaskID) == "" {
-		r.log.Warn("task queue delivery missing task id", zap.String("worker_id", workerID), zap.String("task_type", msg.TaskType))
-		apm.AddEvent(ctx, "task queue delivery missing task id", attribute.String("analysis.task_type", strings.TrimSpace(msg.TaskType)))
+		r.log.Warn("任务队列投递缺少任务 ID", slog.String("worker_id", workerID), slog.String("task_type", msg.TaskType))
+		apm.AddEvent(ctx, "任务队列投递缺少任务 ID", attribute.String("analysis.task_type", strings.TrimSpace(msg.TaskType)))
 		_ = ackDelivery()
 		return
 	}
 	if !handlesTaskType(taskTypes, msg.TaskType) {
-		r.log.Warn("task queue delivery skipped because worker does not handle task type",
-			zap.String("worker_id", workerID),
-			zap.String("task_id", msg.TaskID),
-			zap.String("task_type", msg.TaskType),
+		r.log.Warn("任务队列投递因 worker 不处理该任务类型而跳过",
+			slog.String("worker_id", workerID),
+			slog.String("task_id", msg.TaskID),
+			slog.String("task_type", msg.TaskType),
 		)
-		apm.AddEvent(ctx, "task queue delivery skipped",
+		apm.AddEvent(ctx, "任务队列投递已跳过",
 			attribute.String("worker.id", workerID),
 			attribute.String("analysis.task_id", msg.TaskID),
 			attribute.String("analysis.task_type", msg.TaskType),
@@ -324,7 +325,7 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		_ = ackDelivery()
 		return
 	}
-	apm.AddEvent(ctx, "analysis task claim started",
+	apm.AddEvent(ctx, "分析任务认领开始",
 		attribute.String("worker.id", workerID),
 		attribute.String("analysis.task_id", msg.TaskID),
 		attribute.String("analysis.task_type", msg.TaskType),
@@ -336,11 +337,11 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		LeaseDuration: leaseDuration,
 	})
 	if err != nil {
-		r.log.Error("claim queued task failed",
-			zap.String("worker_id", workerID),
-			zap.String("task_id", msg.TaskID),
-			zap.String("task_type", msg.TaskType),
-			zap.Error(err),
+		r.log.Error("认领队列任务失败",
+			slog.String("worker_id", workerID),
+			slog.String("task_id", msg.TaskID),
+			slog.String("task_type", msg.TaskType),
+			logger.Err(err),
 		)
 		apm.RecordError(ctx, err,
 			attribute.String("worker.id", workerID),
@@ -348,7 +349,7 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 			attribute.String("analysis.task_type", msg.TaskType),
 			attribute.String("analysis.stage", "claim"),
 		)
-		apm.AddEvent(ctx, "analysis task claim failed",
+		apm.AddEvent(ctx, "分析任务认领失败",
 			attribute.String("worker.id", workerID),
 			attribute.String("analysis.task_id", msg.TaskID),
 			attribute.String("analysis.task_type", msg.TaskType),
@@ -360,13 +361,13 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 	task := claim.Task
 	if task == nil {
 		metrics.ObserveWorkerTaskClaim(msg.TaskType, string(claim.Outcome))
-		r.log.Info("queued task skipped because it is no longer pending or not allowed",
-			zap.String("worker_id", workerID),
-			zap.String("task_id", msg.TaskID),
-			zap.String("task_type", msg.TaskType),
-			zap.String("claim_outcome", string(claim.Outcome)),
+		r.log.Info("队列任务因不再待处理或不允许处理而跳过",
+			slog.String("worker_id", workerID),
+			slog.String("task_id", msg.TaskID),
+			slog.String("task_type", msg.TaskType),
+			slog.String("claim_outcome", string(claim.Outcome)),
 		)
-		apm.AddEvent(ctx, "analysis task claim skipped",
+		apm.AddEvent(ctx, "分析任务认领已跳过",
 			attribute.String("worker.id", workerID),
 			attribute.String("analysis.task_id", msg.TaskID),
 			attribute.String("analysis.task_type", msg.TaskType),
@@ -377,16 +378,16 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 	}
 	if claim.Outcome != analyzerepo.ClaimOutcomeClaimed {
 		metrics.ObserveWorkerTaskClaim(task.TaskType, string(claim.Outcome))
-		r.log.Info("queued task skipped after claim check",
-			zap.String("worker_id", workerID),
-			zap.String("task_id", task.ID),
-			zap.String("task_type", task.TaskType),
-			zap.String("task_status", task.Status),
-			zap.String("claim_outcome", string(claim.Outcome)),
-			zap.Stringp("attempt_id", task.AttemptID),
-			zap.Timep("lease_until", task.LeaseUntil),
+		r.log.Info("队列任务在认领检查后跳过",
+			slog.String("worker_id", workerID),
+			slog.String("task_id", task.ID),
+			slog.String("task_type", task.TaskType),
+			slog.String("task_status", task.Status),
+			slog.String("claim_outcome", string(claim.Outcome)),
+			logger.Stringp("attempt_id", task.AttemptID),
+			logger.Timep("lease_until", task.LeaseUntil),
 		)
-		apm.AddEvent(ctx, "analysis task claim skipped",
+		apm.AddEvent(ctx, "分析任务认领已跳过",
 			attribute.String("worker.id", workerID),
 			attribute.String("analysis.task_id", task.ID),
 			attribute.String("analysis.task_type", task.TaskType),
@@ -397,14 +398,14 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		return
 	}
 	metrics.ObserveWorkerTaskClaim(task.TaskType, "claimed")
-	r.log.Info("task claimed",
-		zap.String("worker_id", workerID),
-		zap.String("task_id", task.ID),
-		zap.String("task_type", task.TaskType),
-		zap.Stringp("attempt_id", task.AttemptID),
-		zap.Int("attempt_count", task.AttemptCount),
-		zap.Timep("lease_until", task.LeaseUntil),
-		zap.String("source", "task_queue"),
+	r.log.Info("任务已认领",
+		slog.String("worker_id", workerID),
+		slog.String("task_id", task.ID),
+		slog.String("task_type", task.TaskType),
+		logger.Stringp("attempt_id", task.AttemptID),
+		slog.Int("attempt_count", task.AttemptCount),
+		logger.Timep("lease_until", task.LeaseUntil),
+		slog.String("source", "task_queue"),
 	)
 	apm.SetAttributes(ctx,
 		attribute.String("analysis.task_id", task.ID),
@@ -412,7 +413,7 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		attribute.String("analysis.user_id", task.UserID),
 		attribute.String("analysis.attempt_id", stringPtrValue(task.AttemptID)),
 	)
-	apm.AddEvent(ctx, "analysis task claimed",
+	apm.AddEvent(ctx, "分析任务已认领",
 		attribute.String("worker.id", workerID),
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.task_type", task.TaskType),
@@ -420,12 +421,12 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		attribute.String("analysis.attempt_id", stringPtrValue(task.AttemptID)),
 	)
 	if err := r.process(ctx, workerID, task, leaseDuration); err != nil {
-		r.log.Error("queued task processing did not reach persisted terminal state",
-			zap.String("worker_id", workerID),
-			zap.String("task_id", task.ID),
-			zap.String("task_type", task.TaskType),
-			zap.Stringp("attempt_id", task.AttemptID),
-			zap.Error(err),
+		r.log.Error("队列任务处理未达到已持久化的终态",
+			slog.String("worker_id", workerID),
+			slog.String("task_id", task.ID),
+			slog.String("task_type", task.TaskType),
+			logger.Stringp("attempt_id", task.AttemptID),
+			logger.Err(err),
 		)
 		apm.RecordError(ctx, err,
 			attribute.String("worker.id", workerID),
@@ -438,11 +439,11 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 		return
 	}
 	if err := ackDelivery(); err != nil {
-		r.log.Error("ack queued task failed",
-			zap.String("worker_id", workerID),
-			zap.String("task_id", task.ID),
-			zap.String("task_type", task.TaskType),
-			zap.Error(err),
+		r.log.Error("确认队列任务失败",
+			slog.String("worker_id", workerID),
+			slog.String("task_id", task.ID),
+			slog.String("task_type", task.TaskType),
+			logger.Err(err),
 		)
 		apm.RecordError(ctx, err,
 			attribute.String("worker.id", workerID),
@@ -464,14 +465,14 @@ func (r *Runner) processExpiryNotification(ctx context.Context, workerID string)
 		return false, err
 	}
 	if recovered > 0 {
-		r.log.Warn("expiry notification stale processing jobs recovered",
-			zap.String("worker_id", workerID),
-			zap.Int64("job_count", recovered),
+		r.log.Warn("保质期提醒过期处理中任务已恢复",
+			slog.String("worker_id", workerID),
+			slog.Int64("job_count", recovered),
 		)
 	}
 	handled, err := r.notifier.ProcessNext(jobCtx)
 	if handled {
-		r.log.Info("expiry notification job processed", zap.String("worker_id", workerID))
+		r.log.Info("保质期提醒任务已处理", slog.String("worker_id", workerID))
 	}
 	return handled, err
 }
@@ -480,17 +481,17 @@ func (r *Runner) enqueueTask(ctx context.Context, task *domain.AnalysisTask) err
 	if r.queue == nil || task == nil || task.Status != "pending" {
 		return nil
 	}
-	apm.AddEvent(ctx, "worker child task queue publish started",
+	apm.AddEvent(ctx, "工作器子任务发布开始",
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.task_type", task.TaskType),
 	)
 	publishCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 	if err := r.queue.PublishTask(publishCtx, taskqueue.TaskMessage{TaskID: task.ID, TaskType: task.TaskType}); err != nil {
-		r.log.Error("worker failed to enqueue child task",
-			zap.String("task_id", task.ID),
-			zap.String("task_type", task.TaskType),
-			zap.Error(err),
+		r.log.Error("工作器子任务入队失败",
+			slog.String("task_id", task.ID),
+			slog.String("task_type", task.TaskType),
+			logger.Err(err),
 		)
 		apm.RecordError(ctx, err,
 			attribute.String("analysis.task_id", task.ID),
@@ -499,11 +500,11 @@ func (r *Runner) enqueueTask(ctx context.Context, task *domain.AnalysisTask) err
 		)
 		return fmt.Errorf("enqueue child task %s: %w", task.ID, err)
 	}
-	r.log.Info("worker enqueued child task",
-		zap.String("task_id", task.ID),
-		zap.String("task_type", task.TaskType),
+	r.log.Info("工作器子任务已入队",
+		slog.String("task_id", task.ID),
+		slog.String("task_type", task.TaskType),
 	)
-	apm.AddEvent(ctx, "worker child task queue publish completed",
+	apm.AddEvent(ctx, "工作器子任务发布完成",
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.task_type", task.TaskType),
 	)
@@ -539,7 +540,7 @@ func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
 	defer cancel()
 	tasks, err := r.tasks.ListRecoverableTasks(recoverCtx, taskTypes, taskRecoveryBatchSize, time.Now())
 	if err != nil {
-		r.log.Error("recover queued analysis tasks failed", zap.Error(err))
+		r.log.Error("恢复队列中的分析任务失败", logger.Err(err))
 		apm.RecordError(recoverCtx, err, attribute.String("analysis.stage", "queue_recovery"))
 		return
 	}
@@ -557,12 +558,12 @@ func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
 		publishCancel()
 		if err != nil {
 			metrics.AddWorkerRecoveredTasks(task.TaskType, "publish_failed", 1)
-			r.log.Error("recover queued analysis task publish failed",
-				zap.String("task_id", task.ID),
-				zap.String("task_type", task.TaskType),
-				zap.String("status", task.Status),
-				zap.Timep("lease_until", task.LeaseUntil),
-				zap.Error(err),
+			r.log.Error("恢复队列中的分析任务发布失败",
+				slog.String("task_id", task.ID),
+				slog.String("task_type", task.TaskType),
+				slog.String("status", task.Status),
+				logger.Timep("lease_until", task.LeaseUntil),
+				logger.Err(err),
 			)
 			apm.RecordError(ctx, err,
 				attribute.String("analysis.task_id", task.ID),
@@ -575,9 +576,9 @@ func (r *Runner) recoverQueueTasks(ctx context.Context, taskTypes []string) {
 		published++
 	}
 	if published > 0 {
-		r.log.Info("recover queued analysis tasks published",
-			zap.Int("task_count", published),
-			zap.Int("candidate_count", len(tasks)),
+		r.log.Info("队列中的分析任务恢复发布完成",
+			slog.Int("task_count", published),
+			slog.Int("candidate_count", len(tasks)),
 		)
 	}
 }
@@ -621,22 +622,22 @@ func (r *Runner) startLeaseHeartbeat(ctx context.Context, cancel context.CancelF
 				extendCancel()
 				if err != nil {
 					metrics.ObserveWorkerLeaseHeartbeat(task.TaskType, "error")
-					r.log.Error("task lease heartbeat failed",
-						zap.String("worker_id", workerID),
-						zap.String("task_id", task.ID),
-						zap.String("task_type", task.TaskType),
-						zap.String("attempt_id", attemptID),
-						zap.Error(err),
+					r.log.Error("任务租约心跳失败",
+						slog.String("worker_id", workerID),
+						slog.String("task_id", task.ID),
+						slog.String("task_type", task.TaskType),
+						slog.String("attempt_id", attemptID),
+						logger.Err(err),
 					)
 					continue
 				}
 				if !ok {
 					metrics.ObserveWorkerLeaseHeartbeat(task.TaskType, "lost")
-					r.log.Warn("task lease heartbeat lost ownership",
-						zap.String("worker_id", workerID),
-						zap.String("task_id", task.ID),
-						zap.String("task_type", task.TaskType),
-						zap.String("attempt_id", attemptID),
+					r.log.Warn("任务租约心跳发现所有权丢失",
+						slog.String("worker_id", workerID),
+						slog.String("task_id", task.ID),
+						slog.String("task_type", task.TaskType),
+						slog.String("attempt_id", attemptID),
 					)
 					cancel()
 					return
@@ -671,13 +672,13 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 	)
 	defer span.End()
 
-	r.log.Info("task processing started",
-		zap.String("worker_id", workerID),
-		zap.String("task_id", task.ID),
-		zap.String("task_type", task.TaskType),
-		zap.String("status", task.Status),
+	r.log.Info("任务处理开始",
+		slog.String("worker_id", workerID),
+		slog.String("task_id", task.ID),
+		slog.String("task_type", task.TaskType),
+		slog.String("status", task.Status),
 	)
-	apm.AddEvent(taskCtx, "task processing started",
+	apm.AddEvent(taskCtx, "任务处理开始",
 		attribute.String("worker.id", workerID),
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.task_type", task.TaskType),
@@ -710,13 +711,13 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 	if err != nil {
 		if errors.Is(err, errTaskAttemptLost) {
 			taskStatus = "attempt_lost"
-			r.log.Warn("task attempt lost before completion; acknowledging stale delivery",
-				zap.String("worker_id", workerID),
-				zap.String("task_id", task.ID),
-				zap.String("task_type", task.TaskType),
-				zap.Stringp("attempt_id", task.AttemptID),
+			r.log.Warn("任务完成前 attempt 所有权丢失，确认过期投递",
+				slog.String("worker_id", workerID),
+				slog.String("task_id", task.ID),
+				slog.String("task_type", task.TaskType),
+				logger.Stringp("attempt_id", task.AttemptID),
 			)
-			apm.AddEvent(taskCtx, "task attempt lost",
+			apm.AddEvent(taskCtx, "任务 attempt 所有权丢失",
 				attribute.String("worker.id", workerID),
 				attribute.String("analysis.task_id", task.ID),
 				attribute.String("analysis.task_type", task.TaskType),
@@ -729,7 +730,7 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 		if failErr := r.failTask(failCtx, task, err); failErr != nil {
 			if errors.Is(failErr, errTaskAttemptLost) {
 				taskStatus = "attempt_lost"
-				apm.AddEvent(taskCtx, "task attempt lost while writing failure",
+				apm.AddEvent(taskCtx, "写入失败状态时任务 attempt 所有权丢失",
 					attribute.String("worker.id", workerID),
 					attribute.String("analysis.task_id", task.ID),
 					attribute.String("analysis.task_type", task.TaskType),
@@ -755,33 +756,33 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 			attribute.String("analysis.attempt_id", stringPtrValue(task.AttemptID)),
 			apm.DurationMS("analysis.duration_ms", time.Since(start)),
 		)
-		apm.AddEvent(taskCtx, "task processing failed",
+		apm.AddEvent(taskCtx, "任务处理失败",
 			attribute.String("worker.id", workerID),
 			attribute.String("analysis.task_id", task.ID),
 			attribute.String("analysis.task_type", task.TaskType),
 			apm.DurationMS("analysis.duration_ms", time.Since(start)),
 		)
-		r.log.Warn("task processing finished with error",
-			zap.String("worker_id", workerID),
-			zap.String("task_id", task.ID),
-			zap.String("task_type", task.TaskType),
-			zap.Duration("duration", time.Since(start)),
-			zap.Error(err),
+		r.log.Warn("任务处理结束但返回错误",
+			slog.String("worker_id", workerID),
+			slog.String("task_id", task.ID),
+			slog.String("task_type", task.TaskType),
+			slog.Duration("duration", time.Since(start)),
+			logger.Err(err),
 		)
 		return nil
 	}
 	apm.SetAttributes(taskCtx, apm.DurationMS("analysis.duration_ms", time.Since(start)))
-	apm.AddEvent(taskCtx, "task processing completed",
+	apm.AddEvent(taskCtx, "任务处理完成",
 		attribute.String("worker.id", workerID),
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.task_type", task.TaskType),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
-	r.log.Info("task processed",
-		zap.String("worker_id", workerID),
-		zap.String("task_id", task.ID),
-		zap.String("task_type", task.TaskType),
-		zap.Duration("duration", time.Since(start)),
+	r.log.Info("任务已处理",
+		slog.String("worker_id", workerID),
+		slog.String("task_id", task.ID),
+		slog.String("task_type", task.TaskType),
+		slog.Duration("duration", time.Since(start)),
 	)
 	return nil
 }
@@ -807,7 +808,7 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		return err
 	}
 	start := time.Now()
-	apm.AddEvent(ctx, "food task analyze started",
+	apm.AddEvent(ctx, "食物任务分析开始",
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.user_id", task.UserID),
 		attribute.String("analysis.model_name", stringFromMap(task.Payload, "modelName")),
@@ -815,13 +816,13 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		attribute.String("analysis.engine", stringFromMap(task.Payload, "analysis_engine")),
 		attribute.Int("analysis.image_count", taskImageCount(task)),
 	)
-	r.log.Info("food task analyze started",
-		zap.String("task_id", task.ID),
-		zap.String("user_id", task.UserID),
-		zap.String("model_name", stringFromMap(task.Payload, "modelName")),
-		zap.String("execution_mode", stringFromMap(task.Payload, "execution_mode")),
-		zap.String("analysis_engine", stringFromMap(task.Payload, "analysis_engine")),
-		zap.Int("image_count", taskImageCount(task)),
+	r.log.Info("食物任务分析开始",
+		slog.String("task_id", task.ID),
+		slog.String("user_id", task.UserID),
+		slog.String("model_name", stringFromMap(task.Payload, "modelName")),
+		slog.String("execution_mode", stringFromMap(task.Payload, "execution_mode")),
+		slog.String("analysis_engine", stringFromMap(task.Payload, "analysis_engine")),
+		slog.Int("image_count", taskImageCount(task)),
 	)
 	result, err := r.analyze.Analyze(ctx, task.UserID, input)
 	if err != nil {
@@ -829,20 +830,20 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 			attribute.String("analysis.stage", "food_analyze"),
 			apm.DurationMS("analysis.duration_ms", time.Since(start)),
 		)
-		apm.AddEvent(ctx, "food task analyze failed",
+		apm.AddEvent(ctx, "食物任务分析失败",
 			attribute.String("analysis.task_id", task.ID),
 			attribute.String("analysis.user_id", task.UserID),
 			apm.DurationMS("analysis.duration_ms", time.Since(start)),
 		)
-		r.log.Warn("food task analyze failed",
-			zap.String("task_id", task.ID),
-			zap.String("user_id", task.UserID),
-			zap.Duration("duration", time.Since(start)),
-			zap.Error(err),
+		r.log.Warn("食物任务分析失败",
+			slog.String("task_id", task.ID),
+			slog.String("user_id", task.UserID),
+			slog.Duration("duration", time.Since(start)),
+			logger.Err(err),
 		)
 		return err
 	}
-	apm.AddEvent(ctx, "food task analyze result ready",
+	apm.AddEvent(ctx, "食物任务分析结果已生成",
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.user_id", task.UserID),
 		attribute.String("analysis.model_name", stringFromMap(result, "model_name")),
@@ -850,17 +851,17 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		attribute.Int("analysis.item_count", len(extractItems(result["items"]))),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
-	r.log.Info("food task analyze result ready",
-		zap.String("task_id", task.ID),
-		zap.String("user_id", task.UserID),
-		zap.String("model_name", stringFromMap(result, "model_name")),
-		zap.String("analysis_engine", stringFromMap(result, "analysis_engine")),
-		zap.Int("item_count", len(extractItems(result["items"]))),
-		zap.Duration("duration", time.Since(start)),
+	r.log.Info("食物任务分析结果已生成",
+		slog.String("task_id", task.ID),
+		slog.String("user_id", task.UserID),
+		slog.String("model_name", stringFromMap(result, "model_name")),
+		slog.String("analysis_engine", stringFromMap(result, "analysis_engine")),
+		slog.Int("item_count", len(extractItems(result["items"]))),
+		slog.Duration("duration", time.Since(start)),
 	)
 	err = r.completeTask(ctx, task, result)
 	if err != nil {
-		r.log.Error("food task complete update failed", zap.String("task_id", task.ID), zap.Error(err))
+		r.log.Error("食物任务完成状态更新失败", slog.String("task_id", task.ID), logger.Err(err))
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
 		return err
 	}
@@ -868,11 +869,11 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		attribute.Int("analysis.item_count", len(extractItems(result["items"]))),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
-	apm.AddEvent(ctx, "food task completed",
+	apm.AddEvent(ctx, "食物任务已完成",
 		attribute.String("analysis.task_id", task.ID),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
-	r.log.Info("food task completed", zap.String("task_id", task.ID), zap.Duration("duration", time.Since(start)))
+	r.log.Info("食物任务已完成", slog.String("task_id", task.ID), slog.Duration("duration", time.Since(start)))
 	return nil
 }
 
@@ -896,7 +897,7 @@ func (r *Runner) processFoodText(ctx context.Context, task *domain.AnalysisTask)
 		return err
 	}
 	start := time.Now()
-	apm.AddEvent(ctx, "food text task analyze started",
+	apm.AddEvent(ctx, "文字食物任务分析开始",
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.user_id", task.UserID),
 		attribute.String("analysis.model_name", stringFromMap(task.Payload, "modelName")),
@@ -915,7 +916,7 @@ func (r *Runner) processFoodText(ctx context.Context, task *domain.AnalysisTask)
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
 		return err
 	}
-	apm.AddEvent(ctx, "food text task completed",
+	apm.AddEvent(ctx, "文字食物任务已完成",
 		attribute.String("analysis.task_id", task.ID),
 		attribute.Int("analysis.item_count", len(extractItems(result["items"]))),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
@@ -1244,14 +1245,14 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 	plannedItems := buildPrecisionEstimateItems(result, sourceType)
 	splitStrategy := stringFromMap(result, "splitStrategy")
 	groups := groupPrecisionItemsByStrategy(plannedItems, splitStrategy)
-	r.log.Info("precision plan",
-		zap.String("task_id", task.ID),
-		zap.String("session_id", sessionID),
-		zap.Int("round", roundIndex),
-		zap.String("split_strategy", splitStrategy),
-		zap.Int("items", len(plannedItems)),
-		zap.Int("groups", len(groups)),
-		zap.String("detail", formatPrecisionGroups(groups)),
+	r.log.Info("精确模式计划生成完成",
+		slog.String("task_id", task.ID),
+		slog.String("session_id", sessionID),
+		slog.Int("round", roundIndex),
+		slog.String("split_strategy", splitStrategy),
+		slog.Int("items", len(plannedItems)),
+		slog.Int("groups", len(groups)),
+		slog.String("detail", formatPrecisionGroups(groups)),
 	)
 	childTaskIDs := make([]string, 0, len(groups))
 
@@ -1453,21 +1454,21 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 	refinedNotes := []string{}
 	refinedItems, notes, refineErr := r.maybeRefinePrecisionWeights(ctx, sourceType, parsedItems, plannedItems, rawInputForRefine, additionalContext, referenceObjects, imageURLs, precisionWeightModelName)
 	if refineErr != nil {
-		r.log.Warn("precision refine skipped",
-			zap.String("task_id", task.ID),
-			zap.Int("group_index", intFromMap(task.Payload, "group_index")),
-			zap.Error(refineErr),
+		r.log.Warn("精确模式复核已跳过",
+			slog.String("task_id", task.ID),
+			slog.Int("group_index", intFromMap(task.Payload, "group_index")),
+			logger.Err(refineErr),
 		)
 	} else {
 		parsedItems = attachPrecisionItemMetadata(refinedItems, plannedItems)
 		refinedNotes = notes
 		refinedWeights := precisionWeightSnapshot(parsedItems)
 		if strings.Join(refinedWeights, "|") != strings.Join(initialWeights, "|") {
-			r.log.Info("precision refine",
-				zap.String("task_id", task.ID),
-				zap.Int("group_index", intFromMap(task.Payload, "group_index")),
-				zap.Strings("before", initialWeights),
-				zap.Strings("after", refinedWeights),
+			r.log.Info("精确模式复核完成",
+				slog.String("task_id", task.ID),
+				slog.Int("group_index", intFromMap(task.Payload, "group_index")),
+				slog.Any("before", initialWeights),
+				slog.Any("after", refinedWeights),
 			)
 		}
 	}
@@ -1486,15 +1487,15 @@ func (r *Runner) processPrecisionItemEstimate(ctx context.Context, task *domain.
 		result = map[string]any{"item": item, "uncertaintyNotes": nilIfEmptyStrings(uncertaintyNotes)}
 	}
 	lookupSummary := summarizeLookupItems(dbItems)
-	r.log.Info("precision estimate",
-		zap.String("task_id", task.ID),
-		zap.String("session_id", stringFromMap(task.Payload, "precision_session_id")),
-		zap.Int("round", intFromMap(task.Payload, "round_index")),
-		zap.Int("group_index", intFromMap(task.Payload, "group_index")),
-		zap.Int("items", intFromMap(lookupSummary, "total")),
-		zap.Int("db_hits", intFromMap(lookupSummary, "library_hits")),
-		zap.Int("deepseek_fallback", intFromMap(lookupSummary, "deepseek_fallback")),
-		zap.Int("unresolved", intFromMap(lookupSummary, "unresolved")),
+	r.log.Info("精确模式估重完成",
+		slog.String("task_id", task.ID),
+		slog.String("session_id", stringFromMap(task.Payload, "precision_session_id")),
+		slog.Int("round", intFromMap(task.Payload, "round_index")),
+		slog.Int("group_index", intFromMap(task.Payload, "group_index")),
+		slog.Int("items", intFromMap(lookupSummary, "total")),
+		slog.Int("db_hits", intFromMap(lookupSummary, "library_hits")),
+		slog.Int("deepseek_fallback", intFromMap(lookupSummary, "deepseek_fallback")),
+		slog.Int("unresolved", intFromMap(lookupSummary, "unresolved")),
 	)
 	if estimate != nil {
 		if err := r.precision.UpdateItemEstimate(ctx, estimate.ID, map[string]any{"status": "done", "result": result, "error_message": nil}); err != nil {
@@ -1548,15 +1549,15 @@ func (r *Runner) processPrecisionAggregate(ctx context.Context, task *domain.Ana
 		return err
 	}
 	lookupSummary := finalResult["dbLookupSummary"]
-	r.log.Info("precision aggregate",
-		zap.String("task_id", task.ID),
-		zap.String("session_id", sessionID),
-		zap.Int("round", roundIndex),
-		zap.String("split_strategy", stringFromMap(task.Payload, "split_strategy")),
-		zap.Int("items", intFromMap(mapFromAny(lookupSummary), "total")),
-		zap.Int("db_hits", intFromMap(mapFromAny(lookupSummary), "library_hits")),
-		zap.Int("deepseek_fallback", intFromMap(mapFromAny(lookupSummary), "deepseek_fallback")),
-		zap.Int("unresolved", intFromMap(mapFromAny(lookupSummary), "unresolved")),
+	r.log.Info("精确模式汇总完成",
+		slog.String("task_id", task.ID),
+		slog.String("session_id", sessionID),
+		slog.Int("round", roundIndex),
+		slog.String("split_strategy", stringFromMap(task.Payload, "split_strategy")),
+		slog.Int("items", intFromMap(mapFromAny(lookupSummary), "total")),
+		slog.Int("db_hits", intFromMap(mapFromAny(lookupSummary), "library_hits")),
+		slog.Int("deepseek_fallback", intFromMap(mapFromAny(lookupSummary), "deepseek_fallback")),
+		slog.Int("unresolved", intFromMap(mapFromAny(lookupSummary), "unresolved")),
 	)
 	if err := r.precision.UpdateSession(ctx, sessionID, map[string]any{
 		"status":          "done",
@@ -1934,6 +1935,9 @@ func precisionCandidateNames(item map[string]any) []string {
 
 func buildPrecisionCandidateHint(item map[string]any) string {
 	parts := []string{}
+	if itemType := normalizePrecisionFoodType(firstNonEmptyString(item, "type", "foodType", "food_type")); itemType == "snack" {
+		parts = append(parts, "类型：snack，包装零食/预包装食品，后端会优先用零食库重量")
+	}
 	if candidates := precisionCandidateNames(item); len(candidates) > 1 {
 		parts = append(parts, "候选："+strings.Join(candidates, "/"))
 	}
@@ -1944,6 +1948,16 @@ func buildPrecisionCandidateHint(item map[string]any) string {
 		parts = append(parts, "备选："+alt)
 	}
 	return strings.Join(parts, "；")
+}
+
+func normalizePrecisionFoodType(raw string) string {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	switch text {
+	case "snack", "packaged_snack", "packaged", "packaged_food", "零食", "包装零食", "包装食品", "预包装食品":
+		return "snack"
+	default:
+		return "daily_food"
+	}
 }
 
 func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, referenceObjects []map[string]any, previousRounds []domain.PrecisionSessionRound) string {
@@ -2452,7 +2466,7 @@ func attachPrecisionItemMetadata(parsedItems, plannedItems []map[string]any) []m
 			continue
 		}
 		used[matchIndex] = true
-		for _, key := range []string{"item_key", "item_hint", "uncertainty_level", "uncertainty_reason"} {
+		for _, key := range []string{"item_key", "item_hint", "uncertainty_level", "uncertainty_reason", "type"} {
 			if value, ok := planned[key]; ok && !isEmptyAny(value) {
 				enriched[matchIndex][key] = value
 			}
@@ -3200,9 +3214,9 @@ func (r *Runner) completeTask(ctx context.Context, task *domain.AnalysisTask, re
 	task.Status = "done"
 	task.Result = result
 	if err := r.captureCorrectionFeedbackSample(ctx, task, result, ""); err != nil {
-		r.log.Warn("capture correction feedback sample failed",
-			zap.String("task_id", task.ID),
-			zap.Error(err),
+		r.log.Warn("采集纠错反馈样本失败",
+			slog.String("task_id", task.ID),
+			logger.Err(err),
 		)
 	}
 	return nil
@@ -3227,27 +3241,27 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 		ok, err = r.tasks.FailTaskAttempt(ctx, task.ID, attemptID, msg)
 	}
 	if err != nil {
-		r.log.Error("fail task update failed",
-			zap.String("task_id", task.ID),
-			zap.Stringp("attempt_id", task.AttemptID),
-			zap.Error(err),
+		r.log.Error("任务失败状态更新失败",
+			slog.String("task_id", task.ID),
+			logger.Stringp("attempt_id", task.AttemptID),
+			logger.Err(err),
 		)
 		return err
 	}
 	if !ok {
-		r.log.Warn("fail task update skipped because attempt no longer owns task",
-			zap.String("task_id", task.ID),
-			zap.Stringp("attempt_id", task.AttemptID),
-			zap.String("error", msg),
+		r.log.Warn("任务失败状态更新因 attempt 已失去所有权而跳过",
+			slog.String("task_id", task.ID),
+			logger.Stringp("attempt_id", task.AttemptID),
+			slog.String("error", msg),
 		)
 		return errTaskAttemptLost
 	}
 	task.Status = "failed"
 	task.ErrorMessage = &msg
 	if err := r.captureCorrectionFeedbackSample(ctx, task, nil, msg); err != nil {
-		r.log.Warn("capture failed correction feedback sample failed",
-			zap.String("task_id", task.ID),
-			zap.Error(err),
+		r.log.Warn("采集失败纠错反馈样本失败",
+			slog.String("task_id", task.ID),
+			logger.Err(err),
 		)
 	}
 	if task.TaskType == "precision_item_estimate" && r.precision != nil {
@@ -3256,10 +3270,10 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 		}
 	}
 	r.refundTaskCredits(ctx, task)
-	r.log.Error("task failed",
-		zap.String("task_id", task.ID),
-		zap.Stringp("attempt_id", task.AttemptID),
-		zap.String("error", msg),
+	r.log.Error("任务失败",
+		slog.String("task_id", task.ID),
+		logger.Stringp("attempt_id", task.AttemptID),
+		slog.String("error", msg),
 	)
 	return nil
 }
@@ -3350,7 +3364,7 @@ func (r *Runner) refundTaskCredits(ctx context.Context, task *domain.AnalysisTas
 		"task_id":         task.ID,
 		"task_type":       task.TaskType,
 	}); err != nil {
-		r.log.Warn("refund earned credits after task failure failed", zap.String("task_id", task.ID), zap.String("credit_group_id", groupID), zap.Error(err))
+		r.log.Warn("任务失败后退还预扣积分失败", slog.String("task_id", task.ID), slog.String("credit_group_id", groupID), logger.Err(err))
 	}
 }
 
@@ -3381,6 +3395,12 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		strings.Contains(lower, "<body") {
 		return "AI 服务返回了网页而不是 JSON，请检查模型 API base URL 或网关配置"
 	}
+	if strings.Contains(lower, "toolnotopen") ||
+		strings.Contains(lower, "not activated web search") ||
+		strings.Contains(lower, "activate web search") ||
+		strings.Contains(lower, "web search tool not activated") {
+		return "轻量模式需要先在火山方舟控制台开通 Web Search 联网内容插件；开通后再重试，或先切回标准模式"
+	}
 	if strings.Contains(lower, "context deadline exceeded") ||
 		strings.Contains(lower, "client.timeout") ||
 		strings.Contains(lower, "timeout exceeded while awaiting headers") ||
@@ -3395,7 +3415,10 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		return "AI 识别服务当前繁忙，请稍后重试"
 	}
 	if strings.Contains(lower, "incorrect api key") ||
+		strings.Contains(lower, "api key format is incorrect") ||
+		strings.Contains(lower, "authenticationerror") ||
 		strings.Contains(lower, "apikey-error") ||
+		strings.Contains(lower, "doubao responses api error 401") ||
 		strings.Contains(lower, "doubao api error 401") ||
 		strings.Contains(lower, "ofoxai api error 401") {
 		return "AI 识别服务配置异常，请联系管理员处理"

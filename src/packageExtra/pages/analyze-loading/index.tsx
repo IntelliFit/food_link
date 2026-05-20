@@ -1022,13 +1022,29 @@ const TIP_ROTATE_INTERVAL = 6000
 const ANALYZE_TIMEOUT = 5 * 60 * 1000
 
 const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }> = {
+  lite: {
+    title: '普通模式',
+    desc: '快速识别食物与份量。'
+  },
+  experimental: {
+    title: '普通模式',
+    desc: '快速识别食物与份量。'
+  },
+  gemini35_flash: {
+    title: '精准模式',
+    desc: '更细致识别包装文字、小众食物与份量。'
+  },
+  gemini35_flash_grouped: {
+    title: '精准模式',
+    desc: '更细致识别包装文字、小众食物与份量。'
+  },
   strict: {
     title: '精准模式',
-    desc: '会优先判断这餐能否分项精估；菜太多或遮挡重时会提醒你拆拍。'
+    desc: '更细致识别包装文字、小众食物与份量。'
   },
   standard: {
-    title: '标准模式',
-    desc: '优先保证记录效率，适合日常快速记录。'
+    title: '普通模式',
+    desc: '快速识别食物与份量。'
   }
 }
 
@@ -1038,9 +1054,10 @@ const FOOD_TEXT_STAGE_LABELS = ['解析文字', '匹配营养库', '整理结果
 const CORRECTION_STAGE_LABELS = ['理解纠错说明', '重新分析食物', '更新营养结果']
 const EXERCISE_STAGE_LABELS = ['理解运动', '估算消耗', '写入记录']
 
-const normalizeExecutionMode = (value: unknown): ExecutionMode => (
-  value === 'strict' ? 'strict' : 'standard'
-)
+const normalizeExecutionMode = (value: unknown): ExecutionMode => {
+  if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
+  return 'standard'
+}
 
 const normalizeTaskType = (value: unknown): 'food' | 'food_text' | 'exercise' => {
   if (value === 'food_text') return 'food_text'
@@ -1061,6 +1078,14 @@ const normalizeAnalyzeTaskErrorMessage = (value: unknown): string => {
     return 'AI 服务返回异常网页，请检查模型 API 配置后重试'
   }
   if (
+    lower.includes('toolnotopen') ||
+    lower.includes('not activated web search') ||
+    lower.includes('activate web search') ||
+    lower.includes('web search tool not activated')
+  ) {
+    return 'AI 识别服务联网搜索配置异常，请联系管理员处理；你也可以先使用普通模式重试'
+  }
+  if (
     lower.includes('context deadline exceeded') ||
     lower.includes('client.timeout') ||
     lower.includes('timeout exceeded while awaiting headers') ||
@@ -1079,7 +1104,10 @@ const normalizeAnalyzeTaskErrorMessage = (value: unknown): string => {
   }
   if (
     lower.includes('incorrect api key') ||
+    lower.includes('api key format is incorrect') ||
+    lower.includes('authenticationerror') ||
     lower.includes('apikey-error') ||
+    lower.includes('doubao responses api error 401') ||
     lower.includes('doubao api error 401') ||
     lower.includes('ofoxai api error 401')
   ) {
@@ -1141,12 +1169,18 @@ const persistAnalyzeContextFromPayload = (payload: Record<string, unknown>) => {
 
 const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
-  if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'standard') {
-    return taskAny.execution_mode
+  if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'gemini35_flash' || taskAny.execution_mode === 'gemini35_flash_grouped') {
+    return 'strict'
+  }
+  if (taskAny.execution_mode === 'standard') {
+    return 'standard'
   }
   const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
-  if (payloadMode === 'strict' || payloadMode === 'standard') {
-    return payloadMode
+  if (payloadMode === 'strict' || payloadMode === 'gemini35_flash' || payloadMode === 'gemini35_flash_grouped') {
+    return 'strict'
+  }
+  if (payloadMode === 'standard') {
+    return 'standard'
   }
   return null
 }
@@ -1714,7 +1748,7 @@ function AnalyzeLoadingPage() {
           </View>
           {showPrecisionLongWaitNotice && (
             <Text className='precision-long-wait-notice'>
-              精准模式会分项识别并复核份量，可能需要更久；你可以先离开，完成后到识别记录查看。
+              精准模式会更细致识别食物和份量，可能需要更久；你可以先离开，完成后到识别记录查看。
             </Text>
           )}
         </View>

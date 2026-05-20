@@ -23,7 +23,7 @@ const KNOWN_EXTRA_PACKAGE_ROOTS = [
 export const MAIN_TAB_ROUTES: ReadonlySet<string> = new Set([
   '/pages/index/index',
   '/pages/stats/index',
-  '/pages/expiry/index',
+  '/pages/community/index',
   '/pages/profile/index',
 ])
 

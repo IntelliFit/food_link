@@ -27,7 +27,7 @@ func (r *PrecisionRepo) CreateSession(ctx context.Context, session *domain.Preci
 	}
 	now := time.Now()
 	if session.ExecutionMode == "" {
-		session.ExecutionMode = "strict"
+		session.ExecutionMode = "experimental"
 	}
 	if session.Status == "" {
 		session.Status = "collecting"

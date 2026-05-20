@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 
 	"github.com/segmentio/kafka-go"
-	"go.uber.org/zap"
 )
 
 type KafkaConfig struct {
@@ -25,16 +26,16 @@ type KafkaQueue struct {
 	topic         string
 	consumerGroup string
 	writer        *kafka.Writer
-	log           *zap.Logger
+	log           *logger.Logger
 
 	mu      sync.Mutex
 	readers map[*kafka.Reader]struct{}
 	closed  bool
 }
 
-func NewKafkaQueue(cfg KafkaConfig, log *zap.Logger) (*KafkaQueue, error) {
+func NewKafkaQueue(cfg KafkaConfig, log *logger.Logger) (*KafkaQueue, error) {
 	if log == nil {
-		log = zap.NewNop()
+		log = logger.L()
 	}
 	brokers := normalizeStringSlice(cfg.Brokers)
 	topic := strings.TrimSpace(cfg.Topic)
@@ -114,7 +115,7 @@ func (q *KafkaQueue) Subscribe(ctx context.Context, opts SubscribeOptions) (<-ch
 		defer q.removeReader(reader)
 		defer func() {
 			if err := reader.Close(); err != nil {
-				q.log.Warn("kafka task queue reader close failed", zap.Error(err))
+				q.log.Warn("Kafka 任务队列读取器关闭失败", logger.Err(err))
 			}
 		}()
 		for {
@@ -124,7 +125,7 @@ func (q *KafkaQueue) Subscribe(ctx context.Context, opts SubscribeOptions) (<-ch
 					return
 				}
 				metrics.SetTaskQueueComponentUp("kafka", "consumer", false)
-				q.log.Error("kafka task queue fetch failed", zap.Error(err))
+				q.log.Error("Kafka 任务队列拉取消息失败", logger.Err(err))
 				time.Sleep(time.Second)
 				continue
 			}
@@ -132,28 +133,28 @@ func (q *KafkaQueue) Subscribe(ctx context.Context, opts SubscribeOptions) (<-ch
 			msg, err := decodeKafkaTaskMessage(kmsg.Value)
 			if err != nil {
 				metrics.ObserveTaskQueueSettlement("kafka", "unknown", "decode_error")
-				q.log.Error("kafka task queue message decode failed",
-					zap.String("topic", kmsg.Topic),
-					zap.Int("partition", kmsg.Partition),
-					zap.Int64("offset", kmsg.Offset),
-					zap.Error(err),
+				q.log.Error("Kafka 任务队列消息解码失败",
+					slog.String("topic", kmsg.Topic),
+					slog.Int("partition", kmsg.Partition),
+					slog.Int64("offset", kmsg.Offset),
+					logger.Err(err),
 				)
 				if commitErr := reader.CommitMessages(ctx, kmsg); commitErr != nil {
-					q.log.Error("kafka task queue poison message commit failed", zap.Error(commitErr))
+					q.log.Error("Kafka 任务队列异常消息提交失败", logger.Err(commitErr))
 					return
 				}
 				continue
 			}
 			if len(allowed) > 0 && !allowed[msg.TaskType] {
 				metrics.ObserveTaskQueueSettlement("kafka", msg.TaskType, "skipped")
-				q.log.Warn("kafka task queue message skipped because task type is not subscribed",
-					zap.String("task_id", msg.TaskID),
-					zap.String("task_type", msg.TaskType),
-					zap.Int("partition", kmsg.Partition),
-					zap.Int64("offset", kmsg.Offset),
+				q.log.Warn("Kafka 任务队列消息因任务类型未订阅而跳过",
+					slog.String("task_id", msg.TaskID),
+					slog.String("task_type", msg.TaskType),
+					slog.Int("partition", kmsg.Partition),
+					slog.Int64("offset", kmsg.Offset),
 				)
 				if commitErr := reader.CommitMessages(ctx, kmsg); commitErr != nil {
-					q.log.Error("kafka task queue skipped message commit failed", zap.Error(commitErr))
+					q.log.Error("Kafka 任务队列跳过消息提交失败", logger.Err(commitErr))
 					return
 				}
 				continue
@@ -183,11 +184,11 @@ func (q *KafkaQueue) Subscribe(ctx context.Context, opts SubscribeOptions) (<-ch
 				return
 			case committed := <-settled:
 				if !committed {
-					q.log.Warn("kafka task queue delivery not committed; reader will stop for redelivery",
-						zap.String("task_id", msg.TaskID),
-						zap.String("task_type", msg.TaskType),
-						zap.Int("partition", kmsg.Partition),
-						zap.Int64("offset", kmsg.Offset),
+					q.log.Warn("Kafka 任务队列消息未提交，读取器将停止等待重新投递",
+						slog.String("task_id", msg.TaskID),
+						slog.String("task_type", msg.TaskType),
+						slog.Int("partition", kmsg.Partition),
+						slog.Int64("offset", kmsg.Offset),
 					)
 					return
 				}
@@ -212,7 +213,7 @@ func (q *KafkaQueue) Close(ctx context.Context) error {
 
 	for _, reader := range readers {
 		if err := reader.Close(); err != nil {
-			q.log.Warn("kafka task queue reader close failed", zap.Error(err))
+			q.log.Warn("Kafka 任务队列读取器关闭失败", logger.Err(err))
 		}
 	}
 	done := make(chan error, 1)
