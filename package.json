@@ -29,6 +29,7 @@
     "build:weapp:preview": "cross-env NODE_ENV=production TARO_APP_API_BASE_URL=https://dev.healthymax.cn taro build --type weapp",
     "build:weapp:release": "cross-env NODE_ENV=production TARO_APP_API_BASE_URL=https://healthymax.cn taro build --type weapp",
     "build:weapp:debug": "cross-env NODE_ENV=development TARO_APP_API_BASE_URL=https://dev.healthymax.cn taro build --type weapp --no-check",
+    "build:weapp:e2e": "cross-env NODE_ENV=development taro build --type weapp --no-check",
     "build:swan": "taro build --type swan",
     "build:alipay": "taro build --type alipay",
     "build:tt": "taro build --type tt",

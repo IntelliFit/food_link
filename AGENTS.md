@@ -192,6 +192,10 @@ npm run push-docker-ccr
 - 推送成功但线上未生效
   - 等待自动更新窗口（约 5 分钟）后，再检查 `food-backend.service` 状态与镜像拉取日志
 
+## 端到端测试 / 自动化测试
+
+backend/e2e-test/README.md 
+
 ### 前端部署
 
 微信小程序前端**不通过此服务器部署**，需使用微信开发者工具上传。
