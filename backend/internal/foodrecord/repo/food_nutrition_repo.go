@@ -8,6 +8,7 @@ import (
 
 	"food_link/backend/internal/foodrecord/domain"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -32,6 +33,40 @@ type PackagedResolveResult struct {
 	Status      string
 	MatchSource string
 	Score       float64
+}
+
+type PackagedFoodInput struct {
+	Brand                 string
+	ProductName           string
+	NetWeightG            float64
+	ServingWeightG        float64
+	KcalPer100g           float64
+	ProteinPer100g        float64
+	CarbsPer100g          float64
+	FatPer100g            float64
+	FiberPer100g          float64
+	SugarPer100g          float64
+	SaturatedFatPer100g   float64
+	CholesterolMgPer100g  float64
+	SodiumMgPer100g       float64
+	PotassiumMgPer100g    float64
+	CalciumMgPer100g      float64
+	IronMgPer100g         float64
+	MagnesiumMgPer100g    float64
+	ZincMgPer100g         float64
+	VitaminARaeMcgPer100g float64
+	VitaminCMgPer100g     float64
+	VitaminDMcgPer100g    float64
+	VitaminEMgPer100g     float64
+	VitaminKMcgPer100g    float64
+	ThiaminMgPer100g      float64
+	RiboflavinMgPer100g   float64
+	NiacinMgPer100g       float64
+	VitaminB6MgPer100g    float64
+	FolateMcgPer100g      float64
+	VitaminB12McgPer100g  float64
+	SourceURL             string
+	Source                string
 }
 
 type nutrientFillColumn struct {
@@ -191,6 +226,83 @@ func (r *FoodNutritionRepo) ResolvePackagedFood(ctx context.Context, name string
 		return &PackagedResolveResult{Food: &candidates[0], Status: "fuzzy", MatchSource: "fuzzy", Score: 0.72}, nil
 	}
 	return &PackagedResolveResult{Status: "unresolved", Score: 0}, nil
+}
+
+func (r *FoodNutritionRepo) UpsertPackagedFood(ctx context.Context, input PackagedFoodInput) (*domain.PackagedFood, error) {
+	productName := strings.TrimSpace(input.ProductName)
+	normalized := normalizeFoodName(productName)
+	if productName == "" || normalized == "" {
+		return nil, fmt.Errorf("product_name is required")
+	}
+	source := strings.TrimSpace(input.Source)
+	if source == "" {
+		source = "user_submitted"
+	}
+	values := map[string]any{
+		"brand":                      strings.TrimSpace(input.Brand),
+		"product_name":               productName,
+		"normalized_name":            normalized,
+		"net_weight_g":               nonNegative(input.NetWeightG),
+		"serving_weight_g":           nonNegative(input.ServingWeightG),
+		"kcal_per_100g":              nonNegative(input.KcalPer100g),
+		"protein_per_100g":           nonNegative(input.ProteinPer100g),
+		"carbs_per_100g":             nonNegative(input.CarbsPer100g),
+		"fat_per_100g":               nonNegative(input.FatPer100g),
+		"fiber_per_100g":             nonNegative(input.FiberPer100g),
+		"sugar_per_100g":             nonNegative(input.SugarPer100g),
+		"saturated_fat_per_100g":     nonNegative(input.SaturatedFatPer100g),
+		"cholesterol_mg_per_100g":    nonNegative(input.CholesterolMgPer100g),
+		"sodium_mg_per_100g":         nonNegative(input.SodiumMgPer100g),
+		"potassium_mg_per_100g":      nonNegative(input.PotassiumMgPer100g),
+		"calcium_mg_per_100g":        nonNegative(input.CalciumMgPer100g),
+		"iron_mg_per_100g":           nonNegative(input.IronMgPer100g),
+		"magnesium_mg_per_100g":      nonNegative(input.MagnesiumMgPer100g),
+		"zinc_mg_per_100g":           nonNegative(input.ZincMgPer100g),
+		"vitamin_a_rae_mcg_per_100g": nonNegative(input.VitaminARaeMcgPer100g),
+		"vitamin_c_mg_per_100g":      nonNegative(input.VitaminCMgPer100g),
+		"vitamin_d_mcg_per_100g":     nonNegative(input.VitaminDMcgPer100g),
+		"vitamin_e_mg_per_100g":      nonNegative(input.VitaminEMgPer100g),
+		"vitamin_k_mcg_per_100g":     nonNegative(input.VitaminKMcgPer100g),
+		"thiamin_mg_per_100g":        nonNegative(input.ThiaminMgPer100g),
+		"riboflavin_mg_per_100g":     nonNegative(input.RiboflavinMgPer100g),
+		"niacin_mg_per_100g":         nonNegative(input.NiacinMgPer100g),
+		"vitamin_b6_mg_per_100g":     nonNegative(input.VitaminB6MgPer100g),
+		"folate_mcg_per_100g":        nonNegative(input.FolateMcgPer100g),
+		"vitamin_b12_mcg_per_100g":   nonNegative(input.VitaminB12McgPer100g),
+		"source":                     source,
+		"is_active":                  true,
+	}
+	if sourceURL := strings.TrimSpace(input.SourceURL); sourceURL != "" {
+		values["source_url"] = sourceURL
+	}
+
+	var existing domain.PackagedFood
+	err := r.db.WithContext(ctx).Where("normalized_name = ?", normalized).First(&existing).Error
+	if err == nil {
+		if err := r.db.WithContext(ctx).Model(&domain.PackagedFood{}).Where("id = ?", existing.ID).Updates(values).Error; err != nil {
+			return nil, err
+		}
+		_ = r.createPackagedFoodAlias(ctx, existing.ID, productName, normalized)
+		var updated domain.PackagedFood
+		if err := r.db.WithContext(ctx).Where("id = ?", existing.ID).First(&updated).Error; err != nil {
+			return nil, err
+		}
+		return &updated, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	id := uuid.New().String()
+	values["id"] = id
+	if err := r.db.WithContext(ctx).Table((&domain.PackagedFood{}).TableName()).Create(values).Error; err != nil {
+		return nil, err
+	}
+	_ = r.createPackagedFoodAlias(ctx, id, productName, normalized)
+	var created domain.PackagedFood
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&created).Error; err != nil {
+		return nil, err
+	}
+	return &created, nil
 }
 
 func (r *FoodNutritionRepo) SearchPackagedFood(ctx context.Context, query string, limit int) ([]domain.PackagedFood, error) {
@@ -473,6 +585,28 @@ func (r *FoodNutritionRepo) createNutritionAlias(ctx context.Context, foodID, ra
 			"alias_name":       raw,
 			"normalized_alias": normalized,
 		}).Error
+}
+
+func (r *FoodNutritionRepo) createPackagedFoodAlias(ctx context.Context, foodID, raw, normalized string) error {
+	if strings.TrimSpace(foodID) == "" || strings.TrimSpace(raw) == "" || strings.TrimSpace(normalized) == "" {
+		return nil
+	}
+	return r.db.WithContext(ctx).
+		Table((&domain.PackagedFoodAlias{}).TableName()).
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(map[string]any{
+			"id":               uuid.New().String(),
+			"food_id":          foodID,
+			"alias_name":       raw,
+			"normalized_alias": normalized,
+		}).Error
+}
+
+func nonNegative(value float64) float64 {
+	if value < 0 {
+		return 0
+	}
+	return value
 }
 
 func (r *FoodNutritionRepo) ListFoodsNeedingVitaminBackfill(ctx context.Context, limit int, offsets ...int) ([]domain.FoodNutrition, error) {

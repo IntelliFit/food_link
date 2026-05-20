@@ -1,5 +1,25 @@
 # CURRENT_TASK
 
+## 2026-05-21 - 拍照结果页零食补库入口
+
+- Task: 拍照分析识别到零食时，结果页提示用户当前仍按普通食物流程估算营养，并邀请用户补充零食名称、重量和营养成分，提交后保存到 `packaged_food_library`。
+- Status: implemented_static_verified_runtime_blocked
+- Change:
+  - 拍照分析提示词补充 `item.type` 字段；后端 `db_first` 在判断为零食/预包装食品时先查 `packaged_food_library`，命中则返回 `nutrition_source=packaged_food_library`，未命中继续回退到普通食物库和 DeepSeek fallback。
+  - 后端新增 `POST /api/packaged-food`，登录用户可提交零食/预包装食品数据，服务层校验名称、重量和基础营养字段，仓储层按 `normalized_name` 幂等 upsert 到 `packaged_food_library`，并写入 `packaged_food_aliases`。
+  - 前端结果页保留分析 item 的 `type/category/nutrition_source/unit_nutrition_per_100g` 元数据，按 `snack/packaged` 标记或零食关键词识别零食；如果尚未命中 `packaged_food_library`，在该 item 下显示“识别为零食 / 添加零食”提示。
+  - “添加零食”弹层预填当前识别名称、重量和每 100g 营养值，允许用户编辑品牌、名称、重量、热量、蛋白质、碳水、脂肪、膳食纤维、糖、钠并保存到零食库。
+- Verification:
+  - `go test ./internal/analyze/service -run '^$' -count=1` passed.
+  - `go test ./internal/foodrecord/handler -run "TestCreatePackagedFood|TestSearchFoodNutrition|TestGetUnresolvedTop" -count=1` passed.
+  - `go test ./internal/foodrecord/handler ./internal/foodrecord/service ./internal/app -run '^$' -count=1` passed.
+  - `npx eslint src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed.
+  - 目标 `git diff --check` passed，仅 CRLF warnings。
+- Runtime verification:
+  - 已按项目要求尝试 `mrc where --port 3001` 与 `mrc where --port 9420`，均因微信开发者工具自动化端口未连接失败，未能截图/交互验证。
+- Next step:
+  - 重启 Go 后端后新接口生效；让小程序吃到最新 dev 产物后，在拍照结果页用零食样例确认提示卡、弹层编辑和保存链路。
+
 ## 2026-05-21 - 用户 ID 复制入口视觉收敛
 
 - Task: 用户认为在“我的”页直接显示完整用户 ID 过丑，要求首页只保留“复制用户ID”按钮，并把完整 ID 放到“编辑资料”页。

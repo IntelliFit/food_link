@@ -13,6 +13,7 @@ import {
   updateAnalysisTaskResult,
   getHealthProfile,
   updateHealthProfile,
+  createPackagedFood,
   submitAnalyzeTask,
   submitTextAnalyzeTask,
   continuePrecisionSession,
@@ -23,6 +24,7 @@ import {
   type PrecisionReferenceDefaults,
   type PrecisionReferenceDimensions,
   type PrecisionReferenceObjectInput,
+  type CreatePackagedFoodRequest,
   type PrecisionReferencePresetConfig,
   type PrecisionReferencePresetKey,
   showUnifiedApiError,
@@ -237,11 +239,30 @@ interface NutritionItem {
   ratio: number // 摄入比例（0-100%，独立调节）
   suggestedRatioReason?: string
   suggestedRatioSource?: string
+  itemType?: string
+  category?: string
+  nutritionSource?: string | null
+  isUnresolved?: boolean
+  unitNutritionPer100g?: Nutrients
   protein: number
   carbs: number
   fat: number
   waterMl: number
   nutrients: Nutrients
+}
+
+interface SnackContributionDraft {
+  itemId: number
+  brand: string
+  productName: string
+  netWeightG: string
+  calories: string
+  protein: string
+  carbs: string
+  fat: string
+  fiber: string
+  sugar: string
+  sodiumMg: string
 }
 
 type MacroField = 'protein' | 'carbs' | 'fat'
@@ -334,6 +355,31 @@ const normalizeItemNutrients = (nutrients: FoodItem['nutrients'] | undefined, wa
   folateMcg: normalizeNutrientValue(nutrients?.folateMcg),
   vitaminB12Mcg: normalizeNutrientValue(nutrients?.vitaminB12Mcg)
 })
+
+const SNACK_KEYWORDS = [
+  '零食', '饼干', '薯片', '巧克力', '糖果', '蛋白棒', '能量棒', '肉干', '牛肉干',
+  '鸭脖', '鹅胗', '坚果', '果干', '阿胶糕', '糕点', '辣条', '海苔', '话梅',
+  '果冻', '威化', '沙琪玛', '麻薯', '小包', '包装', '袋装'
+]
+
+const isSnackLikeItem = (item: NutritionItem) => {
+  const source = String(item.nutritionSource || '').toLowerCase()
+  if (source === 'packaged_food_library') return false
+  const marker = `${item.itemType || ''} ${item.category || ''} ${item.name || ''}`.toLowerCase()
+  return (
+    marker.includes('snack') ||
+    marker.includes('packaged') ||
+    marker.includes('package') ||
+    SNACK_KEYWORDS.some(keyword => marker.includes(keyword.toLowerCase()))
+  )
+}
+
+const nutrientPer100FromItem = (item: NutritionItem): Nutrients => {
+  if (item.unitNutritionPer100g) return normalizeItemNutrients(item.unitNutritionPer100g, 0)
+  const baseWeight = item.weight > 0 ? item.weight : item.originalWeight
+  const factor = baseWeight > 0 ? 100 / baseWeight : 1
+  return normalizeItemNutrients(scaleNutrients(buildFoodItemNutrients(item), factor), 0)
+}
 
 const scaleNutrients = (nutrients: Nutrients, factor: number): Nutrients => {
   const scaled = { ...nutrients }
@@ -481,6 +527,8 @@ function ResultPage() {
   const [correctionItems, setCorrectionItems] = useState<NutritionItem[]>([])
   const [additionalContext, setAdditionalContext] = useState('')
   const [isResubmitting, setIsResubmitting] = useState(false)
+  const [snackDraft, setSnackDraft] = useState<SnackContributionDraft | null>(null)
+  const [savingSnackDraft, setSavingSnackDraft] = useState(false)
 
   /** 驱动头图收缩：与 ScrollView 的 scrollTop 同步 */
   const [resultScrollTop, setResultScrollTop] = useState(0)
@@ -592,6 +640,11 @@ function ResultPage() {
         ratio: suggestedRatio,
         suggestedRatioReason: item.suggestedRatioReason,
         suggestedRatioSource: item.suggestedRatioSource,
+        itemType: item.type || item.food_type,
+        category: item.category,
+        nutritionSource: item.nutrition_source,
+        isUnresolved: Boolean(item.is_unresolved),
+        unitNutritionPer100g: item.unit_nutrition_per_100g,
         protein: nutrients.protein,
         carbs: nutrients.carbs,
         fat: nutrients.fat,
@@ -1181,6 +1234,77 @@ function ResultPage() {
   }
 
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
+  const openSnackContribution = (item: NutritionItem) => {
+    const unit = nutrientPer100FromItem(item)
+    setSnackDraft({
+      itemId: item.id,
+      brand: '',
+      productName: item.name,
+      netWeightG: String(Math.max(1, Math.round(item.weight || item.intake || item.originalWeight || 1))),
+      calories: String(Math.round(unit.calories || 0)),
+      protein: formatMacroDisplay(unit.protein || 0),
+      carbs: formatMacroDisplay(unit.carbs || 0),
+      fat: formatMacroDisplay(unit.fat || 0),
+      fiber: formatMacroDisplay(unit.fiber || 0),
+      sugar: formatMacroDisplay(unit.sugar || 0),
+      sodiumMg: String(Math.round(unit.sodiumMg || unit.sodium_mg || 0)),
+    })
+  }
+
+  const updateSnackDraftField = (field: keyof SnackContributionDraft, value: string) => {
+    setSnackDraft(current => current ? { ...current, [field]: value } : current)
+  }
+
+  const numberFromDraft = (value: string) => {
+    const n = Number(String(value || '').trim())
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  }
+
+  const handleSubmitSnackContribution = async () => {
+    if (!snackDraft || savingSnackDraft) return
+    const productName = snackDraft.productName.trim()
+    const netWeightG = numberFromDraft(snackDraft.netWeightG)
+    if (!productName) {
+      Taro.showToast({ title: '请填写零食名称', icon: 'none' })
+      return
+    }
+    if (netWeightG <= 0) {
+      Taro.showToast({ title: '请填写重量', icon: 'none' })
+      return
+    }
+    const payload: CreatePackagedFoodRequest = {
+      brand: snackDraft.brand.trim() || undefined,
+      product_name: productName,
+      net_weight_g: netWeightG,
+      serving_weight_g: netWeightG,
+      kcal_per_100g: numberFromDraft(snackDraft.calories),
+      protein_per_100g: numberFromDraft(snackDraft.protein),
+      carbs_per_100g: numberFromDraft(snackDraft.carbs),
+      fat_per_100g: numberFromDraft(snackDraft.fat),
+      fiber_per_100g: numberFromDraft(snackDraft.fiber),
+      sugar_per_100g: numberFromDraft(snackDraft.sugar),
+      sodium_mg_per_100g: numberFromDraft(snackDraft.sodiumMg),
+    }
+    setSavingSnackDraft(true)
+    Taro.showLoading({ title: '保存零食数据...', mask: true })
+    try {
+      await createPackagedFood(payload)
+      setNutritionItems(items => items.map(item => (
+        item.id === snackDraft.itemId
+          ? { ...item, nutritionSource: 'packaged_food_library', isUnresolved: false }
+          : item
+      )))
+      setSnackDraft(null)
+      Taro.hideLoading()
+      Taro.showToast({ title: '已保存到零食库', icon: 'success' })
+    } catch (error) {
+      Taro.hideLoading()
+      await showUnifiedApiError(error, '保存零食数据失败')
+    } finally {
+      setSavingSnackDraft(false)
+    }
+  }
+
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
     // 避免用户快速连续点击导致重复保存
     if (saving) return
@@ -2149,6 +2273,20 @@ function ResultPage() {
                     </View>
                   </View>
 
+                  {isSnackLikeItem(item) && (
+                    <View className='snack-contribution-card'>
+                      <View className='snack-contribution-copy'>
+                        <Text className='snack-contribution-title'>识别为零食</Text>
+                        <Text className='snack-contribution-desc'>
+                          当前营养值会先按普通食物流程估算。你可以补充包装上的重量和营养成分，帮助完善零食数据库。
+                        </Text>
+                      </View>
+                      <View className='snack-contribution-action' onClick={() => openSnackContribution(item)}>
+                        <Text className='snack-contribution-action-text'>添加零食</Text>
+                      </View>
+                    </View>
+                  )}
+
                   <View className='ingredient-nutrition-strip'>
                     <View className='ingredient-summary-cell ingredient-summary-cell--cal'>
                       <Text className='ingredient-summary-label'>热量</Text>
@@ -2323,6 +2461,93 @@ function ResultPage() {
       </View>
 
       {/* 二次纠错抽屉弹窗 */}
+      <View
+        className={`snack-drawer-overlay ${snackDraft ? 'visible' : ''}`}
+        onClick={() => setSnackDraft(null)}
+      >
+        <View
+          className={`snack-drawer-content ${snackDraft ? 'slide-up' : ''}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <View className='drawer-header'>
+            <Text className='drawer-title'>添加零食数据</Text>
+            <View className='drawer-close' onClick={() => setSnackDraft(null)}>
+              <Text className='close-icon'>×</Text>
+            </View>
+          </View>
+          {snackDraft && (
+            <ScrollView className='drawer-scroll snack-drawer-scroll' scrollY>
+              <View className='snack-form-section'>
+                <Text className='snack-form-label'>基础信息</Text>
+                <Input
+                  className='snack-form-input'
+                  value={snackDraft.productName}
+                  placeholder='零食名称'
+                  onInput={(e: any) => updateSnackDraftField('productName', e.detail.value)}
+                />
+                <Input
+                  className='snack-form-input'
+                  value={snackDraft.brand}
+                  placeholder='品牌（可选）'
+                  onInput={(e: any) => updateSnackDraftField('brand', e.detail.value)}
+                />
+                <View className='snack-form-input-with-unit'>
+                  <Input
+                    className='snack-form-input'
+                    type='digit'
+                    value={snackDraft.netWeightG}
+                    placeholder='重量'
+                    onInput={(e: any) => updateSnackDraftField('netWeightG', e.detail.value)}
+                  />
+                  <Text className='snack-form-unit'>g</Text>
+                </View>
+              </View>
+              <View className='snack-form-section'>
+                <Text className='snack-form-label'>每100g营养成分</Text>
+                <View className='snack-nutrition-grid'>
+                  <View className='snack-form-input-with-unit'>
+                    <Input className='snack-form-input' type='digit' value={snackDraft.calories} placeholder='热量' onInput={(e: any) => updateSnackDraftField('calories', e.detail.value)} />
+                    <Text className='snack-form-unit'>kcal</Text>
+                  </View>
+                  <View className='snack-form-input-with-unit'>
+                    <Input className='snack-form-input' type='digit' value={snackDraft.protein} placeholder='蛋白质' onInput={(e: any) => updateSnackDraftField('protein', e.detail.value)} />
+                    <Text className='snack-form-unit'>g</Text>
+                  </View>
+                  <View className='snack-form-input-with-unit'>
+                    <Input className='snack-form-input' type='digit' value={snackDraft.carbs} placeholder='碳水' onInput={(e: any) => updateSnackDraftField('carbs', e.detail.value)} />
+                    <Text className='snack-form-unit'>g</Text>
+                  </View>
+                  <View className='snack-form-input-with-unit'>
+                    <Input className='snack-form-input' type='digit' value={snackDraft.fat} placeholder='脂肪' onInput={(e: any) => updateSnackDraftField('fat', e.detail.value)} />
+                    <Text className='snack-form-unit'>g</Text>
+                  </View>
+                  <View className='snack-form-input-with-unit'>
+                    <Input className='snack-form-input' type='digit' value={snackDraft.fiber} placeholder='膳食纤维' onInput={(e: any) => updateSnackDraftField('fiber', e.detail.value)} />
+                    <Text className='snack-form-unit'>g</Text>
+                  </View>
+                  <View className='snack-form-input-with-unit'>
+                    <Input className='snack-form-input' type='digit' value={snackDraft.sugar} placeholder='糖' onInput={(e: any) => updateSnackDraftField('sugar', e.detail.value)} />
+                    <Text className='snack-form-unit'>g</Text>
+                  </View>
+                  <View className='snack-form-input-with-unit snack-nutrition-wide'>
+                    <Input className='snack-form-input' type='digit' value={snackDraft.sodiumMg} placeholder='钠' onInput={(e: any) => updateSnackDraftField('sodiumMg', e.detail.value)} />
+                    <Text className='snack-form-unit'>mg</Text>
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+          )}
+          <View className='drawer-footer'>
+            <View
+              className={`drawer-submit-btn ${savingSnackDraft ? 'loading' : ''}`}
+              onClick={handleSubmitSnackContribution}
+            >
+              <Text className='drawer-submit-text'>{savingSnackDraft ? '保存中...' : '保存到零食库'}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
       <View
         className={`correction-drawer-overlay ${showCorrectionDrawer ? 'visible' : ''}`}
         onClick={() => setShowCorrectionDrawer(false)}

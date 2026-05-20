@@ -317,6 +317,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/upload-analyze-image-file", frHandler.UploadAnalyzeImageFile)
 	engine.GET("/api/food-nutrition/search", authmw.RequireJWT(jwtSvc), frHandler.SearchFoodNutrition)
 	engine.GET("/api/food-nutrition/unresolved/top", authmw.RequireJWT(jwtSvc), frHandler.GetUnresolvedTop)
+	engine.POST("/api/packaged-food", authmw.RequireJWT(jwtSvc), frHandler.CreatePackagedFood)
 	engine.POST("/api/critical-samples", authmw.RequireJWT(jwtSvc), frHandler.SaveCriticalSamples)
 
 	// Friend routes

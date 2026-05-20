@@ -1,5 +1,12 @@
 # DECISIONS
 
+- `2026-05-21`: 零食拍照分析的实际查询顺序是 `packaged_food_library` 优先、普通食物库回退。识别 item 若带 `type=snack` 或命中零食/预包装关键词，后端先调用 `ResolvePackagedFood`；命中时返回 `nutrition_source=packaged_food_library` 并不再显示前端补库提示，未命中时继续沿用普通 `db_first` + DeepSeek fallback。
+
+- `2026-05-21`: 拍照分析的零食识别仍沿用普通 `db_first` 营养估算链路，但结果页需要给用户明确的补库入口。
+  - 只要识别结果像零食/预包装食品且当前没有命中 `packaged_food_library`，前端就在该 item 下提示“识别为零食”，并邀请用户补充包装上的名称、重量和营养成分。
+  - 用户提交的数据写入 `packaged_food_library` 和 `packaged_food_aliases`，作为零食专用库沉淀；不改变当前普通食物营养补全和 DeepSeek fallback 主链路。
+  - 未来如果拍照分析主链路接入 `ResolvePackagedFood` 并返回 `nutrition_source=packaged_food_library`，前端不再对该 item 显示补库提示。
+
 - `2026-05-21`: “我的”页只保留复制用户 ID 的入口，完整用户 ID 放到“编辑资料”页。
   - 用户 ID 主要用于排障和 Jaeger tag 反查，不应在“我的”页头像昵称区直接占用视觉空间。
   - 首页只显示“复制用户ID”按钮；完整 UUID 在编辑资料页展示，并允许复制。
