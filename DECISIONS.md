@@ -1,5 +1,13 @@
 # DECISIONS
 
+- `2026-05-21`: 会员支付记录创建必须在仓库层补齐非空 JSON 字段默认值。
+  - `pro_membership_payment_records.notify_payload` 和 `extra` 在数据库层都是 JSON 非空字段；即使调用方漏传，`MembershipRepo.CreatePayment` 也要把它们初始化为 `{}`，不能依赖数据库默认值或上层 service 恰好传值。
+  - 这样可以避免 `/api/membership/pay/create` 在会员支付单落库阶段因 `SQLSTATE 23502` 返回 500。
+
+- `2026-05-21`: Go 后端日志栈继续统一使用 `backend/pkg/logger` + `log/slog`。
+  - `backend/internal/analyze/service/analyze_service.go` 等新改动禁止重新引入 `go.uber.org/zap`，避免 `go.mod` 无该依赖时直接导致 `npm run dev:backend` 编译失败。
+  - 新日志字段统一使用 `slog.String/Int/Bool/Duration/Any` 与 `logger.Err(...)`。
+
 - `2026-05-20`: 手动记录的 item 级营养必须作为一等数据保存和展示。
   - `user_food_records.total_calories / total_protein / total_carbs / total_fat` 只能作为餐次汇总，不能替代 `items[].nutrients`；当天页、历史页、编辑页展开明细时应优先读取 item 级营养。
   - 手动记录保存链路必须保证每个 item 写入标准 `nutrients.calories/protein/carbs/fat`，不能只让外层总营养正确，否则会出现餐次总热量正常、食物明细全 0 的分裂体验。

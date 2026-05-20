@@ -141,6 +141,12 @@ func (r *MembershipRepo) CreatePayment(ctx context.Context, p *domain.Membership
 	if p.ID == "" {
 		p.ID = uuid.New().String()
 	}
+	if p.NotifyPayload == nil {
+		p.NotifyPayload = map[string]any{}
+	}
+	if p.Extra == nil {
+		p.Extra = map[string]any{}
+	}
 	now := time.Now()
 	if p.CreatedAt == nil {
 		p.CreatedAt = &now

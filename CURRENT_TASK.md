@@ -1,5 +1,39 @@
 # CURRENT_TASK
 
+## 2026-05-21 — 会员支付创建接口 `/api/membership/pay/create` 返回 500
+
+- Task: 用户发起会员支付时，后端日志报 `ERROR: null value in column "notify_payload" of relation "pro_membership_payment_records" violates not-null constraint (SQLSTATE 23502)`，接口 `/api/membership/pay/create` 返回 500。
+- Status: fixed_static_verified_restart_required
+- Finding:
+  - 依赖层判断：这是数据库约束层错误，不是前端参数问题，也不是微信下单前置失败。
+  - `backend/internal/membership/service/membership_service.go` 创建 `MembershipPayment` 时给了 `Extra`，但没有给 `NotifyPayload`。
+  - 表结构在 `backend/internal/migration/do/schema_do.go` 中明确要求 `pro_membership_payment_records.notify_payload` 为 `jsonb not null default '{}'::jsonb`。
+  - `backend/internal/membership/repo/membership_repo.go` 直接 `Create(p)`，当 `NotifyPayload` 为 `nil` 时会向数据库写 `NULL`，因此被非空约束拦截。
+- Change:
+  - 在 `MembershipRepo.CreatePayment` 中统一兜底：`NotifyPayload` / `Extra` 为 `nil` 时自动初始化为 `map[string]any{}`，避免空 JSON 字段再触发 500。
+  - 新增回归测试 `TestMembershipRepo_CreatePaymentInitializesNonNullJSONFields`。
+- Verification:
+  - `gofmt -w backend/internal/membership/repo/membership_repo.go backend/internal/membership/repo/membership_repo_test.go` passed。
+  - `cd backend && go test ./internal/membership/repo ./internal/membership/service ./internal/app -run '^$' -count=1` passed。
+  - `cd backend && go test ./internal/membership/repo ./internal/membership/service ./internal/app -run "TestMembershipRepo_CreatePayment|^$" -count=1` 中 repo 运行型测试被本机 `CGO_ENABLED=0` 阻塞，因为 `go-sqlite3` 需要 cgo；service/app 编译级通过。
+- Next step:
+  - 需要重启当前 Go 后端后再重新发起一次会员支付创建。
+
+## 2026-05-21 — `dev:backend` 因残留 `zap` 依赖编译失败
+
+- Task: 用户执行 `npm run dev:backend` 时，Go 编译报错 `internal/analyze/service/analyze_service.go:27:2: no required module provides package go.uber.org/zap`，后端无法启动。
+- Status: fixed_static_verified_restart_required
+- Finding:
+  - `backend/internal/analyze/service/analyze_service.go` 误引入了已淘汰的 `go.uber.org/zap`，并继续使用 `zap.String/Int/Error/...`。
+  - 当前 Go 后端日志基础设施已统一切到 `backend/pkg/logger` + `log/slog`，`backend/go.mod` 中也没有 `zap` 依赖，所以会在编译阶段直接失败，而不是运行到接口层才报错。
+- Change:
+  - 将 `analyze_service.go` 中全部 `zap` 字段改回 `slog.Attr` / `logger.Err(...)` 写法，并补上 `log/slog` 导入。
+- Verification:
+  - `gofmt -w backend/internal/analyze/service/analyze_service.go` passed。
+  - `cd backend && go test ./internal/analyze/service ./internal/app -run '^$' -count=1` passed。
+- Next step:
+  - 用户重新执行 `npm run dev:backend`，后端应可恢复启动；本轮未替用户启动常驻进程。
+
 ## 2026-05-20 — 手动记录保存后当天页食物明细营养为 0
 
 - Task: 用户反馈手动记录保存到当天饮食记录后，餐次总热量正确，但展开的单个食物（如白米饭、水煮蛋）显示 `0 kcal`，蛋白/碳水/脂肪也都是 0。
