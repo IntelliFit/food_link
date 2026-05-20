@@ -1,5 +1,13 @@
 # DECISIONS
 
+- `2026-05-21`: `/api/health` 健康检查不生成 OTel trace。
+  - 健康检查频率高且没有业务排障价值，必须通过 `otelgin.WithFilter` 在入口跳过采集，避免 Jaeger 被健康检查 trace 淹没。
+  - 只精确排除 `/api/health`；其它 API 仍需保留 trace，尤其是登录后请求的 `user.id` / `enduser.id` tag。
+
+- `2026-05-21`: 登录用户 ID 必须作为 trace tag 写入 HTTP 请求 span。
+  - `RequireJWT` 与 `OptionalJWT` 成功解析 JWT 后，统一给当前 OTel span 设置 `user.id` 和 `enduser.id`，方便在用户无法打开小程序控制台复制 trace_id 时，通过 Jaeger tag 反查该用户相关请求。
+  - 分析任务/worker 链路继续保留 `analysis.user_id`，用于分析任务维度筛选；不要把 openid/unionid/token 等更敏感或无必要的身份标识写入 trace tag。
+
 - `2026-05-21`: 会员支付记录创建必须在仓库层补齐非空 JSON 字段默认值。
   - `pro_membership_payment_records.notify_payload` 和 `extra` 在数据库层都是 JSON 非空字段；即使调用方漏传，`MembershipRepo.CreatePayment` 也要把它们初始化为 `{}`，不能依赖数据库默认值或上层 service 恰好传值。
   - 这样可以避免 `/api/membership/pay/create` 在会员支付单落库阶段因 `SQLSTATE 23502` 返回 500。

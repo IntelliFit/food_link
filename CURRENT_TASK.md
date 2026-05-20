@@ -1,5 +1,34 @@
 # CURRENT_TASK
 
+## 2026-05-21 - Jaeger trace 按用户筛选
+
+- Task: 用户希望在用户无法打开微信小程序控制台复制 trace_id 的情况下，仍能用用户 ID 在 Jaeger 中筛选相关 trace。
+- Status: fixed_static_verified_restart_required
+- Finding:
+  - HTTP 入口已通过 `otelgin.Middleware` 自动生成请求 span，并通过 `X-Trace-Id` 响应头把 trace id 返回给小程序。
+  - 分析任务链路已有 `analysis.user_id`、`analysis.task_id`、`analysis.task_type` 等自定义 span tag。
+  - 鉴权中间件此前只把 `user_id/openid/unionid` 写入 Gin context，没有把登录用户写入当前 OTel span，所以普通登录接口 trace 不能直接按用户 ID 搜。
+- Change:
+  - `RequireJWT` 与 `OptionalJWT` 在 JWT 解析成功后，对当前 span 设置 `user.id` 与 `enduser.id` tag。
+  - 不写入 openid/unionid，避免把额外身份标识扩散到 trace tag。
+- Verification:
+  - `cd backend && go test ./internal/auth -count=1` passed.
+  - `cd backend && go test ./internal/app -run '^$' -count=1` passed.
+- Next step:
+  - 重启 Go 后端后生效；Jaeger 中新 trace 可用 `user.id=<用户UUID>` 或 `enduser.id=<用户UUID>` 筛选 HTTP 请求，用 `analysis.user_id=<用户UUID>` 筛选分析 worker 相关 span。
+
+### Follow-up: 健康检查不生成 trace
+
+- Task: `/api/health` 健康检查频率高，Jaeger 中几乎全是健康检查 trace，需要作为例外跳过采集。
+- Change:
+  - `backend/internal/app/app.go` 的 `otelgin.Middleware` 增加 `WithFilter(shouldTraceHTTPRequest)`。
+  - `shouldTraceHTTPRequest` 对精确路径 `/api/health` 返回 `false`，其它请求继续生成 trace。
+- Verification:
+  - `cd backend && go test ./internal/app -run 'TestShouldTraceHTTPRequest|TestAppPackage' -count=1` passed.
+  - `cd backend && go test ./internal/auth -count=1` passed.
+- Next step:
+  - 重启 Go 后端后生效；健康检查响应头仍会由 `RequestID` 兜底返回 `X-Trace-Id`，但不会创建/上报 OTel server span。
+
 ## 2026-05-21 — 会员支付创建接口 `/api/membership/pay/create` 返回 500
 
 - Task: 用户发起会员支付时，后端日志报 `ERROR: null value in column "notify_payload" of relation "pro_membership_payment_records" violates not-null constraint (SQLSTATE 23502)`，接口 `/api/membership/pay/create` 返回 500。

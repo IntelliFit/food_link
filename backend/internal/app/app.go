@@ -110,7 +110,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.Use(metrics.GinMiddleware())
 	engine.Use(gin.Recovery())
 	if cfg.OTel.Enabled {
-		engine.Use(otelgin.Middleware(cfg.App.Name))
+		engine.Use(otelgin.Middleware(cfg.App.Name, otelgin.WithFilter(shouldTraceHTTPRequest)))
 	}
 	engine.Use(commonmw.RequestID())
 
@@ -457,6 +457,13 @@ func New(cfg *config.Config) (*App, error) {
 
 func (a *App) Engine() *gin.Engine {
 	return a.engine
+}
+
+func shouldTraceHTTPRequest(req *http.Request) bool {
+	if req == nil || req.URL == nil {
+		return true
+	}
+	return strings.TrimSpace(req.URL.Path) != "/api/health"
 }
 
 func (a *App) startEmbeddedWorker(
