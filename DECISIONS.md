@@ -1,5 +1,10 @@
 # DECISIONS
 
+- `2026-05-21`: “我的”页只保留复制用户 ID 的入口，完整用户 ID 放到“编辑资料”页。
+  - 用户 ID 主要用于排障和 Jaeger tag 反查，不应在“我的”页头像昵称区直接占用视觉空间。
+  - 首页只显示“复制用户ID”按钮；完整 UUID 在编辑资料页展示，并允许复制。
+  - 资料保存逻辑需要保留本地 `userInfo.id`，避免保存头像/昵称后丢失后续展示和复制所需的用户 ID。
+
 - `2026-05-21`: `/api/health` 健康检查不生成 OTel trace。
   - 健康检查频率高且没有业务排障价值，必须通过 `otelgin.WithFilter` 在入口跳过采集，避免 Jaeger 被健康检查 trace 淹没。
   - 只精确排除 `/api/health`；其它 API 仍需保留 trace，尤其是登录后请求的 `user.id` / `enduser.id` tag。

@@ -1,5 +1,5 @@
 import { View, Text, Image, Button, Input } from '@tarojs/components'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Taro from '@tarojs/taro'
 import { updateUserInfo, uploadUserAvatar, imageToBase64, showUnifiedApiError, clearAllStorage } from '../../../utils/api'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
@@ -11,6 +11,7 @@ export default function ProfileSettingsPage() {
   const { scheme } = useAppColorScheme()
   const [tempAvatar, setTempAvatar] = useState('')
   const [tempNickname, setTempNickname] = useState('')
+  const [userId, setUserId] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -19,11 +20,33 @@ export default function ProfileSettingsPage() {
 
   useEffect(() => {
     const stored = Taro.getStorageSync('userInfo')
+    const cachedUserId = String(Taro.getStorageSync('user_id') || '').trim()
     if (stored) {
       setTempAvatar(stored.avatar || '')
       setTempNickname(stored.name || '')
+      setUserId(String(stored.id || cachedUserId).trim())
+    } else {
+      setUserId(cachedUserId)
     }
   }, [])
+
+  const handleCopyUserId = useCallback(() => {
+    const value = userId.trim()
+    if (!value) {
+      Taro.showToast({ title: '暂无用户ID', icon: 'none' })
+      return
+    }
+    Taro.setClipboardData({
+      data: value,
+      success: () => {
+        Taro.showToast({ title: '已复制用户ID', icon: 'success' })
+      },
+      fail: (err) => {
+        console.error('[profile-settings] copy user id failed:', err)
+        Taro.showToast({ title: '复制失败', icon: 'none' })
+      }
+    })
+  }, [userId])
 
   const handleChooseAvatar = async (e: any) => {
     const { avatarUrl } = e.detail
@@ -89,10 +112,14 @@ export default function ProfileSettingsPage() {
         avatar: tempAvatar
       })
 
-      const newUserInfo = { avatar: tempAvatar, name: tempNickname, meta: '' }
       const stored = Taro.getStorageSync('userInfo')
-      if (stored) {
-        newUserInfo.meta = stored.meta || ''
+      const cachedUserId = String(Taro.getStorageSync('user_id') || '').trim()
+      const nextUserId = userId || String(stored?.id || cachedUserId).trim()
+      const newUserInfo = {
+        avatar: tempAvatar,
+        name: tempNickname,
+        meta: stored?.meta || '',
+        id: nextUserId,
       }
       Taro.setStorageSync('userInfo', newUserInfo)
 
@@ -143,6 +170,18 @@ export default function ProfileSettingsPage() {
             onInput={handleNicknameInput}
           />
         </View>
+
+        {userId && (
+          <View className='user-id-section'>
+            <View className='user-id-section-head'>
+              <Text className='form-label'>用户ID</Text>
+              <View className='user-id-copy-btn' onClick={handleCopyUserId}>
+                <Text className='user-id-copy-btn-text'>复制</Text>
+              </View>
+            </View>
+            <Text className='user-id-full'>{userId}</Text>
+          </View>
+        )}
       </View>
 
       <Button className='save-btn' onClick={handleSave} disabled={loading}>
