@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"food_link/backend/internal/foodrecord/domain"
 
@@ -24,6 +25,22 @@ func (r *FoodRecordRepo) Create(ctx context.Context, record *domain.FoodRecord) 
 		record.ID = uuid.New().String()
 	}
 	return r.db.WithContext(ctx).Create(record).Error
+}
+
+func (r *FoodRecordRepo) GetByUserSourceTaskID(ctx context.Context, userID, sourceTaskID string) (*domain.FoodRecord, error) {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(sourceTaskID) == "" {
+		return nil, nil
+	}
+	var row domain.FoodRecord
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND source_task_id = ?", userID, sourceTaskID).
+		First(&row).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &row, nil
 }
 
 func (r *FoodRecordRepo) ListByUser(ctx context.Context, userID, date string, limit int) ([]domain.FoodRecord, error) {

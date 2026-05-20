@@ -83,10 +83,10 @@ func TestDeepSeekNutritionEstimator_EstimateParsesArrayContent(t *testing.T) {
 	assert.Equal(t, 6.0, rows[0]["vitaminCMg"])
 }
 
-func TestDeepSeekNutritionEstimator_DefaultsToV4Pro(t *testing.T) {
+func TestDeepSeekNutritionEstimator_DefaultsToV4Flash(t *testing.T) {
 	estimator := NewDeepSeekNutritionEstimator("test-key", "", "")
 
-	assert.Equal(t, "deepseek-v4-pro", estimator.Model)
+	assert.Equal(t, "deepseek-v4-flash", estimator.Model)
 }
 
 func TestDeepSeekNutritionEstimator_NormalizesFallbackEnergyConsistency(t *testing.T) {

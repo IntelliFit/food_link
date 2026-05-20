@@ -260,6 +260,10 @@ function FriendsPage() {
     }
   }
 
+  const goToCommunity = () => {
+    Taro.switchTab({ url: '/pages/community/index' })
+  }
+
   const renderEmptyState = (type: 'friends' | 'received' | 'sent') => {
     const configs: Record<'friends' | 'received' | 'sent', {
       icon: JSX.Element
@@ -271,7 +275,9 @@ function FriendsPage() {
       friends: {
         icon: <FriendsIcon size={120} color='#00bc7d' />,
         title: '还没有好友',
-        desc: '社交入口暂时下线，好友列表会在后续恢复后继续使用',
+        desc: '去圈子里发现更多志同道合的食友，一起记录健康饮食',
+        action: '去添加好友',
+        onAction: goToCommunity
       },
       received: {
         icon: <InboxIcon size={120} color='#00bc7d' />,

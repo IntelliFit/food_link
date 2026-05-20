@@ -28,6 +28,7 @@ type FoodRecord struct {
 	SourceTaskID     *string    `gorm:"column:source_task_id" json:"source_task_id,omitempty"`
 	RecordTime       *time.Time `gorm:"column:record_time" json:"record_time"`
 	CreatedAt        *time.Time `gorm:"column:created_at" json:"created_at"`
+	AlreadySaved     bool       `gorm:"-" json:"-"`
 }
 
 func (FoodRecord) TableName() string { return "user_food_records" }
@@ -49,9 +50,8 @@ func (f *FoodItem) UnmarshalJSON(data []byte) error {
 	type Alias FoodItem
 	aux := struct {
 		*Alias
-		WaterMlCamel *float64       `json:"waterMl"`
-		WaterMlSnake *float64       `json:"water_ml"`
-		NutrientsRaw map[string]any `json:"nutrients"`
+		WaterMlCamel *float64 `json:"waterMl"`
+		WaterMlSnake *float64 `json:"water_ml"`
 	}{
 		Alias: (*Alias)(f),
 	}
@@ -66,15 +66,28 @@ func (f *FoodItem) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+	var nutrients struct {
+		Values FoodItemNutrients `json:"nutrients"`
+	}
+	if err := json.Unmarshal(data, &nutrients); err != nil {
+		return err
+	}
+	f.Nutrients = nutrients.Values
+	var nutrientsRaw struct {
+		Values map[string]any `json:"nutrients"`
+	}
+	if err := json.Unmarshal(data, &nutrientsRaw); err != nil {
+		return err
+	}
 	switch {
 	case aux.WaterMlSnake != nil:
 		f.WaterMl = *aux.WaterMlSnake
 	case aux.WaterMlCamel != nil:
 		f.WaterMl = *aux.WaterMlCamel
-	case f.WaterMl <= 0 && aux.NutrientsRaw != nil:
-		f.WaterMl = numberFromAny(aux.NutrientsRaw["water_ml"])
+	case f.WaterMl <= 0 && nutrientsRaw.Values != nil:
+		f.WaterMl = numberFromAny(nutrientsRaw.Values["water_ml"])
 		if f.WaterMl <= 0 {
-			f.WaterMl = numberFromAny(aux.NutrientsRaw["waterMl"])
+			f.WaterMl = numberFromAny(nutrientsRaw.Values["waterMl"])
 		}
 	}
 	if raw.Ratio == nil {

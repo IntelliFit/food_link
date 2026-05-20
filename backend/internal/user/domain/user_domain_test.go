@@ -33,6 +33,22 @@ func TestUserModeSwitchLog_Struct(t *testing.T) {
 	assert.Equal(t, "user_mode_switch_logs", log.TableName())
 }
 
+func TestDailyNutritionTarget_Struct(t *testing.T) {
+	now := time.Now()
+	target := DailyNutritionTarget{
+		ID:            "target-1",
+		UserID:        "user-1",
+		TargetDate:    now,
+		CalorieTarget: 1800,
+		ProteinTarget: 100,
+		CarbsTarget:   200,
+		FatTarget:     60,
+		Source:        "user_manual",
+	}
+	assert.Equal(t, "target-1", target.ID)
+	assert.Equal(t, "user_daily_nutrition_targets", target.TableName())
+}
+
 func TestAnalysisTask_Struct(t *testing.T) {
 	now := time.Now()
 	task := AnalysisTask{

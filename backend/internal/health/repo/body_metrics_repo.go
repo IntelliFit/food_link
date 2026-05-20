@@ -196,6 +196,19 @@ func (r *BodyMetricsRepo) SumWaterByDate(ctx context.Context, userID string, rec
 	return total, err
 }
 
+func (r *BodyMetricsRepo) SumWaterByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string) (int64, error) {
+	if _, _, err := chinaDateWindow(recordedOn); err != nil {
+		return 0, err
+	}
+	var total int64
+	err := r.db.WithContext(ctx).
+		Model(&domain.BodyWaterLog{}).
+		Where("user_id = ? AND DATE(recorded_on) = ? AND source_type = ?", userID, recordedOn, sourceType).
+		Select("COALESCE(SUM(amount_ml), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
 func (r *BodyMetricsRepo) GetUserProfile(ctx context.Context, userID string) (*domain.BodyMetricUserProfile, error) {
 	var row domain.BodyMetricUserProfile
 	if err := r.db.WithContext(ctx).Where("id = ?", userID).First(&row).Error; err != nil {

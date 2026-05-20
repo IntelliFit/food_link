@@ -55,6 +55,26 @@ func TestSanitizeTaskErrorMessage_APIKey(t *testing.T) {
 	}
 }
 
+func TestSanitizeTaskErrorMessage_DoubaoResponsesAuthenticationError(t *testing.T) {
+	msg := sanitizeTaskErrorMessage(errors.New(`doubao responses api error 401: {"error":{"code":"AuthenticationError","message":"The API key format is incorrect. Request id: 021779210783873f3cee0c2e226f4d0a5"}}`))
+	if strings.Contains(msg, "AuthenticationError") || strings.Contains(msg, "Request id") {
+		t.Fatalf("raw authentication error leaked into sanitized error: %s", msg)
+	}
+	if !strings.Contains(msg, "AI 识别服务配置异常") {
+		t.Fatalf("unexpected sanitized authentication error: %s", msg)
+	}
+}
+
+func TestSanitizeTaskErrorMessage_DoubaoWebSearchToolNotOpen(t *testing.T) {
+	msg := sanitizeTaskErrorMessage(errors.New(`doubao responses api error 404: {"error":{"code":"ToolNotOpen","message":"Your account has not activated web search. You may activate it at https://console.volcengine.com/"}}`))
+	if strings.Contains(msg, "ToolNotOpen") || strings.Contains(msg, "volcengine.com") {
+		t.Fatalf("raw web search activation error leaked into sanitized error: %s", msg)
+	}
+	if !strings.Contains(msg, "Web Search") || !strings.Contains(msg, "标准模式") {
+		t.Fatalf("unexpected sanitized web search error: %s", msg)
+	}
+}
+
 func TestSanitizeTaskErrorMessage_TruncatesLongText(t *testing.T) {
 	msg := sanitizeTaskErrorMessage(errors.New(strings.Repeat("x", 400)))
 	if len([]rune(msg)) > 303 {

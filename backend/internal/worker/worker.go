@@ -3395,6 +3395,12 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		strings.Contains(lower, "<body") {
 		return "AI 服务返回了网页而不是 JSON，请检查模型 API base URL 或网关配置"
 	}
+	if strings.Contains(lower, "toolnotopen") ||
+		strings.Contains(lower, "not activated web search") ||
+		strings.Contains(lower, "activate web search") ||
+		strings.Contains(lower, "web search tool not activated") {
+		return "轻量模式需要先在火山方舟控制台开通 Web Search 联网内容插件；开通后再重试，或先切回标准模式"
+	}
 	if strings.Contains(lower, "context deadline exceeded") ||
 		strings.Contains(lower, "client.timeout") ||
 		strings.Contains(lower, "timeout exceeded while awaiting headers") ||
@@ -3409,7 +3415,10 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		return "AI 识别服务当前繁忙，请稍后重试"
 	}
 	if strings.Contains(lower, "incorrect api key") ||
+		strings.Contains(lower, "api key format is incorrect") ||
+		strings.Contains(lower, "authenticationerror") ||
 		strings.Contains(lower, "apikey-error") ||
+		strings.Contains(lower, "doubao responses api error 401") ||
 		strings.Contains(lower, "doubao api error 401") ||
 		strings.Contains(lower, "ofoxai api error 401") {
 		return "AI 识别服务配置异常，请联系管理员处理"

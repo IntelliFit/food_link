@@ -39,6 +39,80 @@ type UserDO struct {
 
 func (UserDO) TableName() string { return "weapp_user" }
 
+type UserDailyNutritionTargetDO struct {
+	ID            string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID        string     `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_user_daily_nutrition_targets_user_date,priority:1;index:idx_user_daily_nutrition_targets_user_id"`
+	TargetDate    time.Time  `gorm:"column:target_date;type:date;not null;uniqueIndex:idx_user_daily_nutrition_targets_user_date,priority:2"`
+	CalorieTarget float64    `gorm:"column:calorie_target;type:numeric;not null"`
+	ProteinTarget float64    `gorm:"column:protein_target;type:numeric;not null"`
+	CarbsTarget   float64    `gorm:"column:carbs_target;type:numeric;not null"`
+	FatTarget     float64    `gorm:"column:fat_target;type:numeric;not null"`
+	Source        string     `gorm:"column:source;type:text;not null;default:'user_manual'"`
+	CreatedAt     *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt     *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (UserDailyNutritionTargetDO) TableName() string { return "user_daily_nutrition_targets" }
+
+type UserPetDO struct {
+	ID            string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID        string         `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_user_pets_user_id"`
+	PetSeed       string         `gorm:"column:pet_seed;type:text;not null"`
+	Name          string         `gorm:"column:name;type:text;not null"`
+	Color         string         `gorm:"column:color;type:text;not null"`
+	Shape         string         `gorm:"column:shape;type:text;not null"`
+	Pattern       string         `gorm:"column:pattern;type:text;not null"`
+	Accessory     string         `gorm:"column:accessory;type:text;not null"`
+	Personality   string         `gorm:"column:personality;type:text;not null"`
+	Level         int            `gorm:"column:level;type:integer;not null;default:1"`
+	Experience    int            `gorm:"column:experience;type:integer;not null;default:0"`
+	TodayStatus   string         `gorm:"column:today_status;type:text;not null;default:'calm'"`
+	LastSettledOn *time.Time     `gorm:"column:last_settled_on;type:date"`
+	TotalEvents   int            `gorm:"column:total_events;type:integer;not null;default:0"`
+	LastSummaryAt *time.Time     `gorm:"column:last_summary_at;type:timestamptz"`
+	Meta          map[string]any `gorm:"column:meta;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt     time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt     time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (UserPetDO) TableName() string { return "user_pets" }
+
+type UserPetEventDO struct {
+	ID           string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID       string         `gorm:"column:user_id;type:uuid;not null;index:idx_user_pet_events_user_date,priority:1;index:idx_user_pet_events_user_claimed,priority:1"`
+	PetID        string         `gorm:"column:pet_id;type:uuid;not null;index:idx_user_pet_events_pet_id"`
+	EventDate    time.Time      `gorm:"column:event_date;type:date;not null;index:idx_user_pet_events_user_date,priority:2"`
+	EventType    string         `gorm:"column:event_type;type:text;not null;index:idx_user_pet_events_user_date,priority:3"`
+	Title        string         `gorm:"column:title;type:text;not null"`
+	Message      string         `gorm:"column:message;type:text;not null"`
+	TaskText     string         `gorm:"column:task_text;type:text;not null"`
+	HabitScore   int            `gorm:"column:habit_score;type:integer;not null;default:0"`
+	ExpReward    int            `gorm:"column:exp_reward;type:integer;not null;default:0"`
+	CreditReward int            `gorm:"column:credit_reward;type:integer;not null;default:0"`
+	ScoreDetails map[string]any `gorm:"column:score_details;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	IsRead       bool           `gorm:"column:is_read;type:boolean;not null;default:false"`
+	ReadAt       *time.Time     `gorm:"column:read_at;type:timestamptz"`
+	IsClaimed    bool           `gorm:"column:is_claimed;type:boolean;not null;default:false;index:idx_user_pet_events_user_claimed,priority:2"`
+	ClaimedAt    *time.Time     `gorm:"column:claimed_at;type:timestamptz"`
+	CreatedAt    time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_user_pet_events_user_claimed,priority:3,sort:desc"`
+	UpdatedAt    time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (UserPetEventDO) TableName() string { return "user_pet_events" }
+
+type UserPetDailyScoreDO struct {
+	ID           string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID       string         `gorm:"column:user_id;type:uuid;not null;index:idx_user_pet_daily_scores_user_date,priority:1"`
+	ScoreDate    time.Time      `gorm:"column:score_date;type:date;not null;index:idx_user_pet_daily_scores_user_date,priority:2"`
+	HabitScore   int            `gorm:"column:habit_score;type:integer;not null;default:0"`
+	ExpGained    int            `gorm:"column:exp_gained;type:integer;not null;default:0"`
+	ScoreDetails map[string]any `gorm:"column:score_details;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt    time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt    time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (UserPetDailyScoreDO) TableName() string { return "user_pet_daily_scores" }
+
 type AnalysisTaskDO struct {
 	ID              string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID          string         `gorm:"column:user_id;type:uuid;not null;index:idx_analysis_tasks_user_id"`
@@ -88,7 +162,7 @@ type PrecisionSessionDO struct {
 	ID                  string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID              string         `gorm:"column:user_id;type:uuid;not null;index:idx_precision_sessions_user_created_at,priority:1;index:idx_precision_sessions_user_status,priority:1"`
 	SourceType          string         `gorm:"column:source_type;type:text;not null"`
-	ExecutionMode       string         `gorm:"column:execution_mode;type:text;not null;default:'strict'"`
+	ExecutionMode       string         `gorm:"column:execution_mode;type:text;not null;default:'experimental'"`
 	Status              string         `gorm:"column:status;type:text;not null;default:'collecting';index:idx_precision_sessions_user_status,priority:2"`
 	RoundIndex          int            `gorm:"column:round_index;type:integer;not null;default:1"`
 	LatestInputs        map[string]any `gorm:"column:latest_inputs;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
@@ -772,6 +846,10 @@ func (TestDatasetDO) TableName() string { return "test_datasets" }
 func AllModels() []any {
 	return []any{
 		&UserDO{},
+		&UserDailyNutritionTargetDO{},
+		&UserPetDO{},
+		&UserPetEventDO{},
+		&UserPetDailyScoreDO{},
 		&MembershipPlanDO{},
 		&AnalysisTaskDO{},
 		&AnalysisFeedbackSampleDO{},

@@ -60,8 +60,12 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 	if err != nil {
 		return nil, err
 	}
+	dailyTarget, err := s.home.GetDailyNutritionTarget(ctx, userID, date)
+	if err != nil {
+		return nil, err
+	}
 
-	targetPlan := buildNutritionTargetPlan(user, date, exerciseBurned, exerciseHistory)
+	targetPlan := buildNutritionTargetPlan(user, date, exerciseBurned, exerciseHistory, dailyTarget)
 	targets := targetPlan.Targets
 	totalCal, totalProtein, totalCarbs, totalFat := 0.0, 0.0, 0.0, 0.0
 	byMeal := map[string][]homerepo.FoodRecord{}
@@ -139,7 +143,12 @@ func (s *DashboardService) PosterCalorieCompare(ctx context.Context, userID, rec
 		return nil, err
 	}
 	mealType := normalizeMealType(record.MealType, record.RecordTime)
-	targets := buildMealTargets(dashboardTargets(user)["calorie_target"])
+	dailyTarget, err := s.home.GetDailyNutritionTarget(ctx, userID, targetDate)
+	if err != nil {
+		return nil, err
+	}
+	targetPlan := buildNutritionTargetPlan(user, targetDate, 0, nil, dailyTarget)
+	targets := buildMealTargets(targetPlan.Targets["calorie_target"])
 	baselineDate := previousChinaDate(targetDate)
 	baselineRows, err := s.home.ListFoodRecordsByDate(ctx, userID, baselineDate)
 	if err != nil {
@@ -199,7 +208,7 @@ func (p nutritionTargetPlan) Response() map[string]any {
 	}
 }
 
-func buildNutritionTargetPlan(user *userrepo.User, date string, todayExerciseKcal int, exerciseHistory map[string]int) nutritionTargetPlan {
+func buildNutritionTargetPlan(user *userrepo.User, date string, todayExerciseKcal int, exerciseHistory map[string]int, dailyTarget ...*homerepo.DailyNutritionTarget) nutritionTargetPlan {
 	targets, source := dashboardTargetsWithSource(user)
 	plan := nutritionTargetPlan{
 		Targets:            targets,
@@ -211,6 +220,21 @@ func buildNutritionTargetPlan(user *userrepo.User, date string, todayExerciseKca
 		ActivityMultiplier: userDailyLifeActivityMultiplier(user),
 	}
 	plan.RecentExerciseAvg, plan.RecentExerciseDays = summarizeExerciseHistory(exerciseHistory)
+	if len(dailyTarget) > 0 && dailyTarget[0] != nil {
+		target := dailyTarget[0]
+		plan.Targets = map[string]float64{
+			"calorie_target": round1(target.CalorieTarget),
+			"protein_target": round1(target.ProteinTarget),
+			"carbs_target":   round1(target.CarbsTarget),
+			"fat_target":     round1(target.FatTarget),
+		}
+		plan.BaseCalorieTarget = round1(target.CalorieTarget)
+		plan.SuggestedCalorie = round1(target.CalorieTarget)
+		plan.TargetSource = "daily_manual"
+		plan.Explanation = "使用你为当天单独保存的自定义目标。"
+		plan.MacroExplanation = "三大营养素沿用当天自定义目标；其它日期仍按系统动态模型计算。"
+		return plan
+	}
 	if source == "manual" {
 		plan.Explanation = "使用你在目标设置中保存的自定义目标。"
 		plan.MacroExplanation = "三大营养素沿用自定义目标。"

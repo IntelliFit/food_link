@@ -2,9 +2,14 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"math"
 	"strings"
+	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
+	healthdomain "food_link/backend/internal/health/domain"
 	"food_link/backend/internal/recipe/domain"
 	"food_link/backend/internal/recipe/repo"
 	"food_link/backend/pkg/storage"
@@ -12,8 +17,9 @@ import (
 )
 
 type RecipeService struct {
-	repo    *repo.RecipeRepo
-	storage *storage.Client
+	repo      *repo.RecipeRepo
+	storage   *storage.Client
+	waterLogs WaterLogRecorder
 }
 
 func NewRecipeService(repo *repo.RecipeRepo, storageClient ...*storage.Client) *RecipeService {
@@ -22,6 +28,14 @@ func NewRecipeService(repo *repo.RecipeRepo, storageClient ...*storage.Client) *
 		client = storageClient[0]
 	}
 	return &RecipeService{repo: repo, storage: client}
+}
+
+type WaterLogRecorder interface {
+	CreateWaterLog(ctx context.Context, log *healthdomain.BodyWaterLog) error
+}
+
+func (s *RecipeService) ConfigureWaterLogRecorder(recorder WaterLogRecorder) {
+	s.waterLogs = recorder
 }
 
 type CreateInput struct {
@@ -187,12 +201,13 @@ func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealTy
 	}
 	chosenMeal = normalizeMeal(chosenMeal)
 	desc := "使用食谱：" + recipe.RecipeName
+	recordItems := normalizeRecipeItemsForFoodRecord(recipe.Items, recipe)
 	record := &domain.FoodRecord{
 		UserID:           userID,
 		MealType:         chosenMeal,
 		ImagePath:        recipe.ImagePath,
 		Description:      &desc,
-		Items:            recipe.Items,
+		Items:            recordItems,
 		TotalCalories:    recipe.TotalCalories,
 		TotalProtein:     recipe.TotalProtein,
 		TotalCarbs:       recipe.TotalCarbs,
@@ -202,8 +217,40 @@ func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealTy
 	if err := s.repo.InsertFoodRecord(ctx, record); err != nil {
 		return "", err
 	}
+	if err := s.recordFoodWaterIntake(ctx, userID, record); err != nil {
+		// Food water is a derived side effect. Keep recipe reuse successful even
+		// if water-log schema/config is temporarily out of sync.
+		fmt.Printf("[recipe] record food water intake failed user_id=%s record_id=%s err=%v\n", userID, record.ID, err)
+	}
 	_ = s.repo.MarkUsed(ctx, recipeID, userID, recipe.UseCount)
 	return record.ID, nil
+}
+
+func (s *RecipeService) recordFoodWaterIntake(ctx context.Context, userID string, record *domain.FoodRecord) error {
+	if s.waterLogs == nil || record == nil || strings.TrimSpace(userID) == "" {
+		return nil
+	}
+	amountMl := totalRecipeFoodWaterIntakeMl(record.Items)
+	if amountMl <= 0 {
+		return nil
+	}
+	recordedOn := time.Now().In(chinaTZ)
+	if record.RecordTime != nil {
+		recordedOn = record.RecordTime.In(chinaTZ)
+	}
+	recordedDate := time.Date(recordedOn.Year(), recordedOn.Month(), recordedOn.Day(), 0, 0, 0, 0, chinaTZ)
+	now := time.Now().UTC()
+	sourceType := foodWaterSourceType(record.ID)
+	if sourceType == "" {
+		return nil
+	}
+	return s.waterLogs.CreateWaterLog(ctx, &healthdomain.BodyWaterLog{
+		UserID:     userID,
+		AmountMl:   amountMl,
+		RecordedOn: &recordedDate,
+		SourceType: sourceType,
+		CreatedAt:  &now,
+	})
 }
 
 func (s *RecipeService) normalizeRecipes(recipes []domain.Recipe) []domain.Recipe {
@@ -264,5 +311,180 @@ func normalizeMeal(v string) string {
 		return "afternoon_snack"
 	default:
 		return v
+	}
+}
+
+func normalizeRecipeItemsForFoodRecord(items []map[string]any, recipe *domain.Recipe) []map[string]any {
+	if len(items) == 0 {
+		return items
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		normalized := make(map[string]any, len(item)+4)
+		for key, value := range item {
+			normalized[key] = value
+		}
+
+		weight := firstNumberFromMap(item, "weight", "estimatedWeightGrams", "estimated_weight_grams")
+		if weight > 0 {
+			normalized["weight"] = weight
+		}
+		ratio := firstNumberFromMap(item, "ratio", "suggestedRatio", "suggested_ratio")
+		if ratio <= 0 {
+			ratio = 100
+		}
+		normalized["ratio"] = ratio
+		intake := firstNumberFromMap(item, "intake")
+		if intake <= 0 && weight > 0 {
+			intake = weight * ratio / 100
+		}
+		if intake > 0 {
+			normalized["intake"] = intake
+		}
+		if waterMl := firstNumberFromMap(item, "water_ml", "waterMl"); waterMl > 0 {
+			normalized["water_ml"] = waterMl
+		}
+
+		nutrients := normalizeRecipeItemNutrients(item)
+		if len(items) == 1 && recipe != nil {
+			fillNutrientIfMissing(nutrients, "calories", recipe.TotalCalories)
+			fillNutrientIfMissing(nutrients, "protein", recipe.TotalProtein)
+			fillNutrientIfMissing(nutrients, "carbs", recipe.TotalCarbs)
+			fillNutrientIfMissing(nutrients, "fat", recipe.TotalFat)
+		}
+		normalized["nutrients"] = nutrients
+		out = append(out, normalized)
+	}
+	return out
+}
+
+var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+func foodWaterSourceType(recordID string) string {
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return ""
+	}
+	return "ai_food_record:" + recordID
+}
+
+func totalRecipeFoodWaterIntakeMl(items []map[string]any) int {
+	total := 0.0
+	for _, item := range items {
+		waterMl := firstNumberFromMap(item, "water_ml", "waterMl")
+		if waterMl <= 0 {
+			if nutrients, ok := item["nutrients"].(map[string]any); ok {
+				waterMl = firstNumberFromMap(nutrients, "water_ml", "waterMl")
+			}
+		}
+		if waterMl <= 0 {
+			continue
+		}
+		ratio := firstNumberFromMap(item, "ratio")
+		if ratio > 0 {
+			total += waterMl * ratio / 100
+			continue
+		}
+		intake := firstNumberFromMap(item, "intake")
+		weight := firstNumberFromMap(item, "weight", "estimatedWeightGrams", "estimated_weight_grams")
+		if intake > 0 && weight > 0 {
+			total += waterMl * intake / weight
+			continue
+		}
+		if intake == 0 && weight == 0 {
+			total += waterMl
+		}
+	}
+	if total <= 0 {
+		return 0
+	}
+	return int(math.Round(total))
+}
+
+func normalizeRecipeItemNutrients(item map[string]any) map[string]any {
+	nutrients := map[string]any{}
+	if raw, ok := item["nutrients"].(map[string]any); ok {
+		for key, value := range raw {
+			nutrients[key] = value
+		}
+	}
+	aliases := map[string][]string{
+		"calories":       {"calories", "calorie", "kcal", "energy", "total_calories"},
+		"protein":        {"protein", "total_protein"},
+		"carbs":          {"carbs", "carbohydrates", "carbohydrate", "total_carbs"},
+		"fat":            {"fat", "total_fat"},
+		"fiber":          {"fiber"},
+		"sugar":          {"sugar"},
+		"saturatedFat":   {"saturatedFat", "saturated_fat"},
+		"cholesterolMg":  {"cholesterolMg", "cholesterol_mg"},
+		"sodiumMg":       {"sodiumMg", "sodium_mg"},
+		"potassiumMg":    {"potassiumMg", "potassium_mg"},
+		"calciumMg":      {"calciumMg", "calcium_mg"},
+		"ironMg":         {"ironMg", "iron_mg"},
+		"magnesiumMg":    {"magnesiumMg", "magnesium_mg"},
+		"zincMg":         {"zincMg", "zinc_mg"},
+		"vitaminARaeMcg": {"vitaminARaeMcg", "vitamin_a_rae_mcg"},
+		"vitaminCMg":     {"vitaminCMg", "vitamin_c_mg"},
+		"vitaminDMcg":    {"vitaminDMcg", "vitamin_d_mcg"},
+		"vitaminEMg":     {"vitaminEMg", "vitamin_e_mg"},
+		"vitaminKMcg":    {"vitaminKMcg", "vitamin_k_mcg"},
+		"thiaminMg":      {"thiaminMg", "thiamin_mg"},
+		"riboflavinMg":   {"riboflavinMg", "riboflavin_mg"},
+		"niacinMg":       {"niacinMg", "niacin_mg"},
+		"vitaminB6Mg":    {"vitaminB6Mg", "vitamin_b6_mg"},
+		"folateMcg":      {"folateMcg", "folate_mcg"},
+		"vitaminB12Mcg":  {"vitaminB12Mcg", "vitamin_b12_mcg"},
+	}
+	for canonical, keys := range aliases {
+		if value := firstNumberFromMap(nutrients, keys...); value > 0 {
+			nutrients[canonical] = value
+			continue
+		}
+		if value := firstNumberFromMap(item, keys...); value > 0 {
+			nutrients[canonical] = value
+		}
+	}
+	return nutrients
+}
+
+func fillNutrientIfMissing(nutrients map[string]any, key string, value float64) {
+	if value <= 0 || firstNumberFromMap(nutrients, key) > 0 {
+		return
+	}
+	nutrients[key] = math.Round(value*10) / 10
+}
+
+func firstNumberFromMap(values map[string]any, keys ...string) float64 {
+	for _, key := range keys {
+		if number := numberFromAny(values[key]); number > 0 {
+			return number
+		}
+	}
+	return 0
+}
+
+func numberFromAny(value any) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case int32:
+		return float64(v)
+	case uint:
+		return float64(v)
+	case uint64:
+		return float64(v)
+	case uint32:
+		return float64(v)
+	case json.Number:
+		n, _ := v.Float64()
+		return n
+	default:
+		return 0
 	}
 }

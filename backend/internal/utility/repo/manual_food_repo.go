@@ -2,39 +2,1096 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+	"unicode"
 
+	fooddomain "food_link/backend/internal/foodrecord/domain"
+	publicdomain "food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/utility/domain"
+	"food_link/backend/pkg/storage"
 
 	"gorm.io/gorm"
 )
 
 type ManualFoodRepo struct {
-	db *gorm.DB
+	db      *gorm.DB
+	storage *storage.Client
 }
 
-func NewManualFoodRepo(db *gorm.DB) *ManualFoodRepo {
-	return &ManualFoodRepo{db: db}
+func NewManualFoodRepo(db *gorm.DB, storageClient ...*storage.Client) *ManualFoodRepo {
+	var client *storage.Client
+	if len(storageClient) > 0 {
+		client = storageClient[0]
+	}
+	return &ManualFoodRepo{db: db, storage: client}
 }
 
-func (r *ManualFoodRepo) List(ctx context.Context, category string, limit int) ([]domain.ManualFood, error) {
-	var items []domain.ManualFood
-	q := r.db.WithContext(ctx)
-	if category != "" {
-		q = q.Where("category = ?", category)
+func (r *ManualFoodRepo) Browse(ctx context.Context, userID string, limit int) (*domain.ManualFoodBrowseResult, error) {
+	limit = clampLimit(limit, 8, 20)
+	result := &domain.ManualFoodBrowseResult{
+		RecentItems:            []domain.ManualFoodResult{},
+		CollectedPublicLibrary: []domain.ManualFoodResult{},
+		PublicLibrary:          []domain.ManualFoodResult{},
+		NutritionLibrary:       []domain.ManualFoodResult{},
 	}
-	if limit > 0 {
-		q = q.Limit(limit)
+
+	stats, err := r.loadStats(ctx)
+	if err != nil {
+		return nil, err
 	}
-	err := q.Order("name asc").Find(&items).Error
-	return items, err
+	result.Stats = stats
+
+	if strings.TrimSpace(userID) != "" {
+		if result.RecentItems, err = r.listRecentItems(ctx, userID, limit); err != nil {
+			return nil, err
+		}
+		if result.CollectedPublicLibrary, err = r.listCollectedPublicLibrary(ctx, userID, limit); err != nil {
+			return nil, err
+		}
+	}
+
+	if result.PublicLibrary, err = r.listPublicLibrary(ctx, minInt(limit, 6)); err != nil {
+		return nil, err
+	}
+	if result.NutritionLibrary, err = r.listNutritionLibrary(ctx, minInt(limit, 12)); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
-func (r *ManualFoodRepo) Search(ctx context.Context, keyword string, limit int) ([]domain.ManualFood, error) {
-	var items []domain.ManualFood
-	q := r.db.WithContext(ctx).Where("LOWER(name) LIKE LOWER(?)", "%"+keyword+"%")
-	if limit > 0 {
-		q = q.Limit(limit)
+func (r *ManualFoodRepo) Catalog(ctx context.Context, userID string, category string, page int, pageSize int) (*domain.ManualFoodCatalogResult, error) {
+	category = normalizeManualFoodCatalogCategory(category)
+	if page <= 0 {
+		page = 1
 	}
-	err := q.Order("name asc").Find(&items).Error
-	return items, err
+	pageSize = clampLimit(pageSize, 30, 60)
+	stats, err := r.loadStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items, hasMore, err := r.listCatalogItems(ctx, userID, category, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.ManualFoodCatalogResult{
+		Categories: manualFoodCatalogCategories(),
+		Items:      items,
+		Category:   category,
+		Page:       page,
+		PageSize:   pageSize,
+		HasMore:    hasMore,
+		Stats:      stats,
+	}, nil
+}
+
+func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword string, limit int) ([]domain.ManualFoodResult, error) {
+	query := strings.TrimSpace(keyword)
+	if query == "" {
+		return []domain.ManualFoodResult{}, nil
+	}
+	limit = clampLimit(limit, 20, 60)
+
+	results := make([]domain.ManualFoodResult, 0, limit*2)
+	catalogRows, err := r.searchCatalogItems(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, catalogRows...)
+
+	recentRows, err := r.searchRecentItems(ctx, userID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, recentRows...)
+
+	publicRows, err := r.searchPublicLibrary(ctx, userID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, publicRows...)
+
+	nutritionRows, err := r.searchNutritionLibrary(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, nutritionRows...)
+
+	sort.SliceStable(results, func(i, j int) bool {
+		left := manualFoodDisplayScore(results[i], query)
+		right := manualFoodDisplayScore(results[j], query)
+		if left == right {
+			if results[i].UsageCount == results[j].UsageCount {
+				return results[i].Title < results[j].Title
+			}
+			return results[i].UsageCount > results[j].UsageCount
+		}
+		return left > right
+	})
+	results = dedupeManualFoodResults(results)
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) listCatalogItems(ctx context.Context, userID string, category string, page int, pageSize int) ([]domain.ManualFoodResult, bool, error) {
+	offset := (page - 1) * pageSize
+	if category == "recent" {
+		items, err := r.listRecentItems(ctx, userID, pageSize+1)
+		if err != nil {
+			return nil, false, err
+		}
+		hasMore := len(items) > pageSize
+		if hasMore {
+			items = items[:pageSize]
+		}
+		return items, hasMore, nil
+	}
+	if category == "favorites" {
+		items, err := r.listCollectedPublicLibrary(ctx, userID, pageSize+1)
+		if err != nil {
+			return nil, false, err
+		}
+		hasMore := len(items) > pageSize
+		if hasMore {
+			items = items[:pageSize]
+		}
+		return items, hasMore, nil
+	}
+
+	userItems, err := r.listGlobalFrequentRecordItems(ctx, category, pageSize+1, offset)
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(userItems) > pageSize
+	if hasMore {
+		userItems = userItems[:pageSize]
+	}
+	if len(userItems) >= pageSize || category == "common" || category == "recent" || category == "favorites" {
+		return userItems, hasMore, nil
+	}
+
+	nutritionItems, err := r.listNutritionCatalogItems(ctx, category, pageSize-len(userItems), 0)
+	if err != nil {
+		return nil, false, err
+	}
+	items := dedupeManualFoodResults(append(userItems, nutritionItems...))
+	if len(items) > pageSize {
+		items = items[:pageSize]
+		hasMore = true
+	}
+	return items, hasMore, nil
+}
+
+func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, category string, limit int, offset int) ([]domain.ManualFoodResult, error) {
+	type row struct {
+		Name       string          `gorm:"column:name"`
+		Uses       int             `gorm:"column:uses"`
+		AvgWeight  float64         `gorm:"column:avg_weight"`
+		AvgCal     float64         `gorm:"column:avg_cal"`
+		AvgProtein float64         `gorm:"column:avg_protein"`
+		AvgCarbs   float64         `gorm:"column:avg_carbs"`
+		AvgFat     float64         `gorm:"column:avg_fat"`
+		ItemJSON   json.RawMessage `gorm:"column:item_json"`
+	}
+	whereCategory := ""
+	args := []any{}
+	if category != "" && category != "all" && category != "common" {
+		whereCategory = "AND (" + manualFoodCategorySQL("name") + ") = ?"
+		args = append(args, category)
+	}
+	args = append(args, limit, offset)
+	var rows []row
+	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
+		WITH record_items AS (
+			SELECT
+				trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) AS name,
+				item
+			FROM user_food_records
+			CROSS JOIN LATERAL jsonb_array_elements(items) item
+			WHERE trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) <> ''
+				AND COALESCE(item->'nutrients'->>'calories', item->>'calories') ~ '^[0-9]+([.][0-9]+){0,1}$'
+		)
+		SELECT
+			name,
+			COUNT(*)::int AS uses,
+			COALESCE(AVG(NULLIF(COALESCE(item->>'intake', item->>'weight'), '')::numeric), 100)::float8 AS avg_weight,
+			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'calories', item->>'calories'), '')::numeric), 0)::float8 AS avg_cal,
+			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'protein', item->>'protein'), '')::numeric), 0)::float8 AS avg_protein,
+			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'carbs', item->>'carbs'), '')::numeric), 0)::float8 AS avg_carbs,
+			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'fat', item->>'fat'), '')::numeric), 0)::float8 AS avg_fat,
+			(MAX(item::text))::jsonb AS item_json
+		FROM record_items
+		WHERE name <> ''
+			%s
+		GROUP BY name
+		HAVING COUNT(*) >= 3
+		ORDER BY COUNT(*) DESC, name ASC
+		LIMIT ? OFFSET ?
+	`, whereCategory), args...).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		item := manualFoodResultFromFrequentRecord(row.Name, row.Uses, row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat, row.ItemJSON)
+		if item.Title != "" {
+			results = append(results, item)
+		}
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) searchCatalogItems(ctx context.Context, query string, limit int) ([]domain.ManualFoodResult, error) {
+	terms := expandedSearchTerms(query)
+	type row struct {
+		Name       string          `gorm:"column:name"`
+		Uses       int             `gorm:"column:uses"`
+		AvgWeight  float64         `gorm:"column:avg_weight"`
+		AvgCal     float64         `gorm:"column:avg_cal"`
+		AvgProtein float64         `gorm:"column:avg_protein"`
+		AvgCarbs   float64         `gorm:"column:avg_carbs"`
+		AvgFat     float64         `gorm:"column:avg_fat"`
+		ItemJSON   json.RawMessage `gorm:"column:item_json"`
+	}
+	conditions := make([]string, 0, len(terms))
+	args := []any{}
+	for _, term := range terms {
+		conditions = append(conditions, "LOWER(name) LIKE ?")
+		args = append(args, "%"+strings.ToLower(term)+"%")
+	}
+	args = append(args, limit)
+	var rows []row
+	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
+		WITH record_items AS (
+			SELECT
+				trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) AS name,
+				item
+			FROM user_food_records
+			CROSS JOIN LATERAL jsonb_array_elements(items) item
+			WHERE trim(COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', ''))) <> ''
+				AND COALESCE(item->'nutrients'->>'calories', item->>'calories') ~ '^[0-9]+([.][0-9]+){0,1}$'
+		)
+		SELECT
+			name,
+			COUNT(*)::int AS uses,
+			COALESCE(AVG(NULLIF(COALESCE(item->>'intake', item->>'weight'), '')::numeric), 100)::float8 AS avg_weight,
+			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'calories', item->>'calories'), '')::numeric), 0)::float8 AS avg_cal,
+			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'protein', item->>'protein'), '')::numeric), 0)::float8 AS avg_protein,
+			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'carbs', item->>'carbs'), '')::numeric), 0)::float8 AS avg_carbs,
+			COALESCE(AVG(NULLIF(COALESCE(item->'nutrients'->>'fat', item->>'fat'), '')::numeric), 0)::float8 AS avg_fat,
+			(MAX(item::text))::jsonb AS item_json
+		FROM record_items
+		WHERE %s
+		GROUP BY name
+		HAVING COUNT(*) >= 2
+		ORDER BY
+			CASE WHEN name = ? THEN 0 WHEN name LIKE ? THEN 1 ELSE 2 END,
+			COUNT(*) DESC,
+			name ASC
+		LIMIT ?
+	`, strings.Join(conditions, " OR ")), append(args[:len(args)-1], query, query+"%", limit)...).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		item := manualFoodResultFromFrequentRecord(row.Name, row.Uses, row.AvgWeight, row.AvgCal, row.AvgProtein, row.AvgCarbs, row.AvgFat, row.ItemJSON)
+		item.MatchScore = computeMatchScore(query, row.Name) + 0.45
+		results = append(results, item)
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) listNutritionCatalogItems(ctx context.Context, category string, limit int, offset int) ([]domain.ManualFoodResult, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	whereCategory := ""
+	args := []any{true}
+	if category != "" && category != "all" && category != "common" {
+		whereCategory = "AND (" + manualFoodCategorySQL("canonical_name") + ") = ?"
+		args = append(args, category)
+	}
+	args = append(args, limit, offset)
+	var rows []fooddomain.FoodNutrition
+	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
+		SELECT *
+		FROM food_nutrition_library
+		WHERE is_active = ?
+			AND kcal_per_100g > 0
+			AND canonical_name ~ '[一-龥]'
+			%s
+		ORDER BY %s
+		LIMIT ? OFFSET ?
+	`, whereCategory, nutritionBrowseOrderSQL())).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, manualFoodResultFromNutrition(row, 0))
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) loadStats(ctx context.Context) (*domain.ManualFoodBrowseStats, error) {
+	stats := &domain.ManualFoodBrowseStats{}
+	if err := r.db.WithContext(ctx).Model(&fooddomain.FoodNutrition{}).Where("is_active = ?", true).Count(&stats.NutritionFoodCount).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.WithContext(ctx).Model(&fooddomain.FoodNutritionAlias{}).Count(&stats.NutritionAliasCount).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.WithContext(ctx).Model(&publicdomain.PublicFoodItem{}).Where("status = ?", "published").Count(&stats.PublicFoodCount).Error; err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
+func (r *ManualFoodRepo) listRecentItems(ctx context.Context, userID string, limit int) ([]domain.ManualFoodResult, error) {
+	type row struct {
+		ManualSource       string          `gorm:"column:manual_source"`
+		ManualSourceID     string          `gorm:"column:manual_source_id"`
+		ManualSourceTitle  string          `gorm:"column:manual_source_title"`
+		ManualPortionLabel string          `gorm:"column:manual_portion_label"`
+		UsageCount         int             `gorm:"column:usage_count"`
+		LatestRecordTime   string          `gorm:"column:latest_record_time"`
+		ItemJSON           json.RawMessage `gorm:"column:item_json"`
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT
+			item->>'manual_source' AS manual_source,
+			item->>'manual_source_id' AS manual_source_id,
+			COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', '')) AS manual_source_title,
+			COALESCE(NULLIF(item->>'manual_portion_label', ''), '1份') AS manual_portion_label,
+			COUNT(*)::int AS usage_count,
+			MAX(record_time)::text AS latest_record_time,
+			(MAX(item::text))::jsonb AS item_json
+		FROM user_food_records
+		CROSS JOIN LATERAL jsonb_array_elements(items) AS item
+		WHERE user_id = ?
+			AND item->>'manual_source' IN ('public_library', 'nutrition_library')
+			AND COALESCE(item->>'manual_source_id', '') <> ''
+		GROUP BY 1,2,3,4
+		ORDER BY usage_count DESC, latest_record_time DESC
+		LIMIT ?
+	`, userID, limit).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		result := manualFoodResultFromRecordItem(row.ManualSource, row.ManualSourceID, row.ManualSourceTitle, row.ManualPortionLabel, row.UsageCount, row.ItemJSON)
+		if result.ID == "" || result.Title == "" {
+			continue
+		}
+		if result.Source == "nutrition_library" && result.DefaultWeightGrams <= 0 {
+			result.DefaultWeightGrams = 100
+		}
+		if result.Source == "public_library" && result.DefaultWeightGrams <= 0 {
+			result.DefaultWeightGrams = 1
+		}
+		result.SourceLabel = sourceLabel(result.Source)
+		result.Category = inferManualFoodCategory(result.Title, result.Source)
+		result.MatchScore = 0.45
+		results = append(results, result)
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) listCollectedPublicLibrary(ctx context.Context, userID string, limit int) ([]domain.ManualFoodResult, error) {
+	var rows []publicdomain.PublicFoodItem
+	err := r.db.WithContext(ctx).
+		Table("public_food_library AS p").
+		Select("p.*").
+		Joins("JOIN public_food_library_collections c ON c.library_item_id = p.id").
+		Where("c.user_id = ? AND p.status = ?", userID, "published").
+		Order("c.created_at DESC").
+		Limit(limit).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		result := r.manualFoodResultFromPublic(row, true)
+		result.MatchScore = 0.5
+		results = append(results, result)
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) listPublicLibrary(ctx context.Context, limit int) ([]domain.ManualFoodResult, error) {
+	var rows []publicdomain.PublicFoodItem
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND total_calories > 0 AND total_calories <= ?", "published", 900).
+		Order("collection_count DESC, like_count DESC, published_at DESC NULLS LAST, created_at DESC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, r.manualFoodResultFromPublic(row, false))
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) listNutritionLibrary(ctx context.Context, limit int) ([]domain.ManualFoodResult, error) {
+	var rows []fooddomain.FoodNutrition
+	err := r.db.WithContext(ctx).
+		Where("is_active = ? AND kcal_per_100g > 0", true).
+		Order(nutritionBrowseOrderSQL()).
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, manualFoodResultFromNutrition(row, 0))
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) searchRecentItems(ctx context.Context, userID string, query string, limit int) ([]domain.ManualFoodResult, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, nil
+	}
+	terms := expandedSearchTerms(query)
+	type row struct {
+		ManualSource       string          `gorm:"column:manual_source"`
+		ManualSourceID     string          `gorm:"column:manual_source_id"`
+		ManualSourceTitle  string          `gorm:"column:manual_source_title"`
+		ManualPortionLabel string          `gorm:"column:manual_portion_label"`
+		UsageCount         int             `gorm:"column:usage_count"`
+		LatestRecordTime   string          `gorm:"column:latest_record_time"`
+		ItemJSON           json.RawMessage `gorm:"column:item_json"`
+	}
+	conditions := make([]string, 0, len(terms))
+	args := []any{userID}
+	for _, term := range terms {
+		conditions = append(conditions, `
+			LOWER(COALESCE(item->>'manual_source_title', item->>'name', '')) LIKE ?
+		`)
+		args = append(args, "%"+strings.ToLower(term)+"%")
+	}
+	args = append(args, limit)
+	var rows []row
+	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
+		SELECT
+			item->>'manual_source' AS manual_source,
+			item->>'manual_source_id' AS manual_source_id,
+			COALESCE(NULLIF(item->>'manual_source_title', ''), NULLIF(item->>'name', '')) AS manual_source_title,
+			COALESCE(NULLIF(item->>'manual_portion_label', ''), '1份') AS manual_portion_label,
+			COUNT(*)::int AS usage_count,
+			MAX(record_time)::text AS latest_record_time,
+			(MAX(item::text))::jsonb AS item_json
+		FROM user_food_records
+		CROSS JOIN LATERAL jsonb_array_elements(items) AS item
+		WHERE user_id = ?
+			AND item->>'manual_source' IN ('public_library', 'nutrition_library')
+			AND COALESCE(item->>'manual_source_id', '') <> ''
+			AND (%s)
+		GROUP BY 1,2,3,4
+		ORDER BY usage_count DESC, latest_record_time DESC
+		LIMIT ?
+	`, strings.Join(conditions, " OR ")), args...).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		result := manualFoodResultFromRecordItem(row.ManualSource, row.ManualSourceID, row.ManualSourceTitle, row.ManualPortionLabel, row.UsageCount, row.ItemJSON)
+		if result.ID == "" || result.Title == "" {
+			continue
+		}
+		result.SourceLabel = sourceLabel(result.Source)
+		result.Category = inferManualFoodCategory(result.Title, result.Source)
+		result.MatchScore = computeMatchScore(query, result.Title, result.Subtitle) + 0.35
+		results = append(results, result)
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string, query string, limit int) ([]domain.ManualFoodResult, error) {
+	terms := expandedSearchTerms(query)
+	type row struct {
+		publicdomain.PublicFoodItem
+		UsageCount int `gorm:"column:usage_count"`
+	}
+	conditions := make([]string, 0, len(terms))
+	usageWhere := "FALSE"
+	args := []any{}
+	if strings.TrimSpace(userID) != "" {
+		usageWhere = "user_id = ?"
+		args = append(args, userID)
+	}
+	for _, term := range terms {
+		like := "%" + strings.ToLower(term) + "%"
+		conditions = append(conditions, `
+			LOWER(COALESCE(p.food_name, '')) LIKE ?
+			OR LOWER(COALESCE(p.description, '')) LIKE ?
+			OR LOWER(COALESCE(p.merchant_name, '')) LIKE ?
+			OR EXISTS (
+				SELECT 1
+				FROM jsonb_array_elements(p.items) AS item
+				WHERE LOWER(COALESCE(item->>'name', '')) LIKE ?
+			)
+		`)
+		args = append(args, like, like, like, like)
+	}
+	args = append(args, limit)
+	var rows []row
+	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
+		SELECT
+			p.*,
+			COALESCE(usage.usage_count, 0) AS usage_count
+		FROM public_food_library p
+		LEFT JOIN (
+			SELECT
+				item->>'manual_source_id' AS source_id,
+				COUNT(*)::int AS usage_count
+			FROM user_food_records
+			CROSS JOIN LATERAL jsonb_array_elements(items) AS item
+		WHERE %s
+				AND item->>'manual_source' = 'public_library'
+			GROUP BY 1
+		) usage ON usage.source_id = p.id::text
+		WHERE p.status = 'published'
+			AND (%s)
+		ORDER BY usage_count DESC, p.collection_count DESC, p.like_count DESC, p.published_at DESC NULLS LAST
+		LIMIT ?
+	`, usageWhere, strings.Join(conditions, " OR ")), args...).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		result := r.manualFoodResultFromPublic(row.PublicFoodItem, false)
+		result.UsageCount = row.UsageCount
+		result.MatchScore = computeMatchScore(query, result.Title, result.Subtitle) + 0.1
+		results = append(results, result)
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) searchNutritionLibrary(ctx context.Context, query string, limit int) ([]domain.ManualFoodResult, error) {
+	terms := expandedSearchTerms(query)
+	type row struct {
+		fooddomain.FoodNutrition
+		MatchSource string `gorm:"column:match_source"`
+	}
+	conditions := make([]string, 0, len(terms))
+	args := []any{}
+	for _, term := range terms {
+		like := "%" + strings.ToLower(term) + "%"
+		conditions = append(conditions, `
+			LOWER(f.canonical_name) LIKE ?
+			OR LOWER(COALESCE(a.alias_name, '')) LIKE ?
+		`)
+		args = append(args, like, like)
+	}
+	args = append([]any{"%" + strings.ToLower(query) + "%"}, args...)
+	args = append(args, limit)
+	var rows []row
+	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
+		SELECT DISTINCT ON (f.id)
+			f.*,
+			CASE
+				WHEN LOWER(f.canonical_name) LIKE ? THEN 'canonical'
+				ELSE 'alias'
+			END AS match_source
+		FROM food_nutrition_library f
+		LEFT JOIN food_nutrition_aliases a ON a.food_id = f.id
+		WHERE f.is_active = TRUE
+			AND f.kcal_per_100g > 0
+			AND (%s)
+		ORDER BY f.id, match_source ASC, %s
+		LIMIT ?
+	`, strings.Join(conditions, " OR "), nutritionSearchOrderSQL()), args...).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		score := computeMatchScore(query, row.CanonicalName, row.MatchSource)
+		if row.MatchSource == "canonical" {
+			score += 0.1
+		}
+		results = append(results, manualFoodResultFromNutrition(row.FoodNutrition, score))
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFoodItem, collected bool) domain.ManualFoodResult {
+	item = r.normalizePublicFoodItem(item)
+	title := strings.TrimSpace(item.FoodName)
+	if title == "" {
+		title = strings.TrimSpace(item.Description)
+	}
+	if title == "" {
+		title = "真实餐食"
+	}
+	subtitleParts := make([]string, 0, 2)
+	if merchant := strings.TrimSpace(item.MerchantName); merchant != "" {
+		subtitleParts = append(subtitleParts, merchant)
+	}
+	if desc := strings.TrimSpace(item.Description); desc != "" && desc != title {
+		subtitleParts = append(subtitleParts, desc)
+	}
+	portionLabel := "1份"
+	defaultWeight := 1.0
+	if item.Items != nil && len(item.Items) == 1 {
+		if label := strings.TrimSpace(fmt.Sprintf("%v", item.Items[0]["manual_portion_label"])); label != "" && label != "<nil>" {
+			portionLabel = label
+		}
+		if intake := numberFromAny(item.Items[0]["intake"]); intake > 0 {
+			defaultWeight = intake
+		} else if weight := numberFromAny(item.Items[0]["weight"]); weight > 0 {
+			defaultWeight = weight
+		}
+	}
+	if defaultWeight <= 0 && item.TotalCalories > 0 {
+		defaultWeight = 1
+	}
+	highlights := make([]string, 0, 2)
+	if item.TotalProtein >= 20 {
+		highlights = append(highlights, fmt.Sprintf("蛋白 %.0fg", item.TotalProtein))
+	}
+	if item.TotalCalories > 0 && item.TotalCalories <= 350 {
+		highlights = append(highlights, fmt.Sprintf("%.0f kcal", item.TotalCalories))
+	}
+	return domain.ManualFoodResult{
+		ID:                  item.ID,
+		Source:              "public_library",
+		Title:               title,
+		Subtitle:            strings.Join(subtitleParts, " · "),
+		Category:            inferManualFoodCategory(title+" "+strings.Join(subtitleParts, " "), "public_library"),
+		DefaultWeightGrams:  defaultWeight,
+		TotalCalories:       item.TotalCalories,
+		TotalProtein:        item.TotalProtein,
+		TotalCarbs:          item.TotalCarbs,
+		TotalFat:            item.TotalFat,
+		Items:               item.Items,
+		ImagePath:           item.ImagePath,
+		ImagePaths:          item.ImagePaths,
+		PortionLabel:        portionLabel,
+		SourceLabel:         "真实餐食",
+		RecommendReason:     "整份复用更快，适合商家餐和外卖",
+		NutritionHighlights: highlights,
+		Collected:           collected,
+		LikeCount:           item.LikeCount,
+		CollectionCount:     item.CollectionCount,
+	}
+}
+
+func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64) domain.ManualFoodResult {
+	title := strings.TrimSpace(item.CanonicalName)
+	if title == "" {
+		title = "标准食物"
+	}
+	highlights := make([]string, 0, 2)
+	if item.ProteinPer100g >= 10 {
+		highlights = append(highlights, fmt.Sprintf("蛋白 %.1fg/100g", item.ProteinPer100g))
+	}
+	if item.KcalPer100g > 0 && item.KcalPer100g <= 120 {
+		highlights = append(highlights, fmt.Sprintf("%.0f kcal/100g", item.KcalPer100g))
+	}
+	return domain.ManualFoodResult{
+		ID:                 item.ID,
+		Source:             "nutrition_library",
+		Title:              title,
+		Subtitle:           "标准营养库",
+		Category:           inferManualFoodCategory(title, "nutrition_library"),
+		DefaultWeightGrams: 100,
+		TotalCalories:      item.KcalPer100g,
+		TotalProtein:       item.ProteinPer100g,
+		TotalCarbs:         item.CarbsPer100g,
+		TotalFat:           item.FatPer100g,
+		NutrientsPer100g: &domain.ManualFoodNutrients{
+			Calories: item.KcalPer100g,
+			Protein:  item.ProteinPer100g,
+			Carbs:    item.CarbsPer100g,
+			Fat:      item.FatPer100g,
+			Fiber:    item.FiberPer100g,
+			Sugar:    item.SugarPer100g,
+			SodiumMg: item.SodiumMgPer100g,
+		},
+		ExtraNutrients: &domain.ManualFoodNutrients{
+			Fiber:    item.FiberPer100g,
+			Sugar:    item.SugarPer100g,
+			SodiumMg: item.SodiumMgPer100g,
+		},
+		PortionLabel:        "100g",
+		SourceLabel:         "标准食物",
+		RecommendReason:     "按克重精调，适合单食材和自制餐",
+		NutritionHighlights: highlights,
+		MatchScore:          score,
+	}
+}
+
+func manualFoodResultFromRecordItem(source, sourceID, sourceTitle, portionLabel string, usageCount int, raw json.RawMessage) domain.ManualFoodResult {
+	type nutrientPayload struct {
+		Calories float64 `json:"calories"`
+		Protein  float64 `json:"protein"`
+		Carbs    float64 `json:"carbs"`
+		Fat      float64 `json:"fat"`
+		Fiber    float64 `json:"fiber"`
+		Sugar    float64 `json:"sugar"`
+		SodiumMg float64 `json:"sodium_mg"`
+	}
+	type recordItem struct {
+		Name      string          `json:"name"`
+		Weight    float64         `json:"weight"`
+		Intake    float64         `json:"intake"`
+		Nutrients nutrientPayload `json:"nutrients"`
+	}
+	var item recordItem
+	_ = json.Unmarshal(raw, &item)
+	title := strings.TrimSpace(sourceTitle)
+	if title == "" {
+		title = strings.TrimSpace(item.Name)
+	}
+	defaultWeight := item.Intake
+	if defaultWeight <= 0 {
+		defaultWeight = item.Weight
+	}
+	return domain.ManualFoodResult{
+		ID:                 strings.TrimSpace(sourceID),
+		Source:             strings.TrimSpace(source),
+		Title:              title,
+		Subtitle:           "最近常吃",
+		Category:           inferManualFoodCategory(title, source),
+		DefaultWeightGrams: defaultWeight,
+		TotalCalories:      item.Nutrients.Calories,
+		TotalProtein:       item.Nutrients.Protein,
+		TotalCarbs:         item.Nutrients.Carbs,
+		TotalFat:           item.Nutrients.Fat,
+		PortionLabel:       strings.TrimSpace(portionLabel),
+		SourceLabel:        sourceLabel(source),
+		UsageCount:         usageCount,
+		ExtraNutrients: &domain.ManualFoodNutrients{
+			Fiber:    item.Nutrients.Fiber,
+			Sugar:    item.Nutrients.Sugar,
+			SodiumMg: item.Nutrients.SodiumMg,
+		},
+	}
+}
+
+func manualFoodResultFromFrequentRecord(name string, usageCount int, avgWeight float64, avgCalories float64, avgProtein float64, avgCarbs float64, avgFat float64, raw json.RawMessage) domain.ManualFoodResult {
+	title := strings.TrimSpace(name)
+	if title == "" {
+		return domain.ManualFoodResult{}
+	}
+	defaultWeight := avgWeight
+	if defaultWeight <= 0 {
+		defaultWeight = 100
+	}
+	per100Scale := 100 / defaultWeight
+	if avgCalories <= 0 {
+		item := manualFoodResultFromRecordItem("nutrition_library", "catalog:"+title, title, "100g", usageCount, raw)
+		item.ID = "catalog:" + title
+		item.Source = "nutrition_library"
+		item.SourceLabel = "常用食物"
+		item.RecommendReason = "来自大家真实记录的高频食物"
+		return item
+	}
+	highlights := []string{fmt.Sprintf("记录过 %d 次", usageCount)}
+	if avgProtein > 8 {
+		highlights = append(highlights, fmt.Sprintf("蛋白 %.1fg", avgProtein))
+	}
+	return domain.ManualFoodResult{
+		ID:                 "catalog:" + title,
+		Source:             "nutrition_library",
+		Title:              title,
+		Subtitle:           "常用食物",
+		Category:           inferManualFoodCategory(title, "nutrition_library"),
+		DefaultWeightGrams: defaultWeight,
+		TotalCalories:      avgCalories,
+		TotalProtein:       avgProtein,
+		TotalCarbs:         avgCarbs,
+		TotalFat:           avgFat,
+		NutrientsPer100g: &domain.ManualFoodNutrients{
+			Calories: avgCalories * per100Scale,
+			Protein:  avgProtein * per100Scale,
+			Carbs:    avgCarbs * per100Scale,
+			Fat:      avgFat * per100Scale,
+		},
+		ExtraNutrients:      &domain.ManualFoodNutrients{},
+		PortionLabel:        fmt.Sprintf("%.0fg", defaultWeight),
+		SourceLabel:         "常用食物",
+		RecommendReason:     "来自真实记录的高频食物",
+		NutritionHighlights: highlights,
+		UsageCount:          usageCount,
+		MatchScore:          0.58,
+	}
+}
+
+func (r *ManualFoodRepo) normalizePublicFoodItem(item publicdomain.PublicFoodItem) publicdomain.PublicFoodItem {
+	if r.storage != nil {
+		item.ImagePaths = r.storage.ResolveReferenceURLs("food-images", item.ImagePaths)
+		if item.ImagePath != nil {
+			resolved := r.storage.ResolveReferenceURL("food-images", *item.ImagePath)
+			item.ImagePath = &resolved
+		}
+	}
+	if item.ImagePath == nil && len(item.ImagePaths) > 0 {
+		first := item.ImagePaths[0]
+		item.ImagePath = &first
+	}
+	return item
+}
+
+func sourceLabel(source string) string {
+	if strings.TrimSpace(source) == "public_library" {
+		return "真实餐食"
+	}
+	return "标准食物"
+}
+
+func clampLimit(limit, fallback, max int) int {
+	if limit <= 0 {
+		return fallback
+	}
+	if limit > max {
+		return max
+	}
+	return limit
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func computeMatchScore(query string, fields ...string) float64 {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return 0
+	}
+	best := 0.0
+	for _, field := range fields {
+		value := strings.ToLower(strings.TrimSpace(field))
+		switch {
+		case value == "":
+		case value == q:
+			if best < 1 {
+				best = 1
+			}
+		case strings.HasPrefix(value, q):
+			if best < 0.92 {
+				best = 0.92
+			}
+		case strings.Contains(value, q):
+			if best < 0.82 {
+				best = 0.82
+			}
+		}
+	}
+	return best
+}
+
+func manualFoodDisplayScore(item domain.ManualFoodResult, query string) float64 {
+	score := item.MatchScore
+	if item.UsageCount > 0 {
+		score += 0.25
+	}
+	if item.Collected {
+		score += 0.2
+	}
+	if item.Source == "nutrition_library" && containsCJK(item.Title) {
+		score += 0.18
+	}
+	if item.Source == "nutrition_library" && !containsCJK(item.Title) {
+		score -= 0.55
+	}
+	if item.Category == "staple" {
+		score += 0.18
+	}
+	if strings.Contains(strings.ToLower(strings.TrimSpace(item.Title)), strings.ToLower(strings.TrimSpace(query))) {
+		score += 0.12
+	}
+	return score
+}
+
+func dedupeManualFoodResults(items []domain.ManualFoodResult) []domain.ManualFoodResult {
+	seen := map[string]bool{}
+	out := make([]domain.ManualFoodResult, 0, len(items))
+	for _, item := range items {
+		key := item.Source + ":" + item.ID
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, item)
+	}
+	return out
+}
+
+func expandedSearchTerms(query string) []string {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil
+	}
+	terms := []string{q}
+	lower := strings.ToLower(q)
+	switch {
+	case q == "饭" || q == "米饭" || strings.Contains(lower, "rice"):
+		terms = append(terms, "米饭", "白米饭", "米", "rice", "cooked rice")
+	case strings.Contains(q, "面"):
+		terms = append(terms, "面条", "面", "noodle")
+	case strings.Contains(q, "鸡"):
+		terms = append(terms, "鸡肉", "鸡胸", "chicken")
+	case strings.Contains(q, "牛"):
+		terms = append(terms, "牛肉", "beef")
+	case strings.Contains(q, "蛋"):
+		terms = append(terms, "鸡蛋", "蛋", "egg")
+	}
+	return uniqueStrings(terms)
+}
+
+func uniqueStrings(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func manualFoodCatalogCategories() []domain.ManualFoodCatalogCategory {
+	return []domain.ManualFoodCatalogCategory{
+		{Key: "common", Label: "常见"},
+		{Key: "recent", Label: "最近"},
+		{Key: "favorites", Label: "收藏"},
+		{Key: "staple", Label: "主食"},
+		{Key: "protein", Label: "肉蛋奶"},
+		{Key: "vegetable", Label: "蔬菜"},
+		{Key: "fruit", Label: "水果"},
+		{Key: "dairy", Label: "乳品"},
+		{Key: "meal", Label: "菜肴"},
+		{Key: "other", Label: "其他"},
+	}
+}
+
+func normalizeManualFoodCatalogCategory(category string) string {
+	category = strings.TrimSpace(category)
+	if category == "" || category == "all" {
+		return "common"
+	}
+	for _, item := range manualFoodCatalogCategories() {
+		if item.Key == category {
+			return category
+		}
+	}
+	return "common"
+}
+
+func manualFoodCategorySQL(column string) string {
+	return fmt.Sprintf(`CASE
+		WHEN %s ILIKE ANY (ARRAY['%%沙拉%%','%%便当%%','%%套餐%%','%%外卖%%','%%餐%%','%%饭团%%','%%炒饭%%']) THEN 'meal'
+		WHEN %s ILIKE ANY (ARRAY['%%米饭%%','%%白米饭%%','%%糙米%%','%%饭%%','%%面条%%','%%馒头%%','%%包子%%','%%粥%%','%%燕麦%%','%%红薯%%','%%玉米%%','%%土豆%%','%%紫薯%%']) THEN 'staple'
+		WHEN %s ILIKE ANY (ARRAY['%%鸡%%','%%牛肉%%','%%猪肉%%','%%鱼%%','%%虾%%','%%蛋%%','%%豆腐%%','%%蛋白%%','%%鸭%%','%%鹅%%']) THEN 'protein'
+		WHEN %s ILIKE ANY (ARRAY['%%菜%%','%%西兰花%%','%%生菜%%','%%菠菜%%','%%番茄%%','%%黄瓜%%','%%白菜%%','%%秋葵%%']) THEN 'vegetable'
+		WHEN %s ILIKE ANY (ARRAY['%%苹果%%','%%香蕉%%','%%橙%%','%%梨%%','%%莓%%','%%果%%','%%西瓜%%','%%草莓%%']) THEN 'fruit'
+		WHEN %s ILIKE ANY (ARRAY['%%奶%%','%%酸奶%%','%%牛奶%%','%%奶酪%%']) THEN 'dairy'
+		ELSE 'other'
+	END`, column, column, column, column, column, column)
+}
+
+func nutritionBrowseOrderSQL() string {
+	return `
+		CASE
+			WHEN canonical_name IN ('米饭','白米饭','糙米饭','馒头','面条','鸡蛋','鸡胸肉','牛奶','豆腐','西兰花','香蕉','苹果','燕麦') THEN 0
+			WHEN canonical_name ~ '[一-龥]' THEN 1
+			ELSE 4
+		END ASC,
+		CASE
+			WHEN source LIKE '历史%' OR source LIKE 'deepseek%' THEN 0
+			WHEN source LIKE 'usda%' THEN 3
+			ELSE 1
+		END ASC,
+		canonical_name ASC
+	`
+}
+
+func nutritionSearchOrderSQL() string {
+	return `
+		CASE WHEN f.canonical_name ~ '[一-龥]' THEN 0 ELSE 2 END ASC,
+		CASE WHEN f.source LIKE 'usda%' THEN 2 ELSE 0 END ASC,
+		f.canonical_name ASC
+	`
+}
+
+func inferManualFoodCategory(text string, source string) string {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	categories := []struct {
+		keywords []string
+		value    string
+	}{
+		{[]string{"沙拉", "便当", "套餐", "外卖", "餐", "饭团"}, "meal"},
+		{[]string{"米饭", "白米饭", "糙米", "饭", "面条", "馒头", "包子", "粥", "燕麦", "rice", "noodle", "bread", "oat"}, "staple"},
+		{[]string{"鸡", "牛肉", "猪肉", "鱼", "虾", "蛋", "豆腐", "protein", "chicken", "beef", "egg", "tofu", "fish"}, "protein"},
+		{[]string{"菜", "西兰花", "生菜", "菠菜", "番茄", "蔬", "broccoli", "tomato", "vegetable"}, "vegetable"},
+		{[]string{"苹果", "香蕉", "橙", "梨", "莓", "果", "apple", "banana", "berry", "fruit"}, "fruit"},
+		{[]string{"奶", "酸奶", "牛奶", "cheese", "milk", "yogurt"}, "dairy"},
+	}
+	for _, category := range categories {
+		for _, keyword := range category.keywords {
+			if strings.Contains(normalized, strings.ToLower(keyword)) {
+				return category.value
+			}
+		}
+	}
+	if source == "public_library" {
+		return "meal"
+	}
+	return "other"
+}
+
+func containsCJK(value string) bool {
+	for _, r := range value {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
+}
+
+func numberFromAny(value any) float64 {
+	switch v := value.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case json.Number:
+		n, _ := v.Float64()
+		return n
+	case string:
+		var out float64
+		_, _ = fmt.Sscanf(strings.TrimSpace(v), "%f", &out)
+		return out
+	default:
+		return 0
+	}
 }

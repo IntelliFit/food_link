@@ -54,6 +54,19 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		referred_by_user_id TEXT,
 		points_balance REAL
 	)`)
+	db.Exec(`CREATE TABLE user_daily_nutrition_targets (
+		id TEXT PRIMARY KEY,
+		user_id TEXT,
+		target_date TEXT,
+		calorie_target REAL,
+		protein_target REAL,
+		carbs_target REAL,
+		fat_target REAL,
+		source TEXT,
+		created_at TIMESTAMP,
+		updated_at TIMESTAMP,
+		UNIQUE(user_id, target_date)
+	)`)
 	db.Exec(`CREATE TABLE user_health_documents (
 		id TEXT PRIMARY KEY,
 		user_id TEXT,
@@ -288,6 +301,33 @@ func TestUserService_UpdateDashboardTargets(t *testing.T) {
 	result, err := svc.UpdateDashboardTargets(ctx, user.ID, UpdateDashboardTargetsInput{CalorieTarget: 1800, ProteinTarget: 100, CarbsTarget: 200, FatTarget: 60})
 	assert.NoError(t, err)
 	assert.Equal(t, 1800.0, result["calorie_target"])
+}
+
+func TestUserService_UpdateDashboardTargets_WithTargetDateStoresDailyOverride(t *testing.T) {
+	db := setupTestDB(t)
+	userRepo := repo.NewUserRepo(db)
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
+	ctx := context.Background()
+
+	user := &repo.User{OpenID: "o1"}
+	_ = userRepo.Create(ctx, user)
+
+	result, err := svc.UpdateDashboardTargets(ctx, user.ID, UpdateDashboardTargetsInput{
+		TargetDate:    "2026-05-19",
+		CalorieTarget: 1800,
+		ProteinTarget: 100,
+		CarbsTarget:   200,
+		FatTarget:     60,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 1800.0, result["calorie_target"])
+
+	var row domain.DailyNutritionTarget
+	err = db.Table((&domain.DailyNutritionTarget{}).TableName()).
+		Where("user_id = ? AND target_date = ?", user.ID, "2026-05-19").
+		First(&row).Error
+	assert.NoError(t, err)
+	assert.Equal(t, 100.0, row.ProteinTarget)
 }
 
 func TestUserService_UpdateDashboardTargets_NotFound(t *testing.T) {
@@ -665,6 +705,10 @@ func TestBuildDashboardTargets_WithDashboardTargets(t *testing.T) {
 func TestNormalizeExecutionMode(t *testing.T) {
 	mode := "strict"
 	assert.Equal(t, "strict", normalizeExecutionMode(&mode))
+	gemini35 := "gemini35_flash"
+	assert.Equal(t, "gemini35_flash", normalizeExecutionMode(&gemini35))
+	grouped := "gemini35_flash_grouped"
+	assert.Equal(t, "gemini35_flash_grouped", normalizeExecutionMode(&grouped))
 	assert.Equal(t, "standard", normalizeExecutionMode(nil))
 	invalid := "invalid"
 	assert.Equal(t, "standard", normalizeExecutionMode(&invalid))

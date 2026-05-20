@@ -33,7 +33,6 @@ type TaskService interface {
 	GetTask(ctx context.Context, taskID, userID string) (*domain.AnalysisTask, error)
 	UpdateTaskResult(ctx context.Context, taskID, userID string, result map[string]any) error
 	DeleteTask(ctx context.Context, taskID, userID string) (map[string]any, error)
-	DeleteUnrecordedTasks(ctx context.Context, userID string) (map[string]any, error)
 	CleanupTimeoutTasks(ctx context.Context, timeoutMinutes int, adminKey, expectedAdminKey string) (int64, error)
 }
 
@@ -332,17 +331,6 @@ func (h *AnalyzeHandler) DeleteTask(c *gin.Context) {
 	response.Success(c, data)
 }
 
-// DELETE /api/analyze/tasks/unrecorded (jwt_required)
-func (h *AnalyzeHandler) DeleteUnrecordedTasks(c *gin.Context) {
-	userID := c.GetString(authmw.ContextUserIDKey)
-	data, err := h.taskSvc.DeleteUnrecordedTasks(c.Request.Context(), userID)
-	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	response.Success(c, data)
-}
-
 // POST /api/analyze/tasks/cleanup-timeout (public, admin only)
 func (h *AnalyzeHandler) CleanupTimeoutTasks(c *gin.Context) {
 	adminKey := c.Query("admin_key")
@@ -392,7 +380,7 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		return
 	}
 	sessionID := c.Param("session_id")
-	mode := "strict"
+	mode := "experimental"
 	input := service.SubmitTaskInput{
 		ImageURL:              strings.TrimSpace(body.ImageURL),
 		ImageURLs:             body.ImageURLs,

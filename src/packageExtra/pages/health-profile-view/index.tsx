@@ -45,7 +45,10 @@ const GOAL_MAP: Record<string, string> = {
 }
 const EXECUTION_MODE_MAP: Record<string, string> = {
   strict: '精准模式',
-  standard: '标准模式'
+  experimental: '普通模式',
+  gemini35_flash: '精准模式',
+  gemini35_flash_grouped: '精准模式',
+  standard: '普通模式'
 }
 const MEDICAL_MAP: Record<string, string> = {
   diabetes: '糖尿病',
@@ -90,8 +93,11 @@ const ACTIVITY_OPTIONS = [
 ]
 const EXECUTION_MODE_OPTIONS: Array<{ label: string; value: ExecutionMode }> = [
   { label: '精准模式', value: 'strict' },
-  { label: '标准模式', value: 'standard' }
+  { label: '普通模式', value: 'standard' }
 ]
+const normalizeVisibleExecutionMode = (value: unknown): ExecutionMode => (
+  value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped' ? 'strict' : 'standard'
+)
 const MEDICAL_OPTIONS = [
   { label: '糖尿病', value: 'diabetes' },
   { label: '高血压', value: 'hypertension' },
@@ -352,7 +358,7 @@ function HealthProfileViewPage() {
         currentValue = parseRoutineHours(profile?.health_condition?.routine_type || '')
         break
       }
-      case 'execution_mode': currentValue = profile?.execution_mode || 'standard'; break
+      case 'execution_mode': currentValue = normalizeVisibleExecutionMode(profile?.execution_mode); break
       case 'medical_history': {
         const list = (profile?.health_condition?.medical_history as string[]) || []
         const predefinedValues = MEDICAL_OPTIONS.map(opt => opt.value)
@@ -432,7 +438,7 @@ function HealthProfileViewPage() {
       diet_goal: profile.diet_goal || undefined,
       activity_level: getDailyLifeActivityLevel(profile) || undefined,
       daily_life_activity_level: getDailyLifeActivityLevel(profile) || undefined,
-      execution_mode: profile.execution_mode || 'standard',
+      execution_mode: normalizeVisibleExecutionMode(profile.execution_mode),
       routine_type: profile.health_condition?.routine_type || undefined,
       routine_sleep_hour: profile.health_condition?.routine_sleep_hour as number | undefined,
       routine_wake_hour: profile.health_condition?.routine_wake_hour as number | undefined,
@@ -1042,7 +1048,7 @@ function HealthProfileViewPage() {
           <EditableRow
             label='执行模式'
             field='execution_mode'
-            value={profile.execution_mode ? EXECUTION_MODE_MAP[profile.execution_mode] || profile.execution_mode : '标准模式（便捷估算）'}
+            value={profile.execution_mode ? EXECUTION_MODE_MAP[profile.execution_mode] || profile.execution_mode : '普通模式'}
           />
         </View>
 

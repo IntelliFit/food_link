@@ -348,7 +348,7 @@ func TestMembershipService_ValidateFoodAnalysisCredits_UsesEarnedAfterSystem(t *
 	assert.Equal(t, 5, user.EarnedCreditsBalance)
 }
 
-func TestMembershipService_ValidateFoodAnalysisCredits_StrictRequiresStandardTier(t *testing.T) {
+func TestMembershipService_ValidateFoodAnalysisCredits_StrictRequiresStandardTierButUsesStandardCost(t *testing.T) {
 	future := time.Now().Add(24 * time.Hour)
 	light := "light_monthly"
 	mockRepo := &mockMembershipRepo{
@@ -369,6 +369,61 @@ func TestMembershipService_ValidateFoodAnalysisCredits_StrictRequiresStandardTie
 	standard := "standard_monthly"
 	mockRepo.membership.CurrentPlanCode = &standard
 	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict", "")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostStandardFoodAnalysis, credits["credit_cost"])
+}
+
+func TestMembershipService_ValidateFoodAnalysisCredits_ExperimentalUsesPrecisionCostAndTier(t *testing.T) {
+	future := time.Now().Add(24 * time.Hour)
+	light := "light_monthly"
+	mockRepo := &mockMembershipRepo{
+		user: &membershiprepo.User{ID: "u1"},
+		membership: &domain.UserMembership{
+			ID:              "um1",
+			UserID:          "u1",
+			CurrentPlanCode: &light,
+			Status:          "active",
+			ExpiresAt:       &future,
+			DailyCredits:    20,
+		},
+	}
+	svc := NewMembershipService(mockRepo)
+	_, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "experimental", "")
+	assert.Error(t, err)
+
+	standard := "standard_monthly"
+	mockRepo.membership.CurrentPlanCode = &standard
+	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "experimental", "")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostPrecisionFoodAnalysis, credits["credit_cost"])
+}
+
+func TestMembershipService_ValidateFoodAnalysisCredits_Gemini35Modes(t *testing.T) {
+	future := time.Now().Add(24 * time.Hour)
+	light := "light_monthly"
+	mockRepo := &mockMembershipRepo{
+		user: &membershiprepo.User{ID: "u1"},
+		membership: &domain.UserMembership{
+			ID:              "um1",
+			UserID:          "u1",
+			CurrentPlanCode: &light,
+			Status:          "active",
+			ExpiresAt:       &future,
+			DailyCredits:    20,
+		},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "gemini35_flash", "")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostStandardFoodAnalysis, credits["credit_cost"])
+
+	_, err = svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "gemini35_flash_grouped", "")
+	assert.Error(t, err)
+
+	standard := "standard_monthly"
+	mockRepo.membership.CurrentPlanCode = &standard
+	credits, err = svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "gemini35_flash_grouped", "")
 	require.NoError(t, err)
 	assert.Equal(t, creditCostPrecisionFoodAnalysis, credits["credit_cost"])
 }

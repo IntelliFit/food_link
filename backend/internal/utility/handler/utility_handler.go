@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	authmw "food_link/backend/internal/auth"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/utility/domain"
 
@@ -20,8 +21,9 @@ type QRCodeService interface {
 }
 
 type ManualFoodService interface {
-	Browse(ctx context.Context, category string, limit int) ([]domain.ManualFood, error)
-	Search(ctx context.Context, keyword string, limit int) ([]domain.ManualFood, error)
+	Browse(ctx context.Context, userID string, limit int) (*domain.ManualFoodBrowseResult, error)
+	Catalog(ctx context.Context, userID string, category string, page int, pageSize int) (*domain.ManualFoodCatalogResult, error)
+	Search(ctx context.Context, userID string, keyword string, limit int) ([]domain.ManualFoodResult, error)
 }
 
 type UtilityHandler struct {
@@ -100,7 +102,6 @@ func (h *UtilityHandler) QRCode(c *gin.Context) {
 
 // GET /api/manual-food/browse
 func (h *UtilityHandler) ManualFoodBrowse(c *gin.Context) {
-	category := c.Query("category")
 	limitStr := c.Query("limit")
 	limit := 20
 	if limitStr != "" {
@@ -108,17 +109,35 @@ func (h *UtilityHandler) ManualFoodBrowse(c *gin.Context) {
 			limit = n
 		}
 	}
-	items, err := h.manualFoodSvc.Browse(c.Request.Context(), category, limit)
+	userID, _ := c.Get(authmw.ContextUserIDKey)
+	items, err := h.manualFoodSvc.Browse(c.Request.Context(), stringValue(userID), limit)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"items": items})
+	response.Success(c, items)
+}
+
+// GET /api/manual-food/catalog
+func (h *UtilityHandler) ManualFoodCatalog(c *gin.Context) {
+	category := c.Query("category")
+	page := parsePositiveInt(c.Query("page"), 1)
+	pageSize := parsePositiveInt(c.Query("page_size"), 30)
+	userID, _ := c.Get(authmw.ContextUserIDKey)
+	result, err := h.manualFoodSvc.Catalog(c.Request.Context(), stringValue(userID), category, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 // GET /api/manual-food/search
 func (h *UtilityHandler) ManualFoodSearch(c *gin.Context) {
-	keyword := c.Query("keyword")
+	keyword := c.Query("q")
+	if keyword == "" {
+		keyword = c.Query("keyword")
+	}
 	limitStr := c.Query("limit")
 	limit := 20
 	if limitStr != "" {
@@ -126,10 +145,29 @@ func (h *UtilityHandler) ManualFoodSearch(c *gin.Context) {
 			limit = n
 		}
 	}
-	items, err := h.manualFoodSvc.Search(c.Request.Context(), keyword, limit)
+	userID, _ := c.Get(authmw.ContextUserIDKey)
+	items, err := h.manualFoodSvc.Search(c.Request.Context(), stringValue(userID), keyword, limit)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"items": items})
+	response.Success(c, gin.H{"results": items})
+}
+
+func parsePositiveInt(value string, fallback int) int {
+	if value == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
+}
+
+func stringValue(value any) string {
+	if v, ok := value.(string); ok {
+		return v
+	}
+	return ""
 }

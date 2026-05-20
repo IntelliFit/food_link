@@ -81,9 +81,10 @@ const MEAL_OPTIONS = [
 ]
 type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
-const normalizeExecutionMode = (value: unknown): ExecutionMode => (
-  value === 'strict' ? 'strict' : 'standard'
-)
+const normalizeExecutionMode = (value: unknown): ExecutionMode => {
+  if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
+  return 'standard'
+}
 
 const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
   value === 'legacy_direct' ? 'legacy_direct' : 'db_first'
@@ -874,7 +875,7 @@ function ResultPage() {
       })
     } catch (e: any) {
       Taro.hideLoading()
-      await showUnifiedApiError(e, '继续精准模式失败')
+      await showUnifiedApiError(e, '继续分析失败')
     } finally {
       setContinuingPrecision(false)
     }
@@ -1784,7 +1785,7 @@ function ResultPage() {
             <View className='execution-mode-left'>
               <View className={`execution-mode-tag ${executionMode}`}>
                 <Text className='execution-mode-tag-text'>
-                  {executionMode === 'strict' ? '精准' : '标准'}
+                  {executionMode === 'strict' ? '精准' : '普通'}
                 </Text>
               </View>
               <Text className='execution-mode-default-link' onClick={handleDefaultModeEdit}>
@@ -1806,7 +1807,7 @@ function ResultPage() {
             <View className={`recognition-status-card outcome-${recognitionOutcome}`}>
               <View className='recognition-status-header'>
                 <View className='recognition-status-title-wrap'>
-                  <Text className='recognition-status-label'>精准模式判定</Text>
+                  <Text className='recognition-status-label'>识别判定</Text>
                   <Text className='recognition-status-title'>{RECOGNITION_OUTCOME_META[recognitionOutcome].title}</Text>
                 </View>
                 <View className={`recognition-chip chip-${recognitionOutcome}`}>
@@ -1835,7 +1836,7 @@ function ResultPage() {
               <View className='followup-question-header'>
                 <View className='followup-question-title-wrap'>
                   <Text className='followup-question-label'>还需要你补充的信息</Text>
-                  <Text className='followup-question-title'>补充后再分析会更接近精准模式</Text>
+                  <Text className='followup-question-title'>补充后再分析会更接近真实份量</Text>
                 </View>
                 <Text className='followup-question-action' onClick={openCorrectionDrawer}>去补充</Text>
               </View>
@@ -1857,7 +1858,7 @@ function ResultPage() {
             <View className='precision-continue-card'>
               <View className='followup-question-header'>
                 <View className='followup-question-title-wrap'>
-                  <Text className='followup-question-label'>精准模式下一步</Text>
+                  <Text className='followup-question-label'>下一步</Text>
                   <Text className='followup-question-title'>
                     {precisionStatus === 'needs_retake' ? '这轮可以先重拍再继续' : '这轮也可以继续补充更多信息'}
                   </Text>
@@ -1935,7 +1936,7 @@ function ResultPage() {
               <View className='precision-reference-block'>
                 <Text className='insight-label'>参考物</Text>
                 <Text className='followup-question-desc'>
-                  默认会记住你当前选中的参考物和尺寸，下次精准模式可直接复用。
+                  默认会记住你当前选中的参考物和尺寸，下次可直接复用。
                 </Text>
                 <View className='state-options'>
                   {PRECISION_REFERENCE_PRESETS.map((preset) => (

@@ -46,25 +46,23 @@ func (m *mockAnalyzeService) AnalyzeBatch(ctx context.Context, userID string, in
 }
 
 type mockTaskService struct {
-	submitTaskID           string
-	submitErr              error
-	batchTaskID            string
-	batchTaskErr           error
-	tasks                  []domain.AnalysisTask
-	listErr                error
-	count                  int64
-	countErr               error
-	statusCounts           map[string]any
-	statusCountErr         error
-	task                   *domain.AnalysisTask
-	getErr                 error
-	updateErr              error
-	deleteResult           map[string]any
-	deleteErr              error
-	deleteUnrecordedResult map[string]any
-	deleteUnrecordedErr    error
-	cleanupAffected        int64
-	cleanupErr             error
+	submitTaskID    string
+	submitErr       error
+	batchTaskID     string
+	batchTaskErr    error
+	tasks           []domain.AnalysisTask
+	listErr         error
+	count           int64
+	countErr        error
+	statusCounts    map[string]any
+	statusCountErr  error
+	task            *domain.AnalysisTask
+	getErr          error
+	updateErr       error
+	deleteResult    map[string]any
+	deleteErr       error
+	cleanupAffected int64
+	cleanupErr      error
 }
 
 func (m *mockTaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input service.SubmitTaskInput) (string, error) {
@@ -94,9 +92,6 @@ func (m *mockTaskService) UpdateTaskResult(ctx context.Context, taskID, userID s
 func (m *mockTaskService) DeleteTask(ctx context.Context, taskID, userID string) (map[string]any, error) {
 	return m.deleteResult, m.deleteErr
 }
-func (m *mockTaskService) DeleteUnrecordedTasks(ctx context.Context, userID string) (map[string]any, error) {
-	return m.deleteUnrecordedResult, m.deleteUnrecordedErr
-}
 func (m *mockTaskService) CleanupTimeoutTasks(ctx context.Context, timeoutMinutes int, adminKey, expectedAdminKey string) (int64, error) {
 	return m.cleanupAffected, m.cleanupErr
 }
@@ -118,7 +113,6 @@ func setupRouter(h *AnalyzeHandler) *gin.Engine {
 	r.GET("/api/analyze/tasks", h.ListTasks)
 	r.GET("/api/analyze/tasks/count", h.CountTasks)
 	r.GET("/api/analyze/tasks/status-count", h.CountTasksByStatus)
-	r.DELETE("/api/analyze/tasks/unrecorded", h.DeleteUnrecordedTasks)
 	r.GET("/api/analyze/tasks/:task_id", h.GetTask)
 	r.PATCH("/api/analyze/tasks/:task_id/result", h.UpdateTaskResult)
 	r.DELETE("/api/analyze/tasks/:task_id", h.DeleteTask)
@@ -357,24 +351,6 @@ func TestAnalyzeHandler_DeleteTask(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, true, data["deleted"])
-}
-
-func TestAnalyzeHandler_DeleteUnrecordedTasks(t *testing.T) {
-	mockSvc := &mockAnalyzeService{}
-	mockTask := &mockTaskService{deleteUnrecordedResult: map[string]any{"deleted": true, "count": int64(3)}}
-	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
-	r := setupRouter(h)
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodDelete, "/api/analyze/tasks/unrecorded", nil)
-	r.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	var resp map[string]any
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	data := resp["data"].(map[string]any)
-	assert.Equal(t, true, data["deleted"])
-	assert.Equal(t, float64(3), data["count"])
 }
 
 func TestAnalyzeHandler_CleanupTimeoutTasks(t *testing.T) {

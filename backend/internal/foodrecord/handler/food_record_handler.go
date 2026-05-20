@@ -104,7 +104,11 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"id": record.ID, "message": "记录成功"})
+	response.Success(c, gin.H{
+		"id":            record.ID,
+		"message":       "记录成功",
+		"already_saved": record.AlreadySaved,
+	})
 }
 
 // GET /api/food-record/list

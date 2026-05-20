@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -46,6 +48,7 @@ type InviteRewardActivator interface {
 type WaterLogRecorder interface {
 	CreateWaterLog(ctx context.Context, log *healthdomain.BodyWaterLog) error
 	ReduceWaterLogsByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string, amountMl int) (int, error)
+	SumWaterByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string) (int64, error)
 }
 
 func NewFoodRecordService(
@@ -109,6 +112,23 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	if !validMealType(input.MealType) {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "meal_type 不合法", HTTPStatus: 400}
 	}
+	if input.SourceTaskID != nil {
+		trimmed := strings.TrimSpace(*input.SourceTaskID)
+		if trimmed == "" {
+			input.SourceTaskID = nil
+		} else {
+			input.SourceTaskID = &trimmed
+			existing, err := s.recordRepo.GetByUserSourceTaskID(ctx, userID, trimmed)
+			if err != nil {
+				return nil, err
+			}
+			if existing != nil {
+				s.ensureExistingFoodWaterIntake(ctx, userID, existing)
+				existing.AlreadySaved = true
+				return existing, nil
+			}
+		}
+	}
 	input.ImagePaths = s.normalizeImagePaths(input.ImagePaths)
 	if input.ImagePath != nil {
 		resolved := s.resolveFoodImageURL(*input.ImagePath)
@@ -151,13 +171,34 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		RecordTime:       recordTime,
 	}
 	if err := s.recordRepo.Create(ctx, record); err != nil {
+		if input.SourceTaskID != nil && isDuplicateRecordError(err) {
+			existing, lookupErr := s.recordRepo.GetByUserSourceTaskID(ctx, userID, *input.SourceTaskID)
+			if lookupErr != nil {
+				return nil, lookupErr
+			}
+			if existing != nil {
+				s.ensureExistingFoodWaterIntake(ctx, userID, existing)
+				existing.AlreadySaved = true
+				return existing, nil
+			}
+		}
 		return nil, err
 	}
 	if err := s.recordFoodWaterIntake(ctx, userID, record); err != nil {
-		return nil, err
+		// Food water is a derived side effect. A schema/config drift in water logs
+		// must not make the primary food record fail after it has been created.
+		fmt.Printf("[foodrecord] record food water intake failed user_id=%s record_id=%s err=%v\n", userID, record.ID, err)
 	}
 	s.activateInviteReward(ctx, userID, "food_record")
 	return record, nil
+}
+
+func isDuplicateRecordError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique") || strings.Contains(msg, "23505")
 }
 
 func (s *FoodRecordService) recordFoodWaterIntake(ctx context.Context, userID string, record *domain.FoodRecord) error {
@@ -168,23 +209,58 @@ func (s *FoodRecordService) recordFoodWaterIntake(ctx context.Context, userID st
 	if amountMl <= 0 {
 		return nil
 	}
-	return s.recordFoodWaterAmount(ctx, userID, foodRecordWaterDate(record.RecordTime), amountMl)
+	return s.recordFoodWaterAmount(ctx, userID, record.ID, foodRecordWaterDate(record.RecordTime), amountMl)
 }
 
-func (s *FoodRecordService) adjustFoodWaterIntake(ctx context.Context, userID string, recordTime *time.Time, deltaMl int) error {
+func (s *FoodRecordService) ensureExistingFoodWaterIntake(ctx context.Context, userID string, record *domain.FoodRecord) {
+	if s.waterLogs == nil || record == nil || strings.TrimSpace(userID) == "" {
+		return
+	}
+	amountMl := totalFoodWaterIntakeMl(record.Items)
+	if amountMl <= 0 {
+		return
+	}
+	sourceType := foodWaterSourceType(record.ID)
+	if sourceType == "" {
+		return
+	}
+	recordedDate := foodRecordWaterDate(record.RecordTime)
+	existingMl, err := s.waterLogs.SumWaterByDateSource(ctx, userID, recordedDate.Format("2006-01-02"), sourceType)
+	if err != nil {
+		fmt.Printf("[foodrecord] check existing food water failed user_id=%s record_id=%s err=%v\n", userID, record.ID, err)
+		return
+	}
+	missingMl := amountMl - int(existingMl)
+	if missingMl <= 0 {
+		return
+	}
+	if err := s.recordFoodWaterAmount(ctx, userID, record.ID, recordedDate, missingMl); err != nil {
+		fmt.Printf("[foodrecord] backfill existing food water failed user_id=%s record_id=%s missing_ml=%d err=%v\n", userID, record.ID, missingMl, err)
+	}
+}
+
+func (s *FoodRecordService) adjustFoodRecordWaterIntake(ctx context.Context, userID string, recordID string, recordTime *time.Time, deltaMl int) error {
 	if s.waterLogs == nil || strings.TrimSpace(userID) == "" || deltaMl == 0 {
 		return nil
 	}
 	recordedDate := foodRecordWaterDate(recordTime)
 	if deltaMl > 0 {
-		return s.recordFoodWaterAmount(ctx, userID, recordedDate, deltaMl)
+		return s.recordFoodWaterAmount(ctx, userID, recordID, recordedDate, deltaMl)
 	}
-	_, err := s.waterLogs.ReduceWaterLogsByDateSource(ctx, userID, recordedDate.Format("2006-01-02"), "ai", -deltaMl)
+	sourceType := foodWaterSourceType(recordID)
+	if sourceType == "" {
+		return nil
+	}
+	_, err := s.waterLogs.ReduceWaterLogsByDateSource(ctx, userID, recordedDate.Format("2006-01-02"), sourceType, -deltaMl)
 	return err
 }
 
-func (s *FoodRecordService) recordFoodWaterAmount(ctx context.Context, userID string, recordedDate time.Time, amountMl int) error {
+func (s *FoodRecordService) recordFoodWaterAmount(ctx context.Context, userID string, recordID string, recordedDate time.Time, amountMl int) error {
 	if s.waterLogs == nil || amountMl <= 0 {
+		return nil
+	}
+	sourceType := foodWaterSourceType(recordID)
+	if sourceType == "" {
 		return nil
 	}
 	for amountMl > 0 {
@@ -197,7 +273,7 @@ func (s *FoodRecordService) recordFoodWaterAmount(ctx context.Context, userID st
 			UserID:     userID,
 			AmountMl:   chunk,
 			RecordedOn: &recordedDate,
-			SourceType: "ai",
+			SourceType: sourceType,
 			CreatedAt:  &now,
 		}
 		if err := s.waterLogs.CreateWaterLog(ctx, log); err != nil {
@@ -206,6 +282,14 @@ func (s *FoodRecordService) recordFoodWaterAmount(ctx context.Context, userID st
 		amountMl -= chunk
 	}
 	return nil
+}
+
+func foodWaterSourceType(recordID string) string {
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return ""
+	}
+	return "ai_food_record:" + recordID
 }
 
 func foodRecordWaterDate(recordTime *time.Time) time.Time {
@@ -354,7 +438,7 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	}
 	if input.Items != nil {
 		nextWaterMl := totalFoodWaterIntakeMl(record.Items)
-		if err := s.adjustFoodWaterIntake(ctx, userID, previousRecordTime, nextWaterMl-previousWaterMl); err != nil {
+		if err := s.adjustFoodRecordWaterIntake(ctx, userID, record.ID, previousRecordTime, nextWaterMl-previousWaterMl); err != nil {
 			return nil, err
 		}
 	}
@@ -382,7 +466,7 @@ func (s *FoodRecordService) Delete(ctx context.Context, userID, recordID string)
 		return err
 	}
 	if waterMl > 0 {
-		return s.adjustFoodWaterIntake(ctx, userID, record.RecordTime, -waterMl)
+		return s.adjustFoodRecordWaterIntake(ctx, userID, record.ID, record.RecordTime, -waterMl)
 	}
 	return nil
 }
@@ -463,7 +547,180 @@ func (s *FoodRecordService) hydrateRecordWithContext(ctx context.Context, record
 		record.ImagePath = nil
 	}
 	s.hydrateRecordNutrientsFromTask(ctx, record)
+	hydrateManualRecordNutrients(record)
 	return record
+}
+
+var manualKnownFoodNutrientsPer100g = map[string]domain.FoodItemNutrients{
+	normalizeRecordFoodName("白米饭"): {
+		Calories: 151,
+		Protein:  2.7,
+		Carbs:    33.1,
+		Fat:      0.3,
+	},
+	normalizeRecordFoodName("米饭"): {
+		Calories: 151,
+		Protein:  2.7,
+		Carbs:    33.1,
+		Fat:      0.3,
+	},
+	normalizeRecordFoodName("水煮蛋"): {
+		Calories: 95,
+		Protein:  12.7,
+		Carbs:    1.1,
+		Fat:      6.5,
+	},
+	normalizeRecordFoodName("鸡蛋"): {
+		Calories: 95,
+		Protein:  12.7,
+		Carbs:    1.1,
+		Fat:      6.5,
+	},
+	normalizeRecordFoodName("香蕉"): {
+		Calories: 89,
+		Protein:  1.1,
+		Carbs:    22.8,
+		Fat:      0.3,
+	},
+	normalizeRecordFoodName("全脂牛奶"): {
+		Calories: 61,
+		Protein:  3.2,
+		Carbs:    4.8,
+		Fat:      3.3,
+	},
+	normalizeRecordFoodName("面条"): {
+		Calories: 109,
+		Protein:  3.9,
+		Carbs:    22.8,
+		Fat:      0.4,
+	},
+}
+
+func hydrateManualRecordNutrients(record *domain.FoodRecord) {
+	if record == nil || len(record.Items) == 0 {
+		return
+	}
+	hasManualItem := false
+	for _, item := range record.Items {
+		if item.ManualSource != nil || item.ManualSourceID != nil || item.ManualSourceTitle != nil {
+			hasManualItem = true
+			break
+		}
+	}
+	if !hasManualItem {
+		return
+	}
+	for index := range record.Items {
+		if !foodItemNutrientsMissing(record.Items[index].Nutrients) {
+			continue
+		}
+		name := strings.TrimSpace(record.Items[index].Name)
+		if record.Items[index].ManualSourceTitle != nil && strings.TrimSpace(*record.Items[index].ManualSourceTitle) != "" {
+			name = strings.TrimSpace(*record.Items[index].ManualSourceTitle)
+		}
+		if per100, ok := manualKnownFoodNutrientsPer100g[normalizeRecordFoodName(name)]; ok {
+			record.Items[index].Nutrients = scaleFoodItemNutrients(per100, manualItemIntakeGrams(record.Items[index])/100)
+		}
+	}
+	fillMissingManualNutrientsFromRecordTotals(record)
+}
+
+func fillMissingManualNutrientsFromRecordTotals(record *domain.FoodRecord) {
+	missingWeight := 0.0
+	for _, item := range record.Items {
+		if foodItemNutrientsMissing(item.Nutrients) {
+			missingWeight += manualItemIntakeGrams(item)
+		}
+	}
+	if missingWeight <= 0 {
+		return
+	}
+	remaining := domain.FoodItemNutrients{
+		Calories: record.TotalCalories,
+		Protein:  record.TotalProtein,
+		Carbs:    record.TotalCarbs,
+		Fat:      record.TotalFat,
+	}
+	for _, item := range record.Items {
+		if foodItemNutrientsMissing(item.Nutrients) {
+			continue
+		}
+		remaining.Calories -= item.Nutrients.Calories
+		remaining.Protein -= item.Nutrients.Protein
+		remaining.Carbs -= item.Nutrients.Carbs
+		remaining.Fat -= item.Nutrients.Fat
+	}
+	remaining.Calories = math.Max(0, remaining.Calories)
+	remaining.Protein = math.Max(0, remaining.Protein)
+	remaining.Carbs = math.Max(0, remaining.Carbs)
+	remaining.Fat = math.Max(0, remaining.Fat)
+	if remaining.Calories <= 0 && remaining.Protein <= 0 && remaining.Carbs <= 0 && remaining.Fat <= 0 {
+		return
+	}
+	for index := range record.Items {
+		if !foodItemNutrientsMissing(record.Items[index].Nutrients) {
+			continue
+		}
+		weight := manualItemIntakeGrams(record.Items[index])
+		if weight <= 0 {
+			weight = missingWeight / float64(len(record.Items))
+		}
+		record.Items[index].Nutrients = scaleFoodItemNutrients(remaining, weight/missingWeight)
+	}
+}
+
+func foodItemNutrientsMissing(n domain.FoodItemNutrients) bool {
+	return n.Calories <= 0 && n.Protein <= 0 && n.Carbs <= 0 && n.Fat <= 0
+}
+
+func manualItemIntakeGrams(item domain.FoodItem) float64 {
+	if item.Intake > 0 {
+		return item.Intake
+	}
+	if item.Weight > 0 && item.Ratio > 0 {
+		return item.Weight * item.Ratio / 100
+	}
+	if item.Weight > 0 {
+		return item.Weight
+	}
+	return 0
+}
+
+func scaleFoodItemNutrients(n domain.FoodItemNutrients, scale float64) domain.FoodItemNutrients {
+	if scale <= 0 {
+		return domain.FoodItemNutrients{}
+	}
+	return domain.FoodItemNutrients{
+		Calories:       roundOneDecimal(n.Calories * scale),
+		Protein:        roundOneDecimal(n.Protein * scale),
+		Carbs:          roundOneDecimal(n.Carbs * scale),
+		Fat:            roundOneDecimal(n.Fat * scale),
+		Fiber:          roundOneDecimal(n.Fiber * scale),
+		Sugar:          roundOneDecimal(n.Sugar * scale),
+		SaturatedFat:   roundOneDecimal(n.SaturatedFat * scale),
+		CholesterolMg:  roundOneDecimal(n.CholesterolMg * scale),
+		SodiumMg:       roundOneDecimal(n.SodiumMg * scale),
+		PotassiumMg:    roundOneDecimal(n.PotassiumMg * scale),
+		CalciumMg:      roundOneDecimal(n.CalciumMg * scale),
+		IronMg:         roundOneDecimal(n.IronMg * scale),
+		MagnesiumMg:    roundOneDecimal(n.MagnesiumMg * scale),
+		ZincMg:         roundOneDecimal(n.ZincMg * scale),
+		VitaminARaeMcg: roundOneDecimal(n.VitaminARaeMcg * scale),
+		VitaminCMg:     roundOneDecimal(n.VitaminCMg * scale),
+		VitaminDMcg:    roundOneDecimal(n.VitaminDMcg * scale),
+		VitaminEMg:     roundOneDecimal(n.VitaminEMg * scale),
+		VitaminKMcg:    roundOneDecimal(n.VitaminKMcg * scale),
+		ThiaminMg:      roundOneDecimal(n.ThiaminMg * scale),
+		RiboflavinMg:   roundOneDecimal(n.RiboflavinMg * scale),
+		NiacinMg:       roundOneDecimal(n.NiacinMg * scale),
+		VitaminB6Mg:    roundOneDecimal(n.VitaminB6Mg * scale),
+		FolateMcg:      roundOneDecimal(n.FolateMcg * scale),
+		VitaminB12Mcg:  roundOneDecimal(n.VitaminB12Mcg * scale),
+	}
+}
+
+func roundOneDecimal(value float64) float64 {
+	return math.Round(value*10) / 10
 }
 
 func (s *FoodRecordService) hydrateRecordNutrientsFromTask(ctx context.Context, record *domain.FoodRecord) {
@@ -634,6 +891,16 @@ func positiveNumberFromAny(values ...any) float64 {
 			number = float64(v)
 		case uint32:
 			number = float64(v)
+		case json.Number:
+			number, _ = v.Float64()
+		case string:
+			trimmed := strings.TrimSpace(v)
+			if trimmed != "" {
+				parsed, err := strconv.ParseFloat(trimmed, 64)
+				if err == nil {
+					number = parsed
+				}
+			}
 		}
 		if number > 0 {
 			return number

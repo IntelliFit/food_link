@@ -2,6 +2,8 @@ package repo
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -54,12 +56,51 @@ type ExerciseLog struct {
 
 func (ExerciseLog) TableName() string { return "user_exercise_logs" }
 
+type DailyNutritionTarget struct {
+	UserID        string     `gorm:"column:user_id"`
+	TargetDate    *time.Time `gorm:"column:target_date"`
+	CalorieTarget float64    `gorm:"column:calorie_target"`
+	ProteinTarget float64    `gorm:"column:protein_target"`
+	CarbsTarget   float64    `gorm:"column:carbs_target"`
+	FatTarget     float64    `gorm:"column:fat_target"`
+}
+
+func (DailyNutritionTarget) TableName() string { return "user_daily_nutrition_targets" }
+
 type HomeRepo struct {
 	db *gorm.DB
 }
 
 func NewHomeRepo(db *gorm.DB) *HomeRepo {
 	return &HomeRepo{db: db}
+}
+
+func (r *HomeRepo) GetDailyNutritionTarget(ctx context.Context, userID, date string) (*DailyNutritionTarget, error) {
+	targetDate, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil, err
+	}
+	var row DailyNutritionTarget
+	err = r.db.WithContext(ctx).
+		Where("user_id = ? AND target_date = ?", userID, targetDate).
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if isUndefinedTableError(err) {
+		return nil, nil
+	}
+	return &row, err
+}
+
+func isUndefinedTableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := err.Error()
+	return strings.Contains(message, "SQLSTATE 42P01") ||
+		strings.Contains(message, `relation "user_daily_nutrition_targets" does not exist`) ||
+		strings.Contains(message, "no such table: user_daily_nutrition_targets")
 }
 
 func (r *HomeRepo) ListFoodRecordsByDate(ctx context.Context, userID, date string) ([]FoodRecord, error) {

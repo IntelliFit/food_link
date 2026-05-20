@@ -75,17 +75,21 @@ type StorageConfig struct {
 }
 
 type ExternalConfig struct {
-	AppID          string `mapstructure:"appid"`
-	Secret         string `mapstructure:"secret"`
-	SupabaseURL    string `mapstructure:"supabase_url"`
-	SupabaseKey    string `mapstructure:"supabase_service_role_key"`
-	TiandituTK     string `mapstructure:"tianditu_tk"`
-	OfoxAIAPIKey   string `mapstructure:"ofoxai_api_key"`
-	OfoxAIBaseURL  string `mapstructure:"ofoxai_base_url"`
-	LLMProvider    string `mapstructure:"llm_provider"`
-	DeepSeekAPIKey string `mapstructure:"deepseek_api_key"`
-	DoubaoAPIKey   string `mapstructure:"doubao_api_key"`
-	DoubaoBaseURL  string `mapstructure:"doubao_base_url"`
+	AppID                 string `mapstructure:"appid"`
+	Secret                string `mapstructure:"secret"`
+	SupabaseURL           string `mapstructure:"supabase_url"`
+	SupabaseKey           string `mapstructure:"supabase_service_role_key"`
+	TiandituTK            string `mapstructure:"tianditu_tk"`
+	OfoxAIAPIKey          string `mapstructure:"ofoxai_api_key"`
+	OfoxAIBaseURL         string `mapstructure:"ofoxai_base_url"`
+	Gemini35APIKey        string `mapstructure:"gemini35_api_key"`
+	Gemini35BaseURL       string `mapstructure:"gemini35_base_url"`
+	Gemini35Model         string `mapstructure:"gemini35_model"`
+	LLMProvider           string `mapstructure:"llm_provider"`
+	DeepSeekAPIKey        string `mapstructure:"deepseek_api_key"`
+	DoubaoAPIKey          string `mapstructure:"doubao_api_key"`
+	DoubaoWebSearchAPIKey string `mapstructure:"doubao_web_search_api_key"`
+	DoubaoBaseURL         string `mapstructure:"doubao_base_url"`
 }
 
 type WechatPayConfig struct {
@@ -162,11 +166,23 @@ func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
 	if fileCfg.External.DoubaoAPIKey != "" {
 		cfg.External.DoubaoAPIKey = fileCfg.External.DoubaoAPIKey
 	}
+	if fileCfg.External.DoubaoWebSearchAPIKey != "" {
+		cfg.External.DoubaoWebSearchAPIKey = fileCfg.External.DoubaoWebSearchAPIKey
+	}
 	if fileCfg.External.DoubaoBaseURL != "" {
 		cfg.External.DoubaoBaseURL = fileCfg.External.DoubaoBaseURL
 	}
 	if fileCfg.External.OfoxAIAPIKey != "" {
 		cfg.External.OfoxAIAPIKey = fileCfg.External.OfoxAIAPIKey
+	}
+	if fileCfg.External.Gemini35APIKey != "" {
+		cfg.External.Gemini35APIKey = fileCfg.External.Gemini35APIKey
+	}
+	if fileCfg.External.Gemini35BaseURL != "" {
+		cfg.External.Gemini35BaseURL = fileCfg.External.Gemini35BaseURL
+	}
+	if fileCfg.External.Gemini35Model != "" {
+		cfg.External.Gemini35Model = fileCfg.External.Gemini35Model
 	}
 	if fileCfg.External.DeepSeekAPIKey != "" {
 		cfg.External.DeepSeekAPIKey = fileCfg.External.DeepSeekAPIKey
@@ -229,9 +245,13 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.TiandituTK = strings.TrimSpace(cfg.TiandituTK)
 	cfg.OfoxAIAPIKey = strings.TrimSpace(cfg.OfoxAIAPIKey)
 	cfg.OfoxAIBaseURL = strings.TrimSpace(cfg.OfoxAIBaseURL)
+	cfg.Gemini35APIKey = strings.TrimSpace(cfg.Gemini35APIKey)
+	cfg.Gemini35BaseURL = strings.TrimSpace(cfg.Gemini35BaseURL)
+	cfg.Gemini35Model = strings.TrimSpace(cfg.Gemini35Model)
 	cfg.LLMProvider = strings.TrimSpace(cfg.LLMProvider)
 	cfg.DeepSeekAPIKey = strings.TrimSpace(cfg.DeepSeekAPIKey)
 	cfg.DoubaoAPIKey = strings.TrimSpace(cfg.DoubaoAPIKey)
+	cfg.DoubaoWebSearchAPIKey = strings.TrimSpace(cfg.DoubaoWebSearchAPIKey)
 	cfg.DoubaoBaseURL = strings.TrimSpace(cfg.DoubaoBaseURL)
 }
 
@@ -289,9 +309,13 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.tianditu_tk", "TIANDITU_TK")
 	_ = v.BindEnv("external.ofoxai_api_key", "OFOXAI_API_KEY")
 	_ = v.BindEnv("external.ofoxai_base_url", "OFOXAI_BASE_URL", "OFOX_BASE_URL")
+	_ = v.BindEnv("external.gemini35_api_key", "GEMINI35_API_KEY")
+	_ = v.BindEnv("external.gemini35_base_url", "GEMINI35_BASE_URL")
+	_ = v.BindEnv("external.gemini35_model", "GEMINI35_MODEL")
 	_ = v.BindEnv("external.llm_provider", "LLM_PROVIDER")
 	_ = v.BindEnv("external.deepseek_api_key", "DEEPSEEK_API_KEY")
 	_ = v.BindEnv("external.doubao_api_key", "DOUBAO_API_KEY")
+	_ = v.BindEnv("external.doubao_web_search_api_key", "DOUBAO_WEB_SEARCH_API_KEY")
 	_ = v.BindEnv("external.doubao_base_url", "DOUBAO_BASE_URL")
 	_ = v.BindEnv("wechat_pay.mchid", "WECHAT_PAY_MCHID")
 	_ = v.BindEnv("wechat_pay.notify_url", "WECHAT_PAY_NOTIFY_URL")

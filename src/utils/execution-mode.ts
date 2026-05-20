@@ -11,7 +11,8 @@ import { extraPkgUrl } from './subpackage-extra'
 export const STRICT_MODE_ENABLED = true
 
 export const normalizeAvailableExecutionMode = (value: unknown): ExecutionMode => {
-  return value === 'strict' ? 'strict' : 'standard'
+  if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
+  return 'standard'
 }
 
 export const canUseStrictModeForMembership = (membershipStatus?: MembershipStatus | null): boolean => {
@@ -66,7 +67,7 @@ export const getStrictModeLockedHint = (membershipStatus?: MembershipStatus | nu
  * 弹窗提示用户：精准模式当前不可用。
  * - 轻度版会员：提示去升级
  * - 非会员 / 试用：提示去开通标准版及以上
- * - 取消：调用 onCancel（通常用于回退到标准模式）
+ * - 取消：调用 onCancel（通常用于回退到普通模式）
  */
 export const promptStrictModeUpgrade = (options?: {
   membershipStatus?: MembershipStatus | null

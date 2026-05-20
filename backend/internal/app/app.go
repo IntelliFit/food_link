@@ -40,6 +40,9 @@ import (
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
+	pethandler "food_link/backend/internal/pet/handler"
+	petrepo "food_link/backend/internal/pet/repo"
+	petservice "food_link/backend/internal/pet/service"
 	publicfoodhandler "food_link/backend/internal/publicfood/handler"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
@@ -143,6 +146,11 @@ func New(cfg *config.Config) (*App, error) {
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(doubaoClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
 	analyzeSvc.ConfigureDoubaoClient(cfg.External.DoubaoAPIKey, cfg.External.DoubaoBaseURL, "")
+	analyzeSvc.ConfigureGemini31LiteClient(cfg.External.OfoxAIAPIKey, cfg.External.OfoxAIBaseURL, "gemini-3.1-flash-lite")
+	analyzeSvc.ConfigureGemini35Client(cfg.External.Gemini35APIKey, cfg.External.Gemini35BaseURL, cfg.External.Gemini35Model)
+	if cfg.External.DoubaoWebSearchAPIKey != "" {
+		analyzeSvc.ConfigureDoubaoWebSearchClient(cfg.External.DoubaoWebSearchAPIKey, cfg.External.DoubaoBaseURL, "")
+	}
 	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
 	analyzeSvc.ConfigureStorage(storageClient)
@@ -196,6 +204,11 @@ func New(cfg *config.Config) (*App, error) {
 	frSvc.ConfigureInviteRewardActivator(membershipSvc)
 	membershipHandler := membershiphandler.NewMembershipHandler(membershipSvc)
 
+	// Pet companion module DI
+	petRepo := petrepo.NewPetRepo(db)
+	petSvc := petservice.NewService(petRepo)
+	petHandler := pethandler.NewPetHandler(petSvc)
+
 	// Public food library module DI
 	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
 	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo, storageClient)
@@ -205,6 +218,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Recipe module DI
 	recipeRepo := reciperepo.NewRecipeRepo(db)
 	recipeSvc := recipeservice.NewRecipeService(recipeRepo, storageClient)
+	recipeSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	recipeHandler := recipehandler.NewRecipeHandler(recipeSvc)
 
 	// Expiry module DI
@@ -221,7 +235,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Utility module DI
 	locationSvc := utilityservice.NewLocationService(cfg)
 	qrcodeSvc := utilityservice.NewQRCodeService(cfg)
-	manualFoodRepo := utilityrepo.NewManualFoodRepo(db)
+	manualFoodRepo := utilityrepo.NewManualFoodRepo(db, storageClient)
 	manualFoodSvc := utilityservice.NewManualFoodService(manualFoodRepo)
 	utilityHandler := utilityhandler.NewUtilityHandler(locationSvc, qrcodeSvc, manualFoodSvc)
 
@@ -286,7 +300,6 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/analyze/tasks", authmw.RequireJWT(jwtSvc), analyzeHandler.ListTasks)
 	engine.GET("/api/analyze/tasks/count", authmw.RequireJWT(jwtSvc), analyzeHandler.CountTasks)
 	engine.GET("/api/analyze/tasks/status-count", authmw.RequireJWT(jwtSvc), analyzeHandler.CountTasksByStatus)
-	engine.DELETE("/api/analyze/tasks/unrecorded", authmw.RequireJWT(jwtSvc), analyzeHandler.DeleteUnrecordedTasks)
 	engine.GET("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.GetTask)
 	engine.PATCH("/api/analyze/tasks/:task_id/result", authmw.RequireJWT(jwtSvc), analyzeHandler.UpdateTaskResult)
 	engine.DELETE("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.DeleteTask)
@@ -361,6 +374,10 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
 
+	// Pet companion routes
+	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
+	engine.POST("/api/pet/events/:event_id/claim", authmw.RequireJWT(jwtSvc), petHandler.ClaimEvent)
+
 	// Public food library routes
 	engine.GET("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.List)
 	engine.POST("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.Create)
@@ -400,6 +417,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/location/search", utilityHandler.LocationSearch)
 	engine.POST("/api/qrcode", utilityHandler.QRCode)
 	engine.GET("/api/manual-food/browse", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodBrowse)
+	engine.GET("/api/manual-food/catalog", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodCatalog)
 	engine.GET("/api/manual-food/search", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodSearch)
 
 	// TestBackend routes

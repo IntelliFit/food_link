@@ -74,6 +74,38 @@ func (m *multiImageLLMClient) AnalyzeWithImages(ctx context.Context, prompt stri
 	return m.result, m.err
 }
 
+type mockWebSearcher struct {
+	results []WebSearchResult
+	queries []string
+	err     error
+}
+
+func (m *mockWebSearcher) Search(ctx context.Context, query string, limit int) ([]WebSearchResult, error) {
+	m.queries = append(m.queries, query)
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.results, nil
+}
+
+type mockDoubaoWebSearchClient struct {
+	result   map[string]any
+	meta     map[string]any
+	prompt   string
+	imageURL []string
+	err      error
+}
+
+func (m *mockDoubaoWebSearchClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	return m.result, m.err
+}
+
+func (m *mockDoubaoWebSearchClient) AnalyzeWithImagesWebSearch(ctx context.Context, prompt string, imageURLs []string, options DoubaoWebSearchOptions) (map[string]any, map[string]any, error) {
+	m.prompt = prompt
+	m.imageURL = append([]string(nil), imageURLs...)
+	return m.result, m.meta, m.err
+}
+
 func setupAnalyzeServiceTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -83,18 +115,114 @@ func setupAnalyzeServiceTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo) {
 
 func TestNormalizeExecutionMode(t *testing.T) {
 	strict := "strict"
+	experimental := "experimental"
+	gemini35 := "gemini35_flash"
+	gemini35Grouped := "gemini35_flash_grouped"
+	lite := "lite"
 	standard := "standard"
 	invalid := "invalid"
 	assert.Equal(t, "strict", normalizeExecutionMode(&strict))
+	assert.Equal(t, "standard", normalizeExecutionMode(&experimental))
+	assert.Equal(t, "strict", normalizeExecutionMode(&gemini35))
+	assert.Equal(t, "strict", normalizeExecutionMode(&gemini35Grouped))
+	assert.Equal(t, "standard", normalizeExecutionMode(&lite))
 	assert.Equal(t, "standard", normalizeExecutionMode(&standard))
 	assert.Equal(t, "standard", normalizeExecutionMode(&invalid))
 	assert.Equal(t, "standard", normalizeExecutionMode(nil))
 }
 
+func TestBuildPromptGemini35Modes(t *testing.T) {
+	input := AnalyzeInput{
+		MealType:          "lunch",
+		AdditionalContext: "包装上可能有鹅胗",
+	}
+	prompt := buildPrompt(input, nil, "gemini35_flash")
+	assert.Contains(t, prompt, "Gemini 3.5 Flash 直接识别")
+	assert.Contains(t, prompt, "包装食品")
+	assert.Contains(t, prompt, "鹅胗/鹅肫/鹅珍")
+
+	groupedPrompt := buildPrompt(input, nil, "gemini35_flash_grouped")
+	assert.Contains(t, groupedPrompt, "第一阶段")
+	assert.Contains(t, groupedPrompt, "锁定食物清单")
+	assert.Contains(t, groupedPrompt, "最多 2 组")
+	assert.Contains(t, groupedPrompt, `"groups"`)
+}
+
+func TestBuildGemini35GroupedWeightPromptLocksPlanItems(t *testing.T) {
+	plan := map[string]any{
+		"items": []map[string]any{
+			{"name": "龙贡果", "estimatedWeightGrams": 10, "groupId": 1, "position": "左下", "recognitionEvidence": "圆形浅黄果实"},
+			{"name": "鹅胗", "estimatedWeightGrams": 10, "groupId": 2, "position": "右侧红袋", "recognitionEvidence": "倒置包装文字"},
+		},
+		"groups": []map[string]any{{"groupId": 1, "description": "左下水果"}, {"groupId": 2, "description": "右侧包装"}},
+	}
+	prompt := buildGemini35GroupedWeightPrompt(AnalyzeInput{AdditionalContext: "红色包装是鹅胗"}, plan)
+	assert.Contains(t, prompt, "第一阶段已锁定的食物清单")
+	assert.Contains(t, prompt, "主要估重量")
+	assert.Contains(t, prompt, "不要随意新增、删除或改名")
+	assert.Contains(t, prompt, "龙贡果")
+	assert.Contains(t, prompt, "鹅胗")
+	assert.Contains(t, prompt, "groupId")
+}
+
+func TestMergeGemini35GroupedPlanAndWeightsKeepsPlanNamesAndUsesWeights(t *testing.T) {
+	plan := map[string]any{
+		"description": "混合零食",
+		"items": []map[string]any{
+			{
+				"name":                 "龙贡果",
+				"estimatedWeightGrams": 10.0,
+				"groupId":              1.0,
+				"position":             "左下",
+				"recognitionEvidence":  "圆形浅黄果实",
+				"alternativeNames":     []any{"龙宫果"},
+			},
+			{
+				"name":                 "鹅胗",
+				"estimatedWeightGrams": 10.0,
+				"groupId":              2.0,
+				"position":             "右侧红袋",
+				"recognitionEvidence":  "倒置包装文字像鹅胗",
+			},
+		},
+		"groups":  []map[string]any{{"groupId": 1.0, "description": "左下水果"}, {"groupId": 2.0, "description": "右侧包装"}},
+		"ocrText": []any{"鹅胗"},
+	}
+	weights := map[string]any{
+		"items": []map[string]any{
+			{
+				"name":                 "无花果",
+				"estimatedWeightGrams": 55.0,
+				"groupId":              1.0,
+				"weightEvidence":       "5个小果，去皮后约55g",
+				"alternativeNames":     []any{"longkong"},
+			},
+			{
+				"name":                 "阿胶糕",
+				"estimatedWeightGrams": 35.0,
+				"groupId":              2.0,
+				"weightEvidence":       "红色包装小袋约35g",
+			},
+		},
+		"ocrText": []any{"鹅肫"},
+	}
+
+	merged := mergeGemini35GroupedPlanAndWeights(plan, weights)
+	items := parseItems(merged)
+	require.Len(t, items, 2)
+	assert.Equal(t, "龙贡果", items[0]["name"])
+	assert.Equal(t, 55.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "鹅胗", items[1]["name"])
+	assert.Equal(t, 35.0, items[1]["estimatedWeightGrams"])
+	assert.Equal(t, 2, normalizeGemini35GroupID(items[1]["groupId"]))
+	assert.Contains(t, stringSliceFromAny(merged["ocrText"]), "鹅胗")
+	assert.Contains(t, stringSliceFromAny(merged["ocrText"]), "鹅肫")
+}
+
 func TestResolveModelConfig(t *testing.T) {
 	p, m := resolveModelConfig("")
-	assert.Equal(t, "doubao", p)
-	assert.Equal(t, "doubao-seed-2-0-lite-260428", m)
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, "gemini-3-flash-preview", m)
 
 	p, m = resolveModelConfig("doubao")
 	assert.Equal(t, "doubao", p)
@@ -106,19 +234,23 @@ func TestResolveModelConfig(t *testing.T) {
 
 	p, m = resolveModelConfig("deepseek")
 	assert.Equal(t, "deepseek", p)
-	assert.Equal(t, "deepseek-v4-pro", m)
+	assert.Equal(t, "deepseek-v4-flash", m)
 
 	p, m = resolveModelConfig("gemini")
-	assert.Equal(t, "doubao", p)
-	assert.Equal(t, "doubao-seed-2-0-lite-260428", m)
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, "gemini-3-flash-preview", m)
 
 	p, m = resolveModelConfig("ofox-gemini")
 	assert.Equal(t, "gemini", p)
 	assert.Equal(t, "gemini-3-flash-preview", m)
 
+	p, m = resolveModelConfig("gemini-3.5-flash")
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, "gemini-3.5-flash", m)
+
 	p, m = resolveModelConfig("unknown-model")
-	assert.Equal(t, "doubao", p)
-	assert.Equal(t, "doubao-seed-2-0-lite-260428", m)
+	assert.Equal(t, "gemini", p)
+	assert.Equal(t, "gemini-3-flash-preview", m)
 }
 
 func TestParseLLMJSON(t *testing.T) {
@@ -167,14 +299,32 @@ func TestBuildPromptStandardMode(t *testing.T) {
 	assert.Contains(t, prompt, "状态:fat_loss/post_workout")
 	assert.Contains(t, prompt, "剩余:500kcal")
 	assert.Contains(t, prompt, "位置:北京 朝阳")
+	assert.Contains(t, prompt, "包装食品、袋装食品、盒装食品")
+	assert.Contains(t, prompt, "请按区域逐一扫描画面")
+	assert.Contains(t, prompt, "配料表")
+	assert.Contains(t, prompt, "营养成分表")
+	assert.Contains(t, prompt, "文字证据优先级高于包装正面插画")
 }
 
-func TestBuildPromptStrictMode(t *testing.T) {
+func TestBuildPromptStrictModeUsesDBFirstPrompt(t *testing.T) {
 	input := AnalyzeInput{
 		MealType: "dinner",
 		UserGoal: "fat_loss",
 	}
 	prompt := buildPrompt(input, nil, "strict")
+	assert.Contains(t, prompt, "Gemini 3.5 Flash 直接识别")
+	assert.Contains(t, prompt, "营养由后端数据库查表补充")
+	assert.Contains(t, prompt, "配料表")
+	assert.Contains(t, prompt, "营养成分表")
+	assert.Contains(t, prompt, "最终名称优先采用包装文字和配料证据")
+}
+
+func TestBuildPromptExperimentalMode(t *testing.T) {
+	input := AnalyzeInput{
+		MealType: "dinner",
+		UserGoal: "fat_loss",
+	}
+	prompt := buildPrompt(input, nil, "experimental")
 	assert.Contains(t, prompt, "请作为专业的营养师分析这张图片")
 	assert.Contains(t, prompt, "pfc_ratio_comment")
 	assert.Contains(t, prompt, "absorption_notes")
@@ -364,10 +514,9 @@ func TestModelResultFrom(t *testing.T) {
 }
 
 func TestAnalyzeService_Analyze(t *testing.T) {
-	_, userRepo := setupAnalyzeServiceTestDB(t)
-	doubaoClient := &mockLLMClient{result: map[string]any{"description": "test", "items": []any{map[string]any{"name": "rice", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 130.0}}}}}
-	svc := NewAnalyzeService(doubaoClient, doubaoClient, userRepo)
-	svc.doubaoClient = doubaoClient
+	gemini31Client := &mockLLMClient{result: map[string]any{"description": "test", "items": []any{map[string]any{"name": "rice", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 130.0}}}}}
+	svc := NewAnalyzeService(nil, gemini31Client, nil)
+	svc.gemini31LiteClient = gemini31Client
 	ctx := context.Background()
 
 	result, err := svc.Analyze(ctx, "", AnalyzeInput{ImageURL: "https://example.com/img.jpg"})
@@ -421,11 +570,11 @@ func TestAnalyzeService_AnalyzeTextRequiresDeepSeekByDefault(t *testing.T) {
 	assert.Contains(t, err.Error(), "DEEPSEEK_API_KEY")
 }
 
-func TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubao(t *testing.T) {
-	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
-	ofoxClient := &mockLLMClient{err: assert.AnError}
-	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
-	svc.doubaoClient = doubaoClient
+func TestAnalyzeService_AnalyzeImageGeminiAliasUsesGemini3FlashInStandardMode(t *testing.T) {
+	doubaoClient := &mockLLMClient{err: assert.AnError}
+	gemini3Client := &mockLLMClient{result: map[string]any{"description": "gemini3 image", "items": []any{}}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureWebSearcher(nil)
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
@@ -433,34 +582,34 @@ func TestAnalyzeService_AnalyzeImageGeminiAliasRoutesToDoubao(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "doubao image", result["description"])
+	assert.Equal(t, "gemini3 image", result["description"])
+	assert.Equal(t, 0, doubaoClient.calls)
+	assert.Equal(t, 1, gemini3Client.calls)
 }
 
-func TestAnalyzeService_AnalyzeImageStandardIgnoresConfiguredGeminiProvider(t *testing.T) {
-	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
-	ofoxClient := &mockLLMClient{result: map[string]any{"description": "gemini image", "items": []any{}}}
-	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
-	svc.doubaoClient = doubaoClient
+func TestAnalyzeService_AnalyzeImageStandardUsesGemini3Flash(t *testing.T) {
+	doubaoClient := &mockLLMClient{err: assert.AnError}
+	gemini3Client := &mockLLMClient{result: map[string]any{"description": "gemini3 image", "items": []any{}}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureImageProvider("gemini")
+	svc.ConfigureWebSearcher(nil)
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
-		ImageURL:  "https://example.com/img.jpg",
-		ModelName: "gemini",
+		ImageURL: "https://example.com/img.jpg",
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "doubao image", result["description"])
-	assert.Equal(t, 1, doubaoClient.calls)
-	assert.Equal(t, 1, ofoxClient.calls)
-	assert.Contains(t, ofoxClient.prompt, "Doubao 初识别结果")
+	assert.Equal(t, "gemini3 image", result["description"])
+	assert.Equal(t, 0, doubaoClient.calls)
+	assert.Equal(t, 1, gemini3Client.calls)
 }
 
-func TestAnalyzeService_AnalyzeImageStandardUsesDoubaoForExplicitDoubao(t *testing.T) {
+func TestAnalyzeService_AnalyzeImageStandardIgnoresExplicitDoubaoAndUsesGemini3Flash(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao image", "items": []any{}}}
-	ofoxClient := &mockLLMClient{err: assert.AnError}
-	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
-	svc.doubaoClient = doubaoClient
+	gemini3Client := &mockLLMClient{result: map[string]any{"description": "gemini3 image", "items": []any{}}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureImageProvider("gemini")
+	svc.ConfigureWebSearcher(nil)
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
@@ -468,34 +617,31 @@ func TestAnalyzeService_AnalyzeImageStandardUsesDoubaoForExplicitDoubao(t *testi
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "doubao image", result["description"])
-	assert.Equal(t, 1, doubaoClient.calls)
-	assert.Equal(t, 1, ofoxClient.calls)
+	assert.Equal(t, "gemini3 image", result["description"])
+	assert.Equal(t, 0, doubaoClient.calls)
+	assert.Equal(t, 1, gemini3Client.calls)
 }
 
-func TestAnalyzeService_AnalyzeImageStandardForcesDoubaoInsteadOfGemini(t *testing.T) {
-	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao standard", "items": []any{}}}
-	ofoxClient := &mockLLMClient{err: errors.New("ofoxai api error 429: Resource exhausted. Please try again later")}
-	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
-	svc.doubaoClient = doubaoClient
+func TestAnalyzeService_AnalyzeImageStandardDoesNotFallbackToDoubaoWhenGeminiFails(t *testing.T) {
+	doubaoClient := &mockLLMClient{result: map[string]any{"description": "doubao fallback", "items": []any{}}}
+	gemini3Client := &mockLLMClient{err: errors.New("ofoxai api error 429: Resource exhausted. Please try again later")}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureWebSearcher(nil)
 
-	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+	_, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
 		ModelName: "ofox-gemini",
 	})
 
-	require.NoError(t, err)
-	assert.Equal(t, "doubao standard", result["description"])
+	require.Error(t, err)
+	assert.Equal(t, 0, doubaoClient.calls)
+	assert.Equal(t, 3, gemini3Client.calls)
 }
 
-func TestAnalyzeService_AnalyzeImageStandardHybridUsesGeminiWeightReview(t *testing.T) {
-	doubaoClient := &multiImageLLMClient{result: map[string]any{
-		"description": "豆包草稿",
-		"items": []any{
-			map[string]any{"name": "鸡胸肉", "estimatedWeightGrams": 180.0, "waterMl": 20.0},
-		},
-	}}
-	ofoxClient := &multiImageLLMClient{result: map[string]any{
+func TestAnalyzeService_AnalyzeImageStrictUsesGemini35SinglePass(t *testing.T) {
+	strict := "strict"
+	doubaoClient := &multiImageLLMClient{err: assert.AnError}
+	gemini35Client := &multiImageLLMClient{result: map[string]any{
 		"description":    "包装鸡胸肉",
 		"modelAgreement": "weight_changed",
 		"ocrText":        []any{"净含量100g"},
@@ -504,54 +650,185 @@ func TestAnalyzeService_AnalyzeImageStandardHybridUsesGeminiWeightReview(t *test
 				"name":                 "即食鸡胸肉",
 				"estimatedWeightGrams": 100.0,
 				"waterMl":              55.0,
+				"confidence":           0.92,
+				"recognitionEvidence":  "包装文字显示鸡胸肉",
 				"weightEvidence":       "包装标注净含量100g",
+				"alternativeNames":     []any{"鸡胸肉"},
 			},
 		},
 	}}
-	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
+	svc := NewAnalyzeService(doubaoClient, nil, nil)
+	svc.gemini35Client = gemini35Client
+	svc.ConfigureWebSearcher(nil)
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
-		ImageURL:  "https://example.com/chicken.jpg",
-		ModelName: "doubao",
+		ImageURL:      "https://example.com/chicken.jpg",
+		ExecutionMode: &strict,
 	})
 
 	require.NoError(t, err)
 	assert.Equal(t, "包装鸡胸肉", result["description"])
-	assert.Equal(t, "doubao_visual_gemini_weight_db_first", result["food_image_strategy"])
+	assert.Equal(t, "strict_db_first", result["food_image_strategy"])
 	meta := result["hybrid_review"].(map[string]any)
 	assert.Equal(t, "applied", meta["status"])
+	assert.Equal(t, "gemini", meta["base_provider"])
+	assert.Equal(t, gemini35FlashModel, meta["base_model"])
 	items := toItems(result["items"])
 	require.Len(t, items, 1)
 	assert.Equal(t, "即食鸡胸肉", items[0]["name"])
 	assert.Equal(t, 100.0, items[0]["estimatedWeightGrams"])
 	assert.Equal(t, "包装标注净含量100g", items[0]["weightEvidence"])
-	require.Len(t, doubaoClient.imageSetCalls, 1)
-	require.Len(t, ofoxClient.imageSetCalls, 1)
-	assert.Contains(t, ofoxClient.prompts[0], "包装文字")
+	assert.Equal(t, "包装文字显示鸡胸肉", items[0]["recognitionEvidence"])
+	require.Empty(t, doubaoClient.imageSetCalls)
+	require.Len(t, gemini35Client.imageSetCalls, 1)
+	assert.Contains(t, gemini35Client.prompts[0], "Gemini 3.5 Flash 直接识别")
 }
 
-func TestAnalyzeService_AnalyzeImageStandardHybridFallsBackToDoubaoWhenGeminiFails(t *testing.T) {
+func TestAnalyzeService_AnalyzeImageStrictDoesNotFallbackToDoubaoWhenGemini35Fails(t *testing.T) {
+	strict := "strict"
 	doubaoClient := &multiImageLLMClient{result: map[string]any{
 		"description": "豆包结果",
 		"items": []any{
 			map[string]any{"name": "米饭", "estimatedWeightGrams": 120.0},
 		},
 	}}
-	ofoxClient := &multiImageLLMClient{err: errors.New("gemini timeout")}
-	svc := NewAnalyzeService(doubaoClient, ofoxClient, nil)
+	gemini35Client := &multiImageLLMClient{err: errors.New("gemini timeout")}
+	svc := NewAnalyzeService(doubaoClient, nil, nil)
+	svc.gemini35Client = gemini35Client
+	svc.ConfigureWebSearcher(nil)
+
+	_, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/rice.jpg",
+		ExecutionMode: &strict,
+	})
+
+	require.Error(t, err)
+	require.Empty(t, doubaoClient.imageSetCalls)
+	require.Len(t, gemini35Client.imageSetCalls, 1)
+}
+
+func TestAnalyzeService_AnalyzeImageLegacyLiteUsesStandardGemini3Flash(t *testing.T) {
+	lite := "lite"
+	doubaoClient := &mockDoubaoWebSearchClient{err: assert.AnError}
+	gemini3Client := &multiImageLLMClient{result: map[string]any{
+		"description": "普通识别",
+		"items": []any{
+			map[string]any{"name": "龙宫果", "estimatedWeightGrams": 45.0},
+		},
+	}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
-		ImageURL: "https://example.com/rice.jpg",
+		ImageURL:      "https://example.com/longkong.jpg",
+		ExecutionMode: &lite,
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "豆包结果", result["description"])
+	assert.Equal(t, "普通识别", result["description"])
+	assert.Equal(t, "gemini_db_first", result["food_image_strategy"])
 	meta := result["hybrid_review"].(map[string]any)
-	assert.Equal(t, "failed", meta["status"])
-	items := toItems(result["items"])
-	require.Len(t, items, 1)
-	assert.Equal(t, "米饭", items[0]["name"])
-	assert.Equal(t, 120.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "skipped", meta["status"])
+	assert.Equal(t, "gemini_db_first", meta["strategy"])
+	require.Len(t, gemini3Client.imageSetCalls, 1)
+	assert.Empty(t, doubaoClient.prompt)
+	assert.Empty(t, doubaoClient.imageURL)
+}
+
+func TestAnalyzeService_AnalyzeImageCorrectionUsesGemini31Lite(t *testing.T) {
+	doubaoClient := &mockLLMClient{err: assert.AnError}
+	gemini3Client := &mockLLMClient{err: assert.AnError}
+	gemini31Client := &multiImageLLMClient{result: map[string]any{
+		"description": "纠错识别",
+		"items": []any{
+			map[string]any{"name": "龙宫果", "estimatedWeightGrams": 45.0},
+		},
+	}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.gemini31LiteClient = gemini31Client
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL: "https://example.com/longkong.jpg",
+		CorrectionItems: []map[string]any{
+			{"name": "龙宫果", "weight": 45},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "纠错识别", result["description"])
+	require.Len(t, gemini31Client.imageSetCalls, 1)
+	assert.Equal(t, 0, doubaoClient.calls)
+	assert.Equal(t, 0, gemini3Client.calls)
+}
+
+func TestBuildStandardImageHybridReviewPromptIncludesIndependentReviewAndSearchEvidence(t *testing.T) {
+	prompt := buildStandardImageHybridReviewPrompt(AnalyzeInput{
+		MealType:          "snack",
+		AdditionalContext: "用户说可能是龙宫果和鹅胗",
+	}, map[string]any{
+		"description": "盘子里有水果和包装零食",
+		"items": []any{
+			map[string]any{"name": "无花果", "estimatedWeightGrams": 125.0, "waterMl": 80.0},
+		},
+	}, []WebSearchEvidence{{
+		Query: "龙宫果 外观 营养",
+		Results: []WebSearchResult{{
+			Title:   "龙宫果/Longkong 外观",
+			Snippet: "龙宫果常呈浅黄褐色圆形，成串或多个摆放。",
+			URL:     "https://example.com/longkong",
+		}},
+	}})
+
+	assert.Contains(t, prompt, "必须先独立观察图片和 OCR 信息")
+	assert.Contains(t, prompt, "倒置")
+	assert.Contains(t, prompt, "鹅胗/鹅肫/鹅珍")
+	assert.Contains(t, prompt, "不要把低置信度 OCR 片段直接当作食物名")
+	assert.Contains(t, prompt, "不要被 Doubao 的单一候选锚定")
+	assert.Contains(t, prompt, "webSearchEvidence")
+	assert.Contains(t, prompt, "龙宫果/Longkong 外观")
+	assert.Contains(t, prompt, "用户说可能是龙宫果和鹅胗")
+}
+
+func TestParseDuckDuckGoHTMLResults(t *testing.T) {
+	raw := `
+<div class="result results_links">
+  <div class="result__body">
+    <h2><a class="result__a" href="/l/?uddg=https%3A%2F%2Fexample.com%2Ffood">龙宫果 Longkong 外观</a></h2>
+    <a class="result__snippet">龙宫果通常为浅黄褐色小圆果，果肉半透明。</a>
+  </div>
+</div>
+<div class="result results_links">
+  <div class="result__body">
+    <h2><a class="result__a" href="https://example.com/nutrition">鹅胗 营养</a></h2>
+    <a class="result__snippet">鹅胗属于动物内脏，常见真空包装熟食。</a>
+  </div>
+</div>`
+
+	results := parseDuckDuckGoHTMLResults(raw, 2)
+
+	require.Len(t, results, 2)
+	assert.Equal(t, "龙宫果 Longkong 外观", results[0].Title)
+	assert.Equal(t, "https://example.com/food", results[0].URL)
+	assert.Contains(t, results[0].Snippet, "半透明")
+	assert.Equal(t, "鹅胗 营养", results[1].Title)
+}
+
+func TestBuildStandardImageSearchQueries(t *testing.T) {
+	queries := buildStandardImageSearchQueries(AnalyzeInput{
+		AdditionalContext: "龙宫果\n鹅胗",
+	}, map[string]any{
+		"description": "零食和水果混合",
+		"items": []any{
+			map[string]any{
+				"name":             "无花果",
+				"alternativeNames": []any{"龙宫果", "longkong"},
+			},
+		},
+	})
+
+	require.Len(t, queries, 3)
+	assert.Equal(t, "龙宫果 鹅胗 食物 外观 营养", queries[0])
+	assert.Equal(t, "龙宫果 鹅胗 包装 净含量 营养成分", queries[1])
+	assert.Equal(t, "零食和水果混合 食物 外观 营养", queries[2])
 }
 
 func TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON(t *testing.T) {
@@ -701,6 +978,10 @@ func TestAnalyzeService_ResolveExecutionMode(t *testing.T) {
 	strict := "strict"
 	mode = svc.resolveExecutionMode(ctx, "", &strict)
 	assert.Equal(t, "strict", mode)
+
+	experimental := "experimental"
+	mode = svc.resolveExecutionMode(ctx, "", &experimental)
+	assert.Equal(t, "experimental", mode)
 }
 
 func TestBuildAnalyzeResponse(t *testing.T) {
@@ -708,7 +989,7 @@ func TestBuildAnalyzeResponse(t *testing.T) {
 	assert.Equal(t, "d", resp["description"])
 	assert.Equal(t, "db_first", resp["analysis_engine"])
 
-	resp2 := buildAnalyzeResponse(map[string]any{"description": "d", "items": []any{}, "pfc_ratio_comment": "good"}, "strict", "doubao", "doubao-seed-2-0-lite-260428", 100)
+	resp2 := buildAnalyzeResponse(map[string]any{"description": "d", "items": []any{}, "pfc_ratio_comment": "good"}, "experimental", "doubao", "doubao-seed-2-0-lite-260428", 100)
 	assert.Equal(t, "good", *resp2["pfc_ratio_comment"].(*string))
 }
 

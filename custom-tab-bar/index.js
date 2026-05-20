@@ -32,9 +32,9 @@ Component({
         selectedIconPath: './icons/record-active.png'
       },
       { 
-        id: 'expiry',
-        pagePath: '/pages/expiry/index',
-        text: '保质期',
+        id: 'community',
+        pagePath: '/pages/community/index',
+        text: '圈子',
         iconPath: './icons/community.png',
         selectedIconPath: './icons/community-active.png'
       },
@@ -87,7 +87,7 @@ Component({
       }
     },
     
-    // 检查是否需要隐藏 tabBar（拍照页 / 弹层展开）
+    // 检查是否需要隐藏 tabBar（拍照页 / 圈子评论输入展开）
     updateColorScheme() {
       try {
         const raw = wx.getStorageSync(APP_COLOR_SCHEME_KEY)
@@ -164,6 +164,7 @@ Component({
           }
 
           const shouldHide =
+            (currentPath === '/pages/community/index' && (communityCommentOpen || communityFilterDrawerOpen)) ||
             (currentPath === '/pages/index/index' && homePosterModalOpen) ||
             (currentPath === '/pages/stats/index' && statsRiskDetailOpen)
 

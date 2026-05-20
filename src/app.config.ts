@@ -2,7 +2,7 @@
 const mainPages = [
   'pages/index/index',
   'pages/stats/index',
-  'pages/expiry/index',
+  'pages/community/index',
   'pages/profile/index',
 ]
 
@@ -105,8 +105,8 @@ export default defineAppConfig({
         text: '分析',
       },
       {
-        pagePath: 'pages/expiry/index',
-        text: '保质期',
+        pagePath: 'pages/community/index',
+        text: '圈子',
       },
       {
         pagePath: 'pages/profile/index',

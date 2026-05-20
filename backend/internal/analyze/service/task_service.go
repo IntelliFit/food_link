@@ -36,6 +36,8 @@ const (
 	maxFoodAnalyzeImages     = 3
 )
 
+const experimentalExecutionMode = "experimental"
+
 func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *authrepo.UserRepo, storageClient ...*storage.Client) *TaskService {
 	var client *storage.Client
 	if len(storageClient) > 0 {
@@ -131,7 +133,7 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	s.attachCorrectionChain(ctx, userID, input, payload)
 
 	creditMode := mode
-	if input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
 	}
 	if boolFromAny(payload["is_correction"]) {
@@ -143,7 +145,7 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	}
 	creditGroupID := ensureCreditGroupID(payload)
 
-	if mode == validExecutionMode || input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
@@ -223,7 +225,7 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	s.attachCorrectionChain(ctx, userID, input, payload)
 
 	creditMode := mode
-	if input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
 	}
 	if boolFromAny(payload["is_correction"]) {
@@ -235,7 +237,7 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	}
 	creditGroupID := ensureCreditGroupID(payload)
 
-	if mode == validExecutionMode || input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
@@ -406,7 +408,7 @@ func creditUnitsForInput(input SubmitTaskInput) int {
 }
 
 func correctionCreditMode(mode string) string {
-	if mode == validExecutionMode {
+	if mode == experimentalExecutionMode || mode == validExecutionMode || mode == gemini35GroupedExecutionMode {
 		return "strict_correction"
 	}
 	return "standard_correction"
@@ -581,7 +583,7 @@ func (s *TaskService) submitPrecisionTask(ctx context.Context, userID string, in
 		newSession := &domain.PrecisionSession{
 			UserID:           userID,
 			SourceType:       sourceType,
-			ExecutionMode:    "strict",
+			ExecutionMode:    "experimental",
 			Status:           "collecting",
 			RoundIndex:       1,
 			LatestInputs:     payload,
@@ -856,20 +858,6 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID, userID string) (ma
 		"deleted":        true,
 		"task_id":        taskID,
 		"deleted_images": deletedImages,
-	}, nil
-}
-
-func (s *TaskService) DeleteUnrecordedTasks(ctx context.Context, userID string) (map[string]any, error) {
-	if strings.TrimSpace(userID) == "" {
-		return nil, errors.ErrForbidden
-	}
-	deleted, err := s.tasks.DeleteUnrecordedDoneTasksByUser(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{
-		"deleted": true,
-		"count":   deleted,
 	}, nil
 }
 
