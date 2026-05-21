@@ -1,5 +1,10 @@
 # DECISIONS
 
+- `2026-05-22`: 后端 Docker 推送脚本默认自动重试多个 Go builder 镜像源。
+  - `backend/scripts/push-docker-ccr.mjs` 继续以 `docker.io/library/golang:1.26.1-bookworm` 作为首选官方镜像，但默认候选列表会继续尝试 `docker.m.daocloud.io`、`docker.xuanyuan.me`、`docker.1ms.run`、`docker.1panel.live`。
+  - `DOCKER_GO_BUILDER_IMAGE` 仍表示“只用这一个镜像”；新增 `DOCKER_GO_BUILDER_IMAGES` 表示逗号分隔的候选镜像列表，供临时覆盖默认重试顺序。
+  - 目标是让 `load metadata for docker.io/library/golang:1.26.1-bookworm` 因 Docker Hub/GFW 失败时无需人工重跑即可自动换源。
+
 - `2026-05-21`: 零食补库页的“拍照识别营养成分表”走异步任务，不走前端同步等待。
   - 前端上传图片后调用 `POST /api/packaged-food/nutrition-label/submit`，只拿 `task_id`，再复用 `GET /api/analyze/tasks/:task_id` 轮询。
   - 后端复用现有 `analysis_tasks`、TaskRepo、task queue、worker claim/lease/complete/fail 机制，新增任务类型 `packaged_nutrition_label`。
@@ -1751,3 +1756,9 @@
   - prompt 必须要求每个 item 输出 `type`，当前取值口径为 `normal`、`snack`、`packaged`。
   - 后端只做 `type/food_type` 兼容归一化，不再按名称、OCR、category、recognitionEvidence 或 alternativeNames 里的“薯片/饼干/零食/净含量”等关键词推断零食。
   - 如果模型没有输出 `snack/packaged`，即使名称像零食，也先走普通食物库和 DeepSeek fallback；日志里的 item 摘要必须保留 `type` 以便判断模型分类是否正确。
+
+- `2026-05-21`: 后端配置中心已弃用 Infisical，改为 Apollo。
+  - `CONFIG_SOURCE` 只允许 `local` / `apollo`；`CONFIG_SOURCE=local` 只读 `backend/app-config.yaml`，`CONFIG_SOURCE=apollo` 只读 `backend/apollo-config.yaml` bootstrap 并从 Apollo 拉取全部业务运行配置。
+  - Apollo 使用 Go SDK `github.com/apolloconfig/agollo/v5`；bootstrap 字段为 `apollo.config_server_url/app_id/cluster/namespaces/access_key_secret/backup_config_path/enable_backup/must_start/label/sync_timeout_seconds`。
+  - Apollo 配置 key 继续支持点号路径式 key（如 `database.host` / `external.doubao_api_key`）、双下划线路径式 key（如 `database__host`）和旧环境变量式 key（如 `POSTGRESQL_HOST`、`DOUBAO_API_KEY`、`WORKER_COUNT`）。
+  - 后续不再新增或维护 Infisical 配置、Infisical SDK、`infisical-config.yaml` 或 `CONFIG_SOURCE=infisical` 路径。

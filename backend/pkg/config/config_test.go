@@ -28,8 +28,8 @@ func writeNamedTestConfig(t *testing.T, name string, content string) string {
 	t.Helper()
 	dir := t.TempDir()
 	source := "local"
-	if name == "infisical-config.yaml" {
-		source = "infisical"
+	if name == "apollo-config.yaml" {
+		source = "apollo"
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("CONFIG_SOURCE="+source+"\n"), 0o600); err != nil {
 		t.Fatalf("write .env: %v", err)
@@ -149,15 +149,15 @@ func TestLoadRequiresConfigSourceWhenEnvAndDotenvMissing(t *testing.T) {
 
 func TestLogConfigFileSnapshotOnlyLogsFileKeys(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "infisical-config.yaml")
+	path := filepath.Join(dir, "apollo-config.yaml")
 	if err := os.WriteFile(path, []byte(`
-infisical:
-  site_url: "https://infisical.example.com"
-  project_id: "project-id"
-  environment: "dev"
-  secret_path: "/"
-  client_id: "client-id"
-  client_secret: "client-secret"
+apollo:
+  app_id: "food-link"
+  cluster: "dev"
+  config_server_url: "https://apollo.example.com"
+  namespaces:
+    - "application"
+  access_key_secret: "super-secret-value"
 `), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -173,20 +173,20 @@ infisical:
 	logConfigFileSnapshot("test", path)
 
 	output := buf.String()
-	if !strings.Contains(output, "config.file.key_count=6") {
+	if !strings.Contains(output, "config.file.key_count=5") {
 		t.Fatalf("expected only file keys to be counted, got %s", output)
 	}
 	if strings.Contains(output, "app.port") {
 		t.Fatalf("file snapshot should not include default keys, got %s", output)
 	}
-	if strings.Contains(output, "client-secret") {
+	if strings.Contains(output, "super-secret-value") {
 		t.Fatalf("file snapshot leaked secret value: %s", output)
 	}
 }
 
-func TestLoadPrefersInfisicalConfigOverAppConfig(t *testing.T) {
+func TestLoadPrefersApolloConfigOverAppConfig(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("CONFIG_SOURCE=infisical\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("CONFIG_SOURCE=apollo\n"), 0o600); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "app-config.yaml"), []byte(`
@@ -195,22 +195,23 @@ worker:
 `), 0o600); err != nil {
 		t.Fatalf("write app-config.yaml: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "infisical-config.yaml"), []byte(`
-infisical:
-  project_id: "project-id"
-  environment: "dev"
-  client_id: "client-id"
-  client_secret: "client-secret"
+	if err := os.WriteFile(filepath.Join(dir, "apollo-config.yaml"), []byte(`
+apollo:
+  app_id: "food-link"
+  cluster: "dev"
+  config_server_url: "http://127.0.0.1:1"
+  namespaces:
+    - "application"
 `), 0o600); err != nil {
-		t.Fatalf("write infisical-config.yaml: %v", err)
+		t.Fatalf("write apollo-config.yaml: %v", err)
 	}
 
 	_, err := Load(dir)
 	if err == nil {
-		t.Fatal("expected Infisical request to fail without test server")
+		t.Fatal("expected Apollo request to fail without test server")
 	}
-	if !strings.Contains(err.Error(), "infisical") {
-		t.Fatalf("expected infisical mode, got %v", err)
+	if !strings.Contains(strings.ToLower(err.Error()), "apollo") {
+		t.Fatalf("expected Apollo mode, got %v", err)
 	}
 }
 
@@ -476,46 +477,39 @@ func TestConfigKeyForSecretSupportsPathAndLegacyNames(t *testing.T) {
 	}
 }
 
-func TestLoadMergesInfisicalSecrets(t *testing.T) {
-	var sawLogin, sawList bool
+func TestLoadMergesApolloConfig(t *testing.T) {
+	var sawConfig bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/universal-auth/login":
-			sawLogin = true
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"accessToken":"test-token","expiresIn":3600,"accessTokenMaxTTL":3600,"tokenType":"Bearer"}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v3/secrets/raw":
-			sawList = true
-			if got := r.URL.Query().Get("workspaceId"); got != "project-id" {
-				t.Fatalf("workspaceId = %q", got)
-			}
-			if got := r.URL.Query().Get("environment"); got != "dev" {
-				t.Fatalf("environment = %q", got)
-			}
+		case r.Method == http.MethodGet && r.URL.Path == "/configfiles/json/food-link/dev/application":
+			sawConfig = true
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
-					"secrets": [
-						{"secretKey":"database.host","secretValue":"db.example.internal"},
-						{"secretKey":"POSTGRESQL_DATABASE","secretValue":"food-cloud"},
-						{"secretKey":"JWT_SECRET_KEY","secretValue":"cloud-jwt"},
-						{"secretKey":"DOUBAO_API_KEY","secretValue":"cloud-doubao"},
-					{"secretKey":"WORKER_COUNT","secretValue":"3"},
-					{"secretKey":"TASK_QUEUE_BROKERS","secretValue":"kafka-1:9092,kafka-2:9092"}
-				]
+				"database.host":"db.example.internal",
+				"POSTGRESQL_DATABASE":"food-cloud",
+				"JWT_SECRET_KEY":"cloud-jwt",
+				"DOUBAO_API_KEY":"cloud-doubao",
+				"WORKER_COUNT":"3",
+				"TASK_QUEUE_BROKERS":"kafka-1:9092,kafka-2:9092"
 			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/services/config":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/notifications/v2":
+			w.WriteHeader(http.StatusNotModified)
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
 		}
 	}))
 	defer server.Close()
 
-	dir := writeNamedTestConfig(t, "infisical-config.yaml", `
-infisical:
-  site_url: "`+server.URL+`"
-  project_id: "project-id"
-  environment: "dev"
-  client_id: "client-id"
-  client_secret: "client-secret"
+	dir := writeNamedTestConfig(t, "apollo-config.yaml", `
+apollo:
+  app_id: "food-link"
+  cluster: "dev"
+  config_server_url: "`+server.URL+`"
+  namespaces:
+    - "application"
 database:
   host: "local-should-not-be-used"
   name: "local-should-not-be-used"
@@ -529,48 +523,101 @@ worker:
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if !sawLogin || !sawList {
-		t.Fatalf("expected Infisical login and list requests, login=%v list=%v", sawLogin, sawList)
+	if !sawConfig {
+		t.Fatal("expected Apollo config request")
 	}
 	if cfg.Database.Host != "db.example.internal" || cfg.Database.Name != "food-cloud" {
-		t.Fatalf("expected database config from Infisical, got %+v", cfg.Database)
+		t.Fatalf("expected database config from Apollo, got %+v", cfg.Database)
 	}
 	if cfg.JWT.Secret != "cloud-jwt" || cfg.External.DoubaoAPIKey != "cloud-doubao" {
-		t.Fatalf("expected secrets from Infisical, got jwt=%q external=%+v", cfg.JWT.Secret, cfg.External)
+		t.Fatalf("expected secrets from Apollo, got jwt=%q external=%+v", cfg.JWT.Secret, cfg.External)
 	}
 	if cfg.Worker.Count != 3 {
-		t.Fatalf("expected worker count from Infisical, got %+v", cfg.Worker)
+		t.Fatalf("expected worker count from Apollo, got %+v", cfg.Worker)
 	}
 	if len(cfg.TaskQueue.Brokers) != 2 || cfg.TaskQueue.Brokers[1] != "kafka-2:9092" {
-		t.Fatalf("expected normalized kafka brokers from Infisical, got %+v", cfg.TaskQueue.Brokers)
+		t.Fatalf("expected normalized kafka brokers from Apollo, got %+v", cfg.TaskQueue.Brokers)
 	}
-	if cfg.ConfigSource != "infisical" {
-		t.Fatalf("expected infisical config source, got %q", cfg.ConfigSource)
+	if cfg.ConfigSource != "apollo" {
+		t.Fatalf("expected Apollo config source, got %q", cfg.ConfigSource)
 	}
 }
 
-func TestLoadInfisicalModeDoesNotUseLocalBusinessConfig(t *testing.T) {
+func TestLoadMergesApolloYAMLContentFromApplicationNamespace(t *testing.T) {
+	var sawConfig bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/universal-auth/login":
+		case r.Method == http.MethodGet && r.URL.Path == "/configfiles/json/food-link/dev/application":
+			sawConfig = true
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"accessToken":"test-token","expiresIn":3600,"accessTokenMaxTTL":3600,"tokenType":"Bearer"}`))
-		case r.Method == http.MethodGet && r.URL.Path == "/api/v3/secrets/raw":
+			_, _ = w.Write([]byte(`{
+				"content": "database:\n  host: db-from-yaml\njwt:\n  secret: yaml-jwt\nworker:\n  count: 4\ntask_queue:\n  brokers:\n    - kafka-1:9092,kafka-2:9092\n"
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/services/config":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"secrets":[]}`))
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/notifications/v2":
+			w.WriteHeader(http.StatusNotModified)
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
 		}
 	}))
 	defer server.Close()
 
-	dir := writeNamedTestConfig(t, "infisical-config.yaml", `
-infisical:
-  site_url: "`+server.URL+`"
-  project_id: "project-id"
-  environment: "dev"
-  client_id: "client-id"
-  client_secret: "client-secret"
+	dir := writeNamedTestConfig(t, "apollo-config.yaml", `
+apollo:
+  app_id: "food-link"
+  cluster: "dev"
+  config_server_url: "`+server.URL+`"
+  namespaces:
+    - "application"
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !sawConfig {
+		t.Fatal("expected Apollo config request")
+	}
+	if cfg.Database.Host != "db-from-yaml" || cfg.JWT.Secret != "yaml-jwt" || cfg.Worker.Count != 4 {
+		t.Fatalf("expected config from Apollo YAML content, got %+v", cfg)
+	}
+	if len(cfg.TaskQueue.Brokers) != 2 || cfg.TaskQueue.Brokers[1] != "kafka-2:9092" {
+		t.Fatalf("expected normalized brokers from YAML content, got %+v", cfg.TaskQueue.Brokers)
+	}
+}
+
+func TestLoadApolloModeDoesNotUseLocalBusinessConfig(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/configfiles/json/food-link/dev/application":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/configfiles/json/food-link/dev/application.yaml":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/configfiles/json/food-link/dev/application.yml":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/services/config":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/notifications/v2":
+			w.WriteHeader(http.StatusNotModified)
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	dir := writeNamedTestConfig(t, "apollo-config.yaml", `
+apollo:
+  app_id: "food-link"
+  cluster: "dev"
+  config_server_url: "`+server.URL+`"
+  namespaces:
+    - "application"
 worker:
   count: 7
 `)
@@ -579,7 +626,7 @@ worker:
 	if err == nil {
 		t.Fatal("expected missing cloud worker.count to fail")
 	}
-	if !strings.Contains(err.Error(), "worker.count") {
-		t.Fatalf("expected worker.count error, got %v", err)
+	if !strings.Contains(err.Error(), "apollo returned no config") {
+		t.Fatalf("expected empty Apollo config error, got %v", err)
 	}
 }
