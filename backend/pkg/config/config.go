@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,7 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	infisical "github.com/infisical/go-sdk"
+	"github.com/apolloconfig/agollo/v5"
+	apolloConfig "github.com/apolloconfig/agollo/v5/env/config"
 	"github.com/spf13/viper"
 )
 
@@ -26,7 +28,7 @@ type Config struct {
 	WechatPay    WechatPayConfig `mapstructure:"wechat_pay"`
 	Worker       WorkerConfig    `mapstructure:"worker"`
 	TaskQueue    TaskQueueConfig `mapstructure:"task_queue"`
-	Infisical    InfisicalConfig `mapstructure:"infisical"`
+	Apollo       ApolloConfig    `mapstructure:"apollo"`
 }
 
 type AppConfig struct {
@@ -125,18 +127,17 @@ type TaskQueueConfig struct {
 	ConsumerGroup string   `mapstructure:"consumer_group"`
 }
 
-type InfisicalConfig struct {
-	Enabled                bool   `mapstructure:"enabled"`
-	SiteURL                string `mapstructure:"site_url"`
-	ProjectID              string `mapstructure:"project_id"`
-	ProjectSlug            string `mapstructure:"project_slug"`
-	Environment            string `mapstructure:"environment"`
-	SecretPath             string `mapstructure:"secret_path"`
-	ClientID               string `mapstructure:"client_id"`
-	ClientSecret           string `mapstructure:"client_secret"`
-	IncludeImports         bool   `mapstructure:"include_imports"`
-	Recursive              bool   `mapstructure:"recursive"`
-	ExpandSecretReferences bool   `mapstructure:"expand_secret_references"`
+type ApolloConfig struct {
+	AppID            string   `mapstructure:"app_id"`
+	Cluster          string   `mapstructure:"cluster"`
+	ConfigServerURL  string   `mapstructure:"config_server_url"`
+	Namespaces       []string `mapstructure:"namespaces"`
+	AccessKeySecret  string   `mapstructure:"access_key_secret"`
+	BackupConfigPath string   `mapstructure:"backup_config_path"`
+	EnableBackup     bool     `mapstructure:"enable_backup"`
+	MustStart        bool     `mapstructure:"must_start"`
+	Label            string   `mapstructure:"label"`
+	SyncTimeoutSec   int      `mapstructure:"sync_timeout_seconds"`
 }
 
 func Load(baseDir string) (*Config, error) {
@@ -163,17 +164,17 @@ func Load(baseDir string) (*Config, error) {
 		if err := applyLocalConfigOverrides(v); err != nil {
 			return nil, err
 		}
-	case "infisical":
+	case "apollo":
 		bootstrap := viper.New()
 		setDefaults(bootstrap)
 		bootstrap.Set("config_source", source)
-		configPath := filepath.Join(baseDir, "infisical-config.yaml")
+		configPath := filepath.Join(baseDir, "apollo-config.yaml")
 		if err := readYAMLConfigFile(bootstrap, configPath); err != nil {
 			return nil, err
 		}
-		logConfigFileSnapshot("Infisical 启动配置文件已读取", configPath)
+		logConfigFileSnapshot("Apollo 启动配置文件已读取", configPath)
 		bootstrap.Set("config_source", source)
-		cloudV, err := loadInfisicalConfig(context.Background(), bootstrap)
+		cloudV, err := loadApolloConfig(context.Background(), bootstrap)
 		if err != nil {
 			return nil, err
 		}
@@ -195,8 +196,8 @@ func Load(baseDir string) (*Config, error) {
 
 func readConfigSource(baseDir string) (string, error) {
 	if source := normalizeConfigSource(os.Getenv("CONFIG_SOURCE")); source != "" {
-		if source != "local" && source != "infisical" {
-			return "", fmt.Errorf("CONFIG_SOURCE must be local or infisical, got %q", source)
+		if source != "local" && source != "apollo" {
+			return "", fmt.Errorf("CONFIG_SOURCE must be local or apollo, got %q", source)
 		}
 		slog.Info("CONFIG_SOURCE 已从进程环境变量读取", slog.String("config.source", source))
 		return source, nil
@@ -214,10 +215,10 @@ func readConfigSource(baseDir string) (string, error) {
 	}
 	source := normalizeConfigSource(sourceV.GetString("CONFIG_SOURCE"))
 	if source == "" {
-		return "", fmt.Errorf("CONFIG_SOURCE must be set to local or infisical in .env")
+		return "", fmt.Errorf("CONFIG_SOURCE must be set to local or apollo in .env")
 	}
-	if source != "local" && source != "infisical" {
-		return "", fmt.Errorf("CONFIG_SOURCE must be local or infisical, got %q", source)
+	if source != "local" && source != "apollo" {
+		return "", fmt.Errorf("CONFIG_SOURCE must be local or apollo, got %q", source)
 	}
 	slog.Info("CONFIG_SOURCE 已从 .env 文件读取",
 		slog.String("config.env_file", envPath),
@@ -319,84 +320,147 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	return nil
 }
 
-func loadInfisicalConfig(ctx context.Context, bootstrap *viper.Viper) (*viper.Viper, error) {
-	var cfg InfisicalConfig
-	if err := bootstrap.UnmarshalKey("infisical", &cfg); err != nil {
-		return nil, fmt.Errorf("unmarshal infisical config: %w", err)
+func loadApolloConfig(_ context.Context, bootstrap *viper.Viper) (*viper.Viper, error) {
+	var cfg ApolloConfig
+	if err := bootstrap.UnmarshalKey("apollo", &cfg); err != nil {
+		return nil, fmt.Errorf("unmarshal apollo config: %w", err)
 	}
-	trimInfisicalConfig(&cfg)
-	if cfg.ProjectID == "" && cfg.ProjectSlug == "" {
-		return nil, fmt.Errorf("infisical.project_id or infisical.project_slug must be set")
+	trimApolloConfig(&cfg)
+	if cfg.AppID == "" {
+		return nil, fmt.Errorf("apollo.app_id must be set")
 	}
-	if cfg.Environment == "" {
-		return nil, fmt.Errorf("infisical.environment must be set")
+	if cfg.Cluster == "" {
+		return nil, fmt.Errorf("apollo.cluster must be set")
 	}
-	if cfg.ClientID == "" {
-		return nil, fmt.Errorf("infisical.client_id must be set")
+	if cfg.ConfigServerURL == "" {
+		return nil, fmt.Errorf("apollo.config_server_url must be set")
 	}
-	if cfg.ClientSecret == "" {
-		return nil, fmt.Errorf("infisical.client_secret must be set")
+	if len(cfg.Namespaces) == 0 {
+		return nil, fmt.Errorf("apollo.namespaces must contain at least one namespace")
 	}
-	if cfg.SecretPath == "" {
-		cfg.SecretPath = "/"
+	if cfg.SyncTimeoutSec <= 0 {
+		cfg.SyncTimeoutSec = 5
 	}
 
-	slog.Info("准备登录 Infisical",
-		slog.String("infisical.site_url", cfg.SiteURL),
-		slog.String("infisical.login_url", joinURLPath(cfg.SiteURL, "/api/v1/auth/universal-auth/login")),
-		slog.String("infisical.project_id", cfg.ProjectID),
-		slog.String("infisical.project_slug", cfg.ProjectSlug),
-		slog.String("infisical.environment", cfg.Environment),
-		slog.String("infisical.secret_path", cfg.SecretPath),
-		slog.String("infisical.client_id", maskValue(cfg.ClientID)),
-	)
-	client := infisical.NewInfisicalClient(ctx, infisical.Config{
-		SiteUrl:    cfg.SiteURL,
-		SilentMode: true,
-	})
-	if _, err := client.Auth().UniversalAuthLogin(cfg.ClientID, cfg.ClientSecret); err != nil {
-		return nil, fmt.Errorf("infisical universal auth login: %w", err)
+	namespaceText := strings.Join(cfg.Namespaces, ",")
+	clientConfig := &apolloConfig.AppConfig{
+		AppID:             cfg.AppID,
+		Cluster:           cfg.Cluster,
+		IP:                cfg.ConfigServerURL,
+		NamespaceName:     namespaceText,
+		Secret:            cfg.AccessKeySecret,
+		BackupConfigPath:  cfg.BackupConfigPath,
+		IsBackupConfig:    cfg.EnableBackup,
+		MustStart:         cfg.MustStart,
+		Label:             cfg.Label,
+		SyncServerTimeout: cfg.SyncTimeoutSec,
 	}
-	slog.Info("Infisical 登录成功，准备拉取 secrets",
-		slog.String("infisical.list_url", joinURLPath(cfg.SiteURL, "/api/v3/secrets/raw")),
-		slog.String("infisical.project_id", cfg.ProjectID),
-		slog.String("infisical.project_slug", cfg.ProjectSlug),
-		slog.String("infisical.environment", cfg.Environment),
-		slog.String("infisical.secret_path", cfg.SecretPath),
-		slog.Bool("infisical.include_imports", cfg.IncludeImports),
-		slog.Bool("infisical.recursive", cfg.Recursive),
-		slog.Bool("infisical.expand_secret_references", cfg.ExpandSecretReferences),
+	slog.Info("准备连接 Apollo",
+		slog.String("apollo.config_server_url", cfg.ConfigServerURL),
+		slog.String("apollo.app_id", cfg.AppID),
+		slog.String("apollo.cluster", cfg.Cluster),
+		slog.String("apollo.namespaces", namespaceText),
+		slog.Bool("apollo.enable_backup", cfg.EnableBackup),
+		slog.Bool("apollo.must_start", cfg.MustStart),
 	)
-	result, err := client.Secrets().ListSecrets(infisical.ListSecretsOptions{
-		ProjectID:              cfg.ProjectID,
-		ProjectSlug:            cfg.ProjectSlug,
-		Environment:            cfg.Environment,
-		SecretPath:             cfg.SecretPath,
-		IncludeImports:         cfg.IncludeImports,
-		Recursive:              cfg.Recursive,
-		ExpandSecretReferences: cfg.ExpandSecretReferences,
-		SkipUniqueValidation:   true,
+	client, err := agollo.StartWithConfig(func() (*apolloConfig.AppConfig, error) {
+		return clientConfig, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("infisical list secrets: %w", err)
+		return nil, fmt.Errorf("apollo start: %w", err)
 	}
-	slog.Info("Infisical secrets 已拉取",
-		slog.Int("infisical.secret_count", len(result.Secrets)),
-		slog.Any("infisical.secrets", maskInfisicalSecrets(result.Secrets)),
-	)
+	defer client.Close()
 
 	cloudV := viper.New()
 	cloudV.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	setDefaults(cloudV)
-	cloudV.Set("config_source", "infisical")
-	cloudV.Set("infisical", cfg)
-	for _, secret := range result.Secrets {
-		if key := configKeyForSecret(secret.SecretKey); key != "" {
-			cloudV.Set(key, secret.SecretValue)
-		}
+	cloudV.Set("config_source", "apollo")
+	cloudV.Set("apollo", cfg)
+
+	items := make([]maskedApolloConfigItem, 0)
+	for _, namespace := range cfg.Namespaces {
+		appendApolloNamespaceConfig(client, cloudV, namespace, &items)
 	}
-	logConfigSnapshot("Infisical secrets 已映射为配置键", "", cloudV)
+	if len(items) == 0 {
+		return nil, fmt.Errorf(
+			"apollo returned no config: app_id=%s cluster=%s namespaces=%s; check whether the namespace exists, the config has been published, and access_key_secret is correct",
+			cfg.AppID,
+			cfg.Cluster,
+			strings.Join(cfg.Namespaces, ","),
+		)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Namespace != items[j].Namespace {
+			return items[i].Namespace < items[j].Namespace
+		}
+		return items[i].Key < items[j].Key
+	})
+	slog.Info("Apollo 配置已拉取",
+		slog.Int("apollo.config_count", len(items)),
+		slog.Any("apollo.configs", items),
+	)
+	logConfigSnapshot("Apollo 配置已映射为后端配置键", "", cloudV)
 	return cloudV, nil
+}
+
+func appendApolloNamespaceConfig(client agollo.Client, cloudV *viper.Viper, namespace string, items *[]maskedApolloConfigItem) int {
+	cache := client.GetConfigCache(namespace)
+	if cache == nil {
+		slog.Warn("Apollo namespace 未返回配置缓存",
+			slog.String("apollo.namespace", namespace),
+		)
+		return 0
+	}
+	loaded := 0
+	cache.Range(func(key, value any) bool {
+		keyText := fmt.Sprint(key)
+		valueText := fmt.Sprint(value)
+		if strings.EqualFold(keyText, "content") && looksLikeYAMLConfig(valueText) {
+			for yamlKey, yamlValue := range parseApolloYAMLContent(valueText) {
+				if mappedKey := configKeyForSecret(yamlKey); mappedKey != "" {
+					yamlValueText := fmt.Sprint(yamlValue)
+					cloudV.Set(mappedKey, yamlValueText)
+					*items = append(*items, maskedApolloConfigItem{
+						Namespace: namespace,
+						Key:       yamlKey,
+						MappedKey: mappedKey,
+						Value:     maskValue(yamlValueText),
+					})
+					loaded++
+				}
+			}
+			return true
+		}
+		if mappedKey := configKeyForSecret(keyText); mappedKey != "" {
+			cloudV.Set(mappedKey, valueText)
+			*items = append(*items, maskedApolloConfigItem{
+				Namespace: namespace,
+				Key:       keyText,
+				MappedKey: mappedKey,
+				Value:     maskValue(valueText),
+			})
+			loaded++
+		}
+		return true
+	})
+	return loaded
+}
+
+func looksLikeYAMLConfig(content string) bool {
+	content = strings.TrimSpace(content)
+	return strings.Contains(content, "\n") && strings.Contains(content, ":")
+}
+
+func parseApolloYAMLContent(content string) map[string]any {
+	reader := viper.New()
+	reader.SetConfigType("yaml")
+	if err := reader.ReadConfig(bytes.NewBufferString(content)); err != nil {
+		slog.Warn("Apollo content YAML 解析失败",
+			slog.String("error", err.Error()),
+		)
+		return nil
+	}
+	return flattenSettings(reader.AllSettings())
 }
 
 type maskedConfigKV struct {
@@ -404,7 +468,8 @@ type maskedConfigKV struct {
 	Value string `json:"value"`
 }
 
-type maskedInfisicalSecret struct {
+type maskedApolloConfigItem struct {
+	Namespace string `json:"namespace"`
 	Key       string `json:"key"`
 	MappedKey string `json:"mapped_key"`
 	Value     string `json:"value"`
@@ -442,21 +507,6 @@ func maskedSettingsAttrs(prefix string, settings map[string]any) []slog.Attr {
 		slog.Int(prefix+".key_count", len(flat)),
 		slog.Any(prefix+".keys", maskSettings(settings)),
 	}
-}
-
-func maskInfisicalSecrets(secrets []infisical.Secret) []maskedInfisicalSecret {
-	out := make([]maskedInfisicalSecret, 0, len(secrets))
-	for _, secret := range secrets {
-		out = append(out, maskedInfisicalSecret{
-			Key:       secret.SecretKey,
-			MappedKey: configKeyForSecret(secret.SecretKey),
-			Value:     maskValue(secret.SecretValue),
-		})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Key < out[j].Key
-	})
-	return out
 }
 
 func maskSettings(settings map[string]any) []maskedConfigKV {
@@ -535,15 +585,6 @@ func maskValue(value string) string {
 	return string(runes[:3]) + strings.Repeat("*", 6) + string(runes[len(runes)-3:])
 }
 
-func joinURLPath(baseURL, path string) string {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	path = "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
-	if baseURL == "" {
-		return path
-	}
-	return baseURL + path
-}
-
 func configKeyForSecret(secretKey string) string {
 	key := strings.TrimSpace(secretKey)
 	if key == "" {
@@ -554,13 +595,13 @@ func configKeyForSecret(secretKey string) string {
 	if strings.Contains(normalized, ".") {
 		return normalized
 	}
-	if mapped, ok := infisicalSecretKeyAliases[strings.ToUpper(key)]; ok {
+	if mapped, ok := cloudConfigKeyAliases[strings.ToUpper(key)]; ok {
 		return mapped
 	}
 	return normalized
 }
 
-var infisicalSecretKeyAliases = map[string]string{
+var cloudConfigKeyAliases = map[string]string{
 	"PORT":                                "app.port",
 	"APPID":                               "external.appid",
 	"SECRET":                              "external.secret",
@@ -621,7 +662,7 @@ var infisicalSecretKeyAliases = map[string]string{
 
 func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
 	if !v.IsSet("worker.count") {
-		return fmt.Errorf("worker.count must be set in app-config.yaml or Infisical")
+		return fmt.Errorf("worker.count must be set in app-config.yaml or Apollo")
 	}
 	if cfg.Worker.Count < 0 {
 		return fmt.Errorf("worker.count must be greater than or equal to 0")
@@ -691,14 +732,17 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.DoubaoBaseURL = strings.TrimSpace(cfg.DoubaoBaseURL)
 }
 
-func trimInfisicalConfig(cfg *InfisicalConfig) {
-	cfg.SiteURL = strings.TrimSpace(cfg.SiteURL)
-	cfg.ProjectID = strings.TrimSpace(cfg.ProjectID)
-	cfg.ProjectSlug = strings.TrimSpace(cfg.ProjectSlug)
-	cfg.Environment = strings.TrimSpace(cfg.Environment)
-	cfg.SecretPath = strings.TrimSpace(cfg.SecretPath)
-	cfg.ClientID = strings.TrimSpace(cfg.ClientID)
-	cfg.ClientSecret = strings.TrimSpace(cfg.ClientSecret)
+func trimApolloConfig(cfg *ApolloConfig) {
+	cfg.AppID = strings.TrimSpace(cfg.AppID)
+	cfg.Cluster = strings.TrimSpace(cfg.Cluster)
+	cfg.ConfigServerURL = strings.TrimRight(strings.TrimSpace(cfg.ConfigServerURL), "/")
+	cfg.AccessKeySecret = strings.TrimSpace(cfg.AccessKeySecret)
+	cfg.BackupConfigPath = strings.TrimSpace(cfg.BackupConfigPath)
+	cfg.Label = strings.TrimSpace(cfg.Label)
+	cfg.Namespaces = normalizeCSV(cfg.Namespaces)
+	if len(cfg.Namespaces) == 0 {
+		cfg.Namespaces = []string{"application"}
+	}
 }
 
 func normalizeCSV(values []string) []string {
@@ -743,8 +787,16 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("task_queue.buffer_size", 1024)
 	v.SetDefault("task_queue.topic", "food-link-analysis-tasks")
 	v.SetDefault("task_queue.consumer_group", "food-link-workers")
-	v.SetDefault("infisical.site_url", "https://app.infisical.com")
-	v.SetDefault("infisical.secret_path", "/")
+	// Apollo bootstrap defaults keep apollo-config.yaml focused on values that
+	// differ per deployment. Add fields to the YAML only when an environment
+	// needs to override these.
+	v.SetDefault("apollo.app_id", "food-link")
+	v.SetDefault("apollo.cluster", "dev")
+	v.SetDefault("apollo.namespaces", []string{"application"})
+	v.SetDefault("apollo.enable_backup", true)
+	v.SetDefault("apollo.backup_config_path", "logs/apollo-cache")
+	v.SetDefault("apollo.must_start", true)
+	v.SetDefault("apollo.sync_timeout_seconds", 5)
 }
 
 func bindLegacyEnv(v *viper.Viper) {
@@ -788,12 +840,4 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("database.user", "POSTGRESQL_USER")
 	_ = v.BindEnv("database.password", "POSTGRESQL_PASSWORD")
 	_ = v.BindEnv("database.name", "POSTGRESQL_DATABASE")
-	_ = v.BindEnv("infisical.enabled", "INFISICAL_ENABLED")
-	_ = v.BindEnv("infisical.site_url", "INFISICAL_SITE_URL")
-	_ = v.BindEnv("infisical.project_id", "INFISICAL_PROJECT_ID")
-	_ = v.BindEnv("infisical.project_slug", "INFISICAL_PROJECT_SLUG")
-	_ = v.BindEnv("infisical.environment", "INFISICAL_ENVIRONMENT")
-	_ = v.BindEnv("infisical.secret_path", "INFISICAL_SECRET_PATH")
-	_ = v.BindEnv("infisical.client_id", "INFISICAL_UNIVERSAL_AUTH_CLIENT_ID")
-	_ = v.BindEnv("infisical.client_secret", "INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET")
 }

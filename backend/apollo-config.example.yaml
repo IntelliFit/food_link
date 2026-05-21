@@ -1,0 +1,32 @@
+# Apollo 云端配置模式的最小启动配置。
+# 使用时复制为 backend/apollo-config.yaml，并在 .env 或进程环境变量中设置：
+# CONFIG_SOURCE=apollo
+#
+# 这个文件只保存“如何连接 Apollo”的启动信息，不保存数据库、COS、大模型
+# API Key、微信支付等业务运行配置；这些配置应放在 Apollo namespace 里。
+#
+# 代码中已有默认值：
+# - enable_backup: true
+# - backup_config_path: logs/apollo-cache
+# - must_start: true
+# - sync_timeout_seconds: 5
+#
+# Apollo 配置项推荐使用 database.host、external.doubao_api_key 这类点号路径；
+# 也兼容 POSTGRESQL_HOST、DOUBAO_API_KEY、WORKER_COUNT 等旧环境变量式 key。
+
+apollo:
+  # Apollo Config Service 地址，例如 http://apollo-config.example.com。
+  config_server_url: ""
+
+  # Apollo 项目 AppID，对应 Apollo 控制台里的应用标识。
+  app_id: "food-link"
+
+  # Apollo 环境/集群名，例如 local、dev、main。
+  cluster: "dev"
+
+  # 要读取的 namespace。application 是 Apollo 默认 namespace。
+  namespaces:
+    - "application"
+
+  # 如果 Apollo App 开启了 AccessKey 鉴权，填写密钥；未开启则留空。
+  access_key_secret: ""
