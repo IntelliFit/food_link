@@ -543,6 +543,54 @@ worker:
 	}
 }
 
+func TestLoadMergesApolloYAMLNamespaceFromRawText(t *testing.T) {
+	var sawRawConfig bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/configfiles/food-link/dev/app-config.yaml":
+			sawRawConfig = true
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte(`content=database\:\n  host\: db-from-raw-yaml\njwt\:\n  secret\: yaml-jwt\nworker\:\n  count\: 3\ntask_queue\:\n  driver\: kafka\n  brokers\:\n    - kafka\:9092\n`))
+		case r.Method == http.MethodGet && r.URL.Path == "/configfiles/json/food-link/dev/app-config.yaml":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"task_queue.brokers": "[kafka:9092]"
+			}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/services/config":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/notifications/v2":
+			w.WriteHeader(http.StatusNotModified)
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	dir := writeNamedTestConfig(t, "apollo-config.yaml", `
+apollo:
+  app_id: "food-link"
+  cluster: "dev"
+  config_server_url: "`+server.URL+`"
+  namespaces:
+    - "app-config.yaml"
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !sawRawConfig {
+		t.Fatal("expected raw Apollo configfiles endpoint to be used for YAML namespace")
+	}
+	if cfg.Database.Host != "db-from-raw-yaml" {
+		t.Fatalf("expected database host from raw YAML, got %+v", cfg.Database)
+	}
+	if len(cfg.TaskQueue.Brokers) != 1 || cfg.TaskQueue.Brokers[0] != "kafka:9092" {
+		t.Fatalf("expected brokers from raw YAML list, got %+v", cfg.TaskQueue.Brokers)
+	}
+}
+
 func TestLoadMergesApolloYAMLContentFromApplicationNamespace(t *testing.T) {
 	var sawConfig bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

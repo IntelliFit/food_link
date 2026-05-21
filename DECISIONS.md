@@ -1,5 +1,10 @@
 # DECISIONS
 
+- `2026-05-22`: Apollo YAML namespace 必须按原始文本读取后交给 Viper 解析。
+  - 规范 YAML 写法仍是 `task_queue.brokers: ["kafka:9092"]` 或多行数组；该写法本身没有问题。
+  - 线上若出现 `[[kafka:9092]]:9092 missing port in address`，说明 `.yaml` namespace 之前经过 agollo 已解析 cache 后又被 `fmt.Sprint` 成了 `[kafka:9092]` 字符串，不是 Apollo 的 YAML 列表语义错，也不是 Kafka service 地址本身缺端口。
+  - `backend/pkg/config` 对 `.yaml/.yml` namespace 应直接请求 Apollo Config Service 的原始文本端点 `/configfiles/{appId}/{cluster}/{namespace}`，再用 Viper 解析；properties/key-value namespace 才继续走 agollo cache。
+
 - `2026-05-22`: 后端 Docker 推送脚本默认自动重试多个 Go builder 镜像源。
   - `backend/scripts/push-docker-ccr.mjs` 继续以 `docker.io/library/golang:1.26.1-bookworm` 作为首选官方镜像，但默认候选列表会继续尝试 `docker.m.daocloud.io`、`docker.xuanyuan.me`、`docker.1ms.run`、`docker.1panel.live`。
   - `DOCKER_GO_BUILDER_IMAGE` 仍表示“只用这一个镜像”；新增 `DOCKER_GO_BUILDER_IMAGES` 表示逗号分隔的候选镜像列表，供临时覆盖默认重试顺序。
