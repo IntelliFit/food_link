@@ -48,6 +48,8 @@ import './index.scss'
 
 
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
+const PACKAGED_FOOD_EDIT_DRAFT_KEY = 'packagedFoodEditDraft'
+const PACKAGED_FOOD_EDIT_SAVED_KEY = 'packagedFoodEditSaved'
 const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
@@ -562,6 +564,24 @@ function ResultPage() {
 
   useDidShow(() => {
     applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
+  })
+
+  useDidShow(() => {
+    try {
+      const saved = Taro.getStorageSync(PACKAGED_FOOD_EDIT_SAVED_KEY)
+      const itemId = Number(saved?.itemId)
+      if (!Number.isFinite(itemId) || itemId <= 0) return
+      Taro.removeStorageSync(PACKAGED_FOOD_EDIT_SAVED_KEY)
+      setNutritionItems(items => {
+        const next = items.map(item => (
+          item.id === itemId
+            ? { ...item, nutritionSource: 'packaged_food_library', isUnresolved: false }
+            : item
+        ))
+        calculateNutritionStats(next)
+        return next
+      })
+    } catch {}
   })
 
   useEffect(() => {
@@ -1236,7 +1256,7 @@ function ResultPage() {
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
   const openSnackContribution = (item: NutritionItem) => {
     const unit = nutrientPer100FromItem(item)
-    setSnackDraft({
+    Taro.setStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY, {
       itemId: item.id,
       brand: '',
       productName: item.name,
@@ -1249,15 +1269,16 @@ function ResultPage() {
       sugar: formatMacroDisplay(unit.sugar || 0),
       sodiumMg: String(Math.round(unit.sodiumMg || unit.sodium_mg || 0)),
     })
-  }
-
-  const updateSnackDraftField = (field: keyof SnackContributionDraft, value: string) => {
-    setSnackDraft(current => current ? { ...current, [field]: value } : current)
+    Taro.navigateTo({ url: extraPkgUrl('/pages/packaged-food-edit/index') })
   }
 
   const numberFromDraft = (value: string) => {
     const n = Number(String(value || '').trim())
     return Number.isFinite(n) && n >= 0 ? n : 0
+  }
+
+  const updateSnackDraftField = (field: keyof SnackContributionDraft, value: string) => {
+    setSnackDraft(current => current ? { ...current, [field]: value } : current)
   }
 
   const handleSubmitSnackContribution = async () => {

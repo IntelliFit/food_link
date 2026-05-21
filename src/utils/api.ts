@@ -3862,6 +3862,40 @@ export interface PackagedFoodItem {
   is_active: boolean
 }
 
+export interface PackagedNutritionLabelRecognition {
+  brand?: string
+  product_name?: string
+  net_weight_g?: number
+  serving_weight_g?: number
+  kcal_per_100g?: number
+  protein_per_100g?: number
+  carbs_per_100g?: number
+  fat_per_100g?: number
+  fiber_per_100g?: number
+  sugar_per_100g?: number
+  saturated_fat_per_100g?: number
+  cholesterol_mg_per_100g?: number
+  sodium_mg_per_100g?: number
+  potassium_mg_per_100g?: number
+  calcium_mg_per_100g?: number
+  iron_mg_per_100g?: number
+  magnesium_mg_per_100g?: number
+  zinc_mg_per_100g?: number
+  vitamin_a_rae_mcg_per_100g?: number
+  vitamin_c_mg_per_100g?: number
+  vitamin_d_mcg_per_100g?: number
+  vitamin_e_mg_per_100g?: number
+  vitamin_k_mcg_per_100g?: number
+  thiamin_mg_per_100g?: number
+  riboflavin_mg_per_100g?: number
+  niacin_mg_per_100g?: number
+  vitamin_b6_mg_per_100g?: number
+  folate_mcg_per_100g?: number
+  vitamin_b12_mcg_per_100g?: number
+  confidence?: number
+  raw_text?: string
+}
+
 export async function createPackagedFood(payload: CreatePackagedFoodRequest): Promise<PackagedFoodItem> {
   const res = await authenticatedRequest('/api/packaged-food', {
     method: 'POST',
@@ -3872,6 +3906,18 @@ export async function createPackagedFood(payload: CreatePackagedFoodRequest): Pr
     throwHttpErrorWithStatus(res.statusCode, res.data, '保存零食数据失败')
   }
   return unwrapResponse<{ item: PackagedFoodItem }>(res).item
+}
+
+export async function recognizePackagedNutritionLabel(imageUrl: string): Promise<PackagedNutritionLabelRecognition> {
+  const res = await authenticatedRequest('/api/packaged-food/nutrition-label/recognize', {
+    method: 'POST',
+    data: { image_url: imageUrl },
+    timeout: 90000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '识别营养成分表失败')
+  }
+  return unwrapResponse<{ nutrition: PackagedNutritionLabelRecognition }>(res).nutrition
 }
 
 export interface FriendSearchUser {
