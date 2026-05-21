@@ -124,6 +124,7 @@ function ProfilePage() {
   const { scheme, toggleScheme } = useAppColorScheme()
   // 登录状态
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [userId, setUserId] = useState('')
 
   // （个人设置已迁移到独立页面 /pages/profile-settings/index）
 
@@ -162,6 +163,8 @@ function ProfilePage() {
       const token = getAccessToken()
       if (token) {
         setIsLoggedIn(true)
+        const cachedUserId = String(Taro.getStorageSync('user_id') || '').trim()
+        setUserId(cachedUserId)
 
         try {
           const [apiUserInfo, membershipData, dashboardData, friendRequestsData] = await Promise.all([
@@ -228,6 +231,8 @@ function ProfilePage() {
             name: apiUserInfo.nickname || '用户昵称',
             meta: `已记录 ${days} 天`
           }
+          const resolvedUserId = String(apiUserInfo.id || cachedUserId).trim()
+          setUserId(resolvedUserId)
           setUserInfo(nextUserInfo)
           Taro.setStorageSync('userInfo', {
             ...nextUserInfo,
@@ -249,6 +254,7 @@ function ProfilePage() {
       } else {
         setIsLoggedIn(false)
         setMembershipStatus(null)
+        setUserId('')
         setUserInfo({
           avatar: '',
           name: '用户昵称',
@@ -429,6 +435,25 @@ function ProfilePage() {
     })
   }, [])
 
+  // 复制用户 ID
+  const handleCopyUserId = useCallback(() => {
+    const value = userId.trim()
+    if (!value) {
+      Taro.showToast({ title: '暂无用户ID', icon: 'none' })
+      return
+    }
+    Taro.setClipboardData({
+      data: value,
+      success: () => {
+        Taro.showToast({ title: '已复制用户ID', icon: 'success' })
+      },
+      fail: (err) => {
+        console.error('[profile] copy user id failed:', err)
+        Taro.showToast({ title: '复制失败', icon: 'none' })
+      }
+    })
+  }, [userId])
+
   // 处理去登录
   const handleGoLogin = () => {
     redirectToLogin()
@@ -524,6 +549,7 @@ function ProfilePage() {
             clearAllStorage()
             setIsLoggedIn(false)
             setMembershipStatus(null)
+            setUserId('')
             setUserInfo({
               avatar: '',
               name: '用户昵称',
@@ -572,6 +598,13 @@ function ProfilePage() {
                   <Text className='user-edit-text'>编辑资料</Text>
                   <Arrow size={12} color='#9ca3af' />
                 </View>
+                {userId && (
+                  <View className='user-id-copy-row'>
+                    <View className='user-id-copy-button' onClick={handleCopyUserId}>
+                      <Text className='user-id-copy-button-text'>复制用户ID</Text>
+                    </View>
+                  </View>
+                )}
               </>
             ) : (
               <View className='user-name-row'>

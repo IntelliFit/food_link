@@ -1055,6 +1055,20 @@ func TestAnalyzeService_ApplyDBFirstUsesPackagedFoodWeightForSnack(t *testing.T)
 	assert.Equal(t, 28.0, nutrients["protein"])
 }
 
+func TestModelDeclaredPackagedFoodDoesNotInferFromName(t *testing.T) {
+	item := map[string]any{"name": "可比克番茄味薯片"}
+
+	assert.False(t, modelDeclaredPackagedFood(item))
+	assert.Empty(t, item["type"])
+}
+
+func TestModelDeclaredPackagedFoodNormalizesModelType(t *testing.T) {
+	item := map[string]any{"name": "可比克番茄味薯片", "type": "packaged"}
+
+	assert.True(t, modelDeclaredPackagedFood(item))
+	assert.Equal(t, "snack", item["type"])
+}
+
 func TestParseItems_Empty(t *testing.T) {
 	items := parseItems(map[string]any{})
 	assert.Len(t, items, 0)

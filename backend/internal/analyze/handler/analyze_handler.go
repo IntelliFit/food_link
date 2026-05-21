@@ -11,8 +11,10 @@ import (
 	authmw "food_link/backend/internal/auth"
 	errors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
+	apm "food_link/backend/pkg/trace"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type AnalyzeService interface {
@@ -48,6 +50,15 @@ func NewAnalyzeHandler(analyzeSvc AnalyzeService, taskSvc TaskService, adminKey 
 		taskSvc:    taskSvc,
 		adminKey:   adminKey,
 	}
+}
+
+func bindTaskIDToRequest(c *gin.Context, taskID string) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return
+	}
+	c.Set("analysis.task_id", taskID)
+	apm.SetAttributes(c.Request.Context(), attribute.String("analysis.task_id", taskID))
 }
 
 func (h *AnalyzeHandler) bindAnalyzeInput(c *gin.Context) (service.AnalyzeInput, error) {
@@ -193,6 +204,7 @@ func (h *AnalyzeHandler) AnalyzeBatch(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	bindTaskIDToRequest(c, taskID)
 
 	response.Success(c, map[string]any{
 		"task_id":     taskID,
@@ -218,6 +230,7 @@ func (h *AnalyzeHandler) SubmitAnalyzeTask(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	bindTaskIDToRequest(c, taskID)
 	response.Success(c, map[string]string{
 		"task_id": taskID,
 		"message": "任务已提交，可在任务列表中查看进度",
@@ -244,6 +257,7 @@ func (h *AnalyzeHandler) SubmitTextTask(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	bindTaskIDToRequest(c, taskID)
 	response.Success(c, map[string]string{
 		"task_id": taskID,
 		"message": "任务已提交，可在任务列表中查看进度",
@@ -293,6 +307,7 @@ func (h *AnalyzeHandler) CountTasksByStatus(c *gin.Context) {
 func (h *AnalyzeHandler) GetTask(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	taskID := c.Param("task_id")
+	bindTaskIDToRequest(c, taskID)
 	task, err := h.taskSvc.GetTask(c.Request.Context(), taskID, userID)
 	if err != nil {
 		response.Error(c, err)
@@ -305,6 +320,7 @@ func (h *AnalyzeHandler) GetTask(c *gin.Context) {
 func (h *AnalyzeHandler) UpdateTaskResult(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	taskID := c.Param("task_id")
+	bindTaskIDToRequest(c, taskID)
 	var body struct {
 		Result map[string]any `json:"result"`
 	}
@@ -323,6 +339,7 @@ func (h *AnalyzeHandler) UpdateTaskResult(c *gin.Context) {
 func (h *AnalyzeHandler) DeleteTask(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	taskID := c.Param("task_id")
+	bindTaskIDToRequest(c, taskID)
 	data, err := h.taskSvc.DeleteTask(c.Request.Context(), taskID, userID)
 	if err != nil {
 		response.Error(c, err)
@@ -427,5 +444,6 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	bindTaskIDToRequest(c, taskID)
 	response.Success(c, gin.H{"task_id": taskID, "message": "精准模式已继续，系统正在重新规划本轮估计"})
 }

@@ -1458,6 +1458,156 @@ transitiontransition
   color: #059669;
 }
 
+.snack-contribution-card {
+  margin: 0 20rpx 18rpx;
+  padding: 18rpx;
+  border-radius: 18rpx;
+  border: 1rpx solid rgba(245, 158, 11, 0.28);
+  background: #fffbeb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+}
+
+.snack-contribution-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.snack-contribution-title {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.snack-contribution-desc {
+  font-size: 22rpx;
+  line-height: 1.45;
+  color: #b45309;
+}
+
+.snack-contribution-action {
+  flex-shrink: 0;
+  min-width: 132rpx;
+  height: 56rpx;
+  padding: 0 18rpx;
+  border-radius: 14rpx;
+  background: #f59e0b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.snack-contribution-action:active {
+  background: #d97706;
+}
+
+.snack-contribution-action-text {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #fff;
+}
+
+.snack-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(15 23 42 / 58%);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+
+  &.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.snack-drawer-content {
+  width: 100%;
+  max-height: 82vh;
+  background: #fff;
+  border-radius: 30rpx 30rpx 0 0;
+  transform: translateY(100%);
+  transition: transform 0.24s ease;
+  overflow: hidden;
+
+  &.slide-up {
+    transform: translateY(0);
+  }
+}
+
+.snack-drawer-scroll {
+  max-height: 58vh;
+}
+
+.snack-form-section {
+  padding: 22rpx 30rpx 8rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.snack-form-label {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #334155;
+}
+
+.snack-form-input,
+.snack-form-input-with-unit {
+  min-height: 76rpx;
+  border-radius: 16rpx;
+  background: #f8fafc;
+  border: 1rpx solid rgba(203, 213, 225, 0.75);
+}
+
+.snack-form-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0 20rpx;
+  font-size: 26rpx;
+  color: #0f172a;
+}
+
+.snack-form-input-with-unit {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+
+  .snack-form-input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+  }
+}
+
+.snack-form-unit {
+  flex-shrink: 0;
+  min-width: 58rpx;
+  padding-right: 18rpx;
+  font-size: 23rpx;
+  color: #64748b;
+  text-align: right;
+}
+
+.snack-nutrition-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+}
+
+.snack-nutrition-wide {
+  grid-column: span 2;
+}
+
 @keyframes pulse {
   0% {
     transform: scale(1);

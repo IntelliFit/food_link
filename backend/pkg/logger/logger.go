@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	commonmw "food_link/backend/internal/common/middleware"
 	"food_link/backend/pkg/config"
 
 	"github.com/gin-gonic/gin"
@@ -110,6 +111,10 @@ func Stringp(name string, value *string) slog.Attr {
 	return slog.String(name, *value)
 }
 
+func AnalysisTaskID(taskID string) slog.Attr {
+	return slog.String("analysis.task_id", strings.TrimSpace(taskID))
+}
+
 func Timep(name string, value *time.Time) slog.Attr {
 	if value == nil {
 		return slog.Any(name, nil)
@@ -182,8 +187,21 @@ func RequestLogger() gin.HandlerFunc {
 			slog.Duration("http.duration", time.Since(start)),
 			slog.String("client.address", c.ClientIP()),
 		}
-		if requestID := strings.TrimSpace(c.GetHeader("X-Request-Id")); requestID != "" {
+		traceID, requestID, hostName := commonmw.RequestIDs(c)
+		if traceID != "" {
+			attrs = append(attrs, slog.String("trace_id", traceID))
+		}
+		if requestID != "" {
 			attrs = append(attrs, slog.String("request_id", requestID))
+		}
+		if hostName != "" {
+			attrs = append(attrs, slog.String("host_name", hostName))
+		}
+		if taskID := strings.TrimSpace(c.GetString("analysis.task_id")); taskID != "" {
+			attrs = append(attrs,
+				slog.String("analysis.task_id", taskID),
+				slog.String("task_id", taskID),
+			)
 		}
 		if len(c.Errors) > 0 {
 			attrs = append(attrs, slog.String("gin.errors", c.Errors.String()))
@@ -296,7 +314,21 @@ func appendTraceAttrs(ctx context.Context, attrs []slog.Attr) []slog.Attr {
 	if len(trace) == 0 {
 		return attrs
 	}
-	return append(attrs, trace...)
+	for _, attr := range trace {
+		if !hasAttr(attrs, attr.Key) {
+			attrs = append(attrs, attr)
+		}
+	}
+	return attrs
+}
+
+func hasAttr(attrs []slog.Attr, key string) bool {
+	for _, attr := range attrs {
+		if attr.Key == key {
+			return true
+		}
+	}
+	return false
 }
 
 func attrsToAny(attrs []slog.Attr) []any {

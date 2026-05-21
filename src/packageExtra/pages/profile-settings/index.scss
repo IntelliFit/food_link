@@ -89,6 +89,7 @@
   display: flex;
   flex-direction: column;
   gap: 24rpx;
+  margin-bottom: 48rpx;
 }
 
 .nickname-input {
@@ -109,6 +110,58 @@
     background: #fff;
     box-shadow: 0 0 0 4rpx rgb(0 188 125 / 10%);
   }
+}
+
+.user-id-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.user-id-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.user-id-copy-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48rpx;
+  padding: 0 20rpx;
+  border-radius: 999rpx;
+  background: rgb(0 188 125 / 10%);
+  border: 1rpx solid rgb(0 188 125 / 18%);
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.72;
+  }
+}
+
+.user-id-copy-btn-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #008f63;
+  font-weight: 600;
+}
+
+.user-id-full {
+  display: block;
+  width: 100%;
+  padding: 24rpx 28rpx;
+  box-sizing: border-box;
+  border-radius: 20rpx;
+  background: #f9fafb;
+  border: 2rpx solid #e5e7eb;
+  font-size: 26rpx;
+  line-height: 38rpx;
+  color: #4b5563;
+  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .save-btn {
@@ -194,6 +247,21 @@
       border-color: #00bc7d;
       box-shadow: 0 0 0 4rpx rgb(0 188 125 / 15%);
     }
+  }
+
+  .user-id-copy-btn {
+    background: rgba(0, 188, 125, 0.14);
+    border-color: rgba(0, 188, 125, 0.24);
+  }
+
+  .user-id-copy-btn-text {
+    color: #6ee7b7;
+  }
+
+  .user-id-full {
+    background: #1e2624;
+    border-color: rgba(255, 255, 255, 0.08);
+    color: rgba(214, 226, 220, 0.76);
   }
 
   .save-btn {

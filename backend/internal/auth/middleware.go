@@ -7,6 +7,8 @@ import (
 	authservice "food_link/backend/internal/auth/service"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -32,6 +34,7 @@ func RequireJWT(jwt *authservice.JWTService) gin.HandlerFunc {
 		c.Set(ContextUserIDKey, claims.UserID)
 		c.Set(ContextOpenIDKey, claims.OpenID)
 		c.Set(ContextUnionIDKey, claims.UnionID)
+		setUserTraceAttributes(c, claims.UserID)
 		c.Next()
 	}
 }
@@ -48,6 +51,7 @@ func OptionalJWT(jwt *authservice.JWTService) gin.HandlerFunc {
 			c.Set(ContextUserIDKey, claims.UserID)
 			c.Set(ContextOpenIDKey, claims.OpenID)
 			c.Set(ContextUnionIDKey, claims.UnionID)
+			setUserTraceAttributes(c, claims.UserID)
 		}
 		c.Next()
 	}
@@ -70,4 +74,19 @@ func bearerToken(header string) string {
 		return ""
 	}
 	return strings.TrimSpace(header[7:])
+}
+
+func setUserTraceAttributes(c *gin.Context, userID string) {
+	userID = strings.TrimSpace(userID)
+	if c == nil || c.Request == nil || userID == "" {
+		return
+	}
+	span := oteltrace.SpanFromContext(c.Request.Context())
+	if !span.SpanContext().IsValid() {
+		return
+	}
+	span.SetAttributes(
+		attribute.String("user.id", userID),
+		attribute.String("enduser.id", userID),
+	)
 }

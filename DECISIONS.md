@@ -1,5 +1,33 @@
 # DECISIONS
 
+- `2026-05-21`: 零食拍照分析的实际查询顺序是 `packaged_food_library` 优先、普通食物库回退。识别 item 若带 `type=snack` 或命中零食/预包装关键词，后端先调用 `ResolvePackagedFood`；命中时返回 `nutrition_source=packaged_food_library` 并不再显示前端补库提示，未命中时继续沿用普通 `db_first` + DeepSeek fallback。
+
+- `2026-05-21`: 拍照分析的零食识别仍沿用普通 `db_first` 营养估算链路，但结果页需要给用户明确的补库入口。
+  - 只要识别结果像零食/预包装食品且当前没有命中 `packaged_food_library`，前端就在该 item 下提示“识别为零食”，并邀请用户补充包装上的名称、重量和营养成分。
+  - 用户提交的数据写入 `packaged_food_library` 和 `packaged_food_aliases`，作为零食专用库沉淀；不改变当前普通食物营养补全和 DeepSeek fallback 主链路。
+  - 未来如果拍照分析主链路接入 `ResolvePackagedFood` 并返回 `nutrition_source=packaged_food_library`，前端不再对该 item 显示补库提示。
+
+- `2026-05-21`: “我的”页只保留复制用户 ID 的入口，完整用户 ID 放到“编辑资料”页。
+  - 用户 ID 主要用于排障和 Jaeger tag 反查，不应在“我的”页头像昵称区直接占用视觉空间。
+  - 首页只显示“复制用户ID”按钮；完整 UUID 在编辑资料页展示，并允许复制。
+  - 资料保存逻辑需要保留本地 `userInfo.id`，避免保存头像/昵称后丢失后续展示和复制所需的用户 ID。
+
+- `2026-05-21`: `/api/health` 健康检查不生成 OTel trace。
+  - 健康检查频率高且没有业务排障价值，必须通过 `otelgin.WithFilter` 在入口跳过采集，避免 Jaeger 被健康检查 trace 淹没。
+  - 只精确排除 `/api/health`；其它 API 仍需保留 trace，尤其是登录后请求的 `user.id` / `enduser.id` tag。
+
+- `2026-05-21`: 登录用户 ID 必须作为 trace tag 写入 HTTP 请求 span。
+  - `RequireJWT` 与 `OptionalJWT` 成功解析 JWT 后，统一给当前 OTel span 设置 `user.id` 和 `enduser.id`，方便在用户无法打开小程序控制台复制 trace_id 时，通过 Jaeger tag 反查该用户相关请求。
+  - 分析任务/worker 链路继续保留 `analysis.user_id`，用于分析任务维度筛选；不要把 openid/unionid/token 等更敏感或无必要的身份标识写入 trace tag。
+
+- `2026-05-21`: 会员支付记录创建必须在仓库层补齐非空 JSON 字段默认值。
+  - `pro_membership_payment_records.notify_payload` 和 `extra` 在数据库层都是 JSON 非空字段；即使调用方漏传，`MembershipRepo.CreatePayment` 也要把它们初始化为 `{}`，不能依赖数据库默认值或上层 service 恰好传值。
+  - 这样可以避免 `/api/membership/pay/create` 在会员支付单落库阶段因 `SQLSTATE 23502` 返回 500。
+
+- `2026-05-21`: Go 后端日志栈继续统一使用 `backend/pkg/logger` + `log/slog`。
+  - `backend/internal/analyze/service/analyze_service.go` 等新改动禁止重新引入 `go.uber.org/zap`，避免 `go.mod` 无该依赖时直接导致 `npm run dev:backend` 编译失败。
+  - 新日志字段统一使用 `slog.String/Int/Bool/Duration/Any` 与 `logger.Err(...)`。
+
 - `2026-05-20`: 手动记录的 item 级营养必须作为一等数据保存和展示。
   - `user_food_records.total_calories / total_protein / total_carbs / total_fat` 只能作为餐次汇总，不能替代 `items[].nutrients`；当天页、历史页、编辑页展开明细时应优先读取 item 级营养。
   - 手动记录保存链路必须保证每个 item 写入标准 `nutrients.calories/protein/carbs/fat`，不能只让外层总营养正确，否则会出现餐次总热量正常、食物明细全 0 的分裂体验。
@@ -1686,3 +1714,35 @@
   - `gemini35_flash` 表示单次 Gemini 3.5 Flash 直接做图片食物识别和估重，仍走后端 db_first 营养回算，按普通分析 2 积分计费。
   - `gemini35_flash_grouped` 表示 Gemini 3.5 Flash 先识别，再进行最多 2 组分组复核估重，按试验/精准成本 4 积分计费，并要求标准版/进阶版权限。
   - 该通道使用独立配置 `external.gemini35_api_key/base_url/model`，不复用旧 `gemini-3-flash-preview` key。
+
+- `2026-05-21`: 后端运行配置优先走 Infisical 云端拉取。
+  - 本地 `backend/config.yaml` 只应保留 Infisical Universal Auth bootstrap、项目/环境/路径等启动必要配置，以及确实只属于本机环境的少量设置。
+  - 后端必须通过 Go SDK 在 `config.Load()` 内自动登录 Infisical 并拉取 secrets；不要要求用户额外执行 Infisical CLI，也不要把云端配置先注入成环境变量再启动。
+  - Infisical secret key 兼容现有环境变量式命名（如 `POSTGRESQL_HOST`、`DOUBAO_API_KEY`、`WORKER_COUNT`）和路径式命名（如 `database__host` / `external.doubao_api_key`）。后续新增配置时优先保持这一映射规则。
+  - 云端配置用于覆盖本地业务配置；如果需要临时脱离云端调试，可将 `infisical.enabled=false` 并继续使用本地 YAML 兼容路径。
+
+- `2026-05-21`: 后端配置源必须通过顶层 `config_source` 显式二选一。
+  - `config_source: local` 表示全部业务配置来自本地 YAML/本地兼容输入。
+  - `config_source: infisical` 表示本地 YAML 只作为 Infisical bootstrap，业务配置全部来自 Infisical secrets；禁止把本地业务配置作为云端模式下的覆盖或兜底。
+  - 后续新增配置项时必须遵守该互斥语义，不能重新引入“云端覆盖本地”的混合设计。
+
+- `2026-05-21`: 后端配置文件拆分为 `app-config.yaml` 与 `infisical-config.yaml`。
+  - `infisical-config.yaml` 只用于 `config_source: infisical`，保存 Infisical Universal Auth bootstrap，不保存业务运行配置。
+  - `app-config.yaml` 只用于 `config_source: local`，保存本地业务运行配置。
+  - 加载优先级为 `infisical-config.yaml` > `app-config.yaml` > 旧 `config.yaml` 兼容；前两个文件的 `config_source` 必须和文件用途一致。
+
+- `2026-05-21`: 后端配置源选择收敛为 `.env` 中的必填 `CONFIG_SOURCE`。
+  - `.env` 必须存在，且 `CONFIG_SOURCE` 只能是 `local` 或 `infisical`，没有默认值。
+  - `CONFIG_SOURCE=local` 时只读 `app-config.yaml`，业务配置全部来自本地文件。
+  - `CONFIG_SOURCE=infisical` 时只读 `infisical-config.yaml` 作为 Infisical bootstrap，业务配置全部来自 Infisical secrets。
+  - 不再通过文件存在性猜测模式，也不再自动兼容旧 `config.yaml`，避免本地/云端混合和隐式切换。
+
+- `2026-05-21`: `CONFIG_SOURCE` 的权威入口支持进程环境变量和 `.env`，其中进程环境变量优先。
+  - Kubernetes/容器部署可以只通过 Deployment env 设置 `CONFIG_SOURCE=local|infisical`，不需要挂载 `.env`。
+  - 本地开发可以用 `backend/.env` 作为便利 fallback。
+  - 两者都不存在或值非法时才启动失败；不能因为容器没有 `.env` 而忽略已有进程环境变量。
+
+- `2026-05-21`: 零食/预包装食品是否进入 `packaged_food_library` 必须由模型输出的 `type` 决定。
+  - prompt 必须要求每个 item 输出 `type`，当前取值口径为 `normal`、`snack`、`packaged`。
+  - 后端只做 `type/food_type` 兼容归一化，不再按名称、OCR、category、recognitionEvidence 或 alternativeNames 里的“薯片/饼干/零食/净含量”等关键词推断零食。
+  - 如果模型没有输出 `snack/packaged`，即使名称像零食，也先走普通食物库和 DeepSeek fallback；日志里的 item 摘要必须保留 `type` 以便判断模型分类是否正确。

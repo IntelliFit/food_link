@@ -278,6 +278,7 @@ func logAnalyzeTaskSubmitted(ctx context.Context, userID, taskID, taskType strin
 	hasText := strings.TrimSpace(input.TextInput) != "" || strings.TrimSpace(input.Text) != ""
 	logger.WithTrace(ctx).Info("分析任务已提交",
 		slog.String("task_id", taskID),
+		logger.AnalysisTaskID(taskID),
 		slog.String("task_type", taskType),
 		slog.String("user_id", userID),
 		slog.String("model_name", modelName),

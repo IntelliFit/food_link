@@ -1,4 +1,150 @@
-# CURRENT_TASK
+﻿# CURRENT_TASK
+
+## 2026-05-21 - 零食库查询改为完全由模型 `type` 决定
+- Task: 用户确认零食/预包装食品的 `type` 应由大模型输出，不应由后端按“薯片/饼干/零食”等预设关键词匹配推断。
+- Status: fixed_static_verified_restart_required
+- Change:
+  - `backend/internal/analyze/service/analyze_service.go` 的普通、精准、轻量、分组规划、文字和文字 db_first prompt 均明确要求每个 item 输出 `type`。
+  - `type` 规则收口为：`normal` 表示普通熟食/鲜食/菜品/饮品等；`snack` 表示零食类预包装食品；`packaged` 表示其它预包装/包装食品。
+  - 后端删除 `snackAnalyzeKeywords` 关键词表，不再根据食物名称、category、OCR、evidence、alternativeNames 推断零食。
+  - `db_first` 只在模型显式输出 `type/food_type` 为 `snack`、`packaged` 或兼容预包装取值时才查 `packaged_food_library`；否则直接走普通食物库，再按未命中情况走 DeepSeek fallback。
+  - trace/log item 摘要新增 `type` 字段，后续可直接从 `视觉模型识别结果已返回` 和 `营养库优先回算开始/完成` 判断模型是否给出零食类型。
+- Verification:
+  - `go test ./internal/analyze/service -run "TestModelDeclaredPackagedFood|TestBuildPrompt|TestBuildStandardImageHybrid|TestBuildAnalyzeResponse" -count=1` passed.
+  - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go` passed with only CRLF warnings.
+  - 旧 sqlite repo 型测试在本机 `CGO_ENABLED=0` 时仍受 `go-sqlite3 requires cgo` 阻塞；尝试 `CGO_ENABLED=1` 后又被本机缺少 `gcc` 阻塞，因此新增回归覆盖改为不依赖数据库的纯函数测试。
+- Next step:
+  - 重启 Go 后端/worker 后生效；复测零食图片时先看日志 item 的 `type`，只有模型输出 `snack/packaged` 才会进入零食库。
+
+## 2026-05-21 - 食物识别链路补充 trace 绑定日志
+- Task: 用户反馈小程序多图模式偶发热量为 0，希望在识别流程中增加日志并绑定到 trace，便于从 Jaeger 分析问题发生在视觉识别、营养库匹配还是 DeepSeek fallback。
+- Status: implemented_static_verified_restart_required
+- Change:
+  - `backend/internal/analyze/service/analyze_service.go` 在视觉模型返回后记录中文结构化日志 `视觉模型识别结果已返回`，并给当前 span 添加同名 event；字段包含 provider、model、execution_mode、analysis_engine、image_count、item_count 和最多 12 个 item 摘要。
+  - `applyDBFirstNutrition` 增加 `营养库优先回算开始`、`营养库未命中，开始 DeepSeek 营养补全`、`DeepSeek 营养补全完成`、`营养库优先回算完成` 等日志和 trace event。
+  - item 摘要只记录排障必要字段：name、estimated_weight_g、original_weight_g、calories/protein/carbs/fat、nutrition_source、resolve_status、matched_food_name、is_unresolved、suggested_ratio/source；不记录图片 URL、完整请求体、token 或大文本。
+- Verification:
+  - `go test ./internal/analyze/service -run "TestBuildAnalyzeResponse|TestMergeBatchResults|TestAnalyzeService_AnalyzeImageStandardForcesDoubaoInsteadOfGemini|TestAnalyzeService_AnalyzeImageStandardUsesDoubaoForExplicitDoubao|TestApplyDBFirstToItemsUsesPackagedFoodLibrary" -count=1` passed.
+  - `go test ./internal/analyze/service -run '^$' -count=1` passed.
+  - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage|^$" -count=1` passed.
+  - `git diff --check -- backend/internal/analyze/service/analyze_service.go` passed with only CRLF warning.
+- Next step:
+  - 重启 Go 后端/worker 后生效。Jaeger 中可按 `analysis.user_id` 或 task 相关 tag 找到 trace，再看事件 `视觉模型识别结果已返回`、`营养库优先回算开始`、`营养库优先回算完成`；若出现 0 热量，重点看 item 的 `nutrition_source` 是否为 `unresolved`、`resolved_count/unresolved_count` 和 `deepseek_generated_count`。
+## 2026-05-21 - 拍照结果页零食补库入口
+
+- Task: 拍照分析识别到零食时，结果页提示用户当前仍按普通食物流程估算营养，并邀请用户补充零食名称、重量和营养成分，提交后保存到 `packaged_food_library`。
+- Status: implemented_static_verified_runtime_blocked
+- Change:
+  - 拍照分析提示词补充 `item.type` 字段；后端 `db_first` 在判断为零食/预包装食品时先查 `packaged_food_library`，命中则返回 `nutrition_source=packaged_food_library`，未命中继续回退到普通食物库和 DeepSeek fallback。
+  - 后端新增 `POST /api/packaged-food`，登录用户可提交零食/预包装食品数据，服务层校验名称、重量和基础营养字段，仓储层按 `normalized_name` 幂等 upsert 到 `packaged_food_library`，并写入 `packaged_food_aliases`。
+  - 前端结果页保留分析 item 的 `type/category/nutrition_source/unit_nutrition_per_100g` 元数据，按 `snack/packaged` 标记或零食关键词识别零食；如果尚未命中 `packaged_food_library`，在该 item 下显示“识别为零食 / 添加零食”提示。
+  - “添加零食”弹层预填当前识别名称、重量和每 100g 营养值，允许用户编辑品牌、名称、重量、热量、蛋白质、碳水、脂肪、膳食纤维、糖、钠并保存到零食库。
+- Verification:
+  - `go test ./internal/analyze/service -run '^$' -count=1` passed.
+  - `go test ./internal/foodrecord/handler -run "TestCreatePackagedFood|TestSearchFoodNutrition|TestGetUnresolvedTop" -count=1` passed.
+  - `go test ./internal/foodrecord/handler ./internal/foodrecord/service ./internal/app -run '^$' -count=1` passed.
+  - `npx eslint src/packageExtra/pages/result/index.tsx src/utils/api.ts --max-warnings 0` passed.
+  - 目标 `git diff --check` passed，仅 CRLF warnings。
+- Runtime verification:
+  - 已按项目要求尝试 `mrc where --port 3001` 与 `mrc where --port 9420`，均因微信开发者工具自动化端口未连接失败，未能截图/交互验证。
+- Next step:
+  - 重启 Go 后端后新接口生效；让小程序吃到最新 dev 产物后，在拍照结果页用零食样例确认提示卡、弹层编辑和保存链路。
+
+## 2026-05-21 - 用户 ID 复制入口视觉收敛
+
+- Task: 用户认为在“我的”页直接显示完整用户 ID 过丑，要求首页只保留“复制用户ID”按钮，并把完整 ID 放到“编辑资料”页。
+- Status: fixed_static_verified_runtime_blocked
+- Change:
+  - `src/pages/profile/index.tsx` 不再在头像昵称区显示完整用户 ID，只保留登录后的“复制用户ID”轻量按钮。
+  - `src/pages/profile/index.scss` 删除首页用户 ID 文本行样式，改为单按钮样式，并补充深色模式。
+  - `src/packageExtra/pages/profile-settings/index.tsx` 新增 `userId` 状态，优先从本地 `userInfo.id` 读取，兜底读取 `user_id`；编辑资料页显示完整用户 ID，并提供复制按钮。
+  - 编辑资料保存时继续把 `id` 写回本地 `userInfo`，避免保存头像/昵称后丢失用户 ID 缓存。
+  - `src/packageExtra/pages/profile-settings/index.scss` 新增完整 ID 展示区样式，长 UUID 使用自动换行避免溢出。
+- Verification:
+  - `npx eslint src/pages/profile/index.tsx src/packageExtra/pages/profile-settings/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/pages/profile/index.tsx src/pages/profile/index.scss src/packageExtra/pages/profile-settings/index.tsx src/packageExtra/pages/profile-settings/index.scss` passed, only CRLF warnings.
+  - 已按项目要求尝试 `mrc where --port 3001` 和 `mrc where --port 9420`，均因微信开发者工具自动化端口未连接失败，未能截图/交互验证。
+- Next step:
+  - 需要用户让小程序吃到最新 dev 产物后，在“我的”页确认只显示复制按钮，并进入“编辑资料”页确认完整用户 ID 展示与复制可用。
+
+## 2026-05-21 - 我的页显示并复制用户 ID
+
+- Task: 为了配合 Jaeger 按 `user.id` / `enduser.id` 反查 trace，用户要求小程序登录后在「我的」页显示自己的用户 ID，并提供复制按钮。
+- Status: fixed_static_verified_runtime_blocked
+- Change:
+  - `src/pages/profile/index.tsx` 新增 `userId` 状态，登录后优先读取 `/api/user/profile` 返回的 `id`，接口刷新前兜底显示本地 `user_id`。
+  - 在「我的」页头像昵称区域下方展示 `用户ID`、完整 ID 的单行省略文本和 `复制` 按钮。
+  - `复制` 按钮调用 `Taro.setClipboardData`，成功提示 `已复制用户ID`，失败提示 `复制失败`。
+  - `src/pages/profile/index.scss` 补充浅色/深色模式样式，确保长 UUID 不撑开布局。
+- Verification:
+  - `npx eslint src/pages/profile/index.tsx --max-warnings 0` passed.
+  - `git diff --check -- src/pages/profile/index.tsx src/pages/profile/index.scss` passed, only CRLF warnings.
+  - 已尝试 `mrc where --port 3001` 和 `mrc where --port 9420`，均因微信开发者工具自动化端口未连接失败，未能截图/交互验证。
+- Next step:
+  - 需要用户让小程序吃到最新 dev 产物后，在「我的」页确认用户 ID 展示与复制按钮。
+
+## 2026-05-21 - Jaeger trace 按用户筛选
+
+- Task: 用户希望在用户无法打开微信小程序控制台复制 trace_id 的情况下，仍能用用户 ID 在 Jaeger 中筛选相关 trace。
+- Status: fixed_static_verified_restart_required
+- Finding:
+  - HTTP 入口已通过 `otelgin.Middleware` 自动生成请求 span，并通过 `X-Trace-Id` 响应头把 trace id 返回给小程序。
+  - 分析任务链路已有 `analysis.user_id`、`analysis.task_id`、`analysis.task_type` 等自定义 span tag。
+  - 鉴权中间件此前只把 `user_id/openid/unionid` 写入 Gin context，没有把登录用户写入当前 OTel span，所以普通登录接口 trace 不能直接按用户 ID 搜。
+- Change:
+  - `RequireJWT` 与 `OptionalJWT` 在 JWT 解析成功后，对当前 span 设置 `user.id` 与 `enduser.id` tag。
+  - 不写入 openid/unionid，避免把额外身份标识扩散到 trace tag。
+- Verification:
+  - `cd backend && go test ./internal/auth -count=1` passed.
+  - `cd backend && go test ./internal/app -run '^$' -count=1` passed.
+- Next step:
+  - 重启 Go 后端后生效；Jaeger 中新 trace 可用 `user.id=<用户UUID>` 或 `enduser.id=<用户UUID>` 筛选 HTTP 请求，用 `analysis.user_id=<用户UUID>` 筛选分析 worker 相关 span。
+
+### Follow-up: 健康检查不生成 trace
+
+- Task: `/api/health` 健康检查频率高，Jaeger 中几乎全是健康检查 trace，需要作为例外跳过采集。
+- Change:
+  - `backend/internal/app/app.go` 的 `otelgin.Middleware` 增加 `WithFilter(shouldTraceHTTPRequest)`。
+  - `shouldTraceHTTPRequest` 对精确路径 `/api/health` 返回 `false`，其它请求继续生成 trace。
+- Verification:
+  - `cd backend && go test ./internal/app -run 'TestShouldTraceHTTPRequest|TestAppPackage' -count=1` passed.
+  - `cd backend && go test ./internal/auth -count=1` passed.
+- Next step:
+  - 重启 Go 后端后生效；健康检查响应头仍会由 `RequestID` 兜底返回 `X-Trace-Id`，但不会创建/上报 OTel server span。
+
+## 2026-05-21 — 会员支付创建接口 `/api/membership/pay/create` 返回 500
+
+- Task: 用户发起会员支付时，后端日志报 `ERROR: null value in column "notify_payload" of relation "pro_membership_payment_records" violates not-null constraint (SQLSTATE 23502)`，接口 `/api/membership/pay/create` 返回 500。
+- Status: fixed_static_verified_restart_required
+- Finding:
+  - 依赖层判断：这是数据库约束层错误，不是前端参数问题，也不是微信下单前置失败。
+  - `backend/internal/membership/service/membership_service.go` 创建 `MembershipPayment` 时给了 `Extra`，但没有给 `NotifyPayload`。
+  - 表结构在 `backend/internal/migration/do/schema_do.go` 中明确要求 `pro_membership_payment_records.notify_payload` 为 `jsonb not null default '{}'::jsonb`。
+  - `backend/internal/membership/repo/membership_repo.go` 直接 `Create(p)`，当 `NotifyPayload` 为 `nil` 时会向数据库写 `NULL`，因此被非空约束拦截。
+- Change:
+  - 在 `MembershipRepo.CreatePayment` 中统一兜底：`NotifyPayload` / `Extra` 为 `nil` 时自动初始化为 `map[string]any{}`，避免空 JSON 字段再触发 500。
+  - 新增回归测试 `TestMembershipRepo_CreatePaymentInitializesNonNullJSONFields`。
+- Verification:
+  - `gofmt -w backend/internal/membership/repo/membership_repo.go backend/internal/membership/repo/membership_repo_test.go` passed。
+  - `cd backend && go test ./internal/membership/repo ./internal/membership/service ./internal/app -run '^$' -count=1` passed。
+  - `cd backend && go test ./internal/membership/repo ./internal/membership/service ./internal/app -run "TestMembershipRepo_CreatePayment|^$" -count=1` 中 repo 运行型测试被本机 `CGO_ENABLED=0` 阻塞，因为 `go-sqlite3` 需要 cgo；service/app 编译级通过。
+- Next step:
+  - 需要重启当前 Go 后端后再重新发起一次会员支付创建。
+
+## 2026-05-21 — `dev:backend` 因残留 `zap` 依赖编译失败
+
+- Task: 用户执行 `npm run dev:backend` 时，Go 编译报错 `internal/analyze/service/analyze_service.go:27:2: no required module provides package go.uber.org/zap`，后端无法启动。
+- Status: fixed_static_verified_restart_required
+- Finding:
+  - `backend/internal/analyze/service/analyze_service.go` 误引入了已淘汰的 `go.uber.org/zap`，并继续使用 `zap.String/Int/Error/...`。
+  - 当前 Go 后端日志基础设施已统一切到 `backend/pkg/logger` + `log/slog`，`backend/go.mod` 中也没有 `zap` 依赖，所以会在编译阶段直接失败，而不是运行到接口层才报错。
+- Change:
+  - 将 `analyze_service.go` 中全部 `zap` 字段改回 `slog.Attr` / `logger.Err(...)` 写法，并补上 `log/slog` 导入。
+- Verification:
+  - `gofmt -w backend/internal/analyze/service/analyze_service.go` passed。
+  - `cd backend && go test ./internal/analyze/service ./internal/app -run '^$' -count=1` passed。
+- Next step:
+  - 用户重新执行 `npm run dev:backend`，后端应可恢复启动；本轮未替用户启动常驻进程。
 
 ## 2026-05-20 — 手动记录保存后当天页食物明细营养为 0
 
@@ -40247,3 +40393,92 @@ DATABASE_HOST=127.0.0.1 DATABASE_USER=kirigaya npm run test:e2e-weapp
   - 需要把完整 Gemini 3.5 Flash key 填入 `backend/config.yaml` 的 `external.gemini35_api_key`，截图中的 key 不完整，当前本地字段保持空值。
   - 需要用户确认是否对当前 `backend/config.yaml` 指向的数据库执行迁移：`cd backend && go run ./cmd/migration -config-dir .`。
   - 需要重启后端和刷新/重新编译小程序后，新通道才会在运行态生效。
+
+## 2026-05-21 - 后端配置接入 Infisical
+- Task: 用户希望后端启动时通过 Go SDK 自动从 Infisical 云端拉取配置，本地只保留 Infisical bootstrap 和环境相关配置，不使用 Infisical CLI 或额外环境注入命令。
+- Status: implemented_static_verified_restart_required
+- Change:
+  - `backend/pkg/config` 新增 `infisical` bootstrap 配置，支持 Universal Auth：`enabled/site_url/project_id/project_slug/environment/secret_path/client_id/client_secret/include_imports/recursive/expand_secret_references`。
+  - `config.Load()` 现在先读默认值、legacy env、本地 YAML 保护项，再在 `infisical.enabled=true` 时用 `github.com/infisical/go-sdk` 登录并拉取 secrets，最后合并为现有 `Config`。
+  - Infisical secret key 支持两种命名：现有环境变量名如 `POSTGRESQL_HOST`、`DOUBAO_API_KEY`、`WORKER_COUNT`，以及路径式 key 如 `database__host` 或 `external.doubao_api_key`。
+  - `worker.count` 现在可以来自本地 `config.yaml` 或 Infisical；本地 YAML 仍兼容，Infisical 云端值会覆盖本地业务配置。
+  - `backend/config-example.yaml` 已补充最小 Infisical bootstrap 示例。
+- Verification:
+  - `go test ./pkg/config -count=1` passed.
+  - `go test ./internal/app -run '^$' -count=1` passed.
+  - `go build -o $env:TEMP\food-link-server-infisical.exe ./cmd/server` passed.
+  - `git diff --check -- backend/pkg/config/config.go backend/pkg/config/config_test.go backend/config-example.yaml backend/go.mod backend/go.sum` passed with only CRLF warnings.
+- Next step:
+  - 在真实 `backend/config.yaml` 中只保留 `infisical` bootstrap 和必要本地环境项，真实业务配置迁移到 Infisical 网页后，重启后端生效。
+
+### Follow-up: 配置源改为 local / infisical 互斥
+- 用户要求配置源必须显式声明云端或本地，云端模式就是全云端，本地模式就是全本地，不要本地业务配置被云端覆盖或兜底的混合设计。
+- 已新增顶层 `config_source`，默认 `local`；可选值仅 `local` / `infisical`。
+- `config_source: local`：沿用本地 YAML 业务配置，兼容现有 legacy env 与本地 YAML 保护项。
+- `config_source: infisical`：本地 YAML 只读取 `infisical` bootstrap；业务配置全部从 Infisical secrets 构建，本地 `database/worker/external/...` 等业务字段不会参与合并或兜底。
+- 新增测试覆盖：Infisical 空 secrets 时即使本地 YAML 有 `worker.count` 也必须失败，证明云端模式不吃本地业务配置。
+
+### Follow-up: 拆分 app-config.yaml 与 infisical-config.yaml
+- 用户希望不要再用一个 YAML 同时承载本地和 Infisical 配置。
+- 已调整配置加载顺序：优先读取 `backend/infisical-config.yaml`（必须 `config_source: infisical`），其次读取 `backend/app-config.yaml`（必须 `config_source: local`），最后兼容旧 `backend/config.yaml`。
+- 云端模式下 `infisical-config.yaml` 只作为 Universal Auth/bootstrap；业务运行配置仍然必须全部来自 Infisical secrets。
+- 本地模式下 `app-config.yaml` 承载全部本地业务配置。
+- 新增 `backend/infisical-config-example.yaml`，`backend/config-example.yaml` 改为本地 app config 示例。
+- Verification: `go test ./pkg/config -count=1`、`go test ./internal/app -run '^$' -count=1`、`go build -o $env:TEMP\food-link-server-infisical-split.exe ./cmd/server` 均通过；diff-check 仅 CRLF warnings。
+
+### Follow-up: 用 .env 作为唯一配置源选择入口
+- 用户确认最终方案：`.env` 只放 `CONFIG_SOURCE=local|infisical`，没有默认值；`local` 只读 `app-config.yaml`，`infisical` 只读 `infisical-config.yaml` 并从云端拉全部业务配置。
+- 已移除旧的按文件存在性自动判断和旧 `config.yaml` 自动兼容路径；`.env` 缺失或 `CONFIG_SOURCE` 缺失/非法会直接启动失败。
+- `backend/config-example.yaml` 现在作为 `app-config.yaml` 模板；新增 `backend/infisical-config-example.yaml` 作为 `infisical-config.yaml` 模板；新增 `backend/.env.example`。
+- `backend/.gitignore` 新增忽略 `app-config.yaml` 与 `infisical-config.yaml`，避免本地/云端 bootstrap 密钥入库。
+- Verification: `go test ./pkg/config -count=1`、`go test ./internal/app -run '^$' -count=1`、`go build -o $env:TEMP\food-link-server-env-source.exe ./cmd/server` 均通过；diff-check 仅 CRLF warnings。
+
+### Follow-up: Kubernetes CONFIG_SOURCE 环境变量不要求 .env 文件
+- 用户部署 `foodlink-dev` 时 Pod 已通过 env 设置 `CONFIG_SOURCE=local`，但镜像内无 `.env` 导致启动失败：`load config: open .env: no such file or directory`。
+- 已修正配置源读取顺序：优先读取进程环境变量 `CONFIG_SOURCE`；只有未设置时才读取 `backend/.env`；两者都没有才启动失败。
+- 这匹配 Kubernetes/容器部署习惯：Deployment env 可以直接声明配置源，`.env` 只是本地开发便利文件。
+- 新增测试覆盖无 `.env` 但进程 env 存在的场景。
+- Verification: `go test ./pkg/config -count=1`、`go test ./internal/app -run '^$' -count=1`、`go build -o $env:TEMP\food-link-server-config-env.exe ./cmd/server` 均通过。
+
+## 2026-05-21 - 分析失败页展示 traceId
+- Task: 用户要求 `packageExtra/pages/analyze-loading/index` 的识别失败界面直接输出 traceId，便于截图后排查。
+- Status: fixed_static_verified_runtime_not_run
+- Change:
+  - `src/utils/api.ts` 的 `AnalysisTask` 类型补充 `trace_id/traceId/request_id/requestId`，并在 `getAnalyzeTask` 成功响应时把响应头 `X-Trace-Id` / `X-Request-Id` 附加到任务对象，作为任务本身没有 trace 字段时的兜底。
+  - `src/packageExtra/pages/analyze-loading/index.tsx` 在任务进入 `failed/timed_out` 时提取 traceId，优先读任务返回体或 payload，兜底读本次轮询响应头附加的 traceId；失败页在错误文案下方展示 `traceId: ...`，并过滤 `no-trace-id/null/undefined` 等占位值。
+  - `src/packageExtra/pages/analyze-loading/index.scss` 新增 `.error-trace`，长 traceId 自动换行，避免撑破失败页布局。
+- Verification:
+  - `npx eslint src/packageExtra/pages/analyze-loading/index.tsx src/utils/api.ts --max-warnings 0` passed.
+  - `git diff --check -- src/utils/api.ts src/packageExtra/pages/analyze-loading/index.tsx src/packageExtra/pages/analyze-loading/index.scss` passed with only CRLF warnings.
+- Runtime verification:
+  - 本轮按当前项目决策未运行微信开发者工具/前端运行态验证；需要让小程序吃到最新 dev 产物后，在一次失败任务上确认 traceId 显示。
+
+## 2026-05-21 - 后端 HTTP 日志补充 trace_id
+- Task: 用户希望后端 JSON 日志中的 `请求完成`、`请求失败`、`应用错误` 能直接输出 traceId，方便和小程序失败页/Jaeger 对应。
+- Status: fixed_static_verified_restart_required
+- Change:
+  - `backend/internal/common/middleware/request_id.go` 新增 `RequestIDs(c)`，统一从 Gin context、响应头、请求头读取 `trace_id/request_id/host_name`。
+  - `backend/pkg/logger/logger.go` 的 `RequestLogger()` 在访问日志里追加 `trace_id`、`request_id`、`host_name`；同时 `appendTraceAttrs` 避免已有 `trace_id/span_id` 时重复追加同名字段。
+  - `backend/internal/common/response/response.go` 的应用错误、参数绑定错误、JSON 解析错误、参数校验错误、未处理错误日志改为 `WarnContext/ErrorContext`，并统一追加 `trace_id/request_id/host_name`。
+- Verification:
+  - `go test ./internal/common/middleware ./internal/common/response ./pkg/logger ./internal/app -run '^$|TestRequestID|TestLogger' -count=1` passed.
+  - `git diff --check -- backend/internal/common/middleware/request_id.go backend/pkg/logger/logger.go backend/internal/common/response/response.go` passed with only CRLF warnings.
+- Next step:
+  - 重启 Go 后端后生效；之后类似 `/api/pet/summary` 500 日志里应能直接看到 `trace_id` 与 `request_id`。
+
+## 2026-05-21 - taskId 作为分析链路关联键
+- Task: 用户希望拿到分析 taskId 后，能查到从提交识别、worker 认领处理、识别结果落库、前端轮询获取结果的全链路日志和 trace tag。
+- Status: fixed_static_verified_restart_required
+- Change:
+  - `backend/internal/analyze/handler/analyze_handler.go` 新增 `bindTaskIDToRequest`，在提交任务成功、批量任务创建、继续精准任务、GET/PATCH/DELETE `/api/analyze/tasks/:task_id` 时把 taskId 写入 Gin context 的 `analysis.task_id`，并设置当前 HTTP span tag `analysis.task_id`。
+  - `backend/pkg/logger/logger.go` 的 `RequestLogger()` 会把 Gin context 中的 `analysis.task_id` 同时输出为 `analysis.task_id` 和 `task_id`，方便 JSON 日志按统一字段过滤；新增 `logger.AnalysisTaskID(taskID)` 辅助。
+  - `backend/internal/common/response/response.go` 的错误日志也会输出 `analysis.task_id/task_id`，因此轮询失败或任务详情接口应用错误可以直接按 taskId 关联。
+  - `backend/internal/analyze/service/task_service.go` 的“分析任务已提交”日志补充 `analysis.task_id`；worker 关键日志“任务已认领/任务处理开始/食物任务已完成/失败状态更新/退还积分失败”等补充 `analysis.task_id`。
+  - worker 侧已有大量 OTel span/event tag `analysis.task_id`，本轮主要补齐 HTTP 侧和日志统一字段。
+- Verification:
+  - `go test ./internal/analyze/handler ./internal/analyze/service ./internal/worker ./internal/common/response ./pkg/logger ./internal/app -run '^$|TestAnalyzeHandler|TestTaskService|TestLogger' -count=1` 中 handler/worker/common/logger/app 通过，`internal/analyze/service` 运行型测试被本机 `CGO_ENABLED=0` + `go-sqlite3` 阻塞。
+  - `go test ./internal/analyze/service -run '^$' -count=1` passed.
+  - `git diff --check -- backend/pkg/logger/logger.go backend/internal/common/response/response.go backend/internal/analyze/handler/analyze_handler.go backend/internal/analyze/service/task_service.go backend/internal/worker/worker.go` passed with only CRLF warnings.
+- Usage:
+  - 日志平台可按 `analysis.task_id=<taskId>` 或兼容字段 `task_id=<taskId>` 查询。
+  - Jaeger 可按 tag `analysis.task_id=<taskId>` 查询提交 HTTP span 和 worker 处理 span；异步 worker 不一定和提交请求属于同一个 trace，但 taskId 是稳定关联键。

@@ -157,6 +157,37 @@
     color: #9ca3af;
     line-height: 34rpx;
   }
+
+  .user-id-copy-row {
+    display: flex;
+    align-items: center;
+    max-width: 100%;
+    margin-top: 4rpx;
+  }
+
+  .user-id-copy-button {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42rpx;
+    padding: 0 18rpx;
+    border-radius: 999rpx;
+    background: rgb(92 184 150 / 10%);
+    border: 1rpx solid rgb(92 184 150 / 20%);
+    box-sizing: border-box;
+
+    &:active {
+      opacity: 0.72;
+    }
+  }
+
+  .user-id-copy-button-text {
+    font-size: 22rpx;
+    color: #2f8f70;
+    line-height: 30rpx;
+    font-weight: 600;
+  }
 }
 
 // 快捷入口（仿知乎头像下方统计/入口：数字 + 名称）
@@ -744,6 +775,15 @@
 
   .user-edit-text {
     color: #9ca3af;
+  }
+
+  .user-id-copy-button {
+    background: rgba(112, 196, 149, 0.14);
+    border-color: rgba(112, 196, 149, 0.26);
+  }
+
+  .user-id-copy-button-text {
+    color: #6ee7b7;
   }
 
   .quick-action-num {

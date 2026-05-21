@@ -668,6 +668,16 @@
   margin-bottom: 48rpx;
 }
 
+.error-trace {
+  max-width: 620rpx;
+  margin: -28rpx 0 40rpx;
+  font-size: 24rpx;
+  line-height: 1.45;
+  color: #64748b;
+  text-align: center;
+  word-break: break-all;
+}
+
 .btn-history {
   padding: 28rpx 56rpx;
   background: linear-gradient(135deg, #00bc7d 0%, #00a86b 100%);

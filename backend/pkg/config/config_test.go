@@ -1,6 +1,8 @@
 package config
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,9 +12,29 @@ import (
 func writeTestConfig(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("CONFIG_SOURCE=local\n"), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	configPath := filepath.Join(dir, "app-config.yaml")
 	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
-		t.Fatalf("write config.yaml: %v", err)
+		t.Fatalf("write app-config.yaml: %v", err)
+	}
+	return dir
+}
+
+func writeNamedTestConfig(t *testing.T, name string, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	source := "local"
+	if name == "infisical-config.yaml" {
+		source = "infisical"
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("CONFIG_SOURCE="+source+"\n"), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	configPath := filepath.Join(dir, name)
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("write %s: %v", name, err)
 	}
 	return dir
 }
@@ -64,13 +86,92 @@ worker:
 		t.Fatalf("legacy env binding failed: %+v", cfg)
 	}
 	if cfg.Worker.Count != 2 {
-		t.Fatalf("worker config should come from config.yaml only: %+v", cfg.Worker)
+		t.Fatalf("worker config should come from app-config.yaml only: %+v", cfg.Worker)
 	}
 	if cfg.External.OfoxAIBaseURL != "https://proxy.example.com/v1" {
 		t.Fatalf("ofox base url env binding failed: %+v", cfg.External)
 	}
 	if cfg.Storage.CDNHealthReportsBaseURL != "health" {
 		t.Fatalf("health reports cdn env binding failed: %+v", cfg.Storage)
+	}
+}
+
+func TestLoadReadsAppConfigYAML(t *testing.T) {
+	dir := writeNamedTestConfig(t, "app-config.yaml", `
+app:
+  port: 3910
+database:
+  host: "app-config-db"
+worker:
+  count: 2
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.ConfigSource != "local" || cfg.App.Port != 3910 || cfg.Database.Host != "app-config-db" || cfg.Worker.Count != 2 {
+		t.Fatalf("expected app-config.yaml values, got %+v", cfg)
+	}
+}
+
+func TestLoadReadsConfigSourceFromProcessEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CONFIG_SOURCE", "local")
+	if err := os.WriteFile(filepath.Join(dir, "app-config.yaml"), []byte(`
+worker:
+  count: 2
+`), 0o600); err != nil {
+		t.Fatalf("write app-config.yaml: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.ConfigSource != "local" || cfg.Worker.Count != 2 {
+		t.Fatalf("expected CONFIG_SOURCE env to select local config, got %+v", cfg)
+	}
+}
+
+func TestLoadRequiresConfigSourceWhenEnvAndDotenvMissing(t *testing.T) {
+	dir := t.TempDir()
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected missing CONFIG_SOURCE to fail")
+	}
+	if !strings.Contains(err.Error(), "CONFIG_SOURCE") {
+		t.Fatalf("expected CONFIG_SOURCE error, got %v", err)
+	}
+}
+
+func TestLoadPrefersInfisicalConfigOverAppConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("CONFIG_SOURCE=infisical\n"), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "app-config.yaml"), []byte(`
+worker:
+  count: 2
+`), 0o600); err != nil {
+		t.Fatalf("write app-config.yaml: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "infisical-config.yaml"), []byte(`
+infisical:
+  project_id: "project-id"
+  environment: "dev"
+  client_id: "client-id"
+  client_secret: "client-secret"
+`), 0o600); err != nil {
+		t.Fatalf("write infisical-config.yaml: %v", err)
+	}
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected Infisical request to fail without test server")
+	}
+	if !strings.Contains(err.Error(), "infisical") {
+		t.Fatalf("expected infisical mode, got %v", err)
 	}
 }
 
@@ -282,7 +383,7 @@ task_queue:
 		t.Fatalf("load config: %v", err)
 	}
 	if cfg.TaskQueue.Driver != "memory" {
-		t.Fatalf("expected task queue driver from config.yaml, got %+v", cfg.TaskQueue)
+		t.Fatalf("expected task queue driver from app-config.yaml, got %+v", cfg.TaskQueue)
 	}
 	if cfg.TaskQueue.BufferSize != 7 || cfg.TaskQueue.Topic != "local-analysis" || cfg.TaskQueue.ConsumerGroup != "local-workers" {
 		t.Fatalf("unexpected task queue config: %+v", cfg.TaskQueue)
@@ -317,5 +418,128 @@ task_queue:
 	}
 	if cfg.TaskQueue.Topic != "food-link-analysis-tasks" || cfg.TaskQueue.ConsumerGroup != "food-link-workers" {
 		t.Fatalf("unexpected task queue config: %+v", cfg.TaskQueue)
+	}
+}
+
+func TestConfigKeyForSecretSupportsPathAndLegacyNames(t *testing.T) {
+	cases := map[string]string{
+		"database__host":          "database.host",
+		"external.doubao_api_key": "external.doubao_api_key",
+		"POSTGRESQL_HOST":         "database.host",
+		"TASK_QUEUE_BROKERS":      "task_queue.brokers",
+		"worker-count":            "worker_count",
+	}
+	for input, want := range cases {
+		if got := configKeyForSecret(input); got != want {
+			t.Fatalf("configKeyForSecret(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestLoadMergesInfisicalSecrets(t *testing.T) {
+	var sawLogin, sawList bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/universal-auth/login":
+			sawLogin = true
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"accessToken":"test-token","expiresIn":3600,"accessTokenMaxTTL":3600,"tokenType":"Bearer"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v3/secrets/raw":
+			sawList = true
+			if got := r.URL.Query().Get("workspaceId"); got != "project-id" {
+				t.Fatalf("workspaceId = %q", got)
+			}
+			if got := r.URL.Query().Get("environment"); got != "dev" {
+				t.Fatalf("environment = %q", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"secrets": [
+					{"secretKey":"database__host","secretValue":"db.example.internal"},
+					{"secretKey":"POSTGRESQL_DATABASE","secretValue":"food-cloud"},
+					{"secretKey":"JWT_SECRET_KEY","secretValue":"cloud-jwt"},
+					{"secretKey":"DOUBAO_API_KEY","secretValue":"cloud-doubao"},
+					{"secretKey":"WORKER_COUNT","secretValue":"3"},
+					{"secretKey":"TASK_QUEUE_BROKERS","secretValue":"kafka-1:9092,kafka-2:9092"}
+				]
+			}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	dir := writeNamedTestConfig(t, "infisical-config.yaml", `
+infisical:
+  site_url: "`+server.URL+`"
+  project_id: "project-id"
+  environment: "dev"
+  client_id: "client-id"
+  client_secret: "client-secret"
+database:
+  host: "local-should-not-be-used"
+  name: "local-should-not-be-used"
+jwt:
+  secret: "local-should-not-be-used"
+worker:
+  count: 1
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !sawLogin || !sawList {
+		t.Fatalf("expected Infisical login and list requests, login=%v list=%v", sawLogin, sawList)
+	}
+	if cfg.Database.Host != "db.example.internal" || cfg.Database.Name != "food-cloud" {
+		t.Fatalf("expected database config from Infisical, got %+v", cfg.Database)
+	}
+	if cfg.JWT.Secret != "cloud-jwt" || cfg.External.DoubaoAPIKey != "cloud-doubao" {
+		t.Fatalf("expected secrets from Infisical, got jwt=%q external=%+v", cfg.JWT.Secret, cfg.External)
+	}
+	if cfg.Worker.Count != 3 {
+		t.Fatalf("expected worker count from Infisical, got %+v", cfg.Worker)
+	}
+	if len(cfg.TaskQueue.Brokers) != 2 || cfg.TaskQueue.Brokers[1] != "kafka-2:9092" {
+		t.Fatalf("expected normalized kafka brokers from Infisical, got %+v", cfg.TaskQueue.Brokers)
+	}
+	if cfg.ConfigSource != "infisical" {
+		t.Fatalf("expected infisical config source, got %q", cfg.ConfigSource)
+	}
+}
+
+func TestLoadInfisicalModeDoesNotUseLocalBusinessConfig(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/auth/universal-auth/login":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"accessToken":"test-token","expiresIn":3600,"accessTokenMaxTTL":3600,"tokenType":"Bearer"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v3/secrets/raw":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"secrets":[]}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	dir := writeNamedTestConfig(t, "infisical-config.yaml", `
+infisical:
+  site_url: "`+server.URL+`"
+  project_id: "project-id"
+  environment: "dev"
+  client_id: "client-id"
+  client_secret: "client-secret"
+worker:
+  count: 7
+`)
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected missing cloud worker.count to fail")
+	}
+	if !strings.Contains(err.Error(), "worker.count") {
+		t.Fatalf("expected worker.count error, got %v", err)
 	}
 }

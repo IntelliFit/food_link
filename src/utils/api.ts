@@ -184,6 +184,9 @@ export interface UnitNutritionPer100g extends Nutrients {}
 export interface FoodItem {
   itemId?: number
   name: string
+  type?: string
+  food_type?: string
+  category?: string
   estimatedWeightGrams: number
   originalWeightGrams: number
   suggestedRatio?: number
@@ -2148,6 +2151,10 @@ export interface AnalysisTask {
   payload?: Record<string, unknown>
   result?: AnalyzeResponse
   error_message?: string
+  trace_id?: string | null
+  traceId?: string | null
+  request_id?: string | null
+  requestId?: string | null
   is_violated?: boolean          // AI 审核是否违规
   violation_reason?: string | null // 违规原因
   is_recorded?: boolean          // 是否已保存为饮食记录（后端通过 user_food_records 关联查询）
@@ -2363,7 +2370,12 @@ export async function getAnalyzeTask(taskId: string): Promise<AnalysisTask> {
     const msg = (res.data as any)?.detail || '获取任务失败'
     throw new Error(msg)
   }
-  return res.data as AnalysisTask
+  const task = res.data as AnalysisTask
+  const responseTraceId = extractTraceIdFromHeaders(res.header as Record<string, any> | undefined)
+  const responseRequestId = extractRequestIdFromHeaders(res.header as Record<string, any> | undefined)
+  if (responseTraceId && !task.trace_id && !task.traceId) task.trace_id = responseTraceId
+  if (responseRequestId && !task.request_id && !task.requestId) task.request_id = responseRequestId
+  return task
 }
 
 /** 查询当前用户的分析任务列表 */
@@ -3799,6 +3811,69 @@ export async function searchFoodNutritionCandidates(query: string, limit: number
 // ---------- 好友与圈子 ----------
 
 /** 搜索用户项（不包含手机号） */
+export interface CreatePackagedFoodRequest {
+  brand?: string
+  product_name: string
+  net_weight_g: number
+  serving_weight_g?: number
+  kcal_per_100g: number
+  protein_per_100g: number
+  carbs_per_100g: number
+  fat_per_100g: number
+  fiber_per_100g?: number
+  sugar_per_100g?: number
+  saturated_fat_per_100g?: number
+  cholesterol_mg_per_100g?: number
+  sodium_mg_per_100g?: number
+  potassium_mg_per_100g?: number
+  calcium_mg_per_100g?: number
+  iron_mg_per_100g?: number
+  magnesium_mg_per_100g?: number
+  zinc_mg_per_100g?: number
+  vitamin_a_rae_mcg_per_100g?: number
+  vitamin_c_mg_per_100g?: number
+  vitamin_d_mcg_per_100g?: number
+  vitamin_e_mg_per_100g?: number
+  vitamin_k_mcg_per_100g?: number
+  thiamin_mg_per_100g?: number
+  riboflavin_mg_per_100g?: number
+  niacin_mg_per_100g?: number
+  vitamin_b6_mg_per_100g?: number
+  folate_mcg_per_100g?: number
+  vitamin_b12_mcg_per_100g?: number
+  source_url?: string
+}
+
+export interface PackagedFoodItem {
+  id: string
+  brand?: string
+  product_name: string
+  normalized_name: string
+  net_weight_g: number
+  serving_weight_g: number
+  kcal_per_100g: number
+  protein_per_100g: number
+  carbs_per_100g: number
+  fat_per_100g: number
+  fiber_per_100g?: number
+  sugar_per_100g?: number
+  sodium_mg_per_100g?: number
+  source?: string
+  is_active: boolean
+}
+
+export async function createPackagedFood(payload: CreatePackagedFoodRequest): Promise<PackagedFoodItem> {
+  const res = await authenticatedRequest('/api/packaged-food', {
+    method: 'POST',
+    data: payload,
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '保存零食数据失败')
+  }
+  return unwrapResponse<{ item: PackagedFoodItem }>(res).item
+}
+
 export interface FriendSearchUser {
   id: string
   nickname: string

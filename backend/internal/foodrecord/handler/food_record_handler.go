@@ -33,11 +33,12 @@ type UploadService interface {
 type FoodNutritionService interface {
 	Search(ctx context.Context, query string, limit int) ([]map[string]any, error)
 	GetUnresolvedTop(ctx context.Context, limit int) ([]domain.FoodUnresolvedLog, error)
+	CreatePackagedFood(ctx context.Context, input service.PackagedFoodInput) (*domain.PackagedFood, error)
 }
 
 type FoodRecordHandler struct {
-	recordSvc   FoodRecordService
-	uploadSvc   UploadService
+	recordSvc    FoodRecordService
+	uploadSvc    UploadService
 	nutritionSvc FoodNutritionService
 }
 
@@ -56,24 +57,24 @@ func NewFoodRecordHandler(
 // POST /api/food-record/save
 func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 	var body struct {
-		MealType         string           `json:"meal_type"`
-		ImagePath        *string          `json:"image_path"`
-		ImagePaths       []string         `json:"image_paths"`
-		Description      *string          `json:"description"`
-		Insight          *string          `json:"insight"`
+		MealType         string            `json:"meal_type"`
+		ImagePath        *string           `json:"image_path"`
+		ImagePaths       []string          `json:"image_paths"`
+		Description      *string           `json:"description"`
+		Insight          *string           `json:"insight"`
 		Items            []domain.FoodItem `json:"items"`
-		TotalCalories    float64          `json:"total_calories"`
-		TotalProtein     float64          `json:"total_protein"`
-		TotalCarbs       float64          `json:"total_carbs"`
-		TotalFat         float64          `json:"total_fat"`
-		TotalWeightGrams int              `json:"total_weight_grams"`
-		DietGoal         *string          `json:"diet_goal"`
-		ActivityTiming   *string          `json:"activity_timing"`
-		PFCRatioComment  *string          `json:"pfc_ratio_comment"`
-		AbsorptionNotes  *string          `json:"absorption_notes"`
-		ContextAdvice    *string          `json:"context_advice"`
-		SourceTaskID     *string          `json:"source_task_id"`
-		Date             *string          `json:"date"`
+		TotalCalories    float64           `json:"total_calories"`
+		TotalProtein     float64           `json:"total_protein"`
+		TotalCarbs       float64           `json:"total_carbs"`
+		TotalFat         float64           `json:"total_fat"`
+		TotalWeightGrams int               `json:"total_weight_grams"`
+		DietGoal         *string           `json:"diet_goal"`
+		ActivityTiming   *string           `json:"activity_timing"`
+		PFCRatioComment  *string           `json:"pfc_ratio_comment"`
+		AbsorptionNotes  *string           `json:"absorption_notes"`
+		ContextAdvice    *string           `json:"context_advice"`
+		SourceTaskID     *string           `json:"source_task_id"`
+		Date             *string           `json:"date"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -281,6 +282,83 @@ func (h *FoodRecordHandler) GetUnresolvedTop(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"items": items})
+}
+
+// POST /api/packaged-food
+func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
+	var body struct {
+		Brand                 string  `json:"brand"`
+		ProductName           string  `json:"product_name"`
+		NetWeightG            float64 `json:"net_weight_g"`
+		ServingWeightG        float64 `json:"serving_weight_g"`
+		KcalPer100g           float64 `json:"kcal_per_100g"`
+		ProteinPer100g        float64 `json:"protein_per_100g"`
+		CarbsPer100g          float64 `json:"carbs_per_100g"`
+		FatPer100g            float64 `json:"fat_per_100g"`
+		FiberPer100g          float64 `json:"fiber_per_100g"`
+		SugarPer100g          float64 `json:"sugar_per_100g"`
+		SaturatedFatPer100g   float64 `json:"saturated_fat_per_100g"`
+		CholesterolMgPer100g  float64 `json:"cholesterol_mg_per_100g"`
+		SodiumMgPer100g       float64 `json:"sodium_mg_per_100g"`
+		PotassiumMgPer100g    float64 `json:"potassium_mg_per_100g"`
+		CalciumMgPer100g      float64 `json:"calcium_mg_per_100g"`
+		IronMgPer100g         float64 `json:"iron_mg_per_100g"`
+		MagnesiumMgPer100g    float64 `json:"magnesium_mg_per_100g"`
+		ZincMgPer100g         float64 `json:"zinc_mg_per_100g"`
+		VitaminARaeMcgPer100g float64 `json:"vitamin_a_rae_mcg_per_100g"`
+		VitaminCMgPer100g     float64 `json:"vitamin_c_mg_per_100g"`
+		VitaminDMcgPer100g    float64 `json:"vitamin_d_mcg_per_100g"`
+		VitaminEMgPer100g     float64 `json:"vitamin_e_mg_per_100g"`
+		VitaminKMcgPer100g    float64 `json:"vitamin_k_mcg_per_100g"`
+		ThiaminMgPer100g      float64 `json:"thiamin_mg_per_100g"`
+		RiboflavinMgPer100g   float64 `json:"riboflavin_mg_per_100g"`
+		NiacinMgPer100g       float64 `json:"niacin_mg_per_100g"`
+		VitaminB6MgPer100g    float64 `json:"vitamin_b6_mg_per_100g"`
+		FolateMcgPer100g      float64 `json:"folate_mcg_per_100g"`
+		VitaminB12McgPer100g  float64 `json:"vitamin_b12_mcg_per_100g"`
+		SourceURL             string  `json:"source_url"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	item, err := h.nutritionSvc.CreatePackagedFood(c.Request.Context(), service.PackagedFoodInput{
+		Brand:                 body.Brand,
+		ProductName:           body.ProductName,
+		NetWeightG:            body.NetWeightG,
+		ServingWeightG:        body.ServingWeightG,
+		KcalPer100g:           body.KcalPer100g,
+		ProteinPer100g:        body.ProteinPer100g,
+		CarbsPer100g:          body.CarbsPer100g,
+		FatPer100g:            body.FatPer100g,
+		FiberPer100g:          body.FiberPer100g,
+		SugarPer100g:          body.SugarPer100g,
+		SaturatedFatPer100g:   body.SaturatedFatPer100g,
+		CholesterolMgPer100g:  body.CholesterolMgPer100g,
+		SodiumMgPer100g:       body.SodiumMgPer100g,
+		PotassiumMgPer100g:    body.PotassiumMgPer100g,
+		CalciumMgPer100g:      body.CalciumMgPer100g,
+		IronMgPer100g:         body.IronMgPer100g,
+		MagnesiumMgPer100g:    body.MagnesiumMgPer100g,
+		ZincMgPer100g:         body.ZincMgPer100g,
+		VitaminARaeMcgPer100g: body.VitaminARaeMcgPer100g,
+		VitaminCMgPer100g:     body.VitaminCMgPer100g,
+		VitaminDMcgPer100g:    body.VitaminDMcgPer100g,
+		VitaminEMgPer100g:     body.VitaminEMgPer100g,
+		VitaminKMcgPer100g:    body.VitaminKMcgPer100g,
+		ThiaminMgPer100g:      body.ThiaminMgPer100g,
+		RiboflavinMgPer100g:   body.RiboflavinMgPer100g,
+		NiacinMgPer100g:       body.NiacinMgPer100g,
+		VitaminB6MgPer100g:    body.VitaminB6MgPer100g,
+		FolateMcgPer100g:      body.FolateMcgPer100g,
+		VitaminB12McgPer100g:  body.VitaminB12McgPer100g,
+		SourceURL:             body.SourceURL,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"item": item})
 }
 
 // POST /api/critical-samples
