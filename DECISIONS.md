@@ -1,5 +1,10 @@
 # DECISIONS
 
+- `2026-05-21`: 零食补库页的“拍照识别营养成分表”走异步任务，不走前端同步等待。
+  - 前端上传图片后调用 `POST /api/packaged-food/nutrition-label/submit`，只拿 `task_id`，再复用 `GET /api/analyze/tasks/:task_id` 轮询。
+  - 后端复用现有 `analysis_tasks`、TaskRepo、task queue、worker claim/lease/complete/fail 机制，新增任务类型 `packaged_nutrition_label`。
+  - 识别模型配置默认复用现有 Doubao 视觉客户端，不新增独立 LLM key/config；除非后续明确要为营养成分表 OCR 单独切模型。
+
 - `2026-05-21`: 零食拍照分析的实际查询顺序是 `packaged_food_library` 优先、普通食物库回退。识别 item 若带 `type=snack` 或命中零食/预包装关键词，后端先调用 `ResolvePackagedFood`；命中时返回 `nutrition_source=packaged_food_library` 并不再显示前端补库提示，未命中时继续沿用普通 `db_first` + DeepSeek fallback。
 
 - `2026-05-21`: 拍照分析的零食识别仍沿用普通 `db_first` 营养估算链路，但结果页需要给用户明确的补库入口。

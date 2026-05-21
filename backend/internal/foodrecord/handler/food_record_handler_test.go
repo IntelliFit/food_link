@@ -91,6 +91,12 @@ func (m *mockNutritionService) RecognizePackagedNutritionLabel(ctx context.Conte
 	}
 	return &service.PackagedNutritionLabelResult{KcalPer100g: 420, ProteinPer100g: 12, SodiumMgPer100g: 280, RawText: imageURL}, nil
 }
+func (m *mockNutritionService) SubmitPackagedNutritionLabelTask(ctx context.Context, userID, imageURL string) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return "label-task-1", nil
+}
 
 func setupRouter(h *FoodRecordHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
@@ -111,6 +117,7 @@ func setupRouter(h *FoodRecordHandler) *gin.Engine {
 	r.GET("/api/food-nutrition/unresolved/top", h.GetUnresolvedTop)
 	r.POST("/api/packaged-food", h.CreatePackagedFood)
 	r.POST("/api/packaged-food/nutrition-label/recognize", h.RecognizePackagedNutritionLabel)
+	r.POST("/api/packaged-food/nutrition-label/submit", h.SubmitPackagedNutritionLabelTask)
 	r.POST("/api/critical-samples", h.SaveCriticalSamples)
 	return r
 }
@@ -301,6 +308,24 @@ func TestRecognizePackagedNutritionLabel(t *testing.T) {
 	nutrition := data["nutrition"].(map[string]any)
 	assert.Equal(t, float64(420), nutrition["kcal_per_100g"])
 	assert.Equal(t, float64(280), nutrition["sodium_mg_per_100g"])
+}
+
+func TestSubmitPackagedNutritionLabelTask(t *testing.T) {
+	mockSvc := &mockNutritionService{}
+	h := NewFoodRecordHandler(nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{"image_url": "https://cdn.example.com/label.jpg"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/packaged-food/nutrition-label/submit", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "label-task-1", data["task_id"])
 }
 
 func TestSaveCriticalSamples(t *testing.T) {

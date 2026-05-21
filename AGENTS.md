@@ -5,7 +5,7 @@
 ## 会话启动
 
 - 在每个新会话开始时，以及在上下文压缩后，回复前请先读取 `IDENTITY.md`、`SOUL.md` 和 `USER.md`。
-- 然后读取 `PROJECT_STATE.md`、`CURRENT_TASK.md` 和 `DECISIONS.md`。
+- 然后读取 `PROJECT_STATE.md` 和 `DECISIONS.md`。
 - 如果存在当天的 `memory/YYYY-MM-DD.md` 和昨天的日记文件，也请一并读取。
 - 当这些文件与过期的对话记忆不一致时，以此类文件为准。
 - 如果必需的状态文件缺失，在进行非琐碎工作前请先创建它。

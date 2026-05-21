@@ -10,7 +10,7 @@
   flex: 1;
   height: 0;
   box-sizing: border-box;
-  padding: 28rpx 28rpx 180rpx;
+  padding: 28rpx 28rpx 0;
 }
 
 .edit-section {
@@ -210,6 +210,11 @@
   background: #fff;
   border-top: 1rpx solid rgba(226, 232, 240, 0.9);
   box-shadow: 0 -8rpx 24rpx rgb(15 23 42 / 8%);
+}
+
+.edit-footer-spacer {
+  height: calc(150rpx + env(safe-area-inset-bottom));
+  flex-shrink: 0;
 }
 
 .save-btn {

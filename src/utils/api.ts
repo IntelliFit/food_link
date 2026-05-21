@@ -2149,7 +2149,7 @@ export interface AnalysisTask {
   text_input?: string | null  // 文字分析时有值，图片分析时为空
   status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out' | 'cancelled'
   payload?: Record<string, unknown>
-  result?: AnalyzeResponse
+  result?: any
   error_message?: string
   trace_id?: string | null
   traceId?: string | null
@@ -3918,6 +3918,18 @@ export async function recognizePackagedNutritionLabel(imageUrl: string): Promise
     throwHttpErrorWithStatus(res.statusCode, res.data, '识别营养成分表失败')
   }
   return unwrapResponse<{ nutrition: PackagedNutritionLabelRecognition }>(res).nutrition
+}
+
+export async function submitPackagedNutritionLabelRecognition(imageUrl: string): Promise<{ task_id: string; message: string }> {
+  const res = await authenticatedRequest('/api/packaged-food/nutrition-label/submit', {
+    method: 'POST',
+    data: { image_url: imageUrl },
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '提交营养成分表识别任务失败')
+  }
+  return unwrapResponse<{ task_id: string; message: string }>(res)
 }
 
 export interface FriendSearchUser {
