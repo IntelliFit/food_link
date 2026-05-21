@@ -1,3 +1,6 @@
+# Copy this file to app-config.yaml for local-only configuration.
+# The active mode is selected in .env with CONFIG_SOURCE=local.
+
 app:
   name: "food_link-backend-local"
   env: "development"

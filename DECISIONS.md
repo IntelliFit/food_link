@@ -1714,3 +1714,25 @@
   - `gemini35_flash` 表示单次 Gemini 3.5 Flash 直接做图片食物识别和估重，仍走后端 db_first 营养回算，按普通分析 2 积分计费。
   - `gemini35_flash_grouped` 表示 Gemini 3.5 Flash 先识别，再进行最多 2 组分组复核估重，按试验/精准成本 4 积分计费，并要求标准版/进阶版权限。
   - 该通道使用独立配置 `external.gemini35_api_key/base_url/model`，不复用旧 `gemini-3-flash-preview` key。
+
+- `2026-05-21`: 后端运行配置优先走 Infisical 云端拉取。
+  - 本地 `backend/config.yaml` 只应保留 Infisical Universal Auth bootstrap、项目/环境/路径等启动必要配置，以及确实只属于本机环境的少量设置。
+  - 后端必须通过 Go SDK 在 `config.Load()` 内自动登录 Infisical 并拉取 secrets；不要要求用户额外执行 Infisical CLI，也不要把云端配置先注入成环境变量再启动。
+  - Infisical secret key 兼容现有环境变量式命名（如 `POSTGRESQL_HOST`、`DOUBAO_API_KEY`、`WORKER_COUNT`）和路径式命名（如 `database__host` / `external.doubao_api_key`）。后续新增配置时优先保持这一映射规则。
+  - 云端配置用于覆盖本地业务配置；如果需要临时脱离云端调试，可将 `infisical.enabled=false` 并继续使用本地 YAML 兼容路径。
+
+- `2026-05-21`: 后端配置源必须通过顶层 `config_source` 显式二选一。
+  - `config_source: local` 表示全部业务配置来自本地 YAML/本地兼容输入。
+  - `config_source: infisical` 表示本地 YAML 只作为 Infisical bootstrap，业务配置全部来自 Infisical secrets；禁止把本地业务配置作为云端模式下的覆盖或兜底。
+  - 后续新增配置项时必须遵守该互斥语义，不能重新引入“云端覆盖本地”的混合设计。
+
+- `2026-05-21`: 后端配置文件拆分为 `app-config.yaml` 与 `infisical-config.yaml`。
+  - `infisical-config.yaml` 只用于 `config_source: infisical`，保存 Infisical Universal Auth bootstrap，不保存业务运行配置。
+  - `app-config.yaml` 只用于 `config_source: local`，保存本地业务运行配置。
+  - 加载优先级为 `infisical-config.yaml` > `app-config.yaml` > 旧 `config.yaml` 兼容；前两个文件的 `config_source` 必须和文件用途一致。
+
+- `2026-05-21`: 后端配置源选择收敛为 `.env` 中的必填 `CONFIG_SOURCE`。
+  - `.env` 必须存在，且 `CONFIG_SOURCE` 只能是 `local` 或 `infisical`，没有默认值。
+  - `CONFIG_SOURCE=local` 时只读 `app-config.yaml`，业务配置全部来自本地文件。
+  - `CONFIG_SOURCE=infisical` 时只读 `infisical-config.yaml` 作为 Infisical bootstrap，业务配置全部来自 Infisical secrets。
+  - 不再通过文件存在性猜测模式，也不再自动兼容旧 `config.yaml`，避免本地/云端混合和隐式切换。
