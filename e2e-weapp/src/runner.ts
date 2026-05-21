@@ -65,8 +65,12 @@ async function main() {
 
   // 2. Start backend test server
   let backendProc: any = null;
+  let devtoolsProc: any = null;
+  let devtoolsStartedByUs = false;
+
   try {
-    backendProc = await startBackendServer(scenario, BACKEND_PORT);
+    const backendResult = await startBackendServer(scenario, BACKEND_PORT);
+    backendProc = backendResult.proc;
   } catch (err: any) {
     console.error(`❌ Failed to start backend: ${err.message}`);
     process.exit(1);
@@ -90,19 +94,25 @@ async function main() {
       console.log('');
     }
 
-    // 5. Ensure screenshots dirs exist
+    // 5. Start WeChat DevTools
+    const devtoolsResult = await startDevTools(DEVTOOLS_PORT);
+    devtoolsProc = devtoolsResult.proc;
+    devtoolsStartedByUs = devtoolsResult.startedByUs;
+    console.log('');
+
+    // 6. Ensure screenshots dirs exist
     ensureDirs();
 
-    // 6. Fetch backend variables and tokens
+    // 7. Fetch backend variables and tokens
     console.log('🔑 Fetching test tokens...');
     const vars = await resolveVariables(backend, scenario);
     console.log(`✅ Variables resolved (${Object.keys(vars).length} vars)`);
     console.log('');
 
-    // 7. Execute scenario
+    // 8. Execute scenario
     const result = await executeScenario(scenario, vars, backend, DEVTOOLS_PORT);
 
-    // 8. Print results
+    // 9. Print results
     printResults(result);
 
     // Exit with appropriate code
@@ -111,6 +121,18 @@ async function main() {
     // Cleanup
     console.log('');
     console.log('🧹 Cleaning up...');
+
+    // Stop DevTools if we started it
+    if (devtoolsStartedByUs && devtoolsProc && !devtoolsProc.killed) {
+      console.log('   Stopping WeChat DevTools...');
+      devtoolsProc.kill('SIGTERM');
+      await sleep(1000);
+      if (!devtoolsProc.killed) {
+        devtoolsProc.kill('SIGKILL');
+      }
+    }
+
+    // Stop backend
     if (backendProc && !backendProc.killed) {
       backendProc.kill('SIGTERM');
       // Give it a moment to drop the DB
@@ -176,7 +198,16 @@ async function startBackendServer(scenario: Scenario, port: number): Promise<any
     }
   });
 
-  return proc;
+  // Wait briefly to detect immediate startup failures (compile errors etc.)
+  // Do NOT await the proc itself — it's a long-running server.
+  await sleep(2000);
+  if (proc.exitCode !== null && proc.exitCode !== 0) {
+    throw new Error(`Backend exited with code ${proc.exitCode}`);
+  }
+
+  // Return wrapped object because `proc` itself is a thenable (Promise-like)
+  // and async/await would otherwise wait for the server process to exit.
+  return { proc };
 }
 
 async function buildMiniprogram(mode: string, apiBaseUrl: string): Promise<void> {
@@ -205,6 +236,70 @@ async function buildMiniprogram(mode: string, apiBaseUrl: string): Promise<void>
   if (exitCode !== 0) {
     throw new Error(`Miniprogram build failed with exit code ${exitCode}`);
   }
+}
+
+async function checkDevToolsRunning(port: number): Promise<boolean> {
+  try {
+    const { stdout } = await execa('lsof', ['-i', `:${port}`], { reject: false });
+    return stdout.includes('LISTEN');
+  } catch {
+    return false;
+  }
+}
+
+async function waitForMrcReady(port: number, timeoutMs: number, intervalMs: number): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const { stdout } = await execa('mrc', ['where', '--port', String(port)], {
+        timeout: 5000,
+        reject: false,
+      });
+      if (stdout.includes('✅') || stdout.includes('连接成功')) {
+        return;
+      }
+    } catch {
+      // ignore
+    }
+    await sleep(intervalMs);
+  }
+  throw new Error(`DevTools mrc not ready after ${timeoutMs}ms`);
+}
+
+async function startDevTools(port: number): Promise<{ proc: any; startedByUs: boolean }> {
+  const isRunning = await checkDevToolsRunning(port);
+  if (isRunning) {
+    console.log('🔧 WeChat DevTools already running');
+    return { proc: null, startedByUs: false };
+  }
+
+  const cliPath = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli';
+  console.log('🔧 Starting WeChat DevTools...');
+
+  const proc = execa(cliPath, ['auto', '--project', PROJECT_ROOT, '--auto-port', String(port)], {
+    detached: false,
+  });
+
+  // Stream devtools logs
+  proc.stdout?.on('data', (data: Buffer) => {
+    const line = data.toString().trim();
+    if (line) {
+      console.log(`   [devtools] ${line}`);
+    }
+  });
+  proc.stderr?.on('data', (data: Buffer) => {
+    const line = data.toString().trim();
+    if (line) {
+      console.error(`   [devtools] ${line}`);
+    }
+  });
+
+  // Wait for mrc to be ready
+  console.log('⏳ Waiting for DevTools mrc connection...');
+  await waitForMrcReady(port, 60000, 1000);
+  console.log('✅ DevTools ready');
+
+  return { proc, startedByUs: true };
 }
 
 function ensureDirs() {

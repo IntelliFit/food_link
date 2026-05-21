@@ -1,7 +1,7 @@
 import execa = require('execa');
 import type { MRCResult } from './types';
 
-const MRC_TIMEOUT = 30000; // 30s per command
+const MRC_TIMEOUT = 60000; // 60s per command
 const MRC_RETRY = 2;
 
 export async function mrc<T = any>(
@@ -21,17 +21,33 @@ export async function mrc<T = any>(
 
       const output = stdout || stderr || '';
 
-      // Try to parse JSON from the last line (mrc --json outputs JSON at the end)
-      const lines = output.trim().split('\n');
+      // Try to parse JSON from the output (mrc --json outputs JSON at the end)
+      const outputStr = output.trim();
       let jsonData: any = null;
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i].trim();
-        if (line.startsWith('{')) {
-          try {
-            jsonData = JSON.parse(line);
-            break;
-          } catch {
-            // not valid JSON, continue
+
+      // First try: find a complete JSON object from the first '{' to the last '}'
+      const firstBrace = outputStr.indexOf('{');
+      const lastBrace = outputStr.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        try {
+          jsonData = JSON.parse(outputStr.substring(firstBrace, lastBrace + 1));
+        } catch {
+          // not valid JSON, fall through
+        }
+      }
+
+      // Fallback: try each line starting with '{' from the end
+      if (!jsonData) {
+        const lines = outputStr.split('\n');
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const line = lines[i].trim();
+          if (line.startsWith('{')) {
+            try {
+              jsonData = JSON.parse(line);
+              break;
+            } catch {
+              // not valid JSON, continue
+            }
           }
         }
       }
