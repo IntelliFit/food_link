@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	infisical "github.com/infisical/go-sdk"
@@ -138,10 +140,12 @@ type InfisicalConfig struct {
 }
 
 func Load(baseDir string) (*Config, error) {
+	slog.Info("开始加载后端配置", slog.String("config.base_dir", baseDir))
 	source, err := readConfigSource(baseDir)
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("配置源已确定", slog.String("config.source", source))
 
 	v := viper.New()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -149,9 +153,11 @@ func Load(baseDir string) (*Config, error) {
 	v.Set("config_source", source)
 	switch source {
 	case "local":
-		if err := readYAMLConfigFile(v, filepath.Join(baseDir, "app-config.yaml")); err != nil {
+		configPath := filepath.Join(baseDir, "app-config.yaml")
+		if err := readYAMLConfigFile(v, configPath); err != nil {
 			return nil, err
 		}
+		logConfigFileSnapshot("本地配置文件已读取", configPath)
 		v.Set("config_source", source)
 		bindLegacyEnv(v)
 		if err := applyLocalConfigOverrides(v); err != nil {
@@ -161,9 +167,11 @@ func Load(baseDir string) (*Config, error) {
 		bootstrap := viper.New()
 		setDefaults(bootstrap)
 		bootstrap.Set("config_source", source)
-		if err := readYAMLConfigFile(bootstrap, filepath.Join(baseDir, "infisical-config.yaml")); err != nil {
+		configPath := filepath.Join(baseDir, "infisical-config.yaml")
+		if err := readYAMLConfigFile(bootstrap, configPath); err != nil {
 			return nil, err
 		}
+		logConfigFileSnapshot("Infisical 启动配置文件已读取", configPath)
 		bootstrap.Set("config_source", source)
 		cloudV, err := loadInfisicalConfig(context.Background(), bootstrap)
 		if err != nil {
@@ -181,6 +189,7 @@ func Load(baseDir string) (*Config, error) {
 	if err := applyConfigFileOnlyValues(v, &cfg); err != nil {
 		return nil, err
 	}
+	logConfigSnapshot("后端配置解析完成", strings.TrimSpace(v.GetString("config_file_used")), v)
 	return &cfg, nil
 }
 
@@ -189,11 +198,13 @@ func readConfigSource(baseDir string) (string, error) {
 		if source != "local" && source != "infisical" {
 			return "", fmt.Errorf("CONFIG_SOURCE must be local or infisical, got %q", source)
 		}
+		slog.Info("CONFIG_SOURCE 已从进程环境变量读取", slog.String("config.source", source))
 		return source, nil
 	}
 
 	sourceV := viper.New()
-	sourceV.SetConfigFile(filepath.Join(baseDir, ".env"))
+	envPath := filepath.Join(baseDir, ".env")
+	sourceV.SetConfigFile(envPath)
 	sourceV.SetConfigType("env")
 	if err := sourceV.ReadInConfig(); err != nil {
 		if isConfigNotFound(err) || os.IsNotExist(err) {
@@ -208,6 +219,10 @@ func readConfigSource(baseDir string) (string, error) {
 	if source != "local" && source != "infisical" {
 		return "", fmt.Errorf("CONFIG_SOURCE must be local or infisical, got %q", source)
 	}
+	slog.Info("CONFIG_SOURCE 已从 .env 文件读取",
+		slog.String("config.env_file", envPath),
+		slog.String("config.source", source),
+	)
 	return source, nil
 }
 
@@ -326,6 +341,15 @@ func loadInfisicalConfig(ctx context.Context, bootstrap *viper.Viper) (*viper.Vi
 		cfg.SecretPath = "/"
 	}
 
+	slog.Info("准备登录 Infisical",
+		slog.String("infisical.site_url", cfg.SiteURL),
+		slog.String("infisical.login_url", joinURLPath(cfg.SiteURL, "/api/v1/auth/universal-auth/login")),
+		slog.String("infisical.project_id", cfg.ProjectID),
+		slog.String("infisical.project_slug", cfg.ProjectSlug),
+		slog.String("infisical.environment", cfg.Environment),
+		slog.String("infisical.secret_path", cfg.SecretPath),
+		slog.String("infisical.client_id", maskValue(cfg.ClientID)),
+	)
 	client := infisical.NewInfisicalClient(ctx, infisical.Config{
 		SiteUrl:    cfg.SiteURL,
 		SilentMode: true,
@@ -333,6 +357,16 @@ func loadInfisicalConfig(ctx context.Context, bootstrap *viper.Viper) (*viper.Vi
 	if _, err := client.Auth().UniversalAuthLogin(cfg.ClientID, cfg.ClientSecret); err != nil {
 		return nil, fmt.Errorf("infisical universal auth login: %w", err)
 	}
+	slog.Info("Infisical 登录成功，准备拉取 secrets",
+		slog.String("infisical.list_url", joinURLPath(cfg.SiteURL, "/api/v3/secrets/raw")),
+		slog.String("infisical.project_id", cfg.ProjectID),
+		slog.String("infisical.project_slug", cfg.ProjectSlug),
+		slog.String("infisical.environment", cfg.Environment),
+		slog.String("infisical.secret_path", cfg.SecretPath),
+		slog.Bool("infisical.include_imports", cfg.IncludeImports),
+		slog.Bool("infisical.recursive", cfg.Recursive),
+		slog.Bool("infisical.expand_secret_references", cfg.ExpandSecretReferences),
+	)
 	result, err := client.Secrets().ListSecrets(infisical.ListSecretsOptions{
 		ProjectID:              cfg.ProjectID,
 		ProjectSlug:            cfg.ProjectSlug,
@@ -346,6 +380,10 @@ func loadInfisicalConfig(ctx context.Context, bootstrap *viper.Viper) (*viper.Vi
 	if err != nil {
 		return nil, fmt.Errorf("infisical list secrets: %w", err)
 	}
+	slog.Info("Infisical secrets 已拉取",
+		slog.Int("infisical.secret_count", len(result.Secrets)),
+		slog.Any("infisical.secrets", maskInfisicalSecrets(result.Secrets)),
+	)
 
 	cloudV := viper.New()
 	cloudV.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -357,7 +395,153 @@ func loadInfisicalConfig(ctx context.Context, bootstrap *viper.Viper) (*viper.Vi
 			cloudV.Set(key, secret.SecretValue)
 		}
 	}
+	logConfigSnapshot("Infisical secrets 已映射为配置键", "", cloudV)
 	return cloudV, nil
+}
+
+type maskedConfigKV struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type maskedInfisicalSecret struct {
+	Key       string `json:"key"`
+	MappedKey string `json:"mapped_key"`
+	Value     string `json:"value"`
+}
+
+func logConfigSnapshot(message, path string, v *viper.Viper) {
+	if v == nil {
+		return
+	}
+	attrs := maskedSettingsAttrs("config", v.AllSettings())
+	if strings.TrimSpace(path) != "" {
+		attrs = append(attrs, slog.String("config.file", path))
+	}
+	slog.LogAttrs(context.Background(), slog.LevelInfo, message, attrs...)
+}
+
+func logConfigFileSnapshot(message, path string) {
+	fileV := viper.New()
+	fileV.SetConfigFile(path)
+	if err := fileV.ReadInConfig(); err != nil {
+		slog.Warn("配置文件日志快照读取失败",
+			slog.String("config.file", path),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	attrs := maskedSettingsAttrs("config.file", fileV.AllSettings())
+	attrs = append(attrs, slog.String("config.file", path))
+	slog.LogAttrs(context.Background(), slog.LevelInfo, message, attrs...)
+}
+
+func maskedSettingsAttrs(prefix string, settings map[string]any) []slog.Attr {
+	flat := flattenSettings(settings)
+	return []slog.Attr{
+		slog.Int(prefix+".key_count", len(flat)),
+		slog.Any(prefix+".keys", maskSettings(settings)),
+	}
+}
+
+func maskInfisicalSecrets(secrets []infisical.Secret) []maskedInfisicalSecret {
+	out := make([]maskedInfisicalSecret, 0, len(secrets))
+	for _, secret := range secrets {
+		out = append(out, maskedInfisicalSecret{
+			Key:       secret.SecretKey,
+			MappedKey: configKeyForSecret(secret.SecretKey),
+			Value:     maskValue(secret.SecretValue),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Key < out[j].Key
+	})
+	return out
+}
+
+func maskSettings(settings map[string]any) []maskedConfigKV {
+	flat := flattenSettings(settings)
+	out := make([]maskedConfigKV, 0, len(flat))
+	for _, key := range sortedKeys(flat) {
+		out = append(out, maskedConfigKV{Key: key, Value: maskValue(fmt.Sprint(flat[key]))})
+	}
+	return out
+}
+
+func flattenSettings(settings map[string]any) map[string]any {
+	out := map[string]any{}
+	flattenValue("", settings, out)
+	return out
+}
+
+func flattenValue(prefix string, value any, out map[string]any) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			next := key
+			if prefix != "" {
+				next = prefix + "." + key
+			}
+			flattenValue(next, child, out)
+		}
+	case map[any]any:
+		for key, child := range typed {
+			keyText := fmt.Sprint(key)
+			next := keyText
+			if prefix != "" {
+				next = prefix + "." + keyText
+			}
+			flattenValue(next, child, out)
+		}
+	case []string:
+		out[prefix] = strings.Join(typed, ",")
+	case []any:
+		parts := make([]string, 0, len(typed))
+		for _, item := range typed {
+			parts = append(parts, fmt.Sprint(item))
+		}
+		out[prefix] = strings.Join(parts, ",")
+	default:
+		out[prefix] = typed
+	}
+}
+
+func sortedKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func maskValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	value = strings.ReplaceAll(value, "\r", "")
+	value = strings.ReplaceAll(value, "\n", "\\n")
+	runes := []rune(value)
+	if len(runes) <= 2 {
+		return strings.Repeat("*", len(runes))
+	}
+	if len(runes) <= 8 {
+		return string(runes[:1]) + strings.Repeat("*", len(runes)-2) + string(runes[len(runes)-1:])
+	}
+	return string(runes[:3]) + strings.Repeat("*", 6) + string(runes[len(runes)-3:])
+}
+
+func joinURLPath(baseURL, path string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	path = "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
+	if baseURL == "" {
+		return path
+	}
+	return baseURL + path
 }
 
 func configKeyForSecret(secretKey string) string {
@@ -561,8 +745,6 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("task_queue.consumer_group", "food-link-workers")
 	v.SetDefault("infisical.site_url", "https://app.infisical.com")
 	v.SetDefault("infisical.secret_path", "/")
-	v.SetDefault("infisical.include_imports", true)
-	v.SetDefault("infisical.expand_secret_references", true)
 }
 
 func bindLegacyEnv(v *viper.Viper) {

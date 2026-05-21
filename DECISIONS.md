@@ -1723,7 +1723,7 @@
 - `2026-05-21`: 后端运行配置优先走 Infisical 云端拉取。
   - 本地 `backend/config.yaml` 只应保留 Infisical Universal Auth bootstrap、项目/环境/路径等启动必要配置，以及确实只属于本机环境的少量设置。
   - 后端必须通过 Go SDK 在 `config.Load()` 内自动登录 Infisical 并拉取 secrets；不要要求用户额外执行 Infisical CLI，也不要把云端配置先注入成环境变量再启动。
-  - Infisical secret key 兼容现有环境变量式命名（如 `POSTGRESQL_HOST`、`DOUBAO_API_KEY`、`WORKER_COUNT`）和路径式命名（如 `database__host` / `external.doubao_api_key`）。后续新增配置时优先保持这一映射规则。
+  - Infisical secret key 优先使用点号路径式命名（如 `database.host` / `external.doubao_api_key`），因为 Infisical 本身不是 shell 环境变量，点号更接近 YAML/Viper 配置树，也更方便人工核对；代码继续兼容现有环境变量式命名（如 `POSTGRESQL_HOST`、`DOUBAO_API_KEY`、`WORKER_COUNT`）和双下划线路径式命名（如 `database__host`）。
   - 云端配置用于覆盖本地业务配置；如果需要临时脱离云端调试，可将 `infisical.enabled=false` 并继续使用本地 YAML 兼容路径。
 
 - `2026-05-21`: 后端配置源必须通过顶层 `config_source` 显式二选一。

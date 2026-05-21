@@ -1,31 +1,59 @@
-# Copy this file to infisical-config.yaml for cloud-only configuration.
-# This file is only bootstrap. Business runtime config must live in Infisical
-# secrets. The active mode is selected in .env with CONFIG_SOURCE=infisical.
+# Infisical 云端配置模式的启动配置模板。
+# 使用时复制为 backend/infisical-config.yaml，并填入当前项目的 Infisical
+# 连接信息。这个文件只保存“如何连接 Infisical”的最小启动信息，不保存
+# 数据库、COS、大模型 API Key、微信支付等业务运行配置。
+#
+# 业务运行配置必须放在 Infisical Secrets Management 中。后端会读取一组
+# key/value secrets，并把类似 database.host、external.doubao_api_key 的 key
+# 映射成 Go 配置结构。
+#
+# 是否启用云端配置由 CONFIG_SOURCE 决定：
+# - 本地开发可在 backend/.env 中写 CONFIG_SOURCE=infisical。
+# - Kubernetes/容器部署可直接用进程环境变量 CONFIG_SOURCE=infisical，
+#   不强制要求镜像内存在 .env 文件。
 
 infisical:
-  # Infisical server URL. Use the default SaaS URL unless you self-host Infisical.
+  # Infisical 服务地址。
+  # - 使用官方 SaaS 时通常是 https://app.infisical.com。
+  # - 使用自建 Infisical 时填写自建控制台/API 地址，例如
+  #   https://infisical.example.com/。
+  # 后端会用这个地址调用 Infisical API 登录并拉取 secrets。
   site_url: "https://app.infisical.com"
 
-  # Infisical project identity. Prefer project_id; project_slug is an optional
-  # human-readable alternative. Set only one unless you have a reason.
+  # Infisical 项目标识。project_id 和 project_slug 二选一即可。
+  #
+  # project_id：
+  # - 项目的 UUID，最稳定，推荐优先使用。
+  # - 在项目 Settings 页面右上角点 “Copy Project ID” 获取。
+  # - 也通常能从浏览器地址里看到，例如：
+  #   /projects/secret-management/<这里这一段 UUID>/settings。
+  #
+  # project_slug：
+  # - 项目的可读短标识，例如 foodlink-dg9-f。
+  # - 在项目 Settings 页面右上角点 “Copy Project Slug” 获取。
+  # - slug 可能会跟随项目名称或后台设置变化；除非你明确更喜欢可读性，
+  #   否则建议只填 project_id，project_slug 保持空字符串。
   project_id: ""
   project_slug: ""
 
-  # Infisical environment slug/name, for example dev, staging, or prod.
+  # 要读取的 Infisical 环境名称/slug。
+  # 必须和 Infisical 页面顶部/表格里的环境列一致。当前 food_link 建议使用：
+  # - local：本地开发
+  # - dev：体验版/测试后端
+  # - main：正式线上
+  # 后端启动时只会读取这里指定环境下的 secrets。
   environment: "dev"
 
-  # Secret folder path inside the selected project/environment.
+  # Secret 文件夹路径。
+  # - "/" 表示读取该环境根目录下的 secrets。
+  # - 如果你在 Infisical 中建了文件夹，例如 /backend，则这里填 "/backend"。
+  # - 当前建议先保持 "/"，把 food_link 后端配置统一放在根目录，减少排障复杂度。
   secret_path: "/"
 
-  # Universal Auth machine identity credentials.
+  # Universal Auth 机器身份凭证。
+  # 这是后端服务登录 Infisical 的账号，不是你的个人登录账号。
+  # 需要在 Infisical 的 Machine Identity / Universal Auth 中创建，并授权它读取
+  # 当前项目、当前 environment、当前 secret_path 下的 secrets。
+  # client_secret 属于敏感启动凭证，不要提交到 Git。
   client_id: ""
   client_secret: ""
-
-  # Include secrets imported from other Infisical folders/projects.
-  include_imports: true
-
-  # Read nested folders below secret_path.
-  recursive: false
-
-  # Resolve Infisical secret references before returning values.
-  expand_secret_references: true

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -142,6 +144,43 @@ func TestLoadRequiresConfigSourceWhenEnvAndDotenvMissing(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "CONFIG_SOURCE") {
 		t.Fatalf("expected CONFIG_SOURCE error, got %v", err)
+	}
+}
+
+func TestLogConfigFileSnapshotOnlyLogsFileKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "infisical-config.yaml")
+	if err := os.WriteFile(path, []byte(`
+infisical:
+  site_url: "https://infisical.example.com"
+  project_id: "project-id"
+  environment: "dev"
+  secret_path: "/"
+  client_id: "client-id"
+  client_secret: "client-secret"
+`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	original := slog.Default()
+	slog.SetDefault(logger)
+	t.Cleanup(func() {
+		slog.SetDefault(original)
+	})
+
+	logConfigFileSnapshot("test", path)
+
+	output := buf.String()
+	if !strings.Contains(output, "config.file.key_count=6") {
+		t.Fatalf("expected only file keys to be counted, got %s", output)
+	}
+	if strings.Contains(output, "app.port") {
+		t.Fatalf("file snapshot should not include default keys, got %s", output)
+	}
+	if strings.Contains(output, "client-secret") {
+		t.Fatalf("file snapshot leaked secret value: %s", output)
 	}
 }
 
@@ -423,8 +462,9 @@ task_queue:
 
 func TestConfigKeyForSecretSupportsPathAndLegacyNames(t *testing.T) {
 	cases := map[string]string{
-		"database__host":          "database.host",
 		"external.doubao_api_key": "external.doubao_api_key",
+		"database.host":           "database.host",
+		"database__host":          "database.host",
 		"POSTGRESQL_HOST":         "database.host",
 		"TASK_QUEUE_BROKERS":      "task_queue.brokers",
 		"worker-count":            "worker_count",
@@ -454,11 +494,11 @@ func TestLoadMergesInfisicalSecrets(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
-				"secrets": [
-					{"secretKey":"database__host","secretValue":"db.example.internal"},
-					{"secretKey":"POSTGRESQL_DATABASE","secretValue":"food-cloud"},
-					{"secretKey":"JWT_SECRET_KEY","secretValue":"cloud-jwt"},
-					{"secretKey":"DOUBAO_API_KEY","secretValue":"cloud-doubao"},
+					"secrets": [
+						{"secretKey":"database.host","secretValue":"db.example.internal"},
+						{"secretKey":"POSTGRESQL_DATABASE","secretValue":"food-cloud"},
+						{"secretKey":"JWT_SECRET_KEY","secretValue":"cloud-jwt"},
+						{"secretKey":"DOUBAO_API_KEY","secretValue":"cloud-doubao"},
 					{"secretKey":"WORKER_COUNT","secretValue":"3"},
 					{"secretKey":"TASK_QUEUE_BROKERS","secretValue":"kafka-1:9092,kafka-2:9092"}
 				]
