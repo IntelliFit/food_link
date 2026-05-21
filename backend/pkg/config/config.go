@@ -3,13 +3,20 @@ package config
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha1"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/apolloconfig/agollo/v5"
 	apolloConfig "github.com/apolloconfig/agollo/v5/env/config"
@@ -379,7 +386,11 @@ func loadApolloConfig(_ context.Context, bootstrap *viper.Viper) (*viper.Viper, 
 
 	items := make([]maskedApolloConfigItem, 0)
 	for _, namespace := range cfg.Namespaces {
-		appendApolloNamespaceConfig(client, cloudV, namespace, &items)
+		loaded, err := appendApolloNamespaceConfig(client, cloudV, cfg, namespace, &items)
+		if err != nil {
+			return nil, err
+		}
+		_ = loaded
 	}
 	if len(items) == 0 {
 		return nil, fmt.Errorf(
@@ -403,13 +414,21 @@ func loadApolloConfig(_ context.Context, bootstrap *viper.Viper) (*viper.Viper, 
 	return cloudV, nil
 }
 
-func appendApolloNamespaceConfig(client agollo.Client, cloudV *viper.Viper, namespace string, items *[]maskedApolloConfigItem) int {
+func appendApolloNamespaceConfig(client agollo.Client, cloudV *viper.Viper, cfg ApolloConfig, namespace string, items *[]maskedApolloConfigItem) (int, error) {
+	if isYAMLNamespace(namespace) {
+		content, err := fetchApolloNamespaceRawContent(cfg, namespace)
+		if err != nil {
+			return 0, err
+		}
+		return mergeApolloYAMLContent(cloudV, namespace, content, items), nil
+	}
+
 	cache := client.GetConfigCache(namespace)
 	if cache == nil {
 		slog.Warn("Apollo namespace 未返回配置缓存",
 			slog.String("apollo.namespace", namespace),
 		)
-		return 0
+		return 0, nil
 	}
 	loaded := 0
 	cache.Range(func(key, value any) bool {
@@ -443,7 +462,128 @@ func appendApolloNamespaceConfig(client agollo.Client, cloudV *viper.Viper, name
 		}
 		return true
 	})
-	return loaded
+	return loaded, nil
+}
+
+func isYAMLNamespace(namespace string) bool {
+	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(namespace)))
+	return ext == ".yaml" || ext == ".yml"
+}
+
+func fetchApolloNamespaceRawContent(cfg ApolloConfig, namespace string) (string, error) {
+	requestURL, err := buildApolloRawConfigURL(cfg, namespace)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("build apollo raw config request: %w", err)
+	}
+	if cfg.AccessKeySecret != "" {
+		for key, value := range apolloAuthHeaders(requestURL, cfg.AppID, cfg.AccessKeySecret) {
+			req.Header.Set(key, value)
+		}
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch apollo raw yaml namespace %q: %w", namespace, err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read apollo raw yaml namespace %q: %w", namespace, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("fetch apollo raw yaml namespace %q: status=%d body=%s", namespace, resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	content := decodeApolloRawConfigBody(string(body))
+	if content == "" {
+		return "", fmt.Errorf("apollo raw yaml namespace %q returned empty content", namespace)
+	}
+	slog.Info("Apollo YAML namespace 原始文本已拉取",
+		slog.String("apollo.namespace", namespace),
+		slog.Int("apollo.raw_bytes", len(body)),
+	)
+	return content, nil
+}
+
+func decodeApolloRawConfigBody(body string) string {
+	content := strings.TrimSpace(body)
+	if strings.HasPrefix(content, "content=") {
+		content = strings.TrimPrefix(content, "content=")
+		content = unescapeJavaPropertiesValue(content)
+	}
+	return strings.TrimSpace(content)
+}
+
+func unescapeJavaPropertiesValue(value string) string {
+	var out strings.Builder
+	out.Grow(len(value))
+	for i := 0; i < len(value); i++ {
+		ch := value[i]
+		if ch != '\\' || i == len(value)-1 {
+			out.WriteByte(ch)
+			continue
+		}
+		i++
+		switch value[i] {
+		case 'n':
+			out.WriteByte('\n')
+		case 'r':
+			out.WriteByte('\r')
+		case 't':
+			out.WriteByte('\t')
+		case 'f':
+			out.WriteByte('\f')
+		case '\\':
+			out.WriteByte('\\')
+		case ':', '=', ' ', '#', '!':
+			out.WriteByte(value[i])
+		default:
+			out.WriteByte(value[i])
+		}
+	}
+	return out.String()
+}
+
+func buildApolloRawConfigURL(cfg ApolloConfig, namespace string) (string, error) {
+	base, err := url.Parse(strings.TrimRight(cfg.ConfigServerURL, "/") + "/")
+	if err != nil {
+		return "", fmt.Errorf("invalid apollo.config_server_url: %w", err)
+	}
+	rel := &url.URL{Path: fmt.Sprintf("configfiles/%s/%s/%s", cfg.AppID, cfg.Cluster, namespace)}
+	resolved := base.ResolveReference(rel)
+	query := resolved.Query()
+	query.Set("ip", "127.0.0.1")
+	if cfg.Label != "" {
+		query.Set("label", cfg.Label)
+	}
+	resolved.RawQuery = query.Encode()
+	return resolved.String(), nil
+}
+
+func apolloAuthHeaders(requestURL, appID, secret string) map[string]string {
+	timestamp := fmt.Sprint(time.Now().UnixNano() / int64(time.Millisecond))
+	pathWithQuery := apolloPathWithQuery(requestURL)
+	mac := hmac.New(sha1.New, []byte(secret))
+	_, _ = mac.Write([]byte(timestamp + "\n" + pathWithQuery))
+	signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	return map[string]string{
+		"Authorization": fmt.Sprintf("Apollo %s:%s", appID, signature),
+		"Timestamp":     timestamp,
+	}
+}
+
+func apolloPathWithQuery(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	out := parsed.Path
+	if parsed.RawQuery != "" {
+		out += "?" + parsed.RawQuery
+	}
+	return out
 }
 
 func looksLikeYAMLConfig(content string) bool {
@@ -461,6 +601,24 @@ func parseApolloYAMLContent(content string) map[string]any {
 		return nil
 	}
 	return flattenSettings(reader.AllSettings())
+}
+
+func mergeApolloYAMLContent(cloudV *viper.Viper, namespace string, content string, items *[]maskedApolloConfigItem) int {
+	loaded := 0
+	for yamlKey, yamlValue := range parseApolloYAMLContent(content) {
+		if mappedKey := configKeyForSecret(yamlKey); mappedKey != "" {
+			yamlValueText := fmt.Sprint(yamlValue)
+			cloudV.Set(mappedKey, yamlValueText)
+			*items = append(*items, maskedApolloConfigItem{
+				Namespace: namespace,
+				Key:       yamlKey,
+				MappedKey: mappedKey,
+				Value:     maskValue(yamlValueText),
+			})
+			loaded++
+		}
+	}
+	return loaded
 }
 
 type maskedConfigKV struct {
