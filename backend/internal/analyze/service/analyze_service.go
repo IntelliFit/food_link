@@ -729,9 +729,15 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 - 建议写得自然一点，但不要空泛和重复
 - 只返回 JSON
 
+Type rule:
+- Every item must include "type".
+- Use "normal" for regular cooked food, fresh food, dishes, drinks, fruit, staple food, meat, eggs, dairy, and vegetables.
+- Use "snack" for snack-like packaged/prepackaged foods.
+- Use "packaged" for other packaged/prepackaged foods.
+
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "context_advice":""
@@ -892,6 +898,12 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - 如果这是纠错任务，必须基于原图、上一轮结果和用户纠错说明重新判断；不要机械照抄上一轮结果，也不要仅把前端列表原样返回
 - 只返回 JSON
 
+Type rule:
+- Every item must include "type".
+- Use "normal" for regular cooked food, fresh food, dishes, drinks, fruit, staple food, meat, eggs, dairy, and vegetables.
+- Use "snack" for snack-like packaged/prepackaged foods.
+- Use "packaged" for other packaged/prepackaged foods.
+
 JSON:
 {
   "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
@@ -924,6 +936,12 @@ func buildLiteImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string
 - 小众水果/进口零食/不确定包装食品可使用 web_search，搜索关键词要围绕可见包装文字、品牌、品名或用户补充信息，避免用泛泛描述搜索
 - estimatedWeightGrams 是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后估算
 - waterMl 表示该食物/饮品本身可计入饮水参考的水量；无法判断填 0
+
+Type rule:
+- Every item must include "type".
+- Use "normal" for regular cooked food, fresh food, dishes, drinks, fruit, staple food, meat, eggs, dairy, and vegetables.
+- Use "snack" for snack-like packaged/prepackaged foods.
+- Use "packaged" for other packaged/prepackaged foods.
 
 JSON:
 {
@@ -1042,6 +1060,12 @@ func buildGemini35GroupedPlanPrompt(input AnalyzeInput, user *authrepo.User) str
 - 每个 item 必须给 groupId、position、recognitionEvidence、alternativeNames
 - ocrText 放你从图片中读到的关键包装文字；不确定的文字写进 evidence 或 alternativeNames
 
+Type rule:
+- Every item must include "type".
+- Use "normal" for regular cooked food, fresh food, dishes, drinks, fruit, staple food, meat, eggs, dairy, and vegetables.
+- Use "snack" for snack-like packaged/prepackaged foods.
+- Use "packaged" for other packaged/prepackaged foods.
+
 JSON:
 {
   "items":[
@@ -1121,9 +1145,15 @@ func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode stri
 - insight/context_advice 各 1-2 句，<= 40字
 - suggestedRatio：每个食物的建议摄入比例（0-100），结合用户剩余热量和饮食目标给出建议，默认100
 
+Type rule:
+- Every item must include "type".
+- Use "normal" for regular cooked food, fresh food, dishes, drinks, fruit, staple food, meat, eggs, dairy, and vegetables.
+- Use "snack" for snack-like packaged/prepackaged foods.
+- Use "packaged" for other packaged/prepackaged foods.
+
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
+  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"suggestedRatio":100,"nutrients":{"calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"sugar":0}}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -1167,9 +1197,15 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - context_advice 1-2句，<= 32字，无需则空字符串
 - 只返回 JSON
 
+Type rule:
+- Every item must include "type".
+- Use "normal" for regular cooked food, fresh food, dishes, drinks, fruit, staple food, meat, eggs, dairy, and vegetables.
+- Use "snack" for snack-like packaged/prepackaged foods.
+- Use "packaged" for other packaged/prepackaged foods.
+
 JSON:
 {
-  "items":[{"name":"","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
+  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -3016,7 +3052,7 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		if weight <= 0 {
 			weight = numberFromAny(item["originalWeightGrams"])
 		}
-		if markSnackTypeForAnalyzeItem(item) {
+		if modelDeclaredPackagedFood(item) {
 			if packagedResolve, packagedErr := s.nutrition.ResolvePackagedFood(ctx, name); packagedErr != nil {
 				logger.WithTrace(ctx).Warn("零食营养库查询失败",
 					logger.Err(packagedErr),
@@ -3546,58 +3582,14 @@ func packagedNutritionUnit(food *foodrecorddomain.PackagedFood) map[string]any {
 	}
 }
 
-func markSnackTypeForAnalyzeItem(item map[string]any) bool {
+func modelDeclaredPackagedFood(item map[string]any) bool {
 	itemType := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["type"], item["food_type"]))))
-	if itemType == "snack" || strings.Contains(itemType, "packaged") || strings.Contains(itemType, "package") {
+	switch itemType {
+	case "snack", "packaged", "package", "packaged_food", "packaged_snack", "prepackaged", "prepackaged_food", "pre_packaged", "pre_packaged_food", "pre-packaged", "pre-packaged food", "零食", "包装食品", "预包装", "预包装食品":
 		item["type"] = "snack"
 		return true
 	}
-	text := strings.ToLower(strings.Join([]string{
-		fmt.Sprintf("%v", item["name"]),
-		fmt.Sprintf("%v", item["category"]),
-		fmt.Sprintf("%v", item["recognitionEvidence"]),
-		fmt.Sprintf("%v", item["ocrText"]),
-		fmt.Sprintf("%v", item["alternativeNames"]),
-	}, " "))
-	for _, keyword := range snackAnalyzeKeywords {
-		if strings.Contains(text, keyword) {
-			item["type"] = "snack"
-			return true
-		}
-	}
 	return false
-}
-
-var snackAnalyzeKeywords = []string{
-	"snack",
-	"packaged",
-	"package",
-	"nutrition facts",
-	"营养成分",
-	"净含量",
-	"零食",
-	"预包装",
-	"袋装",
-	"盒装",
-	"饼干",
-	"薯片",
-	"巧克力",
-	"糖果",
-	"坚果",
-	"果干",
-	"肉干",
-	"牛肉干",
-	"蛋白棒",
-	"能量棒",
-	"辣条",
-	"海苔",
-	"话梅",
-	"果冻",
-	"威化",
-	"沙琪玛",
-	"麻薯",
-	"阿胶糕",
-	"糕点",
 }
 
 func scaleNutrition(unit map[string]any, weight float64) map[string]any {
@@ -3625,6 +3617,7 @@ func analyzeItemLogSummary(items []map[string]any, limit int) []map[string]any {
 		out = append(out, map[string]any{
 			"index":                  index,
 			"name":                   strings.TrimSpace(fmt.Sprintf("%v", item["name"])),
+			"type":                   strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["type"], item["food_type"]))),
 			"estimated_weight_g":     round2(numberFromAny(item["estimatedWeightGrams"])),
 			"original_weight_g":      round2(numberFromAny(item["originalWeightGrams"])),
 			"calories":               round2(numberFromAny(nutrients["calories"])),

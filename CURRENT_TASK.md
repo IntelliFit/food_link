@@ -1,5 +1,21 @@
 ﻿# CURRENT_TASK
 
+## 2026-05-21 - 零食库查询改为完全由模型 `type` 决定
+- Task: 用户确认零食/预包装食品的 `type` 应由大模型输出，不应由后端按“薯片/饼干/零食”等预设关键词匹配推断。
+- Status: fixed_static_verified_restart_required
+- Change:
+  - `backend/internal/analyze/service/analyze_service.go` 的普通、精准、轻量、分组规划、文字和文字 db_first prompt 均明确要求每个 item 输出 `type`。
+  - `type` 规则收口为：`normal` 表示普通熟食/鲜食/菜品/饮品等；`snack` 表示零食类预包装食品；`packaged` 表示其它预包装/包装食品。
+  - 后端删除 `snackAnalyzeKeywords` 关键词表，不再根据食物名称、category、OCR、evidence、alternativeNames 推断零食。
+  - `db_first` 只在模型显式输出 `type/food_type` 为 `snack`、`packaged` 或兼容预包装取值时才查 `packaged_food_library`；否则直接走普通食物库，再按未命中情况走 DeepSeek fallback。
+  - trace/log item 摘要新增 `type` 字段，后续可直接从 `视觉模型识别结果已返回` 和 `营养库优先回算开始/完成` 判断模型是否给出零食类型。
+- Verification:
+  - `go test ./internal/analyze/service -run "TestModelDeclaredPackagedFood|TestBuildPrompt|TestBuildStandardImageHybrid|TestBuildAnalyzeResponse" -count=1` passed.
+  - `git diff --check -- backend/internal/analyze/service/analyze_service.go backend/internal/analyze/service/analyze_service_test.go` passed with only CRLF warnings.
+  - 旧 sqlite repo 型测试在本机 `CGO_ENABLED=0` 时仍受 `go-sqlite3 requires cgo` 阻塞；尝试 `CGO_ENABLED=1` 后又被本机缺少 `gcc` 阻塞，因此新增回归覆盖改为不依赖数据库的纯函数测试。
+- Next step:
+  - 重启 Go 后端/worker 后生效；复测零食图片时先看日志 item 的 `type`，只有模型输出 `snack/packaged` 才会进入零食库。
+
 ## 2026-05-21 - 食物识别链路补充 trace 绑定日志
 - Task: 用户反馈小程序多图模式偶发热量为 0，希望在识别流程中增加日志并绑定到 trace，便于从 Jaeger 分析问题发生在视觉识别、营养库匹配还是 DeepSeek fallback。
 - Status: implemented_static_verified_restart_required

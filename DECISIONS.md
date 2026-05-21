@@ -1741,3 +1741,8 @@
   - Kubernetes/容器部署可以只通过 Deployment env 设置 `CONFIG_SOURCE=local|infisical`，不需要挂载 `.env`。
   - 本地开发可以用 `backend/.env` 作为便利 fallback。
   - 两者都不存在或值非法时才启动失败；不能因为容器没有 `.env` 而忽略已有进程环境变量。
+
+- `2026-05-21`: 零食/预包装食品是否进入 `packaged_food_library` 必须由模型输出的 `type` 决定。
+  - prompt 必须要求每个 item 输出 `type`，当前取值口径为 `normal`、`snack`、`packaged`。
+  - 后端只做 `type/food_type` 兼容归一化，不再按名称、OCR、category、recognitionEvidence 或 alternativeNames 里的“薯片/饼干/零食/净含量”等关键词推断零食。
+  - 如果模型没有输出 `snack/packaged`，即使名称像零食，也先走普通食物库和 DeepSeek fallback；日志里的 item 摘要必须保留 `type` 以便判断模型分类是否正确。
