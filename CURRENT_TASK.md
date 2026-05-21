@@ -40416,3 +40416,10 @@ DATABASE_HOST=127.0.0.1 DATABASE_USER=kirigaya npm run test:e2e-weapp
 - `backend/config-example.yaml` 现在作为 `app-config.yaml` 模板；新增 `backend/infisical-config-example.yaml` 作为 `infisical-config.yaml` 模板；新增 `backend/.env.example`。
 - `backend/.gitignore` 新增忽略 `app-config.yaml` 与 `infisical-config.yaml`，避免本地/云端 bootstrap 密钥入库。
 - Verification: `go test ./pkg/config -count=1`、`go test ./internal/app -run '^$' -count=1`、`go build -o $env:TEMP\food-link-server-env-source.exe ./cmd/server` 均通过；diff-check 仅 CRLF warnings。
+
+### Follow-up: Kubernetes CONFIG_SOURCE 环境变量不要求 .env 文件
+- 用户部署 `foodlink-dev` 时 Pod 已通过 env 设置 `CONFIG_SOURCE=local`，但镜像内无 `.env` 导致启动失败：`load config: open .env: no such file or directory`。
+- 已修正配置源读取顺序：优先读取进程环境变量 `CONFIG_SOURCE`；只有未设置时才读取 `backend/.env`；两者都没有才启动失败。
+- 这匹配 Kubernetes/容器部署习惯：Deployment env 可以直接声明配置源，`.env` 只是本地开发便利文件。
+- 新增测试覆盖无 `.env` 但进程 env 存在的场景。
+- Verification: `go test ./pkg/config -count=1`、`go test ./internal/app -run '^$' -count=1`、`go build -o $env:TEMP\food-link-server-config-env.exe ./cmd/server` 均通过。

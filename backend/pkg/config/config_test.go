@@ -115,6 +115,36 @@ worker:
 	}
 }
 
+func TestLoadReadsConfigSourceFromProcessEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CONFIG_SOURCE", "local")
+	if err := os.WriteFile(filepath.Join(dir, "app-config.yaml"), []byte(`
+worker:
+  count: 2
+`), 0o600); err != nil {
+		t.Fatalf("write app-config.yaml: %v", err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.ConfigSource != "local" || cfg.Worker.Count != 2 {
+		t.Fatalf("expected CONFIG_SOURCE env to select local config, got %+v", cfg)
+	}
+}
+
+func TestLoadRequiresConfigSourceWhenEnvAndDotenvMissing(t *testing.T) {
+	dir := t.TempDir()
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("expected missing CONFIG_SOURCE to fail")
+	}
+	if !strings.Contains(err.Error(), "CONFIG_SOURCE") {
+		t.Fatalf("expected CONFIG_SOURCE error, got %v", err)
+	}
+}
+
 func TestLoadPrefersInfisicalConfigOverAppConfig(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("CONFIG_SOURCE=infisical\n"), 0o600); err != nil {

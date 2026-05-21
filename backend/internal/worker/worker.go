@@ -227,7 +227,6 @@ func (r *Runner) runLoop(ctx context.Context, workerID string, taskTypes []strin
 func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, deliveries <-chan taskqueue.Delivery, pollInterval, leaseDuration time.Duration) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
-	idleCount := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -238,7 +237,6 @@ func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, 
 				r.log.Info("工作器任务队列已关闭", slog.String("worker_id", workerID))
 				return
 			}
-			idleCount = 0
 			r.handleDelivery(ctx, workerID, taskTypes, leaseDuration, delivery)
 		case <-ticker.C:
 			if handlesTaskType(taskTypes, "expiry_notification") || handlesTaskType(taskTypes, "food_expiry_notification_job") {
@@ -248,13 +246,8 @@ func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, 
 					continue
 				}
 				if handled {
-					idleCount = 0
 					continue
 				}
-			}
-			idleCount++
-			if idleCount%30 == 0 {
-				r.log.Info("工作器空闲", slog.String("worker_id", workerID), slog.Any("task_types", taskTypes))
 			}
 		}
 	}

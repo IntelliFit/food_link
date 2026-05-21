@@ -1736,3 +1736,8 @@
   - `CONFIG_SOURCE=local` 时只读 `app-config.yaml`，业务配置全部来自本地文件。
   - `CONFIG_SOURCE=infisical` 时只读 `infisical-config.yaml` 作为 Infisical bootstrap，业务配置全部来自 Infisical secrets。
   - 不再通过文件存在性猜测模式，也不再自动兼容旧 `config.yaml`，避免本地/云端混合和隐式切换。
+
+- `2026-05-21`: `CONFIG_SOURCE` 的权威入口支持进程环境变量和 `.env`，其中进程环境变量优先。
+  - Kubernetes/容器部署可以只通过 Deployment env 设置 `CONFIG_SOURCE=local|infisical`，不需要挂载 `.env`。
+  - 本地开发可以用 `backend/.env` 作为便利 fallback。
+  - 两者都不存在或值非法时才启动失败；不能因为容器没有 `.env` 而忽略已有进程环境变量。

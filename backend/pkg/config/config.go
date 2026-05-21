@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -184,12 +185,19 @@ func Load(baseDir string) (*Config, error) {
 }
 
 func readConfigSource(baseDir string) (string, error) {
+	if source := normalizeConfigSource(os.Getenv("CONFIG_SOURCE")); source != "" {
+		if source != "local" && source != "infisical" {
+			return "", fmt.Errorf("CONFIG_SOURCE must be local or infisical, got %q", source)
+		}
+		return source, nil
+	}
+
 	sourceV := viper.New()
 	sourceV.SetConfigFile(filepath.Join(baseDir, ".env"))
 	sourceV.SetConfigType("env")
 	if err := sourceV.ReadInConfig(); err != nil {
-		if isConfigNotFound(err) {
-			return "", fmt.Errorf(".env must exist and set CONFIG_SOURCE=local or CONFIG_SOURCE=infisical")
+		if isConfigNotFound(err) || os.IsNotExist(err) {
+			return "", fmt.Errorf("CONFIG_SOURCE must be set in the process environment or .env")
 		}
 		return "", err
 	}
