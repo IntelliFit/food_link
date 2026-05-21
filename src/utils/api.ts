@@ -2151,6 +2151,10 @@ export interface AnalysisTask {
   payload?: Record<string, unknown>
   result?: AnalyzeResponse
   error_message?: string
+  trace_id?: string | null
+  traceId?: string | null
+  request_id?: string | null
+  requestId?: string | null
   is_violated?: boolean          // AI 审核是否违规
   violation_reason?: string | null // 违规原因
   is_recorded?: boolean          // 是否已保存为饮食记录（后端通过 user_food_records 关联查询）
@@ -2366,7 +2370,12 @@ export async function getAnalyzeTask(taskId: string): Promise<AnalysisTask> {
     const msg = (res.data as any)?.detail || '获取任务失败'
     throw new Error(msg)
   }
-  return res.data as AnalysisTask
+  const task = res.data as AnalysisTask
+  const responseTraceId = extractTraceIdFromHeaders(res.header as Record<string, any> | undefined)
+  const responseRequestId = extractRequestIdFromHeaders(res.header as Record<string, any> | undefined)
+  if (responseTraceId && !task.trace_id && !task.traceId) task.trace_id = responseTraceId
+  if (responseRequestId && !task.request_id && !task.requestId) task.request_id = responseRequestId
+  return task
 }
 
 /** 查询当前用户的分析任务列表 */

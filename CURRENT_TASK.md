@@ -40423,3 +40423,46 @@ DATABASE_HOST=127.0.0.1 DATABASE_USER=kirigaya npm run test:e2e-weapp
 - 这匹配 Kubernetes/容器部署习惯：Deployment env 可以直接声明配置源，`.env` 只是本地开发便利文件。
 - 新增测试覆盖无 `.env` 但进程 env 存在的场景。
 - Verification: `go test ./pkg/config -count=1`、`go test ./internal/app -run '^$' -count=1`、`go build -o $env:TEMP\food-link-server-config-env.exe ./cmd/server` 均通过。
+
+## 2026-05-21 - 分析失败页展示 traceId
+- Task: 用户要求 `packageExtra/pages/analyze-loading/index` 的识别失败界面直接输出 traceId，便于截图后排查。
+- Status: fixed_static_verified_runtime_not_run
+- Change:
+  - `src/utils/api.ts` 的 `AnalysisTask` 类型补充 `trace_id/traceId/request_id/requestId`，并在 `getAnalyzeTask` 成功响应时把响应头 `X-Trace-Id` / `X-Request-Id` 附加到任务对象，作为任务本身没有 trace 字段时的兜底。
+  - `src/packageExtra/pages/analyze-loading/index.tsx` 在任务进入 `failed/timed_out` 时提取 traceId，优先读任务返回体或 payload，兜底读本次轮询响应头附加的 traceId；失败页在错误文案下方展示 `traceId: ...`，并过滤 `no-trace-id/null/undefined` 等占位值。
+  - `src/packageExtra/pages/analyze-loading/index.scss` 新增 `.error-trace`，长 traceId 自动换行，避免撑破失败页布局。
+- Verification:
+  - `npx eslint src/packageExtra/pages/analyze-loading/index.tsx src/utils/api.ts --max-warnings 0` passed.
+  - `git diff --check -- src/utils/api.ts src/packageExtra/pages/analyze-loading/index.tsx src/packageExtra/pages/analyze-loading/index.scss` passed with only CRLF warnings.
+- Runtime verification:
+  - 本轮按当前项目决策未运行微信开发者工具/前端运行态验证；需要让小程序吃到最新 dev 产物后，在一次失败任务上确认 traceId 显示。
+
+## 2026-05-21 - 后端 HTTP 日志补充 trace_id
+- Task: 用户希望后端 JSON 日志中的 `请求完成`、`请求失败`、`应用错误` 能直接输出 traceId，方便和小程序失败页/Jaeger 对应。
+- Status: fixed_static_verified_restart_required
+- Change:
+  - `backend/internal/common/middleware/request_id.go` 新增 `RequestIDs(c)`，统一从 Gin context、响应头、请求头读取 `trace_id/request_id/host_name`。
+  - `backend/pkg/logger/logger.go` 的 `RequestLogger()` 在访问日志里追加 `trace_id`、`request_id`、`host_name`；同时 `appendTraceAttrs` 避免已有 `trace_id/span_id` 时重复追加同名字段。
+  - `backend/internal/common/response/response.go` 的应用错误、参数绑定错误、JSON 解析错误、参数校验错误、未处理错误日志改为 `WarnContext/ErrorContext`，并统一追加 `trace_id/request_id/host_name`。
+- Verification:
+  - `go test ./internal/common/middleware ./internal/common/response ./pkg/logger ./internal/app -run '^$|TestRequestID|TestLogger' -count=1` passed.
+  - `git diff --check -- backend/internal/common/middleware/request_id.go backend/pkg/logger/logger.go backend/internal/common/response/response.go` passed with only CRLF warnings.
+- Next step:
+  - 重启 Go 后端后生效；之后类似 `/api/pet/summary` 500 日志里应能直接看到 `trace_id` 与 `request_id`。
+
+## 2026-05-21 - taskId 作为分析链路关联键
+- Task: 用户希望拿到分析 taskId 后，能查到从提交识别、worker 认领处理、识别结果落库、前端轮询获取结果的全链路日志和 trace tag。
+- Status: fixed_static_verified_restart_required
+- Change:
+  - `backend/internal/analyze/handler/analyze_handler.go` 新增 `bindTaskIDToRequest`，在提交任务成功、批量任务创建、继续精准任务、GET/PATCH/DELETE `/api/analyze/tasks/:task_id` 时把 taskId 写入 Gin context 的 `analysis.task_id`，并设置当前 HTTP span tag `analysis.task_id`。
+  - `backend/pkg/logger/logger.go` 的 `RequestLogger()` 会把 Gin context 中的 `analysis.task_id` 同时输出为 `analysis.task_id` 和 `task_id`，方便 JSON 日志按统一字段过滤；新增 `logger.AnalysisTaskID(taskID)` 辅助。
+  - `backend/internal/common/response/response.go` 的错误日志也会输出 `analysis.task_id/task_id`，因此轮询失败或任务详情接口应用错误可以直接按 taskId 关联。
+  - `backend/internal/analyze/service/task_service.go` 的“分析任务已提交”日志补充 `analysis.task_id`；worker 关键日志“任务已认领/任务处理开始/食物任务已完成/失败状态更新/退还积分失败”等补充 `analysis.task_id`。
+  - worker 侧已有大量 OTel span/event tag `analysis.task_id`，本轮主要补齐 HTTP 侧和日志统一字段。
+- Verification:
+  - `go test ./internal/analyze/handler ./internal/analyze/service ./internal/worker ./internal/common/response ./pkg/logger ./internal/app -run '^$|TestAnalyzeHandler|TestTaskService|TestLogger' -count=1` 中 handler/worker/common/logger/app 通过，`internal/analyze/service` 运行型测试被本机 `CGO_ENABLED=0` + `go-sqlite3` 阻塞。
+  - `go test ./internal/analyze/service -run '^$' -count=1` passed.
+  - `git diff --check -- backend/pkg/logger/logger.go backend/internal/common/response/response.go backend/internal/analyze/handler/analyze_handler.go backend/internal/analyze/service/task_service.go backend/internal/worker/worker.go` passed with only CRLF warnings.
+- Usage:
+  - 日志平台可按 `analysis.task_id=<taskId>` 或兼容字段 `task_id=<taskId>` 查询。
+  - Jaeger 可按 tag `analysis.task_id=<taskId>` 查询提交 HTTP span 和 worker 处理 span；异步 worker 不一定和提交请求属于同一个 trace，但 taskId 是稳定关联键。

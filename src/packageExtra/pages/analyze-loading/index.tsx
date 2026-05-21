@@ -1129,6 +1129,21 @@ const normalizeAnalyzeTaskErrorMessage = (value: unknown): string => {
   return raw.length > 160 ? `${raw.slice(0, 160)}…` : raw
 }
 
+const normalizeTaskTraceId = (value: unknown): string => {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  const lower = text.toLowerCase()
+  if (lower === 'no-trace-id' || lower === 'none' || lower === 'null' || lower === 'undefined') return ''
+  return text
+}
+
+const pickAnalyzeTaskTraceId = (task: AnalysisTask): string => {
+  const direct = normalizeTaskTraceId(task.trace_id || task.traceId)
+  if (direct) return direct
+  const payload = task.payload as Record<string, unknown> | undefined
+  return normalizeTaskTraceId(payload?.trace_id || payload?.traceId)
+}
+
 const pickSourceTaskTypeFromTask = (task: AnalysisTask): 'food' | 'food_text' => {
   if (task.task_type === 'food_text') return 'food_text'
   const payload = task.payload as Record<string, unknown> | undefined
@@ -1196,6 +1211,7 @@ function AnalyzeLoadingPage() {
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [status, setStatus] = useState<'loading' | 'done' | 'failed' | 'violated'>('loading')
   const [errorMessage, setErrorMessage] = useState<string>('')
+  const [errorTraceId, setErrorTraceId] = useState<string>('')
   const [violationReason, setViolationReason] = useState<string>('')
   const [tipIndex, setTipIndex] = useState(() => getNextTipIndex())
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
@@ -1288,6 +1304,7 @@ function AnalyzeLoadingPage() {
       })
       setStatus('loading')
       setErrorMessage('')
+      setErrorTraceId('')
       setViolationReason('')
       setCurrentStep(1)
       setElapsedSeconds(0)
@@ -1367,6 +1384,7 @@ function AnalyzeLoadingPage() {
 
     timeoutTimerRef.current = setTimeout(() => {
       setStatus('failed')
+      setErrorTraceId('')
       setErrorMessage('分析超时，请重试')
       if (pollTimerRef.current) {
         clearInterval(pollTimerRef.current)
@@ -1515,6 +1533,7 @@ function AnalyzeLoadingPage() {
         }
         if (task.status === 'failed' || task.status === 'timed_out') {
           setStatus('failed')
+          setErrorTraceId(pickAnalyzeTaskTraceId(task))
           setErrorMessage(normalizeAnalyzeTaskErrorMessage(task.error_message || (task.status === 'timed_out' ? (isCorrectionMode ? '纠错分析超时，请重试' : '分析超时，请重试') : (isCorrectionMode ? '纠错失败' : '识别失败'))))
           if (timeoutTimerRef.current) {
             clearTimeout(timeoutTimerRef.current)
@@ -1646,6 +1665,9 @@ function AnalyzeLoadingPage() {
             {taskType === 'exercise' ? '分析失败：' : '识别失败：'}
             {errorMessage}
           </Text>
+          {errorTraceId ? (
+            <Text selectable className='error-trace'>traceId: {errorTraceId}</Text>
+          ) : null}
           <Text
             className='btn-history'
             onClick={() =>

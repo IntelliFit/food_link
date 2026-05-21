@@ -394,6 +394,7 @@ func (r *Runner) handleDelivery(ctx context.Context, workerID string, taskTypes 
 	r.log.Info("任务已认领",
 		slog.String("worker_id", workerID),
 		slog.String("task_id", task.ID),
+		logger.AnalysisTaskID(task.ID),
 		slog.String("task_type", task.TaskType),
 		logger.Stringp("attempt_id", task.AttemptID),
 		slog.Int("attempt_count", task.AttemptCount),
@@ -668,6 +669,7 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 	r.log.Info("任务处理开始",
 		slog.String("worker_id", workerID),
 		slog.String("task_id", task.ID),
+		logger.AnalysisTaskID(task.ID),
 		slog.String("task_type", task.TaskType),
 		slog.String("status", task.Status),
 	)
@@ -854,7 +856,7 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 	)
 	err = r.completeTask(ctx, task, result)
 	if err != nil {
-		r.log.Error("食物任务完成状态更新失败", slog.String("task_id", task.ID), logger.Err(err))
+		r.log.Error("食物任务完成状态更新失败", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), logger.Err(err))
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
 		return err
 	}
@@ -866,7 +868,7 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		attribute.String("analysis.task_id", task.ID),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
-	r.log.Info("食物任务已完成", slog.String("task_id", task.ID), slog.Duration("duration", time.Since(start)))
+	r.log.Info("食物任务已完成", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), slog.Duration("duration", time.Since(start)))
 	return nil
 }
 
@@ -3236,6 +3238,7 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	if err != nil {
 		r.log.Error("任务失败状态更新失败",
 			slog.String("task_id", task.ID),
+			logger.AnalysisTaskID(task.ID),
 			logger.Stringp("attempt_id", task.AttemptID),
 			logger.Err(err),
 		)
@@ -3244,6 +3247,7 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	if !ok {
 		r.log.Warn("任务失败状态更新因 attempt 已失去所有权而跳过",
 			slog.String("task_id", task.ID),
+			logger.AnalysisTaskID(task.ID),
 			logger.Stringp("attempt_id", task.AttemptID),
 			slog.String("error", msg),
 		)
@@ -3254,6 +3258,7 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	if err := r.captureCorrectionFeedbackSample(ctx, task, nil, msg); err != nil {
 		r.log.Warn("采集失败纠错反馈样本失败",
 			slog.String("task_id", task.ID),
+			logger.AnalysisTaskID(task.ID),
 			logger.Err(err),
 		)
 	}
@@ -3357,7 +3362,7 @@ func (r *Runner) refundTaskCredits(ctx context.Context, task *domain.AnalysisTas
 		"task_id":         task.ID,
 		"task_type":       task.TaskType,
 	}); err != nil {
-		r.log.Warn("任务失败后退还预扣积分失败", slog.String("task_id", task.ID), slog.String("credit_group_id", groupID), logger.Err(err))
+		r.log.Warn("任务失败后退还预扣积分失败", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), slog.String("credit_group_id", groupID), logger.Err(err))
 	}
 }
 
