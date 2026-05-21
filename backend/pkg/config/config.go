@@ -1,23 +1,32 @@
 package config
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
+	infisical "github.com/infisical/go-sdk"
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	App       AppConfig       `mapstructure:"app"`
-	Log       LogConfig       `mapstructure:"log"`
-	Database  DatabaseConfig  `mapstructure:"database"`
-	JWT       JWTConfig       `mapstructure:"jwt"`
-	OTel      OTelConfig      `mapstructure:"otel"`
-	Storage   StorageConfig   `mapstructure:"storage"`
-	External  ExternalConfig  `mapstructure:"external"`
-	WechatPay WechatPayConfig `mapstructure:"wechat_pay"`
-	Worker    WorkerConfig    `mapstructure:"worker"`
-	TaskQueue TaskQueueConfig `mapstructure:"task_queue"`
+	ConfigSource string          `mapstructure:"config_source"`
+	App          AppConfig       `mapstructure:"app"`
+	Log          LogConfig       `mapstructure:"log"`
+	Database     DatabaseConfig  `mapstructure:"database"`
+	JWT          JWTConfig       `mapstructure:"jwt"`
+	OTel         OTelConfig      `mapstructure:"otel"`
+	Storage      StorageConfig   `mapstructure:"storage"`
+	External     ExternalConfig  `mapstructure:"external"`
+	WechatPay    WechatPayConfig `mapstructure:"wechat_pay"`
+	Worker       WorkerConfig    `mapstructure:"worker"`
+	TaskQueue    TaskQueueConfig `mapstructure:"task_queue"`
+	Infisical    InfisicalConfig `mapstructure:"infisical"`
 }
 
 type AppConfig struct {
@@ -116,47 +125,143 @@ type TaskQueueConfig struct {
 	ConsumerGroup string   `mapstructure:"consumer_group"`
 }
 
+type InfisicalConfig struct {
+	Enabled                bool   `mapstructure:"enabled"`
+	SiteURL                string `mapstructure:"site_url"`
+	ProjectID              string `mapstructure:"project_id"`
+	ProjectSlug            string `mapstructure:"project_slug"`
+	Environment            string `mapstructure:"environment"`
+	SecretPath             string `mapstructure:"secret_path"`
+	ClientID               string `mapstructure:"client_id"`
+	ClientSecret           string `mapstructure:"client_secret"`
+	IncludeImports         bool   `mapstructure:"include_imports"`
+	Recursive              bool   `mapstructure:"recursive"`
+	ExpandSecretReferences bool   `mapstructure:"expand_secret_references"`
+}
+
 func Load(baseDir string) (*Config, error) {
+	slog.Info("开始加载后端配置", slog.String("config.base_dir", baseDir))
+	source, err := readConfigSource(baseDir)
+	if err != nil {
+		return nil, err
+	}
+	slog.Info("配置源已确定", slog.String("config.source", source))
+
 	v := viper.New()
-	v.SetConfigName("config")
-	v.SetConfigType("yaml")
-	v.AddConfigPath(baseDir)
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	v.AutomaticEnv()
-
 	setDefaults(v)
-	bindLegacyEnv(v)
-
-	if err := v.ReadInConfig(); err != nil {
-		var notFound viper.ConfigFileNotFoundError
-		if !strings.Contains(err.Error(), "Not Found") && !strings.Contains(err.Error(), "not found") {
+	v.Set("config_source", source)
+	switch source {
+	case "local":
+		configPath := filepath.Join(baseDir, "app-config.yaml")
+		if err := readYAMLConfigFile(v, configPath); err != nil {
 			return nil, err
 		}
-		_ = notFound
+		logConfigFileSnapshot("本地配置文件已读取", configPath)
+		v.Set("config_source", source)
+		bindLegacyEnv(v)
+		if err := applyLocalConfigOverrides(v); err != nil {
+			return nil, err
+		}
+	case "infisical":
+		bootstrap := viper.New()
+		setDefaults(bootstrap)
+		bootstrap.Set("config_source", source)
+		configPath := filepath.Join(baseDir, "infisical-config.yaml")
+		if err := readYAMLConfigFile(bootstrap, configPath); err != nil {
+			return nil, err
+		}
+		logConfigFileSnapshot("Infisical 启动配置文件已读取", configPath)
+		bootstrap.Set("config_source", source)
+		cloudV, err := loadInfisicalConfig(context.Background(), bootstrap)
+		if err != nil {
+			return nil, err
+		}
+		v = cloudV
 	}
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshal config: %w", err)
 	}
+	cfg.ConfigSource = source
 	trimExternalConfig(&cfg.External)
 	if err := applyConfigFileOnlyValues(v, &cfg); err != nil {
 		return nil, err
 	}
+	logConfigSnapshot("后端配置解析完成", strings.TrimSpace(v.GetString("config_file_used")), v)
 	return &cfg, nil
 }
 
-func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
-	if v.ConfigFileUsed() == "" {
-		return fmt.Errorf("worker.count must be set in config.yaml")
+func readConfigSource(baseDir string) (string, error) {
+	if source := normalizeConfigSource(os.Getenv("CONFIG_SOURCE")); source != "" {
+		if source != "local" && source != "infisical" {
+			return "", fmt.Errorf("CONFIG_SOURCE must be local or infisical, got %q", source)
+		}
+		slog.Info("CONFIG_SOURCE 已从进程环境变量读取", slog.String("config.source", source))
+		return source, nil
 	}
-	fileV := viper.New()
-	fileV.SetConfigFile(v.ConfigFileUsed())
-	if err := fileV.ReadInConfig(); err != nil {
+
+	sourceV := viper.New()
+	envPath := filepath.Join(baseDir, ".env")
+	sourceV.SetConfigFile(envPath)
+	sourceV.SetConfigType("env")
+	if err := sourceV.ReadInConfig(); err != nil {
+		if isConfigNotFound(err) || os.IsNotExist(err) {
+			return "", fmt.Errorf("CONFIG_SOURCE must be set in the process environment or .env")
+		}
+		return "", err
+	}
+	source := normalizeConfigSource(sourceV.GetString("CONFIG_SOURCE"))
+	if source == "" {
+		return "", fmt.Errorf("CONFIG_SOURCE must be set to local or infisical in .env")
+	}
+	if source != "local" && source != "infisical" {
+		return "", fmt.Errorf("CONFIG_SOURCE must be local or infisical, got %q", source)
+	}
+	slog.Info("CONFIG_SOURCE 已从 .env 文件读取",
+		slog.String("config.env_file", envPath),
+		slog.String("config.source", source),
+	)
+	return source, nil
+}
+
+func readYAMLConfigFile(v *viper.Viper, path string) error {
+	reader := viper.New()
+	reader.SetConfigFile(path)
+	reader.SetConfigType("yaml")
+	if err := reader.ReadInConfig(); err != nil {
+		if isConfigNotFound(err) {
+			return fmt.Errorf("%s must exist", filepath.Base(path))
+		}
 		return err
 	}
-	if !fileV.IsSet("worker.count") {
-		return fmt.Errorf("worker.count must be set in config.yaml")
+	v.Set("config_file_used", path)
+	return v.MergeConfigMap(reader.AllSettings())
+}
+
+func isConfigNotFound(err error) bool {
+	var notFound viper.ConfigFileNotFoundError
+	if errors.As(err, &notFound) {
+		return true
+	}
+	return strings.Contains(err.Error(), "Not Found") || strings.Contains(err.Error(), "not found")
+}
+
+func normalizeConfigSource(source string) string {
+	source = strings.TrimSpace(strings.ToLower(source))
+	return source
+}
+
+func applyLocalConfigOverrides(v *viper.Viper) error {
+	configFile := strings.TrimSpace(v.GetString("config_file_used"))
+	if configFile == "" {
+		return nil
+	}
+	fileV := viper.New()
+	fileV.SetConfigFile(configFile)
+	if err := fileV.ReadInConfig(); err != nil {
+		return err
 	}
 	var fileCfg Config
 	if err := fileV.Unmarshal(&fileCfg); err != nil {
@@ -164,56 +269,387 @@ func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
 	}
 	trimExternalConfig(&fileCfg.External)
 	if fileCfg.External.DoubaoAPIKey != "" {
-		cfg.External.DoubaoAPIKey = fileCfg.External.DoubaoAPIKey
+		v.Set("external.doubao_api_key", fileCfg.External.DoubaoAPIKey)
 	}
 	if fileCfg.External.DoubaoWebSearchAPIKey != "" {
-		cfg.External.DoubaoWebSearchAPIKey = fileCfg.External.DoubaoWebSearchAPIKey
+		v.Set("external.doubao_web_search_api_key", fileCfg.External.DoubaoWebSearchAPIKey)
 	}
 	if fileCfg.External.DoubaoBaseURL != "" {
-		cfg.External.DoubaoBaseURL = fileCfg.External.DoubaoBaseURL
+		v.Set("external.doubao_base_url", fileCfg.External.DoubaoBaseURL)
 	}
 	if fileCfg.External.OfoxAIAPIKey != "" {
-		cfg.External.OfoxAIAPIKey = fileCfg.External.OfoxAIAPIKey
+		v.Set("external.ofoxai_api_key", fileCfg.External.OfoxAIAPIKey)
 	}
 	if fileCfg.External.Gemini35APIKey != "" {
-		cfg.External.Gemini35APIKey = fileCfg.External.Gemini35APIKey
+		v.Set("external.gemini35_api_key", fileCfg.External.Gemini35APIKey)
 	}
 	if fileCfg.External.Gemini35BaseURL != "" {
-		cfg.External.Gemini35BaseURL = fileCfg.External.Gemini35BaseURL
+		v.Set("external.gemini35_base_url", fileCfg.External.Gemini35BaseURL)
 	}
 	if fileCfg.External.Gemini35Model != "" {
-		cfg.External.Gemini35Model = fileCfg.External.Gemini35Model
+		v.Set("external.gemini35_model", fileCfg.External.Gemini35Model)
 	}
 	if fileCfg.External.DeepSeekAPIKey != "" {
-		cfg.External.DeepSeekAPIKey = fileCfg.External.DeepSeekAPIKey
+		v.Set("external.deepseek_api_key", fileCfg.External.DeepSeekAPIKey)
 	}
-	if fileCfg.Worker.Count < 0 {
+	if fileV.IsSet("worker.id") {
+		v.Set("worker.id", fileCfg.Worker.ID)
+	}
+	if fileV.IsSet("worker.count") {
+		v.Set("worker.count", fileCfg.Worker.Count)
+	}
+	if fileV.IsSet("worker.poll_interval_seconds") {
+		v.Set("worker.poll_interval_seconds", fileCfg.Worker.PollIntervalSeconds)
+	}
+	if fileV.IsSet("task_queue.driver") {
+		v.Set("task_queue.driver", strings.TrimSpace(fileCfg.TaskQueue.Driver))
+	}
+	if fileV.IsSet("task_queue.buffer_size") {
+		v.Set("task_queue.buffer_size", fileCfg.TaskQueue.BufferSize)
+	}
+	if fileV.IsSet("task_queue.topic") {
+		v.Set("task_queue.topic", strings.TrimSpace(fileCfg.TaskQueue.Topic))
+	}
+	if fileV.IsSet("task_queue.brokers") {
+		v.Set("task_queue.brokers", normalizeCSV(fileCfg.TaskQueue.Brokers))
+	}
+	if fileV.IsSet("task_queue.consumer_group") {
+		v.Set("task_queue.consumer_group", strings.TrimSpace(fileCfg.TaskQueue.ConsumerGroup))
+	}
+	return nil
+}
+
+func loadInfisicalConfig(ctx context.Context, bootstrap *viper.Viper) (*viper.Viper, error) {
+	var cfg InfisicalConfig
+	if err := bootstrap.UnmarshalKey("infisical", &cfg); err != nil {
+		return nil, fmt.Errorf("unmarshal infisical config: %w", err)
+	}
+	trimInfisicalConfig(&cfg)
+	if cfg.ProjectID == "" && cfg.ProjectSlug == "" {
+		return nil, fmt.Errorf("infisical.project_id or infisical.project_slug must be set")
+	}
+	if cfg.Environment == "" {
+		return nil, fmt.Errorf("infisical.environment must be set")
+	}
+	if cfg.ClientID == "" {
+		return nil, fmt.Errorf("infisical.client_id must be set")
+	}
+	if cfg.ClientSecret == "" {
+		return nil, fmt.Errorf("infisical.client_secret must be set")
+	}
+	if cfg.SecretPath == "" {
+		cfg.SecretPath = "/"
+	}
+
+	slog.Info("准备登录 Infisical",
+		slog.String("infisical.site_url", cfg.SiteURL),
+		slog.String("infisical.login_url", joinURLPath(cfg.SiteURL, "/api/v1/auth/universal-auth/login")),
+		slog.String("infisical.project_id", cfg.ProjectID),
+		slog.String("infisical.project_slug", cfg.ProjectSlug),
+		slog.String("infisical.environment", cfg.Environment),
+		slog.String("infisical.secret_path", cfg.SecretPath),
+		slog.String("infisical.client_id", maskValue(cfg.ClientID)),
+	)
+	client := infisical.NewInfisicalClient(ctx, infisical.Config{
+		SiteUrl:    cfg.SiteURL,
+		SilentMode: true,
+	})
+	if _, err := client.Auth().UniversalAuthLogin(cfg.ClientID, cfg.ClientSecret); err != nil {
+		return nil, fmt.Errorf("infisical universal auth login: %w", err)
+	}
+	slog.Info("Infisical 登录成功，准备拉取 secrets",
+		slog.String("infisical.list_url", joinURLPath(cfg.SiteURL, "/api/v3/secrets/raw")),
+		slog.String("infisical.project_id", cfg.ProjectID),
+		slog.String("infisical.project_slug", cfg.ProjectSlug),
+		slog.String("infisical.environment", cfg.Environment),
+		slog.String("infisical.secret_path", cfg.SecretPath),
+		slog.Bool("infisical.include_imports", cfg.IncludeImports),
+		slog.Bool("infisical.recursive", cfg.Recursive),
+		slog.Bool("infisical.expand_secret_references", cfg.ExpandSecretReferences),
+	)
+	result, err := client.Secrets().ListSecrets(infisical.ListSecretsOptions{
+		ProjectID:              cfg.ProjectID,
+		ProjectSlug:            cfg.ProjectSlug,
+		Environment:            cfg.Environment,
+		SecretPath:             cfg.SecretPath,
+		IncludeImports:         cfg.IncludeImports,
+		Recursive:              cfg.Recursive,
+		ExpandSecretReferences: cfg.ExpandSecretReferences,
+		SkipUniqueValidation:   true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("infisical list secrets: %w", err)
+	}
+	slog.Info("Infisical secrets 已拉取",
+		slog.Int("infisical.secret_count", len(result.Secrets)),
+		slog.Any("infisical.secrets", maskInfisicalSecrets(result.Secrets)),
+	)
+
+	cloudV := viper.New()
+	cloudV.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	setDefaults(cloudV)
+	cloudV.Set("config_source", "infisical")
+	cloudV.Set("infisical", cfg)
+	for _, secret := range result.Secrets {
+		if key := configKeyForSecret(secret.SecretKey); key != "" {
+			cloudV.Set(key, secret.SecretValue)
+		}
+	}
+	logConfigSnapshot("Infisical secrets 已映射为配置键", "", cloudV)
+	return cloudV, nil
+}
+
+type maskedConfigKV struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type maskedInfisicalSecret struct {
+	Key       string `json:"key"`
+	MappedKey string `json:"mapped_key"`
+	Value     string `json:"value"`
+}
+
+func logConfigSnapshot(message, path string, v *viper.Viper) {
+	if v == nil {
+		return
+	}
+	attrs := maskedSettingsAttrs("config", v.AllSettings())
+	if strings.TrimSpace(path) != "" {
+		attrs = append(attrs, slog.String("config.file", path))
+	}
+	slog.LogAttrs(context.Background(), slog.LevelInfo, message, attrs...)
+}
+
+func logConfigFileSnapshot(message, path string) {
+	fileV := viper.New()
+	fileV.SetConfigFile(path)
+	if err := fileV.ReadInConfig(); err != nil {
+		slog.Warn("配置文件日志快照读取失败",
+			slog.String("config.file", path),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+	attrs := maskedSettingsAttrs("config.file", fileV.AllSettings())
+	attrs = append(attrs, slog.String("config.file", path))
+	slog.LogAttrs(context.Background(), slog.LevelInfo, message, attrs...)
+}
+
+func maskedSettingsAttrs(prefix string, settings map[string]any) []slog.Attr {
+	flat := flattenSettings(settings)
+	return []slog.Attr{
+		slog.Int(prefix+".key_count", len(flat)),
+		slog.Any(prefix+".keys", maskSettings(settings)),
+	}
+}
+
+func maskInfisicalSecrets(secrets []infisical.Secret) []maskedInfisicalSecret {
+	out := make([]maskedInfisicalSecret, 0, len(secrets))
+	for _, secret := range secrets {
+		out = append(out, maskedInfisicalSecret{
+			Key:       secret.SecretKey,
+			MappedKey: configKeyForSecret(secret.SecretKey),
+			Value:     maskValue(secret.SecretValue),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Key < out[j].Key
+	})
+	return out
+}
+
+func maskSettings(settings map[string]any) []maskedConfigKV {
+	flat := flattenSettings(settings)
+	out := make([]maskedConfigKV, 0, len(flat))
+	for _, key := range sortedKeys(flat) {
+		out = append(out, maskedConfigKV{Key: key, Value: maskValue(fmt.Sprint(flat[key]))})
+	}
+	return out
+}
+
+func flattenSettings(settings map[string]any) map[string]any {
+	out := map[string]any{}
+	flattenValue("", settings, out)
+	return out
+}
+
+func flattenValue(prefix string, value any, out map[string]any) {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			next := key
+			if prefix != "" {
+				next = prefix + "." + key
+			}
+			flattenValue(next, child, out)
+		}
+	case map[any]any:
+		for key, child := range typed {
+			keyText := fmt.Sprint(key)
+			next := keyText
+			if prefix != "" {
+				next = prefix + "." + keyText
+			}
+			flattenValue(next, child, out)
+		}
+	case []string:
+		out[prefix] = strings.Join(typed, ",")
+	case []any:
+		parts := make([]string, 0, len(typed))
+		for _, item := range typed {
+			parts = append(parts, fmt.Sprint(item))
+		}
+		out[prefix] = strings.Join(parts, ",")
+	default:
+		out[prefix] = typed
+	}
+}
+
+func sortedKeys(values map[string]any) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func maskValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	value = strings.ReplaceAll(value, "\r", "")
+	value = strings.ReplaceAll(value, "\n", "\\n")
+	runes := []rune(value)
+	if len(runes) <= 2 {
+		return strings.Repeat("*", len(runes))
+	}
+	if len(runes) <= 8 {
+		return string(runes[:1]) + strings.Repeat("*", len(runes)-2) + string(runes[len(runes)-1:])
+	}
+	return string(runes[:3]) + strings.Repeat("*", 6) + string(runes[len(runes)-3:])
+}
+
+func joinURLPath(baseURL, path string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	path = "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
+	if baseURL == "" {
+		return path
+	}
+	return baseURL + path
+}
+
+func configKeyForSecret(secretKey string) string {
+	key := strings.TrimSpace(secretKey)
+	if key == "" {
+		return ""
+	}
+	normalized := strings.ToLower(strings.ReplaceAll(key, "__", "."))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	if strings.Contains(normalized, ".") {
+		return normalized
+	}
+	if mapped, ok := infisicalSecretKeyAliases[strings.ToUpper(key)]; ok {
+		return mapped
+	}
+	return normalized
+}
+
+var infisicalSecretKeyAliases = map[string]string{
+	"PORT":                                "app.port",
+	"APPID":                               "external.appid",
+	"SECRET":                              "external.secret",
+	"JWT_SECRET_KEY":                      "jwt.secret",
+	"SUPABASE_URL":                        "external.supabase_url",
+	"SUPABASE_SERVICE_ROLE_KEY":           "external.supabase_service_role_key",
+	"TIANDITU_TK":                         "external.tianditu_tk",
+	"OFOXAI_API_KEY":                      "external.ofoxai_api_key",
+	"OFOXAI_BASE_URL":                     "external.ofoxai_base_url",
+	"OFOX_BASE_URL":                       "external.ofoxai_base_url",
+	"GEMINI35_API_KEY":                    "external.gemini35_api_key",
+	"GEMINI35_BASE_URL":                   "external.gemini35_base_url",
+	"GEMINI35_MODEL":                      "external.gemini35_model",
+	"LLM_PROVIDER":                        "external.llm_provider",
+	"DEEPSEEK_API_KEY":                    "external.deepseek_api_key",
+	"DOUBAO_API_KEY":                      "external.doubao_api_key",
+	"DOUBAO_WEB_SEARCH_API_KEY":           "external.doubao_web_search_api_key",
+	"DOUBAO_BASE_URL":                     "external.doubao_base_url",
+	"WECHAT_PAY_MCHID":                    "wechat_pay.mchid",
+	"WECHAT_PAY_NOTIFY_URL":               "wechat_pay.notify_url",
+	"WECHAT_PAY_SERIAL_NO":                "wechat_pay.serial_no",
+	"WECHAT_PAY_API_V3_KEY":               "wechat_pay.api_v3_key",
+	"WECHAT_PAY_PRIVATE_KEY":              "wechat_pay.private_key",
+	"WECHAT_PAY_PUBLIC_KEY":               "wechat_pay.public_key",
+	"EXPIRY_SUBSCRIBE_TEMPLATE_ID":        "wechat_pay.expiry_subscribe_template_id",
+	"COS_REGION":                          "storage.cos_region",
+	"COS_SECRET_ID":                       "storage.cos_secret_id",
+	"COS_SECRET_KEY":                      "storage.cos_secret_key",
+	"COS_FOOD_IMAGES_BUCKET":              "storage.food_images_bucket",
+	"COS_HEALTH_REPORTS_BUCKET":           "storage.health_reports_bucket",
+	"COS_USER_AVATARS_BUCKET":             "storage.user_avatars_bucket",
+	"COS_ICON_BUCKET":                     "storage.icon_bucket",
+	"CDN_FOOD_IMAGES_BASE_URL":            "storage.food_images_cdn_base_url",
+	"CDN_USER_AVATARS_BASE_URL":           "storage.user_avatars_cdn_base_url",
+	"CDN_HEALTH_REPORTS_BASE_URL":         "storage.health_reports_cdn_base_url",
+	"CDN_ICON_BASE_URL":                   "storage.icon_cdn_base_url",
+	"POSTGRESQL_HOST":                     "database.host",
+	"POSTGRESQL_PORT":                     "database.port",
+	"POSTGRESQL_USER":                     "database.user",
+	"POSTGRESQL_PASSWORD":                 "database.password",
+	"POSTGRESQL_DATABASE":                 "database.name",
+	"POSTGRESQL_SSLMODE":                  "database.sslmode",
+	"POSTGRESQL_SCHEMA":                   "database.schema",
+	"WORKER_COUNT":                        "worker.count",
+	"WORKER_POLL_INTERVAL_SECONDS":        "worker.poll_interval_seconds",
+	"TASK_QUEUE_DRIVER":                   "task_queue.driver",
+	"TASK_QUEUE_BUFFER_SIZE":              "task_queue.buffer_size",
+	"TASK_QUEUE_TOPIC":                    "task_queue.topic",
+	"TASK_QUEUE_BROKERS":                  "task_queue.brokers",
+	"TASK_QUEUE_CONSUMER_GROUP":           "task_queue.consumer_group",
+	"OTEL_ENABLED":                        "otel.enabled",
+	"OTEL_TRACES_ENABLED":                 "otel.traces_enabled",
+	"OTEL_METRICS_ENABLED":                "otel.metrics_enabled",
+	"OTEL_COLLECTOR_ENDPOINT":             "otel.collector_endpoint",
+	"OTEL_INSECURE":                       "otel.insecure",
+	"OTEL_METRIC_EXPORT_INTERVAL_SECONDS": "otel.metric_export_interval_seconds",
+}
+
+func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
+	if !v.IsSet("worker.count") {
+		return fmt.Errorf("worker.count must be set in app-config.yaml or Infisical")
+	}
+	if cfg.Worker.Count < 0 {
 		return fmt.Errorf("worker.count must be greater than or equal to 0")
 	}
 	workerCfg := defaultWorkerConfig()
-	if fileV.IsSet("worker.id") {
-		workerCfg.ID = fileCfg.Worker.ID
+	if v.IsSet("worker.id") {
+		workerCfg.ID = cfg.Worker.ID
 	}
-	workerCfg.Count = fileCfg.Worker.Count
-	if fileV.IsSet("worker.poll_interval_seconds") {
-		workerCfg.PollIntervalSeconds = fileCfg.Worker.PollIntervalSeconds
+	workerCfg.Count = cfg.Worker.Count
+	if v.IsSet("worker.poll_interval_seconds") {
+		workerCfg.PollIntervalSeconds = cfg.Worker.PollIntervalSeconds
 	}
 	cfg.Worker = workerCfg
 	taskQueueCfg := defaultTaskQueueConfig()
-	if fileV.IsSet("task_queue.driver") {
-		taskQueueCfg.Driver = strings.TrimSpace(fileCfg.TaskQueue.Driver)
+	if v.IsSet("task_queue.driver") {
+		taskQueueCfg.Driver = strings.TrimSpace(cfg.TaskQueue.Driver)
 	}
-	if fileV.IsSet("task_queue.buffer_size") {
-		taskQueueCfg.BufferSize = fileCfg.TaskQueue.BufferSize
+	if v.IsSet("task_queue.buffer_size") {
+		taskQueueCfg.BufferSize = cfg.TaskQueue.BufferSize
 	}
-	if fileV.IsSet("task_queue.topic") {
-		taskQueueCfg.Topic = strings.TrimSpace(fileCfg.TaskQueue.Topic)
+	if v.IsSet("task_queue.topic") {
+		taskQueueCfg.Topic = strings.TrimSpace(cfg.TaskQueue.Topic)
 	}
-	if fileV.IsSet("task_queue.brokers") {
-		taskQueueCfg.Brokers = normalizeCSV(fileCfg.TaskQueue.Brokers)
+	if v.IsSet("task_queue.brokers") {
+		taskQueueCfg.Brokers = normalizeCSV(cfg.TaskQueue.Brokers)
 	}
-	if fileV.IsSet("task_queue.consumer_group") {
-		taskQueueCfg.ConsumerGroup = strings.TrimSpace(fileCfg.TaskQueue.ConsumerGroup)
+	if v.IsSet("task_queue.consumer_group") {
+		taskQueueCfg.ConsumerGroup = strings.TrimSpace(cfg.TaskQueue.ConsumerGroup)
 	}
 	if taskQueueCfg.BufferSize <= 0 {
 		return fmt.Errorf("task_queue.buffer_size must be greater than 0")
@@ -253,6 +689,16 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.DoubaoAPIKey = strings.TrimSpace(cfg.DoubaoAPIKey)
 	cfg.DoubaoWebSearchAPIKey = strings.TrimSpace(cfg.DoubaoWebSearchAPIKey)
 	cfg.DoubaoBaseURL = strings.TrimSpace(cfg.DoubaoBaseURL)
+}
+
+func trimInfisicalConfig(cfg *InfisicalConfig) {
+	cfg.SiteURL = strings.TrimSpace(cfg.SiteURL)
+	cfg.ProjectID = strings.TrimSpace(cfg.ProjectID)
+	cfg.ProjectSlug = strings.TrimSpace(cfg.ProjectSlug)
+	cfg.Environment = strings.TrimSpace(cfg.Environment)
+	cfg.SecretPath = strings.TrimSpace(cfg.SecretPath)
+	cfg.ClientID = strings.TrimSpace(cfg.ClientID)
+	cfg.ClientSecret = strings.TrimSpace(cfg.ClientSecret)
 }
 
 func normalizeCSV(values []string) []string {
@@ -297,6 +743,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("task_queue.buffer_size", 1024)
 	v.SetDefault("task_queue.topic", "food-link-analysis-tasks")
 	v.SetDefault("task_queue.consumer_group", "food-link-workers")
+	v.SetDefault("infisical.site_url", "https://app.infisical.com")
+	v.SetDefault("infisical.secret_path", "/")
 }
 
 func bindLegacyEnv(v *viper.Viper) {
@@ -340,4 +788,12 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("database.user", "POSTGRESQL_USER")
 	_ = v.BindEnv("database.password", "POSTGRESQL_PASSWORD")
 	_ = v.BindEnv("database.name", "POSTGRESQL_DATABASE")
+	_ = v.BindEnv("infisical.enabled", "INFISICAL_ENABLED")
+	_ = v.BindEnv("infisical.site_url", "INFISICAL_SITE_URL")
+	_ = v.BindEnv("infisical.project_id", "INFISICAL_PROJECT_ID")
+	_ = v.BindEnv("infisical.project_slug", "INFISICAL_PROJECT_SLUG")
+	_ = v.BindEnv("infisical.environment", "INFISICAL_ENVIRONMENT")
+	_ = v.BindEnv("infisical.secret_path", "INFISICAL_SECRET_PATH")
+	_ = v.BindEnv("infisical.client_id", "INFISICAL_UNIVERSAL_AUTH_CLIENT_ID")
+	_ = v.BindEnv("infisical.client_secret", "INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET")
 }

@@ -1,0 +1,19 @@
+id: e2e-smoke
+name: "端到端流程冒烟"
+desc: "验证临时数据库 → 小程序构建 → 开发者工具自动化 → 数据库清理 整条链路可跑通"
+setup:
+  backend:
+    suite: "backend/e2e-test/suite.yaml"
+  miniprogram:
+    build_mode: "development"
+    devtools_port: 9420
+steps:
+  - action: "relaunch"
+    name: "进入首页"
+    url: "/pages/index/index"
+  - action: "wait"
+    name: "等待页面渲染"
+    ms: 2000
+  - action: "evaluate"
+    name: "验证页面已加载"
+    script: "getCurrentPages().length > 0"

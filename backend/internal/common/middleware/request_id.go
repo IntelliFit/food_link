@@ -47,6 +47,31 @@ func RequestID() gin.HandlerFunc {
 	}
 }
 
+func RequestIDs(c *gin.Context) (traceID, requestID, hostName string) {
+	if c == nil {
+		return "", "", ""
+	}
+	traceID = strings.TrimSpace(c.GetString("trace_id"))
+	if traceID == "" {
+		traceID = strings.TrimSpace(c.Writer.Header().Get(HeaderTraceID))
+	}
+	if traceID == "" {
+		traceID = strings.TrimSpace(c.GetHeader(HeaderTraceID))
+	}
+	requestID = strings.TrimSpace(c.GetString("request_id"))
+	if requestID == "" {
+		requestID = strings.TrimSpace(c.Writer.Header().Get(HeaderRequestID))
+	}
+	if requestID == "" {
+		requestID = strings.TrimSpace(c.GetHeader(HeaderRequestID))
+	}
+	hostName = strings.TrimSpace(c.GetString("host_name"))
+	if hostName == "" {
+		hostName = strings.TrimSpace(c.Writer.Header().Get(HeaderHostName))
+	}
+	return normalizeTraceID(traceID), requestID, hostName
+}
+
 func traceIDFromContext(c *gin.Context) string {
 	if c == nil || c.Request == nil {
 		return ""

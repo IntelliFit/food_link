@@ -1,4 +1,6 @@
 config.yaml
+app-config.yaml
+infisical-config.yaml
 .env
 bin/
 

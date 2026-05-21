@@ -2149,8 +2149,12 @@ export interface AnalysisTask {
   text_input?: string | null  // 文字分析时有值，图片分析时为空
   status: 'pending' | 'processing' | 'done' | 'failed' | 'violated' | 'timed_out' | 'cancelled'
   payload?: Record<string, unknown>
-  result?: AnalyzeResponse
+  result?: any
   error_message?: string
+  trace_id?: string | null
+  traceId?: string | null
+  request_id?: string | null
+  requestId?: string | null
   is_violated?: boolean          // AI 审核是否违规
   violation_reason?: string | null // 违规原因
   is_recorded?: boolean          // 是否已保存为饮食记录（后端通过 user_food_records 关联查询）
@@ -2366,7 +2370,12 @@ export async function getAnalyzeTask(taskId: string): Promise<AnalysisTask> {
     const msg = (res.data as any)?.detail || '获取任务失败'
     throw new Error(msg)
   }
-  return res.data as AnalysisTask
+  const task = res.data as AnalysisTask
+  const responseTraceId = extractTraceIdFromHeaders(res.header as Record<string, any> | undefined)
+  const responseRequestId = extractRequestIdFromHeaders(res.header as Record<string, any> | undefined)
+  if (responseTraceId && !task.trace_id && !task.traceId) task.trace_id = responseTraceId
+  if (responseRequestId && !task.request_id && !task.requestId) task.request_id = responseRequestId
+  return task
 }
 
 /** 查询当前用户的分析任务列表 */
@@ -3853,6 +3862,40 @@ export interface PackagedFoodItem {
   is_active: boolean
 }
 
+export interface PackagedNutritionLabelRecognition {
+  brand?: string
+  product_name?: string
+  net_weight_g?: number
+  serving_weight_g?: number
+  kcal_per_100g?: number
+  protein_per_100g?: number
+  carbs_per_100g?: number
+  fat_per_100g?: number
+  fiber_per_100g?: number
+  sugar_per_100g?: number
+  saturated_fat_per_100g?: number
+  cholesterol_mg_per_100g?: number
+  sodium_mg_per_100g?: number
+  potassium_mg_per_100g?: number
+  calcium_mg_per_100g?: number
+  iron_mg_per_100g?: number
+  magnesium_mg_per_100g?: number
+  zinc_mg_per_100g?: number
+  vitamin_a_rae_mcg_per_100g?: number
+  vitamin_c_mg_per_100g?: number
+  vitamin_d_mcg_per_100g?: number
+  vitamin_e_mg_per_100g?: number
+  vitamin_k_mcg_per_100g?: number
+  thiamin_mg_per_100g?: number
+  riboflavin_mg_per_100g?: number
+  niacin_mg_per_100g?: number
+  vitamin_b6_mg_per_100g?: number
+  folate_mcg_per_100g?: number
+  vitamin_b12_mcg_per_100g?: number
+  confidence?: number
+  raw_text?: string
+}
+
 export async function createPackagedFood(payload: CreatePackagedFoodRequest): Promise<PackagedFoodItem> {
   const res = await authenticatedRequest('/api/packaged-food', {
     method: 'POST',
@@ -3863,6 +3906,30 @@ export async function createPackagedFood(payload: CreatePackagedFoodRequest): Pr
     throwHttpErrorWithStatus(res.statusCode, res.data, '保存零食数据失败')
   }
   return unwrapResponse<{ item: PackagedFoodItem }>(res).item
+}
+
+export async function recognizePackagedNutritionLabel(imageUrl: string): Promise<PackagedNutritionLabelRecognition> {
+  const res = await authenticatedRequest('/api/packaged-food/nutrition-label/recognize', {
+    method: 'POST',
+    data: { image_url: imageUrl },
+    timeout: 90000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '识别营养成分表失败')
+  }
+  return unwrapResponse<{ nutrition: PackagedNutritionLabelRecognition }>(res).nutrition
+}
+
+export async function submitPackagedNutritionLabelRecognition(imageUrl: string): Promise<{ task_id: string; message: string }> {
+  const res = await authenticatedRequest('/api/packaged-food/nutrition-label/submit', {
+    method: 'POST',
+    data: { image_url: imageUrl },
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '提交营养成分表识别任务失败')
+  }
+  return unwrapResponse<{ task_id: string; message: string }>(res)
 }
 
 export interface FriendSearchUser {

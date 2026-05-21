@@ -168,6 +168,8 @@ func New(cfg *config.Config) (*App, error) {
 	frSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
+	frNutritionSvc.ConfigureNutritionLabelVisionClient(doubaoClient)
+	frNutritionSvc.ConfigureAsyncTasks(analyzeTaskRepo, taskQueue)
 	frHandler := foodrecordhandler.NewFoodRecordHandler(frSvc, frUploadSvc, frNutritionSvc)
 
 	homeRepo := homerepo.NewHomeRepo(db)
@@ -257,7 +259,7 @@ func New(cfg *config.Config) (*App, error) {
 		shutdownLog:   logShutdown,
 		taskQueue:     taskQueue,
 	}
-	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, membershipSvc, taskQueue, storageClient)
+	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, membershipSvc, taskQueue, storageClient)
 
 	engine.POST("/api/login", loginHandler.Login)
 	engine.GET("/api", system.Root)
@@ -318,6 +320,8 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/food-nutrition/search", authmw.RequireJWT(jwtSvc), frHandler.SearchFoodNutrition)
 	engine.GET("/api/food-nutrition/unresolved/top", authmw.RequireJWT(jwtSvc), frHandler.GetUnresolvedTop)
 	engine.POST("/api/packaged-food", authmw.RequireJWT(jwtSvc), frHandler.CreatePackagedFood)
+	engine.POST("/api/packaged-food/nutrition-label/recognize", authmw.RequireJWT(jwtSvc), frHandler.RecognizePackagedNutritionLabel)
+	engine.POST("/api/packaged-food/nutrition-label/submit", authmw.RequireJWT(jwtSvc), frHandler.SubmitPackagedNutritionLabelTask)
 	engine.POST("/api/critical-samples", authmw.RequireJWT(jwtSvc), frHandler.SaveCriticalSamples)
 
 	// Friend routes
@@ -479,6 +483,7 @@ func (a *App) startEmbeddedWorker(
 	expiryRecognizer *expiryservice.Recognizer,
 	expiryNotifier *expiryservice.NotificationWorker,
 	exerciseSvc *healthservice.ExerciseService,
+	nutritionSvc *foodrecordservice.FoodNutritionService,
 	membershipSvc *membershipservice.MembershipService,
 	taskQueue taskqueue.Queue,
 	storageClient *storage.Client,
@@ -508,6 +513,7 @@ func (a *App) startEmbeddedWorker(
 		expiryRecognizer,
 		expiryNotifier,
 		exerciseSvc,
+		nutritionSvc,
 		taskQueue,
 		a.log,
 		storageClient,
