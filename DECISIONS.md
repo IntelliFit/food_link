@@ -1,5 +1,10 @@
 # DECISIONS
 
+- `2026-05-22`: 后端 Docker 推送脚本默认自动重试多个 Go builder 镜像源。
+  - `backend/scripts/push-docker-ccr.mjs` 继续以 `docker.io/library/golang:1.26.1-bookworm` 作为首选官方镜像，但默认候选列表会继续尝试 `docker.m.daocloud.io`、`docker.xuanyuan.me`、`docker.1ms.run`、`docker.1panel.live`。
+  - `DOCKER_GO_BUILDER_IMAGE` 仍表示“只用这一个镜像”；新增 `DOCKER_GO_BUILDER_IMAGES` 表示逗号分隔的候选镜像列表，供临时覆盖默认重试顺序。
+  - 目标是让 `load metadata for docker.io/library/golang:1.26.1-bookworm` 因 Docker Hub/GFW 失败时无需人工重跑即可自动换源。
+
 - `2026-05-21`: 零食补库页的“拍照识别营养成分表”走异步任务，不走前端同步等待。
   - 前端上传图片后调用 `POST /api/packaged-food/nutrition-label/submit`，只拿 `task_id`，再复用 `GET /api/analyze/tasks/:task_id` 轮询。
   - 后端复用现有 `analysis_tasks`、TaskRepo、task queue、worker claim/lease/complete/fail 机制，新增任务类型 `packaged_nutrition_label`。
