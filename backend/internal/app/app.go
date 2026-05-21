@@ -168,6 +168,7 @@ func New(cfg *config.Config) (*App, error) {
 	frSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	frUploadSvc := foodrecordservice.NewUploadService(storageClient)
 	frNutritionSvc := foodrecordservice.NewFoodNutritionService(frNutritionRepo)
+	frNutritionSvc.ConfigureNutritionLabelVisionClient(doubaoClient)
 	frHandler := foodrecordhandler.NewFoodRecordHandler(frSvc, frUploadSvc, frNutritionSvc)
 
 	homeRepo := homerepo.NewHomeRepo(db)
@@ -318,6 +319,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/food-nutrition/search", authmw.RequireJWT(jwtSvc), frHandler.SearchFoodNutrition)
 	engine.GET("/api/food-nutrition/unresolved/top", authmw.RequireJWT(jwtSvc), frHandler.GetUnresolvedTop)
 	engine.POST("/api/packaged-food", authmw.RequireJWT(jwtSvc), frHandler.CreatePackagedFood)
+	engine.POST("/api/packaged-food/nutrition-label/recognize", authmw.RequireJWT(jwtSvc), frHandler.RecognizePackagedNutritionLabel)
 	engine.POST("/api/critical-samples", authmw.RequireJWT(jwtSvc), frHandler.SaveCriticalSamples)
 
 	// Friend routes

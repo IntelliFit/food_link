@@ -14,6 +14,7 @@ const extraSubpackagePages = [
   'pages/analyze-loading/index',
   'pages/analyze-history/index',
   'pages/result/index',
+  'pages/packaged-food-edit/index',
   'pages/result-text/index',
   'pages/expiry-edit/index',
   // 兼容旧入口：历史缓存可能仍尝试打开 pages/food-expiry/index

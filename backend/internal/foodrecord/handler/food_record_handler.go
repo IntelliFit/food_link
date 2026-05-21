@@ -34,6 +34,7 @@ type FoodNutritionService interface {
 	Search(ctx context.Context, query string, limit int) ([]map[string]any, error)
 	GetUnresolvedTop(ctx context.Context, limit int) ([]domain.FoodUnresolvedLog, error)
 	CreatePackagedFood(ctx context.Context, input service.PackagedFoodInput) (*domain.PackagedFood, error)
+	RecognizePackagedNutritionLabel(ctx context.Context, imageURL string) (*service.PackagedNutritionLabelResult, error)
 }
 
 type FoodRecordHandler struct {
@@ -359,6 +360,23 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"item": item})
+}
+
+// POST /api/packaged-food/nutrition-label/recognize
+func (h *FoodRecordHandler) RecognizePackagedNutritionLabel(c *gin.Context) {
+	var body struct {
+		ImageURL string `json:"image_url"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	result, err := h.nutritionSvc.RecognizePackagedNutritionLabel(c.Request.Context(), body.ImageURL)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"nutrition": result})
 }
 
 // POST /api/critical-samples
