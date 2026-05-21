@@ -1,31 +1,113 @@
-# 后端 API E2E 契约测试
+# 后端 API E2E 测试与自动化测试基础设施
 
-本文档说明 `food_link` 后端 API 端到端契约测试系统。它面向人类维护者和 AI 编码代理，目标是让新增 API 测试尽量只需要改 YAML 用例文件。
+本文档说明 `food_link` 后端 API 测试与自动化测试基础设施。它包含两套系统，共享同一套「临时数据库 + fixtures」核心能力：
 
-## 目标
+1. **API 契约测试** — 进程内直接调用 Go Gin router，验证 HTTP 边界行为
+2. **微信小程序端到端测试** — 启动真实 HTTP server，通过 `miniprogram-automator` 操作微信开发者工具中的小程序
 
-E2E 契约测试在 HTTP 边界验证后端 API 行为：
+两套系统面向人类维护者和 AI 编码代理，目标是让新增测试尽量只需要改 YAML 用例文件。
 
-- 请求方法、路径、query、headers、认证和请求体
-- 响应状态码
-- 响应头
-- 响应 JSON body
-- 所有已注册 Gin 路由的基础可达性
-- 创建、更新等写接口的后续读取和数据库副作用
+---
 
-这些测试不是线上 smoke test，也不是压测。默认不会请求线上后端。测试会在进程内构建真实 Go Gin app，创建一个全新的本地 PostgreSQL 临时数据库，写入固定 fixture 数据，请求真实路由，然后删除临时数据库。
+## 目录
 
-## 快速开始
+- [系统概览](#系统概览)
+- [临时数据库机制](#临时数据库机制)
+- [API 契约测试](#api-契约测试)
+- [微信小程序端到端测试](#微信小程序端到端测试)
+- [ Fixtures](#fixtures)
+- [AI 维护规则](#ai-维护规则)
+- [排错](#排错)
 
-在仓库根目录运行：
+---
 
-```bash
-npm run test:backend:api-contract
+## 系统概览
+
+```
+backend/e2e-test/
+  suite.yaml              ← 全局配置（临时数据库、auth 用户、seed_sql）
+  cases/                  ← API 契约测试用例
+  fixtures/               ← 种子数据 SQL
+  runner/                 ← 共享核心（临时数据库、fixtures、断言）
+  cmd/
+    api-contract-test/    ← 契约测试 CLI 入口
+    api-test-server/      ← 端到端测试 HTTP 服务器入口
+
+e2e-weapp/
+  src/
+    runner.ts             ← 端到端测试编排引擎
+    mrc.ts                ← miniprogram-remote-control 封装
+    backend-client.ts     ← 与 api-test-server 交互
+  scenarios/              ← 小程序场景用例
 ```
 
-在 `backend/` 目录运行：
+| 维度 | API 契约测试 | 微信小程序端到端测试 |
+|------|-------------|-------------------|
+| 入口 | `cmd/api-contract-test` | `e2e-weapp/src/runner.ts` |
+| 调用方式 | 进程内 `httpexpect.NewBinder` | 真实 HTTP + mrc 操作开发者工具 |
+| 前端参与 | 无 | 微信小程序在开发者工具模拟器中运行 |
+| 数据库初始化 | `runner.PrepareDatabase` + `ApplySeedSQL` | 相同 |
+| 断言能力 | status/headers/JSON/db_assert | mrc 元素检查 + evaluate + db_assert |
+
+---
+
+## 临时数据库机制
+
+两套系统共享同一个临时数据库引擎：`backend/e2e-test/runner/db.go`。
+
+### 创建流程
+
+`PrepareDatabase(ctx, suite, cfg)` 的执行步骤：
+
+1. 读取 `suite.temp_db` 配置，确认临时库已启用（默认 `enabled: true`）
+2. 用 `admin_database`（默认 `postgres`）连接 PostgreSQL server
+3. 生成唯一数据库名：`food_link_e2e_<timestamp>_<nanosecond>`
+4. 执行 `CREATE DATABASE <name>`
+5. 连接新数据库，执行 Go 后端 `AutoMigrate`（创建全部表结构）
+6. 返回 `*TempDatabase`，包含 admin 连接（用于销毁）和 app 连接（用于业务）
+
+```go
+tempDB, err := e2e.PrepareDatabase(ctx, suite, cfg)
+cfg.Database = tempDB.Config   // 让后端 app 指向临时库
+```
+
+### 注入 Fixtures
+
+`ApplySeedSQL(ctx, suite, db, vars)` 的执行步骤：
+
+1. 按 `suite.seed_sql` 列表顺序读取 SQL 文件（如 `fixtures/base.sql`）
+2. 执行变量替换：`{{auth.user1.id}}`、`{{record.lunch.id}}` 等
+3. 通过 GORM `Exec` 注入到临时数据库
+
+### 销毁流程
+
+`TempDatabase.Close()` 的执行步骤：
+
+1. 关闭 app 连接
+2. 若 `keep: false`：
+   - `pg_terminate_backend(pid)` 杀掉其他连接
+   - `DROP DATABASE IF EXISTS <name>`
+3. 关闭 admin 连接
+
+### 权限要求
+
+配置中的 PostgreSQL 用户必须有 `CREATE DATABASE` 和 `DROP DATABASE` 权限。
+
+---
+
+## API 契约测试
+
+在 HTTP 边界验证后端 API 行为：请求方法、路径、query、headers、认证、请求体、响应状态码、响应头、响应 JSON body、所有已注册 Gin 路由的基础可达性、写接口的数据库副作用。
+
+这些测试不是线上 smoke test，也不是压测。默认不会请求线上后端。
+
+### 快速开始
 
 ```bash
+# 仓库根目录
+npm run test:backend:api-contract
+
+# backend/ 目录
 go run ./e2e-test/cmd/api-contract-test --timeout 5m
 ```
 
@@ -40,9 +122,7 @@ go run ./e2e-test/cmd/api-contract-test --keep-db
 
 `--keep-db` 只用于调试。它会保留本次临时数据库，方便手动检查数据。
 
-## 目录结构
-
-所有 E2E 相关资产都放在一个目录下：
+### 目录结构
 
 ```text
 backend/e2e-test/
@@ -60,96 +140,33 @@ backend/e2e-test/
     base.sql
 ```
 
-Go 源码也放在同一个 E2E 板块中：
+### Runner 执行流程
 
-```text
-backend/e2e-test/cmd/api-contract-test/   CLI 入口
-backend/e2e-test/runner/                  runner、临时数据库、fixtures、断言
-```
+1. 加载 `backend/e2e-test/suite.yaml`
+2. 加载 `backend/config.yaml`
+3. `PrepareDatabase` 创建临时数据库
+4. `ApplySeedSQL` 注入 fixtures
+5. `internal/app.New(cfg)` 构建真实 Gin app
+6. 关闭 OTel 和后台 worker
+7. `httpexpect.NewBinder` 直接向进程内 router 发送请求
+8. 断言 status/headers/JSON/body
+9. 删除临时数据库
 
-本文档是唯一的本地说明入口：
+### 用例文件
 
-```text
-backend/e2e-test/README.md
-```
-
-## Runner 如何工作
-
-默认执行流程：
-
-1. 加载 `backend/e2e-test/suite.yaml`。
-2. 加载 `backend/config.yaml`。
-3. 连接配置里的 PostgreSQL server。
-4. 使用 `temp_db.admin_database` 作为维护数据库。
-5. 创建形如 `food_link_e2e_<timestamp>_<nanosecond>` 的临时数据库。
-6. 执行现有 Go 后端 AutoMigrate。
-7. 执行 `backend/e2e-test/fixtures/` 下的 SQL fixture。
-8. 通过 `internal/app.New(cfg)` 构建真实 app。
-9. 关闭 OTel 和后台 worker，减少测试不确定性。
-10. 通过 `httpexpect.NewBinder` 直接向进程内 Gin router 发送请求。
-11. 断言状态码、响应头、JSON body 和 body 文本。
-12. 除非指定 `--keep-db`，否则删除临时数据库。
-
-配置中的 PostgreSQL 用户必须有 `CREATE DATABASE` 和 `DROP DATABASE` 权限。
-
-## Suite 文件
-
-主配置文件：
-
-```text
-backend/e2e-test/suite.yaml
-```
-
-重要顶层字段：
-
-```yaml
-id: food-link-api-contract
-name: "后端 API 契约测试"
-desc: "使用临时 PostgreSQL 数据库和真实 Gin 路由验证后端 API 的请求、认证、响应头和响应体。"
-config_dir: "."
-
-temp_db:
-  enabled: true
-  admin_database: "postgres"
-  name_prefix: "food_link_e2e"
-  keep: false
-
-auth:
-  users:
-    user1:
-      id: "00000000-0000-0000-0000-000000000001"
-      openid: "e2e-openid-user1"
-      unionid: "e2e-unionid-user1"
-  test_backend_cookie: "api-contract-test"
-
-seed_sql:
-  - "fixtures/base.sql"
-
-case_files:
-  - "cases/*/*.yaml"
-```
-
-## 新增 API 用例
-
-根 `suite.yaml` 只放全局配置。具体路由或模块的测试放在：
+根 `suite.yaml` 只放全局配置。具体路由测试放在：
 
 ```text
 backend/e2e-test/cases/<route-or-module>/*.yaml
 ```
 
-例如 `/api/body-metrics/water` 的测试放在：
-
-```text
-backend/e2e-test/cases/body-metrics/water.yaml
-```
-
-每个 case 文件结构如下：
+用例结构：
 
 ```yaml
 cases:
   - id: health.water.create.success
     name: "新增饮水记录"
-    desc: "验证登录用户可以为指定日期新增饮水记录，且响应中的日期和饮水量符合请求。"
+    desc: "验证登录用户可以为指定日期新增饮水记录"
     group: health
     method: POST
     path: /api/body-metrics/water
@@ -157,7 +174,6 @@ cases:
     body:
       amount_ml: 120
       date: "2026-05-14"
-      recorded_on: "2026-05-14"
     expect:
       status: 200
       headers:
@@ -168,49 +184,163 @@ cases:
         data.item.amount_ml: 120
 ```
 
-用例元信息：
+支持的断言类型：精确值、`exists`、`not_empty`、`type:string/number/boolean/object/array/null`、`regex:<pattern>`。
 
-- `id`：稳定的机器可读标识，用于 `--case` 选择和失败输出。
-- `name`：短中文名，展示在测试输出中。
-- `desc`：较详细的人类可读说明，描述这个用例验证什么行为。
-- `group`：模块名，例如 `user`、`health`、`food-record`、`membership`。
-- `id` 推荐使用稳定格式，例如 `user.profile.success` 或 `food-record.detail.not-found`。
+JSON path 使用 `gjson` 语法。
 
-## 认证规则
+### 流程型测试
 
-匿名请求：
+- `capture`：从响应 JSON 中保存值到运行时变量
+- `{{variable.name}}`：在后续用例中复用
+- `db_assert`：查询临时数据库验证副作用
+
+---
+
+## 微信小程序端到端测试
+
+通过 `miniprogram-automator`（`mrc` CLI）操作微信开发者工具中的小程序，验证完整的「前端渲染 → API 调用 → 数据库读写」链路。
+
+### 原理
+
+**数据库层**：和契约测试完全共用 `PrepareDatabase` + `ApplySeedSQL`。
+
+**后端层**：启动 `api-test-server`（`cmd/api-test-server/main.go`），这是一个真实的 HTTP 服务器，监听随机空闲端口，携带临时数据库运行。
+
+**前端层**：
+1. `runner.ts` 自动寻找空闲端口（如 3020）
+2. 在该端口启动 `api-test-server`
+3. 编译小程序，通过环境变量 `TARO_APP_API_BASE_URL=http://127.0.0.1:<port>` 覆盖 API 地址
+4. 小程序代码中的 `__API_BASE_URL__` 编译常量是硬编码的，因此所有 `wx.request` 都会指向临时服务器
+5. 自动启动/复用微信开发者工具，等待 mrc 连接就绪
+6. 通过 `mrc` 命令执行页面导航、元素点击、脚本执行等操作
+7. 测试结束后关闭服务器，临时数据库自动销毁
+
+```
+小程序 wx.request
+    ↓
+__API_BASE_URL__ = "http://127.0.0.1:3020"  （编译时注入）
+    ↓
+api-test-server @ 3020
+    ↓
+Gin Router → Handler → Service → Repo → GORM
+    ↓
+临时数据库 food_link_e2e_...
+```
+
+### 目录结构
+
+```text
+e2e-weapp/
+  src/
+    runner.ts         ← 编排引擎
+    mrc.ts            ← mrc 命令封装
+    backend-client.ts ← 与 api-test-server 交互
+    types.ts          ← 类型定义
+  scenarios/
+    smoke.yaml        ← 冒烟测试样例
+    home-dashboard.yaml
+```
+
+### 快速开始
+
+```bash
+# 端到端冒烟测试（完整链路）
+npm run test:e2e-weapp:smoke
+
+# 原有契约测试
+npm run test:backend:api-contract
+```
+
+`test:e2e-weapp:smoke` 的完整流程：
+
+```
+1. 找空闲端口
+2. 启动 api-test-server（创建临时数据库 + 注入 fixtures）
+3. 等待后端就绪
+4. 编译小程序（API URL 指向临时端口）
+5. 启动/复用微信开发者工具，等待 mrc 就绪
+6. 获取测试 token
+7. 执行场景步骤（relaunch → wait → evaluate）
+8. 关闭开发者工具（若由我们启动）
+9. 关闭后端（自动 DROP DATABASE）
+```
+
+### 场景文件
+
+场景放在 `e2e-weapp/scenarios/*.yaml`：
 
 ```yaml
-auth: none
+id: e2e-smoke
+name: "端到端流程冒烟"
+desc: "验证临时数据库 → 小程序构建 → 开发者工具自动化 → 数据库清理 整条链路可跑通"
+setup:
+  backend:
+    suite: "backend/e2e-test/suite.yaml"
+  miniprogram:
+    build_mode: "development"
+    devtools_port: 9420
+steps:
+  - action: "relaunch"
+    name: "进入首页"
+    url: "/pages/index/index"
+  - action: "wait"
+    name: "等待页面渲染"
+    ms: 2000
+  - action: "evaluate"
+    name: "验证页面已加载"
+    script: "getCurrentPages().length > 0"
 ```
 
-也可以省略 `auth`。
+支持的动作：
 
-登录用户：
+| 动作 | 说明 |
+|------|------|
+| `relaunch` | 重启到指定页面 |
+| `switchTab` | 切换 Tab 页面 |
+| `back` | 返回上一页 |
+| `tap` / `click` | 点击元素 |
+| `wait` | 等待 N 毫秒 |
+| `screenshot` | 截图（若环境支持） |
+| `evaluate` | 执行小程序 JS 脚本 |
+| `assert_element` | 断言元素存在/不存在 |
+| `assert_evaluate` | 断言脚本返回值 |
+| `db_assert` | 查询临时数据库断言 |
+| `clearMocks` | 清除所有 Mock |
 
-```yaml
-auth: user1
+变量替换支持 `{{backend.token.user1}}`、`{{backend.auth.user1.id}}`、`{{capture.xxx}}`。
+
+### 开发者工具自动化
+
+`runner.ts` 会自动处理开发者工具生命周期：
+
+- **检测**：运行前检查 `lsof -i :<port>`，若已监听则复用现有实例
+- **启动**：未运行时自动执行 `cli auto --project <PROJECT_ROOT> --auto-port <port>`
+- **等待**：轮询 `mrc where` 直至连接成功（超时 60s）
+- **关闭**：测试结束后，仅关闭由 `runner.ts` 自己启动的实例，不关闭用户手动打开的工具
+
+前置条件：开发者工具 CLI 路径（macOS 默认 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli`）。
+
+### 构建脚本
+
+```json
+"build:weapp:e2e": "cross-env NODE_ENV=development taro build --type weapp --no-check"
 ```
 
-`user1` 必须存在于 `suite.yaml` 的 `auth.users` 下。runner 会使用后端 JWT secret 签发 JWT，并发送：
+这个脚本**不硬编码** `TARO_APP_API_BASE_URL`，允许 `runner.ts` 在运行时通过环境变量注入临时服务器地址。避免使用 `build:weapp`（它硬编码了 `https://dev.healthymax.cn`）。
 
-```http
-Authorization: Bearer <token>
-```
+### 测试专用路由
 
-内部 test-backend cookie：
+`api-test-server` 提供以下辅助路由：
 
-```yaml
-auth: test_backend_cookie
-```
+| 路由 | 说明 |
+|------|------|
+| `GET /api/test/health` | 健康检查 |
+| `GET /api/test/auth/token?user=user1` | 签发测试用户 JWT |
+| `POST /api/test/db/query` | 只读 SQL 查询 |
+| `POST /api/test/db/reset` | 重置数据库到 fixture 状态 |
+| `GET /api/test/suite/vars` | 获取 suite 变量表 |
 
-会发送：
-
-```http
-Cookie: test_backend_token=<configured value>
-```
-
-未知认证名会让用例失败，不会静默降级成匿名请求。
+---
 
 ## Fixtures
 
@@ -220,269 +350,67 @@ Cookie: test_backend_token=<configured value>
 backend/e2e-test/fixtures/base.sql
 ```
 
-它写入常见测试数据，例如：
+当前 fixture 预置数据：
 
-- `weapp_user`
-- 会员套餐和有效会员
-- 饮食记录
-- 饮水日志
-- 体重记录
-- 运动日志
-- 保质期条目
-- 手动食物库条目
-- 菜谱
+- `weapp_user`：2 个测试用户（user1 / user2）
+- `membership_plan_config`：轻享月卡、标准月卡
+- `user_pro_memberships`：user1 的有效会员
+- `user_body_metric_settings`：饮水目标 2000ml
+- `user_water_logs`、`user_weight_records`、`user_exercise_logs`
+- `user_food_records`：午餐记录
+- `food_expiry_items`：牛奶
+- `manual_food_library`：米饭
+- `user_recipes`：米饭套餐
 
-SQL 支持变量替换：
+SQL 支持变量替换：`{{auth.user1.id}}`、`{{record.lunch.id}}` 等。
 
-```sql
-'{{auth.user1.id}}'
-'{{record.lunch.id}}'
-```
+由于每次运行都会创建全新的临时数据库，fixture 不需要保护线上数据，但仍应保持简单、确定、容易阅读。
 
-变量来源：
-
-- `suite.yaml` 的 `default_vars`
-- `suite.yaml` 的 `auth.users`
-
-由于每次运行都会创建全新的临时数据库，fixture 不需要保护线上数据。但它仍然应该保持简单、确定、容易阅读。
-
-## 断言
-
-状态码：
-
-```yaml
-expect:
-  status: 200
-```
-
-允许多个状态码：
-
-```yaml
-expect:
-  status_any: [200, 201, 202]
-```
-
-响应头：
-
-```yaml
-expect:
-  headers:
-    X-Trace-Id: not_empty
-```
-
-JSON body：
-
-```yaml
-expect:
-  json:
-    code: 0
-    data.id: "00000000-0000-0000-0000-000000000001"
-    data.items: type:array
-```
-
-支持的期望值：
-
-- 精确标量值，例如 `code: 0`
-- `exists`
-- `not_empty`
-- `type:string`
-- `type:number`
-- `type:boolean`
-- `type:object`
-- `type:array`
-- `type:null`
-- `regex:<pattern>`
-
-JSON path 使用 `gjson` 语法：
-
-```yaml
-data.items.0.name: "rice"
-data.water_daily.2026-05-14.total: type:number
-```
-
-body 包含文本：
-
-```yaml
-expect:
-  body_contains:
-    - "food_link"
-```
-
-## 流程型测试
-
-有些行为不能只靠一个孤立请求证明。例如创建一个条目后，通常还需要确认返回的 id 能被详情接口读取，或者确认数据确实写入了临时数据库。
-
-runner 支持三种能力：
-
-- `capture`：从当前响应 JSON 中保存值到运行时变量。
-- `{{variable.name}}`：在后续 path、query、headers、body、expect 和 DB 断言中复用变量。
-- `db_assert`：查询临时数据库，并比较第一行第一列。
-
-示例：
-
-```yaml
-cases:
-  - id: expiry.item.create.workflow
-    name: "创建保质期条目"
-    desc: "创建一条保质期记录，捕获响应里的 item id，并确认记录已经落库。"
-    group: expiry
-    method: POST
-    path: /api/expiry/items
-    auth: user1
-    body:
-      food_name: "E2E Workflow Milk"
-      quantity_note: "1 bottle"
-      storage_type: "refrigerated"
-      source_type: "manual"
-      expire_date: "2026-05-20"
-    expect:
-      status: 200
-      json:
-        code: 0
-        data.item.id: not_empty
-        data.item.food_name: "E2E Workflow Milk"
-    capture:
-      expiry.workflow_item_id: data.item.id
-    db_assert:
-      - query: "select count(*) from food_expiry_items where id = ? and user_id = ?"
-        args:
-          - "{{expiry.workflow_item_id}}"
-          - "{{auth.user1.id}}"
-        equals: 1
-
-  - id: expiry.item.detail.after-create
-    name: "查询刚创建的保质期条目"
-    desc: "使用上一个用例捕获的 item id 查询详情，确认创建结果可被读取。"
-    group: expiry
-    method: GET
-    path: /api/expiry/items/{{expiry.workflow_item_id}}
-    auth: user1
-    expect:
-      status: 200
-      json:
-        code: 0
-        data.item.id: "{{expiry.workflow_item_id}}"
-        data.item.food_name: "E2E Workflow Milk"
-```
-
-### Capture
-
-`capture` 的 key 是变量名，value 是响应 JSON path，使用 `gjson` 语法：
-
-```yaml
-capture:
-  expiry.workflow_item_id: data.item.id
-```
-
-如果 JSON path 不存在或结果为空，用例会失败。捕获到的变量可以被同一次运行中的后续用例使用。用例执行顺序是 case file 加载顺序加文件内部顺序，所以有依赖关系的流程步骤应放在同一个文件中，并按依赖顺序排列。
-
-如果删除了前置创建用例，后续用例里的 `{{expiry.workflow_item_id}}` 这类变量就不会有来源。runner 会在发请求前失败，并提示 `unresolved variable(s)`，不会把未解析变量发给后端。
-
-### 变量替换
-
-变量使用 `{{name}}` 语法：
-
-```yaml
-path: /api/expiry/items/{{expiry.workflow_item_id}}
-headers:
-  X-Debug-User: "{{auth.user1.id}}"
-body:
-  user_id: "{{auth.user1.id}}"
-expect:
-  json:
-    data.item.id: "{{expiry.workflow_item_id}}"
-```
-
-内置变量包括：
-
-- `suite.yaml` 中的 `default_vars`
-- 认证用户字段，例如 `{{auth.user1.id}}`、`{{auth.user1.openid}}`、`{{auth.user1.unionid}}`
-- 前面用例通过 `capture` 创建的变量
-
-### DB 断言
-
-`db_assert` 在 HTTP 响应断言和 `capture` 之后执行，所以可以使用 API 返回的值：
-
-```yaml
-db_assert:
-  - query: "select count(*) from food_expiry_items where id = ? and user_id = ?"
-    args:
-      - "{{expiry.workflow_item_id}}"
-      - "{{auth.user1.id}}"
-    equals: 1
-```
-
-规则：
-
-- 查询运行在 app 使用的同一个临时数据库上。
-- SQL 使用 `?` 占位符，runner 通过 GORM 执行。
-- 只比较第一行第一列。
-- `equals` 支持和 JSON 断言相同的标量期望风格，包括精确值、`exists`、`not_empty`、`type:number` 和 `regex:<pattern>`。
-- DB 断言只应该用于验证通过 API 响应很难证明的副作用。
-
-## 路由冒烟
-
-`route_smoke.enabled: true` 会为每个已注册 Gin 路由自动生成一个浅层冒烟用例。
-
-路由冒烟检查：
-
-- 路由不会 panic
-- 状态码在允许列表内
-- 响应包含 `X-Trace-Id`
-
-路由冒烟不证明业务正确性。真正的业务契约应该写显式 `cases`。
-
-适合路由冒烟的场景：
-
-- 新路由注册检查
-- panic 回归检查
-- 基础 middleware 覆盖
-
-不适合路由冒烟的场景：
-
-- 业务字段校验
-- 权限边界校验
-- DB 写入验证
-- 详细错误码校验
+---
 
 ## AI 维护规则
 
-AI 代理维护这些测试时遵守：
-
-1. 优先只修改 `backend/e2e-test/cases/` 下的路由用例文件。
-2. 只有缺少种子数据阻塞用例时，才修改 `backend/e2e-test/fixtures/base.sql`。
-3. 只有 YAML 无法表达需要的断言或行为时，才修改 `backend/e2e-test/runner/`。
-4. 不要把测试指向生产数据库、生产用户或生产对象存储。
-5. 认证用例使用 `auth.users` 中的命名用户。
-6. 写接口只能写入临时数据库和 fixture 用户。
-7. 依赖外部服务的 API，在 MVP 阶段优先测试认证、校验和响应结构；除非用户明确要求，不要强制真实外部调用。
-8. 修改后至少运行：
+1. **优先只修改用例文件**：契约测试改 `cases/`，端到端测试改 `scenarios/`。
+2. **只有缺少种子数据阻塞用例时**，才修改 `fixtures/base.sql`。
+3. **只有 YAML 无法表达需要的断言或行为时**，才修改 `runner/` 或 `e2e-weapp/src/`。
+4. **不要把测试指向生产数据库、生产用户或生产对象存储。**
+5. **认证用例使用** `auth.users` 中的命名用户。
+6. **写接口只能写入临时数据库和 fixture 用户。**
+7. **依赖外部服务的 API**，在 MVP 阶段优先测试认证、校验和响应结构；除非用户明确要求，不要强制真实外部调用。
+8. **修改后至少运行**：
 
 ```bash
+# 契约测试
 go test ./e2e-test/runner ./e2e-test/cmd/api-contract-test -run TestDoesNotExist -count=1
 npm run test:backend:api-contract -- --timeout 5m
+
+# 端到端冒烟测试
+npm run test:e2e-weapp:smoke
+
 git diff --check
 ```
+
+---
 
 ## 排错
 
 ### CREATE DATABASE 失败
 
-通常是配置中的 PostgreSQL 用户没有创建数据库权限。使用本地测试 DB 用户，并授予 `CREATE DATABASE` 和 `DROP DATABASE` 权限。不要使用生产库。
+通常是 PostgreSQL 用户没有创建数据库权限。授予 `CREATE DATABASE` 和 `DROP DATABASE` 权限，不要使用生产库。
 
 ### 保留失败现场数据库
 
-运行：
-
 ```bash
+# 契约测试
 go run ./e2e-test/cmd/api-contract-test --case <case-id> --keep-db
+
+# 端到端测试
+cd e2e-weapp && npx ts-node src/runner.ts --scenario scenarios/<name>.yaml --keep-db
 ```
 
 输出会打印临时数据库名。检查完后手动删除。
 
 ### 用例意外返回 401
-
-检查：
 
 - 用例是否漏了 `auth: user1`
 - `auth.users` 中是否定义了该认证名
@@ -490,37 +418,35 @@ go run ./e2e-test/cmd/api-contract-test --case <case-id> --keep-db
 
 ### JSON path 找不到
 
-检查：
-
 - 字段是在 `data.xxx` 下，还是顶层字段
 - 数组下标是否正确，例如 `data.items.0.name`
 - 字段名是否和 JSON tag 一致
 
 ### 出现 unresolved variable(s)
 
-说明用例里存在未解析的 `{{变量名}}`。常见原因：
-
-- 依赖的前置 `capture` 用例被删除或没有执行。
-- 只运行了后续用例，例如 `--case expiry.item.detail.after-create`，但没有先运行创建用例。
-- 变量名拼错。
-
-如果你想测试“数据不存在”的 404，不要使用依赖 `capture` 的变量。改用一个合法但不存在的固定 UUID：
-
-```yaml
-path: /api/expiry/items/00000000-0000-0000-0000-00000000ffff
-expect:
-  status: 404
-  json:
-    code: 10001
-```
+- 依赖的前置 `capture` 用例被删除或没有执行
+- 只运行了后续用例但没有先运行创建用例
+- 变量名拼错
 
 ### 路由冒烟输出大量 400 或 401 日志
 
 这是预期行为。路由冒烟会用通用 query/body 请求所有路由。需要认证或必填字段的路由经常返回 400 或 401。重点看最后 summary，`Failed: 0` 表示冒烟通过。
 
+### 端到端测试：mrc screenshot 超时
+
+`mrc screenshot` 命令在某些环境下（macOS 屏幕录制权限不足、模拟器窗口被遮挡等）会连接成功但截图操作卡住。可将场景中的 `screenshot` 步骤替换为 `evaluate` 或 `assert_element` 作为绕过。
+
+### 端到端测试：开发者工具已打开但 mrc 连接失败
+
+- 确认开发者工具是通过 CLI `cli auto --project ... --auto-port 9420` 启动的，而不是 GUI 手动打开
+- 检查端口是否被占用：`lsof -i :9420`
+- 若复用了手动打开的实例，可能缺少自动化 WebSocket 服务，建议关闭后由 `runner.ts` 自动启动
+
+---
+
 ## 当前基线
 
-当前 MVP 基线：
+API 契约测试：
 
 ```text
 Total: 163, Passed: 163, Failed: 0
