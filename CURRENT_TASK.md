@@ -1,5 +1,19 @@
-# CURRENT_TASK
+﻿# CURRENT_TASK
 
+## 2026-05-21 - 食物识别链路补充 trace 绑定日志
+- Task: 用户反馈小程序多图模式偶发热量为 0，希望在识别流程中增加日志并绑定到 trace，便于从 Jaeger 分析问题发生在视觉识别、营养库匹配还是 DeepSeek fallback。
+- Status: implemented_static_verified_restart_required
+- Change:
+  - `backend/internal/analyze/service/analyze_service.go` 在视觉模型返回后记录中文结构化日志 `视觉模型识别结果已返回`，并给当前 span 添加同名 event；字段包含 provider、model、execution_mode、analysis_engine、image_count、item_count 和最多 12 个 item 摘要。
+  - `applyDBFirstNutrition` 增加 `营养库优先回算开始`、`营养库未命中，开始 DeepSeek 营养补全`、`DeepSeek 营养补全完成`、`营养库优先回算完成` 等日志和 trace event。
+  - item 摘要只记录排障必要字段：name、estimated_weight_g、original_weight_g、calories/protein/carbs/fat、nutrition_source、resolve_status、matched_food_name、is_unresolved、suggested_ratio/source；不记录图片 URL、完整请求体、token 或大文本。
+- Verification:
+  - `go test ./internal/analyze/service -run "TestBuildAnalyzeResponse|TestMergeBatchResults|TestAnalyzeService_AnalyzeImageStandardForcesDoubaoInsteadOfGemini|TestAnalyzeService_AnalyzeImageStandardUsesDoubaoForExplicitDoubao|TestApplyDBFirstToItemsUsesPackagedFoodLibrary" -count=1` passed.
+  - `go test ./internal/analyze/service -run '^$' -count=1` passed.
+  - `go test ./internal/worker -run "TestSanitizeTaskErrorMessage|^$" -count=1` passed.
+  - `git diff --check -- backend/internal/analyze/service/analyze_service.go` passed with only CRLF warning.
+- Next step:
+  - 重启 Go 后端/worker 后生效。Jaeger 中可按 `analysis.user_id` 或 task 相关 tag 找到 trace，再看事件 `视觉模型识别结果已返回`、`营养库优先回算开始`、`营养库优先回算完成`；若出现 0 热量，重点看 item 的 `nutrition_source` 是否为 `unresolved`、`resolved_count/unresolved_count` 和 `deepseek_generated_count`。
 ## 2026-05-21 - 拍照结果页零食补库入口
 
 - Task: 拍照分析识别到零食时，结果页提示用户当前仍按普通食物流程估算营养，并邀请用户补充零食名称、重量和营养成分，提交后保存到 `packaged_food_library`。

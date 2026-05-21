@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -1601,6 +1602,27 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		return nil, err
 	}
 	durationMs := float64(time.Since(start).Milliseconds())
+	rawItems := parseItems(parsed)
+	logger.WithTrace(ctx).Info("视觉模型识别结果已返回",
+		slog.String("user_id", userID),
+		slog.String("provider", provider),
+		slog.String("model", model),
+		slog.String("execution_mode", executionMode),
+		slog.String("analysis_engine", strings.TrimSpace(input.AnalysisEngine)),
+		slog.Int("image_count", imageCount),
+		slog.Int("item_count", len(rawItems)),
+		slog.Any("items", analyzeItemLogSummary(rawItems, 12)),
+		slog.Duration("duration", time.Since(start)),
+	)
+	apm.AddEvent(ctx, "视觉模型识别结果已返回",
+		attribute.String("analysis.provider", provider),
+		attribute.String("analysis.model", model),
+		attribute.String("analysis.execution_mode", executionMode),
+		attribute.Int("analysis.image_count", imageCount),
+		attribute.Int("analysis.item_count", len(rawItems)),
+		attribute.String("analysis.items", summarizeAnalyzeItemsForTrace(rawItems, 12)),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
 	hybridMeta := map[string]any{
 		"status":          "skipped",
 		"strategy":        provider + "_db_first",
@@ -2952,6 +2974,12 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	resp["analysis_engine"] = "db_first"
 	if s.nutrition == nil {
 		resolveStatus = "skipped_no_repo"
+		logger.WithTrace(ctx).Warn("营养回算已跳过：营养库未初始化",
+			slog.Int("item_count", len(toItems(resp["items"]))),
+		)
+		apm.AddEvent(ctx, "营养回算已跳过：营养库未初始化",
+			attribute.Int("analysis.item_count", len(toItems(resp["items"]))),
+		)
 		return resp
 	}
 	items := toItems(resp["items"])
@@ -2974,6 +3002,14 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	fallbackCandidates := []UnresolvedNutritionCandidate{}
 	resolvedCount := 0
 	unresolvedCount := 0
+	logger.WithTrace(ctx).Info("营养库优先回算开始",
+		slog.Int("item_count", len(items)),
+		slog.Any("items", analyzeItemLogSummary(items, 12)),
+	)
+	apm.AddEvent(ctx, "营养库优先回算开始",
+		attribute.Int("analysis.item_count", len(items)),
+		attribute.String("analysis.items", summarizeAnalyzeItemsForTrace(items, 12)),
+	)
 	for index, item := range items {
 		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
 		weight := numberFromAny(item["estimatedWeightGrams"])
@@ -3011,8 +3047,25 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		if len(additionalContext) > 0 {
 			contextText = additionalContext[0]
 		}
+		logger.WithTrace(ctx).Info("营养库未命中，开始 DeepSeek 营养补全",
+			slog.Int("candidate_count", len(fallbackCandidates)),
+			slog.Any("candidates", unresolvedNutritionCandidateLogSummary(fallbackCandidates, 12)),
+		)
+		apm.AddEvent(ctx, "营养库未命中，开始 DeepSeek 营养补全",
+			attribute.Int("analysis.candidate_count", len(fallbackCandidates)),
+			attribute.String("analysis.candidates", summarizeUnresolvedNutritionCandidates(fallbackCandidates, 12)),
+		)
 		if rows, err := s.estimateNutritionWithDeepSeek(ctx, fallbackCandidates, contextText); err == nil {
 			fallbacks = rows
+			logger.WithTrace(ctx).Info("DeepSeek 营养补全完成",
+				slog.Int("candidate_count", len(fallbackCandidates)),
+				slog.Int("generated_count", len(fallbacks)),
+				slog.Any("generated_indexes", sortedIntKeys(fallbacks)),
+			)
+			apm.AddEvent(ctx, "DeepSeek 营养补全完成",
+				attribute.Int("analysis.candidate_count", len(fallbackCandidates)),
+				attribute.Int("analysis.generated_count", len(fallbacks)),
+			)
 		} else {
 			metrics.AddNutritionResolveItems("db_first", "deepseek_fallback_failed", len(fallbackCandidates))
 			logger.WithTrace(ctx).Warn("deepseek nutrition fallback failed",
@@ -3107,6 +3160,24 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	metrics.AddNutritionResolveItems("db_first", "deepseek_generated", deepseekGeneratedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_persisted", deepseekPersistedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_persist_failed", deepseekPersistFailedCount)
+	logger.WithTrace(ctx).Info("营养库优先回算完成",
+		slog.Int("item_count", len(out)),
+		slog.Int("resolved_count", resolvedCount),
+		slog.Int("unresolved_count", unresolvedCount),
+		slog.Int("deepseek_generated_count", deepseekGeneratedCount),
+		slog.Int("deepseek_persisted_count", deepseekPersistedCount),
+		slog.Int("deepseek_persist_failed_count", deepseekPersistFailedCount),
+		slog.Any("items", analyzeItemLogSummary(out, 12)),
+	)
+	apm.AddEvent(ctx, "营养库优先回算完成",
+		attribute.Int("analysis.item_count", len(out)),
+		attribute.Int("analysis.resolved_count", resolvedCount),
+		attribute.Int("analysis.unresolved_count", unresolvedCount),
+		attribute.Int("analysis.deepseek_generated_count", deepseekGeneratedCount),
+		attribute.Int("analysis.deepseek_persisted_count", deepseekPersistedCount),
+		attribute.Int("analysis.deepseek_persist_failed_count", deepseekPersistFailedCount),
+		attribute.String("analysis.items", summarizeAnalyzeItemsForTrace(out, 12)),
+	)
 	logDBFirstNutritionSummary(ctx, out, resolvedCount, unresolvedCount)
 	return resp
 }
@@ -3536,6 +3607,99 @@ func scaleNutrition(unit map[string]any, weight float64) map[string]any {
 		out[key] = math.Round(numberFromAny(value)*factor*100) / 100
 	}
 	return out
+}
+
+func analyzeItemLogSummary(items []map[string]any, limit int) []map[string]any {
+	if limit <= 0 || len(items) == 0 {
+		return nil
+	}
+	originalLen := len(items)
+	truncated := false
+	if len(items) > limit {
+		items = items[:limit]
+		truncated = true
+	}
+	out := make([]map[string]any, 0, len(items)+1)
+	for index, item := range items {
+		nutrients := mapFromAny(item["nutrients"])
+		out = append(out, map[string]any{
+			"index":                  index,
+			"name":                   strings.TrimSpace(fmt.Sprintf("%v", item["name"])),
+			"estimated_weight_g":     round2(numberFromAny(item["estimatedWeightGrams"])),
+			"original_weight_g":      round2(numberFromAny(item["originalWeightGrams"])),
+			"calories":               round2(numberFromAny(nutrients["calories"])),
+			"protein":                round2(numberFromAny(nutrients["protein"])),
+			"carbs":                  round2(numberFromAny(nutrients["carbs"])),
+			"fat":                    round2(numberFromAny(nutrients["fat"])),
+			"nutrition_source":       strings.TrimSpace(fmt.Sprintf("%v", item["nutrition_source"])),
+			"resolve_status":         strings.TrimSpace(fmt.Sprintf("%v", item["resolve_status"])),
+			"matched_food_name":      strings.TrimSpace(fmt.Sprintf("%v", item["matched_food_name"])),
+			"is_unresolved":          boolFromAny(item["is_unresolved"]),
+			"suggested_ratio":        round2(numberFromAny(item["suggestedRatio"])),
+			"suggested_ratio_source": strings.TrimSpace(fmt.Sprintf("%v", item["suggestedRatioSource"])),
+		})
+	}
+	if truncated {
+		out = append(out, map[string]any{"more_count": originalLen - limit})
+	}
+	return out
+}
+
+func summarizeAnalyzeItemsForTrace(items []map[string]any, limit int) string {
+	summary := analyzeItemLogSummary(items, limit)
+	if len(summary) == 0 {
+		return ""
+	}
+	bytes, err := json.Marshal(summary)
+	if err != nil {
+		return ""
+	}
+	return string(bytes)
+}
+
+func unresolvedNutritionCandidateLogSummary(candidates []UnresolvedNutritionCandidate, limit int) []map[string]any {
+	if limit <= 0 || len(candidates) == 0 {
+		return nil
+	}
+	originalLen := len(candidates)
+	truncated := false
+	if len(candidates) > limit {
+		candidates = candidates[:limit]
+		truncated = true
+	}
+	out := make([]map[string]any, 0, len(candidates)+1)
+	for _, candidate := range candidates {
+		out = append(out, map[string]any{
+			"index":              candidate.Index,
+			"name":               candidate.Name,
+			"estimated_weight_g": round2(candidate.EstimatedWeightGrams),
+		})
+	}
+	if truncated {
+		out = append(out, map[string]any{"more_count": originalLen - limit})
+	}
+	return out
+}
+
+func summarizeUnresolvedNutritionCandidates(candidates []UnresolvedNutritionCandidate, limit int) string {
+	summary := unresolvedNutritionCandidateLogSummary(candidates, limit)
+	if len(summary) == 0 {
+		return ""
+	}
+	bytes, err := json.Marshal(summary)
+	if err != nil {
+		return ""
+	}
+	return string(bytes)
+}
+
+func sortedIntKeys(values map[int]map[string]any) []int {
+	keys := make([]int, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Ints(keys)
+	return keys
 }
 
 func nutritionSource(status string) string {
