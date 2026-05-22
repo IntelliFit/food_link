@@ -1,5 +1,20 @@
 # DECISIONS
 
+- `2026-05-22`: Apollo YAML namespace 必须按原始文本读取后交给 Viper 解析。
+  - 规范 YAML 写法仍是 `task_queue.brokers: ["kafka:9092"]` 或多行数组；该写法本身没有问题。
+  - 线上若出现 `[[kafka:9092]]:9092 missing port in address`，说明 `.yaml` namespace 之前经过 agollo 已解析 cache 后又被 `fmt.Sprint` 成了 `[kafka:9092]` 字符串，不是 Apollo 的 YAML 列表语义错，也不是 Kafka service 地址本身缺端口。
+  - `backend/pkg/config` 对 `.yaml/.yml` namespace 应直接请求 Apollo Config Service 的原始文本端点 `/configfiles/{appId}/{cluster}/{namespace}`，再用 Viper 解析；properties/key-value namespace 才继续走 agollo cache。
+
+- `2026-05-22`: 后端 Docker 推送脚本默认自动重试多个 Go builder 镜像源。
+  - `backend/scripts/push-docker-ccr.mjs` 继续以 `docker.io/library/golang:1.26.1-bookworm` 作为首选官方镜像，但默认候选列表会继续尝试 `docker.m.daocloud.io`、`docker.xuanyuan.me`、`docker.1ms.run`、`docker.1panel.live`。
+  - `DOCKER_GO_BUILDER_IMAGE` 仍表示“只用这一个镜像”；新增 `DOCKER_GO_BUILDER_IMAGES` 表示逗号分隔的候选镜像列表，供临时覆盖默认重试顺序。
+  - 目标是让 `load metadata for docker.io/library/golang:1.26.1-bookworm` 因 Docker Hub/GFW 失败时无需人工重跑即可自动换源。
+
+- `2026-05-21`: 零食补库页的“拍照识别营养成分表”走异步任务，不走前端同步等待。
+  - 前端上传图片后调用 `POST /api/packaged-food/nutrition-label/submit`，只拿 `task_id`，再复用 `GET /api/analyze/tasks/:task_id` 轮询。
+  - 后端复用现有 `analysis_tasks`、TaskRepo、task queue、worker claim/lease/complete/fail 机制，新增任务类型 `packaged_nutrition_label`。
+  - 识别模型配置默认复用现有 Doubao 视觉客户端，不新增独立 LLM key/config；除非后续明确要为营养成分表 OCR 单独切模型。
+
 - `2026-05-21`: 零食拍照分析的实际查询顺序是 `packaged_food_library` 优先、普通食物库回退。识别 item 若带 `type=snack` 或命中零食/预包装关键词，后端先调用 `ResolvePackagedFood`；命中时返回 `nutrition_source=packaged_food_library` 并不再显示前端补库提示，未命中时继续沿用普通 `db_first` + DeepSeek fallback。
 
 - `2026-05-21`: 拍照分析的零食识别仍沿用普通 `db_first` 营养估算链路，但结果页需要给用户明确的补库入口。
@@ -1718,7 +1733,7 @@
 - `2026-05-21`: 后端运行配置优先走 Infisical 云端拉取。
   - 本地 `backend/config.yaml` 只应保留 Infisical Universal Auth bootstrap、项目/环境/路径等启动必要配置，以及确实只属于本机环境的少量设置。
   - 后端必须通过 Go SDK 在 `config.Load()` 内自动登录 Infisical 并拉取 secrets；不要要求用户额外执行 Infisical CLI，也不要把云端配置先注入成环境变量再启动。
-  - Infisical secret key 兼容现有环境变量式命名（如 `POSTGRESQL_HOST`、`DOUBAO_API_KEY`、`WORKER_COUNT`）和路径式命名（如 `database__host` / `external.doubao_api_key`）。后续新增配置时优先保持这一映射规则。
+  - Infisical secret key 优先使用点号路径式命名（如 `database.host` / `external.doubao_api_key`），因为 Infisical 本身不是 shell 环境变量，点号更接近 YAML/Viper 配置树，也更方便人工核对；代码继续兼容现有环境变量式命名（如 `POSTGRESQL_HOST`、`DOUBAO_API_KEY`、`WORKER_COUNT`）和双下划线路径式命名（如 `database__host`）。
   - 云端配置用于覆盖本地业务配置；如果需要临时脱离云端调试，可将 `infisical.enabled=false` 并继续使用本地 YAML 兼容路径。
 
 - `2026-05-21`: 后端配置源必须通过顶层 `config_source` 显式二选一。
@@ -1746,3 +1761,9 @@
   - prompt 必须要求每个 item 输出 `type`，当前取值口径为 `normal`、`snack`、`packaged`。
   - 后端只做 `type/food_type` 兼容归一化，不再按名称、OCR、category、recognitionEvidence 或 alternativeNames 里的“薯片/饼干/零食/净含量”等关键词推断零食。
   - 如果模型没有输出 `snack/packaged`，即使名称像零食，也先走普通食物库和 DeepSeek fallback；日志里的 item 摘要必须保留 `type` 以便判断模型分类是否正确。
+
+- `2026-05-21`: 后端配置中心已弃用 Infisical，改为 Apollo。
+  - `CONFIG_SOURCE` 只允许 `local` / `apollo`；`CONFIG_SOURCE=local` 只读 `backend/app-config.yaml`，`CONFIG_SOURCE=apollo` 只读 `backend/apollo-config.yaml` bootstrap 并从 Apollo 拉取全部业务运行配置。
+  - Apollo 使用 Go SDK `github.com/apolloconfig/agollo/v5`；bootstrap 字段为 `apollo.config_server_url/app_id/cluster/namespaces/access_key_secret/backup_config_path/enable_backup/must_start/label/sync_timeout_seconds`。
+  - Apollo 配置 key 继续支持点号路径式 key（如 `database.host` / `external.doubao_api_key`）、双下划线路径式 key（如 `database__host`）和旧环境变量式 key（如 `POSTGRESQL_HOST`、`DOUBAO_API_KEY`、`WORKER_COUNT`）。
+  - 后续不再新增或维护 Infisical 配置、Infisical SDK、`infisical-config.yaml` 或 `CONFIG_SOURCE=infisical` 路径。

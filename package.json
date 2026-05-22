@@ -40,7 +40,7 @@
     "build:qq": "taro build --type qq",
     "build:jd": "taro build --type jd",
     "build:harmony-hybrid": "taro build --type harmony-hybrid",
-    "dev:weapp": "cross-env NODE_ENV=development TARO_APP_API_BASE_URL=http://127.0.0.1:3010 taro build --type weapp --watch --no-check",
+    "dev:weapp": "cross-env NODE_ENV=development taro build --type weapp --watch --no-check",
     "dev:weapp:preview": "cross-env NODE_ENV=development TARO_APP_API_BASE_URL=https://dev.healthymax.cn taro build --type weapp --watch --no-check",
     "dev:weapp:online": "cross-env NODE_ENV=production TARO_APP_API_BASE_URL=https://healthymax.cn taro build --type weapp --watch --no-check",
     "dev:swan": "npm run build:swan -- --watch",

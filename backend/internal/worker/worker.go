@@ -16,6 +16,7 @@ import (
 	analyzeservice "food_link/backend/internal/analyze/service"
 	authrepo "food_link/backend/internal/auth/repo"
 	expiryservice "food_link/backend/internal/expiry/service"
+	foodrecordservice "food_link/backend/internal/foodrecord/service"
 	healthservice "food_link/backend/internal/health/service"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	"food_link/backend/internal/taskqueue"
@@ -52,6 +53,7 @@ var supportedTaskTypes = []string{
 	"public_food_library_text",
 	"exercise",
 	"health_report",
+	"packaged_nutrition_label",
 	"expiry_recognize",
 	"expiry_notification",
 }
@@ -71,6 +73,7 @@ type Runner struct {
 	expiry     *expiryservice.Recognizer
 	notifier   *expiryservice.NotificationWorker
 	exercise   *healthservice.ExerciseService
+	nutrition  *foodrecordservice.FoodNutritionService
 	queue      taskqueue.Queue
 	log        *logger.Logger
 	storage    *storage.Client
@@ -102,6 +105,7 @@ func NewRunner(
 	expiry *expiryservice.Recognizer,
 	notifier *expiryservice.NotificationWorker,
 	exercise *healthservice.ExerciseService,
+	nutrition *foodrecordservice.FoodNutritionService,
 	taskQueue taskqueue.Queue,
 	log *logger.Logger,
 	storageClient ...*storage.Client,
@@ -124,6 +128,7 @@ func NewRunner(
 		expiry:     expiry,
 		notifier:   notifier,
 		exercise:   exercise,
+		nutrition:  nutrition,
 		queue:      taskQueue,
 		log:        log,
 		storage:    client,
@@ -698,6 +703,8 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 		err = r.processExercise(taskCtx, task)
 	case "health_report":
 		err = r.processHealthReport(taskCtx, task)
+	case "packaged_nutrition_label":
+		err = r.processPackagedNutritionLabel(taskCtx, task)
 	case "expiry_recognize":
 		err = r.processExpiryRecognize(taskCtx, task)
 	default:
@@ -869,6 +876,56 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
 	r.log.Info("食物任务已完成", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), slog.Duration("duration", time.Since(start)))
+	return nil
+}
+
+func (r *Runner) processPackagedNutritionLabel(ctx context.Context, task *domain.AnalysisTask) error {
+	if r.nutrition == nil {
+		return fmt.Errorf("packaged nutrition label service is not configured")
+	}
+	r.normalizeTaskImages(task, "food-images")
+	imageURL := ""
+	if task.ImageURL != nil {
+		imageURL = strings.TrimSpace(*task.ImageURL)
+	}
+	if imageURL == "" {
+		imageURL = stringFromMap(task.Payload, "image_url")
+	}
+	if imageURL == "" {
+		return fmt.Errorf("packaged nutrition label task missing image_url")
+	}
+	start := time.Now()
+	r.log.Info("营养成分表识别任务开始",
+		slog.String("task_id", task.ID),
+		logger.AnalysisTaskID(task.ID),
+		slog.String("user_id", task.UserID),
+	)
+	result, err := r.nutrition.RecognizePackagedNutritionLabel(ctx, imageURL)
+	if err != nil {
+		return err
+	}
+	payloadBytes, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	var resultMap map[string]any
+	if err := json.Unmarshal(payloadBytes, &resultMap); err != nil {
+		return err
+	}
+	out := map[string]any{
+		"nutrition":            resultMap,
+		"analysis_engine":      "packaged_nutrition_label_ocr",
+		"analysis_duration_ms": time.Since(start).Milliseconds(),
+	}
+	if err := r.completeTask(ctx, task, out); err != nil {
+		return err
+	}
+	r.log.Info("营养成分表识别任务完成",
+		slog.String("task_id", task.ID),
+		logger.AnalysisTaskID(task.ID),
+		slog.String("user_id", task.UserID),
+		slog.Duration("duration", time.Since(start)),
+	)
 	return nil
 }
 

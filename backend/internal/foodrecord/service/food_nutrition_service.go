@@ -7,15 +7,21 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
+	analyzedomain "food_link/backend/internal/analyze/domain"
+	analyzerepo "food_link/backend/internal/analyze/repo"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/internal/foodrecord/repo"
+	"food_link/backend/internal/taskqueue"
 )
 
 type FoodNutritionService struct {
 	nutritionRepo              *repo.FoodNutritionRepo
 	nutritionLabelVisionClient NutritionLabelVisionClient
+	taskRepo                   *analyzerepo.TaskRepo
+	taskQueue                  taskqueue.Publisher
 }
 
 type NutritionLabelVisionClient interface {
@@ -95,6 +101,11 @@ func NewFoodNutritionService(nutritionRepo *repo.FoodNutritionRepo) *FoodNutriti
 
 func (s *FoodNutritionService) ConfigureNutritionLabelVisionClient(client NutritionLabelVisionClient) {
 	s.nutritionLabelVisionClient = client
+}
+
+func (s *FoodNutritionService) ConfigureAsyncTasks(taskRepo *analyzerepo.TaskRepo, queue taskqueue.Publisher) {
+	s.taskRepo = taskRepo
+	s.taskQueue = queue
 }
 
 func (s *FoodNutritionService) Search(ctx context.Context, query string, limit int) ([]map[string]any, error) {
@@ -207,6 +218,36 @@ func (s *FoodNutritionService) RecognizePackagedNutritionLabel(ctx context.Conte
 		return nil, &commonerrors.AppError{Code: 10002, Message: "未能从图片中识别出有效营养成分，请拍清楚营养成分表后重试", HTTPStatus: 400}
 	}
 	return parsed, nil
+}
+
+func (s *FoodNutritionService) SubmitPackagedNutritionLabelTask(ctx context.Context, userID, imageURL string) (string, error) {
+	imageURL = strings.TrimSpace(imageURL)
+	if imageURL == "" {
+		return "", &commonerrors.AppError{Code: 10002, Message: "营养成分表图片不能为空", HTTPStatus: 400}
+	}
+	if s.taskRepo == nil || s.taskQueue == nil {
+		return "", &commonerrors.AppError{Code: 10000, Message: "营养成分表异步识别服务未配置", HTTPStatus: 500}
+	}
+	task := &analyzedomain.AnalysisTask{
+		UserID:   userID,
+		TaskType: "packaged_nutrition_label",
+		Status:   "pending",
+		ImageURL: &imageURL,
+		Payload: map[string]any{
+			"image_url": imageURL,
+			"purpose":   "packaged_nutrition_label",
+		},
+	}
+	if err := s.taskRepo.CreateTask(ctx, task); err != nil {
+		return "", err
+	}
+	publishCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	if err := s.taskQueue.PublishTask(publishCtx, taskqueue.TaskMessage{TaskID: task.ID, TaskType: task.TaskType}); err != nil {
+		_, _ = s.taskRepo.FailTask(context.Background(), task.ID, "packaged nutrition label task enqueue failed")
+		return "", err
+	}
+	return task.ID, nil
 }
 
 func buildNutritionLabelPrompt() string {

@@ -5,8 +5,9 @@ import { withAuth } from '../../../utils/withAuth'
 import {
   compressImagePathForUpload,
   createPackagedFood,
-  recognizePackagedNutritionLabel,
+  getAnalyzeTask,
   showUnifiedApiError,
+  submitPackagedNutritionLabelRecognition,
   uploadAnalyzeImageFile,
   type CreatePackagedFoodRequest,
   type PackagedNutritionLabelRecognition,
@@ -187,7 +188,8 @@ function PackagedFoodEditPage() {
       Taro.showLoading({ title: '识别中...', mask: true })
       const uploadPath = await compressImagePathForUpload(localPath)
       const { imageUrl } = await uploadAnalyzeImageFile(uploadPath)
-      const nutrition = await recognizePackagedNutritionLabel(imageUrl)
+      const { task_id: taskId } = await submitPackagedNutritionLabelRecognition(imageUrl)
+      const nutrition = await pollNutritionLabelTask(taskId)
       applyRecognizedNutrition(nutrition)
       Taro.hideLoading()
       Taro.showToast({ title: '已填充识别结果', icon: 'success' })
@@ -201,6 +203,26 @@ function PackagedFoodEditPage() {
     } finally {
       setRecognizing(false)
     }
+  }
+
+  const pollNutritionLabelTask = async (taskId: string): Promise<PackagedNutritionLabelRecognition> => {
+    const started = Date.now()
+    while (Date.now() - started < 120000) {
+      await new Promise(resolve => setTimeout(resolve, 1800))
+      const task = await getAnalyzeTask(taskId)
+      if (task.status === 'done') {
+        const result = (task.result || {}) as Record<string, any>
+        const nutrition = result.nutrition as PackagedNutritionLabelRecognition | undefined
+        if (!nutrition) {
+          throw new Error('识别任务已完成，但没有返回营养成分')
+        }
+        return nutrition
+      }
+      if (task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') {
+        throw new Error(task.error_message || '识别营养成分表失败')
+      }
+    }
+    throw new Error('识别时间较长，请稍后重试')
   }
 
   const handleSubmit = async () => {
@@ -381,6 +403,7 @@ function PackagedFoodEditPage() {
             </View>
           )}
         </View>
+        <View className='edit-footer-spacer' />
       </ScrollView>
 
       <View className='edit-footer'>
