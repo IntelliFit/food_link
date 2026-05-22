@@ -117,6 +117,15 @@ func (s *AnalyzeService) ConfigureDoubaoClient(apiKey, baseURL, model string) {
 	}
 }
 
+func (s *AnalyzeService) ConfigureDashScopeClient(apiKey, baseURL string) {
+	if strings.TrimSpace(apiKey) != "" {
+		s.dashscopeClient = NewDashScopeClient(apiKey, baseURL)
+		logger.L().Info("dashscope client initialized", slog.String("base_url", baseURL))
+		return
+	}
+	logger.L().Warn("dashscope client not initialized: empty api key")
+}
+
 func (s *AnalyzeService) ConfigureGemini31LiteClient(apiKey, baseURL, model string) {
 	if strings.TrimSpace(model) == "" {
 		model = gemini31FlashLiteModel

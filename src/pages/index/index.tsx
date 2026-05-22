@@ -722,7 +722,7 @@ const MACRO_CONFIGS: Array<{
 
 function IndexPage() {
   const initialSelectedDate = formatDateKey(new Date())
-  const initialHomeSelectedDate = getLastHomeSelectedDate(initialSelectedDate)
+  const initialHomeSelectedDate = initialSelectedDate
   const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialHomeSelectedDate)
   const [intakeData, setIntakeData] = useState<HomeIntakeData>(initialLocalSnapshot?.intakeData || DEFAULT_INTAKE)
   const [nutritionTarget, setNutritionTarget] = useState<HomeNutritionTarget | null>(initialLocalSnapshot?.nutritionTarget || null)
@@ -2165,9 +2165,9 @@ function IndexPage() {
   const showWaterAddFooter =
     waterInputFocused || (waterDraftMl != null && waterDraftMl > 0)
 
-  // 喝水动画（resetKey 含 busy/idle，与主卡一致）
-  const animatedWaterTotal = useAnimatedNumber(todayWater.total, 600, 0, dashboardAnimResetKey)
-  const animatedWaterProgress = useAnimatedProgress(waterProgress, 600, 0, dashboardAnimResetKey)
+  // 喝水动画：切换日期时不播放动画，直接显示最终数字
+  const animatedWaterTotal = useAnimatedNumber(todayWater.total, 600, 0, dashboardAnimResetKey, true)
+  const animatedWaterProgress = useAnimatedProgress(waterProgress, 600, 0, dashboardAnimResetKey, true)
 
   /** 主热量进度条宽度（0～100），与上方 headline 数字同源缓动 */
   const animatedMainCalorieBarPct = useAnimatedProgress(
@@ -2185,9 +2185,9 @@ function IndexPage() {
   const animatedMacroCarbsRing = useAnimatedProgress(dashboardBusy ? 0 : carbsRingPct, 600, 0, dashboardAnimResetKey)
   const animatedMacroFatRing = useAnimatedProgress(dashboardBusy ? 0 : fatRingPct, 600, 0, dashboardAnimResetKey)
 
-  /** 运动消耗：默认 0，数据就绪后从 0 缓动到接口值（与喝水一致） */
+  /** 运动消耗：切换日期时不播放动画，直接显示最终数字 */
   const exerciseAnimTarget = dashboardBusy ? 0 : exerciseBurnedKcal
-  const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0, dashboardAnimResetKey)
+  const animatedExerciseBurnedKcal = useAnimatedNumber(exerciseAnimTarget, 600, 0, dashboardAnimResetKey, true)
   const loadPetSummary = useCallback(async (date: string) => {
     if (!getAccessToken()) {
       setPetSummary(null)

@@ -1,16 +1,18 @@
 import { useState, useLayoutEffect, useRef } from 'react'
 import { getNowMs } from '../../../utils/perf-now'
 
-/** @param resetDep 变化时从 0 开始播放到 targetProgress（与 useAnimatedNumber 一致） */
+/** @param resetDep 变化时从 0 开始播放到 targetProgress（与 useAnimatedNumber 一致）
+ *  @param skipAnimation 为 true 时直接返回 targetProgress，不播放任何动画
+ */
 export function useAnimatedProgress(
   targetProgress: number,
   duration: number = 600,
   delay: number = 0,
-  resetDep?: string
+  resetDep?: string,
+  skipAnimation?: boolean
 ): number {
-  const [displayProgress, setDisplayProgress] = useState(0)
-  const displayProgressRef = useRef(0)
-  displayProgressRef.current = displayProgress
+  const [displayProgress, setDisplayProgress] = useState(skipAnimation ? targetProgress : 0)
+  const displayProgressRef = useRef(skipAnimation ? targetProgress : 0)
   const lastResetDepRef = useRef<string | undefined>(undefined)
   const animationRef = useRef<{ startTime: number | null; startProgress: number; rafId: number | null }>({
     startTime: null,
@@ -19,6 +21,12 @@ export function useAnimatedProgress(
   })
 
   useLayoutEffect(() => {
+    if (skipAnimation) {
+      setDisplayProgress(targetProgress)
+      displayProgressRef.current = targetProgress
+      return
+    }
+
     if (animationRef.current.rafId) {
       cancelAnimationFrame(animationRef.current.rafId)
     }
@@ -64,7 +72,7 @@ export function useAnimatedProgress(
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- displayProgress 故意不列入 deps
-  }, [targetProgress, duration, delay, resetDep])
+  }, [targetProgress, duration, delay, resetDep, skipAnimation])
 
   return Math.max(0, Math.min(100, displayProgress))
 }
