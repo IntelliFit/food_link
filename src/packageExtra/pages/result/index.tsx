@@ -526,6 +526,7 @@ function ResultPage() {
 
   // 二次纠错抽屉状态
   const [showCorrectionDrawer, setShowCorrectionDrawer] = useState(false)
+  const [quickRatioSheetVisible, setQuickRatioSheetVisible] = useState(false)
   const [correctionItems, setCorrectionItems] = useState<NutritionItem[]>([])
   const [additionalContext, setAdditionalContext] = useState('')
   const [isResubmitting, setIsResubmitting] = useState(false)
@@ -1147,6 +1148,23 @@ function ResultPage() {
 
       return updatedItems
     })
+  }
+
+  // 快捷比例：按聚餐人数统一设置所有食物的摄入比例
+  const handleQuickRatio = (people: number) => {
+    const ratio = Math.max(1, Math.min(100, Math.round(100 / people)))
+    setNutritionItems(items => {
+      const updatedItems = items.map(item => ({
+        ...item,
+        ratio,
+        intake: Math.round(item.weight * (ratio / 100)),
+        suggestedRatioSource: item.suggestedRatioSource === 'ai' ? 'manual' : item.suggestedRatioSource,
+        suggestedRatioReason: item.suggestedRatioSource === 'ai' ? undefined : item.suggestedRatioReason,
+      }))
+      calculateNutritionStats(updatedItems)
+      return updatedItems
+    })
+    setQuickRatioSheetVisible(false)
   }
 
   // 删除食物项
@@ -2270,8 +2288,11 @@ function ResultPage() {
           {/* 包含成分 */}
           <View className='ingredients-section'>
             <View className='section-title-row'>
-              <Text className='section-title'>包含成分</Text>
-              <Text className='section-count'>{nutritionItems.length}种</Text>
+              <View className='section-title-group'>
+                <Text className='section-title'>包含成分</Text>
+                <Text className='section-count'>({nutritionItems.length}种)</Text>
+              </View>
+              <Text className='quick-ratio-btn' onClick={() => setQuickRatioSheetVisible(true)}>快捷比例</Text>
             </View>
 
             <View className='ingredients-list'>
@@ -2662,6 +2683,35 @@ function ResultPage() {
           </View>
         </View>
       </View>
+
+      {/* 快捷比例底部弹窗 */}
+      {quickRatioSheetVisible && (
+        <View className='action-sheet-overlay' onClick={() => setQuickRatioSheetVisible(false)}>
+          <View className='action-sheet-mask' />
+          <View className='action-sheet-content'>
+            <View className='action-sheet-handle-bar' />
+            <View className='action-sheet-actions'>
+              <View className='action-sheet-item' onClick={() => handleQuickRatio(2)}>
+                <Text className='action-sheet-label'>两人聚餐</Text>
+                <Text className='action-sheet-hint'>每人 50%</Text>
+              </View>
+              <View className='action-sheet-item' onClick={() => handleQuickRatio(3)}>
+                <Text className='action-sheet-label'>三人聚餐</Text>
+                <Text className='action-sheet-hint'>每人 33%</Text>
+              </View>
+              <View className='action-sheet-item' onClick={() => handleQuickRatio(4)}>
+                <Text className='action-sheet-label'>四人聚餐</Text>
+                <Text className='action-sheet-hint'>每人 25%</Text>
+              </View>
+            </View>
+            <View className='action-sheet-actions action-sheet-actions--cancel'>
+              <View className='action-sheet-item action-sheet-item--cancel' onClick={() => setQuickRatioSheetVisible(false)}>
+                <Text className='action-sheet-label'>取消</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   )
 }

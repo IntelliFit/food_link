@@ -469,6 +469,55 @@ function AnalyzeHistoryPage() {
     }
   }
 
+  const handleDiscardUnrecorded = () => {
+    const discardableTasks = tasks.filter(
+      t => t.status === 'pending' || t.status === 'processing' || t.status === 'failed' || (t.status === 'done' && t.is_recorded === false)
+    )
+    if (discardableTasks.length === 0) {
+      Taro.showToast({ title: '没有可丢弃的未记录', icon: 'none' })
+      return
+    }
+    Taro.showModal({
+      title: '确认丢弃',
+      content: `确定丢弃 ${discardableTasks.length} 条未记录的任务吗？丢弃后不可恢复。`,
+      confirmText: '丢弃',
+      confirmColor: '#e57373',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          void (async () => {
+            Taro.showLoading({ title: '丢弃中...', mask: true })
+            const results = await Promise.allSettled(
+              discardableTasks.map(t => deleteAnalysisTask(t.id))
+            )
+            const deletedIds: string[] = []
+            results.forEach((r, idx) => {
+              if (r.status === 'fulfilled') {
+                deletedIds.push(discardableTasks[idx].id)
+              }
+            })
+            const successCount = deletedIds.length
+            const failCount = results.length - successCount
+            Taro.hideLoading()
+            if (failCount > 0) {
+              Taro.showToast({ title: `已丢弃 ${successCount} 条，${failCount} 条失败`, icon: 'none' })
+            } else {
+              Taro.showToast({ title: `已丢弃 ${successCount} 条记录`, icon: 'success' })
+            }
+            setTasks(prev => prev.filter(t => !deletedIds.includes(t.id)))
+            try {
+              const cached = Taro.getStorageSync('profile_stats_analyze_count')
+              if (cached !== undefined && cached !== '') {
+                const next = Math.max(0, Number(cached) - successCount)
+                Taro.setStorageSync('profile_stats_analyze_count', String(next))
+              }
+            } catch (_) { /* ignore */ }
+          })()
+        }
+      }
+    })
+  }
+
   const handleShare = (task: AnalysisTask) => {
     // 分享功能：跳转到分享页面
     if (task.status === 'done' && task.result) {
@@ -827,14 +876,23 @@ function AnalyzeHistoryPage() {
             <Text className='empty-text'>暂时没有记录，快去拍一张吧~</Text>
           </View>
         ) : (
-          tasks.map(t => (
-            <TaskCard
-              key={t.id}
-              task={t}
-              onTap={onTaskTap}
-              onMore={handleMore}
-            />
-          ))
+          <>
+            <View className='list-header'>
+              <View className='list-header-spacer' />
+              <View className='bulk-delete-btn' onClick={handleDiscardUnrecorded}>
+                <Text className='iconfont icon-shanchu bulk-delete-icon' />
+                <Text className='bulk-delete-text'>一键删除未记录</Text>
+              </View>
+            </View>
+            {tasks.map(t => (
+              <TaskCard
+                key={t.id}
+                task={t}
+                onTap={onTaskTap}
+                onMore={handleMore}
+              />
+            ))}
+          </>
         )}
       </ScrollView>
 

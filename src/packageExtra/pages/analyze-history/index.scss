@@ -11,6 +11,53 @@
   box-sizing: border-box;
 }
 
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16rpx;
+  padding: 0 4rpx;
+}
+
+.list-header-spacer {
+  flex: 1;
+}
+
+.bulk-delete-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  padding: 6rpx 16rpx;
+  background: rgb(255 255 255 / 94%);
+  border-radius: 999rpx;
+  box-shadow:
+    0 4rpx 16rpx rgb(0 0 0 / 10%),
+    inset 0 1rpx 0 rgb(255 255 255 / 55%);
+  transition: all 0.2s ease;
+
+  &:active {
+    background: rgb(255 255 255 / 100%);
+    box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 12%);
+  }
+}
+
+.bulk-delete-icon {
+  font-size: 20rpx;
+  color: #5cb896;
+  line-height: 1;
+}
+
+.bulk-delete-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22rpx;
+  color: #2f7f62;
+  line-height: 30rpx;
+  font-weight: 600;
+}
+
 // 卡片容器
 .task-card-wrapper {
   position: relative;

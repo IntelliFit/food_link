@@ -361,6 +361,10 @@ function AnalyzePage() {
       timing: {
         title: '运动时机',
         content: '选择进食时机，AI 将结合时机给出针对性建议。如运动后补充蛋白有助于肌肉恢复，睡前避免过多碳水有助于睡眠质量。'
+      },
+      suggest_ratio: {
+        title: 'AI摄入比例',
+        content: '结果页自动给出每项食物的滑块比例。开启后，AI 会根据你的剩余热量和饮食目标，为每个识别出的食物建议一个摄入比例（0-100%），你可以在结果页通过滑块快速调整。'
       }
     }
     const info = helpContent[key]
@@ -881,57 +885,21 @@ function AnalyzePage() {
         </View>
       )}
 
-      {/* 模式提示条 */}
-      <View className={`mode-banner ${executionMode}`}>
-        <View className='mode-banner-header'>
-          <View className='mode-title-wrap'>
-            <Text className='mode-title'>当前模式：{EXECUTION_MODE_META[executionMode].title}</Text>
-            <Text className='mode-sub'>影响本次执行规则</Text>
-          </View>
-          <Text className='mode-link' onClick={handleDefaultModeEdit}>设为默认</Text>
-        </View>
-
-        <View className='mode-switch-row'>
-          <View
-            className={`mode-switch-item ${executionMode === 'standard' ? 'active' : ''}`}
-            onClick={() => setExecutionMode('standard')}
-          >
-            普通
-          </View>
-          <View
-            className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
-            onClick={handleStrictModeTap}
-          >
-            {membershipStatus?.is_pro && !canUseStrictMode ? '精准（需升级）' : '精准'}
-          </View>
-        </View>
-
-        {!!precisionUpgradeHint && executionMode === 'standard' && (
-          <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
-        )}
-
-        <Text className='mode-desc'>{EXECUTION_MODE_META[executionMode].desc}</Text>
-        <View className='mode-tips'>
-          {EXECUTION_MODE_META[executionMode].tips.map((tip, idx) => (
-            <View key={idx} className='mode-tip-item'>
-              <Text className='mode-tip-dot'>•</Text>
-              <Text className='mode-tip-text'>{tip}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View className='multiview-compact suggest-ratio-compact'>
-          <View className='multiview-compact-left'>
-            <Text className='multiview-compact-title'>AI摄入比例</Text>
-            <Text className='multiview-compact-hint'>结果页自动给出每项食物的滑块比例</Text>
-          </View>
-          <View
-            className={`multiview-toggle ${suggestRatioEnabled ? 'multiview-toggle--on' : ''}`}
-            onClick={toggleSuggestRatio}
-          >
-            <View className='multiview-toggle-knob' />
-          </View>
-        </View>
+      {/* 摄影技巧 */}
+      <View
+        className='photo-tip-bar'
+        onClick={() => {
+          const meta = EXECUTION_MODE_META[executionMode]
+          setHelpSheet({
+            visible: true,
+            title: '摄影技巧',
+            content: meta.tips.map((t, i) => `${i + 1}. ${t}`).join('\n'),
+          })
+        }}
+      >
+        <Text className='photo-tip-bar__dot' />
+        <Text className='photo-tip-bar__text'>摄影技巧</Text>
+        <Text className='photo-tip-bar__action'>查看</Text>
       </View>
 
       {/* 图片预览区域 (Grid) */}
@@ -973,7 +941,33 @@ function AnalyzePage() {
           </View>
         )}
 
-        {/* 多视角辅助模式：作为图片区域的底部小条 */}
+        {/* 图片分析设置 */}
+        <View className='multiview-compact'>
+          <View className='multiview-compact-left'>
+            <Text className='multiview-compact-title'>识别模式</Text>
+            <Text className='mode-link' onClick={handleDefaultModeEdit}>设为默认</Text>
+          </View>
+          <View className='mode-switch-row'>
+            <View
+              className={`mode-switch-item ${executionMode === 'standard' ? 'active' : ''}`}
+              onClick={() => setExecutionMode('standard')}
+            >
+              普通
+            </View>
+            <View
+              className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
+              onClick={handleStrictModeTap}
+            >
+              {membershipStatus?.is_pro && !canUseStrictMode ? '精准（需升级）' : '精准'}
+            </View>
+          </View>
+        </View>
+
+        {!!precisionUpgradeHint && executionMode === 'standard' && (
+          <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
+        )}
+
+        {/* 多视角辅助模式 */}
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>多视角辅助</Text>
@@ -984,6 +978,22 @@ function AnalyzePage() {
           <View
             className={`multiview-toggle ${isMultiView ? 'multiview-toggle--on' : ''}`}
             onClick={toggleMultiView}
+          >
+            <View className='multiview-toggle-knob' />
+          </View>
+        </View>
+
+        {/* AI摄入比例 */}
+        <View className='multiview-compact'>
+          <View className='multiview-compact-left'>
+            <Text className='multiview-compact-title'>AI摄入比例</Text>
+            <View className='help-icon' onClick={() => openHelp('suggest_ratio')}>
+              <Text className='help-icon-text'>?</Text>
+            </View>
+          </View>
+          <View
+            className={`multiview-toggle ${suggestRatioEnabled ? 'multiview-toggle--on' : ''}`}
+            onClick={toggleSuggestRatio}
           >
             <View className='multiview-toggle-knob' />
           </View>
@@ -1010,9 +1020,7 @@ function AnalyzePage() {
             autoHeight
             showConfirmBar={false}
           />
-          <View className='voice-btn' onClick={handleVoiceInput}>
-            <Text className='voice-icon iconfont icon--yuyinshuruzhong' />
-          </View>
+
         </View>
       </View>
 

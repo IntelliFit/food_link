@@ -4,48 +4,8 @@
   padding: 24rpx 20rpx 200rpx;
 }
 
-.mode-banner {
-  margin: 0 0 20rpx;
-  padding: 24rpx;
-  border-radius: 24rpx;
-  box-shadow: 0 6rpx 20rpx rgb(0 0 0 / 4%);
-  background: #fff;
-  border: 2rpx solid rgb(17 24 39 / 6%);
-
-  &.strict {
-    background: linear-gradient(180deg, #f2fffa 0%, #fff 100%);
-    border-color: rgb(0 188 125 / 24%);
-  }
-
-  &.standard {
-    background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
-    border-color: rgb(59 130 246 / 18%);
-  }
-}
-
-.mode-banner-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 16rpx;
-}
-
-.mode-title-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-.mode-title {
-  font-size: 30rpx;
-  color: #0f172a;
-  font-weight: 700;
-  line-height: 1.35;
-}
-
-
 .mode-link {
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #00bc7d;
   font-weight: 600;
   padding: 4rpx 10rpx;
@@ -53,18 +13,19 @@
 
 .mode-switch-row {
   display: flex;
-  gap: 12rpx;
-  margin-bottom: 16rpx;
+  gap: 10rpx;
+  width: 280rpx;
 }
 
 .mode-switch-item {
   flex: 1;
-  height: 68rpx;
-  border-radius: 16rpx;
-  border: 2rpx solid #d9dee6;
-  background: #f8fafc;
+  min-width: 120rpx;
+  height: 56rpx;
+  border-radius: 12rpx;
+  border: 2rpx solid #e2e8f0;
+  background: transparent;
   color: #64748b;
-  font-size: 26rpx;
+  font-size: 24rpx;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -72,10 +33,10 @@
   transition: all 0.2s ease;
 
   &.active {
-    color: #0f172a;
-    background: #fff;
+    color: #fff;
+    background: #00bc7d;
     border-color: #00bc7d;
-    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 14%);
+    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 20%);
   }
 
   &.locked {
@@ -85,48 +46,69 @@
   }
 
   &:active {
-    transform: scale(0.98);
+    transform: scale(0.96);
   }
 }
 
 .mode-upgrade-note {
   display: block;
-  margin-bottom: 12rpx;
-  font-size: 22rpx;
+  margin-bottom: 10rpx;
+  font-size: 20rpx;
   color: #b45309;
   line-height: 1.5;
 }
 
-.mode-desc {
-  font-size: 24rpx;
-  color: #334155;
-  line-height: 1.6;
-  margin-bottom: 12rpx;
-}
-
-.mode-tips {
+// 摄影技巧浮层条
+.photo-tip-bar {
   display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
+  align-items: center;
+  gap: 10rpx;
+  min-height: 56rpx;
+  padding: 8rpx 16rpx 8rpx 18rpx;
+  border-radius: 999rpx;
+  background: rgb(0 188 125 / 8%);
+  border: 1rpx solid rgb(0 188 125 / 18%);
+  box-sizing: border-box;
+  margin-bottom: 14rpx;
+  transition: all 0.2s ease;
 
-.mode-tip-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8rpx;
-}
+  &:active {
+    background: rgb(0 188 125 / 14%);
+    transform: scale(0.98);
+  }
 
-.mode-tip-dot {
-  color: #00bc7d;
-  font-size: 24rpx;
-  line-height: 32rpx;
-}
+  &__dot {
+    width: 10rpx;
+    height: 10rpx;
+    border-radius: 50%;
+    background: #00bc7d;
+    box-shadow: 0 0 0 4rpx rgb(0 188 125 / 12%);
+    flex-shrink: 0;
+  }
 
-.mode-tip-text {
-  flex: 1;
-  color: #475569;
-  font-size: 23rpx;
-  line-height: 32rpx;
+  &__text {
+    flex: 1;
+    font-size: 22rpx;
+    line-height: 32rpx;
+    font-weight: 600;
+    color: #047857;
+  }
+
+  &__action {
+    flex-shrink: 0;
+    font-size: 20rpx;
+    line-height: 30rpx;
+    font-weight: 700;
+    color: #fff;
+    padding: 6rpx 14rpx;
+    border-radius: 999rpx;
+    background: #00bc7d;
+    transition: opacity 0.2s ease;
+
+    &:active {
+      opacity: 0.82;
+    }
+  }
 }
 
 // 配额提示 — 典雅简约
@@ -531,33 +513,6 @@
   font-size: 26rpx;
 }
 
-.voice-btn {
-  position: absolute;
-  right: 16rpx;
-  bottom: 16rpx;
-  top: auto;
-  width: 60rpx;
-  height: 60rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #fff;
-  border-radius: 50%;
-  box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 8%);
-  transition: all 0.2s ease;
-  z-index: 2;
-
-  &:active {
-    transform: scale(0.92);
-    box-shadow: 0 2rpx 8rpx rgb(0 0 0 / 5%);
-  }
-
-  .voice-icon {
-    font-size: 32rpx;
-    color: #00bc7d;
-  }
-}
-
 // 确认按钮区域
 .confirm-section {
   position: fixed;
@@ -664,7 +619,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16rpx 24rpx;
+  padding: 14rpx 20rpx;
   border-top: 1rpx solid rgb(0 0 0 / 3%);
 
   .multiview-compact-left {
@@ -674,16 +629,19 @@
   }
 
   .multiview-compact-title {
-    font-size: 26rpx;
+    font-size: 24rpx;
     font-weight: 600;
     color: #374151;
   }
+
+  .multiview-compact-hint {
+    font-size: 20rpx;
+    color: #94a3b8;
+    line-height: 1.4;
+  }
 }
 
-.suggest-ratio-compact {
-  border-top-color: rgb(0 188 125 / 10%);
-  background: #f6fffb;
-}
+
 
 // 与系统 Switch 视觉接近的纯 View 开关（不依赖 components/Switch，避免小程序端 react 解析异常）
 .multiview-toggle {
@@ -719,8 +677,8 @@
 
 // 帮助图标
 .help-icon {
-  width: 32rpx;
-  height: 32rpx;
+  width: 28rpx;
+  height: 28rpx;
   border-radius: 50%;
   border: 2rpx solid #d1d5db;
   display: flex;
@@ -736,7 +694,7 @@
 }
 
 .help-icon-text {
-  font-size: 20rpx;
+  font-size: 18rpx;
   color: #9ca3af;
   font-weight: 600;
   line-height: 1;

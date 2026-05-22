@@ -807,8 +807,14 @@ transitiontransition
 .section-title-row {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   padding: 0 8rpx;
+}
+
+.section-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
 }
 
 .section-title {
@@ -821,6 +827,18 @@ transitiontransition
   font-size: 24rpx;
   color: #64748b;
   font-weight: 500;
+}
+
+.quick-ratio-btn {
+  font-size: 26rpx;
+  color: #00bc7d;
+  font-weight: 600;
+  padding: 8rpx 4rpx;
+  transition: opacity 0.2s ease;
+
+  &:active {
+    opacity: 0.7;
+  }
 }
 
 .ingredients-list {
@@ -2543,4 +2561,99 @@ transitiontransition
   .context-textarea::placeholder {
     color: rgba(214, 226, 220, 0.4);
   }
+}
+
+// 快捷比例底部弹窗
+.action-sheet-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.action-sheet-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.action-sheet-content {
+  position: relative;
+  z-index: 1;
+  padding: 0 16rpx 32rpx;
+  animation: action-sheet-slide-up 0.25s ease;
+}
+
+@keyframes action-sheet-slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.action-sheet-handle-bar {
+  width: 64rpx;
+  height: 6rpx;
+  border-radius: 3rpx;
+  background: rgba(255, 255, 255, 0.5);
+  margin: 0 auto 16rpx;
+}
+
+.action-sheet-actions {
+  background: #fff;
+  border-radius: 24rpx;
+  overflow: hidden;
+  margin-bottom: 16rpx;
+
+  &--cancel {
+    margin-bottom: 0;
+  }
+}
+
+.action-sheet-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 28rpx 24rpx;
+  position: relative;
+
+  &:active {
+    background: #f3f4f6;
+  }
+
+  &--cancel {
+    .action-sheet-label {
+      color: #64748b;
+      font-weight: 500;
+    }
+  }
+}
+
+.action-sheet-item + .action-sheet-item {
+  border-top: 1rpx solid #f3f4f6;
+}
+
+.action-sheet-label {
+  font-size: 30rpx;
+  color: #1f2937;
+  font-weight: 500;
+}
+
+.action-sheet-hint {
+  font-size: 24rpx;
+  color: #9ca3af;
+  font-weight: 400;
 }
