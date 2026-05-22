@@ -9,5 +9,5 @@ cd "$(git rev-parse --show-toplevel)" || exit 1
 # *.js - 根目录下的临时 JS 文件
 find . -maxdepth 1 \( -name "*.png" -o -name "*.html" -o -name "*.py" -o -name "*.js" \) -type f -delete
 
-# 如果删除了文件，需要重新 stage
-git add -A
+# 如果删除了文件，需要重新 stage 已跟踪的修改（避免误加入 untracked 编译产物）
+git add -u
