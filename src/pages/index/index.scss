@@ -365,13 +365,14 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .pet-companion-float.is-collapsed .pet-companion-card {
-  width: 108rpx;
-  min-height: 108rpx;
+  width: 116rpx;
+  min-height: 116rpx;
   padding: 8rpx;
   border-radius: 999rpx;
   justify-content: center;
   background: rgb(255 255 255 / 58%);
   box-shadow: 0 6rpx 18rpx rgb(30 70 56 / 8%);
+  overflow: hidden;
 }
 
 .pet-companion-avatar {
@@ -382,8 +383,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .pet-companion-float.is-collapsed .pet-companion-avatar {
-  width: 84rpx;
-  height: 84rpx;
+  width: 92rpx;
+  height: 92rpx;
 }
 
 .pet-companion-shadow {
@@ -871,6 +872,46 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-size: 21rpx;
   line-height: 26rpx;
   font-weight: 800;
+}
+
+// 收起后的小组件：状态提示 + 快捷展开
+.pet-companion-mini-hint {
+  position: absolute;
+  top: 4rpx;
+  right: 4rpx;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5cb896 0%, #8dd3bf 100%);
+  box-shadow: 0 2rpx 6rpx rgb(92 184 150 / 30%);
+}
+
+.pet-companion-mini-hint.is-reward {
+  background: linear-gradient(135deg, #f0985c 0%, #ffb380 100%);
+  box-shadow: 0 2rpx 6rpx rgb(240 152 92 / 30%);
+  animation: pet-mini-hint-pulse 1.6s ease-in-out infinite;
+}
+
+.pet-companion-mini-hint-text {
+  color: #fff;
+  font-size: 18rpx;
+  line-height: 1;
+  font-weight: 700;
+}
+
+@keyframes pet-mini-hint-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.85;
+  }
 }
 
 // 主卡片（热量总览）
@@ -3938,34 +3979,6 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   line-height: 40rpx;
 }
 
-.record-menu-footer {
-  margin-top: 24rpx;
-}
-
-.record-menu-close-btn {
-  height: 88rpx;
-  background: #f3f4f6;
-  border-radius: 9999rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.record-menu-close-text {
-  font-size: 28rpx;
-  font-weight: 500;
-  color: #6b7280;
-  line-height: 40rpx;
-}
-
-.record-menu-delete-btn {
-  background: #fef2f2;
-}
-
-.record-menu-delete-text {
-  color: #ef4444;
-}
-
 /* ===== 新版记录菜单样式 - 仿参考图设计 ===== */
 .record-menu-handle-bar {
   width: 36rpx;
@@ -4037,6 +4050,35 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   font-size: 20rpx;
   color: #9ca3af;
   line-height: 28rpx;
+}
+
+.record-menu-footer {
+  display: flex;
+  justify-content: center;
+  padding: 8rpx 0 4rpx;
+}
+
+.record-menu-delete-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 16rpx 32rpx;
+  cursor: pointer;
+}
+
+.record-menu-delete-icon {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #ef4444;
+  line-height: 1;
+}
+
+.record-menu-delete-text {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #ef4444;
+  line-height: 40rpx;
 }
 
 /* 底部列表样式 */

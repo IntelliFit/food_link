@@ -1151,6 +1151,7 @@ func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode stri
 - 简体中文
 - 根据自然语言拆分食物，不要虚构用户没有提到的主食物
 - 重量可基于常见份量估算，但必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量，不把壳、骨头、果核计入营养计算
+- 如果用户在输入文字中明确声明了具体重量数值（如"59克"、"37g"、"100克"等），则 estimatedWeightGrams 必须严格等于该数值，禁止进行任何四舍五入、估算或修正
 - description <= 24字
 - insight/context_advice 各 1-2 句，<= 40字
 - suggestedRatio：每个食物的建议摄入比例（0-100），结合用户剩余热量和饮食目标给出建议，默认100
@@ -1191,6 +1192,7 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 %s%s解析规则：
 - 只输出用户明确描述的食物，不补充没有出现的食物
 - 如果用户写了明确重量、个数、半份、一碗、一杯等份量，请换算为克；没有明确重量时按日常熟食份量保守估算
+- 如果用户在输入文字中已经直接给出了明确的具体重量数值（如"59克"、"37g"、"100克"等），则 estimatedWeightGrams 必须严格等于该数值，禁止进行任何四舍五入、估算或修正
 - estimatedWeightGrams 是营养计算使用的可食部净重；带壳、带骨、带核食物即使用户描述的是整只/整份，也要换算为去壳/去骨/去核后的可食重量
 - 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
 - 相同食物合并为一项，重量为合计重量

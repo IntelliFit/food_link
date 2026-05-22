@@ -1,6 +1,6 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   imageToBase64,
   compressImagePathForUpload,
@@ -336,6 +336,38 @@ function AnalyzePage() {
   const [referenceWidth, setReferenceWidth] = useState('85')
   const [referenceHeight, setReferenceHeight] = useState('25')
   const [referencePlacementNote, setReferencePlacementNote] = useState('')
+
+  // 帮助说明底部弹窗
+  const [helpSheet, setHelpSheet] = useState<{ visible: boolean; title: string; content: string }>({
+    visible: false,
+    title: '',
+    content: ''
+  })
+
+  const openHelp = useCallback((key: string) => {
+    const helpContent: Record<string, { title: string; content: string }> = {
+      multiview: {
+        title: '多视角辅助',
+        content: '多张图片始终作为一次识别提交；开启后会更强调同一餐食的多角度综合估算。建议从不同角度拍摄同一餐食，让 AI 结合多张照片进行更准确的判断。'
+      },
+      text: {
+        title: '文字补充',
+        content: '提供更多上下文能显著提高识别准确率，例如分量、容器大小、额外配料等。你可以描述食物的具体情况，帮助 AI 更准确地进行分析。'
+      },
+      meal: {
+        title: '餐次',
+        content: '选择本餐次，AI 将结合场景给出建议。不同餐次的营养需求和推荐会有所不同，例如早餐注重能量补充，晚餐建议适当控制碳水摄入。'
+      },
+      timing: {
+        title: '运动时机',
+        content: '选择进食时机，AI 将结合时机给出针对性建议。如运动后补充蛋白有助于肌肉恢复，睡前避免过多碳水有助于睡眠质量。'
+      }
+    }
+    const info = helpContent[key]
+    if (info) {
+      setHelpSheet({ visible: true, ...info })
+    }
+  }, [])
 
   const imagePathsRef = useRef<string[]>([])
   const routeSessionSignatureRef = useRef('')
@@ -835,7 +867,7 @@ function AnalyzePage() {
   return (
     <View className='analyze-page'>
       {/* 提示：长按页面任意位置可启用开发者模式 */}
-      {/* 配额提示条 */}
+      {/* 配额提示 */}
       {membershipStatus && (
         <View
           className={quotaBarClass}
@@ -844,6 +876,7 @@ function AnalyzePage() {
             if (!canUseStrictMode) Taro.navigateTo({ url: precisionUpgradeUrl })
           }}
         >
+          <Text className='quota-bar-dot' />
           <Text className='quota-bar-text'>{quotaBarText}</Text>
         </View>
       )}
@@ -944,7 +977,9 @@ function AnalyzePage() {
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>多视角辅助</Text>
-            <Text className='multiview-compact-hint'>多张图片始终作为一次识别提交；开启后会更强调同一餐食的多角度综合估算</Text>
+            <View className='help-icon' onClick={() => openHelp('multiview')}>
+              <Text className='help-icon-text'>?</Text>
+            </View>
           </View>
           <View
             className={`multiview-toggle ${isMultiView ? 'multiview-toggle--on' : ''}`}
@@ -959,10 +994,10 @@ function AnalyzePage() {
       <View className='details-section'>
         <View className='section-header'>
           <Text className='section-title'>文字补充</Text>
+          <View className='help-icon' onClick={() => openHelp('text')}>
+            <Text className='help-icon-text'>?</Text>
+          </View>
         </View>
-        <Text className='section-hint'>
-          提供更多上下文能显著提高识别准确率，例如分量、容器大小、额外配料等。
-        </Text>
 
         <View className='input-wrapper'>
           <Textarea
@@ -1076,10 +1111,10 @@ function AnalyzePage() {
       <View className='meal-section'>
         <View className='section-header'>
           <Text className='section-title'>餐次</Text>
+          <View className='help-icon' onClick={() => openHelp('meal')}>
+            <Text className='help-icon-text'>?</Text>
+          </View>
         </View>
-        <Text className='section-hint'>
-          选择本餐次，AI 将结合场景给出建议。
-        </Text>
         <View className='meal-options'>
           {MEAL_OPTIONS.map((opt) => (
             <View
@@ -1097,12 +1132,11 @@ function AnalyzePage() {
       {/* 运动时机（状态二） */}
       <View className='state-section'>
         <View className='section-header'>
-
           <Text className='section-title'>运动时机</Text>
+          <View className='help-icon' onClick={() => openHelp('timing')}>
+            <Text className='help-icon-text'>?</Text>
+          </View>
         </View>
-        <Text className='section-hint'>
-          选择进食时机，AI 将结合时机给出针对性建议（如运动后补充蛋白、睡前避免碳水等）。
-        </Text>
         <View className='state-options'>
           {ACTIVITY_TIMING_OPTIONS.map((opt) => (
             <View
@@ -1144,6 +1178,26 @@ function AnalyzePage() {
           <Text className='history-link-text'>查看识别记录</Text>
         </View>
       </View>
+
+      {/* 帮助说明底部弹窗 */}
+      {helpSheet.visible && (
+        <View className='help-sheet' catchMove>
+          <View className='help-sheet-mask' onClick={() => setHelpSheet(prev => ({ ...prev, visible: false }))} />
+          <View className='help-sheet-content'>
+            <View className='help-sheet-handle' />
+            <View className='help-sheet-header'>
+              <Text className='help-sheet-title'>{helpSheet.title}</Text>
+              <View
+                className='help-sheet-close'
+                onClick={() => setHelpSheet(prev => ({ ...prev, visible: false }))}
+              >
+                <Text className='help-sheet-close-icon'>×</Text>
+              </View>
+            </View>
+            <Text className='help-sheet-body'>{helpSheet.content}</Text>
+          </View>
+        </View>
+      )}
     </View>
   )
 }

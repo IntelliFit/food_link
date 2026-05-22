@@ -2345,7 +2345,7 @@ function ResultPage() {
                         <Text className='ingredient-more-toggle-text'>
                           {detailsExpanded ? '收起更多营养' : '展开更多营养'}
                         </Text>
-                        <Text className={`ingredient-more-toggle-icon ${detailsExpanded ? 'expanded' : ''}`}>⌄</Text>
+                        <Text className={`iconfont icon-right ingredient-more-toggle-icon ${detailsExpanded ? 'expanded' : ''}`} />
                       </View>
                       {detailsExpanded && (
                         <View className='ingredient-detail-grid'>

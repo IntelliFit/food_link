@@ -275,8 +275,8 @@ function getStoredPetCollapsed(): boolean {
 function getPetFloatMetrics(collapsed: boolean) {
   const info = Taro.getSystemInfoSync()
   const rpx = info.windowWidth / 750
-  const width = (collapsed ? 108 : 520) * rpx
-  const height = (collapsed ? 108 : 124) * rpx
+  const width = (collapsed ? 116 : 520) * rpx
+  const height = (collapsed ? 116 : 124) * rpx
   const margin = 24 * rpx
   return {
     windowWidth: info.windowWidth,
@@ -2681,6 +2681,20 @@ function IndexPage() {
           {!petCollapsed && (
             <View className='pet-companion-collapse' onClick={togglePetCollapsed}>
               <Text className='pet-companion-collapse-text'>收起</Text>
+            </View>
+          )}
+          {petCollapsed && (
+            <View
+              className={`pet-companion-mini-hint ${petEvent?.can_claim ? 'is-reward' : ''}`}
+              onTouchStart={(e) => e.stopPropagation()}
+              onTouchEnd={(e) => {
+                e.stopPropagation()
+                togglePetCollapsed()
+              }}
+            >
+              {petEvent?.can_claim ? (
+                <Text className='pet-companion-mini-hint-text'>!</Text>
+              ) : null}
             </View>
           )}
         </View>

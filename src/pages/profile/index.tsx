@@ -473,6 +473,8 @@ function ProfilePage() {
           Taro.removeStorageSync('food_link_dashboard_targets_v1')
           Taro.removeStorageSync('home_poster_modal_visible')
           Taro.removeStorageSync('showRecordMenuModal')
+          Taro.removeStorageSync('home_pet_companion_collapsed_v1')
+          Taro.removeStorageSync('home_pet_companion_float_position_v1')
 
           // 识别记录 / 结果页相关缓存
           Taro.removeStorageSync('analyzeResult')

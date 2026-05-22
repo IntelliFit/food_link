@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Button, Input, Slider } from '@tarojs/components'
+import { View, Text, ScrollView, Button, Slider } from '@tarojs/components'
 import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { updateFoodRecord, showUnifiedApiError, type FoodRecord, type Nutrients } from '../../../utils/api'
@@ -6,24 +6,64 @@ import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 
 import './MealRecordEditModal.scss'
 
-type EditableNutrientField = 'calories' | 'protein' | 'carbs' | 'fat'
+type EditableNutrientField = 'calories' | 'protein' | 'carbs' | 'fat' | 'waterMl'
 
 interface EditableFoodItem {
   name: string
   weight: number
   ratio: number
   intake: number
+  waterMl: number
   nutrients: Nutrients
+  nutrientDetailsExpanded?: boolean
 }
-
-const EDITABLE_NUTRIENT_FIELDS: EditableNutrientField[] = ['calories', 'protein', 'carbs', 'fat']
 
 const EDITABLE_NUTRIENT_META: Record<EditableNutrientField, { label: string; unit: string }> = {
   calories: { label: '热量', unit: 'kcal' },
   protein: { label: '蛋白质', unit: 'g' },
   carbs: { label: '碳水', unit: 'g' },
-  fat: { label: '脂肪', unit: 'g' }
+  fat: { label: '脂肪', unit: 'g' },
+  waterMl: { label: '含水量', unit: 'ml' }
 }
+
+const NUTRIENT_FIELD_CLASS: Record<EditableNutrientField, string> = {
+  calories: 'cal',
+  protein: 'protein',
+  carbs: 'carbs',
+  fat: 'fat',
+  waterMl: 'water'
+}
+
+type NutrientDetailKey = keyof Pick<Nutrients,
+  'fiber' | 'sugar' | 'saturatedFat' | 'cholesterolMg' | 'sodiumMg' | 'potassiumMg' |
+  'calciumMg' | 'ironMg' | 'magnesiumMg' | 'zincMg' | 'vitaminARaeMcg' | 'vitaminCMg' |
+  'vitaminDMcg' | 'vitaminEMg' | 'vitaminKMcg' | 'thiaminMg' | 'riboflavinMg' |
+  'niacinMg' | 'vitaminB6Mg' | 'folateMcg' | 'vitaminB12Mcg'
+>
+
+const NUTRIENT_DETAIL_META: Array<{ key: NutrientDetailKey; label: string; unit: string }> = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g' },
+  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg' },
+  { key: 'sodiumMg', label: '钠', unit: 'mg' },
+  { key: 'potassiumMg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', label: '维生素A', unit: 'mcg' },
+  { key: 'vitaminCMg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素D', unit: 'mcg' },
+  { key: 'vitaminEMg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素K', unit: 'mcg' },
+  { key: 'thiaminMg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'mcg' },
+  { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'mcg' }
+]
 
 const roundToSingleDecimal = (value: number) => Math.round(value * 10) / 10
 
@@ -33,11 +73,35 @@ const normalizeDisplayNumber = (value: number) => {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
+const normalizeNutrientValue = (value: unknown) => {
+  const num = Number(value)
+  return Number.isFinite(num) && num > 0 ? num : 0
+}
+
+const formatNutrientDetailValue = (value: number) => {
+  if (value >= 10) return String(Math.round(value))
+  if (value >= 1) return String(Math.round(value * 10) / 10)
+  return String(Math.round(value * 100) / 100)
+}
+
 const getItemRatioFactor = (item: Pick<EditableFoodItem, 'ratio'>) => Math.max(0, item.ratio ?? 0) / 100
 
-const getDisplayedNutrientValue = (item: EditableFoodItem, field: EditableNutrientField) => (
-  roundToSingleDecimal((item.nutrients?.[field] ?? 0) * getItemRatioFactor(item))
-)
+const getDisplayedNutrientValue = (item: EditableFoodItem, field: EditableNutrientField) => {
+  if (field === 'waterMl') {
+    return roundToSingleDecimal(item.waterMl * getItemRatioFactor(item))
+  }
+  return roundToSingleDecimal((item.nutrients?.[field] ?? 0) * getItemRatioFactor(item))
+}
+
+const getNutrientDetailRows = (item: EditableFoodItem) => {
+  const ratio = item.ratio / 100
+  return NUTRIENT_DETAIL_META
+    .map((meta) => ({
+      ...meta,
+      value: normalizeNutrientValue(item.nutrients[meta.key]) * ratio
+    }))
+    .filter((row) => row.value > 0)
+}
 
 const hasVisibleMacroData = (nutrients?: Nutrients | null) => (
   Boolean(
@@ -46,7 +110,8 @@ const hasVisibleMacroData = (nutrients?: Nutrients | null) => (
       Number(nutrients.calories) > 0 ||
       Number(nutrients.protein) > 0 ||
       Number(nutrients.carbs) > 0 ||
-      Number(nutrients.fat) > 0
+      Number(nutrients.fat) > 0 ||
+      Number(nutrients.waterMl ?? nutrients.water_ml) > 0
     )
   )
 )
@@ -89,6 +154,8 @@ function resolveEditableItemNutrients(
   }
 }
 
+const formatWeightDisplay = (value: number) => `${Math.max(0, Math.round(value))}g`
+
 interface MealRecordEditModalProps {
   visible: boolean
   record: FoodRecord | null
@@ -111,7 +178,9 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
             weight: item.weight,
             ratio,
             intake: resolveRecordItemIntake(item),
-            nutrients: resolveEditableItemNutrients(item, record, ratio)
+            waterMl: item.waterMl ?? item.water_ml ?? 0,
+            nutrients: resolveEditableItemNutrients(item, record, ratio),
+            nutrientDetailsExpanded: false
           }
         })
       )
@@ -177,6 +246,15 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     })
   }, [editItems, updateEditItemName])
 
+  const toggleNutrientDetails = useCallback((index: number) => {
+    setEditItems(prev => {
+      const next = [...prev]
+      if (!next[index]) return prev
+      next[index] = { ...next[index], nutrientDetailsExpanded: !next[index].nutrientDetailsExpanded }
+      return next
+    })
+  }, [])
+
   const updateDisplayedNutrient = useCallback((index: number, field: EditableNutrientField, nextDisplayValue: number) => {
     setEditItems(prev => {
       const next = [...prev]
@@ -188,11 +266,15 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
         ? roundToSingleDecimal(normalizedDisplayValue / ratioFactor)
         : normalizedDisplayValue
 
-      next[index] = {
-        ...item,
-        nutrients: {
-          ...item.nutrients,
-          [field]: nextNutrientValue
+      if (field === 'waterMl') {
+        next[index] = { ...item, waterMl: nextNutrientValue }
+      } else {
+        next[index] = {
+          ...item,
+          nutrients: {
+            ...item.nutrients,
+            [field]: nextNutrientValue
+          }
         }
       }
       return next
@@ -273,7 +355,14 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       const totalWeight = editItems.reduce((sum, item) => sum + item.intake, 0)
 
       await updateFoodRecord(record.id, {
-        items: editItems,
+        items: editItems.map(item => ({
+          name: item.name,
+          weight: item.weight,
+          ratio: item.ratio,
+          intake: item.intake,
+          water_ml: item.waterMl,
+          nutrients: item.nutrients
+        })),
         total_calories: Math.round(totalCalories * 10) / 10,
         total_protein: Math.round(totalProtein * 10) / 10,
         total_carbs: Math.round(totalCarbs * 10) / 10,
@@ -310,81 +399,125 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           catchMove
         >
           {editItems.map((item, idx) => {
+            const detailRows = getNutrientDetailRows(item)
+            const detailsExpanded = item.nutrientDetailsExpanded ?? false
             return (
-              <View key={idx} className='edit-food-card'>
-                <View className='edit-food-header'>
-                  <View className='edit-food-title-wrap'>
-                    <Text className='edit-food-name'>{item.name}</Text>
-                    <View className='edit-food-name-btn' onClick={() => handleEditItemName(idx)}>
-                      <Text className='iconfont icon-shouxieqianming'></Text>
-                    </View>
-                  </View>
-                  {editItems.length > 1 && (
-                    <View className='edit-food-delete' onClick={() => removeEditItem(idx)}>
-                      <Text className='iconfont icon-shanchu'></Text>
-                    </View>
-                  )}
-                </View>
-
-                <View className='edit-intake-section'>
-                  <Text className='edit-section-label'>摄入克数</Text>
-                  <View className='intake-adjuster'>
-                    <View className='adjust-btn minus' onClick={() => adjustIntake(idx, -10)}>
-                      <Text className='adjust-btn-text'>−</Text>
-                    </View>
-                    <Input
-                      className='intake-input'
-                      type='digit'
-                      value={String(item.intake)}
-                      onBlur={(e) => updateIntake(idx, parseFloat(e.detail.value) || 0)}
-                    />
-                    <Text className='intake-unit'>g</Text>
-                    <View className='adjust-btn plus' onClick={() => adjustIntake(idx, 10)}>
-                      <Text className='adjust-btn-text'>+</Text>
+              <View key={idx} className='edit-food-card ingredient-card'>
+                {/* 头部：名称 + 编辑/删除 */}
+                <View className='ingredient-main'>
+                  <View className='ingredient-header ingredient-header--title-row'>
+                    <Text className='ingredient-name'>{item.name}</Text>
+                    <View className='ingredient-header-actions'>
+                      <View className='edit-icon-wrapper' onClick={() => handleEditItemName(idx)}>
+                        <Text className='iconfont icon-shouxieqianming' />
+                      </View>
+                      {editItems.length > 1 && (
+                        <View className='delete-icon-wrapper' onClick={() => removeEditItem(idx)}>
+                          <Text className='delete-icon'>×</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
                 </View>
 
-                <View className='edit-ratio-section'>
-                  <View className='ratio-header'>
-                    <Text className='edit-section-label'>摄入比例</Text>
-                    <Text className={`ratio-value ${item.ratio > 100 ? 'over' : ''}`}>{item.ratio}%</Text>
+                {/* 营养摘要条 */}
+                <View className='ingredient-nutrition-strip'>
+                  <View className='ingredient-summary-cell ingredient-summary-cell--cal' onClick={() => handleEditNutrient(idx, 'calories')}>
+                    <Text className='ingredient-summary-label'>热量</Text>
+                    <View className='ingredient-cal-kcal-line'>
+                      <Text className='ingredient-cal-kcal-num'>
+                        {Math.round(item.nutrients.calories * (item.ratio / 100))}
+                      </Text>
+                      <Text className='ingredient-cal-kcal-unit'>kcal</Text>
+                    </View>
                   </View>
-                  <Slider
-                    className='ratio-slider'
-                    value={Math.min(100, item.ratio)}
-                    min={0}
-                    max={100}
-                    step={5}
-                    activeColor={item.ratio > 100 ? '#f59e0b' : '#00bc7d'}
-                    blockSize={20}
-                    onChange={(e) => updateRatio(idx, e.detail.value)}
-                  />
-                </View>
-
-                <View className='edit-nutrients-header'>
-                  <Text className='edit-section-label no-margin'>营养值</Text>
-                  <Text className='edit-nutrients-tip'>点击任一项直接修改</Text>
-                </View>
-
-                <View className='edit-nutrients-grid'>
-                  {EDITABLE_NUTRIENT_FIELDS.map((field) => {
+                  {(['protein', 'carbs', 'fat', 'waterMl'] as const).map((field) => {
                     const meta = EDITABLE_NUTRIENT_META[field]
+                    const classSuffix = NUTRIENT_FIELD_CLASS[field]
                     const displayValue = getDisplayedNutrientValue(item, field)
                     return (
                       <View
                         key={`${idx}-${field}`}
-                        className='nutrient-chip nutrient-chip-editable'
+                        className={`ingredient-summary-cell ingredient-summary-cell--${classSuffix}`}
                         onClick={() => handleEditNutrient(idx, field)}
                       >
-                        <Text className='nutrient-chip-label'>{meta.label}</Text>
-                        <Text className='nutrient-chip-value'>
-                          {normalizeDisplayNumber(displayValue)}
-                          <Text className='nutrient-chip-unit'>{meta.unit}</Text>
-                        </Text>
+                        <Text className='ingredient-summary-label'>{meta.label}</Text>
+                        <View className='ingredient-macro-value-line'>
+                          <Text className={`ingredient-macro-num ingredient-macro-num--${classSuffix}`}>
+                            {field === 'waterMl' ? String(Math.max(0, Math.round(displayValue))) : normalizeDisplayNumber(displayValue)}
+                          </Text>
+                          <Text className='ingredient-macro-g'>{meta.unit}</Text>
+                        </View>
                       </View>
                     )
                   })}
+                </View>
+
+                {/* 展开更多营养 */}
+                {detailRows.length > 0 && (
+                  <View className='ingredient-more-section'>
+                    <View className='ingredient-more-toggle' onClick={() => toggleNutrientDetails(idx)}>
+                      <Text className='ingredient-more-toggle-text'>
+                        {detailsExpanded ? '收起更多营养' : '展开更多营养'}
+                      </Text>
+                      <Text className={`iconfont icon-right ingredient-more-toggle-icon ${detailsExpanded ? 'expanded' : ''}`} />
+                    </View>
+                    {detailsExpanded && (
+                      <View className='ingredient-detail-grid'>
+                        {detailRows.map((row) => (
+                          <View key={`${idx}-${row.key}`} className='ingredient-detail-cell'>
+                            <Text className='ingredient-detail-label'>{row.label}</Text>
+                            <Text className='ingredient-detail-value'>
+                              {formatNutrientDetailValue(row.value)}
+                              <Text className='ingredient-detail-unit'>{row.unit}</Text>
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                )}
+
+                {/* 估算重量 + 实际摄入 */}
+                <View className='ingredient-controls'>
+                  <View className='weight-control'>
+                    <Text className='control-label'>估算重量</Text>
+                    <View className='weight-adjuster'>
+                      <View className='adjust-btn minus' onClick={() => adjustIntake(idx, -10)}>
+                        <Text className='adjust-btn-text'>−</Text>
+                      </View>
+                      <Text className='weight-display'>{formatWeightDisplay(item.intake)}</Text>
+                      <View className='adjust-btn plus' onClick={() => adjustIntake(idx, 10)}>
+                        <Text className='adjust-btn-text'>+</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View className='ratio-control'>
+                    <View className='ratio-label-wrap'>
+                      <Text className='control-label'>实际摄入</Text>
+                    </View>
+                    <View className='ratio-control-right'>
+                      <View className='ratio-slider-shell'>
+                        <View className='ratio-slider-hitbox'>
+                          <Slider
+                            className='ratio-slider-modern'
+                            value={Math.min(100, item.ratio)}
+                            min={0}
+                            max={100}
+                            step={5}
+                            activeColor={item.ratio > 100 ? '#f59e0b' : '#00bc7d'}
+                            backgroundColor={scheme === 'dark' ? '#2d3935' : '#dbe4dd'}
+                            blockSize={24}
+                            blockColor='#ffffff'
+                            showValue={false}
+                            onChange={(e) => updateRatio(idx, e.detail.value)}
+                          />
+                        </View>
+                      </View>
+                      <Text className='ratio-display'>{item.ratio}%</Text>
+                    </View>
+                  </View>
                 </View>
               </View>
             )
