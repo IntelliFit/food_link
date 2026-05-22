@@ -26,6 +26,7 @@
     "test:backend:api-contract": "cd backend && go run ./e2e-test/cmd/api-contract-test",
     "test:e2e-weapp": "cd e2e-weapp && npx ts-node src/runner.ts --scenario scenarios/home-dashboard.yaml",
     "test:e2e-weapp:smoke": "cd e2e-weapp && npx ts-node src/runner.ts --scenario scenarios/smoke.yaml",
+    "test:e2e-weapp:traces": "cd e2e-weapp && npx ts-node src/trace-runner.ts --traces traces/analyze-food.yaml",
     "build:weapp": "cross-env NODE_ENV=production TARO_APP_API_BASE_URL=https://dev.healthymax.cn taro build --type weapp",
     "build:weapp:preview": "cross-env NODE_ENV=production TARO_APP_API_BASE_URL=https://dev.healthymax.cn taro build --type weapp",
     "build:weapp:release": "cross-env NODE_ENV=production TARO_APP_API_BASE_URL=https://healthymax.cn taro build --type weapp",

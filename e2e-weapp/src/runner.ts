@@ -1,5 +1,4 @@
 #!/usr/bin/env ts-node
-import execa = require('execa');
 import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
 import yaml from 'js-yaml';
@@ -17,6 +16,16 @@ import {
 } from './mrc';
 import { BackendClient } from './backend-client';
 import type { Scenario, Step, StepResult, ScenarioResult, StepAssert } from './types';
+import {
+  PROJECT_ROOT,
+  findFreePort,
+  startBackendServer,
+  buildMiniprogram,
+  startDevTools,
+  ensureScreenshotDirs,
+  resolveBackendVariables,
+  sleep,
+} from './infra';
 
 const program = new Command();
 
@@ -38,9 +47,7 @@ const KEEP_DB = opts.keepDb || false;
 const SKIP_BUILD = opts.skipBuild || false;
 const UPDATE_BASELINE = opts.updateBaseline || false;
 
-const PROJECT_ROOT = resolve(__dirname, '../..');
-const BACKEND_DIR = resolve(PROJECT_ROOT, 'backend');
-const DIST_DIR = resolve(PROJECT_ROOT, 'dist');
+
 
 async function main() {
   console.log('══════════════════════════════════════════════════');
@@ -69,7 +76,8 @@ async function main() {
   let devtoolsStartedByUs = false;
 
   try {
-    const backendResult = await startBackendServer(scenario, BACKEND_PORT);
+    const suitePath = resolve(PROJECT_ROOT, scenario.setup.backend.suite);
+    const backendResult = await startBackendServer(suitePath, BACKEND_PORT, KEEP_DB);
     backendProc = backendResult.proc;
   } catch (err: any) {
     console.error(`❌ Failed to start backend: ${err.message}`);
@@ -101,11 +109,11 @@ async function main() {
     console.log('');
 
     // 6. Ensure screenshots dirs exist
-    ensureDirs();
+    ensureScreenshotDirs();
 
     // 7. Fetch backend variables and tokens
     console.log('🔑 Fetching test tokens...');
-    const vars = await resolveVariables(backend, scenario);
+    const vars = await resolveBackendVariables(backend);
     console.log(`✅ Variables resolved (${Object.keys(vars).length} vars)`);
     console.log('');
 
@@ -151,198 +159,6 @@ function loadScenario(path: string): Scenario {
   }
   const content = readFileSync(path, 'utf-8');
   return yaml.load(content) as Scenario;
-}
-
-async function startBackendServer(scenario: Scenario, port: number): Promise<any> {
-  const suitePath = resolve(PROJECT_ROOT, scenario.setup.backend.suite);
-
-  const args = [
-    'run',
-    './e2e-test/cmd/api-test-server',
-    '--suite',
-    suitePath,
-    '--config-dir',
-    '.',
-    '--port',
-    String(port),
-  ];
-  if (KEEP_DB) {
-    args.push('--keep-db');
-  }
-
-  console.log(`🚀 Starting backend test server...`);
-  console.log(`   go ${args.join(' ')}`);
-
-  const proc = execa('go', args, {
-    cwd: BACKEND_DIR,
-    detached: false,
-  });
-
-  // Stream backend logs
-  proc.stdout?.on('data', (data: Buffer) => {
-    const line = data.toString().trim();
-    if (line) {
-      console.log(`   [backend] ${line}`);
-    }
-  });
-  proc.stderr?.on('data', (data: Buffer) => {
-    const line = data.toString().trim();
-    if (line) {
-      console.error(`   [backend] ${line}`);
-    }
-  });
-
-  proc.on('exit', (code: number | null) => {
-    if (code !== null && code !== 0 && code !== 143) {
-      console.error(`   [backend] Exited with code ${code}`);
-    }
-  });
-
-  // Wait briefly to detect immediate startup failures (compile errors etc.)
-  // Do NOT await the proc itself — it's a long-running server.
-  await sleep(2000);
-  if (proc.exitCode !== null && proc.exitCode !== 0) {
-    throw new Error(`Backend exited with code ${proc.exitCode}`);
-  }
-
-  // Return wrapped object because `proc` itself is a thenable (Promise-like)
-  // and async/await would otherwise wait for the server process to exit.
-  return { proc };
-}
-
-async function buildMiniprogram(mode: string, apiBaseUrl: string): Promise<void> {
-  const script = 'build:weapp:e2e';
-  const env = {
-    ...process.env,
-    TARO_APP_API_BASE_URL: apiBaseUrl,
-  };
-
-  console.log(`   Build script: ${script}`);
-  console.log(`   API Base URL: ${apiBaseUrl}`);
-
-  const proc = execa('npm', ['run', script], {
-    cwd: PROJECT_ROOT,
-    env,
-  });
-
-  proc.stdout?.on('data', (data: Buffer) => {
-    process.stdout.write(data);
-  });
-  proc.stderr?.on('data', (data: Buffer) => {
-    process.stderr.write(data);
-  });
-
-  const { exitCode } = await proc;
-  if (exitCode !== 0) {
-    throw new Error(`Miniprogram build failed with exit code ${exitCode}`);
-  }
-}
-
-async function checkDevToolsRunning(port: number): Promise<boolean> {
-  try {
-    const { stdout } = await execa('lsof', ['-i', `:${port}`], { reject: false });
-    return stdout.includes('LISTEN');
-  } catch {
-    return false;
-  }
-}
-
-async function waitForMrcReady(port: number, timeoutMs: number, intervalMs: number): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const { stdout } = await execa('mrc', ['where', '--port', String(port)], {
-        timeout: 5000,
-        reject: false,
-      });
-      if (stdout.includes('✅') || stdout.includes('连接成功')) {
-        return;
-      }
-    } catch {
-      // ignore
-    }
-    await sleep(intervalMs);
-  }
-  throw new Error(`DevTools mrc not ready after ${timeoutMs}ms`);
-}
-
-async function startDevTools(port: number): Promise<{ proc: any; startedByUs: boolean }> {
-  const isRunning = await checkDevToolsRunning(port);
-  if (isRunning) {
-    console.log('🔧 WeChat DevTools already running');
-    return { proc: null, startedByUs: false };
-  }
-
-  const cliPath = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli';
-  console.log('🔧 Starting WeChat DevTools...');
-
-  const proc = execa(cliPath, ['auto', '--project', PROJECT_ROOT, '--auto-port', String(port)], {
-    detached: false,
-  });
-
-  // Stream devtools logs
-  proc.stdout?.on('data', (data: Buffer) => {
-    const line = data.toString().trim();
-    if (line) {
-      console.log(`   [devtools] ${line}`);
-    }
-  });
-  proc.stderr?.on('data', (data: Buffer) => {
-    const line = data.toString().trim();
-    if (line) {
-      console.error(`   [devtools] ${line}`);
-    }
-  });
-
-  // Wait for mrc to be ready
-  console.log('⏳ Waiting for DevTools mrc connection...');
-  await waitForMrcReady(port, 60000, 1000);
-  console.log('✅ DevTools ready');
-
-  return { proc, startedByUs: true };
-}
-
-function ensureDirs() {
-  const dirs = [
-    resolve(PROJECT_ROOT, 'e2e-weapp/screenshots/actual'),
-    resolve(PROJECT_ROOT, 'e2e-weapp/screenshots/baseline'),
-    resolve(PROJECT_ROOT, 'e2e-weapp/screenshots/diff'),
-  ];
-  for (const dir of dirs) {
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-  }
-}
-
-async function resolveVariables(backend: BackendClient, scenario: Scenario): Promise<Record<string, string>> {
-  const vars: Record<string, string> = {};
-
-  // Fetch suite vars from backend
-  try {
-    const suiteVars = await backend.getSuiteVars();
-    for (const [k, v] of Object.entries(suiteVars)) {
-      vars[`backend.${k}`] = v;
-    }
-  } catch (err: any) {
-    console.warn(`   Warning: Could not fetch suite vars: ${err.message}`);
-  }
-
-  // Fetch tokens for known users
-  const knownUsers = ['user1', 'user2'];
-  for (const user of knownUsers) {
-    try {
-      const tokenRes = await backend.getToken(user);
-      vars[`backend.token.${user}`] = tokenRes.token;
-      vars[`backend.auth.${user}.id`] = tokenRes.user_id;
-      vars[`backend.auth.${user}.openid`] = tokenRes.openid;
-      vars[`backend.auth.${user}.unionid`] = tokenRes.unionid;
-    } catch (err: any) {
-      // User may not exist in suite, that's okay
-    }
-  }
-
-  return vars;
 }
 
 async function executeScenario(
@@ -659,30 +475,6 @@ function printResults(result: ScenarioResult) {
     console.log(`⚠️  ${result.failedSteps} step(s) failed.`);
   }
   console.log('══════════════════════════════════════════════════');
-}
-
-async function findFreePort(startPort: number): Promise<number> {
-  const net = await import('net');
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.listen(startPort, '127.0.0.1', () => {
-      const addr = server.address();
-      const port = typeof addr === 'object' && addr !== null ? (addr as any).port : startPort;
-      server.close(() => resolve(port));
-    });
-    server.on('error', (err: any) => {
-      if (err.code === 'EADDRINUSE') {
-        // Try next port
-        resolve(findFreePort(startPort + 1));
-      } else {
-        reject(err);
-      }
-    });
-  });
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 main().catch((err) => {

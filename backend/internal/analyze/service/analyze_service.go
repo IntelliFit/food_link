@@ -53,6 +53,7 @@ type AnalyzeService struct {
 	gemini31LiteClient    LLMClient
 	gemini35Client        LLMClient
 	doubaoClient          LLMClient
+	dashscopeClient       LLMClient
 	doubaoWebSearchClient interface {
 		AnalyzeWithImagesWebSearch(context.Context, string, []string, DoubaoWebSearchOptions) (map[string]any, map[string]any, error)
 	}
@@ -1484,6 +1485,8 @@ func (s *AnalyzeService) resolveImageModelConfig(modelName string) (provider, mo
 			return "gemini", "gemini-3-flash-preview"
 		case "doubao":
 			return "doubao", "doubao-seed-2-0-lite-260428"
+		case "qwen":
+			return "qwen", "qwen-vl-max"
 		}
 	}
 	return resolveModelConfig(modelName)
@@ -1521,6 +1524,8 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	switch provider {
 	case "doubao":
 		client = s.doubaoClient
+	case "qwen":
+		client = s.dashscopeClient
 	case "gemini":
 		if executionMode == precisionExecutionMode || isGemini35ExecutionMode(executionMode) {
 			client = s.gemini35Client

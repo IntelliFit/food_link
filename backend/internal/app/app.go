@@ -146,6 +146,7 @@ func New(cfg *config.Config) (*App, error) {
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(doubaoClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
 	analyzeSvc.ConfigureDoubaoClient(cfg.External.DoubaoAPIKey, cfg.External.DoubaoBaseURL, "")
+	analyzeSvc.ConfigureDashScopeClient(cfg.External.DashScopeAPIKey, cfg.External.DashScopeBaseURL)
 	analyzeSvc.ConfigureGemini31LiteClient(cfg.External.OfoxAIAPIKey, cfg.External.OfoxAIBaseURL, "gemini-3.1-flash-lite")
 	analyzeSvc.ConfigureGemini35Client(cfg.External.Gemini35APIKey, cfg.External.Gemini35BaseURL, cfg.External.Gemini35Model)
 	if cfg.External.DoubaoWebSearchAPIKey != "" {

@@ -97,6 +97,8 @@ type ExternalConfig struct {
 	DoubaoAPIKey          string `mapstructure:"doubao_api_key"`
 	DoubaoWebSearchAPIKey string `mapstructure:"doubao_web_search_api_key"`
 	DoubaoBaseURL         string `mapstructure:"doubao_base_url"`
+	DashScopeAPIKey       string `mapstructure:"dashscope_api_key"`
+	DashScopeBaseURL      string `mapstructure:"dashscope_base_url"`
 }
 
 type WechatPayConfig struct {

@@ -1,0 +1,91 @@
+id: trace-analyze-food
+traces:
+  - id: analyze-food-calories-nonzero
+    name: "食物识别卡路里不为0"
+    desc: "请点击底部的卡路里按钮，选中相册上传，选择图片之后，来执行当前的图像识别，等待最多一分半钟之后，需要保证出现的内容的卡路里存在且不为0，而且不报错。"
+    steps:
+      # 1. 注入登录态
+      - action: "evaluate"
+        name: "注入测试 Token"
+        script: |
+          wx.setStorageSync('access_token', '{{backend.token.user1}}');
+          wx.setStorageSync('user_id', '{{backend.auth.user1.id}}');
+          wx.setStorageSync('isLoggedIn', true);
+
+      # 2. 进入首页
+      - action: "relaunch"
+        name: "进入首页"
+        url: "/pages/index/index"
+
+      # 3. 等待页面渲染
+      - action: "wait"
+        name: "等待首页渲染"
+        ms: 3000
+
+      # 4. 点击底部记录按钮（打开记录菜单）
+      - action: "tap"
+        name: "点击底部记录按钮"
+        selector: ".home-add-record-btn"
+
+      # 5. 等待菜单弹出
+      - action: "wait"
+        name: "等待菜单弹出"
+        ms: 1000
+
+      # 6. 点击相册上传
+      - action: "tap"
+        name: "点击相册上传"
+        selector: ".record-menu-album"
+
+      # 7. 注入测试图片路径（模拟相册选择结果）
+      - action: "evaluate"
+        name: "注入测试图片路径"
+        script: |
+          wx.setStorageSync('analyzeImagePath', 'https://example.com/test-food.jpg');
+          wx.setStorageSync('analyzeImagePaths', ['https://example.com/test-food.jpg']);
+
+      # 8. 进入分析页
+      - action: "relaunch"
+        name: "进入分析页"
+        url: "/packageExtra/pages/analyze/index"
+
+      # 9. 等待分析完成（轮询，最多90秒）
+      - action: "wait_for"
+        name: "等待分析完成"
+        ms: 90000
+        interval: 3000
+        assert:
+          type: "evaluate_script"
+          script: |
+            const pages = getCurrentPages();
+            const p = pages[pages.length - 1];
+            const d = p.data;
+            const hasResult = !!(d.analyzeResult || d.resultData || d.analysisResult);
+            const noError = !d.errorMessage && !d.analyzeError && !d.error;
+            return { hasResult, noError };
+          expected:
+            hasResult: true
+            noError: true
+
+      # 10. 验证卡路里存在且不为0
+      - action: "assert_evaluate"
+        name: "验证卡路里不为0"
+        script: |
+          const pages = getCurrentPages();
+          const p = pages[pages.length - 1];
+          const r = p.data.analyzeResult || p.data.resultData || p.data.analysisResult || {};
+          const items = r.items || r.foods || r.analysisItems || [];
+          let totalCalories = 0;
+          for (const item of items) {
+            totalCalories += item.calories || 0;
+          }
+          return { totalCalories, hasCalories: totalCalories > 0 };
+        expected:
+          hasCalories: true
+
+      # 11. 截图并对比基线（验证页面渲染一致性）
+      - action: "screenshot"
+        name: "分析结果页截图对比"
+        path: "./e2e-weapp/screenshots/actual/analyze-result.png"
+        compare_with_baseline: true
+        threshold: 0.05        # 允许 5% 像素差异
