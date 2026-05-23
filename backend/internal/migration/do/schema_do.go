@@ -224,7 +224,7 @@ type FoodRecordDO struct {
 	TotalFat         *float64         `gorm:"column:total_fat;type:numeric;default:0"`
 	TotalWeightGrams *int             `gorm:"column:total_weight_grams;type:integer;default:0"`
 	RecordTime       *time.Time       `gorm:"column:record_time;type:timestamptz;default:now();index:idx_user_food_records_record_time"`
-	CreatedAt        *time.Time       `gorm:"column:created_at;type:timestamptz;default:now()"`
+	CreatedAt        *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_food_records_created_at"`
 	ContextState     *string          `gorm:"column:context_state;type:text"`
 	PFCRatioComment  *string          `gorm:"column:pfc_ratio_comment;type:text"`
 	AbsorptionNotes  *string          `gorm:"column:absorption_notes;type:text"`

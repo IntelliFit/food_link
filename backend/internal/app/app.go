@@ -155,13 +155,16 @@ func New(cfg *config.Config) (*App, error) {
 	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
 	analyzeSvc.ConfigureStorage(storageClient)
+	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
+
 	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)
 	analyzeTaskSvc.ConfigureTaskPublisher(taskQueue)
+	analyzeTaskSvc.ConfigureRecordRepo(frRepo)
+
 	adminKey := os.Getenv("ADMIN_API_KEY")
 	analyzeHandler := analyzehandler.NewAnalyzeHandler(analyzeSvc, analyzeTaskSvc, adminKey)
 
 	// FoodRecord module DI
-	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
 	frTaskRepo := foodrecordrepo.NewAnalysisTaskRepo(db)
 	frNutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	bodyMetricsRepo := healthrepo.NewBodyMetricsRepo(db)

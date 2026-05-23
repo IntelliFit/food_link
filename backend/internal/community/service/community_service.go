@@ -18,8 +18,8 @@ import (
 var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 type FeedRepo interface {
-	ListPublicFeed(ctx context.Context, mealType, dietGoal, date string, limit int) ([]repo.FeedRecord, error)
-	ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal, date string, limit int) ([]repo.FeedRecord, error)
+	ListPublicFeed(ctx context.Context, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
+	ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
 	GetFeedRecordByID(ctx context.Context, recordID string) (*repo.FeedRecord, error)
 	HideFeedRecord(ctx context.Context, userID, recordID string) error
 	AddLike(ctx context.Context, userID, recordID string) error
@@ -151,7 +151,7 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 		candidateLimit = max(max(params.Offset+params.Limit+40, params.Limit*3), 60)
 	}
 
-	records, err := s.feedRepo.ListPublicFeed(ctx, params.MealType, params.DietGoal, params.Date, candidateLimit)
+	records, err := s.feedRepo.ListPublicFeed(ctx, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 		candidateLimit = max(max(params.Offset+params.Limit+40, params.Limit*3), 60)
 	}
 
-	records, err := s.feedRepo.ListFriendFeed(ctx, authorIDs, params.MealType, params.DietGoal, params.Date, candidateLimit)
+	records, err := s.feedRepo.ListFriendFeed(ctx, authorIDs, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit)
 	if err != nil {
 		return nil, err
 	}

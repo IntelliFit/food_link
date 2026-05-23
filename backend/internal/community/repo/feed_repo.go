@@ -15,6 +15,7 @@ type FeedRecord struct {
 	UserID         string           `gorm:"column:user_id" json:"user_id"`
 	MealType       string           `gorm:"column:meal_type" json:"meal_type"`
 	RecordTime     *time.Time       `gorm:"column:record_time" json:"record_time"`
+	CreatedAt      *time.Time       `gorm:"column:created_at" json:"created_at"`
 	TotalCalories  float64          `gorm:"column:total_calories" json:"total_calories"`
 	TotalProtein   float64          `gorm:"column:total_protein" json:"total_protein"`
 	TotalCarbs     float64          `gorm:"column:total_carbs" json:"total_carbs"`
@@ -58,7 +59,7 @@ func NewFeedRepo(db *gorm.DB) *FeedRepo {
 	return &FeedRepo{db: db}
 }
 
-func (r *FeedRepo) ListPublicFeed(ctx context.Context, mealType, dietGoal, date string, limit int) ([]FeedRecord, error) {
+func (r *FeedRepo) ListPublicFeed(ctx context.Context, mealType, dietGoal, date, sortBy string, limit int) ([]FeedRecord, error) {
 	var publicUserIDs []string
 	err := r.db.WithContext(ctx).Table("weapp_user").
 		Select("id").Where("public_records = ?", true).Pluck("id", &publicUserIDs).Error
@@ -85,11 +86,15 @@ func (r *FeedRepo) ListPublicFeed(ctx context.Context, mealType, dietGoal, date 
 	}
 
 	var rows []FeedRecord
-	err = q.Order("record_time DESC").Limit(limit).Find(&rows).Error
+	orderColumn := "record_time DESC"
+	if sortBy == "latest" {
+		orderColumn = "created_at DESC"
+	}
+	err = q.Order(orderColumn).Limit(limit).Find(&rows).Error
 	return rows, err
 }
 
-func (r *FeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal, date string, limit int) ([]FeedRecord, error) {
+func (r *FeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal, date, sortBy string, limit int) ([]FeedRecord, error) {
 	if len(authorIDs) == 0 {
 		return nil, nil
 	}
@@ -108,7 +113,11 @@ func (r *FeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, mealT
 		q = q.Where("record_time >= ? AND record_time < ?", start, end)
 	}
 	var rows []FeedRecord
-	err := q.Order("record_time DESC").Limit(limit).Find(&rows).Error
+	orderColumn := "record_time DESC"
+	if sortBy == "latest" {
+		orderColumn = "created_at DESC"
+	}
+	err := q.Order(orderColumn).Limit(limit).Find(&rows).Error
 	return rows, err
 }
 

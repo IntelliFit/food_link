@@ -33,7 +33,7 @@ func TestFeedRepoListPublicFeed(t *testing.T) {
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r1", UserID: "u1", MealType: "lunch", HiddenFromFeed: false}).Error)
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r2", UserID: "u1", MealType: "lunch", HiddenFromFeed: true}).Error)
 
-	records, err := r.ListPublicFeed(ctx, "", "", "", 10)
+	records, err := r.ListPublicFeed(ctx, "", "", "", "", 10)
 	assert.NoError(t, err)
 	assert.Len(t, records, 1)
 	assert.Equal(t, "r1", records[0].ID)
@@ -47,7 +47,7 @@ func TestFeedRepoListFriendFeed(t *testing.T) {
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r1", UserID: "u1", MealType: "lunch", HiddenFromFeed: false}).Error)
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r2", UserID: "u1", MealType: "lunch", HiddenFromFeed: true}).Error)
 
-	records, err := r.ListFriendFeed(ctx, []string{"u1"}, "", "", "", 10)
+	records, err := r.ListFriendFeed(ctx, []string{"u1"}, "", "", "", "", 10)
 	assert.NoError(t, err)
 	assert.Len(t, records, 1)
 	assert.Equal(t, "r1", records[0].ID)

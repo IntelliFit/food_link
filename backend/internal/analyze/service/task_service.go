@@ -12,6 +12,7 @@ import (
 	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/common/dateutil"
 	"food_link/backend/internal/common/errors"
+	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
@@ -29,6 +30,7 @@ type TaskService struct {
 	storage     *storage.Client
 	creditGuard CreditGuard
 	taskQueue   taskqueue.Publisher
+	recordRepo  *foodrecordrepo.FoodRecordRepo
 }
 
 const (
@@ -44,6 +46,10 @@ func NewTaskService(tasks *repo.TaskRepo, precision *repo.PrecisionRepo, users *
 		client = storageClient[0]
 	}
 	return &TaskService{tasks: tasks, precision: precision, users: users, storage: client}
+}
+
+func (s *TaskService) ConfigureRecordRepo(repo *foodrecordrepo.FoodRecordRepo) {
+	s.recordRepo = repo
 }
 
 type CreditGuard interface {
@@ -843,6 +849,13 @@ func (s *TaskService) DeleteTask(ctx context.Context, taskID, userID string) (ma
 		task.Status = "cancelled"
 		s.refundTaskCredits(ctx, task)
 		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Delete associated food record if exists
+	if s.recordRepo != nil {
+		if record, err := s.recordRepo.GetByUserSourceTaskID(ctx, userID, taskID); err == nil && record != nil {
+			_ = s.recordRepo.Delete(ctx, userID, record.ID)
+		}
 	}
 
 	if err := s.tasks.DeleteTask(ctx, taskID, userID); err != nil {
