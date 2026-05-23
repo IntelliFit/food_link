@@ -111,6 +111,13 @@
     gap: 16rpx;
   }
 
+  .user-name-actions {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    flex-shrink: 0;
+  }
+
   .user-name {
     font-size: 40rpx;
     font-weight: 600;
@@ -136,7 +143,7 @@
     line-height: 30rpx;
   }
 
-  .user-edit-row {
+  .user-meta-row {
     display: inline-flex;
     align-items: center;
     gap: 4rpx;
@@ -146,47 +153,29 @@
     &:active {
       opacity: 0.6;
     }
-
-    &--active {
-      opacity: 0.6;
-    }
   }
 
-  .user-edit-text {
+  .user-meta-text {
     font-size: 24rpx;
     color: #9ca3af;
     line-height: 34rpx;
   }
 
-  .user-id-copy-row {
-    display: flex;
-    align-items: center;
-    max-width: 100%;
-    margin-top: 4rpx;
-  }
-
-  .user-id-copy-button {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 42rpx;
-    padding: 0 18rpx;
+  .user-id-chip {
+    padding: 2rpx 12rpx;
     border-radius: 999rpx;
-    background: rgb(92 184 150 / 10%);
-    border: 1rpx solid rgb(92 184 150 / 20%);
-    box-sizing: border-box;
+    background: rgba(92, 184, 150, 0.08);
 
     &:active {
       opacity: 0.72;
     }
   }
 
-  .user-id-copy-button-text {
-    font-size: 22rpx;
-    color: #2f8f70;
-    line-height: 30rpx;
-    font-weight: 600;
+  .user-id-chip-text {
+    font-size: 20rpx;
+    color: #5a9e82;
+    line-height: 28rpx;
+    font-weight: 500;
   }
 }
 
@@ -355,6 +344,11 @@
       box-shadow: 0 0 12rpx rgba(251, 191, 36, 0.4);
     }
 
+    .segmented-progress__bar--filled {
+      background: #fbbf24;
+      box-shadow: 0 0 12rpx rgba(251, 191, 36, 0.4);
+    }
+
     .card-pro-badge {
       background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
       color: #1a1a2e;
@@ -409,6 +403,11 @@
 
     .progress-inner--reward {
       background: linear-gradient(90deg, #fff 0%, #ecfdf5 100%);
+      box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
+    }
+
+    .segmented-progress__bar--filled {
+      background: #fff;
       box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
     }
 
@@ -569,6 +568,26 @@
   .progress-inner--reward {
     background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 100%);
     box-shadow: 0 0 10rpx rgba(251, 191, 36, 0.28);
+  }
+
+  .segmented-progress {
+    display: flex;
+    align-items: center;
+    gap: 4rpx;
+    height: 12rpx;
+
+    &__bar {
+      flex: 1;
+      height: 100%;
+      border-radius: 999rpx;
+      background: rgba(255, 255, 255, 0.16);
+      transition: background 0.25s ease;
+
+      &--filled {
+        background: #fbbf24;
+        box-shadow: 0 0 8rpx rgba(251, 191, 36, 0.32);
+      }
+    }
   }
 
   .card-benefit {
@@ -773,16 +792,15 @@
     color: #f2f7f4;
   }
 
-  .user-edit-text {
+  .user-meta-text {
     color: #9ca3af;
   }
 
-  .user-id-copy-button {
-    background: rgba(112, 196, 149, 0.14);
-    border-color: rgba(112, 196, 149, 0.26);
+  .user-id-chip {
+    background: rgba(112, 196, 149, 0.1);
   }
 
-  .user-id-copy-button-text {
+  .user-id-chip-text {
     color: #6ee7b7;
   }
 

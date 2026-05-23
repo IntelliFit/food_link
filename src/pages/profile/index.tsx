@@ -592,21 +592,21 @@ function ProfilePage() {
               <>
                 <View className='user-name-row'>
                   <Text className='user-name'>{userInfo.name}</Text>
-                  <View className='user-days-pill'>
-                    <Text className='user-days-pill-text'>已记录 {recordDays} 天</Text>
+                  <View className='user-name-actions'>
+                    <View className='user-days-pill'>
+                      <Text className='user-days-pill-text'>已记录 {recordDays} 天</Text>
+                    </View>
+                    {userId && (
+                      <View className='user-id-chip' onClick={handleCopyUserId}>
+                        <Text className='user-id-chip-text'>复制ID</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
-                <View className='user-edit-row' onClick={handleSettings}>
-                  <Text className='user-edit-text'>编辑资料</Text>
+                <View className='user-meta-row' onClick={handleSettings}>
+                  <Text className='user-meta-text'>编辑资料</Text>
                   <Arrow size={12} color='#9ca3af' />
                 </View>
-                {userId && (
-                  <View className='user-id-copy-row'>
-                    <View className='user-id-copy-button' onClick={handleCopyUserId}>
-                      <Text className='user-id-copy-button-text'>复制用户ID</Text>
-                    </View>
-                  </View>
-                )}
               </>
             ) : (
               <View className='user-name-row'>
@@ -716,8 +716,17 @@ function ProfilePage() {
                       <Text className='member-meter__label'>奖励可用（一直持有）</Text>
                       <Text className='member-meter__value'>{`${rewardRangeText} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
                     </View>
-                    <View className='progress-bar progress-bar--reward'>
-                      <View className='progress-inner progress-inner--reward' style={{ width: `${rewardProgressPct}%` }} />
+                    <View className='segmented-progress'>
+                      {Array.from({ length: 10 }).map((_, i) => {
+                        const filledCount = Math.min(Math.max(Math.ceil(rewardProgressPct / 10), 0), 10)
+                        const isFilled = i < filledCount
+                        return (
+                          <View
+                            key={i}
+                            className={`segmented-progress__bar ${isFilled ? 'segmented-progress__bar--filled' : ''}`}
+                          />
+                        )
+                      })}
                     </View>
                   </View>
 
