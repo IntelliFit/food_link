@@ -104,6 +104,10 @@ func (m *mockStatsSvc) SaveInsight(ctx context.Context, userID string, content s
 	return m.saveErr
 }
 
+func (m *mockStatsSvc) GenerateCustomFocusCard(ctx context.Context, userID, statsRange, focusID string) (*service.RiskCard, map[string]any, error) {
+	return nil, nil, m.err
+}
+
 func (m *mockStatsSvc) GenerateDietRecommendation(ctx context.Context, userID string, input service.DietRecommendationInput) (*service.DietRecommendationResult, error) {
 	return m.dietResult, m.err
 }

@@ -30,8 +30,10 @@ import (
 
 const (
 	defaultExecutionMode         = "standard"
+	standardWebSearchMode        = "standard_web_search"
 	liteExecutionMode            = "lite"
 	precisionExecutionMode       = "strict"
+	precisionWebSearchMode       = "strict_web_search"
 	validExecutionMode           = "experimental"
 	gemini35FlashExecutionMode   = "gemini35_flash"
 	gemini35GroupedExecutionMode = "gemini35_flash_grouped"
@@ -42,17 +44,24 @@ const (
 	maxLLMJSONParseRetries       = 3
 	maxLLMTransientRetries       = 2
 	ratioSuggestionTimeout       = 20 * time.Second
+	ediblePortionTimeout         = 15 * time.Second
 	standardHybridTimeout        = 60 * time.Second
 	webSearchTimeout             = 6 * time.Second
 	webSearchMaxQueries          = 3
 	webSearchMaxResults          = 3
+	webSearchMinRelevantResults  = 1
+	resolveFoodCandidateLimit    = 8
+	resolveFoodSemanticThreshold = 0.9
 )
+
+const packagedFoodResolveEnabled = true
 
 type AnalyzeService struct {
 	ofoxAIClient          LLMClient
 	gemini31LiteClient    LLMClient
 	gemini35Client        LLMClient
 	doubaoClient          LLMClient
+	dashscopeClient       LLMClient
 	doubaoWebSearchClient interface {
 		AnalyzeWithImagesWebSearch(context.Context, string, []string, DoubaoWebSearchOptions) (map[string]any, map[string]any, error)
 	}
@@ -83,7 +92,7 @@ func NewAnalyzeService(doubaoClient, ofoxAIClient LLMClient, users *authrepo.Use
 		ofoxAIClient:          ofoxAIClient,
 		users:                 users,
 		nutrition:             nutritionRepo,
-		webSearcher:           NewDuckDuckGoWebSearcher(),
+		webSearcher:           NewMultiWebSearcher(NewBingWebSearcher(), NewDuckDuckGoWebSearcher()),
 	}
 }
 
@@ -114,6 +123,15 @@ func (s *AnalyzeService) ConfigureDoubaoClient(apiKey, baseURL, model string) {
 	} else {
 		logger.L().Warn("doubao client not initialized: empty api key")
 	}
+}
+
+func (s *AnalyzeService) ConfigureDashScopeClient(apiKey, baseURL string) {
+	if strings.TrimSpace(apiKey) != "" {
+		s.dashscopeClient = NewDashScopeClient(apiKey, baseURL)
+		logger.L().Info("dashscope client initialized", slog.String("base_url", baseURL))
+		return
+	}
+	logger.L().Warn("dashscope client not initialized: empty api key")
 }
 
 func (s *AnalyzeService) ConfigureGemini31LiteClient(apiKey, baseURL, model string) {
@@ -502,6 +520,10 @@ func normalizeExecutionMode(mode *string) string {
 		return defaultExecutionMode
 	}
 	switch strings.TrimSpace(*mode) {
+	case standardWebSearchMode:
+		return standardWebSearchMode
+	case precisionWebSearchMode:
+		return precisionWebSearchMode
 	case precisionExecutionMode, gemini35FlashExecutionMode, gemini35GroupedExecutionMode:
 		return precisionExecutionMode
 	case defaultExecutionMode, liteExecutionMode, validExecutionMode:
@@ -659,9 +681,9 @@ func buildPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) 
 	if executionMode == liteExecutionMode && strings.TrimSpace(input.Text) == "" {
 		return buildLiteImageDBFirstPrompt(input, user)
 	}
-	if (executionMode == precisionExecutionMode || isGemini35ExecutionMode(executionMode)) && strings.TrimSpace(input.Text) == "" {
+	if (isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode)) && strings.TrimSpace(input.Text) == "" {
 		promptMode := executionMode
-		if executionMode == precisionExecutionMode {
+		if isPrecisionLikeExecutionMode(executionMode) {
 			promptMode = gemini35FlashExecutionMode
 		}
 		return buildGemini35ImageDBFirstPrompt(input, user, promptMode)
@@ -864,37 +886,46 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 	}
 	imageInputHint := buildImageInputHint(input)
 	correctionBlock := buildCorrectionContextBlock(input)
-	return fmt.Sprintf(`你是专业的食物图像识别与份量估算助手。请识别图片中的食物，只输出实际可见的可食用食物名称、可食部分重量和该食物中可计入饮水参考的含水量；营养成分由后端数据库查表补充，不要自行估算营养。
+	return fmt.Sprintf(`你是专业的食物图像识别与份量估算助手。请识别图片中的食物，只输出实际可见的可食用食物名称、可食部分重量和该食物中可计入饮水参考的含水量；营养成分由后端数据库统一查表计算，请绝对不要自行输出或估算卡路里、蛋白质等任何营养数值。
 	%s%s%s%s
-识别规则：
+核心扫描与识别规则：
 - 只识别图片中实际可见的食物，不补充看不见的食物
-- 包装食品、袋装食品、盒装食品、被其他物体部分遮挡但仍明显是食品包装的对象，也必须作为独立食物项输出；不要因为外层是包装、文字倒置、反光或只露出一部分就忽略它
 - 请按区域逐一扫描画面：左侧、中央、右侧、下方、背景/被遮挡处；如果某个区域存在独立食物或独立食品包装，应单独列为一项
+- 在估重前进行快速物理空间标定：优先寻找画面中的天然比例尺，例如标准易拉罐、常见手机、餐具、包装上印有净含量/规格的预包装食品；用这些参照物推算盘子、碗、砂锅、杯盒的真实口径、高度和体积
+- 严禁在没有尺寸对比时直接套用市面最常见的均值小分量；例如不要盲目把所有杯装酸奶默认为 130g，应结合杯体与旁边碗盘/餐具/包装的比例判断
+- 包装食品、袋装食品、盒装食品、被其他物体部分遮挡但仍明显是独立食品包装的对象，应作为独立食物项输出；但前提是你能确认它确实是一个独立食品包装，而不是桌面边缘露出的一小块色块、封边、角落或无法归属的包装碎片
 - 包装本身不是食物，但包装代表的可食内容要输出为食物项；name 写包装上的品名/可判断的食品名，不要输出“包装袋”
-- 零食、点心、饼干、肉干、坚果、糖果、糕点等预包装食品，优先读取包装袋上的品牌、品名、口味、配料表、营养成分表、净含量、规格、独立小包数量；这些文字证据优先级高于包装正面插画或模型对外观的猜测
+- 零食、点心、饼干、肉干、坚果、糖果、糕点、酸奶、饮料等预包装食品，优先读取包装袋/杯/盒上的品牌、品名、口味、配料表、营养成分表、净含量、规格、独立小包数量；这些文字证据优先级高于包装正面插画或模型对外观的猜测
 - 如果能看到配料表或营养成分表，即使字较小、倾斜、倒置、反光，也要尝试读取关键字段；用配料表判断食物类型和主要原料，用净含量/规格判断重量
-- 对零食包装，不能只根据图片图案猜成“阿胶糕/无花果干/普通饼干”等；若包装文字、配料表或营养成分表与视觉图案冲突，最终名称优先采用包装文字和配料证据，并在 evidence 中说明
+- 如果 OCR 明确读到净含量或规格，例如 260g、250ml、独立小包 20g，则 grossWeightGrams 优先采用该数值或按可见食用数量换算；除非画面明显显示包装已开封且食物已被消耗，才按剩余比例扣减
+- 对零食/包装食品，不能只根据图片图案猜成“阿胶糕/无花果干/普通饼干”等；若包装文字、配料表或营养成分表与视觉图案冲突，最终名称优先采用包装文字和配料证据，并在 evidence 中说明
+- 严禁凭 Logo 或颜色脑补品牌：不要仅凭标志颜色、圆形图案、包装主色等断定品牌；只有读到明确品牌文字时才写品牌，否则使用客观品名，例如“草莓酸奶”“草莓风味发酵乳”
+- 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌；这类对象不计入
 - 不输出餐具、空包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
-- 营养库按可食部计算；如果食物带壳、带骨或带核，name 仍写食物本身，estimatedWeightGrams 必须换算为去壳/去骨/去核后的可食净重，不把壳、骨头、果核单独输出为食物
+- 对仅在边缘露出少量、无法确认种类或份量的食物，不计入
+- name 仍写食物本身；带壳、带骨、带核食物的不可食部分由后端 DeepSeek Flash 统一折算，视觉模型不要在 estimatedWeightGrams 里自行扣减
 - 相同食物合并为一项，明显不同食物分开
 - 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
 - 混合菜无法可靠拆分时，作为一道常见菜名输出，不要猜测不可见成分
 
 重量规则：
-- estimatedWeightGrams 必须是数字，单位克，不要输出范围或单位字符串
+- grossWeightGrams 必须是数字，单位克，表示图片中可见食物的原始可见总重量；带壳、带骨、带核时先估整份原始重量，不要扣壳/骨/核
+- estimatedWeightGrams 为兼容字段，本轮请先填与 grossWeightGrams 相同的值；后端会用 DeepSeek Flash 单独计算 ediblePortionRatio 并得到真正可食重量
+- 不要因为减脂、控糖、剩余热量不足或健康建议而下调 grossWeightGrams 或 estimatedWeightGrams；饮食控制只能体现在 suggestedRatio，不能改变重量本身
 - 综合可见面积、厚度、高度、容器、餐具、手掌、包装等参照物估算
-- 只估算可见可食部分，不把餐具、包装、骨头、壳、果核计入重量；例如虾/螃蟹/贝类按去壳肉重，花生/瓜子/坚果按去壳仁重，水果按去核后可食部分
+- 生成 estimatedWeightGrams 前，必须先用空间标定或 OCR 规格做一次合理性校验；大杯、大盒、大盘、砂锅不能被压成默认小份量
+- 不把餐具、空包装计入重量；虾/螃蟹/贝类/带骨带核水果先估可见原始食物重量，后端再折算可食比例
 - waterMl 表示该食物/饮品本身含有的水量，单位毫升，必须是数字；固体食物按常见含水率保守估算，无法判断时填 0
 - 饮品、汤、粥、奶、茶、咖啡等液体或半流体应估算 waterMl；干货、油炸物、酱料难判断时可填 0
-- suggestedRatio 表示建议用户实际摄入该食物的比例（0-100 的整数），请结合用户当日剩余热量预算和饮食目标给出建议：减脂且剩余热量不足时降低主食/高热量食物比例；增肌且热量充足时可按100；默认100
+- suggestedRatio 只是结果页“实际摄入比例”滑块的建议值，不能反向影响 estimatedWeightGrams、waterMl 或营养计算基础；默认100
 
 输出要求：
 - 简体中文
 - description <= 16字
-- insight 1-2句，<= 32字
-- pfc_ratio_comment 可根据食物结构简要评价，不要编具体营养数值
-- absorption_notes 可简述烹饪/搭配影响，不要编具体营养数值
-- context_advice 1-2句，<= 32字，无需则空字符串
+- insight 1-2句，<= 32字，必须结合本餐具体食物，不要写“保持健康饮食”这类泛话
+- pfc_ratio_comment 必须给出本餐蛋白/脂肪/碳水结构判断，并点名应优先保留或控制的食物类别；不要编具体营养数值
+- absorption_notes 必须包含进食顺序建议，例如先蔬菜/汤水/低能量密度食物，再蛋白质，最后主食/甜点/甜饮；需结合本餐实际食物改写，不要套模板
+- context_advice 1-2句，<= 48字；必须结合用户目标、餐次、剩余热量或健康档案中的一个关键点给出细致建议，无信息时空字符串
 - 如果这是纠错任务，必须基于原图、上一轮结果和用户纠错说明重新判断；不要机械照抄上一轮结果，也不要仅把前端列表原样返回
 - 只返回 JSON
 
@@ -906,7 +937,7 @@ Type rule:
 
 JSON:
 {
-  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
+  "items":[{"name":"","type":"normal","grossWeightGrams":0,"estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
@@ -932,9 +963,10 @@ func buildLiteImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string
 - 食物名称用简体中文，尽量标准、具体，方便命中营养库
 - 包装食品优先读取包装文字、品牌、品名、净含量、营养标签；文字倒置/旋转时要旋转后重读
 - 零食/预包装食品要重点读取配料表、营养成分表、口味、规格和独立小包数量；不要只看包装正面插画猜食物
+- 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌；这类对象不计入
 - 不确定 OCR 不能直接当食物名；若 OCR 与视觉冲突，把冲突写进 recognitionEvidence 和 alternativeNames
 - 小众水果/进口零食/不确定包装食品可使用 web_search，搜索关键词要围绕可见包装文字、品牌、品名或用户补充信息，避免用泛泛描述搜索
-- estimatedWeightGrams 是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后估算
+- grossWeightGrams 是图中可见原始总重量；estimatedWeightGrams 先填同值，后端会用 DeepSeek Flash 单独折算可食比例
 - waterMl 表示该食物/饮品本身可计入饮水参考的水量；无法判断填 0
 
 Type rule:
@@ -945,7 +977,7 @@ Type rule:
 
 JSON:
 {
-  "items":[{"name":"","type":"normal","estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100,"confidence":0.8,"recognitionEvidence":"","weightEvidence":"","alternativeNames":[]}],
+  "items":[{"name":"","type":"normal","grossWeightGrams":0,"estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100,"confidence":0.8,"recognitionEvidence":"","weightEvidence":"","alternativeNames":[]}],
   "description":"",
   "insight":"",
   "ocrText":[],
@@ -967,34 +999,47 @@ func buildGemini35ImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User, ex
 	}
 	imageInputHint := buildImageInputHint(input)
 	groupLine := "本通道为 Gemini 3.5 Flash 直接识别：一次性输出完整食物清单。"
-	return fmt.Sprintf(`你是专业的食物图像识别与可食部重量估算助手。请基于图片直接识别食物；营养由后端数据库查表补充，不要自行输出营养值。
+	return fmt.Sprintf(`你是专业的食物图像识别与可食部重量估算助手。请基于图片直接识别食物；营养由后端数据库统一查表补充，你不需要输出任何营养数值。
 %s%s%s
 %s
 
-识别重点：
+深度识别与多模态对齐规则：
 - 必须逐区扫描画面：左侧、中央、右侧、下方、背景/被遮挡处
-- 包装食品、袋装食品、盒装食品、被部分遮挡但仍明显是食品包装的对象，必须作为独立食物项输出
+- 在输出 grossWeightGrams 之前，必须先在脑中完成 recognitionEvidence 和 weightEvidence 的逻辑闭环：先说明为什么认定它是什么，再说明为什么原始可见重量是这个数
+- 物理尺寸与空间标定：先定位标准化工业品或天然比例尺，例如标准 330ml/500ml 易拉罐、常见手机、餐具，或包装上印有净含量的食品；再以这些参照物推算砂锅、大盘、深碗、杯盒的真实口径、高度和体积；最后结合食物堆积高度估算可食部重量
+- 绝对禁止在没有进行空间标定的情况下直接套用市面均值小分量；例如不要把与大砂锅/大盘对比明显很大的 260g 酸奶杯，盲目猜测为 130g 均值杯
+- 包装食品、袋装食品、盒装食品、被部分遮挡但仍能确认是完整独立食品包装的对象，才作为独立食物项输出
 - 包装本身不是食物，但包装代表的可食内容要输出为食物项；name 写包装上的品名/可判断食品名，不要输出“包装袋”
-- 包装文字可能横排、竖排、倒置、旋转、反光或被遮挡；请 mentally rotate 后重读，低置信 OCR 不能直接当食物名
+- OCR 绝对优先与 mentally rotate：包装文字可能横排、竖排、倒置、旋转、反光或被遮挡；请 mentally rotate 后重读，优先提取品牌、品名、口味、规格、配料表、营养成分表、净含量，例如 XX克/XXg/XXml
+- OCR 强覆盖规则：如果 OCR 明确识别到包装净含量或规格，例如“260g”“Net 250g”“250ml”，grossWeightGrams 必须优先采用该包装标明重量/容量或按可见食用数量换算；除非视觉证据极明显显示包装已拆封且食物被消耗，此时必须在 weightEvidence 中写明扣减比例
 - 零食、点心、饼干、肉干、坚果、糖果、糕点等预包装食品，优先读取包装袋上的品牌、品名、口味、配料表、营养成分表、净含量、规格、独立小包数量；这些文字证据优先级高于包装正面插画或模型对外观的猜测
 - 如果能看到配料表或营养成分表，即使字较小、倾斜、倒置、反光，也要尝试读取关键字段；用配料表判断食物类型和主要原料，用净含量/规格判断重量
 - 对零食包装，不能只根据图片图案猜成“阿胶糕/无花果干/普通饼干”等；若包装文字、配料表或营养成分表与视觉图案冲突，最终名称优先采用包装文字和配料证据，并在 recognitionEvidence 中说明
+- 禁止凭 Logo 图案盲猜品牌：不要仅凭标志颜色或几何外形，例如只看到红色圆圈，就猜成某品牌；必须通过 OCR 确认中文字符或清晰品牌文本。若字迹反光无法看清，直接用客观品名命名，并在 recognitionEvidence 中说明“包装文字模糊，未检测到明确品牌文本，不进行品牌猜测”
+- 若包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认是一个完整独立包装，不要猜成具体零食名；这类对象不计入
 - 重点区分相近字：鹅胗/鹅肫/鹅珍 与 阿胶；龙宫果/龙贡果/longkong 与 无花果/无花果干
 - 相同食物合并为一项，明显不同食物分开；不要因为一个物体在背景或被其它包装压住就漏掉
 - 不输出餐具、空包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
+- 对仅在边缘露出少量、无法确认种类或份量的食物，不计入
 
 重量规则：
-- estimatedWeightGrams 是可食部净重，单位克，必须是数字
-- 只估算可见可食部分；带壳、带骨、带核食物必须换算为去壳/去骨/去核后的可食净重
+- grossWeightGrams 是图中可见食物原始总重量，单位克，必须是数字；带壳、带骨、带核时先估整份原始重量，不要扣壳/骨/核
+- estimatedWeightGrams 为兼容字段，本轮请先填与 grossWeightGrams 相同的值；后端会用 DeepSeek Flash 单独计算 ediblePortionRatio 并得到真正可食重量
+- 不要因为减脂、控糖、剩余热量不足或健康建议而下调 grossWeightGrams 或 estimatedWeightGrams；饮食控制只能体现在 suggestedRatio，不能改变重量本身
+- 不把餐具、空包装计入重量；不可食部分由后端可食比例链路扣除
 - 包装食品如果只能看到独立小包，按该小包通常净含量/可见体积估算；如果看得到净含量文字，优先参考净含量
+- grossWeightGrams 必须与 weightEvidence 完全吻合；如果 weightEvidence 写明包装净含量 260g 且未开封，则重量不能输出 130g 或其它均值猜测
 - waterMl 表示该食物/饮品本身含有的水量，单位毫升，必须是数字；无法判断填 0
-- suggestedRatio 表示建议用户实际摄入比例，0-100 的整数，默认100
+- suggestedRatio 只是结果页“实际摄入比例”滑块的建议值，不能反向影响 estimatedWeightGrams、waterMl 或营养计算基础；默认100
 
 输出要求：
 - 只返回 JSON，不要输出 Markdown
 - 简体中文
 - description <= 16字
-- insight <= 32字
+- insight <= 32字，必须结合本餐具体食物，不要写泛话
+- pfc_ratio_comment 必须点名本餐里应优先保留或控制的食物类别
+- absorption_notes 必须包含进食顺序建议，结合本餐实际食物，例如先蔬菜/汤水，再蛋白质，最后主食/甜点/甜饮
+- context_advice 必须结合用户目标、餐次、剩余热量或健康档案中的一个关键点给出细致建议，无信息时空字符串
 - 每个 item 都给出 recognitionEvidence 和 weightEvidence，便于排查
 - ocrText 放你从图片中读到的关键包装文字；不确定的文字可放 alternativeNames 或 evidence 中说明
 
@@ -1004,6 +1049,7 @@ JSON:
     {
       "name":"",
       "type":"normal",
+      "grossWeightGrams":0,
       "estimatedWeightGrams":0,
       "waterMl":0,
       "suggestedRatio":100,
@@ -1038,19 +1084,21 @@ func buildGemini35GroupedPlanPrompt(input AnalyzeInput, user *authrepo.User) str
 %s%s%s
 
 第一阶段目标：
-- 锁定食物清单：图片里所有独立食物、独立包装食品、被部分遮挡但明显是食品包装的对象，都必须列出
+- 锁定食物清单：图片里所有独立食物、独立包装食品、被部分遮挡但仍能确认是完整独立食品包装的对象，都必须列出
 - 最多分 2 组，groupId 只能是 1 或 2；不需要分组时全部填 1
 - 输出每个 item 的位置、识别证据、OCR 证据和候选名称，方便第二阶段专门估重
-- estimatedWeightGrams 可以给粗略占位值，但第二阶段会重新估重；不要因为重量不确定就漏掉食物
+- grossWeightGrams/estimatedWeightGrams 可以给粗略占位值且两者先保持一致；第二阶段会重新估重；不要因为重量不确定就漏掉食物
 
 识别规则：
 - 必须逐区扫描画面：左侧、中央、右侧、下方、背景/被遮挡处
 - 包装本身不是食物，但包装代表的可食内容要输出为食物项；name 写包装上的品名/可判断食品名，不要输出“包装袋”
 - 包装文字可能横排、竖排、倒置、旋转、反光或被遮挡；请 mentally rotate 后重读，低置信 OCR 不能直接当食物名
 - 零食/预包装食品要重点读取配料表、营养成分表、口味、规格、净含量和独立小包数量；这些文字证据优先级高于包装正面插画或模型对外观的猜测
+- 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌，也不要列入第一阶段食物清单
 - 重点区分相近字：鹅胗/鹅肫/鹅珍 与 阿胶；龙宫果/龙贡果/longkong 与 无花果/无花果干
 - 相同食物合并为一项，明显不同食物分开；不要因为一个物体在背景或被其它包装压住就漏掉
 - 不输出餐具、空包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
+- 对仅在边缘露出少量、无法确认种类或份量的食物，不计入
 
 输出要求：
 - 只返回 JSON，不要输出 Markdown
@@ -1072,6 +1120,7 @@ JSON:
     {
       "name":"",
       "type":"normal",
+      "grossWeightGrams":0,
       "estimatedWeightGrams":0,
       "waterMl":0,
       "suggestedRatio":100,
@@ -1141,6 +1190,7 @@ func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode stri
 - 简体中文
 - 根据自然语言拆分食物，不要虚构用户没有提到的主食物
 - 重量可基于常见份量估算，但必须是可食部净重；带壳、带骨、带核食物按去壳/去骨/去核后的重量，不把壳、骨头、果核计入营养计算
+- 如果用户在输入文字中明确声明了具体重量数值（如"59克"、"37g"、"100克"等），则 estimatedWeightGrams 必须严格等于该数值，禁止进行任何四舍五入、估算或修正
 - description <= 24字
 - insight/context_advice 各 1-2 句，<= 40字
 - suggestedRatio：每个食物的建议摄入比例（0-100），结合用户剩余热量和饮食目标给出建议，默认100
@@ -1181,6 +1231,7 @@ func buildTextDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 %s%s解析规则：
 - 只输出用户明确描述的食物，不补充没有出现的食物
 - 如果用户写了明确重量、个数、半份、一碗、一杯等份量，请换算为克；没有明确重量时按日常熟食份量保守估算
+- 如果用户在输入文字中已经直接给出了明确的具体重量数值（如"59克"、"37g"、"100克"等），则 estimatedWeightGrams 必须严格等于该数值，禁止进行任何四舍五入、估算或修正
 - estimatedWeightGrams 是营养计算使用的可食部净重；带壳、带骨、带核食物即使用户描述的是整只/整份，也要换算为去壳/去骨/去核后的可食重量
 - 食物名称使用简体中文，尽量具体、标准、常见，方便命中营养库
 - 相同食物合并为一项，重量为合计重量
@@ -1463,6 +1514,14 @@ func isGemini35ExecutionMode(executionMode string) bool {
 	return executionMode == gemini35FlashExecutionMode || executionMode == gemini35GroupedExecutionMode
 }
 
+func isPrecisionLikeExecutionMode(executionMode string) bool {
+	return executionMode == precisionExecutionMode || executionMode == precisionWebSearchMode
+}
+
+func isWebSearchExecutionMode(executionMode string) bool {
+	return executionMode == standardWebSearchMode || executionMode == precisionWebSearchMode
+}
+
 func shouldUseImageProviderPreference(modelName string) bool {
 	raw := strings.TrimSpace(modelName)
 	if raw == "" {
@@ -1484,6 +1543,8 @@ func (s *AnalyzeService) resolveImageModelConfig(modelName string) (provider, mo
 			return "gemini", "gemini-3-flash-preview"
 		case "doubao":
 			return "doubao", "doubao-seed-2-0-lite-260428"
+		case "qwen":
+			return "qwen", "qwen-vl-max"
 		}
 	}
 	return resolveModelConfig(modelName)
@@ -1494,13 +1555,13 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
 	isCorrection := len(input.CorrectionItems) > 0 || len(input.PreviousResult) > 0
-	if executionMode == defaultExecutionMode {
+	if executionMode == defaultExecutionMode || executionMode == standardWebSearchMode {
 		if isCorrection {
 			input.ModelName = gemini31FlashLiteModel
 		} else {
 			input.ModelName = gemini3FlashModel
 		}
-	} else if executionMode == precisionExecutionMode || executionMode == gemini35FlashExecutionMode {
+	} else if isPrecisionLikeExecutionMode(executionMode) || executionMode == gemini35FlashExecutionMode {
 		input.ModelName = gemini35FlashModel
 	} else if executionMode != validExecutionMode {
 		input.ModelName = gemini3FlashModel
@@ -1521,8 +1582,10 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	switch provider {
 	case "doubao":
 		client = s.doubaoClient
+	case "qwen":
+		client = s.dashscopeClient
 	case "gemini":
-		if executionMode == precisionExecutionMode || isGemini35ExecutionMode(executionMode) {
+		if isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode) {
 			client = s.gemini35Client
 		} else if strings.EqualFold(model, gemini31FlashLiteModel) && s.gemini31LiteClient != nil {
 			client = s.gemini31LiteClient
@@ -1538,7 +1601,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		client = s.doubaoClient
 	}
 	if client == nil {
-		if executionMode == precisionExecutionMode || isGemini35ExecutionMode(executionMode) {
+		if isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode) {
 			return nil, fmt.Errorf("Gemini 3.5 Flash 图片识别 client 未初始化，请配置 gemini35_api_key")
 		}
 		return nil, fmt.Errorf("图片识别 LLM client 未初始化")
@@ -1678,7 +1741,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			"web_search":      lightweightMeta,
 		}
 	}
-	if executionMode == precisionExecutionMode || isGemini35ExecutionMode(executionMode) {
+	if isPrecisionLikeExecutionMode(executionMode) || isGemini35ExecutionMode(executionMode) {
 		hybridMeta = map[string]any{
 			"status":          "applied",
 			"strategy":        executionMode + "_db_first",
@@ -1695,6 +1758,15 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			if grouped != nil {
 				parsed = grouped
 			}
+		}
+	}
+	if isWebSearchExecutionMode(executionMode) {
+		reviewed, meta := s.refineImageWithLowCostWebSearch(ctx, input, parsed, imageURLs, client, provider, model, executionMode)
+		if len(meta) > 0 {
+			hybridMeta = meta
+		}
+		if reviewed != nil {
+			parsed = reviewed
 		}
 	}
 	if shouldRunStandardImageHybridReview(input, executionMode, provider) {
@@ -1893,6 +1965,103 @@ func (s *AnalyzeService) reviewStandardImageWithGemini(ctx context.Context, inpu
 	logger.WithTrace(ctx).Info("standard image hybrid review applied",
 		slog.Int("image_count", len(imageURLs)),
 		slog.Int("item_count", len(parseItems(merged))),
+		slog.Any("hybrid_review", meta),
+	)
+	return merged, meta
+}
+
+func (s *AnalyzeService) refineImageWithLowCostWebSearch(ctx context.Context, input AnalyzeInput, baseParsed map[string]any, imageURLs []string, _ LLMClient, provider, model, executionMode string) (map[string]any, map[string]any) {
+	start := time.Now()
+	baseItems := parseItems(baseParsed)
+	complexity := decideWebSearchComplexity(baseParsed)
+	meta := map[string]any{
+		"status":                "skipped",
+		"strategy":              executionMode + "_single_vision_web_search_db_first",
+		"base_provider":         provider,
+		"base_model":            model,
+		"review_provider":       nil,
+		"review_model":          nil,
+		"calibration_method":    "none",
+		"complexity_decision":   complexity,
+		"stage_durations_ms":    map[string]any{},
+		"second_vision_skipped": true,
+	}
+	if compacted := compactHybridDebugItems(baseItems, 12); len(compacted) > 0 {
+		meta["base_items"] = compacted
+	}
+	if baseDescription := strings.TrimSpace(fmt.Sprintf("%v", baseParsed["description"])); baseDescription != "" && baseDescription != "<nil>" {
+		meta["base_description"] = baseDescription
+	}
+	imageURLs = nonEmptyStrings(imageURLs)
+	if len(imageURLs) == 0 {
+		meta["status"] = "no_images"
+		return nil, meta
+	}
+	if complexity.Decision == "simple" {
+		meta["status"] = "skipped_simple"
+		meta["web_search_status"] = "skipped_simple"
+		meta["calibration_method"] = "first_pass_kept"
+		meta["stage_durations_ms"] = map[string]any{"total": time.Since(start).Milliseconds()}
+		return nil, meta
+	}
+	searchEvidence := s.collectStandardImageSearchEvidence(ctx, input, baseParsed)
+	if len(searchEvidence) == 0 {
+		meta["status"] = "no_evidence"
+		meta["web_search_status"] = "no_results"
+		meta["calibration_method"] = "first_pass_kept"
+		meta["stage_durations_ms"] = map[string]any{"total": time.Since(start).Milliseconds()}
+		return nil, meta
+	}
+	relevantEvidence, relevanceRows := filterRelevantWebSearchEvidence(searchEvidence, baseItems)
+	meta["web_search_queries"] = webSearchEvidenceQueries(searchEvidence)
+	meta["web_search_result_count"] = webSearchEvidenceResultCount(searchEvidence)
+	meta["web_search_relevance"] = relevanceRows
+	meta["stage_durations_ms"] = map[string]any{"search": time.Since(start).Milliseconds()}
+	if len(relevantEvidence) == 0 {
+		meta["status"] = "no_relevant_evidence"
+		meta["web_search_status"] = "no_relevant_results"
+		meta["web_search_evidence"] = compactWebSearchEvidence(searchEvidence, webSearchMaxQueries, 2)
+		meta["calibration_method"] = "first_pass_kept"
+		meta["stage_durations_ms"] = map[string]any{"search": time.Since(start).Milliseconds(), "total": time.Since(start).Milliseconds()}
+		logger.WithTrace(ctx).Info("低成本搜索无有效食品证据",
+			slog.String("execution_mode", executionMode),
+			slog.Int("image_count", len(imageURLs)),
+			slog.Any("web_search_relevance", relevanceRows),
+			slog.Any("web_search_evidence", meta["web_search_evidence"]),
+		)
+		return nil, meta
+	}
+	meta["web_search_status"] = "relevant_results"
+	meta["web_search_evidence"] = compactWebSearchEvidence(relevantEvidence, webSearchMaxQueries, 2)
+	logger.WithTrace(ctx).Info("低成本搜索证据已收集",
+		slog.String("execution_mode", executionMode),
+		slog.Int("image_count", len(imageURLs)),
+		slog.Int("base_item_count", len(baseItems)),
+		slog.Any("base_items", meta["base_items"]),
+		slog.Any("web_search_evidence", meta["web_search_evidence"]),
+	)
+	merged, calibrationRows := applyRuleBasedWebSearchCalibration(baseParsed, relevantEvidence)
+	if len(parseItems(merged)) == 0 {
+		meta["status"] = "empty"
+		return nil, meta
+	}
+	finalItems := parseItems(merged)
+	meta["status"] = "applied"
+	meta["calibration_method"] = "rule_based_spec_extraction"
+	meta["web_search_status"] = "applied"
+	meta["review_item_count"] = len(parseItems(merged))
+	if compacted := compactHybridDebugItems(finalItems, 12); len(compacted) > 0 {
+		meta["final_items"] = compacted
+	}
+	if changes := compactHybridItemChanges(baseItems, finalItems, 12); len(changes) > 0 {
+		meta["item_changes"] = changes
+	}
+	meta["calibration_items"] = calibrationRows
+	meta["stage_durations_ms"] = map[string]any{"search": time.Since(start).Milliseconds(), "calibration": 0, "total": time.Since(start).Milliseconds()}
+	logger.WithTrace(ctx).Info("低成本搜索校准已应用",
+		slog.String("execution_mode", executionMode),
+		slog.Int("image_count", len(imageURLs)),
+		slog.Int("item_count", len(finalItems)),
 		slog.Any("hybrid_review", meta),
 	)
 	return merged, meta
@@ -2265,9 +2434,449 @@ func compactHybridDebugItems(items []map[string]any, limit int) []map[string]any
 		if alternatives := stringSliceFromAny(item["alternativeNames"]); len(alternatives) > 0 {
 			row["alternative_names"] = limitStrings(alternatives, 5)
 		}
+		if source := strings.TrimSpace(fmt.Sprintf("%v", item["evidenceSource"])); source != "" && source != "<nil>" {
+			row["evidence_source"] = truncateRunes(source, 120)
+		}
+		if sources := stringSliceFromAny(item["searchEvidenceUsed"]); len(sources) > 0 {
+			row["search_evidence_used"] = limitStrings(sources, 5)
+		}
 		out = append(out, row)
 	}
 	return out
+}
+
+func compactWebSearchEvidence(evidence []WebSearchEvidence, queryLimit, resultLimit int) []map[string]any {
+	if queryLimit <= 0 || len(evidence) == 0 {
+		return nil
+	}
+	if resultLimit <= 0 {
+		resultLimit = 2
+	}
+	if len(evidence) > queryLimit {
+		evidence = evidence[:queryLimit]
+	}
+	out := make([]map[string]any, 0, len(evidence))
+	for _, row := range evidence {
+		query := strings.TrimSpace(row.Query)
+		if query == "" {
+			continue
+		}
+		results := row.Results
+		if len(results) > resultLimit {
+			results = results[:resultLimit]
+		}
+		compactResults := make([]map[string]any, 0, len(results))
+		for _, result := range results {
+			title := strings.TrimSpace(result.Title)
+			snippet := strings.TrimSpace(result.Snippet)
+			if title == "" && snippet == "" {
+				continue
+			}
+			item := map[string]any{
+				"title":   truncateRunes(title, 80),
+				"snippet": truncateRunes(snippet, 160),
+			}
+			if url := strings.TrimSpace(result.URL); url != "" {
+				item["url"] = truncateRunes(url, 160)
+			}
+			compactResults = append(compactResults, item)
+		}
+		out = append(out, map[string]any{
+			"query":   query,
+			"results": compactResults,
+		})
+	}
+	return out
+}
+
+func compactHybridItemChanges(baseItems, finalItems []map[string]any, limit int) []map[string]any {
+	if limit <= 0 || len(finalItems) == 0 {
+		return nil
+	}
+	if len(finalItems) > limit {
+		finalItems = finalItems[:limit]
+	}
+	out := make([]map[string]any, 0, len(finalItems))
+	for index, finalItem := range finalItems {
+		finalName := strings.TrimSpace(fmt.Sprintf("%v", finalItem["name"]))
+		if finalName == "" || finalName == "<nil>" {
+			continue
+		}
+		var baseItem map[string]any
+		if index < len(baseItems) {
+			baseItem = baseItems[index]
+		}
+		baseName := ""
+		baseWeight := 0.0
+		baseWater := 0.0
+		if baseItem != nil {
+			baseName = strings.TrimSpace(fmt.Sprintf("%v", baseItem["name"]))
+			baseWeight = numberFromAny(baseItem["estimatedWeightGrams"])
+			baseWater = numberFromAny(baseItem["waterMl"])
+		}
+		finalWeight := numberFromAny(finalItem["estimatedWeightGrams"])
+		finalWater := numberFromAny(finalItem["waterMl"])
+		nameChanged := baseName != "" && baseName != finalName
+		weightDelta := round2(finalWeight - baseWeight)
+		waterDelta := round2(finalWater - baseWater)
+		changed := nameChanged || math.Abs(weightDelta) >= 0.01 || math.Abs(waterDelta) >= 0.01
+		row := map[string]any{
+			"index":           index,
+			"changed":         changed,
+			"before_name":     baseName,
+			"after_name":      finalName,
+			"before_weight_g": round2(baseWeight),
+			"after_weight_g":  round2(finalWeight),
+			"weight_delta_g":  weightDelta,
+		}
+		if baseWater > 0 || finalWater > 0 {
+			row["before_water_ml"] = round2(baseWater)
+			row["after_water_ml"] = round2(finalWater)
+			row["water_delta_ml"] = waterDelta
+		}
+		if evidence := strings.TrimSpace(fmt.Sprintf("%v", finalItem["recognitionEvidence"])); evidence != "" && evidence != "<nil>" {
+			row["recognition_evidence"] = truncateRunes(evidence, 120)
+		}
+		if evidence := strings.TrimSpace(fmt.Sprintf("%v", finalItem["weightEvidence"])); evidence != "" && evidence != "<nil>" {
+			row["weight_evidence"] = truncateRunes(evidence, 160)
+		}
+		if source := strings.TrimSpace(fmt.Sprintf("%v", finalItem["evidenceSource"])); source != "" && source != "<nil>" {
+			row["evidence_source"] = truncateRunes(source, 120)
+		}
+		if sources := stringSliceFromAny(finalItem["searchEvidenceUsed"]); len(sources) > 0 {
+			row["search_evidence_used"] = limitStrings(sources, 5)
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+type webSearchComplexityDecision struct {
+	Decision  string   `json:"decision"`
+	Reasons   []string `json:"reasons"`
+	ItemCount int      `json:"item_count"`
+}
+
+func decideWebSearchComplexity(parsed map[string]any) webSearchComplexityDecision {
+	items := parseItems(parsed)
+	reasons := []string{}
+	searchCandidates := 0
+	lowConfidence := 0
+	abnormalWeight := 0
+	for _, item := range items {
+		if isHighPrioritySearchItem(item) {
+			searchCandidates++
+		}
+		if confidence := numberFromAny(item["confidence"]); confidence > 0 && confidence < 0.65 {
+			lowConfidence++
+		}
+		weight := numberFromAny(item["estimatedWeightGrams"])
+		if weight <= 0 || weight > 900 {
+			abnormalWeight++
+		}
+	}
+	if searchCandidates > 0 {
+		reasons = append(reasons, "包含包装食品、饮品或品牌商品，需要搜索规格")
+	}
+	if len(items) >= 4 {
+		reasons = append(reasons, "食物数量较多")
+	}
+	if lowConfidence > 0 {
+		reasons = append(reasons, "存在低置信度识别")
+	}
+	if abnormalWeight > 0 {
+		reasons = append(reasons, "存在异常重量")
+	}
+	decision := "simple"
+	if searchCandidates > 0 {
+		decision = "search_calibration_needed"
+	} else if len(items) >= 4 || lowConfidence > 0 || abnormalWeight > 0 {
+		decision = "complex"
+	}
+	if len(reasons) == 0 {
+		reasons = append(reasons, "单个或少量常见食物，第一轮结果可直接使用")
+	}
+	return webSearchComplexityDecision{Decision: decision, Reasons: reasons, ItemCount: len(items)}
+}
+
+func filterRelevantWebSearchEvidence(evidence []WebSearchEvidence, baseItems []map[string]any) ([]WebSearchEvidence, []map[string]any) {
+	if len(evidence) == 0 {
+		return nil, nil
+	}
+	foodTerms := buildFoodSearchTerms(baseItems)
+	filtered := make([]WebSearchEvidence, 0, len(evidence))
+	relevanceRows := make([]map[string]any, 0, len(evidence))
+	for _, row := range evidence {
+		relevantResults := []WebSearchResult{}
+		for _, result := range row.Results {
+			if isRelevantFoodSearchResult(row.Query, result, foodTerms) {
+				relevantResults = append(relevantResults, result)
+			}
+		}
+		status := "irrelevant"
+		if len(relevantResults) >= webSearchMinRelevantResults {
+			status = "relevant"
+			filtered = append(filtered, WebSearchEvidence{Query: row.Query, Results: relevantResults})
+		}
+		relevanceRows = append(relevanceRows, map[string]any{
+			"query":          row.Query,
+			"status":         status,
+			"result_count":   len(row.Results),
+			"relevant_count": len(relevantResults),
+		})
+	}
+	return filtered, relevanceRows
+}
+
+func buildFoodSearchTerms(items []map[string]any) []string {
+	terms := []string{}
+	for _, item := range items {
+		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+		terms = append(terms, splitFoodSearchTerms(name)...)
+		for _, alt := range stringSliceFromAny(item["alternativeNames"]) {
+			terms = append(terms, splitFoodSearchTerms(alt)...)
+		}
+	}
+	terms = append(terms, []string{
+		"食物", "食品", "营养", "热量", "净含量", "规格", "克", "g", "ml", "kcal",
+		"冰淇淋", "蛋筒", "酸奶", "牛奶", "啤酒", "可乐", "饮料", "蛋糕", "饼干", "零食",
+	}...)
+	return uniqueNonEmptyStrings(terms, 32)
+}
+
+func splitFoodSearchTerms(name string) []string {
+	name = strings.TrimSpace(name)
+	if name == "" || name == "<nil>" {
+		return nil
+	}
+	replacer := strings.NewReplacer("（", " ", "）", " ", "(", " ", ")", " ", "-", " ", "_", " ", "/", " ", "、", " ")
+	fields := strings.Fields(replacer.Replace(name))
+	terms := make([]string, 0, len(fields)+1)
+	if len([]rune(name)) <= 12 {
+		terms = append(terms, name)
+	}
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if len([]rune(field)) >= 2 {
+			terms = append(terms, field)
+		}
+	}
+	for _, keyword := range []string{"蜜雪冰城", "光明", "哈尔滨", "冰淇淋", "蛋筒", "酸奶", "啤酒", "可乐"} {
+		if strings.Contains(name, keyword) {
+			terms = append(terms, keyword)
+		}
+	}
+	return terms
+}
+
+func uniqueNonEmptyStrings(values []string, limit int) []string {
+	if limit <= 0 {
+		limit = len(values)
+	}
+	capacity := len(values)
+	if capacity > limit {
+		capacity = limit
+	}
+	out := make([]string, 0, capacity)
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, value)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func isRelevantFoodSearchResult(query string, result WebSearchResult, foodTerms []string) bool {
+	text := strings.ToLower(query + " " + result.Title + " " + result.Snippet)
+	if hasIrrelevantSearchNoise(text) {
+		return false
+	}
+	foodHit := false
+	for _, term := range foodTerms {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if term != "" && strings.Contains(text, term) {
+			foodHit = true
+			break
+		}
+	}
+	if !foodHit {
+		return false
+	}
+	for _, term := range []string{"营养", "热量", "净含量", "规格", "食品", "食物", "kcal", "g", "ml", "克", "毫升", "蛋筒", "冰淇淋", "酸奶", "啤酒", "可乐"} {
+		if strings.Contains(text, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasIrrelevantSearchNoise(text string) bool {
+	noises := []string{
+		"汉语", "字义", "词典", "成语", "百度百科", "原神", "游戏", "官网-米哈游", "开放世界", "手持 的意思", "为什么男人",
+	}
+	for _, noise := range noises {
+		if strings.Contains(text, strings.ToLower(noise)) {
+			return true
+		}
+	}
+	return false
+}
+
+var (
+	weightSpecRe = regexp.MustCompile(`(?i)(?:净含量|规格|重量|商品规格|content|net\s*weight)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(kg|千克|公斤|g|克|ml|毫升|mL|ML)`)
+	kcalSpecRe   = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(?:kcal|千卡|大卡)`)
+)
+
+func applyRuleBasedWebSearchCalibration(baseParsed map[string]any, evidence []WebSearchEvidence) (map[string]any, []map[string]any) {
+	merged := copyAnyMap(baseParsed)
+	baseItems := parseItems(baseParsed)
+	out := make([]map[string]any, 0, len(baseItems))
+	rows := []map[string]any{}
+	for index, item := range baseItems {
+		next := copyAnyMap(item)
+		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+		best, ok := findBestSpecForItem(name, evidence)
+		if ok && best.WeightGrams > 0 && shouldApplySpecWeight(item, best.WeightGrams) {
+			next["estimatedWeightGrams"] = best.WeightGrams
+			next["originalWeightGrams"] = best.WeightGrams
+			if best.Unit == "ml" {
+				next["waterMl"] = best.WeightGrams
+			}
+			next["weightEvidence"] = fmt.Sprintf("搜索结果“%s”提到%s，按规格校准为%.0fg。", best.Title, best.RawText, best.WeightGrams)
+			next["evidenceSource"] = "search:" + best.Query
+			next["searchEvidenceUsed"] = []string{best.Query, best.Title}
+			rows = append(rows, map[string]any{
+				"index":             index,
+				"name":              name,
+				"applied":           true,
+				"weight_g":          best.WeightGrams,
+				"source_query":      best.Query,
+				"source_title":      best.Title,
+				"source_spec":       best.RawText,
+				"calibration_field": "estimatedWeightGrams",
+			})
+		} else {
+			rows = append(rows, map[string]any{
+				"index":   index,
+				"name":    name,
+				"applied": false,
+				"reason":  "未找到可安全应用的规格或净含量",
+			})
+		}
+		out = append(out, next)
+	}
+	merged["items"] = out
+	return merged, rows
+}
+
+type webSearchSpec struct {
+	Query       string
+	Title       string
+	RawText     string
+	WeightGrams float64
+	Unit        string
+}
+
+func findBestSpecForItem(name string, evidence []WebSearchEvidence) (webSearchSpec, bool) {
+	itemTerms := splitFoodSearchTerms(name)
+	for _, row := range evidence {
+		for _, result := range row.Results {
+			text := result.Title + " " + result.Snippet
+			if !textMatchesAnyTerm(text, itemTerms) {
+				continue
+			}
+			if spec, ok := extractSpecFromText(row.Query, result.Title, text); ok {
+				return spec, true
+			}
+		}
+	}
+	return webSearchSpec{}, false
+}
+
+func textMatchesAnyTerm(text string, terms []string) bool {
+	text = strings.ToLower(text)
+	for _, term := range terms {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if term != "" && strings.Contains(text, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func extractSpecFromText(query, title, text string) (webSearchSpec, bool) {
+	for _, match := range weightSpecRe.FindAllStringSubmatch(text, -1) {
+		if len(match) < 3 {
+			continue
+		}
+		value := numberFromString(match[1])
+		unit := normalizeSpecUnit(match[2])
+		grams := value
+		switch unit {
+		case "kg":
+			grams = value * 1000
+		case "g", "ml":
+		default:
+			continue
+		}
+		if grams <= 0 || grams > 2000 {
+			continue
+		}
+		return webSearchSpec{
+			Query:       query,
+			Title:       title,
+			RawText:     strings.TrimSpace(match[0]),
+			WeightGrams: grams,
+			Unit:        unit,
+		}, true
+	}
+	if kcalSpecRe.MatchString(text) {
+		return webSearchSpec{}, false
+	}
+	return webSearchSpec{}, false
+}
+
+func normalizeSpecUnit(unit string) string {
+	unit = strings.ToLower(strings.TrimSpace(unit))
+	switch unit {
+	case "kg", "千克", "公斤":
+		return "kg"
+	case "g", "克":
+		return "g"
+	case "ml", "毫升":
+		return "ml"
+	default:
+		return unit
+	}
+}
+
+func numberFromString(value string) float64 {
+	var out float64
+	_, _ = fmt.Sscanf(strings.TrimSpace(value), "%f", &out)
+	return out
+}
+
+func shouldApplySpecWeight(item map[string]any, specWeight float64) bool {
+	current := numberFromAny(item["estimatedWeightGrams"])
+	if current <= 0 {
+		return true
+	}
+	if specWeight < 10 || specWeight > 2000 {
+		return false
+	}
+	ratio := specWeight / current
+	return ratio >= 0.45 && ratio <= 2.2
 }
 
 func buildStandardImageHybridReviewPrompt(input AnalyzeInput, doubaoParsed map[string]any, searchEvidence []WebSearchEvidence) string {
@@ -2308,6 +2917,7 @@ func buildStandardImageHybridReviewPrompt(input AnalyzeInput, doubaoParsed map[s
 			"不要把低置信度 OCR 片段直接当作食物名；包装食品最终名称必须同时满足 OCR 文字、包装图案、品牌/品类和可见食物逻辑一致。",
 			"如果 OCR 字样与视觉食物或包装图案不一致，必须在 recognitionEvidence 中说明冲突，并把可能误读的文字放入 alternativeNames，而不是直接定名。",
 			"优先利用包装文字、品牌名、品名、净含量、营养成分表、规格、份数、已食用比例等文字证据；包装食品不要只靠外观猜。",
+			"如果疑似包装对象只露出很小一角、只有色块/封边/局部花纹，既读不到可靠文字，也无法确认是完整独立包装，不要输出为具体零食名；应视为证据不足并忽略。",
 			"webSearchEvidence 只作为外部佐证，不能替代图片证据；当搜索结果与可见图片/包装文字冲突时，以图片和包装文字为准。",
 			"没有包装文字时，可以参考 Doubao 的视觉候选，但必须结合原图重新判断食物名称和重量。",
 			"对小众水果、进口零食、包装食品、候选冲突项，要显式比较 alternativeNames，不要被 Doubao 的单一候选锚定。",
@@ -2336,6 +2946,58 @@ func buildStandardImageHybridReviewPrompt(input AnalyzeInput, doubaoParsed map[s
 	}
 	bytes, _ := json.Marshal(contextPayload)
 	return "你是食物图像复核与重量推理专家。请把 Doubao 的食物识别优势作为候选参考，同时发挥你的 OCR、包装理解、世界知识和重量推理能力，输出最终用于营养库查询的食物名称与可食部净重。\n" + string(bytes)
+}
+
+func buildLowCostWebSearchRefinePrompt(input AnalyzeInput, baseParsed map[string]any, searchEvidence []WebSearchEvidence, executionMode string) string {
+	contextPayload := map[string]any{
+		"task":              "基于原图和低成本搜索结果，对第一轮食物识别结果做轻量校准。重点只校准包装食品、品牌商品、小众水果、饮品容量、明确净含量和可作为空间锚点的物体。",
+		"executionMode":     executionMode,
+		"firstPassResult":   baseParsed,
+		"webSearchEvidence": searchEvidence,
+		"userContext": map[string]any{
+			"mealType":          input.MealType,
+			"dietGoal":          input.DietGoal,
+			"activityTiming":    input.ActivityTiming,
+			"remainingCalories": input.RemainingCalories,
+			"additionalContext": strings.TrimSpace(input.AdditionalContext),
+			"isMultiView":       input.IsMultiView,
+		},
+		"rules": []string{
+			"搜索结果只作为外部佐证，不能替代图片证据；不可把搜索到但图片中不可见的食物新增到结果中。",
+			"如果搜索结果给出明确商品规格、净含量、杯型容量、单个常见重量，且与图片 OCR/包装/视觉证据一致，可以据此修正 estimatedWeightGrams 或 waterMl。",
+			"如果搜索证据与图片可见文字冲突，以图片 OCR、用户补充和原图为准；不确定时保持第一轮结果。",
+			"包装食品未开封且搜索/OCR 指向明确净含量时，estimatedWeightGrams 优先采用净含量；若可见已开封或已食用，按可见剩余比例扣减，并写入 weightEvidence。",
+			"搜索结果可作为空间锚点：若某个可见包装/杯/罐的规格已知，可用它校准旁边盘、碗、锅、杯的尺寸，但必须保守。",
+			"不要仅凭 Logo 颜色或图案猜品牌；品牌名必须来自图片 OCR、用户补充或搜索证据与图片包装共同支持。",
+			"每个被你修改名称、重量或 waterMl 的 item，必须写 evidenceSource：search:<搜索query或标题>、image_ocr、visual_estimate 或 first_pass_kept。",
+			"如果没有搜索结果直接支撑某个商品规格，不要在 weightEvidence 中写“搜索显示/搜索证据显示”；只能写图片OCR、视觉估算或保持第一轮结果。",
+			"searchEvidenceUsed 只填写真实使用过的搜索 query 或搜索结果标题；未使用搜索证据时必须返回空数组。",
+			"只返回 JSON，不要输出 Markdown，不要输出解释性正文。",
+		},
+		"responseSchema": map[string]any{
+			"description":    "简短餐食描述",
+			"insight":        "一句自然健康建议",
+			"context_advice": "",
+			"modelAgreement": "agree|name_changed|weight_changed|conflict",
+			"ocrText":        []string{},
+			"items": []map[string]any{{
+				"name":                 "食物名称",
+				"type":                 "normal",
+				"estimatedWeightGrams": 100,
+				"waterMl":              0,
+				"suggestedRatio":       100,
+				"groupId":              1,
+				"confidence":           0.8,
+				"recognitionEvidence":  "为什么是这个食物",
+				"weightEvidence":       "为什么是这个重量，搜索证据如何支持或为什么未采用搜索结果",
+				"evidenceSource":       "search:<query或标题>|image_ocr|visual_estimate|first_pass_kept",
+				"searchEvidenceUsed":   []string{},
+				"alternativeNames":     []string{},
+			}},
+		},
+	}
+	bytes, _ := json.Marshal(contextPayload)
+	return "你是食物图片低成本联网搜索校准助手。请同时查看原图和下列搜索证据，只做保守校准。\n" + string(bytes)
 }
 
 func mergeHybridReviewParsed(base, review map[string]any) map[string]any {
@@ -2370,6 +3032,76 @@ type WebSearchResult struct {
 type WebSearchEvidence struct {
 	Query   string            `json:"query"`
 	Results []WebSearchResult `json:"results"`
+}
+
+type MultiWebSearcher struct {
+	searchers []WebSearcher
+}
+
+func NewMultiWebSearcher(searchers ...WebSearcher) *MultiWebSearcher {
+	nonNil := make([]WebSearcher, 0, len(searchers))
+	for _, searcher := range searchers {
+		if searcher != nil {
+			nonNil = append(nonNil, searcher)
+		}
+	}
+	return &MultiWebSearcher{searchers: nonNil}
+}
+
+func (s *MultiWebSearcher) Search(ctx context.Context, query string, limit int) ([]WebSearchResult, error) {
+	var lastErr error
+	for _, searcher := range s.searchers {
+		results, err := searcher.Search(ctx, query, limit)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if len(results) > 0 {
+			return results, nil
+		}
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, nil
+}
+
+type BingWebSearcher struct {
+	client *http.Client
+}
+
+func NewBingWebSearcher() *BingWebSearcher {
+	return &BingWebSearcher{client: &http.Client{Timeout: webSearchTimeout}}
+}
+
+func (s *BingWebSearcher) Search(ctx context.Context, query string, limit int) ([]WebSearchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > webSearchMaxResults {
+		limit = webSearchMaxResults
+	}
+	endpoint := "https://cn.bing.com/search?" + url.Values{"q": []string{query}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; FoodLinkBot/1.0; +https://healthymax.cn)")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.6")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("bing search status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return parseBingHTMLResults(string(data), limit), nil
 }
 
 type DuckDuckGoWebSearcher struct {
@@ -2413,10 +3145,48 @@ var (
 	duckResultBlockRe   = regexp.MustCompile(`(?is)<div[^>]+class="[^"]*result[^"]*"[^>]*>(.*?)</div>\s*</div>`)
 	duckTitleRe         = regexp.MustCompile(`(?is)<a[^>]+class="[^"]*result__a[^"]*"[^>]*href="([^"]*)"[^>]*>(.*?)</a>`)
 	duckSnippetRe       = regexp.MustCompile(`(?is)<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>(.*?)</a>`)
+	bingResultBlockRe   = regexp.MustCompile(`(?is)<li[^>]+class="[^"]*b_algo[^"]*"[^>]*>(.*?)</li>`)
+	bingTitleRe         = regexp.MustCompile(`(?is)<h2[^>]*>\s*<a[^>]+href="([^"]*)"[^>]*>(.*?)</a>\s*</h2>`)
+	bingSnippetRe       = regexp.MustCompile(`(?is)<p[^>]*>(.*?)</p>`)
 	htmlTagRe           = regexp.MustCompile(`(?is)<[^>]+>`)
 	htmlWhitespaceRe    = regexp.MustCompile(`\s+`)
 	duckRedirectParamRe = regexp.MustCompile(`[?&]uddg=([^&]+)`)
 )
+
+func parseBingHTMLResults(raw string, limit int) []WebSearchResult {
+	if limit <= 0 {
+		limit = webSearchMaxResults
+	}
+	blocks := bingResultBlockRe.FindAllStringSubmatch(raw, -1)
+	results := make([]WebSearchResult, 0, limit)
+	for _, blockMatch := range blocks {
+		if len(blockMatch) < 2 {
+			continue
+		}
+		block := blockMatch[1]
+		titleMatch := bingTitleRe.FindStringSubmatch(block)
+		if len(titleMatch) < 3 {
+			continue
+		}
+		title := cleanHTMLText(titleMatch[2])
+		if title == "" {
+			continue
+		}
+		snippet := ""
+		if snippetMatch := bingSnippetRe.FindStringSubmatch(block); len(snippetMatch) >= 2 {
+			snippet = cleanHTMLText(snippetMatch[1])
+		}
+		results = append(results, WebSearchResult{
+			Title:   truncateRunes(title, 80),
+			Snippet: truncateRunes(snippet, 180),
+			URL:     strings.TrimSpace(html.UnescapeString(titleMatch[1])),
+		})
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results
+}
 
 func parseDuckDuckGoHTMLResults(raw string, limit int) []WebSearchResult {
 	if limit <= 0 {
@@ -2499,40 +3269,74 @@ func (s *AnalyzeService) collectStandardImageSearchEvidence(ctx context.Context,
 }
 
 func buildStandardImageSearchQueries(input AnalyzeInput, doubaoParsed map[string]any) []string {
-	candidates := []string{}
+	highPriorityCandidates := []string{}
+	normalCandidates := []string{}
+	contextCandidates := []string{}
 	if text := strings.TrimSpace(input.AdditionalContext); text != "" {
-		candidates = append(candidates, text)
-	}
-	if desc := strings.TrimSpace(fmt.Sprintf("%v", doubaoParsed["description"])); desc != "" && desc != "<nil>" {
-		candidates = append(candidates, desc)
+		contextCandidates = append(contextCandidates, text)
 	}
 	for _, item := range parseItems(doubaoParsed) {
 		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
 		if name != "" && name != "未知食物" {
-			candidates = append(candidates, name)
+			if isHighPrioritySearchItem(item) {
+				highPriorityCandidates = append(highPriorityCandidates, name)
+			} else {
+				normalCandidates = append(normalCandidates, name)
+			}
 		}
 		for _, alt := range stringSliceFromAny(item["alternativeNames"]) {
-			candidates = append(candidates, alt)
+			if isHighPrioritySearchItem(item) {
+				highPriorityCandidates = append(highPriorityCandidates, alt)
+			} else {
+				normalCandidates = append(normalCandidates, alt)
+			}
 		}
+	}
+	if desc := strings.TrimSpace(fmt.Sprintf("%v", doubaoParsed["description"])); desc != "" && desc != "<nil>" {
+		contextCandidates = append(contextCandidates, desc)
 	}
 	queries := []string{}
 	seen := map[string]bool{}
 	add := func(value string) {
 		value = normalizeSearchQuery(value)
-		if value == "" || seen[value] {
+		if value == "" || seen[value] || len(queries) >= webSearchMaxQueries {
 			return
 		}
 		seen[value] = true
 		queries = append(queries, value)
 	}
-	for _, candidate := range candidates {
+	for _, candidate := range highPriorityCandidates {
+		add(candidate + " 包装 净含量 规格")
+		add(candidate + " 营养成分")
+	}
+	for _, candidate := range normalCandidates {
+		add(candidate + " 食物 外观 营养")
+	}
+	for _, candidate := range contextCandidates {
 		add(candidate + " 食物 外观 营养")
 		add(candidate + " 包装 净含量 营养成分")
-		if len(queries) >= webSearchMaxQueries {
-			break
-		}
 	}
 	return limitStrings(queries, webSearchMaxQueries)
+}
+
+func isHighPrioritySearchItem(item map[string]any) bool {
+	itemType := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["type"], item["food_type"]))))
+	if strings.Contains(itemType, "pack") || strings.Contains(itemType, "snack") || strings.Contains(itemType, "包装") || strings.Contains(itemType, "预包装") {
+		return true
+	}
+	name := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", item["name"])))
+	terms := []string{
+		"酸奶", "牛奶", "乳", "奶酪", "啤酒", "可乐", "饮料", "汽水", "果汁", "咖啡", "奶茶", "茶饮",
+		"冰淇淋", "蛋筒", "甜筒", "蜜雪冰城",
+		"光明", "伊利", "蒙牛", "哈尔滨", "雪花", "青岛", "百事", "可口可乐", "member", "mark",
+		"净含量", "规格", "包装", "罐", "瓶", "盒", "杯", "袋",
+	}
+	for _, term := range terms {
+		if strings.Contains(name, term) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeSearchQuery(value string) string {
@@ -2905,9 +3709,35 @@ func parseItems(parsed map[string]any) []map[string]any {
 			if n, ok := item["name"].(string); ok && n != "" {
 				name = n
 			}
-			weight := 0.0
-			if w, ok := item["estimatedWeightGrams"].(float64); ok {
-				weight = w
+			weight := numberFromAny(firstNonNil(item["estimatedWeightGrams"], item["weight"], item["estimated_weight_g"]))
+			grossWeight := numberFromAny(firstNonNil(item["grossWeightGrams"], item["gross_weight_grams"], item["rawWeightGrams"], item["raw_weight_grams"]))
+			if grossWeight <= 0 {
+				grossWeight = numberFromAny(firstNonNil(item["originalGrossWeightGrams"], item["original_gross_weight_grams"]))
+			}
+			if grossWeight <= 0 {
+				grossWeight = numberFromAny(firstNonNil(item["originalWeightGrams"], item["original_weight_g"], item["originalWeight"]))
+			}
+			if grossWeight <= 0 {
+				grossWeight = weight
+			}
+			edibleRatio := numberFromAny(firstNonNil(item["ediblePortionRatio"], item["edible_portion_ratio"]))
+			if edibleRatio <= 0 || edibleRatio > 100 {
+				if grossWeight > 0 && weight > 0 && weight <= grossWeight*1.05 {
+					edibleRatio = clampRange(weight/grossWeight*100, 1, 100)
+				} else {
+					edibleRatio = 100
+				}
+			}
+			if weight <= 0 && grossWeight > 0 {
+				weight = grossWeight * edibleRatio / 100
+			}
+			if grossWeight < weight {
+				grossWeight = weight
+				edibleRatio = 100
+			}
+			originalWeight := numberFromAny(firstNonNil(item["originalWeightGrams"], item["original_weight_g"], item["originalWeight"]))
+			if originalWeight <= 0 {
+				originalWeight = weight
 			}
 			waterMl := numberFromAny(item["waterMl"])
 			if waterMl <= 0 {
@@ -2931,13 +3761,15 @@ func parseItems(parsed map[string]any) []map[string]any {
 					}
 				}
 			}
-			suggestedRatio := 100.0
-			if sr, ok := item["suggestedRatio"].(float64); ok && sr >= 0 && sr <= 100 {
-				suggestedRatio = sr
+			suggestedRatio := numberFromAny(item["suggestedRatio"])
+			if suggestedRatio < 0 || suggestedRatio > 100 {
+				suggestedRatio = 100
 			}
 			next["name"] = name
-			next["estimatedWeightGrams"] = weight
-			next["originalWeightGrams"] = weight
+			next["grossWeightGrams"] = round2(grossWeight)
+			next["ediblePortionRatio"] = round2(edibleRatio)
+			next["estimatedWeightGrams"] = round2(weight)
+			next["originalWeightGrams"] = round2(originalWeight)
 			next["waterMl"] = waterMl
 			next["suggestedRatio"] = suggestedRatio
 			next["nutrients"] = nutrients
@@ -2997,8 +3829,86 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, parsed map
 		resp["analysis_engine"] = "legacy_direct"
 		return s.applySuggestedRatios(ctx, resp, input), nil
 	}
+	resp = s.applyEdiblePortionRatios(ctx, resp, input)
 	resp = s.applyDBFirstNutrition(ctx, resp, input.AdditionalContext)
 	return s.applySuggestedRatios(ctx, resp, input), nil
+}
+
+func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[string]any, input AnalyzeInput) map[string]any {
+	items := toItems(resp["items"])
+	if len(items) == 0 {
+		resp["edible_portion_status"] = "no_items"
+		return resp
+	}
+	base := withDefaultEdiblePortions(items, "default")
+	if s == nil || s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" {
+		resp["items"] = base
+		resp["edible_portion_status"] = "unavailable"
+		return resp
+	}
+	prompt := buildEdiblePortionPrompt(base, input)
+	callCtx, cancel := context.WithTimeout(ctx, ediblePortionTimeout)
+	defer cancel()
+	parsed, err := s.deepseek.Analyze(callCtx, prompt, "")
+	if err != nil {
+		logger.WithTrace(ctx).Warn("DeepSeek 可食比例判定失败",
+			logger.Err(err),
+			slog.Int("item_count", len(items)),
+		)
+		resp["items"] = base
+		resp["edible_portion_status"] = "failed"
+		return resp
+	}
+	rows := parseEdiblePortionRows(parsed)
+	out := make([]map[string]any, 0, len(base))
+	applied := 0
+	for index, item := range base {
+		next := copyAnyMap(item)
+		grossWeight := numberFromAny(next["grossWeightGrams"])
+		if grossWeight <= 0 {
+			grossWeight = numberFromAny(next["estimatedWeightGrams"])
+		}
+		ratio := numberFromAny(next["ediblePortionRatio"])
+		reason := strings.TrimSpace(fmt.Sprintf("%v", next["ediblePortionReason"]))
+		source := strings.TrimSpace(fmt.Sprintf("%v", next["ediblePortionSource"]))
+		if row, ok := rows[index]; ok {
+			ratio = row.ratio
+			reason = row.reason
+			source = "deepseek"
+			applied++
+		}
+		if ratio <= 0 || ratio > 100 {
+			ratio = 100
+		}
+		edibleWeight := grossWeight * ratio / 100
+		if edibleWeight <= 0 {
+			edibleWeight = numberFromAny(next["estimatedWeightGrams"])
+		}
+		if grossWeight < edibleWeight {
+			grossWeight = edibleWeight
+			ratio = 100
+		}
+		next["grossWeightGrams"] = round2(grossWeight)
+		next["ediblePortionRatio"] = round2(ratio)
+		next["estimatedWeightGrams"] = round2(edibleWeight)
+		next["originalWeightGrams"] = round2(edibleWeight)
+		if reason != "" && reason != "<nil>" {
+			next["ediblePortionReason"] = truncateEdiblePortionReason(reason)
+		} else if ratio < 100 {
+			next["ediblePortionReason"] = "已按不可食部分折算"
+		} else {
+			delete(next, "ediblePortionReason")
+		}
+		if source == "" || source == "<nil>" {
+			source = "default"
+		}
+		next["ediblePortionSource"] = source
+		out = append(out, next)
+	}
+	resp["items"] = out
+	resp["edible_portion_status"] = "applied"
+	resp["edible_portion_applied_count"] = applied
+	return resp
 }
 
 func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[string]any, additionalContext ...string) map[string]any {
@@ -3036,6 +3946,8 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	}
 	lookups := make([]lookupItem, 0, len(items))
 	fallbackCandidates := []UnresolvedNutritionCandidate{}
+	semanticCandidates := map[int][]foodrecordrepo.SearchCandidate{}
+	semanticQueries := map[int]string{}
 	resolvedCount := 0
 	unresolvedCount := 0
 	logger.WithTrace(ctx).Info("营养库优先回算开始",
@@ -3048,12 +3960,15 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	)
 	for index, item := range items {
 		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
-		weight := numberFromAny(item["estimatedWeightGrams"])
-		if weight <= 0 {
-			weight = numberFromAny(item["originalWeightGrams"])
-		}
-		if modelDeclaredPackagedFood(item) {
-			if packagedResolve, packagedErr := s.nutrition.ResolvePackagedFood(ctx, name); packagedErr != nil {
+		weight := nutritionWeightFromItem(item)
+		if packagedFoodResolveEnabled && modelDeclaredPackagedFood(item) {
+			if packagedResolve, packagedErr := s.nutrition.ResolvePackagedFood(ctx, foodrecordrepo.PackagedFoodResolveInput{
+				Name:       name,
+				Brand:      strings.TrimSpace(fmt.Sprintf("%v", item["brand"])),
+				SpecText:   strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["specText"], item["spec_text"], item["packageSpec"]))),
+				NetWeightG: weight,
+				Barcode:    strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["barcode"], item["ean"], item["gtin"]))),
+			}); packagedErr != nil {
 				logger.WithTrace(ctx).Warn("零食营养库查询失败",
 					logger.Err(packagedErr),
 					slog.String("food_name", name),
@@ -3066,6 +3981,12 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		}
 		resolve, err := s.nutrition.ResolveFood(ctx, name)
 		if err != nil || resolve == nil || resolve.Food == nil {
+			if err == nil && strings.TrimSpace(name) != "" {
+				if candidates, candidateErr := s.nutrition.SearchCandidates(ctx, name, resolveFoodCandidateLimit); candidateErr == nil && len(candidates) > 0 {
+					semanticCandidates[index] = candidates
+					semanticQueries[index] = name
+				}
+			}
 			unresolvedCount++
 			if weight > 0 {
 				fallbackCandidates = append(fallbackCandidates, UnresolvedNutritionCandidate{Index: index, Name: name, EstimatedWeightGrams: weight})
@@ -3074,6 +3995,59 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		} else {
 			resolvedCount++
 			lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, resolve: resolve})
+		}
+	}
+	if len(semanticCandidates) > 0 {
+		if decisions, err := s.rerankNutritionCandidatesWithDeepSeek(ctx, semanticQueries, semanticCandidates); err != nil {
+			logger.WithTrace(ctx).Warn("deepseek 候选复用判定失败",
+				logger.Err(err),
+				slog.Int("candidate_group_count", len(semanticCandidates)),
+			)
+		} else {
+			for index, decision := range decisions {
+				if decision == nil || !decision.ReuseExisting || decision.Confidence < resolveFoodSemanticThreshold {
+					continue
+				}
+				for lookupIndex := range lookups {
+					if lookups[lookupIndex].index != index {
+						continue
+					}
+					candidates := semanticCandidates[index]
+					if decision.SelectedCandidateIndex < 0 || decision.SelectedCandidateIndex >= len(candidates) {
+						continue
+					}
+					selected := candidates[decision.SelectedCandidateIndex]
+					food := selected.Food
+					lookups[lookupIndex].resolve = &foodrecordrepo.ResolveResult{
+						Food:        &food,
+						Status:      "semantic_rerank",
+						MatchSource: selected.MatchSource,
+						Score:       decision.Confidence,
+					}
+					if decision.Reason != "" {
+						lookups[lookupIndex].item["resolve_reason"] = decision.Reason
+					}
+					if decision.ShouldAddAlias {
+						aliasName := strings.TrimSpace(decision.AliasName)
+						if aliasName == "" {
+							aliasName = strings.TrimSpace(semanticQueries[index])
+						}
+						if aliasErr := s.nutrition.EnsureNutritionAlias(ctx, food.ID, aliasName); aliasErr != nil {
+							logger.WithTrace(ctx).Warn("语义复用后补别名失败",
+								logger.Err(aliasErr),
+								slog.String("food_id", food.ID),
+								slog.String("alias_name", aliasName),
+							)
+						}
+					}
+					resolvedCount++
+					if unresolvedCount > 0 {
+						unresolvedCount--
+					}
+					delete(semanticCandidates, index)
+					break
+				}
+			}
 		}
 	}
 
@@ -3131,6 +4105,7 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 			next["nutrients"] = scaleNutrition(unit, lookup.weight)
 			next["estimatedWeightGrams"] = lookup.weight
 			next["originalWeightGrams"] = lookup.weight
+			ensureGrossWeightField(next, lookup.weight)
 			out = append(out, next)
 			continue
 		}
@@ -3171,6 +4146,7 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 			next["nutrients"] = scaleNutrition(unit, lookup.weight)
 			next["estimatedWeightGrams"] = lookup.weight
 			next["originalWeightGrams"] = lookup.weight
+			ensureGrossWeightField(next, lookup.weight)
 			out = append(out, next)
 			continue
 		}
@@ -3185,6 +4161,7 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		next["nutrients"] = scaleNutrition(unit, lookup.weight)
 		next["estimatedWeightGrams"] = lookup.weight
 		next["originalWeightGrams"] = lookup.weight
+		ensureGrossWeightField(next, lookup.weight)
 		_ = resolve.MatchSource
 		out = append(out, next)
 	}
@@ -3297,6 +4274,156 @@ type suggestedRatioRow struct {
 	reason string
 }
 
+type ediblePortionRow struct {
+	ratio  float64
+	reason string
+}
+
+func withDefaultEdiblePortions(items []map[string]any, source string) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		next := copyAnyMap(item)
+		grossWeight := numberFromAny(firstNonNil(next["grossWeightGrams"], next["gross_weight_grams"], next["rawWeightGrams"], next["estimatedWeightGrams"]))
+		if grossWeight < 0 {
+			grossWeight = 0
+		}
+		edibleWeight := numberFromAny(next["estimatedWeightGrams"])
+		ratio := numberFromAny(firstNonNil(next["ediblePortionRatio"], next["edible_portion_ratio"]))
+		if ratio <= 0 || ratio > 100 {
+			if grossWeight > 0 && edibleWeight > 0 && edibleWeight <= grossWeight*1.05 {
+				ratio = clampRange(edibleWeight/grossWeight*100, 1, 100)
+			} else {
+				ratio = 100
+			}
+		}
+		if edibleWeight <= 0 && grossWeight > 0 {
+			edibleWeight = grossWeight * ratio / 100
+		}
+		if grossWeight < edibleWeight {
+			grossWeight = edibleWeight
+			ratio = 100
+		}
+		next["grossWeightGrams"] = round2(grossWeight)
+		next["ediblePortionRatio"] = round2(ratio)
+		next["estimatedWeightGrams"] = round2(edibleWeight)
+		if numberFromAny(next["originalWeightGrams"]) <= 0 {
+			next["originalWeightGrams"] = round2(edibleWeight)
+		}
+		if source != "" {
+			next["ediblePortionSource"] = source
+		}
+		out = append(out, next)
+	}
+	return out
+}
+
+func parseEdiblePortionRows(parsed map[string]any) map[int]ediblePortionRow {
+	out := map[int]ediblePortionRow{}
+	rawItems, ok := parsed["items"].([]any)
+	if !ok {
+		return out
+	}
+	for _, raw := range rawItems {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, exists := row["index"]; !exists {
+			continue
+		}
+		index := int(numberFromAny(row["index"]))
+		if index < 0 {
+			continue
+		}
+		rawRatio := numberFromAny(firstNonNil(row["ediblePortionRatio"], row["edible_ratio"], row["ratio"]))
+		if rawRatio <= 0 || rawRatio > 100 {
+			continue
+		}
+		reason := strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(row["reason"], row["ediblePortionReason"])))
+		if reason == "<nil>" {
+			reason = ""
+		}
+		out[index] = ediblePortionRow{
+			ratio:  math.Round(rawRatio),
+			reason: truncateEdiblePortionReason(reason),
+		}
+	}
+	return out
+}
+
+func truncateEdiblePortionReason(value string) string {
+	runes := []rune(strings.TrimSpace(value))
+	if len(runes) <= 48 {
+		return string(runes)
+	}
+	return string(runes[:48])
+}
+
+func ensureGrossWeightField(item map[string]any, fallbackWeight float64) {
+	if item == nil {
+		return
+	}
+	grossWeight := numberFromAny(item["grossWeightGrams"])
+	if grossWeight <= 0 {
+		grossWeight = fallbackWeight
+		item["grossWeightGrams"] = round2(grossWeight)
+	}
+	ratio := numberFromAny(item["ediblePortionRatio"])
+	if ratio <= 0 || ratio > 100 {
+		if grossWeight > 0 && fallbackWeight > 0 && fallbackWeight <= grossWeight*1.05 {
+			ratio = clampRange(fallbackWeight/grossWeight*100, 1, 100)
+		} else {
+			ratio = 100
+		}
+		item["ediblePortionRatio"] = round2(ratio)
+	}
+	if _, ok := item["ediblePortionSource"]; !ok {
+		item["ediblePortionSource"] = "default"
+	}
+}
+
+func buildEdiblePortionPrompt(items []map[string]any, input AnalyzeInput) string {
+	payloadItems := make([]map[string]any, 0, len(items))
+	for index, item := range items {
+		payloadItems = append(payloadItems, map[string]any{
+			"index":            index,
+			"name":             strings.TrimSpace(fmt.Sprintf("%v", item["name"])),
+			"type":             firstNonNil(item["type"], item["food_type"]),
+			"grossWeightGrams": round2(numberFromAny(item["grossWeightGrams"])),
+			"waterMl":          round2(numberFromAny(item["waterMl"])),
+			"recognitionEvidence": strings.TrimSpace(fmt.Sprintf("%v",
+				firstNonNil(item["recognitionEvidence"], item["recognition_evidence"]))),
+			"weightEvidence": strings.TrimSpace(fmt.Sprintf("%v",
+				firstNonNil(item["weightEvidence"], item["weight_evidence"]))),
+		})
+	}
+	contextPayload := map[string]any{
+		"task": "根据食物名称和可见原始重量，判定每项食物最终可食部分比例。只返回 JSON。",
+		"rules": []string{
+			"grossWeightGrams 是视觉模型估计的图中可见原始重量；它可能包含壳、骨、果核、果皮或包装内完整内容。",
+			"ediblePortionRatio 表示可实际吃进营养计算的比例，0-100 的整数。",
+			"普通米饭、炒菜、酸奶、饮料、蛋糕、冰淇淋、饼干、完整可食包装食品通常为 100。",
+			"小龙虾、螃蟹、贝类、带骨鸡爪/排骨/鱼、带核水果、带皮不可食水果，需要按常识扣除不可食部分。",
+			"不要根据减脂、控糖、多人分享或剩余热量调整比例；那些属于 suggestedRatio，不属于 ediblePortionRatio。",
+			"不确定时保守填 100，并在 reason 说明未扣减。",
+		},
+		"context": map[string]any{
+			"mealType":          input.MealType,
+			"additionalContext": strings.TrimSpace(input.AdditionalContext),
+		},
+		"items": payloadItems,
+		"responseSchema": map[string]any{
+			"items": []map[string]any{{
+				"index":              0,
+				"ediblePortionRatio": 100,
+				"reason":             "",
+			}},
+		},
+	}
+	bytes, _ := json.Marshal(contextPayload)
+	return "你是食物可食部比例判定助手。请只做不可食部分扣除，不做营养估算，也不做摄入建议。\n" + string(bytes)
+}
+
 func withDefaultSuggestedRatios(items []map[string]any, source string) []map[string]any {
 	out := make([]map[string]any, 0, len(items))
 	for _, item := range items {
@@ -3390,10 +4517,11 @@ func buildSuggestedRatioPrompt(items []map[string]any, input AnalyzeInput) strin
 	}
 
 	contextPayload := map[string]any{
-		"task": "为本餐每个食物生成实际摄入比例。这个比例会直接作为结果页滑块初始值。",
+		"task": "为本餐每个食物生成建议摄入比例。该比例只作为结果页建议，不直接作为滑块初始值。",
 		"rules": []string{
 			"只返回 JSON，不要输出解释性正文。",
 			"suggestedRatio 必须是 0 到 100 的整数；无法判断时填 100。",
+			"suggestedRatio 只是建议摄入比例，不会自动改动用户最终滑块值；不要把它和可食部比例、去壳去骨比例混淆。",
 			"不要平均削减所有食物。优先保留蛋白质、蔬菜和低能量密度食物；需要控制时优先降低高油、高糖、高热量密度、过量主食或甜饮甜点。",
 			"如果 remainingCalories 缺失或本餐总热量并不明显超出目标，建议应保守，通常保持 100。",
 			"如果用户目标是减脂且剩余热量不足，应让总摄入更接近预算；如果是增肌且热量充足，可更多保持 100。",
@@ -3423,7 +4551,7 @@ func buildSuggestedRatioPrompt(items []map[string]any, input AnalyzeInput) strin
 		},
 	}
 	bytes, _ := json.Marshal(contextPayload)
-	return "你是健康饮食决策助手。请根据用户上下文和本餐最终营养数据，给出每个食物的实际摄入比例建议。\n" + string(bytes)
+	return "你是健康饮食决策助手。请根据用户上下文和本餐最终营养数据，给出每个食物的建议摄入比例。\n" + string(bytes)
 }
 
 func (s *AnalyzeService) estimateNutritionWithDeepSeek(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
@@ -3520,6 +4648,36 @@ func numberFromAny(value any) float64 {
 	default:
 		return 0
 	}
+}
+
+func nutritionWeightFromItem(item map[string]any) float64 {
+	weight := numberFromAny(item["estimatedWeightGrams"])
+	if weight > 0 {
+		return weight
+	}
+	weight = numberFromAny(item["originalWeightGrams"])
+	if weight > 0 {
+		return weight
+	}
+	waterMl := waterMlFromItem(item)
+	if waterMl > 0 {
+		return waterMl
+	}
+	return 0
+}
+
+func waterMlFromItem(item map[string]any) float64 {
+	waterMl := numberFromAny(firstNonNil(item["waterMl"], item["water_ml"]))
+	if waterMl > 0 {
+		return waterMl
+	}
+	if nutrients := mapFromAny(item["nutrients"]); len(nutrients) > 0 {
+		waterMl = numberFromAny(firstNonNil(nutrients["waterMl"], nutrients["water_ml"]))
+		if waterMl > 0 {
+			return waterMl
+		}
+	}
+	return 0
 }
 
 func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
@@ -3701,11 +4859,122 @@ func nutritionSource(status string) string {
 		return "library_exact_alias"
 	case "exact_canonical":
 		return "library_exact_canonical"
+	case "semantic_rerank":
+		return "library_semantic_rerank"
 	case "fuzzy":
 		return "library_fuzzy"
 	default:
 		return "unresolved"
 	}
+}
+
+type foodCandidateReuseDecision struct {
+	Index                  int     `json:"index"`
+	ReuseExisting          bool    `json:"reuseExisting"`
+	SelectedCandidateIndex int     `json:"selectedCandidateIndex"`
+	Confidence             float64 `json:"confidence"`
+	Reason                 string  `json:"reason"`
+	ShouldAddAlias         bool    `json:"shouldAddAlias"`
+	AliasName              string  `json:"aliasName"`
+}
+
+func (s *AnalyzeService) rerankNutritionCandidatesWithDeepSeek(ctx context.Context, queries map[int]string, candidates map[int][]foodrecordrepo.SearchCandidate) (map[int]*foodCandidateReuseDecision, error) {
+	if s == nil || s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" || len(candidates) == 0 {
+		return map[int]*foodCandidateReuseDecision{}, nil
+	}
+	type requestItem struct {
+		Index      int              `json:"index"`
+		QueryName  string           `json:"queryName"`
+		Candidates []map[string]any `json:"candidates"`
+	}
+	requestItems := make([]requestItem, 0, len(candidates))
+	for index, rows := range candidates {
+		if len(rows) == 0 {
+			continue
+		}
+		queryName := strings.TrimSpace(queries[index])
+		if queryName == "" {
+			queryName = strings.TrimSpace(rows[0].Food.CanonicalName)
+		}
+		candidateRows := make([]map[string]any, 0, len(rows))
+		for candidateIndex, row := range rows {
+			candidateRows = append(candidateRows, map[string]any{
+				"candidateIndex": candidateIndex,
+				"foodID":         row.Food.ID,
+				"canonicalName":  row.Food.CanonicalName,
+				"matchSource":    row.MatchSource,
+				"searchScore":    round4(row.Score),
+				"kcalPer100g":    round4(row.Food.KcalPer100g),
+				"proteinPer100g": round4(row.Food.ProteinPer100g),
+				"carbsPer100g":   round4(row.Food.CarbsPer100g),
+				"fatPer100g":     round4(row.Food.FatPer100g),
+				"source":         row.Food.Source,
+			})
+		}
+		requestItems = append(requestItems, requestItem{
+			Index:      index,
+			QueryName:  queryName,
+			Candidates: candidateRows,
+		})
+	}
+	if len(requestItems) == 0 {
+		return map[int]*foodCandidateReuseDecision{}, nil
+	}
+	sort.SliceStable(requestItems, func(i, j int) bool {
+		return requestItems[i].Index < requestItems[j].Index
+	})
+	systemPrompt := "你是食物营养库去重判定助手。给定一个识别出的食物名和若干数据库候选，请判断是否可以直接复用已有条目。只有在明显是同一食物或稳定同义别名时才复用；口味、规格、净含量、去酱/不去酱、不同配方不能误判成同一个。只返回 JSON，不要解释。"
+	userPrompt := map[string]any{
+		"task": "对每个识别结果从候选列表中选出是否可复用的同一食物",
+		"rules": []string{
+			"如果只是包装/口语/甜筒蛋筒这类稳定同义差异，可以复用。",
+			"如果口味不同、规格不同、净含量不同、是否去酱不同、明显是不同配方，则不要复用。",
+			"只有非常有把握时 reuseExisting 才能为 true。",
+			"confidence 取 0 到 1。",
+			"selectedCandidateIndex 必须使用输入里的 candidateIndex；如果不复用填 -1。",
+		},
+		"items": requestItems,
+		"responseSchema": map[string]any{
+			"items": []map[string]any{{
+				"index":                  0,
+				"reuseExisting":          false,
+				"selectedCandidateIndex": -1,
+				"confidence":             0.0,
+				"reason":                 "",
+				"shouldAddAlias":         false,
+				"aliasName":              "",
+			}},
+		},
+	}
+	userBytes, _ := json.Marshal(userPrompt)
+	callCtx, cancel := context.WithTimeout(ctx, 18*time.Second)
+	defer cancel()
+	parsed, err := s.deepseek.Analyze(callCtx, systemPrompt+"\n"+string(userBytes), "")
+	if err != nil {
+		return nil, err
+	}
+	rawItems, ok := parsed["items"].([]any)
+	if !ok {
+		return map[int]*foodCandidateReuseDecision{}, nil
+	}
+	out := map[int]*foodCandidateReuseDecision{}
+	for _, raw := range rawItems {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		index := int(numberFromAny(row["index"]))
+		out[index] = &foodCandidateReuseDecision{
+			Index:                  index,
+			ReuseExisting:          boolFromAny(row["reuseExisting"]),
+			SelectedCandidateIndex: int(numberFromAny(row["selectedCandidateIndex"])),
+			Confidence:             clampRange(numberFromAny(row["confidence"]), 0, 1),
+			Reason:                 strings.TrimSpace(fmt.Sprintf("%v", row["reason"])),
+			ShouldAddAlias:         boolFromAny(row["shouldAddAlias"]),
+			AliasName:              strings.TrimSpace(fmt.Sprintf("%v", row["aliasName"])),
+		}
+	}
+	return out, nil
 }
 
 func mergeBatchResults(results []map[string]any, executionMode string) map[string]any {

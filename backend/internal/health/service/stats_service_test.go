@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,11 +16,12 @@ import (
 )
 
 type mockStatsRepo struct {
-	records     []domain.FoodRecord
-	user        *domain.StatsUserProfile
-	recordDates []string
-	insights    []domain.StatsInsight
-	candidates  []domain.DietRecommendationCandidate
+	records          []domain.FoodRecord
+	user             *domain.StatsUserProfile
+	recordDates      []string
+	insights         []domain.StatsInsight
+	candidates       []domain.DietRecommendationCandidate
+	customFocusCards []domain.CustomFocusCard
 }
 
 func (m *mockStatsRepo) GetFoodRecordsForDateRange(ctx context.Context, userID string, startUTC, endUTC time.Time) ([]domain.FoodRecord, error) {
@@ -78,6 +80,26 @@ func (m *mockStatsRepo) GetLatestCachedInsight(ctx context.Context, userID strin
 }
 
 func (m *mockStatsRepo) CountInsightGenerationsToday(ctx context.Context, userID string) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockStatsRepo) UpsertCustomFocusCard(ctx context.Context, card domain.CustomFocusCard) error {
+	return nil
+}
+
+func (m *mockStatsRepo) GetCustomFocusCards(ctx context.Context, userID, rangeType string) ([]domain.CustomFocusCard, error) {
+	return m.customFocusCards, nil
+}
+
+func (m *mockStatsRepo) GetCustomFocusCard(ctx context.Context, userID, rangeType, focusID string) (*domain.CustomFocusCard, error) {
+	return nil, nil
+}
+
+func (m *mockStatsRepo) CountCustomFocusGenerationsToday(ctx context.Context, userID string) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockStatsRepo) CountCustomFocusGenerationsTodayForFocus(ctx context.Context, userID, focusID string) (int64, error) {
 	return 0, nil
 }
 
@@ -151,6 +173,29 @@ func TestStatsService_GetSummary(t *testing.T) {
 	assert.False(t, summary.AnalysisSummaryNeedsRefresh)
 }
 
+func TestStatsService_GetSummaryHidesCachedInsightWithoutFoodRecords(t *testing.T) {
+	now := time.Now().In(chinaTZ)
+	repo := &mockStatsRepo{
+		insights: []domain.StatsInsight{{
+			UserID:          "u1",
+			RangeType:       "week",
+			GeneratedDate:   time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, chinaTZ),
+			DataFingerprint: "old",
+			InsightText:     "cached insight from old data",
+		}},
+	}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{})
+
+	summary, err := svc.GetSummary(context.Background(), "u1", "week", 2000, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 0, summary.RecordedDays)
+	assert.Empty(t, summary.AnalysisSummary)
+	require.NotNil(t, summary.HealthIndex)
+	assert.False(t, summary.HealthIndex.HasEnoughData)
+	assert.Empty(t, summary.HealthIndex.RiskCards)
+	assert.Empty(t, summary.HealthIndex.ActionList)
+}
+
 func TestStatsService_GenerateInsight(t *testing.T) {
 	recordTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
 	repo := &mockStatsRepo{
@@ -165,6 +210,20 @@ func TestStatsService_GenerateInsight(t *testing.T) {
 	result, err := svc.GenerateInsight(ctx, "u1", "week", 2000, 5)
 	require.NoError(t, err)
 	assert.NotEmpty(t, result["analysis_summary"])
+}
+
+func TestStatsService_GenerateInsightRequiresFoodRecords(t *testing.T) {
+	repo := &mockStatsRepo{}
+	guard := &mockStatsCreditGuard{}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{})
+	svc.ConfigureCreditGuard(guard)
+
+	result, err := svc.GenerateInsight(context.Background(), "u1", "week", 2000, 0)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Empty(t, repo.insights)
+	assert.Equal(t, 0, guard.validateCalls)
+	assert.Contains(t, err.Error(), "还没有饮食记录")
 }
 
 func TestStatsService_GenerateInsightSavesCacheAndConsumesCredit(t *testing.T) {
@@ -214,6 +273,38 @@ func TestStatsService_GenerateInsightFallsBackWhenDeepSeekFails(t *testing.T) {
 
 func TestStatsInsightUsesDeepSeekV4FlashModel(t *testing.T) {
 	assert.Equal(t, "deepseek-v4-flash", statsInsightDeepSeekModel)
+}
+
+func TestStatsInsightRequestsEnoughOutputTokens(t *testing.T) {
+	assert.Equal(t, 4096, statsInsightMaxTokens)
+}
+
+func TestStatsService_GenerateInsightFallsBackWhenDeepSeekTruncates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, float64(statsInsightMaxTokens), body["max_tokens"])
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"一、总体结论\n二、热量\n三、蛋白质"},"finish_reason":"length"}]}`))
+	}))
+	defer server.Close()
+
+	recordTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	repo := &mockStatsRepo{
+		records: []domain.FoodRecord{
+			{UserID: "u1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &recordTime},
+		},
+	}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{}, &config.Config{
+		External: config.ExternalConfig{DeepSeekAPIKey: "test-key"},
+	})
+	svc.deepSeekBaseURL = server.URL
+
+	result, err := svc.GenerateInsight(context.Background(), "u1", "week", 2000, 5)
+	require.NoError(t, err)
+	text, _ := result["analysis_summary"].(string)
+	assert.Contains(t, text, "本期日均摄入")
+	assert.NotContains(t, text, "三、蛋白质")
 }
 
 func TestStatsService_GenerateDietRecommendationFallback(t *testing.T) {
@@ -289,6 +380,16 @@ func TestStatsService_GetSummaryUsesCachedInsightFingerprint(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "cached insight", summary.AnalysisSummary)
 	assert.False(t, summary.AnalysisSummaryNeedsRefresh)
+}
+
+func TestStatsService_SanitizeInsightMarkdownMarkers(t *testing.T) {
+	repo := &mockStatsRepo{}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{})
+
+	err := svc.SaveInsight(context.Background(), "u1", "## 好的，这是报告\n\n**1. 总体结论**\n- **减脂目标明确**\n", "week")
+	require.NoError(t, err)
+	require.Len(t, repo.insights, 1)
+	assert.Equal(t, "好的，这是报告\n\n1. 总体结论\n减脂目标明确", repo.insights[0].InsightText)
 }
 
 func TestStatsHealthProfileIncludesRoutineLabelAndCustomText(t *testing.T) {

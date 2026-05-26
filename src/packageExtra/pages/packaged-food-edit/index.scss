@@ -22,6 +22,300 @@
   box-shadow: 0 8rpx 24rpx rgb(15 23 42 / 4%);
 }
 
+.wizard-section {
+  background:
+    radial-gradient(circle at top right, rgba(0, 188, 125, 0.08), transparent 34%),
+    #fff;
+}
+
+.wizard-desc {
+  display: block;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #475569;
+  margin-bottom: 22rpx;
+}
+
+.capture-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.capture-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  padding: 18rpx;
+  border-radius: 16rpx;
+  background: #f8fafc;
+  border: 1rpx solid rgba(203, 213, 225, 0.8);
+
+  &.active {
+    border-color: rgba(0, 188, 125, 0.55);
+    background: #ecfdf5;
+  }
+
+  &.done {
+    background: #f0fdf4;
+  }
+}
+
+.capture-step-index {
+  width: 46rpx;
+  height: 46rpx;
+  border-radius: 50%;
+  background: #0f172a;
+  color: #fff;
+  font-size: 24rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.capture-step-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.capture-step-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 6rpx;
+}
+
+.capture-step-desc {
+  display: block;
+  font-size: 23rpx;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.capture-card {
+  padding: 22rpx;
+  border-radius: 18rpx;
+  background: linear-gradient(135deg, #effcf6 0%, #f8fafc 100%);
+  border: 1rpx solid rgba(16, 185, 129, 0.18);
+}
+
+.shoot-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+}
+
+.shoot-guide-card {
+  min-width: 0;
+  padding: 18rpx;
+  border-radius: 18rpx;
+  background: #f8fafc;
+  border: 1rpx solid rgba(203, 213, 225, 0.82);
+
+  &.recommended {
+    background: #ecfdf5;
+    border-color: rgba(0, 188, 125, 0.32);
+  }
+}
+
+.shoot-guide-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64rpx;
+  height: 34rpx;
+  padding: 0 12rpx;
+  border-radius: 999rpx;
+  background: #00bc7d;
+  color: #fff;
+  font-size: 20rpx;
+  font-weight: 800;
+
+  &.muted {
+    background: #e2e8f0;
+    color: #475569;
+  }
+}
+
+.shoot-guide-title {
+  display: block;
+  margin: 12rpx 0;
+  font-size: 26rpx;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.shoot-guide-preview-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10rpx;
+  margin-bottom: 12rpx;
+}
+
+.shoot-guide-preview {
+  min-height: 120rpx;
+  border-radius: 16rpx;
+  border: 1rpx dashed rgba(100, 116, 139, 0.45);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.82), rgba(220,252,231,0.9));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+
+  &.single {
+    margin-bottom: 12rpx;
+  }
+}
+
+.shoot-guide-preview-main {
+  display: block;
+  font-size: 25rpx;
+  font-weight: 800;
+  color: #065f46;
+  margin-bottom: 4rpx;
+}
+
+.shoot-guide-preview-sub {
+  display: block;
+  font-size: 19rpx;
+  line-height: 1.35;
+  color: #0f766e;
+}
+
+.shoot-guide-desc {
+  display: block;
+  font-size: 21rpx;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.reward-capture-card {
+  margin-top: 8rpx;
+}
+
+.reward-upload-visual {
+  padding: 18rpx 10rpx 22rpx;
+  text-align: center;
+}
+
+.reward-upload-icon {
+  width: 72rpx;
+  height: 72rpx;
+  border-radius: 50%;
+  background: #00bc7d;
+  color: #fff;
+  font-size: 48rpx;
+  line-height: 68rpx;
+  font-weight: 500;
+  margin: 0 auto 14rpx;
+}
+
+.reward-upload-title {
+  display: block;
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #065f46;
+  margin-bottom: 8rpx;
+}
+
+.reward-upload-desc {
+  display: block;
+  font-size: 23rpx;
+  line-height: 1.5;
+  color: #0f766e;
+}
+
+.reward-upload-btn {
+  width: 100%;
+  height: 84rpx;
+}
+
+.capture-preview-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.capture-preview-single {
+  margin-bottom: 16rpx;
+}
+
+.capture-preview-card,
+.capture-preview-single {
+  min-width: 0;
+}
+
+.capture-preview-image,
+.capture-preview-placeholder {
+  width: 100%;
+  height: 220rpx;
+  border-radius: 16rpx;
+  display: block;
+  background: #e2e8f0;
+}
+
+.capture-preview-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1rpx dashed rgba(100, 116, 139, 0.45);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.75), rgba(236,253,245,0.9));
+}
+
+.capture-preview-placeholder-text {
+  font-size: 24rpx;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.capture-card-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #065f46;
+  margin-bottom: 8rpx;
+}
+
+.capture-card-desc {
+  display: block;
+  font-size: 23rpx;
+  line-height: 1.5;
+  color: #0f766e;
+  margin-bottom: 18rpx;
+}
+
+.ingest-status-card {
+  margin-top: 22rpx;
+  padding: 20rpx;
+  border-radius: 16rpx;
+  background: #fff7ed;
+  border: 1rpx solid rgba(249, 115, 22, 0.2);
+}
+
+.ingest-status-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #9a3412;
+  margin-bottom: 6rpx;
+}
+
+.ingest-status-desc {
+  display: block;
+  font-size: 23rpx;
+  line-height: 1.5;
+  color: #9a3412;
+}
+
 .section-title {
   display: block;
   font-size: 30rpx;
@@ -124,6 +418,134 @@
   font-size: 25rpx;
   font-weight: 700;
   color: #fff;
+}
+
+.upload-task-panel {
+  margin-top: 22rpx;
+  padding: 22rpx;
+  border-radius: 18rpx;
+  background: #f8fafc;
+  border: 1rpx solid rgba(203, 213, 225, 0.85);
+}
+
+.upload-task-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18rpx;
+  margin-bottom: 16rpx;
+}
+
+.upload-task-panel-title {
+  display: block;
+  font-size: 27rpx;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 4rpx;
+}
+
+.upload-task-panel-desc,
+.upload-task-empty-text,
+.upload-task-item-desc {
+  display: block;
+  font-size: 22rpx;
+  line-height: 1.45;
+  color: #64748b;
+}
+
+.upload-task-item-time {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 20rpx;
+  color: #94a3b8;
+}
+
+.upload-task-refresh {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #00a86b;
+}
+
+.upload-task-empty {
+  padding: 18rpx;
+  border-radius: 14rpx;
+  background: #fff;
+}
+
+.upload-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.upload-task-item {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 18rpx;
+  border-radius: 14rpx;
+  background: #fff;
+  border: 1rpx solid rgba(226, 232, 240, 0.95);
+
+  &:active {
+    background: #f1f5f9;
+  }
+}
+
+.upload-task-item-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.upload-task-item-title {
+  display: block;
+  font-size: 25rpx;
+  font-weight: 750;
+  color: #0f172a;
+  margin-bottom: 4rpx;
+}
+
+.upload-task-item-status {
+  min-width: 86rpx;
+  text-align: center;
+  padding: 8rpx 12rpx;
+  border-radius: 999rpx;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.upload-task-item.status-done .upload-task-item-status {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.upload-task-item.status-failed .upload-task-item-status,
+.upload-task-item.status-timed_out .upload-task-item-status,
+.upload-task-item.status-cancelled .upload-task-item-status {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.upload-task-toggle {
+  height: 70rpx;
+  border-radius: 14rpx;
+  border: 1rpx dashed rgba(0, 188, 125, 0.36);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    background: #ecfdf5;
+  }
+}
+
+.upload-task-toggle-text {
+  font-size: 24rpx;
+  font-weight: 750;
+  color: #047857;
 }
 
 .field {
@@ -232,6 +654,10 @@
   &.loading {
     opacity: 0.75;
   }
+
+  &.disabled {
+    opacity: 0.45;
+  }
 }
 
 .save-btn-text {
@@ -250,6 +676,62 @@
   .edit-footer {
     background: #18211f;
     border-color: rgba(71, 85, 105, 0.7);
+  }
+
+  .wizard-section {
+    background:
+      radial-gradient(circle at top right, rgba(16, 185, 129, 0.16), transparent 36%),
+      #18211f;
+  }
+
+  .wizard-desc,
+  .capture-step-desc,
+  .more-subtitle {
+    color: #9fb0ab;
+  }
+
+  .capture-step {
+    background: #121a18;
+    border-color: rgba(71, 85, 105, 0.7);
+  }
+
+  .capture-step.active {
+    background: rgba(4, 120, 87, 0.28);
+  }
+
+  .capture-step-title,
+  .capture-card-title,
+  .ingest-status-title {
+    color: #f8fafc;
+  }
+
+  .capture-card {
+    background: linear-gradient(135deg, rgba(15, 118, 110, 0.18), rgba(18, 26, 24, 0.92));
+    border-color: rgba(16, 185, 129, 0.28);
+  }
+
+  .capture-card-desc {
+    color: #b8f4dc;
+  }
+
+  .capture-preview-placeholder {
+    background: linear-gradient(135deg, rgba(24, 33, 31, 0.92), rgba(15, 118, 110, 0.24));
+    border-color: rgba(148, 163, 184, 0.35);
+  }
+
+  .capture-preview-placeholder-text,
+  .field-label,
+  .field-unit {
+    color: #a8b8b3;
+  }
+
+  .ingest-status-card {
+    background: rgba(124, 45, 18, 0.22);
+    border-color: rgba(249, 115, 22, 0.28);
+  }
+
+  .ingest-status-desc {
+    color: #fdba74;
   }
 
   .section-title,
@@ -278,6 +760,59 @@
   }
 
   .recognize-desc {
+    color: #a7f3d0;
+  }
+
+  .upload-task-panel,
+  .upload-task-empty,
+  .upload-task-item,
+  .shoot-guide-card,
+  .upload-task-toggle {
+    background: #101716;
+    border-color: rgba(71, 85, 105, 0.75);
+  }
+
+  .upload-task-refresh,
+  .upload-task-toggle-text {
+    color: #6ee7b7;
+  }
+
+  .upload-task-panel-desc,
+  .upload-task-empty-text,
+  .upload-task-item-desc,
+  .upload-task-item-time,
+  .shoot-guide-desc {
+    color: #a8b8b3;
+  }
+
+  .upload-task-panel-title,
+  .upload-task-item-title,
+  .shoot-guide-title {
+    color: #f8fafc;
+  }
+
+  .shoot-guide-card.recommended {
+    background: rgba(4, 120, 87, 0.2);
+    border-color: rgba(16, 185, 129, 0.32);
+  }
+
+  .shoot-guide-badge.muted {
+    background: rgba(71, 85, 105, 0.8);
+    color: #cbd5e1;
+  }
+
+  .shoot-guide-preview {
+    background: linear-gradient(135deg, rgba(24, 33, 31, 0.92), rgba(15, 118, 110, 0.24));
+    border-color: rgba(148, 163, 184, 0.35);
+  }
+
+  .shoot-guide-preview-main,
+  .reward-upload-title {
+    color: #d1fae5;
+  }
+
+  .shoot-guide-preview-sub,
+  .reward-upload-desc {
     color: #a7f3d0;
   }
 

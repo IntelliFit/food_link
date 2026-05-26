@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"time"
 
 	"food_link/backend/pkg/storage"
 	"github.com/google/uuid"
@@ -28,5 +29,12 @@ func (s *UploadService) UploadReportImage(userID string, base64Image string) (st
 		return "", fmt.Errorf("base64Image 不能为空")
 	}
 	key := fmt.Sprintf("%s/%s.jpg", userID, uuid.New().String())
-	return s.storage.UploadBase64("health-reports", key, base64Image, "image/jpeg")
+	stored, err := s.storage.UploadBase64("health-reports", key, base64Image, "image/jpeg")
+	if err != nil {
+		return "", err
+	}
+	if signedURL, signErr := s.storage.PresignGETURL("health-reports", stored, 24*time.Hour); signErr == nil && signedURL != "" {
+		return signedURL, nil
+	}
+	return stored, nil
 }

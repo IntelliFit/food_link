@@ -39,6 +39,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureIndexes(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureTrialEntitlementBackfill(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureTriggers(ctx, db); err != nil {
 		return err
 	}
@@ -54,13 +57,13 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		`ALTER TABLE user_credit_bonus_events DROP CONSTRAINT IF EXISTS user_credit_bonus_events_user_id_bonus_type_bonus_date_key`,
 		dropAndAddCheck("weapp_user", "weapp_user_gender_check", `gender IS NULL OR gender = ANY (ARRAY['male'::text,'female'::text,'other'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_activity_level_check", `activity_level IS NULL OR activity_level = ANY (ARRAY['sedentary'::text,'light'::text,'moderate'::text,'active'::text,'very_active'::text,''::text])`),
-		dropAndAddCheck("weapp_user", "weapp_user_execution_mode_check", `execution_mode IS NULL OR execution_mode = ANY (ARRAY['standard'::text,'strict'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
+		dropAndAddCheck("weapp_user", "weapp_user_execution_mode_check", `execution_mode IS NULL OR execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'done'::text,'failed'::text,'cancelled'::text,'timed_out'::text,'violated'::text])`),
-		dropAndAddCheck("analysis_tasks", "analysis_tasks_task_type_check", `task_type = ANY (ARRAY['food'::text,'food_text'::text,'precision_plan'::text,'precision_item_estimate'::text,'precision_aggregate'::text,'health_report'::text,'public_food_library_text'::text,'exercise'::text,'expiry_recognize'::text,'expiry_notification'::text,'packaged_nutrition_label'::text]) OR task_type ~ '^(food|food_text|precision_plan|precision_item_estimate|precision_aggregate|health_report|public_food_library_text|exercise|expiry_recognize|expiry_notification|packaged_nutrition_label)_debug(_[a-z0-9_]+)?$'`),
+		dropAndAddCheck("analysis_tasks", "analysis_tasks_task_type_check", `task_type = ANY (ARRAY['food'::text,'food_text'::text,'precision_plan'::text,'precision_item_estimate'::text,'precision_aggregate'::text,'health_report'::text,'public_food_library_text'::text,'exercise'::text,'expiry_recognize'::text,'expiry_notification'::text,'packaged_nutrition_label'::text,'packaged_product_extract'::text]) OR task_type ~ '^(food|food_text|precision_plan|precision_item_estimate|precision_aggregate|health_report|public_food_library_text|exercise|expiry_recognize|expiry_notification|packaged_nutrition_label|packaged_product_extract)_debug(_[a-z0-9_]+)?$'`),
 		dropAndAddCheck("analysis_feedback_samples", "analysis_feedback_samples_feedback_type_check", `feedback_type = ANY (ARRAY['correction'::text,'retry'::text,'manual_entry'::text,'failed'::text])`),
 		dropAndAddCheck("user_food_records", "user_food_records_meal_type_check", `meal_type = ANY (ARRAY['breakfast'::text,'morning_snack'::text,'lunch'::text,'afternoon_snack'::text,'dinner'::text,'evening_snack'::text,'snack'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_source_type_check", `source_type = ANY (ARRAY['image'::text,'text'::text])`),
-		dropAndAddCheck("precision_sessions", "precision_sessions_execution_mode_check", `execution_mode = ANY (ARRAY['standard'::text,'strict'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
+		dropAndAddCheck("precision_sessions", "precision_sessions_execution_mode_check", `execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_status_check", `status = ANY (ARRAY['collecting'::text,'estimating'::text,'needs_user_input'::text,'needs_retake'::text,'done'::text,'cancelled'::text,'failed'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_round_index_check", `round_index >= 1`),
 		dropAndAddCheck("precision_session_rounds", "precision_session_rounds_actor_role_check", `actor_role = ANY (ARRAY['user'::text,'assistant'::text,'system'::text])`),
@@ -90,6 +93,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("user_body_metric_settings", "user_body_metric_settings_water_goal_ml_check", `water_goal_ml >= 500 AND water_goal_ml <= 10000`),
 		dropAndAddCheck("user_exercise_logs", "user_exercise_logs_calories_burned_check", `calories_burned >= 0 AND calories_burned <= 5000`),
 		dropAndAddCheck("ai_stats_insights", "ai_stats_insights_range_type_check", `range_type = ANY (ARRAY['week'::text,'month'::text])`),
+		dropAndAddCheck("ai_custom_focus_cards", "ai_custom_focus_cards_range_type_check", `range_type = ANY (ARRAY['week'::text,'month'::text])`),
 		dropAndAddCheck("membership_plan_config", "membership_plan_config_tier_check", `tier IS NULL OR tier = ANY (ARRAY['light'::text,'standard'::text,'advanced'::text])`),
 		dropAndAddCheck("membership_plan_config", "membership_plan_config_period_check", `period IS NULL OR period = ANY (ARRAY['monthly'::text,'quarterly'::text,'yearly'::text])`),
 		dropAndAddCheck("user_invite_referrals", "user_invite_referrals_status_check", `status = ANY (ARRAY['pending_qualified'::text,'reward_active'::text,'reward_completed'::text,'reward_blocked'::text,'cancelled'::text])`),
@@ -102,6 +106,9 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("user_pet_daily_scores", "user_pet_daily_scores_score_check", `habit_score >= 0 AND exp_gained >= 0`),
 		dropAndAddCheck("user_credit_bonus_events", "user_credit_bonus_events_bonus_type_check", `bonus_type = ANY (ARRAY['share_poster'::text])`),
 		dropAndAddCheck("user_credit_bonus_events", "user_credit_bonus_events_credits_check", `credits >= 0`),
+		dropAndAddCheck("reward_task_uploads", "reward_task_uploads_task_type_check", `task_type = ANY (ARRAY['packaged_food_upload'::text,'public_food_upload'::text])`),
+		dropAndAddCheck("reward_task_uploads", "reward_task_uploads_status_check", `status = ANY (ARRAY['pending'::text,'succeeded'::text,'failed'::text])`),
+		dropAndAddCheck("reward_task_uploads", "reward_task_uploads_reward_credits_check", `reward_credits >= 0`),
 		dropAndAddCheck("user_earned_credit_ledger", "user_earned_credit_ledger_balance_after_check", `balance_after >= 0`),
 		addFK("analysis_tasks_user_id_fkey", "analysis_tasks", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("analysis_feedback_samples_user_id_fkey", "analysis_feedback_samples", "user_id", "weapp_user", "id", "CASCADE"),
@@ -153,6 +160,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("user_body_metric_settings_user_id_fkey", "user_body_metric_settings", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_exercise_logs_user_id_fkey", "user_exercise_logs", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("ai_stats_insights_user_id_fkey", "ai_stats_insights", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("ai_custom_focus_cards_user_id_fkey", "ai_custom_focus_cards", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_pro_memberships_user_id_fkey", "user_pro_memberships", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_pro_memberships_current_plan_code_fkey", "user_pro_memberships", "current_plan_code", "membership_plan_config", "code", "SET NULL"),
 		addFK("pro_membership_payment_records_user_id_fkey", "pro_membership_payment_records", "user_id", "weapp_user", "id", "CASCADE"),
@@ -165,6 +173,10 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("user_pet_daily_scores_user_id_fkey", "user_pet_daily_scores", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_credit_bonus_events_user_id_fkey", "user_credit_bonus_events", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_credit_bonus_events_source_record_id_fkey", "user_credit_bonus_events", "source_record_id", "user_food_records", "id", "SET NULL"),
+		addFK("reward_task_uploads_user_id_fkey", "reward_task_uploads", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("reward_task_uploads_source_task_id_fkey", "reward_task_uploads", "source_task_id", "analysis_tasks", "id", "SET NULL"),
+		addFK("reward_task_uploads_packaged_food_id_fkey", "reward_task_uploads", "packaged_food_id", "packaged_food_library", "id", "SET NULL"),
+		addFK("reward_task_uploads_public_food_item_id_fkey", "reward_task_uploads", "public_food_item_id", "public_food_library", "id", "SET NULL"),
 		addFK("user_earned_credit_ledger_user_id_fkey", "user_earned_credit_ledger", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("membership_share_rewards_user_id_fkey", "membership_share_rewards", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("membership_share_rewards_record_id_fkey", "membership_share_rewards", "record_id", "user_food_records", "id", "CASCADE"),
@@ -186,6 +198,44 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 
 func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 	for _, sql := range []string{
+		`ALTER TABLE packaged_food_library DROP CONSTRAINT IF EXISTS packaged_food_library_normalized_name_key`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS product_key text NOT NULL DEFAULT ''`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS spec_text text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS barcode text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS flavor_text text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS package_category text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS ingredients_text text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS source_image_urls jsonb NOT NULL DEFAULT '[]'::jsonb`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS ocr_raw_text text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS nutrition_basis_unit text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS energy_unit_raw text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS raw_label_payload jsonb NOT NULL DEFAULT '{}'::jsonb`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS conversion_status text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS extract_confidence numeric NOT NULL DEFAULT 0`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS field_confidence jsonb NOT NULL DEFAULT '{}'::jsonb`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS ingest_method text`,
+		`ALTER TABLE reward_task_uploads ADD COLUMN IF NOT EXISTS source_key text`,
+		`UPDATE packaged_food_library
+SET product_key = LOWER(
+  regexp_replace(
+    COALESCE(NULLIF(brand, ''), '') ||
+    COALESCE(NULLIF(product_name, ''), '') ||
+    COALESCE(
+      NULLIF(spec_text, ''),
+      CASE
+        WHEN COALESCE(net_weight_g, 0) > 0 THEN regexp_replace(trim(to_char(net_weight_g, 'FM999999990.00')), '[^[:alnum:]]', '', 'g') || 'g'
+        ELSE ''
+      END
+    ),
+    '[^[:alnum:]]',
+    '',
+    'g'
+  )
+)
+WHERE COALESCE(product_key, '') = ''`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_packaged_food_library_product_key ON packaged_food_library (product_key)`,
+		`CREATE INDEX IF NOT EXISTS idx_packaged_food_library_barcode ON packaged_food_library (barcode) WHERE barcode IS NOT NULL AND barcode <> ''`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_reward_task_uploads_source_key ON reward_task_uploads (source_key) WHERE source_key IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS precision_item_estimates_session_round_item_key_key ON precision_item_estimates (session_id, round_index, item_key)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_food_records_user_task_unique ON user_food_records (user_id, source_task_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS public_food_library_likes_unique ON public_food_library_likes (user_id, library_item_id)`,
@@ -195,6 +245,7 @@ func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_requests_pair ON friend_requests (from_user_id, to_user_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_friends_unique ON user_friends (user_id, friend_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS ai_stats_insights_user_range_date_unique ON ai_stats_insights (user_id, range_type, generated_date)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS ai_custom_focus_cards_user_range_focus_unique ON ai_custom_focus_cards (user_id, range_type, focus_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS uq_user_credit_bonus_share_poster_record ON user_credit_bonus_events (user_id, bonus_type, bonus_date, source_record_id) WHERE bonus_type = 'share_poster' AND source_record_id IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_earned_credit_ledger_user_reason_source ON user_earned_credit_ledger (user_id, reason, source_key) WHERE source_key IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_pets_user_id_unique ON user_pets (user_id)`,
@@ -233,6 +284,81 @@ $$ LANGUAGE plpgsql`,
 		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 			return fmt.Errorf("apply trigger statement: %w", err)
 		}
+	}
+	return nil
+}
+
+func ensureTrialEntitlementBackfill(ctx context.Context, db *gorm.DB) error {
+	sql := `
+WITH ranked_users AS (
+  SELECT
+    id,
+    openid,
+    unionid,
+    create_time,
+    ROW_NUMBER() OVER (
+      ORDER BY create_time IS NULL ASC, create_time ASC, id ASC
+    ) AS registration_rank
+  FROM weapp_user
+  WHERE openid IS NOT NULL AND openid <> ''
+),
+prepared AS (
+  SELECT
+    gen_random_uuid() AS id,
+    id AS first_user_id,
+    openid,
+    unionid,
+    COALESCE(create_time, now()) AS first_registered_at,
+    CASE
+      WHEN registration_rank <= 1000 THEN registration_rank
+      ELSE NULL
+    END AS early_user_rank,
+    CASE
+      WHEN registration_rank <= 500 THEN 60
+      WHEN registration_rank <= 1000 THEN 30
+      ELSE 3
+    END AS trial_days_total,
+    CASE
+      WHEN registration_rank <= 500 THEN 'founding_top_500_bonus_month'
+      WHEN registration_rank <= 1000 THEN 'early_first_1000'
+      ELSE 'regular_new_user'
+    END AS trial_policy,
+    now() AS created_at,
+    now() AS updated_at
+  FROM ranked_users
+)
+INSERT INTO user_trial_entitlements (
+  id,
+  first_user_id,
+  openid,
+  unionid,
+  first_registered_at,
+  early_user_rank,
+  trial_days_total,
+  trial_policy,
+  created_at,
+  updated_at
+)
+SELECT
+  p.id,
+  p.first_user_id,
+  p.openid,
+  p.unionid,
+  p.first_registered_at,
+  p.early_user_rank,
+  p.trial_days_total,
+  p.trial_policy,
+  p.created_at,
+  p.updated_at
+FROM prepared p
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM user_trial_entitlements e
+  WHERE e.openid = p.openid
+     OR (p.unionid IS NOT NULL AND e.unionid = p.unionid)
+);`
+	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+		return fmt.Errorf("backfill user trial entitlements: %w", err)
 	}
 	return nil
 }

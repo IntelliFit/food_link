@@ -4,6 +4,7 @@ import Taro, { useDidShow } from '@tarojs/taro'
 // Popup removed — using custom bottom sheet instead
 import {
   getHealthProfile,
+  getAnalyzeTask,
   updateHealthProfile,
   uploadReportImage,
   submitReportExtractionTask,
@@ -13,10 +14,12 @@ import {
   type HealthProfile,
   type ExecutionMode,
   type MembershipStatus,
+  type ReportExtract,
 } from '../../../utils/api'
 import {
   canUseStrictModeForMembership,
   getStrictModeUpgradeDialog,
+  isPrecisionExecutionMode,
 } from '../../../utils/execution-mode'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -45,9 +48,11 @@ const GOAL_MAP: Record<string, string> = {
 }
 const EXECUTION_MODE_MAP: Record<string, string> = {
   strict: '精准模式',
+  strict_web_search: '精准联网',
   experimental: '普通模式',
   gemini35_flash: '精准模式',
   gemini35_flash_grouped: '精准模式',
+  standard_web_search: '普通联网',
   standard: '普通模式'
 }
 const MEDICAL_MAP: Record<string, string> = {
@@ -77,7 +82,9 @@ const ALLERGY_MAP: Record<string, string> = {
   none: '无'
 }
 
-const MAX_REPORT_IMAGE_COUNT = 3
+const MAX_REPORT_IMAGE_COUNT = 9
+const REPORT_TASK_POLL_INTERVAL_MS = 1500
+const REPORT_TASK_POLL_TIMEOUT_MS = 45000
 
 /* ========== 编辑选项常量 ========== */
 const GOAL_OPTIONS = [
@@ -92,11 +99,19 @@ const ACTIVITY_OPTIONS = [
   { label: '体力劳动', value: 'active' }
 ]
 const EXECUTION_MODE_OPTIONS: Array<{ label: string; value: ExecutionMode }> = [
+  { label: '普通模式', value: 'standard' },
+  { label: '普通联网', value: 'standard_web_search' },
   { label: '精准模式', value: 'strict' },
-  { label: '普通模式', value: 'standard' }
+  { label: '精准联网', value: 'strict_web_search' }
 ]
 const normalizeVisibleExecutionMode = (value: unknown): ExecutionMode => (
-  value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped' ? 'strict' : 'standard'
+  value === 'standard_web_search'
+    ? 'standard_web_search'
+    : value === 'strict_web_search'
+      ? 'strict_web_search'
+      : value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped'
+        ? 'strict'
+        : 'standard'
 )
 const MEDICAL_OPTIONS = [
   { label: '糖尿病', value: 'diabetes' },
@@ -167,6 +182,22 @@ function formatProfileDateOnly(value?: string | null): string {
   return match ? `${match[1]}-${match[2]}-${match[3]}` : raw
 }
 
+function createPendingReportExtract(imageUrls: string[]): ReportExtract {
+  return {
+    indicators: [],
+    conclusions: [],
+    suggestions: [],
+    medical_notes: '',
+    _image_urls: imageUrls,
+    _status: 'processing',
+    _error: '',
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function HealthProfileViewPage() {
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<HealthProfile | null>(null)
@@ -177,6 +208,7 @@ function HealthProfileViewPage() {
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  const [reportSubmitting, setReportSubmitting] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
 
   /* 日期选择器索引 */
@@ -195,6 +227,82 @@ function HealthProfileViewPage() {
   const [addingAllergy, setAddingAllergy] = useState(false)
 
   const strictModeAvailable = canUseStrictModeForMembership(membershipStatus)
+
+  const syncEditorReportExtract = (nextReport?: ReportExtract | null) => {
+    if (editingField === 'report_extract') {
+      setEditValue(nextReport || null)
+    }
+  }
+
+  const applyReportExtractLocally = (nextReport: ReportExtract) => {
+    setProfile((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        health_condition: {
+          ...(prev.health_condition || {}),
+          report_extract: nextReport,
+        },
+      }
+    })
+    syncEditorReportExtract(nextReport)
+  }
+
+  const refreshHealthProfileState = async () => {
+    const nextProfile = await getHealthProfile()
+    setProfile(nextProfile)
+    syncEditorReportExtract(nextProfile.health_condition?.report_extract || null)
+    return nextProfile
+  }
+
+  const pollReportTaskUntilSettled = async (taskId: string) => {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < REPORT_TASK_POLL_TIMEOUT_MS) {
+      await sleep(REPORT_TASK_POLL_INTERVAL_MS)
+      try {
+        const task = await getAnalyzeTask(taskId)
+        if (task.status === 'done' || task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') {
+          await refreshHealthProfileState().catch(() => {})
+          if (task.status === 'done') {
+            Taro.showToast({ title: '识别完成', icon: 'success' })
+          } else {
+            Taro.showToast({ title: '识别失败', icon: 'none' })
+          }
+          return
+        }
+      } catch {
+        // ignore polling errors and continue
+      }
+    }
+    await refreshHealthProfileState().catch(() => {})
+  }
+
+  const uploadAndSubmitReport = async (tempPaths: string[]) => {
+    if (tempPaths.length === 0) return
+    setReportSubmitting(true)
+    try {
+      Taro.showLoading({ title: '上传中...', mask: true })
+      const urls: string[] = []
+      for (const path of tempPaths) {
+        const base64 = await imageToBase64(path)
+        const { imageUrl } = await uploadReportImage(base64)
+        urls.push(imageUrl)
+      }
+      const taskRes = await submitReportExtractionTask({
+        imageUrl: urls[0],
+        imageUrls: urls,
+      })
+      Taro.hideLoading()
+      applyReportExtractLocally(createPendingReportExtract(urls))
+      Taro.showToast({ title: `已上传 ${urls.length} 张`, icon: 'success' })
+      void pollReportTaskUntilSettled(taskRes.taskId)
+    } catch (e: any) {
+      Taro.hideLoading()
+      throw e
+    } finally {
+      setReportSubmitting(false)
+    }
+  }
 
   useDidShow(() => {
     getHealthProfile()
@@ -224,26 +332,8 @@ function HealthProfileViewPage() {
     try {
       const res = await chooseImageWithPrivacy({ count: MAX_REPORT_IMAGE_COUNT, sizeType: ['compressed'] })
       const tempPaths = (res.tempFilePaths || []).slice(0, MAX_REPORT_IMAGE_COUNT)
-      if (tempPaths.length === 0) return
-      Taro.showLoading({ title: '上传中...', mask: true })
-      const urls: string[] = []
-      for (const path of tempPaths) {
-        const base64 = await imageToBase64(path)
-        const { imageUrl } = await uploadReportImage(base64)
-        urls.push(imageUrl)
-      }
-      Taro.hideLoading()
-      const combinedUrl = urls.join(',')
-      console.log('[direct upload] urls:', urls)
-      const taskRes = await submitReportExtractionTask(combinedUrl)
-      console.log('[direct upload] task submitted:', taskRes)
-      Taro.showToast({ title: `上传成功 ${urls.length} 张，后台识别中`, icon: 'success' })
-      // 刷新页面以显示"后台识别中"状态
-      setTimeout(() => {
-        getHealthProfile().then(setProfile).catch(() => {})
-      }, 1500)
+      await uploadAndSubmitReport(tempPaths)
     } catch (e: any) {
-      Taro.hideLoading()
       if (e?.errMsg?.includes('cancel')) return
       if (isPrivacyAuthorizeError(e)) {
         showPrivacyAuthorizeFailure(e)
@@ -546,6 +636,8 @@ function HealthProfileViewPage() {
   }
 
   const config = editingField ? FIELD_CONFIG[editingField] : null
+  const editorBusy = saving || reportSubmitting
+  const isReportEditor = editingField === 'report_extract'
 
   /* ========== 渲染编辑器内容 ========== */
   const renderEditorBody = () => {
@@ -562,7 +654,7 @@ function HealthProfileViewPage() {
                   key={opt.value}
                   className={`editor-radio-item ${isActive ? 'active' : ''}`}
                   onClick={() => {
-                    if (editingField === 'execution_mode' && opt.value === 'strict') {
+                    if (editingField === 'execution_mode' && isPrecisionExecutionMode(opt.value)) {
                       if (!strictModeAvailable) {
                         const dialog = getStrictModeUpgradeDialog(membershipStatus, 'profile_execution_mode')
                         Taro.showModal({
@@ -766,29 +858,15 @@ function HealthProfileViewPage() {
         const rHasMedicalNotes = !!report?.medical_notes
         const rHasData = rHasIndicators || rHasConclusions || rHasSuggestions || rHasMedicalNotes
         const existingImageUrls = (report?._image_urls as string[]) || []
+        const reportStatus = String(report?._status || '').trim()
+        const reportError = String(report?._error || '').trim()
 
         const handleReportUpload = async () => {
           try {
             const res = await chooseImageWithPrivacy({ count: MAX_REPORT_IMAGE_COUNT, sizeType: ['compressed'] })
             const tempPaths = (res.tempFilePaths || []).slice(0, MAX_REPORT_IMAGE_COUNT)
-            if (tempPaths.length === 0) return
-            Taro.showLoading({ title: '上传中...', mask: true })
-            const urls: string[] = []
-            for (const path of tempPaths) {
-              const base64 = await imageToBase64(path)
-              const { imageUrl } = await uploadReportImage(base64)
-              urls.push(imageUrl)
-            }
-            Taro.hideLoading()
-            const combinedUrl = urls.join(',')
-            console.log('[report upload] urls:', urls)
-            console.log('[report upload] combinedUrl:', combinedUrl)
-            const taskRes = await submitReportExtractionTask(combinedUrl)
-            console.log('[report upload] task submitted:', taskRes)
-            Taro.showToast({ title: `上传成功 ${urls.length} 张，后台识别中`, icon: 'success' })
-            setTimeout(() => closeEditor(), 1500)
+            await uploadAndSubmitReport(tempPaths)
           } catch (e: any) {
-            Taro.hideLoading()
             if (e?.errMsg?.includes('cancel')) return
             if (isPrivacyAuthorizeError(e)) {
               showPrivacyAuthorizeFailure(e)
@@ -798,8 +876,46 @@ function HealthProfileViewPage() {
           }
         }
 
+        const handleRetryExistingReport = async () => {
+          if (existingImageUrls.length === 0) return
+          try {
+            setReportSubmitting(true)
+            Taro.showLoading({ title: '重新识别中...', mask: true })
+            const taskRes = await submitReportExtractionTask({
+              imageUrl: existingImageUrls[0],
+              imageUrls: existingImageUrls,
+            })
+            Taro.hideLoading()
+            applyReportExtractLocally(createPendingReportExtract(existingImageUrls))
+            Taro.showToast({ title: '已重新提交识别', icon: 'success' })
+            void pollReportTaskUntilSettled(taskRes.taskId)
+          } catch (e: any) {
+            Taro.hideLoading()
+            await showUnifiedApiError(e, '重新识别失败')
+          } finally {
+            setReportSubmitting(false)
+          }
+        }
+
         return (
           <View className='editor-report-body'>
+            {reportStatus === 'processing' && (
+              <View className='editor-report-status editor-report-status-processing'>
+                <View className='editor-report-status-spinner' />
+                <View className='editor-report-status-copy'>
+                  <Text className='editor-report-status-title'>新报告识别中</Text>
+                  <Text className='editor-report-status-desc'>系统已收到报告，识别完成后会自动刷新当前结果</Text>
+                </View>
+              </View>
+            )}
+            {reportStatus === 'failed' && (
+              <View className='editor-report-status editor-report-status-failed'>
+                <View className='editor-report-status-copy'>
+                  <Text className='editor-report-status-title'>识别失败</Text>
+                  <Text className='editor-report-status-desc'>{reportError || '这次报告识别没有成功，可以直接重新识别当前报告'}</Text>
+                </View>
+              </View>
+            )}
             {rHasData ? (
               <ScrollView className='editor-report-scroll' scrollY enhanced showScrollbar={false}>
                 {rHasConclusions && (
@@ -842,8 +958,16 @@ function HealthProfileViewPage() {
               </ScrollView>
             ) : (
               <View className='editor-report-empty'>
-                <Text className='editor-report-empty-text'>暂无识别结果</Text>
-                <Text className='editor-report-empty-hint'>上传体检报告后，AI 将自动识别关键指标</Text>
+                <Text className='editor-report-empty-text'>
+                  {reportStatus === 'failed' ? '识别失败' : reportStatus === 'processing' ? '后台识别中' : '暂无识别结果'}
+                </Text>
+                <Text className='editor-report-empty-hint'>
+                  {reportStatus === 'failed'
+                    ? (reportError || '这次报告识别没有成功，请重新上传后再试')
+                    : reportStatus === 'processing'
+                      ? '报告已上传，系统正在识别关键指标'
+                      : '上传体检报告后，AI 将自动识别关键指标'}
+                </Text>
               </View>
             )}
             {existingImageUrls.length > 0 && (
@@ -856,6 +980,11 @@ function HealthProfileViewPage() {
                     </View>
                   ))}
                 </View>
+              </View>
+            )}
+            {reportStatus === 'failed' && existingImageUrls.length > 0 && (
+              <View className='editor-report-upload-btn' onClick={handleRetryExistingReport}>
+                <Text className='editor-report-upload-text'>重新识别当前报告</Text>
               </View>
             )}
             <View className='editor-report-upload-btn' onClick={handleReportUpload}>
@@ -1001,7 +1130,9 @@ function HealthProfileViewPage() {
   const hasMedicalNotes = !!reportExtract?.medical_notes
   const hasReportData = hasIndicators || hasConclusions || hasSuggestions || hasMedicalNotes
   const hasImageUrls = (reportExtract?._image_urls as string[])?.length > 0
-  const isProcessing = hasImageUrls && !hasReportData
+  const reportStatus = String((reportExtract as any)?._status || '').trim()
+  const isFailed = reportStatus === 'failed'
+  const isProcessing = reportStatus === 'processing' || (hasImageUrls && !hasReportData && !isFailed)
 
   return (
     <View className='health-profile-view-page'>
@@ -1099,11 +1230,11 @@ function HealthProfileViewPage() {
         {/* 体检/病例识别结果 */}
         <View className='block'>
           <Text className='block-title'>体检/病例识别结果</Text>
-          {hasReportData || isProcessing ? (
+          {hasReportData || isProcessing || isFailed ? (
             <EditableRow
               label=''
               field='report_extract'
-              value={isProcessing ? '后台识别中...' : '查看结果'}
+              value={isFailed ? '识别失败，请重试' : isProcessing ? '后台识别中...' : '查看结果'}
             />
           ) : (
             <View className='report-upload-trigger' onClick={handleDirectReportUpload}>
@@ -1129,14 +1260,14 @@ function HealthProfileViewPage() {
             <View className='editor-header'>
               <Text className='editor-cancel' onClick={closeEditor}>取消</Text>
               <Text className='editor-title'>{config?.title || ''}</Text>
-              {saving ? (
+              {editorBusy ? (
                 <View className='editor-confirm-spinner' />
               ) : (
                 <Text
                   className='editor-confirm'
                   onClick={handleSaveEdit}
                 >
-                  确定
+                  {isReportEditor ? '完成' : '确定'}
                 </Text>
               )}
             </View>

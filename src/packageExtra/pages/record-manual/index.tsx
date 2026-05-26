@@ -55,9 +55,20 @@ const DEFAULT_CATALOG_CATEGORIES: ManualFoodCatalogCategory[] = [
   { key: 'vegetable', label: '蔬菜' },
   { key: 'fruit', label: '水果' },
   { key: 'dairy', label: '乳品' },
+  { key: 'beverage', label: '饮品' },
+  { key: 'soup', label: '汤饮' },
+  { key: 'snack', label: '零食' },
   { key: 'meal', label: '菜肴' },
   { key: 'other', label: '其他' },
 ]
+
+type ManualDisplayUnit = 'g' | 'ml' | 'serving' | 'piece'
+
+interface ServingPreset {
+  label: string
+  grams: number
+  quantity: number
+}
 
 interface SelectedItem {
   id: string
@@ -71,6 +82,9 @@ interface SelectedItem {
   baseNutrients: Nutrients
   nutrients: Nutrients
   nutrientsPer100g?: Nutrients
+  displayUnit: ManualDisplayUnit
+  displayUnitLabel: string
+  servingPresets: ServingPreset[]
   imagePath?: string | null
   recommendReason?: string
   usageCount: number
@@ -90,6 +104,153 @@ function getItemKey(item: { source: string; id: string }) {
 
 function roundToSingle(value: number) {
   return Math.round(value * 10) / 10
+}
+
+function isEggLikeFood(title: string) {
+  return /鸡蛋|水煮蛋|卤蛋|煎蛋|egg/i.test(title)
+}
+
+function isBeverageLikeFood(title: string) {
+  return /咖啡|美式|拿铁|奶茶|茶饮|绿茶|红茶|乌龙茶|普洱|茉莉茶|饮料|可乐|果汁|豆浆|coffee|latte|drink/i.test(title)
+}
+
+function isSoupLikeFood(title: string) {
+  return /清汤|汤|羹|soup|broth/i.test(title)
+}
+
+function servingPresets(base: number, unit: string, quantities: number[]): ServingPreset[] {
+  return quantities.map((quantity) => ({
+    label: `${quantity}${unit}`,
+    grams: roundToSingle(base * quantity),
+    quantity,
+  }))
+}
+
+function inferServingProfile(item: ManualFoodSearchResult): {
+  defaultWeight: number
+  displayUnit: ManualDisplayUnit
+  displayUnitLabel: string
+  portionLabel: string
+  servingPresets: ServingPreset[]
+} {
+  const remotePresets = (item.serving_presets || [])
+    .filter((preset) => preset.grams > 0)
+    .map((preset) => ({
+      label: preset.label,
+      grams: roundToSingle(preset.grams),
+      quantity: preset.quantity,
+    }))
+  const remoteUnit = item.display_unit
+  if (remoteUnit) {
+    const defaultWeight = Math.max(1, Math.round(item.default_weight_grams || remotePresets[0]?.grams || 100))
+    return {
+      defaultWeight,
+      displayUnit: remoteUnit,
+      displayUnitLabel: item.display_unit_label || (remoteUnit === 'piece' ? '个' : remoteUnit === 'serving' ? '份' : remoteUnit),
+      portionLabel: item.portion_label || (remoteUnit === 'serving' ? '1份' : remoteUnit === 'piece' ? '1个' : `${defaultWeight}${remoteUnit}`),
+      servingPresets: remotePresets,
+    }
+  }
+
+  if (item.source === 'public_library') {
+    const defaultWeight = Math.max(1, Math.round(item.default_weight_grams || 1))
+    return {
+      defaultWeight,
+      displayUnit: 'serving',
+      displayUnitLabel: '份',
+      portionLabel: item.portion_label || '1份',
+      servingPresets: servingPresets(defaultWeight, '份', [0.5, 1, 1.5, 2]),
+    }
+  }
+
+  if (isEggLikeFood(item.title)) {
+    return {
+      defaultWeight: 55,
+      displayUnit: 'piece',
+      displayUnitLabel: '个',
+      portionLabel: '1个',
+      servingPresets: [
+        { label: '0.5个', grams: 27.5, quantity: 0.5 },
+        { label: '1个', grams: 55, quantity: 1 },
+        { label: '2个', grams: 110, quantity: 2 },
+      ],
+    }
+  }
+
+  if (isBeverageLikeFood(item.title) || isSoupLikeFood(item.title)) {
+    const defaultWeight = isSoupLikeFood(item.title) && !isBeverageLikeFood(item.title) ? 250 : 350
+    const presets = isBeverageLikeFood(item.title)
+      ? [
+        { label: '350ml', grams: 350, quantity: 350 },
+        { label: '450ml', grams: 450, quantity: 450 },
+        { label: '590ml', grams: 590, quantity: 590 },
+      ]
+      : [
+        { label: '250ml', grams: 250, quantity: 250 },
+        { label: '350ml', grams: 350, quantity: 350 },
+        { label: '500ml', grams: 500, quantity: 500 },
+      ]
+    return {
+      defaultWeight,
+      displayUnit: 'ml',
+      displayUnitLabel: 'ml',
+      portionLabel: `${defaultWeight}ml`,
+      servingPresets: presets,
+    }
+  }
+
+  const defaultWeight = Math.max(1, Math.round(item.default_weight_grams || 100))
+  return {
+    defaultWeight,
+    displayUnit: 'g',
+    displayUnitLabel: 'g',
+    portionLabel: item.portion_label || `${defaultWeight}g`,
+    servingPresets: [],
+  }
+}
+
+function formatSelectedAmount(item: Pick<SelectedItem, 'weight' | 'defaultWeight' | 'displayUnit' | 'displayUnitLabel'>) {
+  if (item.displayUnit === 'serving') {
+    return `${roundToSingle(item.weight / item.defaultWeight)}份`
+  }
+  if (item.displayUnit === 'piece') {
+    return `${roundToSingle(item.weight / 55)}个`
+  }
+  return `${Math.round(item.weight)}${item.displayUnitLabel}`
+}
+
+function formatWeightInput(item: Pick<SelectedItem, 'weight' | 'defaultWeight' | 'displayUnit'>, nextWeight = item.weight) {
+  if (item.displayUnit === 'serving') {
+    return String(roundToSingle(nextWeight / item.defaultWeight))
+  }
+  if (item.displayUnit === 'piece') {
+    return String(roundToSingle(nextWeight / 55))
+  }
+  return String(Math.round(nextWeight))
+}
+
+function weightFromDisplayInput(item: Pick<SelectedItem, 'defaultWeight' | 'displayUnit'>, value: number) {
+  if (item.displayUnit === 'serving') {
+    return item.defaultWeight * value
+  }
+  if (item.displayUnit === 'piece') {
+    return 55 * value
+  }
+  return value
+}
+
+function resultPortionText(item: ManualFoodSearchResult) {
+  if (item.display_unit === 'piece') return '1个'
+  if (item.display_unit === 'ml') return `${Math.round(item.default_weight_grams || 350)}ml`
+  if (item.display_unit === 'serving') return '1份'
+  if (isEggLikeFood(item.title)) return '1个'
+  if (isBeverageLikeFood(item.title) || isSoupLikeFood(item.title)) {
+    const fallbackVolume = isSoupLikeFood(item.title) ? 250 : 350
+    return `${Math.round(item.default_weight_grams && item.default_weight_grams !== 100 ? item.default_weight_grams : fallbackVolume)}ml`
+  }
+  if (item.source === 'public_library') return '1份'
+  if (item.portion_label) return item.portion_label
+  return item.source === 'nutrition_library' ? '100g' : '1份'
 }
 
 function buildNutrientsFromWeight(
@@ -257,7 +418,8 @@ function RecordManualPage() {
     Taro.vibrateShort({ type: 'light' }).catch(() => {})
     setSelectedItems(prev => {
       const index = prev.findIndex((selected) => getItemKey(selected) === key)
-      const defaultWeight = Math.max(1, Math.round(item.default_weight_grams || 100))
+      const servingProfile = inferServingProfile(item)
+      const defaultWeight = servingProfile.defaultWeight
       const baseNutrients = {
         calories: roundToSingle(item.total_calories),
         protein: roundToSingle(item.total_protein),
@@ -276,9 +438,13 @@ function RecordManualPage() {
             title: item.title,
             subtitle: item.subtitle,
             weight: defaultWeight,
-            weightInput: String(defaultWeight),
+            weightInput: formatWeightInput({
+              weight: defaultWeight,
+              defaultWeight,
+              displayUnit: servingProfile.displayUnit,
+            }),
             defaultWeight,
-            portionLabel: item.portion_label || (item.source === 'public_library' ? '1份' : '100g'),
+            portionLabel: servingProfile.portionLabel,
             baseNutrients,
             nutrients: buildNutrientsFromWeight({
               defaultWeight,
@@ -286,6 +452,9 @@ function RecordManualPage() {
               nutrientsPer100g: item.nutrients_per_100g || undefined,
             }, defaultWeight),
             nutrientsPer100g: item.nutrients_per_100g || undefined,
+            displayUnit: servingProfile.displayUnit,
+            displayUnitLabel: servingProfile.displayUnitLabel,
+            servingPresets: servingProfile.servingPresets,
             imagePath: item.image_path || item.image_paths?.[0] || null,
             recommendReason: item.nutrition_highlights?.join(' · ') || item.recommend_reason,
             usageCount: Number(item.usage_count || 0),
@@ -299,7 +468,7 @@ function RecordManualPage() {
         return {
           ...selected,
           weight: nextWeight,
-          weightInput: String(nextWeight),
+          weightInput: formatWeightInput(selected, nextWeight),
           nutrients: buildNutrientsFromWeight(selected, nextWeight),
         }
       })
@@ -314,7 +483,7 @@ function RecordManualPage() {
         return {
           ...item,
           weight: safeWeight,
-          weightInput: String(safeWeight),
+          weightInput: formatWeightInput(item, safeWeight),
           nutrients: buildNutrientsFromWeight(item, safeWeight),
         }
       })
@@ -322,7 +491,7 @@ function RecordManualPage() {
   }
 
   const handleWeightInput = (key: string, value: string) => {
-    const cleaned = value.replace(/[^\d]/g, '')
+    const cleaned = value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')
     setSelectedItems((prev) =>
       prev.map((item) => (
         getItemKey(item) === key
@@ -335,24 +504,18 @@ function RecordManualPage() {
   const commitWeightInput = (key: string) => {
     const target = selectedMap.get(key)
     if (!target) return
-    const parsed = parseInt(target.weightInput, 10)
+    const parsed = parseFloat(target.weightInput)
     if (Number.isFinite(parsed) && parsed > 0) {
-      updateItemWeight(key, parsed)
+      updateItemWeight(key, weightFromDisplayInput(target, parsed))
       return
     }
     setSelectedItems((prev) =>
       prev.map((item) => (
         getItemKey(item) === key
-          ? { ...item, weightInput: String(item.weight) }
+          ? { ...item, weightInput: formatWeightInput(item) }
           : item
       ))
     )
-  }
-
-  const handleSetServing = (key: string, multiplier: number) => {
-    const target = selectedMap.get(key)
-    if (!target) return
-    updateItemWeight(key, target.defaultWeight * multiplier)
   }
 
   const handleQuickAdjust = (key: string, delta: number) => {
@@ -479,7 +642,7 @@ function RecordManualPage() {
           </View>
           <Text className='food-sub'>
             {Math.round(item.total_calories)} kcal
-            {item.source === 'nutrition_library' ? ' / 100g' : ` / ${item.portion_label || '1份'}`}
+            {` / ${resultPortionText(item)}`}
             {item.subtitle ? ` · ${item.subtitle}` : ''}
           </Text>
           {!!(item.nutrition_highlights?.length || item.recommend_reason) && (
@@ -493,9 +656,7 @@ function RecordManualPage() {
         <View className={`add-btn ${selected ? 'active' : ''}`}>
           <Text>
             {selected
-              ? (selected.source === 'public_library'
-                ? `${roundToSingle(selected.weight / selected.defaultWeight)}份`
-                : `${Math.round(selected.weight)}g`)
+              ? formatSelectedAmount(selected)
               : '+'}
           </Text>
         </View>
@@ -578,7 +739,13 @@ function RecordManualPage() {
                       <View className='item-name-row'>
                         <Text className='item-name'>{item.title}</Text>
                         <Text className='item-tag'>
-                          {item.source === 'public_library' ? item.portionLabel : '按克重'}
+                          {item.displayUnit === 'serving'
+                            ? item.portionLabel
+                            : item.displayUnit === 'piece'
+                              ? '按个数'
+                              : item.displayUnit === 'ml'
+                                ? '按毫升'
+                                : '按克重'}
                         </Text>
                       </View>
                       <Text className='item-cal'>{Math.round(item.nutrients.calories)} kcal</Text>
@@ -588,21 +755,22 @@ function RecordManualPage() {
                     </View>
                   </View>
 
-                  {item.source === 'public_library' && (
+                  {item.servingPresets.length > 0 && (
                     <View className='serving-row'>
-                      {[0.5, 1, 1.5, 2].map((multiplier) => (
+                      {item.servingPresets.map((preset) => (
                         <View
-                          key={multiplier}
-                          className={`serving-chip ${Math.abs(item.weight - item.defaultWeight * multiplier) < 1 ? 'active' : ''}`}
-                          onClick={() => handleSetServing(key, multiplier)}
+                          key={preset.label}
+                          className={`serving-chip ${Math.abs(item.weight - preset.grams) < 1 ? 'active' : ''}`}
+                          onClick={() => updateItemWeight(key, preset.grams)}
                         >
-                          <Text>{multiplier}份</Text>
+                          <Text>{preset.label}</Text>
                         </View>
                       ))}
                     </View>
                   )}
 
-                  <View className='quick-adjust-row'>
+                  {item.displayUnit === 'g' && (
+                    <View className='quick-adjust-row'>
                     {[-50, -10, 10, 50].map((delta) => (
                       <View
                         key={delta}
@@ -612,7 +780,8 @@ function RecordManualPage() {
                         <Text>{delta > 0 ? `+${delta}` : delta}g</Text>
                       </View>
                     ))}
-                  </View>
+                    </View>
+                  )}
 
                   <View className='item-actions'>
                     <Input
@@ -625,7 +794,7 @@ function RecordManualPage() {
                         commitWeightInput(key)
                       }}
                     />
-                    <Text className='weight-unit'>g</Text>
+                    <Text className='weight-unit'>{item.displayUnitLabel}</Text>
                     <View className='remove-btn' onClick={() => handleRemoveItem(key)}>
                       <Text className='iconfont icon-shanchu' />
                     </View>

@@ -12,12 +12,17 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/user/domain"
 	userrepo "food_link/backend/internal/user/repo"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
+
+	"log/slog"
 )
 
 const (
 	defaultExecutionMode      = "standard"
+	standardWebSearchMode    = "standard_web_search"
 	validExecutionMode        = "strict"
+	strictWebSearchMode       = "strict_web_search"
 	experimentalExecutionMode = "experimental"
 	gemini35FlashMode         = "gemini35_flash"
 	gemini35GroupedMode       = "gemini35_flash_grouped"
@@ -27,7 +32,6 @@ var validModeSetBy = map[string]bool{"system": true, "user_manual": true, "coach
 
 type UserService struct {
 	users         *repo.UserRepo
-	dailyTargets  *userrepo.DailyNutritionTargetRepo
 	healthDocs    *userrepo.HealthDocumentRepo
 	modeSwitchLog *userrepo.ModeSwitchLogRepo
 	storage       *storage.Client
@@ -38,11 +42,7 @@ func NewUserService(users *repo.UserRepo, healthDocs *userrepo.HealthDocumentRep
 	if len(storageClient) > 0 {
 		client = storageClient[0]
 	}
-	var dailyTargets *userrepo.DailyNutritionTargetRepo
-	if users != nil && users.DB() != nil {
-		dailyTargets = userrepo.NewDailyNutritionTargetRepo(users.DB())
-	}
-	return &UserService{users: users, dailyTargets: dailyTargets, healthDocs: healthDocs, modeSwitchLog: modeSwitchLog, storage: client}
+	return &UserService{users: users, healthDocs: healthDocs, modeSwitchLog: modeSwitchLog, storage: client}
 }
 
 func (s *UserService) GetProfile(ctx context.Context, userID string) (map[string]any, error) {
@@ -124,31 +124,13 @@ func (s *UserService) UpdateDashboardTargets(ctx context.Context, userID string,
 		"carbs_target":   math.Round(input.CarbsTarget*10) / 10,
 		"fat_target":     math.Round(input.FatTarget*10) / 10,
 	}
-	if strings.TrimSpace(input.TargetDate) != "" && s.dailyTargets != nil {
-		targetDate, err := time.Parse("2006-01-02", strings.TrimSpace(input.TargetDate))
-		if err != nil {
-			return nil, &commonerrors.AppError{Code: 10002, Message: "目标日期格式不正确", HTTPStatus: 400}
-		}
-		_, err = s.dailyTargets.Upsert(ctx, &domain.DailyNutritionTarget{
-			UserID:        userID,
-			TargetDate:    targetDate,
-			CalorieTarget: targets["calorie_target"],
-			ProteinTarget: targets["protein_target"],
-			CarbsTarget:   targets["carbs_target"],
-			FatTarget:     targets["fat_target"],
-			Source:        "user_manual",
-		})
-		if err != nil {
-			return nil, err
-		}
-		return targets, nil
-	}
 	healthCondition := user.HealthCondition
 	if healthCondition == nil {
 		healthCondition = map[string]any{}
 	}
 	healthCondition["dashboard_targets"] = targets
 	healthCondition["dashboard_targets_mode"] = "manual"
+	healthCondition["dashboard_targets_updated_at"] = time.Now().UTC().Format(time.RFC3339)
 	updated, err := s.users.UpdateFields(ctx, userID, map[string]any{"health_condition": healthCondition})
 	if err != nil {
 		return nil, err
@@ -164,7 +146,7 @@ func (s *UserService) GetHealthProfile(ctx context.Context, userID string) (map[
 	if user == nil {
 		return nil, commonerrors.ErrNotFound
 	}
-	return buildHealthProfileResponse(user), nil
+	return s.buildHealthProfileResponse(user), nil
 }
 
 type UpdateHealthProfileInput struct {
@@ -316,6 +298,8 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 			"carbs_target":   math.Round(dt.CarbsTarget*10) / 10,
 			"fat_target":     math.Round(dt.FatTarget*10) / 10,
 		}
+		healthCondition["dashboard_targets_mode"] = "manual"
+		healthCondition["dashboard_targets_updated_at"] = time.Now().UTC().Format(time.RFC3339)
 	}
 	if input.PrecisionReferenceDefaults != nil {
 		if normalized := normalizePrecisionReferenceDefaults(input.PrecisionReferenceDefaults); len(normalized) > 0 {
@@ -350,6 +334,14 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 	if gender == nil {
 		gender = user.Gender
 	}
+	birthday := updates["birthday"]
+	if birthday == nil {
+		birthday = user.Birthday
+	}
+	height := updates["height"]
+	if height == nil {
+		height = user.Height
+	}
 	weight := updates["weight"]
 	if weight == nil {
 		weight = user.Weight
@@ -368,6 +360,18 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 		} else if user.Gender != nil {
 			g = *user.Gender
 		}
+		bday := ""
+		if v, ok := birthday.(string); ok {
+			bday = v
+		} else if user.Birthday != nil {
+			bday = *user.Birthday
+		}
+		var h float64
+		if v, ok := height.(float64); ok {
+			h = v
+		} else if user.Height != nil {
+			h = *user.Height
+		}
 		var w float64
 		if v, ok := weight.(float64); ok {
 			w = v
@@ -375,10 +379,24 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 			w = *user.Weight
 		}
 		if g != "" && w > 0 {
-			bmr := CalculateBMR(g, w)
-			tdee := CalculateTDEE(bmr, activityLevel)
-			updates["bmr"] = math.Round(bmr*10) / 10
-			updates["tdee"] = math.Round(tdee*10) / 10
+			stable := CalculateStableNutritionTargets(StableNutritionTargetInput{
+				Gender:        g,
+				WeightKg:      w,
+				HeightCm:      h,
+				Birthday:      bday,
+				ActivityLevel: activityLevel,
+				DietGoal:      derefStringPtr(input.DietGoal, user.DietGoal),
+				Now:           time.Now(),
+			})
+			updates["bmr"] = stable.BMR
+			updates["tdee"] = stable.TDEE
+			if input.DashboardTargets == nil && !hasDashboardTargets(healthCondition) {
+				healthCondition["dashboard_targets"] = stable.Targets
+				healthCondition["dashboard_targets_mode"] = "system_initial"
+				healthCondition["dashboard_targets_updated_at"] = time.Now().UTC().Format(time.RFC3339)
+				healthCondition["dashboard_targets_generated_at"] = time.Now().UTC().Format(time.RFC3339)
+				updates["health_condition"] = healthCondition
+			}
 		}
 	}
 
@@ -406,7 +424,7 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 		}
 	}
 
-	return buildHealthProfileResponse(updated), nil
+	return s.buildHealthProfileResponse(updated), nil
 }
 
 func (s *UserService) GetRecordDays(ctx context.Context, userID string) (int64, error) {
@@ -421,8 +439,28 @@ func (s *UserService) AcknowledgeHealthDisclaimer(ctx context.Context, userID st
 	return s.users.UpdateHealthDisclaimerAcknowledged(ctx, userID)
 }
 
+func (s *UserService) DeleteAccount(ctx context.Context, userID string) error {
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		logger.Error(ctx, "查询待注销用户失败", err, slog.String("user_id", userID))
+		return err
+	}
+	if user == nil {
+		logger.Warn(ctx, "注销账号失败，用户不存在", slog.String("user_id", userID))
+		return commonerrors.ErrNotFound
+	}
+
+	if err := s.users.DeleteByID(ctx, userID); err != nil {
+		logger.Error(ctx, "注销账号失败", err, slog.String("user_id", userID))
+		return err
+	}
+
+	logger.Info(ctx, "注销账号完成", slog.String("user_id", userID))
+	return nil
+}
+
 func (s *UserService) buildProfileResponse(user *repo.User) map[string]any {
-	out := buildProfileResponse(user)
+	out := buildProfileResponseWithStorage(user, s.storage)
 	out["avatar"] = s.resolveAvatarURL(user.Avatar)
 	return out
 }
@@ -458,6 +496,10 @@ func (s *UserService) resolveHealthReportURL(value string) string {
 }
 
 func buildProfileResponse(user *repo.User) map[string]any {
+	return buildProfileResponseWithStorage(user, nil)
+}
+
+func buildProfileResponseWithStorage(user *repo.User, storageClient *storage.Client) map[string]any {
 	return map[string]any{
 		"id":                    user.ID,
 		"openid":                user.OpenID,
@@ -471,7 +513,7 @@ func buildProfileResponse(user *repo.User) map[string]any {
 		"birthday":              user.Birthday,
 		"gender":                user.Gender,
 		"activity_level":        user.ActivityLevel,
-		"health_condition":      normalizeHealthConditionResponse(user.HealthCondition),
+		"health_condition":      normalizeHealthConditionResponse(user.HealthCondition, storageClient),
 		"bmr":                   user.BMR,
 		"tdee":                  user.TDEE,
 		"onboarding_completed":  user.OnboardingCompleted,
@@ -488,13 +530,21 @@ func buildProfileResponse(user *repo.User) map[string]any {
 }
 
 func buildHealthProfileResponse(user *repo.User) map[string]any {
+	return buildHealthProfileResponseWithStorage(user, nil)
+}
+
+func (s *UserService) buildHealthProfileResponse(user *repo.User) map[string]any {
+	return buildHealthProfileResponseWithStorage(user, s.storage)
+}
+
+func buildHealthProfileResponseWithStorage(user *repo.User, storageClient *storage.Client) map[string]any {
 	return map[string]any{
 		"height":                user.Height,
 		"weight":                user.Weight,
 		"birthday":              user.Birthday,
 		"gender":                user.Gender,
 		"activity_level":        user.ActivityLevel,
-		"health_condition":      normalizeHealthConditionResponse(user.HealthCondition),
+		"health_condition":      normalizeHealthConditionResponse(user.HealthCondition, storageClient),
 		"bmr":                   user.BMR,
 		"tdee":                  user.TDEE,
 		"onboarding_completed":  user.OnboardingCompleted,
@@ -520,6 +570,34 @@ func resolveDailyLifeActivityLevel(user *repo.User, healthCondition map[string]a
 	return "sedentary"
 }
 
+func derefStringPtr(primary *string, fallback *string) string {
+	if primary != nil {
+		return strings.TrimSpace(*primary)
+	}
+	if fallback != nil {
+		return strings.TrimSpace(*fallback)
+	}
+	return ""
+}
+
+func hasDashboardTargets(healthCondition map[string]any) bool {
+	if healthCondition == nil {
+		return false
+	}
+	raw, ok := healthCondition["dashboard_targets"]
+	if !ok || raw == nil {
+		return false
+	}
+	switch targets := raw.(type) {
+	case map[string]any:
+		return len(targets) > 0
+	case map[string]float64:
+		return len(targets) > 0
+	default:
+		return false
+	}
+}
+
 func buildDashboardTargets(user *repo.User) map[string]float64 {
 	healthCondition := user.HealthCondition
 	if healthCondition == nil {
@@ -527,7 +605,7 @@ func buildDashboardTargets(user *repo.User) map[string]float64 {
 	}
 	dashboardTargets, _ := healthCondition["dashboard_targets"].(map[string]any)
 	if dashboardTargets == nil {
-		dashboardTargets = map[string]any{}
+		dashboardTargets = dashboardTargetsAsAnyMap(healthCondition["dashboard_targets"])
 	}
 
 	calorieTarget := 2000.0
@@ -568,6 +646,21 @@ func buildDashboardTargets(user *repo.User) map[string]float64 {
 	}
 }
 
+func dashboardTargetsAsAnyMap(raw any) map[string]any {
+	switch value := raw.(type) {
+	case map[string]any:
+		return value
+	case map[string]float64:
+		out := make(map[string]any, len(value))
+		for key, val := range value {
+			out[key] = val
+		}
+		return out
+	default:
+		return map[string]any{}
+	}
+}
+
 func cleanStringList(values []string) []string {
 	out := make([]string, 0, len(values))
 	seen := map[string]bool{}
@@ -582,7 +675,7 @@ func cleanStringList(values []string) []string {
 	return out
 }
 
-func normalizeHealthConditionResponse(input map[string]any) map[string]any {
+func normalizeHealthConditionResponse(input map[string]any, storageClient *storage.Client) map[string]any {
 	out := map[string]any{}
 	for key, value := range input {
 		out[key] = value
@@ -606,7 +699,51 @@ func normalizeHealthConditionResponse(input map[string]any) map[string]any {
 	if raw, ok := out["precision_reference_defaults"].(map[string]any); ok {
 		out["precision_reference_defaults"] = normalizePrecisionReferenceDefaults(raw)
 	}
+	if report, ok := out["report_extract"].(map[string]any); ok && storageClient != nil {
+		if rawURLs, ok := report["_image_urls"]; ok {
+			values := stringSliceFromAny(rawURLs)
+			if len(values) > 0 {
+				signed := make([]string, 0, len(values))
+				for _, value := range values {
+					if url, err := storageClient.PresignGETURL("health-reports", value, 24*time.Hour); err == nil && strings.TrimSpace(url) != "" {
+						signed = append(signed, url)
+						continue
+					}
+					resolved := storageClient.ResolveReferenceURL("health-reports", value)
+					if strings.TrimSpace(resolved) != "" {
+						signed = append(signed, resolved)
+					}
+				}
+				report["_image_urls"] = signed
+				out["report_extract"] = report
+			}
+		}
+	}
 	return out
+}
+
+func stringSliceFromAny(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return cleanStringList(typed)
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text := strings.TrimSpace(fmt.Sprintf("%v", item))
+			if text != "" && text != "<nil>" {
+				out = append(out, text)
+			}
+		}
+		return cleanStringList(out)
+	case string:
+		text := strings.TrimSpace(typed)
+		if text == "" {
+			return nil
+		}
+		return []string{text}
+	default:
+		return nil
+	}
 }
 
 func normalizePrecisionReferenceDefaults(input map[string]any) map[string]any {
@@ -645,7 +782,7 @@ func normalizeExecutionMode(mode *string) string {
 		return defaultExecutionMode
 	}
 	m := *mode
-	if m == validExecutionMode || m == experimentalExecutionMode || m == gemini35FlashMode || m == gemini35GroupedMode {
+	if m == standardWebSearchMode || m == validExecutionMode || m == strictWebSearchMode || m == experimentalExecutionMode || m == gemini35FlashMode || m == gemini35GroupedMode {
 		return m
 	}
 	return defaultExecutionMode

@@ -66,7 +66,15 @@ export type MealType = CanonicalMealType | 'snack'
 export type DietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 export type ActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
 export type UserGoal = 'muscle_gain' | 'fat_loss' | 'maintain'
-export type ExecutionMode = 'lite' | 'standard' | 'strict' | 'experimental' | 'gemini35_flash' | 'gemini35_flash_grouped'
+export type ExecutionMode =
+  | 'lite'
+  | 'standard'
+  | 'standard_web_search'
+  | 'strict'
+  | 'strict_web_search'
+  | 'experimental'
+  | 'gemini35_flash'
+  | 'gemini35_flash_grouped'
 export type AnalysisEngine = 'legacy_direct' | 'db_first'
 export type AnalyzeRecognitionOutcome = 'ok' | 'soft_reject' | 'hard_reject'
 export type AllowedFoodCategory = 'carb' | 'lean_protein' | 'unknown'
@@ -189,6 +197,14 @@ export interface FoodItem {
   category?: string
   estimatedWeightGrams: number
   originalWeightGrams: number
+  grossWeightGrams?: number
+  gross_weight_grams?: number
+  ediblePortionRatio?: number
+  edible_portion_ratio?: number
+  ediblePortionReason?: string
+  edible_portion_reason?: string
+  ediblePortionSource?: string
+  edible_portion_source?: string
   suggestedRatio?: number
   suggestedRatioReason?: string
   suggestedRatioSource?: string
@@ -406,6 +422,12 @@ export interface FoodRecordItemPayload {
   weight: number
   ratio: number
   intake: number
+  gross_weight_grams?: number
+  edible_portion_ratio?: number
+  edible_portion_reason?: string
+  edible_portion_source?: string
+  suggested_ratio?: number
+  suggested_ratio_reason?: string
   water_ml?: number
   nutrients: Nutrients
   manual_source?: 'public_library' | 'nutrition_library'
@@ -463,6 +485,14 @@ export interface FoodRecord {
   items: Array<{
     name: string
     weight: number
+    gross_weight_grams?: number
+    grossWeightGrams?: number
+    edible_portion_ratio?: number
+    ediblePortionRatio?: number
+    edible_portion_reason?: string
+    ediblePortionReason?: string
+    edible_portion_source?: string
+    ediblePortionSource?: string
     ratio: number
     intake: number
     waterMl?: number
@@ -495,7 +525,7 @@ export interface HomeIntakeData {
 }
 
 export interface HomeNutritionTarget {
-  source?: 'daily_manual' | 'manual' | 'dynamic' | 'profile' | 'default' | string
+  source?: 'manual' | 'system_initial' | 'dynamic' | 'profile' | 'default' | string
   diet_goal?: string
   base_calorie_target?: number
   suggested_calorie_target?: number
@@ -508,6 +538,18 @@ export interface HomeNutritionTarget {
   activity_multiplier?: number
   explanation?: string
   macro_explanation?: string
+  calibration_suggestion?: HomeTargetCalibrationSuggestion | null
+}
+
+export interface HomeTargetCalibrationSuggestion {
+  available?: boolean
+  suggested_kcal: number
+  current_kcal: number
+  delta_kcal: number
+  reason?: string
+  food_record_days?: number
+  weight_records?: number
+  source?: string
 }
 
 /** 首页同一餐次下的单条饮食记录摘要（用于多选跳转） */
@@ -765,6 +807,12 @@ export interface PetClaimResult {
   earned_credits_balance?: number
 }
 
+export interface PetAppearanceRerollResult {
+  pet: PetProfile
+  credits_cost: number
+  earned_credits_balance?: number
+}
+
 /** 首页仪表盘可编辑目标值 */
 export interface DashboardTargets {
   calorie_target: number
@@ -958,12 +1006,30 @@ export interface RiskCard {
   basis: string
   action: string
   delta: number
+  is_custom?: boolean
+  needs_refresh?: boolean
+  focus_label?: string
 }
 
 export interface RiskOption {
   key: string
   title: string
   short: string
+  is_custom?: boolean
+}
+
+export interface CustomFocusMeta {
+  max_focuses: number
+  generate_cost: number
+  daily_limit: number
+  used_today: number
+  remaining_today: number
+}
+
+export interface CustomHealthFocus {
+  id: string
+  label: string
+  created_at: string
 }
 
 export interface TopIssue {
@@ -979,7 +1045,9 @@ export interface HealthIndex {
   overview_copy: string
   signal_chips: SignalChip[]
   risk_cards: RiskCard[]
+  custom_risk_cards?: RiskCard[]
   all_risk_options: RiskOption[]
+  custom_focus_meta?: CustomFocusMeta
   top_issues: TopIssue[]
   action_list: string[]
 }
@@ -1190,6 +1258,26 @@ export interface ClaimSharePosterRewardResponse {
   points_balance?: number | null
 }
 
+export interface RewardCenterTask {
+  action_type: string
+  name: string
+  reward_amount: number
+  today_count: number
+  daily_limit: number | null
+  status: string
+  action_path: string
+}
+
+export interface RewardCenterResponse {
+  earned_credits_balance: number
+  today_earned_credits: number
+  today_task_overview: {
+    completed_count: number
+    total_count: number
+  }
+  tasks: RewardCenterTask[]
+}
+
 export interface MembershipPlansResponse {
   list: MembershipPlan[]
 }
@@ -1320,6 +1408,8 @@ export interface ReportExtract {
   suggestions?: string[]
   medical_notes?: string
   _image_urls?: string[]
+  _status?: 'processing' | 'done' | 'failed' | string
+  _error?: string
 }
 
 /** 健康档案中的病史/饮食/过敏等 JSON */
@@ -1568,13 +1658,13 @@ export async function compressImagePathForUpload(localPath: string): Promise<str
     return raw
   }
 
-  const targetBytes = 760 * 1024
+  const targetBytes = 2.5 * 1024 * 1024
   const originalSize = await getLocalFileSize(raw)
   if (originalSize !== null && originalSize <= targetBytes) {
     return raw
   }
 
-  const qualities = [72, 60, 48, 36]
+  const qualities = [88, 78, 68, 58]
   let bestPath = raw
   let bestSize = originalSize
 
@@ -1750,6 +1840,79 @@ function formatUserErrorWithTrace(message: string, traceId?: string): string {
   return `${msg}（traceId: ${normalizedTraceId}）`
 }
 
+export function sanitizeUserFacingErrorMessage(message: unknown, fallback: string = '请求失败，请稍后重试'): string {
+  const raw = String(message || '').trim()
+  if (!raw) return fallback
+  const lower = raw.toLowerCase()
+  if (
+    lower.includes('<html') ||
+    lower.includes('<!doctype html') ||
+    lower.includes('<head') ||
+    lower.includes('<body')
+  ) {
+    return 'AI 服务返回异常网页，请联系管理员检查模型配置'
+  }
+  if (
+    lower.includes('context deadline exceeded') ||
+    lower.includes('client.timeout') ||
+    lower.includes('timeout exceeded while awaiting headers') ||
+    lower.includes('net/http: timeout') ||
+    lower.includes('i/o timeout') ||
+    lower.includes('tls handshake timeout')
+  ) {
+    return 'AI 识别服务响应超时，请稍后重试'
+  }
+  if (
+    lower === 'eof' ||
+    lower.endsWith(': eof') ||
+    lower.includes('unexpected eof') ||
+    lower.includes('connection reset') ||
+    lower.includes('connection refused') ||
+    lower.includes('server closed idle connection') ||
+    lower.includes('use of closed network connection') ||
+    lower.includes('socket hang up')
+  ) {
+    return 'AI 识别服务连接中断，请稍后重试'
+  }
+  if (
+    lower.includes('resource exhausted') ||
+    lower.includes('api error 429') ||
+    lower.includes('too many requests')
+  ) {
+    return 'AI 识别服务当前繁忙，请稍后重试'
+  }
+  if (
+    lower.includes('incorrect api key') ||
+    lower.includes('api key format is incorrect') ||
+    lower.includes('authenticationerror') ||
+    lower.includes('apikey-error') ||
+    lower.includes('api error 401')
+  ) {
+    return 'AI 识别服务配置异常，请联系管理员处理'
+  }
+  if (
+    lower.includes('internalserviceerror') ||
+    lower.includes('api error 500') ||
+    lower.includes('api error 502') ||
+    lower.includes('api error 503') ||
+    lower.includes('api error 504')
+  ) {
+    return 'AI 识别服务暂时不可用，请稍后重试'
+  }
+  if (
+    lower.includes('http://') ||
+    lower.includes('https://') ||
+    lower.includes('/chat/completions') ||
+    lower.includes('/responses') ||
+    lower.includes('yunwu.ai') ||
+    lower.includes('api.ofox.ai') ||
+    lower.includes('ark.cn-beijing.volces.com')
+  ) {
+    return fallback
+  }
+  return raw.length > 160 ? `${raw.slice(0, 160)}…` : raw
+}
+
 /** 从文案里去掉已拼接的 traceId 后缀，避免弹窗里重复展示 */
 function stripTraceSuffixFromUserMessage(message: string): string {
   let s = (message || '').trim()
@@ -1778,7 +1941,7 @@ export async function showUnifiedApiError(error: unknown, fallback: string = '�
   const err = error as ErrorLike | undefined
   const traceId = getTraceIdFromError(err)
   const raw = (err?.message || '').trim()
-  const userMsg = stripTraceSuffixFromUserMessage(raw) || fallback
+  const userMsg = sanitizeUserFacingErrorMessage(stripTraceSuffixFromUserMessage(raw), fallback)
   if (isPlaceholderTraceId(raw) || isPlaceholderTraceId(userMsg)) {
     console.warn('[showUnifiedApiError] ignored placeholder trace id error', { message: raw || userMsg })
     return
@@ -2699,6 +2862,18 @@ export async function claimPetEvent(eventId: string): Promise<PetClaimResult> {
   return res.data as PetClaimResult
 }
 
+export async function rerollPetAppearance(): Promise<PetAppearanceRerollResult> {
+  const res = await authenticatedRequest('/api/pet/reroll-appearance', {
+    method: 'POST',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.message || '更换宠物外观失败'
+    throw new Error(msg)
+  }
+  return res.data as PetAppearanceRerollResult
+}
+
 /**
  * 获取首页可编辑目标值
  */
@@ -2911,7 +3086,7 @@ export async function generateStatsInsight(range: 'week' | 'month'): Promise<{
     {
       method: 'POST',
       data: { range },
-      timeout: 30000
+      timeout: 90000
     }
   )
   if (res.statusCode !== 200) {
@@ -2942,6 +3117,73 @@ export async function saveStatsInsight(range: 'week' | 'month', analysis_summary
     const msg = (res.data as any)?.detail || '保存 AI 洞察失败'
     throw new Error(msg)
   }
+}
+
+export async function getHealthFocuses(): Promise<{
+  focuses: CustomHealthFocus[]
+  max_focuses: number
+}> {
+  const res = await authenticatedRequest('/api/user/health-focuses', { method: 'GET', timeout: 10000 })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '获取自定义关注失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<{ focuses: CustomHealthFocus[]; max_focuses: number }>(res)
+}
+
+export async function addHealthFocus(label: string): Promise<{
+  focuses: CustomHealthFocus[]
+  focus_id: string
+  already_exists?: boolean
+}> {
+  const res = await authenticatedRequest('/api/user/health-focuses', {
+    method: 'POST',
+    data: { label },
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '添加自定义关注失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<{
+    focuses: CustomHealthFocus[]
+    focus_id: string
+    already_exists?: boolean
+  }>(res)
+}
+
+export async function removeHealthFocus(focusId: string): Promise<{ focuses: CustomHealthFocus[] }> {
+  const res = await authenticatedRequest(`/api/user/health-focuses/${encodeURIComponent(focusId)}`, {
+    method: 'DELETE',
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '移除自定义关注失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<{ focuses: CustomHealthFocus[] }>(res)
+}
+
+export async function generateCustomFocusCard(
+  range: 'week' | 'month',
+  focusId: string,
+): Promise<{
+  card: RiskCard
+  custom_focus_daily_limit?: number
+  custom_focus_used_today?: number
+  custom_focus_remaining_today?: number
+}> {
+  const res = await authenticatedRequest('/api/stats/custom-focus/generate', {
+    method: 'POST',
+    data: { range, focus_id: focusId },
+    timeout: 90000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '生成 AI 关注卡片失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<{
+    card: RiskCard
+    custom_focus_daily_limit?: number
+    custom_focus_used_today?: number
+    custom_focus_remaining_today?: number
+  }>(res)
 }
 
 /**
@@ -3000,6 +3242,10 @@ export function clearAllStorage() {
     Taro.removeStorageSync('openid')
     Taro.removeStorageSync('unionid')
     Taro.removeStorageSync('phoneNumber')
+    Taro.removeStorageSync('userRegisterTime')
+    Taro.removeStorageSync('pending_friend_invite_code')
+    Taro.removeStorageSync('dietGoal')
+    Taro.removeStorageSync('stats_page_bundle_v1')
 
     // 清除业务数据（可选，根据需求决定是否清除）
     // Taro.removeStorageSync('analyzeImagePath')
@@ -3017,6 +3263,17 @@ export function clearAllStorage() {
 
 /** 登录页路径，token 失效时统一跳转 */
 const LOGIN_PAGE_URL = extraPkgUrl('/pages/login/index')
+
+export async function deleteAccount(): Promise<{ success: boolean }> {
+  const response = await authenticatedRequest('/api/user/account', {
+    method: 'DELETE',
+    timeout: 15000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '注销失败')
+  }
+  return response.data as { success: boolean }
+}
 
 /**
  * 清除登录态并跳转登录页（token 失效或未登录时调用）
@@ -3176,6 +3433,45 @@ export async function login(code: string, phoneCode?: string, inviteCode?: strin
   }
 }
 
+export async function debugImpersonateUser(userId: string, password: string): Promise<LoginResponse> {
+  const trimmedUserId = userId.trim()
+  const trimmedPassword = password.trim()
+  if (!trimmedUserId) {
+    throw new Error('请输入用户 ID')
+  }
+  if (!trimmedPassword) {
+    throw new Error('请输入调试密码')
+  }
+
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/test-backend/impersonate-user`,
+    method: 'POST',
+    header: withNgrokBypassHeaders({
+      'Content-Type': 'application/json'
+    }),
+    data: { user_id: trimmedUserId, password: trimmedPassword },
+    timeout: 10000
+  })
+
+  if (response.statusCode !== 200) {
+    throwHttpErrorWithStatus(
+      response.statusCode,
+      response.data,
+      '代登录失败',
+      response.header as Record<string, any> | undefined
+    )
+  }
+
+  const loginData = unwrapResponse<LoginResponse>(response)
+  saveTokens(loginData.access_token, loginData.refresh_token, loginData.user_id)
+  if (loginData.diet_goal) {
+    Taro.setStorageSync('dietGoal', loginData.diet_goal)
+  } else {
+    Taro.removeStorageSync('dietGoal')
+  }
+  return loginData
+}
+
 /**
  * 获取用户信息
  * @returns Promise<UserInfo>
@@ -3298,6 +3594,22 @@ export async function claimSharePosterReward(recordId: string): Promise<ClaimSha
   } catch (error: any) {
     console.error('领取海报奖励失败:', error)
     throw new Error(error.message || '领取海报奖励失败')
+  }
+}
+
+export async function getRewardCenter(): Promise<RewardCenterResponse> {
+  try {
+    const response = await authenticatedRequest('/api/membership/reward-center', {
+      method: 'GET',
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取赚积分任务失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as RewardCenterResponse
+  } catch (error: any) {
+    console.error('获取赚积分任务失败:', error)
+    throw new Error(error.message || '获取赚积分任务失败')
   }
 }
 
@@ -3562,11 +3874,21 @@ export async function uploadReportImage(base64Image: string): Promise<{ imageUrl
  * 提交病历信息提取任务，后台异步处理，完成后自动更新到健康档案。用户无感知。
  * @param imageUrl 体检报告图片在 Supabase Storage 的公网 URL
  */
-export async function submitReportExtractionTask(imageUrl: string): Promise<{ taskId: string }> {
+export async function submitReportExtractionTask(input: {
+  imageUrl?: string
+  imageUrls?: string[]
+}): Promise<{ taskId: string }> {
+  const imageUrl = String(input.imageUrl || '').trim()
+  const imageUrls = Array.isArray(input.imageUrls)
+    ? input.imageUrls.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
+  if (!imageUrl && imageUrls.length === 0) {
+    throw new Error('请先上传体检报告')
+  }
   try {
     const response = await authenticatedRequest('/api/user/health-profile/submit-report-extraction-task', {
       method: 'POST',
-      data: { imageUrl }
+      data: imageUrls.length > 0 ? { imageUrl, imageUrls } : { imageUrl }
     })
     if (response.statusCode !== 200) {
       const errorMsg = (response.data as any)?.detail || '提交失败'
@@ -3641,6 +3963,9 @@ export interface ManualFoodSearchResult {
   subtitle: string
   category?: string
   default_weight_grams: number
+  display_unit?: 'g' | 'ml' | 'serving' | 'piece'
+  display_unit_label?: string
+  serving_presets?: Array<{ label: string; grams: number; quantity: number }>
   total_calories: number
   total_protein: number
   total_carbs: number
@@ -3814,6 +4139,16 @@ export async function searchFoodNutritionCandidates(query: string, limit: number
 export interface CreatePackagedFoodRequest {
   brand?: string
   product_name: string
+  spec_text?: string
+  barcode?: string
+  flavor_text?: string
+  package_category?: string
+  ingredients_text?: string
+  source_image_urls?: string[]
+  ocr_raw_text?: string
+  extract_confidence?: number
+  field_confidence?: Record<string, any>
+  ingest_method?: string
   net_weight_g: number
   serving_weight_g?: number
   kcal_per_100g: number
@@ -3849,6 +4184,17 @@ export interface PackagedFoodItem {
   brand?: string
   product_name: string
   normalized_name: string
+  product_key?: string
+  spec_text?: string
+  barcode?: string
+  flavor_text?: string
+  package_category?: string
+  ingredients_text?: string
+  source_image_urls?: string[]
+  ocr_raw_text?: string
+  extract_confidence?: number
+  field_confidence?: Record<string, any>
+  ingest_method?: string
   net_weight_g: number
   serving_weight_g: number
   kcal_per_100g: number
@@ -3896,6 +4242,52 @@ export interface PackagedNutritionLabelRecognition {
   raw_text?: string
 }
 
+export interface PackagedAutoIngestResult {
+  status?: string
+  reason?: string
+  upsert_action?: string
+  packaged_food_id?: string
+  missing_fields?: string[]
+  conflict_reasons?: string[]
+}
+
+export interface PackagedProductExtractResult {
+  brand?: string
+  product_name?: string
+  flavor_text?: string
+  package_category?: string
+  net_weight_g?: number
+  serving_weight_g?: number
+  spec_text?: string
+  barcode?: string
+  ingredients_text?: string
+  unit_nutrition_per_100g?: Record<string, number>
+  nutrition_basis_unit?: string
+  energy_unit_raw?: string
+  conversion_status?: string
+  raw_label_payload?: Record<string, any>
+  field_confidence?: Record<string, number>
+  extract_confidence?: number
+  needs_more_images?: string[]
+  missing_fields?: string[]
+  auto_ingest_result?: PackagedAutoIngestResult
+  packaged_food_id?: string
+  ocr_raw_text?: string
+  source_image_urls?: string[]
+}
+
+export interface PackagedUploadRewardResult {
+  awarded?: boolean
+  already_claimed?: boolean
+  already_exists?: boolean
+  daily_limit_reached?: boolean
+  reward_credits?: number
+  reason?: string
+  packaged_food_id?: string
+  reward_task?: Record<string, any>
+  reward_center?: RewardCenterResponse
+}
+
 export async function createPackagedFood(payload: CreatePackagedFoodRequest): Promise<PackagedFoodItem> {
   const res = await authenticatedRequest('/api/packaged-food', {
     method: 'POST',
@@ -3928,6 +4320,22 @@ export async function submitPackagedNutritionLabelRecognition(imageUrl: string):
   })
   if (res.statusCode !== 200) {
     throwHttpErrorWithStatus(res.statusCode, res.data, '提交营养成分表识别任务失败')
+  }
+  return unwrapResponse<{ task_id: string; message: string }>(res)
+}
+
+export async function submitPackagedProductExtract(payload: {
+  image_urls: string[]
+  source_task_id?: string
+  recognized_name_hint?: string
+}): Promise<{ task_id: string; message: string }> {
+  const res = await authenticatedRequest('/api/packaged-food/extract/submit', {
+    method: 'POST',
+    data: payload,
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '提交预包装商品识别任务失败')
   }
   return unwrapResponse<{ task_id: string; message: string }>(res)
 }

@@ -5,7 +5,9 @@
   "private": true,
   "scripts": {
     "runner": "ts-node src/runner.ts",
-    "test": "ts-node src/runner.ts --scenario scenarios/home-dashboard.yaml"
+    "test": "ts-node src/runner.ts --scenario scenarios/home-dashboard.yaml",
+    "test:traces": "ts-node src/trace-runner.ts --traces traces/analyze-food.yaml",
+    "test:traces:all": "ts-node src/trace-runner.ts --traces 'traces/*.yaml'"
   },
   "dependencies": {
     "commander": "^12.0.0",

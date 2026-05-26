@@ -9,6 +9,7 @@ import {
   deleteExerciseLog,
   getAnalyzeTask,
   getMyMembership,
+  sanitizeUserFacingErrorMessage,
   uploadAnalyzeImageFile,
   compressImagePathForUpload,
   showUnifiedApiError,
@@ -17,11 +18,11 @@ import {
   type MembershipStatus,
 } from '../../../utils/api'
 import {
-  getExerciseLogBlockedActionText,
   getExerciseLogCreditBlockMessage,
   isExerciseLogCreditExhausted,
 } from '../../../utils/membership'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'
@@ -96,18 +97,18 @@ function normalizeTaskErrorMessage(raw: unknown): string {
     if (t.startsWith('{') && t.includes('"message"')) {
       try {
         const j = JSON.parse(t) as { message?: string }
-        if (typeof j.message === 'string') return j.message
+        if (typeof j.message === 'string') return sanitizeUserFacingErrorMessage(j.message, '分析失败')
       } catch {
         /* ignore */
       }
     }
-    return t || '分析失败'
+    return sanitizeUserFacingErrorMessage(t, '分析失败')
   }
   if (typeof raw === 'object' && raw !== null && 'message' in raw) {
     const m = (raw as { message?: unknown }).message
-    return typeof m === 'string' ? m : JSON.stringify(raw)
+    return typeof m === 'string' ? sanitizeUserFacingErrorMessage(m, '分析失败') : sanitizeUserFacingErrorMessage(JSON.stringify(raw), '分析失败')
   }
-  return String(raw)
+  return sanitizeUserFacingErrorMessage(String(raw), '分析失败')
 }
 
 type DisplayRow =
@@ -123,6 +124,10 @@ export default function ExerciseRecordPage() {
   const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [creditSheet, setCreditSheet] = useState<{ visible: boolean; message?: string; status?: MembershipStatus | null }>({
+    visible: false,
+    status: null,
+  })
   const [selectedImagePath, setSelectedImagePath] = useState('')
   const currentRecordDateRef = useRef(recordDate)
   const pollingTaskIdsRef = useRef<Set<string>>(new Set())
@@ -361,20 +366,10 @@ export default function ExerciseRecordPage() {
     )
     const isTodayRecord = targetRecordDate === getTodayRecordDateKey()
     if (isTodayRecord && isExerciseLogCreditExhausted(membershipStatus)) {
-      const content = getExerciseLogCreditBlockMessage(membershipStatus)
-      const confirmText = getExerciseLogBlockedActionText(membershipStatus)
-      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
-      Taro.showModal({
-        title: '积分不足',
-        content,
-        showCancel: showUpgrade,
-        confirmText: showUpgrade ? confirmText : '知道了',
-        cancelText: '取消',
-        success: (res) => {
-          if (showUpgrade && res.confirm) {
-            Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-          }
-        }
+      setCreditSheet({
+        visible: true,
+        status: membershipStatus,
+        message: getExerciseLogCreditBlockMessage(membershipStatus),
       })
       return
     }
@@ -393,20 +388,10 @@ export default function ExerciseRecordPage() {
       if (membership) {
         setMembershipStatus(membership)
         if (isTodayRecord && isExerciseLogCreditExhausted(membership)) {
-          const content = getExerciseLogCreditBlockMessage(membership)
-          const confirmText = getExerciseLogBlockedActionText(membership)
-          const showUpgrade = content.includes('开通') || content.includes('升级') || membership.is_pro
-          Taro.showModal({
-            title: '积分不足',
-            content,
-            showCancel: showUpgrade,
-            confirmText: showUpgrade ? confirmText : '知道了',
-            cancelText: '取消',
-            success: (res) => {
-              if (showUpgrade && res.confirm) {
-                Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-              }
-            }
+          setCreditSheet({
+            visible: true,
+            status: membership,
+            message: getExerciseLogCreditBlockMessage(membership),
           })
           return
         }
@@ -437,19 +422,7 @@ export default function ExerciseRecordPage() {
         msg.includes('开通会员') ||
         msg.includes('升级更高套餐')
       if (isQuota) {
-        const suggestUpgrade = msg.includes('开通') || msg.includes('升级')
-        Taro.showModal({
-          title: '积分不足',
-          content: msg,
-          showCancel: suggestUpgrade,
-          confirmText: suggestUpgrade ? getExerciseLogBlockedActionText(membershipStatus) : '知道了',
-          cancelText: '取消',
-          success: (res) => {
-            if (suggestUpgrade && res.confirm) {
-              Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-            }
-          }
-        })
+        setCreditSheet({ visible: true, status: membershipStatus, message: msg })
       } else {
         await showUnifiedApiError(e, '提交失败')
       }
@@ -676,6 +649,14 @@ export default function ExerciseRecordPage() {
         )}
         <View style={{ height: '20rpx' }} />
       </ScrollView>
+      <CreditShortageSheet
+        visible={creditSheet.visible}
+        membershipStatus={creditSheet.status ?? membershipStatus}
+        requiredCredits={1}
+        scenarioLabel='运动记录'
+        message={creditSheet.message}
+        onClose={() => setCreditSheet({ visible: false, status: null })}
+      />
     </View>
   )
 }

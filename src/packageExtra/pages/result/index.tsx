@@ -86,8 +86,17 @@ const MEAL_OPTIONS = [
 type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => {
+  if (value === 'standard_web_search') return 'standard_web_search'
+  if (value === 'strict_web_search') return 'strict_web_search'
   if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
   return 'standard'
+}
+
+const getExecutionModeLabel = (value: ExecutionMode): string => {
+  if (value === 'strict_web_search') return '精准联网'
+  if (value === 'standard_web_search') return '普通联网'
+  if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return '精准'
+  return '普通'
 }
 
 const normalizeAnalysisEngine = (value: unknown): AnalysisEngine => (
@@ -236,9 +245,14 @@ interface NutritionItem {
   name: string
   weight: number // 当前重量（用户可调节）
   originalWeight: number // AI 初始估算重量（用于标记样本时计算偏差）
+  grossWeight: number // 图中可见原始重量（未扣壳/骨/核）
+  ediblePortionRatio: number // 可食部比例，用于从原始重量折算可食重量
+  ediblePortionReason?: string
+  ediblePortionSource?: string
   calorie: number // 基于 weight 的总热量
   intake: number // 实际摄入量 = weight × ratio
   ratio: number // 摄入比例（0-100%，独立调节）
+  suggestedRatio?: number
   suggestedRatioReason?: string
   suggestedRatioSource?: string
   itemType?: string
@@ -268,6 +282,25 @@ interface SnackContributionDraft {
 }
 
 type MacroField = 'protein' | 'carbs' | 'fat'
+
+const EDIBLE_PORTION_HINT_KEYWORDS = [
+  '虾', '小龙虾', '龙虾', '蟹', '螃蟹', '贝', '蛤', '蛏', '蚝', '扇贝',
+  '鸡爪', '凤爪', '鸡翅', '鸡腿', '鸭脖', '鸭掌', '鸭翅', '鸭腿', '鹅胗', '鹅翅',
+  '排骨', '骨', '猪蹄', '鱼',
+  '荔枝', '龙眼', '龙贡果', '龙宫果', '山竹', '榴莲', '柚子', '橙', '橘', '香蕉', '芒果', '菠萝', '玉米'
+]
+
+const getEdiblePortionHint = (item: NutritionItem): string | null => {
+  if (item.ediblePortionRatio > 0 && item.ediblePortionRatio < 99) {
+    const reason = item.ediblePortionReason ? `：${item.ediblePortionReason}` : ''
+    return `可食部 ${Math.round(item.ediblePortionRatio)}%，原始约 ${Math.round(item.grossWeight)}g，计入 ${Math.round(item.weight)}g${reason}`
+  }
+  const name = `${item.name || ''}${item.sourceName || ''}`
+  if (!name) return null
+  const shouldHint = EDIBLE_PORTION_HINT_KEYWORDS.some(keyword => name.includes(keyword))
+  if (!shouldHint) return null
+  return '重量按可食部估算：去壳、去骨、去皮或去核部分未计入营养。'
+}
 type IngredientMetricField = MacroField | 'waterMl'
 
 const INGREDIENT_METRIC_FIELDS: IngredientMetricField[] = ['protein', 'carbs', 'fat', 'waterMl']
@@ -364,7 +397,10 @@ const SNACK_KEYWORDS = [
   '果冻', '威化', '沙琪玛', '麻薯', '小包', '包装', '袋装'
 ]
 
+const snackContributionEnabled = false
+
 const isSnackLikeItem = (item: NutritionItem) => {
+  if (!snackContributionEnabled) return false
   const source = String(item.nutritionSource || '').toLowerCase()
   if (source === 'packaged_food_library') return false
   const marker = `${item.itemType || ''} ${item.category || ''} ${item.name || ''}`.toLowerCase()
@@ -526,6 +562,7 @@ function ResultPage() {
 
   // 二次纠错抽屉状态
   const [showCorrectionDrawer, setShowCorrectionDrawer] = useState(false)
+  const [quickRatioSheetVisible, setQuickRatioSheetVisible] = useState(false)
   const [correctionItems, setCorrectionItems] = useState<NutritionItem[]>([])
   const [additionalContext, setAdditionalContext] = useState('')
   const [isResubmitting, setIsResubmitting] = useState(false)
@@ -642,12 +679,19 @@ function ResultPage() {
   // 将API返回的数据转换为页面需要的格式（保留 originalWeight 用于标记样本时计算偏差）
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
     return items.map((item, index) => {
+      const grossWeightRaw = item.grossWeightGrams ?? item.gross_weight_grams ?? item.originalWeightGrams ?? item.estimatedWeightGrams
+      const grossWeight = Math.max(0, Math.round(grossWeightRaw || 0))
+      const edibleRatioRaw = item.ediblePortionRatio ?? item.edible_portion_ratio
+      const ediblePortionRatio = Math.max(1, Math.min(100, Math.round(
+        edibleRatioRaw || (grossWeight > 0 ? (item.estimatedWeightGrams / grossWeight) * 100 : 100)
+      )))
       const aiWeight = item.originalWeightGrams ?? item.estimatedWeightGrams
       const itemId = item.itemId ?? (index + 1)
       const waterMl = normalizeWaterMl(item.waterMl, item.water_ml, item.nutrients?.waterMl, item.nutrients?.water_ml)
       const nutrients = normalizeItemNutrients(item.nutrients, waterMl)
       const suggestedRatio = Math.max(0, Math.min(100, Math.round(item.suggestedRatio ?? 100)))
-      const intake = Math.round(item.estimatedWeightGrams * (suggestedRatio / 100))
+      const actualRatio = 100
+      const intake = Math.round(item.estimatedWeightGrams * (actualRatio / 100))
       return {
         id: itemId,
         sourceItemId: itemId,
@@ -655,9 +699,14 @@ function ResultPage() {
         name: item.name,
         weight: item.estimatedWeightGrams,
         originalWeight: aiWeight,
+        grossWeight,
+        ediblePortionRatio,
+        ediblePortionReason: item.ediblePortionReason ?? item.edible_portion_reason,
+        ediblePortionSource: item.ediblePortionSource ?? item.edible_portion_source,
         calorie: nutrients.calories,
         intake,
-        ratio: suggestedRatio,
+        ratio: actualRatio,
+        suggestedRatio,
         suggestedRatioReason: item.suggestedRatioReason,
         suggestedRatioSource: item.suggestedRatioSource,
         itemType: item.type || item.food_type,
@@ -809,7 +858,7 @@ function ResultPage() {
     Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
   }
 
-  const isStrictMode = executionMode === 'strict'
+  const isStrictMode = executionMode === 'strict' || executionMode === 'strict_web_search'
   const shouldShowRecognitionCard = false
   const shouldShowFollowupCard = taskType === 'food_text' && followupQuestions.length > 0 && !isStrictMode
   const hasUploadableImage = taskType === 'food' && (imagePaths.length > 0 || !!imagePath)
@@ -982,21 +1031,65 @@ function ResultPage() {
     return /【调试】|调试预览|调试随机|随机样本/.test(t)
   }
 
-  /** 与加载逻辑一致：接口空串时用默认句，避免首屏 healthAdvice 为空导致整块 AI 分析被隐藏 */
-  const resolvedHealthInsight = (healthAdvice?.trim() || '保持健康饮食！')
-
-  const showInsightDescription = Boolean(description?.trim()) && !isDebugInsightText(description)
-  const showInsightHealth =
-    !isDebugInsightText(healthAdvice) && !isDebugInsightText(resolvedHealthInsight)
-  const showInsightPfc = Boolean(pfcRatioComment?.trim()) && !isDebugInsightText(pfcRatioComment)
-  const showInsightAbsorption = Boolean(absorptionNotes?.trim()) && !isDebugInsightText(absorptionNotes)
   const showInsightContext = Boolean(contextAdvice?.trim()) && !isDebugInsightText(contextAdvice)
-  const showInsightCard =
-    showInsightDescription ||
-    showInsightHealth ||
-    showInsightPfc ||
-    showInsightAbsorption ||
-    showInsightContext
+
+  const ratioAdviceItems = useMemo(() => {
+    return nutritionItems
+      .filter(item => item.suggestedRatioSource === 'ai' && typeof item.suggestedRatio === 'number' && item.suggestedRatio < 100)
+      .slice(0, 3)
+      .map(item => `${item.name}建议 ${item.suggestedRatio}%${item.suggestedRatioReason ? `，${item.suggestedRatioReason}` : ''}`)
+  }, [nutritionItems])
+
+  const ratioAdviceText = ratioAdviceItems.length > 0
+    ? `${ratioAdviceItems.join('；')}。`
+    : '本餐暂无需要特别下调的食物，默认按实际食用量记录即可。'
+
+  const eatingOrderText = useMemo(() => {
+    const names = nutritionItems.map(item => item.name).join('、')
+    const hasDrink = nutritionItems.some(item => item.waterMl >= 150 || /汤|粥|奶|茶|咖啡|饮料|水|酒/.test(item.name))
+    const hasVegFruit = nutritionItems.some(item => /菜|瓜|蓝莓|水果|荔枝|桃|苹果|香蕉|蔬|蘑|菇|豆/.test(item.name))
+    const hasProtein = nutritionItems.some(item => /肉|虾|鱼|鸡|蛋|牛|羊|猪|豆腐|奶|酸奶/.test(item.name))
+    const hasStapleSweet = nutritionItems.some(item => /饭|面|粉|饼|糕|甜|糖|蛋筒|冰淇淋|可乐|奶茶/.test(item.name))
+    const steps: string[] = []
+    if (hasDrink) steps.push('先喝汤水/奶茶饮品少量润口')
+    if (hasVegFruit) steps.push('再吃蔬果或低能量密度食物')
+    if (hasProtein) steps.push('接着吃蛋白质')
+    if (hasStapleSweet) steps.push('最后吃主食、甜点或甜饮')
+    if (steps.length === 0 && names) return '先从清淡、低油的食物开始，再吃更高能量密度的部分。'
+    return `${steps.join('，')}。`
+  }, [nutritionItems])
+
+  const fallbackPfcRatioText = useMemo(() => {
+    const total = nutritionStats.protein + nutritionStats.carbs + nutritionStats.fat
+    if (total <= 0) return '本餐营养比例暂无法判断，建议结合实际食用量记录后再观察。'
+    const proteinPercent = Math.round((nutritionStats.protein / total) * 100)
+    const carbsPercent = Math.round((nutritionStats.carbs / total) * 100)
+    const fatPercent = Math.round((nutritionStats.fat / total) * 100)
+    const notes: string[] = []
+    if (carbsPercent >= 55) notes.push('碳水占比较高，可适当控制主食或甜饮')
+    if (fatPercent >= 35) notes.push('脂肪占比较高，油脂/高脂菜建议减量')
+    if (proteinPercent < 18) notes.push('蛋白质偏少，可补充蛋类、奶类、豆制品或瘦肉')
+    if (notes.length === 0) notes.push('整体比例较均衡')
+    return `蛋白质约${proteinPercent}%，碳水约${carbsPercent}%，脂肪约${fatPercent}%；${notes.join('，')}。`
+  }, [nutritionStats.protein, nutritionStats.carbs, nutritionStats.fat])
+
+  const fallbackAbsorptionText = useMemo(() => {
+    const hasProtein = nutritionItems.some(item => /肉|虾|鱼|鸡|蛋|牛|羊|猪|豆腐|奶|酸奶/.test(item.name))
+    const hasFruitVeg = nutritionItems.some(item => /菜|瓜|果|蓝莓|荔枝|苹果|香蕉|桃|橙|柑|莓|蔬/.test(item.name))
+    const hasHighFat = nutritionItems.some(item => /油|炸|烧烤|肥|酥|奶油|蛋筒|冰淇淋/.test(item.name)) || nutritionStats.fat >= 18
+    const notes: string[] = []
+    if (hasFruitVeg && hasProtein) notes.push('蔬果中的维生素和酸味食物有助于搭配蛋白质餐食')
+    if (hasHighFat) notes.push('高油脂食物消化较慢，建议放慢进食速度')
+    if (notes.length === 0) notes.push('本餐按清淡食物优先、主食甜点后置的顺序更稳妥')
+    return `${notes.join('；')}。`
+  }, [nutritionItems, nutritionStats.fat])
+
+  const pfcRatioDisplayText = !isDebugInsightText(pfcRatioComment) && pfcRatioComment?.trim()
+    ? pfcRatioComment.trim()
+    : fallbackPfcRatioText
+  const absorptionDisplayText = !isDebugInsightText(absorptionNotes) && absorptionNotes?.trim()
+    ? absorptionNotes.trim()
+    : fallbackAbsorptionText
 
   // 调节食物估算重量（+- 按钮）
   const handleWeightAdjust = (id: number, delta: number) => {
@@ -1006,6 +1099,10 @@ function ResultPage() {
           // 调节的是 weight（AI 估算的食物总重量）
           const newWeight = Math.max(10, item.weight + delta) // 最小 10g
           const weightScale = item.weight > 0 ? newWeight / item.weight : 1
+          const nextGrossWeight = Math.max(item.grossWeight, newWeight)
+          const nextEdiblePortionRatio = nextGrossWeight > 0
+            ? Math.max(1, Math.min(100, Math.round((newWeight / nextGrossWeight) * 100)))
+            : item.ediblePortionRatio
           const nextProtein = item.protein * weightScale
           const nextCarbs = item.carbs * weightScale
           const nextFat = item.fat * weightScale
@@ -1016,6 +1113,8 @@ function ResultPage() {
           return {
             ...item,
             weight: newWeight,
+            grossWeight: nextGrossWeight,
+            ediblePortionRatio: nextEdiblePortionRatio,
             intake: newIntake,
             // 重量变化时，同步更新该食物对应的营养值
             calorie: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
@@ -1133,9 +1232,7 @@ function ResultPage() {
           return {
             ...item,
             ratio: clampedRatio,
-            intake: newIntake,
-            suggestedRatioSource: item.suggestedRatioSource === 'ai' ? 'manual' : item.suggestedRatioSource,
-            suggestedRatioReason: item.suggestedRatioSource === 'ai' ? undefined : item.suggestedRatioReason
+            intake: newIntake
             // weight 不变
           }
         }
@@ -1147,6 +1244,27 @@ function ResultPage() {
 
       return updatedItems
     })
+  }
+
+  // 快捷比例：按聚餐人数统一设置所有食物的摄入比例
+  const handleQuickRatio = (people: number) => {
+    const ratio = Math.max(1, Math.min(100, Math.round(100 / people)))
+    setNutritionItems(items => {
+      const updatedItems = items.map(item => ({
+        ...item,
+        ratio,
+        intake: Math.round(item.weight * (ratio / 100)),
+      }))
+      calculateNutritionStats(updatedItems)
+      return updatedItems
+    })
+    setQuickRatioSheetVisible(false)
+  }
+
+  const applySuggestedRatio = (id: number) => {
+    const target = nutritionItems.find(item => item.id === id)
+    if (!target || typeof target.suggestedRatio !== 'number') return
+    handleRatioAdjust(id, target.suggestedRatio)
   }
 
   // 删除食物项
@@ -1256,11 +1374,20 @@ function ResultPage() {
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
   const openSnackContribution = (item: NutritionItem) => {
     const unit = nutrientPer100FromItem(item)
+    const sourceTaskId = String(Taro.getStorageSync('analyzeSourceTaskId') || '').trim()
     Taro.setStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY, {
       itemId: item.id,
+      sourceTaskId: sourceTaskId || undefined,
+      recognizedNameHint: item.name,
       brand: '',
       productName: item.name,
+      flavorText: '',
+      packageCategory: item.category || item.itemType || '',
+      specText: '',
+      barcode: '',
+      ingredientsText: '',
       netWeightG: String(Math.max(1, Math.round(item.weight || item.intake || item.originalWeight || 1))),
+      servingWeightG: '',
       calories: String(Math.round(unit.calories || 0)),
       protein: formatMacroDisplay(unit.protein || 0),
       carbs: formatMacroDisplay(unit.carbs || 0),
@@ -1268,6 +1395,24 @@ function ResultPage() {
       fiber: formatMacroDisplay(unit.fiber || 0),
       sugar: formatMacroDisplay(unit.sugar || 0),
       sodiumMg: String(Math.round(unit.sodiumMg || unit.sodium_mg || 0)),
+      saturatedFat: '',
+      cholesterolMg: '',
+      potassiumMg: '',
+      calciumMg: '',
+      ironMg: '',
+      magnesiumMg: '',
+      zincMg: '',
+      vitaminARaeMcg: '',
+      vitaminCMg: '',
+      vitaminDMcg: '',
+      vitaminEMg: '',
+      vitaminKMcg: '',
+      thiaminMg: '',
+      riboflavinMg: '',
+      niacinMg: '',
+      vitaminB6Mg: '',
+      folateMcg: '',
+      vitaminB12Mcg: '',
     })
     Taro.navigateTo({ url: extraPkgUrl('/pages/packaged-food-edit/index') })
   }
@@ -1370,6 +1515,12 @@ function ResultPage() {
             weight: item.weight,
             ratio: item.ratio,
             intake: item.intake,
+            gross_weight_grams: item.grossWeight,
+            edible_portion_ratio: item.ediblePortionRatio,
+            edible_portion_reason: item.ediblePortionReason,
+            edible_portion_source: item.ediblePortionSource,
+            suggested_ratio: item.suggestedRatio,
+            suggested_ratio_reason: item.suggestedRatioReason,
             water_ml: item.waterMl,
             nutrients: buildFoodItemNutrients(item)
           })),
@@ -1930,7 +2081,7 @@ function ResultPage() {
             <View className='execution-mode-left'>
               <View className={`execution-mode-tag ${executionMode}`}>
                 <Text className='execution-mode-tag-text'>
-                  {executionMode === 'strict' ? '精准' : '普通'}
+                  {getExecutionModeLabel(executionMode)}
                 </Text>
               </View>
               <Text className='execution-mode-default-link' onClick={handleDefaultModeEdit}>
@@ -2202,7 +2353,7 @@ function ResultPage() {
           </View>
 
           {/* AI 饮食分析（隐藏调试文案，仅展示最终可读结论） */}
-          {showInsightCard && (
+          {nutritionItems.length > 0 && (
             <View className='insight-card'>
               <View className='card-header'>
                 <Text className='card-title'>
@@ -2211,47 +2362,45 @@ function ResultPage() {
                 </Text>
               </View>
 
-              {showInsightDescription && (
-                <View className='insight-item intro'>
-                  <View className='insight-icon-wrapper blue'>
-                    <Text className='insight-icon iconfont icon-jishiben'></Text>
-                  </View>
-                  <Text className='insight-content'>{description}</Text>
+              <View className='insight-item ratio-advice'>
+                <View className='insight-icon-wrapper orange'>
+                  <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
                 </View>
-              )}
+                <View className='insight-body'>
+                  <Text className='insight-label'>饮食比例建议</Text>
+                  <Text className='insight-content'>{ratioAdviceText}</Text>
+                </View>
+              </View>
 
-              {showInsightHealth && (
-                <View className='insight-item highlight'>
-                  <View className='insight-icon-wrapper green'>
-                    <Text className='insight-icon iconfont icon-good'></Text>
-                  </View>
-                  <Text className='insight-content'>{resolvedHealthInsight}</Text>
+              <View className='insight-item ratio'>
+                <View className='insight-icon-wrapper orange'>
+                  <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
                 </View>
-              )}
+                <View className='insight-body'>
+                  <Text className='insight-label'>营养比例</Text>
+                  <Text className='insight-content'>{pfcRatioDisplayText}</Text>
+                </View>
+              </View>
 
-              {showInsightPfc && (
-                <View className='insight-item ratio'>
-                  <View className='insight-icon-wrapper orange'>
-                    <Text className='insight-icon iconfont icon-tubiao-zhuzhuangtu'></Text>
-                  </View>
-                  <View className='insight-body'>
-                    <Text className='insight-label'>营养比例</Text>
-                    <Text className='insight-content'>{pfcRatioComment}</Text>
-                  </View>
+              <View className='insight-item eating-order'>
+                <View className='insight-icon-wrapper teal'>
+                  <Text className='insight-icon iconfont icon-shizhong'></Text>
                 </View>
-              )}
+                <View className='insight-body'>
+                  <Text className='insight-label'>进食顺序</Text>
+                  <Text className='insight-content'>{eatingOrderText}</Text>
+                </View>
+              </View>
 
-              {showInsightAbsorption && (
-                <View className='insight-item absorption'>
-                  <View className='insight-icon-wrapper purple'>
-                    <Text className='insight-icon iconfont icon-huore'></Text>
-                  </View>
-                  <View className='insight-body'>
-                    <Text className='insight-label'>吸收与利用</Text>
-                    <Text className='insight-content'>{absorptionNotes}</Text>
-                  </View>
+              <View className='insight-item absorption'>
+                <View className='insight-icon-wrapper purple'>
+                  <Text className='insight-icon iconfont icon-huore'></Text>
                 </View>
-              )}
+                <View className='insight-body'>
+                  <Text className='insight-label'>吸收与利用</Text>
+                  <Text className='insight-content'>{absorptionDisplayText}</Text>
+                </View>
+              </View>
 
               {showInsightContext && (
                 <View className='insight-item context'>
@@ -2270,14 +2419,18 @@ function ResultPage() {
           {/* 包含成分 */}
           <View className='ingredients-section'>
             <View className='section-title-row'>
-              <Text className='section-title'>包含成分</Text>
-              <Text className='section-count'>{nutritionItems.length}种</Text>
+              <View className='section-title-group'>
+                <Text className='section-title'>包含成分</Text>
+                <Text className='section-count'>({nutritionItems.length}种)</Text>
+              </View>
+              <Text className='quick-ratio-btn' onClick={() => setQuickRatioSheetVisible(true)}>快捷比例</Text>
             </View>
 
             <View className='ingredients-list'>
               {nutritionItems.map((item) => {
                 const detailRows = getNutrientDetailRows(item)
                 const detailsExpanded = !!expandedNutritionDetailIds[item.id]
+                const ediblePortionHint = getEdiblePortionHint(item)
                 return (
                 <View key={item.id} className='ingredient-card'>
                   <View className='ingredient-main'>
@@ -2292,6 +2445,11 @@ function ResultPage() {
                         </View>
                       </View>
                     </View>
+                    {ediblePortionHint && (
+                      <View className='ingredient-edible-portion-hint'>
+                        <Text className='ingredient-edible-portion-hint-text'>{ediblePortionHint}</Text>
+                      </View>
+                    )}
                   </View>
 
                   {isSnackLikeItem(item) && (
@@ -2345,7 +2503,7 @@ function ResultPage() {
                         <Text className='ingredient-more-toggle-text'>
                           {detailsExpanded ? '收起更多营养' : '展开更多营养'}
                         </Text>
-                        <Text className={`ingredient-more-toggle-icon ${detailsExpanded ? 'expanded' : ''}`}>⌄</Text>
+                        <Text className={`iconfont icon-right ingredient-more-toggle-icon ${detailsExpanded ? 'expanded' : ''}`} />
                       </View>
                       {detailsExpanded && (
                         <View className='ingredient-detail-grid'>
@@ -2366,12 +2524,15 @@ function ResultPage() {
                   <View className='ingredient-controls'>
                     <View className='weight-control'>
                       <Text className='control-label'>估算重量</Text>
+                      {item.ediblePortionRatio > 0 && item.ediblePortionRatio < 99 && (
+                        <Text className='control-sub-label'>原始约 {Math.round(item.grossWeight)}g · 可食 {Math.round(item.ediblePortionRatio)}%</Text>
+                      )}
                       <View className='weight-adjuster'>
                         <View
                           className='adjust-btn minus'
                           onClick={() => handleWeightAdjust(item.id, -10)}
                         >–</View>
-                        <Text className='weight-display'>{formatWeightDisplay(item.intake)}</Text>
+                        <Text className='weight-display'>{formatWeightDisplay(item.weight)}</Text>
                         <View
                           className='adjust-btn plus'
                           onClick={() => handleWeightAdjust(item.id, 10)}
@@ -2383,7 +2544,7 @@ function ResultPage() {
                       <View className='ratio-label-wrap'>
                         <Text className='control-label'>实际摄入</Text>
                         {item.suggestedRatioSource === 'ai' && (
-                          <Text className='ratio-suggestion-badge'>AI建议</Text>
+                          <Text className='ratio-suggestion-badge'>AI建议 {item.suggestedRatio ?? 100}%</Text>
                         )}
                       </View>
                       <View className='ratio-control-right'>
@@ -2407,6 +2568,11 @@ function ResultPage() {
                         </View>
                         <Text className='ratio-display'>{item.ratio}%</Text>
                       </View>
+                      {item.suggestedRatioSource === 'ai' && typeof item.suggestedRatio === 'number' && item.suggestedRatio !== item.ratio && (
+                        <View className='ratio-suggestion-action' onClick={() => applySuggestedRatio(item.id)}>
+                          <Text className='ratio-suggestion-action-text'>应用建议</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -2662,6 +2828,35 @@ function ResultPage() {
           </View>
         </View>
       </View>
+
+      {/* 快捷比例底部弹窗 */}
+      {quickRatioSheetVisible && (
+        <View className='action-sheet-overlay' onClick={() => setQuickRatioSheetVisible(false)}>
+          <View className='action-sheet-mask' />
+          <View className='action-sheet-content'>
+            <View className='action-sheet-handle-bar' />
+            <View className='action-sheet-actions'>
+              <View className='action-sheet-item' onClick={() => handleQuickRatio(2)}>
+                <Text className='action-sheet-label'>两人聚餐</Text>
+                <Text className='action-sheet-hint'>每人 50%</Text>
+              </View>
+              <View className='action-sheet-item' onClick={() => handleQuickRatio(3)}>
+                <Text className='action-sheet-label'>三人聚餐</Text>
+                <Text className='action-sheet-hint'>每人 33%</Text>
+              </View>
+              <View className='action-sheet-item' onClick={() => handleQuickRatio(4)}>
+                <Text className='action-sheet-label'>四人聚餐</Text>
+                <Text className='action-sheet-hint'>每人 25%</Text>
+              </View>
+            </View>
+            <View className='action-sheet-actions action-sheet-actions--cancel'>
+              <View className='action-sheet-item action-sheet-item--cancel' onClick={() => setQuickRatioSheetVisible(false)}>
+                <Text className='action-sheet-label'>取消</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   )
 }

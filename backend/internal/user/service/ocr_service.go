@@ -3,11 +3,14 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/pkg/config"
@@ -37,13 +40,19 @@ func (s *OCRService) ExtractFromBase64(ctx context.Context, base64Image string) 
 }
 
 func (s *OCRService) ExtractFromURL(ctx context.Context, imageURL string) (map[string]any, error) {
-	return s.callDoubao(ctx, s.resolveHealthReportURL(imageURL))
+	return s.callDoubao(ctx, s.resolveHealthReportInput(imageURL))
 }
 
-func (s *OCRService) resolveHealthReportURL(value string) string {
+func (s *OCRService) resolveHealthReportInput(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" || s.storage == nil {
 		return value
+	}
+	if signedURL, err := s.storage.PresignGETURL("health-reports", value, 30*time.Minute); err == nil && signedURL != "" {
+		return signedURL
+	}
+	if data, err := s.storage.DownloadBytes("health-reports", value); err == nil && len(data) > 0 {
+		return fmt.Sprintf("data:image/jpeg;base64,%s", base64.StdEncoding.EncodeToString(data))
 	}
 	resolved := s.storage.ResolveReferenceURL("health-reports", value)
 	if resolved == "" {
@@ -72,7 +81,6 @@ func (s *OCRService) callDoubao(ctx context.Context, imageURL string) (map[strin
 				},
 			},
 		},
-		"response_format":  map[string]string{"type": "json_object"},
 		"temperature":      0.3,
 		"reasoning_effort": "minimal",
 	}
@@ -88,11 +96,17 @@ func (s *OCRService) callDoubao(ctx context.Context, imageURL string) (map[strin
 		return nil, err
 	}
 	defer resp.Body.Close()
+	bodyBytes, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, &commonerrors.AppError{Code: 10000, Message: "OCR 识别服务请求失败", HTTPStatus: 500}
+		detail := extractDoubaoErrorMessage(bodyBytes)
+		message := "OCR 识别服务请求失败"
+		if detail != "" {
+			message = fmt.Sprintf("%s: %s", message, detail)
+		}
+		return nil, &commonerrors.AppError{Code: 10000, Message: message, HTTPStatus: 500}
 	}
 	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return nil, err
 	}
 	choices, ok := result["choices"].([]any)
@@ -119,6 +133,28 @@ func (s *OCRService) callDoubao(ctx context.Context, imageURL string) (map[strin
 		return nil, &commonerrors.AppError{Code: 10000, Message: "OCR 返回格式解析失败", HTTPStatus: 500}
 	}
 	return extracted, nil
+}
+
+func extractDoubaoErrorMessage(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(body, &parsed); err == nil {
+		if errObj, ok := parsed["error"].(map[string]any); ok {
+			if msg := strings.TrimSpace(fmt.Sprintf("%v", errObj["message"])); msg != "" && msg != "<nil>" {
+				return msg
+			}
+		}
+	}
+	raw := strings.TrimSpace(string(body))
+	if raw == "" {
+		return ""
+	}
+	if len(raw) > 240 {
+		raw = raw[:240]
+	}
+	return raw
 }
 
 func ocrReportPrompt() string {

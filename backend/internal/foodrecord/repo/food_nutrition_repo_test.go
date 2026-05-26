@@ -75,6 +75,80 @@ func TestFoodNutritionRepo_Search_DefaultLimit(t *testing.T) {
 	assert.NotNil(t, results)
 }
 
+func TestFoodNutritionRepo_SearchCandidatesRanksAliasAndCanonical(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "food-1",
+		CanonicalName:  "蜜雪冰城原味冰淇淋蛋筒",
+		NormalizedName: normalizeFoodName("蜜雪冰城原味冰淇淋蛋筒"),
+		KcalPer100g:    210,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutritionAlias{
+		ID:              "alias-1",
+		FoodID:          "food-1",
+		AliasName:       "蜜雪冰城原味冰淇淋",
+		NormalizedAlias: normalizeFoodName("蜜雪冰城原味冰淇淋"),
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "food-2",
+		CanonicalName:  "蜜雪冰城蜜瓜冰淇淋",
+		NormalizedName: normalizeFoodName("蜜雪冰城蜜瓜冰淇淋"),
+		KcalPer100g:    205,
+		IsActive:       true,
+	}).Error)
+
+	results, err := repo.SearchCandidates(ctx, "蜜雪冰城原味冰淇淋", 5)
+	require.NoError(t, err)
+	require.Len(t, results, 2)
+	assert.Equal(t, "food-1", results[0].Food.ID)
+	assert.Equal(t, "alias", results[0].MatchSource)
+	assert.Greater(t, results[0].Score, results[1].Score)
+}
+
+func TestFoodNutritionRepo_ResolveFoodPrefersExactCanonicalOverAlias(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "lean-beef",
+		CanonicalName:  "瘦牛肉(熟)",
+		NormalizedName: normalizeFoodName("瘦牛肉(熟)"),
+		KcalPer100g:    176,
+		ProteinPer100g: 26,
+		CarbsPer100g:   0,
+		FatPer100g:     7,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "sauce-beef",
+		CanonicalName:  "酱牛肉",
+		NormalizedName: normalizeFoodName("酱牛肉"),
+		KcalPer100g:    246,
+		ProteinPer100g: 31.4,
+		CarbsPer100g:   3.2,
+		FatPer100g:     11.9,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutritionAlias{
+		ID:              "stale-alias",
+		FoodID:          "lean-beef",
+		AliasName:       "酱牛肉",
+		NormalizedAlias: normalizeFoodName("酱牛肉"),
+	}).Error)
+
+	result, err := repo.ResolveFood(ctx, "酱牛肉")
+	require.NoError(t, err)
+	require.NotNil(t, result.Food)
+	assert.Equal(t, "sauce-beef", result.Food.ID)
+	assert.Equal(t, "exact_canonical", result.Status)
+	assert.Equal(t, 3.2, result.Food.CarbsPer100g)
+}
+
 func TestFoodNutritionRepo_GetUnresolvedTop(t *testing.T) {
 	db := setupFoodNutritionTestDB(t)
 	repo := NewFoodNutritionRepo(db)
@@ -304,6 +378,7 @@ func TestFoodNutritionRepo_ResolvePackagedFood(t *testing.T) {
 		Brand:          "BrandA",
 		ProductName:    "BrandA Protein Bar",
 		NormalizedName: normalizeFoodName("BrandA Protein Bar"),
+		ProductKey:     buildPackagedProductKey("BrandA", "BrandA Protein Bar", "60g", 60),
 		NetWeightG:     60,
 		KcalPer100g:    400,
 		ProteinPer100g: 30,
@@ -318,9 +393,81 @@ func TestFoodNutritionRepo_ResolvePackagedFood(t *testing.T) {
 		NormalizedAlias: normalizeFoodName("protein bar"),
 	}).Error)
 
-	result, err := repo.ResolvePackagedFood(ctx, "protein bar")
+	result, err := repo.ResolvePackagedFood(ctx, PackagedFoodResolveInput{Name: "protein bar"})
 	require.NoError(t, err)
 	require.NotNil(t, result.Food)
 	assert.Equal(t, "p1", result.Food.ID)
 	assert.Equal(t, "exact_alias", result.Status)
+}
+
+func TestFoodNutritionRepo_UpsertPackagedFoodPersistsJSONFields(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	item, err := repo.UpsertPackagedFood(ctx, PackagedFoodInput{
+		Brand:              "卫龙",
+		ProductName:        "风吃海带",
+		SpecText:           "18g",
+		SourceImageURLs:    []string{"front.jpg", "nutrition.jpg"},
+		RawLabelPayload:    map[string]any{"energy_unit_raw": "kj"},
+		FieldConfidence:    map[string]any{"product_name": 0.91, "nutrition": 0.9},
+		ConversionStatus:   "converted",
+		ExtractConfidence:  0.9,
+		NetWeightG:         18,
+		ServingWeightG:     18,
+		KcalPer100g:        230,
+		ProteinPer100g:     4,
+		CarbsPer100g:       20,
+		FatPer100g:         8,
+		Source:             "user_capture_ocr",
+		IngestMethod:       "user_capture_ocr",
+		NutritionBasisUnit: "100g",
+		EnergyUnitRaw:      "kj",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, item)
+
+	var stored domain.PackagedFood
+	require.NoError(t, db.Where("id = ?", item.ID).First(&stored).Error)
+	assert.Equal(t, []string{"front.jpg", "nutrition.jpg"}, stored.SourceImageURLs)
+	assert.Equal(t, "kj", stored.RawLabelPayload["energy_unit_raw"])
+	assert.Equal(t, 0.91, stored.FieldConfidence["product_name"])
+	assert.Equal(t, "converted", *stored.ConversionStatus)
+}
+
+func TestFoodNutritionRepo_UpsertPackagedFoodUpdatesSameNormalizedName(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	first, _, err := repo.UpsertPackagedFoodWithAction(ctx, PackagedFoodInput{
+		Brand:              "乐事",
+		ProductName:        "原切马铃薯片",
+		SpecText:           "40克",
+		ConversionStatus:   "converted",
+		NetWeightG:         40,
+		KcalPer100g:        540,
+		CarbsPer100g:       52,
+		FatPer100g:         34,
+		NutritionBasisUnit: "100g",
+	})
+	require.NoError(t, err)
+
+	second, action, err := repo.UpsertPackagedFoodWithAction(ctx, PackagedFoodInput{
+		Brand:              "乐事",
+		ProductName:        "原切马铃薯片",
+		SpecText:           "70克",
+		ConversionStatus:   "converted",
+		NetWeightG:         70,
+		KcalPer100g:        520,
+		CarbsPer100g:       50,
+		FatPer100g:         32,
+		NutritionBasisUnit: "100g",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "updated", action)
+	assert.Equal(t, first.ID, second.ID)
+	assert.Equal(t, 70.0, second.NetWeightG)
+	assert.Equal(t, 520.0, second.KcalPer100g)
 }

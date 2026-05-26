@@ -34,6 +34,7 @@ type AnalysisTask struct {
 	TaskType  string         `gorm:"column:task_type"`
 	Status    string         `gorm:"column:status"`
 	ImageURL  *string        `gorm:"column:image_url"`
+	ImagePaths []string      `gorm:"column:image_paths;serializer:json"`
 	Payload   map[string]any `gorm:"column:payload;serializer:json"`
 	CreatedAt *time.Time     `gorm:"column:created_at"`
 }

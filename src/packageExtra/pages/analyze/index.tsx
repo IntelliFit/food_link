@@ -1,6 +1,6 @@
 import { View, Text, Image, Textarea } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   imageToBase64,
   compressImagePathForUpload,
@@ -27,17 +27,18 @@ import {
   canUseStrictModeForMembership,
   getStrictModeLockedHint,
   getStrictModeUpgradeUrl,
+  isPrecisionExecutionMode,
   normalizeAvailableExecutionMode,
   promptStrictModeUpgrade,
 } from '../../../utils/execution-mode'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import {
-  getFoodAnalysisBlockedActionText,
   getFoodAnalysisCreditBlockMessage,
   getFoodAnalysisCreditCost,
   getMembershipCreditSummary,
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
+import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
@@ -173,6 +174,16 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; 
       '菜太多或互相遮挡时，请分开拍；旁边放餐具会更稳'
     ]
   },
+  standard_web_search: {
+    title: '普通联网',
+    desc: '先快速识别，再用低成本搜索结果保守校准包装规格、饮品容量和可用参照物。',
+    tips: [
+      '有包装时尽量让品名、规格、净含量正着入镜',
+      '联网结果只做佐证，图片里看不到的食物不会新增',
+      '适合酸奶、饮料、连锁/品牌商品、小众水果等需要规格参考的场景',
+      '搜索不可用时会保留普通识别结果'
+    ]
+  },
   gemini35_flash: {
     title: '精准模式',
     desc: '更细致识别包装文字、小众食物和复杂场景。',
@@ -198,6 +209,16 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; 
       '包装袋文字尽量正着拍，配料表清晰会更准',
       '复杂菜可在下方补充烹饪方式和份量信息',
       '多角度拍摄可打开多视角辅助'
+    ]
+  },
+  strict_web_search: {
+    title: '精准联网',
+    desc: '精准识别后，再用低成本搜索证据校准包装规格、商品重量和空间锚点。',
+    tips: [
+      '包装文字、倒置文字和配料表尽量拍清楚',
+      '搜索结果只辅助校准重量和规格，不替代图片判断',
+      '复杂品牌商品可补充购买渠道、口味或规格',
+      '网络搜索慢或失败时会保留精准识别结果'
     ]
   },
   standard: {
@@ -336,6 +357,45 @@ function AnalyzePage() {
   const [referenceWidth, setReferenceWidth] = useState('85')
   const [referenceHeight, setReferenceHeight] = useState('25')
   const [referencePlacementNote, setReferencePlacementNote] = useState('')
+  const [creditSheet, setCreditSheet] = useState<{ visible: boolean; message?: string }>({
+    visible: false,
+  })
+
+  // 帮助说明底部弹窗
+  const [helpSheet, setHelpSheet] = useState<{ visible: boolean; title: string; content: string }>({
+    visible: false,
+    title: '',
+    content: ''
+  })
+
+  const openHelp = useCallback((key: string) => {
+    const helpContent: Record<string, { title: string; content: string }> = {
+      multiview: {
+        title: '多视角辅助',
+        content: '多张图片始终作为一次识别提交；开启后会更强调同一餐食的多角度综合估算。建议从不同角度拍摄同一餐食，让 AI 结合多张照片进行更准确的判断。'
+      },
+      text: {
+        title: '文字补充',
+        content: '提供更多上下文能显著提高识别准确率，例如分量、容器大小、额外配料等。你可以描述食物的具体情况，帮助 AI 更准确地进行分析。'
+      },
+      meal: {
+        title: '餐次',
+        content: '选择本餐次，AI 将结合场景给出建议。不同餐次的营养需求和推荐会有所不同，例如早餐注重能量补充，晚餐建议适当控制碳水摄入。'
+      },
+      timing: {
+        title: '运动时机',
+        content: '选择进食时机，AI 将结合时机给出针对性建议。如运动后补充蛋白有助于肌肉恢复，睡前避免过多碳水有助于睡眠质量。'
+      },
+      suggest_ratio: {
+        title: 'AI摄入比例',
+        content: '结果页自动给出每项食物的滑块比例。开启后，AI 会根据你的剩余热量和饮食目标，为每个识别出的食物建议一个摄入比例（0-100%），你可以在结果页通过滑块快速调整。'
+      }
+    }
+    const info = helpContent[key]
+    if (info) {
+      setHelpSheet({ visible: true, ...info })
+    }
+  }, [])
 
   const imagePathsRef = useRef<string[]>([])
   const routeSessionSignatureRef = useRef('')
@@ -353,7 +413,7 @@ function AnalyzePage() {
 
   useEffect(() => {
     if (!membershipStatus) return
-    if (executionMode === 'strict' && !canUseStrictMode && !precisionSessionId) {
+    if (isPrecisionExecutionMode(executionMode) && !canUseStrictMode && !precisionSessionId) {
       setExecutionMode('standard')
     }
   }, [membershipStatus, executionMode, canUseStrictMode, precisionSessionId])
@@ -563,7 +623,7 @@ function AnalyzePage() {
       // 使用 chooseImage 避免开发者工具返回 http://tmp 的不可读临时路径
       const res = await chooseImageWithPrivacy({
         count: remain,
-        sizeType: ['compressed'],
+        sizeType: ['original'],
         sourceType: ['album', 'camera'],
       })
       const rawPaths = (res.tempFilePaths || []).map(p => String(p || '').trim()).filter(Boolean)
@@ -595,9 +655,9 @@ function AnalyzePage() {
     Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
   }
 
-  const handleStrictModeTap = () => {
+  const handleStrictModeTap = (targetMode: ExecutionMode = 'strict') => {
     if (canUseStrictMode) {
-      setExecutionMode('strict')
+      setExecutionMode(targetMode)
       return
     }
     promptStrictModeUpgrade({
@@ -728,18 +788,7 @@ function AnalyzePage() {
         errMsg.includes('明日再试') ||
         errMsg.includes('积分不足')
       if (isQuotaExhausted) {
-        const suggestPro = errMsg.includes('开通') || errMsg.includes('会员') || errMsg.includes('升级')
-        const confirmText = suggestPro ? getFoodAnalysisBlockedActionText(membershipStatus) : '知道了'
-        Taro.showModal({
-          title: '积分不足',
-          content: errMsg,
-          confirmText,
-          cancelText: '取消',
-          showCancel: suggestPro,
-          success: (res) => {
-            if (suggestPro && res.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-          }
-        })
+        setCreditSheet({ visible: true, message: errMsg })
       } else {
         await showUnifiedApiError(error, '分析失败，请重试')
       }
@@ -753,21 +802,7 @@ function AnalyzePage() {
     if (now - analyzeSubmitDebounceRef.current < ANALYZE_SUBMIT_DEBOUNCE_MS) return
     analyzeSubmitDebounceRef.current = now
     if (isQuotaExhausted) {
-      const content = getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode, creditUnits)
-      const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
-      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
-      Taro.showModal({
-        title: '积分不足',
-        content,
-        showCancel: showUpgrade,
-        confirmText: showUpgrade ? confirmText : '知道了',
-        cancelText: '取消',
-        success: (res) => {
-          if (showUpgrade && res.confirm) {
-            Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-          }
-        }
-      })
+      setCreditSheet({ visible: true, message: getFoodAnalysisCreditBlockMessage(membershipStatus, executionMode, creditUnits) })
       return
     }
     if (imagePaths.length === 0) {
@@ -835,7 +870,7 @@ function AnalyzePage() {
   return (
     <View className='analyze-page'>
       {/* 提示：长按页面任意位置可启用开发者模式 */}
-      {/* 配额提示条 */}
+      {/* 配额提示 */}
       {membershipStatus && (
         <View
           className={quotaBarClass}
@@ -844,61 +879,26 @@ function AnalyzePage() {
             if (!canUseStrictMode) Taro.navigateTo({ url: precisionUpgradeUrl })
           }}
         >
+          <Text className='quota-bar-dot' />
           <Text className='quota-bar-text'>{quotaBarText}</Text>
         </View>
       )}
 
-      {/* 模式提示条 */}
-      <View className={`mode-banner ${executionMode}`}>
-        <View className='mode-banner-header'>
-          <View className='mode-title-wrap'>
-            <Text className='mode-title'>当前模式：{EXECUTION_MODE_META[executionMode].title}</Text>
-            <Text className='mode-sub'>影响本次执行规则</Text>
-          </View>
-          <Text className='mode-link' onClick={handleDefaultModeEdit}>设为默认</Text>
-        </View>
-
-        <View className='mode-switch-row'>
-          <View
-            className={`mode-switch-item ${executionMode === 'standard' ? 'active' : ''}`}
-            onClick={() => setExecutionMode('standard')}
-          >
-            普通
-          </View>
-          <View
-            className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
-            onClick={handleStrictModeTap}
-          >
-            {membershipStatus?.is_pro && !canUseStrictMode ? '精准（需升级）' : '精准'}
-          </View>
-        </View>
-
-        {!!precisionUpgradeHint && executionMode === 'standard' && (
-          <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
-        )}
-
-        <Text className='mode-desc'>{EXECUTION_MODE_META[executionMode].desc}</Text>
-        <View className='mode-tips'>
-          {EXECUTION_MODE_META[executionMode].tips.map((tip, idx) => (
-            <View key={idx} className='mode-tip-item'>
-              <Text className='mode-tip-dot'>•</Text>
-              <Text className='mode-tip-text'>{tip}</Text>
-            </View>
-          ))}
-        </View>
-
-        <View className='multiview-compact suggest-ratio-compact'>
-          <View className='multiview-compact-left'>
-            <Text className='multiview-compact-title'>AI摄入比例</Text>
-            <Text className='multiview-compact-hint'>结果页自动给出每项食物的滑块比例</Text>
-          </View>
-          <View
-            className={`multiview-toggle ${suggestRatioEnabled ? 'multiview-toggle--on' : ''}`}
-            onClick={toggleSuggestRatio}
-          >
-            <View className='multiview-toggle-knob' />
-          </View>
-        </View>
+      {/* 摄影技巧 */}
+      <View
+        className='photo-tip-bar'
+        onClick={() => {
+          const meta = EXECUTION_MODE_META[executionMode]
+          setHelpSheet({
+            visible: true,
+            title: '摄影技巧',
+            content: meta.tips.map((t, i) => `${i + 1}. ${t}`).join('\n'),
+          })
+        }}
+      >
+        <Text className='photo-tip-bar__dot' />
+        <Text className='photo-tip-bar__text'>摄影技巧</Text>
+        <Text className='photo-tip-bar__action'>查看</Text>
       </View>
 
       {/* 图片预览区域 (Grid) */}
@@ -940,15 +940,71 @@ function AnalyzePage() {
           </View>
         )}
 
-        {/* 多视角辅助模式：作为图片区域的底部小条 */}
+        {/* 图片分析设置 */}
+        <View className='multiview-compact'>
+          <View className='multiview-compact-left'>
+            <Text className='multiview-compact-title'>识别模式</Text>
+            <Text className='mode-link' onClick={handleDefaultModeEdit}>设为默认</Text>
+          </View>
+          <View className='mode-switch-row'>
+            <View
+              className={`mode-switch-item ${executionMode === 'standard' ? 'active' : ''}`}
+              onClick={() => setExecutionMode('standard')}
+            >
+              普通
+            </View>
+            <View
+              className={`mode-switch-item ${executionMode === 'standard_web_search' ? 'active' : ''}`}
+              onClick={() => setExecutionMode('standard_web_search')}
+            >
+              普通联网
+            </View>
+            <View
+              className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
+              onClick={() => handleStrictModeTap('strict')}
+            >
+              {!canUseStrictMode ? '精准锁定' : '精准'}
+            </View>
+            <View
+              className={`mode-switch-item ${executionMode === 'strict_web_search' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
+              onClick={() => handleStrictModeTap('strict_web_search')}
+            >
+              {!canUseStrictMode ? '联网锁定' : '精准联网'}
+            </View>
+          </View>
+        </View>
+
+        {!!precisionUpgradeHint && !isPrecisionExecutionMode(executionMode) && (
+          <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
+        )}
+
+        {/* 多视角辅助模式 */}
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
             <Text className='multiview-compact-title'>多视角辅助</Text>
-            <Text className='multiview-compact-hint'>多张图片始终作为一次识别提交；开启后会更强调同一餐食的多角度综合估算</Text>
+            <View className='help-icon' onClick={() => openHelp('multiview')}>
+              <Text className='help-icon-text'>?</Text>
+            </View>
           </View>
           <View
             className={`multiview-toggle ${isMultiView ? 'multiview-toggle--on' : ''}`}
             onClick={toggleMultiView}
+          >
+            <View className='multiview-toggle-knob' />
+          </View>
+        </View>
+
+        {/* AI摄入比例 */}
+        <View className='multiview-compact'>
+          <View className='multiview-compact-left'>
+            <Text className='multiview-compact-title'>AI摄入比例</Text>
+            <View className='help-icon' onClick={() => openHelp('suggest_ratio')}>
+              <Text className='help-icon-text'>?</Text>
+            </View>
+          </View>
+          <View
+            className={`multiview-toggle ${suggestRatioEnabled ? 'multiview-toggle--on' : ''}`}
+            onClick={toggleSuggestRatio}
           >
             <View className='multiview-toggle-knob' />
           </View>
@@ -959,10 +1015,10 @@ function AnalyzePage() {
       <View className='details-section'>
         <View className='section-header'>
           <Text className='section-title'>文字补充</Text>
+          <View className='help-icon' onClick={() => openHelp('text')}>
+            <Text className='help-icon-text'>?</Text>
+          </View>
         </View>
-        <Text className='section-hint'>
-          提供更多上下文能显著提高识别准确率，例如分量、容器大小、额外配料等。
-        </Text>
 
         <View className='input-wrapper'>
           <Textarea
@@ -975,9 +1031,7 @@ function AnalyzePage() {
             autoHeight
             showConfirmBar={false}
           />
-          <View className='voice-btn' onClick={handleVoiceInput}>
-            <Text className='voice-icon iconfont icon--yuyinshuruzhong' />
-          </View>
+
         </View>
       </View>
 
@@ -1076,10 +1130,10 @@ function AnalyzePage() {
       <View className='meal-section'>
         <View className='section-header'>
           <Text className='section-title'>餐次</Text>
+          <View className='help-icon' onClick={() => openHelp('meal')}>
+            <Text className='help-icon-text'>?</Text>
+          </View>
         </View>
-        <Text className='section-hint'>
-          选择本餐次，AI 将结合场景给出建议。
-        </Text>
         <View className='meal-options'>
           {MEAL_OPTIONS.map((opt) => (
             <View
@@ -1097,12 +1151,11 @@ function AnalyzePage() {
       {/* 运动时机（状态二） */}
       <View className='state-section'>
         <View className='section-header'>
-
           <Text className='section-title'>运动时机</Text>
+          <View className='help-icon' onClick={() => openHelp('timing')}>
+            <Text className='help-icon-text'>?</Text>
+          </View>
         </View>
-        <Text className='section-hint'>
-          选择进食时机，AI 将结合时机给出针对性建议（如运动后补充蛋白、睡前避免碳水等）。
-        </Text>
         <View className='state-options'>
           {ACTIVITY_TIMING_OPTIONS.map((opt) => (
             <View
@@ -1144,6 +1197,34 @@ function AnalyzePage() {
           <Text className='history-link-text'>查看识别记录</Text>
         </View>
       </View>
+
+      {/* 帮助说明底部弹窗 */}
+      {helpSheet.visible && (
+        <View className='help-sheet' catchMove>
+          <View className='help-sheet-mask' onClick={() => setHelpSheet(prev => ({ ...prev, visible: false }))} />
+          <View className='help-sheet-content'>
+            <View className='help-sheet-handle' />
+            <View className='help-sheet-header'>
+              <Text className='help-sheet-title'>{helpSheet.title}</Text>
+              <View
+                className='help-sheet-close'
+                onClick={() => setHelpSheet(prev => ({ ...prev, visible: false }))}
+              >
+                <Text className='help-sheet-close-icon'>×</Text>
+              </View>
+            </View>
+            <Text className='help-sheet-body'>{helpSheet.content}</Text>
+          </View>
+        </View>
+      )}
+      <CreditShortageSheet
+        visible={creditSheet.visible}
+        membershipStatus={membershipStatus}
+        requiredCredits={creditCost}
+        scenarioLabel='食物分析'
+        message={creditSheet.message}
+        onClose={() => setCreditSheet({ visible: false })}
+      />
     </View>
   )
 }

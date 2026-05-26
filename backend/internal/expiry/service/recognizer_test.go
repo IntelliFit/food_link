@@ -26,6 +26,7 @@ func newTestExpiryRecognizer(handler expiryRoundTripFunc) *Recognizer {
 	recognizer := NewRecognizer(&config.Config{
 		External: config.ExternalConfig{
 			DoubaoAPIKey: "fake-key",
+			OfoxAIAPIKey: "fake-ofox-key",
 		},
 	})
 	recognizer.client = &http.Client{Transport: handler}
@@ -34,10 +35,10 @@ func newTestExpiryRecognizer(handler expiryRoundTripFunc) *Recognizer {
 
 func TestRecognizerRecognizeSuccess(t *testing.T) {
 	recognizer := newTestExpiryRecognizer(func(req *http.Request) (*http.Response, error) {
-		assert.Equal(t, "https://ark.cn-beijing.volces.com/api/v3/chat/completions", req.URL.String())
+		assert.Equal(t, "https://api.ofox.ai/v1/chat/completions", req.URL.String())
 		var body map[string]any
 		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
-		assert.Equal(t, "doubao-seed-2-0-lite-260428", body["model"])
+		assert.Equal(t, "gemini-3-flash-preview", body["model"])
 		assert.Equal(t, "medium", body["reasoning_effort"])
 
 		responseBody := `{"choices":[{"message":{"content":"{\"items\":[{\"food_name\":\"牛奶\",\"category\":\"乳制品\",\"storage_type\":\"refrigerated\",\"quantity_note\":\"1盒\",\"expire_date\":\"2026-05-12\",\"confidence\":0.8}]}"}}]}`
@@ -109,17 +110,56 @@ func TestRecognizerRecognizeMissingConfigReturnsServerError(t *testing.T) {
 	assert.Equal(t, "后端未配置保质期识别模型", appErr.Message)
 }
 
-func TestRecognizerDoesNotFallbackToOfoxWhenDoubaoMissing(t *testing.T) {
+func TestRecognizerFallsBackToDoubaoWhenGeminiFails(t *testing.T) {
+	callCount := 0
+	recognizer := newTestExpiryRecognizer(func(req *http.Request) (*http.Response, error) {
+		callCount++
+		if callCount == 1 {
+			assert.Equal(t, "https://api.ofox.ai/v1/chat/completions", req.URL.String())
+			return &http.Response{
+				StatusCode: http.StatusTooManyRequests,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"error":{"message":"Resource exhausted"}}`)),
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+			}, nil
+		}
+		assert.Equal(t, "https://ark.cn-beijing.volces.com/api/v3/chat/completions", req.URL.String())
+		responseBody := `{"choices":[{"message":{"content":"{\"items\":[{\"food_name\":\"酸奶\",\"category\":\"乳制品\",\"storage_type\":\"refrigerated\",\"expire_date\":\"2026-05-12\",\"confidence\":0.8}]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
+			Header:     make(http.Header),
+		}, nil
+	})
+
+	result, err := recognizer.Recognize(context.Background(), RecognizeInput{
+		ImageURLs: []string{"https://example.com/yogurt.jpg"},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, 2, callCount)
+	assert.Equal(t, "酸奶", result.Items[0]["food_name"])
+}
+
+func TestRecognizerUsesGeminiWhenOnlyOfoxConfigured(t *testing.T) {
 	recognizer := NewRecognizer(&config.Config{
 		External: config.ExternalConfig{OfoxAIAPIKey: "fake-ofox-key"},
 	})
+	recognizer.client = &http.Client{Transport: expiryRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://api.ofox.ai/v1/chat/completions", req.URL.String())
+		responseBody := `{"choices":[{"message":{"content":"{\"items\":[{\"food_name\":\"牛奶\",\"category\":\"乳制品\",\"storage_type\":\"refrigerated\",\"expire_date\":\"2026-05-12\",\"confidence\":0.8}]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(responseBody)),
+			Header:     make(http.Header),
+		}, nil
+	})}
 
-	_, err := recognizer.Recognize(context.Background(), RecognizeInput{
+	result, err := recognizer.Recognize(context.Background(), RecognizeInput{
 		ImageURLs: []string{"https://example.com/milk.jpg"},
 	})
 
-	var appErr *commonerrors.AppError
-	require.True(t, errors.As(err, &appErr))
-	assert.Equal(t, http.StatusInternalServerError, appErr.HTTPStatus)
-	assert.Equal(t, "后端未配置保质期识别模型", appErr.Message)
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "牛奶", result.Items[0]["food_name"])
 }

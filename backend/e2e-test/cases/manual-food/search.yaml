@@ -6,9 +6,9 @@ cases:
     method: GET
     path: /api/manual-food/search
     query:
-      q: "绫抽キ"
+      q: "米饭"
     expect:
       status: 200
       json:
         code: 0
-        data.items: type:array
+        data.results: type:array

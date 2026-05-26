@@ -1,4 +1,4 @@
-import { type HomeIntakeData, type HomeMealItem, type BodyMetricWaterDay } from '../../../utils/api'
+import { type HomeIntakeData, type HomeMealItem, type BodyMetricWaterDay, type HomeTargetCalibrationSuggestion } from '../../../utils/api'
 
 export interface WeightRecordEntry {
   date: string
@@ -55,8 +55,11 @@ export interface TargetEditorProps {
   visible: boolean
   targetForm: TargetFormState
   saving: boolean
+  calibrationSuggestion?: HomeTargetCalibrationSuggestion | null
   onTargetFieldChange: (key: keyof TargetFormState, value: string) => void
   onSave: () => void
+  onApplyCalibration?: (suggestion: HomeTargetCalibrationSuggestion) => void
+  onDismissCalibration?: () => void
   onClose: () => void
 }
 

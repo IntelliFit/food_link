@@ -5,7 +5,6 @@ import { redirectToLogin } from '../../../utils/withAuth'
 import { getAccessToken, getMyMembership, showUnifiedApiError, type MembershipStatus } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import {
-  getFoodAnalysisBlockedActionText,
   getFoodAnalysisCreditBlockMessage,
   isFoodAnalysisCreditExhausted,
 } from '../../../utils/membership'
@@ -28,6 +27,7 @@ import { getDevDebugUiTestImageUrl, setDevDebugUiTestImageUrl } from '../../../u
 import { persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import CreditShortageSheet from '../../../components/CreditShortageSheet'
 
 interface RecordMenuProps {
   visible: boolean
@@ -134,6 +134,10 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
   const [devToolsOpen, setDevToolsOpen] = useState(false)
   /** 预置测试图 URL（仅 development 本地 UI 调试） */
   const [previewImageUrl, setPreviewImageUrl] = useState('')
+  const [creditSheet, setCreditSheet] = useState<{ visible: boolean; membershipStatus: MembershipStatus | null }>({
+    visible: false,
+    membershipStatus: null,
+  })
   /** 弹窗打开时预取会员状态，点击「相册上传」时直接使用缓存结果 */
   const membershipPromiseRef = useRef<Promise<MembershipStatus | null> | null>(null)
 
@@ -153,7 +157,6 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
   if (!visible) return null
 
   const handleGridClick = (modeId: string) => {
-    onClose()
     const recordDate = persistRecordTargetDate(selectedDate)
 
     switch (modeId) {
@@ -172,26 +175,13 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
               MEMBERSHIP_PREFLIGHT_TIMEOUT_MS
             )
             if (membershipStatus && isFoodAnalysisCreditExhausted(membershipStatus)) {
-              const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
-              const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
-              const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus.is_pro
-              Taro.showModal({
-                title: '积分不足',
-                content,
-                confirmText: showUpgrade ? confirmText : '知道了',
-                cancelText: '取消',
-                showCancel: showUpgrade,
-                success: (r) => {
-                  if (showUpgrade && r.confirm) {
-                    Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-                  }
-                }
-              })
+              setCreditSheet({ visible: true, membershipStatus })
               return
             }
           } catch {
             // 会员接口失败时仍允许选图，由分析提交接口提示
           }
+          onClose()
           chooseImageWithPrivacy({
             count: modeId === 'album' ? 5 : 1,
             sizeType: ['compressed'],
@@ -215,9 +205,11 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
         break
       }
       case 'text':
+        onClose()
         Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-text/index')}?date=${encodeURIComponent(recordDate)}` })
         break
       case 'manual':
+        onClose()
         Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-manual/index')}?date=${encodeURIComponent(recordDate)}` })
         break
     }
@@ -401,6 +393,14 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
           )}
         </View>
       </View>
+      <CreditShortageSheet
+        visible={creditSheet.visible}
+        membershipStatus={creditSheet.membershipStatus}
+        requiredCredits={2}
+        scenarioLabel='食物分析'
+        message={creditSheet.membershipStatus ? getFoodAnalysisCreditBlockMessage(creditSheet.membershipStatus) : undefined}
+        onClose={() => setCreditSheet({ visible: false, membershipStatus: null })}
+      />
     </View>
   )
 }

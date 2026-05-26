@@ -1,0 +1,246 @@
+.packaged-task-detail-page {
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.packaged-task-detail-scroll {
+  height: 100vh;
+  box-sizing: border-box;
+  padding: 28rpx 28rpx 44rpx;
+}
+
+.detail-hero,
+.detail-card {
+  border-radius: 22rpx;
+  background: #fff;
+  border: 1rpx solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 10rpx 28rpx rgba(15, 23, 42, 0.05);
+}
+
+.detail-hero {
+  padding: 30rpx;
+  margin-bottom: 22rpx;
+  background:
+    radial-gradient(circle at top right, rgba(0, 188, 125, 0.16), transparent 40%),
+    linear-gradient(135deg, #ecfdf5 0%, #fff 78%);
+}
+
+.detail-hero-kicker {
+  display: block;
+  font-size: 22rpx;
+  font-weight: 800;
+  color: #059669;
+  margin-bottom: 10rpx;
+}
+
+.detail-hero-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 850;
+  color: #0f172a;
+  line-height: 1.25;
+  margin-bottom: 10rpx;
+}
+
+.detail-hero-status {
+  display: block;
+  font-size: 25rpx;
+  font-weight: 750;
+  color: #047857;
+  margin-bottom: 6rpx;
+}
+
+.detail-hero-time,
+.detail-card-desc,
+.detail-card-note {
+  display: block;
+  font-size: 23rpx;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 14rpx;
+  margin-top: 22rpx;
+}
+
+.detail-action-btn {
+  flex: 1;
+  height: 74rpx;
+  border-radius: 16rpx;
+  background: #00bc7d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.secondary {
+    background: #fff;
+    border: 1rpx solid rgba(0, 188, 125, 0.35);
+  }
+
+  &.loading {
+    opacity: 0.72;
+  }
+}
+
+.detail-action-text {
+  font-size: 25rpx;
+  font-weight: 800;
+  color: #fff;
+
+  &.secondary {
+    color: #047857;
+  }
+}
+
+.detail-card {
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+
+  &.success {
+    background: #ecfdf5;
+    border-color: rgba(0, 188, 125, 0.24);
+  }
+
+  &.warning {
+    background: #fff7ed;
+    border-color: rgba(249, 115, 22, 0.22);
+  }
+}
+
+.detail-card-title {
+  display: block;
+  font-size: 29rpx;
+  font-weight: 850;
+  color: #0f172a;
+  margin-bottom: 16rpx;
+}
+
+.detail-card-note {
+  margin-top: 12rpx;
+  font-size: 21rpx;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+}
+
+.uploaded-image {
+  width: 100%;
+  height: 220rpx;
+  border-radius: 16rpx;
+  background: #e2e8f0;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+}
+
+.field-item {
+  min-width: 0;
+  padding: 16rpx;
+  border-radius: 16rpx;
+  background: #f8fafc;
+}
+
+.field-label {
+  display: block;
+  font-size: 21rpx;
+  color: #94a3b8;
+  margin-bottom: 6rpx;
+}
+
+.field-value {
+  display: block;
+  font-size: 25rpx;
+  font-weight: 750;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.nutrition-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10rpx;
+  margin-bottom: 16rpx;
+}
+
+.nutrition-chip {
+  min-width: 0;
+  padding: 16rpx 8rpx;
+  border-radius: 16rpx;
+  background: #ecfdf5;
+  text-align: center;
+}
+
+.nutrition-value {
+  display: block;
+  font-size: 25rpx;
+  font-weight: 850;
+  color: #047857;
+  margin-bottom: 5rpx;
+}
+
+.nutrition-label {
+  display: block;
+  font-size: 19rpx;
+  color: #0f766e;
+}
+
+@media (prefers-color-scheme: dark) {
+  .packaged-task-detail-page {
+    background: #101716;
+    color: #f8fafc;
+  }
+
+  .detail-hero,
+  .detail-card {
+    background: #18211f;
+    border-color: rgba(71, 85, 105, 0.72);
+  }
+
+  .detail-hero {
+    background:
+      radial-gradient(circle at top right, rgba(16, 185, 129, 0.16), transparent 42%),
+      #18211f;
+  }
+
+  .detail-hero-title,
+  .detail-card-title,
+  .field-value {
+    color: #f8fafc;
+  }
+
+  .detail-hero-time,
+  .detail-card-desc,
+  .detail-card-note,
+  .field-label {
+    color: #a8b8b3;
+  }
+
+  .detail-action-btn.secondary,
+  .field-item {
+    background: #101716;
+    border-color: rgba(71, 85, 105, 0.75);
+  }
+
+  .detail-card.success {
+    background: rgba(4, 120, 87, 0.22);
+    border-color: rgba(16, 185, 129, 0.3);
+  }
+
+  .detail-card.warning {
+    background: rgba(124, 45, 18, 0.22);
+    border-color: rgba(249, 115, 22, 0.28);
+  }
+
+  .nutrition-chip {
+    background: rgba(4, 120, 87, 0.26);
+  }
+}

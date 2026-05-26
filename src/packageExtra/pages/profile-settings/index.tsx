@@ -1,7 +1,7 @@
 import { View, Text, Image, Button, Input } from '@tarojs/components'
 import { useState, useEffect, useCallback } from 'react'
 import Taro from '@tarojs/taro'
-import { updateUserInfo, uploadUserAvatar, imageToBase64, showUnifiedApiError, clearAllStorage } from '../../../utils/api'
+import { updateUserInfo, uploadUserAvatar, imageToBase64, showUnifiedApiError, clearAllStorage, deleteAccount } from '../../../utils/api'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
@@ -79,7 +79,7 @@ export default function ProfileSettingsPage() {
   const handleDeleteAccount = async () => {
     const modalRes = await Taro.showModal({
       title: '注销账号',
-      content: '注销后，您的本地数据、登录状态将被清除，健康记录、饮食分析历史等个性化服务将无法恢复。确定要注销账号吗？',
+      content: '注销后，您的账号及健康记录、饮食分析历史、好友关系等数据会被删除，本地登录状态也会清空。确定要注销账号吗？',
       confirmText: '确认注销',
       confirmColor: '#ef4444',
       cancelText: '再想想'
@@ -87,14 +87,18 @@ export default function ProfileSettingsPage() {
     if (!modalRes.confirm) return
 
     try {
+      Taro.showLoading({ title: '注销中...' })
+      await deleteAccount()
       clearAllStorage()
+      Taro.hideLoading()
       Taro.showToast({ title: '已注销账号', icon: 'success' })
       setTimeout(() => {
         Taro.switchTab({ url: '/pages/index/index' })
       }, 1200)
     } catch (error) {
+      Taro.hideLoading()
       console.error('注销账号失败:', error)
-      Taro.showToast({ title: '注销失败，请重试', icon: 'none' })
+      await showUnifiedApiError(error, '注销失败')
     }
   }
 

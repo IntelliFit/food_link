@@ -94,7 +94,9 @@ const PROFILE_STEP_WIDTH_RPX = 750
 const TOTAL_STEPS = PROFILE_STEPS.length
 const DEFAULT_HEIGHT_CM = 170
 const DEFAULT_WEIGHT_KG = 60
-const MAX_REPORT_IMAGE_COUNT = 3
+const MAX_REPORT_IMAGE_COUNT = 9
+const MEDICAL_OPTION_VALUES = new Set(MEDICAL_OPTIONS.map((item) => item.value))
+const ALLERGY_OPTION_VALUES = new Set(ALLERGY_OPTIONS.map((item) => item.value))
 
 function HealthProfilePage() {
   const { scheme } = useAppColorScheme()
@@ -119,10 +121,13 @@ function HealthProfilePage() {
   const [customMedicalList, setCustomMedicalList] = useState<string[]>([]) // 用户添加的自定义病史列表
   const [selectedCustomMedical, setSelectedCustomMedical] = useState<string[]>([]) // 被选中的自定义病史
   const [addingMedical, setAddingMedical] = useState(false) // 是否正在添加自定义病史
+  const [editingMedical, setEditingMedical] = useState<string>('') // 正在编辑的自定义病史
 
+  const [customAllergy, setCustomAllergy] = useState<string>('') // 自定义过敏源输入
   const [customAllergyList, setCustomAllergyList] = useState<string[]>([]) // 用户添加的自定义过敏源
   const [selectedCustomAllergy, setSelectedCustomAllergy] = useState<string[]>([]) // 被选中的自定义过敏源
   const [addingAllergy, setAddingAllergy] = useState(false) // 是否正在添加自定义过敏源
+  const [editingAllergy, setEditingAllergy] = useState<string>('') // 正在编辑的自定义过敏源
 
   const [healthNotes, setHealthNotes] = useState<string>('') // 用户自己文字补充自己身体的特殊情况和问题
 
@@ -151,9 +156,23 @@ function HealthProfilePage() {
       } else if (profile.activity_level) {
         setActivityLevel(profile.activity_level)
       }
-      if (hc?.medical_history?.length) setMedicalHistory(hc.medical_history)
+      if (hc?.medical_history?.length) {
+        const allMedical = hc.medical_history as string[]
+        const presetMedical = allMedical.filter((item) => MEDICAL_OPTION_VALUES.has(item))
+        const customMedicalItems = allMedical.filter((item) => !MEDICAL_OPTION_VALUES.has(item))
+        setMedicalHistory(presetMedical)
+        setCustomMedicalList(customMedicalItems)
+        setSelectedCustomMedical(customMedicalItems)
+      }
       if (hc?.diet_preference?.length) setDietPreference(hc.diet_preference)
-      if (hc?.allergies?.length) setAllergyList(hc.allergies as string[])
+      if (hc?.allergies?.length) {
+        const allAllergies = hc.allergies as string[]
+        const presetAllergies = allAllergies.filter((item) => ALLERGY_OPTION_VALUES.has(item))
+        const customAllergyItems = allAllergies.filter((item) => !ALLERGY_OPTION_VALUES.has(item))
+        setAllergyList(presetAllergies)
+        setCustomAllergyList(customAllergyItems)
+        setSelectedCustomAllergy(customAllergyItems)
+      }
       if (hc?.health_notes) setHealthNotes(hc.health_notes)
       if (hc?.routine_type) {
         setRoutineHours(parseRoutineHours(hc.routine_type))
@@ -214,14 +233,22 @@ function HealthProfilePage() {
       Taro.showToast({ title: '请输入病史名称', icon: 'none' })
       return
     }
-    if (customMedicalList.includes(trimmed)) {
+    if (customMedicalList.includes(trimmed) && editingMedical !== trimmed) {
       Taro.showToast({ title: '该病史已添加', icon: 'none' })
       return
     }
-    setCustomMedicalList((prev) => [...prev, trimmed])
-    setSelectedCustomMedical((prev) => [...prev, trimmed]) // 添加时默认选中
+    if (editingMedical) {
+      setCustomMedicalList((prev) => prev.map((item) => item === editingMedical ? trimmed : item))
+      setSelectedCustomMedical((prev) => prev.map((item) => item === editingMedical ? trimmed : item))
+      Taro.showToast({ title: '已更新病史', icon: 'success' })
+    } else {
+      setCustomMedicalList((prev) => [...prev, trimmed])
+      setSelectedCustomMedical((prev) => [...prev, trimmed]) // 添加时默认选中
+    }
     setMedicalHistory((prev) => prev.filter((v) => v !== 'none')) // 添加自定义时移除"无"
     setCustomMedical('')
+    setEditingMedical('')
+    setAddingMedical(false)
   }
 
   // 切换自定义病史的选中状态
@@ -236,6 +263,12 @@ function HealthProfilePage() {
     setMedicalHistory((prev) => prev.filter((v) => v !== 'none'))
   }
 
+  const handleEditCustomMedical = (item: string) => {
+    setAddingMedical(true)
+    setEditingMedical(item)
+    setCustomMedical(item)
+  }
+
   // 删除自定义病史（长按）
   const handleRemoveCustomMedical = (item: string) => {
     Taro.showModal({
@@ -245,6 +278,11 @@ function HealthProfilePage() {
         if (res.confirm) {
           setCustomMedicalList((prev) => prev.filter((v) => v !== item))
           setSelectedCustomMedical((prev) => prev.filter((v) => v !== item))
+          if (editingMedical === item) {
+            setEditingMedical('')
+            setCustomMedical('')
+            setAddingMedical(false)
+          }
         }
       }
     })
@@ -265,19 +303,26 @@ function HealthProfilePage() {
   }
 
   const handleAddCustomAllergy = () => {
-    const trimmed = customMedical.trim() // 复用 customMedical 作为输入
+    const trimmed = customAllergy.trim()
     if (!trimmed) {
       Taro.showToast({ title: '请输入过敏源名称', icon: 'none' })
       return
     }
-    if (customAllergyList.includes(trimmed)) {
+    if (customAllergyList.includes(trimmed) && editingAllergy !== trimmed) {
       Taro.showToast({ title: '该过敏源已添加', icon: 'none' })
       return
     }
-    setCustomAllergyList((prev) => [...prev, trimmed])
-    setSelectedCustomAllergy((prev) => [...prev, trimmed])
+    if (editingAllergy) {
+      setCustomAllergyList((prev) => prev.map((item) => item === editingAllergy ? trimmed : item))
+      setSelectedCustomAllergy((prev) => prev.map((item) => item === editingAllergy ? trimmed : item))
+      Taro.showToast({ title: '已更新过敏源', icon: 'success' })
+    } else {
+      setCustomAllergyList((prev) => [...prev, trimmed])
+      setSelectedCustomAllergy((prev) => [...prev, trimmed])
+    }
     setAllergyList((prev) => prev.filter((v) => v !== 'none'))
-    setCustomMedical('')
+    setCustomAllergy('')
+    setEditingAllergy('')
     setAddingAllergy(false)
   }
 
@@ -289,6 +334,12 @@ function HealthProfilePage() {
     setAllergyList((prev) => prev.filter((v) => v !== 'none'))
   }
 
+  const handleEditCustomAllergy = (item: string) => {
+    setAddingAllergy(true)
+    setEditingAllergy(item)
+    setCustomAllergy(item)
+  }
+
   const handleRemoveCustomAllergy = (item: string) => {
     Taro.showModal({
       title: '删除确认',
@@ -297,6 +348,11 @@ function HealthProfilePage() {
         if (res.confirm) {
           setCustomAllergyList((prev) => prev.filter((v) => v !== item))
           setSelectedCustomAllergy((prev) => prev.filter((v) => v !== item))
+          if (editingAllergy === item) {
+            setEditingAllergy('')
+            setCustomAllergy('')
+            setAddingAllergy(false)
+          }
         }
       }
     })
@@ -379,7 +435,7 @@ function HealthProfilePage() {
       routine_type: finalRoutine || undefined,
       routine_sleep_hour: routineHours.sleepHour,
       routine_wake_hour: routineHours.wakeHour,
-      report_image_url: reportImageUrl || undefined
+      report_image_url: reportImageUrls[0] || reportImageUrl || undefined
     }
     if (!req.gender || !req.birthday || !req.height || !req.weight || !req.diet_goal || !req.activity_level) {
       Taro.showToast({ title: '请完成前几项必填', icon: 'none' })
@@ -397,8 +453,11 @@ function HealthProfilePage() {
     try {
       await updateHealthProfile(req)
       // 若有上传的体检报告图片，提交后台病历提取任务（用户无感知）
-      if (reportImageUrl) {
-        submitReportExtractionTask(reportImageUrl).catch(() => {
+      if (reportImageUrls.length > 0) {
+        submitReportExtractionTask({
+          imageUrl: reportImageUrls[0],
+          imageUrls: reportImageUrls,
+        }).catch(() => {
           // 静默失败，不影响保存成功
         })
       }
@@ -659,9 +718,28 @@ function HealthProfilePage() {
                   key={item}
                   className={`option-card small custom-tag ${selectedCustomMedical.includes(item) ? 'active' : ''}`}
                   onClick={() => toggleCustomMedical(item)}
-                  onLongPress={() => handleRemoveCustomMedical(item)}
                 >
-                  <Text className='option-label'>{item}</Text>
+                  <Text className='option-label option-label--custom'>{item}</Text>
+                  <View className='custom-tag-actions'>
+                    <Text
+                      className='custom-tag-action'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleEditCustomMedical(item)
+                      }}
+                    >
+                      编辑
+                    </Text>
+                    <Text
+                      className='custom-tag-action custom-tag-action--danger'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleRemoveCustomMedical(item)
+                      }}
+                    >
+                      删除
+                    </Text>
+                  </View>
                 </View>
               ))}
             </View>
@@ -677,9 +755,9 @@ function HealthProfilePage() {
                   focus
                 />
                 <View className='custom-input-btn' onClick={handleAddCustomMedical}>
-                  <Text>确认</Text>
+                  <Text>{editingMedical ? '保存' : '确认'}</Text>
                 </View>
-                <View className='custom-input-cancel' onClick={() => { setAddingMedical(false); setCustomMedical('') }}>
+                <View className='custom-input-cancel' onClick={() => { setAddingMedical(false); setCustomMedical(''); setEditingMedical('') }}>
                   <Text className='cancel-icon-text'>×</Text>
                 </View>
               </View>
@@ -742,9 +820,28 @@ function HealthProfilePage() {
                   key={item}
                   className={`option-card small custom-tag ${selectedCustomAllergy.includes(item) ? 'active' : ''}`}
                   onClick={() => toggleCustomAllergy(item)}
-                  onLongPress={() => handleRemoveCustomAllergy(item)}
                 >
-                  <Text className='option-label'>{item}</Text>
+                  <Text className='option-label option-label--custom'>{item}</Text>
+                  <View className='custom-tag-actions'>
+                    <Text
+                      className='custom-tag-action'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleEditCustomAllergy(item)
+                      }}
+                    >
+                      编辑
+                    </Text>
+                    <Text
+                      className='custom-tag-action custom-tag-action--danger'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleRemoveCustomAllergy(item)
+                      }}
+                    >
+                      删除
+                    </Text>
+                  </View>
                 </View>
               ))}
             </View>
@@ -754,15 +851,15 @@ function HealthProfilePage() {
                 <Input
                   className='custom-input'
                   placeholder='输入过敏源名称'
-                  value={customMedical}
-                  onInput={(e) => setCustomMedical(e.detail.value)}
+                  value={customAllergy}
+                  onInput={(e) => setCustomAllergy(e.detail.value)}
                   onConfirm={handleAddCustomAllergy}
                   focus
                 />
                 <View className='custom-input-btn' onClick={handleAddCustomAllergy}>
-                  <Text>确认</Text>
+                  <Text>{editingAllergy ? '保存' : '确认'}</Text>
                 </View>
-                <View className='custom-input-cancel' onClick={() => { setAddingAllergy(false); setCustomMedical('') }}>
+                <View className='custom-input-cancel' onClick={() => { setAddingAllergy(false); setCustomAllergy(''); setEditingAllergy('') }}>
                   <Text className='cancel-icon-text'>×</Text>
                 </View>
               </View>

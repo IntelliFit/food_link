@@ -46,11 +46,11 @@ type mockFeedRepo struct {
 	checkinCountsErr           error
 }
 
-func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, mealType, dietGoal, date string, limit int) ([]repo.FeedRecord, error) {
+func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
 	m.listPublicFeedLimit = limit
 	return m.listPublicFeed, m.listPublicFeedErr
 }
-func (m *mockFeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal, date string, limit int) ([]repo.FeedRecord, error) {
+func (m *mockFeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
 	m.listFriendFeedLimit = limit
 	return m.listFriendFeed, m.listFriendFeedErr
 }

@@ -311,6 +311,12 @@
     font-weight: 500;
   }
 
+  .option-label--custom {
+    flex: 1;
+    min-width: 0;
+    word-break: break-all;
+  }
+
   /* 自定义标签样式 */
   &.custom-tag {
     border-style: dashed;
@@ -334,6 +340,24 @@
       color: #1a1a1a;
       font-weight: 600;
     }
+  }
+}
+
+.custom-tag-actions {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.custom-tag-action {
+  font-size: 24rpx;
+  color: #64748b;
+  padding: 8rpx 0;
+
+  &--danger {
+    color: #ef4444;
   }
 }
 

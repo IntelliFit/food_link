@@ -8,7 +8,8 @@ import {
   ShieldOutlined,
   InfoOutlined,
   Arrow,
-  ChatOutlined
+  ChatOutlined,
+  GiftOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import {
@@ -70,6 +71,7 @@ const REWARD_LEVELS: RewardLevelMeta[] = [
 const SERVICE_ICON_TONES: Record<number, ProfileListIconTone> = {
   0: { color: '#41a17a', backgroundColor: '#ecfcf4', darkColor: '#6ff6bc', darkBackgroundColor: 'rgba(111, 246, 188, 0.16)' },
   2: { color: '#987f42', backgroundColor: '#faf5e8', darkColor: '#fcd666', darkBackgroundColor: 'rgba(252, 214, 102, 0.16)' },
+  4: { color: '#7c68d8', backgroundColor: '#f3f0ff', darkColor: '#c4b5fd', darkBackgroundColor: 'rgba(196, 181, 253, 0.16)' },
   5: { color: '#4c92b3', backgroundColor: '#ecf7fc', darkColor: '#81d6fb', darkBackgroundColor: 'rgba(129, 214, 251, 0.16)' },
   8: { color: '#6e5ab5', backgroundColor: '#f4f0fc', darkColor: '#b39ef4', darkBackgroundColor: 'rgba(179, 158, 244, 0.16)' },
 }
@@ -238,7 +240,7 @@ function ProfilePage() {
             ...nextUserInfo,
             nickname: apiUserInfo.nickname || '用户昵称',
           })
-          const completed = apiUserInfo.onboarding_completed ?? true
+          const completed = apiUserInfo.onboarding_completed === true
           setOnboardingCompleted(completed)
           // 首次登录未填写健康档案时，先跳转到答题页面
           if (!completed) {
@@ -315,6 +317,20 @@ function ProfilePage() {
       badgeCount: (expiryDashboard?.expired_count ?? 0) + (expiryDashboard?.today_count ?? 0) + (expiryDashboard?.soon_count ?? 0)
     },
     {
+      id: 4,
+      icon: <GiftOutlined size='20' />,
+      title: '我的宠物',
+      desc: `奖励积分 ${membershipEarnedBalance}，去看看你的健康伙伴`,
+      path: extraPkgUrl('/pages/pet-home/index')
+    },
+    {
+      id: 6,
+      icon: <GiftOutlined size='20' />,
+      title: '赚积分',
+      desc: '查看今天还能做哪些任务、每项上限和当前进度',
+      path: extraPkgUrl('/pages/reward-center/index')
+    },
+    {
       id: 5,
       icon: <ShopOutlined size='20' />,
       title: '公共食物库',
@@ -360,10 +376,6 @@ function ProfilePage() {
     // 识别记录
     if (service.id === 7) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/analyze-history/index') })
-      return
-    }
-    if (service.id === 4) {
-      Taro.navigateTo({ url: extraPkgUrl('/pages/invite-friends/index') })
       return
     }
     // 公共食物库
@@ -473,6 +485,8 @@ function ProfilePage() {
           Taro.removeStorageSync('food_link_dashboard_targets_v1')
           Taro.removeStorageSync('home_poster_modal_visible')
           Taro.removeStorageSync('showRecordMenuModal')
+          Taro.removeStorageSync('home_pet_companion_collapsed_v1')
+          Taro.removeStorageSync('home_pet_companion_float_position_v1')
 
           // 识别记录 / 结果页相关缓存
           Taro.removeStorageSync('analyzeResult')
@@ -590,21 +604,21 @@ function ProfilePage() {
               <>
                 <View className='user-name-row'>
                   <Text className='user-name'>{userInfo.name}</Text>
-                  <View className='user-days-pill'>
-                    <Text className='user-days-pill-text'>已记录 {recordDays} 天</Text>
+                  <View className='user-name-actions'>
+                    <View className='user-days-pill'>
+                      <Text className='user-days-pill-text'>已记录 {recordDays} 天</Text>
+                    </View>
+                    {userId && (
+                      <View className='user-id-chip' onClick={handleCopyUserId}>
+                        <Text className='user-id-chip-text'>复制ID</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
-                <View className='user-edit-row' onClick={handleSettings}>
-                  <Text className='user-edit-text'>编辑资料</Text>
+                <View className='user-meta-row' onClick={handleSettings}>
+                  <Text className='user-meta-text'>编辑资料</Text>
                   <Arrow size={12} color='#9ca3af' />
                 </View>
-                {userId && (
-                  <View className='user-id-copy-row'>
-                    <View className='user-id-copy-button' onClick={handleCopyUserId}>
-                      <Text className='user-id-copy-button-text'>复制用户ID</Text>
-                    </View>
-                  </View>
-                )}
               </>
             ) : (
               <View className='user-name-row'>
@@ -714,8 +728,17 @@ function ProfilePage() {
                       <Text className='member-meter__label'>奖励可用（一直持有）</Text>
                       <Text className='member-meter__value'>{`${rewardRangeText} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
                     </View>
-                    <View className='progress-bar progress-bar--reward'>
-                      <View className='progress-inner progress-inner--reward' style={{ width: `${rewardProgressPct}%` }} />
+                    <View className='segmented-progress'>
+                      {Array.from({ length: 10 }).map((_, i) => {
+                        const filledCount = Math.min(Math.max(Math.ceil(rewardProgressPct / 10), 0), 10)
+                        const isFilled = i < filledCount
+                        return (
+                          <View
+                            key={i}
+                            className={`segmented-progress__bar ${isFilled ? 'segmented-progress__bar--filled' : ''}`}
+                          />
+                        )
+                      })}
                     </View>
                   </View>
 

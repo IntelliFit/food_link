@@ -8,6 +8,8 @@ import (
 	analyzedomain "food_link/backend/internal/analyze/domain"
 	"food_link/backend/internal/analyze/repo"
 	authrepo "food_link/backend/internal/auth/repo"
+	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
+	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
@@ -99,12 +101,7 @@ func (m *mockTaskCreditGuard) RefundEarnedCreditsAfterTaskFailure(ctx context.Co
 func setupTaskServiceTestDB(t *testing.T) (*gorm.DB, *repo.TaskRepo, *repo.PrecisionRepo, *authrepo.UserRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&analyzedomain.AnalysisTask{}, &analyzedomain.PrecisionSession{}, &analyzedomain.PrecisionSessionRound{}, &authrepo.User{}))
-	require.NoError(t, db.Exec(`CREATE TABLE user_food_records (
-		id TEXT PRIMARY KEY,
-		user_id TEXT,
-		source_task_id TEXT
-	)`).Error)
+	require.NoError(t, db.AutoMigrate(&analyzedomain.AnalysisTask{}, &analyzedomain.PrecisionSession{}, &analyzedomain.PrecisionSessionRound{}, &authrepo.User{}, &foodrecorddomain.FoodRecord{}))
 	return db, repo.NewTaskRepo(db), repo.NewPrecisionRepo(db), authrepo.NewUserRepo(db)
 }
 
@@ -535,16 +532,27 @@ func TestTaskService_UpdateTaskResult(t *testing.T) {
 }
 
 func TestTaskService_DeleteTask(t *testing.T) {
-	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	db, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	recordRepo := foodrecordrepo.NewFoodRecordRepo(db)
+	svc.ConfigureRecordRepo(recordRepo)
 	ctx := context.Background()
 
 	task := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "pending"}
 	require.NoError(t, taskRepo.CreateTask(ctx, task))
 
+	// Create associated food record
+	record := &foodrecorddomain.FoodRecord{ID: "fr1", UserID: "user1", SourceTaskID: &task.ID, MealType: "lunch"}
+	require.NoError(t, db.Create(record).Error)
+
 	result, err := svc.DeleteTask(ctx, task.ID, "user1")
 	require.NoError(t, err)
 	assert.True(t, result["deleted"].(bool))
+
+	// Verify associated food record is also deleted
+	deletedRecord, err := recordRepo.GetByUserSourceTaskID(ctx, "user1", task.ID)
+	require.NoError(t, err)
+	assert.Nil(t, deletedRecord)
 
 	_, err = svc.DeleteTask(ctx, task.ID, "user2")
 	assert.Error(t, err)

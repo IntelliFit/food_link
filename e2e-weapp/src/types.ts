@@ -28,8 +28,9 @@ export interface Step {
   script?: string;
   // relaunch / switchTab
   url?: string;
-  // wait
+  // wait / wait_for
   ms?: number;
+  interval?: number;
   // tap / assert_element
   selector?: string;
   // assert_element
@@ -96,4 +97,36 @@ export interface BackendTokenResponse {
   user_id: string;
   openid: string;
   unionid: string;
+}
+
+// ─── Trace types ───────────────────────────────────────────────
+
+export interface TraceFile {
+  traces: Trace[];
+}
+
+export interface Trace {
+  id: string;
+  name: string;
+  desc: string;
+  steps: Step[];
+}
+
+export interface TraceResult {
+  traceId: string;
+  traceName: string;
+  success: boolean;
+  durationMs: number;
+  steps: StepResult[];
+  failedStepIndex?: number;
+  failedStepMessage?: string;
+}
+
+export interface TraceReport {
+  databaseName?: string;
+  totalTraces: number;
+  passedTraces: number;
+  failedTraces: number;
+  durationMs: number;
+  traces: TraceResult[];
 }

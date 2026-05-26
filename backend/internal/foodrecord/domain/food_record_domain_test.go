@@ -111,6 +111,38 @@ func TestFoodItem_UnmarshalJSONManualRecordNutrients(t *testing.T) {
 	assert.Equal(t, "nutrition_library", *item.ManualSource)
 }
 
+func TestFoodItemNutrients_UnmarshalMacroAliases(t *testing.T) {
+	var fromCarbohydrate FoodItemNutrients
+	require.NoError(t, json.Unmarshal([]byte(`{"carbohydrate":28,"calories":120}`), &fromCarbohydrate))
+	assert.Equal(t, 28.0, fromCarbohydrate.Carbs)
+	assert.Equal(t, 120.0, fromCarbohydrate.Calories)
+
+	var fromCarbohydrates FoodItemNutrients
+	require.NoError(t, json.Unmarshal([]byte(`{"carbohydrates":15,"calories":80}`), &fromCarbohydrates))
+	assert.Equal(t, 15.0, fromCarbohydrates.Carbs)
+
+	var fromCarbs FoodItemNutrients
+	require.NoError(t, json.Unmarshal([]byte(`{"carbs":20,"calories":100}`), &fromCarbs))
+	assert.Equal(t, 20.0, fromCarbs.Carbs)
+
+	var fromDietaryFiber FoodItemNutrients
+	require.NoError(t, json.Unmarshal([]byte(`{"dietary_fiber":8,"sugar":6}`), &fromDietaryFiber))
+	assert.Equal(t, 8.0, fromDietaryFiber.Fiber)
+	assert.Equal(t, 6.0, fromDietaryFiber.Sugar)
+
+	var fromFibre FoodItemNutrients
+	require.NoError(t, json.Unmarshal([]byte(`{"fibre":5}`), &fromFibre))
+	assert.Equal(t, 5.0, fromFibre.Fiber)
+
+	var fromTotalSugar FoodItemNutrients
+	require.NoError(t, json.Unmarshal([]byte(`{"total_sugar":10}`), &fromTotalSugar))
+	assert.Equal(t, 10.0, fromTotalSugar.Sugar)
+
+	var fromSugars FoodItemNutrients
+	require.NoError(t, json.Unmarshal([]byte(`{"sugars":3}`), &fromSugars))
+	assert.Equal(t, 3.0, fromSugars.Sugar)
+}
+
 func TestFoodItemNutrients_UnmarshalMicronutrients(t *testing.T) {
 	var nutrients FoodItemNutrients
 	require.NoError(t, json.Unmarshal([]byte(`{

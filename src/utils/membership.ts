@@ -28,14 +28,39 @@ const STANDARD_FOOD_ANALYSIS_CREDIT_COST = 2
 const PRECISION_FOOD_ANALYSIS_CREDIT_COST = 4
 const EXERCISE_LOG_CREDIT_COST = 1
 
+export const LOW_CREDIT_REWARD_HINT_THRESHOLD = 4
+
+export interface CreditShortageInfoOptions {
+  requiredCredits: number
+  scenarioLabel?: string
+  message?: string
+}
+
+export interface CreditShortageInfo {
+  requiredCredits: number
+  totalAvailable: number
+  systemRemaining: number
+  earnedBalance: number
+  missingCredits: number
+  message: string
+  membershipActionText: string
+}
+
 export function getFoodAnalysisCreditCost(executionMode?: ExecutionMode | string | null, units = 1): number {
   const normalizedUnits = Number.isFinite(units) && units > 0 ? Math.floor(units) : 1
-  const unitCost = executionMode === 'experimental' || executionMode === 'gemini35_flash_grouped' ? PRECISION_FOOD_ANALYSIS_CREDIT_COST : STANDARD_FOOD_ANALYSIS_CREDIT_COST
+  const unitCost = executionMode === 'strict' ||
+    executionMode === 'strict_web_search' ||
+    executionMode === 'experimental' ||
+    executionMode === 'gemini35_flash_grouped'
+    ? PRECISION_FOOD_ANALYSIS_CREDIT_COST
+    : STANDARD_FOOD_ANALYSIS_CREDIT_COST
   return unitCost * normalizedUnits
 }
 
 function getFoodAnalysisCreditLabel(executionMode?: ExecutionMode | string | null): string {
   if (executionMode === 'experimental') return '试验分析'
+  if (executionMode === 'standard_web_search') return '联网分析'
+  if (executionMode === 'strict_web_search') return '联网精准分析'
   if (executionMode === 'strict') return '精准分析'
   if (executionMode === 'gemini35_flash' || executionMode === 'gemini35_flash_grouped') return '精准分析'
   return '食物分析'
@@ -204,6 +229,30 @@ export function getFoodAnalysisCreditBlockMessage(
 
 export function getFoodAnalysisBlockedActionText(status?: MembershipStatus | null): string {
   return status?.is_pro ? '去升级' : '去开通'
+}
+
+export function buildCreditShortageInfo(
+  status: MembershipStatus | null | undefined,
+  options: CreditShortageInfoOptions,
+): CreditShortageInfo {
+  const requiredCredits = Math.max(Math.ceil(Number(options.requiredCredits || 0)), 1)
+  const { remaining } = getMembershipCreditSummary(status)
+  const systemRemaining = getSystemCreditsRemaining(status)
+  const earnedBalance = getEarnedCreditsBalance(status)
+  const missingCredits = Math.max(requiredCredits - remaining, 0)
+  const scenarioLabel = String(options.scenarioLabel || '本次操作').trim() || '本次操作'
+  const fallbackMessage = missingCredits > 0
+    ? `${scenarioLabel}需要 ${requiredCredits} 积分，还差 ${missingCredits} 积分。可以先完成奖励任务赚积分，赚到后马上继续使用。`
+    : `${scenarioLabel}需要 ${requiredCredits} 积分。可以先完成奖励任务赚积分，也可以开通会员获得更多每日积分。`
+  return {
+    requiredCredits,
+    totalAvailable: remaining,
+    systemRemaining,
+    earnedBalance,
+    missingCredits,
+    message: options.message?.trim() || fallbackMessage,
+    membershipActionText: status?.is_pro ? '去升级' : '开通会员',
+  }
 }
 
 export function isExerciseLogCreditExhausted(status?: MembershipStatus | null): boolean {

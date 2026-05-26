@@ -13,6 +13,8 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+var ErrInsufficientEarnedCredits = errors.New("insufficient earned credits")
+
 type FoodRecord struct {
 	ID            string     `gorm:"column:id"`
 	MealType      string     `gorm:"column:meal_type"`
@@ -167,7 +169,7 @@ func (r *PetRepo) GetEventByUserDateType(ctx context.Context, userID, date, even
 	}
 	var row petdomain.UserPetEvent
 	err = r.db.WithContext(ctx).
-		Where("user_id = ? AND event_date = ? AND event_type = ?", userID, eventDate).
+		Where("user_id = ? AND event_date = ? AND event_type = ?", userID, eventDate, eventType).
 		First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -314,6 +316,62 @@ func (r *PetRepo) ClaimEvent(ctx context.Context, userID, eventID string, expRew
 		return nil, nil, nil, false, err
 	}
 	return &claimedEvent, &updatedPet, ledger, appliedCredit, nil
+}
+
+func (r *PetRepo) RerollAppearance(ctx context.Context, userID, petID string, updates map[string]any, cost int, meta map[string]any) (*petdomain.UserPet, *domain.UserEarnedCreditLedger, error) {
+	var updatedPet petdomain.UserPet
+	var ledger *domain.UserEarnedCreditLedger
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND user_id = ?", petID, userID).
+			First(&updatedPet).Error; err != nil {
+			return err
+		}
+
+		if cost > 0 {
+			var user struct {
+				EarnedCreditsBalance int `gorm:"column:earned_credits_balance"`
+			}
+			if err := tx.Table("weapp_user").
+				Clauses(clause.Locking{Strength: "UPDATE"}).
+				Select("earned_credits_balance").
+				Where("id = ?", userID).
+				First(&user).Error; err != nil {
+				return err
+			}
+			next := user.EarnedCreditsBalance - cost
+			if next < 0 {
+				return ErrInsufficientEarnedCredits
+			}
+			if err := tx.Table("weapp_user").Where("id = ?", userID).Update("earned_credits_balance", next).Error; err != nil {
+				return err
+			}
+			now := time.Now()
+			ledger = &domain.UserEarnedCreditLedger{
+				ID:           uuid.New().String(),
+				UserID:       userID,
+				Delta:        -cost,
+				BalanceAfter: next,
+				Reason:       "pet_appearance_reroll_spend",
+				Meta:         meta,
+				CreatedAt:    &now,
+				UpdatedAt:    &now,
+			}
+			if err := tx.Create(ledger).Error; err != nil {
+				return err
+			}
+		}
+
+		updates["updated_at"] = time.Now()
+		if err := tx.Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(updates).Error; err != nil {
+			return err
+		}
+		return tx.Where("id = ?", petID).First(&updatedPet).Error
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return &updatedPet, ledger, nil
 }
 
 func LevelForExperience(experience int) int {

@@ -54,6 +54,7 @@ var supportedTaskTypes = []string{
 	"exercise",
 	"health_report",
 	"packaged_nutrition_label",
+	"packaged_product_extract",
 	"expiry_recognize",
 	"expiry_notification",
 }
@@ -705,6 +706,8 @@ func (r *Runner) process(ctx context.Context, workerID string, task *domain.Anal
 		err = r.processHealthReport(taskCtx, task)
 	case "packaged_nutrition_label":
 		err = r.processPackagedNutritionLabel(taskCtx, task)
+	case "packaged_product_extract":
+		err = r.processPackagedProductExtract(taskCtx, task)
 	case "expiry_recognize":
 		err = r.processExpiryRecognize(taskCtx, task)
 	default:
@@ -876,6 +879,7 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
 	r.log.Info("食物任务已完成", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), slog.Duration("duration", time.Since(start)))
+	r.trySilentPackagedIngest(ctx, task, result)
 	return nil
 }
 
@@ -2906,6 +2910,136 @@ func firstNonNil(values ...any) any {
 	return nil
 }
 
+func (r *Runner) processPackagedProductExtract(ctx context.Context, task *domain.AnalysisTask) error {
+	if r.nutrition == nil {
+		return fmt.Errorf("packaged product extract service is not configured")
+	}
+	r.normalizeTaskImages(task, "food-images")
+	imageURLs := healthReportImageURLs(task)
+	imageURLs = r.resolveImageURLs("food-images", imageURLs)
+	if len(imageURLs) == 0 {
+		return fmt.Errorf("packaged product extract task missing image_urls")
+	}
+	start := time.Now()
+	r.log.Info("预包装商品识别任务开始",
+		slog.String("task_id", task.ID),
+		logger.AnalysisTaskID(task.ID),
+		slog.String("user_id", task.UserID),
+		slog.Int("image_count", len(imageURLs)),
+	)
+	result, err := r.nutrition.ExtractPackagedProduct(ctx, imageURLs, stringFromMap(task.Payload, "recognized_name_hint"))
+	if err != nil {
+		return err
+	}
+	autoIngestResult, createdFood, err := r.nutrition.TryAutoIngestPackagedProduct(ctx, result)
+	if err != nil {
+		return err
+	}
+	result.AutoIngestResult = *autoIngestResult
+	if createdFood != nil {
+		result.PackagedFoodID = createdFood.ID
+	}
+	rewardResult := map[string]any{
+		"awarded": false,
+	}
+	if createdFood != nil && r.nutrition != nil {
+		if autoIngestResult != nil && autoIngestResult.UpsertAction == "created" {
+			awarded, awardErr := r.nutrition.AwardPackagedUpload(ctx, task.UserID, task.ID, createdFood.ID, map[string]any{
+				"packaged_food_id": createdFood.ID,
+				"source_task_id":   task.ID,
+				"product_name":     createdFood.ProductName,
+				"upsert_action":    autoIngestResult.UpsertAction,
+			})
+			if awardErr != nil {
+				r.log.Warn("预包装商品奖励积分发放失败",
+					slog.String("task_id", task.ID),
+					logger.AnalysisTaskID(task.ID),
+					slog.String("user_id", task.UserID),
+					slog.String("packaged_food_id", createdFood.ID),
+					logger.Err(awardErr),
+				)
+				rewardResult["reason"] = "award_failed"
+			} else if awarded != nil {
+				rewardResult = awarded
+			}
+		} else {
+			rewardResult["already_exists"] = true
+			rewardResult["reason"] = "packaged_food_existing"
+			rewardResult["packaged_food_id"] = createdFood.ID
+		}
+	}
+	payloadBytes, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	var resultMap map[string]any
+	if err := json.Unmarshal(payloadBytes, &resultMap); err != nil {
+		return err
+	}
+	out := map[string]any{
+		"packaged_product":     resultMap,
+		"nutrition":            resultMap,
+		"reward_result":        rewardResult,
+		"analysis_engine":      "packaged_product_extract_ocr",
+		"analysis_duration_ms": time.Since(start).Milliseconds(),
+	}
+	if err := r.completeTask(ctx, task, out); err != nil {
+		return err
+	}
+	r.log.Info("预包装商品识别任务完成",
+		slog.String("task_id", task.ID),
+		logger.AnalysisTaskID(task.ID),
+		slog.String("user_id", task.UserID),
+		slog.String("auto_ingest_status", autoIngestResult.Status),
+		slog.Duration("duration", time.Since(start)),
+	)
+	return nil
+}
+
+func (r *Runner) trySilentPackagedIngest(ctx context.Context, task *domain.AnalysisTask, result map[string]any) {
+	if r == nil || r.nutrition == nil || task == nil {
+		return
+	}
+	imageURLs := healthReportImageURLs(task)
+	imageURLs = r.resolveImageURLs("food-images", imageURLs)
+	if len(imageURLs) < 2 {
+		return
+	}
+	items := extractItems(result["items"])
+	if len(items) == 0 {
+		return
+	}
+	nameHint := strings.TrimSpace(stringFromAny(items[0]["name"]))
+	if nameHint == "" {
+		return
+	}
+	extractResult, err := r.nutrition.ExtractPackagedProduct(ctx, imageURLs, nameHint)
+	if err != nil {
+		r.log.Warn("静默预包装补库识别失败",
+			slog.String("task_id", task.ID),
+			logger.AnalysisTaskID(task.ID),
+			logger.Err(err),
+		)
+		return
+	}
+	if extractResult == nil {
+		return
+	}
+	if auto, _, err := r.nutrition.TryAutoIngestPackagedProduct(ctx, extractResult); err != nil {
+		r.log.Warn("静默预包装补库入库失败",
+			slog.String("task_id", task.ID),
+			logger.AnalysisTaskID(task.ID),
+			logger.Err(err),
+		)
+	} else if auto != nil && auto.Status == "ingested" {
+		r.log.Info("静默预包装补库成功",
+			slog.String("task_id", task.ID),
+			logger.AnalysisTaskID(task.ID),
+			slog.String("packaged_food_id", auto.PackagedFoodID),
+		)
+	}
+}
+
 func isEmptyAny(value any) bool {
 	if value == nil {
 		return true
@@ -3166,6 +3300,8 @@ func (r *Runner) processHealthReport(ctx context.Context, task *domain.AnalysisT
 		"suggestions":   []string{},
 		"medical_notes": "",
 		"_image_urls":   imageURLs,
+		"_status":       "processing",
+		"_error":        "",
 	}
 	allIndicators := []any{}
 	allConclusions := []string{}
@@ -3187,6 +3323,8 @@ func (r *Runner) processHealthReport(ctx context.Context, task *domain.AnalysisT
 	merged["conclusions"] = allConclusions
 	merged["suggestions"] = allSuggestions
 	merged["medical_notes"] = strings.Join(allNotes, "\n")
+	merged["_status"] = "done"
+	merged["_error"] = ""
 
 	imageURLRaw := strings.Join(imageURLs, ",")
 	if task.ImageURL != nil && strings.TrimSpace(*task.ImageURL) != "" {
@@ -3312,6 +3450,14 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 	}
 	task.Status = "failed"
 	task.ErrorMessage = &msg
+	if task.TaskType == "health_report" {
+		if err := r.markHealthReportFailed(ctx, task, msg); err != nil {
+			r.log.Warn("回写体检报告失败状态失败",
+				slog.String("task_id", task.ID),
+				logger.Err(err),
+			)
+		}
+	}
 	if err := r.captureCorrectionFeedbackSample(ctx, task, nil, msg); err != nil {
 		r.log.Warn("采集失败纠错反馈样本失败",
 			slog.String("task_id", task.ID),
@@ -3331,6 +3477,35 @@ func (r *Runner) failTask(ctx context.Context, task *domain.AnalysisTask, taskEr
 		slog.String("error", msg),
 	)
 	return nil
+}
+
+func (r *Runner) markHealthReportFailed(ctx context.Context, task *domain.AnalysisTask, message string) error {
+	if r.users == nil || task == nil || strings.TrimSpace(task.UserID) == "" {
+		return nil
+	}
+	user, err := r.users.FindByID(ctx, task.UserID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return nil
+	}
+	healthCondition := map[string]any{}
+	for key, value := range user.HealthCondition {
+		healthCondition[key] = value
+	}
+	imageURLs := healthReportImageURLs(task)
+	healthCondition["report_extract"] = map[string]any{
+		"indicators":    []any{},
+		"conclusions":   []string{},
+		"suggestions":   []string{},
+		"medical_notes": "",
+		"_image_urls":   imageURLs,
+		"_status":       "failed",
+		"_error":        message,
+	}
+	_, err = r.users.UpdateFields(ctx, task.UserID, map[string]any{"health_condition": healthCondition})
+	return err
 }
 
 func (r *Runner) captureCorrectionFeedbackSample(ctx context.Context, task *domain.AnalysisTask, result map[string]any, errorMessage string) error {
@@ -3463,6 +3638,16 @@ func sanitizeTaskErrorMessage(taskErr error) string {
 		strings.Contains(lower, "i/o timeout") ||
 		strings.Contains(lower, "tls handshake timeout") {
 		return "AI 识别服务响应超时，请稍后重试；如果连续失败，可以换一张更清晰的照片再试"
+	}
+	if lower == "eof" ||
+		strings.HasSuffix(lower, ": eof") ||
+		strings.Contains(lower, "unexpected eof") ||
+		strings.Contains(lower, "connection reset") ||
+		strings.Contains(lower, "connection refused") ||
+		strings.Contains(lower, "server closed idle connection") ||
+		strings.Contains(lower, "use of closed network connection") ||
+		strings.Contains(lower, "socket hang up") {
+		return "AI 识别服务连接中断，请稍后重试；如果连续失败，可以换一张更清晰的照片再试"
 	}
 	if strings.Contains(lower, "resource exhausted") ||
 		strings.Contains(lower, "ofoxai api error 429") ||

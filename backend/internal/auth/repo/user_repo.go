@@ -46,6 +46,21 @@ type User struct {
 
 func (User) TableName() string { return "weapp_user" }
 
+type UserTrialEntitlement struct {
+	ID                string     `gorm:"column:id"`
+	FirstUserID       *string    `gorm:"column:first_user_id"`
+	OpenID            string     `gorm:"column:openid"`
+	UnionID           *string    `gorm:"column:unionid"`
+	FirstRegisteredAt *time.Time `gorm:"column:first_registered_at"`
+	EarlyUserRank     *int       `gorm:"column:early_user_rank"`
+	TrialDaysTotal    int        `gorm:"column:trial_days_total"`
+	TrialPolicy       string     `gorm:"column:trial_policy"`
+	CreatedAt         *time.Time `gorm:"column:created_at"`
+	UpdatedAt         *time.Time `gorm:"column:updated_at"`
+}
+
+func (UserTrialEntitlement) TableName() string { return "user_trial_entitlements" }
+
 type UserRepo struct {
 	db *gorm.DB
 }
@@ -79,6 +94,41 @@ func (r *UserRepo) FindByID(ctx context.Context, userID string) (*User, error) {
 	return &user, err
 }
 
+func (r *UserRepo) FindTrialEntitlementByIdentity(ctx context.Context, openID, unionID string) (*UserTrialEntitlement, error) {
+	unionID = strings.TrimSpace(unionID)
+	openID = strings.TrimSpace(openID)
+	if unionID != "" {
+		var ent UserTrialEntitlement
+		err := r.db.WithContext(ctx).Where("unionid = ?", unionID).First(&ent).Error
+		if err == nil {
+			return &ent, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
+	if openID == "" {
+		return nil, nil
+	}
+	var ent UserTrialEntitlement
+	err := r.db.WithContext(ctx).Where("openid = ?", openID).First(&ent).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &ent, err
+}
+
+func (r *UserRepo) DeleteByID(ctx context.Context, userID string) error {
+	result := r.db.WithContext(ctx).Where("id = ?", userID).Delete(&User{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 func (r *UserRepo) Create(ctx context.Context, user *User) error {
 	if user.ID == "" {
 		user.ID = uuid.New().String()
@@ -86,11 +136,42 @@ func (r *UserRepo) Create(ctx context.Context, user *User) error {
 	return r.db.WithContext(ctx).Create(user).Error
 }
 
+func (r *UserRepo) CreateTrialEntitlement(ctx context.Context, ent *UserTrialEntitlement) error {
+	if ent.ID == "" {
+		ent.ID = uuid.New().String()
+	}
+	now := time.Now()
+	if ent.CreatedAt == nil {
+		ent.CreatedAt = &now
+	}
+	if ent.UpdatedAt == nil {
+		ent.UpdatedAt = &now
+	}
+	return r.db.WithContext(ctx).Create(ent).Error
+}
+
 func (r *UserRepo) UpdateFields(ctx context.Context, userID string, updates map[string]any) (*User, error) {
 	if err := r.db.WithContext(ctx).Model(&User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
 		return nil, err
 	}
 	return r.FindByID(ctx, userID)
+}
+
+func (r *UserRepo) UpdateTrialEntitlement(ctx context.Context, id string, updates map[string]any) (*UserTrialEntitlement, error) {
+	if len(updates) > 0 {
+		if _, ok := updates["updated_at"]; !ok {
+			updates["updated_at"] = time.Now()
+		}
+		if err := r.db.WithContext(ctx).Model(&UserTrialEntitlement{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return nil, err
+		}
+	}
+	var ent UserTrialEntitlement
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&ent).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &ent, err
 }
 
 func (r *UserRepo) ExchangeCode(ctx context.Context, appID, secret, code string) (string, string, error) {
@@ -134,6 +215,33 @@ func (r *UserRepo) CountFoodRecordDays(ctx context.Context, userID string) (int6
 		WHERE user_id = ?
 	`, userID).Scan(&count).Error
 	return count, err
+}
+
+func (r *UserRepo) GetFirstMembershipTrialBatchRank(ctx context.Context, userID string, limit int) (int, error) {
+	if strings.TrimSpace(userID) == "" {
+		return 0, nil
+	}
+	query := r.db.WithContext(ctx).
+		Table("weapp_user").
+		Select("id").
+		Order("create_time IS NULL ASC").
+		Order("create_time ASC").
+		Order("id ASC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	var rows []struct {
+		ID string `gorm:"column:id"`
+	}
+	if err := query.Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	for index, row := range rows {
+		if row.ID == userID {
+			return index + 1, nil
+		}
+	}
+	return 0, nil
 }
 
 func (r *UserRepo) FindByRegistrationInviteCode(ctx context.Context, code string) (*User, error) {

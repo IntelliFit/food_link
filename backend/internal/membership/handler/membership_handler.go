@@ -16,6 +16,7 @@ import (
 type MembershipService interface {
 	ListPlans(ctx context.Context) ([]map[string]any, error)
 	GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error)
+	GetRewardCenter(ctx context.Context, userID string) (map[string]any, error)
 	CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error)
 	WechatNotify(ctx context.Context, paymentID string) error
 	HandleWechatNotify(ctx context.Context, headers http.Header, body []byte) (map[string]any, error)
@@ -49,6 +50,21 @@ func (h *MembershipHandler) GetMyMembership(c *gin.Context) {
 	}
 	date := strings.TrimSpace(c.Query("date"))
 	data, err := h.svc.GetMyMembership(c.Request.Context(), userID, date)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+// GET /api/membership/reward-center
+func (h *MembershipHandler) GetRewardCenter(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	data, err := h.svc.GetRewardCenter(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
 		return

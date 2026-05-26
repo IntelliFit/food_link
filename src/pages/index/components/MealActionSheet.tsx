@@ -8,6 +8,27 @@ interface MealActionSheetProps {
   onDelete: () => void
 }
 
+const GRID_ITEMS = [
+  {
+    id: 'edit',
+    label: '修改记录',
+    color: '#5c9ed4',
+    backgroundColor: '#f0f7ff',
+    borderColor: '#cce0f5',
+    iconBackgroundColor: '#e0f0ff',
+    iconClass: 'icon-edit',
+  },
+  {
+    id: 'poster',
+    label: '生成分享海报',
+    color: '#00bc7d',
+    backgroundColor: '#f0fdf9',
+    borderColor: '#ccf5e6',
+    iconBackgroundColor: '#e0fbf0',
+    iconClass: 'icon-share',
+  },
+] as const
+
 export function MealActionSheet({ visible, onClose, onEdit, onPoster, onDelete }: MealActionSheetProps) {
   if (!visible) return null
 
@@ -16,39 +37,39 @@ export function MealActionSheet({ visible, onClose, onEdit, onPoster, onDelete }
       <View className='record-menu-mask' onClick={onClose} />
       <View className='record-menu-content'>
         <View className='record-menu-handle-bar' />
-        <View className='record-menu-grid-v2'>
-          <View
-            className='record-menu-grid-card'
-            onClick={() => { onClose(); onEdit() }}
-          >
-            <View className='record-menu-grid-icon-wrap'>
-              <Text className='iconfont icon-edit' style={{ fontSize: '40rpx', color: '#5c9ed4' }} />
-            </View>
-            <View className='record-menu-grid-text-wrap'>
-              <Text className='record-menu-grid-label' style={{ color: '#5c9ed4' }}>
-                修改记录
-              </Text>
-            </View>
-          </View>
 
-          <View
-            className='record-menu-grid-card'
-            onClick={() => { onClose(); onPoster() }}
-          >
-            <View className='record-menu-grid-icon-wrap'>
-              <Text className='iconfont icon-share' style={{ fontSize: '40rpx', color: '#00bc7d' }} />
+        {/* 修改记录 + 生成分享海报：2 列卡片 */}
+        <View className='record-menu-grid-v2'>
+          {GRID_ITEMS.map((item) => (
+            <View
+              key={item.id}
+              className='record-menu-grid-card'
+              style={{
+                backgroundColor: item.backgroundColor,
+                borderColor: item.borderColor,
+              }}
+              onClick={() => { onClose(); item.id === 'edit' ? onEdit() : onPoster() }}
+            >
+              <View
+                className='record-menu-grid-icon-wrap'
+                style={{ backgroundColor: item.iconBackgroundColor }}
+              >
+                <Text className={`iconfont ${item.iconClass}`} style={{ fontSize: '40rpx', color: item.color }} />
+              </View>
+              <View className='record-menu-grid-text-wrap'>
+                <Text className='record-menu-grid-label' style={{ color: item.color }}>
+                  {item.label}
+                </Text>
+              </View>
             </View>
-            <View className='record-menu-grid-text-wrap'>
-              <Text className='record-menu-grid-label' style={{ color: '#00bc7d' }}>
-                生成分享海报
-              </Text>
-            </View>
-          </View>
+          ))}
         </View>
 
+        {/* 删除：单独一行，纯文字红色 */}
         <View className='record-menu-footer'>
-          <View className='record-menu-close-btn record-menu-delete-btn' onClick={() => { onClose(); onDelete() }}>
-            <Text className='record-menu-close-text record-menu-delete-text'>删除</Text>
+          <View className='record-menu-delete-row' onClick={() => { onClose(); onDelete() }}>
+            <Text className='record-menu-delete-icon'>×</Text>
+            <Text className='record-menu-delete-text'>删除</Text>
           </View>
         </View>
       </View>

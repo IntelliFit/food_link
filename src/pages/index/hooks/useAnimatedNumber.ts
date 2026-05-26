@@ -3,16 +3,17 @@ import { getNowMs } from '../../../utils/perf-now'
 
 /**
  * @param resetDep 传入后，每次该值变化（如选中日）时从 0 重新播放到 target，便于换日后可见数字缓动；不传则仅从当前展示值过渡到新 target
+ * @param skipAnimation 为 true 时直接返回 target，不播放任何动画（用于特定卡片切换日期时取消动画）
  */
 export function useAnimatedNumber(
   target: number,
   duration: number = 600,
   delay: number = 0,
-  resetDep?: string
+  resetDep?: string,
+  skipAnimation?: boolean
 ): number {
-  const [displayValue, setDisplayValue] = useState(0)
-  const displayValueRef = useRef(0)
-  displayValueRef.current = displayValue
+  const [displayValue, setDisplayValue] = useState(skipAnimation ? target : 0)
+  const displayValueRef = useRef(skipAnimation ? target : 0)
   const lastResetDepRef = useRef<string | undefined>(undefined)
   const animationRef = useRef<{ startTime: number | null; startValue: number; rafId: number | null }>({
     startTime: null,
@@ -22,6 +23,12 @@ export function useAnimatedNumber(
 
   // useLayoutEffect：resetDep 变化时先把展示值同步归零再 rAF，避免遮罩关闭首帧仍显示上一段动画的终值（换日看不到缓动）
   useLayoutEffect(() => {
+    if (skipAnimation) {
+      setDisplayValue(target)
+      displayValueRef.current = target
+      return
+    }
+
     if (animationRef.current.rafId) {
       cancelAnimationFrame(animationRef.current.rafId)
     }
@@ -68,7 +75,7 @@ export function useAnimatedNumber(
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- displayValue 仅作起点，故意不列入 deps，避免 rAF 每帧 setState 导致 effect 重入
-  }, [target, duration, delay, resetDep])
+  }, [target, duration, delay, resetDep, skipAnimation])
 
   return displayValue
 }

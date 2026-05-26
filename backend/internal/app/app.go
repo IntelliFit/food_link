@@ -49,6 +49,7 @@ import (
 	recipehandler "food_link/backend/internal/recipe/handler"
 	reciperepo "food_link/backend/internal/recipe/repo"
 	recipeservice "food_link/backend/internal/recipe/service"
+	"food_link/backend/internal/migration"
 	"food_link/backend/internal/stub"
 	systemhandler "food_link/backend/internal/system/handler"
 	"food_link/backend/internal/taskqueue"
@@ -104,6 +105,9 @@ func New(cfg *config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := migration.AutoMigrate(context.Background(), db, cfg.Database.Schema); err != nil {
+		return nil, fmt.Errorf("auto migrate: %w", err)
+	}
 
 	engine := gin.New()
 	engine.Use(logger.RequestLogger())
@@ -133,7 +137,7 @@ func New(cfg *config.Config) (*App, error) {
 	bindPhoneSvc := userservice.NewBindPhoneService(cfg, userRepo)
 	uploadSvc := userservice.NewUploadService(storageClient)
 	ocrSvc := userservice.NewOCRService(cfg, storageClient)
-	analysisTaskSvc := userservice.NewAnalysisTaskService(analysisTaskRepo, storageClient)
+	analysisTaskSvc := userservice.NewAnalysisTaskService(analysisTaskRepo, userRepo, storageClient)
 	analysisTaskSvc.ConfigureTaskPublisher(taskQueue)
 
 	userHandler := userhandler.NewUserHandler(userSvc, bindPhoneSvc, uploadSvc, ocrSvc, analysisTaskSvc)
@@ -146,6 +150,7 @@ func New(cfg *config.Config) (*App, error) {
 	ofoxAIClient := analyzeservice.NewOfoxAIClient(cfg.External.OfoxAIAPIKey, "gemini-3-flash-preview", cfg.External.OfoxAIBaseURL)
 	analyzeSvc := analyzeservice.NewAnalyzeService(doubaoClient, ofoxAIClient, userRepo, analyzeNutritionRepo)
 	analyzeSvc.ConfigureDoubaoClient(cfg.External.DoubaoAPIKey, cfg.External.DoubaoBaseURL, "")
+	analyzeSvc.ConfigureDashScopeClient(cfg.External.DashScopeAPIKey, cfg.External.DashScopeBaseURL)
 	analyzeSvc.ConfigureGemini31LiteClient(cfg.External.OfoxAIAPIKey, cfg.External.OfoxAIBaseURL, "gemini-3.1-flash-lite")
 	analyzeSvc.ConfigureGemini35Client(cfg.External.Gemini35APIKey, cfg.External.Gemini35BaseURL, cfg.External.Gemini35Model)
 	if cfg.External.DoubaoWebSearchAPIKey != "" {
@@ -154,13 +159,16 @@ func New(cfg *config.Config) (*App, error) {
 	analyzeSvc.ConfigureImageProvider(cfg.External.LLMProvider)
 	analyzeSvc.ConfigureDeepSeekFallback(cfg.External.DeepSeekAPIKey)
 	analyzeSvc.ConfigureStorage(storageClient)
+	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
+
 	analyzeTaskSvc := analyzeservice.NewTaskService(analyzeTaskRepo, analyzePrecisionRepo, userRepo, storageClient)
 	analyzeTaskSvc.ConfigureTaskPublisher(taskQueue)
+	analyzeTaskSvc.ConfigureRecordRepo(frRepo)
+
 	adminKey := os.Getenv("ADMIN_API_KEY")
 	analyzeHandler := analyzehandler.NewAnalyzeHandler(analyzeSvc, analyzeTaskSvc, adminKey)
 
 	// FoodRecord module DI
-	frRepo := foodrecordrepo.NewFoodRecordRepo(db)
 	frTaskRepo := foodrecordrepo.NewAnalysisTaskRepo(db)
 	frNutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
 	bodyMetricsRepo := healthrepo.NewBodyMetricsRepo(db)
@@ -204,6 +212,7 @@ func New(cfg *config.Config) (*App, error) {
 	exerciseSvc.ConfigureCreditGuard(membershipSvc)
 	exerciseSvc.ConfigureInviteRewardActivator(membershipSvc)
 	frSvc.ConfigureInviteRewardActivator(membershipSvc)
+	frNutritionSvc.ConfigureRewardAwarder(membershipSvc)
 	membershipHandler := membershiphandler.NewMembershipHandler(membershipSvc)
 
 	// Pet companion module DI
@@ -215,6 +224,7 @@ func New(cfg *config.Config) (*App, error) {
 	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
 	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo, storageClient)
 	publicFoodSvc.ConfigureTaskPublisher(taskQueue)
+	publicFoodSvc.ConfigureRewardTaskAwarder(membershipSvc)
 	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
 
 	// Recipe module DI
@@ -245,7 +255,7 @@ func New(cfg *config.Config) (*App, error) {
 	testBackendPromptRepo := testbackendrepo.NewPromptRepo(db)
 	testBackendBatchRepo := testbackendrepo.NewBatchRepo(db)
 	testBackendDatasetRepo := testbackendrepo.NewDatasetRepo(db)
-	testBackendSvc := testbackendservice.NewTestBackendService(testBackendPromptRepo, testBackendBatchRepo, testBackendDatasetRepo, doubaoClient, ofoxAIClient)
+	testBackendSvc := testbackendservice.NewTestBackendService(testBackendPromptRepo, testBackendBatchRepo, testBackendDatasetRepo, doubaoClient, ofoxAIClient, userRepo, jwtSvc, cfg)
 	testBackendHandler := testbackendhandler.NewTestBackendHandler(testBackendSvc)
 
 	commentHandler := communityhandler.NewCommentHandler(homeRepo, userRepo)
@@ -279,6 +289,10 @@ func New(cfg *config.Config) (*App, error) {
 	engine.PUT("/api/user/dashboard-targets", authmw.RequireJWT(jwtSvc), userHandler.UpdateDashboardTargets)
 	engine.GET("/api/user/health-profile", authmw.RequireJWT(jwtSvc), userHandler.GetHealthProfile)
 	engine.PUT("/api/user/health-profile", authmw.RequireJWT(jwtSvc), userHandler.UpdateHealthProfile)
+	engine.GET("/api/user/health-focuses", authmw.RequireJWT(jwtSvc), userHandler.GetHealthFocuses)
+	engine.PUT("/api/user/health-focuses", authmw.RequireJWT(jwtSvc), userHandler.UpdateHealthFocuses)
+	engine.POST("/api/user/health-focuses", authmw.RequireJWT(jwtSvc), userHandler.AddHealthFocus)
+	engine.DELETE("/api/user/health-focuses/:focus_id", authmw.RequireJWT(jwtSvc), userHandler.RemoveHealthFocus)
 	engine.POST("/api/user/health-profile/ocr", authmw.RequireJWT(jwtSvc), userHandler.HealthReportOCR)
 	engine.POST("/api/user/health-profile/ocr-extract", authmw.RequireJWT(jwtSvc), userHandler.HealthReportOCRExtract)
 	engine.POST("/api/user/health-profile/submit-report-extraction-task", authmw.RequireJWT(jwtSvc), userHandler.SubmitReportExtractionTask)
@@ -286,6 +300,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/user/record-days", authmw.RequireJWT(jwtSvc), userHandler.GetRecordDays)
 	engine.POST("/api/user/last-seen-analyze-history", authmw.RequireJWT(jwtSvc), userHandler.UpdateLastSeenAnalyzeHistory)
 	engine.POST("/api/user/acknowledge-health-disclaimer", authmw.RequireJWT(jwtSvc), userHandler.AcknowledgeHealthDisclaimer)
+	engine.DELETE("/api/user/account", authmw.RequireJWT(jwtSvc), userHandler.DeleteAccount)
 
 	engine.GET("/api/home/dashboard", authmw.RequireJWT(jwtSvc), dashboardHandler.HomeDashboard)
 	engine.GET("/api/food-record/:record_id/poster-calorie-compare", authmw.RequireJWT(jwtSvc), dashboardHandler.PosterCalorieCompare)
@@ -320,6 +335,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/food-nutrition/search", authmw.RequireJWT(jwtSvc), frHandler.SearchFoodNutrition)
 	engine.GET("/api/food-nutrition/unresolved/top", authmw.RequireJWT(jwtSvc), frHandler.GetUnresolvedTop)
 	engine.POST("/api/packaged-food", authmw.RequireJWT(jwtSvc), frHandler.CreatePackagedFood)
+	engine.POST("/api/packaged-food/extract/submit", authmw.RequireJWT(jwtSvc), frHandler.SubmitPackagedProductExtractTask)
 	engine.POST("/api/packaged-food/nutrition-label/recognize", authmw.RequireJWT(jwtSvc), frHandler.RecognizePackagedNutritionLabel)
 	engine.POST("/api/packaged-food/nutrition-label/submit", authmw.RequireJWT(jwtSvc), frHandler.SubmitPackagedNutritionLabelTask)
 	engine.POST("/api/critical-samples", authmw.RequireJWT(jwtSvc), frHandler.SaveCriticalSamples)
@@ -363,6 +379,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/body-metrics/weight", authmw.RequireJWT(jwtSvc), healthHandler.SaveBodyWeightRecord)
 	engine.DELETE("/api/body-metrics/weight/:record_id", authmw.RequireJWT(jwtSvc), healthHandler.DeleteBodyWeightRecord)
 	engine.GET("/api/stats/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetStatsSummary)
+	engine.POST("/api/stats/custom-focus/generate", authmw.RequireJWT(jwtSvc), healthHandler.GenerateCustomFocusCard)
 	engine.POST("/api/stats/insight/generate", authmw.RequireJWT(jwtSvc), healthHandler.GenerateStatsInsight)
 	engine.POST("/api/stats/insight/save", authmw.RequireJWT(jwtSvc), healthHandler.SaveStatsInsight)
 	engine.POST("/api/diet/recommendations", authmw.RequireJWT(jwtSvc), healthHandler.GenerateDietRecommendation)
@@ -375,6 +392,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Membership routes
 	engine.GET("/api/membership/plans", membershipHandler.ListPlans)
 	engine.GET("/api/membership/me", authmw.RequireJWT(jwtSvc), membershipHandler.GetMyMembership)
+	engine.GET("/api/membership/reward-center", authmw.RequireJWT(jwtSvc), membershipHandler.GetRewardCenter)
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
@@ -382,6 +400,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Pet companion routes
 	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
 	engine.POST("/api/pet/events/:event_id/claim", authmw.RequireJWT(jwtSvc), petHandler.ClaimEvent)
+	engine.POST("/api/pet/reroll-appearance", authmw.RequireJWT(jwtSvc), petHandler.RerollAppearance)
 
 	// Public food library routes
 	engine.GET("/api/public-food-library", authmw.RequireJWT(jwtSvc), publicFoodHandler.List)
@@ -443,6 +462,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/test-backend/datasets/:dataset_id/prepare", authmw.RequireTestBackendCookie(), testBackendHandler.PrepareDataset)
 	engine.POST("/api/test-backend/login", testBackendHandler.Login)
 	engine.POST("/api/test-backend/logout", testBackendHandler.Logout)
+	engine.POST("/api/test-backend/impersonate-user", testBackendHandler.ImpersonateUser)
 	engine.POST("/api/test/batch-upload", authmw.RequireTestBackendCookie(), testBackendHandler.LegacyBatchUpload)
 	engine.POST("/api/test/single-image", authmw.RequireTestBackendCookie(), testBackendHandler.LegacySingleImage)
 
@@ -684,7 +704,7 @@ func statsInsightWebsocket(statsSvc *healthservice.StatsService) gin.HandlerFunc
 		if statsRange != "week" && statsRange != "month" {
 			statsRange = "week"
 		}
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
 		defer cancel()
 		result, err := statsSvc.GenerateInsight(ctx, userID, statsRange, 2000, 0)
 		if err != nil {

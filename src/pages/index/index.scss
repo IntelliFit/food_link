@@ -229,6 +229,104 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
+.home-reward-hint {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  min-height: 116rpx;
+  padding: 20rpx 18rpx 20rpx 24rpx;
+  margin: -2rpx 0 18rpx;
+  border-radius: 28rpx;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 8% 8%, rgb(255 214 128 / 45%), transparent 34%),
+    linear-gradient(135deg, #11251d 0%, #0f9f6e 58%, #18c58b 100%);
+  box-shadow: 0 16rpx 34rpx rgb(15 159 110 / 22%);
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.9;
+  }
+}
+
+.home-reward-hint__glow {
+  position: absolute;
+  right: -36rpx;
+  top: -46rpx;
+  width: 150rpx;
+  height: 150rpx;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 18%);
+}
+
+.home-reward-hint__main {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-reward-hint__kicker {
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 800;
+  color: rgb(255 255 255 / 76%);
+}
+
+.home-reward-hint__title {
+  margin-top: 4rpx;
+  font-size: 30rpx;
+  line-height: 40rpx;
+  font-weight: 900;
+  color: #ffffff;
+}
+
+.home-reward-hint__desc {
+  margin-top: 4rpx;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: rgb(255 255 255 / 82%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-reward-hint__actions {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.home-reward-hint__go {
+  padding: 12rpx 22rpx;
+  border-radius: 999rpx;
+  background: #ffffff;
+  color: #0f9f6e;
+  font-size: 24rpx;
+  line-height: 32rpx;
+  font-weight: 900;
+}
+
+.home-reward-hint__close {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(255 255 255 / 78%);
+  background: rgb(255 255 255 / 16%);
+  font-size: 34rpx;
+  line-height: 42rpx;
+  font-weight: 600;
+}
+
 .date-list {
   display: flex;
   justify-content: space-between;
@@ -365,13 +463,14 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .pet-companion-float.is-collapsed .pet-companion-card {
-  width: 108rpx;
-  min-height: 108rpx;
+  width: 116rpx;
+  min-height: 116rpx;
   padding: 8rpx;
   border-radius: 999rpx;
   justify-content: center;
   background: rgb(255 255 255 / 58%);
   box-shadow: 0 6rpx 18rpx rgb(30 70 56 / 8%);
+  overflow: hidden;
 }
 
 .pet-companion-avatar {
@@ -382,8 +481,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .pet-companion-float.is-collapsed .pet-companion-avatar {
-  width: 84rpx;
-  height: 84rpx;
+  width: 92rpx;
+  height: 92rpx;
 }
 
 .pet-companion-shadow {
@@ -408,6 +507,19 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   box-shadow:
     inset 0 8rpx 14rpx rgb(255 255 255 / 28%),
     0 8rpx 18rpx rgb(92 184 150 / 20%);
+}
+
+.pet-tail {
+  position: absolute;
+  right: 6rpx;
+  bottom: 14rpx;
+  width: 22rpx;
+  height: 30rpx;
+  border-radius: 18rpx 18rpx 12rpx 12rpx;
+  background: inherit;
+  transform-origin: 50% 100%;
+  transform: rotate(26deg);
+  opacity: 0.92;
 }
 
 .pet-companion-card.bean .pet-body {
@@ -450,6 +562,150 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   &.right {
     right: 14rpx;
     transform: rotate(18deg);
+  }
+}
+
+.pet-companion-card.animal-bunny {
+  .pet-ear {
+    top: -22rpx;
+    width: 18rpx;
+    height: 38rpx;
+    border-radius: 18rpx 18rpx 10rpx 10rpx;
+
+    &.left {
+      left: 16rpx;
+      transform: rotate(-12deg);
+    }
+
+    &.right {
+      right: 16rpx;
+      transform: rotate(12deg);
+    }
+  }
+
+  .pet-tail {
+    right: 2rpx;
+    bottom: 10rpx;
+    width: 18rpx;
+    height: 18rpx;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 82%);
+    box-shadow: 0 2rpx 6rpx rgb(31 41 55 / 10%);
+    transform: none;
+  }
+}
+
+.pet-companion-card.animal-bear {
+  .pet-ear {
+    top: -12rpx;
+    width: 24rpx;
+    height: 24rpx;
+    border-radius: 50%;
+
+    &.left {
+      left: 10rpx;
+      transform: none;
+    }
+
+    &.right {
+      right: 10rpx;
+      transform: none;
+    }
+  }
+
+  .pet-tail {
+    width: 14rpx;
+    height: 16rpx;
+    right: 8rpx;
+    bottom: 12rpx;
+    border-radius: 999rpx;
+    transform: rotate(18deg);
+  }
+}
+
+.pet-companion-card.animal-cat {
+  .pet-ear {
+    top: -14rpx;
+    width: 22rpx;
+    height: 28rpx;
+    border-radius: 18rpx 18rpx 6rpx 6rpx;
+
+    &.left {
+      left: 10rpx;
+      transform: rotate(-28deg);
+    }
+
+    &.right {
+      right: 10rpx;
+      transform: rotate(28deg);
+    }
+  }
+}
+
+.pet-companion-card.animal-fox {
+  .pet-ear {
+    top: -16rpx;
+    width: 20rpx;
+    height: 30rpx;
+    border-radius: 18rpx 18rpx 4rpx 4rpx;
+
+    &.left {
+      left: 12rpx;
+      transform: rotate(-24deg);
+    }
+
+    &.right {
+      right: 12rpx;
+      transform: rotate(24deg);
+    }
+  }
+
+  .pet-tail {
+    right: 0;
+    bottom: 16rpx;
+    width: 26rpx;
+    height: 36rpx;
+    border-radius: 20rpx 20rpx 12rpx 12rpx;
+    transform: rotate(36deg);
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 2rpx;
+      right: 2rpx;
+      bottom: 0;
+      height: 12rpx;
+      border-radius: 12rpx;
+      background: rgb(255 255 255 / 76%);
+    }
+  }
+}
+
+.pet-companion-card.animal-hamster {
+  .pet-ear {
+    top: -10rpx;
+    width: 20rpx;
+    height: 20rpx;
+    border-radius: 50%;
+
+    &.left {
+      left: 12rpx;
+      transform: rotate(-10deg);
+    }
+
+    &.right {
+      right: 12rpx;
+      transform: rotate(10deg);
+    }
+  }
+
+  .pet-tail {
+    width: 12rpx;
+    height: 14rpx;
+    right: 10rpx;
+    bottom: 12rpx;
+    border-radius: 999rpx;
+    transform: rotate(16deg);
   }
 }
 
@@ -595,6 +851,17 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   height: 38rpx;
 }
 
+.pet-snout {
+  position: absolute;
+  left: 50%;
+  top: 18rpx;
+  width: 24rpx;
+  height: 16rpx;
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 42%);
+  transform: translateX(-50%);
+}
+
 .pet-eye {
   position: absolute;
   top: 6rpx;
@@ -632,12 +899,84 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .pet-mouth {
   position: absolute;
   left: 50%;
-  top: 25rpx;
+  top: 27rpx;
   width: 16rpx;
   height: 8rpx;
   border-bottom: 3rpx solid #1f2937;
   border-radius: 0 0 18rpx 18rpx;
   transform: translateX(-50%);
+}
+
+.pet-whisker {
+  position: absolute;
+  top: 24rpx;
+  width: 14rpx;
+  height: 2rpx;
+  border-radius: 999rpx;
+  background: rgb(31 41 55 / 42%);
+
+  &.left {
+    left: 12rpx;
+  }
+
+  &.right {
+    right: 12rpx;
+  }
+
+  &.top.left {
+    transform: rotate(12deg);
+  }
+
+  &.bottom.left {
+    top: 30rpx;
+    transform: rotate(-10deg);
+  }
+
+  &.top.right {
+    transform: rotate(-12deg);
+  }
+
+  &.bottom.right {
+    top: 30rpx;
+    transform: rotate(10deg);
+  }
+}
+
+.pet-companion-card.animal-bear,
+.pet-companion-card.animal-bunny,
+.pet-companion-card.animal-hamster {
+  .pet-whisker {
+    display: none;
+  }
+}
+
+.pet-companion-card.animal-bear,
+.pet-companion-card.animal-hamster {
+  .pet-snout {
+    width: 28rpx;
+    height: 18rpx;
+    top: 17rpx;
+    background: rgb(255 255 255 / 54%);
+  }
+}
+
+.pet-companion-card.animal-bunny {
+  .pet-snout {
+    width: 22rpx;
+    height: 18rpx;
+    top: 18rpx;
+    background: rgb(255 255 255 / 48%);
+  }
+}
+
+.pet-companion-card.animal-fox {
+  .pet-snout {
+    width: 18rpx;
+    height: 12rpx;
+    top: 19rpx;
+    border-radius: 10rpx 10rpx 16rpx 16rpx;
+    background: rgb(255 255 255 / 46%);
+  }
 }
 
 .pet-companion-card.mood-sleepy {
@@ -873,6 +1212,46 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-weight: 800;
 }
 
+// 收起后的小组件：状态提示 + 快捷展开
+.pet-companion-mini-hint {
+  position: absolute;
+  top: 4rpx;
+  right: 4rpx;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32rpx;
+  height: 32rpx;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5cb896 0%, #8dd3bf 100%);
+  box-shadow: 0 2rpx 6rpx rgb(92 184 150 / 30%);
+}
+
+.pet-companion-mini-hint.is-reward {
+  background: linear-gradient(135deg, #f0985c 0%, #ffb380 100%);
+  box-shadow: 0 2rpx 6rpx rgb(240 152 92 / 30%);
+  animation: pet-mini-hint-pulse 1.6s ease-in-out infinite;
+}
+
+.pet-companion-mini-hint-text {
+  color: #fff;
+  font-size: 18rpx;
+  line-height: 1;
+  font-weight: 700;
+}
+
+@keyframes pet-mini-hint-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.85;
+  }
+}
+
 // 主卡片（热量总览）
 .main-card {
   background: #ffffff;
@@ -1000,79 +1379,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   color: #2f7f62;
   line-height: 30rpx;
   font-weight: 600;
-}
-
-.nutrition-target-compact {
-  display: flex;
-  align-items: center;
-  width: fit-content;
-  margin-top: 10rpx;
-  padding: 4rpx 10rpx;
-  border-radius: 999rpx;
-  background: rgb(92 184 150 / 10%);
-}
-
-.nutrition-target-compact-text {
-  color: #2f7f62;
-  font-size: 20rpx;
-  line-height: 28rpx;
-  font-weight: 700;
-}
-
-.nutrition-target-compact-icon {
-  margin-left: 4rpx;
-  color: #2f7f62;
-  font-size: 18rpx;
-  line-height: 28rpx;
-}
-
-.nutrition-target-sheet {
-  max-height: calc(70vh - env(safe-area-inset-bottom));
-}
-
-.nutrition-target-sheet-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10rpx;
-  margin-top: 10rpx;
-}
-
-.nutrition-target-sheet-item {
-  padding: 14rpx 12rpx;
-  border-radius: 8rpx;
-  background: rgb(92 184 150 / 8%);
-  border: 1rpx solid rgb(92 184 150 / 16%);
-}
-
-.nutrition-target-sheet-label {
-  display: block;
-  color: $text-tertiary;
-  font-size: 20rpx;
-  line-height: 28rpx;
-}
-
-.nutrition-target-sheet-value {
-  display: block;
-  margin-top: 4rpx;
-  color: $text-primary;
-  font-size: 24rpx;
-  line-height: 34rpx;
-  font-weight: 700;
-}
-
-.nutrition-target-sheet-desc {
-  display: block;
-  margin-top: 16rpx;
-  color: $text-secondary;
-  font-size: 24rpx;
-  line-height: 36rpx;
-
-  &.muted {
-    margin-top: 8rpx;
-    color: $text-tertiary;
-    font-size: 22rpx;
-    line-height: 32rpx;
-  }
 }
 
 // 进度条
@@ -2727,6 +3033,67 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   line-height: 38rpx;
 }
 
+.target-calibration-card {
+  margin-bottom: 20rpx;
+  padding: 20rpx;
+  border-radius: 16rpx;
+  background: rgb(92 184 150 / 10%);
+  border: 1rpx solid rgb(92 184 150 / 20%);
+}
+
+.target-calibration-title {
+  display: block;
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 700;
+  color: #2f7f62;
+}
+
+.target-calibration-desc {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: $text-secondary;
+}
+
+.target-calibration-actions {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.target-calibration-btn {
+  flex: 1;
+  height: 64rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.secondary {
+    background: #eef2f7;
+  }
+
+  &.primary {
+    background: $primary-color;
+  }
+}
+
+.target-calibration-btn-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 600;
+
+  &.secondary {
+    color: $text-secondary;
+  }
+
+  &.primary {
+    color: #ffffff;
+  }
+}
+
 .target-form-list {
   display: flex;
   flex-direction: column;
@@ -3938,34 +4305,6 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   line-height: 40rpx;
 }
 
-.record-menu-footer {
-  margin-top: 24rpx;
-}
-
-.record-menu-close-btn {
-  height: 88rpx;
-  background: #f3f4f6;
-  border-radius: 9999rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.record-menu-close-text {
-  font-size: 28rpx;
-  font-weight: 500;
-  color: #6b7280;
-  line-height: 40rpx;
-}
-
-.record-menu-delete-btn {
-  background: #fef2f2;
-}
-
-.record-menu-delete-text {
-  color: #ef4444;
-}
-
 /* ===== 新版记录菜单样式 - 仿参考图设计 ===== */
 .record-menu-handle-bar {
   width: 36rpx;
@@ -4037,6 +4376,35 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   font-size: 20rpx;
   color: #9ca3af;
   line-height: 28rpx;
+}
+
+.record-menu-footer {
+  display: flex;
+  justify-content: center;
+  padding: 8rpx 0 4rpx;
+}
+
+.record-menu-delete-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 16rpx 32rpx;
+  cursor: pointer;
+}
+
+.record-menu-delete-icon {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #ef4444;
+  line-height: 1;
+}
+
+.record-menu-delete-text {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #ef4444;
+  line-height: 40rpx;
 }
 
 /* 底部列表样式 */

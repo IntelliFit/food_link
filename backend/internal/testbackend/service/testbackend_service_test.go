@@ -5,9 +5,12 @@ import (
 	"os"
 	"testing"
 
+	authrepo "food_link/backend/internal/auth/repo"
+	authservice "food_link/backend/internal/auth/service"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/testbackend/domain"
 	"food_link/backend/internal/testbackend/repo"
+	"food_link/backend/pkg/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,7 +36,16 @@ func setupTestDB(t *testing.T) (*repo.PromptRepo, *repo.BatchRepo, *repo.Dataset
 
 func newService(t *testing.T) (*TestBackendService, *repo.PromptRepo, *repo.BatchRepo, *repo.DatasetRepo) {
 	pr, br, dr := setupTestDB(t)
-	return NewTestBackendService(pr, br, dr, &mockLLMClient{result: map[string]any{"items": []any{}}}, &mockLLMClient{result: map[string]any{"items": []any{}}}), pr, br, dr
+	userDB, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, userDB.AutoMigrate(&authrepo.User{}))
+	userRepo := authrepo.NewUserRepo(userDB)
+	jwtSvc := authservice.NewJWTService("test-secret-key-for-testing-only-min-32-chars", 3600, 86400)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development"},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	return NewTestBackendService(pr, br, dr, &mockLLMClient{result: map[string]any{"items": []any{}}}, &mockLLMClient{result: map[string]any{"items": []any{}}}, userRepo, jwtSvc, cfg), pr, br, dr
 }
 
 // ---------- Prompt Tests ----------
@@ -319,6 +331,43 @@ func TestTestBackendService_Logout(t *testing.T) {
 	ctx := context.Background()
 
 	require.NoError(t, svc.Logout(ctx))
+}
+
+func TestTestBackendService_ImpersonateUser(t *testing.T) {
+	svc, _, _, _ := newService(t)
+	ctx := context.Background()
+
+	require.NoError(t, svc.userRepo.Create(ctx, &authrepo.User{
+		ID:       "user-1",
+		OpenID:   "openid-1",
+		Nickname: "测试用户",
+	}))
+
+	out, err := svc.ImpersonateUser(ctx, "user-1")
+	require.NoError(t, err)
+	assert.Equal(t, "user-1", out.UserID)
+	assert.Equal(t, "openid-1", out.OpenID)
+	assert.NotEmpty(t, out.AccessToken)
+	assert.NotEmpty(t, out.RefreshToken)
+}
+
+func TestTestBackendService_ImpersonateUserRejectsNonDevelopment(t *testing.T) {
+	svc, _, _, _ := newService(t)
+	ctx := context.Background()
+	svc.cfg.App.Env = "production"
+
+	_, err := svc.ImpersonateUser(ctx, "user-1")
+	require.Error(t, err)
+	assert.Equal(t, commonerrors.ErrForbidden.Code, err.(*commonerrors.AppError).Code)
+}
+
+func TestTestBackendService_ImpersonateUserRequiresExistingUser(t *testing.T) {
+	svc, _, _, _ := newService(t)
+	ctx := context.Background()
+
+	_, err := svc.ImpersonateUser(ctx, "missing-user")
+	require.Error(t, err)
+	assert.Equal(t, commonerrors.ErrNotFound, err)
 }
 
 // ---------- Legacy Tests ----------

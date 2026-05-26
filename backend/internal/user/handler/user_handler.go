@@ -21,6 +21,11 @@ type UserService interface {
 	GetRecordDays(ctx context.Context, userID string) (int64, error)
 	UpdateLastSeenAnalyzeHistory(ctx context.Context, userID string) error
 	AcknowledgeHealthDisclaimer(ctx context.Context, userID string) error
+	DeleteAccount(ctx context.Context, userID string) error
+	GetCustomHealthFocuses(ctx context.Context, userID string) ([]service.CustomHealthFocus, error)
+	UpdateCustomHealthFocuses(ctx context.Context, userID string, focuses []service.CustomHealthFocus) ([]service.CustomHealthFocus, error)
+	AddCustomHealthFocus(ctx context.Context, userID, label string) (*service.AddCustomHealthFocusResult, error)
+	RemoveCustomHealthFocus(ctx context.Context, userID, focusID string) ([]service.CustomHealthFocus, error)
 }
 
 type BindPhoneService interface {
@@ -239,7 +244,7 @@ func (h *UserHandler) SubmitReportExtractionTask(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	if input.ImageURL == "" {
+	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
 		response.Error(c, &gin.Error{Err: http.ErrBodyNotAllowed, Type: gin.ErrorTypePublic})
 		return
 	}
@@ -302,4 +307,79 @@ func (h *UserHandler) AcknowledgeHealthDisclaimer(c *gin.Context) {
 		return
 	}
 	response.Success(c, map[string]bool{"success": true})
+}
+
+func (h *UserHandler) DeleteAccount(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if err := h.userSvc.DeleteAccount(c.Request.Context(), userID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, map[string]bool{"success": true})
+}
+
+// GET /api/user/health-focuses
+func (h *UserHandler) GetHealthFocuses(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	focuses, err := h.userSvc.GetCustomHealthFocuses(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"focuses":     focuses,
+		"max_focuses": service.CustomHealthFocusMaxCountExport(),
+	})
+}
+
+// PUT /api/user/health-focuses
+func (h *UserHandler) UpdateHealthFocuses(c *gin.Context) {
+	var body struct {
+		Focuses []service.CustomHealthFocus `json:"focuses"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	focuses, err := h.userSvc.UpdateCustomHealthFocuses(c.Request.Context(), userID, body.Focuses)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"focuses": focuses})
+}
+
+// POST /api/user/health-focuses
+func (h *UserHandler) AddHealthFocus(c *gin.Context) {
+	var body struct {
+		Label string `json:"label"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	result, err := h.userSvc.AddCustomHealthFocus(c.Request.Context(), userID, body.Label)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"focuses":        result.Focuses,
+		"focus_id":       result.FocusID,
+		"already_exists": result.AlreadyExists,
+	})
+}
+
+// DELETE /api/user/health-focuses/:focus_id
+func (h *UserHandler) RemoveHealthFocus(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	focusID := c.Param("focus_id")
+	focuses, err := h.userSvc.RemoveCustomHealthFocus(c.Request.Context(), userID, focusID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"focuses": focuses})
 }

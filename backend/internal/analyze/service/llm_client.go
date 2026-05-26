@@ -60,6 +60,14 @@ type OfoxAIClient struct {
 	client  *http.Client
 }
 
+func NewDashScopeClient(apiKey string, baseURLs ...string) *OfoxAIClient {
+	baseURL := "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	if len(baseURLs) > 0 && strings.TrimSpace(baseURLs[0]) != "" {
+		baseURL = strings.TrimRight(strings.TrimSpace(baseURLs[0]), "/")
+	}
+	return NewOfoxAIClient(apiKey, "qwen-vl-max", baseURL)
+}
+
 func NewOfoxAIClient(apiKey, model string, baseURLs ...string) *OfoxAIClient {
 	if model == "" {
 		model = "gemini-3-flash-preview"

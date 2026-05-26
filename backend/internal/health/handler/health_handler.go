@@ -43,6 +43,7 @@ type StatsService interface {
 	GetSummary(ctx context.Context, userID string, statsRange string, tdee int, streakDays int) (*service.StatsSummary, error)
 	GenerateInsight(ctx context.Context, userID string, dateRange string, tdee int, streakDays int) (map[string]any, error)
 	SaveInsight(ctx context.Context, userID string, content string, dateRange string) error
+	GenerateCustomFocusCard(ctx context.Context, userID, statsRange, focusID string) (*service.RiskCard, map[string]any, error)
 	GenerateDietRecommendation(ctx context.Context, userID string, input service.DietRecommendationInput) (*service.DietRecommendationResult, error)
 }
 
@@ -311,6 +312,30 @@ func (h *HealthHandler) SaveStatsInsight(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"message": "ok"})
+}
+
+// POST /api/stats/custom-focus/generate
+func (h *HealthHandler) GenerateCustomFocusCard(c *gin.Context) {
+	var body struct {
+		Range   string `json:"range"`
+		FocusID string `json:"focus_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	card, meta, err := h.stats.GenerateCustomFocusCard(c.Request.Context(), userID, body.Range, body.FocusID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{
+		"card":                           card,
+		"custom_focus_daily_limit":       meta["custom_focus_daily_limit"],
+		"custom_focus_used_today":        meta["custom_focus_used_today"],
+		"custom_focus_remaining_today":   meta["custom_focus_remaining_today"],
+	})
 }
 
 // POST /api/diet/recommendations

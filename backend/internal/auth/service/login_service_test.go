@@ -16,7 +16,7 @@ import (
 func setupLoginTestDB(t *testing.T) (*gorm.DB, *repo.UserRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&repo.User{}))
+	require.NoError(t, db.AutoMigrate(&repo.User{}, &repo.UserTrialEntitlement{}))
 	return db, repo.NewUserRepo(db)
 }
 
@@ -61,4 +61,21 @@ func TestLoginService_Login_NewUserWithUnionID(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, result.UserID)
 	assert.Equal(t, "new_user_openid", result.OpenID)
+}
+
+func TestLoginService_Login_CreatesTrialEntitlement(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{App: config.AppConfig{Env: "development"}, JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400}}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	svc := NewLoginService(cfg, userRepo, jwtSvc)
+	ctx := context.Background()
+
+	result, err := svc.Login(ctx, LoginInput{TestOpenID: "trial_openid_1"})
+	require.NoError(t, err)
+	ent, err := userRepo.FindTrialEntitlementByIdentity(ctx, "trial_openid_1", "")
+	require.NoError(t, err)
+	require.NotNil(t, ent)
+	require.NotNil(t, ent.FirstUserID)
+	assert.Equal(t, result.UserID, *ent.FirstUserID)
+	assert.Equal(t, loginRegularUserTrialDays, ent.TrialDaysTotal)
 }

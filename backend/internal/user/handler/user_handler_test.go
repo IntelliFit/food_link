@@ -27,6 +27,7 @@ type mockUserService struct {
 	recordDays          int64
 	recordDaysErr       error
 	lastSeenErr         error
+	deleteAccountErr    error
 }
 
 func (m *mockUserService) GetProfile(ctx context.Context, userID string) (map[string]any, error) {
@@ -52,6 +53,31 @@ func (m *mockUserService) GetRecordDays(ctx context.Context, userID string) (int
 }
 func (m *mockUserService) UpdateLastSeenAnalyzeHistory(ctx context.Context, userID string) error {
 	return m.lastSeenErr
+}
+func (m *mockUserService) AcknowledgeHealthDisclaimer(ctx context.Context, userID string) error {
+	return nil
+}
+func (m *mockUserService) DeleteAccount(ctx context.Context, userID string) error {
+	return m.deleteAccountErr
+}
+
+func (m *mockUserService) GetCustomHealthFocuses(ctx context.Context, userID string) ([]service.CustomHealthFocus, error) {
+	return []service.CustomHealthFocus{}, nil
+}
+
+func (m *mockUserService) UpdateCustomHealthFocuses(ctx context.Context, userID string, focuses []service.CustomHealthFocus) ([]service.CustomHealthFocus, error) {
+	return focuses, nil
+}
+
+func (m *mockUserService) AddCustomHealthFocus(ctx context.Context, userID, label string) (*service.AddCustomHealthFocusResult, error) {
+	return &service.AddCustomHealthFocusResult{
+		Focuses: []service.CustomHealthFocus{{ID: "f1", Label: label}},
+		FocusID: "f1",
+	}, nil
+}
+
+func (m *mockUserService) RemoveCustomHealthFocus(ctx context.Context, userID, focusID string) ([]service.CustomHealthFocus, error) {
+	return []service.CustomHealthFocus{}, nil
 }
 
 type mockBindPhoneService struct {
@@ -117,6 +143,8 @@ func setupRouter(h *UserHandler) *gin.Engine {
 	r.POST("/api/user/health-profile/upload-report-image", h.UploadReportImage)
 	r.GET("/api/user/record-days", h.GetRecordDays)
 	r.POST("/api/user/last-seen-analyze-history", h.UpdateLastSeenAnalyzeHistory)
+	r.POST("/api/user/acknowledge-health-disclaimer", h.AcknowledgeHealthDisclaimer)
+	r.DELETE("/api/user/account", h.DeleteAccount)
 	return r
 }
 
@@ -304,6 +332,33 @@ func TestUpdateLastSeenAnalyzeHistory(t *testing.T) {
 	assert.Equal(t, true, data["success"])
 }
 
+func TestDeleteAccount(t *testing.T) {
+	mockSvc := &mockUserService{}
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/user/account", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, true, data["success"])
+}
+
+func TestDeleteAccountError(t *testing.T) {
+	mockSvc := &mockUserService{deleteAccountErr: errors.New("db error")}
+	h := NewUserHandler(mockSvc, nil, nil, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/user/account", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
 
 func TestUpdateDashboardTargets(t *testing.T) {
 	mockSvc := &mockUserService{dashboardTargets: map[string]float64{"calorie_target": 2200}}
@@ -511,6 +566,25 @@ func TestSubmitReportExtractionTaskError(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSubmitReportExtractionTaskWithImageURLs(t *testing.T) {
+	mockSvc := &mockAnalysisTaskService{taskID: "task-1"}
+	h := NewUserHandler(&mockUserService{}, nil, nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"imageUrls": []string{
+			"https://example.com/report-1.jpg",
+			"https://example.com/report-2.jpg",
+		},
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/user/health-profile/submit-report-extraction-task", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestGetRecordDaysError(t *testing.T) {

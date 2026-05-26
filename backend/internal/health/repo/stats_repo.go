@@ -316,6 +316,90 @@ func normalizeDietRecommendationItems(items []map[string]any, source string, sou
 	return out
 }
 
+func (r *StatsRepo) UpsertCustomFocusCard(ctx context.Context, card domain.CustomFocusCard) error {
+	row := map[string]any{
+		"id":               card.ID,
+		"user_id":          card.UserID,
+		"focus_id":         card.FocusID,
+		"range_type":       card.RangeType,
+		"generated_date":   card.GeneratedDate,
+		"data_fingerprint": card.DataFingerprint,
+		"focus_label":      card.FocusLabel,
+		"score":            card.Score,
+		"brief":            card.Brief,
+		"summary":          card.Summary,
+		"basis":            card.Basis,
+		"action":           card.Action,
+		"created_at":       time.Now().UTC(),
+	}
+	if card.ID == "" {
+		row["id"] = uuid.New().String()
+	}
+	return r.db.WithContext(ctx).
+		Table((&domain.CustomFocusCard{}).TableName()).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "user_id"},
+				{Name: "range_type"},
+				{Name: "focus_id"},
+			},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"generated_date", "data_fingerprint", "focus_label", "score", "brief", "summary", "basis", "action", "created_at",
+			}),
+		}).
+		Create(row).Error
+}
+
+func (r *StatsRepo) GetCustomFocusCards(ctx context.Context, userID, rangeType string) ([]domain.CustomFocusCard, error) {
+	var rows []domain.CustomFocusCard
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND range_type = ?", userID, rangeType).
+		Order("created_at desc").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *StatsRepo) GetCustomFocusCard(ctx context.Context, userID, rangeType, focusID string) (*domain.CustomFocusCard, error) {
+	var row domain.CustomFocusCard
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND range_type = ? AND focus_id = ?", userID, rangeType, focusID).
+		First(&row).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *StatsRepo) CountCustomFocusGenerationsToday(ctx context.Context, userID string) (int64, error) {
+	loc := time.FixedZone("Asia/Shanghai", 8*60*60)
+	now := time.Now().In(loc)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	end := start.Add(24 * time.Hour)
+
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table((&domain.CustomFocusCard{}).TableName()).
+		Where("user_id = ? AND created_at >= ? AND created_at < ?", userID, start.UTC(), end.UTC()).
+		Count(&count).Error
+	return count, err
+}
+
+func (r *StatsRepo) CountCustomFocusGenerationsTodayForFocus(ctx context.Context, userID, focusID string) (int64, error) {
+	loc := time.FixedZone("Asia/Shanghai", 8*60*60)
+	now := time.Now().In(loc)
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	end := start.Add(24 * time.Hour)
+
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table((&domain.CustomFocusCard{}).TableName()).
+		Where("user_id = ? AND focus_id = ? AND created_at >= ? AND created_at < ?", userID, focusID, start.UTC(), end.UTC()).
+		Count(&count).Error
+	return count, err
+}
+
 func formatDietRecommendationAmount(item map[string]any) string {
 	if label := strings.TrimSpace(fmt.Sprintf("%v", item["manual_portion_label"])); label != "" && label != "<nil>" {
 		return label

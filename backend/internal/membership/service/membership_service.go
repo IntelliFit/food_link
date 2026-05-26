@@ -51,6 +51,10 @@ const (
 	inviteRewardLegacyCreditsPerDay = 5
 	sharePosterRewardCredits        = 1
 	sharePosterDailyMaxEvents       = 3
+	packagedUploadRewardCredits     = 1
+	packagedUploadDailyMaxEvents    = 0
+	publicFoodUploadRewardCredits   = 1
+	publicFoodUploadDailyMaxEvents  = 3
 )
 
 var manualMembershipUpgradeUserIDs = map[string]struct{}{
@@ -74,6 +78,7 @@ type MembershipRepo interface {
 	CountAnalysisTasksToday(ctx context.Context, userID string) (int64, error)
 	CountDailySystemCreditUsage(ctx context.Context, userID, chinaDate string) (int, error)
 	GetFirstMembershipTrialBatchRank(ctx context.Context, userID string, limit int) (int, error)
+	GetTrialEntitlementByUserID(ctx context.Context, userID string) (*domain.UserTrialEntitlement, error)
 	GetFirstPaidMembershipUserRank(ctx context.Context, userID string, limit int) (int, error)
 	CountDailyMembershipBonusCredits(ctx context.Context, userID, chinaDate string) (inviteBonus int, shareBonus int, err error)
 	GetInviteReferralByInvitee(ctx context.Context, inviteeUserID string) (*domain.UserInviteReferral, error)
@@ -88,6 +93,11 @@ type MembershipRepo interface {
 	CreateSharePosterBonusEvent(ctx context.Context, userID, recordID, chinaDate string, credits int) (*domain.UserCreditBonusEvent, error)
 	GetEarnedCreditLedgerBySource(ctx context.Context, userID, reason, sourceKey string) (*domain.UserEarnedCreditLedger, error)
 	ChangeEarnedCredits(ctx context.Context, userID string, delta int, reason, sourceKey, relatedDate string, meta map[string]any) (*domain.UserEarnedCreditLedger, bool, error)
+	SumPositiveEarnedCreditsByDate(ctx context.Context, userID, chinaDate string) (int, error)
+	CountRewardTaskUploads(ctx context.Context, userID, taskType, chinaDate, status string) (int, error)
+	GetRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string) (*domain.RewardTaskUpload, error)
+	CreateRewardTaskUpload(ctx context.Context, row *domain.RewardTaskUpload) error
+	UpdateRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string, updates map[string]any) (*domain.RewardTaskUpload, error)
 }
 
 type MembershipService struct {
@@ -112,6 +122,7 @@ type trialPolicy struct {
 	ExpiresAt *time.Time
 	DaysTotal int
 	Policy    any
+	StartAt   *time.Time
 }
 
 type membershipPaymentTerms struct {
@@ -224,11 +235,11 @@ func (s *MembershipService) reconcileMembershipFromLatestPaidOrder(ctx context.C
 		now := time.Now()
 		paidAt = &now
 	}
-	user, err := s.repo.GetUser(ctx, userID)
+	trialEntitlement, err := s.repo.GetTrialEntitlementByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	meta, err := s.resolveEarlyUserMembershipMeta(ctx, userID, user)
+	meta, err := s.resolveEarlyUserMembershipMeta(ctx, userID, trialEntitlement)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +291,11 @@ func (s *MembershipService) computeDailyCreditsStatus(ctx context.Context, userI
 	var trialExpiresAt *time.Time
 	trialDaysTotal := 0
 	var trialPolicy any
-	earlyMeta, err := s.resolveEarlyUserMembershipMeta(ctx, userID, user)
+	trialEntitlement, err := s.repo.GetTrialEntitlementByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	earlyMeta, err := s.resolveEarlyUserMembershipMeta(ctx, userID, trialEntitlement)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +307,7 @@ func (s *MembershipService) computeDailyCreditsStatus(ctx context.Context, userI
 		}
 	}
 	if base <= 0 && !isPro && user != nil {
-		policy := s.resolveUserTrialPolicy(user, earlyMeta)
+		policy := s.resolveUserTrialPolicy(trialEntitlement, earlyMeta)
 		trialActive = policy.Active
 		trialExpiresAt = policy.ExpiresAt
 		trialDaysTotal = policy.DaysTotal
@@ -857,6 +872,248 @@ func (s *MembershipService) ClaimSharePosterReward(ctx context.Context, userID, 
 	return s.shareRewardResponse(ctx, userID, true, false, false, claimsToday+1, sharePosterRewardCredits, fmt.Sprintf("本餐海报奖励已到账 +%d 积分", sharePosterRewardCredits))
 }
 
+func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) (map[string]any, error) {
+	membership, err := s.getEffectiveMembership(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.repo.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	credits, err := s.computeDailyCreditsStatus(ctx, userID, membership != nil && membership.Status == "active", membership, user, "")
+	if err != nil {
+		return nil, err
+	}
+	today := time.Now().In(chinaLocation()).Format("2006-01-02")
+	todayEarned, err := s.repo.SumPositiveEarnedCreditsByDate(ctx, userID, today)
+	if err != nil {
+		return nil, err
+	}
+	shareCount, err := s.repo.CountSharePosterClaims(ctx, userID, today)
+	if err != nil {
+		return nil, err
+	}
+	packagedCount, err := s.repo.CountRewardTaskUploads(ctx, userID, "packaged_food_upload", today, "succeeded")
+	if err != nil {
+		return nil, err
+	}
+	publicCount, err := s.repo.CountRewardTaskUploads(ctx, userID, "public_food_upload", today, "succeeded")
+	if err != nil {
+		return nil, err
+	}
+	taskList := []map[string]any{
+		buildRewardTask("share_poster", "每日分享打卡", sharePosterRewardCredits, shareCount, sharePosterDailyMaxEvents, "可去完成", "/pages/day-record/index?task_mode=reward_center"),
+		buildRewardTask("packaged_food_upload", "预包装零食/实物上传", packagedUploadRewardCredits, packagedCount, packagedUploadDailyMaxEvents, "可去完成", "/pages/packaged-food-edit/index?task_mode=reward_center"),
+		buildRewardTask("public_food_upload", "公共食物库上传", publicFoodUploadRewardCredits, publicCount, publicFoodUploadDailyMaxEvents, "可去完成", "/pages/food-library-share/index?task_mode=reward_center"),
+	}
+	completed := 0
+	totalWithLimit := 0
+	for _, task := range taskList {
+		dailyLimit, _ := task["daily_limit"].(int)
+		if dailyLimit <= 0 {
+			continue
+		}
+		totalWithLimit++
+		if task["today_count"] == task["daily_limit"] {
+			completed++
+		}
+	}
+	return map[string]any{
+		"earned_credits_balance": credits["earned_credits_balance"],
+		"today_earned_credits":   todayEarned,
+		"today_task_overview": map[string]any{
+			"completed_count": completed,
+			"total_count":     totalWithLimit,
+		},
+		"tasks": taskList,
+	}, nil
+}
+
+func (s *MembershipService) AwardPackagedUpload(ctx context.Context, userID, sourceTaskID, packagedFoodID string, meta map[string]any) (map[string]any, error) {
+	return s.awardRewardTask(ctx, rewardTaskAwardInput{
+		UserID:         userID,
+		TaskType:       "packaged_food_upload",
+		RewardCredits:  packagedUploadRewardCredits,
+		DailyMaxEvents: packagedUploadDailyMaxEvents,
+		SourceTaskID:   sourceTaskID,
+		PackagedFoodID: packagedFoodID,
+		Meta:           meta,
+	})
+}
+
+func (s *MembershipService) AwardPublicFoodUpload(ctx context.Context, userID, publicFoodItemID string, meta map[string]any) (map[string]any, error) {
+	return s.awardRewardTask(ctx, rewardTaskAwardInput{
+		UserID:           userID,
+		TaskType:         "public_food_upload",
+		RewardCredits:    publicFoodUploadRewardCredits,
+		DailyMaxEvents:   publicFoodUploadDailyMaxEvents,
+		PublicFoodItemID: publicFoodItemID,
+		Meta:             meta,
+	})
+}
+
+type rewardTaskAwardInput struct {
+	UserID           string
+	TaskType         string
+	RewardCredits    int
+	DailyMaxEvents   int
+	SourceTaskID     string
+	PackagedFoodID   string
+	PublicFoodItemID string
+	Meta             map[string]any
+}
+
+func (s *MembershipService) awardRewardTask(ctx context.Context, input rewardTaskAwardInput) (map[string]any, error) {
+	today := time.Now().In(chinaLocation()).Format("2006-01-02")
+	sourceKey := rewardTaskSourceKey(input.TaskType, firstNonEmpty(input.SourceTaskID, input.PackagedFoodID, input.PublicFoodItemID))
+	if sourceKey == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "奖励任务缺少来源标识", HTTPStatus: 400}
+	}
+	existing, err := s.repo.GetRewardTaskUploadBySourceKey(ctx, input.UserID, sourceKey)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil && strings.TrimSpace(existing.Status) == "succeeded" {
+		center, err := s.GetRewardCenter(ctx, input.UserID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"awarded":         false,
+			"already_claimed": true,
+			"reward_task":     existing,
+			"reward_center":   center,
+		}, nil
+	}
+	count, err := s.repo.CountRewardTaskUploads(ctx, input.UserID, input.TaskType, today, "succeeded")
+	if err != nil {
+		return nil, err
+	}
+	if input.DailyMaxEvents > 0 && count >= input.DailyMaxEvents {
+		now := time.Now()
+		if existing == nil {
+			existing = &domain.RewardTaskUpload{
+				UserID:        input.UserID,
+				TaskType:      input.TaskType,
+				BonusDate:     today,
+				Status:        "failed",
+				RewardCredits: input.RewardCredits,
+				SourceKey:     &sourceKey,
+				Meta:          input.Meta,
+				CreatedAt:     &now,
+				UpdatedAt:     &now,
+			}
+			if input.SourceTaskID != "" {
+				existing.SourceTaskID = &input.SourceTaskID
+			}
+			if input.PackagedFoodID != "" {
+				existing.PackagedFoodID = &input.PackagedFoodID
+			}
+			if input.PublicFoodItemID != "" {
+				existing.PublicFoodItemID = &input.PublicFoodItemID
+			}
+			failure := "daily_limit_reached"
+			existing.FailureReason = &failure
+			if err := s.repo.CreateRewardTaskUpload(ctx, existing); err != nil {
+				return nil, err
+			}
+		}
+		center, err := s.GetRewardCenter(ctx, input.UserID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"awarded":             false,
+			"daily_limit_reached": true,
+			"reward_task":         existing,
+			"reward_center":       center,
+		}, nil
+	}
+	if existing == nil {
+		row := &domain.RewardTaskUpload{
+			UserID:        input.UserID,
+			TaskType:      input.TaskType,
+			BonusDate:     today,
+			Status:        "pending",
+			RewardCredits: input.RewardCredits,
+			SourceKey:     &sourceKey,
+			Meta:          input.Meta,
+		}
+		if input.SourceTaskID != "" {
+			row.SourceTaskID = &input.SourceTaskID
+		}
+		if input.PackagedFoodID != "" {
+			row.PackagedFoodID = &input.PackagedFoodID
+		}
+		if input.PublicFoodItemID != "" {
+			row.PublicFoodItemID = &input.PublicFoodItemID
+		}
+		if err := s.repo.CreateRewardTaskUpload(ctx, row); err != nil {
+			return nil, err
+		}
+		existing = row
+	}
+	reason := input.TaskType + "_reward"
+	_, _, err = s.repo.ChangeEarnedCredits(ctx, input.UserID, input.RewardCredits, reason, sourceKey, today, input.Meta)
+	if err != nil {
+		return nil, err
+	}
+	existing, err = s.repo.UpdateRewardTaskUploadBySourceKey(ctx, input.UserID, sourceKey, map[string]any{
+		"status":         "succeeded",
+		"failure_reason": nil,
+	})
+	if err != nil {
+		return nil, err
+	}
+	center, err := s.GetRewardCenter(ctx, input.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"awarded":        true,
+		"reward_credits": input.RewardCredits,
+		"reward_task":    existing,
+		"reward_center":  center,
+	}, nil
+}
+
+func buildRewardTask(actionType, name string, rewardAmount, todayCount, dailyLimit int, defaultStatus, actionPath string) map[string]any {
+	status := defaultStatus
+	var dailyLimitValue any = dailyLimit
+	if dailyLimit <= 0 {
+		dailyLimitValue = nil
+	} else if todayCount >= dailyLimit {
+		status = "今日已满"
+	}
+	return map[string]any{
+		"action_type":   actionType,
+		"name":          name,
+		"reward_amount": rewardAmount,
+		"today_count":   todayCount,
+		"daily_limit":   dailyLimitValue,
+		"status":        status,
+		"action_path":   actionPath,
+	}
+}
+
+func rewardTaskSourceKey(taskType, rawID string) string {
+	rawID = strings.TrimSpace(rawID)
+	if rawID == "" {
+		return ""
+	}
+	return taskType + ":" + rawID
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
 func (s *MembershipService) shareRewardResponse(ctx context.Context, userID string, claimed, alreadyClaimed, dailyCapReached bool, claimsToday, credits int, message string) (map[string]any, error) {
 	user, _ := s.repo.GetUser(ctx, userID)
 	membership, _ := s.getEffectiveMembership(ctx, userID)
@@ -880,7 +1137,15 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 	mode := normalizeFoodExecutionMode(executionMode)
 	cost := creditCostStandardFoodAnalysis
 	analysisLabel := "食物分析"
-	if mode == "experimental" {
+	if mode == "strict" {
+		cost = creditCostPrecisionFoodAnalysis
+		analysisLabel = "精准分析"
+	} else if mode == "strict_web_search" {
+		cost = creditCostPrecisionFoodAnalysis
+		analysisLabel = "联网精准分析"
+	} else if mode == "standard_web_search" {
+		analysisLabel = "联网分析"
+	} else if mode == "experimental" {
 		cost = creditCostPrecisionFoodAnalysis
 		analysisLabel = "试验分析"
 	} else if mode == "gemini35_flash" {
@@ -888,8 +1153,6 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 	} else if mode == "gemini35_flash_grouped" {
 		cost = creditCostPrecisionFoodAnalysis
 		analysisLabel = "Gemini 3.5 分组分析"
-	} else if mode == "strict" {
-		analysisLabel = "精准分析"
 	} else if mode == "standard_correction" {
 		cost = creditCostStandardCorrection
 		analysisLabel = "食物纠错"
@@ -906,7 +1169,7 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 	if err != nil {
 		return nil, err
 	}
-	if (mode == "strict" || mode == "experimental" || mode == "gemini35_flash_grouped" || mode == "strict_correction") && !canUsePrecisionMode(membership) {
+	if (mode == "strict" || mode == "strict_web_search" || mode == "experimental" || mode == "gemini35_flash_grouped" || mode == "strict_correction") && !canUsePrecisionMode(membership) {
 		return nil, &commonerrors.AppError{Code: 10005, Message: "精准模式仅对标准版和进阶版开放，请升级或开通后再试。", HTTPStatus: 402}
 	}
 	return s.validateCredits(ctx, userID, cost, analysisLabel, recordedOn, membership, user)
@@ -1055,7 +1318,11 @@ func (s *MembershipService) dailySystemCreditBaseForDate(ctx context.Context, us
 	if err != nil {
 		target = time.Now().In(chinaLocation())
 	}
-	meta, err := s.resolveEarlyUserMembershipMeta(ctx, userID, user)
+	trialEntitlement, err := s.repo.GetTrialEntitlementByUserID(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	meta, err := s.resolveEarlyUserMembershipMeta(ctx, userID, trialEntitlement)
 	if err != nil {
 		return 0, err
 	}
@@ -1071,15 +1338,11 @@ func (s *MembershipService) dailySystemCreditBaseForDate(ctx context.Context, us
 	if user == nil {
 		return 0, nil
 	}
-	created := userRegistrationTime(user)
-	if created == nil {
+	policy := s.resolveUserTrialPolicy(trialEntitlement, meta)
+	if policy.ExpiresAt == nil || policy.StartAt == nil {
 		return 0, nil
 	}
-	policy := s.resolveUserTrialPolicy(user, meta)
-	if policy.ExpiresAt == nil {
-		return 0, nil
-	}
-	createdDate := dateOnly(created.In(chinaLocation()))
+	createdDate := dateOnly(policy.StartAt.In(chinaLocation()))
 	targetDate := dateOnly(target.In(chinaLocation()))
 	trialEndDate := dateOnly(policy.ExpiresAt.In(chinaLocation()))
 	if !targetDate.Before(createdDate) && !targetDate.After(trialEndDate) {
@@ -1138,11 +1401,11 @@ func (s *MembershipService) activateMembershipFromPayment(ctx context.Context, p
 	if err != nil {
 		return nil, err
 	}
-	user, err := s.repo.GetUser(ctx, payment.UserID)
+	trialEntitlement, err := s.repo.GetTrialEntitlementByUserID(ctx, payment.UserID)
 	if err != nil {
 		return nil, err
 	}
-	meta, err := s.resolveEarlyUserMembershipMeta(ctx, payment.UserID, user)
+	meta, err := s.resolveEarlyUserMembershipMeta(ctx, payment.UserID, trialEntitlement)
 	if err != nil {
 		return nil, err
 	}
@@ -1179,20 +1442,14 @@ func (s *MembershipService) activateMembershipFromPayment(ctx context.Context, p
 	})
 }
 
-func (s *MembershipService) resolveEarlyUserMembershipMeta(ctx context.Context, userID string, user *membershiprepo.User) (*earlyUserMembershipMeta, error) {
+func (s *MembershipService) resolveEarlyUserMembershipMeta(ctx context.Context, userID string, trialEntitlement *domain.UserTrialEntitlement) (*earlyUserMembershipMeta, error) {
 	meta := &earlyUserMembershipMeta{
 		EarlyUserLimit:      earlyUserTrialLimit,
 		EarlyPaidUserLimit:  earlyPaidUserLimit,
 		PaidBonusMultiplier: 1,
 	}
-	if userRegistrationTime(user) != nil {
-		rank, err := s.repo.GetFirstMembershipTrialBatchRank(ctx, userID, earlyUserTrialLimit)
-		if err != nil {
-			return nil, err
-		}
-		if rank > 0 {
-			meta.EarlyUserRank = intPtr(rank)
-		}
+	if trialEntitlement != nil && trialEntitlement.EarlyUserRank != nil && *trialEntitlement.EarlyUserRank > 0 {
+		meta.EarlyUserRank = intPtr(*trialEntitlement.EarlyUserRank)
 	}
 	paidRank, err := s.repo.GetFirstPaidMembershipUserRank(ctx, userID, earlyPaidUserLimit)
 	if err != nil {
@@ -1220,14 +1477,20 @@ func (s *MembershipService) resolveEarlyUserMembershipMeta(ctx context.Context, 
 	return meta, nil
 }
 
-func (s *MembershipService) resolveUserTrialPolicy(user *membershiprepo.User, meta *earlyUserMembershipMeta) trialPolicy {
-	created := userRegistrationTime(user)
-	if created == nil {
+func (s *MembershipService) resolveUserTrialPolicy(entitlement *domain.UserTrialEntitlement, meta *earlyUserMembershipMeta) trialPolicy {
+	if entitlement == nil || entitlement.FirstRegisteredAt == nil {
 		return trialPolicy{}
 	}
-	trialDays := regularUserTrialDays
-	policy := any("regular_new_user")
-	if meta != nil && meta.EarlyUserRank != nil {
+	created := *entitlement.FirstRegisteredAt
+	trialDays := entitlement.TrialDaysTotal
+	if trialDays <= 0 {
+		trialDays = regularUserTrialDays
+	}
+	policy := any(strings.TrimSpace(entitlement.TrialPolicy))
+	if policy == "" {
+		policy = "regular_new_user"
+	}
+	if meta != nil && meta.EarlyUserRank != nil && policy == "regular_new_user" {
 		rank := *meta.EarlyUserRank
 		switch {
 		case rank <= earlyUserTop500Limit:
@@ -1244,6 +1507,7 @@ func (s *MembershipService) resolveUserTrialPolicy(user *membershiprepo.User, me
 		ExpiresAt: &expires,
 		DaysTotal: trialDays,
 		Policy:    policy,
+		StartAt:   &created,
 	}
 }
 
@@ -1373,13 +1637,6 @@ func membershipActiveForChinaDate(membership *domain.UserMembership, target time
 		return false
 	}
 	return true
-}
-
-func userRegistrationTime(user *membershiprepo.User) *time.Time {
-	if user == nil {
-		return nil
-	}
-	return user.CreatedAt
 }
 
 func membershipTierOrder(planCode string) int {
@@ -1853,8 +2110,12 @@ func normalizeFoodExecutionMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "lite", "lightweight":
 		return "lite"
+	case "standard_web_search", "web_search", "standard-web-search":
+		return "standard_web_search"
 	case "strict", "precision":
 		return "strict"
+	case "strict_web_search", "precision_web_search", "strict-web-search":
+		return "strict_web_search"
 	case "experimental", "experiment":
 		return "experimental"
 	case "gemini35_flash", "gemini35", "gemini_35_flash":

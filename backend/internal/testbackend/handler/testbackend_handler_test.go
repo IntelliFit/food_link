@@ -51,6 +51,8 @@ type mockTestBackendService struct {
 	prepareDatasetErr   error
 	loginErr            error
 	logoutErr           error
+	impersonateUser     *service.ImpersonateUserOutput
+	impersonateUserErr  error
 	legacyBatch         map[string]any
 	legacyBatchErr      error
 	legacySingle        map[string]any
@@ -108,6 +110,9 @@ func (m *mockTestBackendService) Login(ctx context.Context, password string) err
 func (m *mockTestBackendService) Logout(ctx context.Context) error {
 	return m.logoutErr
 }
+func (m *mockTestBackendService) ImpersonateUser(ctx context.Context, userID string) (*service.ImpersonateUserOutput, error) {
+	return m.impersonateUser, m.impersonateUserErr
+}
 func (m *mockTestBackendService) LegacyBatchUpload(ctx context.Context, input service.LegacyBatchUploadInput) (map[string]any, error) {
 	return m.legacyBatch, m.legacyBatchErr
 }
@@ -135,6 +140,7 @@ func setupRouter(h *TestBackendHandler) *gin.Engine {
 	r.POST("/api/test-backend/datasets/:dataset_id/prepare", h.PrepareDataset)
 	r.POST("/api/test-backend/login", h.Login)
 	r.POST("/api/test-backend/logout", h.Logout)
+	r.POST("/api/test-backend/impersonate-user", h.ImpersonateUser)
 	r.POST("/api/test/batch-upload", h.LegacyBatchUpload)
 	r.POST("/api/test/single-image", h.LegacySingleImage)
 	return r
@@ -467,6 +473,56 @@ func TestLogout(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestImpersonateUser(t *testing.T) {
+	mockSvc := &mockTestBackendService{
+		impersonateUser: &service.ImpersonateUserOutput{
+			AccessToken:  "access",
+			RefreshToken: "refresh",
+			TokenType:    "bearer",
+			ExpiresIn:    3600,
+			UserID:       "user-1",
+			OpenID:       "openid-1",
+		},
+	}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"user_id": "user-1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/impersonate-user", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestImpersonateUserBindError(t *testing.T) {
+	mockSvc := &mockTestBackendService{}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/impersonate-user", bytes.NewReader([]byte("bad json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestImpersonateUserError(t *testing.T) {
+	mockSvc := &mockTestBackendService{impersonateUserErr: errors.New("impersonate error")}
+	h := NewTestBackendHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"user_id": "user-1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/test-backend/impersonate-user", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
 
 // ---------- Legacy Handler Tests ----------
