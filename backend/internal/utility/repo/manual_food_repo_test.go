@@ -2,7 +2,6 @@ package repo
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	fooddomain "food_link/backend/internal/foodrecord/domain"
@@ -215,8 +214,6 @@ func TestManualFoodCategoryFilterSQL(t *testing.T) {
 		assert.NotContains(t, sql, "CASE")
 		assert.NotContains(t, sql, "= ?")
 		assert.NotContains(t, sql, "\nAND")
-		assert.Contains(t, escapeSQLForSprintf(sql), "%%")
-		assert.NotContains(t, fmt.Sprintf("WHERE is_active = TRUE %s", escapeSQLForSprintf(sql)), "%!")
 	}
 	assert.Contains(t, manualFoodCategoryFilterSQL("canonical_name", "meal"), "%餐%")
 	assert.Contains(t, manualFoodCategoryFilterSQL("canonical_name", "other"), "NOT (")

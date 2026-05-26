@@ -237,7 +237,7 @@ func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, cate
 		HAVING COUNT(*) >= 3
 		ORDER BY COUNT(*) DESC, name ASC
 		LIMIT ? OFFSET ?
-	`, escapeSQLForSprintf(whereCategory)), args...).Scan(&rows).Error
+	`, whereCategory), args...).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +332,7 @@ func (r *ManualFoodRepo) listNutritionCatalogItems(ctx context.Context, category
 			%s
 		ORDER BY %s
 		LIMIT ? OFFSET ?
-	`, escapeSQLForSprintf(whereCategory), nutritionBrowseOrderSQL())).Scan(&rows).Error
+	`, whereCategory, nutritionBrowseOrderSQL()), args...).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -1084,10 +1084,6 @@ func ilikeAnySQL(column string, patterns []string) string {
 		quoted = append(quoted, "'"+strings.ReplaceAll(pattern, "'", "''")+"'")
 	}
 	return fmt.Sprintf("%s ILIKE ANY (ARRAY[%s])", column, strings.Join(quoted, ","))
-}
-
-func escapeSQLForSprintf(sql string) string {
-	return strings.ReplaceAll(sql, "%", "%%")
 }
 
 func nutritionBrowseOrderSQL() string {
