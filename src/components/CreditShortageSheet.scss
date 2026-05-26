@@ -1,0 +1,182 @@
+.credit-shortage-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+}
+
+.credit-shortage-sheet__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(6px);
+}
+
+.credit-shortage-sheet__panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 18px 24px 34px;
+  border-radius: 32px 32px 0 0;
+  background:
+    radial-gradient(circle at 14% 4%, rgba(255, 211, 122, 0.34), transparent 30%),
+    linear-gradient(145deg, #fffaf0 0%, #f7fff9 48%, #ffffff 100%);
+  box-shadow: 0 -22px 56px rgba(15, 23, 42, 0.18);
+  box-sizing: border-box;
+  animation: credit-shortage-rise 0.24s ease-out;
+}
+
+.credit-shortage-sheet__handle {
+  width: 72px;
+  height: 8px;
+  margin: 0 auto 22px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.14);
+}
+
+.credit-shortage-sheet__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.credit-shortage-sheet__eyebrow {
+  display: block;
+  font-size: 22px;
+  line-height: 32px;
+  color: #0f9f6e;
+  font-weight: 700;
+}
+
+.credit-shortage-sheet__title {
+  display: block;
+  margin-top: 4px;
+  font-size: 38px;
+  line-height: 48px;
+  font-weight: 800;
+  color: #172033;
+}
+
+.credit-shortage-sheet__close {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.credit-shortage-sheet__close-text {
+  font-size: 38px;
+  line-height: 48px;
+  color: #64748b;
+}
+
+.credit-shortage-sheet__message {
+  display: block;
+  margin-top: 18px;
+  font-size: 26px;
+  line-height: 38px;
+  color: #475569;
+}
+
+.credit-shortage-sheet__stats {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.credit-shortage-sheet__stat {
+  min-width: 0;
+  padding: 16px 10px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(15, 159, 110, 0.13);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  text-align: center;
+}
+
+.credit-shortage-sheet__stat--need {
+  background: #fff7ed;
+  border-color: rgba(245, 158, 11, 0.24);
+}
+
+.credit-shortage-sheet__stat-value {
+  display: block;
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 800;
+  color: #172033;
+}
+
+.credit-shortage-sheet__stat-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+  line-height: 28px;
+  color: #64748b;
+}
+
+.credit-shortage-sheet__actions {
+  margin-top: 28px;
+  display: flex;
+  gap: 14px;
+}
+
+.credit-shortage-sheet__primary,
+.credit-shortage-sheet__secondary {
+  flex: 1;
+  height: 88px;
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.credit-shortage-sheet__primary {
+  background: linear-gradient(135deg, #0f9f6e 0%, #18c58b 100%);
+  box-shadow: 0 14px 28px rgba(16, 185, 129, 0.24);
+}
+
+.credit-shortage-sheet__secondary {
+  background: #172033;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.16);
+}
+
+.credit-shortage-sheet__primary-text,
+.credit-shortage-sheet__secondary-text {
+  font-size: 28px;
+  line-height: 36px;
+  color: #fff;
+}
+
+.credit-shortage-sheet__later {
+  margin-top: 22px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.credit-shortage-sheet__later-text {
+  font-size: 24px;
+  line-height: 34px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+@keyframes credit-shortage-rise {
+  from {
+    transform: translateY(28px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
