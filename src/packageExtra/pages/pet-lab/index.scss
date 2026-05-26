@@ -1,0 +1,1134 @@
+.pet-lab-page {
+  min-height: 100vh;
+  padding: 24rpx 24rpx calc(env(safe-area-inset-bottom) + 44rpx);
+  box-sizing: border-box;
+  background: linear-gradient(180deg, #eff8f4 0%, #f6f8fb 44%, #eef2f6 100%);
+}
+
+.pet-lab-hero,
+.pet-lab-panel {
+  background: rgb(255 255 255 / 88%);
+  border: 1rpx solid rgb(92 184 150 / 10%);
+  box-shadow: 0 8rpx 24rpx rgb(15 23 42 / 5%);
+  backdrop-filter: blur(10rpx);
+}
+
+.pet-lab-hero {
+  padding: 28rpx;
+  border-radius: 28rpx;
+  margin-bottom: 20rpx;
+}
+
+.pet-lab-title {
+  display: block;
+  font-size: 42rpx;
+  line-height: 56rpx;
+  font-weight: 800;
+  color: #13202b;
+  margin-bottom: 10rpx;
+}
+
+.pet-lab-subtitle,
+.pet-lab-copy {
+  display: block;
+  font-size: 24rpx;
+  line-height: 38rpx;
+  color: #64748b;
+}
+
+.pet-lab-stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-top: 22rpx;
+}
+
+.pet-lab-stat {
+  padding: 18rpx 8rpx;
+  border-radius: 18rpx;
+  background: rgb(92 184 150 / 9%);
+  text-align: center;
+}
+
+.pet-lab-stat-value {
+  display: block;
+  font-size: 34rpx;
+  line-height: 42rpx;
+  font-weight: 800;
+  color: #1f8a68;
+}
+
+.pet-lab-stat-label {
+  display: block;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  color: #6b7280;
+  margin-top: 4rpx;
+}
+
+.pet-lab-panel {
+  padding: 24rpx;
+  border-radius: 24rpx;
+  margin-bottom: 18rpx;
+}
+
+.pet-lab-panel-title {
+  display: block;
+  font-size: 30rpx;
+  line-height: 42rpx;
+  font-weight: 800;
+  color: #17212b;
+  margin-bottom: 12rpx;
+}
+
+.pet-lab-formula {
+  margin-top: 16rpx;
+  padding: 18rpx;
+  border-radius: 18rpx;
+  background: #101827;
+}
+
+.pet-lab-archetype-note {
+  margin-top: 16rpx;
+  padding: 18rpx;
+  border-radius: 18rpx;
+  background: rgb(92 184 150 / 8%);
+}
+
+.pet-lab-archetype-note-text {
+  display: block;
+  font-size: 23rpx;
+  line-height: 36rpx;
+  color: #2f7f62;
+  font-weight: 700;
+}
+
+.pet-lab-code {
+  display: block;
+  font-size: 20rpx;
+  line-height: 32rpx;
+  color: #dbeafe;
+  word-break: break-all;
+}
+
+.pet-lab-sample-scroll,
+.pet-lab-filter-scroll {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.pet-lab-sample-row,
+.pet-lab-filter-row {
+  display: inline-flex;
+  gap: 14rpx;
+  min-width: 100%;
+}
+
+.pet-lab-sample-card {
+  width: 156rpx;
+  padding: 14rpx 10rpx;
+  border-radius: 20rpx;
+  background: rgb(92 184 150 / 8%);
+  text-align: center;
+  box-sizing: border-box;
+
+  &.risky {
+    background: rgb(244 114 182 / 8%);
+  }
+
+  &.quirky {
+    background: rgb(139 92 246 / 8%);
+  }
+
+  &.pretty {
+    background: rgb(92 184 150 / 10%);
+  }
+}
+
+.pet-lab-sample-title {
+  display: block;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: #17212b;
+  font-weight: 700;
+  margin-top: 8rpx;
+}
+
+.pet-lab-sample-sub {
+  display: block;
+  font-size: 20rpx;
+  line-height: 28rpx;
+  color: #94a3b8;
+  white-space: normal;
+}
+
+.pet-lab-filter {
+  margin-top: 18rpx;
+}
+
+.pet-lab-filter-title {
+  display: block;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: #64748b;
+  margin-bottom: 10rpx;
+}
+
+.pet-lab-pill {
+  flex-shrink: 0;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: #f1f5f9;
+  border: 1rpx solid transparent;
+  box-sizing: border-box;
+
+  &.active {
+    background: rgb(92 184 150 / 12%);
+    border-color: rgb(92 184 150 / 34%);
+  }
+}
+
+.pet-lab-pill-text {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: #475569;
+  font-weight: 700;
+}
+
+.pet-lab-pill.active .pet-lab-pill-text {
+  color: #2f7f62;
+}
+
+.pet-lab-grid-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 24rpx 4rpx 14rpx;
+}
+
+.pet-lab-grid-title {
+  font-size: 30rpx;
+  line-height: 42rpx;
+  font-weight: 800;
+  color: #17212b;
+}
+
+.pet-lab-grid-side {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #94a3b8;
+}
+
+.pet-lab-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
+.pet-lab-card {
+  min-width: 0;
+  padding: 18rpx 12rpx 16rpx;
+  border-radius: 22rpx;
+  background: rgb(255 255 255 / 88%);
+  border: 1rpx solid rgb(148 163 184 / 12%);
+  box-shadow: 0 8rpx 20rpx rgb(15 23 42 / 4%);
+  text-align: center;
+  box-sizing: border-box;
+
+  &.risky {
+    border-color: rgb(244 114 182 / 18%);
+    background: rgb(255 247 250 / 90%);
+  }
+
+  &.quirky {
+    border-color: rgb(139 92 246 / 14%);
+    background: rgb(250 248 255 / 92%);
+  }
+
+  &.pretty {
+    border-color: rgb(92 184 150 / 18%);
+    background: rgb(248 255 252 / 92%);
+  }
+}
+
+.pet-lab-card-title {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 800;
+  color: #17212b;
+}
+
+.pet-lab-card-desc {
+  display: block;
+  font-size: 20rpx;
+  line-height: 30rpx;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pet-lab-card-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  margin: 2rpx auto 8rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 10%);
+  color: #2f7f62;
+  font-size: 19rpx;
+  line-height: 28rpx;
+  font-weight: 700;
+  box-sizing: border-box;
+}
+
+.pet-lab-card.quirky .pet-lab-card-badge {
+  background: rgb(139 92 246 / 10%);
+  color: #6d4cc4;
+}
+
+.pet-lab-card.risky .pet-lab-card-badge {
+  background: rgb(244 114 182 / 10%);
+  color: #b84b7e;
+}
+
+.pet-lab-card-reason {
+  display: block;
+  min-height: 56rpx;
+  margin-top: 8rpx;
+  padding: 8rpx 10rpx;
+  border-radius: 14rpx;
+  background: rgb(92 184 150 / 7%);
+  color: #64748b;
+  font-size: 19rpx;
+  line-height: 28rpx;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+
+  &.warn {
+    background: rgb(244 114 182 / 8%);
+    color: #9f426d;
+  }
+}
+
+.pet-lab-load-more {
+  margin: 24rpx 0 6rpx;
+  height: 76rpx;
+  border-radius: 999rpx;
+  background: #17212b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pet-lab-load-more-text {
+  color: #fff;
+  font-size: 26rpx;
+  line-height: 36rpx;
+  font-weight: 800;
+}
+
+.pet-lab-avatar {
+  position: relative;
+  width: 164rpx;
+  height: 164rpx;
+  margin: 0 auto;
+  transform: translateZ(0);
+
+  &.small {
+    width: 96rpx;
+    height: 96rpx;
+  }
+}
+
+.pet-lab-shadow {
+  position: absolute;
+  left: 26rpx;
+  right: 26rpx;
+  bottom: 8rpx;
+  height: 18rpx;
+  border-radius: 50%;
+  background: rgb(31 41 55 / 10%);
+  filter: blur(2rpx);
+}
+
+.pet-body {
+  position: absolute;
+  left: 18rpx;
+  right: 18rpx;
+  bottom: 20rpx;
+  height: 112rpx;
+  border-radius: 64rpx 64rpx 52rpx 52rpx;
+  background: linear-gradient(160deg, #8dd3bf 0%, #5cb896 100%);
+  box-shadow:
+    inset 0 12rpx 20rpx rgb(255 255 255 / 34%),
+    inset 0 -10rpx 16rpx rgb(39 108 93 / 8%),
+    0 10rpx 20rpx rgb(92 184 150 / 14%);
+}
+
+.pet-body::before {
+  content: '';
+  position: absolute;
+  left: 24rpx;
+  top: 18rpx;
+  width: 26rpx;
+  height: 14rpx;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 34%);
+  transform: rotate(-18deg);
+}
+
+.small .pet-body {
+  left: 10rpx;
+  right: 10rpx;
+  bottom: 12rpx;
+  height: 66rpx;
+  border-radius: 38rpx 38rpx 30rpx 30rpx;
+}
+
+.small .pet-body::before {
+  left: 14rpx;
+  top: 11rpx;
+  width: 16rpx;
+  height: 8rpx;
+}
+
+.pet-lab-avatar.bean .pet-body {
+  left: 14rpx;
+  right: 22rpx;
+  height: 104rpx;
+  border-radius: 64rpx 54rpx 62rpx 44rpx;
+  transform: rotate(-4deg);
+}
+
+.pet-lab-avatar.puff .pet-body {
+  left: 14rpx;
+  right: 14rpx;
+  height: 116rpx;
+}
+
+.pet-lab-avatar.drop .pet-body {
+  left: 22rpx;
+  right: 22rpx;
+  height: 118rpx;
+  border-radius: 60rpx 60rpx 68rpx 24rpx;
+  transform: rotate(3deg);
+}
+
+.small.bean .pet-body {
+  left: 8rpx;
+  right: 12rpx;
+  height: 62rpx;
+}
+
+.small.puff .pet-body {
+  left: 8rpx;
+  right: 8rpx;
+  height: 68rpx;
+}
+
+.small.drop .pet-body {
+  left: 13rpx;
+  right: 13rpx;
+  height: 70rpx;
+}
+
+.pet-tail {
+  position: absolute;
+  right: 8rpx;
+  bottom: 18rpx;
+  width: 32rpx;
+  height: 44rpx;
+  border-radius: 24rpx 24rpx 14rpx 14rpx;
+  background: inherit;
+  transform-origin: 50% 100%;
+  transform: rotate(24deg);
+  opacity: 0.9;
+}
+
+.small .pet-tail {
+  right: 5rpx;
+  bottom: 11rpx;
+  width: 18rpx;
+  height: 26rpx;
+}
+
+.pet-ear {
+  position: absolute;
+  top: -14rpx;
+  width: 34rpx;
+  height: 38rpx;
+  border-radius: 24rpx 24rpx 10rpx 10rpx;
+  background: inherit;
+  transform-origin: 50% 100%;
+
+  &.left {
+    left: 22rpx;
+    transform: rotate(-18deg);
+  }
+
+  &.right {
+    right: 22rpx;
+    transform: rotate(18deg);
+  }
+}
+
+.small .pet-ear {
+  top: -8rpx;
+  width: 20rpx;
+  height: 23rpx;
+
+  &.left {
+    left: 12rpx;
+  }
+
+  &.right {
+    right: 12rpx;
+  }
+}
+
+.pet-lab-avatar.animal-bunny {
+  .pet-ear {
+    top: -32rpx;
+    width: 26rpx;
+    height: 60rpx;
+    border-radius: 24rpx 24rpx 12rpx 12rpx;
+
+    &.left {
+      left: 28rpx;
+      transform: rotate(-12deg);
+    }
+
+    &.right {
+      right: 28rpx;
+      transform: rotate(12deg);
+    }
+  }
+
+  .pet-tail {
+    right: 4rpx;
+    bottom: 14rpx;
+    width: 26rpx;
+    height: 26rpx;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 82%);
+    transform: none;
+  }
+}
+
+.pet-lab-avatar.animal-bear,
+.pet-lab-avatar.animal-hamster {
+  .pet-ear {
+    top: -14rpx;
+    width: 32rpx;
+    height: 32rpx;
+    border-radius: 50%;
+  }
+}
+
+.pet-lab-avatar.animal-cat,
+.pet-lab-avatar.animal-fox {
+  .pet-ear {
+    top: -22rpx;
+    width: 30rpx;
+    height: 44rpx;
+    border-radius: 22rpx 22rpx 6rpx 6rpx;
+  }
+}
+
+.pet-lab-avatar.animal-fox {
+  .pet-tail {
+    right: 2rpx;
+    bottom: 22rpx;
+    width: 38rpx;
+    height: 54rpx;
+    border-radius: 30rpx 30rpx 14rpx 14rpx;
+    transform: rotate(34deg);
+
+    &::after {
+      content: '';
+      position: absolute;
+      left: 4rpx;
+      right: 4rpx;
+      bottom: 0;
+      height: 16rpx;
+      border-radius: 20rpx;
+      background: rgb(255 255 255 / 76%);
+    }
+  }
+}
+
+.small.animal-bunny {
+  .pet-ear {
+    top: -18rpx;
+    width: 16rpx;
+    height: 34rpx;
+
+    &.left {
+      left: 15rpx;
+    }
+
+    &.right {
+      right: 15rpx;
+    }
+  }
+
+  .pet-tail {
+    width: 16rpx;
+    height: 16rpx;
+  }
+}
+
+.small.animal-bear,
+.small.animal-hamster {
+  .pet-ear {
+    top: -8rpx;
+    width: 18rpx;
+    height: 18rpx;
+  }
+}
+
+.small.animal-cat,
+.small.animal-fox {
+  .pet-ear {
+    top: -12rpx;
+    width: 18rpx;
+    height: 26rpx;
+  }
+}
+
+.pet-accessory {
+  position: absolute;
+  top: -14rpx;
+  left: 48%;
+  width: 44rpx;
+  height: 32rpx;
+  transform: translateX(-50%) rotate(-2deg);
+  z-index: 2;
+}
+
+.small .pet-accessory {
+  top: -8rpx;
+  width: 26rpx;
+  height: 20rpx;
+}
+
+.pet-accessory-shape {
+  position: absolute;
+  left: 12rpx;
+  top: 3rpx;
+
+  &.leaf {
+    width: 24rpx;
+    height: 15rpx;
+    border-radius: 24rpx 3rpx 24rpx 3rpx;
+    background: #6bcf8d;
+    transform: rotate(-28deg);
+  }
+
+  &.sprout {
+    width: 8rpx;
+    height: 24rpx;
+    border-radius: 999rpx;
+    background: #57b97b;
+
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      width: 17rpx;
+      height: 11rpx;
+      border-radius: 16rpx 3rpx 16rpx 3rpx;
+      background: #73d49a;
+    }
+
+    &::before {
+      right: 7rpx;
+      transform: rotate(-24deg);
+    }
+
+    &::after {
+      left: 7rpx;
+      transform: rotate(24deg) scaleX(-1);
+    }
+  }
+
+  &.scarf {
+    top: 18rpx;
+    left: 4rpx;
+    width: 40rpx;
+    height: 10rpx;
+    border-radius: 999rpx;
+    background: #f0985c;
+    transform: rotate(-8deg);
+  }
+
+  &.drop {
+    width: 18rpx;
+    height: 24rpx;
+    border-radius: 18rpx 18rpx 18rpx 5rpx;
+    background: #5c9ed4;
+    transform: rotate(32deg);
+  }
+
+  &.star {
+    width: 24rpx;
+    height: 24rpx;
+    background: #ffd166;
+    clip-path: polygon(50% 0%, 62% 34%, 98% 35%, 69% 56%, 79% 91%, 50% 70%, 21% 91%, 31% 56%, 2% 35%, 38% 34%);
+  }
+
+  &.cap {
+    top: 10rpx;
+    left: 4rpx;
+    width: 40rpx;
+    height: 16rpx;
+    border-radius: 16rpx 16rpx 6rpx 6rpx;
+    background: #5c9ed4;
+
+    &::after {
+      content: '';
+      position: absolute;
+      right: -10rpx;
+      bottom: 0;
+      width: 16rpx;
+      height: 6rpx;
+      border-radius: 999rpx;
+      background: #4a89bd;
+    }
+  }
+
+  &.bow {
+    top: 14rpx;
+    left: 6rpx;
+    width: 34rpx;
+    height: 16rpx;
+
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      width: 17rpx;
+      height: 16rpx;
+      border-radius: 14rpx 4rpx 14rpx 4rpx;
+      background: #f5a6c9;
+    }
+
+    &::before {
+      left: 0;
+      transform: rotate(18deg);
+    }
+
+    &::after {
+      right: 0;
+      transform: rotate(-18deg) scaleX(-1);
+    }
+  }
+
+  &.halo {
+    top: 10rpx;
+    left: 5rpx;
+    width: 36rpx;
+    height: 14rpx;
+    border-radius: 50%;
+    border: 4rpx solid #ffd982;
+    background: transparent;
+  }
+}
+
+.small .pet-accessory-shape {
+  transform: scale(0.62);
+  transform-origin: 0 0;
+}
+
+.pet-face {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 28rpx;
+  height: 56rpx;
+  z-index: 3;
+}
+
+.small .pet-face {
+  top: 16rpx;
+  height: 34rpx;
+}
+
+.pet-snout {
+  position: absolute;
+  left: 50%;
+  top: 27rpx;
+  width: 32rpx;
+  height: 20rpx;
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 34%);
+  transform: translateX(-50%);
+}
+
+.small .pet-snout {
+  top: 16rpx;
+  width: 20rpx;
+  height: 12rpx;
+}
+
+.pet-eye {
+  position: absolute;
+  top: 6rpx;
+  width: 14rpx;
+  height: 18rpx;
+  border-radius: 999rpx;
+  background: #263241;
+  box-shadow: 0 2rpx 0 rgb(255 255 255 / 24%);
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 4rpx;
+    top: 3rpx;
+    width: 4rpx;
+    height: 4rpx;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 82%);
+  }
+
+  &.left {
+    left: 34rpx;
+  }
+
+  &.right {
+    right: 34rpx;
+  }
+}
+
+.small .pet-eye {
+  top: 4rpx;
+  width: 8rpx;
+  height: 11rpx;
+
+  &::after {
+    left: 2rpx;
+    top: 2rpx;
+    width: 2rpx;
+    height: 2rpx;
+  }
+
+  &.left {
+    left: 20rpx;
+  }
+
+  &.right {
+    right: 20rpx;
+  }
+}
+
+.pet-cheek {
+  position: absolute;
+  top: 34rpx;
+  width: 18rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: rgb(255 169 177 / 44%);
+
+  &.left {
+    left: 20rpx;
+  }
+
+  &.right {
+    right: 20rpx;
+  }
+}
+
+.small .pet-cheek {
+  top: 20rpx;
+  width: 10rpx;
+  height: 6rpx;
+
+  &.left {
+    left: 12rpx;
+  }
+
+  &.right {
+    right: 12rpx;
+  }
+}
+
+.pet-mouth {
+  position: absolute;
+  left: 50%;
+  top: 40rpx;
+  width: 20rpx;
+  height: 10rpx;
+  border-bottom: 4rpx solid rgb(38 50 65 / 76%);
+  border-radius: 0 0 22rpx 22rpx;
+  transform: translateX(-50%);
+}
+
+.small .pet-mouth {
+  top: 24rpx;
+  width: 12rpx;
+  height: 6rpx;
+  border-bottom-width: 3rpx;
+}
+
+.pet-lab-avatar.animal-bear,
+.pet-lab-avatar.animal-hamster {
+  .pet-snout {
+    width: 38rpx;
+    height: 24rpx;
+    top: 25rpx;
+    background: rgb(255 255 255 / 44%);
+  }
+}
+
+.pet-lab-avatar.animal-bunny {
+  .pet-snout {
+    width: 30rpx;
+    height: 23rpx;
+    top: 26rpx;
+    background: rgb(255 255 255 / 38%);
+  }
+}
+
+.pet-lab-avatar.animal-fox {
+  .pet-snout {
+    width: 26rpx;
+    height: 17rpx;
+    top: 28rpx;
+    border-radius: 14rpx 14rpx 20rpx 20rpx;
+    background: rgb(255 255 255 / 38%);
+  }
+}
+
+.pet-lab-avatar.mood-sleepy {
+  .pet-eye {
+    top: 12rpx;
+    height: 4rpx;
+  }
+
+  .pet-mouth {
+    width: 18rpx;
+    height: 5rpx;
+    border-bottom-width: 3rpx;
+  }
+}
+
+.pet-lab-avatar.mood-happy .pet-body {
+  transform: translateY(-3rpx);
+}
+
+.pet-lab-avatar.mood-surprised {
+  .pet-eye {
+    border-radius: 50%;
+  }
+
+  .pet-mouth {
+    width: 16rpx;
+    height: 16rpx;
+    border: 4rpx solid rgb(36 54 74 / 76%);
+    border-top-color: transparent;
+    border-radius: 50%;
+  }
+}
+
+.pet-lab-avatar.pattern-1 .pet-body::after,
+.pet-lab-avatar.pattern-2 .pet-body::after,
+.pet-lab-avatar.pattern-3 .pet-body::after,
+.pet-lab-avatar.pattern-4 .pet-body::after {
+  content: '';
+  position: absolute;
+  background: rgb(255 255 255 / 30%);
+}
+
+.pet-lab-avatar.pattern-1 .pet-body::after {
+  left: 24rpx;
+  top: 25rpx;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+}
+
+.pet-lab-avatar.pattern-2 .pet-body::after {
+  right: 22rpx;
+  top: 24rpx;
+  width: 24rpx;
+  height: 10rpx;
+  border-radius: 50%;
+}
+
+.pet-lab-avatar.pattern-3 .pet-body::after {
+  left: 22rpx;
+  right: 22rpx;
+  bottom: 20rpx;
+  height: 8rpx;
+  border-radius: 999rpx;
+}
+
+.pet-lab-avatar.pattern-4 .pet-body::after {
+  left: 32rpx;
+  top: 20rpx;
+  width: 10rpx;
+  height: 42rpx;
+  border-radius: 999rpx;
+  box-shadow: 22rpx 2rpx 0 rgb(255 255 255 / 22%);
+}
+
+.small.pattern-1 .pet-body::after {
+  left: 14rpx;
+  top: 14rpx;
+  width: 10rpx;
+  height: 10rpx;
+}
+
+.small.pattern-2 .pet-body::after {
+  right: 13rpx;
+  top: 14rpx;
+  width: 14rpx;
+  height: 6rpx;
+}
+
+.small.pattern-3 .pet-body::after {
+  left: 13rpx;
+  right: 13rpx;
+  bottom: 12rpx;
+  height: 5rpx;
+}
+
+.small.pattern-4 .pet-body::after {
+  left: 19rpx;
+  top: 12rpx;
+  width: 6rpx;
+  height: 24rpx;
+  box-shadow: 13rpx 1rpx 0 rgb(255 255 255 / 22%);
+}
+
+.pet-lab-avatar.berry .pet-body {
+  background: linear-gradient(160deg, #f5a6c9 0%, #c27bd8 100%);
+}
+
+.pet-lab-avatar.sunny .pet-body {
+  background: linear-gradient(160deg, #ffd982 0%, #f0985c 100%);
+}
+
+.pet-lab-avatar.aqua .pet-body {
+  background: linear-gradient(160deg, #92d7ef 0%, #5c9ed4 100%);
+}
+
+.pet-lab-avatar.grape .pet-body {
+  background: linear-gradient(160deg, #c4b5fd 0%, #8b5cf6 100%);
+}
+
+.pet-lab-avatar.peach .pet-body {
+  background: linear-gradient(160deg, #ffc2b3 0%, #ff8a7a 100%);
+}
+
+.pet-lab-avatar.cream .pet-body {
+  background: linear-gradient(160deg, #ffe9b8 0%, #f3c66b 100%);
+}
+
+.pet-lab-avatar.matcha .pet-body {
+  background: linear-gradient(160deg, #b8e986 0%, #75b86b 100%);
+}
+
+.pet-lab-detail-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 24rpx;
+  box-sizing: border-box;
+  background: rgb(15 23 42 / 42%);
+}
+
+.pet-lab-detail {
+  width: 100%;
+  padding: 28rpx 24rpx calc(env(safe-area-inset-bottom) + 26rpx);
+  border-radius: 30rpx 30rpx 22rpx 22rpx;
+  background: #fff;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.pet-lab-detail-title {
+  display: block;
+  margin-top: 14rpx;
+  font-size: 32rpx;
+  line-height: 44rpx;
+  font-weight: 800;
+  color: #17212b;
+}
+
+.pet-lab-detail-copy {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #64748b;
+  word-break: break-all;
+}
+
+.pet-lab-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10rpx;
+  margin-top: 18rpx;
+}
+
+.pet-lab-detail-tag {
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgb(92 184 150 / 10%);
+  color: #2f7f62;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 700;
+}
+
+.pet-lab-detail-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10rpx;
+  margin-top: 18rpx;
+}
+
+.pet-lab-detail-reason {
+  max-width: 100%;
+  padding: 8rpx 14rpx;
+  border-radius: 14rpx;
+  font-size: 21rpx;
+  line-height: 30rpx;
+  box-sizing: border-box;
+
+  &.good {
+    background: rgb(92 184 150 / 9%);
+    color: #2f7f62;
+  }
+
+  &.warn {
+    background: rgb(244 114 182 / 9%);
+    color: #a23e6c;
+  }
+}
+
+.pet-lab-detail-close {
+  display: block;
+  margin-top: 20rpx;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #94a3b8;
+}
