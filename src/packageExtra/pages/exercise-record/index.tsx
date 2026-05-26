@@ -24,7 +24,7 @@ import {
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
-import { HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
+import { COMMUNITY_FEED_CHANGED_EVENT, HOME_DASHBOARD_REFRESH_EVENT } from '../../../utils/home-events'
 import { getTodayRecordDateKey, normalizeRecordDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
@@ -214,6 +214,7 @@ export default function ExerciseRecordPage() {
               await loadRecordsForDate(targetDate)
             }
             Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
+            Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
             Taro.showToast({
               title: `已记录 ${payload.estimated_calories} kcal`,
               icon: 'success'
@@ -447,6 +448,7 @@ export default function ExerciseRecordPage() {
           await deleteExerciseLog(id)
           setRecords((prev) => prev.filter((r) => r.id !== id))
           Taro.eventCenter.trigger(HOME_DASHBOARD_REFRESH_EVENT)
+          Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
           Taro.showToast({ title: '已删除', icon: 'success' })
         } catch (e) {
           await showUnifiedApiError(e, '删除失败')

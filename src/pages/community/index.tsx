@@ -28,6 +28,8 @@ import {
   type CommunityFeedItem,
   type CommunityFeedSortBy,
   type CommunityAuthorScope,
+  type CommunityFeedContentType,
+  type CommunityFeedTargetType,
   type FeedCommentItem,
   type CheckinLeaderboardItem,
   type MealType,
@@ -72,6 +74,12 @@ const FEED_SORT_OPTIONS: Array<{ value: CommunityFeedSortBy; label: string }> = 
   { value: 'recommended', label: '推荐' },
   { value: 'hot', label: '高赞' },
   { value: 'balanced', label: '均衡' },
+]
+
+const FEED_CONTENT_OPTIONS: Array<{ value: CommunityFeedContentType; label: string }> = [
+  { value: 'all', label: '全部内容' },
+  { value: 'food_record', label: '饮食' },
+  { value: 'exercise_log', label: '运动' },
 ]
 
 const FEED_MEAL_OPTIONS: Array<{ value: MealType | 'all'; label: string }> = [
@@ -205,6 +213,8 @@ const COMMUNITY_NOTIFICATION_TARGET_MAX_AGE_MS = 10 * 60 * 1000
 
 type PendingCommunityNotificationTarget = {
   recordId: string
+  targetType?: CommunityFeedTargetType
+  targetId?: string
   notificationType?: 'like_received' | 'comment_received' | 'reply_received' | 'comment_rejected' | ''
   commentId?: string | null
   parentCommentId?: string | null
@@ -239,6 +249,8 @@ function readPendingCommunityNotificationTarget(): PendingCommunityNotificationT
 
     return {
       recordId,
+      targetType: parsed?.targetType === 'exercise_log' ? 'exercise_log' : 'food_record',
+      targetId: typeof parsed?.targetId === 'string' ? parsed.targetId.trim() : recordId,
       notificationType: typeof parsed?.notificationType === 'string' ? parsed.notificationType.trim() as PendingCommunityNotificationTarget['notificationType'] : '',
       commentId: typeof parsed?.commentId === 'string' ? parsed.commentId.trim() : '',
       parentCommentId: typeof parsed?.parentCommentId === 'string' ? parsed.parentCommentId.trim() : '',
@@ -307,6 +319,7 @@ function isCommunityFeedCacheFromCurrentSession(): boolean {
 
 function buildFeedQueryParams(
   sortBy: CommunityFeedSortBy,
+  contentType: CommunityFeedContentType,
   mealType: MealType | 'all',
   dietGoal: DietGoal | 'all',
   authorScope: CommunityAuthorScope,
@@ -315,12 +328,73 @@ function buildFeedQueryParams(
 ) {
   return {
     sort_by: sortBy,
-    meal_type: mealType === 'all' ? undefined : mealType,
-    diet_goal: dietGoal === 'all' ? undefined : dietGoal,
+    content_type: contentType,
+    meal_type: contentType === 'exercise_log' || mealType === 'all' ? undefined : mealType,
+    diet_goal: contentType === 'exercise_log' || dietGoal === 'all' ? undefined : dietGoal,
     author_scope: authorId ? 'all' : authorScope,
     priority_author_ids: authorId ? undefined : (authorScope === 'priority' ? priorityAuthorIds : undefined),
     author_id: authorId || undefined,
   }
+}
+
+function buildFeedQueryKey(
+  authed: boolean,
+  params: ReturnType<typeof buildFeedQueryParams>
+): string {
+  return JSON.stringify({
+    authed,
+    sort_by: params.sort_by,
+    content_type: params.content_type || 'all',
+    meal_type: params.meal_type || '',
+    diet_goal: params.diet_goal || '',
+    author_scope: params.author_scope || '',
+    author_id: params.author_id || '',
+    priority_author_ids: params.priority_author_ids || [],
+  })
+}
+
+function dedupeFeedItems(list: CommunityFeedItem[]): CommunityFeedItem[] {
+  const seen = new Set<string>()
+  const next: CommunityFeedItem[] = []
+  for (const item of list) {
+    const id = getFeedTargetKey(item)
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    next.push(item)
+  }
+  return next
+}
+
+function appendUniqueFeedItems(
+  existing: CommunityFeedItem[],
+  incoming: CommunityFeedItem[]
+): { list: CommunityFeedItem[]; added: number } {
+  const seen = new Set(existing.map(getFeedTargetKey).filter(Boolean))
+  const unique = incoming.filter((item) => {
+    const id = getFeedTargetKey(item)
+    if (!id || seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+  return { list: [...existing, ...unique], added: unique.length }
+}
+
+function getFeedTargetType(item: CommunityFeedItem | null | undefined): CommunityFeedTargetType {
+  return item?.target_type || item?.record?.feed_type || 'food_record'
+}
+
+function getFeedTargetId(item: CommunityFeedItem | null | undefined): string {
+  return item?.target_id || item?.record?.id || ''
+}
+
+function getFeedTargetKey(item: CommunityFeedItem | null | undefined): string {
+  const id = getFeedTargetId(item)
+  if (!id) return ''
+  return `${getFeedTargetType(item)}:${id}`
+}
+
+function isExerciseFeed(item: CommunityFeedItem | null | undefined): boolean {
+  return getFeedTargetType(item) === 'exercise_log'
 }
 
 function CommunityPage() {
@@ -328,6 +402,7 @@ function CommunityPage() {
   const [friends, setFriends] = useState<FriendListItem[]>([])
   const [requests, setRequests] = useState<FriendRequestItem[]>([])
   const [feedList, setFeedList] = useState<CommunityFeedItem[]>([])
+  const feedListRef = useRef<CommunityFeedItem[]>([])
   const [loadingFriends, setLoadingFriends] = useState(false)
   const [loadingFeed, setLoadingFeed] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -343,9 +418,11 @@ function CommunityPage() {
 
   // 评论：当前评论的 recordId、输入内容、提交中、延迟聚焦
   const [expandedCommentRecordId, setExpandedCommentRecordId] = useState<string | null>(null)
+  const [expandedCommentTargetType, setExpandedCommentTargetType] = useState<CommunityFeedTargetType>('food_record')
   const [commentContent, setCommentContent] = useState('')
   const commentContentRef = useRef('')
   const expandedCommentRecordIdRef = useRef<string | null>(null)
+  const expandedCommentTargetTypeRef = useRef<CommunityFeedTargetType>('food_record')
   /** 后台发表评论中的请求数，用于发送按钮 spinner（不阻塞继续输入） */
   const [commentInFlightCount, setCommentInFlightCount] = useState(0)
   /** 短锁：与签名防抖一起防止连点 */
@@ -372,11 +449,16 @@ function CommunityPage() {
     expandedCommentRecordIdRef.current = expandedCommentRecordId
   }, [expandedCommentRecordId])
 
+  useEffect(() => {
+    expandedCommentTargetTypeRef.current = expandedCommentTargetType
+  }, [expandedCommentTargetType])
+
   // 固定页面高度
   const [pageHeight, setPageHeight] = useState(0)
 
   // 分页状态
   const [offset, setOffset] = useState(0)
+  const offsetRef = useRef(0)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const PAGE_SIZE = 10
@@ -395,6 +477,7 @@ function CommunityPage() {
   /** 任意请求进行中（含静默），用于首次进入时骨架 */
   const [lbPreviewFetching, setLbPreviewFetching] = useState(false)
   const [feedSortBy, setFeedSortBy] = useState<CommunityFeedSortBy>('latest')
+  const [feedContentType, setFeedContentType] = useState<CommunityFeedContentType>('all')
   /** 动态筛选：漏斗展开后再显示排序/餐次/目标，避免占满一屏 */
   const [feedFilterExpanded, setFeedFilterExpanded] = useState(false)
   const [feedMealType, setFeedMealType] = useState<MealType | 'all'>('all')
@@ -413,10 +496,24 @@ function CommunityPage() {
   const commentTasksPromiseRef = useRef<Promise<Map<string, { status: string }>> | null>(null)
   /** 防止 refreshFeed 并发执行导致重复请求骨架屏闪烁 */
   const refreshFeedPendingRef = useRef(false)
+  /** 同步分页锁：避免 onScroll 与 onScrollToLower 在同一帧重复发起相同 offset 请求 */
+  const loadingMoreRef = useRef(false)
+  /** 当前列表查询条件；旧查询回包不再允许写入新列表 */
+  const feedQueryKeyRef = useRef('')
+  /** 列表请求世代；刷新、筛选、删除会递增，挡住旧分页回包 */
+  const feedRequestGenerationRef = useRef(0)
   /** 防止 useDidShow 在极短窗口内被触发两次（微信小程序 tab 切换偶发） */
   const useDidShowTsRef = useRef(0)
   /** ScrollView 触底事件在部分机型上不稳定，滚动兜底需要节流 */
   const scrollLoadMoreTsRef = useRef(0)
+
+  useEffect(() => {
+    feedListRef.current = feedList
+  }, [feedList])
+
+  useEffect(() => {
+    offsetRef.current = offset
+  }, [offset])
 
   const loadCheckinPreview = useCallback(async (silent = true) => {
     if (!getAccessToken()) {
@@ -468,6 +565,7 @@ function CommunityPage() {
         try {
           const parsed = typeof cachedFeedFilters === 'string' ? JSON.parse(cachedFeedFilters) : cachedFeedFilters
           setFeedSortBy((parsed?.sortBy as CommunityFeedSortBy) || 'latest')
+          setFeedContentType((parsed?.contentType as CommunityFeedContentType) || 'all')
           setFeedMealType((parsed?.mealType as MealType | 'all') || 'all')
           setFeedDietGoal((parsed?.dietGoal as DietGoal | 'all') || 'all')
           setFeedAuthorScope((parsed?.authorScope as CommunityAuthorScope) || 'all')
@@ -482,8 +580,11 @@ function CommunityPage() {
         try {
           const parsed = JSON.parse(cachedFeed)
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setFeedList(parsed)
-            setOffset(parsed.length) // 同步更新 offset，确保后续 loadMore 正确
+            const list = dedupeFeedItems(parsed)
+            feedListRef.current = list
+            offsetRef.current = list.length
+            setFeedList(list)
+            setOffset(list.length) // 同步更新 offset，确保后续 loadMore 正确
             hasCache = true
           }
         } catch (e) {
@@ -550,6 +651,7 @@ function CommunityPage() {
       }
       Taro.setStorageSync(CACHE_KEYS.FEED_FILTERS, JSON.stringify({
         sortBy: feedSortBy,
+        contentType: feedContentType,
         mealType: feedMealType,
         dietGoal: feedDietGoal,
         authorScope: feedAuthorScope,
@@ -577,17 +679,34 @@ function CommunityPage() {
     } catch (e) {
       console.error('清除缓存失败:', e)
     }
-  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy])
+  }, [feedAuthorScope, feedContentType, feedDietGoal, feedMealType, feedSortBy])
 
-  const updateFeedItem = useCallback((recordId: string, updater: (item: CommunityFeedItem) => CommunityFeedItem) => {
+  const syncCurrentFeedQueryKey = useCallback(() => {
+    const token = getAccessToken()
+    const params = buildFeedQueryParams(
+      feedSortBy,
+      feedContentType,
+      feedMealType,
+      feedDietGoal,
+      token ? feedAuthorScope : 'all',
+      priorityAuthorIds,
+      feedSearchAuthorId,
+    )
+    const key = buildFeedQueryKey(Boolean(token), params)
+    feedQueryKeyRef.current = key
+    return key
+  }, [feedAuthorScope, feedContentType, feedDietGoal, feedMealType, feedSortBy, feedSearchAuthorId, priorityAuthorIds])
+
+  const updateFeedItem = useCallback((recordId: string, updater: (item: CommunityFeedItem) => CommunityFeedItem, targetType: CommunityFeedTargetType = 'food_record') => {
+    const targetKey = `${targetType}:${recordId}`
     setFeedList((prev) => {
-      const next = prev.map((item) => item.record.id === recordId ? updater(item) : item)
+      const next = prev.map((item) => getFeedTargetKey(item) === targetKey ? updater(item) : item)
       saveToCache(next)
       return next
     })
   }, [saveToCache])
 
-  const getTempCommentsKey = useCallback((recordId: string) => `temp_comments_${recordId}`, [])
+  const getTempCommentsKey = useCallback((recordId: string, targetType: CommunityFeedTargetType = 'food_record') => `temp_comments_${targetType}_${recordId}`, [])
 
   const mergeFeedTempComments = useCallback(async (list: CommunityFeedItem[], includeTaskState: boolean = false) => {
     if (!getAccessToken()) return list
@@ -611,7 +730,7 @@ function CommunityPage() {
     }
 
     return list.map((item) => {
-      const tempCommentsKey = getTempCommentsKey(item.record.id)
+      const tempCommentsKey = getTempCommentsKey(getFeedTargetId(item), getFeedTargetType(item))
       let cachedTemp: Array<{ task_id: string; comment: FeedCommentItem; timestamp: number }> = []
       try {
         const raw = Taro.getStorageSync(tempCommentsKey)
@@ -729,7 +848,7 @@ function CommunityPage() {
    * @param force 是否强制刷新（忽略时间间隔）
    */
   const refreshFeed = useCallback(async (silent = false, force = false) => {
-    if (refreshFeedPendingRef.current) {
+    if (refreshFeedPendingRef.current && !force) {
       return
     }
     const now = Date.now()
@@ -744,19 +863,28 @@ function CommunityPage() {
       const token = getAccessToken()
       const params = buildFeedQueryParams(
         feedSortBy,
+        feedContentType,
         feedMealType,
         feedDietGoal,
         token ? feedAuthorScope : 'all',
         priorityAuthorIds,
         feedSearchAuthorId,
       )
+      const requestKey = buildFeedQueryKey(Boolean(token), params)
+      feedQueryKeyRef.current = requestKey
+      feedRequestGenerationRef.current += 1
+      const requestGeneration = feedRequestGenerationRef.current
+      loadingMoreRef.current = false
       // 已登录：好友 Feed；未登录：公共 Feed
       const res = token
         ? await communityGetFeed(undefined, 0, PAGE_SIZE, true, 5, params)
         : await communityGetPublicFeed(0, PAGE_SIZE, true, 5, params)
       const baseList = res.list || []
-      const list = token ? await mergeFeedTempComments(baseList, true) : baseList
+      const list = dedupeFeedItems(token ? await mergeFeedTempComments(baseList, true) : baseList)
+      if (feedQueryKeyRef.current !== requestKey || feedRequestGenerationRef.current !== requestGeneration) return
 
+      feedListRef.current = list
+      offsetRef.current = list.length
       setFeedList(list)
       setOffset(list.length)
       setHasMore(res.has_more ?? list.length >= PAGE_SIZE)
@@ -773,35 +901,55 @@ function CommunityPage() {
       setRefreshing(false)
       setShowSkeleton(false)
     }
-  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy, feedSearchAuthorId, mergeFeedTempComments, priorityAuthorIds, saveToCache])
+  }, [feedAuthorScope, feedContentType, feedDietGoal, feedMealType, feedSortBy, feedSearchAuthorId, mergeFeedTempComments, priorityAuthorIds, saveToCache])
 
   const loadMoreFeed = useCallback(async () => {
-    if (!hasMore || loadingMore) return
+    if (!hasMore || loadingMoreRef.current) return
+    loadingMoreRef.current = true
     setLoadingMore(true)
+    const requestedOffset = offsetRef.current
+    const requestGeneration = feedRequestGenerationRef.current
     try {
       const token = getAccessToken()
       const params = buildFeedQueryParams(
         feedSortBy,
+        feedContentType,
         feedMealType,
         feedDietGoal,
         token ? feedAuthorScope : 'all',
         priorityAuthorIds,
         feedSearchAuthorId,
       )
+      const requestKey = buildFeedQueryKey(Boolean(token), params)
+      if (!feedQueryKeyRef.current) {
+        feedQueryKeyRef.current = requestKey
+      }
       const res = token
-        ? await communityGetFeed(undefined, offset, PAGE_SIZE, true, 5, params)
-        : await communityGetPublicFeed(offset, PAGE_SIZE, true, 5, params)
+        ? await communityGetFeed(undefined, requestedOffset, PAGE_SIZE, true, 5, params)
+        : await communityGetPublicFeed(requestedOffset, PAGE_SIZE, true, 5, params)
       const baseList = res.list || []
-      const list = token ? await mergeFeedTempComments(baseList, false) : baseList
-      setFeedList(prev => [...prev, ...list])
-      setOffset(prev => prev + list.length)
-      setHasMore(res.has_more ?? list.length >= PAGE_SIZE)
+      const list = dedupeFeedItems(token ? await mergeFeedTempComments(baseList, false) : baseList)
+      if (
+        feedQueryKeyRef.current !== requestKey ||
+        feedRequestGenerationRef.current !== requestGeneration ||
+        offsetRef.current !== requestedOffset
+      ) {
+        return
+      }
+      const merged = appendUniqueFeedItems(feedListRef.current, list)
+      feedListRef.current = merged.list
+      offsetRef.current = merged.list.length
+      setFeedList(merged.list)
+      setOffset(merged.list.length)
+      setHasMore((res.has_more ?? list.length >= PAGE_SIZE) && merged.added > 0)
+      saveToCache(merged.list)
     } catch (e) {
       await showUnifiedApiError(e, '加载更多失败')
     } finally {
+      loadingMoreRef.current = false
       setLoadingMore(false)
     }
-  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy, feedSearchAuthorId, hasMore, loadingMore, mergeFeedTempComments, offset, priorityAuthorIds])
+  }, [feedAuthorScope, feedContentType, feedDietGoal, feedMealType, feedSortBy, feedSearchAuthorId, hasMore, mergeFeedTempComments, priorityAuthorIds, saveToCache])
 
   const handleCommunityScroll = useCallback((event) => {
     if (!hasMore || loadingMore) return
@@ -850,7 +998,7 @@ function CommunityPage() {
     } catch (e) {
       console.error('获取系统信息失败:', e)
     }
-  }, [feedAuthorScope, feedDietGoal, feedMealType, feedSortBy])
+  }, [feedAuthorScope, feedContentType, feedDietGoal, feedMealType, feedSortBy])
 
   useEffect(() => () => {
     if (feedScrollResetTimerRef.current) {
@@ -872,6 +1020,10 @@ function CommunityPage() {
     const handleFeedChanged = () => {
       lastFeedRefreshTime.current = 0
       clearCache()
+      feedRequestGenerationRef.current += 1
+      syncCurrentFeedQueryKey()
+      feedListRef.current = []
+      offsetRef.current = 0
       setFeedList([])
       setOffset(0)
       setHasMore(true)
@@ -881,12 +1033,13 @@ function CommunityPage() {
     return () => {
       Taro.eventCenter.off(COMMUNITY_FEED_CHANGED_EVENT, handleFeedChanged)
     }
-  }, [clearCache, refreshFeed])
+  }, [clearCache, refreshFeed, syncCurrentFeedQueryKey])
 
   useEffect(() => {
     try {
       Taro.setStorageSync(CACHE_KEYS.FEED_FILTERS, JSON.stringify({
         sortBy: feedSortBy,
+        contentType: feedContentType,
         mealType: feedMealType,
         dietGoal: feedDietGoal,
         authorScope: feedAuthorScope,
@@ -902,6 +1055,10 @@ function CommunityPage() {
       return
     }
     clearCache()
+    feedRequestGenerationRef.current += 1
+    syncCurrentFeedQueryKey()
+    feedListRef.current = []
+    offsetRef.current = 0
     setFeedList([])
     setOffset(0)
     setHasMore(true)
@@ -910,12 +1067,14 @@ function CommunityPage() {
   }, [
     clearCache,
     feedAuthorScope,
+    feedContentType,
     feedDietGoal,
     feedMealType,
     feedSortBy,
     loggedIn,
     priorityAuthorIds,
     refreshFeed,
+    syncCurrentFeedQueryKey,
   ])
 
   useShareAppMessage(() => ({
@@ -1070,9 +1229,13 @@ function CommunityPage() {
       return
     }
 
+    const targetType = getFeedTargetType(item)
+    const targetId = getFeedTargetId(item)
+    const targetKey = getFeedTargetKey(item)
+
     // 乐观更新：立即更新 UI
     const newList = feedList.map(f =>
-      f.record.id === item.record.id
+      getFeedTargetKey(f) === targetKey
         ? {
           ...f,
           liked: !f.liked,
@@ -1087,9 +1250,9 @@ function CommunityPage() {
 
     try {
       if (item.liked) {
-        await communityUnlike(item.record.id)
+        await communityUnlike(targetId, targetType)
       } else {
-        await communityLike(item.record.id)
+        await communityLike(targetId, targetType)
       }
     } catch (e) {
       // 失败则回滚
@@ -1101,19 +1264,22 @@ function CommunityPage() {
 
   const handleHideFeed = async (item: CommunityFeedItem) => {
     if (!getAccessToken()) return
-    if (hidingFeedIds.includes(item.record.id)) return
+    const targetType = getFeedTargetType(item)
+    const targetId = getFeedTargetId(item)
+    const targetKey = getFeedTargetKey(item)
+    if (hidingFeedIds.includes(targetKey)) return
     Taro.showModal({
       title: '删除动态',
-      content: '从圈子中删除这条动态？你的饮食记录不会被删除。',
+      content: `从圈子中删除这条动态？你的${targetType === 'exercise_log' ? '运动记录' : '饮食记录'}不会被删除。`,
       confirmText: '删除',
       confirmColor: '#ef4444',
       success: async (res) => {
         if (!res.confirm) return
-        setHidingFeedIds((prev) => prev.includes(item.record.id) ? prev : [...prev, item.record.id])
+        setHidingFeedIds((prev) => prev.includes(targetKey) ? prev : [...prev, targetKey])
         try {
-          await communityHideFeed(item.record.id)
+          await communityHideFeed(targetId, targetType)
           setFeedList((prev) => {
-            const next = prev.filter(f => f.record.id !== item.record.id)
+            const next = prev.filter(f => getFeedTargetKey(f) !== targetKey)
             saveToCache(next)
             return next
           })
@@ -1124,19 +1290,28 @@ function CommunityPage() {
         } catch (e) {
           await showUnifiedApiError(e, '操作失败')
         } finally {
-          setHidingFeedIds((prev) => prev.filter((id) => id !== item.record.id))
+          setHidingFeedIds((prev) => prev.filter((id) => id !== targetKey))
         }
       }
     })
   }
 
   /** 点击帖子图片/热量/营养进入识别记录详情 */
-  const handleViewDetail = (record: CommunityFeedItem['record']) => {
+  const handleViewDetail = (itemOrRecord: CommunityFeedItem | CommunityFeedItem['record']) => {
+    const maybeItem = 'record' in itemOrRecord ? itemOrRecord : null
+    const record = maybeItem ? maybeItem.record : itemOrRecord
     if (!record.id) {
       Taro.showToast({ title: '记录 ID 缺失', icon: 'none' })
       return
     }
     try {
+      if (maybeItem && isExerciseFeed(maybeItem)) {
+        const dateText = String(record.record_time || record.created_at || '').slice(0, 10)
+        Taro.navigateTo({
+          url: `${extraPkgUrl('/pages/exercise-record/index')}${dateText ? `?date=${encodeURIComponent(dateText)}` : ''}`
+        })
+        return
+      }
       Taro.navigateTo({
         url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}`
       })
@@ -1174,40 +1349,47 @@ function CommunityPage() {
       ? feedList.filter((item) => {
         const kw = feedSearchKeyword.trim().toLowerCase()
         const desc = (item.record.description || '').toLowerCase()
+        const exerciseText = [
+          item.record.exercise_desc,
+          item.record.exercise_type,
+          item.record.ai_reasoning
+        ].filter(Boolean).join(' ').toLowerCase()
         const author = (item.author.nickname || '').toLowerCase()
-        return desc.includes(kw) || author.includes(kw)
+        return desc.includes(kw) || exerciseText.includes(kw) || author.includes(kw)
       })
       : feedList)
 
   const feedFilterSummary = useMemo(() => {
     const sortLabel = FEED_SORT_OPTIONS.find(o => o.value === feedSortBy)?.label ?? ''
+    const contentLabel = FEED_CONTENT_OPTIONS.find(o => o.value === feedContentType)?.label ?? ''
     const mealLabel = FEED_MEAL_OPTIONS.find(o => o.value === feedMealType)?.label ?? ''
     const goalLabel = FEED_GOAL_OPTIONS.find(o => o.value === feedDietGoal)?.label ?? ''
     const scopeLabel = loggedIn
       ? (feedAuthorScope === 'priority' ? '特别关注' : feedAuthorScope === 'all' ? '仅好友' : '')
       : ''
-    return [sortLabel, mealLabel, goalLabel, scopeLabel].filter(Boolean).join(' · ')
-  }, [feedSortBy, feedMealType, feedDietGoal, feedAuthorScope, loggedIn])
+    return [sortLabel, contentLabel, mealLabel, goalLabel, scopeLabel].filter(Boolean).join(' · ')
+  }, [feedSortBy, feedContentType, feedMealType, feedDietGoal, feedAuthorScope, loggedIn])
 
   /** 筛选图标：展开面板或任一筛选项非默认时为主题色 */
   const feedFilterIconActive = useMemo(
     () =>
       feedFilterExpanded ||
       feedSortBy !== 'latest' ||
+      feedContentType !== 'all' ||
       feedMealType !== 'all' ||
       feedDietGoal !== 'all' ||
       (loggedIn && feedAuthorScope !== 'all'),
-    [feedFilterExpanded, feedSortBy, feedMealType, feedDietGoal, feedAuthorScope, loggedIn]
+    [feedFilterExpanded, feedSortBy, feedContentType, feedMealType, feedDietGoal, feedAuthorScope, loggedIn]
   )
 
   /** 暂存草稿的 key */
-  const draftKey = (recordId: string) => `comment_draft_${recordId}`
+  const draftKey = (recordId: string, targetType: CommunityFeedTargetType = 'food_record') => `comment_draft_${targetType}_${recordId}`
 
   /** 关闭评论输入栏并暂存草稿 */
   const closeCommentModal = () => {
     if (expandedCommentRecordId == null) return
     if (commentContent.trim()) {
-      try { Taro.setStorageSync(draftKey(expandedCommentRecordId), commentContent) } catch (_) {}
+      try { Taro.setStorageSync(draftKey(expandedCommentRecordId, expandedCommentTargetType), commentContent) } catch (_) {}
     }
     setCommentInputFocus(false)
     setExpandedCommentRecordId(null)
@@ -1251,28 +1433,29 @@ function CommunityPage() {
   }, [])
 
   /** 点击评论：打开底部输入栏，同一帖再点则关闭 */
-  const openCommentModal = (recordId: string, replyComment?: FeedCommentItem | null) => {
+  const openCommentModal = (recordId: string, replyComment?: FeedCommentItem | null, targetType: CommunityFeedTargetType = 'food_record') => {
     if (!getAccessToken()) {
       Taro.showToast({ title: '请先登录', icon: 'none' })
       return
     }
-    if (expandedCommentRecordId === recordId && !replyComment) {
+    if (expandedCommentRecordId === recordId && expandedCommentTargetType === targetType && !replyComment) {
       closeCommentModal()
       return
     }
     if (expandedCommentRecordId && commentContent.trim()) {
-      try { Taro.setStorageSync(draftKey(expandedCommentRecordId), commentContent) } catch (_) {}
+      try { Taro.setStorageSync(draftKey(expandedCommentRecordId, expandedCommentTargetType), commentContent) } catch (_) {}
     }
     let draft = ''
-    try { draft = Taro.getStorageSync(draftKey(recordId)) || '' } catch (_) {}
+    try { draft = Taro.getStorageSync(draftKey(recordId, targetType)) || '' } catch (_) {}
     setCommentInputFocus(false)
     setCommentContent(draft)
     setExpandedCommentRecordId(recordId)
+    setExpandedCommentTargetType(targetType)
     setReplyTargetComment(replyComment || null)
   }
 
-  const scrollToFeedCard = useCallback((recordId: string) => {
-    const nextTarget = `feed-card-${recordId}`
+  const scrollToFeedCard = useCallback((targetId: string, targetType: CommunityFeedTargetType = 'food_record') => {
+    const nextTarget = `feed-card-${targetType}-${targetId}`
     setFeedScrollIntoView(nextTarget)
     if (feedScrollResetTimerRef.current) {
       clearTimeout(feedScrollResetTimerRef.current)
@@ -1284,7 +1467,8 @@ function CommunityPage() {
 
   const ensureFeedReadyForNotification = useCallback(async (
     recordId: string,
-    targetCommentId?: string | null
+    targetCommentId?: string | null,
+    targetType: CommunityFeedTargetType = 'food_record'
   ): Promise<CommunityFeedItem | null> => {
     if (!getAccessToken()) return null
 
@@ -1298,9 +1482,10 @@ function CommunityPage() {
       saveToCache(nextList)
     }
 
-    let targetItem = accumulated.find((item) => item.record.id === recordId) || null
+    const targetKey = `${targetType}:${recordId}`
+    let targetItem = accumulated.find((item) => getFeedTargetKey(item) === targetKey) || null
     if (!targetItem) {
-      const contextRes = await communityGetFeedContext(recordId, 5)
+      const contextRes = await communityGetFeedContext(recordId, 5, targetType)
       const contextItem = contextRes.item
       if (!contextItem?.record?.id) return null
 
@@ -1308,7 +1493,7 @@ function CommunityPage() {
       targetItem = mergedContext[0] || null
       if (!targetItem) return null
 
-      accumulated = [targetItem, ...accumulated.filter((item) => item.record.id !== recordId)]
+      accumulated = [targetItem, ...accumulated.filter((item) => getFeedTargetKey(item) !== targetKey)]
       syncAccumulatedState(accumulated, nextHasMore)
     }
 
@@ -1320,10 +1505,10 @@ function CommunityPage() {
       return targetItem
     }
 
-    const res = await communityGetComments(recordId)
+    const res = await communityGetComments(recordId, targetType)
     const comments = res.list || []
     accumulated = await mergeFeedTempComments(
-      accumulated.map((item) => item.record.id === recordId ? {
+      accumulated.map((item) => getFeedTargetKey(item) === targetKey ? {
         ...item,
         comments,
         comment_count: Math.max(item.comment_count || 0, comments.length)
@@ -1331,7 +1516,7 @@ function CommunityPage() {
       true
     )
     syncAccumulatedState(accumulated, nextHasMore)
-    targetItem = accumulated.find((item) => item.record.id === recordId) || null
+    targetItem = accumulated.find((item) => getFeedTargetKey(item) === targetKey) || null
     return targetItem
   }, [feedList, hasMore, mergeFeedTempComments, saveToCache])
 
@@ -1344,9 +1529,12 @@ function CommunityPage() {
     clearPendingCommunityNotificationTarget()
     pendingNotificationNavigationRef.current = true
     try {
+      const targetType = pendingTarget.targetType || 'food_record'
+      const targetId = pendingTarget.targetId || pendingTarget.recordId
       const targetItem = await ensureFeedReadyForNotification(
-        pendingTarget.recordId,
-        pendingTarget.commentId
+        targetId,
+        pendingTarget.commentId,
+        targetType
       )
 
       if (!targetItem) {
@@ -1354,7 +1542,7 @@ function CommunityPage() {
         return
       }
 
-      scrollToFeedCard(pendingTarget.recordId)
+      scrollToFeedCard(targetId, targetType)
       const shouldOpenReplyComposer = pendingTarget.notificationType === 'comment_received'
         || pendingTarget.notificationType === 'reply_received'
         || Boolean(pendingTarget.commentId || pendingTarget.parentCommentId)
@@ -1369,7 +1557,7 @@ function CommunityPage() {
             : null)
           || null
 
-        openCommentModal(pendingTarget.recordId, replyTarget)
+        openCommentModal(targetId, replyTarget, targetType)
       }
     } catch (e) {
       console.error('处理互动消息跳转失败:', e)
@@ -1379,29 +1567,30 @@ function CommunityPage() {
     }
   }, [ensureFeedReadyForNotification, openCommentModal, scrollToFeedCard])
 
-  const handleLoadAllComments = async (recordId: string) => {
+  const handleLoadAllComments = async (recordId: string, targetType: CommunityFeedTargetType = 'food_record') => {
     if (!getAccessToken()) {
       Taro.showToast({ title: '请先登录', icon: 'none' })
       return
     }
     try {
-      const res = await communityGetComments(recordId)
+      const res = await communityGetComments(recordId, targetType)
       const comments = res.list || []
-      const mergedList = await mergeFeedTempComments(feedList.map((item) => item.record.id === recordId ? {
+      const targetKey = `${targetType}:${recordId}`
+      const mergedList = await mergeFeedTempComments(feedList.map((item) => getFeedTargetKey(item) === targetKey ? {
         ...item,
         comments,
         comment_count: Math.max(item.comment_count || 0, comments.length)
       } : item), true)
       setFeedList(mergedList)
       saveToCache(mergedList)
-      setFeedCommentPreviewExpanded((prev) => ({ ...prev, [recordId]: true }))
+      setFeedCommentPreviewExpanded((prev) => ({ ...prev, [targetKey]: true }))
     } catch (e) {
       await showUnifiedApiError(e, '获取评论失败')
     }
   }
 
-  const removeTempCommentFromStorage = useCallback((recordId: string, comment: FeedCommentItem) => {
-    const key = getTempCommentsKey(recordId)
+  const removeTempCommentFromStorage = useCallback((recordId: string, comment: FeedCommentItem, targetType: CommunityFeedTargetType = 'food_record') => {
+    const key = getTempCommentsKey(recordId, targetType)
     try {
       const raw = Taro.getStorageSync(key)
       const cachedTemp: Array<{ task_id: string; comment: FeedCommentItem; timestamp: number }> = Array.isArray(raw) ? raw : []
@@ -1417,15 +1606,16 @@ function CommunityPage() {
   }, [getTempCommentsKey])
 
   const handleRemoveCommentLocally = useCallback(
-    (recordId: string, comment: FeedCommentItem) => {
+    (recordId: string, comment: FeedCommentItem, targetType: CommunityFeedTargetType = 'food_record') => {
+      const targetKey = `${targetType}:${recordId}`
       setFeedList((prev) => {
-        const target = prev.find((i) => i.record.id === recordId)
+        const target = prev.find((i) => getFeedTargetKey(i) === targetKey)
         const comments = target?.comments || []
         const subtreeIds = buildCommentSubtreeIds(comments, comment.id)
         const nextComments = removeCommentSubtreeFromList(comments, comment.id)
         const removedCount = comments.length - nextComments.length
         const next = prev.map((it) => {
-          if (it.record.id !== recordId) return it
+          if (getFeedTargetKey(it) !== targetKey) return it
           return {
             ...it,
             comments: nextComments,
@@ -1436,7 +1626,7 @@ function CommunityPage() {
         queueMicrotask(() => {
           setReplyTargetComment((rt) => {
             if (!rt) return null
-            if (expandedCommentRecordId !== recordId) return rt
+            if (expandedCommentRecordId !== recordId || expandedCommentTargetType !== targetType) return rt
             if (subtreeIds.has(rt.id)) return null
             return rt
           })
@@ -1444,11 +1634,12 @@ function CommunityPage() {
         return next
       })
     },
-    [saveToCache, expandedCommentRecordId]
+    [saveToCache, expandedCommentRecordId, expandedCommentTargetType]
   )
 
   const handleCommentLongPress = useCallback(
     (recordId: string, feedItem: CommunityFeedItem, comment: FeedCommentItem) => {
+      const targetType = getFeedTargetType(feedItem)
       commentLongPressIgnoreRef.current = true
       setTimeout(() => {
         commentLongPressIgnoreRef.current = false
@@ -1470,20 +1661,20 @@ function CommunityPage() {
       }).then((res) => {
         if (!res.confirm) return
         if (comment._is_pending || comment.id.startsWith('pending_')) {
-          handleRemoveCommentLocally(recordId, comment)
+          handleRemoveCommentLocally(recordId, comment, targetType)
           Taro.showToast({ title: '已删除', icon: 'success' })
           return
         }
         if (comment._is_temp) {
-          removeTempCommentFromStorage(recordId, comment)
-          handleRemoveCommentLocally(recordId, comment)
+          removeTempCommentFromStorage(recordId, comment, targetType)
+          handleRemoveCommentLocally(recordId, comment, targetType)
           Taro.showToast({ title: '已删除', icon: 'success' })
           return
         }
         Taro.showLoading({ title: '删除中...', mask: true })
-        void communityDeleteComment(recordId, comment.id)
+        void communityDeleteComment(recordId, comment.id, targetType)
           .then(() => {
-            handleRemoveCommentLocally(recordId, comment)
+            handleRemoveCommentLocally(recordId, comment, targetType)
             Taro.showToast({ title: '已删除', icon: 'success' })
           })
           .catch(async (e: Error) => {
@@ -1527,6 +1718,8 @@ function CommunityPage() {
     }, COMMENT_TAP_LOCK_MS)
 
     const recordId = expandedCommentRecordId
+    const targetType = expandedCommentTargetTypeRef.current
+    const targetKey = `${targetType}:${recordId}`
     const replySnap = replyTargetComment
     const clientKey = `pending_${now}_${Math.random().toString(36).slice(2, 9)}`
     const uid = String(Taro.getStorageSync('user_id') || '')
@@ -1535,7 +1728,9 @@ function CommunityPage() {
     const optimistic: FeedCommentItem = {
       id: clientKey,
       user_id: uid || 'pending',
-      record_id: recordId,
+      record_id: targetType === 'food_record' ? recordId : null,
+      target_type: targetType,
+      target_id: recordId,
       parent_comment_id: replySnap?.id ?? null,
       reply_to_user_id: replySnap?.user_id ?? null,
       reply_to_nickname: replySnap?.nickname,
@@ -1549,6 +1744,7 @@ function CommunityPage() {
     setFeedList((prev) => {
       const next = prev.map((item) => {
         if (item.record.id !== recordId) return item
+        if (getFeedTargetKey(item) !== targetKey) return item
         const currentComments = item.comments || []
         const nextComments = [...currentComments, optimistic]
         return {
@@ -1562,7 +1758,7 @@ function CommunityPage() {
     })
 
     try {
-      Taro.removeStorageSync(draftKey(recordId))
+      Taro.removeStorageSync(draftKey(recordId, targetType))
     } catch (_) {}
     commentContentRef.current = ''
     setCommentContent('')
@@ -1573,7 +1769,7 @@ function CommunityPage() {
       const { comment } = await communityPostComment(recordId, trimmed, {
         parent_comment_id: replySnap?.id,
         reply_to_user_id: replySnap?.user_id
-      })
+      }, targetType)
       const displayComment: FeedCommentItem = {
         ...comment,
         reply_to_nickname: replySnap?.nickname || comment.reply_to_nickname || '',
@@ -1584,7 +1780,7 @@ function CommunityPage() {
 
       setFeedList((prev) => {
         const next = prev.map((item) => {
-          if (item.record.id !== recordId) return item
+          if (getFeedTargetKey(item) !== targetKey) return item
           const comments = item.comments || []
           const idx = comments.findIndex((c) => c.id === clientKey)
           if (idx === -1) {
@@ -1604,7 +1800,7 @@ function CommunityPage() {
         saveToCache(next)
         return next
       })
-      if (expandedCommentRecordIdRef.current === recordId && !commentContentRef.current.trim()) {
+      if (expandedCommentRecordIdRef.current === recordId && expandedCommentTargetTypeRef.current === targetType && !commentContentRef.current.trim()) {
         setCommentInputFocus(false)
         expandedCommentRecordIdRef.current = null
         setExpandedCommentRecordId(null)
@@ -1614,7 +1810,7 @@ function CommunityPage() {
       lastCommentSubmitRef.current = { signature: '', timestamp: 0 }
       setFeedList((prev) => {
         const next = prev.map((item) => {
-          if (item.record.id !== recordId) return item
+          if (getFeedTargetKey(item) !== targetKey) return item
           const comments = (item.comments || []).filter((c) => c.id !== clientKey)
           return {
             ...item,
@@ -1945,11 +2141,20 @@ function CommunityPage() {
                 )
               ) : (
                 <View className='feed-list'>
-                  {filteredFeedList.map((item) => (
-                    <View key={item.record.id}>
+                  {filteredFeedList.map((item) => {
+                    const targetType = getFeedTargetType(item)
+                    const targetId = getFeedTargetId(item)
+                    const targetKey = getFeedTargetKey(item)
+                    const exercise = isExerciseFeed(item)
+                    const feedTime = String(item.record.record_time || item.record.created_at || '')
+                    const exerciseTitle = item.record.exercise_type || '运动打卡'
+                    const exerciseDesc = item.record.exercise_desc || item.record.description || ''
+                    const exerciseKcal = Number(item.record.calories_burned ?? item.record.total_calories ?? 0)
+                    return (
+                    <View key={targetKey}>
                       <View
-                        id={`feed-card-${item.record.id}`}
-                        className={`feed-card${item.record.description?.trim() && !item.record.image_path ? ' feed-card-text-only' : ''}`}
+                        id={`feed-card-${targetType}-${targetId}`}
+                        className={`feed-card${(item.record.description?.trim() || exerciseDesc) && !item.record.image_path ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''}`}
                       >
                         <View className='feed-card-moments'>
                           <View className='feed-card-avatar-col'>
@@ -1966,19 +2171,21 @@ function CommunityPage() {
                               <Text className='user-name'>{item.is_mine ? '我' : item.author.nickname}</Text>
                               <View className='feed-sub-meta-row'>
                                 <Text className='post-time'>
-                                  {MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · {formatFeedTime(item.record.record_time)}
+                                  {exercise ? `运动打卡 · ${formatFeedTime(feedTime)}` : `${MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · ${formatFeedTime(feedTime)}`}
                                 </Text>
-                                {item.record.diet_goal && item.record.diet_goal !== 'none' ? (
+                                {exercise ? (
+                                  <Text className='feed-tag-plain feed-tag-exercise'>{exerciseTitle}</Text>
+                                ) : item.record.diet_goal && item.record.diet_goal !== 'none' ? (
                                   <Text className='feed-tag-plain'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
                                 ) : null}
                               </View>
                             </View>
-                            {item.record.description &&
+                            {(exercise ? exerciseDesc : item.record.description) &&
                               (item.record.image_path ? (
-                                <Text className='feed-content'>{item.record.description}</Text>
+                                <Text className='feed-content'>{exercise ? exerciseDesc : item.record.description}</Text>
                               ) : (
                                 <View className='feed-content-wrap feed-content-wrap--text-only'>
-                                  <Text className='feed-content'>{item.record.description}</Text>
+                                  <Text className='feed-content'>{exercise ? exerciseDesc : item.record.description}</Text>
                                 </View>
                               ))}
                             {item.record.image_path && (
@@ -1986,7 +2193,7 @@ function CommunityPage() {
                                 className='feed-image feed-tap-to-detail'
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  handleViewDetail(item.record)
+                                  handleViewDetail(item)
                                 }}
                               >
                                 <Image
@@ -2001,23 +2208,25 @@ function CommunityPage() {
                                 className='feed-calorie feed-tap-to-detail'
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  handleViewDetail(item.record)
+                                  handleViewDetail(item)
                                 }}
                               >
                                 <Text className='feed-calorie-num'>
-                                  {Number(item.record.total_calories || 0).toFixed(0)}
+                                  {(exercise ? exerciseKcal : Number(item.record.total_calories || 0)).toFixed(0)}
                                 </Text>
-                                <Text className='feed-calorie-unit'> kcal</Text>
+                                <Text className='feed-calorie-unit'> kcal{exercise ? ' 消耗' : ''}</Text>
                               </View>
                               <View
                                 className='feed-macros feed-tap-to-detail'
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  handleViewDetail(item.record)
+                                  handleViewDetail(item)
                                 }}
                               >
                                 <Text className='feed-macros-text'>
-                                  蛋白质 {Math.round(item.record.total_protein ?? 0)}g · 碳水 {Math.round(item.record.total_carbs ?? 0)}g · 脂肪 {Math.round(item.record.total_fat ?? 0)}g
+                                  {exercise
+                                    ? (item.record.ai_reasoning || 'AI 已根据运动内容估算消耗')
+                                    : `蛋白质 ${Math.round(item.record.total_protein ?? 0)}g · 碳水 ${Math.round(item.record.total_carbs ?? 0)}g · 脂肪 ${Math.round(item.record.total_fat ?? 0)}g`}
                                 </Text>
                               </View>
                             </View>
@@ -2036,14 +2245,14 @@ function CommunityPage() {
                               </View>
                               <View
                                 className='action-item feed-action-comment'
-                                onClick={() => openCommentModal(item.record.id)}
+                                onClick={() => openCommentModal(targetId, null, targetType)}
                               >
                                 <Text className='action-icon iconfont icon-pinglun' />
                                 <Text className='action-count'>评论 {item.comment_count || 0}</Text>
                               </View>
                               {item.is_mine ? (
                                 <View
-                                  className={`action-item action-delete ${hidingFeedIds.includes(item.record.id) ? 'is-deleting' : ''}`}
+                                  className={`action-item action-delete ${hidingFeedIds.includes(targetKey) ? 'is-deleting' : ''}`}
                                   onClick={() => handleHideFeed(item)}
                                 >
                                   <Text className='action-icon action-delete-icon'>×</Text>
@@ -2053,8 +2262,8 @@ function CommunityPage() {
                             </View>
                             {(item.comments?.length ?? 0) > 0 && (() => {
                               const list = item.comments || []
-                              const rid = item.record.id
-                              const isListExpanded = feedCommentPreviewExpanded[rid] === true
+                              const rid = targetId
+                              const isListExpanded = feedCommentPreviewExpanded[targetKey] === true
                               const shouldFoldList = list.length > 3 && !isListExpanded
                               const displayed = shouldFoldList ? list.slice(0, 2) : list
                               const foldedHiddenCount = shouldFoldList ? list.length - 2 : 0
@@ -2074,7 +2283,7 @@ function CommunityPage() {
                                         commentLongPressIgnoreRef.current = false
                                         return
                                       }
-                                      openCommentModal(item.record.id, c)
+                                      openCommentModal(targetId, c, targetType)
                                     }}
                                   >
                                     <View className='comment-avatar'>
@@ -2106,7 +2315,7 @@ function CommunityPage() {
                                     className='feed-comments-expand-row'
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      setFeedCommentPreviewExpanded((prev) => ({ ...prev, [rid]: true }))
+                                      setFeedCommentPreviewExpanded((prev) => ({ ...prev, [targetKey]: true }))
                                     }}
                                   >
                                     <Text className='feed-comments-expand-text'>
@@ -2119,7 +2328,7 @@ function CommunityPage() {
                                     className='feed-comments-expand-row feed-comments-collapse-row'
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      setFeedCommentPreviewExpanded((prev) => ({ ...prev, [rid]: false }))
+                                      setFeedCommentPreviewExpanded((prev) => ({ ...prev, [targetKey]: false }))
                                     }}
                                   >
                                     <Text className='feed-comments-expand-text'>收起</Text>
@@ -2130,7 +2339,7 @@ function CommunityPage() {
                                     className='feed-comments-more'
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      void handleLoadAllComments(item.record.id)
+                                      void handleLoadAllComments(targetId, targetType)
                                     }}
                                   >
                                     <Text className='feed-comments-more-text'>查看全部评论</Text>
@@ -2143,7 +2352,8 @@ function CommunityPage() {
                         </View>
                       </View>
                     </View>
-                  ))}
+                    )
+                  })}
                 </View>
               )}
               {/* 加载更多提示 */}
@@ -2236,6 +2446,20 @@ function CommunityPage() {
                   ))}
                 </View>
               </View>
+              <View className='feed-filter-labeled-row'>
+                <Text className='feed-filter-label'>内容</Text>
+                <View className='feed-filter-row-inner'>
+                  {FEED_CONTENT_OPTIONS.map((opt) => (
+                    <View
+                      key={opt.value}
+                      className={`feed-filter-chip ${feedContentType === opt.value ? 'active' : ''}`}
+                      onClick={() => setFeedContentType(opt.value)}
+                    >
+                      <Text className='feed-filter-chip-text'>{opt.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
               {loggedIn ? (
                 <View className='feed-filter-labeled-row'>
                   <Text className='feed-filter-label'>来源</Text>
@@ -2263,6 +2487,7 @@ function CommunityPage() {
                   </View>
                 </View>
               ) : null}
+              {feedContentType !== 'exercise_log' ? (
               <View className='feed-filter-labeled-row'>
                 <Text className='feed-filter-label'>餐次</Text>
                 <View className='feed-filter-row-inner'>
@@ -2277,6 +2502,8 @@ function CommunityPage() {
                   ))}
                 </View>
               </View>
+              ) : null}
+              {feedContentType !== 'exercise_log' ? (
               <View className='feed-filter-labeled-row'>
                 <Text className='feed-filter-label'>目标</Text>
                 <View className='feed-filter-row-inner'>
@@ -2291,6 +2518,7 @@ function CommunityPage() {
                   ))}
                 </View>
               </View>
+              ) : null}
             </ScrollView>
           </View>
         </View>

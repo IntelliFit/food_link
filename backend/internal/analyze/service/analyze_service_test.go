@@ -452,6 +452,28 @@ func TestParseBingHTMLResults(t *testing.T) {
 	assert.Equal(t, "https://example.com/yogurt", results[0].URL)
 }
 
+func TestParseSo360HTMLResults(t *testing.T) {
+	raw := `<html><body><ul><li class="res-list"><h3><a href="https://example.com/chocliz">伊利巧乐兹 型号 规格 - 京东</a></h3><p class="res-desc">伊利 巧乐兹 低糖 双享 抹茶 可可 冰淇淋50克*6支。</p></li></ul></body></html>`
+
+	results := parseSo360HTMLResults(raw, 3)
+
+	require.Len(t, results, 1)
+	assert.Equal(t, "伊利巧乐兹 型号 规格 - 京东", results[0].Title)
+	assert.Contains(t, results[0].Snippet, "50克")
+	assert.Equal(t, "https://example.com/chocliz", results[0].URL)
+}
+
+func TestParseSogouHTMLResults(t *testing.T) {
+	raw := `<html><body><div class="vrwrap"><h3><a href="https://example.com/baxi">八喜 牛奶冰淇淋 经典口味测评</a></h3><p class="str_info">每杯 90g，牛奶香浓，适合夏季囤货。</p></div></body></html>`
+
+	results := parseSogouHTMLResults(raw, 3)
+
+	require.Len(t, results, 1)
+	assert.Equal(t, "八喜 牛奶冰淇淋 经典口味测评", results[0].Title)
+	assert.Contains(t, results[0].Snippet, "90g")
+	assert.Equal(t, "https://example.com/baxi", results[0].URL)
+}
+
 func TestBuildPromptExperimentalMode(t *testing.T) {
 	input := AnalyzeInput{
 		MealType: "dinner",
@@ -905,6 +927,201 @@ func TestAnalyzeService_AnalyzeImageStandardWebSearchIgnoresIrrelevantSearchEvid
 	assert.Equal(t, 100.0, items[0]["estimatedWeightGrams"])
 }
 
+func TestAnalyzeService_AnalyzeImageStandardWebSearchRejectsGenericBrandPages(t *testing.T) {
+	mode := "standard_web_search"
+	doubaoClient := &multiImageLLMClient{err: assert.AnError}
+	gemini3Client := &sequenceMultiImageLLMClient{results: []map[string]any{{
+		"description": "八喜牛奶冰淇淋与巧乐兹抹茶雪糕",
+		"items": []any{
+			map[string]any{"name": "八喜牛奶冰淇淋", "type": "snack", "estimatedWeightGrams": 90.0, "waterMl": 54.0},
+			map[string]any{"name": "伊利巧乐兹低糖抹茶可可味雪糕", "type": "snack", "estimatedWeightGrams": 75.0, "waterMl": 45.0},
+		},
+	}}}
+	searcher := &mockWebSearcher{results: []WebSearchResult{
+		{Title: "伊利 官网", Snippet: "伊利相信，所有的生命都需要被滋养，才能向这个世界展示多姿多彩的活力。", URL: "https://www.yili.com/"},
+		{Title: "伊利 招聘官网", Snippet: "伊利校园招聘，热招职位，投递简历。", URL: "http://yili.hotjob.cn/"},
+	}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureWebSearcher(searcher)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/icecream-bars.jpg",
+		ExecutionMode: &mode,
+	})
+
+	require.NoError(t, err)
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "no_relevant_evidence", meta["status"])
+	assert.Equal(t, "no_relevant_results", meta["web_search_status"])
+	assert.Equal(t, "first_pass_kept", meta["calibration_method"])
+	relevance := meta["web_search_relevance"].([]map[string]any)
+	require.NotEmpty(t, relevance)
+	for _, row := range relevance {
+		assert.Equal(t, "irrelevant", row["status"])
+	}
+	items := toItems(result["items"])
+	require.Len(t, items, 2)
+	assert.Equal(t, 90.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, 75.0, items[1]["estimatedWeightGrams"])
+	require.Empty(t, doubaoClient.imageSetCalls)
+	require.Len(t, gemini3Client.imageSetCalls, 1)
+}
+
+func TestAnalyzeService_AnalyzeImageStandardWebSearchKeepsFirstPassWhenRelevantButNoSpecApplies(t *testing.T) {
+	mode := "standard_web_search"
+	doubaoClient := &multiImageLLMClient{err: assert.AnError}
+	gemini3Client := &sequenceMultiImageLLMClient{results: []map[string]any{{
+		"description": "八喜牛奶冰淇淋",
+		"items": []any{
+			map[string]any{"name": "八喜牛奶冰淇淋", "type": "snack", "estimatedWeightGrams": 90.0, "waterMl": 54.0},
+		},
+	}}}
+	searcher := &mockWebSearcher{results: []WebSearchResult{
+		{Title: "八喜牛奶冰淇淋 营养成分表", Snippet: "每100g能量约210kcal，蛋白质3.5g，脂肪12g。", URL: "https://example.com/baxi"},
+	}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureWebSearcher(searcher)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/baxi.jpg",
+		ExecutionMode: &mode,
+	})
+
+	require.NoError(t, err)
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "no_applicable_specs", meta["status"])
+	assert.Equal(t, "no_applicable_specs", meta["web_search_status"])
+	assert.Equal(t, "first_pass_kept", meta["calibration_method"])
+	assert.Equal(t, 0, meta["calibration_applied_count"])
+	items := toItems(result["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, 90.0, items[0]["estimatedWeightGrams"])
+	require.Len(t, gemini3Client.imageSetCalls, 1)
+}
+
+func TestAnalyzeService_AnalyzeImageStandardWebSearchAppliesTitleSpecWithoutPrefix(t *testing.T) {
+	mode := "standard_web_search"
+	doubaoClient := &multiImageLLMClient{err: assert.AnError}
+	gemini3Client := &sequenceMultiImageLLMClient{results: []map[string]any{{
+		"description": "巧乐兹抹茶雪糕",
+		"items": []any{
+			map[string]any{"name": "伊利巧乐兹低糖抹茶可可味雪糕", "type": "snack", "estimatedWeightGrams": 75.0, "waterMl": 45.0},
+		},
+	}}}
+	searcher := &mockWebSearcher{results: []WebSearchResult{
+		{Title: "伊利巧乐兹低糖抹茶可可味雪糕 50g", Snippet: "抹茶可可味，营养成分表显示能量799千焦。", URL: "https://example.com/chocliz"},
+	}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureWebSearcher(searcher)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/chocliz.jpg",
+		ExecutionMode: &mode,
+	})
+
+	require.NoError(t, err)
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "applied", meta["status"])
+	assert.Equal(t, "applied", meta["web_search_status"])
+	assert.Equal(t, 1, meta["calibration_applied_count"])
+	items := toItems(result["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, 50.0, items[0]["estimatedWeightGrams"])
+}
+
+func TestAnalyzeService_AnalyzeImageStandardWebSearchSpecOverridesGrossWeight(t *testing.T) {
+	mode := "standard_web_search"
+	doubaoClient := &multiImageLLMClient{err: assert.AnError}
+	gemini3Client := &sequenceMultiImageLLMClient{results: []map[string]any{{
+		"description": "巧乐兹抹茶雪糕",
+		"items": []any{
+			map[string]any{
+				"name":                 "伊利巧乐兹低糖抹茶可可味雪糕",
+				"type":                 "snack",
+				"grossWeightGrams":     75.0,
+				"estimatedWeightGrams": 75.0,
+				"waterMl":              45.0,
+			},
+		},
+	}}}
+	searcher := &mockWebSearcher{results: []WebSearchResult{
+		{Title: "伊利巧乐兹低糖抹茶可可味雪糕 50克*6支 参数配置", Snippet: "低糖抹茶可可味，6支装。", URL: "https://example.com/chocliz-pack"},
+	}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureWebSearcher(searcher)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/chocliz.jpg",
+		ExecutionMode: &mode,
+	})
+
+	require.NoError(t, err)
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "applied", meta["status"])
+	items := toItems(result["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, 50.0, items[0]["grossWeightGrams"])
+	assert.Equal(t, 50.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, 100.0, items[0]["ediblePortionRatio"])
+}
+
+func TestAnalyzeService_AnalyzeImageStandardWebSearchAppliesMultipackTitleSpec(t *testing.T) {
+	mode := "standard_web_search"
+	doubaoClient := &multiImageLLMClient{err: assert.AnError}
+	gemini3Client := &sequenceMultiImageLLMClient{results: []map[string]any{{
+		"description": "巧乐兹抹茶雪糕",
+		"items": []any{
+			map[string]any{"name": "伊利巧乐兹低糖抹茶可可味雪糕", "type": "snack", "estimatedWeightGrams": 75.0, "waterMl": 45.0},
+		},
+	}}}
+	searcher := &mockWebSearcher{results: []WebSearchResult{
+		{Title: "伊利巧乐兹低糖抹茶可可味雪糕 50克*6支 参数配置", Snippet: "低糖抹茶可可味，6支装。", URL: "https://example.com/chocliz-pack"},
+	}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureWebSearcher(searcher)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/chocliz.jpg",
+		ExecutionMode: &mode,
+	})
+
+	require.NoError(t, err)
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "applied", meta["status"])
+	items := toItems(result["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, 50.0, items[0]["estimatedWeightGrams"])
+}
+
+func TestAnalyzeService_AnalyzeImageStandardWebSearchRejectsDifferentFlavorTitleSpec(t *testing.T) {
+	mode := "standard_web_search"
+	doubaoClient := &multiImageLLMClient{err: assert.AnError}
+	gemini3Client := &sequenceMultiImageLLMClient{results: []map[string]any{{
+		"description": "巧乐兹抹茶雪糕",
+		"items": []any{
+			map[string]any{"name": "伊利巧乐兹低糖抹茶可可味雪糕", "type": "snack", "estimatedWeightGrams": 70.0, "waterMl": 42.0},
+		},
+	}}}
+	searcher := &mockWebSearcher{results: []WebSearchResult{
+		{Title: "伊利巧乐兹 巧恋果 雪糕 75g参数配置", Snippet: "巧恋果口味，非低糖抹茶可可味。", URL: "https://example.com/chocliz-other"},
+	}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureWebSearcher(searcher)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/chocliz.jpg",
+		ExecutionMode: &mode,
+	})
+
+	require.NoError(t, err)
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "no_applicable_specs", meta["status"])
+	assert.Equal(t, "no_applicable_specs", meta["web_search_status"])
+	items := toItems(result["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, 70.0, items[0]["estimatedWeightGrams"])
+}
+
 func TestAnalyzeService_AnalyzeImageStrictUsesGemini35SinglePass(t *testing.T) {
 	strict := "strict"
 	doubaoClient := &multiImageLLMClient{err: assert.AnError}
@@ -1110,9 +1327,10 @@ func TestBuildStandardImageSearchQueriesPrioritizesPackagedFoods(t *testing.T) {
 	})
 
 	require.Len(t, queries, 3)
-	assert.Contains(t, queries[0], "光明大粒草莓酸奶")
-	assert.Contains(t, queries[0], "净含量")
-	assert.Contains(t, strings.Join(queries, "\n"), "哈尔滨啤酒")
+	assert.Contains(t, queries[0], "光明")
+	assert.Contains(t, queries[0], "酸奶")
+	assert.Contains(t, queries[0], "型号 规格 多少克")
+	assert.Contains(t, strings.Join(queries, "\n"), "哈尔滨 啤酒")
 	assert.NotContains(t, strings.Join(queries, "\n"), "丰盛晚餐")
 }
 
@@ -1121,7 +1339,7 @@ func TestFilterRelevantWebSearchEvidence(t *testing.T) {
 		Query: "原味软冰淇淋蛋筒 食物 外观 营养",
 		Results: []WebSearchResult{
 			{Title: "原 （汉语文字）_百度百科", Snippet: "原字的本义是水的源头"},
-			{Title: "蜜雪冰城冰淇淋蛋筒 热量", Snippet: "原味冰淇淋蛋筒营养与规格信息"},
+			{Title: "蜜雪冰城冰淇淋蛋筒 热量", Snippet: "原味冰淇淋蛋筒约 100g，营养与规格信息"},
 		},
 	}}
 	baseItems := []map[string]any{{"name": "原味软冰淇淋蛋筒"}}

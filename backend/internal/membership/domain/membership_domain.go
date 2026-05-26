@@ -88,6 +88,8 @@ type UserCreditBonusEvent struct {
 	BonusDate      string         `gorm:"column:bonus_date" json:"bonus_date"`
 	Credits        int            `gorm:"column:credits" json:"credits"`
 	SourceRecordID *string        `gorm:"column:source_record_id" json:"source_record_id,omitempty"`
+	SourceScope    *string        `gorm:"column:source_scope" json:"source_scope,omitempty"`
+	SourceKey      *string        `gorm:"column:source_key" json:"source_key,omitempty"`
 	Meta           map[string]any `gorm:"column:meta;serializer:json" json:"meta,omitempty"`
 	CreatedAt      *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
 	UpdatedAt      *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`

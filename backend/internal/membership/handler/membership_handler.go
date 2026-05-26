@@ -9,6 +9,7 @@ import (
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
+	"food_link/backend/internal/membership/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -20,7 +21,7 @@ type MembershipService interface {
 	CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error)
 	WechatNotify(ctx context.Context, paymentID string) error
 	HandleWechatNotify(ctx context.Context, headers http.Header, body []byte) (map[string]any, error)
-	ClaimSharePosterReward(ctx context.Context, userID, recordID string) (map[string]any, error)
+	ClaimSharePosterReward(ctx context.Context, userID string, input service.SharePosterRewardClaimInput) (map[string]any, error)
 }
 
 type MembershipHandler struct {
@@ -120,15 +121,9 @@ func (h *MembershipHandler) WechatNotify(c *gin.Context) {
 
 // POST /api/membership/rewards/share-poster/claim
 func (h *MembershipHandler) ClaimSharePosterReward(c *gin.Context) {
-	var body struct {
-		RecordID string `json:"record_id"`
-	}
+	var body service.SharePosterRewardClaimInput
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
-		return
-	}
-	if body.RecordID == "" {
-		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "record_id required", HTTPStatus: 400})
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
@@ -136,7 +131,7 @@ func (h *MembershipHandler) ClaimSharePosterReward(c *gin.Context) {
 		response.Error(c, commonerrors.ErrUnauthorized)
 		return
 	}
-	data, err := h.svc.ClaimSharePosterReward(c.Request.Context(), userID, body.RecordID)
+	data, err := h.svc.ClaimSharePosterReward(c.Request.Context(), userID, body)
 	if err != nil {
 		response.Error(c, err)
 		return

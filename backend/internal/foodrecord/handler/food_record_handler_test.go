@@ -67,10 +67,12 @@ func (m *mockUploadService) UploadFile(fileBytes []byte, ext, contentType string
 }
 
 type mockNutritionService struct {
-	items []map[string]any
-	logs  []domain.FoodUnresolvedLog
-	item  *domain.PackagedFood
-	err   error
+	items                    []map[string]any
+	logs                     []domain.FoodUnresolvedLog
+	item                     *domain.PackagedFood
+	err                      error
+	submitPackagedExtractErr error
+	submitPackagedInputs     []service.SubmitPackagedProductExtractInput
 }
 
 func (m *mockNutritionService) Search(ctx context.Context, query string, limit int) ([]map[string]any, error) {
@@ -98,6 +100,10 @@ func (m *mockNutritionService) SubmitPackagedNutritionLabelTask(ctx context.Cont
 	return "label-task-1", nil
 }
 func (m *mockNutritionService) SubmitPackagedProductExtractTask(ctx context.Context, userID string, input service.SubmitPackagedProductExtractInput) (string, error) {
+	m.submitPackagedInputs = append(m.submitPackagedInputs, input)
+	if m.submitPackagedExtractErr != nil {
+		return "", m.submitPackagedExtractErr
+	}
 	if m.err != nil {
 		return "", m.err
 	}
@@ -124,6 +130,7 @@ func setupRouter(h *FoodRecordHandler) *gin.Engine {
 	r.POST("/api/packaged-food", h.CreatePackagedFood)
 	r.POST("/api/packaged-food/nutrition-label/recognize", h.RecognizePackagedNutritionLabel)
 	r.POST("/api/packaged-food/nutrition-label/submit", h.SubmitPackagedNutritionLabelTask)
+	r.POST("/api/packaged-food/extract/submit", h.SubmitPackagedProductExtractTask)
 	r.POST("/api/critical-samples", h.SaveCriticalSamples)
 	return r
 }
@@ -332,6 +339,57 @@ func TestSubmitPackagedNutritionLabelTask(t *testing.T) {
 	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "label-task-1", data["task_id"])
+}
+
+func TestSubmitPackagedProductExtractTask(t *testing.T) {
+	mockSvc := &mockNutritionService{}
+	h := NewFoodRecordHandler(nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"image_urls":           []string{"https://cdn.example.com/front.jpg", "https://cdn.example.com/nutrition.jpg", "https://cdn.example.com/extra.jpg"},
+		"recognized_name_hint": "蛋白棒",
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/packaged-food/extract/submit", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "packaged-extract-task-1", data["task_id"])
+	assert.Len(t, mockSvc.submitPackagedInputs, 1)
+	assert.Len(t, mockSvc.submitPackagedInputs[0].ImageURLs, 3)
+	assert.Equal(t, "蛋白棒", mockSvc.submitPackagedInputs[0].RecognizedNameHint)
+}
+
+func TestSubmitPackagedProductExtractTaskRejectsImageCount(t *testing.T) {
+	tests := []struct {
+		name      string
+		imageURLs []string
+	}{
+		{name: "empty", imageURLs: []string{}},
+		{name: "too many", imageURLs: []string{"1", "2", "3", "4"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockSvc := &mockNutritionService{
+				submitPackagedExtractErr: &commonerrors.AppError{Code: 10002, Message: "同一种商品最多上传 3 张包装图片", HTTPStatus: 400},
+			}
+			h := NewFoodRecordHandler(nil, nil, mockSvc)
+			r := setupRouter(h)
+
+			body, _ := json.Marshal(map[string]any{"image_urls": tt.imageURLs})
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest(http.MethodPost, "/api/packaged-food/extract/submit", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+		})
+	}
 }
 
 func TestSaveCriticalSamples(t *testing.T) {

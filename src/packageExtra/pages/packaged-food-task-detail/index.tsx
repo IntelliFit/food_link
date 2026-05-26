@@ -68,6 +68,37 @@ function describeBlockedReason(auto?: PackagedAutoIngestResult | null) {
   }
 }
 
+function detailResultTitle(task?: AnalysisTask | null, packaged?: PackagedProductExtractResult | null, reward?: PackagedUploadRewardResult | null) {
+  if (!task) return '正在读取任务'
+  if (task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') return '这次没有分析成功'
+  if (isTaskStillRunning(task.status)) return '已收到，后台分析中'
+  if (reward?.awarded) return '新商品已入库'
+  if (reward?.already_exists || packaged?.auto_ingest_result?.upsert_action === 'updated') return '商品库已有同商品'
+  if (packaged?.auto_ingest_result?.status === 'ingested') return '商品已入库'
+  return '暂未入库'
+}
+
+function detailResultDesc(task?: AnalysisTask | null, packaged?: PackagedProductExtractResult | null, reward?: PackagedUploadRewardResult | null) {
+  if (!task) return '请稍等片刻，正在读取任务状态。'
+  if (task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') {
+    return taskFailureMessage(task)
+  }
+  if (isTaskStillRunning(task.status)) {
+    return '系统已收到这一种商品的照片，正在识别品牌、品名、净含量和营养成分表。你可以稍后刷新查看结果。'
+  }
+  const auto = packaged?.auto_ingest_result
+  if (reward?.awarded) {
+    return `识别结果已写入食物库，因为数据库原本没有这个商品，本次奖励积分 +${Number(reward.reward_credits) || 1}。`
+  }
+  if (reward?.already_exists || auto?.upsert_action === 'updated') {
+    return '识别结果匹配到数据库已有同商品，本次会用于更新数据，但不重复发放奖励积分。'
+  }
+  if (auto?.status === 'ingested') {
+    return '商品已成功入库；本次未发放奖励积分，请以奖励记录为准。'
+  }
+  return describeBlockedReason(auto)
+}
+
 function statusText(task?: AnalysisTask | null, packaged?: PackagedProductExtractResult | null, reward?: PackagedUploadRewardResult | null) {
   if (!task) return '加载中'
   if (task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') return '分析失败'
@@ -175,6 +206,11 @@ function PackagedFoodTaskDetailPage() {
 
         {packaged ? (
           <>
+            <View className={`detail-card result ${reward?.awarded || auto?.status === 'ingested' ? 'success' : 'warning'}`}>
+              <Text className='detail-card-title'>{detailResultTitle(task, packaged, reward)}</Text>
+              <Text className='detail-card-desc'>{detailResultDesc(task, packaged, reward)}</Text>
+            </View>
+
             <View className='detail-card'>
               <Text className='detail-card-title'>结构化结果</Text>
               <View className='field-grid'>

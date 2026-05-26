@@ -16,6 +16,7 @@ import (
 
 type fakePetRepo struct {
 	pet              *petdomain.UserPet
+	profile          *repo.UserProfile
 	dailyScores      map[string]*petdomain.UserPetDailyScore
 	events           map[string]*petdomain.UserPetEvent
 	foodByDate       map[string][]repo.FoodRecord
@@ -61,6 +62,14 @@ func (f *fakePetRepo) CreatePet(ctx context.Context, pet *petdomain.UserPet) err
 	return nil
 }
 
+func (f *fakePetRepo) GetUserProfile(ctx context.Context, userID string) (*repo.UserProfile, error) {
+	if f.profile == nil {
+		return nil, nil
+	}
+	copy := *f.profile
+	return &copy, nil
+}
+
 func (f *fakePetRepo) UpdatePet(ctx context.Context, petID string, updates map[string]any) error {
 	if f.pet == nil || f.pet.ID != petID {
 		return errors.New("pet not found")
@@ -71,7 +80,42 @@ func (f *fakePetRepo) UpdatePet(ctx context.Context, petID string, updates map[s
 	if v, ok := updates["today_status"].(string); ok {
 		f.pet.TodayStatus = v
 	}
+	if v, ok := updates["pet_seed"].(string); ok {
+		f.pet.PetSeed = v
+	}
+	if v, ok := updates["name"].(string); ok {
+		f.pet.Name = v
+	}
+	if v, ok := updates["color"].(string); ok {
+		f.pet.Color = v
+	}
+	if v, ok := updates["shape"].(string); ok {
+		f.pet.Shape = v
+	}
+	if v, ok := updates["pattern"].(string); ok {
+		f.pet.Pattern = v
+	}
+	if v, ok := updates["accessory"].(string); ok {
+		f.pet.Accessory = v
+	}
+	if v, ok := updates["personality"].(string); ok {
+		f.pet.Personality = v
+	}
+	if v, ok := updates["meta"].(map[string]any); ok {
+		f.pet.Meta = v
+	}
 	return nil
+}
+
+func (f *fakePetRepo) SelectAppearance(ctx context.Context, userID, petID string, updates map[string]any) (*petdomain.UserPet, error) {
+	if f.pet == nil || f.pet.ID != petID || f.pet.UserID != userID {
+		return nil, errors.New("pet not found")
+	}
+	if err := f.UpdatePet(ctx, petID, updates); err != nil {
+		return nil, err
+	}
+	copy := *f.pet
+	return &copy, nil
 }
 
 func (f *fakePetRepo) AddPetExperience(ctx context.Context, petID string, delta int) (*petdomain.UserPet, error) {
@@ -219,6 +263,12 @@ func (f *fakePetRepo) RerollAppearance(ctx context.Context, userID, petID string
 	if v, ok := updates["accessory"].(string); ok {
 		f.pet.Accessory = v
 	}
+	if v, ok := updates["personality"].(string); ok {
+		f.pet.Personality = v
+	}
+	if v, ok := updates["meta"].(map[string]any); ok {
+		f.pet.Meta = v
+	}
 	copy := *f.pet
 	ledger := &membershipdomain.UserEarnedCreditLedger{BalanceAfter: f.balance}
 	return &copy, ledger, nil
@@ -226,6 +276,14 @@ func (f *fakePetRepo) RerollAppearance(ctx context.Context, userID, petID string
 
 func TestSummaryCreatesStablePetAndSingleOfflineEvent(t *testing.T) {
 	fake := newFakePetRepo()
+	goal := "fat_loss"
+	fake.profile = &repo.UserProfile{
+		ID:       "user-1",
+		DietGoal: &goal,
+		HealthCondition: map[string]any{
+			"daily_life_activity_level": "moderate",
+		},
+	}
 	fake.foodByDate["2026-05-19"] = []repo.FoodRecord{
 		{MealType: "breakfast", TotalCalories: 500, TotalProtein: 30},
 		{MealType: "lunch", TotalCalories: 700, TotalProtein: 35},
@@ -241,12 +299,54 @@ func TestSummaryCreatesStablePetAndSingleOfflineEvent(t *testing.T) {
 	assert.Equal(t, 1, fake.createPetCalls)
 	assert.Equal(t, 1, fake.createEventCalls)
 	assert.Equal(t, 1, first.Event.CreditReward)
+	assert.Equal(t, archetypeLightLifestyle, first.Pet.Archetype)
+	assert.True(t, first.Pet.NeedsSelection)
+	require.Len(t, first.Pet.SelectionCandidates, 3)
+	assert.NotEmpty(t, first.Pet.MatchReasons)
 
 	second, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
 	require.NoError(t, err)
 	assert.Equal(t, first.Pet.ID, second.Pet.ID)
 	assert.Equal(t, 1, fake.createPetCalls)
 	assert.Equal(t, 1, fake.createEventCalls)
+}
+
+func TestSummaryAutoProfileMatchPreservesExistingProgress(t *testing.T) {
+	fake := newFakePetRepo()
+	goal := "muscle_gain"
+	fake.profile = &repo.UserProfile{
+		ID:       "user-1",
+		DietGoal: &goal,
+		HealthCondition: map[string]any{
+			"diet_preference": []any{"high_protein"},
+		},
+	}
+	fake.pet = &petdomain.UserPet{
+		ID:          "pet-1",
+		UserID:      "user-1",
+		PetSeed:     "pet:user-1:old",
+		Name:        "旧名字",
+		Color:       "mint",
+		Shape:       "round",
+		Pattern:     "pattern-0",
+		Accessory:   "leaf",
+		Personality: "gentle",
+		Level:       4,
+		Experience:  345,
+		TotalEvents: 7,
+		Meta:        map[string]any{},
+	}
+	svc := NewService(fake)
+
+	result, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
+	require.NoError(t, err)
+	assert.Equal(t, "旧名字", result.Pet.Name)
+	assert.Equal(t, 4, result.Pet.Level)
+	assert.Equal(t, 345, result.Pet.Experience)
+	assert.Equal(t, 7, result.Pet.TotalEvents)
+	assert.Equal(t, archetypeProteinGuardian, result.Pet.Archetype)
+	assert.True(t, result.Pet.FreeProfileRematchAvailable)
+	require.Len(t, result.Pet.SelectionCandidates, 3)
 }
 
 func TestClaimEventIsIdempotent(t *testing.T) {
@@ -318,4 +418,39 @@ func TestRerollAppearanceRequiresEnoughEarnedCredits(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, result)
 	assert.True(t, IsInsufficientEarnedCreditsError(err))
+}
+
+func TestSelectAppearanceUsesCurrentCandidatesAndIsIdempotent(t *testing.T) {
+	fake := newFakePetRepo()
+	goal := "fat_loss"
+	fake.profile = &repo.UserProfile{ID: "user-1", DietGoal: &goal}
+	svc := NewService(fake)
+
+	summary, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
+	require.NoError(t, err)
+	require.Len(t, summary.Pet.SelectionCandidates, 3)
+	candidate := summary.Pet.SelectionCandidates[1]
+
+	first, err := svc.SelectAppearance(context.Background(), "user-1", candidate.ID)
+	require.NoError(t, err)
+	require.NotNil(t, first)
+	assert.Equal(t, candidate.PetSeed, first.Pet.PetSeed)
+	assert.Equal(t, candidate.Name, first.Pet.Name)
+	assert.False(t, first.Pet.NeedsSelection)
+
+	second, err := svc.SelectAppearance(context.Background(), "user-1", candidate.ID)
+	require.NoError(t, err)
+	require.NotNil(t, second)
+	assert.Equal(t, first.Pet.PetSeed, second.Pet.PetSeed)
+}
+
+func TestSelectAppearanceRejectsUnknownCandidate(t *testing.T) {
+	fake := newFakePetRepo()
+	svc := NewService(fake)
+
+	_, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
+	require.NoError(t, err)
+	result, err := svc.SelectAppearance(context.Background(), "user-1", "missing")
+	require.Error(t, err)
+	assert.Nil(t, result)
 }

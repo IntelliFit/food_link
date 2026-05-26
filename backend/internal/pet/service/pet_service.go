@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	nextLevelExp          = 100
-	maxOfflineCreditDaily = 1
+	nextLevelExp            = 100
+	maxOfflineCreditDaily   = 1
 	petAppearanceRerollCost = 5
 )
 
@@ -33,7 +33,9 @@ var (
 type PetRepo interface {
 	GetPetByUserID(ctx context.Context, userID string) (*petdomain.UserPet, error)
 	CreatePet(ctx context.Context, pet *petdomain.UserPet) error
+	GetUserProfile(ctx context.Context, userID string) (*repo.UserProfile, error)
 	UpdatePet(ctx context.Context, petID string, updates map[string]any) error
+	SelectAppearance(ctx context.Context, userID, petID string, updates map[string]any) (*petdomain.UserPet, error)
 	AddPetExperience(ctx context.Context, petID string, delta int) (*petdomain.UserPet, error)
 	ListFoodRecordsByDate(ctx context.Context, userID, date string) ([]repo.FoodRecord, error)
 	SumWaterByDate(ctx context.Context, userID, date string) (int, error)
@@ -67,20 +69,26 @@ type Summary struct {
 }
 
 type PetProfile struct {
-	ID            string `json:"id"`
-	PetSeed       string `json:"pet_seed"`
-	Name          string `json:"name"`
-	Color         string `json:"color"`
-	Shape         string `json:"shape"`
-	Pattern       string `json:"pattern"`
-	Accessory     string `json:"accessory"`
-	Personality   string `json:"personality"`
-	Level         int    `json:"level"`
-	Experience    int    `json:"experience"`
-	LevelExp      int    `json:"level_exp"`
-	NextLevelExp  int    `json:"next_level_exp"`
-	LevelProgress int    `json:"level_progress"`
-	TotalEvents   int    `json:"total_events"`
+	ID                          string                `json:"id"`
+	PetSeed                     string                `json:"pet_seed"`
+	Name                        string                `json:"name"`
+	Color                       string                `json:"color"`
+	Shape                       string                `json:"shape"`
+	Pattern                     string                `json:"pattern"`
+	Accessory                   string                `json:"accessory"`
+	Personality                 string                `json:"personality"`
+	Level                       int                   `json:"level"`
+	Experience                  int                   `json:"experience"`
+	LevelExp                    int                   `json:"level_exp"`
+	NextLevelExp                int                   `json:"next_level_exp"`
+	LevelProgress               int                   `json:"level_progress"`
+	TotalEvents                 int                   `json:"total_events"`
+	Archetype                   string                `json:"archetype,omitempty"`
+	MatchReasons                []string              `json:"match_reasons,omitempty"`
+	NeedsSelection              bool                  `json:"needs_selection"`
+	SelectionCandidates         []AppearanceCandidate `json:"selection_candidates,omitempty"`
+	FreeProfileRematchAvailable bool                  `json:"free_profile_rematch_available"`
+	GrowthUnlocks               []string              `json:"growth_unlocks,omitempty"`
 }
 
 type DailyScoreView struct {
@@ -130,6 +138,10 @@ type AppearanceRerollResult struct {
 	EarnedCreditsBalance *int       `json:"earned_credits_balance,omitempty"`
 }
 
+type AppearanceSelectResult struct {
+	Pet PetProfile `json:"pet"`
+}
+
 func ChinaToday() string {
 	return time.Now().In(chinaTZ()).Format("2006-01-02")
 }
@@ -141,7 +153,15 @@ func (s *Service) Summary(ctx context.Context, userID, date string) (*Summary, e
 	if _, err := parseChinaDate(date); err != nil {
 		return nil, err
 	}
-	pet, err := s.ensurePet(ctx, userID)
+	profile, err := s.repo.GetUserProfile(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	pet, err := s.ensurePet(ctx, userID, profile)
+	if err != nil {
+		return nil, err
+	}
+	pet, err = s.ensureProfileMatch(ctx, userID, pet, profile)
 	if err != nil {
 		return nil, err
 	}
@@ -228,32 +248,43 @@ func (s *Service) ClaimEvent(ctx context.Context, userID, eventID string) (*Clai
 }
 
 func (s *Service) RerollAppearance(ctx context.Context, userID string) (*AppearanceRerollResult, error) {
-	pet, err := s.ensurePet(ctx, userID)
+	profile, err := s.repo.GetUserProfile(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	newSeed := fmt.Sprintf("pet:%s:%d", userID, time.Now().UnixNano())
-	appearance := appearanceFromSeed(newSeed)
+	pet, err := s.ensurePet(ctx, userID, profile)
+	if err != nil {
+		return nil, err
+	}
+	match := buildProfileMatch(userID, profile)
+	style := []string{"pretty", "quirky", "stable"}[stableHash(fmt.Sprintf("pet:%s:%d:style", userID, time.Now().UnixNano()))%3]
+	candidate := candidateFromSeed(fmt.Sprintf("pet:%s:reroll:%d", userID, time.Now().UnixNano()), match.Archetype, style, match.Reasons)
+	meta := mergedProfileMeta(pet.Meta, match)
+	meta["selected_candidate_id"] = candidate.ID
+	meta["last_reroll_at"] = time.Now().Format(time.RFC3339)
 	updatedPet, ledger, err := s.repo.RerollAppearance(ctx, userID, pet.ID, map[string]any{
-		"pet_seed":   newSeed,
-		"color":      appearance.Color,
-		"shape":      appearance.Shape,
-		"pattern":    appearance.Pattern,
-		"accessory":  appearance.Accessory,
-		"updated_at": time.Now(),
+		"pet_seed":    candidate.PetSeed,
+		"color":       candidate.Color,
+		"shape":       candidate.Shape,
+		"pattern":     candidate.Pattern,
+		"accessory":   candidate.Accessory,
+		"personality": candidate.Personality,
+		"meta":        meta,
+		"updated_at":  time.Now(),
 	}, petAppearanceRerollCost, map[string]any{
-		"cost":       petAppearanceRerollCost,
-		"pet_id":     pet.ID,
-		"old_seed":   pet.PetSeed,
-		"new_seed":   newSeed,
-		"old_color":  pet.Color,
-		"new_color":  appearance.Color,
-		"old_shape":  pet.Shape,
-		"new_shape":  appearance.Shape,
-		"old_pattern": pet.Pattern,
-		"new_pattern": appearance.Pattern,
+		"cost":          petAppearanceRerollCost,
+		"pet_id":        pet.ID,
+		"old_seed":      pet.PetSeed,
+		"new_seed":      candidate.PetSeed,
+		"old_color":     pet.Color,
+		"new_color":     candidate.Color,
+		"old_shape":     pet.Shape,
+		"new_shape":     candidate.Shape,
+		"old_pattern":   pet.Pattern,
+		"new_pattern":   candidate.Pattern,
 		"old_accessory": pet.Accessory,
-		"new_accessory": appearance.Accessory,
+		"new_accessory": candidate.Accessory,
+		"archetype":     match.Archetype,
 	})
 	if err != nil {
 		return nil, err
@@ -269,34 +300,128 @@ func (s *Service) RerollAppearance(ctx context.Context, userID string) (*Appeara
 	return result, nil
 }
 
+func (s *Service) SelectAppearance(ctx context.Context, userID, candidateID string) (*AppearanceSelectResult, error) {
+	candidateID = strings.TrimSpace(candidateID)
+	if candidateID == "" {
+		return nil, fmt.Errorf("candidate_id required")
+	}
+	profile, err := s.repo.GetUserProfile(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	pet, err := s.ensurePet(ctx, userID, profile)
+	if err != nil {
+		return nil, err
+	}
+	pet, err = s.ensureProfileMatch(ctx, userID, pet, profile)
+	if err != nil {
+		return nil, err
+	}
+	candidates := candidatesFromMeta(pet.Meta)
+	var selected *AppearanceCandidate
+	for _, candidate := range candidates {
+		if candidate.ID == candidateID {
+			c := candidate
+			selected = &c
+			break
+		}
+	}
+	if selected == nil {
+		return nil, fmt.Errorf("candidate not found")
+	}
+	meta := cloneMeta(pet.Meta)
+	meta["selected_candidate_id"] = selected.ID
+	meta["free_profile_rematch_used"] = true
+	meta["selected_at"] = time.Now().Format(time.RFC3339)
+	updatedPet, err := s.repo.SelectAppearance(ctx, userID, pet.ID, map[string]any{
+		"pet_seed":    selected.PetSeed,
+		"name":        selected.Name,
+		"color":       selected.Color,
+		"shape":       selected.Shape,
+		"pattern":     selected.Pattern,
+		"accessory":   selected.Accessory,
+		"personality": selected.Personality,
+		"meta":        meta,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if updatedPet == nil {
+		return nil, nil
+	}
+	return &AppearanceSelectResult{Pet: profileFromPet(updatedPet)}, nil
+}
+
 func IsInsufficientEarnedCreditsError(err error) bool {
 	return errors.Is(err, repo.ErrInsufficientEarnedCredits)
 }
 
-func (s *Service) ensurePet(ctx context.Context, userID string) (*petdomain.UserPet, error) {
+func (s *Service) ensurePet(ctx context.Context, userID string, profile *repo.UserProfile) (*petdomain.UserPet, error) {
 	pet, err := s.repo.GetPetByUserID(ctx, userID)
 	if err != nil || pet != nil {
 		return pet, err
 	}
-	seed := "pet:" + userID
-	appearance := appearanceFromSeed(seed)
+	match := buildProfileMatch(userID, profile)
+	candidate := match.Candidates[0]
+	meta := profileMatchMeta(match)
 	pet = &petdomain.UserPet{
 		UserID:      userID,
-		PetSeed:     seed,
-		Name:        appearance.Name,
-		Color:       appearance.Color,
-		Shape:       appearance.Shape,
-		Pattern:     appearance.Pattern,
-		Accessory:   appearance.Accessory,
-		Personality: appearance.Personality,
+		PetSeed:     candidate.PetSeed,
+		Name:        candidate.Name,
+		Color:       candidate.Color,
+		Shape:       candidate.Shape,
+		Pattern:     candidate.Pattern,
+		Accessory:   candidate.Accessory,
+		Personality: candidate.Personality,
 		Level:       1,
 		Experience:  0,
 		TodayStatus: "calm",
+		Meta:        meta,
 	}
 	if err := s.repo.CreatePet(ctx, pet); err != nil {
 		return nil, err
 	}
 	return s.repo.GetPetByUserID(ctx, userID)
+}
+
+func (s *Service) ensureProfileMatch(ctx context.Context, userID string, pet *petdomain.UserPet, profile *repo.UserProfile) (*petdomain.UserPet, error) {
+	if pet == nil {
+		return nil, nil
+	}
+	match := buildProfileMatch(userID, profile)
+	currentVersion := intFromMeta(pet.Meta, "profile_match_version")
+	currentFingerprint := stringFromMeta(pet.Meta, "profile_fingerprint")
+	selectedID := stringFromMeta(pet.Meta, "selected_candidate_id")
+	if currentVersion >= petProfileMatchVersion && currentFingerprint == match.Fingerprint {
+		return pet, nil
+	}
+	meta := mergedProfileMeta(pet.Meta, match)
+	if currentVersion == 0 {
+		meta["free_profile_rematch_used"] = false
+	}
+	updates := map[string]any{
+		"meta": meta,
+	}
+	if selectedID == "" || currentVersion == 0 {
+		candidate := match.Candidates[0]
+		updates["pet_seed"] = candidate.PetSeed
+		updates["color"] = candidate.Color
+		updates["shape"] = candidate.Shape
+		updates["pattern"] = candidate.Pattern
+		updates["accessory"] = candidate.Accessory
+		updates["personality"] = candidate.Personality
+		if strings.TrimSpace(pet.Name) == "" {
+			updates["name"] = candidate.Name
+		}
+	}
+	if err := s.repo.UpdatePet(ctx, pet.ID, updates); err != nil {
+		return nil, err
+	}
+	updated, err := s.repo.GetPetByUserID(ctx, userID)
+	if err != nil || updated == nil {
+		return updated, err
+	}
+	return updated, nil
 }
 
 func (s *Service) ensureDailyScore(ctx context.Context, userID string, pet *petdomain.UserPet, date string) (*petdomain.UserPetDailyScore, bool, error) {
@@ -474,27 +599,197 @@ func stableHash(value string) uint32 {
 	return h.Sum32()
 }
 
+func profileMatchMeta(match profileMatch) map[string]any {
+	return map[string]any{
+		"profile_match_version":     match.Version,
+		"profile_fingerprint":       match.Fingerprint,
+		"archetype":                 match.Archetype,
+		"match_reasons":             match.Reasons,
+		"selection_candidates":      match.Candidates,
+		"selected_candidate_id":     "",
+		"free_profile_rematch_used": false,
+		"profile_matched_at":        time.Now().Format(time.RFC3339),
+	}
+}
+
+func mergedProfileMeta(existing map[string]any, match profileMatch) map[string]any {
+	meta := cloneMeta(existing)
+	meta["profile_match_version"] = match.Version
+	meta["profile_fingerprint"] = match.Fingerprint
+	meta["archetype"] = match.Archetype
+	meta["match_reasons"] = match.Reasons
+	meta["selection_candidates"] = match.Candidates
+	meta["profile_matched_at"] = time.Now().Format(time.RFC3339)
+	if _, ok := meta["free_profile_rematch_used"]; !ok {
+		meta["free_profile_rematch_used"] = false
+	}
+	if _, ok := meta["selected_candidate_id"]; !ok {
+		meta["selected_candidate_id"] = ""
+	}
+	return meta
+}
+
+func cloneMeta(input map[string]any) map[string]any {
+	output := map[string]any{}
+	for key, value := range input {
+		output[key] = value
+	}
+	return output
+}
+
+func candidatesFromMeta(meta map[string]any) []AppearanceCandidate {
+	if len(meta) == 0 {
+		return nil
+	}
+	switch rows := meta["selection_candidates"].(type) {
+	case []AppearanceCandidate:
+		return rows
+	case []any:
+		candidates := make([]AppearanceCandidate, 0, len(rows))
+		for _, row := range rows {
+			if candidate, ok := appearanceCandidateFromAny(row); ok {
+				candidates = append(candidates, candidate)
+			}
+		}
+		return candidates
+	default:
+		return nil
+	}
+}
+
+func appearanceCandidateFromAny(value any) (AppearanceCandidate, bool) {
+	row, ok := value.(map[string]any)
+	if !ok {
+		return AppearanceCandidate{}, false
+	}
+	return AppearanceCandidate{
+		ID:           stringFromMap(row, "id"),
+		PetSeed:      stringFromMap(row, "pet_seed"),
+		Name:         stringFromMap(row, "name"),
+		Color:        stringFromMap(row, "color"),
+		Shape:        stringFromMap(row, "shape"),
+		Pattern:      stringFromMap(row, "pattern"),
+		Accessory:    stringFromMap(row, "accessory"),
+		Personality:  stringFromMap(row, "personality"),
+		Archetype:    stringFromMap(row, "archetype"),
+		Style:        stringFromMap(row, "style"),
+		Score:        intFromAny(row["score"]),
+		MatchReasons: stringSliceFromAny(row["match_reasons"]),
+	}, true
+}
+
+func stringFromMap(row map[string]any, key string) string {
+	if row == nil {
+		return ""
+	}
+	if value, ok := row[key].(string); ok {
+		return value
+	}
+	return ""
+}
+
+func stringFromMeta(meta map[string]any, key string) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	if value, ok := meta[key].(string); ok {
+		return value
+	}
+	return ""
+}
+
+func intFromMeta(meta map[string]any, key string) int {
+	if len(meta) == 0 {
+		return 0
+	}
+	return intFromAny(meta[key])
+}
+
+func intFromAny(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case float32:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+func boolFromMeta(meta map[string]any, key string) bool {
+	if len(meta) == 0 {
+		return false
+	}
+	value, ok := meta[key].(bool)
+	return ok && value
+}
+
+func stringSliceFromAny(value any) []string {
+	switch rows := value.(type) {
+	case []string:
+		return rows
+	case []any:
+		items := make([]string, 0, len(rows))
+		for _, row := range rows {
+			if text := strings.TrimSpace(fmt.Sprint(row)); text != "" {
+				items = append(items, text)
+			}
+		}
+		return items
+	default:
+		return nil
+	}
+}
+
 func profileFromPet(pet *petdomain.UserPet) PetProfile {
 	if pet == nil {
 		return PetProfile{}
 	}
 	levelExp := pet.Experience % nextLevelExp
+	candidates := candidatesFromMeta(pet.Meta)
+	selectedID := stringFromMeta(pet.Meta, "selected_candidate_id")
 	return PetProfile{
-		ID:            pet.ID,
-		PetSeed:       pet.PetSeed,
-		Name:          pet.Name,
-		Color:         pet.Color,
-		Shape:         pet.Shape,
-		Pattern:       pet.Pattern,
-		Accessory:     pet.Accessory,
-		Personality:   pet.Personality,
-		Level:         pet.Level,
-		Experience:    pet.Experience,
-		LevelExp:      levelExp,
-		NextLevelExp:  nextLevelExp,
-		LevelProgress: int(math.Round(float64(levelExp) / float64(nextLevelExp) * 100)),
-		TotalEvents:   pet.TotalEvents,
+		ID:                          pet.ID,
+		PetSeed:                     pet.PetSeed,
+		Name:                        pet.Name,
+		Color:                       pet.Color,
+		Shape:                       pet.Shape,
+		Pattern:                     pet.Pattern,
+		Accessory:                   pet.Accessory,
+		Personality:                 pet.Personality,
+		Level:                       pet.Level,
+		Experience:                  pet.Experience,
+		LevelExp:                    levelExp,
+		NextLevelExp:                nextLevelExp,
+		LevelProgress:               int(math.Round(float64(levelExp) / float64(nextLevelExp) * 100)),
+		TotalEvents:                 pet.TotalEvents,
+		Archetype:                   stringFromMeta(pet.Meta, "archetype"),
+		MatchReasons:                stringSliceFromAny(pet.Meta["match_reasons"]),
+		NeedsSelection:              selectedID == "" && len(candidates) > 0,
+		SelectionCandidates:         candidates,
+		FreeProfileRematchAvailable: !boolFromMeta(pet.Meta, "free_profile_rematch_used") && len(candidates) > 0,
+		GrowthUnlocks:               growthUnlocksForLevel(pet.Level),
 	}
+}
+
+func growthUnlocksForLevel(level int) []string {
+	unlocks := []string{"Lv.1 默认形象"}
+	if level >= 3 {
+		unlocks = append(unlocks, "Lv.3 更多状态文案")
+	}
+	if level >= 5 {
+		unlocks = append(unlocks, "Lv.5 配饰候选权重提升")
+	}
+	if level >= 8 {
+		unlocks = append(unlocks, "Lv.8 动作与表情文案池")
+	}
+	return unlocks
 }
 
 func dailyScoreView(row *petdomain.UserPetDailyScore) DailyScoreView {

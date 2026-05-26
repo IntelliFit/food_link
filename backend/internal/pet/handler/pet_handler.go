@@ -16,6 +16,7 @@ type PetService interface {
 	Summary(ctx context.Context, userID, date string) (*service.Summary, error)
 	ClaimEvent(ctx context.Context, userID, eventID string) (*service.ClaimResult, error)
 	RerollAppearance(ctx context.Context, userID string) (*service.AppearanceRerollResult, error)
+	SelectAppearance(ctx context.Context, userID, candidateID string) (*service.AppearanceSelectResult, error)
 }
 
 type PetHandler struct {
@@ -77,6 +78,33 @@ func (h *PetHandler) RerollAppearance(c *gin.Context) {
 			return
 		}
 		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "更换宠物外观失败", HTTPStatus: 500})
+		return
+	}
+	response.Success(c, data)
+}
+
+type selectAppearanceRequest struct {
+	CandidateID string `json:"candidate_id"`
+}
+
+func (h *PetHandler) SelectAppearance(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	var req selectAppearanceRequest
+	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.CandidateID) == "" {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "candidate_id required", HTTPStatus: 400})
+		return
+	}
+	data, err := h.svc.SelectAppearance(c.Request.Context(), userID, strings.TrimSpace(req.CandidateID))
+	if err != nil {
+		response.Error(c, &commonerrors.AppError{Code: 10004, Message: "候选外观不存在", HTTPStatus: 400})
+		return
+	}
+	if data == nil {
+		response.Error(c, &commonerrors.AppError{Code: 10004, Message: "宠物档案不存在", HTTPStatus: 404})
 		return
 	}
 	response.Success(c, data)

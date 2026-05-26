@@ -43,6 +43,12 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import {
+  getMealTypeLabel,
+  MealTypeSelectSheet,
+  normalizeSelectableMealType,
+  type SelectableMealType
+} from '../../../components/MealTypeSelector'
 
 import './index.scss'
 
@@ -74,16 +80,6 @@ const readSuggestRatioPreference = (): boolean => {
   if (saved === true || saved === '1' || saved === 'true') return true
   return true
 }
-
-const MEAL_OPTIONS = [
-  { value: 'breakfast' as const, label: '早餐' },
-  { value: 'morning_snack' as const, label: '早加餐' },
-  { value: 'lunch' as const, label: '午餐' },
-  { value: 'afternoon_snack' as const, label: '午加餐' },
-  { value: 'dinner' as const, label: '晚餐' },
-  { value: 'evening_snack' as const, label: '晚加餐' },
-]
-type SelectableMealType = (typeof MEAL_OPTIONS)[number]['value']
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => {
   if (value === 'standard_web_search') return 'standard_web_search'
@@ -215,24 +211,9 @@ const RECOGNITION_OUTCOME_META: Record<AnalyzeRecognitionOutcome, { title: strin
   }
 }
 
-const MEAL_ICONS = {
-  breakfast: 'icon-zaocan',
-  morning_snack: 'icon-lingshi',
-  lunch: 'icon-wucan',
-  afternoon_snack: 'icon-lingshi',
-  dinner: 'icon-wancan',
-  evening_snack: 'icon-lingshi',
-}
-
-const toSelectableMealType = (value: unknown): SelectableMealType | undefined => {
-  if (value === 'snack') return 'afternoon_snack'
-  const hit = MEAL_OPTIONS.find((o) => o.value === value)
-  return hit?.value
-}
-
 const getSavedSelectableMealType = (): SelectableMealType | undefined => {
   const savedMealType = Taro.getStorageSync('analyzeMealType')
-  return toSelectableMealType(savedMealType)
+  return normalizeSelectableMealType(savedMealType, inferDefaultMealTypeFromLocalTime())
 }
 
 // 移除未使用的 CONTEXT_STATE_OPTIONS
@@ -1480,11 +1461,8 @@ function ResultPage() {
     const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
 
     // 确定餐次：优先使用确认过的餐次，否则尝试从缓存读取，最后按当前时间推断
-    let mealType = confirmedMealType
-    if (!mealType) {
-      mealType = toSelectableMealType(savedMealType) || inferDefaultMealTypeFromLocalTime()
-    }
-    const mealLabel = MEAL_OPTIONS.find((o) => o.value === mealType)?.label || '早餐'
+    const mealType = confirmedMealType || normalizeSelectableMealType(savedMealType, inferDefaultMealTypeFromLocalTime())
+    const mealLabel = getMealTypeLabel(mealType)
 
     // 饮食目标和时机，未找到默认无
     const dietGoal = savedDietGoal || 'none'
@@ -1645,19 +1623,13 @@ function ResultPage() {
     }
   }, [committedRecordId])
 
-  /** 点击保存按钮：打开餐次选择弹窗 */
+  /** 点击保存按钮：分析入口已选过餐次，直接按既有餐次保存 */
   const handleConfirmAndShare = () => {
     if (isAnalyzeSessionCommitted() || committedRecordId) {
       handleViewCommittedResult()
       return
     }
-    const savedMealType = getSavedSelectableMealType()
-    if (savedMealType) {
-      saveRecord(false, savedMealType)
-      return
-    }
-    setSelectedMealType(inferDefaultMealTypeFromLocalTime())
-    setShowMealSelector(true)
+    saveRecord(false, getSavedSelectableMealType() || inferDefaultMealTypeFromLocalTime())
   }
 
   const handleOpenLibraryUpload = () => {
@@ -1685,7 +1657,7 @@ function ResultPage() {
 
     // 获取餐次信息
     const savedMealType = Taro.getStorageSync('analyzeMealType')
-    const mealType = toSelectableMealType(savedMealType)
+    const mealType = normalizeSelectableMealType(savedMealType, inferDefaultMealTypeFromLocalTime())
 
     // 弹窗输入收藏名称
     Taro.showModal({
@@ -2618,34 +2590,15 @@ function ResultPage() {
         </View>
       </View>
 
-      {/* 餐次选择弹窗 */}
-      <View
-        className={`meal-selector-overlay ${showMealSelector ? 'visible' : ''}`}
-        onClick={() => setShowMealSelector(false)}
-      >
-        <View
-          className='meal-selector-card'
-          onClick={(e) => e.stopPropagation()}
-        >
-          <View className='selector-title'>选择餐次</View>
-          <View className='meal-options-grid'>
-            {MEAL_OPTIONS.map((meal) => (
-              <View
-                key={meal.value}
-                className={`meal-option-item ${selectedMealType === meal.value ? 'active' : ''}`}
-                onClick={() => setSelectedMealType(meal.value)}
-              >
-                <Text className={`iconfont ${MEAL_ICONS[meal.value]} option-icon`}></Text>
-                <Text className='option-label'>{meal.label}</Text>
-              </View>
-            ))}
-          </View>
-          <View className='selector-actions'>
-            <View className='cancel-btn' onClick={() => setShowMealSelector(false)}>取消</View>
-            <View className='confirm-btn' onClick={handleConfirmMealType}>保存</View>
-          </View>
-        </View>
-      </View>
+      <MealTypeSelectSheet
+        visible={showMealSelector}
+        value={selectedMealType}
+        title='选择餐次'
+        confirmText='保存记录'
+        onChange={setSelectedMealType}
+        onCancel={() => setShowMealSelector(false)}
+        onConfirm={handleConfirmMealType}
+      />
 
       {/* 二次纠错抽屉弹窗 */}
       <View
@@ -2806,9 +2759,12 @@ function ResultPage() {
                 <Text className='iconfont icon-jishiben'></Text>
                 <Text>补充说明（可选）</Text>
               </View>
+              <Text className='context-tip'>
+                改重量建议直接修改上方列表；如果写在补充说明里，系统也会优先按说明处理。
+              </Text>
               <Textarea
                 className='context-textarea'
-                placeholder='例如：不是橘子，是橙子；这碗饭大概 300g；鸡腿是整只未去骨，我只吃了蛋白'
+                placeholder='例如：八喜冰淇淋60克，532千焦；不是橘子，是橙子；鸡腿是整只未去骨'
                 value={additionalContext}
                 onInput={(e: any) => setAdditionalContext(e.detail.value)}
                 maxlength={200}

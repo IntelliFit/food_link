@@ -88,9 +88,11 @@ type MembershipRepo interface {
 	ListSharePosterBonusEvents(ctx context.Context, userID, chinaDate string) ([]domain.UserCreditBonusEvent, error)
 	GetUser(ctx context.Context, userID string) (*membershiprepo.User, error)
 	GetFoodRecordOwner(ctx context.Context, recordID string) (string, error)
+	CountFoodRecordsByDate(ctx context.Context, userID, chinaDate string) (int, error)
 	CountSharePosterClaims(ctx context.Context, userID, chinaDate string) (int, error)
 	GetSharePosterClaim(ctx context.Context, userID, recordID, chinaDate string) (*domain.UserCreditBonusEvent, error)
-	CreateSharePosterBonusEvent(ctx context.Context, userID, recordID, chinaDate string, credits int) (*domain.UserCreditBonusEvent, error)
+	GetSharePosterClaimBySourceKey(ctx context.Context, userID, sourceKey, chinaDate string) (*domain.UserCreditBonusEvent, error)
+	CreateSharePosterBonusEvent(ctx context.Context, userID, sourceKey, sourceScope, recordID, chinaDate string, credits int, meta map[string]any) (*domain.UserCreditBonusEvent, error)
 	GetEarnedCreditLedgerBySource(ctx context.Context, userID, reason, sourceKey string) (*domain.UserEarnedCreditLedger, error)
 	ChangeEarnedCredits(ctx context.Context, userID string, delta int, reason, sourceKey, relatedDate string, meta map[string]any) (*domain.UserEarnedCreditLedger, bool, error)
 	SumPositiveEarnedCreditsByDate(ctx context.Context, userID, chinaDate string) (int, error)
@@ -98,6 +100,12 @@ type MembershipRepo interface {
 	GetRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string) (*domain.RewardTaskUpload, error)
 	CreateRewardTaskUpload(ctx context.Context, row *domain.RewardTaskUpload) error
 	UpdateRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string, updates map[string]any) (*domain.RewardTaskUpload, error)
+}
+
+type SharePosterRewardClaimInput struct {
+	RecordID   string `json:"record_id"`
+	ShareScope string `json:"share_scope"`
+	ShareDate  string `json:"share_date"`
 }
 
 type MembershipService struct {
@@ -514,10 +522,18 @@ func (s *MembershipService) materializeDailySharePosterRewardCredits(ctx context
 			continue
 		}
 		meta := map[string]any{"bonus_event_id": row.ID}
+		sourceKey := "share:" + row.ID
 		if row.SourceRecordID != nil {
 			meta["source_record_id"] = *row.SourceRecordID
 		}
-		_, applied, err := s.repo.ChangeEarnedCredits(ctx, userID, row.Credits, "share_poster_reward", "share:"+row.ID, chinaDate, meta)
+		if row.SourceScope != nil {
+			meta["source_scope"] = *row.SourceScope
+		}
+		if row.SourceKey != nil && strings.TrimSpace(*row.SourceKey) != "" {
+			sourceKey = "share_poster:" + *row.SourceKey + ":" + chinaDate
+			meta["source_key"] = *row.SourceKey
+		}
+		_, applied, err := s.repo.ChangeEarnedCredits(ctx, userID, row.Credits, "share_poster_reward", sourceKey, chinaDate, meta)
 		if err != nil {
 			return awarded, err
 		}
@@ -834,42 +850,112 @@ func (s *MembershipService) HandleWechatNotify(ctx context.Context, headers http
 	return map[string]any{"code": "SUCCESS", "message": "成功"}, nil
 }
 
-func (s *MembershipService) ClaimSharePosterReward(ctx context.Context, userID, recordID string) (map[string]any, error) {
-	if recordID == "" {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "record_id required", HTTPStatus: 400}
-	}
-	ownerID, err := s.repo.GetFoodRecordOwner(ctx, recordID)
+func (s *MembershipService) ClaimSharePosterReward(ctx context.Context, userID string, input SharePosterRewardClaimInput) (map[string]any, error) {
+	today := time.Now().In(chinaLocation()).Format("2006-01-02")
+	source, err := s.resolveSharePosterRewardSource(ctx, userID, input)
 	if err != nil {
 		return nil, err
 	}
-	if ownerID == "" {
-		return nil, commonerrors.ErrNotFound
-	}
-	if ownerID != userID {
-		return nil, &commonerrors.AppError{Code: 10003, Message: "只能为自己的记录领取海报奖励", HTTPStatus: 403}
-	}
-	today := time.Now().In(chinaLocation()).Format("2006-01-02")
 	claimsToday, err := s.repo.CountSharePosterClaims(ctx, userID, today)
 	if err != nil {
 		return nil, err
 	}
-	if existing, err := s.repo.GetSharePosterClaim(ctx, userID, recordID, today); err != nil {
+	if existing, err := s.repo.GetSharePosterClaimBySourceKey(ctx, userID, source.SourceKey, today); err != nil {
 		return nil, err
 	} else if existing != nil {
-		return s.shareRewardResponse(ctx, userID, false, true, false, claimsToday, 0, "本条记录今日海报奖励已领取")
+		return s.shareRewardResponse(ctx, userID, false, true, false, claimsToday, 0, source.AlreadyClaimedMessage)
+	}
+	if source.RecordID != "" {
+		if existing, err := s.repo.GetSharePosterClaim(ctx, userID, source.RecordID, today); err != nil {
+			return nil, err
+		} else if existing != nil {
+			return s.shareRewardResponse(ctx, userID, false, true, false, claimsToday, 0, source.AlreadyClaimedMessage)
+		}
 	}
 	if claimsToday >= sharePosterDailyMaxEvents {
 		return s.shareRewardResponse(ctx, userID, false, false, true, claimsToday, 0, fmt.Sprintf("今日海报奖励已达上限（最多 %d 积分）", sharePosterDailyMaxEvents))
 	}
-	event, err := s.repo.CreateSharePosterBonusEvent(ctx, userID, recordID, today, sharePosterRewardCredits)
+	event, err := s.repo.CreateSharePosterBonusEvent(ctx, userID, source.SourceKey, source.Scope, source.RecordID, today, sharePosterRewardCredits, source.Meta)
 	if err != nil {
 		return nil, err
 	}
-	_, _, _ = s.repo.ChangeEarnedCredits(ctx, userID, sharePosterRewardCredits, "share_poster_reward", "share:"+event.ID, today, map[string]any{
-		"bonus_event_id":   event.ID,
-		"source_record_id": recordID,
-	})
-	return s.shareRewardResponse(ctx, userID, true, false, false, claimsToday+1, sharePosterRewardCredits, fmt.Sprintf("本餐海报奖励已到账 +%d 积分", sharePosterRewardCredits))
+	ledgerMeta := copyMeta(source.Meta)
+	ledgerMeta["bonus_event_id"] = event.ID
+	_, _, _ = s.repo.ChangeEarnedCredits(ctx, userID, sharePosterRewardCredits, "share_poster_reward", "share_poster:"+source.SourceKey+":"+today, today, ledgerMeta)
+	return s.shareRewardResponse(ctx, userID, true, false, false, claimsToday+1, sharePosterRewardCredits, fmt.Sprintf("%s +%d 积分", source.ClaimedMessagePrefix, sharePosterRewardCredits))
+}
+
+type sharePosterRewardSource struct {
+	Scope                 string
+	SourceKey             string
+	RecordID              string
+	ShareDate             string
+	Meta                  map[string]any
+	AlreadyClaimedMessage string
+	ClaimedMessagePrefix  string
+}
+
+func (s *MembershipService) resolveSharePosterRewardSource(ctx context.Context, userID string, input SharePosterRewardClaimInput) (*sharePosterRewardSource, error) {
+	recordID := strings.TrimSpace(input.RecordID)
+	if recordID != "" {
+		ownerID, err := s.repo.GetFoodRecordOwner(ctx, recordID)
+		if err != nil {
+			return nil, err
+		}
+		if ownerID == "" {
+			return nil, commonerrors.ErrNotFound
+		}
+		if ownerID != userID {
+			return nil, &commonerrors.AppError{Code: 10003, Message: "只能为自己的记录领取海报奖励", HTTPStatus: 403}
+		}
+		sourceKey := "meal_record:" + recordID
+		return &sharePosterRewardSource{
+			Scope:     "meal_record",
+			SourceKey: sourceKey,
+			RecordID:  recordID,
+			Meta: map[string]any{
+				"source_scope":     "meal_record",
+				"source_key":       sourceKey,
+				"source_record_id": recordID,
+			},
+			AlreadyClaimedMessage: "本条记录今日海报奖励已领取",
+			ClaimedMessagePrefix:  "本餐分享奖励已到账",
+		}, nil
+	}
+	scope := strings.ToLower(strings.TrimSpace(input.ShareScope))
+	if scope != "daily_food" && scope != "daily_summary" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "record_id 或 share_scope required", HTTPStatus: 400}
+	}
+	shareDate, err := normalizeChinaDate(input.ShareDate)
+	if err != nil {
+		return nil, err
+	}
+	recordCount, err := s.repo.CountFoodRecordsByDate(ctx, userID, shareDate)
+	if err != nil {
+		return nil, err
+	}
+	if recordCount <= 0 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "当天没有饮食记录，无法领取分享奖励", HTTPStatus: 400}
+	}
+	sourceKey := scope + ":" + shareDate
+	alreadyMessage := "今日饮食分享奖励已领取"
+	claimPrefix := "今日饮食分享奖励已到账"
+	if scope == "daily_summary" {
+		alreadyMessage = "今日小结分享奖励已领取"
+		claimPrefix = "今日小结分享奖励已到账"
+	}
+	return &sharePosterRewardSource{
+		Scope:     scope,
+		SourceKey: sourceKey,
+		ShareDate: shareDate,
+		Meta: map[string]any{
+			"source_scope": scope,
+			"source_key":   sourceKey,
+			"share_date":   shareDate,
+		},
+		AlreadyClaimedMessage: alreadyMessage,
+		ClaimedMessagePrefix:  claimPrefix,
+	}, nil
 }
 
 func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) (map[string]any, error) {

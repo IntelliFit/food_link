@@ -114,6 +114,12 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 	}
 	results = append(results, publicRows...)
 
+	packagedRows, err := r.searchPackagedLibrary(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, packagedRows...)
+
 	nutritionRows, err := r.searchNutritionLibrary(ctx, query, limit)
 	if err != nil {
 		return nil, err
@@ -181,11 +187,21 @@ func (r *ManualFoodRepo) listCatalogItems(ctx context.Context, userID string, ca
 		return userItems, hasMore, nil
 	}
 
-	nutritionItems, err := r.listNutritionCatalogItems(ctx, category, pageSize-len(userItems), 0)
+	packagedLimit := pageSize - len(userItems)
+	packagedItems, err := r.listPackagedCatalogItems(ctx, category, packagedLimit+1, packagedCatalogOffset(category, page, pageSize, len(userItems)))
 	if err != nil {
 		return nil, false, err
 	}
-	items := dedupeManualFoodResults(append(userItems, nutritionItems...))
+	if len(packagedItems) > packagedLimit {
+		hasMore = true
+		packagedItems = packagedItems[:packagedLimit]
+	}
+
+	nutritionItems, err := r.listNutritionCatalogItems(ctx, category, pageSize-len(userItems)-len(packagedItems), 0)
+	if err != nil {
+		return nil, false, err
+	}
+	items := dedupeManualFoodResults(append(append(userItems, packagedItems...), nutritionItems...))
 	if len(items) > pageSize {
 		items = items[:pageSize]
 		hasMore = true
@@ -343,6 +359,33 @@ func (r *ManualFoodRepo) listNutritionCatalogItems(ctx context.Context, category
 	return results, nil
 }
 
+func (r *ManualFoodRepo) listPackagedCatalogItems(ctx context.Context, category string, limit int, offset int) ([]domain.ManualFoodResult, error) {
+	if limit <= 0 || !manualFoodCategoryCanIncludePackaged(category) {
+		return nil, nil
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var rows []fooddomain.PackagedFood
+	err := r.db.WithContext(ctx).
+		Where("is_active = ? AND kcal_per_100g > 0", true).
+		Order("updated_at DESC NULLS LAST, product_name ASC").
+		Limit(minInt(limit, 60)).
+		Offset(offset).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		result := manualFoodResultFromPackaged(row, 0.72)
+		if packagedMatchesManualCategory(result, row, category) {
+			results = append(results, result)
+		}
+	}
+	return results, nil
+}
+
 func (r *ManualFoodRepo) loadStats(ctx context.Context) (*domain.ManualFoodBrowseStats, error) {
 	stats := &domain.ManualFoodBrowseStats{}
 	if err := r.db.WithContext(ctx).Model(&fooddomain.FoodNutrition{}).Where("is_active = ?", true).Count(&stats.NutritionFoodCount).Error; err != nil {
@@ -380,7 +423,7 @@ func (r *ManualFoodRepo) listRecentItems(ctx context.Context, userID string, lim
 		FROM user_food_records
 		CROSS JOIN LATERAL jsonb_array_elements(items) AS item
 		WHERE user_id = ?
-			AND item->>'manual_source' IN ('public_library', 'nutrition_library')
+			AND item->>'manual_source' IN ('public_library', 'nutrition_library', 'packaged_food')
 			AND COALESCE(item->>'manual_source_id', '') <> ''
 		GROUP BY 1,2,3,4
 		ORDER BY usage_count DESC, latest_record_time DESC
@@ -502,7 +545,7 @@ func (r *ManualFoodRepo) searchRecentItems(ctx context.Context, userID string, q
 		FROM user_food_records
 		CROSS JOIN LATERAL jsonb_array_elements(items) AS item
 		WHERE user_id = ?
-			AND item->>'manual_source' IN ('public_library', 'nutrition_library')
+			AND item->>'manual_source' IN ('public_library', 'nutrition_library', 'packaged_food')
 			AND COALESCE(item->>'manual_source_id', '') <> ''
 			AND (%s)
 		GROUP BY 1,2,3,4
@@ -584,6 +627,45 @@ func (r *ManualFoodRepo) searchPublicLibrary(ctx context.Context, userID string,
 		result.UsageCount = row.UsageCount
 		result.MatchScore = computeMatchScore(query, result.Title, result.Subtitle) + 0.1
 		results = append(results, result)
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string, limit int) ([]domain.ManualFoodResult, error) {
+	terms := expandedSearchTerms(query)
+	conditions := make([]string, 0, len(terms))
+	args := []any{}
+	for _, term := range terms {
+		like := "%" + strings.ToLower(term) + "%"
+		conditions = append(conditions, `
+			LOWER(COALESCE(product_name, '')) LIKE ?
+			OR LOWER(COALESCE(brand, '')) LIKE ?
+			OR LOWER(COALESCE(spec_text, '')) LIKE ?
+			OR LOWER(COALESCE(package_category, '')) LIKE ?
+		`)
+		args = append(args, like, like, like, like)
+	}
+	args = append(args, query+"%", limit)
+	var rows []fooddomain.PackagedFood
+	err := r.db.WithContext(ctx).Raw(fmt.Sprintf(`
+		SELECT *
+		FROM packaged_food_library
+		WHERE is_active = TRUE
+			AND kcal_per_100g > 0
+			AND (%s)
+		ORDER BY
+			CASE WHEN LOWER(product_name) LIKE LOWER(?) THEN 0 ELSE 1 END,
+			updated_at DESC NULLS LAST,
+			product_name ASC
+		LIMIT ?
+	`, strings.Join(conditions, " OR ")), args...).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		score := computeMatchScore(query, row.ProductName, row.Brand, stringPtrValue(row.SpecText)) + 0.18
+		results = append(results, manualFoodResultFromPackaged(row, score))
 	}
 	return results, nil
 }
@@ -695,6 +777,70 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 		Collected:           collected,
 		LikeCount:           item.LikeCount,
 		CollectionCount:     item.CollectionCount,
+	}
+	applyManualFoodServingProfile(&result)
+	return result
+}
+
+func manualFoodResultFromPackaged(item fooddomain.PackagedFood, score float64) domain.ManualFoodResult {
+	title := strings.TrimSpace(item.ProductName)
+	if title == "" {
+		title = "包装食品"
+	}
+	subtitleParts := make([]string, 0, 3)
+	if brand := strings.TrimSpace(item.Brand); brand != "" {
+		subtitleParts = append(subtitleParts, brand)
+	}
+	if spec := stringPtrValue(item.SpecText); spec != "" {
+		subtitleParts = append(subtitleParts, spec)
+	}
+	if basis := stringPtrValue(item.NutritionBasisUnit); basis != "" {
+		subtitleParts = append(subtitleParts, "营养口径 "+basis)
+	}
+	imagePath, imagePaths := packagedPrimaryImage(item.SourceImageURLs)
+	highlights := make([]string, 0, 3)
+	if item.KcalPer100g > 0 {
+		highlights = append(highlights, fmt.Sprintf("%.0f kcal/100g", item.KcalPer100g))
+	}
+	if item.ProteinPer100g >= 8 {
+		highlights = append(highlights, fmt.Sprintf("蛋白 %.1fg/100g", item.ProteinPer100g))
+	}
+	if item.NetWeightG > 0 {
+		highlights = append(highlights, fmt.Sprintf("净含量 %.0fg", item.NetWeightG))
+	}
+	subtitle := strings.Join(subtitleParts, " · ")
+	result := domain.ManualFoodResult{
+		ID:                 item.ID,
+		Source:             "packaged_food",
+		Title:              title,
+		Subtitle:           subtitle,
+		Category:           inferManualFoodCategory(title+" "+subtitle+" "+stringPtrValue(item.PackageCategory), "packaged_food"),
+		DefaultWeightGrams: packagedDefaultWeight(item),
+		TotalCalories:      item.KcalPer100g,
+		TotalProtein:       item.ProteinPer100g,
+		TotalCarbs:         item.CarbsPer100g,
+		TotalFat:           item.FatPer100g,
+		NutrientsPer100g: &domain.ManualFoodNutrients{
+			Calories: item.KcalPer100g,
+			Protein:  item.ProteinPer100g,
+			Carbs:    item.CarbsPer100g,
+			Fat:      item.FatPer100g,
+			Fiber:    item.FiberPer100g,
+			Sugar:    item.SugarPer100g,
+			SodiumMg: item.SodiumMgPer100g,
+		},
+		ExtraNutrients: &domain.ManualFoodNutrients{
+			Fiber:    item.FiberPer100g,
+			Sugar:    item.SugarPer100g,
+			SodiumMg: item.SodiumMgPer100g,
+		},
+		ImagePath:           imagePath,
+		ImagePaths:          imagePaths,
+		PortionLabel:        packagedPortionLabel(item),
+		SourceLabel:         "包装食品",
+		RecommendReason:     "来自用户上传包装图，按营养成分表换算",
+		NutritionHighlights: highlights,
+		MatchScore:          score,
 	}
 	applyManualFoodServingProfile(&result)
 	return result
@@ -877,8 +1023,11 @@ func (r *ManualFoodRepo) normalizePublicFoodItem(item publicdomain.PublicFoodIte
 }
 
 func sourceLabel(source string) string {
-	if strings.TrimSpace(source) == "public_library" {
+	switch strings.TrimSpace(source) {
+	case "public_library":
 		return "真实餐食"
+	case "packaged_food":
+		return "包装食品"
 	}
 	return "标准食物"
 }
@@ -1155,6 +1304,22 @@ func applyManualFoodServingProfile(item *domain.ManualFoodResult) {
 		item.ServingPresets = servingPresets(item.DefaultWeightGrams, "份", []float64{0.5, 1, 1.5, 2})
 		return
 	}
+	if item.Source == "packaged_food" {
+		if strings.Contains(strings.ToLower(strings.TrimSpace(item.Subtitle+" "+item.Category)), "100ml") || item.Category == "beverage" {
+			item.DisplayUnit = "ml"
+			item.DisplayUnitLabel = "ml"
+		} else {
+			item.DisplayUnit = "g"
+			item.DisplayUnitLabel = "g"
+		}
+		if item.DefaultWeightGrams <= 0 {
+			item.DefaultWeightGrams = 100
+		}
+		if strings.TrimSpace(item.PortionLabel) == "" {
+			item.PortionLabel = fmt.Sprintf("%.0f%s", item.DefaultWeightGrams, item.DisplayUnitLabel)
+		}
+		return
+	}
 	title := strings.TrimSpace(item.Title)
 	switch {
 	case isEggLikeFood(title):
@@ -1282,4 +1447,84 @@ func numberFromAny(value any) float64 {
 	default:
 		return 0
 	}
+}
+
+func packagedCatalogOffset(category string, page int, pageSize int, userItemCount int) int {
+	if page <= 1 || !manualFoodCategoryCanIncludePackaged(category) {
+		return 0
+	}
+	return maxInt(0, (page-1)*pageSize-userItemCount)
+}
+
+func manualFoodCategoryCanIncludePackaged(category string) bool {
+	switch category {
+	case "snack", "beverage", "dairy", "staple", "other":
+		return true
+	default:
+		return false
+	}
+}
+
+func packagedMatchesManualCategory(result domain.ManualFoodResult, item fooddomain.PackagedFood, category string) bool {
+	switch category {
+	case "", "all", "snack":
+		return true
+	case "other":
+		return result.Category == "other"
+	default:
+		if result.Category == category {
+			return true
+		}
+		text := strings.TrimSpace(result.Title + " " + result.Subtitle + " " + stringPtrValue(item.PackageCategory))
+		return inferManualFoodCategory(text, "packaged_food") == category
+	}
+}
+
+func packagedDefaultWeight(item fooddomain.PackagedFood) float64 {
+	if item.ServingWeightG > 0 {
+		return item.ServingWeightG
+	}
+	if item.NetWeightG > 0 && item.NetWeightG <= 500 {
+		return item.NetWeightG
+	}
+	return 100
+}
+
+func packagedPortionLabel(item fooddomain.PackagedFood) string {
+	unit := "g"
+	if strings.Contains(strings.ToLower(stringPtrValue(item.NutritionBasisUnit)), "100ml") {
+		unit = "ml"
+	}
+	if item.ServingWeightG > 0 {
+		return fmt.Sprintf("%.0f%s", item.ServingWeightG, unit)
+	}
+	if item.NetWeightG > 0 && item.NetWeightG <= 500 {
+		return fmt.Sprintf("%.0f%s", item.NetWeightG, unit)
+	}
+	return "100" + unit
+}
+
+func packagedPrimaryImage(urls []string) (*string, []string) {
+	for _, raw := range urls {
+		url := strings.TrimSpace(raw)
+		if url == "" {
+			continue
+		}
+		return &url, []string{url}
+	}
+	return nil, nil
+}
+
+func stringPtrValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func maxInt(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }

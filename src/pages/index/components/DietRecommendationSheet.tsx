@@ -1,4 +1,4 @@
-import { View, Text } from '@tarojs/components'
+import { View, Text, ScrollView } from '@tarojs/components'
 import type { DietRecommendationResult, DietRecommendationScene } from '../../../utils/api'
 import { formatDisplayNumber } from '../utils/helpers'
 
@@ -69,82 +69,89 @@ export function DietRecommendationSheet({
           ))}
         </View>
 
-        {loading ? (
-          <View className='diet-rec-loading'>
-            <View className='diet-rec-spinner' />
-          </View>
-        ) : result ? (
-          <>
-            <Text className='diet-rec-summary'>{result.summary}</Text>
-            <View className='diet-rec-gap-row'>
-              <View className='diet-rec-gap-pill'>
-                <Text className='diet-rec-gap-value'>{formatDisplayNumber(Math.max(0, Math.round(result.calorie_remaining || 0)))}</Text>
-                <Text className='diet-rec-gap-label'>kcal</Text>
-              </View>
-              <View className='diet-rec-gap-pill'>
-                <Text className='diet-rec-gap-value'>{formatDisplayNumber(Math.max(0, result.macro_gaps?.protein || 0))}</Text>
-                <Text className='diet-rec-gap-label'>蛋白</Text>
-              </View>
-              <View className='diet-rec-gap-pill'>
-                <Text className='diet-rec-gap-value'>{formatDisplayNumber(Math.max(0, result.macro_gaps?.carbs || 0))}</Text>
-                <Text className='diet-rec-gap-label'>碳水</Text>
-              </View>
-              <View className='diet-rec-gap-pill'>
-                <Text className='diet-rec-gap-value'>{formatDisplayNumber(Math.max(0, result.macro_gaps?.fat || 0))}</Text>
-                <Text className='diet-rec-gap-label'>脂肪</Text>
-              </View>
+        <ScrollView
+          scrollY
+          enhanced
+          showScrollbar={false}
+          className='diet-rec-body'
+        >
+          {loading ? (
+            <View className='diet-rec-loading'>
+              <View className='diet-rec-spinner' />
             </View>
-
-            <View className='diet-rec-list'>
-              {(result.recommendations || []).map((option, index) => (
-                <View key={`${option.title}-${index}`} className='diet-rec-option'>
-                  <View className='diet-rec-option-head'>
-                    <Text className='diet-rec-option-title'>{option.title}</Text>
-                    <Text className='diet-rec-option-cal'>{formatDisplayNumber(Math.round(option.calories || 0))} kcal</Text>
-                  </View>
-                  <Text className='diet-rec-option-reason'>{option.reason}</Text>
-                  {!!getSourceLabel(option.source || option.items?.[0]?.source) && (
-                    <Text className='diet-rec-option-source'>
-                      来源：{getSourceLabel(option.source || option.items?.[0]?.source)}
-                    </Text>
-                  )}
-                  <View className='diet-rec-foods'>
-                    {(option.items || []).map((food, idx) => (
-                      <View key={`${food.name}-${idx}`} className='diet-rec-food'>
-                        <Text className='diet-rec-food-name'>{food.name}</Text>
-                        <Text className='diet-rec-food-amount'>{food.amount}</Text>
-                      </View>
-                    ))}
-                  </View>
-                  <View className='diet-rec-macros'>
-                    <Text className='diet-rec-macro'>蛋白 {formatDisplayNumber(option.protein || 0)}g</Text>
-                    <Text className='diet-rec-macro'>碳水 {formatDisplayNumber(option.carbs || 0)}g</Text>
-                    <Text className='diet-rec-macro'>脂肪 {formatDisplayNumber(option.fat || 0)}g</Text>
-                  </View>
-                  {option.tips && option.tips.length > 0 ? (
-                    <Text className='diet-rec-tip'>{option.tips[0]}</Text>
-                  ) : null}
-                  {option.alternatives && option.alternatives.length > 0 ? (
-                    <Text className='diet-rec-alt'>可替换：{option.alternatives.slice(0, 3).join(' / ')}</Text>
-                  ) : null}
+          ) : result ? (
+            <>
+              <Text className='diet-rec-summary'>{result.summary}</Text>
+              <View className='diet-rec-gap-row'>
+                <View className='diet-rec-gap-pill'>
+                  <Text className='diet-rec-gap-value'>{formatDisplayNumber(Math.max(0, Math.round(result.calorie_remaining || 0)))}</Text>
+                  <Text className='diet-rec-gap-label'>kcal</Text>
                 </View>
-              ))}
-            </View>
+                <View className='diet-rec-gap-pill'>
+                  <Text className='diet-rec-gap-value'>{formatDisplayNumber(Math.max(0, result.macro_gaps?.protein || 0))}</Text>
+                  <Text className='diet-rec-gap-label'>蛋白</Text>
+                </View>
+                <View className='diet-rec-gap-pill'>
+                  <Text className='diet-rec-gap-value'>{formatDisplayNumber(Math.max(0, result.macro_gaps?.carbs || 0))}</Text>
+                  <Text className='diet-rec-gap-label'>碳水</Text>
+                </View>
+                <View className='diet-rec-gap-pill'>
+                  <Text className='diet-rec-gap-value'>{formatDisplayNumber(Math.max(0, result.macro_gaps?.fat || 0))}</Text>
+                  <Text className='diet-rec-gap-label'>脂肪</Text>
+                </View>
+              </View>
 
-            <View className='diet-rec-actions'>
+              <View className='diet-rec-list'>
+                {(result.recommendations || []).map((option, index) => (
+                  <View key={`${option.title}-${index}`} className='diet-rec-option'>
+                    <View className='diet-rec-option-head'>
+                      <Text className='diet-rec-option-title'>{option.title}</Text>
+                      <Text className='diet-rec-option-cal'>{formatDisplayNumber(Math.round(option.calories || 0))} kcal</Text>
+                    </View>
+                    <Text className='diet-rec-option-reason'>{option.reason}</Text>
+                    {!!getSourceLabel(option.source || option.items?.[0]?.source) && (
+                      <Text className='diet-rec-option-source'>
+                        来源：{getSourceLabel(option.source || option.items?.[0]?.source)}
+                      </Text>
+                    )}
+                    <View className='diet-rec-foods'>
+                      {(option.items || []).map((food, idx) => (
+                        <View key={`${food.name}-${idx}`} className='diet-rec-food'>
+                          <Text className='diet-rec-food-name'>{food.name}</Text>
+                          <Text className='diet-rec-food-amount'>{food.amount}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <View className='diet-rec-macros'>
+                      <Text className='diet-rec-macro'>蛋白 {formatDisplayNumber(option.protein || 0)}g</Text>
+                      <Text className='diet-rec-macro'>碳水 {formatDisplayNumber(option.carbs || 0)}g</Text>
+                      <Text className='diet-rec-macro'>脂肪 {formatDisplayNumber(option.fat || 0)}g</Text>
+                    </View>
+                    {option.tips && option.tips.length > 0 ? (
+                      <Text className='diet-rec-tip'>{option.tips[0]}</Text>
+                    ) : null}
+                    {option.alternatives && option.alternatives.length > 0 ? (
+                      <Text className='diet-rec-alt'>可替换：{option.alternatives.slice(0, 3).join(' / ')}</Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+
+              <View className='diet-rec-actions'>
+                <View className='diet-rec-refresh' onClick={onRefresh}>
+                  <Text className='diet-rec-refresh-text'>换一组</Text>
+                </View>
+              </View>
+            </>
+          ) : (
+            <View className='diet-rec-empty'>
+              <Text className='diet-rec-empty-text'>暂时没有生成结果</Text>
               <View className='diet-rec-refresh' onClick={onRefresh}>
-                <Text className='diet-rec-refresh-text'>换一组</Text>
+                <Text className='diet-rec-refresh-text'>重新生成</Text>
               </View>
             </View>
-          </>
-        ) : (
-          <View className='diet-rec-empty'>
-            <Text className='diet-rec-empty-text'>暂时没有生成结果</Text>
-            <View className='diet-rec-refresh' onClick={onRefresh}>
-              <Text className='diet-rec-refresh-text'>重新生成</Text>
-            </View>
-          </View>
-        )}
+          )}
+        </ScrollView>
       </View>
     </View>
   )

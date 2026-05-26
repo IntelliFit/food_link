@@ -8,12 +8,15 @@ import {
   getPetSummary,
   rerollPetAppearance,
   claimPetEvent,
+  selectPetAppearance,
   type MembershipStatus,
+  type PetAppearanceCandidate,
   type PetOfflineEvent,
   type PetSummary,
   showUnifiedApiError
 } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import './index.scss'
 
 const PET_COLORS = ['mint', 'berry', 'sunny', 'aqua', 'grape', 'peach', 'cream', 'matcha'] as const
@@ -56,10 +59,63 @@ function personalityText(personality?: string): string {
   }
 }
 
+function archetypeText(archetype?: string): string {
+  switch (archetype) {
+    case 'energetic_buddy':
+      return '元气伙伴'
+    case 'gentle_healer':
+      return '温柔守护'
+    case 'protein_guardian':
+      return '蛋白守卫'
+    case 'light_lifestyle':
+      return '轻盈陪伴'
+    default:
+      return '稳定陪伴'
+  }
+}
+
+function candidateStyleText(style?: string): string {
+  switch (style) {
+    case 'quirky':
+      return '特色丑萌'
+    case 'stable':
+      return '稳定可用'
+    default:
+      return '漂亮亲和'
+  }
+}
+
+function CandidatePetFigure({ candidate }: { candidate: PetAppearanceCandidate }) {
+  const seed = candidate.pet_seed || 'candidate'
+  const animal = PET_ANIMALS[stableHash(`${seed}:animal`) % PET_ANIMALS.length]
+  return (
+    <View className={`pet-home-candidate-avatar ${candidate.color} ${candidate.shape} ${candidate.pattern} animal-${animal} mood-calm`}>
+      <View className='pet-home-shadow' />
+      <View className='pet-body'>
+        <View className='pet-tail' />
+        <View className='pet-ear left' />
+        <View className='pet-ear right' />
+        <View className='pet-accessory'>
+          <View className={`pet-accessory-shape ${candidate.accessory}`} />
+        </View>
+        <View className='pet-face'>
+          <View className='pet-snout' />
+          <View className='pet-eye left' />
+          <View className='pet-eye right' />
+          <View className='pet-cheek left' />
+          <View className='pet-cheek right' />
+          <View className='pet-mouth' />
+        </View>
+      </View>
+    </View>
+  )
+}
+
 function PetHomePage() {
   const [loading, setLoading] = useState(true)
   const [claiming, setClaiming] = useState(false)
   const [rerolling, setRerolling] = useState(false)
+  const [selectingCandidateId, setSelectingCandidateId] = useState('')
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
 
@@ -98,6 +154,9 @@ function PetHomePage() {
   const earnedCredits = membership?.earned_credits_balance ?? 0
   const totalCredits = membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0
   const nextLevelGap = Math.max((petSummary?.pet?.next_level_exp ?? 0) - (petSummary?.pet?.level_exp ?? 0), 0)
+  const selectionCandidates = petSummary?.pet?.selection_candidates || []
+  const shouldShowSelection = selectionCandidates.length > 0
+    && Boolean(petSummary?.pet?.needs_selection || petSummary?.pet?.free_profile_rematch_available)
 
   const handleClaim = useCallback(async () => {
     if (!petEvent?.id || claiming) return
@@ -170,8 +229,29 @@ function PetHomePage() {
     }
   }, [earnedCredits, petSummary?.pet, rerolling, totalCredits])
 
+  const handleSelectCandidate = useCallback(async (candidate: PetAppearanceCandidate) => {
+    if (!candidate?.id || selectingCandidateId) return
+    try {
+      setSelectingCandidateId(candidate.id)
+      const result = await selectPetAppearance(candidate.id)
+      setPetSummary((prev) => prev ? {
+        ...prev,
+        pet: result.pet,
+      } : prev)
+      Taro.showToast({ title: '宠物已选择', icon: 'success' })
+    } catch (error) {
+      await showUnifiedApiError(error, '选择宠物失败')
+    } finally {
+      setSelectingCandidateId('')
+    }
+  }, [selectingCandidateId])
+
   const handlePickComingSoon = useCallback(() => {
     Taro.showToast({ title: '挑选外观即将开放', icon: 'none' })
+  }, [])
+
+  const openPetLab = useCallback(() => {
+    Taro.navigateTo({ url: extraPkgUrl('/pages/pet-lab/index') })
   }, [])
 
   return (
@@ -193,10 +273,6 @@ function PetHomePage() {
                 <View className='pet-eye right' />
                 <View className='pet-cheek left' />
                 <View className='pet-cheek right' />
-                <View className='pet-whisker left top' />
-                <View className='pet-whisker left bottom' />
-                <View className='pet-whisker right top' />
-                <View className='pet-whisker right bottom' />
                 <View className='pet-mouth' />
               </View>
             </View>
@@ -207,6 +283,7 @@ function PetHomePage() {
             <View className='pet-home-meta-row'>
               <Text className='pet-home-chip'>Lv.{petSummary?.pet?.level || 1}</Text>
               <Text className='pet-home-chip secondary'>{personalityText(petSummary?.pet?.personality)}</Text>
+              <Text className='pet-home-chip secondary'>{archetypeText(petSummary?.pet?.archetype)}</Text>
               <Text className='pet-home-chip secondary'>{moodText(petMood)}</Text>
             </View>
             <Text className='pet-home-message'>
@@ -214,6 +291,56 @@ function PetHomePage() {
             </Text>
           </View>
         </View>
+
+        <View className='pet-home-card'>
+          <View className='pet-home-card-head'>
+            <Text className='pet-home-card-title'>为什么是它</Text>
+            <Text className='pet-home-card-side'>{archetypeText(petSummary?.pet?.archetype)}</Text>
+          </View>
+          <View className='pet-home-reason-list'>
+            {(petSummary?.pet?.match_reasons?.length ? petSummary.pet.match_reasons : ['它会根据你的健康目标、活动水平和记录习惯生成，不按性别粗暴分配。']).map((reason) => (
+              <View key={reason} className='pet-home-reason-item'>
+                <Text className='pet-home-reason-dot'>•</Text>
+                <Text className='pet-home-reason-text'>{reason}</Text>
+              </View>
+            ))}
+          </View>
+          {petSummary?.pet?.growth_unlocks?.length ? (
+            <View className='pet-home-unlock-row'>
+              {petSummary.pet.growth_unlocks.map((item) => (
+                <Text key={item} className='pet-home-unlock-chip'>{item}</Text>
+              ))}
+            </View>
+          ) : null}
+        </View>
+
+        {shouldShowSelection ? (
+          <View className='pet-home-card'>
+            <View className='pet-home-card-head'>
+              <Text className='pet-home-card-title'>{petSummary?.pet?.needs_selection ? '三选一伙伴' : '免费重新匹配'}</Text>
+              <Text className='pet-home-card-side'>不消耗积分</Text>
+            </View>
+            <Text className='pet-home-event-message'>
+              系统先默认使用第一个候选，首页不会被打断。你可以在这里挑一个真正顺眼的伙伴。
+            </Text>
+            <View className='pet-home-candidate-grid'>
+              {selectionCandidates.map((candidate) => (
+                <View
+                  key={candidate.id}
+                  className={`pet-home-candidate-card ${candidate.pet_seed === petSummary?.pet?.pet_seed ? 'active' : ''}`}
+                  onClick={() => handleSelectCandidate(candidate)}
+                >
+                  <CandidatePetFigure candidate={candidate} />
+                  <Text className='pet-home-candidate-name'>{candidate.name}</Text>
+                  <Text className='pet-home-candidate-style'>{candidateStyleText(candidate.style)} · {candidate.score || '--'}</Text>
+                  <Text className='pet-home-candidate-action'>
+                    {selectingCandidateId === candidate.id ? '选择中' : candidate.pet_seed === petSummary?.pet?.pet_seed ? '当前' : '选择'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         <View className='pet-home-card'>
           <View className='pet-home-card-head'>
@@ -309,6 +436,21 @@ function PetHomePage() {
             </View>
           </View>
         </View>
+
+        {process.env.NODE_ENV === 'development' ? (
+          <View className='pet-home-card'>
+            <View className='pet-home-card-head'>
+              <Text className='pet-home-card-title'>外观试验箱</Text>
+              <Text className='pet-home-card-side'>开发调试</Text>
+            </View>
+            <Text className='pet-home-event-message'>
+              批量查看颜色、体型、动物特征、花纹与配饰组合，定位哪些组合好看，哪些组合需要收敛。
+            </Text>
+            <View className='pet-home-inline-action lab' onClick={openPetLab}>
+              <Text className='pet-home-inline-action-text lab'>打开试验箱</Text>
+            </View>
+          </View>
+        ) : null}
       </View>
     </View>
   )

@@ -17,7 +17,25 @@ func setupFeedTestDB(t *testing.T) *gorm.DB {
 
 	// Create tables
 	assert.NoError(t, db.AutoMigrate(&FeedRecord{}, &domain.FeedLike{}, &domain.FeedComment{}, &UserFriend{}, &UserProfile{}))
+	assert.NoError(t, db.Exec(`CREATE TABLE IF NOT EXISTS user_exercise_logs (
+		id text primary key,
+		user_id text,
+		exercise_desc text,
+		exercise_type text,
+		image_url text,
+		calories_burned real,
+		duration_min integer,
+		recorded_on datetime,
+		recorded_at datetime,
+		ai_reasoning text,
+		hidden_from_feed boolean default false,
+		created_at datetime
+	)`).Error)
 	return db
+}
+
+func testStringPtr(value string) *string {
+	return &value
 }
 
 func TestFeedRepoListPublicFeed(t *testing.T) {
@@ -33,7 +51,7 @@ func TestFeedRepoListPublicFeed(t *testing.T) {
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r1", UserID: "u1", MealType: "lunch", HiddenFromFeed: false}).Error)
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r2", UserID: "u1", MealType: "lunch", HiddenFromFeed: true}).Error)
 
-	records, err := r.ListPublicFeed(ctx, "", "", "", "", 10)
+	records, err := r.ListPublicFeed(ctx, "food_record", "", "", "", "", 10)
 	assert.NoError(t, err)
 	assert.Len(t, records, 1)
 	assert.Equal(t, "r1", records[0].ID)
@@ -47,7 +65,7 @@ func TestFeedRepoListFriendFeed(t *testing.T) {
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r1", UserID: "u1", MealType: "lunch", HiddenFromFeed: false}).Error)
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r2", UserID: "u1", MealType: "lunch", HiddenFromFeed: true}).Error)
 
-	records, err := r.ListFriendFeed(ctx, []string{"u1"}, "", "", "", "", 10)
+	records, err := r.ListFriendFeed(ctx, []string{"u1"}, "food_record", "", "", "", "", 10)
 	assert.NoError(t, err)
 	assert.Len(t, records, 1)
 	assert.Equal(t, "r1", records[0].ID)
@@ -133,7 +151,7 @@ func TestFeedRepoAddComment(t *testing.T) {
 
 	comment := &domain.FeedComment{
 		UserID:   "u1",
-		RecordID: "r1",
+		RecordID: testStringPtr("r1"),
 		Content:  "test",
 	}
 	assert.NoError(t, r.AddComment(ctx, comment))
@@ -145,8 +163,8 @@ func TestFeedRepoListComments(t *testing.T) {
 	r := NewFeedRepo(db)
 	ctx := context.Background()
 
-	assert.NoError(t, r.AddComment(ctx, &domain.FeedComment{UserID: "u1", RecordID: "r1", Content: "c1"}))
-	assert.NoError(t, r.AddComment(ctx, &domain.FeedComment{UserID: "u2", RecordID: "r1", Content: "c2"}))
+	assert.NoError(t, r.AddComment(ctx, &domain.FeedComment{UserID: "u1", RecordID: testStringPtr("r1"), Content: "c1"}))
+	assert.NoError(t, r.AddComment(ctx, &domain.FeedComment{UserID: "u2", RecordID: testStringPtr("r1"), Content: "c2"}))
 
 	comments, err := r.ListComments(ctx, "r1", 10)
 	assert.NoError(t, err)
@@ -160,7 +178,7 @@ func TestFeedRepoFindRecentDuplicate(t *testing.T) {
 
 	comment := &domain.FeedComment{
 		UserID:   "u1",
-		RecordID: "r1",
+		RecordID: testStringPtr("r1"),
 		Content:  "dup",
 	}
 	assert.NoError(t, r.AddComment(ctx, comment))

@@ -38,6 +38,7 @@ const (
 	packagedFoodIngestMethodSilentAnalyze  = "analyze_silent_capture"
 	packagedProductExtractTaskType         = "packaged_product_extract"
 	packagedNutritionLabelTaskType         = "packaged_nutrition_label"
+	packagedProductExtractMaxImages        = 3
 )
 
 type PackagedFoodInput struct {
@@ -367,7 +368,7 @@ func (s *FoodNutritionService) ExtractPackagedProduct(ctx context.Context, image
 	if s.nutritionLabelVisionClient == nil {
 		return nil, &commonerrors.AppError{Code: 10000, Message: "预包装商品识别服务未配置", HTTPStatus: 500}
 	}
-	result, err := s.nutritionLabelVisionClient.AnalyzeWithImagesAndTemperature(ctx, buildPackagedProductExtractPrompt(recognizedNameHint), imageURLs, 0.1)
+	result, err := s.nutritionLabelVisionClient.AnalyzeWithImagesAndTemperature(ctx, buildPackagedProductExtractPrompt(recognizedNameHint, len(imageURLs)), imageURLs, 0.1)
 	if err != nil {
 		return nil, fmt.Errorf("识别预包装商品失败: %w", err)
 	}
@@ -390,6 +391,9 @@ func (s *FoodNutritionService) SubmitPackagedProductExtractTask(ctx context.Cont
 	imageURLs := normalizeStringSlice(input.ImageURLs)
 	if len(imageURLs) == 0 {
 		return "", &commonerrors.AppError{Code: 10002, Message: "包装图片不能为空", HTTPStatus: 400}
+	}
+	if len(imageURLs) > packagedProductExtractMaxImages {
+		return "", &commonerrors.AppError{Code: 10002, Message: "同一种商品最多上传 3 张包装图片", HTTPStatus: 400}
 	}
 	if s.taskRepo == nil || s.taskQueue == nil {
 		return "", &commonerrors.AppError{Code: 10000, Message: "预包装商品异步识别服务未配置", HTTPStatus: 500}
@@ -459,12 +463,16 @@ func buildNutritionLabelPrompt() string {
 }`
 }
 
-func buildPackagedProductExtractPrompt(recognizedNameHint string) string {
+func buildPackagedProductExtractPrompt(recognizedNameHint string, imageCount int) string {
 	hint := strings.TrimSpace(recognizedNameHint)
 	if hint == "" {
 		hint = "无"
 	}
-	return `你是预包装食品 OCR 和结构化提取助手。现在会给你多张同一商品图片，可能包括包装正面、营养成分表、净含量、规格、配料表。
+	imageContext := buildPackagedImageCountContext(imageCount)
+	return `你是预包装食品 OCR 和结构化提取助手。现在会给你 1-3 张同一商品图片，可能包括包装正面、营养成分表、净含量、规格、配料表。
+` + imageContext + `
+这些图片必须被视为同一个商品的一组照片，是同一包装在不同角度、不同折叠状态或大包装局部的补充信息。不要把多张图拆成多个商品，也不要因为多图而输出多个任务。
+如果包装较大、弯曲、反光或一张图拍不全，请综合 1-3 张图片互相补全品牌、品名、净含量/规格和营养成分表；若不同图片信息冲突，只记录冲突，不要编造。
 请只提取图片中真实可见的信息，不要编造，不要根据常识补品牌和口味。
 不要在模型里做自由数学换算。你只负责提取标签上的原始数值、单位、口径（每100g/每100ml/每份）和份量信息。
 营养成分表、净含量/规格、品名是核心信息；配料表和条码是可选增强信息，缺失时不要放入 needs_more_images，也不要降低整体置信度。
@@ -555,6 +563,19 @@ func buildPackagedProductExtractPrompt(recognizedNameHint string) string {
   "ocr_raw_text": "",
   "raw_label_payload": {}
 }`
+}
+
+func buildPackagedImageCountContext(imageCount int) string {
+	switch imageCount {
+	case 1:
+		return "本次实际只有 1 张图片：这通常表示用户认为品名、净含量/规格和营养成分表都在同一张图里。请尽量从这一张里提取可见信息；不要因为没有第二张图片就默认需要补图，只有核心字段确实看不清时才返回 needs_more_images。"
+	case 2:
+		return "本次实际有 2 张图片：通常是包装正面/净含量 + 营养成分表。请把两张图合并理解为同一商品的互补信息，不要分别识别为两个商品。"
+	case 3:
+		return "本次实际有 3 张图片：通常是包装较大、弯曲或文字较小，第三张用于补拍局部。请把三张图合并理解为同一商品的互补信息，优先用更清晰的局部图补全字段。"
+	default:
+		return "本次实际图片数量不固定，但所有图片都应被视为同一商品的一组照片。"
+	}
 }
 
 func parseNutritionLabelResult(raw map[string]any) *PackagedNutritionLabelResult {

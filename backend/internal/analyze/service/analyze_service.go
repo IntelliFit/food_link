@@ -92,7 +92,7 @@ func NewAnalyzeService(doubaoClient, ofoxAIClient LLMClient, users *authrepo.Use
 		ofoxAIClient:          ofoxAIClient,
 		users:                 users,
 		nutrition:             nutritionRepo,
-		webSearcher:           NewMultiWebSearcher(NewBingWebSearcher(), NewDuckDuckGoWebSearcher()),
+		webSearcher:           NewMultiWebSearcher(NewSo360WebSearcher(), NewSogouWebSearcher(), NewBingWebSearcher(), NewDuckDuckGoWebSearcher()),
 	}
 }
 
@@ -2046,9 +2046,7 @@ func (s *AnalyzeService) refineImageWithLowCostWebSearch(ctx context.Context, in
 		return nil, meta
 	}
 	finalItems := parseItems(merged)
-	meta["status"] = "applied"
 	meta["calibration_method"] = "rule_based_spec_extraction"
-	meta["web_search_status"] = "applied"
 	meta["review_item_count"] = len(parseItems(merged))
 	if compacted := compactHybridDebugItems(finalItems, 12); len(compacted) > 0 {
 		meta["final_items"] = compacted
@@ -2058,6 +2056,22 @@ func (s *AnalyzeService) refineImageWithLowCostWebSearch(ctx context.Context, in
 	}
 	meta["calibration_items"] = calibrationRows
 	meta["stage_durations_ms"] = map[string]any{"search": time.Since(start).Milliseconds(), "calibration": 0, "total": time.Since(start).Milliseconds()}
+	appliedCount := countAppliedCalibrationRows(calibrationRows)
+	meta["calibration_applied_count"] = appliedCount
+	if appliedCount == 0 {
+		meta["status"] = "no_applicable_specs"
+		meta["web_search_status"] = "no_applicable_specs"
+		meta["calibration_method"] = "first_pass_kept"
+		logger.WithTrace(ctx).Info("低成本搜索未找到可应用规格",
+			slog.String("execution_mode", executionMode),
+			slog.Int("image_count", len(imageURLs)),
+			slog.Int("item_count", len(finalItems)),
+			slog.Any("hybrid_review", meta),
+		)
+		return nil, meta
+	}
+	meta["status"] = "applied"
+	meta["web_search_status"] = "applied"
 	logger.WithTrace(ctx).Info("低成本搜索校准已应用",
 		slog.String("execution_mode", executionMode),
 		slog.Int("image_count", len(imageURLs)),
@@ -2661,7 +2675,7 @@ func splitFoodSearchTerms(name string) []string {
 			terms = append(terms, field)
 		}
 	}
-	for _, keyword := range []string{"蜜雪冰城", "光明", "哈尔滨", "冰淇淋", "蛋筒", "酸奶", "啤酒", "可乐"} {
+	for _, keyword := range []string{"蜜雪冰城", "巧乐兹", "八喜", "BAXY", "光明", "伊利", "哈尔滨", "冰淇淋", "雪糕", "蛋筒", "酸奶", "啤酒", "可乐"} {
 		if strings.Contains(name, keyword) {
 			terms = append(terms, keyword)
 		}
@@ -2698,14 +2712,14 @@ func uniqueNonEmptyStrings(values []string, limit int) []string {
 }
 
 func isRelevantFoodSearchResult(query string, result WebSearchResult, foodTerms []string) bool {
-	text := strings.ToLower(query + " " + result.Title + " " + result.Snippet)
-	if hasIrrelevantSearchNoise(text) {
+	resultText := strings.ToLower(result.Title + " " + result.Snippet)
+	if hasIrrelevantSearchNoise(resultText) {
 		return false
 	}
 	foodHit := false
 	for _, term := range foodTerms {
 		term = strings.ToLower(strings.TrimSpace(term))
-		if term != "" && strings.Contains(text, term) {
+		if term != "" && strings.Contains(resultText, term) {
 			foodHit = true
 			break
 		}
@@ -2713,10 +2727,8 @@ func isRelevantFoodSearchResult(query string, result WebSearchResult, foodTerms 
 	if !foodHit {
 		return false
 	}
-	for _, term := range []string{"营养", "热量", "净含量", "规格", "食品", "食物", "kcal", "g", "ml", "克", "毫升", "蛋筒", "冰淇淋", "酸奶", "啤酒", "可乐"} {
-		if strings.Contains(text, term) {
-			return true
-		}
+	if hasSearchResultSpecOrNutritionSignal(resultText) {
+		return true
 	}
 	return false
 }
@@ -2724,6 +2736,8 @@ func isRelevantFoodSearchResult(query string, result WebSearchResult, foodTerms 
 func hasIrrelevantSearchNoise(text string) bool {
 	noises := []string{
 		"汉语", "字义", "词典", "成语", "百度百科", "原神", "游戏", "官网-米哈游", "开放世界", "手持 的意思", "为什么男人",
+		"招聘", "校园招聘", "社会招聘", "人才", "职位", "热招", "简历", "求职", "hotjob", "career", "job",
+		"集团新闻", "签约仪式", "投资者关系", "企业文化",
 	}
 	for _, noise := range noises {
 		if strings.Contains(text, strings.ToLower(noise)) {
@@ -2733,9 +2747,29 @@ func hasIrrelevantSearchNoise(text string) bool {
 	return false
 }
 
+func hasSearchResultSpecOrNutritionSignal(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" {
+		return false
+	}
+	if weightSpecRe.MatchString(text) || kcalSpecRe.MatchString(text) || kjSpecRe.MatchString(text) {
+		return true
+	}
+	if productTitleSpecRe.MatchString(text) {
+		return true
+	}
+	if nutritionValueRe.MatchString(text) {
+		return true
+	}
+	return false
+}
+
 var (
-	weightSpecRe = regexp.MustCompile(`(?i)(?:净含量|规格|重量|商品规格|content|net\s*weight)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(kg|千克|公斤|g|克|ml|毫升|mL|ML)`)
-	kcalSpecRe   = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(?:kcal|千卡|大卡)`)
+	weightSpecRe       = regexp.MustCompile(`(?i)(?:净含量|规格|重量|商品规格|content|net\s*weight|net\s*wt\.?)\s*(?:为|是|约|:|：)?\s*(\d+(?:\.\d+)?)\s*(kg|千克|公斤|g|克|ml|毫升|mL|ML)`)
+	productTitleSpecRe = regexp.MustCompile(`(?i)(?:^|[^\d])(\d+(?:\.\d+)?)\s*(kg|千克|公斤|g|克|ml|毫升|mL|ML)(?:\s*(?:[*x×]\s*\d+)?\s*(?:装|支|杯|瓶|袋|盒|根|条|只|个|规格|参数|口味|风味|六合一|$))?`)
+	kcalSpecRe         = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(?:kcal|千卡|大卡)`)
+	kjSpecRe           = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(?:kj|kJ|千焦)`)
+	nutritionValueRe   = regexp.MustCompile(`(?i)(?:能量|热量|蛋白质|脂肪|碳水化合物|碳水|钠|营养成分)[^。；;\n]{0,20}\d+(?:\.\d+)?\s*(?:kcal|千卡|大卡|kj|千焦|g|克|mg|毫克)`)
 )
 
 func applyRuleBasedWebSearchCalibration(baseParsed map[string]any, evidence []WebSearchEvidence) (map[string]any, []map[string]any) {
@@ -2748,6 +2782,7 @@ func applyRuleBasedWebSearchCalibration(baseParsed map[string]any, evidence []We
 		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
 		best, ok := findBestSpecForItem(name, evidence)
 		if ok && best.WeightGrams > 0 && shouldApplySpecWeight(item, best.WeightGrams) {
+			next["grossWeightGrams"] = best.WeightGrams
 			next["estimatedWeightGrams"] = best.WeightGrams
 			next["originalWeightGrams"] = best.WeightGrams
 			if best.Unit == "ml" {
@@ -2780,6 +2815,16 @@ func applyRuleBasedWebSearchCalibration(baseParsed map[string]any, evidence []We
 	return merged, rows
 }
 
+func countAppliedCalibrationRows(rows []map[string]any) int {
+	count := 0
+	for _, row := range rows {
+		if applied, ok := row["applied"].(bool); ok && applied {
+			count++
+		}
+	}
+	return count
+}
+
 type webSearchSpec struct {
 	Query       string
 	Title       string
@@ -2796,12 +2841,63 @@ func findBestSpecForItem(name string, evidence []WebSearchEvidence) (webSearchSp
 			if !textMatchesAnyTerm(text, itemTerms) {
 				continue
 			}
+			if !textMatchesProductEvidence(name, text) {
+				continue
+			}
 			if spec, ok := extractSpecFromText(row.Query, result.Title, text); ok {
 				return spec, true
 			}
 		}
 	}
 	return webSearchSpec{}, false
+}
+
+func textMatchesProductEvidence(name, text string) bool {
+	name = strings.TrimSpace(name)
+	text = strings.ToLower(strings.TrimSpace(text))
+	if name == "" || text == "" {
+		return false
+	}
+	if hasConflictingProductVariant(name, text) {
+		return false
+	}
+	compactName := strings.ReplaceAll(strings.ToLower(name), " ", "")
+	compactText := strings.ReplaceAll(text, " ", "")
+	if compactName != "" && strings.Contains(compactText, compactName) {
+		return true
+	}
+	tokens := productSearchTokens(name)
+	if len(tokens) == 0 {
+		return textMatchesAnyTerm(text, splitFoodSearchTerms(name))
+	}
+	hits := 0
+	for _, token := range tokens {
+		token = strings.ToLower(strings.TrimSpace(token))
+		if token != "" && strings.Contains(text, token) {
+			hits++
+		}
+	}
+	switch {
+	case len(tokens) >= 3:
+		return hits >= 3
+	case len(tokens) == 2:
+		return hits >= 2
+	default:
+		return hits >= 1
+	}
+}
+
+func hasConflictingProductVariant(name, text string) bool {
+	lowerName := strings.ToLower(strings.TrimSpace(name))
+	lowerText := strings.ToLower(strings.TrimSpace(text))
+	if strings.Contains(lowerName, "巧乐兹") {
+		for _, variant := range []string{"巧恋果", "四个圈", "迷你", "mini", "脆筒", "经典巧脆棒"} {
+			if strings.Contains(lowerText, strings.ToLower(variant)) && !strings.Contains(lowerName, strings.ToLower(variant)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func textMatchesAnyTerm(text string, terms []string) bool {
@@ -2841,10 +2937,43 @@ func extractSpecFromText(query, title, text string) (webSearchSpec, bool) {
 			Unit:        unit,
 		}, true
 	}
+	for _, match := range productTitleSpecRe.FindAllStringSubmatch(title, -1) {
+		if len(match) < 3 {
+			continue
+		}
+		if isPerUnitSpecText(match[0]) {
+			continue
+		}
+		value := numberFromString(match[1])
+		unit := normalizeSpecUnit(match[2])
+		grams := value
+		switch unit {
+		case "kg":
+			grams = value * 1000
+		case "g", "ml":
+		default:
+			continue
+		}
+		if grams <= 0 || grams > 2000 {
+			continue
+		}
+		return webSearchSpec{
+			Query:       query,
+			Title:       title,
+			RawText:     strings.TrimSpace(match[0]),
+			WeightGrams: grams,
+			Unit:        unit,
+		}, true
+	}
 	if kcalSpecRe.MatchString(text) {
 		return webSearchSpec{}, false
 	}
 	return webSearchSpec{}, false
+}
+
+func isPerUnitSpecText(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	return strings.Contains(text, "每") || strings.Contains(text, "per")
 }
 
 func normalizeSpecUnit(unit string) string {
@@ -3066,6 +3195,82 @@ func (s *MultiWebSearcher) Search(ctx context.Context, query string, limit int) 
 	return nil, nil
 }
 
+type So360WebSearcher struct {
+	client *http.Client
+}
+
+func NewSo360WebSearcher() *So360WebSearcher {
+	return &So360WebSearcher{client: &http.Client{Timeout: webSearchTimeout}}
+}
+
+func (s *So360WebSearcher) Search(ctx context.Context, query string, limit int) ([]WebSearchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > webSearchMaxResults {
+		limit = webSearchMaxResults
+	}
+	endpoint := "https://www.so.com/s?" + url.Values{"q": []string{query}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; FoodLinkBot/1.0; +https://healthymax.cn)")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.6")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("360 search status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return parseSo360HTMLResults(string(data), limit), nil
+}
+
+type SogouWebSearcher struct {
+	client *http.Client
+}
+
+func NewSogouWebSearcher() *SogouWebSearcher {
+	return &SogouWebSearcher{client: &http.Client{Timeout: webSearchTimeout}}
+}
+
+func (s *SogouWebSearcher) Search(ctx context.Context, query string, limit int) ([]WebSearchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > webSearchMaxResults {
+		limit = webSearchMaxResults
+	}
+	endpoint := "https://www.sogou.com/web?" + url.Values{"query": []string{query}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; FoodLinkBot/1.0; +https://healthymax.cn)")
+	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.6")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("sogou search status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return parseSogouHTMLResults(string(data), limit), nil
+}
+
 type BingWebSearcher struct {
 	client *http.Client
 }
@@ -3148,10 +3353,101 @@ var (
 	bingResultBlockRe   = regexp.MustCompile(`(?is)<li[^>]+class="[^"]*b_algo[^"]*"[^>]*>(.*?)</li>`)
 	bingTitleRe         = regexp.MustCompile(`(?is)<h2[^>]*>\s*<a[^>]+href="([^"]*)"[^>]*>(.*?)</a>\s*</h2>`)
 	bingSnippetRe       = regexp.MustCompile(`(?is)<p[^>]*>(.*?)</p>`)
+	so360ResultBlockRe  = regexp.MustCompile(`(?is)<li[^>]+class="[^"]*res-list[^"]*"[^>]*>(.*?)</li>`)
+	so360TitleRe        = regexp.MustCompile(`(?is)<a[^>]+href="([^"]*)"[^>]*>(.*?)</a>`)
+	so360SnippetRe      = regexp.MustCompile(`(?is)<p[^>]+class="[^"]*res-desc[^"]*"[^>]*>(.*?)</p>`)
+	sogouResultStartRe  = regexp.MustCompile(`(?is)<div[^>]+class="[^"]*(?:vrwrap|results)[^"]*"[^>]*>`)
+	sogouTitleRe        = regexp.MustCompile(`(?is)<a[^>]+href="([^"]*)"[^>]*>(.*?)</a>`)
+	sogouSnippetRe      = regexp.MustCompile(`(?is)<(?:p|div)[^>]+class="[^"]*(?:str_info|fz-mid|text-layout)[^"]*"[^>]*>(.*?)</(?:p|div)>`)
 	htmlTagRe           = regexp.MustCompile(`(?is)<[^>]+>`)
 	htmlWhitespaceRe    = regexp.MustCompile(`\s+`)
 	duckRedirectParamRe = regexp.MustCompile(`[?&]uddg=([^&]+)`)
 )
+
+func parseSo360HTMLResults(raw string, limit int) []WebSearchResult {
+	if limit <= 0 {
+		limit = webSearchMaxResults
+	}
+	blocks := so360ResultBlockRe.FindAllStringSubmatch(raw, -1)
+	results := make([]WebSearchResult, 0, limit)
+	for _, blockMatch := range blocks {
+		if len(blockMatch) < 2 {
+			continue
+		}
+		block := blockMatch[1]
+		titleMatch := so360TitleRe.FindStringSubmatch(block)
+		if len(titleMatch) < 3 {
+			continue
+		}
+		title := cleanHTMLText(titleMatch[2])
+		if title == "" {
+			continue
+		}
+		snippet := ""
+		if snippetMatch := so360SnippetRe.FindStringSubmatch(block); len(snippetMatch) >= 2 {
+			snippet = cleanHTMLText(snippetMatch[1])
+		}
+		results = append(results, WebSearchResult{
+			Title:   truncateRunes(title, 80),
+			Snippet: truncateRunes(snippet, 180),
+			URL:     strings.TrimSpace(html.UnescapeString(titleMatch[1])),
+		})
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results
+}
+
+func parseSogouHTMLResults(raw string, limit int) []WebSearchResult {
+	if limit <= 0 {
+		limit = webSearchMaxResults
+	}
+	blocks := splitSogouResultBlocks(raw)
+	results := make([]WebSearchResult, 0, limit)
+	for _, block := range blocks {
+		titleMatch := sogouTitleRe.FindStringSubmatch(block)
+		if len(titleMatch) < 3 {
+			continue
+		}
+		title := cleanHTMLText(titleMatch[2])
+		if title == "" {
+			continue
+		}
+		snippet := ""
+		if snippetMatch := sogouSnippetRe.FindStringSubmatch(block); len(snippetMatch) >= 2 {
+			snippet = cleanHTMLText(snippetMatch[1])
+		}
+		results = append(results, WebSearchResult{
+			Title:   truncateRunes(title, 80),
+			Snippet: truncateRunes(snippet, 180),
+			URL:     strings.TrimSpace(html.UnescapeString(titleMatch[1])),
+		})
+		if len(results) >= limit {
+			break
+		}
+	}
+	return results
+}
+
+func splitSogouResultBlocks(raw string) []string {
+	matches := sogouResultStartRe.FindAllStringIndex(raw, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	blocks := make([]string, 0, len(matches))
+	for index, match := range matches {
+		start := match[0]
+		end := len(raw)
+		if index+1 < len(matches) {
+			end = matches[index+1][0]
+		}
+		if start < end {
+			blocks = append(blocks, raw[start:end])
+		}
+	}
+	return blocks
+}
 
 func parseBingHTMLResults(raw string, limit int) []WebSearchResult {
 	if limit <= 0 {
@@ -3306,8 +3602,10 @@ func buildStandardImageSearchQueries(input AnalyzeInput, doubaoParsed map[string
 		queries = append(queries, value)
 	}
 	for _, candidate := range highPriorityCandidates {
-		add(candidate + " 包装 净含量 规格")
-		add(candidate + " 营养成分")
+		add(buildProductSearchQuery(candidate) + " 型号 规格 多少克")
+	}
+	for _, candidate := range highPriorityCandidates {
+		add(buildProductSearchQuery(candidate) + " 营养成分")
 	}
 	for _, candidate := range normalCandidates {
 		add(candidate + " 食物 外观 营养")
@@ -3337,6 +3635,51 @@ func isHighPrioritySearchItem(item map[string]any) bool {
 		}
 	}
 	return false
+}
+
+func buildProductSearchQuery(name string) string {
+	tokens := productSearchTokens(name)
+	if len(tokens) == 0 {
+		return name
+	}
+	return strings.Join(tokens, " ")
+}
+
+func productSearchTokens(name string) []string {
+	name = strings.TrimSpace(name)
+	if name == "" || name == "<nil>" {
+		return nil
+	}
+	lowerName := strings.ToLower(name)
+	tokens := []string{}
+	addIfContains := func(keyword string) {
+		if strings.Contains(lowerName, strings.ToLower(keyword)) {
+			tokens = append(tokens, keyword)
+		}
+	}
+	if strings.Contains(name, "巧乐兹") {
+		for _, keyword := range []string{"巧乐兹", "低糖", "抹茶", "可可", "巧克力", "雪糕", "冰淇淋"} {
+			addIfContains(keyword)
+		}
+		return uniqueNonEmptyStrings(tokens, 8)
+	}
+	if strings.Contains(name, "八喜") || strings.Contains(lowerName, "baxy") {
+		for _, keyword := range []string{"八喜", "BAXY", "牛奶", "香草", "草莓", "巧克力", "绿茶", "冰淇淋", "雪糕"} {
+			addIfContains(keyword)
+		}
+		return uniqueNonEmptyStrings(tokens, 8)
+	}
+	for _, keyword := range []string{
+		"蜜雪冰城", "光明", "伊利", "蒙牛", "雀巢", "哈尔滨", "哈啤", "雪花", "青岛", "百事", "可口可乐", "Member", "Mark",
+		"低糖", "无糖", "抹茶", "可可", "巧克力", "草莓", "香草", "牛奶", "大粒", "原味", "绿茶",
+		"冰淇淋", "雪糕", "蛋筒", "甜筒", "酸奶", "啤酒", "可乐", "咖啡", "饮料", "汽水", "奶茶", "饼干", "蛋糕",
+	} {
+		addIfContains(keyword)
+	}
+	if len(tokens) > 0 {
+		return uniqueNonEmptyStrings(tokens, 10)
+	}
+	return splitFoodSearchTerms(name)
 }
 
 func normalizeSearchQuery(value string) string {

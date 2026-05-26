@@ -548,6 +548,18 @@ func (r *MembershipRepo) GetFoodRecordOwner(ctx context.Context, recordID string
 	return row.UserID, err
 }
 
+func (r *MembershipRepo) CountFoodRecordsByDate(ctx context.Context, userID, chinaDate string) (int, error) {
+	if strings.TrimSpace(userID) == "" || strings.TrimSpace(chinaDate) == "" {
+		return 0, nil
+	}
+	var count int64
+	err := r.db.WithContext(ctx).
+		Table("user_food_records").
+		Where("user_id = ? AND DATE(COALESCE(record_time, created_at) AT TIME ZONE 'Asia/Shanghai') = ?", userID, chinaDate).
+		Count(&count).Error
+	return int(count), err
+}
+
 func (r *MembershipRepo) UpdateUserEarnedCreditsBalance(ctx context.Context, userID string, nextBalance int) error {
 	return r.db.WithContext(ctx).Table("weapp_user").Where("id = ?", userID).Update("earned_credits_balance", nextBalance).Error
 }
@@ -697,18 +709,54 @@ func (r *MembershipRepo) GetSharePosterClaim(ctx context.Context, userID, record
 	return &row, err
 }
 
-func (r *MembershipRepo) CreateSharePosterBonusEvent(ctx context.Context, userID, recordID, chinaDate string, credits int) (*domain.UserCreditBonusEvent, error) {
+func (r *MembershipRepo) GetSharePosterClaimBySourceKey(ctx context.Context, userID, sourceKey, chinaDate string) (*domain.UserCreditBonusEvent, error) {
+	sourceKey = strings.TrimSpace(sourceKey)
+	if sourceKey == "" {
+		return nil, nil
+	}
+	var row domain.UserCreditBonusEvent
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND bonus_type = ? AND bonus_date = ? AND source_key = ?", userID, "share_poster", chinaDate, sourceKey).
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &row, err
+}
+
+func (r *MembershipRepo) CreateSharePosterBonusEvent(ctx context.Context, userID, sourceKey, sourceScope, recordID, chinaDate string, credits int, meta map[string]any) (*domain.UserCreditBonusEvent, error) {
 	now := time.Now()
+	sourceKey = strings.TrimSpace(sourceKey)
+	sourceScope = strings.TrimSpace(sourceScope)
+	recordID = strings.TrimSpace(recordID)
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	if sourceKey != "" {
+		meta["source_key"] = sourceKey
+	}
+	if sourceScope != "" {
+		meta["source_scope"] = sourceScope
+	}
 	row := &domain.UserCreditBonusEvent{
-		ID:             uuid.New().String(),
-		UserID:         userID,
-		BonusType:      "share_poster",
-		BonusDate:      chinaDate,
-		Credits:        credits,
-		SourceRecordID: &recordID,
-		Meta:           map[string]any{"source_record_id": recordID},
-		CreatedAt:      &now,
-		UpdatedAt:      &now,
+		ID:        uuid.New().String(),
+		UserID:    userID,
+		BonusType: "share_poster",
+		BonusDate: chinaDate,
+		Credits:   credits,
+		Meta:      meta,
+		CreatedAt: &now,
+		UpdatedAt: &now,
+	}
+	if recordID != "" {
+		row.SourceRecordID = &recordID
+		meta["source_record_id"] = recordID
+	}
+	if sourceScope != "" {
+		row.SourceScope = &sourceScope
+	}
+	if sourceKey != "" {
+		row.SourceKey = &sourceKey
 	}
 	return row, r.db.WithContext(ctx).Create(row).Error
 }
@@ -719,7 +767,10 @@ func (r *MembershipRepo) HasShareReward(ctx context.Context, userID, recordID st
 }
 
 func (r *MembershipRepo) CreateShareReward(ctx context.Context, reward *domain.MembershipShareReward) error {
-	_, err := r.CreateSharePosterBonusEvent(ctx, reward.UserID, reward.RecordID, chinaToday(), 1)
+	sourceKey := "meal_record:" + reward.RecordID
+	_, err := r.CreateSharePosterBonusEvent(ctx, reward.UserID, sourceKey, "meal_record", reward.RecordID, chinaToday(), 1, map[string]any{
+		"source_record_id": reward.RecordID,
+	})
 	return err
 }
 

@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"food_link/backend/internal/membership/service"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
@@ -49,7 +51,7 @@ func (m *mockMembershipService) HandleWechatNotify(ctx context.Context, headers 
 	}
 	return map[string]any{"code": "SUCCESS", "message": "成功"}, m.wechatNotifyErr
 }
-func (m *mockMembershipService) ClaimSharePosterReward(ctx context.Context, userID, recordID string) (map[string]any, error) {
+func (m *mockMembershipService) ClaimSharePosterReward(ctx context.Context, userID string, input service.SharePosterRewardClaimInput) (map[string]any, error) {
 	return m.claimSharePosterRewardResult, m.claimSharePosterRewardErr
 }
 
@@ -147,6 +149,19 @@ func TestMembershipHandler_ClaimSharePosterReward(t *testing.T) {
 	r := setupRouter(h)
 
 	body, _ := json.Marshal(map[string]string{"record_id": "rec1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/rewards/share-poster/claim", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestMembershipHandler_ClaimSharePosterRewardDailyScope(t *testing.T) {
+	mockSvc := &mockMembershipService{claimSharePosterRewardResult: map[string]any{"claimed": true}}
+	h := NewMembershipHandler(mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"share_scope": "daily_food", "share_date": "2026-05-26"})
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/membership/rewards/share-poster/claim", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

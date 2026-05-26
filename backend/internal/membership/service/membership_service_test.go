@@ -39,8 +39,10 @@ type mockMembershipRepo struct {
 	shareEvents                   []domain.UserCreditBonusEvent
 	completedInviteRewardsInMonth int
 	foodRecordOwner               string
+	foodRecordCountByDate         map[string]int
 	shareClaimsToday              int
 	shareClaim                    *domain.UserCreditBonusEvent
+	shareClaimBySourceKey         map[string]*domain.UserCreditBonusEvent
 	saveMembershipCalls           int
 	ledgerByReasonSource          map[string]*domain.UserEarnedCreditLedger
 	sumPositiveEarnedCredits      int
@@ -196,14 +198,39 @@ func (m *mockMembershipRepo) GetUser(ctx context.Context, userID string) (*membe
 func (m *mockMembershipRepo) GetFoodRecordOwner(ctx context.Context, recordID string) (string, error) {
 	return m.foodRecordOwner, nil
 }
+func (m *mockMembershipRepo) CountFoodRecordsByDate(ctx context.Context, userID, chinaDate string) (int, error) {
+	if m.foodRecordCountByDate == nil {
+		return 0, nil
+	}
+	return m.foodRecordCountByDate[chinaDate], nil
+}
 func (m *mockMembershipRepo) CountSharePosterClaims(ctx context.Context, userID, chinaDate string) (int, error) {
 	return m.shareClaimsToday, nil
 }
 func (m *mockMembershipRepo) GetSharePosterClaim(ctx context.Context, userID, recordID, chinaDate string) (*domain.UserCreditBonusEvent, error) {
 	return m.shareClaim, nil
 }
-func (m *mockMembershipRepo) CreateSharePosterBonusEvent(ctx context.Context, userID, recordID, chinaDate string, credits int) (*domain.UserCreditBonusEvent, error) {
-	event := &domain.UserCreditBonusEvent{ID: "bonus1", UserID: userID, Credits: credits}
+func (m *mockMembershipRepo) GetSharePosterClaimBySourceKey(ctx context.Context, userID, sourceKey, chinaDate string) (*domain.UserCreditBonusEvent, error) {
+	if m.shareClaimBySourceKey == nil {
+		return nil, nil
+	}
+	return m.shareClaimBySourceKey[sourceKey], nil
+}
+func (m *mockMembershipRepo) CreateSharePosterBonusEvent(ctx context.Context, userID, sourceKey, sourceScope, recordID, chinaDate string, credits int, meta map[string]any) (*domain.UserCreditBonusEvent, error) {
+	event := &domain.UserCreditBonusEvent{ID: "bonus1", UserID: userID, Credits: credits, Meta: meta}
+	if sourceKey != "" {
+		event.SourceKey = &sourceKey
+		if m.shareClaimBySourceKey == nil {
+			m.shareClaimBySourceKey = map[string]*domain.UserCreditBonusEvent{}
+		}
+		m.shareClaimBySourceKey[sourceKey] = event
+	}
+	if sourceScope != "" {
+		event.SourceScope = &sourceScope
+	}
+	if recordID != "" {
+		event.SourceRecordID = &recordID
+	}
 	m.shareClaim = event
 	return event, nil
 }
@@ -703,6 +730,97 @@ func TestMembershipService_GetMyMembershipMaterializesLegacyInviteAndShareReward
 	require.NoError(t, err)
 	assert.Equal(t, 6, data["earned_credits_balance"])
 	assert.Equal(t, 14, data["total_credits_available"])
+}
+
+func TestMembershipService_ClaimSharePosterRewardRecordIDCompat(t *testing.T) {
+	repo := &mockMembershipRepo{
+		user:            &membershiprepo.User{ID: "u1"},
+		foodRecordOwner: "u1",
+	}
+	svc := NewMembershipService(repo)
+
+	data, err := svc.ClaimSharePosterReward(context.Background(), "u1", SharePosterRewardClaimInput{RecordID: "rec1"})
+	require.NoError(t, err)
+	assert.Equal(t, true, data["claimed"])
+	assert.Equal(t, 1, data["credits"])
+	require.NotNil(t, repo.shareClaim)
+	require.NotNil(t, repo.shareClaim.SourceKey)
+	require.NotNil(t, repo.shareClaim.SourceScope)
+	assert.Equal(t, "meal_record:rec1", *repo.shareClaim.SourceKey)
+	assert.Equal(t, "meal_record", *repo.shareClaim.SourceScope)
+}
+
+func TestMembershipService_ClaimSharePosterRewardDailyFood(t *testing.T) {
+	today := time.Now().In(chinaLocation()).Format("2006-01-02")
+	repo := &mockMembershipRepo{
+		user:                  &membershiprepo.User{ID: "u1"},
+		foodRecordCountByDate: map[string]int{today: 2},
+	}
+	svc := NewMembershipService(repo)
+
+	data, err := svc.ClaimSharePosterReward(context.Background(), "u1", SharePosterRewardClaimInput{
+		ShareScope: "daily_food",
+		ShareDate:  today,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, true, data["claimed"])
+	require.NotNil(t, repo.shareClaim)
+	require.NotNil(t, repo.shareClaim.SourceKey)
+	assert.Equal(t, "daily_food:"+today, *repo.shareClaim.SourceKey)
+	assert.Nil(t, repo.shareClaim.SourceRecordID)
+}
+
+func TestMembershipService_ClaimSharePosterRewardDailyFoodRequiresRecords(t *testing.T) {
+	today := time.Now().In(chinaLocation()).Format("2006-01-02")
+	repo := &mockMembershipRepo{user: &membershiprepo.User{ID: "u1"}, foodRecordCountByDate: map[string]int{today: 0}}
+	svc := NewMembershipService(repo)
+
+	_, err := svc.ClaimSharePosterReward(context.Background(), "u1", SharePosterRewardClaimInput{
+		ShareScope: "daily_food",
+		ShareDate:  today,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "当天没有饮食记录")
+}
+
+func TestMembershipService_ClaimSharePosterRewardDailySummaryDedupesBySourceKey(t *testing.T) {
+	today := time.Now().In(chinaLocation()).Format("2006-01-02")
+	sourceKey := "daily_summary:" + today
+	repo := &mockMembershipRepo{
+		user:                  &membershiprepo.User{ID: "u1"},
+		foodRecordCountByDate: map[string]int{today: 1},
+		shareClaimsToday:      1,
+		shareClaimBySourceKey: map[string]*domain.UserCreditBonusEvent{sourceKey: {ID: "bonus1"}},
+	}
+	svc := NewMembershipService(repo)
+
+	data, err := svc.ClaimSharePosterReward(context.Background(), "u1", SharePosterRewardClaimInput{
+		ShareScope: "daily_summary",
+		ShareDate:  today,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, false, data["claimed"])
+	assert.Equal(t, true, data["already_claimed"])
+	assert.Equal(t, 1, data["share_poster_claims_today"])
+}
+
+func TestMembershipService_ClaimSharePosterRewardDailyCap(t *testing.T) {
+	today := time.Now().In(chinaLocation()).Format("2006-01-02")
+	repo := &mockMembershipRepo{
+		user:                  &membershiprepo.User{ID: "u1"},
+		foodRecordCountByDate: map[string]int{today: 1},
+		shareClaimsToday:      sharePosterDailyMaxEvents,
+	}
+	svc := NewMembershipService(repo)
+
+	data, err := svc.ClaimSharePosterReward(context.Background(), "u1", SharePosterRewardClaimInput{
+		ShareScope: "daily_food",
+		ShareDate:  today,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, false, data["claimed"])
+	assert.Equal(t, true, data["daily_cap_reached"])
+	assert.Equal(t, sharePosterDailyMaxEvents, data["share_poster_claims_today"])
 }
 
 func TestMembershipService_WechatNotify_ActivatesMembership(t *testing.T) {

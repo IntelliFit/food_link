@@ -430,7 +430,7 @@ export interface FoodRecordItemPayload {
   suggested_ratio_reason?: string
   water_ml?: number
   nutrients: Nutrients
-  manual_source?: 'public_library' | 'nutrition_library'
+  manual_source?: 'public_library' | 'nutrition_library' | 'packaged_food'
   manual_source_id?: string
   manual_source_title?: string
   manual_portion_label?: string
@@ -758,6 +758,27 @@ export interface PetProfile {
   next_level_exp: number
   level_progress: number
   total_events: number
+  archetype?: string
+  match_reasons?: string[]
+  needs_selection?: boolean
+  selection_candidates?: PetAppearanceCandidate[]
+  free_profile_rematch_available?: boolean
+  growth_unlocks?: string[]
+}
+
+export interface PetAppearanceCandidate {
+  id: string
+  pet_seed: string
+  name: string
+  color: string
+  shape: string
+  pattern: string
+  accessory: string
+  personality: string
+  archetype?: string
+  style?: string
+  score?: number
+  match_reasons?: string[]
 }
 
 export interface PetDailyScore {
@@ -811,6 +832,10 @@ export interface PetAppearanceRerollResult {
   pet: PetProfile
   credits_cost: number
   earned_credits_balance?: number
+}
+
+export interface PetAppearanceSelectResult {
+  pet: PetProfile
 }
 
 /** 首页仪表盘可编辑目标值 */
@@ -1256,6 +1281,14 @@ export interface ClaimSharePosterRewardResponse {
   total_credits_available?: number | null
   message: string
   points_balance?: number | null
+}
+
+export type SharePosterRewardScope = 'daily_food' | 'daily_summary'
+
+export interface ClaimSharePosterRewardInput {
+  record_id?: string
+  share_scope?: SharePosterRewardScope
+  share_date?: string
 }
 
 export interface RewardCenterTask {
@@ -2874,6 +2907,19 @@ export async function rerollPetAppearance(): Promise<PetAppearanceRerollResult> 
   return res.data as PetAppearanceRerollResult
 }
 
+export async function selectPetAppearance(candidateId: string): Promise<PetAppearanceSelectResult> {
+  const res = await authenticatedRequest('/api/pet/select-appearance', {
+    method: 'POST',
+    data: { candidate_id: candidateId },
+    timeout: 10000,
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.message || '选择宠物外观失败'
+    throw new Error(msg)
+  }
+  return res.data as PetAppearanceSelectResult
+}
+
 /**
  * 获取首页可编辑目标值
  */
@@ -3572,17 +3618,20 @@ export async function getMyMembership(date?: string): Promise<MembershipStatus> 
   return _membershipPending
 }
 
-export async function claimSharePosterReward(recordId: string): Promise<ClaimSharePosterRewardResponse> {
-  const rid = (recordId || '').trim()
-  if (!rid) {
-    throw new Error('缺少记录 ID，无法领取海报奖励')
+export async function claimSharePosterReward(input: string | ClaimSharePosterRewardInput): Promise<ClaimSharePosterRewardResponse> {
+  const payload: ClaimSharePosterRewardInput = typeof input === 'string'
+    ? { record_id: input }
+    : { ...input }
+  if (payload.record_id) {
+    payload.record_id = payload.record_id.trim()
+  }
+  if (!payload.record_id && !payload.share_scope) {
+    throw new Error('缺少分享对象，无法领取海报奖励')
   }
   try {
     const response = await authenticatedRequest('/api/membership/rewards/share-poster/claim', {
       method: 'POST',
-      data: {
-        record_id: rid
-      }
+      data: payload
     })
 
     if (response.statusCode !== 200) {
@@ -3958,7 +4007,7 @@ export async function uploadHealthReportOcr(base64Image: string): Promise<{
 
 export interface ManualFoodSearchResult {
   id: string
-  source: 'public_library' | 'nutrition_library'
+  source: 'public_library' | 'nutrition_library' | 'packaged_food'
   title: string
   subtitle: string
   category?: string
@@ -4428,19 +4477,33 @@ export interface CheckinLeaderboardItem {
 
 export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
 export type CommunityAuthorScope = 'all' | 'priority' | 'public'
+export type CommunityFeedTargetType = 'food_record' | 'exercise_log'
+export type CommunityFeedContentType = 'all' | CommunityFeedTargetType
 
 export interface CommunityFeedQueryParams {
   meal_type?: MealType
   diet_goal?: DietGoal
   sort_by?: CommunityFeedSortBy
+  content_type?: CommunityFeedContentType
   priority_author_ids?: string[]
   author_scope?: CommunityAuthorScope
   author_id?: string
 }
 
+export type CommunityFeedRecord = FoodRecord & {
+  feed_type?: CommunityFeedTargetType
+  exercise_type?: string | null
+  exercise_desc?: string | null
+  calories_burned?: number | null
+  duration_min?: number | null
+  ai_reasoning?: string | null
+}
+
 /** 圈子 Feed 单条（好友 + 自己今日饮食 + 点赞信息） */
 export interface CommunityFeedItem {
-  record: FoodRecord
+  target_type?: CommunityFeedTargetType
+  target_id?: string
+  record: CommunityFeedRecord
   author: { id: string; nickname: string; avatar: string }
   like_count: number
   liked: boolean
@@ -4458,7 +4521,9 @@ export interface CommunityFeedItem {
 export interface FeedCommentItem {
   id: string
   user_id: string
-  record_id: string
+  record_id?: string | null
+  target_type?: CommunityFeedTargetType
+  target_id?: string
   parent_comment_id?: string | null
   reply_to_user_id?: string | null
   reply_to_nickname?: string
@@ -4491,6 +4556,8 @@ export interface FeedInteractionNotification {
   id: string
   notification_type: 'like_received' | 'comment_received' | 'reply_received' | 'comment_rejected'
   record_id?: string | null
+  target_type?: CommunityFeedTargetType
+  target_id?: string | null
   comment_id?: string | null
   parent_comment_id?: string | null
   content_preview: string
@@ -4687,6 +4754,7 @@ export async function communityGetFeed(
   if (params?.meal_type) q += `&meal_type=${encodeURIComponent(params.meal_type)}`
   if (params?.diet_goal) q += `&diet_goal=${encodeURIComponent(params.diet_goal)}`
   if (params?.sort_by) q += `&sort_by=${encodeURIComponent(params.sort_by)}`
+  if (params?.content_type) q += `&content_type=${encodeURIComponent(params.content_type)}`
   if (params?.author_scope) q += `&author_scope=${encodeURIComponent(params.author_scope)}`
   if (params?.priority_author_ids?.length) {
     q += `&priority_author_ids=${encodeURIComponent(params.priority_author_ids.join(','))}`
@@ -4718,12 +4786,13 @@ export async function communityGetPublicFeed(
   limit: number = 20,
   includeComments: boolean = true,
   commentsLimit: number = 5,
-  params?: Pick<CommunityFeedQueryParams, 'meal_type' | 'diet_goal' | 'sort_by'>
+  params?: Pick<CommunityFeedQueryParams, 'meal_type' | 'diet_goal' | 'sort_by' | 'content_type'>
 ): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
   let q = `?offset=${offset}&limit=${limit}&include_comments=${includeComments}&comments_limit=${commentsLimit}`
   if (params?.meal_type) q += `&meal_type=${encodeURIComponent(params.meal_type)}`
   if (params?.diet_goal) q += `&diet_goal=${encodeURIComponent(params.diet_goal)}`
   if (params?.sort_by) q += `&sort_by=${encodeURIComponent(params.sort_by)}`
+  if (params?.content_type) q += `&content_type=${encodeURIComponent(params.content_type)}`
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/community/public-feed${q}`,
     method: 'GET',
@@ -4735,26 +4804,31 @@ export async function communityGetPublicFeed(
 }
 
 /** 点赞某条动态 */
-export async function communityLike(recordId: string): Promise<void> {
-  const response = await authenticatedRequest(`/api/community/feed/${recordId}/like`, { method: 'POST' })
+function communityFeedTargetPath(targetId: string, targetType: CommunityFeedTargetType = 'food_record'): string {
+  return `/api/community/feed-targets/${encodeURIComponent(targetType)}/${encodeURIComponent(targetId)}`
+}
+
+/** 点赞某条动态 */
+export async function communityLike(recordId: string, targetType: CommunityFeedTargetType = 'food_record'): Promise<void> {
+  const response = await authenticatedRequest(`${communityFeedTargetPath(recordId, targetType)}/like`, { method: 'POST' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '点赞失败')
 }
 
 /** 取消点赞 */
-export async function communityUnlike(recordId: string): Promise<void> {
-  const response = await authenticatedRequest(`/api/community/feed/${recordId}/like`, { method: 'DELETE' })
+export async function communityUnlike(recordId: string, targetType: CommunityFeedTargetType = 'food_record'): Promise<void> {
+  const response = await authenticatedRequest(`${communityFeedTargetPath(recordId, targetType)}/like`, { method: 'DELETE' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '取消失败')
 }
 
 /** 将自己的动态从圈子中隐藏（不删除饮食记录本身） */
-export async function communityHideFeed(recordId: string): Promise<void> {
-  const response = await authenticatedRequest(`/api/community/feed/${recordId}/hide`, { method: 'POST' })
+export async function communityHideFeed(recordId: string, targetType: CommunityFeedTargetType = 'food_record'): Promise<void> {
+  const response = await authenticatedRequest(`${communityFeedTargetPath(recordId, targetType)}/hide`, { method: 'POST' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '操作失败')
 }
 
 /** 某条动态的评论列表 */
-export async function communityGetComments(recordId: string): Promise<{ list: FeedCommentItem[] }> {
-  const response = await authenticatedRequest(`/api/community/feed/${recordId}/comments`, { method: 'GET' })
+export async function communityGetComments(recordId: string, targetType: CommunityFeedTargetType = 'food_record'): Promise<{ list: FeedCommentItem[] }> {
+  const response = await authenticatedRequest(`${communityFeedTargetPath(recordId, targetType)}/comments`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取评论失败')
   return response.data as { list: FeedCommentItem[] }
 }
@@ -4762,10 +4836,11 @@ export async function communityGetComments(recordId: string): Promise<{ list: Fe
 /** 获取单条动态的互动上下文（用于互动消息定位） */
 export async function communityGetFeedContext(
   recordId: string,
-  commentsLimit: number = 5
+  commentsLimit: number = 5,
+  targetType: CommunityFeedTargetType = 'food_record'
 ): Promise<{ item: CommunityFeedItem }> {
   const response = await authenticatedRequest(
-    `/api/community/feed/${recordId}/context?comments_limit=${Math.max(0, commentsLimit)}`,
+    `${communityFeedTargetPath(recordId, targetType)}/context?comments_limit=${Math.max(0, commentsLimit)}`,
     { method: 'GET' }
   )
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取动态上下文失败')
@@ -4778,9 +4853,10 @@ export async function communityGetFeedContext(
 export async function communityPostComment(
   recordId: string,
   content: string,
-  options?: { parent_comment_id?: string; reply_to_user_id?: string }
+  options?: { parent_comment_id?: string; reply_to_user_id?: string },
+  targetType: CommunityFeedTargetType = 'food_record'
 ): Promise<{ comment: FeedCommentItem }> {
-  const response = await authenticatedRequest(`/api/community/feed/${recordId}/comments`, {
+  const response = await authenticatedRequest(`${communityFeedTargetPath(recordId, targetType)}/comments`, {
     method: 'POST',
     data: {
       content: content.trim(),
@@ -4795,10 +4871,11 @@ export async function communityPostComment(
 /** 删除圈子评论（本人或动态作者；子回复一并删除） */
 export async function communityDeleteComment(
   recordId: string,
-  commentId: string
+  commentId: string,
+  targetType: CommunityFeedTargetType = 'food_record'
 ): Promise<{ deleted: number }> {
   const response = await authenticatedRequest(
-    `/api/community/feed/${encodeURIComponent(recordId)}/comments/${encodeURIComponent(commentId)}`,
+    `${communityFeedTargetPath(recordId, targetType)}/comments/${encodeURIComponent(commentId)}`,
     { method: 'DELETE' }
   )
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '删除失败')
@@ -5254,6 +5331,8 @@ export async function applyUserRecipe(recipeId: string, mealType?: string): Prom
 export interface ExerciseLogItem {
   id: string
   exercise_desc: string
+  exercise_type?: string | null
+  image_url?: string | null
   calories_burned: number
   recorded_on?: string | null
   recorded_at?: string | null

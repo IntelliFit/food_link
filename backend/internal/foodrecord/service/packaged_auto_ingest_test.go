@@ -1,6 +1,67 @@
 package service
 
-import "testing"
+import (
+	"context"
+	"strings"
+	"testing"
+
+	commonerrors "food_link/backend/internal/common/errors"
+)
+
+func TestBuildPackagedProductExtractPromptTreatsImagesAsOneProduct(t *testing.T) {
+	prompt := buildPackagedProductExtractPrompt("蛋白棒", 3)
+
+	for _, want := range []string{
+		"同一个商品的一组照片",
+		"不要把多张图拆成多个商品",
+		"本次实际有 3 张图片",
+		"综合 1-3 张图片",
+		"弯曲",
+		"大包装",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, prompt)
+		}
+	}
+}
+
+func TestBuildPackagedProductExtractPromptMentionsActualImageCount(t *testing.T) {
+	cases := []struct {
+		name       string
+		imageCount int
+		want       string
+	}{
+		{name: "one image", imageCount: 1, want: "本次实际只有 1 张图片"},
+		{name: "two images", imageCount: 2, want: "本次实际有 2 张图片"},
+		{name: "three images", imageCount: 3, want: "本次实际有 3 张图片"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			prompt := buildPackagedProductExtractPrompt("", tc.imageCount)
+			if !strings.Contains(prompt, tc.want) {
+				t.Fatalf("prompt missing %q:\n%s", tc.want, prompt)
+			}
+		})
+	}
+}
+
+func TestSubmitPackagedProductExtractTaskValidatesImageCount(t *testing.T) {
+	svc := NewFoodNutritionService(nil)
+	ctx := context.Background()
+
+	_, err := svc.SubmitPackagedProductExtractTask(ctx, "u1", SubmitPackagedProductExtractInput{})
+	if appErr, ok := err.(*commonerrors.AppError); !ok || appErr.HTTPStatus != 400 {
+		t.Fatalf("empty images err=%#v want 400 AppError", err)
+	}
+
+	_, err = svc.SubmitPackagedProductExtractTask(ctx, "u1", SubmitPackagedProductExtractInput{
+		ImageURLs: []string{"1", "2", "3", "4"},
+	})
+	if appErr, ok := err.(*commonerrors.AppError); !ok || appErr.HTTPStatus != 400 || !strings.Contains(appErr.Message, "最多上传 3 张") {
+		t.Fatalf("too many images err=%#v want 400 max images AppError", err)
+	}
+}
 
 func TestEvaluatePackagedProductExtract_AllowsMissingIngredientsWhenNutritionReady(t *testing.T) {
 	result := packagedReadyExtract()

@@ -32,11 +32,14 @@ type ExerciseLog struct {
 	ID             string     `gorm:"column:id"`
 	UserID         string     `gorm:"column:user_id"`
 	ExerciseDesc   string     `gorm:"column:exercise_desc"`
+	ExerciseType   *string    `gorm:"column:exercise_type"`
+	ImageURL       *string    `gorm:"column:image_url"`
 	CaloriesBurned *float64   `gorm:"column:calories_burned"`
 	DurationMin    *int       `gorm:"column:duration_min"`
 	RecordedOn     *time.Time `gorm:"column:recorded_on"`
 	RecordedAt     *time.Time `gorm:"column:recorded_at"`
 	AIReasoning    *string    `gorm:"column:ai_reasoning"`
+	HiddenFromFeed bool       `gorm:"column:hidden_from_feed"`
 	CreatedAt      *time.Time `gorm:"column:created_at"`
 }
 
@@ -119,17 +122,17 @@ func chinaDateLocation() *time.Location {
 
 // StatsUserProfile is the weapp_user projection needed for stats insight.
 type StatsUserProfile struct {
-	ID              string         `gorm:"column:id"`
-	Gender          *string        `gorm:"column:gender"`
-	Height          *float64       `gorm:"column:height"`
-	Weight          *float64       `gorm:"column:weight"`
-	Birthday        *string        `gorm:"column:birthday"`
-	ActivityLevel   *string        `gorm:"column:activity_level"`
-	BMR             *float64       `gorm:"column:bmr"`
-	TDEE            *float64       `gorm:"column:tdee"`
-	DietGoal                         *string        `gorm:"column:diet_goal"`
-	HealthCondition                  map[string]any `gorm:"column:health_condition;serializer:json"`
-	HealthDisclaimerAcknowledgedAt   *time.Time     `gorm:"column:health_disclaimer_acknowledged_at"`
+	ID                             string         `gorm:"column:id"`
+	Gender                         *string        `gorm:"column:gender"`
+	Height                         *float64       `gorm:"column:height"`
+	Weight                         *float64       `gorm:"column:weight"`
+	Birthday                       *string        `gorm:"column:birthday"`
+	ActivityLevel                  *string        `gorm:"column:activity_level"`
+	BMR                            *float64       `gorm:"column:bmr"`
+	TDEE                           *float64       `gorm:"column:tdee"`
+	DietGoal                       *string        `gorm:"column:diet_goal"`
+	HealthCondition                map[string]any `gorm:"column:health_condition;serializer:json"`
+	HealthDisclaimerAcknowledgedAt *time.Time     `gorm:"column:health_disclaimer_acknowledged_at"`
 }
 
 func (StatsUserProfile) TableName() string { return "weapp_user" }

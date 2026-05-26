@@ -19,6 +19,16 @@
   font-weight: 700;
 }
 
+.day-record-reward-hint {
+  margin: -8rpx 32rpx 24rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 18rpx;
+  background: #ecfdf5;
+  color: #0f8f62;
+  font-size: 23rpx;
+  line-height: 34rpx;
+}
+
 .day-record-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

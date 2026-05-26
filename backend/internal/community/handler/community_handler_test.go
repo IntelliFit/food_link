@@ -55,20 +55,41 @@ func (m *mockCommunityService) CheckinLeaderboard(ctx context.Context, viewerUse
 func (m *mockCommunityService) LikeFeed(ctx context.Context, userID, recordID string) (string, error) {
 	return m.likeMsg, m.likeErr
 }
+func (m *mockCommunityService) LikeFeedTarget(ctx context.Context, userID, targetType, targetID string) (string, error) {
+	return m.likeMsg, m.likeErr
+}
 func (m *mockCommunityService) UnlikeFeed(ctx context.Context, userID, recordID string) (string, error) {
+	return m.unlikeMsg, m.unlikeErr
+}
+func (m *mockCommunityService) UnlikeFeedTarget(ctx context.Context, userID, targetType, targetID string) (string, error) {
 	return m.unlikeMsg, m.unlikeErr
 }
 func (m *mockCommunityService) HideFeed(ctx context.Context, userID, recordID string) error {
 	return m.hideErr
 }
+func (m *mockCommunityService) HideFeedTarget(ctx context.Context, userID, targetType, targetID string) error {
+	return m.hideErr
+}
 func (m *mockCommunityService) ListComments(ctx context.Context, recordID string, limit int) ([]service.CommentItem, error) {
+	return m.comments, m.commentsErr
+}
+func (m *mockCommunityService) ListTargetComments(ctx context.Context, targetType, targetID string, limit int) ([]service.CommentItem, error) {
 	return m.comments, m.commentsErr
 }
 func (m *mockCommunityService) FeedContext(ctx context.Context, userID, recordID string) (*service.FeedContextResult, error) {
 	return m.feedContext, m.feedContextErr
 }
+func (m *mockCommunityService) FeedTargetContext(ctx context.Context, userID, targetType, targetID string) (*service.FeedContextResult, error) {
+	return m.feedContext, m.feedContextErr
+}
 func (m *mockCommunityService) PostComment(ctx context.Context, userID, recordID, content string, parentCommentID, replyToUserID *string) (*service.CommentItem, error) {
 	return m.postComment, m.postCommentErr
+}
+func (m *mockCommunityService) PostTargetComment(ctx context.Context, userID, targetType, targetID, content string, parentCommentID, replyToUserID *string) (*service.CommentItem, error) {
+	return m.postComment, m.postCommentErr
+}
+func (m *mockCommunityService) DeleteTargetComment(ctx context.Context, userID, targetType, targetID, commentID string) (int64, error) {
+	return 1, nil
 }
 func (m *mockCommunityService) ListCommentTasks(ctx context.Context, userID string, limit int) ([]domain.CommentTask, error) {
 	return m.commentTasks, m.commentTasksErr
@@ -96,6 +117,13 @@ func setupCommunityRouter(h *CommunityHandler) *gin.Engine {
 	r.GET("/api/community/feed/:record_id/comments", h.ListComments)
 	r.GET("/api/community/feed/:record_id/context", h.FeedContext)
 	r.POST("/api/community/feed/:record_id/comments", h.PostComment)
+	r.POST("/api/community/feed-targets/:target_type/:target_id/like", h.LikeFeedTarget)
+	r.DELETE("/api/community/feed-targets/:target_type/:target_id/like", h.UnlikeFeedTarget)
+	r.GET("/api/community/feed-targets/:target_type/:target_id/comments", h.ListTargetComments)
+	r.POST("/api/community/feed-targets/:target_type/:target_id/comments", h.PostTargetComment)
+	r.DELETE("/api/community/feed-targets/:target_type/:target_id/comments/:comment_id", h.DeleteTargetComment)
+	r.GET("/api/community/feed-targets/:target_type/:target_id/context", h.FeedTargetContext)
+	r.POST("/api/community/feed-targets/:target_type/:target_id/hide", h.HideFeedTarget)
 	r.GET("/api/community/comment-tasks", h.ListCommentTasks)
 	r.GET("/api/community/notifications", h.ListNotifications)
 	r.POST("/api/community/notifications/read", h.MarkNotificationsRead)
@@ -301,7 +329,6 @@ func TestPostCommentBadRequest(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
-
 
 func TestPublicFeedError(t *testing.T) {
 	mockSvc := &mockCommunityService{publicFeedErr: errors.New("db error")}

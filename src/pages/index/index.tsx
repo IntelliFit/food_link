@@ -55,6 +55,7 @@ import {
 } from '../../utils/poster'
 import { isShowShareImageMenuCancel } from '../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../utils/weapp-canvas-image'
+import { claimSharePosterRewardQuietly } from '../../utils/share-reward'
 
 import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconWaterDrop } from '../../components/iconfont'
 import { FOOD_EXPIRY_CHANGED_EVENT } from '../../utils/food-expiry-events'
@@ -2437,13 +2438,16 @@ function IndexPage() {
     // @ts-ignore
     Taro.showShareImageMenu({
       path: dailyPosterImageUrl,
+      success: () => {
+        void claimSharePosterRewardQuietly({ share_scope: 'daily_summary', share_date: selectedDate })
+      },
       fail: (err: { errMsg?: string }) => {
         if (isShowShareImageMenuCancel(err)) return
         console.error('showShareImageMenu fail', err)
         void showUnifiedApiError(new Error('分享失败，请保存图片后手动发送'), '分享失败，请保存图片后手动发送')
       }
     })
-  }, [dailyPosterImageUrl])
+  }, [dailyPosterImageUrl, selectedDate])
 
   const handleSaveDailyPoster = useCallback(() => {
     if (!dailyPosterImageUrl) return
@@ -2752,10 +2756,6 @@ function IndexPage() {
                 <View className='pet-eye right' />
                 <View className='pet-cheek left' />
                 <View className='pet-cheek right' />
-                <View className='pet-whisker left top' />
-                <View className='pet-whisker left bottom' />
-                <View className='pet-whisker right top' />
-                <View className='pet-whisker right bottom' />
                 <View className='pet-mouth' />
               </View>
             </View>

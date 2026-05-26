@@ -10,7 +10,6 @@ import {
   updateFoodRecord,
   getPosterCalorieCompare,
   getMyMembership,
-  claimSharePosterReward,
   showUnifiedApiError,
   type FoodRecord,
   type Nutrients
@@ -19,12 +18,19 @@ import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } fr
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { getCurrentPosterUserProfile, getLocalPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
+import { claimSharePosterRewardQuietly } from '../../../utils/share-reward'
 
 import { IconBreakfast, IconCollapse, IconExpand, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { COMMUNITY_FEED_CHANGED_EVENT, HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
+import {
+  MealTypeField,
+  normalizeSelectableMealType,
+  type SelectableMealType
+} from '../../../components/MealTypeSelector'
 
 import './index.scss'
 
@@ -230,6 +236,7 @@ function RecordDetailPage() {
   const [isOwner, setIsOwner] = React.useState(false)
   const [showEditModal, setShowEditModal] = React.useState(false)
   const [editItems, setEditItems] = React.useState<EditableFoodItem[]>([])
+  const [editMealType, setEditMealType] = React.useState<SelectableMealType>('afternoon_snack')
   const [editSaving, setEditSaving] = React.useState(false)
   const [ownerNickname, setOwnerNickname] = React.useState('')
   const [ownerAvatar, setOwnerAvatar] = React.useState('')
@@ -350,6 +357,7 @@ function RecordDetailPage() {
   /** 打开编辑弹窗，复制当前食物项数据 */
   const handleOpenEdit = useCallback(() => {
     if (!record) return
+    setEditMealType(normalizeSelectableMealType(record.meal_type))
     setEditItems(
       (record.items || []).map(item => ({
         name: item.name,
@@ -527,13 +535,7 @@ function RecordDetailPage() {
         // 分享成功后领取积分奖励（record-detail 页面特有业务）
         if (!isOwner || !record?.id || sharePosterRewardClaimingRef.current) return
         sharePosterRewardClaimingRef.current = true
-        claimSharePosterReward(record.id)
-          .then(rewardRes => {
-            if (rewardRes.claimed && rewardRes.credits > 0) {
-              Taro.showToast({ title: `海报奖励 +${rewardRes.credits} 积分`, icon: 'success' })
-            }
-          })
-          .catch(() => {})
+        claimSharePosterRewardQuietly(record.id)
           .finally(() => { sharePosterRewardClaimingRef.current = false })
       },
       fail: (err: { errMsg?: string }) => {
@@ -733,6 +735,7 @@ function RecordDetailPage() {
       const totalWeight = editItems.reduce((sum, item) => sum + item.intake, 0)
 
       const { record: updated } = await updateFoodRecord(record.id, {
+        meal_type: editMealType,
         items: editItems,
         total_calories: Math.round(totalCalories * 10) / 10,
         total_protein: Math.round(totalProtein * 10) / 10,
@@ -742,6 +745,12 @@ function RecordDetailPage() {
       })
       setRecord(updated)
       setShowEditModal(false)
+      try {
+        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+        Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
+      } catch {
+        /* ignore */
+      }
       Taro.hideLoading()
       Taro.showToast({ title: '修改成功', icon: 'success' })
     } catch (e: any) {
@@ -1101,10 +1110,11 @@ function RecordDetailPage() {
           <View className='edit-modal-mask' onClick={() => setShowEditModal(false)} />
           <View className='edit-modal-content'>
             <View className='edit-modal-header'>
-              <Text className='edit-modal-title'>修改食物参数</Text>
+              <Text className='edit-modal-title'>修改记录</Text>
               <View className='edit-modal-close' onClick={() => setShowEditModal(false)} />
             </View>
             <ScrollView scrollY enhanced showScrollbar={false} className='edit-modal-body'>
+              <MealTypeField value={editMealType} onChange={setEditMealType} />
               {editItems.map((item, idx) => {
                 return (
                   <View key={idx} className='edit-food-card'>

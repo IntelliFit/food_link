@@ -8,6 +8,7 @@ import {
   communityPostComment,
   communityUnlike,
   showUnifiedApiError,
+  type CommunityFeedTargetType,
   type CommunityFeedItem,
   type FeedCommentItem
 } from '../../../utils/api'
@@ -51,11 +52,28 @@ function formatFeedTime(recordTime: string): string {
 type RouteOptions = Record<string, string | undefined>
 
 function pickRecordId(options: RouteOptions): string {
-  return String(options.recordId || options.record_id || options.id || '').trim()
+  return String(options.targetId || options.target_id || options.recordId || options.record_id || options.id || '').trim()
+}
+
+function pickTargetType(options: RouteOptions): CommunityFeedTargetType {
+  return options.targetType === 'exercise_log' || options.target_type === 'exercise_log' ? 'exercise_log' : 'food_record'
+}
+
+function getFeedTargetType(item: CommunityFeedItem | null | undefined): CommunityFeedTargetType {
+  return item?.target_type || item?.record?.feed_type || 'food_record'
+}
+
+function getFeedTargetId(item: CommunityFeedItem | null | undefined): string {
+  return item?.target_id || item?.record?.id || ''
+}
+
+function isExerciseFeed(item: CommunityFeedItem | null | undefined): boolean {
+  return getFeedTargetType(item) === 'exercise_log'
 }
 
 function InteractionFeedDetailPage() {
   const [recordId, setRecordId] = useState('')
+  const [targetType, setTargetType] = useState<CommunityFeedTargetType>('food_record')
   const [targetCommentId, setTargetCommentId] = useState('')
   const [feedItem, setFeedItem] = useState<CommunityFeedItem | null>(null)
   const [loading, setLoading] = useState(true)
@@ -65,7 +83,7 @@ function InteractionFeedDetailPage() {
   const [composerVisible, setComposerVisible] = useState(false)
   const likePendingRef = useRef(false)
 
-  const loadDetail = useCallback(async (nextRecordId: string) => {
+  const loadDetail = useCallback(async (nextRecordId: string, nextTargetType: CommunityFeedTargetType = 'food_record') => {
     if (!nextRecordId) {
       setFeedItem(null)
       setLoading(false)
@@ -88,9 +106,9 @@ function InteractionFeedDetailPage() {
         ])
       }
 
-      const context = await withTimeout(communityGetFeedContext(nextRecordId, 5))
+      const context = await withTimeout(communityGetFeedContext(nextRecordId, 5, nextTargetType))
       const contextItem = context.item
-      const commentsRes = await withTimeout(communityGetComments(nextRecordId))
+      const commentsRes = await withTimeout(communityGetComments(nextRecordId, nextTargetType))
       const fullComments = commentsRes.list || []
       setFeedItem({
         ...contextItem,
@@ -108,11 +126,13 @@ function InteractionFeedDetailPage() {
 
   const hydrateFromOptions = useCallback((options: RouteOptions) => {
     const nextRecordId = pickRecordId(options)
+    const nextTargetType = pickTargetType(options)
     setRecordId(nextRecordId)
+    setTargetType(nextTargetType)
     const nextTarget = String(options?.commentId || options?.parentCommentId || '')
     setTargetCommentId(nextTarget)
     if (nextRecordId) {
-      void loadDetail(nextRecordId)
+      void loadDetail(nextRecordId, nextTargetType)
     } else {
       setLoading(false)
       setFeedItem(null)
@@ -146,9 +166,9 @@ function InteractionFeedDetailPage() {
     setFeedItem(optimistic)
     try {
       if (prev.liked) {
-        await communityUnlike(prev.record.id)
+        await communityUnlike(getFeedTargetId(prev), getFeedTargetType(prev))
       } else {
-        await communityLike(prev.record.id)
+        await communityLike(getFeedTargetId(prev), getFeedTargetType(prev))
       }
     } catch (e) {
       setFeedItem(prev)
@@ -175,12 +195,12 @@ function InteractionFeedDetailPage() {
     if (!content || submitting) return
     setSubmitting(true)
     try {
-      await communityPostComment(feedItem.record.id, content, {
+      await communityPostComment(getFeedTargetId(feedItem), content, {
         parent_comment_id: replyTargetComment?.id,
         reply_to_user_id: replyTargetComment?.user_id
-      })
+      }, getFeedTargetType(feedItem))
       closeComposer()
-      await loadDetail(feedItem.record.id)
+      await loadDetail(getFeedTargetId(feedItem), getFeedTargetType(feedItem))
       Taro.showToast({ title: '评论成功', icon: 'success' })
     } catch (e) {
       await showUnifiedApiError(e, '评论失败')
@@ -193,8 +213,13 @@ function InteractionFeedDetailPage() {
 
   const handleViewDetail = useCallback((id: string) => {
     if (!id) return
+    if (targetType === 'exercise_log') {
+      const dateText = String(feedItem?.record?.record_time || feedItem?.record?.created_at || '').slice(0, 10)
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-record/index')}${dateText ? `?date=${encodeURIComponent(dateText)}` : ''}` })
+      return
+    }
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(id)}` })
-  }, [])
+  }, [targetType, feedItem])
 
   return (
     <View className='interaction-feed-detail-page'>
@@ -210,9 +235,16 @@ function InteractionFeedDetailPage() {
             </View>
           ) : (
             <View className='feed-list'>
+              {(() => {
+                const exercise = isExerciseFeed(feedItem)
+                const feedTime = String(feedItem.record.record_time || feedItem.record.created_at || '')
+                const exerciseTitle = feedItem.record.exercise_type || '运动打卡'
+                const exerciseDesc = feedItem.record.exercise_desc || feedItem.record.description || ''
+                const exerciseKcal = Number(feedItem.record.calories_burned ?? feedItem.record.total_calories ?? 0)
+                return (
               <View
-                id={`feed-card-${feedItem.record.id}`}
-                className={`feed-card${feedItem.record.description?.trim() && !feedItem.record.image_path ? ' feed-card-text-only' : ''}`}
+                id={`feed-card-${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`}
+                className={`feed-card${(feedItem.record.description?.trim() || exerciseDesc) && !feedItem.record.image_path ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''}`}
               >
                 <View className='feed-card-moments'>
                   <View className='feed-card-avatar-col'>
@@ -228,16 +260,20 @@ function InteractionFeedDetailPage() {
                     <View className='feed-card-name-block'>
                       <Text className='user-name'>{feedItem.is_mine ? '我' : feedItem.author.nickname}</Text>
                       <Text className='post-time'>
-                        {MEAL_NAMES[feedItem.record.meal_type] || feedItem.record.meal_type} · {formatFeedTime(feedItem.record.record_time)}
+                        {exercise ? `运动打卡 · ${formatFeedTime(feedTime)}` : `${MEAL_NAMES[feedItem.record.meal_type] || feedItem.record.meal_type} · ${formatFeedTime(feedTime)}`}
                       </Text>
                     </View>
-                    {feedItem.record.diet_goal && feedItem.record.diet_goal !== 'none' ? (
+                    {exercise ? (
+                      <View className='feed-tags'>
+                        <Text className='feed-tag'>{exerciseTitle}</Text>
+                      </View>
+                    ) : feedItem.record.diet_goal && feedItem.record.diet_goal !== 'none' ? (
                       <View className='feed-tags'>
                         <Text className='feed-tag'>{DIET_GOAL_NAMES[feedItem.record.diet_goal] || feedItem.record.diet_goal}</Text>
                       </View>
                     ) : null}
-                    {feedItem.record.description && (
-                      <Text className='feed-content'>{feedItem.record.description}</Text>
+                    {(exercise ? exerciseDesc : feedItem.record.description) && (
+                      <Text className='feed-content'>{exercise ? exerciseDesc : feedItem.record.description}</Text>
                     )}
                     {feedItem.record.image_path ? (
                       <View className='feed-image feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
@@ -247,12 +283,14 @@ function InteractionFeedDetailPage() {
 
                     <View className='feed-meta'>
                       <View className='feed-calorie feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
-                        <Text className='feed-calorie-num'>{Number(feedItem.record.total_calories || 0).toFixed(0)}</Text>
-                        <Text className='feed-calorie-unit'> kcal</Text>
+                        <Text className='feed-calorie-num'>{(exercise ? exerciseKcal : Number(feedItem.record.total_calories || 0)).toFixed(0)}</Text>
+                        <Text className='feed-calorie-unit'> kcal{exercise ? ' 消耗' : ''}</Text>
                       </View>
                       <View className='feed-macros feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
                         <Text className='feed-macros-text'>
-                          蛋白质 {Math.round(feedItem.record.total_protein ?? 0)}g · 碳水 {Math.round(feedItem.record.total_carbs ?? 0)}g · 脂肪 {Math.round(feedItem.record.total_fat ?? 0)}g
+                          {exercise
+                            ? (feedItem.record.ai_reasoning || 'AI 已根据运动内容估算消耗')
+                            : `蛋白质 ${Math.round(feedItem.record.total_protein ?? 0)}g · 碳水 ${Math.round(feedItem.record.total_carbs ?? 0)}g · 脂肪 ${Math.round(feedItem.record.total_fat ?? 0)}g`}
                         </Text>
                       </View>
                     </View>
@@ -315,6 +353,8 @@ function InteractionFeedDetailPage() {
                   </View>
                 </View>
               </View>
+                )
+              })()}
             </View>
           )}
         </View>

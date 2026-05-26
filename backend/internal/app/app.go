@@ -40,6 +40,7 @@ import (
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
+	"food_link/backend/internal/migration"
 	pethandler "food_link/backend/internal/pet/handler"
 	petrepo "food_link/backend/internal/pet/repo"
 	petservice "food_link/backend/internal/pet/service"
@@ -49,7 +50,6 @@ import (
 	recipehandler "food_link/backend/internal/recipe/handler"
 	reciperepo "food_link/backend/internal/recipe/repo"
 	recipeservice "food_link/backend/internal/recipe/service"
-	"food_link/backend/internal/migration"
 	"food_link/backend/internal/stub"
 	systemhandler "food_link/backend/internal/system/handler"
 	"food_link/backend/internal/taskqueue"
@@ -366,6 +366,13 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/community/feed/:record_id/comments", authmw.RequireJWT(jwtSvc), communityHandler.ListComments)
 	engine.GET("/api/community/feed/:record_id/context", authmw.RequireJWT(jwtSvc), communityHandler.FeedContext)
 	engine.POST("/api/community/feed/:record_id/comments", authmw.RequireJWT(jwtSvc), communityHandler.PostComment)
+	engine.POST("/api/community/feed-targets/:target_type/:target_id/like", authmw.RequireJWT(jwtSvc), communityHandler.LikeFeedTarget)
+	engine.DELETE("/api/community/feed-targets/:target_type/:target_id/like", authmw.RequireJWT(jwtSvc), communityHandler.UnlikeFeedTarget)
+	engine.GET("/api/community/feed-targets/:target_type/:target_id/comments", authmw.RequireJWT(jwtSvc), communityHandler.ListTargetComments)
+	engine.POST("/api/community/feed-targets/:target_type/:target_id/comments", authmw.RequireJWT(jwtSvc), communityHandler.PostTargetComment)
+	engine.DELETE("/api/community/feed-targets/:target_type/:target_id/comments/:comment_id", authmw.RequireJWT(jwtSvc), communityHandler.DeleteTargetComment)
+	engine.GET("/api/community/feed-targets/:target_type/:target_id/context", authmw.RequireJWT(jwtSvc), communityHandler.FeedTargetContext)
+	engine.POST("/api/community/feed-targets/:target_type/:target_id/hide", authmw.RequireJWT(jwtSvc), communityHandler.HideFeedTarget)
 	engine.GET("/api/community/comment-tasks", authmw.RequireJWT(jwtSvc), communityHandler.ListCommentTasks)
 	engine.GET("/api/community/notifications", authmw.RequireJWT(jwtSvc), communityHandler.ListNotifications)
 	engine.POST("/api/community/notifications/read", authmw.RequireJWT(jwtSvc), communityHandler.MarkNotificationsRead)
@@ -400,6 +407,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Pet companion routes
 	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
 	engine.POST("/api/pet/events/:event_id/claim", authmw.RequireJWT(jwtSvc), petHandler.ClaimEvent)
+	engine.POST("/api/pet/select-appearance", authmw.RequireJWT(jwtSvc), petHandler.SelectAppearance)
 	engine.POST("/api/pet/reroll-appearance", authmw.RequireJWT(jwtSvc), petHandler.RerollAppearance)
 
 	// Public food library routes

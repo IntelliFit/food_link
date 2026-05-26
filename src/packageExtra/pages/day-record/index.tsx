@@ -21,6 +21,7 @@ import { drawDayRecordPoster, computeDayRecordPosterHeight, POSTER_WIDTH, type D
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { getCurrentPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
+import { claimSharePosterRewardQuietly } from '../../../utils/share-reward'
 
 /** 格式化数字，最多保留1位小数，避免浮点精度溢出 */
 function formatNumber(value: number): string {
@@ -190,6 +191,7 @@ function sortDayRecordCardsByTime(items: DayRecordCard[]) {
 }
 
 function DayRecordPage() {
+  const isRewardCenterMode = Taro.getCurrentInstance()?.router?.params?.task_mode === 'reward_center'
   /** 每次进入须从路由读 date；仅用 useState(initial) 会导致从首页带参跳转时仍停留在旧日期 */
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = Taro.getCurrentInstance()?.router?.params?.date
@@ -415,6 +417,7 @@ function DayRecordPage() {
     Taro.showShareImageMenu({
       path,
       success: () => {
+        void claimSharePosterRewardQuietly({ share_scope: 'daily_food', share_date: selectedDate })
         closeDayRecordPoster()
       },
       fail: (err: { errMsg?: string }) => {
@@ -427,7 +430,7 @@ function DayRecordPage() {
         void showUnifiedApiError(new Error('打开微信图片菜单失败，请重试'), '打开微信图片菜单失败，请重试')
       }
     })
-  }, [closeDayRecordPoster])
+  }, [closeDayRecordPoster, selectedDate])
 
   const handleShareDayRecord = useCallback(() => {
     if (posterGenerating) return
@@ -605,13 +608,16 @@ function DayRecordPage() {
     if (!posterImageUrl) return
     Taro.showShareImageMenu({
       path: posterImageUrl,
+      success: () => {
+        void claimSharePosterRewardQuietly({ share_scope: 'daily_food', share_date: selectedDate })
+      },
       fail: (err: { errMsg?: string }) => {
         if (isShowShareImageMenuCancel(err)) return
         console.error('showShareImageMenu fail', err)
         Taro.showToast({ title: '分享失败，请保存图片后手动发送', icon: 'none' })
       }
     })
-  }, [posterImageUrl])
+  }, [posterImageUrl, selectedDate])
 
   const handleSaveDayRecordPoster = useCallback(() => {
     if (!posterImageUrl) return
@@ -637,6 +643,11 @@ function DayRecordPage() {
             </View>
           )}
         </View>
+        {isRewardCenterMode && (
+          <View className='day-record-reward-hint'>
+            分享单餐或今日饮食均可获得奖励积分，每日最多 3 次。
+          </View>
+        )}
 
         <View className='day-record-summary'>
           <View className='summary-card'>

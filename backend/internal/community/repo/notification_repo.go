@@ -26,6 +26,10 @@ func (r *NotificationRepo) CreateNotification(ctx context.Context, n *domain.Fee
 }
 
 func (r *NotificationRepo) FindRecentDuplicate(ctx context.Context, recipientUserID, notificationType string, actorUserID, recordID, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error) {
+	return r.FindRecentDuplicateForTarget(ctx, recipientUserID, notificationType, actorUserID, FeedTargetFoodRecord, recordID, parentCommentID, commentID, contentPreview)
+}
+
+func (r *NotificationRepo) FindRecentDuplicateForTarget(ctx context.Context, recipientUserID, notificationType string, actorUserID *string, targetType string, targetID *string, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error) {
 	q := r.db.WithContext(ctx).
 		Where("recipient_user_id = ? AND notification_type = ?", recipientUserID, notificationType).
 		Order("created_at DESC").
@@ -33,8 +37,13 @@ func (r *NotificationRepo) FindRecentDuplicate(ctx context.Context, recipientUse
 	if actorUserID != nil {
 		q = q.Where("actor_user_id = ?", *actorUserID)
 	}
-	if recordID != nil {
-		q = q.Where("record_id = ?", *recordID)
+	if targetID != nil {
+		targetType = normalizeTargetType(targetType)
+		if targetType == FeedTargetFoodRecord {
+			q = q.Where("(target_type = ? AND target_id = ?) OR record_id = ?", targetType, *targetID, *targetID)
+		} else {
+			q = q.Where("target_type = ? AND target_id = ?", targetType, *targetID)
+		}
 	}
 
 	var rows []domain.FeedInteractionNotification
