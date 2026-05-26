@@ -14,6 +14,7 @@ import { drawRecordPoster, POSTER_WIDTH, POSTER_HEIGHT, computePosterHeight } fr
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { getCurrentPosterUserProfile, getLocalPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
+import { claimSharePosterRewardQuietly } from '../../../utils/share-reward'
 
 import './MealRecordPosterModal.scss'
 
@@ -79,6 +80,9 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
     Taro.showShareImageMenu({
       path,
       success: () => {
+        if (safeRecordId) {
+          void claimSharePosterRewardQuietly(safeRecordId)
+        }
         onClose()
       },
       fail: (err: { errMsg?: string }) => {
@@ -91,7 +95,7 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
         void showUnifiedApiError(new Error('打开微信图片菜单失败，请重试'), '打开微信图片菜单失败，请重试')
       }
     })
-  }, [onClose])
+  }, [onClose, safeRecordId])
 
   useEffect(() => {
     setOwnerNickname('')

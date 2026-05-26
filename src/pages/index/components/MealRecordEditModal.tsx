@@ -3,6 +3,12 @@ import React, { useCallback, useEffect, useState } from 'react'
 import Taro from '@tarojs/taro'
 import { updateFoodRecord, showUnifiedApiError, type FoodRecord, type Nutrients } from '../../../utils/api'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { COMMUNITY_FEED_CHANGED_EVENT } from '../../../utils/home-events'
+import {
+  MealTypeField,
+  normalizeSelectableMealType,
+  type SelectableMealType
+} from '../../../components/MealTypeSelector'
 
 import './MealRecordEditModal.scss'
 
@@ -181,10 +187,12 @@ interface MealRecordEditModalProps {
 export function MealRecordEditModal({ visible, record, onClose, onSuccess }: MealRecordEditModalProps) {
   const { scheme } = useAppColorScheme()
   const [editItems, setEditItems] = useState<EditableFoodItem[]>([])
+  const [editMealType, setEditMealType] = useState<SelectableMealType>('afternoon_snack')
   const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => {
     if (visible && record) {
+      setEditMealType(normalizeSelectableMealType(record.meal_type))
       setEditItems(
         (record.items || []).map(item => {
           const ratio = resolveRecordItemRatio(item)
@@ -381,6 +389,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       const totalWeight = editItems.reduce((sum, item) => sum + item.intake, 0)
 
       await updateFoodRecord(record.id, {
+        meal_type: editMealType,
         items: editItems.map(item => ({
           name: item.name,
           weight: item.weight,
@@ -403,6 +412,11 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       setEditSaving(false)
       onClose()
       onSuccess()
+      try {
+        Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
+      } catch {
+        /* ignore */
+      }
       Taro.showToast({ title: '修改成功', icon: 'success' })
     } catch (e: any) {
       Taro.hideLoading()
@@ -416,7 +430,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
   return (
     <View className={`edit-modal ${scheme === 'dark' ? 'edit-modal--dark' : ''}`} catchMove>
       <View className='edit-modal-mask' onClick={onClose} />
-      <View className='edit-modal-content' catchMove>
+      <View className='edit-modal-content'>
         <View className='edit-modal-header'>
           <Text className='edit-modal-title'>修改饮食数据</Text>
           <View className='edit-modal-close' onClick={onClose} />
@@ -426,8 +440,8 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           enhanced
           showScrollbar={false}
           className='edit-modal-body'
-          catchMove
         >
+          <MealTypeField value={editMealType} onChange={setEditMealType} />
           {editItems.map((item, idx) => {
             const detailRows = getNutrientDetailRows(item)
             const detailsExpanded = item.nutrientDetailsExpanded ?? false

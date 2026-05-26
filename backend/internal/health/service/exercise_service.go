@@ -152,6 +152,8 @@ func (s *ExerciseService) ListLogsByRange(ctx context.Context, userID string, da
 		item := map[string]any{
 			"id":              log.ID,
 			"exercise_desc":   log.ExerciseDesc,
+			"exercise_type":   nil,
+			"image_url":       nil,
 			"calories_burned": calories,
 			"recorded_on":     nil,
 			"recorded_at":     nil,
@@ -160,6 +162,15 @@ func (s *ExerciseService) ListLogsByRange(ctx context.Context, userID string, da
 		}
 		if log.AIReasoning != nil {
 			item["ai_reasoning"] = *log.AIReasoning
+		}
+		if log.ExerciseType != nil {
+			item["exercise_type"] = *log.ExerciseType
+		}
+		if log.ImageURL != nil {
+			resolved := s.resolveFoodImageURL(*log.ImageURL)
+			if resolved != "" {
+				item["image_url"] = resolved
+			}
 		}
 		if log.RecordedOn != nil {
 			item["recorded_on"] = log.RecordedOn.Format("2006-01-02")
@@ -418,9 +429,20 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 	calories := float64(estimate.CaloriesKcal)
 	reasoning := estimate.Reasoning
 	logDesc := resolveExerciseLogDesc(desc, estimate)
+	var storedImageURL *string
+	if imageURL != "" {
+		storedImageURL = &imageURL
+	}
+	var exerciseType *string
+	if strings.TrimSpace(estimate.ExerciseType) != "" {
+		value := strings.TrimSpace(estimate.ExerciseType)
+		exerciseType = &value
+	}
 	log := &domain.ExerciseLog{
 		UserID:         userID,
 		ExerciseDesc:   logDesc,
+		ExerciseType:   exerciseType,
+		ImageURL:       storedImageURL,
 		CaloriesBurned: &calories,
 		RecordedOn:     &recordedDate,
 		RecordedAt:     &now,
@@ -440,6 +462,8 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 	exerciseLog := map[string]any{
 		"id":              log.ID,
 		"exercise_desc":   log.ExerciseDesc,
+		"exercise_type":   estimate.ExerciseType,
+		"image_url":       imageURL,
 		"calories_burned": int(calories),
 		"recorded_on":     recordedOn,
 		"recorded_at":     now.Format(time.RFC3339),

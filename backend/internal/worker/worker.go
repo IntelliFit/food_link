@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -43,6 +46,11 @@ const (
 )
 
 var errTaskAttemptLost = errors.New("task attempt no longer owns task")
+
+var (
+	correctionContextWeightPattern = regexp.MustCompile(`(?i)([0-9]+(?:\.[0-9]+)?)\s*(?:克|g)`)
+	correctionContextEnergyPattern = regexp.MustCompile(`(?i)([0-9]+(?:\.[0-9]+)?)\s*(千焦|kj|千卡|大卡|kcal)`)
+)
 
 var supportedTaskTypes = []string{
 	"food",
@@ -992,6 +1000,11 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 	if len(input.PreviousResult) == 0 {
 		input.PreviousResult = mapFromAny(firstNonNil(task.Payload["previousResult"], latestInputs["previousResult"]))
 	}
+	contextOverrides := parseCorrectionContextOverrides(input.AdditionalContext, correctionItems)
+	if len(contextOverrides) > 0 {
+		input.CorrectionItems = applyCorrectionContextOverrides(correctionItems, contextOverrides)
+		correctionItems = input.CorrectionItems
+	}
 	input.AnalysisEngine = "db_first"
 	input.ModelName = precisionPlanModelName
 	standardMode := "standard"
@@ -1020,6 +1033,9 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 	originalItems := buildItemsFromCorrection(correctionItems)
 	if len(originalItems) > 0 {
 		result["items"] = restoreCorrectionFallbackNutrition(extractItems(result["items"]), originalItems)
+	}
+	if len(contextOverrides) > 0 {
+		result["items"] = applyCorrectionOverridesToResultItems(extractItems(result["items"]), contextOverrides)
 	}
 	result["correctionApplied"] = true
 	if sessionID != "" {
@@ -1141,6 +1157,342 @@ func buildItemsFromCorrection(correctionItems []map[string]any) []map[string]any
 		items = append(items, next)
 	}
 	return items
+}
+
+type correctionContextOverride struct {
+	WeightGrams *float64
+	Calories    *float64
+	Index       int
+	Names       []string
+}
+
+func parseCorrectionContextOverrides(contextText string, correctionItems []map[string]any) map[int]correctionContextOverride {
+	contextText = strings.TrimSpace(contextText)
+	if contextText == "" || len(correctionItems) == 0 {
+		return nil
+	}
+	overrides := map[int]correctionContextOverride{}
+	remaining := contextText
+	for index, item := range correctionItems {
+		names := correctionCandidateNamesFromItem(item)
+		start, matchedName := findFirstCorrectionNameInText(remaining, names)
+		if start < 0 {
+			continue
+		}
+		segment := remaining[start+len(matchedName):]
+		nextStart := -1
+		for nextIndex := index + 1; nextIndex < len(correctionItems); nextIndex++ {
+			if pos, _ := findFirstCorrectionNameInText(segment, correctionCandidateNamesFromItem(correctionItems[nextIndex])); pos >= 0 && (nextStart < 0 || pos < nextStart) {
+				nextStart = pos
+			}
+		}
+		if nextStart >= 0 {
+			segment = segment[:nextStart]
+		}
+		if override, ok := parseCorrectionOverrideSegment(segment); ok {
+			override.Index = index
+			override.Names = names
+			overrides[index] = override
+		}
+		remaining = remaining[start+len(matchedName):]
+	}
+	parseCorrectionContextOverrideClauses(contextText, correctionItems, overrides)
+	if len(overrides) == 0 {
+		return nil
+	}
+	return overrides
+}
+
+func parseCorrectionOverrideSegment(segment string) (correctionContextOverride, bool) {
+	override := correctionContextOverride{}
+	if match := correctionContextWeightPattern.FindStringSubmatch(segment); len(match) >= 2 {
+		if value, err := strconv.ParseFloat(match[1], 64); err == nil && value > 0 {
+			override.WeightGrams = &value
+		}
+	}
+	if match := correctionContextEnergyPattern.FindStringSubmatch(segment); len(match) >= 3 {
+		if value, err := strconv.ParseFloat(match[1], 64); err == nil && value > 0 {
+			unit := strings.ToLower(match[2])
+			if unit == "千焦" || unit == "kj" {
+				value = value / 4.184
+			}
+			override.Calories = &value
+		}
+	}
+	return override, override.WeightGrams != nil || override.Calories != nil
+}
+
+func applyCorrectionContextOverrides(correctionItems []map[string]any, overrides map[int]correctionContextOverride) []map[string]any {
+	if len(correctionItems) == 0 || len(overrides) == 0 {
+		return correctionItems
+	}
+	out := make([]map[string]any, 0, len(correctionItems))
+	for index, item := range correctionItems {
+		next := copyAnyMap(item)
+		if override, ok := overrides[index]; ok {
+			applyCorrectionOverrideToItem(next, override)
+		}
+		out = append(out, next)
+	}
+	return out
+}
+
+func applyCorrectionOverridesToResultItems(items []map[string]any, overrides map[int]correctionContextOverride) []map[string]any {
+	if len(items) == 0 || len(overrides) == 0 {
+		return items
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, copyAnyMap(item))
+	}
+	keys := make([]int, 0, len(overrides))
+	for index := range overrides {
+		keys = append(keys, index)
+	}
+	sort.Ints(keys)
+	used := map[int]bool{}
+	for _, index := range keys {
+		override := overrides[index]
+		targetIndex := findCorrectionResultItemIndex(out, override, index, used)
+		if targetIndex < 0 {
+			continue
+		}
+		applyCorrectionOverrideToItem(out[targetIndex], override)
+		used[targetIndex] = true
+	}
+	return out
+}
+
+func parseCorrectionContextOverrideClauses(contextText string, correctionItems []map[string]any, overrides map[int]correctionContextOverride) {
+	clauses := strings.FieldsFunc(contextText, func(r rune) bool {
+		return r == '。' || r == ';' || r == '；' || r == '\n' || r == '\r'
+	})
+	for _, clause := range clauses {
+		clause = strings.TrimSpace(clause)
+		if clause == "" {
+			continue
+		}
+		override, ok := parseCorrectionOverrideSegment(clause)
+		if !ok {
+			continue
+		}
+		nameHint := correctionNameHintBeforeNumbers(clause)
+		if nameHint == "" {
+			continue
+		}
+		index := findCorrectionItemIndexByNameHint(nameHint, correctionItems)
+		if index < 0 {
+			continue
+		}
+		override.Index = index
+		override.Names = addUniqueStrings(correctionCandidateNamesFromItem(correctionItems[index]), nameHint)
+		if existing, ok := overrides[index]; ok {
+			override = mergeCorrectionContextOverride(existing, override)
+		}
+		overrides[index] = override
+	}
+}
+
+func correctionNameHintBeforeNumbers(clause string) string {
+	firstMetricStart := len(clause)
+	if loc := correctionContextWeightPattern.FindStringIndex(clause); loc != nil && loc[0] < firstMetricStart {
+		firstMetricStart = loc[0]
+	}
+	if loc := correctionContextEnergyPattern.FindStringIndex(clause); loc != nil && loc[0] < firstMetricStart {
+		firstMetricStart = loc[0]
+	}
+	if firstMetricStart == len(clause) {
+		return ""
+	}
+	return strings.Trim(clause[:firstMetricStart], " \t　,，:：约大概左右是为")
+}
+
+func findCorrectionItemIndexByNameHint(nameHint string, correctionItems []map[string]any) int {
+	bestIndex := -1
+	bestScore := 0
+	for index, item := range correctionItems {
+		score := correctionNamesMatchScore([]string{nameHint}, correctionCandidateNamesFromItem(item))
+		if score > bestScore {
+			bestScore = score
+			bestIndex = index
+		}
+	}
+	if bestScore < 55 {
+		return -1
+	}
+	return bestIndex
+}
+
+func mergeCorrectionContextOverride(existing, next correctionContextOverride) correctionContextOverride {
+	if existing.WeightGrams == nil {
+		existing.WeightGrams = next.WeightGrams
+	}
+	if existing.Calories == nil {
+		existing.Calories = next.Calories
+	}
+	if existing.Index == 0 && next.Index != 0 {
+		existing.Index = next.Index
+	}
+	existing.Names = addUniqueStrings(existing.Names, next.Names...)
+	return existing
+}
+
+func findCorrectionResultItemIndex(items []map[string]any, override correctionContextOverride, fallbackIndex int, used map[int]bool) int {
+	bestIndex := -1
+	bestScore := 0
+	for index, item := range items {
+		if used[index] {
+			continue
+		}
+		score := correctionNamesMatchScore(override.Names, correctionCandidateNamesFromItem(item))
+		if score > bestScore {
+			bestScore = score
+			bestIndex = index
+		}
+	}
+	if bestScore >= 55 {
+		return bestIndex
+	}
+	if fallbackIndex >= 0 && fallbackIndex < len(items) && !used[fallbackIndex] {
+		return fallbackIndex
+	}
+	return -1
+}
+
+func correctionCandidateNamesFromItem(item map[string]any) []string {
+	if item == nil {
+		return nil
+	}
+	names := []string{}
+	for _, key := range []string{"name", "sourceName", "food_name", "item_name", "originalName", "displayName", "matchedFoodName"} {
+		names = addUniqueStrings(names, stringFromMap(item, key))
+	}
+	return names
+}
+
+func findFirstCorrectionNameInText(text string, names []string) (int, string) {
+	bestStart := -1
+	bestName := ""
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		start := strings.Index(text, name)
+		if start < 0 {
+			continue
+		}
+		if bestStart < 0 || start < bestStart || (start == bestStart && len(name) > len(bestName)) {
+			bestStart = start
+			bestName = name
+		}
+	}
+	return bestStart, bestName
+}
+
+func correctionNamesMatchScore(leftNames, rightNames []string) int {
+	best := 0
+	for _, left := range leftNames {
+		for _, right := range rightNames {
+			if score := correctionNameMatchScore(left, right); score > best {
+				best = score
+			}
+		}
+	}
+	return best
+}
+
+func correctionNameMatchScore(left, right string) int {
+	left = normalizeCorrectionFoodName(left)
+	right = normalizeCorrectionFoodName(right)
+	if left == "" || right == "" {
+		return 0
+	}
+	if left == right {
+		return 1000 + len([]rune(left))
+	}
+	if strings.Contains(left, right) || strings.Contains(right, left) {
+		shorter := len([]rune(left))
+		if rightLen := len([]rune(right)); rightLen < shorter {
+			shorter = rightLen
+		}
+		return 800 + shorter
+	}
+	leftRunes := []rune(left)
+	rightRunes := []rune(right)
+	counts := map[rune]int{}
+	for _, r := range leftRunes {
+		counts[r]++
+	}
+	common := 0
+	for _, r := range rightRunes {
+		if counts[r] > 0 {
+			common++
+			counts[r]--
+		}
+	}
+	return common * 200 / (len(leftRunes) + len(rightRunes))
+}
+
+func normalizeCorrectionFoodName(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	replacer := strings.NewReplacer(
+		" ", "",
+		"　", "",
+		"\t", "",
+		"\n", "",
+		"\r", "",
+		"（", "",
+		"）", "",
+		"(", "",
+		")", "",
+		"-", "",
+		"_", "",
+		"·", "",
+		"、", "",
+		"，", "",
+		",", "",
+		"。", "",
+	)
+	return replacer.Replace(value)
+}
+
+func addUniqueStrings(base []string, values ...string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(base)+len(values))
+	for _, value := range append(base, values...) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func applyCorrectionOverrideToItem(item map[string]any, override correctionContextOverride) {
+	if override.WeightGrams != nil {
+		item["estimatedWeightGrams"] = *override.WeightGrams
+		item["originalWeightGrams"] = *override.WeightGrams
+		item["weight"] = *override.WeightGrams
+		item["weightEdited"] = true
+	}
+	if override.Calories == nil {
+		return
+	}
+	nutrients := mapFromAny(item["nutrients"])
+	if len(nutrients) == 0 {
+		nutrients = map[string]any{}
+	}
+	nutrients["calories"] = round2(*override.Calories)
+	for _, key := range []string{"protein", "carbs", "fat", "fiber", "sugar"} {
+		if _, ok := nutrients[key]; !ok {
+			nutrients[key] = 0.0
+		}
+	}
+	item["nutrients"] = nutrients
+	item["calorie"] = round2(*override.Calories)
+	item["nutrition_source"] = "user_correction_context"
 }
 
 func correctionNutrients(item map[string]any) map[string]any {
@@ -2834,6 +3186,10 @@ func mapFromAny(value any) map[string]any {
 		return m
 	}
 	return map[string]any{}
+}
+
+func round2(value float64) float64 {
+	return math.Round(value*100) / 100
 }
 
 func firstPositiveFloat(payload map[string]any, keys ...string) (float64, bool) {

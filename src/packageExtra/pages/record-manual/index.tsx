@@ -72,7 +72,7 @@ interface ServingPreset {
 
 interface SelectedItem {
   id: string
-  source: 'public_library' | 'nutrition_library'
+  source: 'public_library' | 'nutrition_library' | 'packaged_food'
   title: string
   subtitle: string
   weight: number
@@ -637,7 +637,7 @@ function RecordManualPage() {
           <View className='food-name-row'>
             <Text className='food-name'>{item.title}</Text>
             <View className={`source-badge ${item.source}`}>
-              <Text>{item.source_label || (item.source === 'public_library' ? '真实餐食' : '标准食物')}</Text>
+              <Text>{item.source_label || (item.source === 'public_library' ? '真实餐食' : item.source === 'packaged_food' ? '包装食品' : '标准食物')}</Text>
             </View>
           </View>
           <Text className='food-sub'>

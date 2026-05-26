@@ -493,10 +493,12 @@ type RewardTaskUploadDO struct {
 func (RewardTaskUploadDO) TableName() string { return "reward_task_uploads" }
 
 type FeedLikeDO struct {
-	ID        string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID    string     `gorm:"column:user_id;type:uuid;not null;index:idx_feed_likes_user_id"`
-	RecordID  string     `gorm:"column:record_id;type:uuid;not null;index:idx_feed_likes_record_id"`
-	CreatedAt *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID     string     `gorm:"column:user_id;type:uuid;not null;index:idx_feed_likes_user_id"`
+	RecordID   *string    `gorm:"column:record_id;type:uuid;index:idx_feed_likes_record_id"`
+	TargetType string     `gorm:"column:target_type;type:text;not null;default:'food_record';index:idx_feed_likes_target,priority:1"`
+	TargetID   *string    `gorm:"column:target_id;type:uuid;index:idx_feed_likes_target,priority:2"`
+	CreatedAt  *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
 }
 
 func (FeedLikeDO) TableName() string { return "feed_likes" }
@@ -504,7 +506,9 @@ func (FeedLikeDO) TableName() string { return "feed_likes" }
 type FeedCommentDO struct {
 	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID          string     `gorm:"column:user_id;type:uuid;not null;index:idx_feed_comments_user_id"`
-	RecordID        string     `gorm:"column:record_id;type:uuid;not null;index:idx_feed_comments_record_id"`
+	RecordID        *string    `gorm:"column:record_id;type:uuid;index:idx_feed_comments_record_id"`
+	TargetType      string     `gorm:"column:target_type;type:text;not null;default:'food_record';index:idx_feed_comments_target,priority:1"`
+	TargetID        *string    `gorm:"column:target_id;type:uuid;index:idx_feed_comments_target,priority:2"`
 	ParentCommentID *string    `gorm:"column:parent_comment_id;type:uuid;index:idx_feed_comments_parent_comment_id"`
 	ReplyToUserID   *string    `gorm:"column:reply_to_user_id;type:uuid;index:idx_feed_comments_reply_to_user_id"`
 	Content         string     `gorm:"column:content;type:text;not null"`
@@ -518,6 +522,8 @@ type FeedInteractionNotificationDO struct {
 	RecipientUserID  string     `gorm:"column:recipient_user_id;type:uuid;not null;index:idx_feed_interaction_notifications_recipient,priority:1"`
 	ActorUserID      *string    `gorm:"column:actor_user_id;type:uuid"`
 	RecordID         *string    `gorm:"column:record_id;type:uuid;index:idx_feed_interaction_notifications_record_id"`
+	TargetType       string     `gorm:"column:target_type;type:text;not null;default:'food_record';index:idx_feed_interaction_notifications_target,priority:1"`
+	TargetID         *string    `gorm:"column:target_id;type:uuid;index:idx_feed_interaction_notifications_target,priority:2"`
 	CommentID        *string    `gorm:"column:comment_id;type:uuid"`
 	ParentCommentID  *string    `gorm:"column:parent_comment_id;type:uuid"`
 	NotificationType string     `gorm:"column:notification_type;type:text;not null"`
@@ -644,11 +650,14 @@ type ExerciseLogDO struct {
 	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID         string    `gorm:"column:user_id;type:uuid;not null;index:idx_user_exercise_logs_user_date,priority:1;index:idx_user_exercise_logs_user_recorded_at,priority:1"`
 	ExerciseDesc   string    `gorm:"column:exercise_desc;type:text;not null"`
+	ExerciseType   *string   `gorm:"column:exercise_type;type:text"`
+	ImageURL       *string   `gorm:"column:image_url;type:text"`
 	CaloriesBurned int       `gorm:"column:calories_burned;type:integer;not null"`
 	DurationMin    *int      `gorm:"column:duration_min;type:integer"`
 	RecordedOn     time.Time `gorm:"column:recorded_on;type:date;not null;index:idx_user_exercise_logs_user_date,priority:2"`
 	RecordedAt     time.Time `gorm:"column:recorded_at;type:timestamptz;not null;default:now();index:idx_user_exercise_logs_user_recorded_at,priority:2,sort:desc"`
 	AIReasoning    *string   `gorm:"column:ai_reasoning;type:text"`
+	HiddenFromFeed bool      `gorm:"column:hidden_from_feed;type:boolean;not null;default:false;index:idx_user_exercise_logs_hidden_from_feed"`
 	CreatedAt      time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
 }
 
@@ -770,6 +779,8 @@ type UserCreditBonusEventDO struct {
 	BonusDate      time.Time      `gorm:"column:bonus_date;type:date;not null;index:idx_user_credit_bonus_events_user_date,priority:3"`
 	Credits        int            `gorm:"column:credits;type:integer;not null;default:0"`
 	SourceRecordID *string        `gorm:"column:source_record_id;type:uuid"`
+	SourceScope    *string        `gorm:"column:source_scope;type:text"`
+	SourceKey      *string        `gorm:"column:source_key;type:text"`
 	Meta           map[string]any `gorm:"column:meta;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	CreatedAt      time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
 	UpdatedAt      time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`

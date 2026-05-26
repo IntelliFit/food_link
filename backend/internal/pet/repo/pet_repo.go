@@ -27,6 +27,17 @@ type FoodRecord struct {
 
 func (FoodRecord) TableName() string { return "user_food_records" }
 
+type UserProfile struct {
+	ID              string         `gorm:"column:id"`
+	Gender          *string        `gorm:"column:gender"`
+	Birthday        *time.Time     `gorm:"column:birthday"`
+	ActivityLevel   *string        `gorm:"column:activity_level"`
+	DietGoal        *string        `gorm:"column:diet_goal"`
+	HealthCondition map[string]any `gorm:"column:health_condition;serializer:json"`
+}
+
+func (UserProfile) TableName() string { return "weapp_user" }
+
 type PetRepo struct {
 	db *gorm.DB
 }
@@ -58,9 +69,44 @@ func (r *PetRepo) CreatePet(ctx context.Context, pet *petdomain.UserPet) error {
 		Create(pet).Error
 }
 
+func (r *PetRepo) GetUserProfile(ctx context.Context, userID string) (*UserProfile, error) {
+	var row UserProfile
+	err := r.db.WithContext(ctx).
+		Select("id", "gender", "birthday", "activity_level", "diet_goal", "health_condition").
+		Where("id = ?", userID).
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &row, err
+}
+
 func (r *PetRepo) UpdatePet(ctx context.Context, petID string, updates map[string]any) error {
 	updates["updated_at"] = time.Now()
 	return r.db.WithContext(ctx).Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(updates).Error
+}
+
+func (r *PetRepo) SelectAppearance(ctx context.Context, userID, petID string, updates map[string]any) (*petdomain.UserPet, error) {
+	var updatedPet petdomain.UserPet
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND user_id = ?", petID, userID).
+			First(&updatedPet).Error; err != nil {
+			return err
+		}
+		updates["updated_at"] = time.Now()
+		if err := tx.Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(updates).Error; err != nil {
+			return err
+		}
+		return tx.Where("id = ?", petID).First(&updatedPet).Error
+	})
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &updatedPet, nil
 }
 
 func (r *PetRepo) AddPetExperience(ctx context.Context, petID string, delta int) (*petdomain.UserPet, error) {

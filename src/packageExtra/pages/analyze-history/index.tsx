@@ -14,6 +14,11 @@ import {
   refreshHomeDashboardLocalSnapshotFromCloud
 } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
+import {
+  MealTypeSelectSheet,
+  normalizeSelectableMealType,
+  type SelectableMealType
+} from '../../../components/MealTypeSelector'
 
 const STATUS_MAP: Record<string, string> = {
   pending: '排队中',
@@ -390,6 +395,8 @@ function AnalyzeHistoryPage() {
   const [loading, setLoading] = useState(true)
   const [showActionSheet, setShowActionSheet] = useState(false)
   const [activeTask, setActiveTask] = useState<AnalysisTask | null>(null)
+  const [quickRecordTask, setQuickRecordTask] = useState<AnalysisTask | null>(null)
+  const [quickRecordMealType, setQuickRecordMealType] = useState<SelectableMealType>('afternoon_snack')
   const loadSeqRef = useRef(0)
   const navBarHeight = getNavBarHeight()
 
@@ -678,11 +685,28 @@ function AnalyzeHistoryPage() {
       return
     }
 
-    const mealType = getTaskMealType(task)
-    if (!mealType) {
-      Taro.showToast({ title: '未找到餐次，请点进详情记录', icon: 'none' })
+    const result = task.result as AnalyzeResponse
+    const items = buildTaskFoodItems(result)
+    if (items.length === 0) {
+      Taro.showToast({ title: '没有可记录的食物', icon: 'none' })
       return
     }
+    setQuickRecordTask(task)
+    setQuickRecordMealType(normalizeSelectableMealType(getTaskMealType(task), 'afternoon_snack'))
+  }
+
+  const closeQuickRecordMealSelector = () => {
+    setQuickRecordTask(null)
+  }
+
+  const confirmQuickRecordMealType = () => {
+    const task = quickRecordTask
+    if (!task || task.status !== 'done' || !task.result || task.is_recorded) {
+      closeQuickRecordMealSelector()
+      return
+    }
+    const mealType = quickRecordMealType
+    closeQuickRecordMealSelector()
 
     const result = task.result as AnalyzeResponse
     const items = buildTaskFoodItems(result)
@@ -692,71 +716,61 @@ function AnalyzeHistoryPage() {
     }
     const imageUrls = pickTaskImageUrls(task)
     const totals = buildTaskNutritionTotals(items)
-    const mealLabel = MEAL_TYPE_LABELS[mealType] || mealType
 
-    Taro.showModal({
-      title: '快速记录',
-      content: `记录为${mealLabel}？`,
-      confirmText: '记录',
-      cancelText: '取消',
-      success: (res) => {
-        if (!res.confirm) return
-        void (async () => {
-          try {
-            Taro.showLoading({ title: '', mask: true })
-            const payload = {
-              meal_type: mealType,
-              image_path: imageUrls[0] || undefined,
-              image_paths: imageUrls.length > 0 ? imageUrls : undefined,
-              description: result.description || undefined,
-              insight: result.insight || undefined,
-              items,
-              total_calories: totals.totalCalories,
-              total_protein: totals.totalProtein,
-              total_carbs: totals.totalCarbs,
-              total_fat: totals.totalFat,
-              total_weight_grams: Math.round(totals.totalWeight),
-              diet_goal: getTaskDietGoal(task) as any,
-              activity_timing: getTaskActivityTiming(task) as any,
-              pfc_ratio_comment: result.pfc_ratio_comment || undefined,
-              absorption_notes: result.absorption_notes || undefined,
-              context_advice: result.context_advice || undefined,
-              source_task_id: task.id,
-              date: getTaskRecordDate(task)
-            }
-            const saveResult = await saveFoodRecord(payload)
-            Taro.hideLoading()
-            const targetDateKey = payload.date || formatDateKey(new Date())
-            if (!saveResult.already_saved) {
-              applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
-            }
-            setTasks(prev => prev.map(item => (
-              item.id === task.id
-                ? { ...item, is_recorded: true, record_id: saveResult.id }
-                : item
-            )))
-            try {
-              Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey })
-            } catch {
-              /* ignore */
-            }
-            await refreshHomeDashboardLocalSnapshotFromCloud(targetDateKey)
-            try {
-              Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey, force: true })
-            } catch {
-              /* ignore */
-            }
-            Taro.showToast({
-              title: saveResult.already_saved ? '该餐已记录' : '记录成功',
-              icon: saveResult.already_saved ? 'none' : 'success'
-            })
-          } catch (e: any) {
-            Taro.hideLoading()
-            await showUnifiedApiError(e, '记录失败')
-          }
-        })()
+    void (async () => {
+      try {
+        Taro.showLoading({ title: '', mask: true })
+        const payload = {
+          meal_type: mealType,
+          image_path: imageUrls[0] || undefined,
+          image_paths: imageUrls.length > 0 ? imageUrls : undefined,
+          description: result.description || undefined,
+          insight: result.insight || undefined,
+          items,
+          total_calories: totals.totalCalories,
+          total_protein: totals.totalProtein,
+          total_carbs: totals.totalCarbs,
+          total_fat: totals.totalFat,
+          total_weight_grams: Math.round(totals.totalWeight),
+          diet_goal: getTaskDietGoal(task) as any,
+          activity_timing: getTaskActivityTiming(task) as any,
+          pfc_ratio_comment: result.pfc_ratio_comment || undefined,
+          absorption_notes: result.absorption_notes || undefined,
+          context_advice: result.context_advice || undefined,
+          source_task_id: task.id,
+          date: getTaskRecordDate(task)
+        }
+        const saveResult = await saveFoodRecord(payload)
+        Taro.hideLoading()
+        const targetDateKey = payload.date || formatDateKey(new Date())
+        if (!saveResult.already_saved) {
+          applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
+        }
+        setTasks(prev => prev.map(item => (
+          item.id === task.id
+            ? { ...item, is_recorded: true, record_id: saveResult.id }
+            : item
+        )))
+        try {
+          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey })
+        } catch {
+          /* ignore */
+        }
+        await refreshHomeDashboardLocalSnapshotFromCloud(targetDateKey)
+        try {
+          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey, force: true })
+        } catch {
+          /* ignore */
+        }
+        Taro.showToast({
+          title: saveResult.already_saved ? '该餐已记录' : '记录成功',
+          icon: saveResult.already_saved ? 'none' : 'success'
+        })
+      } catch (e: any) {
+        Taro.hideLoading()
+        await showUnifiedApiError(e, '记录失败')
       }
-    })
+    })()
   }
 
   const actionSheetDelete = () => {
@@ -948,6 +962,15 @@ function AnalyzeHistoryPage() {
           </View>
         </View>
       )}
+      <MealTypeSelectSheet
+        visible={Boolean(quickRecordTask)}
+        value={quickRecordMealType}
+        title='记录到哪个餐次'
+        confirmText='记录'
+        onChange={setQuickRecordMealType}
+        onCancel={closeQuickRecordMealSelector}
+        onConfirm={confirmQuickRecordMealType}
+      />
     </View>
   )
 }

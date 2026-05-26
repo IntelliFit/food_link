@@ -46,27 +46,57 @@ type mockFeedRepo struct {
 	checkinCountsErr           error
 }
 
-func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
+func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
 	m.listPublicFeedLimit = limit
 	return m.listPublicFeed, m.listPublicFeedErr
 }
-func (m *mockFeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
+func (m *mockFeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
 	m.listFriendFeedLimit = limit
 	return m.listFriendFeed, m.listFriendFeedErr
 }
 func (m *mockFeedRepo) GetFeedRecordByID(ctx context.Context, recordID string) (*repo.FeedRecord, error) {
 	return m.getFeedRecord, m.getFeedRecordErr
 }
+func (m *mockFeedRepo) GetFeedTargetByID(ctx context.Context, targetType, targetID string) (*repo.FeedRecord, error) {
+	return m.getFeedRecord, m.getFeedRecordErr
+}
 func (m *mockFeedRepo) HideFeedRecord(ctx context.Context, userID, recordID string) error {
+	return m.hideFeedErr
+}
+func (m *mockFeedRepo) HideFeedTarget(ctx context.Context, userID, targetType, targetID string) error {
 	return m.hideFeedErr
 }
 func (m *mockFeedRepo) AddLike(ctx context.Context, userID, recordID string) error {
 	return m.addLikeErr
 }
+func (m *mockFeedRepo) AddLikeTarget(ctx context.Context, userID, targetType, targetID string) error {
+	return m.addLikeErr
+}
 func (m *mockFeedRepo) RemoveLike(ctx context.Context, userID, recordID string) error {
 	return m.removeLikeErr
 }
+func (m *mockFeedRepo) RemoveLikeTarget(ctx context.Context, userID, targetType, targetID string) error {
+	return m.removeLikeErr
+}
 func (m *mockFeedRepo) GetLikesForRecords(ctx context.Context, recordIDs []string, currentUserID string) (map[string]*repo.LikeInfo, error) {
+	return m.likesMap, m.likesMapErr
+}
+func (m *mockFeedRepo) GetLikesForTargets(ctx context.Context, targets []repo.FeedTarget, currentUserID string) (map[string]*repo.LikeInfo, error) {
+	if m.likesMap == nil {
+		return m.likesMap, m.likesMapErr
+	}
+	result := make(map[string]*repo.LikeInfo, len(targets))
+	for _, target := range targets {
+		key := repo.FeedTargetKey(target.TargetType, target.TargetID)
+		if info := m.likesMap[key]; info != nil {
+			result[key] = info
+			continue
+		}
+		result[key] = m.likesMap[target.TargetID]
+	}
+	if len(result) > 0 {
+		return result, m.likesMapErr
+	}
 	return m.likesMap, m.likesMapErr
 }
 func (m *mockFeedRepo) AddComment(ctx context.Context, comment *domain.FeedComment) error {
@@ -75,7 +105,13 @@ func (m *mockFeedRepo) AddComment(ctx context.Context, comment *domain.FeedComme
 func (m *mockFeedRepo) ListComments(ctx context.Context, recordID string, limit int) ([]domain.FeedComment, error) {
 	return m.listComments, m.listCommentsErr
 }
+func (m *mockFeedRepo) ListCommentsForTarget(ctx context.Context, targetType, targetID string, limit int) ([]domain.FeedComment, error) {
+	return m.listComments, m.listCommentsErr
+}
 func (m *mockFeedRepo) ListCommentsByRecordIDs(ctx context.Context, recordIDs []string) ([]domain.FeedComment, error) {
+	return m.listCommentsByRecordIDs, m.listCommentsByRecordIDsErr
+}
+func (m *mockFeedRepo) ListCommentsByTargets(ctx context.Context, targets []repo.FeedTarget) ([]domain.FeedComment, error) {
 	return m.listCommentsByRecordIDs, m.listCommentsByRecordIDsErr
 }
 func (m *mockFeedRepo) GetCommentByID(ctx context.Context, commentID string) (*domain.FeedComment, error) {
@@ -83,6 +119,12 @@ func (m *mockFeedRepo) GetCommentByID(ctx context.Context, commentID string) (*d
 }
 func (m *mockFeedRepo) FindRecentDuplicate(ctx context.Context, userID, recordID, content string, parentCommentID, replyToUserID *string, window time.Duration) (*domain.FeedComment, error) {
 	return m.findDuplicate, m.findDuplicateErr
+}
+func (m *mockFeedRepo) FindRecentDuplicateForTarget(ctx context.Context, userID, targetType, targetID, content string, parentCommentID, replyToUserID *string, window time.Duration) (*domain.FeedComment, error) {
+	return m.findDuplicate, m.findDuplicateErr
+}
+func (m *mockFeedRepo) DeleteCommentCascade(ctx context.Context, targetType, targetID, commentID string) (int64, error) {
+	return 1, nil
 }
 func (m *mockFeedRepo) GetFriendIDs(ctx context.Context, userID string) ([]string, error) {
 	return m.friendIDs, m.friendIDsErr
@@ -115,6 +157,9 @@ func (m *mockNotificationRepo) CreateNotification(ctx context.Context, n *domain
 	return m.createNotificationErr
 }
 func (m *mockNotificationRepo) FindRecentDuplicate(ctx context.Context, recipientUserID, notificationType string, actorUserID, recordID, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error) {
+	return m.findDuplicateNotification, m.findDuplicateNotificationErr
+}
+func (m *mockNotificationRepo) FindRecentDuplicateForTarget(ctx context.Context, recipientUserID, notificationType string, actorUserID *string, targetType string, targetID *string, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error) {
 	return m.findDuplicateNotification, m.findDuplicateNotificationErr
 }
 func (m *mockNotificationRepo) ListNotifications(ctx context.Context, userID string, limit int) ([]domain.FeedInteractionNotification, error) {
@@ -343,7 +388,7 @@ func TestHideFeedForbidden(t *testing.T) {
 
 func TestListComments(t *testing.T) {
 	mockFeed := &mockFeedRepo{
-		listComments: []domain.FeedComment{{ID: "c1", UserID: "u1", RecordID: "r1", Content: "nice"}},
+		listComments: []domain.FeedComment{{ID: "c1", UserID: "u1", RecordID: boolStringPtr("r1"), Content: "nice"}},
 		profiles:     map[string]*repo.UserProfile{"u1": {ID: "u1", Nickname: "Alice"}},
 	}
 	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
@@ -413,7 +458,7 @@ func TestPostCommentDeduplication(t *testing.T) {
 	mockFeed := &mockFeedRepo{
 		getFeedRecord: &repo.FeedRecord{ID: "r1", UserID: "u2"},
 		isFriend:      true,
-		findDuplicate: &domain.FeedComment{ID: "c1", UserID: "u1", RecordID: "r1", Content: "dup"},
+		findDuplicate: &domain.FeedComment{ID: "c1", UserID: "u1", RecordID: boolStringPtr("r1"), Content: "dup"},
 		profiles:      map[string]*repo.UserProfile{"u1": {ID: "u1", Nickname: "Alice"}},
 	}
 	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
@@ -490,4 +535,8 @@ func TestComputeFreshnessScore(t *testing.T) {
 
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func boolStringPtr(value string) *string {
+	return &value
 }

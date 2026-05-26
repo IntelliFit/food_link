@@ -101,12 +101,16 @@ function InteractionNotificationsPage() {
   }
 
   const handleOpenNotification = (item: FeedInteractionNotification) => {
-    if (!item.record_id) {
+    const targetType = item.target_type || 'food_record'
+    const targetId = item.target_id || item.record_id || ''
+    if (!targetId) {
       Taro.showToast({ title: '未找到对应动态', icon: 'none' })
       return
     }
     const query = [
-      `recordId=${encodeURIComponent(item.record_id)}`,
+      `recordId=${encodeURIComponent(targetId)}`,
+      `targetId=${encodeURIComponent(targetId)}`,
+      `targetType=${encodeURIComponent(targetType)}`,
       `notificationType=${encodeURIComponent(item.notification_type || '')}`,
       `commentId=${encodeURIComponent(item.comment_id || '')}`,
       `parentCommentId=${encodeURIComponent(item.parent_comment_id || '')}`

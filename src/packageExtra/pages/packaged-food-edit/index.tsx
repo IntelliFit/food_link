@@ -22,6 +22,8 @@ import './index.scss'
 const PACKAGED_FOOD_EDIT_DRAFT_KEY = 'packagedFoodEditDraft'
 const PACKAGED_FOOD_EDIT_SAVED_KEY = 'packagedFoodEditSaved'
 const PACKAGED_FOOD_UPLOAD_TASKS_KEY = 'packagedFoodUploadTasks'
+const PACKAGED_FOOD_UPLOAD_CONSENT_KEY = 'packagedFoodUploadConsentV1'
+const MAX_REWARD_UPLOAD_IMAGES = 3
 
 type CaptureStep = 'front' | 'nutrition' | 'ingredients'
 
@@ -339,6 +341,51 @@ function formatTaskTime(value?: string) {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function formatUploadTaskMessage(task: PackagedUploadTaskEntry) {
+  if (task.message) return task.message
+  if (task.status === 'pending') return '已收到，排队中'
+  if (task.status === 'processing') return '后台分析中，可稍后刷新'
+  if (task.status === 'failed' || task.status === 'timed_out' || task.status === 'cancelled') {
+    return sanitizeUserFacingErrorMessage(task.errorMessage, '分析失败，请重拍后再试')
+  }
+  return '点击查看分析结果和奖励原因'
+}
+
+function hasPackagedUploadConsent() {
+  try {
+    return Boolean(Taro.getStorageSync(PACKAGED_FOOD_UPLOAD_CONSENT_KEY))
+  } catch {
+    return false
+  }
+}
+
+function rememberPackagedUploadConsent() {
+  Taro.setStorageSync(PACKAGED_FOOD_UPLOAD_CONSENT_KEY, {
+    acceptedAt: new Date().toISOString(),
+  })
+}
+
+function askPackagedUploadConsent(): Promise<boolean> {
+  if (hasPackagedUploadConsent()) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    Taro.showModal({
+      title: '图片使用授权',
+      content: '你上传的包装照片将用于 AI 识别、食物库数据建设和奖励积分判定。请确认你有权上传这些图片，并授权平台在本服务中使用。',
+      confirmText: '同意上传',
+      cancelText: '暂不上传',
+      success: (res) => {
+        if (res.confirm) {
+          rememberPackagedUploadConsent()
+          resolve(true)
+        } else {
+          resolve(false)
+        }
+      },
+      fail: () => resolve(false),
+    })
+  })
+}
+
 function PackagedFoodEditPage() {
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(emptyDraft)
@@ -351,6 +398,7 @@ function PackagedFoodEditPage() {
   const [extractResult, setExtractResult] = useState<PackagedProductExtractResult | null>(null)
   const [autoIngestResult, setAutoIngestResult] = useState<PackagedAutoIngestResult | null>(null)
   const [uploadTasks, setUploadTasks] = useState<PackagedUploadTaskEntry[]>([])
+  const [pendingRewardImages, setPendingRewardImages] = useState<UploadedImage[]>([])
   const [tasksExpanded, setTasksExpanded] = useState(false)
   const isRewardTaskMode = router.params?.task_mode === 'reward_center'
 
@@ -461,6 +509,10 @@ function PackagedFoodEditPage() {
     }))
   }
 
+  const resetRewardSelection = () => {
+    setPendingRewardImages([])
+  }
+
   const refreshUploadTasks = async (baseTasks?: PackagedUploadTaskEntry[]) => {
     if (!isRewardTaskMode) return
     const localTasks = baseTasks || readPackagedUploadTasks()
@@ -490,17 +542,69 @@ function PackagedFoodEditPage() {
     setUploadTasks(next)
   }
 
-  const handleRewardBatchUpload = async () => {
+  const showRewardSubmitConfirm = (taskId: string, nextTasks: PackagedUploadTaskEntry[]) => {
+    Taro.showModal({
+      title: '已收到，后台分析中',
+      content: '这一种商品已加入上传分析列表。成功入库且数据库原本没有时，会发放奖励积分 +1。',
+      confirmText: '查看详情',
+      cancelText: '继续上传',
+      success: (res) => {
+        if (res.confirm) {
+          openTaskDetail({ taskId } as PackagedUploadTaskEntry)
+        } else {
+          resetRewardSelection()
+        }
+      },
+      complete: () => {
+        setTimeout(() => refreshUploadTasks(nextTasks), 1200)
+      },
+    })
+  }
+
+  const handleRewardChooseImages = async () => {
     if (recognizing) return
     setRecognizing(true)
-    Taro.showLoading({ title: '提交中', mask: true })
+    Taro.showLoading({ title: '上传中', mask: true })
     try {
-      const uploaded = await chooseAndUploadImages(2)
-      const imageUrls = uploaded.map(item => item.imageUrl).filter(Boolean)
-      if (imageUrls.length === 0) {
+      const allowed = await askPackagedUploadConsent()
+      if (!allowed) {
         Taro.hideLoading()
         return
       }
+      const uploaded = await chooseAndUploadImages(MAX_REWARD_UPLOAD_IMAGES)
+      if (uploaded.length === 0) {
+        Taro.hideLoading()
+        return
+      }
+      setPendingRewardImages(uploaded)
+      Taro.hideLoading()
+    } catch (error) {
+      Taro.hideLoading()
+      if (isChooseImageCancel(error)) return
+      if (isPrivacyAuthorizeError(error)) {
+        showPrivacyAuthorizeFailure(error)
+      } else {
+        await showUnifiedApiError(error, '提交零食分析任务失败')
+      }
+    } finally {
+      setRecognizing(false)
+    }
+  }
+
+  const handleRewardSubmitSelected = async () => {
+    if (recognizing) return
+    const imageUrls = pendingRewardImages.map(item => item.imageUrl).filter(Boolean)
+    if (imageUrls.length < 1) {
+      Taro.showToast({ title: '请先选择这一种商品的照片', icon: 'none' })
+      return
+    }
+    if (imageUrls.length > MAX_REWARD_UPLOAD_IMAGES) {
+      Taro.showToast({ title: '同一种商品最多 3 张图', icon: 'none' })
+      return
+    }
+    setRecognizing(true)
+    Taro.showLoading({ title: '提交中', mask: true })
+    try {
       const { task_id: taskId } = await submitPackagedProductExtract({
         image_urls: imageUrls,
         source_task_id: draft.sourceTaskId,
@@ -511,7 +615,7 @@ function PackagedFoodEditPage() {
         createdAt: new Date().toISOString(),
         imageCount: imageUrls.length,
         status: 'pending',
-        message: '已加入后台分析列表',
+        message: '已收到，排队中',
       })
       setUploadTasks(nextTasks)
       setCaptureImages({})
@@ -519,18 +623,13 @@ function PackagedFoodEditPage() {
       setNeedsIngredientsCapture(false)
       setExtractResult(null)
       setAutoIngestResult(null)
+      resetRewardSelection()
       Taro.removeStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY)
       Taro.hideLoading()
-      Taro.showToast({ title: '已加入分析列表', icon: 'success' })
-      setTimeout(() => refreshUploadTasks(nextTasks), 1200)
+      showRewardSubmitConfirm(taskId, nextTasks)
     } catch (error) {
       Taro.hideLoading()
-      if (isChooseImageCancel(error)) return
-      if (isPrivacyAuthorizeError(error)) {
-        showPrivacyAuthorizeFailure(error)
-      } else {
-        await showUnifiedApiError(error, '提交零食分析任务失败')
-      }
+      await showUnifiedApiError(error, '提交零食分析任务失败')
     } finally {
       setRecognizing(false)
     }
@@ -585,7 +684,7 @@ function PackagedFoodEditPage() {
           createdAt: new Date().toISOString(),
           imageCount: imageUrls.length,
           status: 'pending',
-          message: '已加入后台分析列表',
+          message: '已收到，排队中',
         })
         setUploadTasks(nextTasks)
         setCaptureImages({})
@@ -722,45 +821,81 @@ function PackagedFoodEditPage() {
           <Text className='section-title'>预包装零食补库</Text>
           {isRewardTaskMode ? (
             <>
-              <Text className='wizard-desc'>一次上传 1-2 张照片即可加入后台分析列表。成功入库且数据库原本没有时发放奖励积分。</Text>
+              <Text className='wizard-desc'>一种食物一组照片。下面不是模式选择，点上传后按实际情况选 1-3 张同一商品照片即可。</Text>
 
-              <View className='shoot-guide-grid'>
-                <View className='shoot-guide-card recommended'>
-                  <Text className='shoot-guide-badge'>推荐</Text>
-                  <Text className='shoot-guide-title'>两张图更稳</Text>
-                  <View className='shoot-guide-preview-row'>
-                    <View className='shoot-guide-preview'>
-                      <Text className='shoot-guide-preview-main'>图 1</Text>
-                      <Text className='shoot-guide-preview-sub'>正面 + 净含量</Text>
-                    </View>
-                    <View className='shoot-guide-preview'>
-                      <Text className='shoot-guide-preview-main'>图 2</Text>
-                      <Text className='shoot-guide-preview-sub'>营养成分表</Text>
-                    </View>
+              <View className='shoot-case-list'>
+                <View className='shoot-case-card'>
+                  <View className='shoot-case-count'>
+                    <Text className='shoot-case-count-main'>1</Text>
+                    <Text className='shoot-case-count-sub'>张</Text>
                   </View>
-                  <Text className='shoot-guide-desc'>第一张拍品牌、品名、口味和净含量；第二张拍清能量、蛋白质、脂肪、碳水、钠和每100g/每份口径。</Text>
+                  <View className='shoot-case-copy'>
+                    <Text className='shoot-case-title'>包装小，一张能拍全</Text>
+                    <Text className='shoot-case-desc'>适合小包装、盒装侧面信息集中：同一张照片里能看清品名、净含量和营养成分表。</Text>
+                  </View>
                 </View>
-                <View className='shoot-guide-card'>
-                  <Text className='shoot-guide-badge muted'>可选</Text>
-                  <Text className='shoot-guide-title'>一张图也可以</Text>
-                  <View className='shoot-guide-preview single'>
-                    <Text className='shoot-guide-preview-main'>一图完整</Text>
-                    <Text className='shoot-guide-preview-sub'>品名 + 净含量 + 营养表</Text>
+                <View className='shoot-case-card recommended'>
+                  <View className='shoot-case-count'>
+                    <Text className='shoot-case-count-main'>2</Text>
+                    <Text className='shoot-case-count-sub'>张</Text>
                   </View>
-                  <Text className='shoot-guide-desc'>包装较小、所有文字能同框拍清时用一张图；如果反光、字小或营养表不清楚，请改用两张图。</Text>
+                  <View className='shoot-case-copy'>
+                    <View className='shoot-case-title-row'>
+                      <Text className='shoot-case-title'>最常用：正面 + 营养表</Text>
+                      <Text className='shoot-case-badge'>推荐</Text>
+                    </View>
+                    <Text className='shoot-case-desc'>第 1 张拍品牌、品名、口味、净含量；第 2 张拍清能量、蛋白质、脂肪、碳水、钠和每100g/每份口径。</Text>
+                  </View>
+                </View>
+                <View className='shoot-case-card'>
+                  <View className='shoot-case-count'>
+                    <Text className='shoot-case-count-main'>3</Text>
+                    <Text className='shoot-case-count-sub'>张</Text>
+                  </View>
+                  <View className='shoot-case-copy'>
+                    <Text className='shoot-case-title'>包装大、弯曲或字太小</Text>
+                    <Text className='shoot-case-desc'>前两张拍正面和营养表，第 3 张只补拍看不清的局部，比如净含量、规格或营养表下半部分。</Text>
+                  </View>
                 </View>
               </View>
 
               <View className='capture-card reward-capture-card'>
                 <View className='reward-upload-visual'>
                   <View className='reward-upload-icon'>+</View>
-                  <Text className='reward-upload-title'>快速添加一个零食任务</Text>
-                  <Text className='reward-upload-desc'>可以一次选 1 张或 2 张；提交后你可以继续添加下一组，不用等 AI 分析完。</Text>
+                  <Text className='reward-upload-title'>选择这一种商品的照片</Text>
+                  <Text className='reward-upload-desc'>请不要把不同商品混在一组。提交后你可以继续添加下一种，不用等 AI 分析完。</Text>
                 </View>
-                <View className={`recognize-btn reward-upload-btn ${recognizing ? 'loading' : ''}`} onClick={handleRewardBatchUpload}>
-                  <Text className='recognize-btn-text'>{recognizing ? '提交中' : '上传/拍摄 1-2 张照片'}</Text>
+                <View className={`recognize-btn reward-upload-btn ${recognizing ? 'loading' : ''}`} onClick={handleRewardChooseImages}>
+                  <Text className='recognize-btn-text'>{recognizing ? '处理中' : '选择/拍摄 1-3 张照片'}</Text>
                 </View>
               </View>
+
+              {pendingRewardImages.length > 0 && (
+                <View className='reward-confirm-card'>
+                  <View className='reward-confirm-head'>
+                    <View>
+                      <Text className='reward-confirm-title'>确认这一种商品</Text>
+                      <Text className='reward-confirm-desc'>已选 {pendingRewardImages.length} 张图。确认这些照片都是同一个商品的正面、净含量或营养成分表后再提交。</Text>
+                    </View>
+                    <Text className='reward-confirm-clear' onClick={resetRewardSelection}>重选</Text>
+                  </View>
+                  <View className='reward-image-preview-grid'>
+                    {pendingRewardImages.map((item, index) => (
+                      <View key={`${item.imageUrl}-${index}`} className='reward-image-preview'>
+                        <Image className='reward-image-preview-img' src={item.localPath || item.imageUrl} mode='aspectFill' />
+                        <Text className='reward-image-preview-badge'>图 {index + 1}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View className='reward-confirm-rules'>
+                    <Text className='reward-confirm-rule'>同一商品：可以是正面、背面、营养表或大包装局部。</Text>
+                    <Text className='reward-confirm-rule'>不同商品：请分开提交，一种食物一个任务。</Text>
+                  </View>
+                  <View className={`recognize-btn reward-submit-btn ${recognizing ? 'loading' : ''}`} onClick={handleRewardSubmitSelected}>
+                    <Text className='recognize-btn-text'>{recognizing ? '提交中' : '提交这一种商品'}</Text>
+                  </View>
+                </View>
+              )}
             </>
           ) : (
             <>
@@ -840,7 +975,7 @@ function PackagedFoodEditPage() {
                     <View key={task.taskId} className={`upload-task-item status-${task.status}`} onClick={() => openTaskDetail(task)}>
                       <View className='upload-task-item-main'>
                         <Text className='upload-task-item-title'>{task.productName || `零食照片 ${task.imageCount} 张`}</Text>
-                        <Text className='upload-task-item-desc'>{task.message || '后台分析中'}</Text>
+                        <Text className='upload-task-item-desc'>{formatUploadTaskMessage(task)}</Text>
                         <Text className='upload-task-item-time'>{formatTaskTime(task.createdAt)}</Text>
                       </View>
                       <Text className='upload-task-item-status'>{formatUploadTaskStatus(task)}</Text>

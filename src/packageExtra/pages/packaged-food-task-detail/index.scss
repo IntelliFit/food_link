@@ -108,6 +108,10 @@
     background: #fff7ed;
     border-color: rgba(249, 115, 22, 0.22);
   }
+
+  &.result {
+    border-width: 2rpx;
+  }
 }
 
 .detail-card-title {

@@ -1602,6 +1602,10 @@ $community-border-soft: rgb(92 184 150 / 18%);
   white-space: nowrap;
 }
 
+.feed-tag-exercise {
+  color: #0f766e;
+}
+
 .user-avatar {
   width: 80rpx;
   height: 80rpx;
@@ -1748,6 +1752,22 @@ $feed-body-font-size: 30rpx;
   font-size: 24rpx;
   color: #64748b;
   line-height: 1.5;
+}
+
+.feed-card-exercise {
+  .feed-calorie {
+    background: linear-gradient(to right, #0f766e 0%, #14b8a6 100%);
+    box-shadow: 0 4rpx 12rpx rgb(20 184 166 / 24%);
+  }
+
+  .feed-macros {
+    background: #f0fdfa;
+    border-color: #99f6e4;
+  }
+
+  .feed-macros-text {
+    color: #0f766e;
+  }
 }
 
 /** 仅图片/热量/营养可进入详情，按下反馈 */

@@ -3,10 +3,12 @@ package domain
 import "time"
 
 type FeedLike struct {
-	ID        string     `gorm:"column:id"`
-	UserID    string     `gorm:"column:user_id"`
-	RecordID  string     `gorm:"column:record_id"`
-	CreatedAt *time.Time `gorm:"column:created_at"`
+	ID         string     `gorm:"column:id"`
+	UserID     string     `gorm:"column:user_id"`
+	RecordID   *string    `gorm:"column:record_id"`
+	TargetType string     `gorm:"column:target_type"`
+	TargetID   string     `gorm:"column:target_id"`
+	CreatedAt  *time.Time `gorm:"column:created_at"`
 }
 
 func (FeedLike) TableName() string { return "feed_likes" }
@@ -14,7 +16,9 @@ func (FeedLike) TableName() string { return "feed_likes" }
 type FeedComment struct {
 	ID              string     `gorm:"column:id"`
 	UserID          string     `gorm:"column:user_id"`
-	RecordID        string     `gorm:"column:record_id"`
+	RecordID        *string    `gorm:"column:record_id"`
+	TargetType      string     `gorm:"column:target_type"`
+	TargetID        string     `gorm:"column:target_id"`
 	ParentCommentID *string    `gorm:"column:parent_comment_id"`
 	ReplyToUserID   *string    `gorm:"column:reply_to_user_id"`
 	Content         string     `gorm:"column:content"`
@@ -28,6 +32,8 @@ type FeedInteractionNotification struct {
 	RecipientUserID  string     `gorm:"column:recipient_user_id"`
 	ActorUserID      *string    `gorm:"column:actor_user_id"`
 	RecordID         *string    `gorm:"column:record_id"`
+	TargetType       string     `gorm:"column:target_type"`
+	TargetID         *string    `gorm:"column:target_id"`
 	CommentID        *string    `gorm:"column:comment_id"`
 	ParentCommentID  *string    `gorm:"column:parent_comment_id"`
 	NotificationType string     `gorm:"column:notification_type"`

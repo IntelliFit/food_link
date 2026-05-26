@@ -463,6 +463,206 @@ func TestBuildItemsFromCorrection_KeepsUserNutrition(t *testing.T) {
 	}
 }
 
+func TestApplyCorrectionContextOverrides_UsesExplicitWeightAndKJ(t *testing.T) {
+	correctionItems := []map[string]any{
+		{
+			"name":    "八喜牛奶冰淇淋",
+			"weight":  75,
+			"calorie": 158,
+			"nutrients": map[string]any{
+				"calories": 158,
+				"protein":  3,
+				"carbs":    18,
+				"fat":      8,
+			},
+		},
+		{
+			"name":    "巧乐兹低糖抹茶口味雪糕",
+			"weight":  65,
+			"calorie": 148,
+			"nutrients": map[string]any{
+				"calories": 148,
+				"protein":  2,
+				"carbs":    17,
+				"fat":      7,
+			},
+		},
+	}
+	overrides := parseCorrectionContextOverrides("八喜牛奶冰淇淋60克，532千焦。巧乐兹低糖抹茶口味雪糕50克，799千焦。", correctionItems)
+	merged := applyCorrectionContextOverrides(correctionItems, overrides)
+	items := buildItemsFromCorrection(merged)
+
+	if len(items) != 2 {
+		t.Fatalf("expected two correction items, got %#v", items)
+	}
+	if got, _ := floatFromAny(items[0]["estimatedWeightGrams"]); got != 60 {
+		t.Fatalf("expected first item weight from context, got %v", got)
+	}
+	if got, _ := floatFromAny(items[1]["estimatedWeightGrams"]); got != 50 {
+		t.Fatalf("expected second item weight from context, got %v", got)
+	}
+	firstNutrients := mapFromAny(items[0]["nutrients"])
+	if got, _ := floatFromAny(firstNutrients["calories"]); got < 127 || got > 128 {
+		t.Fatalf("expected first item kcal converted from 532kJ, got %v", got)
+	}
+	secondNutrients := mapFromAny(items[1]["nutrients"])
+	if got, _ := floatFromAny(secondNutrients["calories"]); got < 190 || got > 192 {
+		t.Fatalf("expected second item kcal converted from 799kJ, got %v", got)
+	}
+}
+
+func TestApplyCorrectionOverridesToResultItems_OverridesAfterDBFirst(t *testing.T) {
+	dbItems := []map[string]any{
+		{
+			"name":                 "八喜牛奶冰淇淋",
+			"estimatedWeightGrams": 75,
+			"nutrition_source":     "library_exact_canonical",
+			"nutrients": map[string]any{
+				"calories": 157.5,
+				"protein":  3.2,
+				"carbs":    20.1,
+				"fat":      6.5,
+			},
+		},
+	}
+	weight := 60.0
+	kcal := 532.0 / 4.184
+
+	items := applyCorrectionOverridesToResultItems(dbItems, map[int]correctionContextOverride{
+		0: {WeightGrams: &weight, Calories: &kcal},
+	})
+
+	if got, _ := floatFromAny(items[0]["estimatedWeightGrams"]); got != 60 {
+		t.Fatalf("expected user context to override db-first weight, got %v", got)
+	}
+	nutrients := mapFromAny(items[0]["nutrients"])
+	if got, _ := floatFromAny(nutrients["calories"]); got < 127 || got > 128 {
+		t.Fatalf("expected user context to override db-first calories, got %v", got)
+	}
+	if got, _ := floatFromAny(nutrients["protein"]); got != 3.2 {
+		t.Fatalf("expected db-first protein to be preserved, got %v", got)
+	}
+	if source := stringFromMap(items[0], "nutrition_source"); source != "user_correction_context" {
+		t.Fatalf("expected correction source marker, got %s", source)
+	}
+}
+
+func TestApplyCorrectionOverridesToResultItems_MatchesRenamedDBFirstItems(t *testing.T) {
+	correctionItems := []map[string]any{
+		{"name": "八喜牛奶冰淇淋", "weight": 75},
+		{"name": "巧乐兹低糖抹茶口味雪糕", "weight": 65},
+	}
+	overrides := parseCorrectionContextOverrides("八喜牛奶冰淇淋60克，532千焦。巧乐兹低糖抹茶口味雪糕50克，799千焦。", correctionItems)
+	dbItems := []map[string]any{
+		{
+			"name":                 "八喜牛奶冰淇淋",
+			"estimatedWeightGrams": 75,
+			"nutrients": map[string]any{
+				"calories": 158,
+				"protein":  2.1,
+			},
+		},
+		{
+			"name":                 "巧乐兹低糖抹茶可可味雪糕",
+			"estimatedWeightGrams": 70,
+			"nutrients": map[string]any{
+				"calories": 112,
+				"protein":  2.1,
+			},
+		},
+	}
+
+	items := applyCorrectionOverridesToResultItems(dbItems, overrides)
+
+	if got, _ := floatFromAny(items[0]["estimatedWeightGrams"]); got != 60 {
+		t.Fatalf("expected first item to keep its 60g override, got %v", got)
+	}
+	if got, _ := floatFromAny(items[1]["estimatedWeightGrams"]); got != 50 {
+		t.Fatalf("expected renamed second item to use 50g override, got %v", got)
+	}
+	secondNutrients := mapFromAny(items[1]["nutrients"])
+	if got, _ := floatFromAny(secondNutrients["calories"]); got < 190 || got > 192 {
+		t.Fatalf("expected renamed second item kcal converted from 799kJ, got %v", got)
+	}
+}
+
+func TestParseCorrectionContextOverrides_MatchesUserTypedNameVariant(t *testing.T) {
+	correctionItems := []map[string]any{
+		{"name": "八喜牛奶冰淇淋", "weight": 90},
+		{"name": "巧乐兹低糖抹茶可可味雪糕", "weight": 70},
+	}
+
+	overrides := parseCorrectionContextOverrides("八喜牛奶冰淇淋60克，532千焦\n巧乐兹低糖抹茶口味雪糕50克，799千焦", correctionItems)
+	merged := applyCorrectionContextOverrides(correctionItems, overrides)
+
+	if got, _ := floatFromAny(merged[0]["estimatedWeightGrams"]); got != 60 {
+		t.Fatalf("expected first item to use 60g override, got %v", got)
+	}
+	if got, _ := floatFromAny(merged[1]["estimatedWeightGrams"]); got != 50 {
+		t.Fatalf("expected second variant item to use 50g override, got %v", got)
+	}
+	secondNutrients := mapFromAny(merged[1]["nutrients"])
+	if got, _ := floatFromAny(secondNutrients["calories"]); got < 190 || got > 192 {
+		t.Fatalf("expected second variant kcal converted from 799kJ, got %v", got)
+	}
+}
+
+func TestApplyCorrectionOverridesToResultItems_MatchesByNameWhenOrderChanges(t *testing.T) {
+	correctionItems := []map[string]any{
+		{"name": "八喜牛奶冰淇淋", "weight": 75},
+		{"name": "巧乐兹低糖抹茶口味雪糕", "weight": 65},
+	}
+	overrides := parseCorrectionContextOverrides("八喜牛奶冰淇淋60克。巧乐兹低糖抹茶口味雪糕50克。", correctionItems)
+	dbItems := []map[string]any{
+		{"name": "巧乐兹低糖抹茶可可味雪糕", "estimatedWeightGrams": 70},
+		{"name": "八喜牛奶冰淇淋", "estimatedWeightGrams": 75},
+	}
+
+	items := applyCorrectionOverridesToResultItems(dbItems, overrides)
+
+	if got, _ := floatFromAny(items[0]["estimatedWeightGrams"]); got != 50 {
+		t.Fatalf("expected first db result item to match 巧乐兹 by name, got %v", got)
+	}
+	if got, _ := floatFromAny(items[1]["estimatedWeightGrams"]); got != 60 {
+		t.Fatalf("expected second db result item to match 八喜 by name, got %v", got)
+	}
+}
+
+func TestParseCorrectionContextOverrides_ParsesKcalUnitsAndPartialFields(t *testing.T) {
+	correctionItems := []map[string]any{
+		{"name": "八喜牛奶冰淇淋", "weight": 75},
+		{"name": "巧乐兹低糖抹茶口味雪糕", "weight": 65},
+	}
+
+	overrides := parseCorrectionContextOverrides("八喜牛奶冰淇淋60g。巧乐兹低糖抹茶口味雪糕127千卡。", correctionItems)
+	merged := applyCorrectionContextOverrides(correctionItems, overrides)
+
+	if got, _ := floatFromAny(merged[0]["estimatedWeightGrams"]); got != 60 {
+		t.Fatalf("expected g unit to override weight, got %v", got)
+	}
+	if _, ok := mapFromAny(merged[0]["nutrients"])["calories"]; ok {
+		t.Fatalf("did not expect calories override for first item")
+	}
+	if got, _ := floatFromAny(merged[1]["weight"]); got != 65 {
+		t.Fatalf("expected second item weight to remain db/list value, got %v", got)
+	}
+	secondNutrients := mapFromAny(merged[1]["nutrients"])
+	if got, _ := floatFromAny(secondNutrients["calories"]); got != 127 {
+		t.Fatalf("expected 千卡 to override calories, got %v", got)
+	}
+
+	overrides = parseCorrectionContextOverrides("八喜牛奶冰淇淋128kcal。巧乐兹低糖抹茶口味雪糕130大卡。", correctionItems)
+	merged = applyCorrectionContextOverrides(correctionItems, overrides)
+	firstNutrients := mapFromAny(merged[0]["nutrients"])
+	if got, _ := floatFromAny(firstNutrients["calories"]); got != 128 {
+		t.Fatalf("expected kcal to override calories, got %v", got)
+	}
+	secondNutrients = mapFromAny(merged[1]["nutrients"])
+	if got, _ := floatFromAny(secondNutrients["calories"]); got != 130 {
+		t.Fatalf("expected 大卡 to override calories, got %v", got)
+	}
+}
+
 func TestRestoreCorrectionFallbackNutrition_PreventsZeroForUnresolved(t *testing.T) {
 	dbItems := []map[string]any{{
 		"name":                 "用户自定义菜",

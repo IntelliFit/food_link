@@ -18,18 +18,27 @@ import (
 var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 type FeedRepo interface {
-	ListPublicFeed(ctx context.Context, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
-	ListFriendFeed(ctx context.Context, authorIDs []string, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
+	ListPublicFeed(ctx context.Context, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
+	ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
 	GetFeedRecordByID(ctx context.Context, recordID string) (*repo.FeedRecord, error)
+	GetFeedTargetByID(ctx context.Context, targetType, targetID string) (*repo.FeedRecord, error)
 	HideFeedRecord(ctx context.Context, userID, recordID string) error
+	HideFeedTarget(ctx context.Context, userID, targetType, targetID string) error
 	AddLike(ctx context.Context, userID, recordID string) error
+	AddLikeTarget(ctx context.Context, userID, targetType, targetID string) error
 	RemoveLike(ctx context.Context, userID, recordID string) error
+	RemoveLikeTarget(ctx context.Context, userID, targetType, targetID string) error
 	GetLikesForRecords(ctx context.Context, recordIDs []string, currentUserID string) (map[string]*repo.LikeInfo, error)
+	GetLikesForTargets(ctx context.Context, targets []repo.FeedTarget, currentUserID string) (map[string]*repo.LikeInfo, error)
 	AddComment(ctx context.Context, comment *domain.FeedComment) error
 	ListComments(ctx context.Context, recordID string, limit int) ([]domain.FeedComment, error)
+	ListCommentsForTarget(ctx context.Context, targetType, targetID string, limit int) ([]domain.FeedComment, error)
 	ListCommentsByRecordIDs(ctx context.Context, recordIDs []string) ([]domain.FeedComment, error)
+	ListCommentsByTargets(ctx context.Context, targets []repo.FeedTarget) ([]domain.FeedComment, error)
 	GetCommentByID(ctx context.Context, commentID string) (*domain.FeedComment, error)
 	FindRecentDuplicate(ctx context.Context, userID, recordID, content string, parentCommentID, replyToUserID *string, window time.Duration) (*domain.FeedComment, error)
+	FindRecentDuplicateForTarget(ctx context.Context, userID, targetType, targetID, content string, parentCommentID, replyToUserID *string, window time.Duration) (*domain.FeedComment, error)
+	DeleteCommentCascade(ctx context.Context, targetType, targetID, commentID string) (int64, error)
 	GetFriendIDs(ctx context.Context, userID string) ([]string, error)
 	IsFriend(ctx context.Context, userID, friendID string) (bool, error)
 	GetUserProfiles(ctx context.Context, userIDs []string) (map[string]*repo.UserProfile, error)
@@ -39,6 +48,7 @@ type FeedRepo interface {
 type NotificationRepo interface {
 	CreateNotification(ctx context.Context, n *domain.FeedInteractionNotification) error
 	FindRecentDuplicate(ctx context.Context, recipientUserID, notificationType string, actorUserID, recordID, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error)
+	FindRecentDuplicateForTarget(ctx context.Context, recipientUserID, notificationType string, actorUserID *string, targetType string, targetID *string, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error)
 	ListNotifications(ctx context.Context, userID string, limit int) ([]domain.FeedInteractionNotification, error)
 	CountUnread(ctx context.Context, userID string) (int64, error)
 	MarkRead(ctx context.Context, userID string, notificationIDs []string) (int64, error)
@@ -78,12 +88,15 @@ type FeedParams struct {
 	DietGoal          string
 	Date              string
 	SortBy            string
+	ContentType       string
 	PriorityAuthorIDs []string
 	AuthorScope       string
 	AuthorID          string
 }
 
 type FeedItem struct {
+	TargetType      string            `json:"target_type"`
+	TargetID        string            `json:"target_id"`
 	Record          repo.FeedRecord   `json:"record"`
 	Author          map[string]string `json:"author"`
 	LikeCount       int               `json:"like_count"`
@@ -97,7 +110,9 @@ type FeedItem struct {
 type CommentItem struct {
 	ID              string     `json:"id"`
 	UserID          string     `json:"user_id"`
-	RecordID        string     `json:"record_id"`
+	RecordID        *string    `json:"record_id,omitempty"`
+	TargetType      string     `json:"target_type"`
+	TargetID        string     `json:"target_id"`
 	ParentCommentID *string    `json:"parent_comment_id,omitempty"`
 	ReplyToUserID   *string    `json:"reply_to_user_id,omitempty"`
 	ReplyToNickname string     `json:"reply_to_nickname"`
@@ -126,6 +141,8 @@ type NotificationItem struct {
 	ID               string            `json:"id"`
 	NotificationType string            `json:"notification_type"`
 	RecordID         *string           `json:"record_id,omitempty"`
+	TargetType       string            `json:"target_type"`
+	TargetID         string            `json:"target_id"`
 	CommentID        *string           `json:"comment_id,omitempty"`
 	ParentCommentID  *string           `json:"parent_comment_id,omitempty"`
 	ContentPreview   string            `json:"content_preview"`
@@ -151,7 +168,7 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 		candidateLimit = max(max(params.Offset+params.Limit+40, params.Limit*3), 60)
 	}
 
-	records, err := s.feedRepo.ListPublicFeed(ctx, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit)
+	records, err := s.feedRepo.ListPublicFeed(ctx, params.ContentType, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -159,19 +176,16 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 		return nil, nil
 	}
 
-	recordIDs := make([]string, len(records))
-	for i, r := range records {
-		recordIDs[i] = r.ID
-	}
+	targets := feedTargetsFromRecords(records)
 
-	likesMap, err := s.feedRepo.GetLikesForRecords(ctx, recordIDs, "")
+	likesMap, err := s.feedRepo.GetLikesForTargets(ctx, targets, "")
 	if err != nil {
 		return nil, err
 	}
 
 	var commentCountMap map[string]int
 	if customRank {
-		commentCountMap = s.getCommentCounts(ctx, recordIDs)
+		commentCountMap = s.getCommentCountsForTargets(ctx, targets)
 	}
 
 	if customRank {
@@ -184,18 +198,15 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 		return nil, nil
 	}
 
-	recordIDs = make([]string, len(records))
-	for i, r := range records {
-		recordIDs[i] = r.ID
-	}
-	likesMap, _ = s.feedRepo.GetLikesForRecords(ctx, recordIDs, "")
+	targets = feedTargetsFromRecords(records)
+	likesMap, _ = s.feedRepo.GetLikesForTargets(ctx, targets, "")
 
 	var commentsMap map[string][]CommentItem
 	if params.IncludeComments {
-		commentsMap = s.getCommentsMap(ctx, recordIDs, params.CommentsLimit)
+		commentsMap = s.getCommentsMapForTargets(ctx, targets, params.CommentsLimit)
 	}
 	if commentCountMap == nil {
-		commentCountMap = s.getCommentCounts(ctx, recordIDs)
+		commentCountMap = s.getCommentCountsForTargets(ctx, targets)
 	}
 
 	userIDs := make([]string, 0, len(records))
@@ -213,21 +224,25 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 			author["nickname"] = profile.Nickname
 			author["avatar"] = s.resolveAvatarURL(profile.Avatar)
 		}
-		likeInfo := likesMap[rec.ID]
+		targetType, targetID := feedTargetOfRecord(rec)
+		targetKey := repo.FeedTargetKey(targetType, targetID)
+		likeInfo := likesMap[targetKey]
 		if likeInfo == nil {
 			likeInfo = &repo.LikeInfo{}
 		}
 		item := FeedItem{
+			TargetType:      targetType,
+			TargetID:        targetID,
 			Record:          rec,
 			Author:          author,
 			LikeCount:       likeInfo.Count,
 			Liked:           false,
 			IsMine:          false,
-			RecommendReason: s.buildRecommendReason(&rec, params.SortBy, params.MealType, params.DietGoal, nil, likeInfo.Count, commentCountMap[rec.ID]),
-			CommentCount:    commentCountMap[rec.ID],
+			RecommendReason: s.buildRecommendReason(&rec, params.SortBy, params.MealType, params.DietGoal, nil, likeInfo.Count, commentCountMap[targetKey]),
+			CommentCount:    commentCountMap[targetKey],
 		}
 		if params.IncludeComments {
-			item.Comments = commentsMap[rec.ID]
+			item.Comments = commentsMap[targetKey]
 		}
 		items = append(items, item)
 	}
@@ -279,7 +294,7 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 		candidateLimit = max(max(params.Offset+params.Limit+40, params.Limit*3), 60)
 	}
 
-	records, err := s.feedRepo.ListFriendFeed(ctx, authorIDs, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit)
+	records, err := s.feedRepo.ListFriendFeed(ctx, authorIDs, params.ContentType, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -287,19 +302,16 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 		return nil, nil
 	}
 
-	recordIDs := make([]string, len(records))
-	for i, r := range records {
-		recordIDs[i] = r.ID
-	}
+	targets := feedTargetsFromRecords(records)
 
-	likesMap, err := s.feedRepo.GetLikesForRecords(ctx, recordIDs, userID)
+	likesMap, err := s.feedRepo.GetLikesForTargets(ctx, targets, userID)
 	if err != nil {
 		return nil, err
 	}
 
 	var commentCountMap map[string]int
 	if customRank {
-		commentCountMap = s.getCommentCounts(ctx, recordIDs)
+		commentCountMap = s.getCommentCountsForTargets(ctx, targets)
 	}
 
 	if customRank {
@@ -312,18 +324,15 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 		return nil, nil
 	}
 
-	recordIDs = make([]string, len(records))
-	for i, r := range records {
-		recordIDs[i] = r.ID
-	}
-	likesMap, _ = s.feedRepo.GetLikesForRecords(ctx, recordIDs, userID)
+	targets = feedTargetsFromRecords(records)
+	likesMap, _ = s.feedRepo.GetLikesForTargets(ctx, targets, userID)
 
 	var commentsMap map[string][]CommentItem
 	if params.IncludeComments {
-		commentsMap = s.getCommentsMap(ctx, recordIDs, params.CommentsLimit)
+		commentsMap = s.getCommentsMapForTargets(ctx, targets, params.CommentsLimit)
 	}
 	if commentCountMap == nil {
-		commentCountMap = s.getCommentCounts(ctx, recordIDs)
+		commentCountMap = s.getCommentCountsForTargets(ctx, targets)
 	}
 
 	userIDs := make([]string, 0, len(records))
@@ -341,21 +350,25 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 			author["nickname"] = profile.Nickname
 			author["avatar"] = s.resolveAvatarURL(profile.Avatar)
 		}
-		likeInfo := likesMap[rec.ID]
+		targetType, targetID := feedTargetOfRecord(rec)
+		targetKey := repo.FeedTargetKey(targetType, targetID)
+		likeInfo := likesMap[targetKey]
 		if likeInfo == nil {
 			likeInfo = &repo.LikeInfo{}
 		}
 		item := FeedItem{
+			TargetType:      targetType,
+			TargetID:        targetID,
 			Record:          rec,
 			Author:          author,
 			LikeCount:       likeInfo.Count,
 			Liked:           likeInfo.Liked,
 			IsMine:          rec.UserID == userID,
-			RecommendReason: s.buildRecommendReason(&rec, params.SortBy, params.MealType, params.DietGoal, params.PriorityAuthorIDs, likeInfo.Count, commentCountMap[rec.ID]),
-			CommentCount:    commentCountMap[rec.ID],
+			RecommendReason: s.buildRecommendReason(&rec, params.SortBy, params.MealType, params.DietGoal, params.PriorityAuthorIDs, likeInfo.Count, commentCountMap[targetKey]),
+			CommentCount:    commentCountMap[targetKey],
 		}
 		if params.IncludeComments {
-			item.Comments = commentsMap[rec.ID]
+			item.Comments = commentsMap[targetKey]
 		}
 		items = append(items, item)
 	}
@@ -367,19 +380,24 @@ func (s *CommunityService) sortAndSlice(records []repo.FeedRecord, params FeedPa
 		ti := recordTimeStamp(records[i].RecordTime)
 		tj := recordTimeStamp(records[j].RecordTime)
 		li := 0
-		if likesMap[records[i].ID] != nil {
-			li = likesMap[records[i].ID].Count
+		iKey := feedTargetKeyOfRecord(records[i])
+		jKey := feedTargetKeyOfRecord(records[j])
+		if likesMap[iKey] != nil {
+			li = likesMap[iKey].Count
 		}
 		lj := 0
-		if likesMap[records[j].ID] != nil {
-			lj = likesMap[records[j].ID].Count
+		if likesMap[jKey] != nil {
+			lj = likesMap[jKey].Count
 		}
-		si := scoreFeedRecord(&records[i], params.SortBy, li, commentCountMap[records[i].ID], params.MealType, params.DietGoal, priorityAuthorIDs)
-		sj := scoreFeedRecord(&records[j], params.SortBy, lj, commentCountMap[records[j].ID], params.MealType, params.DietGoal, priorityAuthorIDs)
+		si := scoreFeedRecord(&records[i], params.SortBy, li, commentCountMap[iKey], params.MealType, params.DietGoal, priorityAuthorIDs)
+		sj := scoreFeedRecord(&records[j], params.SortBy, lj, commentCountMap[jKey], params.MealType, params.DietGoal, priorityAuthorIDs)
 		if si != sj {
 			return si > sj
 		}
-		return ti > tj
+		if ti != tj {
+			return ti > tj
+		}
+		return records[i].ID > records[j].ID
 	})
 	return sliceRecords(records, params.Offset, params.Limit)
 }
@@ -396,25 +414,51 @@ func sliceRecords(records []repo.FeedRecord, offset, limit int) []repo.FeedRecor
 }
 
 func (s *CommunityService) getCommentCounts(ctx context.Context, recordIDs []string) map[string]int {
-	if len(recordIDs) == 0 {
+	targets := make([]repo.FeedTarget, 0, len(recordIDs))
+	for _, id := range recordIDs {
+		targets = append(targets, repo.FeedTarget{TargetType: repo.FeedTargetFoodRecord, TargetID: id})
+	}
+	targetCounts := s.getCommentCountsForTargets(ctx, targets)
+	counts := map[string]int{}
+	for _, id := range recordIDs {
+		counts[id] = targetCounts[repo.FeedTargetKey(repo.FeedTargetFoodRecord, id)]
+	}
+	return counts
+}
+
+func (s *CommunityService) getCommentCountsForTargets(ctx context.Context, targets []repo.FeedTarget) map[string]int {
+	if len(targets) == 0 {
 		return map[string]int{}
 	}
-	comments, err := s.feedRepo.ListCommentsByRecordIDs(ctx, recordIDs)
+	comments, err := s.feedRepo.ListCommentsByTargets(ctx, targets)
 	if err != nil {
 		return map[string]int{}
 	}
 	counts := make(map[string]int)
 	for _, c := range comments {
-		counts[c.RecordID]++
+		counts[commentTargetKey(c)]++
 	}
 	return counts
 }
 
 func (s *CommunityService) getCommentsMap(ctx context.Context, recordIDs []string, commentsLimit int) map[string][]CommentItem {
-	if len(recordIDs) == 0 {
+	targets := make([]repo.FeedTarget, 0, len(recordIDs))
+	for _, id := range recordIDs {
+		targets = append(targets, repo.FeedTarget{TargetType: repo.FeedTargetFoodRecord, TargetID: id})
+	}
+	targetMap := s.getCommentsMapForTargets(ctx, targets, commentsLimit)
+	result := map[string][]CommentItem{}
+	for _, id := range recordIDs {
+		result[id] = targetMap[repo.FeedTargetKey(repo.FeedTargetFoodRecord, id)]
+	}
+	return result
+}
+
+func (s *CommunityService) getCommentsMapForTargets(ctx context.Context, targets []repo.FeedTarget, commentsLimit int) map[string][]CommentItem {
+	if len(targets) == 0 {
 		return map[string][]CommentItem{}
 	}
-	comments, err := s.feedRepo.ListCommentsByRecordIDs(ctx, recordIDs)
+	comments, err := s.feedRepo.ListCommentsByTargets(ctx, targets)
 	if err != nil {
 		return map[string][]CommentItem{}
 	}
@@ -434,11 +478,11 @@ func (s *CommunityService) getCommentsMap(ctx context.Context, recordIDs []strin
 
 	recordComments := make(map[string][]domain.FeedComment)
 	for _, c := range comments {
-		recordComments[c.RecordID] = append(recordComments[c.RecordID], c)
+		recordComments[commentTargetKey(c)] = append(recordComments[commentTargetKey(c)], c)
 	}
 
 	result := make(map[string][]CommentItem)
-	for rid, list := range recordComments {
+	for targetKey, list := range recordComments {
 		if commentsLimit > 0 && len(list) > commentsLimit {
 			list = list[len(list)-commentsLimit:]
 		}
@@ -453,6 +497,8 @@ func (s *CommunityService) getCommentsMap(ctx context.Context, recordIDs []strin
 				ID:              c.ID,
 				UserID:          c.UserID,
 				RecordID:        c.RecordID,
+				TargetType:      commentTargetType(c),
+				TargetID:        commentTargetID(c),
 				ParentCommentID: c.ParentCommentID,
 				ReplyToUserID:   c.ReplyToUserID,
 				ReplyToNickname: strOr(replyUser, ""),
@@ -462,7 +508,7 @@ func (s *CommunityService) getCommentsMap(ctx context.Context, recordIDs []strin
 				Avatar:          s.resolveAvatarURL(strOrAvatar(author)),
 			})
 		}
-		result[rid] = items
+		result[targetKey] = items
 	}
 	return result
 }
@@ -482,9 +528,24 @@ func strOrAvatar(profile *repo.UserProfile) string {
 }
 
 func (s *CommunityService) normalizeFeedRecord(record repo.FeedRecord) repo.FeedRecord {
+	if strings.TrimSpace(record.FeedType) == "" {
+		record.FeedType = repo.FeedTargetFoodRecord
+	}
 	if record.RecordTime != nil {
 		recordTime := record.RecordTime.In(chinaTZ)
 		record.RecordTime = &recordTime
+	}
+	if record.FeedType == repo.FeedTargetExerciseLog {
+		if record.ImagePath != nil {
+			resolved := s.resolveFoodImageURL(*record.ImagePath)
+			if resolved == "" {
+				record.ImagePath = nil
+			} else {
+				record.ImagePath = &resolved
+				record.ImagePaths = []string{resolved}
+			}
+		}
+		return record
 	}
 	record.ImagePaths = s.resolveFoodImageURLs(record.ImagePaths)
 	if len(record.ImagePaths) > 0 {
@@ -656,7 +717,12 @@ func (s *CommunityService) CheckinLeaderboard(ctx context.Context, viewerUserID 
 }
 
 func (s *CommunityService) LikeFeed(ctx context.Context, userID, recordID string) (string, error) {
-	record, err := s.feedRepo.GetFeedRecordByID(ctx, recordID)
+	return s.LikeFeedTarget(ctx, userID, repo.FeedTargetFoodRecord, recordID)
+}
+
+func (s *CommunityService) LikeFeedTarget(ctx context.Context, userID, targetType, targetID string) (string, error) {
+	targetType = normalizeServiceTargetType(targetType)
+	record, err := s.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
 	if err != nil {
 		return "", err
 	}
@@ -674,18 +740,20 @@ func (s *CommunityService) LikeFeed(ctx context.Context, userID, recordID string
 		return "", commonerrors.ErrForbidden
 	}
 
-	if err := s.feedRepo.AddLike(ctx, userID, recordID); err != nil {
+	if err := s.feedRepo.AddLikeTarget(ctx, userID, targetType, targetID); err != nil {
 		return "", err
 	}
 
 	// Create notification for record owner
 	if record.UserID != "" && record.UserID != userID {
-		duplicate, _ := s.notifRepo.FindRecentDuplicate(ctx, record.UserID, "like_received", &userID, &recordID, nil, nil, nil)
+		duplicate, _ := s.notifRepo.FindRecentDuplicateForTarget(ctx, record.UserID, "like_received", &userID, targetType, &targetID, nil, nil, nil)
 		if duplicate == nil {
 			_ = s.notifRepo.CreateNotification(ctx, &domain.FeedInteractionNotification{
 				RecipientUserID:  record.UserID,
 				ActorUserID:      &userID,
-				RecordID:         &recordID,
+				RecordID:         legacyRecordID(targetType, targetID),
+				TargetType:       targetType,
+				TargetID:         &targetID,
 				NotificationType: "like_received",
 			})
 		}
@@ -694,14 +762,23 @@ func (s *CommunityService) LikeFeed(ctx context.Context, userID, recordID string
 }
 
 func (s *CommunityService) UnlikeFeed(ctx context.Context, userID, recordID string) (string, error) {
-	if err := s.feedRepo.RemoveLike(ctx, userID, recordID); err != nil {
+	return s.UnlikeFeedTarget(ctx, userID, repo.FeedTargetFoodRecord, recordID)
+}
+
+func (s *CommunityService) UnlikeFeedTarget(ctx context.Context, userID, targetType, targetID string) (string, error) {
+	if err := s.feedRepo.RemoveLikeTarget(ctx, userID, normalizeServiceTargetType(targetType), targetID); err != nil {
 		return "", err
 	}
 	return "已取消", nil
 }
 
 func (s *CommunityService) HideFeed(ctx context.Context, userID, recordID string) error {
-	record, err := s.feedRepo.GetFeedRecordByID(ctx, recordID)
+	return s.HideFeedTarget(ctx, userID, repo.FeedTargetFoodRecord, recordID)
+}
+
+func (s *CommunityService) HideFeedTarget(ctx context.Context, userID, targetType, targetID string) error {
+	targetType = normalizeServiceTargetType(targetType)
+	record, err := s.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
 	if err != nil {
 		return err
 	}
@@ -711,11 +788,15 @@ func (s *CommunityService) HideFeed(ctx context.Context, userID, recordID string
 	if record.UserID != userID {
 		return commonerrors.ErrForbidden
 	}
-	return s.feedRepo.HideFeedRecord(ctx, userID, recordID)
+	return s.feedRepo.HideFeedTarget(ctx, userID, targetType, targetID)
 }
 
 func (s *CommunityService) ListComments(ctx context.Context, recordID string, limit int) ([]CommentItem, error) {
-	comments, err := s.feedRepo.ListComments(ctx, recordID, limit)
+	return s.ListTargetComments(ctx, repo.FeedTargetFoodRecord, recordID, limit)
+}
+
+func (s *CommunityService) ListTargetComments(ctx context.Context, targetType, targetID string, limit int) ([]CommentItem, error) {
+	comments, err := s.feedRepo.ListCommentsForTarget(ctx, normalizeServiceTargetType(targetType), targetID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -747,6 +828,8 @@ func (s *CommunityService) ListComments(ctx context.Context, recordID string, li
 			ID:              c.ID,
 			UserID:          c.UserID,
 			RecordID:        c.RecordID,
+			TargetType:      commentTargetType(c),
+			TargetID:        commentTargetID(c),
 			ParentCommentID: c.ParentCommentID,
 			ReplyToUserID:   c.ReplyToUserID,
 			ReplyToNickname: strOr(replyUser, ""),
@@ -771,7 +854,12 @@ type FeedContextResult struct {
 }
 
 func (s *CommunityService) FeedContext(ctx context.Context, userID, recordID string) (*FeedContextResult, error) {
-	record, err := s.feedRepo.GetFeedRecordByID(ctx, recordID)
+	return s.FeedTargetContext(ctx, userID, repo.FeedTargetFoodRecord, recordID)
+}
+
+func (s *CommunityService) FeedTargetContext(ctx context.Context, userID, targetType, targetID string) (*FeedContextResult, error) {
+	targetType = normalizeServiceTargetType(targetType)
+	record, err := s.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
 	if err != nil {
 		return nil, err
 	}
@@ -797,14 +885,15 @@ func (s *CommunityService) FeedContext(ctx context.Context, userID, recordID str
 		author["avatar"] = s.resolveAvatarURL(profile.Avatar)
 	}
 
-	likesMap, _ := s.feedRepo.GetLikesForRecords(ctx, []string{recordID}, userID)
-	likeInfo := likesMap[recordID]
+	targetKey := repo.FeedTargetKey(targetType, targetID)
+	likesMap, _ := s.feedRepo.GetLikesForTargets(ctx, []repo.FeedTarget{{TargetType: targetType, TargetID: targetID}}, userID)
+	likeInfo := likesMap[targetKey]
 	if likeInfo == nil {
 		likeInfo = &repo.LikeInfo{}
 	}
 
-	comments, _ := s.ListComments(ctx, recordID, 5)
-	countMap := s.getCommentCounts(ctx, []string{recordID})
+	comments, _ := s.ListTargetComments(ctx, targetType, targetID, 5)
+	countMap := s.getCommentCountsForTargets(ctx, []repo.FeedTarget{{TargetType: targetType, TargetID: targetID}})
 
 	return &FeedContextResult{
 		Allowed:      true,
@@ -814,7 +903,7 @@ func (s *CommunityService) FeedContext(ctx context.Context, userID, recordID str
 		LikeCount:    likeInfo.Count,
 		Liked:        likeInfo.Liked,
 		Comments:     comments,
-		CommentCount: countMap[recordID],
+		CommentCount: countMap[targetKey],
 	}, nil
 }
 
@@ -848,6 +937,11 @@ func (s *CommunityService) getFeedRecordInteractionContext(ctx context.Context, 
 }
 
 func (s *CommunityService) PostComment(ctx context.Context, userID, recordID, content string, parentCommentID, replyToUserID *string) (*CommentItem, error) {
+	return s.PostTargetComment(ctx, userID, repo.FeedTargetFoodRecord, recordID, content, parentCommentID, replyToUserID)
+}
+
+func (s *CommunityService) PostTargetComment(ctx context.Context, userID, targetType, targetID, content string, parentCommentID, replyToUserID *string) (*CommentItem, error) {
+	targetType = normalizeServiceTargetType(targetType)
 	if len(strings.TrimSpace(content)) == 0 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "评论内容不能为空", HTTPStatus: 400}
 	}
@@ -855,7 +949,7 @@ func (s *CommunityService) PostComment(ctx context.Context, userID, recordID, co
 		return nil, &commonerrors.AppError{Code: 10002, Message: "评论内容不能超过500字", HTTPStatus: 400}
 	}
 
-	record, err := s.feedRepo.GetFeedRecordByID(ctx, recordID)
+	record, err := s.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
 	if err != nil {
 		return nil, err
 	}
@@ -874,7 +968,7 @@ func (s *CommunityService) PostComment(ctx context.Context, userID, recordID, co
 	}
 
 	normalizedContent := strings.TrimSpace(content)
-	duplicate, err := s.feedRepo.FindRecentDuplicate(ctx, userID, recordID, normalizedContent, parentCommentID, replyToUserID, 8*time.Second)
+	duplicate, err := s.feedRepo.FindRecentDuplicateForTarget(ctx, userID, targetType, targetID, normalizedContent, parentCommentID, replyToUserID, 8*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -884,7 +978,9 @@ func (s *CommunityService) PostComment(ctx context.Context, userID, recordID, co
 
 	comment := &domain.FeedComment{
 		UserID:          userID,
-		RecordID:        recordID,
+		RecordID:        legacyRecordID(targetType, targetID),
+		TargetType:      targetType,
+		TargetID:        targetID,
 		Content:         normalizedContent,
 		ParentCommentID: parentCommentID,
 		ReplyToUserID:   replyToUserID,
@@ -899,12 +995,14 @@ func (s *CommunityService) PostComment(ctx context.Context, userID, recordID, co
 		if parentCommentID != nil {
 			notifType = "reply_received"
 		}
-		duplicateNotif, _ := s.notifRepo.FindRecentDuplicate(ctx, record.UserID, notifType, &userID, &recordID, parentCommentID, &comment.ID, &normalizedContent)
+		duplicateNotif, _ := s.notifRepo.FindRecentDuplicateForTarget(ctx, record.UserID, notifType, &userID, targetType, &targetID, parentCommentID, &comment.ID, &normalizedContent)
 		if duplicateNotif == nil {
 			_ = s.notifRepo.CreateNotification(ctx, &domain.FeedInteractionNotification{
 				RecipientUserID:  record.UserID,
 				ActorUserID:      &userID,
-				RecordID:         &recordID,
+				RecordID:         legacyRecordID(targetType, targetID),
+				TargetType:       targetType,
+				TargetID:         &targetID,
 				CommentID:        &comment.ID,
 				ParentCommentID:  parentCommentID,
 				NotificationType: notifType,
@@ -916,12 +1014,14 @@ func (s *CommunityService) PostComment(ctx context.Context, userID, recordID, co
 	// Notify reply target
 	if replyToUserID != nil && *replyToUserID != "" && *replyToUserID != userID && *replyToUserID != record.UserID {
 		notifType := "reply_received"
-		duplicateNotif, _ := s.notifRepo.FindRecentDuplicate(ctx, *replyToUserID, notifType, &userID, &recordID, parentCommentID, &comment.ID, &normalizedContent)
+		duplicateNotif, _ := s.notifRepo.FindRecentDuplicateForTarget(ctx, *replyToUserID, notifType, &userID, targetType, &targetID, parentCommentID, &comment.ID, &normalizedContent)
 		if duplicateNotif == nil {
 			_ = s.notifRepo.CreateNotification(ctx, &domain.FeedInteractionNotification{
 				RecipientUserID:  *replyToUserID,
 				ActorUserID:      &userID,
-				RecordID:         &recordID,
+				RecordID:         legacyRecordID(targetType, targetID),
+				TargetType:       targetType,
+				TargetID:         &targetID,
 				CommentID:        &comment.ID,
 				ParentCommentID:  parentCommentID,
 				NotificationType: notifType,
@@ -931,6 +1031,28 @@ func (s *CommunityService) PostComment(ctx context.Context, userID, recordID, co
 	}
 
 	return s.commentToItem(ctx, comment)
+}
+
+func (s *CommunityService) DeleteTargetComment(ctx context.Context, userID, targetType, targetID, commentID string) (int64, error) {
+	targetType = normalizeServiceTargetType(targetType)
+	record, err := s.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
+	if err != nil {
+		return 0, err
+	}
+	if record == nil {
+		return 0, commonerrors.ErrNotFound
+	}
+	comment, err := s.feedRepo.GetCommentByID(ctx, commentID)
+	if err != nil {
+		return 0, err
+	}
+	if comment == nil || commentTargetKey(*comment) != repo.FeedTargetKey(targetType, targetID) {
+		return 0, commonerrors.ErrNotFound
+	}
+	if comment.UserID != userID && record.UserID != userID {
+		return 0, commonerrors.ErrForbidden
+	}
+	return s.feedRepo.DeleteCommentCascade(ctx, targetType, targetID, commentID)
 }
 
 func (s *CommunityService) commentToItem(ctx context.Context, comment *domain.FeedComment) (*CommentItem, error) {
@@ -953,6 +1075,8 @@ func (s *CommunityService) commentToItem(ctx context.Context, comment *domain.Fe
 		ID:              comment.ID,
 		UserID:          comment.UserID,
 		RecordID:        comment.RecordID,
+		TargetType:      commentTargetType(*comment),
+		TargetID:        commentTargetID(*comment),
 		ParentCommentID: comment.ParentCommentID,
 		ReplyToUserID:   comment.ReplyToUserID,
 		ReplyToNickname: strOr(replyUser, ""),
@@ -1009,6 +1133,8 @@ func (s *CommunityService) ListNotifications(ctx context.Context, userID string,
 			ID:               n.ID,
 			NotificationType: n.NotificationType,
 			RecordID:         n.RecordID,
+			TargetType:       notificationTargetType(n),
+			TargetID:         notificationTargetID(n),
 			CommentID:        n.CommentID,
 			ParentCommentID:  n.ParentCommentID,
 			ContentPreview:   strOrStringPtr(n.ContentPreview),
@@ -1051,7 +1177,10 @@ func (s *CommunityService) MarkNotificationsRead(ctx context.Context, userID str
 }
 
 func scoreFeedRecord(record *repo.FeedRecord, sortBy string, likeCount, commentCount int, mealType, dietGoal string, priorityAuthorIDs []string) float64 {
-	balanceScore := computeMacroBalanceScore(record.TotalProtein, record.TotalCarbs, record.TotalFat) / 100.0
+	balanceScore := 0.0
+	if record.FeedType != repo.FeedTargetExerciseLog {
+		balanceScore = computeMacroBalanceScore(record.TotalProtein, record.TotalCarbs, record.TotalFat) / 100.0
+	}
 	hotScore := computeFeedHotScore(likeCount, commentCount)
 	freshScore := computeFreshnessScore(record.RecordTime)
 	mealMatch := 0.0
@@ -1076,6 +1205,9 @@ func scoreFeedRecord(record *repo.FeedRecord, sortBy string, likeCount, commentC
 		return hotScore*100.0 + freshScore*10.0 + balanceScore*8.0
 	}
 	if sortBy == "balanced" {
+		if record.FeedType == repo.FeedTargetExerciseLog {
+			return hotScore*12.0 + freshScore*6.0
+		}
 		return balanceScore*100.0 + hotScore*12.0 + freshScore*6.0
 	}
 	return priorityMatch*120.0 +
@@ -1087,6 +1219,12 @@ func scoreFeedRecord(record *repo.FeedRecord, sortBy string, likeCount, commentC
 }
 
 func (s *CommunityService) buildRecommendReason(record *repo.FeedRecord, sortBy, mealType, dietGoal string, priorityAuthorIDs []string, likeCount, commentCount int) string {
+	if record.FeedType == repo.FeedTargetExerciseLog {
+		if sortBy == "hot" && (likeCount > 0 || commentCount > 0) {
+			return "圈子高热度"
+		}
+		return "运动打卡"
+	}
 	if len(priorityAuthorIDs) > 0 {
 		for _, pid := range priorityAuthorIDs {
 			if pid == record.UserID {
@@ -1162,4 +1300,76 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func normalizeServiceTargetType(value string) string {
+	value = strings.TrimSpace(value)
+	if value == repo.FeedTargetExerciseLog {
+		return repo.FeedTargetExerciseLog
+	}
+	return repo.FeedTargetFoodRecord
+}
+
+func legacyRecordID(targetType, targetID string) *string {
+	if normalizeServiceTargetType(targetType) != repo.FeedTargetFoodRecord {
+		return nil
+	}
+	return &targetID
+}
+
+func feedTargetOfRecord(record repo.FeedRecord) (string, string) {
+	targetType := normalizeServiceTargetType(record.FeedType)
+	return targetType, record.ID
+}
+
+func feedTargetKeyOfRecord(record repo.FeedRecord) string {
+	targetType, targetID := feedTargetOfRecord(record)
+	return repo.FeedTargetKey(targetType, targetID)
+}
+
+func feedTargetsFromRecords(records []repo.FeedRecord) []repo.FeedTarget {
+	targets := make([]repo.FeedTarget, 0, len(records))
+	for _, record := range records {
+		targetType, targetID := feedTargetOfRecord(record)
+		targets = append(targets, repo.FeedTarget{TargetType: targetType, TargetID: targetID})
+	}
+	return targets
+}
+
+func commentTargetType(comment domain.FeedComment) string {
+	if strings.TrimSpace(comment.TargetType) != "" {
+		return normalizeServiceTargetType(comment.TargetType)
+	}
+	return repo.FeedTargetFoodRecord
+}
+
+func commentTargetID(comment domain.FeedComment) string {
+	if strings.TrimSpace(comment.TargetID) != "" {
+		return comment.TargetID
+	}
+	if comment.RecordID != nil {
+		return *comment.RecordID
+	}
+	return ""
+}
+
+func commentTargetKey(comment domain.FeedComment) string {
+	return repo.FeedTargetKey(commentTargetType(comment), commentTargetID(comment))
+}
+
+func notificationTargetType(notification domain.FeedInteractionNotification) string {
+	if strings.TrimSpace(notification.TargetType) != "" {
+		return normalizeServiceTargetType(notification.TargetType)
+	}
+	return repo.FeedTargetFoodRecord
+}
+
+func notificationTargetID(notification domain.FeedInteractionNotification) string {
+	if notification.TargetID != nil && strings.TrimSpace(*notification.TargetID) != "" {
+		return *notification.TargetID
+	}
+	if notification.RecordID != nil {
+		return *notification.RecordID
+	}
+	return ""
 }

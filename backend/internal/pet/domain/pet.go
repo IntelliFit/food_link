@@ -7,23 +7,24 @@ const (
 )
 
 type UserPet struct {
-	ID            string     `gorm:"column:id;primaryKey" json:"id"`
-	UserID        string     `gorm:"column:user_id" json:"user_id"`
-	PetSeed       string     `gorm:"column:pet_seed" json:"pet_seed"`
-	Name          string     `gorm:"column:name" json:"name"`
-	Color         string     `gorm:"column:color" json:"color"`
-	Shape         string     `gorm:"column:shape" json:"shape"`
-	Pattern       string     `gorm:"column:pattern" json:"pattern"`
-	Accessory     string     `gorm:"column:accessory" json:"accessory"`
-	Personality   string     `gorm:"column:personality" json:"personality"`
-	Level         int        `gorm:"column:level" json:"level"`
-	Experience    int        `gorm:"column:experience" json:"experience"`
-	TodayStatus   string     `gorm:"column:today_status" json:"today_status"`
-	LastSettledOn *time.Time `gorm:"column:last_settled_on" json:"last_settled_on,omitempty"`
-	TotalEvents   int        `gorm:"column:total_events" json:"total_events"`
-	LastSummaryAt *time.Time `gorm:"column:last_summary_at" json:"last_summary_at,omitempty"`
-	CreatedAt     *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
-	UpdatedAt     *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	ID            string         `gorm:"column:id;primaryKey" json:"id"`
+	UserID        string         `gorm:"column:user_id" json:"user_id"`
+	PetSeed       string         `gorm:"column:pet_seed" json:"pet_seed"`
+	Name          string         `gorm:"column:name" json:"name"`
+	Color         string         `gorm:"column:color" json:"color"`
+	Shape         string         `gorm:"column:shape" json:"shape"`
+	Pattern       string         `gorm:"column:pattern" json:"pattern"`
+	Accessory     string         `gorm:"column:accessory" json:"accessory"`
+	Personality   string         `gorm:"column:personality" json:"personality"`
+	Level         int            `gorm:"column:level" json:"level"`
+	Experience    int            `gorm:"column:experience" json:"experience"`
+	TodayStatus   string         `gorm:"column:today_status" json:"today_status"`
+	LastSettledOn *time.Time     `gorm:"column:last_settled_on" json:"last_settled_on,omitempty"`
+	TotalEvents   int            `gorm:"column:total_events" json:"total_events"`
+	LastSummaryAt *time.Time     `gorm:"column:last_summary_at" json:"last_summary_at,omitempty"`
+	Meta          map[string]any `gorm:"column:meta;serializer:json" json:"meta,omitempty"`
+	CreatedAt     *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt     *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
 }
 
 func (UserPet) TableName() string { return "user_pets" }

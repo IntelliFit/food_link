@@ -10,10 +10,12 @@ import (
 func TestFeedLike_Struct(t *testing.T) {
 	now := time.Now()
 	like := FeedLike{
-		ID:       "like-1",
-		UserID:   "user-1",
-		RecordID: "record-1",
-		CreatedAt: &now,
+		ID:         "like-1",
+		UserID:     "user-1",
+		RecordID:   strPtr("record-1"),
+		TargetType: "food_record",
+		TargetID:   "record-1",
+		CreatedAt:  &now,
 	}
 	assert.Equal(t, "like-1", like.ID)
 	assert.Equal(t, "feed_likes", like.TableName())
@@ -22,14 +24,20 @@ func TestFeedLike_Struct(t *testing.T) {
 func TestFeedComment_Struct(t *testing.T) {
 	now := time.Now()
 	comment := FeedComment{
-		ID:       "comment-1",
-		UserID:   "user-1",
-		RecordID: "record-1",
-		Content:  "test comment",
-		CreatedAt: &now,
+		ID:         "comment-1",
+		UserID:     "user-1",
+		RecordID:   strPtr("record-1"),
+		TargetType: "food_record",
+		TargetID:   "record-1",
+		Content:    "test comment",
+		CreatedAt:  &now,
 	}
 	assert.Equal(t, "test comment", comment.Content)
 	assert.Equal(t, "feed_comments", comment.TableName())
+}
+
+func strPtr(value string) *string {
+	return &value
 }
 
 func TestFeedInteractionNotification_Struct(t *testing.T) {

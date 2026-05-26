@@ -193,6 +193,34 @@ func TestManualFoodServingProfile(t *testing.T) {
 	assert.Equal(t, "450ml", coffee.ServingPresets[1].Label)
 }
 
+func TestManualFoodResultFromPackagedUsesOnlyPrimaryImage(t *testing.T) {
+	spec := "15g*6袋"
+	basis := "100g"
+	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:                 "pkg1",
+		Brand:              "样例品牌",
+		ProductName:        "番茄味薯片",
+		SpecText:           &spec,
+		NutritionBasisUnit: &basis,
+		SourceImageURLs:    []string{"https://cdn.example.com/front.jpg", "https://cdn.example.com/nutrition.jpg"},
+		NetWeightG:         90,
+		KcalPer100g:        520,
+		ProteinPer100g:     6,
+		CarbsPer100g:       60,
+		FatPer100g:         28,
+	}, 0.9)
+
+	require.NotNil(t, item.ImagePath)
+	assert.Equal(t, "https://cdn.example.com/front.jpg", *item.ImagePath)
+	assert.Equal(t, []string{"https://cdn.example.com/front.jpg"}, item.ImagePaths)
+	assert.Equal(t, "packaged_food", item.Source)
+	assert.Equal(t, "包装食品", item.SourceLabel)
+	assert.Equal(t, "snack", item.Category)
+	assert.Equal(t, "g", item.DisplayUnit)
+	assert.Equal(t, 90.0, item.DefaultWeightGrams)
+	assert.Equal(t, 520.0, item.NutrientsPer100g.Calories)
+}
+
 func TestManualFoodCatalogUserScopedCategoriesAllowAnonymous(t *testing.T) {
 	repo := &ManualFoodRepo{}
 
