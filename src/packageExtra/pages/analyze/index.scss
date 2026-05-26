@@ -12,14 +12,14 @@
 }
 
 .mode-switch-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10rpx;
-  width: 280rpx;
+  width: 360rpx;
 }
 
 .mode-switch-item {
-  flex: 1;
-  min-width: 120rpx;
+  min-width: 0;
   height: 56rpx;
   border-radius: 12rpx;
   border: 2rpx solid #e2e8f0;
@@ -27,6 +27,8 @@
   color: #64748b;
   font-size: 24rpx;
   font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   justify-content: center;

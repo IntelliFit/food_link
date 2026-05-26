@@ -512,6 +512,10 @@ function FoodLibrarySharePage() {
     if (finalFoodName !== foodName.trim()) {
       setFoodName(finalFoodName)
     }
+    if (!province.trim() || !city.trim() || !district.trim() || latitude == null || longitude == null) {
+      Taro.showToast({ title: '请先补充完整位置', icon: 'none' })
+      return
+    }
 
     const { confirm } = await Taro.showModal({
       title: '确认提交',
@@ -791,24 +795,24 @@ function FoodLibrarySharePage() {
       {/* 商家地址 */}
       <View className='location-section'>
         <View className='location-title-row'>
-          <Text className='section-title'>商家地址（可选）</Text>
+          <Text className='section-title'>商家地址 <Text className='required'>*</Text></Text>
           <View className='search-location-btn' onClick={handleNavigateLocationSearch}>
             <Text className='iconfont icon-dizhi' />
             <Text>搜索地址</Text>
           </View>
         </View>
         <View className='form-item' onClick={() => setShowCityPicker(true)}>
-          <Text className='form-label'>城市/区域</Text>
+          <Text className='form-label'>城市/区域 <Text className='required'>*</Text></Text>
           <View className='form-input city-display'>
             <Text className={province ? 'city-value' : 'city-placeholder'}>
               {province
                 ? `${province}${city ? ' ' + city : ''} ${district}`.trim()
-                : '点击选择城市/区域'}
+                : '点击选择城市/区域（必填）'}
             </Text>
           </View>
         </View>
         <View className='form-item'>
-          <Text className='form-label'>详细地址</Text>
+          <Text className='form-label'>详细地址（可选）</Text>
           <Input
             className='form-input'
             placeholder='如：XX路XX号'

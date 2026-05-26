@@ -111,3 +111,73 @@ func TestDeepSeekNutritionEstimator_NormalizesFallbackEnergyConsistency(t *testi
 	assert.Equal(t, 2.0, rows[0]["sugar"])
 	assert.Equal(t, 0.0, rows[0]["saturatedFat"])
 }
+
+func TestDeepSeekNutritionEstimator_EstimateParsesCarbohydrateAlias(t *testing.T) {
+	estimator := NewDeepSeekNutritionEstimator("test-key", "", "")
+	estimator.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"unitNutritionPer100g\":{\"calories\":250,\"protein\":8,\"carbohydrate\":35,\"fat\":10,\"fiber\":3,\"sugar\":5}}]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{
+		Index:                0,
+		Name:                 "测试牛肉面",
+		EstimatedWeightGrams: 100,
+	}}, "")
+	require.NoError(t, err)
+	require.Contains(t, rows, 0)
+	assert.Equal(t, 35.0, rows[0]["carbs"])
+	assert.Equal(t, 250.0, rows[0]["calories"])
+	assert.Equal(t, 8.0, rows[0]["protein"])
+}
+
+func TestDeepSeekNutritionEstimator_EstimateParsesCarbohydratesPluralAlias(t *testing.T) {
+	estimator := NewDeepSeekNutritionEstimator("test-key", "", "")
+	estimator.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"unitNutritionPer100g\":{\"calories\":180,\"protein\":5,\"carbohydrates\":22,\"fat\":7}}]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{
+		Index:                0,
+		Name:                 "测试酱牛肉",
+		EstimatedWeightGrams: 100,
+	}}, "")
+	require.NoError(t, err)
+	require.Contains(t, rows, 0)
+	assert.Equal(t, 22.0, rows[0]["carbs"])
+}
+
+func TestDeepSeekNutritionEstimator_EstimateParsesAllMacroAliases(t *testing.T) {
+	estimator := NewDeepSeekNutritionEstimator("test-key", "", "")
+	estimator.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"unitNutritionPer100g\":{\"kcal\":350,\"total_protein\":12,\"carbohydrate\":45,\"total_fat\":15,\"dietary_fiber\":8,\"total_sugar\":6}}]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{{
+		Index:                0,
+		Name:                 "测试全麦面包",
+		EstimatedWeightGrams: 100,
+	}}, "")
+	require.NoError(t, err)
+	require.Contains(t, rows, 0)
+	assert.Equal(t, 350.0, rows[0]["calories"])
+	assert.Equal(t, 12.0, rows[0]["protein"])
+	assert.Equal(t, 45.0, rows[0]["carbs"])
+	assert.Equal(t, 15.0, rows[0]["fat"])
+	assert.Equal(t, 8.0, rows[0]["fiber"])
+	assert.Equal(t, 6.0, rows[0]["sugar"])
+}

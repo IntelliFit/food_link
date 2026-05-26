@@ -61,6 +61,7 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 		Province           *string          `json:"province"`
 		City               *string          `json:"city"`
 		District           *string          `json:"district"`
+		DetailAddress      *string          `json:"detail_address"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -89,6 +90,7 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 		Province:           body.Province,
 		City:               body.City,
 		District:           body.District,
+		DetailAddress:      body.DetailAddress,
 	})
 	if err != nil {
 		response.Error(c, err)

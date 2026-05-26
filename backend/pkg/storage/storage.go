@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"food_link/backend/pkg/config"
 
@@ -262,6 +264,64 @@ func (c *Client) UploadBytes(bucketAlias, key string, data []byte, contentType s
 		return "", err
 	}
 	return c.BuildAccessURL(bucketAlias, key), nil
+}
+
+func (c *Client) DownloadBytes(bucketAlias, value string) ([]byte, error) {
+	key := c.ResolveObjectKey(bucketAlias, value)
+	if key == "" {
+		key = strings.TrimLeft(strings.TrimSpace(value), "/")
+	}
+	if key == "" {
+		return nil, fmt.Errorf("empty object key for bucket %s", bucketAlias)
+	}
+	bucket := c.bucketName(bucketAlias)
+	if bucket == "" {
+		return nil, fmt.Errorf("unknown bucket alias: %s", bucketAlias)
+	}
+	client, err := c.cosClient(bucket)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Object.Get(context.Background(), key, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
+}
+
+func (c *Client) PresignGETURL(bucketAlias, value string, expire time.Duration) (string, error) {
+	key := c.ResolveObjectKey(bucketAlias, value)
+	if key == "" {
+		key = strings.TrimLeft(strings.TrimSpace(value), "/")
+	}
+	if key == "" {
+		return "", fmt.Errorf("empty object key for bucket %s", bucketAlias)
+	}
+	bucket := c.bucketName(bucketAlias)
+	if bucket == "" {
+		return "", fmt.Errorf("unknown bucket alias: %s", bucketAlias)
+	}
+	if expire <= 0 {
+		expire = 30 * time.Minute
+	}
+	client, err := c.cosClient(bucket)
+	if err != nil {
+		return "", err
+	}
+	presigned, err := client.Object.GetPresignedURL(
+		context.Background(),
+		http.MethodGet,
+		key,
+		c.cfg.COSSecretID,
+		c.cfg.COSSecretKey,
+		expire,
+		nil,
+	)
+	if err != nil {
+		return "", err
+	}
+	return presigned.String(), nil
 }
 
 func (c *Client) UploadBase64(bucketAlias, key, base64Image, contentType string) (string, error) {

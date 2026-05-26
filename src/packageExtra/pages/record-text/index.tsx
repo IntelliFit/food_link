@@ -4,7 +4,6 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import { getAccessToken, submitTextAnalyzeTask, getMyMembership, type CanonicalMealType, type MembershipStatus } from '../../../utils/api'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import {
-  getFoodAnalysisBlockedActionText,
   getFoodAnalysisCreditBlockMessage,
   getMembershipCreditSummary,
   isFoodAnalysisCreditExhausted,
@@ -12,6 +11,7 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateKey } from '../../../utils/record-date'
+import CreditShortageSheet from '../../../components/CreditShortageSheet'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -55,6 +55,10 @@ function RecordTextPage() {
   const [loading, setLoading] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [targetDateStatus, setTargetDateStatus] = useState<MembershipStatus | null>(null)
+  const [creditSheet, setCreditSheet] = useState<{ visible: boolean; message?: string; status?: MembershipStatus | null }>({
+    visible: false,
+    status: null,
+  })
   const { hasInfo: hasCreditsInfo, max: creditsMax, used: creditsUsed, remaining: creditsRemaining } =
     getMembershipCreditSummary(membershipStatus)
 
@@ -97,20 +101,10 @@ function RecordTextPage() {
     }
 
     if (isQuotaExhausted) {
-      const content = getFoodAnalysisCreditBlockMessage(membershipStatus)
-      const confirmText = getFoodAnalysisBlockedActionText(membershipStatus)
-      const showUpgrade = content.includes('开通') || content.includes('升级') || membershipStatus?.is_pro
-      Taro.showModal({
-        title: '积分不足',
-        content,
-        showCancel: showUpgrade,
-        confirmText: showUpgrade ? confirmText : '知道了',
-        cancelText: '取消',
-        success: (res) => {
-          if (showUpgrade && res.confirm) {
-            Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-          }
-        }
+      setCreditSheet({
+        visible: true,
+        status: membershipStatus,
+        message: getFoodAnalysisCreditBlockMessage(membershipStatus),
       })
       return
     }
@@ -120,20 +114,10 @@ function RecordTextPage() {
       const membership = await getMyMembership()
       setMembershipStatus(membership)
       if (isFoodAnalysisCreditExhausted(membership)) {
-        const content = getFoodAnalysisCreditBlockMessage(membership)
-        const confirmText = getFoodAnalysisBlockedActionText(membership)
-        const showUpgrade = content.includes('开通') || content.includes('升级') || membership.is_pro
-        Taro.showModal({
-          title: '积分不足',
-          content,
-          confirmText: showUpgrade ? confirmText : '知道了',
-          cancelText: '取消',
-          showCancel: showUpgrade,
-          success: (res) => {
-            if (showUpgrade && res.confirm) {
-              Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-            }
-          }
+        setCreditSheet({
+          visible: true,
+          status: membership,
+          message: getFoodAnalysisCreditBlockMessage(membership),
         })
         return
       }
@@ -178,17 +162,7 @@ function RecordTextPage() {
         errMsg.includes('明日再试') ||
         errMsg.includes('积分不足')
       if (isQuota) {
-        const suggestPro = errMsg.includes('开通') || errMsg.includes('会员') || errMsg.includes('升级')
-        Taro.showModal({
-          title: '积分不足',
-          content: errMsg,
-          confirmText: suggestPro ? getFoodAnalysisBlockedActionText(membershipStatus) : '知道了',
-          cancelText: '取消',
-          showCancel: suggestPro,
-          success: (res) => {
-            if (suggestPro && res.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
-          }
-        })
+        setCreditSheet({ visible: true, status: membershipStatus, message: errMsg })
       } else {
         Taro.showToast({ title: errMsg, icon: 'none' })
       }
@@ -358,6 +332,14 @@ function RecordTextPage() {
           <Text>{loading ? '分析中...' : isQuotaExhausted ? '积分不足，暂不可分析' : '开始智能分析'}</Text>
         </View>
       </View>
+      <CreditShortageSheet
+        visible={creditSheet.visible}
+        membershipStatus={creditSheet.status ?? membershipStatus}
+        requiredCredits={2}
+        scenarioLabel='文字分析'
+        message={creditSheet.message}
+        onClose={() => setCreditSheet({ visible: false, status: null })}
+      />
     </View>
   )
 }

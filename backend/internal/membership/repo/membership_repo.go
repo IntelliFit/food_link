@@ -220,6 +220,48 @@ func (r *MembershipRepo) GetFirstMembershipTrialBatchRank(ctx context.Context, u
 	return 0, nil
 }
 
+func (r *MembershipRepo) GetTrialEntitlementByUserID(ctx context.Context, userID string) (*domain.UserTrialEntitlement, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, nil
+	}
+	var row domain.UserTrialEntitlement
+	err := r.db.WithContext(ctx).Where("first_user_id = ?", userID).First(&row).Error
+	if err == nil {
+		return &row, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	var user User
+	err = r.db.WithContext(ctx).Where("id = ?", userID).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if user.UnionID != nil && strings.TrimSpace(*user.UnionID) != "" {
+		err = r.db.WithContext(ctx).Where("unionid = ?", strings.TrimSpace(*user.UnionID)).First(&row).Error
+		if err == nil {
+			return &row, nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
+	if strings.TrimSpace(user.OpenID) == "" {
+		return nil, nil
+	}
+	err = r.db.WithContext(ctx).Where("openid = ?", strings.TrimSpace(user.OpenID)).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (r *MembershipRepo) GetFirstPaidMembershipUserRank(ctx context.Context, userID string, limit int) (int, error) {
 	if limit <= 0 {
 		return 0, nil
@@ -573,6 +615,69 @@ func (r *MembershipRepo) ChangeEarnedCredits(ctx context.Context, userID string,
 	return entry, entry != nil, err
 }
 
+func (r *MembershipRepo) SumPositiveEarnedCreditsByDate(ctx context.Context, userID, chinaDate string) (int, error) {
+	var total int64
+	err := r.db.WithContext(ctx).
+		Table("user_earned_credit_ledger").
+		Select("COALESCE(SUM(delta), 0)").
+		Where("user_id = ? AND related_date = ? AND delta > 0", userID, chinaDate).
+		Scan(&total).Error
+	return int(total), err
+}
+
+func (r *MembershipRepo) CountRewardTaskUploads(ctx context.Context, userID, taskType, chinaDate, status string) (int, error) {
+	query := r.db.WithContext(ctx).Model(&domain.RewardTaskUpload{}).Where("user_id = ? AND task_type = ? AND bonus_date = ?", userID, taskType, chinaDate)
+	if strings.TrimSpace(status) != "" {
+		query = query.Where("status = ?", status)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
+func (r *MembershipRepo) GetRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string) (*domain.RewardTaskUpload, error) {
+	sourceKey = strings.TrimSpace(sourceKey)
+	if sourceKey == "" {
+		return nil, nil
+	}
+	var row domain.RewardTaskUpload
+	err := r.db.WithContext(ctx).Where("user_id = ? AND source_key = ?", userID, sourceKey).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &row, err
+}
+
+func (r *MembershipRepo) CreateRewardTaskUpload(ctx context.Context, row *domain.RewardTaskUpload) error {
+	if row.ID == "" {
+		row.ID = uuid.New().String()
+	}
+	now := time.Now()
+	if row.CreatedAt == nil {
+		row.CreatedAt = &now
+	}
+	row.UpdatedAt = &now
+	if row.Meta == nil {
+		row.Meta = map[string]any{}
+	}
+	return r.db.WithContext(ctx).Create(row).Error
+}
+
+func (r *MembershipRepo) UpdateRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string, updates map[string]any) (*domain.RewardTaskUpload, error) {
+	if _, ok := updates["updated_at"]; !ok {
+		updates["updated_at"] = time.Now()
+	}
+	if err := r.db.WithContext(ctx).
+		Model(&domain.RewardTaskUpload{}).
+		Where("user_id = ? AND source_key = ?", userID, sourceKey).
+		Updates(updates).Error; err != nil {
+		return nil, err
+	}
+	return r.GetRewardTaskUploadBySourceKey(ctx, userID, sourceKey)
+}
+
 func (r *MembershipRepo) CountSharePosterClaims(ctx context.Context, userID, chinaDate string) (int, error) {
 	var count int64
 	err := r.db.WithContext(ctx).Model(&domain.UserCreditBonusEvent{}).
@@ -621,6 +726,7 @@ func (r *MembershipRepo) CreateShareReward(ctx context.Context, reward *domain.M
 type User struct {
 	ID                   string     `gorm:"column:id"`
 	OpenID               string     `gorm:"column:openid"`
+	UnionID              *string    `gorm:"column:unionid"`
 	EarnedCreditsBalance int        `gorm:"column:earned_credits_balance"`
 	CreatedAt            *time.Time `gorm:"column:create_time"`
 	Birthday             *string    `gorm:"column:birthday"`

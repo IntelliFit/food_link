@@ -5,7 +5,7 @@
 ## 会话启动
 
 - 在每个新会话开始时，以及在上下文压缩后，回复前请先读取 `IDENTITY.md`、`SOUL.md` 和 `USER.md`。
-- 然后读取 `PROJECT_STATE.md` 和 `DECISIONS.md`。
+- 然后读取 `PROJECT_STATE.md`、`.local-state/current-task/active.md` 和 `.local-state/decisions/2026-05-active.md`。
 - 如果存在当天的 `memory/YYYY-MM-DD.md` 和昨天的日记文件，也请一并读取。
 - 当这些文件与过期的对话记忆不一致时，以此类文件为准。
 - 如果必需的状态文件缺失，在进行非琐碎工作前请先创建它。
@@ -54,8 +54,8 @@
 
 - 不要仅依赖对话记录来维持项目连续性。
 - 在确认任何需求、决策、阻塞点、里程碑、所有权澄清或值得交接的后续步骤后，在最终回复前将持久化部分写入文件。
-- 更新 `CURRENT_TASK.md` 以记录当前正在进行的任务、状态、阻塞点或后续步骤。
-- 更新 `DECISIONS.md` 以记录应在会话重置后保留的稳定选择。
+- 更新 `.local-state/current-task/active.md` 以记录当前正在进行的任务、状态、阻塞点或后续步骤。
+- 更新 `.local-state/decisions/2026-05-active.md` 以记录应在会话重置后保留的稳定选择。
 - 将日期笔记和简短交接记录追加到 `memory/YYYY-MM-DD.md`。
 - 当用户说"记住这个"或纠正项目上下文时，将其记录下来，而不是仅保留在对话记忆中。
 

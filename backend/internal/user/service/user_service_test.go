@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
@@ -303,7 +304,7 @@ func TestUserService_UpdateDashboardTargets(t *testing.T) {
 	assert.Equal(t, 1800.0, result["calorie_target"])
 }
 
-func TestUserService_UpdateDashboardTargets_WithTargetDateStoresDailyOverride(t *testing.T) {
+func TestUserService_UpdateDashboardTargets_WithTargetDateStillStoresLongTermTarget(t *testing.T) {
 	db := setupTestDB(t)
 	userRepo := repo.NewUserRepo(db)
 	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
@@ -322,12 +323,17 @@ func TestUserService_UpdateDashboardTargets_WithTargetDateStoresDailyOverride(t 
 	assert.NoError(t, err)
 	assert.Equal(t, 1800.0, result["calorie_target"])
 
-	var row domain.DailyNutritionTarget
-	err = db.Table((&domain.DailyNutritionTarget{}).TableName()).
+	var count int64
+	err = db.Table("user_daily_nutrition_targets").
 		Where("user_id = ? AND target_date = ?", user.ID, "2026-05-19").
-		First(&row).Error
+		Count(&count).Error
 	assert.NoError(t, err)
-	assert.Equal(t, 100.0, row.ProteinTarget)
+	assert.Equal(t, int64(0), count)
+
+	found, err := userRepo.FindByID(ctx, user.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "manual", found.HealthCondition["dashboard_targets_mode"])
+	assert.NotEmpty(t, found.HealthCondition["dashboard_targets_updated_at"])
 }
 
 func TestUserService_UpdateDashboardTargets_NotFound(t *testing.T) {
@@ -413,6 +419,7 @@ func TestUserService_UpdateHealthProfile(t *testing.T) {
 	height := 175.0
 	weight := 70.0
 	activity := "moderate"
+	birthday := "1994-01-01"
 	patches := ApplyMethod(reflect.TypeOf(userRepo), "UpdateFields", func(_ *repo.UserRepo, _ context.Context, _ string, updates map[string]any) (*repo.User, error) {
 		if h, ok := updates["height"].(float64); ok {
 			user.Height = &h
@@ -429,6 +436,9 @@ func TestUserService_UpdateHealthProfile(t *testing.T) {
 		if tdee, ok := updates["tdee"].(float64); ok {
 			user.TDEE = &tdee
 		}
+		if hc, ok := updates["health_condition"].(map[string]any); ok {
+			user.HealthCondition = hc
+		}
 		return user, nil
 	})
 	defer patches.Reset()
@@ -438,10 +448,15 @@ func TestUserService_UpdateHealthProfile(t *testing.T) {
 		Weight:        &weight,
 		ActivityLevel: &activity,
 		Gender:        strPtr("male"),
+		Birthday:      &birthday,
 	})
 	assert.NoError(t, err)
 	assert.NotNil(t, result["bmr"])
 	assert.NotNil(t, result["tdee"])
+	hc := result["health_condition"].(map[string]any)
+	assert.Equal(t, "system_initial", hc["dashboard_targets_mode"])
+	targets := hc["dashboard_targets"].(map[string]float64)
+	assert.Greater(t, targets["calorie_target"], 0.0)
 }
 
 func TestUserService_UpdateHealthProfile_ModeChange(t *testing.T) {
@@ -671,6 +686,33 @@ func TestUserService_UpdateLastSeenAnalyzeHistory(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestUserService_DeleteAccount(t *testing.T) {
+	db := setupTestDB(t)
+	userRepo := repo.NewUserRepo(db)
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
+	ctx := context.Background()
+
+	user := &repo.User{OpenID: "o1", Nickname: "DeleteMe"}
+	_ = userRepo.Create(ctx, user)
+
+	err := svc.DeleteAccount(ctx, user.ID)
+	assert.NoError(t, err)
+
+	found, err := userRepo.FindByID(ctx, user.ID)
+	assert.NoError(t, err)
+	assert.Nil(t, found)
+}
+
+func TestUserService_DeleteAccount_NotFound(t *testing.T) {
+	db := setupTestDB(t)
+	userRepo := repo.NewUserRepo(db)
+	svc := NewUserService(userRepo, userrepo.NewHealthDocumentRepo(db), userrepo.NewModeSwitchLogRepo(db), nil)
+	ctx := context.Background()
+
+	err := svc.DeleteAccount(ctx, "missing-user")
+	assert.Error(t, err)
+}
+
 func TestBuildDashboardTargets(t *testing.T) {
 	user := &repo.User{OpenID: "o1"}
 	targets := buildDashboardTargets(user)
@@ -702,6 +744,22 @@ func TestBuildDashboardTargets_WithDashboardTargets(t *testing.T) {
 	assert.Equal(t, 65.0, targets["fat_target"])
 }
 
+func TestCalculateStableNutritionTargets_HybridBMR(t *testing.T) {
+	result := CalculateStableNutritionTargets(StableNutritionTargetInput{
+		Gender:        "male",
+		WeightKg:      70,
+		HeightCm:      175,
+		Birthday:      "1994-01-01",
+		ActivityLevel: "moderate",
+		DietGoal:      "fat_loss",
+		Now:           time.Date(2026, 5, 23, 0, 0, 0, 0, time.UTC),
+	})
+	assert.Equal(t, 1578.2, result.BMR)
+	assert.Equal(t, 2209.5, result.TDEE)
+	assert.Equal(t, 1860.0, result.Targets["calorie_target"])
+	assert.Greater(t, result.Targets["protein_target"], 0.0)
+}
+
 func TestNormalizeExecutionMode(t *testing.T) {
 	mode := "strict"
 	assert.Equal(t, "strict", normalizeExecutionMode(&mode))
@@ -731,7 +789,7 @@ func TestBuildProfileResponse(t *testing.T) {
 func TestUserService_CreateHealthReportTask(t *testing.T) {
 	db := setupTestDB(t)
 	taskRepo := userrepo.NewAnalysisTaskRepo(db)
-	svc := NewAnalysisTaskService(taskRepo)
+	svc := NewAnalysisTaskService(taskRepo, nil)
 	ctx := context.Background()
 
 	imageURL := "https://example.com/report.jpg"
@@ -748,7 +806,7 @@ func TestUserService_CreateHealthReportTask(t *testing.T) {
 func TestUserService_CreateHealthReportTask_Error(t *testing.T) {
 	db := setupTestDB(t)
 	taskRepo := userrepo.NewAnalysisTaskRepo(db)
-	svc := NewAnalysisTaskService(taskRepo)
+	svc := NewAnalysisTaskService(taskRepo, nil)
 	ctx := context.Background()
 
 	patches := ApplyMethod(reflect.TypeOf(taskRepo), "Create", func(_ *userrepo.AnalysisTaskRepo, _ context.Context, _ *domain.AnalysisTask) error {

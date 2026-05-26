@@ -141,6 +141,9 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 func (r *ManualFoodRepo) listCatalogItems(ctx context.Context, userID string, category string, page int, pageSize int) ([]domain.ManualFoodResult, bool, error) {
 	offset := (page - 1) * pageSize
 	if category == "recent" {
+		if strings.TrimSpace(userID) == "" {
+			return []domain.ManualFoodResult{}, false, nil
+		}
 		items, err := r.listRecentItems(ctx, userID, pageSize+1)
 		if err != nil {
 			return nil, false, err
@@ -152,6 +155,9 @@ func (r *ManualFoodRepo) listCatalogItems(ctx context.Context, userID string, ca
 		return items, hasMore, nil
 	}
 	if category == "favorites" {
+		if strings.TrimSpace(userID) == "" {
+			return []domain.ManualFoodResult{}, false, nil
+		}
 		items, err := r.listCollectedPublicLibrary(ctx, userID, pageSize+1)
 		if err != nil {
 			return nil, false, err
@@ -201,8 +207,7 @@ func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, cate
 	whereCategory := ""
 	args := []any{}
 	if category != "" && category != "all" && category != "common" {
-		whereCategory = "AND (" + manualFoodCategorySQL("name") + ") = ?"
-		args = append(args, category)
+		whereCategory = "AND " + manualFoodCategoryFilterSQL("name", category)
 	}
 	args = append(args, limit, offset)
 	var rows []row
@@ -232,7 +237,7 @@ func (r *ManualFoodRepo) listGlobalFrequentRecordItems(ctx context.Context, cate
 		HAVING COUNT(*) >= 3
 		ORDER BY COUNT(*) DESC, name ASC
 		LIMIT ? OFFSET ?
-	`, whereCategory), args...).Scan(&rows).Error
+	`, escapeSQLForSprintf(whereCategory)), args...).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -314,8 +319,7 @@ func (r *ManualFoodRepo) listNutritionCatalogItems(ctx context.Context, category
 	whereCategory := ""
 	args := []any{true}
 	if category != "" && category != "all" && category != "common" {
-		whereCategory = "AND (" + manualFoodCategorySQL("canonical_name") + ") = ?"
-		args = append(args, category)
+		whereCategory = "AND " + manualFoodCategoryFilterSQL("canonical_name", category)
 	}
 	args = append(args, limit, offset)
 	var rows []fooddomain.FoodNutrition
@@ -328,7 +332,7 @@ func (r *ManualFoodRepo) listNutritionCatalogItems(ctx context.Context, category
 			%s
 		ORDER BY %s
 		LIMIT ? OFFSET ?
-	`, whereCategory, nutritionBrowseOrderSQL())).Scan(&rows).Error
+	`, escapeSQLForSprintf(whereCategory), nutritionBrowseOrderSQL())).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
@@ -670,7 +674,7 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 	if item.TotalCalories > 0 && item.TotalCalories <= 350 {
 		highlights = append(highlights, fmt.Sprintf("%.0f kcal", item.TotalCalories))
 	}
-	return domain.ManualFoodResult{
+	result := domain.ManualFoodResult{
 		ID:                  item.ID,
 		Source:              "public_library",
 		Title:               title,
@@ -692,6 +696,8 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 		LikeCount:           item.LikeCount,
 		CollectionCount:     item.CollectionCount,
 	}
+	applyManualFoodServingProfile(&result)
+	return result
 }
 
 func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64) domain.ManualFoodResult {
@@ -706,7 +712,7 @@ func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64)
 	if item.KcalPer100g > 0 && item.KcalPer100g <= 120 {
 		highlights = append(highlights, fmt.Sprintf("%.0f kcal/100g", item.KcalPer100g))
 	}
-	return domain.ManualFoodResult{
+	result := domain.ManualFoodResult{
 		ID:                 item.ID,
 		Source:             "nutrition_library",
 		Title:              title,
@@ -737,6 +743,8 @@ func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64)
 		NutritionHighlights: highlights,
 		MatchScore:          score,
 	}
+	applyManualFoodServingProfile(&result)
+	return result
 }
 
 func manualFoodResultFromRecordItem(source, sourceID, sourceTitle, portionLabel string, usageCount int, raw json.RawMessage) domain.ManualFoodResult {
@@ -765,7 +773,7 @@ func manualFoodResultFromRecordItem(source, sourceID, sourceTitle, portionLabel 
 	if defaultWeight <= 0 {
 		defaultWeight = item.Weight
 	}
-	return domain.ManualFoodResult{
+	result := domain.ManualFoodResult{
 		ID:                 strings.TrimSpace(sourceID),
 		Source:             strings.TrimSpace(source),
 		Title:              title,
@@ -785,6 +793,20 @@ func manualFoodResultFromRecordItem(source, sourceID, sourceTitle, portionLabel 
 			SodiumMg: item.Nutrients.SodiumMg,
 		},
 	}
+	if result.DefaultWeightGrams > 0 {
+		scale := 100 / result.DefaultWeightGrams
+		result.NutrientsPer100g = &domain.ManualFoodNutrients{
+			Calories: result.TotalCalories * scale,
+			Protein:  result.TotalProtein * scale,
+			Carbs:    result.TotalCarbs * scale,
+			Fat:      result.TotalFat * scale,
+			Fiber:    item.Nutrients.Fiber * scale,
+			Sugar:    item.Nutrients.Sugar * scale,
+			SodiumMg: item.Nutrients.SodiumMg * scale,
+		}
+	}
+	applyManualFoodServingProfile(&result)
+	return result
 }
 
 func manualFoodResultFromFrequentRecord(name string, usageCount int, avgWeight float64, avgCalories float64, avgProtein float64, avgCarbs float64, avgFat float64, raw json.RawMessage) domain.ManualFoodResult {
@@ -803,13 +825,14 @@ func manualFoodResultFromFrequentRecord(name string, usageCount int, avgWeight f
 		item.Source = "nutrition_library"
 		item.SourceLabel = "常用食物"
 		item.RecommendReason = "来自大家真实记录的高频食物"
+		applyManualFoodServingProfile(&item)
 		return item
 	}
 	highlights := []string{fmt.Sprintf("记录过 %d 次", usageCount)}
 	if avgProtein > 8 {
 		highlights = append(highlights, fmt.Sprintf("蛋白 %.1fg", avgProtein))
 	}
-	return domain.ManualFoodResult{
+	result := domain.ManualFoodResult{
 		ID:                 "catalog:" + title,
 		Source:             "nutrition_library",
 		Title:              title,
@@ -834,6 +857,8 @@ func manualFoodResultFromFrequentRecord(name string, usageCount int, avgWeight f
 		UsageCount:          usageCount,
 		MatchScore:          0.58,
 	}
+	applyManualFoodServingProfile(&result)
+	return result
 }
 
 func (r *ManualFoodRepo) normalizePublicFoodItem(item publicdomain.PublicFoodItem) publicdomain.PublicFoodItem {
@@ -985,6 +1010,9 @@ func manualFoodCatalogCategories() []domain.ManualFoodCatalogCategory {
 		{Key: "vegetable", Label: "蔬菜"},
 		{Key: "fruit", Label: "水果"},
 		{Key: "dairy", Label: "乳品"},
+		{Key: "beverage", Label: "饮品"},
+		{Key: "soup", Label: "汤饮"},
+		{Key: "snack", Label: "零食"},
 		{Key: "meal", Label: "菜肴"},
 		{Key: "other", Label: "其他"},
 	}
@@ -1005,14 +1033,61 @@ func normalizeManualFoodCatalogCategory(category string) string {
 
 func manualFoodCategorySQL(column string) string {
 	return fmt.Sprintf(`CASE
+		WHEN %s ILIKE ANY (ARRAY['%%清汤%%','%%汤%%','%%羹%%','%%soup%%','%%broth%%']) THEN 'soup'
+		WHEN %s ILIKE ANY (ARRAY['%%咖啡%%','%%美式%%','%%拿铁%%','%%奶茶%%','%%茶饮%%','%%绿茶%%','%%红茶%%','%%乌龙茶%%','%%普洱%%','%%茉莉茶%%','%%饮料%%','%%可乐%%','%%果汁%%','%%豆浆%%','%%coffee%%','%%latte%%','%%tea%%','%%drink%%']) THEN 'beverage'
+		WHEN %s ILIKE ANY (ARRAY['%%坚果%%','%%薯片%%','%%饼干%%','%%曲奇%%','%%巧克力%%','%%方糖%%','%%糖果%%','%%软糖%%','%%棒棒糖%%','%%糕点%%','%%蛋糕%%','%%零食%%','%%瓜子%%','%%花生%%','%%杏仁%%','%%核桃%%','%%cookie%%','%%snack%%','%%nuts%%']) THEN 'snack'
 		WHEN %s ILIKE ANY (ARRAY['%%沙拉%%','%%便当%%','%%套餐%%','%%外卖%%','%%餐%%','%%饭团%%','%%炒饭%%']) THEN 'meal'
-		WHEN %s ILIKE ANY (ARRAY['%%米饭%%','%%白米饭%%','%%糙米%%','%%饭%%','%%面条%%','%%馒头%%','%%包子%%','%%粥%%','%%燕麦%%','%%红薯%%','%%玉米%%','%%土豆%%','%%紫薯%%']) THEN 'staple'
-		WHEN %s ILIKE ANY (ARRAY['%%鸡%%','%%牛肉%%','%%猪肉%%','%%鱼%%','%%虾%%','%%蛋%%','%%豆腐%%','%%蛋白%%','%%鸭%%','%%鹅%%']) THEN 'protein'
-		WHEN %s ILIKE ANY (ARRAY['%%菜%%','%%西兰花%%','%%生菜%%','%%菠菜%%','%%番茄%%','%%黄瓜%%','%%白菜%%','%%秋葵%%']) THEN 'vegetable'
-		WHEN %s ILIKE ANY (ARRAY['%%苹果%%','%%香蕉%%','%%橙%%','%%梨%%','%%莓%%','%%果%%','%%西瓜%%','%%草莓%%']) THEN 'fruit'
-		WHEN %s ILIKE ANY (ARRAY['%%奶%%','%%酸奶%%','%%牛奶%%','%%奶酪%%']) THEN 'dairy'
+		WHEN %s ILIKE ANY (ARRAY['%%米饭%%','%%白米饭%%','%%糙米%%','%%饭%%','%%面条%%','%%荞麦面%%','%%馒头%%','%%包子%%','%%粥%%','%%燕麦%%','%%红薯%%','%%玉米%%','%%土豆%%','%%紫薯%%','%%南瓜%%','%%面包%%','%%吐司%%']) THEN 'staple'
+		WHEN %s ILIKE ANY (ARRAY['%%鸡%%','%%牛肉%%','%%猪肉%%','%%红烧肉%%','%%鱼%%','%%虾%%','%%蛋%%','%%豆腐%%','%%蛋白%%','%%鸭%%','%%鹅%%']) THEN 'protein'
+		WHEN %s ILIKE ANY (ARRAY['%%菜%%','%%西兰花%%','%%生菜%%','%%菠菜%%','%%番茄%%','%%黄瓜%%','%%白菜%%','%%秋葵%%','%%时蔬%%']) THEN 'vegetable'
+		WHEN %s ILIKE ANY (ARRAY['%%苹果%%','%%香蕉%%','%%橙%%','%%梨%%','%%莓%%','%%水果%%','%%西瓜%%','%%草莓%%']) THEN 'fruit'
+		WHEN %s ILIKE ANY (ARRAY['%%奶%%','%%酸奶%%','%%牛奶%%','%%奶酪%%','%%芝士%%']) THEN 'dairy'
 		ELSE 'other'
-	END`, column, column, column, column, column, column)
+	END`, column, column, column, column, column, column, column, column, column)
+}
+
+func manualFoodCategoryFilterSQL(column string, category string) string {
+	conditions := manualFoodCategoryConditions(column)
+	if condition, ok := conditions[category]; ok {
+		return condition
+	}
+	if category == "other" {
+		known := make([]string, 0, len(conditions))
+		for _, condition := range conditions {
+			known = append(known, "("+condition+")")
+		}
+		sort.Strings(known)
+		return "NOT (" + strings.Join(known, " OR ") + ")"
+	}
+	return "TRUE"
+}
+
+func manualFoodCategoryConditions(column string) map[string]string {
+	return map[string]string{
+		"soup":     ilikeAnySQL(column, []string{"%清汤%", "%汤%", "%羹%", "%soup%", "%broth%"}),
+		"beverage": ilikeAnySQL(column, []string{"%咖啡%", "%美式%", "%拿铁%", "%奶茶%", "%茶饮%", "%绿茶%", "%红茶%", "%乌龙茶%", "%普洱%", "%茉莉茶%", "%饮料%", "%可乐%", "%果汁%", "%豆浆%", "%coffee%", "%latte%", "%tea%", "%drink%"}),
+		"snack":    ilikeAnySQL(column, []string{"%坚果%", "%薯片%", "%饼干%", "%曲奇%", "%巧克力%", "%方糖%", "%糖果%", "%软糖%", "%棒棒糖%", "%糕点%", "%蛋糕%", "%零食%", "%瓜子%", "%花生%", "%杏仁%", "%核桃%", "%cookie%", "%snack%", "%nuts%"}),
+		"meal":     ilikeAnySQL(column, []string{"%沙拉%", "%便当%", "%套餐%", "%外卖%", "%餐%", "%饭团%", "%炒饭%"}),
+		"staple":   ilikeAnySQL(column, []string{"%米饭%", "%白米饭%", "%糙米%", "%饭%", "%面条%", "%荞麦面%", "%馒头%", "%包子%", "%粥%", "%燕麦%", "%红薯%", "%玉米%", "%土豆%", "%紫薯%", "%南瓜%", "%面包%", "%吐司%"}),
+		"protein":  ilikeAnySQL(column, []string{"%鸡%", "%牛肉%", "%猪肉%", "%红烧肉%", "%鱼%", "%虾%", "%蛋%", "%豆腐%", "%蛋白%", "%鸭%", "%鹅%"}),
+		"vegetable": ilikeAnySQL(column, []string{
+			"%菜%", "%西兰花%", "%生菜%", "%菠菜%", "%番茄%", "%黄瓜%", "%白菜%", "%秋葵%", "%时蔬%",
+		}),
+		"fruit": ilikeAnySQL(column, []string{"%苹果%", "%香蕉%", "%橙%", "%梨%", "%莓%", "%水果%", "%西瓜%", "%草莓%"}),
+		"dairy": ilikeAnySQL(column, []string{"%奶%", "%酸奶%", "%牛奶%", "%奶酪%", "%芝士%"}),
+	}
+}
+
+func ilikeAnySQL(column string, patterns []string) string {
+	quoted := make([]string, 0, len(patterns))
+	for _, pattern := range patterns {
+		quoted = append(quoted, "'"+strings.ReplaceAll(pattern, "'", "''")+"'")
+	}
+	return fmt.Sprintf("%s ILIKE ANY (ARRAY[%s])", column, strings.Join(quoted, ","))
+}
+
+func escapeSQLForSprintf(sql string) string {
+	return strings.ReplaceAll(sql, "%", "%%")
 }
 
 func nutritionBrowseOrderSQL() string {
@@ -1045,12 +1120,15 @@ func inferManualFoodCategory(text string, source string) string {
 		keywords []string
 		value    string
 	}{
+		{[]string{"清汤", "汤", "羹", "soup", "broth"}, "soup"},
+		{[]string{"咖啡", "美式", "拿铁", "奶茶", "茶饮", "绿茶", "红茶", "乌龙茶", "普洱", "茉莉茶", "饮料", "可乐", "果汁", "豆浆", "coffee", "latte", "tea", "drink"}, "beverage"},
+		{[]string{"坚果", "薯片", "饼干", "曲奇", "巧克力", "方糖", "糖果", "软糖", "棒棒糖", "糕点", "蛋糕", "零食", "瓜子", "花生", "杏仁", "核桃", "cookie", "snack", "nuts"}, "snack"},
 		{[]string{"沙拉", "便当", "套餐", "外卖", "餐", "饭团"}, "meal"},
-		{[]string{"米饭", "白米饭", "糙米", "饭", "面条", "馒头", "包子", "粥", "燕麦", "rice", "noodle", "bread", "oat"}, "staple"},
-		{[]string{"鸡", "牛肉", "猪肉", "鱼", "虾", "蛋", "豆腐", "protein", "chicken", "beef", "egg", "tofu", "fish"}, "protein"},
-		{[]string{"菜", "西兰花", "生菜", "菠菜", "番茄", "蔬", "broccoli", "tomato", "vegetable"}, "vegetable"},
-		{[]string{"苹果", "香蕉", "橙", "梨", "莓", "果", "apple", "banana", "berry", "fruit"}, "fruit"},
-		{[]string{"奶", "酸奶", "牛奶", "cheese", "milk", "yogurt"}, "dairy"},
+		{[]string{"米饭", "白米饭", "糙米", "饭", "面条", "荞麦面", "馒头", "包子", "粥", "燕麦", "红薯", "玉米", "土豆", "紫薯", "南瓜", "面包", "吐司", "rice", "noodle", "bread", "oat"}, "staple"},
+		{[]string{"鸡", "牛肉", "猪肉", "红烧肉", "鱼", "虾", "蛋", "豆腐", "protein", "chicken", "beef", "egg", "tofu", "fish"}, "protein"},
+		{[]string{"菜", "西兰花", "生菜", "菠菜", "番茄", "蔬", "时蔬", "broccoli", "tomato", "vegetable"}, "vegetable"},
+		{[]string{"苹果", "香蕉", "橙", "梨", "莓", "水果", "apple", "banana", "berry", "fruit"}, "fruit"},
+		{[]string{"奶", "酸奶", "牛奶", "奶酪", "芝士", "cheese", "milk", "yogurt"}, "dairy"},
 	}
 	for _, category := range categories {
 		for _, keyword := range category.keywords {
@@ -1063,6 +1141,120 @@ func inferManualFoodCategory(text string, source string) string {
 		return "meal"
 	}
 	return "other"
+}
+
+func applyManualFoodServingProfile(item *domain.ManualFoodResult) {
+	if item == nil {
+		return
+	}
+	if item.Source == "public_library" {
+		item.DisplayUnit = "serving"
+		item.DisplayUnitLabel = "份"
+		if strings.TrimSpace(item.PortionLabel) == "" {
+			item.PortionLabel = "1份"
+		}
+		if item.DefaultWeightGrams <= 0 {
+			item.DefaultWeightGrams = 1
+		}
+		item.ServingPresets = servingPresets(item.DefaultWeightGrams, "份", []float64{0.5, 1, 1.5, 2})
+		return
+	}
+	title := strings.TrimSpace(item.Title)
+	switch {
+	case isEggLikeFood(title):
+		applyPer100Default(item, 55)
+		item.DisplayUnit = "piece"
+		item.DisplayUnitLabel = "个"
+		item.PortionLabel = "1个"
+		item.ServingPresets = []domain.ManualFoodServingPreset{
+			{Label: "0.5个", Grams: 27.5, Quantity: 0.5},
+			{Label: "1个", Grams: 55, Quantity: 1},
+			{Label: "2个", Grams: 110, Quantity: 2},
+		}
+	case isBeverageLikeFood(title):
+		defaultWeight := 350.0
+		if strings.Contains(strings.ToLower(title), "清汤") || strings.Contains(title, "汤") {
+			defaultWeight = 250
+		}
+		applyPer100Default(item, defaultWeight)
+		item.DisplayUnit = "ml"
+		item.DisplayUnitLabel = "ml"
+		item.PortionLabel = fmt.Sprintf("%.0fml", defaultWeight)
+		item.ServingPresets = beverageServingPresets(title)
+	default:
+		item.DisplayUnit = "g"
+		item.DisplayUnitLabel = "g"
+		if strings.TrimSpace(item.PortionLabel) == "" {
+			item.PortionLabel = fmt.Sprintf("%.0fg", item.DefaultWeightGrams)
+		}
+	}
+}
+
+func applyPer100Default(item *domain.ManualFoodResult, defaultWeight float64) {
+	if item == nil || defaultWeight <= 0 {
+		return
+	}
+	if item.NutrientsPer100g != nil {
+		scale := defaultWeight / 100
+		item.TotalCalories = item.NutrientsPer100g.Calories * scale
+		item.TotalProtein = item.NutrientsPer100g.Protein * scale
+		item.TotalCarbs = item.NutrientsPer100g.Carbs * scale
+		item.TotalFat = item.NutrientsPer100g.Fat * scale
+		if item.ExtraNutrients == nil {
+			item.ExtraNutrients = &domain.ManualFoodNutrients{}
+		}
+		item.ExtraNutrients.Fiber = item.NutrientsPer100g.Fiber * scale
+		item.ExtraNutrients.Sugar = item.NutrientsPer100g.Sugar * scale
+		item.ExtraNutrients.SodiumMg = item.NutrientsPer100g.SodiumMg * scale
+	}
+	item.DefaultWeightGrams = defaultWeight
+}
+
+func servingPresets(base float64, unit string, quantities []float64) []domain.ManualFoodServingPreset {
+	if base <= 0 {
+		return nil
+	}
+	out := make([]domain.ManualFoodServingPreset, 0, len(quantities))
+	for _, quantity := range quantities {
+		out = append(out, domain.ManualFoodServingPreset{
+			Label:    fmt.Sprintf("%g%s", quantity, unit),
+			Grams:    base * quantity,
+			Quantity: quantity,
+		})
+	}
+	return out
+}
+
+func beverageServingPresets(title string) []domain.ManualFoodServingPreset {
+	lower := strings.ToLower(strings.TrimSpace(title))
+	if strings.Contains(lower, "coffee") || strings.Contains(title, "咖啡") || strings.Contains(title, "拿铁") || strings.Contains(title, "美式") {
+		return []domain.ManualFoodServingPreset{
+			{Label: "350ml", Grams: 350, Quantity: 350},
+			{Label: "450ml", Grams: 450, Quantity: 450},
+			{Label: "590ml", Grams: 590, Quantity: 590},
+		}
+	}
+	return []domain.ManualFoodServingPreset{
+		{Label: "250ml", Grams: 250, Quantity: 250},
+		{Label: "350ml", Grams: 350, Quantity: 350},
+		{Label: "500ml", Grams: 500, Quantity: 500},
+	}
+}
+
+func isEggLikeFood(title string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(title))
+	return strings.Contains(normalized, "egg") || strings.Contains(title, "鸡蛋") || strings.Contains(title, "水煮蛋") || strings.Contains(title, "卤蛋") || strings.Contains(title, "煎蛋")
+}
+
+func isBeverageLikeFood(title string) bool {
+	lower := strings.ToLower(strings.TrimSpace(title))
+	keywords := []string{"咖啡", "美式", "拿铁", "奶茶", "茶饮", "绿茶", "红茶", "乌龙茶", "普洱", "茉莉茶", "饮料", "可乐", "果汁", "豆浆", "清汤", "汤", "coffee", "latte", "tea", "drink", "soup", "broth"}
+	for _, keyword := range keywords {
+		if strings.Contains(lower, strings.ToLower(keyword)) {
+			return true
+		}
+	}
+	return false
 }
 
 func containsCJK(value string) bool {

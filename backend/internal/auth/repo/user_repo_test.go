@@ -42,6 +42,18 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 		public_records BOOLEAN,
 		last_seen_analyze_history_at TIMESTAMP
 	)`)
+	db.Exec(`CREATE TABLE user_trial_entitlements (
+		id TEXT PRIMARY KEY,
+		first_user_id TEXT,
+		openid TEXT,
+		unionid TEXT,
+		first_registered_at TIMESTAMP,
+		early_user_rank INTEGER,
+		trial_days_total INTEGER,
+		trial_policy TEXT,
+		created_at TIMESTAMP,
+		updated_at TIMESTAMP
+	)`)
 	db.Exec(`CREATE TABLE user_food_records (
 		id TEXT PRIMARY KEY,
 		user_id TEXT,
@@ -168,4 +180,41 @@ func TestUserRepo_CountFoodRecordDays(t *testing.T) {
 	count, err := repo.CountFoodRecordDays(ctx, userID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), count)
+}
+
+func TestUserRepo_TrialEntitlementCRUD(t *testing.T) {
+	db := setupUserTestDB(t)
+	repo := NewUserRepo(db)
+	ctx := context.Background()
+	now := time.Now()
+	firstUserID := "user-trial-1"
+	unionID := "union-trial-1"
+
+	ent := &UserTrialEntitlement{
+		FirstUserID:       &firstUserID,
+		OpenID:            "openid-trial-1",
+		UnionID:           &unionID,
+		FirstRegisteredAt: &now,
+		TrialDaysTotal:    30,
+		TrialPolicy:       "early_first_1000",
+	}
+	err := repo.CreateTrialEntitlement(ctx, ent)
+	require.NoError(t, err)
+	require.NotEmpty(t, ent.ID)
+
+	found, err := repo.FindTrialEntitlementByIdentity(ctx, "openid-trial-1", "")
+	require.NoError(t, err)
+	require.NotNil(t, found)
+	assert.Equal(t, "early_first_1000", found.TrialPolicy)
+
+	foundByUnion, err := repo.FindTrialEntitlementByIdentity(ctx, "other-openid", unionID)
+	require.NoError(t, err)
+	require.NotNil(t, foundByUnion)
+	assert.Equal(t, ent.ID, foundByUnion.ID)
+
+	updated, err := repo.UpdateTrialEntitlement(ctx, ent.ID, map[string]any{"first_user_id": "user-trial-2"})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.NotNil(t, updated.FirstUserID)
+	assert.Equal(t, "user-trial-2", *updated.FirstUserID)
 }

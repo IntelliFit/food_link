@@ -15,7 +15,9 @@ const extraSubpackagePages = [
   'pages/analyze-history/index',
   'pages/result/index',
   'pages/packaged-food-edit/index',
+  'pages/packaged-food-task-detail/index',
   'pages/result-text/index',
+  'pages/expiry/index',
   'pages/expiry-edit/index',
   // 兼容旧入口：历史缓存可能仍尝试打开 pages/food-expiry/index
   'pages/food-expiry/index',
@@ -28,6 +30,7 @@ const extraSubpackagePages = [
   'pages/record-detail/index',
   'pages/food-library/index',
   'pages/food-library-detail/index',
+  'pages/reward-center/index',
   'pages/interaction-notifications/index',
   'pages/interaction-feed-detail/index',
   'pages/food-library-share/index',
@@ -40,6 +43,7 @@ const extraSubpackagePages = [
   // 真实业务入口会经 extraPkgUrl() 路由到独立 packageAbout。
   'pages/about/index',
   'pages/privacy-settings/index',
+  'pages/pet-home/index',
   'pages/friends/index',
   'pages/invite-friends/index',
   'pages/profile-settings/index',

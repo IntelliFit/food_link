@@ -56,6 +56,13 @@ type ExerciseLog struct {
 
 func (ExerciseLog) TableName() string { return "user_exercise_logs" }
 
+type WeightRecord struct {
+	WeightKg   float64    `gorm:"column:weight_kg"`
+	RecordedOn *time.Time `gorm:"column:recorded_on"`
+}
+
+func (WeightRecord) TableName() string { return "user_weight_records" }
+
 type DailyNutritionTarget struct {
 	UserID        string     `gorm:"column:user_id"`
 	TargetDate    *time.Time `gorm:"column:target_date"`
@@ -116,6 +123,23 @@ func (r *HomeRepo) ListFoodRecordsByDate(ctx context.Context, userID, date strin
 	return rows, err
 }
 
+func (r *HomeRepo) CountFoodRecordDaysByDateRange(ctx context.Context, userID, startDate, endDate string) (int64, error) {
+	start, _, err := chinaDateWindow(startDate)
+	if err != nil {
+		return 0, err
+	}
+	_, end, err := chinaDateWindow(endDate)
+	if err != nil {
+		return 0, err
+	}
+	var count int64
+	err = r.db.WithContext(ctx).Table("user_food_records").
+		Select("COUNT(DISTINCT DATE(record_time))").
+		Where("user_id = ? AND record_time >= ? AND record_time < ?", userID, start, end).
+		Scan(&count).Error
+	return count, err
+}
+
 func (r *HomeRepo) GetFoodRecordByID(ctx context.Context, recordID string) (*FoodRecord, error) {
 	var row FoodRecord
 	if err := r.db.WithContext(ctx).Where("id = ?", recordID).First(&row).Error; err != nil {
@@ -163,6 +187,24 @@ func (r *HomeRepo) ListExerciseBurnedByDateRange(ctx context.Context, userID, st
 		out[date] += row.CaloriesBurned
 	}
 	return out, nil
+}
+
+func (r *HomeRepo) ListWeightRecordsByDateRange(ctx context.Context, userID, startDate, endDate string) ([]WeightRecord, error) {
+	start, _, err := chinaDateWindow(startDate)
+	if err != nil {
+		return nil, err
+	}
+	_, end, err := chinaDateWindow(endDate)
+	if err != nil {
+		return nil, err
+	}
+	var rows []WeightRecord
+	err = r.db.WithContext(ctx).Table("user_weight_records").
+		Select("weight_kg, recorded_on").
+		Where("user_id = ? AND recorded_on >= ? AND recorded_on < ?", userID, start, end).
+		Order("recorded_on asc, created_at asc").
+		Find(&rows).Error
+	return rows, err
 }
 
 func (r *HomeRepo) ListRecordComments(ctx context.Context, recordID string) ([]FeedComment, error) {

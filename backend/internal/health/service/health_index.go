@@ -5,19 +5,32 @@ import (
 	"math"
 )
 
+const healthIndexMinRecordedDays = 2
+
 // HealthIndex 健康指数计算结果
 type HealthIndex struct {
-	HasEnoughData     bool         `json:"has_enough_data"`
-	OverallScore      int          `json:"overall_score"`
-	ProjectedScore    int          `json:"projected_score"`
-	OverallTrendLabel string       `json:"overall_trend_label"`
-	OverviewCopy      string       `json:"overview_copy"`
-	SignalChips       []SignalChip `json:"signal_chips"`
-	RiskCards         []RiskCard   `json:"risk_cards"`
-	AllRiskOptions    []RiskOption `json:"all_risk_options"`
-	TopIssues         []TopIssue   `json:"top_issues"`
-	ActionList        []string     `json:"action_list"`
-	ShowDisclaimer    bool         `json:"show_disclaimer"`
+	HasEnoughData     bool              `json:"has_enough_data"`
+	OverallScore      int               `json:"overall_score"`
+	ProjectedScore    int               `json:"projected_score"`
+	OverallTrendLabel string            `json:"overall_trend_label"`
+	OverviewCopy      string            `json:"overview_copy"`
+	SignalChips       []SignalChip      `json:"signal_chips"`
+	RiskCards         []RiskCard        `json:"risk_cards"`
+	CustomRiskCards   []RiskCard        `json:"custom_risk_cards"`
+	AllRiskOptions    []RiskOption      `json:"all_risk_options"`
+	CustomFocusMeta   *CustomFocusMeta  `json:"custom_focus_meta,omitempty"`
+	TopIssues         []TopIssue        `json:"top_issues"`
+	ActionList        []string          `json:"action_list"`
+	ShowDisclaimer    bool              `json:"show_disclaimer"`
+}
+
+// CustomFocusMeta 自定义关注元信息
+type CustomFocusMeta struct {
+	MaxFocuses      int `json:"max_focuses"`
+	GenerateCost    int `json:"generate_cost"`
+	DailyLimit      int `json:"daily_limit"`
+	UsedToday       int `json:"used_today"`
+	RemainingToday  int `json:"remaining_today"`
 }
 
 // SignalChip 信号芯片
@@ -28,22 +41,26 @@ type SignalChip struct {
 
 // RiskCard 风险卡片
 type RiskCard struct {
-	Key     string `json:"key"`
-	Title   string `json:"title"`
-	Score   int    `json:"score"`
-	Tone    string `json:"tone"`
-	Brief   string `json:"brief"`
-	Summary string `json:"summary"`
-	Basis   string `json:"basis"`
-	Action  string `json:"action"`
-	Delta   int    `json:"delta"`
+	Key          string `json:"key"`
+	Title        string `json:"title"`
+	Score        int    `json:"score"`
+	Tone         string `json:"tone"`
+	Brief        string `json:"brief"`
+	Summary      string `json:"summary"`
+	Basis        string `json:"basis"`
+	Action       string `json:"action"`
+	Delta        int    `json:"delta"`
+	IsCustom     bool   `json:"is_custom,omitempty"`
+	NeedsRefresh bool   `json:"needs_refresh,omitempty"`
+	FocusLabel   string `json:"focus_label,omitempty"`
 }
 
 // RiskOption 风险选项
 type RiskOption struct {
-	Key   string `json:"key"`
-	Title string `json:"title"`
-	Short string `json:"short"`
+	Key      string `json:"key"`
+	Title    string `json:"title"`
+	Short    string `json:"short"`
+	IsCustom bool   `json:"is_custom,omitempty"`
 }
 
 // TopIssue 问题项
@@ -53,7 +70,6 @@ type TopIssue struct {
 }
 
 func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex {
-	// 基础指标
 	totalCalories := comp.TotalCalories
 	tdee := float64(comp.TDEE)
 	avgCaloriesPerDay := comp.AvgCaloriesPerDay
@@ -63,7 +79,23 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	recordedDays := comp.RecordedDays
 	streakDays := comp.StreakDays
 
-	// 超标天数
+	if recordedDays < healthIndexMinRecordedDays {
+		return &HealthIndex{
+			HasEnoughData:     false,
+			OverallScore:      0,
+			ProjectedScore:    0,
+			OverallTrendLabel: "",
+			OverviewCopy:      "",
+			SignalChips:       []SignalChip{{Label: "已记录", Value: fmt.Sprintf("%d 天", recordedDays)}},
+			RiskCards:         []RiskCard{},
+			CustomRiskCards:   []RiskCard{},
+			AllRiskOptions:    []RiskOption{},
+			TopIssues:         []TopIssue{},
+			ActionList:        []string{},
+			ShowDisclaimer:    comp.User != nil && comp.User.HealthDisclaimerAcknowledgedAt == nil,
+		}
+	}
+
 	surplusDays := 0
 	for _, item := range dailyCalories {
 		if item.Calories > 0 && item.Calories > tdee {
@@ -92,53 +124,53 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		energyOverRatio = math.Max(0, avgCaloriesPerDay-tdee) / tdee
 	}
 
-	carbGap := math.Max(0, macroPercent["carbs"]-50)
-	fatGap := math.Max(0, macroPercent["fat"]-32)
-	proteinGap := math.Max(0, 20-macroPercent["protein"])
-	dinnerPenalty := math.Max(0, dinnerPct-38)
-	snackPenalty := math.Max(0, snackPct-18)
+	dinnerOver35 := math.Max(0, dinnerPct-35)
+	dinnerOver38 := math.Max(0, dinnerPct-38)
+	snackOver15 := math.Max(0, snackPct-15)
+	breakfastUnder18 := math.Max(0, 18-breakfastPct)
+	carbOver50 := math.Max(0, macroPercent["carbs"]-50)
+	fatOver30 := math.Max(0, macroPercent["fat"]-30)
+	proteinUnder20 := math.Max(0, 20-macroPercent["protein"])
 
-	// 四个核心维度得分
 	hypertensionScore := clampScore(
-		82 -
-			surplusRate*18 -
-			dinnerPenalty*0.8 -
-			snackPenalty*0.45 -
-			energyOverRatio*26 +
-			bonusIf(breakfastPct >= 18, 3),
+		100 -
+			surplusRate*25 -
+			dinnerOver35*2.0 -
+			snackOver15*0.5 -
+			energyOverRatio*35 -
+			breakfastUnder18*0.5,
 	)
 
 	diabetesScore := clampScore(
-		80 -
-			carbGap*1.25 -
-			proteinGap*1.4 -
-			surplusRate*16 -
-			snackPenalty*0.65 +
-			bonusIf(macroPercent["protein"] >= 20 && macroPercent["protein"] <= 30, 4),
+		100 -
+			carbOver50*1.5 -
+			proteinUnder20*1.8 -
+			surplusRate*20 -
+			snackOver15*1.9 -
+			dinnerOver35*2.2,
 	)
 
 	cardioScore := clampScore(
-		79 -
-			fatGap*1.15 -
-			surplusRate*14 -
-			dinnerPenalty*0.7 -
-			energyOverRatio*20 +
-			bonusIf(macroPercent["protein"] >= 18 && macroPercent["protein"] <= 28, 3),
+		100 -
+			fatOver30*3.5 -
+			surplusRate*20 -
+			dinnerOver35*1.5 -
+			energyOverRatio*30,
 	)
 
 	var weightBonus float64
 	if statsRange == "week" && recordedDays >= 5 {
-		weightBonus = 4
+		weightBonus = 3
 	} else if statsRange == "month" && recordedDays >= 18 {
-		weightBonus = 4
+		weightBonus = 3
 	}
 
 	weightScore := clampScore(
-		78 -
-			energyOverRatio*38 -
-			surplusRate*22 -
-			snackPenalty*0.45 -
-			math.Max(0, dinnerPct-40)*0.55 +
+		100-
+			energyOverRatio*40-
+			surplusRate*25-
+			snackOver15*0.5-
+			dinnerOver38*4.0+
 			weightBonus,
 	)
 
@@ -162,28 +194,24 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		{Label: "连续记录", Value: fmt.Sprintf("%d 天", streakDays)},
 	}
 
-	// 肠道状态友好度
 	colorectalScore := clampScore(
-		76 -
-			fatGap*0.9 -
-			carbGap*0.45 -
-			snackPenalty*0.6 -
-			surplusRate*10 +
-			bonusIf(macroPercent["protein"] >= 18 && macroPercent["protein"] <= 28, 4),
+		100 -
+			fatOver30*2.0 -
+			carbOver50*0.8 -
+			snackOver15*1.2 -
+			surplusRate*12,
 	)
 
-	// 长期状态趋势
 	longevityScore := clampScore(
-		78 -
-			energyOverRatio*24 -
-			surplusRate*15 -
-			dinnerPenalty*0.55 -
-			fatGap*0.75 -
-			carbGap*0.55 +
+		100-
+			energyOverRatio*28-
+			surplusRate*18-
+			dinnerOver35*1.2-
+			fatOver30*1.5-
+			carbOver50*1.0+
 			bonusIf(recordedDays >= thresholdDays(statsRange), 5),
 	)
 
-	// 风险卡片
 	riskCards := []RiskCard{
 		{
 			Key:     "hypertension",
@@ -238,7 +266,7 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 			Summary: ifElseStr(snackPct > 18, "加餐偏多、结构偏散时，长期饮食质量通常会被一点点拖低。", "这段时间的饮食结构还算整齐，但仍要警惕高油高精制主食的重复出现。"),
 			Basis:   fmt.Sprintf("加餐占比 %s，脂肪 %s，连续超标 %d/%d 天。", formatPercent(snackPct), formatPercent(macroPercent["fat"]), surplusDays, recordedDays),
 			Action:  "优先减少最容易重复出现的重油重加工那一类餐食，让整体结构更干净。",
-			Delta:   clampScore(ifElseFloat(snackPct > 18, 9, 6) + ifElseFloat(fatGap > 0, 4, 0)),
+			Delta:   clampScore(ifElseFloat(snackPct > 18, 9, 6) + ifElseFloat(fatOver30 > 0, 4, 0)),
 		},
 		{
 			Key:     "longevity",
@@ -262,7 +290,6 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		{Key: "longevity", Title: "长期状态趋势", Short: "长期"},
 	}
 
-	// 问题列表
 	var topIssues []TopIssue
 	if surplusRate > 0.45 {
 		topIssues = append(topIssues, TopIssue{Title: "连续超出消耗", Detail: fmt.Sprintf("%d/%d 天摄入高于 TDEE", surplusDays, recordedDays)})
@@ -283,7 +310,6 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		topIssues = topIssues[:3]
 	}
 
-	// 行动建议
 	var actionList []string
 	if surplusRate > 0.45 {
 		actionList = append(actionList, "先把每周最容易超标的 2-3 餐压下来，不求每餐都完美。")
@@ -304,21 +330,20 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	}
 
 	return &HealthIndex{
-		HasEnoughData:     recordedDays >= 2,
+		HasEnoughData:     recordedDays >= healthIndexMinRecordedDays,
 		OverallScore:      overallRiskScore,
 		ProjectedScore:    projectedOverallScore,
 		OverallTrendLabel: overallTrendLabel,
 		OverviewCopy:      overviewCopy,
 		SignalChips:       signalChips,
 		RiskCards:         riskCards,
+		CustomRiskCards:   []RiskCard{},
 		AllRiskOptions:    allRiskOptions,
 		TopIssues:         topIssues,
 		ActionList:        actionList,
 		ShowDisclaimer:    comp.User != nil && comp.User.HealthDisclaimerAcknowledgedAt == nil,
 	}
 }
-
-// ---- 辅助函数 ----
 
 func clampScore(value float64) int {
 	return int(math.Max(0, math.Min(100, math.Round(value))))

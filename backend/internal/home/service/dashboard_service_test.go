@@ -73,7 +73,7 @@ func TestDashboardService_HomeDashboard_NoRecords(t *testing.T) {
 	assert.Equal(t, 0.0, intakeData["current"])
 }
 
-func TestDashboardService_HomeDashboard_DynamicTargetsUseProfileAndExercise(t *testing.T) {
+func TestDashboardService_HomeDashboard_StableTargetsIgnoreExercise(t *testing.T) {
 	db, userRepo, homeRepo := setupDashboardTestDB(t)
 	svc := NewDashboardService(userRepo, homeRepo)
 	ctx := context.Background()
@@ -97,19 +97,19 @@ func TestDashboardService_HomeDashboard_DynamicTargetsUseProfileAndExercise(t *t
 	result, err := svc.HomeDashboard(ctx, user.ID, "2024-06-15")
 	require.NoError(t, err)
 	intakeData := result["intakeData"].(map[string]any)
-	assert.Equal(t, 1805.7, intakeData["target"])
+	assert.Equal(t, 1560.0, intakeData["target"])
 	macros := intakeData["macros"].(map[string]any)
 	assert.Equal(t, 126.0, macros["protein"].(map[string]any)["target"])
-	assert.Greater(t, macros["carbs"].(map[string]any)["target"], 155.0)
+	assert.Greater(t, macros["carbs"].(map[string]any)["target"], 150.0)
 
 	target, ok := result["nutritionTarget"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "dynamic", target["source"])
 	assert.Equal(t, "fat_loss", target["diet_goal"])
 	assert.Equal(t, 1560.0, target["base_calorie_target"])
-	assert.Equal(t, 245.7, target["exercise_added_kcal"])
+	assert.Equal(t, 0.0, target["exercise_added_kcal"])
 	assert.Equal(t, 1.3, target["activity_multiplier"])
-	assert.Contains(t, target["explanation"], "今天运动明显高于近期日均水平")
+	assert.Contains(t, target["explanation"], "不随当天运动自动变化")
 }
 
 func TestDashboardService_PosterCalorieCompare(t *testing.T) {
@@ -186,28 +186,19 @@ func TestBuildNutritionTargetPlan_IgnoresLegacyManualTargets(t *testing.T) {
 	assert.Equal(t, "dynamic", plan.TargetSource)
 	assert.NotEqual(t, 1800.0, plan.Targets["calorie_target"])
 	assert.NotEqual(t, 100.0, plan.Targets["protein_target"])
-	assert.Equal(t, 2152.1, plan.Targets["calorie_target"])
+	assert.Equal(t, 1920.0, plan.Targets["calorie_target"])
 }
 
-func TestBuildNutritionTargetPlan_SmallExerciseSurplusDoesNotCompensate(t *testing.T) {
+func TestBuildNutritionTargetPlan_ExerciseDoesNotChangeStableTarget(t *testing.T) {
 	bmr := 1500.0
 	weight := 70.0
 	activity := "light"
 	user := &authrepo.User{OpenID: "o1", BMR: &bmr, Weight: &weight, ActivityLevel: &activity, HealthCondition: map[string]any{}}
-	history := map[string]int{
-		"2024-06-01": 300,
-		"2024-06-02": 300,
-		"2024-06-03": 300,
-		"2024-06-04": 300,
-		"2024-06-05": 300,
-		"2024-06-06": 300,
-		"2024-06-07": 300,
-	}
 
-	plan := buildNutritionTargetPlan(user, "2024-06-15", 260, history)
+	plan := buildNutritionTargetPlan(user, "2024-06-15", 800, nil)
 	assert.Equal(t, 0.0, plan.ExerciseAddedKcal)
-	assert.Equal(t, 120.0, plan.ExerciseThresholdKcal)
-	assert.Contains(t, plan.Explanation, "未达到明显超量门槛")
+	assert.Equal(t, 1950.0, plan.Targets["calorie_target"])
+	assert.Contains(t, plan.Explanation, "不随当天运动自动变化")
 }
 
 func TestBaseCalorieTargetUsesDailyLifeActivityNotStoredTDEE(t *testing.T) {
@@ -236,7 +227,7 @@ func TestBuildNutritionTargetPlan_ManualModeWins(t *testing.T) {
 	assert.Equal(t, 0.0, plan.ExerciseAddedKcal)
 }
 
-func TestBuildNutritionTargetPlan_DailyManualWinsOverGlobalManual(t *testing.T) {
+func TestBuildNutritionTargetPlan_IgnoresDailyManualLegacyTable(t *testing.T) {
 	hc := map[string]any{
 		"dashboard_targets_mode": "manual",
 		"dashboard_targets": map[string]any{
@@ -247,16 +238,60 @@ func TestBuildNutritionTargetPlan_DailyManualWinsOverGlobalManual(t *testing.T) 
 		},
 	}
 	user := &authrepo.User{OpenID: "o1", HealthCondition: hc}
-	plan := buildNutritionTargetPlan(user, "2024-06-15", 500, map[string]int{"2024-06-15": 500}, &homerepo.DailyNutritionTarget{
-		CalorieTarget: 2100,
-		ProteinTarget: 130,
-		CarbsTarget:   260,
-		FatTarget:     70,
-	})
-	assert.Equal(t, "daily_manual", plan.TargetSource)
-	assert.Equal(t, 2100.0, plan.Targets["calorie_target"])
-	assert.Equal(t, 130.0, plan.Targets["protein_target"])
+	plan := buildNutritionTargetPlan(user, "2024-06-15", 500, map[string]int{"2024-06-15": 500})
+	assert.Equal(t, "manual", plan.TargetSource)
+	assert.Equal(t, 1800.0, plan.Targets["calorie_target"])
+	assert.Equal(t, 100.0, plan.Targets["protein_target"])
 	assert.Equal(t, 0.0, plan.ExerciseAddedKcal)
+}
+
+func TestDashboardService_CalibrationSuggestionAfter14Days(t *testing.T) {
+	db, userRepo, homeRepo := setupDashboardTestDB(t)
+	require.NoError(t, db.Exec(`CREATE TABLE user_weight_records (
+		id TEXT PRIMARY KEY,
+		user_id TEXT,
+		weight_kg REAL,
+		recorded_on TIMESTAMP,
+		created_at TIMESTAMP
+	)`).Error)
+	svc := NewDashboardService(userRepo, homeRepo)
+	ctx := context.Background()
+
+	createdAt := time.Date(2024, 5, 20, 0, 0, 0, 0, time.UTC)
+	goal := "fat_loss"
+	user := &authrepo.User{
+		OpenID:    "o1",
+		DietGoal:  &goal,
+		CreatedAt: &createdAt,
+		HealthCondition: map[string]any{
+			"dashboard_targets_mode":       "manual",
+			"dashboard_targets_updated_at": "2024-05-20T00:00:00Z",
+			"dashboard_targets": map[string]any{
+				"calorie_target": 1800.0,
+				"protein_target": 120.0,
+				"carbs_target":   220.0,
+				"fat_target":     55.0,
+			},
+		},
+	}
+	require.NoError(t, userRepo.Create(ctx, user))
+	for day := 2; day <= 8; day++ {
+		recordTime := time.Date(2024, 6, day, 12, 0, 0, 0, time.UTC)
+		require.NoError(t, db.Create(&homerepo.FoodRecord{
+			ID: "r" + recordTime.Format("02"), UserID: user.ID, MealType: "lunch", TotalCalories: 500, RecordTime: &recordTime,
+		}).Error)
+	}
+	require.NoError(t, db.Exec(`INSERT INTO user_weight_records (id, user_id, weight_kg, recorded_on, created_at) VALUES (?, ?, ?, ?, ?)`, "w1", user.ID, 70.0, "2024-06-02 00:00:00", "2024-06-02 00:00:00").Error)
+	require.NoError(t, db.Exec(`INSERT INTO user_weight_records (id, user_id, weight_kg, recorded_on, created_at) VALUES (?, ?, ?, ?, ?)`, "w2", user.ID, 70.0, "2024-06-15 00:00:00", "2024-06-15 00:00:00").Error)
+
+	result, err := svc.HomeDashboard(ctx, user.ID, "2024-06-15")
+	require.NoError(t, err)
+	target := result["nutritionTarget"].(map[string]any)
+	suggestion := target["calibration_suggestion"].(*targetCalibrationSuggestion)
+	require.NotNil(t, suggestion)
+	assert.True(t, suggestion.Available)
+	assert.Equal(t, 1700.0, suggestion.SuggestedKcal)
+	assert.Equal(t, -100.0, suggestion.DeltaKcal)
 }
 
 func TestBuildMealTargets(t *testing.T) {

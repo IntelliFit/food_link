@@ -24,11 +24,11 @@ function showFoodAnalysisQuotaModalLikeRecordMenu(ms: Awaited<ReturnType<typeof 
   if (typeof creditBalance === 'number') {
     Taro.showModal({
       title: '积分不足',
-      content: '食物分析需至少 2 积分，请先充值或升级。',
-      confirmText: '去充值',
+      content: '食物分析需至少 2 积分，可以先完成奖励任务赚积分，赚到后马上继续使用。',
+      confirmText: '去赚积分',
       cancelText: '取消',
       success: (r) => {
-        if (r.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
+        if (r.confirm) Taro.navigateTo({ url: extraPkgUrl('/pages/reward-center/index') })
       }
     })
     return
@@ -38,13 +38,13 @@ function showFoodAnalysisQuotaModalLikeRecordMenu(ms: Awaited<ReturnType<typeof 
     title: '今日次数已用完',
     content: isPro
       ? `今日 ${ms.daily_limit ?? 30} 次拍照已用完，请明日再试。`
-      : `免费版每日限 ${ms.daily_limit ?? 30} 次，开通食探会员可享更高额度与精准模式等功能。`,
-    confirmText: isPro ? '知道了' : '去开通',
+      : `免费版每日限 ${ms.daily_limit ?? 30} 次，也可以先去赚奖励积分继续使用。`,
+    confirmText: isPro ? '去赚积分' : '去赚积分',
     cancelText: '取消',
-    showCancel: !isPro,
+    showCancel: true,
     success: (r) => {
-      if (!isPro && r.confirm) {
-        Taro.navigateTo({ url: extraPkgUrl('/pages/pro-membership/index') })
+      if (r.confirm) {
+        Taro.navigateTo({ url: extraPkgUrl('/pages/reward-center/index') })
       }
     }
   })

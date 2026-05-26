@@ -36,6 +36,7 @@ type TestBackendService interface {
 	PrepareDataset(ctx context.Context, datasetID string) (*domain.TestDataset, error)
 	Login(ctx context.Context, password string) error
 	Logout(ctx context.Context) error
+	ImpersonateUser(ctx context.Context, userID string) (*service.ImpersonateUserOutput, error)
 	LegacyBatchUpload(ctx context.Context, input service.LegacyBatchUploadInput) (map[string]any, error)
 	LegacySingleImage(ctx context.Context, input service.LegacySingleImageInput) (map[string]any, error)
 }
@@ -457,6 +458,30 @@ func (h *TestBackendHandler) Logout(c *gin.Context) {
 	_ = h.svc.Logout(c.Request.Context())
 	c.SetCookie("test_backend_token", "", -1, "/", "", false, true)
 	response.Success(c, gin.H{"message": "退出成功"})
+}
+
+// POST /api/test-backend/impersonate-user
+func (h *TestBackendHandler) ImpersonateUser(c *gin.Context) {
+	var body struct {
+		UserID   string `json:"user_id"`
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if _, err := c.Cookie("test_backend_token"); err != nil {
+		if err := h.svc.Login(c.Request.Context(), body.Password); err != nil {
+			response.Error(c, err)
+			return
+		}
+	}
+	out, err := h.svc.ImpersonateUser(c.Request.Context(), body.UserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, out)
 }
 
 // ---------- Legacy Test API ----------

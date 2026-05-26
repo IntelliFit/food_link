@@ -7,6 +7,7 @@ import {
     login,
     LoginResponse,
     bindPhone,
+    debugImpersonateUser,
     getUserProfile,
     updateUserInfo,
     uploadUserAvatar,
@@ -94,12 +95,17 @@ export default function LoginPage() {
     const [showProfileForm, setShowProfileForm] = useState(false)
     /** 登录成功但库中无手机号时展示，引导用户授权绑定 */
     const [showPhoneBindModal, setShowPhoneBindModal] = useState(false)
+    const [showDebugLoginPanel, setShowDebugLoginPanel] = useState(false)
+    /** 当前登录链路是否已完成首次健康档案 */
+    const [pendingOnboardingCompleted, setPendingOnboardingCompleted] = useState(true)
     /** 是否已同意用户协议与隐私政策 */
     const [agreed, setAgreed] = useState(false)
 
     // 临时头像和昵称（用于完善信息）
     const [tempAvatar, setTempAvatar] = useState('')
     const [tempNickname, setTempNickname] = useState('')
+    const [debugUserId, setDebugUserId] = useState('')
+    const [debugPassword, setDebugPassword] = useState('')
 
     const isDev = process.env.NODE_ENV === 'development'
 
@@ -135,6 +141,14 @@ export default function LoginPage() {
         Taro.switchTab({ url: '/pages/index/index' })
     }
 
+    const continueAfterAuthGates = (onboardingCompleted: boolean) => {
+        if (!onboardingCompleted) {
+            Taro.redirectTo({ url: extraPkgUrl('/pages/health-profile/index') })
+            return
+        }
+        finishLoginFlow()
+    }
+
     /** 微信一键登录：仅用 code，后端若已有手机号会直接带回，无需再授权 */
     const handleWxLogin = async () => {
         if (!agreed) {
@@ -166,7 +180,7 @@ export default function LoginPage() {
         if (!phoneCode) {
             setShowPhoneBindModal(false)
             Taro.showToast({ title: '未授权手机号', icon: 'none' })
-            setTimeout(() => { finishLoginFlow() }, 800)
+            setTimeout(() => { continueAfterAuthGates(pendingOnboardingCompleted) }, 800)
             return
         }
         try {
@@ -177,7 +191,7 @@ export default function LoginPage() {
             Taro.hideLoading()
             Taro.showToast({ title: '绑定成功', icon: 'success' })
             setShowPhoneBindModal(false)
-            setTimeout(() => { finishLoginFlow() }, 1000)
+            setTimeout(() => { continueAfterAuthGates(pendingOnboardingCompleted) }, 1000)
         } catch (err: any) {
             Taro.hideLoading()
             await showLoginErrorToast(err, '绑定失败')
@@ -213,6 +227,9 @@ export default function LoginPage() {
                 icon: 'success'
             })
 
+            const onboardingCompleted = apiUserInfo.onboarding_completed === true
+            setPendingOnboardingCompleted(onboardingCompleted)
+
             // 检查是否需要完善头像/昵称
             // API 返回的 avatar 可能为空字符串，nickname 可能为空
             if (!apiUserInfo.nickname || !apiUserInfo.avatar || apiUserInfo.avatar === '' || apiUserInfo.nickname === '微信用户') {
@@ -222,7 +239,7 @@ export default function LoginPage() {
                 setLoading(false)
                 // 库中已有手机号则直接返回；否则弹出授权手机号弹窗
                 if (loginData.purePhoneNumber) {
-                    setTimeout(() => { finishLoginFlow() }, 1500)
+                    setTimeout(() => { continueAfterAuthGates(onboardingCompleted) }, 1500)
                 } else {
                     setShowPhoneBindModal(true)
                 }
@@ -240,6 +257,21 @@ export default function LoginPage() {
     // 跳过登录
     const handleSkip = () => {
         safeNavigateBack()
+    }
+
+    const handleDebugImpersonate = async () => {
+        if (!isDev || loading) return
+        setLoading(true)
+        try {
+            const loginData = await debugImpersonateUser(debugUserId, debugPassword)
+            await handleLoginSuccess(loginData)
+            setShowDebugLoginPanel(false)
+        } catch (error: any) {
+            console.error('调试代登录失败:', error)
+            await showLoginErrorToast(error, '代登录失败')
+        } finally {
+            setLoading(false)
+        }
     }
 
     // 处理头像选择
@@ -293,8 +325,14 @@ export default function LoginPage() {
             Taro.hideLoading()
             Taro.showToast({ title: '保存成功', icon: 'success' })
 
+            setShowProfileForm(false)
             setTimeout(() => {
-                finishLoginFlow()
+                const hasPhone = String(Taro.getStorageSync('phoneNumber') || '').trim().length > 0
+                if (hasPhone) {
+                    continueAfterAuthGates(pendingOnboardingCompleted)
+                    return
+                }
+                setShowPhoneBindModal(true)
             }, 1500)
 
         } catch (err: any) {
@@ -336,6 +374,15 @@ export default function LoginPage() {
                 >
                     暂不登录，随便看看
                 </TaroifyButton>
+                {isDev && (
+                    <TaroifyButton
+                      className='debug-login-btn'
+                      variant='text'
+                      onClick={() => setShowDebugLoginPanel(true)}
+                    >
+                        调试代登录
+                    </TaroifyButton>
+                )}
             </View>
 
             <View className='login-footer'>
@@ -402,10 +449,54 @@ export default function LoginPage() {
                               variant='text'
                               onClick={() => {
                                     setShowPhoneBindModal(false)
-                                    finishLoginFlow()
+                                    continueAfterAuthGates(pendingOnboardingCompleted)
                                 }}
                             >
                                 暂不绑定
+                            </TaroifyButton>
+                        </View>
+                    </View>
+                </View>
+            )}
+
+            {isDev && showDebugLoginPanel && (
+                <View className='profile-form-modal debug-login-modal'>
+                    <View className='profile-form-content'>
+                        <View className='profile-form-header'>
+                            <Text className='profile-form-title'>调试代登录</Text>
+                            <Text className='profile-form-desc'>输入目标用户 ID，直接进入该用户的小程序态</Text>
+                        </View>
+                        <View className='profile-form-body'>
+                            <Input
+                              className='nickname-input'
+                              placeholder='请输入用户 ID'
+                              value={debugUserId}
+                              onInput={(e) => setDebugUserId(e.detail.value)}
+                            />
+                            <Input
+                              className='nickname-input'
+                              password
+                              placeholder='请输入 test-backend 调试密码'
+                              value={debugPassword}
+                              onInput={(e) => setDebugPassword(e.detail.value)}
+                            />
+                        </View>
+                        <View className='phone-bind-actions'>
+                            <TaroifyButton
+                              className='save-btn'
+                              block
+                              shape='round'
+                              onClick={handleDebugImpersonate}
+                              loading={loading}
+                            >
+                                进入该用户
+                            </TaroifyButton>
+                            <TaroifyButton
+                              className='skip-phone-btn'
+                              variant='text'
+                              onClick={() => setShowDebugLoginPanel(false)}
+                            >
+                                取消
                             </TaroifyButton>
                         </View>
                     </View>

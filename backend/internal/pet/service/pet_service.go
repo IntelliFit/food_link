@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"math"
@@ -16,6 +17,7 @@ import (
 const (
 	nextLevelExp          = 100
 	maxOfflineCreditDaily = 1
+	petAppearanceRerollCost = 5
 )
 
 var (
@@ -45,6 +47,7 @@ type PetRepo interface {
 	MarkEventRead(ctx context.Context, eventID string) error
 	GetEventByID(ctx context.Context, userID, eventID string) (*petdomain.UserPetEvent, error)
 	ClaimEvent(ctx context.Context, userID, eventID string, expReward, creditReward int, relatedDate string, meta map[string]any) (*petdomain.UserPetEvent, *petdomain.UserPet, *membershipdomain.UserEarnedCreditLedger, bool, error)
+	RerollAppearance(ctx context.Context, userID, petID string, updates map[string]any, cost int, meta map[string]any) (*petdomain.UserPet, *membershipdomain.UserEarnedCreditLedger, error)
 }
 
 type Service struct {
@@ -118,6 +121,12 @@ type ClaimResult struct {
 	Event                EventView  `json:"event"`
 	CreditsAwarded       int        `json:"credits_awarded"`
 	ExpAwarded           int        `json:"exp_awarded"`
+	EarnedCreditsBalance *int       `json:"earned_credits_balance,omitempty"`
+}
+
+type AppearanceRerollResult struct {
+	Pet                  PetProfile `json:"pet"`
+	CreditsCost          int        `json:"credits_cost"`
 	EarnedCreditsBalance *int       `json:"earned_credits_balance,omitempty"`
 }
 
@@ -216,6 +225,52 @@ func (s *Service) ClaimEvent(ctx context.Context, userID, eventID string) (*Clai
 		result.EarnedCreditsBalance = &value
 	}
 	return result, nil
+}
+
+func (s *Service) RerollAppearance(ctx context.Context, userID string) (*AppearanceRerollResult, error) {
+	pet, err := s.ensurePet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	newSeed := fmt.Sprintf("pet:%s:%d", userID, time.Now().UnixNano())
+	appearance := appearanceFromSeed(newSeed)
+	updatedPet, ledger, err := s.repo.RerollAppearance(ctx, userID, pet.ID, map[string]any{
+		"pet_seed":   newSeed,
+		"color":      appearance.Color,
+		"shape":      appearance.Shape,
+		"pattern":    appearance.Pattern,
+		"accessory":  appearance.Accessory,
+		"updated_at": time.Now(),
+	}, petAppearanceRerollCost, map[string]any{
+		"cost":       petAppearanceRerollCost,
+		"pet_id":     pet.ID,
+		"old_seed":   pet.PetSeed,
+		"new_seed":   newSeed,
+		"old_color":  pet.Color,
+		"new_color":  appearance.Color,
+		"old_shape":  pet.Shape,
+		"new_shape":  appearance.Shape,
+		"old_pattern": pet.Pattern,
+		"new_pattern": appearance.Pattern,
+		"old_accessory": pet.Accessory,
+		"new_accessory": appearance.Accessory,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := &AppearanceRerollResult{
+		Pet:         profileFromPet(updatedPet),
+		CreditsCost: petAppearanceRerollCost,
+	}
+	if ledger != nil {
+		value := ledger.BalanceAfter
+		result.EarnedCreditsBalance = &value
+	}
+	return result, nil
+}
+
+func IsInsufficientEarnedCreditsError(err error) bool {
+	return errors.Is(err, repo.ErrInsufficientEarnedCredits)
 }
 
 func (s *Service) ensurePet(ctx context.Context, userID string) (*petdomain.UserPet, error) {

@@ -144,7 +144,8 @@ $stats-blue-soft: #7aa9ce;
   color: #fff;
 }
 
-.health-index-gate-card {
+.health-index-gate-card,
+.stats-data-gate-card {
   margin: 28rpx 32rpx 0;
   padding: 36rpx 32rpx;
   display: flex;
@@ -648,6 +649,14 @@ $stats-blue-soft: #7aa9ce;
   color: rgb(255 255 255 / 78%);
 }
 
+.risk-overview-score-hint {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: rgb(226 232 240 / 82%);
+}
+
 .risk-overview-summary {
   display: block;
   margin-top: 16rpx;
@@ -925,6 +934,127 @@ $stats-blue-soft: #7aa9ce;
   font-size: 22rpx;
   line-height: 34rpx;
   color: #475569;
+}
+
+.risk-custom-focus-add {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.risk-custom-focus-input {
+  flex: 1;
+  min-width: 0;
+  height: 72rpx;
+  padding: 0 20rpx;
+  border-radius: 18rpx;
+  background: #f8fafc;
+  font-size: 26rpx;
+  color: #0f172a;
+}
+
+.risk-custom-focus-add-btn {
+  flex-shrink: 0;
+  padding: 0 24rpx;
+  height: 72rpx;
+  border-radius: 18rpx;
+  background: $stats-primary;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.is-loading {
+    opacity: 0.7;
+  }
+}
+
+.risk-custom-focus-add-btn-text {
+  font-size: 24rpx;
+  line-height: 32rpx;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.risk-custom-focus-meta {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 20rpx;
+  line-height: 30rpx;
+  color: #64748b;
+}
+
+.risk-picker-chip.is-custom {
+  border-color: rgb(90 168 150 / 35%);
+}
+
+.risk-card-ai-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-top: 8rpx;
+}
+
+.risk-card-ai-badge {
+  padding: 2rpx 10rpx;
+  border-radius: 999rpx;
+  background: rgb(90 168 150 / 16%);
+  font-size: 18rpx;
+  line-height: 28rpx;
+  font-weight: 700;
+  color: #2f6f62;
+}
+
+.risk-card-ai-refresh-hint {
+  font-size: 18rpx;
+  line-height: 28rpx;
+  color: #c9965c;
+}
+
+.risk-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.risk-detail-ai-badge {
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgb(90 168 150 / 14%);
+  font-size: 20rpx;
+  line-height: 28rpx;
+  font-weight: 700;
+  color: #2f6f62;
+}
+
+.risk-detail-ai-disclaimer {
+  display: block;
+  margin-bottom: 16rpx;
+  font-size: 22rpx;
+  line-height: 34rpx;
+  color: #64748b;
+}
+
+.risk-detail-refresh-btn {
+  margin-top: 20rpx;
+  padding: 18rpx 24rpx;
+  border-radius: 999rpx;
+  background: rgb(90 168 150 / 12%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.is-loading {
+    opacity: 0.7;
+  }
+}
+
+.risk-detail-refresh-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 600;
+  color: #2f6f62;
 }
 
 .risk-focus-modal-close {
@@ -2179,6 +2309,7 @@ $stats-blue-soft: #7aa9ce;
   font-size: 28rpx;
   color: #334155;
   line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .ai-disclaimer {
@@ -2197,6 +2328,72 @@ $stats-blue-soft: #7aa9ce;
   gap: 12rpx;
 }
 
+.analysis-loading-card {
+  padding: 24rpx 22rpx;
+  border-radius: 22rpx;
+  background: linear-gradient(180deg, rgb(92 158 212 / 8%) 0%, rgb(92 158 212 / 3%) 100%);
+  border: 1rpx solid rgb(92 158 212 / 14%);
+}
+
+.analysis-loading-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.analysis-loading-card-icon {
+  margin-top: 2rpx;
+  font-size: 30rpx;
+  color: $stats-macro-protein;
+}
+
+.analysis-loading-card-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.analysis-loading-card-title {
+  font-size: 28rpx;
+  line-height: 38rpx;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.analysis-loading-card-text {
+  font-size: 22rpx;
+  line-height: 34rpx;
+  color: #64748b;
+}
+
+.analysis-skeleton-group {
+  margin-top: 22rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.analysis-skeleton-line {
+  height: 20rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, rgb(92 158 212 / 10%) 0%, rgb(92 158 212 / 22%) 45%, rgb(92 158 212 / 10%) 100%);
+  background-size: 200% 100%;
+  animation: analysis-skeleton-shimmer 1.2s ease-in-out infinite;
+
+  &.w-100 { width: 100%; }
+  &.w-96 { width: 96%; }
+  &.w-92 { width: 92%; }
+  &.w-86 { width: 86%; }
+  &.w-70 { width: 70%; }
+}
+
+@keyframes analysis-skeleton-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
 .analysis-loading-icon {
   font-size: 28rpx;
   color: $stats-macro-protein;
@@ -2213,6 +2410,21 @@ $stats-blue-soft: #7aa9ce;
   flex-direction: column;
   gap: 20rpx;
   align-items: flex-start;
+}
+
+.analysis-empty--gate {
+  padding: 22rpx 20rpx;
+  border-radius: 20rpx;
+  background: rgb(92 158 212 / 8%);
+  border: 1rpx solid rgb(92 158 212 / 14%);
+}
+
+.analysis-empty-title {
+  display: block;
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 700;
+  color: #1e2939;
 }
 
 .analysis-empty-text {

@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Environment & Session
 
-Before starting any non-trivial work, read `IDENTITY.md`, `SOUL.md`, `USER.md`, `PROJECT_STATE.md`, `CURRENT_TASK.md`, and `DECISIONS.md`. After confirming requirements, decisions, or milestones, persist them to those state files and to `memory/YYYY-MM-DD.md`.
+Before starting any non-trivial work, read `IDENTITY.md`, `SOUL.md`, `USER.md`, `PROJECT_STATE.md`, `.local-state/current-task/active.md`, and `.local-state/decisions/2026-05-active.md`. After confirming requirements, decisions, or milestones, persist them to those local state files and to `memory/YYYY-MM-DD.md`.
 
 ## Commands
 
@@ -117,5 +117,5 @@ Conventional Commits: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, 
 - DO NOT use `taro build --type weapp --watch` directly — use the npm scripts which set correct env vars.
 - DO NOT claim UI behavior is correct without runtime verification via weapp-devtools.
 - DO update `PROGRESS.md` with concise git-commit-style entries after each code change.
-- DO update `CURRENT_TASK.md` and `DECISIONS.md` for persistent context.
+- DO update `.local-state/current-task/active.md` and `.local-state/decisions/2026-05-active.md` for persistent context.
 - Real device previews MUST use production API (`build:weapp:preview`), never `127.0.0.1`.

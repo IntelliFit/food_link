@@ -44,6 +44,8 @@ const EXECUTION_MODE_LABEL: Record<ExecutionMode, string> = {
   gemini35_flash: '精准模式',
   gemini35_flash_grouped: '精准模式',
   strict: '精准模式',
+  strict_web_search: '精准联网',
+  standard_web_search: '普通联网',
   standard: '普通模式'
 }
 
@@ -105,6 +107,8 @@ const pickRecognitionOutcome = (task: AnalysisTask): AnalyzeRecognitionOutcome =
 
 const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
+  if (taskAny.execution_mode === 'standard_web_search') return 'standard_web_search'
+  if (taskAny.execution_mode === 'strict_web_search') return 'strict_web_search'
   if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'gemini35_flash' || taskAny.execution_mode === 'gemini35_flash_grouped') {
     return 'strict'
   }
@@ -112,6 +116,8 @@ const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
     return 'standard'
   }
   const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
+  if (payloadMode === 'standard_web_search') return 'standard_web_search'
+  if (payloadMode === 'strict_web_search') return 'strict_web_search'
   if (payloadMode === 'strict' || payloadMode === 'gemini35_flash' || payloadMode === 'gemini35_flash_grouped') return 'strict'
   return 'standard'
 }

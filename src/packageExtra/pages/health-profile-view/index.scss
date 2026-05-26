@@ -576,6 +576,66 @@
   flex-direction: column;
   gap: 24rpx;
 
+  .editor-report-status {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+    padding: 20rpx 24rpx;
+    border-radius: 16rpx;
+
+    .editor-report-status-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 6rpx;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .editor-report-status-title {
+      font-size: 28rpx;
+      font-weight: 600;
+    }
+
+    .editor-report-status-desc {
+      font-size: 24rpx;
+      line-height: 1.5;
+    }
+  }
+
+  .editor-report-status-processing {
+    background: #eefbf6;
+
+    .editor-report-status-title {
+      color: #047857;
+    }
+
+    .editor-report-status-desc {
+      color: #059669;
+    }
+  }
+
+  .editor-report-status-failed {
+    background: #fff4f4;
+
+    .editor-report-status-title {
+      color: #b42318;
+    }
+
+    .editor-report-status-desc {
+      color: #d92d20;
+    }
+  }
+
+  .editor-report-status-spinner {
+    width: 32rpx;
+    height: 32rpx;
+    flex-shrink: 0;
+    border: 3rpx solid rgb(0 188 125 / 18%);
+    border-top-color: #00bc7d;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
   .editor-report-scroll {
     max-height: 600rpx;
   }

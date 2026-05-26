@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAnalyzeTask,
+  sanitizeUserFacingErrorMessage,
   showUnifiedApiError,
   type AnalysisTask,
   type AnalysisEngine,
@@ -1030,6 +1031,10 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }
     title: '普通模式',
     desc: '快速识别食物与份量。'
   },
+  standard_web_search: {
+    title: '普通联网',
+    desc: '结合低成本搜索证据校准包装规格与份量。'
+  },
   gemini35_flash: {
     title: '精准模式',
     desc: '更细致识别包装文字、小众食物与份量。'
@@ -1041,6 +1046,10 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }
   strict: {
     title: '精准模式',
     desc: '更细致识别包装文字、小众食物与份量。'
+  },
+  strict_web_search: {
+    title: '精准联网',
+    desc: '精准识别后结合搜索证据校准规格与重量。'
   },
   standard: {
     title: '普通模式',
@@ -1055,6 +1064,8 @@ const CORRECTION_STAGE_LABELS = ['理解纠错说明', '重新分析食物', '�
 const EXERCISE_STAGE_LABELS = ['理解运动', '估算消耗', '写入记录']
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => {
+  if (value === 'standard_web_search') return 'standard_web_search'
+  if (value === 'strict_web_search') return 'strict_web_search'
   if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
   return 'standard'
 }
@@ -1068,6 +1079,8 @@ const normalizeTaskType = (value: unknown): 'food' | 'food_text' | 'exercise' =>
 const normalizeAnalyzeTaskErrorMessage = (value: unknown): string => {
   const raw = String(value || '').trim()
   if (!raw) return '识别失败，请稍后重试'
+  const sanitized = sanitizeUserFacingErrorMessage(raw, '识别失败，请稍后重试')
+  if (sanitized !== raw) return sanitized
   const lower = raw.toLowerCase()
   if (
     lower.includes('<html') ||
@@ -1184,6 +1197,12 @@ const persistAnalyzeContextFromPayload = (payload: Record<string, unknown>) => {
 
 const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
+  if (taskAny.execution_mode === 'standard_web_search') {
+    return 'standard_web_search'
+  }
+  if (taskAny.execution_mode === 'strict_web_search') {
+    return 'strict_web_search'
+  }
   if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'gemini35_flash' || taskAny.execution_mode === 'gemini35_flash_grouped') {
     return 'strict'
   }
@@ -1191,6 +1210,12 @@ const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => 
     return 'standard'
   }
   const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
+  if (payloadMode === 'standard_web_search') {
+    return 'standard_web_search'
+  }
+  if (payloadMode === 'strict_web_search') {
+    return 'strict_web_search'
+  }
   if (payloadMode === 'strict' || payloadMode === 'gemini35_flash' || payloadMode === 'gemini35_flash_grouped') {
     return 'strict'
   }
@@ -1693,11 +1718,11 @@ function AnalyzeLoadingPage() {
       ? EXERCISE_STAGE_LABELS
       : taskType === 'food_text'
         ? FOOD_TEXT_STAGE_LABELS
-        : executionMode === 'strict'
+        : executionMode === 'strict' || executionMode === 'strict_web_search'
           ? FOOD_STRICT_STAGE_LABELS
           : FOOD_STANDARD_STAGE_LABELS
   const currentCompactStage = compactStageLabels[Math.min(currentStep, compactStageLabels.length - 1)]
-  const showPrecisionLongWaitNotice = taskType === 'food' && executionMode === 'strict' && !isCorrectionMode
+  const showPrecisionLongWaitNotice = taskType === 'food' && (executionMode === 'strict' || executionMode === 'strict_web_search') && !isCorrectionMode
 
   return (
     <View className='analyze-loading-page-v3'>

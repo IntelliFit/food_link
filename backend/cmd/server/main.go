@@ -26,9 +26,9 @@ func main() {
 	server := &http.Server{
 		Addr:         cfg.ListenAddr(),
 		Handler:      application.Engine(),
-		ReadTimeout:  20 * time.Second,
-		WriteTimeout: 20 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 90 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	go func() {

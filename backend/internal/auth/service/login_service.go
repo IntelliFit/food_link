@@ -14,6 +14,14 @@ import (
 	"food_link/backend/pkg/config"
 )
 
+const (
+	loginRegularUserTrialDays     = 3
+	loginEarlyUserTrialLimit      = 1000
+	loginEarlyUserTop500Limit     = 500
+	loginEarlyUserTop500TrialDays = 60
+	loginEarlyUserTrialDays       = 30
+)
+
 type LoginInput struct {
 	Code       string `json:"code"`
 	PhoneCode  string `json:"phoneCode"`
@@ -80,6 +88,9 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 		if err := s.users.Create(ctx, user); err != nil {
 			return nil, err
 		}
+		if err := s.ensureTrialEntitlement(ctx, user, openID, unionID); err != nil {
+			return nil, err
+		}
 		_ = s.ensureRegistrationInviteCode(ctx, user.ID)
 		if inviteCode != "" {
 			_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
@@ -87,6 +98,11 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 	} else if unionID != "" && user.UnionID == nil {
 		user, err = s.users.UpdateFields(ctx, user.ID, map[string]any{"unionid": unionID})
 		if err != nil {
+			return nil, err
+		}
+	}
+	if user != nil {
+		if err := s.ensureTrialEntitlement(ctx, user, openID, unionID); err != nil {
 			return nil, err
 		}
 	}
@@ -119,6 +135,64 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 		PurePhoneNumber: user.Telephone,
 		DietGoal:        user.DietGoal,
 	}, nil
+}
+
+func (s *LoginService) ensureTrialEntitlement(ctx context.Context, user *repo.User, openID, unionID string) error {
+	if user == nil {
+		return nil
+	}
+	openID = strings.TrimSpace(openID)
+	unionID = strings.TrimSpace(unionID)
+	ent, err := s.users.FindTrialEntitlementByIdentity(ctx, openID, unionID)
+	if err != nil {
+		return err
+	}
+	if ent == nil {
+		trialDays := loginRegularUserTrialDays
+		policy := "regular_new_user"
+		var earlyRank *int
+		if rank, err := s.users.GetFirstMembershipTrialBatchRank(ctx, user.ID, loginEarlyUserTrialLimit); err == nil && rank > 0 {
+			earlyRank = &rank
+			switch {
+			case rank <= loginEarlyUserTop500Limit:
+				trialDays = loginEarlyUserTop500TrialDays
+				policy = "founding_top_500_bonus_month"
+			case rank <= loginEarlyUserTrialLimit:
+				trialDays = loginEarlyUserTrialDays
+				policy = "early_first_1000"
+			}
+		}
+		ent = &repo.UserTrialEntitlement{
+			FirstUserID:       &user.ID,
+			OpenID:            openID,
+			FirstRegisteredAt: user.CreatedAt,
+			EarlyUserRank:     earlyRank,
+			TrialDaysTotal:    trialDays,
+			TrialPolicy:       policy,
+		}
+		if unionID != "" {
+			ent.UnionID = &unionID
+		}
+		return s.users.CreateTrialEntitlement(ctx, ent)
+	}
+	updates := map[string]any{}
+	if ent.FirstUserID == nil && strings.TrimSpace(user.ID) != "" {
+		updates["first_user_id"] = user.ID
+	}
+	if strings.TrimSpace(ent.OpenID) == "" && openID != "" {
+		updates["openid"] = openID
+	}
+	if ent.FirstRegisteredAt == nil && user.CreatedAt != nil {
+		updates["first_registered_at"] = *user.CreatedAt
+	}
+	if unionID != "" && ent.UnionID == nil {
+		updates["unionid"] = unionID
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	_, err = s.users.UpdateTrialEntitlement(ctx, ent.ID, updates)
+	return err
 }
 
 func (s *LoginService) resolvePhoneNumber(ctx context.Context, phoneCode string) *string {

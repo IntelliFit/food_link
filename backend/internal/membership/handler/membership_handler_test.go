@@ -22,6 +22,8 @@ type mockMembershipService struct {
 	createPaymentErr             error
 	wechatNotifyResult           map[string]any
 	wechatNotifyErr              error
+	rewardCenterResult           map[string]any
+	rewardCenterErr              error
 	claimSharePosterRewardResult map[string]any
 	claimSharePosterRewardErr    error
 }
@@ -31,6 +33,9 @@ func (m *mockMembershipService) ListPlans(ctx context.Context) ([]map[string]any
 }
 func (m *mockMembershipService) GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error) {
 	return m.getMyMembershipResult, m.getMyMembershipErr
+}
+func (m *mockMembershipService) GetRewardCenter(ctx context.Context, userID string) (map[string]any, error) {
+	return m.rewardCenterResult, m.rewardCenterErr
 }
 func (m *mockMembershipService) CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error) {
 	return m.createPaymentResult, m.createPaymentErr

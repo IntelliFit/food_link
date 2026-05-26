@@ -18,6 +18,11 @@ type PublicFoodService struct {
 	repo      *repo.PublicFoodRepo
 	storage   *storage.Client
 	taskQueue taskqueue.Publisher
+	rewards   RewardTaskAwarder
+}
+
+type RewardTaskAwarder interface {
+	AwardPublicFoodUpload(ctx context.Context, userID, publicFoodItemID string, meta map[string]any) (map[string]any, error)
 }
 
 const (
@@ -35,6 +40,10 @@ func NewPublicFoodService(repo *repo.PublicFoodRepo, storageClient ...*storage.C
 
 func (s *PublicFoodService) ConfigureTaskPublisher(queue taskqueue.Publisher) {
 	s.taskQueue = queue
+}
+
+func (s *PublicFoodService) ConfigureRewardTaskAwarder(awarder RewardTaskAwarder) {
+	s.rewards = awarder
 }
 
 type CreateInput struct {
@@ -60,9 +69,16 @@ type CreateInput struct {
 	Province           *string
 	City               *string
 	District           *string
+	DetailAddress      *string
 }
 
 func (s *PublicFoodService) Create(ctx context.Context, userID string, input CreateInput) (string, error) {
+	if strings.TrimSpace(ptrString(input.Province)) == "" ||
+		strings.TrimSpace(ptrString(input.City)) == "" ||
+		strings.TrimSpace(ptrString(input.District)) == "" ||
+		input.Latitude == nil || input.Longitude == nil {
+		return "", &commonerrors.AppError{Code: 10002, Message: "公共食物库上传必须带完整地理位置", HTTPStatus: 400}
+	}
 	var src map[string]any
 	var err error
 	if input.SourceRecordID != nil && *input.SourceRecordID != "" {
@@ -133,6 +149,7 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		Province:           ptrString(input.Province),
 		City:               ptrString(input.City),
 		District:           ptrString(input.District),
+		DetailAddress:      ptrString(input.DetailAddress),
 		Status:             "pending",
 	}
 	if err := s.repo.CreateItem(ctx, item); err != nil {
@@ -151,6 +168,13 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		}
 	} else if err := s.repo.UpdateStatus(ctx, item.ID, "published"); err != nil {
 		return "", err
+	}
+	if s.rewards != nil {
+		_, _ = s.rewards.AwardPublicFoodUpload(ctx, userID, item.ID, map[string]any{
+			"public_food_item_id": item.ID,
+			"food_name":           item.FoodName,
+			"merchant_name":       item.MerchantName,
+		})
 	}
 	return item.ID, nil
 }

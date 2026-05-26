@@ -97,6 +97,12 @@ func (m *mockNutritionService) SubmitPackagedNutritionLabelTask(ctx context.Cont
 	}
 	return "label-task-1", nil
 }
+func (m *mockNutritionService) SubmitPackagedProductExtractTask(ctx context.Context, userID string, input service.SubmitPackagedProductExtractInput) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return "packaged-extract-task-1", nil
+}
 
 func setupRouter(h *FoodRecordHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)

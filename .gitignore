@@ -130,3 +130,5 @@ backend/develop-config.yaml
 scripts/enrich_missing_nutrients.state.json
 scripts/enrich_packaged_foods.state.json
 CURRENT_TASK.md
+DECISIONS.md
+.local-state/

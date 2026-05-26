@@ -4,8 +4,17 @@ import type { StatsSummary } from './api'
 const STATS_PAGE_CACHE_KEY = 'stats_page_bundle_v1'
 
 type StatsPageCacheStore = {
+  user_id?: string
   week?: StatsSummary
   month?: StatsSummary
+}
+
+function currentUserId(): string {
+  try {
+    return String(Taro.getStorageSync('user_id') || '').trim()
+  } catch {
+    return ''
+  }
 }
 
 function isStatsSummaryForRange(raw: unknown, range: 'week' | 'month'): raw is StatsSummary {
@@ -19,6 +28,8 @@ export function readStatsPageCache(range: 'week' | 'month'): StatsSummary | null
   try {
     const raw = Taro.getStorageSync(STATS_PAGE_CACHE_KEY) as StatsPageCacheStore | undefined
     if (!raw || typeof raw !== 'object') return null
+    const userId = currentUserId()
+    if (!userId || raw.user_id !== userId) return null
     const d = range === 'week' ? raw.week : raw.month
     return isStatsSummaryForRange(d, range) ? d : null
   } catch {
@@ -29,9 +40,11 @@ export function readStatsPageCache(range: 'week' | 'month'): StatsSummary | null
 /** 网络刷新成功后写入；与 `handleGenerateInsight` 等本地更新共用 */
 export function writeStatsPageCache(range: 'week' | 'month', data: StatsSummary): void {
   try {
+    const userId = currentUserId()
+    if (!userId) return
     const prev =
       (Taro.getStorageSync(STATS_PAGE_CACHE_KEY) as StatsPageCacheStore | undefined) || {}
-    const next: StatsPageCacheStore = { ...prev }
+    const next: StatsPageCacheStore = prev.user_id === userId ? { ...prev, user_id: userId } : { user_id: userId }
     if (range === 'week') {
       next.week = data
     } else {

@@ -24,6 +24,9 @@ import (
 	"log/slog"
 )
 
+var statsInsightMarkdownHeadingPattern = regexp.MustCompile(`(?m)^\s{0,3}#{1,6}\s*`)
+var statsInsightMarkdownBulletPattern = regexp.MustCompile(`(?m)^\s*[-*+]\s+`)
+
 type StatsRepo interface {
 	GetFoodRecordsForDateRange(ctx context.Context, userID string, startUTC, endUTC time.Time) ([]domain.FoodRecord, error)
 	GetUserProfile(ctx context.Context, userID string) (*domain.StatsUserProfile, error)
@@ -32,6 +35,11 @@ type StatsRepo interface {
 	GetCachedInsight(ctx context.Context, userID string, rangeType string, generatedDate string) (*domain.StatsInsight, error)
 	GetLatestCachedInsight(ctx context.Context, userID string, rangeType string) (*domain.StatsInsight, error)
 	CountInsightGenerationsToday(ctx context.Context, userID string) (int64, error)
+	UpsertCustomFocusCard(ctx context.Context, card domain.CustomFocusCard) error
+	GetCustomFocusCards(ctx context.Context, userID, rangeType string) ([]domain.CustomFocusCard, error)
+	GetCustomFocusCard(ctx context.Context, userID, rangeType, focusID string) (*domain.CustomFocusCard, error)
+	CountCustomFocusGenerationsToday(ctx context.Context, userID string) (int64, error)
+	CountCustomFocusGenerationsTodayForFocus(ctx context.Context, userID, focusID string) (int64, error)
 	GetDietRecommendationCandidates(ctx context.Context, userID string, scene string, limit int) ([]domain.DietRecommendationCandidate, error)
 }
 
@@ -52,6 +60,8 @@ const (
 	statsInsightDeepSeekModel = "deepseek-v4-flash"
 	statsInsightDailyLimit    = 3
 	statsInsightCreditCost    = 1
+	statsInsightMaxTokens     = 4096
+	statsInsightMinRecordDays = 1
 )
 
 func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg ...*config.Config) *StatsService {
@@ -131,9 +141,12 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 	}
 
 	today := time.Now().In(chinaTZ).Format("2006-01-02")
-	cached, _ := s.repo.GetCachedInsight(ctx, userID, comp.StatsRange, today)
-	if cached == nil {
-		cached, _ = s.repo.GetLatestCachedInsight(ctx, userID, comp.StatsRange)
+	var cached *domain.StatsInsight
+	if hasEnoughStatsInsightData(comp) {
+		cached, _ = s.repo.GetCachedInsight(ctx, userID, comp.StatsRange, today)
+		if cached == nil {
+			cached, _ = s.repo.GetLatestCachedInsight(ctx, userID, comp.StatsRange)
+		}
 	}
 	usedToday := 0
 	if count, err := s.repo.CountInsightGenerationsToday(ctx, userID); err == nil && count > 0 {
@@ -144,12 +157,17 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 	var analysisSummaryGeneratedDate *string
 	needsRefresh := false
 	if cached != nil {
-		analysisSummary = cached.InsightText
+		analysisSummary = sanitizeStatsInsightText(cached.InsightText)
 		generatedDate := cached.GeneratedDateString()
 		if generatedDate != "" {
 			analysisSummaryGeneratedDate = &generatedDate
 		}
 		needsRefresh = generatedDate != today || cached.DataFingerprint != comp.DataFingerprint
+	}
+
+	healthIndex := computeHealthIndex(comp, statsRange)
+	if err := s.attachCustomRiskCards(ctx, comp, healthIndex); err != nil {
+		return nil, err
 	}
 
 	return &StatsSummary{
@@ -174,7 +192,7 @@ func (s *StatsService) GetSummary(ctx context.Context, userID string, statsRange
 		AnalysisSummaryDailyLimit:    statsInsightDailyLimit,
 		AnalysisSummaryUsedToday:     usedToday,
 		BodyMetrics:                  comp.BodyMetrics,
-		HealthIndex:                  computeHealthIndex(comp, statsRange),
+		HealthIndex:                  healthIndex,
 	}, nil
 }
 
@@ -208,6 +226,9 @@ func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateR
 	if err != nil {
 		return nil, err
 	}
+	if !hasEnoughStatsInsightData(comp) {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "当前统计周期还没有饮食记录，先记录一餐后再生成 AI 风险解读", HTTPStatus: 400}
+	}
 	var creditsInfo map[string]any
 	if s.creditGuard != nil && strings.TrimSpace(userID) != "" {
 		creditsInfo, err = s.creditGuard.ValidateStatsInsightCredits(ctx, userID)
@@ -225,6 +246,7 @@ func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateR
 		)
 		insight = fallbackStatsInsight(comp)
 	}
+	insight = sanitizeStatsInsightText(insight)
 	today := time.Now().In(chinaTZ).Format("2006-01-02")
 	if err := s.repo.UpsertInsightCache(ctx, userID, comp.StatsRange, today, comp.DataFingerprint, insight); err != nil {
 		return nil, err
@@ -247,6 +269,10 @@ func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateR
 	}, nil
 }
 
+func hasEnoughStatsInsightData(comp *statsComputation) bool {
+	return comp != nil && comp.RecordedDays >= statsInsightMinRecordDays
+}
+
 func (s *StatsService) SaveInsight(ctx context.Context, userID string, content string, dateRange string) error {
 	content = strings.TrimSpace(content)
 	if content == "" {
@@ -257,7 +283,7 @@ func (s *StatsService) SaveInsight(ctx context.Context, userID string, content s
 		return err
 	}
 	today := time.Now().In(chinaTZ).Format("2006-01-02")
-	return s.repo.UpsertInsightCache(ctx, userID, comp.StatsRange, today, comp.DataFingerprint, content)
+	return s.repo.UpsertInsightCache(ctx, userID, comp.StatsRange, today, comp.DataFingerprint, sanitizeStatsInsightText(content))
 }
 
 func (s *StatsService) buildStatsComputation(ctx context.Context, userID string, statsRange string, fallbackTDEE int, fallbackStreakDays int) (*statsComputation, error) {
@@ -424,7 +450,7 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 			{"role": "user", "content": buildNutritionInsightPrompt(comp)},
 		},
 		"temperature": 0.6,
-		"max_tokens":  1024,
+		"max_tokens":  statsInsightMaxTokens,
 		"stream":      false,
 	}
 	bodyBytes, _ := json.Marshal(body)
@@ -448,6 +474,7 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
@@ -456,11 +483,30 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 	if len(parsed.Choices) == 0 {
 		return "", fmt.Errorf("DeepSeek 返回了空响应")
 	}
+	if strings.EqualFold(strings.TrimSpace(parsed.Choices[0].FinishReason), "length") {
+		return "", fmt.Errorf("DeepSeek 输出因 max_tokens 截断")
+	}
 	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
 	if content == "" {
 		return "", fmt.Errorf("DeepSeek 返回了空响应")
 	}
-	return content, nil
+	return sanitizeStatsInsightText(content), nil
+}
+
+func sanitizeStatsInsightText(content string) string {
+	text := strings.TrimSpace(content)
+	if text == "" {
+		return ""
+	}
+
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = statsInsightMarkdownHeadingPattern.ReplaceAllString(text, "")
+	text = strings.ReplaceAll(text, "**", "")
+	text = strings.ReplaceAll(text, "__", "")
+	text = statsInsightMarkdownBulletPattern.ReplaceAllString(text, "")
+	text = regexp.MustCompile("`{1,3}").ReplaceAllString(text, "")
+	text = regexp.MustCompile(`\n{3,}`).ReplaceAllString(text, "\n\n")
+	return strings.TrimSpace(text)
 }
 
 func buildNutritionInsightPrompt(comp *statsComputation) string {
@@ -527,10 +573,20 @@ func buildNutritionInsightPrompt(comp *statsComputation) string {
 		statsText += "\n身体指标：\n" + weightBlock
 	}
 
+	customFocusBlock := ""
+	if focuses := parseCustomHealthFocusesFromProfile(comp.User); len(focuses) > 0 {
+		labels := make([]string, 0, len(focuses))
+		for _, focus := range focuses {
+			labels = append(labels, focus.Label)
+		}
+		customFocusBlock = "\n用户当前自定义关注：" + strings.Join(labels, "、") + "。请在餐次结构与优先行动部分针对性展开。\n"
+	}
+
 	return fmt.Sprintf(`你是一位专业的营养师和饮食行为研究员。请根据以下用户健康档案、饮食统计和身体指标，生成一份“深度 AI 风险解读”，质量要接近 deep research 风格，但保持普通用户能读懂。
 
 %s
 
+%s
 %s
 
 要求：
@@ -540,7 +596,7 @@ func buildNutritionInsightPrompt(comp *statsComputation) string {
 4. 结合用户体重、作息、体检/病史/过敏/饮食目标等可用信息；没有数据时明确说“本期证据不足”。
 5. 风险表达要谨慎：这是饮食相关风险趋势，不构成医学诊断或治疗建议。
 6. 输出纯中文，不要 JSON 或代码块，直接输出正文；不要使用 Markdown 符号。
-`, formatStatsHealthProfile(comp.User, latestWeightFromBodyMetrics(comp.BodyMetrics)), statsText)
+`, formatStatsHealthProfile(comp.User, latestWeightFromBodyMetrics(comp.BodyMetrics)), statsText, customFocusBlock)
 }
 
 func fallbackStatsInsight(comp *statsComputation) string {

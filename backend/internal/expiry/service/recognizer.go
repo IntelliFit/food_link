@@ -81,23 +81,52 @@ func (r *Recognizer) Recognize(ctx context.Context, input RecognizeInput) (*Reco
 }
 
 func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string]any, temperature float64) (map[string]any, error) {
-	apiURL, model, apiKey, err := r.llmConfig()
+	configs, err := r.llmConfigs()
 	if err != nil {
 		return nil, err
 	}
+
+	var lastErr error
+	for idx, cfg := range configs {
+		parsed, runErr := r.runJSONCompletionWithConfig(ctx, cfg, content, temperature)
+		if runErr == nil {
+			return parsed, nil
+		}
+		lastErr = runErr
+		if idx < len(configs)-1 {
+			if log := logger.L(); log != nil {
+				log.Warn("保质期识别主模型失败，准备回退",
+					slog.String("provider", cfg.Provider),
+					slog.String("model", cfg.Model),
+					logger.Err(runErr),
+				)
+			}
+		}
+	}
+	return nil, lastErr
+}
+
+type expiryLLMConfig struct {
+	Provider string
+	APIURL   string
+	Model    string
+	APIKey   string
+}
+
+func (r *Recognizer) runJSONCompletionWithConfig(ctx context.Context, cfg expiryLLMConfig, content []map[string]any, temperature float64) (map[string]any, error) {
 	body := map[string]any{
-		"model":            model,
+		"model":            cfg.Model,
 		"messages":         []map[string]any{{"role": "user", "content": content}},
 		"response_format":  map[string]string{"type": "json_object"},
 		"temperature":      temperature,
 		"reasoning_effort": "medium",
 	}
 	b, _ := json.Marshal(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(b))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.APIURL, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := r.client.Do(req)
 	if err != nil {
@@ -107,7 +136,7 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, expiryRecognitionUpstreamError(
-			fmt.Sprintf("保质期识别服务请求失败 %d: %s", resp.StatusCode, summarizeExpiryUpstreamBody(respBody, resp.Header.Get("Content-Type"))),
+			fmt.Sprintf("保质期识别服务请求失败 provider=%s model=%s status=%d: %s", cfg.Provider, cfg.Model, resp.StatusCode, summarizeExpiryUpstreamBody(respBody, resp.Header.Get("Content-Type"))),
 		)
 	}
 	if looksLikeExpiryHTMLResponse(respBody, resp.Header.Get("Content-Type")) {
@@ -121,39 +150,49 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, expiryRecognitionUpstreamError(fmt.Sprintf("保质期识别服务响应解析失败: %v", err))
+		return nil, expiryRecognitionUpstreamError(fmt.Sprintf("保质期识别服务响应解析失败 provider=%s model=%s: %v", cfg.Provider, cfg.Model, err))
 	}
 	if len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
-		return nil, expiryRecognitionUpstreamError("AI 返回了空响应")
+		return nil, expiryRecognitionUpstreamError(fmt.Sprintf("AI 返回了空响应 provider=%s model=%s", cfg.Provider, cfg.Model))
 	}
 	contentText := expiryCodeFenceRe.ReplaceAllString(result.Choices[0].Message.Content, "")
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(contentText)), &parsed); err != nil {
-		return nil, expiryRecognitionUpstreamError(fmt.Sprintf("AI 返回结果格式解析失败: %v", err))
+		return nil, expiryRecognitionUpstreamError(fmt.Sprintf("AI 返回结果格式解析失败 provider=%s model=%s: %v", cfg.Provider, cfg.Model, err))
 	}
 	return parsed, nil
 }
 
-func (r *Recognizer) llmConfig() (apiURL, model, apiKey string, err error) {
-	provider := strings.ToLower(strings.TrimSpace(r.cfg.External.LLMProvider))
-	if provider == "" {
-		provider = "doubao"
-	}
+func (r *Recognizer) llmConfigs() ([]expiryLLMConfig, error) {
 	ofoxBaseURL := strings.TrimRight(strings.TrimSpace(r.cfg.External.OfoxAIBaseURL), "/")
 	if ofoxBaseURL == "" {
 		ofoxBaseURL = "https://api.ofox.ai/v1"
 	}
-	if (provider == "gemini" || provider == "ofox-gemini") && r.cfg.External.OfoxAIAPIKey != "" {
-		return ofoxBaseURL + "/chat/completions", "gemini-3-flash-preview", r.cfg.External.OfoxAIAPIKey, nil
+	baseURL := strings.TrimRight(strings.TrimSpace(r.cfg.External.DoubaoBaseURL), "/")
+	if baseURL == "" {
+		baseURL = "https://ark.cn-beijing.volces.com/api/v3"
 	}
-	if provider == "doubao" && r.cfg.External.DoubaoAPIKey != "" {
-		baseURL := strings.TrimRight(strings.TrimSpace(r.cfg.External.DoubaoBaseURL), "/")
-		if baseURL == "" {
-			baseURL = "https://ark.cn-beijing.volces.com/api/v3"
-		}
-		return baseURL + "/chat/completions", "doubao-seed-2-0-lite-260428", r.cfg.External.DoubaoAPIKey, nil
+	configs := make([]expiryLLMConfig, 0, 2)
+	if r.cfg.External.OfoxAIAPIKey != "" {
+		configs = append(configs, expiryLLMConfig{
+			Provider: "gemini",
+			APIURL:   ofoxBaseURL + "/chat/completions",
+			Model:    "gemini-3-flash-preview",
+			APIKey:   r.cfg.External.OfoxAIAPIKey,
+		})
 	}
-	return "", "", "", expiryRecognitionConfigError("后端未配置保质期识别模型")
+	if r.cfg.External.DoubaoAPIKey != "" {
+		configs = append(configs, expiryLLMConfig{
+			Provider: "doubao",
+			APIURL:   baseURL + "/chat/completions",
+			Model:    "doubao-seed-2-0-lite-260428",
+			APIKey:   r.cfg.External.DoubaoAPIKey,
+		})
+	}
+	if len(configs) == 0 {
+		return nil, expiryRecognitionConfigError("后端未配置保质期识别模型")
+	}
+	return configs, nil
 }
 
 func expiryRecognitionBadRequest(message string) error {

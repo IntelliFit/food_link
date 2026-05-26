@@ -15,6 +15,8 @@ import {
   getFoodRecordById,
   getPetSummary,
   claimPetEvent,
+  getMyMembership,
+  getRewardCenter,
   saveBodyWeightRecord,
   addBodyWaterLog,
   resetBodyWaterLogs,
@@ -31,12 +33,16 @@ import {
   type HomeIntakeData,
   type HomeMealItem,
   type HomeNutritionTarget,
+  type HomeTargetCalibrationSuggestion,
   type PetSummary,
   type BodyMetricWeightEntry,
   type BodyMetricWaterDay,
   type HomeFoodExpiryItem,
   type HomeFoodExpirySummary,
   type FoodRecord,
+  type MembershipStatus,
+  type RewardCenterResponse,
+  type RewardCenterTask,
   getCachedMealFullRecord,
   showUnifiedApiError
 } from '../../utils/api'
@@ -71,6 +77,7 @@ import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { isAllowedRecordDate, isTodayRecordDate } from '../../utils/record-date'
+import { getMembershipCreditSummary, LOW_CREDIT_REWARD_HINT_THRESHOLD } from '../../utils/membership'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -90,6 +97,7 @@ const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
 const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v1'
 const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v1'
+const HOME_REWARD_HINT_DISMISSED_DATE_KEY = 'home_reward_hint_dismissed_date_v1'
 
 function isValidHomeDate(date?: string): date is string {
   return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
@@ -108,6 +116,33 @@ function getLastHomeSelectedDate(fallback: string): string {
     if (isValidHomeDate(stored)) return stored
   } catch (_) {}
   return isValidHomeDate(fallback) ? fallback : formatDateKey(new Date())
+}
+
+function getTodayLocalDateKey(): string {
+  return formatDateKey(new Date())
+}
+
+function isRewardTaskAvailable(task: RewardCenterTask): boolean {
+  if (!task.action_path) return false
+  if (typeof task.daily_limit === 'number' && task.daily_limit > 0) {
+    return task.today_count < task.daily_limit
+  }
+  return true
+}
+
+function getAvailableRewardCredits(data: RewardCenterResponse | null): number {
+  if (!data) return 0
+  return (data.tasks || [])
+    .filter(isRewardTaskAvailable)
+    .reduce((sum, task) => sum + Math.max(Number(task.reward_amount || 0), 0), 0)
+}
+
+function formatRewardHintTaskText(tasks: RewardCenterTask[]): string {
+  const labels = tasks
+    .filter(isRewardTaskAvailable)
+    .slice(0, 2)
+    .map(task => `${task.name.replace(/^每日/, '')} +${task.reward_amount}`)
+  return labels.length > 0 ? labels.join(' · ') : '完成任务即可补充奖励积分'
 }
 
 /** 与记录详情页海报一致：邀请码用于小程序码 scene */
@@ -320,6 +355,7 @@ function savePetFloatPosition(position: { left: number; top: number }) {
 
 const PET_COLORS = ['mint', 'berry', 'sunny', 'aqua', 'grape', 'peach', 'cream', 'matcha'] as const
 const PET_SHAPES = ['round', 'bean', 'puff', 'drop'] as const
+const PET_ANIMALS = ['cat', 'bunny', 'bear', 'fox', 'hamster'] as const
 const PET_ACCESSORIES = ['leaf', 'sprout', 'scarf', 'drop', 'star', 'cap', 'bow', 'halo'] as const
 const PET_PATTERNS = ['pattern-0', 'pattern-1', 'pattern-2', 'pattern-3', 'pattern-4'] as const
 
@@ -738,6 +774,15 @@ function IndexPage() {
   const [petDragging, setPetDragging] = useState(false)
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [petClaiming, setPetClaiming] = useState(false)
+  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [rewardCenter, setRewardCenter] = useState<RewardCenterResponse | null>(null)
+  const [rewardHintDismissedDate, setRewardHintDismissedDate] = useState(() => {
+    try {
+      return String(Taro.getStorageSync(HOME_REWARD_HINT_DISMISSED_DATE_KEY) || '')
+    } catch (_) {
+      return ''
+    }
+  })
   const petSummarySeqRef = useRef(0)
   const petDragRef = useRef<{
     pointerId: number
@@ -748,7 +793,6 @@ function IndexPage() {
     moved: boolean
   } | null>(null)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
-  const [showNutritionTargetSheet, setShowNutritionTargetSheet] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
   const targetScaleBaseMacrosRef = useRef<MacroTargets>(getMacroTargetsFromIntake(DEFAULT_INTAKE))
@@ -810,6 +854,24 @@ function IndexPage() {
   const [dietRecScene, setDietRecScene] = useState<DietRecommendationScene>('eat_out')
   const [dietRecLoading, setDietRecLoading] = useState(false)
   const [dietRecResult, setDietRecResult] = useState<DietRecommendationResult | null>(null)
+
+  const loadRewardHintData = useCallback(async () => {
+    if (!getAccessToken()) {
+      setMembershipStatus(null)
+      setRewardCenter(null)
+      return
+    }
+    try {
+      const [membership, center] = await Promise.all([
+        getMyMembership().catch(() => null),
+        getRewardCenter().catch(() => null),
+      ])
+      setMembershipStatus(membership)
+      setRewardCenter(center)
+    } catch {
+      // 奖励提示是增强信息，失败时不影响首页主链路。
+    }
+  }, [])
 
   // 餐食卡片操作状态
   const [mealActionSheetVisible, setMealActionSheetVisible] = useState(false)
@@ -1145,6 +1207,8 @@ function IndexPage() {
       return
     }
 
+    void loadRewardHintData()
+
     // 刷新食物保质期待办数量
     void (async () => {
       try {
@@ -1441,7 +1505,6 @@ function IndexPage() {
   }
 
   const handleSaveTargets = async () => {
-    // 「编辑今日目标」弹层仅支持数字表单（与 TargetEditor 一致）
     let payload: DashboardTargets = {
       calorie_target: Number(targetForm.calorieTarget),
       protein_target: Number(targetForm.proteinTarget),
@@ -1475,10 +1538,7 @@ function IndexPage() {
     }
 
     const normalized = alignPayloadWithCalorieTarget(payload)
-    const savePayload: DashboardTargetsUpdateInput = {
-      ...normalized.payload,
-      target_date: selectedDateRef.current || formatDateKey(new Date())
-    }
+    const savePayload: DashboardTargetsUpdateInput = normalized.payload
 
     setSavingTargets(true)
     try {
@@ -1495,7 +1555,7 @@ function IndexPage() {
         })
       } else {
         Taro.showToast({
-          title: normalized.adjusted ? '已按热量自动校准并保存当天目标' : '当天目标已更新',
+          title: normalized.adjusted ? '已按热量自动校准并保存基础目标' : '基础目标已更新',
           icon: 'success'
         })
       }
@@ -1504,6 +1564,42 @@ function IndexPage() {
     } finally {
       setSavingTargets(false)
     }
+  }
+
+  const handleApplyCalibrationSuggestion = async (suggestion: HomeTargetCalibrationSuggestion) => {
+    if (!suggestion?.suggested_kcal || suggestion.suggested_kcal <= 0) return
+    const baseMacros = parseMacroTargets(targetForm) || getMacroTargetsFromIntake(intakeData)
+    const scaledMacros = scaleMacrosByCalorieTarget(suggestion.suggested_kcal, baseMacros)
+    const payload = alignPayloadWithCalorieTarget({
+      calorie_target: suggestion.suggested_kcal,
+      protein_target: Number(formatTargetInput(scaledMacros.protein)),
+      carbs_target: Number(formatTargetInput(scaledMacros.carbs)),
+      fat_target: Number(formatTargetInput(scaledMacros.fat))
+    }).payload
+    setTargetForm(createTargetForm({
+      ...intakeData,
+      target: payload.calorie_target,
+      macros: {
+        protein: { ...intakeData.macros.protein, target: payload.protein_target },
+        carbs: { ...intakeData.macros.carbs, target: payload.carbs_target },
+        fat: { ...intakeData.macros.fat, target: payload.fat_target }
+      }
+    }))
+    setSavingTargets(true)
+    try {
+      await updateDashboardTargets(payload)
+      setShowTargetEditor(false)
+      await loadDashboard(selectedDateRef.current || formatDateKey(new Date()))
+      Taro.showToast({ title: '基础目标已按建议更新', icon: 'success' })
+    } catch (error) {
+      await showUnifiedApiError(error, '应用建议失败')
+    } finally {
+      setSavingTargets(false)
+    }
+  }
+
+  const handleDismissCalibrationSuggestion = () => {
+    Taro.showToast({ title: '已暂不调整', icon: 'none' })
   }
 
   const handleQuickRecord = () => {
@@ -2113,22 +2209,6 @@ function IndexPage() {
       ? Number((calorieInputValue - caloriesFromMacroInputs).toFixed(1))
       : null
   const isRelationAligned = calorieGap != null && Math.abs(calorieGap) <= 1
-  const nutritionTargetSource = nutritionTarget?.source || ''
-  const nutritionTargetLabel = nutritionTargetSource === 'daily_manual'
-    ? '当天自定义'
-    : nutritionTargetSource === 'manual'
-    ? '自定义目标'
-    : nutritionTargetSource === 'dynamic'
-      ? '今日建议'
-      : '系统目标'
-  const nutritionTargetBase = normalizeDisplayNumber(nutritionTarget?.base_calorie_target)
-  const nutritionTargetAdded = normalizeDisplayNumber(nutritionTarget?.exercise_added_kcal)
-  const nutritionTargetSurplus = normalizeDisplayNumber(nutritionTarget?.exercise_surplus_kcal)
-  const nutritionTargetThreshold = normalizeDisplayNumber(nutritionTarget?.exercise_threshold_kcal)
-  const nutritionTargetHint = !dashboardBusy && !isGuest && nutritionTarget
-    ? (nutritionTarget.explanation || nutritionTarget.macro_explanation || '')
-    : ''
-  const nutritionTargetMacroHint = nutritionTarget?.macro_explanation || ''
 
   // 体重/喝水计算
   const weightSummary = useMemo(() =>
@@ -2220,6 +2300,7 @@ function IndexPage() {
   }, [petSummary?.pet?.pet_seed])
   const fallbackPetColor = PET_COLORS[stableHash(`${petSeed}:color`) % PET_COLORS.length]
   const fallbackPetShape = PET_SHAPES[stableHash(`${petSeed}:shape`) % PET_SHAPES.length]
+  const fallbackPetAnimal = PET_ANIMALS[stableHash(`${petSeed}:animal`) % PET_ANIMALS.length]
   const fallbackPetAccessory = PET_ACCESSORIES[stableHash(`${petSeed}:accessory`) % PET_ACCESSORIES.length]
   const petHash = stableHash(`${petSeed}:name`)
   const fallbackPetPattern = PET_PATTERNS[stableHash(`${petSeed}:pattern`) % PET_PATTERNS.length]
@@ -2600,8 +2681,24 @@ function IndexPage() {
     !dashboardBusy &&
     !isGuest &&
     !backfillDismissedDateSet.has(selectedDate)
+  const membershipCredits = getMembershipCreditSummary(membershipStatus)
+  const availableRewardCredits = getAvailableRewardCredits(rewardCenter)
+  const rewardHintTasks = rewardCenter?.tasks || []
+  const showRewardHint =
+    !isGuest &&
+    rewardHintDismissedDate !== getTodayLocalDateKey() &&
+    availableRewardCredits > 0 &&
+    (membershipCredits.remaining < LOW_CREDIT_REWARD_HINT_THRESHOLD || rewardHintTasks.some(isRewardTaskAvailable))
+  const rewardHintTaskText = formatRewardHintTaskText(rewardHintTasks)
   const openBackfillRecordMenu = () => {
     setShowRecordMenu(true)
+  }
+  const handleDismissRewardHint = () => {
+    const today = getTodayLocalDateKey()
+    try {
+      Taro.setStorageSync(HOME_REWARD_HINT_DISMISSED_DATE_KEY, today)
+    } catch (_) {}
+    setRewardHintDismissedDate(today)
   }
   const handleDismissBackfillHint = async () => {
     const { confirm } = await Taro.showModal({
@@ -2639,20 +2736,26 @@ function IndexPage() {
         onTouchEnd={handlePetTouchEnd}
         onTouchCancel={handlePetTouchEnd}
       >
-        <View className={`pet-companion-card ${petColor} ${petShape} ${petPattern} mood-${petMood}`}>
+        <View className={`pet-companion-card ${petColor} ${petShape} ${petPattern} animal-${fallbackPetAnimal} mood-${petMood}`}>
           <View className='pet-companion-avatar'>
             <View className='pet-companion-shadow' />
             <View className='pet-body'>
+              <View className='pet-tail' />
               <View className='pet-ear left' />
               <View className='pet-ear right' />
               <View className='pet-accessory'>
                 <View className={`pet-accessory-shape ${petAccessory}`} />
               </View>
               <View className='pet-face'>
+                <View className='pet-snout' />
                 <View className='pet-eye left' />
                 <View className='pet-eye right' />
                 <View className='pet-cheek left' />
                 <View className='pet-cheek right' />
+                <View className='pet-whisker left top' />
+                <View className='pet-whisker left bottom' />
+                <View className='pet-whisker right top' />
+                <View className='pet-whisker right bottom' />
                 <View className='pet-mouth' />
               </View>
             </View>
@@ -2724,6 +2827,31 @@ function IndexPage() {
           selectedDate={selectedDate}
           onSelect={handleDateSelect}
         />
+        {showRewardHint && (
+          <View
+            className='home-reward-hint'
+            onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/reward-center/index') })}
+          >
+            <View className='home-reward-hint__glow' />
+            <View className='home-reward-hint__main'>
+              <Text className='home-reward-hint__kicker'>今日可赚积分</Text>
+              <Text className='home-reward-hint__title'>今天还可以赚 {availableRewardCredits} 积分</Text>
+              <Text className='home-reward-hint__desc'>{rewardHintTaskText}</Text>
+            </View>
+            <View className='home-reward-hint__actions'>
+              <Text className='home-reward-hint__go'>去赚</Text>
+              <Text
+                className='home-reward-hint__close'
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleDismissRewardHint()
+                }}
+              >
+                ×
+              </Text>
+            </View>
+          </View>
+        )}
         {showBackfillHint && (
           <View className='home-backfill-hint'>
             <Text className='home-backfill-hint__dot' />
@@ -2784,13 +2912,6 @@ function IndexPage() {
               </View>
             </View>
           </View>
-
-          {!dashboardBusy && !isGuest && nutritionTarget && (
-            <View className='nutrition-target-compact' onClick={() => setShowNutritionTargetSheet(true)}>
-              <Text className='nutrition-target-compact-text'>{nutritionTargetLabel}</Text>
-              <Text className='iconfont icon-xiangyou nutrition-target-compact-icon' />
-            </View>
-          )}
 
           <View className='progress-section'>
             <View className={`progress-bar-bg thick${dashboardBusy ? ' loading-pulse' : ''}`}>
@@ -3255,57 +3376,13 @@ function IndexPage() {
         visible={showTargetEditor}
         targetForm={targetForm}
         saving={savingTargets}
+        calibrationSuggestion={nutritionTarget?.calibration_suggestion || null}
         onTargetFieldChange={handleTargetInput}
         onSave={handleSaveTargets}
+        onApplyCalibration={handleApplyCalibrationSuggestion}
+        onDismissCalibration={handleDismissCalibrationSuggestion}
         onClose={() => setShowTargetEditor(false)}
       />
-
-      {showNutritionTargetSheet && nutritionTarget && (
-        <View className='target-modal' catchMove>
-          <View className='target-modal-mask' onClick={() => setShowNutritionTargetSheet(false)} />
-          <View className='target-modal-content nutrition-target-sheet'>
-            <View className='target-modal-header'>
-              <Text className='target-modal-title'>目标说明</Text>
-              <Text className='target-modal-desc'>系统会根据档案、目标和运动记录更新今日目标</Text>
-            </View>
-            <View className='nutrition-target-sheet-summary'>
-              <View className='nutrition-target-sheet-item'>
-                <Text className='nutrition-target-sheet-label'>当前目标</Text>
-                <Text className='nutrition-target-sheet-value'>{formatDisplayNumber(Math.round(totalTarget))} kcal</Text>
-              </View>
-              {nutritionTargetBase > 0 && (
-                <View className='nutrition-target-sheet-item'>
-                  <Text className='nutrition-target-sheet-label'>基础目标</Text>
-                  <Text className='nutrition-target-sheet-value'>{formatDisplayNumber(Math.round(nutritionTargetBase))} kcal</Text>
-                </View>
-              )}
-              {nutritionTargetAdded > 0 && (
-                <View className='nutrition-target-sheet-item'>
-                  <Text className='nutrition-target-sheet-label'>运动增量补偿</Text>
-                  <Text className='nutrition-target-sheet-value'>{formatDisplayNumber(Math.round(nutritionTargetAdded))} kcal</Text>
-                </View>
-              )}
-              {nutritionTargetSurplus > 0 && nutritionTargetAdded <= 0 && nutritionTargetThreshold > 0 && (
-                <View className='nutrition-target-sheet-item'>
-                  <Text className='nutrition-target-sheet-label'>明显超量门槛</Text>
-                  <Text className='nutrition-target-sheet-value'>{formatDisplayNumber(Math.round(nutritionTargetThreshold))} kcal</Text>
-                </View>
-              )}
-            </View>
-            {nutritionTargetHint && (
-              <Text className='nutrition-target-sheet-desc'>{nutritionTargetHint}</Text>
-            )}
-            {nutritionTargetMacroHint && (
-              <Text className='nutrition-target-sheet-desc muted'>{nutritionTargetMacroHint}</Text>
-            )}
-            <View className='target-modal-actions'>
-              <View className='target-modal-btn primary' onClick={() => setShowNutritionTargetSheet(false)}>
-                <Text className='target-modal-btn-text primary'>知道了</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
 
       {/* 体重编辑弹窗 */}
       {showWeightEditor && (

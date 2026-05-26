@@ -39,6 +39,22 @@ type UserMembership struct {
 
 func (UserMembership) TableName() string { return "user_pro_memberships" }
 
+// UserTrialEntitlement — table: user_trial_entitlements
+type UserTrialEntitlement struct {
+	ID                string     `gorm:"column:id;primaryKey" json:"id"`
+	FirstUserID       *string    `gorm:"column:first_user_id" json:"first_user_id,omitempty"`
+	OpenID            string     `gorm:"column:openid" json:"openid"`
+	UnionID           *string    `gorm:"column:unionid" json:"unionid,omitempty"`
+	FirstRegisteredAt *time.Time `gorm:"column:first_registered_at" json:"first_registered_at,omitempty"`
+	EarlyUserRank     *int       `gorm:"column:early_user_rank" json:"early_user_rank,omitempty"`
+	TrialDaysTotal    int        `gorm:"column:trial_days_total" json:"trial_days_total"`
+	TrialPolicy       string     `gorm:"column:trial_policy" json:"trial_policy"`
+	CreatedAt         *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt         *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+func (UserTrialEntitlement) TableName() string { return "user_trial_entitlements" }
+
 // MembershipPayment — table: pro_membership_payment_records
 type MembershipPayment struct {
 	ID              string         `gorm:"column:id;primaryKey" json:"id"`
@@ -78,6 +94,25 @@ type UserCreditBonusEvent struct {
 }
 
 func (UserCreditBonusEvent) TableName() string { return "user_credit_bonus_events" }
+
+type RewardTaskUpload struct {
+	ID               string         `gorm:"column:id;primaryKey" json:"id"`
+	UserID           string         `gorm:"column:user_id" json:"user_id"`
+	TaskType         string         `gorm:"column:task_type" json:"task_type"`
+	BonusDate        string         `gorm:"column:bonus_date" json:"bonus_date"`
+	Status           string         `gorm:"column:status" json:"status"`
+	RewardCredits    int            `gorm:"column:reward_credits" json:"reward_credits"`
+	SourceTaskID     *string        `gorm:"column:source_task_id" json:"source_task_id,omitempty"`
+	PackagedFoodID   *string        `gorm:"column:packaged_food_id" json:"packaged_food_id,omitempty"`
+	PublicFoodItemID *string        `gorm:"column:public_food_item_id" json:"public_food_item_id,omitempty"`
+	SourceKey        *string        `gorm:"column:source_key" json:"source_key,omitempty"`
+	FailureReason    *string        `gorm:"column:failure_reason" json:"failure_reason,omitempty"`
+	Meta             map[string]any `gorm:"column:meta;serializer:json" json:"meta,omitempty"`
+	CreatedAt        *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt        *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+func (RewardTaskUpload) TableName() string { return "reward_task_uploads" }
 
 // UserEarnedCreditLedger — table: user_earned_credit_ledger
 type UserEarnedCreditLedger struct {

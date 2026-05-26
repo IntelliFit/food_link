@@ -22,15 +22,41 @@ type FoodNutritionService struct {
 	nutritionLabelVisionClient NutritionLabelVisionClient
 	taskRepo                   *analyzerepo.TaskRepo
 	taskQueue                  taskqueue.Publisher
+	rewards                    PackagedRewardAwarder
 }
 
 type NutritionLabelVisionClient interface {
 	AnalyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, error)
 }
 
+type PackagedRewardAwarder interface {
+	AwardPackagedUpload(ctx context.Context, userID, sourceTaskID, packagedFoodID string, meta map[string]any) (map[string]any, error)
+}
+
+const (
+	packagedFoodIngestMethodUserCaptureOCR = "user_capture_ocr"
+	packagedFoodIngestMethodSilentAnalyze  = "analyze_silent_capture"
+	packagedProductExtractTaskType         = "packaged_product_extract"
+	packagedNutritionLabelTaskType         = "packaged_nutrition_label"
+)
+
 type PackagedFoodInput struct {
 	Brand                 string
 	ProductName           string
+	SpecText              string
+	Barcode               string
+	FlavorText            string
+	PackageCategory       string
+	IngredientsText       string
+	SourceImageURLs       []string
+	OCRRawText            string
+	NutritionBasisUnit    string
+	EnergyUnitRaw         string
+	RawLabelPayload       map[string]any
+	ConversionStatus      string
+	ExtractConfidence     float64
+	FieldConfidence       map[string]any
+	IngestMethod          string
 	NetWeightG            float64
 	ServingWeightG        float64
 	KcalPer100g           float64
@@ -59,6 +85,46 @@ type PackagedFoodInput struct {
 	FolateMcgPer100g      float64
 	VitaminB12McgPer100g  float64
 	SourceURL             string
+	Source                string
+}
+
+type PackagedLabelNutritionValue struct {
+	Value float64 `json:"value,omitempty"`
+	Unit  string  `json:"unit,omitempty"`
+}
+
+type PackagedLabelNutritionBasis struct {
+	Type  string  `json:"type,omitempty"`
+	Value float64 `json:"value,omitempty"`
+	Unit  string  `json:"unit,omitempty"`
+}
+
+type PackagedLabelRawNutrition struct {
+	Energy         PackagedLabelNutritionValue `json:"energy,omitempty"`
+	Protein        PackagedLabelNutritionValue `json:"protein,omitempty"`
+	Carbs          PackagedLabelNutritionValue `json:"carbs,omitempty"`
+	Fat            PackagedLabelNutritionValue `json:"fat,omitempty"`
+	Fiber          PackagedLabelNutritionValue `json:"fiber,omitempty"`
+	Sugar          PackagedLabelNutritionValue `json:"sugar,omitempty"`
+	SaturatedFat   PackagedLabelNutritionValue `json:"saturatedFat,omitempty"`
+	CholesterolMg  PackagedLabelNutritionValue `json:"cholesterolMg,omitempty"`
+	SodiumMg       PackagedLabelNutritionValue `json:"sodiumMg,omitempty"`
+	PotassiumMg    PackagedLabelNutritionValue `json:"potassiumMg,omitempty"`
+	CalciumMg      PackagedLabelNutritionValue `json:"calciumMg,omitempty"`
+	IronMg         PackagedLabelNutritionValue `json:"ironMg,omitempty"`
+	MagnesiumMg    PackagedLabelNutritionValue `json:"magnesiumMg,omitempty"`
+	ZincMg         PackagedLabelNutritionValue `json:"zincMg,omitempty"`
+	VitaminARaeMcg PackagedLabelNutritionValue `json:"vitaminARaeMcg,omitempty"`
+	VitaminCMg     PackagedLabelNutritionValue `json:"vitaminCMg,omitempty"`
+	VitaminDMcg    PackagedLabelNutritionValue `json:"vitaminDMcg,omitempty"`
+	VitaminEMg     PackagedLabelNutritionValue `json:"vitaminEMg,omitempty"`
+	VitaminKMcg    PackagedLabelNutritionValue `json:"vitaminKMcg,omitempty"`
+	ThiaminMg      PackagedLabelNutritionValue `json:"thiaminMg,omitempty"`
+	RiboflavinMg   PackagedLabelNutritionValue `json:"riboflavinMg,omitempty"`
+	NiacinMg       PackagedLabelNutritionValue `json:"niacinMg,omitempty"`
+	VitaminB6Mg    PackagedLabelNutritionValue `json:"vitaminB6Mg,omitempty"`
+	FolateMcg      PackagedLabelNutritionValue `json:"folateMcg,omitempty"`
+	VitaminB12Mcg  PackagedLabelNutritionValue `json:"vitaminB12Mcg,omitempty"`
 }
 
 type PackagedNutritionLabelResult struct {
@@ -95,6 +161,48 @@ type PackagedNutritionLabelResult struct {
 	RawText               string  `json:"raw_text,omitempty"`
 }
 
+type PackagedAutoIngestResult struct {
+	Status          string   `json:"status,omitempty"`
+	Reason          string   `json:"reason,omitempty"`
+	UpsertAction    string   `json:"upsert_action,omitempty"`
+	PackagedFoodID  string   `json:"packaged_food_id,omitempty"`
+	MissingFields   []string `json:"missing_fields,omitempty"`
+	ConflictReasons []string `json:"conflict_reasons,omitempty"`
+}
+
+type PackagedProductExtractResult struct {
+	Brand                string                      `json:"brand,omitempty"`
+	ProductName          string                      `json:"product_name,omitempty"`
+	FlavorText           string                      `json:"flavor_text,omitempty"`
+	PackageCategory      string                      `json:"package_category,omitempty"`
+	NetWeightG           float64                     `json:"net_weight_g,omitempty"`
+	ServingWeightG       float64                     `json:"serving_weight_g,omitempty"`
+	SpecText             string                      `json:"spec_text,omitempty"`
+	Barcode              string                      `json:"barcode,omitempty"`
+	IngredientsText      string                      `json:"ingredients_text,omitempty"`
+	UnitNutritionPer100g map[string]any              `json:"unit_nutrition_per_100g,omitempty"`
+	NutritionBasisUnit   string                      `json:"nutrition_basis_unit,omitempty"`
+	EnergyUnitRaw        string                      `json:"energy_unit_raw,omitempty"`
+	RawNutritionBasis    PackagedLabelNutritionBasis `json:"raw_nutrition_basis,omitempty"`
+	RawNutritionPerBasis PackagedLabelRawNutrition   `json:"raw_nutrition_per_basis,omitempty"`
+	RawLabelPayload      map[string]any              `json:"raw_label_payload,omitempty"`
+	ConversionStatus     string                      `json:"conversion_status,omitempty"`
+	FieldConfidence      map[string]any              `json:"field_confidence,omitempty"`
+	ExtractConfidence    float64                     `json:"extract_confidence,omitempty"`
+	NeedsMoreImages      []string                    `json:"needs_more_images,omitempty"`
+	MissingFields        []string                    `json:"missing_fields,omitempty"`
+	AutoIngestResult     PackagedAutoIngestResult    `json:"auto_ingest_result,omitempty"`
+	PackagedFoodID       string                      `json:"packaged_food_id,omitempty"`
+	OCRRawText           string                      `json:"ocr_raw_text,omitempty"`
+	SourceImageURLs      []string                    `json:"source_image_urls,omitempty"`
+}
+
+type SubmitPackagedProductExtractInput struct {
+	ImageURLs          []string
+	SourceTaskID       string
+	RecognizedNameHint string
+}
+
 func NewFoodNutritionService(nutritionRepo *repo.FoodNutritionRepo) *FoodNutritionService {
 	return &FoodNutritionService{nutritionRepo: nutritionRepo}
 }
@@ -106,6 +214,17 @@ func (s *FoodNutritionService) ConfigureNutritionLabelVisionClient(client Nutrit
 func (s *FoodNutritionService) ConfigureAsyncTasks(taskRepo *analyzerepo.TaskRepo, queue taskqueue.Publisher) {
 	s.taskRepo = taskRepo
 	s.taskQueue = queue
+}
+
+func (s *FoodNutritionService) ConfigureRewardAwarder(awarder PackagedRewardAwarder) {
+	s.rewards = awarder
+}
+
+func (s *FoodNutritionService) AwardPackagedUpload(ctx context.Context, userID, sourceTaskID, packagedFoodID string, meta map[string]any) (map[string]any, error) {
+	if s.rewards == nil {
+		return nil, nil
+	}
+	return s.rewards.AwardPackagedUpload(ctx, userID, sourceTaskID, packagedFoodID, meta)
 }
 
 func (s *FoodNutritionService) Search(ctx context.Context, query string, limit int) ([]map[string]any, error) {
@@ -153,22 +272,42 @@ func (s *FoodNutritionService) GetUnresolvedTop(ctx context.Context, limit int) 
 }
 
 func (s *FoodNutritionService) CreatePackagedFood(ctx context.Context, input PackagedFoodInput) (*domain.PackagedFood, error) {
+	item, _, err := s.CreatePackagedFoodWithAction(ctx, input)
+	return item, err
+}
+
+func (s *FoodNutritionService) CreatePackagedFoodWithAction(ctx context.Context, input PackagedFoodInput) (*domain.PackagedFood, string, error) {
 	productName := strings.TrimSpace(input.ProductName)
 	if productName == "" {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "零食名称不能为空", HTTPStatus: 400}
+		return nil, "", &commonerrors.AppError{Code: 10002, Message: "零食名称不能为空", HTTPStatus: 400}
 	}
-	if input.NetWeightG <= 0 {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "零食重量必须大于0", HTTPStatus: 400}
-	}
-	if input.ServingWeightG <= 0 {
+	if input.ServingWeightG <= 0 && input.NetWeightG > 0 {
 		input.ServingWeightG = input.NetWeightG
 	}
 	if input.KcalPer100g <= 0 && input.ProteinPer100g <= 0 && input.CarbsPer100g <= 0 && input.FatPer100g <= 0 {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "请至少填写热量或三大营养素", HTTPStatus: 400}
+		return nil, "", &commonerrors.AppError{Code: 10002, Message: "请至少填写热量或三大营养素", HTTPStatus: 400}
 	}
-	return s.nutritionRepo.UpsertPackagedFood(ctx, repo.PackagedFoodInput{
+	source := strings.TrimSpace(input.Source)
+	if source == "" {
+		source = "user_submitted"
+	}
+	return s.nutritionRepo.UpsertPackagedFoodWithAction(ctx, repo.PackagedFoodInput{
 		Brand:                 input.Brand,
 		ProductName:           productName,
+		SpecText:              input.SpecText,
+		Barcode:               input.Barcode,
+		FlavorText:            input.FlavorText,
+		PackageCategory:       input.PackageCategory,
+		IngredientsText:       input.IngredientsText,
+		SourceImageURLs:       input.SourceImageURLs,
+		OCRRawText:            input.OCRRawText,
+		NutritionBasisUnit:    input.NutritionBasisUnit,
+		EnergyUnitRaw:         input.EnergyUnitRaw,
+		RawLabelPayload:       input.RawLabelPayload,
+		ConversionStatus:      input.ConversionStatus,
+		ExtractConfidence:     input.ExtractConfidence,
+		FieldConfidence:       input.FieldConfidence,
+		IngestMethod:          input.IngestMethod,
 		NetWeightG:            input.NetWeightG,
 		ServingWeightG:        input.ServingWeightG,
 		KcalPer100g:           input.KcalPer100g,
@@ -197,7 +336,7 @@ func (s *FoodNutritionService) CreatePackagedFood(ctx context.Context, input Pac
 		FolateMcgPer100g:      input.FolateMcgPer100g,
 		VitaminB12McgPer100g:  input.VitaminB12McgPer100g,
 		SourceURL:             input.SourceURL,
-		Source:                "user_submitted",
+		Source:                source,
 	})
 }
 
@@ -220,22 +359,54 @@ func (s *FoodNutritionService) RecognizePackagedNutritionLabel(ctx context.Conte
 	return parsed, nil
 }
 
+func (s *FoodNutritionService) ExtractPackagedProduct(ctx context.Context, imageURLs []string, recognizedNameHint string) (*PackagedProductExtractResult, error) {
+	imageURLs = normalizeStringSlice(imageURLs)
+	if len(imageURLs) == 0 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "包装图片不能为空", HTTPStatus: 400}
+	}
+	if s.nutritionLabelVisionClient == nil {
+		return nil, &commonerrors.AppError{Code: 10000, Message: "预包装商品识别服务未配置", HTTPStatus: 500}
+	}
+	result, err := s.nutritionLabelVisionClient.AnalyzeWithImagesAndTemperature(ctx, buildPackagedProductExtractPrompt(recognizedNameHint), imageURLs, 0.1)
+	if err != nil {
+		return nil, fmt.Errorf("识别预包装商品失败: %w", err)
+	}
+	parsed := parsePackagedProductExtractResult(result, imageURLs)
+	enrichPackagedProductExtractResult(parsed)
+	return parsed, nil
+}
+
 func (s *FoodNutritionService) SubmitPackagedNutritionLabelTask(ctx context.Context, userID, imageURL string) (string, error) {
 	imageURL = strings.TrimSpace(imageURL)
 	if imageURL == "" {
 		return "", &commonerrors.AppError{Code: 10002, Message: "营养成分表图片不能为空", HTTPStatus: 400}
 	}
-	if s.taskRepo == nil || s.taskQueue == nil {
-		return "", &commonerrors.AppError{Code: 10000, Message: "营养成分表异步识别服务未配置", HTTPStatus: 500}
+	return s.SubmitPackagedProductExtractTask(ctx, userID, SubmitPackagedProductExtractInput{
+		ImageURLs: []string{imageURL},
+	})
+}
+
+func (s *FoodNutritionService) SubmitPackagedProductExtractTask(ctx context.Context, userID string, input SubmitPackagedProductExtractInput) (string, error) {
+	imageURLs := normalizeStringSlice(input.ImageURLs)
+	if len(imageURLs) == 0 {
+		return "", &commonerrors.AppError{Code: 10002, Message: "包装图片不能为空", HTTPStatus: 400}
 	}
+	if s.taskRepo == nil || s.taskQueue == nil {
+		return "", &commonerrors.AppError{Code: 10000, Message: "预包装商品异步识别服务未配置", HTTPStatus: 500}
+	}
+	primaryImageURL := imageURLs[0]
 	task := &analyzedomain.AnalysisTask{
-		UserID:   userID,
-		TaskType: "packaged_nutrition_label",
-		Status:   "pending",
-		ImageURL: &imageURL,
+		UserID:     userID,
+		TaskType:   packagedProductExtractTaskType,
+		Status:     "pending",
+		ImageURL:   &primaryImageURL,
+		ImagePaths: imageURLs,
 		Payload: map[string]any{
-			"image_url": imageURL,
-			"purpose":   "packaged_nutrition_label",
+			"image_url":            primaryImageURL,
+			"image_urls":           imageURLs,
+			"purpose":              packagedProductExtractTaskType,
+			"recognized_name_hint": strings.TrimSpace(input.RecognizedNameHint),
+			"source_task_id":       strings.TrimSpace(input.SourceTaskID),
 		},
 	}
 	if err := s.taskRepo.CreateTask(ctx, task); err != nil {
@@ -244,7 +415,7 @@ func (s *FoodNutritionService) SubmitPackagedNutritionLabelTask(ctx context.Cont
 	publishCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	if err := s.taskQueue.PublishTask(publishCtx, taskqueue.TaskMessage{TaskID: task.ID, TaskType: task.TaskType}); err != nil {
-		_, _ = s.taskRepo.FailTask(context.Background(), task.ID, "packaged nutrition label task enqueue failed")
+		_, _ = s.taskRepo.FailTask(context.Background(), task.ID, "packaged product extract task enqueue failed")
 		return "", err
 	}
 	return task.ID, nil
@@ -288,6 +459,104 @@ func buildNutritionLabelPrompt() string {
 }`
 }
 
+func buildPackagedProductExtractPrompt(recognizedNameHint string) string {
+	hint := strings.TrimSpace(recognizedNameHint)
+	if hint == "" {
+		hint = "无"
+	}
+	return `你是预包装食品 OCR 和结构化提取助手。现在会给你多张同一商品图片，可能包括包装正面、营养成分表、净含量、规格、配料表。
+请只提取图片中真实可见的信息，不要编造，不要根据常识补品牌和口味。
+不要在模型里做自由数学换算。你只负责提取标签上的原始数值、单位、口径（每100g/每100ml/每份）和份量信息。
+营养成分表、净含量/规格、品名是核心信息；配料表和条码是可选增强信息，缺失时不要放入 needs_more_images，也不要降低整体置信度。
+只有缺少营养成分表、净含量/规格、品名等核心信息，导致无法确定商品营养或规格时，才在 needs_more_images 里返回对应原因（如 ["nutrition_label"]、["net_weight"]、["front_package"]）。
+可参考的已识别名称提示：` + hint + `
+返回严格 JSON，不要 Markdown：
+{
+  "brand": "",
+  "product_name": "",
+  "flavor_text": "",
+  "package_category": "",
+  "net_weight_g": 0,
+  "serving_weight_g": 0,
+  "spec_text": "",
+  "barcode": "",
+  "ingredients_text": "",
+  "nutrition_basis_unit": "",
+  "energy_unit_raw": "",
+  "raw_nutrition_basis": {
+    "type": "",
+    "value": 0,
+    "unit": ""
+  },
+  "raw_nutrition_per_basis": {
+    "energy": { "value": 0, "unit": "" },
+    "protein": { "value": 0, "unit": "" },
+    "carbs": { "value": 0, "unit": "" },
+    "fat": { "value": 0, "unit": "" },
+    "fiber": { "value": 0, "unit": "" },
+    "sugar": { "value": 0, "unit": "" },
+    "saturatedFat": { "value": 0, "unit": "" },
+    "cholesterolMg": { "value": 0, "unit": "" },
+    "sodiumMg": { "value": 0, "unit": "" },
+    "potassiumMg": { "value": 0, "unit": "" },
+    "calciumMg": { "value": 0, "unit": "" },
+    "ironMg": { "value": 0, "unit": "" },
+    "magnesiumMg": { "value": 0, "unit": "" },
+    "zincMg": { "value": 0, "unit": "" },
+    "vitaminARaeMcg": { "value": 0, "unit": "" },
+    "vitaminCMg": { "value": 0, "unit": "" },
+    "vitaminDMcg": { "value": 0, "unit": "" },
+    "vitaminEMg": { "value": 0, "unit": "" },
+    "vitaminKMcg": { "value": 0, "unit": "" },
+    "thiaminMg": { "value": 0, "unit": "" },
+    "riboflavinMg": { "value": 0, "unit": "" },
+    "niacinMg": { "value": 0, "unit": "" },
+    "vitaminB6Mg": { "value": 0, "unit": "" },
+    "folateMcg": { "value": 0, "unit": "" },
+    "vitaminB12Mcg": { "value": 0, "unit": "" }
+  },
+  "unit_nutrition_per_100g": {
+    "calories": 0,
+    "protein": 0,
+    "carbs": 0,
+    "fat": 0,
+    "fiber": 0,
+    "sugar": 0,
+    "saturatedFat": 0,
+    "cholesterolMg": 0,
+    "sodiumMg": 0,
+    "potassiumMg": 0,
+    "calciumMg": 0,
+    "ironMg": 0,
+    "magnesiumMg": 0,
+    "zincMg": 0,
+    "vitaminARaeMcg": 0,
+    "vitaminCMg": 0,
+    "vitaminDMcg": 0,
+    "vitaminEMg": 0,
+    "vitaminKMcg": 0,
+    "thiaminMg": 0,
+    "riboflavinMg": 0,
+    "niacinMg": 0,
+    "vitaminB6Mg": 0,
+    "folateMcg": 0,
+    "vitaminB12Mcg": 0
+  },
+  "field_confidence": {
+    "product_name": 0,
+    "spec_text": 0,
+    "nutrition": 0,
+    "brand": 0,
+    "ingredients_text": 0
+  },
+  "extract_confidence": 0,
+  "needs_more_images": [],
+  "missing_fields": [],
+  "ocr_raw_text": "",
+  "raw_label_payload": {}
+}`
+}
+
 func parseNutritionLabelResult(raw map[string]any) *PackagedNutritionLabelResult {
 	return &PackagedNutritionLabelResult{
 		ProductName:           stringFromAny(raw["product_name"], raw["productName"], raw["name"]),
@@ -324,6 +593,72 @@ func parseNutritionLabelResult(raw map[string]any) *PackagedNutritionLabelResult
 	}
 }
 
+func parsePackagedProductExtractResult(raw map[string]any, imageURLs []string) *PackagedProductExtractResult {
+	unit := mapFromAny(raw["unit_nutrition_per_100g"])
+	fieldConfidence := mapFromAny(raw["field_confidence"])
+	result := &PackagedProductExtractResult{
+		Brand:                stringFromAny(raw["brand"]),
+		ProductName:          stringFromAny(raw["product_name"], raw["productName"], raw["name"]),
+		FlavorText:           stringFromAny(raw["flavor_text"], raw["flavorText"]),
+		PackageCategory:      stringFromAny(raw["package_category"], raw["packageCategory"]),
+		NetWeightG:           numberFromAny(raw["net_weight_g"], raw["netWeightG"]),
+		ServingWeightG:       numberFromAny(raw["serving_weight_g"], raw["servingWeightG"]),
+		SpecText:             stringFromAny(raw["spec_text"], raw["specText"]),
+		Barcode:              stringFromAny(raw["barcode"]),
+		IngredientsText:      stringFromAny(raw["ingredients_text"], raw["ingredientsText"]),
+		UnitNutritionPer100g: normalizeNutritionUnitMap(unit),
+		NutritionBasisUnit:   strings.ToLower(stringFromAny(raw["nutrition_basis_unit"])),
+		EnergyUnitRaw:        strings.ToLower(stringFromAny(raw["energy_unit_raw"])),
+		RawNutritionBasis:    parseRawNutritionBasis(raw["raw_nutrition_basis"]),
+		RawNutritionPerBasis: parseRawNutritionValues(raw["raw_nutrition_per_basis"]),
+		RawLabelPayload:      mapFromAny(raw["raw_label_payload"]),
+		ConversionStatus:     stringFromAny(raw["conversion_status"]),
+		FieldConfidence:      normalizeConfidenceMap(fieldConfidence),
+		ExtractConfidence:    numberFromAny(raw["extract_confidence"], raw["confidence"]),
+		NeedsMoreImages:      stringSliceFromAny(raw["needs_more_images"]),
+		MissingFields:        stringSliceFromAny(raw["missing_fields"]),
+		OCRRawText:           stringFromAny(raw["ocr_raw_text"], raw["raw_text"], raw["rawText"]),
+		SourceImageURLs:      imageURLs,
+	}
+	if result.UnitNutritionPer100g == nil {
+		result.UnitNutritionPer100g = map[string]any{}
+	}
+	if result.RawLabelPayload == nil {
+		result.RawLabelPayload = map[string]any{}
+	}
+	if result.FieldConfidence == nil {
+		result.FieldConfidence = map[string]any{}
+	}
+	return result
+}
+
+func enrichPackagedProductExtractResult(result *PackagedProductExtractResult) {
+	if result == nil {
+		return
+	}
+	missingFields := make([]string, 0, len(result.MissingFields))
+	seen := map[string]bool{}
+	addMissing := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		missingFields = append(missingFields, value)
+	}
+	for _, field := range result.MissingFields {
+		addMissing(field)
+	}
+	if strings.TrimSpace(result.ProductName) == "" {
+		addMissing("product_name")
+	}
+	if result.NetWeightG <= 0 {
+		addMissing("net_weight_g")
+	}
+	convertPackagedNutrition(result)
+	result.MissingFields = missingFields
+}
+
 func stringFromAny(values ...any) string {
 	for _, value := range values {
 		text := strings.TrimSpace(fmt.Sprintf("%v", value))
@@ -332,6 +667,434 @@ func stringFromAny(values ...any) string {
 		}
 	}
 	return ""
+}
+
+func stringSliceFromAny(value any) []string {
+	raw, ok := value.([]any)
+	if !ok {
+		if typed, typedOK := value.([]string); typedOK {
+			return normalizeStringSlice(typed)
+		}
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		text := strings.TrimSpace(fmt.Sprintf("%v", item))
+		if text == "" || text == "<nil>" {
+			continue
+		}
+		out = append(out, text)
+	}
+	return normalizeStringSlice(out)
+}
+
+func mapFromAny(value any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	if typed, ok := value.(map[string]any); ok {
+		return typed
+	}
+	if typed, ok := value.(map[string]interface{}); ok {
+		return typed
+	}
+	return nil
+}
+
+func normalizeConfidenceMap(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return map[string]any{}
+	}
+	out := map[string]any{}
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		score := numberFromAny(value)
+		if score < 0 {
+			score = 0
+		}
+		if score > 1 {
+			score = 1
+		}
+		out[key] = score
+	}
+	return out
+}
+
+func normalizeNutritionUnitMap(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return map[string]any{}
+	}
+	keys := []string{
+		"calories", "protein", "carbs", "fat", "fiber", "sugar", "saturatedFat",
+		"cholesterolMg", "sodiumMg", "potassiumMg", "calciumMg", "ironMg",
+		"magnesiumMg", "zincMg", "vitaminARaeMcg", "vitaminCMg", "vitaminDMcg",
+		"vitaminEMg", "vitaminKMcg", "thiaminMg", "riboflavinMg", "niacinMg",
+		"vitaminB6Mg", "folateMcg", "vitaminB12Mcg",
+	}
+	out := map[string]any{}
+	for _, key := range keys {
+		out[key] = numberFromAny(values[key])
+	}
+	return out
+}
+
+func parseRawNutritionBasis(value any) PackagedLabelNutritionBasis {
+	raw := mapFromAny(value)
+	return PackagedLabelNutritionBasis{
+		Type:  strings.ToLower(stringFromAny(raw["type"])),
+		Value: numberFromAny(raw["value"]),
+		Unit:  strings.ToLower(stringFromAny(raw["unit"])),
+	}
+}
+
+func parseRawNutritionValues(value any) PackagedLabelRawNutrition {
+	raw := mapFromAny(value)
+	return PackagedLabelRawNutrition{
+		Energy:         parseNutritionValue(raw["energy"]),
+		Protein:        parseNutritionValue(raw["protein"]),
+		Carbs:          parseNutritionValue(raw["carbs"]),
+		Fat:            parseNutritionValue(raw["fat"]),
+		Fiber:          parseNutritionValue(raw["fiber"]),
+		Sugar:          parseNutritionValue(raw["sugar"]),
+		SaturatedFat:   parseNutritionValue(raw["saturatedFat"]),
+		CholesterolMg:  parseNutritionValue(raw["cholesterolMg"]),
+		SodiumMg:       parseNutritionValue(raw["sodiumMg"]),
+		PotassiumMg:    parseNutritionValue(raw["potassiumMg"]),
+		CalciumMg:      parseNutritionValue(raw["calciumMg"]),
+		IronMg:         parseNutritionValue(raw["ironMg"]),
+		MagnesiumMg:    parseNutritionValue(raw["magnesiumMg"]),
+		ZincMg:         parseNutritionValue(raw["zincMg"]),
+		VitaminARaeMcg: parseNutritionValue(raw["vitaminARaeMcg"]),
+		VitaminCMg:     parseNutritionValue(raw["vitaminCMg"]),
+		VitaminDMcg:    parseNutritionValue(raw["vitaminDMcg"]),
+		VitaminEMg:     parseNutritionValue(raw["vitaminEMg"]),
+		VitaminKMcg:    parseNutritionValue(raw["vitaminKMcg"]),
+		ThiaminMg:      parseNutritionValue(raw["thiaminMg"]),
+		RiboflavinMg:   parseNutritionValue(raw["riboflavinMg"]),
+		NiacinMg:       parseNutritionValue(raw["niacinMg"]),
+		VitaminB6Mg:    parseNutritionValue(raw["vitaminB6Mg"]),
+		FolateMcg:      parseNutritionValue(raw["folateMcg"]),
+		VitaminB12Mcg:  parseNutritionValue(raw["vitaminB12Mcg"]),
+	}
+}
+
+func parseNutritionValue(value any) PackagedLabelNutritionValue {
+	raw := mapFromAny(value)
+	return PackagedLabelNutritionValue{
+		Value: numberFromAny(raw["value"]),
+		Unit:  strings.ToLower(stringFromAny(raw["unit"])),
+	}
+}
+
+func convertPackagedNutrition(result *PackagedProductExtractResult) {
+	if result == nil {
+		return
+	}
+	if result.UnitNutritionPer100g == nil {
+		result.UnitNutritionPer100g = map[string]any{}
+	}
+	basis := normalizeBasisUnit(result.RawNutritionBasis.Type, result.RawNutritionBasis.Unit, result.NutritionBasisUnit)
+	result.NutritionBasisUnit = basis
+	result.EnergyUnitRaw = normalizeEnergyUnit(result.RawNutritionPerBasis.Energy.Unit, result.EnergyUnitRaw)
+	conversionStatus := "insufficient"
+	switch basis {
+	case "100g", "100ml":
+		scale := basisScale(result.RawNutritionBasis, basis)
+		if scale > 0 {
+			fillConvertedNutrition(result.UnitNutritionPer100g, result.RawNutritionPerBasis, scale, result.EnergyUnitRaw)
+			conversionStatus = "converted"
+		}
+	case "serving":
+		servingSize := effectiveServingWeight(result)
+		if basisUnit := servingBasisUnit(result); servingSize > 0 && basisUnit != "" {
+			scale := 100.0 / servingSize
+			fillConvertedNutrition(result.UnitNutritionPer100g, result.RawNutritionPerBasis, scale, result.EnergyUnitRaw)
+			result.NutritionBasisUnit = "100" + basisUnit
+			conversionStatus = "converted"
+		}
+	}
+	if conversionStatus == "converted" && !hasValidPackagedNutrition(result.UnitNutritionPer100g) {
+		conversionStatus = "insufficient"
+	}
+	result.ConversionStatus = conversionStatus
+	if len(result.RawLabelPayload) == 0 {
+		result.RawLabelPayload = map[string]any{
+			"raw_nutrition_basis":     result.RawNutritionBasis,
+			"raw_nutrition_per_basis": result.RawNutritionPerBasis,
+			"nutrition_basis_unit":    result.NutritionBasisUnit,
+			"energy_unit_raw":         result.EnergyUnitRaw,
+		}
+	}
+}
+
+func fillConvertedNutrition(out map[string]any, raw PackagedLabelRawNutrition, scale float64, energyUnitRaw string) {
+	if out == nil || scale <= 0 {
+		return
+	}
+	out["calories"] = convertEnergyToKcal(raw.Energy.Value, firstNonEmpty(energyUnitRaw, raw.Energy.Unit)) * scale
+	out["protein"] = raw.Protein.Value * scale
+	out["carbs"] = raw.Carbs.Value * scale
+	out["fat"] = raw.Fat.Value * scale
+	out["fiber"] = raw.Fiber.Value * scale
+	out["sugar"] = raw.Sugar.Value * scale
+	out["saturatedFat"] = raw.SaturatedFat.Value * scale
+	out["cholesterolMg"] = raw.CholesterolMg.Value * scale
+	out["sodiumMg"] = raw.SodiumMg.Value * scale
+	out["potassiumMg"] = raw.PotassiumMg.Value * scale
+	out["calciumMg"] = raw.CalciumMg.Value * scale
+	out["ironMg"] = raw.IronMg.Value * scale
+	out["magnesiumMg"] = raw.MagnesiumMg.Value * scale
+	out["zincMg"] = raw.ZincMg.Value * scale
+	out["vitaminARaeMcg"] = raw.VitaminARaeMcg.Value * scale
+	out["vitaminCMg"] = raw.VitaminCMg.Value * scale
+	out["vitaminDMcg"] = raw.VitaminDMcg.Value * scale
+	out["vitaminEMg"] = raw.VitaminEMg.Value * scale
+	out["vitaminKMcg"] = raw.VitaminKMcg.Value * scale
+	out["thiaminMg"] = raw.ThiaminMg.Value * scale
+	out["riboflavinMg"] = raw.RiboflavinMg.Value * scale
+	out["niacinMg"] = raw.NiacinMg.Value * scale
+	out["vitaminB6Mg"] = raw.VitaminB6Mg.Value * scale
+	out["folateMcg"] = raw.FolateMcg.Value * scale
+	out["vitaminB12Mcg"] = raw.VitaminB12Mcg.Value * scale
+}
+
+func convertEnergyToKcal(value float64, unit string) float64 {
+	switch strings.ToLower(strings.TrimSpace(unit)) {
+	case "kj", "千焦":
+		return value / 4.184
+	default:
+		return value
+	}
+}
+
+func normalizeBasisUnit(basisType, basisUnit, fallback string) string {
+	normalizedType := normalizeBasisToken(basisType)
+	fallback = normalizeBasisToken(fallback)
+	if normalizedType == "" {
+		normalizedType = fallback
+	}
+	basisUnit = normalizeBasisToken(basisUnit)
+	if normalizedType == "份" || strings.Contains(normalizedType, "perserving") || strings.Contains(normalizedType, "serving") {
+		return "serving"
+	}
+	if strings.Contains(normalizedType, "100ml") {
+		return "100ml"
+	}
+	if strings.Contains(normalizedType, "100g") {
+		return "100g"
+	}
+	switch normalizedType {
+	case "100g", "100ml", "serving":
+		return normalizedType
+	case "per100g":
+		return "100g"
+	case "per100ml":
+		return "100ml"
+	case "per_serving":
+		return "serving"
+	}
+	if basisUnit == "g" {
+		return "100g"
+	}
+	if basisUnit == "ml" {
+		return "100ml"
+	}
+	return fallback
+}
+
+func normalizeBasisToken(value string) string {
+	normalizedType := strings.ToLower(strings.TrimSpace(value))
+	normalizedType = strings.ReplaceAll(normalizedType, " ", "")
+	normalizedType = strings.ReplaceAll(normalizedType, "每", "")
+	normalizedType = strings.ReplaceAll(normalizedType, "毫升", "ml")
+	normalizedType = strings.ReplaceAll(normalizedType, "克", "g")
+	normalizedType = strings.ReplaceAll(normalizedType, "（", "(")
+	normalizedType = strings.ReplaceAll(normalizedType, "）", ")")
+	return normalizedType
+}
+
+func basisScale(basis PackagedLabelNutritionBasis, normalizedBasis string) float64 {
+	if basis.Value <= 0 {
+		if normalizedBasis == "100g" || normalizedBasis == "100ml" {
+			return 1
+		}
+		return 0
+	}
+	return 100.0 / basis.Value
+}
+
+func servingBasisUnit(result *PackagedProductExtractResult) string {
+	if result == nil {
+		return ""
+	}
+	rawUnit := normalizeBasisToken(result.RawNutritionBasis.Unit)
+	switch rawUnit {
+	case "g":
+		return "g"
+	case "ml":
+		return "ml"
+	}
+	category := strings.ToLower(strings.TrimSpace(result.PackageCategory))
+	if strings.Contains(category, "固体饮料") {
+		return "g"
+	}
+	if strings.Contains(category, "drink") || strings.Contains(category, "饮料") || strings.Contains(category, "饮品") {
+		return "ml"
+	}
+	if result.NutritionBasisUnit == "100ml" {
+		return "ml"
+	}
+	return "g"
+}
+
+func normalizeEnergyUnit(primary, fallback string) string {
+	value := strings.ToLower(strings.TrimSpace(primary))
+	if value != "" {
+		return value
+	}
+	return strings.ToLower(strings.TrimSpace(fallback))
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func normalizeStringSlice(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func evaluatePackagedAutoIngest(result *PackagedProductExtractResult) *PackagedAutoIngestResult {
+	auto := &PackagedAutoIngestResult{
+		Status: "blocked",
+	}
+	if result == nil {
+		auto.Reason = "empty_result"
+		return auto
+	}
+	auto.MissingFields = append([]string(nil), result.MissingFields...)
+	auto.ConflictReasons = detectPackagedExtractConflicts(result)
+	if strings.TrimSpace(result.ProductName) == "" {
+		auto.Reason = "missing_product_name"
+		return auto
+	}
+	if strings.TrimSpace(result.ConversionStatus) != "converted" {
+		auto.Reason = "conversion_not_closed"
+		return auto
+	}
+	if !hasValidPackagedNutrition(result.UnitNutritionPer100g) {
+		auto.Reason = "missing_nutrition"
+		return auto
+	}
+	auto.Status = "ready"
+	auto.Reason = "passed"
+	return auto
+}
+
+func detectPackagedExtractConflicts(result *PackagedProductExtractResult) []string {
+	conflicts := []string{}
+	if result == nil {
+		return conflicts
+	}
+	if result.ServingWeightG > 0 && result.NetWeightG > 0 && result.ServingWeightG > result.NetWeightG*1.2 {
+		conflicts = append(conflicts, "serving_weight_exceeds_net_weight")
+	}
+	if result.NetWeightG > 0 && result.SpecText != "" {
+		if totalFromSpec := parseSpecTotalWeight(result.SpecText); totalFromSpec > 0 && math.Abs(totalFromSpec-result.NetWeightG) > 5 {
+			conflicts = append(conflicts, "spec_total_weight_conflict")
+		}
+	}
+	return conflicts
+}
+
+func hasValidPackagedNutrition(unit map[string]any) bool {
+	if len(unit) == 0 {
+		return false
+	}
+	if numberFromAny(unit["calories"]) > 0 {
+		return true
+	}
+	macroCount := 0
+	for _, key := range []string{"protein", "carbs", "fat"} {
+		if numberFromAny(unit[key]) > 0 {
+			macroCount++
+		}
+	}
+	return macroCount >= 2
+}
+
+func confidenceBelow(confidence map[string]any, key string, threshold float64) bool {
+	if threshold <= 0 {
+		return false
+	}
+	score := numberFromAny(confidence[key])
+	return score > 0 && score < threshold
+}
+
+func effectiveServingWeight(result *PackagedProductExtractResult) float64 {
+	if result != nil && result.ServingWeightG > 0 {
+		return result.ServingWeightG
+	}
+	if result != nil {
+		return result.NetWeightG
+	}
+	return 0
+}
+
+func parseSpecTotalWeight(specText string) float64 {
+	specText = strings.ToLower(strings.TrimSpace(specText))
+	if specText == "" {
+		return 0
+	}
+	specText = strings.ReplaceAll(specText, "×", "*")
+	specText = strings.ReplaceAll(specText, "x", "*")
+	multiIdx := strings.Index(specText, "*")
+	if multiIdx <= 0 {
+		return parseLeadingWeight(specText)
+	}
+	left := parseLeadingWeight(specText[:multiIdx])
+	right := parseCount(specText[multiIdx+1:])
+	if left > 0 && right > 0 {
+		return left * right
+	}
+	return parseLeadingWeight(specText)
+}
+
+func parseLeadingWeight(text string) float64 {
+	text = strings.TrimSpace(text)
+	if strings.Contains(text, "ml") {
+		return numberFromAny(strings.TrimSpace(strings.ReplaceAll(text, "ml", "")))
+	}
+	if strings.Contains(text, "g") {
+		return numberFromAny(strings.TrimSpace(strings.ReplaceAll(text, "g", "")))
+	}
+	return numberFromAny(text)
+}
+
+func parseCount(text string) float64 {
+	text = strings.TrimSpace(text)
+	for _, suffix := range []string{"袋", "包", "盒", "瓶", "杯", "支", "枚"} {
+		text = strings.ReplaceAll(text, suffix, "")
+	}
+	return numberFromAny(text)
 }
 
 func numberFromAny(values ...any) float64 {

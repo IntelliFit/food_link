@@ -11,6 +11,10 @@ type EditableNutrientField = 'calories' | 'protein' | 'carbs' | 'fat' | 'waterMl
 interface EditableFoodItem {
   name: string
   weight: number
+  grossWeight: number
+  ediblePortionRatio: number
+  ediblePortionReason?: string
+  ediblePortionSource?: string
   ratio: number
   intake: number
   waterMl: number
@@ -156,6 +160,17 @@ function resolveEditableItemNutrients(
 
 const formatWeightDisplay = (value: number) => `${Math.max(0, Math.round(value))}g`
 
+const scaleNutrients = (nutrients: Nutrients, scale: number): Nutrients => {
+  const next: Nutrients = { ...nutrients }
+  ;(Object.keys(next) as Array<keyof Nutrients>).forEach((key) => {
+    const value = Number(next[key])
+    if (Number.isFinite(value)) {
+      next[key] = roundToSingleDecimal(value * scale) as never
+    }
+  })
+  return next
+}
+
 interface MealRecordEditModalProps {
   visible: boolean
   record: FoodRecord | null
@@ -176,6 +191,10 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           return {
             name: item.name,
             weight: item.weight,
+            grossWeight: Number((item as any).gross_weight_grams ?? (item as any).grossWeightGrams ?? item.weight) || item.weight,
+            ediblePortionRatio: Number((item as any).edible_portion_ratio ?? (item as any).ediblePortionRatio ?? 100) || 100,
+            ediblePortionReason: (item as any).edible_portion_reason ?? (item as any).ediblePortionReason,
+            ediblePortionSource: (item as any).edible_portion_source ?? (item as any).ediblePortionSource,
             ratio,
             intake: resolveRecordItemIntake(item),
             waterMl: item.waterMl ?? item.water_ml ?? 0,
@@ -306,16 +325,23 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     })
   }, [editItems, updateDisplayedNutrient])
 
-  const adjustIntake = useCallback((index: number, delta: number) => {
+  const adjustWeight = useCallback((index: number, delta: number) => {
     setEditItems(prev => {
       const item = prev[index]
       if (!item) return prev
       const next = [...prev]
       const updated = { ...next[index] }
-      updated.intake = Math.max(0, Math.round(((item.intake || 0) + delta) * 10) / 10)
-      if (updated.weight > 0) {
-        updated.ratio = Math.round((updated.intake / updated.weight) * 100)
-      }
+      const nextWeight = Math.max(10, Math.round(((item.weight || 0) + delta) * 10) / 10)
+      const scale = item.weight > 0 ? nextWeight / item.weight : 1
+      const nextGrossWeight = Math.max(updated.grossWeight, nextWeight)
+      updated.weight = nextWeight
+      updated.grossWeight = nextGrossWeight
+      updated.ediblePortionRatio = nextGrossWeight > 0
+        ? Math.max(1, Math.min(100, Math.round((nextWeight / nextGrossWeight) * 100)))
+        : updated.ediblePortionRatio
+      updated.intake = Math.round(nextWeight * (updated.ratio / 100) * 10) / 10
+      updated.waterMl = roundToSingleDecimal(item.waterMl * scale)
+      updated.nutrients = scaleNutrients(item.nutrients, scale)
       next[index] = updated
       return next
     })
@@ -360,6 +386,10 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           weight: item.weight,
           ratio: item.ratio,
           intake: item.intake,
+          gross_weight_grams: item.grossWeight,
+          edible_portion_ratio: item.ediblePortionRatio,
+          edible_portion_reason: item.ediblePortionReason,
+          edible_portion_source: item.ediblePortionSource,
           water_ml: item.waterMl,
           nutrients: item.nutrients
         })),
@@ -483,11 +513,11 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
                   <View className='weight-control'>
                     <Text className='control-label'>估算重量</Text>
                     <View className='weight-adjuster'>
-                      <View className='adjust-btn minus' onClick={() => adjustIntake(idx, -10)}>
+                      <View className='adjust-btn minus' onClick={() => adjustWeight(idx, -10)}>
                         <Text className='adjust-btn-text'>−</Text>
                       </View>
-                      <Text className='weight-display'>{formatWeightDisplay(item.intake)}</Text>
-                      <View className='adjust-btn plus' onClick={() => adjustIntake(idx, 10)}>
+                      <Text className='weight-display'>{formatWeightDisplay(item.weight)}</Text>
+                      <View className='adjust-btn plus' onClick={() => adjustWeight(idx, 10)}>
                         <Text className='adjust-btn-text'>+</Text>
                       </View>
                     </View>

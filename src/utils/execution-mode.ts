@@ -11,9 +11,14 @@ import { extraPkgUrl } from './subpackage-extra'
 export const STRICT_MODE_ENABLED = true
 
 export const normalizeAvailableExecutionMode = (value: unknown): ExecutionMode => {
+  if (value === 'standard_web_search') return 'standard_web_search'
+  if (value === 'strict_web_search') return 'strict_web_search'
   if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
   return 'standard'
 }
+
+export const isPrecisionExecutionMode = (value?: ExecutionMode | string | null): boolean =>
+  value === 'strict' || value === 'strict_web_search' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped'
 
 export const canUseStrictModeForMembership = (membershipStatus?: MembershipStatus | null): boolean => {
   return Boolean(

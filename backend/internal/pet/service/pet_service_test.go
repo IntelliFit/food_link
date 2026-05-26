@@ -196,6 +196,34 @@ func (f *fakePetRepo) ClaimEvent(ctx context.Context, userID, eventID string, ex
 	return &eventCopy, &petCopy, ledger, applied, nil
 }
 
+func (f *fakePetRepo) RerollAppearance(ctx context.Context, userID, petID string, updates map[string]any, cost int, meta map[string]any) (*petdomain.UserPet, *membershipdomain.UserEarnedCreditLedger, error) {
+	if f.pet == nil || f.pet.ID != petID || f.pet.UserID != userID {
+		return nil, nil, errors.New("pet not found")
+	}
+	if f.balance < cost {
+		return nil, nil, repo.ErrInsufficientEarnedCredits
+	}
+	f.balance -= cost
+	if v, ok := updates["pet_seed"].(string); ok {
+		f.pet.PetSeed = v
+	}
+	if v, ok := updates["color"].(string); ok {
+		f.pet.Color = v
+	}
+	if v, ok := updates["shape"].(string); ok {
+		f.pet.Shape = v
+	}
+	if v, ok := updates["pattern"].(string); ok {
+		f.pet.Pattern = v
+	}
+	if v, ok := updates["accessory"].(string); ok {
+		f.pet.Accessory = v
+	}
+	copy := *f.pet
+	ledger := &membershipdomain.UserEarnedCreditLedger{BalanceAfter: f.balance}
+	return &copy, ledger, nil
+}
+
 func TestSummaryCreatesStablePetAndSingleOfflineEvent(t *testing.T) {
 	fake := newFakePetRepo()
 	fake.foodByDate["2026-05-19"] = []repo.FoodRecord{
@@ -247,4 +275,47 @@ func TestClaimEventIsIdempotent(t *testing.T) {
 	assert.Equal(t, 0, second.ExpAwarded)
 	assert.Equal(t, 1, fake.balance)
 	assert.Equal(t, 16, fake.pet.Experience)
+}
+
+func TestRerollAppearanceConsumesEarnedCredits(t *testing.T) {
+	fake := newFakePetRepo()
+	fake.pet = &petdomain.UserPet{
+		ID:          "pet-1",
+		UserID:      "user-1",
+		PetSeed:     "pet:user-1",
+		Name:        "薄荷团子",
+		Color:       "mint",
+		Shape:       "round",
+		Pattern:     "pattern-0",
+		Accessory:   "leaf",
+		Personality: "gentle",
+	}
+	fake.balance = 9
+	svc := NewService(fake)
+
+	result, err := svc.RerollAppearance(context.Background(), "user-1")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, petAppearanceRerollCost, result.CreditsCost)
+	assert.NotEqual(t, "pet:user-1", result.Pet.PetSeed)
+	assert.Equal(t, "薄荷团子", result.Pet.Name)
+	require.NotNil(t, result.EarnedCreditsBalance)
+	assert.Equal(t, 4, *result.EarnedCreditsBalance)
+}
+
+func TestRerollAppearanceRequiresEnoughEarnedCredits(t *testing.T) {
+	fake := newFakePetRepo()
+	fake.pet = &petdomain.UserPet{
+		ID:      "pet-1",
+		UserID:  "user-1",
+		PetSeed: "pet:user-1",
+		Name:    "薄荷团子",
+	}
+	fake.balance = 3
+	svc := NewService(fake)
+
+	result, err := svc.RerollAppearance(context.Background(), "user-1")
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, IsInsufficientEarnedCreditsError(err))
 }

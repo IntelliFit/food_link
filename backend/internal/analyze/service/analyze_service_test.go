@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	authrepo "food_link/backend/internal/auth/repo"
@@ -74,6 +76,34 @@ func (m *multiImageLLMClient) AnalyzeWithImages(ctx context.Context, prompt stri
 	return m.result, m.err
 }
 
+type sequenceMultiImageLLMClient struct {
+	results       []map[string]any
+	errs          []error
+	imageSetCalls [][]string
+	prompts       []string
+}
+
+func (m *sequenceMultiImageLLMClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	return m.AnalyzeWithImages(ctx, prompt, []string{imageURL})
+}
+
+func (m *sequenceMultiImageLLMClient) AnalyzeWithImages(ctx context.Context, prompt string, imageURLs []string) (map[string]any, error) {
+	index := len(m.imageSetCalls)
+	copied := append([]string(nil), imageURLs...)
+	m.imageSetCalls = append(m.imageSetCalls, copied)
+	m.prompts = append(m.prompts, prompt)
+	if index < len(m.errs) && m.errs[index] != nil {
+		return nil, m.errs[index]
+	}
+	if index < len(m.results) && m.results[index] != nil {
+		return m.results[index], nil
+	}
+	if len(m.results) > 0 {
+		return m.results[len(m.results)-1], nil
+	}
+	return map[string]any{}, nil
+}
+
 type mockWebSearcher struct {
 	results []WebSearchResult
 	queries []string
@@ -120,6 +150,8 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	gemini35Grouped := "gemini35_flash_grouped"
 	lite := "lite"
 	standard := "standard"
+	standardWeb := "standard_web_search"
+	strictWeb := "strict_web_search"
 	invalid := "invalid"
 	assert.Equal(t, "strict", normalizeExecutionMode(&strict))
 	assert.Equal(t, "standard", normalizeExecutionMode(&experimental))
@@ -127,6 +159,8 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	assert.Equal(t, "strict", normalizeExecutionMode(&gemini35Grouped))
 	assert.Equal(t, "standard", normalizeExecutionMode(&lite))
 	assert.Equal(t, "standard", normalizeExecutionMode(&standard))
+	assert.Equal(t, "standard_web_search", normalizeExecutionMode(&standardWeb))
+	assert.Equal(t, "strict_web_search", normalizeExecutionMode(&strictWeb))
 	assert.Equal(t, "standard", normalizeExecutionMode(&invalid))
 	assert.Equal(t, "standard", normalizeExecutionMode(nil))
 }
@@ -304,6 +338,10 @@ func TestBuildPromptStandardMode(t *testing.T) {
 	assert.Contains(t, prompt, "配料表")
 	assert.Contains(t, prompt, "营养成分表")
 	assert.Contains(t, prompt, "文字证据优先级高于包装正面插画")
+	assert.Contains(t, prompt, "只露出很小一角、只有色块/封边/局部花纹")
+	assert.Contains(t, prompt, "快速物理空间标定")
+	assert.Contains(t, prompt, "严禁凭 Logo 或颜色脑补品牌")
+	assert.Contains(t, prompt, "260g")
 }
 
 func TestBuildPromptStrictModeUsesDBFirstPrompt(t *testing.T) {
@@ -313,10 +351,105 @@ func TestBuildPromptStrictModeUsesDBFirstPrompt(t *testing.T) {
 	}
 	prompt := buildPrompt(input, nil, "strict")
 	assert.Contains(t, prompt, "Gemini 3.5 Flash 直接识别")
-	assert.Contains(t, prompt, "营养由后端数据库查表补充")
+	assert.Contains(t, prompt, "营养由后端数据库统一查表补充")
 	assert.Contains(t, prompt, "配料表")
 	assert.Contains(t, prompt, "营养成分表")
 	assert.Contains(t, prompt, "最终名称优先采用包装文字和配料证据")
+	assert.Contains(t, prompt, "只露出很小一角、只有色块/封边/局部花纹")
+	assert.Contains(t, prompt, "OCR 强覆盖规则")
+	assert.Contains(t, prompt, "空间标定")
+	assert.Contains(t, prompt, "禁止凭 Logo 图案盲猜品牌")
+	assert.Contains(t, prompt, "estimatedWeightGrams 必须与 weightEvidence 完全吻合")
+}
+
+func TestBuildStandardImageHybridReviewPromptRejectsTinyPackageCorners(t *testing.T) {
+	doubaoParsed := map[string]any{
+		"description": "米饭鸡肉",
+		"items": []map[string]any{
+			{"name": "白米饭", "estimatedWeightGrams": 220.0, "waterMl": 0.0},
+			{"name": "鸡肉", "estimatedWeightGrams": 160.0, "waterMl": 0.0},
+		},
+	}
+	prompt := buildStandardImageHybridReviewPrompt(AnalyzeInput{MealType: "lunch"}, doubaoParsed, nil)
+	assert.Contains(t, prompt, "如果疑似包装对象只露出很小一角、只有色块/封边/局部花纹")
+	assert.Contains(t, prompt, "不要输出为具体零食名")
+}
+
+func TestBuildLowCostWebSearchRefinePrompt(t *testing.T) {
+	prompt := buildLowCostWebSearchRefinePrompt(
+		AnalyzeInput{AdditionalContext: "酸奶杯完整未开封"},
+		map[string]any{"items": []any{map[string]any{"name": "草莓酸奶", "estimatedWeightGrams": 130}}},
+		[]WebSearchEvidence{{
+			Query:   "光明12mm大粒草莓酸奶 净含量",
+			Results: []WebSearchResult{{Title: "光明12mm大粒草莓酸奶 260g", Snippet: "净含量260g"}},
+		}},
+		standardWebSearchMode,
+	)
+
+	assert.Contains(t, prompt, "低成本联网搜索校准")
+	assert.Contains(t, prompt, "webSearchEvidence")
+	assert.Contains(t, prompt, "净含量260g")
+	assert.Contains(t, prompt, "搜索结果只作为外部佐证")
+	assert.Contains(t, prompt, "不可把搜索到但图片中不可见的食物新增到结果中")
+	assert.Contains(t, prompt, "evidenceSource")
+	assert.Contains(t, prompt, "searchEvidenceUsed")
+	assert.Contains(t, prompt, "没有搜索结果直接支撑某个商品规格")
+}
+
+func TestCompactWebSearchEvidence(t *testing.T) {
+	evidence := []WebSearchEvidence{{
+		Query: "光明酸奶 净含量",
+		Results: []WebSearchResult{
+			{Title: "光明酸奶 260g", Snippet: "净含量260g", URL: "https://example.com/yogurt"},
+			{Title: "第二条", Snippet: "其他摘要"},
+			{Title: "第三条", Snippet: "不应出现"},
+		},
+	}}
+
+	compacted := compactWebSearchEvidence(evidence, 1, 2)
+
+	require.Len(t, compacted, 1)
+	assert.Equal(t, "光明酸奶 净含量", compacted[0]["query"])
+	results := compacted[0]["results"].([]map[string]any)
+	require.Len(t, results, 2)
+	assert.Equal(t, "光明酸奶 260g", results[0]["title"])
+	assert.Equal(t, "https://example.com/yogurt", results[0]["url"])
+}
+
+func TestCompactHybridItemChanges(t *testing.T) {
+	baseItems := []map[string]any{{
+		"name":                 "草莓酸奶",
+		"estimatedWeightGrams": 130.0,
+		"waterMl":              120.0,
+	}}
+	finalItems := []map[string]any{{
+		"name":                 "光明12mm大粒草莓酸奶",
+		"estimatedWeightGrams": 260.0,
+		"waterMl":              220.0,
+		"weightEvidence":       "搜索证据显示净含量260g。",
+		"evidenceSource":       "search:光明12mm大粒草莓酸奶 净含量",
+		"searchEvidenceUsed":   []any{"光明12mm大粒草莓酸奶 净含量"},
+	}}
+
+	changes := compactHybridItemChanges(baseItems, finalItems, 8)
+
+	require.Len(t, changes, 1)
+	assert.True(t, changes[0]["changed"].(bool))
+	assert.Equal(t, "草莓酸奶", changes[0]["before_name"])
+	assert.Equal(t, "光明12mm大粒草莓酸奶", changes[0]["after_name"])
+	assert.Equal(t, 130.0, changes[0]["weight_delta_g"])
+	assert.Equal(t, "search:光明12mm大粒草莓酸奶 净含量", changes[0]["evidence_source"])
+}
+
+func TestParseBingHTMLResults(t *testing.T) {
+	raw := `<html><body><ol><li class="b_algo"><h2><a href="https://example.com/yogurt">光明12mm大粒草莓酸奶</a></h2><p>规格 净含量260g，草莓风味发酵乳。</p></li></ol></body></html>`
+
+	results := parseBingHTMLResults(raw, 3)
+
+	require.Len(t, results, 1)
+	assert.Equal(t, "光明12mm大粒草莓酸奶", results[0].Title)
+	assert.Contains(t, results[0].Snippet, "净含量260g")
+	assert.Equal(t, "https://example.com/yogurt", results[0].URL)
 }
 
 func TestBuildPromptExperimentalMode(t *testing.T) {
@@ -372,13 +505,30 @@ func TestBuildDBFirstPromptIncludesCorrectionContext(t *testing.T) {
 
 func TestBuildDBFirstPromptsUseEdibleNetWeight(t *testing.T) {
 	imagePrompt := buildImageDBFirstPrompt(AnalyzeInput{ImageURL: "https://example.com/shrimp.jpg"}, nil)
-	for _, expected := range []string{"营养库按可食部计算", "去壳/去骨/去核后的可食净重", "虾/螃蟹/贝类按去壳肉重", "花生/瓜子/坚果按去壳仁重"} {
+	for _, expected := range []string{"grossWeightGrams", "原始可见总重量", "后端会用 DeepSeek Flash 单独计算 ediblePortionRatio"} {
 		assert.Contains(t, imagePrompt, expected)
 	}
 
 	textPrompt := buildTextDBFirstPrompt(AnalyzeInput{Text: "吃了十只虾和一把花生"}, nil)
 	for _, expected := range []string{"可食部净重", "带壳、带骨、带核食物", "去壳/去骨/去核后的可食重量"} {
 		assert.Contains(t, textPrompt, expected)
+	}
+}
+
+func TestImageDBFirstPromptsSeparateWeightFromSuggestedRatio(t *testing.T) {
+	input := AnalyzeInput{
+		ImageURL:            "https://example.com/meal.jpg",
+		RemainingCalories:   floatPtr(300),
+		SuggestRatioEnabled: true,
+	}
+	standardPrompt := buildImageDBFirstPrompt(input, nil)
+	strictPrompt := buildPrompt(input, nil, "strict")
+	for _, prompt := range []string{standardPrompt, strictPrompt} {
+		assert.Contains(t, prompt, "原始")
+		assert.Contains(t, prompt, "DeepSeek Flash")
+		assert.Contains(t, prompt, "不能改变重量本身")
+		assert.Contains(t, prompt, "不能反向影响 estimatedWeightGrams")
+		assert.Contains(t, prompt, "grossWeightGrams")
 	}
 }
 
@@ -430,6 +580,48 @@ func TestParseItems(t *testing.T) {
 	assert.Len(t, items, 1)
 	assert.Equal(t, "apple", items[0]["name"])
 	assert.Equal(t, 126.0, items[0]["waterMl"])
+	assert.Equal(t, 150.0, items[0]["grossWeightGrams"])
+	assert.Equal(t, 100.0, items[0]["ediblePortionRatio"])
+}
+
+func TestParseItemsPreservesGrossAndEdibleRatio(t *testing.T) {
+	items := parseItems(map[string]any{
+		"items": []any{
+			map[string]any{
+				"name":                 "小龙虾",
+				"grossWeightGrams":     600.0,
+				"estimatedWeightGrams": 600.0,
+				"ediblePortionRatio":   35.0,
+			},
+		},
+	})
+	assert.Len(t, items, 1)
+	assert.Equal(t, 600.0, items[0]["grossWeightGrams"])
+	assert.Equal(t, 600.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, 35.0, items[0]["ediblePortionRatio"])
+}
+
+func TestWithDefaultEdiblePortionsDerivesEdibleWeight(t *testing.T) {
+	items := withDefaultEdiblePortions([]map[string]any{
+		{"name": "小龙虾", "grossWeightGrams": 600.0, "estimatedWeightGrams": 210.0},
+	}, "test")
+	assert.Len(t, items, 1)
+	assert.Equal(t, 600.0, items[0]["grossWeightGrams"])
+	assert.Equal(t, 35.0, items[0]["ediblePortionRatio"])
+	assert.Equal(t, 210.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "test", items[0]["ediblePortionSource"])
+}
+
+func TestParseEdiblePortionRows(t *testing.T) {
+	rows := parseEdiblePortionRows(map[string]any{
+		"items": []any{
+			map[string]any{"index": 0.0, "ediblePortionRatio": 35.0, "reason": "去壳后可食肉"},
+			map[string]any{"index": 1.0, "ediblePortionRatio": 100.0},
+		},
+	})
+	assert.Equal(t, 35.0, rows[0].ratio)
+	assert.Equal(t, "去壳后可食肉", rows[0].reason)
+	assert.Equal(t, 100.0, rows[1].ratio)
 }
 
 func TestAnalyzeService_ApplySuggestedRatiosDisabledDefaultsTo100(t *testing.T) {
@@ -638,6 +830,81 @@ func TestAnalyzeService_AnalyzeImageStandardDoesNotFallbackToDoubaoWhenGeminiFai
 	assert.Equal(t, 3, gemini3Client.calls)
 }
 
+func TestAnalyzeService_AnalyzeImageStandardWebSearchRefinesWithSearchEvidence(t *testing.T) {
+	mode := "standard_web_search"
+	doubaoClient := &multiImageLLMClient{err: assert.AnError}
+	gemini3Client := &sequenceMultiImageLLMClient{results: []map[string]any{{
+		"description": "第一轮识别",
+		"items": []any{
+			map[string]any{"name": "光明12mm大粒草莓酸奶", "type": "packaged", "estimatedWeightGrams": 130.0, "waterMl": 120.0},
+		},
+	}}}
+	searcher := &mockWebSearcher{results: []WebSearchResult{
+		{Title: "光明12mm大粒草莓酸奶 净含量260g", Snippet: "商品规格：260g 杯装酸奶", URL: "https://example.com/yogurt"},
+	}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureWebSearcher(searcher)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/yogurt.jpg",
+		ExecutionMode: &mode,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "第一轮识别", result["description"])
+	assert.Equal(t, "standard_web_search_single_vision_web_search_db_first", result["food_image_strategy"])
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "applied", meta["status"])
+	assert.Equal(t, "standard_web_search_single_vision_web_search_db_first", meta["strategy"])
+	assert.Equal(t, "applied", meta["web_search_status"])
+	assert.Equal(t, "rule_based_spec_extraction", meta["calibration_method"])
+	assert.True(t, meta["second_vision_skipped"].(bool))
+	assert.NotEmpty(t, meta["base_items"])
+	assert.NotEmpty(t, meta["web_search_evidence"])
+	assert.NotEmpty(t, meta["item_changes"])
+	require.Len(t, gemini3Client.imageSetCalls, 1)
+	items := toItems(result["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "光明12mm大粒草莓酸奶", items[0]["name"])
+	assert.Equal(t, 260.0, items[0]["estimatedWeightGrams"])
+	assert.Contains(t, fmt.Sprintf("%v", items[0]["weightEvidence"]), "净含量260g")
+	require.Empty(t, doubaoClient.imageSetCalls)
+	assert.NotEmpty(t, searcher.queries)
+}
+
+func TestAnalyzeService_AnalyzeImageStandardWebSearchIgnoresIrrelevantSearchEvidence(t *testing.T) {
+	mode := "standard_web_search"
+	doubaoClient := &multiImageLLMClient{err: assert.AnError}
+	gemini3Client := &sequenceMultiImageLLMClient{results: []map[string]any{{
+		"description": "手持的原味软冰淇淋蛋筒",
+		"items": []any{
+			map[string]any{"name": "原味软冰淇淋蛋筒", "estimatedWeightGrams": 100.0, "waterMl": 50.0},
+		},
+	}}}
+	searcher := &mockWebSearcher{results: []WebSearchResult{
+		{Title: "原 （汉语文字）_百度百科", Snippet: "原字的本义是水的源头", URL: "https://baike.baidu.com/item/%E5%8E%9F/34324"},
+		{Title: "《原神》官方网站-米哈游开放世界冒险RPG", Snippet: "开放世界冒险RPG游戏", URL: "https://www.yuanshen.com/"},
+	}}
+	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureWebSearcher(searcher)
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/icecream.jpg",
+		ExecutionMode: &mode,
+	})
+
+	require.NoError(t, err)
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "no_relevant_evidence", meta["status"])
+	assert.Equal(t, "no_relevant_results", meta["web_search_status"])
+	assert.Equal(t, "first_pass_kept", meta["calibration_method"])
+	require.Len(t, gemini3Client.imageSetCalls, 1)
+	items := toItems(result["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "原味软冰淇淋蛋筒", items[0]["name"])
+	assert.Equal(t, 100.0, items[0]["estimatedWeightGrams"])
+}
+
 func TestAnalyzeService_AnalyzeImageStrictUsesGemini35SinglePass(t *testing.T) {
 	strict := "strict"
 	doubaoClient := &multiImageLLMClient{err: assert.AnError}
@@ -826,9 +1093,72 @@ func TestBuildStandardImageSearchQueries(t *testing.T) {
 	})
 
 	require.Len(t, queries, 3)
-	assert.Equal(t, "龙宫果 鹅胗 食物 外观 营养", queries[0])
-	assert.Equal(t, "龙宫果 鹅胗 包装 净含量 营养成分", queries[1])
-	assert.Equal(t, "零食和水果混合 食物 外观 营养", queries[2])
+	assert.Equal(t, "无花果 食物 外观 营养", queries[0])
+	assert.Equal(t, "龙宫果 食物 外观 营养", queries[1])
+	assert.Equal(t, "longkong 食物 外观 营养", queries[2])
+}
+
+func TestBuildStandardImageSearchQueriesPrioritizesPackagedFoods(t *testing.T) {
+	queries := buildStandardImageSearchQueries(AnalyzeInput{}, map[string]any{
+		"description": "丰盛晚餐，包含小龙虾、鸡爪、丝瓜炒蛋、多种水果及饮品",
+		"items": []any{
+			map[string]any{"name": "麻辣小龙虾", "type": "normal"},
+			map[string]any{"name": "光明大粒草莓酸奶", "type": "packaged"},
+			map[string]any{"name": "哈尔滨啤酒", "type": "packaged"},
+			map[string]any{"name": "可乐", "type": "normal"},
+		},
+	})
+
+	require.Len(t, queries, 3)
+	assert.Contains(t, queries[0], "光明大粒草莓酸奶")
+	assert.Contains(t, queries[0], "净含量")
+	assert.Contains(t, strings.Join(queries, "\n"), "哈尔滨啤酒")
+	assert.NotContains(t, strings.Join(queries, "\n"), "丰盛晚餐")
+}
+
+func TestFilterRelevantWebSearchEvidence(t *testing.T) {
+	evidence := []WebSearchEvidence{{
+		Query: "原味软冰淇淋蛋筒 食物 外观 营养",
+		Results: []WebSearchResult{
+			{Title: "原 （汉语文字）_百度百科", Snippet: "原字的本义是水的源头"},
+			{Title: "蜜雪冰城冰淇淋蛋筒 热量", Snippet: "原味冰淇淋蛋筒营养与规格信息"},
+		},
+	}}
+	baseItems := []map[string]any{{"name": "原味软冰淇淋蛋筒"}}
+
+	filtered, relevance := filterRelevantWebSearchEvidence(evidence, baseItems)
+
+	require.Len(t, filtered, 1)
+	require.Len(t, filtered[0].Results, 1)
+	assert.Contains(t, filtered[0].Results[0].Title, "冰淇淋蛋筒")
+	require.Len(t, relevance, 1)
+	assert.Equal(t, "relevant", relevance[0]["status"])
+	assert.Equal(t, 1, relevance[0]["relevant_count"])
+}
+
+func TestApplyRuleBasedWebSearchCalibration(t *testing.T) {
+	baseParsed := map[string]any{
+		"description": "酸奶",
+		"items": []any{
+			map[string]any{"name": "光明12mm大粒草莓酸奶", "estimatedWeightGrams": 130.0, "waterMl": 120.0},
+		},
+	}
+	evidence := []WebSearchEvidence{{
+		Query: "光明12mm大粒草莓酸奶 包装 净含量 规格",
+		Results: []WebSearchResult{{
+			Title:   "光明12mm大粒草莓酸奶",
+			Snippet: "净含量260g，杯装酸奶",
+		}},
+	}}
+
+	merged, rows := applyRuleBasedWebSearchCalibration(baseParsed, evidence)
+
+	items := parseItems(merged)
+	require.Len(t, items, 1)
+	assert.Equal(t, 260.0, items[0]["estimatedWeightGrams"])
+	assert.Contains(t, fmt.Sprintf("%v", items[0]["evidenceSource"]), "search:")
+	require.Len(t, rows, 1)
+	assert.Equal(t, true, rows[0]["applied"])
 }
 
 func TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON(t *testing.T) {
@@ -981,7 +1311,15 @@ func TestAnalyzeService_ResolveExecutionMode(t *testing.T) {
 
 	experimental := "experimental"
 	mode = svc.resolveExecutionMode(ctx, "", &experimental)
-	assert.Equal(t, "experimental", mode)
+	assert.Equal(t, "standard", mode)
+
+	standardWeb := "standard_web_search"
+	mode = svc.resolveExecutionMode(ctx, "", &standardWeb)
+	assert.Equal(t, "standard_web_search", mode)
+
+	strictWeb := "strict_web_search"
+	mode = svc.resolveExecutionMode(ctx, "", &strictWeb)
+	assert.Equal(t, "strict_web_search", mode)
 }
 
 func TestBuildAnalyzeResponse(t *testing.T) {
@@ -1016,10 +1354,41 @@ func TestNutritionUnitIncludesMicronutrients(t *testing.T) {
 	assert.Equal(t, 0.3, scaled["vitaminB12Mcg"])
 }
 
-func TestAnalyzeService_ApplyDBFirstUsesPackagedFoodWeightForSnack(t *testing.T) {
+func TestNutritionWeightFromItemFallsBackToWaterMl(t *testing.T) {
+	assert.Equal(t, 165.0, nutritionWeightFromItem(map[string]any{
+		"estimatedWeightGrams": 0.0,
+		"originalWeightGrams":  0.0,
+		"waterMl":              165.0,
+	}))
+	assert.Equal(t, 120.0, nutritionWeightFromItem(map[string]any{
+		"estimatedWeightGrams": 0.0,
+		"originalWeightGrams":  120.0,
+		"waterMl":              165.0,
+	}))
+	assert.Equal(t, 90.0, nutritionWeightFromItem(map[string]any{
+		"estimatedWeightGrams": 90.0,
+		"originalWeightGrams":  120.0,
+		"waterMl":              165.0,
+	}))
+	assert.Equal(t, 88.0, nutritionWeightFromItem(map[string]any{
+		"nutrients": map[string]any{"waterMl": 88.0},
+	}))
+}
+
+func TestAnalyzeService_ApplyDBFirstUsesUnifiedNutritionFlowForSnack(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
 	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
+		ID:             "normal-1",
+		CanonicalName:  "蛋白棒",
+		NormalizedName: "蛋白棒",
+		KcalPer100g:    200,
+		ProteinPer100g: 10,
+		CarbsPer100g:   20,
+		FatPer100g:     6,
+		IsActive:       true,
+	}).Error)
 	require.NoError(t, db.Create(&foodrecorddomain.PackagedFood{
 		ID:             "snack-1",
 		Brand:          "BrandA",
@@ -1048,11 +1417,93 @@ func TestAnalyzeService_ApplyDBFirstUsesPackagedFoodWeightForSnack(t *testing.T)
 
 	require.Len(t, items, 1)
 	assert.Equal(t, "snack", items[0]["type"])
-	assert.Equal(t, "packaged_food_library", items[0]["nutrition_source"])
-	assert.Equal(t, 100.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+	assert.Equal(t, 80.0, items[0]["estimatedWeightGrams"])
 	nutrients := items[0]["nutrients"].(map[string]any)
-	assert.Equal(t, 420.0, nutrients["calories"])
-	assert.Equal(t, 28.0, nutrients["protein"])
+	assert.Equal(t, 160.0, nutrients["calories"])
+	assert.Equal(t, 8.0, nutrients["protein"])
+}
+
+func TestAnalyzeService_ApplyDBFirstUsesWaterMlAsLiquidWeight(t *testing.T) {
+	db, userRepo := setupAnalyzeServiceTestDB(t)
+	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
+		ID:             "drink-1",
+		CanonicalName:  "可乐",
+		NormalizedName: "可乐",
+		KcalPer100g:    42,
+		CarbsPer100g:   10.6,
+		IsActive:       true,
+	}).Error)
+
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"name":                 "可乐",
+		"estimatedWeightGrams": 0.0,
+		"originalWeightGrams":  0.0,
+		"waterMl":              100.0,
+	}}, "")
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+	assert.Equal(t, 100.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, 100.0, items[0]["originalWeightGrams"])
+	assert.Equal(t, 100.0, items[0]["waterMl"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.Equal(t, 42.0, nutrients["calories"])
+	assert.Equal(t, 10.6, nutrients["carbs"])
+}
+
+func TestAnalyzeService_ApplyDBFirstUsesDeepSeekSemanticReuse(t *testing.T) {
+	db, userRepo := setupAnalyzeServiceTestDB(t)
+	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
+		ID:             "icecream-1",
+		CanonicalName:  "蜜雪冰城原味冰淇淋蛋筒",
+		NormalizedName: "蜜雪冰城原味冰淇淋蛋筒",
+		KcalPer100g:    220,
+		ProteinPer100g: 4,
+		CarbsPer100g:   28,
+		FatPer100g:     10,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
+		ID:             "icecream-2",
+		CanonicalName:  "蜜雪冰城蜜瓜冰淇淋",
+		NormalizedName: "蜜雪冰城蜜瓜冰淇淋",
+		KcalPer100g:    215,
+		ProteinPer100g: 4,
+		CarbsPer100g:   27,
+		FatPer100g:     9,
+		IsActive:       true,
+	}).Error)
+
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
+	svc.ConfigureDeepSeekFallback("fake-key")
+	svc.deepseek.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"choices":[{"message":{"content":"{\"items\":[{\"index\":0,\"reuseExisting\":true,\"selectedCandidateIndex\":0,\"confidence\":0.96,\"reason\":\"甜筒/蛋筒属于同义包装说法\",\"shouldAddAlias\":true,\"aliasName\":\"蜜雪冰城原味冰淇淋\"}]}"}}]}`
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"name":                 "蜜雪冰城原味冰淇淋",
+		"estimatedWeightGrams": 80.0,
+	}}, "")
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "icecream-1", items[0]["matched_food_id"])
+	assert.Equal(t, "蜜雪冰城原味冰淇淋蛋筒", items[0]["matched_food_name"])
+	assert.Equal(t, "semantic_rerank", items[0]["resolve_status"])
+	assert.Equal(t, "library_semantic_rerank", items[0]["nutrition_source"])
+	assert.Equal(t, "甜筒/蛋筒属于同义包装说法", items[0]["resolve_reason"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.Equal(t, 176.0, nutrients["calories"])
 }
 
 func TestModelDeclaredPackagedFoodDoesNotInferFromName(t *testing.T) {

@@ -242,6 +242,12 @@ func zeroUnitNutritionPer100g() map[string]any {
 }
 
 var nutritionKeyAliases = map[string][]string{
+	"calories":       {"calories", "calorie", "kcal", "energy", "total_calories"},
+	"protein":        {"protein", "total_protein"},
+	"carbs":          {"carbs", "carbohydrates", "carbohydrate", "total_carbs"},
+	"fat":            {"fat", "total_fat"},
+	"fiber":          {"fiber", "dietary_fiber", "fibre"},
+	"sugar":          {"sugar", "total_sugar", "sugars"},
 	"saturatedFat":   {"saturatedFat", "saturated_fat"},
 	"cholesterolMg":  {"cholesterolMg", "cholesterol_mg"},
 	"sodiumMg":       {"sodiumMg", "sodium_mg"},

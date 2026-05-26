@@ -15,9 +15,12 @@ import (
 	"strings"
 	"time"
 
+	authrepo "food_link/backend/internal/auth/repo"
+	authservice "food_link/backend/internal/auth/service"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/testbackend/domain"
 	"food_link/backend/internal/testbackend/repo"
+	"food_link/backend/pkg/config"
 )
 
 // LLMClient is the interface for LLM-based analysis.
@@ -31,6 +34,9 @@ type TestBackendService struct {
 	datasetRepo  *repo.DatasetRepo
 	doubaoClient LLMClient
 	ofoxAIClient LLMClient
+	userRepo     *authrepo.UserRepo
+	jwtSvc       *authservice.JWTService
+	cfg          *config.Config
 }
 
 func NewTestBackendService(
@@ -39,6 +45,9 @@ func NewTestBackendService(
 	datasetRepo *repo.DatasetRepo,
 	doubaoClient LLMClient,
 	ofoxAIClient LLMClient,
+	userRepo *authrepo.UserRepo,
+	jwtSvc *authservice.JWTService,
+	cfg *config.Config,
 ) *TestBackendService {
 	return &TestBackendService{
 		promptRepo:   promptRepo,
@@ -46,7 +55,23 @@ func NewTestBackendService(
 		datasetRepo:  datasetRepo,
 		doubaoClient: doubaoClient,
 		ofoxAIClient: ofoxAIClient,
+		userRepo:     userRepo,
+		jwtSvc:       jwtSvc,
+		cfg:          cfg,
 	}
+}
+
+type ImpersonateUserOutput struct {
+	AccessToken     string  `json:"access_token"`
+	RefreshToken    string  `json:"refresh_token"`
+	TokenType       string  `json:"token_type"`
+	ExpiresIn       int64   `json:"expires_in"`
+	UserID          string  `json:"user_id"`
+	OpenID          string  `json:"openid"`
+	UnionID         string  `json:"unionid,omitempty"`
+	PhoneNumber     *string `json:"phoneNumber,omitempty"`
+	PurePhoneNumber *string `json:"purePhoneNumber,omitempty"`
+	DietGoal        *string `json:"diet_goal,omitempty"`
 }
 
 // ---------- Prompts ----------
@@ -640,6 +665,54 @@ func (s *TestBackendService) Login(ctx context.Context, password string) error {
 
 func (s *TestBackendService) Logout(ctx context.Context) error {
 	return nil
+}
+
+func (s *TestBackendService) ImpersonateUser(ctx context.Context, userID string) (*ImpersonateUserOutput, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "user_id 不能为空", HTTPStatus: 400}
+	}
+	if s.cfg == nil || strings.TrimSpace(s.cfg.App.Env) != "development" {
+		return nil, &commonerrors.AppError{Code: 20003, Message: "仅开发环境允许代登录", HTTPStatus: 403}
+	}
+	if s.userRepo == nil || s.jwtSvc == nil {
+		return nil, commonerrors.ErrInternal
+	}
+
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, commonerrors.ErrNotFound
+	}
+
+	unionID := ""
+	if user.UnionID != nil {
+		unionID = strings.TrimSpace(*user.UnionID)
+	}
+
+	access, err := s.jwtSvc.IssueAccess(user.ID, user.OpenID, unionID)
+	if err != nil {
+		return nil, err
+	}
+	refresh, err := s.jwtSvc.IssueRefresh(user.ID, user.OpenID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ImpersonateUserOutput{
+		AccessToken:     access,
+		RefreshToken:    refresh,
+		TokenType:       "bearer",
+		ExpiresIn:       s.cfg.JWT.AccessTokenTTLSeconds,
+		UserID:          user.ID,
+		OpenID:          user.OpenID,
+		UnionID:         unionID,
+		PhoneNumber:     user.Telephone,
+		PurePhoneNumber: user.Telephone,
+		DietGoal:        user.DietGoal,
+	}, nil
 }
 
 // ---------- Legacy Test API ----------

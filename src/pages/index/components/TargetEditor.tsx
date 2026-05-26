@@ -6,8 +6,11 @@ export function TargetEditor({
   visible,
   targetForm,
   saving,
+  calibrationSuggestion,
   onTargetFieldChange,
   onSave,
+  onApplyCalibration,
+  onDismissCalibration,
   onClose
 }: TargetEditorProps) {
   if (!visible) return null
@@ -42,16 +45,41 @@ export function TargetEditor({
       <View className='target-modal-content'>
         <View className='target-modal-header'>
           <View className='target-modal-title-row'>
-            <Text className='target-modal-title'>编辑今日目标</Text>
+            <Text className='target-modal-title'>基础目标设置</Text>
           </View>
-          <Text className='target-modal-desc'>保存后会同步到账号，下次登录仍会保留。</Text>
+          <Text className='target-modal-desc'>这是长期基础目标，不会因为当天运动自动变化。</Text>
         </View>
+
+        {calibrationSuggestion?.available && (
+          <View className='target-calibration-card'>
+            <Text className='target-calibration-title'>
+              建议调整到 {Math.round(calibrationSuggestion.suggested_kcal)} kcal
+            </Text>
+            <Text className='target-calibration-desc'>
+              {calibrationSuggestion.reason || '根据最近14天的饮食和体重变化，建议小幅调整基础目标。'}
+            </Text>
+            <View className='target-calibration-actions'>
+              <View
+                className='target-calibration-btn secondary'
+                onClick={() => onDismissCalibration?.()}
+              >
+                <Text className='target-calibration-btn-text secondary'>暂不调整</Text>
+              </View>
+              <View
+                className='target-calibration-btn primary'
+                onClick={() => onApplyCalibration?.(calibrationSuggestion)}
+              >
+                <Text className='target-calibration-btn-text primary'>应用建议</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* 精确模式：数字输入框 + 加减按钮 */}
         <View className='target-form-list'>
           {/* 热量目标 */}
           <View className='target-form-item'>
-            <Text className='target-form-label'>今日摄入目标</Text>
+            <Text className='target-form-label'>基础摄入目标</Text>
             <View className='target-input-row'>
               <View 
                 className='target-adjust-btn'

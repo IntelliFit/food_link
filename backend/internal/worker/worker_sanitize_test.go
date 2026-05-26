@@ -28,6 +28,16 @@ func TestSanitizeTaskErrorMessage_Timeout(t *testing.T) {
 	}
 }
 
+func TestSanitizeTaskErrorMessage_EOF(t *testing.T) {
+	msg := sanitizeTaskErrorMessage(errors.New(`Post "https://yunwu.ai/v1/chat/completions": EOF`))
+	if strings.Contains(msg, "yunwu.ai") || strings.Contains(msg, "chat/completions") || strings.Contains(msg, "EOF") {
+		t.Fatalf("raw eof error leaked into sanitized error: %s", msg)
+	}
+	if !strings.Contains(msg, "AI 识别服务连接中断") {
+		t.Fatalf("unexpected sanitized eof error: %s", msg)
+	}
+}
+
 func TestSanitizeTaskErrorMessage_ResourceExhausted(t *testing.T) {
 	msg := sanitizeTaskErrorMessage(errors.New(`ofoxai api error 429: {"error":{"message":"Resource exhausted. Please try again later"}}`))
 	if !strings.Contains(msg, "AI 识别服务当前繁忙") {

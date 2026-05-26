@@ -18,6 +18,7 @@ type PublicFoodItem struct {
 	FoodName           string           `gorm:"column:food_name" json:"food_name"`
 	MerchantName       string           `gorm:"column:merchant_name" json:"merchant_name"`
 	MerchantAddress    string           `gorm:"column:merchant_address" json:"merchant_address"`
+	DetailAddress      string           `gorm:"column:detail_address" json:"detail_address"`
 	TasteRating        *int             `gorm:"column:taste_rating" json:"taste_rating,omitempty"`
 	SuitableForFatLoss bool             `gorm:"column:suitable_for_fat_loss" json:"suitable_for_fat_loss"`
 	UserTags           []string         `gorm:"column:user_tags;serializer:json" json:"user_tags"`

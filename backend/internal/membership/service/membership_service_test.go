@@ -16,6 +16,10 @@ func ptrTime(t time.Time) *time.Time {
 	return &t
 }
 
+func strPtr(value string) *string {
+	return &value
+}
+
 type mockMembershipRepo struct {
 	plans                         []domain.MembershipPlan
 	planByCode                    map[string]*domain.MembershipPlan
@@ -23,6 +27,7 @@ type mockMembershipRepo struct {
 	payment                       *domain.MembershipPayment
 	latestPaidPayment             *domain.MembershipPayment
 	user                          *membershiprepo.User
+	trialEntitlement              *domain.UserTrialEntitlement
 	analysisCountToday            int64
 	usedByDate                    map[string]int
 	earlyUserRank                 int
@@ -38,6 +43,8 @@ type mockMembershipRepo struct {
 	shareClaim                    *domain.UserCreditBonusEvent
 	saveMembershipCalls           int
 	ledgerByReasonSource          map[string]*domain.UserEarnedCreditLedger
+	sumPositiveEarnedCredits      int
+	rewardTaskUploads             map[string]*domain.RewardTaskUpload
 }
 
 func (m *mockMembershipRepo) ListActivePlans(ctx context.Context) ([]domain.MembershipPlan, error) {
@@ -136,6 +143,9 @@ func (m *mockMembershipRepo) CountDailySystemCreditUsage(ctx context.Context, us
 func (m *mockMembershipRepo) GetFirstMembershipTrialBatchRank(ctx context.Context, userID string, limit int) (int, error) {
 	return m.earlyUserRank, nil
 }
+func (m *mockMembershipRepo) GetTrialEntitlementByUserID(ctx context.Context, userID string) (*domain.UserTrialEntitlement, error) {
+	return m.trialEntitlement, nil
+}
 func (m *mockMembershipRepo) GetFirstPaidMembershipUserRank(ctx context.Context, userID string, limit int) (int, error) {
 	return m.earlyPaidRank, nil
 }
@@ -221,6 +231,53 @@ func (m *mockMembershipRepo) ChangeEarnedCredits(ctx context.Context, userID str
 	}
 	return entry, true, nil
 }
+func (m *mockMembershipRepo) SumPositiveEarnedCreditsByDate(ctx context.Context, userID, chinaDate string) (int, error) {
+	return m.sumPositiveEarnedCredits, nil
+}
+func (m *mockMembershipRepo) CountRewardTaskUploads(ctx context.Context, userID, taskType, chinaDate, status string) (int, error) {
+	count := 0
+	for _, row := range m.rewardTaskUploads {
+		if row == nil || row.UserID != userID || row.TaskType != taskType || row.BonusDate != chinaDate {
+			continue
+		}
+		if status != "" && row.Status != status {
+			continue
+		}
+		count++
+	}
+	return count, nil
+}
+func (m *mockMembershipRepo) GetRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string) (*domain.RewardTaskUpload, error) {
+	if m.rewardTaskUploads == nil {
+		return nil, nil
+	}
+	return m.rewardTaskUploads[sourceKey], nil
+}
+func (m *mockMembershipRepo) CreateRewardTaskUpload(ctx context.Context, row *domain.RewardTaskUpload) error {
+	if m.rewardTaskUploads == nil {
+		m.rewardTaskUploads = map[string]*domain.RewardTaskUpload{}
+	}
+	if row.SourceKey != nil {
+		m.rewardTaskUploads[*row.SourceKey] = row
+	}
+	return nil
+}
+func (m *mockMembershipRepo) UpdateRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string, updates map[string]any) (*domain.RewardTaskUpload, error) {
+	if m.rewardTaskUploads == nil {
+		return nil, nil
+	}
+	row := m.rewardTaskUploads[sourceKey]
+	if row == nil {
+		return nil, nil
+	}
+	if status, ok := updates["status"].(string); ok {
+		row.Status = status
+	}
+	if failure, ok := updates["failure_reason"].(*string); ok {
+		row.FailureReason = failure
+	}
+	return row, nil
+}
 
 func TestMembershipService_ListPlans(t *testing.T) {
 	desc := "标准套餐"
@@ -249,7 +306,14 @@ func TestMembershipService_GetMyMembership_NoMembershipTrial(t *testing.T) {
 	now := time.Now()
 	today := now.In(chinaLocation()).Format("2006-01-02")
 	svc := NewMembershipService(&mockMembershipRepo{
-		user:       &membershiprepo.User{ID: "u1", CreatedAt: &now},
+		user: &membershiprepo.User{ID: "u1", CreatedAt: &now},
+		trialEntitlement: &domain.UserTrialEntitlement{
+			FirstUserID:       strPtr("u1"),
+			OpenID:            "openid-u1",
+			FirstRegisteredAt: &now,
+			TrialDaysTotal:    regularUserTrialDays,
+			TrialPolicy:       "regular_new_user",
+		},
 		usedByDate: map[string]int{today: 3},
 	})
 
@@ -265,9 +329,16 @@ func TestMembershipService_GetMyMembership_EarlyTop500TrialMeta(t *testing.T) {
 	now := time.Now()
 	today := now.In(chinaLocation()).Format("2006-01-02")
 	svc := NewMembershipService(&mockMembershipRepo{
-		user:          &membershiprepo.User{ID: "u1", CreatedAt: &now, EarnedCreditsBalance: 2},
-		usedByDate:    map[string]int{today: 1},
-		earlyUserRank: 42,
+		user: &membershiprepo.User{ID: "u1", CreatedAt: &now, EarnedCreditsBalance: 2},
+		trialEntitlement: &domain.UserTrialEntitlement{
+			FirstUserID:       strPtr("u1"),
+			OpenID:            "openid-u1",
+			FirstRegisteredAt: &now,
+			EarlyUserRank:     intPtr(42),
+			TrialDaysTotal:    earlyUserTop500TrialDays,
+			TrialPolicy:       "founding_top_500_bonus_month",
+		},
+		usedByDate: map[string]int{today: 1},
 	})
 
 	data, err := svc.GetMyMembership(context.Background(), "u1", "")
@@ -282,6 +353,27 @@ func TestMembershipService_GetMyMembership_EarlyTop500TrialMeta(t *testing.T) {
 	assert.Equal(t, earlyUserPaidCreditsMultiplier, data["early_user_paid_bonus_multiplier"])
 	assert.Equal(t, true, data["early_user_paid_bonus_eligible"])
 	assert.Equal(t, "registration_top_1000", data["early_user_paid_bonus_source"])
+}
+
+func TestMembershipService_TrialDoesNotDependOnCurrentUserCreatedAt(t *testing.T) {
+	now := time.Now()
+	today := now.In(chinaLocation()).Format("2006-01-02")
+	svc := NewMembershipService(&mockMembershipRepo{
+		user: &membershiprepo.User{ID: "u1"},
+		trialEntitlement: &domain.UserTrialEntitlement{
+			FirstUserID:       strPtr("u1"),
+			OpenID:            "openid-u1",
+			FirstRegisteredAt: &now,
+			TrialDaysTotal:    regularUserTrialDays,
+			TrialPolicy:       "regular_new_user",
+		},
+		usedByDate: map[string]int{today: 0},
+	})
+
+	data, err := svc.GetMyMembership(context.Background(), "u1", "")
+	require.NoError(t, err)
+	assert.Equal(t, true, data["trial_active"])
+	assert.Equal(t, trialDailyCredits, data["daily_credits_max"])
 }
 
 func TestMembershipService_GetMyMembership_EarlyPaidDoublesPlanCreditsAndBonusBreakdown(t *testing.T) {
@@ -325,7 +417,14 @@ func TestMembershipService_ValidateFoodAnalysisCredits_UsesEarnedAfterSystem(t *
 	today := now.In(chinaLocation()).Format("2006-01-02")
 	user := &membershiprepo.User{ID: "u1", CreatedAt: &now, EarnedCreditsBalance: 5}
 	svc := NewMembershipService(&mockMembershipRepo{
-		user:       user,
+		user: user,
+		trialEntitlement: &domain.UserTrialEntitlement{
+			FirstUserID:       strPtr("u1"),
+			OpenID:            "openid-u1",
+			FirstRegisteredAt: &now,
+			TrialDaysTotal:    regularUserTrialDays,
+			TrialPolicy:       "regular_new_user",
+		},
 		usedByDate: map[string]int{today: 7},
 	})
 
@@ -348,7 +447,7 @@ func TestMembershipService_ValidateFoodAnalysisCredits_UsesEarnedAfterSystem(t *
 	assert.Equal(t, 5, user.EarnedCreditsBalance)
 }
 
-func TestMembershipService_ValidateFoodAnalysisCredits_StrictRequiresStandardTierButUsesStandardCost(t *testing.T) {
+func TestMembershipService_ValidateFoodAnalysisCredits_StrictRequiresStandardTierAndUsesPrecisionCost(t *testing.T) {
 	future := time.Now().Add(24 * time.Hour)
 	light := "light_monthly"
 	mockRepo := &mockMembershipRepo{
@@ -370,7 +469,37 @@ func TestMembershipService_ValidateFoodAnalysisCredits_StrictRequiresStandardTie
 	mockRepo.membership.CurrentPlanCode = &standard
 	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict", "")
 	require.NoError(t, err)
+	assert.Equal(t, creditCostPrecisionFoodAnalysis, credits["credit_cost"])
+}
+
+func TestMembershipService_ValidateFoodAnalysisCredits_WebSearchModeCosts(t *testing.T) {
+	future := time.Now().Add(24 * time.Hour)
+	light := "light_monthly"
+	mockRepo := &mockMembershipRepo{
+		user: &membershiprepo.User{ID: "u1"},
+		membership: &domain.UserMembership{
+			ID:              "um1",
+			UserID:          "u1",
+			CurrentPlanCode: &light,
+			Status:          "active",
+			ExpiresAt:       &future,
+			DailyCredits:    20,
+		},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "standard_web_search", "")
+	require.NoError(t, err)
 	assert.Equal(t, creditCostStandardFoodAnalysis, credits["credit_cost"])
+
+	_, err = svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict_web_search", "")
+	assert.Error(t, err)
+
+	standard := "standard_monthly"
+	mockRepo.membership.CurrentPlanCode = &standard
+	credits, err = svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict_web_search", "")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostPrecisionFoodAnalysis, credits["credit_cost"])
 }
 
 func TestMembershipService_ValidateFoodAnalysisCredits_ExperimentalUsesPrecisionCostAndTier(t *testing.T) {
@@ -461,6 +590,13 @@ func TestMembershipService_ValidateStatsInsightCredits(t *testing.T) {
 			ExpiresAt: ptrTime(now.AddDate(0, 1, 0)),
 		},
 		user: &membershiprepo.User{ID: "u1", CreatedAt: &now},
+		trialEntitlement: &domain.UserTrialEntitlement{
+			FirstUserID:       strPtr("u1"),
+			OpenID:            "openid-u1",
+			FirstRegisteredAt: &now,
+			TrialDaysTotal:    regularUserTrialDays,
+			TrialPolicy:       "regular_new_user",
+		},
 	}
 	svc := NewMembershipService(repo, nil)
 
@@ -539,6 +675,13 @@ func TestMembershipService_GetMyMembershipMaterializesLegacyInviteAndShareReward
 	recordID := "rec1"
 	repo := &mockMembershipRepo{
 		user: &membershiprepo.User{ID: "u1", CreatedAt: &now},
+		trialEntitlement: &domain.UserTrialEntitlement{
+			FirstUserID:       strPtr("u1"),
+			OpenID:            "openid-u1",
+			FirstRegisteredAt: &now,
+			TrialDaysTotal:    regularUserTrialDays,
+			TrialPolicy:       "regular_new_user",
+		},
 		activeInviteRewards: []domain.UserInviteReferral{{
 			ID:            "ref1",
 			InviterUserID: "u1",

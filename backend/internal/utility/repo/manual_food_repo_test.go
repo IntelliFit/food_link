@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	fooddomain "food_link/backend/internal/foodrecord/domain"
@@ -152,4 +153,71 @@ func TestInferManualFoodCategory(t *testing.T) {
 	assert.Equal(t, "staple", inferManualFoodCategory("白米饭", "nutrition_library"))
 	assert.Equal(t, "protein", inferManualFoodCategory("鸡胸肉", "nutrition_library"))
 	assert.Equal(t, "meal", inferManualFoodCategory("轻食鸡胸沙拉套餐", "public_library"))
+	assert.Equal(t, "beverage", inferManualFoodCategory("黑咖啡", "nutrition_library"))
+	assert.Equal(t, "beverage", inferManualFoodCategory("拿铁咖啡", "nutrition_library"))
+	assert.Equal(t, "soup", inferManualFoodCategory("清汤", "nutrition_library"))
+	assert.Equal(t, "protein", inferManualFoodCategory("红烧肉", "nutrition_library"))
+	assert.Equal(t, "staple", inferManualFoodCategory("全麦吐司", "nutrition_library"))
+	assert.Equal(t, "snack", inferManualFoodCategory("坚果饼干", "nutrition_library"))
+	assert.Equal(t, "snack", inferManualFoodCategory("抹茶蛋糕", "nutrition_library"))
+	assert.Equal(t, "protein", inferManualFoodCategory("茶叶蛋", "nutrition_library"))
+	assert.Equal(t, "dairy", inferManualFoodCategory("无糖酸奶", "nutrition_library"))
+	assert.NotContains(t, manualFoodCategoryFilterSQL("canonical_name", "snack"), "%糖%")
+	assert.Contains(t, manualFoodCategoryFilterSQL("canonical_name", "snack"), "%方糖%")
+}
+
+func TestManualFoodServingProfile(t *testing.T) {
+	egg := manualFoodResultFromNutrition(fooddomain.FoodNutrition{
+		ID:             "egg",
+		CanonicalName:  "鸡蛋",
+		KcalPer100g:    144,
+		ProteinPer100g: 13,
+		CarbsPer100g:   1.1,
+		FatPer100g:     9.4,
+	}, 0)
+	assert.Equal(t, "piece", egg.DisplayUnit)
+	assert.Equal(t, "个", egg.DisplayUnitLabel)
+	assert.Equal(t, 55.0, egg.DefaultWeightGrams)
+	assert.Equal(t, "1个", egg.PortionLabel)
+	require.Len(t, egg.ServingPresets, 3)
+	assert.Equal(t, "1个", egg.ServingPresets[1].Label)
+
+	coffee := manualFoodResultFromNutrition(fooddomain.FoodNutrition{
+		ID:            "coffee",
+		CanonicalName: "黑咖啡",
+		KcalPer100g:   2,
+	}, 0)
+	assert.Equal(t, "beverage", coffee.Category)
+	assert.Equal(t, "ml", coffee.DisplayUnit)
+	assert.Equal(t, 350.0, coffee.DefaultWeightGrams)
+	require.Len(t, coffee.ServingPresets, 3)
+	assert.Equal(t, "450ml", coffee.ServingPresets[1].Label)
+}
+
+func TestManualFoodCatalogUserScopedCategoriesAllowAnonymous(t *testing.T) {
+	repo := &ManualFoodRepo{}
+
+	recent, hasMore, err := repo.listCatalogItems(context.Background(), "", "recent", 1, 20)
+	require.NoError(t, err)
+	assert.False(t, hasMore)
+	assert.Empty(t, recent)
+
+	favorites, hasMore, err := repo.listCatalogItems(context.Background(), "", "favorites", 1, 20)
+	require.NoError(t, err)
+	assert.False(t, hasMore)
+	assert.Empty(t, favorites)
+}
+
+func TestManualFoodCategoryFilterSQL(t *testing.T) {
+	for _, category := range []string{"staple", "protein", "vegetable", "fruit", "dairy", "beverage", "soup", "snack", "meal", "other"} {
+		sql := manualFoodCategoryFilterSQL("canonical_name", category)
+		assert.NotEmpty(t, sql)
+		assert.NotContains(t, sql, "CASE")
+		assert.NotContains(t, sql, "= ?")
+		assert.NotContains(t, sql, "\nAND")
+		assert.Contains(t, escapeSQLForSprintf(sql), "%%")
+		assert.NotContains(t, fmt.Sprintf("WHERE is_active = TRUE %s", escapeSQLForSprintf(sql)), "%!")
+	}
+	assert.Contains(t, manualFoodCategoryFilterSQL("canonical_name", "meal"), "%餐%")
+	assert.Contains(t, manualFoodCategoryFilterSQL("canonical_name", "other"), "NOT (")
 }
