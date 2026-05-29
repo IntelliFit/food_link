@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { brand } from '@/content/brand'
 import { mainNav } from '@/content/navigation'
 import { ExperienceButton } from '@/components/ui/ExperienceButton'
+import { MobileNavMenu } from '@/components/layout/MobileNavMenu'
 import { cn } from '@/lib/utils'
 
 const MORPH_MS = 520
@@ -166,11 +167,34 @@ export function SiteHeader() {
   return (
     <header
       className={cn(
-        'pointer-events-none fixed inset-x-0 z-50 px-4 md:px-8',
-        atTop ? 'top-0' : 'top-2',
+        'fixed inset-x-0 z-50 pt-[env(safe-area-inset-top)]',
+        atTop ? 'top-0' : 'top-0 md:top-2',
       )}
       style={{ transitionProperty: 'top', ...morphStyle }}
     >
+      {/* 移动端：简洁顶栏 + 折叠菜单 */}
+      <div
+        className={cn(
+          'pointer-events-auto mx-3 flex h-14 items-center justify-between px-3 md:hidden',
+          !atTop && 'rounded-3xl bg-primary/10 backdrop-blur-xl',
+        )}
+        style={morphStyle}
+      >
+        <Link to="/#hero" className="flex min-w-0 items-center gap-2">
+          <BrandMark />
+        </Link>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <ExperienceButton variant="simple" />
+          <MobileNavMenu />
+        </div>
+      </div>
+
+      {/* 桌面端：原有 morph 胶囊顶栏 */}
+      <div
+        className={cn(
+          'pointer-events-none hidden px-4 md:block md:px-8',
+        )}
+      >
       <div
         ref={containerRef}
         className="relative mx-auto max-w-6xl transition-[height]"
@@ -229,6 +253,7 @@ export function SiteHeader() {
         >
           <ExperienceButton variant="simple" />
         </div>
+      </div>
       </div>
     </header>
   )

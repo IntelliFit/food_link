@@ -1,6 +1,6 @@
 import { CheckCircle2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { PhonePlaceholder } from '@/components/ui/PhonePlaceholder'
+import { PhoneMockup2D } from '@/components/ui/PhoneMockup2D'
 import type { FeatureBlock } from '@/content/features'
 import { cn } from '@/lib/utils'
 
@@ -46,8 +46,8 @@ export function FeaturePanel({ feature, reversed = false }: FeaturePanelProps) {
         </ul>
       </div>
 
-      <div className="flex w-full shrink-0 justify-center md:w-auto">
-        <PhonePlaceholder label={feature.screenshotLabel} />
+      <div className="flex w-full shrink-0 justify-center md:w-auto md:min-w-[300px]">
+        <PhoneMockup2D src={feature.screenshotSrc} alt={feature.screenshotLabel} />
       </div>
     </div>
   )

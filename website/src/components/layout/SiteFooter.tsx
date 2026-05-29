@@ -12,7 +12,14 @@ export function SiteFooter() {
           <div className="flex flex-col gap-2">
             <p className="text-base font-semibold text-foreground">{brand.fullName}</p>
             <p className="text-sm text-muted-foreground">{brand.companyName}</p>
-            <p className="text-sm text-muted-foreground">{brand.icpNumber}</p>
+            <a
+              href={brand.icpUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {brand.icpNumber}
+            </a>
           </div>
 
           <nav className="flex flex-wrap gap-4 text-sm" aria-label="法律与联系">

@@ -54,16 +54,20 @@ export function FeatureScrollCarousel({ features }: FeatureScrollCarouselProps) 
 
   useEffect(() => {
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const mobileQuery = window.matchMedia('(max-width: 767px)')
 
     const syncLayoutMode = () => {
-      setUseStaticLayout(motionQuery.matches)
+      // 移动端与减少动效时回退纵向布局，避免 scroll-jacking 影响触控体验
+      setUseStaticLayout(motionQuery.matches || mobileQuery.matches)
     }
 
     syncLayoutMode()
     motionQuery.addEventListener('change', syncLayoutMode)
+    mobileQuery.addEventListener('change', syncLayoutMode)
 
     return () => {
       motionQuery.removeEventListener('change', syncLayoutMode)
+      mobileQuery.removeEventListener('change', syncLayoutMode)
     }
   }, [])
 

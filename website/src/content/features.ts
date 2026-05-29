@@ -8,6 +8,7 @@ export type FeatureBlock = {
   description: string
   highlights: string[]
   screenshotLabel: string
+  screenshotSrc: string
   icon: LucideIcon
   emphasized?: boolean
 }
@@ -28,6 +29,7 @@ export const features: FeatureBlock[] = [
       '热量与营养不再是一堆难懂的数字，而是你手边最清晰的提醒。吃得是否合适，当下就能感知。',
     highlights: ['剩余热量，直观呈现', '营养是否均衡，立刻知晓', '下一餐吃什么，更有方向'],
     screenshotLabel: '首页 · 能量分析',
+    screenshotSrc: '/images/shouye.jpg',
     icon: Flame,
     emphasized: true,
   },
@@ -39,6 +41,7 @@ export const features: FeatureBlock[] = [
       '食探把零散的一餐一餐，汇成对你真正有用的健康反馈。你看到的，是方向，而不只是数据。',
     highlights: ['饮食表现，一屏掌握', '长期趋势，清晰可见', '改进建议，简单可执行'],
     screenshotLabel: '分析 · 健康评分',
+    screenshotSrc: '/images/fenxi.jpg',
     icon: BarChart3,
   },
   {
@@ -49,6 +52,7 @@ export const features: FeatureBlock[] = [
       '和志同道合的人一起记录、一起分享、一起变好。真实的生活感，比完美的打卡更重要。',
     highlights: ['和好友彼此看见进步', '真实分享，而非表演', '坚持，因为有人同行'],
     screenshotLabel: '圈子 · 饮食分享',
+    screenshotSrc: '/images/quanzi.jpg',
     icon: Users,
   },
 ]
