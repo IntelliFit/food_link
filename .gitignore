@@ -100,6 +100,7 @@ coverage/
 /debug/
 /artifacts/
 /docs/verification/
+e2e-weapp/screenshots/
 
 # 调试/测试截图
 check_*.png
