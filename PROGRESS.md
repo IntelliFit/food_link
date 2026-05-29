@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-05-29
+
+- 🎨 style: 功能轮播三板块文字与图片改用 flex 固定间距，左右交替布局时间距一致 `website/src/components/sections/FeaturePanel.tsx`
+- ✨ feat: 首页三大功能区块改为滚动驱动横向轮播，纵向滚动切换每日总览/深度洞察/饮食圈子后衔接 CTA `website/src/components/sections/FeatureScrollCarousel.tsx`
+- ✨ feat: 新增官网 Vite 站点，整合 Hero/功能介绍/CTA/App 即将上线等版块与法律页路由 `website/` `package.json`
+- 🎨 style: 顶栏默认高度 70px，滚动后 morph 为 24px 圆角主题绿毛玻璃胶囊 `website/src/components/layout/SiteHeader.tsx`
+- 🎨 style: 「立即体验」按钮高度改为 h-6（48px），className 移至 PopoverTrigger 以正确生效 `website/src/components/ui/ExperienceButton.tsx`
+
 ## 2026-05-10
 
 - 🔧 chore: 发布小程序版本 `3.0.1`（`package.json` / `package-lock.json`；「我的」页版本号继续由 `__APP_VERSION__` 从 package 注入）

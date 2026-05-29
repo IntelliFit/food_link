@@ -1,0 +1,96 @@
+/**
+ * Food Link website theme — single source for CSS custom properties.
+ * Sync values with color-spec.ts; components must use Tailwind semantic tokens only.
+ */
+
+:root {
+  /* Brand / semantic (light) */
+  --background: #f0f3f6;
+  --foreground: #1f2937;
+  --card: #ffffff;
+  --card-foreground: #1f2937;
+  --popover: #ffffff;
+  --popover-foreground: #1f2937;
+  --primary: #00bc7d;
+  --primary-foreground: #ffffff;
+  --secondary: #5cb896;
+  --secondary-foreground: #ffffff;
+  --muted: #f9fafb;
+  --muted-foreground: #6b7280;
+  --accent: #8dd3bf;
+  --accent-foreground: #1f2937;
+  --destructive: #ef4444;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #5cb896;
+  --radius: 0.625rem;
+  --wechat: #07c160;
+
+  /* Macro nutrients */
+  --macro-protein: #5c9ed4;
+  --macro-carbs: #00bc7d;
+  --macro-fat: #f0985c;
+  --warning: #e57373;
+
+  /* Gradients */
+  --gradient-page: linear-gradient(
+    180deg,
+    rgb(92 184 150 / 8%) 0%,
+    rgb(92 184 150 / 3%) 40%,
+    var(--background) 80%,
+    var(--background) 100%
+  );
+  --gradient-primary: linear-gradient(90deg, #00bc7d 0%, #00bba7 100%);
+
+  /* Charts / sidebar (shadcn) */
+  --chart-1: #00bc7d;
+  --chart-2: #5cb896;
+  --chart-3: #8dd3bf;
+  --chart-4: #5c9ed4;
+  --chart-5: #6b7280;
+  --sidebar: #f9fafb;
+  --sidebar-foreground: #1f2937;
+  --sidebar-primary: #00bc7d;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #8dd3bf;
+  --sidebar-accent-foreground: #1f2937;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: #5cb896;
+
+  /* Typography */
+  --font-sans: 'Source Han Sans SC', 'PingFang SC', system-ui, -apple-system, sans-serif;
+}
+
+.dark {
+  --background: #0f1312;
+  --foreground: #e8ece9;
+  --card: #1a2220;
+  --card-foreground: #e8ece9;
+  --popover: #1a2220;
+  --popover-foreground: #e8ece9;
+  --primary: #7dd3b0;
+  --primary-foreground: #0f1312;
+  --secondary: #5cb896;
+  --secondary-foreground: #ffffff;
+  --muted: #141c1a;
+  --muted-foreground: #9ca3a8;
+  --accent: #5cb896;
+  --accent-foreground: #e8ece9;
+  --destructive: #ef4444;
+  --border: #3d5d51;
+  --input: #3d5d51;
+  --ring: #5cb896;
+  --chart-1: #7dd3b0;
+  --chart-2: #5cb896;
+  --chart-3: #8dd3bf;
+  --chart-4: #5c9ed4;
+  --chart-5: #9ca3a8;
+  --sidebar: #141c1a;
+  --sidebar-foreground: #e8ece9;
+  --sidebar-primary: #7dd3b0;
+  --sidebar-primary-foreground: #0f1312;
+  --sidebar-accent: #5cb896;
+  --sidebar-accent-foreground: #e8ece9;
+  --sidebar-border: #3d5d51;
+  --sidebar-ring: #5cb896;
+}
