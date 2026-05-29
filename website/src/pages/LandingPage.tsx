@@ -2,7 +2,7 @@ import { SiteFooter } from '@/components/layout/SiteFooter'
 import { SiteHeader } from '@/components/layout/SiteHeader'
 import { AppComingSoonSection } from '@/components/sections/AppComingSoonSection'
 import { CtaSection } from '@/components/sections/CtaSection'
-import { FeatureSection } from '@/components/sections/FeatureSection'
+import { FeatureScrollCarousel } from '@/components/sections/FeatureScrollCarousel'
 import { ProductIntroSection } from '@/components/sections/ProductIntroSection'
 import { features } from '@/content/features'
 
@@ -12,9 +12,7 @@ export function LandingPage() {
       <SiteHeader />
       <main>
         <ProductIntroSection />
-        {features.map((feature, index) => (
-          <FeatureSection key={feature.id} feature={feature} reversed={index % 2 === 1} />
-        ))}
+        <FeatureScrollCarousel features={features} />
         <CtaSection />
         <AppComingSoonSection />
       </main>
