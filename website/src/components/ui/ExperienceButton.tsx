@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import { MiniProgramExperienceCard } from '@/components/ui/MiniProgramExperienceCard'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { WechatIcon } from '@/components/ui/WechatIcon'
+import { MOBILE_MEDIA_QUERY, useMediaQuery } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
 
 type ExperienceButtonProps = {
@@ -9,45 +12,58 @@ type ExperienceButtonProps = {
   variant?: 'simple' | 'wechat'
 }
 
-/** 「立即体验」CTA */
+const simpleTriggerClass =
+  'inline-flex h-9 shrink-0 items-center rounded-[12px] bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-none transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:h-6 md:px-4'
+
+const wechatTriggerClass =
+  'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-[12px] bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:gap-0 sm:overflow-hidden sm:px-0'
+
+/** 「立即体验」CTA：移动端用 Dialog 展示二维码，桌面端用 Popover */
 export function ExperienceButton({ className, variant = 'wechat' }: ExperienceButtonProps) {
-  if (variant === 'simple') {
+  const isMobile = useMediaQuery(MOBILE_MEDIA_QUERY)
+  const [open, setOpen] = useState(false)
+
+  const triggerContent =
+    variant === 'simple' ? (
+      '立即体验'
+    ) : (
+      <>
+        <WechatIcon className="size-4 shrink-0 text-primary-foreground sm:ml-2.5" />
+        <span className="leading-none sm:hidden">扫一扫立即体验</span>
+        <span className="hidden h-full flex-col justify-center pr-3.5 text-left sm:flex">
+          <span className="text-sm font-semibold leading-tight">扫一扫立即体验</span>
+          <span className="mt-0.5 text-xs leading-tight text-primary-foreground/75">微信小程序</span>
+        </span>
+      </>
+    )
+
+  const triggerClassName = cn(
+    variant === 'simple' ? simpleTriggerClass : wechatTriggerClass,
+    className,
+  )
+
+  if (isMobile) {
     return (
-      <Popover>
-        <PopoverTrigger
-          className={cn(
-            'inline-flex h-6 shrink-0 items-center rounded-[12px] bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-none transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-            className,
-          )}
-          render={<button type="button" />}
-        >
-          立即体验
-        </PopoverTrigger>
-        <PopoverContent className="w-auto border-border bg-transparent p-0 shadow-none ring-0">
-          <MiniProgramExperienceCard />
-        </PopoverContent>
-      </Popover>
+      <>
+        <button type="button" className={triggerClassName} onClick={() => setOpen(true)}>
+          {triggerContent}
+        </button>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent
+            showCloseButton
+            className="max-w-[calc(100%-1.5rem)] gap-0 border-0 bg-transparent p-0 shadow-none ring-0 sm:max-w-sm"
+          >
+            <MiniProgramExperienceCard className="mx-auto" />
+          </DialogContent>
+        </Dialog>
+      </>
     )
   }
 
   return (
     <Popover>
-      <PopoverTrigger
-        className={cn(
-          'inline-flex h-10 shrink-0 items-center overflow-hidden rounded-[12px] bg-primary shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-          className,
-        )}
-        render={<button type="button" />}
-      >
-        <span className="flex h-full items-center justify-center pl-2.5 pr-1 text-primary-foreground">
-          <WechatIcon className="size-4" />
-        </span>
-        <span className="flex h-full flex-col justify-center pr-3.5 text-left text-primary-foreground">
-          <span className="text-sm font-semibold leading-tight">扫一扫立即体验</span>
-          <span className="mt-0.5 text-xs leading-tight text-primary-foreground/75">
-            微信小程序
-          </span>
-        </span>
+      <PopoverTrigger className={triggerClassName} render={<button type="button" />}>
+        {triggerContent}
       </PopoverTrigger>
       <PopoverContent className="w-auto border-border bg-transparent p-0 shadow-none ring-0">
         <MiniProgramExperienceCard />

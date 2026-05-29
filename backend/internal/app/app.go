@@ -448,6 +448,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/location/reverse", utilityHandler.LocationReverse)
 	engine.POST("/api/location/search", utilityHandler.LocationSearch)
 	engine.POST("/api/qrcode", utilityHandler.QRCode)
+	engine.GET("/api/miniprogram/launch-url", utilityHandler.MiniProgramLaunchURL)
 	engine.GET("/api/manual-food/browse", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodBrowse)
 	engine.GET("/api/manual-food/catalog", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodCatalog)
 	engine.GET("/api/manual-food/search", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodSearch)

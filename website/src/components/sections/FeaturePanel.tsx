@@ -1,6 +1,6 @@
 import { CheckCircle2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { PhonePlaceholder } from '@/components/ui/PhonePlaceholder'
+import { PhoneMockup2D } from '@/components/ui/PhoneMockup2D'
 import type { FeatureBlock } from '@/content/features'
 import { cn } from '@/lib/utils'
 
@@ -16,7 +16,7 @@ export function FeaturePanel({ feature, reversed = false }: FeaturePanelProps) {
     <div
       id={feature.id}
       className={cn(
-        'mx-auto flex w-full max-w-6xl flex-col items-center gap-8 px-4 transition-opacity duration-300 md:flex-row md:items-center md:gap-16 md:px-8 lg:gap-20',
+        'mx-auto flex w-full max-w-6xl flex-col items-center gap-6 px-4 transition-opacity duration-300 md:flex-row md:items-center md:gap-16 md:px-8 lg:gap-20',
         reversed && 'md:flex-row-reverse',
       )}
     >
@@ -28,7 +28,9 @@ export function FeaturePanel({ feature, reversed = false }: FeaturePanelProps) {
         <h2
           className={cn(
             'whitespace-pre-line font-semibold tracking-tight text-foreground',
-            feature.emphasized ? 'text-4xl md:text-5xl' : 'text-3xl md:text-4xl',
+            feature.emphasized
+              ? 'text-[1.75rem] leading-tight sm:text-3xl md:text-5xl'
+              : 'text-2xl sm:text-3xl md:text-4xl',
           )}
         >
           {feature.title}
@@ -46,8 +48,12 @@ export function FeaturePanel({ feature, reversed = false }: FeaturePanelProps) {
         </ul>
       </div>
 
-      <div className="flex w-full shrink-0 justify-center md:w-auto">
-        <PhonePlaceholder label={feature.screenshotLabel} />
+      <div className="flex w-full shrink-0 justify-center md:w-auto md:min-w-[280px] lg:min-w-[300px]">
+        <PhoneMockup2D
+          src={feature.screenshotSrc}
+          alt={feature.screenshotLabel}
+          className="max-w-[240px] sm:max-w-[280px] md:max-w-[300px]"
+        />
       </div>
     </div>
   )

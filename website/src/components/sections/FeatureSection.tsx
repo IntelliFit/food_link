@@ -12,7 +12,7 @@ export function FeatureSection({ feature, reversed = false }: FeatureSectionProp
   return (
     <section
       className={cn(
-        'scroll-mt-20 py-16 md:py-24',
+        'scroll-mt-header py-12 md:py-24',
         feature.emphasized ? 'bg-muted/50' : 'bg-background',
       )}
     >

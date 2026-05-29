@@ -1,0 +1,22 @@
+{
+  "name": "智健食探",
+  "short_name": "食探",
+  "description": "记录饮食，连接健康。AI 帮你看懂每一餐。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f3f6",
+  "theme_color": "#00bc7d",
+  "lang": "zh-CN",
+  "icons": [
+    {
+      "src": "/brand/login-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/logo-shitan.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
