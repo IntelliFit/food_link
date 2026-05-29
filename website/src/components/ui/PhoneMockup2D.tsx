@@ -12,10 +12,10 @@ type PhoneMockup2DProps = {
 export function PhoneMockup2D({ src, alt, className }: PhoneMockup2DProps) {
   return (
     <div className={cn('relative mx-auto w-full max-w-[300px]', className)} aria-label={alt}>
-      <div className="relative aspect-[9/19.5] overflow-hidden rounded-[44px] border-[11px] border-[#1c1c1e] bg-[#1c1c1e] shadow-md ring-1 ring-black/10">
+      <div className="relative aspect-[9/19.5] overflow-hidden rounded-[40px] border-[9px] border-[#1c1c1e] bg-[#1c1c1e] shadow-md ring-1 ring-black/10 md:rounded-[44px] md:border-[11px]">
         {/* Dynamic Island */}
         <div
-          className="absolute left-1/2 top-[11px] z-10 h-[21px] w-[78px] -translate-x-1/2 rounded-full bg-[#1c1c1e]"
+          className="absolute left-1/2 top-[10px] z-10 h-[19px] w-[72px] -translate-x-1/2 rounded-full bg-[#1c1c1e] md:top-[11px] md:h-[21px] md:w-[78px]"
           aria-hidden
         />
         <img

@@ -6,6 +6,10 @@
 
 ## 2026-05-30
 
+- 🔧 refactor: 暂时取消移动端 URL Link 跳转小程序，体验按钮恢复为二维码弹层 `website/src/components/ui/ExperienceButton.tsx`
+- ✨ feat: 移动端体验按钮优先通过微信 URL Link 跳转小程序，失败回退二维码弹层；新增 `GET /api/miniprogram/launch-url` `website/` `backend/internal/utility/`
+- 🐛 fix: 恢复 PC 导航栏「立即体验」按钮 compact 高度 h-6，Hero 区 wechat 按钮保持 h-10 `website/src/components/ui/ExperienceButton.tsx`
+- 🎨 style: 优化官网移动端布局与体验（Hero/功能区块/导航抽屉/CTA 弹层/安全区与锚点偏移） `website/src/`
 - 🔧 chore: 官网 footer 备案号更新为京ICP备2025141637号-4，并链至工信部备案查询官网 `website/src/content/brand.ts` `website/src/components/layout/SiteFooter.tsx`
 
 ## 2026-05-29

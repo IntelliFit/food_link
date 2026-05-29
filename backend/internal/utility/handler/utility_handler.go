@@ -18,6 +18,7 @@ type LocationService interface {
 
 type QRCodeService interface {
 	GenerateQRCode(ctx context.Context, scene, page string, width int, checkPath bool, envVersion string) (string, error)
+	GenerateURLLink(ctx context.Context, path, query, envVersion string) (string, error)
 }
 
 type ManualFoodService interface {
@@ -98,6 +99,20 @@ func (h *UtilityHandler) QRCode(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"base64": base64})
+}
+
+// GET /api/miniprogram/launch-url
+func (h *UtilityHandler) MiniProgramLaunchURL(c *gin.Context) {
+	path := c.DefaultQuery("path", "pages/index/index")
+	query := c.Query("query")
+	envVersion := c.DefaultQuery("env_version", "release")
+
+	link, err := h.qrcodeSvc.GenerateURLLink(c.Request.Context(), path, query, envVersion)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"url_link": link})
 }
 
 // GET /api/manual-food/browse

@@ -175,7 +175,7 @@ export function SiteHeader() {
       {/* 移动端：简洁顶栏 + 折叠菜单 */}
       <div
         className={cn(
-          'pointer-events-auto mx-3 flex h-14 items-center justify-between px-3 md:hidden',
+          'pointer-events-auto mx-2 flex h-14 items-center justify-between gap-2 px-2 sm:mx-3 sm:px-3 md:hidden',
           !atTop && 'rounded-3xl bg-primary/10 backdrop-blur-xl',
         )}
         style={morphStyle}
@@ -183,7 +183,7 @@ export function SiteHeader() {
         <Link to="/#hero" className="flex min-w-0 items-center gap-2">
           <BrandMark />
         </Link>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-1">
           <ExperienceButton variant="simple" />
           <MobileNavMenu />
         </div>

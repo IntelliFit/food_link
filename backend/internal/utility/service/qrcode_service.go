@@ -25,11 +25,20 @@ type QRCodeService struct {
 	stableTokenURL string
 	tokenURL       string
 	qrCodeURL      string
+	urlLinkURL     string
 
 	mu             sync.Mutex
 	accessToken    string
 	tokenFetchedAt int64
 	tokenExpiresAt int64
+
+	urlLinkMu    sync.Mutex
+	urlLinkCache map[string]cachedURLLink
+}
+
+type cachedURLLink struct {
+	link      string
+	expiresAt int64
 }
 
 func NewQRCodeService(cfg ...*config.Config) *QRCodeService {
@@ -38,6 +47,8 @@ func NewQRCodeService(cfg ...*config.Config) *QRCodeService {
 		stableTokenURL: "https://api.weixin.qq.com/cgi-bin/stable_token",
 		tokenURL:       "https://api.weixin.qq.com/cgi-bin/token",
 		qrCodeURL:      "https://api.weixin.qq.com/wxa/getwxacodeunlimit",
+		urlLinkURL:     "https://api.weixin.qq.com/wxa/generate_urllink",
+		urlLinkCache:   make(map[string]cachedURLLink),
 	}
 	if len(cfg) > 0 && cfg[0] != nil {
 		s.appID = strings.TrimSpace(cfg[0].External.AppID)
@@ -95,6 +106,99 @@ func (s *QRCodeService) GenerateQRCode(ctx context.Context, scene, page string, 
 		return "", lastErr
 	}
 	return "", &commonerrors.AppError{Code: 10000, Message: "生成二维码失败", HTTPStatus: 500}
+}
+
+// GenerateURLLink 生成可在手机浏览器中拉起微信小程序的 URL Link（服务端缓存，减少微信 API 调用）
+func (s *QRCodeService) GenerateURLLink(ctx context.Context, path, query, envVersion string) (string, error) {
+	path = strings.Trim(strings.TrimSpace(path), "/")
+	if path == "" {
+		path = "pages/index/index"
+	}
+	query = strings.TrimSpace(query)
+	envVersion = strings.TrimSpace(envVersion)
+	if envVersion == "" {
+		envVersion = "release"
+	}
+
+	cacheKey := path + "|" + query + "|" + envVersion
+	now := time.Now().Unix()
+
+	s.urlLinkMu.Lock()
+	if cached, ok := s.urlLinkCache[cacheKey]; ok && now < cached.expiresAt {
+		link := cached.link
+		s.urlLinkMu.Unlock()
+		return link, nil
+	}
+	s.urlLinkMu.Unlock()
+
+	token, err := s.getAccessToken(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	payload := map[string]any{
+		"path":            path,
+		"query":           query,
+		"env_version":     envVersion,
+		"expire_type":     0,
+		"expire_interval": 30,
+	}
+	link, retry, err := s.requestURLLink(ctx, token, payload)
+	if err != nil && retry {
+		s.clearAccessToken()
+		token, err = s.getAccessToken(ctx)
+		if err != nil {
+			return "", err
+		}
+		link, _, err = s.requestURLLink(ctx, token, payload)
+	}
+	if err != nil {
+		return "", err
+	}
+
+	s.urlLinkMu.Lock()
+	s.urlLinkCache[cacheKey] = cachedURLLink{
+		link:      link,
+		expiresAt: now + int64(29*24*time.Hour/time.Second),
+	}
+	s.urlLinkMu.Unlock()
+	return link, nil
+}
+
+func (s *QRCodeService) requestURLLink(ctx context.Context, token string, payload map[string]any) (string, bool, error) {
+	reqURL := s.urlLinkURL + "?access_token=" + url.QueryEscape(token)
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(body))
+	if err != nil {
+		return "", false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.httpClient().Do(req)
+	if err != nil {
+		return "", false, err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", false, &commonerrors.AppError{Code: 10000, Message: "请求微信 URL Link 接口失败", HTTPStatus: 500}
+	}
+
+	var data map[string]any
+	if err := json.Unmarshal(respBody, &data); err != nil {
+		return "", false, err
+	}
+	errcode := intFromAny(data["errcode"])
+	if errcode == 40001 || errcode == 42001 {
+		return "", true, &commonerrors.AppError{Code: 10000, Message: "微信 access_token 已失效", HTTPStatus: 500}
+	}
+	if errcode != 0 {
+		return "", false, &commonerrors.AppError{Code: 10000, Message: fmt.Sprintf("生成 URL Link 失败: %v", data["errmsg"]), HTTPStatus: 500}
+	}
+	link := strings.TrimSpace(fmt.Sprintf("%v", data["url_link"]))
+	if link == "" || link == "<nil>" {
+		return "", false, &commonerrors.AppError{Code: 10000, Message: "生成 URL Link 失败：未返回链接", HTTPStatus: 500}
+	}
+	return link, false, nil
 }
 
 func (s *QRCodeService) getAccessToken(ctx context.Context) (string, error) {

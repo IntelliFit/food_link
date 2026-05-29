@@ -30,12 +30,24 @@ func (m *mockLocationService) SearchAddress(ctx context.Context, keyword string)
 }
 
 type mockQRCodeService struct {
-	base64 string
-	err    error
+	base64  string
+	urlLink string
+	err     error
+	urlErr  error
 }
 
 func (m *mockQRCodeService) GenerateQRCode(ctx context.Context, scene, page string, width int, checkPath bool, envVersion string) (string, error) {
 	return m.base64, m.err
+}
+
+func (m *mockQRCodeService) GenerateURLLink(ctx context.Context, path, query, envVersion string) (string, error) {
+	if m.urlErr != nil {
+		return "", m.urlErr
+	}
+	if m.urlLink != "" {
+		return m.urlLink, nil
+	}
+	return "https://wxaurl.cn/mock", nil
 }
 
 type mockManualFoodService struct {
@@ -63,6 +75,7 @@ func setupRouter(h *UtilityHandler) *gin.Engine {
 	r.POST("/api/location/reverse", h.LocationReverse)
 	r.POST("/api/location/search", h.LocationSearch)
 	r.POST("/api/qrcode", h.QRCode)
+	r.GET("/api/miniprogram/launch-url", h.MiniProgramLaunchURL)
 	r.GET("/api/manual-food/browse", h.ManualFoodBrowse)
 	r.GET("/api/manual-food/catalog", h.ManualFoodCatalog)
 	r.GET("/api/manual-food/search", h.ManualFoodSearch)
@@ -117,6 +130,22 @@ func TestQRCode(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "data:image/png;base64,mock", data["base64"])
+}
+
+func TestMiniProgramLaunchURL(t *testing.T) {
+	mockQR := &mockQRCodeService{urlLink: "https://wxaurl.cn/test-link"}
+	h := NewUtilityHandler(nil, mockQR, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/miniprogram/launch-url?path=pages/index/index&query=from%3Dwebsite", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "https://wxaurl.cn/test-link", data["url_link"])
 }
 
 func TestManualFoodBrowse(t *testing.T) {
