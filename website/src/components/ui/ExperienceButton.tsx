@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ArrowRight } from 'lucide-react'
 import { MiniProgramExperienceCard } from '@/components/ui/MiniProgramExperienceCard'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -8,8 +9,8 @@ import { cn } from '@/lib/utils'
 
 type ExperienceButtonProps = {
   className?: string
-  /** simple：导航栏纯文字；wechat：首页带微信图标与说明 */
-  variant?: 'simple' | 'wechat'
+  /** simple：导航栏纯文字；wechat：带副标题；hero：Hero 区单行 CTA */
+  variant?: 'simple' | 'wechat' | 'hero'
 }
 
 const simpleTriggerClass =
@@ -17,6 +18,9 @@ const simpleTriggerClass =
 
 const wechatTriggerClass =
   'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-[12px] bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:gap-0 sm:overflow-hidden sm:px-0'
+
+const heroTriggerClass =
+  'inline-flex h-10 shrink-0 items-center gap-2 rounded-[12px] bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50'
 
 /** 「立即体验」CTA：移动端用 Dialog 展示二维码，桌面端用 Popover */
 export function ExperienceButton({ className, variant = 'wechat' }: ExperienceButtonProps) {
@@ -26,6 +30,12 @@ export function ExperienceButton({ className, variant = 'wechat' }: ExperienceBu
   const triggerContent =
     variant === 'simple' ? (
       '立即体验'
+    ) : variant === 'hero' ? (
+      <>
+        <WechatIcon className="size-4 shrink-0 text-primary-foreground" />
+        <span className="leading-none">微信扫码体验</span>
+        <ArrowRight className="size-4 shrink-0 text-primary-foreground/90" aria-hidden />
+      </>
     ) : (
       <>
         <WechatIcon className="size-4 shrink-0 text-primary-foreground sm:ml-2.5" />
@@ -38,7 +48,11 @@ export function ExperienceButton({ className, variant = 'wechat' }: ExperienceBu
     )
 
   const triggerClassName = cn(
-    variant === 'simple' ? simpleTriggerClass : wechatTriggerClass,
+    variant === 'simple'
+      ? simpleTriggerClass
+      : variant === 'hero'
+        ? heroTriggerClass
+        : wechatTriggerClass,
     className,
   )
 
