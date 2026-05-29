@@ -2,7 +2,7 @@ export const brand = {
   shortName: '食探',
   fullName: '智健食探',
   legalName: 'Food Link',
-  companyName: '北京智健启能有限公司',
+  companyName: '智健启能（北京）科技有限公司',
   icpNumber: '京ICP备2025141637号-4',
   /** 工信部 ICP/IP 地址/域名信息备案管理系统（备案号须链至该官网） */
   icpUrl: 'https://beian.miit.gov.cn/',

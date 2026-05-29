@@ -128,4 +128,28 @@
       transform: rotateY(-16deg) rotateX(6deg);
     }
   }
+
+  /** Hero 标题「一张照片」手绘感下划线 */
+  .hero-headline-underline {
+    position: relative;
+    display: inline-block;
+  }
+
+  .hero-headline-underline::after {
+    content: '';
+    position: absolute;
+    left: -2%;
+    right: -2%;
+    bottom: 0.06em;
+    height: 0.28em;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      rgb(0 188 125 / 35%) 0%,
+      rgb(0 188 125 / 55%) 45%,
+      rgb(0 188 125 / 30%) 100%
+    );
+    z-index: -1;
+    transform: rotate(-1.5deg);
+  }
 }
