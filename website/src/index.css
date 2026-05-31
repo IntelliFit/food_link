@@ -1,0 +1,155 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./design-system/theme-vars.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: var(--font-sans);
+
+  /* 8px grid spacing */
+  --spacing-0: 0px;
+  --spacing-1: 8px;
+  --spacing-2: 16px;
+  --spacing-3: 24px;
+  --spacing-4: 32px;
+  --spacing-5: 40px;
+  --spacing-6: 48px;
+  --spacing-8: 64px;
+  --spacing-10: 80px;
+  --spacing-12: 96px;
+  --spacing-16: 128px;
+  --spacing-20: 160px;
+  --spacing-24: 192px;
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-macro-protein: var(--macro-protein);
+  --color-macro-carbs: var(--macro-carbs);
+  --color-macro-fat: var(--macro-fat);
+  --color-warning: var(--warning);
+  --color-wechat: var(--wechat);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    overflow-x: clip;
+  }
+  html {
+    @apply font-sans scroll-smooth;
+  }
+  button,
+  a,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+}
+
+@layer utilities {
+  .bg-gradient-page {
+    background: var(--gradient-page);
+  }
+  .bg-gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  /** 固定顶栏下的首屏上内边距（含刘海安全区） */
+  .pt-below-header {
+    padding-top: calc(3.5rem + env(safe-area-inset-top, 0px) + 1.25rem);
+  }
+
+  /** 锚点滚动时避开固定顶栏 */
+  .scroll-mt-header {
+    scroll-margin-top: calc(3.5rem + env(safe-area-inset-top, 0px) + 0.75rem);
+  }
+
+  @media (min-width: 768px) {
+    .pt-below-header {
+      padding-top: 5rem;
+    }
+
+    .scroll-mt-header {
+      scroll-margin-top: 5rem;
+    }
+  }
+
+  /** Hero 手机 mockup：仅桌面端保留 3D 倾角 */
+  .hero-phone-tilt {
+    transform: none;
+  }
+
+  @media (min-width: 768px) {
+    .hero-phone-tilt {
+      transform: rotateY(-16deg) rotateX(6deg);
+    }
+  }
+
+  /** Hero 标题「一张照片」手绘感下划线 */
+  .hero-headline-underline {
+    position: relative;
+    display: inline-block;
+  }
+
+  .hero-headline-underline::after {
+    content: '';
+    position: absolute;
+    left: -2%;
+    right: -2%;
+    bottom: 0.06em;
+    height: 0.28em;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      rgb(0 188 125 / 35%) 0%,
+      rgb(0 188 125 / 55%) 45%,
+      rgb(0 188 125 / 30%) 100%
+    );
+    z-index: -1;
+    transform: rotate(-1.5deg);
+  }
+}
