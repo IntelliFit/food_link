@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-05-31
+
+- 🔧 chore: 添加 Hero 区 number 装饰图资源 `website/public/images/hero/number.png`
+
 ## 2026-05-30
 
 - 🎨 style: Hero 主标题增加字间距（tracking 0.05–0.06em） `website/src/components/hero/HeroHeadline.tsx`
