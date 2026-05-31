@@ -29,7 +29,7 @@ import {
   type PrecisionReferencePresetKey,
   showUnifiedApiError,
 } from '../../../utils/api'
-import { normalizeAvailableExecutionMode } from '../../../utils/execution-mode'
+import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
 import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { withAuth } from '../../../utils/withAuth'
@@ -83,12 +83,14 @@ const readSuggestRatioPreference = (): boolean => {
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => {
   if (value === 'standard_web_search') return 'standard_web_search'
+  if (value === 'standard_packaged_experiment') return 'standard_packaged_experiment'
   if (value === 'strict_web_search') return 'strict_web_search'
   if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
   return 'standard'
 }
 
 const getExecutionModeLabel = (value: ExecutionMode): string => {
+  if (value === 'standard_packaged_experiment') return '零食库试验'
   if (value === 'strict_web_search') return '精准联网'
   if (value === 'standard_web_search') return '普通联网'
   if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return '精准'
@@ -1814,7 +1816,7 @@ function ResultPage() {
           const savedMealType = Taro.getStorageSync('analyzeMealType') as MealType | undefined
           const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
           const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
-          const savedExecutionMode = normalizeAvailableExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
+          const savedExecutionMode = normalizeRuntimeExecutionMode(Taro.getStorageSync('analyzeExecutionMode') || executionMode)
           const savedAnalysisEngine = normalizeAnalysisEngine(Taro.getStorageSync(ANALYSIS_ENGINE_STORAGE_KEY))
           const correctionSourceTaskId = String(Taro.getStorageSync('analyzeSourceTaskId') || '').trim()
           const previousResult: AnalyzeResponse = {

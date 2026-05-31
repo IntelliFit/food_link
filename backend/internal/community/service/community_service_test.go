@@ -17,9 +17,12 @@ type mockFeedRepo struct {
 	listPublicFeed             []repo.FeedRecord
 	listPublicFeedErr          error
 	listPublicFeedLimit        int
+	listPublicFeedCalled       bool
+	listPublicFeedContentType  string
 	listFriendFeed             []repo.FeedRecord
 	listFriendFeedErr          error
 	listFriendFeedLimit        int
+	listFriendFeedCalled       bool
 	getFeedRecord              *repo.FeedRecord
 	getFeedRecordErr           error
 	hideFeedErr                error
@@ -48,10 +51,13 @@ type mockFeedRepo struct {
 
 func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
 	m.listPublicFeedLimit = limit
+	m.listPublicFeedCalled = true
+	m.listPublicFeedContentType = contentType
 	return m.listPublicFeed, m.listPublicFeedErr
 }
 func (m *mockFeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
 	m.listFriendFeedLimit = limit
+	m.listFriendFeedCalled = true
 	return m.listFriendFeed, m.listFriendFeedErr
 }
 func (m *mockFeedRepo) GetFeedRecordByID(ctx context.Context, recordID string) (*repo.FeedRecord, error) {
@@ -229,6 +235,31 @@ func TestFriendFeed(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.True(t, items[0].Liked)
+}
+
+func TestFriendFeedPublicScopeUsesPublicFeedWithViewerLikeState(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		listPublicFeed: []repo.FeedRecord{{ID: "r1", UserID: "u2", MealType: "lunch"}},
+		friendIDs:      []string{"u3"},
+		likesMap:       map[string]*repo.LikeInfo{repo.FeedTargetKey(repo.FeedTargetFoodRecord, "r1"): {Count: 4, Liked: true}},
+		profiles:       map[string]*repo.UserProfile{"u2": {ID: "u2", Nickname: "Alice"}},
+	}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+
+	items, err := svc.FriendFeed(context.Background(), "viewer", FeedParams{
+		Limit:       10,
+		AuthorScope: "public",
+		ContentType: "all",
+	})
+
+	assert.NoError(t, err)
+	assert.True(t, mockFeed.listPublicFeedCalled)
+	assert.False(t, mockFeed.listFriendFeedCalled)
+	assert.Equal(t, "all", mockFeed.listPublicFeedContentType)
+	assert.Len(t, items, 1)
+	assert.Equal(t, 4, items[0].LikeCount)
+	assert.True(t, items[0].Liked)
+	assert.False(t, items[0].IsMine)
 }
 
 func TestFriendFeedLatestUsesOffsetWindow(t *testing.T) {

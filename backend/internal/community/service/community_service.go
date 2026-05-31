@@ -162,6 +162,10 @@ type MarkReadResult struct {
 }
 
 func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([]FeedItem, error) {
+	return s.publicFeed(ctx, params, "")
+}
+
+func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, viewerUserID string) ([]FeedItem, error) {
 	customRank := params.SortBy == "recommended" || params.SortBy == "hot" || params.SortBy == "balanced"
 	candidateLimit := params.Offset + params.Limit
 	if customRank {
@@ -178,7 +182,7 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 
 	targets := feedTargetsFromRecords(records)
 
-	likesMap, err := s.feedRepo.GetLikesForTargets(ctx, targets, "")
+	likesMap, err := s.feedRepo.GetLikesForTargets(ctx, targets, viewerUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +203,7 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 	}
 
 	targets = feedTargetsFromRecords(records)
-	likesMap, _ = s.feedRepo.GetLikesForTargets(ctx, targets, "")
+	likesMap, _ = s.feedRepo.GetLikesForTargets(ctx, targets, viewerUserID)
 
 	var commentsMap map[string][]CommentItem
 	if params.IncludeComments {
@@ -236,8 +240,8 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 			Record:          rec,
 			Author:          author,
 			LikeCount:       likeInfo.Count,
-			Liked:           false,
-			IsMine:          false,
+			Liked:           likeInfo.Liked,
+			IsMine:          viewerUserID != "" && rec.UserID == viewerUserID,
 			RecommendReason: s.buildRecommendReason(&rec, params.SortBy, params.MealType, params.DietGoal, nil, likeInfo.Count, commentCountMap[targetKey]),
 			CommentCount:    commentCountMap[targetKey],
 		}
@@ -250,6 +254,10 @@ func (s *CommunityService) PublicFeed(ctx context.Context, params FeedParams) ([
 }
 
 func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params FeedParams) ([]FeedItem, error) {
+	if params.AuthorID == "" && params.AuthorScope == "public" {
+		return s.publicFeed(ctx, params, userID)
+	}
+
 	friendIDs, err := s.feedRepo.GetFriendIDs(ctx, userID)
 	if err != nil {
 		return nil, err

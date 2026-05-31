@@ -1231,6 +1231,8 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 		analysisLabel = "联网精准分析"
 	} else if mode == "standard_web_search" {
 		analysisLabel = "联网分析"
+	} else if mode == "standard_packaged_experiment" {
+		analysisLabel = "零食库试验分析"
 	} else if mode == "experimental" {
 		cost = creditCostPrecisionFoodAnalysis
 		analysisLabel = "试验分析"
@@ -2198,6 +2200,8 @@ func normalizeFoodExecutionMode(mode string) string {
 		return "lite"
 	case "standard_web_search", "web_search", "standard-web-search":
 		return "standard_web_search"
+	case "standard_packaged_experiment", "packaged_experiment", "standard-packaged-experiment":
+		return "standard_packaged_experiment"
 	case "strict", "precision":
 		return "strict"
 	case "strict_web_search", "precision_web_search", "strict-web-search":

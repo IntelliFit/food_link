@@ -8,10 +8,12 @@ import {
   getAnalyzeTask,
   listAnalyzeTasks,
   sanitizeUserFacingErrorMessage,
+  searchManualFood,
   showUnifiedApiError,
   submitPackagedProductExtract,
   uploadAnalyzeImageFile,
   type CreatePackagedFoodRequest,
+  type ManualFoodSearchResult,
   type PackagedAutoIngestResult,
   type PackagedProductExtractResult,
   type PackagedUploadRewardResult,
@@ -400,6 +402,10 @@ function PackagedFoodEditPage() {
   const [uploadTasks, setUploadTasks] = useState<PackagedUploadTaskEntry[]>([])
   const [pendingRewardImages, setPendingRewardImages] = useState<UploadedImage[]>([])
   const [tasksExpanded, setTasksExpanded] = useState(false)
+  const [librarySearchQuery, setLibrarySearchQuery] = useState('')
+  const [librarySearchResults, setLibrarySearchResults] = useState<ManualFoodSearchResult[]>([])
+  const [librarySearchLoading, setLibrarySearchLoading] = useState(false)
+  const [librarySearchTouched, setLibrarySearchTouched] = useState(false)
   const isRewardTaskMode = router.params?.task_mode === 'reward_center'
 
   useDidShow(() => {
@@ -511,6 +517,27 @@ function PackagedFoodEditPage() {
 
   const resetRewardSelection = () => {
     setPendingRewardImages([])
+  }
+
+  const handleLibrarySearch = async () => {
+    const keyword = librarySearchQuery.trim()
+    if (!keyword) {
+      setLibrarySearchTouched(false)
+      setLibrarySearchResults([])
+      Taro.showToast({ title: '先输入品名或口味', icon: 'none' })
+      return
+    }
+    setLibrarySearchLoading(true)
+    setLibrarySearchTouched(true)
+    try {
+      const results = await searchManualFood(keyword, 30, { source: 'packaged_food' })
+      setLibrarySearchResults(results.slice(0, 6))
+    } catch (error) {
+      setLibrarySearchResults([])
+      await showUnifiedApiError(error, '搜索零食库失败')
+    } finally {
+      setLibrarySearchLoading(false)
+    }
   }
 
   const refreshUploadTasks = async (baseTasks?: PackagedUploadTaskEntry[]) => {
@@ -859,11 +886,70 @@ function PackagedFoodEditPage() {
                 </View>
               </View>
 
+              <View className='duplicate-guide-card'>
+                <View className='duplicate-guide-head'>
+                  <Text className='duplicate-guide-title'>上传前先看是否重复</Text>
+                  <Text className='duplicate-guide-badge'>避免白传</Text>
+                </View>
+                <Text className='duplicate-guide-item'>同品牌、同品名、同规格或净含量：只算同一个商品，只奖励一次。</Text>
+                <Text className='duplicate-guide-item'>换口味、换规格、换包装容量：可以当作另一种商品上传。</Text>
+                <Text className='duplicate-guide-item'>如果下方任务已经显示“已入库”或“数据库已有”，同商品再拍也不会重复加分。</Text>
+              </View>
+
+              <View className='library-search-card'>
+                <View className='library-search-head'>
+                  <Text className='library-search-title'>先搜零食库</Text>
+                  <Text className='library-search-desc'>输入品牌、品名、口味或条码；搜到同款就不用上传。</Text>
+                </View>
+                <View className='library-search-row'>
+                  <Input
+                    className='library-search-input'
+                    value={librarySearchQuery}
+                    placeholder='例：玉米薄脆 麻辣味'
+                    confirmType='search'
+                    onInput={(e) => setLibrarySearchQuery(String(e.detail.value || ''))}
+                    onConfirm={handleLibrarySearch}
+                  />
+                  <View className={`library-search-btn ${librarySearchLoading ? 'loading' : ''}`} onClick={handleLibrarySearch}>
+                    <Text>{librarySearchLoading ? '搜索中' : '搜索'}</Text>
+                  </View>
+                </View>
+                {librarySearchResults.length > 0 && (
+                  <View className='library-search-results'>
+                    <Text className='library-search-hit'>找到 {librarySearchResults.length} 个包装食品结果，确认同款后不用再上传。</Text>
+                    {librarySearchResults.map(item => (
+                      <View key={`${item.source}-${item.id}`} className='library-search-item'>
+                        {item.image_path ? (
+                          <Image className='library-search-image' src={item.image_path} mode='aspectFill' />
+                        ) : (
+                          <View className='library-search-image placeholder'>
+                            <Text>食</Text>
+                          </View>
+                        )}
+                        <View className='library-search-copy'>
+                          <Text className='library-search-item-title'>{item.title}</Text>
+                          <Text className='library-search-item-subtitle'>{item.subtitle || item.source_label || '包装食品'}</Text>
+                          {item.nutrition_highlights?.length ? (
+                            <Text className='library-search-item-meta'>{item.nutrition_highlights.slice(0, 2).join(' · ')}</Text>
+                          ) : null}
+                        </View>
+                        <Text className='library-search-tag'>已收录</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                {librarySearchTouched && !librarySearchLoading && librarySearchResults.length === 0 && (
+                  <View className='library-search-empty'>
+                    <Text>没有搜到同款。确认照片清晰后，可以继续上传补库。</Text>
+                  </View>
+                )}
+              </View>
+
               <View className='capture-card reward-capture-card'>
                 <View className='reward-upload-visual'>
                   <View className='reward-upload-icon'>+</View>
                   <Text className='reward-upload-title'>选择这一种商品的照片</Text>
-                  <Text className='reward-upload-desc'>请不要把不同商品混在一组。提交后你可以继续添加下一种，不用等 AI 分析完。</Text>
+                  <Text className='reward-upload-desc'>请不要把不同商品混在一组，也不要重复上传已入库的同一规格商品。</Text>
                 </View>
                 <View className={`recognize-btn reward-upload-btn ${recognizing ? 'loading' : ''}`} onClick={handleRewardChooseImages}>
                   <Text className='recognize-btn-text'>{recognizing ? '处理中' : '选择/拍摄 1-3 张照片'}</Text>
@@ -890,6 +976,7 @@ function PackagedFoodEditPage() {
                   <View className='reward-confirm-rules'>
                     <Text className='reward-confirm-rule'>同一商品：可以是正面、背面、营养表或大包装局部。</Text>
                     <Text className='reward-confirm-rule'>不同商品：请分开提交，一种食物一个任务。</Text>
+                    <Text className='reward-confirm-rule'>已有商品：系统会更新数据，但不会重复发放奖励积分。</Text>
                   </View>
                   <View className={`recognize-btn reward-submit-btn ${recognizing ? 'loading' : ''}`} onClick={handleRewardSubmitSelected}>
                     <Text className='recognize-btn-text'>{recognizing ? '提交中' : '提交这一种商品'}</Text>
@@ -967,7 +1054,7 @@ function PackagedFoodEditPage() {
               </View>
               {uploadTasks.length === 0 ? (
                 <View className='upload-task-empty'>
-                  <Text className='upload-task-empty-text'>还没有提交任务。先上传一张完整图，或一次选择正面和营养表两张图。</Text>
+                  <Text className='upload-task-empty-text'>还没有提交任务。先上传一张完整图，或一次选择正面和营养表两张图；后续可在这里确认是否已入库或已有不奖励。</Text>
                 </View>
               ) : (
                 <View className='upload-task-list'>

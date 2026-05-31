@@ -292,6 +292,9 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 	var body struct {
 		Brand                 string         `json:"brand"`
 		ProductName           string         `json:"product_name"`
+		DisplayName           string         `json:"display_name"`
+		SearchText            string         `json:"search_text"`
+		ProductFamilyKey      string         `json:"product_family_key"`
 		SpecText              string         `json:"spec_text"`
 		Barcode               string         `json:"barcode"`
 		FlavorText            string         `json:"flavor_text"`
@@ -302,6 +305,12 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		ExtractConfidence     float64        `json:"extract_confidence"`
 		FieldConfidence       map[string]any `json:"field_confidence"`
 		IngestMethod          string         `json:"ingest_method"`
+		NetContentValue       float64        `json:"net_content_value"`
+		NetContentUnit        string         `json:"net_content_unit"`
+		UnitCount             float64        `json:"unit_count"`
+		UnitContentValue      float64        `json:"unit_content_value"`
+		UnitContentUnit       string         `json:"unit_content_unit"`
+		ReviewStatus          string         `json:"review_status"`
 		NetWeightG            float64        `json:"net_weight_g"`
 		ServingWeightG        float64        `json:"serving_weight_g"`
 		KcalPer100g           float64        `json:"kcal_per_100g"`
@@ -338,6 +347,9 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 	item, err := h.nutritionSvc.CreatePackagedFood(c.Request.Context(), service.PackagedFoodInput{
 		Brand:                 body.Brand,
 		ProductName:           body.ProductName,
+		DisplayName:           body.DisplayName,
+		SearchText:            body.SearchText,
+		ProductFamilyKey:      body.ProductFamilyKey,
 		SpecText:              body.SpecText,
 		Barcode:               body.Barcode,
 		FlavorText:            body.FlavorText,
@@ -348,6 +360,12 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		ExtractConfidence:     body.ExtractConfidence,
 		FieldConfidence:       body.FieldConfidence,
 		IngestMethod:          body.IngestMethod,
+		NetContentValue:       body.NetContentValue,
+		NetContentUnit:        body.NetContentUnit,
+		UnitCount:             body.UnitCount,
+		UnitContentValue:      body.UnitContentValue,
+		UnitContentUnit:       body.UnitContentUnit,
+		ReviewStatus:          body.ReviewStatus,
 		NetWeightG:            body.NetWeightG,
 		ServingWeightG:        body.ServingWeightG,
 		KcalPer100g:           body.KcalPer100g,

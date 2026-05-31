@@ -305,6 +305,9 @@ type PackagedFood struct {
 	ProductName           string         `gorm:"column:product_name" json:"product_name"`
 	NormalizedName        string         `gorm:"column:normalized_name" json:"normalized_name"`
 	ProductKey            string         `gorm:"column:product_key" json:"product_key"`
+	DisplayName           string         `gorm:"column:display_name" json:"display_name"`
+	SearchText            string         `gorm:"column:search_text" json:"search_text,omitempty"`
+	ProductFamilyKey      string         `gorm:"column:product_family_key" json:"product_family_key,omitempty"`
 	SpecText              *string        `gorm:"column:spec_text" json:"spec_text,omitempty"`
 	Barcode               *string        `gorm:"column:barcode" json:"barcode,omitempty"`
 	FlavorText            *string        `gorm:"column:flavor_text" json:"flavor_text,omitempty"`
@@ -319,6 +322,12 @@ type PackagedFood struct {
 	ExtractConfidence     float64        `gorm:"column:extract_confidence" json:"extract_confidence"`
 	FieldConfidence       map[string]any `gorm:"column:field_confidence;serializer:json" json:"field_confidence,omitempty"`
 	IngestMethod          *string        `gorm:"column:ingest_method" json:"ingest_method,omitempty"`
+	NetContentValue       float64        `gorm:"column:net_content_value" json:"net_content_value,omitempty"`
+	NetContentUnit        *string        `gorm:"column:net_content_unit" json:"net_content_unit,omitempty"`
+	UnitCount             float64        `gorm:"column:unit_count" json:"unit_count,omitempty"`
+	UnitContentValue      float64        `gorm:"column:unit_content_value" json:"unit_content_value,omitempty"`
+	UnitContentUnit       *string        `gorm:"column:unit_content_unit" json:"unit_content_unit,omitempty"`
+	ReviewStatus          string         `gorm:"column:review_status" json:"review_status,omitempty"`
 	NetWeightG            float64        `gorm:"column:net_weight_g" json:"net_weight_g"`
 	ServingWeightG        float64        `gorm:"column:serving_weight_g" json:"serving_weight_g"`
 	KcalPer100g           float64        `gorm:"column:kcal_per_100g" json:"kcal_per_100g"`

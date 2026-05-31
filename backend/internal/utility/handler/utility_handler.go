@@ -24,6 +24,7 @@ type ManualFoodService interface {
 	Browse(ctx context.Context, userID string, limit int) (*domain.ManualFoodBrowseResult, error)
 	Catalog(ctx context.Context, userID string, category string, page int, pageSize int) (*domain.ManualFoodCatalogResult, error)
 	Search(ctx context.Context, userID string, keyword string, limit int) ([]domain.ManualFoodResult, error)
+	SearchPackaged(ctx context.Context, keyword string, limit int) ([]domain.ManualFoodResult, error)
 }
 
 type UtilityHandler struct {
@@ -146,7 +147,15 @@ func (h *UtilityHandler) ManualFoodSearch(c *gin.Context) {
 		}
 	}
 	userID, _ := c.Get(authmw.ContextUserIDKey)
-	items, err := h.manualFoodSvc.Search(c.Request.Context(), stringValue(userID), keyword, limit)
+	var (
+		items []domain.ManualFoodResult
+		err   error
+	)
+	if c.Query("source") == "packaged_food" {
+		items, err = h.manualFoodSvc.SearchPackaged(c.Request.Context(), keyword, limit)
+	} else {
+		items, err = h.manualFoodSvc.Search(c.Request.Context(), stringValue(userID), keyword, limit)
+	}
 	if err != nil {
 		response.Error(c, err)
 		return

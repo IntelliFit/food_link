@@ -44,6 +44,9 @@ const (
 type PackagedFoodInput struct {
 	Brand                 string
 	ProductName           string
+	DisplayName           string
+	SearchText            string
+	ProductFamilyKey      string
 	SpecText              string
 	Barcode               string
 	FlavorText            string
@@ -58,6 +61,12 @@ type PackagedFoodInput struct {
 	ExtractConfidence     float64
 	FieldConfidence       map[string]any
 	IngestMethod          string
+	NetContentValue       float64
+	NetContentUnit        string
+	UnitCount             float64
+	UnitContentValue      float64
+	UnitContentUnit       string
+	ReviewStatus          string
 	NetWeightG            float64
 	ServingWeightG        float64
 	KcalPer100g           float64
@@ -174,8 +183,17 @@ type PackagedAutoIngestResult struct {
 type PackagedProductExtractResult struct {
 	Brand                string                      `json:"brand,omitempty"`
 	ProductName          string                      `json:"product_name,omitempty"`
+	DisplayName          string                      `json:"display_name,omitempty"`
+	SearchText           string                      `json:"search_text,omitempty"`
+	ProductFamilyKey     string                      `json:"product_family_key,omitempty"`
 	FlavorText           string                      `json:"flavor_text,omitempty"`
 	PackageCategory      string                      `json:"package_category,omitempty"`
+	NetContentValue      float64                     `json:"net_content_value,omitempty"`
+	NetContentUnit       string                      `json:"net_content_unit,omitempty"`
+	UnitCount            float64                     `json:"unit_count,omitempty"`
+	UnitContentValue     float64                     `json:"unit_content_value,omitempty"`
+	UnitContentUnit      string                      `json:"unit_content_unit,omitempty"`
+	ReviewStatus         string                      `json:"review_status,omitempty"`
 	NetWeightG           float64                     `json:"net_weight_g,omitempty"`
 	ServingWeightG       float64                     `json:"serving_weight_g,omitempty"`
 	SpecText             string                      `json:"spec_text,omitempty"`
@@ -284,6 +302,8 @@ func (s *FoodNutritionService) CreatePackagedFoodWithAction(ctx context.Context,
 	}
 	if input.ServingWeightG <= 0 && input.NetWeightG > 0 {
 		input.ServingWeightG = input.NetWeightG
+	} else if input.ServingWeightG <= 0 && input.NetContentValue > 0 && strings.EqualFold(strings.TrimSpace(input.NetContentUnit), "g") {
+		input.ServingWeightG = input.NetContentValue
 	}
 	if input.KcalPer100g <= 0 && input.ProteinPer100g <= 0 && input.CarbsPer100g <= 0 && input.FatPer100g <= 0 {
 		return nil, "", &commonerrors.AppError{Code: 10002, Message: "请至少填写热量或三大营养素", HTTPStatus: 400}
@@ -295,6 +315,9 @@ func (s *FoodNutritionService) CreatePackagedFoodWithAction(ctx context.Context,
 	return s.nutritionRepo.UpsertPackagedFoodWithAction(ctx, repo.PackagedFoodInput{
 		Brand:                 input.Brand,
 		ProductName:           productName,
+		DisplayName:           input.DisplayName,
+		SearchText:            input.SearchText,
+		ProductFamilyKey:      input.ProductFamilyKey,
 		SpecText:              input.SpecText,
 		Barcode:               input.Barcode,
 		FlavorText:            input.FlavorText,
@@ -309,6 +332,12 @@ func (s *FoodNutritionService) CreatePackagedFoodWithAction(ctx context.Context,
 		ExtractConfidence:     input.ExtractConfidence,
 		FieldConfidence:       input.FieldConfidence,
 		IngestMethod:          input.IngestMethod,
+		NetContentValue:       input.NetContentValue,
+		NetContentUnit:        input.NetContentUnit,
+		UnitCount:             input.UnitCount,
+		UnitContentValue:      input.UnitContentValue,
+		UnitContentUnit:       input.UnitContentUnit,
+		ReviewStatus:          input.ReviewStatus,
 		NetWeightG:            input.NetWeightG,
 		ServingWeightG:        input.ServingWeightG,
 		KcalPer100g:           input.KcalPer100g,
@@ -484,6 +513,11 @@ func buildPackagedProductExtractPrompt(recognizedNameHint string, imageCount int
   "product_name": "",
   "flavor_text": "",
   "package_category": "",
+  "net_content_value": 0,
+  "net_content_unit": "",
+  "unit_count": 0,
+  "unit_content_value": 0,
+  "unit_content_unit": "",
   "net_weight_g": 0,
   "serving_weight_g": 0,
   "spec_text": "",
@@ -620,8 +654,17 @@ func parsePackagedProductExtractResult(raw map[string]any, imageURLs []string) *
 	result := &PackagedProductExtractResult{
 		Brand:                stringFromAny(raw["brand"]),
 		ProductName:          stringFromAny(raw["product_name"], raw["productName"], raw["name"]),
+		DisplayName:          stringFromAny(raw["display_name"], raw["displayName"]),
+		SearchText:           stringFromAny(raw["search_text"], raw["searchText"]),
+		ProductFamilyKey:     stringFromAny(raw["product_family_key"], raw["productFamilyKey"]),
 		FlavorText:           stringFromAny(raw["flavor_text"], raw["flavorText"]),
 		PackageCategory:      stringFromAny(raw["package_category"], raw["packageCategory"]),
+		NetContentValue:      numberFromAny(raw["net_content_value"], raw["netContentValue"]),
+		NetContentUnit:       strings.ToLower(stringFromAny(raw["net_content_unit"], raw["netContentUnit"])),
+		UnitCount:            numberFromAny(raw["unit_count"], raw["unitCount"]),
+		UnitContentValue:     numberFromAny(raw["unit_content_value"], raw["unitContentValue"]),
+		UnitContentUnit:      strings.ToLower(stringFromAny(raw["unit_content_unit"], raw["unitContentUnit"])),
+		ReviewStatus:         stringFromAny(raw["review_status"], raw["reviewStatus"]),
 		NetWeightG:           numberFromAny(raw["net_weight_g"], raw["netWeightG"]),
 		ServingWeightG:       numberFromAny(raw["serving_weight_g"], raw["servingWeightG"]),
 		SpecText:             stringFromAny(raw["spec_text"], raw["specText"]),
@@ -673,10 +716,39 @@ func enrichPackagedProductExtractResult(result *PackagedProductExtractResult) {
 	if strings.TrimSpace(result.ProductName) == "" {
 		addMissing("product_name")
 	}
-	if result.NetWeightG <= 0 {
+	if result.NetWeightG <= 0 && result.NetContentValue <= 0 {
 		addMissing("net_weight_g")
 	}
 	convertPackagedNutrition(result)
+	normalized := repo.PackagedProductNormalizer{}.Normalize(repo.PackagedProductNormalizeInput{
+		Brand:            result.Brand,
+		ProductName:      result.ProductName,
+		DisplayName:      result.DisplayName,
+		SearchText:       result.SearchText,
+		ProductFamilyKey: result.ProductFamilyKey,
+		FlavorText:       result.FlavorText,
+		SpecText:         result.SpecText,
+		Barcode:          result.Barcode,
+		PackageCategory:  result.PackageCategory,
+		OCRRawText:       result.OCRRawText,
+		NetWeightG:       result.NetWeightG,
+		NetContentValue:  result.NetContentValue,
+		NetContentUnit:   result.NetContentUnit,
+		UnitCount:        result.UnitCount,
+		UnitContentValue: result.UnitContentValue,
+		UnitContentUnit:  result.UnitContentUnit,
+		ReviewStatus:     result.ReviewStatus,
+	})
+	result.DisplayName = normalized.DisplayName
+	result.SearchText = normalized.SearchText
+	result.ProductFamilyKey = normalized.ProductFamilyKey
+	result.NetWeightG = normalized.NetWeightG
+	result.NetContentValue = normalized.NetContentValue
+	result.NetContentUnit = normalized.NetContentUnit
+	result.UnitCount = normalized.UnitCount
+	result.UnitContentValue = normalized.UnitContentValue
+	result.UnitContentUnit = normalized.UnitContentUnit
+	result.ReviewStatus = normalized.ReviewStatus
 	result.MissingFields = missingFields
 }
 
@@ -1015,6 +1087,10 @@ func evaluatePackagedAutoIngest(result *PackagedProductExtractResult) *PackagedA
 	auto.ConflictReasons = detectPackagedExtractConflicts(result)
 	if strings.TrimSpace(result.ProductName) == "" {
 		auto.Reason = "missing_product_name"
+		return auto
+	}
+	if result.NetWeightG <= 0 && result.NetContentValue <= 0 {
+		auto.Reason = "missing_net_content"
 		return auto
 	}
 	if strings.TrimSpace(result.ConversionStatus) != "converted" {

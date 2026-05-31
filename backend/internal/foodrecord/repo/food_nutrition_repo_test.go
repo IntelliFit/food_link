@@ -378,7 +378,7 @@ func TestFoodNutritionRepo_ResolvePackagedFood(t *testing.T) {
 		Brand:          "BrandA",
 		ProductName:    "BrandA Protein Bar",
 		NormalizedName: normalizeFoodName("BrandA Protein Bar"),
-		ProductKey:     buildPackagedProductKey("BrandA", "BrandA Protein Bar", "60g", 60),
+		ProductKey:     buildPackagedProductKey("BrandA", "BrandA Protein Bar", "", "60g", 60),
 		NetWeightG:     60,
 		KcalPer100g:    400,
 		ProteinPer100g: 30,
@@ -398,6 +398,55 @@ func TestFoodNutritionRepo_ResolvePackagedFood(t *testing.T) {
 	require.NotNil(t, result.Food)
 	assert.Equal(t, "p1", result.Food.ID)
 	assert.Equal(t, "exact_alias", result.Status)
+}
+
+func TestPackagedProductNormalizerParsesCiciNetContent(t *testing.T) {
+	fields := PackagedProductNormalizer{}.Normalize(PackagedProductNormalizeInput{
+		Brand:       "喜之郎",
+		ProductName: "Cici果粒爽",
+		FlavorText:  "橙汁味",
+		SpecText:    "净含量:258克",
+		OCRRawText:  "喜之郎 Cici 果粒爽 橙汁饮料 净含量:258克",
+	})
+
+	assert.Equal(t, 258.0, fields.NetContentValue)
+	assert.Equal(t, "g", fields.NetContentUnit)
+	assert.Equal(t, 258.0, fields.NetWeightG)
+	assert.Contains(t, fields.DisplayName, "喜之郎")
+	assert.Contains(t, fields.DisplayName, "Cici果粒爽")
+	assert.Contains(t, fields.DisplayName, "橙汁味")
+	assert.Contains(t, fields.DisplayName, "258g")
+	assert.Contains(t, fields.ProductKey, normalizeFoodName("喜之郎Cici果粒爽橙汁味258g"))
+}
+
+func TestPackagedProductNormalizerParsesMultiUnitSpec(t *testing.T) {
+	fields := PackagedProductNormalizer{}.Normalize(PackagedProductNormalizeInput{
+		Brand:       "士力架",
+		ProductName: "花生夹心巧克力",
+		FlavorText:  "经典花生",
+		SpecText:    "2条装 35g*2",
+	})
+
+	assert.Equal(t, 70.0, fields.NetContentValue)
+	assert.Equal(t, "g", fields.NetContentUnit)
+	assert.Equal(t, 35.0, fields.UnitContentValue)
+	assert.Equal(t, 2.0, fields.UnitCount)
+	assert.Equal(t, 70.0, fields.NetWeightG)
+	assert.Contains(t, fields.DisplayName, "2条装")
+	assert.Contains(t, fields.DisplayName, "70g")
+	assert.Contains(t, fields.ProductKey, normalizeFoodName("2条装"))
+	assert.Contains(t, fields.ProductKey, normalizeFoodName("70g"))
+}
+
+func TestPackagedProductNormalizerKeepsDifferentSpecsSeparate(t *testing.T) {
+	normalizer := PackagedProductNormalizer{}
+	spec35 := normalizer.Normalize(PackagedProductNormalizeInput{Brand: "士力架", ProductName: "花生夹心巧克力", SpecText: "35g", NetWeightG: 35})
+	spec51 := normalizer.Normalize(PackagedProductNormalizeInput{Brand: "士力架", ProductName: "花生夹心巧克力", SpecText: "51g", NetWeightG: 51})
+	spec70 := normalizer.Normalize(PackagedProductNormalizeInput{Brand: "士力架", ProductName: "花生夹心巧克力", SpecText: "2条装 35g*2"})
+
+	assert.NotEqual(t, spec35.ProductKey, spec51.ProductKey)
+	assert.NotEqual(t, spec35.ProductKey, spec70.ProductKey)
+	assert.NotEqual(t, spec51.ProductKey, spec70.ProductKey)
 }
 
 func TestFoodNutritionRepo_UpsertPackagedFoodPersistsJSONFields(t *testing.T) {
@@ -436,7 +485,7 @@ func TestFoodNutritionRepo_UpsertPackagedFoodPersistsJSONFields(t *testing.T) {
 	assert.Equal(t, "converted", *stored.ConversionStatus)
 }
 
-func TestFoodNutritionRepo_UpsertPackagedFoodUpdatesSameNormalizedName(t *testing.T) {
+func TestFoodNutritionRepo_UpsertPackagedFoodCreatesDifferentSpecsWithSameName(t *testing.T) {
 	db := setupFoodNutritionFullTestDB(t)
 	repo := NewFoodNutritionRepo(db)
 	ctx := context.Background()
@@ -466,8 +515,202 @@ func TestFoodNutritionRepo_UpsertPackagedFoodUpdatesSameNormalizedName(t *testin
 		NutritionBasisUnit: "100g",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "updated", action)
-	assert.Equal(t, first.ID, second.ID)
+	assert.Equal(t, "created", action)
+	assert.NotEqual(t, first.ID, second.ID)
 	assert.Equal(t, 70.0, second.NetWeightG)
 	assert.Equal(t, 520.0, second.KcalPer100g)
+}
+
+func TestFoodNutritionRepo_UpsertPackagedFoodCreatesDifferentFlavorsWithSameNameAndSpec(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	first, action, err := repo.UpsertPackagedFoodWithAction(ctx, PackagedFoodInput{
+		Brand:              "粟三代",
+		ProductName:        "玉米薄脆",
+		FlavorText:         "奥尔良烤翅味",
+		SpecText:           "30g",
+		ConversionStatus:   "converted",
+		NetWeightG:         30,
+		KcalPer100g:        650,
+		CarbsPer100g:       61.5,
+		FatPer100g:         41,
+		NutritionBasisUnit: "100g",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "created", action)
+
+	second, action, err := repo.UpsertPackagedFoodWithAction(ctx, PackagedFoodInput{
+		Brand:              "粟三代",
+		ProductName:        "玉米薄脆",
+		FlavorText:         "麻辣味",
+		SpecText:           "30g",
+		ConversionStatus:   "converted",
+		NetWeightG:         30,
+		KcalPer100g:        595,
+		CarbsPer100g:       65,
+		FatPer100g:         35,
+		NutritionBasisUnit: "100g",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "created", action)
+	assert.NotEqual(t, first.ID, second.ID)
+	assert.NotEqual(t, first.ProductKey, second.ProductKey)
+	assert.Equal(t, "玉米薄脆", first.ProductName)
+	assert.Equal(t, "玉米薄脆", second.ProductName)
+}
+
+func TestFoodNutritionRepo_UpsertPackagedFoodUpdatesSameBarcode(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	first, _, err := repo.UpsertPackagedFoodWithAction(ctx, PackagedFoodInput{
+		Brand:              "粟三代",
+		ProductName:        "玉米薄脆",
+		FlavorText:         "奥尔良烤翅味",
+		SpecText:           "30g",
+		Barcode:            "6973029304302",
+		ConversionStatus:   "converted",
+		NetWeightG:         30,
+		KcalPer100g:        650,
+		CarbsPer100g:       61.5,
+		FatPer100g:         41,
+		NutritionBasisUnit: "100g",
+	})
+	require.NoError(t, err)
+
+	second, action, err := repo.UpsertPackagedFoodWithAction(ctx, PackagedFoodInput{
+		Brand:              "粟三代",
+		ProductName:        "玉米薄脆",
+		FlavorText:         "奥尔良味",
+		SpecText:           "30g",
+		Barcode:            "6973029304302",
+		ConversionStatus:   "converted",
+		NetWeightG:         30,
+		KcalPer100g:        648,
+		CarbsPer100g:       61.5,
+		FatPer100g:         41,
+		NutritionBasisUnit: "100g",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "updated", action)
+	assert.Equal(t, first.ID, second.ID)
+	assert.Equal(t, 648.0, second.KcalPer100g)
+}
+
+func TestFoodNutritionRepo_UpsertPackagedFoodCreatesWhenSameProductKeyHasDifferentBarcode(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	first, _, err := repo.UpsertPackagedFoodWithAction(ctx, PackagedFoodInput{
+		Brand:              "粟三代",
+		ProductName:        "玉米薄脆",
+		SpecText:           "30g",
+		Barcode:            "6973029304302",
+		ConversionStatus:   "converted",
+		NetWeightG:         30,
+		KcalPer100g:        650,
+		CarbsPer100g:       61.5,
+		FatPer100g:         41,
+		NutritionBasisUnit: "100g",
+	})
+	require.NoError(t, err)
+
+	second, action, err := repo.UpsertPackagedFoodWithAction(ctx, PackagedFoodInput{
+		Brand:              "粟三代",
+		ProductName:        "玉米薄脆",
+		SpecText:           "30g",
+		Barcode:            "6973029304265",
+		ConversionStatus:   "converted",
+		NetWeightG:         30,
+		KcalPer100g:        595,
+		CarbsPer100g:       65,
+		FatPer100g:         35,
+		NutritionBasisUnit: "100g",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "created", action)
+	assert.NotEqual(t, first.ID, second.ID)
+	assert.Equal(t, first.ProductKey, second.ProductKey)
+}
+
+func TestBuildPackagedProductKeyIncludesFlavor(t *testing.T) {
+	base := buildPackagedProductKey("粟三代", "玉米薄脆", "", "30g", 30)
+	orleans := buildPackagedProductKey("粟三代", "玉米薄脆", "奥尔良烤翅味", "30g", 30)
+	spicy := buildPackagedProductKey("粟三代", "玉米薄脆", "麻辣味", "30g", 30)
+
+	assert.NotEqual(t, base, orleans)
+	assert.NotEqual(t, orleans, spicy)
+	assert.Contains(t, orleans, normalizeFoodName("奥尔良烤翅味"))
+	assert.Contains(t, spicy, normalizeFoodName("麻辣味"))
+}
+
+func TestBuildPackagedProductKeyDoesNotDuplicateFlavorAlreadyInName(t *testing.T) {
+	withFlavorField := buildPackagedProductKey("粟三代", "玉米薄脆奥尔良烤翅味", "奥尔良烤翅味", "30g", 30)
+	withoutFlavorField := buildPackagedProductKey("粟三代", "玉米薄脆奥尔良烤翅味", "", "30g", 30)
+
+	assert.Equal(t, withoutFlavorField, withFlavorField)
+}
+
+func TestPackagedFoodSearchTermsExtractBrandProductAndFlavor(t *testing.T) {
+	terms := packagedFoodSearchTerms("喜之郎Cici果冻爽（橙味）")
+
+	assert.Contains(t, terms, "喜之郎")
+	assert.Contains(t, terms, "cici")
+	assert.Contains(t, terms, "果冻爽")
+	assert.Contains(t, terms, "橙味")
+}
+
+func TestPackagedFoodSearchScoreMatchesCiciOrangeJellyDrink(t *testing.T) {
+	flavor := "橙味"
+	spec := "258g"
+	category := "果冻饮料"
+	food := domain.PackagedFood{
+		ID:              "pkg-cici-orange",
+		Brand:           "喜之郎",
+		ProductName:     "喜之郎 CiCi 果冻爽 橙汁饮料",
+		NormalizedName:  normalizeFoodName("喜之郎 CiCi 果冻爽 橙汁饮料"),
+		FlavorText:      &flavor,
+		SpecText:        &spec,
+		PackageCategory: &category,
+		NetWeightG:      258,
+	}
+	unrelated := domain.PackagedFood{
+		ID:             "pkg-other",
+		Brand:          "伊利",
+		ProductName:    "伊利巧乐兹低糖抹茶可可味雪糕",
+		NormalizedName: normalizeFoodName("伊利巧乐兹低糖抹茶可可味雪糕"),
+		NetWeightG:     50,
+	}
+
+	assert.Greater(t, packagedFoodSearchScore("喜之郎Cici果冻爽（橙味）", food), 0.65)
+	assert.Greater(t, packagedFoodSearchScore("喜之郎Cici果冻爽（橙味）", food), packagedFoodSearchScore("喜之郎Cici果冻爽（橙味）", unrelated))
+}
+
+func TestPackagedFoodSearchScorePrefersMatchingFlavor(t *testing.T) {
+	orangeFlavor := "橙汁"
+	grapeFlavor := "红葡萄"
+	spec := "净含量:258克"
+	orange := domain.PackagedFood{
+		ID:          "pkg-cici-orange",
+		Brand:       "喜之郎",
+		ProductName: "cici果粒爽 橙汁饮料",
+		FlavorText:  &orangeFlavor,
+		SpecText:    &spec,
+		NetWeightG:  258,
+	}
+	grape := domain.PackagedFood{
+		ID:          "pkg-cici-grape",
+		Brand:       "喜之郎",
+		ProductName: "cici果粒可吸红葡萄汁饮料",
+		FlavorText:  &grapeFlavor,
+		SpecText:    &spec,
+		NetWeightG:  258,
+	}
+
+	query := "喜之郎Cici果冻爽（橙味）"
+	assert.Greater(t, packagedFoodSearchScore(query, orange), packagedFoodSearchScore(query, grape))
 }

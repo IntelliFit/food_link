@@ -293,8 +293,11 @@ type PackagedFoodDO struct {
 	ID                    string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	Brand                 string         `gorm:"column:brand;type:text;not null;default:'';index:idx_packaged_food_library_brand"`
 	ProductName           string         `gorm:"column:product_name;type:text;not null;index:idx_packaged_food_library_product_name"`
-	NormalizedName        string         `gorm:"column:normalized_name;type:text;not null;unique"`
+	NormalizedName        string         `gorm:"column:normalized_name;type:text;not null"`
 	ProductKey            string         `gorm:"column:product_key;type:text;not null;default:''"`
+	DisplayName           string         `gorm:"column:display_name;type:text;not null;default:'';index:idx_packaged_food_library_display_name"`
+	SearchText            string         `gorm:"column:search_text;type:text;not null;default:''"`
+	ProductFamilyKey      string         `gorm:"column:product_family_key;type:text;not null;default:'';index:idx_packaged_food_library_family_key"`
 	SpecText              *string        `gorm:"column:spec_text;type:text"`
 	Barcode               *string        `gorm:"column:barcode;type:text;index:idx_packaged_food_library_barcode"`
 	FlavorText            *string        `gorm:"column:flavor_text;type:text"`
@@ -309,6 +312,12 @@ type PackagedFoodDO struct {
 	ExtractConfidence     float64        `gorm:"column:extract_confidence;type:numeric;not null;default:0"`
 	FieldConfidence       map[string]any `gorm:"column:field_confidence;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	IngestMethod          *string        `gorm:"column:ingest_method;type:text"`
+	NetContentValue       float64        `gorm:"column:net_content_value;type:numeric;not null;default:0"`
+	NetContentUnit        *string        `gorm:"column:net_content_unit;type:text"`
+	UnitCount             float64        `gorm:"column:unit_count;type:numeric;not null;default:0"`
+	UnitContentValue      float64        `gorm:"column:unit_content_value;type:numeric;not null;default:0"`
+	UnitContentUnit       *string        `gorm:"column:unit_content_unit;type:text"`
+	ReviewStatus          string         `gorm:"column:review_status;type:text;not null;default:'active';index:idx_packaged_food_library_review_status"`
 	NetWeightG            float64        `gorm:"column:net_weight_g;type:numeric;not null;default:0"`
 	ServingWeightG        float64        `gorm:"column:serving_weight_g;type:numeric;not null;default:0"`
 	KcalPer100g           float64        `gorm:"column:kcal_per_100g;type:numeric;not null;default:0"`
@@ -349,7 +358,7 @@ type PackagedFoodAliasDO struct {
 	ID              string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	FoodID          string    `gorm:"column:food_id;type:uuid;not null;index:idx_packaged_food_aliases_food_id"`
 	AliasName       string    `gorm:"column:alias_name;type:text;not null"`
-	NormalizedAlias string    `gorm:"column:normalized_alias;type:text;not null;unique"`
+	NormalizedAlias string    `gorm:"column:normalized_alias;type:text;not null;index:idx_packaged_food_aliases_normalized_alias"`
 	CreatedAt       time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
 	UpdatedAt       time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }

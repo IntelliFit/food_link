@@ -198,7 +198,7 @@ const CACHE_KEYS = {
   REQUESTS: 'community_requests_cache',
   FEED_TIMESTAMP: 'community_feed_timestamp',
   FRIENDS_TIMESTAMP: 'community_friends_timestamp',
-  FEED_FILTERS: 'community_feed_filters_v3',
+  FEED_FILTERS: 'community_feed_filters_v4',
   PRIORITY_AUTHORS: 'community_priority_authors_v1',
   FEED_SESSION_ID: 'community_feed_session_id_v1',
   FEED_CACHE_SESSION_ID: 'community_feed_cache_session_id_v1'
@@ -482,7 +482,7 @@ function CommunityPage() {
   const [feedFilterExpanded, setFeedFilterExpanded] = useState(false)
   const [feedMealType, setFeedMealType] = useState<MealType | 'all'>('all')
   const [feedDietGoal, setFeedDietGoal] = useState<DietGoal | 'all'>('all')
-  const [feedAuthorScope, setFeedAuthorScope] = useState<CommunityAuthorScope>('all')
+  const [feedAuthorScope, setFeedAuthorScope] = useState<CommunityAuthorScope>('public')
   const [priorityAuthorIds, setPriorityAuthorIds] = useState<string[]>([])
   const [feedSearchKeyword, setFeedSearchKeyword] = useState('')
   /** 搜索框输入后，从好友列表匹配到的昵称好友 */
@@ -568,7 +568,7 @@ function CommunityPage() {
           setFeedContentType((parsed?.contentType as CommunityFeedContentType) || 'all')
           setFeedMealType((parsed?.mealType as MealType | 'all') || 'all')
           setFeedDietGoal((parsed?.dietGoal as DietGoal | 'all') || 'all')
-          setFeedAuthorScope((parsed?.authorScope as CommunityAuthorScope) || 'all')
+          setFeedAuthorScope((parsed?.authorScope as CommunityAuthorScope) || 'public')
         } catch (e) {
           console.error('解析 Feed 筛选缓存失败:', e)
         }
@@ -875,7 +875,7 @@ function CommunityPage() {
       feedRequestGenerationRef.current += 1
       const requestGeneration = feedRequestGenerationRef.current
       loadingMoreRef.current = false
-      // 已登录：好友 Feed；未登录：公共 Feed
+      // 登录后默认看公开广场，方便新用户与微信审核人员进入圈子就能看到内容；仅好友/特别关注仍走登录态 Feed。
       const res = token
         ? await communityGetFeed(undefined, 0, PAGE_SIZE, true, 5, params)
         : await communityGetPublicFeed(0, PAGE_SIZE, true, 5, params)
@@ -1365,7 +1365,7 @@ function CommunityPage() {
     const mealLabel = FEED_MEAL_OPTIONS.find(o => o.value === feedMealType)?.label ?? ''
     const goalLabel = FEED_GOAL_OPTIONS.find(o => o.value === feedDietGoal)?.label ?? ''
     const scopeLabel = loggedIn
-      ? (feedAuthorScope === 'priority' ? '特别关注' : feedAuthorScope === 'all' ? '仅好友' : '')
+      ? (feedAuthorScope === 'priority' ? '特别关注' : feedAuthorScope === 'all' ? '仅好友' : '全部公开')
       : ''
     return [sortLabel, contentLabel, mealLabel, goalLabel, scopeLabel].filter(Boolean).join(' · ')
   }, [feedSortBy, feedContentType, feedMealType, feedDietGoal, feedAuthorScope, loggedIn])
@@ -1378,7 +1378,7 @@ function CommunityPage() {
       feedContentType !== 'all' ||
       feedMealType !== 'all' ||
       feedDietGoal !== 'all' ||
-      (loggedIn && feedAuthorScope !== 'all'),
+      (loggedIn && feedAuthorScope !== 'public'),
     [feedFilterExpanded, feedSortBy, feedContentType, feedMealType, feedDietGoal, feedAuthorScope, loggedIn]
   )
 
@@ -2007,7 +2007,7 @@ function CommunityPage() {
             {/* 饮食动态 */}
             <View className='feed-section'>
               <View className='section-header feed-section-header'>
-                <Text className='section-title feed-section-title'>{loggedIn ? '好友动态' : '饮食动态'}</Text>
+                <Text className='section-title feed-section-title'>公开动态</Text>
                 {loggedIn ? (
                   <Text
                     className='feed-section-link'
@@ -2132,7 +2132,9 @@ function CommunityPage() {
                       {loggedIn
                         ? (feedAuthorScope === 'priority'
                           ? '你还没有特别关注的人，先点好友头像设置吧'
-                          : feedAuthorScope === 'all'
+                          : feedAuthorScope === 'public'
+                            ? '暂无公开动态，稍后下拉刷新试试'
+                            : feedAuthorScope === 'all'
                             ? '暂无符合当前筛选条件的好友动态'
                             : '暂无符合当前筛选条件的动态')
                         : '暂无符合当前筛选条件的动态'}

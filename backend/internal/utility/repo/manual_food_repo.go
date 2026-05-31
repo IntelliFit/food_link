@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -138,6 +140,30 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 		return left > right
 	})
 	results = dedupeManualFoodResults(results)
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results, nil
+}
+
+func (r *ManualFoodRepo) SearchPackaged(ctx context.Context, keyword string, limit int) ([]domain.ManualFoodResult, error) {
+	query := strings.TrimSpace(keyword)
+	if query == "" {
+		return []domain.ManualFoodResult{}, nil
+	}
+	limit = clampLimit(limit, 20, 60)
+	results, err := r.searchPackagedLibrary(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	sort.SliceStable(results, func(i, j int) bool {
+		left := manualFoodDisplayScore(results[i], query)
+		right := manualFoodDisplayScore(results[j], query)
+		if left == right {
+			return results[i].Title < results[j].Title
+		}
+		return left > right
+	})
 	if len(results) > limit {
 		results = results[:limit]
 	}
@@ -639,11 +665,16 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 		like := "%" + strings.ToLower(term) + "%"
 		conditions = append(conditions, `
 			LOWER(COALESCE(product_name, '')) LIKE ?
+			OR LOWER(COALESCE(display_name, '')) LIKE ?
+			OR LOWER(COALESCE(search_text, '')) LIKE ?
+			OR LOWER(COALESCE(product_family_key, '')) LIKE ?
 			OR LOWER(COALESCE(brand, '')) LIKE ?
+			OR LOWER(COALESCE(flavor_text, '')) LIKE ?
 			OR LOWER(COALESCE(spec_text, '')) LIKE ?
+			OR LOWER(COALESCE(barcode, '')) LIKE ?
 			OR LOWER(COALESCE(package_category, '')) LIKE ?
 		`)
-		args = append(args, like, like, like, like)
+		args = append(args, like, like, like, like, like, like, like, like, like)
 	}
 	args = append(args, query+"%", limit)
 	var rows []fooddomain.PackagedFood
@@ -654,7 +685,7 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 			AND kcal_per_100g > 0
 			AND (%s)
 		ORDER BY
-			CASE WHEN LOWER(product_name) LIKE LOWER(?) THEN 0 ELSE 1 END,
+			CASE WHEN LOWER(COALESCE(display_name, product_name)) LIKE LOWER(?) THEN 0 ELSE 1 END,
 			updated_at DESC NULLS LAST,
 			product_name ASC
 		LIMIT ?
@@ -664,7 +695,7 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
-		score := computeMatchScore(query, row.ProductName, row.Brand, stringPtrValue(row.SpecText)) + 0.18
+		score := computeMatchScore(query, packagedDisplayName(row), row.SearchText, row.ProductName, row.Brand, stringPtrValue(row.FlavorText), stringPtrValue(row.SpecText), stringPtrValue(row.Barcode)) + 0.18
 		results = append(results, manualFoodResultFromPackaged(row, score))
 	}
 	return results, nil
@@ -783,15 +814,18 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 }
 
 func manualFoodResultFromPackaged(item fooddomain.PackagedFood, score float64) domain.ManualFoodResult {
-	title := strings.TrimSpace(item.ProductName)
+	title := packagedDisplayName(item)
 	if title == "" {
 		title = "包装食品"
 	}
 	subtitleParts := make([]string, 0, 3)
-	if brand := strings.TrimSpace(item.Brand); brand != "" {
+	if brand := strings.TrimSpace(item.Brand); brand != "" && !strings.Contains(title, brand) {
 		subtitleParts = append(subtitleParts, brand)
 	}
-	if spec := stringPtrValue(item.SpecText); spec != "" {
+	if flavor := stringPtrValue(item.FlavorText); flavor != "" && !strings.Contains(title, flavor) {
+		subtitleParts = append(subtitleParts, flavor)
+	}
+	if spec := stringPtrValue(item.SpecText); spec != "" && !strings.Contains(title, spec) {
 		subtitleParts = append(subtitleParts, spec)
 	}
 	if basis := stringPtrValue(item.NutritionBasisUnit); basis != "" {
@@ -805,8 +839,8 @@ func manualFoodResultFromPackaged(item fooddomain.PackagedFood, score float64) d
 	if item.ProteinPer100g >= 8 {
 		highlights = append(highlights, fmt.Sprintf("蛋白 %.1fg/100g", item.ProteinPer100g))
 	}
-	if item.NetWeightG > 0 {
-		highlights = append(highlights, fmt.Sprintf("净含量 %.0fg", item.NetWeightG))
+	if label := packagedNetContentLabel(item); label != "" {
+		highlights = append(highlights, "净含量 "+label)
 	}
 	subtitle := strings.Join(subtitleParts, " · ")
 	result := domain.ManualFoodResult{
@@ -1484,6 +1518,9 @@ func packagedDefaultWeight(item fooddomain.PackagedFood) float64 {
 	if item.ServingWeightG > 0 {
 		return item.ServingWeightG
 	}
+	if netContent := packagedNetContentWeight(item); netContent > 0 && netContent <= 500 {
+		return netContent
+	}
 	if item.NetWeightG > 0 && item.NetWeightG <= 500 {
 		return item.NetWeightG
 	}
@@ -1498,10 +1535,83 @@ func packagedPortionLabel(item fooddomain.PackagedFood) string {
 	if item.ServingWeightG > 0 {
 		return fmt.Sprintf("%.0f%s", item.ServingWeightG, unit)
 	}
+	if label := packagedNetContentLabel(item); label != "" {
+		return label
+	}
 	if item.NetWeightG > 0 && item.NetWeightG <= 500 {
 		return fmt.Sprintf("%.0f%s", item.NetWeightG, unit)
 	}
 	return "100" + unit
+}
+
+func packagedDisplayName(item fooddomain.PackagedFood) string {
+	if displayName := strings.TrimSpace(item.DisplayName); displayName != "" {
+		return displayName
+	}
+	titleParts := []string{strings.TrimSpace(item.Brand), strings.TrimSpace(item.ProductName)}
+	if flavor := stringPtrValue(item.FlavorText); flavor != "" && !strings.Contains(normalizeManualText(item.ProductName), normalizeManualText(flavor)) {
+		titleParts = append(titleParts, flavor)
+	}
+	if label := packagedNetContentLabel(item); label != "" {
+		titleParts = append(titleParts, label)
+	} else if spec := stringPtrValue(item.SpecText); spec != "" {
+		titleParts = append(titleParts, spec)
+	}
+	out := make([]string, 0, len(titleParts))
+	for _, part := range titleParts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+func packagedNetContentLabel(item fooddomain.PackagedFood) string {
+	if item.NetContentValue > 0 {
+		unit := strings.TrimSpace(stringPtrValue(item.NetContentUnit))
+		if unit == "" && item.NetWeightG > 0 {
+			unit = "g"
+		}
+		if unit != "" {
+			return formatManualCompactNumber(item.NetContentValue) + unit
+		}
+	}
+	if item.NetWeightG > 0 {
+		return formatManualCompactNumber(item.NetWeightG) + "g"
+	}
+	return ""
+}
+
+func packagedNetContentWeight(item fooddomain.PackagedFood) float64 {
+	if item.NetWeightG > 0 {
+		return item.NetWeightG
+	}
+	unit := strings.ToLower(strings.TrimSpace(stringPtrValue(item.NetContentUnit)))
+	if item.NetContentValue > 0 && (unit == "g" || unit == "ml") {
+		return item.NetContentValue
+	}
+	return 0
+}
+
+func formatManualCompactNumber(value float64) string {
+	if value <= 0 {
+		return "0"
+	}
+	if math.Abs(value-math.Round(value)) < 0.005 {
+		return fmt.Sprintf("%.0f", math.Round(value))
+	}
+	return strconv.FormatFloat(math.Round(value*100)/100, 'f', -1, 64)
+}
+
+func normalizeManualText(raw string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func packagedPrimaryImage(urls []string) (*string, []string) {

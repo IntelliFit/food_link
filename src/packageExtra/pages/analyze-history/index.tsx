@@ -2,7 +2,7 @@ import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useState, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
-import { listAnalyzeTasks, deleteAnalysisTask, createUserRecipe, getAccessToken, saveFoodRecord, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult, type MealType, type Nutrients } from '../../../utils/api'
+import { listAnalyzeTasks, deleteAnalysisTask, createUserRecipe, getAccessToken, saveFoodRecord, retryAnalyzeTask, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult, type MealType, type Nutrients } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -40,6 +40,9 @@ const pickDisplayStatus = (task: AnalysisTask): { text: string; className: strin
     if (task.is_recorded === false) return { text: '等待记录', className: 'status-waiting' }
     return { text: '已完成', className: 'status-done' } // 兼容旧数据
   }
+  if (task.status === 'failed' || task.status === 'timed_out') {
+    return { text: '点我重试', className: 'status-retry' }
+  }
   return { text: STATUS_MAP[task.status] || task.status, className: `status-${task.status}` }
 }
 
@@ -51,6 +54,7 @@ const EXECUTION_MODE_LABEL: Record<ExecutionMode, string> = {
   strict: '精准模式',
   strict_web_search: '精准联网',
   standard_web_search: '普通联网',
+  standard_packaged_experiment: '零食库试验',
   standard: '普通模式'
 }
 
@@ -113,6 +117,7 @@ const pickRecognitionOutcome = (task: AnalysisTask): AnalyzeRecognitionOutcome =
 const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
   if (taskAny.execution_mode === 'standard_web_search') return 'standard_web_search'
+  if (taskAny.execution_mode === 'standard_packaged_experiment') return 'standard_packaged_experiment'
   if (taskAny.execution_mode === 'strict_web_search') return 'strict_web_search'
   if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'gemini35_flash' || taskAny.execution_mode === 'gemini35_flash_grouped') {
     return 'strict'
@@ -122,6 +127,7 @@ const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
   }
   const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
   if (payloadMode === 'standard_web_search') return 'standard_web_search'
+  if (payloadMode === 'standard_packaged_experiment') return 'standard_packaged_experiment'
   if (payloadMode === 'strict_web_search') return 'strict_web_search'
   if (payloadMode === 'strict' || payloadMode === 'gemini35_flash' || payloadMode === 'gemini35_flash_grouped') return 'strict'
   return 'standard'
@@ -156,6 +162,9 @@ const pickTaskMeta = (task: AnalysisTask): string => {
   const result = task.result as AnalyzeResponse | undefined
   if (task.status === 'violated' || task.is_violated) {
     return task.violation_reason || '该记录因内容问题不可查看'
+  }
+  if (task.status === 'failed' || task.status === 'timed_out') {
+    return '识别没有成功 · 点击卡片可用原记录重新识别'
   }
   if (sourceType === 'food_text') {
     const count = result?.items?.length || 0
@@ -580,6 +589,49 @@ function AnalyzeHistoryPage() {
     closeActionSheet()
   }
 
+  const actionSheetRetry = () => {
+    if (!activeTask) return
+    const task = activeTask
+    closeActionSheet()
+    confirmRetryTask(task)
+  }
+
+  const submitRetryTask = useCallback(async (task: AnalysisTask) => {
+    if (task.status !== 'failed' && task.status !== 'timed_out') {
+      Taro.showToast({ title: '当前任务不能重新识别', icon: 'none' })
+      return
+    }
+    try {
+      Taro.showLoading({ title: '', mask: true })
+      const result = await retryAnalyzeTask(task.id)
+      Taro.hideLoading()
+      Taro.showToast({ title: '已重新识别', icon: 'success' })
+      void load()
+      Taro.navigateTo({
+        url: `${extraPkgUrl('/pages/analyze-loading/index')}?task_id=${encodeURIComponent(result.task_id)}&task_type=${encodeURIComponent(task.task_type || 'food')}&execution_mode=${pickExecutionMode(task)}`
+      })
+    } catch (e: any) {
+      Taro.hideLoading()
+      await showUnifiedApiError(e, '重新识别失败')
+    }
+  }, [load])
+
+  const confirmRetryTask = useCallback((task: AnalysisTask) => {
+    Taro.showModal({
+      title: '重新识别',
+      content: pickSourceTaskType(task) === 'food_text'
+        ? '将使用这条记录的原文字内容重新识别。'
+        : '将使用这条记录已上传的图片重新识别，不需要重新上传照片。',
+      confirmText: '重新识别',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          void submitRetryTask(task)
+        }
+      }
+    })
+  }, [submitRetryTask])
+
   const actionSheetSaveRecipe = () => {
     if (!activeTask) return
     const task = activeTask
@@ -872,7 +924,7 @@ function AnalyzeHistoryPage() {
       return
     }
     if (task.status === 'failed' || task.status === 'timed_out') {
-      void showUnifiedApiError(new Error(task.error_message || '识别失败'), '识别失败')
+      confirmRetryTask(task)
     }
   }
 
@@ -933,6 +985,14 @@ function AnalyzeHistoryPage() {
                     ? `快速记录到${MEAL_TYPE_LABELS[getTaskMealType(activeTask) || ''] || '餐食'}`
                     : '快速记录'}
                 </Text>
+              </View>
+              <View className='action-sheet-divider' />
+              <View
+                className={`action-sheet-item ${activeTask.status === 'failed' || activeTask.status === 'timed_out' ? '' : 'action-sheet-item--disabled'}`}
+                onClick={actionSheetRetry}
+              >
+                <Text className='iconfont icon-paizhao-xianxing action-sheet-icon action-sheet-icon--retry' />
+                <Text className='action-sheet-label'>{pickSourceTaskType(activeTask) === 'food_text' ? '用原文字重新识别' : '用原图重新识别'}</Text>
               </View>
               <View className='action-sheet-divider' />
               <View

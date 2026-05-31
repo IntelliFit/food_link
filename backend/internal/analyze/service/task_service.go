@@ -94,6 +94,13 @@ type SubmitTaskInput struct {
 	CorrectionRootTaskID   string           `json:"correction_root_task_id"`
 	ReferenceObjects       []map[string]any `json:"reference_objects"`
 	SourceType             string           `json:"source_type"`
+	RetrySourceTaskID      string           `json:"-"`
+}
+
+type RetryTaskResult struct {
+	TaskID       string `json:"task_id"`
+	Message      string `json:"message"`
+	SourceTaskID string `json:"source_task_id"`
 }
 
 func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
@@ -445,6 +452,10 @@ func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInp
 	}
 	if strings.TrimSpace(input.SourceType) != "" {
 		payload["source_type"] = strings.ToLower(strings.TrimSpace(input.SourceType))
+	}
+	if strings.TrimSpace(input.RetrySourceTaskID) != "" {
+		payload["retry_source_task_id"] = strings.TrimSpace(input.RetrySourceTaskID)
+		payload["is_retry"] = true
 	}
 }
 
@@ -829,6 +840,222 @@ func (s *TaskService) UpdateTaskResult(ctx context.Context, taskID, userID strin
 		return errors.ErrForbidden
 	}
 	return s.tasks.UpdateTaskResult(ctx, taskID, result)
+}
+
+func (s *TaskService) RetryTask(ctx context.Context, taskID, userID string) (*RetryTaskResult, error) {
+	task, err := s.tasks.GetTaskByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if task == nil {
+		return nil, errors.ErrNotFound
+	}
+	if task.UserID != userID {
+		return nil, errors.ErrForbidden
+	}
+	if !isRetryableTaskStatus(task.Status) {
+		return nil, &errors.AppError{Code: 10002, Message: "只有识别失败或超时的任务可以重新识别", HTTPStatus: 400}
+	}
+	input, err := s.retryInputFromTask(task)
+	if err != nil {
+		return nil, err
+	}
+	s.refundTaskCredits(ctx, task)
+	var newTaskID string
+	if retrySourceType(task) == "food_text" {
+		newTaskID, err = s.SubmitTextTask(ctx, userID, input)
+	} else {
+		newTaskID, err = s.SubmitAnalyzeTask(ctx, userID, input)
+	}
+	if err != nil {
+		return nil, err
+	}
+	logger.WithTrace(ctx).Info("分析任务重新识别已提交",
+		slog.String("user_id", userID),
+		slog.String("source_task_id", task.ID),
+		slog.String("new_task_id", newTaskID),
+		slog.String("task_type", task.TaskType),
+	)
+	return &RetryTaskResult{
+		TaskID:       newTaskID,
+		Message:      "已重新提交识别任务",
+		SourceTaskID: task.ID,
+	}, nil
+}
+
+func isRetryableTaskStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "failed", "timed_out":
+		return true
+	default:
+		return false
+	}
+}
+
+func retrySourceType(task *domain.AnalysisTask) string {
+	if task == nil {
+		return ""
+	}
+	taskType := strings.TrimSpace(task.TaskType)
+	if taskType == "food_text" || strings.HasPrefix(taskType, "food_text") {
+		return "food_text"
+	}
+	return "food"
+}
+
+func (s *TaskService) retryInputFromTask(task *domain.AnalysisTask) (SubmitTaskInput, error) {
+	if task == nil {
+		return SubmitTaskInput{}, errors.ErrNotFound
+	}
+	payload := copyMap(task.Payload)
+	removeRetryIncompatiblePayload(payload)
+	input := SubmitTaskInput{
+		ImageURL:               firstImageURL(task),
+		ImageURLs:              task.ImagePaths,
+		TextInput:              stringFromPtr(task.TextInput),
+		Text:                   stringFromPtr(task.TextInput),
+		Date:                   stringFromAny(firstPayloadValue(payload, "date", "recorded_on", "recordedOn")),
+		MealType:               stringFromAny(firstPayloadValue(payload, "meal_type", "mealType")),
+		Province:               stringFromAny(payload["province"]),
+		City:                   stringFromAny(payload["city"]),
+		District:               stringFromAny(payload["district"]),
+		DietGoal:               stringFromAny(payload["diet_goal"]),
+		ActivityTiming:         stringFromAny(payload["activity_timing"]),
+		UserGoal:               stringFromAny(payload["user_goal"]),
+		SuggestRatioEnabled:    boolFromAny(payload["suggest_ratio_enabled"]),
+		AdditionalContext:      stringFromAny(payload["additionalContext"]),
+		ModelName:              stringFromAny(payload["modelName"]),
+		AnalysisEngine:         stringFromAny(payload["analysis_engine"]),
+		IsMultiView:            boolFromAny(payload["is_multi_view"]),
+		PreviousResult:         mapFromAny(payload["previousResult"]),
+		CorrectionItems:        mapSliceFromAny(payload["correctionItems"]),
+		CorrectionSourceTaskID: stringFromAny(payload["correction_source_task_id"]),
+		CorrectionRootTaskID:   stringFromAny(payload["correction_root_task_id"]),
+		ReferenceObjects:       mapSliceFromAny(payload["reference_objects"]),
+		SourceType:             stringFromAny(payload["source_type"]),
+		RetrySourceTaskID:      task.ID,
+	}
+	if input.Date == "" && task.CreatedAt != nil {
+		input.Date = task.CreatedAt.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02")
+	}
+	if v, ok := float64PtrFromAny(payload["remaining_calories"]); ok {
+		input.RemainingCalories = v
+	}
+	if v, ok := intPtrFromAny(payload["timezone_offset_minutes"]); ok {
+		input.TimezoneOffsetMinutes = v
+	}
+	if mode := stringFromAny(payload["execution_mode"]); mode != "" {
+		input.ExecutionMode = &mode
+	}
+	if sessionID := stringFromAny(payload["precision_session_id"]); sessionID != "" {
+		input.PrecisionSessionID = &sessionID
+	}
+	if retrySourceType(task) == "food_text" {
+		if strings.TrimSpace(input.TextInput) == "" {
+			return SubmitTaskInput{}, &errors.AppError{Code: 10002, Message: "原任务缺少文字内容，无法重新识别", HTTPStatus: 400}
+		}
+		return input, nil
+	}
+	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
+		return SubmitTaskInput{}, &errors.AppError{Code: 10002, Message: "原任务缺少图片，无法重新识别", HTTPStatus: 400}
+	}
+	return input, nil
+}
+
+func removeRetryIncompatiblePayload(payload map[string]any) {
+	if payload == nil {
+		return
+	}
+	delete(payload, "credit_usage")
+	delete(payload, "credit_group_id")
+	delete(payload, "retry_source_task_id")
+	delete(payload, "is_retry")
+}
+
+func firstImageURL(task *domain.AnalysisTask) string {
+	if task == nil {
+		return ""
+	}
+	if len(task.ImagePaths) > 0 {
+		return strings.TrimSpace(task.ImagePaths[0])
+	}
+	if task.ImageURL != nil {
+		return strings.TrimSpace(*task.ImageURL)
+	}
+	return ""
+}
+
+func stringFromPtr(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func firstPayloadValue(payload map[string]any, keys ...string) any {
+	for _, key := range keys {
+		if value, ok := payload[key]; ok && stringFromAny(value) != "" {
+			return value
+		}
+	}
+	return nil
+}
+
+func float64PtrFromAny(value any) (*float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return &v, true
+	case float32:
+		out := float64(v)
+		return &out, true
+	case int:
+		out := float64(v)
+		return &out, true
+	case int64:
+		out := float64(v)
+		return &out, true
+	case json.Number:
+		out, err := v.Float64()
+		return &out, err == nil
+	default:
+		return nil, false
+	}
+}
+
+func intPtrFromAny(value any) (*int, bool) {
+	switch v := value.(type) {
+	case int:
+		return &v, true
+	case int64:
+		out := int(v)
+		return &out, true
+	case float64:
+		out := int(v)
+		return &out, true
+	case json.Number:
+		i, err := v.Int64()
+		out := int(i)
+		return &out, err == nil
+	default:
+		return nil, false
+	}
+}
+
+func mapSliceFromAny(value any) []map[string]any {
+	switch v := value.(type) {
+	case []map[string]any:
+		return v
+	case []any:
+		out := make([]map[string]any, 0, len(v))
+		for _, item := range v {
+			if m := mapFromAny(item); len(m) > 0 {
+				out = append(out, m)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func (s *TaskService) DeleteTask(ctx context.Context, taskID, userID string) (map[string]any, error) {

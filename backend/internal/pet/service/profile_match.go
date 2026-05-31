@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	petProfileMatchVersion = 1
+	petProfileMatchVersion = 2
 
 	archetypeSteadyCaregiver = "steady_caregiver"
 	archetypeEnergeticBuddy  = "energetic_buddy"
@@ -64,7 +64,7 @@ var archetypePreferences = map[string]archetypeAppearancePreference{
 		Colors:        []string{"sunny", "aqua", "mint", "peach", "matcha"},
 		Shapes:        []string{"puff", "bean", "round", "drop"},
 		Patterns:      []string{"pattern-0", "pattern-1", "pattern-2", "pattern-3"},
-		Accessories:   []string{"sprout", "star", "scarf", "leaf", "bow"},
+		Accessories:   []string{"sprout", "bow", "scarf", "leaf", "halo"},
 		Personalities: []string{"energetic", "sporty", "focused"},
 	},
 	archetypeGentleHealer: {
@@ -78,14 +78,14 @@ var archetypePreferences = map[string]archetypeAppearancePreference{
 		Colors:        []string{"matcha", "aqua", "sunny", "mint", "cream"},
 		Shapes:        []string{"puff", "round", "bean"},
 		Patterns:      []string{"pattern-0", "pattern-3", "pattern-1", "pattern-2"},
-		Accessories:   []string{"scarf", "sprout", "leaf", "star", "cap"},
+		Accessories:   []string{"scarf", "sprout", "leaf", "bow", "halo"},
 		Personalities: []string{"focused", "sporty", "energetic"},
 	},
 	archetypeLightLifestyle: {
 		Colors:        []string{"mint", "cream", "peach", "matcha", "aqua"},
 		Shapes:        []string{"bean", "round", "puff", "drop"},
 		Patterns:      []string{"pattern-0", "pattern-1", "pattern-2", "pattern-3"},
-		Accessories:   []string{"leaf", "sprout", "drop", "bow", "halo"},
+		Accessories:   []string{"leaf", "sprout", "bow", "halo", "scarf"},
 		Personalities: []string{"gentle", "energetic", "focused"},
 	},
 }
@@ -241,7 +241,7 @@ func styleValues(values []string, style, slot string) []string {
 			result = append(result, "drop", "bean")
 		}
 		if slot == "accessory" {
-			result = append(result, "halo", "star", "drop")
+			result = append(result, "halo", "bow", "scarf")
 		}
 	case "stable":
 		if slot == "pattern" {
@@ -274,6 +274,9 @@ func guardAppearance(appearance petAppearance, style string) (petAppearance, int
 	if appearance.Accessory == "cap" {
 		score -= 8
 	}
+	if appearance.Accessory == "star" || appearance.Accessory == "drop" {
+		score -= 4
+	}
 	if appearance.Shape == "drop" {
 		score -= 4
 	}
@@ -288,15 +291,18 @@ func guardAppearance(appearance petAppearance, style string) (petAppearance, int
 	}
 	if style != "quirky" && score < 78 {
 		appearance.Pattern = "pattern-0"
-		if appearance.Accessory == "cap" || appearance.Accessory == "star" {
+		if appearance.Accessory == "cap" || appearance.Accessory == "star" || appearance.Accessory == "drop" {
 			appearance.Accessory = "leaf"
 		}
 		score = 88
 	}
 	if style == "quirky" && score < 70 {
 		appearance.Pattern = "pattern-2"
-		if appearance.Accessory == "cap" {
+		if appearance.Accessory == "cap" || appearance.Accessory == "star" {
 			appearance.Accessory = "halo"
+		}
+		if appearance.Accessory == "drop" {
+			appearance.Accessory = "bow"
 		}
 		score = 74
 	}

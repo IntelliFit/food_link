@@ -22,6 +22,16 @@ import './index.scss'
 const PET_COLORS = ['mint', 'berry', 'sunny', 'aqua', 'grape', 'peach', 'cream', 'matcha'] as const
 const PET_SHAPES = ['round', 'bean', 'puff', 'drop'] as const
 const PET_ANIMALS = ['cat', 'bunny', 'bear', 'fox', 'hamster'] as const
+const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
+const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
+
+function getStoredHomePetHidden(): boolean {
+  try {
+    return Taro.getStorageSync(HOME_PET_HIDDEN_KEY) === '1'
+  } catch (_) {
+    return false
+  }
+}
 
 function stableHash(input: string): number {
   let hash = 0
@@ -118,6 +128,7 @@ function PetHomePage() {
   const [selectingCandidateId, setSelectingCandidateId] = useState('')
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
+  const [homePetHidden, setHomePetHidden] = useState(getStoredHomePetHidden)
 
   const loadData = useCallback(async () => {
     try {
@@ -136,6 +147,7 @@ function PetHomePage() {
   }, [])
 
   useDidShow(() => {
+    setHomePetHidden(getStoredHomePetHidden())
     void loadData()
   })
 
@@ -248,6 +260,18 @@ function PetHomePage() {
 
   const handlePickComingSoon = useCallback(() => {
     Taro.showToast({ title: '挑选外观即将开放', icon: 'none' })
+  }, [])
+
+  const handleToggleHomePetHidden = useCallback(() => {
+    setHomePetHidden((prev) => {
+      const next = !prev
+      try {
+        Taro.setStorageSync(HOME_PET_HIDDEN_KEY, next ? '1' : '0')
+      } catch (_) {}
+      Taro.eventCenter.trigger(HOME_PET_HIDDEN_CHANGED_EVENT, next)
+      Taro.showToast({ title: next ? '首页宠物已隐藏' : '首页宠物已显示', icon: 'none' })
+      return next
+    })
   }, [])
 
   const openPetLab = useCallback(() => {
@@ -414,6 +438,20 @@ function PetHomePage() {
             <Text className='pet-home-card-side'>统一角色体系</Text>
           </View>
           <View className='pet-home-action-list'>
+            <View className='pet-home-action-item visibility' onClick={handleToggleHomePetHidden}>
+              <View>
+                <Text className='pet-home-action-title'>首页悬浮宠物</Text>
+                <Text className='pet-home-action-desc'>{homePetHidden ? '当前首页不显示宠物，数据和成长仍会保留' : '当前首页会显示可拖动的小宠物'}</Text>
+              </View>
+              <View className='pet-home-action-side'>
+                <Text className={`pet-home-visibility-status ${homePetHidden ? 'hidden' : ''}`}>
+                  {homePetHidden ? '已隐藏' : '显示中'}
+                </Text>
+                <View className={`pet-home-toggle ${homePetHidden ? '' : 'active'}`}>
+                  <View className='pet-home-toggle-knob' />
+                </View>
+              </View>
+            </View>
             <View className='pet-home-action-item' onClick={handleReroll}>
               <View>
                 <Text className='pet-home-action-title'>随机换外观</Text>

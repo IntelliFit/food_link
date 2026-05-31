@@ -59,6 +59,9 @@ type mockTaskService struct {
 	task            *domain.AnalysisTask
 	getErr          error
 	updateErr       error
+	retryResult     *service.RetryTaskResult
+	retryErr        error
+	retryTaskID     string
 	deleteResult    map[string]any
 	deleteErr       error
 	cleanupAffected int64
@@ -89,6 +92,10 @@ func (m *mockTaskService) GetTask(ctx context.Context, taskID, userID string) (*
 func (m *mockTaskService) UpdateTaskResult(ctx context.Context, taskID, userID string, result map[string]any) error {
 	return m.updateErr
 }
+func (m *mockTaskService) RetryTask(ctx context.Context, taskID, userID string) (*service.RetryTaskResult, error) {
+	m.retryTaskID = taskID
+	return m.retryResult, m.retryErr
+}
 func (m *mockTaskService) DeleteTask(ctx context.Context, taskID, userID string) (map[string]any, error) {
 	return m.deleteResult, m.deleteErr
 }
@@ -113,6 +120,7 @@ func setupRouter(h *AnalyzeHandler) *gin.Engine {
 	r.GET("/api/analyze/tasks", h.ListTasks)
 	r.GET("/api/analyze/tasks/count", h.CountTasks)
 	r.GET("/api/analyze/tasks/status-count", h.CountTasksByStatus)
+	r.POST("/api/analyze/tasks/retry", h.RetryTask)
 	r.GET("/api/analyze/tasks/:task_id", h.GetTask)
 	r.PATCH("/api/analyze/tasks/:task_id/result", h.UpdateTaskResult)
 	r.DELETE("/api/analyze/tasks/:task_id", h.DeleteTask)
@@ -315,6 +323,23 @@ func TestAnalyzeHandler_GetTask(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "t1", data["id"])
+}
+
+func TestAnalyzeHandler_RetryTask(t *testing.T) {
+	mockSvc := &mockAnalyzeService{}
+	mockTask := &mockTaskService{retryResult: &service.RetryTaskResult{TaskID: "retry-1", Message: "已重新提交识别任务", SourceTaskID: "t1"}}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"task_id": "t1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze/tasks/retry", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "t1", mockTask.retryTaskID)
+	assert.Contains(t, w.Body.String(), "retry-1")
 }
 
 func TestAnalyzeHandler_UpdateTaskResult(t *testing.T) {

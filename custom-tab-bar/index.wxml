@@ -26,7 +26,7 @@
       </block>
       <block wx:elif="{{item.isCenter}}">
         <view class="center-icon-wrapper">
-          <text class="iconfont icon-kcal center-icon"></text>
+          <text class="iconfont icon-paizhao-xianxing center-icon"></text>
         </view>
       </block>
       <block wx:else>
