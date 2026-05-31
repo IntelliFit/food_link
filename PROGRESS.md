@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-05-31
+
+- 🔧 chore: 添加 Hero 区 number 装饰图资源 `website/public/images/hero/number.png`
+
+## 2026-05-30
+
+- 🎨 style: Hero 主标题增加字间距（tracking 0.05–0.06em） `website/src/components/hero/HeroHeadline.tsx`
+- ✨ feat: 移动端体验按钮优先通过微信 URL Link 跳转小程序，失败回退二维码弹层；新增 `GET /api/miniprogram/launch-url` `website/` `backend/internal/utility/`
+- 🐛 fix: 恢复 PC 导航栏「立即体验」按钮 compact 高度 h-6，Hero 区 wechat 按钮保持 h-10 `website/src/components/ui/ExperienceButton.tsx`
+- 🎨 style: 优化官网移动端布局与体验（Hero/功能区块/导航抽屉/CTA 弹层/安全区与锚点偏移） `website/src/`
+- 🔧 chore: 官网 footer 备案号更新为京ICP备2025141637号-4，并链至工信部备案查询官网 `website/src/content/brand.ts` `website/src/components/layout/SiteFooter.tsx`
+
+## 2026-05-29
+
+- 🎨 style: Hero 区移除 stage1/stage3 侧卡，仅保留 stage2 手机 mockup `HeroFlowVisual.tsx`
+- ✨ feat: Hero 区替换为 Three.js iPhone 3D mockup（stage2 屏幕）+ stage1/stage3 悬浮卡片与弯曲箭头流程 `website/src/components/hero/` `website/public/models/iphone/`
+- 🎨 style: 浏览器标签页 favicon 改为食探 login-logo，移除 Vite 默认紫色图标 `website/index.html`
+- ✨ feat: 官网移动端适配（折叠导航、安全区、轮播纵向回退）与 SEO（meta/OG/Twitter/JSON-LD/robots/sitemap/manifest）参考 watcha.cn `website/`
+- 🎨 style: 功能轮播三板块文字与图片改用 flex 固定间距，左右交替布局时间距一致 `website/src/components/sections/FeaturePanel.tsx`
+- ✨ feat: 首页三大功能区块改为滚动驱动横向轮播，纵向滚动切换每日总览/深度洞察/饮食圈子后衔接 CTA `website/src/components/sections/FeatureScrollCarousel.tsx`
+- ✨ feat: 新增官网 Vite 站点，整合 Hero/功能介绍/CTA/App 即将上线等版块与法律页路由 `website/` `package.json`
+- 🎨 style: 顶栏默认高度 70px，滚动后 morph 为 24px 圆角主题绿毛玻璃胶囊 `website/src/components/layout/SiteHeader.tsx`
+- 🎨 style: 「立即体验」按钮高度改为 h-6（48px），className 移至 PopoverTrigger 以正确生效 `website/src/components/ui/ExperienceButton.tsx`
+
 ## 2026-05-10
 
 - 🔧 chore: 发布小程序版本 `3.0.1`（`package.json` / `package-lock.json`；「我的」页版本号继续由 `__APP_VERSION__` 从 package 注入）

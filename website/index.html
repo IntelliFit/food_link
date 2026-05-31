@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+
+    <!-- PWA / 移动端 -->
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="食探" />
+
+    <!-- favicon -->
+    <link rel="icon" type="image/png" href="/brand/login-logo.png" />
+    <link rel="shortcut icon" type="image/png" href="/brand/login-logo.png" />
+    <link rel="apple-touch-icon" href="/brand/login-logo.png" />
+
+    <!-- SEO（SPA 路由切换由 PageHead 组件同步更新） -->
+    <title>食探丨记录饮食，连接健康</title>
+    <meta
+      name="description"
+      content="智健食探（Food Link）— AI 帮你看懂每一餐。智能饮食记录、热量分析与营养洞察，微信小程序即刻体验。"
+    />
+    <meta
+      name="keywords"
+      content="食探,智健食探,Food Link,饮食记录,热量计算,营养分析,AI健康管理,微信小程序"
+    />
+    <meta name="author" content="智健启能（北京）科技有限公司" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://healthymax.cn/" />
+
+    <meta property="og:site_name" content="食探" />
+    <meta property="og:title" content="食探丨记录饮食，连接健康" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta
+      property="og:description"
+      content="智健食探（Food Link）— AI 帮你看懂每一餐。智能饮食记录、热量分析与营养洞察。"
+    />
+    <meta property="og:url" content="https://healthymax.cn/" />
+    <meta property="og:image" content="https://healthymax.cn/brand/logo-shitan.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="食探丨记录饮食，连接健康" />
+    <meta
+      name="twitter:description"
+      content="AI 智能饮食记录与营养洞察，微信小程序即刻体验。"
+    />
+    <meta name="twitter:image" content="https://healthymax.cn/brand/logo-shitan.png" />
+
+    <script type="application/ld+json" id="structured-data">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "url": "https://healthymax.cn/",
+        "name": "食探",
+        "alternateName": "智健食探",
+        "inLanguage": "zh-CN"
+      }
+    </script>
+
+    <!-- 主题色 -->
+    <meta name="theme-color" content="#00bc7d" />
+    <meta name="msapplication-TileColor" content="#00bc7d" />
+  </head>
+  <body>
+    <noscript>
+      <div style="max-width: 720px; margin: 2rem auto; padding: 0 1rem; font-family: system-ui, sans-serif; line-height: 1.6;">
+        <h1>食探 · 智健食探</h1>
+        <p>记录饮食，连接健康。AI 帮你看懂每一餐。</p>
+        <p>请启用 JavaScript 以获得完整体验，或在微信中搜索「智健食探」小程序。</p>
+      </div>
+    </noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

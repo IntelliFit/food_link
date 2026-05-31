@@ -38,7 +38,6 @@ develop-eggs/
 downloads/
 eggs/
 .eggs/
-lib/
 lib64/
 parts/
 sdist/
@@ -100,6 +99,7 @@ coverage/
 /debug/
 /artifacts/
 /docs/verification/
+e2e-weapp/screenshots/
 
 # 调试/测试截图
 check_*.png
