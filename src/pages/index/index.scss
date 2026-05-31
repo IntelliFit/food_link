@@ -503,11 +503,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   bottom: 10rpx;
   height: 72rpx;
   border-radius: 42rpx 42rpx 34rpx 34rpx;
-  background: linear-gradient(160deg, #8dd3bf 0%, #5cb896 100%);
+  background: linear-gradient(160deg, #a7ddcf 0%, #6fc5a7 100%);
   box-shadow:
-    inset 0 9rpx 15rpx rgb(255 255 255 / 34%),
+    inset 0 10rpx 16rpx rgb(255 255 255 / 42%),
     inset 0 -8rpx 12rpx rgb(39 108 93 / 8%),
-    0 8rpx 18rpx rgb(92 184 150 / 18%);
+    0 9rpx 18rpx rgb(92 184 150 / 14%);
 }
 
 .pet-body::before {
@@ -784,37 +784,44 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 
   &.drop {
+    top: 7rpx;
+    left: 12rpx;
     width: 16rpx;
-    height: 22rpx;
-    border-radius: 18rpx 18rpx 18rpx 4rpx;
-    background: #5c9ed4;
-    transform: rotate(32deg);
+    height: 16rpx;
+    border-radius: 50%;
+    background: #8ec7ec;
+    box-shadow: 7rpx 8rpx 0 rgb(255 255 255 / 42%);
+    transform: none;
   }
 
   &.star {
-    width: 24rpx;
-    height: 24rpx;
-    background: #ffd166;
-    clip-path: polygon(50% 0%, 62% 34%, 98% 35%, 69% 56%, 79% 91%, 50% 70%, 21% 91%, 31% 56%, 2% 35%, 38% 34%);
+    width: 20rpx;
+    height: 20rpx;
+    border-radius: 50%;
+    background: #ffe08a;
+    box-shadow:
+      -7rpx 4rpx 0 -2rpx #ffe8a9,
+      7rpx 4rpx 0 -2rpx #ffe8a9,
+      0 0 0 3rpx rgb(255 255 255 / 30%);
   }
 
   &.cap {
     top: 8rpx;
-    left: 3rpx;
-    width: 34rpx;
-    height: 14rpx;
-    border-radius: 14rpx 14rpx 6rpx 6rpx;
-    background: #5c9ed4;
+    left: 5rpx;
+    width: 28rpx;
+    height: 16rpx;
+    border-radius: 18rpx 18rpx 10rpx 10rpx;
+    background: #8ec7ec;
 
     &::after {
       content: '';
       position: absolute;
-      right: -10rpx;
-      bottom: 0;
-      width: 16rpx;
-      height: 6rpx;
-      border-radius: 999rpx;
-      background: #4a89bd;
+      left: 8rpx;
+      top: 4rpx;
+      width: 12rpx;
+      height: 5rpx;
+      border-radius: 50%;
+      background: rgb(255 255 255 / 34%);
     }
   }
 
@@ -873,7 +880,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   width: 22rpx;
   height: 14rpx;
   border-radius: 999rpx;
-  background: rgb(255 255 255 / 34%);
+  background: rgb(255 255 255 / 48%);
   transform: translateX(-50%);
 }
 
@@ -883,8 +890,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   width: 10rpx;
   height: 12rpx;
   border-radius: 999rpx;
-  background: #263241;
-  box-shadow: 0 1rpx 0 rgb(255 255 255 / 24%);
+  background: #27384b;
+  box-shadow: 0 1rpx 0 rgb(255 255 255 / 28%);
 
   &::after {
     content: '';
@@ -929,7 +936,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   top: 28rpx;
   width: 14rpx;
   height: 7rpx;
-  border-bottom: 3rpx solid rgb(38 50 65 / 76%);
+  border-bottom: 3rpx solid rgb(39 56 74 / 62%);
   border-radius: 0 0 16rpx 16rpx;
   transform: translateX(-50%);
 }
@@ -952,7 +959,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     width: 26rpx;
     height: 17rpx;
     top: 17rpx;
-    background: rgb(255 255 255 / 44%);
+    background: rgb(255 255 255 / 56%);
   }
 }
 
@@ -961,7 +968,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     width: 20rpx;
     height: 16rpx;
     top: 18rpx;
-    background: rgb(255 255 255 / 38%);
+    background: rgb(255 255 255 / 50%);
   }
 }
 
@@ -971,19 +978,20 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     height: 12rpx;
     top: 19rpx;
     border-radius: 10rpx 10rpx 16rpx 16rpx;
-    background: rgb(255 255 255 / 38%);
+    background: rgb(255 255 255 / 50%);
   }
 }
 
 .pet-companion-card.mood-sleepy {
   .pet-eye {
-    top: 12rpx;
-    height: 3rpx;
+    top: 8rpx;
+    height: 10rpx;
+    opacity: 0.72;
   }
 
   .pet-mouth {
-    width: 12rpx;
-    height: 3rpx;
+    width: 14rpx;
+    height: 7rpx;
     border-bottom-width: 2rpx;
   }
 }
@@ -1006,11 +1014,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 
   .pet-mouth {
-    width: 13rpx;
-    height: 13rpx;
-    border: 3rpx solid rgb(36 54 74 / 76%);
-    border-top-color: transparent;
-    border-radius: 50%;
+    width: 15rpx;
+    height: 8rpx;
+    border: 0;
+    border-bottom: 3rpx solid rgb(39 56 74 / 62%);
+    border-radius: 0 0 16rpx 16rpx;
   }
 }
 
@@ -1039,69 +1047,71 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .pet-companion-card.pattern-3 .pet-body::after {
-  left: 15rpx;
-  right: 15rpx;
-  bottom: 14rpx;
-  height: 6rpx;
-  border-radius: 999rpx;
+  left: 50%;
+  bottom: 13rpx;
+  width: 30rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  transform: translateX(-50%);
 }
 
 .pet-companion-card.pattern-4 .pet-body::after {
-  left: 24rpx;
-  top: 14rpx;
-  width: 8rpx;
-  height: 34rpx;
-  border-radius: 999rpx;
-  box-shadow: 18rpx 2rpx 0 rgb(255 255 255 / 22%);
+  left: auto;
+  right: 18rpx;
+  top: 20rpx;
+  width: 11rpx;
+  height: 11rpx;
+  border-radius: 50%;
+  box-shadow: -18rpx 18rpx 0 rgb(255 255 255 / 18%);
 }
 
 .pet-companion-card.berry .pet-body {
-  background: linear-gradient(160deg, #f5a6c9 0%, #c27bd8 100%);
+  background: linear-gradient(160deg, #ffc1dc 0%, #d99be7 100%);
   box-shadow:
-    inset 0 8rpx 14rpx rgb(255 255 255 / 28%),
-    0 8rpx 18rpx rgb(194 123 216 / 20%);
+    inset 0 9rpx 15rpx rgb(255 255 255 / 36%),
+    0 8rpx 18rpx rgb(217 155 231 / 16%);
 }
 
 .pet-companion-card.sunny .pet-body {
-  background: linear-gradient(160deg, #ffd982 0%, #f0985c 100%);
+  background: linear-gradient(160deg, #ffe3a3 0%, #f3b97c 100%);
   box-shadow:
-    inset 0 8rpx 14rpx rgb(255 255 255 / 30%),
-    0 8rpx 18rpx rgb(240 152 92 / 18%);
+    inset 0 9rpx 15rpx rgb(255 255 255 / 38%),
+    0 8rpx 18rpx rgb(243 185 124 / 15%);
 }
 
 .pet-companion-card.aqua .pet-body {
-  background: linear-gradient(160deg, #92d7ef 0%, #5c9ed4 100%);
+  background: linear-gradient(160deg, #aee4f4 0%, #72b7dc 100%);
   box-shadow:
-    inset 0 8rpx 14rpx rgb(255 255 255 / 30%),
-    0 8rpx 18rpx rgb(92 158 212 / 18%);
+    inset 0 9rpx 15rpx rgb(255 255 255 / 38%),
+    0 8rpx 18rpx rgb(114 183 220 / 15%);
 }
 
 .pet-companion-card.grape .pet-body {
-  background: linear-gradient(160deg, #c4b5fd 0%, #8b5cf6 100%);
+  background: linear-gradient(160deg, #d7ccff 0%, #a98bed 100%);
   box-shadow:
-    inset 0 8rpx 14rpx rgb(255 255 255 / 30%),
-    0 8rpx 18rpx rgb(139 92 246 / 18%);
+    inset 0 9rpx 15rpx rgb(255 255 255 / 38%),
+    0 8rpx 18rpx rgb(169 139 237 / 15%);
 }
 
 .pet-companion-card.peach .pet-body {
-  background: linear-gradient(160deg, #ffc2b3 0%, #ff8a7a 100%);
+  background: linear-gradient(160deg, #ffd1c8 0%, #ffa090 100%);
   box-shadow:
-    inset 0 8rpx 14rpx rgb(255 255 255 / 30%),
-    0 8rpx 18rpx rgb(255 138 122 / 18%);
+    inset 0 9rpx 15rpx rgb(255 255 255 / 38%),
+    0 8rpx 18rpx rgb(255 160 144 / 15%);
 }
 
 .pet-companion-card.cream .pet-body {
-  background: linear-gradient(160deg, #ffe9b8 0%, #f3c66b 100%);
+  background: linear-gradient(160deg, #fff0c8 0%, #f5d78a 100%);
   box-shadow:
-    inset 0 8rpx 14rpx rgb(255 255 255 / 34%),
-    0 8rpx 18rpx rgb(243 198 107 / 18%);
+    inset 0 9rpx 15rpx rgb(255 255 255 / 42%),
+    0 8rpx 18rpx rgb(245 215 138 / 15%);
 }
 
 .pet-companion-card.matcha .pet-body {
-  background: linear-gradient(160deg, #b8e986 0%, #75b86b 100%);
+  background: linear-gradient(160deg, #c9edaa 0%, #86c77b 100%);
   box-shadow:
-    inset 0 8rpx 14rpx rgb(255 255 255 / 30%),
-    0 8rpx 18rpx rgb(117 184 107 / 18%);
+    inset 0 9rpx 15rpx rgb(255 255 255 / 38%),
+    0 8rpx 18rpx rgb(134 199 123 / 15%);
 }
 
 .pet-companion-content {

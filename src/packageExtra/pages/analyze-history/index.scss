@@ -304,6 +304,12 @@
       border-color: #fde68a;
       .status-text { color: #d97706; }
     }
+
+    &.status-retry {
+      background: #fff7ed;
+      border-color: #fed7aa;
+      .status-text { color: #c2410c; }
+    }
   }
 
   .mode-tag {
@@ -499,6 +505,10 @@
     color: #10b981;
   }
 
+  .action-sheet-icon--retry {
+    color: #f97316;
+  }
+
   &--disabled {
     opacity: 0.4;
     pointer-events: none;
@@ -665,6 +675,10 @@
 
     .action-sheet-icon--record {
       color: #5ee2a6;
+    }
+
+    .action-sheet-icon--retry {
+      color: #fb923c;
     }
 
     &--disabled {

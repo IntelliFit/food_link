@@ -98,6 +98,8 @@ const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
 const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v1'
 const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v1'
+const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
+const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
 const HOME_REWARD_HINT_DISMISSED_DATE_KEY = 'home_reward_hint_dismissed_date_v1'
 
 function isValidHomeDate(date?: string): date is string {
@@ -303,6 +305,14 @@ function getMacroTargetsFromIntake(intake: HomeIntakeData): MacroTargets {
 function getStoredPetCollapsed(): boolean {
   try {
     return Taro.getStorageSync(HOME_PET_COLLAPSED_KEY) === '1'
+  } catch (_) {
+    return false
+  }
+}
+
+function getStoredPetHidden(): boolean {
+  try {
+    return Taro.getStorageSync(HOME_PET_HIDDEN_KEY) === '1'
   } catch (_) {
     return false
   }
@@ -771,6 +781,7 @@ function IndexPage() {
   /** 后台静默同步中：左上角微型 spinner，不占文档流 */
   const [dataSyncing, setDataSyncing] = useState(false)
   const [petCollapsed, setPetCollapsed] = useState(getStoredPetCollapsed)
+  const [petHidden, setPetHidden] = useState(getStoredPetHidden)
   const [petFloatPosition, setPetFloatPosition] = useState(() => getStoredPetFloatPosition(getStoredPetCollapsed()))
   const [petDragging, setPetDragging] = useState(false)
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
@@ -896,6 +907,16 @@ function IndexPage() {
   useEffect(() => {
     showDailyPosterModalRef.current = showDailyPosterModal
   }, [showDailyPosterModal])
+
+  useEffect(() => {
+    const handleHiddenChanged = (hidden?: boolean) => {
+      setPetHidden(typeof hidden === 'boolean' ? hidden : getStoredPetHidden())
+    }
+    Taro.eventCenter.on(HOME_PET_HIDDEN_CHANGED_EVENT, handleHiddenChanged)
+    return () => {
+      Taro.eventCenter.off(HOME_PET_HIDDEN_CHANGED_EVENT, handleHiddenChanged)
+    }
+  }, [])
 
   const handleMealPosterShareContext = useCallback((ctx: MealPosterSharePayload | null) => {
     mealPosterShareForAppMessageRef.current = ctx
@@ -1179,6 +1200,7 @@ function IndexPage() {
   const skipNextRefreshRef = useRef(false)
 
   Taro.useDidShow(() => {
+    setPetHidden(getStoredPetHidden())
     const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current
 
@@ -2729,79 +2751,81 @@ function IndexPage() {
           <View className='home-page__data-sync-spinner' />
         </View>
       ) : null}
-      <View
-        className={`pet-companion-float ${petCollapsed ? 'is-collapsed' : 'is-expanded'} ${petDragging ? 'is-dragging' : ''}`}
-        style={{
-          left: `${petFloatPosition.left}px`,
-          top: `${petFloatPosition.top}px`
-        }}
-        onTouchStart={handlePetTouchStart}
-        onTouchMove={handlePetTouchMove}
-        onTouchEnd={handlePetTouchEnd}
-        onTouchCancel={handlePetTouchEnd}
-      >
-        <View className={`pet-companion-card ${petColor} ${petShape} ${petPattern} animal-${fallbackPetAnimal} mood-${petMood}`}>
-          <View className='pet-companion-avatar'>
-            <View className='pet-companion-shadow' />
-            <View className='pet-body'>
-              <View className='pet-tail' />
-              <View className='pet-ear left' />
-              <View className='pet-ear right' />
-              <View className='pet-accessory'>
-                <View className={`pet-accessory-shape ${petAccessory}`} />
-              </View>
-              <View className='pet-face'>
-                <View className='pet-snout' />
-                <View className='pet-eye left' />
-                <View className='pet-eye right' />
-                <View className='pet-cheek left' />
-                <View className='pet-cheek right' />
-                <View className='pet-mouth' />
-              </View>
-            </View>
-          </View>
-          {!petCollapsed && (
-            <View className='pet-companion-content'>
-              <View className='pet-companion-header'>
-                <Text className='pet-companion-kicker'>健康伙伴</Text>
-                <Text className='pet-companion-name'>{petName}</Text>
-                <Text className='pet-companion-progress-text'>{petLevelText}</Text>
-              </View>
-              <Text className='pet-companion-message'>{petMessage}</Text>
-              <View className='pet-companion-task'>
-                <Text className='pet-companion-task-dot' />
-                <Text className='pet-companion-task-text'>{petTaskText}</Text>
-              </View>
-              {petEvent?.can_claim && (
-                <View className='pet-companion-reward' onClick={handleClaimPetEvent}>
-                  <Text className='pet-companion-reward-text'>
-                    {petClaiming ? '领取中' : petEvent.credit_reward > 0 ? `领取 +${petEvent.credit_reward}积分` : `领取 +${petEvent.exp_reward}经验`}
-                  </Text>
+      {!petHidden ? (
+        <View
+          className={`pet-companion-float ${petCollapsed ? 'is-collapsed' : 'is-expanded'} ${petDragging ? 'is-dragging' : ''}`}
+          style={{
+            left: `${petFloatPosition.left}px`,
+            top: `${petFloatPosition.top}px`
+          }}
+          onTouchStart={handlePetTouchStart}
+          onTouchMove={handlePetTouchMove}
+          onTouchEnd={handlePetTouchEnd}
+          onTouchCancel={handlePetTouchEnd}
+        >
+          <View className={`pet-companion-card ${petColor} ${petShape} ${petPattern} animal-${fallbackPetAnimal} mood-${petMood}`}>
+            <View className='pet-companion-avatar'>
+              <View className='pet-companion-shadow' />
+              <View className='pet-body'>
+                <View className='pet-tail' />
+                <View className='pet-ear left' />
+                <View className='pet-ear right' />
+                <View className='pet-accessory'>
+                  <View className={`pet-accessory-shape ${petAccessory}`} />
                 </View>
-              )}
+                <View className='pet-face'>
+                  <View className='pet-snout' />
+                  <View className='pet-eye left' />
+                  <View className='pet-eye right' />
+                  <View className='pet-cheek left' />
+                  <View className='pet-cheek right' />
+                  <View className='pet-mouth' />
+                </View>
+              </View>
             </View>
-          )}
-          {!petCollapsed && (
-            <View className='pet-companion-collapse' onClick={togglePetCollapsed}>
-              <Text className='pet-companion-collapse-text'>收起</Text>
-            </View>
-          )}
-          {petCollapsed && (
-            <View
-              className={`pet-companion-mini-hint ${petEvent?.can_claim ? 'is-reward' : ''}`}
-              onTouchStart={(e) => e.stopPropagation()}
-              onTouchEnd={(e) => {
-                e.stopPropagation()
-                togglePetCollapsed()
-              }}
-            >
-              {petEvent?.can_claim ? (
-                <Text className='pet-companion-mini-hint-text'>!</Text>
-              ) : null}
-            </View>
-          )}
+            {!petCollapsed && (
+              <View className='pet-companion-content'>
+                <View className='pet-companion-header'>
+                  <Text className='pet-companion-kicker'>健康伙伴</Text>
+                  <Text className='pet-companion-name'>{petName}</Text>
+                  <Text className='pet-companion-progress-text'>{petLevelText}</Text>
+                </View>
+                <Text className='pet-companion-message'>{petMessage}</Text>
+                <View className='pet-companion-task'>
+                  <Text className='pet-companion-task-dot' />
+                  <Text className='pet-companion-task-text'>{petTaskText}</Text>
+                </View>
+                {petEvent?.can_claim && (
+                  <View className='pet-companion-reward' onClick={handleClaimPetEvent}>
+                    <Text className='pet-companion-reward-text'>
+                      {petClaiming ? '领取中' : petEvent.credit_reward > 0 ? `领取 +${petEvent.credit_reward}积分` : `领取 +${petEvent.exp_reward}经验`}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+            {!petCollapsed && (
+              <View className='pet-companion-collapse' onClick={togglePetCollapsed}>
+                <Text className='pet-companion-collapse-text'>收起</Text>
+              </View>
+            )}
+            {petCollapsed && (
+              <View
+                className={`pet-companion-mini-hint ${petEvent?.can_claim ? 'is-reward' : ''}`}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => {
+                  e.stopPropagation()
+                  togglePetCollapsed()
+                }}
+              >
+                {petEvent?.can_claim ? (
+                  <Text className='pet-companion-mini-hint-text'>!</Text>
+                ) : null}
+              </View>
+            )}
+          </View>
         </View>
-      </View>
+      ) : null}
       {/* 页面内容 */}
       <View className='page-content'>
         {/* 问候区 */}

@@ -58,6 +58,7 @@ export function getFoodAnalysisCreditCost(executionMode?: ExecutionMode | string
 }
 
 function getFoodAnalysisCreditLabel(executionMode?: ExecutionMode | string | null): string {
+  if (executionMode === 'standard_packaged_experiment') return '零食库试验分析'
   if (executionMode === 'experimental') return '试验分析'
   if (executionMode === 'standard_web_search') return '联网分析'
   if (executionMode === 'strict_web_search') return '联网精准分析'

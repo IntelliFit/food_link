@@ -196,10 +196,13 @@ func TestManualFoodServingProfile(t *testing.T) {
 func TestManualFoodResultFromPackagedUsesOnlyPrimaryImage(t *testing.T) {
 	spec := "15g*6袋"
 	basis := "100g"
+	flavor := "番茄味"
 	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
 		ID:                 "pkg1",
 		Brand:              "样例品牌",
-		ProductName:        "番茄味薯片",
+		ProductName:        "薯片",
+		DisplayName:        "样例品牌 薯片 番茄味 90g",
+		FlavorText:         &flavor,
 		SpecText:           &spec,
 		NutritionBasisUnit: &basis,
 		SourceImageURLs:    []string{"https://cdn.example.com/front.jpg", "https://cdn.example.com/nutrition.jpg"},
@@ -214,11 +217,33 @@ func TestManualFoodResultFromPackagedUsesOnlyPrimaryImage(t *testing.T) {
 	assert.Equal(t, "https://cdn.example.com/front.jpg", *item.ImagePath)
 	assert.Equal(t, []string{"https://cdn.example.com/front.jpg"}, item.ImagePaths)
 	assert.Equal(t, "packaged_food", item.Source)
+	assert.Equal(t, "样例品牌 薯片 番茄味 90g", item.Title)
 	assert.Equal(t, "包装食品", item.SourceLabel)
 	assert.Equal(t, "snack", item.Category)
 	assert.Equal(t, "g", item.DisplayUnit)
 	assert.Equal(t, 90.0, item.DefaultWeightGrams)
 	assert.Equal(t, 520.0, item.NutrientsPer100g.Calories)
+	assert.Contains(t, item.Title, "番茄味")
+}
+
+func TestManualFoodResultFromPackagedUsesNetContentValue(t *testing.T) {
+	unit := "g"
+	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:              "pkg-net-content",
+		Brand:           "士力架",
+		ProductName:     "花生夹心巧克力",
+		NetContentValue: 70,
+		NetContentUnit:  &unit,
+		KcalPer100g:     487,
+		ProteinPer100g:  8.6,
+		CarbsPer100g:    62,
+		FatPer100g:      24,
+	}, 0.9)
+
+	assert.Equal(t, "士力架 花生夹心巧克力 70g", item.Title)
+	assert.Equal(t, 70.0, item.DefaultWeightGrams)
+	assert.Equal(t, "70g", item.PortionLabel)
+	assert.Contains(t, item.NutritionHighlights, "净含量 70g")
 }
 
 func TestManualFoodCatalogUserScopedCategoriesAllowAnonymous(t *testing.T) {

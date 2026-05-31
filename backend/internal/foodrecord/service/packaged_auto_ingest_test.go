@@ -77,16 +77,18 @@ func TestEvaluatePackagedProductExtract_AllowsMissingIngredientsWhenNutritionRea
 	}
 }
 
-func TestEvaluatePackagedProductExtract_AllowsMissingNetWeightWhenNutritionReady(t *testing.T) {
+func TestEvaluatePackagedProductExtract_BlocksMissingNetContent(t *testing.T) {
 	result := packagedReadyExtract()
 	result.NetWeightG = 0
+	result.NetContentValue = 0
+	result.NetContentUnit = ""
 	result.ServingWeightG = 0
-	result.SpecText = "净含量:250mL"
+	result.SpecText = ""
 	result.NutritionBasisUnit = "100ml"
 
 	auto := EvaluatePackagedProductExtract(result)
-	if auto.Status != "ready" || auto.Reason != "passed" {
-		t.Fatalf("auto=%#v want ready/passed", auto)
+	if auto.Status != "blocked" || auto.Reason != "missing_net_content" {
+		t.Fatalf("auto=%#v want blocked/missing_net_content", auto)
 	}
 }
 

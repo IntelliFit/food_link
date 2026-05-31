@@ -516,6 +516,65 @@ func TestTaskService_GetTask_RefundsCreditsForFailedTextTask(t *testing.T) {
 	assert.Equal(t, "food_analysis_refund:text-group-failed", guard.refundCalls[0].sourceKey)
 }
 
+func TestTaskService_RetryTask_ResubmitsFailedImageTaskWithExistingImages(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	publisher := &recordingTaskPublisher{}
+	guard := &mockTaskCreditGuard{earnedUnits: 1}
+	svc.ConfigureTaskPublisher(publisher)
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+	imageURL := "https://example.com/meal.jpg"
+	task := &analyzedomain.AnalysisTask{
+		UserID:     "user1",
+		TaskType:   "food",
+		Status:     "failed",
+		ImageURL:   &imageURL,
+		ImagePaths: []string{imageURL},
+		Payload: map[string]any{
+			"meal_type":      "lunch",
+			"execution_mode": "standard_web_search",
+			"credit_usage": map[string]any{
+				"credit_group_id": "old-group",
+				"cost":            2,
+				"earned_units":    1,
+			},
+		},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, task))
+
+	result, err := svc.RetryTask(ctx, task.ID, "user1")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, publisher.messages, 1)
+	assert.Equal(t, result.TaskID, publisher.messages[0].TaskID)
+	require.Len(t, guard.refundCalls, 1)
+	require.Len(t, guard.consumeCalls, 1)
+
+	retryTask, err := taskRepo.GetTaskByID(ctx, result.TaskID)
+	require.NoError(t, err)
+	require.NotNil(t, retryTask)
+	assert.Equal(t, "food", retryTask.TaskType)
+	assert.Equal(t, "pending", retryTask.Status)
+	assert.Equal(t, []string{imageURL}, retryTask.ImagePaths)
+	assert.Equal(t, task.ID, retryTask.Payload["retry_source_task_id"])
+	assert.Equal(t, true, retryTask.Payload["is_retry"])
+	assert.NotEqual(t, "old-group", stringFromAny(retryTask.Payload["credit_group_id"]))
+	assert.Equal(t, "standard_web_search", retryTask.Payload["execution_mode"])
+}
+
+func TestTaskService_RetryTask_RejectsDoneTask(t *testing.T) {
+	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	ctx := context.Background()
+	task := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done"}
+	require.NoError(t, taskRepo.CreateTask(ctx, task))
+
+	_, err := svc.RetryTask(ctx, task.ID, "user1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "只有识别失败或超时")
+}
+
 func TestTaskService_UpdateTaskResult(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)

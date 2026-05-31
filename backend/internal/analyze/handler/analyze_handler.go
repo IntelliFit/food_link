@@ -34,6 +34,7 @@ type TaskService interface {
 	CountTasksByStatus(ctx context.Context, userID string) (map[string]any, error)
 	GetTask(ctx context.Context, taskID, userID string) (*domain.AnalysisTask, error)
 	UpdateTaskResult(ctx context.Context, taskID, userID string, result map[string]any) error
+	RetryTask(ctx context.Context, taskID, userID string) (*service.RetryTaskResult, error)
 	DeleteTask(ctx context.Context, taskID, userID string) (map[string]any, error)
 	CleanupTimeoutTasks(ctx context.Context, timeoutMinutes int, adminKey, expectedAdminKey string) (int64, error)
 }
@@ -333,6 +334,30 @@ func (h *AnalyzeHandler) UpdateTaskResult(c *gin.Context) {
 		return
 	}
 	response.Success(c, map[string]bool{"success": true})
+}
+
+// POST /api/analyze/tasks/retry (jwt_required)
+func (h *AnalyzeHandler) RetryTask(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	var body struct {
+		TaskID string `json:"task_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	taskID := strings.TrimSpace(body.TaskID)
+	if taskID == "" {
+		response.Error(c, &errors.AppError{Code: 10002, Message: "task_id 不能为空", HTTPStatus: 400})
+		return
+	}
+	bindTaskIDToRequest(c, taskID)
+	data, err := h.taskSvc.RetryTask(c.Request.Context(), taskID, userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
 }
 
 // DELETE /api/analyze/tasks/:task_id (jwt_required)

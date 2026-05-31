@@ -53,6 +53,7 @@ const EXECUTION_MODE_MAP: Record<string, string> = {
   gemini35_flash: '精准模式',
   gemini35_flash_grouped: '精准模式',
   standard_web_search: '普通联网',
+  standard_packaged_experiment: '零食库试验',
   standard: '普通模式'
 }
 const MEDICAL_MAP: Record<string, string> = {

@@ -47,3 +47,13 @@ func (s *ManualFoodService) Search(ctx context.Context, userID string, keyword s
 	}
 	return s.repo.Search(ctx, userID, keyword, limit)
 }
+
+func (s *ManualFoodService) SearchPackaged(ctx context.Context, keyword string, limit int) ([]domain.ManualFoodResult, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 60 {
+		limit = 60
+	}
+	return s.repo.SearchPackaged(ctx, keyword, limit)
+}

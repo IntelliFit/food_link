@@ -1035,6 +1035,10 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }
     title: '普通联网',
     desc: '结合低成本搜索证据校准包装规格与份量。'
   },
+  standard_packaged_experiment: {
+    title: '零食库试验',
+    desc: '用本地零食库规格校准包装食品重量。'
+  },
   gemini35_flash: {
     title: '精准模式',
     desc: '更细致识别包装文字、小众食物与份量。'
@@ -1065,6 +1069,7 @@ const EXERCISE_STAGE_LABELS = ['理解运动', '估算消耗', '写入记录']
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => {
   if (value === 'standard_web_search') return 'standard_web_search'
+  if (value === 'standard_packaged_experiment') return 'standard_packaged_experiment'
   if (value === 'strict_web_search') return 'strict_web_search'
   if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
   return 'standard'
@@ -1200,6 +1205,9 @@ const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => 
   if (taskAny.execution_mode === 'standard_web_search') {
     return 'standard_web_search'
   }
+  if (taskAny.execution_mode === 'standard_packaged_experiment') {
+    return 'standard_packaged_experiment'
+  }
   if (taskAny.execution_mode === 'strict_web_search') {
     return 'strict_web_search'
   }
@@ -1212,6 +1220,9 @@ const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => 
   const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
   if (payloadMode === 'standard_web_search') {
     return 'standard_web_search'
+  }
+  if (payloadMode === 'standard_packaged_experiment') {
+    return 'standard_packaged_experiment'
   }
   if (payloadMode === 'strict_web_search') {
     return 'strict_web_search'

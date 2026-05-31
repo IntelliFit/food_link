@@ -184,6 +184,16 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; 
       '搜索不可用时会保留普通识别结果'
     ]
   },
+  standard_packaged_experiment: {
+    title: '普通 · 零食库试验',
+    desc: '复用普通识别模型，但优先用本地零食库里的真实规格重量校准包装食品。',
+    tips: [
+      '适合测试已入库的零食、雪糕、饮料和酸奶',
+      '包装正面、口味、净含量越清楚，越容易命中正确规格',
+      '多规格商品没有明确规格时，只会保留候选，不会强行改重量',
+      '普通菜品仍按普通营养库处理'
+    ]
+  },
   gemini35_flash: {
     title: '精准模式',
     desc: '更细致识别包装文字、小众食物和复杂场景。',
@@ -977,6 +987,23 @@ function AnalyzePage() {
         {!!precisionUpgradeHint && !isPrecisionExecutionMode(executionMode) && (
           <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
         )}
+
+        <View className='experiment-mode-panel'>
+          <View className='experiment-mode-head'>
+            <Text className='experiment-mode-title'>零食库试验模式</Text>
+            <Text className='experiment-mode-sub'>不影响上方正式模式</Text>
+          </View>
+          <View
+            className={`experiment-mode-card ${executionMode === 'standard_packaged_experiment' ? 'active' : ''}`}
+            onClick={() => setExecutionMode('standard_packaged_experiment')}
+          >
+            <View className='experiment-mode-card-main'>
+              <Text className='experiment-mode-card-title'>普通 · 零食库试验</Text>
+              <Text className='experiment-mode-card-desc'>用已收录零食规格校准包装食品重量</Text>
+            </View>
+            <Text className='experiment-mode-card-badge'>2积分</Text>
+          </View>
+        </View>
 
         {/* 多视角辅助模式 */}
         <View className='multiview-compact'>

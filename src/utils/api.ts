@@ -70,6 +70,7 @@ export type ExecutionMode =
   | 'lite'
   | 'standard'
   | 'standard_web_search'
+  | 'standard_packaged_experiment'
   | 'strict'
   | 'strict_web_search'
   | 'experimental'
@@ -217,6 +218,12 @@ export interface FoodItem {
   resolve_status?: string | null
   resolve_score?: number
   nutrition_source?: string | null
+  package_match_status?: string
+  package_match_confidence?: number
+  package_weight_source?: string
+  package_weight_applied?: boolean
+  package_weight_reason?: string
+  packaged_candidates?: Array<Record<string, unknown>>
 }
 
 // 分析响应接口（含专业营养分析）
@@ -250,6 +257,13 @@ export interface AnalyzeResponse {
   splitStrategy?: PrecisionSplitStrategy
   uncertaintyNotes?: string[]
   redirectTaskId?: string
+  packaged_experiment?: {
+    enabled?: boolean
+    triggered_count?: number
+    matched_count?: number
+    weight_applied_count?: number
+    fallback_count?: number
+  }
 }
 
 const ANALYZE_LOCATION_CACHE_KEY = 'analyze_location_context_v1'
@@ -2608,6 +2622,29 @@ export async function updateAnalysisTaskResult(taskId: string, result: AnalyzeRe
   return res.data as { message: string; task: AnalysisTask }
 }
 
+/** 使用原任务已上传的图片或文字重新提交识别任务 */
+export async function retryAnalyzeTask(taskId: string): Promise<{ task_id: string; message: string; source_task_id: string }> {
+  const res = await authenticatedRequest('/api/analyze/tasks/retry', {
+    method: 'POST',
+    data: { task_id: taskId },
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '重新识别失败')
+  }
+  const data = normalizeTaroResponseJson(res.data)
+  const retryTaskId = String(data?.task_id ?? data?.taskId ?? '').trim()
+  if (!retryTaskId) {
+    console.error('[retryAnalyzeTask] 响应缺少 task_id', res.data)
+    throw new Error('服务器未返回任务编号，请稍后重试')
+  }
+  return {
+    task_id: retryTaskId,
+    message: String(data?.message ?? '已重新提交识别任务'),
+    source_task_id: String(data?.source_task_id ?? data?.sourceTaskId ?? taskId)
+  }
+}
+
 /**
  * 删除分析任务
  * DELETE /api/analyze/tasks/{task_id}
@@ -4067,9 +4104,16 @@ export interface ManualFoodCatalogResult {
   }
 }
 
-export async function searchManualFood(q: string, limit: number = 20): Promise<ManualFoodSearchResult[]> {
+export async function searchManualFood(
+  q: string,
+  limit: number = 20,
+  options?: { source?: 'packaged_food' }
+): Promise<ManualFoodSearchResult[]> {
   const token = getAccessToken()
   const params = new URLSearchParams({ q: q.trim(), limit: String(limit) })
+  if (options?.source) {
+    params.set('source', options.source)
+  }
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/manual-food/search?${params.toString()}`,
     method: 'GET',

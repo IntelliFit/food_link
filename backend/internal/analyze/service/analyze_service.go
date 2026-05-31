@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	authrepo "food_link/backend/internal/auth/repo"
 	"food_link/backend/internal/common/errors"
@@ -29,29 +30,30 @@ import (
 )
 
 const (
-	defaultExecutionMode         = "standard"
-	standardWebSearchMode        = "standard_web_search"
-	liteExecutionMode            = "lite"
-	precisionExecutionMode       = "strict"
-	precisionWebSearchMode       = "strict_web_search"
-	validExecutionMode           = "experimental"
-	gemini35FlashExecutionMode   = "gemini35_flash"
-	gemini35GroupedExecutionMode = "gemini35_flash_grouped"
-	gemini3FlashModel            = "gemini-3-flash-preview"
-	gemini31FlashLiteModel       = "gemini-3.1-flash-lite"
-	gemini35FlashModel           = "gemini-3.5-flash"
-	visionPrimaryTimeout         = 45 * time.Second
-	maxLLMJSONParseRetries       = 3
-	maxLLMTransientRetries       = 2
-	ratioSuggestionTimeout       = 20 * time.Second
-	ediblePortionTimeout         = 15 * time.Second
-	standardHybridTimeout        = 60 * time.Second
-	webSearchTimeout             = 6 * time.Second
-	webSearchMaxQueries          = 3
-	webSearchMaxResults          = 3
-	webSearchMinRelevantResults  = 1
-	resolveFoodCandidateLimit    = 8
-	resolveFoodSemanticThreshold = 0.9
+	defaultExecutionMode           = "standard"
+	standardWebSearchMode          = "standard_web_search"
+	standardPackagedExperimentMode = "standard_packaged_experiment"
+	liteExecutionMode              = "lite"
+	precisionExecutionMode         = "strict"
+	precisionWebSearchMode         = "strict_web_search"
+	validExecutionMode             = "experimental"
+	gemini35FlashExecutionMode     = "gemini35_flash"
+	gemini35GroupedExecutionMode   = "gemini35_flash_grouped"
+	gemini3FlashModel              = "gemini-3-flash-preview"
+	gemini31FlashLiteModel         = "gemini-3.1-flash-lite"
+	gemini35FlashModel             = "gemini-3.5-flash"
+	visionPrimaryTimeout           = 45 * time.Second
+	maxLLMJSONParseRetries         = 3
+	maxLLMTransientRetries         = 2
+	ratioSuggestionTimeout         = 20 * time.Second
+	ediblePortionTimeout           = 15 * time.Second
+	standardHybridTimeout          = 60 * time.Second
+	webSearchTimeout               = 6 * time.Second
+	webSearchMaxQueries            = 3
+	webSearchMaxResults            = 3
+	webSearchMinRelevantResults    = 1
+	resolveFoodCandidateLimit      = 8
+	resolveFoodSemanticThreshold   = 0.9
 )
 
 const packagedFoodResolveEnabled = true
@@ -519,14 +521,16 @@ func normalizeExecutionMode(mode *string) string {
 	if mode == nil {
 		return defaultExecutionMode
 	}
-	switch strings.TrimSpace(*mode) {
-	case standardWebSearchMode:
+	switch strings.ToLower(strings.TrimSpace(*mode)) {
+	case standardWebSearchMode, "web_search", "standard-web-search":
 		return standardWebSearchMode
-	case precisionWebSearchMode:
+	case standardPackagedExperimentMode, "packaged_experiment", "standard-packaged-experiment":
+		return standardPackagedExperimentMode
+	case precisionWebSearchMode, "precision_web_search", "strict-web-search":
 		return precisionWebSearchMode
-	case precisionExecutionMode, gemini35FlashExecutionMode, gemini35GroupedExecutionMode:
+	case precisionExecutionMode, "precision", gemini35FlashExecutionMode, "gemini35", "gemini_35_flash", gemini35GroupedExecutionMode, "gemini35_grouped", "gemini_35_flash_grouped":
 		return precisionExecutionMode
-	case defaultExecutionMode, liteExecutionMode, validExecutionMode:
+	case defaultExecutionMode, liteExecutionMode, "lightweight", validExecutionMode, "experiment":
 		return defaultExecutionMode
 	default:
 		return defaultExecutionMode
@@ -1518,6 +1522,10 @@ func isPrecisionLikeExecutionMode(executionMode string) bool {
 	return executionMode == precisionExecutionMode || executionMode == precisionWebSearchMode
 }
 
+func isPackagedExperimentExecutionMode(executionMode string) bool {
+	return executionMode == standardPackagedExperimentMode
+}
+
 func isWebSearchExecutionMode(executionMode string) bool {
 	return executionMode == standardWebSearchMode || executionMode == precisionWebSearchMode
 }
@@ -1555,7 +1563,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	s.normalizeFoodImageInput(&input)
 	executionMode := s.resolveExecutionMode(ctx, userID, input.ExecutionMode)
 	isCorrection := len(input.CorrectionItems) > 0 || len(input.PreviousResult) > 0
-	if executionMode == defaultExecutionMode || executionMode == standardWebSearchMode {
+	if executionMode == defaultExecutionMode || executionMode == standardWebSearchMode || isPackagedExperimentExecutionMode(executionMode) {
 		if isCorrection {
 			input.ModelName = gemini31FlashLiteModel
 		} else {
@@ -1767,6 +1775,16 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		}
 		if reviewed != nil {
 			parsed = reviewed
+		}
+	}
+	if isPackagedExperimentExecutionMode(executionMode) {
+		hybridMeta = map[string]any{
+			"status":          "applied",
+			"strategy":        "standard_packaged_experiment_db_first",
+			"base_provider":   provider,
+			"base_model":      model,
+			"review_provider": nil,
+			"review_model":    nil,
 		}
 	}
 	if shouldRunStandardImageHybridReview(input, executionMode, provider) {
@@ -4173,7 +4191,10 @@ func (s *AnalyzeService) finalizeAnalyzeResponse(ctx context.Context, parsed map
 		return s.applySuggestedRatios(ctx, resp, input), nil
 	}
 	resp = s.applyEdiblePortionRatios(ctx, resp, input)
-	resp = s.applyDBFirstNutrition(ctx, resp, input.AdditionalContext)
+	resp = s.applyDBFirstNutritionWithOptions(ctx, resp, dbFirstNutritionOptions{
+		additionalContext:         input.AdditionalContext,
+		packagedExperimentEnabled: isPackagedExperimentExecutionMode(executionMode),
+	})
 	return s.applySuggestedRatios(ctx, resp, input), nil
 }
 
@@ -4254,7 +4275,20 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 	return resp
 }
 
+type dbFirstNutritionOptions struct {
+	additionalContext         string
+	packagedExperimentEnabled bool
+}
+
 func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[string]any, additionalContext ...string) map[string]any {
+	options := dbFirstNutritionOptions{}
+	if len(additionalContext) > 0 {
+		options.additionalContext = additionalContext[0]
+	}
+	return s.applyDBFirstNutritionWithOptions(ctx, resp, options)
+}
+
+func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, resp map[string]any, options dbFirstNutritionOptions) map[string]any {
 	start := time.Now()
 	resolveStatus := "success"
 	defer func() {
@@ -4280,12 +4314,13 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	}
 
 	type lookupItem struct {
-		index    int
-		item     map[string]any
-		name     string
-		weight   float64
-		resolve  *foodrecordrepo.ResolveResult
-		packaged *foodrecordrepo.PackagedResolveResult
+		index              int
+		item               map[string]any
+		name               string
+		weight             float64
+		resolve            *foodrecordrepo.ResolveResult
+		packaged           *foodrecordrepo.PackagedResolveResult
+		packagedCandidates []foodrecorddomain.PackagedFood
 	}
 	lookups := make([]lookupItem, 0, len(items))
 	fallbackCandidates := []UnresolvedNutritionCandidate{}
@@ -4293,6 +4328,10 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	semanticQueries := map[int]string{}
 	resolvedCount := 0
 	unresolvedCount := 0
+	packagedExperimentTriggered := 0
+	packagedExperimentMatched := 0
+	packagedExperimentWeightApplied := 0
+	packagedExperimentFallback := 0
 	logger.WithTrace(ctx).Info("营养库优先回算开始",
 		slog.Int("item_count", len(items)),
 		slog.Any("items", analyzeItemLogSummary(items, 12)),
@@ -4304,12 +4343,26 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	for index, item := range items {
 		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
 		weight := nutritionWeightFromItem(item)
-		if packagedFoodResolveEnabled && modelDeclaredPackagedFood(item) {
+		packagedProbe := packagedFoodResolveEnabled && shouldResolvePackagedFoodForDBFirst(item, options.packagedExperimentEnabled)
+		if packagedProbe {
+			if options.packagedExperimentEnabled {
+				packagedExperimentTriggered++
+				logger.WithTrace(ctx).Info("零食库试验解析开始",
+					slog.String("food_name", name),
+					slog.String("food_type", strings.TrimSpace(fmt.Sprintf("%v", item["type"]))),
+					slog.Float64("ai_estimated_weight_g", round2(weight)),
+				)
+			}
+			resolveWeight := weight
+			if options.packagedExperimentEnabled && !hasStrongPackagedExperimentEvidence(item, "") {
+				resolveWeight = 0
+			}
 			if packagedResolve, packagedErr := s.nutrition.ResolvePackagedFood(ctx, foodrecordrepo.PackagedFoodResolveInput{
 				Name:       name,
 				Brand:      strings.TrimSpace(fmt.Sprintf("%v", item["brand"])),
+				FlavorText: strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["flavorText"], item["flavor_text"], item["flavor"]))),
 				SpecText:   strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["specText"], item["spec_text"], item["packageSpec"]))),
-				NetWeightG: weight,
+				NetWeightG: resolveWeight,
 				Barcode:    strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["barcode"], item["ean"], item["gtin"]))),
 			}); packagedErr != nil {
 				logger.WithTrace(ctx).Warn("零食营养库查询失败",
@@ -4317,9 +4370,43 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 					slog.String("food_name", name),
 				)
 			} else if packagedResolve != nil && packagedResolve.Food != nil {
+				var packagedCandidates []foodrecorddomain.PackagedFood
+				if options.packagedExperimentEnabled {
+					packagedCandidates = searchPackagedExperimentCandidates(ctx, s.nutrition, name, packagedResolve.Food)
+				}
+				if options.packagedExperimentEnabled {
+					packagedExperimentMatched++
+					logger.WithTrace(ctx).Info("零食库试验命中",
+						slog.String("food_name", name),
+						slog.String("match_status", packagedResolve.Status),
+						slog.Float64("match_score", round2(packagedResolve.Score)),
+						slog.String("matched_food_id", packagedResolve.Food.ID),
+						slog.String("matched_food_name", packagedFoodDisplayName(packagedResolve.Food)),
+						slog.Float64("package_net_weight_g", round2(packagedFoodNetWeightForNutrition(packagedResolve.Food))),
+						slog.Int("candidate_count", len(packagedCandidates)),
+					)
+				}
 				resolvedCount++
-				lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, resolve: &foodrecordrepo.ResolveResult{Status: packagedResolve.Status, Score: packagedResolve.Score}, packaged: packagedResolve})
+				lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, resolve: &foodrecordrepo.ResolveResult{Status: packagedResolve.Status, Score: packagedResolve.Score}, packaged: packagedResolve, packagedCandidates: packagedCandidates})
 				continue
+			}
+			if options.packagedExperimentEnabled {
+				packagedCandidates := searchPackagedExperimentCandidates(ctx, s.nutrition, name, nil)
+				item["package_match_status"] = "not_found"
+				item["package_weight_source"] = "ai_estimate"
+				item["package_weight_applied"] = false
+				item["package_weight_reason"] = "包装库未命中，已回退普通营养库"
+				if len(packagedCandidates) > 0 {
+					item["package_match_status"] = "candidates_only"
+					item["package_weight_reason"] = "包装库找到候选但未达到自动命中，已回退普通营养库"
+					item["packaged_candidates"] = packagedCandidateDebugList(nil, packagedCandidates, "candidate")
+				}
+				logger.WithTrace(ctx).Info("零食库试验未命中",
+					slog.String("food_name", name),
+					slog.Int("candidate_count", len(packagedCandidates)),
+					slog.String("package_match_status", strings.TrimSpace(fmt.Sprintf("%v", item["package_match_status"]))),
+				)
+				packagedExperimentFallback++
 			}
 		}
 		resolve, err := s.nutrition.ResolveFood(ctx, name)
@@ -4397,9 +4484,7 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	fallbacks := map[int]map[string]any{}
 	if len(fallbackCandidates) > 0 {
 		contextText := ""
-		if len(additionalContext) > 0 {
-			contextText = additionalContext[0]
-		}
+		contextText = options.additionalContext
 		logger.WithTrace(ctx).Info("营养库未命中，开始 DeepSeek 营养补全",
 			slog.Int("candidate_count", len(fallbackCandidates)),
 			slog.Any("candidates", unresolvedNutritionCandidateLogSummary(fallbackCandidates, 12)),
@@ -4437,18 +4522,29 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 		if lookup.packaged != nil && lookup.packaged.Food != nil {
 			food := lookup.packaged.Food
 			unit := packagedNutritionUnit(food)
+			weight, weightMeta := packagedExperimentWeightForItem(lookup.item, food, lookup.packagedCandidates, lookup.packaged.Status, lookup.weight, options.packagedExperimentEnabled)
 			next["type"] = "snack"
 			next["matched_food_id"] = food.ID
-			next["matched_food_name"] = food.ProductName
+			next["matched_food_name"] = packagedFoodDisplayName(food)
 			next["resolve_status"] = lookup.packaged.Status
 			next["resolve_score"] = lookup.packaged.Score
 			next["is_unresolved"] = false
 			next["nutrition_source"] = "packaged_food_library"
 			next["unit_nutrition_per_100g"] = unit
-			next["nutrients"] = scaleNutrition(unit, lookup.weight)
-			next["estimatedWeightGrams"] = lookup.weight
-			next["originalWeightGrams"] = lookup.weight
-			ensureGrossWeightField(next, lookup.weight)
+			next["nutrients"] = scaleNutrition(unit, weight)
+			next["estimatedWeightGrams"] = weight
+			next["originalWeightGrams"] = weight
+			if options.packagedExperimentEnabled {
+				next["grossWeightGrams"] = weight
+				for key, value := range weightMeta {
+					next[key] = value
+				}
+				if boolFromAny(weightMeta["package_weight_applied"]) {
+					packagedExperimentWeightApplied++
+				}
+			} else {
+				ensureGrossWeightField(next, weight)
+			}
 			out = append(out, next)
 			continue
 		}
@@ -4511,6 +4607,15 @@ func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[str
 	resp["items"] = out
 	resp["resolved_count"] = resolvedCount
 	resp["unresolved_count"] = unresolvedCount
+	if options.packagedExperimentEnabled {
+		resp["packaged_experiment"] = map[string]any{
+			"enabled":              true,
+			"triggered_count":      packagedExperimentTriggered,
+			"matched_count":        packagedExperimentMatched,
+			"weight_applied_count": packagedExperimentWeightApplied,
+			"fallback_count":       packagedExperimentFallback,
+		}
+	}
 	metrics.AddNutritionResolveItems("db_first", "resolved", resolvedCount)
 	metrics.AddNutritionResolveItems("db_first", "unresolved", unresolvedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_generated", deepseekGeneratedCount)
@@ -5054,6 +5159,9 @@ func nutritionUnit(food *foodrecorddomain.FoodNutrition) map[string]any {
 }
 
 func packagedNutritionUnit(food *foodrecorddomain.PackagedFood) map[string]any {
+	if food == nil {
+		return zeroUnitNutritionPer100g()
+	}
 	return map[string]any{
 		"calories":       food.KcalPer100g,
 		"protein":        food.ProteinPer100g,
@@ -5091,6 +5199,344 @@ func modelDeclaredPackagedFood(item map[string]any) bool {
 		return true
 	}
 	return false
+}
+
+func shouldResolvePackagedFoodForDBFirst(item map[string]any, experimentEnabled bool) bool {
+	if modelDeclaredPackagedFood(item) {
+		return true
+	}
+	if !experimentEnabled {
+		return false
+	}
+	for _, key := range []string{"barcode", "ean", "gtin", "brand", "specText", "spec_text", "packageSpec", "flavorText", "flavor_text"} {
+		if strings.TrimSpace(fmt.Sprintf("%v", item[key])) != "" && strings.TrimSpace(fmt.Sprintf("%v", item[key])) != "<nil>" {
+			item["type"] = "snack"
+			return true
+		}
+	}
+	name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+	if looksLikePackagedFoodName(name) {
+		item["type"] = "snack"
+		return true
+	}
+	return false
+}
+
+func looksLikePackagedFoodName(name string) bool {
+	text := strings.ToLower(strings.TrimSpace(name))
+	if text == "" {
+		return false
+	}
+	brandKeywords := []string{
+		"八喜", "baxy", "巧乐兹", "伊利", "蒙牛", "光明", "喜之郎", "cici", "乐事", "可比克", "奥利奥", "旺旺", "三只松鼠", "良品铺子", "百事", "可口可乐", "元气森林", "农夫山泉", "康师傅", "统一", "哈尔滨", "哈啤", "雪花", "青岛", "蜜雪冰城",
+	}
+	categoryKeywords := []string{
+		"冰淇淋", "雪糕", "蛋筒", "果冻", "果冻爽", "果汁", "薯片", "饼干", "巧克力", "蛋糕", "面包", "奶茶", "咖啡", "酸奶", "乳", "饮料", "汽水", "啤酒", "棒", "条", "袋", "罐", "瓶", "盒",
+	}
+	hasBrand := false
+	for _, keyword := range brandKeywords {
+		if strings.Contains(text, strings.ToLower(keyword)) {
+			hasBrand = true
+			break
+		}
+	}
+	if !hasBrand {
+		return false
+	}
+	for _, keyword := range categoryKeywords {
+		if strings.Contains(text, strings.ToLower(keyword)) {
+			return true
+		}
+	}
+	return false
+}
+
+func searchPackagedExperimentCandidates(ctx context.Context, repo *foodrecordrepo.FoodNutritionRepo, name string, matched *foodrecorddomain.PackagedFood) []foodrecorddomain.PackagedFood {
+	candidates := []foodrecorddomain.PackagedFood{}
+	if repo != nil && strings.TrimSpace(name) != "" {
+		if rows, err := repo.SearchPackagedFood(ctx, name, 4); err == nil {
+			candidates = append(candidates, filterPackagedExperimentRelevantCandidates(name, rows)...)
+		}
+	}
+	if matched != nil {
+		found := false
+		for _, candidate := range candidates {
+			if candidate.ID == matched.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			candidates = append([]foodrecorddomain.PackagedFood{*matched}, candidates...)
+		}
+	}
+	if len(candidates) > 4 {
+		candidates = candidates[:4]
+	}
+	return candidates
+}
+
+func filterPackagedExperimentRelevantCandidates(name string, candidates []foodrecorddomain.PackagedFood) []foodrecorddomain.PackagedFood {
+	name = strings.TrimSpace(name)
+	if name == "" || len(candidates) <= 1 {
+		return candidates
+	}
+	queryFlavors := packagedExperimentFlavorGroups(name)
+	out := make([]foodrecorddomain.PackagedFood, 0, len(candidates))
+	for _, candidate := range candidates {
+		if len(queryFlavors) > 0 {
+			candidateText := candidate.Brand + candidate.ProductName + stringPtrValue(candidate.FlavorText) + stringPtrValue(candidate.OCRRawText)
+			candidateFlavors := packagedExperimentFlavorGroups(candidateText)
+			matchedFlavor := false
+			for group := range queryFlavors {
+				if candidateFlavors[group] {
+					matchedFlavor = true
+					break
+				}
+			}
+			if !matchedFlavor && len(candidateFlavors) > 0 {
+				continue
+			}
+		}
+		out = append(out, candidate)
+	}
+	if len(out) == 0 {
+		return candidates
+	}
+	return out
+}
+
+func packagedExperimentWeightForItem(item map[string]any, food *foodrecorddomain.PackagedFood, candidates []foodrecorddomain.PackagedFood, matchStatus string, fallbackWeight float64, experimentEnabled bool) (float64, map[string]any) {
+	meta := map[string]any{}
+	if !experimentEnabled || food == nil {
+		return fallbackWeight, meta
+	}
+	meta["package_match_status"] = "matched"
+	meta["package_match_confidence"] = 1.0
+	meta["package_weight_applied"] = false
+	meta["package_weight_source"] = "ai_estimate"
+	meta["package_weight_reason"] = "包装库命中，但未找到可安全应用的规格重量"
+	meta["packaged_candidates"] = packagedCandidateDebugList(food, candidates, matchStatus)
+
+	userWeight, userReason := explicitWeightFromAnalyzeItem(item)
+	if userWeight > 0 {
+		meta["package_weight_applied"] = true
+		meta["package_weight_source"] = "user_context"
+		meta["package_weight_reason"] = userReason
+		return round2(userWeight), meta
+	}
+	if hasAmbiguousPackagedExperimentWeights(candidates) && !hasStrongPackagedExperimentEvidence(item, matchStatus) {
+		meta["package_match_status"] = "multiple_candidates"
+		meta["package_weight_reason"] = "包装库存在多个可能规格，且本次没有条码、OCR净含量或用户规格，保留AI估重"
+		return fallbackWeight, meta
+	}
+	if packageWeight := packagedFoodNetWeightForNutrition(food); packageWeight > 0 {
+		meta["package_weight_applied"] = true
+		meta["package_weight_source"] = "packaged_food_library"
+		meta["package_weight_reason"] = fmt.Sprintf("命中包装库规格/净含量 %s，按完整包装计入", packagedFoodNetContentLabel(food))
+		return round2(packageWeight), meta
+	}
+	return fallbackWeight, meta
+}
+
+func hasStrongPackagedExperimentEvidence(item map[string]any, matchStatus string) bool {
+	switch strings.ToLower(strings.TrimSpace(matchStatus)) {
+	case "barcode":
+		return true
+	}
+	for _, key := range []string{"barcode", "ean", "gtin", "ocrNetWeightGrams", "ocr_net_weight_grams", "netWeightGrams", "net_weight_g", "userWeightGrams", "user_weight_grams", "specText", "spec_text", "packageSpec"} {
+		if strings.TrimSpace(fmt.Sprintf("%v", item[key])) != "" && strings.TrimSpace(fmt.Sprintf("%v", item[key])) != "<nil>" {
+			return true
+		}
+	}
+	return false
+}
+
+func packagedExperimentFlavorGroups(value string) map[string]bool {
+	value = normalizePackagedExperimentText(value)
+	if value == "" {
+		return nil
+	}
+	groups := map[string][]string{
+		"orange":     {"橙", "橙味", "橙汁", "橘", "柑橘"},
+		"grape":      {"葡萄", "葡萄味", "葡萄汁", "红葡萄", "白葡萄"},
+		"peach":      {"桃", "蜜桃", "黄桃", "桃味", "蜜桃味", "黄桃味"},
+		"apple":      {"苹果", "苹果味", "苹果汁"},
+		"strawberry": {"草莓", "草莓味"},
+		"lemon":      {"柠檬", "柠檬味", "柠檬汁"},
+	}
+	out := map[string]bool{}
+	for group, keywords := range groups {
+		for _, keyword := range keywords {
+			if strings.Contains(value, normalizePackagedExperimentText(keyword)) {
+				out[group] = true
+				break
+			}
+		}
+	}
+	return out
+}
+
+func normalizePackagedExperimentText(raw string) string {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	if raw == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range raw {
+		if unicode.Is(unicode.Han, r) || unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func hasAmbiguousPackagedExperimentWeights(candidates []foodrecorddomain.PackagedFood) bool {
+	seen := map[int]bool{}
+	for _, candidate := range candidates {
+		weight := packagedFoodNetWeightForNutrition(&candidate)
+		if weight <= 0 {
+			continue
+		}
+		seen[int(math.Round(weight))] = true
+		if len(seen) > 1 {
+			return true
+		}
+	}
+	return false
+}
+
+func packagedCandidateDebugList(matched *foodrecorddomain.PackagedFood, candidates []foodrecorddomain.PackagedFood, matchStatus string) []map[string]any {
+	if len(candidates) == 0 {
+		return []map[string]any{packagedCandidateDebug(matched, matchStatus, 1)}
+	}
+	out := make([]map[string]any, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		if candidate.ID == "" || seen[candidate.ID] {
+			continue
+		}
+		seen[candidate.ID] = true
+		status := "candidate"
+		score := 0.72
+		if matched != nil && candidate.ID == matched.ID {
+			status = matchStatus
+			score = 1
+		}
+		food := candidate
+		out = append(out, packagedCandidateDebug(&food, status, score))
+	}
+	if len(out) == 0 {
+		return []map[string]any{packagedCandidateDebug(matched, matchStatus, 1)}
+	}
+	return out
+}
+
+func explicitWeightFromAnalyzeItem(item map[string]any) (float64, string) {
+	for _, key := range []string{"userWeightGrams", "user_weight_grams", "ocrNetWeightGrams", "ocr_net_weight_grams", "netWeightGrams", "net_weight_g"} {
+		weight := numberFromAny(item[key])
+		if weight > 0 && weight <= 5000 {
+			return weight, fmt.Sprintf("使用用户/OCR 明确规格 %.0fg", weight)
+		}
+	}
+	return 0, ""
+}
+
+func packagedCandidateDebug(food *foodrecorddomain.PackagedFood, status string, score float64) map[string]any {
+	if food == nil {
+		return map[string]any{}
+	}
+	return map[string]any{
+		"id":                food.ID,
+		"name":              food.ProductName,
+		"display_name":      packagedFoodDisplayName(food),
+		"brand":             food.Brand,
+		"spec_text":         stringPtrValue(food.SpecText),
+		"flavor_text":       stringPtrValue(food.FlavorText),
+		"net_weight_g":      round2(food.NetWeightG),
+		"net_content_value": round2(food.NetContentValue),
+		"net_content_unit":  stringPtrValue(food.NetContentUnit),
+		"unit_count":        round2(food.UnitCount),
+		"match_status":      status,
+		"score":             round2(score),
+	}
+}
+
+func packagedFoodDisplayName(food *foodrecorddomain.PackagedFood) string {
+	if food == nil {
+		return ""
+	}
+	if displayName := strings.TrimSpace(food.DisplayName); displayName != "" {
+		return displayName
+	}
+	parts := []string{strings.TrimSpace(food.Brand), strings.TrimSpace(food.ProductName)}
+	if flavor := stringPtrValue(food.FlavorText); flavor != "" && !strings.Contains(normalizePackagedExperimentText(food.ProductName), normalizePackagedExperimentText(flavor)) {
+		parts = append(parts, flavor)
+	}
+	if label := packagedFoodNetContentLabel(food); label != "" {
+		parts = append(parts, label)
+	} else if spec := stringPtrValue(food.SpecText); spec != "" {
+		parts = append(parts, spec)
+	}
+	return strings.Join(nonEmptyStringParts(parts...), " ")
+}
+
+func packagedFoodNetContentLabel(food *foodrecorddomain.PackagedFood) string {
+	if food == nil {
+		return ""
+	}
+	if food.NetContentValue > 0 {
+		unit := strings.TrimSpace(stringPtrValue(food.NetContentUnit))
+		if unit == "" && food.NetWeightG > 0 {
+			unit = "g"
+		}
+		if unit != "" {
+			return fmt.Sprintf("%s%s", formatNumberCompact(food.NetContentValue), unit)
+		}
+	}
+	if food.NetWeightG > 0 {
+		return fmt.Sprintf("%sg", formatNumberCompact(food.NetWeightG))
+	}
+	return ""
+}
+
+func packagedFoodNetWeightForNutrition(food *foodrecorddomain.PackagedFood) float64 {
+	if food == nil {
+		return 0
+	}
+	if food.NetWeightG > 0 {
+		return food.NetWeightG
+	}
+	unit := strings.ToLower(strings.TrimSpace(stringPtrValue(food.NetContentUnit)))
+	if food.NetContentValue > 0 && (unit == "g" || unit == "ml") {
+		return food.NetContentValue
+	}
+	return 0
+}
+
+func formatNumberCompact(value float64) string {
+	if math.Abs(value-math.Round(value)) < 0.005 {
+		return fmt.Sprintf("%.0f", math.Round(value))
+	}
+	return fmt.Sprintf("%.2f", value)
+}
+
+func nonEmptyStringParts(values ...string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func stringPtrValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
 }
 
 func scaleNutrition(unit map[string]any, weight float64) map[string]any {
@@ -5131,6 +5577,10 @@ func analyzeItemLogSummary(items []map[string]any, limit int) []map[string]any {
 			"is_unresolved":          boolFromAny(item["is_unresolved"]),
 			"suggested_ratio":        round2(numberFromAny(item["suggestedRatio"])),
 			"suggested_ratio_source": strings.TrimSpace(fmt.Sprintf("%v", item["suggestedRatioSource"])),
+			"package_match_status":   strings.TrimSpace(fmt.Sprintf("%v", item["package_match_status"])),
+			"package_weight_source":  strings.TrimSpace(fmt.Sprintf("%v", item["package_weight_source"])),
+			"package_weight_applied": boolFromAny(item["package_weight_applied"]),
+			"package_weight_reason":  strings.TrimSpace(fmt.Sprintf("%v", item["package_weight_reason"])),
 		})
 	}
 	if truncated {

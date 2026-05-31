@@ -152,6 +152,7 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	standard := "standard"
 	standardWeb := "standard_web_search"
 	strictWeb := "strict_web_search"
+	packagedExperiment := "standard_packaged_experiment"
 	invalid := "invalid"
 	assert.Equal(t, "strict", normalizeExecutionMode(&strict))
 	assert.Equal(t, "standard", normalizeExecutionMode(&experimental))
@@ -161,6 +162,7 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	assert.Equal(t, "standard", normalizeExecutionMode(&standard))
 	assert.Equal(t, "standard_web_search", normalizeExecutionMode(&standardWeb))
 	assert.Equal(t, "strict_web_search", normalizeExecutionMode(&strictWeb))
+	assert.Equal(t, "standard_packaged_experiment", normalizeExecutionMode(&packagedExperiment))
 	assert.Equal(t, "standard", normalizeExecutionMode(&invalid))
 	assert.Equal(t, "standard", normalizeExecutionMode(nil))
 }
@@ -1538,6 +1540,10 @@ func TestAnalyzeService_ResolveExecutionMode(t *testing.T) {
 	strictWeb := "strict_web_search"
 	mode = svc.resolveExecutionMode(ctx, "", &strictWeb)
 	assert.Equal(t, "strict_web_search", mode)
+
+	packagedExperiment := "standard_packaged_experiment"
+	mode = svc.resolveExecutionMode(ctx, "", &packagedExperiment)
+	assert.Equal(t, "standard_packaged_experiment", mode)
 }
 
 func TestBuildAnalyzeResponse(t *testing.T) {
@@ -1642,6 +1648,173 @@ func TestAnalyzeService_ApplyDBFirstUsesUnifiedNutritionFlowForSnack(t *testing.
 	assert.Equal(t, 8.0, nutrients["protein"])
 }
 
+func TestAnalyzeService_ApplyDBFirstPackagedExperimentUsesNetWeightAnchor(t *testing.T) {
+	db, userRepo := setupAnalyzeServiceTestDB(t)
+	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	spec := "50克*6支"
+	require.NoError(t, db.Create(&foodrecorddomain.PackagedFood{
+		ID:             "pkg-chocliz-50",
+		Brand:          "伊利",
+		ProductName:    "伊利巧乐兹低糖抹茶可可味雪糕",
+		NormalizedName: "伊利巧乐兹低糖抹茶可可味雪糕",
+		SpecText:       &spec,
+		NetWeightG:     50,
+		KcalPer100g:    244,
+		ProteinPer100g: 3.76,
+		CarbsPer100g:   28.5,
+		FatPer100g:     12.76,
+		IsActive:       true,
+	}).Error)
+
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
+	resp := svc.applyDBFirstNutritionWithOptions(context.Background(), map[string]any{
+		"items": []map[string]any{{
+			"name":                 "伊利巧乐兹低糖抹茶可可味雪糕",
+			"type":                 "snack",
+			"estimatedWeightGrams": 75.0,
+			"grossWeightGrams":     75.0,
+		}},
+	}, dbFirstNutritionOptions{packagedExperimentEnabled: true})
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "packaged_food_library", items[0]["nutrition_source"])
+	assert.Equal(t, 50.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, 50.0, items[0]["originalWeightGrams"])
+	assert.Equal(t, 50.0, items[0]["grossWeightGrams"])
+	assert.Equal(t, true, items[0]["package_weight_applied"])
+	assert.Equal(t, "packaged_food_library", items[0]["package_weight_source"])
+	assert.Equal(t, "matched", items[0]["package_match_status"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.Equal(t, 122.0, nutrients["calories"])
+	assert.Equal(t, 1.88, nutrients["protein"])
+
+	debug := resp["packaged_experiment"].(map[string]any)
+	assert.Equal(t, true, debug["enabled"])
+	assert.Equal(t, 1, debug["triggered_count"])
+	assert.Equal(t, 1, debug["matched_count"])
+	assert.Equal(t, 1, debug["weight_applied_count"])
+}
+
+func TestAnalyzeService_ApplyDBFirstPackagedExperimentKeepsAIWeightForAmbiguousSpecs(t *testing.T) {
+	db, userRepo := setupAnalyzeServiceTestDB(t)
+	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	spec65 := "65g杯装"
+	spec90 := "90g杯装"
+	require.NoError(t, db.Create(&foodrecorddomain.PackagedFood{
+		ID:             "pkg-baxy-65",
+		Brand:          "八喜",
+		ProductName:    "八喜牛奶冰淇淋",
+		NormalizedName: "八喜牛奶冰淇淋",
+		SpecText:       &spec65,
+		NetWeightG:     65,
+		KcalPer100g:    210,
+		ProteinPer100g: 3.5,
+		CarbsPer100g:   22,
+		FatPer100g:     12,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&foodrecorddomain.PackagedFood{
+		ID:             "pkg-baxy-90",
+		Brand:          "八喜",
+		ProductName:    "八喜牛奶冰淇淋",
+		NormalizedName: "八喜牛奶冰淇淋",
+		SpecText:       &spec90,
+		NetWeightG:     90,
+		KcalPer100g:    210,
+		ProteinPer100g: 3.5,
+		CarbsPer100g:   22,
+		FatPer100g:     12,
+		IsActive:       true,
+	}).Error)
+
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
+	resp := svc.applyDBFirstNutritionWithOptions(context.Background(), map[string]any{
+		"items": []map[string]any{{
+			"name":                 "八喜牛奶冰淇淋",
+			"estimatedWeightGrams": 80.0,
+			"grossWeightGrams":     80.0,
+		}},
+	}, dbFirstNutritionOptions{packagedExperimentEnabled: true})
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "packaged_food_library", items[0]["nutrition_source"])
+	assert.Equal(t, 80.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, 80.0, items[0]["grossWeightGrams"])
+	assert.Equal(t, false, items[0]["package_weight_applied"])
+	assert.Equal(t, "multiple_candidates", items[0]["package_match_status"])
+	assert.Contains(t, fmt.Sprint(items[0]["package_weight_reason"]), "多个可能规格")
+	candidates, ok := items[0]["packaged_candidates"].([]map[string]any)
+	require.True(t, ok)
+	assert.Len(t, candidates, 2)
+}
+
+func TestAnalyzeService_ApplyDBFirstPackagedExperimentUserWeightWinsOverLibrary(t *testing.T) {
+	db, userRepo := setupAnalyzeServiceTestDB(t)
+	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	require.NoError(t, db.Create(&foodrecorddomain.PackagedFood{
+		ID:             "pkg-user-weight",
+		Brand:          "伊利",
+		ProductName:    "伊利巧乐兹低糖抹茶可可味雪糕",
+		NormalizedName: "伊利巧乐兹低糖抹茶可可味雪糕",
+		NetWeightG:     70,
+		KcalPer100g:    244,
+		ProteinPer100g: 3.76,
+		CarbsPer100g:   28.5,
+		FatPer100g:     12.76,
+		IsActive:       true,
+	}).Error)
+
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
+	resp := svc.applyDBFirstNutritionWithOptions(context.Background(), map[string]any{
+		"items": []map[string]any{{
+			"name":                 "伊利巧乐兹低糖抹茶可可味雪糕",
+			"type":                 "snack",
+			"estimatedWeightGrams": 75.0,
+			"userWeightGrams":      50.0,
+		}},
+	}, dbFirstNutritionOptions{packagedExperimentEnabled: true})
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, 50.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "user_context", items[0]["package_weight_source"])
+	assert.Equal(t, true, items[0]["package_weight_applied"])
+}
+
+func TestFilterPackagedExperimentRelevantCandidatesPrefersMatchingFlavor(t *testing.T) {
+	orangeSpec := "净含量:258克"
+	grapeFlavor := "红葡萄"
+	grapeSpec := "净含量:258克"
+	candidates := []foodrecorddomain.PackagedFood{
+		{
+			ID:          "pkg-cici-grape",
+			Brand:       "喜之郎",
+			ProductName: "cici果粒可吸红葡萄汁饮料",
+			FlavorText:  &grapeFlavor,
+			SpecText:    &grapeSpec,
+			NetWeightG:  258,
+		},
+		{
+			ID:          "pkg-cici-orange",
+			Brand:       "喜之郎",
+			ProductName: "cici果粒爽 橙汁饮料",
+			SpecText:    &orangeSpec,
+			NetWeightG:  258,
+		},
+	}
+
+	filtered := filterPackagedExperimentRelevantCandidates("喜之郎Cici果冻爽（橙味）", candidates)
+
+	require.Len(t, filtered, 1)
+	assert.Equal(t, "pkg-cici-orange", filtered[0].ID)
+	assert.False(t, hasAmbiguousPackagedExperimentWeights(filtered))
+}
+
 func TestAnalyzeService_ApplyDBFirstUsesWaterMlAsLiquidWeight(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
 	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
@@ -1735,6 +1908,13 @@ func TestModelDeclaredPackagedFoodNormalizesModelType(t *testing.T) {
 	item := map[string]any{"name": "可比克番茄味薯片", "type": "packaged"}
 
 	assert.True(t, modelDeclaredPackagedFood(item))
+	assert.Equal(t, "snack", item["type"])
+}
+
+func TestShouldResolvePackagedFoodForExperimentInfersCiciJellyDrink(t *testing.T) {
+	item := map[string]any{"name": "喜之郎Cici果冻爽（橙味）"}
+
+	assert.True(t, shouldResolvePackagedFoodForDBFirst(item, true))
 	assert.Equal(t, "snack", item["type"])
 }
 

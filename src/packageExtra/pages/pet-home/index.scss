@@ -157,11 +157,11 @@
   bottom: 26rpx;
   height: 150rpx;
   border-radius: 82rpx 82rpx 66rpx 66rpx;
-  background: linear-gradient(160deg, #8dd3bf 0%, #5cb896 100%);
+  background: linear-gradient(160deg, #a7ddcf 0%, #6fc5a7 100%);
   box-shadow:
-    inset 0 16rpx 26rpx rgb(255 255 255 / 34%),
+    inset 0 17rpx 27rpx rgb(255 255 255 / 42%),
     inset 0 -14rpx 20rpx rgb(39 108 93 / 8%),
-    0 14rpx 24rpx rgb(92 184 150 / 16%);
+    0 14rpx 24rpx rgb(92 184 150 / 13%);
 }
 
 .pet-body::before {
@@ -470,37 +470,44 @@
   }
 
   &.drop {
+    top: 12rpx;
+    left: 20rpx;
     width: 24rpx;
-    height: 32rpx;
-    border-radius: 20rpx 20rpx 20rpx 6rpx;
-    background: #5c9ed4;
-    transform: rotate(32deg);
+    height: 24rpx;
+    border-radius: 50%;
+    background: #8ec7ec;
+    box-shadow: 10rpx 11rpx 0 rgb(255 255 255 / 42%);
+    transform: none;
   }
 
   &.star {
     width: 30rpx;
     height: 30rpx;
-    background: #ffd166;
-    clip-path: polygon(50% 0%, 62% 34%, 98% 35%, 69% 56%, 79% 91%, 50% 70%, 21% 91%, 31% 56%, 2% 35%, 38% 34%);
+    border-radius: 50%;
+    background: #ffe08a;
+    box-shadow:
+      -10rpx 6rpx 0 -3rpx #ffe8a9,
+      10rpx 6rpx 0 -3rpx #ffe8a9,
+      0 0 0 4rpx rgb(255 255 255 / 30%);
   }
 
   &.cap {
     top: 14rpx;
-    left: 4rpx;
-    width: 52rpx;
-    height: 22rpx;
-    border-radius: 18rpx 18rpx 8rpx 8rpx;
-    background: #5c9ed4;
+    left: 8rpx;
+    width: 44rpx;
+    height: 24rpx;
+    border-radius: 24rpx 24rpx 14rpx 14rpx;
+    background: #8ec7ec;
 
     &::after {
       content: '';
       position: absolute;
-      right: -14rpx;
-      bottom: 0;
-      width: 22rpx;
-      height: 8rpx;
-      border-radius: 999rpx;
-      background: #4a89bd;
+      left: 14rpx;
+      top: 6rpx;
+      width: 18rpx;
+      height: 7rpx;
+      border-radius: 50%;
+      background: rgb(255 255 255 / 34%);
     }
   }
 
@@ -559,7 +566,7 @@
   width: 42rpx;
   height: 26rpx;
   border-radius: 999rpx;
-  background: rgb(255 255 255 / 34%);
+  background: rgb(255 255 255 / 48%);
   transform: translateX(-50%);
 }
 
@@ -569,8 +576,8 @@
   width: 18rpx;
   height: 22rpx;
   border-radius: 999rpx;
-  background: #263241;
-  box-shadow: 0 2rpx 0 rgb(255 255 255 / 24%);
+  background: #27384b;
+  box-shadow: 0 2rpx 0 rgb(255 255 255 / 28%);
 
   &::after {
     content: '';
@@ -615,7 +622,7 @@
   top: 52rpx;
   width: 26rpx;
   height: 12rpx;
-  border-bottom: 5rpx solid rgb(38 50 65 / 76%);
+  border-bottom: 5rpx solid rgb(39 56 74 / 62%);
   border-radius: 0 0 26rpx 26rpx;
   transform: translateX(-50%);
 }
@@ -638,7 +645,7 @@
     width: 50rpx;
     height: 32rpx;
     top: 32rpx;
-    background: rgb(255 255 255 / 44%);
+    background: rgb(255 255 255 / 56%);
   }
 }
 
@@ -647,7 +654,7 @@
     width: 38rpx;
     height: 30rpx;
     top: 34rpx;
-    background: rgb(255 255 255 / 38%);
+    background: rgb(255 255 255 / 50%);
   }
 }
 
@@ -657,19 +664,20 @@
     height: 22rpx;
     top: 36rpx;
     border-radius: 14rpx 14rpx 20rpx 20rpx;
-    background: rgb(255 255 255 / 38%);
+    background: rgb(255 255 255 / 50%);
   }
 }
 
 .pet-home-avatar.mood-sleepy {
   .pet-eye {
-    top: 18rpx;
-    height: 4rpx;
+    top: 12rpx;
+    height: 18rpx;
+    opacity: 0.72;
   }
 
   .pet-mouth {
-    width: 22rpx;
-    height: 4rpx;
+    width: 24rpx;
+    height: 12rpx;
     border-bottom-width: 3rpx;
   }
 }
@@ -686,11 +694,11 @@
   }
 
   .pet-mouth {
-    width: 20rpx;
-    height: 20rpx;
-    border: 4rpx solid rgb(36 54 74 / 76%);
-    border-top-color: transparent;
-    border-radius: 50%;
+    width: 24rpx;
+    height: 12rpx;
+    border: 0;
+    border-bottom: 5rpx solid rgb(39 56 74 / 62%);
+    border-radius: 0 0 26rpx 26rpx;
   }
 }
 
@@ -719,48 +727,50 @@
 }
 
 .pet-home-avatar.pattern-3 .pet-body::after {
-  left: 28rpx;
-  right: 28rpx;
-  bottom: 26rpx;
-  height: 10rpx;
-  border-radius: 999rpx;
+  left: 50%;
+  bottom: 24rpx;
+  width: 56rpx;
+  height: 28rpx;
+  border-radius: 50%;
+  transform: translateX(-50%);
 }
 
 .pet-home-avatar.pattern-4 .pet-body::after {
-  left: 42rpx;
-  top: 24rpx;
-  width: 12rpx;
-  height: 56rpx;
-  border-radius: 999rpx;
-  box-shadow: 28rpx 2rpx 0 rgb(255 255 255 / 22%);
+  left: auto;
+  right: 32rpx;
+  top: 38rpx;
+  width: 18rpx;
+  height: 18rpx;
+  border-radius: 50%;
+  box-shadow: -30rpx 30rpx 0 rgb(255 255 255 / 18%);
 }
 
 .pet-home-avatar.berry .pet-body {
-  background: linear-gradient(160deg, #f5a6c9 0%, #c27bd8 100%);
+  background: linear-gradient(160deg, #ffc1dc 0%, #d99be7 100%);
 }
 
 .pet-home-avatar.sunny .pet-body {
-  background: linear-gradient(160deg, #ffd982 0%, #f0985c 100%);
+  background: linear-gradient(160deg, #ffe3a3 0%, #f3b97c 100%);
 }
 
 .pet-home-avatar.aqua .pet-body {
-  background: linear-gradient(160deg, #92d7ef 0%, #5c9ed4 100%);
+  background: linear-gradient(160deg, #aee4f4 0%, #72b7dc 100%);
 }
 
 .pet-home-avatar.grape .pet-body {
-  background: linear-gradient(160deg, #c4b5fd 0%, #8b5cf6 100%);
+  background: linear-gradient(160deg, #d7ccff 0%, #a98bed 100%);
 }
 
 .pet-home-avatar.peach .pet-body {
-  background: linear-gradient(160deg, #ffc2b3 0%, #ff8a7a 100%);
+  background: linear-gradient(160deg, #ffd1c8 0%, #ffa090 100%);
 }
 
 .pet-home-avatar.cream .pet-body {
-  background: linear-gradient(160deg, #ffe9b8 0%, #f3c66b 100%);
+  background: linear-gradient(160deg, #fff0c8 0%, #f5d78a 100%);
 }
 
 .pet-home-avatar.matcha .pet-body {
-  background: linear-gradient(160deg, #b8e986 0%, #75b86b 100%);
+  background: linear-gradient(160deg, #c9edaa 0%, #86c77b 100%);
 }
 
 .pet-home-hero-copy {
@@ -957,6 +967,10 @@
   &.muted {
     background: #f6f8fb;
   }
+
+  &.visibility {
+    background: rgb(92 184 150 / 7%);
+  }
 }
 
 .pet-home-action-title {
@@ -980,6 +994,46 @@
   align-items: center;
   gap: 10rpx;
   flex-shrink: 0;
+}
+
+.pet-home-visibility-status {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 700;
+  color: #2f7f62;
+
+  &.hidden {
+    color: #94a3b8;
+  }
+}
+
+.pet-home-toggle {
+  position: relative;
+  width: 58rpx;
+  height: 34rpx;
+  border-radius: 999rpx;
+  background: #d9e2ea;
+  transition: background 0.18s ease;
+}
+
+.pet-home-toggle.active {
+  background: #5cb896;
+}
+
+.pet-home-toggle-knob {
+  position: absolute;
+  left: 4rpx;
+  top: 4rpx;
+  width: 26rpx;
+  height: 26rpx;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2rpx 8rpx rgb(15 23 42 / 14%);
+  transition: transform 0.18s ease;
+}
+
+.pet-home-toggle.active .pet-home-toggle-knob {
+  transform: translateX(24rpx);
 }
 
 .pet-home-action-cost {

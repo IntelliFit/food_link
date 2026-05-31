@@ -202,7 +202,11 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 	for _, sql := range []string{
 		`ALTER TABLE packaged_food_library DROP CONSTRAINT IF EXISTS packaged_food_library_normalized_name_key`,
+		`DROP INDEX IF EXISTS uni_packaged_food_library_normalized_name`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS product_key text NOT NULL DEFAULT ''`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS display_name text NOT NULL DEFAULT ''`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS search_text text NOT NULL DEFAULT ''`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS product_family_key text NOT NULL DEFAULT ''`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS spec_text text`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS barcode text`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS flavor_text text`,
@@ -217,6 +221,15 @@ func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS extract_confidence numeric NOT NULL DEFAULT 0`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS field_confidence jsonb NOT NULL DEFAULT '{}'::jsonb`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS ingest_method text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS net_content_value numeric NOT NULL DEFAULT 0`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS net_content_unit text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS unit_count numeric NOT NULL DEFAULT 0`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS unit_content_value numeric NOT NULL DEFAULT 0`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS unit_content_unit text`,
+		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS review_status text NOT NULL DEFAULT 'active'`,
+		`ALTER TABLE packaged_food_aliases DROP CONSTRAINT IF EXISTS packaged_food_aliases_normalized_alias_key`,
+		`DROP INDEX IF EXISTS uni_packaged_food_aliases_normalized_alias`,
+		`DROP INDEX IF EXISTS packaged_food_aliases_normalized_alias_key`,
 		`ALTER TABLE reward_task_uploads ADD COLUMN IF NOT EXISTS source_key text`,
 		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS image_url text`,
 		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS exercise_type text`,
@@ -251,6 +264,7 @@ SET product_key = LOWER(
   regexp_replace(
     COALESCE(NULLIF(brand, ''), '') ||
     COALESCE(NULLIF(product_name, ''), '') ||
+    COALESCE(NULLIF(flavor_text, ''), '') ||
     COALESCE(
       NULLIF(spec_text, ''),
       CASE
@@ -264,7 +278,41 @@ SET product_key = LOWER(
   )
 )
 WHERE COALESCE(product_key, '') = ''`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_packaged_food_library_product_key ON packaged_food_library (product_key)`,
+		`UPDATE packaged_food_library
+SET net_content_value = COALESCE(NULLIF(net_content_value, 0), NULLIF(net_weight_g, 0), 0),
+    net_content_unit = COALESCE(NULLIF(net_content_unit, ''), CASE WHEN COALESCE(net_weight_g, 0) > 0 THEN 'g' ELSE NULL END),
+    display_name = COALESCE(NULLIF(display_name, ''), trim(concat_ws(' ',
+      NULLIF(brand, ''),
+      NULLIF(product_name, ''),
+      NULLIF(flavor_text, ''),
+      CASE
+        WHEN COALESCE(net_weight_g, 0) > 0 THEN regexp_replace(trim(to_char(net_weight_g, 'FM999999990.00')), '\.?0+$', '') || 'g'
+        ELSE NULLIF(spec_text, '')
+      END
+    ))),
+    product_family_key = COALESCE(NULLIF(product_family_key, ''), lower(regexp_replace(COALESCE(NULLIF(brand, ''), '') || COALESCE(NULLIF(product_name, ''), ''), '[^[:alnum:]]', '', 'g'))),
+    search_text = COALESCE(NULLIF(search_text, ''), trim(concat_ws(' ',
+      NULLIF(brand, ''),
+      NULLIF(product_name, ''),
+      NULLIF(flavor_text, ''),
+      NULLIF(spec_text, ''),
+      NULLIF(barcode, ''),
+      NULLIF(package_category, ''),
+      NULLIF(display_name, ''),
+      NULLIF(ocr_raw_text, '')
+    ))),
+    review_status = COALESCE(NULLIF(review_status, ''), 'active')
+WHERE COALESCE(display_name, '') = ''
+   OR COALESCE(search_text, '') = ''
+   OR COALESCE(product_family_key, '') = ''
+   OR COALESCE(net_content_value, 0) = 0
+   OR COALESCE(review_status, '') = ''`,
+		`DROP INDEX IF EXISTS idx_packaged_food_library_product_key`,
+		`CREATE INDEX IF NOT EXISTS idx_packaged_food_library_product_key ON packaged_food_library (product_key)`,
+		`CREATE INDEX IF NOT EXISTS idx_packaged_food_library_display_name ON packaged_food_library (display_name)`,
+		`CREATE INDEX IF NOT EXISTS idx_packaged_food_library_family_key ON packaged_food_library (product_family_key)`,
+		`CREATE INDEX IF NOT EXISTS idx_packaged_food_library_review_status ON packaged_food_library (review_status)`,
+		`CREATE INDEX IF NOT EXISTS idx_packaged_food_aliases_normalized_alias ON packaged_food_aliases (normalized_alias)`,
 		`CREATE INDEX IF NOT EXISTS idx_packaged_food_library_barcode ON packaged_food_library (barcode) WHERE barcode IS NOT NULL AND barcode <> ''`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_reward_task_uploads_source_key ON reward_task_uploads (source_key) WHERE source_key IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS precision_item_estimates_session_round_item_key_key ON precision_item_estimates (session_id, round_index, item_key)`,

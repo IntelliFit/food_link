@@ -17,6 +17,11 @@ export const normalizeAvailableExecutionMode = (value: unknown): ExecutionMode =
   return 'standard'
 }
 
+export const normalizeRuntimeExecutionMode = (value: unknown): ExecutionMode => {
+  if (value === 'standard_packaged_experiment') return 'standard_packaged_experiment'
+  return normalizeAvailableExecutionMode(value)
+}
+
 export const isPrecisionExecutionMode = (value?: ExecutionMode | string | null): boolean =>
   value === 'strict' || value === 'strict_web_search' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped'
 

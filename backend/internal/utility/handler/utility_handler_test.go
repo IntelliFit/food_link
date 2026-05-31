@@ -39,12 +39,15 @@ func (m *mockQRCodeService) GenerateQRCode(ctx context.Context, scene, page stri
 }
 
 type mockManualFoodService struct {
-	browseItems *domain.ManualFoodBrowseResult
-	browseErr   error
-	catalog     *domain.ManualFoodCatalogResult
-	catalogErr  error
-	searchItems []domain.ManualFoodResult
-	searchErr   error
+	browseItems          *domain.ManualFoodBrowseResult
+	browseErr            error
+	catalog              *domain.ManualFoodCatalogResult
+	catalogErr           error
+	searchItems          []domain.ManualFoodResult
+	searchErr            error
+	searchPackagedItems  []domain.ManualFoodResult
+	searchPackagedErr    error
+	searchPackagedCalled bool
 }
 
 func (m *mockManualFoodService) Browse(ctx context.Context, userID string, limit int) (*domain.ManualFoodBrowseResult, error) {
@@ -55,6 +58,10 @@ func (m *mockManualFoodService) Catalog(ctx context.Context, userID string, cate
 }
 func (m *mockManualFoodService) Search(ctx context.Context, userID string, keyword string, limit int) ([]domain.ManualFoodResult, error) {
 	return m.searchItems, m.searchErr
+}
+func (m *mockManualFoodService) SearchPackaged(ctx context.Context, keyword string, limit int) ([]domain.ManualFoodResult, error) {
+	m.searchPackagedCalled = true
+	return m.searchPackagedItems, m.searchPackagedErr
 }
 
 func setupRouter(h *UtilityHandler) *gin.Engine {
@@ -178,6 +185,25 @@ func TestManualFoodSearch(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	items := data["results"].([]any)
 	assert.Len(t, items, 1)
+}
+
+func TestManualFoodSearchPackagedOnly(t *testing.T) {
+	mockFood := &mockManualFoodService{searchPackagedItems: []domain.ManualFoodResult{{ID: "p1", Title: "雀巢咖啡", Source: "packaged_food"}}}
+	h := NewUtilityHandler(nil, nil, mockFood)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/manual-food/search?q=咖啡&limit=5&source=packaged_food", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.True(t, mockFood.searchPackagedCalled)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	items := data["results"].([]any)
+	assert.Len(t, items, 1)
+	assert.Equal(t, "packaged_food", items[0].(map[string]any)["source"])
 }
 
 func TestLocationReverseError(t *testing.T) {

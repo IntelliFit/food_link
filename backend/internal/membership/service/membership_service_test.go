@@ -529,6 +529,27 @@ func TestMembershipService_ValidateFoodAnalysisCredits_WebSearchModeCosts(t *tes
 	assert.Equal(t, creditCostPrecisionFoodAnalysis, credits["credit_cost"])
 }
 
+func TestMembershipService_ValidateFoodAnalysisCredits_PackagedExperimentUsesStandardCost(t *testing.T) {
+	future := time.Now().Add(24 * time.Hour)
+	light := "light_monthly"
+	mockRepo := &mockMembershipRepo{
+		user: &membershiprepo.User{ID: "u1"},
+		membership: &domain.UserMembership{
+			ID:              "um1",
+			UserID:          "u1",
+			CurrentPlanCode: &light,
+			Status:          "active",
+			ExpiresAt:       &future,
+			DailyCredits:    20,
+		},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "standard_packaged_experiment", "")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostStandardFoodAnalysis, credits["credit_cost"])
+}
+
 func TestMembershipService_ValidateFoodAnalysisCredits_ExperimentalUsesPrecisionCostAndTier(t *testing.T) {
 	future := time.Now().Add(24 * time.Hour)
 	light := "light_monthly"
