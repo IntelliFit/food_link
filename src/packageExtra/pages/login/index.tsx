@@ -1,4 +1,4 @@
-import { View, Text, Image, Input, Button } from '@tarojs/components'
+import { View, Text, Image, Input } from '@tarojs/components'
 import Taro, { useRouter } from '@tarojs/taro'
 import { useState } from 'react'
 import { Button as TaroifyButton } from '@taroify/core'
@@ -10,14 +10,15 @@ import {
     debugImpersonateUser,
     getUserProfile,
     updateUserInfo,
-    uploadUserAvatar,
-    imageToBase64,
     requestFriendByInviteCode,
 } from '../../../utils/api'
 import { extraPkgUrl, normalizeRedirectUrlForSubpackage, MAIN_TAB_ROUTES } from '../../../utils/subpackage-extra'
 import { isPublicPage } from '../../../utils/withAuth'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { cleanupGeneratedUserFiles } from '../../../utils/weapp-user-files'
+import { NewUserOnboardingModals } from '../../../components/NewUserOnboardingModals'
+import { processChooseAvatarSelection } from '../../../utils/new-user-profile-form'
+import { shouldShowProfileFormFromApiUser } from '../../../utils/new-user-onboarding-scenarios'
 
 import loginLogo from '../../../assets/login-logo.png'
 import './index.scss'
@@ -232,7 +233,7 @@ export default function LoginPage() {
 
             // 检查是否需要完善头像/昵称
             // API 返回的 avatar 可能为空字符串，nickname 可能为空
-            if (!apiUserInfo.nickname || !apiUserInfo.avatar || apiUserInfo.avatar === '' || apiUserInfo.nickname === '微信用户') {
+            if (shouldShowProfileFormFromApiUser(apiUserInfo)) {
                 setLoading(false)
                 setShowProfileForm(true) // 显示完善信息弹窗
             } else {
@@ -274,27 +275,13 @@ export default function LoginPage() {
         }
     }
 
-    // 处理头像选择
-    const handleChooseAvatar = async (e: any) => {
-        const { avatarUrl } = e.detail
+    const handleChooseAvatar = async (e: { detail?: { avatarUrl?: string } }) => {
+        const avatarUrl = e.detail?.avatarUrl
         if (!avatarUrl) return
-
-        // 也是同样逻辑：非 https 需要上传
-        const needUpload = !avatarUrl.startsWith('https://')
-
-        if (needUpload) {
-            Taro.showLoading({ title: '上传中...' })
-            try {
-                const base64 = await imageToBase64(avatarUrl)
-                const { imageUrl } = await uploadUserAvatar(base64)
-                setTempAvatar(imageUrl)
-                Taro.hideLoading()
-            } catch (err: any) {
-                Taro.hideLoading()
-                await showLoginErrorToast(err, '上传失败')
-            }
-        } else {
-            setTempAvatar(avatarUrl)
+        try {
+            await processChooseAvatarSelection(avatarUrl, setTempAvatar)
+        } catch (err: unknown) {
+            await showLoginErrorToast(err, '上传失败')
         }
     }
 
@@ -428,36 +415,21 @@ export default function LoginPage() {
                 </View>
             </View>
 
-            {/* 登录成功但库中无手机号：引导授权绑定 */}
-            {showPhoneBindModal && (
-                <View className='profile-form-modal phone-bind-modal'>
-                    <View className='profile-form-content'>
-                        <View className='profile-form-header'>
-                            <Text className='profile-form-title'>完善账号</Text>
-                            <Text className='profile-form-desc'>授权手机号便于好友搜索与账号安全</Text>
-                        </View>
-                        <View className='phone-bind-actions'>
-                            <Button
-                              className='wx-login-btn-native phone-bind-btn'
-                              openType='getPhoneNumber'
-                              onGetPhoneNumber={handleBindPhone}
-                            >
-                                授权手机号
-                            </Button>
-                            <TaroifyButton
-                              className='skip-phone-btn'
-                              variant='text'
-                              onClick={() => {
-                                    setShowPhoneBindModal(false)
-                                    continueAfterAuthGates(pendingOnboardingCompleted)
-                                }}
-                            >
-                                暂不绑定
-                            </TaroifyButton>
-                        </View>
-                    </View>
-                </View>
-            )}
+            <NewUserOnboardingModals
+              showProfileForm={showProfileForm}
+              showPhoneBindModal={showPhoneBindModal}
+              tempAvatar={tempAvatar}
+              tempNickname={tempNickname}
+              onChooseAvatar={handleChooseAvatar}
+              onNicknameInput={setTempNickname}
+              onNicknameBlur={handleNicknameBlur}
+              onSaveProfile={handleSaveProfile}
+              onBindPhone={handleBindPhone}
+              onSkipPhone={() => {
+                setShowPhoneBindModal(false)
+                continueAfterAuthGates(pendingOnboardingCompleted)
+              }}
+            />
 
             {isDev && showDebugLoginPanel && (
                 <View className='profile-form-modal debug-login-modal'>
@@ -503,49 +475,6 @@ export default function LoginPage() {
                 </View>
             )}
 
-            {/* 完善信息弹窗 */}
-            {showProfileForm && (
-                <View className='profile-form-modal'>
-                    <View className='profile-form-content'>
-                        <View className='profile-form-header'>
-                            <Text className='profile-form-title'>完善个人信息</Text>
-                        </View>
-                        <View className='profile-form-body'>
-                            <View className='avatar-choose-wrapper'>
-                                {tempAvatar ? (
-                                    <Image src={tempAvatar} className='avatar-image' mode='aspectFill' />
-                                ) : (
-                                    <Text className='iconfont icon-camera camera-icon' style={{ fontSize: '60rpx', color: '#ccc' }}>📷</Text>
-                                )}
-                                <Button
-                                  className='avatar-choose-btn'
-                                  openType='chooseAvatar'
-                                  onChooseAvatar={handleChooseAvatar}
-                                />
-                                <View className='choose-tip'>点击修改</View>
-                            </View>
-
-                            <Input
-                              className='nickname-input'
-                              type='nickname'
-                              placeholder='请输入昵称'
-                              value={tempNickname}
-                              onBlur={handleNicknameBlur}
-                              onInput={(e) => setTempNickname(e.detail.value)}
-                            />
-                        </View>
-
-                        <TaroifyButton
-                          className='save-btn'
-                          block
-                          shape='round'
-                          onClick={handleSaveProfile}
-                        >
-                            进入首页
-                        </TaroifyButton>
-                    </View>
-                </View>
-            )}
         </View>
         </FlPageThemeRoot>
     )
