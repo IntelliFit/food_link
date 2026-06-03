@@ -45,8 +45,8 @@ import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
 import OnboardingGuide from '../../../components/OnboardingGuide'
 import {
-  isGuideCompleted,
   ONBOARDING_ANALYZE_PREP_GUIDE_KEY,
+  shouldOfferOnboardingGuide,
 } from '../../../utils/onboarding-guide-storage'
 import { ANALYZE_PREP_ONBOARDING_STEPS } from './analyze-onboarding-steps'
 import { PAGE_SCROLL_LOCK_STYLE, usePageScrollLock } from '../../../utils/page-scroll-lock'
@@ -489,8 +489,10 @@ function AnalyzePage() {
     if (imagePathsRef.current.length === 0) {
       setMealType(inferDefaultMealTypeFromLocalTime())
     }
-    if (!isGuideCompleted(ONBOARDING_ANALYZE_PREP_GUIDE_KEY)) {
+    if (shouldOfferOnboardingGuide(ONBOARDING_ANALYZE_PREP_GUIDE_KEY)) {
       setShowAnalyzeOnboardingGuide(true)
+    } else {
+      setShowAnalyzeOnboardingGuide(false)
     }
   })
 

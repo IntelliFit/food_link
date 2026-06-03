@@ -95,8 +95,8 @@ import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, type MealPosterSharePayload } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
 import {
-  isGuideCompleted,
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
+  shouldOfferOnboardingGuide,
 } from '../../utils/onboarding-guide-storage'
 import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
 
@@ -1223,8 +1223,10 @@ function IndexPage() {
     if (shouldShowRecordMenu) {
       Taro.removeStorageSync(HOME_RECORD_MENU_FLAG_KEY)
       openRecordMenuFromRequest()
-    } else if (!isGuideCompleted(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
+    } else if (shouldOfferOnboardingGuide(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
       setShowHomeOnboardingGuide(true)
+    } else {
+      setShowHomeOnboardingGuide(false)
     }
 
     if (skipNextRefreshRef.current) {

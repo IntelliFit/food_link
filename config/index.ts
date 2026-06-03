@@ -105,6 +105,19 @@ export default defineConfig<'vite'>(async (merge) => {
             config.build.target = 'es2018'
           }
         },
+        // fix: @taroify/core 依赖的 lodash 在部分基础库下 getNative(Map) 非构造函数，
+        // 触发 MapCache "(Map || ListCache) is not a constructor" 导致 common 分包白屏
+        {
+          name: 'taro-fix-lodash-weapp-map',
+          transform(code, id) {
+            if (!/[\\/]lodash[\\/]/.test(id)) return null
+            if (!code.includes('Map || ListCache')) return null
+            return {
+              code: code.replace(/new \(Map \|\| ListCache\)/g, 'new ListCache'),
+              map: null,
+            }
+          },
+        },
         // fix: @taroify/icons 使用的 iconfont CDN (at.alicdn.com) 在小程序环境中
         // 无法加载，改为 base64 内联，彻底避免路径解析问题
         {

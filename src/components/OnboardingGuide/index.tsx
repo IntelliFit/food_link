@@ -3,6 +3,7 @@ import Taro from '@tarojs/taro'
 import { useState, useCallback, useMemo, useEffect, useRef, type CSSProperties } from 'react'
 import type { OnboardingGuideStorageKey } from '../../utils/onboarding-guide-storage'
 import { markGuideCompleted } from '../../utils/onboarding-guide-storage'
+import { checkIsLoggedIn } from '../../utils/withAuth'
 import type { HighlightRect, OnboardingGuideStep } from './types'
 import { useHighlightRect } from './useHighlightRect'
 import { PAGE_SCROLL_LOCK_STYLE, usePageScrollLock } from '../../utils/page-scroll-lock'
@@ -60,17 +61,18 @@ export default function OnboardingGuide({
 }: OnboardingGuideProps) {
   const [stepIndex, setStepIndex] = useState(0)
   const wasVisibleRef = useRef(false)
+  const showGuide = visible && checkIsLoggedIn()
 
   useEffect(() => {
-    if (visible && !wasVisibleRef.current) {
+    if (showGuide && !wasVisibleRef.current) {
       setStepIndex(0)
     }
-    wasVisibleRef.current = visible
-  }, [visible])
+    wasVisibleRef.current = showGuide
+  }, [showGuide])
 
-  const currentStep = visible && steps.length > 0 ? steps[stepIndex] ?? null : null
-  usePageScrollLock(visible)
-  const { rect, ready, refresh } = useHighlightRect(currentStep, visible, HIGHLIGHT_RECT_OPTIONS)
+  const currentStep = showGuide && steps.length > 0 ? steps[stepIndex] ?? null : null
+  usePageScrollLock(showGuide)
+  const { rect, ready, refresh } = useHighlightRect(currentStep, showGuide, HIGHLIGHT_RECT_OPTIONS)
   const isLast = stepIndex >= steps.length - 1
 
   const winHeight = useMemo(() => {
@@ -79,7 +81,7 @@ export default function OnboardingGuide({
     } catch {
       return 667
     }
-  }, [visible, stepIndex])
+  }, [showGuide, stepIndex])
 
   const finish = useCallback(() => {
     markGuideCompleted(storageKey)
@@ -92,7 +94,7 @@ export default function OnboardingGuide({
   }, [finish])
 
   const handleNext = useCallback(async () => {
-    if (!visible || steps.length === 0) return
+    if (!showGuide || steps.length === 0) return
     const nextIndex = stepIndex + 1
     if (onBeforeNext) {
       await onBeforeNext(stepIndex, nextIndex)
@@ -104,9 +106,9 @@ export default function OnboardingGuide({
     const nextStep = steps[nextIndex]
     setStepIndex(nextIndex)
     await refresh(nextStep)
-  }, [visible, steps, stepIndex, onBeforeNext, finish, refresh])
+  }, [showGuide, steps, stepIndex, onBeforeNext, finish, refresh])
 
-  if (!visible || !currentStep) return null
+  if (!showGuide || !currentStep) return null
 
   const { placement, style: panelStyle } = panelPlacement(currentStep, rect, ready, winHeight)
   const isRoundHole = currentStep.preset === 'tab-record-center'

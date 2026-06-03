@@ -674,7 +674,7 @@ function RecordManualPage() {
 
   return (
     <View className='record-manual-page'>
-      <ScrollView className='content-scroll' scrollY>
+      <ScrollView className='content-scroll' scrollY onScrollToLower={handleLoadMoreCatalog}>
         <View className='workspace-card'>
           <View className='workspace-header'>
             <View>
@@ -718,7 +718,8 @@ function RecordManualPage() {
 
         </View>
 
-        <View className='catalog-shell'>
+        <View className='catalog-card'>
+          <View className='catalog-shell'>
           {!normalizedQuery && (
             <ScrollView className='catalog-sidebar' scrollY>
               {categories.map((category) => (
@@ -753,8 +754,12 @@ function RecordManualPage() {
               <View className='food-list compact-list'>
                 {visibleItems.map(renderResultItem)}
                 {!normalizedQuery && catalogHasMore && (
-                  <View className='load-more' onClick={handleLoadMoreCatalog}>
-                    <Text>{catalogLoadingMore ? '加载中' : '加载更多'}</Text>
+                  <View className={`load-more ${catalogLoadingMore ? 'loading' : ''}`}>
+                    {catalogLoadingMore ? (
+                      <View className='load-more-spinner' />
+                    ) : (
+                      <Text>继续下滑自动加载</Text>
+                    )}
                   </View>
                 )}
               </View>
@@ -763,6 +768,7 @@ function RecordManualPage() {
                 <Text>{normalizedQuery ? '没有找到匹配食物，试试“米饭”“鸡蛋”这类关键词' : '暂无可用食物数据'}</Text>
               </View>
             )}
+          </View>
           </View>
         </View>
 
