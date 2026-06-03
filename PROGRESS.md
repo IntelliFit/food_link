@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-06-03
+
+- 🔧 chore: 从 Git 移除误提交的 `backend/api-test-server` 编译产物（~53MB），并加入 `.gitignore`
+
 ## 2026-05-31
 
 - 🔧 chore: 添加 Hero 区 number 装饰图资源 `website/public/images/hero/number.png`
