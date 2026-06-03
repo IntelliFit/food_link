@@ -415,7 +415,6 @@ function RecordManualPage() {
 
   const handleAddItem = (item: ManualFoodSearchResult) => {
     const key = getItemKey(item)
-    Taro.vibrateShort({ type: 'light' }).catch(() => {})
     setSelectedItems(prev => {
       const index = prev.findIndex((selected) => getItemKey(selected) === key)
       const servingProfile = inferServingProfile(item)
@@ -575,7 +574,14 @@ function RecordManualPage() {
         manual_portion_label: item.portionLabel,
       }))
       const totalWeight = selectedItems.reduce((s, i) => s + i.weight, 0)
-      
+      const mealImagePaths = Array.from(
+        new Set(
+          selectedItems
+            .map((item) => (item.imagePath || '').trim())
+            .filter(Boolean)
+        )
+      )
+
       await saveFoodRecord({
         date: getStoredRecordTargetDate(),
         meal_type: selectedMeal as any,
@@ -583,6 +589,8 @@ function RecordManualPage() {
         activity_timing: activityTiming as any,
         description: '手动记录：' + selectedItems.map(i => i.title).join('、'),
         insight: '手动记录，数据来自食物词典',
+        image_path: mealImagePaths[0],
+        image_paths: mealImagePaths.length > 0 ? mealImagePaths : undefined,
         items,
         total_calories: Math.round(totalNutrients.calories * 10) / 10,
         total_protein: Math.round(totalNutrients.protein * 10) / 10,
@@ -710,6 +718,54 @@ function RecordManualPage() {
 
         </View>
 
+        <View className='catalog-shell'>
+          {!normalizedQuery && (
+            <ScrollView className='catalog-sidebar' scrollY>
+              {categories.map((category) => (
+                <View
+                  key={category.key}
+                  className={`catalog-tab ${activeCategory === category.key ? 'active' : ''}`}
+                  onClick={() => handleSelectCategory(category.key)}
+                >
+                  <Text>{category.label}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+
+          <View className='catalog-main'>
+            <View className='library-header'>
+              <View>
+                <Text className='section-title'>{normalizedQuery ? '搜索结果' : activeCategoryLabel}</Text>
+                <Text className='library-subtitle'>
+                  {normalizedQuery
+                    ? `围绕“${normalizedQuery}”优先展示高频食物`
+                    : statsText}
+                </Text>
+              </View>
+            </View>
+
+            {(catalogLoading || searchLoading) ? (
+              <View className='loading-state'>
+                <View className='loading-spinner' />
+              </View>
+            ) : visibleItems.length > 0 ? (
+              <View className='food-list compact-list'>
+                {visibleItems.map(renderResultItem)}
+                {!normalizedQuery && catalogHasMore && (
+                  <View className='load-more' onClick={handleLoadMoreCatalog}>
+                    <Text>{catalogLoadingMore ? '加载中' : '加载更多'}</Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View className='empty-state'>
+                <Text>{normalizedQuery ? '没有找到匹配食物，试试“米饭”“鸡蛋”这类关键词' : '暂无可用食物数据'}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
         {selectedItems.length > 0 && (
           <View className='selected-section'>
             <View className='section-header'>
@@ -719,7 +775,7 @@ function RecordManualPage() {
                 <Text className='unit'>kcal</Text>
               </View>
             </View>
-            
+
             <View className='selected-list'>
               {selectedItems.map((item) => {
                 const key = getItemKey(item)
@@ -803,7 +859,7 @@ function RecordManualPage() {
                 )
               })}
             </View>
-            
+
             <View className='nutrition-total'>
               <View className='total-item'>
                 <Text className='label'>热量</Text>
@@ -824,54 +880,6 @@ function RecordManualPage() {
             </View>
           </View>
         )}
-
-        <View className='catalog-shell'>
-          {!normalizedQuery && (
-            <ScrollView className='catalog-sidebar' scrollY>
-              {categories.map((category) => (
-                <View
-                  key={category.key}
-                  className={`catalog-tab ${activeCategory === category.key ? 'active' : ''}`}
-                  onClick={() => handleSelectCategory(category.key)}
-                >
-                  <Text>{category.label}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-
-          <View className='catalog-main'>
-            <View className='library-header'>
-              <View>
-                <Text className='section-title'>{normalizedQuery ? '搜索结果' : activeCategoryLabel}</Text>
-                <Text className='library-subtitle'>
-                  {normalizedQuery
-                    ? `围绕“${normalizedQuery}”优先展示高频食物`
-                    : statsText}
-                </Text>
-              </View>
-            </View>
-
-            {(catalogLoading || searchLoading) ? (
-              <View className='loading-state'>
-                <View className='loading-spinner' />
-              </View>
-            ) : visibleItems.length > 0 ? (
-              <View className='food-list compact-list'>
-                {visibleItems.map(renderResultItem)}
-                {!normalizedQuery && catalogHasMore && (
-                  <View className='load-more' onClick={handleLoadMoreCatalog}>
-                    <Text>{catalogLoadingMore ? '加载中' : '加载更多'}</Text>
-                  </View>
-                )}
-              </View>
-            ) : (
-              <View className='empty-state'>
-                <Text>{normalizedQuery ? '没有找到匹配食物，试试“米饭”“鸡蛋”这类关键词' : '暂无可用食物数据'}</Text>
-              </View>
-            )}
-          </View>
-        </View>
 
         {selectedItems.length > 0 && (
           <View className='config-card'>

@@ -7,6 +7,7 @@ import {
   NEW_USER_ONBOARDING_SCENARIOS,
   type NewUserOnboardingScenario,
 } from '../utils/new-user-onboarding-scenarios'
+import { defaultAvatarImage, buildDefaultWechatNickname } from '../utils/default-user-profile'
 import './DevNewUserOnboardingPreview.scss'
 
 interface DevNewUserOnboardingPreviewProps {
@@ -41,8 +42,10 @@ export function DevNewUserOnboardingPreview({ visible, onClose }: DevNewUserOnbo
 
   const openScenario = useCallback((scenario: NewUserOnboardingScenario) => {
     setActiveScenario(scenario)
-    setTempAvatar(scenario.initialAvatar || '')
-    setTempNickname(scenario.initialNickname || '')
+    setTempAvatar(scenario.initialAvatar || defaultAvatarImage)
+    setTempNickname(
+      scenario.initialNickname || buildDefaultWechatNickname('preview_openid_demo')
+    )
     setChainPhoneAfterProfile(Boolean(scenario.chainPhoneBind))
     setPickerOpen(false)
 

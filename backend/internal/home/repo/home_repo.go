@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -216,4 +217,93 @@ func (r *HomeRepo) ListRecordComments(ctx context.Context, recordID string) ([]F
 func (r *HomeRepo) DeleteCommentCascade(ctx context.Context, recordID, commentID string) (int64, error) {
 	result := r.db.WithContext(ctx).Where("record_id = ? AND (id = ? OR parent_comment_id = ?)", recordID, commentID, commentID).Delete(&FeedComment{})
 	return result.RowsAffected, result.Error
+}
+
+// LookupManualSourceImagePaths 从饮食记录 items 中的 manual_source 回查食物库图片（记录级 image_path 为空时使用）。
+func (r *HomeRepo) LookupManualSourceImagePaths(ctx context.Context, items []map[string]any) []string {
+	if r == nil || r.db == nil || len(items) == 0 {
+		return nil
+	}
+	publicIDs := make([]string, 0)
+	packagedIDs := make([]string, 0)
+	seenID := map[string]bool{}
+	for _, item := range items {
+		source := strings.TrimSpace(stringFromAny(item["manual_source"]))
+		id := strings.TrimSpace(stringFromAny(item["manual_source_id"]))
+		if source == "" || id == "" {
+			continue
+		}
+		key := source + ":" + id
+		if seenID[key] {
+			continue
+		}
+		seenID[key] = true
+		switch source {
+		case "public_library":
+			publicIDs = append(publicIDs, id)
+		case "packaged_food":
+			packagedIDs = append(packagedIDs, id)
+		}
+	}
+	paths := make([]string, 0)
+	seenPath := map[string]bool{}
+	appendPath := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" || seenPath[raw] {
+			return
+		}
+		seenPath[raw] = true
+		paths = append(paths, raw)
+	}
+	if len(publicIDs) > 0 {
+		var rows []struct {
+			ImagePath  *string  `gorm:"column:image_path"`
+			ImagePaths []string `gorm:"column:image_paths;serializer:json"`
+		}
+		if err := r.db.WithContext(ctx).
+			Table("public_food_library").
+			Select("image_path, image_paths").
+			Where("id IN ?", publicIDs).
+			Scan(&rows).Error; err == nil {
+			for _, row := range rows {
+				if row.ImagePath != nil {
+					appendPath(*row.ImagePath)
+				}
+				for _, imagePath := range row.ImagePaths {
+					appendPath(imagePath)
+				}
+			}
+		}
+	}
+	if len(packagedIDs) > 0 {
+		var rows []struct {
+			SourceImageURLs []string `gorm:"column:source_image_urls;serializer:json"`
+		}
+		if err := r.db.WithContext(ctx).
+			Table("packaged_food_library").
+			Select("source_image_urls").
+			Where("id IN ?", packagedIDs).
+			Scan(&rows).Error; err == nil {
+			for _, row := range rows {
+				for _, imageURL := range row.SourceImageURLs {
+					appendPath(imageURL)
+				}
+			}
+		}
+	}
+	return paths
+}
+
+func stringFromAny(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case []byte:
+		return string(typed)
+	default:
+		if value == nil {
+			return ""
+		}
+		return strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(fmt.Sprint(value), "<nil>", ""), " ", ""))
+	}
 }

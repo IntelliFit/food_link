@@ -337,7 +337,7 @@ func TestBuildMealItem(t *testing.T) {
 		},
 	}
 	svc := NewDashboardService(nil, nil, storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn.example.com/food"}))
-	meal := svc.buildMealItem("lunch", records, 800)
+	meal := svc.buildMealItem(context.Background(), "lunch", records, 800)
 	assert.Equal(t, "lunch", meal["type"])
 	assert.Equal(t, 800.0, meal["calorie"])
 	assert.Equal(t, 800.0, meal["target"])
@@ -353,6 +353,44 @@ func TestBuildMealItem(t *testing.T) {
 	assert.Equal(t, "r2", entries[1]["id"])
 	assert.Equal(t, "https://cdn.example.com/food/second.jpg", entries[1]["image_path"])
 	assert.Equal(t, []string{"https://cdn.example.com/food/second.jpg"}, entries[1]["image_paths"])
+}
+
+func TestBuildMealItemManualSourceImageFallback(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec(`
+		CREATE TABLE public_food_library (
+			id TEXT PRIMARY KEY,
+			image_path TEXT,
+			image_paths TEXT
+		)
+	`).Error)
+	libraryID := "lib-meal-1"
+	libraryImage := "public/meal-thumb.jpg"
+	require.NoError(t, db.Exec(
+		`INSERT INTO public_food_library (id, image_path, image_paths) VALUES (?, ?, ?)`,
+		libraryID, libraryImage, `[]`,
+	).Error)
+
+	now := time.Now()
+	records := []homerepo.FoodRecord{{
+		ID: "manual-r1", MealType: "lunch", TotalCalories: 420, RecordTime: &now,
+		Items: []map[string]any{{
+			"name":               "鸡胸肉饭团",
+			"weight":             1.0,
+			"intake":             1.0,
+			"manual_source":      "public_library",
+			"manual_source_id":   libraryID,
+			"manual_source_title": "鸡胸肉饭团",
+		}},
+	}}
+	svc := NewDashboardService(nil, homerepo.NewHomeRepo(db), storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn.example.com/food"}))
+	meal := svc.buildMealItem(context.Background(), "lunch", records, 600)
+	assert.Equal(t, "https://cdn.example.com/food/public/meal-thumb.jpg", meal["image_path"])
+	entries, ok := meal["meal_record_entries"].([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "https://cdn.example.com/food/public/meal-thumb.jpg", entries[0]["image_path"])
 }
 
 func TestTotalFoodRecordWaterMl(t *testing.T) {

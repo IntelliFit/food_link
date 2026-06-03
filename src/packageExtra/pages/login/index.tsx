@@ -17,8 +17,9 @@ import { isPublicPage } from '../../../utils/withAuth'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { cleanupGeneratedUserFiles } from '../../../utils/weapp-user-files'
 import { NewUserOnboardingModals } from '../../../components/NewUserOnboardingModals'
-import { processChooseAvatarSelection } from '../../../utils/new-user-profile-form'
+import { processChooseAvatarSelection, ensureAvatarUploadedForSave, getInitialRegistrationAvatar } from '../../../utils/new-user-profile-form'
 import { shouldShowProfileFormFromApiUser } from '../../../utils/new-user-onboarding-scenarios'
+import { resolveRegistrationNickname, buildDefaultWechatNickname } from '../../../utils/default-user-profile'
 
 import loginLogo from '../../../assets/login-logo.png'
 import './index.scss'
@@ -215,9 +216,10 @@ export default function LoginPage() {
             }
 
             // 保存用户信息到 storage
+            const displayName = resolveRegistrationNickname(apiUserInfo.nickname, loginData.openid)
             const userInfo: UserInfo = {
-                avatar: apiUserInfo.avatar || '',
-                name: apiUserInfo.nickname || '用户昵称',
+                avatar: getInitialRegistrationAvatar(apiUserInfo.avatar),
+                name: displayName,
                 meta: '已记录 0 天' // 初始值，profile 页面会刷新
             }
             Taro.setStorageSync('userInfo', userInfo)
@@ -234,6 +236,8 @@ export default function LoginPage() {
             // 检查是否需要完善头像/昵称
             // API 返回的 avatar 可能为空字符串，nickname 可能为空
             if (shouldShowProfileFormFromApiUser(apiUserInfo)) {
+                setTempAvatar(getInitialRegistrationAvatar(apiUserInfo.avatar))
+                setTempNickname(resolveRegistrationNickname(apiUserInfo.nickname, loginData.openid))
                 setLoading(false)
                 setShowProfileForm(true) // 显示完善信息弹窗
             } else {
@@ -251,7 +255,9 @@ export default function LoginPage() {
             // 即使获取失败，也算登录成功
             Taro.setStorageSync('isLoggedIn', true)
             setLoading(false)
-            setShowProfileForm(true) // 假设获取失败是因为没创建档案？或者让用户填写兜底
+            setTempAvatar(getInitialRegistrationAvatar(''))
+            setTempNickname(buildDefaultWechatNickname(loginData.openid))
+            setShowProfileForm(true) // 兜底：预填默认头像昵称，用户可直接进入
         }
     }
 
@@ -298,14 +304,15 @@ export default function LoginPage() {
 
         Taro.showLoading({ title: '保存中...' })
         try {
+            const avatarToSave = await ensureAvatarUploadedForSave(tempAvatar)
             await updateUserInfo({
                 nickname: tempNickname,
-                avatar: tempAvatar
+                avatar: avatarToSave
             })
 
             // 更新本地 storage
             const currentUser = Taro.getStorageSync('userInfo') || {}
-            currentUser.avatar = tempAvatar
+            currentUser.avatar = avatarToSave
             currentUser.name = tempNickname
             Taro.setStorageSync('userInfo', currentUser)
 

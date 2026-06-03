@@ -78,7 +78,7 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 		if len(items) == 0 {
 			continue
 		}
-		meal := s.buildMealItem(mealType, items, mealTargets[mealType])
+		meal := s.buildMealItem(ctx, mealType, items, mealTargets[mealType])
 		meals = append(meals, meal)
 	}
 
@@ -622,7 +622,7 @@ func normalizeMealType(mealType string, recordTime *time.Time) string {
 	return "afternoon_snack"
 }
 
-func (s *DashboardService) buildMealItem(mealType string, records []homerepo.FoodRecord, mealTarget float64) map[string]any {
+func (s *DashboardService) buildMealItem(ctx context.Context, mealType string, records []homerepo.FoodRecord, mealTarget float64) map[string]any {
 	mealCal, mealProtein, mealCarbs, mealFat, mealWater := 0.0, 0.0, 0.0, 0.0, 0.0
 	imagePaths := make([]string, 0)
 	seen := map[string]bool{}
@@ -643,28 +643,11 @@ func (s *DashboardService) buildMealItem(mealType string, records []homerepo.Foo
 		mealCarbs += record.TotalCarbs
 		mealFat += record.TotalFat
 		mealWater += recordWater
-		recordImagePaths := make([]string, 0)
-		recordSeen := map[string]bool{}
-		for _, imagePath := range record.ImagePaths {
-			imagePath = s.resolveFoodImageURL(imagePath)
-			if imagePath != "" && !seen[imagePath] {
+		recordImagePaths := s.collectFoodRecordImagePaths(ctx, record)
+		for _, imagePath := range recordImagePaths {
+			if !seen[imagePath] {
 				imagePaths = append(imagePaths, imagePath)
 				seen[imagePath] = true
-			}
-			if imagePath != "" && !recordSeen[imagePath] {
-				recordImagePaths = append(recordImagePaths, imagePath)
-				recordSeen[imagePath] = true
-			}
-		}
-		if record.ImagePath != nil {
-			resolved := s.resolveFoodImageURL(*record.ImagePath)
-			if resolved != "" && !seen[resolved] {
-				imagePaths = append(imagePaths, resolved)
-				seen[resolved] = true
-			}
-			if resolved != "" && !recordSeen[resolved] {
-				recordImagePaths = append(recordImagePaths, resolved)
-				recordSeen[resolved] = true
 			}
 		}
 		title := ""
@@ -807,6 +790,54 @@ func waterMlFromHomeFoodItem(item map[string]any) float64 {
 		}
 	}
 	return 0
+}
+
+func (s *DashboardService) collectFoodRecordImagePaths(ctx context.Context, record homerepo.FoodRecord) []string {
+	paths := make([]string, 0)
+	seen := map[string]bool{}
+	appendRaw := func(raw string) {
+		resolved := s.resolveFoodImageURL(strings.TrimSpace(raw))
+		if resolved == "" || seen[resolved] {
+			return
+		}
+		seen[resolved] = true
+		paths = append(paths, resolved)
+	}
+	for _, imagePath := range record.ImagePaths {
+		appendRaw(imagePath)
+	}
+	if record.ImagePath != nil {
+		appendRaw(*record.ImagePath)
+	}
+	if len(paths) > 0 {
+		return paths
+	}
+	for _, item := range record.Items {
+		for _, key := range []string{"image_path", "imagePath"} {
+			if value, ok := item[key].(string); ok {
+				appendRaw(value)
+			}
+		}
+		switch typed := item["image_paths"].(type) {
+		case []string:
+			for _, value := range typed {
+				appendRaw(value)
+			}
+		case []any:
+			for _, value := range typed {
+				if imagePath, ok := value.(string); ok {
+					appendRaw(imagePath)
+				}
+			}
+		}
+	}
+	if len(paths) > 0 || s.home == nil {
+		return paths
+	}
+	for _, raw := range s.home.LookupManualSourceImagePaths(ctx, record.Items) {
+		appendRaw(raw)
+	}
+	return paths
 }
 
 func (s *DashboardService) resolveFoodImageURL(path string) string {

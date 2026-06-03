@@ -30,7 +30,7 @@ export const NEW_USER_ONBOARDING_SCENARIOS: NewUserOnboardingScenario[] = [
   {
     id: 'profile_empty',
     title: '完善个人信息（全空）',
-    desc: '新注册：nickname、avatar 均为空，与登录后弹窗一致',
+    desc: '模拟旧数据：nickname、avatar 均为空；弹窗会预填默认头像与微信用户_随机6位数字',
   },
   {
     id: 'profile_wechat_user',

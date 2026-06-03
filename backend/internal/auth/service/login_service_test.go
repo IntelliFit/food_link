@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"food_link/backend/internal/auth/repo"
@@ -61,6 +62,25 @@ func TestLoginService_Login_NewUserWithUnionID(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, result.UserID)
 	assert.Equal(t, "new_user_openid", result.OpenID)
+
+	user, err := userRepo.FindByOpenID(ctx, "new_user_openid")
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	assert.Equal(t, defaultUserAvatarKey, user.Avatar)
+	assert.True(t, strings.HasPrefix(user.Nickname, defaultWechatNicknamePrefix))
+	suffix := strings.TrimPrefix(user.Nickname, defaultWechatNicknamePrefix)
+	assert.True(t, defaultWechatNicknameSuffixPattern.MatchString(suffix), "suffix=%q", suffix)
+}
+
+func TestBuildDefaultWechatNickname(t *testing.T) {
+	n1 := buildDefaultWechatNickname()
+	n2 := buildDefaultWechatNickname()
+	assert.True(t, strings.HasPrefix(n1, defaultWechatNicknamePrefix))
+	assert.True(t, strings.HasPrefix(n2, defaultWechatNicknamePrefix))
+	suffix1 := strings.TrimPrefix(n1, defaultWechatNicknamePrefix)
+	suffix2 := strings.TrimPrefix(n2, defaultWechatNicknamePrefix)
+	assert.True(t, defaultWechatNicknameSuffixPattern.MatchString(suffix1))
+	assert.True(t, defaultWechatNicknameSuffixPattern.MatchString(suffix2))
 }
 
 func TestLoginService_Login_CreatesTrialEntitlement(t *testing.T) {
