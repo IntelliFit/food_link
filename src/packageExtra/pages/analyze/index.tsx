@@ -1,4 +1,4 @@
-import { View, Text, Image, Textarea } from '@tarojs/components'
+import { View, Text, Image, Textarea, PageMeta } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import {
@@ -43,6 +43,13 @@ import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateK
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
+import OnboardingGuide from '../../../components/OnboardingGuide'
+import {
+  isGuideCompleted,
+  ONBOARDING_ANALYZE_PREP_GUIDE_KEY,
+} from '../../../utils/onboarding-guide-storage'
+import { ANALYZE_PREP_ONBOARDING_STEPS } from './analyze-onboarding-steps'
+import { PAGE_SCROLL_LOCK_STYLE, usePageScrollLock } from '../../../utils/page-scroll-lock'
 
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
@@ -370,6 +377,7 @@ function AnalyzePage() {
   const [creditSheet, setCreditSheet] = useState<{ visible: boolean; message?: string }>({
     visible: false,
   })
+  const [showAnalyzeOnboardingGuide, setShowAnalyzeOnboardingGuide] = useState(false)
 
   // 帮助说明底部弹窗
   const [helpSheet, setHelpSheet] = useState<{ visible: boolean; title: string; content: string }>({
@@ -399,7 +407,12 @@ function AnalyzePage() {
       suggest_ratio: {
         title: 'AI摄入比例',
         content: '结果页自动给出每项食物的滑块比例。开启后，AI 会根据你的剩余热量和饮食目标，为每个识别出的食物建议一个摄入比例（0-100%），你可以在结果页通过滑块快速调整。'
-      }
+      },
+      web_search: {
+        title: '联网增强',
+        content:
+          '在普通或精准模式基础上启用后，会额外调用联网搜索校准包装规格与重量等信息。搜索不可用或失败时，会保留当前模式下的识别结果。',
+      },
     }
     const info = helpContent[key]
     if (info) {
@@ -475,6 +488,9 @@ function AnalyzePage() {
     }
     if (imagePathsRef.current.length === 0) {
       setMealType(inferDefaultMealTypeFromLocalTime())
+    }
+    if (!isGuideCompleted(ONBOARDING_ANALYZE_PREP_GUIDE_KEY)) {
+      setShowAnalyzeOnboardingGuide(true)
     }
   })
 
@@ -675,6 +691,42 @@ function AnalyzePage() {
       source: 'precision_upgrade',
     })
   }
+
+  const isWebSearchEnabled =
+    executionMode === 'standard_web_search' || executionMode === 'strict_web_search'
+
+  const webSearchSwitchApplicable =
+    executionMode === 'standard' ||
+    executionMode === 'standard_web_search' ||
+    executionMode === 'strict' ||
+    executionMode === 'strict_web_search'
+
+  const isStandardModeSelected =
+    executionMode === 'standard' || executionMode === 'standard_web_search'
+
+  const isStrictModeSelected =
+    executionMode === 'strict' || executionMode === 'strict_web_search'
+
+  const handleSelectStandardMode = () => {
+    setExecutionMode(isWebSearchEnabled ? 'standard_web_search' : 'standard')
+  }
+
+  const handleSelectStrictMode = () => {
+    handleStrictModeTap(isWebSearchEnabled ? 'strict_web_search' : 'strict')
+  }
+
+  const toggleWebSearchMode = () => {
+    if (!webSearchSwitchApplicable) return
+    if (isStandardModeSelected) {
+      setExecutionMode(executionMode === 'standard_web_search' ? 'standard' : 'standard_web_search')
+      return
+    }
+    if (isStrictModeSelected) {
+      handleStrictModeTap(executionMode === 'strict_web_search' ? 'strict' : 'strict_web_search')
+    }
+  }
+
+  usePageScrollLock(showAnalyzeOnboardingGuide)
 
   const doAnalyze = async () => {
     if (!getAccessToken()) {
@@ -878,7 +930,13 @@ function AnalyzePage() {
   }
 
   return (
-    <View className='analyze-page'>
+    <>
+      <PageMeta
+        pageStyle={showAnalyzeOnboardingGuide ? PAGE_SCROLL_LOCK_STYLE : 'overflow: visible;'}
+      />
+      <View
+        className={`analyze-page ${showAnalyzeOnboardingGuide ? 'analyze-page--scroll-locked' : ''}`}
+      >
       {/* 提示：长按页面任意位置可启用开发者模式 */}
       {/* 配额提示 */}
       {membershipStatus && (
@@ -950,6 +1008,7 @@ function AnalyzePage() {
           </View>
         )}
 
+        <View className='analyze-guide-quality-zone' id='analyze-guide-quality-zone'>
         {/* 图片分析设置 */}
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
@@ -958,52 +1017,38 @@ function AnalyzePage() {
           </View>
           <View className='mode-switch-row'>
             <View
-              className={`mode-switch-item ${executionMode === 'standard' ? 'active' : ''}`}
-              onClick={() => setExecutionMode('standard')}
+              className={`mode-switch-item ${isStandardModeSelected ? 'active' : ''}`}
+              onClick={handleSelectStandardMode}
             >
               普通
             </View>
             <View
-              className={`mode-switch-item ${executionMode === 'standard_web_search' ? 'active' : ''}`}
-              onClick={() => setExecutionMode('standard_web_search')}
-            >
-              普通联网
-            </View>
-            <View
-              className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
-              onClick={() => handleStrictModeTap('strict')}
+              className={`mode-switch-item ${isStrictModeSelected ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
+              onClick={handleSelectStrictMode}
             >
               {!canUseStrictMode ? '精准锁定' : '精准'}
             </View>
-            <View
-              className={`mode-switch-item ${executionMode === 'strict_web_search' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
-              onClick={() => handleStrictModeTap('strict_web_search')}
-            >
-              {!canUseStrictMode ? '联网锁定' : '精准联网'}
+          </View>
+        </View>
+
+        <View className='multiview-compact'>
+          <View className='multiview-compact-left'>
+            <Text className='multiview-compact-title'>联网增强</Text>
+            <View className='help-icon' onClick={() => openHelp('web_search')}>
+              <Text className='help-icon-text'>?</Text>
             </View>
+          </View>
+          <View
+            className={`multiview-toggle ${isWebSearchEnabled ? 'multiview-toggle--on' : ''}${!webSearchSwitchApplicable ? ' multiview-toggle--disabled' : ''}`}
+            onClick={toggleWebSearchMode}
+          >
+            <View className='multiview-toggle-knob' />
           </View>
         </View>
 
         {!!precisionUpgradeHint && !isPrecisionExecutionMode(executionMode) && (
           <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
         )}
-
-        <View className='experiment-mode-panel'>
-          <View className='experiment-mode-head'>
-            <Text className='experiment-mode-title'>零食库试验模式</Text>
-            <Text className='experiment-mode-sub'>不影响上方正式模式</Text>
-          </View>
-          <View
-            className={`experiment-mode-card ${executionMode === 'standard_packaged_experiment' ? 'active' : ''}`}
-            onClick={() => setExecutionMode('standard_packaged_experiment')}
-          >
-            <View className='experiment-mode-card-main'>
-              <Text className='experiment-mode-card-title'>普通 · 零食库试验</Text>
-              <Text className='experiment-mode-card-desc'>用已收录零食规格校准包装食品重量</Text>
-            </View>
-            <Text className='experiment-mode-card-badge'>2积分</Text>
-          </View>
-        </View>
 
         {/* 多视角辅助模式 */}
         <View className='multiview-compact'>
@@ -1034,6 +1079,24 @@ function AnalyzePage() {
             onClick={toggleSuggestRatio}
           >
             <View className='multiview-toggle-knob' />
+          </View>
+        </View>
+        </View>
+
+        <View className='experiment-mode-panel'>
+          <View className='experiment-mode-head'>
+            <Text className='experiment-mode-title'>零食库试验模式</Text>
+            <Text className='experiment-mode-sub'>不影响上方正式模式</Text>
+          </View>
+          <View
+            className={`experiment-mode-card ${executionMode === 'standard_packaged_experiment' ? 'active' : ''}`}
+            onClick={() => setExecutionMode('standard_packaged_experiment')}
+          >
+            <View className='experiment-mode-card-main'>
+              <Text className='experiment-mode-card-title'>普通 · 零食库试验</Text>
+              <Text className='experiment-mode-card-desc'>用已收录零食规格校准包装食品重量</Text>
+            </View>
+            <Text className='experiment-mode-card-badge'>2积分</Text>
           </View>
         </View>
       </View>
@@ -1252,7 +1315,16 @@ function AnalyzePage() {
         message={creditSheet.message}
         onClose={() => setCreditSheet({ visible: false })}
       />
-    </View>
+
+      </View>
+
+      <OnboardingGuide
+        visible={showAnalyzeOnboardingGuide}
+        steps={ANALYZE_PREP_ONBOARDING_STEPS}
+        storageKey={ONBOARDING_ANALYZE_PREP_GUIDE_KEY}
+        onClose={() => setShowAnalyzeOnboardingGuide(false)}
+      />
+    </>
   )
 }
 

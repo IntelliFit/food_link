@@ -93,6 +93,12 @@ import {
 import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, type MealPosterSharePayload } from './components'
+import OnboardingGuide from '../../components/OnboardingGuide'
+import {
+  isGuideCompleted,
+  ONBOARDING_HOME_RECORD_GUIDE_KEY,
+} from '../../utils/onboarding-guide-storage'
+import { HOME_RECORD_ONBOARDING_STEPS } from './home-onboarding-steps'
 
 const BACKFILL_HINT_DISMISSED_DATES_KEY = 'home_backfill_hint_dismissed_dates_v1'
 const HOME_SELECTED_DATE_KEY = 'home_selected_date_v1'
@@ -840,6 +846,7 @@ function IndexPage() {
 
   // 记录菜单弹窗状态
   const [showRecordMenu, setShowRecordMenu] = useState(false)
+  const [showHomeOnboardingGuide, setShowHomeOnboardingGuide] = useState(false)
   const [dismissedBackfillDates, setDismissedBackfillDates] = useState<string[]>(() => getDismissedBackfillDates())
   const selectedDateRef = useRef(selectedDate)
   const commitSelectedDate = useCallback((date: string) => {
@@ -856,6 +863,13 @@ function IndexPage() {
     }
     setShowRecordMenu(true)
   }, [commitSelectedDate])
+
+  const handleHomeGuideBeforeNext = useCallback(async (stepIndex: number, nextIndex: number) => {
+    if (nextIndex >= 1 && nextIndex <= 4) {
+      setShowRecordMenu(true)
+      await new Promise<void>((resolve) => setTimeout(resolve, stepIndex === 0 ? 400 : 220))
+    }
+  }, [])
 
   /** 首页仪表盘返回的成就（连续记录 / 全绿天数） */
   const [homeAchievement, setHomeAchievement] = useState<HomeAchievement>(initialLocalSnapshot?.achievement || { streak_days: 0, green_days: 0 })
@@ -1209,6 +1223,8 @@ function IndexPage() {
     if (shouldShowRecordMenu) {
       Taro.removeStorageSync(HOME_RECORD_MENU_FLAG_KEY)
       openRecordMenuFromRequest()
+    } else if (!isGuideCompleted(ONBOARDING_HOME_RECORD_GUIDE_KEY)) {
+      setShowHomeOnboardingGuide(true)
     }
 
     if (skipNextRefreshRef.current) {
@@ -2743,8 +2759,16 @@ function IndexPage() {
   }
 
   return (
-    <View className={`home-page ${showRecordEditModal ? 'home-page--modal-open' : ''}`}>
-      <PageMeta pageStyle={showRecordEditModal ? 'overflow: hidden; height: 100vh;' : 'overflow: visible;'} />
+    <View
+      className={`home-page ${showRecordEditModal || showHomeOnboardingGuide ? 'home-page--modal-open' : ''}`}
+    >
+      <PageMeta
+        pageStyle={
+          showRecordEditModal || showHomeOnboardingGuide
+            ? 'overflow: hidden; height: 100vh;'
+            : 'overflow: visible;'
+        }
+      />
       {/* 后台静默同步中：左上角微型 spinner */}
       {dataSyncing ? (
         <View className='home-page__data-sync'>
@@ -3549,6 +3573,14 @@ function IndexPage() {
 
       {/* 记录菜单弹窗 */}
       <RecordMenu visible={showRecordMenu} onClose={() => setShowRecordMenu(false)} selectedDate={selectedDate} />
+
+      <OnboardingGuide
+        visible={showHomeOnboardingGuide}
+        steps={HOME_RECORD_ONBOARDING_STEPS}
+        storageKey={ONBOARDING_HOME_RECORD_GUIDE_KEY}
+        onClose={() => setShowHomeOnboardingGuide(false)}
+        onBeforeNext={handleHomeGuideBeforeNext}
+      />
 
       <DietRecommendationSheet
         visible={dietRecVisible}

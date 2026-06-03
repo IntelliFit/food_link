@@ -114,7 +114,7 @@
 
 1. **以 `package.json` 的 `version` 为唯一来源**：使用 `npm version <x.y.z> --no-git-tag-version`（或等价地同时更新 `package.json` 与 `package-lock.json` 根级 `version`）。
 2. **「我的」页底部文案**：`src/pages/profile/index.tsx` 中版本展示由构建常量 `__APP_VERSION__` 注入（在 `config/index.ts` 的 `defineConstants` 中从根目录 `package.json` 读取）。**只要第 1 步已正确 bump，无需再手改该页硬编码字符串**；若历史上曾写死版本号，应改为使用 `__APP_VERSION__` 以保持与发布版本一致。
-3. 按项目惯例更新 `PROGRESS.md`、执行提交与推送；若用户还要求打 tag、上传小程序体验版等，按其说明继续。
+3. 执行提交与推送；若用户还要求打 tag、上传小程序体验版等，按其说明继续。
 
 ### 提交前清理
 

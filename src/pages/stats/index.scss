@@ -1,3 +1,5 @@
+@import '../../styles/tab-page-layout.scss';
+
 /* 与首页 `index.scss` 同源：时间轴绿 #5cb896、警示红 #e57373、页面渐变与三大营养素低饱和色 */
 $stats-primary: #5cb896;
 $stats-primary-deep: #4a9d7d;
@@ -21,8 +23,7 @@ $stats-blue-soft: #7aa9ce;
     #f0f3f6 100%
   );
 
-  /* 自定义导航后顶栏区域留白（状态栏 + 视觉呼吸区） */
-  padding-top: 182rpx;
+  padding-top: $tab-page-content-top;
   padding-bottom: 200rpx;
   box-sizing: border-box;
 
@@ -30,7 +31,7 @@ $stats-blue-soft: #7aa9ce;
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding: 182rpx 48rpx 200rpx;
+    padding: $tab-page-content-top 48rpx 200rpx;
   }
 }
 
@@ -39,8 +40,7 @@ $stats-blue-soft: #7aa9ce;
   position: fixed;
   left: 228rpx;
 
-  /* 与微信默认胶囊按钮同一水平线 */
-  top: 130rpx;
+  top: $tab-page-fixed-control-top;
   z-index: 200;
   pointer-events: none;
   width: 40rpx;
@@ -62,7 +62,7 @@ $stats-blue-soft: #7aa9ce;
 .stats-range-dropdown {
   position: fixed;
   left: 32rpx;
-  top: 118rpx;
+  top: $tab-page-fixed-control-top;
   z-index: 220;
   min-width: 156rpx;
   height: 56rpx;

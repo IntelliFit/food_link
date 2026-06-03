@@ -174,6 +174,7 @@
 - ✅ 首页 dashboard 相关（`home_dashboard_local_cache`, `body_metrics_storage`, `food_link_dashboard_targets_v1`, `home_poster_modal_visible`, `showRecordMenuModal`）
 - ✅ 朋友圈相关（`community_feed_cache`, `community_friends_cache`, `community_requests_cache`, `community_feed_timestamp`, `community_friends_timestamp`, `community_feed_filters_v2`, `community_priority_authors_v1`, `community_notification_target_v1`, `community_comment_bar_visible`）
 - ✅ Badge / 红点提醒（`analyze_waiting_record_count`, `analyze_has_unseen_waiting_record`, `food_expiry_last_seen_date`）
+- ✅ 新手引导完成标记（`onboarding_home_record_guide_v1`, `onboarding_analyze_prep_guide_v1`）
 - ✅ 动态 Key（`comment_draft_*`, `temp_comments_*`）
 
 ---

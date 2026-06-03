@@ -259,7 +259,8 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
             return (
               <View
                 key={feature.id}
-                className='record-menu-grid-card'
+                id={`record-menu-guide-${feature.id}`}
+                className={`record-menu-grid-card record-menu-grid-card--${feature.id}`}
                 style={{ backgroundColor: featureBackground, borderColor: featureBorder }}
                 onClick={() => handleGridClick(feature.id)}
               >

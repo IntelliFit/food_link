@@ -33,6 +33,7 @@ import {
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 import { cleanupGeneratedUserFiles } from '../../utils/weapp-user-files'
+import { clearAllOnboardingGuides } from '../../utils/onboarding-guide-storage'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -479,6 +480,8 @@ function ProfilePage() {
       success: async (res) => {
         if (!res.confirm) return
         try {
+          clearAllOnboardingGuides()
+
           // 首页相关缓存
           Taro.removeStorageSync('home_dashboard_local_cache')
           Taro.removeStorageSync('body_metrics_storage')

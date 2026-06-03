@@ -116,6 +116,5 @@ Conventional Commits: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `perf:`, 
 - DO NOT auto-start/stop/restart local dev servers unless the user explicitly asks. Only tell the user when a restart is needed.
 - DO NOT use `taro build --type weapp --watch` directly — use the npm scripts which set correct env vars.
 - DO NOT claim UI behavior is correct without runtime verification via weapp-devtools.
-- DO update `PROGRESS.md` with concise git-commit-style entries after each code change.
 - DO update `.local-state/current-task/active.md` and `.local-state/decisions/2026-05-active.md` for persistent context.
 - Real device previews MUST use production API (`build:weapp:preview`), never `127.0.0.1`.
