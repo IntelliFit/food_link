@@ -522,11 +522,15 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 }
 
 func updateFoodImage(ctx context.Context, db *gorm.DB, foodID, key string) error {
+	pathsJSON, err := json.Marshal([]string{key})
+	if err != nil {
+		return err
+	}
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		res := tx.Exec(`
 UPDATE food_nutrition_library
-SET image_path = ?::text,
-    image_paths = jsonb_build_array(?::text),
+SET image_path = ?,
+    image_paths = ?::jsonb,
     updated_at = now()
 WHERE id::text = ?
   AND NULLIF(trim(COALESCE(image_path, '')), '') IS NULL
@@ -534,7 +538,7 @@ WHERE id::text = ?
     SELECT 1
     FROM jsonb_array_elements_text(COALESCE(image_paths, '[]'::jsonb)) AS image_url
     WHERE NULLIF(trim(image_url), '') IS NOT NULL
-  )`, key, key, foodID)
+  )`, key, string(pathsJSON), foodID)
 		if res.Error != nil {
 			return res.Error
 		}
