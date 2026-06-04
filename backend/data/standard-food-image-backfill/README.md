@@ -4,7 +4,7 @@
 
 ## 首次准备
 
-1. 在 `backend\.env` 中填写 `KIMI_API_KEY=`（参考 `.env.example`）
+1. 在 `backend\.env` 中填写 `DASHSCOPE_API_KEY=`（参考 `.env.example`），执行 `go run ./cmd/standard-food-image-backfill --config-dir . --test-api`
 2. 基线统计：
    ```powershell
    cd backend

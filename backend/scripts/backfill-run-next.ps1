@@ -3,7 +3,7 @@ param(
   [string]$SchedulerPath = ""
 )
 $ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "backfill-require-kimi.ps1")
+. (Join-Path $PSScriptRoot "backfill-require-dashscope.ps1")
 $Root = Split-Path $PSScriptRoot -Parent
 $DataDir = Join-Path $Root "data\standard-food-image-backfill"
 if (-not $SchedulerPath) { $SchedulerPath = Join-Path $DataDir "scheduler.json" }

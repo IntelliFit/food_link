@@ -9,24 +9,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadKimiAPIKeyFromEnvFile(t *testing.T) {
-	t.Setenv("KIMI_API_KEY", "")
+func TestLoadDashScopeAPIKeyFromEnvFile(t *testing.T) {
+	t.Setenv("DASHSCOPE_API_KEY", "")
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("KIMI_API_KEY=sk-from-env\n"), 0o600))
-	assert.Equal(t, "sk-from-env", loadKimiAPIKey(dir, ""))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("DASHSCOPE_API_KEY=sk-from-env\n"), 0o600))
+	assert.Equal(t, "sk-from-env", loadDashScopeAPIKey(dir, ""))
 }
 
-func TestLoadKimiAPIKeyFromFileOverride(t *testing.T) {
-	t.Setenv("KIMI_API_KEY", "")
+func TestLoadDashScopeAPIKeyFromFileOverride(t *testing.T) {
+	t.Setenv("DASHSCOPE_API_KEY", "")
 	dir := t.TempDir()
-	path := filepath.Join(dir, "kimi-api-key.local")
-	require.NoError(t, os.WriteFile(path, []byte("KIMI_API_KEY=sk-test-key\n"), 0o600))
-	assert.Equal(t, "sk-test-key", loadKimiAPIKey(dir, path))
+	path := filepath.Join(dir, "dashscope-api-key.local")
+	require.NoError(t, os.WriteFile(path, []byte("DASHSCOPE_API_KEY=sk-test-key\n"), 0o600))
+	assert.Equal(t, "sk-test-key", loadDashScopeAPIKey(dir, path))
+}
+
+func TestPickQwenFlashModel(t *testing.T) {
+	models := []string{"qwen-max", "qwen3.5-flash-2026-02-23", "qwen-turbo"}
+	got, err := pickQwenFlashModel(models, "")
+	require.NoError(t, err)
+	assert.Equal(t, "qwen3.5-flash-2026-02-23", got)
+
+	got, err = pickQwenFlashModel(models, "qwen3.5-flash")
+	require.NoError(t, err)
+	assert.Equal(t, "qwen3.5-flash", got)
 }
 
 func TestIsPlaceholderAPIKey(t *testing.T) {
 	assert.True(t, isPlaceholderAPIKey(""))
-	assert.True(t, isPlaceholderAPIKey("在此粘贴你的_Kimi_API_Key"))
+	assert.True(t, isPlaceholderAPIKey("在此粘贴你的_Key"))
 	assert.False(t, isPlaceholderAPIKey("sk-real-key"))
 }
 
@@ -74,12 +85,13 @@ func TestShouldSkip(t *testing.T) {
 
 func TestIsFailureStatus(t *testing.T) {
 	assert.True(t, isFailureStatus("no_match"))
+	assert.True(t, isFailureStatus("vision_failed"))
 	assert.False(t, isFailureStatus("db_updated"))
 	assert.False(t, isFailureStatus("dry_run_match"))
 }
 
-func TestParseKimiDecisionTruncatedJSON(t *testing.T) {
-	decision, err := parseKimiDecision(`{"food_match":false,"no_watermark":true,"confidence":1.0,"reason":"图片为户外风景`)
+func TestParseImageDecisionTruncatedJSON(t *testing.T) {
+	decision, err := parseImageDecision(`{"food_match":false,"no_watermark":true,"confidence":1.0,"reason":"图片为户外风景`)
 	require.NoError(t, err)
 	assert.False(t, decision.Match)
 	assert.False(t, decision.FoodMatch)
@@ -87,12 +99,12 @@ func TestParseKimiDecisionTruncatedJSON(t *testing.T) {
 	assert.InDelta(t, 1.0, decision.Confidence, 0.01)
 }
 
-func TestNormalizeKimiDecisionBothRequired(t *testing.T) {
-	d := kimiDecision{FoodMatch: true, NoWatermark: false, Confidence: 0.9}
-	normalizeKimiDecision(&d)
+func TestNormalizeImageDecisionBothRequired(t *testing.T) {
+	d := imageDecision{FoodMatch: true, NoWatermark: false, Confidence: 0.9}
+	normalizeImageDecision(&d)
 	assert.False(t, d.Match)
-	d = kimiDecision{FoodMatch: true, NoWatermark: true, Confidence: 0.9}
-	normalizeKimiDecision(&d)
+	d = imageDecision{FoodMatch: true, NoWatermark: true, Confidence: 0.9}
+	normalizeImageDecision(&d)
 	assert.True(t, d.Match)
 }
 

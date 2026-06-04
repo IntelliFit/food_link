@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -17,15 +16,11 @@ import (
 	_ "image/png"
 	"io"
 	"log"
-	"os/exec"
-	"runtime"
-	"sync"
 	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -33,17 +28,9 @@ import (
 	"food_link/backend/pkg/database"
 	"food_link/backend/pkg/storage"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
-
-const (
-	kimiClientID  = "17e5f671-d194-4dfb-9706-5516cb48c098"
-	kimiAuthBase  = "https://auth.kimi.com"
-	kimiAPIBase   = "https://api.kimi.com/coding/v1"
-	kimiUserAgent = "KimiCLI/1.0.0"
-)
-
-var tokenFileMu sync.Mutex
 
 type foodRow struct {
 	ID             string `json:"id"`
@@ -68,14 +55,6 @@ type downloadedImage struct {
 	SHA256      string
 }
 
-type kimiDecision struct {
-	FoodMatch    bool    `json:"food_match"`
-	NoWatermark  bool    `json:"no_watermark"`
-	Match        bool    `json:"match"`
-	Confidence   float64 `json:"confidence"`
-	Reason       string  `json:"reason"`
-}
-
 type resultRow struct {
 	FoodID      string        `json:"food_id"`
 	FoodName    string        `json:"food_name"`
@@ -83,7 +62,7 @@ type resultRow struct {
 	Reason      string        `json:"reason,omitempty"`
 	Candidate   string        `json:"candidate,omitempty"`
 	Query       string        `json:"query,omitempty"`
-	Decision    *kimiDecision `json:"decision,omitempty"`
+	Decision    *imageDecision `json:"decision,omitempty"`
 	ObjectKey   string        `json:"object_key,omitempty"`
 	AccessURL   string        `json:"access_url,omitempty"`
 	Uploaded    bool          `json:"uploaded"`
@@ -102,15 +81,7 @@ type stateEntry struct {
 	AccessURL   string    `json:"access_url,omitempty"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	Attempts    int       `json:"attempts"`
-	LastDecision *kimiDecision `json:"last_decision,omitempty"`
-}
-
-type kimiToken struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	TokenType    string    `json:"token_type"`
-	ExpiresIn    int       `json:"expires_in"`
-	ObtainedAt   time.Time `json:"obtained_at"`
+	LastDecision *imageDecision `json:"last_decision,omitempty"`
 }
 
 type options struct {
@@ -119,8 +90,8 @@ type options struct {
 	statePath      string
 	resultsPath    string
 	failedPath     string
-	tokenPath       string
-	kimiAPIKeyPath  string
+	visionAPIKeyPath string
+	dashscopeBaseURL string
 	limit          int
 	offset         int
 	maxCandidates  int
@@ -132,7 +103,7 @@ type options struct {
 	dryRun         bool
 	failedOnly     bool
 	demo           bool
-	authOnly       bool
+	testAPI        bool
 	demoImage      string
 	demoFood       string
 	localImage     string
@@ -157,15 +128,15 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), opts.timeout)
 	defer cancel()
 
-	if opts.authOnly {
-		if err := runAuthOnly(ctx, opts); err != nil {
-			log.Fatalf("Kimi OAuth 登录失败: %v", err)
+	if opts.testAPI {
+		if err := runTestAPI(ctx, opts); err != nil {
+			log.Fatalf("DashScope API 验证失败: %v", err)
 		}
 		return
 	}
 	if opts.demo {
 		if err := runDemo(ctx, opts); err != nil {
-			log.Fatalf("Kimi 图片判断 demo 失败: %v", err)
+			log.Fatalf("图片判定 demo 失败: %v", err)
 		}
 		return
 	}
@@ -181,6 +152,9 @@ func main() {
 		}
 		return
 	}
+	if err := ensureVisionModel(ctx, &opts); err != nil {
+		log.Fatalf("解析视觉模型失败: %v", err)
+	}
 	if err := runBackfill(ctx, opts); err != nil {
 		log.Fatalf("标准食物图片回填失败: %v", err)
 	}
@@ -193,24 +167,24 @@ func parseFlags() options {
 	flag.StringVar(&opts.statePath, "state-file", "", "resume state json path")
 	flag.StringVar(&opts.resultsPath, "results-file", "", "results jsonl path")
 	flag.StringVar(&opts.failedPath, "failed-file", "", "failed jsonl path")
-	flag.StringVar(&opts.tokenPath, "token-file", "tmp/kimi-code-oauth-token.json", "Kimi OAuth token cache path")
-	flag.StringVar(&opts.kimiAPIKeyPath, "kimi-api-key-file", "", "optional Kimi API key file override (default: backend/.env KIMI_API_KEY)")
+	flag.StringVar(&opts.visionAPIKeyPath, "dashscope-api-key-file", "", "optional DashScope API key file override (default: backend/.env DASHSCOPE_API_KEY)")
+	flag.StringVar(&opts.dashscopeBaseURL, "dashscope-base-url", "", "DashScope OpenAI-compatible base URL (default: env DASHSCOPE_BASE_URL or Beijing endpoint)")
 	flag.IntVar(&opts.limit, "limit", 0, "process at most N foods, 0 means all")
 	flag.IntVar(&opts.offset, "offset", 0, "skip first N foods")
 	flag.IntVar(&opts.maxCandidates, "max-candidates", 8, "max downloaded image candidates per food")
 	flag.StringVar(&opts.foodID, "food-id", "", "process only one food id")
 	flag.StringVar(&opts.keyPrefix, "key-prefix", "standard-food/backfill", "COS object key prefix")
-	flag.StringVar(&opts.model, "kimi-model", "kimi-for-coding", "Kimi model name")
-	flag.Float64Var(&opts.threshold, "threshold", 0.72, "minimum Kimi confidence to accept")
+	flag.StringVar(&opts.model, "vision-model", dashScopeModelHint, "DashScope vision model (empty=auto pick qwen3.5-flash from /models)")
+	flag.Float64Var(&opts.threshold, "threshold", 0.72, "minimum vision model confidence to accept")
 	flag.BoolVar(&opts.apply, "apply", false, "upload image and update database")
 	flag.BoolVar(&opts.dryRun, "dry-run", true, "run without uploading or updating database")
 	flag.BoolVar(&opts.failedOnly, "failed-only", false, "process only rows with failed status in state file")
-	flag.BoolVar(&opts.demo, "demo", false, "run a single Kimi image matching demo")
-	flag.BoolVar(&opts.authOnly, "auth-only", false, "run Kimi device OAuth and save token only")
+	flag.BoolVar(&opts.demo, "demo", false, "run a single image matching demo (local file)")
+	flag.BoolVar(&opts.testAPI, "test-api", false, "verify DashScope: list models, Bing fetch, vision classify")
 	flag.StringVar(&opts.demoImage, "demo-image", "tmp/test.jpg", "demo image path")
-	flag.StringVar(&opts.demoFood, "demo-food", "食物", "demo expected food name")
+	flag.StringVar(&opts.demoFood, "demo-food", "凉拌海带丝", "demo / test-api expected food name")
 	flag.StringVar(&opts.localImage, "local-image", "", "use a local image file instead of Bing search; requires --food-id")
-	flag.BoolVar(&opts.trustLocal, "trust-local-image", false, "with --local-image, skip Kimi and accept the file (for upload path verification only)")
+	flag.BoolVar(&opts.trustLocal, "trust-local-image", false, "with --local-image, skip vision model and accept the file (for upload path verification only)")
 	flag.IntVar(&opts.workers, "workers", 1, "parallel worker count for batch processing")
 	flag.StringVar(&opts.imageSearch, "image-search", "bing", "image search provider: google or bing")
 	flag.StringVar(&opts.foodIDs, "food-ids", "", "comma-separated food ids to process (overrides limit/offset)")
@@ -242,25 +216,16 @@ func parseFlags() options {
 	return opts
 }
 
-func runAuthOnly(ctx context.Context, opts options) error {
-	token, err := runDeviceFlow(ctx)
-	if err != nil {
-		return err
-	}
-	if err := saveToken(opts.tokenPath, token); err != nil {
-		return err
-	}
-	fmt.Printf("Kimi token 已保存到 %s\n", opts.tokenPath)
-	return nil
-}
-
 func runDemo(ctx context.Context, opts options) error {
+	if err := ensureVisionModel(ctx, &opts); err != nil {
+		return err
+	}
 	data, err := os.ReadFile(opts.demoImage)
 	if err != nil {
 		return err
 	}
 	contentType := http.DetectContentType(data)
-	decision, err := classifyImageWithAuth(ctx, opts.configDir, opts.tokenPath, opts.kimiAPIKeyPath, opts.model, opts.demoFood, data, contentType)
+	decision, err := classifyFoodImage(ctx, opts.configDir, opts.visionAPIKeyPath, opts.dashscopeBaseURL, opts.model, opts.demoFood, data, contentType)
 	if err != nil {
 		return err
 	}
@@ -328,11 +293,14 @@ func runLocalImageBackfill(ctx context.Context, opts options) error {
 	storageClient := storage.New(cfg.Storage)
 	result := resultRow{FoodID: food.ID, FoodName: food.CanonicalName, ProcessedAt: time.Now()}
 	if opts.trustLocal {
-		result.Decision = &kimiDecision{FoodMatch: true, NoWatermark: true, Match: true, Confidence: 1, Reason: "trust-local-image"}
+		result.Decision = &imageDecision{FoodMatch: true, NoWatermark: true, Match: true, Confidence: 1, Reason: "trust-local-image"}
 	} else {
-		decision, err := classifyImageWithAuth(ctx, opts.configDir, opts.tokenPath, opts.kimiAPIKeyPath, opts.model, food.CanonicalName, img.Data, img.ContentType)
+		if err := ensureVisionModel(ctx, &opts); err != nil {
+			return err
+		}
+		decision, err := classifyFoodImage(ctx, opts.configDir, opts.visionAPIKeyPath, opts.dashscopeBaseURL, opts.model, food.CanonicalName, img.Data, img.ContentType)
 		if err != nil {
-			result.Status = "kimi_failed"
+			result.Status = "vision_failed"
 			result.Reason = err.Error()
 			updateState(state, result)
 			_ = saveState(opts.statePath, state)
@@ -441,9 +409,9 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 	downloaded := 0
 	var lastKimiErr string
 	var lastNoMatchReason string
-	kimiOK := 0
-	var downloadTotal, kimiTotal time.Duration
-	kimiCalls := 0
+	visionOK := 0
+	var downloadTotal, visionTotal time.Duration
+	visionCalls := 0
 	for i, candidate := range candidates {
 		if downloaded >= opts.maxCandidates {
 			break
@@ -457,18 +425,18 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 		}
 		downloaded++
 		printTiming(opts, "download_ok idx=%d duration=%s bytes=%d", i+1, time.Since(dlStart).Round(time.Millisecond), len(img.Data))
-		kimiStart := time.Now()
-		decision, err := classifyImageWithAuth(ctx, opts.configDir, opts.tokenPath, opts.kimiAPIKeyPath, opts.model, food.CanonicalName, img.Data, img.ContentType)
-		kimiDur := time.Since(kimiStart)
-		kimiTotal += kimiDur
-		kimiCalls++
+		visionStart := time.Now()
+		decision, err := classifyFoodImage(ctx, opts.configDir, opts.visionAPIKeyPath, opts.dashscopeBaseURL, opts.model, food.CanonicalName, img.Data, img.ContentType)
+		visionDur := time.Since(visionStart)
+		visionTotal += visionDur
+		visionCalls++
 		if err != nil {
 			lastKimiErr = err.Error()
-			printTiming(opts, "kimi_fail idx=%d duration=%s err=%s", i+1, kimiDur.Round(time.Millisecond), err.Error())
+			printTiming(opts, "vision_fail idx=%d duration=%s err=%s", i+1, visionDur.Round(time.Millisecond), err.Error())
 			continue
 		}
-		kimiOK++
-		printTiming(opts, "kimi_ok idx=%d duration=%s food_match=%v no_watermark=%v match=%v confidence=%.2f", i+1, kimiDur.Round(time.Millisecond), decision.FoodMatch, decision.NoWatermark, decision.Match, decision.Confidence)
+		visionOK++
+		printTiming(opts, "vision_ok idx=%d duration=%s food_match=%v no_watermark=%v match=%v confidence=%.2f", i+1, visionDur.Round(time.Millisecond), decision.FoodMatch, decision.NoWatermark, decision.Match, decision.Confidence)
 		result.Candidate = img.URL
 		result.Query = img.Query
 		result.Decision = decision
@@ -509,36 +477,38 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 	case downloaded == 0:
 		result.Status = "download_failed"
 		result.Reason = "all candidates failed download"
-	case kimiOK == 0:
-		result.Status = "kimi_failed"
+	case visionOK == 0:
+		result.Status = "vision_failed"
 		result.Reason = lastKimiErr
 	case lastNoMatchReason != "" && result.Status != "dry_run_match" && result.Status != "db_updated":
 		result.Status = "no_match"
 		result.Reason = lastNoMatchReason
 	}
-	printTiming(opts, "download_sum duration=%s kimi_sum duration=%s kimi_calls=%d", downloadTotal.Round(time.Millisecond), kimiTotal.Round(time.Millisecond), kimiCalls)
+	printTiming(opts, "download_sum duration=%s vision_sum duration=%s vision_calls=%d", downloadTotal.Round(time.Millisecond), visionTotal.Round(time.Millisecond), visionCalls)
 	printTiming(opts, "food_total food=%s duration=%s status=%s", food.CanonicalName, time.Since(foodStart).Round(time.Millisecond), result.Status)
 	return result
 }
 
 func updateFoodImage(ctx context.Context, db *gorm.DB, foodID, key string) error {
-	pathsJSON, err := json.Marshal([]string{key})
+	paths := []string{key}
+	pathsJSON, err := json.Marshal(paths)
 	if err != nil {
 		return err
 	}
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		res := tx.Exec(`
-UPDATE food_nutrition_library
-SET image_path = ?,
-    image_paths = ?::jsonb,
-    updated_at = now()
-WHERE id::text = ?
-  AND NULLIF(trim(COALESCE(image_path, '')), '') IS NULL
-  AND NOT EXISTS (
+		res := tx.Table("food_nutrition_library").
+			Where("id::text = ?", foodID).
+			Where("NULLIF(trim(COALESCE(image_path, '')), '') IS NULL").
+			Where(`NOT EXISTS (
     SELECT 1
     FROM jsonb_array_elements_text(COALESCE(image_paths, '[]'::jsonb)) AS image_url
     WHERE NULLIF(trim(image_url), '') IS NOT NULL
-  )`, key, string(pathsJSON), foodID)
+  )`).
+			Updates(map[string]interface{}{
+				"image_path":  key,
+				"image_paths": datatypes.JSON(pathsJSON),
+				"updated_at":  gorm.Expr("now()"),
+			})
 		if res.Error != nil {
 			return res.Error
 		}
@@ -696,236 +666,6 @@ func downloadCandidateHTTP(ctx context.Context, candidate imageCandidate, imageS
 	}, nil
 }
 
-func classifyImage(ctx context.Context, token, model, foodName string, data []byte, contentType string) (*kimiDecision, error) {
-	if contentType == "" {
-		contentType = http.DetectContentType(data)
-	}
-	prompt := fmt.Sprintf(
-		"请判断图片是否适合作为“%s”的标准展示图。该图来自 Bing 图片搜索「%s」。只返回 JSON，不要 Markdown。格式必须为 {\"food_match\":true/false,\"no_watermark\":true/false,\"confidence\":0到1,\"reason\":\"中文简短原因\"}。food_match：主体应是搜索词所指的食物或常见同类菜品实拍；若搜索凉拌海带丝，深绿/褐绿条状海带凉菜、碗装凉拌海带丝应判 true；仅当明显是无关食物（如皮蛋黄瓜、地图、包装无关商品）才 false。no_watermark：无平台/店铺/版权/大面积水印；少量配料文字可 true。",
-		foodName, foodName,
-	)
-	payload := map[string]any{
-		"model":       model,
-		"temperature": 0,
-		"max_tokens":  512,
-		"messages": []map[string]any{{
-			"role": "user",
-			"content": []map[string]any{
-				{"type": "text", "text": prompt},
-				{"type": "image_url", "image_url": map[string]any{"url": "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(data)}},
-			},
-		}},
-	}
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, kimiAPIBase+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+strings.TrimPrefix(token, "Bearer "))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", kimiUserAgent)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
-	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("kimi status %d: %s", resp.StatusCode, string(respBody))
-	}
-	var parsed struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return nil, err
-	}
-	if len(parsed.Choices) == 0 {
-		return nil, errors.New("kimi returned no choices")
-	}
-	return parseKimiDecision(parsed.Choices[0].Message.Content)
-}
-
-func classifyImageWithAuth(ctx context.Context, configDir, tokenPath, kimiAPIKeyPath, model, foodName string, data []byte, contentType string) (*kimiDecision, error) {
-	token, err := getKimiAccessToken(ctx, configDir, tokenPath, kimiAPIKeyPath)
-	if err != nil {
-		return nil, err
-	}
-	decision, err := classifyImage(ctx, token, model, foodName, data, contentType)
-	if err == nil {
-		return decision, nil
-	}
-	if strings.Contains(err.Error(), "parse kimi decision") {
-		if retry, retryErr := classifyImage(ctx, token, model, foodName, data, contentType); retryErr == nil {
-			return retry, nil
-		}
-	}
-	if !strings.Contains(err.Error(), "401") && !strings.Contains(err.Error(), "invalid_authentication") {
-		return nil, err
-	}
-	tok := loadToken(tokenPath)
-	if tok.RefreshToken == "" {
-		return nil, err
-	}
-	refreshed, refreshErr := refreshKimiToken(ctx, tok.RefreshToken)
-	if refreshErr != nil {
-		return nil, err
-	}
-	_ = saveToken(tokenPath, refreshed)
-	return classifyImage(ctx, refreshed.AccessToken, model, foodName, data, contentType)
-}
-
-func loadKimiAPIKey(configDir, apiKeyPath string) string {
-	loadBackendEnv(configDir)
-	if manual := strings.TrimSpace(os.Getenv("KIMI_API_KEY")); !isPlaceholderAPIKey(manual) {
-		return strings.TrimPrefix(manual, "Bearer ")
-	}
-	path := strings.TrimSpace(apiKeyPath)
-	if path == "" {
-		return ""
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if key, ok := strings.CutPrefix(line, "KIMI_API_KEY="); ok {
-			key = strings.TrimSpace(key)
-			key = strings.Trim(key, `"'`)
-			if isPlaceholderAPIKey(key) {
-				return ""
-			}
-			return key
-		}
-		key := strings.Trim(line, `"'`)
-		if !isPlaceholderAPIKey(key) {
-			return key
-		}
-	}
-	return ""
-}
-
-func getKimiAccessToken(ctx context.Context, configDir, tokenPath, kimiAPIKeyPath string) (string, error) {
-	tokenFileMu.Lock()
-	defer tokenFileMu.Unlock()
-	if key := loadKimiAPIKey(configDir, kimiAPIKeyPath); key != "" {
-		return key, nil
-	}
-	token := loadToken(tokenPath)
-	if token.AccessToken != "" && time.Since(token.ObtainedAt) < time.Duration(token.ExpiresIn-60)*time.Second {
-		return token.AccessToken, nil
-	}
-	if token.RefreshToken != "" {
-		refreshed, err := refreshKimiToken(ctx, token.RefreshToken)
-		if err == nil {
-			_ = saveToken(tokenPath, refreshed)
-			return refreshed.AccessToken, nil
-		}
-	}
-	fresh, err := runDeviceFlow(ctx)
-	if err != nil {
-		return "", err
-	}
-	_ = saveToken(tokenPath, fresh)
-	return fresh.AccessToken, nil
-}
-
-func runDeviceFlow(ctx context.Context) (kimiToken, error) {
-	values := url.Values{"client_id": {kimiClientID}}
-	var auth struct {
-		DeviceCode              string `json:"device_code"`
-		UserCode                string `json:"user_code"`
-		VerificationURI         string `json:"verification_uri"`
-		VerificationURIComplete string `json:"verification_uri_complete"`
-		Interval                int    `json:"interval"`
-		ExpiresIn               int    `json:"expires_in"`
-	}
-	if err := postFormJSON(ctx, kimiAuthBase+"/api/oauth/device_authorization", values, &auth); err != nil {
-		return kimiToken{}, err
-	}
-	if auth.Interval <= 0 {
-		auth.Interval = 5
-	}
-	authURL := auth.VerificationURIComplete
-	if authURL == "" {
-		authURL = auth.VerificationURI
-	}
-	fmt.Println("请在浏览器打开以下链接完成 Kimi 授权：")
-	fmt.Println(authURL)
-	if auth.UserCode != "" {
-		fmt.Printf("用户码: %s\n", auth.UserCode)
-	}
-	tryOpenBrowser(authURL)
-	deadline := time.Now().Add(time.Duration(auth.ExpiresIn) * time.Second)
-	for time.Now().Before(deadline) {
-		time.Sleep(time.Duration(auth.Interval) * time.Second)
-		var tok kimiToken
-		values := url.Values{
-			"client_id":   {kimiClientID},
-			"device_code": {auth.DeviceCode},
-			"grant_type":  {"urn:ietf:params:oauth:grant-type:device_code"},
-		}
-		err := postFormJSON(ctx, kimiAuthBase+"/api/oauth/token", values, &tok)
-		if err == nil && tok.AccessToken != "" {
-			tok.ObtainedAt = time.Now()
-			return tok, nil
-		}
-		if err != nil && strings.Contains(err.Error(), "slow_down") {
-			auth.Interval += 5
-		} else if err != nil && !strings.Contains(err.Error(), "authorization_pending") {
-			return kimiToken{}, err
-		}
-	}
-	return kimiToken{}, errors.New("kimi device authorization expired")
-}
-
-func refreshKimiToken(ctx context.Context, refreshToken string) (kimiToken, error) {
-	values := url.Values{
-		"client_id":     {kimiClientID},
-		"refresh_token": {refreshToken},
-		"grant_type":    {"refresh_token"},
-	}
-	var tok kimiToken
-	if err := postFormJSON(ctx, kimiAuthBase+"/api/oauth/token", values, &tok); err != nil {
-		return kimiToken{}, err
-	}
-	tok.ObtainedAt = time.Now()
-	return tok, nil
-}
-
-func postFormJSON(ctx context.Context, endpoint string, values url.Values, target any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(values.Encode()))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", kimiUserAgent)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
-	if resp.StatusCode >= 400 {
-		var errBody struct {
-			Error string `json:"error"`
-		}
-		_ = json.Unmarshal(body, &errBody)
-		if errBody.Error != "" {
-			return errors.New(errBody.Error)
-		}
-		return fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
-	}
-	return json.Unmarshal(body, target)
-}
-
 func loadState(path string) stateFile {
 	state := stateFile{Entries: map[string]stateEntry{}}
 	data, err := os.ReadFile(path)
@@ -972,9 +712,9 @@ func shouldSkip(foodID string, state stateFile, failedOnly bool) bool {
 	switch entry.Status {
 	case "db_updated", "dry_run_match":
 		return true
-	case "db_update_failed", "upload_failed":
+	case "db_update_failed", "upload_failed", "vision_failed", "kimi_failed", "search_failed", "download_failed":
 		return false
-	case "no_match", "kimi_failed", "search_failed", "download_failed":
+	case "no_match":
 		return true
 	default:
 		return false
@@ -1030,26 +770,6 @@ func appendJSONL(path string, value any) error {
 	return err
 }
 
-func loadToken(path string) kimiToken {
-	var tok kimiToken
-	data, err := os.ReadFile(path)
-	if err == nil {
-		_ = json.Unmarshal(data, &tok)
-	}
-	return tok
-}
-
-func saveToken(path string, tok kimiToken) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(tok, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o600)
-}
-
 func buildObjectKey(prefix, foodID, hash, ext string) string {
 	prefix = strings.Trim(strings.TrimSpace(prefix), "/")
 	if len(hash) > 16 {
@@ -1099,72 +819,13 @@ func extractJSONObject(value string) string {
 	return value
 }
 
-var (
-	reKimiFoodMatch    = regexp.MustCompile(`"food_match"\s*:\s*(true|false)`)
-	reKimiNoWatermark  = regexp.MustCompile(`"no_watermark"\s*:\s*(true|false)`)
-	reKimiMatch        = regexp.MustCompile(`"match"\s*:\s*(true|false)`)
-	reKimiConfidence   = regexp.MustCompile(`"confidence"\s*:\s*([0-9.]+)`)
-	reKimiReason       = regexp.MustCompile(`"reason"\s*:\s*"((?:\\.|[^"\\])*)"`)
-)
-
-func parseKimiDecision(raw string) (*kimiDecision, error) {
-	content := extractJSONObject(raw)
-	var decision kimiDecision
-	if jsonErr := json.Unmarshal([]byte(content), &decision); jsonErr == nil {
-		normalizeKimiDecision(&decision)
-		return &decision, nil
-	}
-	if parts := reKimiFoodMatch.FindStringSubmatch(content); len(parts) == 2 {
-		decision.FoodMatch = parts[1] == "true"
-	}
-	if parts := reKimiNoWatermark.FindStringSubmatch(content); len(parts) == 2 {
-		decision.NoWatermark = parts[1] == "true"
-	}
-	if parts := reKimiMatch.FindStringSubmatch(content); len(parts) == 2 {
-		decision.Match = parts[1] == "true"
-	}
-	if !decision.FoodMatch && !decision.NoWatermark && !decision.Match {
-		return nil, fmt.Errorf("parse kimi decision %q: invalid json", raw)
-	}
-	if confParts := reKimiConfidence.FindStringSubmatch(content); len(confParts) == 2 {
-		fmt.Sscanf(confParts[1], "%f", &decision.Confidence)
-	}
-	if reasonParts := reKimiReason.FindStringSubmatch(content); len(reasonParts) == 2 {
-		decision.Reason = strings.ReplaceAll(reasonParts[1], `\"`, `"`)
-	}
-	if decision.Reason == "" {
-		decision.Reason = "模型返回不完整，按不匹配处理"
-	}
-	normalizeKimiDecision(&decision)
-	return &decision, nil
-}
-
-func normalizeKimiDecision(decision *kimiDecision) {
-	clampKimiDecision(decision)
-	if decision.FoodMatch || decision.NoWatermark {
-		decision.Match = decision.FoodMatch && decision.NoWatermark
-		return
-	}
-	decision.FoodMatch = decision.Match
-	decision.NoWatermark = decision.Match
-}
-
-func clampKimiDecision(decision *kimiDecision) {
-	if decision.Confidence < 0 {
-		decision.Confidence = 0
-	}
-	if decision.Confidence > 1 {
-		decision.Confidence = 1
-	}
-}
-
 func quoteIdent(value string) string {
 	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
 }
 
 func isFailureStatus(status string) bool {
 	switch status {
-	case "search_failed", "download_failed", "kimi_failed", "upload_failed", "db_update_failed", "no_match":
+	case "search_failed", "download_failed", "vision_failed", "kimi_failed", "upload_failed", "db_update_failed", "no_match":
 		return true
 	default:
 		return false
@@ -1175,18 +836,3 @@ func browserUserAgent() string {
 	return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
 }
 
-func tryOpenBrowser(url string) {
-	if strings.TrimSpace(url) == "" {
-		return
-	}
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	case "darwin":
-		cmd = exec.Command("open", url)
-	default:
-		cmd = exec.Command("xdg-open", url)
-	}
-	_ = cmd.Start()
-}

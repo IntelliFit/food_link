@@ -1,6 +1,6 @@
 # Phase 1: 200 条 dry-run 校准
 $ErrorActionPreference = "Stop"
-. (Join-Path $PSScriptRoot "backfill-require-kimi.ps1")
+. (Join-Path $PSScriptRoot "backfill-require-dashscope.ps1")
 $Root = Split-Path $PSScriptRoot -Parent
 $RunDir = Join-Path $Root "data\standard-food-image-backfill\runs\phase1-dryrun-200"
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null

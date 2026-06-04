@@ -25,7 +25,7 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | uuid | 食物主键 |
-| `canonical_name` | text | 展示名（搜索与 Kimi 判断依据） |
+| `canonical_name` | text | 展示名（搜索与视觉判定依据） |
 | `normalized_name` | text | 规范化名 |
 | `image_path` | text | **主展示图**：COS 对象键（非完整 URL） |
 | `image_paths` | jsonb | 图片键列表；回填成功时写入单元素数组 |
@@ -66,7 +66,7 @@ CLI 查询与 `updateFoodImage` 更新均要求：
 flowchart LR
   A[PostgreSQL 缺图食物] --> B[Bing 图片搜索]
   B --> C[下载 mediaurl 原图]
-  C --> D[Kimi 多模态判定]
+  C --> D[DashScope Qwen 视觉判定]
   D -->|通过| E{dry-run?}
   E -->|是| F[记录 dry_run_match]
   E -->|否| G[上传 COS]
@@ -78,7 +78,7 @@ flowchart LR
 2. **拉取任务**：按 `limit`/`offset`、`--food-id`、`--food-ids` 或断点状态筛选食物。
 3. **Bing 搜图**（默认 `--image-search bing`）：见下文「Bing 取图逻辑」。
 4. **下载候选**：每张图带 `Referer`（优先来源页 `purl`，否则 Bing 搜索页）。
-5. **Kimi 判定**：模型默认 `kimi-for-coding`；需 `food_match`、`no_watermark` 且 `confidence >= threshold`（默认 0.72）。
+5. **视觉判定**：DashScope OpenAI 兼容接口，默认自动选用 `qwen3.5-flash`；需 `food_match`、`no_watermark` 且 `confidence >= threshold`（默认 0.72）。
 6. **落库/上传**：仅 `--apply` 时上传 COS 并 `UPDATE`；默认 `--dry-run` 只输出 `dry_run_match`。
 7. **断点续跑**：`--output-dir` 下 `state.json`、`results.jsonl`、`failed.jsonl` 记录进度。
 
@@ -99,14 +99,18 @@ flowchart LR
 
 ---
 
-## Kimi 鉴权
+## DashScope 鉴权
 
-优先级（见 `main.go`）：
+1. **`backend/.env` 中的 `DASHSCOPE_API_KEY`**（推荐，见 `.env.example`）
+2. 进程环境变量 `DASHSCOPE_API_KEY`（覆盖 .env）
+3. 可选 `--dashscope-api-key-file` 文件覆盖
+4. 可选 `DASHSCOPE_BASE_URL`（默认北京 `https://dashscope.aliyuncs.com/compatible-mode/v1`）
 
-1. **`backend/.env` 中的 `KIMI_API_KEY`**（推荐，见 `.env.example`）
-2. 进程环境变量 `KIMI_API_KEY`（覆盖 .env）
-3. 可选 `--kimi-api-key-file` 文件覆盖
-4. OAuth 设备码令牌 `tmp/kimi-code-oauth-token.json`（`--auth-only` 获取）
+验证 API（拉模型列表 + Bing 取图 + 判定）：
+
+```bash
+go run ./cmd/standard-food-image-backfill --config-dir . --test-api
+```
 
 **勿将 Key 提交仓库**；`.env` 已在 `.gitignore` 中忽略。
 
@@ -124,7 +128,7 @@ go run ./cmd/standard-food-image-backfill --config-dir . \
   --search-query-limit 1 \
   --force-reprocess \
   --timing \
-  --kimi-api-key-file tmp/kimi-api-key.local
+  --vision-model qwen3.5-flash
 
 # 指定多条
 go run ./cmd/standard-food-image-backfill --config-dir . \
@@ -137,10 +141,10 @@ go run ./cmd/standard-food-image-backfill --config-dir . \
   --limit 100 \
   --apply \
   --workers 4 \
-  --kimi-api-key-file tmp/kimi-api-key.local
+  --vision-model qwen3.5-flash
 
-# 仅 OAuth 登录
-go run ./cmd/standard-food-image-backfill --config-dir . --auth-only
+# API 连通性验证（Bing + 视觉判定）
+go run ./cmd/standard-food-image-backfill --config-dir . --test-api
 ```
 
 ### 主要参数
@@ -150,7 +154,8 @@ go run ./cmd/standard-food-image-backfill --config-dir . --auth-only
 | `--dry-run` | true | 为 true 时不传 COS、不 UPDATE |
 | `--apply` | false | 与 dry-run 互斥；开启后写库 |
 | `--max-candidates` | 8 | 每条食物最多下载判定张数 |
-| `--threshold` | 0.72 | Kimi 置信度下限 |
+| `--vision-model` | `qwen3.5-flash` | DashScope 模型（空则自动从 /models 选取） |
+| `--threshold` | 0.72 | 视觉判定置信度下限 |
 | `--output-dir` | `tmp/standard-food-image-backfill` | 状态与结果目录 |
 | `--force-reprocess` | false | 忽略 state 中已完成记录 |
 | `--workers` | 1 | 并行 worker 数 |
@@ -161,9 +166,9 @@ go run ./cmd/standard-food-image-backfill --config-dir . --auth-only
 |--------|------|
 | `dry_run_match` | 判定通过，未上传/未写库 |
 | `db_updated` | 已上传并更新 `image_path` |
-| `no_match` | 候选均未通过 Kimi |
+| `no_match` | 候选均未通过视觉判定 |
 | `search_failed` | Bing 无候选 |
-| `download_failed` / `kimi_failed` | 下载或 API 失败 |
+| `download_failed` / `vision_failed` | 下载或 DashScope API 失败 |
 
 ---
 
@@ -174,7 +179,7 @@ go run ./cmd/standard-food-image-backfill --config-dir . --auth-only
 | `cmd/standard-food-image-backfill/` | 主回填 CLI |
 | `cmd/manual-food-image-audit/` | 手动食物库缺图审计（只读统计） |
 | `scripts/audit_manual_food_image_coverage.py` | 覆盖率审计脚本 |
-| `kimi-api-key.local.example` | 本地 Key 配置模板 |
+| `scripts/backfill-require-dashscope.ps1` | 检查 `DASHSCOPE_API_KEY` |
 
 单元测试（Bing 解析）：`go test ./cmd/standard-food-image-backfill -run TestBing -count=1`  
 需联网 live 测试：`BING_SEARCH_LIVE=1 go test ./cmd/standard-food-image-backfill -run TestSearchBingImagesLive -v`
@@ -184,7 +189,7 @@ go run ./cmd/standard-food-image-backfill --config-dir . --auth-only
 ## 批量运行（1 万+ 条）
 
 1. 基线：`.\scripts\backfill-baseline.ps1`
-2. 在 `backend\.env` 填写 `KIMI_API_KEY`
+2. 在 `backend\.env` 填写 `DASHSCOPE_API_KEY`，并执行 `--test-api` 验证
 3. 试跑：`.\scripts\backfill-phase1-dryrun.ps1`
 4. 持续分片：`copy data\standard-food-image-backfill\scheduler.example.json scheduler.json` 后反复执行 `.\scripts\backfill-run-next.ps1`
 

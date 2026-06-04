@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"food_link/backend/pkg/config"
@@ -34,7 +35,7 @@ type successRecord struct {
 	Uploaded     bool          `json:"uploaded"`
 	DBUpdated    bool          `json:"db_updated"`
 	ProcessedAt  time.Time     `json:"processed_at"`
-	Decision     *kimiDecision `json:"decision,omitempty"`
+	Decision     *imageDecision `json:"decision,omitempty"`
 }
 
 type successSummary struct {
@@ -88,11 +89,22 @@ func runBackfill(ctx context.Context, opts options) error {
 	state := loadState(opts.statePath)
 	storageClient := storage.New(cfg.Storage)
 
+	pendingCount := 0
+	for _, food := range foods {
+		if opts.forceReprocess || !shouldSkip(food.ID, state, opts.failedOnly) {
+			pendingCount++
+		}
+	}
+	fmt.Printf("[启动] 本批次共 %d 条食物，待处理 %d 条（force=%v failedOnly=%v workers=%d）\n",
+		len(foods), pendingCount, opts.forceReprocess, opts.failedOnly, opts.workers)
+
 	var (
 		mu       sync.Mutex
 		results  []resultRow
 		successes []successRecord
 	)
+	var processed int64
+	var successCnt int64
 
 	processOne := func(food foodRow) {
 		if !opts.forceReprocess && shouldSkip(food.ID, state, opts.failedOnly) {
@@ -114,6 +126,16 @@ func runBackfill(ctx context.Context, opts options) error {
 			_ = saveState(opts.statePath, state)
 		}
 		mu.Unlock()
+		current := atomic.AddInt64(&processed, 1)
+		if isSuccessStatus(result.Status) {
+			atomic.AddInt64(&successCnt, 1)
+		}
+		if pendingCount > 0 && (current%10 == 0 || int(current) == pendingCount) {
+			sc := atomic.LoadInt64(&successCnt)
+			fmt.Printf("[进度 %s] %d/%d (%.1f%%) | 成功:%d | 最新[%s] %s\n",
+				time.Now().Format("15:04:05"), current, pendingCount,
+				100.0*float64(current)/float64(pendingCount), sc, result.Status, food.CanonicalName)
+		}
 		fmt.Printf("[%s] %s %s\n", result.Status, food.ID, food.CanonicalName)
 	}
 

@@ -66,7 +66,7 @@ FROM food_nutrition_library;
 
 | 风险 | 处理 |
 |------|------|
-| 无 Kimi Key | 在 `backend/.env` 填写 `KIMI_API_KEY` |
+| 无 DashScope Key | 在 `backend/.env` 填写 `DASHSCOPE_API_KEY`，运行 `--test-api` 验证 |
 | Bing 限流 | 增大 `sleep_ms` |
 | `no_match` | `--failed-only` 二轮 |
 | 错图 | Phase1 人工抽检 30 张 |
