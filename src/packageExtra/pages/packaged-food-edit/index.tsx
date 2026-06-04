@@ -947,7 +947,6 @@ function PackagedFoodEditPage() {
 
               <View className='capture-card reward-capture-card'>
                 <View className='reward-upload-visual'>
-                  <View className='reward-upload-icon'>+</View>
                   <Text className='reward-upload-title'>选择这一种商品的照片</Text>
                   <Text className='reward-upload-desc'>请不要把不同商品混在一组，也不要重复上传已入库的同一规格商品。</Text>
                 </View>

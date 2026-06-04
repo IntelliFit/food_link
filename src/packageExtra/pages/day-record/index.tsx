@@ -22,6 +22,7 @@ import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { getCurrentPosterUserProfile, mergePosterUserProfile } from '../../../utils/poster-profile'
 import { claimSharePosterRewardQuietly } from '../../../utils/share-reward'
+import { collectFoodDisplayImageUrls } from '../../../utils/food-display-image'
 
 /** 格式化数字，最多保留1位小数，避免浮点精度溢出 */
 function formatNumber(value: number): string {
@@ -59,15 +60,6 @@ function summarizeRecordItems(items: FoodRecord['items']) {
     total_fat: Math.round(totals.fat * 10) / 10,
     total_weight_grams: Math.round(totals.weight),
   }
-}
-
-function normalizeDisplayImageUrl(url: string): string {
-  const raw = String(url || '').trim()
-  if (!raw) return ''
-  if (/^https?:\/\/tmp\//i.test(raw)) {
-    return raw.replace(/^https?:\/\/tmp\//i, 'wxfile://tmp/')
-  }
-  return raw
 }
 
 function resolveFoodItemIntakeRatio(item: FoodRecord['items'][number]): number {
@@ -238,11 +230,7 @@ function DayRecordPage() {
         getHomeDashboard(yesterdayStr).catch(() => null),
       ])
       const nextRecords = sortDayRecordCardsByTime((recordRes.records || []).map((record: FoodRecord) => {
-        const imageUrls = ((record.image_paths && record.image_paths.length > 0)
-          ? record.image_paths.filter(Boolean)
-          : (record.image_path ? [record.image_path] : []))
-          .map(normalizeDisplayImageUrl)
-          .filter(Boolean)
+        const imageUrls = collectFoodDisplayImageUrls(record)
 
         const foodItems = (record.items || []).map((item) => {
           const ratio = resolveFoodItemIntakeRatio(item)

@@ -2,6 +2,7 @@ import { View, Text, Image } from '@tarojs/components'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { getCachedMealFullRecord } from '../../../utils/api'
 import type { HomeMealItem, HomeMealRecordEntry } from '../../../utils/api'
+import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from '../../../utils/food-display-image'
 import { formatDisplayNumber } from '../utils/helpers'
 
 const MEAL_ICON_CONFIG = {
@@ -68,12 +69,14 @@ export function MealRecordsDialog({ visible, meal, onClose, onSelectRecord }: Me
           {sortedEntries.map((entry) => {
             const cachedFull = getCachedMealFullRecord(entry.id)
             // 优先从 entry 直接取图（后端已下发），避免缓存未命中导致图片缺失；fallback 到缓存
-            const imageUrl = entry.image_path
-              || entry.image_paths?.[0]
-              || cachedFull?.image_path
-              || cachedFull?.image_paths?.[0]
-              || ''
-            const hasImage = !!imageUrl
+            const imageUrls = collectFoodDisplayImageUrls({
+              image_path: entry.image_path,
+              image_paths: entry.image_paths,
+            })
+            const cachedUrls = cachedFull ? collectFoodDisplayImageUrls(cachedFull) : []
+            const mergedUrls = imageUrls.length > 0 ? imageUrls : cachedUrls
+            const imageUrl = mergedUrls[0] || ''
+            const hasImage = hasFoodDisplayImage({ image_paths: mergedUrls, image_path: imageUrl })
             const time = formatEntryTime(entry.record_time)
             const totalCalories = entry.total_calories ?? 0
             const protein = entry.total_protein ?? cachedFull?.total_protein ?? 0

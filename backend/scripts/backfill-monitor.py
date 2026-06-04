@@ -1,20 +1,33 @@
 #!/usr/bin/env python3
-"""实时监控标准食物图片回填各分片进度（DashScope / Qwen 视觉判定）。"""
+"""htop-style table monitor for standard food image backfill shards (DashScope / Qwen)."""
+from __future__ import annotations
+
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 SHARD_TARGET = 500
 REFRESH_DEFAULT_SEC = 10
-ACTIVE_WRITE_SEC = 45  # 此秒数内有文件更新视为「可能仍在跑」
+ACTIVE_WRITE_SEC = 45
 
-# results/state 中可能有切换模型前的旧状态；监控统一按视觉 API 失败展示。
 API_FAIL_STATUSES = frozenset({"vision_failed", "kimi_failed"})
+RETRY_STATUSES = frozenset(
+    {
+        "vision_failed",
+        "kimi_failed",
+        "db_update_failed",
+        "upload_failed",
+        "search_failed",
+        "download_failed",
+        "no_match",
+    }
+)
 
 
 def load_json(path: Path) -> dict | None:
@@ -31,83 +44,35 @@ def load_json(path: Path) -> dict | None:
 def summarize_state(state_path: Path) -> dict:
     data = load_json(state_path)
     if not data:
-        return {
-            "entries": 0,
-            "counts": Counter(),
-            "ok": 0,
-            "api_fail": 0,
-            "pending_retry": 0,
-        }
+        return {"entries": 0, "counts": Counter(), "ok": 0, "retry": 0, "api_fail": 0}
     entries = data.get("entries") or {}
     counts = Counter(e.get("status", "unknown") for e in entries.values())
     ok = counts.get("db_updated", 0) + counts.get("dry_run_match", 0)
     api_fail = sum(counts.get(s, 0) for s in API_FAIL_STATUSES)
-    pending_retry = sum(
-        counts.get(s, 0)
-        for s in (
-            "vision_failed",
-            "kimi_failed",
-            "db_update_failed",
-            "upload_failed",
-            "search_failed",
-            "download_failed",
-        )
-    )
-    return {
-        "entries": len(entries),
-        "counts": counts,
-        "ok": ok,
-        "api_fail": api_fail,
-        "pending_retry": pending_retry,
-    }
+    retry = sum(counts.get(s, 0) for s in RETRY_STATUSES)
+    return {"entries": len(entries), "counts": counts, "ok": ok, "api_fail": api_fail, "retry": retry}
 
 
-def summarize_results_tail(results_path: Path, tail_n: int = 1) -> dict:
+def summarize_results_tail(results_path: Path) -> dict:
     if not results_path.is_file():
-        return {"lines": 0, "latest_name": "", "latest_status": "", "latest_reason": ""}
-    lines = 0
-    last_row = {}
+        return {"latest_name": "", "latest_status": ""}
+    last_row: dict = {}
     try:
         with results_path.open(encoding="utf-8-sig") as f:
             for line in f:
                 line = line.strip()
-                if not line:
-                    continue
-                lines += 1
-                last_row = json.loads(line)
+                if line:
+                    last_row = json.loads(line)
     except Exception:
         pass
-    reason = (last_row.get("reason") or "")[:80]
-    if len(last_row.get("reason") or "") > 80:
-        reason += "…"
-    return {
-        "lines": lines,
-        "latest_name": last_row.get("food_name", ""),
-        "latest_status": last_row.get("status", ""),
-        "latest_reason": reason,
-    }
+    st = last_row.get("status", "")
+    if st in API_FAIL_STATUSES:
+        st = "vision_fail"
+    return {"latest_name": (last_row.get("food_name") or "")[:14], "latest_status": st[:12]}
 
 
 def read_run_meta(shard_dir: Path) -> dict:
-    meta = load_json(shard_dir / "run-meta.json") or {}
-    started = meta.get("started_at")
-    finished = meta.get("finished_at")
-    return {
-        "workers": meta.get("workers"),
-        "apply": meta.get("apply"),
-        "started_at": started,
-        "finished_at": finished,
-        "exit_code": meta.get("exit_code"),
-    }
-
-
-def parse_iso(ts: str | None) -> datetime | None:
-    if not ts:
-        return None
-    try:
-        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    except ValueError:
-        return None
+    return load_json(shard_dir / "run-meta.json") or {}
 
 
 def file_age_sec(path: Path) -> float | None:
@@ -117,71 +82,109 @@ def file_age_sec(path: Path) -> float | None:
 
 
 def activity_label(shard_dir: Path) -> str:
-    """根据 state/results 最近写入时间推断是否在跑（无 go 进程时也可用）。"""
     ages = []
     for name in ("state.json", "results.jsonl", "run.log"):
         age = file_age_sec(shard_dir / name)
         if age is not None:
             ages.append(age)
     if not ages:
-        return "无数据"
-    min_age = min(ages)
-    if min_age <= ACTIVE_WRITE_SEC:
-        return "写入中"
+        return "idle"
+    if min(ages) <= ACTIVE_WRITE_SEC:
+        return "RUN"
     meta = read_run_meta(shard_dir)
     if meta.get("finished_at"):
-        return "已结束"
-    return "空闲"
+        return "DONE"
+    return "wait"
 
 
-def display_counts(counts: Counter, total: int) -> None:
-    """按业务含义排序展示状态；合并旧状态与当前 Qwen 视觉失败。"""
-    merged = Counter(counts)
-    if merged.get("kimi_failed") or merged.get("vision_failed"):
-        merged["视觉API失败"] = merged.get("vision_failed", 0) + merged.get("kimi_failed", 0)
-        if "vision_failed" in merged:
-            del merged["vision_failed"]
-        if "kimi_failed" in merged:
-            del merged["kimi_failed"]
-
-    order = [
-        "db_updated",
-        "dry_run_match",
-        "视觉API失败",
-        "db_update_failed",
-        "no_match",
-        "search_failed",
-        "download_failed",
-        "upload_failed",
-    ]
-    shown = set()
-    for key in order:
-        if key in merged and merged[key]:
-            n = merged[key]
-            pct = 100.0 * n / total if total else 0
-            print(f"      {key}: {n} ({pct:.1f}%)")
-            shown.add(key)
-    for key, n in merged.most_common():
-        if key in shown or not n:
+def merged_fail_counts(counts: Counter) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for k, v in counts.items():
+        if not v:
             continue
-        pct = 100.0 * n / total if total else 0
-        print(f"      {key}: {n} ({pct:.1f}%)")
+        if k in API_FAIL_STATUSES:
+            out["vision"] = out.get("vision", 0) + v
+        elif k in RETRY_STATUSES:
+            out[k] = out.get(k, 0) + v
+        elif k == "db_updated":
+            out["ok"] = v
+    return out
+
+
+def col_widths(headers: list[str], rows: list[list[str]]) -> list[int]:
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(cell))
+    return widths
+
+
+def render_table(headers: list[str], rows: list[list[str]]) -> list[str]:
+    widths = col_widths(headers, rows)
+    sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+
+    def fmt_row(cells: list[str]) -> str:
+        parts = []
+        for i, w in enumerate(widths):
+            text = cells[i] if i < len(cells) else ""
+            parts.append(" " + text.ljust(w) + " ")
+        return "|" + "|".join(parts) + "|"
+
+    lines = [sep, fmt_row(headers), sep]
+    for row in rows:
+        lines.append(fmt_row(row))
+    lines.append(sep)
+    return lines
+
+
+def clear_screen() -> None:
+    if os.name == "nt":
+        os.system("cls")
+    else:
+        print("\033[2J\033[H", end="")
+
+
+def discover_shard_dirs(root: Path) -> list[Path]:
+    return sorted(
+        (d for d in root.iterdir() if d.is_dir() and re.fullmatch(r"shard-\d{4}", d.name)),
+        key=lambda d: d.name,
+    )
+
+
+def parse_shards_filter(raw: str, root: Path) -> set[str]:
+    """解析 --shards：空/all=runs 下全部分片；支持 6-15、6,7,8。"""
+    text = raw.strip()
+    if not text or text.lower() in {"all", "*"}:
+        return {d.name for d in discover_shard_dirs(root)}
+
+    out: set[str] = set()
+    for part in text.replace(" ", "").split(","):
+        if not part:
+            continue
+        m = re.fullmatch(r"(\d+)-(\d+)", part)
+        if m:
+            lo, hi = int(m.group(1)), int(m.group(2))
+            if lo > hi:
+                lo, hi = hi, lo
+            for n in range(lo, hi + 1):
+                out.add(f"shard-{n:04d}")
+            continue
+        if part.isdigit():
+            out.add(f"shard-{int(part):04d}")
+            continue
+        if re.fullmatch(r"shard-\d{4}", part):
+            out.add(part)
+    return out
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="标准食物图片回填分片监控")
-    parser.add_argument(
-        "-i",
-        "--interval",
-        type=int,
-        default=REFRESH_DEFAULT_SEC,
-        help=f"刷新间隔秒数（默认 {REFRESH_DEFAULT_SEC}）",
-    )
+    parser = argparse.ArgumentParser(description="标准食物图片回填分片监控（表格刷新）")
+    parser.add_argument("-i", "--interval", type=int, default=REFRESH_DEFAULT_SEC)
     parser.add_argument(
         "--shards",
         type=str,
-        default="",
-        help="只监控指定分片，逗号分隔，如 1,2,3",
+        default="all",
+        help="监控分片：默认 all（runs 下全部 shard-XXXX）；也可 1-5、6-15、6,7,8",
     )
     args = parser.parse_args()
     if args.interval < 1:
@@ -193,80 +196,94 @@ def main() -> int:
         print(f"目录不存在: {root}")
         return 1
 
-    filter_shards: set[str] | None = None
-    if args.shards.strip():
-        filter_shards = {f"shard-{int(s):04d}" for s in args.shards.replace(" ", "").split(",") if s}
+    shards_arg_display = args.shards.strip() or "all"
 
-    prev_entries: dict[str, int] = {}
-    while True:
-        os.system("cls" if os.name == "nt" else "clear")
-        now = time.strftime("%Y-%m-%d %H:%M:%S")
-        print(f"=== 标准食物图片回填监控 [{now}] ===")
-        print(f"视觉模型: DashScope / Qwen")
-        print(f"刷新间隔: {args.interval} 秒 | 分片目标: 每片 {SHARD_TARGET} 条（state 唯一食物数）\n")
+    headers = [
+        "shard",
+        "act",
+        "ok",
+        "tgt",
+        "retry",
+        "vision",
+        "db_fail",
+        "nomatch",
+        "mode",
+        "latest",
+    ]
 
-        shards = sorted(d for d in root.iterdir() if d.is_dir() and d.name.startswith("shard-"))
-        if filter_shards:
-            shards = [d for d in shards if d.name in filter_shards]
+    try:
+        while True:
+            filter_shards = parse_shards_filter(args.shards, root)
+            clear_screen()
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            rows: list[list[str]] = []
+            grand_ok = 0
+            grand_retry = 0
+            grand_active = 0
+            shard_n = 0
 
-        grand_ok = 0
-        grand_entries = 0
-        grand_active = 0
+            for shard_dir in discover_shard_dirs(root):
+                if shard_dir.name not in filter_shards:
+                    continue
+                shard_n += 1
+                st = summarize_state(shard_dir / "state.json")
+                res = summarize_results_tail(shard_dir / "results.jsonl")
+                meta = read_run_meta(shard_dir)
+                act = activity_label(shard_dir)
+                if act == "RUN":
+                    grand_active += 1
 
-        for shard_dir in shards:
-            state_info = summarize_state(shard_dir / "state.json")
-            results_info = summarize_results_tail(shard_dir / "results.jsonl")
-            meta = read_run_meta(shard_dir)
+                counts = st["counts"]
+                fail = merged_fail_counts(counts)
+                grand_ok += st["ok"]
+                grand_retry += st["retry"]
 
-            prev = prev_entries.get(shard_dir.name, state_info["entries"])
-            delta = state_info["entries"] - prev
-            prev_entries[shard_dir.name] = state_info["entries"]
+                mode = (meta.get("mode") or "?")[:10]
+                latest = res["latest_name"]
+                if res["latest_status"]:
+                    latest = f"{res['latest_status']} {latest}".strip()[:22]
 
-            grand_ok += state_info["ok"]
-            grand_entries += state_info["entries"]
+                rows.append(
+                    [
+                        shard_dir.name,
+                        act,
+                        str(st["ok"]),
+                        str(SHARD_TARGET),
+                        str(st["retry"]),
+                        str(fail.get("vision", 0)),
+                        str(counts.get("db_update_failed", 0)),
+                        str(counts.get("no_match", 0)),
+                        mode,
+                        latest,
+                    ]
+                )
 
-            activity = activity_label(shard_dir)
-            if activity == "写入中":
-                grand_active += 1
-            icon = {"写入中": "[>>]", "已结束": "[OK]", "空闲": "[--]", "无数据": "[  ]"}.get(activity, "[--]")
+            target = SHARD_TARGET * max(shard_n, 1)
+            pct = 100.0 * grand_ok / target if target else 0.0
 
-            pct_shard = 100.0 * state_info["ok"] / SHARD_TARGET if SHARD_TARGET else 0
-            workers = meta.get("workers")
-            wtxt = f"workers={workers}" if workers else "workers=?"
-            apply_txt = "apply" if meta.get("apply") else "dry-run"
-            print(
-                f"{icon} {shard_dir.name} [{activity}] {wtxt} {apply_txt} | "
-                f"成功 {state_info['ok']}/{SHARD_TARGET} ({pct_shard:.1f}%) | "
-                f"state {state_info['entries']} 条 | +{delta}/轮 | "
-                f"results行 {results_info['lines']}"
-            )
-            if meta.get("started_at"):
-                fin = meta.get("finished_at") or "进行中"
-                print(f"      运行: {meta['started_at']} → {fin}")
-            if state_info["entries"]:
-                display_counts(state_info["counts"], state_info["entries"])
-            if results_info["latest_name"]:
-                st = results_info["latest_status"]
-                if st in API_FAIL_STATUSES:
-                    st = "视觉API失败"
-                print(f"      最新结果: [{st}] {results_info['latest_name']}")
-                if results_info["latest_reason"]:
-                    print(f"      原因: {results_info['latest_reason']}")
+            print(f" food-link backfill monitor | {now} | refresh {args.interval}s")
+            shown = ",".join(sorted(filter_shards)) if filter_shards else "(none)"
+            print(f" vision: DashScope Qwen | filter: {shards_arg_display} | showing {shard_n} shard(s)")
             print()
+            if shard_n == 0:
+                print("  (no matching shards — check --shards or runs/ directory)")
+                print(f"  runs: {root}")
+                print(f"  available: {', '.join(d.name for d in discover_shard_dirs(root))}")
+            else:
+                for line in render_table(headers, rows):
+                    print(line)
+            print()
+            print(
+                f" TOTAL ok {grand_ok}/{target} ({pct:.1f}%) | "
+                f"retry-queue {grand_retry} | active {grand_active}/{shard_n}"
+            )
+            print(f" retry cmd: .\\scripts\\backfill-run-shards.ps1 -Apply -RetryFailed -Workers 8")
+            print(" Ctrl+C exit")
 
-        shard_n = len(shards) or 1
-        target_ok = SHARD_TARGET * shard_n
-        pct_all = 100.0 * grand_ok / target_ok if target_ok else 0
-        print(
-            f"汇总: 成功 {grand_ok}/{target_ok} ({pct_all:.1f}%) | "
-            f"state 条目 {grand_entries} | 活跃分片 {grand_active}/{shard_n}"
-        )
-        print(f"\n按 Ctrl+C 退出。每 {args.interval} 秒刷新。")
-        try:
             time.sleep(args.interval)
-        except KeyboardInterrupt:
-            print("\n已退出监控。")
-            return 0
+    except KeyboardInterrupt:
+        print("\n已退出监控。")
+        return 0
 
 
 if __name__ == "__main__":

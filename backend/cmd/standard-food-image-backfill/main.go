@@ -61,6 +61,7 @@ type resultRow struct {
 	Status      string        `json:"status"`
 	Reason      string        `json:"reason,omitempty"`
 	Candidate   string        `json:"candidate,omitempty"`
+	TriedURLs   []string      `json:"tried_urls,omitempty"`
 	Query       string        `json:"query,omitempty"`
 	Decision    *imageDecision `json:"decision,omitempty"`
 	ObjectKey   string        `json:"object_key,omitempty"`
@@ -75,12 +76,13 @@ type stateFile struct {
 }
 
 type stateEntry struct {
-	Status      string    `json:"status"`
-	Reason      string    `json:"reason,omitempty"`
-	ObjectKey   string    `json:"object_key,omitempty"`
-	AccessURL   string    `json:"access_url,omitempty"`
-	UpdatedAt   time.Time `json:"updated_at"`
-	Attempts    int       `json:"attempts"`
+	Status       string         `json:"status"`
+	Reason       string         `json:"reason,omitempty"`
+	ObjectKey    string         `json:"object_key,omitempty"`
+	AccessURL    string         `json:"access_url,omitempty"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	Attempts     int            `json:"attempts"`
+	TriedURLs    []string       `json:"tried_urls,omitempty"`
 	LastDecision *imageDecision `json:"last_decision,omitempty"`
 }
 
@@ -116,6 +118,7 @@ type options struct {
 	timeout         time.Duration
 	sleep             time.Duration
 	searchQueryLimit  int
+	searchPerQuery    int
 	timing            bool
 	statsOnly         bool
 	statsOutput       string
@@ -193,6 +196,7 @@ func parseFlags() options {
 	flag.DurationVar(&opts.timeout, "timeout", 12*time.Hour, "overall timeout")
 	flag.DurationVar(&opts.sleep, "sleep", 800*time.Millisecond, "delay between search requests")
 	flag.IntVar(&opts.searchQueryLimit, "search-query-limit", 0, "max search queries per food (0 = all, 1 recommended for google+opencli)")
+	flag.IntVar(&opts.searchPerQuery, "search-per-query", 12, "max image URLs to fetch per search query (Bing pages); use higher on retry")
 	flag.BoolVar(&opts.timing, "timing", false, "print per-stage durations to stdout")
 	flag.BoolVar(&opts.statsOnly, "stats-only", false, "print backfill baseline stats and exit")
 	flag.StringVar(&opts.statsOutput, "stats-output", "", "write --stats-only JSON to this file")
@@ -395,12 +399,20 @@ func printTiming(opts options, format string, args ...any) {
 	fmt.Printf("[timing] "+format+"\n", args...)
 }
 
-func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client, opts options, food foodRow) resultRow {
+func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client, opts options, state stateFile, food foodRow) resultRow {
 	foodStart := time.Now()
 	result := resultRow{FoodID: food.ID, FoodName: food.CanonicalName, Status: "search_failed", ProcessedAt: time.Now()}
+	entry := state.Entries[food.ID]
+	tried := triedURLSet(entry.TriedURLs)
+	bingStartPage := 0
+	if len(tried) > 0 {
+		bingStartPage = entry.Attempts % bingMaxSearchPages
+	}
 	searchStart := time.Now()
-	candidates := searchCandidates(food, opts.sleep, opts.imageSearch, opts.searchQueryLimit)
-	printTiming(opts, "image_search provider=%s duration=%s candidates=%d", opts.imageSearch, time.Since(searchStart).Round(time.Millisecond), len(candidates))
+	candidates := searchCandidates(food, opts.sleep, opts.imageSearch, opts.searchQueryLimit, opts.searchPerQuery, bingStartPage)
+	candidates = filterUntriedCandidates(candidates, tried)
+	printTiming(opts, "image_search provider=%s duration=%s candidates=%d tried=%d bing_page=%d",
+		opts.imageSearch, time.Since(searchStart).Round(time.Millisecond), len(candidates), len(tried), bingStartPage)
 	if len(candidates) == 0 {
 		result.Reason = "no image candidates"
 		printTiming(opts, "food_total food=%s duration=%s status=%s", food.CanonicalName, time.Since(foodStart).Round(time.Millisecond), result.Status)
@@ -412,10 +424,16 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 	visionOK := 0
 	var downloadTotal, visionTotal time.Duration
 	visionCalls := 0
+	var triedThisRun []string
 	for i, candidate := range candidates {
 		if downloaded >= opts.maxCandidates {
 			break
 		}
+		if tried[candidate.ImageURL] {
+			continue
+		}
+		tried[candidate.ImageURL] = true
+		triedThisRun = append(triedThisRun, candidate.ImageURL)
 		dlStart := time.Now()
 		img, err := downloadCandidateImage(ctx, candidate, opts.imageSearch)
 		downloadTotal += time.Since(dlStart)
@@ -486,6 +504,9 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 	}
 	printTiming(opts, "download_sum duration=%s vision_sum duration=%s vision_calls=%d", downloadTotal.Round(time.Millisecond), visionTotal.Round(time.Millisecond), visionCalls)
 	printTiming(opts, "food_total food=%s duration=%s status=%s", food.CanonicalName, time.Since(foodStart).Round(time.Millisecond), result.Status)
+	if len(triedThisRun) > 0 {
+		result.TriedURLs = triedThisRun
+	}
 	return result
 }
 
@@ -519,19 +540,25 @@ func updateFoodImage(ctx context.Context, db *gorm.DB, foodID, key string) error
 	})
 }
 
-func searchCandidates(food foodRow, sleep time.Duration, imageSearch string, searchQueryLimit int) []imageCandidate {
+func searchCandidates(food foodRow, sleep time.Duration, imageSearch string, searchQueryLimit, searchPerQuery, bingStartPage int) []imageCandidate {
 	queries := candidateQueries(food)
 	out := []imageCandidate{}
 	seen := map[string]bool{}
-	searchFn := searchBingImages
-	if imageSearch == "google" {
-		searchFn = searchGoogleImages
+	perQuery := searchPerQuery
+	if perQuery <= 0 {
+		perQuery = 12
 	}
 	for i, query := range queries {
 		if searchQueryLimit > 0 && i >= searchQueryLimit {
 			break
 		}
-		for _, candidate := range searchFn(query, 12) {
+		var batch []imageCandidate
+		if imageSearch == "bing" {
+			batch = searchBingImages(query, perQuery, bingStartPage)
+		} else {
+			batch = searchGoogleImages(query, perQuery)
+		}
+		for _, candidate := range batch {
 			if candidate.ImageURL == "" || seen[candidate.ImageURL] {
 				continue
 			}
@@ -542,7 +569,7 @@ func searchCandidates(food foodRow, sleep time.Duration, imageSearch string, sea
 		if sleep > 0 {
 			time.Sleep(sleep)
 		}
-		if imageSearch == "google" && len(out) >= 8 {
+		if imageSearch == "google" && len(out) >= perQuery*2 {
 			break
 		}
 	}
@@ -551,6 +578,49 @@ func searchCandidates(food foodRow, sleep time.Duration, imageSearch string, sea
 		sortCandidatesByURLPreference(out)
 	}
 	return out
+}
+
+func triedURLSet(urls []string) map[string]bool {
+	out := make(map[string]bool, len(urls))
+	for _, u := range urls {
+		u = strings.TrimSpace(u)
+		if u != "" {
+			out[u] = true
+		}
+	}
+	return out
+}
+
+func filterUntriedCandidates(candidates []imageCandidate, tried map[string]bool) []imageCandidate {
+	if len(tried) == 0 {
+		return candidates
+	}
+	out := make([]imageCandidate, 0, len(candidates))
+	for _, c := range candidates {
+		if !tried[c.ImageURL] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func mergeTriedURLs(entry *stateEntry, urls []string) {
+	for _, u := range urls {
+		u = strings.TrimSpace(u)
+		if u == "" {
+			continue
+		}
+		dup := false
+		for _, existing := range entry.TriedURLs {
+			if existing == u {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			entry.TriedURLs = append(entry.TriedURLs, u)
+		}
+	}
 }
 
 func candidateQueries(food foodRow) []string {
@@ -698,6 +768,10 @@ func updateState(state stateFile, result resultRow) {
 	entry.UpdatedAt = time.Now()
 	entry.Attempts++
 	entry.LastDecision = result.Decision
+	mergeTriedURLs(&entry, result.TriedURLs)
+	if result.Candidate != "" {
+		mergeTriedURLs(&entry, []string{result.Candidate})
+	}
 	state.Entries[result.FoodID] = entry
 }
 

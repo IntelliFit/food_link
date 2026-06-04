@@ -83,6 +83,23 @@ func TestShouldSkip(t *testing.T) {
 	assert.False(t, shouldSkip("b", state, true))
 }
 
+func TestFilterUntriedCandidates(t *testing.T) {
+	tried := triedURLSet([]string{"https://a/1.jpg"})
+	cands := []imageCandidate{
+		{ImageURL: "https://a/1.jpg"},
+		{ImageURL: "https://b/2.jpg"},
+	}
+	out := filterUntriedCandidates(cands, tried)
+	require.Len(t, out, 1)
+	assert.Equal(t, "https://b/2.jpg", out[0].ImageURL)
+}
+
+func TestMergeTriedURLs(t *testing.T) {
+	entry := stateEntry{TriedURLs: []string{"https://a/1.jpg"}}
+	mergeTriedURLs(&entry, []string{"https://a/1.jpg", "https://b/2.jpg"})
+	assert.Len(t, entry.TriedURLs, 2)
+}
+
 func TestIsFailureStatus(t *testing.T) {
 	assert.True(t, isFailureStatus("no_match"))
 	assert.True(t, isFailureStatus("vision_failed"))

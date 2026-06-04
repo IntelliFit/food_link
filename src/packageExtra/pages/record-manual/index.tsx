@@ -13,6 +13,11 @@ import {
   type ManualFoodSearchResult,
   type Nutrients,
 } from '../../../utils/api'
+import {
+  collectFoodDisplayImageUrls,
+  hasFoodDisplayImage,
+  pickFoodDisplayImageUrl,
+} from '../../../utils/food-display-image'
 import { withAuth } from '../../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
@@ -519,7 +524,7 @@ function RecordManualPage() {
             displayUnit: servingProfile.displayUnit,
             displayUnitLabel: servingProfile.displayUnitLabel,
             servingPresets: servingProfile.servingPresets,
-            imagePath: item.image_path || item.image_paths?.[0] || null,
+            imagePath: pickFoodDisplayImageUrl(item) || null,
             recommendReason: item.nutrition_highlights?.join(' · ') || item.recommend_reason,
             usageCount: Number(item.usage_count || 0),
             collected: Boolean(item.collected),
@@ -641,9 +646,7 @@ function RecordManualPage() {
       const totalWeight = selectedItems.reduce((s, i) => s + i.weight, 0)
       const mealImagePaths = Array.from(
         new Set(
-          selectedItems
-            .map((item) => (item.imagePath || '').trim())
-            .filter(Boolean)
+          selectedItems.flatMap((item) => collectFoodDisplayImageUrls({ image_path: item.imagePath }))
         )
       )
 
@@ -694,10 +697,10 @@ function RecordManualPage() {
         onClick={() => handleAddItem(item)}
       >
         <View className='food-cover'>
-          {item.image_path || item.image_paths?.[0] ? (
+          {hasFoodDisplayImage(item) ? (
             <Image
               className='food-cover-image'
-              src={item.image_path || item.image_paths?.[0] || ''}
+              src={pickFoodDisplayImageUrl(item)}
               mode='aspectFill'
             />
           ) : (
@@ -859,7 +862,7 @@ function RecordManualPage() {
                 <View key={key} className='selected-item'>
                   <View className='selected-main'>
                     <View className='selected-thumb'>
-                      {item.imagePath ? (
+                      {item.imagePath && hasFoodDisplayImage({ image_path: item.imagePath }) ? (
                         <Image className='selected-thumb-image' src={item.imagePath} mode='aspectFill' />
                       ) : (
                         <View className='selected-thumb-placeholder'>

@@ -77,6 +77,7 @@ import {
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
+import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from '../../utils/food-display-image'
 import { isAllowedRecordDate, isTodayRecordDate } from '../../utils/record-date'
 import { getMembershipCreditSummary, LOW_CREDIT_REWARD_HINT_THRESHOLD } from '../../utils/membership'
 
@@ -106,7 +107,6 @@ const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v1'
 const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v1'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
-const HOME_REWARD_HINT_DISMISSED_DATE_KEY = 'home_reward_hint_dismissed_date_v1'
 
 function isValidHomeDate(date?: string): date is string {
   return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
@@ -794,13 +794,8 @@ function IndexPage() {
   const [petClaiming, setPetClaiming] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = useState<RewardCenterResponse | null>(null)
-  const [rewardHintDismissedDate, setRewardHintDismissedDate] = useState(() => {
-    try {
-      return String(Taro.getStorageSync(HOME_REWARD_HINT_DISMISSED_DATE_KEY) || '')
-    } catch (_) {
-      return ''
-    }
-  })
+  /** 今日可赚积分提示：仅当前停留首页时关闭，不落库；再次进入首页会重新展示 */
+  const [rewardHintDismissed, setRewardHintDismissed] = useState(false)
   const petSummarySeqRef = useRef(0)
   const petDragRef = useRef<{
     pointerId: number
@@ -1214,6 +1209,12 @@ function IndexPage() {
   const skipNextRefreshRef = useRef(false)
 
   Taro.useDidShow(() => {
+    setRewardHintDismissed(false)
+    try {
+      Taro.removeStorageSync('home_reward_hint_dismissed_date_v1')
+    } catch (_) {
+      /* ignore */
+    }
     setPetHidden(getStoredPetHidden())
     const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current
@@ -2192,11 +2193,11 @@ function IndexPage() {
 
   // 餐食图片预览
   const previewHomeMealImages = (meal: HomeMealItem, startIndex = 0) => {
-    const images = meal.images || []
+    const images = collectFoodDisplayImageUrls(meal)
     if (images.length === 0) return
 
     Taro.previewImage({
-      current: images[startIndex],
+      current: images[startIndex] || images[0],
       urls: images
     })
   }
@@ -2730,7 +2731,7 @@ function IndexPage() {
   const rewardHintTasks = rewardCenter?.tasks || []
   const showRewardHint =
     !isGuest &&
-    rewardHintDismissedDate !== getTodayLocalDateKey() &&
+    !rewardHintDismissed &&
     availableRewardCredits > 0 &&
     (membershipCredits.remaining < LOW_CREDIT_REWARD_HINT_THRESHOLD || rewardHintTasks.some(isRewardTaskAvailable))
   const rewardHintTaskText = formatRewardHintTaskText(rewardHintTasks)
@@ -2738,11 +2739,7 @@ function IndexPage() {
     setShowRecordMenu(true)
   }
   const handleDismissRewardHint = () => {
-    const today = getTodayLocalDateKey()
-    try {
-      Taro.setStorageSync(HOME_REWARD_HINT_DISMISSED_DATE_KEY, today)
-    } catch (_) {}
-    setRewardHintDismissedDate(today)
+    setRewardHintDismissed(true)
   }
   const handleDismissBackfillHint = async () => {
     const { confirm } = await Taro.showModal({
@@ -3216,11 +3213,9 @@ function IndexPage() {
                 const mealCalorie = normalizeDisplayNumber(meal.calorie)
                 const mealTarget = normalizeDisplayNumber(meal.target)
                 const mealProgress = normalizeProgressPercent(meal.progress, mealCalorie, mealTarget)
-                const mealImageUrls = Array.isArray(meal.image_paths) && meal.image_paths.length > 0
-                  ? meal.image_paths.filter(Boolean)
-                  : (meal.image_path ? [meal.image_path] : [])
+                const mealImageUrls = collectFoodDisplayImageUrls(meal)
                 const previewImage = mealImageUrls[0] || ''
-                const hasRealImage = mealImageUrls.length > 0
+                const hasRealImage = hasFoodDisplayImage(meal)
                 const mealRecordCount = Array.isArray(meal.meal_record_entries)
                   ? meal.meal_record_entries.filter((entry) => entry && String(entry.id || '').trim()).length
                   : 0
@@ -3239,15 +3234,19 @@ function IndexPage() {
                       className={`meal-media-wrap ${hasRealImage ? 'is-photo' : 'is-icon'}`}
                       onClick={(e) => {
                         e.stopPropagation()
-                        previewHomeMealImages(meal)
+                        if (hasRealImage) previewHomeMealImages(meal)
                       }}
                     >
-                      {hasRealImage && (
+                      {hasRealImage ? (
                         <Image
                           className='meal-thumb-image'
                           src={previewImage}
                           mode='aspectFill'
                         />
+                      ) : (
+                        <View className='meal-icon-wrap' style={{ backgroundColor: bgColor }}>
+                          <Icon size={24} color={color} />
+                        </View>
                       )}
                       <View className='meal-media-type-tag'>
                         <Text className='meal-media-type-tag-text'>{label}</Text>

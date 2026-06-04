@@ -306,7 +306,7 @@ func runTestAPI(ctx context.Context, opts options) error {
 		foodName = "凉拌海带丝"
 	}
 	fmt.Printf("Bing 取图验证: %s\n", foodName)
-	candidates := searchBingImages(foodName, 8)
+	candidates := searchBingImages(foodName, 8, 0)
 	if len(candidates) == 0 {
 		return errors.New("Bing 未返回候选图")
 	}

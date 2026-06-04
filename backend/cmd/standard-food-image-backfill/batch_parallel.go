@@ -110,7 +110,7 @@ func runBackfill(ctx context.Context, opts options) error {
 		if !opts.forceReprocess && shouldSkip(food.ID, state, opts.failedOnly) {
 			return
 		}
-		result := processFood(ctx, db, storageClient, opts, food)
+		result := processFood(ctx, db, storageClient, opts, state, food)
 		mu.Lock()
 		updateState(state, result)
 		results = append(results, result)

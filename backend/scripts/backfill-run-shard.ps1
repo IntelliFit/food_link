@@ -6,34 +6,59 @@ param(
   [switch]$Apply,
   [int]$Workers = 2,
   [int]$SleepMs = 1000,
-  [switch]$ForceReprocess
+  [switch]$ForceReprocess,
+  [switch]$RetryFailed,
+  [int]$QueryOffset = -1
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "backfill-require-dashscope.ps1")
 $Root = Split-Path $PSScriptRoot -Parent
 $DataDir = Join-Path $Root "data\standard-food-image-backfill"
 if ($Shard -lt 1) { throw "Shard must be >= 1" }
-$offset = ($Shard - 1) * $ShardSize
+if ($QueryOffset -ge 0) {
+  $offset = $QueryOffset
+} else {
+  $offset = ($Shard - 1) * $ShardSize
+}
 $runName = "shard-{0:D4}" -f $Shard
 $RunDir = Join-Path $DataDir "runs\$runName"
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 Set-Location $Root
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+$maxCandidates = 8
+$searchQueryLimit = 1
+$searchPerQuery = 12
+$mode = "full"
+if ($RetryFailed) {
+  $mode = "retry-failed"
+  $maxCandidates = 16
+  $searchQueryLimit = 3
+  $searchPerQuery = 28
+}
+
 $log = Join-Path $RunDir "run.log"
 $startUtc = (Get-Date).ToUniversalTime().ToString('o')
 $startTime = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
 @{
   shard = $Shard
+  query_offset = $offset
   workers = $Workers
   apply = $Apply.IsPresent
   sleep_ms = $SleepMs
   started_at = $startUtc
   vision_api = "dashscope"
   vision_model = "qwen3.5-flash"
+  mode = $mode
+  max_candidates = $maxCandidates
+  search_query_limit = $searchQueryLimit
+  search_per_query = $searchPerQuery
+  failed_only = $RetryFailed.IsPresent
 } | ConvertTo-Json | Set-Content (Join-Path $RunDir "run-meta.json") -Encoding UTF8
 Write-Host "===========================================" -ForegroundColor Cyan
-Write-Host "=== [$startTime] $runName 启动 ===" -ForegroundColor Cyan
-Write-Host "参数: offset=$offset limit=$ShardSize apply=$($Apply.IsPresent) workers=$Workers sleep=${SleepMs}ms" -ForegroundColor Cyan
+Write-Host "=== [$startTime] $runName 启动 mode=$mode ===" -ForegroundColor Cyan
+Write-Host "参数: query_offset=$offset limit=$ShardSize apply=$($Apply.IsPresent) workers=$Workers sleep=${SleepMs}ms" -ForegroundColor Cyan
+Write-Host "搜索: max-candidates=$maxCandidates search-query-limit=$searchQueryLimit search-per-query=$searchPerQuery failed-only=$($RetryFailed.IsPresent)" -ForegroundColor Cyan
 Write-Host "目录: $RunDir" -ForegroundColor Cyan
 Write-Host "日志: $log" -ForegroundColor Cyan
 Write-Host "===========================================" -ForegroundColor Cyan
@@ -44,8 +69,9 @@ $goArgs = @(
   "--limit", "$ShardSize",
   "--offset", "$offset",
   "--image-search", "bing",
-  "--search-query-limit", "1",
-  "--max-candidates", "8",
+  "--search-query-limit", "$searchQueryLimit",
+  "--search-per-query", "$searchPerQuery",
+  "--max-candidates", "$maxCandidates",
   "--threshold", "0.72",
   "--workers", "$Workers",
   "--sleep", "${SleepMs}ms",
@@ -56,6 +82,7 @@ $goArgs = @(
 )
 if ($Apply) { $goArgs += "--apply" } else { $goArgs += "--dry-run" }
 if ($ForceReprocess) { $goArgs += "--force-reprocess" }
+if ($RetryFailed) { $goArgs += "--failed-only" }
 go run @goArgs 2>&1 | Tee-Object -FilePath $log
 $exitCode = $LASTEXITCODE
 

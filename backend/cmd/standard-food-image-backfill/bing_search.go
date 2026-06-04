@@ -49,14 +49,17 @@ func bingSearchUserAgent() string {
 	return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.105 Safari/537.36"
 }
 
-func searchBingImages(query string, maxCandidates int) []imageCandidate {
+func searchBingImages(query string, maxCandidates int, startPage int) []imageCandidate {
 	if maxCandidates <= 0 {
 		maxCandidates = 12
+	}
+	if startPage < 0 {
+		startPage = 0
 	}
 	seen := map[string]bool{}
 	out := make([]imageCandidate, 0, maxCandidates)
 
-	for page := 0; page < bingMaxSearchPages && len(out) < maxCandidates; page++ {
+	for page := startPage; page < startPage+bingMaxSearchPages && len(out) < maxCandidates; page++ {
 		first := 1 + page*bingTilesPerPage
 		pageHTML, err := fetchBingSearchHTML(query, first)
 		if err != nil {

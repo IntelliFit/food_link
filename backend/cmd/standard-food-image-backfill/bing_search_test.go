@@ -33,7 +33,7 @@ func TestSearchBingImagesLive(t *testing.T) {
 	if os.Getenv("BING_SEARCH_LIVE") == "" {
 		t.Skip("set BING_SEARCH_LIVE=1 to run")
 	}
-	cands := searchBingImages("凉拌海带丝", 8)
+	cands := searchBingImages("凉拌海带丝", 8, 0)
 	if len(cands) < 1 {
 		t.Fatalf("expected >=1 bing candidate, got %d", len(cands))
 	}
@@ -49,7 +49,7 @@ func TestSaveBingPreviewTop3(t *testing.T) {
 		t.Skip("set BING_SEARCH_LIVE=1 to run")
 	}
 	query := "凉拌海带丝"
-	cands := searchBingImages(query, 3)
+	cands := searchBingImages(query, 3, 0)
 	require.NotEmpty(t, cands)
 	dir := filepath.Join("tmp", "standard-food-image-backfill-bing-one", "preview-python-logic")
 	require.NoError(t, os.MkdirAll(dir, 0o755))

@@ -17,6 +17,7 @@ import {
   type HomeNutritionTarget,
   type SaveFoodRecordRequest
 } from './api'
+import { sanitizeFoodDisplayImageUrl } from './food-display-image'
 
 export const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache'
 export const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 14
@@ -201,7 +202,7 @@ function mergeMealImagePaths(
   const merged: string[] = []
   const seen = new Set<string>()
   const append = (value: string | null | undefined) => {
-    const raw = String(value || '').trim()
+    const raw = sanitizeFoodDisplayImageUrl(value)
     if (!raw || seen.has(raw)) return
     seen.add(raw)
     merged.push(raw)
