@@ -2,6 +2,8 @@ config.yaml
 app-config.yaml
 apollo-config.yaml
 .env
+kimi-api-key.local
+tmp/
 bin/
 
 *.out

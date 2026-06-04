@@ -380,6 +380,7 @@ func (r *ManualFoodRepo) listNutritionCatalogItems(ctx context.Context, category
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
+		row = r.normalizeNutritionFoodItem(row)
 		results = append(results, manualFoodResultFromNutrition(row, 0))
 	}
 	return results, nil
@@ -529,6 +530,7 @@ func (r *ManualFoodRepo) listNutritionLibrary(ctx context.Context, limit int) ([
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
+		row = r.normalizeNutritionFoodItem(row)
 		results = append(results, manualFoodResultFromNutrition(row, 0))
 	}
 	return results, nil
@@ -744,7 +746,8 @@ func (r *ManualFoodRepo) searchNutritionLibrary(ctx context.Context, query strin
 		if row.MatchSource == "canonical" {
 			score += 0.1
 		}
-		results = append(results, manualFoodResultFromNutrition(row.FoodNutrition, score))
+		item := r.normalizeNutritionFoodItem(row.FoodNutrition)
+		results = append(results, manualFoodResultFromNutrition(item, score))
 	}
 	return results, nil
 }
@@ -917,6 +920,8 @@ func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64)
 			Sugar:    item.SugarPer100g,
 			SodiumMg: item.SodiumMgPer100g,
 		},
+		ImagePath:           item.ImagePath,
+		ImagePaths:          item.ImagePaths,
 		PortionLabel:        "100g",
 		SourceLabel:         "标准食物",
 		RecommendReason:     "按克重精调，适合单食材和自制餐",
@@ -1042,6 +1047,21 @@ func manualFoodResultFromFrequentRecord(name string, usageCount int, avgWeight f
 }
 
 func (r *ManualFoodRepo) normalizePublicFoodItem(item publicdomain.PublicFoodItem) publicdomain.PublicFoodItem {
+	if r.storage != nil {
+		item.ImagePaths = r.storage.ResolveReferenceURLs("food-images", item.ImagePaths)
+		if item.ImagePath != nil {
+			resolved := r.storage.ResolveReferenceURL("food-images", *item.ImagePath)
+			item.ImagePath = &resolved
+		}
+	}
+	if item.ImagePath == nil && len(item.ImagePaths) > 0 {
+		first := item.ImagePaths[0]
+		item.ImagePath = &first
+	}
+	return item
+}
+
+func (r *ManualFoodRepo) normalizeNutritionFoodItem(item fooddomain.FoodNutrition) fooddomain.FoodNutrition {
 	if r.storage != nil {
 		item.ImagePaths = r.storage.ResolveReferenceURLs("food-images", item.ImagePaths)
 		if item.ImagePath != nil {

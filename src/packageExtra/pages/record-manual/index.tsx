@@ -1,5 +1,5 @@
 import { View, Text, ScrollView, Input, Image } from '@tarojs/components'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAccessToken,
@@ -302,6 +302,29 @@ function RecordManualPage() {
   const [saving, setSaving] = useState(false)
 
   const normalizedQuery = searchText.trim()
+  const activeCategoryRef = useRef(activeCategory)
+  const catalogPageRef = useRef(catalogPage)
+  const catalogHasMoreRef = useRef(catalogHasMore)
+  const catalogLoadingRef = useRef(false)
+  const catalogLoadingMoreRef = useRef(false)
+  const normalizedQueryRef = useRef('')
+  const catalogRequestSeqRef = useRef(0)
+
+  useEffect(() => {
+    activeCategoryRef.current = activeCategory
+  }, [activeCategory])
+
+  useEffect(() => {
+    catalogPageRef.current = catalogPage
+  }, [catalogPage])
+
+  useEffect(() => {
+    catalogHasMoreRef.current = catalogHasMore
+  }, [catalogHasMore])
+
+  useEffect(() => {
+    normalizedQueryRef.current = normalizedQuery
+  }, [normalizedQuery])
 
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
@@ -326,38 +349,60 @@ function RecordManualPage() {
     applyThemeNavigationBar(scheme, { lightBackground: '#f0fdf4' })
   }, [scheme])
 
-  const loadCatalog = async (category: string, page: number = 1, replace: boolean = true) => {
+  const loadCatalog = useCallback(async (category: string, page: number = 1, replace: boolean = true) => {
+    const requestSeq = ++catalogRequestSeqRef.current
     if (replace) {
+      catalogLoadingRef.current = true
       setCatalogLoading(true)
     } else {
+      catalogLoadingMoreRef.current = true
       setCatalogLoadingMore(true)
     }
     try {
       const data = await fetchManualFoodCatalog(category, page, 30)
+      if (requestSeq !== catalogRequestSeqRef.current || category !== activeCategoryRef.current) {
+        return
+      }
       setCatalogData(data)
+      catalogPageRef.current = data.page
+      catalogHasMoreRef.current = Boolean(data.has_more)
       setCatalogPage(data.page)
       setCatalogHasMore(Boolean(data.has_more))
       setCatalogItems((prev) => replace ? data.items : [...prev, ...data.items])
     } catch (e: any) {
-      await showUnifiedApiError(e, '加载食物目录失败')
+      if (requestSeq === catalogRequestSeqRef.current) {
+        await showUnifiedApiError(e, '加载食物目录失败')
+      }
     } finally {
-      setCatalogLoading(false)
-      setCatalogLoadingMore(false)
+      if (requestSeq === catalogRequestSeqRef.current) {
+        catalogLoadingRef.current = false
+        catalogLoadingMoreRef.current = false
+        setCatalogLoading(false)
+        setCatalogLoadingMore(false)
+      }
     }
-  }
+  }, [])
 
   const handleSelectCategory = (category: string) => {
     if (category === activeCategory) return
+    activeCategoryRef.current = category
     setActiveCategory(category)
     setSearchText('')
     setSearchResults([])
     loadCatalog(category, 1, true)
   }
 
-  const handleLoadMoreCatalog = () => {
-    if (catalogLoading || catalogLoadingMore || !catalogHasMore || normalizedQuery) return
-    loadCatalog(activeCategory, catalogPage + 1, false)
-  }
+  const handleLoadMoreCatalog = useCallback(() => {
+    if (
+      catalogLoadingRef.current ||
+      catalogLoadingMoreRef.current ||
+      !catalogHasMoreRef.current ||
+      normalizedQueryRef.current
+    ) {
+      return
+    }
+    loadCatalog(activeCategoryRef.current, catalogPageRef.current + 1, false)
+  }, [loadCatalog])
 
   useEffect(() => {
     const keyword = normalizedQuery
@@ -412,6 +457,26 @@ function RecordManualPage() {
 
   const categories = catalogData?.categories?.length ? catalogData.categories : DEFAULT_CATALOG_CATEGORIES
   const activeCategoryLabel = categories.find((item) => item.key === activeCategory)?.label || '常见'
+
+  useEffect(() => {
+    if (normalizedQuery || catalogLoading || catalogLoadingMore || !catalogHasMore || visibleItems.length === 0) {
+      return undefined
+    }
+    const page = Taro.getCurrentInstance().page
+    if (!page || typeof Taro.createIntersectionObserver !== 'function') {
+      return undefined
+    }
+
+    // 提示文案一进入屏幕附近就预加载，避免必须滚到整个页面底部才触发。
+    const observer = Taro.createIntersectionObserver(page, { thresholds: [0.1] })
+    observer.relativeToViewport({ bottom: 180 }).observe('.load-more', (res) => {
+      if (res.intersectionRatio > 0) {
+        handleLoadMoreCatalog()
+      }
+    })
+
+    return () => observer.disconnect()
+  }, [catalogHasMore, catalogLoading, catalogLoadingMore, handleLoadMoreCatalog, normalizedQuery, visibleItems.length])
 
   const handleAddItem = (item: ManualFoodSearchResult) => {
     const key = getItemKey(item)
@@ -674,7 +739,12 @@ function RecordManualPage() {
 
   return (
     <View className='record-manual-page'>
-      <ScrollView className='content-scroll' scrollY onScrollToLower={handleLoadMoreCatalog}>
+      <ScrollView
+        className='content-scroll'
+        scrollY
+        lowerThreshold={160}
+        onScrollToLower={handleLoadMoreCatalog}
+      >
         <View className='workspace-card'>
           <View className='workspace-header'>
             <View>
