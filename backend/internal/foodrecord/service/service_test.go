@@ -640,6 +640,52 @@ func TestFoodRecordService_hydrateRecord(t *testing.T) {
 	assert.Equal(t, []string{"https://cdn.example.com/food/fallback.jpg"}, result3.ImagePaths)
 }
 
+func TestFoodRecordService_List_HydratesManualSourceImages(t *testing.T) {
+	db := setupServiceTestDB(t)
+	r := foodrepo.NewFoodRecordRepo(db)
+	tr := foodrepo.NewAnalysisTaskRepo(db)
+	ur := repo.NewUserRepo(db)
+	storageClient := storage.New(config.StorageConfig{CDNFoodImagesBaseURL: "https://cdn.example.com/food"})
+	svc := NewFoodRecordService(r, tr, ur, storageClient)
+
+	manualSource := "nutrition_library"
+	manualSourceID := "nut-rice-1"
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:            manualSourceID,
+		CanonicalName: "白米饭",
+		ImagePath:     strPtr("nutrition/rice.jpg"),
+		KcalPer100g:   151,
+		IsActive:      true,
+	}).Error)
+
+	now := time.Now()
+	record := &domain.FoodRecord{
+		ID:            uuid.New().String(),
+		UserID:        "u1",
+		MealType:      "lunch",
+		TotalCalories: 151,
+		RecordTime:    &now,
+		Items: []domain.FoodItem{{
+			Name:             "白米饭",
+			Weight:           100,
+			Intake:           100,
+			ManualSource:     &manualSource,
+			ManualSourceID:   &manualSourceID,
+			ManualSourceTitle: strPtr("白米饭"),
+		}},
+	}
+	require.NoError(t, db.Create(record).Error)
+
+	records, err := svc.List(context.Background(), "u1", now.In(chinaTZ).Format("2006-01-02"))
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.NotNil(t, records[0].ImagePath)
+	assert.Equal(t, "https://cdn.example.com/food/nutrition/rice.jpg", *records[0].ImagePath)
+	assert.Equal(t, []string{"https://cdn.example.com/food/nutrition/rice.jpg"}, records[0].ImagePaths)
+}
+
+func strPtr(v string) *string { return &v }
+
 func TestNewUploadService(t *testing.T) {
 	client := &storage.Client{}
 	svc := NewUploadService(client)

@@ -1,4 +1,4 @@
-# 运行指定分片（不修改 scheduler.json，可并行多片）
+﻿# Run one backfill shard (does not update scheduler.json; safe to run in parallel)
 param(
   [Parameter(Mandatory = $true)]
   [int]$Shard,

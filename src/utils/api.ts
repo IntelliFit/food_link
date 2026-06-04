@@ -666,8 +666,17 @@ function normalizeHomeMealRecordEntry(entry: HomeMealRecordEntry): HomeMealRecor
   const ratio = typeof entry.intake_ratio === 'number'
     ? entry.intake_ratio
     : (typeof entry.intakeRatio === 'number' ? entry.intakeRatio : computeFoodRecordIntakeRatio(entry.full_record))
+  const entryImagePaths = Array.isArray(entry.image_paths)
+    ? entry.image_paths.filter(Boolean)
+    : (entry.full_record?.image_paths || []).filter(Boolean)
+  const entryImagePath = entry.image_path
+    || entryImagePaths[0]
+    || entry.full_record?.image_path
+    || null
   return {
     ...entry,
+    image_path: entryImagePath,
+    image_paths: entryImagePaths.length > 0 ? entryImagePaths : (entry.image_paths ?? null),
     total_protein: entry.total_protein ?? entry.full_record?.total_protein,
     total_carbs: entry.total_carbs ?? entry.full_record?.total_carbs,
     total_fat: entry.total_fat ?? entry.full_record?.total_fat,
