@@ -4,6 +4,9 @@ apollo-config.yaml
 .env
 kimi-api-key.local
 tmp/
+data/standard-food-image-backfill/runs/
+data/standard-food-image-backfill/baseline.json
+data/standard-food-image-backfill/scheduler.json
 bin/
 
 *.out

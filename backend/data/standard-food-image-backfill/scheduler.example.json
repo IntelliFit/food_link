@@ -1,0 +1,12 @@
+{
+  "shard_size": 500,
+  "next_shard": 1,
+  "workers": 2,
+  "sleep_ms": 1000,
+  "search_query_limit": 1,
+  "max_candidates": 8,
+  "threshold": 0.72,
+  "apply": false,
+  "image_search": "bing",
+  "note": "复制为 scheduler.json 后由 backfill-run-next.ps1 使用；apply=true 时上传 COS 并写库"
+}

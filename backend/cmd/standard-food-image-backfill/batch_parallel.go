@@ -100,12 +100,20 @@ func runBackfill(ctx context.Context, opts options) error {
 		}
 		result := processFood(ctx, db, storageClient, opts, food)
 		mu.Lock()
-		defer mu.Unlock()
 		updateState(state, result)
 		results = append(results, result)
 		if isSuccessStatus(result.Status) {
 			successes = append(successes, resultToSuccessRecord(result))
 		}
+		_ = appendJSONL(opts.resultsPath, result)
+		if isFailureStatus(result.Status) {
+			_ = appendJSONL(opts.failedPath, result)
+		}
+		attempts := state.Entries[result.FoodID].Attempts
+		if opts.checkpointEvery > 0 && attempts%opts.checkpointEvery == 0 {
+			_ = saveState(opts.statePath, state)
+		}
+		mu.Unlock()
 		fmt.Printf("[%s] %s %s\n", result.Status, food.ID, food.CanonicalName)
 	}
 
@@ -138,16 +146,6 @@ func runBackfill(ctx context.Context, opts options) error {
 
 	if err := saveState(opts.statePath, state); err != nil {
 		return err
-	}
-	for _, result := range results {
-		if err := appendJSONL(opts.resultsPath, result); err != nil {
-			return err
-		}
-		if isFailureStatus(result.Status) {
-			if err := appendJSONL(opts.failedPath, result); err != nil {
-				return err
-			}
-		}
 	}
 	if opts.successJSON != "" {
 		summary := successSummary{

@@ -146,6 +146,9 @@ type options struct {
 	sleep             time.Duration
 	searchQueryLimit  int
 	timing            bool
+	statsOnly         bool
+	statsOutput       string
+	checkpointEvery   int
 }
 
 func main() {
@@ -168,6 +171,12 @@ func main() {
 	if strings.TrimSpace(opts.localImage) != "" {
 		if err := runLocalImageBackfill(ctx, opts); err != nil {
 			log.Fatalf("本地图片回填失败: %v", err)
+		}
+		return
+	}
+	if opts.statsOnly {
+		if err := runStats(ctx, opts); err != nil {
+			log.Fatalf("统计失败: %v", err)
 		}
 		return
 	}
@@ -210,6 +219,9 @@ func parseFlags() options {
 	flag.DurationVar(&opts.sleep, "sleep", 800*time.Millisecond, "delay between search requests")
 	flag.IntVar(&opts.searchQueryLimit, "search-query-limit", 0, "max search queries per food (0 = all, 1 recommended for google+opencli)")
 	flag.BoolVar(&opts.timing, "timing", false, "print per-stage durations to stdout")
+	flag.BoolVar(&opts.statsOnly, "stats-only", false, "print backfill baseline stats and exit")
+	flag.StringVar(&opts.statsOutput, "stats-output", "", "write --stats-only JSON to this file")
+	flag.IntVar(&opts.checkpointEvery, "checkpoint-every", 1, "save state.json every N processed foods (0=only at end)")
 	flag.Parse()
 	if opts.imageSearch != "google" && opts.imageSearch != "bing" {
 		log.Fatalf("不支持的 image-search: %s（仅 google 或 bing）", opts.imageSearch)

@@ -180,6 +180,16 @@ go run ./cmd/standard-food-image-backfill --config-dir . --auth-only
 
 ---
 
+## 批量运行（1 万+ 条）
+
+1. 基线：`.\scripts\backfill-baseline.ps1`
+2. 配置 `tmp\kimi-api-key.local`（见 `kimi-api-key.local.example`）
+3. 试跑：`.\scripts\backfill-phase1-dryrun.ps1`
+4. 持续分片：`copy data\standard-food-image-backfill\scheduler.example.json scheduler.json` 后反复执行 `.\scripts\backfill-run-next.ps1`
+
+详细手册：[docs/standard-food-image-backfill-runbook.md](docs/standard-food-image-backfill-runbook.md)  
+数据目录：[data/standard-food-image-backfill/README.md](data/standard-food-image-backfill/README.md)
+
 ## 其它文档
 
 - API / 路由迁移：`docs/backend-api-prd/`
