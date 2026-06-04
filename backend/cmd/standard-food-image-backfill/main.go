@@ -525,8 +525,8 @@ func updateFoodImage(ctx context.Context, db *gorm.DB, foodID, key string) error
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		res := tx.Exec(`
 UPDATE food_nutrition_library
-SET image_path = ?,
-    image_paths = jsonb_build_array(?),
+SET image_path = ?::text,
+    image_paths = jsonb_build_array(?::text),
     updated_at = now()
 WHERE id::text = ?
   AND NULLIF(trim(COALESCE(image_path, '')), '') IS NULL
@@ -966,7 +966,11 @@ func shouldSkip(foodID string, state stateFile, failedOnly bool) bool {
 		return !isFailureStatus(entry.Status)
 	}
 	switch entry.Status {
-	case "db_updated", "dry_run_match", "no_match", "kimi_failed", "search_failed", "download_failed", "upload_failed", "db_update_failed":
+	case "db_updated", "dry_run_match":
+		return true
+	case "db_update_failed", "upload_failed":
+		return false
+	case "no_match", "kimi_failed", "search_failed", "download_failed":
 		return true
 	default:
 		return false
