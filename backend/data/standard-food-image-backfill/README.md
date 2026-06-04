@@ -4,9 +4,7 @@
 
 ## 首次准备
 
-1. 复制 Kimi Key（二选一）：
-   - `copy kimi-api-key.local.example tmp\kimi-api-key.local` 并填入 Key
-   - 或设置环境变量 `KIMI_API_KEY`
+1. 在 `backend\.env` 中填写 `KIMI_API_KEY=`（参考 `.env.example`）
 2. 基线统计：
    ```powershell
    cd backend

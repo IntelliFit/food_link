@@ -9,14 +9,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoadKimiAPIKeyFromFile(t *testing.T) {
+func TestLoadKimiAPIKeyFromEnvFile(t *testing.T) {
+	t.Setenv("KIMI_API_KEY", "")
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("KIMI_API_KEY=sk-from-env\n"), 0o600))
+	assert.Equal(t, "sk-from-env", loadKimiAPIKey(dir, ""))
+}
+
+func TestLoadKimiAPIKeyFromFileOverride(t *testing.T) {
 	t.Setenv("KIMI_API_KEY", "")
 	dir := t.TempDir()
 	path := filepath.Join(dir, "kimi-api-key.local")
-	require.NoError(t, os.WriteFile(path, []byte("# comment\nKIMI_API_KEY=sk-test-key\n"), 0o600))
-	assert.Equal(t, "sk-test-key", loadKimiAPIKey(path))
-	require.NoError(t, os.WriteFile(path, []byte("sk-raw-key\n"), 0o600))
-	assert.Equal(t, "sk-raw-key", loadKimiAPIKey(path))
+	require.NoError(t, os.WriteFile(path, []byte("KIMI_API_KEY=sk-test-key\n"), 0o600))
+	assert.Equal(t, "sk-test-key", loadKimiAPIKey(dir, path))
+}
+
+func TestIsPlaceholderAPIKey(t *testing.T) {
+	assert.True(t, isPlaceholderAPIKey(""))
+	assert.True(t, isPlaceholderAPIKey("在此粘贴你的_Kimi_API_Key"))
+	assert.False(t, isPlaceholderAPIKey("sk-real-key"))
 }
 
 func TestExtractJSONObject(t *testing.T) {

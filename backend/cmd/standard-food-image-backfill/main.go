@@ -153,6 +153,7 @@ type options struct {
 
 func main() {
 	opts := parseFlags()
+	loadBackendEnv(opts.configDir)
 	ctx, cancel := context.WithTimeout(context.Background(), opts.timeout)
 	defer cancel()
 
@@ -193,7 +194,7 @@ func parseFlags() options {
 	flag.StringVar(&opts.resultsPath, "results-file", "", "results jsonl path")
 	flag.StringVar(&opts.failedPath, "failed-file", "", "failed jsonl path")
 	flag.StringVar(&opts.tokenPath, "token-file", "tmp/kimi-code-oauth-token.json", "Kimi OAuth token cache path")
-	flag.StringVar(&opts.kimiAPIKeyPath, "kimi-api-key-file", "tmp/kimi-api-key.local", "local Kimi API key file (see backend/kimi-api-key.local.example)")
+	flag.StringVar(&opts.kimiAPIKeyPath, "kimi-api-key-file", "", "optional Kimi API key file override (default: backend/.env KIMI_API_KEY)")
 	flag.IntVar(&opts.limit, "limit", 0, "process at most N foods, 0 means all")
 	flag.IntVar(&opts.offset, "offset", 0, "skip first N foods")
 	flag.IntVar(&opts.maxCandidates, "max-candidates", 8, "max downloaded image candidates per food")
@@ -259,7 +260,7 @@ func runDemo(ctx context.Context, opts options) error {
 		return err
 	}
 	contentType := http.DetectContentType(data)
-	decision, err := classifyImageWithAuth(ctx, opts.tokenPath, opts.kimiAPIKeyPath, opts.model, opts.demoFood, data, contentType)
+	decision, err := classifyImageWithAuth(ctx, opts.configDir, opts.tokenPath, opts.kimiAPIKeyPath, opts.model, opts.demoFood, data, contentType)
 	if err != nil {
 		return err
 	}
@@ -329,7 +330,7 @@ func runLocalImageBackfill(ctx context.Context, opts options) error {
 	if opts.trustLocal {
 		result.Decision = &kimiDecision{FoodMatch: true, NoWatermark: true, Match: true, Confidence: 1, Reason: "trust-local-image"}
 	} else {
-		decision, err := classifyImageWithAuth(ctx, opts.tokenPath, opts.kimiAPIKeyPath, opts.model, food.CanonicalName, img.Data, img.ContentType)
+		decision, err := classifyImageWithAuth(ctx, opts.configDir, opts.tokenPath, opts.kimiAPIKeyPath, opts.model, food.CanonicalName, img.Data, img.ContentType)
 		if err != nil {
 			result.Status = "kimi_failed"
 			result.Reason = err.Error()
@@ -457,7 +458,7 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 		downloaded++
 		printTiming(opts, "download_ok idx=%d duration=%s bytes=%d", i+1, time.Since(dlStart).Round(time.Millisecond), len(img.Data))
 		kimiStart := time.Now()
-		decision, err := classifyImageWithAuth(ctx, opts.tokenPath, opts.kimiAPIKeyPath, opts.model, food.CanonicalName, img.Data, img.ContentType)
+		decision, err := classifyImageWithAuth(ctx, opts.configDir, opts.tokenPath, opts.kimiAPIKeyPath, opts.model, food.CanonicalName, img.Data, img.ContentType)
 		kimiDur := time.Since(kimiStart)
 		kimiTotal += kimiDur
 		kimiCalls++
@@ -744,8 +745,8 @@ func classifyImage(ctx context.Context, token, model, foodName string, data []by
 	return parseKimiDecision(parsed.Choices[0].Message.Content)
 }
 
-func classifyImageWithAuth(ctx context.Context, tokenPath, kimiAPIKeyPath, model, foodName string, data []byte, contentType string) (*kimiDecision, error) {
-	token, err := getKimiAccessToken(ctx, tokenPath, kimiAPIKeyPath)
+func classifyImageWithAuth(ctx context.Context, configDir, tokenPath, kimiAPIKeyPath, model, foodName string, data []byte, contentType string) (*kimiDecision, error) {
+	token, err := getKimiAccessToken(ctx, configDir, tokenPath, kimiAPIKeyPath)
 	if err != nil {
 		return nil, err
 	}
@@ -773,8 +774,9 @@ func classifyImageWithAuth(ctx context.Context, tokenPath, kimiAPIKeyPath, model
 	return classifyImage(ctx, refreshed.AccessToken, model, foodName, data, contentType)
 }
 
-func loadKimiAPIKey(apiKeyPath string) string {
-	if manual := strings.TrimSpace(os.Getenv("KIMI_API_KEY")); manual != "" {
+func loadKimiAPIKey(configDir, apiKeyPath string) string {
+	loadBackendEnv(configDir)
+	if manual := strings.TrimSpace(os.Getenv("KIMI_API_KEY")); !isPlaceholderAPIKey(manual) {
 		return strings.TrimPrefix(manual, "Bearer ")
 	}
 	path := strings.TrimSpace(apiKeyPath)
@@ -792,17 +794,24 @@ func loadKimiAPIKey(apiKeyPath string) string {
 		}
 		if key, ok := strings.CutPrefix(line, "KIMI_API_KEY="); ok {
 			key = strings.TrimSpace(key)
-			return strings.Trim(key, `"'`)
+			key = strings.Trim(key, `"'`)
+			if isPlaceholderAPIKey(key) {
+				return ""
+			}
+			return key
 		}
-		return strings.Trim(line, `"'`)
+		key := strings.Trim(line, `"'`)
+		if !isPlaceholderAPIKey(key) {
+			return key
+		}
 	}
 	return ""
 }
 
-func getKimiAccessToken(ctx context.Context, tokenPath, kimiAPIKeyPath string) (string, error) {
+func getKimiAccessToken(ctx context.Context, configDir, tokenPath, kimiAPIKeyPath string) (string, error) {
 	tokenFileMu.Lock()
 	defer tokenFileMu.Unlock()
-	if key := loadKimiAPIKey(kimiAPIKeyPath); key != "" {
+	if key := loadKimiAPIKey(configDir, kimiAPIKeyPath); key != "" {
 		return key, nil
 	}
 	token := loadToken(tokenPath)

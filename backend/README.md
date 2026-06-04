@@ -103,11 +103,12 @@ flowchart LR
 
 优先级（见 `main.go`）：
 
-1. 环境变量 `KIMI_API_KEY`
-2. 文件 `--kimi-api-key-file`（默认 `tmp/kimi-api-key.local`，模板见 `kimi-api-key.local.example`）
-3. OAuth 设备码令牌 `tmp/kimi-code-oauth-token.json`（`--auth-only` 获取）
+1. **`backend/.env` 中的 `KIMI_API_KEY`**（推荐，见 `.env.example`）
+2. 进程环境变量 `KIMI_API_KEY`（覆盖 .env）
+3. 可选 `--kimi-api-key-file` 文件覆盖
+4. OAuth 设备码令牌 `tmp/kimi-code-oauth-token.json`（`--auth-only` 获取）
 
-**勿将 Key 提交仓库**；`tmp/` 已在 `.gitignore` 中忽略。
+**勿将 Key 提交仓库**；`.env` 已在 `.gitignore` 中忽略。
 
 ---
 
@@ -183,7 +184,7 @@ go run ./cmd/standard-food-image-backfill --config-dir . --auth-only
 ## 批量运行（1 万+ 条）
 
 1. 基线：`.\scripts\backfill-baseline.ps1`
-2. 配置 `tmp\kimi-api-key.local`（见 `kimi-api-key.local.example`）
+2. 在 `backend\.env` 填写 `KIMI_API_KEY`
 3. 试跑：`.\scripts\backfill-phase1-dryrun.ps1`
 4. 持续分片：`copy data\standard-food-image-backfill\scheduler.example.json scheduler.json` 后反复执行 `.\scripts\backfill-run-next.ps1`
 

@@ -38,7 +38,6 @@ $goArgs = @(
   "--sleep", "$([int]$cfg.sleep_ms)ms",
   "--checkpoint-every", "1",
   "--output-dir", $RunDir,
-  "--kimi-api-key-file", "tmp/kimi-api-key.local",
   "--timeout", "24h",
   "--timing"
 )

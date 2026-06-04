@@ -14,7 +14,6 @@ go run ./cmd/standard-food-image-backfill --config-dir . `
   --workers 2 --sleep 1s --checkpoint-every 1 `
   --dry-run --timing `
   --output-dir $RunDir `
-  --kimi-api-key-file tmp/kimi-api-key.local `
   --timeout 6h 2>&1 | Tee-Object -FilePath $log
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 python (Join-Path $PSScriptRoot "backfill-summarize-results.py") (Join-Path $RunDir "results.jsonl")
