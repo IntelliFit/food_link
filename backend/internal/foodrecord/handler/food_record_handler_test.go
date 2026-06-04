@@ -20,12 +20,14 @@ import (
 type mockFoodRecordService struct {
 	saveRecord             *domain.FoodRecord
 	saveErr                error
+	saveInput              *service.SaveFoodRecordInput
 	listRecords            []domain.FoodRecord
 	listErr                error
 	getRecord              *domain.FoodRecord
 	getErr                 error
 	updateRecord           *domain.FoodRecord
 	updateErr              error
+	updateInput            *service.UpdateFoodRecordInput
 	deleteErr              error
 	shareRecord            *domain.FoodRecord
 	shareErr               error
@@ -33,6 +35,7 @@ type mockFoodRecordService struct {
 }
 
 func (m *mockFoodRecordService) Save(ctx context.Context, userID string, input service.SaveFoodRecordInput) (*domain.FoodRecord, error) {
+	m.saveInput = &input
 	return m.saveRecord, m.saveErr
 }
 func (m *mockFoodRecordService) List(ctx context.Context, userID, date string) ([]domain.FoodRecord, error) {
@@ -42,6 +45,7 @@ func (m *mockFoodRecordService) Get(ctx context.Context, userID, recordID string
 	return m.getRecord, m.getErr
 }
 func (m *mockFoodRecordService) Update(ctx context.Context, userID, recordID string, input service.UpdateFoodRecordInput) (*domain.FoodRecord, error) {
+	m.updateInput = &input
 	return m.updateRecord, m.updateErr
 }
 func (m *mockFoodRecordService) Delete(ctx context.Context, userID, recordID string) error {
@@ -154,6 +158,65 @@ func TestSaveFoodRecord(t *testing.T) {
 	assert.Equal(t, "记录成功", data["message"])
 }
 
+func TestSaveFoodRecordPreservesPackagedAnalysisMetadata(t *testing.T) {
+	mockSvc := &mockFoodRecordService{saveRecord: &domain.FoodRecord{ID: "r1"}}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"meal_type": "lunch",
+		"items": []map[string]any{{
+			"name":                     "雀巢咖啡1+2奶香",
+			"weight":                   52.5,
+			"ratio":                    75,
+			"intake":                   39.375,
+			"gross_weight_grams":       105,
+			"edible_portion_ratio":     1,
+			"edible_portion_reason":    "完整包装",
+			"edible_portion_source":    "vision",
+			"suggested_ratio":          75,
+			"suggested_ratio_reason":   "建议少喝一些",
+			"suggested_ratio_source":   "ai",
+			"water_ml":                 0,
+			"nutrition_source":         "packaged_food_library",
+			"matched_food_id":          "nutrition:coffee",
+			"packaged_food_id":         "packaged:nescafe-105g",
+			"package_match_status":     "matched",
+			"package_match_confidence": 0.96,
+			"package_weight_source":    "packaged_food_library",
+			"package_weight_applied":   true,
+			"package_weight_reason":    "命中包装库净含量105g",
+			"packaged_candidates":      []map[string]any{{"id": "packaged:nescafe-105g", "net_weight_g": 105}},
+			"nutrients":                map[string]any{"calories": 52.5, "protein": 1, "carbs": 10, "fat": 1},
+		}},
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/food-record/save", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	if assert.NotNil(t, mockSvc.saveInput) && assert.Len(t, mockSvc.saveInput.Items, 1) {
+		item := mockSvc.saveInput.Items[0]
+		assert.Equal(t, "雀巢咖啡1+2奶香", item.Name)
+		assert.Equal(t, 52.5, item.Weight)
+		assert.Equal(t, 105.0, item.GrossWeightGrams)
+		if assert.NotNil(t, item.SuggestedRatioSource) {
+			assert.Equal(t, "ai", *item.SuggestedRatioSource)
+		}
+		if assert.NotNil(t, item.NutritionSource) {
+			assert.Equal(t, "packaged_food_library", *item.NutritionSource)
+		}
+		if assert.NotNil(t, item.PackagedFoodID) {
+			assert.Equal(t, "packaged:nescafe-105g", *item.PackagedFoodID)
+		}
+		if assert.NotNil(t, item.PackageWeightApplied) {
+			assert.True(t, *item.PackageWeightApplied)
+		}
+		assert.Len(t, item.PackagedCandidates, 1)
+	}
+}
+
 func TestListFoodRecords(t *testing.T) {
 	mockSvc := &mockFoodRecordService{listRecords: []domain.FoodRecord{{ID: "r1", MealType: "breakfast"}}}
 	h := NewFoodRecordHandler(mockSvc, nil, nil)
@@ -195,6 +258,55 @@ func TestUpdateFoodRecord(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestUpdateFoodRecordPreservesPackagedAnalysisMetadata(t *testing.T) {
+	mockSvc := &mockFoodRecordService{updateRecord: &domain.FoodRecord{ID: "r1", MealType: "lunch"}}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"items": []map[string]any{{
+			"name":                     "喜之郎CiCi果粒爽橙汁饮料",
+			"weight":                   258,
+			"ratio":                    80,
+			"intake":                   206.4,
+			"suggested_ratio":          80,
+			"suggested_ratio_source":   "ai",
+			"nutrition_source":         "packaged_food_library",
+			"packaged_food_id":         "packaged:cici-orange-258g",
+			"package_match_status":     "matched",
+			"package_match_confidence": 0.93,
+			"package_weight_source":    "packaged_food_library",
+			"package_weight_applied":   true,
+			"package_weight_reason":    "命中包装库净含量258g",
+			"packaged_candidates":      []map[string]any{{"id": "packaged:cici-orange-258g", "net_weight_g": 258}},
+			"nutrients":                map[string]any{"calories": 178, "protein": 0, "carbs": 44, "fat": 0},
+		}},
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/food-record/r1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	if assert.NotNil(t, mockSvc.updateInput) && assert.Len(t, mockSvc.updateInput.Items, 1) {
+		item := mockSvc.updateInput.Items[0]
+		assert.Equal(t, "喜之郎CiCi果粒爽橙汁饮料", item.Name)
+		if assert.NotNil(t, item.SuggestedRatioSource) {
+			assert.Equal(t, "ai", *item.SuggestedRatioSource)
+		}
+		if assert.NotNil(t, item.NutritionSource) {
+			assert.Equal(t, "packaged_food_library", *item.NutritionSource)
+		}
+		if assert.NotNil(t, item.PackagedFoodID) {
+			assert.Equal(t, "packaged:cici-orange-258g", *item.PackagedFoodID)
+		}
+		if assert.NotNil(t, item.PackageWeightApplied) {
+			assert.True(t, *item.PackageWeightApplied)
+		}
+		assert.Len(t, item.PackagedCandidates, 1)
+	}
 }
 
 func TestDeleteFoodRecord(t *testing.T) {
@@ -282,6 +394,7 @@ func TestCreatePackagedFood(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{
 		"product_name":       "蛋白棒",
+		"source_image_urls":  []string{"https://cdn.example.com/protein-bar.jpg"},
 		"net_weight_g":       60,
 		"kcal_per_100g":      420,
 		"protein_per_100g":   28,
@@ -301,6 +414,27 @@ func TestCreatePackagedFood(t *testing.T) {
 	item := data["item"].(map[string]any)
 	assert.Equal(t, "蛋白棒", item["product_name"])
 	assert.Equal(t, float64(60), item["net_weight_g"])
+}
+
+func TestCreatePackagedFoodRejectsMissingImage(t *testing.T) {
+	mockSvc := &mockNutritionService{}
+	h := NewFoodRecordHandler(nil, nil, mockSvc)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"product_name":     "蛋白棒",
+		"net_weight_g":     60,
+		"kcal_per_100g":    420,
+		"protein_per_100g": 28,
+		"carbs_per_100g":   42,
+		"fat_per_100g":     14,
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/packaged-food", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
 func TestRecognizePackagedNutritionLabel(t *testing.T) {

@@ -462,6 +462,10 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   transition: box-shadow 0.16s ease, transform 0.16s ease, opacity 0.16s ease;
 }
 
+.pet-companion-card .pet-companion-avatar {
+  animation: pet-idle-breath 3.4s ease-in-out infinite;
+}
+
 .pet-companion-float.is-collapsed .pet-companion-card {
   width: 116rpx;
   min-height: 116rpx;
@@ -997,13 +1001,165 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .pet-companion-card.mood-happy {
-  .pet-body {
-    transform: translateY(-2rpx);
+  .pet-companion-avatar {
+    animation: pet-happy-bounce 1.8s ease-in-out infinite;
   }
 
   .pet-mouth {
     width: 19rpx;
     height: 10rpx;
+  }
+}
+
+.pet-companion-card.state-warming .pet-companion-avatar {
+  animation: pet-wakeup 1.6s ease-in-out infinite;
+}
+
+.pet-companion-card.state-dozing .pet-companion-avatar {
+  animation: pet-dozing-breath 4.2s ease-in-out infinite;
+}
+
+.pet-companion-card.state-low_power {
+  opacity: 0.82;
+
+  .pet-companion-avatar {
+    animation: pet-low-power 2.8s ease-in-out infinite;
+  }
+
+  .pet-body {
+    filter: saturate(0.72);
+  }
+
+  .pet-accessory {
+    opacity: 0.62;
+  }
+}
+
+.pet-companion-card.state-hibernating {
+  opacity: 0.78;
+
+  .pet-companion-avatar {
+    animation: pet-hibernate 5s ease-in-out infinite;
+    transform: translateY(6rpx) scale(0.88);
+  }
+
+  .pet-body {
+    filter: saturate(0.66);
+  }
+
+  .pet-ear,
+  .pet-tail,
+  .pet-accessory {
+    opacity: 0.45;
+  }
+}
+
+.pet-companion-card.state-deep_sleep {
+  opacity: 0.72;
+
+  &::after {
+    content: '';
+    position: absolute;
+    left: 10rpx;
+    top: 10rpx;
+    width: 94rpx;
+    height: 94rpx;
+    border-radius: 50%;
+    border: 2rpx solid rgb(148 163 184 / 22%);
+    background: rgb(255 255 255 / 16%);
+    pointer-events: none;
+  }
+
+  .pet-companion-avatar {
+    animation: pet-deep-sleep 5.4s ease-in-out infinite;
+    transform: translateY(8rpx) scale(0.82);
+  }
+
+  .pet-body {
+    filter: saturate(0.55);
+  }
+
+  .pet-ear,
+  .pet-tail,
+  .pet-accessory {
+    opacity: 0.32;
+  }
+}
+
+@keyframes pet-idle-breath {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-1rpx) scale(1.015);
+  }
+}
+
+@keyframes pet-happy-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  45% {
+    transform: translateY(-4rpx) scale(1.025);
+  }
+}
+
+@keyframes pet-wakeup {
+  0%,
+  100% {
+    transform: translateY(2rpx) scale(0.98);
+  }
+
+  50% {
+    transform: translateY(-3rpx) scale(1.02);
+  }
+}
+
+@keyframes pet-dozing-breath {
+  0%,
+  100% {
+    transform: translateY(2rpx) scale(0.98);
+  }
+
+  50% {
+    transform: translateY(4rpx) scale(0.96);
+  }
+}
+
+@keyframes pet-low-power {
+  0%,
+  100% {
+    transform: translateY(3rpx) rotate(-1deg) scale(0.96);
+  }
+
+  50% {
+    transform: translateY(5rpx) rotate(1deg) scale(0.94);
+  }
+}
+
+@keyframes pet-hibernate {
+  0%,
+  100% {
+    transform: translateY(6rpx) scale(0.88);
+  }
+
+  50% {
+    transform: translateY(8rpx) scale(0.86);
+  }
+}
+
+@keyframes pet-deep-sleep {
+  0%,
+  100% {
+    transform: translateY(8rpx) scale(0.82);
+  }
+
+  50% {
+    transform: translateY(10rpx) scale(0.8);
   }
 }
 

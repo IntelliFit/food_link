@@ -102,6 +102,14 @@ const WAITING_INTERACTION_CARDS: WaitingInteractionCard[] = [
   {
     type: 'quiz',
     eyebrow: '快问快答',
+    title: '包装袋写 418 kJ，大约是多少 kcal？',
+    options: ['约 100 kcal', '约 418 kcal'],
+    answerIndex: 0,
+    reveal: '约 100 kcal。换算关系是 1 kcal = 4.184 kJ，所以 kJ 数字除以 4.184 就是 kcal。'
+  },
+  {
+    type: 'quiz',
+    eyebrow: '快问快答',
     title: '同样 100g，哪个通常热量更高？',
     options: ['米饭', '油条'],
     answerIndex: 1,
@@ -1035,6 +1043,14 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }
     title: '普通联网',
     desc: '结合低成本搜索证据校准包装规格与份量。'
   },
+  fast: {
+    title: '快速模式',
+    desc: '使用 Qwen Flash 快速识别食物与份量。'
+  },
+  fast_web_search: {
+    title: '快速联网',
+    desc: '使用 Qwen Flash 原生联网搜索校准规格与份量。'
+  },
   standard_packaged_experiment: {
     title: '零食库试验',
     desc: '用本地零食库规格校准包装食品重量。'
@@ -1050,6 +1066,10 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }
   strict: {
     title: '精准模式',
     desc: '更细致识别包装文字、小众食物与份量。'
+  },
+  strict_separate: {
+    title: '精准分项',
+    desc: '拆开混合食物，分别估计各成分份量。'
   },
   strict_web_search: {
     title: '精准联网',
@@ -1068,8 +1088,11 @@ const CORRECTION_STAGE_LABELS = ['理解纠错说明', '重新分析食物', '�
 const EXERCISE_STAGE_LABELS = ['理解运动', '估算消耗', '写入记录']
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => {
+  if (value === 'fast') return 'fast'
+  if (value === 'fast_web_search') return 'fast_web_search'
   if (value === 'standard_web_search') return 'standard_web_search'
   if (value === 'standard_packaged_experiment') return 'standard_packaged_experiment'
+  if (value === 'strict_separate') return 'strict_separate'
   if (value === 'strict_web_search') return 'strict_web_search'
   if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
   return 'standard'
@@ -1202,11 +1225,20 @@ const persistAnalyzeContextFromPayload = (payload: Record<string, unknown>) => {
 
 const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
+  if (taskAny.execution_mode === 'fast') {
+    return 'fast'
+  }
+  if (taskAny.execution_mode === 'fast_web_search') {
+    return 'fast_web_search'
+  }
   if (taskAny.execution_mode === 'standard_web_search') {
     return 'standard_web_search'
   }
   if (taskAny.execution_mode === 'standard_packaged_experiment') {
     return 'standard_packaged_experiment'
+  }
+  if (taskAny.execution_mode === 'strict_separate') {
+    return 'strict_separate'
   }
   if (taskAny.execution_mode === 'strict_web_search') {
     return 'strict_web_search'
@@ -1218,11 +1250,20 @@ const pickExecutionModeFromTask = (task: AnalysisTask): ExecutionMode | null => 
     return 'standard'
   }
   const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
+  if (payloadMode === 'fast') {
+    return 'fast'
+  }
+  if (payloadMode === 'fast_web_search') {
+    return 'fast_web_search'
+  }
   if (payloadMode === 'standard_web_search') {
     return 'standard_web_search'
   }
   if (payloadMode === 'standard_packaged_experiment') {
     return 'standard_packaged_experiment'
+  }
+  if (payloadMode === 'strict_separate') {
+    return 'strict_separate'
   }
   if (payloadMode === 'strict_web_search') {
     return 'strict_web_search'
@@ -1729,11 +1770,11 @@ function AnalyzeLoadingPage() {
       ? EXERCISE_STAGE_LABELS
       : taskType === 'food_text'
         ? FOOD_TEXT_STAGE_LABELS
-        : executionMode === 'strict' || executionMode === 'strict_web_search'
+        : executionMode === 'strict' || executionMode === 'strict_separate' || executionMode === 'strict_web_search'
           ? FOOD_STRICT_STAGE_LABELS
           : FOOD_STANDARD_STAGE_LABELS
   const currentCompactStage = compactStageLabels[Math.min(currentStep, compactStageLabels.length - 1)]
-  const showPrecisionLongWaitNotice = taskType === 'food' && (executionMode === 'strict' || executionMode === 'strict_web_search') && !isCorrectionMode
+  const showPrecisionLongWaitNotice = taskType === 'food' && (executionMode === 'strict' || executionMode === 'strict_separate' || executionMode === 'strict_web_search') && !isCorrectionMode
 
   return (
     <View className='analyze-loading-page-v3'>

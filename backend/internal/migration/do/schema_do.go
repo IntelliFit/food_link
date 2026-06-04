@@ -281,6 +281,11 @@ type FoodNutritionDO struct {
 	VitaminB6MgPer100g    float64   `gorm:"column:vitamin_b6_mg_per_100g;type:numeric;not null;default:0"`
 	FolateMcgPer100g      float64   `gorm:"column:folate_mcg_per_100g;type:numeric;not null;default:0"`
 	VitaminB12McgPer100g  float64   `gorm:"column:vitamin_b12_mcg_per_100g;type:numeric;not null;default:0"`
+	ImagePath             *string   `gorm:"column:image_path;type:text"`
+	ImagePaths            []string  `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	ImageSourceURL        *string   `gorm:"column:image_source_url;type:text"`
+	ImageSourceLabel      *string   `gorm:"column:image_source_label;type:text"`
+	ImageLicense          *string   `gorm:"column:image_license;type:text"`
 	IsActive              bool      `gorm:"column:is_active;type:boolean;not null;default:true;index:idx_food_nutrition_library_is_active"`
 	Source                *string   `gorm:"column:source;type:text"`
 	CreatedAt             time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
@@ -879,6 +884,32 @@ type ManualFoodDO struct {
 
 func (ManualFoodDO) TableName() string { return "manual_food_library" }
 
+type UserCustomFoodDO struct {
+	ID                 string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID             string         `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_user_custom_foods_user_title,priority:1;index:idx_user_custom_foods_user_status,priority:1"`
+	Title              string         `gorm:"column:title;type:text;not null"`
+	NormalizedTitle    string         `gorm:"column:normalized_title;type:text;not null;uniqueIndex:idx_user_custom_foods_user_title,priority:2"`
+	Category           string         `gorm:"column:category;type:text;not null;default:'custom';index:idx_user_custom_foods_category"`
+	DefaultWeightGrams float64        `gorm:"column:default_weight_grams;type:numeric;not null;default:100"`
+	TotalCalories      float64        `gorm:"column:total_calories;type:numeric;not null;default:0"`
+	TotalProtein       float64        `gorm:"column:total_protein;type:numeric;not null;default:0"`
+	TotalCarbs         float64        `gorm:"column:total_carbs;type:numeric;not null;default:0"`
+	TotalFat           float64        `gorm:"column:total_fat;type:numeric;not null;default:0"`
+	NutrientsPer100g   map[string]any `gorm:"column:nutrients_per_100g;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ExtraNutrients     map[string]any `gorm:"column:extra_nutrients;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ImagePath          *string        `gorm:"column:image_path;type:text"`
+	ImagePaths         []string       `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	PortionLabel       string         `gorm:"column:portion_label;type:text;not null;default:''"`
+	RecommendReason    string         `gorm:"column:recommend_reason;type:text;not null;default:''"`
+	PublicStatus       string         `gorm:"column:public_status;type:text;not null;default:'private';index:idx_user_custom_foods_public_status"`
+	PublicFoodItemID   *string        `gorm:"column:public_food_item_id;type:uuid;index:idx_user_custom_foods_public_food_item_id"`
+	Status             string         `gorm:"column:status;type:text;not null;default:'active';index:idx_user_custom_foods_user_status,priority:2"`
+	CreatedAt          *time.Time     `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_custom_foods_created_at,sort:desc"`
+	UpdatedAt          *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (UserCustomFoodDO) TableName() string { return "user_custom_foods" }
+
 type PromptDO struct {
 	ID        string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	Name      string     `gorm:"column:name;type:text;not null"`
@@ -981,6 +1012,7 @@ func AllModels() []any {
 		&UserHealthDocumentDO{},
 		&UserModeSwitchLogDO{},
 		&ManualFoodDO{},
+		&UserCustomFoodDO{},
 		&PromptDO{},
 		&PromptHistoryDO{},
 		&TestDatasetDO{},

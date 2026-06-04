@@ -13,9 +13,9 @@
 
 .mode-switch-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10rpx;
-  width: 360rpx;
+  width: 430rpx;
 }
 
 .mode-switch-item {
@@ -58,6 +58,88 @@
   font-size: 20rpx;
   color: #b45309;
   line-height: 1.5;
+}
+
+.analysis-options-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12rpx;
+  padding: 14rpx 20rpx 16rpx;
+  border-top: 1rpx solid rgb(0 0 0 / 3%);
+}
+
+.analysis-option-card {
+  min-width: 0;
+  min-height: 68rpx;
+  padding: 10rpx 12rpx;
+  border-radius: 14rpx;
+  border: 2rpx solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8rpx;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+
+  &.active {
+    border-color: rgb(0 188 125 / 35%);
+    background: rgb(0 188 125 / 8%);
+  }
+
+  &.disabled {
+    opacity: 0.56;
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+.analysis-option-card-left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.analysis-option-title {
+  min-width: 0;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 700;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.analysis-option-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 64rpx;
+  height: 36rpx;
+  border-radius: 999rpx;
+  background: #e5e7eb;
+  transition: background 0.2s ease;
+
+  &--on {
+    background: #00bc7d;
+  }
+}
+
+.analysis-option-switch-knob {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 28rpx;
+  height: 28rpx;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2rpx 6rpx rgb(0 0 0 / 12%);
+  transition: transform 0.2s ease;
+}
+
+.analysis-option-switch--on .analysis-option-switch-knob {
+  transform: translateX(28rpx);
 }
 
 .experiment-mode-panel {
@@ -704,6 +786,11 @@
   justify-content: space-between;
   padding: 14rpx 20rpx;
   border-top: 1rpx solid rgb(0 0 0 / 3%);
+  transition: opacity 0.2s ease;
+
+  &.disabled {
+    opacity: 0.56;
+  }
 
   .multiview-compact-left {
     display: flex;
@@ -739,6 +826,10 @@
 
   &--on {
     background: #00bc7d;
+  }
+
+  &--disabled {
+    background: #e5e7eb;
   }
 }
 

@@ -1,0 +1,258 @@
+query,expected_canonical_name,category,comment
+白米饭,白米饭,rice,exact canonical
+白饭,白米饭,rice,common alias
+熟米饭,白米饭,rice,cooked alias
+大米饭,白米饭,rice,common alias
+蒸米饭,白米饭,rice,cooking state
+熟白饭,白米饭,rice,cooked alias
+蒸白饭,白米饭,rice,cooking state
+白米熟饭,白米饭,rice,word order variant
+米饭熟,白米饭,rice,word order variant
+米饭,白米饭,rice,short common name
+白米,白米饭,rice,ingredient shorthand
+白米饭熟,白米饭,rice,cooked suffix
+米饭一份,白米饭,rice,user phrase
+一碗米饭,白米饭,rice,user phrase with measure
+一碗白饭,白米饭,rice,user phrase with measure
+大碗米饭,白米饭,rice,user phrase with measure
+小碗米饭,白米饭,rice,user phrase with measure
+米饭半碗,白米饭,rice,user phrase with measure
+白米饭半碗,白米饭,rice,user phrase with measure
+隔夜米饭,白米饭,rice,state variant
+玉米(熟),玉米(熟),corn,exact canonical
+煮玉米,玉米(熟),corn,historical bad alias guard
+水煮玉米,玉米(熟),corn,cooking state
+熟玉米,玉米(熟),corn,cooked alias
+蒸玉米,玉米(熟),corn,cooking state
+玉米棒,玉米(熟),corn,common alias
+玉米棒子,玉米(熟),corn,common alias
+苞米,玉米(熟),corn,regional name
+苞米棒,玉米(熟),corn,regional name
+熟苞米,玉米(熟),corn,regional cooked name
+水煮苞米,玉米(熟),corn,regional cooking state
+煮苞米,玉米(熟),corn,regional cooking state
+蒸苞米,玉米(熟),corn,regional cooking state
+玉米穗,玉米(熟),corn,common alias
+甜玉米,玉米(熟),corn,variety shorthand
+熟甜玉米,玉米(熟),corn,cooked variety
+玉米粒,玉米(熟),corn,edible part
+熟玉米粒,玉米(熟),corn,cooked edible part
+玉米段,玉米(熟),corn,user phrase
+烤玉米,玉米(熟),corn,cooking state
+鸡蛋,鸡蛋,egg,exact canonical
+蛋,鸡蛋,egg,short alias
+整鸡蛋,鸡蛋,egg,whole egg
+普通鸡蛋,鸡蛋,egg,common alias
+鲜鸡蛋,鸡蛋,egg,fresh state
+鸡卵,鸡蛋,egg,regional/written alias
+全蛋,鸡蛋,egg,whole egg
+全鸡蛋,鸡蛋,egg,whole egg
+鸡蛋全蛋,鸡蛋,egg,whole egg
+整颗鸡蛋,鸡蛋,egg,user phrase
+鸡蛋整颗,鸡蛋,egg,user phrase
+水煮蛋,鸡蛋,egg,cooking state
+煮鸡蛋,鸡蛋,egg,cooking state
+白煮蛋,鸡蛋,egg,cooking state
+熟鸡蛋,鸡蛋,egg,cooked state
+荷包蛋,鸡蛋,egg,cooking state
+煎鸡蛋,鸡蛋,egg,cooking state
+鸡蛋一个,鸡蛋,egg,user phrase with count
+一个鸡蛋,鸡蛋,egg,user phrase with count
+半个鸡蛋,鸡蛋,egg,user phrase with count
+禽肉（去皮鸡胸肉）,禽肉（去皮鸡胸肉）,chicken,exact canonical
+鸡胸肉,禽肉（去皮鸡胸肉）,chicken,common alias
+鸡胸,禽肉（去皮鸡胸肉）,chicken,short alias
+去皮鸡胸,禽肉（去皮鸡胸肉）,chicken,body part
+去皮鸡胸肉,禽肉（去皮鸡胸肉）,chicken,body part
+水煮鸡胸,禽肉（去皮鸡胸肉）,chicken,cooking state
+水煮鸡胸肉,禽肉（去皮鸡胸肉）,chicken,cooking state
+煎鸡胸肉,禽肉（去皮鸡胸肉）,chicken,cooking state
+熟鸡胸,禽肉（去皮鸡胸肉）,chicken,cooked state
+去皮熟鸡胸,禽肉（去皮鸡胸肉）,chicken,cooked body part
+鸡胸熟肉,禽肉（去皮鸡胸肉）,chicken,cooked body part
+鸡胸肉熟,禽肉（去皮鸡胸肉）,chicken,cooked suffix
+烤鸡胸,禽肉（去皮鸡胸肉）,chicken,cooking state
+烤鸡胸肉,禽肉（去皮鸡胸肉）,chicken,cooking state
+鸡胸肉一块,禽肉（去皮鸡胸肉）,chicken,user phrase
+鸡胸肉片,禽肉（去皮鸡胸肉）,chicken,shape variant
+鸡胸切片,禽肉（去皮鸡胸肉）,chicken,shape variant
+低脂鸡胸,禽肉（去皮鸡胸肉）,chicken,common diet phrase
+健身鸡胸肉,禽肉（去皮鸡胸肉）,chicken,common diet phrase
+牛奶(全脂),牛奶(全脂),milk,exact canonical
+牛奶,牛奶(全脂),milk,common alias
+全脂牛奶,牛奶(全脂),milk,fat level
+纯牛奶,牛奶(全脂),milk,common alias
+普通牛奶,牛奶(全脂),milk,common alias
+鲜牛奶,牛奶(全脂),milk,common alias
+全脂奶,牛奶(全脂),milk,short alias
+鲜奶,牛奶(全脂),milk,short alias
+全脂纯牛奶,牛奶(全脂),milk,fat level
+普通纯牛奶,牛奶(全脂),milk,common alias
+纯鲜奶,牛奶(全脂),milk,short alias
+盒装牛奶,牛奶(全脂),milk,serving phrase
+一杯牛奶,牛奶(全脂),milk,user phrase with measure
+热牛奶,牛奶(全脂),milk,temperature state
+冷牛奶,牛奶(全脂),milk,temperature state
+早餐牛奶,牛奶(全脂),milk,meal phrase
+西兰花,西兰花,vegetable,exact canonical
+西蓝花,西兰花,vegetable,alternate writing
+青花菜,西兰花,vegetable,common alias
+绿花菜,西兰花,vegetable,common alias
+西兰花菜,西兰花,vegetable,user phrase
+西蓝花菜,西兰花,vegetable,alternate writing
+绿菜花,西兰花,vegetable,common alias
+水煮西兰花,西兰花,vegetable,cooking state
+清炒西兰花,西兰花,vegetable,cooking state
+蒸西兰花,西兰花,vegetable,cooking state
+熟西兰花,西兰花,vegetable,cooked state
+西兰花小朵,西兰花,vegetable,edible part phrase
+西蓝花小朵,西兰花,vegetable,alternate writing
+西兰花半碗,西兰花,vegetable,user phrase with measure
+香蕉,香蕉,fruit,exact canonical
+香蕉肉,香蕉,fruit,edible part
+香蕉果肉,香蕉,fruit,edible part
+熟香蕉,香蕉,fruit,ripe state
+新鲜香蕉,香蕉,fruit,fresh state
+去皮香蕉,香蕉,fruit,edible part
+香蕉去皮,香蕉,fruit,edible part
+普通香蕉,香蕉,fruit,common alias
+香蕉一根,香蕉,fruit,user phrase with count
+一根香蕉,香蕉,fruit,user phrase with count
+半根香蕉,香蕉,fruit,user phrase with count
+大香蕉,香蕉,fruit,size phrase
+小香蕉,香蕉,fruit,size phrase
+苹果,苹果,fruit,exact canonical
+红苹果,苹果,fruit,variety phrase
+苹果肉,苹果,fruit,edible part
+新鲜苹果,苹果,fruit,fresh state
+富士苹果,苹果,fruit,variety phrase
+苹果果肉,苹果,fruit,edible part
+苹果去皮,苹果,fruit,edible part
+去皮苹果,苹果,fruit,edible part
+普通苹果,苹果,fruit,common alias
+一个苹果,苹果,fruit,user phrase with count
+半个苹果,苹果,fruit,user phrase with count
+苹果半个,苹果,fruit,user phrase with count
+苹果块,苹果,fruit,shape phrase
+切块苹果,苹果,fruit,shape phrase
+燕麦片,燕麦片,grain,exact canonical
+燕麦,燕麦片,grain,short alias
+即食燕麦,燕麦片,grain,product phrase
+即食燕麦片,燕麦片,grain,product phrase
+原味燕麦片,燕麦片,grain,plain flavor
+纯燕麦片,燕麦片,grain,plain flavor
+原味燕麦,燕麦片,grain,plain flavor
+纯燕麦,燕麦片,grain,plain flavor
+燕麦熟片,燕麦片,grain,user phrase
+干燕麦片,燕麦片,grain,dry state
+泡燕麦,燕麦片,grain,cooking state
+泡燕麦片,燕麦片,grain,cooking state
+燕麦粥,燕麦片,grain,cooking state
+一碗燕麦,燕麦片,grain,user phrase with measure
+红薯,红薯,sweet_potato,exact canonical
+地瓜,红薯,sweet_potato,regional alias
+甘薯,红薯,sweet_potato,common alias
+番薯,红薯,sweet_potato,regional alias
+熟红薯,红薯,sweet_potato,cooked state
+烤红薯,红薯,sweet_potato,cooking state
+蒸红薯,红薯,sweet_potato,cooking state
+水煮红薯,红薯,sweet_potato,cooking state
+红薯熟,红薯,sweet_potato,cooked suffix
+熟番薯,红薯,sweet_potato,regional cooked alias
+熟地瓜,红薯,sweet_potato,regional cooked alias
+烤地瓜,红薯,sweet_potato,regional cooking state
+蒸地瓜,红薯,sweet_potato,regional cooking state
+半个红薯,红薯,sweet_potato,user phrase with count
+一块红薯,红薯,sweet_potato,user phrase with count
+玉米肠,玉米肠,processed_guard,processed exact
+即食玉米肠,玉米肠,processed_guard,processed alias
+鸡肉玉米肠,玉米肠,processed_guard,processed alias
+煎玉米肠,玉米肠,processed_guard,processed cooking state
+一根玉米肠,玉米肠,processed_guard,processed user phrase
+米饭100g,白米饭,rice,quantity suffix
+白米饭100克,白米饭,rice,quantity suffix
+米饭150克,白米饭,rice,quantity suffix
+白饭200g,白米饭,rice,quantity suffix
+一小碗米饭,白米饭,rice,measure phrase
+一大碗白饭,白米饭,rice,measure phrase
+半碗白米饭,白米饭,rice,measure phrase
+剩米饭,白米饭,rice,state variant
+昨晚剩饭,白米饭,rice,state variant
+盒饭里的米饭,白米饭,rice,mixed context
+米饭底,白米饭,rice,context phrase
+盖浇饭米饭,白米饭,rice,mixed context
+熟玉米100g,玉米(熟),corn,quantity suffix
+玉米棒100克,玉米(熟),corn,quantity suffix
+一根煮玉米,玉米(熟),corn,measure phrase
+半根玉米,玉米(熟),corn,measure phrase
+半截玉米,玉米(熟),corn,measure phrase
+玉米粒100g,玉米(熟),corn,quantity suffix
+熟玉米粒,玉米(熟),corn,cooked state
+煮熟的玉米,玉米(熟),corn,cooked phrase
+水煮苞米,玉米(熟),corn,regional cooking state
+蒸苞米,玉米(熟),corn,regional cooking state
+非玉米肠的玉米,玉米(熟),corn,processed negative phrase
+鸡蛋1个,鸡蛋,egg,count suffix
+鸡蛋一个,鸡蛋,egg,count suffix
+鸡蛋两个,鸡蛋,egg,count suffix
+2个鸡蛋,鸡蛋,egg,count prefix
+水煮蛋一个,鸡蛋,egg,count phrase
+煮蛋两个,鸡蛋,egg,count phrase
+熟鸡蛋100g,鸡蛋,egg,quantity suffix
+鸡蛋白加蛋黄,鸡蛋,egg,whole egg phrase
+剥壳鸡蛋,鸡蛋,egg,state variant
+茶叶蛋去壳,鸡蛋,egg,prepared variant
+鸡胸肉100g,禽肉（去皮鸡胸肉）,chicken,quantity suffix
+鸡胸100克,禽肉（去皮鸡胸肉）,chicken,quantity suffix
+一块鸡胸肉,禽肉（去皮鸡胸肉）,chicken,measure phrase
+半块鸡胸肉,禽肉（去皮鸡胸肉）,chicken,measure phrase
+熟鸡胸肉,禽肉（去皮鸡胸肉）,chicken,cooked state
+水煮鸡胸肉,禽肉（去皮鸡胸肉）,chicken,cooking state
+煎鸡胸肉,禽肉（去皮鸡胸肉）,chicken,cooking state
+去皮鸡胸肉100g,禽肉（去皮鸡胸肉）,chicken,quantity suffix
+鸡胸肉片,禽肉（去皮鸡胸肉）,chicken,shape phrase
+鸡胸丁,禽肉（去皮鸡胸肉）,chicken,shape phrase
+牛奶250ml,牛奶(全脂),milk,quantity suffix
+全脂牛奶250ml,牛奶(全脂),milk,quantity suffix
+一杯牛奶,牛奶(全脂),milk,measure phrase
+半杯牛奶,牛奶(全脂),milk,measure phrase
+热牛奶,牛奶(全脂),milk,state variant
+常温牛奶,牛奶(全脂),milk,state variant
+纯牛奶一盒,牛奶(全脂),milk,packaging phrase
+早餐牛奶,牛奶(全脂),milk,meal context
+西兰花100g,西兰花,vegetable,quantity suffix
+水煮西兰花100g,西兰花,vegetable,quantity suffix
+清炒西兰花100g,西兰花,vegetable,quantity suffix
+一份西兰花,西兰花,vegetable,measure phrase
+半份西兰花,西兰花,vegetable,measure phrase
+西蓝花小朵,西兰花,vegetable,shape phrase
+蒜蓉西兰花,西兰花,vegetable,cooking flavor
+西兰花菜,西兰花,vegetable,suffix variant
+香蕉1根,香蕉,fruit,count suffix
+一根香蕉,香蕉,fruit,measure phrase
+半根香蕉,香蕉,fruit,measure phrase
+香蕉100g,香蕉,fruit,quantity suffix
+熟香蕉,香蕉,fruit,state variant
+小香蕉,香蕉,fruit,size variant
+苹果1个,苹果,fruit,count suffix
+一个苹果,苹果,fruit,measure phrase
+半个苹果,苹果,fruit,measure phrase
+苹果100g,苹果,fruit,quantity suffix
+去皮苹果,苹果,fruit,state variant
+苹果块,苹果,fruit,shape phrase
+燕麦片30g,燕麦片,grain,quantity suffix
+燕麦40克,燕麦片,grain,quantity suffix
+一碗燕麦粥,燕麦片,grain,measure phrase
+泡好的燕麦,燕麦片,grain,cooked phrase
+牛奶燕麦,燕麦片,grain,mixed context
+即食燕麦片,燕麦片,grain,preparation phrase
+红薯100g,红薯,sweet_potato,quantity suffix
+一个红薯,红薯,sweet_potato,measure phrase
+半个地瓜,红薯,sweet_potato,regional measure phrase
+一小块烤红薯,红薯,sweet_potato,measure phrase
+蒸熟的红薯,红薯,sweet_potato,cooked phrase
+红薯块,红薯,sweet_potato,shape phrase
+玉米肠1根,玉米肠,processed_guard,processed count suffix
+玉米香肠,玉米肠,processed_guard,processed alias
+热狗玉米肠,玉米肠,processed_guard,processed alias
+火腿玉米肠,玉米肠,processed_guard,processed alias

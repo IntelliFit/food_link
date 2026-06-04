@@ -126,28 +126,15 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 		}
 	}
 
-	payload := map[string]any{
-		"meal_type":             input.MealType,
-		"province":              input.Province,
-		"city":                  input.City,
-		"district":              input.District,
-		"diet_goal":             input.DietGoal,
-		"activity_timing":       input.ActivityTiming,
-		"user_goal":             input.UserGoal,
-		"remaining_calories":    input.RemainingCalories,
-		"suggest_ratio_enabled": input.SuggestRatioEnabled,
-		"additionalContext":     input.AdditionalContext,
-		"modelName":             input.ModelName,
-		"execution_mode":        mode,
-		"analysis_engine":       input.AnalysisEngine,
-		"recorded_on":           recordedOn,
-	}
-	applySubmitCompatibilityPayload(payload, input)
+	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
 
 	creditMode := mode
-	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
+	}
+	if mode == precisionSeparateExecutionMode {
+		creditMode = precisionSeparateExecutionMode
 	}
 	if boolFromAny(payload["is_correction"]) {
 		creditMode = correctionCreditMode(creditMode)
@@ -158,7 +145,7 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	}
 	creditGroupID := ensureCreditGroupID(payload)
 
-	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
@@ -218,28 +205,15 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 		}
 	}
 
-	payload := map[string]any{
-		"meal_type":             input.MealType,
-		"province":              input.Province,
-		"city":                  input.City,
-		"district":              input.District,
-		"diet_goal":             input.DietGoal,
-		"activity_timing":       input.ActivityTiming,
-		"user_goal":             input.UserGoal,
-		"remaining_calories":    input.RemainingCalories,
-		"suggest_ratio_enabled": input.SuggestRatioEnabled,
-		"additionalContext":     input.AdditionalContext,
-		"modelName":             input.ModelName,
-		"execution_mode":        mode,
-		"analysis_engine":       input.AnalysisEngine,
-		"recorded_on":           recordedOn,
-	}
-	applySubmitCompatibilityPayload(payload, input)
+	payload := buildSubmitTaskPayload(input, recordedOn, mode)
 	s.attachCorrectionChain(ctx, userID, input, payload)
 
 	creditMode := mode
-	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
+	}
+	if mode == precisionSeparateExecutionMode {
+		creditMode = precisionSeparateExecutionMode
 	}
 	if boolFromAny(payload["is_correction"]) {
 		creditMode = correctionCreditMode(creditMode)
@@ -250,7 +224,7 @@ func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input S
 	}
 	creditGroupID := ensureCreditGroupID(payload)
 
-	if mode == experimentalExecutionMode || input.PrecisionSessionID != nil {
+	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
 			return "", err
@@ -422,10 +396,31 @@ func creditUnitsForInput(input SubmitTaskInput) int {
 }
 
 func correctionCreditMode(mode string) string {
-	if mode == experimentalExecutionMode || mode == validExecutionMode || mode == gemini35GroupedExecutionMode {
+	if mode == experimentalExecutionMode || mode == validExecutionMode || mode == precisionSeparateExecutionMode || mode == gemini35GroupedExecutionMode {
 		return "strict_correction"
 	}
 	return "standard_correction"
+}
+
+func buildSubmitTaskPayload(input SubmitTaskInput, recordedOn, mode string) map[string]any {
+	payload := map[string]any{
+		"meal_type":             input.MealType,
+		"province":              input.Province,
+		"city":                  input.City,
+		"district":              input.District,
+		"diet_goal":             input.DietGoal,
+		"activity_timing":       input.ActivityTiming,
+		"user_goal":             input.UserGoal,
+		"remaining_calories":    input.RemainingCalories,
+		"suggest_ratio_enabled": input.SuggestRatioEnabled,
+		"additionalContext":     input.AdditionalContext,
+		"modelName":             input.ModelName,
+		"execution_mode":        mode,
+		"analysis_engine":       input.AnalysisEngine,
+		"recorded_on":           recordedOn,
+	}
+	applySubmitCompatibilityPayload(payload, input)
+	return payload
 }
 
 func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInput) {

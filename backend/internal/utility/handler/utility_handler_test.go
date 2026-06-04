@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"food_link/backend/internal/utility/domain"
+	"food_link/backend/internal/utility/repo"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -60,6 +61,11 @@ type mockManualFoodService struct {
 	searchPackagedItems  []domain.ManualFoodResult
 	searchPackagedErr    error
 	searchPackagedCalled bool
+	customItems          []domain.ManualFoodResult
+	customHasMore        bool
+	customErr            error
+	saveCustomItem       domain.ManualFoodResult
+	saveCustomErr        error
 }
 
 func (m *mockManualFoodService) Browse(ctx context.Context, userID string, limit int) (*domain.ManualFoodBrowseResult, error) {
@@ -75,6 +81,12 @@ func (m *mockManualFoodService) SearchPackaged(ctx context.Context, keyword stri
 	m.searchPackagedCalled = true
 	return m.searchPackagedItems, m.searchPackagedErr
 }
+func (m *mockManualFoodService) ListCustomFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error) {
+	return m.customItems, m.customHasMore, m.customErr
+}
+func (m *mockManualFoodService) SaveCustomFood(ctx context.Context, userID string, input repo.CustomFoodInput) (domain.ManualFoodResult, error) {
+	return m.saveCustomItem, m.saveCustomErr
+}
 
 func setupRouter(h *UtilityHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
@@ -86,6 +98,8 @@ func setupRouter(h *UtilityHandler) *gin.Engine {
 	r.GET("/api/manual-food/browse", h.ManualFoodBrowse)
 	r.GET("/api/manual-food/catalog", h.ManualFoodCatalog)
 	r.GET("/api/manual-food/search", h.ManualFoodSearch)
+	r.GET("/api/manual-food/custom", h.ManualFoodCustomList)
+	r.POST("/api/manual-food/custom", h.ManualFoodCustomSave)
 	return r
 }
 

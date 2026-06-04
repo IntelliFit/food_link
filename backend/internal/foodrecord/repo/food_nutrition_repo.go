@@ -47,6 +47,14 @@ type PackagedResolveResult struct {
 	Score       float64
 }
 
+func activePackagedFoodScope(db *gorm.DB) *gorm.DB {
+	return db.Where("COALESCE(NULLIF(review_status, ''), 'active') = ?", "active")
+}
+
+func pendingPackagedFoodScope(db *gorm.DB) *gorm.DB {
+	return db.Where("review_status = ?", "pending")
+}
+
 type PackagedFoodInput struct {
 	Brand                 string
 	ProductName           string
@@ -273,32 +281,37 @@ func (r *FoodNutritionRepo) ResolveFood(ctx context.Context, name string) (*Reso
 	if raw == "" {
 		return &ResolveResult{Status: "unresolved", Score: 0}, nil
 	}
-	lower := strings.ToLower(raw)
-	normalized := normalizeFoodName(raw)
+	variants := nutritionQueryVariants(raw)
 
 	var food domain.FoodNutrition
-	err := r.db.WithContext(ctx).
-		Where("is_active = ? AND (LOWER(canonical_name) = ? OR normalized_name = ?)", true, lower, normalized).
-		First(&food).Error
-	if err == nil {
-		return &ResolveResult{Food: &food, Status: "exact_canonical", MatchSource: "canonical", Score: 1}, nil
-	}
-	if err != gorm.ErrRecordNotFound {
-		return nil, err
+	for _, variant := range variants {
+		err := r.db.WithContext(ctx).
+			Where("is_active = ? AND (LOWER(canonical_name) = ? OR normalized_name = ?)", true, strings.ToLower(variant.Text), variant.Normalized).
+			First(&food).Error
+		if err == nil {
+			return &ResolveResult{Food: &food, Status: "exact_canonical", MatchSource: variant.matchSource("canonical"), Score: 1}, nil
+		}
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
 	}
 
 	var alias domain.FoodNutritionAlias
-	err = r.db.WithContext(ctx).
-		Where("LOWER(alias_name) = ? OR normalized_alias = ?", lower, normalized).
-		First(&alias).Error
-	if err == nil && alias.FoodID != "" {
-		if foodErr := r.db.WithContext(ctx).Where("is_active = ? AND id = ?", true, alias.FoodID).First(&food).Error; foodErr == nil {
-			return &ResolveResult{Food: &food, Status: "exact_alias", MatchSource: "alias", Score: 1}, nil
-		} else if foodErr != gorm.ErrRecordNotFound {
-			return nil, foodErr
+	for _, variant := range variants {
+		err := r.db.WithContext(ctx).
+			Where("LOWER(alias_name) = ? OR normalized_alias = ?", strings.ToLower(variant.Text), variant.Normalized).
+			First(&alias).Error
+		if err == nil && alias.FoodID != "" {
+			if foodErr := r.db.WithContext(ctx).Where("is_active = ? AND id = ?", true, alias.FoodID).First(&food).Error; foodErr == nil {
+				if !isUnsafeNutritionAliasMatch(raw, alias.AliasName, food.CanonicalName) {
+					return &ResolveResult{Food: &food, Status: "exact_alias", MatchSource: variant.matchSource("alias"), Score: 1}, nil
+				}
+			} else if foodErr != gorm.ErrRecordNotFound {
+				return nil, foodErr
+			}
+		} else if err != gorm.ErrRecordNotFound {
+			return nil, err
 		}
-	} else if err != gorm.ErrRecordNotFound {
-		return nil, err
 	}
 
 	candidates, err := r.SearchCandidates(ctx, raw, 1)
@@ -310,6 +323,45 @@ func (r *FoodNutritionRepo) ResolveFood(ctx context.Context, name string) (*Reso
 		return &ResolveResult{Food: &food, Status: "fuzzy", MatchSource: candidates[0].MatchSource, Score: candidates[0].Score}, nil
 	}
 	return &ResolveResult{Status: "unresolved", Score: 0}, nil
+}
+
+func allNutritionAliasesUnsafe(query string, aliasNames []string, canonicalName string) bool {
+	if len(aliasNames) == 0 {
+		return false
+	}
+	for _, aliasName := range aliasNames {
+		if !isUnsafeNutritionAliasMatch(query, aliasName, canonicalName) {
+			return false
+		}
+	}
+	return true
+}
+
+func isUnsafeNutritionAliasMatch(query, aliasName, canonicalName string) bool {
+	queryNorm := normalizeFoodName(query)
+	aliasNorm := normalizeFoodName(aliasName)
+	canonicalNorm := normalizeFoodName(canonicalName)
+	if queryNorm == "" || canonicalNorm == "" || queryNorm == canonicalNorm {
+		return false
+	}
+	queryText := queryNorm + aliasNorm
+	processedTokens := []string{"肠", "香肠", "火腿", "热狗", "肉肠", "鱼肠", "鸡肉肠", "玉米肠"}
+	if containsAnyToken(canonicalNorm, processedTokens) && !containsAnyToken(queryText, processedTokens) {
+		return true
+	}
+	if containsCJK(queryNorm) && isMostlyASCII(canonicalName) {
+		return true
+	}
+	return false
+}
+
+func containsAnyToken(text string, tokens []string) bool {
+	for _, token := range tokens {
+		if token != "" && strings.Contains(text, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *FoodNutritionRepo) ResolvePackagedFood(ctx context.Context, input PackagedFoodResolveInput) (*PackagedResolveResult, error) {
@@ -337,7 +389,7 @@ func (r *FoodNutritionRepo) ResolvePackagedFood(ctx context.Context, input Packa
 
 	if barcode != "" {
 		var barcodeFood domain.PackagedFood
-		err := r.db.WithContext(ctx).
+		err := activePackagedFoodScope(r.db.WithContext(ctx)).
 			Where("is_active = ? AND barcode = ?", true, barcode).
 			First(&barcodeFood).Error
 		if err == nil {
@@ -350,7 +402,7 @@ func (r *FoodNutritionRepo) ResolvePackagedFood(ctx context.Context, input Packa
 
 	if productKey != "" {
 		var productKeyFood domain.PackagedFood
-		query := r.db.WithContext(ctx).
+		query := activePackagedFoodScope(r.db.WithContext(ctx)).
 			Where("is_active = ? AND product_key = ?", true, productKey).
 			Order("updated_at DESC")
 		if barcode != "" {
@@ -385,7 +437,7 @@ func (r *FoodNutritionRepo) ResolvePackagedFood(ctx context.Context, input Packa
 		}
 		if len(foodIDs) > 0 {
 			var aliasFoods []domain.PackagedFood
-			if foodErr := r.db.WithContext(ctx).
+			if foodErr := activePackagedFoodScope(r.db.WithContext(ctx)).
 				Where("is_active = ? AND id IN ?", true, foodIDs).
 				Find(&aliasFoods).Error; foodErr != nil {
 				return nil, foodErr
@@ -406,7 +458,7 @@ func (r *FoodNutritionRepo) ResolvePackagedFood(ctx context.Context, input Packa
 	}
 
 	var exactFoods []domain.PackagedFood
-	err = r.db.WithContext(ctx).
+	err = activePackagedFoodScope(r.db.WithContext(ctx)).
 		Where("is_active = ? AND (LOWER(product_name) = ? OR normalized_name = ? OR LOWER(COALESCE(display_name, '')) = ? OR product_key = ?)", true, lower, normalized, lower, productKey).
 		Limit(3).
 		Find(&exactFoods).Error
@@ -426,12 +478,17 @@ func (r *FoodNutritionRepo) ResolvePackagedFood(ctx context.Context, input Packa
 		}
 	}
 
-	candidates, err := r.SearchPackagedFood(ctx, raw, 1)
+	if isGenericPackagedResolveQuery(raw) && !hasPackagedResolveEvidence(brand, specText, input.FlavorText, barcode) {
+		return &PackagedResolveResult{Status: "unresolved", Score: 0}, nil
+	}
+
+	fuzzyQuery := packagedFoodFuzzyQuery(raw, brand, specText, input.FlavorText, barcode)
+	candidates, err := r.SearchPackagedFood(ctx, fuzzyQuery, 1)
 	if err != nil {
 		return nil, err
 	}
 	if len(candidates) > 0 {
-		score := packagedFoodSearchScore(raw, candidates[0])
+		score := packagedFoodSearchScore(fuzzyQuery, candidates[0])
 		if score < 0.35 {
 			return &PackagedResolveResult{Status: "unresolved", Score: 0}, nil
 		}
@@ -441,6 +498,46 @@ func (r *FoodNutritionRepo) ResolvePackagedFood(ctx context.Context, input Packa
 		return &PackagedResolveResult{Food: &candidates[0], Status: "fuzzy", MatchSource: "fuzzy", Score: score}, nil
 	}
 	return &PackagedResolveResult{Status: "unresolved", Score: 0}, nil
+}
+
+func packagedFoodFuzzyQuery(values ...string) string {
+	parts := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		parts = append(parts, value)
+	}
+	return strings.Join(parts, " ")
+}
+
+func hasPackagedResolveEvidence(values ...string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func isGenericPackagedResolveQuery(query string) bool {
+	normalized := normalizeFoodName(query)
+	if normalized == "" {
+		return false
+	}
+	switch normalized {
+	case "面包", "酸奶", "咖啡", "饮料", "零食", "雪糕", "冰淇淋", "薯片", "饼干", "巧克力", "奶茶", "果汁", "汽水", "啤酒":
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *FoodNutritionRepo) UpsertPackagedFood(ctx context.Context, input PackagedFoodInput) (*domain.PackagedFood, error) {
@@ -544,8 +641,12 @@ func (r *FoodNutritionRepo) UpsertPackagedFoodWithAction(ctx context.Context, in
 	barcode := strings.TrimSpace(input.Barcode)
 	var existing domain.PackagedFood
 	err := gorm.ErrRecordNotFound
+	lookupDB := r.db.WithContext(ctx)
+	if normalizedFields.ReviewStatus == "pending" {
+		lookupDB = pendingPackagedFoodScope(lookupDB)
+	}
 	if barcode != "" {
-		err = r.db.WithContext(ctx).
+		err = lookupDB.
 			Where("barcode IS NOT NULL AND barcode <> '' AND barcode = ?", barcode).
 			First(&existing).Error
 		if err != nil && err != gorm.ErrRecordNotFound {
@@ -553,7 +654,7 @@ func (r *FoodNutritionRepo) UpsertPackagedFoodWithAction(ctx context.Context, in
 		}
 	}
 	if err == gorm.ErrRecordNotFound {
-		query := r.db.WithContext(ctx).Where("product_key = ?", normalizedFields.ProductKey)
+		query := lookupDB.Where("product_key = ?", normalizedFields.ProductKey)
 		if barcode != "" {
 			query = query.Where("(barcode IS NULL OR barcode = '' OR barcode = ?)", barcode)
 		}
@@ -764,7 +865,7 @@ func (r *FoodNutritionRepo) SearchPackagedFood(ctx context.Context, query string
 		args = append(args, pattern, pattern, pattern, normalizedPattern, normalizedPattern)
 	}
 	var foods []domain.PackagedFood
-	err := r.db.WithContext(ctx).
+	err := activePackagedFoodScope(r.db.WithContext(ctx)).
 		Where("is_active = ? AND ("+strings.Join(whereParts, " OR ")+")", append([]any{true}, args...)...).
 		Limit(candidateLimit).
 		Find(&foods).Error
@@ -808,7 +909,7 @@ func (r *FoodNutritionRepo) SearchPackagedFood(ctx context.Context, query string
 		}
 		if len(foodIDs) > 0 {
 			var extra []domain.PackagedFood
-			err = r.db.WithContext(ctx).
+			err = activePackagedFoodScope(r.db.WithContext(ctx)).
 				Where("is_active = ? AND id IN ?", true, foodIDs).
 				Find(&extra).Error
 			if err != nil {
@@ -888,8 +989,8 @@ func packagedFoodSearchTerms(query string) []string {
 	flush()
 	normalizedRaw := normalizeFoodName(raw)
 	for _, keyword := range []string{
-		"果冻爽", "果冻", "橙味", "橙汁", "葡萄味", "葡萄", "蜜桃味", "蜜桃", "苹果味", "苹果", "草莓味", "草莓",
-		"冰淇淋", "雪糕", "蛋筒", "酸奶", "饮料", "汽水", "啤酒", "薯片", "饼干", "巧克力", "cici",
+		"果冻爽", "果粒爽", "果冻", "橙味", "橙汁", "葡萄味", "葡萄", "蜜桃味", "蜜桃", "苹果味", "苹果", "草莓味", "草莓",
+		"冰淇淋", "雪糕", "蛋筒", "酸奶", "牛乳", "饮料", "汽水", "咖啡", "固体饮料", "啤酒", "薯片", "原切", "马铃薯片", "饼干", "巧克力", "面包", "豆沙小饼", "豆沙", "小饼", "花生夹心", "花生", "桃李", "雀巢", "nescafe", "三得利", "suntory", "纤漾饮", "荷叶", "茉莉", "无糖", "士力架", "snickers", "cici",
 	} {
 		if strings.Contains(normalizedRaw, normalizeFoodName(keyword)) || strings.Contains(strings.ToLower(raw), strings.ToLower(keyword)) {
 			add(keyword)
@@ -1047,37 +1148,59 @@ func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, 
 	if raw == "" {
 		return []SearchCandidate{}, nil
 	}
-	pattern := fmt.Sprintf("%%%s%%", strings.ToLower(raw))
-	normalized := normalizeFoodName(raw)
-	normalizedPattern := fmt.Sprintf("%%%s%%", normalized)
+	variants := nutritionQueryVariants(raw)
 
 	type aliasRow struct {
-		FoodID string `gorm:"column:food_id"`
+		FoodID          string `gorm:"column:food_id"`
+		AliasName       string `gorm:"column:alias_name"`
+		NormalizedAlias string `gorm:"column:normalized_alias"`
 	}
 	var canonicalFoods []domain.FoodNutrition
-	if err := r.db.WithContext(ctx).
-		Where("is_active = ? AND (LOWER(canonical_name) LIKE ? OR normalized_name LIKE ?)", true, pattern, normalizedPattern).
-		Limit(limit * 2).
-		Find(&canonicalFoods).Error; err != nil {
-		return nil, err
-	}
-
 	var aliasRows []aliasRow
-	if err := r.db.WithContext(ctx).
-		Table((&domain.FoodNutritionAlias{}).TableName()).
-		Select("DISTINCT food_id").
-		Where("LOWER(alias_name) LIKE ? OR normalized_alias LIKE ?", pattern, normalizedPattern).
-		Limit(limit * 2).
-		Find(&aliasRows).Error; err != nil {
-		return nil, err
+	canonicalVariantByFoodID := map[string]nutritionQueryVariant{}
+	aliasVariantsByFoodID := map[string][]nutritionQueryVariant{}
+	for _, variant := range variants {
+		pattern := fmt.Sprintf("%%%s%%", strings.ToLower(variant.Text))
+		normalizedPattern := fmt.Sprintf("%%%s%%", variant.Normalized)
+		var foods []domain.FoodNutrition
+		if err := r.db.WithContext(ctx).
+			Where("is_active = ? AND (LOWER(canonical_name) LIKE ? OR normalized_name LIKE ?)", true, pattern, normalizedPattern).
+			Limit(limit * 4).
+			Find(&foods).Error; err != nil {
+			return nil, err
+		}
+		for _, food := range foods {
+			canonicalFoods = append(canonicalFoods, food)
+			if existing, ok := canonicalVariantByFoodID[food.ID]; !ok || variant.Weight > existing.Weight {
+				canonicalVariantByFoodID[food.ID] = variant
+			}
+		}
+		var rows []aliasRow
+		if err := r.db.WithContext(ctx).
+			Table((&domain.FoodNutritionAlias{}).TableName()).
+			Select("food_id, alias_name, normalized_alias").
+			Where("LOWER(alias_name) LIKE ? OR normalized_alias LIKE ?", pattern, normalizedPattern).
+			Limit(limit * 4).
+			Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			aliasRows = append(aliasRows, row)
+			aliasVariantsByFoodID[row.FoodID] = append(aliasVariantsByFoodID[row.FoodID], variant)
+		}
 	}
 
 	seen := map[string]SearchCandidate{}
 	for _, food := range canonicalFoods {
-		score := searchCandidateScore(raw, food.CanonicalName)
+		variant := canonicalVariantByFoodID[food.ID]
+		score := nutritionSearchScore(raw, variant, food, "canonical")
 		matchSource := "canonical"
-		if normalized != "" && food.NormalizedName == normalized {
+		if variant.Normalized != "" && food.NormalizedName == variant.Normalized {
 			score = 0.99
+			if variant.Text != raw {
+				score = 0.965
+				matchSource = "canonical_normalized"
+			}
 		}
 		if existing, ok := seen[food.ID]; !ok || score > existing.Score {
 			seen[food.ID] = SearchCandidate{
@@ -1090,12 +1213,14 @@ func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, 
 
 	if len(aliasRows) > 0 {
 		foodIDs := make([]string, 0, len(aliasRows))
+		aliasNamesByFoodID := map[string][]string{}
 		for _, row := range aliasRows {
 			row.FoodID = strings.TrimSpace(row.FoodID)
 			if row.FoodID == "" {
 				continue
 			}
 			foodIDs = append(foodIDs, row.FoodID)
+			aliasNamesByFoodID[row.FoodID] = append(aliasNamesByFoodID[row.FoodID], row.AliasName)
 		}
 		if len(foodIDs) > 0 {
 			var aliasFoods []domain.FoodNutrition
@@ -1105,7 +1230,11 @@ func (r *FoodNutritionRepo) SearchCandidates(ctx context.Context, query string, 
 				return nil, err
 			}
 			for _, food := range aliasFoods {
-				score := searchCandidateScore(raw, food.CanonicalName) + 0.03
+				if allNutritionAliasesUnsafe(raw, aliasNamesByFoodID[food.ID], food.CanonicalName) {
+					continue
+				}
+				variant := bestNutritionVariant(aliasVariantsByFoodID[food.ID])
+				score := nutritionSearchScore(raw, variant, food, "alias") + 0.03
 				if score > 0.99 {
 					score = 0.99
 				}
@@ -1186,6 +1315,310 @@ func normalizeFoodName(raw string) string {
 		}
 	}
 	return b.String()
+}
+
+type nutritionQueryVariant struct {
+	Text       string
+	Normalized string
+	Weight     float64
+}
+
+func (v nutritionQueryVariant) matchSource(source string) string {
+	if strings.TrimSpace(v.Text) == "" || v.Weight >= 1 {
+		return source
+	}
+	return source + "_normalized"
+}
+
+func nutritionQueryVariants(raw string) []nutritionQueryVariant {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	candidates := []struct {
+		text   string
+		weight float64
+	}{}
+	for _, preferred := range preferredNutritionQueryTexts(raw) {
+		candidates = append(candidates, struct {
+			text   string
+			weight float64
+		}{preferred, 1.05})
+	}
+	candidates = append(candidates, struct {
+		text   string
+		weight float64
+	}{raw, 1})
+	for _, cleaned := range normalizeNutritionQueryText(raw) {
+		if cleaned == "" {
+			continue
+		}
+		candidates = append(candidates, struct {
+			text   string
+			weight float64
+		}{cleaned, 0.92})
+		for _, stripped := range stripNutritionPreparationWords(cleaned) {
+			if stripped != "" && stripped != cleaned {
+				candidates = append(candidates, struct {
+					text   string
+					weight float64
+				}{stripped, 0.86})
+			}
+		}
+	}
+	out := make([]nutritionQueryVariant, 0, len(candidates))
+	seen := map[string]bool{}
+	for _, candidate := range candidates {
+		text := strings.TrimSpace(candidate.text)
+		normalized := normalizeFoodName(text)
+		if normalized == "" || seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		out = append(out, nutritionQueryVariant{Text: text, Normalized: normalized, Weight: candidate.weight})
+	}
+	return out
+}
+
+func preferredNutritionQueryTexts(raw string) []string {
+	normalized := normalizeFoodName(raw)
+	if normalized == "" || looksLikeCompoundNutritionQuery(normalized) {
+		return nil
+	}
+	out := []string{}
+	hasCookedCue := containsAnyToken(normalized, []string{"熟", "煮", "水煮", "蒸", "烤", "煎", "即食"})
+	switch {
+	case containsAnyToken(normalized, []string{"鸡胸"}):
+		out = append(out, "禽肉（去皮鸡胸肉）")
+	case containsAnyToken(normalized, []string{"米饭", "白饭"}) && !containsAnyToken(normalized, []string{"紫米", "糙米", "杂粮", "黑米"}):
+		out = append(out, "白米饭")
+	case containsAnyToken(normalized, []string{"玉米", "苞米", "棒子"}) && !containsAnyToken(normalized, []string{"肠", "香肠", "火腿", "热狗"}):
+		if hasCookedCue || !containsAnyToken(normalized, []string{"油", "粉", "面"}) {
+			out = append(out, "玉米(熟)")
+		}
+	case containsAnyToken(normalized, []string{"鸡蛋", "煮蛋", "水煮蛋", "全蛋"}) && !containsAnyToken(normalized, []string{"蛋清", "蛋白", "蛋黄", "三明治", "青团", "蛋糕"}):
+		out = append(out, "鸡蛋")
+	case containsAnyToken(normalized, []string{"牛奶", "全脂奶", "纯奶", "鲜奶"}) && !containsAnyToken(normalized, []string{"奶粉", "酸奶", "拿铁", "咖啡", "奶茶"}):
+		out = append(out, "牛奶(全脂)")
+	case containsAnyToken(normalized, []string{"西兰花", "西蓝花"}):
+		out = append(out, "西兰花")
+	case containsAnyToken(normalized, []string{"香蕉"}):
+		out = append(out, "香蕉")
+	case containsAnyToken(normalized, []string{"苹果"}) && !containsAnyToken(normalized, []string{"苹果醋", "苹果汁"}):
+		out = append(out, "苹果")
+	case containsAnyToken(normalized, []string{"燕麦"}):
+		out = append(out, "燕麦片")
+	case containsAnyToken(normalized, []string{"红薯", "地瓜", "番薯", "甘薯"}):
+		out = append(out, "红薯")
+	}
+	return uniqueNonEmptyStrings(out)
+}
+
+func looksLikeCompoundNutritionQuery(normalized string) bool {
+	if normalized == "" {
+		return false
+	}
+	compoundTokens := []string{"三明治", "汉堡", "披萨", "蛋糕", "青团", "水饺", "汤", "粥", "面", "粉", "饭团", "沙拉"}
+	if containsAnyToken(normalized, compoundTokens) {
+		return true
+	}
+	return len([]rune(normalized)) > 12
+}
+
+func normalizeNutritionQueryText(raw string) []string {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	if text == "" {
+		return nil
+	}
+	variants := []string{text}
+	if idx := strings.LastIndex(text, "里的"); idx >= 0 && idx+len("里的") < len(text) {
+		variants = append(variants, text[idx+len("里的"):])
+	}
+	if strings.Contains(text, "盒饭") && strings.Contains(text, "米饭") {
+		variants = append(variants, "米饭")
+	}
+	replaced := text
+	replacements := []struct{ old, new string }{
+		{"西蓝花", "西兰花"},
+		{"苞米", "玉米"},
+		{"棒子", "玉米"},
+		{"地瓜", "红薯"},
+		{"番薯", "红薯"},
+		{"甘薯", "红薯"},
+		{"白饭", "白米饭"},
+		{"全蛋", "鸡蛋"},
+		{"全鸡蛋", "鸡蛋"},
+		{"纯牛奶", "牛奶"},
+		{"鲜牛奶", "牛奶"},
+		{"全脂牛奶", "牛奶全脂"},
+		{"全脂奶", "牛奶全脂"},
+	}
+	for _, item := range replacements {
+		replaced = strings.ReplaceAll(replaced, item.old, item.new)
+	}
+	variants = append(variants, replaced)
+	for _, value := range append([]string{}, variants...) {
+		cleaned := stripNutritionMeasureWords(value)
+		if cleaned != "" {
+			variants = append(variants, cleaned)
+		}
+	}
+	return uniqueNonEmptyStrings(variants)
+}
+
+var (
+	nutritionAmountPattern        = regexp.MustCompile(`(?i)\d+(?:\.\d+)?\s*(?:g|克|kg|千克|ml|毫升|l|升|kcal|千卡|卡路里)`)
+	nutritionCountPrefixPattern   = regexp.MustCompile(`^(?:[一二两三四五六七八九十半]+|\d+)\s*(?:个|颗|根|块|碗|份|杯|盒|袋|片|只|枚|条|截|小碗|大碗|小块|大块)`)
+	nutritionCountSuffixPattern   = regexp.MustCompile(`(?:[一二两三四五六七八九十半]+|\d+)\s*(?:个|颗|根|块|碗|份|杯|盒|袋|片|只|枚|条|截|小碗|大碗|小块|大块)$`)
+	nutritionMeasurePrefixPattern = regexp.MustCompile(`^(?:一|半|两|二|三|四|五|六|七|八|九|十)?(?:小|大)?(?:碗|份|杯|盒|袋|块|根|个|颗|条|截)`)
+	nutritionMeasureSuffixPattern = regexp.MustCompile(`(?:一|半|两|二|三|四|五|六|七|八|九|十)?(?:小|大)?(?:碗|份|杯|盒|袋|块|根|个|颗|条|截)$`)
+)
+
+func stripNutritionMeasureWords(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	value = nutritionAmountPattern.ReplaceAllString(value, "")
+	value = nutritionCountPrefixPattern.ReplaceAllString(value, "")
+	value = nutritionCountSuffixPattern.ReplaceAllString(value, "")
+	value = nutritionMeasurePrefixPattern.ReplaceAllString(value, "")
+	value = nutritionMeasureSuffixPattern.ReplaceAllString(value, "")
+	for _, token := range []string{"约", "大约", "左右", "的", "里", "里面", "里面的", "底", "饭底", "底部", "剩", "昨晚"} {
+		value = strings.TrimPrefix(value, token)
+		value = strings.TrimSuffix(value, token)
+	}
+	return strings.TrimSpace(value)
+}
+
+func stripNutritionPreparationWords(value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	variants := []string{value}
+	prefixes := []string{"水煮", "白水煮", "煮熟的", "熟的", "熟", "清炒", "蒜蓉", "蒸熟的", "蒸", "煮", "烤", "煎", "泡好的", "泡", "去皮", "剥壳", "常温", "热", "冷藏", "原味", "纯"}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(value, prefix) && len(value) > len(prefix) {
+			variants = append(variants, strings.TrimSpace(strings.TrimPrefix(value, prefix)))
+		}
+	}
+	suffixes := []string{"熟", "菜", "块", "片", "丁", "粒", "小朵"}
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(value, suffix) && len(value) > len(suffix) {
+			variants = append(variants, strings.TrimSpace(strings.TrimSuffix(value, suffix)))
+		}
+	}
+	return uniqueNonEmptyStrings(variants)
+}
+
+func bestNutritionVariant(variants []nutritionQueryVariant) nutritionQueryVariant {
+	if len(variants) == 0 {
+		return nutritionQueryVariant{}
+	}
+	best := variants[0]
+	for _, variant := range variants[1:] {
+		if variant.Weight > best.Weight {
+			best = variant
+		}
+	}
+	return best
+}
+
+func nutritionSearchScore(raw string, variant nutritionQueryVariant, food domain.FoodNutrition, source string) float64 {
+	if variant.Text == "" {
+		variant = nutritionQueryVariant{Text: raw, Normalized: normalizeFoodName(raw), Weight: 1}
+	}
+	score := searchCandidateScore(variant.Text, food.CanonicalName) * variant.Weight
+	if source == "alias" {
+		score += 0.02
+	}
+	queryNorm := normalizeFoodName(raw)
+	canonicalNorm := normalizeFoodName(food.CanonicalName)
+	switch {
+	case variant.Normalized != "" && canonicalNorm == variant.Normalized:
+		score += 0.12
+	case variant.Normalized != "" && strings.Contains(canonicalNorm, variant.Normalized):
+		score += 0.04
+	case variant.Normalized != "" && strings.Contains(variant.Normalized, canonicalNorm):
+		score += 0.03
+	}
+	if containsCJK(queryNorm) && isMostlyASCII(food.CanonicalName) {
+		score -= 0.35
+	}
+	if isSpecificDishName(food.CanonicalName) && !isSpecificDishName(raw) {
+		score -= 0.12
+	}
+	if isProcessedFoodMismatchForCandidate(raw, food.CanonicalName) {
+		score -= 0.5
+	}
+	if score < 0 {
+		return 0
+	}
+	if score > 0.99 {
+		return 0.99
+	}
+	return score
+}
+
+func isSpecificDishName(value string) bool {
+	normalized := normalizeFoodName(value)
+	if normalized == "" {
+		return false
+	}
+	tokens := []string{"炒", "配", "与", "盖浇", "混合", "底部", "铺垫", "覆盖", "含", "腌制", "空气炸锅", "干"}
+	return containsAnyToken(normalized, tokens)
+}
+
+func isProcessedFoodMismatchForCandidate(query, canonicalName string) bool {
+	queryNorm := normalizeFoodName(query)
+	canonicalNorm := normalizeFoodName(canonicalName)
+	if queryNorm == "" || canonicalNorm == "" {
+		return false
+	}
+	processedTokens := []string{"肠", "香肠", "火腿", "热狗", "肉肠", "鱼肠", "鸡肉肠", "玉米肠"}
+	return containsAnyToken(canonicalNorm, processedTokens) && !containsAnyToken(queryNorm, processedTokens)
+}
+
+func containsCJK(value string) bool {
+	for _, r := range value {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
+}
+
+func isMostlyASCII(value string) bool {
+	letters := 0
+	ascii := 0
+	for _, r := range strings.TrimSpace(value) {
+		if unicode.IsLetter(r) {
+			letters++
+			if r <= unicode.MaxASCII {
+				ascii++
+			}
+		}
+	}
+	return letters > 0 && ascii*2 >= letters
+}
+
+func uniqueNonEmptyStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := normalizeFoodName(value)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func buildPackagedProductKey(brand, productName, flavorText, specText string, netWeightG float64) string {

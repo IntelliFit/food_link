@@ -1,27 +1,19 @@
 import { useEffect, useState } from 'react'
 import { View, Text, Image } from '@tarojs/components'
 import Taro from '@tarojs/taro'
-import { Arrow } from '@taroify/icons'
 import '@taroify/icons/style'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import {
   getDefaultUserGroupQr,
-  USER_GROUP_QR_LIST,
   type UserGroupQrConfig,
 } from './group-config'
 import './index.scss'
 
-function formatExpiryDate(value: string): string {
-  const date = new Date(`${value}T00:00:00+08:00`)
-  if (Number.isNaN(date.getTime())) return value
-  return `${date.getMonth() + 1}月${date.getDate()}日`
-}
-
 export default function UserGroupPage() {
   const { scheme } = useAppColorScheme()
-  const [activeGroup, setActiveGroup] = useState<UserGroupQrConfig>(getDefaultUserGroupQr())
+  const [activeGroup] = useState<UserGroupQrConfig>(getDefaultUserGroupQr())
 
   useEffect(() => {
     applyThemeNavigationBar(scheme, { lightBackground: '#f7faf8', darkBackground: '#101716' })
@@ -55,7 +47,7 @@ export default function UserGroupPage() {
               <Text className='qr-card__subtitle'>{activeGroup.subtitle}</Text>
             </View>
             <View className='qr-card__tag'>
-              <Text className='qr-card__tag-text'>{activeGroup.recommended ? '当前推荐' : '备用可用'}</Text>
+              <Text className='qr-card__tag-text'>永久有效</Text>
             </View>
           </View>
 
@@ -68,7 +60,7 @@ export default function UserGroupPage() {
             />
           </View>
 
-          <Text className='qr-expiry'>二维码 {formatExpiryDate(activeGroup.expiresAt)} 前有效，过期后会更新</Text>
+          <Text className='qr-expiry'>这是当前唯一用户群二维码，可长期使用</Text>
 
           <View className='action-row'>
             <View className='primary-action' onClick={handlePreviewQr}>
@@ -84,25 +76,6 @@ export default function UserGroupPage() {
           <Text className='hint-title'>加入方式</Text>
           <Text className='hint-text'>点击二维码可放大查看；也可以长按二维码，在微信菜单中识别或保存图片。</Text>
         </View>
-
-        {USER_GROUP_QR_LIST.length > 1 && (
-          <View className='switch-card'>
-            <Text className='switch-title'>切换群二维码</Text>
-            {USER_GROUP_QR_LIST.map(group => (
-              <View
-                key={group.id}
-                className={`switch-item ${group.id === activeGroup.id ? 'switch-item--active' : ''}`}
-                onClick={() => setActiveGroup(group)}
-              >
-                <View className='switch-item__copy'>
-                  <Text className='switch-item__title'>{group.title}</Text>
-                  <Text className='switch-item__subtitle'>{group.subtitle}</Text>
-                </View>
-                <Arrow size={16} color={group.id === activeGroup.id ? '#5cb896' : '#c8c9cc'} />
-              </View>
-            ))}
-          </View>
-        )}
       </View>
     </FlPageThemeRoot>
   )

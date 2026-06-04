@@ -53,6 +53,9 @@ export default function MembershipAgreementPage() {
                     <Text className='paragraph'>
                         3. 所有会员套餐到期后均不自动续费。如需继续使用，请在到期前手动续费。到期未续费将自动恢复为免费额度，已累积的奖励积分余额不受影响。
                     </Text>
+                    <Text className='paragraph'>
+                        4. 如本小程序后续提供自动续费服务，用户需在购买页面主动选择并确认开通。自动续费的服务名称、扣费周期、每期金额和取消方式将以购买页面及微信支付签约页面展示为准；未主动选择自动续费的套餐仍按手动续费处理。
+                    </Text>
                 </View>
 
                 <View className='section'>
@@ -101,6 +104,9 @@ export default function MembershipAgreementPage() {
                     </Text>
                     <Text className='paragraph'>
                         2. 由于本小程序所有套餐均为到期不自动续费，您无需主动「取消订阅」，到期后如不手动续费即自动终止。
+                    </Text>
+                    <Text className='paragraph'>
+                        3. 如用户已主动开通自动续费，可通过「我的 → 食探会员 → 自动续费管理 → 关闭自动续费」查看关闭指引，也可在「微信支付 → 扣费服务」中按页面提示关闭。关闭自动续费后，不影响已付费周期内的会员权益。
                     </Text>
                 </View>
 

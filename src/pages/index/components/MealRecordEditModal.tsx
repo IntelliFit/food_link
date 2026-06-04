@@ -9,6 +9,7 @@ import {
   normalizeSelectableMealType,
   type SelectableMealType
 } from '../../../components/MealTypeSelector'
+import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 
 import './MealRecordEditModal.scss'
 
@@ -24,6 +25,18 @@ interface EditableFoodItem {
   ratio: number
   intake: number
   waterMl: number
+  suggestedRatio?: number
+  suggestedRatioReason?: string
+  suggestedRatioSource?: string
+  nutritionSource?: string | null
+  matchedFoodId?: string | null
+  packagedFoodId?: string
+  packageMatchStatus?: string
+  packageMatchConfidence?: number
+  packageWeightSource?: string
+  packageWeightApplied?: boolean
+  packageWeightReason?: string
+  packagedCandidates?: Array<Record<string, unknown>>
   nutrients: Nutrients
   nutrientDetailsExpanded?: boolean
 }
@@ -203,6 +216,18 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
             ediblePortionRatio: Number((item as any).edible_portion_ratio ?? (item as any).ediblePortionRatio ?? 100) || 100,
             ediblePortionReason: (item as any).edible_portion_reason ?? (item as any).ediblePortionReason,
             ediblePortionSource: (item as any).edible_portion_source ?? (item as any).ediblePortionSource,
+            suggestedRatio: (item as any).suggested_ratio ?? (item as any).suggestedRatio,
+            suggestedRatioReason: (item as any).suggested_ratio_reason ?? (item as any).suggestedRatioReason,
+            suggestedRatioSource: (item as any).suggested_ratio_source ?? (item as any).suggestedRatioSource,
+            nutritionSource: (item as any).nutrition_source ?? (item as any).nutritionSource,
+            matchedFoodId: (item as any).matched_food_id ?? (item as any).matchedFoodId,
+            packagedFoodId: (item as any).packaged_food_id ?? (item as any).packagedFoodId,
+            packageMatchStatus: (item as any).package_match_status ?? (item as any).packageMatchStatus,
+            packageMatchConfidence: (item as any).package_match_confidence ?? (item as any).packageMatchConfidence,
+            packageWeightSource: (item as any).package_weight_source ?? (item as any).packageWeightSource,
+            packageWeightApplied: (item as any).package_weight_applied ?? (item as any).packageWeightApplied,
+            packageWeightReason: (item as any).package_weight_reason ?? (item as any).packageWeightReason,
+            packagedCandidates: (item as any).packaged_candidates ?? (item as any).packagedCandidates,
             ratio,
             intake: resolveRecordItemIntake(item),
             waterMl: item.waterMl ?? item.water_ml ?? 0,
@@ -390,18 +415,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
 
       await updateFoodRecord(record.id, {
         meal_type: editMealType,
-        items: editItems.map(item => ({
-          name: item.name,
-          weight: item.weight,
-          ratio: item.ratio,
-          intake: item.intake,
-          gross_weight_grams: item.grossWeight,
-          edible_portion_ratio: item.ediblePortionRatio,
-          edible_portion_reason: item.ediblePortionReason,
-          edible_portion_source: item.ediblePortionSource,
-          water_ml: item.waterMl,
-          nutrients: item.nutrients
-        })),
+        items: editItems.map(item => buildFoodRecordItemPayloadFromResultItem(item, item.nutrients)),
         total_calories: Math.round(totalCalories * 10) / 10,
         total_protein: Math.round(totalProtein * 10) / 10,
         total_carbs: Math.round(totalCarbs * 10) / 10,

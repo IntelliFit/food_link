@@ -129,5 +129,5 @@ func canForceIngestPackagedProduct(result *PackagedProductExtractResult) bool {
 	if strings.TrimSpace(result.ConversionStatus) != "converted" {
 		return false
 	}
-	return hasValidPackagedNutrition(result.UnitNutritionPer100g)
+	return hasValidPackagedNutrition(result.UnitNutritionPer100g) || PackagedExtractHasVerifiedZeroNutritionEvidence(result)
 }

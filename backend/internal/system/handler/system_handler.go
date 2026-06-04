@@ -42,6 +42,10 @@ func (h *Handler) TestBackendLoginPage(c *gin.Context) {
 	serveStaticHTML(c, filepath.Join("static", "test_backend", "login.html"))
 }
 
+func (h *Handler) SnackAdminPage(c *gin.Context) {
+	serveStaticHTML(c, filepath.Join("static", "snack_admin", "index.html"))
+}
+
 func serveStaticHTML(c *gin.Context, path string) {
 	if _, err := os.Stat(path); err != nil {
 		c.Header("Content-Type", "text/html; charset=utf-8")

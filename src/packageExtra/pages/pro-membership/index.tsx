@@ -10,6 +10,7 @@ import {
   getMembershipPlans,
   getMyMembership,
   getHealthProfile,
+  syncMembershipPayment,
   showUnifiedApiError,
   MembershipPeriod,
   MembershipPlan,
@@ -120,6 +121,60 @@ const BASE_TIER_DAILY_CREDITS: Record<MembershipTier, number> = {
   advanced: 40,
 }
 
+const AUDIT_PREVIEW_PLANS: MembershipPlan[] = [
+  { code: 'light_monthly', name: '轻度版月卡', amount: 9.9, duration_months: 1, tier: 'light', period: 'monthly', daily_credits: 8, sort_order: 1 },
+  { code: 'light_quarterly', name: '轻度版季卡', amount: 27.9, duration_months: 3, tier: 'light', period: 'quarterly', daily_credits: 8, savings: 1.8, sort_order: 2 },
+  { code: 'light_yearly', name: '轻度版年卡', amount: 99, duration_months: 12, tier: 'light', period: 'yearly', daily_credits: 8, savings: 19.8, sort_order: 3 },
+  { code: 'standard_monthly', name: '标准版月卡', amount: 19.9, duration_months: 1, tier: 'standard', period: 'monthly', daily_credits: 20, sort_order: 4 },
+  { code: 'standard_quarterly', name: '标准版季卡', amount: 56.9, duration_months: 3, tier: 'standard', period: 'quarterly', daily_credits: 20, savings: 2.8, sort_order: 5 },
+  { code: 'standard_yearly', name: '标准版年卡', amount: 199, duration_months: 12, tier: 'standard', period: 'yearly', daily_credits: 20, savings: 39.8, sort_order: 6 },
+  { code: 'advanced_monthly', name: '进阶版月卡', amount: 29.9, duration_months: 1, tier: 'advanced', period: 'monthly', daily_credits: 40, sort_order: 7 },
+  { code: 'advanced_quarterly', name: '进阶版季卡', amount: 84.9, duration_months: 3, tier: 'advanced', period: 'quarterly', daily_credits: 40, savings: 4.8, sort_order: 8 },
+  { code: 'advanced_yearly', name: '进阶版年卡', amount: 299, duration_months: 12, tier: 'advanced', period: 'yearly', daily_credits: 40, savings: 59.8, sort_order: 9 },
+]
+
+const AUDIT_PREVIEW_MEMBERSHIP: MembershipStatus = {
+  is_pro: false,
+  status: 'inactive',
+  current_plan_code: null,
+  daily_limit: null,
+  daily_used: null,
+  daily_remaining: null,
+  daily_credits_max: 0,
+  daily_credits_used: 0,
+  daily_credits_remaining: 0,
+  daily_credits_base: 0,
+  daily_bonus_credits: 0,
+  invite_bonus_credits: 0,
+  share_bonus_credits: 0,
+  system_credits_remaining: 0,
+  earned_credits_balance: 12,
+  total_credits_available: 12,
+  trial_active: false,
+  early_user_rank: 128,
+  early_user_limit: 1000,
+  early_paid_user_limit: 100,
+  early_user_paid_bonus_multiplier: 2,
+  early_user_paid_bonus_eligible: true,
+  early_user_paid_bonus_source: 'registration_top_1000',
+  early_user_paid_bonus_active: false,
+}
+
+const AUTO_RENEW_AUDIT_PREVIEW_STORAGE_KEY = 'auto_renew_audit_preview'
+
+function isAutoRenewAuditRoute(): boolean {
+  const routerParams = Taro.getCurrentInstance().router?.params || {}
+  if (String(routerParams.audit_auto_renew || '') === '1') return true
+  const pages = Taro.getCurrentPages()
+  const current = pages[pages.length - 1]
+  if (String(current?.options?.audit_auto_renew || '') === '1') return true
+  try {
+    return String(Taro.getStorageSync(AUTO_RENEW_AUDIT_PREVIEW_STORAGE_KEY) || '') === '1'
+  } catch {
+    return false
+  }
+}
+
 function ProMembershipPage() {
   const { scheme } = useAppColorScheme()
   const [plans, setPlans] = useState<MembershipPlan[]>([])
@@ -130,6 +185,9 @@ function ProMembershipPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<MembershipPeriod>('yearly')
   const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null)
   const [ageWarningDismissed, setAgeWarningDismissed] = useState(false)
+  const [autoRenewRuleAccepted, setAutoRenewRuleAccepted] = useState(false)
+
+  const autoRenewAuditMode = isAutoRenewAuditRoute()
 
   const handleBack = useCallback(() => {
     const pages = Taro.getCurrentPages()
@@ -272,7 +330,7 @@ function ProMembershipPage() {
 
   const loadData = useCallback(async () => {
     const token = getAccessToken()
-    if (!token) {
+    if (!token && !autoRenewAuditMode) {
       Taro.redirectTo({ url: extraPkgUrl('/pages/login/index') })
       return
     }
@@ -282,11 +340,13 @@ function ProMembershipPage() {
       const params = Taro.getCurrentInstance().router?.params
       const targetTier = normalizeTierParam(params?.target_tier)
       const targetPeriod = normalizePeriodParam(params?.target_period)
-      const [planList, currentMembership, profile] = await Promise.all([
-        getMembershipPlans(),
-        getMyMembership(),
-        getHealthProfile().catch(() => null),
-      ])
+      const [planList, currentMembership, profile] = autoRenewAuditMode
+        ? [AUDIT_PREVIEW_PLANS, AUDIT_PREVIEW_MEMBERSHIP, null]
+        : await Promise.all([
+          getMembershipPlans(),
+          getMyMembership(),
+          getHealthProfile().catch(() => null),
+        ])
       setPlans(planList)
       setMembership(currentMembership)
       if (profile) setHealthProfile(profile)
@@ -310,7 +370,7 @@ function ProMembershipPage() {
     } finally {
       setPageLoading(false)
     }
-  }, [])
+  }, [autoRenewAuditMode])
 
   useDidShow(() => {
     loadData()
@@ -325,7 +385,7 @@ function ProMembershipPage() {
     for (let i = 0; i < 8; i++) {
       await wait(1000)
       try {
-        const latest = await getMyMembership()
+        const latest = await getMyMembership(undefined, { forceRefresh: true })
         setMembership(latest)
         if (latest.is_pro || latest.status === 'active') return true
       } catch (err) {
@@ -337,11 +397,36 @@ function ProMembershipPage() {
 
   const handleSubscribe = async () => {
     const token = getAccessToken()
-    if (!token) {
+    if (!token && !autoRenewAuditMode) {
       Taro.redirectTo({ url: extraPkgUrl('/pages/login/index') })
       return
     }
     if (!selectedPlan || loading) return
+
+    if (autoRenewAuditMode) {
+      if (!autoRenewRuleAccepted) {
+        await Taro.showModal({
+          title: '请先确认规则',
+          content: '请先勾选已阅读并同意会员服务协议及自动续费规则。该页面仅用于微信支付自动续费能力审核预览，不会发起真实代扣。',
+          showCancel: false,
+          confirmText: '知道了',
+          confirmColor: '#00bc7d',
+        })
+        return
+      }
+      const payAmount = paymentEstimate.amount || selectedPlan.amount
+      const periodLabel = PERIODS.find(p => p.key === selectedPeriod)?.label || '所选周期'
+      const periodUnit = PERIODS.find(p => p.key === selectedPeriod)?.unit || ''
+      await Taro.showModal({
+        title: '自动续费签约预览',
+        content: `拟开通：${selectedPlan.name}\n扣费周期：${periodLabel}\n每期金额：¥${payAmount.toFixed(2)}${periodUnit}\n说明：当前仅为审核预览，不会创建订单、不会调用微信委托代扣接口、不会真实扣款。`,
+        showCancel: false,
+        confirmText: '我知道了',
+        confirmColor: '#00bc7d',
+      })
+      return
+    }
+
     if (paymentEstimate.disabled) {
       await Taro.showModal({
         title: '暂不可切换',
@@ -404,9 +489,17 @@ function ProMembershipPage() {
         paySign: payOrder.pay_params.paySign
       })
       Taro.showToast({ title: '支付已提交，正在确认', icon: 'none', duration: 1800 })
+      try {
+        const syncResult = await syncMembershipPayment(payOrder.order_no)
+        if (syncResult.membership) {
+          setMembership(syncResult.membership)
+        }
+      } catch (syncError) {
+        console.error('主动同步会员支付状态失败:', syncError)
+      }
       const confirmed = await pollMembershipStatus()
       if (!confirmed) {
-        const latest = await getMyMembership()
+        const latest = await getMyMembership(undefined, { forceRefresh: true })
         setMembership(latest)
       }
       if (membership?.is_pro || confirmed) {
@@ -509,6 +602,7 @@ function ProMembershipPage() {
 
   const actionButtonText = useMemo(() => {
     if (!selectedPlan) return '加载中...'
+    if (autoRenewAuditMode) return '确认开通自动续费（审核预览）'
     if (paymentEstimate.disabled) return '当前套餐不可即时切换'
     const price = `¥${(paymentEstimate.amount || selectedPlan.amount).toFixed(2)}`
     if (!isPro) return `立即开通 · ${price}`
@@ -518,7 +612,34 @@ function ProMembershipPage() {
     if (tierCompare > 0) return `升级到${getMembershipTierLabel(selectedTier)} · ${price}`
     if (tierCompare < 0) return `切换到${selectedPlan.name} · ${price}`
     return `切换周期 · ${price}`
-  }, [selectedPlan, paymentEstimate, isPro, isCurrentSelectedPlan, selectedTier, currentPlanTier])
+  }, [selectedPlan, autoRenewAuditMode, paymentEstimate, isPro, isCurrentSelectedPlan, selectedTier, currentPlanTier])
+
+  const autoRenewPreview = useMemo(() => {
+    const plan = selectedPlan
+    const periodMeta = PERIODS.find(p => p.key === selectedPeriod)
+    const payAmount = paymentEstimate.amount || plan?.amount || 0
+    const baseDate = isPro && isCurrentSelectedPlan
+      ? parseDateValue(membership?.expires_at) || new Date()
+      : new Date()
+    const renewDate = addMonthsDate(baseDate, plan?.duration_months || 1)
+    return {
+      planName: plan?.name || '食探会员',
+      periodLabel: periodMeta?.label || '所选周期',
+      periodUnit: periodMeta?.unit || '',
+      amountText: `¥${payAmount.toFixed(2)}${periodMeta?.unit || ''}`,
+      renewDateText: formatDateShort(renewDate),
+    }
+  }, [selectedPlan, selectedPeriod, paymentEstimate, isPro, isCurrentSelectedPlan, membership])
+
+  const showAutoRenewCancelPreview = async () => {
+    await Taro.showModal({
+      title: '关闭自动续费路径',
+      content: '产品内路径：我的 → 食探会员 → 自动续费管理 → 关闭自动续费。\n也可在微信支付 → 扣费服务中关闭。当前为审核预览，不会执行真实解约。',
+      showCancel: false,
+      confirmText: '知道了',
+      confirmColor: '#00bc7d',
+    })
+  }
 
   return (
     <View className={`membership-page ${scheme === 'dark' ? 'membership-page--dark' : ''}`}>
@@ -530,6 +651,12 @@ function ProMembershipPage() {
         background={scheme === 'dark' ? '#101716' : '#f0fdf4'}
         className='membership-page__nav'
       />
+      {autoRenewAuditMode && (
+        <View className='audit-preview-banner'>
+          <Text className='audit-preview-title'>自动续费申请交互预览</Text>
+          <Text className='audit-preview-text'>仅用于微信支付能力审核，当前不会发起真实代扣。</Text>
+        </View>
+      )}
       {/* 顶部 Hero */}
       <View className='hero-section'>
         <View className='hero-orb hero-orb--right' />
@@ -731,6 +858,52 @@ function ProMembershipPage() {
         </View>
       </View>
 
+      {autoRenewAuditMode && (
+        <View className='auto-renew-card'>
+          <View className='auto-renew-card-head'>
+            <Text className='auto-renew-card-title'>自动续费说明</Text>
+            <Text className='auto-renew-card-badge'>审核预览</Text>
+          </View>
+          <View className='auto-renew-row'>
+            <Text className='auto-renew-label'>服务名称</Text>
+            <Text className='auto-renew-value'>{autoRenewPreview.planName}</Text>
+          </View>
+          <View className='auto-renew-row'>
+            <Text className='auto-renew-label'>扣费周期</Text>
+            <Text className='auto-renew-value'>{autoRenewPreview.periodLabel}</Text>
+          </View>
+          <View className='auto-renew-row'>
+            <Text className='auto-renew-label'>每期金额</Text>
+            <Text className='auto-renew-value auto-renew-value--price'>{autoRenewPreview.amountText}</Text>
+          </View>
+          <View className='auto-renew-row'>
+            <Text className='auto-renew-label'>预计续费</Text>
+            <Text className='auto-renew-value'>{autoRenewPreview.renewDateText}</Text>
+          </View>
+          <Text className='auto-renew-desc'>开通后，会员到期前将按所选周期自动续费；扣费前会按微信支付规则发送通知。用户可随时关闭自动续费，关闭后不影响已付费周期内的会员权益。</Text>
+          <View className='auto-renew-path'>
+            <Text className='auto-renew-path-title'>取消路径</Text>
+            <Text className='auto-renew-path-text'>我的 → 食探会员 → 自动续费管理 → 关闭自动续费</Text>
+            <Text className='auto-renew-path-text'>也可在微信支付 → 扣费服务中关闭</Text>
+          </View>
+          <View
+            className={`auto-renew-check ${autoRenewRuleAccepted ? 'auto-renew-check--checked' : ''}`}
+            onClick={() => setAutoRenewRuleAccepted(v => !v)}
+          >
+            <View className='auto-renew-checkbox'>
+              {autoRenewRuleAccepted && <Text className='auto-renew-checkbox-mark'>✓</Text>}
+            </View>
+            <Text className='auto-renew-check-text'>我已阅读并同意会员服务协议及自动续费规则</Text>
+          </View>
+          <Text
+            className='auto-renew-link'
+            onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/membership-agreement/index') })}
+          >
+            查看《会员服务协议》
+          </Text>
+        </View>
+      )}
+
       {/* 三档对比表 */}
       <View className='features-section'>
         <View className='features-header'>
@@ -873,6 +1046,20 @@ function ProMembershipPage() {
         </View>
       )}
 
+      {autoRenewAuditMode && !pageLoading && membership && (
+        <View className='auto-renew-manage-card'>
+          <View className='auto-renew-card-head'>
+            <Text className='auto-renew-card-title'>自动续费管理</Text>
+            <Text className='auto-renew-card-badge'>产品内路径</Text>
+          </View>
+          <Text className='auto-renew-manage-text'>用户开通后，可在本页面查看自动续费状态，并通过下方入口关闭自动续费。</Text>
+          <Text className='auto-renew-path-text'>我的 → 食探会员 → 自动续费管理 → 关闭自动续费</Text>
+          <Button className='auto-renew-cancel-btn' onClick={showAutoRenewCancelPreview}>
+            关闭自动续费（审核预览）
+          </Button>
+        </View>
+      )}
+
       {/* 年龄合规提示 */}
       {!ageCompliance.ok && !ageWarningDismissed && (
         <View className={`age-compliance-banner age-compliance-banner--${ageCompliance.severity}`}>
@@ -915,11 +1102,16 @@ function ProMembershipPage() {
             : actionButtonText
           }
         </Button>
-        <Text className='subscribe-hint'>{paymentEstimate.hint || '到期后不自动续费 · 支持微信支付'}</Text>
+        <Text className='subscribe-hint'>
+          {autoRenewAuditMode ? '自动续费审核预览 · 不发起真实代扣' : (paymentEstimate.hint || '到期后不自动续费 · 支持微信支付')}
+        </Text>
+        {autoRenewAuditMode && (
+          <Text className='subscribe-hint subscribe-hint--audit'>当前页面仅为自动续费申请审核预览，不会真实扣款。</Text>
+        )}
       </View>
 
     </View>
   )
 }
 
-export default withAuth(ProMembershipPage)
+export default withAuth(ProMembershipPage, { public: true })

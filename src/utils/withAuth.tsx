@@ -23,6 +23,18 @@ export function isPublicPage(path: string): boolean {
   return PUBLIC_PAGES.has(cleanPath)
 }
 
+function isAutoRenewAuditPreviewPage(): boolean {
+  const pages = Taro.getCurrentPages()
+  if (pages.length === 0) return false
+  const currentPage = pages[pages.length - 1]
+  const route = `/${currentPage.route || ''}`
+  const options = currentPage.options || {}
+  return (
+    (route === extraPkgUrl('/pages/pro-membership/index') || route === '/packageExtra/pages/pro-membership/index') &&
+    String(options.audit_auto_renew || '') === '1'
+  )
+}
+
 /**
  * 获取当前页面路径（包含查询参数）
  */
@@ -86,7 +98,7 @@ export function checkAuth(): boolean {
   const route = getCurrentPageRoute()
   
   // 如果是公共页面，不需要检查登录
-  if (isPublicPage(route)) {
+  if (isPublicPage(route) || isAutoRenewAuditPreviewPage()) {
     return true
   }
   
@@ -136,6 +148,11 @@ export function withAuth<P extends object>(
       
       // 如果是公共页面，不需要检查登录
       if (isPublicPage(currentRoute)) {
+        setIsAuthenticated(true)
+        return
+      }
+
+      if (isAutoRenewAuditPreviewPage()) {
         setIsAuthenticated(true)
         return
       }

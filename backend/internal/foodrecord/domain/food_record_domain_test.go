@@ -59,6 +59,54 @@ func TestFoodItem_UnmarshalJSONWaterMlAliases(t *testing.T) {
 	assert.Equal(t, 10.0, nested.Nutrients.Calories)
 }
 
+func TestFoodItem_UnmarshalJSONPreservesPackagedAnalysisMetadata(t *testing.T) {
+	var item FoodItem
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"name": "雀巢咖啡1+2奶香",
+		"weight": 52.5,
+		"ratio": 75,
+		"intake": 39.375,
+		"gross_weight_grams": 105,
+		"edible_portion_ratio": 1,
+		"edible_portion_reason": "完整包装",
+		"edible_portion_source": "vision",
+		"suggested_ratio": 75,
+		"suggested_ratio_reason": "建议半包到四分之三包",
+		"suggested_ratio_source": "ai",
+		"nutrition_source": "packaged_food_library",
+		"matched_food_id": "nutrition:coffee",
+		"packaged_food_id": "packaged:nescafe-105g",
+		"package_match_status": "matched",
+		"package_match_confidence": 0.96,
+		"package_weight_source": "packaged_food_library",
+		"package_weight_applied": true,
+		"package_weight_reason": "命中包装库净含量105g",
+		"packaged_candidates": [{"id":"packaged:nescafe-105g","net_weight_g":105}],
+		"nutrients": {"calories": 52.5, "protein": 1, "carbs": 10, "fat": 1}
+	}`), &item))
+
+	assert.Equal(t, "雀巢咖啡1+2奶香", item.Name)
+	assert.Equal(t, 52.5, item.Weight)
+	assert.Equal(t, 105.0, item.GrossWeightGrams)
+	require.NotNil(t, item.SuggestedRatio)
+	assert.Equal(t, 75.0, *item.SuggestedRatio)
+	require.NotNil(t, item.SuggestedRatioSource)
+	assert.Equal(t, "ai", *item.SuggestedRatioSource)
+	require.NotNil(t, item.NutritionSource)
+	assert.Equal(t, "packaged_food_library", *item.NutritionSource)
+	require.NotNil(t, item.PackagedFoodID)
+	assert.Equal(t, "packaged:nescafe-105g", *item.PackagedFoodID)
+	require.NotNil(t, item.PackageWeightApplied)
+	assert.True(t, *item.PackageWeightApplied)
+	require.Len(t, item.PackagedCandidates, 1)
+
+	encoded, err := json.Marshal(item)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"suggested_ratio_source":"ai"`)
+	assert.Contains(t, string(encoded), `"package_weight_source":"packaged_food_library"`)
+	assert.Contains(t, string(encoded), `"packaged_candidates"`)
+}
+
 func TestFoodItem_UnmarshalJSONDefaultsMissingRatio(t *testing.T) {
 	var fromIntake FoodItem
 	require.NoError(t, json.Unmarshal([]byte(`{"name":"米饭","weight":200,"intake":50,"nutrients":{"calories":100}}`), &fromIntake))

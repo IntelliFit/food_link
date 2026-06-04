@@ -31,6 +31,7 @@ import {
   normalizeSelectableMealType,
   type SelectableMealType
 } from '../../../components/MealTypeSelector'
+import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 
 import './index.scss'
 
@@ -74,8 +75,25 @@ type EditableNutrientField = 'calories' | 'protein' | 'carbs' | 'fat'
 interface EditableFoodItem {
   name: string
   weight: number
+  grossWeight?: number
+  ediblePortionRatio?: number
+  ediblePortionReason?: string
+  ediblePortionSource?: string
   ratio: number
   intake: number
+  waterMl?: number
+  suggestedRatio?: number
+  suggestedRatioReason?: string
+  suggestedRatioSource?: string
+  nutritionSource?: string | null
+  matchedFoodId?: string | null
+  packagedFoodId?: string
+  packageMatchStatus?: string
+  packageMatchConfidence?: number
+  packageWeightSource?: string
+  packageWeightApplied?: boolean
+  packageWeightReason?: string
+  packagedCandidates?: Array<Record<string, unknown>>
   nutrients: Nutrients
 }
 
@@ -362,8 +380,25 @@ function RecordDetailPage() {
       (record.items || []).map(item => ({
         name: item.name,
         weight: item.weight,
+        grossWeight: item.gross_weight_grams ?? item.grossWeightGrams ?? item.weight,
+        ediblePortionRatio: item.edible_portion_ratio ?? item.ediblePortionRatio,
+        ediblePortionReason: item.edible_portion_reason ?? item.ediblePortionReason,
+        ediblePortionSource: item.edible_portion_source ?? item.ediblePortionSource,
         ratio: resolveRecordItemRatio(item),
         intake: resolveRecordItemIntake(item),
+        waterMl: item.water_ml ?? item.waterMl,
+        suggestedRatio: item.suggested_ratio ?? item.suggestedRatio,
+        suggestedRatioReason: item.suggested_ratio_reason ?? item.suggestedRatioReason,
+        suggestedRatioSource: item.suggested_ratio_source ?? item.suggestedRatioSource,
+        nutritionSource: item.nutrition_source ?? item.nutritionSource,
+        matchedFoodId: item.matched_food_id ?? item.matchedFoodId,
+        packagedFoodId: item.packaged_food_id ?? item.packagedFoodId,
+        packageMatchStatus: item.package_match_status ?? item.packageMatchStatus,
+        packageMatchConfidence: item.package_match_confidence ?? item.packageMatchConfidence,
+        packageWeightSource: item.package_weight_source ?? item.packageWeightSource,
+        packageWeightApplied: item.package_weight_applied ?? item.packageWeightApplied,
+        packageWeightReason: item.package_weight_reason ?? item.packageWeightReason,
+        packagedCandidates: item.packaged_candidates ?? item.packagedCandidates,
         nutrients: { ...(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }) }
       }))
     )
@@ -736,7 +771,7 @@ function RecordDetailPage() {
 
       const { record: updated } = await updateFoodRecord(record.id, {
         meal_type: editMealType,
-        items: editItems,
+        items: editItems.map((item) => buildFoodRecordItemPayloadFromResultItem(item, item.nutrients)),
         total_calories: Math.round(totalCalories * 10) / 10,
         total_protein: Math.round(totalProtein * 10) / 10,
         total_carbs: Math.round(totalCarbs * 10) / 10,

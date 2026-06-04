@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>零食库管理</title>
+    <link rel="stylesheet" href="/static/snack_admin/style.css" />
+  </head>
+  <body>
+    <main class="admin-shell">
+      <header class="topbar">
+        <div>
+          <h1>零食库管理</h1>
+          <p>浏览包装图片、核对规格与营养，快速修正包装食品库。</p>
+        </div>
+        <form id="auth-form" class="auth-form">
+          <input id="admin-key" type="password" autocomplete="off" placeholder="管理员密钥，可留空使用测试后台登录态" />
+          <button type="submit">应用密钥</button>
+          <a href="/test-backend/login" target="_blank" rel="noreferrer">测试后台登录</a>
+        </form>
+      </header>
+
+      <section class="toolbar" aria-label="筛选">
+        <label>
+          关键词
+          <input id="filter-q" type="search" placeholder="品牌 / 商品 / 条码 / OCR" />
+        </label>
+        <label>
+          状态
+          <select id="filter-review">
+            <option value="all">全部</option>
+            <option value="active">active</option>
+            <option value="pending">pending</option>
+            <option value="web_verified">web_verified</option>
+            <option value="rejected_missing_net_content">rejected_missing_net_content</option>
+            <option value="blank">空状态</option>
+          </select>
+        </label>
+        <label>
+          启用
+          <select id="filter-active">
+            <option value="all">全部</option>
+            <option value="true">启用</option>
+            <option value="false">停用</option>
+          </select>
+        </label>
+        <label>
+          图片
+          <select id="filter-image">
+            <option value="all">全部</option>
+            <option value="with_images">有图</option>
+            <option value="missing_images">缺图</option>
+          </select>
+        </label>
+        <label>
+          每页
+          <select id="filter-limit">
+            <option value="30">30</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+          </select>
+        </label>
+        <button id="refresh-btn" type="button">刷新</button>
+      </section>
+
+      <section class="statusline">
+        <span id="result-summary">准备加载</span>
+        <div class="pager">
+          <button id="prev-page" type="button">上一页</button>
+          <span id="page-indicator">第 1 页</span>
+          <button id="next-page" type="button">下一页</button>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div id="grid" class="food-grid" aria-live="polite"></div>
+        <aside id="editor" class="editor" aria-label="编辑商品">
+          <div class="empty-editor">
+            <h2>选择一个商品</h2>
+            <p>点击左侧任意商品后，可查看全部图片、OCR 和可编辑字段。</p>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <dialog id="image-dialog" class="image-dialog">
+      <button id="close-image" type="button" aria-label="关闭">×</button>
+      <img id="dialog-image" alt="零食图片预览" />
+    </dialog>
+
+    <script src="/static/snack_admin/app.js" defer></script>
+  </body>
+</html>

@@ -9,5 +9,5 @@ export const userGroup = {
   qrImage: '/images/community/user-group-qr.jpg',
   qrAlt: '食探用户群二维码',
   scanHint: '微信扫码或长按识别二维码加入',
-  fallbackHint: '群二维码会定期更新；若失效，请在小程序「我的」→「加入用户群」查看最新群码。',
+  fallbackHint: '这是当前唯一用户群二维码，可长期使用。',
 } as const

@@ -329,7 +329,7 @@ func normalizeRecipeItemsForFoodRecord(items []map[string]any, recipe *domain.Re
 		if weight > 0 {
 			normalized["weight"] = weight
 		}
-		ratio := firstNumberFromMap(item, "ratio", "suggestedRatio", "suggested_ratio")
+		ratio := firstNumberFromMap(item, "ratio")
 		if ratio <= 0 {
 			ratio = 100
 		}

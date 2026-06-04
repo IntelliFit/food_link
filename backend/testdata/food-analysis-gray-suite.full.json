@@ -1,0 +1,346 @@
+{
+  "modes": [
+    "fast",
+    "standard",
+    "strict",
+    "strict_separate",
+    "fast_web_search",
+    "standard_web_search",
+    "strict_web_search"
+  ],
+  "additional_context": "full gray verification for mixed normal meals and packaged snacks in the main photo analysis flow",
+  "suggest_ratio_enabled": true,
+  "fail_on_issue": true,
+  "global_gate": {
+    "require_done": true,
+    "max_unresolved_like_items": 0,
+    "max_missing_nutrition_items": 0,
+    "require_ai_ratio": true
+  },
+  "cases": [
+    {
+      "name": "mixed_nescafe",
+      "refs": [
+        "http://cdn-food-images.coachlink.fit/86f5223b-b338-4ef7-8aed-331a3cd31743.jpg"
+      ],
+      "expect": {
+        "require_mixed": true,
+        "require_package_anchor": true,
+        "packaged_name_contains": [
+          "雀巢",
+          "咖啡"
+        ],
+        "non_packaged_name_contains": [
+          "炸猪排"
+        ],
+        "item_expectations": [
+          {
+            "name_contains": [
+              "雀巢",
+              "咖啡"
+            ],
+            "require_packaged": true,
+            "min_weight_g": 104,
+            "max_weight_g": 106,
+            "nutrition_source": "packaged_food_library",
+            "package_weight_source": "packaged_food_library",
+            "require_package_weight_applied": true
+          }
+        ]
+      },
+      "correction": {
+        "additional_context": "把雀巢咖啡修正为半包，按 52.5g 记录，并使用用户填写的营养。",
+        "items": [
+          {
+            "name": "雀巢咖啡1+2奶香（半包）",
+            "sourceName": "雀巢咖啡1+2奶香",
+            "estimatedWeightGrams": 52.5,
+            "weight": 52.5,
+            "nameEdited": true,
+            "weightEdited": true,
+            "nutritionEdited": true,
+            "nutrients": {
+              "calories": 52.5,
+              "protein": 1.0,
+              "carbs": 10.0,
+              "fat": 1.0
+            }
+          }
+        ],
+        "expect": {
+          "require_done": true,
+          "require_ai_ratio": true,
+          "min_items": 1,
+          "name_contains": [
+            "半包"
+          ],
+          "item_expectations": [
+            {
+              "name_contains": [
+                "半包"
+              ],
+              "min_weight_g": 52,
+              "max_weight_g": 53,
+              "min_calories": 52,
+              "max_calories": 53,
+              "nutrition_source": "user_correction_context",
+              "package_weight_source": "user_context",
+              "require_package_weight_applied": true
+            }
+          ],
+          "max_unresolved_like_items": 0,
+          "max_missing_nutrition_items": 0
+        }
+      }
+    },
+    {
+      "name": "mixed_cutlet_cici",
+      "refs": [
+        "http://cdn-food-images.coachlink.fit/1153ee82-2713-4552-90a7-a48814e6bddc.jpg"
+      ],
+      "expect": {
+        "require_mixed": true,
+        "require_package_anchor": true,
+        "packaged_name_contains": [
+          "喜之郎",
+          "爽"
+        ],
+        "non_packaged_name_contains": [
+          "猪排"
+        ],
+        "item_expectations": [
+          {
+            "name_contains": [
+              "果"
+            ],
+            "require_packaged": true,
+            "min_weight_g": 250,
+            "max_weight_g": 265,
+            "nutrition_source": "packaged_food_library",
+            "package_weight_source": "packaged_food_library",
+            "require_package_weight_applied": true
+          },
+          {
+            "name_contains": [
+              "猪排"
+            ],
+            "require_non_packaged": true,
+            "min_weight_g": 80,
+            "max_weight_g": 400
+          }
+        ]
+      },
+      "correction": {
+        "additional_context": "把普通餐饮里的炸猪排修正为少量炸猪排，按 100g 记录，并使用用户填写营养；喜之郎饮料保持包装库结果。",
+        "items": [
+          {
+            "name": "炸猪排（少量）",
+            "sourceName": "炸猪排",
+            "estimatedWeightGrams": 100,
+            "weight": 100,
+            "nameEdited": true,
+            "weightEdited": true,
+            "nutritionEdited": true,
+            "nutrients": {
+              "calories": 260,
+              "protein": 18,
+              "carbs": 12,
+              "fat": 16
+            }
+          },
+          {
+            "name": "喜之郎CiCi果粒爽橙汁饮料",
+            "sourceName": "喜之郎CiCi果粒爽橙汁饮料",
+            "estimatedWeightGrams": 258,
+            "weight": 258
+          }
+        ],
+        "expect": {
+          "require_done": true,
+          "require_ai_ratio": true,
+          "min_items": 2,
+          "name_contains": [
+            "少量"
+          ],
+          "item_expectations": [
+            {
+              "name_contains": [
+                "少量"
+              ],
+              "require_non_packaged": true,
+              "min_weight_g": 99,
+              "max_weight_g": 101,
+              "min_calories": 259,
+              "max_calories": 261,
+              "nutrition_source": "user_correction_context",
+              "package_weight_source": "user_context",
+              "require_package_weight_applied": true
+            },
+            {
+              "name_contains": [
+                "果"
+              ],
+              "require_packaged": true,
+              "min_weight_g": 250,
+              "max_weight_g": 265,
+              "nutrition_source": "packaged_food_library",
+              "package_weight_source": "packaged_food_library",
+              "require_package_weight_applied": true
+            }
+          ],
+          "max_unresolved_like_items": 0,
+          "max_missing_nutrition_items": 0
+        }
+      }
+    },
+    {
+      "name": "mixed_skewer_snickers",
+      "refs": [
+        "http://cdn-food-images.coachlink.fit/154a5549-1e58-44e3-be27-1e45e5b4bdea.jpg"
+      ],
+      "expect": {
+        "require_mixed": true,
+        "require_package_anchor": true,
+        "packaged_name_contains": [
+          "士力架"
+        ],
+        "non_packaged_name_contains": [
+          "烤",
+          "串"
+        ],
+        "item_expectations": [
+          {
+            "name_contains": [
+              "士力架"
+            ],
+            "require_packaged": true,
+            "min_weight_g": 69,
+            "max_weight_g": 71,
+            "nutrition_source": "packaged_food_library",
+            "package_weight_source": "packaged_food_library",
+            "require_package_weight_applied": true
+          },
+          {
+            "name_contains": [
+              "烤"
+            ],
+            "require_non_packaged": true,
+            "min_weight_g": 40,
+            "max_weight_g": 300
+          }
+        ]
+      }
+    },
+    {
+      "name": "mixed_rice_suntory_sugarfree",
+      "refs": [
+        "./testdata/food-analysis-gray-assets/mixed-rice-suntory-sugarfree.png"
+      ],
+      "additional_context": "左侧是普通白米饭，右侧是 SUNTORY 三得利纤漾饮荷叶茉莉花味风味饮料（无糖）包装，标签显示净含量500ml，营养成分表每100ml能量75kJ/18kcal、蛋白质0g、脂肪0g、碳水化合物0g。请把白米饭作为普通餐饮解析，把三得利无糖饮料作为预包装饮料解析；低热量但宏量为0是标签值，不应算缺营养。",
+      "expect": {
+        "require_mixed": true,
+        "require_package_anchor": true,
+        "packaged_name_contains": [
+          "三得利",
+          "纤漾饮"
+        ],
+        "non_packaged_name_contains": [
+          "白米饭"
+        ],
+        "item_expectations": [
+          {
+            "name_contains": [
+              "三得利",
+              "纤漾饮"
+            ],
+            "require_packaged": true,
+            "min_weight_g": 490,
+            "max_weight_g": 510,
+            "min_calories": 80,
+            "max_calories": 100,
+            "nutrition_source": "packaged_food_library",
+            "package_weight_source": "packaged_food_library",
+            "require_package_weight_applied": true
+          },
+          {
+            "name_contains": [
+              "白米饭"
+            ],
+            "require_non_packaged": true,
+            "min_weight_g": 120,
+            "max_weight_g": 240
+          }
+        ],
+        "max_unresolved_like_items": 0,
+        "max_missing_nutrition_items": 0
+      }
+    },
+    {
+      "name": "package_miss_ai_fallback",
+      "refs": [
+        "./testdata/food-analysis-gray-assets/mixed-rice-unlisted-dougan.jpg"
+      ],
+      "additional_context": "右侧红色包装是虚构未收录测试 SKU：未来牌香辣豆干脆块。不要把它改写成普通豆干；如果包装库没有命中，请保守估算营养并保留为已解析结果。",
+      "expect": {
+        "min_items": 2,
+        "min_non_packaged_items": 1,
+        "max_packaged_items": 0,
+        "name_contains": [
+          "豆干"
+        ],
+        "non_packaged_name_contains": [
+          "白米饭"
+        ],
+        "item_expectations": [
+          {
+            "name_contains": [
+              "白米饭"
+            ],
+            "require_non_packaged": true,
+            "min_weight_g": 80,
+            "max_weight_g": 250
+          },
+          {
+            "name_contains": [
+              "豆干"
+            ],
+            "min_weight_g": 20,
+            "max_weight_g": 60,
+            "min_calories": 30,
+            "max_calories": 200,
+            "nutrition_source_any": [
+              "deepseek_generated",
+              "library_exact_canonical"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "normal_only_skewer",
+      "refs": [
+        "./testdata/food/9F1F4BC7A2986BBFEFE4854FFA939035.jpg"
+      ],
+      "additional_context": "这是一张纯普通餐饮烤串图片，没有完整独立包装袋或营养标签；不要把盘子、签子、桌面或背景误识别成包装食品。",
+      "expect": {
+        "min_items": 1,
+        "min_non_packaged_items": 1,
+        "max_packaged_items": 0,
+        "non_packaged_name_contains": [
+          "烤",
+          "串"
+        ],
+        "item_expectations": [
+          {
+            "name_contains": [
+              "烤"
+            ],
+            "require_non_packaged": true,
+            "min_weight_g": 40,
+            "max_weight_g": 300
+          }
+        ]
+      }
+    }
+  ]
+}

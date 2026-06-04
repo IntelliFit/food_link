@@ -70,8 +70,11 @@ export type ExecutionMode =
   | 'lite'
   | 'standard'
   | 'standard_web_search'
+  | 'fast'
+  | 'fast_web_search'
   | 'standard_packaged_experiment'
   | 'strict'
+  | 'strict_separate'
   | 'strict_web_search'
   | 'experimental'
   | 'gemini35_flash'
@@ -209,21 +212,35 @@ export interface FoodItem {
   suggestedRatio?: number
   suggestedRatioReason?: string
   suggestedRatioSource?: string
+  suggested_ratio?: number
+  suggested_ratio_reason?: string
+  suggested_ratio_source?: string
   waterMl?: number
   water_ml?: number
   nutrients: Nutrients
   unit_nutrition_per_100g?: UnitNutritionPer100g
+  matched_food_id?: string | null
+  matchedFoodId?: string | null
   matched_food_name?: string | null
   is_unresolved?: boolean
   resolve_status?: string | null
   resolve_score?: number
   nutrition_source?: string | null
+  nutritionSource?: string | null
+  packaged_food_id?: string
+  packagedFoodId?: string
   package_match_status?: string
+  packageMatchStatus?: string
   package_match_confidence?: number
+  packageMatchConfidence?: number
   package_weight_source?: string
+  packageWeightSource?: string
   package_weight_applied?: boolean
+  packageWeightApplied?: boolean
   package_weight_reason?: string
+  packageWeightReason?: string
   packaged_candidates?: Array<Record<string, unknown>>
+  packagedCandidates?: Array<Record<string, unknown>>
 }
 
 // 分析响应接口（含专业营养分析）
@@ -235,6 +252,7 @@ export interface AnalyzeResponse {
   suggest_ratio_status?: string
   suggest_ratio_applied_count?: number
   pfc_ratio_comment?: string
+  eating_order_advice?: string
   absorption_notes?: string
   context_advice?: string
   analysis_engine?: AnalysisEngine
@@ -415,6 +433,7 @@ export interface ModelAnalyzeResult {
   insight?: string
   items: FoodItem[]
   pfc_ratio_comment?: string
+  eating_order_advice?: string
   absorption_notes?: string
   context_advice?: string
   recognitionOutcome?: AnalyzeRecognitionOutcome
@@ -436,15 +455,27 @@ export interface FoodRecordItemPayload {
   weight: number
   ratio: number
   intake: number
+  image_path?: string
+  image_paths?: string[]
   gross_weight_grams?: number
   edible_portion_ratio?: number
   edible_portion_reason?: string
   edible_portion_source?: string
   suggested_ratio?: number
   suggested_ratio_reason?: string
+  suggested_ratio_source?: string
   water_ml?: number
+  nutrition_source?: string | null
+  matched_food_id?: string | null
+  packaged_food_id?: string
+  package_match_status?: string
+  package_match_confidence?: number
+  package_weight_source?: string
+  package_weight_applied?: boolean
+  package_weight_reason?: string
+  packaged_candidates?: Array<Record<string, unknown>>
   nutrients: Nutrients
-  manual_source?: 'public_library' | 'nutrition_library' | 'packaged_food'
+  manual_source?: 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom'
   manual_source_id?: string
   manual_source_title?: string
   manual_portion_label?: string
@@ -507,10 +538,34 @@ export interface FoodRecord {
     ediblePortionReason?: string
     edible_portion_source?: string
     ediblePortionSource?: string
+    suggested_ratio?: number
+    suggestedRatio?: number
+    suggested_ratio_reason?: string
+    suggestedRatioReason?: string
+    suggested_ratio_source?: string
+    suggestedRatioSource?: string
     ratio: number
     intake: number
     waterMl?: number
     water_ml?: number
+    nutrition_source?: string | null
+    nutritionSource?: string | null
+    matched_food_id?: string | null
+    matchedFoodId?: string | null
+    packaged_food_id?: string
+    packagedFoodId?: string
+    package_match_status?: string
+    packageMatchStatus?: string
+    package_match_confidence?: number
+    packageMatchConfidence?: number
+    package_weight_source?: string
+    packageWeightSource?: string
+    package_weight_applied?: boolean
+    packageWeightApplied?: boolean
+    package_weight_reason?: string
+    packageWeightReason?: string
+    packaged_candidates?: Array<Record<string, unknown>>
+    packagedCandidates?: Array<Record<string, unknown>>
     nutrients: Nutrients
   }>
   total_calories: number
@@ -804,8 +859,11 @@ export interface PetDailyScore {
 
 export interface PetStatus {
   mood: 'happy' | 'calm' | 'sleepy' | 'surprised' | string
+  state?: 'active' | 'steady' | 'warming' | 'sleepy' | 'dozing' | 'low_power' | 'hibernating' | 'deep_sleep' | 'surprised' | string
   message: string
   task_text: string
+  inactivity_days?: number
+  can_revive?: boolean
 }
 
 export interface PetOfflineEvent {
@@ -1426,6 +1484,13 @@ export interface CreateMembershipPaymentResponse {
     signType: 'RSA'
     paySign: string
   }
+}
+
+export interface SyncMembershipPaymentResponse {
+  synced: boolean
+  status: string
+  trade_state?: string
+  membership?: MembershipStatus
 }
 
 /** 积分充值下单（微信支付 JSAPI），回调到账后增加积分 */
@@ -2342,11 +2407,13 @@ export interface AnalyzeTaskSubmitParams {
     protein?: number
     carbs?: number
     fat?: number
+    waterMl?: number
     nutrients?: Nutrients
     sourceName?: string
     sourceItemId?: number
     nameEdited?: boolean
     weightEdited?: boolean
+    nutritionEdited?: boolean
   }>
 }
 
@@ -2499,11 +2566,13 @@ export interface AnalyzeTextTaskSubmitParams {
     protein?: number
     carbs?: number
     fat?: number
+    waterMl?: number
     nutrients?: Nutrients
     sourceName?: string
     sourceItemId?: number
     nameEdited?: boolean
     weightEdited?: boolean
+    nutritionEdited?: boolean
   }>
 }
 
@@ -3616,13 +3685,14 @@ const MEMBERSHIP_CACHE_TTL_MS = 30_000
  * 获取当前用户会员状态（带 30s 缓存，复用 in-flight 请求）
  * @param date 可选，查询指定日期的积分状态（YYYY-MM-DD），不传则查今天
  */
-export async function getMyMembership(date?: string): Promise<MembershipStatus> {
+export async function getMyMembership(date?: string, options?: { forceRefresh?: boolean }): Promise<MembershipStatus> {
   const key = (date || '').trim()
+  const forceRefresh = options?.forceRefresh === true
   const cached = _membershipCache.get(key)
-  if (cached && Date.now() < cached.expiresAt) {
+  if (!forceRefresh && cached && Date.now() < cached.expiresAt) {
     return cached.data
   }
-  if (_membershipPending && _membershipPendingKey === key) {
+  if (!forceRefresh && _membershipPending && _membershipPendingKey === key) {
     return _membershipPending
   }
 
@@ -3816,6 +3886,28 @@ export async function createMembershipPayment(planCode: string): Promise<CreateM
   } catch (error: any) {
     console.error('创建会员支付单失败:', error)
     throw new Error(error.message || '创建会员支付单失败')
+  }
+}
+
+export async function syncMembershipPayment(orderNo: string): Promise<SyncMembershipPaymentResponse> {
+  try {
+    const response = await authenticatedRequest('/api/membership/pay/sync', {
+      method: 'POST',
+      data: {
+        order_no: orderNo,
+      },
+      timeout: 15000,
+    })
+
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '同步会员支付状态失败'
+      throw new Error(errorMsg)
+    }
+
+    return response.data as SyncMembershipPaymentResponse
+  } catch (error: any) {
+    console.error('同步会员支付状态失败:', error)
+    throw new Error(error.message || '同步会员支付状态失败')
   }
 }
 
@@ -4044,7 +4136,7 @@ export async function uploadHealthReportOcr(base64Image: string): Promise<{
 
 export interface ManualFoodSearchResult {
   id: string
-  source: 'public_library' | 'nutrition_library' | 'packaged_food'
+  source: 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom'
   title: string
   subtitle: string
   category?: string
@@ -4063,12 +4155,50 @@ export interface ManualFoodSearchResult {
     fat: number
     fiber: number
     sugar: number
+    saturatedFat?: number
+    cholesterolMg?: number
     sodium_mg?: number
+    sodiumMg?: number
+    potassiumMg?: number
+    calciumMg?: number
+    ironMg?: number
+    magnesiumMg?: number
+    zincMg?: number
+    vitaminARaeMcg?: number
+    vitaminCMg?: number
+    vitaminDMcg?: number
+    vitaminEMg?: number
+    vitaminKMcg?: number
+    thiaminMg?: number
+    riboflavinMg?: number
+    niacinMg?: number
+    vitaminB6Mg?: number
+    folateMcg?: number
+    vitaminB12Mcg?: number
   }
   extra_nutrients?: {
     fiber: number
     sugar: number
+    saturatedFat?: number
+    cholesterolMg?: number
     sodium_mg?: number
+    sodiumMg?: number
+    potassiumMg?: number
+    calciumMg?: number
+    ironMg?: number
+    magnesiumMg?: number
+    zincMg?: number
+    vitaminARaeMcg?: number
+    vitaminCMg?: number
+    vitaminDMcg?: number
+    vitaminEMg?: number
+    vitaminKMcg?: number
+    thiaminMg?: number
+    riboflavinMg?: number
+    niacinMg?: number
+    vitaminB6Mg?: number
+    folateMcg?: number
+    vitaminB12Mcg?: number
   }
   items?: Array<{ name: string; weight?: number; nutrients?: Nutrients }> | null
   image_path?: string | null
@@ -4151,6 +4281,49 @@ export async function fetchManualFoodCatalog(
     throw new Error((response.data as any)?.detail || '获取食物目录失败')
   }
   return unwrapResponse<ManualFoodCatalogResult>(response)
+}
+
+export interface SaveManualCustomFoodRequest {
+  id?: string
+  title: string
+  default_weight_grams: number
+  total_calories: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  nutrients_per_100g?: Nutrients
+  extra_nutrients?: Nutrients
+  image_path?: string | null
+  image_paths?: string[] | null
+  portion_label?: string
+  recommend_reason?: string
+  share_to_public?: boolean
+}
+
+export async function fetchManualCustomFoods(
+  limit: number = 120,
+  offset: number = 0
+): Promise<{ items: ManualFoodSearchResult[]; has_more: boolean }> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  })
+  const response = await authenticatedRequest(`/api/manual-food/custom?${params.toString()}`, {
+    method: 'GET',
+    timeout: 15000
+  })
+  return unwrapResponse<{ items: ManualFoodSearchResult[]; has_more: boolean }>(response)
+}
+
+export async function saveManualCustomFood(
+  data: SaveManualCustomFoodRequest
+): Promise<ManualFoodSearchResult> {
+  const response = await authenticatedRequest('/api/manual-food/custom', {
+    method: 'POST',
+    data,
+    timeout: 15000
+  })
+  return unwrapResponse<{ item: ManualFoodSearchResult }>(response).item
 }
 
 export interface ManualFoodBrowseResult {
@@ -4239,9 +4412,14 @@ export interface CreatePackagedFoodRequest {
   ingredients_text?: string
   source_image_urls?: string[]
   ocr_raw_text?: string
+  nutrition_basis_unit?: string
+  energy_unit_raw?: string
+  raw_label_payload?: Record<string, any>
+  conversion_status?: string
   extract_confidence?: number
   field_confidence?: Record<string, any>
   ingest_method?: string
+  review_status?: string
   net_weight_g: number
   serving_weight_g?: number
   kcal_per_100g: number
@@ -5212,14 +5390,7 @@ export interface UserRecipe {
   recipe_name: string
   description?: string
   image_path?: string
-  items: Array<{
-    name: string
-    weight: number
-    ratio: number
-    intake: number
-    water_ml?: number
-    nutrients: Nutrients
-  }>
+  items: FoodRecordItemPayload[]
   total_calories: number
   total_protein: number
   total_carbs: number
@@ -5239,14 +5410,7 @@ export interface CreateRecipeRequest {
   recipe_name: string
   description?: string
   image_path?: string
-  items: Array<{
-    name: string
-    weight: number
-    ratio: number
-    intake: number
-    water_ml?: number
-    nutrients: Nutrients
-  }>
+  items: FoodRecordItemPayload[]
   total_calories: number
   total_protein: number
   total_carbs: number
@@ -5262,14 +5426,7 @@ export interface UpdateRecipeRequest {
   recipe_name?: string
   description?: string
   image_path?: string
-  items?: Array<{
-    name: string
-    weight: number
-    ratio: number
-    intake: number
-    water_ml?: number
-    nutrients: Nutrients
-  }>
+  items?: FoodRecordItemPayload[]
   total_calories?: number
   total_protein?: number
   total_carbs?: number

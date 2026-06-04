@@ -245,6 +245,8 @@ worker:
 func TestLoadTrimsExternalSecrets(t *testing.T) {
 	t.Setenv("DOUBAO_API_KEY", " sk-test ")
 	t.Setenv("DOUBAO_WEB_SEARCH_API_KEY", "\tweb-search-key\n")
+	t.Setenv("DASHSCOPE_API_KEY", "\tdashscope-key\n")
+	t.Setenv("DASHSCOPE_BASE_URL", "\thttps://dashscope.example.com/v1\n")
 	t.Setenv("OFOXAI_API_KEY", "\tsk-ofox\n")
 	t.Setenv("GEMINI35_API_KEY", "\tsk-gemini35\n")
 	t.Setenv("GEMINI35_BASE_URL", "\thttps://yunwu.ai/v1\n")
@@ -266,6 +268,12 @@ worker:
 	if cfg.External.DoubaoWebSearchAPIKey != "web-search-key" {
 		t.Fatalf("expected trimmed doubao web search key, got %q", cfg.External.DoubaoWebSearchAPIKey)
 	}
+	if cfg.External.DashScopeAPIKey != "dashscope-key" {
+		t.Fatalf("expected trimmed dashscope key, got %q", cfg.External.DashScopeAPIKey)
+	}
+	if cfg.External.DashScopeBaseURL != "https://dashscope.example.com/v1" {
+		t.Fatalf("expected trimmed dashscope base URL, got %q", cfg.External.DashScopeBaseURL)
+	}
 	if cfg.External.OfoxAIAPIKey != "sk-ofox" {
 		t.Fatalf("expected trimmed ofox key, got %q", cfg.External.OfoxAIAPIKey)
 	}
@@ -286,6 +294,8 @@ worker:
 func TestLoadPrefersFileExternalKeysOverEnv(t *testing.T) {
 	t.Setenv("DOUBAO_API_KEY", "bad-env-key")
 	t.Setenv("DOUBAO_WEB_SEARCH_API_KEY", "bad-web-search")
+	t.Setenv("DASHSCOPE_API_KEY", "bad-dashscope")
+	t.Setenv("DASHSCOPE_BASE_URL", "https://bad-dashscope.example.com")
 	t.Setenv("OFOXAI_API_KEY", "bad-ofox")
 	t.Setenv("GEMINI35_API_KEY", "bad-gemini35")
 	t.Setenv("GEMINI35_BASE_URL", "https://bad.example.com")
@@ -298,6 +308,8 @@ app:
 external:
   doubao_api_key: "good-doubao"
   doubao_web_search_api_key: "good-web-search"
+  dashscope_api_key: "good-dashscope"
+  dashscope_base_url: "https://good-dashscope.example.com/v1"
   ofoxai_api_key: "good-ofox"
   gemini35_api_key: "good-gemini35"
   gemini35_base_url: "https://good.example.com/v1"
@@ -316,6 +328,12 @@ worker:
 	}
 	if cfg.External.DoubaoWebSearchAPIKey != "good-web-search" {
 		t.Fatalf("expected file doubao web search key, got %q", cfg.External.DoubaoWebSearchAPIKey)
+	}
+	if cfg.External.DashScopeAPIKey != "good-dashscope" {
+		t.Fatalf("expected file dashscope key, got %q", cfg.External.DashScopeAPIKey)
+	}
+	if cfg.External.DashScopeBaseURL != "https://good-dashscope.example.com/v1" {
+		t.Fatalf("expected file dashscope base URL, got %q", cfg.External.DashScopeBaseURL)
 	}
 	if cfg.External.OfoxAIAPIKey != "good-ofox" {
 		t.Fatalf("expected file ofox key, got %q", cfg.External.OfoxAIAPIKey)

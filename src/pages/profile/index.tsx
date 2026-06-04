@@ -537,7 +537,11 @@ function ProfilePage() {
           const storageInfo = Taro.getStorageInfoSync()
           const keys = storageInfo.keys || []
           keys.forEach((key: string) => {
-            if (key.startsWith('comment_draft_') || key.startsWith('temp_comments_')) {
+            if (
+              key.startsWith('comment_draft_') ||
+              key.startsWith('temp_comments_') ||
+              key.startsWith('record_manual_custom_foods_v1:')
+            ) {
               try { Taro.removeStorageSync(key) } catch (_) {}
             }
           })

@@ -290,19 +290,28 @@ func processFood(
 func loadIssueFoods(ctx context.Context, db *gorm.DB, limit int) ([]foodrecorddomain.PackagedFood, error) {
 	query := db.WithContext(ctx).
 		Where(`is_active = true AND (
-			COALESCE(net_weight_g,0) <= 0
-			OR COALESCE(net_content_value,0) <= 0
+			COALESCE(net_content_value,0) <= 0
 			OR COALESCE(net_content_unit,'') = ''
 			OR (COALESCE(protein_per_100g,0)=0 AND COALESCE(carbs_per_100g,0)=0 AND COALESCE(fat_per_100g,0)=0)
 			OR COALESCE(kcal_per_100g,0) > 900
 			OR COALESCE(protein_per_100g,0)+COALESCE(carbs_per_100g,0)+COALESCE(fat_per_100g,0) > 120
 		)`).
 		Order(`CASE WHEN jsonb_array_length(COALESCE(source_image_urls,'[]'::jsonb)) > 0 THEN 0 ELSE 1 END, updated_at DESC`)
-	if limit > 0 {
-		query = query.Limit(limit)
+	var candidates []foodrecorddomain.PackagedFood
+	if err := query.Find(&candidates).Error; err != nil {
+		return nil, err
 	}
-	var foods []foodrecorddomain.PackagedFood
-	return foods, query.Find(&foods).Error
+	foods := make([]foodrecorddomain.PackagedFood, 0, len(candidates))
+	for _, food := range candidates {
+		if len(issueTags(food)) == 0 {
+			continue
+		}
+		foods = append(foods, food)
+		if limit > 0 && len(foods) >= limit {
+			break
+		}
+	}
+	return foods, nil
 }
 
 func deterministicPatch(food foodrecorddomain.PackagedFood) map[string]any {
@@ -422,7 +431,7 @@ func buildVisionPatch(food foodrecorddomain.PackagedFood, extract *foodrecordser
 		if next <= 0 {
 			return
 		}
-		if current <= 0 {
+		if current <= 0 || shouldReplaceInvalidNumber(food, field) {
 			patch[field] = next
 			return
 		}
@@ -462,6 +471,19 @@ func buildVisionPatch(food foodrecorddomain.PackagedFood, extract *foodrecordser
 		patch["extract_confidence"] = extract.ExtractConfidence
 	}
 	return patch, uniqueStrings(conflicts)
+}
+
+func shouldReplaceInvalidNumber(food foodrecorddomain.PackagedFood, field string) bool {
+	macroSum := food.ProteinPer100g + food.CarbsPer100g + food.FatPer100g
+	macrosAllZero := food.ProteinPer100g == 0 && food.CarbsPer100g == 0 && food.FatPer100g == 0
+	switch field {
+	case "kcal_per_100g":
+		return food.KcalPer100g > 900
+	case "protein_per_100g", "carbs_per_100g", "fat_per_100g":
+		return (macrosAllZero && !foodrecordservice.PackagedFoodHasVerifiedZeroNutritionEvidence(&food)) || macroSum > 120
+	default:
+		return false
+	}
 }
 
 func maybeApplyPatch(ctx context.Context, repo *foodrecordrepo.FoodNutritionRepo, foodID string, patch map[string]any, apply bool) (*foodrecorddomain.PackagedFood, error) {
@@ -537,7 +559,7 @@ func isTransientVisionError(err error) bool {
 
 func issueTags(food foodrecorddomain.PackagedFood) []string {
 	tags := []string{}
-	if food.NetWeightG <= 0 {
+	if food.NetWeightG <= 0 && food.NetContentValue <= 0 {
 		tags = append(tags, "missing_net_weight_g")
 	}
 	if food.NetContentValue <= 0 || derefString(food.NetContentUnit) == "" {
@@ -546,7 +568,7 @@ func issueTags(food foodrecorddomain.PackagedFood) []string {
 	if food.KcalPer100g > 900 {
 		tags = append(tags, "kcal_over_900")
 	}
-	if food.ProteinPer100g == 0 && food.CarbsPer100g == 0 && food.FatPer100g == 0 {
+	if food.ProteinPer100g == 0 && food.CarbsPer100g == 0 && food.FatPer100g == 0 && !foodrecordservice.PackagedFoodHasVerifiedZeroNutritionEvidence(&food) {
 		tags = append(tags, "macros_all_zero")
 	}
 	if food.ProteinPer100g+food.CarbsPer100g+food.FatPer100g > 120 {

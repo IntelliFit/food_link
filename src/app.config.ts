@@ -22,6 +22,7 @@ const extraSubpackagePages = [
   // 兼容旧入口：历史缓存可能仍尝试打开 pages/food-expiry/index
   'pages/food-expiry/index',
   'pages/pro-membership/index',
+  'pages/auto-renew-audit/index',
   'pages/recipes/index',
   'pages/recipe-edit/index',
   'pages/health-profile/index',

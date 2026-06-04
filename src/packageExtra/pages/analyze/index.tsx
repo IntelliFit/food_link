@@ -63,6 +63,7 @@ const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; ico
 ]
 
 type ReferencePresetValue = PrecisionReferencePresetKey
+type AnalyzeBaseMode = 'fast' | 'standard' | 'strict'
 
 const REFERENCE_PRESETS: Array<{
   value: ReferencePresetValue
@@ -90,6 +91,28 @@ const readSuggestRatioPreference = (): boolean => {
   if (saved === false || saved === '0' || saved === 'false') return false
   if (saved === true || saved === '1' || saved === 'true') return true
   return true
+}
+
+const resolveAnalyzeBaseMode = (mode: ExecutionMode): AnalyzeBaseMode => {
+  if (mode === 'fast' || mode === 'fast_web_search') return 'fast'
+  if (mode === 'strict' || mode === 'strict_separate' || mode === 'strict_web_search') return 'strict'
+  return 'standard'
+}
+
+const isWebSearchExecutionMode = (mode: ExecutionMode): boolean => (
+  mode === 'fast_web_search' || mode === 'standard_web_search' || mode === 'strict_web_search'
+)
+
+const resolveExecutionModeFromOptions = (
+  baseMode: AnalyzeBaseMode,
+  webSearchEnabled: boolean,
+  separateFoodEstimateEnabled: boolean,
+): ExecutionMode => {
+  if (baseMode === 'fast') return webSearchEnabled ? 'fast_web_search' : 'fast'
+  if (baseMode === 'standard') return webSearchEnabled ? 'standard_web_search' : 'standard'
+  if (webSearchEnabled) return 'strict_web_search'
+  if (separateFoodEstimateEnabled) return 'strict_separate'
+  return 'strict'
 }
 
 const normalizePositiveReferenceDimension = (value: unknown): number | undefined => {
@@ -184,6 +207,26 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; 
       '搜索不可用时会保留普通识别结果'
     ]
   },
+  fast: {
+    title: '快速模式',
+    desc: '使用 Qwen Flash 快速看图识别，适合想先得到一版结果的日常记录。',
+    tips: [
+      '主体食物尽量完整入镜',
+      '包装文字越清楚，名称和规格越稳',
+      '复杂混合菜可补充烹饪方式或食材名称',
+      '若需要更细估重，可切换精准模式'
+    ]
+  },
+  fast_web_search: {
+    title: '快速联网',
+    desc: '使用 Qwen Flash 原生联网搜索，快速结合网络信息校准包装规格和商品名称。',
+    tips: [
+      '适合酸奶、饮料、零食、品牌商品等需要查规格的场景',
+      '请让品名、口味、净含量尽量正着清晰入镜',
+      '联网搜索只做规格佐证，不会新增图片里不存在的食物',
+      '如网络搜索慢或不可用，可切回快速模式'
+    ]
+  },
   standard_packaged_experiment: {
     title: '普通 · 零食库试验',
     desc: '复用普通识别模型，但优先用本地零食库里的真实规格重量校准包装食品。',
@@ -219,6 +262,16 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string; 
       '包装袋文字尽量正着拍，配料表清晰会更准',
       '复杂菜可在下方补充烹饪方式和份量信息',
       '多角度拍摄可打开多视角辅助'
+    ]
+  },
+  strict_separate: {
+    title: '精准分项',
+    desc: '尽量把混合食物拆成可单独调整比例的成分项。',
+    tips: [
+      '适合牛肉面、盖饭、麻辣烫、沙拉、汤面等混合食物',
+      '系统会优先拆出主食、肉类、蔬菜、汤底或配料',
+      '结果页可分别调整每个成分吃了多少',
+      '补充说明里写“肉吃完、面剩一半”会更稳'
     ]
   },
   strict_web_search: {
@@ -399,6 +452,14 @@ function AnalyzePage() {
       suggest_ratio: {
         title: 'AI摄入比例',
         content: '结果页自动给出每项食物的滑块比例。开启后，AI 会根据你的剩余热量和饮食目标，为每个识别出的食物建议一个摄入比例（0-100%），你可以在结果页通过滑块快速调整。'
+      },
+      web_search: {
+        title: '联网校准',
+        content: '开启后会用低成本网络搜索辅助校准包装规格、品牌商品、饮品容量或小众食物信息。联网只做佐证，不会新增图片里不存在的食物。'
+      },
+      separate_foods: {
+        title: '分项模式',
+        content: '仅在精准模式下可开启。适合牛肉面、盖饭、麻辣烫、沙拉等混合食物，会尽量拆出主食、肉类、蔬菜、汤底或配料，结果页可分别调整每项吃了多少。'
       }
     }
     const info = helpContent[key]
@@ -417,6 +478,10 @@ function AnalyzePage() {
     getMembershipCreditSummary(membershipStatus)
   const precisionUpgradeUrl = getStrictModeUpgradeUrl(membershipStatus)
   const precisionUpgradeHint = canUseStrictMode ? '' : getStrictModeLockedHint(membershipStatus)
+  const selectedBaseMode = resolveAnalyzeBaseMode(executionMode)
+  const isWebSearchEnabled = isWebSearchExecutionMode(executionMode)
+  const isSeparateFoodEstimateEnabled = executionMode === 'strict_separate'
+  const isStrictBaseModeSelected = selectedBaseMode === 'strict'
 
   const creditUnits = 1
   const isQuotaExhausted = isFoodAnalysisCreditExhausted(membershipStatus, executionMode, creditUnits)
@@ -442,6 +507,39 @@ function AnalyzePage() {
     const nextValue = !suggestRatioEnabled
     setSuggestRatioEnabled(nextValue)
     Taro.setStorageSync(SUGGEST_RATIO_STORAGE_KEY, nextValue ? '1' : '0')
+  }
+
+  const handleBaseModeTap = (baseMode: AnalyzeBaseMode) => {
+    if (baseMode === 'strict' && !canUseStrictMode) {
+      promptStrictModeUpgrade({
+        membershipStatus,
+        source: 'precision_upgrade',
+      })
+      return
+    }
+    const keepSeparate = baseMode === 'strict' && !isWebSearchEnabled && isSeparateFoodEstimateEnabled
+    setExecutionMode(resolveExecutionModeFromOptions(baseMode, isWebSearchEnabled, keepSeparate))
+  }
+
+  const toggleWebSearch = () => {
+    const nextValue = !isWebSearchEnabled
+    const nextMode = resolveExecutionModeFromOptions(selectedBaseMode, nextValue, false)
+    setExecutionMode(nextMode)
+  }
+
+  const toggleSeparateFoodEstimate = () => {
+    if (!canUseStrictMode) {
+      promptStrictModeUpgrade({
+        membershipStatus,
+        source: 'precision_upgrade',
+      })
+      return
+    }
+    if (!isStrictBaseModeSelected) {
+      Taro.showToast({ title: '请先选择精准模式', icon: 'none' })
+      return
+    }
+    setExecutionMode(resolveExecutionModeFromOptions('strict', false, !isSeparateFoodEstimateEnabled))
   }
 
   // 每次进入拍照页都刷新配额（从分析结果页返回时）；无图时按当前时间刷新默认餐次
@@ -663,17 +761,6 @@ function AnalyzePage() {
 
   const handleDefaultModeEdit = () => {
     Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
-  }
-
-  const handleStrictModeTap = (targetMode: ExecutionMode = 'strict') => {
-    if (canUseStrictMode) {
-      setExecutionMode(targetMode)
-      return
-    }
-    promptStrictModeUpgrade({
-      membershipStatus,
-      source: 'precision_upgrade',
-    })
   }
 
   const doAnalyze = async () => {
@@ -958,28 +1045,59 @@ function AnalyzePage() {
           </View>
           <View className='mode-switch-row'>
             <View
-              className={`mode-switch-item ${executionMode === 'standard' ? 'active' : ''}`}
-              onClick={() => setExecutionMode('standard')}
+              className={`mode-switch-item ${selectedBaseMode === 'fast' ? 'active' : ''}`}
+              onClick={() => handleBaseModeTap('fast')}
+            >
+              快速
+            </View>
+            <View
+              className={`mode-switch-item ${selectedBaseMode === 'standard' ? 'active' : ''}`}
+              onClick={() => handleBaseModeTap('standard')}
             >
               普通
             </View>
             <View
-              className={`mode-switch-item ${executionMode === 'standard_web_search' ? 'active' : ''}`}
-              onClick={() => setExecutionMode('standard_web_search')}
-            >
-              普通联网
-            </View>
-            <View
-              className={`mode-switch-item ${executionMode === 'strict' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
-              onClick={() => handleStrictModeTap('strict')}
+              className={`mode-switch-item ${isStrictBaseModeSelected ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
+              onClick={() => handleBaseModeTap('strict')}
             >
               {!canUseStrictMode ? '精准锁定' : '精准'}
             </View>
-            <View
-              className={`mode-switch-item ${executionMode === 'strict_web_search' ? 'active' : ''} ${!canUseStrictMode ? 'locked' : ''}`}
-              onClick={() => handleStrictModeTap('strict_web_search')}
-            >
-              {!canUseStrictMode ? '联网锁定' : '精准联网'}
+          </View>
+        </View>
+
+        <View className='analysis-options-row'>
+          <View className={`analysis-option-card ${isWebSearchEnabled ? 'active' : ''}`} onClick={toggleWebSearch}>
+            <View className='analysis-option-card-left'>
+              <Text className='analysis-option-title'>联网校准</Text>
+              <View className='help-icon' onClick={(e) => {
+                e.stopPropagation()
+                openHelp('web_search')
+              }}
+              >
+                <Text className='help-icon-text'>?</Text>
+              </View>
+            </View>
+            <View className={`analysis-option-switch ${isWebSearchEnabled ? 'analysis-option-switch--on' : ''}`}>
+              <View className='analysis-option-switch-knob' />
+            </View>
+          </View>
+
+          <View
+            className={`analysis-option-card ${isSeparateFoodEstimateEnabled ? 'active' : ''} ${!isStrictBaseModeSelected ? 'disabled' : ''}`}
+            onClick={toggleSeparateFoodEstimate}
+          >
+            <View className='analysis-option-card-left'>
+              <Text className='analysis-option-title'>分项模式</Text>
+              <View className='help-icon' onClick={(e) => {
+                e.stopPropagation()
+                openHelp('separate_foods')
+              }}
+              >
+                <Text className='help-icon-text'>?</Text>
+              </View>
+            </View>
+            <View className={`analysis-option-switch ${isSeparateFoodEstimateEnabled ? 'analysis-option-switch--on' : ''}`}>
+              <View className='analysis-option-switch-knob' />
             </View>
           </View>
         </View>

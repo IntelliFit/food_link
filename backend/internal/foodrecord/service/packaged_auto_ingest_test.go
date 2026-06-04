@@ -63,6 +63,23 @@ func TestSubmitPackagedProductExtractTaskValidatesImageCount(t *testing.T) {
 	}
 }
 
+func TestCreatePackagedFoodRejectsMissingSourceImage(t *testing.T) {
+	svc := NewFoodNutritionService(nil)
+	ctx := context.Background()
+
+	_, err := svc.CreatePackagedFood(ctx, PackagedFoodInput{
+		ProductName:    "蛋白棒",
+		NetWeightG:     60,
+		KcalPer100g:    420,
+		ProteinPer100g: 28,
+		CarbsPer100g:   42,
+		FatPer100g:     14,
+	})
+	if appErr, ok := err.(*commonerrors.AppError); !ok || appErr.HTTPStatus != 400 || !strings.Contains(appErr.Message, "包装图片") {
+		t.Fatalf("missing image err=%#v want 400 packaged image AppError", err)
+	}
+}
+
 func TestEvaluatePackagedProductExtract_AllowsMissingIngredientsWhenNutritionReady(t *testing.T) {
 	result := packagedReadyExtract()
 	result.IngredientsText = ""
@@ -101,6 +118,59 @@ func TestEvaluatePackagedProductExtract_AllowsLowConfidenceWhenCoreNutritionRead
 	auto := EvaluatePackagedProductExtract(result)
 	if auto.Status != "ready" || auto.Reason != "passed" {
 		t.Fatalf("auto=%#v want ready/passed", auto)
+	}
+}
+
+func TestEvaluatePackagedProductExtract_BlocksKJWrittenAsKcal(t *testing.T) {
+	result := packagedReadyExtract()
+	result.UnitNutritionPer100g["calories"] = 1668
+
+	auto := EvaluatePackagedProductExtract(result)
+	if auto.Status != "blocked" || auto.Reason != "nutrition_out_of_range" {
+		t.Fatalf("auto=%#v want blocked/nutrition_out_of_range", auto)
+	}
+}
+
+func TestEvaluatePackagedProductExtract_BlocksImpossibleMacroSum(t *testing.T) {
+	result := packagedReadyExtract()
+	result.UnitNutritionPer100g["calories"] = 420
+	result.UnitNutritionPer100g["protein"] = 45
+	result.UnitNutritionPer100g["carbs"] = 50
+	result.UnitNutritionPer100g["fat"] = 35
+
+	auto := EvaluatePackagedProductExtract(result)
+	if auto.Status != "blocked" || auto.Reason != "nutrition_out_of_range" {
+		t.Fatalf("auto=%#v want blocked/nutrition_out_of_range", auto)
+	}
+}
+
+func TestEvaluatePackagedProductExtract_AllowsVerifiedZeroNutritionDrink(t *testing.T) {
+	result := verifiedZeroDrinkExtract()
+	auto := EvaluatePackagedProductExtract(result)
+
+	if auto.Status != "ready" || auto.Reason != "passed" {
+		t.Fatalf("auto=%#v want ready/passed for verified zero drink", auto)
+	}
+	if !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
+		t.Fatal("expected verified zero nutrition evidence")
+	}
+}
+
+func TestEvaluatePackagedProductExtract_BlocksZeroNutritionWithoutEvidence(t *testing.T) {
+	result := packagedReadyExtract()
+	result.UnitNutritionPer100g = map[string]any{
+		"calories": 0,
+		"protein":  0,
+		"carbs":    0,
+		"fat":      0,
+	}
+	result.RawNutritionPerBasis = PackagedLabelRawNutrition{}
+	result.RawLabelPayload = nil
+	result.OCRRawText = ""
+
+	auto := EvaluatePackagedProductExtract(result)
+	if auto.Status != "blocked" || auto.Reason != "missing_nutrition" {
+		t.Fatalf("auto=%#v want blocked/missing_nutrition without zero-label evidence", auto)
 	}
 }
 
@@ -200,6 +270,23 @@ func TestConvertPackagedNutrition_TreatsSolidBeverageServingAsPer100G(t *testing
 	}
 }
 
+func TestConvertPackagedNutrition_AllowsZeroEnergyPer100ML(t *testing.T) {
+	result := verifiedZeroDrinkExtract()
+	result.UnitNutritionPer100g = map[string]any{}
+	result.ConversionStatus = ""
+
+	convertPackagedNutrition(result)
+
+	if result.ConversionStatus != "converted" || result.NutritionBasisUnit != "100ml" {
+		t.Fatalf("status=%s basis=%s want converted/100ml", result.ConversionStatus, result.NutritionBasisUnit)
+	}
+	for _, key := range []string{"calories", "protein", "carbs", "fat"} {
+		if got := numberFromAny(result.UnitNutritionPer100g[key]); got != 0 {
+			t.Fatalf("%s=%v want 0", key, got)
+		}
+	}
+}
+
 func packagedReadyExtract() *PackagedProductExtractResult {
 	return &PackagedProductExtractResult{
 		Brand:              "雀巢咖啡",
@@ -221,6 +308,40 @@ func packagedReadyExtract() *PackagedProductExtractResult {
 			"nutrition":        0.9,
 			"brand":            1,
 			"ingredients_text": 1,
+		},
+		ExtractConfidence: 0.95,
+	}
+}
+
+func verifiedZeroDrinkExtract() *PackagedProductExtractResult {
+	return &PackagedProductExtractResult{
+		Brand:              "三得利",
+		ProductName:        "无糖荷叶茉莉花味风味饮料",
+		PackageCategory:    "饮料",
+		NetContentValue:    500,
+		NetContentUnit:     "ml",
+		SpecText:           "500ml",
+		NutritionBasisUnit: "100ml",
+		ConversionStatus:   "converted",
+		RawNutritionBasis:  PackagedLabelNutritionBasis{Type: "每100毫升", Value: 100, Unit: "毫升"},
+		RawNutritionPerBasis: PackagedLabelRawNutrition{
+			Energy:  PackagedLabelNutritionValue{Value: 0, Unit: "千焦"},
+			Protein: PackagedLabelNutritionValue{Value: 0, Unit: "克"},
+			Carbs:   PackagedLabelNutritionValue{Value: 0, Unit: "克"},
+			Fat:     PackagedLabelNutritionValue{Value: 0, Unit: "克"},
+		},
+		UnitNutritionPer100g: map[string]any{
+			"calories": 0,
+			"protein":  0,
+			"carbs":    0,
+			"fat":      0,
+			"sodiumMg": 5,
+		},
+		OCRRawText: "营养成分表 每100ml 能量 0kJ 蛋白质 0g 脂肪 0g 碳水化合物 0g",
+		FieldConfidence: map[string]any{
+			"product_name": 0.9,
+			"spec_text":    0.95,
+			"nutrition":    0.9,
 		},
 		ExtractConfidence: 0.95,
 	}

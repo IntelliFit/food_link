@@ -20,7 +20,9 @@ import (
 
 const (
 	defaultExecutionMode      = "standard"
-	standardWebSearchMode    = "standard_web_search"
+	standardWebSearchMode     = "standard_web_search"
+	fastExecutionMode         = "fast"
+	fastWebSearchMode         = "fast_web_search"
 	validExecutionMode        = "strict"
 	strictWebSearchMode       = "strict_web_search"
 	experimentalExecutionMode = "experimental"
@@ -782,7 +784,7 @@ func normalizeExecutionMode(mode *string) string {
 		return defaultExecutionMode
 	}
 	m := *mode
-	if m == standardWebSearchMode || m == validExecutionMode || m == strictWebSearchMode || m == experimentalExecutionMode || m == gemini35FlashMode || m == gemini35GroupedMode {
+	if m == standardWebSearchMode || m == fastExecutionMode || m == fastWebSearchMode || m == validExecutionMode || m == strictWebSearchMode || m == experimentalExecutionMode || m == gemini35FlashMode || m == gemini35GroupedMode {
 		return m
 	}
 	return defaultExecutionMode

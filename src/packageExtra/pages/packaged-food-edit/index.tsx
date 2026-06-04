@@ -26,13 +26,19 @@ const PACKAGED_FOOD_EDIT_SAVED_KEY = 'packagedFoodEditSaved'
 const PACKAGED_FOOD_UPLOAD_TASKS_KEY = 'packagedFoodUploadTasks'
 const PACKAGED_FOOD_UPLOAD_CONSENT_KEY = 'packagedFoodUploadConsentV1'
 const MAX_REWARD_UPLOAD_IMAGES = 3
+const KJ_PER_KCAL = 4.184
 
 type CaptureStep = 'front' | 'nutrition' | 'ingredients'
+type EnergyUnit = 'kj' | 'kcal'
+type UploadMode = 'upload' | 'manual'
 
 type Draft = {
   itemId?: number
   sourceTaskId?: string
   recognizedNameHint?: string
+  frontImageUrl?: string
+  nutritionImageUrl?: string
+  ingredientsImageUrl?: string
   brand: string
   productName: string
   flavorText: string
@@ -42,6 +48,8 @@ type Draft = {
   ingredientsText: string
   netWeightG: string
   servingWeightG: string
+  nutritionBasis: string
+  energyUnit: EnergyUnit
   calories: string
   protein: string
   carbs: string
@@ -106,6 +114,8 @@ const emptyDraft: Draft = {
   ingredientsText: '',
   netWeightG: '',
   servingWeightG: '',
+  nutritionBasis: '100',
+  energyUnit: 'kj',
   calories: '',
   protein: '',
   carbs: '',
@@ -177,6 +187,19 @@ const numberFromDraft = (value: string) => {
   return Number.isFinite(n) && n >= 0 ? n : 0
 }
 
+const positiveNumberFromDraft = (value: string, fallback = 100) => {
+  const n = Number(String(value || '').trim())
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+const energyToKcal = (value: number, unit: EnergyUnit) => (
+  unit === 'kj' ? value / KJ_PER_KCAL : value
+)
+
+const nutritionValuePer100g = (value: string, basis: number) => (
+  basis > 0 ? numberFromDraft(value) * 100 / basis : numberFromDraft(value)
+)
+
 const formatRecognizedNumber = (value: unknown) => {
   const n = Number(value)
   if (!Number.isFinite(n) || n <= 0) return ''
@@ -191,7 +214,7 @@ function isChooseImageCancel(error: unknown) {
 }
 
 function describeAutoIngestReason(result: PackagedAutoIngestResult, rewardTaskMode = false) {
-  const actionSuffix = rewardTaskMode ? '请重拍后重新识别。' : '可以重拍，或手动确认字段后保存。'
+  const actionSuffix = rewardTaskMode ? '可进入详情补充信息，或重拍后重新识别。' : '可以补齐缺失字段后提交待审核，或重拍。'
   switch (result.reason) {
     case 'missing_net_weight':
       return `还缺少净含量/规格。第 1 张包装正面必须把“净含量”拍清楚，${actionSuffix}`
@@ -210,8 +233,8 @@ function describeAutoIngestReason(result: PackagedAutoIngestResult, rewardTaskMo
       return `包装正面、净含量或营养表之间存在冲突。请重新拍清楚正面净含量和营养成分表。`
     default:
       return rewardTaskMode
-        ? '这次识别结果还不够稳定。请重拍包装正面和营养成分表后重新提交。'
-        : '你可以继续重拍，或手动确认字段后保存。'
+        ? '这次识别结果还不够稳定。可进入详情补充信息，或重拍包装正面和营养成分表后重新提交。'
+        : '你可以补齐缺失字段后提交待审核，或继续重拍。'
   }
 }
 
@@ -220,15 +243,15 @@ function buildPackagedExtractToast(result: PackagedProductExtractResult) {
   if ((result.needs_more_images || []).includes('ingredients')) return '还需要补拍配料表'
   switch (result.auto_ingest_result?.reason) {
     case 'missing_net_weight':
-      return '请重拍正面净含量'
+      return '可补充净含量'
     case 'missing_nutrition':
     case 'conversion_not_closed':
-      return '请重拍营养表'
+      return '可补充营养表'
     case 'low_extract_confidence':
     case 'low_name_confidence':
     case 'low_spec_confidence':
     case 'low_nutrition_confidence':
-      return '图片不够清晰，请重拍'
+      return '可补充缺失信息'
     case 'conflict':
       return '信息冲突，请重拍'
     default:
@@ -390,9 +413,13 @@ function askPackagedUploadConsent(): Promise<boolean> {
 
 function PackagedFoodEditPage() {
   const router = useRouter()
+  const modeParam = normalizeString(router.params?.mode)
+  const uploadMode: UploadMode = modeParam === 'manual' ? 'manual' : 'upload'
   const [draft, setDraft] = useState<Draft>(emptyDraft)
   const [captureImages, setCaptureImages] = useState<CaptureImages>({})
+  const [manualImages, setManualImages] = useState<UploadedImage[]>([])
   const [currentStep, setCurrentStep] = useState<CaptureStep>('front')
+  const [draftLoaded, setDraftLoaded] = useState(false)
   const [recognizing, setRecognizing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [showMoreNutrition, setShowMoreNutrition] = useState(false)
@@ -407,28 +434,49 @@ function PackagedFoodEditPage() {
   const [librarySearchLoading, setLibrarySearchLoading] = useState(false)
   const [librarySearchTouched, setLibrarySearchTouched] = useState(false)
   const isRewardTaskMode = router.params?.task_mode === 'reward_center'
+  const isUploadMode = uploadMode === 'upload'
+  const isManualMode = uploadMode === 'manual'
+  const needsSupplement = Boolean(autoIngestResult && autoIngestResult.status !== 'ingested')
+  const sourceImageURLs = useMemo(() => {
+    const urls = [
+      captureImages.front,
+      captureImages.nutrition,
+      captureImages.ingredients,
+      ...manualImages.map(item => item.imageUrl),
+      ...pendingRewardImages.map(item => item.imageUrl),
+    ].filter(Boolean) as string[]
+    return Array.from(new Set(urls))
+  }, [captureImages, manualImages, pendingRewardImages])
+  const hasSupplementContext = Boolean(sourceImageURLs.length > 0 || draft.sourceTaskId || draft.recognizedNameHint || extractResult)
+  const showManualForm = needsSupplement || (isManualMode && draftLoaded && hasSupplementContext)
+  const showSupplementBlocked = isManualMode && draftLoaded && !showManualForm
 
   useDidShow(() => {
     try {
       const saved = Taro.getStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY)
-      if (!saved || typeof saved !== 'object') return
-      const nextDraft = { ...emptyDraft, ...saved }
-      setDraft(nextDraft)
-      setCurrentStep(saved.frontImageUrl ? 'nutrition' : 'front')
-      setCaptureImages({
-        front: normalizeString(saved.frontImageUrl),
-        nutrition: normalizeString(saved.nutritionImageUrl),
-        ingredients: normalizeString(saved.ingredientsImageUrl),
-      })
-    } catch {}
+      if (saved && typeof saved === 'object') {
+        const nextDraft = { ...emptyDraft, ...saved }
+        setDraft(nextDraft)
+        setCurrentStep(saved.frontImageUrl ? 'nutrition' : 'front')
+        setCaptureImages({
+          front: normalizeString(saved.frontImageUrl),
+          nutrition: normalizeString(saved.nutritionImageUrl),
+          ingredients: normalizeString(saved.ingredientsImageUrl),
+        })
+      }
+    } catch {} finally {
+      setDraftLoaded(true)
+    }
     if (isRewardTaskMode) {
       refreshUploadTasks()
     }
   })
 
-  const canSubmitManually = useMemo(() => {
-    return draft.productName.trim() && numberFromDraft(draft.netWeightG) > 0
-  }, [draft])
+  const canSubmitManually = useMemo(() => Boolean(
+    draft.productName.trim()
+    && numberFromDraft(draft.netWeightG) > 0
+    && sourceImageURLs.length > 0
+  ), [draft, sourceImageURLs.length])
 
   const updateField = (field: keyof Draft, value: string) => {
     setDraft(current => ({ ...current, [field]: value }))
@@ -456,6 +504,8 @@ function PackagedFoodEditPage() {
       if (normalizeString(result.spec_text)) next.specText = normalizeString(result.spec_text)
       if (normalizeString(result.barcode)) next.barcode = normalizeString(result.barcode)
       if (normalizeString(result.ingredients_text)) next.ingredientsText = normalizeString(result.ingredients_text)
+      next.nutritionBasis = '100'
+      next.energyUnit = 'kcal'
       next = fillIfRecognized(next, 'netWeightG', result.net_weight_g)
       next = fillIfRecognized(next, 'servingWeightG', result.serving_weight_g)
       next = fillIfRecognized(next, 'calories', unit.calories)
@@ -517,6 +567,46 @@ function PackagedFoodEditPage() {
 
   const resetRewardSelection = () => {
     setPendingRewardImages([])
+  }
+
+  const goUploadMode = () => {
+    const query = ['mode=upload']
+    if (isRewardTaskMode) query.push('task_mode=reward_center')
+    Taro.redirectTo({
+      url: `/packageExtra/pages/packaged-food-edit/index?${query.join('&')}`,
+    })
+  }
+
+  const handleManualChooseImages = async () => {
+    if (recognizing) return
+    setRecognizing(true)
+    Taro.showLoading({ title: '上传中', mask: true })
+    try {
+      const allowed = await askPackagedUploadConsent()
+      if (!allowed) return
+      const remain = Math.max(1, MAX_REWARD_UPLOAD_IMAGES - sourceImageURLs.length)
+      const uploaded = await chooseAndUploadImages(remain)
+      if (uploaded.length === 0) return
+      setManualImages(current => {
+        const next = [...current, ...uploaded]
+        const seen = new Set<string>()
+        return next.filter(item => {
+          if (!item.imageUrl || seen.has(item.imageUrl)) return false
+          seen.add(item.imageUrl)
+          return true
+        }).slice(0, MAX_REWARD_UPLOAD_IMAGES)
+      })
+    } catch (error) {
+      if (isChooseImageCancel(error)) return
+      if (isPrivacyAuthorizeError(error)) {
+        showPrivacyAuthorizeFailure(error)
+      } else {
+        await showUnifiedApiError(error, '上传包装图片失败')
+      }
+    } finally {
+      Taro.hideLoading()
+      setRecognizing(false)
+    }
   }
 
   const handleLibrarySearch = async () => {
@@ -774,7 +864,22 @@ function PackagedFoodEditPage() {
   }
 
   const handleSubmit = async () => {
-    if (saving || !canSubmitManually) return
+    if (saving) return
+    if (!draft.productName.trim()) {
+      Taro.showToast({ title: '请填写零食名称', icon: 'none' })
+      return
+    }
+    if (numberFromDraft(draft.netWeightG) <= 0) {
+      Taro.showToast({ title: '请填写净含量', icon: 'none' })
+      return
+    }
+    if (sourceImageURLs.length === 0) {
+      Taro.showToast({ title: '请先上传包装图片', icon: 'none' })
+      return
+    }
+    const nutritionBasis = positiveNumberFromDraft(draft.nutritionBasis, 100)
+    const kcalPer100g = energyToKcal(numberFromDraft(draft.calories), draft.energyUnit) * 100 / nutritionBasis
+    const isSupplementSubmission = Boolean(extractResult || draft.sourceTaskId || draft.recognizedNameHint)
     const payload: CreatePackagedFoodRequest = {
       brand: draft.brand.trim() || undefined,
       product_name: draft.productName.trim(),
@@ -783,38 +888,47 @@ function PackagedFoodEditPage() {
       spec_text: draft.specText.trim() || undefined,
       barcode: draft.barcode.trim() || undefined,
       ingredients_text: draft.ingredientsText.trim() || undefined,
-      source_image_urls: [captureImages.front, captureImages.nutrition, captureImages.ingredients].filter(Boolean) as string[],
+      source_image_urls: sourceImageURLs,
       ocr_raw_text: extractResult?.ocr_raw_text || undefined,
       extract_confidence: extractResult?.extract_confidence,
       field_confidence: extractResult?.field_confidence,
-      ingest_method: 'user_capture_ocr',
+      ingest_method: isSupplementSubmission ? 'user_capture_ocr' : 'user_manual_label',
+      nutrition_basis_unit: `${nutritionBasis}g`,
+      energy_unit_raw: draft.energyUnit,
+      raw_label_payload: {
+        nutrition_basis: { type: 'per_weight', value: nutritionBasis, unit: 'g' },
+        energy_unit_raw: draft.energyUnit,
+        entry_source: isSupplementSubmission ? 'supplement_after_ocr' : 'manual_with_images',
+      },
+      conversion_status: 'converted',
+      review_status: 'pending',
       net_weight_g: numberFromDraft(draft.netWeightG),
       serving_weight_g: numberFromDraft(draft.servingWeightG) || numberFromDraft(draft.netWeightG),
-      kcal_per_100g: numberFromDraft(draft.calories),
-      protein_per_100g: numberFromDraft(draft.protein),
-      carbs_per_100g: numberFromDraft(draft.carbs),
-      fat_per_100g: numberFromDraft(draft.fat),
-      fiber_per_100g: numberFromDraft(draft.fiber),
-      sugar_per_100g: numberFromDraft(draft.sugar),
-      sodium_mg_per_100g: numberFromDraft(draft.sodiumMg),
-      saturated_fat_per_100g: numberFromDraft(draft.saturatedFat),
-      cholesterol_mg_per_100g: numberFromDraft(draft.cholesterolMg),
-      potassium_mg_per_100g: numberFromDraft(draft.potassiumMg),
-      calcium_mg_per_100g: numberFromDraft(draft.calciumMg),
-      iron_mg_per_100g: numberFromDraft(draft.ironMg),
-      magnesium_mg_per_100g: numberFromDraft(draft.magnesiumMg),
-      zinc_mg_per_100g: numberFromDraft(draft.zincMg),
-      vitamin_a_rae_mcg_per_100g: numberFromDraft(draft.vitaminARaeMcg),
-      vitamin_c_mg_per_100g: numberFromDraft(draft.vitaminCMg),
-      vitamin_d_mcg_per_100g: numberFromDraft(draft.vitaminDMcg),
-      vitamin_e_mg_per_100g: numberFromDraft(draft.vitaminEMg),
-      vitamin_k_mcg_per_100g: numberFromDraft(draft.vitaminKMcg),
-      thiamin_mg_per_100g: numberFromDraft(draft.thiaminMg),
-      riboflavin_mg_per_100g: numberFromDraft(draft.riboflavinMg),
-      niacin_mg_per_100g: numberFromDraft(draft.niacinMg),
-      vitamin_b6_mg_per_100g: numberFromDraft(draft.vitaminB6Mg),
-      folate_mcg_per_100g: numberFromDraft(draft.folateMcg),
-      vitamin_b12_mcg_per_100g: numberFromDraft(draft.vitaminB12Mcg),
+      kcal_per_100g: kcalPer100g,
+      protein_per_100g: nutritionValuePer100g(draft.protein, nutritionBasis),
+      carbs_per_100g: nutritionValuePer100g(draft.carbs, nutritionBasis),
+      fat_per_100g: nutritionValuePer100g(draft.fat, nutritionBasis),
+      fiber_per_100g: nutritionValuePer100g(draft.fiber, nutritionBasis),
+      sugar_per_100g: nutritionValuePer100g(draft.sugar, nutritionBasis),
+      sodium_mg_per_100g: nutritionValuePer100g(draft.sodiumMg, nutritionBasis),
+      saturated_fat_per_100g: nutritionValuePer100g(draft.saturatedFat, nutritionBasis),
+      cholesterol_mg_per_100g: nutritionValuePer100g(draft.cholesterolMg, nutritionBasis),
+      potassium_mg_per_100g: nutritionValuePer100g(draft.potassiumMg, nutritionBasis),
+      calcium_mg_per_100g: nutritionValuePer100g(draft.calciumMg, nutritionBasis),
+      iron_mg_per_100g: nutritionValuePer100g(draft.ironMg, nutritionBasis),
+      magnesium_mg_per_100g: nutritionValuePer100g(draft.magnesiumMg, nutritionBasis),
+      zinc_mg_per_100g: nutritionValuePer100g(draft.zincMg, nutritionBasis),
+      vitamin_a_rae_mcg_per_100g: nutritionValuePer100g(draft.vitaminARaeMcg, nutritionBasis),
+      vitamin_c_mg_per_100g: nutritionValuePer100g(draft.vitaminCMg, nutritionBasis),
+      vitamin_d_mcg_per_100g: nutritionValuePer100g(draft.vitaminDMcg, nutritionBasis),
+      vitamin_e_mg_per_100g: nutritionValuePer100g(draft.vitaminEMg, nutritionBasis),
+      vitamin_k_mcg_per_100g: nutritionValuePer100g(draft.vitaminKMcg, nutritionBasis),
+      thiamin_mg_per_100g: nutritionValuePer100g(draft.thiaminMg, nutritionBasis),
+      riboflavin_mg_per_100g: nutritionValuePer100g(draft.riboflavinMg, nutritionBasis),
+      niacin_mg_per_100g: nutritionValuePer100g(draft.niacinMg, nutritionBasis),
+      vitamin_b6_mg_per_100g: nutritionValuePer100g(draft.vitaminB6Mg, nutritionBasis),
+      folate_mcg_per_100g: nutritionValuePer100g(draft.folateMcg, nutritionBasis),
+      vitamin_b12_mcg_per_100g: nutritionValuePer100g(draft.vitaminB12Mcg, nutritionBasis),
     }
 
     setSaving(true)
@@ -827,7 +941,7 @@ function PackagedFoodEditPage() {
       })
       Taro.removeStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY)
       Taro.hideLoading()
-      Taro.showToast({ title: '已保存到零食库', icon: 'success' })
+      Taro.showToast({ title: '已提交待审核', icon: 'success' })
       setTimeout(() => Taro.navigateBack(), 450)
     } catch (error) {
       Taro.hideLoading()
@@ -844,6 +958,7 @@ function PackagedFoodEditPage() {
   return (
     <View className='packaged-food-edit-page'>
       <ScrollView className='packaged-food-edit-scroll' scrollY>
+        {isUploadMode && (
         <View className='edit-section wizard-section'>
           <Text className='section-title'>预包装零食补库</Text>
           {isRewardTaskMode ? (
@@ -1082,14 +1197,49 @@ function PackagedFoodEditPage() {
             <View className='ingest-status-card'>
               <Text className='ingest-status-title'>{isRewardTaskMode ? '这次还不能发积分' : '自动入库暂未通过'}</Text>
               <Text className='ingest-status-desc'>{describeAutoIngestReason(autoIngestResult, isRewardTaskMode)}</Text>
-              {isRewardTaskMode && (
-                <Text className='ingest-status-hint'>请按提示重拍后重新识别；系统自动入库成功后才会结算奖励积分。</Text>
-              )}
+              <Text className='ingest-status-hint'>已识别到的字段会保留在下方，你可以补齐缺失信息后提交待审核。</Text>
             </View>
           )}
         </View>
+        )}
 
-        {!isRewardTaskMode && (
+        {showSupplementBlocked && (
+          <View className='edit-section supplement-blocked-card'>
+            <Text className='section-title'>请先拍照识别</Text>
+            <Text className='wizard-desc'>零食补库以包装图片和 AI 提取为主。识别后如果缺少名称、规格或营养字段，再进入这里补充，不再单独创建纯手动商品。</Text>
+            <View className='recognize-btn supplement-upload-btn' onClick={goUploadMode}>
+              <Text className='recognize-btn-text'>去拍照上传</Text>
+            </View>
+          </View>
+        )}
+
+        {showManualForm && (
+          <View className='edit-section manual-image-section'>
+            <Text className='section-title'>补充缺失信息</Text>
+            <Text className='wizard-desc'>AI 已先提取包装上的可见信息。请保留已识别内容，补齐缺少的名称、规格或营养字段后提交待审核。</Text>
+            {sourceImageURLs.length > 0 ? (
+              <View className='reward-image-preview-grid manual-image-grid'>
+                {sourceImageURLs.map((url, index) => (
+                  <View key={`${url}-${index}`} className='reward-image-preview'>
+                    <Image className='reward-image-preview-img' src={url} mode='aspectFill' />
+                    <Text className='reward-image-preview-badge'>图 {index + 1}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View className='manual-image-empty'>
+                <Text>原识别任务没有带到图片，请补拍包装正面、净含量或营养成分表图片。</Text>
+              </View>
+            )}
+            {sourceImageURLs.length < MAX_REWARD_UPLOAD_IMAGES && (
+              <View className={`recognize-btn manual-image-btn ${recognizing ? 'loading' : ''}`} onClick={handleManualChooseImages}>
+                <Text className='recognize-btn-text'>{recognizing ? '上传中' : sourceImageURLs.length > 0 ? '继续补拍图片' : '补拍包装图片'}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {showManualForm && (
           <View className='edit-section'>
             <Text className='section-title'>基础信息</Text>
             <View className='field'>
@@ -1137,53 +1287,88 @@ function PackagedFoodEditPage() {
           </View>
         )}
 
-        {!isRewardTaskMode && <View className='edit-section'>
-          <Text className='section-title'>每100g营养成分</Text>
+        {showManualForm && <View className='edit-section'>
+          <Text className='section-title'>营养成分</Text>
+          <View className='nutrition-basis-row'>
+            <View className='field compact'>
+              <Text className='field-label'>营养标示每 g</Text>
+              <Input className='field-input' type='digit' value={draft.nutritionBasis} placeholder='100' onInput={(e) => updateField('nutritionBasis', e.detail.value)} />
+            </View>
+            <View className='basis-chip-row'>
+              {['100', '60', '30', '20'].map((basis) => (
+                <View
+                  key={basis}
+                  className={`basis-chip ${draft.nutritionBasis === basis ? 'active' : ''}`}
+                  onClick={() => updateField('nutritionBasis', basis)}
+                >
+                  <Text>每{basis}g</Text>
+                </View>
+              ))}
+            </View>
+          </View>
           <View className='nutrition-grid'>
             <View className='field compact'>
-              <Text className='field-label'>热量</Text>
+              <View className='energy-label-row'>
+                <Text className='field-label'>热量 {draft.energyUnit === 'kj' ? 'kJ' : 'kcal'} / 标示</Text>
+                <View className='energy-unit-switch'>
+                  {(['kj', 'kcal'] as EnergyUnit[]).map((unit) => (
+                    <View
+                      key={unit}
+                      className={`energy-unit ${draft.energyUnit === unit ? 'active' : ''}`}
+                      onClick={() => updateField('energyUnit', unit)}
+                    >
+                      <Text>{unit === 'kj' ? 'kJ' : 'kcal'}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
               <View className='field-input-with-unit'>
                 <Input className='field-input' type='digit' value={draft.calories} placeholder='0' onInput={(e) => updateField('calories', e.detail.value)} />
-                <Text className='field-unit'>kcal</Text>
+                <Text className='field-unit'>{draft.energyUnit === 'kj' ? 'kJ' : 'kcal'}</Text>
               </View>
+              <Text className='energy-hint'>
+                {draft.energyUnit === 'kj'
+                  ? '按包装 kJ 填，保存时换算为 kcal/100g'
+                  : '1 kcal = 4.184 kJ，可切回 kJ 填包装值'}
+              </Text>
             </View>
             <View className='field compact'>
-              <Text className='field-label'>蛋白质</Text>
+              <Text className='field-label'>蛋白质 / 标示</Text>
               <View className='field-input-with-unit'>
                 <Input className='field-input' type='digit' value={draft.protein} placeholder='0' onInput={(e) => updateField('protein', e.detail.value)} />
                 <Text className='field-unit'>g</Text>
               </View>
             </View>
             <View className='field compact'>
-              <Text className='field-label'>碳水</Text>
+              <Text className='field-label'>碳水 / 标示</Text>
               <View className='field-input-with-unit'>
                 <Input className='field-input' type='digit' value={draft.carbs} placeholder='0' onInput={(e) => updateField('carbs', e.detail.value)} />
                 <Text className='field-unit'>g</Text>
               </View>
             </View>
             <View className='field compact'>
-              <Text className='field-label'>脂肪</Text>
+              <Text className='field-label'>脂肪 / 标示</Text>
               <View className='field-input-with-unit'>
                 <Input className='field-input' type='digit' value={draft.fat} placeholder='0' onInput={(e) => updateField('fat', e.detail.value)} />
                 <Text className='field-unit'>g</Text>
               </View>
             </View>
             <View className='field compact'>
-              <Text className='field-label'>膳食纤维</Text>
+              <Text className='field-label'>膳食纤维 / 标示</Text>
               <View className='field-input-with-unit'>
                 <Input className='field-input' type='digit' value={draft.fiber} placeholder='0' onInput={(e) => updateField('fiber', e.detail.value)} />
                 <Text className='field-unit'>g</Text>
               </View>
             </View>
             <View className='field compact'>
-              <Text className='field-label'>糖</Text>
+              <Text className='field-label'>糖 / 标示</Text>
               <View className='field-input-with-unit'>
                 <Input className='field-input' type='digit' value={draft.sugar} placeholder='0' onInput={(e) => updateField('sugar', e.detail.value)} />
                 <Text className='field-unit'>g</Text>
               </View>
             </View>
             <View className='field compact wide'>
-              <Text className='field-label'>钠</Text>
+              <Text className='field-label'>钠 / 标示</Text>
               <View className='field-input-with-unit'>
                 <Input className='field-input' type='digit' value={draft.sodiumMg} placeholder='0' onInput={(e) => updateField('sodiumMg', e.detail.value)} />
                 <Text className='field-unit'>mg</Text>
@@ -1192,7 +1377,7 @@ function PackagedFoodEditPage() {
           </View>
         </View>}
 
-        {!isRewardTaskMode && <View className='edit-section more-section'>
+        {showManualForm && <View className='edit-section more-section'>
           <View className='more-header' onClick={() => setShowMoreNutrition(current => !current)}>
             <View className='more-title-wrap'>
               <Text className='section-title more-title'>更多营养成分</Text>
@@ -1220,12 +1405,12 @@ function PackagedFoodEditPage() {
             </View>
           )}
         </View>}
-        {!isRewardTaskMode && <View className='edit-footer-spacer' />}
+        {showManualForm && <View className='edit-footer-spacer' />}
       </ScrollView>
 
-      {!isRewardTaskMode && <View className='edit-footer'>
+      {showManualForm && <View className='edit-footer'>
         <View className={`save-btn ${saving ? 'loading' : ''} ${!canSubmitManually ? 'disabled' : ''}`} onClick={handleSubmit}>
-          <Text className='save-btn-text'>{saving ? '保存中...' : '确认保存到零食库'}</Text>
+          <Text className='save-btn-text'>{saving ? '保存中...' : '提交待审核'}</Text>
         </View>
       </View>}
     </View>

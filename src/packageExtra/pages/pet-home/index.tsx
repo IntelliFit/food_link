@@ -54,6 +54,27 @@ function moodText(mood?: string): string {
   }
 }
 
+function petStateText(state?: string, inactivityDays?: number): string {
+  switch (state) {
+    case 'deep_sleep':
+      return '保温箱深睡'
+    case 'hibernating':
+      return '冬眠中'
+    case 'low_power':
+      return '低电量'
+    case 'dozing':
+      return '犯困中'
+    case 'warming':
+      return '正在唤醒'
+    case 'active':
+      return '满电'
+    case 'steady':
+      return '稳定'
+    default:
+      return inactivityDays && inactivityDays > 0 ? `${inactivityDays}天未记录` : '陪伴中'
+  }
+}
+
 function personalityText(personality?: string): string {
   switch (personality) {
     case 'energetic':
@@ -162,6 +183,8 @@ function PetHomePage() {
   const petPattern = petSummary?.pet?.pattern || `pattern-${stableHash(`${petSeed}:pattern`) % 5}`
   const petAccessory = petSummary?.pet?.accessory || 'leaf'
   const petMood = petSummary?.status?.mood || 'calm'
+  const petState = petSummary?.status?.state || petMood
+  const petInactivityDays = petSummary?.status?.inactivity_days || 0
   const petEvent: PetOfflineEvent | null = petSummary?.event && !petSummary.event.is_claimed ? petSummary.event : null
   const earnedCredits = membership?.earned_credits_balance ?? 0
   const totalCredits = membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0
@@ -282,7 +305,7 @@ function PetHomePage() {
     <View className='pet-home-page'>
       <View className='pet-home-shell'>
         <View className='pet-home-hero'>
-          <View className={`pet-home-avatar ${petColor} ${petShape} ${petPattern} animal-${petAnimal} mood-${petMood}`}>
+          <View className={`pet-home-avatar ${petColor} ${petShape} ${petPattern} animal-${petAnimal} mood-${petMood} state-${petState}`}>
             <View className='pet-home-shadow' />
             <View className='pet-body'>
               <View className='pet-tail' />
@@ -308,6 +331,7 @@ function PetHomePage() {
               <Text className='pet-home-chip'>Lv.{petSummary?.pet?.level || 1}</Text>
               <Text className='pet-home-chip secondary'>{personalityText(petSummary?.pet?.personality)}</Text>
               <Text className='pet-home-chip secondary'>{archetypeText(petSummary?.pet?.archetype)}</Text>
+              <Text className='pet-home-chip secondary'>{petStateText(petState, petInactivityDays)}</Text>
               <Text className='pet-home-chip secondary'>{moodText(petMood)}</Text>
             </View>
             <Text className='pet-home-message'>

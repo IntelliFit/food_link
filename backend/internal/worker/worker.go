@@ -19,6 +19,7 @@ import (
 	analyzeservice "food_link/backend/internal/analyze/service"
 	authrepo "food_link/backend/internal/auth/repo"
 	expiryservice "food_link/backend/internal/expiry/service"
+	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordservice "food_link/backend/internal/foodrecord/service"
 	healthservice "food_link/backend/internal/health/service"
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
@@ -37,6 +38,7 @@ import (
 const (
 	precisionPlanModelName   = "doubao"
 	precisionWeightModelName = "ofox-gemini"
+	strictSeparateModeName   = "strict_separate"
 	precisionRefineEnabled   = true
 	precisionRefineTimeout   = 25 * time.Second
 	taskLeaseDuration        = 5 * time.Minute
@@ -75,7 +77,7 @@ type Runner struct {
 	tasks      *analyzerepo.TaskRepo
 	precision  *analyzerepo.PrecisionRepo
 	publicFood *publicfoodrepo.PublicFoodRepo
-	analyze    *analyzeservice.AnalyzeService
+	analyze    analyzeRunner
 	ocr        *userservice.OCRService
 	healthDocs *userrepo.HealthDocumentRepo
 	users      *authrepo.UserRepo
@@ -87,6 +89,15 @@ type Runner struct {
 	log        *logger.Logger
 	storage    *storage.Client
 	credit     CreditGuard
+}
+
+type analyzeRunner interface {
+	Analyze(context.Context, string, analyzeservice.AnalyzeInput) (map[string]any, error)
+	AnalyzeText(context.Context, string, analyzeservice.AnalyzeInput) (map[string]any, error)
+	RunPrecisionJSONWithImages(context.Context, string, string, []string, string) (map[string]any, error)
+	RunPrecisionJSONWithImagesNoFallback(context.Context, string, string, []string, string) (map[string]any, error)
+	RunPrecisionJSONWithImagesTemperatureNoFallback(context.Context, string, string, []string, string, float64) (map[string]any, error)
+	ApplyDBFirstToItems(context.Context, []map[string]any, string) []map[string]any
 }
 
 type CreditGuard interface {
@@ -107,7 +118,7 @@ func NewRunner(
 	tasks *analyzerepo.TaskRepo,
 	precision *analyzerepo.PrecisionRepo,
 	publicFood *publicfoodrepo.PublicFoodRepo,
-	analyze *analyzeservice.AnalyzeService,
+	analyze analyzeRunner,
 	ocr *userservice.OCRService,
 	healthDocs *userrepo.HealthDocumentRepo,
 	users *authrepo.UserRepo,
@@ -814,13 +825,37 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		}
 		return err
 	}
+	start := time.Now()
+	result, err := r.runFoodAnalysis(ctx, task, start)
+	if err != nil {
+		return err
+	}
+	err = r.completeTask(ctx, task, result)
+	if err != nil {
+		r.log.Error("食物任务完成状态更新失败", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), logger.Err(err))
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
+		return err
+	}
+	apm.SetAttributes(ctx,
+		attribute.Int("analysis.item_count", len(extractItems(result["items"]))),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	apm.AddEvent(ctx, "食物任务已完成",
+		attribute.String("analysis.task_id", task.ID),
+		apm.DurationMS("analysis.duration_ms", time.Since(start)),
+	)
+	r.log.Info("食物任务已完成", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), slog.Duration("duration", time.Since(start)))
+	r.trySilentPackagedIngest(ctx, task, result)
+	return nil
+}
+
+func (r *Runner) runFoodAnalysis(ctx context.Context, task *domain.AnalysisTask, start time.Time) (map[string]any, error) {
 	input := analyzeInputFromTask(task)
 	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
 		err := fmt.Errorf("food task missing image_url/image_paths")
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "validate_input"))
-		return err
+		return nil, err
 	}
-	start := time.Now()
 	apm.AddEvent(ctx, "食物任务分析开始",
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.user_id", task.UserID),
@@ -854,7 +889,7 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 			slog.Duration("duration", time.Since(start)),
 			logger.Err(err),
 		)
-		return err
+		return nil, err
 	}
 	apm.AddEvent(ctx, "食物任务分析结果已生成",
 		attribute.String("analysis.task_id", task.ID),
@@ -872,23 +907,7 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		slog.Int("item_count", len(extractItems(result["items"]))),
 		slog.Duration("duration", time.Since(start)),
 	)
-	err = r.completeTask(ctx, task, result)
-	if err != nil {
-		r.log.Error("食物任务完成状态更新失败", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), logger.Err(err))
-		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
-		return err
-	}
-	apm.SetAttributes(ctx,
-		attribute.Int("analysis.item_count", len(extractItems(result["items"]))),
-		apm.DurationMS("analysis.duration_ms", time.Since(start)),
-	)
-	apm.AddEvent(ctx, "食物任务已完成",
-		attribute.String("analysis.task_id", task.ID),
-		apm.DurationMS("analysis.duration_ms", time.Since(start)),
-	)
-	r.log.Info("食物任务已完成", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), slog.Duration("duration", time.Since(start)))
-	r.trySilentPackagedIngest(ctx, task, result)
-	return nil
+	return result, nil
 }
 
 func (r *Runner) processPackagedNutritionLabel(ctx context.Context, task *domain.AnalysisTask) error {
@@ -1030,13 +1049,7 @@ func (r *Runner) completeCorrectionTask(ctx context.Context, task *domain.Analys
 	if err != nil {
 		return true, err
 	}
-	originalItems := buildItemsFromCorrection(correctionItems)
-	if len(originalItems) > 0 {
-		result["items"] = restoreCorrectionFallbackNutrition(extractItems(result["items"]), originalItems)
-	}
-	if len(contextOverrides) > 0 {
-		result["items"] = applyCorrectionOverridesToResultItems(extractItems(result["items"]), contextOverrides)
-	}
+	result = applyCorrectionPostProcessingToResult(result, correctionItems, extractItems(input.PreviousResult["items"]), contextOverrides)
 	result["correctionApplied"] = true
 	if sessionID != "" {
 		result["precisionSessionId"] = sessionID
@@ -1142,6 +1155,13 @@ func buildItemsFromCorrection(correctionItems []map[string]any) []map[string]any
 			"name":                 name,
 			"estimatedWeightGrams": weight,
 			"originalWeightGrams":  weight,
+		}
+		if boolFromAny(firstNonNil(item["weightEdited"], item["weight_edited"])) {
+			next["weightEdited"] = true
+			next["userWeightGrams"] = weight
+		}
+		if boolFromAny(firstNonNil(item["nameEdited"], item["name_edited"])) {
+			next["nameEdited"] = true
 		}
 		if sourceID, ok := firstPositiveFloat(item, "sourceItemId", "itemId", "id"); ok {
 			next["itemId"] = int(sourceID)
@@ -1546,6 +1566,247 @@ func restoreCorrectionFallbackNutrition(dbItems, originalItems []map[string]any)
 	return out
 }
 
+func applyCorrectionPostProcessingToResult(result map[string]any, correctionItems, previousItems []map[string]any, contextOverrides map[int]correctionContextOverride) map[string]any {
+	if result == nil {
+		result = map[string]any{}
+	}
+	items := extractItems(result["items"])
+	originalItems := buildItemsFromCorrection(correctionItems)
+	if len(originalItems) > 0 {
+		items = restoreCorrectionFallbackNutrition(items, originalItems)
+	}
+	if len(correctionItems) > 0 {
+		items = applyCorrectionIdentityAndWeightEditsToResultItems(items, correctionItems)
+		items = applyCorrectionNutritionEditsToResultItems(items, correctionItems, previousItems)
+	}
+	if len(contextOverrides) > 0 {
+		items = applyCorrectionOverridesToResultItems(items, contextOverrides)
+	}
+	result["items"] = items
+	return result
+}
+
+func applyCorrectionIdentityAndWeightEditsToResultItems(items, correctionItems []map[string]any) []map[string]any {
+	if len(items) == 0 || len(correctionItems) == 0 {
+		return items
+	}
+	out := make([]map[string]any, len(items))
+	for index, item := range items {
+		out[index] = copyAnyMap(item)
+	}
+	used := map[int]bool{}
+	for correctionIndex, correctionItem := range correctionItems {
+		nameEdited := boolFromAny(firstNonNil(correctionItem["nameEdited"], correctionItem["name_edited"]))
+		weightEdited := boolFromAny(firstNonNil(correctionItem["weightEdited"], correctionItem["weight_edited"]))
+		if !nameEdited && !weightEdited {
+			continue
+		}
+		targetIndex := findCorrectionResultItemIndex(out, correctionContextOverride{
+			Index: correctionIndex,
+			Names: correctionCandidateNamesFromItem(correctionItem),
+		}, correctionIndex, used)
+		if targetIndex < 0 || targetIndex >= len(out) {
+			continue
+		}
+		used[targetIndex] = true
+		if nameEdited {
+			if name := strings.TrimSpace(firstNonEmptyString(correctionItem, "name", "food_name", "item_name")); name != "" {
+				out[targetIndex]["name"] = name
+				out[targetIndex]["nameEdited"] = true
+			}
+		}
+		if weightEdited {
+			if weight, ok := firstPositiveFloat(correctionItem, "estimatedWeightGrams", "weight", "weight_g", "originalWeightGrams"); ok && weight > 0 {
+				rounded := round2(weight)
+				out[targetIndex]["estimatedWeightGrams"] = rounded
+				out[targetIndex]["originalWeightGrams"] = rounded
+				out[targetIndex]["grossWeightGrams"] = rounded
+				out[targetIndex]["weight"] = rounded
+				out[targetIndex]["userWeightGrams"] = rounded
+				out[targetIndex]["weightEdited"] = true
+				out[targetIndex]["package_weight_source"] = "user_context"
+				out[targetIndex]["package_weight_applied"] = true
+				out[targetIndex]["package_weight_reason"] = "用户纠错重量优先"
+			}
+		}
+	}
+	return out
+}
+
+func applyCorrectionNutritionEditsToResultItems(items, correctionItems, previousItems []map[string]any) []map[string]any {
+	if len(items) == 0 || len(correctionItems) == 0 {
+		return items
+	}
+	out := make([]map[string]any, len(items))
+	for index, item := range items {
+		out[index] = copyAnyMap(item)
+	}
+	used := map[int]bool{}
+	for correctionIndex, correctionItem := range correctionItems {
+		if !correctionItemNutritionEdited(correctionItem, previousItems, correctionIndex) {
+			continue
+		}
+		overrides := correctionNutrientOverrideValues(correctionItem)
+		if len(overrides) == 0 {
+			continue
+		}
+		targetIndex := findCorrectionResultItemIndex(out, correctionContextOverride{
+			Index: correctionIndex,
+			Names: correctionCandidateNamesFromItem(correctionItem),
+		}, correctionIndex, used)
+		if targetIndex < 0 || targetIndex >= len(out) {
+			continue
+		}
+		used[targetIndex] = true
+		applyNutritionOverridesToCorrectionItem(out[targetIndex], overrides)
+	}
+	return out
+}
+
+func correctionItemNutritionEdited(item map[string]any, previousItems []map[string]any, fallbackIndex int) bool {
+	if boolFromAny(firstNonNil(item["nutritionEdited"], item["nutrition_edited"], item["nutrientsEdited"], item["nutrients_edited"])) {
+		return true
+	}
+	previous := findPreviousCorrectionItem(item, previousItems, fallbackIndex)
+	if previous == nil {
+		return hasPositiveCorrectionNutrientOverride(item)
+	}
+	currentWeight, _ := firstPositiveFloat(item, "estimatedWeightGrams", "weight", "weight_g", "originalWeightGrams")
+	previousWeight, _ := firstPositiveFloat(previous, "estimatedWeightGrams", "weight", "weight_g", "originalWeightGrams")
+	for _, key := range correctionEditableNutrientKeys() {
+		current, currentOK := correctionNutrientValue(item, key)
+		previousValue, previousOK := correctionNutrientValue(previous, key)
+		if !currentOK && !previousOK {
+			continue
+		}
+		if currentOK != previousOK {
+			if currentOK && math.Abs(current) > 0.05 {
+				return true
+			}
+			continue
+		}
+		if key == "waterMl" || currentWeight <= 0 || previousWeight <= 0 {
+			if math.Abs(current-previousValue) > 0.05 {
+				return true
+			}
+			continue
+		}
+		if math.Abs(current/currentWeight-previousValue/previousWeight) > 0.002 {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPositiveCorrectionNutrientOverride(item map[string]any) bool {
+	for _, value := range correctionNutrientOverrideValues(item) {
+		if math.Abs(value) > 0.05 {
+			return true
+		}
+	}
+	return false
+}
+
+func findPreviousCorrectionItem(item map[string]any, previousItems []map[string]any, fallbackIndex int) map[string]any {
+	if len(previousItems) == 0 {
+		return nil
+	}
+	sourceID := strings.TrimSpace(firstNonEmptyString(item, "sourceItemId", "itemId", "id"))
+	if sourceID != "" {
+		for _, previous := range previousItems {
+			previousID := strings.TrimSpace(firstNonEmptyString(previous, "sourceItemId", "itemId", "id"))
+			if previousID != "" && previousID == sourceID {
+				return previous
+			}
+		}
+	}
+	names := correctionCandidateNamesFromItem(item)
+	bestIndex := -1
+	bestScore := 0
+	for index, previous := range previousItems {
+		score := correctionNamesMatchScore(names, correctionCandidateNamesFromItem(previous))
+		if score > bestScore {
+			bestScore = score
+			bestIndex = index
+		}
+	}
+	if bestIndex >= 0 && bestScore >= 800 {
+		return previousItems[bestIndex]
+	}
+	if fallbackIndex >= 0 && fallbackIndex < len(previousItems) {
+		return previousItems[fallbackIndex]
+	}
+	return nil
+}
+
+func correctionNutrientOverrideValues(item map[string]any) map[string]float64 {
+	out := map[string]float64{}
+	for _, key := range correctionEditableNutrientKeys() {
+		if value, ok := correctionNutrientValue(item, key); ok {
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func correctionNutrientValue(item map[string]any, key string) (float64, bool) {
+	if item == nil {
+		return 0, false
+	}
+	nutrients := mapFromAny(item["nutrients"])
+	if value, ok := floatFromAny(nutrients[key]); ok {
+		return value, true
+	}
+	if key == "calories" {
+		if value, ok := floatFromAny(firstNonNil(item["calorie"], item["calories"])); ok {
+			return value, true
+		}
+	}
+	if key == "waterMl" {
+		if value, ok := floatFromAny(firstNonNil(item["waterMl"], item["water_ml"])); ok {
+			return value, true
+		}
+		if value, ok := floatFromAny(nutrients["water_ml"]); ok {
+			return value, true
+		}
+	}
+	if value, ok := floatFromAny(item[key]); ok {
+		return value, true
+	}
+	return 0, false
+}
+
+func applyNutritionOverridesToCorrectionItem(item map[string]any, overrides map[string]float64) {
+	nutrients := mapFromAny(item["nutrients"])
+	if len(nutrients) == 0 {
+		nutrients = map[string]any{}
+	}
+	for key, value := range overrides {
+		rounded := round2(value)
+		nutrients[key] = rounded
+		switch key {
+		case "calories":
+			item["calorie"] = rounded
+		case "protein", "carbs", "fat", "waterMl":
+			item[key] = rounded
+			if key == "waterMl" {
+				nutrients["water_ml"] = rounded
+			}
+		}
+	}
+	item["nutrients"] = nutrients
+	item["nutrition_source"] = "user_correction_context"
+	item["nutritionEdited"] = true
+}
+
+func correctionEditableNutrientKeys() []string {
+	return []string{
+		"calories", "protein", "carbs", "fat", "fiber", "sugar", "waterMl",
+		"saturatedFat", "cholesterolMg", "sodiumMg", "potassiumMg", "calciumMg", "ironMg", "magnesiumMg", "zincMg",
+		"vitaminARaeMcg", "vitaminCMg", "vitaminDMcg", "vitaminEMg", "vitaminKMcg", "thiaminMg", "riboflavinMg", "niacinMg", "vitaminB6Mg", "folateMcg", "vitaminB12Mcg",
+	}
+}
+
 func buildCorrectionAnalyzeResult(payload map[string]any, items []map[string]any) map[string]any {
 	previous := mapFromAny(payload["previousResult"])
 	description := strings.TrimSpace(stringFromMap(previous, "description"))
@@ -1633,12 +1894,20 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 	if len(imageURLs) == 0 && imageURL != "" {
 		imageURLs = []string{imageURL}
 	}
-	prompt := buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext, referenceObjects, previousRounds)
+	executionMode := firstNonEmptyString(task.Payload, "execution_mode", "executionMode")
+	if executionMode == "" {
+		executionMode = session.ExecutionMode
+	}
+	strictSeparateMode := isStrictSeparateExecutionMode(executionMode)
+	prompt := buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext, referenceObjects, previousRounds, strictSeparateMode)
 	result, err := r.analyze.RunPrecisionJSONWithImages(ctx, sourceType, prompt, imageURLs, precisionPlanModelName)
 	if err != nil {
 		return err
 	}
 	result = normalizePrecisionPlanResult(result)
+	if strictSeparateMode {
+		result = forceSeparateMixedDishPlan(result)
+	}
 
 	if err := r.precision.CreateRound(ctx, &domain.PrecisionSessionRound{
 		SessionID:     sessionID,
@@ -1678,6 +1947,9 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 			"text":                 firstNonEmptyString(latestInputs, "text"),
 			"modelName":            precisionWeightModelName,
 			"planner_modelName":    precisionPlanModelName,
+		}
+		if strictSeparateMode {
+			groupPayload["execution_mode"] = strictSeparateModeName
 		}
 		groupPayload["round_index"] = roundIndex
 		groupPayload["group_index"] = groupIndex
@@ -1743,6 +2015,9 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		"split_strategy":       splitStrategy,
 		"child_task_ids":       childTaskIDs,
 		"source_type":          sourceType,
+	}
+	if strictSeparateMode {
+		aggregatePayload["execution_mode"] = strictSeparateModeName
 	}
 	if creditUsage := mapFromAny(task.Payload["credit_usage"]); len(creditUsage) > 0 {
 		aggregatePayload["credit_usage"] = creditUsage
@@ -2045,6 +2320,138 @@ func normalizePrecisionPlanResult(parsed map[string]any) map[string]any {
 		"description":                stringFromMap(parsed, "description"),
 		"insight":                    stringFromMap(parsed, "insight"),
 	}
+}
+
+func isStrictSeparateExecutionMode(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case strictSeparateModeName, "precision_separate", "strict-separate":
+		return true
+	default:
+		return false
+	}
+}
+
+func forceSeparateMixedDishPlan(plan map[string]any) map[string]any {
+	items := normalizePrecisionPlanItems(plan["itemsToEstimate"])
+	if len(items) != 1 {
+		return plan
+	}
+	wholeName := firstNonEmptyString(items[0], "item_name", "name")
+	components := inferMixedDishComponents(wholeName)
+	if len(components) < 2 {
+		return plan
+	}
+	splitItems := make([]map[string]any, 0, len(components))
+	summary := make([]string, 0, len(components))
+	for index, component := range components {
+		summary = append(summary, component.name)
+		splitItems = append(splitItems, map[string]any{
+			"item_key":           fmt.Sprintf("component_%d", index+1),
+			"item_name":          component.name,
+			"candidate_names":    []string{component.name},
+			"visual_evidence":    fmt.Sprintf("整菜名“%s”中包含%s成分，精准分项模式按可调摄入比例拆开估计", wholeName, component.name),
+			"item_hint":          fmt.Sprintf("来自混合菜“%s”的%s部分；只估计该成分的可食净重，不把其它配料并入", wholeName, component.name),
+			"requires_reference": false,
+			"uncertainty_level":  "medium",
+			"uncertainty_reason": "由混合菜名拆出的成分项，重量仍需结合画面区域和堆叠关系估计",
+		})
+	}
+	notes := stringSliceFromAny(plan["uncertaintyNotes"])
+	notes = append(notes, fmt.Sprintf("精准分项模式已将“%s”从整菜名兜底拆成：%s", wholeName, strings.Join(summary, "、")))
+	out := copyAnyMap(plan)
+	out["splitStrategy"] = "single_shot"
+	if len(splitItems) > 3 {
+		out["splitStrategy"] = "grouped_parallel"
+	}
+	out["detectedItemsSummary"] = summary
+	out["uncertaintyNotes"] = notes
+	out["itemsToEstimate"] = splitItems
+	return out
+}
+
+type mixedDishComponent struct {
+	name     string
+	category string
+}
+
+func inferMixedDishComponents(dishName string) []mixedDishComponent {
+	text := strings.TrimSpace(dishName)
+	if text == "" {
+		return nil
+	}
+	components := []mixedDishComponent{}
+	seen := map[string]bool{}
+	add := func(name, category string) {
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		components = append(components, mixedDishComponent{name: name, category: category})
+	}
+
+	proteinPatterns := []struct {
+		needle string
+		name   string
+	}{
+		{"鸡肉", "鸡肉"}, {"牛肉", "牛肉"}, {"猪肉", "猪肉"}, {"羊肉", "羊肉"}, {"鸭肉", "鸭肉"},
+		{"虾仁", "虾仁"}, {"虾", "虾"}, {"鱼肉", "鱼肉"}, {"鱼片", "鱼肉"}, {"鱼块", "鱼肉"}, {"鸡蛋", "鸡蛋"}, {"蛋", "鸡蛋"},
+		{"豆腐", "豆腐"},
+	}
+	vegetablePatterns := []struct {
+		needle string
+		name   string
+	}{
+		{"胡萝卜", "胡萝卜"}, {"西兰花", "西兰花"}, {"番茄", "番茄"}, {"西红柿", "番茄"},
+		{"土豆", "土豆"}, {"青菜", "青菜"}, {"小白菜", "小白菜"}, {"洋葱", "洋葱"},
+		{"玉米", "玉米"}, {"蘑菇", "蘑菇"}, {"香菇", "香菇"}, {"豌豆", "豌豆"},
+	}
+	staplePatterns := []struct {
+		needle string
+		name   string
+	}{
+		{"意面", "意大利面"}, {"意大利面", "意大利面"}, {"面条", "面条"}, {"米线", "米线"},
+		{"河粉", "河粉"}, {"炒粉", "米粉"}, {"米粉", "米粉"}, {"盖饭", "米饭"},
+		{"炒饭", "米饭"}, {"米饭", "米饭"}, {"饭", "米饭"}, {"面", "面条"},
+	}
+	for _, pattern := range staplePatterns {
+		if strings.Contains(text, pattern.needle) {
+			add(pattern.name, "staple")
+			break
+		}
+	}
+	for _, pattern := range proteinPatterns {
+		if strings.Contains(text, pattern.needle) {
+			add(pattern.name, "protein")
+		}
+	}
+	for _, pattern := range vegetablePatterns {
+		if strings.Contains(text, pattern.needle) {
+			add(pattern.name, "vegetable")
+		}
+	}
+	if !shouldSplitMixedDishName(text, components) {
+		return nil
+	}
+	return components
+}
+
+func shouldSplitMixedDishName(dishName string, components []mixedDishComponent) bool {
+	if len(components) < 2 {
+		return false
+	}
+	categories := map[string]bool{}
+	for _, component := range components {
+		categories[component.category] = true
+	}
+	if categories["staple"] && (categories["protein"] || categories["vegetable"]) {
+		return true
+	}
+	for _, cue := range []string{"烩", "炒", "盖", "拌", "汤面", "面", "饭", "粉", "麻辣烫", "沙拉", "咖喱", "套餐", "便当"} {
+		if strings.Contains(dishName, cue) {
+			return true
+		}
+	}
+	return false
 }
 
 func validPrecisionSplitStrategy(value string) bool {
@@ -2368,7 +2775,7 @@ func normalizePrecisionFoodType(raw string) string {
 	}
 }
 
-func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, referenceObjects []map[string]any, previousRounds []domain.PrecisionSessionRound) string {
+func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, referenceObjects []map[string]any, previousRounds []domain.PrecisionSessionRound, strictSeparateMode bool) string {
 	previousContext := []string{}
 	start := len(previousRounds) - 3
 	if start < 0 {
@@ -2392,6 +2799,19 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 	if additionalContext == "" {
 		additionalContext = "无"
 	}
+	strictSeparateBlock := ""
+	if strictSeparateMode {
+		strictSeparateBlock = `精准分项模式额外要求：
+- 这个模式的首要目标是让用户能分别调整混合食物中不同成分的实际摄入比例；不要把明显混合食物只作为一道整菜输出。
+- 对牛肉面、鸡肉胡萝卜烩意面、盖饭、炒饭、炒面、汤面、麻辣烫、沙拉、咖喱饭、便当等混合食物，必须尽量拆成主食基底、蛋白质、可见蔬菜/配料、显著酱汁或汤底。
+- item_name 使用成分名，不使用整菜名；整菜名可写进 item_hint。例如“鸡肉胡萝卜烩意面”应拆为“意大利面”“鸡肉”“胡萝卜”，必要时再拆“酱汁”。
+- 对牛肉面，应拆为“牛肉”“面条”，如果青菜或汤底可见且影响摄入比例，也拆出“青菜”“汤底”。
+- 对盖饭，应拆为“米饭”“肉/蛋/豆制品主料”“可见蔬菜/配料”，酱汁明显时单独列“酱汁”或在主料 hint 中说明。
+- 只有某成分完全不可见且菜名/用户说明也不能确定时，才不拆；但主食基底和明确可见蛋白/蔬菜必须拆。
+- 每个拆出的成分都是后续单独估重对象，item_hint 必须提醒“只估计该成分，不把其它配料并入”。
+
+`
+	}
 	return fmt.Sprintf(`你是精准模式的直接估计规划器。你的任务不是跟用户对话，而是尽可能把当前画面/文本拆成可直接估计的主体，并为后续数据库营养检索提供结构化列表。
 
 请基于当前输入，返回 JSON，且 precisionStatus 统一使用 ready_for_estimate。
@@ -2408,8 +2828,9 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
 最近几轮历史（如有）：
 %s
 
-要求：
+%s要求：
 - 如果有多个主体食物，请拆成 itemsToEstimate，后续并行估计。
+- 如果当前是明显混合食物，且不同成分可能有不同实际摄入比例，也应拆成 itemsToEstimate，而不是只输出整道菜。
 - 食物种类识别优先于重量估计。每个主体先列出 2-3 个最可能的候选食物，再根据视觉证据选择 item_name。
 - 重量口径必须与营养数据库一致：后续 estimatedWeightGrams 只计算可食部净重。遇到带壳、带骨、带核食物时，itemsToEstimate 仍列食物本身，但 visual_evidence/item_hint 需要提示后续按去壳/去骨/去核后的可食重量估算，不把壳、骨头、果核计入重量。
 - 候选筛选必须看具体视觉证据：切法、形状、边缘/皮、是否有馅、颜色、纹理、菜梗/叶片比例、包裹方式、烹饪方式和所在区域；不要只按常见菜名猜。
@@ -2444,7 +2865,7 @@ func buildPrecisionPlanPrompt(sourceType, rawInput, additionalContext string, re
     {"item_key": "wrapped_tofu_skin", "item_name": "百叶包", "candidate_names": ["百叶包", "蒸饺", "馄饨"], "alternative_name": "蒸饺", "visual_evidence": "外皮呈豆皮褶皱和方形包裹感，不是半透明面皮", "item_hint": "右侧包裹类主体", "requires_reference": false, "uncertainty_level": "medium"},
     {"item_key": "lettuce_stem", "item_name": "莴苣片", "candidate_names": ["莴苣片", "青菜", "西兰花梗"], "alternative_name": "青菜", "visual_evidence": "浅绿色厚片状茎部为主，叶片很少", "item_hint": "左侧绿色蔬菜", "requires_reference": false, "uncertainty_level": "medium"}
   ]
-}`, sourceType, rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), previousBlock)
+}`, sourceType, rawInput, additionalContext, buildReferenceObjectsHint(referenceObjects), previousBlock, strictSeparateBlock)
 }
 
 func buildPrecisionItemEstimatePromptFromPayload(sourceType string, payload map[string]any, textInput, additionalContext string, referenceObjects []map[string]any) (string, error) {
@@ -2504,6 +2925,7 @@ func buildPrecisionItemEstimatePromptSingle(sourceType, itemName, itemHint, rawI
 - 对相似项必须比较视觉证据：莴苣/莴笋片看厚片茎部和浅绿半透明质感，青菜/小白菜看叶片和菜梗；百叶包/千张包看豆皮褶皱和包裹边缘，蒸饺/馄饨看面皮半透明和褶边。
 - 如果只能在两个名称之间选择，name 填更可能的主名称，并在 uncertaintyNotes 简短记录备选。
 - 如果画面/描述里还有其他食物，忽略它们。
+- 如果主体提示说明这是混合菜中的某个成分，只估计该成分的可食净重；例如估“意大利面”时不要把鸡肉、胡萝卜、酱汁重量并入。
 - 参考物和尺寸如果可用，请务必用于精确估重。
 - 只有“图中可见”的参考物或容器，才能当强比例尺；不在图中的参考物尺寸只能当弱提示，不能当精确比例尺。
 - 估重时必须同时考虑：可见面积、堆叠高度/厚度、容器占比、与餐具/手掌/碗盘的相对大小。
@@ -3300,23 +3722,35 @@ func (r *Runner) processPackagedProductExtract(ctx context.Context, task *domain
 	}
 	if createdFood != nil && r.nutrition != nil {
 		if autoIngestResult != nil && autoIngestResult.UpsertAction == "created" {
-			awarded, awardErr := r.nutrition.AwardPackagedUpload(ctx, task.UserID, task.ID, createdFood.ID, map[string]any{
-				"packaged_food_id": createdFood.ID,
-				"source_task_id":   task.ID,
-				"product_name":     createdFood.ProductName,
-				"upsert_action":    autoIngestResult.UpsertAction,
-			})
-			if awardErr != nil {
-				r.log.Warn("预包装商品奖励积分发放失败",
+			if !packagedFoodQualifiesForReward(createdFood) {
+				rewardResult["reason"] = "quality_not_rewardable"
+				rewardResult["packaged_food_id"] = createdFood.ID
+				r.log.Warn("预包装商品未达到奖励质量门槛",
 					slog.String("task_id", task.ID),
 					logger.AnalysisTaskID(task.ID),
 					slog.String("user_id", task.UserID),
 					slog.String("packaged_food_id", createdFood.ID),
-					logger.Err(awardErr),
+					slog.String("review_status", createdFood.ReviewStatus),
 				)
-				rewardResult["reason"] = "award_failed"
-			} else if awarded != nil {
-				rewardResult = awarded
+			} else {
+				awarded, awardErr := r.nutrition.AwardPackagedUpload(ctx, task.UserID, task.ID, createdFood.ID, map[string]any{
+					"packaged_food_id": createdFood.ID,
+					"source_task_id":   task.ID,
+					"product_name":     createdFood.ProductName,
+					"upsert_action":    autoIngestResult.UpsertAction,
+				})
+				if awardErr != nil {
+					r.log.Warn("预包装商品奖励积分发放失败",
+						slog.String("task_id", task.ID),
+						logger.AnalysisTaskID(task.ID),
+						slog.String("user_id", task.UserID),
+						slog.String("packaged_food_id", createdFood.ID),
+						logger.Err(awardErr),
+					)
+					rewardResult["reason"] = "award_failed"
+				} else if awarded != nil {
+					rewardResult = awarded
+				}
 			}
 		} else {
 			rewardResult["already_exists"] = true
@@ -3350,6 +3784,48 @@ func (r *Runner) processPackagedProductExtract(ctx context.Context, task *domain
 		slog.Duration("duration", time.Since(start)),
 	)
 	return nil
+}
+
+func packagedFoodQualifiesForReward(food *foodrecorddomain.PackagedFood) bool {
+	if food == nil || !food.IsActive {
+		return false
+	}
+	if strings.TrimSpace(food.ProductName) == "" {
+		return false
+	}
+	if len(food.SourceImageURLs) == 0 {
+		return false
+	}
+	if food.NetContentValue <= 0 || strings.TrimSpace(stringValue(food.NetContentUnit)) == "" {
+		return false
+	}
+	if strings.EqualFold(stringValue(food.NetContentUnit), "g") && food.NetWeightG <= 0 {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(stringValue(food.ConversionStatus)), "converted") {
+		return false
+	}
+	verifiedZeroNutrition := foodrecordservice.PackagedFoodHasVerifiedZeroNutritionEvidence(food)
+	if (food.KcalPer100g <= 0 && !verifiedZeroNutrition) || food.KcalPer100g > 900 {
+		return false
+	}
+	macroSum := food.ProteinPer100g + food.CarbsPer100g + food.FatPer100g
+	if (macroSum <= 0 && !verifiedZeroNutrition) || macroSum > 120 {
+		return false
+	}
+	for _, value := range []float64{food.ProteinPer100g, food.CarbsPer100g, food.FatPer100g} {
+		if value < 0 || value > 100 {
+			return false
+		}
+	}
+	return true
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func (r *Runner) trySilentPackagedIngest(ctx context.Context, task *domain.AnalysisTask, result map[string]any) {

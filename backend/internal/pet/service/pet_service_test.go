@@ -129,6 +129,30 @@ func (f *fakePetRepo) ListFoodRecordsByDate(ctx context.Context, userID, date st
 	return f.foodByDate[date], nil
 }
 
+func (f *fakePetRepo) GetLatestFoodRecordDate(ctx context.Context, userID string, beforeOrOn string) (string, error) {
+	target, err := parseChinaDate(beforeOrOn)
+	if err != nil {
+		return "", err
+	}
+	latest := ""
+	for date, rows := range f.foodByDate {
+		if len(rows) == 0 {
+			continue
+		}
+		day, err := parseChinaDate(date)
+		if err != nil {
+			continue
+		}
+		if day.After(target) {
+			continue
+		}
+		if latest == "" || date > latest {
+			latest = date
+		}
+	}
+	return latest, nil
+}
+
 func (f *fakePetRepo) SumWaterByDate(ctx context.Context, userID, date string) (int, error) {
 	return f.waterByDate[date], nil
 }
@@ -309,6 +333,53 @@ func TestSummaryCreatesStablePetAndSingleOfflineEvent(t *testing.T) {
 	assert.Equal(t, first.Pet.ID, second.Pet.ID)
 	assert.Equal(t, 1, fake.createPetCalls)
 	assert.Equal(t, 1, fake.createEventCalls)
+}
+
+func TestSummaryShowsLowPowerWhenFoodRecordsStop(t *testing.T) {
+	fake := newFakePetRepo()
+	fake.foodByDate["2026-05-16"] = []repo.FoodRecord{
+		{MealType: "breakfast", TotalCalories: 500, TotalProtein: 20},
+	}
+	svc := NewService(fake)
+
+	summary, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
+	require.NoError(t, err)
+	assert.Equal(t, "low_power", summary.Status.State)
+	assert.Equal(t, "sleepy", summary.Status.Mood)
+	assert.Equal(t, 4, summary.Status.InactivityDays)
+	assert.Contains(t, summary.Status.Message, "低电量")
+	assert.Contains(t, summary.Status.TaskText, "充一点电")
+}
+
+func TestSummaryShowsDeepSleepButNotDeathAfterLongInactivity(t *testing.T) {
+	fake := newFakePetRepo()
+	fake.foodByDate["2026-05-01"] = []repo.FoodRecord{
+		{MealType: "lunch", TotalCalories: 600, TotalProtein: 30},
+	}
+	svc := NewService(fake)
+
+	summary, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
+	require.NoError(t, err)
+	assert.Equal(t, "deep_sleep", summary.Status.State)
+	assert.Equal(t, 19, summary.Status.InactivityDays)
+	assert.Contains(t, summary.Status.Message, "不会饿死")
+}
+
+func TestSummaryRevivesPetWhenFoodRecordReturns(t *testing.T) {
+	fake := newFakePetRepo()
+	fake.foodByDate["2026-05-16"] = []repo.FoodRecord{
+		{MealType: "breakfast", TotalCalories: 500, TotalProtein: 20},
+	}
+	fake.foodByDate["2026-05-20"] = []repo.FoodRecord{
+		{MealType: "dinner", TotalCalories: 700, TotalProtein: 35},
+	}
+	svc := NewService(fake)
+
+	summary, err := svc.Summary(context.Background(), "user-1", "2026-05-20")
+	require.NoError(t, err)
+	assert.Equal(t, 0, summary.Status.InactivityDays)
+	assert.NotEqual(t, "sleepy", summary.Status.Mood)
+	assert.Contains(t, summary.Status.Message, "睁眼")
 }
 
 func TestSummaryAutoProfileMatchPreservesExistingProgress(t *testing.T) {

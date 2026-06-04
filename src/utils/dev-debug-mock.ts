@@ -69,6 +69,7 @@ export function buildRandomDebugAnalyzeResponse(): AnalyzeResponse {
     insight: `【调试】随机营养汇总：蛋白质约 ${tp}g、碳水约 ${tc}g、脂肪约 ${tf}g。供能占比约 蛋白 ${pp}% / 碳水 ${cp}% / 脂肪 ${fp}%。`,
     items,
     pfc_ratio_comment: `三大营养素供能比例（调试随机）：蛋白质约 ${pp}%、碳水化合物约 ${cp}%、脂肪约 ${fp}%。`,
+    eating_order_advice: `【调试】进食顺序：示例占位文案，便于检查「进食顺序」区块样式。`,
     absorption_notes: `【调试】吸收与利用：示例占位文案，便于检查「吸收与利用」区块样式。`,
     context_advice: `【调试】情境建议：示例占位文案，便于检查「情境建议」区块样式。`
   }

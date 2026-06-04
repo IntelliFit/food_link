@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	adminhandler "food_link/backend/internal/admin/handler"
+	adminrepo "food_link/backend/internal/admin/repo"
+	adminservice "food_link/backend/internal/admin/service"
 	analyzehandler "food_link/backend/internal/analyze/handler"
 	analyzerepo "food_link/backend/internal/analyze/repo"
 	analyzeservice "food_link/backend/internal/analyze/service"
@@ -277,7 +280,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/map-picker", system.MapPicker)
 	engine.GET("/test-backend", system.TestBackendPage)
 	engine.GET("/test-backend/login", system.TestBackendLoginPage)
+	engine.GET("/snack-admin", system.SnackAdminPage)
 	engine.Static("/static/test_backend", filepath.Join("static", "test_backend"))
+	engine.Static("/static/snack_admin", filepath.Join("static", "snack_admin"))
 	engine.GET("/ws/stats/insight", statsInsightWebsocket(statsSvc))
 
 	// User routes
@@ -402,6 +407,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/membership/me", authmw.RequireJWT(jwtSvc), membershipHandler.GetMyMembership)
 	engine.GET("/api/membership/reward-center", authmw.RequireJWT(jwtSvc), membershipHandler.GetRewardCenter)
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)
+	engine.POST("/api/membership/pay/sync", authmw.RequireJWT(jwtSvc), membershipHandler.SyncPayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
 
@@ -453,6 +459,8 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/manual-food/browse", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodBrowse)
 	engine.GET("/api/manual-food/catalog", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodCatalog)
 	engine.GET("/api/manual-food/search", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodSearch)
+	engine.GET("/api/manual-food/custom", authmw.RequireJWT(jwtSvc), utilityHandler.ManualFoodCustomList)
+	engine.POST("/api/manual-food/custom", authmw.RequireJWT(jwtSvc), utilityHandler.ManualFoodCustomSave)
 
 	// TestBackend routes
 	engine.GET("/api/prompts", authmw.RequireTestBackendCookie(), testBackendHandler.ListPrompts)
@@ -475,6 +483,15 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/test-backend/impersonate-user", testBackendHandler.ImpersonateUser)
 	engine.POST("/api/test/batch-upload", authmw.RequireTestBackendCookie(), testBackendHandler.LegacyBatchUpload)
 	engine.POST("/api/test/single-image", authmw.RequireTestBackendCookie(), testBackendHandler.LegacySingleImage)
+
+	// Admin routes
+	adminPackagedFoodRepo := adminrepo.NewPackagedFoodRepo(db)
+	adminPackagedFoodSvc := adminservice.NewPackagedFoodService(adminPackagedFoodRepo)
+	adminPackagedFoodHandler := adminhandler.NewPackagedFoodHandler(adminPackagedFoodSvc, adminKey)
+	adminPackagedFoodAuth := adminPackagedFoodHandler.AdminAuth()
+	engine.GET("/api/admin/packaged-foods", adminPackagedFoodAuth, adminPackagedFoodHandler.List)
+	engine.GET("/api/admin/packaged-foods/:food_id", adminPackagedFoodAuth, adminPackagedFoodHandler.Get)
+	engine.PATCH("/api/admin/packaged-foods/:food_id", adminPackagedFoodAuth, adminPackagedFoodHandler.Update)
 
 	routeMapPath := filepath.Join(".", "docs", "backend-api-prd", "ROUTE_MAP.md")
 	if _, err := os.Stat(routeMapPath); err == nil {

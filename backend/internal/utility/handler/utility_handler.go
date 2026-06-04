@@ -7,6 +7,7 @@ import (
 	authmw "food_link/backend/internal/auth"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/utility/domain"
+	"food_link/backend/internal/utility/repo"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,6 +27,8 @@ type ManualFoodService interface {
 	Catalog(ctx context.Context, userID string, category string, page int, pageSize int) (*domain.ManualFoodCatalogResult, error)
 	Search(ctx context.Context, userID string, keyword string, limit int) ([]domain.ManualFoodResult, error)
 	SearchPackaged(ctx context.Context, keyword string, limit int) ([]domain.ManualFoodResult, error)
+	ListCustomFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error)
+	SaveCustomFood(ctx context.Context, userID string, input repo.CustomFoodInput) (domain.ManualFoodResult, error)
 }
 
 type UtilityHandler struct {
@@ -178,12 +181,85 @@ func (h *UtilityHandler) ManualFoodSearch(c *gin.Context) {
 	response.Success(c, gin.H{"results": items})
 }
 
+// GET /api/manual-food/custom
+func (h *UtilityHandler) ManualFoodCustomList(c *gin.Context) {
+	limit := parsePositiveInt(c.Query("limit"), 60)
+	offset := parseNonNegativeInt(c.Query("offset"), 0)
+	items, hasMore, err := h.manualFoodSvc.ListCustomFoods(
+		c.Request.Context(),
+		c.GetString(authmw.ContextUserIDKey),
+		limit,
+		offset,
+	)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"items": items, "has_more": hasMore})
+}
+
+// POST /api/manual-food/custom
+func (h *UtilityHandler) ManualFoodCustomSave(c *gin.Context) {
+	var body struct {
+		ID                 string         `json:"id"`
+		Title              string         `json:"title"`
+		DefaultWeightGrams float64        `json:"default_weight_grams"`
+		TotalCalories      float64        `json:"total_calories"`
+		TotalProtein       float64        `json:"total_protein"`
+		TotalCarbs         float64        `json:"total_carbs"`
+		TotalFat           float64        `json:"total_fat"`
+		NutrientsPer100g   map[string]any `json:"nutrients_per_100g"`
+		ExtraNutrients     map[string]any `json:"extra_nutrients"`
+		ImagePath          *string        `json:"image_path"`
+		ImagePaths         []string       `json:"image_paths"`
+		PortionLabel       string         `json:"portion_label"`
+		RecommendReason    string         `json:"recommend_reason"`
+		ShareToPublic      bool           `json:"share_to_public"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	item, err := h.manualFoodSvc.SaveCustomFood(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), repo.CustomFoodInput{
+		ID:                 body.ID,
+		Title:              body.Title,
+		DefaultWeightGrams: body.DefaultWeightGrams,
+		TotalCalories:      body.TotalCalories,
+		TotalProtein:       body.TotalProtein,
+		TotalCarbs:         body.TotalCarbs,
+		TotalFat:           body.TotalFat,
+		NutrientsPer100g:   body.NutrientsPer100g,
+		ExtraNutrients:     body.ExtraNutrients,
+		ImagePath:          body.ImagePath,
+		ImagePaths:         body.ImagePaths,
+		PortionLabel:       body.PortionLabel,
+		RecommendReason:    body.RecommendReason,
+		ShareToPublic:      body.ShareToPublic,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"item": item})
+}
+
 func parsePositiveInt(value string, fallback int) int {
 	if value == "" {
 		return fallback
 	}
 	n, err := strconv.Atoi(value)
 	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
+}
+
+func parseNonNegativeInt(value string, fallback int) int {
+	if value == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 0 {
 		return fallback
 	}
 	return n

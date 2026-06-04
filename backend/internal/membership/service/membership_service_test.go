@@ -2,11 +2,15 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"food_link/backend/internal/membership/domain"
 	membershiprepo "food_link/backend/internal/membership/repo"
+	"food_link/backend/pkg/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,6 +52,34 @@ type mockMembershipRepo struct {
 	sumPositiveEarnedCredits      int
 	rewardTaskUploads             map[string]*domain.RewardTaskUpload
 }
+
+const testRSAPrivateKeyPEM = `-----BEGIN RSA PRIVATE KEY-----
+MIIEoAIBAAKCAQEArK/f7m/7fObXZNK4vm9iaNaGBd+67U5cY8dx3zNUvYbl0SZM
+SQ5al8szrpbcz7BbX7NRX7qEyLfwTJe9+6ZiVdhgiexXu4UPUjG6KfLIuhrVyTE0
+wq0GD34LVvmXJfJN9FTgy91mPJfwwG96rA6DCx3OacTC95PNZW9ZwEvm3bpC4kHJ
+9Z+vIJSqcs66ZDfR7pXs5rDrlQlYpaMXL1ZYYVBVrwlDUcszYa5qUNORVURVL74x
+DpmnI+HDNv4bO3tg22/ZMVYrjmEm8LLz4MnFkKsVh3k5X0TOPNZ5C+bmSKEnOpLg
++fx1LTExOX4FZHJxL9qJ261YH9V+zlV6tXd46QIDAQABAoIBAAYvgJJuYXA+Zo2+
+fI6Zt8kwkflo4623ZljOnpYTpR/q0pWUzRu6z2Triuzgi4VG+GbrqekHadU0vX9I
+2i3G7nPLvd2C4TuezwcvL89r2mPMLUc5I34rq3FnnuldJFxgGwm69phm1FAsUxvZ
+gmfiVzBRP4ELYr5yhWNyQyE/tsPPZp8llbp/jQ21Z3l14xIpPX2WpRXUJ3OJFdx8
+BpIEZ/IJ1Y/Vd47+m9vTilHce6pTSFY0Lv3qwuwCeFGRSKF7xqawJllK4tqGFcmM
+xURg1R2Rz7GENsqDaX+7se//CgQAf0WZSE576UD3AQHJ6p+9El1edKPzfgrb4Sh7
+Cb0hrQcCgYEA2JZne4B8vIfpVNJHr2Xo/UTQ+SEeyzRJnuUv1hebh27gqaUeowLU
+beLCVww8gJ/7SBPSAGNh/4hWctEpc/JOG81k/28F2vBNMBb99l8ZxROs7qVIRUJN
+tlTs62T6DVxnNluF8UB/qMjXYbTxSgzlHYL/b1Jmw08OVy4RL8IubJ8CgYEAzBxk
+fTtc5zoEPx9ezJw8cFqVKx5eIfBB8fXl6qoGnI2yLtQYmnp1H9pDrsl93w5HEhKK
+uwuJkgpMaOA7CCZKUUXKLbxKTRVHWTNlZvGeZAJRKpwwl8aS34KU6QRUt+Aewc4I
+T+Eoo4LNhJ8cvqaz3ZQC9hGFnTqRLA7TBKXQJXcCgYA2vazh9hOQwvkiSxN7LVK5
+0I7QqKJT0Z9Z3as9fTH+BPQbbHRV1v1B2LItthYEnGqySPAm0PeP0jGnS14iw/ch
+58PDG5hrQZkAso71mgu1V8e5eWTOvHdPwh8vT5Izlksv3en4k8iwLDLjqwvhH2k5
+EEbnJ/h5HJ4PQsFtRLLfGQKBgA1NQGNE7h4HkuVGNxhgijPMQ3Jm7T2K+dE59Dzh
+zcKAHX+dxOi0WFO2FrkaWoCh3pHX8YCVFOcWkro2+sHiNO+s+6sVXUY+v8KZbd9S
+mb7sw7tiKGyLvWChkvDInnjJO1foBHSoOMzHJnuhHu9xz8D9919v7uQ7P+C+KpRf
+9furAn9qGDmO3u5Fgfeo6IQpq79vNuiT4tvDypdBykI7nrCEOrjvbiYVBg/nT35w
+mYLwOf5KPwTEIZpWguWOQN0I+a8YNbl42UhJs8xYPKEQXCcTMyWLB0q7/iTJVFBZ
+nRvBBBKTiQK7lbjWGGHKPuaqbJj/ne4zLFO9mxLnN/HRZQBX
+-----END RSA PRIVATE KEY-----`
 
 func (m *mockMembershipRepo) ListActivePlans(ctx context.Context) ([]domain.MembershipPlan, error) {
 	return m.plans, nil
@@ -126,6 +158,15 @@ func (m *mockMembershipRepo) UpdatePaymentByOrderNo(ctx context.Context, orderNo
 	if m.payment != nil {
 		if status, ok := updates["status"].(string); ok {
 			m.payment.Status = status
+		}
+		if paidAt, ok := updates["paid_at"].(time.Time); ok {
+			m.payment.PaidAt = &paidAt
+		}
+		if tx, ok := updates["wx_transaction_id"].(string); ok && tx != "" {
+			m.payment.WxTransactionID = &tx
+		}
+		if payload, ok := updates["notify_payload"].(map[string]any); ok {
+			m.payment.NotifyPayload = payload
 		}
 	}
 	return nil
@@ -499,6 +540,31 @@ func TestMembershipService_ValidateFoodAnalysisCredits_StrictRequiresStandardTie
 	assert.Equal(t, creditCostPrecisionFoodAnalysis, credits["credit_cost"])
 }
 
+func TestMembershipService_ValidateFoodAnalysisCredits_StrictSeparateRequiresStandardTierAndUsesPrecisionCost(t *testing.T) {
+	future := time.Now().Add(24 * time.Hour)
+	light := "light_monthly"
+	mockRepo := &mockMembershipRepo{
+		user: &membershiprepo.User{ID: "u1"},
+		membership: &domain.UserMembership{
+			ID:              "um1",
+			UserID:          "u1",
+			CurrentPlanCode: &light,
+			Status:          "active",
+			ExpiresAt:       &future,
+			DailyCredits:    20,
+		},
+	}
+	svc := NewMembershipService(mockRepo)
+	_, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict_separate", "")
+	assert.Error(t, err)
+
+	standard := "standard_monthly"
+	mockRepo.membership.CurrentPlanCode = &standard
+	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict_separate", "")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostPrecisionFoodAnalysis, credits["credit_cost"])
+}
+
 func TestMembershipService_ValidateFoodAnalysisCredits_WebSearchModeCosts(t *testing.T) {
 	future := time.Now().Add(24 * time.Hour)
 	light := "light_monthly"
@@ -527,6 +593,31 @@ func TestMembershipService_ValidateFoodAnalysisCredits_WebSearchModeCosts(t *tes
 	credits, err = svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "strict_web_search", "")
 	require.NoError(t, err)
 	assert.Equal(t, creditCostPrecisionFoodAnalysis, credits["credit_cost"])
+}
+
+func TestMembershipService_ValidateFoodAnalysisCredits_FastModesUseStandardCost(t *testing.T) {
+	future := time.Now().Add(24 * time.Hour)
+	light := "light_monthly"
+	mockRepo := &mockMembershipRepo{
+		user: &membershiprepo.User{ID: "u1"},
+		membership: &domain.UserMembership{
+			ID:              "um1",
+			UserID:          "u1",
+			CurrentPlanCode: &light,
+			Status:          "active",
+			ExpiresAt:       &future,
+			DailyCredits:    20,
+		},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	credits, err := svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "fast", "")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostStandardFoodAnalysis, credits["credit_cost"])
+
+	credits, err = svc.ValidateFoodAnalysisCredits(context.Background(), "u1", "fast_web_search", "")
+	require.NoError(t, err)
+	assert.Equal(t, creditCostStandardFoodAnalysis, credits["credit_cost"])
 }
 
 func TestMembershipService_ValidateFoodAnalysisCredits_PackagedExperimentUsesStandardCost(t *testing.T) {
@@ -875,6 +966,56 @@ func TestMembershipService_WechatNotify_EarlyPaidRankDoublesDailyCredits(t *test
 	require.NotNil(t, mockRepo.membership)
 	assert.Equal(t, "active", mockRepo.membership.Status)
 	assert.Equal(t, 80, mockRepo.membership.DailyCredits)
+}
+
+func TestMembershipService_SyncWechatPayment_ActivatesPaidOrderFromQuery(t *testing.T) {
+	oldBaseURL := wechatPayAPIBaseURL
+	defer func() { wechatPayAPIBaseURL = oldBaseURL }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Contains(t, r.URL.Path, "/v3/pay/transactions/out-trade-no/PM1")
+		assert.NotEmpty(t, r.Header.Get("Authorization"))
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"out_trade_no":   "PM1",
+			"trade_state":    "SUCCESS",
+			"transaction_id": "4200000000000001",
+			"success_time":   "2026-06-02T00:38:44+08:00",
+			"amount":         map[string]any{"payer_total": 990, "total": 990},
+		})
+	}))
+	defer server.Close()
+	wechatPayAPIBaseURL = server.URL
+
+	plan := &domain.MembershipPlan{Code: "light_monthly", Name: "轻度版", Amount: 9.9, DurationMonths: 1, DailyCredits: 8, IsActive: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode:    map[string]*domain.MembershipPlan{"light_monthly": plan},
+		payment:       &domain.MembershipPayment{ID: "pay1", UserID: "u1", OrderNo: "PM1", PlanCode: "light_monthly", Status: "pending", Amount: 9.9, DurationMonths: 1},
+		user:          &membershiprepo.User{ID: "u1"},
+		earlyPaidRank: 18,
+	}
+	cfg := &config.Config{
+		External: config.ExternalConfig{AppID: "wx-app"},
+		WechatPay: config.WechatPayConfig{
+			MchID:      "1100000000",
+			NotifyURL:  "https://api.healthymax.cn/api/payment/wechat/notify/membership",
+			SerialNo:   "SERIAL",
+			APIV3Key:   "12345678901234567890123456789012",
+			PrivateKey: testRSAPrivateKeyPEM,
+		},
+	}
+	svc := NewMembershipService(mockRepo, cfg)
+
+	data, err := svc.SyncWechatPayment(context.Background(), "u1", "PM1")
+	require.NoError(t, err)
+	assert.Equal(t, true, data["synced"])
+	assert.Equal(t, "paid", mockRepo.payment.Status)
+	require.NotNil(t, mockRepo.payment.PaidAt)
+	require.NotNil(t, mockRepo.payment.WxTransactionID)
+	assert.Equal(t, "4200000000000001", *mockRepo.payment.WxTransactionID)
+	require.NotNil(t, mockRepo.membership)
+	assert.Equal(t, "active", mockRepo.membership.Status)
+	assert.Equal(t, "light_monthly", *mockRepo.membership.CurrentPlanCode)
+	assert.Equal(t, 16, mockRepo.membership.DailyCredits)
 }
 
 func TestMembershipService_GetMyMembership_ManualUpgradeKeepsHigherTierOnReconcile(t *testing.T) {

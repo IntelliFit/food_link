@@ -38,6 +38,7 @@ type PetRepo interface {
 	SelectAppearance(ctx context.Context, userID, petID string, updates map[string]any) (*petdomain.UserPet, error)
 	AddPetExperience(ctx context.Context, petID string, delta int) (*petdomain.UserPet, error)
 	ListFoodRecordsByDate(ctx context.Context, userID, date string) ([]repo.FoodRecord, error)
+	GetLatestFoodRecordDate(ctx context.Context, userID string, beforeOrOn string) (string, error)
 	SumWaterByDate(ctx context.Context, userID, date string) (int, error)
 	SumExerciseByDate(ctx context.Context, userID, date string) (int, error)
 	GetDailyScore(ctx context.Context, userID, date string) (*petdomain.UserPetDailyScore, error)
@@ -99,9 +100,12 @@ type DailyScoreView struct {
 }
 
 type PetStatus struct {
-	Mood     string `json:"mood"`
-	Message  string `json:"message"`
-	TaskText string `json:"task_text"`
+	Mood           string `json:"mood"`
+	State          string `json:"state"`
+	Message        string `json:"message"`
+	TaskText       string `json:"task_text"`
+	InactivityDays int    `json:"inactivity_days"`
+	CanRevive      bool   `json:"can_revive"`
 }
 
 type EventView struct {
@@ -195,11 +199,12 @@ func (s *Service) Summary(ctx context.Context, userID, date string) (*Summary, e
 		_ = s.repo.MarkEventRead(ctx, event.ID)
 		event.IsRead = true
 	}
-	status := statusForScore(pet.Name, todayScore.HabitScore, todayScore.ScoreDetails)
-	if event != nil && !event.IsClaimed {
+	status := s.statusForPet(ctx, userID, pet.Name, date, todayScore.HabitScore, todayScore.ScoreDetails)
+	if event != nil && !event.IsClaimed && status.InactivityDays < 2 && !truthy(todayScore.ScoreDetails["recorded_meal"]) {
 		status.Message = event.Message
 		status.TaskText = event.TaskText
 		status.Mood = "surprised"
+		status.State = "surprised"
 	}
 	return &Summary{
 		Pet:     profileFromPet(pet),
@@ -829,14 +834,76 @@ func statusForScore(name string, score int, details map[string]any) PetStatus {
 	task := nextTask(details)
 	switch {
 	case score >= 5:
-		return PetStatus{Mood: "happy", Message: fmt.Sprintf("%s今天满电了，好习惯正在发光。", name), TaskText: task}
+		return PetStatus{Mood: "happy", State: "active", Message: fmt.Sprintf("%s今天满电了，好习惯正在发光。", name), TaskText: task}
 	case score >= 3:
-		return PetStatus{Mood: "calm", Message: fmt.Sprintf("%s整理完今天的记录，状态稳稳的。", name), TaskText: task}
+		return PetStatus{Mood: "calm", State: "steady", Message: fmt.Sprintf("%s整理完今天的记录，状态稳稳的。", name), TaskText: task}
 	case score >= 1:
-		return PetStatus{Mood: "calm", Message: fmt.Sprintf("%s陪你补一点小习惯，今天还能更舒服。", name), TaskText: task}
+		return PetStatus{Mood: "calm", State: "warming", Message: fmt.Sprintf("%s睁眼啦，正在慢慢回到状态。", name), TaskText: task}
 	default:
-		return PetStatus{Mood: "sleepy", Message: fmt.Sprintf("%s还在等第一条记录，先从一餐开始吧。", name), TaskText: task}
+		return PetStatus{Mood: "sleepy", State: "sleepy", Message: fmt.Sprintf("%s还在等第一条记录，先从一餐开始吧。", name), TaskText: task}
 	}
+}
+
+func (s *Service) statusForPet(ctx context.Context, userID, name, date string, score int, details map[string]any) PetStatus {
+	status := statusForScore(name, score, details)
+	inactivityDays := s.inactivityDays(ctx, userID, date, details)
+	status.InactivityDays = inactivityDays
+	if truthy(details["recorded_meal"]) {
+		status.CanRevive = inactivityDays > 0
+		return status
+	}
+	if inactivityDays >= 14 {
+		status.Mood = "sleepy"
+		status.State = "deep_sleep"
+		status.Message = fmt.Sprintf("%s躲进保温箱深睡了，但不会饿死。记录一餐就能把它叫醒。", name)
+		status.TaskText = "记录一餐，把它从保温箱叫出来"
+		return status
+	}
+	if inactivityDays >= 7 {
+		status.Mood = "sleepy"
+		status.State = "hibernating"
+		status.Message = fmt.Sprintf("%s缩成小团子冬眠中，正在给你留灯。", name)
+		status.TaskText = "记录一餐，唤醒冬眠小团子"
+		return status
+	}
+	if inactivityDays >= 4 {
+		status.Mood = "sleepy"
+		status.State = "low_power"
+		status.Message = fmt.Sprintf("%s进入低电量模式了，眼睛快睁不开。", name)
+		status.TaskText = "记录一餐，给它充一点电"
+		return status
+	}
+	if inactivityDays >= 2 {
+		status.Mood = "sleepy"
+		status.State = "dozing"
+		status.Message = fmt.Sprintf("%s有点犯困，正在等你回来记录。", name)
+		status.TaskText = "记录一餐，让它睁开眼"
+		return status
+	}
+	return status
+}
+
+func (s *Service) inactivityDays(ctx context.Context, userID, date string, details map[string]any) int {
+	if truthy(details["recorded_meal"]) {
+		return 0
+	}
+	target, err := parseChinaDate(date)
+	if err != nil {
+		return 0
+	}
+	latest, err := s.repo.GetLatestFoodRecordDate(ctx, userID, date)
+	if err != nil || strings.TrimSpace(latest) == "" {
+		return 0
+	}
+	latestDate, err := parseChinaDate(latest)
+	if err != nil {
+		return 0
+	}
+	days := int(target.Sub(latestDate).Hours() / 24)
+	if days < 0 {
+		return 0
+	}
+	return days
 }
 
 func moodForScore(score int) string {

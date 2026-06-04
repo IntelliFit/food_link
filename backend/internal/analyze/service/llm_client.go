@@ -24,6 +24,11 @@ type DoubaoWebSearchOptions struct {
 	MaxToolCalls int
 }
 
+type DashScopeWebSearchOptions struct {
+	ForcedSearch   bool
+	SearchStrategy string
+}
+
 var ErrLLMJSONParse = errors.New("llm json parse error")
 
 type LLMJSONParseError struct {
@@ -65,7 +70,7 @@ func NewDashScopeClient(apiKey string, baseURLs ...string) *OfoxAIClient {
 	if len(baseURLs) > 0 && strings.TrimSpace(baseURLs[0]) != "" {
 		baseURL = strings.TrimRight(strings.TrimSpace(baseURLs[0]), "/")
 	}
-	return NewOfoxAIClient(apiKey, "qwen-vl-max", baseURL)
+	return NewOfoxAIClient(apiKey, "qwen3.6-flash", baseURL)
 }
 
 func NewOfoxAIClient(apiKey, model string, baseURLs ...string) *OfoxAIClient {
@@ -97,6 +102,34 @@ func (c *OfoxAIClient) AnalyzeWithImages(ctx context.Context, prompt string, ima
 }
 
 func (c *OfoxAIClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {
+	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, nil)
+}
+
+func (c *OfoxAIClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, prompt string, imageURLs []string, options DashScopeWebSearchOptions) (map[string]any, map[string]any, error) {
+	searchStrategy := strings.TrimSpace(options.SearchStrategy)
+	if searchStrategy == "" {
+		searchStrategy = "turbo"
+	}
+	extras := map[string]any{
+		"enable_search": true,
+		"search_options": map[string]any{
+			"forced_search":   options.ForcedSearch,
+			"search_strategy": searchStrategy,
+		},
+	}
+	parsed, err := c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0.3, extras)
+	if err != nil {
+		return nil, nil, err
+	}
+	return parsed, map[string]any{
+		"native_search":   true,
+		"forced_search":   options.ForcedSearch,
+		"search_strategy": searchStrategy,
+		"model":           c.Model,
+	}, nil
+}
+
+func (c *OfoxAIClient) analyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64, extras map[string]any) (map[string]any, error) {
 	content := []map[string]any{
 		{"type": "text", "text": prompt},
 	}
@@ -118,7 +151,19 @@ func (c *OfoxAIClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prom
 		"response_format": map[string]string{"type": "json_object"},
 		"temperature":     temperature,
 	}
+	if isDashScopeQwenModel(c.Model, c.BaseURL) {
+		body["enable_thinking"] = true
+	}
+	for key, value := range extras {
+		body[key] = value
+	}
 	return c.doRequest(ctx, c.BaseURL+"/chat/completions", body)
+}
+
+func isDashScopeQwenModel(model, baseURL string) bool {
+	normalizedModel := strings.ToLower(strings.TrimSpace(model))
+	normalizedBase := strings.ToLower(strings.TrimSpace(baseURL))
+	return strings.Contains(normalizedBase, "dashscope.aliyuncs.com") || strings.HasPrefix(normalizedModel, "qwen")
 }
 
 func (c *OfoxAIClient) doRequest(ctx context.Context, url string, body map[string]any) (map[string]any, error) {

@@ -3,10 +3,14 @@ import { useState, useEffect, useMemo } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAccessToken,
+  imageToBase64,
   saveFoodRecord,
   fetchManualFoodCatalog,
+  fetchManualCustomFoods,
   searchManualFood,
+  saveManualCustomFood,
   showUnifiedApiError,
+  uploadAnalyzeImage,
   type CanonicalMealType,
   type ManualFoodCatalogCategory,
   type ManualFoodCatalogResult,
@@ -21,6 +25,7 @@ import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 
 const MEALS: Array<{ id: CanonicalMealType; name: string; icon: string }> = [
@@ -48,6 +53,7 @@ const ACTIVITY_TIMINGS = [
 
 const DEFAULT_CATALOG_CATEGORIES: ManualFoodCatalogCategory[] = [
   { key: 'common', label: '常见' },
+  { key: 'custom', label: '自定义' },
   { key: 'recent', label: '最近' },
   { key: 'favorites', label: '收藏' },
   { key: 'staple', label: '主食' },
@@ -63,6 +69,12 @@ const DEFAULT_CATALOG_CATEGORIES: ManualFoodCatalogCategory[] = [
 ]
 
 type ManualDisplayUnit = 'g' | 'ml' | 'serving' | 'piece'
+type ManualFoodSource = 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom'
+type CustomEnergyUnit = 'kcal' | 'kj'
+
+const KJ_PER_KCAL = 4.184
+const CUSTOM_FOOD_STORAGE_LIMIT = 120
+const CUSTOM_FOOD_STORAGE_PREFIX = 'record_manual_custom_foods_v1'
 
 interface ServingPreset {
   label: string
@@ -72,7 +84,7 @@ interface ServingPreset {
 
 interface SelectedItem {
   id: string
-  source: 'public_library' | 'nutrition_library' | 'packaged_food'
+  source: ManualFoodSource
   title: string
   subtitle: string
   weight: number
@@ -91,6 +103,65 @@ interface SelectedItem {
   collected: boolean
 }
 
+type NutrientKey = keyof Nutrients
+
+interface CustomMicroField {
+  key: NutrientKey
+  label: string
+  unit: string
+}
+
+const NUTRIENT_SCALE_KEYS: NutrientKey[] = [
+  'calories',
+  'protein',
+  'carbs',
+  'fat',
+  'fiber',
+  'sugar',
+  'saturatedFat',
+  'cholesterolMg',
+  'sodium_mg',
+  'sodiumMg',
+  'potassiumMg',
+  'calciumMg',
+  'ironMg',
+  'magnesiumMg',
+  'zincMg',
+  'vitaminARaeMcg',
+  'vitaminCMg',
+  'vitaminDMcg',
+  'vitaminEMg',
+  'vitaminKMcg',
+  'thiaminMg',
+  'riboflavinMg',
+  'niacinMg',
+  'vitaminB6Mg',
+  'folateMcg',
+  'vitaminB12Mcg',
+]
+
+const CUSTOM_MICRO_FIELDS: CustomMicroField[] = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'sodium_mg', label: '钠', unit: 'mg' },
+  { key: 'potassiumMg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', label: '维生素A', unit: 'μg RAE' },
+  { key: 'vitaminCMg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素D', unit: 'μg' },
+  { key: 'vitaminEMg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素K', unit: 'μg' },
+  { key: 'thiaminMg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸B3', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'μg' },
+  { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'μg' },
+]
+
 function formatDateKey(date: Date) {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -104,6 +175,119 @@ function getItemKey(item: { source: string; id: string }) {
 
 function roundToSingle(value: number) {
   return Math.round(value * 10) / 10
+}
+
+function nutrientNumber(nutrients: Partial<Nutrients> | undefined, key: NutrientKey) {
+  const value = nutrients?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function scaledNutrients(source: Partial<Nutrients>, scale: number): Nutrients {
+  const result = {} as Nutrients
+  NUTRIENT_SCALE_KEYS.forEach((key) => {
+    result[key] = roundToSingle(nutrientNumber(source, key) * scale) as never
+  })
+  if (!result.sodium_mg && result.sodiumMg) {
+    result.sodium_mg = result.sodiumMg
+  }
+  if (!result.sodiumMg && result.sodium_mg) {
+    result.sodiumMg = result.sodium_mg
+  }
+  return result
+}
+
+function parseOptionalNumber(value: string) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? roundToSingle(parsed) : 0
+}
+
+function energyToKcal(value: number, unit: CustomEnergyUnit) {
+  return unit === 'kj' ? value / KJ_PER_KCAL : value
+}
+
+function customFoodStorageKey() {
+  let userId = ''
+  try {
+    userId = String(Taro.getStorageSync('user_id') || '').trim()
+  } catch {
+    userId = ''
+  }
+  return `${CUSTOM_FOOD_STORAGE_PREFIX}:${userId || 'anonymous'}`
+}
+
+function normalizeCustomFoodItem(item: any): ManualFoodSearchResult | null {
+  if (!item || item.source !== 'custom') return null
+  const title = String(item.title || '').trim()
+  const id = String(item.id || '').trim()
+  if (!title || !id) return null
+  const defaultWeight = Math.max(1, Math.round(Number(item.default_weight_grams || 100)))
+  const nutrientsPer100g = item.nutrients_per_100g || item.extra_nutrients || {
+    calories: Number(item.total_calories || 0),
+    protein: Number(item.total_protein || 0),
+    carbs: Number(item.total_carbs || 0),
+    fat: Number(item.total_fat || 0),
+    fiber: 0,
+    sugar: 0,
+  }
+  return {
+    ...item,
+    id,
+    source: 'custom',
+    title,
+    subtitle: String(item.subtitle || `${Math.round(Number(item.total_calories || 0))} kcal / ${defaultWeight}g`),
+    category: 'custom',
+    default_weight_grams: defaultWeight,
+    display_unit: 'g',
+    display_unit_label: 'g',
+    total_calories: Number(item.total_calories || 0),
+    total_protein: Number(item.total_protein || 0),
+    total_carbs: Number(item.total_carbs || 0),
+    total_fat: Number(item.total_fat || 0),
+    nutrients_per_100g: nutrientsPer100g,
+    extra_nutrients: item.extra_nutrients || nutrientsPer100g,
+    image_path: item.image_path || item.image_paths?.[0] || null,
+    image_paths: item.image_paths || (item.image_path ? [item.image_path] : null),
+    portion_label: item.portion_label || `${defaultWeight}g`,
+    source_label: '自定义',
+    usage_count: Number(item.usage_count || 0),
+    collected: Boolean(item.collected),
+  }
+}
+
+function mergeCustomFoodItems(items: ManualFoodSearchResult[]) {
+  const seen = new Set<string>()
+  const merged: ManualFoodSearchResult[] = []
+  items.forEach((item) => {
+    const normalized = normalizeCustomFoodItem(item)
+    if (!normalized) return
+    const key = normalized.title.trim().toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    merged.push(normalized)
+  })
+  return merged.slice(0, CUSTOM_FOOD_STORAGE_LIMIT)
+}
+
+function loadStoredCustomFoodItems() {
+  try {
+    const raw = Taro.getStorageSync(customFoodStorageKey())
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return Array.isArray(parsed) ? mergeCustomFoodItems(parsed) : []
+  } catch {
+    return []
+  }
+}
+
+function persistStoredCustomFoodItems(items: ManualFoodSearchResult[]) {
+  try {
+    Taro.setStorageSync(customFoodStorageKey(), mergeCustomFoodItems(items))
+  } catch {
+    /* ignore storage quota or serialization errors */
+  }
+}
+
+function nutrientsForPayload(nutrients: Nutrients): Nutrients {
+  return scaledNutrients(nutrients, 1)
 }
 
 function isEggLikeFood(title: string) {
@@ -260,27 +444,11 @@ function buildNutrientsFromWeight(
   const safeWeight = Math.max(1, weight)
   if (item.nutrientsPer100g) {
     const scale = safeWeight / 100
-    return {
-      calories: roundToSingle(item.nutrientsPer100g.calories * scale),
-      protein: roundToSingle(item.nutrientsPer100g.protein * scale),
-      carbs: roundToSingle(item.nutrientsPer100g.carbs * scale),
-      fat: roundToSingle(item.nutrientsPer100g.fat * scale),
-      fiber: roundToSingle((item.nutrientsPer100g.fiber || 0) * scale),
-      sugar: roundToSingle((item.nutrientsPer100g.sugar || 0) * scale),
-      sodium_mg: roundToSingle((item.nutrientsPer100g.sodium_mg || 0) * scale),
-    }
+    return scaledNutrients(item.nutrientsPer100g, scale)
   }
 
   const ratio = item.defaultWeight > 0 ? safeWeight / item.defaultWeight : 1
-  return {
-    calories: roundToSingle(item.baseNutrients.calories * ratio),
-    protein: roundToSingle(item.baseNutrients.protein * ratio),
-    carbs: roundToSingle(item.baseNutrients.carbs * ratio),
-    fat: roundToSingle(item.baseNutrients.fat * ratio),
-    fiber: roundToSingle((item.baseNutrients.fiber || 0) * ratio),
-    sugar: roundToSingle((item.baseNutrients.sugar || 0) * ratio),
-    sodium_mg: roundToSingle((item.baseNutrients.sodium_mg || 0) * ratio),
-  }
+  return scaledNutrients(item.baseNutrients, ratio)
 }
 
 function RecordManualPage() {
@@ -300,10 +468,31 @@ function RecordManualPage() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchResults, setSearchResults] = useState<ManualFoodSearchResult[]>([])
   const [saving, setSaving] = useState(false)
+  const [showCustomPanel, setShowCustomPanel] = useState(false)
+  const [customName, setCustomName] = useState('')
+  const [customWeight, setCustomWeight] = useState('100')
+  const [customNutritionBasis, setCustomNutritionBasis] = useState('100')
+  const [customEnergyUnit, setCustomEnergyUnit] = useState<CustomEnergyUnit>('kj')
+  const [customCalories, setCustomCalories] = useState('')
+  const [customProtein, setCustomProtein] = useState('')
+  const [customCarbs, setCustomCarbs] = useState('')
+  const [customFat, setCustomFat] = useState('')
+  const [customMicroValues, setCustomMicroValues] = useState<Record<string, string>>({})
+  const [showCustomMicroPanel, setShowCustomMicroPanel] = useState(false)
+  const [customImageLocalPath, setCustomImageLocalPath] = useState('')
+  const [customImageUrl, setCustomImageUrl] = useState('')
+  const [customImageUploading, setCustomImageUploading] = useState(false)
+  const [customShareToPublic, setCustomShareToPublic] = useState(false)
+  const [customItems, setCustomItems] = useState<ManualFoodSearchResult[]>([])
+  const [showSelectedDrawer, setShowSelectedDrawer] = useState(false)
 
   const normalizedQuery = searchText.trim()
 
   useEffect(() => {
+    const storedCustomItems = loadStoredCustomFoodItems()
+    if (storedCustomItems.length > 0) {
+      setCustomItems(storedCustomItems)
+    }
     const params = Taro.getCurrentInstance().router?.params
     persistRecordTargetDate(String(params?.date || ''))
     const storedMeal = Taro.getStorageSync('analyzeMealType')
@@ -316,6 +505,7 @@ function RecordManualPage() {
       setSelectedMeal(inferDefaultMealTypeFromLocalTime())
     }
     loadCatalog('common', 1, true)
+    hydrateCustomItemsFromBackend(storedCustomItems)
   }, [])
 
   useDidShow(() => {
@@ -351,11 +541,35 @@ function RecordManualPage() {
     setActiveCategory(category)
     setSearchText('')
     setSearchResults([])
+    if (category === 'custom') return
     loadCatalog(category, 1, true)
   }
 
+  const hydrateCustomItemsFromBackend = async (baseItems: ManualFoodSearchResult[]) => {
+    if (!getAccessToken()) return
+    try {
+      const data = await fetchManualCustomFoods(120, 0)
+      const remoteCustomItems = data.items || []
+      const recentData = await fetchManualFoodCatalog('recent', 1, 60)
+      const recentCustomItems = (recentData.items || []).filter((item) => item.source === 'custom')
+      if (remoteCustomItems.length === 0 && recentCustomItems.length === 0) return
+      setCustomItems((prev) => {
+        const next = mergeCustomFoodItems([
+          ...remoteCustomItems,
+          ...prev,
+          ...baseItems,
+          ...recentCustomItems,
+        ])
+        persistStoredCustomFoodItems(next)
+        return next
+      })
+    } catch {
+      /* 最近记录同步失败不影响手动记录主流程 */
+    }
+  }
+
   const handleLoadMoreCatalog = () => {
-    if (catalogLoading || catalogLoadingMore || !catalogHasMore || normalizedQuery) return
+    if (catalogLoading || catalogLoadingMore || !catalogHasMore || normalizedQuery || activeCategory === 'custom') return
     loadCatalog(activeCategory, catalogPage + 1, false)
   }
 
@@ -389,8 +603,21 @@ function RecordManualPage() {
     return map
   }, [selectedItems])
 
+  useEffect(() => {
+    if (selectedItems.length === 0 && showSelectedDrawer) {
+      setShowSelectedDrawer(false)
+    }
+  }, [selectedItems.length, showSelectedDrawer])
+
   const visibleItems = useMemo(() => {
-    const items = normalizedQuery ? searchResults : catalogItems
+    const items = normalizedQuery
+      ? [
+        ...customItems.filter((item) => item.title.includes(normalizedQuery)),
+        ...searchResults,
+      ]
+      : activeCategory === 'custom'
+        ? customItems
+        : catalogItems
     const seen = new Set<string>()
     return items
       .filter((item) => {
@@ -399,7 +626,7 @@ function RecordManualPage() {
         seen.add(key)
         return true
       })
-  }, [catalogItems, normalizedQuery, searchResults])
+  }, [activeCategory, catalogItems, customItems, normalizedQuery, searchResults])
 
   const statsText = useMemo(() => {
     const nutritionCount = catalogData?.stats?.nutrition_food_count || 0
@@ -407,11 +634,214 @@ function RecordManualPage() {
     if (normalizedQuery) {
       return `已找到 ${visibleItems.length} 个结果`
     }
+    if (activeCategory === 'custom') {
+      return customItems.length > 0
+        ? `${customItems.length} 个自定义食物 · 可点右侧 + 加入本餐`
+        : '暂无自定义食物，先新建一个常吃的'
+    }
     return `${catalogItems.length} 个常用食物 · ${nutritionCount} 个标准食物 · ${publicCount} 个真实餐食`
-  }, [catalogData, catalogItems.length, normalizedQuery, visibleItems.length])
+  }, [activeCategory, catalogData, catalogItems.length, customItems.length, normalizedQuery, visibleItems.length])
 
-  const categories = catalogData?.categories?.length ? catalogData.categories : DEFAULT_CATALOG_CATEGORIES
+  const categories = useMemo(() => {
+    const remoteCategories = catalogData?.categories?.length ? catalogData.categories : DEFAULT_CATALOG_CATEGORIES
+    const withoutCustom = remoteCategories.filter((category) => category.key !== 'custom')
+    return [
+      withoutCustom[0] || DEFAULT_CATALOG_CATEGORIES[0],
+      { key: 'custom', label: '自定义', count: customItems.length },
+      ...withoutCustom.slice(1),
+    ]
+  }, [catalogData?.categories, customItems.length])
   const activeCategoryLabel = categories.find((item) => item.key === activeCategory)?.label || '常见'
+
+  const openCustomPanel = () => {
+    if (normalizedQuery && !customName.trim()) {
+      setCustomName(normalizedQuery)
+    }
+    setShowCustomPanel(true)
+  }
+
+  const resetCustomDraft = () => {
+    setCustomName('')
+    setCustomWeight('100')
+    setCustomNutritionBasis('100')
+    setCustomEnergyUnit('kj')
+    setCustomCalories('')
+    setCustomProtein('')
+    setCustomCarbs('')
+    setCustomFat('')
+    setCustomMicroValues({})
+    setShowCustomMicroPanel(false)
+    setCustomImageLocalPath('')
+    setCustomImageUrl('')
+    setCustomImageUploading(false)
+    setCustomShareToPublic(false)
+  }
+
+  const handleCustomMicroInput = (key: NutrientKey, value: string) => {
+    const cleaned = value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1')
+    setCustomMicroValues((prev) => ({ ...prev, [key]: cleaned }))
+  }
+
+  const handleChooseCustomImage = async () => {
+    if (customImageUploading) return
+    try {
+      setCustomImageUploading(true)
+      const res = await chooseImageWithPrivacy({
+        count: 1,
+        sizeType: ['compressed'],
+        sourceType: ['album', 'camera'],
+      })
+      const localPath = res.tempFilePaths?.[0]
+      if (!localPath) return
+      setCustomImageLocalPath(localPath)
+      const base64 = await imageToBase64(localPath)
+      const uploadRes = await uploadAnalyzeImage(base64)
+      setCustomImageUrl(uploadRes.imageUrl)
+    } catch (e: any) {
+      const message = String(e?.errMsg || e?.message || e || '')
+      if (/cancel/i.test(message)) return
+      if (isPrivacyAuthorizeError(e)) {
+        showPrivacyAuthorizeFailure(e, '需要授权后才能选择图片')
+        return
+      }
+      setCustomImageLocalPath('')
+      setCustomImageUrl('')
+      await showUnifiedApiError(e, '上传图片失败')
+    } finally {
+      setCustomImageUploading(false)
+    }
+  }
+
+  const handleRemoveCustomImage = () => {
+    setCustomImageLocalPath('')
+    setCustomImageUrl('')
+  }
+
+  const handleAddCustomItem = async () => {
+    const name = customName.trim()
+    const parsedWeight = Number(customWeight)
+    const parsedBasis = Number(customNutritionBasis)
+    const parsedEnergy = Number(customCalories)
+    if (!name) {
+      Taro.showToast({ title: '请输入食物名称', icon: 'none' })
+      return
+    }
+    if (!Number.isFinite(parsedWeight) || parsedWeight <= 0) {
+      Taro.showToast({ title: '请输入本次重量', icon: 'none' })
+      return
+    }
+    if (!Number.isFinite(parsedBasis) || parsedBasis <= 0) {
+      Taro.showToast({ title: '请输入营养标示重量', icon: 'none' })
+      return
+    }
+    if (!Number.isFinite(parsedEnergy) || parsedEnergy <= 0) {
+      Taro.showToast({ title: '请输入热量', icon: 'none' })
+      return
+    }
+    if (customImageUploading) {
+      Taro.showToast({ title: '图片处理后再加入', icon: 'none' })
+      return
+    }
+
+    const weight = Math.max(1, Math.round(parsedWeight))
+    const nutritionBasis = Math.max(1, roundToSingle(parsedBasis))
+    const labelCaloriesKcal = roundToSingle(energyToKcal(parsedEnergy, customEnergyUnit))
+    const labelNutrients: Nutrients = {
+      calories: labelCaloriesKcal,
+      protein: roundToSingle(Number(customProtein) || 0),
+      carbs: roundToSingle(Number(customCarbs) || 0),
+      fat: roundToSingle(Number(customFat) || 0),
+      fiber: parseOptionalNumber(customMicroValues.fiber || ''),
+      sugar: parseOptionalNumber(customMicroValues.sugar || ''),
+      saturatedFat: parseOptionalNumber(customMicroValues.saturatedFat || ''),
+      cholesterolMg: parseOptionalNumber(customMicroValues.cholesterolMg || ''),
+      sodium_mg: parseOptionalNumber(customMicroValues.sodium_mg || ''),
+      sodiumMg: parseOptionalNumber(customMicroValues.sodium_mg || ''),
+      potassiumMg: parseOptionalNumber(customMicroValues.potassiumMg || ''),
+      calciumMg: parseOptionalNumber(customMicroValues.calciumMg || ''),
+      ironMg: parseOptionalNumber(customMicroValues.ironMg || ''),
+      magnesiumMg: parseOptionalNumber(customMicroValues.magnesiumMg || ''),
+      zincMg: parseOptionalNumber(customMicroValues.zincMg || ''),
+      vitaminARaeMcg: parseOptionalNumber(customMicroValues.vitaminARaeMcg || ''),
+      vitaminCMg: parseOptionalNumber(customMicroValues.vitaminCMg || ''),
+      vitaminDMcg: parseOptionalNumber(customMicroValues.vitaminDMcg || ''),
+      vitaminEMg: parseOptionalNumber(customMicroValues.vitaminEMg || ''),
+      vitaminKMcg: parseOptionalNumber(customMicroValues.vitaminKMcg || ''),
+      thiaminMg: parseOptionalNumber(customMicroValues.thiaminMg || ''),
+      riboflavinMg: parseOptionalNumber(customMicroValues.riboflavinMg || ''),
+      niacinMg: parseOptionalNumber(customMicroValues.niacinMg || ''),
+      vitaminB6Mg: parseOptionalNumber(customMicroValues.vitaminB6Mg || ''),
+      folateMcg: parseOptionalNumber(customMicroValues.folateMcg || ''),
+      vitaminB12Mcg: parseOptionalNumber(customMicroValues.vitaminB12Mcg || ''),
+    }
+    const nutrients = scaledNutrients(labelNutrients, weight / nutritionBasis)
+    const nutrientsPer100g = scaledNutrients(labelNutrients, 100 / nutritionBasis)
+    const id = `custom:${Date.now()}:${name}`
+    const imagePath = customImageUrl || null
+    const sourceEnergyText = customEnergyUnit === 'kj'
+      ? `标示 ${roundToSingle(parsedEnergy)} kJ ≈ ${labelCaloriesKcal} kcal`
+      : `标示 ${labelCaloriesKcal} kcal`
+    const customResult: ManualFoodSearchResult = {
+        id,
+        source: 'custom',
+        title: name,
+        subtitle: `${Math.round(nutrients.calories)} kcal / ${weight}g`,
+        category: 'custom',
+        default_weight_grams: weight,
+        display_unit: 'g',
+        display_unit_label: 'g',
+        total_calories: nutrients.calories,
+        total_protein: nutrients.protein,
+        total_carbs: nutrients.carbs,
+        total_fat: nutrients.fat,
+        nutrients_per_100g: nutrientsPer100g,
+        extra_nutrients: nutrientsPer100g,
+        image_path: imagePath,
+        image_paths: imagePath ? [imagePath] : null,
+        portion_label: `${weight}g`,
+        source_label: '自定义',
+        recommend_reason: `${sourceEnergyText} / 每${nutritionBasis}g`,
+        nutrition_highlights: [sourceEnergyText],
+        usage_count: 0,
+        collected: false,
+      }
+    let savedCustomResult = customResult
+    if (getAccessToken()) {
+      try {
+        savedCustomResult = await saveManualCustomFood({
+          title: customResult.title,
+          default_weight_grams: customResult.default_weight_grams,
+          total_calories: customResult.total_calories,
+          total_protein: customResult.total_protein,
+          total_carbs: customResult.total_carbs,
+          total_fat: customResult.total_fat,
+          nutrients_per_100g: nutrientsPer100g,
+          extra_nutrients: nutrientsPer100g,
+          image_path: customResult.image_path,
+          image_paths: customResult.image_paths || undefined,
+          portion_label: customResult.portion_label,
+          recommend_reason: customResult.recommend_reason,
+          share_to_public: customShareToPublic,
+        })
+      } catch (e) {
+        Taro.showToast({ title: '已先保存到本机', icon: 'none' })
+      }
+    }
+    setCustomItems((prev) => {
+      const next = mergeCustomFoodItems([
+        savedCustomResult,
+        ...prev.filter((item) => item.title.trim() !== name),
+      ])
+      persistStoredCustomFoodItems(next)
+      return next
+    })
+    Taro.vibrateShort({ type: 'light' }).catch(() => {})
+    resetCustomDraft()
+    setShowCustomPanel(false)
+    setActiveCategory('custom')
+    setSearchText('')
+    Taro.showToast({ title: '自定义完成', icon: 'success' })
+  }
 
   const handleAddItem = (item: ManualFoodSearchResult) => {
     const key = getItemKey(item)
@@ -420,14 +850,20 @@ function RecordManualPage() {
       const index = prev.findIndex((selected) => getItemKey(selected) === key)
       const servingProfile = inferServingProfile(item)
       const defaultWeight = servingProfile.defaultWeight
-      const baseNutrients = {
+      const extraNutrients = scaledNutrients(item.extra_nutrients || item.nutrients_per_100g || {
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        fiber: 0,
+        sugar: 0,
+      }, 1)
+      const baseNutrients: Nutrients = {
+        ...extraNutrients,
         calories: roundToSingle(item.total_calories),
         protein: roundToSingle(item.total_protein),
         carbs: roundToSingle(item.total_carbs),
         fat: roundToSingle(item.total_fat),
-        fiber: roundToSingle(item.extra_nutrients?.fiber || item.nutrients_per_100g?.fiber || 0),
-        sugar: roundToSingle(item.extra_nutrients?.sugar || item.nutrients_per_100g?.sugar || 0),
-        sodium_mg: roundToSingle(item.extra_nutrients?.sodium_mg || item.nutrients_per_100g?.sodium_mg || 0),
       }
       if (index === -1) {
         return [
@@ -560,29 +996,27 @@ function RecordManualPage() {
         weight: item.weight,
         ratio: 100,
         intake: item.weight,
-        nutrients: {
-          calories: item.nutrients.calories,
-          protein: item.nutrients.protein,
-          carbs: item.nutrients.carbs,
-          fat: item.nutrients.fat,
-          fiber: item.nutrients.fiber || 0,
-          sugar: item.nutrients.sugar || 0,
-          sodium_mg: item.nutrients.sodium_mg || 0,
-        } as Nutrients,
+        image_path: item.imagePath || undefined,
+        image_paths: item.imagePath ? [item.imagePath] : undefined,
+        nutrients: nutrientsForPayload(item.nutrients),
         manual_source: item.source,
         manual_source_id: item.id,
         manual_source_title: item.title,
         manual_portion_label: item.portionLabel,
       }))
       const totalWeight = selectedItems.reduce((s, i) => s + i.weight, 0)
+      const hasCustomItems = selectedItems.some(item => item.source === 'custom')
+      const firstImagePath = selectedItems.find(item => item.source === 'custom' && item.imagePath)?.imagePath
       
       await saveFoodRecord({
         date: getStoredRecordTargetDate(),
         meal_type: selectedMeal as any,
+        image_path: firstImagePath || undefined,
+        image_paths: firstImagePath ? [firstImagePath] : undefined,
         diet_goal: dietGoal as any,
         activity_timing: activityTiming as any,
         description: '手动记录：' + selectedItems.map(i => i.title).join('、'),
-        insight: '手动记录，数据来自食物词典',
+        insight: hasCustomItems ? '手动记录，包含用户自定义营养数据' : '手动记录，数据来自食物词典',
         items,
         total_calories: Math.round(totalNutrients.calories * 10) / 10,
         total_protein: Math.round(totalNutrients.protein * 10) / 10,
@@ -611,6 +1045,92 @@ function RecordManualPage() {
     }
   }
 
+  const renderSelectedList = (variant: 'section' | 'drawer') => (
+    <View className={`selected-list ${variant === 'drawer' ? 'drawer-selected-list' : ''}`}>
+      {selectedItems.map((item) => {
+        const key = getItemKey(item)
+        return (
+          <View key={key} className='selected-item'>
+            <View className='selected-main'>
+              <View className='selected-thumb'>
+                {item.imagePath ? (
+                  <Image className='selected-thumb-image' src={item.imagePath} mode='aspectFill' />
+                ) : (
+                  <View className='selected-thumb-placeholder'>
+                    <Text className='iconfont icon-shiwu' />
+                  </View>
+                )}
+              </View>
+              <View className='item-info'>
+                <View className='item-name-row'>
+                  <Text className='item-name'>{item.title}</Text>
+                  <Text className='item-tag'>
+                    {item.displayUnit === 'serving'
+                      ? item.portionLabel
+                      : item.displayUnit === 'piece'
+                        ? '按个数'
+                        : item.displayUnit === 'ml'
+                          ? '按毫升'
+                          : '按克重'}
+                  </Text>
+                </View>
+                <Text className='item-cal'>{Math.round(item.nutrients.calories)} kcal</Text>
+                {!!item.recommendReason && (
+                  <Text className='item-hint'>{item.recommendReason}</Text>
+                )}
+              </View>
+            </View>
+
+            {item.servingPresets.length > 0 && (
+              <View className='serving-row'>
+                {item.servingPresets.map((preset) => (
+                  <View
+                    key={preset.label}
+                    className={`serving-chip ${Math.abs(item.weight - preset.grams) < 1 ? 'active' : ''}`}
+                    onClick={() => updateItemWeight(key, preset.grams)}
+                  >
+                    <Text>{preset.label}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {item.displayUnit === 'g' && (
+              <View className='quick-adjust-row'>
+                {[-50, -10, 10, 50].map((delta) => (
+                  <View
+                    key={delta}
+                    className='quick-adjust-chip'
+                    onClick={() => handleQuickAdjust(key, delta)}
+                  >
+                    <Text>{delta > 0 ? `+${delta}` : delta}g</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <View className='item-actions'>
+              <Input
+                className='weight-input'
+                type='number'
+                value={item.weightInput}
+                onInput={(e) => handleWeightInput(key, e.detail.value)}
+                onBlur={(e) => {
+                  handleWeightInput(key, e.detail.value)
+                  commitWeightInput(key)
+                }}
+              />
+              <Text className='weight-unit'>{item.displayUnitLabel}</Text>
+              <View className='remove-btn' onClick={() => handleRemoveItem(key)}>
+                <Text className='iconfont icon-shanchu' />
+              </View>
+            </View>
+          </View>
+        )
+      })}
+    </View>
+  )
+
   const renderResultItem = (item: ManualFoodSearchResult) => {
     const key = getItemKey(item)
     const selected = selectedMap.get(key)
@@ -637,7 +1157,7 @@ function RecordManualPage() {
           <View className='food-name-row'>
             <Text className='food-name'>{item.title}</Text>
             <View className={`source-badge ${item.source}`}>
-              <Text>{item.source_label || (item.source === 'public_library' ? '真实餐食' : item.source === 'packaged_food' ? '包装食品' : '标准食物')}</Text>
+              <Text>{item.source_label || (item.source === 'public_library' ? '真实餐食' : item.source === 'packaged_food' ? '包装食品' : item.source === 'custom' ? '自定义' : '标准食物')}</Text>
             </View>
           </View>
           <Text className='food-sub'>
@@ -696,7 +1216,7 @@ function RecordManualPage() {
             <Text className='iconfont icon-sousuo search-icon' />
             <Input
               className='search-input'
-              placeholder='搜索标准食物、菜名、商家餐'
+              placeholder='搜索食物，找不到可自定义'
               value={searchText}
               onInput={(e) => setSearchText(e.detail.value)}
               confirmType='search'
@@ -708,122 +1228,189 @@ function RecordManualPage() {
             )}
           </View>
 
-        </View>
-
-        {selectedItems.length > 0 && (
-          <View className='selected-section'>
-            <View className='section-header'>
-              <Text className='section-title'>已选食物（{selectedItems.length}）</Text>
-              <View className='total-calories'>
-                <Text>{Math.round(totalNutrients.calories)}</Text>
-                <Text className='unit'>kcal</Text>
-              </View>
+          <View className='custom-entry-card'>
+            <View className='custom-entry-copy'>
+              <Text className='custom-entry-title'>没有找到？直接自定义</Text>
+              <Text className='custom-entry-subtitle'>不拍照，不走 AI，填一次后下次可复用</Text>
             </View>
-            
-            <View className='selected-list'>
-              {selectedItems.map((item) => {
-                const key = getItemKey(item)
-                return (
-                <View key={key} className='selected-item'>
-                  <View className='selected-main'>
-                    <View className='selected-thumb'>
-                      {item.imagePath ? (
-                        <Image className='selected-thumb-image' src={item.imagePath} mode='aspectFill' />
-                      ) : (
-                        <View className='selected-thumb-placeholder'>
-                          <Text className='iconfont icon-shiwu' />
-                        </View>
-                      )}
-                    </View>
-                    <View className='item-info'>
-                      <View className='item-name-row'>
-                        <Text className='item-name'>{item.title}</Text>
-                        <Text className='item-tag'>
-                          {item.displayUnit === 'serving'
-                            ? item.portionLabel
-                            : item.displayUnit === 'piece'
-                              ? '按个数'
-                              : item.displayUnit === 'ml'
-                                ? '按毫升'
-                                : '按克重'}
-                        </Text>
-                      </View>
-                      <Text className='item-cal'>{Math.round(item.nutrients.calories)} kcal</Text>
-                      {!!item.recommendReason && (
-                        <Text className='item-hint'>{item.recommendReason}</Text>
-                      )}
-                    </View>
-                  </View>
+            <View className='custom-entry-btn' onClick={openCustomPanel}>
+              <Text>{normalizedQuery ? `新建“${normalizedQuery}”` : '新建'}</Text>
+            </View>
+          </View>
 
-                  {item.servingPresets.length > 0 && (
-                    <View className='serving-row'>
-                      {item.servingPresets.map((preset) => (
+          {showCustomPanel && (
+            <View className='custom-food-panel'>
+              <View className='custom-food-header'>
+                <Text className='custom-food-title'>自定义食物</Text>
+                <Text className='custom-food-close' onClick={() => setShowCustomPanel(false)}>收起</Text>
+              </View>
+              <View className='custom-image-row'>
+                <View className='custom-image-preview' onClick={handleChooseCustomImage}>
+                  {customImageLocalPath || customImageUrl ? (
+                    <Image className='custom-image' src={customImageLocalPath || customImageUrl} mode='aspectFill' />
+                  ) : (
+                    <View className='custom-image-empty'>
+                      {customImageUploading ? (
+                        <View className='custom-image-spinner' />
+                      ) : (
+                        <Text className='iconfont icon-xiangji' />
+                      )}
+                    </View>
+                  )}
+                </View>
+                <View className='custom-image-actions'>
+                  <Text className='custom-image-title'>食物图片</Text>
+                  <View className='custom-image-buttons'>
+                    <View className={`custom-image-btn ${customImageUploading ? 'disabled' : ''}`} onClick={handleChooseCustomImage}>
+                      {customImageUploading ? <View className='custom-image-btn-spinner' /> : <Text>添加图片</Text>}
+                    </View>
+                    {(customImageLocalPath || customImageUrl) && (
+                      <View className='custom-image-remove' onClick={handleRemoveCustomImage}>
+                        <Text>移除</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </View>
+              <View className='custom-food-grid'>
+                <View className='custom-field custom-field-full'>
+                  <Text className='custom-field-label'>名称</Text>
+                  <Input
+                    className='custom-field-input'
+                    value={customName}
+                    placeholder='例如 家里卤牛肉'
+                    onInput={(e) => setCustomName(e.detail.value)}
+                  />
+                </View>
+                <View className='custom-field'>
+                  <Text className='custom-field-label'>实际重量 g</Text>
+                  <Input
+                    className='custom-field-input'
+                    type='number'
+                    value={customWeight}
+                    onInput={(e) => setCustomWeight(e.detail.value)}
+                  />
+                </View>
+                <View className='custom-field'>
+                  <Text className='custom-field-label'>营养标示每 g</Text>
+                  <Input
+                    className='custom-field-input'
+                    type='digit'
+                    value={customNutritionBasis}
+                    onInput={(e) => setCustomNutritionBasis(e.detail.value)}
+                  />
+                </View>
+                <View className='custom-basis-presets custom-field-full'>
+                  {['100', '60', '30'].map((basis) => (
+                    <View
+                      key={basis}
+                      className={`custom-basis-chip ${customNutritionBasis === basis ? 'active' : ''}`}
+                      onClick={() => setCustomNutritionBasis(basis)}
+                    >
+                      <Text>每{basis}g</Text>
+                    </View>
+                  ))}
+                </View>
+                <View className='custom-field'>
+                  <View className='custom-energy-label-row'>
+                    <Text className='custom-field-label'>热量 {customEnergyUnit} / 标示</Text>
+                    <View className='custom-energy-unit-switch'>
+                      {(['kj', 'kcal'] as CustomEnergyUnit[]).map((unit) => (
                         <View
-                          key={preset.label}
-                          className={`serving-chip ${Math.abs(item.weight - preset.grams) < 1 ? 'active' : ''}`}
-                          onClick={() => updateItemWeight(key, preset.grams)}
+                          key={unit}
+                          className={`custom-energy-unit ${customEnergyUnit === unit ? 'active' : ''}`}
+                          onClick={() => setCustomEnergyUnit(unit)}
                         >
-                          <Text>{preset.label}</Text>
+                          <Text>{unit === 'kcal' ? 'kcal' : 'kJ'}</Text>
                         </View>
                       ))}
                     </View>
-                  )}
-
-                  {item.displayUnit === 'g' && (
-                    <View className='quick-adjust-row'>
-                    {[-50, -10, 10, 50].map((delta) => (
-                      <View
-                        key={delta}
-                        className='quick-adjust-chip'
-                        onClick={() => handleQuickAdjust(key, delta)}
-                      >
-                        <Text>{delta > 0 ? `+${delta}` : delta}g</Text>
-                      </View>
-                    ))}
-                    </View>
-                  )}
-
-                  <View className='item-actions'>
-                    <Input
-                      className='weight-input'
-                      type='number'
-                      value={item.weightInput}
-                      onInput={(e) => handleWeightInput(key, e.detail.value)}
-                      onBlur={(e) => {
-                        handleWeightInput(key, e.detail.value)
-                        commitWeightInput(key)
-                      }}
-                    />
-                    <Text className='weight-unit'>{item.displayUnitLabel}</Text>
-                    <View className='remove-btn' onClick={() => handleRemoveItem(key)}>
-                      <Text className='iconfont icon-shanchu' />
-                    </View>
                   </View>
+                  <Input
+                    className='custom-field-input'
+                    type='number'
+                    value={customCalories}
+                    placeholder='必填'
+                    onInput={(e) => setCustomCalories(e.detail.value)}
+                  />
+                  <Text className='custom-energy-hint'>
+                    {customEnergyUnit === 'kj'
+                      ? '按包装 kJ 填，保存时自动换算 kcal'
+                      : '1 kcal = 4.184 kJ，可切回 kJ 填包装值'}
+                  </Text>
                 </View>
-                )
-              })}
+                <View className='custom-field'>
+                  <Text className='custom-field-label'>蛋白质 g / 标示</Text>
+                  <Input
+                    className='custom-field-input'
+                    type='number'
+                    value={customProtein}
+                    placeholder='可选'
+                    onInput={(e) => setCustomProtein(e.detail.value)}
+                  />
+                </View>
+                <View className='custom-field'>
+                  <Text className='custom-field-label'>碳水 g / 标示</Text>
+                  <Input
+                    className='custom-field-input'
+                    type='number'
+                    value={customCarbs}
+                    placeholder='可选'
+                    onInput={(e) => setCustomCarbs(e.detail.value)}
+                  />
+                </View>
+                <View className='custom-field'>
+                  <Text className='custom-field-label'>脂肪 g / 标示</Text>
+                  <Input
+                    className='custom-field-input'
+                    type='number'
+                    value={customFat}
+                    placeholder='可选'
+                    onInput={(e) => setCustomFat(e.detail.value)}
+                  />
+                </View>
+              </View>
+              <View className='custom-more-toggle' onClick={() => setShowCustomMicroPanel((prev) => !prev)}>
+                <Text>维生素 / 矿物质</Text>
+                <Text className='custom-more-arrow'>{showCustomMicroPanel ? '收起' : '展开'}</Text>
+              </View>
+              {showCustomMicroPanel && (
+                <View className='custom-food-grid custom-micro-grid'>
+                  {CUSTOM_MICRO_FIELDS.map((field) => (
+                    <View className='custom-field' key={field.key}>
+                      <Text className='custom-field-label'>{field.label} {field.unit} / 标示</Text>
+                      <Input
+                        className='custom-field-input'
+                        type='digit'
+                        value={customMicroValues[field.key] || ''}
+                        placeholder='可选'
+                        onInput={(e) => handleCustomMicroInput(field.key, e.detail.value)}
+                      />
+                    </View>
+                  ))}
+                </View>
+              )}
+              <View className='custom-public-row' onClick={() => setCustomShareToPublic((prev) => !prev)}>
+                <View className='custom-public-copy'>
+                  <Text className='custom-public-title'>贡献到公共临时库</Text>
+                  <Text className='custom-public-subtitle'>审核通过后可给大家复用</Text>
+                </View>
+                <View className={`custom-public-switch ${customShareToPublic ? 'active' : ''}`}>
+                  <View className='custom-public-knob' />
+                </View>
+              </View>
+              <View className='custom-food-actions'>
+                <View className='custom-food-secondary' onClick={resetCustomDraft}>
+                  <Text>清空</Text>
+                </View>
+                <View className='custom-food-primary' onClick={handleAddCustomItem}>
+                  <Text>完成自定义</Text>
+                </View>
+              </View>
             </View>
-            
-            <View className='nutrition-total'>
-              <View className='total-item'>
-                <Text className='label'>热量</Text>
-                <Text className='value'>{Math.round(totalNutrients.calories)} kcal</Text>
-              </View>
-              <View className='total-item'>
-                <Text className='label'>蛋白质</Text>
-                <Text className='value'>{Math.round(totalNutrients.protein)}g</Text>
-              </View>
-              <View className='total-item'>
-                <Text className='label'>碳水</Text>
-                <Text className='value'>{Math.round(totalNutrients.carbs)}g</Text>
-              </View>
-              <View className='total-item'>
-                <Text className='label'>脂肪</Text>
-                <Text className='value'>{Math.round(totalNutrients.fat)}g</Text>
-              </View>
-            </View>
-          </View>
-        )}
+          )}
+
+        </View>
 
         <View className='catalog-shell'>
           {!normalizedQuery && (
@@ -867,7 +1454,12 @@ function RecordManualPage() {
               </View>
             ) : (
               <View className='empty-state'>
-                <Text>{normalizedQuery ? '没有找到匹配食物，试试“米饭”“鸡蛋”这类关键词' : '暂无可用食物数据'}</Text>
+                <Text>{normalizedQuery ? '没有找到匹配食物，可以直接按这个名字新建' : '暂无可用食物数据'}</Text>
+                {normalizedQuery && (
+                  <View className='empty-create-btn' onClick={openCustomPanel}>
+                    <Text>新建“{normalizedQuery}”</Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -911,19 +1503,71 @@ function RecordManualPage() {
 
       {selectedItems.length > 0 && (
         <View className='bottom-bar'>
-          <View className='bottom-summary'>
-            <Text className='bottom-summary-text'>
-              已选 {selectedItems.length} 项 · {Math.round(totalNutrients.calories)} kcal
-            </Text>
-            <Text className='bottom-summary-subtext'>
-              保存后会直接回到今天记录页
-            </Text>
+          <View className='bottom-summary' onClick={() => setShowSelectedDrawer(true)}>
+            <View className='bottom-summary-main'>
+              <Text className='bottom-summary-text'>
+                已选 {selectedItems.length} 项 · {Math.round(totalNutrients.calories)} kcal
+              </Text>
+              <Text className='bottom-summary-action'>查看</Text>
+            </View>
+            <Text className='bottom-summary-subtext'>点击查看已选食物</Text>
           </View>
           <View
             className={`save-btn ${saving ? 'loading' : ''}`}
             onClick={handleSave}
           >
             <Text>{saving ? '保存中...' : '保存到今天记录'}</Text>
+          </View>
+        </View>
+      )}
+
+      {selectedItems.length > 0 && showSelectedDrawer && (
+        <View className='selected-drawer-mask' onClick={() => setShowSelectedDrawer(false)}>
+          <View className='selected-drawer' onClick={(e) => e.stopPropagation()}>
+            <View className='selected-drawer-handle' />
+            <View className='selected-drawer-header'>
+              <View>
+                <Text className='selected-drawer-title'>已选食物</Text>
+                <Text className='selected-drawer-subtitle'>
+                  {selectedItems.length} 项 · {Math.round(totalNutrients.calories)} kcal
+                </Text>
+              </View>
+              <View className='selected-drawer-close' onClick={() => setShowSelectedDrawer(false)}>
+                <Text className='iconfont icon-guanbi' />
+              </View>
+            </View>
+            <View className='selected-drawer-total'>
+              <View className='total-item'>
+                <Text className='label'>热量</Text>
+                <Text className='value'>{Math.round(totalNutrients.calories)} kcal</Text>
+              </View>
+              <View className='total-item'>
+                <Text className='label'>蛋白质</Text>
+                <Text className='value'>{Math.round(totalNutrients.protein)}g</Text>
+              </View>
+              <View className='total-item'>
+                <Text className='label'>碳水</Text>
+                <Text className='value'>{Math.round(totalNutrients.carbs)}g</Text>
+              </View>
+              <View className='total-item'>
+                <Text className='label'>脂肪</Text>
+                <Text className='value'>{Math.round(totalNutrients.fat)}g</Text>
+              </View>
+            </View>
+            <ScrollView className='selected-drawer-scroll' scrollY>
+              {renderSelectedList('drawer')}
+            </ScrollView>
+            <View className='selected-drawer-actions'>
+              <View className='selected-drawer-secondary' onClick={() => setShowSelectedDrawer(false)}>
+                <Text>继续添加</Text>
+              </View>
+              <View
+                className={`selected-drawer-primary ${saving ? 'loading' : ''}`}
+                onClick={handleSave}
+              >
+                <Text>{saving ? '保存中...' : '保存本餐'}</Text>
+              </View>
+            </View>
           </View>
         </View>
       )}

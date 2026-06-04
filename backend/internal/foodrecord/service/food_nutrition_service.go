@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -299,6 +300,10 @@ func (s *FoodNutritionService) CreatePackagedFoodWithAction(ctx context.Context,
 	productName := strings.TrimSpace(input.ProductName)
 	if productName == "" {
 		return nil, "", &commonerrors.AppError{Code: 10002, Message: "零食名称不能为空", HTTPStatus: 400}
+	}
+	input.SourceImageURLs = normalizeStringSlice(input.SourceImageURLs)
+	if len(input.SourceImageURLs) == 0 {
+		return nil, "", &commonerrors.AppError{Code: 10002, Message: "请至少上传一张包装图片", HTTPStatus: 400}
 	}
 	if input.ServingWeightG <= 0 && input.NetWeightG > 0 {
 		input.ServingWeightG = input.NetWeightG
@@ -909,7 +914,7 @@ func convertPackagedNutrition(result *PackagedProductExtractResult) {
 			conversionStatus = "converted"
 		}
 	}
-	if conversionStatus == "converted" && !hasValidPackagedNutrition(result.UnitNutritionPer100g) {
+	if conversionStatus == "converted" && !hasValidPackagedNutrition(result.UnitNutritionPer100g) && !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
 		conversionStatus = "insufficient"
 	}
 	result.ConversionStatus = conversionStatus
@@ -1097,7 +1102,11 @@ func evaluatePackagedAutoIngest(result *PackagedProductExtractResult) *PackagedA
 		auto.Reason = "conversion_not_closed"
 		return auto
 	}
-	if !hasValidPackagedNutrition(result.UnitNutritionPer100g) {
+	if hasImplausiblePackagedNutrition(result.UnitNutritionPer100g) {
+		auto.Reason = "nutrition_out_of_range"
+		return auto
+	}
+	if !hasValidPackagedNutrition(result.UnitNutritionPer100g) && !PackagedExtractHasVerifiedZeroNutritionEvidence(result) {
 		auto.Reason = "missing_nutrition"
 		return auto
 	}
@@ -1136,6 +1145,162 @@ func hasValidPackagedNutrition(unit map[string]any) bool {
 		}
 	}
 	return macroCount >= 2
+}
+
+func PackagedExtractHasVerifiedZeroNutritionEvidence(result *PackagedProductExtractResult) bool {
+	if result == nil {
+		return false
+	}
+	if hasPositiveCoreNutrition(result.UnitNutritionPer100g) {
+		return false
+	}
+	if rawNutritionHasVerifiedZeroEvidence(result.RawNutritionPerBasis) {
+		return true
+	}
+	return textHasVerifiedZeroNutritionEvidence(strings.Join([]string{
+		result.OCRRawText,
+		result.EnergyUnitRaw,
+		result.NutritionBasisUnit,
+		flattenLabelEvidence(result.RawLabelPayload),
+	}, "\n"))
+}
+
+func PackagedFoodHasVerifiedZeroNutritionEvidence(food *domain.PackagedFood) bool {
+	if food == nil {
+		return false
+	}
+	if food.KcalPer100g != 0 || food.ProteinPer100g != 0 || food.CarbsPer100g != 0 || food.FatPer100g != 0 {
+		return false
+	}
+	return textHasVerifiedZeroNutritionEvidence(strings.Join([]string{
+		stringPointerValue(food.OCRRawText),
+		stringPointerValue(food.EnergyUnitRaw),
+		stringPointerValue(food.NutritionBasisUnit),
+		flattenLabelEvidence(food.RawLabelPayload),
+		flattenLabelEvidence(food.FieldConfidence),
+	}, "\n"))
+}
+
+func hasPositiveCoreNutrition(unit map[string]any) bool {
+	if len(unit) == 0 {
+		return false
+	}
+	for _, key := range []string{"calories", "protein", "carbs", "fat"} {
+		if numberFromAny(unit[key]) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func rawNutritionHasVerifiedZeroEvidence(raw PackagedLabelRawNutrition) bool {
+	if !isZeroNutritionValueWithUnit(raw.Energy, "kj", "kcal", "千焦", "千卡", "大卡") {
+		return false
+	}
+	for _, value := range []PackagedLabelNutritionValue{raw.Protein, raw.Carbs, raw.Fat} {
+		if isZeroNutritionValueWithUnit(value, "g", "克") {
+			return true
+		}
+	}
+	return false
+}
+
+func isZeroNutritionValueWithUnit(value PackagedLabelNutritionValue, units ...string) bool {
+	if value.Value != 0 || strings.TrimSpace(value.Unit) == "" {
+		return false
+	}
+	unit := strings.ToLower(strings.TrimSpace(value.Unit))
+	for _, allowed := range units {
+		if unit == strings.ToLower(strings.TrimSpace(allowed)) {
+			return true
+		}
+	}
+	return false
+}
+
+func textHasVerifiedZeroNutritionEvidence(text string) bool {
+	text = normalizeZeroNutritionEvidenceText(text)
+	if strings.TrimSpace(text) == "" {
+		return false
+	}
+	return zeroEnergyEvidenceRE.MatchString(text) &&
+		!nonZeroEnergyEvidenceRE.MatchString(text) &&
+		zeroMacroEvidenceRE.MatchString(text)
+}
+
+var (
+	zeroEnergyEvidenceRE    = regexp.MustCompile(`(?:能量|energy)[^\d]{0,16}0(?:\.0+)?\s*(?:kj|kcal)|0(?:\.0+)?\s*(?:kj|kcal)[^\n;；,，]{0,16}(?:能量|energy)`)
+	nonZeroEnergyEvidenceRE = regexp.MustCompile(`(?:能量|energy)[^\d]{0,16}[1-9]\d*(?:\.\d+)?\s*(?:kj|kcal)`)
+	zeroMacroEvidenceRE     = regexp.MustCompile(`(?:蛋白质|protein|脂肪|fat|碳水化合物|碳水|carbohydrate|carbs)[^\d]{0,16}0(?:\.0+)?\s*g`)
+)
+
+func normalizeZeroNutritionEvidenceText(text string) string {
+	text = strings.ToLower(text)
+	replacements := map[string]string{
+		"：":  ":",
+		"，":  ",",
+		"；":  ";",
+		"（":  "(",
+		"）":  ")",
+		"千焦": "kj",
+		"千卡": "kcal",
+		"大卡": "kcal",
+		"克":  "g",
+	}
+	for old, next := range replacements {
+		text = strings.ReplaceAll(text, old, next)
+	}
+	return text
+}
+
+func flattenLabelEvidence(value any) string {
+	switch typed := value.(type) {
+	case nil:
+		return ""
+	case string:
+		return typed
+	case fmt.Stringer:
+		return typed.String()
+	case map[string]any:
+		parts := make([]string, 0, len(typed)*2)
+		for key, nested := range typed {
+			parts = append(parts, key, flattenLabelEvidence(nested))
+		}
+		return strings.Join(parts, " ")
+	case []any:
+		parts := make([]string, 0, len(typed))
+		for _, nested := range typed {
+			parts = append(parts, flattenLabelEvidence(nested))
+		}
+		return strings.Join(parts, " ")
+	default:
+		return fmt.Sprintf("%v", typed)
+	}
+}
+
+func stringPointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func hasImplausiblePackagedNutrition(unit map[string]any) bool {
+	if len(unit) == 0 {
+		return false
+	}
+	if calories := numberFromAny(unit["calories"]); calories > 900 {
+		return true
+	}
+	macroSum := 0.0
+	for _, key := range []string{"protein", "carbs", "fat"} {
+		value := numberFromAny(unit[key])
+		if value > 100 {
+			return true
+		}
+		macroSum += value
+	}
+	return macroSum > 120
 }
 
 func confidenceBelow(confidence map[string]any, key string, threshold float64) bool {

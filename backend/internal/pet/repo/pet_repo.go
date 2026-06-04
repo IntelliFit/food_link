@@ -149,6 +149,33 @@ func (r *PetRepo) ListFoodRecordsByDate(ctx context.Context, userID, date string
 	return rows, err
 }
 
+func (r *PetRepo) GetLatestFoodRecordDate(ctx context.Context, userID string, beforeOrOn string) (string, error) {
+	_, end, err := chinaDateWindow(beforeOrOn)
+	if err != nil {
+		return "", err
+	}
+	var row FoodRecord
+	err = r.db.WithContext(ctx).
+		Select("record_time").
+		Where("user_id = ? AND record_time < ?", userID, end).
+		Order("record_time DESC").
+		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if row.RecordTime == nil {
+		return "", nil
+	}
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		loc = time.FixedZone("CST", 8*3600)
+	}
+	return row.RecordTime.In(loc).Format("2006-01-02"), nil
+}
+
 func (r *PetRepo) SumWaterByDate(ctx context.Context, userID, date string) (int, error) {
 	var total int
 	err := r.db.WithContext(ctx).

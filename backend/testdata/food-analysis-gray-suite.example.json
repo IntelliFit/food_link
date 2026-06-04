@@ -1,0 +1,97 @@
+{
+  "modes": [
+    "fast",
+    "standard",
+    "strict",
+    "strict_separate",
+    "fast_web_search",
+    "standard_web_search",
+    "strict_web_search"
+  ],
+  "additional_context": "gray verify mixed normal food and packaged snack recognition",
+  "suggest_ratio_enabled": true,
+  "fail_on_issue": true,
+  "global_gate": {
+    "require_done": true,
+    "max_unresolved_like_items": 0,
+    "max_missing_nutrition_items": 0,
+    "require_ai_ratio": true
+  },
+  "cases": [
+    {
+      "name": "mixed_nescafe",
+      "refs": [
+        "http://cdn-food-images.coachlink.fit/86f5223b-b338-4ef7-8aed-331a3cd31743.jpg"
+      ],
+      "expect": {
+        "require_mixed": true,
+        "require_package_anchor": true,
+        "packaged_name_contains": [
+          "雀巢",
+          "咖啡"
+        ],
+        "non_packaged_name_contains": [
+          "炸猪排"
+        ],
+        "item_expectations": [
+          {
+            "name_contains": [
+              "雀巢",
+              "咖啡"
+            ],
+            "require_packaged": true,
+            "min_weight_g": 104,
+            "max_weight_g": 106,
+            "nutrition_source": "packaged_food_library",
+            "package_weight_source": "packaged_food_library",
+            "require_package_weight_applied": true
+          }
+        ]
+      },
+      "correction": {
+        "additional_context": "把雀巢咖啡修正为半包，按 52.5g 记录，并使用用户填写的营养。",
+        "items": [
+          {
+            "name": "雀巢咖啡1+2奶香（半包）",
+            "sourceName": "雀巢咖啡1+2奶香",
+            "estimatedWeightGrams": 52.5,
+            "weight": 52.5,
+            "nameEdited": true,
+            "weightEdited": true,
+            "nutritionEdited": true,
+            "nutrients": {
+              "calories": 52.5,
+              "protein": 1.0,
+              "carbs": 10.0,
+              "fat": 1.0
+            }
+          }
+        ],
+        "expect": {
+          "require_done": true,
+          "require_ai_ratio": true,
+          "min_items": 1,
+          "name_contains": [
+            "半包"
+          ],
+          "item_expectations": [
+            {
+              "name_contains": [
+                "半包"
+              ],
+              "min_weight_g": 52,
+              "max_weight_g": 53,
+              "min_calories": 52,
+              "max_calories": 53,
+              "nutrition_source": "user_correction_context",
+              "package_weight_source": "user_context",
+              "require_package_weight_applied": true
+            }
+          ],
+          "max_unresolved_like_items": 0,
+          "max_missing_nutrition_items": 0
+        }
+      }
+    }
+  ]
+}

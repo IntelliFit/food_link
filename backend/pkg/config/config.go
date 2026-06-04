@@ -287,6 +287,12 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	if fileCfg.External.DoubaoBaseURL != "" {
 		v.Set("external.doubao_base_url", fileCfg.External.DoubaoBaseURL)
 	}
+	if fileCfg.External.DashScopeAPIKey != "" {
+		v.Set("external.dashscope_api_key", fileCfg.External.DashScopeAPIKey)
+	}
+	if fileCfg.External.DashScopeBaseURL != "" {
+		v.Set("external.dashscope_base_url", fileCfg.External.DashScopeBaseURL)
+	}
 	if fileCfg.External.OfoxAIAPIKey != "" {
 		v.Set("external.ofoxai_api_key", fileCfg.External.OfoxAIAPIKey)
 	}
@@ -780,6 +786,8 @@ var cloudConfigKeyAliases = map[string]string{
 	"DOUBAO_API_KEY":                      "external.doubao_api_key",
 	"DOUBAO_WEB_SEARCH_API_KEY":           "external.doubao_web_search_api_key",
 	"DOUBAO_BASE_URL":                     "external.doubao_base_url",
+	"DASHSCOPE_API_KEY":                   "external.dashscope_api_key",
+	"DASHSCOPE_BASE_URL":                  "external.dashscope_base_url",
 	"WECHAT_PAY_MCHID":                    "wechat_pay.mchid",
 	"WECHAT_PAY_NOTIFY_URL":               "wechat_pay.notify_url",
 	"WECHAT_PAY_SERIAL_NO":                "wechat_pay.serial_no",
@@ -890,6 +898,8 @@ func trimExternalConfig(cfg *ExternalConfig) {
 	cfg.DoubaoAPIKey = strings.TrimSpace(cfg.DoubaoAPIKey)
 	cfg.DoubaoWebSearchAPIKey = strings.TrimSpace(cfg.DoubaoWebSearchAPIKey)
 	cfg.DoubaoBaseURL = strings.TrimSpace(cfg.DoubaoBaseURL)
+	cfg.DashScopeAPIKey = strings.TrimSpace(cfg.DashScopeAPIKey)
+	cfg.DashScopeBaseURL = strings.TrimSpace(cfg.DashScopeBaseURL)
 }
 
 func trimApolloConfig(cfg *ApolloConfig) {
@@ -977,6 +987,8 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.doubao_api_key", "DOUBAO_API_KEY")
 	_ = v.BindEnv("external.doubao_web_search_api_key", "DOUBAO_WEB_SEARCH_API_KEY")
 	_ = v.BindEnv("external.doubao_base_url", "DOUBAO_BASE_URL")
+	_ = v.BindEnv("external.dashscope_api_key", "DASHSCOPE_API_KEY")
+	_ = v.BindEnv("external.dashscope_base_url", "DASHSCOPE_BASE_URL")
 	_ = v.BindEnv("wechat_pay.mchid", "WECHAT_PAY_MCHID")
 	_ = v.BindEnv("wechat_pay.notify_url", "WECHAT_PAY_NOTIFY_URL")
 	_ = v.BindEnv("wechat_pay.serial_no", "WECHAT_PAY_SERIAL_NO")

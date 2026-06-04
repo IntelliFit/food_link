@@ -47,12 +47,16 @@ const GOAL_MAP: Record<string, string> = {
   muscle_gain: '增重'
 }
 const EXECUTION_MODE_MAP: Record<string, string> = {
+  fast: '快速模式',
+  fast_web_search: '快速模式',
+  lite: '快速模式',
   strict: '精准模式',
-  strict_web_search: '精准联网',
+  strict_separate: '精准模式',
+  strict_web_search: '精准模式',
   experimental: '普通模式',
   gemini35_flash: '精准模式',
   gemini35_flash_grouped: '精准模式',
-  standard_web_search: '普通联网',
+  standard_web_search: '普通模式',
   standard_packaged_experiment: '零食库试验',
   standard: '普通模式'
 }
@@ -100,17 +104,14 @@ const ACTIVITY_OPTIONS = [
   { label: '体力劳动', value: 'active' }
 ]
 const EXECUTION_MODE_OPTIONS: Array<{ label: string; value: ExecutionMode }> = [
+  { label: '快速模式', value: 'fast' },
   { label: '普通模式', value: 'standard' },
-  { label: '普通联网', value: 'standard_web_search' },
-  { label: '精准模式', value: 'strict' },
-  { label: '精准联网', value: 'strict_web_search' }
+  { label: '精准模式', value: 'strict' }
 ]
 const normalizeVisibleExecutionMode = (value: unknown): ExecutionMode => (
-  value === 'standard_web_search'
-    ? 'standard_web_search'
-    : value === 'strict_web_search'
-      ? 'strict_web_search'
-      : value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped'
+  value === 'fast' || value === 'fast_web_search' || value === 'lite'
+    ? 'fast'
+    : value === 'strict' || value === 'strict_separate' || value === 'strict_web_search' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped'
         ? 'strict'
         : 'standard'
 )

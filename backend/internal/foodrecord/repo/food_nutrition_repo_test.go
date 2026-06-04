@@ -149,6 +149,169 @@ func TestFoodNutritionRepo_ResolveFoodPrefersExactCanonicalOverAlias(t *testing.
 	assert.Equal(t, 3.2, result.Food.CarbsPer100g)
 }
 
+func TestFoodNutritionRepo_ResolveFoodSkipsUnsafeProcessedAlias(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "cooked-corn",
+		CanonicalName:  "玉米(熟)",
+		NormalizedName: normalizeFoodName("玉米(熟)"),
+		KcalPer100g:    96,
+		ProteinPer100g: 3.4,
+		CarbsPer100g:   21,
+		FatPer100g:     1.5,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "corn-sausage",
+		CanonicalName:  "玉米肠",
+		NormalizedName: normalizeFoodName("玉米肠"),
+		KcalPer100g:    207.7,
+		ProteinPer100g: 10.3,
+		CarbsPer100g:   19.7,
+		FatPer100g:     9.74,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutritionAlias{
+		ID:              "good-cooked-corn-alias",
+		FoodID:          "cooked-corn",
+		AliasName:       "水煮玉米",
+		NormalizedAlias: normalizeFoodName("水煮玉米"),
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutritionAlias{
+		ID:              "bad-corn-sausage-alias",
+		FoodID:          "corn-sausage",
+		AliasName:       "煮玉米",
+		NormalizedAlias: normalizeFoodName("煮玉米"),
+	}).Error)
+
+	result, err := repo.ResolveFood(ctx, "煮玉米")
+	require.NoError(t, err)
+	require.NotNil(t, result.Food)
+	assert.Equal(t, "cooked-corn", result.Food.ID)
+	assert.NotEqual(t, "corn-sausage", result.Food.ID)
+	assert.Less(t, result.Food.FatPer100g, 2.0)
+
+	candidates, err := repo.SearchCandidates(ctx, "煮玉米", 5)
+	require.NoError(t, err)
+	require.NotEmpty(t, candidates)
+	assert.Equal(t, "cooked-corn", candidates[0].Food.ID)
+	for _, candidate := range candidates {
+		assert.NotEqual(t, "corn-sausage", candidate.Food.ID)
+	}
+}
+
+func TestFoodNutritionRepo_ResolveFoodUsesNormalizedQueryVariants(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "egg",
+		CanonicalName:  "鸡蛋",
+		NormalizedName: normalizeFoodName("鸡蛋"),
+		KcalPer100g:    139,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "rice",
+		CanonicalName:  "白米饭",
+		NormalizedName: normalizeFoodName("白米饭"),
+		KcalPer100g:    116,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutritionAlias{
+		ID:              "rice-alias",
+		FoodID:          "rice",
+		AliasName:       "米饭",
+		NormalizedAlias: normalizeFoodName("米饭"),
+	}).Error)
+
+	egg, err := repo.ResolveFood(ctx, "鸡蛋1个")
+	require.NoError(t, err)
+	require.NotNil(t, egg.Food)
+	assert.Equal(t, "egg", egg.Food.ID)
+	assert.Equal(t, "exact_canonical", egg.Status)
+	assert.Equal(t, "canonical_normalized", egg.MatchSource)
+
+	rice, err := repo.ResolveFood(ctx, "一碗米饭")
+	require.NoError(t, err)
+	require.NotNil(t, rice.Food)
+	assert.Equal(t, "rice", rice.Food.ID)
+	assert.Equal(t, "exact_alias", rice.Status)
+	assert.Equal(t, "alias_normalized", rice.MatchSource)
+}
+
+func TestFoodNutritionRepo_ResolveFoodSkipsEnglishAliasForChineseQuery(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "milk-cn",
+		CanonicalName:  "牛奶(全脂)",
+		NormalizedName: normalizeFoodName("牛奶(全脂)"),
+		KcalPer100g:    61,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "milk-usda",
+		CanonicalName:  "Milk, whole, 3.25% milkfat, with added vitamin D",
+		NormalizedName: normalizeFoodName("Milk, whole, 3.25% milkfat, with added vitamin D"),
+		KcalPer100g:    61,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutritionAlias{
+		ID:              "bad-english-alias",
+		FoodID:          "milk-usda",
+		AliasName:       "全脂牛奶",
+		NormalizedAlias: normalizeFoodName("全脂牛奶"),
+	}).Error)
+
+	result, err := repo.ResolveFood(ctx, "全脂牛奶")
+	require.NoError(t, err)
+	require.NotNil(t, result.Food)
+	assert.Equal(t, "milk-cn", result.Food.ID)
+	assert.NotEqual(t, "milk-usda", result.Food.ID)
+}
+
+func TestIsUnsafeNutritionAliasMatch(t *testing.T) {
+	assert.True(t, isUnsafeNutritionAliasMatch("煮玉米", "煮玉米", "玉米肠"))
+	assert.True(t, isUnsafeNutritionAliasMatch("蒸玉米", "蒸玉米", "鸡肉玉米肠"))
+	assert.True(t, isUnsafeNutritionAliasMatch("全脂牛奶", "全脂牛奶", "Milk, whole, 3.25% milkfat, with added vitamin D"))
+	assert.False(t, isUnsafeNutritionAliasMatch("玉米肠", "玉米肠", "玉米肠"))
+	assert.False(t, isUnsafeNutritionAliasMatch("即食玉米肠", "即食玉米肠", "玉米肠"))
+	assert.False(t, isUnsafeNutritionAliasMatch("水煮玉米", "水煮玉米", "玉米(熟)"))
+}
+
+func TestNutritionQueryVariants(t *testing.T) {
+	variants := nutritionQueryVariants("水煮鸡胸肉100g")
+	normalized := []string{}
+	for _, variant := range variants {
+		normalized = append(normalized, variant.Normalized)
+	}
+	assert.Contains(t, normalized, normalizeFoodName("禽肉（去皮鸡胸肉）"))
+	assert.Contains(t, normalized, normalizeFoodName("水煮鸡胸肉"))
+	assert.Contains(t, normalized, normalizeFoodName("鸡胸肉"))
+
+	variants = nutritionQueryVariants("一碗米饭")
+	normalized = []string{}
+	for _, variant := range variants {
+		normalized = append(normalized, variant.Normalized)
+	}
+	assert.Contains(t, normalized, normalizeFoodName("白米饭"))
+	assert.Contains(t, normalized, normalizeFoodName("米饭"))
+
+	variants = nutritionQueryVariants("煮玉米")
+	normalized = []string{}
+	for _, variant := range variants {
+		normalized = append(normalized, variant.Normalized)
+	}
+	assert.Contains(t, normalized, normalizeFoodName("玉米(熟)"))
+}
+
 func TestFoodNutritionRepo_GetUnresolvedTop(t *testing.T) {
 	db := setupFoodNutritionTestDB(t)
 	repo := NewFoodNutritionRepo(db)
@@ -664,6 +827,57 @@ func TestPackagedFoodSearchTermsExtractBrandProductAndFlavor(t *testing.T) {
 	assert.Contains(t, terms, "橙味")
 }
 
+func TestPackagedFoodSearchTermsExtractTaoliBreadTokens(t *testing.T) {
+	terms := packagedFoodSearchTerms("桃李豆沙小饼面包")
+
+	assert.Contains(t, terms, "桃李")
+	assert.Contains(t, terms, "豆沙小饼")
+	assert.Contains(t, terms, "豆沙")
+	assert.Contains(t, terms, "小饼")
+	assert.Contains(t, terms, "面包")
+}
+
+func TestPackagedFoodSearchTermsExtractNescafeCoffeeTokens(t *testing.T) {
+	terms := packagedFoodSearchTerms("雀巢奶香速溶咖啡固体饮料")
+
+	assert.Contains(t, terms, "雀巢")
+	assert.Contains(t, terms, "咖啡")
+	assert.Contains(t, terms, "固体饮料")
+}
+
+func TestPackagedFoodSearchTermsExtractSuntorySugarfreeDrinkTokens(t *testing.T) {
+	terms := packagedFoodSearchTerms("SUNTORY三得利纤漾饮荷叶茉莉花味风味饮料（无糖）")
+
+	assert.Contains(t, terms, "suntory")
+	assert.Contains(t, terms, "三得利")
+	assert.Contains(t, terms, "纤漾饮")
+	assert.Contains(t, terms, "饮料")
+	assert.Contains(t, terms, "无糖")
+}
+
+func TestPackagedFoodSearchTermsExtractCiciFruitDrinkTokens(t *testing.T) {
+	terms := packagedFoodSearchTerms("Cici果粒爽橙味")
+
+	assert.Contains(t, terms, "cici")
+	assert.Contains(t, terms, "果粒爽")
+	assert.Contains(t, terms, "橙味")
+}
+
+func TestPackagedFoodFuzzyQueryKeepsInputEvidence(t *testing.T) {
+	query := packagedFoodFuzzyQuery("Cici果粒爽橙味", "喜之郎", "", "橙味", "")
+
+	assert.Contains(t, query, "Cici果粒爽橙味")
+	assert.Contains(t, query, "喜之郎")
+	assert.Contains(t, query, "橙味")
+}
+
+func TestIsGenericPackagedResolveQuery(t *testing.T) {
+	assert.True(t, isGenericPackagedResolveQuery("面包"))
+	assert.True(t, isGenericPackagedResolveQuery("酸奶"))
+	assert.False(t, isGenericPackagedResolveQuery("桃李豆沙小饼面包"))
+	assert.False(t, isGenericPackagedResolveQuery("三得利无糖荷叶茉莉饮料500ml"))
+}
+
 func TestPackagedFoodSearchScoreMatchesCiciOrangeJellyDrink(t *testing.T) {
 	flavor := "橙味"
 	spec := "258g"
@@ -688,6 +902,32 @@ func TestPackagedFoodSearchScoreMatchesCiciOrangeJellyDrink(t *testing.T) {
 
 	assert.Greater(t, packagedFoodSearchScore("喜之郎Cici果冻爽（橙味）", food), 0.65)
 	assert.Greater(t, packagedFoodSearchScore("喜之郎Cici果冻爽（橙味）", food), packagedFoodSearchScore("喜之郎Cici果冻爽（橙味）", unrelated))
+}
+
+func TestPackagedFoodSearchScoreMatchesSuntorySugarfreeDrink(t *testing.T) {
+	category := "风味饮料"
+	spec := "500ml"
+	food := domain.PackagedFood{
+		ID:              "pkg-suntory-sugarfree",
+		Brand:           "SUNTORY三得利",
+		ProductName:     "汲赏 纤漾饮 荷叶茉莉花味风味饮料（无糖）",
+		DisplayName:     "SUNTORY三得利 汲赏 纤漾饮 荷叶茉莉花味风味饮料（无糖） 500ml",
+		NormalizedName:  normalizeFoodName("SUNTORY三得利 汲赏 纤漾饮 荷叶茉莉花味风味饮料（无糖）"),
+		SpecText:        &spec,
+		PackageCategory: &category,
+		NetContentValue: 500,
+	}
+	unrelated := domain.PackagedFood{
+		ID:             "pkg-rice",
+		Brand:          "桃李",
+		ProductName:    "豆沙小饼面包",
+		NormalizedName: normalizeFoodName("桃李豆沙小饼面包"),
+		NetWeightG:     55,
+	}
+
+	query := "SUNTORY三得利纤漾饮荷叶茉莉花味风味饮料（无糖）"
+	assert.Greater(t, packagedFoodSearchScore(query, food), 0.65)
+	assert.Greater(t, packagedFoodSearchScore(query, food), packagedFoodSearchScore(query, unrelated))
 }
 
 func TestPackagedFoodSearchScorePrefersMatchingFlavor(t *testing.T) {

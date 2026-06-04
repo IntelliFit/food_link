@@ -16,8 +16,10 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -26,6 +28,7 @@ import (
 	"food_link/backend/internal/membership/domain"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/logger"
 )
 
 const (
@@ -56,6 +59,8 @@ const (
 	publicFoodUploadRewardCredits   = 1
 	publicFoodUploadDailyMaxEvents  = 3
 )
+
+var wechatPayAPIBaseURL = "https://api.mch.weixin.qq.com"
 
 var manualMembershipUpgradeUserIDs = map[string]struct{}{
 	"cafa4614-9453-4eb0-bf60-51f442ce0f4a": {},
@@ -599,7 +604,7 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.mch.weixin.qq.com"+canonicalURL, bytes.NewReader(requestBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(wechatPayAPIBaseURL, "/")+canonicalURL, bytes.NewReader(requestBody))
 	if err != nil {
 		return nil, err
 	}
@@ -765,6 +770,77 @@ func (s *MembershipService) WechatNotify(ctx context.Context, paymentID string) 
 	return err
 }
 
+func (s *MembershipService) SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error) {
+	orderNo = strings.TrimSpace(orderNo)
+	if orderNo == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "order_no required", HTTPStatus: 400}
+	}
+	payment, err := s.repo.GetPaymentByOrderNo(ctx, orderNo)
+	if err != nil {
+		return nil, err
+	}
+	if payment == nil {
+		return nil, commonerrors.ErrNotFound
+	}
+	if strings.TrimSpace(payment.UserID) != strings.TrimSpace(userID) {
+		return nil, commonerrors.ErrForbidden
+	}
+	if payment.Status == "paid" {
+		membership, err := s.getEffectiveMembership(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{
+			"synced":     true,
+			"status":     "paid",
+			"membership": formatMembershipResponse(membership),
+		}, nil
+	}
+	state, err := s.queryWechatOrder(ctx, orderNo)
+	if err != nil {
+		logger.Error(ctx, "查询微信支付订单失败", err,
+			slog.String("user_id", userID),
+			slog.String("order_no", orderNo),
+		)
+		return nil, err
+	}
+	tradeState := strings.ToUpper(strings.TrimSpace(fmt.Sprintf("%v", state["trade_state"])))
+	if tradeState != "SUCCESS" {
+		logger.Info(ctx, "微信支付订单尚未支付成功",
+			slog.String("user_id", userID),
+			slog.String("order_no", orderNo),
+			slog.String("trade_state", tradeState),
+		)
+		return map[string]any{
+			"synced":      false,
+			"status":      payment.Status,
+			"trade_state": tradeState,
+		}, nil
+	}
+	if paidTotalFromWechatState(state) != amountToFen(payment.Amount) {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "微信支付金额与订单金额不一致", HTTPStatus: 400}
+	}
+	if err := s.markPaymentPaidFromWechatState(ctx, payment, state, map[string]any{"source": "active_query"}); err != nil {
+		return nil, err
+	}
+	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
+	membership, err := s.getEffectiveMembership(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info(ctx, "主动查询微信支付并同步会员成功",
+		slog.String("user_id", userID),
+		slog.String("order_no", orderNo),
+		slog.String("plan_code", payment.PlanCode),
+	)
+	return map[string]any{
+		"synced":      true,
+		"status":      "paid",
+		"trade_state": tradeState,
+		"membership":  formatMembershipResponse(membership),
+	}, nil
+}
+
 func (s *MembershipService) HandleWechatNotify(ctx context.Context, headers http.Header, body []byte) (map[string]any, error) {
 	payCfg, err := s.wechatPayConfig()
 	if err != nil {
@@ -810,40 +886,18 @@ func (s *MembershipService) HandleWechatNotify(ctx context.Context, headers http
 	if strings.ToUpper(fmt.Sprintf("%v", decrypted["trade_state"])) != "SUCCESS" {
 		return map[string]any{"code": "SUCCESS", "message": "已接收"}, nil
 	}
-	amount, _ := decrypted["amount"].(map[string]any)
-	paidTotal := intFromAny(amount["payer_total"])
-	if paidTotal == 0 {
-		paidTotal = intFromAny(amount["total"])
-	}
-	if paidTotal != amountToFen(payment.Amount) {
+	if paidTotalFromWechatState(decrypted) != amountToFen(payment.Amount) {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "微信支付金额与订单金额不一致", HTTPStatus: 400}
 	}
-	paidAt := parseTime(fmt.Sprintf("%v", decrypted["success_time"]))
-	if paidAt == nil {
-		now := time.Now()
-		paidAt = &now
-	}
-	transactionID := stringPtrFromAny(decrypted["transaction_id"])
-	bankType := stringPtrFromAny(decrypted["bank_type"])
-	if err := s.repo.UpdatePaymentByOrderNo(ctx, orderNo, map[string]any{
-		"status":            "paid",
-		"wx_transaction_id": wxString(transactionID),
-		"wx_bank_type":      wxString(bankType),
-		"paid_at":           *paidAt,
-		"notify_payload": map[string]any{
-			"headers": map[string]any{
-				"Wechatpay-Signature": signature,
-				"Wechatpay-Timestamp": timestamp,
-				"Wechatpay-Nonce":     nonce,
-			},
-			"body":               notifyData,
-			"resource_decrypted": decrypted,
+	if err := s.markPaymentPaidFromWechatState(ctx, payment, decrypted, map[string]any{
+		"source": "notify",
+		"headers": map[string]any{
+			"Wechatpay-Signature": signature,
+			"Wechatpay-Timestamp": timestamp,
+			"Wechatpay-Nonce":     nonce,
 		},
+		"body": notifyData,
 	}); err != nil {
-		return nil, err
-	}
-	payment.PaidAt = paidAt
-	if _, err := s.activateMembershipFromPayment(ctx, payment, *paidAt); err != nil {
 		return nil, err
 	}
 	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
@@ -1226,9 +1280,16 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 	if mode == "strict" {
 		cost = creditCostPrecisionFoodAnalysis
 		analysisLabel = "精准分析"
+	} else if mode == "strict_separate" {
+		cost = creditCostPrecisionFoodAnalysis
+		analysisLabel = "精准分项分析"
 	} else if mode == "strict_web_search" {
 		cost = creditCostPrecisionFoodAnalysis
 		analysisLabel = "联网精准分析"
+	} else if mode == "fast" {
+		analysisLabel = "快速分析"
+	} else if mode == "fast_web_search" {
+		analysisLabel = "快速联网分析"
 	} else if mode == "standard_web_search" {
 		analysisLabel = "联网分析"
 	} else if mode == "standard_packaged_experiment" {
@@ -1257,7 +1318,7 @@ func (s *MembershipService) ValidateFoodAnalysisCredits(ctx context.Context, use
 	if err != nil {
 		return nil, err
 	}
-	if (mode == "strict" || mode == "strict_web_search" || mode == "experimental" || mode == "gemini35_flash_grouped" || mode == "strict_correction") && !canUsePrecisionMode(membership) {
+	if (mode == "strict" || mode == "strict_separate" || mode == "strict_web_search" || mode == "experimental" || mode == "gemini35_flash_grouped" || mode == "strict_correction") && !canUsePrecisionMode(membership) {
 		return nil, &commonerrors.AppError{Code: 10005, Message: "精准模式仅对标准版和进阶版开放，请升级或开通后再试。", HTTPStatus: 402}
 	}
 	return s.validateCredits(ctx, userID, cost, analysisLabel, recordedOn, membership, user)
@@ -1669,6 +1730,82 @@ func (s *MembershipService) planDailyCredits(ctx context.Context, planCode strin
 		return 0, err
 	}
 	return maxInt(plan.DailyCredits, 0), nil
+}
+
+func (s *MembershipService) queryWechatOrder(ctx context.Context, orderNo string) (map[string]any, error) {
+	payCfg, err := s.wechatPayConfig()
+	if err != nil {
+		return nil, err
+	}
+	canonicalURL := "/v3/pay/transactions/out-trade-no/" + url.PathEscape(orderNo) + "?mchid=" + url.QueryEscape(payCfg.MchID)
+	auth, err := buildWechatPayAuthorization(payCfg.MchID, payCfg.SerialNo, payCfg.PrivateKey, http.MethodGet, canonicalURL, "")
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(wechatPayAPIBaseURL, "/")+canonicalURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", auth)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "food-link/1.0")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, &commonerrors.AppError{Code: 10000, Message: "微信查单失败: " + parseWechatErrorMessage(respBody), HTTPStatus: 502}
+	}
+	var wxResp map[string]any
+	if err := json.Unmarshal(respBody, &wxResp); err != nil {
+		return nil, err
+	}
+	return wxResp, nil
+}
+
+func (s *MembershipService) markPaymentPaidFromWechatState(ctx context.Context, payment *domain.MembershipPayment, state map[string]any, notifyMeta map[string]any) error {
+	if payment == nil {
+		return commonerrors.ErrNotFound
+	}
+	paidAt := parseTime(fmt.Sprintf("%v", state["success_time"]))
+	if paidAt == nil {
+		now := time.Now()
+		paidAt = &now
+	}
+	transactionID := stringPtrFromAny(state["transaction_id"])
+	bankType := stringPtrFromAny(state["bank_type"])
+	payload := map[string]any{
+		"resource_decrypted": state,
+	}
+	for key, value := range notifyMeta {
+		payload[key] = value
+	}
+	if err := s.repo.UpdatePaymentByOrderNo(ctx, payment.OrderNo, map[string]any{
+		"status":            "paid",
+		"wx_transaction_id": wxString(transactionID),
+		"wx_bank_type":      wxString(bankType),
+		"paid_at":           *paidAt,
+		"notify_payload":    payload,
+	}); err != nil {
+		return err
+	}
+	payment.Status = "paid"
+	payment.PaidAt = paidAt
+	payment.WxTransactionID = transactionID
+	payment.WxBankType = bankType
+	_, err := s.activateMembershipFromPayment(ctx, payment, *paidAt)
+	return err
+}
+
+func paidTotalFromWechatState(state map[string]any) int {
+	amount, _ := state["amount"].(map[string]any)
+	paidTotal := intFromAny(amount["payer_total"])
+	if paidTotal == 0 {
+		paidTotal = intFromAny(amount["total"])
+	}
+	return paidTotal
 }
 
 func applyEarlyPaidMultiplier(credits int, meta *earlyUserMembershipMeta) int {
@@ -2198,10 +2335,16 @@ func normalizeFoodExecutionMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "lite", "lightweight":
 		return "lite"
+	case "fast", "qwen_fast", "qwen-fast", "quick":
+		return "fast"
+	case "fast_web_search", "fast-web-search", "qwen_fast_web_search", "qwen-fast-web-search", "quick_web_search":
+		return "fast_web_search"
 	case "standard_web_search", "web_search", "standard-web-search":
 		return "standard_web_search"
 	case "standard_packaged_experiment", "packaged_experiment", "standard-packaged-experiment":
 		return "standard_packaged_experiment"
+	case "strict_separate", "precision_separate", "strict-separate":
+		return "strict_separate"
 	case "strict", "precision":
 		return "strict"
 	case "strict_web_search", "precision_web_search", "strict-web-search":

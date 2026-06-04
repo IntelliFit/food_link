@@ -55,7 +55,7 @@ func (m *mockTaskCreditGuard) ValidateFoodAnalysisCredits(ctx context.Context, u
 	m.validateCalls = append(m.validateCalls, unit)
 	m.validateModes = append(m.validateModes, executionMode)
 	cost := 2 * unit
-	if executionMode == "strict" || executionMode == "experimental" {
+	if executionMode == "strict" || executionMode == "strict_separate" || executionMode == "experimental" {
 		cost = 4 * unit
 	} else if executionMode == "standard_correction" {
 		cost = 1 * unit
@@ -150,6 +150,33 @@ func TestTaskService_SubmitAnalyzeTask_WithImages(t *testing.T) {
 	assert.Equal(t, []string{"https://example.com/1.jpg", "https://example.com/2.jpg"}, task.ImagePaths)
 }
 
+func TestTaskService_SubmitAnalyzeTask_StrictSeparateCreatesPrecisionPlan(t *testing.T) {
+	db, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
+	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
+	guard := &mockTaskCreditGuard{}
+	svc.ConfigureCreditGuard(guard)
+	ctx := context.Background()
+
+	mode := "strict_separate"
+	taskID, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{
+		ImageURLs:     []string{"https://example.com/noodle.jpg"},
+		ExecutionMode: &mode,
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, taskID)
+	require.Equal(t, []string{"strict_separate"}, guard.validateModes)
+
+	task, err := taskRepo.GetTaskByID(ctx, taskID)
+	require.NoError(t, err)
+	assert.Equal(t, "precision_plan", task.TaskType)
+	assert.Equal(t, "strict_separate", task.Payload["execution_mode"])
+	assert.NotEmpty(t, task.Payload["precision_session_id"])
+
+	var session analyzedomain.PrecisionSession
+	require.NoError(t, db.First(&session, "id = ?", task.Payload["precision_session_id"]).Error)
+	assert.Equal(t, "experimental", session.ExecutionMode)
+}
+
 func TestTaskService_SubmitAnalyzeTask_RejectsMoreThanThreeImages(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
@@ -167,6 +194,61 @@ func TestTaskService_SubmitAnalyzeTask_RejectsMoreThanThreeImages(t *testing.T) 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "最多支持 3 张图片")
 	assert.Empty(t, guard.validateCalls)
+}
+
+func TestBuildSubmitTaskPayloadPreservesIntegratedPackagedCorrectionFields(t *testing.T) {
+	remaining := 520.5
+	offset := -480
+	payload := buildSubmitTaskPayload(SubmitTaskInput{
+		MealType:              "snack",
+		Province:              "上海市",
+		City:                  "上海市",
+		District:              "徐汇区",
+		DietGoal:              "fat_loss",
+		ActivityTiming:        "after_training",
+		UserGoal:              "减脂",
+		RemainingCalories:     &remaining,
+		SuggestRatioEnabled:   true,
+		AdditionalContext:     "桃李面包只吃半包",
+		ModelName:             "qwen3.6-flash",
+		AnalysisEngine:        "db_first",
+		TimezoneOffsetMinutes: &offset,
+		IsMultiView:           true,
+		PreviousResult: map[string]any{
+			"items": []any{map[string]any{"itemId": 12, "name": "桃李豆沙小饼面包"}},
+		},
+		CorrectionItems: []map[string]any{{
+			"sourceItemId":         12,
+			"sourceName":           "桃李豆沙小饼面包",
+			"name":                 "桃李豆沙小饼面包（半包）",
+			"estimatedWeightGrams": 27.5,
+			"nameEdited":           true,
+			"weightEdited":         true,
+			"nutritionEdited":      true,
+			"nutrients":            map[string]any{"calories": 90.0, "protein": 4.2},
+		}},
+		SourceType: "Image",
+	}, "2026-06-04", "fast_web_search")
+
+	assert.Equal(t, "fast_web_search", payload["execution_mode"])
+	assert.Equal(t, true, payload["suggest_ratio_enabled"])
+	assert.Equal(t, &remaining, payload["remaining_calories"])
+	assert.Equal(t, "桃李面包只吃半包", payload["additionalContext"])
+	assert.Equal(t, "db_first", payload["analysis_engine"])
+	assert.Equal(t, offset, payload["timezone_offset_minutes"])
+	assert.Equal(t, true, payload["is_multi_view"])
+	assert.Equal(t, "image", payload["source_type"])
+	assert.NotEmpty(t, mapFromAny(payload["previousResult"]))
+	items := mapSliceFromAny(payload["correctionItems"])
+	require.Len(t, items, 1)
+	assert.Equal(t, float64(12), numberFromAny(items[0]["sourceItemId"]))
+	assert.Equal(t, "桃李豆沙小饼面包", items[0]["sourceName"])
+	assert.Equal(t, "桃李豆沙小饼面包（半包）", items[0]["name"])
+	assert.Equal(t, true, items[0]["nameEdited"])
+	assert.Equal(t, true, items[0]["weightEdited"])
+	assert.Equal(t, true, items[0]["nutritionEdited"])
+	nutrients := mapFromAny(items[0]["nutrients"])
+	assert.Equal(t, 90.0, nutrients["calories"])
 }
 
 func TestTaskService_EnqueueTaskPublishesQueueMessage(t *testing.T) {

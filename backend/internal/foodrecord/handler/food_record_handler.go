@@ -302,6 +302,10 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		IngredientsText       string         `json:"ingredients_text"`
 		SourceImageURLs       []string       `json:"source_image_urls"`
 		OCRRawText            string         `json:"ocr_raw_text"`
+		NutritionBasisUnit    string         `json:"nutrition_basis_unit"`
+		EnergyUnitRaw         string         `json:"energy_unit_raw"`
+		RawLabelPayload       map[string]any `json:"raw_label_payload"`
+		ConversionStatus      string         `json:"conversion_status"`
 		ExtractConfidence     float64        `json:"extract_confidence"`
 		FieldConfidence       map[string]any `json:"field_confidence"`
 		IngestMethod          string         `json:"ingest_method"`
@@ -344,6 +348,10 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	if !hasNonEmptyString(body.SourceImageURLs) {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "请至少上传一张包装图片", HTTPStatus: 400})
+		return
+	}
 	item, err := h.nutritionSvc.CreatePackagedFood(c.Request.Context(), service.PackagedFoodInput{
 		Brand:                 body.Brand,
 		ProductName:           body.ProductName,
@@ -357,6 +365,10 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		IngredientsText:       body.IngredientsText,
 		SourceImageURLs:       body.SourceImageURLs,
 		OCRRawText:            body.OCRRawText,
+		NutritionBasisUnit:    body.NutritionBasisUnit,
+		EnergyUnitRaw:         body.EnergyUnitRaw,
+		RawLabelPayload:       body.RawLabelPayload,
+		ConversionStatus:      body.ConversionStatus,
 		ExtractConfidence:     body.ExtractConfidence,
 		FieldConfidence:       body.FieldConfidence,
 		IngestMethod:          body.IngestMethod,
@@ -400,6 +412,15 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"item": item})
+}
+
+func hasNonEmptyString(values []string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // POST /api/packaged-food/nutrition-label/recognize

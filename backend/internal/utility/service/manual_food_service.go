@@ -57,3 +57,17 @@ func (s *ManualFoodService) SearchPackaged(ctx context.Context, keyword string, 
 	}
 	return s.repo.SearchPackaged(ctx, keyword, limit)
 }
+
+func (s *ManualFoodService) ListCustomFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	if limit > 120 {
+		limit = 120
+	}
+	return s.repo.ListCustomFoods(ctx, userID, limit, offset)
+}
+
+func (s *ManualFoodService) SaveCustomFood(ctx context.Context, userID string, input repo.CustomFoodInput) (domain.ManualFoodResult, error) {
+	return s.repo.SaveCustomFood(ctx, userID, input)
+}

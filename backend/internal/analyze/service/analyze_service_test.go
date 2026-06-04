@@ -136,6 +136,174 @@ func (m *mockDoubaoWebSearchClient) AnalyzeWithImagesWebSearch(ctx context.Conte
 	return m.result, m.meta, m.err
 }
 
+type mockDashScopeNativeSearchClient struct {
+	result        map[string]any
+	meta          map[string]any
+	err           error
+	imageSetCalls [][]string
+}
+
+func (m *mockDashScopeNativeSearchClient) Analyze(ctx context.Context, prompt, imageURL string) (map[string]any, error) {
+	return m.result, m.err
+}
+
+func (m *mockDashScopeNativeSearchClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, prompt string, imageURLs []string, options DashScopeWebSearchOptions) (map[string]any, map[string]any, error) {
+	m.imageSetCalls = append(m.imageSetCalls, append([]string(nil), imageURLs...))
+	if m.meta != nil {
+		return m.result, m.meta, m.err
+	}
+	return m.result, map[string]any{
+		"native_search":   true,
+		"forced_search":   options.ForcedSearch,
+		"search_strategy": options.SearchStrategy,
+	}, m.err
+}
+
+type fakeAnalyzeNutritionResolver struct {
+	rice                 foodrecorddomain.FoodNutrition
+	ordinaryFoods        map[string]foodrecorddomain.FoodNutrition
+	packagedFood         foodrecorddomain.PackagedFood
+	nescafeFood          foodrecorddomain.PackagedFood
+	sugarfreeDrinkFood   foodrecorddomain.PackagedFood
+	packagedResolveCalls int
+}
+
+func newFakeAnalyzeNutritionResolver() *fakeAnalyzeNutritionResolver {
+	return &fakeAnalyzeNutritionResolver{
+		rice: foodrecorddomain.FoodNutrition{
+			ID:             "rice-1",
+			CanonicalName:  "白米饭",
+			NormalizedName: "白米饭",
+			KcalPer100g:    116,
+			ProteinPer100g: 2.6,
+			CarbsPer100g:   25.9,
+			FatPer100g:     0.3,
+			IsActive:       true,
+		},
+		ordinaryFoods: map[string]foodrecorddomain.FoodNutrition{
+			"卫龙小面筋辣条": {
+				ID:             "normal-weilong-xiaomianjin",
+				CanonicalName:  "卫龙小面筋辣条",
+				NormalizedName: "卫龙小面筋辣条",
+				KcalPer100g:    385,
+				ProteinPer100g: 7.8,
+				CarbsPer100g:   48,
+				FatPer100g:     17,
+				IsActive:       true,
+			},
+		},
+		packagedFood: foodrecorddomain.PackagedFood{
+			ID:             "pkg-taoli-dousha",
+			Brand:          "桃李",
+			ProductName:    "豆沙小饼面包",
+			NormalizedName: "桃李豆沙小饼面包",
+			DisplayName:    "桃李 豆沙小饼面包 55g",
+			NetWeightG:     55,
+			KcalPer100g:    320,
+			ProteinPer100g: 7,
+			CarbsPer100g:   58,
+			FatPer100g:     6,
+			IsActive:       true,
+		},
+		nescafeFood: foodrecorddomain.PackagedFood{
+			ID:             "pkg-nescafe-1plus2",
+			Brand:          "雀巢",
+			ProductName:    "雀巢咖啡1+2 奶香 咖啡固体饮料",
+			NormalizedName: "雀巢咖啡1+2奶香咖啡固体饮料",
+			DisplayName:    "雀巢 雀巢咖啡1+2 奶香 105g",
+			NetWeightG:     105,
+			KcalPer100g:    40.15,
+			ProteinPer100g: 0,
+			CarbsPer100g:   6.6,
+			FatPer100g:     1.5,
+			IsActive:       true,
+		},
+		sugarfreeDrinkFood: foodrecorddomain.PackagedFood{
+			ID:             "pkg-suntory-sugarfree-drink",
+			Brand:          "SUNTORY三得利",
+			ProductName:    "纤漾饮荷叶茉莉花味风味饮料（无糖）",
+			NormalizedName: "suntory三得利纤漾饮荷叶茉莉花味风味饮料无糖",
+			DisplayName:    "SUNTORY三得利 纤漾饮荷叶茉莉花味风味饮料（无糖） 500ml",
+			NetWeightG:     500,
+			KcalPer100g:    18,
+			ProteinPer100g: 0,
+			CarbsPer100g:   0,
+			FatPer100g:     0,
+			IsActive:       true,
+		},
+	}
+}
+
+func (r *fakeAnalyzeNutritionResolver) ResolvePackagedFood(ctx context.Context, input foodrecordrepo.PackagedFoodResolveInput) (*foodrecordrepo.PackagedResolveResult, error) {
+	r.packagedResolveCalls++
+	if strings.Contains(input.Name, "桃李") || strings.Contains(input.Name, "豆沙小饼") {
+		food := r.packagedFood
+		return &foodrecordrepo.PackagedResolveResult{Food: &food, Status: "fuzzy", MatchSource: "fake", Score: 0.92}, nil
+	}
+	if strings.Contains(input.Name, "雀巢") || strings.Contains(strings.ToLower(input.Name), "nescafe") {
+		food := r.nescafeFood
+		return &foodrecordrepo.PackagedResolveResult{Food: &food, Status: "fuzzy", MatchSource: "fake", Score: 0.94}, nil
+	}
+	if strings.Contains(input.Name, "三得利") || strings.Contains(strings.ToLower(input.Name), "suntory") || strings.Contains(input.Name, "纤漾饮") {
+		food := r.sugarfreeDrinkFood
+		return &foodrecordrepo.PackagedResolveResult{Food: &food, Status: "fuzzy", MatchSource: "fake", Score: 0.95}, nil
+	}
+	return &foodrecordrepo.PackagedResolveResult{Status: "unresolved", Score: 0}, nil
+}
+
+func (r *fakeAnalyzeNutritionResolver) SearchPackagedFood(ctx context.Context, query string, limit int) ([]foodrecorddomain.PackagedFood, error) {
+	if strings.Contains(query, "桃李") || strings.Contains(query, "豆沙小饼") {
+		return []foodrecorddomain.PackagedFood{r.packagedFood}, nil
+	}
+	if strings.Contains(query, "雀巢") || strings.Contains(strings.ToLower(query), "nescafe") {
+		return []foodrecorddomain.PackagedFood{r.nescafeFood}, nil
+	}
+	if strings.Contains(query, "三得利") || strings.Contains(strings.ToLower(query), "suntory") || strings.Contains(query, "纤漾饮") {
+		return []foodrecorddomain.PackagedFood{r.sugarfreeDrinkFood}, nil
+	}
+	return nil, nil
+}
+
+func (r *fakeAnalyzeNutritionResolver) ResolveFood(ctx context.Context, name string) (*foodrecordrepo.ResolveResult, error) {
+	if strings.TrimSpace(name) == "白米饭" {
+		food := r.rice
+		return &foodrecordrepo.ResolveResult{Food: &food, Status: "exact_canonical", MatchSource: "fake", Score: 1}, nil
+	}
+	if food, ok := r.ordinaryFoods[strings.TrimSpace(name)]; ok {
+		return &foodrecordrepo.ResolveResult{Food: &food, Status: "exact_canonical", MatchSource: "fake", Score: 1}, nil
+	}
+	return &foodrecordrepo.ResolveResult{Status: "unresolved", Score: 0}, nil
+}
+
+func (r *fakeAnalyzeNutritionResolver) SearchCandidates(ctx context.Context, query string, limit int) ([]foodrecordrepo.SearchCandidate, error) {
+	return nil, nil
+}
+
+func (r *fakeAnalyzeNutritionResolver) EnsureNutritionAlias(ctx context.Context, foodID, rawName string) error {
+	return nil
+}
+
+func (r *fakeAnalyzeNutritionResolver) LogUnresolved(ctx context.Context, rawName string) error {
+	return nil
+}
+
+func (r *fakeAnalyzeNutritionResolver) UpsertDeepSeekNutrition(ctx context.Context, rawName string, unit map[string]any, sources ...string) (string, error) {
+	return "generated-food", nil
+}
+
+type fakeNutritionFallbackEstimator struct {
+	candidates        []UnresolvedNutritionCandidate
+	additionalContext string
+	rows              map[int]map[string]any
+	err               error
+}
+
+func (f *fakeNutritionFallbackEstimator) Estimate(ctx context.Context, candidates []UnresolvedNutritionCandidate, additionalContext string) (map[int]map[string]any, error) {
+	f.candidates = append([]UnresolvedNutritionCandidate(nil), candidates...)
+	f.additionalContext = additionalContext
+	return f.rows, f.err
+}
+
 func setupAnalyzeServiceTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -151,7 +319,10 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	lite := "lite"
 	standard := "standard"
 	standardWeb := "standard_web_search"
+	fast := "fast"
+	fastWeb := "fast_web_search"
 	strictWeb := "strict_web_search"
+	strictSeparate := "strict_separate"
 	packagedExperiment := "standard_packaged_experiment"
 	invalid := "invalid"
 	assert.Equal(t, "strict", normalizeExecutionMode(&strict))
@@ -161,6 +332,9 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	assert.Equal(t, "standard", normalizeExecutionMode(&lite))
 	assert.Equal(t, "standard", normalizeExecutionMode(&standard))
 	assert.Equal(t, "standard_web_search", normalizeExecutionMode(&standardWeb))
+	assert.Equal(t, "fast", normalizeExecutionMode(&fast))
+	assert.Equal(t, "fast_web_search", normalizeExecutionMode(&fastWeb))
+	assert.Equal(t, "strict_separate", normalizeExecutionMode(&strictSeparate))
 	assert.Equal(t, "strict_web_search", normalizeExecutionMode(&strictWeb))
 	assert.Equal(t, "standard_packaged_experiment", normalizeExecutionMode(&packagedExperiment))
 	assert.Equal(t, "standard", normalizeExecutionMode(&invalid))
@@ -283,6 +457,10 @@ func TestResolveModelConfig(t *testing.T) {
 	p, m = resolveModelConfig("gemini-3.5-flash")
 	assert.Equal(t, "gemini", p)
 	assert.Equal(t, "gemini-3.5-flash", m)
+
+	p, m = resolveModelConfig("qwen3.6-flash")
+	assert.Equal(t, "qwen", p)
+	assert.Equal(t, "qwen3.6-flash", m)
 
 	p, m = resolveModelConfig("unknown-model")
 	assert.Equal(t, "gemini", p)
@@ -1541,6 +1719,10 @@ func TestAnalyzeService_ResolveExecutionMode(t *testing.T) {
 	mode = svc.resolveExecutionMode(ctx, "", &strictWeb)
 	assert.Equal(t, "strict_web_search", mode)
 
+	strictSeparate := "strict_separate"
+	mode = svc.resolveExecutionMode(ctx, "", &strictSeparate)
+	assert.Equal(t, "strict_separate", mode)
+
 	packagedExperiment := "standard_packaged_experiment"
 	mode = svc.resolveExecutionMode(ctx, "", &packagedExperiment)
 	assert.Equal(t, "standard_packaged_experiment", mode)
@@ -1599,7 +1781,435 @@ func TestNutritionWeightFromItemFallsBackToWaterMl(t *testing.T) {
 	}))
 }
 
-func TestAnalyzeService_ApplyDBFirstUsesUnifiedNutritionFlowForSnack(t *testing.T) {
+func mixedMealWithPackagedFoodParsed() map[string]any {
+	return map[string]any{
+		"description": "米饭配面包",
+		"items": []any{
+			map[string]any{
+				"name":                 "白米饭",
+				"type":                 "normal",
+				"estimatedWeightGrams": 200.0,
+				"grossWeightGrams":     200.0,
+			},
+			map[string]any{
+				"name":                 "桃李豆沙小饼面包",
+				"estimatedWeightGrams": 80.0,
+				"grossWeightGrams":     80.0,
+			},
+		},
+	}
+}
+
+func mixedMealWithSugarfreePackagedDrinkParsed() map[string]any {
+	return map[string]any{
+		"description": "米饭配无糖气泡水",
+		"items": []any{
+			map[string]any{
+				"name":                 "白米饭",
+				"type":                 "normal",
+				"estimatedWeightGrams": 180.0,
+				"grossWeightGrams":     180.0,
+			},
+			map[string]any{
+				"name":                 "SUNTORY三得利纤漾饮荷叶茉莉花味风味饮料（无糖）",
+				"estimatedWeightGrams": 500.0,
+				"grossWeightGrams":     500.0,
+			},
+		},
+	}
+}
+
+func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesPackagedFoodAcrossMainModes(t *testing.T) {
+	for _, mode := range []string{fastExecutionMode, defaultExecutionMode, precisionExecutionMode, precisionSeparateExecutionMode} {
+		t.Run(mode, func(t *testing.T) {
+			svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+			svc.nutrition = newFakeAnalyzeNutritionResolver()
+
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), mixedMealWithPackagedFoodParsed(), AnalyzeInput{}, mode, "fake", "fake-model", 12)
+			require.NoError(t, err)
+
+			items := toItems(resp["items"])
+			require.Len(t, items, 2)
+			assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+			assert.Equal(t, 200.0, items[0]["estimatedWeightGrams"])
+
+			assert.Equal(t, "snack", items[1]["type"])
+			assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
+			assert.Equal(t, "pkg-taoli-dousha", items[1]["matched_food_id"])
+			assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
+			assert.Equal(t, 55.0, items[1]["grossWeightGrams"])
+			assert.Equal(t, true, items[1]["package_weight_applied"])
+			nutrients := items[1]["nutrients"].(map[string]any)
+			assert.Equal(t, 176.0, nutrients["calories"])
+
+			meta, ok := resp["packaged_food_resolution"].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, true, meta["enabled"])
+			assert.Equal(t, 1, meta["triggered_count"])
+			assert.Equal(t, 1, meta["matched_count"])
+			assert.Equal(t, 1, meta["weight_applied_count"])
+		})
+	}
+}
+
+func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkAcrossModes(t *testing.T) {
+	modes := []string{
+		fastExecutionMode,
+		defaultExecutionMode,
+		precisionExecutionMode,
+		precisionSeparateExecutionMode,
+		fastWebSearchMode,
+		standardWebSearchMode,
+		precisionWebSearchMode,
+	}
+	for _, mode := range modes {
+		t.Run(mode, func(t *testing.T) {
+			ratioClient := &mockLLMClient{result: map[string]any{
+				"items": []any{
+					map[string]any{"index": 0.0, "suggestedRatio": 90.0, "reason": "主食按需保留"},
+					map[string]any{"index": 1.0, "suggestedRatio": 100.0, "reason": "无糖饮料可按整瓶记录"},
+				},
+			}}
+			svc := NewAnalyzeService(&mockLLMClient{}, ratioClient, nil)
+			svc.nutrition = newFakeAnalyzeNutritionResolver()
+
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), mixedMealWithSugarfreePackagedDrinkParsed(), AnalyzeInput{SuggestRatioEnabled: true}, mode, "fake", "fake-model", 12)
+			require.NoError(t, err)
+
+			assert.Equal(t, 2, resp["resolved_count"])
+			assert.Equal(t, 0, resp["unresolved_count"])
+			assert.Equal(t, true, resp["suggest_ratio_enabled"])
+			assert.Equal(t, "applied", resp["suggest_ratio_status"])
+
+			items := toItems(resp["items"])
+			require.Len(t, items, 2)
+			assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+			assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
+			assert.Equal(t, "pkg-suntory-sugarfree-drink", items[1]["matched_food_id"])
+			assert.Equal(t, false, items[1]["is_unresolved"])
+			assert.Equal(t, 500.0, items[1]["estimatedWeightGrams"])
+			assert.Equal(t, "packaged_food_library", items[1]["package_weight_source"])
+			assert.Equal(t, true, items[1]["package_weight_applied"])
+			assert.Equal(t, 100.0, items[1]["suggestedRatio"])
+			assert.Equal(t, "ai", items[1]["suggestedRatioSource"])
+
+			nutrients := items[1]["nutrients"].(map[string]any)
+			assert.Equal(t, 90.0, nutrients["calories"])
+			assert.Equal(t, 0.0, nutrients["protein"])
+			assert.Equal(t, 0.0, nutrients["carbs"])
+			assert.Equal(t, 0.0, nutrients["fat"])
+
+			meta, ok := resp["packaged_food_resolution"].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, true, meta["enabled"])
+			assert.Equal(t, 1, meta["triggered_count"])
+			assert.Equal(t, 1, meta["matched_count"])
+			assert.Equal(t, 1, meta["weight_applied_count"])
+			assert.Equal(t, 0, meta["fallback_count"])
+		})
+	}
+}
+
+func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodAcrossMainModes(t *testing.T) {
+	for _, mode := range []string{fastExecutionMode, defaultExecutionMode, precisionExecutionMode, precisionSeparateExecutionMode} {
+		t.Run(mode, func(t *testing.T) {
+			modelClient := &mockLLMClient{result: mixedMealWithPackagedFoodParsed()}
+			svc := NewAnalyzeService(modelClient, modelClient, nil)
+			svc.dashscopeClient = modelClient
+			svc.gemini35Client = modelClient
+			svc.nutrition = newFakeAnalyzeNutritionResolver()
+
+			modeValue := mode
+			resp, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+				ImageURL:      "https://example.com/mixed-meal.jpg",
+				ExecutionMode: &modeValue,
+			})
+			require.NoError(t, err)
+
+			items := toItems(resp["items"])
+			require.Len(t, items, 2)
+			assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+			assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
+			assert.Equal(t, "pkg-taoli-dousha", items[1]["matched_food_id"])
+			assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
+			assert.Equal(t, true, items[1]["package_weight_applied"])
+
+			meta, ok := resp["packaged_food_resolution"].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, "integrated", meta["mode"])
+			assert.Equal(t, 1, meta["triggered_count"])
+			assert.Equal(t, 1, meta["matched_count"])
+		})
+	}
+}
+
+func TestAnalyzeService_AnalyzeImageIntegratesPackagedFoodAcrossWebSearchModes(t *testing.T) {
+	for _, mode := range []string{fastWebSearchMode, standardWebSearchMode, precisionWebSearchMode} {
+		t.Run(mode, func(t *testing.T) {
+			svc := NewAnalyzeService(&multiImageLLMClient{err: assert.AnError}, &multiImageLLMClient{result: mixedMealWithPackagedFoodParsed()}, nil)
+			svc.ConfigureWebSearcher(&mockWebSearcher{})
+			svc.nutrition = newFakeAnalyzeNutritionResolver()
+
+			var qwenClient *mockDashScopeNativeSearchClient
+			switch mode {
+			case fastWebSearchMode:
+				qwenClient = &mockDashScopeNativeSearchClient{result: mixedMealWithPackagedFoodParsed()}
+				svc.dashscopeClient = qwenClient
+			case precisionWebSearchMode:
+				svc.gemini35Client = &multiImageLLMClient{result: mixedMealWithPackagedFoodParsed()}
+			}
+
+			modeValue := mode
+			resp, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+				ImageURL:      "https://example.com/mixed-meal.jpg",
+				ExecutionMode: &modeValue,
+			})
+			require.NoError(t, err)
+
+			items := toItems(resp["items"])
+			require.Len(t, items, 2)
+			assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+			assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
+			assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
+			assert.Equal(t, true, items[1]["package_weight_applied"])
+
+			meta, ok := resp["packaged_food_resolution"].(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, 1, meta["triggered_count"])
+			assert.Equal(t, 1, meta["matched_count"])
+			if mode == fastWebSearchMode {
+				require.NotNil(t, qwenClient)
+				require.Len(t, qwenClient.imageSetCalls, 1)
+			}
+		})
+	}
+}
+
+func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackWhenPackagedFoodMisses(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = resolver
+
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), map[string]any{
+		"description": "包装零食未入库",
+		"items": []any{
+			map[string]any{
+				"name":                 "卫龙小面筋辣条",
+				"type":                 "snack",
+				"estimatedWeightGrams": 40.0,
+				"grossWeightGrams":     40.0,
+			},
+		},
+	}, AnalyzeInput{}, defaultExecutionMode, "fake", "fake-model", 12)
+	require.NoError(t, err)
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, 1, resolver.packagedResolveCalls)
+	assert.Equal(t, "normal-weilong-xiaomianjin", items[0]["matched_food_id"])
+	assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+	assert.Equal(t, 40.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "not_found", items[0]["package_match_status"])
+	assert.Equal(t, false, items[0]["package_weight_applied"])
+	assert.Equal(t, "包装库未命中，已回退普通营养库", items[0]["package_weight_reason"])
+
+	meta, ok := resp["packaged_food_resolution"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 1, meta["triggered_count"])
+	assert.Equal(t, 0, meta["matched_count"])
+	assert.Equal(t, 1, meta["fallback_count"])
+}
+
+func TestAnalyzeService_FinalizeAnalyzeResponseGeneratesNutritionWhenPackagedAndNormalMiss(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	fallback := &fakeNutritionFallbackEstimator{
+		rows: map[int]map[string]any{
+			0: {
+				"calories": 250.0,
+				"protein":  12.0,
+				"carbs":    30.0,
+				"fat":      8.0,
+			},
+		},
+	}
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = resolver
+	svc.nutritionAI = fallback
+
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), map[string]any{
+		"description": "包装零食没有入库也没有普通营养库条目",
+		"items": []any{
+			map[string]any{
+				"name":                 "未收录包装豆干",
+				"type":                 "snack",
+				"estimatedWeightGrams": 30.0,
+				"grossWeightGrams":     30.0,
+			},
+		},
+	}, AnalyzeInput{AdditionalContext: "包装库未命中时允许 AI 保守估算"}, defaultExecutionMode, "fake", "fake-model", 12)
+	require.NoError(t, err)
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	require.Len(t, fallback.candidates, 1)
+	assert.Equal(t, "未收录包装豆干", fallback.candidates[0].Name)
+	assert.Equal(t, 30.0, fallback.candidates[0].EstimatedWeightGrams)
+	assert.Equal(t, "包装库未命中时允许 AI 保守估算", fallback.additionalContext)
+	assert.Equal(t, 1, resolver.packagedResolveCalls)
+	assert.Equal(t, "not_found", items[0]["package_match_status"])
+	assert.Equal(t, false, items[0]["package_weight_applied"])
+	assert.Equal(t, "deepseek_generated", items[0]["nutrition_source"])
+	assert.Equal(t, "deepseek_generated", items[0]["resolve_status"])
+	assert.Equal(t, false, items[0]["is_unresolved"])
+	assert.Equal(t, "generated-food", items[0]["matched_food_id"])
+	assert.Equal(t, true, items[0]["nutrition_persisted"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.Equal(t, 75.0, nutrients["calories"])
+	assert.Equal(t, 3.6, nutrients["protein"])
+	assert.Equal(t, 1, resp["resolved_count"])
+	assert.Equal(t, 0, resp["unresolved_count"])
+
+	meta, ok := resp["packaged_food_resolution"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 1, meta["triggered_count"])
+	assert.Equal(t, 0, meta["matched_count"])
+	assert.Equal(t, 1, meta["fallback_count"])
+}
+
+func TestAnalyzeService_ApplyDBFirstToItemsIntegratesPackagedFoodForWorkerPrecision(t *testing.T) {
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = newFakeAnalyzeNutritionResolver()
+
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{
+		{
+			"name":                 "白米饭",
+			"type":                 "normal",
+			"estimatedWeightGrams": 150.0,
+			"grossWeightGrams":     150.0,
+		},
+		{
+			"name":                 "桃李豆沙小饼面包",
+			"estimatedWeightGrams": 90.0,
+			"grossWeightGrams":     90.0,
+		},
+	}, "精准分项估重后统一回算")
+
+	require.Len(t, items, 2)
+	assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+	assert.Equal(t, 150.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
+	assert.Equal(t, "pkg-taoli-dousha", items[1]["matched_food_id"])
+	assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
+	assert.Equal(t, true, items[1]["package_weight_applied"])
+}
+
+func TestAnalyzeService_ApplyDBFirstToItemsIntegratesNescafeFromPrecisionAggregateName(t *testing.T) {
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = newFakeAnalyzeNutritionResolver()
+
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"name":                 "雀巢奶香速溶咖啡固体饮料",
+		"estimatedWeightGrams": 105.0,
+		"grossWeightGrams":     105.0,
+	}}, "精准分项聚合后的包装食品名称")
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "snack", items[0]["type"])
+	assert.Equal(t, "packaged_food_library", items[0]["nutrition_source"])
+	assert.Equal(t, "pkg-nescafe-1plus2", items[0]["matched_food_id"])
+	assert.Equal(t, 105.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "packaged_food_library", items[0]["package_weight_source"])
+	assert.Equal(t, true, items[0]["package_weight_applied"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.InDelta(t, 42.16, nutrients["calories"], 0.01)
+}
+
+func TestAnalyzeService_ApplyDBFirstToItemsUsesOCREvidenceForGenericPackagedAggregate(t *testing.T) {
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = newFakeAnalyzeNutritionResolver()
+
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"name":                 "奶香速溶咖啡固体饮料",
+		"estimatedWeightGrams": 96.0,
+		"grossWeightGrams":     96.0,
+		"ocrText":              []any{"雀巢咖啡1+2奶香", "净含量105克"},
+		"recognitionEvidence":  "包装正面可见雀巢咖啡1+2奶香字样",
+		"weightEvidence":       "包装显示净含量105克",
+	}}, "精准分项聚合名称泛化，但 OCR 保留包装证据")
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "snack", items[0]["type"])
+	assert.Equal(t, "packaged_food_library", items[0]["nutrition_source"])
+	assert.Equal(t, "pkg-nescafe-1plus2", items[0]["matched_food_id"])
+	assert.Equal(t, 105.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "packaged_food_library", items[0]["package_weight_source"])
+	assert.Equal(t, true, items[0]["package_weight_applied"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.InDelta(t, 42.16, nutrients["calories"], 0.01)
+}
+
+func TestAnalyzeService_ApplyDBFirstToItemsUserCorrectionWeightWinsOverPackagedAnchor(t *testing.T) {
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = newFakeAnalyzeNutritionResolver()
+
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"itemId":               12,
+		"name":                 "桃李豆沙小饼面包",
+		"estimatedWeightGrams": 27.5,
+		"grossWeightGrams":     27.5,
+		"userWeightGrams":      27.5,
+		"weightEdited":         true,
+	}}, "用户纠错为半包")
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "packaged_food_library", items[0]["nutrition_source"])
+	assert.Equal(t, 27.5, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, 27.5, items[0]["grossWeightGrams"])
+	assert.Equal(t, "user_context", items[0]["package_weight_source"])
+	assert.Equal(t, true, items[0]["package_weight_applied"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.Equal(t, 88.0, nutrients["calories"])
+}
+
+func TestAnalyzeService_FinalizeAnalyzeResponseKeepsPackagedWeightWithSuggestRatio(t *testing.T) {
+	modes := []string{
+		fastExecutionMode,
+		defaultExecutionMode,
+		precisionExecutionMode,
+		precisionSeparateExecutionMode,
+		fastWebSearchMode,
+		standardWebSearchMode,
+		precisionWebSearchMode,
+	}
+	for _, mode := range modes {
+		t.Run(mode, func(t *testing.T) {
+			ratioClient := &mockLLMClient{result: map[string]any{
+				"items": []any{
+					map[string]any{"index": 0.0, "suggestedRatio": 80.0, "reason": "主食稍微控制"},
+					map[string]any{"index": 1.0, "suggestedRatio": 60.0, "reason": "包装面包按需食用"},
+				},
+			}}
+			svc := NewAnalyzeService(&mockLLMClient{}, ratioClient, nil)
+			svc.nutrition = newFakeAnalyzeNutritionResolver()
+
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), mixedMealWithPackagedFoodParsed(), AnalyzeInput{SuggestRatioEnabled: true}, mode, "fake", "fake-model", 12)
+			require.NoError(t, err)
+
+			assert.Equal(t, true, resp["suggest_ratio_enabled"])
+			assert.Equal(t, "applied", resp["suggest_ratio_status"])
+			items := toItems(resp["items"])
+			require.Len(t, items, 2)
+			assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+			assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
+			assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
+			assert.Equal(t, 60.0, items[1]["suggestedRatio"])
+			assert.Equal(t, "ai", items[1]["suggestedRatioSource"])
+			assert.Equal(t, true, items[1]["package_weight_applied"])
+		})
+	}
+}
+
+func TestAnalyzeService_ApplyDBFirstUsesPackagedNutritionForSnack(t *testing.T) {
 	db, userRepo := setupAnalyzeServiceTestDB(t)
 	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
 	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
@@ -1634,18 +2244,79 @@ func TestAnalyzeService_ApplyDBFirstUsesUnifiedNutritionFlowForSnack(t *testing.
 
 	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
 	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
-		"name":                 "蛋白棒",
+		"name":                 "BrandA 蛋白棒",
 		"type":                 "snack",
 		"estimatedWeightGrams": 80.0,
 	}}, "")
 
 	require.Len(t, items, 1)
 	assert.Equal(t, "snack", items[0]["type"])
-	assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
-	assert.Equal(t, 80.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, "packaged_food_library", items[0]["nutrition_source"])
+	assert.Equal(t, 100.0, items[0]["estimatedWeightGrams"])
+	assert.Equal(t, true, items[0]["package_weight_applied"])
 	nutrients := items[0]["nutrients"].(map[string]any)
-	assert.Equal(t, 160.0, nutrients["calories"])
-	assert.Equal(t, 8.0, nutrients["protein"])
+	assert.Equal(t, 420.0, nutrients["calories"])
+	assert.Equal(t, 28.0, nutrients["protein"])
+}
+
+func TestAnalyzeService_ApplyDBFirstIntegratesPackagedFoodInMixedMeal(t *testing.T) {
+	db, userRepo := setupAnalyzeServiceTestDB(t)
+	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
+		ID:             "rice-1",
+		CanonicalName:  "白米饭",
+		NormalizedName: "白米饭",
+		KcalPer100g:    116,
+		ProteinPer100g: 2.6,
+		CarbsPer100g:   25.9,
+		FatPer100g:     0.3,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&foodrecorddomain.PackagedFood{
+		ID:             "pkg-taoli-dousha",
+		Brand:          "桃李",
+		ProductName:    "豆沙小饼面包",
+		NormalizedName: "桃李豆沙小饼面包",
+		DisplayName:    "桃李 豆沙小饼面包 55g",
+		NetWeightG:     55,
+		KcalPer100g:    320,
+		ProteinPer100g: 7,
+		CarbsPer100g:   58,
+		FatPer100g:     6,
+		IsActive:       true,
+	}).Error)
+
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{
+		{
+			"name":                 "白米饭",
+			"type":                 "normal",
+			"estimatedWeightGrams": 200.0,
+		},
+		{
+			"name":                 "桃李豆沙小饼面包",
+			"estimatedWeightGrams": 80.0,
+			"grossWeightGrams":     80.0,
+		},
+	}, "")
+
+	require.Len(t, items, 2)
+	assert.Equal(t, "library_exact_canonical", items[0]["nutrition_source"])
+	assert.Equal(t, 200.0, items[0]["estimatedWeightGrams"])
+	riceNutrients := items[0]["nutrients"].(map[string]any)
+	assert.Equal(t, 232.0, riceNutrients["calories"])
+
+	assert.Equal(t, "snack", items[1]["type"])
+	assert.Equal(t, "packaged_food_library", items[1]["nutrition_source"])
+	assert.Equal(t, "pkg-taoli-dousha", items[1]["matched_food_id"])
+	assert.Equal(t, 55.0, items[1]["estimatedWeightGrams"])
+	assert.Equal(t, 55.0, items[1]["grossWeightGrams"])
+	assert.Equal(t, true, items[1]["package_weight_applied"])
+	assert.Equal(t, "packaged_food_library", items[1]["package_weight_source"])
+	packagedNutrients := items[1]["nutrients"].(map[string]any)
+	assert.Equal(t, 176.0, packagedNutrients["calories"])
+	assert.Equal(t, 3.85, packagedNutrients["protein"])
 }
 
 func TestAnalyzeService_ApplyDBFirstPackagedExperimentUsesNetWeightAnchor(t *testing.T) {
@@ -1675,7 +2346,7 @@ func TestAnalyzeService_ApplyDBFirstPackagedExperimentUsesNetWeightAnchor(t *tes
 			"estimatedWeightGrams": 75.0,
 			"grossWeightGrams":     75.0,
 		}},
-	}, dbFirstNutritionOptions{packagedExperimentEnabled: true})
+	}, dbFirstNutritionOptions{packagedExperimentCompatMode: true})
 
 	items := toItems(resp["items"])
 	require.Len(t, items, 1)
@@ -1695,6 +2366,28 @@ func TestAnalyzeService_ApplyDBFirstPackagedExperimentUsesNetWeightAnchor(t *tes
 	assert.Equal(t, 1, debug["triggered_count"])
 	assert.Equal(t, 1, debug["matched_count"])
 	assert.Equal(t, 1, debug["weight_applied_count"])
+}
+
+func TestPackagedExperimentWeightForItemKeepsVisualWeightWhenLibrarySpecIsMuchLarger(t *testing.T) {
+	food := &foodrecorddomain.PackagedFood{
+		ID:          "pkg-pumpkin-bread-bulk",
+		Brand:       "TASTY ELF",
+		ProductName: "低糖小南瓜面包",
+		NetWeightG:  1100,
+	}
+	item := map[string]any{
+		"name":                 "低糖小南瓜面包",
+		"estimatedWeightGrams": 50.0,
+		"grossWeightGrams":     50.0,
+	}
+
+	weight, meta := packagedExperimentWeightForItem(item, food, []foodrecorddomain.PackagedFood{*food}, "exact_alias", 50, true, nil)
+
+	assert.Equal(t, 50.0, weight)
+	assert.Equal(t, "matched_weight_conflict", meta["package_match_status"])
+	assert.Equal(t, "ai_estimate", meta["package_weight_source"])
+	assert.Equal(t, false, meta["package_weight_applied"])
+	assert.Contains(t, fmt.Sprint(meta["package_weight_reason"]), "1100g")
 }
 
 func TestAnalyzeService_ApplyDBFirstPackagedExperimentKeepsAIWeightForAmbiguousSpecs(t *testing.T) {
@@ -1737,7 +2430,7 @@ func TestAnalyzeService_ApplyDBFirstPackagedExperimentKeepsAIWeightForAmbiguousS
 			"estimatedWeightGrams": 80.0,
 			"grossWeightGrams":     80.0,
 		}},
-	}, dbFirstNutritionOptions{packagedExperimentEnabled: true})
+	}, dbFirstNutritionOptions{packagedExperimentCompatMode: true})
 
 	items := toItems(resp["items"])
 	require.Len(t, items, 1)
@@ -1777,7 +2470,7 @@ func TestAnalyzeService_ApplyDBFirstPackagedExperimentUserWeightWinsOverLibrary(
 			"estimatedWeightGrams": 75.0,
 			"userWeightGrams":      50.0,
 		}},
-	}, dbFirstNutritionOptions{packagedExperimentEnabled: true})
+	}, dbFirstNutritionOptions{packagedExperimentCompatMode: true})
 
 	items := toItems(resp["items"])
 	require.Len(t, items, 1)
@@ -1916,6 +2609,39 @@ func TestShouldResolvePackagedFoodForExperimentInfersCiciJellyDrink(t *testing.T
 
 	assert.True(t, shouldResolvePackagedFoodForDBFirst(item, true))
 	assert.Equal(t, "snack", item["type"])
+}
+
+func TestShouldResolvePackagedFoodIntegratedInfersTaoliBread(t *testing.T) {
+	item := map[string]any{"name": "桃李豆沙小饼面包"}
+
+	assert.True(t, shouldResolvePackagedFoodForDBFirst(item, true))
+	assert.Equal(t, "snack", item["type"])
+}
+
+func TestShouldResolvePackagedFoodIntegratedInfersNescafeCoffee(t *testing.T) {
+	item := map[string]any{"name": "雀巢奶香速溶咖啡固体饮料"}
+
+	assert.True(t, shouldResolvePackagedFoodForDBFirst(item, true))
+	assert.Equal(t, "snack", item["type"])
+}
+
+func TestShouldResolvePackagedFoodIntegratedInfersSuntorySugarfreeDrink(t *testing.T) {
+	item := map[string]any{"name": "SUNTORY三得利纤漾饮荷叶茉莉花味风味饮料（无糖）"}
+
+	assert.True(t, shouldResolvePackagedFoodForDBFirst(item, true))
+	assert.Equal(t, "snack", item["type"])
+}
+
+func TestShouldResolvePackagedFoodIntegratedUsesOCREvidence(t *testing.T) {
+	item := map[string]any{
+		"name":           "奶香速溶咖啡固体饮料",
+		"ocrText":        []any{"雀巢咖啡1+2奶香", "净含量105克"},
+		"weightEvidence": "包装显示净含量105克",
+	}
+
+	assert.True(t, shouldResolvePackagedFoodForDBFirst(item, true))
+	assert.Equal(t, "snack", item["type"])
+	assert.Contains(t, packagedFoodResolveQuery(item), "雀巢咖啡1+2奶香")
 }
 
 func TestParseItems_Empty(t *testing.T) {

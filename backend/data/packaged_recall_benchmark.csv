@@ -1,0 +1,26 @@
+query,expected_behavior,expected_brand,expected_product_contains,expected_net_weight_g,expected_net_content_value,expected_net_content_unit,input_brand,input_spec_text,input_flavor_text,input_barcode,category,comment
+喜之郎Cici果冻爽（橙味）,match,喜之郎,橙,258,,,喜之郎,,橙味,,known_packaged,真实库 integration 已覆盖的橙味 Cici
+喜之郎 cici 橙汁饮料 258g,match,喜之郎,橙,258,,,喜之郎,258g,橙味,,known_packaged,品牌+口味+规格
+Cici果粒爽橙味,match,喜之郎,橙,258,,,喜之郎,,橙味,,known_packaged,省略中文品牌但带 Cici/口味
+SUNTORY三得利纤漾饮荷叶茉莉花味风味饮料（无糖）,match,三得利,纤漾饮,,500,ml,SUNTORY三得利,,荷叶茉莉,,known_packaged,真实库 integration 已覆盖的三得利无糖饮料
+三得利无糖荷叶茉莉饮料500ml,match,三得利,纤漾饮,,500,ml,三得利,500ml,荷叶茉莉,,known_packaged,用户口语名+容量
+桃李豆沙小饼面包,match,桃李,豆沙小饼,,,,桃李,,,,known_packaged,品牌+商品名
+桃李 豆沙小饼,match,桃李,豆沙小饼,,,,桃李,,,,known_packaged,省略面包
+雀巢咖啡1+2奶香,match,雀巢,奶香,105,,,雀巢,,奶香,,known_packaged,常见固体饮料
+Nescafe 1+2 奶香咖啡,match,雀巢,奶香,105,,,雀巢,,奶香,,known_packaged,英文品牌写法
+士力架花生夹心巧克力70g,match,士力架,花生夹心,70,,,士力架,70g,,,known_packaged,多包装规格样例
+士力架2条装,match,士力架,花生夹心,70,,,士力架,2条装,,,known_packaged,规格口语
+伊利巧乐兹低糖抹茶雪糕,match,伊利,低糖抹茶,,,,伊利,,抹茶,,known_packaged,雪糕包装商品
+光明黄桃大果粒酸奶260g,match,,光明黄桃果粒酸奶,260,,,光明,260g,黄桃,,known_packaged,真实事故相关酸奶规格
+低糖小南瓜面包,match,TASTY ELF,低糖小南瓜面包,1100,,,TASTY ELF,1100g,,,risk_large_pack,大包装/整箱 SKU：命中不代表可直接用作本次重量
+TASTY ELF低糖小南瓜面包1100g,match,TASTY ELF,低糖小南瓜面包,1100,,,TASTY ELF,1100g,,,risk_large_pack,带品牌和大包装规格
+乐事原切马铃薯片,match,乐事,原切马铃薯片,,,,乐事,,,,known_packaged,薯片商品名
+乐事薯片番茄味,match,乐事,墨西哥鸡汁番茄,135,,,乐事,,番茄,,flavor,口味影响排序
+卫龙风吃海带,match,卫龙,风吃海带,,,,卫龙,,,,known_packaged,辣味零食
+喜之郎红葡萄120g,match,喜之郎,红葡萄,120,,,喜之郎,120g,红葡萄,,known_packaged,用户之前查看过的蒟蒻果冻样例
+面包,no_match,,,,,,,,,,negative_generic,普通泛称不应由包装 repo 直接稳定确认 SKU
+酸奶,no_match,,,,,,,,,,negative_generic,普通泛称不应稳定确认具体 SKU
+咖啡,no_match,,,,,,,,,,negative_generic,普通泛称不应稳定确认具体 SKU
+饮料,no_match,,,,,,,,,,negative_generic,普通泛称不应稳定确认具体 SKU
+白米饭,no_match,,,,,,,,,,negative_normal_food,普通餐饮不应命中包装库
+煮玉米,no_match,,,,,,,,,,negative_normal_food,普通食材不应命中包装库

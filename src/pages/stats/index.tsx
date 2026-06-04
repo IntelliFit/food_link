@@ -134,6 +134,41 @@ function scoreToLabel(score: number): string {
   return '重点关注'
 }
 
+function scoreToFocusOverview(score: number, hasCustomFocus: boolean): string {
+  if (score >= 78) {
+    return hasCustomFocus
+      ? '你当前关注的指标整体更偏向保护，自定义方向也会跟随卡片一起纳入参考。'
+      : '你当前关注的核心指标整体更偏向保护。'
+  }
+  if (score >= 60) {
+    return hasCustomFocus
+      ? '你当前关注的指标总体还算稳，但自定义方向和核心指标里已经有一些可优化项。'
+      : '你当前关注的核心指标总体还算稳，但已经出现一些可优化项。'
+  }
+  if (score >= 42) {
+    return hasCustomFocus
+      ? '你当前关注的指标已经出现明显拖累，建议优先处理分数最低的关注项。'
+      : '你当前关注的核心指标已经出现明显拖累，建议优先处理分数最低的一项。'
+  }
+  return hasCustomFocus
+    ? '你当前关注的指标处在较高压力区，先从最可执行的一项小步调整。'
+    : '你当前关注的核心指标处在较高压力区，先从最可执行的一项小步调整。'
+}
+
+function averageRiskCardScore(cards: RiskCard[], projectDelta = false): number | null {
+  const validScores = cards
+    .map(card => {
+      const baseScore = toSafeNumber(card.score, NaN)
+      if (!Number.isFinite(baseScore)) return null
+      const delta = projectDelta ? toSafeNumber(card.delta, 0) : 0
+      return Math.round(Math.max(0, Math.min(100, baseScore + delta)))
+    })
+    .filter((score): score is number => typeof score === 'number')
+
+  if (validScores.length === 0) return null
+  return Math.round(validScores.reduce((sum, score) => sum + score, 0) / validScores.length)
+}
+
 function riskCardIcon(key: string): string {
   switch (key) {
     case 'hypertension': return 'tianpingzuo'
@@ -920,8 +955,6 @@ function StatsPage() {
   const hasEnoughHealthIndexData = healthIndex?.has_enough_data ?? false
   const overallRiskScore = healthIndex?.overall_score ?? 0
   const projectedOverallScore = healthIndex?.projected_score ?? 0
-  const overallTrendLabel = healthIndex?.overall_trend_label ?? ''
-  const overviewCopy = healthIndex?.overview_copy ?? ''
   const signalChips = healthIndex?.signal_chips ?? []
   const riskCards = healthIndex?.risk_cards ?? []
   const customRiskCards = healthIndex?.custom_risk_cards ?? []
@@ -959,6 +992,13 @@ function StatsPage() {
       return option?.is_custom ? pendingCustomRiskCardFromOption(option) : null
     })
     .filter((card): card is RiskCard => Boolean(card))
+  const focusOverallScore = averageRiskCardScore(visibleRiskCards) ?? overallRiskScore
+  const focusProjectedScore = averageRiskCardScore(visibleRiskCards, true) ?? projectedOverallScore
+  const hasVisibleCustomFocus = visibleRiskCards.some(card => card.is_custom)
+  const focusOverviewCopy = scoreToFocusOverview(focusOverallScore, hasVisibleCustomFocus)
+  const focusScoreHint = hasVisibleCustomFocus
+    ? '按当前展示的核心指标与自定义 AI 指标综合计算'
+    : '按当前展示的核心关注指标综合计算'
   const selectedRiskSummary = selectedRiskItems.map(item => item.short).join('、')
   const topIssues = healthIndex?.top_issues ?? []
   const actionList = healthIndex?.action_list ?? []
@@ -1032,22 +1072,22 @@ function StatsPage() {
             <View className='stats-card risk-overview-card'>
               <View className='risk-overview-top'>
                 <View className='risk-overview-copy'>
-                  <Text className='risk-overview-title'>健康得分</Text>
+                  <Text className='risk-overview-title'>关注综合分</Text>
                 </View>
                 <View className='risk-overview-actions'>
-                  <View className={`risk-overview-badge tone-${scoreToTone(overallRiskScore)}`}>
-                    <Text className='risk-overview-badge-label'>{overallTrendLabel}</Text>
+                  <View className={`risk-overview-badge tone-${scoreToTone(focusOverallScore)}`}>
+                    <Text className='risk-overview-badge-label'>{scoreToLabel(focusOverallScore)}</Text>
                   </View>
                 </View>
               </View>
 
               <View className='risk-overview-score-row'>
-                <Text className='risk-overview-score'>{overallRiskScore}</Text>
+                <Text className='risk-overview-score'>{focusOverallScore}</Text>
                 <Text className='risk-overview-score-unit'>/ 100</Text>
               </View>
-              <Text className='risk-overview-score-hint'>参考指数，100 表示当前周期内的理想饮食结构</Text>
+              <Text className='risk-overview-score-hint'>{focusScoreHint}</Text>
 
-              <Text className='risk-overview-summary'>{overviewCopy}</Text>
+              <Text className='risk-overview-summary'>{focusOverviewCopy}</Text>
 
               <View className='risk-overview-chip-row'>
                 {signalChips.map((chip) => (
@@ -1339,7 +1379,7 @@ function StatsPage() {
           </View>
           <View className='action-score-delta'>
             <Text className='action-score-delta__dot' />
-            <Text className='action-score-delta__text'>如果完成修改，分数的变化为 {overallRiskScore} → {projectedOverallScore}</Text>
+            <Text className='action-score-delta__text'>如果完成修改，关注综合分约为 {focusOverallScore} → {focusProjectedScore}</Text>
           </View>
 
           </>

@@ -91,6 +91,7 @@ func TestTotalRecipeFoodWaterIntakeMl(t *testing.T) {
 	assert.Equal(t, 0, totalRecipeFoodWaterIntakeMl(nil))
 	assert.Equal(t, 72, totalRecipeFoodWaterIntakeMl([]map[string]any{{"waterMl": 72.0, "ratio": 100.0}}))
 	assert.Equal(t, 36, totalRecipeFoodWaterIntakeMl([]map[string]any{{"water_ml": 72.0, "ratio": 50.0}}))
+	assert.Equal(t, 72, totalRecipeFoodWaterIntakeMl([]map[string]any{{"water_ml": 72.0, "suggested_ratio": 50.0}}))
 	assert.Equal(t, 80, totalRecipeFoodWaterIntakeMl([]map[string]any{{"water_ml": 200.0, "weight": 500.0, "intake": 200.0}}))
 	assert.Equal(t, 64, totalRecipeFoodWaterIntakeMl([]map[string]any{{"nutrients": map[string]any{"waterMl": 63.6}}}))
 }
@@ -118,4 +119,38 @@ func TestNormalizeRecipeItemsForFoodRecordKeepsItemNutrients(t *testing.T) {
 	assert.Equal(t, 18.4, nutrients["carbs"])
 	assert.Equal(t, 12.6, nutrients["fat"])
 	assert.Equal(t, 65.0, got[0]["water_ml"])
+}
+
+func TestNormalizeRecipeItemsForFoodRecordDoesNotApplySuggestedRatio(t *testing.T) {
+	items := []map[string]any{{
+		"name":                   "士力架花生夹心巧克力",
+		"weight":                 70.0,
+		"suggested_ratio":        50.0,
+		"suggested_ratio_source": "ai",
+		"nutrition_source":       "packaged_food_library",
+		"packaged_food_id":       "packaged:snickers-70g",
+		"package_weight_source":  "packaged_food_library",
+		"package_weight_applied": true,
+		"packaged_candidates": []map[string]any{{
+			"id":           "packaged:snickers-70g",
+			"net_weight_g": 70.0,
+		}},
+		"nutrients": map[string]any{"calories": 340.97, "protein": 5.6, "carbs": 42.0, "fat": 16.0},
+	}}
+
+	got := normalizeRecipeItemsForFoodRecord(items, nil)
+
+	require.Len(t, got, 1)
+	assert.Equal(t, 100.0, got[0]["ratio"])
+	assert.Equal(t, 70.0, got[0]["intake"])
+	assert.Equal(t, 50.0, got[0]["suggested_ratio"])
+	assert.Equal(t, "ai", got[0]["suggested_ratio_source"])
+	assert.Equal(t, "packaged:snickers-70g", got[0]["packaged_food_id"])
+	assert.Equal(t, "packaged_food_library", got[0]["package_weight_source"])
+	assert.Equal(t, true, got[0]["package_weight_applied"])
+	candidates, ok := got[0]["packaged_candidates"].([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, candidates, 1)
+	assert.Equal(t, "packaged:snickers-70g", candidates[0]["id"])
+	assert.Equal(t, 70.0, candidates[0]["net_weight_g"])
 }

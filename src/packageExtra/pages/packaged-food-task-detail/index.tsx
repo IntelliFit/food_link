@@ -12,6 +12,8 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 import './index.scss'
 
+const PACKAGED_FOOD_EDIT_DRAFT_KEY = 'packagedFoodEditDraft'
+
 function normalizeString(value: unknown) {
   return String(value || '').trim()
 }
@@ -48,23 +50,24 @@ function formatNumber(value: unknown, unit = '') {
 
 function describeBlockedReason(auto?: PackagedAutoIngestResult | null) {
   switch (auto?.reason) {
+    case 'missing_net_content':
     case 'missing_net_weight':
-      return '缺少净含量/规格，请重拍包装正面，让净含量完整入镜。'
+      return '缺少净含量/规格。可以重拍包装正面，也可以补充净含量后提交待审核。'
     case 'missing_product_name':
-      return '缺少商品名称，请重拍包装正面，让品牌和品名完整入镜。'
+      return '缺少商品名称。可以重拍包装正面，也可以补充品牌和品名后提交待审核。'
     case 'missing_nutrition':
-      return '营养成分表不完整，请重拍能量、蛋白质、脂肪、碳水和钠。'
+      return '营养成分表不完整。可以重拍营养表，也可以按包装标签补齐后提交待审核。'
     case 'conversion_not_closed':
-      return '营养口径无法可靠换算，请确认每100g/每份和每份重量拍清楚。'
+      return '营养口径无法可靠换算。请确认每100g/每份和每份重量，补齐后提交待审核。'
     case 'conflict':
-      return '包装信息之间存在冲突，请重新拍清楚正面净含量和营养表。'
+      return '包装信息之间存在冲突。请重新拍清楚正面净含量和营养表，或补充确认后的标签信息。'
     case 'low_extract_confidence':
     case 'low_name_confidence':
     case 'low_spec_confidence':
     case 'low_nutrition_confidence':
-      return '图片文字识别不够稳定，请减少反光和倾斜后重拍。'
+      return '图片文字识别不够稳定。可以减少反光后重拍，也可以确认已识别字段并补齐缺失信息。'
     default:
-      return '这次识别结果还不够稳定，请重新上传更清晰图片。'
+      return '这次识别结果还不够完整。可以重拍更清晰图片，或补齐缺失字段后提交待审核。'
   }
 }
 
@@ -106,7 +109,7 @@ function statusText(task?: AnalysisTask | null, packaged?: PackagedProductExtrac
   if (reward?.awarded) return `已入库，奖励积分 +${Number(reward.reward_credits) || 1}`
   if (reward?.already_exists || packaged?.auto_ingest_result?.upsert_action === 'updated') return '数据库已有，本次不奖励'
   if (packaged?.auto_ingest_result?.status === 'ingested') return '已入库，本次不奖励'
-  return '未入库，请重拍'
+  return '未入库，可补充'
 }
 
 function taskFailureMessage(task?: AnalysisTask | null) {
@@ -164,6 +167,38 @@ function PackagedFoodTaskDetailPage() {
     Taro.navigateTo({ url: '/packageExtra/pages/packaged-food-edit/index?task_mode=reward_center' })
   }
 
+  const supplementResult = () => {
+    if (!packaged) return
+    const unit = packaged.unit_nutrition_per_100g || {}
+    const netWeight = Number(packaged.net_weight_g) || Number((packaged as any).net_content_value) || 0
+    Taro.setStorageSync(PACKAGED_FOOD_EDIT_DRAFT_KEY, {
+      sourceTaskId: taskId,
+      recognizedNameHint: packaged.product_name,
+      frontImageUrl: imageUrls[0] || '',
+      nutritionImageUrl: imageUrls[1] || '',
+      ingredientsImageUrl: imageUrls[2] || '',
+      brand: packaged.brand || '',
+      productName: packaged.product_name || '',
+      flavorText: packaged.flavor_text || '',
+      packageCategory: packaged.package_category || '',
+      specText: packaged.spec_text || '',
+      barcode: packaged.barcode || '',
+      ingredientsText: packaged.ingredients_text || '',
+      netWeightG: netWeight > 0 ? String(netWeight) : '',
+      servingWeightG: packaged.serving_weight_g ? String(packaged.serving_weight_g) : '',
+      nutritionBasis: '100',
+      energyUnit: 'kcal',
+      calories: unit.calories != null ? String(unit.calories) : '',
+      protein: unit.protein != null ? String(unit.protein) : '',
+      carbs: unit.carbs != null ? String(unit.carbs) : '',
+      fat: unit.fat != null ? String(unit.fat) : '',
+      fiber: unit.fiber != null ? String(unit.fiber) : '',
+      sugar: unit.sugar != null ? String(unit.sugar) : '',
+      sodiumMg: unit.sodiumMg != null ? String(unit.sodiumMg) : '',
+    })
+    Taro.navigateTo({ url: '/packageExtra/pages/packaged-food-edit/index?mode=manual&task_mode=reward_center' })
+  }
+
   return (
     <View className='packaged-task-detail-page'>
       <ScrollView className='packaged-task-detail-scroll' scrollY>
@@ -179,6 +214,11 @@ function PackagedFoodTaskDetailPage() {
             {!isTaskStillRunning(task?.status) && (
               <View className='detail-action-btn secondary' onClick={retryUpload}>
                 <Text className='detail-action-text secondary'>重新上传</Text>
+              </View>
+            )}
+            {packaged && !isTaskStillRunning(task?.status) && auto?.status !== 'ingested' && (
+              <View className='detail-action-btn secondary' onClick={supplementResult}>
+                <Text className='detail-action-text secondary'>补充信息</Text>
               </View>
             )}
           </View>

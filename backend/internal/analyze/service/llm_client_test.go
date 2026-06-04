@@ -164,6 +164,52 @@ func TestOfoxAIClient_Analyze_CustomBaseURL(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestDashScopeClient_Analyze_UsesQwen36FlashThinking(t *testing.T) {
+	client := NewDashScopeClient("fake-key")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", req.URL.String())
+		var payload map[string]any
+		assert.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
+		assert.Equal(t, "qwen3.6-flash", payload["model"])
+		assert.Equal(t, true, payload["enable_thinking"])
+		assert.NotContains(t, payload, "enable_search")
+		body := `{"choices":[{"message":{"content":"{\"description\":\"快速识别\",\"items\":[{\"name\":\"米饭\",\"estimatedWeightGrams\":100}]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	result, err := client.Analyze(context.Background(), "test prompt", "https://example.com/img.jpg")
+	assert.NoError(t, err)
+	assert.Equal(t, "快速识别", result["description"])
+}
+
+func TestDashScopeClient_AnalyzeWithImagesDashScopeWebSearch(t *testing.T) {
+	client := NewDashScopeClient("fake-key")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var payload map[string]any
+		assert.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
+		assert.Equal(t, true, payload["enable_search"])
+		options := payload["search_options"].(map[string]any)
+		assert.Equal(t, true, options["forced_search"])
+		assert.Equal(t, "turbo", options["search_strategy"])
+		body := `{"choices":[{"message":{"content":"{\"description\":\"快速联网\",\"items\":[{\"name\":\"酸奶\",\"estimatedWeightGrams\":260}]}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	result, meta, err := client.AnalyzeWithImagesDashScopeWebSearch(context.Background(), "test prompt", []string{"https://example.com/img.jpg"}, DashScopeWebSearchOptions{ForcedSearch: true})
+	assert.NoError(t, err)
+	assert.Equal(t, "快速联网", result["description"])
+	assert.Equal(t, true, meta["native_search"])
+	assert.Equal(t, "qwen3.6-flash", meta["model"])
+}
+
 func TestOfoxAIClient_Analyze_HTMLResponse(t *testing.T) {
 	client := NewOfoxAIClient("fake-key", "gemini-3-flash-preview")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

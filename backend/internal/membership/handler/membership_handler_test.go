@@ -42,6 +42,9 @@ func (m *mockMembershipService) GetRewardCenter(ctx context.Context, userID stri
 func (m *mockMembershipService) CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error) {
 	return m.createPaymentResult, m.createPaymentErr
 }
+func (m *mockMembershipService) SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error) {
+	return map[string]any{"synced": true, "order_no": orderNo}, nil
+}
 func (m *mockMembershipService) WechatNotify(ctx context.Context, paymentID string) error {
 	return m.wechatNotifyErr
 }
@@ -65,6 +68,7 @@ func setupRouter(h *MembershipHandler) *gin.Engine {
 	r.GET("/api/membership/plans", h.ListPlans)
 	r.GET("/api/membership/me", h.GetMyMembership)
 	r.POST("/api/membership/pay/create", h.CreatePayment)
+	r.POST("/api/membership/pay/sync", h.SyncPayment)
 	r.POST("/api/payment/wechat/notify/membership", h.WechatNotify)
 	r.POST("/api/membership/rewards/share-poster/claim", h.ClaimSharePosterReward)
 	return r
@@ -126,6 +130,24 @@ func TestMembershipHandler_CreatePaymentMissingPlanCode(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMembershipHandler_SyncPayment(t *testing.T) {
+	h := NewMembershipHandler(&mockMembershipService{})
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"order_no": "PM1"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/membership/pay/sync", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, true, data["synced"])
+	assert.Equal(t, "PM1", data["order_no"])
 }
 
 func TestMembershipHandler_WechatNotifyRawSuccess(t *testing.T) {

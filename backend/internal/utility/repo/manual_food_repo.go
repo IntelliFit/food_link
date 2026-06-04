@@ -3,11 +3,13 @@ package repo
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	fooddomain "food_link/backend/internal/foodrecord/domain"
@@ -15,12 +17,31 @@ import (
 	"food_link/backend/internal/utility/domain"
 	"food_link/backend/pkg/storage"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ManualFoodRepo struct {
 	db      *gorm.DB
 	storage *storage.Client
+}
+
+type CustomFoodInput struct {
+	ID                 string
+	Title              string
+	DefaultWeightGrams float64
+	TotalCalories      float64
+	TotalProtein       float64
+	TotalCarbs         float64
+	TotalFat           float64
+	NutrientsPer100g   map[string]any
+	ExtraNutrients     map[string]any
+	ImagePath          *string
+	ImagePaths         []string
+	PortionLabel       string
+	RecommendReason    string
+	ShareToPublic      bool
 }
 
 func NewManualFoodRepo(db *gorm.DB, storageClient ...*storage.Client) *ManualFoodRepo {
@@ -65,6 +86,163 @@ func (r *ManualFoodRepo) Browse(ctx context.Context, userID string, limit int) (
 	return result, nil
 }
 
+func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, input CustomFoodInput) (domain.ManualFoodResult, error) {
+	userID = strings.TrimSpace(userID)
+	title := strings.TrimSpace(input.Title)
+	if userID == "" {
+		return domain.ManualFoodResult{}, fmt.Errorf("user id is required")
+	}
+	if title == "" {
+		return domain.ManualFoodResult{}, fmt.Errorf("title is required")
+	}
+	normalizedTitle := normalizeCustomFoodTitle(title)
+	id := strings.TrimSpace(input.ID)
+	if _, err := uuid.Parse(id); err != nil {
+		id = uuid.New().String()
+	}
+	defaultWeight := input.DefaultWeightGrams
+	if defaultWeight <= 0 {
+		defaultWeight = 100
+	}
+	nutrientsPer100g := normalizeNutrientMap(input.NutrientsPer100g)
+	if len(nutrientsPer100g) == 0 {
+		nutrientsPer100g = map[string]any{
+			"calories": input.TotalCalories,
+			"protein":  input.TotalProtein,
+			"carbs":    input.TotalCarbs,
+			"fat":      input.TotalFat,
+			"fiber":    0,
+			"sugar":    0,
+		}
+	}
+	extraNutrients := normalizeNutrientMap(input.ExtraNutrients)
+	if len(extraNutrients) == 0 {
+		extraNutrients = nutrientsPer100g
+	}
+	imagePaths := compactStrings(input.ImagePaths)
+	if len(imagePaths) == 0 && input.ImagePath != nil && strings.TrimSpace(*input.ImagePath) != "" {
+		imagePaths = []string{strings.TrimSpace(*input.ImagePath)}
+	}
+	var imagePath *string
+	if len(imagePaths) > 0 {
+		first := imagePaths[0]
+		imagePath = &first
+	}
+	publicStatus := "private"
+	if input.ShareToPublic {
+		publicStatus = "pending"
+	}
+	now := time.Now()
+	row := domain.UserCustomFood{
+		ID:                 id,
+		UserID:             userID,
+		Title:              title,
+		NormalizedTitle:    normalizedTitle,
+		Category:           "custom",
+		DefaultWeightGrams: defaultWeight,
+		TotalCalories:      input.TotalCalories,
+		TotalProtein:       input.TotalProtein,
+		TotalCarbs:         input.TotalCarbs,
+		TotalFat:           input.TotalFat,
+		NutrientsPer100g:   nutrientsPer100g,
+		ExtraNutrients:     extraNutrients,
+		ImagePath:          imagePath,
+		ImagePaths:         imagePaths,
+		PortionLabel:       strings.TrimSpace(input.PortionLabel),
+		RecommendReason:    strings.TrimSpace(input.RecommendReason),
+		PublicStatus:       publicStatus,
+		Status:             "active",
+		CreatedAt:          &now,
+		UpdatedAt:          &now,
+	}
+	if row.PortionLabel == "" {
+		row.PortionLabel = fmt.Sprintf("%.0fg", defaultWeight)
+	}
+	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "user_id"}, {Name: "normalized_title"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"title",
+			"category",
+			"default_weight_grams",
+			"total_calories",
+			"total_protein",
+			"total_carbs",
+			"total_fat",
+			"nutrients_per_100g",
+			"extra_nutrients",
+			"image_path",
+			"image_paths",
+			"portion_label",
+			"recommend_reason",
+			"public_status",
+			"status",
+			"updated_at",
+		}),
+	}).Create(&row).Error; err != nil {
+		return domain.ManualFoodResult{}, err
+	}
+	var saved domain.UserCustomFood
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND normalized_title = ? AND status <> ?", userID, normalizedTitle, "deleted").
+		First(&saved).Error; err != nil {
+		return domain.ManualFoodResult{}, err
+	}
+	return r.manualFoodResultFromCustomFood(saved), nil
+}
+
+func (r *ManualFoodRepo) ListCustomFoods(ctx context.Context, userID string, limit int, offset int) ([]domain.ManualFoodResult, bool, error) {
+	if strings.TrimSpace(userID) == "" {
+		return []domain.ManualFoodResult{}, false, nil
+	}
+	limit = clampLimit(limit, 30, 120)
+	if offset < 0 {
+		offset = 0
+	}
+	var rows []domain.UserCustomFood
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND status <> ?", userID, "deleted").
+		Order("updated_at desc NULLS LAST, created_at desc NULLS LAST").
+		Limit(limit + 1).
+		Offset(offset).
+		Find(&rows).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return []domain.ManualFoodResult{}, false, nil
+		}
+		return nil, false, err
+	}
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit]
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, r.manualFoodResultFromCustomFood(row))
+	}
+	return results, hasMore, nil
+}
+
+func (r *ManualFoodRepo) searchCustomFoods(ctx context.Context, userID string, query string, limit int) ([]domain.ManualFoodResult, error) {
+	if strings.TrimSpace(userID) == "" {
+		return []domain.ManualFoodResult{}, nil
+	}
+	var rows []domain.UserCustomFood
+	like := "%" + strings.ToLower(strings.TrimSpace(query)) + "%"
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND status <> ? AND LOWER(title) LIKE ?", userID, "deleted", like).
+		Order("updated_at desc NULLS LAST, created_at desc NULLS LAST").
+		Limit(limit).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		result := r.manualFoodResultFromCustomFood(row)
+		result.MatchScore = computeMatchScore(query, result.Title)
+		results = append(results, result)
+	}
+	return results, nil
+}
+
 func (r *ManualFoodRepo) Catalog(ctx context.Context, userID string, category string, page int, pageSize int) (*domain.ManualFoodCatalogResult, error) {
 	category = normalizeManualFoodCatalogCategory(category)
 	if page <= 0 {
@@ -98,6 +276,12 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 	limit = clampLimit(limit, 20, 60)
 
 	results := make([]domain.ManualFoodResult, 0, limit*2)
+	customRows, err := r.searchCustomFoods(ctx, userID, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	results = append(results, customRows...)
+
 	catalogRows, err := r.searchCatalogItems(ctx, query, limit)
 	if err != nil {
 		return nil, err
@@ -199,6 +383,9 @@ func (r *ManualFoodRepo) listCatalogItems(ctx context.Context, userID string, ca
 			items = items[:pageSize]
 		}
 		return items, hasMore, nil
+	}
+	if category == "custom" {
+		return r.ListCustomFoods(ctx, userID, pageSize, offset)
 	}
 
 	userItems, err := r.listGlobalFrequentRecordItems(ctx, category, pageSize+1, offset)
@@ -380,7 +567,7 @@ func (r *ManualFoodRepo) listNutritionCatalogItems(ctx context.Context, category
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
-		results = append(results, manualFoodResultFromNutrition(row, 0))
+		results = append(results, r.manualFoodResultFromNutrition(row, 0))
 	}
 	return results, nil
 }
@@ -394,7 +581,7 @@ func (r *ManualFoodRepo) listPackagedCatalogItems(ctx context.Context, category 
 	}
 	var rows []fooddomain.PackagedFood
 	err := r.db.WithContext(ctx).
-		Where("is_active = ? AND kcal_per_100g > 0", true).
+		Where("is_active = ? AND kcal_per_100g > 0 AND COALESCE(NULLIF(review_status, ''), 'active') = ?", true, "active").
 		Order("updated_at DESC NULLS LAST, product_name ASC").
 		Limit(minInt(limit, 60)).
 		Offset(offset).
@@ -449,7 +636,7 @@ func (r *ManualFoodRepo) listRecentItems(ctx context.Context, userID string, lim
 		FROM user_food_records
 		CROSS JOIN LATERAL jsonb_array_elements(items) AS item
 		WHERE user_id = ?
-			AND item->>'manual_source' IN ('public_library', 'nutrition_library', 'packaged_food')
+			AND item->>'manual_source' IN ('public_library', 'nutrition_library', 'packaged_food', 'custom')
 			AND COALESCE(item->>'manual_source_id', '') <> ''
 		GROUP BY 1,2,3,4
 		ORDER BY usage_count DESC, latest_record_time DESC
@@ -529,7 +716,7 @@ func (r *ManualFoodRepo) listNutritionLibrary(ctx context.Context, limit int) ([
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
-		results = append(results, manualFoodResultFromNutrition(row, 0))
+		results = append(results, r.manualFoodResultFromNutrition(row, 0))
 	}
 	return results, nil
 }
@@ -571,7 +758,7 @@ func (r *ManualFoodRepo) searchRecentItems(ctx context.Context, userID string, q
 		FROM user_food_records
 		CROSS JOIN LATERAL jsonb_array_elements(items) AS item
 		WHERE user_id = ?
-			AND item->>'manual_source' IN ('public_library', 'nutrition_library', 'packaged_food')
+			AND item->>'manual_source' IN ('public_library', 'nutrition_library', 'packaged_food', 'custom')
 			AND COALESCE(item->>'manual_source_id', '') <> ''
 			AND (%s)
 		GROUP BY 1,2,3,4
@@ -683,6 +870,7 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 		FROM packaged_food_library
 		WHERE is_active = TRUE
 			AND kcal_per_100g > 0
+			AND COALESCE(NULLIF(review_status, ''), 'active') = 'active'
 			AND (%s)
 		ORDER BY
 			CASE WHEN LOWER(COALESCE(display_name, product_name)) LIKE LOWER(?) THEN 0 ELSE 1 END,
@@ -744,7 +932,7 @@ func (r *ManualFoodRepo) searchNutritionLibrary(ctx context.Context, query strin
 		if row.MatchSource == "canonical" {
 			score += 0.1
 		}
-		results = append(results, manualFoodResultFromNutrition(row.FoodNutrition, score))
+		results = append(results, r.manualFoodResultFromNutrition(row.FoodNutrition, score))
 	}
 	return results, nil
 }
@@ -855,18 +1043,54 @@ func manualFoodResultFromPackaged(item fooddomain.PackagedFood, score float64) d
 		TotalCarbs:         item.CarbsPer100g,
 		TotalFat:           item.FatPer100g,
 		NutrientsPer100g: &domain.ManualFoodNutrients{
-			Calories: item.KcalPer100g,
-			Protein:  item.ProteinPer100g,
-			Carbs:    item.CarbsPer100g,
-			Fat:      item.FatPer100g,
-			Fiber:    item.FiberPer100g,
-			Sugar:    item.SugarPer100g,
-			SodiumMg: item.SodiumMgPer100g,
+			Calories:       item.KcalPer100g,
+			Protein:        item.ProteinPer100g,
+			Carbs:          item.CarbsPer100g,
+			Fat:            item.FatPer100g,
+			Fiber:          item.FiberPer100g,
+			Sugar:          item.SugarPer100g,
+			SaturatedFat:   item.SaturatedFatPer100g,
+			CholesterolMg:  item.CholesterolMgPer100g,
+			SodiumMg:       item.SodiumMgPer100g,
+			PotassiumMg:    item.PotassiumMgPer100g,
+			CalciumMg:      item.CalciumMgPer100g,
+			IronMg:         item.IronMgPer100g,
+			MagnesiumMg:    item.MagnesiumMgPer100g,
+			ZincMg:         item.ZincMgPer100g,
+			VitaminARaeMcg: item.VitaminARaeMcgPer100g,
+			VitaminCMg:     item.VitaminCMgPer100g,
+			VitaminDMcg:    item.VitaminDMcgPer100g,
+			VitaminEMg:     item.VitaminEMgPer100g,
+			VitaminKMcg:    item.VitaminKMcgPer100g,
+			ThiaminMg:      item.ThiaminMgPer100g,
+			RiboflavinMg:   item.RiboflavinMgPer100g,
+			NiacinMg:       item.NiacinMgPer100g,
+			VitaminB6Mg:    item.VitaminB6MgPer100g,
+			FolateMcg:      item.FolateMcgPer100g,
+			VitaminB12Mcg:  item.VitaminB12McgPer100g,
 		},
 		ExtraNutrients: &domain.ManualFoodNutrients{
-			Fiber:    item.FiberPer100g,
-			Sugar:    item.SugarPer100g,
-			SodiumMg: item.SodiumMgPer100g,
+			Fiber:          item.FiberPer100g,
+			Sugar:          item.SugarPer100g,
+			SaturatedFat:   item.SaturatedFatPer100g,
+			CholesterolMg:  item.CholesterolMgPer100g,
+			SodiumMg:       item.SodiumMgPer100g,
+			PotassiumMg:    item.PotassiumMgPer100g,
+			CalciumMg:      item.CalciumMgPer100g,
+			IronMg:         item.IronMgPer100g,
+			MagnesiumMg:    item.MagnesiumMgPer100g,
+			ZincMg:         item.ZincMgPer100g,
+			VitaminARaeMcg: item.VitaminARaeMcgPer100g,
+			VitaminCMg:     item.VitaminCMgPer100g,
+			VitaminDMcg:    item.VitaminDMcgPer100g,
+			VitaminEMg:     item.VitaminEMgPer100g,
+			VitaminKMcg:    item.VitaminKMcgPer100g,
+			ThiaminMg:      item.ThiaminMgPer100g,
+			RiboflavinMg:   item.RiboflavinMgPer100g,
+			NiacinMg:       item.NiacinMgPer100g,
+			VitaminB6Mg:    item.VitaminB6MgPer100g,
+			FolateMcg:      item.FolateMcgPer100g,
+			VitaminB12Mcg:  item.VitaminB12McgPer100g,
 		},
 		ImagePath:           imagePath,
 		ImagePaths:          imagePaths,
@@ -904,19 +1128,57 @@ func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64)
 		TotalCarbs:         item.CarbsPer100g,
 		TotalFat:           item.FatPer100g,
 		NutrientsPer100g: &domain.ManualFoodNutrients{
-			Calories: item.KcalPer100g,
-			Protein:  item.ProteinPer100g,
-			Carbs:    item.CarbsPer100g,
-			Fat:      item.FatPer100g,
-			Fiber:    item.FiberPer100g,
-			Sugar:    item.SugarPer100g,
-			SodiumMg: item.SodiumMgPer100g,
+			Calories:       item.KcalPer100g,
+			Protein:        item.ProteinPer100g,
+			Carbs:          item.CarbsPer100g,
+			Fat:            item.FatPer100g,
+			Fiber:          item.FiberPer100g,
+			Sugar:          item.SugarPer100g,
+			SaturatedFat:   item.SaturatedFatPer100g,
+			CholesterolMg:  item.CholesterolMgPer100g,
+			SodiumMg:       item.SodiumMgPer100g,
+			PotassiumMg:    item.PotassiumMgPer100g,
+			CalciumMg:      item.CalciumMgPer100g,
+			IronMg:         item.IronMgPer100g,
+			MagnesiumMg:    item.MagnesiumMgPer100g,
+			ZincMg:         item.ZincMgPer100g,
+			VitaminARaeMcg: item.VitaminARaeMcgPer100g,
+			VitaminCMg:     item.VitaminCMgPer100g,
+			VitaminDMcg:    item.VitaminDMcgPer100g,
+			VitaminEMg:     item.VitaminEMgPer100g,
+			VitaminKMcg:    item.VitaminKMcgPer100g,
+			ThiaminMg:      item.ThiaminMgPer100g,
+			RiboflavinMg:   item.RiboflavinMgPer100g,
+			NiacinMg:       item.NiacinMgPer100g,
+			VitaminB6Mg:    item.VitaminB6MgPer100g,
+			FolateMcg:      item.FolateMcgPer100g,
+			VitaminB12Mcg:  item.VitaminB12McgPer100g,
 		},
 		ExtraNutrients: &domain.ManualFoodNutrients{
-			Fiber:    item.FiberPer100g,
-			Sugar:    item.SugarPer100g,
-			SodiumMg: item.SodiumMgPer100g,
+			Fiber:          item.FiberPer100g,
+			Sugar:          item.SugarPer100g,
+			SaturatedFat:   item.SaturatedFatPer100g,
+			CholesterolMg:  item.CholesterolMgPer100g,
+			SodiumMg:       item.SodiumMgPer100g,
+			PotassiumMg:    item.PotassiumMgPer100g,
+			CalciumMg:      item.CalciumMgPer100g,
+			IronMg:         item.IronMgPer100g,
+			MagnesiumMg:    item.MagnesiumMgPer100g,
+			ZincMg:         item.ZincMgPer100g,
+			VitaminARaeMcg: item.VitaminARaeMcgPer100g,
+			VitaminCMg:     item.VitaminCMgPer100g,
+			VitaminDMcg:    item.VitaminDMcgPer100g,
+			VitaminEMg:     item.VitaminEMgPer100g,
+			VitaminKMcg:    item.VitaminKMcgPer100g,
+			ThiaminMg:      item.ThiaminMgPer100g,
+			RiboflavinMg:   item.RiboflavinMgPer100g,
+			NiacinMg:       item.NiacinMgPer100g,
+			VitaminB6Mg:    item.VitaminB6MgPer100g,
+			FolateMcg:      item.FolateMcgPer100g,
+			VitaminB12Mcg:  item.VitaminB12McgPer100g,
 		},
+		ImagePath:           item.ImagePath,
+		ImagePaths:          item.ImagePaths,
 		PortionLabel:        "100g",
 		SourceLabel:         "标准食物",
 		RecommendReason:     "按克重精调，适合单食材和自制餐",
@@ -927,21 +1189,64 @@ func manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64)
 	return result
 }
 
+func (r *ManualFoodRepo) manualFoodResultFromNutrition(item fooddomain.FoodNutrition, score float64) domain.ManualFoodResult {
+	result := manualFoodResultFromNutrition(item, score)
+	if r.storage != nil {
+		result.ImagePaths = r.storage.ResolveReferenceURLs("food-images", result.ImagePaths)
+		if result.ImagePath != nil {
+			resolved := r.storage.ResolveReferenceURL("food-images", *result.ImagePath)
+			if strings.TrimSpace(resolved) == "" {
+				result.ImagePath = nil
+			} else {
+				result.ImagePath = &resolved
+			}
+		}
+	}
+	if result.ImagePath == nil && len(result.ImagePaths) > 0 {
+		first := result.ImagePaths[0]
+		result.ImagePath = &first
+	}
+	if len(result.ImagePaths) == 0 && result.ImagePath != nil {
+		result.ImagePaths = []string{*result.ImagePath}
+	}
+	return result
+}
+
 func manualFoodResultFromRecordItem(source, sourceID, sourceTitle, portionLabel string, usageCount int, raw json.RawMessage) domain.ManualFoodResult {
 	type nutrientPayload struct {
-		Calories float64 `json:"calories"`
-		Protein  float64 `json:"protein"`
-		Carbs    float64 `json:"carbs"`
-		Fat      float64 `json:"fat"`
-		Fiber    float64 `json:"fiber"`
-		Sugar    float64 `json:"sugar"`
-		SodiumMg float64 `json:"sodium_mg"`
+		Calories       float64 `json:"calories"`
+		Protein        float64 `json:"protein"`
+		Carbs          float64 `json:"carbs"`
+		Fat            float64 `json:"fat"`
+		Fiber          float64 `json:"fiber"`
+		Sugar          float64 `json:"sugar"`
+		SaturatedFat   float64 `json:"saturatedFat"`
+		CholesterolMg  float64 `json:"cholesterolMg"`
+		SodiumMg       float64 `json:"sodium_mg"`
+		PotassiumMg    float64 `json:"potassiumMg"`
+		CalciumMg      float64 `json:"calciumMg"`
+		IronMg         float64 `json:"ironMg"`
+		MagnesiumMg    float64 `json:"magnesiumMg"`
+		ZincMg         float64 `json:"zincMg"`
+		VitaminARaeMcg float64 `json:"vitaminARaeMcg"`
+		VitaminCMg     float64 `json:"vitaminCMg"`
+		VitaminDMcg    float64 `json:"vitaminDMcg"`
+		VitaminEMg     float64 `json:"vitaminEMg"`
+		VitaminKMcg    float64 `json:"vitaminKMcg"`
+		ThiaminMg      float64 `json:"thiaminMg"`
+		RiboflavinMg   float64 `json:"riboflavinMg"`
+		NiacinMg       float64 `json:"niacinMg"`
+		VitaminB6Mg    float64 `json:"vitaminB6Mg"`
+		FolateMcg      float64 `json:"folateMcg"`
+		VitaminB12Mcg  float64 `json:"vitaminB12Mcg"`
 	}
 	type recordItem struct {
-		Name      string          `json:"name"`
-		Weight    float64         `json:"weight"`
-		Intake    float64         `json:"intake"`
-		Nutrients nutrientPayload `json:"nutrients"`
+		Name       string          `json:"name"`
+		Weight     float64         `json:"weight"`
+		Intake     float64         `json:"intake"`
+		ImagePath  *string         `json:"image_path"`
+		ImagePaths []string        `json:"image_paths"`
+		Nutrients  nutrientPayload `json:"nutrients"`
 	}
 	var item recordItem
 	_ = json.Unmarshal(raw, &item)
@@ -967,22 +1272,67 @@ func manualFoodResultFromRecordItem(source, sourceID, sourceTitle, portionLabel 
 		PortionLabel:       strings.TrimSpace(portionLabel),
 		SourceLabel:        sourceLabel(source),
 		UsageCount:         usageCount,
+		ImagePath:          item.ImagePath,
+		ImagePaths:         item.ImagePaths,
 		ExtraNutrients: &domain.ManualFoodNutrients{
-			Fiber:    item.Nutrients.Fiber,
-			Sugar:    item.Nutrients.Sugar,
-			SodiumMg: item.Nutrients.SodiumMg,
+			Fiber:          item.Nutrients.Fiber,
+			Sugar:          item.Nutrients.Sugar,
+			SaturatedFat:   item.Nutrients.SaturatedFat,
+			CholesterolMg:  item.Nutrients.CholesterolMg,
+			SodiumMg:       item.Nutrients.SodiumMg,
+			PotassiumMg:    item.Nutrients.PotassiumMg,
+			CalciumMg:      item.Nutrients.CalciumMg,
+			IronMg:         item.Nutrients.IronMg,
+			MagnesiumMg:    item.Nutrients.MagnesiumMg,
+			ZincMg:         item.Nutrients.ZincMg,
+			VitaminARaeMcg: item.Nutrients.VitaminARaeMcg,
+			VitaminCMg:     item.Nutrients.VitaminCMg,
+			VitaminDMcg:    item.Nutrients.VitaminDMcg,
+			VitaminEMg:     item.Nutrients.VitaminEMg,
+			VitaminKMcg:    item.Nutrients.VitaminKMcg,
+			ThiaminMg:      item.Nutrients.ThiaminMg,
+			RiboflavinMg:   item.Nutrients.RiboflavinMg,
+			NiacinMg:       item.Nutrients.NiacinMg,
+			VitaminB6Mg:    item.Nutrients.VitaminB6Mg,
+			FolateMcg:      item.Nutrients.FolateMcg,
+			VitaminB12Mcg:  item.Nutrients.VitaminB12Mcg,
 		},
+	}
+	if result.ImagePath == nil && len(result.ImagePaths) > 0 {
+		first := result.ImagePaths[0]
+		result.ImagePath = &first
+	}
+	if len(result.ImagePaths) == 0 && result.ImagePath != nil {
+		result.ImagePaths = []string{*result.ImagePath}
 	}
 	if result.DefaultWeightGrams > 0 {
 		scale := 100 / result.DefaultWeightGrams
 		result.NutrientsPer100g = &domain.ManualFoodNutrients{
-			Calories: result.TotalCalories * scale,
-			Protein:  result.TotalProtein * scale,
-			Carbs:    result.TotalCarbs * scale,
-			Fat:      result.TotalFat * scale,
-			Fiber:    item.Nutrients.Fiber * scale,
-			Sugar:    item.Nutrients.Sugar * scale,
-			SodiumMg: item.Nutrients.SodiumMg * scale,
+			Calories:       result.TotalCalories * scale,
+			Protein:        result.TotalProtein * scale,
+			Carbs:          result.TotalCarbs * scale,
+			Fat:            result.TotalFat * scale,
+			Fiber:          item.Nutrients.Fiber * scale,
+			Sugar:          item.Nutrients.Sugar * scale,
+			SaturatedFat:   item.Nutrients.SaturatedFat * scale,
+			CholesterolMg:  item.Nutrients.CholesterolMg * scale,
+			SodiumMg:       item.Nutrients.SodiumMg * scale,
+			PotassiumMg:    item.Nutrients.PotassiumMg * scale,
+			CalciumMg:      item.Nutrients.CalciumMg * scale,
+			IronMg:         item.Nutrients.IronMg * scale,
+			MagnesiumMg:    item.Nutrients.MagnesiumMg * scale,
+			ZincMg:         item.Nutrients.ZincMg * scale,
+			VitaminARaeMcg: item.Nutrients.VitaminARaeMcg * scale,
+			VitaminCMg:     item.Nutrients.VitaminCMg * scale,
+			VitaminDMcg:    item.Nutrients.VitaminDMcg * scale,
+			VitaminEMg:     item.Nutrients.VitaminEMg * scale,
+			VitaminKMcg:    item.Nutrients.VitaminKMcg * scale,
+			ThiaminMg:      item.Nutrients.ThiaminMg * scale,
+			RiboflavinMg:   item.Nutrients.RiboflavinMg * scale,
+			NiacinMg:       item.Nutrients.NiacinMg * scale,
+			VitaminB6Mg:    item.Nutrients.VitaminB6Mg * scale,
+			FolateMcg:      item.Nutrients.FolateMcg * scale,
+			VitaminB12Mcg:  item.Nutrients.VitaminB12Mcg * scale,
 		}
 	}
 	applyManualFoodServingProfile(&result)
@@ -1056,12 +1406,140 @@ func (r *ManualFoodRepo) normalizePublicFoodItem(item publicdomain.PublicFoodIte
 	return item
 }
 
+func (r *ManualFoodRepo) manualFoodResultFromCustomFood(item domain.UserCustomFood) domain.ManualFoodResult {
+	nutrientsPer100g := manualFoodNutrientsFromMap(item.NutrientsPer100g)
+	extraNutrients := manualFoodNutrientsFromMap(item.ExtraNutrients)
+	imagePaths := compactStrings(item.ImagePaths)
+	imagePath := item.ImagePath
+	if r.storage != nil {
+		imagePaths = r.storage.ResolveReferenceURLs("food-images", imagePaths)
+		if imagePath != nil {
+			resolved := r.storage.ResolveReferenceURL("food-images", *imagePath)
+			if strings.TrimSpace(resolved) == "" {
+				imagePath = nil
+			} else {
+				imagePath = &resolved
+			}
+		}
+	}
+	if imagePath == nil && len(imagePaths) > 0 {
+		first := imagePaths[0]
+		imagePath = &first
+	}
+	if len(imagePaths) == 0 && imagePath != nil {
+		imagePaths = []string{*imagePath}
+	}
+	result := domain.ManualFoodResult{
+		ID:                 item.ID,
+		Source:             "custom",
+		Title:              item.Title,
+		Subtitle:           fmt.Sprintf("%.0f kcal / %.0fg", item.TotalCalories, item.DefaultWeightGrams),
+		Category:           "custom",
+		DefaultWeightGrams: item.DefaultWeightGrams,
+		DisplayUnit:        "g",
+		DisplayUnitLabel:   "g",
+		TotalCalories:      item.TotalCalories,
+		TotalProtein:       item.TotalProtein,
+		TotalCarbs:         item.TotalCarbs,
+		TotalFat:           item.TotalFat,
+		NutrientsPer100g:   &nutrientsPer100g,
+		ExtraNutrients:     &extraNutrients,
+		ImagePath:          imagePath,
+		ImagePaths:         imagePaths,
+		PortionLabel:       item.PortionLabel,
+		SourceLabel:        "自定义",
+		RecommendReason:    item.RecommendReason,
+	}
+	if result.DefaultWeightGrams <= 0 {
+		result.DefaultWeightGrams = 100
+	}
+	if result.PortionLabel == "" {
+		result.PortionLabel = fmt.Sprintf("%.0fg", result.DefaultWeightGrams)
+	}
+	if result.RecommendReason == "" {
+		result.RecommendReason = "我的自定义食物"
+	}
+	applyManualFoodServingProfile(&result)
+	return result
+}
+
+func manualFoodNutrientsFromMap(values map[string]any) domain.ManualFoodNutrients {
+	if len(values) == 0 {
+		return domain.ManualFoodNutrients{}
+	}
+	raw, err := json.Marshal(values)
+	if err != nil {
+		return domain.ManualFoodNutrients{}
+	}
+	var nutrients domain.ManualFoodNutrients
+	_ = json.Unmarshal(raw, &nutrients)
+	return nutrients
+}
+
+func normalizeNutrientMap(values map[string]any) map[string]any {
+	out := make(map[string]any)
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		switch v := value.(type) {
+		case float64:
+			out[key] = v
+		case float32:
+			out[key] = float64(v)
+		case int:
+			out[key] = float64(v)
+		case int64:
+			out[key] = float64(v)
+		case json.Number:
+			if n, err := v.Float64(); err == nil {
+				out[key] = n
+			}
+		default:
+			if n, ok := parseLooseFloat(v); ok {
+				out[key] = n
+			}
+		}
+	}
+	return out
+}
+
+func parseLooseFloat(value any) (float64, bool) {
+	raw := strings.TrimSpace(fmt.Sprint(value))
+	if raw == "" || raw == "<nil>" {
+		return 0, false
+	}
+	n, err := strconv.ParseFloat(raw, 64)
+	return n, err == nil
+}
+
+func normalizeCustomFoodTitle(title string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(title)), " "))
+}
+
+func compactStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
 func sourceLabel(source string) string {
 	switch strings.TrimSpace(source) {
 	case "public_library":
 		return "真实餐食"
 	case "packaged_food":
 		return "包装食品"
+	case "custom":
+		return "自定义"
 	}
 	return "标准食物"
 }
@@ -1186,6 +1664,7 @@ func uniqueStrings(values []string) []string {
 func manualFoodCatalogCategories() []domain.ManualFoodCatalogCategory {
 	return []domain.ManualFoodCatalogCategory{
 		{Key: "common", Label: "常见"},
+		{Key: "custom", Label: "自定义"},
 		{Key: "recent", Label: "最近"},
 		{Key: "favorites", Label: "收藏"},
 		{Key: "staple", Label: "主食"},

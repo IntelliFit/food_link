@@ -2360,6 +2360,7 @@ function IndexPage() {
       : healthyHabitScore >= 1
         ? 'calm'
         : 'sleepy')
+  const petState = petSummary?.status?.state || petMood
   const petLevelProgress = petSummary?.pet?.level_progress ?? Math.min(100, healthyHabitScore * 25)
   const petLevelText = petSummary?.pet?.level ? `Lv.${petSummary.pet.level} · 成长 ${petLevelProgress}%` : `成长 ${petLevelProgress}%`
   const petMessage = petEvent?.message || petSummary?.status?.message || (dashboardBusy
@@ -2763,7 +2764,7 @@ function IndexPage() {
           onTouchEnd={handlePetTouchEnd}
           onTouchCancel={handlePetTouchEnd}
         >
-          <View className={`pet-companion-card ${petColor} ${petShape} ${petPattern} animal-${fallbackPetAnimal} mood-${petMood}`}>
+          <View className={`pet-companion-card ${petColor} ${petShape} ${petPattern} animal-${fallbackPetAnimal} mood-${petMood} state-${petState}`}>
             <View className='pet-companion-avatar'>
               <View className='pet-companion-shadow' />
               <View className='pet-body'>

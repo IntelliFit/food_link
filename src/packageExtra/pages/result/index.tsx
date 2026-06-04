@@ -3,7 +3,6 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   AnalyzeResponse,
-  FoodItem,
   MealType,
   type Nutrients,
   type SaveFoodRecordRequest,
@@ -41,6 +40,7 @@ import {
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
+import { buildFoodRecordItemPayloadFromResultItem } from '../../../utils/food-record-item-payload'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import {
@@ -49,6 +49,18 @@ import {
   normalizeSelectableMealType,
   type SelectableMealType
 } from '../../../components/MealTypeSelector'
+import {
+  buildCorrectionItemsPayload,
+  buildCorrectionPreviousResultItems,
+  formatCorrectionWeight,
+  hasCorrectionWeightChanged,
+  normalizeFoodNameForCorrection,
+} from './correction-payload'
+import {
+  convertApiFoodItemsToNutritionItems,
+  normalizeItemNutrients,
+  type NutritionItem,
+} from './result-item-converter'
 
 import './index.scss'
 
@@ -82,8 +94,11 @@ const readSuggestRatioPreference = (): boolean => {
 }
 
 const normalizeExecutionMode = (value: unknown): ExecutionMode => {
+  if (value === 'fast') return 'fast'
+  if (value === 'fast_web_search') return 'fast_web_search'
   if (value === 'standard_web_search') return 'standard_web_search'
   if (value === 'standard_packaged_experiment') return 'standard_packaged_experiment'
+  if (value === 'strict_separate') return 'strict_separate'
   if (value === 'strict_web_search') return 'strict_web_search'
   if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return 'strict'
   return 'standard'
@@ -91,7 +106,10 @@ const normalizeExecutionMode = (value: unknown): ExecutionMode => {
 
 const getExecutionModeLabel = (value: ExecutionMode): string => {
   if (value === 'standard_packaged_experiment') return '零食库试验'
+  if (value === 'strict_separate') return '精准分项'
   if (value === 'strict_web_search') return '精准联网'
+  if (value === 'fast') return '快速'
+  if (value === 'fast_web_search') return '快速联网'
   if (value === 'standard_web_search') return '普通联网'
   if (value === 'strict' || value === 'gemini35_flash' || value === 'gemini35_flash_grouped') return '精准'
   return '普通'
@@ -221,35 +239,6 @@ const getSavedSelectableMealType = (): SelectableMealType | undefined => {
 // 移除未使用的 CONTEXT_STATE_OPTIONS
 
 
-interface NutritionItem {
-  id: number
-  sourceItemId?: number
-  sourceName?: string
-  name: string
-  weight: number // 当前重量（用户可调节）
-  originalWeight: number // AI 初始估算重量（用于标记样本时计算偏差）
-  grossWeight: number // 图中可见原始重量（未扣壳/骨/核）
-  ediblePortionRatio: number // 可食部比例，用于从原始重量折算可食重量
-  ediblePortionReason?: string
-  ediblePortionSource?: string
-  calorie: number // 基于 weight 的总热量
-  intake: number // 实际摄入量 = weight × ratio
-  ratio: number // 摄入比例（0-100%，独立调节）
-  suggestedRatio?: number
-  suggestedRatioReason?: string
-  suggestedRatioSource?: string
-  itemType?: string
-  category?: string
-  nutritionSource?: string | null
-  isUnresolved?: boolean
-  unitNutritionPer100g?: Nutrients
-  protein: number
-  carbs: number
-  fat: number
-  waterMl: number
-  nutrients: Nutrients
-}
-
 interface SnackContributionDraft {
   itemId: number
   brand: string
@@ -262,6 +251,17 @@ interface SnackContributionDraft {
   fiber: string
   sugar: string
   sodiumMg: string
+}
+
+interface FoodEditDraft {
+  itemId: number
+  name: string
+  weight: string
+  calories: string
+  protein: string
+  carbs: string
+  fat: string
+  waterMl: string
 }
 
 type MacroField = 'protein' | 'carbs' | 'fat'
@@ -284,11 +284,12 @@ const getEdiblePortionHint = (item: NutritionItem): string | null => {
   if (!shouldHint) return null
   return '重量按可食部估算：去壳、去骨、去皮或去核部分未计入营养。'
 }
-type IngredientMetricField = MacroField | 'waterMl'
+type IngredientMetricField = 'calories' | MacroField | 'waterMl'
 
-const INGREDIENT_METRIC_FIELDS: IngredientMetricField[] = ['protein', 'carbs', 'fat', 'waterMl']
+const INGREDIENT_METRIC_FIELDS: Array<Exclude<IngredientMetricField, 'calories'>> = ['protein', 'carbs', 'fat', 'waterMl']
 
 const INGREDIENT_METRIC_META: Record<IngredientMetricField, { label: string; className: string; unit: string }> = {
+  calories: { label: '热量', className: 'cal', unit: 'kcal' },
   protein: { label: '蛋白质', className: 'protein', unit: 'g' },
   carbs: { label: '碳水', className: 'carbs', unit: 'g' },
   fat: { label: '脂肪', className: 'fat', unit: 'g' },
@@ -302,7 +303,7 @@ const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixe
 const formatWaterDisplay = (value: number) => String(Math.max(0, Math.round(value)))
 
 const formatIngredientMetricDisplay = (field: IngredientMetricField, value: number) => (
-  field === 'waterMl' ? formatWaterDisplay(value) : formatMacroDisplay(value)
+  field === 'waterMl' || field === 'calories' ? formatWaterDisplay(value) : formatMacroDisplay(value)
 )
 
 const formatWeightDisplay = (value: number) => `${Math.max(0, Math.round(value))}g`
@@ -343,37 +344,6 @@ const normalizeNutrientValue = (value: unknown) => {
   return Number.isFinite(num) && num > 0 ? num : 0
 }
 
-const normalizeItemNutrients = (nutrients: FoodItem['nutrients'] | undefined, waterMl: number): Nutrients => ({
-  calories: normalizeNutrientValue(nutrients?.calories),
-  protein: normalizeNutrientValue(nutrients?.protein),
-  carbs: normalizeNutrientValue(nutrients?.carbs),
-  fat: normalizeNutrientValue(nutrients?.fat),
-  fiber: normalizeNutrientValue(nutrients?.fiber),
-  sugar: normalizeNutrientValue(nutrients?.sugar),
-  waterMl,
-  water_ml: waterMl,
-  saturatedFat: normalizeNutrientValue(nutrients?.saturatedFat),
-  cholesterolMg: normalizeNutrientValue(nutrients?.cholesterolMg),
-  sodiumMg: normalizeNutrientValue(nutrients?.sodiumMg),
-  sodium_mg: normalizeNutrientValue(nutrients?.sodiumMg ?? nutrients?.sodium_mg),
-  potassiumMg: normalizeNutrientValue(nutrients?.potassiumMg),
-  calciumMg: normalizeNutrientValue(nutrients?.calciumMg),
-  ironMg: normalizeNutrientValue(nutrients?.ironMg),
-  magnesiumMg: normalizeNutrientValue(nutrients?.magnesiumMg),
-  zincMg: normalizeNutrientValue(nutrients?.zincMg),
-  vitaminARaeMcg: normalizeNutrientValue(nutrients?.vitaminARaeMcg),
-  vitaminCMg: normalizeNutrientValue(nutrients?.vitaminCMg),
-  vitaminDMcg: normalizeNutrientValue(nutrients?.vitaminDMcg),
-  vitaminEMg: normalizeNutrientValue(nutrients?.vitaminEMg),
-  vitaminKMcg: normalizeNutrientValue(nutrients?.vitaminKMcg),
-  thiaminMg: normalizeNutrientValue(nutrients?.thiaminMg),
-  riboflavinMg: normalizeNutrientValue(nutrients?.riboflavinMg),
-  niacinMg: normalizeNutrientValue(nutrients?.niacinMg),
-  vitaminB6Mg: normalizeNutrientValue(nutrients?.vitaminB6Mg),
-  folateMcg: normalizeNutrientValue(nutrients?.folateMcg),
-  vitaminB12Mcg: normalizeNutrientValue(nutrients?.vitaminB12Mcg)
-})
-
 const SNACK_KEYWORDS = [
   '零食', '饼干', '薯片', '巧克力', '糖果', '蛋白棒', '能量棒', '肉干', '牛肉干',
   '鸭脖', '鹅胗', '坚果', '果干', '阿胶糕', '糕点', '辣条', '海苔', '话梅',
@@ -393,6 +363,95 @@ const isSnackLikeItem = (item: NutritionItem) => {
     marker.includes('package') ||
     SNACK_KEYWORDS.some(keyword => marker.includes(keyword.toLowerCase()))
   )
+}
+
+const isPackagedChoicePending = (item: NutritionItem) => {
+  const status = String(item.packageMatchStatus || '').trim().toLowerCase()
+  return Boolean(item.packagedPending) || (
+    Array.isArray(item.packagedCandidates) &&
+    item.packagedCandidates.length > 0 &&
+    item.packageWeightApplied !== true &&
+    (status === 'packaged_needs_confirmation' || status === 'multiple_candidates')
+  )
+}
+
+const candidateNumber = (candidate: Record<string, unknown>, ...keys: string[]) => {
+  for (const key of keys) {
+    const value = Number(candidate[key])
+    if (Number.isFinite(value) && value > 0) return value
+  }
+  return 0
+}
+
+const candidateText = (candidate: Record<string, unknown>, ...keys: string[]) => {
+  for (const key of keys) {
+    const value = String(candidate[key] || '').trim()
+    if (value && value !== '<nil>') return value
+  }
+  return ''
+}
+
+const isDisplayableImageURL = (value: string) => (
+  /^https?:\/\//i.test(value) ||
+  /^wxfile:\/\//i.test(value) ||
+  /^cloud:\/\//i.test(value)
+)
+
+const candidateSourceImage = (candidate: Record<string, unknown>) => {
+  const direct = candidateText(candidate, 'image_url', 'imageUrl')
+  if (direct && isDisplayableImageURL(direct)) return direct
+  const urls = candidate.source_image_urls || candidate.sourceImageUrls
+  if (Array.isArray(urls)) {
+    return urls
+      .map(value => String(value || '').trim())
+      .find(value => value && isDisplayableImageURL(value)) || ''
+  }
+  return ''
+}
+
+const candidateNetContentLabel = (candidate: Record<string, unknown>) => {
+  const label = candidateText(candidate, 'net_content_label', 'netContentLabel')
+  if (label) return label
+  const value = candidateNumber(candidate, 'net_content_value', 'netContentValue', 'net_weight_g', 'netWeightG')
+  if (value <= 0) return ''
+  const unit = candidateText(candidate, 'net_content_unit', 'netContentUnit') || 'g'
+  return `${formatNumberCompact(value)}${unit}`
+}
+
+const candidateNutritionBasisLabel = (candidate: Record<string, unknown>) => {
+  const basis = candidateText(candidate, 'nutrition_basis_unit', 'nutritionBasisUnit')
+  if (basis) return basis
+  const unit = candidateText(candidate, 'net_content_unit', 'netContentUnit').toLowerCase()
+  return unit === 'ml' ? '100ml' : '100g'
+}
+
+const candidateNutritionUnit = (candidate: Record<string, unknown>): Nutrients => {
+  const unit = candidate.unit_nutrition_per_100g || candidate.unitNutritionPer100g
+  if (unit && typeof unit === 'object') {
+    return normalizeItemNutrients(unit as Nutrients, 0)
+  }
+  return normalizeItemNutrients({
+    calories: candidateNumber(candidate, 'kcal_per_100g', 'calories_per_100g', 'caloriesPer100g'),
+    protein: candidateNumber(candidate, 'protein_per_100g', 'proteinPer100g'),
+    carbs: candidateNumber(candidate, 'carbs_per_100g', 'carbsPer100g'),
+    fat: candidateNumber(candidate, 'fat_per_100g', 'fatPer100g')
+  } as Nutrients, 0)
+}
+
+const candidateHasDisplayNutrition = (unit: Nutrients) => (
+  (unit.calories || 0) > 0 ||
+  (unit.protein || 0) > 0 ||
+  (unit.carbs || 0) > 0 ||
+  (unit.fat || 0) > 0
+)
+
+const candidateWeightForNutrition = (candidate: Record<string, unknown>) => (
+  candidateNumber(candidate, 'net_weight_g', 'netWeightG', 'net_content_value', 'netContentValue')
+)
+
+const formatNumberCompact = (value: number) => {
+  if (Math.abs(value - Math.round(value)) < 0.005) return String(Math.round(value))
+  return String(Math.round(value * 100) / 100)
 }
 
 const nutrientPer100FromItem = (item: NutritionItem): Nutrients => {
@@ -441,26 +500,8 @@ const formatNutrientDetailValue = (value: number) => {
   return String(Math.round(value * 100) / 100)
 }
 
-const normalizeWaterMl = (...values: unknown[]) => {
-  for (const value of values) {
-    const num = Number(value)
-    if (Number.isFinite(num) && num > 0) {
-      return Math.round(num)
-    }
-  }
-  return 0
-}
-
 const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
   roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9
-)
-
-const normalizeFoodNameForCorrection = (value: unknown) => (
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '')
-    .replace(/[()（）\[\]【】,，。./\\\-_:：;；·]/g, '')
 )
 
 /** 结果页头图：上滑时在区间内高度收缩；左右不留 margin（全宽铺满） */
@@ -497,6 +538,7 @@ function ResultPage() {
   const [healthAdvice, setHealthAdvice] = useState('')
   const [description, setDescription] = useState('')
   const [pfcRatioComment, setPfcRatioComment] = useState<string | null>(null)
+  const [eatingOrderAdvice, setEatingOrderAdvice] = useState<string | null>(null)
   const [absorptionNotes, setAbsorptionNotes] = useState<string | null>(null)
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -551,6 +593,7 @@ function ResultPage() {
   const [isResubmitting, setIsResubmitting] = useState(false)
   const [snackDraft, setSnackDraft] = useState<SnackContributionDraft | null>(null)
   const [savingSnackDraft, setSavingSnackDraft] = useState(false)
+  const [foodEditDraft, setFoodEditDraft] = useState<FoodEditDraft | null>(null)
 
   /** 驱动头图收缩：与 ScrollView 的 scrollTop 同步 */
   const [resultScrollTop, setResultScrollTop] = useState(0)
@@ -659,56 +702,10 @@ function ResultPage() {
     })
   }
 
-  // 将API返回的数据转换为页面需要的格式（保留 originalWeight 用于标记样本时计算偏差）
-  const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
-    return items.map((item, index) => {
-      const grossWeightRaw = item.grossWeightGrams ?? item.gross_weight_grams ?? item.originalWeightGrams ?? item.estimatedWeightGrams
-      const grossWeight = Math.max(0, Math.round(grossWeightRaw || 0))
-      const edibleRatioRaw = item.ediblePortionRatio ?? item.edible_portion_ratio
-      const ediblePortionRatio = Math.max(1, Math.min(100, Math.round(
-        edibleRatioRaw || (grossWeight > 0 ? (item.estimatedWeightGrams / grossWeight) * 100 : 100)
-      )))
-      const aiWeight = item.originalWeightGrams ?? item.estimatedWeightGrams
-      const itemId = item.itemId ?? (index + 1)
-      const waterMl = normalizeWaterMl(item.waterMl, item.water_ml, item.nutrients?.waterMl, item.nutrients?.water_ml)
-      const nutrients = normalizeItemNutrients(item.nutrients, waterMl)
-      const suggestedRatio = Math.max(0, Math.min(100, Math.round(item.suggestedRatio ?? 100)))
-      const actualRatio = 100
-      const intake = Math.round(item.estimatedWeightGrams * (actualRatio / 100))
-      return {
-        id: itemId,
-        sourceItemId: itemId,
-        sourceName: item.name,
-        name: item.name,
-        weight: item.estimatedWeightGrams,
-        originalWeight: aiWeight,
-        grossWeight,
-        ediblePortionRatio,
-        ediblePortionReason: item.ediblePortionReason ?? item.edible_portion_reason,
-        ediblePortionSource: item.ediblePortionSource ?? item.edible_portion_source,
-        calorie: nutrients.calories,
-        intake,
-        ratio: actualRatio,
-        suggestedRatio,
-        suggestedRatioReason: item.suggestedRatioReason,
-        suggestedRatioSource: item.suggestedRatioSource,
-        itemType: item.type || item.food_type,
-        category: item.category,
-        nutritionSource: item.nutrition_source,
-        isUnresolved: Boolean(item.is_unresolved),
-        unitNutritionPer100g: item.unit_nutrition_per_100g,
-        protein: nutrients.protein,
-        carbs: nutrients.carbs,
-        fat: nutrients.fat,
-        waterMl,
-        nutrients
-      }
-    })
-  }
-
   // 计算总营养统计
   const calculateNutritionStats = (items: NutritionItem[]) => {
-    const stats = items.reduce(
+    const confirmedItems = items.filter(item => !isPackagedChoicePending(item))
+    const stats = confirmedItems.reduce(
       (acc, item) => {
         // 使用 ratio 来计算实际摄入的营养
         const ratio = item.ratio / 100
@@ -724,7 +721,7 @@ function ResultPage() {
     setNutritionStats(stats)
 
     // 计算总摄入重量
-    const total = items.reduce((sum, item) => sum + item.intake, 0)
+    const total = confirmedItems.reduce((sum, item) => sum + item.intake, 0)
     setTotalWeight(Math.round(total))
   }
 
@@ -737,6 +734,7 @@ function ResultPage() {
     setDescription(result.description || '')
     setHealthAdvice(result.insight || '保持健康饮食！')
     setPfcRatioComment(result.pfc_ratio_comment ?? null)
+    setEatingOrderAdvice(result.eating_order_advice ?? null)
     setAbsorptionNotes(result.absorption_notes ?? null)
     setContextAdvice(result.context_advice ?? null)
     setRecognitionOutcome(normalizeRecognitionOutcome(result.recognitionOutcome))
@@ -754,7 +752,7 @@ function ResultPage() {
     setSplitStrategy(String(result.splitStrategy || ''))
     setUncertaintyNotes(normalizePrecisionStringList(result.uncertaintyNotes))
 
-    const items = convertApiDataToItems(result.items || [])
+    const items = convertApiFoodItemsToNutritionItems(result.items || [])
     setNutritionItems(items)
     setCorrectionItems(items)
     calculateNutritionStats(items)
@@ -841,7 +839,7 @@ function ResultPage() {
     Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
   }
 
-  const isStrictMode = executionMode === 'strict' || executionMode === 'strict_web_search'
+  const isStrictMode = executionMode === 'strict' || executionMode === 'strict_separate' || executionMode === 'strict_web_search'
   const shouldShowRecognitionCard = false
   const shouldShowFollowupCard = taskType === 'food_text' && followupQuestions.length > 0 && !isStrictMode
   const hasUploadableImage = taskType === 'food' && (imagePaths.length > 0 || !!imagePath)
@@ -1027,20 +1025,66 @@ function ResultPage() {
     ? `${ratioAdviceItems.join('；')}。`
     : '本餐暂无需要特别下调的食物，默认按实际食用量记录即可。'
 
-  const eatingOrderText = useMemo(() => {
-    const names = nutritionItems.map(item => item.name).join('、')
-    const hasDrink = nutritionItems.some(item => item.waterMl >= 150 || /汤|粥|奶|茶|咖啡|饮料|水|酒/.test(item.name))
-    const hasVegFruit = nutritionItems.some(item => /菜|瓜|蓝莓|水果|荔枝|桃|苹果|香蕉|蔬|蘑|菇|豆/.test(item.name))
-    const hasProtein = nutritionItems.some(item => /肉|虾|鱼|鸡|蛋|牛|羊|猪|豆腐|奶|酸奶/.test(item.name))
-    const hasStapleSweet = nutritionItems.some(item => /饭|面|粉|饼|糕|甜|糖|蛋筒|冰淇淋|可乐|奶茶/.test(item.name))
-    const steps: string[] = []
-    if (hasDrink) steps.push('先喝汤水/奶茶饮品少量润口')
-    if (hasVegFruit) steps.push('再吃蔬果或低能量密度食物')
-    if (hasProtein) steps.push('接着吃蛋白质')
-    if (hasStapleSweet) steps.push('最后吃主食、甜点或甜饮')
-    if (steps.length === 0 && names) return '先从清淡、低油的食物开始，再吃更高能量密度的部分。'
-    return `${steps.join('，')}。`
+  const mealSuggestionContext = useMemo(() => {
+    const matchNames = (pattern: RegExp) => nutritionItems
+      .map(item => item.name.trim())
+      .filter(name => name && pattern.test(name))
+
+    const unique = (names: string[]) => Array.from(new Set(names))
+    const soupDrinkNames = unique(matchNames(/汤|羹|粥|豆浆|牛奶|酸奶|奶茶|茶饮|咖啡|饮料|果汁|可乐|汽水|酒|矿泉水|苏打水/))
+    const soupLikeStapleNames = unique(
+      nutritionItems
+        .filter(item => item.waterMl >= 120 && /面|粉|米线|馄饨|云吞|麻辣烫|火锅/.test(item.name))
+        .map(item => item.name.trim())
+        .filter(Boolean)
+    )
+    const vegFruitNames = unique(matchNames(/青菜|蔬菜|白菜|菠菜|生菜|油麦菜|油菜|西兰花|菜花|番茄|西红柿|黄瓜|冬瓜|南瓜|丝瓜|苦瓜|蘑菇|香菇|金针菇|豆芽|胡萝卜|萝卜|土豆|茄子|莲藕|海带|木耳|笋|玉米|苹果|香蕉|橙|柑|莓|蓝莓|草莓|荔枝|桃|梨|葡萄|水果/))
+    const proteinNames = unique(matchNames(/牛肉|猪肉|羊肉|鸡肉|鸡|鸭|鱼|虾|蟹|贝|蛋|豆腐|瘦肉|排骨|牛腩|肉/))
+    const stapleNames = unique(matchNames(/米饭|炒饭|饭|面|粉|米线|馒头|包子|饺|饼|粥|粉丝|面条|主食/))
+    const sweetFoodNames = unique(matchNames(/蛋糕|面包|糕|甜|糖|蛋筒|冰淇淋|雪糕|巧克力|饼干|甜点|甜品/))
+    const sweetDrinkNames = unique(matchNames(/奶茶|甜饮|可乐|汽水|果汁|含糖饮料/))
+
+    return {
+      soupDrinkNames,
+      soupLikeStapleNames,
+      vegFruitNames,
+      proteinNames,
+      stapleNames,
+      sweetFoodNames,
+      sweetDrinkNames,
+      hasSoupOrDrink: soupDrinkNames.length > 0 || soupLikeStapleNames.length > 0,
+      hasVegFruit: vegFruitNames.length > 0,
+      hasProtein: proteinNames.length > 0,
+      hasStaple: stapleNames.length > 0,
+      hasSweetFood: sweetFoodNames.length > 0,
+      hasSweetDrink: sweetDrinkNames.length > 0,
+    }
   }, [nutritionItems])
+
+  const eatingOrderText = useMemo(() => {
+    const steps: string[] = []
+    if (mealSuggestionContext.soupDrinkNames.length > 0) {
+      steps.push(`少量喝${mealSuggestionContext.soupDrinkNames.slice(0, 2).join('、')}润口`)
+    } else if (mealSuggestionContext.soupLikeStapleNames.length > 0) {
+      steps.push('如有汤汁，可先少量喝汤汁润口')
+    }
+    if (mealSuggestionContext.hasVegFruit) steps.push(`吃${mealSuggestionContext.vegFruitNames.slice(0, 2).join('、')}`)
+    if (mealSuggestionContext.hasProtein) steps.push('吃本餐的蛋白质部分')
+    if (mealSuggestionContext.hasStaple || mealSuggestionContext.hasSweetFood || mealSuggestionContext.hasSweetDrink) {
+      const tailParts: string[] = []
+      if (mealSuggestionContext.hasStaple) tailParts.push('主食')
+      if (mealSuggestionContext.hasSweetFood) tailParts.push('甜点')
+      if (mealSuggestionContext.hasSweetDrink) tailParts.push('甜饮')
+      steps.push(`吃${tailParts.join('、')}`)
+    }
+    if (steps.length === 0 && nutritionItems.length > 0) return '按当前识别到的食物少量多次、放慢速度进食即可。'
+
+    return `${steps.map((step, index) => {
+      if (index === 0) return step.startsWith('如有汤汁') ? step : `先${step}`
+      if (index === steps.length - 1) return step.startsWith('吃') ? `最后${step}` : `最后${step}`
+      return step.startsWith('吃') ? `接着${step}` : `接着${step}`
+    }).join('，')}。`
+  }, [mealSuggestionContext, nutritionItems.length])
 
   const fallbackPfcRatioText = useMemo(() => {
     const total = nutritionStats.protein + nutritionStats.carbs + nutritionStats.fat
@@ -1049,28 +1093,48 @@ function ResultPage() {
     const carbsPercent = Math.round((nutritionStats.carbs / total) * 100)
     const fatPercent = Math.round((nutritionStats.fat / total) * 100)
     const notes: string[] = []
-    if (carbsPercent >= 55) notes.push('碳水占比较高，可适当控制主食或甜饮')
+    if (carbsPercent >= 55) {
+      const carbTargets = mealSuggestionContext.hasSweetDrink ? '主食或甜饮' : '主食部分'
+      notes.push(`碳水占比较高，可适当控制${carbTargets}`)
+    }
     if (fatPercent >= 35) notes.push('脂肪占比较高，油脂/高脂菜建议减量')
     if (proteinPercent < 18) notes.push('蛋白质偏少，可补充蛋类、奶类、豆制品或瘦肉')
     if (notes.length === 0) notes.push('整体比例较均衡')
     return `蛋白质约${proteinPercent}%，碳水约${carbsPercent}%，脂肪约${fatPercent}%；${notes.join('，')}。`
-  }, [nutritionStats.protein, nutritionStats.carbs, nutritionStats.fat])
+  }, [mealSuggestionContext.hasSweetDrink, nutritionStats.protein, nutritionStats.carbs, nutritionStats.fat])
 
   const fallbackAbsorptionText = useMemo(() => {
-    const hasProtein = nutritionItems.some(item => /肉|虾|鱼|鸡|蛋|牛|羊|猪|豆腐|奶|酸奶/.test(item.name))
-    const hasFruitVeg = nutritionItems.some(item => /菜|瓜|果|蓝莓|荔枝|苹果|香蕉|桃|橙|柑|莓|蔬/.test(item.name))
     const hasHighFat = nutritionItems.some(item => /油|炸|烧烤|肥|酥|奶油|蛋筒|冰淇淋/.test(item.name)) || nutritionStats.fat >= 18
     const notes: string[] = []
-    if (hasFruitVeg && hasProtein) notes.push('蔬果中的维生素和酸味食物有助于搭配蛋白质餐食')
+    if (mealSuggestionContext.hasVegFruit && mealSuggestionContext.hasProtein) {
+      notes.push(`${mealSuggestionContext.vegFruitNames.slice(0, 2).join('、')}可与本餐蛋白质部分搭配`)
+    }
+    if (!mealSuggestionContext.hasVegFruit && mealSuggestionContext.hasProtein && mealSuggestionContext.hasStaple) {
+      notes.push('先吃蛋白质部分、主食后置，有助于让餐后能量释放更平稳')
+    }
     if (hasHighFat) notes.push('高油脂食物消化较慢，建议放慢进食速度')
-    if (notes.length === 0) notes.push('本餐按清淡食物优先、主食甜点后置的顺序更稳妥')
+    if (notes.length === 0) notes.push('本餐按当前识别到的食物少量多次、放慢速度进食即可')
     return `${notes.join('；')}。`
-  }, [nutritionItems, nutritionStats.fat])
+  }, [mealSuggestionContext, nutritionItems, nutritionStats.fat])
 
-  const pfcRatioDisplayText = !isDebugInsightText(pfcRatioComment) && pfcRatioComment?.trim()
+  const isUnsupportedInsightText = useCallback((text: string | null | undefined): boolean => {
+    if (!text?.trim()) return false
+    const t = text.trim()
+    if (/奶茶|茶饮/.test(t) && !mealSuggestionContext.sweetDrinkNames.some(name => /奶茶|茶饮/.test(name))) return true
+    if (/蔬果|蔬菜|水果|维生素C|酸味食物/.test(t) && !mealSuggestionContext.hasVegFruit) return true
+    if (/甜饮|可乐|汽水|果汁|含糖饮料/.test(t) && !mealSuggestionContext.hasSweetDrink) return true
+    if (/甜点|甜品|冰淇淋|雪糕|蛋糕/.test(t) && !mealSuggestionContext.hasSweetFood) return true
+    if (/汤水|汤汁|喝汤/.test(t) && !mealSuggestionContext.hasSoupOrDrink) return true
+    return false
+  }, [mealSuggestionContext])
+
+  const pfcRatioDisplayText = !isDebugInsightText(pfcRatioComment) && !isUnsupportedInsightText(pfcRatioComment) && pfcRatioComment?.trim()
     ? pfcRatioComment.trim()
     : fallbackPfcRatioText
-  const absorptionDisplayText = !isDebugInsightText(absorptionNotes) && absorptionNotes?.trim()
+  const eatingOrderDisplayText = !isDebugInsightText(eatingOrderAdvice) && !isUnsupportedInsightText(eatingOrderAdvice) && eatingOrderAdvice?.trim()
+    ? eatingOrderAdvice.trim()
+    : eatingOrderText
+  const absorptionDisplayText = !isDebugInsightText(absorptionNotes) && !isUnsupportedInsightText(absorptionNotes) && absorptionNotes?.trim()
     ? absorptionNotes.trim()
     : fallbackAbsorptionText
 
@@ -1135,12 +1199,25 @@ function ResultPage() {
     setNutritionItems(items => {
       const updatedItems = items.map(item => {
         if (item.id !== id) return item
-        const resolvedValue = typeof nextValue === 'function' ? nextValue(item[field]) : nextValue
+        const currentValue = field === 'calories' ? item.calorie : item[field]
+        const resolvedValue = typeof nextValue === 'function' ? nextValue(currentValue) : nextValue
         const normalizedValue = field === 'waterMl'
           ? Math.max(0, Math.round(resolvedValue))
           : Math.max(0, roundToSingleDecimal(resolvedValue))
+        if (field === 'calories') {
+          return {
+            ...item,
+            nutritionEdited: true,
+            calorie: Math.round(normalizedValue),
+            nutrients: {
+              ...item.nutrients,
+              calories: Math.round(normalizedValue)
+            }
+          }
+        }
         const nextItem = {
           ...item,
+          nutritionEdited: true,
           [field]: normalizedValue,
           nutrients: {
             ...item.nutrients,
@@ -1250,6 +1327,205 @@ function ResultPage() {
     handleRatioAdjust(id, target.suggestedRatio)
   }
 
+  const applyPackagedCandidate = (id: number, candidate: Record<string, unknown>) => {
+    const weight = candidateWeightForNutrition(candidate)
+    if (weight <= 0) {
+      Taro.showToast({ title: '该规格缺少净含量', icon: 'none' })
+      return
+    }
+    const unit = candidateNutritionUnit(candidate)
+    const nutrients = normalizeItemNutrients(scaleNutrients(unit, weight / 100), 0)
+    const calories = nutrients.calories > 0
+      ? nutrients.calories
+      : calculateCaloriesFromMacros(nutrients.protein, nutrients.carbs, nutrients.fat)
+    const candidateId = candidateText(candidate, 'packaged_food_id', 'id')
+    const nextName = candidateText(candidate, 'display_name', 'displayName', 'name') || '包装食品'
+    const netLabel = candidateNetContentLabel(candidate)
+
+    setNutritionItems(items => {
+      const updatedItems = items.map(item => {
+        if (item.id !== id) return item
+        const ratio = item.ratio > 0 ? item.ratio : 100
+        return {
+          ...item,
+          name: nextName,
+          weight,
+          originalWeight: weight,
+          grossWeight: weight,
+          ediblePortionRatio: 100,
+          ediblePortionReason: undefined,
+          ediblePortionSource: 'packaged_food_library',
+          calorie: calories,
+          intake: Math.round(weight * (ratio / 100)),
+          ratio,
+          protein: nutrients.protein,
+          carbs: nutrients.carbs,
+          fat: nutrients.fat,
+          waterMl: nutrients.waterMl || nutrients.water_ml || item.waterMl || 0,
+          nutrients: {
+            ...nutrients,
+            calories,
+            protein: nutrients.protein,
+            carbs: nutrients.carbs,
+            fat: nutrients.fat,
+            waterMl: nutrients.waterMl || nutrients.water_ml || 0,
+            water_ml: nutrients.waterMl || nutrients.water_ml || 0
+          },
+          unitNutritionPer100g: unit,
+          matchedFoodId: candidateId || item.matchedFoodId,
+          packagedFoodId: candidateId || item.packagedFoodId,
+          packageMatchStatus: 'matched',
+          packageMatchConfidence: 1,
+          packageWeightSource: 'packaged_food_library',
+          packageWeightApplied: true,
+          packageWeightReason: netLabel ? `已选择包装规格 ${netLabel}` : '已选择包装库候选规格',
+          nutritionSource: 'packaged_food_library',
+          isUnresolved: false,
+          packagedPending: false
+        } as NutritionItem
+      })
+      calculateNutritionStats(updatedItems)
+      return updatedItems
+    })
+  }
+
+  const buildAnalyzeResultFromItems = (items: NutritionItem[]): AnalyzeResponse => ({
+    description,
+    insight: healthAdvice,
+    items: items.map(item => ({
+      name: item.name,
+      estimatedWeightGrams: item.weight,
+      originalWeightGrams: item.originalWeight,
+      waterMl: item.waterMl,
+      nutrients: buildFoodItemNutrients(item)
+    })),
+    pfc_ratio_comment: pfcRatioComment || undefined,
+    eating_order_advice: eatingOrderAdvice || undefined,
+    absorption_notes: absorptionNotes || undefined,
+    context_advice: contextAdvice || undefined,
+    recognitionOutcome,
+    rejectionReason: rejectionReason || undefined,
+    retakeGuidance: retakeGuidance.length > 0 ? retakeGuidance : undefined,
+    allowedFoodCategory,
+    followupQuestions: followupQuestions.length > 0 ? followupQuestions : undefined,
+  })
+
+  const syncEditedAnalyzeResult = async (items: NutritionItem[]) => {
+    const nextResult = buildAnalyzeResultFromItems(items)
+    Taro.setStorageSync('analyzeResult', JSON.stringify(nextResult))
+    const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId')
+    if (!sourceTaskId) return
+    try {
+      await updateAnalysisTaskResult(sourceTaskId, nextResult)
+    } catch (error) {
+      console.error('同步更新 analysis_tasks 失败:', error)
+    }
+  }
+
+  const openFoodEditDrawer = (item: NutritionItem) => {
+    setFoodEditDraft({
+      itemId: item.id,
+      name: item.name,
+      weight: String(roundToSingleDecimal(item.weight || 0)),
+      calories: String(Math.round(item.calorie || 0)),
+      protein: formatMacroDisplay(item.protein || 0),
+      carbs: formatMacroDisplay(item.carbs || 0),
+      fat: formatMacroDisplay(item.fat || 0),
+      waterMl: String(Math.round(item.waterMl || 0))
+    })
+  }
+
+  const updateFoodEditDraftField = (field: keyof FoodEditDraft, value: string) => {
+    setFoodEditDraft(current => current ? { ...current, [field]: value } : current)
+  }
+
+  const parseFoodEditNumber = (value: string) => {
+    const parsed = Number(String(value || '').trim())
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+  }
+
+  const handleSaveFoodEditDraft = () => {
+    if (!foodEditDraft) return
+    const name = foodEditDraft.name.trim()
+    const weight = parseFoodEditNumber(foodEditDraft.weight)
+    const calories = parseFoodEditNumber(foodEditDraft.calories)
+    const protein = parseFoodEditNumber(foodEditDraft.protein)
+    const carbs = parseFoodEditNumber(foodEditDraft.carbs)
+    const fat = parseFoodEditNumber(foodEditDraft.fat)
+    const waterMl = parseFoodEditNumber(foodEditDraft.waterMl)
+
+    if (!name) {
+      Taro.showToast({ title: '名称不能为空', icon: 'none' })
+      return
+    }
+    if (weight == null || weight <= 0) {
+      Taro.showToast({ title: '请输入大于0的重量', icon: 'none' })
+      return
+    }
+    if (calories == null || protein == null || carbs == null || fat == null || waterMl == null) {
+      Taro.showToast({ title: '营养值需为不小于0的数字', icon: 'none' })
+      return
+    }
+
+    const nextItems = nutritionItems.map(item => {
+        if (item.id !== foodEditDraft.itemId) return item
+
+        const weightChanged = Math.abs(weight - item.weight) > 0.001
+        const isPendingPackagedChoice = isPackagedChoicePending(item)
+        const nutritionChanged =
+          Math.abs(calories - item.calorie) > 0.001 ||
+          Math.abs(protein - item.protein) > 0.001 ||
+          Math.abs(carbs - item.carbs) > 0.001 ||
+          Math.abs(fat - item.fat) > 0.001 ||
+          Math.abs(waterMl - item.waterMl) > 0.001
+        const weightScale = item.weight > 0 ? weight / item.weight : 1
+        const nextProtein = nutritionChanged ? roundToSingleDecimal(protein) : roundToSingleDecimal(item.protein * weightScale)
+        const nextCarbs = nutritionChanged ? roundToSingleDecimal(carbs) : roundToSingleDecimal(item.carbs * weightScale)
+        const nextFat = nutritionChanged ? roundToSingleDecimal(fat) : roundToSingleDecimal(item.fat * weightScale)
+        const nextWaterMl = nutritionChanged ? Math.round(waterMl) : Math.round(item.waterMl * weightScale)
+        const nextCalories = nutritionChanged ? Math.round(calories) : Math.round(item.calorie * weightScale)
+        const ratio = item.ratio > 0 ? item.ratio : 100
+        const nextGrossWeight = Math.max(weight, item.grossWeight || weight)
+        const nextEdiblePortionRatio = nextGrossWeight > 0
+          ? Math.max(1, Math.min(100, Math.round((weight / nextGrossWeight) * 100)))
+          : item.ediblePortionRatio
+        return {
+          ...item,
+          name,
+          weight: roundToSingleDecimal(weight),
+          grossWeight: nextGrossWeight,
+          ediblePortionRatio: nextEdiblePortionRatio,
+          intake: Math.round(weight * (ratio / 100)),
+          calorie: nextCalories,
+          protein: nextProtein,
+          carbs: nextCarbs,
+          fat: nextFat,
+          waterMl: nextWaterMl,
+          nutrients: {
+            ...item.nutrients,
+            calories: nextCalories,
+            protein: nextProtein,
+            carbs: nextCarbs,
+            fat: nextFat,
+            waterMl: nextWaterMl,
+            water_ml: nextWaterMl
+          },
+          nutritionEdited: nutritionChanged || item.nutritionEdited,
+          nutritionSource: nutritionChanged ? 'user_correction_context' : item.nutritionSource,
+          packageMatchStatus: isPendingPackagedChoice ? 'user_confirmed' : item.packageMatchStatus,
+          packageWeightSource: weightChanged || isPendingPackagedChoice ? 'user_context' : item.packageWeightSource,
+          packageWeightApplied: weightChanged || isPendingPackagedChoice ? true : item.packageWeightApplied,
+          packageWeightReason: weightChanged || isPendingPackagedChoice ? '用户在结果页手动修改重量' : item.packageWeightReason,
+          packagedPending: false
+        } as NutritionItem
+      })
+    calculateNutritionStats(nextItems)
+    setNutritionItems(nextItems)
+    setFoodEditDraft(null)
+    Taro.showToast({ title: '已修改', icon: 'success' })
+    void syncEditedAnalyzeResult(nextItems)
+  }
+
   // 删除食物项
   const handleDeleteItem = (id: number, name: string) => {
     Taro.showModal({
@@ -1264,92 +1540,6 @@ function ResultPage() {
           calculateNutritionStats(updated)
           return updated
         })
-      }
-    })
-  }
-
-  // 修改食物名称
-  const handleEditName = (id: number, currentName: string) => {
-    // @ts-ignore
-    Taro.showModal({
-      title: '修改食物名称',
-      content: currentName,
-      // @ts-ignore
-      editable: true,
-      placeholderText: '请输入新的食物名称',
-      success: (res) => {
-        if (res.confirm) {
-          const newName = (res as any).content.trim()
-          if (!newName) {
-            Taro.showToast({
-              title: '名称不能为空',
-              icon: 'none'
-            })
-            return
-          }
-
-          // 确认保存修改
-          Taro.showModal({
-            title: '确认保存',
-            content: `确定将食物名称修改为"${newName}"吗？`,
-            success: async (confirmRes) => {
-              if (confirmRes.confirm) {
-                // 1. 更新本地状态
-                const updatedItems = nutritionItems.map(item =>
-                  item.id === id ? { ...item, name: newName } : item
-                )
-                setNutritionItems(updatedItems)
-
-                // 2. 尝试同步更新后端 analysis_tasks 记录（如果有 taskId）
-                const sourceTaskId = Taro.getStorageSync('analyzeSourceTaskId')
-                if (sourceTaskId) {
-                  try {
-                    Taro.showLoading({ title: '同步中...' })
-
-                    // 构建新的 result 对象（基于当前页面状态）
-                    // 注意：后端 updateAnalysisTaskResult 接收整个 result 对象
-                    // 我们尽量还原 AnalyzeResponse 的结构
-                    const newResult: AnalyzeResponse = {
-                      description,
-                      insight: healthAdvice,
-                      items: updatedItems.map(item => ({
-                        name: item.name,
-                        estimatedWeightGrams: item.weight,
-                        originalWeightGrams: item.originalWeight,
-                        waterMl: item.waterMl,
-                        nutrients: buildFoodItemNutrients(item)
-                      })),
-                      pfc_ratio_comment: pfcRatioComment || undefined,
-                      absorption_notes: absorptionNotes || undefined,
-                      context_advice: contextAdvice || undefined,
-                      recognitionOutcome,
-                      rejectionReason: rejectionReason || undefined,
-                      retakeGuidance: retakeGuidance.length > 0 ? retakeGuidance : undefined,
-                      allowedFoodCategory,
-                      followupQuestions: followupQuestions.length > 0 ? followupQuestions : undefined,
-                    }
-
-                    await updateAnalysisTaskResult(sourceTaskId, newResult)
-
-                    // 同时更新本地缓存的 analyzeResult，以免用户刷新后丢失修改
-                    Taro.setStorageSync('analyzeResult', JSON.stringify(newResult))
-
-                    Taro.hideLoading()
-                    Taro.showToast({ title: '已更新并同步', icon: 'success' })
-                  } catch (error) {
-                    console.error('同步更新 analysis_tasks 失败:', error)
-                    Taro.hideLoading()
-                    // 即使后端同步失败，本地已经修改了，也提示成功但告知同步失败
-                    void showUnifiedApiError(new Error('本地已更新(同步失败)'), '本地已更新(同步失败)')
-                  }
-                } else {
-                  // 没有 taskId，仅本地更新
-                  Taro.showToast({ title: '已更新', icon: 'success' })
-                }
-              }
-            }
-          })
-        }
       }
     })
   }
@@ -1457,6 +1647,10 @@ function ResultPage() {
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
     // 避免用户快速连续点击导致重复保存
     if (saving) return
+    if (nutritionItems.some(isPackagedChoicePending)) {
+      Taro.showToast({ title: '请先选择零食规格', icon: 'none' })
+      return
+    }
     // 从缓存获取分析时选择的状态
     const savedMealType = Taro.getStorageSync('analyzeMealType')
     const savedDietGoal = Taro.getStorageSync('analyzeDietGoal')
@@ -1490,20 +1684,10 @@ function ResultPage() {
           image_paths: hasUploadableImage && imagePaths.length > 0 ? imagePaths : undefined,
           description: description || undefined,
           insight: healthAdvice || undefined,
-          items: nutritionItems.map((item) => ({
-            name: item.name,
-            weight: item.weight,
-            ratio: item.ratio,
-            intake: item.intake,
-            gross_weight_grams: item.grossWeight,
-            edible_portion_ratio: item.ediblePortionRatio,
-            edible_portion_reason: item.ediblePortionReason,
-            edible_portion_source: item.ediblePortionSource,
-            suggested_ratio: item.suggestedRatio,
-            suggested_ratio_reason: item.suggestedRatioReason,
-            water_ml: item.waterMl,
-            nutrients: buildFoodItemNutrients(item)
-          })),
+          items: nutritionItems.map((item) => buildFoodRecordItemPayloadFromResultItem(
+            item,
+            buildFoodItemNutrients(item),
+          )),
           total_calories: nutritionStats.calories,
           total_protein: nutritionStats.protein,
           total_carbs: nutritionStats.carbs,
@@ -1656,6 +1840,10 @@ function ResultPage() {
       Taro.showToast({ title: '请先登录', icon: 'none' })
       return
     }
+    if (nutritionItems.some(isPackagedChoicePending)) {
+      Taro.showToast({ title: '请先选择零食规格', icon: 'none' })
+      return
+    }
 
     // 获取餐次信息
     const savedMealType = Taro.getStorageSync('analyzeMealType')
@@ -1681,14 +1869,10 @@ function ResultPage() {
 
           try {
             // 构建食谱数据
-            const recipeItems = nutritionItems.map(nutritionItem => ({
-              name: nutritionItem.name,
-              weight: nutritionItem.weight,
-              ratio: nutritionItem.ratio,
-              intake: nutritionItem.intake,
-              water_ml: nutritionItem.waterMl,
-              nutrients: buildFoodItemNutrients(nutritionItem)
-            }))
+            const recipeItems = nutritionItems.map((nutritionItem) => buildFoodRecordItemPayloadFromResultItem(
+              nutritionItem,
+              buildFoodItemNutrients(nutritionItem),
+            ))
 
             await createUserRecipe({
               recipe_name: recipeName,
@@ -1759,6 +1943,8 @@ function ResultPage() {
         name: '',
         weight: 100, // 默认 100g
         originalWeight: 100,
+        grossWeight: 100,
+        ediblePortionRatio: 1,
         calorie: 0,
         intake: 100,
         ratio: 100,
@@ -1822,15 +2008,9 @@ function ResultPage() {
           const previousResult: AnalyzeResponse = {
             description,
             insight: healthAdvice,
-            items: nutritionItems.map((item) => ({
-              itemId: item.sourceItemId ?? item.id,
-              name: item.name,
-              estimatedWeightGrams: item.weight,
-              originalWeightGrams: item.originalWeight,
-              waterMl: item.waterMl,
-              nutrients: buildFoodItemNutrients(item)
-            })),
+            items: buildCorrectionPreviousResultItems(nutritionItems, buildFoodItemNutrients),
             pfc_ratio_comment: pfcRatioComment || undefined,
+            eating_order_advice: eatingOrderAdvice || undefined,
             absorption_notes: absorptionNotes || undefined,
             context_advice: contextAdvice || undefined,
             recognitionOutcome,
@@ -1846,16 +2026,16 @@ function ResultPage() {
             const baseline = baselineMap.get(item.id)
             if (baseline) {
               const nameChanged = normalizeFoodNameForCorrection(item.name.trim()) !== normalizeFoodNameForCorrection(baseline.name.trim())
-              const weightChanged = Math.round(item.weight || 0) !== Math.round(baseline.weight || 0)
+              const weightChanged = hasCorrectionWeightChanged(item.weight, baseline.weight)
               if (nameChanged && weightChanged) {
-                editDescriptions.push(`将"${baseline.name}"改为"${item.name.trim()}"，重量改为${Math.round(item.weight)}g`)
+                editDescriptions.push(`将"${baseline.name}"改为"${item.name.trim()}"，重量改为${formatCorrectionWeight(item.weight)}g`)
               } else if (nameChanged) {
                 editDescriptions.push(`将"${baseline.name}"改为"${item.name.trim()}"`)
               } else if (weightChanged) {
-                editDescriptions.push(`将"${item.name.trim()}"的重量改为${Math.round(item.weight)}g`)
+                editDescriptions.push(`将"${item.name.trim()}"的重量改为${formatCorrectionWeight(item.weight)}g`)
               }
             } else {
-              editDescriptions.push(`新增食物"${item.name.trim()}" ${Math.round(item.weight)}g`)
+              editDescriptions.push(`新增食物"${item.name.trim()}" ${formatCorrectionWeight(item.weight)}g`)
             }
           }
           for (const baseline of nutritionItems) {
@@ -1874,29 +2054,11 @@ function ResultPage() {
           const finalCorrectionContext = correctionParts.length > 0
             ? correctionParts.join('\n')
             : '用户发起了二次纠错，请结合原始内容重新分析。'
-          const correctionPayload = resolvedCorrectionItems.map((item) => {
-            const baseline = baselineMap.get(item.id)
-            const normalizedName = item.name.trim()
-            return {
-              name: normalizedName,
-              weight: Math.round(item.weight || 0),
-              originalWeight: item.originalWeight,
-              calorie: item.calorie,
-              protein: item.protein,
-              carbs: item.carbs,
-              fat: item.fat,
-              waterMl: item.waterMl,
-              nutrients: buildFoodItemNutrients(item),
-              sourceName: baseline?.name || item.sourceName,
-              sourceItemId: item.sourceItemId ?? item.id,
-              nameEdited: baseline
-                ? normalizeFoodNameForCorrection(normalizedName) !== normalizeFoodNameForCorrection(baseline.name)
-                : true,
-              weightEdited: baseline
-                ? Math.round(item.weight || 0) !== Math.round(baseline.weight || 0)
-                : true,
-            }
-          })
+          const correctionPayload = buildCorrectionItemsPayload(
+            resolvedCorrectionItems,
+            nutritionItems,
+            buildFoodItemNutrients,
+          )
 
           let taskId = ''
 
@@ -1982,6 +2144,8 @@ function ResultPage() {
       })
     }
   }
+
+  const pendingPackagedChoiceCount = nutritionItems.filter(isPackagedChoicePending).length
 
   return (
     <View className={`result-page ${scheme === 'dark' ? 'result-page--dark' : ''}`}>
@@ -2326,6 +2490,14 @@ function ResultPage() {
             </View>
           </View>
 
+          {pendingPackagedChoiceCount > 0 && (
+            <View className='packaged-pending-banner'>
+              <Text className='packaged-pending-banner-text'>
+                {pendingPackagedChoiceCount} 个包装食品规格待确认，暂未计入总热量
+              </Text>
+            </View>
+          )}
+
           {/* AI 饮食分析（隐藏调试文案，仅展示最终可读结论） */}
           {nutritionItems.length > 0 && (
             <View className='insight-card'>
@@ -2362,7 +2534,7 @@ function ResultPage() {
                 </View>
                 <View className='insight-body'>
                   <Text className='insight-label'>进食顺序</Text>
-                  <Text className='insight-content'>{eatingOrderText}</Text>
+                  <Text className='insight-content'>{eatingOrderDisplayText}</Text>
                 </View>
               </View>
 
@@ -2405,14 +2577,17 @@ function ResultPage() {
                 const detailRows = getNutrientDetailRows(item)
                 const detailsExpanded = !!expandedNutritionDetailIds[item.id]
                 const ediblePortionHint = getEdiblePortionHint(item)
+                const packageChoicePending = isPackagedChoicePending(item)
+                const packagedCandidates = item.packagedCandidates || []
                 return (
                 <View key={item.id} className='ingredient-card'>
                   <View className='ingredient-main'>
                     <View className='ingredient-header ingredient-header--title-row'>
                       <Text className='ingredient-name'>{item.name}</Text>
                       <View className='ingredient-header-actions'>
-                        <View className='edit-icon-wrapper' onClick={() => handleEditName(item.id, item.name)}>
+                        <View className='edit-icon-wrapper edit-icon-wrapper--with-label' onClick={() => openFoodEditDrawer(item)}>
                           <Text className='iconfont icon-shouxieqianming'></Text>
+                          <Text className='edit-icon-label'>编辑</Text>
                         </View>
                         <View className='delete-icon-wrapper' onClick={() => handleDeleteItem(item.id, item.name)}>
                           <Text className='delete-icon'>×</Text>
@@ -2440,8 +2615,62 @@ function ResultPage() {
                     </View>
                   )}
 
+                  {packageChoicePending && (
+                    <View className='packaged-choice-card'>
+                      <View className='packaged-choice-header'>
+                        <Text className='packaged-choice-title'>请选择包装规格</Text>
+                        <Text className='packaged-choice-subtitle'>图片未读到净含量，先不自动套重量</Text>
+                      </View>
+                      <View className='packaged-choice-list'>
+                        {packagedCandidates.map((candidate, candidateIndex) => {
+                          const candidateName = candidateText(candidate, 'display_name', 'displayName', 'name') || item.name
+                          const netLabel = candidateNetContentLabel(candidate)
+                          const imageUrl = candidateSourceImage(candidate)
+                          const unit = candidateNutritionUnit(candidate)
+                          const basisLabel = candidateNutritionBasisLabel(candidate)
+                          const hasNutrition = candidateHasDisplayNutrition(unit)
+                          const kcal = Math.round(unit.calories || 0)
+                          const protein = formatMacroDisplay(unit.protein || 0)
+                          const carbs = formatMacroDisplay(unit.carbs || 0)
+                          const fat = formatMacroDisplay(unit.fat || 0)
+                          return (
+                            <View
+                              key={`${item.id}-packaged-candidate-${candidateText(candidate, 'id', 'packaged_food_id') || candidateIndex}`}
+                              className='packaged-choice-option'
+                              onClick={() => applyPackagedCandidate(item.id, candidate)}
+                            >
+                              {imageUrl ? (
+                                <Image className='packaged-choice-image' src={imageUrl} mode='aspectFill' />
+                              ) : (
+                                <View className='packaged-choice-image packaged-choice-image--empty'>
+                                  <Text className='iconfont icon-tupian' />
+                                </View>
+                              )}
+                              <View className='packaged-choice-body'>
+                                <Text className='packaged-choice-name'>{candidateName}</Text>
+                                <Text className='packaged-choice-meta'>
+                                  {hasNutrition
+                                    ? `${netLabel || '规格待确认'} · ${kcal} kcal/${basisLabel} · 蛋白 ${protein}g · 碳水 ${carbs}g · 脂肪 ${fat}g`
+                                    : `${netLabel || '规格待确认'} · 营养信息待确认`}
+                                </Text>
+                              </View>
+                              <View className='packaged-choice-pick'>
+                                <Text className='packaged-choice-pick-text'>选择</Text>
+                              </View>
+                            </View>
+                          )
+                        })}
+                      </View>
+                    </View>
+                  )}
+
+                  {!packageChoicePending && (
+                    <>
                   <View className='ingredient-nutrition-strip'>
-                    <View className='ingredient-summary-cell ingredient-summary-cell--cal'>
+                    <View
+                      className='ingredient-summary-cell ingredient-summary-cell--cal'
+                      onClick={() => handleIngredientMetricEdit(item.id, 'calories', item.calorie)}
+                    >
                       <Text className='ingredient-summary-label'>热量</Text>
                       <View className='ingredient-cal-kcal-line'>
                         <Text className='ingredient-cal-kcal-num'>
@@ -2549,6 +2778,8 @@ function ResultPage() {
                       )}
                     </View>
                   </View>
+                    </>
+                  )}
                 </View>
                 )
               })}
@@ -2569,7 +2800,7 @@ function ResultPage() {
               <Text className='btn-text'>收藏餐食</Text>
             </View>
             <View
-              className={`primary-btn ${saving ? 'loading' : ''} ${isAnalyzeSessionCommitted() || committedRecordId ? 'is-committed' : ''}`}
+              className={`primary-btn ${saving ? 'loading' : ''} ${pendingPackagedChoiceCount > 0 ? 'needs-spec' : ''} ${isAnalyzeSessionCommitted() || committedRecordId ? 'is-committed' : ''}`}
               onClick={handleConfirmAndShare}
             >
               {saving ? (
@@ -2578,6 +2809,8 @@ function ResultPage() {
                 <Text className='btn-text'>
                   {isAnalyzeSessionCommitted() || committedRecordId
                     ? '查看结果'
+                    : pendingPackagedChoiceCount > 0
+                      ? '选规格'
                     : '记录'}
                 </Text>
               )}
@@ -2601,6 +2834,88 @@ function ResultPage() {
         onCancel={() => setShowMealSelector(false)}
         onConfirm={handleConfirmMealType}
       />
+
+      <View
+        className={`food-edit-drawer-overlay ${foodEditDraft ? 'visible' : ''}`}
+        onClick={() => setFoodEditDraft(null)}
+      >
+        <View
+          className={`food-edit-drawer-content ${foodEditDraft ? 'slide-up' : ''}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <View className='drawer-header'>
+            <Text className='drawer-title'>修改食物</Text>
+            <View className='drawer-close' onClick={() => setFoodEditDraft(null)}>
+              <Text className='close-icon'>×</Text>
+            </View>
+          </View>
+          {foodEditDraft && (
+            <ScrollView className='drawer-scroll food-edit-drawer-scroll' scrollY>
+              <View className='food-edit-section'>
+                <Text className='food-edit-section-title'>基础信息</Text>
+                <View className='food-edit-field'>
+                  <Text className='food-edit-label'>名称</Text>
+                  <Input
+                    className='food-edit-input'
+                    value={foodEditDraft.name}
+                    placeholder='食物名称'
+                    onInput={(e: any) => updateFoodEditDraftField('name', e.detail.value)}
+                  />
+                </View>
+                <View className='food-edit-field food-edit-field--with-unit'>
+                  <Text className='food-edit-label'>估算重量</Text>
+                  <Input
+                    className='food-edit-input'
+                    type='digit'
+                    value={foodEditDraft.weight}
+                    placeholder='重量'
+                    onInput={(e: any) => updateFoodEditDraftField('weight', e.detail.value)}
+                  />
+                  <Text className='food-edit-unit'>g</Text>
+                </View>
+              </View>
+              <View className='food-edit-section'>
+                <Text className='food-edit-section-title'>整份营养</Text>
+                <View className='food-edit-grid'>
+                  <View className='food-edit-field food-edit-field--with-unit'>
+                    <Text className='food-edit-label'>热量</Text>
+                    <Input className='food-edit-input' type='digit' value={foodEditDraft.calories} placeholder='热量' onInput={(e: any) => updateFoodEditDraftField('calories', e.detail.value)} />
+                    <Text className='food-edit-unit'>kcal</Text>
+                  </View>
+                  <View className='food-edit-field food-edit-field--with-unit'>
+                    <Text className='food-edit-label'>蛋白质</Text>
+                    <Input className='food-edit-input' type='digit' value={foodEditDraft.protein} placeholder='蛋白质' onInput={(e: any) => updateFoodEditDraftField('protein', e.detail.value)} />
+                    <Text className='food-edit-unit'>g</Text>
+                  </View>
+                  <View className='food-edit-field food-edit-field--with-unit'>
+                    <Text className='food-edit-label'>碳水</Text>
+                    <Input className='food-edit-input' type='digit' value={foodEditDraft.carbs} placeholder='碳水' onInput={(e: any) => updateFoodEditDraftField('carbs', e.detail.value)} />
+                    <Text className='food-edit-unit'>g</Text>
+                  </View>
+                  <View className='food-edit-field food-edit-field--with-unit'>
+                    <Text className='food-edit-label'>脂肪</Text>
+                    <Input className='food-edit-input' type='digit' value={foodEditDraft.fat} placeholder='脂肪' onInput={(e: any) => updateFoodEditDraftField('fat', e.detail.value)} />
+                    <Text className='food-edit-unit'>g</Text>
+                  </View>
+                  <View className='food-edit-field food-edit-field--with-unit food-edit-field--wide'>
+                    <Text className='food-edit-label'>含水量</Text>
+                    <Input className='food-edit-input' type='digit' value={foodEditDraft.waterMl} placeholder='含水量' onInput={(e: any) => updateFoodEditDraftField('waterMl', e.detail.value)} />
+                    <Text className='food-edit-unit'>ml</Text>
+                  </View>
+                </View>
+              </View>
+            </ScrollView>
+          )}
+          <View className='food-edit-footer'>
+            <View className='food-edit-cancel' onClick={() => setFoodEditDraft(null)}>
+              <Text className='food-edit-cancel-text'>取消</Text>
+            </View>
+            <View className='food-edit-save' onClick={handleSaveFoodEditDraft}>
+              <Text className='food-edit-save-text'>保存修改</Text>
+            </View>
+          </View>
+        </View>
+      </View>
 
       {/* 二次纠错抽屉弹窗 */}
       <View

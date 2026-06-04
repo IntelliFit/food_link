@@ -19,6 +19,7 @@ type MembershipService interface {
 	GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error)
 	GetRewardCenter(ctx context.Context, userID string) (map[string]any, error)
 	CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error)
+	SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error)
 	WechatNotify(ctx context.Context, paymentID string) error
 	HandleWechatNotify(ctx context.Context, headers http.Header, body []byte) (map[string]any, error)
 	ClaimSharePosterReward(ctx context.Context, userID string, input service.SharePosterRewardClaimInput) (map[string]any, error)
@@ -97,6 +98,28 @@ func (h *MembershipHandler) CreatePayment(c *gin.Context) {
 		return
 	}
 	data, err := h.svc.CreatePayment(c.Request.Context(), userID, planCode)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+// POST /api/membership/pay/sync
+func (h *MembershipHandler) SyncPayment(c *gin.Context) {
+	var body struct {
+		OrderNo string `json:"order_no"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	data, err := h.svc.SyncWechatPayment(c.Request.Context(), userID, body.OrderNo)
 	if err != nil {
 		response.Error(c, err)
 		return

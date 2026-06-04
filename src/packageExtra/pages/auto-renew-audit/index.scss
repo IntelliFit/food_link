@@ -1,0 +1,281 @@
+.audit-page {
+  min-height: 100vh;
+  background: #f0fdf4;
+  padding: 28rpx 28rpx 72rpx;
+}
+
+.audit-banner,
+.section {
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: 0 4rpx 20rpx rgb(0 100 60 / 8%);
+}
+
+.audit-banner {
+  padding: 34rpx 32rpx;
+  background: linear-gradient(180deg, #12372f 0%, #1f5a48 100%);
+}
+
+.audit-kicker {
+  display: block;
+  color: #b7f7d6;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.audit-title {
+  display: block;
+  margin-top: 12rpx;
+  color: #f7fff9;
+  font-size: 44rpx;
+  line-height: 1.25;
+  font-weight: 900;
+}
+
+.audit-desc {
+  display: block;
+  margin-top: 18rpx;
+  color: rgb(240 253 244 / 82%);
+  font-size: 24rpx;
+  line-height: 1.7;
+}
+
+.section {
+  margin-top: 24rpx;
+  padding: 28rpx;
+}
+
+.section-title {
+  display: block;
+  color: #064e3b;
+  font-size: 30rpx;
+  font-weight: 900;
+  margin-bottom: 20rpx;
+}
+
+.service-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+}
+
+.service-item {
+  width: 194rpx;
+  min-height: 58rpx;
+  line-height: 58rpx;
+  text-align: center;
+  border-radius: 14rpx;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 24rpx;
+  font-weight: 700;
+}
+
+.price-head,
+.price-row,
+.info-row {
+  display: flex;
+  align-items: center;
+}
+
+.price-head {
+  min-height: 58rpx;
+  background: #f6fdf9;
+  border-radius: 14rpx 14rpx 0 0;
+}
+
+.price-row {
+  min-height: 92rpx;
+  border-bottom: 1rpx solid #edf5f0;
+}
+
+.price-cell {
+  flex: 1;
+  text-align: center;
+  color: #111827;
+  font-size: 23rpx;
+  font-weight: 800;
+}
+
+.price-name {
+  flex: 1.28;
+}
+
+.price-name-col {
+  flex: 1.28;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.tier-name {
+  color: #111827;
+  font-size: 24rpx;
+  font-weight: 900;
+}
+
+.tier-credits,
+.price-note,
+.plain-text {
+  color: #4b5563;
+  font-size: 22rpx;
+  line-height: 1.65;
+}
+
+.price-note {
+  display: block;
+  margin-top: 16rpx;
+}
+
+.auto-card {
+  border: 2rpx solid #bbf7d0;
+}
+
+.cancel-card {
+  border: 2rpx solid #bfdbfe;
+}
+
+.info-row {
+  justify-content: space-between;
+  min-height: 62rpx;
+  border-bottom: 1rpx solid #edf5f0;
+  gap: 24rpx;
+}
+
+.info-label {
+  color: #6b7280;
+  font-size: 24rpx;
+}
+
+.info-value {
+  color: #111827;
+  font-size: 24rpx;
+  font-weight: 800;
+  text-align: right;
+  max-width: 430rpx;
+  line-height: 1.5;
+}
+
+.price-strong {
+  color: #00a86b;
+}
+
+.plain-text {
+  display: block;
+  margin-top: 18rpx;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.checkbox {
+  width: 34rpx;
+  height: 34rpx;
+  line-height: 34rpx;
+  border-radius: 8rpx;
+  text-align: center;
+  color: #fff;
+  background: #00bc7d;
+  font-size: 22rpx;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.check-text {
+  color: #374151;
+  font-size: 23rpx;
+  line-height: 1.5;
+}
+
+.path-text {
+  display: block;
+  padding: 18rpx 20rpx;
+  border-radius: 16rpx;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 24rpx;
+  line-height: 1.6;
+  font-weight: 800;
+}
+
+.primary-btn,
+.secondary-btn {
+  margin-top: 24rpx;
+  height: 82rpx;
+  line-height: 82rpx;
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  font-weight: 900;
+}
+
+.primary-btn {
+  color: #fff;
+  background: linear-gradient(135deg, #00bc7d 0%, #00a86b 100%);
+}
+
+.secondary-btn {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1rpx solid #bfdbfe;
+}
+
+.audit-modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+  background: rgb(15 23 42 / 48%);
+}
+
+.audit-modal {
+  width: 100%;
+  max-width: 620rpx;
+  padding: 34rpx 30rpx 30rpx;
+  border-radius: 22rpx;
+  background: #fff;
+  box-shadow: 0 16rpx 48rpx rgb(15 23 42 / 20%);
+}
+
+.audit-modal-title {
+  display: block;
+  color: #0f172a;
+  font-size: 32rpx;
+  font-weight: 900;
+  text-align: center;
+}
+
+.audit-modal-body {
+  margin-top: 22rpx;
+  padding: 22rpx;
+  border-radius: 16rpx;
+  background: #f8fafc;
+}
+
+.audit-modal-line {
+  display: block;
+  color: #334155;
+  font-size: 24rpx;
+  line-height: 1.7;
+}
+
+.audit-modal-line + .audit-modal-line {
+  margin-top: 8rpx;
+}
+
+.audit-modal-btn {
+  margin-top: 26rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  border-radius: 999rpx;
+  background: #00bc7d;
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 900;
+}

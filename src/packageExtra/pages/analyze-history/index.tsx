@@ -2,7 +2,7 @@ import { View, Text, Image, ScrollView } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useState, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
-import { listAnalyzeTasks, deleteAnalysisTask, createUserRecipe, getAccessToken, saveFoodRecord, retryAnalyzeTask, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult, type MealType, type Nutrients } from '../../../utils/api'
+import { listAnalyzeTasks, deleteAnalysisTask, createUserRecipe, getAccessToken, saveFoodRecord, retryAnalyzeTask, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult, type MealType } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -14,6 +14,7 @@ import {
   refreshHomeDashboardLocalSnapshotFromCloud
 } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
+import { buildFoodRecordItemPayloadFromAnalyzeItem } from '../../../utils/food-record-item-payload'
 import {
   MealTypeSelectSheet,
   normalizeSelectableMealType,
@@ -52,7 +53,10 @@ const EXECUTION_MODE_LABEL: Record<ExecutionMode, string> = {
   gemini35_flash: '精准模式',
   gemini35_flash_grouped: '精准模式',
   strict: '精准模式',
+  strict_separate: '精准分项',
   strict_web_search: '精准联网',
+  fast: '快速模式',
+  fast_web_search: '快速联网',
   standard_web_search: '普通联网',
   standard_packaged_experiment: '零食库试验',
   standard: '普通模式'
@@ -116,8 +120,11 @@ const pickRecognitionOutcome = (task: AnalysisTask): AnalyzeRecognitionOutcome =
 
 const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
   const taskAny = task as AnalysisTask & { execution_mode?: unknown }
+  if (taskAny.execution_mode === 'fast') return 'fast'
+  if (taskAny.execution_mode === 'fast_web_search') return 'fast_web_search'
   if (taskAny.execution_mode === 'standard_web_search') return 'standard_web_search'
   if (taskAny.execution_mode === 'standard_packaged_experiment') return 'standard_packaged_experiment'
+  if (taskAny.execution_mode === 'strict_separate') return 'strict_separate'
   if (taskAny.execution_mode === 'strict_web_search') return 'strict_web_search'
   if (taskAny.execution_mode === 'strict' || taskAny.execution_mode === 'gemini35_flash' || taskAny.execution_mode === 'gemini35_flash_grouped') {
     return 'strict'
@@ -126,8 +133,11 @@ const pickExecutionMode = (task: AnalysisTask): ExecutionMode => {
     return 'standard'
   }
   const payloadMode = (task.payload as Record<string, unknown> | undefined)?.execution_mode
+  if (payloadMode === 'fast') return 'fast'
+  if (payloadMode === 'fast_web_search') return 'fast_web_search'
   if (payloadMode === 'standard_web_search') return 'standard_web_search'
   if (payloadMode === 'standard_packaged_experiment') return 'standard_packaged_experiment'
+  if (payloadMode === 'strict_separate') return 'strict_separate'
   if (payloadMode === 'strict_web_search') return 'strict_web_search'
   if (payloadMode === 'strict' || payloadMode === 'gemini35_flash' || payloadMode === 'gemini35_flash_grouped') return 'strict'
   return 'standard'
@@ -186,19 +196,6 @@ const normalizeNumber = (value: unknown): number => {
   return Number.isFinite(n) ? n : 0
 }
 
-const buildRecipeNutrients = (nutrients: Partial<Nutrients> | undefined, waterMl: number): Nutrients => ({
-  ...(nutrients || {}),
-  calories: normalizeNumber(nutrients?.calories),
-  protein: normalizeNumber(nutrients?.protein),
-  carbs: normalizeNumber(nutrients?.carbs),
-  fat: normalizeNumber(nutrients?.fat),
-  fiber: normalizeNumber(nutrients?.fiber),
-  sugar: normalizeNumber(nutrients?.sugar),
-  waterMl,
-  water_ml: waterMl,
-  sodium_mg: normalizeNumber(nutrients?.sodium_mg ?? nutrients?.sodiumMg)
-})
-
 const buildDefaultRecipeName = (task: AnalysisTask): string => {
   const result = task.result as AnalyzeResponse | undefined
   const firstName = result?.items?.[0]?.name?.trim()
@@ -216,20 +213,7 @@ const pickTaskImageUrls = (task: AnalysisTask): string[] => {
 }
 
 const buildTaskFoodItems = (result: AnalyzeResponse) => (
-  (result.items || []).map((item) => {
-    const weight = normalizeNumber(item.estimatedWeightGrams || item.originalWeightGrams)
-    const ratio = normalizeNumber(item.suggestedRatio) || 100
-    const intake = weight * ratio / 100
-    const waterMl = normalizeNumber(item.water_ml ?? item.waterMl ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl)
-    return {
-      name: item.name || '未命名食物',
-      weight,
-      ratio,
-      intake,
-      water_ml: waterMl,
-      nutrients: buildRecipeNutrients(item.nutrients, waterMl)
-    }
-  })
+  (result.items || []).map(buildFoodRecordItemPayloadFromAnalyzeItem)
 )
 
 const buildTaskNutritionTotals = (items: ReturnType<typeof buildTaskFoodItems>) => (
@@ -665,18 +649,7 @@ function AnalyzeHistoryPage() {
           return
         }
 
-        const items = (result.items || []).map((item) => {
-          const weight = normalizeNumber(item.estimatedWeightGrams || item.originalWeightGrams)
-          const waterMl = normalizeNumber(item.water_ml ?? item.waterMl ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl)
-          return {
-            name: item.name || '未命名食物',
-            weight,
-            ratio: normalizeNumber(item.suggestedRatio) || 100,
-            intake: weight,
-            water_ml: waterMl,
-            nutrients: buildRecipeNutrients(item.nutrients, waterMl)
-          }
-        })
+        const items = buildTaskFoodItems(result)
 
         if (items.length === 0) {
           Taro.showToast({ title: '没有可收藏的食物', icon: 'none' })
