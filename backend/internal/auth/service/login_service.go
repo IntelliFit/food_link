@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"food_link/backend/internal/auth/repo"
@@ -20,6 +22,9 @@ const (
 	loginEarlyUserTop500Limit     = 500
 	loginEarlyUserTop500TrialDays = 60
 	loginEarlyUserTrialDays       = 30
+
+	defaultUserAvatarKey          = "_system/default_avatar.jpg"
+	defaultWechatNicknamePrefix   = "微信用户_"
 )
 
 type LoginInput struct {
@@ -77,8 +82,8 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 		pointsBalance := 100.0
 		user = &repo.User{
 			OpenID:        openID,
-			Nickname:      "",
-			Avatar:        "",
+			Nickname:      buildDefaultWechatNickname(),
+			Avatar:        defaultUserAvatarKey,
 			Telephone:     phone,
 			PointsBalance: &pointsBalance,
 		}
@@ -295,3 +300,12 @@ func randomInviteCode() string {
 	_, _ = rand.Read(buf[:])
 	return strings.ToUpper(hex.EncodeToString(buf[:]))
 }
+
+func buildDefaultWechatNickname() string {
+	var buf [4]byte
+	_, _ = rand.Read(buf[:])
+	n := binary.BigEndian.Uint32(buf[:]) % 1_000_000
+	return fmt.Sprintf("%s%06d", defaultWechatNicknamePrefix, n)
+}
+
+var defaultWechatNicknameSuffixPattern = regexp.MustCompile(`^\d{6}$`)

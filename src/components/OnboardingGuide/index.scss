@@ -1,0 +1,140 @@
+// 避开微信右上角胶囊（状态栏 + 菜单按钮区域）
+$onboarding-guide-top-inset: calc(env(safe-area-inset-top) + 180rpx);
+
+.onboarding-guide {
+  position: fixed;
+  inset: 0;
+  z-index: 100010;
+  pointer-events: auto;
+}
+
+// 全屏拦截触摸（镂空仅视觉，pointer-events: none，避免穿透到底层页面滚动）
+.onboarding-guide__touch-blocker {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.onboarding-guide__hole {
+  position: fixed;
+  border-radius: 20rpx;
+  box-shadow: 0 0 0 9999px rgb(15 23 42 / 62%);
+  pointer-events: none;
+  z-index: 1;
+  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease;
+}
+
+.onboarding-guide__hole--round {
+  border-radius: 50%;
+}
+
+.onboarding-guide__fallback-mask {
+  position: fixed;
+  inset: 0;
+  background: rgb(15 23 42 / 62%);
+  z-index: 0;
+}
+
+.onboarding-guide__panel {
+  position: fixed;
+  left: 32rpx;
+  right: 32rpx;
+  z-index: 2;
+  padding: 28rpx 28rpx 24rpx;
+  border-radius: 24rpx;
+  background: #fff;
+  box-shadow: 0 16rpx 48rpx rgb(15 23 42 / 18%);
+  box-sizing: border-box;
+}
+
+.onboarding-guide__panel--top {
+  top: $onboarding-guide-top-inset;
+}
+
+.onboarding-guide__panel--bottom {
+  bottom: calc(env(safe-area-inset-bottom) + 200rpx);
+}
+
+.onboarding-guide__panel--center {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+
+.onboarding-guide__step-label {
+  display: block;
+  font-size: 24rpx;
+  color: #6b7280;
+  margin-bottom: 8rpx;
+}
+
+.onboarding-guide__title {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.4;
+  margin-bottom: 12rpx;
+}
+
+.onboarding-guide__desc {
+  display: block;
+  font-size: 28rpx;
+  color: #4b5563;
+  line-height: 1.5;
+  margin-bottom: 24rpx;
+}
+
+.onboarding-guide__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.onboarding-guide__skip {
+  padding: 16rpx 8rpx;
+  font-size: 28rpx;
+  color: #6b7280;
+  background: transparent;
+}
+
+.onboarding-guide__next {
+  min-width: 168rpx;
+  padding: 16rpx 36rpx;
+  text-align: center;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #fff;
+  background: linear-gradient(135deg, #5cb896 0%, #00bc7d 100%);
+  border-radius: 999rpx;
+}
+
+.fl-page-theme-root--dark .onboarding-guide__hole {
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 72%);
+}
+
+.fl-page-theme-root--dark .onboarding-guide__fallback-mask {
+  background: rgb(0 0 0 / 72%);
+}
+
+.fl-page-theme-root--dark .onboarding-guide__panel {
+  background: #1a2422;
+  box-shadow: 0 16rpx 48rpx rgb(0 0 0 / 45%);
+}
+
+.fl-page-theme-root--dark .onboarding-guide__step-label {
+  color: #9ca3af;
+}
+
+.fl-page-theme-root--dark .onboarding-guide__title {
+  color: #f3f4f6;
+}
+
+.fl-page-theme-root--dark .onboarding-guide__desc {
+  color: #d1d5db;
+}
+
+.fl-page-theme-root--dark .onboarding-guide__skip {
+  color: #9ca3af;
+}

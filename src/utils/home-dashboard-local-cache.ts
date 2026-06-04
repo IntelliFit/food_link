@@ -17,6 +17,7 @@ import {
   type HomeNutritionTarget,
   type SaveFoodRecordRequest
 } from './api'
+import { sanitizeFoodDisplayImageUrl } from './food-display-image'
 
 export const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache'
 export const HOME_DASHBOARD_LOCAL_CACHE_LIMIT = 14
@@ -191,6 +192,28 @@ function deriveMealTargetKcal(mealType: string, intakeTarget: number, existingMe
   return DEFAULT_SNACK_TARGET_KCAL
 }
 
+/** 合并同餐次多条记录的图片路径（去重，保持顺序） */
+function mergeMealImagePaths(
+  existingPaths: string[] | null | undefined,
+  existingPath: string | null | undefined,
+  newPaths: string[] | undefined,
+  newPath: string | undefined
+): string[] | null {
+  const merged: string[] = []
+  const seen = new Set<string>()
+  const append = (value: string | null | undefined) => {
+    const raw = sanitizeFoodDisplayImageUrl(value)
+    if (!raw || seen.has(raw)) return
+    seen.add(raw)
+    merged.push(raw)
+  }
+  for (const path of existingPaths || []) append(path)
+  for (const path of newPaths || []) append(path)
+  append(existingPath)
+  append(newPath)
+  return merged.length > 0 ? merged : null
+}
+
 function buildOptimisticFoodRecord(
   payload: SaveFoodRecordRequest,
   recordId: string,
@@ -250,18 +273,30 @@ export function applyOptimisticFoodRecordToHomeDashboardSnapshot(
   const existingMealIndex = currentSnapshot.meals.findIndex((item) => item.type === payload.meal_type)
   const existingMeal = existingMealIndex >= 0 ? currentSnapshot.meals[existingMealIndex] : undefined
 
+  const newEntryImagePaths = mergeMealImagePaths(
+    null,
+    null,
+    payload.image_paths,
+    payload.image_path
+  )
   const nextMealEntries: HomeMealRecordEntry[] = [
     {
       id: recordId,
       record_time: optimisticRecord.record_time,
       total_calories: payload.total_calories,
       title: recordTitle,
-      image_path: payload.image_path || payload.image_paths?.[0] || null,
-      image_paths: payload.image_paths || (payload.image_path ? [payload.image_path] : null),
+      image_path: newEntryImagePaths?.[0] || null,
+      image_paths: newEntryImagePaths,
       full_record: optimisticRecord,
     },
     ...((existingMeal?.meal_record_entries || []).filter((entry) => String(entry?.id || '').trim() !== recordId)),
   ]
+  const nextMealImagePaths = mergeMealImagePaths(
+    existingMeal?.image_paths || existingMeal?.images,
+    existingMeal?.image_path,
+    payload.image_paths,
+    payload.image_path
+  )
 
   const nextMealTarget = deriveMealTargetKcal(payload.meal_type, currentSnapshot.intakeData.target, existingMeal)
   const nextMealCalories = clampNumber((existingMeal?.calorie || 0) + payload.total_calories)
@@ -278,9 +313,9 @@ export function applyOptimisticFoodRecordToHomeDashboardSnapshot(
     target: nextMealTarget,
     progress: nextMealProgress,
     tags: existingMeal?.tags || [],
-    image_path: payload.image_path || payload.image_paths?.[0] || existingMeal?.image_path || null,
-    image_paths: payload.image_paths || existingMeal?.image_paths || null,
-    images: payload.image_paths || existingMeal?.images || null,
+    image_path: nextMealImagePaths?.[0] || null,
+    image_paths: nextMealImagePaths,
+    images: nextMealImagePaths,
     primary_record_id: recordId,
     primaryRecordId: recordId,
     meal_record_entries: nextMealEntries,

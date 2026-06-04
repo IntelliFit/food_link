@@ -1,0 +1,99 @@
+id: user-register
+name: "新用户注册流程"
+desc: "在全新临时库上清空本地态 → 进入登录页 → 勾选协议 → 通过 testOpenid 完成注册落库 → 进入首页"
+setup:
+  backend:
+    suite: "backend/e2e-test/suite.yaml"
+  miniprogram:
+    build_mode: "development"
+    devtools_port: 9420
+
+steps:
+  - action: "evaluate"
+    name: "清空本地登录态"
+    script: |
+      wx.clearStorageSync();
+      true;
+
+  - action: "relaunch"
+    name: "进入登录页"
+    url: "/packageExtra/pages/login/index"
+
+  - action: "wait"
+    name: "等待登录页渲染"
+    ms: 2500
+
+  - action: "screenshot"
+    name: "登录页截图"
+    path: "./e2e-weapp/screenshots/actual/user-register-login.png"
+
+  - action: "tap"
+    name: "勾选用户协议"
+    selector: ".agreement-row"
+
+  - action: "evaluate"
+    name: "模拟微信登录并注册新用户"
+    script: |
+      (function () {
+        var openid = 'e2e-register-' + Date.now();
+        return new Promise(function (resolve, reject) {
+          wx.request({
+            url: '{{backend.api_base}}/api/login',
+            method: 'POST',
+            header: { 'Content-Type': 'application/json' },
+            data: { testOpenid: openid },
+            success: function (res) {
+              if (!res || res.statusCode !== 200 || !res.data) {
+                reject('login failed: ' + (res && res.statusCode));
+                return;
+              }
+              var body = res.data;
+              var payload = body.data && body.access_token ? body.data : body;
+              if (!payload.access_token || !payload.user_id) {
+                reject('invalid login payload');
+                return;
+              }
+              wx.setStorageSync('access_token', payload.access_token);
+              wx.setStorageSync('refresh_token', payload.refresh_token || '');
+              wx.setStorageSync('user_id', payload.user_id);
+              wx.setStorageSync('openid', payload.openid || openid);
+              wx.setStorageSync('isLoggedIn', true);
+              resolve({ openid: payload.openid || openid, user_id: payload.user_id });
+            },
+            fail: function (err) {
+              reject((err && err.errMsg) || 'wx.request failed');
+            }
+          });
+        });
+      })();
+    capture:
+      register_openid: "openid"
+      register_user_id: "user_id"
+
+  - action: "wait"
+    name: "数据库已创建新用户"
+    ms: 200
+    assert:
+      type: "db_assert"
+      query: "SELECT COUNT(*)::int AS cnt FROM weapp_user WHERE openid = '{{capture.register_openid}}'"
+      expected: 1
+
+  - action: "relaunch"
+    name: "注册后进入首页"
+    url: "/pages/index/index"
+
+  - action: "wait"
+    name: "等待首页渲染"
+    ms: 3000
+
+  - action: "screenshot"
+    name: "注册后首页截图"
+    path: "./e2e-weapp/screenshots/actual/user-register-home.png"
+
+  - action: "evaluate"
+    name: "本地已写入登录态"
+    script: "!!wx.getStorageSync('access_token') && !!wx.getStorageSync('user_id')"
+    assert:
+      type: "evaluate_equals"
+      script: "!!wx.getStorageSync('access_token') && !!wx.getStorageSync('user_id')"
+      expected: true

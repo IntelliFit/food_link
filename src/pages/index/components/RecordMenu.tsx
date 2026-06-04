@@ -28,6 +28,7 @@ import { persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import CreditShortageSheet from '../../../components/CreditShortageSheet'
+import { DevNewUserOnboardingPreview } from '../../../components/DevNewUserOnboardingPreview'
 
 interface RecordMenuProps {
   visible: boolean
@@ -132,6 +133,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
   const { scheme } = useAppColorScheme()
   const isDark = scheme === 'dark'
   const [devToolsOpen, setDevToolsOpen] = useState(false)
+  const [onboardingPreviewOpen, setOnboardingPreviewOpen] = useState(false)
   /** 预置测试图 URL（仅 development 本地 UI 调试） */
   const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [creditSheet, setCreditSheet] = useState<{ visible: boolean; membershipStatus: MembershipStatus | null }>({
@@ -150,11 +152,10 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
     if (__ENABLE_DEV_DEBUG_UI__) {
       setPreviewImageUrl(getDevDebugUiTestImageUrl())
     }
-    // 弹窗打开即预取会员状态，减少点击后的等待时间
     membershipPromiseRef.current = getMyMembership().catch(() => null)
   }, [visible])
 
-  if (!visible) return null
+  if (!visible && !onboardingPreviewOpen) return null
 
   const handleGridClick = (modeId: string) => {
     const recordDate = persistRecordTargetDate(selectedDate)
@@ -242,6 +243,8 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
   }
 
   return (
+    <>
+    {visible ? (
     <View className='record-menu-modal' catchMove>
       <View className='record-menu-mask' onClick={onClose} />
       <View className={`record-menu-content${isDark ? ' record-menu-content--dark' : ''}`}>
@@ -259,7 +262,8 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
             return (
               <View
                 key={feature.id}
-                className='record-menu-grid-card'
+                id={`record-menu-guide-${feature.id}`}
+                className={`record-menu-grid-card record-menu-grid-card--${feature.id}`}
                 style={{ backgroundColor: featureBackground, borderColor: featureBorder }}
                 onClick={() => handleGridClick(feature.id)}
               >
@@ -380,6 +384,16 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
                       <Text className='record-menu-dev-item-desc'>正常实拍分析流程</Text>
                     </View>
                     <View
+                      className='record-menu-dev-item'
+                      onClick={() => {
+                        onClose()
+                        setOnboardingPreviewOpen(true)
+                      }}
+                    >
+                      <Text className='record-menu-dev-item-label'>新用户引导预览</Text>
+                      <Text className='record-menu-dev-item-desc'>登录页弹窗各场景（不跳转新页面）</Text>
+                    </View>
+                    <View
                       className='record-menu-dev-item record-menu-dev-item-last'
                       onClick={() => runDevTool(openDebugHealthProfileFromMenu)}
                     >
@@ -402,5 +416,11 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
         onClose={() => setCreditSheet({ visible: false, membershipStatus: null })}
       />
     </View>
+    ) : null}
+    <DevNewUserOnboardingPreview
+      visible={onboardingPreviewOpen}
+      onClose={() => setOnboardingPreviewOpen(false)}
+    />
+    </>
   )
 }

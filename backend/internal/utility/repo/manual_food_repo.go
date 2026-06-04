@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	fooddomain "food_link/backend/internal/foodrecord/domain"
+	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	publicdomain "food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/utility/domain"
 	"food_link/backend/pkg/storage"
@@ -83,6 +84,8 @@ func (r *ManualFoodRepo) Browse(ctx context.Context, userID string, limit int) (
 		return nil, err
 	}
 
+	result.RecentItems = r.enrichManualFoodResultsWithNutritionLibrary(ctx, result.RecentItems)
+	result.NutritionLibrary = r.enrichManualFoodResultsWithNutritionLibrary(ctx, result.NutritionLibrary)
 	return result, nil
 }
 
@@ -257,6 +260,7 @@ func (r *ManualFoodRepo) Catalog(ctx context.Context, userID string, category st
 	if err != nil {
 		return nil, err
 	}
+	items = r.enrichManualFoodResultsWithNutritionLibrary(ctx, items)
 	return &domain.ManualFoodCatalogResult{
 		Categories: manualFoodCatalogCategories(),
 		Items:      items,
@@ -327,7 +331,7 @@ func (r *ManualFoodRepo) Search(ctx context.Context, userID string, keyword stri
 	if len(results) > limit {
 		results = results[:limit]
 	}
-	return results, nil
+	return r.enrichManualFoodResultsWithNutritionLibrary(ctx, results), nil
 }
 
 func (r *ManualFoodRepo) SearchPackaged(ctx context.Context, keyword string, limit int) ([]domain.ManualFoodResult, error) {
@@ -1532,6 +1536,21 @@ func compactStrings(values []string) []string {
 	return out
 }
 
+func (r *ManualFoodRepo) normalizeNutritionFoodItem(item fooddomain.FoodNutrition) fooddomain.FoodNutrition {
+	if r.storage != nil {
+		item.ImagePaths = r.storage.ResolveReferenceURLs("food-images", item.ImagePaths)
+		if item.ImagePath != nil {
+			resolved := r.storage.ResolveReferenceURL("food-images", *item.ImagePath)
+			item.ImagePath = &resolved
+		}
+	}
+	if item.ImagePath == nil && len(item.ImagePaths) > 0 {
+		first := item.ImagePaths[0]
+		item.ImagePath = &first
+	}
+	return item
+}
+
 func sourceLabel(source string) string {
 	switch strings.TrimSpace(source) {
 	case "public_library":
@@ -1659,6 +1678,192 @@ func uniqueStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func (r *ManualFoodRepo) enrichManualFoodResultsWithNutritionLibrary(ctx context.Context, results []domain.ManualFoodResult) []domain.ManualFoodResult {
+	if r == nil || r.db == nil || len(results) == 0 {
+		return results
+	}
+	ids := make([]string, 0, len(results))
+	titles := make([]string, 0, len(results))
+	for _, item := range results {
+		if !shouldEnrichManualFoodWithNutritionLibrary(item) {
+			continue
+		}
+		id := strings.TrimSpace(item.ID)
+		if id != "" && !strings.HasPrefix(id, "catalog:") {
+			ids = append(ids, id)
+			continue
+		}
+		if title := strings.TrimSpace(item.Title); title != "" {
+			titles = append(titles, title)
+		}
+	}
+	byID := r.loadNutritionFoodRowsByIDs(ctx, ids)
+	byTitle := r.loadNutritionFoodRowsByTitles(ctx, titles)
+	for i := range results {
+		results[i] = r.mergeNutritionLibraryIntoManualFoodResult(results[i], byID, byTitle)
+	}
+	return results
+}
+
+func shouldEnrichManualFoodWithNutritionLibrary(item domain.ManualFoodResult) bool {
+	source := strings.TrimSpace(item.Source)
+	id := strings.TrimSpace(item.ID)
+	if source == "nutrition_library" {
+		return true
+	}
+	return strings.HasPrefix(id, "catalog:")
+}
+
+func (r *ManualFoodRepo) loadNutritionFoodRowsByIDs(ctx context.Context, ids []string) map[string]fooddomain.FoodNutrition {
+	out := make(map[string]fooddomain.FoodNutrition, len(ids))
+	if len(ids) == 0 {
+		return out
+	}
+	var rows []fooddomain.FoodNutrition
+	if err := r.db.WithContext(ctx).
+		Where("id::text IN ? AND is_active = TRUE AND kcal_per_100g > 0", ids).
+		Find(&rows).Error; err != nil {
+		return out
+	}
+	for _, row := range rows {
+		row = r.normalizeNutritionFoodItem(row)
+		out[strings.TrimSpace(row.ID)] = row
+	}
+	return out
+}
+
+func (r *ManualFoodRepo) loadNutritionFoodRowsByTitles(ctx context.Context, titles []string) map[string]fooddomain.FoodNutrition {
+	out := make(map[string]fooddomain.FoodNutrition, len(titles))
+	if len(titles) == 0 {
+		return out
+	}
+	unique := make([]string, 0, len(titles))
+	seen := map[string]bool{}
+	for _, title := range titles {
+		title = strings.TrimSpace(title)
+		if title == "" || seen[title] {
+			continue
+		}
+		seen[title] = true
+		unique = append(unique, title)
+	}
+	if len(unique) == 0 {
+		return out
+	}
+	lowerTitles := make([]string, 0, len(unique))
+	for _, title := range unique {
+		lowerTitles = append(lowerTitles, strings.ToLower(title))
+	}
+	var rows []fooddomain.FoodNutrition
+	if err := r.db.WithContext(ctx).
+		Where("is_active = TRUE AND kcal_per_100g > 0 AND (canonical_name IN ? OR LOWER(canonical_name) IN ?)", unique, lowerTitles).
+		Find(&rows).Error; err == nil {
+		for _, row := range rows {
+			row = r.normalizeNutritionFoodItem(row)
+			key := strings.TrimSpace(row.CanonicalName)
+			if key == "" {
+				continue
+			}
+			for _, title := range unique {
+				if strings.EqualFold(title, key) {
+					out[title] = preferNutritionRowWithImage(out[title], row)
+				}
+			}
+		}
+	}
+	type aliasRow struct {
+		AliasName string `gorm:"column:alias_name"`
+		fooddomain.FoodNutrition
+	}
+	var aliasRows []aliasRow
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT a.alias_name, f.*
+		FROM food_nutrition_aliases a
+		INNER JOIN food_nutrition_library f ON f.id = a.food_id
+		WHERE f.is_active = TRUE
+			AND f.kcal_per_100g > 0
+			AND (a.alias_name IN ? OR LOWER(a.alias_name) IN ?)
+	`, unique, lowerTitles).Scan(&aliasRows).Error; err == nil {
+		for _, row := range aliasRows {
+			food := r.normalizeNutritionFoodItem(row.FoodNutrition)
+			alias := strings.TrimSpace(row.AliasName)
+			if alias == "" {
+				continue
+			}
+			for _, title := range unique {
+				if strings.EqualFold(title, alias) {
+					out[title] = preferNutritionRowWithImage(out[title], food)
+				}
+			}
+		}
+	}
+	nutriRepo := foodrecordrepo.NewFoodNutritionRepo(r.db)
+	for _, title := range unique {
+		if existing, ok := out[title]; ok && nutritionRowHasImage(existing) {
+			continue
+		}
+		resolved, err := nutriRepo.ResolveFood(ctx, title)
+		if err != nil || resolved == nil || resolved.Food == nil {
+			continue
+		}
+		out[title] = preferNutritionRowWithImage(out[title], r.normalizeNutritionFoodItem(*resolved.Food))
+	}
+	return out
+}
+
+func nutritionRowHasImage(row fooddomain.FoodNutrition) bool {
+	if row.ImagePath != nil && strings.TrimSpace(*row.ImagePath) != "" {
+		return true
+	}
+	for _, path := range row.ImagePaths {
+		if strings.TrimSpace(path) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func preferNutritionRowWithImage(current, candidate fooddomain.FoodNutrition) fooddomain.FoodNutrition {
+	if !nutritionRowHasImage(current) {
+		return candidate
+	}
+	if nutritionRowHasImage(candidate) {
+		return candidate
+	}
+	return current
+}
+
+func (r *ManualFoodRepo) mergeNutritionLibraryIntoManualFoodResult(
+	item domain.ManualFoodResult,
+	byID map[string]fooddomain.FoodNutrition,
+	byTitle map[string]fooddomain.FoodNutrition,
+) domain.ManualFoodResult {
+	if !shouldEnrichManualFoodWithNutritionLibrary(item) {
+		return item
+	}
+	var row fooddomain.FoodNutrition
+	var ok bool
+	id := strings.TrimSpace(item.ID)
+	if id != "" && !strings.HasPrefix(id, "catalog:") {
+		row, ok = byID[id]
+	}
+	if !ok {
+		row, ok = byTitle[strings.TrimSpace(item.Title)]
+	}
+	if !ok {
+		return item
+	}
+	item.ID = strings.TrimSpace(row.ID)
+	item.Source = "nutrition_library"
+	item.ImagePath = row.ImagePath
+	item.ImagePaths = append([]string(nil), row.ImagePaths...)
+	if item.ImagePath == nil && len(item.ImagePaths) > 0 {
+		first := item.ImagePaths[0]
+		item.ImagePath = &first
+	}
+	return item
 }
 
 func manualFoodCatalogCategories() []domain.ManualFoodCatalogCategory {

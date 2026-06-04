@@ -4,6 +4,7 @@ import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconChevronRight } fro
 import { formatDisplayNumber } from '../utils/helpers'
 import { HOME_WARNING_RED } from '../utils/constants'
 import type { HomeMealItem } from '../../../utils/api'
+import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from '../../../utils/food-display-image'
 
 // 餐次对应的 iconfont 图标及颜色
 const MEAL_ICON_CONFIG = {
@@ -126,11 +127,9 @@ export function MealsSection({
             const mealCalorie = normalizeDisplayNumber(meal.calorie)
             const mealTarget = normalizeDisplayNumber(meal.target)
             const mealProgress = normalizeProgressPercent(meal.progress, mealCalorie, mealTarget)
-            const mealImageUrls = Array.isArray(meal.image_paths) && meal.image_paths.length > 0
-              ? meal.image_paths.filter(Boolean)
-              : (meal.image_path ? [meal.image_path] : [])
+            const mealImageUrls = collectFoodDisplayImageUrls(meal)
             const previewImage = mealImageUrls[0] || ''
-            const hasRealImage = mealImageUrls.length > 0
+            const hasRealImage = hasFoodDisplayImage(meal)
             const targetText = isSnackMeal
               ? `参考 ${formatDisplayNumber(mealTarget)} kcal`
               : `目标 ${formatDisplayNumber(mealTarget)} kcal`

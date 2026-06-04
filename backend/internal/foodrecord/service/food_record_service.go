@@ -362,6 +362,7 @@ func (s *FoodRecordService) List(ctx context.Context, userID, date string) ([]do
 			}
 		}
 		records[i].MealType = normalizeMealType(records[i].MealType, records[i].RecordTime)
+		s.hydrateRecordImages(ctx, &records[i])
 		s.hydrateRecordNutrientsFromTask(ctx, &records[i])
 	}
 	return records, nil
@@ -540,12 +541,7 @@ func (s *FoodRecordService) hydrateRecordWithContext(ctx context.Context, record
 	if len(record.ImagePaths) == 0 && record.ImagePath != nil && *record.ImagePath != "" {
 		record.ImagePaths = []string{*record.ImagePath}
 	}
-	record.ImagePaths = s.normalizeImagePaths(record.ImagePaths)
-	if len(record.ImagePaths) > 0 {
-		record.ImagePath = &record.ImagePaths[0]
-	} else {
-		record.ImagePath = nil
-	}
+	s.hydrateRecordImages(ctx, record)
 	s.hydrateRecordNutrientsFromTask(ctx, record)
 	hydrateManualRecordNutrients(record)
 	return record
@@ -907,6 +903,51 @@ func positiveNumberFromAny(values ...any) float64 {
 		}
 	}
 	return 0
+}
+
+func (s *FoodRecordService) hydrateRecordImages(ctx context.Context, record *domain.FoodRecord) {
+	if record == nil {
+		return
+	}
+	paths := s.collectFoodRecordImagePaths(ctx, record)
+	record.ImagePaths = s.normalizeImagePaths(paths)
+	if len(record.ImagePaths) > 0 {
+		first := record.ImagePaths[0]
+		record.ImagePath = &first
+	} else {
+		record.ImagePath = nil
+	}
+}
+
+func (s *FoodRecordService) collectFoodRecordImagePaths(ctx context.Context, record *domain.FoodRecord) []string {
+	if record == nil {
+		return nil
+	}
+	paths := make([]string, 0)
+	seen := map[string]bool{}
+	appendRaw := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" || seen[raw] {
+			return
+		}
+		seen[raw] = true
+		paths = append(paths, raw)
+	}
+	for _, imagePath := range record.ImagePaths {
+		appendRaw(imagePath)
+	}
+	if record.ImagePath != nil {
+		appendRaw(*record.ImagePath)
+	}
+	if len(paths) > 0 {
+		return paths
+	}
+	if s.recordRepo != nil {
+		for _, raw := range s.recordRepo.LookupManualSourceImagePaths(ctx, record.Items) {
+			appendRaw(raw)
+		}
+	}
+	return paths
 }
 
 func (s *FoodRecordService) normalizeImagePaths(paths []string) []string {

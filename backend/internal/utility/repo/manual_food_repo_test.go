@@ -6,6 +6,7 @@ import (
 
 	fooddomain "food_link/backend/internal/foodrecord/domain"
 	publicdomain "food_link/backend/internal/publicfood/domain"
+	"food_link/backend/internal/utility/domain"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/storage"
 
@@ -244,6 +245,40 @@ func TestManualFoodResultFromPackagedUsesNetContentValue(t *testing.T) {
 	assert.Equal(t, 70.0, item.DefaultWeightGrams)
 	assert.Equal(t, "70g", item.PortionLabel)
 	assert.Contains(t, item.NutritionHighlights, "净含量 70g")
+}
+
+func TestEnrichManualFoodResultsWithNutritionLibrary(t *testing.T) {
+	db := setupTestDB(t)
+	imgKey := "standard-food/backfill/rice.png"
+	r := NewManualFoodRepo(db, storage.New(config.StorageConfig{
+		CDNFoodImagesBaseURL: "https://cdn-food-images.example.com",
+	}))
+	require.NoError(t, db.Create(&fooddomain.FoodNutrition{
+		ID:             "rice-uuid",
+		CanonicalName:  "白米饭",
+		NormalizedName: "白米饭",
+		ImagePath:      &imgKey,
+		ImagePaths:     []string{imgKey},
+		KcalPer100g:    116,
+		ProteinPer100g: 2.6,
+		CarbsPer100g:   25.9,
+		FatPer100g:     0.3,
+		IsActive:       true,
+	}).Error)
+
+	items := r.enrichManualFoodResultsWithNutritionLibrary(context.Background(), []domain.ManualFoodResult{{
+		ID:                 "catalog:白米饭",
+		Source:             "nutrition_library",
+		Title:              "白米饭",
+		Subtitle:           "常用食物",
+		DefaultWeightGrams: 178,
+	}})
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "rice-uuid", items[0].ID)
+	require.NotNil(t, items[0].ImagePath)
+	assert.Equal(t, "https://cdn-food-images.example.com/standard-food/backfill/rice.png", *items[0].ImagePath)
+	require.NotEmpty(t, items[0].ImagePaths)
 }
 
 func TestManualFoodCatalogUserScopedCategoriesAllowAnonymous(t *testing.T) {

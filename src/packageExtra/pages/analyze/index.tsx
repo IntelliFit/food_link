@@ -1,4 +1,4 @@
-import { View, Text, Image, Textarea } from '@tarojs/components'
+import { View, Text, Image, Textarea, PageMeta } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import {
@@ -43,6 +43,13 @@ import { getStoredRecordTargetDate, persistRecordTargetDate, getTodayRecordDateK
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import './index.scss'
 import { withAuth } from '../../../utils/withAuth'
+import OnboardingGuide from '../../../components/OnboardingGuide'
+import {
+  ONBOARDING_ANALYZE_PREP_GUIDE_KEY,
+  shouldOfferOnboardingGuide,
+} from '../../../utils/onboarding-guide-storage'
+import { ANALYZE_PREP_ONBOARDING_STEPS } from './analyze-onboarding-steps'
+import { PAGE_SCROLL_LOCK_STYLE, usePageScrollLock } from '../../../utils/page-scroll-lock'
 
 /** 餐次（分析前选择，AI 将结合餐次分析） */
 const MEAL_OPTIONS: Array<{ value: MealType; label: string; iconClass: string }> = [
@@ -423,6 +430,7 @@ function AnalyzePage() {
   const [creditSheet, setCreditSheet] = useState<{ visible: boolean; message?: string }>({
     visible: false,
   })
+  const [showAnalyzeOnboardingGuide, setShowAnalyzeOnboardingGuide] = useState(false)
 
   // 帮助说明底部弹窗
   const [helpSheet, setHelpSheet] = useState<{ visible: boolean; title: string; content: string }>({
@@ -573,6 +581,11 @@ function AnalyzePage() {
     }
     if (imagePathsRef.current.length === 0) {
       setMealType(inferDefaultMealTypeFromLocalTime())
+    }
+    if (shouldOfferOnboardingGuide(ONBOARDING_ANALYZE_PREP_GUIDE_KEY)) {
+      setShowAnalyzeOnboardingGuide(true)
+    } else {
+      setShowAnalyzeOnboardingGuide(false)
     }
   })
 
@@ -762,6 +775,8 @@ function AnalyzePage() {
   const handleDefaultModeEdit = () => {
     Taro.navigateTo({ url: extraPkgUrl('/pages/health-profile-view/index') })
   }
+
+  usePageScrollLock(showAnalyzeOnboardingGuide)
 
   const doAnalyze = async () => {
     if (!getAccessToken()) {
@@ -965,7 +980,13 @@ function AnalyzePage() {
   }
 
   return (
-    <View className='analyze-page'>
+    <>
+      <PageMeta
+        pageStyle={showAnalyzeOnboardingGuide ? PAGE_SCROLL_LOCK_STYLE : 'overflow: visible;'}
+      />
+      <View
+        className={`analyze-page ${showAnalyzeOnboardingGuide ? 'analyze-page--scroll-locked' : ''}`}
+      >
       {/* 提示：长按页面任意位置可启用开发者模式 */}
       {/* 配额提示 */}
       {membershipStatus && (
@@ -1037,6 +1058,7 @@ function AnalyzePage() {
           </View>
         )}
 
+        <View className='analyze-guide-quality-zone' id='analyze-guide-quality-zone'>
         {/* 图片分析设置 */}
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
@@ -1106,23 +1128,6 @@ function AnalyzePage() {
           <Text className='mode-upgrade-note'>{precisionUpgradeHint}</Text>
         )}
 
-        <View className='experiment-mode-panel'>
-          <View className='experiment-mode-head'>
-            <Text className='experiment-mode-title'>零食库试验模式</Text>
-            <Text className='experiment-mode-sub'>不影响上方正式模式</Text>
-          </View>
-          <View
-            className={`experiment-mode-card ${executionMode === 'standard_packaged_experiment' ? 'active' : ''}`}
-            onClick={() => setExecutionMode('standard_packaged_experiment')}
-          >
-            <View className='experiment-mode-card-main'>
-              <Text className='experiment-mode-card-title'>普通 · 零食库试验</Text>
-              <Text className='experiment-mode-card-desc'>用已收录零食规格校准包装食品重量</Text>
-            </View>
-            <Text className='experiment-mode-card-badge'>2积分</Text>
-          </View>
-        </View>
-
         {/* 多视角辅助模式 */}
         <View className='multiview-compact'>
           <View className='multiview-compact-left'>
@@ -1152,6 +1157,24 @@ function AnalyzePage() {
             onClick={toggleSuggestRatio}
           >
             <View className='multiview-toggle-knob' />
+          </View>
+        </View>
+        </View>
+
+        <View className='experiment-mode-panel'>
+          <View className='experiment-mode-head'>
+            <Text className='experiment-mode-title'>零食库试验模式</Text>
+            <Text className='experiment-mode-sub'>不影响上方正式模式</Text>
+          </View>
+          <View
+            className={`experiment-mode-card ${executionMode === 'standard_packaged_experiment' ? 'active' : ''}`}
+            onClick={() => setExecutionMode('standard_packaged_experiment')}
+          >
+            <View className='experiment-mode-card-main'>
+              <Text className='experiment-mode-card-title'>普通 · 零食库试验</Text>
+              <Text className='experiment-mode-card-desc'>用已收录零食规格校准包装食品重量</Text>
+            </View>
+            <Text className='experiment-mode-card-badge'>2积分</Text>
           </View>
         </View>
       </View>
@@ -1370,7 +1393,16 @@ function AnalyzePage() {
         message={creditSheet.message}
         onClose={() => setCreditSheet({ visible: false })}
       />
-    </View>
+
+      </View>
+
+      <OnboardingGuide
+        visible={showAnalyzeOnboardingGuide}
+        steps={ANALYZE_PREP_ONBOARDING_STEPS}
+        storageKey={ONBOARDING_ANALYZE_PREP_GUIDE_KEY}
+        onClose={() => setShowAnalyzeOnboardingGuide(false)}
+      />
+    </>
   )
 }
 

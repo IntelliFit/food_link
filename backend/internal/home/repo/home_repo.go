@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"food_link/backend/internal/foodmedia"
+
 	"gorm.io/gorm"
 )
 
@@ -216,4 +218,12 @@ func (r *HomeRepo) ListRecordComments(ctx context.Context, recordID string) ([]F
 func (r *HomeRepo) DeleteCommentCascade(ctx context.Context, recordID, commentID string) (int64, error) {
 	result := r.db.WithContext(ctx).Where("record_id = ? AND (id = ? OR parent_comment_id = ?)", recordID, commentID, commentID).Delete(&FeedComment{})
 	return result.RowsAffected, result.Error
+}
+
+// LookupManualSourceImagePaths 从饮食记录 items 中的 manual_source 回查食物库图片（记录级 image_path 为空时使用）。
+func (r *HomeRepo) LookupManualSourceImagePaths(ctx context.Context, items []map[string]any) []string {
+	if r == nil || r.db == nil {
+		return nil
+	}
+	return foodmedia.LookupManualSourceImagePaths(ctx, r.db, items)
 }

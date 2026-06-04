@@ -1,3 +1,5 @@
+@import '../../styles/tab-page-layout.scss';
+
 .profile-page {
   min-height: 100vh;
   position: relative;
@@ -8,7 +10,7 @@
     #f0f3f6 80%,
     #f0f3f6 100%
   );
-  padding: 182rpx 0 320rpx;
+  padding: $tab-page-content-top 0 320rpx;
 
 }
 

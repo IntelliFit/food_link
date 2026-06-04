@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"food_link/backend/internal/foodmedia"
 	"food_link/backend/internal/foodrecord/domain"
 
 	"github.com/google/uuid"
@@ -130,4 +131,30 @@ func (r *FoodRecordRepo) InsertCriticalSamples(ctx context.Context, userID strin
 		}
 	}
 	return r.db.WithContext(ctx).Create(&rows).Error
+}
+
+// LookupManualSourceImagePaths 从 items 中的 manual_source 回查食物库图片。
+func (r *FoodRecordRepo) LookupManualSourceImagePaths(ctx context.Context, items []domain.FoodItem) []string {
+	if r == nil || r.db == nil || len(items) == 0 {
+		return nil
+	}
+	itemMaps := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		source := ""
+		if item.ManualSource != nil {
+			source = strings.TrimSpace(*item.ManualSource)
+		}
+		id := ""
+		if item.ManualSourceID != nil {
+			id = strings.TrimSpace(*item.ManualSourceID)
+		}
+		if source == "" || id == "" {
+			continue
+		}
+		itemMaps = append(itemMaps, map[string]any{
+			"manual_source":    source,
+			"manual_source_id": id,
+		})
+	}
+	return foodmedia.LookupManualSourceImagePaths(ctx, r.db, itemMaps)
 }

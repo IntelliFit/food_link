@@ -1,5 +1,9 @@
 import Taro from '@tarojs/taro'
 
+import {
+  collectFoodDisplayImageUrls,
+  type FoodImageSource,
+} from './food-display-image'
 import { extraPkgUrl } from './subpackage-extra'
 
 function readInjectedString(
@@ -688,6 +692,25 @@ export function resolveHomeMealPrimaryRecordId(meal: HomeMealItem | Record<strin
   return null
 }
 
+export function normalizeManualFoodSearchResult(item: ManualFoodSearchResult): ManualFoodSearchResult {
+  const urls = collectFoodDisplayImageUrls(item)
+  return {
+    ...item,
+    image_path: urls[0] || null,
+    image_paths: urls.length > 0 ? urls : null,
+  }
+}
+
+/** 规范化饮食记录图片字段（含后端从标准食物库回查的 image_path/image_paths）。 */
+export function normalizeFoodRecord(record: FoodRecord): FoodRecord {
+  const urls = collectFoodDisplayImageUrls(record)
+  return {
+    ...record,
+    image_path: urls[0] || null,
+    image_paths: urls.length > 0 ? urls : null,
+  }
+}
+
 function normalizeHomeMealItem(raw: unknown): HomeMealItem {
   const row = raw as HomeMealItem
   const entries = Array.isArray(row.meal_record_entries)
@@ -696,15 +719,12 @@ function normalizeHomeMealItem(raw: unknown): HomeMealItem {
       .map(normalizeHomeMealRecordEntry)
     : []
   const fallbackMealRatio = computeMealIntakeRatioFromEntries(entries)
-  const images = Array.isArray(row.image_paths)
-    ? row.image_paths.filter(Boolean)
-    : Array.isArray(row.images)
-      ? row.images.filter(Boolean)
-      : null
+  const images = collectFoodDisplayImageUrls(row)
   return {
     ...row,
-    images,
-    image_paths: images,
+    images: images.length > 0 ? images : null,
+    image_paths: images.length > 0 ? images : null,
+    image_path: images[0] || null,
     meal_record_entries: entries.length > 0 ? entries : row.meal_record_entries,
     primary_record_id: resolveHomeMealPrimaryRecordId(row as unknown as Record<string, unknown>),
     protein: row.protein,
@@ -721,8 +741,17 @@ function normalizeHomeMealRecordEntry(entry: HomeMealRecordEntry): HomeMealRecor
   const ratio = typeof entry.intake_ratio === 'number'
     ? entry.intake_ratio
     : (typeof entry.intakeRatio === 'number' ? entry.intakeRatio : computeFoodRecordIntakeRatio(entry.full_record))
+  const entryImages = collectFoodDisplayImageUrls({
+    image_path: entry.image_path ?? entry.full_record?.image_path,
+    image_paths: [
+      ...(Array.isArray(entry.image_paths) ? entry.image_paths : []),
+      ...(Array.isArray(entry.full_record?.image_paths) ? entry.full_record.image_paths : []),
+    ],
+  } as FoodImageSource)
   return {
     ...entry,
+    image_path: entryImages[0] || null,
+    image_paths: entryImages.length > 0 ? entryImages : null,
     total_protein: entry.total_protein ?? entry.full_record?.total_protein,
     total_carbs: entry.total_carbs ?? entry.full_record?.total_carbs,
     total_fat: entry.total_fat ?? entry.full_record?.total_fat,
@@ -2765,7 +2794,9 @@ export async function getFoodRecordList(date?: string): Promise<{ records: FoodR
     const msg = (res.data as any)?.detail || '获取记录失败'
     throw new Error(msg)
   }
-  return res.data as { records: FoodRecord[] }
+  const data = res.data as { records?: FoodRecord[] }
+  const records = Array.isArray(data.records) ? data.records.map(normalizeFoodRecord) : []
+  return { records }
 }
 
 /** 分享海报「较昨同餐」对比（服务端按中国自然日计算；仅本人；403 不触发重登） */
@@ -2805,7 +2836,7 @@ function stripMealFullRecordsFromDashboard(data: HomeDashboard): HomeDashboard {
   const meals = (data.meals || []).map((meal) => {
     const entries = (meal.meal_record_entries || []).map((entry) => {
       if ((entry as any).full_record) {
-        mealFullRecordCache[entry.id] = (entry as any).full_record as FoodRecord
+        mealFullRecordCache[entry.id] = normalizeFoodRecord((entry as any).full_record as FoodRecord)
       }
       const { full_record, ...rest } = entry as any
       return rest
@@ -2833,7 +2864,8 @@ export async function getFoodRecordById(recordId: string): Promise<{ record: Foo
     const msg = (res.data as any)?.detail || '获取记录详情失败'
     throw new Error(msg)
   }
-  return res.data as { record: FoodRecord }
+  const data = res.data as { record: FoodRecord }
+  return { record: normalizeFoodRecord(data.record) }
 }
 
 /** 更新饮食记录请求 */
@@ -4255,7 +4287,8 @@ export async function searchManualFood(
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '搜索失败')
   }
-  return ((unwrapResponse<any>(response))?.results || []) as ManualFoodSearchResult[]
+  const results = ((unwrapResponse<any>(response))?.results || []) as ManualFoodSearchResult[]
+  return results.map(normalizeManualFoodSearchResult)
 }
 
 export async function fetchManualFoodCatalog(
@@ -4280,7 +4313,11 @@ export async function fetchManualFoodCatalog(
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取食物目录失败')
   }
-  return unwrapResponse<ManualFoodCatalogResult>(response)
+  const data = unwrapResponse<ManualFoodCatalogResult>(response)
+  return {
+    ...data,
+    items: Array.isArray(data.items) ? data.items.map(normalizeManualFoodSearchResult) : [],
+  }
 }
 
 export interface SaveManualCustomFoodRequest {
@@ -4351,7 +4388,16 @@ export async function browseManualFood(): Promise<ManualFoodBrowseResult> {
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取食物库失败')
   }
-  return unwrapResponse<ManualFoodBrowseResult>(response)
+  const data = unwrapResponse<ManualFoodBrowseResult>(response)
+  const mapList = (list?: ManualFoodSearchResult[]) =>
+    Array.isArray(list) ? list.map(normalizeManualFoodSearchResult) : []
+  return {
+    ...data,
+    recent_items: mapList(data.recent_items),
+    collected_public_library: mapList(data.collected_public_library),
+    public_library: mapList(data.public_library),
+    nutrition_library: mapList(data.nutrition_library),
+  }
 }
 
 export interface UnresolvedFoodLog {

@@ -231,6 +231,8 @@ func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS unit_content_value numeric NOT NULL DEFAULT 0`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS unit_content_unit text`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS review_status text NOT NULL DEFAULT 'active'`,
+		`ALTER TABLE food_nutrition_library ADD COLUMN IF NOT EXISTS image_path text`,
+		`ALTER TABLE food_nutrition_library ADD COLUMN IF NOT EXISTS image_paths jsonb NOT NULL DEFAULT '[]'::jsonb`,
 		`ALTER TABLE packaged_food_aliases DROP CONSTRAINT IF EXISTS packaged_food_aliases_normalized_alias_key`,
 		`DROP INDEX IF EXISTS uni_packaged_food_aliases_normalized_alias`,
 		`DROP INDEX IF EXISTS packaged_food_aliases_normalized_alias_key`,

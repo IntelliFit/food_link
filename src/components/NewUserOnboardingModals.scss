@@ -1,0 +1,199 @@
+.nuo-modals.profile-form-modal {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 60%);
+  backdrop-filter: blur(8rpx);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: nuoFadeIn 0.3s ease;
+}
+
+@keyframes nuoFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.nuo-modals-preview-badge {
+  position: absolute;
+  top: 48rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1001;
+  padding: 8rpx 24rpx;
+  border-radius: 999rpx;
+  background: rgb(0 188 125 / 92%);
+}
+
+.nuo-modals-preview-badge-text {
+  font-size: 24rpx;
+  color: #fff;
+  font-weight: 600;
+}
+
+.nuo-modals .profile-form-content {
+  background: #fff;
+  border-radius: 40rpx;
+  width: 90%;
+  max-width: 600rpx;
+  padding: 56rpx 40rpx;
+  box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 30%);
+  animation: nuoSlideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes nuoSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(40rpx);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.nuo-modals .profile-form-header {
+  margin-bottom: 48rpx;
+  text-align: center;
+}
+
+.nuo-modals .profile-form-title {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #111827;
+}
+
+.nuo-modals .profile-form-desc {
+  display: block;
+  margin-top: 16rpx;
+  font-size: 28rpx;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.nuo-modals.phone-bind-modal .profile-form-header {
+  margin-bottom: 40rpx;
+}
+
+.nuo-modals .phone-bind-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+  align-items: center;
+}
+
+.nuo-modals .phone-bind-btn {
+  width: 100%;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 44rpx;
+  font-size: 32rpx;
+  font-weight: 500;
+  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+  border: none;
+  color: #fff;
+
+  &::after {
+    border: none;
+  }
+}
+
+.nuo-modals .skip-phone-btn {
+  font-size: 28rpx;
+  color: #6b7280;
+  background: transparent;
+  border: none;
+}
+
+.nuo-modals .profile-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 48rpx;
+  margin-bottom: 48rpx;
+}
+
+.nuo-modals .avatar-choose-wrapper {
+  width: 180rpx;
+  height: 180rpx;
+  margin: 0 auto;
+  border-radius: 50%;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4rpx solid #e5e7eb;
+  position: relative;
+  overflow: hidden;
+
+  .avatar-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .choose-tip {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgb(0 0 0 / 30%);
+    color: white;
+    font-size: 20rpx;
+    text-align: center;
+    padding: 4rpx 0;
+  }
+}
+
+.nuo-modals .avatar-choose-btn {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+
+  &::after {
+    border: none;
+  }
+}
+
+.nuo-modals .nickname-input {
+  width: 100%;
+  height: 96rpx;
+  background: #f9fafb;
+  border-radius: 16rpx;
+  padding: 0 32rpx;
+  font-size: 30rpx;
+  border: 2rpx solid #e5e7eb;
+  box-sizing: border-box;
+
+  &:focus {
+    border-color: #00bc7d;
+    background: #fff;
+  }
+}
+
+.nuo-modals .save-btn {
+  background: linear-gradient(to right, #00bc7d 0%, #00bba7 100%);
+  color: white;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  box-shadow: 0 8rpx 20rpx rgb(0 188 125 / 20%);
+  border: none;
+
+  &:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+  }
+}

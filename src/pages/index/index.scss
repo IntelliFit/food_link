@@ -25,6 +25,8 @@ $home-warning-red: #e57373;
 $home-warning-border: #f5d4d4;
 $home-warning-surface: #fef8f8;
 
+@import '../../styles/tab-page-layout.scss';
+
 // 日期选中胶囊：沿用主题绿半透明；边框与背景同色（避免色差）
 $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
@@ -55,7 +57,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .page-content {
   position: relative;
   z-index: 1;
-  padding: 180rpx 32rpx 160rpx; // 底部留出 tab-bar 高度 + safe-area 空间
+  padding: $tab-page-content-top 32rpx 160rpx; // 底部留出 tab-bar 高度 + safe-area 空间
 }
 
 // 未登录：首页顶部引导（审核要求先浏览再授权）
@@ -3811,8 +3813,8 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 .home-page__data-sync {
   position: fixed;
   left: 28rpx;
-  /* 与微信默认胶囊按钮同一水平线 */
-  top: 130rpx;
+  /* 与微信胶囊按钮同一水平线（无系统导航栏） */
+  top: $tab-page-fixed-control-top;
   z-index: 200;
   pointer-events: none;
   width: 40rpx;

@@ -1,44 +1,5 @@
 # Food Link 项目开发规则
 
-## 📝 自动记录进度（重要！）
-**每次进行代码修改、bug 修复、功能添加时，必须自动更新 PROGRESS.md 文件**
-
-### 更新格式（简洁的 Git commit 风格）
-在 PROGRESS.md 文件顶部（日期标题下）添加一行简洁的记录：
-
-```markdown
-- [图标] [类型]: [简要描述（1-2句话）] [涉及文件]
-```
-
-### 图标和类型对照
-- 🐛 fix: Bug修复
-- ✨ feat: 新功能
-- 🔧 refactor: 重构/优化
-- 📝 docs: 文档更新
-- 🎨 style: UI改进
-- 🔒 security: 安全修复
-- ⚡ perf: 性能优化
-- 🗃️ db: 数据库变更
-- 🔧 chore: 构建/配置
-
-### 示例
-```markdown
-## 2025-01-28
-
-- 🐛 fix: 修复登录按钮无响应问题，添加错误提示 `src/pages/profile/index.tsx`
-- ✨ feat: 添加食物收藏功能，支持快速添加到记录 `src/pages/favorites/index.tsx`
-- 📝 docs: 更新API文档，添加认证说明 `README.md`
-- ⚡ perf: 优化图片上传，添加压缩逻辑减少50%大小 `src/utils/api.ts`
-```
-
-**要求：**
-- 每条记录控制在 1-2 句话
-- 说明做了什么，不需要详细技术细节
-- 文件路径用反引号包裹
-- 保持简洁清晰
-
----
-
 ## 🎯 代码规范
 
 ### TypeScript
@@ -124,7 +85,6 @@ docs: 更新API文档
 - [ ] 已添加必要注释
 - [ ] 已处理错误情况
 - [ ] 已测试主要功能
-- [ ] 已更新 PROGRESS.md
 - [ ] 无 console.log 调试代码
 - [ ] 无未使用的导入
 
