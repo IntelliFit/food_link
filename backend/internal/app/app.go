@@ -194,7 +194,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Community module DI
 	feedRepo := communityrepo.NewFeedRepo(db)
 	notifRepo := communityrepo.NewNotificationRepo(db)
-	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, storageClient)
+	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, storageClient)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
 	// Health module DI

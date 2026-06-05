@@ -33,8 +33,14 @@ import {
   type FeedCommentItem,
   type CheckinLeaderboardItem,
   type MealType,
-  type DietGoal
+  type DietGoal,
+  normalizeCommunityFeedItem
 } from '../../utils/api'
+import {
+  extractManualFoodDisplayItems,
+  isManualFoodFeedRecord,
+  manualItemHasDisplayImage
+} from '../../utils/manual-food-source'
 import { Button as TaroifyButton } from '@taroify/core'
 import '@taroify/core/button/style'
 
@@ -880,7 +886,9 @@ function CommunityPage() {
         ? await communityGetFeed(undefined, 0, PAGE_SIZE, true, 5, params)
         : await communityGetPublicFeed(0, PAGE_SIZE, true, 5, params)
       const baseList = res.list || []
-      const list = dedupeFeedItems(token ? await mergeFeedTempComments(baseList, true) : baseList)
+      const list = dedupeFeedItems(token ? await mergeFeedTempComments(baseList, true) : baseList).map(
+        normalizeCommunityFeedItem
+      )
       if (feedQueryKeyRef.current !== requestKey || feedRequestGenerationRef.current !== requestGeneration) return
 
       feedListRef.current = list
@@ -928,7 +936,9 @@ function CommunityPage() {
         ? await communityGetFeed(undefined, requestedOffset, PAGE_SIZE, true, 5, params)
         : await communityGetPublicFeed(requestedOffset, PAGE_SIZE, true, 5, params)
       const baseList = res.list || []
-      const list = dedupeFeedItems(token ? await mergeFeedTempComments(baseList, false) : baseList)
+      const list = dedupeFeedItems(token ? await mergeFeedTempComments(baseList, false) : baseList).map(
+        normalizeCommunityFeedItem
+      )
       if (
         feedQueryKeyRef.current !== requestKey ||
         feedRequestGenerationRef.current !== requestGeneration ||
@@ -2152,11 +2162,16 @@ function CommunityPage() {
                     const exerciseTitle = item.record.exercise_type || '运动打卡'
                     const exerciseDesc = item.record.exercise_desc || item.record.description || ''
                     const exerciseKcal = Number(item.record.calories_burned ?? item.record.total_calories ?? 0)
+                    const isManualRecord = !exercise && isManualFoodFeedRecord(item.record)
+                    const manualFoodItems = isManualRecord
+                      ? extractManualFoodDisplayItems(item.record.items)
+                      : []
+                    const useManualFoodCards = isManualRecord && manualFoodItems.length > 0
                     return (
                     <View key={targetKey}>
                       <View
                         id={`feed-card-${targetType}-${targetId}`}
-                        className={`feed-card${(item.record.description?.trim() || exerciseDesc) && !item.record.image_path ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''}`}
+                        className={`feed-card${(item.record.description?.trim() || exerciseDesc) && !item.record.image_path && !useManualFoodCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''}`}
                       >
                         <View className='feed-card-moments'>
                           <View className='feed-card-avatar-col'>
@@ -2182,7 +2197,7 @@ function CommunityPage() {
                                 ) : null}
                               </View>
                             </View>
-                            {(exercise ? exerciseDesc : item.record.description) &&
+                            {!useManualFoodCards && (exercise ? exerciseDesc : item.record.description) &&
                               (item.record.image_path ? (
                                 <Text className='feed-content'>{exercise ? exerciseDesc : item.record.description}</Text>
                               ) : (
@@ -2190,7 +2205,46 @@ function CommunityPage() {
                                   <Text className='feed-content'>{exercise ? exerciseDesc : item.record.description}</Text>
                                 </View>
                               ))}
-                            {item.record.image_path && (
+                            {useManualFoodCards && (
+                              <View className='feed-manual-foods'>
+                                {manualFoodItems.map((row, idx) => (
+                                  <View
+                                    key={`${targetKey}-manual-${idx}`}
+                                    className='feed-manual-food-row feed-tap-to-detail'
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleViewDetail(item)
+                                    }}
+                                  >
+                                    <View className={`feed-manual-food-thumb ${manualItemHasDisplayImage(row) ? 'has-image' : ''}`}>
+                                      {manualItemHasDisplayImage(row) ? (
+                                        <Image
+                                          className='feed-manual-food-image'
+                                          src={row.imageUrl}
+                                          mode='aspectFill'
+                                        />
+                                      ) : (
+                                        <Text className='iconfont icon-shiwu feed-manual-food-placeholder-icon' />
+                                      )}
+                                    </View>
+                                    <View className='feed-manual-food-info'>
+                                      <View className='feed-manual-food-title-row'>
+                                        <Text className='feed-manual-food-name'>{row.displayName}</Text>
+                                        {row.sourceLabel ? (
+                                          <View className={`feed-manual-food-badge source-${row.manual_source || 'unknown'}`}>
+                                            <Text className='feed-manual-food-badge-text'>{row.sourceLabel}</Text>
+                                          </View>
+                                        ) : null}
+                                      </View>
+                                      <Text className='feed-manual-food-kcal'>
+                                        {Math.round(Number(row.nutrients?.calories || 0))} kcal
+                                      </Text>
+                                    </View>
+                                  </View>
+                                ))}
+                              </View>
+                            )}
+                            {item.record.image_path && !useManualFoodCards && (
                               <View
                                 className='feed-image feed-tap-to-detail'
                                 onClick={(e) => {

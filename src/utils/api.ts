@@ -518,6 +518,56 @@ export interface CriticalSamplePayload {
   deviation_percent: number
 }
 
+/** 饮食记录 items 单条（含手动记录来源与展示图） */
+export interface FoodRecordItemRow {
+  name: string
+  weight: number
+  gross_weight_grams?: number
+  grossWeightGrams?: number
+  edible_portion_ratio?: number
+  ediblePortionRatio?: number
+  edible_portion_reason?: string
+  ediblePortionReason?: string
+  edible_portion_source?: string
+  ediblePortionSource?: string
+  ratio: number
+  intake: number
+  waterMl?: number
+  water_ml?: number
+  nutrients: Nutrients
+  manual_source?: 'public_library' | 'nutrition_library' | 'packaged_food'
+  manual_source_id?: string
+  manual_source_title?: string
+  manual_portion_label?: string
+  source_label?: string
+  image_path?: string | null
+  image_paths?: string[] | null
+  suggested_ratio?: number
+  suggestedRatio?: number
+  suggested_ratio_reason?: string
+  suggestedRatioReason?: string
+  suggested_ratio_source?: string
+  suggestedRatioSource?: string
+  nutrition_source?: string | null
+  nutritionSource?: string | null
+  matched_food_id?: string | null
+  matchedFoodId?: string | null
+  packaged_food_id?: string
+  packagedFoodId?: string
+  package_match_status?: string
+  packageMatchStatus?: string
+  package_match_confidence?: number
+  packageMatchConfidence?: number
+  package_weight_source?: string
+  packageWeightSource?: string
+  package_weight_applied?: boolean
+  packageWeightApplied?: boolean
+  package_weight_reason?: string
+  packageWeightReason?: string
+  packaged_candidates?: Array<Record<string, unknown>>
+  packagedCandidates?: Array<Record<string, unknown>>
+}
+
 /** 单条饮食记录（列表接口返回） */
 export interface FoodRecord {
   id: string
@@ -531,47 +581,7 @@ export interface FoodRecord {
   pfc_ratio_comment?: string | null
   absorption_notes?: string | null
   context_advice?: string | null
-  items: Array<{
-    name: string
-    weight: number
-    gross_weight_grams?: number
-    grossWeightGrams?: number
-    edible_portion_ratio?: number
-    ediblePortionRatio?: number
-    edible_portion_reason?: string
-    ediblePortionReason?: string
-    edible_portion_source?: string
-    ediblePortionSource?: string
-    suggested_ratio?: number
-    suggestedRatio?: number
-    suggested_ratio_reason?: string
-    suggestedRatioReason?: string
-    suggested_ratio_source?: string
-    suggestedRatioSource?: string
-    ratio: number
-    intake: number
-    waterMl?: number
-    water_ml?: number
-    nutrition_source?: string | null
-    nutritionSource?: string | null
-    matched_food_id?: string | null
-    matchedFoodId?: string | null
-    packaged_food_id?: string
-    packagedFoodId?: string
-    package_match_status?: string
-    packageMatchStatus?: string
-    package_match_confidence?: number
-    packageMatchConfidence?: number
-    package_weight_source?: string
-    packageWeightSource?: string
-    package_weight_applied?: boolean
-    packageWeightApplied?: boolean
-    package_weight_reason?: string
-    packageWeightReason?: string
-    packaged_candidates?: Array<Record<string, unknown>>
-    packagedCandidates?: Array<Record<string, unknown>>
-    nutrients: Nutrients
-  }>
+  items: FoodRecordItemRow[]
   total_calories: number
   total_protein: number
   total_carbs: number
@@ -704,10 +714,21 @@ export function normalizeManualFoodSearchResult(item: ManualFoodSearchResult): M
 /** 规范化饮食记录图片字段（含后端从标准食物库回查的 image_path/image_paths）。 */
 export function normalizeFoodRecord(record: FoodRecord): FoodRecord {
   const urls = collectFoodDisplayImageUrls(record)
+  const items = Array.isArray(record.items)
+    ? record.items.map((item) => {
+        const itemUrls = collectFoodDisplayImageUrls(item)
+        return {
+          ...item,
+          image_path: itemUrls[0] || item.image_path || null,
+          image_paths: itemUrls.length > 0 ? itemUrls : item.image_paths,
+        }
+      })
+    : record.items
   return {
     ...record,
     image_path: urls[0] || null,
     image_paths: urls.length > 0 ? urls : null,
+    items,
   }
 }
 
@@ -4783,6 +4804,13 @@ export interface CommunityFeedItem {
   comment_count?: number
   /** 推荐理由（推荐排序时展示） */
   recommend_reason?: string
+}
+
+export function normalizeCommunityFeedItem(item: CommunityFeedItem): CommunityFeedItem {
+  return {
+    ...item,
+    record: normalizeFoodRecord(item.record as FoodRecord) as CommunityFeedRecord,
+  }
 }
 
 /** 评论项 */
