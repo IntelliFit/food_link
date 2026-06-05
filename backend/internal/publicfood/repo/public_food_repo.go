@@ -42,7 +42,11 @@ func (r *PublicFoodRepo) CreateItem(ctx context.Context, item *domain.PublicFood
 	if item.ID == "" {
 		item.ID = uuid.New().String()
 	}
-	return r.db.WithContext(ctx).Create(item).Error
+	db := r.db.WithContext(ctx)
+	if strings.TrimSpace(item.PriceType) == "" {
+		db = db.Omit("price_type")
+	}
+	return db.Create(item).Error
 }
 
 func (r *PublicFoodRepo) UpdateStatus(ctx context.Context, itemID, status string) error {

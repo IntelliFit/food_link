@@ -355,16 +355,18 @@ function parseAnalyzeGeoContext(address: string, promptCity = ''): AnalyzeGeoCon
   return { province, city, district }
 }
 
-async function resolveAnalyzeGeoContext(): Promise<AnalyzeGeoContext | undefined> {
+export async function resolveCurrentGeoContext(options?: { requestAuthorization?: boolean }): Promise<AnalyzeGeoContext | undefined> {
   const cached = readCachedAnalyzeGeoContext()
   if (Taro.getEnv() !== Taro.ENV_TYPE.WEAPP) {
     return cached
   }
 
   try {
-    const setting = await Taro.getSetting()
-    if (!setting.authSetting?.['scope.userLocation']) {
-      return cached
+    if (!options?.requestAuthorization) {
+      const setting = await Taro.getSetting()
+      if (!setting.authSetting?.['scope.userLocation']) {
+        return cached
+      }
     }
 
     const location = await Taro.getLocation({ type: 'wgs84' })
@@ -401,6 +403,8 @@ async function resolveAnalyzeGeoContext(): Promise<AnalyzeGeoContext | undefined
 
   return cached
 }
+
+const resolveAnalyzeGeoContext = resolveCurrentGeoContext
 
 async function enrichAnalyzePayloadWithGeoContext<T extends AnalyzeGeoContext & { timezone_offset_minutes?: number }>(
   body: T

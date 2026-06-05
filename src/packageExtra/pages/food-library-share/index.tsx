@@ -14,6 +14,7 @@ import {
   uploadAnalyzeImage,
   analyzeFoodImage,
   imageToBase64,
+  resolveCurrentGeoContext,
   showUnifiedApiError,
   type FoodRecord,
   type Nutrients
@@ -119,6 +120,7 @@ function FoodLibrarySharePage() {
   // 提交状态
   const [submitting, setSubmitting] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
+  const [locatingHomemadeCity, setLocatingHomemadeCity] = useState(false)
 
   // 加载最近记录
   useEffect(() => {
@@ -232,6 +234,22 @@ function FoodLibrarySharePage() {
     }
   }, [isCampusFood, priceType, priceUnit])
 
+  const fillHomemadeCityFromLocation = async () => {
+    if (province.trim() || city.trim() || locatingHomemadeCity) return
+    setLocatingHomemadeCity(true)
+    try {
+      const geo = await resolveCurrentGeoContext({ requestAuthorization: true })
+      if (!geo?.province && !geo?.city) return
+      if (geo.province) setProvince(geo.province)
+      if (geo.city) setCity(geo.city)
+      if (geo.district) setDistrict(geo.district)
+    } catch (e) {
+      console.warn('获取自制餐食所在城市失败:', e)
+    } finally {
+      setLocatingHomemadeCity(false)
+    }
+  }
+
   const handleSetHomemade = (nextValue: boolean) => {
     setIsHomemade(nextValue)
     if (nextValue) {
@@ -239,6 +257,7 @@ function FoodLibrarySharePage() {
       setDetailAddress('')
       setLatitude(undefined)
       setLongitude(undefined)
+      void fillHomemadeCityFromLocation()
     }
   }
 
@@ -1022,7 +1041,9 @@ function FoodLibrarySharePage() {
             <Text className={province ? 'city-value' : 'city-placeholder'}>
               {province
                 ? `${province}${city ? ' ' + city : ''}${isHomemade ? '' : ` ${district}`}`.trim()
-                : isHomemade ? '可选填所在省市' : '点击选择城市/区域（必填）'}
+                : isHomemade
+                  ? (locatingHomemadeCity ? '正在定位所在城市...' : '可选填所在省市')
+                  : '点击选择城市/区域（必填）'}
             </Text>
           </View>
         </View>

@@ -591,6 +591,7 @@ func normalizePublicFoodLocationInput(input *CreateInput) error {
 	if input == nil || input.IsCampusFood {
 		return nil
 	}
+	clearCampusPriceInput(input)
 	if isHomemadeInput(*input) {
 		input.MerchantName = nil
 		input.MerchantAddress = nil
@@ -607,6 +608,16 @@ func normalizePublicFoodLocationInput(input *CreateInput) error {
 		return &commonerrors.AppError{Code: 10002, Message: "公共食物库上传必须带完整地理位置", HTTPStatus: 400}
 	}
 	return nil
+}
+
+func clearCampusPriceInput(input *CreateInput) {
+	input.Price = nil
+	input.PriceType = nil
+	input.PriceMin = nil
+	input.PriceMax = nil
+	input.PriceUnit = nil
+	input.PriceCollectedAt = nil
+	input.PortionDescription = nil
 }
 
 func validateCampusCreateInput(input CreateInput, imagePaths []string) error {
