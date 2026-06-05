@@ -12,7 +12,10 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/community/domain"
 	"food_link/backend/internal/community/repo"
+	"food_link/backend/internal/foodmedia"
 	"food_link/backend/pkg/storage"
+
+	"gorm.io/gorm"
 )
 
 var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
@@ -59,6 +62,7 @@ type CommunityService struct {
 	feedRepo  FeedRepo
 	notifRepo NotificationRepo
 	userRepo  UserFinder
+	db        *gorm.DB
 	storage   *storage.Client
 }
 
@@ -66,7 +70,7 @@ type UserFinder interface {
 	FindByID(ctx context.Context, userID string) (*authrepo.User, error)
 }
 
-func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo UserFinder, storageClient ...*storage.Client) *CommunityService {
+func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo UserFinder, db *gorm.DB, storageClient ...*storage.Client) *CommunityService {
 	var client *storage.Client
 	if len(storageClient) > 0 {
 		client = storageClient[0]
@@ -75,6 +79,7 @@ func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo
 		feedRepo:  feedRepo,
 		notifRepo: notifRepo,
 		userRepo:  userRepo,
+		db:        db,
 		storage:   client,
 	}
 }
@@ -221,7 +226,7 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 
 	items := make([]FeedItem, 0, len(records))
 	for _, rec := range records {
-		rec = s.normalizeFeedRecord(rec)
+		rec = s.normalizeFeedRecord(ctx, rec)
 		profile := profiles[rec.UserID]
 		author := map[string]string{"id": rec.UserID, "nickname": "用户", "avatar": ""}
 		if profile != nil {
@@ -234,16 +239,24 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 		if likeInfo == nil {
 			likeInfo = &repo.LikeInfo{}
 		}
+		likeCount := likeInfo.Count
+		commentCount := commentCountMap[targetKey]
+		liked := likeInfo.Liked
+		// Campus food items use denormalized counts from public_food_library
+		if rec.FeedType == "campus_food" {
+			likeCount = rec.LikeCount
+			commentCount = rec.CommentCount
+		}
 		item := FeedItem{
 			TargetType:      targetType,
 			TargetID:        targetID,
 			Record:          rec,
 			Author:          author,
-			LikeCount:       likeInfo.Count,
-			Liked:           likeInfo.Liked,
+			LikeCount:       likeCount,
+			Liked:           liked,
 			IsMine:          viewerUserID != "" && rec.UserID == viewerUserID,
-			RecommendReason: s.buildRecommendReason(&rec, params.SortBy, params.MealType, params.DietGoal, nil, likeInfo.Count, commentCountMap[targetKey]),
-			CommentCount:    commentCountMap[targetKey],
+			RecommendReason: s.buildRecommendReason(&rec, params.SortBy, params.MealType, params.DietGoal, nil, likeCount, commentCount),
+			CommentCount:    commentCount,
 		}
 		if params.IncludeComments {
 			item.Comments = commentsMap[targetKey]
@@ -351,7 +364,7 @@ func (s *CommunityService) FriendFeed(ctx context.Context, userID string, params
 
 	items := make([]FeedItem, 0, len(records))
 	for _, rec := range records {
-		rec = s.normalizeFeedRecord(rec)
+		rec = s.normalizeFeedRecord(ctx, rec)
 		profile := profiles[rec.UserID]
 		author := map[string]string{"id": rec.UserID, "nickname": "用户", "avatar": ""}
 		if profile != nil {
@@ -535,7 +548,7 @@ func strOrAvatar(profile *repo.UserProfile) string {
 	return ""
 }
 
-func (s *CommunityService) normalizeFeedRecord(record repo.FeedRecord) repo.FeedRecord {
+func (s *CommunityService) normalizeFeedRecord(ctx context.Context, record repo.FeedRecord) repo.FeedRecord {
 	if strings.TrimSpace(record.FeedType) == "" {
 		record.FeedType = repo.FeedTargetFoodRecord
 	}
@@ -555,6 +568,14 @@ func (s *CommunityService) normalizeFeedRecord(record repo.FeedRecord) repo.Feed
 		}
 		return record
 	}
+	record.Items = foodmedia.EnrichFoodRecordDisplayFields(
+		ctx,
+		s.db,
+		s.storage,
+		&record.ImagePath,
+		&record.ImagePaths,
+		record.Items,
+	)
 	record.ImagePaths = s.resolveFoodImageURLs(record.ImagePaths)
 	if len(record.ImagePaths) > 0 {
 		first := record.ImagePaths[0]
@@ -882,7 +903,7 @@ func (s *CommunityService) FeedTargetContext(ctx context.Context, userID, target
 	if !ctxCheck.Allowed {
 		return ctxCheck, nil
 	}
-	normalizedRecord := s.normalizeFeedRecord(*record)
+	normalizedRecord := s.normalizeFeedRecord(ctx, *record)
 	record = &normalizedRecord
 
 	profiles, _ := s.feedRepo.GetUserProfiles(ctx, []string{record.UserID})

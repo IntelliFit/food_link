@@ -58,6 +58,7 @@ const ACTIVITY_TIMINGS = [
 
 const DEFAULT_CATALOG_CATEGORIES: ManualFoodCatalogCategory[] = [
   { key: 'common', label: '常见' },
+  { key: 'campus', label: '校园食堂' },
   { key: 'custom', label: '自定义' },
   { key: 'recent', label: '最近' },
   { key: 'favorites', label: '收藏' },

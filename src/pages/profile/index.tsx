@@ -1,5 +1,5 @@
 import { View, Text, Image, Navigator } from '@tarojs/components'
-import { useState, useCallback } from 'react'
+import * as React from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   TodoListOutlined,
@@ -9,7 +9,8 @@ import {
   InfoOutlined,
   Arrow,
   ChatOutlined,
-  GiftOutlined
+  GiftOutlined,
+  LocationOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import {
@@ -126,35 +127,35 @@ function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string 
 function ProfilePage() {
   const { scheme, toggleScheme } = useAppColorScheme()
   // 登录状态
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [userId, setUserId] = useState('')
+  const [isLoggedIn, setIsLoggedIn] = React.useState(false)
+  const [userId, setUserId] = React.useState('')
 
   // （个人设置已迁移到独立页面 /pages/profile-settings/index）
 
   // 用户信息
-  const [userInfo, setUserInfo] = useState<UserInfo>({
+  const [userInfo, setUserInfo] = React.useState<UserInfo>({
     avatar: '',
     name: '用户昵称',
     meta: '已记录 0 天'
   })
 
   // 是否已完成健康档案引导（首次问卷）
-  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean>(true)
+  const [onboardingCompleted, setOnboardingCompleted] = React.useState<boolean>(true)
 
   // 记录天数
-  const [recordDays, setRecordDays] = useState(0)
+  const [recordDays, setRecordDays] = React.useState(0)
 
   // 会员状态
-  const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
-  const [expiryDashboard, setExpiryDashboard] = useState<FoodExpiryDashboard | null>(null)
+  const [membershipStatus, setMembershipStatus] = React.useState<MembershipStatus | null>(null)
+  const [expiryDashboard, setExpiryDashboard] = React.useState<FoodExpiryDashboard | null>(null)
 
   // 好友请求数量
-  const [friendRequestCount, setFriendRequestCount] = useState(0)
+  const [friendRequestCount, setFriendRequestCount] = React.useState(0)
 
   // 快捷入口统计数字
-  const [analyzeCount, setAnalyzeCount] = useState(0)
-  const [friendCount, setFriendCount] = useState(0)
-  const [favoriteCount, setFavoriteCount] = useState(0)
+  const [analyzeCount, setAnalyzeCount] = React.useState(0)
+  const [friendCount, setFriendCount] = React.useState(0)
+  const [favoriteCount, setFavoriteCount] = React.useState(0)
 
   // 每次显示页面时检查登录状态并刷新数据（含会员配额）
   useDidShow(() => {
@@ -339,6 +340,13 @@ function ProfilePage() {
       path: extraPkgUrl('/pages/food-library/index')
     },
     {
+      id: 9,
+      icon: <LocationOutlined size='20' />,
+      title: '校园食堂',
+      desc: '查食堂菜品热量、价格和蛋白质',
+      path: extraPkgUrl('/pages/campus-canteen/index')
+    },
+    {
       id: 8,
       icon: <ChatOutlined size='20' />,
       title: '加入用户群',
@@ -382,6 +390,11 @@ function ProfilePage() {
     // 公共食物库
     if (service.id === 5) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/food-library/index') })
+      return
+    }
+    // 校园食堂
+    if (service.id === 9) {
+      Taro.navigateTo({ url: extraPkgUrl('/pages/campus-canteen/index') })
       return
     }
     if (service.id === 8) {
@@ -437,7 +450,7 @@ function ProfilePage() {
   }
 
   // 快捷入口点击处理
-  const handleQuickActionClick = useCallback((path: string) => {
+  const handleQuickActionClick = React.useCallback((path: string) => {
     console.log('[profile] quick action click:', path)
     Taro.navigateTo({
       url: path,
@@ -449,7 +462,7 @@ function ProfilePage() {
   }, [])
 
   // 复制用户 ID
-  const handleCopyUserId = useCallback(() => {
+  const handleCopyUserId = React.useCallback(() => {
     const value = userId.trim()
     if (!value) {
       Taro.showToast({ title: '暂无用户ID', icon: 'none' })

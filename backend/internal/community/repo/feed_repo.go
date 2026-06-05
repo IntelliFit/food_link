@@ -39,6 +39,17 @@ type FeedRecord struct {
 	CaloriesBurned *float64         `gorm:"column:calories_burned" json:"calories_burned,omitempty"`
 	DurationMin    *int             `gorm:"column:duration_min" json:"duration_min,omitempty"`
 	AIReasoning    *string          `gorm:"column:ai_reasoning" json:"ai_reasoning,omitempty"`
+	// Campus food fields (for public_food_library entries appearing in feed)
+	Price           float64 `gorm:"column:price" json:"price,omitempty"`
+	PriceUnit       string  `gorm:"column:price_unit" json:"price_unit,omitempty"`
+	SchoolName      string  `gorm:"column:school_name" json:"school_name,omitempty"`
+	CanteenName     string  `gorm:"column:canteen_name" json:"canteen_name,omitempty"`
+	CampusLocation  string  `gorm:"column:campus_location_text" json:"campus_location,omitempty"`
+	IsCampusFood    bool    `gorm:"column:is_campus_food" json:"is_campus_food"`
+	IsCampusHighlight bool `gorm:"column:is_campus_highlight" json:"is_campus_highlight"`
+	LikeCount       int     `gorm:"column:like_count" json:"like_count,omitempty"`
+	CommentCount    int     `gorm:"column:comment_count" json:"comment_count,omitempty"`
+	CollectionCount int     `gorm:"column:collection_count" json:"collection_count,omitempty"`
 }
 
 func (FeedRecord) TableName() string { return "user_food_records" }
@@ -104,6 +115,13 @@ func (r *FeedRepo) listFeedByAuthors(ctx context.Context, authorIDs []string, co
 		contentType = "all"
 	}
 	var rows []FeedRecord
+	if contentType == "campus_food" {
+		campusRows, err := r.listCampusFeed(ctx, limit)
+		if err != nil {
+			return nil, err
+		}
+		return campusRows, nil
+	}
 	if contentType == "all" || contentType == FeedTargetFoodRecord {
 		foodRows, err := r.listFoodFeedByAuthors(ctx, authorIDs, mealType, dietGoal, date, sortBy, limit)
 		if err != nil {
@@ -117,6 +135,13 @@ func (r *FeedRepo) listFeedByAuthors(ctx context.Context, authorIDs []string, co
 			return nil, err
 		}
 		rows = append(rows, exerciseRows...)
+	}
+	// Mix in a small number of campus highlights for the default feed
+	if contentType == "all" && sortBy != "latest" {
+		campusRows, err := r.listCampusFeed(ctx, 3)
+		if err == nil && len(campusRows) > 0 {
+			rows = append(rows, campusRows...)
+		}
 	}
 	sortFeedRecords(rows, sortBy)
 	if limit > 0 && len(rows) > limit {
@@ -169,6 +194,20 @@ func (r *FeedRepo) listExerciseFeedByAuthors(ctx context.Context, authorIDs []st
 		orderColumn = "created_at DESC, id DESC"
 	}
 	err := q.Order(orderColumn).Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
+func (r *FeedRepo) listCampusFeed(ctx context.Context, limit int) ([]FeedRecord, error) {
+	var rows []FeedRecord
+	if limit <= 0 || limit > 20 {
+		limit = 3
+	}
+	err := r.db.WithContext(ctx).Table("public_food_library").
+		Select("'campus_food' AS feed_type, id, user_id, '' AS meal_type, COALESCE(published_at, created_at) AS record_time, created_at, COALESCE(total_calories, 0) AS total_calories, COALESCE(total_protein, 0) AS total_protein, COALESCE(total_carbs, 0) AS total_carbs, COALESCE(total_fat, 0) AS total_fat, image_path, image_paths, food_name AS description, items, '' AS diet_goal, false AS hidden_from_feed, NULL::text AS exercise_type, NULL::text AS exercise_desc, NULL::numeric AS calories_burned, NULL::int AS duration_min, NULL::text AS ai_reasoning, COALESCE(price, 0) AS price, COALESCE(price_unit, '') AS price_unit, COALESCE(school_name, '') AS school_name, COALESCE(canteen_name, '') AS canteen_name, COALESCE(campus_location_text, '') AS campus_location_text, is_campus_food, is_campus_highlight, COALESCE(like_count, 0) AS like_count, COALESCE(comment_count, 0) AS comment_count, COALESCE(collection_count, 0) AS collection_count").
+		Where("is_campus_highlight = ? AND status = ?", true, "published").
+		Order("published_at DESC NULLS LAST, created_at DESC").
+		Limit(limit).
+		Find(&rows).Error
 	return rows, err
 }
 
@@ -509,6 +548,8 @@ func normalizeTargetType(value string) string {
 		return value
 	case FeedTargetExerciseLog:
 		return FeedTargetExerciseLog
+	case "campus_food":
+		return "campus_food"
 	default:
 		return FeedTargetFoodRecord
 	}

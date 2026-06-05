@@ -37,7 +37,9 @@ function RewardCenterPage() {
 
   const handleTaskClick = (task: RewardCenterTask) => {
     if (!task.action_path || isTaskDisabled(task)) return
-    const url = resolveRewardTaskUrl(task.action_path)
+    const url = task.action_type === 'public_food_upload'
+      ? extraPkgUrl('/pages/food-library-share/index?task_mode=reward_center&campus_mode=1')
+      : resolveRewardTaskUrl(task.action_path)
     Taro.navigateTo({
       url,
       fail: (error) => {
@@ -76,7 +78,7 @@ function RewardCenterPage() {
             {quickTasks.map(task => (
               <View key={task.action_type} className='reward-quick-card' onClick={() => handleTaskClick(task)}>
                 <View>
-                  <Text className='reward-quick-card__name'>{task.name}</Text>
+                  <Text className='reward-quick-card__name'>{formatTaskName(task)}</Text>
                   <Text className='reward-quick-card__desc'>
                     {formatTaskProgress(task)} · +{task.reward_amount} 积分
                   </Text>
@@ -105,7 +107,7 @@ function RewardCenterPage() {
                 <View key={task.action_type} className='reward-task-card'>
                   <View className='reward-task-card__head'>
                     <View>
-                      <Text className='reward-task-card__name'>{task.name}</Text>
+                      <Text className='reward-task-card__name'>{formatTaskName(task)}</Text>
                       <Text className='reward-task-card__reward'>完成一次 +{task.reward_amount} 奖励积分</Text>
                     </View>
                     <Text className='reward-task-card__status'>{task.status}</Text>
@@ -159,6 +161,13 @@ function formatTaskProgress(task: RewardCenterTask): string {
     return `今日 ${task.today_count}/${task.daily_limit}`
   }
   return `今日已提交 ${task.today_count}`
+}
+
+function formatTaskName(task: RewardCenterTask): string {
+  if (task.action_type === 'public_food_upload') {
+    return '上传公共食物/校园食堂菜品'
+  }
+  return task.name
 }
 
 export default RewardCenterPage

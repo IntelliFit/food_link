@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"strconv"
+	"time"
 
 	authmw "food_link/backend/internal/auth"
 	"food_link/backend/internal/common/response"
@@ -62,6 +63,19 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 		City               *string          `json:"city"`
 		District           *string          `json:"district"`
 		DetailAddress      *string          `json:"detail_address"`
+		IsCampusFood       bool             `json:"is_campus_food"`
+		SchoolName         *string          `json:"school_name"`
+		CampusName         *string          `json:"campus_name"`
+		CanteenName        *string          `json:"canteen_name"`
+		Floor              *string          `json:"floor"`
+		WindowName         *string          `json:"window_name"`
+		Price              *float64         `json:"price"`
+		PriceType          *string          `json:"price_type"`
+		PriceMin           *float64         `json:"price_min"`
+		PriceMax           *float64         `json:"price_max"`
+		PriceUnit          *string          `json:"price_unit"`
+		PriceCollectedAt   *time.Time       `json:"price_collected_at"`
+		PortionDescription *string          `json:"portion_description"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -91,6 +105,19 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 		City:               body.City,
 		District:           body.District,
 		DetailAddress:      body.DetailAddress,
+		IsCampusFood:       body.IsCampusFood,
+		SchoolName:         body.SchoolName,
+		CampusName:         body.CampusName,
+		CanteenName:        body.CanteenName,
+		Floor:              body.Floor,
+		WindowName:         body.WindowName,
+		Price:              body.Price,
+		PriceType:          body.PriceType,
+		PriceMin:           body.PriceMin,
+		PriceMax:           body.PriceMax,
+		PriceUnit:          body.PriceUnit,
+		PriceCollectedAt:   body.PriceCollectedAt,
+		PortionDescription: body.PortionDescription,
 	})
 	if err != nil {
 		response.Error(c, err)
@@ -106,10 +133,22 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 		SortBy:       c.DefaultQuery("sort_by", "latest"),
 		Limit:        intQuery(c, "limit", 20),
 		Offset:       intQuery(c, "offset", 0),
+		SchoolName:   c.Query("school_name"),
+		CanteenName:  c.Query("canteen_name"),
 	}
 	if raw := c.Query("suitable_for_fat_loss"); raw != "" {
 		if v, err := strconv.ParseBool(raw); err == nil {
 			filter.SuitableForFatLoss = &v
+		}
+	}
+	if raw := c.Query("is_campus_food"); raw != "" {
+		if v, err := strconv.ParseBool(raw); err == nil {
+			filter.IsCampusFood = &v
+		}
+	}
+	if raw := c.Query("is_campus_highlight"); raw != "" {
+		if v, err := strconv.ParseBool(raw); err == nil {
+			filter.IsCampusHighlight = &v
 		}
 	}
 	if raw := c.Query("min_calories"); raw != "" {

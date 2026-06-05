@@ -1045,7 +1045,7 @@ func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) 
 	taskList := []map[string]any{
 		buildRewardTask("share_poster", "每日分享打卡", sharePosterRewardCredits, shareCount, sharePosterDailyMaxEvents, "可去完成", "/pages/day-record/index?task_mode=reward_center"),
 		buildRewardTask("packaged_food_upload", "预包装零食/食物上传", packagedUploadRewardCredits, packagedCount, packagedUploadDailyMaxEvents, "可去完成", "/pages/packaged-food-edit/index?task_mode=reward_center"),
-		buildRewardTask("public_food_upload", "公共食物库上传", publicFoodUploadRewardCredits, publicCount, publicFoodUploadDailyMaxEvents, "可去完成", "/pages/food-library-share/index?task_mode=reward_center"),
+		buildRewardTask("public_food_upload", "上传公共食物/校园食堂菜品", publicFoodUploadRewardCredits, publicCount, publicFoodUploadDailyMaxEvents, "可去完成", "/pages/food-library-share/index?task_mode=reward_center&campus_mode=1"),
 	}
 	completed := 0
 	totalWithLimit := 0

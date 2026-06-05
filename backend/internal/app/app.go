@@ -51,6 +51,8 @@ import (
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
 	recipehandler "food_link/backend/internal/recipe/handler"
+	schoolhandler "food_link/backend/internal/school/handler"
+	locationhandler "food_link/backend/internal/location/handler"
 	reciperepo "food_link/backend/internal/recipe/repo"
 	recipeservice "food_link/backend/internal/recipe/service"
 	"food_link/backend/internal/stub"
@@ -68,6 +70,7 @@ import (
 	workerpkg "food_link/backend/internal/worker"
 	"food_link/backend/pkg/config"
 	"food_link/backend/pkg/database"
+	"food_link/backend/pkg/location"
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
@@ -110,6 +113,12 @@ func New(cfg *config.Config) (*App, error) {
 	}
 	if err := migration.AutoMigrate(context.Background(), db, cfg.Database.Schema); err != nil {
 		return nil, fmt.Errorf("auto migrate: %w", err)
+	}
+
+	// 初始化 IP 定位（离线 ip2region xdb）
+	ip2regionPath := filepath.Join(".", "data", "ip2region.xdb")
+	if err := location.Init(ip2regionPath); err != nil {
+		log.Warn("ip2region 初始化失败，IP 定位功能将不可用", logger.Err(err))
 	}
 
 	engine := gin.New()
@@ -194,7 +203,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Community module DI
 	feedRepo := communityrepo.NewFeedRepo(db)
 	notifRepo := communityrepo.NewNotificationRepo(db)
-	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, storageClient)
+	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, storageClient)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
 	// Health module DI
@@ -235,6 +244,8 @@ func New(cfg *config.Config) (*App, error) {
 	recipeSvc := recipeservice.NewRecipeService(recipeRepo, storageClient)
 	recipeSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	recipeHandler := recipehandler.NewRecipeHandler(recipeSvc)
+
+	schoolHandler := schoolhandler.NewSchoolHandler(db)
 
 	// Expiry module DI
 	expiryRepo := expiryrepo.NewExpiryRepo(db)
@@ -461,6 +472,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/manual-food/search", authmw.OptionalJWT(jwtSvc), utilityHandler.ManualFoodSearch)
 	engine.GET("/api/manual-food/custom", authmw.RequireJWT(jwtSvc), utilityHandler.ManualFoodCustomList)
 	engine.POST("/api/manual-food/custom", authmw.RequireJWT(jwtSvc), utilityHandler.ManualFoodCustomSave)
+	engine.GET("/api/schools", authmw.RequireJWT(jwtSvc), schoolHandler.Search)
+	engine.GET("/api/schools/provinces", authmw.RequireJWT(jwtSvc), schoolHandler.Provinces)
+	engine.GET("/api/location", authmw.RequireJWT(jwtSvc), locationhandler.GetLocation)
 
 	// TestBackend routes
 	engine.GET("/api/prompts", authmw.RequireTestBackendCookie(), testBackendHandler.ListPrompts)
@@ -643,9 +657,10 @@ func (a *App) Close(ctx context.Context) error {
 	if a.db != nil {
 		sqlDB, err := a.db.DB()
 		if err == nil {
-			return sqlDB.Close()
+			_ = sqlDB.Close()
 		}
 	}
+	location.Close()
 	return nil
 }
 

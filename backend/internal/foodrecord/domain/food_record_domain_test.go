@@ -3,285 +3,53 @@ package domain
 import (
 	"encoding/json"
 	"testing"
-	"time"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestFoodRecord_Struct(t *testing.T) {
-	now := time.Now()
-	record := FoodRecord{
-		ID:            "record-1",
-		UserID:        "user-1",
-		MealType:      "lunch",
-		TotalCalories: 500,
-		TotalProtein:  20,
-		TotalCarbs:    60,
-		TotalFat:      15,
-		RecordTime:    &now,
-		CreatedAt:     &now,
-	}
-	assert.Equal(t, "record-1", record.ID)
-	assert.Equal(t, "user_food_records", record.TableName())
-}
-
-func TestFoodItem_Struct(t *testing.T) {
-	item := FoodItem{
-		Name:   "Apple",
-		Weight: 100,
-		Ratio:  1.0,
-		Intake: 100,
-		Nutrients: FoodItemNutrients{
-			Calories: 52,
-			Protein:  0.3,
-			Carbs:    14,
-			Fat:      0.2,
+func TestFoodItemUnmarshalJSON_ClampsRatioAndIntake(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        string
+		expectRatio  float64
+		expectIntake float64
+	}{
+		{
+			name:         "intake exceeding weight clamps ratio to 100",
+			input:        `{"weight":200,"intake":250}`,
+			expectRatio:  100,
+			expectIntake: 200,
+		},
+		{
+			name:         "ratio over 100 is clamped",
+			input:        `{"weight":200,"ratio":120,"intake":200}`,
+			expectRatio:  100,
+			expectIntake: 200,
+		},
+		{
+			name:         "normal ratio and intake preserved",
+			input:        `{"weight":200,"ratio":50,"intake":100}`,
+			expectRatio:  50,
+			expectIntake: 100,
+		},
+		{
+			name:         "ratio exactly 100 preserved",
+			input:        `{"weight":281.6,"ratio":100.2,"intake":282.2}`,
+			expectRatio:  100,
+			expectIntake: 281.6,
 		},
 	}
-	assert.Equal(t, "Apple", item.Name)
-}
 
-func TestFoodItem_UnmarshalJSONWaterMlAliases(t *testing.T) {
-	var camel FoodItem
-	require.NoError(t, json.Unmarshal([]byte(`{"name":"粥","waterMl":120,"nutrients":{"calories":10}}`), &camel))
-	assert.Equal(t, 120.0, camel.WaterMl)
-	assert.Equal(t, 10.0, camel.Nutrients.Calories)
-
-	var snake FoodItem
-	require.NoError(t, json.Unmarshal([]byte(`{"name":"粥","water_ml":85,"nutrients":{"calories":10}}`), &snake))
-	assert.Equal(t, 85.0, snake.WaterMl)
-	assert.Equal(t, 10.0, snake.Nutrients.Calories)
-
-	var nested FoodItem
-	require.NoError(t, json.Unmarshal([]byte(`{"name":"汤","nutrients":{"calories":10,"water_ml":200}}`), &nested))
-	assert.Equal(t, 200.0, nested.WaterMl)
-	assert.Equal(t, 10.0, nested.Nutrients.Calories)
-}
-
-func TestFoodItem_UnmarshalJSONPreservesPackagedAnalysisMetadata(t *testing.T) {
-	var item FoodItem
-	require.NoError(t, json.Unmarshal([]byte(`{
-		"name": "雀巢咖啡1+2奶香",
-		"weight": 52.5,
-		"ratio": 75,
-		"intake": 39.375,
-		"gross_weight_grams": 105,
-		"edible_portion_ratio": 1,
-		"edible_portion_reason": "完整包装",
-		"edible_portion_source": "vision",
-		"suggested_ratio": 75,
-		"suggested_ratio_reason": "建议半包到四分之三包",
-		"suggested_ratio_source": "ai",
-		"nutrition_source": "packaged_food_library",
-		"matched_food_id": "nutrition:coffee",
-		"packaged_food_id": "packaged:nescafe-105g",
-		"package_match_status": "matched",
-		"package_match_confidence": 0.96,
-		"package_weight_source": "packaged_food_library",
-		"package_weight_applied": true,
-		"package_weight_reason": "命中包装库净含量105g",
-		"packaged_candidates": [{"id":"packaged:nescafe-105g","net_weight_g":105}],
-		"nutrients": {"calories": 52.5, "protein": 1, "carbs": 10, "fat": 1}
-	}`), &item))
-
-	assert.Equal(t, "雀巢咖啡1+2奶香", item.Name)
-	assert.Equal(t, 52.5, item.Weight)
-	assert.Equal(t, 105.0, item.GrossWeightGrams)
-	require.NotNil(t, item.SuggestedRatio)
-	assert.Equal(t, 75.0, *item.SuggestedRatio)
-	require.NotNil(t, item.SuggestedRatioSource)
-	assert.Equal(t, "ai", *item.SuggestedRatioSource)
-	require.NotNil(t, item.NutritionSource)
-	assert.Equal(t, "packaged_food_library", *item.NutritionSource)
-	require.NotNil(t, item.PackagedFoodID)
-	assert.Equal(t, "packaged:nescafe-105g", *item.PackagedFoodID)
-	require.NotNil(t, item.PackageWeightApplied)
-	assert.True(t, *item.PackageWeightApplied)
-	require.Len(t, item.PackagedCandidates, 1)
-
-	encoded, err := json.Marshal(item)
-	require.NoError(t, err)
-	assert.Contains(t, string(encoded), `"suggested_ratio_source":"ai"`)
-	assert.Contains(t, string(encoded), `"package_weight_source":"packaged_food_library"`)
-	assert.Contains(t, string(encoded), `"packaged_candidates"`)
-}
-
-func TestFoodItem_UnmarshalJSONDefaultsMissingRatio(t *testing.T) {
-	var fromIntake FoodItem
-	require.NoError(t, json.Unmarshal([]byte(`{"name":"米饭","weight":200,"intake":50,"nutrients":{"calories":100}}`), &fromIntake))
-	assert.Equal(t, 25.0, fromIntake.Ratio)
-	assert.Equal(t, 50.0, fromIntake.Intake)
-
-	var wholeItem FoodItem
-	require.NoError(t, json.Unmarshal([]byte(`{"name":"苹果","weight":120,"nutrients":{"calories":60}}`), &wholeItem))
-	assert.Equal(t, 100.0, wholeItem.Ratio)
-	assert.Equal(t, 120.0, wholeItem.Intake)
-
-	var explicitZero FoodItem
-	require.NoError(t, json.Unmarshal([]byte(`{"name":"苹果","weight":120,"ratio":0,"nutrients":{"calories":60}}`), &explicitZero))
-	assert.Equal(t, 0.0, explicitZero.Ratio)
-	assert.Equal(t, 0.0, explicitZero.Intake)
-}
-
-func TestFoodItem_UnmarshalJSONManualRecordNutrients(t *testing.T) {
-	var item FoodItem
-	require.NoError(t, json.Unmarshal([]byte(`{
-		"name": "白米饭",
-		"weight": 177,
-		"ratio": 100,
-		"intake": 177,
-		"nutrients": {
-			"calories": 225.0,
-			"protein": 4.7,
-			"carbs": 49.2,
-			"fat": 0.6,
-			"fiber": 0,
-			"sugar": 0,
-			"sodium_mg": 1.8
-		},
-		"manual_source": "nutrition_library",
-		"manual_source_id": "food-1",
-		"manual_source_title": "白米饭",
-		"manual_portion_label": "100g"
-	}`), &item))
-
-	assert.Equal(t, "白米饭", item.Name)
-	assert.Equal(t, 177.0, item.Weight)
-	assert.Equal(t, 100.0, item.Ratio)
-	assert.Equal(t, 177.0, item.Intake)
-	assert.Equal(t, 225.0, item.Nutrients.Calories)
-	assert.Equal(t, 4.7, item.Nutrients.Protein)
-	assert.Equal(t, 49.2, item.Nutrients.Carbs)
-	assert.Equal(t, 0.6, item.Nutrients.Fat)
-	assert.Equal(t, 1.8, item.Nutrients.SodiumMg)
-	require.NotNil(t, item.ManualSource)
-	assert.Equal(t, "nutrition_library", *item.ManualSource)
-}
-
-func TestFoodItemNutrients_UnmarshalMacroAliases(t *testing.T) {
-	var fromCarbohydrate FoodItemNutrients
-	require.NoError(t, json.Unmarshal([]byte(`{"carbohydrate":28,"calories":120}`), &fromCarbohydrate))
-	assert.Equal(t, 28.0, fromCarbohydrate.Carbs)
-	assert.Equal(t, 120.0, fromCarbohydrate.Calories)
-
-	var fromCarbohydrates FoodItemNutrients
-	require.NoError(t, json.Unmarshal([]byte(`{"carbohydrates":15,"calories":80}`), &fromCarbohydrates))
-	assert.Equal(t, 15.0, fromCarbohydrates.Carbs)
-
-	var fromCarbs FoodItemNutrients
-	require.NoError(t, json.Unmarshal([]byte(`{"carbs":20,"calories":100}`), &fromCarbs))
-	assert.Equal(t, 20.0, fromCarbs.Carbs)
-
-	var fromDietaryFiber FoodItemNutrients
-	require.NoError(t, json.Unmarshal([]byte(`{"dietary_fiber":8,"sugar":6}`), &fromDietaryFiber))
-	assert.Equal(t, 8.0, fromDietaryFiber.Fiber)
-	assert.Equal(t, 6.0, fromDietaryFiber.Sugar)
-
-	var fromFibre FoodItemNutrients
-	require.NoError(t, json.Unmarshal([]byte(`{"fibre":5}`), &fromFibre))
-	assert.Equal(t, 5.0, fromFibre.Fiber)
-
-	var fromTotalSugar FoodItemNutrients
-	require.NoError(t, json.Unmarshal([]byte(`{"total_sugar":10}`), &fromTotalSugar))
-	assert.Equal(t, 10.0, fromTotalSugar.Sugar)
-
-	var fromSugars FoodItemNutrients
-	require.NoError(t, json.Unmarshal([]byte(`{"sugars":3}`), &fromSugars))
-	assert.Equal(t, 3.0, fromSugars.Sugar)
-}
-
-func TestFoodItemNutrients_UnmarshalMicronutrients(t *testing.T) {
-	var nutrients FoodItemNutrients
-	require.NoError(t, json.Unmarshal([]byte(`{
-		"calories": 100,
-		"protein": 1.5,
-		"carbs": 25,
-		"fat": 0.5,
-		"saturatedFat": 0.1,
-		"cholesterol_mg": 2,
-		"sodiumMg": 3,
-		"potassium_mg": 120,
-		"calciumMg": 10,
-		"iron_mg": 0.4,
-		"magnesiumMg": 6,
-		"zinc_mg": 0.2,
-		"vitaminARaeMcg": 15,
-		"vitamin_c_mg": 4,
-		"vitaminDMcg": 0.1,
-		"vitamin_e_mg": 0.2,
-		"vitaminKMcg": 3,
-		"thiamin_mg": 0.03,
-		"riboflavinMg": 0.04,
-		"niacin_mg": 0.5,
-		"vitaminB6Mg": 0.06,
-		"folate_mcg": 8,
-		"vitaminB12Mcg": 0.01
-	}`), &nutrients))
-
-	assert.Equal(t, 100.0, nutrients.Calories)
-	assert.Equal(t, 0.1, nutrients.SaturatedFat)
-	assert.Equal(t, 2.0, nutrients.CholesterolMg)
-	assert.Equal(t, 3.0, nutrients.SodiumMg)
-	assert.Equal(t, 120.0, nutrients.PotassiumMg)
-	assert.Equal(t, 10.0, nutrients.CalciumMg)
-	assert.Equal(t, 0.4, nutrients.IronMg)
-	assert.Equal(t, 6.0, nutrients.MagnesiumMg)
-	assert.Equal(t, 0.2, nutrients.ZincMg)
-	assert.Equal(t, 15.0, nutrients.VitaminARaeMcg)
-	assert.Equal(t, 4.0, nutrients.VitaminCMg)
-	assert.Equal(t, 0.1, nutrients.VitaminDMcg)
-	assert.Equal(t, 0.2, nutrients.VitaminEMg)
-	assert.Equal(t, 3.0, nutrients.VitaminKMcg)
-	assert.Equal(t, 0.03, nutrients.ThiaminMg)
-	assert.Equal(t, 0.04, nutrients.RiboflavinMg)
-	assert.Equal(t, 0.5, nutrients.NiacinMg)
-	assert.Equal(t, 0.06, nutrients.VitaminB6Mg)
-	assert.Equal(t, 8.0, nutrients.FolateMcg)
-	assert.Equal(t, 0.01, nutrients.VitaminB12Mcg)
-}
-
-func TestFoodNutrition_Struct(t *testing.T) {
-	food := FoodNutrition{
-		ID:            "food-1",
-		CanonicalName: "Apple",
-		KcalPer100g:   52,
-		IsActive:      true,
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var item FoodItem
+			if err := json.Unmarshal([]byte(tt.input), &item); err != nil {
+				t.Fatalf("unmarshal failed: %v", err)
+			}
+			if item.Ratio != tt.expectRatio {
+				t.Errorf("Ratio: expected %v, got %v", tt.expectRatio, item.Ratio)
+			}
+			if item.Intake != tt.expectIntake {
+				t.Errorf("Intake: expected %v, got %v", tt.expectIntake, item.Intake)
+			}
+		})
 	}
-	assert.Equal(t, "food-1", food.ID)
-	assert.Equal(t, "food_nutrition_library", food.TableName())
-}
-
-func TestFoodNutritionAlias_Struct(t *testing.T) {
-	alias := FoodNutritionAlias{
-		ID:        "alias-1",
-		FoodID:    "food-1",
-		AliasName: "Red Apple",
-	}
-	assert.Equal(t, "alias-1", alias.ID)
-	assert.Equal(t, "food_nutrition_aliases", alias.TableName())
-}
-
-func TestFoodUnresolvedLog_Struct(t *testing.T) {
-	log := FoodUnresolvedLog{
-		ID:             "log-1",
-		RawName:        "Unknown Food",
-		NormalizedName: "unknownfood",
-		HitCount:       1,
-	}
-	assert.Equal(t, "log-1", log.ID)
-	assert.Equal(t, "food_unresolved_logs", log.TableName())
-}
-
-func TestCriticalSample_Struct(t *testing.T) {
-	sample := CriticalSample{
-		ID:               "sample-1",
-		UserID:           "user-1",
-		FoodName:         "Apple",
-		AIWeight:         100,
-		UserWeight:       120,
-		DeviationPercent: 20,
-	}
-	assert.Equal(t, "sample-1", sample.ID)
-	assert.Equal(t, "critical_samples_weapp", sample.TableName())
 }

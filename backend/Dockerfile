@@ -31,6 +31,7 @@ COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /out/food-link /app/food-link
 COPY docs/backend-api-prd/ROUTE_MAP.md /app/docs/backend-api-prd/ROUTE_MAP.md
 COPY static /app/static
+COPY data /app/data
 
 ENV APP_ENV=production \
     PORT=3010 \

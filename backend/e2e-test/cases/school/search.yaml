@@ -1,0 +1,78 @@
+cases:
+  - id: school.search.requires-auth
+    name: "学校搜索需要登录"
+    desc: "未携带登录态访问 /api/schools 时，应返回 401。"
+    group: auth
+    method: GET
+    path: /api/schools
+    expect:
+      status: 401
+      json:
+        detail: exists
+
+  - id: school.search.empty-keyword
+    name: "学校搜索空关键字"
+    desc: "不传入 keyword 时，应返回按 985/211 优先排序的学校列表。"
+    group: school
+    method: GET
+    path: /api/schools
+    auth: user1
+    expect:
+      status: 200
+      body_contains:
+        - "北京大学"
+      json:
+        code: 0
+        data: type:array
+        "data.0.id": type:string
+
+  - id: school.search.beijing
+    name: "学校搜索北京"
+    desc: "搜索关键词'北京'，应返回包含北京的学校。"
+    group: school
+    method: GET
+    path: /api/schools
+    auth: user1
+    query:
+      keyword: "北京"
+    expect:
+      status: 200
+      body_contains:
+        - "北京大学"
+      json:
+        code: 0
+        data: type:array
+        "data.0.id": type:string
+
+  - id: school.search.tsinghua
+    name: "学校搜索清华"
+    desc: "搜索关键词'清华'，应返回清华大学。"
+    group: school
+    method: GET
+    path: /api/schools
+    auth: user1
+    query:
+      keyword: "清华"
+    expect:
+      status: 200
+      body_contains:
+        - "清华大学"
+      json:
+        code: 0
+        data: type:array
+        "data.0.name": "清华大学"
+
+  - id: school.search.not-found
+    name: "学校搜索无结果"
+    desc: "搜索不存在的关键词，应返回空数组。"
+    group: school
+    method: GET
+    path: /api/schools
+    auth: user1
+    query:
+      keyword: "不存在的高校名称"
+    expect:
+      status: 200
+      json:
+        code: 0
+        data: []

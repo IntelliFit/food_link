@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"food_link/backend/internal/analyze/domain"
@@ -223,7 +224,7 @@ func (r *TaskRepo) GetTaskByID(ctx context.Context, taskID string) (*domain.Anal
 	return &task, err
 }
 
-func (r *TaskRepo) ListTasksByUser(ctx context.Context, userID, taskType, status string, limit int) ([]domain.AnalysisTask, error) {
+func (r *TaskRepo) ListTasksByUser(ctx context.Context, userID, taskType, status, search string, limit int) ([]domain.AnalysisTask, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -235,6 +236,9 @@ func (r *TaskRepo) ListTasksByUser(ctx context.Context, userID, taskType, status
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)
+	}
+	if strings.TrimSpace(search) != "" {
+		q = q.Where("search_text ILIKE ?", "%"+strings.TrimSpace(search)+"%")
 	}
 	var tasks []domain.AnalysisTask
 	err := q.Find(&tasks).Error

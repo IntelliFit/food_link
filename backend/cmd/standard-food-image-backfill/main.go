@@ -119,6 +119,7 @@ type options struct {
 	sleep             time.Duration
 	searchQueryLimit  int
 	searchPerQuery    int
+	bingPageOffset    int
 	timing            bool
 	statsOnly         bool
 	statsOutput       string
@@ -197,6 +198,7 @@ func parseFlags() options {
 	flag.DurationVar(&opts.sleep, "sleep", 800*time.Millisecond, "delay between search requests")
 	flag.IntVar(&opts.searchQueryLimit, "search-query-limit", 0, "max search queries per food (0 = all, 1 recommended for google+opencli)")
 	flag.IntVar(&opts.searchPerQuery, "search-per-query", 12, "max image URLs to fetch per search query (Bing pages); use higher on retry")
+	flag.IntVar(&opts.bingPageOffset, "bing-page-offset", 0, "extra Bing image search start page added before attempts-based paging (retry with 1+ to fetch next result pages)")
 	flag.BoolVar(&opts.timing, "timing", false, "print per-stage durations to stdout")
 	flag.BoolVar(&opts.statsOnly, "stats-only", false, "print backfill baseline stats and exit")
 	flag.StringVar(&opts.statsOutput, "stats-output", "", "write --stats-only JSON to this file")
@@ -404,9 +406,9 @@ func processFood(ctx context.Context, db *gorm.DB, storageClient *storage.Client
 	result := resultRow{FoodID: food.ID, FoodName: food.CanonicalName, Status: "search_failed", ProcessedAt: time.Now()}
 	entry := state.Entries[food.ID]
 	tried := triedURLSet(entry.TriedURLs)
-	bingStartPage := 0
-	if len(tried) > 0 {
-		bingStartPage = entry.Attempts % bingMaxSearchPages
+	bingStartPage := opts.bingPageOffset
+	if len(tried) > 0 || entry.Attempts > 0 {
+		bingStartPage += entry.Attempts % bingMaxSearchPages
 	}
 	searchStart := time.Now()
 	candidates := searchCandidates(food, opts.sleep, opts.imageSearch, opts.searchQueryLimit, opts.searchPerQuery, bingStartPage)

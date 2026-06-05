@@ -207,7 +207,7 @@ func (m *mockUserRepo) CountFoodRecordDays(ctx context.Context, userID string) (
 }
 
 func newTestService(feed FeedRepo, notif NotificationRepo, user UserFinder) *CommunityService {
-	return NewCommunityService(feed, notif, user, nil)
+	return NewCommunityService(feed, notif, user, nil, nil)
 }
 
 func TestPublicFeed(t *testing.T) {
@@ -335,7 +335,7 @@ func TestNormalizeFeedRecordUsesChinaTime(t *testing.T) {
 	utcTime := time.Date(2026, 5, 11, 12, 30, 0, 0, time.UTC)
 	svc := newTestService(&mockFeedRepo{}, &mockNotificationRepo{}, &mockUserRepo{})
 
-	record := svc.normalizeFeedRecord(repo.FeedRecord{ID: "r1", RecordTime: &utcTime})
+	record := svc.normalizeFeedRecord(context.Background(), repo.FeedRecord{ID: "r1", RecordTime: &utcTime})
 
 	assert.NotNil(t, record.RecordTime)
 	assert.Equal(t, "2026-05-11T20:30:00+08:00", record.RecordTime.Format(time.RFC3339))

@@ -1,0 +1,183 @@
+.school-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+
+  &.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.school-picker-card {
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.school-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.school-picker-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.school-picker-close {
+  font-size: 28rpx;
+  color: #6b7280;
+}
+
+.school-picker-search {
+  display: flex;
+  align-items: center;
+  margin: 24rpx 32rpx 16rpx;
+  padding: 16rpx 24rpx;
+  background: #f3f4f6;
+  border-radius: 32rpx;
+}
+
+.school-picker-search-icon {
+  font-size: 28rpx;
+  color: #9ca3af;
+  margin-right: 16rpx;
+}
+
+.school-picker-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #1f2937;
+}
+
+/* 定位提示 */
+.school-picker-locate-tip {
+  display: flex;
+  align-items: center;
+  padding: 0 32rpx 12rpx;
+}
+
+.school-picker-locate-icon {
+  font-size: 24rpx;
+  color: #5cb896;
+  margin-right: 8rpx;
+}
+
+.school-picker-locate-text {
+  font-size: 24rpx;
+  color: #5cb896;
+}
+
+/* 省份标签 */
+.school-picker-provinces {
+  padding: 8rpx 0;
+}
+
+.school-picker-province-list {
+  display: flex;
+  flex-direction: row;
+  padding: 0 24rpx;
+  white-space: nowrap;
+}
+
+.school-picker-province-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12rpx 24rpx;
+  margin-right: 16rpx;
+  background: #f3f4f6;
+  border-radius: 28rpx;
+  flex-shrink: 0;
+
+  &.active {
+    background: #5cb896;
+
+    .school-picker-province-text {
+      color: #fff;
+      font-weight: 600;
+    }
+  }
+}
+
+.school-picker-province-text {
+  font-size: 26rpx;
+  color: #4b5563;
+}
+
+/* 学校列表 */
+.school-picker-list {
+  flex: 1;
+  max-height: 45vh;
+}
+
+.school-picker-item {
+  padding: 24rpx 32rpx;
+  border-bottom: 1rpx solid #f5f5f5;
+
+  &.selected {
+    background: #f4faf8;
+
+    .school-picker-item-name {
+      color: #5cb896;
+      font-weight: 600;
+    }
+  }
+}
+
+.school-picker-item-name {
+  font-size: 28rpx;
+  color: #1f2937;
+  line-height: 1.4;
+}
+
+.school-picker-item-meta {
+  font-size: 24rpx;
+  color: #9ca3af;
+  margin-top: 8rpx;
+}
+
+.school-picker-loading {
+  display: flex;
+  justify-content: center;
+  padding: 64rpx 0;
+}
+
+.school-picker-spinner {
+  width: 40rpx;
+  height: 40rpx;
+  border: 4rpx solid #e5e7eb;
+  border-top-color: #5cb896;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.school-picker-empty {
+  display: flex;
+  justify-content: center;
+  padding: 64rpx 0;
+}
+
+.school-picker-empty-text {
+  font-size: 28rpx;
+  color: #9ca3af;
+}

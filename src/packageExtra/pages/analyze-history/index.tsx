@@ -1,4 +1,4 @@
-import { View, Text, Image, ScrollView } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
 import { useState, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
@@ -390,6 +390,8 @@ function AnalyzeHistoryPage() {
   const [activeTask, setActiveTask] = useState<AnalysisTask | null>(null)
   const [quickRecordTask, setQuickRecordTask] = useState<AnalysisTask | null>(null)
   const [quickRecordMealType, setQuickRecordMealType] = useState<SelectableMealType>('afternoon_snack')
+  const [searchKeyword, setSearchKeyword] = useState('')
+  const searchDebounceRef = useRef(0)
   const loadSeqRef = useRef(0)
   const navBarHeight = getNavBarHeight()
 
@@ -418,22 +420,23 @@ function AnalyzeHistoryPage() {
     Taro.switchTab({ url: '/pages/index/index' })
   }, [])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (keyword?: string) => {
     const seq = ++loadSeqRef.current
     setLoading(true)
     try {
+      const search = keyword?.trim()
       // 单次拉取再前端筛选：避免 Promise.all 四路并行时一路挂起导致整页永远 loading（真机偶发）
       const res = await withTimeout(
-        listAnalyzeTasks({ limit: 120 }).catch(() => ({ tasks: [] as AnalysisTask[] })),
+        listAnalyzeTasks({ limit: 120, search }).catch(() => ({ tasks: [] as AnalysisTask[] })),
         22000,
         () => ({ tasks: [] as AnalysisTask[] })
       )
-        const allTasks = (res.tasks || []).filter((t) => {
-          const payload = (t.payload || {}) as Record<string, unknown>
-          if (payload.expiry_recognition) return false
-          if (payload.exercise) return false // 排除运动回退任务（payload.exercise=true）
-          return isAnalyzeHistoryTaskType(t.task_type)
-        })
+      const allTasks = (res.tasks || []).filter((t) => {
+        const payload = (t.payload || {}) as Record<string, unknown>
+        if (payload.expiry_recognition) return false
+        if (payload.exercise) return false // 排除运动回退任务（payload.exercise=true）
+        return isAnalyzeHistoryTaskType(t.task_type)
+      })
       allTasks.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       if (seq !== loadSeqRef.current) return
       setTasks(allTasks)
@@ -445,6 +448,19 @@ function AnalyzeHistoryPage() {
       if (seq === loadSeqRef.current) setLoading(false)
     }
   }, [])
+
+  const handleSearchInput = (value: string) => {
+    setSearchKeyword(value)
+    window.clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = window.setTimeout(() => {
+      void load(value)
+    }, 300)
+  }
+
+  const clearSearch = () => {
+    setSearchKeyword('')
+    void load('')
+  }
 
   useDidShow(() => {
     applyThemeNavigationBar(scheme)
@@ -910,7 +926,24 @@ function AnalyzeHistoryPage() {
         color={scheme === 'dark' ? '#f3f7f4' : '#0f172a'}
         background={scheme === 'dark' ? '#101716' : '#f6faf8'}
       />
-      <ScrollView className='list' scrollY style={{ height: `calc(100vh - ${navBarHeight}px)` }}>
+      <View className='search-bar'>
+        <View className='search-input-wrap'>
+          <Text className='iconfont icon-sousuo search-icon' />
+          <Input
+            className='search-input'
+            type='text'
+            placeholder='搜索食物名称'
+            value={searchKeyword}
+            onInput={(e) => handleSearchInput(e.detail.value)}
+          />
+          {searchKeyword.length > 0 && (
+            <View className='search-clear' onClick={clearSearch}>
+              <Text className='iconfont icon-guanbi search-clear-icon' />
+            </View>
+          )}
+        </View>
+      </View>
+      <ScrollView className='list' scrollY style={{ height: `calc(100vh - ${navBarHeight}px - 96rpx)` }}>
         {loading ? (
           <View className='loading-wrap'><View className='loading-spinner-md' /></View>
         ) : tasks.length === 0 ? (
@@ -918,7 +951,7 @@ function AnalyzeHistoryPage() {
             <View className='empty-icon'>
               <Text className='iconfont icon-paizhao-xianxing' style={{ fontSize: '80rpx', color: '#9ca3af' }} />
             </View>
-            <Text className='empty-text'>暂时没有记录，快去拍一张吧~</Text>
+            <Text className='empty-text'>{searchKeyword ? '没有找到匹配的记录' : '暂时没有记录，快去拍一张吧~'}</Text>
           </View>
         ) : (
           <>
@@ -946,7 +979,6 @@ function AnalyzeHistoryPage() {
         <View className='action-sheet-overlay' catchMove>
           <View className='action-sheet-mask' onClick={closeActionSheet} />
           <View className='action-sheet-content'>
-            <View className='action-sheet-handle-bar' />
             <View className='action-sheet-actions'>
               <View
                 className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result && !activeTask.is_recorded ? '' : 'action-sheet-item--disabled'}`}
@@ -980,7 +1012,7 @@ function AnalyzeHistoryPage() {
                 className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetShare}
               >
-                <Text className='iconfont icon-fenxiang action-sheet-icon' />
+                <Text className='iconfont icon-shiwu action-sheet-icon action-sheet-icon--library' />
                 <Text className='action-sheet-label'>分享到公共食物库</Text>
               </View>
               <View className='action-sheet-divider' />

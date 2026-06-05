@@ -2,7 +2,9 @@ package migration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
@@ -27,6 +29,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := db.WithContext(ctx).Exec("CREATE EXTENSION IF NOT EXISTS pgcrypto").Error; err != nil {
 		return fmt.Errorf("create pgcrypto extension: %w", err)
 	}
+	if err := db.WithContext(ctx).Exec("CREATE EXTENSION IF NOT EXISTS pg_trgm").Error; err != nil {
+		return fmt.Errorf("create pg_trgm extension: %w", err)
+	}
 	if err := db.WithContext(ctx).Exec("SET search_path TO " + qSchema).Error; err != nil {
 		return fmt.Errorf("set search path: %w", err)
 	}
@@ -43,6 +48,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 		return err
 	}
 	if err := ensureTriggers(ctx, db); err != nil {
+		return err
+	}
+	if err := ensureSchoolsSeed(ctx, db); err != nil {
 		return err
 	}
 	return nil
@@ -73,6 +81,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("precision_item_estimates", "precision_item_estimates_item_index_check", `item_index >= 0`),
 		dropAndAddCheck("public_food_library", "public_food_library_status_check", `status = ANY (ARRAY['pending'::text,'published'::text,'rejected'::text,'user_deleted'::text,'deleted'::text])`),
 		dropAndAddCheck("public_food_library", "public_food_library_taste_rating_check", `taste_rating IS NULL OR (taste_rating >= 1 AND taste_rating <= 5)`),
+		dropAndAddCheck("public_food_library", "public_food_library_price_type_check", `price_type IS NULL OR price_type = ANY (ARRAY['fixed'::text,'weight'::text,'range'::text,'combo'::text,'unknown'::text])`),
 		dropAndAddCheck("public_food_library_comments", "public_food_library_comments_rating_check", `rating IS NULL OR (rating >= 1 AND rating <= 5)`),
 		dropAndAddCheck("user_custom_foods", "user_custom_foods_status_check", `status = ANY (ARRAY['active'::text,'deleted'::text])`),
 		dropAndAddCheck("user_custom_foods", "user_custom_foods_public_status_check", `public_status = ANY (ARRAY['private'::text,'pending'::text,'published'::text,'rejected'::text])`),
@@ -343,6 +352,32 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_pet_daily_scores_user_date_unique ON user_pet_daily_scores (user_id, score_date)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_weight_records_user_client_record_id ON user_weight_records (user_id, client_record_id) WHERE client_record_id IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_user_food_records_hidden_from_feed ON user_food_records (hidden_from_feed) WHERE hidden_from_feed = false`,
+		// Campus food library columns
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS is_campus_food boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS school_name text`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS campus_name text`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS canteen_name text`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS floor text`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS window_name text`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS price numeric`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS price_type text`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS price_min numeric`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS price_max numeric`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS price_unit text`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS price_collected_at timestamptz`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS portion_description text`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS is_campus_highlight boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS campus_location_text text`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_is_campus ON public_food_library (is_campus_food)`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_school ON public_food_library (school_name) WHERE school_name IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_canteen ON public_food_library (canteen_name) WHERE canteen_name IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_campus_highlight ON public_food_library (is_campus_highlight) WHERE is_campus_highlight = true`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_campus_published ON public_food_library (is_campus_food, status, published_at) WHERE is_campus_food = true`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_price_type ON public_food_library (price_type) WHERE price_type IS NOT NULL`,
+		// Analysis tasks search text column + index for name-based search
+		`ALTER TABLE analysis_tasks ADD COLUMN IF NOT EXISTS search_text text`,
+		`UPDATE analysis_tasks SET search_text = COALESCE(NULLIF(text_input, ''), result->'items'->0->>'name', result->>'description', '') WHERE search_text IS NULL OR search_text = ''`,
+		`CREATE INDEX IF NOT EXISTS idx_analysis_tasks_user_search_gin ON analysis_tasks USING gin (search_text gin_trgm_ops)`,
 	} {
 		if sql == "" {
 			continue
@@ -449,6 +484,49 @@ WHERE NOT EXISTS (
 );`
 	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 		return fmt.Errorf("backfill user trial entitlements: %w", err)
+	}
+	return nil
+}
+
+func ensureSchoolsSeed(ctx context.Context, db *gorm.DB) error {
+	var count int64
+	if err := db.WithContext(ctx).Raw("SELECT COUNT(*) FROM schools").Scan(&count).Error; err != nil {
+		return fmt.Errorf("count schools: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+
+	data, err := os.ReadFile("data/schools_seed.json")
+	if err != nil {
+		return fmt.Errorf("read schools seed file: %w", err)
+	}
+
+	var seeds []struct {
+		Name     string  `json:"name"`
+		Province *string `json:"province"`
+		City     *string `json:"city"`
+		Level    *string `json:"level"`
+		Is985    *bool   `json:"is_985"`
+		Is211    *bool   `json:"is_211"`
+	}
+	if err := json.Unmarshal(data, &seeds); err != nil {
+		return fmt.Errorf("parse schools seed file: %w", err)
+	}
+
+	for _, s := range seeds {
+		do := migrationdo.SchoolDO{
+			Name:     s.Name,
+			Province: s.Province,
+			City:     s.City,
+			Level:    s.Level,
+			Is985:    s.Is985,
+			Is211:    s.Is211,
+			Status:   "active",
+		}
+		if err := db.WithContext(ctx).Create(&do).Error; err != nil {
+			return fmt.Errorf("insert school %q: %w", s.Name, err)
+		}
 	}
 	return nil
 }

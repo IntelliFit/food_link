@@ -143,6 +143,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		input.ImagePath = &first
 	}
 	normalizedMeal := normalizeMealType(input.MealType, nil)
+	input.Items = normalizeFoodItems(input.Items)
 
 	recordTime, err := s.buildRecordTime(ctx, input.Date, input.SourceTaskID)
 	if err != nil {
@@ -300,6 +301,24 @@ func foodRecordWaterDate(recordTime *time.Time) time.Time {
 	return time.Date(recordedOn.Year(), recordedOn.Month(), recordedOn.Day(), 0, 0, 0, 0, chinaTZ)
 }
 
+func normalizeFoodItems(items []domain.FoodItem) []domain.FoodItem {
+	for i := range items {
+		if items[i].Ratio > 100 {
+			items[i].Ratio = 100
+		}
+		if items[i].Ratio < 0 {
+			items[i].Ratio = 0
+		}
+		if items[i].Intake > items[i].Weight {
+			items[i].Intake = items[i].Weight
+		}
+		if items[i].Intake < 0 {
+			items[i].Intake = 0
+		}
+	}
+	return items
+}
+
 func totalFoodWaterIntakeMl(items []domain.FoodItem) int {
 	total := 0.0
 	for _, item := range items {
@@ -308,6 +327,9 @@ func totalFoodWaterIntakeMl(items []domain.FoodItem) int {
 			continue
 		}
 		ratio := item.Ratio
+		if ratio > 100 {
+			ratio = 100
+		}
 		if ratio > 0 {
 			total += waterMl * ratio / 100
 			continue
@@ -410,7 +432,7 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 		updates["meal_type"] = normalizeMealType(*input.MealType, nil)
 	}
 	if input.Items != nil {
-		updates["items"] = input.Items
+		updates["items"] = normalizeFoodItems(input.Items)
 	}
 	if input.TotalCalories != nil {
 		updates["total_calories"] = *input.TotalCalories

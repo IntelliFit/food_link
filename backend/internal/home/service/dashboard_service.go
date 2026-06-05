@@ -719,7 +719,7 @@ func foodRecordIntakeRatioFromRecords(records []homerepo.FoodRecord) float64 {
 	if totalWeight <= 0 {
 		return 100
 	}
-	return totalIntake / totalWeight * 100
+	return math.Min(100, totalIntake/totalWeight*100)
 }
 
 func foodRecordIntakeRatio(items []map[string]any) float64 {
@@ -727,7 +727,7 @@ func foodRecordIntakeRatio(items []map[string]any) float64 {
 	if weight <= 0 {
 		return 100
 	}
-	return intake / weight * 100
+	return math.Min(100, intake/weight*100)
 }
 
 func foodItemsWeightAndIntake(items []map[string]any) (float64, float64) {
@@ -748,6 +748,9 @@ func foodItemsWeightAndIntake(items []map[string]any) (float64, float64) {
 		if intake < 0 {
 			intake = 0
 		}
+		if intake > weight {
+			intake = weight
+		}
 		totalWeight += weight
 		totalIntake += intake
 	}
@@ -762,6 +765,9 @@ func totalFoodRecordWaterMl(items []map[string]any) float64 {
 			continue
 		}
 		if ratio, ok := toFloat64(item["ratio"]); ok && ratio >= 0 {
+			if ratio > 100 {
+				ratio = 100
+			}
 			total += waterMl * ratio / 100
 			continue
 		}

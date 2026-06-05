@@ -200,7 +200,8 @@ def main() -> int:
 
     headers = [
         "shard",
-        "act",
+        "stat",
+        "ent",
         "ok",
         "tgt",
         "retry",
@@ -247,6 +248,7 @@ def main() -> int:
                     [
                         shard_dir.name,
                         act,
+                        str(st["entries"]),
                         str(st["ok"]),
                         str(SHARD_TARGET),
                         str(st["retry"]),
@@ -277,7 +279,14 @@ def main() -> int:
                 f" TOTAL ok {grand_ok}/{target} ({pct:.1f}%) | "
                 f"retry-queue {grand_retry} | active {grand_active}/{shard_n}"
             )
-            print(f" retry cmd: .\\scripts\\backfill-run-shards.ps1 -Apply -RetryFailed -Workers 8")
+            print(
+                " 说明: ent=state 条目数(可>tgt，同目录多轮 full/retry 会累积); "
+                "ok=db_updated 累计; tgt=每片设计批量 500"
+            )
+            print(
+                " retry cmd: .\\scripts\\backfill-run-retry-failed.ps1 -Apply "
+                "-BingPageOffset 1 -KeepCandidateLimits"
+            )
             print(" Ctrl+C exit")
 
             time.sleep(args.interval)

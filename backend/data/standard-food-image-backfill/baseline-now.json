@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-06-05T01:19:11.7490421+08:00",
+  "schema": "public",
+  "eligible": {
+    "total": 12470,
+    "han_canonical_names": 4480,
+    "non_han_canonical_names": 7990
+  },
+  "with_image": {
+    "total": 7094,
+    "han_canonical_names": 2566,
+    "non_han_canonical_names": 4528
+  },
+  "missing_backfill_queue": {
+    "total": 5376,
+    "han_canonical_names": 1914,
+    "non_han_canonical_names": 3462
+  }
+}

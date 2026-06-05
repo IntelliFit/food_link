@@ -74,30 +74,39 @@ export const buildFoodRecordNutrients = (
 export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordItemSource>(
   item: T,
   nutrients: Nutrients,
-): FoodRecordItemPayload => ({
-  name: item.name || '未命名食物',
-  weight: normalizeFoodRecordNumber(item.weight),
-  ratio: normalizeFoodRecordNumber(item.ratio),
-  intake: normalizeFoodRecordNumber(item.intake),
-  gross_weight_grams: firstDefined(item.gross_weight_grams, item.grossWeight, item.grossWeightGrams),
-  edible_portion_ratio: firstDefined(item.edible_portion_ratio, item.ediblePortionRatio),
-  edible_portion_reason: firstDefined(item.edible_portion_reason, item.ediblePortionReason),
-  edible_portion_source: firstDefined(item.edible_portion_source, item.ediblePortionSource),
-  suggested_ratio: firstDefined(item.suggested_ratio, item.suggestedRatio),
-  suggested_ratio_reason: firstDefined(item.suggested_ratio_reason, item.suggestedRatioReason),
-  suggested_ratio_source: firstDefined(item.suggested_ratio_source, item.suggestedRatioSource),
-  water_ml: firstDefined(item.water_ml, item.waterMl),
-  nutrition_source: firstDefined(item.nutrition_source, item.nutritionSource),
-  matched_food_id: firstDefined(item.matched_food_id, item.matchedFoodId),
-  packaged_food_id: firstDefined(item.packaged_food_id, item.packagedFoodId),
-  package_match_status: firstDefined(item.package_match_status, item.packageMatchStatus),
-  package_match_confidence: firstDefined(item.package_match_confidence, item.packageMatchConfidence),
-  package_weight_source: firstDefined(item.package_weight_source, item.packageWeightSource),
-  package_weight_applied: firstDefined(item.package_weight_applied, item.packageWeightApplied),
-  package_weight_reason: firstDefined(item.package_weight_reason, item.packageWeightReason),
-  packaged_candidates: firstDefined(item.packaged_candidates, item.packagedCandidates),
-  nutrients,
-})
+): FoodRecordItemPayload => {
+  const weight = normalizeFoodRecordNumber(item.weight)
+  let ratio = normalizeFoodRecordNumber(item.ratio)
+  let intake = normalizeFoodRecordNumber(item.intake)
+  if (ratio > 100) ratio = 100
+  if (ratio < 0) ratio = 0
+  if (intake > weight) intake = weight
+  if (intake < 0) intake = 0
+  return {
+    name: item.name || '未命名食物',
+    weight,
+    ratio,
+    intake,
+    gross_weight_grams: firstDefined(item.gross_weight_grams, item.grossWeight, item.grossWeightGrams),
+    edible_portion_ratio: firstDefined(item.edible_portion_ratio, item.ediblePortionRatio),
+    edible_portion_reason: firstDefined(item.edible_portion_reason, item.ediblePortionReason),
+    edible_portion_source: firstDefined(item.edible_portion_source, item.ediblePortionSource),
+    suggested_ratio: firstDefined(item.suggested_ratio, item.suggestedRatio),
+    suggested_ratio_reason: firstDefined(item.suggested_ratio_reason, item.suggestedRatioReason),
+    suggested_ratio_source: firstDefined(item.suggested_ratio_source, item.suggestedRatioSource),
+    water_ml: firstDefined(item.water_ml, item.waterMl),
+    nutrition_source: firstDefined(item.nutrition_source, item.nutritionSource),
+    matched_food_id: firstDefined(item.matched_food_id, item.matchedFoodId),
+    packaged_food_id: firstDefined(item.packaged_food_id, item.packagedFoodId),
+    package_match_status: firstDefined(item.package_match_status, item.packageMatchStatus),
+    package_match_confidence: firstDefined(item.package_match_confidence, item.packageMatchConfidence),
+    package_weight_source: firstDefined(item.package_weight_source, item.packageWeightSource),
+    package_weight_applied: firstDefined(item.package_weight_applied, item.packageWeightApplied),
+    package_weight_reason: firstDefined(item.package_weight_reason, item.packageWeightReason),
+    packaged_candidates: firstDefined(item.packaged_candidates, item.packagedCandidates),
+    nutrients,
+  }
+}
 
 export const buildFoodRecordItemPayloadFromAnalyzeItem = (item: FoodItem): FoodRecordItemPayload => {
   const weight = normalizeFoodRecordNumber(item.estimatedWeightGrams || item.originalWeightGrams)

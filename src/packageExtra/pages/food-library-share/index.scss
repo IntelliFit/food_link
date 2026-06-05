@@ -6,11 +6,11 @@
 }
 
 .quick-upload-tip {
-  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf9 100%);
+  background: linear-gradient(135deg, #f4faf8 0%, #f0fdf9 100%);
   margin: 24rpx 24rpx 0;
-  padding: 28rpx 32rpx;
+  padding: 24rpx 32rpx;
   border-radius: 24rpx;
-  border: 2rpx solid rgb(0 188 125 / 12%);
+  border: 2rpx solid rgb(92 184 150 / 12%);
 }
 
 .quick-upload-title {
@@ -18,11 +18,11 @@
   font-size: 32rpx;
   font-weight: 700;
   color: #047857;
-  margin-bottom: 10rpx;
+  margin-bottom: 8rpx;
 }
 
 .quick-upload-subtitle {
-  font-size: 26rpx;
+  font-size: 28rpx;
   line-height: 1.6;
   color: #065f46;
 }
@@ -35,10 +35,10 @@
 }
 
 .section-title {
-  font-size: 30rpx;
+  font-size: 32rpx;
   font-weight: 600;
   color: #1e2939;
-  margin-bottom: 20rpx;
+  margin-bottom: 24rpx;
   display: flex;
   align-items: center;
   gap: 8rpx;
@@ -63,7 +63,7 @@
 
 .upload-icon {
   font-size: 64rpx;
-  color: #00bc7d;
+  color: #5cb896;
 }
 
 .upload-text {
@@ -192,7 +192,7 @@
   display: block;
   font-size: 32rpx;
   font-weight: 600;
-  color: #096;
+  color: #4a9e7d;
   margin-bottom: 8rpx;
 }
 
@@ -292,9 +292,9 @@
   border: 2rpx solid transparent;
 
   &.active {
-    background: #ecfdf5;
+    background: #f4faf8;
     color: #059669;
-    border-color: #00bc7d;
+    border-color: #5cb896;
     font-weight: 600;
   }
 }
@@ -343,7 +343,7 @@
   transition: all 0.3s ease;
 
   &.active {
-    background: #00bc7d;
+    background: #5cb896;
   }
 }
 
@@ -374,12 +374,12 @@
   padding: 12rpx 24rpx;
   background: #f3f4f6;
   border-radius: 20rpx;
-  font-size: 26rpx;
+  font-size: 28rpx;
   color: #364153;
 
   &.selected {
-    background: #ecfdf5;
-    color: #096;
+    background: #f4faf8;
+    color: #4a9e7d;
   }
 }
 
@@ -401,7 +401,7 @@
   padding: 0 32rpx;
   height: 72rpx;
   line-height: 72rpx;
-  background: #00bc7d;
+  background: #5cb896;
   color: #fff;
   border-radius: 12rpx;
   font-size: 28rpx;
@@ -419,10 +419,10 @@
   align-items: center;
   gap: 8rpx;
   padding: 8rpx 16rpx;
-  background: #ecfdf5;
+  background: #f4faf8;
   border-radius: 12rpx;
   font-size: 24rpx;
-  color: #096;
+  color: #4a9e7d;
 }
 
 .remove-tag {
@@ -451,7 +451,7 @@
 
 .location-icon {
   font-size: 32rpx;
-  color: #00bc7d;
+  color: #5cb896;
 }
 
 .location-info {
@@ -470,7 +470,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20rpx;
+  margin-bottom: 24rpx;
 
   .section-title {
     margin-bottom: 0;
@@ -482,15 +482,23 @@
   align-items: center;
   gap: 6rpx;
   padding: 10rpx 20rpx;
-  background: #ecfdf5;
+  background: #f4faf8;
   border-radius: 20rpx;
   font-size: 24rpx;
-  color: #096;
+  color: #4a9e7d;
 
   .iconfont {
-    font-size: 26rpx;
-    color: #096;
+    font-size: 28rpx;
+    color: #4a9e7d;
   }
+}
+
+.location-helper {
+  display: block;
+  margin-top: -8rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: #6a7282;
 }
 
 // 底部提交栏
@@ -509,7 +517,7 @@
 .submit-btn {
   width: 100%;
   height: 88rpx;
-  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
+  background: linear-gradient(135deg, #5cb896 0%, #8dd3bf 100%);
   color: #fff;
   font-size: 32rpx;
   border-radius: 16rpx;
@@ -641,8 +649,8 @@
   border: 2rpx solid transparent;
 
   &.active {
-    background: #ecfdf5;
-    border-color: #00bc7d;
+    background: #f4faf8;
+    border-color: #5cb896;
   }
 }
 
@@ -650,11 +658,11 @@
   font-size: 48rpx;
   display: block;
   margin-bottom: 12rpx;
-  color: #00bc7d;
+  color: #5cb896;
 }
 
 .source-text {
-  font-size: 26rpx;
+  font-size: 28rpx;
   color: #364153;
 }
 // 按钮 spinner 样式
@@ -812,6 +820,10 @@
     .iconfont {
       color: #7dd3b0;
     }
+  }
+
+  .location-helper {
+    color: #9ca3a8;
   }
 
   .submit-bar {

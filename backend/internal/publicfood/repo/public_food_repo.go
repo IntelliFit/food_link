@@ -32,13 +32,21 @@ type ListFilter struct {
 	SortBy             string
 	Limit              int
 	Offset             int
+	IsCampusFood       *bool
+	SchoolName         string
+	CanteenName        string
+	IsCampusHighlight  *bool
 }
 
 func (r *PublicFoodRepo) CreateItem(ctx context.Context, item *domain.PublicFoodItem) error {
 	if item.ID == "" {
 		item.ID = uuid.New().String()
 	}
-	return r.db.WithContext(ctx).Create(item).Error
+	db := r.db.WithContext(ctx)
+	if strings.TrimSpace(item.PriceType) == "" {
+		db = db.Omit("price_type")
+	}
+	return db.Create(item).Error
 }
 
 func (r *PublicFoodRepo) UpdateStatus(ctx context.Context, itemID, status string) error {
@@ -67,11 +75,29 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	if f.MaxCalories != nil {
 		q = q.Where("total_calories <= ?", *f.MaxCalories)
 	}
+	if f.IsCampusFood != nil {
+		q = q.Where("is_campus_food = ?", *f.IsCampusFood)
+	}
+	if f.SchoolName != "" {
+		q = q.Where("school_name = ?", f.SchoolName)
+	}
+	if f.CanteenName != "" {
+		q = q.Where("canteen_name = ?", f.CanteenName)
+	}
+	if f.IsCampusHighlight != nil {
+		q = q.Where("is_campus_highlight = ?", *f.IsCampusHighlight)
+	}
 	switch f.SortBy {
 	case "hot":
 		q = q.Order("like_count desc")
 	case "rating":
 		q = q.Order("avg_rating desc")
+	case "high_protein":
+		q = q.Order("total_protein desc NULLS LAST")
+	case "low_calorie":
+		q = q.Order("total_calories asc NULLS LAST")
+	case "value":
+		q = q.Order("COALESCE(price, 999999) asc NULLS LAST, total_protein desc NULLS LAST")
 	default:
 		q = q.Order("published_at desc NULLS LAST, created_at desc")
 	}
@@ -82,6 +108,20 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 		f.Offset = 0
 	}
 	err := q.Limit(f.Limit).Offset(f.Offset).Find(&rows).Error
+	return rows, err
+}
+
+// ListCampusHighlights 查询精选校园内容，用于圈子默认流混入
+func (r *PublicFoodRepo) ListCampusHighlights(ctx context.Context, limit int) ([]domain.PublicFoodItem, error) {
+	var rows []domain.PublicFoodItem
+	if limit <= 0 || limit > 20 {
+		limit = 3
+	}
+	err := r.db.WithContext(ctx).
+		Where("is_campus_highlight = ? AND status = ?", true, "published").
+		Order("published_at desc NULLS LAST, created_at desc").
+		Limit(limit).
+		Find(&rows).Error
 	return rows, err
 }
 

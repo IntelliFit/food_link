@@ -8,7 +8,9 @@ param(
   [int]$SleepMs = 1000,
   [switch]$ForceReprocess,
   [switch]$RetryFailed,
-  [int]$QueryOffset = -1
+  [switch]$KeepCandidateLimits,
+  [int]$QueryOffset = -1,
+  [int]$BingPageOffset = 0
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "backfill-require-dashscope.ps1")
@@ -32,9 +34,11 @@ $searchPerQuery = 12
 $mode = "full"
 if ($RetryFailed) {
   $mode = "retry-failed"
-  $maxCandidates = 16
-  $searchQueryLimit = 3
-  $searchPerQuery = 28
+  if (-not $KeepCandidateLimits) {
+    $maxCandidates = 16
+    $searchQueryLimit = 3
+    $searchPerQuery = 28
+  }
 }
 
 $log = Join-Path $RunDir "run.log"
@@ -54,11 +58,13 @@ $startTime = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
   search_query_limit = $searchQueryLimit
   search_per_query = $searchPerQuery
   failed_only = $RetryFailed.IsPresent
+  bing_page_offset = $BingPageOffset
+  keep_candidate_limits = $KeepCandidateLimits.IsPresent
 } | ConvertTo-Json | Set-Content (Join-Path $RunDir "run-meta.json") -Encoding UTF8
 Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host "=== [$startTime] $runName 启动 mode=$mode ===" -ForegroundColor Cyan
 Write-Host "参数: query_offset=$offset limit=$ShardSize apply=$($Apply.IsPresent) workers=$Workers sleep=${SleepMs}ms" -ForegroundColor Cyan
-Write-Host "搜索: max-candidates=$maxCandidates search-query-limit=$searchQueryLimit search-per-query=$searchPerQuery failed-only=$($RetryFailed.IsPresent)" -ForegroundColor Cyan
+Write-Host "搜索: max-candidates=$maxCandidates search-query-limit=$searchQueryLimit search-per-query=$searchPerQuery bing-page-offset=$BingPageOffset failed-only=$($RetryFailed.IsPresent)" -ForegroundColor Cyan
 Write-Host "目录: $RunDir" -ForegroundColor Cyan
 Write-Host "日志: $log" -ForegroundColor Cyan
 Write-Host "===========================================" -ForegroundColor Cyan
@@ -83,6 +89,7 @@ $goArgs = @(
 if ($Apply) { $goArgs += "--apply" } else { $goArgs += "--dry-run" }
 if ($ForceReprocess) { $goArgs += "--force-reprocess" }
 if ($RetryFailed) { $goArgs += "--failed-only" }
+if ($BingPageOffset -gt 0) { $goArgs += "--bing-page-offset", "$BingPageOffset" }
 go run @goArgs 2>&1 | Tee-Object -FilePath $log
 $exitCode = $LASTEXITCODE
 

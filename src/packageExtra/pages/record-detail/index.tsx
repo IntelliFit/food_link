@@ -122,11 +122,11 @@ const getDisplayedNutrientValue = (item: EditableFoodItem, field: EditableNutrie
 
 const resolveRecordItemRatio = (item: Pick<FoodRecord['items'][0], 'ratio' | 'intake' | 'weight'>): number => {
   const ratio = Number(item.ratio)
-  if (Number.isFinite(ratio) && ratio > 0) return ratio
+  if (Number.isFinite(ratio) && ratio > 0) return Math.min(100, ratio)
   const intake = Number(item.intake)
   const weight = Number(item.weight)
   if (Number.isFinite(intake) && Number.isFinite(weight) && intake >= 0 && weight > 0) {
-    return Math.round((intake / weight) * 1000) / 10
+    return Math.min(100, Math.round((intake / weight) * 1000) / 10)
   }
   return 100
 }
@@ -405,12 +405,12 @@ function RecordDetailPage() {
     setShowEditModal(true)
   }, [record])
 
-  /** 更新摄入克数，联动比例（允许超过 100%） */
+  /** 更新摄入克数，联动比例 */
   const updateIntake = useCallback((index: number, newIntake: number) => {
     setEditItems(prev => {
       const next = [...prev]
       const item = { ...next[index] }
-      item.intake = Math.max(0, Math.round(newIntake * 10) / 10)
+      item.intake = Math.max(0, Math.min(item.weight, Math.round(newIntake * 10) / 10))
       if (item.weight > 0) {
         item.ratio = Math.round((item.intake / item.weight) * 100)
       }
@@ -509,14 +509,14 @@ function RecordDetailPage() {
     })
   }, [editItems, updateDisplayedNutrient])
 
-  /** 摄入克数加减按钮（允许超过原始重量） */
+  /** 摄入克数加减按钮 */
   const adjustIntake = useCallback((index: number, delta: number) => {
     setEditItems(prev => {
       const item = prev[index]
       if (!item) return prev
       const next = [...prev]
       const updated = { ...next[index] }
-      updated.intake = Math.max(0, Math.round(((item.intake || 0) + delta) * 10) / 10)
+      updated.intake = Math.max(0, Math.min(updated.weight, Math.round(((item.intake || 0) + delta) * 10) / 10))
       if (updated.weight > 0) {
         updated.ratio = Math.round((updated.intake / updated.weight) * 100)
       }
