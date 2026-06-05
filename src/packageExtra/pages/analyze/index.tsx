@@ -1160,23 +1160,6 @@ function AnalyzePage() {
           </View>
         </View>
         </View>
-
-        <View className='experiment-mode-panel'>
-          <View className='experiment-mode-head'>
-            <Text className='experiment-mode-title'>零食库试验模式</Text>
-            <Text className='experiment-mode-sub'>不影响上方正式模式</Text>
-          </View>
-          <View
-            className={`experiment-mode-card ${executionMode === 'standard_packaged_experiment' ? 'active' : ''}`}
-            onClick={() => setExecutionMode('standard_packaged_experiment')}
-          >
-            <View className='experiment-mode-card-main'>
-              <Text className='experiment-mode-card-title'>普通 · 零食库试验</Text>
-              <Text className='experiment-mode-card-desc'>用已收录零食规格校准包装食品重量</Text>
-            </View>
-            <Text className='experiment-mode-card-badge'>2积分</Text>
-          </View>
-        </View>
       </View>
 
       {/* 文字补充区域（放在照片下方，拍完再补充上下文） */}
