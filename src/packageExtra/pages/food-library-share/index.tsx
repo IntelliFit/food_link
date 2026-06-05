@@ -246,7 +246,7 @@ function FoodLibrarySharePage() {
     const hasProvince = !!province.trim()
     const hasCity = !!city.trim()
     if (isHomemade) {
-      return hasProvince && hasCity
+      return true
     }
     return hasProvince && hasCity && !!district.trim() && latitude != null && longitude != null
   }
@@ -584,10 +584,7 @@ function FoodLibrarySharePage() {
       }
     }
     if (!isCampusFood && !isLocationValid()) {
-      Taro.showToast({
-        title: isHomemade ? '请选择所在省市' : '请先补充完整商家位置',
-        icon: 'none'
-      })
+      Taro.showToast({ title: '请先补充完整商家位置', icon: 'none' })
       return
     }
 
@@ -780,9 +777,9 @@ function FoodLibrarySharePage() {
         <Text className='nutrition-tip'>营养数据由 AI 自动识别</Text>
       </View>
 
-      {/* 商家信息 */}
+      {/* 基础信息 */}
       <View className='merchant-section'>
-        <Text className='section-title'>商家信息</Text>
+        <Text className='section-title'>基础信息</Text>
         <View className='form-item'>
           <Text className='form-label'>
             食物名称（已自动带入，可修改）
@@ -795,31 +792,33 @@ function FoodLibrarySharePage() {
           />
         </View>
         <View className='form-item'>
-          <Text className='form-label'>商家名称（可选）</Text>
-          <Input
-            className='form-input'
-            placeholder={isHomemade ? '自制餐食可不填' : '如：沙县小吃、肯德基等'}
-            value={merchantName}
-            onInput={e => setMerchantName(e.detail.value)}
-          />
-        </View>
-        <View className='form-item'>
           <Text className='form-label'>餐食来源</Text>
           <View className='source-tag-row'>
             <View
               className={`source-tag-chip ${isHomemade ? 'active' : ''}`}
-              onClick={() => setIsHomemade(true)}
+              onClick={() => handleSetHomemade(true)}
             >
               自制
             </View>
             <View
               className={`source-tag-chip ${!isHomemade ? 'active' : ''}`}
-              onClick={() => setIsHomemade(false)}
+              onClick={() => handleSetHomemade(false)}
             >
               外卖/堂食
             </View>
           </View>
         </View>
+        {!isHomemade && (
+          <View className='form-item'>
+            <Text className='form-label'>商家名称（可选）</Text>
+            <Input
+              className='form-input'
+              placeholder='如：沙县小吃、肯德基等'
+              value={merchantName}
+              onInput={e => setMerchantName(e.detail.value)}
+            />
+          </View>
+        )}
         <View className='form-item'>
           <Text className='form-label'>口味评分（可选）</Text>
           <View className='rating-row'>
@@ -1002,34 +1001,44 @@ function FoodLibrarySharePage() {
         )}
       </View>
 
-      {/* 商家地址 */}
+      {/* 位置信息 */}
       <View className='location-section'>
         <View className='location-title-row'>
-          <Text className='section-title'>商家地址 <Text className='required'>*</Text></Text>
-          <View className='search-location-btn' onClick={handleNavigateLocationSearch}>
-            <Text className='iconfont icon-dizhi' />
-            <Text>搜索地址</Text>
-          </View>
+          <Text className='section-title'>
+            {isHomemade ? '所在地区（可选）' : '商家地址'} {!isHomemade && <Text className='required'>*</Text>}
+          </Text>
+          {!isHomemade && (
+            <View className='search-location-btn' onClick={handleNavigateLocationSearch}>
+              <Text className='iconfont icon-dizhi' />
+              <Text>搜索地址</Text>
+            </View>
+          )}
         </View>
         <View className='form-item' onClick={() => setShowCityPicker(true)}>
-          <Text className='form-label'>城市/区域 <Text className='required'>*</Text></Text>
+          <Text className='form-label'>
+            {isHomemade ? '省市（可选）' : '城市/区域'} {!isHomemade && <Text className='required'>*</Text>}
+          </Text>
           <View className='form-input city-display'>
             <Text className={province ? 'city-value' : 'city-placeholder'}>
               {province
-                ? `${province}${city ? ' ' + city : ''} ${district}`.trim()
-                : '点击选择城市/区域（必填）'}
+                ? `${province}${city ? ' ' + city : ''}${isHomemade ? '' : ` ${district}`}`.trim()
+                : isHomemade ? '可选填所在省市' : '点击选择城市/区域（必填）'}
             </Text>
           </View>
         </View>
-        <View className='form-item'>
-          <Text className='form-label'>详细地址（可选）</Text>
-          <Input
-            className='form-input'
-            placeholder='如：XX路XX号'
-            value={detailAddress}
-            onInput={e => setDetailAddress(e.detail.value)}
-          />
-        </View>
+        {isHomemade ? (
+          <Text className='location-helper'>自制餐食不需要填写商家信息；所在地区可按需补充。</Text>
+        ) : (
+          <View className='form-item'>
+            <Text className='form-label'>详细地址（可选）</Text>
+            <Input
+              className='form-input'
+              placeholder='如：XX路XX号'
+              value={detailAddress}
+              onInput={e => setDetailAddress(e.detail.value)}
+            />
+          </View>
+        )}
       </View>
 
       {/* 备注 */}

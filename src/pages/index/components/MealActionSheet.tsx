@@ -13,14 +13,14 @@ const ACTION_ITEMS = [
   {
     id: 'edit',
     label: '修改记录',
-    iconClass: 'icon-canciguanli',
+    iconClass: 'icon-edit',
     color: '#10b981',
     iconModifier: 'action-sheet-icon--record',
   },
   {
     id: 'poster',
     label: '生成分享海报',
-    iconClass: 'icon-fenxiang',
+    iconClass: 'icon-share',
     color: '#3b82f6',
     iconModifier: 'action-sheet-icon--share',
   },
@@ -47,7 +47,6 @@ export function MealActionSheet({ visible, onClose, onEdit, onPoster, onShare, o
     <View className='meal-action-sheet-overlay' catchMove>
       <View className='meal-action-sheet-mask' onClick={onClose} />
       <View className='meal-action-sheet-content'>
-        <View className='meal-action-sheet-handle-bar' />
         <View className='meal-action-sheet-actions'>
           {ACTION_ITEMS.map((item, idx) => (
             <View key={item.id}>

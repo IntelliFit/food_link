@@ -979,7 +979,6 @@ function AnalyzeHistoryPage() {
         <View className='action-sheet-overlay' catchMove>
           <View className='action-sheet-mask' onClick={closeActionSheet} />
           <View className='action-sheet-content'>
-            <View className='action-sheet-handle-bar' />
             <View className='action-sheet-actions'>
               <View
                 className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result && !activeTask.is_recorded ? '' : 'action-sheet-item--disabled'}`}
@@ -1013,7 +1012,7 @@ function AnalyzeHistoryPage() {
                 className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetShare}
               >
-                <Text className='iconfont icon-fenxiang action-sheet-icon action-sheet-icon--share' />
+                <Text className='iconfont icon-shiwu action-sheet-icon action-sheet-icon--library' />
                 <Text className='action-sheet-label'>分享到公共食物库</Text>
               </View>
               <View className='action-sheet-divider' />

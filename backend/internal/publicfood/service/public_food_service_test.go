@@ -107,3 +107,56 @@ func TestHasCampusPrice(t *testing.T) {
 	require.True(t, hasCampusPrice(&domain.PublicFoodItem{Price: 12}))
 	require.True(t, hasCampusPrice(&domain.PublicFoodItem{PriceMin: 8, PriceMax: 15}))
 }
+
+func TestNormalizePublicFoodLocationInputHomemadeOnlyRequiresProvinceCity(t *testing.T) {
+	province := "浙江省"
+	city := "杭州市"
+	district := "西湖区"
+	merchantName := "不应该保存的商家"
+	merchantAddress := "不应该保存的地址"
+	detailAddress := "不应该保存的详细地址"
+	latitude := 30.25
+	longitude := 120.16
+
+	input := CreateInput{
+		UserTags:        []string{"自制"},
+		Province:        &province,
+		City:            &city,
+		District:        &district,
+		MerchantName:    &merchantName,
+		MerchantAddress: &merchantAddress,
+		DetailAddress:   &detailAddress,
+		Latitude:        &latitude,
+		Longitude:       &longitude,
+	}
+
+	err := normalizePublicFoodLocationInput(&input)
+	require.NoError(t, err)
+	require.Nil(t, input.MerchantName)
+	require.Nil(t, input.MerchantAddress)
+	require.Nil(t, input.DetailAddress)
+	require.Nil(t, input.District)
+	require.Nil(t, input.Latitude)
+	require.Nil(t, input.Longitude)
+}
+
+func TestNormalizePublicFoodLocationInputHomemadeLocationOptional(t *testing.T) {
+	input := CreateInput{
+		UserTags: []string{"自制"},
+	}
+
+	err := normalizePublicFoodLocationInput(&input)
+	require.NoError(t, err)
+}
+
+func TestNormalizePublicFoodLocationInputNonHomemadeRequiresFullLocation(t *testing.T) {
+	province := "浙江省"
+	city := "杭州市"
+	input := CreateInput{
+		Province: &province,
+		City:     &city,
+	}
+
+	err := normalizePublicFoodLocationInput(&input)
+	require.Error(t, err)
+}

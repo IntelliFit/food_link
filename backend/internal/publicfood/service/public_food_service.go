@@ -87,13 +87,8 @@ type CreateInput struct {
 }
 
 func (s *PublicFoodService) Create(ctx context.Context, userID string, input CreateInput) (string, error) {
-	if !input.IsCampusFood {
-		if strings.TrimSpace(ptrString(input.Province)) == "" ||
-			strings.TrimSpace(ptrString(input.City)) == "" ||
-			strings.TrimSpace(ptrString(input.District)) == "" ||
-			input.Latitude == nil || input.Longitude == nil {
-			return "", &commonerrors.AppError{Code: 10002, Message: "公共食物库上传必须带完整地理位置", HTTPStatus: 400}
-		}
+	if err := normalizePublicFoodLocationInput(&input); err != nil {
+		return "", err
 	}
 	var src map[string]any
 	var err error
@@ -581,6 +576,37 @@ func ptrFloat64(v *float64) float64 {
 		return 0
 	}
 	return *v
+}
+
+func isHomemadeInput(input CreateInput) bool {
+	for _, tag := range input.UserTags {
+		if strings.TrimSpace(tag) == "自制" {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizePublicFoodLocationInput(input *CreateInput) error {
+	if input == nil || input.IsCampusFood {
+		return nil
+	}
+	if isHomemadeInput(*input) {
+		input.MerchantName = nil
+		input.MerchantAddress = nil
+		input.DetailAddress = nil
+		input.District = nil
+		input.Latitude = nil
+		input.Longitude = nil
+		return nil
+	}
+	if strings.TrimSpace(ptrString(input.Province)) == "" ||
+		strings.TrimSpace(ptrString(input.City)) == "" ||
+		strings.TrimSpace(ptrString(input.District)) == "" ||
+		input.Latitude == nil || input.Longitude == nil {
+		return &commonerrors.AppError{Code: 10002, Message: "公共食物库上传必须带完整地理位置", HTTPStatus: 400}
+	}
+	return nil
 }
 
 func validateCampusCreateInput(input CreateInput, imagePaths []string) error {

@@ -493,6 +493,14 @@
   }
 }
 
+.location-helper {
+  display: block;
+  margin-top: -8rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: #6a7282;
+}
+
 // 底部提交栏
 .submit-bar {
   position: fixed;
@@ -812,6 +820,10 @@
     .iconfont {
       color: #7dd3b0;
     }
+  }
+
+  .location-helper {
+    color: #9ca3a8;
   }
 
   .submit-bar {
