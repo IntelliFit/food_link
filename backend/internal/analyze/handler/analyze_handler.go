@@ -29,7 +29,7 @@ type TaskService interface {
 	SubmitAnalyzeTask(ctx context.Context, userID string, input service.SubmitTaskInput) (string, error)
 	SubmitTextTask(ctx context.Context, userID string, input service.SubmitTaskInput) (string, error)
 	CreateBatchTask(ctx context.Context, userID string, imageURLs []string, payload map[string]any, result map[string]any) (string, error)
-	ListTasks(ctx context.Context, userID, taskType, status string, limit int) ([]domain.AnalysisTask, error)
+	ListTasks(ctx context.Context, userID, taskType, status, search string, limit int) ([]domain.AnalysisTask, error)
 	CountTasks(ctx context.Context, userID string) (int64, error)
 	CountTasksByStatus(ctx context.Context, userID string) (map[string]any, error)
 	GetTask(ctx context.Context, taskID, userID string) (*domain.AnalysisTask, error)
@@ -270,11 +270,12 @@ func (h *AnalyzeHandler) ListTasks(c *gin.Context) {
 	userID := c.GetString(authmw.ContextUserIDKey)
 	taskType := c.Query("task_type")
 	status := c.Query("status")
+	search := c.Query("search")
 	limit, _ := strconv.Atoi(c.Query("limit"))
 	if limit <= 0 {
 		limit = 50
 	}
-	tasks, err := h.taskSvc.ListTasks(c.Request.Context(), userID, taskType, status, limit)
+	tasks, err := h.taskSvc.ListTasks(c.Request.Context(), userID, taskType, status, search, limit)
 	if err != nil {
 		response.Error(c, err)
 		return

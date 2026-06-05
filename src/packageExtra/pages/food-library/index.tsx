@@ -6,6 +6,7 @@ import {
   getAccessToken,
   getPublicFoodLibraryList,
   getPublicFoodLibraryCollections,
+  getMyPublicFoodLibrary,
   likePublicFoodLibraryItem,
   unlikePublicFoodLibraryItem,
   collectPublicFoodLibraryItem,
@@ -32,8 +33,21 @@ const CACHE_KEYS = {
 // 缓存有效期（5分钟）
 const CACHE_DURATION = 5 * 60 * 1000
 
-type TabMode = 'all' | 'collections'
+type TabMode = 'all' | 'campus' | 'collections' | 'mine'
 const RECORD_TEXT_LIBRARY_SELECTION_KEY = 'record_text_library_selection'
+
+function formatCampusPrice(item: PublicFoodLibraryItem): string {
+  if (item.price_type === 'range' && item.price_min != null && item.price_max != null) {
+    return `${item.price_min}-${item.price_max}元`
+  }
+  if (item.price == null || item.price <= 0) return '价格待补充'
+  const unit = item.price_unit || '元/份'
+  return `${item.price}${unit.replace(/^\d+/, '')}`
+}
+
+function campusLocation(item: PublicFoodLibraryItem): string {
+  return item.campus_location_text || [item.school_name, item.campus_name, item.canteen_name, item.floor, item.window_name].filter(Boolean).join(' · ')
+}
 
 function FoodLibraryPage() {
   const { scheme } = useAppColorScheme()
@@ -43,8 +57,12 @@ function FoodLibraryPage() {
   const [tabMode, setTabMode] = useState<TabMode>('all')
   const [loading, setLoading] = useState(false)
   const [list, setList] = useState<PublicFoodLibraryItem[]>([])
+  const [campusList, setCampusList] = useState<PublicFoodLibraryItem[]>([])
+  const [campusLoading, setCampusLoading] = useState(false)
   const [collectionList, setCollectionList] = useState<PublicFoodLibraryItem[]>([])
   const [collectionLoading, setCollectionLoading] = useState(false)
+  const [mineList, setMineList] = useState<PublicFoodLibraryItem[]>([])
+  const [mineLoading, setMineLoading] = useState(false)
   const [sortBy, setSortBy] = useState<'latest' | 'hot' | 'rating'>('latest')
   const [filterFatLoss, setFilterFatLoss] = useState<boolean | undefined>(undefined)
   const [searchKeyword, setSearchKeyword] = useState('')
@@ -222,6 +240,36 @@ function FoodLibraryPage() {
     }
   }, [])
 
+  /** 加载校园食堂列表 */
+  const loadCampusList = useCallback(async (force = false) => {
+    if (!getAccessToken()) return
+    if (!force && campusList.length > 0) return
+    setCampusLoading(true)
+    try {
+      const res = await getPublicFoodLibraryList({ is_campus_food: true, limit: 50 })
+      setCampusList(res.list || [])
+    } catch (e: any) {
+      await showUnifiedApiError(e, '加载校园食堂失败')
+    } finally {
+      setCampusLoading(false)
+    }
+  }, [])
+
+  /** 加载我的上传列表 */
+  const loadMineList = useCallback(async (force = false) => {
+    if (!getAccessToken()) return
+    if (!force && mineList.length > 0) return
+    setMineLoading(true)
+    try {
+      const res = await getMyPublicFoodLibrary()
+      setMineList(res.list || [])
+    } catch (e: any) {
+      await showUnifiedApiError(e, '加载我的上传失败')
+    } finally {
+      setMineLoading(false)
+    }
+  }, [])
+
   // 从分享页提交成功返回时需强制刷新列表
   const NEED_REFRESH_KEY = 'food_library_need_refresh'
 
@@ -236,6 +284,10 @@ function FoodLibraryPage() {
       try { Taro.removeStorageSync(NEED_REFRESH_KEY) } catch (_) {}
       if (tabMode === 'collections') {
         loadCollectionList(true)
+      } else if (tabMode === 'campus') {
+        loadCampusList(true)
+      } else if (tabMode === 'mine') {
+        loadMineList(true)
       } else {
         loadList(true, true)
       }
@@ -244,6 +296,14 @@ function FoodLibraryPage() {
 
     if (tabMode === 'collections') {
       loadCollectionList(true)
+      return
+    }
+    if (tabMode === 'campus') {
+      loadCampusList(true)
+      return
+    }
+    if (tabMode === 'mine') {
+      loadMineList(true)
       return
     }
 
@@ -277,9 +337,14 @@ function FoodLibraryPage() {
 
   // 仅登录态或 tab 切换时做初始化加载（sortBy/filterFatLoss/searchMerchant 的主动变更由点击函数直接处理）
   useEffect(() => {
-    if (loggedIn && tabMode === 'all') {
+    if (!loggedIn) return
+    if (tabMode === 'all') {
       clearCache()
       loadList(false, true)
+    } else if (tabMode === 'campus') {
+      loadCampusList(false)
+    } else if (tabMode === 'mine') {
+      loadMineList(false)
     }
   }, [loggedIn, tabMode])
 
@@ -292,10 +357,14 @@ function FoodLibraryPage() {
     setRefreshing(true)
     if (tabMode === 'collections') {
       loadCollectionList(true).finally(() => setRefreshing(false))
+    } else if (tabMode === 'campus') {
+      loadCampusList(true).finally(() => setRefreshing(false))
+    } else if (tabMode === 'mine') {
+      loadMineList(true).finally(() => setRefreshing(false))
     } else {
       loadList(false, true)
     }
-  }, [loadList, tabMode, loadCollectionList])
+  }, [loadList, tabMode, loadCollectionList, loadCampusList, loadMineList])
 
   // 搜索
   const handleSearch = () => {
@@ -488,8 +557,8 @@ function FoodLibraryPage() {
     )
   }
 
-  const displayList = tabMode === 'all' ? list : collectionList
-  const isLoading = tabMode === 'all' ? loading : collectionLoading
+  const displayList = tabMode === 'all' ? list : tabMode === 'campus' ? campusList : tabMode === 'mine' ? mineList : collectionList
+  const isLoading = tabMode === 'all' ? loading : tabMode === 'campus' ? campusLoading : tabMode === 'mine' ? mineLoading : collectionLoading
 
   return (
     <FlPageThemeRoot>
@@ -500,13 +569,22 @@ function FoodLibraryPage() {
           <Text className='pick-mode-subtitle'>点任意餐食卡片，可直接带回到文字记录里</Text>
         </View>
       )}
-      {/* Tab：全部 / 收藏夹 */}
+      {/* Tab：全部 / 校园食堂 / 收藏夹 / 我上传的 */}
       <View className='tab-section'>
         <View
           className={`tab-item ${tabMode === 'all' ? 'active' : ''}`}
           onClick={() => setTabMode('all')}
         >
           全部
+        </View>
+        <View
+          className={`tab-item ${tabMode === 'campus' ? 'active' : ''}`}
+          onClick={() => {
+            setTabMode('campus')
+            loadCampusList(true)
+          }}
+        >
+          校园食堂
         </View>
         <View
           className={`tab-item ${tabMode === 'collections' ? 'active' : ''}`}
@@ -516,6 +594,15 @@ function FoodLibraryPage() {
           }}
         >
           收藏夹
+        </View>
+        <View
+          className={`tab-item ${tabMode === 'mine' ? 'active' : ''}`}
+          onClick={() => {
+            setTabMode('mine')
+            loadMineList(true)
+          }}
+        >
+          我上传的
         </View>
       </View>
 
@@ -635,6 +722,18 @@ function FoodLibraryPage() {
               <Text className='empty-text'>暂无收藏，去逛逛收藏喜欢的餐食</Text>
               <View className='empty-btn' onClick={() => setTabMode('all')}>去逛逛</View>
             </View>
+          ) : tabMode === 'campus' && displayList.length === 0 ? (
+            <View className='empty-state'>
+              <Text className='empty-icon iconfont icon-shiwu' />
+              <Text className='empty-text'>暂无校园食堂数据</Text>
+              <View className='empty-btn' onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/campus-canteen/index') })}>去校园专区</View>
+            </View>
+          ) : tabMode === 'mine' && displayList.length === 0 ? (
+            <View className='empty-state'>
+              <Text className='empty-icon iconfont icon-shiwu' />
+              <Text className='empty-text'>暂无上传，快来分享第一份健康餐吧</Text>
+              <View className='empty-btn' onClick={goShare}>去分享</View>
+            </View>
           ) : displayList.length === 0 ? (
             <View className='empty-state'>
               <Text className='empty-icon iconfont icon-shiwu' />
@@ -663,6 +762,9 @@ function FoodLibraryPage() {
                     {item.suitable_for_fat_loss && (
                       <View className='fat-loss-badge'>适合减脂</View>
                     )}
+                    {item.is_campus_food && (
+                      <View className='campus-food-badge'>校园食堂</View>
+                    )}
                   </View>
                   <View className='food-info'>
                     <Text className='food-title'>{item.food_name || item.description || '健康餐'}</Text>
@@ -673,6 +775,13 @@ function FoodLibraryPage() {
                       <View className='food-merchant'>
                         <Text className='merchant-icon iconfont icon-shiwu' />
                         <Text className='merchant-name'>{item.merchant_name}</Text>
+                      </View>
+                    )}
+                    {item.is_campus_food && (
+                      <View className='campus-food-meta'>
+                        <Text className='campus-food-location'>{campusLocation(item) || '校园食堂'}</Text>
+                        <Text className='campus-food-price'>{formatCampusPrice(item)}</Text>
+                        <Text className='campus-food-nutrition'>蛋白 {item.total_protein.toFixed(0)}g</Text>
                       </View>
                     )}
                     <Text className='food-calories'>{item.total_calories.toFixed(0)} kcal</Text>

@@ -112,8 +112,8 @@
 }
 
 .tab-item {
-  padding: 20rpx 48rpx;
-  font-size: 30rpx;
+  padding: 20rpx 28rpx;
+  font-size: 28rpx;
   font-weight: 500;
   color: #6b7280;
   margin-bottom: -1rpx;
@@ -358,6 +358,53 @@
   padding: 4rpx 12rpx;
   border-radius: 8rpx;
   z-index: 2;
+}
+
+.campus-food-badge {
+  position: absolute;
+  right: 12rpx;
+  bottom: 12rpx;
+  padding: 6rpx 12rpx;
+  background: rgba(20, 184, 166, 0.92);
+  color: #fff;
+  font-size: 20rpx;
+  border-radius: 999rpx;
+  font-weight: 700;
+  z-index: 2;
+}
+
+.campus-food-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10rpx;
+  margin: 8rpx 0 36rpx;
+}
+
+.campus-food-location {
+  width: 100%;
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campus-food-price,
+.campus-food-nutrition {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  padding: 4rpx 10rpx;
+  border-radius: 10rpx;
+  background: #ecfdf5;
+  color: #047857;
+  font-weight: 700;
+}
+
+.campus-food-price {
+  background: #fff7ed;
+  color: #ea580c;
 }
 
 .food-info {

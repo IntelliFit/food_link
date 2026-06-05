@@ -1695,6 +1695,75 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
+.campus-canteen-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18rpx;
+  min-height: 112rpx;
+  padding: 22rpx 24rpx;
+  margin-bottom: 16rpx;
+  background: #ffffff;
+  border: 1rpx solid rgb(92 184 150 / 18%);
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 18rpx rgb(0 0 0 / 4%);
+  box-sizing: border-box;
+
+  &:active {
+    opacity: 0.82;
+  }
+}
+
+.campus-canteen-entry-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.campus-canteen-entry-icon {
+  width: 64rpx;
+  height: 64rpx;
+  flex-shrink: 0;
+  border-radius: 20rpx;
+  background: rgb(92 184 150 / 12%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.campus-canteen-entry-icon-text {
+  font-size: 32rpx;
+  color: $primary-color;
+}
+
+.campus-canteen-entry-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.campus-canteen-entry-title {
+  font-size: 28rpx;
+  line-height: 38rpx;
+  font-weight: 700;
+  color: $text-primary;
+}
+
+.campus-canteen-entry-subtitle {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  color: $text-secondary;
+}
+
+.campus-canteen-entry-arrow {
+  font-size: 24rpx;
+  color: $text-tertiary;
+  flex-shrink: 0;
+}
+
 .diet-rec-modal {
   position: fixed;
   inset: 0;
@@ -4209,6 +4278,140 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+// 首页餐食 ActionSheet（对齐识别记录页 ActionSheet 样式）
+.meal-action-sheet-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100001;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.meal-action-sheet-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.meal-action-sheet-content {
+  position: relative;
+  z-index: 1;
+  padding: 0 16rpx 32rpx;
+  animation: action-sheet-slide-up 0.25s ease;
+}
+
+.meal-action-sheet-handle-bar {
+  width: 64rpx;
+  height: 6rpx;
+  border-radius: 3rpx;
+  background: rgba(255, 255, 255, 0.5);
+  margin: 0 auto 16rpx;
+}
+
+.meal-action-sheet-actions {
+  background: #fff;
+  border-radius: 24rpx;
+  overflow: hidden;
+}
+
+.meal-action-sheet-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16rpx;
+  padding: 32rpx 24rpx;
+  position: relative;
+
+  &:active {
+    background: #f3f4f6;
+  }
+
+  .meal-action-sheet-icon {
+    font-size: 32rpx;
+    color: #1f2937;
+  }
+
+  .meal-action-sheet-label {
+    font-size: 30rpx;
+    color: #1f2937;
+    font-weight: 500;
+  }
+
+  &--danger {
+    .meal-action-sheet-icon,
+    .meal-action-sheet-label {
+      color: #ef4444;
+    }
+  }
+}
+
+.meal-action-sheet-divider {
+  height: 1rpx;
+  background: #e5e7eb;
+  margin: 0 24rpx;
+}
+
+.meal-action-sheet-cancel {
+  margin-top: 16rpx;
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 28rpx 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    background: #f3f4f6;
+  }
+}
+
+.meal-action-sheet-cancel-text {
+  font-size: 30rpx;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+// 深色模式
+.page--dark {
+  .meal-action-sheet-actions,
+  .meal-action-sheet-cancel {
+    background: #1e2624;
+  }
+
+  .meal-action-sheet-item {
+    &:active {
+      background: #2a3330;
+    }
+
+    .meal-action-sheet-icon,
+    .meal-action-sheet-label {
+      color: #f2f7f4;
+    }
+
+    &--danger {
+      .meal-action-sheet-icon,
+      .meal-action-sheet-label {
+        color: #ef4444;
+      }
+    }
+  }
+
+  .meal-action-sheet-divider {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .meal-action-sheet-cancel-text {
+    color: rgba(214, 226, 220, 0.6);
   }
 }
 

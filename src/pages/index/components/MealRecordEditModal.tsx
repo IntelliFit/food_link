@@ -141,11 +141,11 @@ const hasVisibleMacroData = (nutrients?: Nutrients | null) => (
 
 const resolveRecordItemRatio = (item: Pick<FoodRecord['items'][0], 'ratio' | 'intake' | 'weight'>): number => {
   const ratio = Number(item.ratio)
-  if (Number.isFinite(ratio) && ratio > 0) return ratio
+  if (Number.isFinite(ratio) && ratio > 0) return Math.min(100, ratio)
   const intake = Number(item.intake)
   const weight = Number(item.weight)
   if (Number.isFinite(intake) && Number.isFinite(weight) && intake >= 0 && weight > 0) {
-    return Math.round((intake / weight) * 1000) / 10
+    return Math.min(100, Math.round((intake / weight) * 1000) / 10)
   }
   return 100
 }
@@ -248,7 +248,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     setEditItems(prev => {
       const next = [...prev]
       const item = { ...next[index] }
-      item.intake = Math.max(0, Math.round(newIntake * 10) / 10)
+      item.intake = Math.max(0, Math.min(item.weight, Math.round(newIntake * 10) / 10))
       if (item.weight > 0) {
         item.ratio = Math.round((item.intake / item.weight) * 100)
       }
@@ -373,6 +373,10 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
         ? Math.max(1, Math.min(100, Math.round((nextWeight / nextGrossWeight) * 100)))
         : updated.ediblePortionRatio
       updated.intake = Math.round(nextWeight * (updated.ratio / 100) * 10) / 10
+      if (updated.intake > nextWeight) {
+        updated.intake = nextWeight
+        updated.ratio = 100
+      }
       updated.waterMl = roundToSingleDecimal(item.waterMl * scale)
       updated.nutrients = scaleNutrients(item.nutrients, scale)
       next[index] = updated

@@ -56,6 +56,36 @@ function formatTime(timeStr: string | null | undefined): string {
   }
 }
 
+function fmtPriceDisplay(item: PublicFoodLibraryItem): string {
+  if (item.price_type === 'unknown') return '价格待补充'
+  if (item.price_type === 'range' && item.price_min != null && item.price_max != null) {
+    return `${item.price_min}-${item.price_max}元`
+  }
+  if (item.price == null || item.price <= 0) return '价格待补充'
+  const unit = item.price_unit || '元/份'
+  return `${item.price}${unit.replace(/^\d+/, '')}`
+}
+
+function getMetricPrice(item: PublicFoodLibraryItem): number {
+  if (item.price && item.price > 0) return item.price
+  if (item.price_type === 'range' && item.price_min != null && item.price_max != null) {
+    return (item.price_min + item.price_max) / 2
+  }
+  return 0
+}
+
+function getCampusLocationText(item: PublicFoodLibraryItem): string {
+  if (item.campus_location_text) return item.campus_location_text
+  const parts = [
+    item.school_name,
+    item.campus_name,
+    item.canteen_name,
+    item.floor,
+    item.window_name
+  ].filter(Boolean)
+  return parts.join(' · ') || '校园食堂'
+}
+
 function FoodLibraryDetailPage() {
   const router = useRouter()
   const itemId = router.params.id || ''
@@ -164,6 +194,13 @@ function FoodLibraryDetailPage() {
       Taro.hideLoading()
       setDeleting(false)
     }
+  }
+
+  // 一键记录
+  const handleQuickRecord = () => {
+    if (!item) return
+    Taro.setStorageSync('campus_quick_record_item', JSON.stringify(item))
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-manual/index')}?campus_quick=1` })
   }
 
   // 提交修正
@@ -397,6 +434,42 @@ function FoodLibraryDetailPage() {
         </View>
       </View>
 
+      {/* 校园食堂信息 */}
+      {item.is_campus_food && (
+        <View className='campus-card'>
+          {(() => {
+            const metricPrice = getMetricPrice(item)
+            return (
+              <>
+          <View className='campus-header-row'>
+            <Text className='campus-badge'>校园食堂</Text>
+            {item.portion_description && (
+              <Text className='campus-portion'>{item.portion_description}</Text>
+            )}
+          </View>
+          <Text className='campus-location'>{getCampusLocationText(item)}</Text>
+          <View className='campus-price-row'>
+            <Text className='campus-price'>{fmtPriceDisplay(item)}</Text>
+            {metricPrice > 0 && item.total_protein > 0 && (
+              <Text className='campus-metric'>
+                蛋白质 {(item.total_protein / metricPrice).toFixed(1)}g/元
+              </Text>
+            )}
+            {metricPrice > 0 && item.total_calories > 0 && (
+              <Text className='campus-metric'>
+                {(metricPrice / item.total_calories * 100).toFixed(2)}元/100kcal
+              </Text>
+            )}
+          </View>
+          {item.price_collected_at && (
+            <Text className='campus-price-date'>价格采集于 {formatTime(item.price_collected_at).split(' ')[0]}</Text>
+          )}
+              </>
+            )
+          })()}
+        </View>
+      )}
+
       {/* 商家信息 */}
       {(item.merchant_name || item.merchant_address || item.city) && (
         <View className='merchant-card'>
@@ -501,6 +574,11 @@ function FoodLibraryDetailPage() {
           {isOwner && (
             <View className='action-btn icon-action delete-btn' onClick={handleDelete}>
               {deleting ? <View className='delete-spinner' /> : <Text className='iconfont icon-shanchu delete-icon' />}
+            </View>
+          )}
+          {item.is_campus_food && (
+            <View className='action-btn quick-record-btn' onClick={handleQuickRecord}>
+              <Text className='action-text'>一键记录</Text>
             </View>
           )}
           <View className='action-btn comment-btn' onClick={() => setShowCommentModal(true)}>

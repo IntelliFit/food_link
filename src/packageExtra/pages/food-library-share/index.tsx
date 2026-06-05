@@ -1,5 +1,5 @@
 import { withAuth } from '../../../utils/withAuth'
-import { View, Text, ScrollView, Image, Input, Textarea } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Input, Textarea, Picker } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro from '@tarojs/taro'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -21,9 +21,19 @@ import {
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import SchoolPicker from '../../../components/SchoolPicker'
 
 const QUICK_TAGS = ['少油', '少盐', '高蛋白', '低碳水', '清淡', '外卖', '健身餐']
 const FOOD_LIBRARY_QUICK_UPLOAD_DRAFT_KEY = 'foodLibraryQuickUploadDraft'
+
+const PRICE_TYPE_OPTIONS = ['fixed', 'weight', 'range', 'combo', 'unknown']
+const PRICE_TYPE_LABELS: Record<string, string> = {
+  fixed: '固定价格',
+  weight: '称重计价',
+  range: '价格区间',
+  combo: '套餐价格',
+  unknown: '未知',
+}
 
 type QuickUploadDraft = {
   imageUrls?: string[]
@@ -43,6 +53,7 @@ function FoodLibrarySharePage() {
   const routerParams = Taro.getCurrentInstance().router?.params
   const sourceRecordId = routerParams?.source_record_id
   const quickUploadMode = routerParams?.quick_upload === '1'
+  const campusMode = routerParams?.campus_mode === '1'
 
   // 选择来源：record（从记录分享）或 upload（直接上传）
   const [sourceType, setSourceType] = useState<'record' | 'upload'>('upload')
@@ -89,6 +100,21 @@ function FoodLibrarySharePage() {
 
   // 城市选择器
   const [showCityPicker, setShowCityPicker] = useState(false)
+
+  // 校园食堂信息
+  const [isCampusFood, setIsCampusFood] = useState(campusMode)
+  const [schoolName, setSchoolName] = useState('')
+  const [canteenName, setCanteenName] = useState('')
+  const [floor, setFloor] = useState('')
+  const [showSchoolPicker, setShowSchoolPicker] = useState(false)
+  const [windowName, setWindowName] = useState('')
+  const [price, setPrice] = useState('')
+  const [priceType, setPriceType] = useState('fixed')
+  const [priceMin, setPriceMin] = useState('')
+  const [priceMax, setPriceMax] = useState('')
+  const [priceUnit, setPriceUnit] = useState('元/份')
+  const [priceCollectedAt, setPriceCollectedAt] = useState(() => new Date().toISOString().slice(0, 10))
+  const [portionDescription, setPortionDescription] = useState('')
 
   // 提交状态
   const [submitting, setSubmitting] = useState(false)
@@ -197,6 +223,33 @@ function FoodLibrarySharePage() {
       Taro.removeStorageSync('analyzeShareData')
     }
   }, [routerParams?.from_analyze])
+
+  // 校园模式默认值
+  useEffect(() => {
+    if (isCampusFood) {
+      if (!priceUnit) setPriceUnit('元/份')
+      if (!priceType) setPriceType('fixed')
+    }
+  }, [isCampusFood, priceType, priceUnit])
+
+  const handleSetHomemade = (nextValue: boolean) => {
+    setIsHomemade(nextValue)
+    if (nextValue) {
+      setMerchantName('')
+      setDetailAddress('')
+      setLatitude(undefined)
+      setLongitude(undefined)
+    }
+  }
+
+  const isLocationValid = () => {
+    const hasProvince = !!province.trim()
+    const hasCity = !!city.trim()
+    if (isHomemade) {
+      return hasProvince && hasCity
+    }
+    return hasProvince && hasCity && !!district.trim() && latitude != null && longitude != null
+  }
 
   const inferFoodName = (record?: FoodRecord | null, nextItems?: Array<{ name: string }>, nextDescription?: string) => {
     const itemNames = (nextItems || record?.items || [])
@@ -512,16 +565,39 @@ function FoodLibrarySharePage() {
     if (finalFoodName !== foodName.trim()) {
       setFoodName(finalFoodName)
     }
-    if (!province.trim() || !city.trim() || !district.trim() || latitude == null || longitude == null) {
-      Taro.showToast({ title: '请先补充完整位置', icon: 'none' })
+    if (isCampusFood) {
+      if (!schoolName.trim()) {
+        Taro.showToast({ title: '请选择学校', icon: 'none' })
+        return
+      }
+      if (!canteenName.trim()) {
+        Taro.showToast({ title: '请填写食堂名称', icon: 'none' })
+        return
+      }
+      if (priceType === 'range') {
+        const min = Number(priceMin)
+        const max = Number(priceMax)
+        if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max <= 0 || min > max) {
+          Taro.showToast({ title: '请填写正确价格区间', icon: 'none' })
+          return
+        }
+      }
+    }
+    if (!isCampusFood && !isLocationValid()) {
+      Taro.showToast({
+        title: isHomemade ? '请选择所在省市' : '请先补充完整商家位置',
+        icon: 'none'
+      })
       return
     }
 
     const { confirm } = await Taro.showModal({
       title: '确认提交',
-      content: quickUploadMode
-        ? '确定上传到公共食物库吗？审核通过后其他用户即可查看。'
-        : '确定要将该食物分享到公共食物库吗？提交后需经系统审核，通过后其他用户可查看。',
+      content: isCampusFood
+        ? '确定发布这份校园食堂菜品吗？提交后会自动出现在校园食堂分区。'
+        : quickUploadMode
+          ? '确定上传到公共食物库吗？审核通过后其他用户即可查看。'
+          : '确定要将该食物分享到公共食物库吗？提交后需经系统审核，通过后其他用户可查看。',
       confirmText: '确定提交',
       cancelText: '取消'
     })
@@ -534,12 +610,11 @@ function FoodLibrarySharePage() {
   const doSubmit = async () => {
     setSubmitting(true)
     try {
-      // 构建完整的商家地址
       const fullAddress = [
         province,
         city,
-        district,
-        detailAddress
+        isHomemade ? '' : district,
+        isHomemade ? '' : detailAddress
       ].filter(Boolean).join(' ').trim()
 
       const finalFoodName = foodName.trim() || inferFoodName(selectedRecord, items, description)
@@ -557,22 +632,38 @@ function FoodLibrarySharePage() {
         description,
         insight,
         food_name: finalFoodName,
-        merchant_name: merchantName.trim() || undefined,
-        merchant_address: fullAddress || undefined,
+        merchant_name: isHomemade ? undefined : merchantName.trim() || undefined,
+        merchant_address: isHomemade ? undefined : fullAddress || undefined,
         taste_rating: tasteRating > 0 ? tasteRating : undefined,
         suitable_for_fat_loss: suitableForFatLoss,
         user_tags: submitTags,
         user_notes: userNotes.trim() || undefined,
-        latitude,
-        longitude,
+        latitude: isHomemade ? undefined : latitude,
+        longitude: isHomemade ? undefined : longitude,
         province: province.trim() || undefined,
         city: city.trim() || undefined,
-        district: district.trim() || undefined,
-        detail_address: detailAddress.trim() || undefined
+        district: isHomemade ? undefined : district.trim() || undefined,
+        detail_address: isHomemade ? undefined : detailAddress.trim() || undefined,
+        is_campus_food: isCampusFood,
+        school_name: isCampusFood ? schoolName.trim() || undefined : undefined,
+        canteen_name: isCampusFood ? canteenName.trim() || undefined : undefined,
+        floor: isCampusFood ? floor.trim() || undefined : undefined,
+        window_name: isCampusFood ? windowName.trim() || undefined : undefined,
+        price: isCampusFood && priceType !== 'range' && price ? Number(price) || undefined : undefined,
+        price_type: isCampusFood ? priceType.trim() || undefined : undefined,
+        price_min: isCampusFood && priceType === 'range' && priceMin ? Number(priceMin) || undefined : undefined,
+        price_max: isCampusFood && priceType === 'range' && priceMax ? Number(priceMax) || undefined : undefined,
+        price_unit: isCampusFood ? priceUnit.trim() || undefined : undefined,
+        price_collected_at: isCampusFood && priceCollectedAt ? `${priceCollectedAt}T00:00:00+08:00` : undefined,
+        portion_description: isCampusFood ? portionDescription.trim() || undefined : undefined
       })
-      Taro.showToast({ title: '提交成功，审核通过后将展示', icon: 'none', duration: 2500 })
+      Taro.showToast({ title: isCampusFood ? '已发布到校园食堂' : '提交成功，审核通过后将展示', icon: 'none', duration: 2500 })
       Taro.setStorageSync('food_library_need_refresh', '1')
       setTimeout(() => {
+        if (isCampusFood) {
+          Taro.redirectTo({ url: extraPkgUrl('/pages/campus-canteen/index') })
+          return
+        }
         if (quickUploadMode) {
           Taro.redirectTo({ url: extraPkgUrl('/pages/food-library/index') })
           return
@@ -745,6 +836,125 @@ function FoodLibrarySharePage() {
             </View>
           </View>
         </View>
+        {/* 校园食堂 */}
+        <View className='form-item'>
+          <View className='switch-row' style={{ marginBottom: 0, borderBottom: 'none' }}>
+            <Text className='switch-label'>校园食堂菜品</Text>
+            <View
+              className={`switch-btn ${isCampusFood ? 'active' : ''}`}
+              onClick={() => setIsCampusFood(!isCampusFood)}
+            >
+              <View className='switch-dot' />
+            </View>
+          </View>
+        </View>
+        {isCampusFood && (
+          <>
+            <View className='form-item'>
+              <Text className='form-label'>学校 <Text className='required'>*</Text></Text>
+              <View className='form-input city-display' onClick={() => setShowSchoolPicker(true)}>
+                <Text className={schoolName ? 'city-value' : 'city-placeholder'}>
+                  {schoolName || '请选择学校（必填）'}
+                </Text>
+              </View>
+            </View>
+            <View className='form-item'>
+              <Text className='form-label'>食堂 <Text className='required'>*</Text></Text>
+              <Input
+                className='form-input'
+                placeholder='请输入食堂名称'
+                value={canteenName}
+                onInput={e => setCanteenName(e.detail.value)}
+              />
+            </View>
+            <View className='form-item'>
+              <Text className='form-label'>楼层（可选）</Text>
+              <Input
+                className='form-input'
+                placeholder='如：一层'
+                value={floor}
+                onInput={e => setFloor(e.detail.value)}
+              />
+            </View>
+            <View className='form-item'>
+              <Text className='form-label'>窗口名称（可选）</Text>
+              <Input
+                className='form-input'
+                placeholder='如：12号窗口'
+                value={windowName}
+                onInput={e => setWindowName(e.detail.value)}
+              />
+            </View>
+            <View className='form-item'>
+              <Text className='form-label'>价格（可选）</Text>
+              <Input
+                className='form-input'
+                placeholder={priceType === 'range' ? '区间价请填写下方上下限' : '如：15'}
+                type='digit'
+                value={price}
+                onInput={e => setPrice(e.detail.value)}
+                disabled={priceType === 'range'}
+              />
+            </View>
+            {priceType === 'range' && (
+              <View className='form-item'>
+                <Text className='form-label'>价格区间（元）</Text>
+                <View style={{ display: 'flex', gap: '16rpx' }}>
+                  <Input
+                    className='form-input'
+                    placeholder='最低价'
+                    type='digit'
+                    value={priceMin}
+                    onInput={e => setPriceMin(e.detail.value)}
+                  />
+                  <Input
+                    className='form-input'
+                    placeholder='最高价'
+                    type='digit'
+                    value={priceMax}
+                    onInput={e => setPriceMax(e.detail.value)}
+                  />
+                </View>
+              </View>
+            )}
+            <View className='form-item'>
+              <Text className='form-label'>计价方式（可选）</Text>
+              <Picker mode='selector' range={PRICE_TYPE_OPTIONS.map(t => PRICE_TYPE_LABELS[t])} value={PRICE_TYPE_OPTIONS.indexOf(priceType)} onChange={e => setPriceType(PRICE_TYPE_OPTIONS[Number(e.detail.value)] || '')}>
+                <View className='form-input city-display'>
+                  <Text className={priceType ? 'city-value' : 'city-placeholder'}>
+                    {priceType ? PRICE_TYPE_LABELS[priceType] : '请选择计价方式'}
+                  </Text>
+                </View>
+              </Picker>
+            </View>
+            <View className='form-item'>
+              <Text className='form-label'>价格单位</Text>
+              <Input
+                className='form-input'
+                placeholder='如：元/份'
+                value={priceUnit}
+                onInput={e => setPriceUnit(e.detail.value)}
+              />
+            </View>
+            <View className='form-item'>
+              <Text className='form-label'>价格采集日期</Text>
+              <Picker mode='date' value={priceCollectedAt} onChange={e => setPriceCollectedAt(e.detail.value)}>
+                <View className='form-input city-display'>
+                  <Text className='city-value'>{priceCollectedAt || '请选择日期'}</Text>
+                </View>
+              </Picker>
+            </View>
+            <View className='form-item'>
+              <Text className='form-label'>份量说明（可选）</Text>
+              <Input
+                className='form-input'
+                placeholder='如：大份、小份'
+                value={portionDescription}
+                onInput={e => setPortionDescription(e.detail.value)}
+              />
+            </View>
+          </>
+        )}
       </View>
 
       {/* 标签 */}
@@ -906,6 +1116,15 @@ function FoodLibrarySharePage() {
           </View>
         </View>
       )}
+
+      <SchoolPicker
+        visible={showSchoolPicker}
+        onSelect={(school) => {
+          setSchoolName(school.name)
+          setShowSchoolPicker(false)
+        }}
+        onCancel={() => setShowSchoolPicker(false)}
+      />
 
     </View>
   )

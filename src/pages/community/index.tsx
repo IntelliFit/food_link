@@ -86,6 +86,7 @@ const FEED_CONTENT_OPTIONS: Array<{ value: CommunityFeedContentType; label: stri
   { value: 'all', label: '全部内容' },
   { value: 'food_record', label: '饮食' },
   { value: 'exercise_log', label: '运动' },
+  { value: 'campus_food', label: '校园食堂' },
 ]
 
 const FEED_MEAL_OPTIONS: Array<{ value: MealType | 'all'; label: string }> = [
@@ -335,8 +336,8 @@ function buildFeedQueryParams(
   return {
     sort_by: sortBy,
     content_type: contentType,
-    meal_type: contentType === 'exercise_log' || mealType === 'all' ? undefined : mealType,
-    diet_goal: contentType === 'exercise_log' || dietGoal === 'all' ? undefined : dietGoal,
+    meal_type: contentType === 'exercise_log' || contentType === 'campus_food' || mealType === 'all' ? undefined : mealType,
+    diet_goal: contentType === 'exercise_log' || contentType === 'campus_food' || dietGoal === 'all' ? undefined : dietGoal,
     author_scope: authorId ? 'all' : authorScope,
     priority_author_ids: authorId ? undefined : (authorScope === 'priority' ? priorityAuthorIds : undefined),
     author_id: authorId || undefined,
@@ -401,6 +402,10 @@ function getFeedTargetKey(item: CommunityFeedItem | null | undefined): string {
 
 function isExerciseFeed(item: CommunityFeedItem | null | undefined): boolean {
   return getFeedTargetType(item) === 'exercise_log'
+}
+
+function isCampusFoodFeed(item: CommunityFeedItem | null | undefined): boolean {
+  return getFeedTargetType(item) === 'campus_food'
 }
 
 function CommunityPage() {
@@ -1280,7 +1285,7 @@ function CommunityPage() {
     if (hidingFeedIds.includes(targetKey)) return
     Taro.showModal({
       title: '删除动态',
-      content: `从圈子中删除这条动态？你的${targetType === 'exercise_log' ? '运动记录' : '饮食记录'}不会被删除。`,
+      content: `从圈子中删除这条动态？你的${targetType === 'exercise_log' ? '运动记录' : targetType === 'campus_food' ? '校园食堂记录' : '饮食记录'}不会被删除。`,
       confirmText: '删除',
       confirmColor: '#ef4444',
       success: async (res) => {
@@ -1319,6 +1324,13 @@ function CommunityPage() {
         const dateText = String(record.record_time || record.created_at || '').slice(0, 10)
         Taro.navigateTo({
           url: `${extraPkgUrl('/pages/exercise-record/index')}${dateText ? `?date=${encodeURIComponent(dateText)}` : ''}`
+        })
+        return
+      }
+      if (maybeItem && isCampusFoodFeed(maybeItem)) {
+        const targetId = maybeItem.target_id || record.id
+        Taro.navigateTo({
+          url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(targetId)}`
         })
         return
       }
@@ -2158,6 +2170,7 @@ function CommunityPage() {
                     const targetId = getFeedTargetId(item)
                     const targetKey = getFeedTargetKey(item)
                     const exercise = isExerciseFeed(item)
+                    const isCampusFood = isCampusFoodFeed(item)
                     const feedTime = String(item.record.record_time || item.record.created_at || '')
                     const exerciseTitle = item.record.exercise_type || '运动打卡'
                     const exerciseDesc = item.record.exercise_desc || item.record.description || ''
@@ -2188,10 +2201,12 @@ function CommunityPage() {
                               <Text className='user-name'>{item.is_mine ? '我' : item.author.nickname}</Text>
                               <View className='feed-sub-meta-row'>
                                 <Text className='post-time'>
-                                  {exercise ? `运动打卡 · ${formatFeedTime(feedTime)}` : `${MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · ${formatFeedTime(feedTime)}`}
+                                  {exercise ? `运动打卡 · ${formatFeedTime(feedTime)}` : isCampusFood ? `校园食堂 · ${formatFeedTime(feedTime)}` : `${MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · ${formatFeedTime(feedTime)}`}
                                 </Text>
                                 {exercise ? (
                                   <Text className='feed-tag-plain feed-tag-exercise'>{exerciseTitle}</Text>
+                                ) : isCampusFood ? (
+                                  <Text className='feed-tag-plain feed-tag-campus'>校园食堂</Text>
                                 ) : item.record.diet_goal && item.record.diet_goal !== 'none' ? (
                                   <Text className='feed-tag-plain'>{DIET_GOAL_NAMES[item.record.diet_goal] || item.record.diet_goal}</Text>
                                 ) : null}
@@ -2259,33 +2274,73 @@ function CommunityPage() {
                                 />
                               </View>
                             )}
-                            <View className='feed-meta'>
-                              <View
-                                className='feed-calorie feed-tap-to-detail'
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleViewDetail(item)
-                                }}
-                              >
-                                <Text className='feed-calorie-num'>
-                                  {(exercise ? exerciseKcal : Number(item.record.total_calories || 0)).toFixed(0)}
-                                </Text>
-                                <Text className='feed-calorie-unit'> kcal{exercise ? ' 消耗' : ''}</Text>
+                            {isCampusFood ? (
+                              <View className='feed-meta'>
+                                {item.record.price != null ? (
+                                  <View
+                                    className='feed-calorie feed-calorie-campus feed-tap-to-detail'
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleViewDetail(item)
+                                    }}
+                                  >
+                                    <Text className='feed-calorie-num'>¥{Number(item.record.price).toFixed(1)}</Text>
+                                  </View>
+                                ) : null}
+                                <View
+                                  className='feed-macros feed-campus-nutrition feed-tap-to-detail'
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleViewDetail(item)
+                                  }}
+                                >
+                                  <Text className='feed-macros-text'>
+                                    {Math.round(item.record.total_calories ?? 0)} kcal · 蛋白质 {Math.round(item.record.total_protein ?? 0)}g
+                                  </Text>
+                                </View>
+                                {(item.record.school || item.record.canteen) ? (
+                                  <View
+                                    className='feed-macros feed-campus-location feed-tap-to-detail'
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleViewDetail(item)
+                                    }}
+                                  >
+                                    <Text className='feed-macros-text'>
+                                      {[item.record.school, item.record.canteen].filter(Boolean).join(' · ')}
+                                    </Text>
+                                  </View>
+                                ) : null}
                               </View>
-                              <View
-                                className='feed-macros feed-tap-to-detail'
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleViewDetail(item)
-                                }}
-                              >
-                                <Text className='feed-macros-text'>
-                                  {exercise
-                                    ? (item.record.ai_reasoning || 'AI 已根据运动内容估算消耗')
-                                    : `蛋白质 ${Math.round(item.record.total_protein ?? 0)}g · 碳水 ${Math.round(item.record.total_carbs ?? 0)}g · 脂肪 ${Math.round(item.record.total_fat ?? 0)}g`}
-                                </Text>
+                            ) : (
+                              <View className='feed-meta'>
+                                <View
+                                  className='feed-calorie feed-tap-to-detail'
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleViewDetail(item)
+                                  }}
+                                >
+                                  <Text className='feed-calorie-num'>
+                                    {(exercise ? exerciseKcal : Number(item.record.total_calories || 0)).toFixed(0)}
+                                  </Text>
+                                  <Text className='feed-calorie-unit'> kcal{exercise ? ' 消耗' : ''}</Text>
+                                </View>
+                                <View
+                                  className='feed-macros feed-tap-to-detail'
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleViewDetail(item)
+                                  }}
+                                >
+                                  <Text className='feed-macros-text'>
+                                    {exercise
+                                      ? (item.record.ai_reasoning || 'AI 已根据运动内容估算消耗')
+                                      : `蛋白质 ${Math.round(item.record.total_protein ?? 0)}g · 碳水 ${Math.round(item.record.total_carbs ?? 0)}g · 脂肪 ${Math.round(item.record.total_fat ?? 0)}g`}
+                                  </Text>
+                                </View>
                               </View>
-                            </View>
+                            )}
                             <View
                               className='feed-actions'
                               onClick={(e) => e.stopPropagation()}

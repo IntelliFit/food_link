@@ -2708,10 +2708,11 @@ export async function getAnalyzeTask(taskId: string): Promise<AnalysisTask> {
 }
 
 /** 查询当前用户的分析任务列表 */
-export async function listAnalyzeTasks(params?: { task_type?: string; status?: string; limit?: number }): Promise<{ tasks: AnalysisTask[] }> {
+export async function listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number }): Promise<{ tasks: AnalysisTask[] }> {
   const q = new URLSearchParams()
   if (params?.task_type) q.set('task_type', params.task_type)
   if (params?.status) q.set('status', params.status)
+  if (params?.search?.trim()) q.set('search', params.search.trim())
   if (params?.limit != null && Number.isFinite(params.limit)) q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
   const url = `/api/analyze/tasks${q.toString() ? '?' + q.toString() : ''}`
   const res = await authenticatedRequest(url, { method: 'GET', timeout: 20000 })
@@ -4766,7 +4767,7 @@ export interface CheckinLeaderboardItem {
 
 export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
 export type CommunityAuthorScope = 'all' | 'priority' | 'public'
-export type CommunityFeedTargetType = 'food_record' | 'exercise_log'
+export type CommunityFeedTargetType = 'food_record' | 'exercise_log' | 'campus_food'
 export type CommunityFeedContentType = 'all' | CommunityFeedTargetType
 
 export interface CommunityFeedQueryParams {
@@ -4786,6 +4787,9 @@ export type CommunityFeedRecord = FoodRecord & {
   calories_burned?: number | null
   duration_min?: number | null
   ai_reasoning?: string | null
+  price?: number | null
+  school?: string | null
+  canteen?: string | null
 }
 
 /** 圈子 Feed 单条（好友 + 自己今日饮食 + 点赞信息） */
@@ -5253,6 +5257,34 @@ export interface PublicFoodLibraryItem {
   collected?: boolean
   /** 作者信息 */
   author?: { id: string; nickname: string; avatar: string }
+  /** 是否为校园食堂菜品 */
+  is_campus_food?: boolean
+  /** 学校名称 */
+  school_name?: string | null
+  /** 校区 */
+  campus_name?: string | null
+  /** 食堂名称 */
+  canteen_name?: string | null
+  /** 楼层 */
+  floor?: string | null
+  /** 窗口名称 */
+  window_name?: string | null
+  /** 价格 */
+  price?: number | null
+  /** 价格类型: fixed/weight/range/combo/unknown */
+  price_type?: string | null
+  /** 价格下限（区间价） */
+  price_min?: number | null
+  /** 价格上限（区间价） */
+  price_max?: number | null
+  /** 价格单位 */
+  price_unit?: string | null
+  /** 价格采集日期 */
+  price_collected_at?: string | null
+  /** 份量描述 */
+  portion_description?: string | null
+  /** 校园位置展示文案 */
+  campus_location_text?: string | null
 }
 
 /** 公共食物库评论 */
@@ -5294,6 +5326,20 @@ export interface CreatePublicFoodLibraryRequest {
   city?: string
   district?: string
   detail_address?: string
+  /** 是否为校园食堂菜品 */
+  is_campus_food?: boolean
+  school_name?: string
+  campus_name?: string
+  canteen_name?: string
+  floor?: string
+  window_name?: string
+  price?: number
+  price_type?: string
+  price_min?: number
+  price_max?: number
+  price_unit?: string
+  price_collected_at?: string
+  portion_description?: string
 }
 
 /** 公共食物库列表查询参数 */
@@ -5303,9 +5349,13 @@ export interface PublicFoodLibraryListParams {
   merchant_name?: string
   min_calories?: number
   max_calories?: number
-  sort_by?: 'latest' | 'hot' | 'rating' | 'balanced' | 'high_protein' | 'low_calorie' | 'recommended'
+  sort_by?: 'latest' | 'hot' | 'rating' | 'balanced' | 'high_protein' | 'low_calorie' | 'recommended' | 'value'
   limit?: number
   offset?: number
+  is_campus_food?: boolean
+  school_name?: string
+  canteen_name?: string
+  is_campus_highlight?: boolean
 }
 
 /** 创建公共食物库条目（上传/分享） */
@@ -5336,6 +5386,10 @@ export async function getPublicFoodLibraryList(
   if (params?.sort_by) q.set('sort_by', params.sort_by)
   if (params?.limit !== undefined) q.set('limit', String(params.limit))
   if (params?.offset !== undefined) q.set('offset', String(params.offset))
+  if (params?.is_campus_food !== undefined) q.set('is_campus_food', String(params.is_campus_food))
+  if (params?.school_name) q.set('school_name', params.school_name)
+  if (params?.canteen_name) q.set('canteen_name', params.canteen_name)
+  if (params?.is_campus_highlight !== undefined) q.set('is_campus_highlight', String(params.is_campus_highlight))
   const qs = q.toString()
   const url = qs ? `/api/public-food-library?${qs}` : '/api/public-food-library'
   const response = await authenticatedRequest(url, { method: 'GET', timeout: 10000 })
@@ -5745,4 +5799,57 @@ export async function estimateExerciseCalories(exerciseDesc: string): Promise<{
     reasoning?: string
     profile_snapshot?: Record<string, any>
   }
+}
+
+/** 学校搜索 */
+export interface SchoolItem {
+  id: string
+  name: string
+  province?: string
+  city?: string
+}
+
+export async function searchSchools(keyword: string, province?: string, limit = 20): Promise<SchoolItem[]> {
+  const q = new URLSearchParams()
+  if (keyword) q.set('keyword', keyword)
+  if (province) q.set('province', province)
+  q.set('limit', String(limit))
+  const response = await authenticatedRequest(`/api/schools?${q.toString()}`, {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '搜索学校失败')
+  }
+  return unwrapResponse<SchoolItem[]>(response) || []
+}
+
+/** 获取有学校的省份列表 */
+export async function getSchoolProvinces(): Promise<string[]> {
+  const response = await authenticatedRequest('/api/schools/provinces', {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取省份列表失败')
+  }
+  return unwrapResponse<string[]>(response) || []
+}
+
+/** 根据 IP 获取当前地理位置 */
+export interface LocationInfo {
+  country: string
+  province: string
+  city: string
+}
+
+export async function getUserLocation(): Promise<LocationInfo> {
+  const response = await authenticatedRequest('/api/location', {
+    method: 'GET',
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '获取定位失败')
+  }
+  return unwrapResponse<LocationInfo>(response) || { country: '', province: '', city: '' }
 }

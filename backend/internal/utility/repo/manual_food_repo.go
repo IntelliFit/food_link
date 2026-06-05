@@ -391,6 +391,17 @@ func (r *ManualFoodRepo) listCatalogItems(ctx context.Context, userID string, ca
 	if category == "custom" {
 		return r.ListCustomFoods(ctx, userID, pageSize, offset)
 	}
+	if category == "campus" {
+		items, err := r.listCampusCatalogItems(ctx, pageSize+1, offset)
+		if err != nil {
+			return nil, false, err
+		}
+		hasMore := len(items) > pageSize
+		if hasMore {
+			items = items[:pageSize]
+		}
+		return items, hasMore, nil
+	}
 
 	userItems, err := r.listGlobalFrequentRecordItems(ctx, category, pageSize+1, offset)
 	if err != nil {
@@ -708,6 +719,24 @@ func (r *ManualFoodRepo) listPublicLibrary(ctx context.Context, limit int) ([]do
 	return results, nil
 }
 
+func (r *ManualFoodRepo) listCampusCatalogItems(ctx context.Context, limit int, offset int) ([]domain.ManualFoodResult, error) {
+	var rows []publicdomain.PublicFoodItem
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND is_campus_food = ? AND total_calories > 0", "published", true).
+		Order("collection_count DESC, like_count DESC, published_at DESC NULLS LAST, created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	results := make([]domain.ManualFoodResult, 0, len(rows))
+	for _, row := range rows {
+		results = append(results, r.manualFoodResultFromPublic(row, false))
+	}
+	return results, nil
+}
+
 func (r *ManualFoodRepo) listNutritionLibrary(ctx context.Context, limit int) ([]domain.ManualFoodResult, error) {
 	var rows []fooddomain.FoodNutrition
 	err := r.db.WithContext(ctx).
@@ -951,8 +980,14 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 		title = "真实餐食"
 	}
 	subtitleParts := make([]string, 0, 2)
-	if merchant := strings.TrimSpace(item.MerchantName); merchant != "" {
-		subtitleParts = append(subtitleParts, merchant)
+	if item.IsCampusFood {
+		if loc := strings.TrimSpace(item.CampusLocationText); loc != "" {
+			subtitleParts = append(subtitleParts, loc)
+		}
+	} else {
+		if merchant := strings.TrimSpace(item.MerchantName); merchant != "" {
+			subtitleParts = append(subtitleParts, merchant)
+		}
 	}
 	if desc := strings.TrimSpace(item.Description); desc != "" && desc != title {
 		subtitleParts = append(subtitleParts, desc)
@@ -979,6 +1014,15 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 	if item.TotalCalories > 0 && item.TotalCalories <= 350 {
 		highlights = append(highlights, fmt.Sprintf("%.0f kcal", item.TotalCalories))
 	}
+	sourceLabel := "真实餐食"
+	recommendReason := "整份复用更快，适合商家餐和外卖"
+	if item.IsCampusFood {
+		sourceLabel = "校园食堂"
+		recommendReason = "校园真实菜品，热量价格一目了然"
+		if item.Price > 0 {
+			highlights = append([]string{fmtPriceDisplay(item.Price, item.PriceType, item.PriceUnit)}, highlights...)
+		}
+	}
 	result := domain.ManualFoodResult{
 		ID:                  item.ID,
 		Source:              "public_library",
@@ -994,8 +1038,8 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 		ImagePath:           item.ImagePath,
 		ImagePaths:          item.ImagePaths,
 		PortionLabel:        portionLabel,
-		SourceLabel:         "真实餐食",
-		RecommendReason:     "整份复用更快，适合商家餐和外卖",
+		SourceLabel:         sourceLabel,
+		RecommendReason:     recommendReason,
 		NutritionHighlights: highlights,
 		Collected:           collected,
 		LikeCount:           item.LikeCount,
@@ -1869,6 +1913,7 @@ func (r *ManualFoodRepo) mergeNutritionLibraryIntoManualFoodResult(
 func manualFoodCatalogCategories() []domain.ManualFoodCatalogCategory {
 	return []domain.ManualFoodCatalogCategory{
 		{Key: "common", Label: "常见"},
+		{Key: "campus", Label: "校园食堂"},
 		{Key: "custom", Label: "自定义"},
 		{Key: "recent", Label: "最近"},
 		{Key: "favorites", Label: "收藏"},
@@ -2321,4 +2366,29 @@ func maxInt(left, right int) int {
 		return left
 	}
 	return right
+}
+
+func fmtPriceDisplay(price float64, priceType, priceUnit string) string {
+	if price <= 0 {
+		return "价格待补充"
+	}
+	switch priceType {
+	case "weight":
+		if priceUnit != "" {
+			return fmt.Sprintf("%.0f%s", price, priceUnit)
+		}
+		return fmt.Sprintf("%.0f元/kg", price)
+	case "range":
+		return fmt.Sprintf("%.0f-%.0f元", price, price)
+	case "combo":
+		if priceUnit != "" {
+			return fmt.Sprintf("%.0f%s", price, priceUnit)
+		}
+		return fmt.Sprintf("%.0f元/套餐", price)
+	default:
+		if priceUnit != "" {
+			return fmt.Sprintf("%.0f%s", price, priceUnit)
+		}
+		return fmt.Sprintf("%.0f元/份", price)
+	}
 }

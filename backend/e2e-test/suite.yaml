@@ -28,6 +28,7 @@ default_vars:
 
 seed_sql:
   - "fixtures/base.sql"
+  - "fixtures/schools.sql"
 
 route_smoke:
   enabled: true

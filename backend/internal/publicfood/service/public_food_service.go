@@ -70,14 +70,30 @@ type CreateInput struct {
 	City               *string
 	District           *string
 	DetailAddress      *string
+	// Campus fields
+	IsCampusFood       bool
+	SchoolName         *string
+	CampusName         *string
+	CanteenName        *string
+	Floor              *string
+	WindowName         *string
+	Price              *float64
+	PriceType          *string
+	PriceMin           *float64
+	PriceMax           *float64
+	PriceUnit          *string
+	PriceCollectedAt   *time.Time
+	PortionDescription *string
 }
 
 func (s *PublicFoodService) Create(ctx context.Context, userID string, input CreateInput) (string, error) {
-	if strings.TrimSpace(ptrString(input.Province)) == "" ||
-		strings.TrimSpace(ptrString(input.City)) == "" ||
-		strings.TrimSpace(ptrString(input.District)) == "" ||
-		input.Latitude == nil || input.Longitude == nil {
-		return "", &commonerrors.AppError{Code: 10002, Message: "公共食物库上传必须带完整地理位置", HTTPStatus: 400}
+	if !input.IsCampusFood {
+		if strings.TrimSpace(ptrString(input.Province)) == "" ||
+			strings.TrimSpace(ptrString(input.City)) == "" ||
+			strings.TrimSpace(ptrString(input.District)) == "" ||
+			input.Latitude == nil || input.Longitude == nil {
+			return "", &commonerrors.AppError{Code: 10002, Message: "公共食物库上传必须带完整地理位置", HTTPStatus: 400}
+		}
 	}
 	var src map[string]any
 	var err error
@@ -111,6 +127,9 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		}
 	}
 	imagePaths = s.normalizeFoodImageURLs(imagePaths)
+	if err := validateCampusCreateInput(input, imagePaths); err != nil {
+		return "", err
+	}
 
 	firstPath := input.ImagePath
 	if len(imagePaths) > 0 {
@@ -151,9 +170,44 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		District:           ptrString(input.District),
 		DetailAddress:      ptrString(input.DetailAddress),
 		Status:             "pending",
+		IsCampusFood:       input.IsCampusFood,
+		SchoolName:         ptrString(input.SchoolName),
+		CampusName:         ptrString(input.CampusName),
+		CanteenName:        ptrString(input.CanteenName),
+		Floor:              ptrString(input.Floor),
+		WindowName:         ptrString(input.WindowName),
+		Price:              ptrFloat64(input.Price),
+		PriceType:          ptrString(input.PriceType),
+		PriceMin:           ptrFloat64(input.PriceMin),
+		PriceMax:           ptrFloat64(input.PriceMax),
+		PriceUnit:          ptrString(input.PriceUnit),
+		PriceCollectedAt:   input.PriceCollectedAt,
+		PortionDescription: ptrString(input.PortionDescription),
+		CampusLocationText: buildCampusLocationText(input.SchoolName, input.CampusName, input.CanteenName, input.Floor, input.WindowName),
+	}
+	if item.IsCampusFood {
+		item.Status = "published"
+		now := time.Now()
+		item.PublishedAt = &now
+		if item.PriceCollectedAt == nil && hasCampusPrice(item) {
+			item.PriceCollectedAt = &now
+		}
 	}
 	if err := s.repo.CreateItem(ctx, item); err != nil {
 		return "", err
+	}
+	if item.IsCampusFood {
+		if s.rewards != nil {
+			_, _ = s.rewards.AwardPublicFoodUpload(ctx, userID, item.ID, map[string]any{
+				"public_food_item_id": item.ID,
+				"food_name":           item.FoodName,
+				"merchant_name":       item.MerchantName,
+				"is_campus_food":      true,
+				"school_name":         item.SchoolName,
+				"canteen_name":        item.CanteenName,
+			})
+		}
+		return item.ID, nil
 	}
 	text := strings.TrimSpace(strings.Join([]string{
 		item.FoodName, item.MerchantName, item.MerchantAddress, item.Description, item.Insight, item.UserNotes,
@@ -520,4 +574,71 @@ func isDeletedStatus(status string) bool {
 	default:
 		return false
 	}
+}
+
+func ptrFloat64(v *float64) float64 {
+	if v == nil {
+		return 0
+	}
+	return *v
+}
+
+func validateCampusCreateInput(input CreateInput, imagePaths []string) error {
+	if !input.IsCampusFood {
+		return nil
+	}
+	if strings.TrimSpace(ptrString(input.FoodName)) == "" {
+		return &commonerrors.AppError{Code: 10002, Message: "请填写校园菜品名称", HTTPStatus: 400}
+	}
+	if strings.TrimSpace(ptrString(input.SchoolName)) == "" {
+		return &commonerrors.AppError{Code: 10002, Message: "请选择学校", HTTPStatus: 400}
+	}
+	if strings.TrimSpace(ptrString(input.CanteenName)) == "" {
+		return &commonerrors.AppError{Code: 10002, Message: "请填写食堂名称", HTTPStatus: 400}
+	}
+	if len(imagePaths) == 0 {
+		return &commonerrors.AppError{Code: 10002, Message: "请上传校园菜品图片", HTTPStatus: 400}
+	}
+	priceType := strings.TrimSpace(ptrString(input.PriceType))
+	if priceType == "" {
+		return nil
+	}
+	switch priceType {
+	case "fixed", "weight", "range", "combo", "unknown":
+	default:
+		return &commonerrors.AppError{Code: 10002, Message: "计价方式不正确", HTTPStatus: 400}
+	}
+	if priceType == "range" {
+		if input.PriceMin == nil || input.PriceMax == nil || *input.PriceMin <= 0 || *input.PriceMax <= 0 || *input.PriceMin > *input.PriceMax {
+			return &commonerrors.AppError{Code: 10002, Message: "请填写正确的价格区间", HTTPStatus: 400}
+		}
+	}
+	return nil
+}
+
+func hasCampusPrice(item *domain.PublicFoodItem) bool {
+	if item == nil {
+		return false
+	}
+	return item.Price > 0 || item.PriceMin > 0 || item.PriceMax > 0
+}
+
+func buildCampusLocationText(school, campus, canteen, floor, window *string) string {
+	parts := []string{}
+	if school != nil && *school != "" {
+		parts = append(parts, *school)
+	}
+	if campus != nil && *campus != "" {
+		parts = append(parts, *campus)
+	}
+	if canteen != nil && *canteen != "" {
+		parts = append(parts, *canteen)
+	}
+	if floor != nil && *floor != "" {
+		parts = append(parts, *floor)
+	}
+	if window != nil && *window != "" {
+		parts = append(parts, *window)
+	}
+	return strings.Join(parts, " · ")
 }

@@ -1608,6 +1608,26 @@ $community-border-soft: rgb(92 184 150 / 18%);
   color: #0f766e;
 }
 
+.feed-tag-campus {
+  color: #15803d;
+}
+
+.feed-calorie-campus {
+  background: linear-gradient(to right, #f97316 0%, #fb923c 100%);
+  box-shadow: 0 4rpx 12rpx rgb(249 115 22 / 24%);
+}
+
+.feed-campus-nutrition,
+.feed-campus-location {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.feed-campus-nutrition .feed-macros-text,
+.feed-campus-location .feed-macros-text {
+  color: #047857;
+}
+
 .user-avatar {
   width: 80rpx;
   height: 80rpx;

@@ -696,8 +696,8 @@ func referenceObjectsAsAny(items []map[string]any) []any {
 	return out
 }
 
-func (s *TaskService) ListTasks(ctx context.Context, userID, taskType, status string, limit int) ([]domain.AnalysisTask, error) {
-	tasks, err := s.tasks.ListTasksByUser(ctx, userID, taskType, status, limit)
+func (s *TaskService) ListTasks(ctx context.Context, userID, taskType, status, search string, limit int) ([]domain.AnalysisTask, error) {
+	tasks, err := s.tasks.ListTasksByUser(ctx, userID, taskType, status, search, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -728,7 +728,7 @@ func (s *TaskService) ListTasks(ctx context.Context, userID, taskType, status st
 }
 
 func (s *TaskService) CountTasks(ctx context.Context, userID string) (int64, error) {
-	tasks, err := s.tasks.ListTasksByUser(ctx, userID, "", "", 10000)
+	tasks, err := s.tasks.ListTasksByUser(ctx, userID, "", "", "", 10000)
 	if err != nil {
 		return 0, err
 	}
@@ -736,7 +736,7 @@ func (s *TaskService) CountTasks(ctx context.Context, userID string) (int64, err
 }
 
 func (s *TaskService) CountTasksByStatus(ctx context.Context, userID string) (map[string]any, error) {
-	tasks, err := s.tasks.ListTasksByUser(ctx, userID, "", "", 500)
+	tasks, err := s.tasks.ListTasksByUser(ctx, userID, "", "", "", 500)
 	if err != nil {
 		return nil, err
 	}

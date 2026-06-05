@@ -115,8 +115,20 @@ func (f *FoodItem) UnmarshalJSON(data []byte) error {
 			f.Ratio = 100
 		}
 	}
+	if f.Ratio > 100 {
+		f.Ratio = 100
+	}
+	if f.Ratio < 0 {
+		f.Ratio = 0
+	}
 	if raw.Intake == nil && f.Weight > 0 {
 		f.Intake = f.Weight * f.Ratio / 100
+	}
+	if f.Intake > f.Weight {
+		f.Intake = f.Weight
+	}
+	if f.Intake < 0 {
+		f.Intake = 0
 	}
 	return nil
 }

@@ -1754,6 +1754,45 @@ function IndexPage() {
     }
   }
 
+  const handleMealShare = async () => {
+    if (!mealActionRecordId) return
+    try {
+      Taro.showLoading({ title: '加载中...', mask: true })
+      let record = getCachedMealFullRecord(mealActionRecordId)
+      if (!record || !String(record.id || '').trim()) {
+        const res = await getFoodRecordById(mealActionRecordId)
+        record = res.record
+      }
+      if (!record) {
+        Taro.hideLoading()
+        Taro.showToast({ title: '记录加载失败', icon: 'none' })
+        return
+      }
+      const items = (record.items || []).map((item: any) => ({
+        name: item.name || '',
+        weight: item.weight || 0,
+        nutrients: item.nutrients
+      }))
+      const shareData = {
+        imageUrl: record.image_path || '',
+        imageUrls: record.image_paths || [],
+        description: record.description || '',
+        insight: record.insight || '',
+        items,
+        totalCalories: record.total_calories || 0,
+        totalProtein: record.total_protein || 0,
+        totalCarbs: record.total_carbs || 0,
+        totalFat: record.total_fat || 0
+      }
+      Taro.setStorageSync('analyzeShareData', shareData)
+      Taro.hideLoading()
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-share/index')}?from_analyze=1` })
+    } catch (e: any) {
+      Taro.hideLoading()
+      await showUnifiedApiError(e, '加载失败')
+    }
+  }
+
   const handleMealDelete = async () => {
     if (!mealActionRecordId) return
     const currentDate = selectedDateRef.current || formatDateKey(new Date())
@@ -3659,6 +3698,7 @@ function IndexPage() {
         onClose={() => setMealActionSheetVisible(false)}
         onEdit={handleMealEdit}
         onPoster={handleMealPoster}
+        onShare={handleMealShare}
         onDelete={handleMealDelete}
       />
 

@@ -239,16 +239,24 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 		if likeInfo == nil {
 			likeInfo = &repo.LikeInfo{}
 		}
+		likeCount := likeInfo.Count
+		commentCount := commentCountMap[targetKey]
+		liked := likeInfo.Liked
+		// Campus food items use denormalized counts from public_food_library
+		if rec.FeedType == "campus_food" {
+			likeCount = rec.LikeCount
+			commentCount = rec.CommentCount
+		}
 		item := FeedItem{
 			TargetType:      targetType,
 			TargetID:        targetID,
 			Record:          rec,
 			Author:          author,
-			LikeCount:       likeInfo.Count,
-			Liked:           likeInfo.Liked,
+			LikeCount:       likeCount,
+			Liked:           liked,
 			IsMine:          viewerUserID != "" && rec.UserID == viewerUserID,
-			RecommendReason: s.buildRecommendReason(&rec, params.SortBy, params.MealType, params.DietGoal, nil, likeInfo.Count, commentCountMap[targetKey]),
-			CommentCount:    commentCountMap[targetKey],
+			RecommendReason: s.buildRecommendReason(&rec, params.SortBy, params.MealType, params.DietGoal, nil, likeCount, commentCount),
+			CommentCount:    commentCount,
 		}
 		if params.IncludeComments {
 			item.Comments = commentsMap[targetKey]

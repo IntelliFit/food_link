@@ -77,7 +77,7 @@ func (m *mockTaskService) SubmitTextTask(ctx context.Context, userID string, inp
 func (m *mockTaskService) CreateBatchTask(ctx context.Context, userID string, imageURLs []string, payload map[string]any, result map[string]any) (string, error) {
 	return m.batchTaskID, m.batchTaskErr
 }
-func (m *mockTaskService) ListTasks(ctx context.Context, userID, taskType, status string, limit int) ([]domain.AnalysisTask, error) {
+func (m *mockTaskService) ListTasks(ctx context.Context, userID, taskType, status, search string, limit int) ([]domain.AnalysisTask, error) {
 	return m.tasks, m.listErr
 }
 func (m *mockTaskService) CountTasks(ctx context.Context, userID string) (int64, error) {

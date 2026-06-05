@@ -37,6 +37,22 @@ type PublicFoodItem struct {
 	AvgRating          float64          `gorm:"column:avg_rating" json:"avg_rating"`
 	CreatedAt          *time.Time       `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt          *time.Time       `gorm:"column:updated_at" json:"updated_at"`
+	// Campus canteen fields
+	IsCampusFood       bool             `gorm:"column:is_campus_food" json:"is_campus_food"`
+	SchoolName         string           `gorm:"column:school_name" json:"school_name,omitempty"`
+	CampusName         string           `gorm:"column:campus_name" json:"campus_name,omitempty"`
+	CanteenName        string           `gorm:"column:canteen_name" json:"canteen_name,omitempty"`
+	Floor              string           `gorm:"column:floor" json:"floor,omitempty"`
+	WindowName         string           `gorm:"column:window_name" json:"window_name,omitempty"`
+	Price              float64          `gorm:"column:price" json:"price,omitempty"`
+	PriceType          string           `gorm:"column:price_type" json:"price_type,omitempty"`
+	PriceMin           float64          `gorm:"column:price_min" json:"price_min,omitempty"`
+	PriceMax           float64          `gorm:"column:price_max" json:"price_max,omitempty"`
+	PriceUnit          string           `gorm:"column:price_unit" json:"price_unit,omitempty"`
+	PriceCollectedAt   *time.Time       `gorm:"column:price_collected_at" json:"price_collected_at,omitempty"`
+	PortionDescription string           `gorm:"column:portion_description" json:"portion_description,omitempty"`
+	IsCampusHighlight  bool             `gorm:"column:is_campus_highlight" json:"is_campus_highlight"`
+	CampusLocationText string           `gorm:"column:campus_location_text" json:"campus_location_text,omitempty"`
 }
 
 func (PublicFoodItem) TableName() string { return "public_food_library" }
