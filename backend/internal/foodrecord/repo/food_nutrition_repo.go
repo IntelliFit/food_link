@@ -489,7 +489,7 @@ func (r *FoodNutritionRepo) ResolvePackagedFood(ctx context.Context, input Packa
 	}
 	if len(candidates) > 0 {
 		score := packagedFoodSearchScore(fuzzyQuery, candidates[0])
-		if score < 0.35 {
+		if score < 0.35 || !packagedFoodHasAutoResolveAnchor(fuzzyQuery, candidates[0]) {
 			return &PackagedResolveResult{Status: "unresolved", Score: 0}, nil
 		}
 		if score > 0.99 {
@@ -840,11 +840,11 @@ func (r *FoodNutritionRepo) SearchPackagedFood(ctx context.Context, query string
 		terms = []string{raw}
 	}
 	candidateLimit := limit * 6
-	if candidateLimit < 300 {
-		candidateLimit = 300
+	if candidateLimit < 800 {
+		candidateLimit = 800
 	}
-	if candidateLimit > 500 {
-		candidateLimit = 500
+	if candidateLimit > 1500 {
+		candidateLimit = 1500
 	}
 	whereParts := make([]string, 0, len(terms))
 	args := make([]any, 0, len(terms)*9)
@@ -934,6 +934,17 @@ func (r *FoodNutritionRepo) SearchPackagedFood(ctx context.Context, query string
 		}
 		return left > right
 	})
+	filtered := foods[:0]
+	for _, food := range foods {
+		if packagedFoodProductTypeConflict(raw, food) {
+			continue
+		}
+		if !packagedFoodHasSearchAnchor(raw, food) {
+			continue
+		}
+		filtered = append(filtered, food)
+	}
+	foods = filtered
 	if len(foods) > limit {
 		foods = foods[:limit]
 	}
@@ -989,8 +1000,8 @@ func packagedFoodSearchTerms(query string) []string {
 	flush()
 	normalizedRaw := normalizeFoodName(raw)
 	for _, keyword := range []string{
-		"果冻爽", "果粒爽", "果冻", "橙味", "橙汁", "葡萄味", "葡萄", "蜜桃味", "蜜桃", "苹果味", "苹果", "草莓味", "草莓",
-		"冰淇淋", "雪糕", "蛋筒", "酸奶", "牛乳", "饮料", "汽水", "咖啡", "固体饮料", "啤酒", "薯片", "原切", "马铃薯片", "饼干", "巧克力", "面包", "豆沙小饼", "豆沙", "小饼", "花生夹心", "花生", "桃李", "雀巢", "nescafe", "三得利", "suntory", "纤漾饮", "荷叶", "茉莉", "无糖", "士力架", "snickers", "cici",
+		"果冻爽", "果粒爽", "果冻", "橙味", "橙汁", "葡萄味", "葡萄", "蜜桃味", "蜜桃", "苹果味", "苹果", "草莓味", "草莓", "番茄味", "番茄",
+		"冰淇淋", "雪糕", "蛋筒", "酸奶", "牛乳", "饮料", "汽水", "咖啡", "固体饮料", "啤酒", "薯片", "原切", "马铃薯片", "饼干", "巧克力", "面包", "豆沙小饼", "豆沙", "小饼", "花生夹心", "花生", "蛋白粉", "酵母蛋白", "乳清蛋白", "增肌粉", "桃李", "雀巢", "nescafe", "三得利", "suntory", "纤漾饮", "荷叶", "茉莉", "无糖", "士力架", "snickers", "cici",
 	} {
 		if strings.Contains(normalizedRaw, normalizeFoodName(keyword)) || strings.Contains(strings.ToLower(raw), strings.ToLower(keyword)) {
 			add(keyword)
@@ -1003,6 +1014,9 @@ func packagedFoodSearchTerms(query string) []string {
 }
 
 func packagedFoodSearchScore(query string, food domain.PackagedFood) float64 {
+	if packagedFoodProductTypeConflict(query, food) {
+		return -1
+	}
 	normalizedQuery := normalizeFoodName(query)
 	brand := normalizeFoodName(food.Brand)
 	productName := normalizeFoodName(food.ProductName)
@@ -1054,7 +1068,7 @@ func packagedFoodSearchScore(query string, food domain.PackagedFood) float64 {
 	if len(terms) > 0 {
 		score += float64(matchedTerms) / float64(len(terms)) * 0.18
 	}
-	if brand != "" && strings.Contains(normalizedQuery, brand) {
+	if packagedFoodHasBrandAnchor(normalizedQuery, food) {
 		score += 0.12
 	}
 	if flavorText != "" && strings.Contains(normalizedQuery, flavorText) {
@@ -1083,6 +1097,264 @@ func packagedFoodSearchScore(query string, food domain.PackagedFood) float64 {
 	return score
 }
 
+func packagedFoodProductTypeConflict(query string, food domain.PackagedFood) bool {
+	queryType := packagedFoodProductType(normalizeFoodName(query))
+	if queryType == "" {
+		return false
+	}
+	foodText := normalizeFoodName(strings.Join(filterNonEmptyStrings(
+		food.Brand,
+		food.ProductName,
+		food.DisplayName,
+		stringPtr(food.PackageCategory),
+		stringPtr(food.FlavorText),
+		stringPtr(food.SpecText),
+	), " "))
+	foodType := packagedFoodProductType(foodText)
+	if queryType == "protein_powder" {
+		return foodType != "protein_powder"
+	}
+	return false
+}
+
+func packagedFoodHasSearchAnchor(query string, food domain.PackagedFood) bool {
+	normalizedQuery := normalizeFoodName(query)
+	identityText := packagedFoodIdentityText(food)
+	if normalizedQuery == "" || identityText == "" {
+		return false
+	}
+	if queryType := packagedFoodProductType(normalizedQuery); queryType != "" {
+		required := packagedFoodProductTypeRequiredKeyword(queryType)
+		if required != "" && !strings.Contains(identityText, required) {
+			return false
+		}
+	}
+	if packagedFoodHasExactOrContainmentAnchor(normalizedQuery, food, identityText) {
+		return true
+	}
+	if packagedFoodHasBrandAnchor(normalizedQuery, food) {
+		return true
+	}
+	if packagedFoodHasSpecAnchor(normalizedQuery, food) {
+		return true
+	}
+	return packagedFoodStrongTermCount(query, identityText) > 0
+}
+
+func packagedFoodHasAutoResolveAnchor(query string, food domain.PackagedFood) bool {
+	normalizedQuery := normalizeFoodName(query)
+	identityText := packagedFoodIdentityText(food)
+	if normalizedQuery == "" || identityText == "" {
+		return false
+	}
+	if queryType := packagedFoodProductType(normalizedQuery); queryType != "" {
+		required := packagedFoodProductTypeRequiredKeyword(queryType)
+		if required != "" && !strings.Contains(identityText, required) {
+			return false
+		}
+	}
+	if packagedFoodHasExactOrContainmentAnchor(normalizedQuery, food, identityText) {
+		return true
+	}
+	hasBrand := packagedFoodHasBrandAnchor(normalizedQuery, food)
+	hasSpec := packagedFoodHasSpecAnchor(normalizedQuery, food)
+	coreCount := packagedFoodCoreTermCount(query, identityText, food)
+	weakCount := packagedFoodWeakIdentityTermCount(query, identityText)
+	if hasBrand && (coreCount > 0 || hasSpec || weakCount >= 2) {
+		return true
+	}
+	if hasSpec && (coreCount > 0 || weakCount > 0) {
+		return true
+	}
+	return coreCount >= 2
+}
+
+func packagedFoodHasExactOrContainmentAnchor(normalizedQuery string, food domain.PackagedFood, identityText string) bool {
+	productName := normalizeFoodName(food.ProductName)
+	displayName := normalizeFoodName(food.DisplayName)
+	if productName != "" && productName == normalizedQuery {
+		return true
+	}
+	if displayName != "" && displayName == normalizedQuery {
+		return true
+	}
+	return runeCount(normalizedQuery) >= 6 && strings.Contains(identityText, normalizedQuery)
+}
+
+func packagedFoodHasBrandAnchor(normalizedQuery string, food domain.PackagedFood) bool {
+	for _, brandTerm := range packagedFoodBrandTerms(food.Brand) {
+		if strings.Contains(normalizedQuery, brandTerm) {
+			return true
+		}
+	}
+	return false
+}
+
+func packagedFoodHasSpecAnchor(normalizedQuery string, food domain.PackagedFood) bool {
+	if food.NetWeightG > 0 && strings.Contains(normalizedQuery, normalizeFoodName(fmt.Sprintf("%.0fg", food.NetWeightG))) {
+		return true
+	}
+	if food.NetContentValue > 0 && food.NetContentUnit != nil && strings.Contains(normalizedQuery, normalizeFoodName(formatContentAmount(food.NetContentValue, *food.NetContentUnit))) {
+		return true
+	}
+	specText := normalizeFoodName(stringPtr(food.SpecText))
+	return specText != "" && runeCount(specText) >= 3 && strings.Contains(normalizedQuery, specText)
+}
+
+func packagedFoodStrongTermCount(query string, identityText string) int {
+	count := 0
+	seen := map[string]bool{}
+	for _, term := range packagedFoodSearchTerms(query) {
+		termNorm := normalizeFoodName(term)
+		if termNorm == "" || seen[termNorm] || packagedFoodWeakMatchTerm(termNorm) {
+			continue
+		}
+		seen[termNorm] = true
+		if strings.Contains(identityText, termNorm) {
+			count++
+		}
+	}
+	return count
+}
+
+func packagedFoodCoreTermCount(query string, identityText string, food domain.PackagedFood) int {
+	count := 0
+	seen := map[string]bool{}
+	brandTerms := map[string]bool{}
+	for _, brandTerm := range packagedFoodBrandTerms(food.Brand) {
+		brandTerms[brandTerm] = true
+	}
+	for _, term := range packagedFoodSearchTerms(query) {
+		termNorm := normalizeFoodName(term)
+		if termNorm == "" || seen[termNorm] || packagedFoodWeakMatchTerm(termNorm) || brandTerms[termNorm] {
+			continue
+		}
+		seen[termNorm] = true
+		if strings.Contains(identityText, termNorm) {
+			count++
+		}
+	}
+	return count
+}
+
+func packagedFoodWeakIdentityTermCount(query string, identityText string) int {
+	count := 0
+	seen := map[string]bool{}
+	for _, term := range packagedFoodSearchTerms(query) {
+		termNorm := normalizeFoodName(term)
+		if termNorm == "" || seen[termNorm] || !packagedFoodWeakMatchTerm(termNorm) {
+			continue
+		}
+		seen[termNorm] = true
+		if strings.Contains(identityText, termNorm) {
+			count++
+		}
+	}
+	return count
+}
+
+func packagedFoodBrandTerms(brand string) []string {
+	brand = strings.TrimSpace(brand)
+	if brand == "" {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := []string{}
+	add := func(value string) {
+		value = normalizeFoodName(value)
+		if value == "" || runeCount(value) < 2 || seen[value] {
+			return
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	add(brand)
+	var b strings.Builder
+	var mode string
+	flush := func() {
+		if b.Len() == 0 {
+			return
+		}
+		add(b.String())
+		b.Reset()
+		mode = ""
+	}
+	for _, r := range brand {
+		nextMode := ""
+		switch {
+		case unicode.Is(unicode.Han, r):
+			nextMode = "han"
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			nextMode = "latin"
+		default:
+			flush()
+			continue
+		}
+		if mode != "" && mode != nextMode {
+			flush()
+		}
+		mode = nextMode
+		b.WriteRune(r)
+	}
+	flush()
+	return out
+}
+
+func packagedFoodWeakMatchTerm(term string) bool {
+	if term == "" {
+		return true
+	}
+	if runeCount(term) < 2 && !isKnownShortFlavorTerm(term) {
+		return true
+	}
+	weakTerms := []string{
+		"橙味", "橙汁", "葡萄味", "葡萄", "蜜桃味", "蜜桃", "苹果味", "苹果", "草莓味", "草莓", "番茄味", "番茄", "黄桃", "蓝莓", "蔓越莓",
+		"荷叶", "茉莉", "无糖", "低糖", "原味", "风味", "口味",
+		"零食", "雪糕", "冰淇淋", "酸奶", "牛乳", "乳", "饮料", "汽水", "咖啡", "固体饮料", "啤酒", "薯片", "饼干", "巧克力", "面包",
+	}
+	for _, weak := range weakTerms {
+		if term == normalizeFoodName(weak) {
+			return true
+		}
+	}
+	return false
+}
+
+func packagedFoodIdentityText(food domain.PackagedFood) string {
+	return normalizeFoodName(strings.Join(filterNonEmptyStrings(
+		food.Brand,
+		food.ProductName,
+		food.DisplayName,
+		food.ProductFamilyKey,
+		stringPtr(food.PackageCategory),
+		stringPtr(food.FlavorText),
+		stringPtr(food.SpecText),
+		normalizeFoodName(stringPtr(food.Barcode)),
+	), " "))
+}
+
+func packagedFoodProductTypeRequiredKeyword(productType string) string {
+	switch productType {
+	case "protein_powder":
+		return "蛋白"
+	default:
+		return ""
+	}
+}
+
+func packagedFoodProductType(text string) string {
+	if text == "" {
+		return ""
+	}
+	if strings.Contains(text, "蛋白粉") || strings.Contains(text, "乳清蛋白") || strings.Contains(text, "增肌粉") || strings.Contains(text, "酵母蛋白") {
+		return "protein_powder"
+	}
+	if strings.Contains(text, "酸奶") || strings.Contains(text, "酸牛奶") || strings.Contains(text, "发酵乳") || strings.Contains(text, "风味发酵乳") || strings.Contains(text, "乳酸菌") {
+		return "fermented_milk"
+	}
+	return ""
+}
+
 func packagedFoodFlavorGroups(value string) map[string]bool {
 	value = normalizeFoodName(value)
 	if value == "" {
@@ -1095,6 +1367,7 @@ func packagedFoodFlavorGroups(value string) map[string]bool {
 		"apple":      {"苹果", "苹果味", "苹果汁"},
 		"strawberry": {"草莓", "草莓味"},
 		"lemon":      {"柠檬", "柠檬味", "柠檬汁"},
+		"tomato":     {"番茄", "番茄味", "西红柿"},
 	}
 	out := map[string]bool{}
 	for group, keywords := range groups {

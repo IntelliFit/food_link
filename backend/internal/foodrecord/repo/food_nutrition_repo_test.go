@@ -878,6 +878,121 @@ func TestIsGenericPackagedResolveQuery(t *testing.T) {
 	assert.False(t, isGenericPackagedResolveQuery("三得利无糖荷叶茉莉饮料500ml"))
 }
 
+func TestFoodNutritionRepo_ResolvePackagedFoodRejectsProteinPowderYogurtFuzzy(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	flavor := "关山樱花+草莓"
+	spec := "净含量:250克"
+	category := "风味发酵乳"
+	require.NoError(t, db.Create(&domain.PackagedFood{
+		ID:              "pkg-yogurt",
+		Brand:           "光明",
+		ProductName:     "如实 关山樱花+草莓风味发酵乳",
+		DisplayName:     "光明 如实 关山樱花+草莓风味发酵乳 关山樱花+草莓 250g",
+		NormalizedName:  normalizeFoodName("如实 关山樱花+草莓风味发酵乳"),
+		SearchText:      "光明 如实 关山樱花 草莓 风味发酵乳 酸奶",
+		FlavorText:      &flavor,
+		SpecText:        &spec,
+		PackageCategory: &category,
+		NetWeightG:      250,
+		KcalPer100g:     74.33,
+		ProteinPer100g:  3.6,
+		CarbsPer100g:    10,
+		FatPer100g:      3.9,
+		ReviewStatus:    "active",
+		IsActive:        true,
+	}).Error)
+
+	result, err := repo.ResolvePackagedFood(ctx, PackagedFoodResolveInput{Name: "怡可纳草莓味酵母蛋白粉"})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Nil(t, result.Food)
+	assert.Equal(t, "unresolved", result.Status)
+}
+
+func TestFoodNutritionRepo_SearchPackagedFoodFiltersProteinPowderYogurtConflict(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	flavor := "草莓"
+	category := "风味发酵乳"
+	require.NoError(t, db.Create(&domain.PackagedFood{
+		ID:              "pkg-yogurt",
+		Brand:           "光明",
+		ProductName:     "草莓风味发酵乳",
+		DisplayName:     "光明 草莓风味发酵乳 250g",
+		NormalizedName:  normalizeFoodName("草莓风味发酵乳"),
+		SearchText:      "光明 草莓 风味发酵乳 酸奶",
+		FlavorText:      &flavor,
+		PackageCategory: &category,
+		NetWeightG:      250,
+		KcalPer100g:     74.33,
+		ProteinPer100g:  3.6,
+		ReviewStatus:    "active",
+		IsActive:        true,
+	}).Error)
+
+	results, err := repo.SearchPackagedFood(ctx, "怡可纳草莓味酵母蛋白粉", 5)
+	require.NoError(t, err)
+	assert.Empty(t, results)
+}
+
+func TestPackagedFoodProductTypeConflictRejectsProteinPowderYogurt(t *testing.T) {
+	flavor := "关山樱花+草莓"
+	category := "风味发酵乳"
+	food := domain.PackagedFood{
+		Brand:           "光明",
+		ProductName:     "如实 关山樱花+草莓风味发酵乳",
+		DisplayName:     "光明 如实 关山樱花+草莓风味发酵乳 250g",
+		SearchText:      "光明 如实 草莓 风味发酵乳 酸奶",
+		FlavorText:      &flavor,
+		PackageCategory: &category,
+	}
+
+	assert.True(t, packagedFoodProductTypeConflict("怡可纳草莓味酵母蛋白粉", food))
+	assert.Equal(t, -1.0, packagedFoodSearchScore("怡可纳草莓味酵母蛋白粉", food))
+}
+
+func TestPackagedFoodAutoResolveAnchorRequiresMoreThanWeakFlavor(t *testing.T) {
+	flavor := "黄桃"
+	spec := "260g"
+	category := "酸奶"
+	food := domain.PackagedFood{
+		Brand:           "光明",
+		ProductName:     "黄桃大果粒酸奶",
+		DisplayName:     "光明黄桃大果粒酸奶 260g",
+		FlavorText:      &flavor,
+		SpecText:        &spec,
+		PackageCategory: &category,
+		NetWeightG:      260,
+	}
+
+	assert.False(t, packagedFoodHasAutoResolveAnchor("黄桃味", food))
+	assert.True(t, packagedFoodHasAutoResolveAnchor("光明黄桃大果粒酸奶260g", food))
+}
+
+func TestPackagedFoodAutoResolveAnchorUsesBrandAliasWithProductSignals(t *testing.T) {
+	flavor := "墨西哥鸡汁番茄味"
+	spec := "净含量：135克"
+	category := "膨化食品"
+	food := domain.PackagedFood{
+		Brand:           "乐事（Lay's）",
+		ProductName:     "薯片",
+		DisplayName:     "乐事（Lay's） 薯片 墨西哥鸡汁番茄味 135g",
+		FlavorText:      &flavor,
+		SpecText:        &spec,
+		PackageCategory: &category,
+		NetWeightG:      135,
+	}
+
+	assert.True(t, packagedFoodHasBrandAnchor(normalizeFoodName("乐事薯片番茄味"), food))
+	assert.True(t, packagedFoodHasAutoResolveAnchor("乐事薯片番茄味", food))
+	assert.False(t, packagedFoodHasAutoResolveAnchor("乐事", food))
+}
+
 func TestPackagedFoodSearchScoreMatchesCiciOrangeJellyDrink(t *testing.T) {
 	flavor := "橙味"
 	spec := "258g"
