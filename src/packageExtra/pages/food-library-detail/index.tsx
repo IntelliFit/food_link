@@ -32,6 +32,8 @@ import {
 import '@taroify/icons/style'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 
 function getLocalUserDisplay(): { nickname: string; avatar: string } {
   try {
@@ -89,6 +91,7 @@ function getCampusLocationText(item: PublicFoodLibraryItem): string {
 function FoodLibraryDetailPage() {
   const router = useRouter()
   const itemId = router.params.id || ''
+  const { scheme } = useAppColorScheme()
 
   const [loading, setLoading] = useState(true)
   const [item, setItem] = useState<PublicFoodLibraryItem | null>(null)
@@ -106,6 +109,10 @@ function FoodLibraryDetailPage() {
     loadDetail()
     loadComments()
   }, [itemId])
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme)
+  }, [scheme])
 
   const loadDetail = async () => {
     setLoading(true)
@@ -266,9 +273,11 @@ function FoodLibraryDetailPage() {
     }
   }
 
+  const pageClassName = `food-detail-page ${scheme === 'dark' ? 'food-detail-page--dark' : ''}`
+
   if (loading) {
     return (
-      <View className='food-detail-page skeleton-wrapper'>
+      <View className={`${pageClassName} skeleton-wrapper`}>
         {/* 图片骨架 */}
         <View className='skeleton-image' />
 
@@ -334,7 +343,7 @@ function FoodLibraryDetailPage() {
 
   if (!item) {
     return (
-      <View className='food-detail-page'>
+      <View className={pageClassName}>
         <View className='loading-state'>
           <Text className='loading-text'>内容不存在</Text>
         </View>
@@ -349,7 +358,7 @@ function FoodLibraryDetailPage() {
   const isOwner = Boolean(currentUserId && item.user_id === currentUserId)
 
   return (
-    <View className='food-detail-page'>
+    <View className={pageClassName}>
       {/* 图片（支持多图轮播） */}
       <View className='image-section'>
         {imageList.length > 0 ? (

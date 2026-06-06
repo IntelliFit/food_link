@@ -893,3 +893,123 @@
     transform: rotate(360deg);
   }
 }
+
+.food-detail-page--dark {
+  background: #101715;
+
+  .image-section,
+  .image-placeholder,
+  .skeleton-image {
+    background: #18211f;
+  }
+
+  .info-card,
+  .merchant-card,
+  .tags-card,
+  .notes-card,
+  .comments-card,
+  .campus-card,
+  .skeleton-card {
+    background: #18211f;
+    box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 22%);
+  }
+
+  .info-title,
+  .nutrient-value,
+  .author-name,
+  .card-title,
+  .comment-name,
+  .modal-title {
+    color: #f2f7f4;
+  }
+
+  .info-description,
+  .info-insight,
+  .nutrient-label,
+  .publish-time,
+  .campus-portion,
+  .campus-location,
+  .campus-price-date,
+  .merchant-text,
+  .notes-content,
+  .comments-count,
+  .comment-time,
+  .comment-content,
+  .comments-empty,
+  .loading-text,
+  .correction-hint,
+  .rating-label {
+    color: rgb(214 226 220 / 62%);
+  }
+
+  .info-calories-badge,
+  .campus-badge,
+  .tag-item {
+    background: rgb(92 184 150 / 13%);
+    color: #6ee7b7;
+  }
+
+  .nutrients-row,
+  .nutrients-block {
+    border-color: rgb(255 255 255 / 8%);
+  }
+
+  .nutrient-item:not(:last-child)::after {
+    background: rgb(255 255 255 / 10%);
+  }
+
+  .author-avatar,
+  .comment-avatar,
+  .modal-close,
+  .comment-input,
+  .skeleton-block,
+  .nutrient-item-block,
+  .avatar-block {
+    background: #222c29;
+  }
+
+  .author-avatar {
+    border-color: rgb(255 255 255 / 8%);
+  }
+
+  .campus-metric,
+  .comments-count,
+  .comments-empty {
+    background: rgb(255 255 255 / 7%);
+  }
+
+  .merchant-icon-wrapper,
+  .like-btn,
+  .collect-btn,
+  .icon-action {
+    color: rgb(214 226 220 / 58%);
+  }
+
+  .comment-item {
+    border-bottom-color: rgb(255 255 255 / 8%);
+  }
+
+  .bottom-bar {
+    background: rgb(24 33 31 / 92%);
+    border-color: rgb(255 255 255 / 8%);
+    box-shadow: 0 -12rpx 32rpx rgb(0 0 0 / 24%);
+  }
+
+  .comment-modal-content {
+    background: #18211f;
+  }
+
+  .comment-input {
+    color: #f2f7f4;
+    border-color: rgb(255 255 255 / 8%);
+
+    &:focus {
+      background: #222c29;
+      border-color: #5cb896;
+    }
+  }
+
+  .rating-star-wrapper {
+    color: #3d5d51;
+  }
+}

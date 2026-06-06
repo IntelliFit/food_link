@@ -239,12 +239,14 @@ function CampusCanteenPage() {
 
   if (!loggedIn) {
     return (
+      <FlPageThemeRoot>
       <View className='campus-canteen-page'>
         <View className='login-tip'>
           <Text className='login-tip-text'>登录后查看校园食堂</Text>
           <Button className='login-tip-btn' onClick={() => Taro.switchTab({ url: '/pages/profile/index' })}>去登录</Button>
         </View>
       </View>
+      </FlPageThemeRoot>
     )
   }
 
