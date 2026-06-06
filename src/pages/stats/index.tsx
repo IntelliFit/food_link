@@ -77,15 +77,138 @@ function normalizeInsightText(raw: string): string {
 
   return raw
     .replace(/\r\n/g, '\n')
-    .replace(/^\s{0,3}(#{1,6})\s*/gm, '')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/__(.*?)__/g, '$1')
-    .replace(/_(.*?)_/g, '$1')
-    .replace(/`{1,3}([^`]+)`{1,3}/g, '$1')
-    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/```+/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+type InsightInlinePart = {
+  text: string
+  underline?: boolean
+  strong?: boolean
+}
+
+type InsightMarkdownBlock = {
+  type: 'heading' | 'paragraph' | 'list'
+  text?: string
+  items?: string[]
+}
+
+function parseInsightInline(text: string): InsightInlinePart[] {
+  const parts: InsightInlinePart[] = []
+  const pattern = /<u>(.*?)<\/u>|__(.*?)__|\*\*(.*?)\*\*/g
+  let cursor = 0
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) {
+      parts.push({ text: text.slice(cursor, match.index) })
+    }
+    if (match[1] != null) {
+      parts.push({ text: match[1], underline: true })
+    } else if (match[2] != null) {
+      parts.push({ text: match[2], underline: true })
+    } else if (match[3] != null) {
+      parts.push({ text: match[3], strong: true })
+    }
+    cursor = pattern.lastIndex
+  }
+  if (cursor < text.length) {
+    parts.push({ text: text.slice(cursor) })
+  }
+  return parts.filter(part => part.text)
+}
+
+function stripInsightMarkdownPrefix(line: string): string {
+  return line
+    .replace(/^\s{0,3}#{1,6}\s*/, '')
+    .replace(/^\s*[-*+]\s+/, '')
+    .replace(/^\s*\d+[.)]\s+/, '')
+    .trim()
+}
+
+function parseInsightMarkdown(text: string): InsightMarkdownBlock[] {
+  const blocks: InsightMarkdownBlock[] = []
+  const lines = normalizeInsightText(text).split('\n')
+  let paragraph: string[] = []
+  let listItems: string[] = []
+
+  const flushParagraph = () => {
+    if (paragraph.length) {
+      blocks.push({ type: 'paragraph', text: paragraph.join('\n').trim() })
+      paragraph = []
+    }
+  }
+  const flushList = () => {
+    if (listItems.length) {
+      blocks.push({ type: 'list', items: listItems })
+      listItems = []
+    }
+  }
+
+  lines.forEach(rawLine => {
+    const line = rawLine.trim()
+    if (!line) {
+      flushParagraph()
+      flushList()
+      return
+    }
+    if (/^\s{0,3}#{1,6}\s+/.test(rawLine)) {
+      flushParagraph()
+      flushList()
+      blocks.push({ type: 'heading', text: stripInsightMarkdownPrefix(rawLine) })
+      return
+    }
+    if (/^\s*([-*+]|\d+[.)])\s+/.test(rawLine)) {
+      flushParagraph()
+      listItems.push(stripInsightMarkdownPrefix(rawLine))
+      return
+    }
+    flushList()
+    paragraph.push(line)
+  })
+  flushParagraph()
+  flushList()
+  return blocks
+}
+
+function renderInsightInline(text: string) {
+  return parseInsightInline(text).map((part, index) => (
+    <Text
+      key={`${part.text}-${index}`}
+      className={`${part.underline ? 'analysis-md-underline' : ''}${part.strong ? ' analysis-md-strong' : ''}`}
+    >
+      {part.text}
+    </Text>
+  ))
+}
+
+function renderInsightMarkdown(text: string) {
+  return parseInsightMarkdown(text).map((block, index) => {
+    if (block.type === 'heading') {
+      return (
+        <Text key={`heading-${index}`} className='analysis-md-heading'>
+          {renderInsightInline(block.text || '')}
+        </Text>
+      )
+    }
+    if (block.type === 'list') {
+      return (
+        <View key={`list-${index}`} className='analysis-md-list'>
+          {(block.items || []).map((item, itemIndex) => (
+            <View key={`${item}-${itemIndex}`} className='analysis-md-list-item'>
+              <Text className='analysis-md-list-bullet'>•</Text>
+              <Text className='analysis-md-list-text'>{renderInsightInline(item)}</Text>
+            </View>
+          ))}
+        </View>
+      )
+    }
+    return (
+      <Text key={`paragraph-${index}`} className='analysis-md-paragraph'>
+        {renderInsightInline(block.text || '')}
+      </Text>
+    )
+  })
 }
 
 type HeatmapCell = {
@@ -830,7 +953,7 @@ function StatsPage() {
 
   if (guestBrowse) {
     return (
-      <View className='stats-page stats-page--guest'>
+      <View className={`stats-page stats-page--guest ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
         <View className='stats-guest-card'>
           <Text className='stats-guest-title'>登录后查看饮食分析</Text>
           <Text className='stats-guest-desc'>可先浏览首页热量与营养概览，需要账号同步时再登录</Text>
@@ -844,7 +967,7 @@ function StatsPage() {
 
   if (loading && !data) {
     return (
-      <View className='stats-page'>
+      <View className={`stats-page ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
         <View className='loading-wrap'>
           <View className='loading-spinner-md' />
         </View>
@@ -854,7 +977,7 @@ function StatsPage() {
 
   if (error && !data) {
     return (
-      <View className='stats-page'>
+      <View className={`stats-page ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
         <View className='error-wrap'>
           <Text className='iconfont icon-jiesuo error-icon' />
           <Text className='error-text'>{error}</Text>
@@ -932,9 +1055,10 @@ function StatsPage() {
     const y = 154 - ((toSafeNumber(item.value) - weightChartMin) / weightChartRange) * 112
     return `${x.toFixed(1)},${y.toFixed(1)}`
   }).join(' ')
+  const weightChartGridColor = scheme === 'dark' ? '#2f3d39' : '#e2e8f0'
   const weightChartSvg = weightChartEntries.length > 1
     ? `url("data:image/svg+xml,${encodeURIComponent(
-      `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 180'><line x1='32' y1='42' x2='568' y2='42' stroke='#e2e8f0' stroke-width='2'/><line x1='32' y1='98' x2='568' y2='98' stroke='#e2e8f0' stroke-width='2'/><line x1='32' y1='154' x2='568' y2='154' stroke='#e2e8f0' stroke-width='2'/><polyline points='${weightChartPoints}' fill='none' stroke='#5cb896' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/></svg>`
+      `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 180'><line x1='32' y1='42' x2='568' y2='42' stroke='${weightChartGridColor}' stroke-width='2'/><line x1='32' y1='98' x2='568' y2='98' stroke='${weightChartGridColor}' stroke-width='2'/><line x1='32' y1='154' x2='568' y2='154' stroke='${weightChartGridColor}' stroke-width='2'/><polyline points='${weightChartPoints}' fill='none' stroke='#5cb896' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/></svg>`
     )}")`
     : ''
   const heatmapCells: HeatmapCell[] = d.daily_calories.map((item) => {
@@ -1041,7 +1165,7 @@ function StatsPage() {
   }
 
   return (
-    <View className='stats-page'>
+    <View className={`stats-page ${scheme === 'dark' ? 'stats-page--dark' : ''}`}>
       {dataSyncing ? (
         <View className='stats-page__data-sync'>
           <View className='stats-page__data-sync-spinner' />
@@ -1391,15 +1515,9 @@ function StatsPage() {
           <View className='ai-insight-card-top'>
             <View className='ai-insight-card-title-wrap'>
               <Text className='ai-insight-card-title'>AI 风险解读</Text>
-              <Text className='ai-insight-card-summary'>
-                用于把统计结果翻译成更容易理解的长期趋势结论
-              </Text>
             </View>
           </View>
           <View className='ai-insight-card-body'>
-            <View className='ai-disclaimer'>
-              <Text className='ai-disclaimer-text'>本页表达的是饮食相关风险趋势，不构成医学诊断或治疗建议。</Text>
-            </View>
             {canUseStatsInsight && insightGeneratedDate ? (
               <View className={`analysis-status${insightNeedsRefresh ? ' warning' : ''}`}>
                 <View className='analysis-status-copy'>
@@ -1461,7 +1579,7 @@ function StatsPage() {
                 </View>
               </View>
             ) : displayInsightText ? (
-              <Text className='analysis-content'>{displayInsightText}</Text>
+              <View className='analysis-content'>{renderInsightMarkdown(displayInsightText)}</View>
             ) : isTyping ? (
               <View className='analysis-loading'>
                 <Text className='iconfont icon-jiazaixiao analysis-loading-icon' />

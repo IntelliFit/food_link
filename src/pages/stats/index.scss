@@ -62,9 +62,9 @@ $stats-blue-soft: #7aa9ce;
 .stats-range-dropdown {
   position: fixed;
   left: 32rpx;
-  top: $tab-page-fixed-control-top;
+  top: 100rpx;
   z-index: 220;
-  min-width: 156rpx;
+  min-width: 100rpx;
   height: 56rpx;
   padding: 0 18rpx;
   box-sizing: border-box;
@@ -2306,19 +2306,67 @@ $stats-blue-soft: #7aa9ce;
 }
 
 .analysis-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.analysis-md-heading {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 30rpx;
+  line-height: 42rpx;
+  color: #1f3f68;
+  font-weight: 700;
+}
+
+.analysis-md-paragraph {
+  display: block;
   font-size: 28rpx;
   color: #334155;
-  line-height: 1.6;
+  line-height: 46rpx;
   white-space: pre-wrap;
 }
 
-.ai-disclaimer {
-  margin-bottom: 8rpx;
+.analysis-md-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
 }
 
-.ai-disclaimer-text {
-  font-size: 22rpx;
-  color: #64748b;
+.analysis-md-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.analysis-md-list-bullet {
+  flex-shrink: 0;
+  font-size: 28rpx;
+  line-height: 44rpx;
+  color: #5cb896;
+}
+
+.analysis-md-list-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 28rpx;
+  color: #334155;
+  line-height: 44rpx;
+}
+
+.analysis-md-strong {
+  font-weight: 700;
+  color: #24364f;
+}
+
+.analysis-md-underline {
+  color: $stats-primary-deep;
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: #5cb896;
+  text-decoration-thickness: 3rpx;
+  text-underline-offset: 5rpx;
 }
 
 .analysis-loading {
@@ -2646,11 +2694,13 @@ $stats-blue-soft: #7aa9ce;
   min-height: 180rpx;
   display: flex;
   align-items: flex-end;
-  gap: 12rpx;
+  justify-content: space-between;
+  gap: 8rpx;
+  width: 100%;
 }
 
 .water-trend-col {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -2660,6 +2710,7 @@ $stats-blue-soft: #7aa9ce;
 
 .water-trend-bar-wrap {
   width: 100%;
+  max-width: 92rpx;
   height: 150rpx;
   padding: 10rpx;
   display: flex;
@@ -2667,10 +2718,12 @@ $stats-blue-soft: #7aa9ce;
   justify-content: center;
   border-radius: 24rpx;
   background: rgb(226 232 240 / 50%);
+  box-sizing: border-box;
 }
 
 .water-trend-bar {
   width: 100%;
+  min-width: 0;
   border-radius: 999rpx;
   background: linear-gradient(180deg, $stats-blue-soft 0%, $stats-macro-protein 100%);
   box-shadow: 0 8rpx 20rpx rgb(92 158 212 / 18%);
@@ -2690,6 +2743,160 @@ $stats-blue-soft: #7aa9ce;
   font-size: 22rpx;
   line-height: 32rpx;
   color: #64748b;
+}
+
+.stats-page--dark {
+  .risk-overview-title,
+  .risk-section-title,
+  .action-section-title,
+  .ai-insight-card-title,
+  .analysis-md-heading,
+  .analysis-md-paragraph,
+  .analysis-md-list-text,
+  .analysis-md-strong,
+  .analysis-empty-title,
+  .analysis-empty-text,
+  .analysis-loading-card-title,
+  .analysis-loading-card-text,
+  .analysis-loading-text,
+  .analysis-status-text,
+  .analysis-status-subtext,
+  .action-plan-panel__title,
+  .action-plan-panel--red .action-plan-panel__title,
+  .action-plan-panel--green .action-plan-panel__title,
+  .action-plan-panel__empty,
+  .action-plan-item__title,
+  .action-plan-item__detail,
+  .action-score-delta__text,
+  .ai-detail-title,
+  .ai-detail-subtitle,
+  .health-index-gate-title {
+    color: #f2f7f4;
+  }
+
+  .action-plan-panel,
+  .action-plan-panel--red,
+  .action-plan-panel--green,
+  .ai-insight-card,
+  .analysis-empty--gate,
+  .analysis-loading-card,
+  .analysis-status {
+    background:
+      linear-gradient(180deg, rgb(15 21 20 / 96%) 0%, rgb(13 19 18 / 94%) 100%),
+      linear-gradient(135deg, rgb(92 184 150 / 10%) 0%, rgb(92 158 212 / 8%) 100%);
+    border-color: rgb(92 184 150 / 24%);
+  }
+
+  .analysis-status.warning {
+    background:
+      linear-gradient(180deg, rgb(15 21 20 / 96%) 0%, rgb(13 19 18 / 94%) 100%),
+      linear-gradient(135deg, rgb(240 152 92 / 12%) 0%, rgb(92 184 150 / 8%) 100%);
+    border-color: rgb(240 152 92 / 24%);
+  }
+
+  .analysis-status-action {
+    background: rgb(242 247 244 / 10%);
+    border-color: rgb(242 247 244 / 14%);
+    box-shadow: none;
+  }
+
+  .analysis-status-action-text,
+  .analysis-status-action-icon,
+  .analysis-md-list-bullet,
+  .ai-insight-card-more-text,
+  .action-plan-item__bullet,
+  .action-plan-panel--green .action-plan-item__bullet {
+    color: #f2f7f4;
+  }
+
+  .analysis-md-underline {
+    color: $stats-primary-light;
+    font-weight: 800;
+    text-decoration-color: rgb(141 211 191 / 78%);
+  }
+
+  .analysis-skeleton-line {
+    background: linear-gradient(90deg, rgb(242 247 244 / 8%) 0%, rgb(242 247 244 / 18%) 50%, rgb(242 247 244 / 8%) 100%);
+  }
+
+  .analysis-error {
+    background: rgb(229 115 115 / 12%);
+    border-color: rgb(229 115 115 / 24%);
+  }
+
+  .analysis-error-text,
+  .action-plan-item__bullet--error {
+    color: #f2f7f4;
+  }
+
+  .action-score-delta {
+    background: rgb(92 184 150 / 12%);
+    border-color: rgb(92 184 150 / 24%);
+  }
+
+  .ai-insight-card-more-btn {
+    border-top-color: rgb(242 247 244 / 12%);
+  }
+
+  .ai-detail-panel {
+    background:
+      linear-gradient(180deg, rgb(15 21 20 / 98%) 0%, rgb(13 19 18 / 96%) 100%),
+      linear-gradient(135deg, rgb(92 184 150 / 10%) 0%, rgb(92 158 212 / 8%) 100%);
+    border: 1rpx solid rgb(92 184 150 / 24%);
+    box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 34%);
+  }
+
+  .ai-detail-handle {
+    background: rgb(242 247 244 / 24%);
+  }
+
+  .body-metric-panel {
+    background:
+      linear-gradient(180deg, rgb(15 21 20 / 96%) 0%, rgb(13 19 18 / 94%) 100%),
+      linear-gradient(135deg, rgb(92 184 150 / 10%) 0%, rgb(92 158 212 / 8%) 100%);
+    border-color: rgb(92 184 150 / 24%);
+  }
+
+  .water-panel {
+    background:
+      linear-gradient(180deg, rgb(15 21 20 / 96%) 0%, rgb(13 19 18 / 94%) 100%),
+      linear-gradient(135deg, rgb(92 158 212 / 12%) 0%, rgb(92 184 150 / 8%) 100%);
+  }
+
+  .body-metric-title,
+  .body-metric-main {
+    color: #f2f7f4;
+  }
+
+  .body-metric-sub,
+  .water-metric-note {
+    color: rgb(214 226 220 / 62%);
+  }
+
+  .weight-line-chart {
+    background-color: rgb(18 25 24 / 92%);
+    box-shadow: inset 0 0 0 1rpx rgb(92 184 150 / 18%);
+  }
+
+  .weight-line-point {
+    background: #101715;
+  }
+
+  .weight-line-point-value {
+    background: rgb(242 247 244 / 92%);
+    color: #0f172a;
+    box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 28%);
+  }
+
+  .weight-line-label,
+  .water-trend-label {
+    color: rgb(214 226 220 / 56%);
+  }
+
+  .water-trend-bar-wrap {
+    background: rgb(255 255 255 / 8%);
+    box-shadow: inset 0 0 0 1rpx rgb(255 255 255 / 5%);
+  }
 }
 
 
