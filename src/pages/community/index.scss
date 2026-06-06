@@ -1780,10 +1780,14 @@ $feed-body-font-size: 30rpx;
 }
 
 .feed-manual-food-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 4rpx 12rpx;
   border-radius: 999rpx;
   background: #ecfdf5;
   border: 1rpx solid #a7f3d0;
+  box-sizing: border-box;
 }
 
 .feed-manual-food-badge-text {
@@ -1848,9 +1852,9 @@ $feed-body-font-size: 30rpx;
 
 .feed-calorie {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: nowrap;
-  gap: 0;
+  gap: 4rpx;
   font-size: 24rpx;
   color: #fff;
   font-weight: 600;
@@ -1859,6 +1863,20 @@ $feed-body-font-size: 30rpx;
   padding: 8rpx 18rpx;
   border-radius: 28rpx;
   box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 30%);
+}
+
+.feed-calorie-icon {
+  font-size: 24rpx;
+  line-height: 1;
+  color: inherit;
+}
+
+.feed-calorie-num {
+  margin-left: 2rpx;
+}
+
+.feed-calorie-unit {
+  margin-left: 2rpx;
 }
 
 .feed-calorie-num,

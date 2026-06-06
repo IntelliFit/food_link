@@ -422,6 +422,7 @@ function CommunityPage() {
   // 首次加载标志（用于判断是否显示骨架屏）
   const [isFirstLoad, setIsFirstLoad] = useState(true)
   const [showSkeleton, setShowSkeleton] = useState(false)
+  const [feedInitialLoaded, setFeedInitialLoaded] = useState(false)
 
   // 上次刷新时间（用于条件刷新）
   const lastFeedRefreshTime = useRef<number>(0)
@@ -596,6 +597,7 @@ function CommunityPage() {
             offsetRef.current = list.length
             setFeedList(list)
             setOffset(list.length) // 同步更新 offset，确保后续 loadMore 正确
+            setFeedInitialLoaded(true)
             hasCache = true
           }
         } catch (e) {
@@ -901,6 +903,7 @@ function CommunityPage() {
       setFeedList(list)
       setOffset(list.length)
       setHasMore(res.has_more ?? list.length >= PAGE_SIZE)
+      setFeedInitialLoaded(true)
 
       saveToCache(list)
       lastFeedRefreshTime.current = Date.now()
@@ -912,7 +915,7 @@ function CommunityPage() {
       refreshFeedPendingRef.current = false
       if (!silent) setLoadingFeed(false)
       setRefreshing(false)
-      setShowSkeleton(false)
+      setTimeout(() => setShowSkeleton(false), 0)
     }
   }, [feedAuthorScope, feedContentType, feedDietGoal, feedMealType, feedSortBy, feedSearchAuthorId, mergeFeedTempComments, priorityAuthorIds, saveToCache])
 
@@ -1039,6 +1042,8 @@ function CommunityPage() {
       syncCurrentFeedQueryKey()
       feedListRef.current = []
       offsetRef.current = 0
+      setFeedInitialLoaded(false)
+      setShowSkeleton(true)
       setFeedList([])
       setOffset(0)
       setHasMore(true)
@@ -1074,6 +1079,8 @@ function CommunityPage() {
     syncCurrentFeedQueryKey()
     feedListRef.current = []
     offsetRef.current = 0
+    setFeedInitialLoaded(false)
+    setShowSkeleton(true)
     setFeedList([])
     setOffset(0)
     setHasMore(true)
@@ -2112,7 +2119,7 @@ function CommunityPage() {
                   <Text className='feed-search-author-clear' onClick={handleClearSearchAuthor}>清除筛选</Text>
                 </View>
               )}
-              {(showSkeleton || (loadingFeed && feedList.length === 0)) ? (
+              {(showSkeleton || (loadingFeed && feedList.length === 0) || (!feedInitialLoaded && feedList.length === 0)) ? (
                 <View className='skeleton-container' onClick={(e) => e.stopPropagation()}>
                   {[1, 2, 3].map(i => (
                     <View key={i} className='skeleton-feed-card'>
@@ -2321,24 +2328,25 @@ function CommunityPage() {
                                     handleViewDetail(item)
                                   }}
                                 >
+                                  <Text className='van-icon van-icon-fire-o taroify-icon taroify-icon--inherit feed-calorie-icon' />
                                   <Text className='feed-calorie-num'>
                                     {(exercise ? exerciseKcal : Number(item.record.total_calories || 0)).toFixed(0)}
                                   </Text>
-                                  <Text className='feed-calorie-unit'> kcal{exercise ? ' 消耗' : ''}</Text>
+                                  <Text className='feed-calorie-unit'>kcal{exercise ? ' 消耗' : ''}</Text>
                                 </View>
-                                <View
-                                  className='feed-macros feed-tap-to-detail'
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleViewDetail(item)
-                                  }}
-                                >
-                                  <Text className='feed-macros-text'>
-                                    {exercise
-                                      ? (item.record.ai_reasoning || 'AI 已根据运动内容估算消耗')
-                                      : `蛋白质 ${Math.round(item.record.total_protein ?? 0)}g · 碳水 ${Math.round(item.record.total_carbs ?? 0)}g · 脂肪 ${Math.round(item.record.total_fat ?? 0)}g`}
-                                  </Text>
-                                </View>
+                                {!exercise ? (
+                                  <View
+                                    className='feed-macros feed-tap-to-detail'
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleViewDetail(item)
+                                    }}
+                                  >
+                                    <Text className='feed-macros-text'>
+                                      蛋白质 {Math.round(item.record.total_protein ?? 0)}g · 碳水 {Math.round(item.record.total_carbs ?? 0)}g · 脂肪 {Math.round(item.record.total_fat ?? 0)}g
+                                    </Text>
+                                  </View>
+                                ) : null}
                               </View>
                             )}
                             <View
