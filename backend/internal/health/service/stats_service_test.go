@@ -279,6 +279,57 @@ func TestStatsInsightRequestsEnoughOutputTokens(t *testing.T) {
 	assert.Equal(t, 4096, statsInsightMaxTokens)
 }
 
+func TestBuildNutritionInsightPromptForbidsCertifiedIdentityClaims(t *testing.T) {
+	prompt := buildNutritionInsightPrompt(&statsComputation{StatsRange: "week", StartDate: "2024-06-10", EndDate: "2024-06-16"})
+
+	assert.NotContains(t, prompt, "你是一位专业的营养师")
+	assert.NotContains(t, prompt, "饮食行为研究员。请根据")
+	assert.Contains(t, prompt, "严禁自我介绍或身份声明")
+	assert.Contains(t, prompt, "全文不得出现“专业营养师”")
+}
+
+func TestStatsService_GenerateInsightRetriesForbiddenIdentityClaim(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		messages, ok := body["messages"].([]any)
+		require.True(t, ok)
+		require.NotEmpty(t, messages)
+		w.Header().Set("Content-Type", "application/json")
+		if requestCount == 1 {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"作为一名专业营养师，我建议先看热量结构。"},"finish_reason":"stop"}]}`))
+			return
+		}
+		assert.Len(t, messages, 2)
+		feedback, ok := messages[1].(map[string]any)
+		require.True(t, ok)
+		assert.Contains(t, feedback["content"], "禁用身份措辞")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"总体结论\n本期日均摄入较稳定，需要继续关注蛋白质和餐次结构。"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+
+	recordTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	repo := &mockStatsRepo{
+		records: []domain.FoodRecord{
+			{UserID: "u1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &recordTime},
+		},
+	}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{}, &config.Config{
+		External: config.ExternalConfig{DeepSeekAPIKey: "test-key"},
+	})
+	svc.deepSeekBaseURL = server.URL
+
+	result, err := svc.GenerateInsight(context.Background(), "u1", "week", 2000, 5)
+	require.NoError(t, err)
+	text, _ := result["analysis_summary"].(string)
+	assert.Equal(t, 2, requestCount)
+	assert.Contains(t, text, "本期日均摄入较稳定")
+	assert.NotContains(t, text, "专业营养师")
+	assert.NotContains(t, repo.insights[0].InsightText, "专业营养师")
+}
+
 func TestStatsService_GenerateInsightFallsBackWhenDeepSeekTruncates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]any

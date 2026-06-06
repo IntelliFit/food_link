@@ -62,7 +62,16 @@ const (
 	statsInsightCreditCost    = 1
 	statsInsightMaxTokens     = 4096
 	statsInsightMinRecordDays = 1
+	statsInsightMaxAttempts   = 2
 )
+
+var statsInsightForbiddenIdentityTerms = []string{
+	"专业营养师",
+	"专业的营养师",
+	"注册营养师",
+	"持证营养师",
+	"饮食行为研究员",
+}
 
 func NewStatsService(repo StatsRepo, bodyMetrics BodyMetricsSummaryProvider, cfg ...*config.Config) *StatsService {
 	var c *config.Config
@@ -444,11 +453,39 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 		return fallbackStatsInsight(comp), nil
 	}
 
+	prompt := buildNutritionInsightPrompt(comp)
+	var lastErr error
+	var retryFeedback string
+	for attempt := 0; attempt < statsInsightMaxAttempts; attempt++ {
+		content, err := s.requestNutritionInsight(ctx, baseURL, apiKey, model, prompt, retryFeedback)
+		if err != nil {
+			lastErr = err
+			break
+		}
+		if term := findStatsInsightForbiddenIdentityTerm(content); term != "" {
+			lastErr = fmt.Errorf("DeepSeek 输出包含禁用身份措辞: %s", term)
+			retryFeedback = fmt.Sprintf("上一次输出包含禁用身份措辞“%s”。请重新生成全文：不要自称任何身份，不要出现“专业营养师”“专业的营养师”“注册营养师”“持证营养师”“饮食行为研究员”等说法，也不要用相近表达暗示自己具备执业资质。", term)
+			continue
+		}
+		sanitized := sanitizeStatsInsightText(content)
+		return sanitized, nil
+	}
+	if lastErr != nil {
+		return "", lastErr
+	}
+	return "", fmt.Errorf("DeepSeek 返回了空响应")
+}
+
+func (s *StatsService) requestNutritionInsight(ctx context.Context, baseURL, apiKey, model, prompt, retryFeedback string) (string, error) {
+	messages := []map[string]string{
+		{"role": "user", "content": prompt},
+	}
+	if strings.TrimSpace(retryFeedback) != "" {
+		messages = append(messages, map[string]string{"role": "user", "content": retryFeedback})
+	}
 	body := map[string]any{
-		"model": model,
-		"messages": []map[string]string{
-			{"role": "user", "content": buildNutritionInsightPrompt(comp)},
-		},
+		"model":       model,
+		"messages":    messages,
 		"temperature": 0.6,
 		"max_tokens":  statsInsightMaxTokens,
 		"stream":      false,
@@ -490,7 +527,7 @@ func (s *StatsService) generateNutritionInsight(ctx context.Context, comp *stats
 	if content == "" {
 		return "", fmt.Errorf("DeepSeek 返回了空响应")
 	}
-	return sanitizeStatsInsightText(content), nil
+	return content, nil
 }
 
 func sanitizeStatsInsightText(content string) string {
@@ -506,7 +543,38 @@ func sanitizeStatsInsightText(content string) string {
 	text = statsInsightMarkdownBulletPattern.ReplaceAllString(text, "")
 	text = regexp.MustCompile("`{1,3}").ReplaceAllString(text, "")
 	text = regexp.MustCompile(`\n{3,}`).ReplaceAllString(text, "\n\n")
+	text = filterStatsInsightForbiddenIdentityText(text)
 	return strings.TrimSpace(text)
+}
+
+func findStatsInsightForbiddenIdentityTerm(content string) string {
+	normalized := strings.ReplaceAll(strings.TrimSpace(content), " ", "")
+	for _, term := range statsInsightForbiddenIdentityTerms {
+		if strings.Contains(normalized, strings.ReplaceAll(term, " ", "")) {
+			return term
+		}
+	}
+	return ""
+}
+
+func filterStatsInsightForbiddenIdentityText(content string) string {
+	text := strings.TrimSpace(content)
+	if text == "" {
+		return ""
+	}
+	sentences := regexp.MustCompile(`(?m)[^。！？!?]*?(作为一名|作为一位|我是|我作为)[^。！？!?]*(专业营养师|专业的营养师|注册营养师|持证营养师|饮食行为研究员)[^。！？!?]*[。！？!?]?`).ReplaceAllString(text, "")
+	replacements := map[string]string{
+		"专业的营养师":  "营养相关专业人士",
+		"专业营养师":   "营养相关专业人士",
+		"注册营养师":   "营养相关专业人士",
+		"持证营养师":   "营养相关专业人士",
+		"饮食行为研究员": "饮食分析人员",
+	}
+	for old, replacement := range replacements {
+		sentences = strings.ReplaceAll(sentences, old, replacement)
+	}
+	sentences = regexp.MustCompile(`\n{3,}`).ReplaceAllString(sentences, "\n\n")
+	return strings.TrimSpace(sentences)
 }
 
 func buildNutritionInsightPrompt(comp *statsComputation) string {
@@ -582,7 +650,7 @@ func buildNutritionInsightPrompt(comp *statsComputation) string {
 		customFocusBlock = "\n用户当前自定义关注：" + strings.Join(labels, "、") + "。请在餐次结构与优先行动部分针对性展开。\n"
 	}
 
-	return fmt.Sprintf(`你是一位专业的营养师和饮食行为研究员。请根据以下用户健康档案、饮食统计和身体指标，生成一份“深度 AI 风险解读”，质量要接近 deep research 风格，但保持普通用户能读懂。
+	return fmt.Sprintf(`请根据以下用户健康档案、饮食统计和身体指标，生成一份“深度 AI 风险解读”。内容应基于数据、清晰克制、普通用户能读懂，避免任何身份扮演或资质暗示。
 
 %s
 
@@ -596,6 +664,7 @@ func buildNutritionInsightPrompt(comp *statsComputation) string {
 4. 结合用户体重、作息、体检/病史/过敏/饮食目标等可用信息；没有数据时明确说“本期证据不足”。
 5. 风险表达要谨慎：这是饮食相关风险趋势，不构成医学诊断或治疗建议。
 6. 输出纯中文，不要 JSON 或代码块，直接输出正文；不要使用 Markdown 符号。
+7. 严禁自我介绍或身份声明；全文不得出现“专业营养师”“专业的营养师”“注册营养师”“持证营养师”“饮食行为研究员”等措辞，也不要使用相近表达暗示具备执业资质。
 `, formatStatsHealthProfile(comp.User, latestWeightFromBodyMetrics(comp.BodyMetrics)), statsText, customFocusBlock)
 }
 
