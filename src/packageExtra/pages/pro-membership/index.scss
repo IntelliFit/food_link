@@ -459,7 +459,8 @@
 
 .tier-card-badge {
   position: absolute;
-  top: -14rpx;
+  top: 8rpx;
+  z-index: 2;
   right: 12rpx;
   font-size: 18rpx;
   font-weight: 700;
