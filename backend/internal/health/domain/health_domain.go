@@ -78,6 +78,7 @@ type StatsInsight struct {
 	GeneratedDate   time.Time  `gorm:"column:generated_date"`
 	DataFingerprint string     `gorm:"column:data_fingerprint"`
 	InsightText     string     `gorm:"column:insight_text"`
+	GenerationCount int        `gorm:"column:generation_count"`
 	CreatedAt       *time.Time `gorm:"column:created_at"`
 }
 

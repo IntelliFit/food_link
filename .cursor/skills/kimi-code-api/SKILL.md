@@ -1,0 +1,22 @@
+---
+name: kimi-code-api
+description: Kimi Code (api.kimi.com/coding) 接入指南。支持 OAuth 2.0 设备码登录、Token 刷新、OpenAI 兼容的聊天/模型列表请求，以及手动 API Key 回退。适用于在模型列表中集成 Kimi Code、实现一键测试和正常对话请求的开发场景。
+rootUrl: https://raw.githubusercontent.com/LSTM-Kirigaya/jinhui-skills/main/skills/kimi-code-api/SKILL.md
+tags:
+ - kimi
+ - api
+ - oauth
+ - openai-compatible
+ - coding
+model: deepseek-chat
+---
+
+# Kimi Code API
+
+可复用的概念索引：与具体仓库、框架、文件路径无关。细节按主题拆到子目录。
+
+| 主题 | 说明 |
+|------|------|
+| [凭据与替代方案](https://raw.githubusercontent.com/LSTM-Kirigaya/jinhui-skills/main/skills/kimi-code-api/credentials/README.md) | Device OAuth、手动 API Key/Token、解析优先级与切换注意点 |
+| [OAuth 设备码全流程](https://raw.githubusercontent.com/LSTM-Kirigaya/jinhui-skills/main/skills/kimi-code-api/oauth-device-flow/README.md) | `auth.kimi.com`、轮询、`refresh_token`、本地持久化 |
+| [OpenAI 兼容请求](https://raw.githubusercontent.com/LSTM-Kirigaya/jinhui-skills/main/skills/kimi-code-api/openai-compatible-requests/README.md) | Base URL、路径、`Authorization`、必选 `User-Agent`、CORS 与传输层 |

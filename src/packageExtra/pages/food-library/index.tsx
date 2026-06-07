@@ -542,6 +542,7 @@ function FoodLibraryPage() {
 
   if (!loggedIn) {
     return (
+      <FlPageThemeRoot>
       <View className='food-library-page'>
         {fromRecord && (
           <View className='pick-mode-tip'>
@@ -554,6 +555,7 @@ function FoodLibraryPage() {
           <Button className='login-tip-btn' onClick={goLogin}>去登录</Button>
         </View>
       </View>
+      </FlPageThemeRoot>
     )
   }
 

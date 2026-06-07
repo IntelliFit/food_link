@@ -164,9 +164,13 @@
   }
 
   .user-id-chip {
-    padding: 2rpx 12rpx;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5rpx 12rpx;
     border-radius: 999rpx;
     background: rgba(92, 184, 150, 0.08);
+    box-sizing: border-box;
 
     &:active {
       opacity: 0.72;
@@ -176,7 +180,9 @@
   .user-id-chip-text {
     font-size: 20rpx;
     color: #5a9e82;
-    line-height: 28rpx;
+    line-height: 1;
+    padding-top: 5rpx;
+    padding-bottom: 5rpx;
     font-weight: 500;
   }
 }

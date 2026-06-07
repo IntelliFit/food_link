@@ -262,6 +262,7 @@ func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 		`ALTER TABLE feed_interaction_notifications ADD COLUMN IF NOT EXISTS target_type text NOT NULL DEFAULT 'food_record'`,
 		`ALTER TABLE feed_interaction_notifications ADD COLUMN IF NOT EXISTS target_id uuid`,
 		`UPDATE feed_interaction_notifications SET target_type = 'food_record', target_id = record_id WHERE target_id IS NULL AND record_id IS NOT NULL`,
+		`ALTER TABLE ai_stats_insights ADD COLUMN IF NOT EXISTS generation_count integer NOT NULL DEFAULT 1`,
 		`ALTER TABLE user_credit_bonus_events ADD COLUMN IF NOT EXISTS source_scope text`,
 		`ALTER TABLE user_credit_bonus_events ADD COLUMN IF NOT EXISTS source_key text`,
 		`UPDATE user_credit_bonus_events

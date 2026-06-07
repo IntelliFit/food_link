@@ -145,7 +145,7 @@ function CampusCanteenPage() {
   }
 
   const goUpload = () => {
-    Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-share/index')}?campus_mode=1` })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/campus-food-share/index') })
   }
 
   const quickRecord = (e: any, item: PublicFoodLibraryItem) => {
@@ -239,12 +239,14 @@ function CampusCanteenPage() {
 
   if (!loggedIn) {
     return (
+      <FlPageThemeRoot>
       <View className='campus-canteen-page'>
         <View className='login-tip'>
           <Text className='login-tip-text'>登录后查看校园食堂</Text>
           <Button className='login-tip-btn' onClick={() => Taro.switchTab({ url: '/pages/profile/index' })}>去登录</Button>
         </View>
       </View>
+      </FlPageThemeRoot>
     )
   }
 

@@ -1286,3 +1286,142 @@
   line-height: 30rpx;
   font-weight: 800;
 }
+
+.pet-home-page--dark {
+  background: linear-gradient(180deg,
+    rgb(16 23 22 / 100%) 0%,
+    rgb(16 23 22 / 100%) 34%,
+    #0d1312 72%,
+    #0d1312 100%
+  );
+
+  .pet-home-hero,
+  .pet-home-card {
+    background: rgb(24 33 31 / 88%);
+    border-color: rgb(112 196 149 / 16%);
+    box-shadow: 0 10rpx 30rpx rgb(0 0 0 / 24%);
+  }
+
+  .pet-home-hero {
+    background:
+      radial-gradient(circle at 18% 18%, rgb(92 184 150 / 18%) 0%, transparent 38%),
+      linear-gradient(145deg, rgb(24 33 31 / 92%) 0%, rgb(18 27 25 / 92%) 100%);
+  }
+
+  .pet-home-shadow {
+    background: rgb(0 0 0 / 30%);
+  }
+
+  .pet-home-name,
+  .pet-home-card-title,
+  .pet-home-metric-value,
+  .pet-home-score-value,
+  .pet-home-event-title,
+  .pet-home-action-title,
+  .pet-home-candidate-name {
+    color: #f2f7f4;
+  }
+
+  .pet-home-message,
+  .pet-home-card-side,
+  .pet-home-metric-label,
+  .pet-home-score-label,
+  .pet-home-event-message,
+  .pet-home-action-desc,
+  .pet-home-reason-text,
+  .pet-home-candidate-style {
+    color: rgb(214 226 220 / 62%);
+  }
+
+  .pet-home-chip {
+    background: rgb(92 184 150 / 16%);
+    color: #6ee7b7;
+
+    &.secondary {
+      background: rgb(255 255 255 / 7%);
+      color: rgb(214 226 220 / 66%);
+    }
+  }
+
+  .pet-home-progress {
+    background: rgb(255 255 255 / 9%);
+  }
+
+  .pet-home-metric,
+  .pet-home-score-item,
+  .pet-home-action-item,
+  .pet-home-reason-item,
+  .pet-home-candidate-card {
+    background: rgb(255 255 255 / 6%);
+  }
+
+  .pet-home-action-item.muted {
+    background: rgb(255 255 255 / 5%);
+  }
+
+  .pet-home-action-item.visibility {
+    background: rgb(92 184 150 / 10%);
+  }
+
+  .pet-home-task,
+  .pet-home-visibility-status,
+  .pet-home-action-cost {
+    color: #6ee7b7;
+  }
+
+  .pet-home-visibility-status.hidden,
+  .pet-home-action-coming {
+    color: rgb(214 226 220 / 44%);
+  }
+
+  .pet-home-toggle {
+    background: #33413d;
+  }
+
+  .pet-home-toggle-knob {
+    background: #f2f7f4;
+    box-shadow: 0 2rpx 10rpx rgb(0 0 0 / 28%);
+  }
+
+  .pet-home-unlock-chip {
+    background: rgb(255 255 255 / 7%);
+    color: rgb(214 226 220 / 68%);
+  }
+
+  .pet-home-candidate-card {
+    border-color: rgb(255 255 255 / 6%);
+
+    &.active {
+      background: rgb(92 184 150 / 13%);
+      border-color: rgb(92 184 150 / 42%);
+    }
+  }
+
+  .pet-home-candidate-action {
+    background: #5cb896;
+    color: #fff;
+  }
+
+  .pet-home-inline-action {
+    background: rgb(255 255 255 / 7%);
+    border-color: rgb(92 184 150 / 22%);
+
+    &.primary {
+      background: linear-gradient(135deg, #4a9e7d 0%, #5cb896 100%);
+      border-color: transparent;
+      box-shadow: 0 8rpx 18rpx rgb(92 184 150 / 20%);
+    }
+
+    &.lab {
+      background: rgb(255 255 255 / 8%);
+      border-color: rgb(255 255 255 / 10%);
+    }
+  }
+
+  .pet-body {
+    box-shadow:
+      inset 0 17rpx 27rpx rgb(255 255 255 / 32%),
+      inset 0 -14rpx 20rpx rgb(0 0 0 / 10%),
+      0 14rpx 24rpx rgb(0 0 0 / 18%);
+  }
+}

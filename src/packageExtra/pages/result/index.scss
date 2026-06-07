@@ -941,6 +941,7 @@ transitiontransition
 
   &--cal {
     border-color: rgba(240, 152, 92, 0.16);
+    box-shadow: none;
   }
 
   &--protein:active {
@@ -1229,7 +1230,6 @@ transitiontransition
   padding: 8rpx;
   border-radius: 18rpx;
   border: 1rpx solid rgba(196, 210, 200, 0.66);
-  box-shadow: inset 0 2rpx 8rpx rgba(255, 255, 255, 0.85);
 }
 
 .adjust-btn {
@@ -1329,8 +1329,6 @@ transitiontransition
   min-height: 76rpx;
   padding: 0 14rpx;
   border-radius: 18rpx;
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: inset 0 2rpx 8rpx rgba(255, 255, 255, 0.85);
 }
 
 .ratio-slider-hitbox {
@@ -2750,6 +2748,7 @@ transitiontransition
 
     &--cal {
       border-color: rgba(255, 217, 178, 0.26);
+      box-shadow: none;
     }
 
     &--protein {
@@ -2865,16 +2864,6 @@ transitiontransition
   .weight-adjuster {
     background: rgba(15, 23, 21, 0.74);
     border-color: rgba(216, 230, 223, 0.2);
-    box-shadow:
-      inset 0 0 0 1rpx rgba(255, 255, 255, 0.04),
-      0 4rpx 14rpx rgba(0, 0, 0, 0.18);
-  }
-
-  .ratio-slider-shell {
-    background: rgba(15, 23, 21, 0.74);
-    box-shadow:
-      inset 0 0 0 1rpx rgba(255, 255, 255, 0.04),
-      0 4rpx 14rpx rgba(0, 0, 0, 0.18);
   }
 
   .secondary-btn {

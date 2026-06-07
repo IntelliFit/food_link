@@ -1,5 +1,5 @@
 import { View, Text } from '@tarojs/components'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro'
 import { Arrow } from '@taroify/icons'
 import '@taroify/icons/style'
@@ -17,6 +17,8 @@ import {
 } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import './index.scss'
 
 const PET_COLORS = ['mint', 'berry', 'sunny', 'aqua', 'grape', 'peach', 'cream', 'matcha'] as const
@@ -143,6 +145,7 @@ function CandidatePetFigure({ candidate }: { candidate: PetAppearanceCandidate }
 }
 
 function PetHomePage() {
+  const { scheme } = useAppColorScheme()
   const [loading, setLoading] = useState(true)
   const [claiming, setClaiming] = useState(false)
   const [rerolling, setRerolling] = useState(false)
@@ -168,9 +171,14 @@ function PetHomePage() {
   }, [])
 
   useDidShow(() => {
+    applyThemeNavigationBar(scheme)
     setHomePetHidden(getStoredHomePetHidden())
     void loadData()
   })
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme)
+  }, [scheme])
 
   usePullDownRefresh(() => {
     void loadData().finally(() => Taro.stopPullDownRefresh())
@@ -302,7 +310,7 @@ function PetHomePage() {
   }, [])
 
   return (
-    <View className='pet-home-page'>
+    <View className={`pet-home-page ${scheme === 'dark' ? 'pet-home-page--dark' : ''}`}>
       <View className='pet-home-shell'>
         <View className='pet-home-hero'>
           <View className={`pet-home-avatar ${petColor} ${petShape} ${petPattern} animal-${petAnimal} mood-${petMood} state-${petState}`}>

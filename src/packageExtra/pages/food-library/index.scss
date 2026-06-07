@@ -709,3 +709,98 @@
     opacity: 0.7;
   }
 }
+
+.fl-page-theme-root--dark {
+  .food-library-page {
+    background: #101715;
+  }
+
+  .pick-mode-tip {
+    background: linear-gradient(135deg, #153127 0%, #1a3328 100%);
+    border-bottom-color: rgb(92 184 150 / 18%);
+  }
+
+  .pick-mode-title,
+  .food-title {
+    color: #f2f7f4;
+  }
+
+  .pick-mode-subtitle,
+  .description-text,
+  .campus-food-location,
+  .location-text,
+  .author-name,
+  .stat-count,
+  .feedback-hint,
+  .empty-text,
+  .loading-text {
+    color: rgb(214 226 220 / 62%);
+  }
+
+  .tab-section,
+  .filter-section,
+  .food-card,
+  .login-tip {
+    background: #18211f;
+    border-color: rgb(255 255 255 / 8%);
+  }
+
+  .sort-section,
+  .food-footer {
+    border-color: rgb(255 255 255 / 8%);
+  }
+
+  .tab-item,
+  .sort-item,
+  .sort-filter-icon,
+  .sort-filter-text,
+  .filter-dropdown-label,
+  .location-icon,
+  .stat-icon {
+    color: rgb(214 226 220 / 58%);
+  }
+
+  .search-input-wrap,
+  .sort-filter-btn,
+  .filter-dropdown-panel,
+  .filter-dropdown-option,
+  .food-tag,
+  .author-avatar,
+  .food-image-placeholder,
+  .skeleton-food-card {
+    background: #222c29;
+  }
+
+  .search-input,
+  .filter-dropdown-option,
+  .food-tag {
+    color: #f2f7f4;
+  }
+
+  .filter-dropdown-option.active,
+  .merchant-name,
+  .campus-food-nutrition,
+  .login-tip-btn {
+    background: rgb(92 184 150 / 13%);
+    color: #6ee7b7;
+  }
+
+  .campus-food-price {
+    background: rgb(249 115 22 / 14%);
+    color: #fdba74;
+  }
+
+  .taste-rating {
+    background: rgb(245 158 11 / 14%);
+  }
+
+  .food-image-wrap {
+    background: linear-gradient(135deg, #1f3b33 0%, #18332d 100%);
+  }
+
+  .skeleton-image,
+  .skeleton-line {
+    background: linear-gradient(90deg, #202926 25%, #2a3531 50%, #202926 75%);
+    background-size: 200% 100%;
+  }
+}

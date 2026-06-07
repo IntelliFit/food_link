@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { View, Text, Input, ScrollView } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { searchSchools, getSchoolProvinces, getUserLocation, type SchoolItem } from '../../utils/api'
+import { useAppColorScheme } from '../AppColorSchemeContext'
 import './index.scss'
 
 interface SchoolPickerProps {
@@ -12,6 +13,7 @@ interface SchoolPickerProps {
 }
 
 export default function SchoolPicker({ visible, value, onSelect, onCancel }: SchoolPickerProps) {
+  const { scheme } = useAppColorScheme()
   const [keyword, setKeyword] = useState('')
   const [results, setResults] = useState<SchoolItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -93,9 +95,10 @@ export default function SchoolPicker({ visible, value, onSelect, onCancel }: Sch
   }, [onSelect])
 
   const isSearchMode = keyword.trim().length > 0
+  const isDark = scheme === 'dark'
 
   return (
-    <View className={`school-picker-overlay ${visible ? 'visible' : ''}`} onClick={onCancel}>
+    <View className={`school-picker-overlay ${visible ? 'visible' : ''} ${isDark ? 'school-picker-overlay--dark' : ''}`} onClick={onCancel}>
       <View className='school-picker-card' onClick={(e) => e.stopPropagation()}>
         <View className='school-picker-header'>
           <Text className='school-picker-title'>选择大学</Text>

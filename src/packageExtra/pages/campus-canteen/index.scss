@@ -9,12 +9,29 @@
   margin: 24rpx 24rpx 16rpx;
   padding: 32rpx;
   border-radius: 32rpx;
-  background: linear-gradient(135deg, #115e59 0%, #24a67a 100%);
+  background-image: url('../../../../assets/bg/cafeteria.png');
+  background-size: cover;
+  background-position: center;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24rpx;
   box-shadow: 0 18rpx 36rpx rgba(17, 94, 89, 0.18);
+  overflow: hidden;
+  position: relative;
+}
+
+.campus-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgb(6 45 37 / 78%) 0%, rgb(17 94 89 / 56%) 52%, rgb(0 0 0 / 34%) 100%);
+  z-index: 0;
+}
+
+.campus-hero > View {
+  position: relative;
+  z-index: 1;
 }
 
 .campus-hero-eyebrow {
@@ -537,4 +554,109 @@
   color: #fff;
   font-size: 32rpx;
   border-radius: 40rpx;
+}
+
+.fl-page-theme-root--dark {
+  .campus-canteen-page {
+    background: linear-gradient(180deg, #101715 0%, #0d1312 100%);
+  }
+
+  .campus-hero {
+    box-shadow: 0 18rpx 36rpx rgb(0 0 0 / 24%);
+  }
+
+  .campus-hero::before {
+    background: linear-gradient(135deg, rgb(4 23 21 / 82%) 0%, rgb(10 58 48 / 64%) 52%, rgb(0 0 0 / 50%) 100%);
+  }
+
+  .campus-hero-upload {
+    background: rgb(255 255 255 / 12%);
+    border-color: rgb(255 255 255 / 18%);
+  }
+
+  .campus-header,
+  .sort-section,
+  .recommend-card,
+  .recommend-panel,
+  .campus-card {
+    background: #18211f;
+    box-shadow: 0 10rpx 30rpx rgb(0 0 0 / 22%);
+  }
+
+  .filter-chip,
+  .search-input-wrap,
+  .campus-image-wrap,
+  .campus-image-placeholder,
+  .recommend-card-image.placeholder {
+    background: #222c29;
+  }
+
+  .filter-chip-text,
+  .filter-chip-input-inner,
+  .search-input,
+  .section-title,
+  .recommend-card-title,
+  .campus-title {
+    color: #f2f7f4;
+  }
+
+  .filter-chip-arrow,
+  .search-input-icon,
+  .section-subtitle,
+  .recommend-card-meta,
+  .recommend-panel-line,
+  .campus-location,
+  .stat-icon,
+  .stat-count,
+  .empty-text,
+  .login-tip-text {
+    color: rgb(214 226 220 / 62%);
+  }
+
+  .sort-item {
+    color: rgb(214 226 220 / 58%);
+  }
+
+  .sort-item.active,
+  .recommend-panel-title,
+  .campus-protein,
+  .campus-tag.fat-loss {
+    color: #6ee7b7;
+  }
+
+  .campus-calories {
+    color: #fdba74;
+    background: rgb(249 115 22 / 14%);
+  }
+
+  .campus-protein,
+  .campus-tag.fat-loss {
+    background: rgb(92 184 150 / 13%);
+  }
+
+  .campus-tag {
+    color: rgb(214 226 220 / 70%);
+    background: rgb(255 255 255 / 7%);
+  }
+
+  .campus-card-footer {
+    border-top-color: rgb(255 255 255 / 8%);
+  }
+
+  .loading-spinner-md {
+    border-color: rgb(255 255 255 / 12%);
+    border-top-color: #5cb896;
+  }
+
+  .empty-icon {
+    color: rgb(214 226 220 / 30%);
+  }
+
+  .empty-subtext {
+    color: rgb(214 226 220 / 45%);
+  }
+
+  .login-tip {
+    background: transparent;
+  }
 }
