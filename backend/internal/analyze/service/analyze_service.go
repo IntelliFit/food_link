@@ -138,7 +138,7 @@ func (s *AnalyzeService) ConfigureImageProvider(provider string) {
 func (s *AnalyzeService) ConfigureDeepSeekFallback(apiKey string) {
 	estimator := NewDeepSeekNutritionEstimator(apiKey, "", "")
 	s.deepseek = estimator
-	s.nutritionAI = estimator
+	s.refreshNutritionFallbackEstimator()
 }
 
 func (s *AnalyzeService) ConfigureDoubaoClient(apiKey, baseURL, model string) {
@@ -161,7 +161,8 @@ func (s *AnalyzeService) ConfigureDoubaoClient(apiKey, baseURL, model string) {
 func (s *AnalyzeService) ConfigureDashScopeClient(apiKey, baseURL string) {
 	if strings.TrimSpace(apiKey) != "" {
 		s.dashscopeClient = NewDashScopeClient(apiKey, baseURL)
-		logger.L().Info("dashscope client initialized", slog.String("base_url", baseURL))
+		s.refreshNutritionFallbackEstimator()
+		logger.L().Info("dashscope client initialized", slog.String("base_url", baseURL), slog.String("model", qwen36FlashModel))
 		return
 	}
 	logger.L().Warn("dashscope client not initialized: empty api key")
@@ -169,6 +170,28 @@ func (s *AnalyzeService) ConfigureDashScopeClient(apiKey, baseURL string) {
 
 func (s *AnalyzeService) ConfigureDashScopeLLMClient(client LLMClient) {
 	s.dashscopeClient = client
+	s.refreshNutritionFallbackEstimator()
+}
+
+func (s *AnalyzeService) refreshNutritionFallbackEstimator() {
+	estimators := []namedNutritionFallbackEstimator{}
+	if s.deepseek != nil && strings.TrimSpace(s.deepseek.APIKey) != "" {
+		estimators = append(estimators, namedNutritionFallbackEstimator{
+			source:    "deepseek_generated",
+			estimator: s.deepseek,
+		})
+	}
+	if s.dashscopeClient != nil {
+		estimators = append(estimators, namedNutritionFallbackEstimator{
+			source:    "qwen_generated",
+			estimator: NewQwenNutritionEstimator(s.dashscopeClient),
+		})
+	}
+	if len(estimators) == 0 {
+		s.nutritionAI = nil
+		return
+	}
+	s.nutritionAI = newChainedNutritionFallbackEstimator(estimators...)
 }
 
 func (s *AnalyzeService) ConfigureGemini31LiteClient(apiKey, baseURL, model string) {
@@ -4615,6 +4638,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 
 	out := make([]map[string]any, 0, len(items))
 	deepseekGeneratedCount := 0
+	qwenGeneratedCount := 0
 	deepseekPersistedCount := 0
 	deepseekPersistFailedCount := 0
 	for _, lookup := range lookups {
@@ -4679,30 +4703,37 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 			next["resolve_score"] = 0
 			next["nutrition_source"] = "unresolved"
 			if fallbackUnit, ok := fallbacks[lookup.index]; ok && len(fallbackUnit) > 0 {
-				deepseekGeneratedCount++
+				fallbackSource := popFallbackSource(fallbackUnit, "deepseek_generated")
+				if fallbackSource == "qwen_generated" {
+					qwenGeneratedCount++
+				} else {
+					deepseekGeneratedCount++
+				}
 				unit = fallbackUnit
-				next["resolve_status"] = "deepseek_generated"
+				next["resolve_status"] = fallbackSource
 				next["is_unresolved"] = false
-				next["nutrition_source"] = "deepseek_generated"
+				next["nutrition_source"] = fallbackSource
 				next["nutrition_persisted"] = false
 				resolvedCount++
 				if unresolvedCount > 0 {
 					unresolvedCount--
 				}
-				if foodID, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, fallbackUnit, "deepseek_generated"); err != nil {
+				if foodID, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, fallbackUnit, fallbackSource); err != nil {
 					deepseekPersistFailedCount++
-					logger.WithTrace(ctx).Warn("deepseek nutrition upsert failed",
+					logger.WithTrace(ctx).Warn("AI 营养补全写库失败",
 						logger.Err(err),
 						slog.String("food_name", lookup.name),
+						slog.String("nutrition_source", fallbackSource),
 						slog.Any("unit_nutrition_per_100g", fallbackUnit),
 					)
 				} else {
 					deepseekPersistedCount++
 					next["nutrition_persisted"] = true
 					next["matched_food_id"] = foodID
-					logger.WithTrace(ctx).Info("deepseek nutrition upsert succeeded",
+					logger.WithTrace(ctx).Info("AI 营养补全写库成功",
 						slog.String("food_name", lookup.name),
 						slog.String("food_id", foodID),
+						slog.String("nutrition_source", fallbackSource),
 						slog.Any("unit_nutrition_per_100g", unit),
 					)
 				}
@@ -4758,6 +4789,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	metrics.AddNutritionResolveItems("db_first", "resolved", resolvedCount)
 	metrics.AddNutritionResolveItems("db_first", "unresolved", unresolvedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_generated", deepseekGeneratedCount)
+	metrics.AddNutritionResolveItems("db_first", "qwen_generated", qwenGeneratedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_persisted", deepseekPersistedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_persist_failed", deepseekPersistFailedCount)
 	logger.WithTrace(ctx).Info("营养库优先回算完成",
@@ -4765,6 +4797,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		slog.Int("resolved_count", resolvedCount),
 		slog.Int("unresolved_count", unresolvedCount),
 		slog.Int("deepseek_generated_count", deepseekGeneratedCount),
+		slog.Int("qwen_generated_count", qwenGeneratedCount),
 		slog.Int("deepseek_persisted_count", deepseekPersistedCount),
 		slog.Int("deepseek_persist_failed_count", deepseekPersistFailedCount),
 		slog.Any("items", analyzeItemLogSummary(out, 12)),
@@ -4774,6 +4807,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		attribute.Int("analysis.resolved_count", resolvedCount),
 		attribute.Int("analysis.unresolved_count", unresolvedCount),
 		attribute.Int("analysis.deepseek_generated_count", deepseekGeneratedCount),
+		attribute.Int("analysis.qwen_generated_count", qwenGeneratedCount),
 		attribute.Int("analysis.deepseek_persisted_count", deepseekPersistedCount),
 		attribute.Int("analysis.deepseek_persist_failed_count", deepseekPersistFailedCount),
 		attribute.String("analysis.items", summarizeAnalyzeItemsForTrace(out, 12)),

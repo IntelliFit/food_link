@@ -2076,6 +2076,81 @@ func TestAnalyzeService_FinalizeAnalyzeResponseGeneratesNutritionWhenPackagedAnd
 	assert.Equal(t, 1, meta["fallback_count"])
 }
 
+func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackToQwenWhenDeepSeekFails(t *testing.T) {
+	resolver := newFakeAnalyzeNutritionResolver()
+	deepseekFallback := &fakeNutritionFallbackEstimator{err: errors.New("deepseek timeout")}
+	qwenFallback := &fakeNutritionFallbackEstimator{
+		rows: map[int]map[string]any{
+			0: {
+				"calories": 120.0,
+				"protein":  8.0,
+				"carbs":    10.0,
+				"fat":      4.0,
+			},
+		},
+	}
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
+	svc.nutrition = resolver
+	svc.nutritionAI = newChainedNutritionFallbackEstimator(
+		namedNutritionFallbackEstimator{source: "deepseek_generated", estimator: deepseekFallback},
+		namedNutritionFallbackEstimator{source: "qwen_generated", estimator: qwenFallback},
+	)
+
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), map[string]any{
+		"description": "DeepSeek 不稳定时应继续用 Qwen 兜底",
+		"items": []any{
+			map[string]any{
+				"name":                 "未收录清炒蔬菜",
+				"type":                 "normal",
+				"estimatedWeightGrams": 50.0,
+				"grossWeightGrams":     50.0,
+			},
+		},
+	}, AnalyzeInput{}, defaultExecutionMode, "fake", "fake-model", 12)
+	require.NoError(t, err)
+
+	require.Len(t, deepseekFallback.candidates, 1)
+	require.Len(t, qwenFallback.candidates, 1)
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "qwen_generated", items[0]["nutrition_source"])
+	assert.Equal(t, "qwen_generated", items[0]["resolve_status"])
+	assert.Equal(t, false, items[0]["is_unresolved"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.Equal(t, 60.0, nutrients["calories"])
+	assert.Equal(t, 4.0, nutrients["protein"])
+	assert.Equal(t, 1, resp["resolved_count"])
+	assert.Equal(t, 0, resp["unresolved_count"])
+}
+
+func TestQwenNutritionEstimatorEstimateParsesNutrition(t *testing.T) {
+	client := &mockLLMClient{result: map[string]any{
+		"items": []any{
+			map[string]any{
+				"index": 3,
+				"unitNutritionPer100g": map[string]any{
+					"calories": 80.0,
+					"protein":  3.0,
+					"carbs":    12.0,
+					"fat":      2.0,
+				},
+			},
+		},
+	}}
+	estimator := NewQwenNutritionEstimator(client)
+
+	rows, err := estimator.Estimate(context.Background(), []UnresolvedNutritionCandidate{
+		{Index: 3, Name: "未收录蔬菜", EstimatedWeightGrams: 100},
+	}, "测试上下文")
+	require.NoError(t, err)
+
+	require.Equal(t, 1, client.calls)
+	assert.Contains(t, client.prompt, "测试上下文")
+	assert.Contains(t, client.prompt, "不要因为不确定就把热量或宏量营养填 0")
+	assert.Equal(t, 80.0, rows[3]["calories"])
+	assert.Equal(t, 3.0, rows[3]["protein"])
+}
+
 func TestAnalyzeService_ApplyDBFirstToItemsIntegratesPackagedFoodForWorkerPrecision(t *testing.T) {
 	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
 	svc.nutrition = newFakeAnalyzeNutritionResolver()

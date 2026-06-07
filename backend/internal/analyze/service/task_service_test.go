@@ -335,7 +335,7 @@ func TestTaskService_ListTasks(t *testing.T) {
 	require.NoError(t, taskRepo.CreateTask(ctx, &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "pending", ImageURL: &legacyURL}))
 	require.NoError(t, taskRepo.CreateTask(ctx, &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done"}))
 
-	tasks, err := svc.ListTasks(ctx, "user1", "food", "", 10)
+	tasks, err := svc.ListTasks(ctx, "user1", "food", "", "", 10)
 	require.NoError(t, err)
 	assert.Len(t, tasks, 2)
 	var imageTask *analyzedomain.AnalysisTask
@@ -363,7 +363,7 @@ func TestTaskService_ListTasksCollapsesRepeatedSameDayInput(t *testing.T) {
 	require.NoError(t, taskRepo.CreateTask(ctx, older))
 	require.NoError(t, taskRepo.CreateTask(ctx, newer))
 
-	tasks, err := svc.ListTasks(ctx, "user1", "", "", 10)
+	tasks, err := svc.ListTasks(ctx, "user1", "", "", "", 10)
 	require.NoError(t, err)
 	require.Len(t, tasks, 1)
 	assert.Equal(t, newer.ID, tasks[0].ID)
