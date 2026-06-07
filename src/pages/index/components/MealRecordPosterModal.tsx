@@ -226,19 +226,12 @@ export function MealRecordPosterModal({ visible, record, onClose, onShareContext
 
         const loadQRImage = async () => {
           const scene = posterInviteCode ? `fi=${posterInviteCode}` : 'share=1'
-          const isDevelopmentEnv = typeof process !== 'undefined' && process?.env?.NODE_ENV === 'development'
-          const envCandidates: Array<'develop' | 'trial' | 'release'> = isDevelopmentEnv
-            ? ['develop', 'trial', 'release']
-            : ['release', 'trial', 'develop']
-
-          for (const envVersion of envCandidates) {
-            try {
-              const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', envVersion)
-              const img = await loadImage(base64)
-              if (img) return img
-            } catch (e) {
-              console.warn(`QR code load failed for env=${envVersion}`, e)
-            }
+          try {
+            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', 'release')
+            const img = await loadImage(base64)
+            if (img) return img
+          } catch (e) {
+            console.warn('QR code load failed for env=release', e)
           }
           return null
         }

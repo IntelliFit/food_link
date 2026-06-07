@@ -497,16 +497,12 @@ function DayRecordPage() {
             (async () => {
               const inviteCode = uid ? uid.replace(/-/g, '').toLowerCase().slice(0, 8) : ''
               const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
-              const isDev = typeof process !== 'undefined' && process?.env?.NODE_ENV === 'development'
-              const envCandidates: Array<'develop' | 'trial' | 'release'> = isDev
-                ? ['develop', 'trial', 'release']
-                : ['release', 'trial', 'develop']
-              for (const envVersion of envCandidates) {
-                try {
-                  const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', envVersion)
-                  const img = await loadImage(base64)
-                  if (img) return img
-                } catch { /* try next env */ }
+              try {
+                const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', 'release')
+                const img = await loadImage(base64)
+                if (img) return img
+              } catch {
+                // Ignore QR failures; the poster can still render without a code.
               }
               return null
             })(),
