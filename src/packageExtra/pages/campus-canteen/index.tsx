@@ -145,7 +145,7 @@ function CampusCanteenPage() {
   }
 
   const goUpload = () => {
-    Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-share/index')}?campus_mode=1` })
+    Taro.navigateTo({ url: extraPkgUrl('/pages/campus-food-share/index') })
   }
 
   const quickRecord = (e: any, item: PublicFoodLibraryItem) => {

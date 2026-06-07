@@ -38,7 +38,7 @@ function RewardCenterPage() {
   const handleTaskClick = (task: RewardCenterTask) => {
     if (!task.action_path || isTaskDisabled(task)) return
     const url = task.action_type === 'public_food_upload'
-      ? extraPkgUrl('/pages/food-library-share/index?task_mode=reward_center&campus_mode=1')
+      ? extraPkgUrl('/pages/campus-food-share/index?task_mode=reward_center')
       : resolveRewardTaskUrl(task.action_path)
     Taro.navigateTo({
       url,

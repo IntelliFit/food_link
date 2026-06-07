@@ -659,13 +659,7 @@ function ProMembershipPage() {
       )}
       {/* 顶部 Hero */}
       <View className='hero-section'>
-        <View className='hero-orb hero-orb--right' />
-        <View className='hero-orb hero-orb--left' />
-        <View className='hero-curve hero-curve--left' />
-        <View className='hero-curve hero-curve--right' />
         <View className='hero-inner'>
-          <View className='hero-spark hero-spark--left'>✦</View>
-          <View className='hero-spark hero-spark--right'>✦</View>
           <View className='hero-emblem-row'>
             <Text className='hero-laurel hero-laurel--left'>❦</Text>
             <View className='hero-icon-shell'>
@@ -706,11 +700,6 @@ function ProMembershipPage() {
                   <View className='hero-credits-value-row'>
                     <Text className='hero-credits-value'>{creditsUsed}</Text>
                     <Text className='hero-credits-total'>/ {creditsMax}</Text>
-                  </View>
-                  <View className='hero-credits-pill'>
-                    <Text className='hero-credits-tip'>
-                      可用 {totalCreditsAvailable} 积分 · 系统剩余 {systemCreditsRemaining} 次日清零 · 累计奖励 {earnedCreditsBalance}{bonusCredits > 0 ? ` · 今日入账 +${bonusCredits}` : ''}{paidBonusActive ? ` · 创始翻倍 x${paidBonusMultiplier}` : ''}
-                    </Text>
                   </View>
                 </>
               ) : (

@@ -80,6 +80,7 @@ import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { collectFoodDisplayImageUrls, hasFoodDisplayImage } from '../../utils/food-display-image'
 import { isAllowedRecordDate, isTodayRecordDate } from '../../utils/record-date'
 import { getMembershipCreditSummary, LOW_CREDIT_REWARD_HINT_THRESHOLD } from '../../utils/membership'
+import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 
 // 导入拆分出的模块
 import { type WeightRecordEntry, type BodyMetricsStorage, type WaterRecord, type MacroKey, type WeekHeatmapState, type WeekHeatmapCell, type TargetFormState, type MacroTargets } from './types'
@@ -774,6 +775,7 @@ const MACRO_CONFIGS: Array<{
 ]
 
 function IndexPage() {
+  const { scheme } = useAppColorScheme()
   const initialSelectedDate = formatDateKey(new Date())
   const initialHomeSelectedDate = initialSelectedDate
   const initialLocalSnapshot = getStoredHomeDashboardSnapshotByDate(initialHomeSelectedDate)
@@ -2799,7 +2801,7 @@ function IndexPage() {
 
   return (
     <View
-      className={`home-page ${showRecordEditModal || showHomeOnboardingGuide ? 'home-page--modal-open' : ''}`}
+      className={`home-page ${scheme === 'dark' ? 'home-page--dark' : ''} ${showRecordEditModal || showHomeOnboardingGuide ? 'home-page--modal-open' : ''}`}
     >
       <PageMeta
         pageStyle={
@@ -2919,7 +2921,6 @@ function IndexPage() {
             className='home-reward-hint'
             onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/reward-center/index') })}
           >
-            <View className='home-reward-hint__glow' />
             <View className='home-reward-hint__main'>
               <Text className='home-reward-hint__kicker'>今日可赚积分</Text>
               <Text className='home-reward-hint__title'>今天还可以赚 {availableRewardCredits} 积分</Text>

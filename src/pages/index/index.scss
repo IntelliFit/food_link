@@ -252,16 +252,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
-.home-reward-hint__glow {
-  position: absolute;
-  right: -36rpx;
-  top: -46rpx;
-  width: 150rpx;
-  height: 150rpx;
-  border-radius: 50%;
-  background: rgb(255 255 255 / 18%);
-}
-
 .home-reward-hint__main {
   position: relative;
   z-index: 1;
@@ -474,9 +464,11 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   padding: 8rpx;
   border-radius: 999rpx;
   justify-content: center;
-  background: rgb(255 255 255 / 58%);
-  box-shadow: 0 6rpx 18rpx rgb(30 70 56 / 8%);
-  overflow: hidden;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  overflow: visible;
 }
 
 .pet-companion-avatar {
@@ -1607,7 +1599,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   padding: 22rpx 24rpx;
   margin-bottom: 16rpx;
   background: #ffffff;
-  border: 1rpx solid rgb(92 184 150 / 18%);
   border-radius: 24rpx;
   box-shadow: 0 4rpx 18rpx rgb(0 0 0 / 4%);
   box-sizing: border-box;
@@ -4401,6 +4392,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 }
 
 // 深色模式
+.home-page--dark,
 .page--dark {
   .meal-action-sheet-actions,
   .meal-action-sheet-cancel {

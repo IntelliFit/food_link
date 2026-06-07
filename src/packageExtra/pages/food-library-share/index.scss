@@ -752,11 +752,32 @@
     color: #e8ece9;
   }
 
+  .form-item {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    outline: none;
+
+    &::before,
+    &::after {
+      display: none;
+    }
+  }
+
   .form-input,
   .form-textarea,
   .tag-input {
     background: #222c29;
+    border: none;
+    border-color: transparent;
+    outline: none;
     color: #e8ece9;
+  }
+
+  .location-btn,
+  .location-info,
+  .search-location-btn {
+    border-color: transparent;
   }
 
   .city-value {
@@ -769,12 +790,13 @@
 
   .source-tag-chip {
     background: #222c29;
+    border-color: transparent;
     color: #9ca3a8;
 
     &.active {
       background: rgb(92 184 150 / 12%);
       color: #7dd3b0;
-      border-color: #3d5d51;
+      border-color: transparent;
     }
   }
 
@@ -783,7 +805,7 @@
   }
 
   .switch-row {
-    border-bottom-color: #3d5d51;
+    border-bottom-color: transparent;
   }
 
   .switch-label {
@@ -815,6 +837,7 @@
 
   .search-location-btn {
     background: rgb(92 184 150 / 12%);
+    border-color: transparent;
     color: #7dd3b0;
 
     .iconfont {
@@ -848,7 +871,7 @@
   }
 
   .record-item {
-    border-bottom-color: #3d5d51;
+    border-bottom-color: transparent;
   }
 
   .record-image,
@@ -870,10 +893,11 @@
 
   .source-option {
     background: #222c29;
+    border-color: transparent;
 
     &.active {
       background: rgb(92 184 150 / 12%);
-      border-color: #3d5d51;
+      border-color: transparent;
     }
   }
 

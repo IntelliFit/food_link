@@ -32,6 +32,7 @@ const extraSubpackagePages = [
   'pages/food-library/index',
   'pages/food-library-detail/index',
   'pages/campus-canteen/index',
+  'pages/campus-food-share/index',
   'pages/reward-center/index',
   'pages/interaction-notifications/index',
   'pages/interaction-feed-detail/index',

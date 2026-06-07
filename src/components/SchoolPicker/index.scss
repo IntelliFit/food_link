@@ -181,3 +181,83 @@
   font-size: 28rpx;
   color: #9ca3af;
 }
+
+.school-picker-overlay--dark {
+  background: rgb(0 0 0 / 62%);
+
+  .school-picker-card {
+    background: #101a17;
+    box-shadow: 0 -20rpx 52rpx rgb(0 0 0 / 36%);
+  }
+
+  .school-picker-header {
+    border-bottom-color: rgb(255 255 255 / 6%);
+  }
+
+  .school-picker-title {
+    color: #f3f7f5;
+  }
+
+  .school-picker-close {
+    color: #aab7b2;
+  }
+
+  .school-picker-search {
+    background: #17231f;
+    border: 1rpx solid rgb(255 255 255 / 5%);
+  }
+
+  .school-picker-search-icon,
+  .school-picker-input {
+    color: #dce6e2;
+  }
+
+  .school-picker-input {
+    caret-color: #65d8b0;
+  }
+
+  .school-picker-locate-icon,
+  .school-picker-locate-text {
+    color: #79d9b0;
+  }
+
+  .school-picker-province-tag {
+    background: #17231f;
+    border: 1rpx solid rgb(255 255 255 / 4%);
+
+    &.active {
+      background: #2f9d78;
+      border-color: rgb(131 230 188 / 42%);
+    }
+  }
+
+  .school-picker-province-text {
+    color: #cbd5d1;
+  }
+
+  .school-picker-item {
+    border-bottom-color: rgb(255 255 255 / 6%);
+
+    &.selected {
+      background: #173429;
+
+      .school-picker-item-name {
+        color: #83e6bc;
+      }
+    }
+  }
+
+  .school-picker-item-name {
+    color: #e8ece9;
+  }
+
+  .school-picker-item-meta,
+  .school-picker-empty-text {
+    color: #9ca3a8;
+  }
+
+  .school-picker-spinner {
+    border-color: #263530;
+    border-top-color: #65d8b0;
+  }
+}

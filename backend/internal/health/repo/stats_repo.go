@@ -82,6 +82,7 @@ func (r *StatsRepo) UpsertInsightCache(ctx context.Context, userID, rangeType, g
 		"generated_date":   generatedDate,
 		"data_fingerprint": dataFingerprint,
 		"insight_text":     insightText,
+		"generation_count": 1,
 		"created_at":       time.Now().UTC(),
 	}
 	return r.db.WithContext(ctx).
@@ -92,7 +93,12 @@ func (r *StatsRepo) UpsertInsightCache(ctx context.Context, userID, rangeType, g
 				{Name: "range_type"},
 				{Name: "generated_date"},
 			},
-			DoUpdates: clause.AssignmentColumns([]string{"data_fingerprint", "insight_text", "created_at"}),
+			DoUpdates: clause.Assignments(map[string]any{
+				"data_fingerprint": clause.Column{Table: "excluded", Name: "data_fingerprint"},
+				"insight_text":     clause.Column{Table: "excluded", Name: "insight_text"},
+				"created_at":       clause.Column{Table: "excluded", Name: "created_at"},
+				"generation_count": gorm.Expr("COALESCE(ai_stats_insights.generation_count, 0) + 1"),
+			}),
 		}).
 		Create(row).Error
 }
@@ -134,8 +140,9 @@ func (r *StatsRepo) CountInsightGenerationsToday(ctx context.Context, userID str
 	var count int64
 	err := r.db.WithContext(ctx).
 		Table((&domain.StatsInsight{}).TableName()).
+		Select("COALESCE(SUM(COALESCE(generation_count, 1)), 0)").
 		Where("user_id = ? AND created_at >= ? AND created_at < ?", userID, start.UTC(), end.UTC()).
-		Count(&count).Error
+		Scan(&count).Error
 	return count, err
 }
 

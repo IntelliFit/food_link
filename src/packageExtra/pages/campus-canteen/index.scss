@@ -9,12 +9,29 @@
   margin: 24rpx 24rpx 16rpx;
   padding: 32rpx;
   border-radius: 32rpx;
-  background: linear-gradient(135deg, #115e59 0%, #24a67a 100%);
+  background-image: url('../../../../assets/bg/cafeteria.png');
+  background-size: cover;
+  background-position: center;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24rpx;
   box-shadow: 0 18rpx 36rpx rgba(17, 94, 89, 0.18);
+  overflow: hidden;
+  position: relative;
+}
+
+.campus-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgb(6 45 37 / 78%) 0%, rgb(17 94 89 / 56%) 52%, rgb(0 0 0 / 34%) 100%);
+  z-index: 0;
+}
+
+.campus-hero > View {
+  position: relative;
+  z-index: 1;
 }
 
 .campus-hero-eyebrow {
@@ -545,8 +562,11 @@
   }
 
   .campus-hero {
-    background: linear-gradient(135deg, #12352d 0%, #17624c 100%);
     box-shadow: 0 18rpx 36rpx rgb(0 0 0 / 24%);
+  }
+
+  .campus-hero::before {
+    background: linear-gradient(135deg, rgb(4 23 21 / 82%) 0%, rgb(10 58 48 / 64%) 52%, rgb(0 0 0 / 50%) 100%);
   }
 
   .campus-hero-upload {
