@@ -2,7 +2,10 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +14,7 @@ import (
 	"food_link/backend/internal/publicfood/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -57,49 +61,80 @@ func (r *PublicFoodRepo) UpdateStatus(ctx context.Context, itemID, status string
 	return r.db.WithContext(ctx).Model(&domain.PublicFoodItem{}).Where("id = ?", itemID).Updates(updates).Error
 }
 
+func (r *PublicFoodRepo) LinkAnalysisTask(ctx context.Context, itemID, taskID string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.PublicFoodItem{}).
+		Where("id = ?", itemID).
+		Updates(map[string]any{
+			"analysis_task_id": taskID,
+			"updated_at":       time.Now(),
+		}).Error
+}
+
+func (r *PublicFoodRepo) UpdateNutritionFromAnalysis(ctx context.Context, itemID string, result map[string]any) error {
+	totalCalories, totalProtein, totalCarbs, totalFat := nutritionTotalsFromResult(result)
+	return r.db.WithContext(ctx).
+		Model(&domain.PublicFoodItem{}).
+		Where("id = ?", itemID).
+		Updates(map[string]any{
+			"total_calories": totalCalories,
+			"total_protein":  totalProtein,
+			"total_carbs":    totalCarbs,
+			"total_fat":      totalFat,
+			"items":          datatypes.JSONSlice[map[string]any](mapSliceFromAny(result["items"])),
+			"description":    stringFromAny(result["description"]),
+			"insight":        stringFromAny(result["insight"]),
+			"updated_at":     time.Now(),
+		}).Error
+}
+
 func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]domain.PublicFoodItem, error) {
 	var rows []domain.PublicFoodItem
-	q := r.db.WithContext(ctx).Where("status = ?", "published")
+	q := r.db.WithContext(ctx).
+		Table("public_food_library AS p").
+		Select("p.*, COALESCE(t.status, '') AS analysis_status, COALESCE(t.error_message, '') AS analysis_error").
+		Joins("LEFT JOIN analysis_tasks t ON t.id = p.analysis_task_id").
+		Where("p.status = ?", "published")
 	if f.City != "" {
-		q = q.Where("city = ?", f.City)
+		q = q.Where("p.city = ?", f.City)
 	}
 	if f.SuitableForFatLoss != nil {
-		q = q.Where("suitable_for_fat_loss = ?", *f.SuitableForFatLoss)
+		q = q.Where("p.suitable_for_fat_loss = ?", *f.SuitableForFatLoss)
 	}
 	if f.MerchantName != "" {
-		q = q.Where("merchant_name ILIKE ?", "%"+f.MerchantName+"%")
+		q = q.Where("p.merchant_name ILIKE ?", "%"+f.MerchantName+"%")
 	}
 	if f.MinCalories != nil {
-		q = q.Where("total_calories >= ?", *f.MinCalories)
+		q = q.Where("p.total_calories >= ?", *f.MinCalories)
 	}
 	if f.MaxCalories != nil {
-		q = q.Where("total_calories <= ?", *f.MaxCalories)
+		q = q.Where("p.total_calories <= ?", *f.MaxCalories)
 	}
 	if f.IsCampusFood != nil {
-		q = q.Where("is_campus_food = ?", *f.IsCampusFood)
+		q = q.Where("p.is_campus_food = ?", *f.IsCampusFood)
 	}
 	if f.SchoolName != "" {
-		q = q.Where("school_name = ?", f.SchoolName)
+		q = q.Where("p.school_name = ?", f.SchoolName)
 	}
 	if f.CanteenName != "" {
-		q = q.Where("canteen_name = ?", f.CanteenName)
+		q = q.Where("p.canteen_name = ?", f.CanteenName)
 	}
 	if f.IsCampusHighlight != nil {
-		q = q.Where("is_campus_highlight = ?", *f.IsCampusHighlight)
+		q = q.Where("p.is_campus_highlight = ?", *f.IsCampusHighlight)
 	}
 	switch f.SortBy {
 	case "hot":
-		q = q.Order("like_count desc")
+		q = q.Order("p.like_count desc")
 	case "rating":
-		q = q.Order("avg_rating desc")
+		q = q.Order("p.avg_rating desc")
 	case "high_protein":
-		q = q.Order("total_protein desc NULLS LAST")
+		q = q.Order("p.total_protein desc NULLS LAST")
 	case "low_calorie":
-		q = q.Order("total_calories asc NULLS LAST")
+		q = q.Order("CASE WHEN COALESCE(p.total_calories, 0) <= 0 THEN 1 ELSE 0 END asc, p.total_calories asc NULLS LAST")
 	case "value":
-		q = q.Order("COALESCE(price, 999999) asc NULLS LAST, total_protein desc NULLS LAST")
+		q = q.Order("COALESCE(p.price, 999999) asc NULLS LAST, p.total_protein desc NULLS LAST")
 	default:
-		q = q.Order("published_at desc NULLS LAST, created_at desc")
+		q = q.Order("p.published_at desc NULLS LAST, p.created_at desc")
 	}
 	if f.Limit <= 0 || f.Limit > 100 {
 		f.Limit = 20
@@ -107,7 +142,7 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	if f.Offset < 0 {
 		f.Offset = 0
 	}
-	err := q.Limit(f.Limit).Offset(f.Offset).Find(&rows).Error
+	err := q.Limit(f.Limit).Offset(f.Offset).Scan(&rows).Error
 	return rows, err
 }
 
@@ -122,6 +157,53 @@ func (r *PublicFoodRepo) ListCampusHighlights(ctx context.Context, limit int) ([
 		Order("published_at desc NULLS LAST, created_at desc").
 		Limit(limit).
 		Find(&rows).Error
+	return rows, err
+}
+
+func (r *PublicFoodRepo) ListSimilarCampusFoods(ctx context.Context, item domain.PublicFoodItem, limit int) ([]domain.PublicFoodItem, error) {
+	var rows []domain.PublicFoodItem
+	if limit <= 0 || limit > 20 {
+		limit = 6
+	}
+	q := r.db.WithContext(ctx).
+		Where("id <> ? AND status = ? AND is_campus_food = ?", item.ID, "published", true)
+	if strings.TrimSpace(item.SchoolName) != "" {
+		q = q.Where("school_name = ?", item.SchoolName)
+	}
+	if strings.TrimSpace(item.CanteenName) != "" {
+		q = q.Where("canteen_name = ?", item.CanteenName)
+	}
+	err := q.
+		Order(gorm.Expr("CASE WHEN COALESCE(window_name, '') = ? AND COALESCE(window_name, '') <> '' THEN 0 ELSE 1 END", item.WindowName)).
+		Order(gorm.Expr("CASE WHEN COALESCE(floor, '') = ? AND COALESCE(floor, '') <> '' THEN 0 ELSE 1 END", item.Floor)).
+		Order("(COALESCE(collection_count, 0) + COALESCE(like_count, 0)) DESC").
+		Order("published_at DESC").
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *PublicFoodRepo) ListRelatedCampusFeeds(ctx context.Context, item domain.PublicFoodItem, limit int) ([]domain.CampusRelatedFeedItem, error) {
+	var rows []domain.CampusRelatedFeedItem
+	if limit <= 0 || limit > 20 {
+		limit = 6
+	}
+	q := r.db.WithContext(ctx).
+		Table("public_food_library").
+		Select("id, food_name, image_path, image_paths, school_name, canteen_name, campus_location_text AS campus_location, total_calories, total_protein, price, price_unit, like_count, comment_count, collection_count, published_at").
+		Where("id <> ? AND status = ? AND is_campus_food = ? AND is_campus_highlight = ?", item.ID, "published", true, true)
+	if strings.TrimSpace(item.SchoolName) != "" {
+		q = q.Where("school_name = ?", item.SchoolName)
+	}
+	if strings.TrimSpace(item.CanteenName) != "" {
+		q = q.Where("canteen_name = ?", item.CanteenName)
+	}
+	err := q.
+		Order("published_at DESC").
+		Order("created_at DESC").
+		Limit(limit).
+		Scan(&rows).Error
 	return rows, err
 }
 
@@ -181,6 +263,27 @@ func (r *PublicFoodRepo) GetTaskImagePaths(ctx context.Context, taskID string) (
 	return task.ImagePaths, err
 }
 
+func (r *PublicFoodRepo) CreateCampusAnalysisTask(ctx context.Context, userID, itemID string, imageURL *string, imagePaths []string, payload map[string]any) (*analyzedomain.AnalysisTask, error) {
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payload["public_food_item_id"] = itemID
+	payload["source_type"] = "campus_public_food"
+	task := analyzedomain.AnalysisTask{
+		ID:         uuid.New().String(),
+		UserID:     userID,
+		TaskType:   "food",
+		Status:     "pending",
+		ImageURL:   imageURL,
+		ImagePaths: imagePaths,
+		Payload:    payload,
+	}
+	if err := r.db.WithContext(ctx).Create(&task).Error; err != nil {
+		return nil, err
+	}
+	return &task, nil
+}
+
 func (r *PublicFoodRepo) CreateModerationTask(ctx context.Context, userID, itemID, text string) (*analyzedomain.AnalysisTask, error) {
 	task := analyzedomain.AnalysisTask{
 		ID:        uuid.New().String(),
@@ -212,6 +315,13 @@ func (r *PublicFoodRepo) Collect(ctx context.Context, userID, itemID string) err
 
 func (r *PublicFoodRepo) Uncollect(ctx context.Context, userID, itemID string) error {
 	return r.db.WithContext(ctx).Where("user_id = ? AND library_item_id = ?", userID, itemID).Delete(&domain.PublicFoodCollection{}).Error
+}
+
+func (r *PublicFoodRepo) UpdateItem(ctx context.Context, itemID, userID string, updates map[string]any) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.PublicFoodItem{}).
+		Where("id = ? AND user_id = ?", itemID, userID).
+		Updates(updates).Error
 }
 
 func (r *PublicFoodRepo) SoftDeleteOwned(ctx context.Context, itemID, userID, status string) error {
@@ -326,4 +436,77 @@ func uniqueNonEmpty(in []string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+func extractFloat(values map[string]any, keys ...string) float64 {
+	for _, key := range keys {
+		switch v := values[key].(type) {
+		case float64:
+			return v
+		case float32:
+			return float64(v)
+		case int:
+			return float64(v)
+		case int64:
+			return float64(v)
+		case json.Number:
+			n, _ := v.Float64()
+			return n
+		case string:
+			n, _ := strconv.ParseFloat(strings.TrimSpace(v), 64)
+			return n
+		}
+	}
+	return 0
+}
+
+func nutritionTotalsFromResult(result map[string]any) (float64, float64, float64, float64) {
+	calories := extractFloat(result, "total_calories", "totalCalories")
+	protein := extractFloat(result, "total_protein", "totalProtein")
+	carbs := extractFloat(result, "total_carbs", "totalCarbs")
+	fat := extractFloat(result, "total_fat", "totalFat")
+	if calories > 0 || protein > 0 || carbs > 0 || fat > 0 {
+		return calories, protein, carbs, fat
+	}
+	for _, item := range mapSliceFromAny(result["items"]) {
+		nutrients := mapFromAny(item["nutrients"])
+		calories += extractFloat(nutrients, "calories")
+		protein += extractFloat(nutrients, "protein")
+		carbs += extractFloat(nutrients, "carbs")
+		fat += extractFloat(nutrients, "fat")
+	}
+	return calories, protein, carbs, fat
+}
+
+func mapSliceFromAny(value any) []map[string]any {
+	switch v := value.(type) {
+	case []map[string]any:
+		return v
+	case []any:
+		out := make([]map[string]any, 0, len(v))
+		for _, item := range v {
+			if m := mapFromAny(item); len(m) > 0 {
+				out = append(out, m)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func mapFromAny(value any) map[string]any {
+	switch v := value.(type) {
+	case map[string]any:
+		return v
+	default:
+		return nil
+	}
+}
+
+func stringFromAny(value any) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
 }

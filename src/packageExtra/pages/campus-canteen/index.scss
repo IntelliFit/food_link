@@ -435,7 +435,7 @@
 .campus-price {
   font-size: 32rpx;
   font-weight: 700;
-  color: #ef4444;
+  color: #047857;
 }
 
 .campus-calories {
@@ -452,6 +452,31 @@
   background: #f4faf8;
   padding: 4rpx 12rpx;
   border-radius: 8rpx;
+}
+
+.campus-analysis-text {
+  display: inline-flex;
+  align-items: center;
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  font-size: 24rpx;
+  line-height: 32rpx;
+  font-weight: 600;
+  color: #0f766e;
+  background: #ecfdf5;
+}
+
+.campus-analysis-failed {
+  font-size: 24rpx;
+  line-height: 32rpx;
+  font-weight: 600;
+}
+
+.campus-analysis-failed {
+  padding: 6rpx 14rpx;
+  border-radius: 999rpx;
+  color: #b91c1c;
+  background: #fef2f2;
 }
 
 .campus-tag {
@@ -473,6 +498,16 @@
 .campus-tag.fat-loss {
   color: #5cb896;
   background: #f4faf8;
+}
+
+.campus-card--analyzing .campus-tag {
+  color: #0f766e;
+  background: #ecfdf5;
+}
+
+.campus-card--failed .campus-tag {
+  color: #b91c1c;
+  background: #fef2f2;
 }
 
 .campus-card-footer {
@@ -632,6 +667,18 @@
   .campus-protein,
   .campus-tag.fat-loss {
     background: rgb(92 184 150 / 13%);
+  }
+
+  .campus-analysis-text,
+  .campus-card--analyzing .campus-tag {
+    color: #6ee7b7;
+    background: rgb(92 184 150 / 13%);
+  }
+
+  .campus-analysis-failed,
+  .campus-card--failed .campus-tag {
+    color: #fca5a5;
+    background: rgb(248 113 113 / 14%);
   }
 
   .campus-tag {

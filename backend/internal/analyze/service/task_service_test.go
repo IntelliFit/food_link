@@ -16,8 +16,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	_ "modernc.org/sqlite"
 )
 
 type recordingTaskPublisher struct {
@@ -99,8 +101,14 @@ func (m *mockTaskCreditGuard) RefundEarnedCreditsAfterTaskFailure(ctx context.Co
 }
 
 func setupTaskServiceTestDB(t *testing.T) (*gorm.DB, *repo.TaskRepo, *repo.PrecisionRepo, *authrepo.UserRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
+	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
+		DriverName: "sqlite",
+		DSN:        "file::memory:",
+	}), &gorm.Config{})
 	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 	require.NoError(t, db.AutoMigrate(&analyzedomain.AnalysisTask{}, &analyzedomain.PrecisionSession{}, &analyzedomain.PrecisionSessionRound{}, &authrepo.User{}, &foodrecorddomain.FoodRecord{}))
 	return db, repo.NewTaskRepo(db), repo.NewPrecisionRepo(db), authrepo.NewUserRepo(db)
 }
@@ -335,7 +343,7 @@ func TestTaskService_ListTasks(t *testing.T) {
 	require.NoError(t, taskRepo.CreateTask(ctx, &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "pending", ImageURL: &legacyURL}))
 	require.NoError(t, taskRepo.CreateTask(ctx, &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "food", Status: "done"}))
 
-	tasks, err := svc.ListTasks(ctx, "user1", "food", "", 10)
+	tasks, err := svc.ListTasks(ctx, "user1", "food", "", "", 10)
 	require.NoError(t, err)
 	assert.Len(t, tasks, 2)
 	var imageTask *analyzedomain.AnalysisTask
@@ -363,7 +371,7 @@ func TestTaskService_ListTasksCollapsesRepeatedSameDayInput(t *testing.T) {
 	require.NoError(t, taskRepo.CreateTask(ctx, older))
 	require.NoError(t, taskRepo.CreateTask(ctx, newer))
 
-	tasks, err := svc.ListTasks(ctx, "user1", "", "", 10)
+	tasks, err := svc.ListTasks(ctx, "user1", "", "", "", 10)
 	require.NoError(t, err)
 	require.Len(t, tasks, 1)
 	assert.Equal(t, newer.ID, tasks[0].ID)
@@ -417,7 +425,7 @@ func TestTaskService_SubmitCorrectionUsesOneCredit(t *testing.T) {
 	assert.Equal(t, true, task.Payload["is_correction"])
 }
 
-func TestTaskService_SubmitPrecisionCorrectionUsesTwoCredits(t *testing.T) {
+func TestTaskService_SubmitStrictSeparateCorrectionUsesPrecisionCorrectionCredits(t *testing.T) {
 	_, taskRepo, precisionRepo, userRepo := setupTaskServiceTestDB(t)
 	svc := NewTaskService(taskRepo, precisionRepo, userRepo)
 	guard := &mockTaskCreditGuard{}
@@ -426,11 +434,11 @@ func TestTaskService_SubmitPrecisionCorrectionUsesTwoCredits(t *testing.T) {
 	imageURL := "https://example.com/meal.jpg"
 	source := &analyzedomain.AnalysisTask{UserID: "user1", TaskType: "precision_plan", Status: "done", ImageURL: &imageURL}
 	require.NoError(t, taskRepo.CreateTask(ctx, source))
-	experimental := "experimental"
+	strictSeparate := "strict_separate"
 
 	taskID, err := svc.SubmitAnalyzeTask(ctx, "user1", SubmitTaskInput{
 		ImageURL:               imageURL,
-		ExecutionMode:          &experimental,
+		ExecutionMode:          &strictSeparate,
 		CorrectionSourceTaskID: source.ID,
 		PreviousResult:         map[string]any{"description": "old"},
 		CorrectionItems:        []map[string]any{{"name": "米饭", "weight": 100}},

@@ -20,10 +20,12 @@ type PublicFoodService interface {
 	Mine(ctx context.Context, userID string) ([]domain.PublicFoodItem, error)
 	Collections(ctx context.Context, userID string) ([]domain.PublicFoodView, error)
 	Get(ctx context.Context, userID, itemID string) (*domain.PublicFoodView, error)
+	GetCampusDetail(ctx context.Context, userID, itemID string) (*domain.CampusFoodDetailView, error)
 	Like(ctx context.Context, userID, itemID string) error
 	Unlike(ctx context.Context, userID, itemID string) error
 	Collect(ctx context.Context, userID, itemID string) error
 	Uncollect(ctx context.Context, userID, itemID string) error
+	Update(ctx context.Context, userID, itemID string, input service.CreateInput) error
 	Delete(ctx context.Context, userID, itemID string) error
 	Comments(ctx context.Context, itemID string) ([]domain.PublicFoodComment, error)
 	AddComment(ctx context.Context, userID, itemID, content string, rating *int) (*domain.PublicFoodComment, error)
@@ -196,6 +198,15 @@ func (h *PublicFoodHandler) Get(c *gin.Context) {
 	response.Success(c, item)
 }
 
+func (h *PublicFoodHandler) GetCampusDetail(c *gin.Context) {
+	detail, err := h.svc.GetCampusDetail(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("item_id"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, detail)
+}
+
 func (h *PublicFoodHandler) Like(c *gin.Context) {
 	if err := h.svc.Like(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("item_id")); err != nil {
 		response.Error(c, err)
@@ -226,6 +237,81 @@ func (h *PublicFoodHandler) Uncollect(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"message": "已取消"})
+}
+
+func (h *PublicFoodHandler) Update(c *gin.Context) {
+	var body struct {
+		ImagePath          *string          `json:"image_path"`
+		ImagePaths         []string         `json:"image_paths"`
+		Description        *string          `json:"description"`
+		Insight            *string          `json:"insight"`
+		FoodName           *string          `json:"food_name"`
+		MerchantName       *string          `json:"merchant_name"`
+		MerchantAddress    *string          `json:"merchant_address"`
+		TasteRating        *int             `json:"taste_rating"`
+		SuitableForFatLoss bool             `json:"suitable_for_fat_loss"`
+		UserTags           []string         `json:"user_tags"`
+		UserNotes          *string          `json:"user_notes"`
+		Latitude           *float64         `json:"latitude"`
+		Longitude          *float64         `json:"longitude"`
+		Province           *string          `json:"province"`
+		City               *string          `json:"city"`
+		District           *string          `json:"district"`
+		DetailAddress      *string          `json:"detail_address"`
+		IsCampusFood       bool             `json:"is_campus_food"`
+		SchoolName         *string          `json:"school_name"`
+		CampusName         *string          `json:"campus_name"`
+		CanteenName        *string          `json:"canteen_name"`
+		Floor              *string          `json:"floor"`
+		WindowName         *string          `json:"window_name"`
+		Price              *float64         `json:"price"`
+		PriceType          *string          `json:"price_type"`
+		PriceMin           *float64         `json:"price_min"`
+		PriceMax           *float64         `json:"price_max"`
+		PriceUnit          *string          `json:"price_unit"`
+		PriceCollectedAt   *time.Time       `json:"price_collected_at"`
+		PortionDescription *string          `json:"portion_description"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err := h.svc.Update(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("item_id"), service.CreateInput{
+		ImagePath:          body.ImagePath,
+		ImagePaths:         body.ImagePaths,
+		Description:        body.Description,
+		Insight:            body.Insight,
+		FoodName:           body.FoodName,
+		MerchantName:       body.MerchantName,
+		MerchantAddress:    body.MerchantAddress,
+		TasteRating:        body.TasteRating,
+		SuitableForFatLoss: body.SuitableForFatLoss,
+		UserTags:           body.UserTags,
+		UserNotes:          body.UserNotes,
+		Latitude:           body.Latitude,
+		Longitude:          body.Longitude,
+		Province:           body.Province,
+		City:               body.City,
+		District:           body.District,
+		DetailAddress:      body.DetailAddress,
+		IsCampusFood:       body.IsCampusFood,
+		SchoolName:         body.SchoolName,
+		CampusName:         body.CampusName,
+		CanteenName:        body.CanteenName,
+		Floor:              body.Floor,
+		WindowName:         body.WindowName,
+		Price:              body.Price,
+		PriceType:          body.PriceType,
+		PriceMin:           body.PriceMin,
+		PriceMax:           body.PriceMax,
+		PriceUnit:          body.PriceUnit,
+		PriceCollectedAt:   body.PriceCollectedAt,
+		PortionDescription: body.PortionDescription,
+	}); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "更新成功"})
 }
 
 func (h *PublicFoodHandler) Delete(c *gin.Context) {

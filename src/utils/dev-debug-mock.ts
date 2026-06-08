@@ -20,34 +20,51 @@ export function buildRandomDebugAnalyzeResponse(): AnalyzeResponse {
   const cal1 = kcalFromMacros(p1, c1, f1)
   const cal2 = kcalFromMacros(p2, c2, f2)
 
+  const buildNutrients = (cal: number, p: number, c: number, f: number) => ({
+    calories: cal,
+    protein: p,
+    carbs: c,
+    fat: f,
+    fiber: round1(rnd(0, 8)),
+    sugar: round1(rnd(0, 16)),
+    water_ml: round1(rnd(30, 180)),
+    sodium_mg: Math.round(rnd(80, 620)),
+    potassiumMg: Math.round(rnd(120, 580)),
+    calciumMg: Math.round(rnd(10, 120)),
+    ironMg: round1(rnd(0.3, 4.5)),
+    magnesiumMg: Math.round(rnd(8, 55)),
+    zincMg: round1(rnd(0.2, 3.5)),
+    vitaminARaeMcg: Math.round(rnd(5, 85)),
+    vitaminCMg: round1(rnd(1, 45)),
+    vitaminDMcg: round1(rnd(0.1, 2.5)),
+    vitaminEMg: round1(rnd(0.2, 4.0)),
+    vitaminKMcg: Math.round(rnd(2, 45)),
+    thiaminMg: round1(rnd(0.02, 0.35)),
+    riboflavinMg: round1(rnd(0.03, 0.4)),
+    niacinMg: round1(rnd(0.3, 5.5)),
+    vitaminB6Mg: round1(rnd(0.05, 0.6)),
+    folateMcg: Math.round(rnd(5, 65)),
+    vitaminB12Mcg: round1(rnd(0.05, 1.8)),
+    saturatedFat: round1(rnd(0.5, 8)),
+    cholesterolMg: Math.round(rnd(5, 95)),
+  })
+
   const items: FoodItem[] = [
     {
       itemId: 1,
       name: '调试 · 咖喱鸡饭',
       estimatedWeightGrams: w1,
       originalWeightGrams: w1,
-      nutrients: {
-        calories: cal1,
-        protein: p1,
-        carbs: c1,
-        fat: f1,
-        fiber: round1(rnd(1, 7)),
-        sugar: round1(rnd(0, 14))
-      }
+      water_ml: round1(rnd(50, 150)),
+      nutrients: buildNutrients(cal1, p1, c1, f1)
     },
     {
       itemId: 2,
       name: '调试 · 蔬菜沙拉',
       estimatedWeightGrams: w2,
       originalWeightGrams: w2,
-      nutrients: {
-        calories: cal2,
-        protein: p2,
-        carbs: c2,
-        fat: f2,
-        fiber: round1(rnd(0, 5)),
-        sugar: round1(rnd(0, 9))
-      }
+      water_ml: round1(rnd(40, 120)),
+      nutrients: buildNutrients(cal2, p2, c2, f2)
     }
   ]
 

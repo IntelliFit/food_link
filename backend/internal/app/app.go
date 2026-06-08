@@ -40,6 +40,7 @@ import (
 	homehandler "food_link/backend/internal/home/handler"
 	homerepo "food_link/backend/internal/home/repo"
 	homeservice "food_link/backend/internal/home/service"
+	locationhandler "food_link/backend/internal/location/handler"
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
@@ -51,10 +52,9 @@ import (
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
 	recipehandler "food_link/backend/internal/recipe/handler"
-	schoolhandler "food_link/backend/internal/school/handler"
-	locationhandler "food_link/backend/internal/location/handler"
 	reciperepo "food_link/backend/internal/recipe/repo"
 	recipeservice "food_link/backend/internal/recipe/service"
+	schoolhandler "food_link/backend/internal/school/handler"
 	"food_link/backend/internal/stub"
 	systemhandler "food_link/backend/internal/system/handler"
 	"food_link/backend/internal/taskqueue"
@@ -236,6 +236,7 @@ func New(cfg *config.Config) (*App, error) {
 	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
 	publicFoodSvc := publicfoodservice.NewPublicFoodService(publicFoodRepo, storageClient)
 	publicFoodSvc.ConfigureTaskPublisher(taskQueue)
+	publicFoodSvc.ConfigureCampusAnalyzeTaskSubmitter(analyzeTaskSvc)
 	publicFoodSvc.ConfigureRewardTaskAwarder(membershipSvc)
 	publicFoodHandler := publicfoodhandler.NewPublicFoodHandler(publicFoodSvc)
 
@@ -434,11 +435,13 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/public-food-library/mine", authmw.RequireJWT(jwtSvc), publicFoodHandler.Mine)
 	engine.GET("/api/public-food-library/collections", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collections)
 	engine.POST("/api/public-food-library/feedback", authmw.RequireJWT(jwtSvc), publicFoodHandler.Feedback)
+	engine.GET("/api/public-food-library/:item_id/campus-detail", authmw.RequireJWT(jwtSvc), publicFoodHandler.GetCampusDetail)
 	engine.GET("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Get)
 	engine.POST("/api/public-food-library/:item_id/like", authmw.RequireJWT(jwtSvc), publicFoodHandler.Like)
 	engine.DELETE("/api/public-food-library/:item_id/like", authmw.RequireJWT(jwtSvc), publicFoodHandler.Unlike)
 	engine.POST("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Collect)
 	engine.DELETE("/api/public-food-library/:item_id/collect", authmw.RequireJWT(jwtSvc), publicFoodHandler.Uncollect)
+	engine.PUT("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Update)
 	engine.DELETE("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Delete)
 	engine.GET("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.Comments)
 	engine.POST("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.AddComment)

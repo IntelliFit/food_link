@@ -41,12 +41,28 @@ function getPriceText(item: PublicFoodLibraryItem): string {
 }
 
 function getCampusTags(item: PublicFoodLibraryItem): string[] {
+  if (isAnalyzingItem(item)) return ['正在分析中']
+  if (isAnalysisFailedItem(item)) return ['分析失败']
   const tags: string[] = []
   if (item.total_protein >= 25) tags.push('高蛋白')
   if (item.total_calories > 0 && item.total_calories <= 450) tags.push('低热量')
   if (item.suitable_for_fat_loss) tags.push('减脂友好')
   if (!item.price || item.price <= 0) tags.push('价格待补充')
   return tags.slice(0, 3)
+}
+
+function isAnalyzingItem(item: PublicFoodLibraryItem): boolean {
+  const status = normalizeText(item.analysis_status)
+  return status === 'pending' || status === 'processing'
+}
+
+function isAnalysisFailedItem(item: PublicFoodLibraryItem): boolean {
+  const status = normalizeText(item.analysis_status)
+  return status === 'failed' || status === 'timed_out'
+}
+
+function hasNutrition(item: PublicFoodLibraryItem): boolean {
+  return !isAnalyzingItem(item) && !isAnalysisFailedItem(item) && ((item.total_calories || 0) > 0 || (item.total_protein || 0) > 0)
 }
 
 function CampusCanteenPage() {
@@ -141,7 +157,7 @@ function CampusCanteenPage() {
   }
 
   const goDetail = (itemId: string) => {
-    Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${itemId}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${itemId}&scene=campus` })
   }
 
   const goUpload = () => {
@@ -150,6 +166,14 @@ function CampusCanteenPage() {
 
   const quickRecord = (e: any, item: PublicFoodLibraryItem) => {
     e.stopPropagation()
+    if (isAnalyzingItem(item)) {
+      Taro.showToast({ title: '营养信息分析中', icon: 'none' })
+      return
+    }
+    if (isAnalysisFailedItem(item)) {
+      Taro.showToast({ title: '分析失败，暂不能记录', icon: 'none' })
+      return
+    }
     Taro.setStorageSync('campus_quick_record_item', JSON.stringify(item))
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-manual/index')}?campus_quick=1` })
   }
@@ -169,21 +193,22 @@ function CampusCanteenPage() {
     })
   }, [floorName, list, windowName])
 
-  const hotItems = useMemo(() => visibleList.slice(0, 6), [visibleList])
+  const analyzedList = useMemo(() => visibleList.filter(hasNutrition), [visibleList])
+  const hotItems = useMemo(() => analyzedList.slice(0, 6), [analyzedList])
   const highProteinItems = useMemo(
-    () => [...visibleList].sort((a, b) => (b.total_protein || 0) - (a.total_protein || 0)).slice(0, 6),
-    [visibleList]
+    () => [...analyzedList].sort((a, b) => (b.total_protein || 0) - (a.total_protein || 0)).slice(0, 6),
+    [analyzedList]
   )
   const lowCalorieItems = useMemo(
-    () => [...visibleList].filter(item => item.total_calories > 0).sort((a, b) => a.total_calories - b.total_calories).slice(0, 6),
-    [visibleList]
+    () => [...analyzedList].filter(item => item.total_calories > 0).sort((a, b) => a.total_calories - b.total_calories).slice(0, 6),
+    [analyzedList]
   )
   const valueItems = useMemo(
-    () => [...visibleList]
+    () => [...analyzedList]
       .filter(item => item.price && item.price > 0 && item.total_protein > 0)
       .sort((a, b) => ((b.total_protein || 0) / (b.price || 1)) - ((a.total_protein || 0) / (a.price || 1)))
       .slice(0, 6),
-    [visibleList]
+    [analyzedList]
   )
 
   const renderMiniCard = (item: PublicFoodLibraryItem) => (
@@ -198,8 +223,11 @@ function CampusCanteenPage() {
     </View>
   )
 
-  const renderCampusCard = (item: PublicFoodLibraryItem) => (
-    <View key={item.id} className='campus-card' onClick={() => goDetail(item.id)}>
+  const renderCampusCard = (item: PublicFoodLibraryItem) => {
+    const analyzing = isAnalyzingItem(item)
+    const failed = isAnalysisFailedItem(item)
+    return (
+    <View key={item.id} className={`campus-card ${analyzing ? 'campus-card--analyzing' : ''} ${failed ? 'campus-card--failed' : ''}`} onClick={() => goDetail(item.id)}>
       <View className='campus-card-main'>
         <View className='campus-image-wrap'>
           {item.image_path ? (
@@ -213,8 +241,16 @@ function CampusCanteenPage() {
           <Text className='campus-location'>{getLocationText(item) || selectedSchoolName}</Text>
           <View className='campus-nutrition-row'>
             <Text className='campus-price'>{getPriceText(item)}</Text>
-            <Text className='campus-calories'>{item.total_calories.toFixed(0)} kcal</Text>
-            <Text className='campus-protein'>蛋白 {item.total_protein.toFixed(0)}g</Text>
+            {analyzing ? (
+              <Text className='campus-analysis-text'>正在分析中</Text>
+            ) : failed ? (
+              <Text className='campus-analysis-failed'>分析失败，稍后重试</Text>
+            ) : (
+              <>
+                <Text className='campus-calories'>{item.total_calories.toFixed(0)} kcal</Text>
+                <Text className='campus-protein'>蛋白 {item.total_protein.toFixed(0)}g</Text>
+              </>
+            )}
           </View>
           <View className='campus-tags'>
             {getCampusTags(item).map(tag => (
@@ -231,11 +267,12 @@ function CampusCanteenPage() {
           <Text className='stat-count'>{item.comment_count}</Text>
         </View>
         <View className='campus-record-btn' onClick={(e) => quickRecord(e, item)}>
-          <Text className='campus-record-btn-text'>一键记录</Text>
+          <Text className='campus-record-btn-text'>{analyzing ? '分析中' : '一键记录'}</Text>
         </View>
       </View>
     </View>
-  )
+    )
+  }
 
   if (!loggedIn) {
     return (
@@ -331,7 +368,7 @@ function CampusCanteenPage() {
         refresherDefaultStyle='black'
       >
         <View className='list-content'>
-          {visibleList.length > 0 && (
+          {analyzedList.length > 0 && (
             <>
               <View className='section-block'>
                 <View className='section-head'>

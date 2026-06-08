@@ -1,4 +1,4 @@
-﻿import { View, Text, Image, Input, Textarea, PageMeta } from '@tarojs/components'
+import { View, Text, Image, Input, Textarea, PageMeta } from '@tarojs/components'
 import { useEffect, useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { withAuth } from '../../../utils/withAuth'
@@ -6,12 +6,13 @@ import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import SchoolPicker from '../../../components/SchoolPicker'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import {
-  analyzeFoodImage,
   createPublicFoodLibraryItem,
+  getPublicFoodLibraryItem,
   imageToBase64,
   showUnifiedApiError,
+  type PublicFoodLibraryItem,
+  updatePublicFoodLibraryItem,
   uploadAnalyzeImage,
-  type Nutrients,
 } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
@@ -42,25 +43,15 @@ const PRICE_TYPE_HELPERS: Record<string, string> = {
   unknown: '暂不确定计价方式时使用',
 }
 
-type CampusFoodItem = {
-  name: string
-  weight?: number
-  nutrients?: Nutrients
-}
-
 function CampusFoodSharePage() {
   const { scheme } = useAppColorScheme()
+  const routerParams = Taro.getCurrentInstance().router?.params
+  const editId = routerParams?.edit_id || ''
+  const isEditMode = Boolean(editId)
+  const [loadingEdit, setLoadingEdit] = useState(isEditMode)
   const [imagePaths, setImagePaths] = useState<string[]>([])
   const [imageUrls, setImageUrls] = useState<string[]>([])
   const [imageUrl, setImageUrl] = useState('')
-  const [analyzeResultsMap, setAnalyzeResultsMap] = useState<Record<string, Awaited<ReturnType<typeof analyzeFoodImage>>>>({})
-  const [items, setItems] = useState<CampusFoodItem[]>([])
-  const [description, setDescription] = useState('')
-  const [insight, setInsight] = useState('')
-  const [totalCalories, setTotalCalories] = useState(0)
-  const [totalProtein, setTotalProtein] = useState(0)
-  const [totalCarbs, setTotalCarbs] = useState(0)
-  const [totalFat, setTotalFat] = useState(0)
   const [foodName, setFoodName] = useState('')
   const [schoolName, setSchoolName] = useState('')
   const [canteenName, setCanteenName] = useState('')
@@ -81,54 +72,6 @@ function CampusFoodSharePage() {
   const [showPriceTypeSheet, setShowPriceTypeSheet] = useState(false)
   const [showPriceDateSheet, setShowPriceDateSheet] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [analyzing, setAnalyzing] = useState(false)
-
-  const inferFoodName = (nextItems?: CampusFoodItem[], nextDescription?: string) => {
-    const itemNames = (nextItems || [])
-      .map(item => item.name?.trim())
-      .filter(Boolean)
-      .slice(0, 3) as string[]
-    if (itemNames.length > 0) return itemNames.join('、')
-
-    const desc = (nextDescription || '').trim()
-    return desc ? desc.slice(0, 20) : ''
-  }
-
-  /** 聚合识别结果，只用于提交给后端，不在上传页展示营养数值。 */
-  const aggregateFromMap = (urls: string[], resultsMap: Record<string, Awaited<ReturnType<typeof analyzeFoodImage>>>) => {
-    if (urls.length === 0) {
-      setDescription('')
-      setInsight('')
-      setItems([])
-      setTotalCalories(0)
-      setTotalProtein(0)
-      setTotalCarbs(0)
-      setTotalFat(0)
-      return
-    }
-
-    const results = urls.map(url => resultsMap[url]).filter(Boolean)
-    const descriptions = results.map(r => r.description).filter(Boolean)
-    const insights = results.map(r => r.insight).filter(Boolean)
-    const allItems = results.flatMap(r =>
-      (r.items || []).map(it => ({
-        name: it.name,
-        weight: it.estimatedWeightGrams,
-        nutrients: it.nutrients,
-      }))
-    )
-
-    setDescription(descriptions.join('；'))
-    setInsight(insights.join('；'))
-    setItems(allItems)
-    setTotalCalories(results.reduce((sum, r) => sum + (r.items || []).reduce((subSum, it) => subSum + (it.nutrients?.calories || 0), 0), 0))
-    setTotalProtein(results.reduce((sum, r) => sum + (r.items || []).reduce((subSum, it) => subSum + (it.nutrients?.protein || 0), 0), 0))
-    setTotalCarbs(results.reduce((sum, r) => sum + (r.items || []).reduce((subSum, it) => subSum + (it.nutrients?.carbs || 0), 0), 0))
-    setTotalFat(results.reduce((sum, r) => sum + (r.items || []).reduce((subSum, it) => subSum + (it.nutrients?.fat || 0), 0), 0))
-
-    const inferredName = inferFoodName(allItems, descriptions.join('；'))
-    if (inferredName) setFoodName(prev => prev.trim() || inferredName)
-  }
 
   const handleChooseImage = async () => {
     const remain = MAX_IMAGES - imageUrls.length
@@ -145,9 +88,7 @@ function CampusFoodSharePage() {
 
       const prevPaths = imagePaths
       const prevUrls = imageUrls
-      const prevResultsMap = analyzeResultsMap
       setImagePaths(prev => [...prev, ...tempPaths])
-      setAnalyzing(true)
       Taro.showLoading({ title: '上传中...', mask: true })
 
       try {
@@ -161,25 +102,14 @@ function CampusFoodSharePage() {
         const allUrls = [...prevUrls, ...newUrls]
         setImageUrls(allUrls)
         setImageUrl(allUrls[0] || '')
-        Taro.hideLoading()
-
-        const newResultsMap = { ...prevResultsMap }
-        for (let i = 0; i < newUrls.length; i++) {
-          Taro.showLoading({ title: `识别中 (${i + 1}/${newUrls.length})...`, mask: true })
-          newResultsMap[newUrls[i]] = await analyzeFoodImage({ image_url: newUrls[i] })
-        }
-        setAnalyzeResultsMap(newResultsMap)
-        aggregateFromMap(allUrls, newResultsMap)
         Taro.showToast({ title: '图片已上传', icon: 'success' })
       } catch (e: any) {
         setImagePaths(prevPaths)
         setImageUrls(prevUrls)
         setImageUrl(prevUrls[0] || '')
-        setAnalyzeResultsMap(prevResultsMap)
         await showUnifiedApiError(e, '上传失败')
       } finally {
         Taro.hideLoading()
-        setAnalyzing(false)
       }
     } catch (e) {
       if ((e as any)?.errMsg?.includes('cancel')) return
@@ -201,14 +131,10 @@ function CampusFoodSharePage() {
     const removedUrl = imageUrls[index]
     const nextPaths = imagePaths.filter((_, i) => i !== index)
     const nextUrls = imageUrls.filter((_, i) => i !== index)
-    const nextResultsMap = { ...analyzeResultsMap }
-    delete nextResultsMap[removedUrl]
 
     setImagePaths(nextPaths)
     setImageUrls(nextUrls)
     setImageUrl(nextUrls[0] || '')
-    setAnalyzeResultsMap(nextResultsMap)
-    aggregateFromMap(nextUrls, nextResultsMap)
   }
 
   const toggleQuickTag = (tag: string) => {
@@ -266,7 +192,7 @@ function CampusFoodSharePage() {
       return
     }
 
-    const finalFoodName = foodName.trim() || inferFoodName(items, description)
+    const finalFoodName = foodName.trim()
     if (!finalFoodName) {
       Taro.showToast({ title: '请填写菜品名称', icon: 'none' })
       return
@@ -287,9 +213,11 @@ function CampusFoodSharePage() {
     if (finalFoodName !== foodName.trim()) setFoodName(finalFoodName)
 
     const { confirm } = await Taro.showModal({
-      title: '确认提交',
-      content: '确定发布这份校园食堂菜品吗？提交后会自动出现在校园食堂分区。',
-      confirmText: '确定提交',
+      title: isEditMode ? '确认保存' : '确认提交',
+      content: isEditMode
+        ? '确定保存对这份校园食堂菜品的修改吗？'
+        : '确定提交这份校园食堂菜品吗？提交后会在后台分析营养信息，并显示在校园食堂分区。',
+      confirmText: isEditMode ? '保存' : '确定提交',
       cancelText: '取消',
     })
     if (!confirm) return
@@ -297,49 +225,53 @@ function CampusFoodSharePage() {
     await doSubmit(finalFoodName)
   }
 
+  const buildPayload = (finalFoodName: string) => ({
+    image_path: imageUrl || undefined,
+    image_paths: imageUrls.length > 0 ? imageUrls : undefined,
+    food_name: finalFoodName,
+    suitable_for_fat_loss: suitableForFatLoss,
+    user_tags: userTags,
+    user_notes: userNotes.trim() || undefined,
+    is_campus_food: true,
+    school_name: schoolName.trim(),
+    canteen_name: canteenName.trim(),
+    floor: floor.trim() || undefined,
+    window_name: windowName.trim() || undefined,
+    price: priceType !== 'range' && price ? Number(price) || undefined : undefined,
+    price_type: priceType.trim() || undefined,
+    price_min: priceType === 'range' && priceMin ? Number(priceMin) || undefined : undefined,
+    price_max: priceType === 'range' && priceMax ? Number(priceMax) || undefined : undefined,
+    price_unit: priceUnit.trim() || undefined,
+    price_collected_at: priceCollectedAt ? `${priceCollectedAt}T00:00:00+08:00` : undefined,
+    portion_description: portionDescription.trim() || undefined,
+  })
+
   const doSubmit = async (finalFoodName: string) => {
     setSubmitting(true)
     try {
-      await createPublicFoodLibraryItem({
-        image_path: imageUrl || undefined,
-        image_paths: imageUrls.length > 0 ? imageUrls : undefined,
-        total_calories: totalCalories,
-        total_protein: totalProtein,
-        total_carbs: totalCarbs,
-        total_fat: totalFat,
-        items,
-        description,
-        insight,
-        food_name: finalFoodName,
-        suitable_for_fat_loss: suitableForFatLoss,
-        user_tags: userTags,
-        user_notes: userNotes.trim() || undefined,
-        is_campus_food: true,
-        school_name: schoolName.trim(),
-        canteen_name: canteenName.trim(),
-        floor: floor.trim() || undefined,
-        window_name: windowName.trim() || undefined,
-        price: priceType !== 'range' && price ? Number(price) || undefined : undefined,
-        price_type: priceType.trim() || undefined,
-        price_min: priceType === 'range' && priceMin ? Number(priceMin) || undefined : undefined,
-        price_max: priceType === 'range' && priceMax ? Number(priceMax) || undefined : undefined,
-        price_unit: priceUnit.trim() || undefined,
-        price_collected_at: priceCollectedAt ? `${priceCollectedAt}T00:00:00+08:00` : undefined,
-        portion_description: portionDescription.trim() || undefined,
-      })
-      Taro.showToast({ title: '已发布到校园食堂', icon: 'none', duration: 2500 })
-      Taro.setStorageSync('food_library_need_refresh', '1')
-      setTimeout(() => {
-        Taro.redirectTo({ url: extraPkgUrl('/pages/campus-canteen/index') })
-      }, 2500)
+      if (isEditMode) {
+        await updatePublicFoodLibraryItem(editId, buildPayload(finalFoodName))
+        Taro.showToast({ title: '已保存', icon: 'success' })
+        Taro.setStorageSync('food_library_need_refresh', '1')
+        setTimeout(() => {
+          Taro.navigateBack()
+        }, 1200)
+      } else {
+        await createPublicFoodLibraryItem(buildPayload(finalFoodName))
+        Taro.showToast({ title: '已提交，后台分析中', icon: 'none', duration: 2500 })
+        Taro.setStorageSync('food_library_need_refresh', '1')
+        setTimeout(() => {
+          Taro.redirectTo({ url: extraPkgUrl('/pages/campus-canteen/index') })
+        }, 2500)
+      }
     } catch (e: any) {
-      await showUnifiedApiError(e, '发布失败')
+      await showUnifiedApiError(e, isEditMode ? '保存失败' : '发布失败')
     } finally {
       setSubmitting(false)
     }
   }
 
-  const canSubmit = imageUrls.length > 0 && !submitting && !analyzing
+  const canSubmit = imageUrls.length > 0 && !submitting
   const isDark = scheme === 'dark'
 
   useDidShow(() => {
@@ -350,6 +282,58 @@ function CampusFoodSharePage() {
     applyThemeNavigationBar(scheme, { lightBackground: '#f9fafb', darkBackground: '#07110f' })
   }, [scheme])
 
+  // 编辑模式：加载已有数据回填
+  useEffect(() => {
+    if (!editId) return
+    let cancelled = false
+    setLoadingEdit(true)
+    getPublicFoodLibraryItem(editId).then((data: PublicFoodLibraryItem) => {
+      if (cancelled) return
+      if (!data.is_campus_food) {
+        Taro.showToast({ title: '该条目不是校园食堂菜品', icon: 'none' })
+        return
+      }
+      const imgs = data.image_paths && data.image_paths.length > 0 ? data.image_paths : (data.image_path ? [data.image_path] : [])
+      setImageUrls(imgs)
+      setImageUrl(imgs[0] || '')
+      setFoodName(data.food_name || '')
+      setSchoolName(data.school_name || '')
+      setCanteenName(data.canteen_name || '')
+      setFloor(data.floor || '')
+      setWindowName(data.window_name || '')
+      setSuitableForFatLoss(data.suitable_for_fat_loss)
+      setUserTags(data.user_tags || [])
+      setUserNotes(data.user_notes || '')
+      setPortionDescription(data.portion_description || '')
+      const pt = data.price_type || 'fixed'
+      setPriceType(pt)
+      setPriceUnit(data.price_unit || PRICE_TYPE_UNITS[pt] || '元/份')
+      if (pt === 'range') {
+        setPriceMin(data.price_min ? String(data.price_min) : '')
+        setPriceMax(data.price_max ? String(data.price_max) : '')
+        setPrice('')
+      } else {
+        setPrice(data.price ? String(data.price) : '')
+        setPriceMin('')
+        setPriceMax('')
+      }
+      if (data.price_collected_at) {
+        try {
+          const d = new Date(data.price_collected_at)
+          setPriceCollectedAt(d.toISOString().slice(0, 10))
+        } catch {
+          setPriceCollectedAt(new Date().toISOString().slice(0, 10))
+        }
+      }
+    }).catch(async (e: any) => {
+      if (cancelled) return
+      await showUnifiedApiError(e, '加载失败')
+    }).finally(() => {
+      if (!cancelled) setLoadingEdit(false)
+    })
+    return () => { cancelled = true }
+  }, [editId])
+
   return (
     <>
       <PageMeta
@@ -358,7 +342,7 @@ function CampusFoodSharePage() {
       />
     <View className={`campus-share-page ${isDark ? 'campus-share-page--dark' : ''}`}>
       <View className='campus-share-hero'>
-        <Text className='campus-share-hero__title'>分享校园食堂菜品</Text>
+        <Text className='campus-share-hero__title'>{isEditMode ? '编辑校园食堂菜品' : '分享校园食堂菜品'}</Text>
         <Text className='campus-share-hero__subtitle'>补充学校、食堂和窗口信息，帮助同学更快找到好吃的一餐。</Text>
       </View>
 
@@ -511,7 +495,7 @@ function CampusFoodSharePage() {
 
       <View className='submit-bar'>
         <View className={`submit-btn ${canSubmit ? '' : 'disabled'}`} onClick={canSubmit ? handleSubmit : undefined}>
-          {submitting || analyzing ? <View className='btn-spinner' /> : '发布到校园食堂'}
+          {submitting ? <View className='btn-spinner' /> : isEditMode ? '保存修改' : '提交并后台分析'}
         </View>
       </View>
 

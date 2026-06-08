@@ -8,12 +8,17 @@ import (
 	"food_link/backend/internal/analyze/domain"
 
 	"github.com/stretchr/testify/assert"
-	"gorm.io/driver/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	_ "modernc.org/sqlite"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
+		DriverName: "sqlite",
+		DSN:        ":memory:",
+	}), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -171,11 +176,11 @@ func TestTaskRepo_ListTasksByUser(t *testing.T) {
 	_ = r.CreateTask(ctx, &domain.AnalysisTask{UserID: "u1", TaskType: "food_text", Status: "done"})
 	_ = r.CreateTask(ctx, &domain.AnalysisTask{UserID: "u2", TaskType: "food", Status: "pending"})
 
-	tasks, err := r.ListTasksByUser(ctx, "u1", "", "", 10)
+	tasks, err := r.ListTasksByUser(ctx, "u1", "", "", "", 10)
 	assert.NoError(t, err)
 	assert.Len(t, tasks, 2)
 
-	tasks, err = r.ListTasksByUser(ctx, "u1", "food", "", 10)
+	tasks, err = r.ListTasksByUser(ctx, "u1", "food", "", "", 10)
 	assert.NoError(t, err)
 	assert.Len(t, tasks, 1)
 }

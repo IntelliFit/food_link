@@ -94,6 +94,7 @@ type SubmitTaskInput struct {
 	CorrectionRootTaskID   string           `json:"correction_root_task_id"`
 	ReferenceObjects       []map[string]any `json:"reference_objects"`
 	SourceType             string           `json:"source_type"`
+	ExtraPayload           map[string]any   `json:"-"`
 	RetrySourceTaskID      string           `json:"-"`
 }
 
@@ -447,6 +448,12 @@ func applySubmitCompatibilityPayload(payload map[string]any, input SubmitTaskInp
 	}
 	if strings.TrimSpace(input.SourceType) != "" {
 		payload["source_type"] = strings.ToLower(strings.TrimSpace(input.SourceType))
+	}
+	for key, value := range input.ExtraPayload {
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		payload[key] = value
 	}
 	if strings.TrimSpace(input.RetrySourceTaskID) != "" {
 		payload["retry_source_task_id"] = strings.TrimSpace(input.RetrySourceTaskID)

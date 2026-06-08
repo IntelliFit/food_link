@@ -16,8 +16,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
+	gormsqlite "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+
+	_ "modernc.org/sqlite"
 )
 
 type mockLLMClient struct {
@@ -305,7 +307,10 @@ func (f *fakeNutritionFallbackEstimator) Estimate(ctx context.Context, candidate
 }
 
 func setupAnalyzeServiceTestDB(t *testing.T) (*gorm.DB, *authrepo.UserRepo) {
-	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
+	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
+		DriverName: "sqlite",
+		DSN:        "file::memory:",
+	}), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&authrepo.User{}))
 	return db, authrepo.NewUserRepo(db)
@@ -539,7 +544,7 @@ func TestBuildPromptStrictModeUsesDBFirstPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "OCR 强覆盖规则")
 	assert.Contains(t, prompt, "空间标定")
 	assert.Contains(t, prompt, "禁止凭 Logo 图案盲猜品牌")
-	assert.Contains(t, prompt, "estimatedWeightGrams 必须与 weightEvidence 完全吻合")
+	assert.Contains(t, prompt, "grossWeightGrams 必须与 weightEvidence 完全吻合")
 }
 
 func TestBuildStandardImageHybridReviewPromptRejectsTinyPackageCorners(t *testing.T) {
@@ -911,6 +916,7 @@ func TestAnalyzeService_Analyze(t *testing.T) {
 	gemini31Client := &mockLLMClient{result: map[string]any{"description": "test", "items": []any{map[string]any{"name": "rice", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 130.0}}}}}
 	svc := NewAnalyzeService(nil, gemini31Client, nil)
 	svc.gemini31LiteClient = gemini31Client
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 	ctx := context.Background()
 
 	result, err := svc.Analyze(ctx, "", AnalyzeInput{ImageURL: "https://example.com/img.jpg"})
@@ -920,13 +926,13 @@ func TestAnalyzeService_Analyze(t *testing.T) {
 
 func TestAnalyzeService_AnalyzeUsesSingleLLMRequestForMultipleImages(t *testing.T) {
 	client := &multiImageLLMClient{result: map[string]any{"description": "multi", "items": []any{}}}
-	svc := NewAnalyzeService(client, nil, nil)
-	svc.doubaoClient = client
+	svc := NewAnalyzeService(nil, client, nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/1.jpg",
 		ImageURLs: []string{"https://example.com/1.jpg", "https://example.com/2.jpg", "https://example.com/3.jpg"},
-		ModelName: "doubao",
+		ModelName: "gemini",
 	})
 
 	require.NoError(t, err)
@@ -969,6 +975,7 @@ func TestAnalyzeService_AnalyzeImageGeminiAliasUsesGemini3FlashInStandardMode(t 
 	gemini3Client := &mockLLMClient{result: map[string]any{"description": "gemini3 image", "items": []any{}}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
@@ -987,6 +994,7 @@ func TestAnalyzeService_AnalyzeImageStandardUsesGemini3Flash(t *testing.T) {
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureImageProvider("gemini")
 	svc.ConfigureWebSearcher(nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL: "https://example.com/img.jpg",
@@ -1004,6 +1012,7 @@ func TestAnalyzeService_AnalyzeImageStandardIgnoresExplicitDoubaoAndUsesGemini3F
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureImageProvider("gemini")
 	svc.ConfigureWebSearcher(nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
@@ -1021,6 +1030,7 @@ func TestAnalyzeService_AnalyzeImageStandardDoesNotFallbackToDoubaoWhenGeminiFai
 	gemini3Client := &mockLLMClient{err: errors.New("ofoxai api error 429: Resource exhausted. Please try again later")}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	_, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
@@ -1046,6 +1056,7 @@ func TestAnalyzeService_AnalyzeImageStandardWebSearchRefinesWithSearchEvidence(t
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(searcher)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:      "https://example.com/yogurt.jpg",
@@ -1089,6 +1100,7 @@ func TestAnalyzeService_AnalyzeImageStandardWebSearchIgnoresIrrelevantSearchEvid
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(searcher)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:      "https://example.com/icecream.jpg",
@@ -1123,6 +1135,7 @@ func TestAnalyzeService_AnalyzeImageStandardWebSearchRejectsGenericBrandPages(t 
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(searcher)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:      "https://example.com/icecream-bars.jpg",
@@ -1161,6 +1174,7 @@ func TestAnalyzeService_AnalyzeImageStandardWebSearchKeepsFirstPassWhenRelevantB
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(searcher)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:      "https://example.com/baxi.jpg",
@@ -1193,6 +1207,7 @@ func TestAnalyzeService_AnalyzeImageStandardWebSearchAppliesTitleSpecWithoutPref
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(searcher)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:      "https://example.com/chocliz.jpg",
@@ -1229,6 +1244,7 @@ func TestAnalyzeService_AnalyzeImageStandardWebSearchSpecOverridesGrossWeight(t 
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(searcher)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:      "https://example.com/chocliz.jpg",
@@ -1259,6 +1275,7 @@ func TestAnalyzeService_AnalyzeImageStandardWebSearchAppliesMultipackTitleSpec(t
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(searcher)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:      "https://example.com/chocliz.jpg",
@@ -1287,6 +1304,7 @@ func TestAnalyzeService_AnalyzeImageStandardWebSearchRejectsDifferentFlavorTitle
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.ConfigureWebSearcher(searcher)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:      "https://example.com/chocliz.jpg",
@@ -1324,6 +1342,7 @@ func TestAnalyzeService_AnalyzeImageStrictUsesGemini35SinglePass(t *testing.T) {
 	svc := NewAnalyzeService(doubaoClient, nil, nil)
 	svc.gemini35Client = gemini35Client
 	svc.ConfigureWebSearcher(nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:      "https://example.com/chicken.jpg",
@@ -1381,6 +1400,7 @@ func TestAnalyzeService_AnalyzeImageLegacyLiteUsesStandardGemini3Flash(t *testin
 		},
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:      "https://example.com/longkong.jpg",
@@ -1409,6 +1429,7 @@ func TestAnalyzeService_AnalyzeImageCorrectionUsesGemini31Lite(t *testing.T) {
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
 	svc.gemini31LiteClient = gemini31Client
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL: "https://example.com/longkong.jpg",
@@ -1573,6 +1594,8 @@ func TestAnalyzeService_AnalyzeRetriesInvalidLLMJSON(t *testing.T) {
 	}
 	svc := NewAnalyzeService(client, client, nil)
 	svc.doubaoClient = client
+	svc.ConfigureImageProvider("doubao")
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
 		ImageURL:  "https://example.com/img.jpg",
@@ -1648,6 +1671,7 @@ func TestAnalyzeService_AnalyzeCompare(t *testing.T) {
 	ofoxClient := &mockLLMClient{result: map[string]any{"description": "gemini result", "items": []any{}}}
 	svc := NewAnalyzeService(doubaoClient, ofoxClient, userRepo)
 	svc.doubaoClient = doubaoClient
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 	ctx := context.Background()
 
 	result, err := svc.AnalyzeCompare(ctx, "", AnalyzeInput{ImageURL: "https://example.com/img.jpg"})
@@ -1661,6 +1685,7 @@ func TestAnalyzeService_AnalyzeCompareEngines(t *testing.T) {
 	doubaoClient := &mockLLMClient{result: map[string]any{"description": "test", "items": []any{}}}
 	svc := NewAnalyzeService(doubaoClient, doubaoClient, userRepo)
 	svc.doubaoClient = doubaoClient
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 	ctx := context.Background()
 
 	result, err := svc.AnalyzeCompareEngines(ctx, "", AnalyzeInput{ImageURL: "https://example.com/img.jpg"})
@@ -1672,8 +1697,8 @@ func TestAnalyzeService_AnalyzeCompareEngines(t *testing.T) {
 func TestAnalyzeService_AnalyzeBatch(t *testing.T) {
 	_, userRepo := setupAnalyzeServiceTestDB(t)
 	doubaoClient := &multiImageLLMClient{result: map[string]any{"description": "batch", "items": []any{map[string]any{"name": "apple", "estimatedWeightGrams": 100.0, "nutrients": map[string]any{"calories": 50.0}}}}}
-	svc := NewAnalyzeService(doubaoClient, doubaoClient, userRepo)
-	svc.doubaoClient = doubaoClient
+	svc := NewAnalyzeService(nil, doubaoClient, userRepo)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 	ctx := context.Background()
 
 	_, err := svc.AnalyzeBatch(ctx, "", AnalyzeInput{ImageURLs: []string{}})

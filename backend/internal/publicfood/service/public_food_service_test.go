@@ -1,12 +1,65 @@
 package service
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	analyzedomain "food_link/backend/internal/analyze/domain"
+	analyzerepo "food_link/backend/internal/analyze/repo"
+	analyzeservice "food_link/backend/internal/analyze/service"
+	authrepo "food_link/backend/internal/auth/repo"
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/publicfood/domain"
+	"food_link/backend/internal/publicfood/repo"
+	"food_link/backend/internal/taskqueue"
 
 	"github.com/stretchr/testify/require"
+	gormsqlite "gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
+	_ "modernc.org/sqlite"
 )
+
+type mockPublicFoodRewardAwarder struct {
+	called bool
+	meta   map[string]any
+}
+
+type recordingPublicFoodTaskPublisher struct {
+	messages []taskqueue.TaskMessage
+}
+
+func (p *recordingPublicFoodTaskPublisher) PublishTask(ctx context.Context, msg taskqueue.TaskMessage) error {
+	p.messages = append(p.messages, msg)
+	return nil
+}
+
+func (m *mockPublicFoodRewardAwarder) AwardPublicFoodUpload(ctx context.Context, userID, publicFoodItemID string, meta map[string]any) (map[string]any, error) {
+	m.called = true
+	m.meta = meta
+	return map[string]any{"ok": true}, nil
+}
+
+func setupPublicFoodServiceTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+
+	db, err := gorm.Open(gormsqlite.New(gormsqlite.Config{
+		DriverName: "sqlite",
+		DSN:        ":memory:",
+	}), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&domain.PublicFoodItem{},
+		&analyzedomain.AnalysisTask{},
+		&analyzedomain.PrecisionSession{},
+		&analyzedomain.PrecisionSessionRound{},
+		&authrepo.User{},
+		&domain.PublicFoodLike{},
+		&domain.PublicFoodCollection{},
+	))
+	return db
+}
 
 func TestValidateCampusCreateInputRequiresCoreFields(t *testing.T) {
 	foodName := "鸡胸肉套餐"
@@ -189,4 +242,362 @@ func TestNormalizePublicFoodLocationInputNonCampusClearsPriceFields(t *testing.T
 	require.NoError(t, err)
 	require.Nil(t, input.Price)
 	require.Nil(t, input.PriceType)
+}
+
+func TestPublicFoodServiceCreateCampusFoodPublishesAndStoresCampusFields(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	publicFoodRepo := repo.NewPublicFoodRepo(db)
+	taskRepo := analyzerepo.NewTaskRepo(db)
+	precisionRepo := analyzerepo.NewPrecisionRepo(db)
+	analyzeTaskSvc := analyzeservice.NewTaskService(taskRepo, precisionRepo, authrepo.NewUserRepo(db))
+	svc := NewPublicFoodService(publicFoodRepo)
+	awarder := &mockPublicFoodRewardAwarder{}
+	publisher := &recordingPublicFoodTaskPublisher{}
+	analyzeTaskSvc.ConfigureTaskPublisher(publisher)
+	svc.ConfigureCampusAnalyzeTaskSubmitter(analyzeTaskSvc)
+	svc.ConfigureRewardTaskAwarder(awarder)
+	ctx := context.Background()
+
+	foodName := "鸡胸肉套餐"
+	school := "北京大学"
+	campus := "燕园校区"
+	canteen := "学一食堂"
+	floor := "一层"
+	window := "低脂窗口"
+	image := "https://example.com/campus-food.jpg"
+	price := 16.5
+	priceType := "fixed"
+	priceUnit := "份"
+	portion := "一荤一素"
+
+	id, err := svc.Create(ctx, "user-1", CreateInput{
+		IsCampusFood:       true,
+		FoodName:           &foodName,
+		SchoolName:         &school,
+		CampusName:         &campus,
+		CanteenName:        &canteen,
+		Floor:              &floor,
+		WindowName:         &window,
+		ImagePath:          &image,
+		TotalCalories:      420,
+		TotalProtein:       38,
+		Price:              &price,
+		PriceType:          &priceType,
+		PriceUnit:          &priceUnit,
+		PortionDescription: &portion,
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, id)
+
+	var saved domain.PublicFoodItem
+	require.NoError(t, db.Where("id = ?", id).First(&saved).Error)
+	require.Equal(t, "published", saved.Status)
+	require.NotNil(t, saved.PublishedAt)
+	require.True(t, saved.IsCampusFood)
+	require.Equal(t, school, saved.SchoolName)
+	require.Equal(t, campus, saved.CampusName)
+	require.Equal(t, canteen, saved.CanteenName)
+	require.Equal(t, floor, saved.Floor)
+	require.Equal(t, window, saved.WindowName)
+	require.Equal(t, "北京大学 · 燕园校区 · 学一食堂 · 一层 · 低脂窗口", saved.CampusLocationText)
+	require.Equal(t, price, saved.Price)
+	require.Equal(t, priceType, saved.PriceType)
+	require.Equal(t, priceUnit, saved.PriceUnit)
+	require.Equal(t, portion, saved.PortionDescription)
+	require.NotNil(t, saved.PriceCollectedAt)
+	require.NotNil(t, saved.AnalysisTaskID)
+
+	var task analyzedomain.AnalysisTask
+	require.NoError(t, db.Where("id = ?", *saved.AnalysisTaskID).First(&task).Error)
+	require.Equal(t, "precision_plan", task.TaskType)
+	require.Equal(t, "pending", task.Status)
+	require.Equal(t, image, *task.ImageURL)
+	require.Equal(t, []string{image}, task.ImagePaths)
+	require.Equal(t, id, task.Payload["public_food_item_id"])
+	require.Equal(t, "campus_public_food", task.Payload["public_food_source_type"])
+	require.Equal(t, "image", task.Payload["source_type"])
+	require.Equal(t, "strict_separate", task.Payload["execution_mode"])
+	require.NotEmpty(t, task.Payload["precision_session_id"])
+	require.Len(t, publisher.messages, 1)
+	require.Equal(t, task.ID, publisher.messages[0].TaskID)
+	require.Equal(t, "precision_plan", publisher.messages[0].TaskType)
+	require.True(t, awarder.called)
+	require.Equal(t, true, awarder.meta["is_campus_food"])
+	require.Equal(t, school, awarder.meta["school_name"])
+	require.Equal(t, canteen, awarder.meta["canteen_name"])
+}
+
+func TestPublicFoodServiceCreateCampusFoodAcceptsPostedPayloadWithoutItems(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	publicFoodRepo := repo.NewPublicFoodRepo(db)
+	taskRepo := analyzerepo.NewTaskRepo(db)
+	precisionRepo := analyzerepo.NewPrecisionRepo(db)
+	analyzeTaskSvc := analyzeservice.NewTaskService(taskRepo, precisionRepo, authrepo.NewUserRepo(db))
+	publisher := &recordingPublicFoodTaskPublisher{}
+	analyzeTaskSvc.ConfigureTaskPublisher(publisher)
+	svc := NewPublicFoodService(publicFoodRepo)
+	svc.ConfigureCampusAnalyzeTaskSubmitter(analyzeTaskSvc)
+	ctx := context.Background()
+
+	imageURL := "http://cdn-food-images.coachlink.fit/2ff8d285-09e3-4b24-9dee-19861259a8c4.jpg"
+	foodName := "锦恢蜜汁拿铁"
+	schoolName := "中国科学技术大学"
+	canteenName := "测试"
+	floor := "1"
+	windowName := "1"
+	price := 10.0
+	priceType := "fixed"
+	priceUnit := "元/份"
+	collectedAt := time.Date(2026, 6, 7, 0, 0, 0, 0, time.FixedZone("CST", 8*60*60))
+	portion := "中杯"
+
+	itemID, err := svc.Create(ctx, "user-1", CreateInput{
+		ImagePath:          &imageURL,
+		ImagePaths:         []string{imageURL},
+		FoodName:           &foodName,
+		SuitableForFatLoss: true,
+		UserTags:           []string{},
+		IsCampusFood:       true,
+		SchoolName:         &schoolName,
+		CanteenName:        &canteenName,
+		Floor:              &floor,
+		WindowName:         &windowName,
+		Price:              &price,
+		PriceType:          &priceType,
+		PriceUnit:          &priceUnit,
+		PriceCollectedAt:   &collectedAt,
+		PortionDescription: &portion,
+	})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, itemID)
+	var saved domain.PublicFoodItem
+	require.NoError(t, db.Where("id = ?", itemID).First(&saved).Error)
+	require.Equal(t, "published", saved.Status)
+	require.Equal(t, []map[string]any{}, saved.Items)
+	require.Equal(t, []string{}, saved.UserTags)
+	require.Equal(t, 0.0, saved.TotalCalories)
+	require.NotNil(t, saved.AnalysisTaskID)
+	require.Equal(t, "中国科学技术大学 · 测试 · 1 · 1", saved.CampusLocationText)
+
+	var task analyzedomain.AnalysisTask
+	require.NoError(t, db.Where("id = ?", *saved.AnalysisTaskID).First(&task).Error)
+	require.Equal(t, "precision_plan", task.TaskType)
+	require.Equal(t, "strict_separate", task.Payload["execution_mode"])
+	require.Equal(t, "campus_public_food", task.Payload["public_food_source_type"])
+	require.Equal(t, itemID, task.Payload["public_food_item_id"])
+	require.Len(t, publisher.messages, 1)
+	require.Equal(t, task.ID, publisher.messages[0].TaskID)
+}
+
+func TestPublicFoodServiceCreateCampusFoodRequiresCoreFields(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	ctx := context.Background()
+
+	foodName := "鸡胸肉套餐"
+	school := "北京大学"
+	canteen := "学一食堂"
+	image := "https://example.com/campus-food.jpg"
+
+	tests := []struct {
+		name  string
+		input CreateInput
+	}{
+		{
+			name: "missing school",
+			input: CreateInput{
+				IsCampusFood: true,
+				FoodName:     &foodName,
+				CanteenName:  &canteen,
+				ImagePath:    &image,
+			},
+		},
+		{
+			name: "missing canteen",
+			input: CreateInput{
+				IsCampusFood: true,
+				FoodName:     &foodName,
+				SchoolName:   &school,
+				ImagePath:    &image,
+			},
+		},
+		{
+			name: "missing image",
+			input: CreateInput{
+				IsCampusFood: true,
+				FoodName:     &foodName,
+				SchoolName:   &school,
+				CanteenName:  &canteen,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, err := svc.Create(ctx, "user-1", tt.input)
+
+			require.Error(t, err)
+			require.Empty(t, id)
+		})
+	}
+}
+
+func TestPublicFoodServiceGetCampusDetailAggregatesRelatedData(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	publicFoodRepo := repo.NewPublicFoodRepo(db)
+	svc := NewPublicFoodService(publicFoodRepo)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	require.NoError(t, db.Create(&authrepo.User{ID: "user-1", Nickname: "贡献者"}).Error)
+	rows := []domain.PublicFoodItem{
+		{
+			ID:            "campus-1",
+			UserID:        "user-1",
+			FoodName:      "鸡胸肉套餐",
+			Status:        "published",
+			IsCampusFood:  true,
+			SchoolName:    "北京大学",
+			CanteenName:   "学一食堂",
+			Floor:         "一层",
+			WindowName:    "低脂窗口",
+			TotalCalories: 420,
+			TotalProtein:  38,
+			Price:         16,
+			PublishedAt:   &now,
+			CreatedAt:     &now,
+		},
+		{
+			ID:                "campus-2",
+			UserID:            "user-1",
+			FoodName:          "低脂牛肉饭",
+			Status:            "published",
+			IsCampusFood:      true,
+			IsCampusHighlight: true,
+			SchoolName:        "北京大学",
+			CanteenName:       "学一食堂",
+			Floor:             "一层",
+			WindowName:        "低脂窗口",
+			TotalCalories:     480,
+			TotalProtein:      35,
+			Price:             19,
+			PublishedAt:       &now,
+			CreatedAt:         &now,
+		},
+	}
+	require.NoError(t, db.Create(&rows).Error)
+
+	detail, err := svc.GetCampusDetail(ctx, "viewer-1", "campus-1")
+
+	require.NoError(t, err)
+	require.NotNil(t, detail)
+	require.Equal(t, "campus-1", detail.Item.ID)
+	require.Equal(t, "贡献者", detail.Item.Author.Nickname)
+	require.Equal(t, 2.4, detail.Metrics.ProteinPerYuan)
+	require.Equal(t, 3.81, detail.Metrics.PricePer100Kcal)
+	require.Len(t, detail.SimilarItems, 1)
+	require.Equal(t, "campus-2", detail.SimilarItems[0].ID)
+	require.Len(t, detail.RelatedFeeds, 1)
+	require.Equal(t, "campus-2", detail.RelatedFeeds[0].ID)
+}
+
+func TestPublicFoodServiceUpdateOwnItem(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	require.NoError(t, db.Create(&authrepo.User{ID: "user-1", Nickname: "作者"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:           "item-1",
+		UserID:       "user-1",
+		FoodName:     "原菜品",
+		Status:       "published",
+		IsCampusFood: true,
+		SchoolName:   "北京大学",
+		CanteenName:  "学一食堂",
+		Price:        15,
+		PublishedAt:  &now,
+		CreatedAt:    &now,
+	}).Error)
+
+	newName := "修改后的菜品"
+	newSchool := "清华大学"
+	newCanteen := "清芬园"
+	newPrice := 18.0
+	newPriceType := "fixed"
+	newDesc := "修改后的描述"
+
+	err := svc.Update(ctx, "user-1", "item-1", CreateInput{
+		IsCampusFood: true,
+		FoodName:     &newName,
+		SchoolName:   &newSchool,
+		CanteenName:  &newCanteen,
+		Price:        &newPrice,
+		PriceType:    &newPriceType,
+		Description:  &newDesc,
+	})
+	require.NoError(t, err)
+
+	var updated domain.PublicFoodItem
+	require.NoError(t, db.Where("id = ?", "item-1").First(&updated).Error)
+	require.Equal(t, "修改后的菜品", updated.FoodName)
+	require.Equal(t, "清华大学", updated.SchoolName)
+	require.Equal(t, "清芬园", updated.CanteenName)
+	require.Equal(t, 18.0, updated.Price)
+	require.Equal(t, "fixed", updated.PriceType)
+	require.Equal(t, "修改后的描述", updated.Description)
+	require.Equal(t, "清华大学 · 清芬园", updated.CampusLocationText)
+}
+
+func TestPublicFoodServiceUpdateNotFound(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	ctx := context.Background()
+
+	newName := "新名字"
+	err := svc.Update(ctx, "user-1", "nonexistent", CreateInput{FoodName: &newName})
+	require.ErrorIs(t, err, commonerrors.ErrNotFound)
+}
+
+func TestPublicFoodServiceUpdateForbidden(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:          "item-1",
+		UserID:      "user-1",
+		FoodName:    "原菜品",
+		Status:      "published",
+		PublishedAt: &now,
+		CreatedAt:   &now,
+	}).Error)
+
+	newName := "恶意修改"
+	err := svc.Update(ctx, "user-2", "item-1", CreateInput{FoodName: &newName})
+	require.ErrorIs(t, err, commonerrors.ErrForbidden)
+}
+
+func TestPublicFoodServiceUpdateSoftDeletedReturnsNotFound(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:          "item-1",
+		UserID:      "user-1",
+		FoodName:    "原菜品",
+		Status:      "user_deleted",
+		PublishedAt: &now,
+		CreatedAt:   &now,
+	}).Error)
+
+	newName := "恢复"
+	err := svc.Update(ctx, "user-1", "item-1", CreateInput{FoodName: &newName})
+	require.ErrorIs(t, err, commonerrors.ErrNotFound)
 }

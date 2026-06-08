@@ -11,13 +11,16 @@ import {
   getFoodRecordList,
   getFoodRecordById,
   createPublicFoodLibraryItem,
+  getPublicFoodLibraryItem,
   uploadAnalyzeImage,
   analyzeFoodImage,
   imageToBase64,
   resolveCurrentGeoContext,
   showUnifiedApiError,
   type FoodRecord,
-  type Nutrients
+  type Nutrients,
+  type PublicFoodLibraryItem,
+  updatePublicFoodLibraryItem
 } from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -55,6 +58,8 @@ function FoodLibrarySharePage() {
   const sourceRecordId = routerParams?.source_record_id
   const quickUploadMode = routerParams?.quick_upload === '1'
   const campusMode = routerParams?.campus_mode === '1'
+  const editId = routerParams?.edit_id || ''
+  const isEditMode = Boolean(editId)
 
   // 选择来源：record（从记录分享）或 upload（直接上传）
   const [sourceType, setSourceType] = useState<'record' | 'upload'>('upload')
@@ -234,6 +239,52 @@ function FoodLibrarySharePage() {
     }
   }, [isCampusFood, priceType, priceUnit])
 
+  // 编辑模式：加载已有数据回填
+  useEffect(() => {
+    if (!editId) return
+    let cancelled = false
+    Taro.showLoading({ title: '加载中...', mask: true })
+    getPublicFoodLibraryItem(editId).then((data: PublicFoodLibraryItem) => {
+      if (cancelled) return
+      if (data.is_campus_food) {
+        Taro.hideLoading()
+        Taro.redirectTo({ url: `${extraPkgUrl('/pages/campus-food-share/index')}?edit_id=${editId}` })
+        return
+      }
+      const imgs = data.image_paths && data.image_paths.length > 0 ? data.image_paths : (data.image_path ? [data.image_path] : [])
+      setSourceType('upload')
+      setSelectedRecord(null)
+      setImagePaths([])
+      setImageUrls(imgs)
+      setImageUrl(imgs[0] || '')
+      setFoodName(data.food_name || '')
+      setDescription(data.description || '')
+      setInsight(data.insight || '')
+      setTotalCalories(data.total_calories || 0)
+      setTotalProtein(data.total_protein || 0)
+      setTotalCarbs(data.total_carbs || 0)
+      setTotalFat(data.total_fat || 0)
+      setItems(Array.isArray(data.items) ? data.items.map((it: any) => ({ name: it.name || '', weight: it.weight, nutrients: it.nutrients })) : [])
+      setMerchantName(data.merchant_name || '')
+      setTasteRating(data.taste_rating || 0)
+      setSuitableForFatLoss(data.suitable_for_fat_loss)
+      setUserTags(data.user_tags || [])
+      setUserNotes(data.user_notes || '')
+      setProvince(data.province || '')
+      setCity(data.city || '')
+      setDistrict(data.district || '')
+      setDetailAddress(data.detail_address || '')
+      if (data.latitude) setLatitude(data.latitude)
+      if (data.longitude) setLongitude(data.longitude)
+    }).catch(async (e: any) => {
+      if (cancelled) return
+      await showUnifiedApiError(e, '加载失败')
+    }).finally(() => {
+      if (!cancelled) Taro.hideLoading()
+    })
+    return () => { cancelled = true }
+  }, [editId])
+
   const fillHomemadeCityFromLocation = async () => {
     if (province.trim() || city.trim() || locatingHomemadeCity) return
     setLocatingHomemadeCity(true)
@@ -386,6 +437,31 @@ function FoodLibrarySharePage() {
       const prevUrls = imageUrls
       const prevResultsMap = analyzeResultsMap
       setImagePaths(p => [...p, ...tempPaths])
+
+      if (isEditMode) {
+        // 编辑模式：仅上传图片，不触发 AI 识别，保留原有营养数据
+        Taro.showLoading({ title: '上传中...', mask: true })
+        try {
+          const newUrls: string[] = []
+          for (let i = 0; i < tempPaths.length; i++) {
+            const base64 = await imageToBase64(tempPaths[i])
+            const uploadRes = await uploadAnalyzeImage(base64)
+            newUrls.push(uploadRes.imageUrl)
+          }
+          const allUrls = [...prevUrls, ...newUrls]
+          setImageUrls(allUrls)
+          setImageUrl(allUrls[0] || '')
+          Taro.showToast({ title: '图片已更新', icon: 'success' })
+        } catch (e: any) {
+          setImagePaths(prevPaths)
+          setImageUrls(prevUrls)
+          setImageUrl(prevUrls[0] || '')
+          await showUnifiedApiError(e, '上传失败')
+        } finally {
+          Taro.hideLoading()
+        }
+        return
+      }
 
       setAnalyzing(true)
       Taro.showLoading({ title: '上传中...', mask: true })
@@ -608,13 +684,15 @@ function FoodLibrarySharePage() {
     }
 
     const { confirm } = await Taro.showModal({
-      title: '确认提交',
-      content: isCampusFood
-        ? '确定发布这份校园食堂菜品吗？提交后会自动出现在校园食堂分区。'
-        : quickUploadMode
-          ? '确定上传到公共食物库吗？审核通过后其他用户即可查看。'
-          : '确定要将该食物分享到公共食物库吗？提交后需经系统审核，通过后其他用户可查看。',
-      confirmText: '确定提交',
+      title: isEditMode ? '确认保存' : '确认提交',
+      content: isEditMode
+        ? '确定保存对这份食物的修改吗？'
+        : isCampusFood
+          ? '确定发布这份校园食堂菜品吗？提交后会自动出现在校园食堂分区。'
+          : quickUploadMode
+            ? '确定上传到公共食物库吗？审核通过后其他用户即可查看。'
+            : '确定要将该食物分享到公共食物库吗？提交后需经系统审核，通过后其他用户可查看。',
+      confirmText: isEditMode ? '保存' : '确定提交',
       cancelText: '取消'
     })
     if (!confirm) return
@@ -622,72 +700,85 @@ function FoodLibrarySharePage() {
     await doSubmit()
   }
 
+  const buildSubmitPayload = () => {
+    const fullAddress = [
+      province,
+      city,
+      isHomemade ? '' : district,
+      isHomemade ? '' : detailAddress
+    ].filter(Boolean).join(' ').trim()
+
+    const finalFoodName = foodName.trim() || inferFoodName(selectedRecord, items, description)
+    const submitTags = buildSubmitTags()
+
+    return {
+      image_path: imageUrl || selectedRecord?.image_path || undefined,
+      image_paths: imageUrls.length > 0 ? imageUrls : undefined,
+      source_record_id: selectedRecord?.id,
+      total_calories: totalCalories,
+      total_protein: totalProtein,
+      total_carbs: totalCarbs,
+      total_fat: totalFat,
+      items,
+      description,
+      insight,
+      food_name: finalFoodName,
+      merchant_name: isHomemade ? undefined : merchantName.trim() || undefined,
+      merchant_address: isHomemade ? undefined : fullAddress || undefined,
+      taste_rating: tasteRating > 0 ? tasteRating : undefined,
+      suitable_for_fat_loss: suitableForFatLoss,
+      user_tags: submitTags,
+      user_notes: userNotes.trim() || undefined,
+      latitude: isHomemade ? undefined : latitude,
+      longitude: isHomemade ? undefined : longitude,
+      province: province.trim() || undefined,
+      city: city.trim() || undefined,
+      district: isHomemade ? undefined : district.trim() || undefined,
+      detail_address: isHomemade ? undefined : detailAddress.trim() || undefined,
+      is_campus_food: isCampusFood,
+      school_name: isCampusFood ? schoolName.trim() || undefined : undefined,
+      canteen_name: isCampusFood ? canteenName.trim() || undefined : undefined,
+      floor: isCampusFood ? floor.trim() || undefined : undefined,
+      window_name: isCampusFood ? windowName.trim() || undefined : undefined,
+      price: isCampusFood && priceType !== 'range' && price ? Number(price) || undefined : undefined,
+      price_type: isCampusFood ? priceType.trim() || undefined : undefined,
+      price_min: isCampusFood && priceType === 'range' && priceMin ? Number(priceMin) || undefined : undefined,
+      price_max: isCampusFood && priceType === 'range' && priceMax ? Number(priceMax) || undefined : undefined,
+      price_unit: isCampusFood ? priceUnit.trim() || undefined : undefined,
+      price_collected_at: isCampusFood && priceCollectedAt ? `${priceCollectedAt}T00:00:00+08:00` : undefined,
+      portion_description: isCampusFood ? portionDescription.trim() || undefined : undefined
+    }
+  }
+
   /** 实际执行提交到公共库 */
   const doSubmit = async () => {
     setSubmitting(true)
     try {
-      const fullAddress = [
-        province,
-        city,
-        isHomemade ? '' : district,
-        isHomemade ? '' : detailAddress
-      ].filter(Boolean).join(' ').trim()
-
-      const finalFoodName = foodName.trim() || inferFoodName(selectedRecord, items, description)
-      const submitTags = buildSubmitTags()
-
-      await createPublicFoodLibraryItem({
-        image_path: imageUrl || selectedRecord?.image_path || undefined,
-        image_paths: imageUrls.length > 0 ? imageUrls : undefined,
-        source_record_id: selectedRecord?.id,
-        total_calories: totalCalories,
-        total_protein: totalProtein,
-        total_carbs: totalCarbs,
-        total_fat: totalFat,
-        items,
-        description,
-        insight,
-        food_name: finalFoodName,
-        merchant_name: isHomemade ? undefined : merchantName.trim() || undefined,
-        merchant_address: isHomemade ? undefined : fullAddress || undefined,
-        taste_rating: tasteRating > 0 ? tasteRating : undefined,
-        suitable_for_fat_loss: suitableForFatLoss,
-        user_tags: submitTags,
-        user_notes: userNotes.trim() || undefined,
-        latitude: isHomemade ? undefined : latitude,
-        longitude: isHomemade ? undefined : longitude,
-        province: province.trim() || undefined,
-        city: city.trim() || undefined,
-        district: isHomemade ? undefined : district.trim() || undefined,
-        detail_address: isHomemade ? undefined : detailAddress.trim() || undefined,
-        is_campus_food: isCampusFood,
-        school_name: isCampusFood ? schoolName.trim() || undefined : undefined,
-        canteen_name: isCampusFood ? canteenName.trim() || undefined : undefined,
-        floor: isCampusFood ? floor.trim() || undefined : undefined,
-        window_name: isCampusFood ? windowName.trim() || undefined : undefined,
-        price: isCampusFood && priceType !== 'range' && price ? Number(price) || undefined : undefined,
-        price_type: isCampusFood ? priceType.trim() || undefined : undefined,
-        price_min: isCampusFood && priceType === 'range' && priceMin ? Number(priceMin) || undefined : undefined,
-        price_max: isCampusFood && priceType === 'range' && priceMax ? Number(priceMax) || undefined : undefined,
-        price_unit: isCampusFood ? priceUnit.trim() || undefined : undefined,
-        price_collected_at: isCampusFood && priceCollectedAt ? `${priceCollectedAt}T00:00:00+08:00` : undefined,
-        portion_description: isCampusFood ? portionDescription.trim() || undefined : undefined
-      })
-      Taro.showToast({ title: isCampusFood ? '已发布到校园食堂' : '提交成功，审核通过后将展示', icon: 'none', duration: 2500 })
-      Taro.setStorageSync('food_library_need_refresh', '1')
-      setTimeout(() => {
-        if (isCampusFood) {
-          Taro.redirectTo({ url: extraPkgUrl('/pages/campus-canteen/index') })
-          return
-        }
-        if (quickUploadMode) {
-          Taro.redirectTo({ url: extraPkgUrl('/pages/food-library/index') })
-          return
-        }
-        Taro.navigateBack()
-      }, 2500)
+      if (isEditMode) {
+        await updatePublicFoodLibraryItem(editId, buildSubmitPayload())
+        Taro.showToast({ title: '已保存', icon: 'success' })
+        Taro.setStorageSync('food_library_need_refresh', '1')
+        setTimeout(() => {
+          Taro.navigateBack()
+        }, 1200)
+      } else {
+        await createPublicFoodLibraryItem(buildSubmitPayload())
+        Taro.showToast({ title: isCampusFood ? '已发布到校园食堂' : '提交成功，审核通过后将展示', icon: 'none', duration: 2500 })
+        Taro.setStorageSync('food_library_need_refresh', '1')
+        setTimeout(() => {
+          if (isCampusFood) {
+            Taro.redirectTo({ url: extraPkgUrl('/pages/campus-canteen/index') })
+            return
+          }
+          if (quickUploadMode) {
+            Taro.redirectTo({ url: extraPkgUrl('/pages/food-library/index') })
+            return
+          }
+          Taro.navigateBack()
+        }, 2500)
+      }
     } catch (e: any) {
-      await showUnifiedApiError(e, '分享失败')
+      await showUnifiedApiError(e, isEditMode ? '保存失败' : '分享失败')
     } finally {
       setSubmitting(false)
     }
@@ -711,7 +802,7 @@ function FoodLibrarySharePage() {
       )}
 
       {/* 选择来源 */}
-      {!quickUploadMode && !sourceRecordId && (
+      {!quickUploadMode && !sourceRecordId && !isEditMode && (
         <View className='source-section'>
           <Text className='section-title'>选择来源</Text>
           <View className='source-options'>
@@ -1080,7 +1171,7 @@ function FoodLibrarySharePage() {
           className={`submit-btn ${canSubmit ? '' : 'disabled'}`}
           onClick={canSubmit ? handleSubmit : undefined}
         >
-          {submitting || analyzing ? <View className='btn-spinner' /> : '分享到公共库'}
+          {submitting || analyzing ? <View className='btn-spinner' /> : isEditMode ? '保存修改' : '分享到公共库'}
         </View>
       </View>
 

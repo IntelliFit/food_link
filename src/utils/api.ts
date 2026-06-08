@@ -5217,6 +5217,9 @@ export interface PublicFoodLibraryItem {
   id: string
   user_id: string
   source_record_id?: string | null
+  analysis_task_id?: string | null
+  analysis_status?: string | null
+  analysis_error?: string | null
   image_path?: string | null
   /** 多图 URL 列表，展示时优先于 image_path */
   image_paths?: string[] | null
@@ -5289,6 +5292,43 @@ export interface PublicFoodLibraryItem {
   portion_description?: string | null
   /** 校园位置展示文案 */
   campus_location_text?: string | null
+  /** 每元蛋白质（g/元） */
+  protein_per_yuan?: number
+  /** 每 100 kcal 价格（元/100kcal） */
+  price_per_100_kcal?: number
+}
+
+/** 校园详情页性价比指标 */
+export interface CampusFoodMetric {
+  protein_per_yuan?: number
+  price_per_100_kcal?: number
+}
+
+/** 校园详情页相关圈子动态摘要 */
+export interface CampusRelatedFeedItem {
+  id: string
+  food_name: string
+  image_path?: string | null
+  image_paths?: string[] | null
+  school_name?: string | null
+  canteen_name?: string | null
+  campus_location?: string | null
+  total_calories: number
+  total_protein: number
+  price?: number | null
+  price_unit?: string | null
+  like_count: number
+  comment_count: number
+  collection_count: number
+  published_at?: string | null
+}
+
+/** 校园菜品详情聚合响应 */
+export interface CampusFoodDetailResponse {
+  item: PublicFoodLibraryItem
+  metrics: CampusFoodMetric
+  similar_items: PublicFoodLibraryItem[]
+  related_feeds: CampusRelatedFeedItem[]
 }
 
 /** 公共食物库评论 */
@@ -5430,6 +5470,15 @@ export async function getPublicFoodLibraryItem(itemId: string): Promise<PublicFo
   return response.data as PublicFoodLibraryItem
 }
 
+/** 获取校园菜品详情聚合信息 */
+export async function getCampusFoodDetail(itemId: string): Promise<CampusFoodDetailResponse> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/campus-detail`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取校园菜品详情失败')
+  }
+  return response.data as CampusFoodDetailResponse
+}
+
 /** 点赞公共食物库条目 */
 export async function likePublicFoodLibraryItem(itemId: string): Promise<void> {
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}/like`, { method: 'POST' })
@@ -5467,6 +5516,22 @@ export async function deletePublicFoodLibraryItem(itemId: string): Promise<{ mes
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}`, { method: 'DELETE', timeout: 10000 })
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '删除失败')
+  }
+  return response.data as { message: string }
+}
+
+/** 更新/编辑自己上传的公共食物库条目 */
+export async function updatePublicFoodLibraryItem(
+  itemId: string,
+  data: Partial<CreatePublicFoodLibraryRequest>
+): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}`, {
+    method: 'PUT',
+    data,
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '更新失败')
   }
   return response.data as { message: string }
 }

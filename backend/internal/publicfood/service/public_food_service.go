@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	analyzeservice "food_link/backend/internal/analyze/service"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
@@ -15,14 +16,19 @@ import (
 )
 
 type PublicFoodService struct {
-	repo      *repo.PublicFoodRepo
-	storage   *storage.Client
-	taskQueue taskqueue.Publisher
-	rewards   RewardTaskAwarder
+	repo         *repo.PublicFoodRepo
+	storage      *storage.Client
+	taskQueue    taskqueue.Publisher
+	analyzeTasks CampusAnalyzeTaskSubmitter
+	rewards      RewardTaskAwarder
 }
 
 type RewardTaskAwarder interface {
 	AwardPublicFoodUpload(ctx context.Context, userID, publicFoodItemID string, meta map[string]any) (map[string]any, error)
+}
+
+type CampusAnalyzeTaskSubmitter interface {
+	SubmitAnalyzeTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
 }
 
 const (
@@ -40,6 +46,10 @@ func NewPublicFoodService(repo *repo.PublicFoodRepo, storageClient ...*storage.C
 
 func (s *PublicFoodService) ConfigureTaskPublisher(queue taskqueue.Publisher) {
 	s.taskQueue = queue
+}
+
+func (s *PublicFoodService) ConfigureCampusAnalyzeTaskSubmitter(submitter CampusAnalyzeTaskSubmitter) {
+	s.analyzeTasks = submitter
 }
 
 func (s *PublicFoodService) ConfigureRewardTaskAwarder(awarder RewardTaskAwarder) {
@@ -139,6 +149,18 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		}
 	}
 
+	items := firstItems(input.Items, src)
+	if items == nil {
+		items = []map[string]any{}
+	}
+	userTags := input.UserTags
+	if userTags == nil {
+		userTags = []string{}
+	}
+	if imagePaths == nil {
+		imagePaths = []string{}
+	}
+
 	item := &domain.PublicFoodItem{
 		UserID:             userID,
 		SourceRecordID:     input.SourceRecordID,
@@ -148,7 +170,7 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		TotalProtein:       firstFloat(input.TotalProtein, src, "total_protein"),
 		TotalCarbs:         firstFloat(input.TotalCarbs, src, "total_carbs"),
 		TotalFat:           firstFloat(input.TotalFat, src, "total_fat"),
-		Items:              firstItems(input.Items, src),
+		Items:              items,
 		Description:        firstString(input.Description, src, "description"),
 		Insight:            firstString(input.Insight, src, "insight"),
 		FoodName:           ptrString(input.FoodName),
@@ -156,7 +178,7 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		MerchantAddress:    ptrString(input.MerchantAddress),
 		TasteRating:        input.TasteRating,
 		SuitableForFatLoss: input.SuitableForFatLoss,
-		UserTags:           input.UserTags,
+		UserTags:           userTags,
 		UserNotes:          ptrString(input.UserNotes),
 		Latitude:           input.Latitude,
 		Longitude:          input.Longitude,
@@ -192,6 +214,13 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		return "", err
 	}
 	if item.IsCampusFood {
+		taskID, err := s.submitCampusAnalyzeTask(ctx, userID, item, firstPath, imagePaths)
+		if err != nil {
+			return "", err
+		}
+		if err := s.repo.LinkAnalysisTask(ctx, item.ID, taskID); err != nil {
+			return "", err
+		}
 		if s.rewards != nil {
 			_, _ = s.rewards.AwardPublicFoodUpload(ctx, userID, item.ID, map[string]any{
 				"public_food_item_id": item.ID,
@@ -226,6 +255,86 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		})
 	}
 	return item.ID, nil
+}
+
+func (s *PublicFoodService) submitCampusAnalyzeTask(ctx context.Context, userID string, item *domain.PublicFoodItem, imageURL *string, imagePaths []string) (string, error) {
+	payload := buildCampusAnalyzeExtraPayload(item)
+	if s.analyzeTasks != nil {
+		mode := "strict_separate"
+		input := analyzeservice.SubmitTaskInput{
+			ImageURLs:           imagePaths,
+			ExecutionMode:       &mode,
+			AdditionalContext:   stringFromAny(payload["additionalContext"]),
+			SuggestRatioEnabled: true,
+			SourceType:          "image",
+			ExtraPayload:        payload,
+		}
+		if imageURL != nil {
+			input.ImageURL = *imageURL
+		}
+		return s.analyzeTasks.SubmitAnalyzeTask(ctx, userID, input)
+	}
+	task, err := s.repo.CreateCampusAnalysisTask(ctx, userID, item.ID, imageURL, imagePaths, buildLegacyCampusAnalysisPayload(item, payload))
+	if err != nil {
+		return "", err
+	}
+	if err := s.enqueueTask(ctx, task.ID, task.TaskType); err != nil {
+		return "", err
+	}
+	return task.ID, nil
+}
+
+func buildCampusAnalyzeExtraPayload(item *domain.PublicFoodItem) map[string]any {
+	payload := map[string]any{
+		"public_food_source_type": "campus_public_food",
+		"public_food_item_id":     item.ID,
+		"food_name":               item.FoodName,
+		"school_name":             item.SchoolName,
+		"campus_name":             item.CampusName,
+		"canteen_name":            item.CanteenName,
+		"floor":                   item.Floor,
+		"window_name":             item.WindowName,
+		"campus_location_text":    item.CampusLocationText,
+	}
+	contextParts := []string{}
+	if item.FoodName != "" {
+		contextParts = append(contextParts, "菜品名称："+item.FoodName)
+	}
+	if item.CampusLocationText != "" {
+		contextParts = append(contextParts, "校园位置："+item.CampusLocationText)
+	}
+	if item.Price > 0 {
+		contextParts = append(contextParts, fmt.Sprintf("价格：%.1f%s", item.Price, item.PriceUnit))
+	}
+	if item.PortionDescription != "" {
+		contextParts = append(contextParts, "份量说明："+item.PortionDescription)
+	}
+	if item.UserNotes != "" {
+		contextParts = append(contextParts, "用户备注："+item.UserNotes)
+	}
+	payload["additionalContext"] = strings.Join(contextParts, "；")
+	payload["suggest_ratio_enabled"] = true
+	return payload
+}
+
+func buildLegacyCampusAnalysisPayload(item *domain.PublicFoodItem, extra map[string]any) map[string]any {
+	payload := map[string]any{}
+	for key, value := range extra {
+		payload[key] = value
+	}
+	payload["source_type"] = "campus_public_food"
+	return payload
+}
+
+func stringFromAny(value any) string {
+	if value == nil {
+		return ""
+	}
+	text := strings.TrimSpace(fmt.Sprintf("%v", value))
+	if text == "<nil>" {
+		return ""
+	}
+	return text
 }
 
 func (s *PublicFoodService) enqueueTask(ctx context.Context, taskID, taskType string) error {
@@ -279,6 +388,39 @@ func (s *PublicFoodService) Get(ctx context.Context, userID, itemID string) (*do
 	return &views[0], nil
 }
 
+func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID string) (*domain.CampusFoodDetailView, error) {
+	item, err := s.repo.GetItem(ctx, itemID)
+	if err != nil {
+		return nil, err
+	}
+	if item == nil || isDeletedStatus(item.Status) || !item.IsCampusFood {
+		return nil, commonerrors.ErrNotFound
+	}
+	views, err := s.hydrate(ctx, userID, []domain.PublicFoodItem{*item}, "")
+	if err != nil {
+		return nil, err
+	}
+	similarItems, err := s.repo.ListSimilarCampusFoods(ctx, *item, 6)
+	if err != nil {
+		return nil, err
+	}
+	similarViews, err := s.hydrate(ctx, userID, similarItems, "recommended")
+	if err != nil {
+		return nil, err
+	}
+	relatedFeeds, err := s.repo.ListRelatedCampusFeeds(ctx, *item, 6)
+	if err != nil {
+		return nil, err
+	}
+	s.normalizeRelatedCampusFeeds(relatedFeeds)
+	return &domain.CampusFoodDetailView{
+		Item:         views[0],
+		Metrics:      campusFoodMetrics(views[0].PublicFoodItem),
+		SimilarItems: similarViews,
+		RelatedFeeds: relatedFeeds,
+	}, nil
+}
+
 func (s *PublicFoodService) Like(ctx context.Context, userID, itemID string) error {
 	return s.repo.Like(ctx, userID, itemID)
 }
@@ -293,6 +435,113 @@ func (s *PublicFoodService) Collect(ctx context.Context, userID, itemID string) 
 
 func (s *PublicFoodService) Uncollect(ctx context.Context, userID, itemID string) error {
 	return s.repo.Uncollect(ctx, userID, itemID)
+}
+
+func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, input CreateInput) error {
+	item, err := s.repo.GetItem(ctx, itemID)
+	if err != nil {
+		return err
+	}
+	if item == nil || isDeletedStatus(item.Status) {
+		return commonerrors.ErrNotFound
+	}
+	if item.UserID != userID {
+		return commonerrors.ErrForbidden
+	}
+
+	updates := map[string]any{
+		"updated_at": time.Now(),
+	}
+	if input.ImagePath != nil && *input.ImagePath != "" {
+		updates["image_path"] = *input.ImagePath
+	}
+	if len(input.ImagePaths) > 0 {
+		updates["image_paths"] = input.ImagePaths
+	}
+	if input.FoodName != nil {
+		updates["food_name"] = *input.FoodName
+	}
+	if input.Description != nil {
+		updates["description"] = *input.Description
+	}
+	if input.Insight != nil {
+		updates["insight"] = *input.Insight
+	}
+	if input.MerchantName != nil {
+		updates["merchant_name"] = *input.MerchantName
+	}
+	if input.MerchantAddress != nil {
+		updates["merchant_address"] = *input.MerchantAddress
+	}
+	if input.TasteRating != nil {
+		updates["taste_rating"] = *input.TasteRating
+	}
+	updates["suitable_for_fat_loss"] = input.SuitableForFatLoss
+	if input.UserTags != nil {
+		updates["user_tags"] = input.UserTags
+	}
+	if input.UserNotes != nil {
+		updates["user_notes"] = *input.UserNotes
+	}
+	if input.Latitude != nil {
+		updates["latitude"] = *input.Latitude
+	}
+	if input.Longitude != nil {
+		updates["longitude"] = *input.Longitude
+	}
+	if input.Province != nil {
+		updates["province"] = *input.Province
+	}
+	if input.City != nil {
+		updates["city"] = *input.City
+	}
+	if input.District != nil {
+		updates["district"] = *input.District
+	}
+	if input.DetailAddress != nil {
+		updates["detail_address"] = *input.DetailAddress
+	}
+	if input.IsCampusFood {
+		if input.SchoolName != nil {
+			updates["school_name"] = *input.SchoolName
+		}
+		if input.CampusName != nil {
+			updates["campus_name"] = *input.CampusName
+		}
+		if input.CanteenName != nil {
+			updates["canteen_name"] = *input.CanteenName
+		}
+		if input.Floor != nil {
+			updates["floor"] = *input.Floor
+		}
+		if input.WindowName != nil {
+			updates["window_name"] = *input.WindowName
+		}
+		if input.Price != nil {
+			updates["price"] = *input.Price
+		}
+		if input.PriceType != nil {
+			updates["price_type"] = *input.PriceType
+		}
+		if input.PriceMin != nil {
+			updates["price_min"] = *input.PriceMin
+		}
+		if input.PriceMax != nil {
+			updates["price_max"] = *input.PriceMax
+		}
+		if input.PriceUnit != nil {
+			updates["price_unit"] = *input.PriceUnit
+		}
+		if input.PriceCollectedAt != nil {
+			updates["price_collected_at"] = *input.PriceCollectedAt
+		}
+		if input.PortionDescription != nil {
+			updates["portion_description"] = *input.PortionDescription
+		}
+		updates["campus_location_text"] = buildCampusLocationText(input.SchoolName, input.CampusName, input.CanteenName, input.Floor, input.WindowName)
+	}
+
+	return s.repo.UpdateItem(ctx, itemID, userID, updates)
 }
 
 func (s *PublicFoodService) Delete(ctx context.Context, userID, itemID string) error {
@@ -436,6 +685,26 @@ func (s *PublicFoodService) normalizePublicFoodComments(comments []domain.Public
 	}
 }
 
+func (s *PublicFoodService) normalizeRelatedCampusFeeds(feeds []domain.CampusRelatedFeedItem) {
+	for i := range feeds {
+		feeds[i].ImagePaths = s.normalizeFoodImageURLs(feeds[i].ImagePaths)
+		if len(feeds[i].ImagePaths) > 0 {
+			first := feeds[i].ImagePaths[0]
+			feeds[i].ImagePath = &first
+			continue
+		}
+		if feeds[i].ImagePath != nil {
+			resolved := s.resolveFoodImageURL(*feeds[i].ImagePath)
+			if resolved == "" {
+				feeds[i].ImagePath = nil
+			} else {
+				feeds[i].ImagePath = &resolved
+				feeds[i].ImagePaths = []string{resolved}
+			}
+		}
+	}
+}
+
 func (s *PublicFoodService) normalizeFoodImageURLs(values []string) []string {
 	if s.storage != nil {
 		return s.storage.ResolveReferenceURLs("food-images", values)
@@ -505,6 +774,28 @@ func recommendReason(item domain.PublicFoodItem, sortBy string) string {
 	default:
 		return ""
 	}
+}
+
+func campusFoodMetrics(item domain.PublicFoodItem) domain.CampusFoodMetric {
+	price := metricPrice(item)
+	metric := domain.CampusFoodMetric{}
+	if price > 0 && item.TotalProtein > 0 {
+		metric.ProteinPerYuan = math.Round(item.TotalProtein/price*10) / 10
+	}
+	if price > 0 && item.TotalCalories > 0 {
+		metric.PricePer100Kcal = math.Round(price/item.TotalCalories*100*100) / 100
+	}
+	return metric
+}
+
+func metricPrice(item domain.PublicFoodItem) float64 {
+	if item.Price > 0 {
+		return item.Price
+	}
+	if item.PriceType == "range" && item.PriceMin > 0 && item.PriceMax > 0 {
+		return (item.PriceMin + item.PriceMax) / 2
+	}
+	return 0
 }
 
 func firstFloat(v float64, src map[string]any, key string) float64 {

@@ -413,6 +413,7 @@ type PublicFoodItemDO struct {
 	ID                 string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID             string           `gorm:"column:user_id;type:uuid;not null;index:idx_public_food_library_user_id"`
 	SourceRecordID     *string          `gorm:"column:source_record_id;type:uuid"`
+	AnalysisTaskID     *string          `gorm:"column:analysis_task_id;type:uuid;index:idx_public_food_library_analysis_task_id"`
 	ImagePath          *string          `gorm:"column:image_path;type:text"`
 	ImagePaths         []string         `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	TotalCalories      *float64         `gorm:"column:total_calories;type:numeric;default:0"`
@@ -445,21 +446,21 @@ type PublicFoodItemDO struct {
 	CreatedAt          *time.Time       `gorm:"column:created_at;type:timestamptz;default:now()"`
 	UpdatedAt          *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
 	// Campus canteen fields
-	IsCampusFood       bool             `gorm:"column:is_campus_food;type:boolean;not null;default:false"`
-	SchoolName         *string          `gorm:"column:school_name;type:text"`
-	CampusName         *string          `gorm:"column:campus_name;type:text"`
-	CanteenName        *string          `gorm:"column:canteen_name;type:text"`
-	Floor              *string          `gorm:"column:floor;type:text"`
-	WindowName         *string          `gorm:"column:window_name;type:text"`
-	Price              *float64         `gorm:"column:price;type:numeric"`
-	PriceType          *string          `gorm:"column:price_type;type:text"`
-	PriceMin           *float64         `gorm:"column:price_min;type:numeric"`
-	PriceMax           *float64         `gorm:"column:price_max;type:numeric"`
-	PriceUnit          *string          `gorm:"column:price_unit;type:text"`
-	PriceCollectedAt   *time.Time       `gorm:"column:price_collected_at;type:timestamptz"`
-	PortionDescription *string          `gorm:"column:portion_description;type:text"`
-	IsCampusHighlight  bool             `gorm:"column:is_campus_highlight;type:boolean;not null;default:false"`
-	CampusLocationText *string          `gorm:"column:campus_location_text;type:text"`
+	IsCampusFood       bool       `gorm:"column:is_campus_food;type:boolean;not null;default:false"`
+	SchoolName         *string    `gorm:"column:school_name;type:text"`
+	CampusName         *string    `gorm:"column:campus_name;type:text"`
+	CanteenName        *string    `gorm:"column:canteen_name;type:text"`
+	Floor              *string    `gorm:"column:floor;type:text"`
+	WindowName         *string    `gorm:"column:window_name;type:text"`
+	Price              *float64   `gorm:"column:price;type:numeric"`
+	PriceType          *string    `gorm:"column:price_type;type:text"`
+	PriceMin           *float64   `gorm:"column:price_min;type:numeric"`
+	PriceMax           *float64   `gorm:"column:price_max;type:numeric"`
+	PriceUnit          *string    `gorm:"column:price_unit;type:text"`
+	PriceCollectedAt   *time.Time `gorm:"column:price_collected_at;type:timestamptz"`
+	PortionDescription *string    `gorm:"column:portion_description;type:text"`
+	IsCampusHighlight  bool       `gorm:"column:is_campus_highlight;type:boolean;not null;default:false"`
+	CampusLocationText *string    `gorm:"column:campus_location_text;type:text"`
 }
 
 func (PublicFoodItemDO) TableName() string { return "public_food_library" }

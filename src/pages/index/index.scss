@@ -237,7 +237,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   align-items: center;
   gap: 18rpx;
   min-height: 116rpx;
-  padding: 20rpx 18rpx 20rpx 24rpx;
+  padding: 20rpx 18rpx 34rpx 24rpx;
   margin: -2rpx 0 18rpx;
   border-radius: 28rpx;
   overflow: hidden;
@@ -249,6 +249,19 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
   &:active {
     opacity: 0.9;
+  }
+}
+
+.home-reward-hint--campus {
+  background-image:
+    linear-gradient(135deg, rgb(6 45 37 / 82%) 0%, rgb(17 94 89 / 58%) 52%, rgb(0 0 0 / 36%) 100%),
+    url('../../../assets/bg/cafeteria.png');
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 16rpx 34rpx rgb(17 94 89 / 22%);
+
+  .home-reward-hint__go {
+    color: #0f766e;
   }
 }
 
@@ -305,18 +318,29 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   font-weight: 900;
 }
 
-.home-reward-hint__close {
-  width: 44rpx;
-  height: 44rpx;
-  border-radius: 50%;
+.home-reward-hint__dots {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14rpx;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgb(255 255 255 / 78%);
-  background: rgb(255 255 255 / 16%);
-  font-size: 34rpx;
-  line-height: 42rpx;
-  font-weight: 600;
+  gap: 10rpx;
+}
+
+.home-reward-hint__dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 999rpx;
+  background: rgb(255 255 255 / 42%);
+  transition: all 0.2s ease;
+
+  &.active {
+    width: 26rpx;
+    background: #ffffff;
+  }
 }
 
 .date-list {
@@ -4394,6 +4418,22 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 // 深色模式
 .home-page--dark,
 .page--dark {
+  .home-reward-hint {
+    box-shadow: 0 16rpx 34rpx rgb(0 0 0 / 26%);
+  }
+
+  .home-reward-hint__go {
+    background: rgb(255 255 255 / 92%);
+  }
+
+  .home-reward-hint__dot {
+    background: rgb(255 255 255 / 36%);
+
+    &.active {
+      background: #ffffff;
+    }
+  }
+
   .meal-action-sheet-actions,
   .meal-action-sheet-cancel {
     background: #1e2624;

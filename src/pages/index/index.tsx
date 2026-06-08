@@ -796,8 +796,12 @@ function IndexPage() {
   const [petClaiming, setPetClaiming] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = useState<RewardCenterResponse | null>(null)
-  /** 今日可赚积分提示：仅当前停留首页时关闭，不落库；再次进入首页会重新展示 */
-  const [rewardHintDismissed, setRewardHintDismissed] = useState(false)
+  const [rewardHintIndex, setRewardHintIndex] = useState(0)
+  const rewardHintTouchRef = useRef<{
+    startClientX: number
+    startClientY: number
+    swiped: boolean
+  } | null>(null)
   const petSummarySeqRef = useRef(0)
   const petDragRef = useRef<{
     pointerId: number
@@ -894,6 +898,13 @@ function IndexPage() {
     } catch {
       // 奖励提示是增强信息，失败时不影响首页主链路。
     }
+  }, [])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setRewardHintIndex((current) => (current + 1) % 2)
+    }, 5000)
+    return () => clearInterval(timer)
   }, [])
 
   // 餐食卡片操作状态
@@ -1211,12 +1222,6 @@ function IndexPage() {
   const skipNextRefreshRef = useRef(false)
 
   Taro.useDidShow(() => {
-    setRewardHintDismissed(false)
-    try {
-      Taro.removeStorageSync('home_reward_hint_dismissed_date_v1')
-    } catch (_) {
-      /* ignore */
-    }
     setPetHidden(getStoredPetHidden())
     const today = formatDateKey(new Date())
     const currentSelected = selectedDateRef.current
@@ -2490,7 +2495,7 @@ function IndexPage() {
   const handlePetTouchMove = useCallback((event) => {
     const drag = petDragRef.current
     if (!drag) return
-    const touches = Array.from(event.touches || [])
+    const touches = Array.from(event.touches || []) as Array<{ identifier?: number; clientX: number; clientY: number }>
     const touch = touches.find((item: any) => (item.identifier ?? 0) === drag.pointerId) || touches[0]
     if (!touch) return
     const dx = touch.clientX - drag.startClientX
@@ -2773,15 +2778,69 @@ function IndexPage() {
   const rewardHintTasks = rewardCenter?.tasks || []
   const showRewardHint =
     !isGuest &&
-    !rewardHintDismissed &&
     availableRewardCredits > 0 &&
     (membershipCredits.remaining < LOW_CREDIT_REWARD_HINT_THRESHOLD || rewardHintTasks.some(isRewardTaskAvailable))
   const rewardHintTaskText = formatRewardHintTaskText(rewardHintTasks)
+  const rewardHintBanners = [
+    {
+      key: 'reward',
+      className: 'home-reward-hint--reward',
+      kicker: '今日可赚积分',
+      title: `今天还可以赚 ${availableRewardCredits} 积分`,
+      desc: rewardHintTaskText,
+      actionText: '去赚',
+      url: extraPkgUrl('/pages/reward-center/index'),
+    },
+    {
+      key: 'campus',
+      className: 'home-reward-hint--campus',
+      kicker: '食探校园活动',
+      title: '食探校园食堂计划',
+      desc: '一起补全食堂菜品、价格、窗口和营养信息',
+      actionText: '去看看',
+      url: extraPkgUrl('/pages/campus-canteen/index'),
+    },
+  ] as const
+  const currentRewardHint = rewardHintBanners[rewardHintIndex % rewardHintBanners.length]
+  const switchRewardHint = useCallback((direction: 1 | -1) => {
+    setRewardHintIndex((current) => {
+      const total = rewardHintBanners.length
+      return (current + direction + total) % total
+    })
+  }, [rewardHintBanners.length])
+  const handleRewardHintTouchStart = useCallback((event) => {
+    const touch = event.touches?.[0]
+    if (!touch) return
+    rewardHintTouchRef.current = {
+      startClientX: touch.clientX,
+      startClientY: touch.clientY,
+      swiped: false,
+    }
+  }, [])
+  const handleRewardHintTouchEnd = useCallback((event) => {
+    const start = rewardHintTouchRef.current
+    const touch = event.changedTouches?.[0]
+    if (!start || !touch) {
+      rewardHintTouchRef.current = null
+      return
+    }
+    const dx = touch.clientX - start.startClientX
+    const dy = touch.clientY - start.startClientY
+    if (Math.abs(dx) >= 44 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+      start.swiped = true
+      switchRewardHint(dx < 0 ? 1 : -1)
+    }
+  }, [switchRewardHint])
+  const handleRewardHintClick = useCallback(() => {
+    if (rewardHintTouchRef.current?.swiped) {
+      rewardHintTouchRef.current = null
+      return
+    }
+    rewardHintTouchRef.current = null
+    Taro.navigateTo({ url: currentRewardHint.url })
+  }, [currentRewardHint.url])
   const openBackfillRecordMenu = () => {
     setShowRecordMenu(true)
-  }
-  const handleDismissRewardHint = () => {
-    setRewardHintDismissed(true)
   }
   const handleDismissBackfillHint = async () => {
     const { confirm } = await Taro.showModal({
@@ -2918,25 +2977,29 @@ function IndexPage() {
         />
         {showRewardHint && (
           <View
-            className='home-reward-hint'
-            onClick={() => Taro.navigateTo({ url: extraPkgUrl('/pages/reward-center/index') })}
+            className={`home-reward-hint ${currentRewardHint.className}`}
+            onClick={handleRewardHintClick}
+            onTouchStart={handleRewardHintTouchStart}
+            onTouchEnd={handleRewardHintTouchEnd}
+            onTouchCancel={() => {
+              rewardHintTouchRef.current = null
+            }}
           >
             <View className='home-reward-hint__main'>
-              <Text className='home-reward-hint__kicker'>今日可赚积分</Text>
-              <Text className='home-reward-hint__title'>今天还可以赚 {availableRewardCredits} 积分</Text>
-              <Text className='home-reward-hint__desc'>{rewardHintTaskText}</Text>
+              <Text className='home-reward-hint__kicker'>{currentRewardHint.kicker}</Text>
+              <Text className='home-reward-hint__title'>{currentRewardHint.title}</Text>
+              <Text className='home-reward-hint__desc'>{currentRewardHint.desc}</Text>
             </View>
             <View className='home-reward-hint__actions'>
-              <Text className='home-reward-hint__go'>去赚</Text>
-              <Text
-                className='home-reward-hint__close'
-                onClick={(event) => {
-                  event.stopPropagation()
-                  handleDismissRewardHint()
-                }}
-              >
-                ×
-              </Text>
+              <Text className='home-reward-hint__go'>{currentRewardHint.actionText}</Text>
+            </View>
+            <View className='home-reward-hint__dots'>
+              {rewardHintBanners.map((banner, index) => (
+                <Text
+                  key={banner.key}
+                  className={`home-reward-hint__dot ${index === rewardHintIndex ? 'active' : ''}`}
+                />
+              ))}
             </View>
           </View>
         )}
