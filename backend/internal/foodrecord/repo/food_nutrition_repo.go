@@ -1673,6 +1673,10 @@ func preferredNutritionQueryTexts(raw string) []string {
 		out = append(out, "鸡蛋")
 	case containsAnyToken(normalized, []string{"牛奶", "全脂奶", "纯奶", "鲜奶"}) && !containsAnyToken(normalized, []string{"奶粉", "酸奶", "拿铁", "咖啡", "奶茶"}):
 		out = append(out, "牛奶(全脂)")
+	case containsAnyToken(normalized, []string{"酸奶", "酸牛奶", "发酵乳"}) && !containsAnyToken(normalized, []string{"软糖", "溶豆", "奶昔", "饮料", "蛋糕", "冰淇淋", "雪糕"}):
+		out = append(out, "酸奶")
+	case containsAnyToken(normalized, []string{"油麦菜"}):
+		out = append(out, "油麦菜")
 	case containsAnyToken(normalized, []string{"西兰花", "西蓝花"}):
 		out = append(out, "西兰花")
 	case containsAnyToken(normalized, []string{"香蕉"}):

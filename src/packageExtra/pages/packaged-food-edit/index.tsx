@@ -88,6 +88,8 @@ type UploadedImage = {
   imageUrl: string
 }
 
+type UploadImageSource = 'album' | 'camera'
+
 type PackagedUploadTaskEntry = {
   taskId: string
   createdAt: string
@@ -550,19 +552,83 @@ function PackagedFoodEditPage() {
     return imageUrl
   }
 
-  const chooseAndUploadImages = async (count = 2): Promise<UploadedImage[]> => {
-    const chooseRes = await chooseImageWithPrivacy({
-      count,
-      sizeType: ['compressed'],
-      sourceType: ['camera', 'album'],
+  const chooseUploadImageSource = async (): Promise<UploadImageSource | null> => {
+    const res = await Taro.showActionSheet({
+      itemList: ['从相册选择', '连续拍摄'],
     })
-    const localPaths = (chooseRes.tempFilePaths || []).filter(Boolean).slice(0, count)
-    if (localPaths.length === 0) return []
+    if (res.tapIndex === 0) return 'album'
+    if (res.tapIndex === 1) return 'camera'
+    return null
+  }
+
+  const uploadLocalImages = async (localPaths: string[]): Promise<UploadedImage[]> => {
     return Promise.all(localPaths.map(async (localPath) => {
       const uploadPath = await compressImagePathForUpload(localPath)
       const { imageUrl } = await uploadAnalyzeImageFile(uploadPath)
       return { localPath, imageUrl }
     }))
+  }
+
+  const askContinueCapture = async (capturedCount: number, maxCount: number): Promise<boolean> => {
+    if (capturedCount >= maxCount) return false
+    return new Promise((resolve) => {
+      Taro.showModal({
+        title: `已拍 ${capturedCount} 张`,
+        content: `还可以继续补拍同一种商品的正面、净含量或营养成分表，最多 ${maxCount} 张。`,
+        confirmText: '继续拍',
+        cancelText: '完成',
+        success: (res) => resolve(Boolean(res.confirm)),
+        fail: () => resolve(false),
+      })
+    })
+  }
+
+  const chooseAndUploadImages = async (count = 2): Promise<UploadedImage[]> => {
+    const maxCount = Math.max(1, Math.min(count, MAX_REWARD_UPLOAD_IMAGES))
+    const source = await chooseUploadImageSource()
+    if (!source) return []
+
+    const uploadSelectedLocalImages = async (localPaths: string[]) => {
+      if (localPaths.length === 0) return []
+      Taro.showLoading({ title: '上传中', mask: true })
+      try {
+        return await uploadLocalImages(localPaths)
+      } finally {
+        Taro.hideLoading()
+      }
+    }
+
+    if (source === 'album') {
+      const chooseRes = await chooseImageWithPrivacy({
+        count: maxCount,
+        sizeType: ['compressed'],
+        sourceType: ['album'],
+      })
+      const localPaths = (chooseRes.tempFilePaths || []).filter(Boolean).slice(0, maxCount)
+      return uploadSelectedLocalImages(localPaths)
+    }
+
+    const localPaths: string[] = []
+    while (localPaths.length < maxCount) {
+      let chooseRes: Taro.chooseImage.SuccessCallbackResult
+      try {
+        chooseRes = await chooseImageWithPrivacy({
+          count: 1,
+          sizeType: ['compressed'],
+          sourceType: ['camera'],
+        })
+      } catch (error) {
+        if (localPaths.length > 0 && isChooseImageCancel(error)) break
+        throw error
+      }
+      const localPath = chooseRes.tempFilePaths?.[0]
+      if (localPath) {
+        localPaths.push(localPath)
+      }
+      const shouldContinue = await askContinueCapture(localPaths.length, maxCount)
+      if (!shouldContinue) break
+    }
+    return uploadSelectedLocalImages(localPaths)
   }
 
   const resetRewardSelection = () => {
@@ -580,7 +646,6 @@ function PackagedFoodEditPage() {
   const handleManualChooseImages = async () => {
     if (recognizing) return
     setRecognizing(true)
-    Taro.showLoading({ title: '上传中', mask: true })
     try {
       const allowed = await askPackagedUploadConsent()
       if (!allowed) return
@@ -604,7 +669,6 @@ function PackagedFoodEditPage() {
         await showUnifiedApiError(error, '上传包装图片失败')
       }
     } finally {
-      Taro.hideLoading()
       setRecognizing(false)
     }
   }
@@ -681,22 +745,17 @@ function PackagedFoodEditPage() {
   const handleRewardChooseImages = async () => {
     if (recognizing) return
     setRecognizing(true)
-    Taro.showLoading({ title: '上传中', mask: true })
     try {
       const allowed = await askPackagedUploadConsent()
       if (!allowed) {
-        Taro.hideLoading()
         return
       }
       const uploaded = await chooseAndUploadImages(MAX_REWARD_UPLOAD_IMAGES)
       if (uploaded.length === 0) {
-        Taro.hideLoading()
         return
       }
       setPendingRewardImages(uploaded)
-      Taro.hideLoading()
     } catch (error) {
-      Taro.hideLoading()
       if (isChooseImageCancel(error)) return
       if (isPrivacyAuthorizeError(error)) {
         showPrivacyAuthorizeFailure(error)
@@ -963,7 +1022,7 @@ function PackagedFoodEditPage() {
           <Text className='section-title'>预包装零食补库</Text>
           {isRewardTaskMode ? (
             <>
-              <Text className='wizard-desc'>一种食物一组照片。下面不是模式选择，点上传后按实际情况选 1-3 张同一商品照片即可。</Text>
+              <Text className='wizard-desc'>一种食物一组照片。可以从相册一次选择 1-3 张，也可以用相机连续拍摄多张；确认后只会建立一个分析任务。</Text>
 
               <View className='shoot-case-list'>
                 <View className='shoot-case-card'>
@@ -1063,10 +1122,10 @@ function PackagedFoodEditPage() {
               <View className='capture-card reward-capture-card'>
                 <View className='reward-upload-visual'>
                   <Text className='reward-upload-title'>选择这一种商品的照片</Text>
-                  <Text className='reward-upload-desc'>请不要把不同商品混在一组，也不要重复上传已入库的同一规格商品。</Text>
+                  <Text className='reward-upload-desc'>相册可多选；手机拍摄会在每张后询问是否继续拍。请不要把不同商品混在一组。</Text>
                 </View>
                 <View className={`recognize-btn reward-upload-btn ${recognizing ? 'loading' : ''}`} onClick={handleRewardChooseImages}>
-                  <Text className='recognize-btn-text'>{recognizing ? '处理中' : '选择/拍摄 1-3 张照片'}</Text>
+                  <Text className='recognize-btn-text'>{recognizing ? '处理中' : '相册多选或连续拍摄'}</Text>
                 </View>
               </View>
 
@@ -1232,7 +1291,7 @@ function PackagedFoodEditPage() {
             )}
             {sourceImageURLs.length < MAX_REWARD_UPLOAD_IMAGES && (
               <View className={`recognize-btn manual-image-btn ${recognizing ? 'loading' : ''}`} onClick={handleManualChooseImages}>
-                <Text className='recognize-btn-text'>{recognizing ? '上传中' : sourceImageURLs.length > 0 ? '继续补拍图片' : '补拍包装图片'}</Text>
+                <Text className='recognize-btn-text'>{recognizing ? '上传中' : sourceImageURLs.length > 0 ? '继续补拍/选择图片' : '补拍或选择包装图片'}</Text>
               </View>
             )}
           </View>

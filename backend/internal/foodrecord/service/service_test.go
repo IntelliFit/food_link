@@ -128,6 +128,59 @@ func TestFoodRecordService_Save(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestZeroNutritionGateRejectsSuspiciousItem(t *testing.T) {
+	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
+		Name:   "如实酸奶",
+		Weight: 135,
+		Intake: 135,
+	}})
+
+	require.Error(t, err)
+	appErr, ok := err.(*commonerrors.AppError)
+	require.True(t, ok)
+	assert.Equal(t, 10002, appErr.Code)
+	assert.Contains(t, appErr.Message, "如实酸奶")
+}
+
+func TestZeroNutritionGateRejectsMixedVegetableDish(t *testing.T) {
+	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
+		Name:   "香菇油麦菜",
+		Weight: 100,
+		Intake: 100,
+	}})
+
+	require.Error(t, err)
+	appErr, ok := err.(*commonerrors.AppError)
+	require.True(t, ok)
+	assert.Equal(t, 10002, appErr.Code)
+	assert.Contains(t, appErr.Message, "香菇油麦菜")
+}
+
+func TestZeroNutritionGateAllowsKnownZeroDrink(t *testing.T) {
+	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
+		Name:    "白开水",
+		Weight:  250,
+		Intake:  250,
+		WaterMl: 250,
+	}})
+	require.NoError(t, err)
+}
+
+func TestZeroNutritionGateAllowsNonZeroItem(t *testing.T) {
+	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
+		Name:   "双汇玉米热狗肠",
+		Weight: 40,
+		Intake: 40,
+		Nutrients: domain.FoodItemNutrients{
+			Calories: 81.17,
+			Protein:  4.4,
+			Carbs:    6,
+			Fat:      4.4,
+		},
+	}})
+	require.NoError(t, err)
+}
+
 func TestFoodRecordService_Save_WithDate(t *testing.T) {
 	db := setupServiceTestDB(t)
 	r := foodrepo.NewFoodRecordRepo(db)
@@ -666,11 +719,11 @@ func TestFoodRecordService_List_HydratesManualSourceImages(t *testing.T) {
 		TotalCalories: 151,
 		RecordTime:    &now,
 		Items: []domain.FoodItem{{
-			Name:             "白米饭",
-			Weight:           100,
-			Intake:           100,
-			ManualSource:     &manualSource,
-			ManualSourceID:   &manualSourceID,
+			Name:              "白米饭",
+			Weight:            100,
+			Intake:            100,
+			ManualSource:      &manualSource,
+			ManualSourceID:    &manualSourceID,
 			ManualSourceTitle: strPtr("白米饭"),
 		}},
 	}

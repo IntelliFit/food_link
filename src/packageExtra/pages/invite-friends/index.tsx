@@ -106,21 +106,13 @@ function InviteFriendsPage() {
     const loadQr = async () => {
       setQrLoading(true)
       const scene = `fi=${inviteCode}`
-      const isDevelopmentEnv =
-        typeof process !== 'undefined' && process?.env?.NODE_ENV === 'development'
-      const envCandidates: Array<'develop' | 'trial' | 'release'> = isDevelopmentEnv
-        ? ['develop', 'trial', 'release']
-        : ['release', 'trial', 'develop']
 
       try {
-        for (const envVersion of envCandidates) {
-          try {
-            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', envVersion)
-            if (!cancelled) setQrCodeImage(base64)
-            return
-          } catch (error) {
-            console.warn(`[invite-friends] qr load failed env=${envVersion}`, error)
-          }
+        try {
+          const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', 'release')
+          if (!cancelled) setQrCodeImage(base64)
+        } catch (error) {
+          console.warn('[invite-friends] qr load failed env=release', error)
         }
       } finally {
         if (!cancelled) setQrLoading(false)

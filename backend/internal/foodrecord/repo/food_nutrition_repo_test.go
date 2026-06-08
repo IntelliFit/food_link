@@ -228,6 +228,16 @@ func TestFoodNutritionRepo_ResolveFoodUsesNormalizedQueryVariants(t *testing.T) 
 		AliasName:       "米饭",
 		NormalizedAlias: normalizeFoodName("米饭"),
 	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "youmaicai",
+		CanonicalName:  "油麦菜",
+		NormalizedName: normalizeFoodName("油麦菜"),
+		KcalPer100g:    15,
+		ProteinPer100g: 1.4,
+		CarbsPer100g:   2.1,
+		FatPer100g:     0.4,
+		IsActive:       true,
+	}).Error)
 
 	egg, err := repo.ResolveFood(ctx, "鸡蛋1个")
 	require.NoError(t, err)
@@ -242,6 +252,43 @@ func TestFoodNutritionRepo_ResolveFoodUsesNormalizedQueryVariants(t *testing.T) 
 	assert.Equal(t, "rice", rice.Food.ID)
 	assert.Equal(t, "exact_alias", rice.Status)
 	assert.Equal(t, "alias_normalized", rice.MatchSource)
+
+	youmaicai, err := repo.ResolveFood(ctx, "香菇油麦菜")
+	require.NoError(t, err)
+	require.NotNil(t, youmaicai.Food)
+	assert.Equal(t, "youmaicai", youmaicai.Food.ID)
+	assert.Equal(t, "exact_canonical", youmaicai.Status)
+	assert.Equal(t, "canonical_normalized", youmaicai.MatchSource)
+}
+
+func TestFoodNutritionRepo_ResolveFoodFallsBackBrandYogurtToGenericYogurt(t *testing.T) {
+	db := setupFoodNutritionFullTestDB(t)
+	repo := NewFoodNutritionRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.FoodNutrition{
+		ID:             "yogurt",
+		CanonicalName:  "乳品（酸奶，均值)",
+		NormalizedName: normalizeFoodName("乳品（酸奶，均值)"),
+		KcalPer100g:    70,
+		ProteinPer100g: 3,
+		CarbsPer100g:   9,
+		FatPer100g:     2,
+		IsActive:       true,
+	}).Error)
+	require.NoError(t, db.Create(&domain.FoodNutritionAlias{
+		ID:              "alias-yogurt",
+		FoodID:          "yogurt",
+		AliasName:       "酸奶",
+		NormalizedAlias: normalizeFoodName("酸奶"),
+	}).Error)
+
+	result, err := repo.ResolveFood(ctx, "如实酸奶")
+	require.NoError(t, err)
+	require.NotNil(t, result.Food)
+	assert.Equal(t, "yogurt", result.Food.ID)
+	assert.Equal(t, "exact_alias", result.Status)
+	assert.Equal(t, "alias_normalized", result.MatchSource)
 }
 
 func TestFoodNutritionRepo_ResolveFoodSkipsEnglishAliasForChineseQuery(t *testing.T) {
@@ -310,6 +357,20 @@ func TestNutritionQueryVariants(t *testing.T) {
 		normalized = append(normalized, variant.Normalized)
 	}
 	assert.Contains(t, normalized, normalizeFoodName("玉米(熟)"))
+
+	variants = nutritionQueryVariants("如实酸奶")
+	normalized = []string{}
+	for _, variant := range variants {
+		normalized = append(normalized, variant.Normalized)
+	}
+	assert.Contains(t, normalized, normalizeFoodName("酸奶"))
+
+	variants = nutritionQueryVariants("酸奶软糖")
+	normalized = []string{}
+	for _, variant := range variants {
+		normalized = append(normalized, variant.Normalized)
+	}
+	assert.NotContains(t, normalized, normalizeFoodName("酸奶"))
 }
 
 func TestFoodNutritionRepo_GetUnresolvedTop(t *testing.T) {

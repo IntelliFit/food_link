@@ -144,6 +144,11 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	}
 	normalizedMeal := normalizeMealType(input.MealType, nil)
 	input.Items = normalizeFoodItems(input.Items)
+	if input.SourceTaskID != nil {
+		if err := validateNoSuspiciousZeroNutritionItems(input.Items); err != nil {
+			return nil, err
+		}
+	}
 
 	recordTime, err := s.buildRecordTime(ctx, input.Date, input.SourceTaskID)
 	if err != nil {
@@ -317,6 +322,73 @@ func normalizeFoodItems(items []domain.FoodItem) []domain.FoodItem {
 		}
 	}
 	return items
+}
+
+func validateNoSuspiciousZeroNutritionItems(items []domain.FoodItem) error {
+	for _, item := range items {
+		if !isSuspiciousZeroNutritionFoodItem(item) {
+			continue
+		}
+		return &commonerrors.AppError{
+			Code:       10002,
+			Message:    fmt.Sprintf("食物「%s」营养信息缺失，请先重新识别或手动补充热量", strings.TrimSpace(item.Name)),
+			HTTPStatus: 400,
+		}
+	}
+	return nil
+}
+
+func isSuspiciousZeroNutritionFoodItem(item domain.FoodItem) bool {
+	name := strings.TrimSpace(item.Name)
+	if name == "" || len([]rune(name)) <= 1 {
+		return false
+	}
+	weight := item.Weight
+	if weight <= 0 {
+		weight = item.Intake
+	}
+	if weight < 5 {
+		return false
+	}
+	if isKnownZeroNutritionFoodName(name) {
+		return false
+	}
+	if !allFoodItemCoreNutritionZero(item.Nutrients) {
+		return false
+	}
+	return true
+}
+
+func allFoodItemCoreNutritionZero(n domain.FoodItemNutrients) bool {
+	const eps = 0.0001
+	return math.Abs(n.Calories) <= eps &&
+		math.Abs(n.Protein) <= eps &&
+		math.Abs(n.Carbs) <= eps &&
+		math.Abs(n.Fat) <= eps
+}
+
+func isKnownZeroNutritionFoodName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	exactNames := []string{
+		"水", "白开水", "温水", "热水", "冰水", "纯净水", "矿泉水", "饮用水", "饮用天然水",
+		"苏打水", "气泡水", "无糖茶", "茶水", "绿茶", "乌龙茶",
+		"黑咖啡", "美式咖啡", "无糖可乐", "无糖可口可乐", "无糖芬达",
+	}
+	for _, exact := range exactNames {
+		if name == exact {
+			return true
+		}
+	}
+	safeContains := []string{"无糖茶", "黑咖啡", "美式咖啡", "深烘美式", "椰青美式", "无糖可乐", "无糖芬达"}
+	for _, part := range safeContains {
+		if strings.Contains(name, part) {
+			return true
+		}
+	}
+	return false
 }
 
 func totalFoodWaterIntakeMl(items []domain.FoodItem) int {
