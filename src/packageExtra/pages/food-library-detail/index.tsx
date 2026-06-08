@@ -9,6 +9,7 @@ import {
   unlikePublicFoodLibraryItem,
   getPublicFoodLibraryComments,
   postPublicFoodLibraryComment,
+  deletePublicFoodLibraryComment,
   submitPublicFoodLibraryFeedback,
   showUnifiedApiError,
   type CampusFoodMetric,
@@ -23,14 +24,11 @@ import {
   ShopOutlined,
   LocationOutlined,
   GuideOutlined,
-  Star,
-  Like,
-  LikeOutlined,
-  CommentOutlined,
   Cross,
-  StarOutlined,
   FireOutlined,
-  UserOutlined
+  UserOutlined,
+  Star,
+  StarOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import './index.scss'
@@ -97,6 +95,10 @@ function isAnalysisFailedItem(item: PublicFoodLibraryItem): boolean {
   return status === 'failed' || status === 'timed_out'
 }
 
+function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
+  return item.type === 'campus' || !!item.is_campus_food
+}
+
 function formatDateOnly(timeStr: string | null | undefined): string {
   if (!timeStr) return '待补充'
   return formatTime(timeStr).split(' ')[0] || '待补充'
@@ -112,6 +114,7 @@ function FoodLibraryDetailPage() {
   const [comments, setComments] = useState<PublicFoodLibraryComment[]>([])
   const [showCommentModal, setShowCommentModal] = useState(false)
   const [showActionSheet, setShowActionSheet] = useState(false)
+  const [commentInputFocus, setCommentInputFocus] = useState(false)
   const [commentContent, setCommentContent] = useState('')
   const [commentRating, setCommentRating] = useState(0)
   const [submitting, setSubmitting] = useState(false)
@@ -137,7 +140,7 @@ function FoodLibraryDetailPage() {
   useShareAppMessage(() => {
     if (!item) return { title: '食探 - 发现健康餐' }
     const title = item.food_name || item.description || '来看看这道菜'
-    const path = `${extraPkgUrl('/pages/food-library-detail/index')}?id=${item.id}${item.is_campus_food ? '&scene=campus' : ''}`
+    const path = `${extraPkgUrl('/pages/food-library-detail/index')}?id=${item.id}${isCampusFoodItem(item) ? '&scene=campus' : ''}`
     const imageUrl = item.image_path || ''
     return { title, path, imageUrl }
   })
@@ -180,7 +183,7 @@ function FoodLibraryDetailPage() {
         return
       }
       const data = await getPublicFoodLibraryItem(itemId)
-      if (data.is_campus_food) {
+      if (isCampusFoodItem(data)) {
         const detail = await getCampusFoodDetail(itemId)
         setItem({ ...detail.item, ...detail.metrics })
         setCampusMetrics(detail.metrics || {})
@@ -276,7 +279,7 @@ function FoodLibraryDetailPage() {
   const handleEdit = () => {
     setShowActionSheet(false)
     if (!item) return
-    if (item.is_campus_food) {
+    if (isCampusFoodItem(item)) {
       Taro.navigateTo({ url: `${extraPkgUrl('/pages/campus-food-share/index')}?edit_id=${item.id}` })
     } else {
       Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-share/index')}?edit_id=${item.id}` })
@@ -328,6 +331,19 @@ function FoodLibraryDetailPage() {
     }
   }
 
+  const openCommentModal = () => {
+    setShowCommentModal(true)
+    setCommentInputFocus(false)
+    setTimeout(() => {
+      setCommentInputFocus(true)
+    }, 80)
+  }
+
+  const closeCommentModal = () => {
+    setShowCommentModal(false)
+    setCommentInputFocus(false)
+  }
+
   // 提交评论
   const handleSubmitComment = async () => {
     if (!commentContent.trim()) {
@@ -351,7 +367,7 @@ function FoodLibraryDetailPage() {
       setComments(prev => [displayComment, ...prev])
 
       Taro.showToast({ title: '评论成功', icon: 'success' })
-      setShowCommentModal(false)
+      closeCommentModal()
       setCommentContent('')
       setCommentRating(0)
       
@@ -363,6 +379,30 @@ function FoodLibraryDetailPage() {
       await showUnifiedApiError(e, '评论失败')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleDeleteComment = async (comment: PublicFoodLibraryComment) => {
+    if (!item || !comment?.id) return
+    const { confirm } = await Taro.showModal({
+      title: '删除评论',
+      content: '确定删除这条评论吗？',
+      confirmText: '删除',
+      cancelText: '取消',
+      confirmColor: '#ef4444'
+    })
+    if (!confirm) return
+
+    Taro.showLoading({ title: '删除中...', mask: true })
+    try {
+      await deletePublicFoodLibraryComment(item.id, comment.id)
+      setComments(prev => prev.filter(c => c.id !== comment.id))
+      setItem({ ...item, comment_count: Math.max(0, (item.comment_count || 0) - 1) })
+      Taro.showToast({ title: '已删除', icon: 'success' })
+    } catch (e: any) {
+      await showUnifiedApiError(e, '删除失败')
+    } finally {
+      Taro.hideLoading()
     }
   }
 
@@ -556,7 +596,7 @@ function FoodLibraryDetailPage() {
       </View>
 
       {/* 校园食堂信息 */}
-      {item.is_campus_food && (
+      {isCampusFoodItem(item) && (
         <View className='campus-card'>
           {(() => {
             return (
@@ -611,7 +651,7 @@ function FoodLibraryDetailPage() {
         </View>
       )}
 
-      {item.is_campus_food && similarItems.length > 0 && (
+      {isCampusFoodItem(item) && similarItems.length > 0 && (
         <View className='campus-related-section'>
           <View className='campus-section-head'>
             <Text className='card-title'>同食堂相似菜品</Text>
@@ -625,7 +665,7 @@ function FoodLibraryDetailPage() {
         </View>
       )}
 
-      {item.is_campus_food && relatedFeeds.length > 0 && (
+      {isCampusFoodItem(item) && relatedFeeds.length > 0 && (
         <View className='campus-feed-section'>
           <View className='campus-section-head'>
             <Text className='card-title'>圈子相关动态</Text>
@@ -705,6 +745,24 @@ function FoodLibraryDetailPage() {
           <Text className='card-title'>评论</Text>
           <Text className='comments-count'>{comments.length} 条</Text>
         </View>
+        {/* 快速评论输入条 */}
+        <View className='quick-comment-bar' onClick={openCommentModal}>
+          {(() => {
+            const localUser = getLocalUserDisplay()
+            return localUser.avatar ? (
+              <View className='quick-comment-avatar'>
+                <Image className='quick-comment-avatar-img' src={localUser.avatar} />
+              </View>
+            ) : (
+              <View className='quick-comment-avatar'>
+                <UserOutlined size='16' color='#9ca3af' />
+              </View>
+            )
+          })()}
+          <View className='quick-comment-input'>
+            <Text className='quick-comment-placeholder'>理性发言</Text>
+          </View>
+        </View>
         {comments.length === 0 ? (
           <View className='comments-empty'>暂无评论，快来抢沙发</View>
         ) : (
@@ -734,50 +792,49 @@ function FoodLibraryDetailPage() {
                   )}
                 </View>
                 <Text className='comment-content'>{c.content}</Text>
+                {currentUserId && c.user_id === currentUserId && (
+                  <View className='comment-actions'>
+                    <View className='comment-delete-btn' onClick={() => handleDeleteComment(c)}>
+                      <Text className='iconfont icon-shanchu comment-delete-icon' />
+                    </View>
+                  </View>
+                )}
               </View>
             ))}
           </ScrollView>
         )}
-        {/* 快速评论输入条 */}
-        <View className='quick-comment-bar' onClick={() => setShowCommentModal(true)}>
-          {(() => {
-            const localUser = getLocalUserDisplay()
-            return localUser.avatar ? (
-              <View className='quick-comment-avatar'>
-                <Image className='quick-comment-avatar-img' src={localUser.avatar} />
-              </View>
-            ) : (
-              <View className='quick-comment-avatar'>
-                <UserOutlined size='16' color='#9ca3af' />
-              </View>
-            )
-          })()}
-          <View className='quick-comment-input'>
-            <Text className='quick-comment-placeholder'>理性发言</Text>
-          </View>
-        </View>
       </View>
 
       {/* 底部操作栏 */}
       <View className='bottom-bar'>
         <View className='bottom-bar-row1'>
-          {item.is_campus_food && (
+          {isCampusFoodItem(item) && (
             <View className={`action-btn quick-record-btn ${analyzing || analysisFailed ? 'disabled' : ''}`} onClick={handleQuickRecord}>
               <Text className='action-text'>{analyzing ? '分析中' : analysisFailed ? '暂不可记' : '一键记录'}</Text>
             </View>
           )}
-          <View className={`action-btn icon-action like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
-            {item.liked ? <Like size='20' /> : <LikeOutlined size='20' />}
-          </View>
-          <View className={`action-btn icon-action collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
-            {item.collected ? <Star size='20' className='star-filled' /> : <StarOutlined size='20' />}
-          </View>
-          <View className='action-btn icon-action comment-btn' onClick={() => setShowCommentModal(true)}>
-            <CommentOutlined size='20' />
-            <Text className='action-text'>写评论</Text>
-          </View>
-          <View className='action-btn icon-action more-btn' onClick={() => setShowActionSheet(true)}>
-            <Text className='more-icon'>⋮</Text>
+          <View className='bottom-bar-actions'>
+            <View className={`action-btn icon-action like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
+              <Text className={`iconfont ${item.liked ? 'icon-like_fill' : 'icon-like'}`} />
+              {item.like_count > 0 && (
+                <Text className='action-badge'>{item.like_count}</Text>
+              )}
+            </View>
+            <View className={`action-btn icon-action collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
+              <Text className={`iconfont ${item.collected ? 'icon-collection_fill' : 'icon-collection'}`} />
+              {(item.collection_count || 0) > 0 && (
+                <Text className='action-badge'>{item.collection_count}</Text>
+              )}
+            </View>
+            <View className='action-btn icon-action comment-btn' onClick={openCommentModal}>
+              <Text className='iconfont icon-comment' />
+              {item.comment_count > 0 && (
+                <Text className='action-badge'>{item.comment_count}</Text>
+              )}
+            </View>
+            <View className='action-btn icon-action more-btn' onClick={() => setShowActionSheet(true)}>
+              <Text className='more-icon'>⋮</Text>
+            </View>
           </View>
         </View>
         <View className='correction-bar'>
@@ -788,11 +845,11 @@ function FoodLibraryDetailPage() {
 
       {/* 评论弹窗 */}
       {showCommentModal && (
-        <View className='comment-modal' onClick={() => setShowCommentModal(false)}>
+        <View className='comment-modal' onClick={closeCommentModal}>
           <View className='comment-modal-content' onClick={e => e.stopPropagation()}>
             <View className='modal-header'>
               <Text className='modal-title'>发表评论</Text>
-              <View className='modal-close' onClick={() => setShowCommentModal(false)}>
+              <View className='modal-close' onClick={closeCommentModal}>
                 <Cross size='24' color='#9ca3af' />
               </View>
             </View>
@@ -816,6 +873,7 @@ function FoodLibraryDetailPage() {
               value={commentContent}
               onInput={e => setCommentContent(e.detail.value)}
               maxlength={500}
+              focus={commentInputFocus}
               autoFocus
               fixed
             />

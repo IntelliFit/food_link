@@ -624,6 +624,7 @@
 
 .comment-info {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
@@ -644,6 +645,26 @@
   display: flex;
   gap: 4rpx;
   color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.comment-delete-btn {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 999rpx;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    opacity: 0.72;
+  }
+}
+
+.comment-delete-icon {
+  font-size: 30rpx;
+  color: #64748b;
 }
 
 .star-filled {
@@ -655,6 +676,13 @@
   color: #374151;
   line-height: 44rpx;
   padding-left: 92rpx; // Align with text start (avatar width + gap)
+}
+
+.comment-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-left: 92rpx;
+  margin-top: 8rpx;
 }
 
 .comments-empty {
@@ -670,7 +698,7 @@
   display: flex;
   align-items: center;
   gap: 20rpx;
-  margin-top: 32rpx;
+  margin-bottom: 24rpx;
   padding: 16rpx 20rpx;
   background: #f9fafb;
   border-radius: 40rpx;
@@ -732,11 +760,22 @@
 .bottom-bar-row1 {
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  justify-content: space-between;
+  gap: 16rpx;
+  width: 100%;
+}
+
+.bottom-bar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16rpx;
+  flex: 1;
+  min-width: 0;
 }
 
 .action-btn {
-  height: 86rpx;
+  height: 72rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -755,16 +794,39 @@
 }
 
 .icon-action {
-  width: 88rpx;
-  min-width: 88rpx;
-  flex: 0 0 88rpx;
+  width: 46rpx;
+  min-width: 46rpx;
+  flex: 0 0 46rpx;
+  height: 46rpx;
   background: transparent;
   border: none;
   box-shadow: none;
+  position: relative;
+}
+
+.action-badge {
+  position: absolute;
+  top: -12rpx;
+  right: -10rpx;
+  min-width: 20rpx;
+  height: 24rpx;
+  padding: 0;
+  background: transparent;
+  color: #64748b;
+  font-size: 20rpx;
+  font-weight: 600;
+  line-height: 24rpx;
+  text-align: center;
+  z-index: 2;
 }
 
 .like-btn {
   color: #64748b;
+
+  .icon-like,
+  .icon-like_fill {
+    font-size: 46rpx;
+  }
 
   &.liked {
     color: #e11d48;
@@ -774,18 +836,31 @@
 .collect-btn {
   color: #64748b;
 
+  .icon-collection,
+  .icon-collection_fill {
+    font-size: 46rpx;
+  }
+
   &.collected {
     color: #b45309;
   }
 }
 
+.comment-btn {
+  color: #64748b;
+
+  .icon-comment {
+    font-size: 46rpx;
+  }
+}
+
 .more-btn {
   color: #64748b;
-  background: #f3f4f6;
+  background: transparent;
 }
 
 .more-icon {
-  font-size: 32rpx;
+  font-size: 46rpx;
   line-height: 1;
   font-weight: 700;
 }
@@ -800,12 +875,15 @@
 }
 
 .quick-record-btn {
-  flex: 1;
+  flex: 0 0 auto;
+  min-width: 176rpx;
+  padding: 0 34rpx;
   background: #5cb896;
   color: #fff;
   border-color: rgb(92 184 150 / 72%);
-  box-shadow: 0 10rpx 20rpx rgb(92 184 150 / 20%);
-  border-radius: 24rpx;
+  box-shadow: 0 6rpx 14rpx rgb(92 184 150 / 18%);
+  border-radius: 20rpx;
+  height: 72rpx;
 
   &.disabled {
     background: #d1d5db;
@@ -815,12 +893,10 @@
 }
 
 .comment-btn {
-  padding: 0 24rpx;
-  background: #5cb896;
-  color: #fff;
-  border-color: rgb(92 184 150 / 72%);
-  box-shadow: 0 10rpx 20rpx rgb(92 184 150 / 20%);
-  border-radius: 24rpx;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .action-text {
@@ -831,8 +907,9 @@
 // 修正入口
 .correction-bar {
   text-align: center;
-  padding: 4rpx 0 0;
+  padding: 2rpx 0 0;
   font-size: 22rpx;
+  line-height: 28rpx;
   background: transparent;
 }
 
@@ -1370,6 +1447,8 @@
   .merchant-icon-wrapper,
   .like-btn,
   .collect-btn,
+  .comment-btn,
+  .more-btn,
   .icon-action {
     color: rgb(214 226 220 / 58%);
   }

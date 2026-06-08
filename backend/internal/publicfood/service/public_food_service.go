@@ -32,8 +32,10 @@ type CampusAnalyzeTaskSubmitter interface {
 }
 
 const (
-	statusUserDeleted = "user_deleted"
-	statusDeleted     = "deleted"
+	statusUserDeleted    = "user_deleted"
+	statusDeleted        = "deleted"
+	publicFoodTypeCommon = "common"
+	publicFoodTypeCampus = "campus"
 )
 
 func NewPublicFoodService(repo *repo.PublicFoodRepo, storageClient ...*storage.Client) *PublicFoodService {
@@ -80,6 +82,7 @@ type CreateInput struct {
 	City               *string
 	District           *string
 	DetailAddress      *string
+	Type               string
 	// Campus fields
 	IsCampusFood       bool
 	SchoolName         *string
@@ -97,6 +100,7 @@ type CreateInput struct {
 }
 
 func (s *PublicFoodService) Create(ctx context.Context, userID string, input CreateInput) (string, error) {
+	normalizePublicFoodTypeInput(&input)
 	if err := normalizePublicFoodLocationInput(&input); err != nil {
 		return "", err
 	}
@@ -187,6 +191,7 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		District:           ptrString(input.District),
 		DetailAddress:      ptrString(input.DetailAddress),
 		Status:             "pending",
+		Type:               input.Type,
 		IsCampusFood:       input.IsCampusFood,
 		SchoolName:         ptrString(input.SchoolName),
 		CampusName:         ptrString(input.CampusName),
@@ -202,7 +207,7 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 		PortionDescription: ptrString(input.PortionDescription),
 		CampusLocationText: buildCampusLocationText(input.SchoolName, input.CampusName, input.CanteenName, input.Floor, input.WindowName),
 	}
-	if item.IsCampusFood {
+	if isCampusPublicFood(item) {
 		item.Status = "published"
 		now := time.Now()
 		item.PublishedAt = &now
@@ -213,7 +218,7 @@ func (s *PublicFoodService) Create(ctx context.Context, userID string, input Cre
 	if err := s.repo.CreateItem(ctx, item); err != nil {
 		return "", err
 	}
-	if item.IsCampusFood {
+	if isCampusPublicFood(item) {
 		taskID, err := s.submitCampusAnalyzeTask(ctx, userID, item, firstPath, imagePaths)
 		if err != nil {
 			return "", err
@@ -393,7 +398,7 @@ func (s *PublicFoodService) GetCampusDetail(ctx context.Context, userID, itemID 
 	if err != nil {
 		return nil, err
 	}
-	if item == nil || isDeletedStatus(item.Status) || !item.IsCampusFood {
+	if item == nil || isDeletedStatus(item.Status) || !isCampusPublicFood(item) {
 		return nil, commonerrors.ErrNotFound
 	}
 	views, err := s.hydrate(ctx, userID, []domain.PublicFoodItem{*item}, "")
@@ -438,6 +443,7 @@ func (s *PublicFoodService) Uncollect(ctx context.Context, userID, itemID string
 }
 
 func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, input CreateInput) error {
+	normalizePublicFoodTypeInput(&input)
 	item, err := s.repo.GetItem(ctx, itemID)
 	if err != nil {
 		return err
@@ -501,7 +507,9 @@ func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, i
 	if input.DetailAddress != nil {
 		updates["detail_address"] = *input.DetailAddress
 	}
-	if input.IsCampusFood {
+	updates["type"] = input.Type
+	updates["is_campus_food"] = input.IsCampusFood
+	if input.Type == publicFoodTypeCampus {
 		if input.SchoolName != nil {
 			updates["school_name"] = *input.SchoolName
 		}
@@ -588,16 +596,25 @@ func (s *PublicFoodService) AddComment(ctx context.Context, userID, itemID, cont
 		return nil, err
 	}
 	_ = s.repo.RefreshCommentStats(ctx, itemID)
-	rows, err := s.repo.ListComments(ctx, itemID, 1)
-	if err == nil {
+	row, err := s.repo.GetComment(ctx, itemID, comment.ID)
+	if err == nil && row != nil {
+		rows := []domain.PublicFoodComment{*row}
 		s.normalizePublicFoodComments(rows)
-		for _, row := range rows {
-			if row.ID == comment.ID {
-				return &row, nil
-			}
-		}
+		return &rows[0], nil
 	}
 	return comment, nil
+}
+
+func (s *PublicFoodService) DeleteComment(ctx context.Context, userID, itemID, commentID string) error {
+	rowsAffected, err := s.repo.DeleteOwnComment(ctx, itemID, commentID, userID)
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return commonerrors.ErrNotFound
+	}
+	_ = s.repo.RefreshCommentStats(ctx, itemID)
+	return nil
 }
 
 func (s *PublicFoodService) Feedback(ctx context.Context, userID, content string, itemID *string) (string, error) {
@@ -862,6 +879,35 @@ func isDeletedStatus(status string) bool {
 	}
 }
 
+func normalizePublicFoodTypeInput(input *CreateInput) {
+	if input == nil {
+		return
+	}
+	itemType := strings.TrimSpace(strings.ToLower(input.Type))
+	if itemType == "" {
+		if input.IsCampusFood {
+			itemType = publicFoodTypeCampus
+		} else {
+			itemType = publicFoodTypeCommon
+		}
+	}
+	switch itemType {
+	case publicFoodTypeCampus:
+		input.Type = publicFoodTypeCampus
+		input.IsCampusFood = true
+	default:
+		input.Type = publicFoodTypeCommon
+		input.IsCampusFood = false
+	}
+}
+
+func isCampusPublicFood(item *domain.PublicFoodItem) bool {
+	if item == nil {
+		return false
+	}
+	return strings.TrimSpace(strings.ToLower(item.Type)) == publicFoodTypeCampus || item.IsCampusFood
+}
+
 func ptrFloat64(v *float64) float64 {
 	if v == nil {
 		return 0
@@ -879,7 +925,8 @@ func isHomemadeInput(input CreateInput) bool {
 }
 
 func normalizePublicFoodLocationInput(input *CreateInput) error {
-	if input == nil || input.IsCampusFood {
+	normalizePublicFoodTypeInput(input)
+	if input == nil || input.Type == publicFoodTypeCampus {
 		return nil
 	}
 	clearCampusPriceInput(input)
@@ -912,7 +959,8 @@ func clearCampusPriceInput(input *CreateInput) {
 }
 
 func validateCampusCreateInput(input CreateInput, imagePaths []string) error {
-	if !input.IsCampusFood {
+	normalizePublicFoodTypeInput(&input)
+	if input.Type != publicFoodTypeCampus {
 		return nil
 	}
 	if strings.TrimSpace(ptrString(input.FoodName)) == "" {

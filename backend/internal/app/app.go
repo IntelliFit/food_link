@@ -445,6 +445,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/public-food-library/:item_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.Delete)
 	engine.GET("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.Comments)
 	engine.POST("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.AddComment)
+	engine.DELETE("/api/public-food-library/:item_id/comments/:comment_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.DeleteComment)
 
 	// Recipe routes
 	engine.GET("/api/recipes", authmw.RequireJWT(jwtSvc), recipeHandler.List)

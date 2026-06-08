@@ -415,10 +415,21 @@
   white-space: nowrap;
 }
 
+.campus-location-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  margin-bottom: 16rpx;
+}
+
+.campus-location-icon {
+  color: #9ca3af;
+  flex-shrink: 0;
+}
+
 .campus-location {
   font-size: 24rpx;
   color: #6b7280;
-  margin-bottom: 16rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -433,17 +444,30 @@
 }
 
 .campus-price {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #047857;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #1f2937;
 }
 
-.campus-calories {
-  font-size: 28rpx;
-  color: #f97316;
-  background: #fff7ed;
-  padding: 4rpx 12rpx;
-  border-radius: 8rpx;
+.campus-calorie-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4rpx;
+  font-size: 22rpx;
+  color: #fff;
+  font-weight: 600;
+  line-height: 1;
+  background: linear-gradient(to right, #5cb896 0%, #8dd3bf 100%);
+  padding: 8rpx 16rpx;
+  border-radius: 28rpx;
+  box-shadow: 0 4rpx 12rpx rgb(92 184 150 / 24%);
+}
+
+.campus-calorie-num,
+.campus-calorie-unit {
+  font-size: 22rpx;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .campus-protein {
@@ -518,31 +542,91 @@
   border-top: 1rpx solid #f3f4f6;
 }
 
-.campus-stats {
+.campus-author-row {
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  gap: 12rpx;
 }
 
-.stat-icon {
+.campus-author-avatar {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: #f3f4f6;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.campus-author-avatar-img {
+  width: 100%;
+  height: 100%;
+}
+
+.campus-author-name {
   font-size: 24rpx;
+  color: #6b7280;
+  line-height: 1;
+}
+
+.campus-actions {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+
+.campus-stat {
+  display: flex;
+  align-items: center;
+  gap: 2rpx;
+}
+
+.campus-like-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48rpx;
+  height: 48rpx;
+  font-size: 28rpx;
+  color: #9ca3af;
+
+  &.icon-like_fill,
+  &.liked {
+    color: #e11d48;
+  }
+}
+
+.campus-comment-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48rpx;
+  height: 48rpx;
   color: #9ca3af;
 }
 
+.stat-icon {
+  font-size: 28rpx;
+  line-height: 1;
+}
+
 .stat-count {
-  font-size: 24rpx;
+  font-size: 26rpx;
   color: #6b7280;
-  margin-right: 16rpx;
+  line-height: 1;
 }
 
 .campus-record-btn {
-  padding: 8rpx 24rpx;
+  padding: 6rpx 18rpx;
   background: #5cb896;
-  border-radius: 32rpx;
+  border-radius: 24rpx;
+  margin-left: 2rpx;
 }
 
 .campus-record-btn-text {
-  font-size: 28rpx;
+  font-size: 24rpx;
   color: #fff;
   font-weight: 500;
 }
@@ -659,9 +743,38 @@
     color: #6ee7b7;
   }
 
-  .campus-calories {
-    color: #fdba74;
-    background: rgb(249 115 22 / 14%);
+  .campus-price {
+    color: #f2f7f4;
+  }
+
+  .campus-calorie-badge {
+    background: linear-gradient(to right, #0f766e 0%, #14b8a6 100%);
+    box-shadow: 0 4rpx 12rpx rgb(20 184 166 / 24%);
+  }
+
+  .campus-like-btn {
+    color: rgb(214 226 220 / 45%);
+
+    &.icon-like_fill,
+    &.liked {
+      color: #f43f5e;
+    }
+  }
+
+  .campus-comment-btn {
+    color: rgb(214 226 220 / 45%);
+  }
+
+  .campus-location-icon {
+    color: rgb(214 226 220 / 45%);
+  }
+
+  .campus-author-avatar {
+    background: #222c29;
+  }
+
+  .campus-author-name {
+    color: rgb(214 226 220 / 58%);
   }
 
   .campus-protein,

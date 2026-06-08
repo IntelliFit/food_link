@@ -30,6 +30,7 @@ type PublicFoodItem struct {
 	City               string           `gorm:"column:city" json:"city"`
 	District           string           `gorm:"column:district" json:"district"`
 	Status             string           `gorm:"column:status" json:"status"`
+	Type               string           `gorm:"column:type" json:"type"`
 	AuditRejectReason  *string          `gorm:"column:audit_reject_reason" json:"audit_reject_reason,omitempty"`
 	PublishedAt        *time.Time       `gorm:"column:published_at" json:"published_at,omitempty"`
 	LikeCount          int              `gorm:"column:like_count" json:"like_count"`

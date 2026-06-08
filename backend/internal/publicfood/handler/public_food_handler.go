@@ -29,6 +29,7 @@ type PublicFoodService interface {
 	Delete(ctx context.Context, userID, itemID string) error
 	Comments(ctx context.Context, itemID string) ([]domain.PublicFoodComment, error)
 	AddComment(ctx context.Context, userID, itemID, content string, rating *int) (*domain.PublicFoodComment, error)
+	DeleteComment(ctx context.Context, userID, itemID, commentID string) error
 	Feedback(ctx context.Context, userID, content string, itemID *string) (string, error)
 }
 
@@ -65,6 +66,7 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 		City               *string          `json:"city"`
 		District           *string          `json:"district"`
 		DetailAddress      *string          `json:"detail_address"`
+		Type               string           `json:"type"`
 		IsCampusFood       bool             `json:"is_campus_food"`
 		SchoolName         *string          `json:"school_name"`
 		CampusName         *string          `json:"campus_name"`
@@ -107,6 +109,7 @@ func (h *PublicFoodHandler) Create(c *gin.Context) {
 		City:               body.City,
 		District:           body.District,
 		DetailAddress:      body.DetailAddress,
+		Type:               body.Type,
 		IsCampusFood:       body.IsCampusFood,
 		SchoolName:         body.SchoolName,
 		CampusName:         body.CampusName,
@@ -135,6 +138,7 @@ func (h *PublicFoodHandler) List(c *gin.Context) {
 		SortBy:       c.DefaultQuery("sort_by", "latest"),
 		Limit:        intQuery(c, "limit", 20),
 		Offset:       intQuery(c, "offset", 0),
+		Type:         c.Query("type"),
 		SchoolName:   c.Query("school_name"),
 		CanteenName:  c.Query("canteen_name"),
 	}
@@ -241,36 +245,37 @@ func (h *PublicFoodHandler) Uncollect(c *gin.Context) {
 
 func (h *PublicFoodHandler) Update(c *gin.Context) {
 	var body struct {
-		ImagePath          *string          `json:"image_path"`
-		ImagePaths         []string         `json:"image_paths"`
-		Description        *string          `json:"description"`
-		Insight            *string          `json:"insight"`
-		FoodName           *string          `json:"food_name"`
-		MerchantName       *string          `json:"merchant_name"`
-		MerchantAddress    *string          `json:"merchant_address"`
-		TasteRating        *int             `json:"taste_rating"`
-		SuitableForFatLoss bool             `json:"suitable_for_fat_loss"`
-		UserTags           []string         `json:"user_tags"`
-		UserNotes          *string          `json:"user_notes"`
-		Latitude           *float64         `json:"latitude"`
-		Longitude          *float64         `json:"longitude"`
-		Province           *string          `json:"province"`
-		City               *string          `json:"city"`
-		District           *string          `json:"district"`
-		DetailAddress      *string          `json:"detail_address"`
-		IsCampusFood       bool             `json:"is_campus_food"`
-		SchoolName         *string          `json:"school_name"`
-		CampusName         *string          `json:"campus_name"`
-		CanteenName        *string          `json:"canteen_name"`
-		Floor              *string          `json:"floor"`
-		WindowName         *string          `json:"window_name"`
-		Price              *float64         `json:"price"`
-		PriceType          *string          `json:"price_type"`
-		PriceMin           *float64         `json:"price_min"`
-		PriceMax           *float64         `json:"price_max"`
-		PriceUnit          *string          `json:"price_unit"`
-		PriceCollectedAt   *time.Time       `json:"price_collected_at"`
-		PortionDescription *string          `json:"portion_description"`
+		ImagePath          *string    `json:"image_path"`
+		ImagePaths         []string   `json:"image_paths"`
+		Description        *string    `json:"description"`
+		Insight            *string    `json:"insight"`
+		FoodName           *string    `json:"food_name"`
+		MerchantName       *string    `json:"merchant_name"`
+		MerchantAddress    *string    `json:"merchant_address"`
+		TasteRating        *int       `json:"taste_rating"`
+		SuitableForFatLoss bool       `json:"suitable_for_fat_loss"`
+		UserTags           []string   `json:"user_tags"`
+		UserNotes          *string    `json:"user_notes"`
+		Latitude           *float64   `json:"latitude"`
+		Longitude          *float64   `json:"longitude"`
+		Province           *string    `json:"province"`
+		City               *string    `json:"city"`
+		District           *string    `json:"district"`
+		DetailAddress      *string    `json:"detail_address"`
+		Type               string     `json:"type"`
+		IsCampusFood       bool       `json:"is_campus_food"`
+		SchoolName         *string    `json:"school_name"`
+		CampusName         *string    `json:"campus_name"`
+		CanteenName        *string    `json:"canteen_name"`
+		Floor              *string    `json:"floor"`
+		WindowName         *string    `json:"window_name"`
+		Price              *float64   `json:"price"`
+		PriceType          *string    `json:"price_type"`
+		PriceMin           *float64   `json:"price_min"`
+		PriceMax           *float64   `json:"price_max"`
+		PriceUnit          *string    `json:"price_unit"`
+		PriceCollectedAt   *time.Time `json:"price_collected_at"`
+		PortionDescription *string    `json:"portion_description"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -294,6 +299,7 @@ func (h *PublicFoodHandler) Update(c *gin.Context) {
 		City:               body.City,
 		District:           body.District,
 		DetailAddress:      body.DetailAddress,
+		Type:               body.Type,
 		IsCampusFood:       body.IsCampusFood,
 		SchoolName:         body.SchoolName,
 		CampusName:         body.CampusName,
@@ -346,6 +352,20 @@ func (h *PublicFoodHandler) AddComment(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"comment": comment})
+}
+
+func (h *PublicFoodHandler) DeleteComment(c *gin.Context) {
+	err := h.svc.DeleteComment(
+		c.Request.Context(),
+		c.GetString(authmw.ContextUserIDKey),
+		c.Param("item_id"),
+		c.Param("comment_id"),
+	)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "已删除"})
 }
 
 func (h *PublicFoodHandler) Feedback(c *gin.Context) {

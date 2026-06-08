@@ -246,7 +246,7 @@ function FoodLibrarySharePage() {
     Taro.showLoading({ title: '加载中...', mask: true })
     getPublicFoodLibraryItem(editId).then((data: PublicFoodLibraryItem) => {
       if (cancelled) return
-      if (data.is_campus_food) {
+      if (data.type === 'campus' || data.is_campus_food) {
         Taro.hideLoading()
         Taro.redirectTo({ url: `${extraPkgUrl('/pages/campus-food-share/index')}?edit_id=${editId}` })
         return
@@ -735,6 +735,7 @@ function FoodLibrarySharePage() {
       city: city.trim() || undefined,
       district: isHomemade ? undefined : district.trim() || undefined,
       detail_address: isHomemade ? undefined : detailAddress.trim() || undefined,
+      type: isCampusFood ? 'campus' : 'common',
       is_campus_food: isCampusFood,
       school_name: isCampusFood ? schoolName.trim() || undefined : undefined,
       canteen_name: isCampusFood ? canteenName.trim() || undefined : undefined,

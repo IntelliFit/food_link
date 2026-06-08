@@ -44,6 +44,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureIndexes(ctx, db); err != nil {
 		return err
 	}
+	if err := ensurePublicFoodTypeBackfill(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureTrialEntitlementBackfill(ctx, db); err != nil {
 		return err
 	}
@@ -80,6 +83,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("precision_item_estimates", "precision_item_estimates_round_index_check", `round_index >= 1`),
 		dropAndAddCheck("precision_item_estimates", "precision_item_estimates_item_index_check", `item_index >= 0`),
 		dropAndAddCheck("public_food_library", "public_food_library_status_check", `status = ANY (ARRAY['pending'::text,'published'::text,'rejected'::text,'user_deleted'::text,'deleted'::text])`),
+		dropAndAddCheck("public_food_library", "public_food_library_type_check", `type = ANY (ARRAY['common'::text,'campus'::text])`),
 		dropAndAddCheck("public_food_library", "public_food_library_taste_rating_check", `taste_rating IS NULL OR (taste_rating >= 1 AND taste_rating <= 5)`),
 		dropAndAddCheck("public_food_library", "public_food_library_price_type_check", `price_type IS NULL OR price_type = ANY (ARRAY['fixed'::text,'weight'::text,'range'::text,'combo'::text,'unknown'::text])`),
 		dropAndAddCheck("public_food_library_comments", "public_food_library_comments_rating_check", `rating IS NULL OR (rating >= 1 AND rating <= 5)`),
@@ -413,6 +417,18 @@ $$ LANGUAGE plpgsql`,
 		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 			return fmt.Errorf("apply trigger statement: %w", err)
 		}
+	}
+	return nil
+}
+
+func ensurePublicFoodTypeBackfill(ctx context.Context, db *gorm.DB) error {
+	sql := `
+UPDATE public_food_library
+SET type = CASE WHEN COALESCE(is_campus_food, false) THEN 'campus' ELSE 'common' END
+WHERE type IS NULL OR type = '' OR (type = 'common' AND COALESCE(is_campus_food, false) = true)
+`
+	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+		return fmt.Errorf("backfill public_food_library type: %w", err)
 	}
 	return nil
 }

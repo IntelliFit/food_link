@@ -9,6 +9,8 @@ import {
   type PublicFoodLibraryItem,
   type SchoolItem
 } from '../../../utils/api'
+import { UserOutlined, LocationOutlined } from '@taroify/icons'
+import '@taroify/icons/style'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -87,7 +89,7 @@ function CampusCanteenPage() {
     if (!silent) setLoading(true)
     try {
       const res = await getPublicFoodLibraryList({
-        is_campus_food: true,
+        type: 'campus',
         school_name: selectedSchool?.name,
         canteen_name: canteenName || undefined,
         sort_by: sortBy,
@@ -142,7 +144,7 @@ function CampusCanteenPage() {
     }
     setLoading(true)
     getPublicFoodLibraryList({
-      is_campus_food: true,
+      type: 'campus',
       school_name: selectedSchool?.name,
       merchant_name: kw,
       sort_by: sortBy,
@@ -238,7 +240,10 @@ function CampusCanteenPage() {
         </View>
         <View className='campus-info'>
           <Text className='campus-title'>{item.food_name || '未命名菜品'}</Text>
-          <Text className='campus-location'>{getLocationText(item) || selectedSchoolName}</Text>
+          <View className='campus-location-row'>
+            <LocationOutlined size='18' className='campus-location-icon' />
+            <Text className='campus-location'>{getLocationText(item) || selectedSchoolName}</Text>
+          </View>
           <View className='campus-nutrition-row'>
             <Text className='campus-price'>{getPriceText(item)}</Text>
             {analyzing ? (
@@ -246,10 +251,10 @@ function CampusCanteenPage() {
             ) : failed ? (
               <Text className='campus-analysis-failed'>分析失败，稍后重试</Text>
             ) : (
-              <>
-                <Text className='campus-calories'>{item.total_calories.toFixed(0)} kcal</Text>
-                <Text className='campus-protein'>蛋白 {item.total_protein.toFixed(0)}g</Text>
-              </>
+              <View className='campus-calorie-badge'>
+                <Text className='campus-calorie-num'>{item.total_calories.toFixed(0)}</Text>
+                <Text className='campus-calorie-unit'>kcal</Text>
+              </View>
             )}
           </View>
           <View className='campus-tags'>
@@ -260,14 +265,34 @@ function CampusCanteenPage() {
         </View>
       </View>
       <View className='campus-card-footer'>
-        <View className='campus-stats'>
-          <Text className='stat-icon iconfont icon-good' />
-          <Text className='stat-count'>{item.like_count}</Text>
-          <Text className='stat-icon iconfont icon-pinglun' />
-          <Text className='stat-count'>{item.comment_count}</Text>
+        <View className='campus-author-row'>
+          {item.author?.avatar ? (
+            <View className='campus-author-avatar'>
+              <Image className='campus-author-avatar-img' src={item.author.avatar} mode='aspectFill' />
+            </View>
+          ) : (
+            <View className='campus-author-avatar'>
+              <UserOutlined size='14' color='#9ca3af' />
+            </View>
+          )}
+          <Text className='campus-author-name'>{item.author?.nickname || '用户'}</Text>
         </View>
-        <View className='campus-record-btn' onClick={(e) => quickRecord(e, item)}>
-          <Text className='campus-record-btn-text'>{analyzing ? '分析中' : '一键记录'}</Text>
+        <View className='campus-actions'>
+          <View className='campus-stat'>
+            <Text className={`iconfont ${item.liked ? 'icon-like_fill' : 'icon-like'} campus-like-btn ${item.liked ? 'liked' : ''}`} />
+            <Text className='stat-count'>{item.like_count}</Text>
+          </View>
+          <View className='campus-stat'>
+            <View className='campus-comment-btn'>
+              <Text className='stat-icon iconfont icon-comment' />
+            </View>
+            {(item.comment_count || 0) > 0 && (
+              <Text className='stat-count'>{item.comment_count}</Text>
+            )}
+          </View>
+          <View className='campus-record-btn' onClick={(e) => quickRecord(e, item)}>
+            <Text className='campus-record-btn-text'>{analyzing ? '分析中' : '一键记录'}</Text>
+          </View>
         </View>
       </View>
     </View>

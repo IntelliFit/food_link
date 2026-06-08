@@ -36,6 +36,7 @@ type ListFilter struct {
 	SortBy             string
 	Limit              int
 	Offset             int
+	Type               string
 	IsCampusFood       *bool
 	SchoolName         string
 	CanteenName        string
@@ -110,8 +111,11 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	if f.MaxCalories != nil {
 		q = q.Where("p.total_calories <= ?", *f.MaxCalories)
 	}
-	if f.IsCampusFood != nil {
-		q = q.Where("p.is_campus_food = ?", *f.IsCampusFood)
+	itemType := normalizePublicFoodTypeFilter(f.Type)
+	if itemType != "" {
+		q = applyStrictPublicFoodTypeWhere(q, "p", itemType)
+	} else if f.IsCampusFood != nil {
+		q = applyLegacyPublicFoodTypeWhere(q, "p", publicFoodTypeFromCampusFlag(*f.IsCampusFood))
 	}
 	if f.SchoolName != "" {
 		q = q.Where("p.school_name = ?", f.SchoolName)
@@ -146,6 +150,52 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	return rows, err
 }
 
+func publicFoodTypeFromCampusFlag(isCampus bool) string {
+	if isCampus {
+		return "campus"
+	}
+	return "common"
+}
+
+func normalizePublicFoodTypeFilter(value string) string {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "common":
+		return "common"
+	case "campus":
+		return "campus"
+	default:
+		return ""
+	}
+}
+
+func applyStrictPublicFoodTypeWhere(q *gorm.DB, alias string, itemType string) *gorm.DB {
+	prefix := ""
+	if strings.TrimSpace(alias) != "" {
+		prefix = strings.TrimSpace(alias) + "."
+	}
+	switch itemType {
+	case "campus", "common":
+		return q.Where(prefix+"type = ?", itemType)
+	default:
+		return q
+	}
+}
+
+func applyLegacyPublicFoodTypeWhere(q *gorm.DB, alias string, itemType string) *gorm.DB {
+	prefix := ""
+	if strings.TrimSpace(alias) != "" {
+		prefix = strings.TrimSpace(alias) + "."
+	}
+	switch itemType {
+	case "campus":
+		return q.Where("("+prefix+"type = ? OR "+prefix+"is_campus_food = ?)", "campus", true)
+	case "common":
+		return q.Where("("+prefix+"type = ? OR COALESCE("+prefix+"is_campus_food, false) = ?)", "common", false)
+	default:
+		return q
+	}
+}
+
 // ListCampusHighlights 查询精选校园内容，用于圈子默认流混入
 func (r *PublicFoodRepo) ListCampusHighlights(ctx context.Context, limit int) ([]domain.PublicFoodItem, error) {
 	var rows []domain.PublicFoodItem
@@ -166,7 +216,8 @@ func (r *PublicFoodRepo) ListSimilarCampusFoods(ctx context.Context, item domain
 		limit = 6
 	}
 	q := r.db.WithContext(ctx).
-		Where("id <> ? AND status = ? AND is_campus_food = ?", item.ID, "published", true)
+		Where("id <> ? AND status = ?", item.ID, "published")
+	q = applyLegacyPublicFoodTypeWhere(q, "", "campus")
 	if strings.TrimSpace(item.SchoolName) != "" {
 		q = q.Where("school_name = ?", item.SchoolName)
 	}
@@ -192,7 +243,8 @@ func (r *PublicFoodRepo) ListRelatedCampusFeeds(ctx context.Context, item domain
 	q := r.db.WithContext(ctx).
 		Table("public_food_library").
 		Select("id, food_name, image_path, image_paths, school_name, canteen_name, campus_location_text AS campus_location, total_calories, total_protein, price, price_unit, like_count, comment_count, collection_count, published_at").
-		Where("id <> ? AND status = ? AND is_campus_food = ? AND is_campus_highlight = ?", item.ID, "published", true, true)
+		Where("id <> ? AND status = ? AND is_campus_highlight = ?", item.ID, "published", true)
+	q = applyLegacyPublicFoodTypeWhere(q, "", "campus")
 	if strings.TrimSpace(item.SchoolName) != "" {
 		q = q.Where("school_name = ?", item.SchoolName)
 	}
@@ -335,7 +387,7 @@ func (r *PublicFoodRepo) SoftDeleteOwned(ctx context.Context, itemID, userID, st
 }
 
 func (r *PublicFoodRepo) ListComments(ctx context.Context, itemID string, limit int) ([]domain.PublicFoodComment, error) {
-	var rows []domain.PublicFoodComment
+	var rows []publicFoodCommentRow
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
@@ -347,7 +399,57 @@ func (r *PublicFoodRepo) ListComments(ctx context.Context, itemID string, limit 
 		Order("c.created_at desc").
 		Limit(limit).
 		Scan(&rows).Error
-	return rows, err
+	return mapPublicFoodCommentRows(rows), err
+}
+
+func (r *PublicFoodRepo) GetComment(ctx context.Context, itemID, commentID string) (*domain.PublicFoodComment, error) {
+	var row publicFoodCommentRow
+	err := r.db.WithContext(ctx).
+		Table("public_food_library_comments AS c").
+		Select("c.id, c.user_id, c.library_item_id, c.content, c.rating, c.created_at, COALESCE(u.nickname, '用户') AS nickname, COALESCE(u.avatar, '') AS avatar").
+		Joins("LEFT JOIN weapp_user u ON u.id = c.user_id").
+		Where("c.library_item_id = ? AND c.id = ?", itemID, commentID).
+		Scan(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	if row.ID == "" {
+		return nil, nil
+	}
+	comment := row.toDomain()
+	return &comment, nil
+}
+
+type publicFoodCommentRow struct {
+	ID            string
+	UserID        string
+	LibraryItemID string
+	Content       string
+	Rating        *int
+	CreatedAt     *time.Time
+	Nickname      string
+	Avatar        string
+}
+
+func (row publicFoodCommentRow) toDomain() domain.PublicFoodComment {
+	return domain.PublicFoodComment{
+		ID:            row.ID,
+		UserID:        row.UserID,
+		LibraryItemID: row.LibraryItemID,
+		Content:       row.Content,
+		Rating:        row.Rating,
+		CreatedAt:     row.CreatedAt,
+		Nickname:      row.Nickname,
+		Avatar:        row.Avatar,
+	}
+}
+
+func mapPublicFoodCommentRows(rows []publicFoodCommentRow) []domain.PublicFoodComment {
+	out := make([]domain.PublicFoodComment, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row.toDomain())
+	}
+	return out
 }
 
 func (r *PublicFoodRepo) CreateComment(ctx context.Context, comment *domain.PublicFoodComment) error {
@@ -355,6 +457,13 @@ func (r *PublicFoodRepo) CreateComment(ctx context.Context, comment *domain.Publ
 		comment.ID = uuid.New().String()
 	}
 	return r.db.WithContext(ctx).Create(comment).Error
+}
+
+func (r *PublicFoodRepo) DeleteOwnComment(ctx context.Context, itemID, commentID, userID string) (int64, error) {
+	result := r.db.WithContext(ctx).
+		Where("library_item_id = ? AND id = ? AND user_id = ?", itemID, commentID, userID).
+		Delete(&domain.PublicFoodComment{})
+	return result.RowsAffected, result.Error
 }
 
 func (r *PublicFoodRepo) RefreshCommentStats(ctx context.Context, itemID string) error {

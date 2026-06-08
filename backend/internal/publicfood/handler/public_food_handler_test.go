@@ -101,6 +101,10 @@ func (m *mockPublicFoodService) AddComment(ctx context.Context, userID, itemID, 
 	return nil, nil
 }
 
+func (m *mockPublicFoodService) DeleteComment(ctx context.Context, userID, itemID, commentID string) error {
+	return nil
+}
+
 func (m *mockPublicFoodService) Feedback(ctx context.Context, userID, content string, itemID *string) (string, error) {
 	return "feedback-1", nil
 }

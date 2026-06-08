@@ -437,6 +437,7 @@ type PublicFoodItemDO struct {
 	City               *string          `gorm:"column:city;type:text;index:idx_public_food_library_city"`
 	District           *string          `gorm:"column:district;type:text"`
 	Status             string           `gorm:"column:status;type:text;not null;default:'published';index:idx_public_food_library_status"`
+	Type               string           `gorm:"column:type;type:text;not null;default:'common';index:idx_public_food_library_type"`
 	AuditRejectReason  *string          `gorm:"column:audit_reject_reason;type:text"`
 	PublishedAt        *time.Time       `gorm:"column:published_at;type:timestamptz;index:idx_public_food_library_published_at,sort:desc"`
 	LikeCount          *int             `gorm:"column:like_count;type:integer;default:0;index:idx_public_food_library_like_count,sort:desc"`

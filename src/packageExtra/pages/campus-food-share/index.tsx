@@ -232,6 +232,7 @@ function CampusFoodSharePage() {
     suitable_for_fat_loss: suitableForFatLoss,
     user_tags: userTags,
     user_notes: userNotes.trim() || undefined,
+    type: 'campus',
     is_campus_food: true,
     school_name: schoolName.trim(),
     canteen_name: canteenName.trim(),
@@ -289,7 +290,7 @@ function CampusFoodSharePage() {
     setLoadingEdit(true)
     getPublicFoodLibraryItem(editId).then((data: PublicFoodLibraryItem) => {
       if (cancelled) return
-      if (!data.is_campus_food) {
+      if (data.type !== 'campus' && !data.is_campus_food) {
         Taro.showToast({ title: '该条目不是校园食堂菜品', icon: 'none' })
         return
       }

@@ -57,6 +57,7 @@ func setupPublicFoodServiceTestDB(t *testing.T) *gorm.DB {
 		&authrepo.User{},
 		&domain.PublicFoodLike{},
 		&domain.PublicFoodCollection{},
+		&domain.PublicFoodComment{},
 	))
 	return db
 }
@@ -600,4 +601,70 @@ func TestPublicFoodServiceUpdateSoftDeletedReturnsNotFound(t *testing.T) {
 	newName := "恢复"
 	err := svc.Update(ctx, "user-1", "item-1", CreateInput{FoodName: &newName})
 	require.ErrorIs(t, err, commonerrors.ErrNotFound)
+}
+
+func TestPublicFoodServiceAddCommentReturnsUserProfile(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	require.NoError(t, db.Create(&authrepo.User{ID: "user-1", Nickname: "评论者", Avatar: "avatar.jpg"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:          "item-1",
+		UserID:      "author-1",
+		FoodName:    "测试菜品",
+		Status:      "published",
+		PublishedAt: &now,
+		CreatedAt:   &now,
+	}).Error)
+
+	comment, err := svc.AddComment(ctx, "user-1", "item-1", "非常不错", nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, comment)
+	require.Equal(t, "user-1", comment.UserID)
+	require.Equal(t, "评论者", comment.Nickname)
+	require.NotEmpty(t, comment.Avatar)
+}
+
+func TestPublicFoodServiceDeleteCommentOnlyOwnComment(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	require.NoError(t, db.Create(&authrepo.User{ID: "user-1", Nickname: "评论者"}).Error)
+	require.NoError(t, db.Create(&authrepo.User{ID: "user-2", Nickname: "其他人"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:           "item-1",
+		UserID:       "author-1",
+		FoodName:     "测试菜品",
+		Status:       "published",
+		CommentCount: 1,
+		PublishedAt:  &now,
+		CreatedAt:    &now,
+	}).Error)
+	comment := &domain.PublicFoodComment{
+		ID:            "comment-1",
+		UserID:        "user-1",
+		LibraryItemID: "item-1",
+		Content:       "我的评论",
+		CreatedAt:     &now,
+	}
+	require.NoError(t, db.Create(comment).Error)
+
+	err := svc.DeleteComment(ctx, "user-2", "item-1", "comment-1")
+	require.ErrorIs(t, err, commonerrors.ErrNotFound)
+
+	err = svc.DeleteComment(ctx, "user-1", "item-1", "comment-1")
+	require.NoError(t, err)
+
+	var count int64
+	require.NoError(t, db.Model(&domain.PublicFoodComment{}).Where("id = ?", "comment-1").Count(&count).Error)
+	require.EqualValues(t, 0, count)
+
+	var item domain.PublicFoodItem
+	require.NoError(t, db.Where("id = ?", "item-1").First(&item).Error)
+	require.Equal(t, 0, item.CommentCount)
 }

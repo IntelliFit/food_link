@@ -5212,6 +5212,8 @@ export async function communityMarkNotificationsRead(notificationIds?: string[])
 
 // ---------- 公共食物库 ----------
 
+export type PublicFoodLibraryType = 'common' | 'campus'
+
 /** 公共食物库条目 */
 export interface PublicFoodLibraryItem {
   id: string
@@ -5248,6 +5250,8 @@ export interface PublicFoodLibraryItem {
   district?: string | null
   detail_address?: string | null
   status: string
+  /** 条目类型：普通公共食物库或校园食堂 */
+  type: PublicFoodLibraryType
   like_count: number
   comment_count: number
   avg_rating: number
@@ -5370,6 +5374,8 @@ export interface CreatePublicFoodLibraryRequest {
   city?: string
   district?: string
   detail_address?: string
+  /** 条目类型：普通公共食物库或校园食堂 */
+  type?: PublicFoodLibraryType
   /** 是否为校园食堂菜品 */
   is_campus_food?: boolean
   school_name?: string
@@ -5396,6 +5402,7 @@ export interface PublicFoodLibraryListParams {
   sort_by?: 'latest' | 'hot' | 'rating' | 'balanced' | 'high_protein' | 'low_calorie' | 'recommended' | 'value'
   limit?: number
   offset?: number
+  type?: PublicFoodLibraryType
   is_campus_food?: boolean
   school_name?: string
   canteen_name?: string
@@ -5430,6 +5437,7 @@ export async function getPublicFoodLibraryList(
   if (params?.sort_by) q.set('sort_by', params.sort_by)
   if (params?.limit !== undefined) q.set('limit', String(params.limit))
   if (params?.offset !== undefined) q.set('offset', String(params.offset))
+  if (params?.type) q.set('type', params.type)
   if (params?.is_campus_food !== undefined) q.set('is_campus_food', String(params.is_campus_food))
   if (params?.school_name) q.set('school_name', params.school_name)
   if (params?.canteen_name) q.set('canteen_name', params.canteen_name)
@@ -5561,6 +5569,21 @@ export async function postPublicFoodLibraryComment(
     throw new Error((response.data as any)?.detail || '发表失败')
   }
   return response.data as { comment: PublicFoodLibraryComment }
+}
+
+/** 删除自己发表的公共食物库评论 */
+export async function deletePublicFoodLibraryComment(
+  itemId: string,
+  commentId: string
+): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments/${commentId}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '删除评论失败')
+  }
+  return response.data as { message: string }
 }
 
 /** 提交公共食物库反馈 */
