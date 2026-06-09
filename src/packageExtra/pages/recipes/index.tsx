@@ -4,6 +4,9 @@ import Taro, { useDidShow } from '@tarojs/taro'
 import { getUserRecipes, deleteUserRecipe, applyUserRecipe, showUnifiedApiError, type UserRecipe, type FoodRecord } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
+import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
+import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
+import { getStoredRecordTargetDate } from '../../../utils/record-date'
 import './index.scss'
 
 /** 餐次映射 */
@@ -67,17 +70,17 @@ function RecipesPage() {
       })
 
       const selectedMealType = MEAL_KEYS[tapIndex]
-      const selectedMealName = MEAL_NAMES[tapIndex]
-
-      const { confirm } = await Taro.showModal({
-        title: '确认记录',
-        content: `确定将"${recipe.recipe_name}"记录为${selectedMealName}吗？`
-      })
-      if (!confirm) return
+      const targetDate = getStoredRecordTargetDate()
 
       Taro.showLoading({ title: '记录中...', mask: true })
       await applyUserRecipe(recipe.id, selectedMealType)
       Taro.hideLoading()
+      try {
+        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
+      } catch {
+        /* ignore */
+      }
+      void refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
       Taro.showToast({ title: '已添加到饮食记录', icon: 'success' })
       // 刷新列表以更新使用次数
       setTimeout(() => loadRecipes(), 500)

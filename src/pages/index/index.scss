@@ -1796,6 +1796,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   left: 0;
   right: 0;
   bottom: 0;
+  height: 86vh;
   max-height: 86vh;
   padding: 16rpx 28rpx calc(34rpx + env(safe-area-inset-bottom));
   border-radius: 32rpx 32rpx 0 0;
@@ -1899,7 +1900,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .diet-rec-loading {
-  min-height: 420rpx;
+  height: 100%;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
