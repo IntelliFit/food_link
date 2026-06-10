@@ -9,6 +9,7 @@ import (
 	"food_link/backend/internal/analyze/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -336,7 +337,7 @@ func (r *TaskRepo) UpdateTaskResult(ctx context.Context, taskID string, result m
 func (r *TaskRepo) CompleteTask(ctx context.Context, taskID string, result map[string]any) (bool, error) {
 	updates := map[string]any{
 		"status":        "done",
-		"result":        result,
+		"result":        datatypes.JSONMap(result),
 		"error_message": nil,
 		"lease_until":   nil,
 		"updated_at":    time.Now(),
@@ -353,7 +354,7 @@ func (r *TaskRepo) CompleteTaskAttempt(ctx context.Context, taskID, attemptID st
 	}
 	updates := map[string]any{
 		"status":        "done",
-		"result":        result,
+		"result":        datatypes.JSONMap(result),
 		"error_message": nil,
 		"lease_until":   nil,
 		"updated_at":    time.Now(),

@@ -1,8 +1,8 @@
-﻿.campus-share-page {
+.campus-share-page {
   min-height: 100vh;
   background: #f9fafb;
   padding-top: 24rpx;
-  padding-bottom: 160rpx;
+  padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
 
@@ -497,7 +497,7 @@
 .campus-share-page--dark {
   background: #07110f;
   color: #e8ece9;
-  padding-bottom: 260rpx;
+  padding-bottom: calc(240rpx + env(safe-area-inset-bottom));
 
   .campus-share-hero {
     background: linear-gradient(135deg, #103325 0%, #0f2a21 100%);

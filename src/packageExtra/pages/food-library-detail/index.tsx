@@ -1,15 +1,19 @@
 import { withAuth } from '../../../utils/withAuth'
 import { View, Text, ScrollView, Image, Textarea, Swiper, SwiperItem } from '@tarojs/components'
-import { useState, useEffect } from 'react'
-import Taro, { useRouter } from '@tarojs/taro'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import Taro, { useRouter, useShareAppMessage } from '@tarojs/taro'
 import {
+  getCampusFoodDetail,
   getPublicFoodLibraryItem,
   likePublicFoodLibraryItem,
   unlikePublicFoodLibraryItem,
   getPublicFoodLibraryComments,
   postPublicFoodLibraryComment,
+  deletePublicFoodLibraryComment,
   submitPublicFoodLibraryFeedback,
   showUnifiedApiError,
+  type CampusFoodMetric,
+  type CampusRelatedFeedItem,
   type PublicFoodLibraryItem,
   type PublicFoodLibraryComment,
   collectPublicFoodLibraryItem,
@@ -20,14 +24,11 @@ import {
   ShopOutlined,
   LocationOutlined,
   GuideOutlined,
-  Star,
-  Like,
-  LikeOutlined,
-  CommentOutlined,
   Cross,
-  StarOutlined,
   FireOutlined,
-  UserOutlined
+  UserOutlined,
+  Star,
+  StarOutlined
 } from '@taroify/icons'
 import '@taroify/icons/style'
 import './index.scss'
@@ -68,14 +69,6 @@ function fmtPriceDisplay(item: PublicFoodLibraryItem): string {
   return `${item.price}${unit.replace(/^\d+/, '')}`
 }
 
-function getMetricPrice(item: PublicFoodLibraryItem): number {
-  if (item.price && item.price > 0) return item.price
-  if (item.price_type === 'range' && item.price_min != null && item.price_max != null) {
-    return (item.price_min + item.price_max) / 2
-  }
-  return 0
-}
-
 function getCampusLocationText(item: PublicFoodLibraryItem): string {
   if (item.campus_location_text) return item.campus_location_text
   const parts = [
@@ -88,6 +81,29 @@ function getCampusLocationText(item: PublicFoodLibraryItem): string {
   return parts.join(' · ') || '校园食堂'
 }
 
+function normalizeStatus(value?: string | null): string {
+  return String(value || '').trim().toLowerCase()
+}
+
+function isAnalyzingItem(item: PublicFoodLibraryItem): boolean {
+  const status = normalizeStatus(item.analysis_status)
+  return status === 'pending' || status === 'processing'
+}
+
+function isAnalysisFailedItem(item: PublicFoodLibraryItem): boolean {
+  const status = normalizeStatus(item.analysis_status)
+  return status === 'failed' || status === 'timed_out'
+}
+
+function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
+  return item.type === 'campus' || !!item.is_campus_food
+}
+
+function formatDateOnly(timeStr: string | null | undefined): string {
+  if (!timeStr) return '待补充'
+  return formatTime(timeStr).split(' ')[0] || '待补充'
+}
+
 function FoodLibraryDetailPage() {
   const router = useRouter()
   const itemId = router.params.id || ''
@@ -97,11 +113,18 @@ function FoodLibraryDetailPage() {
   const [item, setItem] = useState<PublicFoodLibraryItem | null>(null)
   const [comments, setComments] = useState<PublicFoodLibraryComment[]>([])
   const [showCommentModal, setShowCommentModal] = useState(false)
+  const [showActionSheet, setShowActionSheet] = useState(false)
+  const [commentInputFocus, setCommentInputFocus] = useState(false)
   const [commentContent, setCommentContent] = useState('')
   const [commentRating, setCommentRating] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [campusMetrics, setCampusMetrics] = useState<CampusFoodMetric>({})
+  const [similarItems, setSimilarItems] = useState<PublicFoodLibraryItem[]>([])
+  const [relatedFeeds, setRelatedFeeds] = useState<CampusRelatedFeedItem[]>([])
+  const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const sceneRef = useRef(router.params.scene || '')
 
   // 加载详情
   useEffect(() => {
@@ -114,18 +137,67 @@ function FoodLibraryDetailPage() {
     applyThemeNavigationBar(scheme)
   }, [scheme])
 
-  const loadDetail = async () => {
+  useShareAppMessage(() => {
+    if (!item) return { title: '食探 - 发现健康餐' }
+    const title = item.food_name || item.description || '来看看这道菜'
+    const path = `${extraPkgUrl('/pages/food-library-detail/index')}?id=${item.id}${isCampusFoodItem(item) ? '&scene=campus' : ''}`
+    const imageUrl = item.image_path || ''
+    return { title, path, imageUrl }
+  })
+
+  // 分析中状态轮询：仅在详情页且当前 item 处于分析中时才轮询
+  useEffect(() => {
+    if (!item || !isAnalyzingItem(item)) {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+      return
+    }
+    if (pollTimerRef.current) return
+    pollTimerRef.current = setInterval(() => {
+      loadDetail()
+    }, 8000)
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+  }, [item])
+
+  const loadDetail = useCallback(async () => {
     setLoading(true)
     setCurrentImageIndex(0)
+    setCampusMetrics({})
+    setSimilarItems([])
+    setRelatedFeeds([])
     try {
+      const shouldPreferCampus = sceneRef.current === 'campus'
+      if (shouldPreferCampus) {
+        const detail = await getCampusFoodDetail(itemId)
+        setItem({ ...detail.item, ...detail.metrics })
+        setCampusMetrics(detail.metrics || {})
+        setSimilarItems(detail.similar_items || [])
+        setRelatedFeeds(detail.related_feeds || [])
+        return
+      }
       const data = await getPublicFoodLibraryItem(itemId)
+      if (isCampusFoodItem(data)) {
+        const detail = await getCampusFoodDetail(itemId)
+        setItem({ ...detail.item, ...detail.metrics })
+        setCampusMetrics(detail.metrics || {})
+        setSimilarItems(detail.similar_items || [])
+        setRelatedFeeds(detail.related_feeds || [])
+        return
+      }
       setItem(data)
     } catch (e: any) {
       await showUnifiedApiError(e, '加载失败')
     } finally {
       setLoading(false)
     }
-  }
+  }, [itemId])
 
   const loadComments = async () => {
     try {
@@ -175,6 +247,7 @@ function FoodLibraryDetailPage() {
 
   const handleDelete = async () => {
     if (!item || deleting) return
+    setShowActionSheet(false)
     const { confirm } = await Taro.showModal({
       title: '删除上传',
       content: '删除后这条食物会从公共库下架，其他用户将无法再查看。',
@@ -203,9 +276,32 @@ function FoodLibraryDetailPage() {
     }
   }
 
+  const handleEdit = () => {
+    setShowActionSheet(false)
+    if (!item) return
+    if (isCampusFoodItem(item)) {
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/campus-food-share/index')}?edit_id=${item.id}` })
+    } else {
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-share/index')}?edit_id=${item.id}` })
+    }
+  }
+
+  const handleShare = () => {
+    setShowActionSheet(false)
+    Taro.showShareMenu({ withShareTicket: true })
+  }
+
   // 一键记录
   const handleQuickRecord = () => {
     if (!item) return
+    if (isAnalyzingItem(item)) {
+      Taro.showToast({ title: '营养信息分析中', icon: 'none' })
+      return
+    }
+    if (isAnalysisFailedItem(item)) {
+      Taro.showToast({ title: '分析失败，暂不能记录', icon: 'none' })
+      return
+    }
     Taro.setStorageSync('campus_quick_record_item', JSON.stringify(item))
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-manual/index')}?campus_quick=1` })
   }
@@ -235,6 +331,19 @@ function FoodLibraryDetailPage() {
     }
   }
 
+  const openCommentModal = () => {
+    setShowCommentModal(true)
+    setCommentInputFocus(false)
+    setTimeout(() => {
+      setCommentInputFocus(true)
+    }, 80)
+  }
+
+  const closeCommentModal = () => {
+    setShowCommentModal(false)
+    setCommentInputFocus(false)
+  }
+
   // 提交评论
   const handleSubmitComment = async () => {
     if (!commentContent.trim()) {
@@ -258,7 +367,7 @@ function FoodLibraryDetailPage() {
       setComments(prev => [displayComment, ...prev])
 
       Taro.showToast({ title: '评论成功', icon: 'success' })
-      setShowCommentModal(false)
+      closeCommentModal()
       setCommentContent('')
       setCommentRating(0)
       
@@ -270,6 +379,30 @@ function FoodLibraryDetailPage() {
       await showUnifiedApiError(e, '评论失败')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleDeleteComment = async (comment: PublicFoodLibraryComment) => {
+    if (!item || !comment?.id) return
+    const { confirm } = await Taro.showModal({
+      title: '删除评论',
+      content: '确定删除这条评论吗？',
+      confirmText: '删除',
+      cancelText: '取消',
+      confirmColor: '#ef4444'
+    })
+    if (!confirm) return
+
+    Taro.showLoading({ title: '删除中...', mask: true })
+    try {
+      await deletePublicFoodLibraryComment(item.id, comment.id)
+      setComments(prev => prev.filter(c => c.id !== comment.id))
+      setItem({ ...item, comment_count: Math.max(0, (item.comment_count || 0) - 1) })
+      Taro.showToast({ title: '已删除', icon: 'success' })
+    } catch (e: any) {
+      await showUnifiedApiError(e, '删除失败')
+    } finally {
+      Taro.hideLoading()
     }
   }
 
@@ -356,6 +489,21 @@ function FoodLibraryDetailPage() {
     : (item.image_path ? [item.image_path] : [])
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
   const isOwner = Boolean(currentUserId && item.user_id === currentUserId)
+  const campusProteinPerYuan = campusMetrics.protein_per_yuan ?? item.protein_per_yuan
+  const campusPricePer100Kcal = campusMetrics.price_per_100_kcal ?? item.price_per_100_kcal
+  const analyzing = isAnalyzingItem(item)
+  const analysisFailed = isAnalysisFailedItem(item)
+  const renderCampusMiniCard = (card: PublicFoodLibraryItem) => (
+    <View key={card.id} className='campus-related-card' onClick={() => Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${card.id}&scene=campus` })}>
+      {card.image_path ? (
+        <Image className='campus-related-image' src={card.image_path} mode='aspectFill' />
+      ) : (
+        <View className='campus-related-image campus-related-image--empty'>暂无图片</View>
+      )}
+      <Text className='campus-related-title'>{card.food_name || '未命名菜品'}</Text>
+      <Text className='campus-related-meta'>{fmtPriceDisplay(card)} · {Math.round(card.total_calories || 0)} kcal</Text>
+    </View>
+  )
 
   return (
     <View className={pageClassName}>
@@ -414,6 +562,10 @@ function FoodLibraryDetailPage() {
         )}
         <View className='nutrients-row'>
           <View className='nutrient-item'>
+            <Text className='nutrient-value'>{item.total_calories.toFixed(0)}</Text>
+            <Text className='nutrient-label'>热量 kcal</Text>
+          </View>
+          <View className='nutrient-item'>
             <Text className='nutrient-value'>{item.total_protein.toFixed(1)}g</Text>
             <Text className='nutrient-label'>蛋白质</Text>
           </View>
@@ -444,38 +596,95 @@ function FoodLibraryDetailPage() {
       </View>
 
       {/* 校园食堂信息 */}
-      {item.is_campus_food && (
+      {isCampusFoodItem(item) && (
         <View className='campus-card'>
           {(() => {
-            const metricPrice = getMetricPrice(item)
             return (
               <>
           <View className='campus-header-row'>
             <Text className='campus-badge'>校园食堂</Text>
+            <Text className={`campus-fat-loss ${item.suitable_for_fat_loss ? 'active' : ''}`}>
+              {item.suitable_for_fat_loss ? '适合减脂' : '不标记减脂'}
+            </Text>
             {item.portion_description && (
               <Text className='campus-portion'>{item.portion_description}</Text>
             )}
           </View>
+          <View className='campus-info-grid'>
+            <View className='campus-info-cell'>
+              <Text className='campus-info-label'>学校</Text>
+              <Text className='campus-info-value'>{item.school_name || '待补充'}</Text>
+            </View>
+            <View className='campus-info-cell'>
+              <Text className='campus-info-label'>食堂</Text>
+              <Text className='campus-info-value'>{item.canteen_name || '待补充'}</Text>
+            </View>
+            <View className='campus-info-cell'>
+              <Text className='campus-info-label'>楼层/窗口</Text>
+              <Text className='campus-info-value'>{[item.floor, item.window_name].filter(Boolean).join(' · ') || '待补充'}</Text>
+            </View>
+            <View className='campus-info-cell'>
+              <Text className='campus-info-label'>估算份量</Text>
+              <Text className='campus-info-value'>{item.portion_description || '约 1 份'}</Text>
+            </View>
+          </View>
           <Text className='campus-location'>{getCampusLocationText(item)}</Text>
           <View className='campus-price-row'>
             <Text className='campus-price'>{fmtPriceDisplay(item)}</Text>
-            {metricPrice > 0 && item.total_protein > 0 && (
+            {!!campusProteinPerYuan && (
               <Text className='campus-metric'>
-                蛋白质 {(item.total_protein / metricPrice).toFixed(1)}g/元
+                蛋白质 {campusProteinPerYuan.toFixed(1)}g/元
               </Text>
             )}
-            {metricPrice > 0 && item.total_calories > 0 && (
+            {!!campusPricePer100Kcal && (
               <Text className='campus-metric'>
-                {(metricPrice / item.total_calories * 100).toFixed(2)}元/100kcal
+                {campusPricePer100Kcal.toFixed(2)}元/100kcal
               </Text>
             )}
           </View>
-          {item.price_collected_at && (
-            <Text className='campus-price-date'>价格采集于 {formatTime(item.price_collected_at).split(' ')[0]}</Text>
-          )}
+          <Text className='campus-price-date'>价格更新于 {formatDateOnly(item.price_collected_at)}</Text>
+          {analyzing && <Text className='campus-analysis-tip'>营养信息正在分析中，完成后会自动补齐热量和宏量营养素。</Text>}
+          {analysisFailed && <Text className='campus-analysis-tip campus-analysis-tip--error'>营养分析失败，暂不建议一键记录，可通过纠错入口反馈。</Text>}
               </>
             )
           })()}
+        </View>
+      )}
+
+      {isCampusFoodItem(item) && similarItems.length > 0 && (
+        <View className='campus-related-section'>
+          <View className='campus-section-head'>
+            <Text className='card-title'>同食堂相似菜品</Text>
+            <Text className='campus-section-subtitle'>同学校同食堂优先推荐</Text>
+          </View>
+          <ScrollView scrollX enhanced showScrollbar={false} className='campus-related-scroll'>
+            <View className='campus-related-list'>
+              {similarItems.map(renderCampusMiniCard)}
+            </View>
+          </ScrollView>
+        </View>
+      )}
+
+      {isCampusFoodItem(item) && relatedFeeds.length > 0 && (
+        <View className='campus-feed-section'>
+          <View className='campus-section-head'>
+            <Text className='card-title'>圈子相关动态</Text>
+            <Text className='campus-section-subtitle'>来自同食堂精选动态</Text>
+          </View>
+          {relatedFeeds.map(feed => (
+            <View key={feed.id} className='campus-feed-item' onClick={() => Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${feed.id}&scene=campus` })}>
+              {feed.image_path ? (
+                <Image className='campus-feed-image' src={feed.image_path} mode='aspectFill' />
+              ) : (
+                <View className='campus-feed-image campus-feed-image--empty'>食堂</View>
+              )}
+              <View className='campus-feed-copy'>
+                <Text className='campus-feed-title'>{feed.food_name || '校园菜品动态'}</Text>
+                <Text className='campus-feed-meta'>{feed.campus_location || [feed.school_name, feed.canteen_name].filter(Boolean).join(' · ')}</Text>
+                <Text className='campus-feed-stats'>{Math.round(feed.total_calories || 0)} kcal · 蛋白 {Math.round(feed.total_protein || 0)}g · {feed.like_count} 赞</Text>
+              </View>
+            </View>
+          ))}
         </View>
       )}
 
@@ -536,6 +745,24 @@ function FoodLibraryDetailPage() {
           <Text className='card-title'>评论</Text>
           <Text className='comments-count'>{comments.length} 条</Text>
         </View>
+        {/* 快速评论输入条 */}
+        <View className='quick-comment-bar' onClick={openCommentModal}>
+          {(() => {
+            const localUser = getLocalUserDisplay()
+            return localUser.avatar ? (
+              <View className='quick-comment-avatar'>
+                <Image className='quick-comment-avatar-img' src={localUser.avatar} />
+              </View>
+            ) : (
+              <View className='quick-comment-avatar'>
+                <UserOutlined size='16' color='#9ca3af' />
+              </View>
+            )
+          })()}
+          <View className='quick-comment-input'>
+            <Text className='quick-comment-placeholder'>理性发言</Text>
+          </View>
+        </View>
         {comments.length === 0 ? (
           <View className='comments-empty'>暂无评论，快来抢沙发</View>
         ) : (
@@ -565,6 +792,13 @@ function FoodLibraryDetailPage() {
                   )}
                 </View>
                 <Text className='comment-content'>{c.content}</Text>
+                {currentUserId && c.user_id === currentUserId && (
+                  <View className='comment-actions'>
+                    <View className='comment-delete-btn' onClick={() => handleDeleteComment(c)}>
+                      <Text className='iconfont icon-shanchu comment-delete-icon' />
+                    </View>
+                  </View>
+                )}
               </View>
             ))}
           </ScrollView>
@@ -574,25 +808,33 @@ function FoodLibraryDetailPage() {
       {/* 底部操作栏 */}
       <View className='bottom-bar'>
         <View className='bottom-bar-row1'>
-          <View className={`action-btn icon-action like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
-            {item.liked ? <Like size='20' /> : <LikeOutlined size='20' />}
-          </View>
-          <View className={`action-btn icon-action collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
-            {item.collected ? <Star size='20' className='star-filled' /> : <StarOutlined size='20' />}
-          </View>
-          {isOwner && (
-            <View className='action-btn icon-action delete-btn' onClick={handleDelete}>
-              {deleting ? <View className='delete-spinner' /> : <Text className='iconfont icon-shanchu delete-icon' />}
+          {isCampusFoodItem(item) && (
+            <View className={`action-btn quick-record-btn ${analyzing || analysisFailed ? 'disabled' : ''}`} onClick={handleQuickRecord}>
+              <Text className='action-text'>{analyzing ? '分析中' : analysisFailed ? '暂不可记' : '一键记录'}</Text>
             </View>
           )}
-          {item.is_campus_food && (
-            <View className='action-btn quick-record-btn' onClick={handleQuickRecord}>
-              <Text className='action-text'>一键记录</Text>
+          <View className='bottom-bar-actions'>
+            <View className={`action-btn icon-action like-btn ${item.liked ? 'liked' : ''}`} onClick={handleLike}>
+              <Text className={`iconfont ${item.liked ? 'icon-like_fill' : 'icon-like'}`} />
+              {item.like_count > 0 && (
+                <Text className='action-badge'>{item.like_count}</Text>
+              )}
             </View>
-          )}
-          <View className='action-btn comment-btn' onClick={() => setShowCommentModal(true)}>
-            <CommentOutlined size='20' />
-            <Text className='action-text'>写评论</Text>
+            <View className={`action-btn icon-action collect-btn ${item.collected ? 'collected' : ''}`} onClick={handleCollect}>
+              <Text className={`iconfont ${item.collected ? 'icon-collection_fill' : 'icon-collection'}`} />
+              {(item.collection_count || 0) > 0 && (
+                <Text className='action-badge'>{item.collection_count}</Text>
+              )}
+            </View>
+            <View className='action-btn icon-action comment-btn' onClick={openCommentModal}>
+              <Text className='iconfont icon-comment' />
+              {item.comment_count > 0 && (
+                <Text className='action-badge'>{item.comment_count}</Text>
+              )}
+            </View>
+            <View className='action-btn icon-action more-btn' onClick={() => setShowActionSheet(true)}>
+              <Text className='more-icon'>⋮</Text>
+            </View>
           </View>
         </View>
         <View className='correction-bar'>
@@ -603,11 +845,11 @@ function FoodLibraryDetailPage() {
 
       {/* 评论弹窗 */}
       {showCommentModal && (
-        <View className='comment-modal' onClick={() => setShowCommentModal(false)}>
+        <View className='comment-modal' onClick={closeCommentModal}>
           <View className='comment-modal-content' onClick={e => e.stopPropagation()}>
             <View className='modal-header'>
               <Text className='modal-title'>发表评论</Text>
-              <View className='modal-close' onClick={() => setShowCommentModal(false)}>
+              <View className='modal-close' onClick={closeCommentModal}>
                 <Cross size='24' color='#9ca3af' />
               </View>
             </View>
@@ -631,11 +873,46 @@ function FoodLibraryDetailPage() {
               value={commentContent}
               onInput={e => setCommentContent(e.detail.value)}
               maxlength={500}
+              focus={commentInputFocus}
               autoFocus
               fixed
             />
             <View className='submit-btn' onClick={handleSubmitComment}>
               {submitting ? <View className='btn-spinner' /> : '发表评论'}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* 更多操作 ActionSheet */}
+      {showActionSheet && (
+        <View className='action-sheet-modal' onClick={() => setShowActionSheet(false)}>
+          <View className='action-sheet-mask' />
+          <View className='action-sheet-content' onClick={e => e.stopPropagation()}>
+            <View className='action-sheet-actions'>
+              <View className='action-sheet-item' onClick={handleShare}>
+                <Text className='iconfont icon-fenxiang action-sheet-icon action-sheet-icon--share' />
+                <Text className='action-sheet-label'>转发给朋友</Text>
+              </View>
+              <View className='action-sheet-divider' />
+              {isOwner && (
+                <>
+                  <View className='action-sheet-item' onClick={handleEdit}>
+                    <Text className='iconfont icon-edit action-sheet-icon action-sheet-icon--edit' />
+                    <Text className='action-sheet-label'>编辑</Text>
+                  </View>
+                  <View className='action-sheet-divider' />
+                </>
+              )}
+              {isOwner && (
+                <View className='action-sheet-item action-sheet-item--danger' onClick={handleDelete}>
+                  <Text className='iconfont icon-shanchu action-sheet-icon' />
+                  <Text className='action-sheet-label'>删除</Text>
+                </View>
+              )}
+            </View>
+            <View className='action-sheet-cancel' onClick={() => setShowActionSheet(false)}>
+              <Text className='action-sheet-cancel-text'>取消</Text>
             </View>
           </View>
         </View>

@@ -836,6 +836,11 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 		apm.RecordError(ctx, err, attribute.String("analysis.stage", "complete_task"))
 		return err
 	}
+	if err := r.writeBackCampusPublicFood(ctx, task, result); err != nil {
+		r.log.Error("校园食堂分析结果回写失败", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), logger.Err(err))
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "campus_public_food_writeback"))
+		return err
+	}
 	apm.SetAttributes(ctx,
 		attribute.Int("analysis.item_count", len(extractItems(result["items"]))),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
@@ -847,6 +852,49 @@ func (r *Runner) processFood(ctx context.Context, task *domain.AnalysisTask) err
 	r.log.Info("食物任务已完成", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), slog.Duration("duration", time.Since(start)))
 	r.trySilentPackagedIngest(ctx, task, result)
 	return nil
+}
+
+func (r *Runner) writeBackCampusPublicFood(ctx context.Context, task *domain.AnalysisTask, result map[string]any) error {
+	if r.publicFood == nil || task == nil {
+		return nil
+	}
+	if campusPublicFoodSourceType(task.Payload) != "campus_public_food" {
+		return nil
+	}
+	itemID := stringFromMap(task.Payload, "public_food_item_id")
+	if itemID == "" {
+		return nil
+	}
+	return r.publicFood.UpdateNutritionFromAnalysis(ctx, itemID, result)
+}
+
+func (r *Runner) linkCampusPublicFoodAnalysisTask(ctx context.Context, payload map[string]any, taskID string) error {
+	if r.publicFood == nil || campusPublicFoodSourceType(payload) != "campus_public_food" {
+		return nil
+	}
+	itemID := stringFromMap(payload, "public_food_item_id")
+	if itemID == "" || strings.TrimSpace(taskID) == "" {
+		return nil
+	}
+	return r.publicFood.LinkAnalysisTask(ctx, itemID, taskID)
+}
+
+func campusPublicFoodSourceType(payload map[string]any) string {
+	sourceType := stringFromMap(payload, "public_food_source_type")
+	if sourceType != "" {
+		return sourceType
+	}
+	return stringFromMap(payload, "source_type")
+}
+
+func copyCampusPublicFoodPayload(from, to map[string]any) {
+	if campusPublicFoodSourceType(from) != "campus_public_food" {
+		return
+	}
+	to["public_food_source_type"] = "campus_public_food"
+	if itemID := stringFromMap(from, "public_food_item_id"); itemID != "" {
+		to["public_food_item_id"] = itemID
+	}
 }
 
 func (r *Runner) runFoodAnalysis(ctx context.Context, task *domain.AnalysisTask, start time.Time) (map[string]any, error) {
@@ -2016,6 +2064,7 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		"child_task_ids":       childTaskIDs,
 		"source_type":          sourceType,
 	}
+	copyCampusPublicFoodPayload(task.Payload, aggregatePayload)
 	if strictSeparateMode {
 		aggregatePayload["execution_mode"] = strictSeparateModeName
 	}
@@ -2044,6 +2093,9 @@ func (r *Runner) processPrecisionPlan(ctx context.Context, task *domain.Analysis
 		Payload:    aggregatePayload,
 	}
 	if err := r.tasks.CreateTask(ctx, aggregateTask); err != nil {
+		return err
+	}
+	if err := r.linkCampusPublicFoodAnalysisTask(ctx, task.Payload, aggregateTask.ID); err != nil {
 		return err
 	}
 
@@ -2252,7 +2304,15 @@ func (r *Runner) processPrecisionAggregate(ctx context.Context, task *domain.Ana
 		return err
 	}
 	err = r.completeTask(ctx, task, finalResult)
-	return err
+	if err != nil {
+		return err
+	}
+	if err := r.writeBackCampusPublicFood(ctx, task, finalResult); err != nil {
+		r.log.Error("校园食堂精准分析结果回写失败", slog.String("task_id", task.ID), logger.AnalysisTaskID(task.ID), logger.Err(err))
+		apm.RecordError(ctx, err, attribute.String("analysis.stage", "campus_public_food_precision_writeback"))
+		return err
+	}
+	return nil
 }
 
 func normalizePrecisionPlanResult(parsed map[string]any) map[string]any {

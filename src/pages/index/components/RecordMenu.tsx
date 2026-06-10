@@ -217,6 +217,7 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
   }
 
   const handleQuickAccessClick = (modeId: string) => {
+    persistRecordTargetDate(selectedDate)
     onClose()
     switch (modeId) {
       case 'favorites':

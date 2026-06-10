@@ -16,7 +16,7 @@
     "packNpmManually": false,
     "packNpmRelationList": [],
     "minifyWXSS": false,
-    "minifyWXML": false,
+    "minifyWXML": true,
     "localPlugins": false,
     "disableUseStrict": false,
     "useCompilerPlugins": false,

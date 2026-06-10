@@ -54,6 +54,26 @@ type UserDailyNutritionTargetDO struct {
 
 func (UserDailyNutritionTargetDO) TableName() string { return "user_daily_nutrition_targets" }
 
+type UserFeedbackDO struct {
+	ID              string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID          string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_feedback_user_created,priority:1"`
+	Category        string           `gorm:"column:category;type:text;not null;default:'other'"`
+	Content         string           `gorm:"column:content;type:text;not null"`
+	Contact         string           `gorm:"column:contact;type:text;not null;default:''"`
+	PagePath        string           `gorm:"column:page_path;type:text;not null;default:''"`
+	AppVersion      string           `gorm:"column:app_version;type:text;not null;default:''"`
+	ClientInfo      map[string]any   `gorm:"column:client_info;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	RecentRequests  []map[string]any `gorm:"column:recent_requests;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	SubmitTraceID   string           `gorm:"column:submit_trace_id;type:text;not null;default:'';index:idx_user_feedback_submit_trace_id"`
+	SubmitRequestID string           `gorm:"column:submit_request_id;type:text;not null;default:''"`
+	SubmitHostName  string           `gorm:"column:submit_host_name;type:text;not null;default:''"`
+	Status          string           `gorm:"column:status;type:text;not null;default:'open';index:idx_user_feedback_status"`
+	CreatedAt       *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_feedback_user_created,priority:2"`
+	UpdatedAt       *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (UserFeedbackDO) TableName() string { return "user_feedback" }
+
 type UserPetDO struct {
 	ID            string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID        string         `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_user_pets_user_id"`
@@ -413,6 +433,7 @@ type PublicFoodItemDO struct {
 	ID                 string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID             string           `gorm:"column:user_id;type:uuid;not null;index:idx_public_food_library_user_id"`
 	SourceRecordID     *string          `gorm:"column:source_record_id;type:uuid"`
+	AnalysisTaskID     *string          `gorm:"column:analysis_task_id;type:uuid;index:idx_public_food_library_analysis_task_id"`
 	ImagePath          *string          `gorm:"column:image_path;type:text"`
 	ImagePaths         []string         `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	TotalCalories      *float64         `gorm:"column:total_calories;type:numeric;default:0"`
@@ -436,6 +457,7 @@ type PublicFoodItemDO struct {
 	City               *string          `gorm:"column:city;type:text;index:idx_public_food_library_city"`
 	District           *string          `gorm:"column:district;type:text"`
 	Status             string           `gorm:"column:status;type:text;not null;default:'published';index:idx_public_food_library_status"`
+	Type               string           `gorm:"column:type;type:text;not null;default:'common';index:idx_public_food_library_type"`
 	AuditRejectReason  *string          `gorm:"column:audit_reject_reason;type:text"`
 	PublishedAt        *time.Time       `gorm:"column:published_at;type:timestamptz;index:idx_public_food_library_published_at,sort:desc"`
 	LikeCount          *int             `gorm:"column:like_count;type:integer;default:0;index:idx_public_food_library_like_count,sort:desc"`
@@ -445,21 +467,21 @@ type PublicFoodItemDO struct {
 	CreatedAt          *time.Time       `gorm:"column:created_at;type:timestamptz;default:now()"`
 	UpdatedAt          *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
 	// Campus canteen fields
-	IsCampusFood       bool             `gorm:"column:is_campus_food;type:boolean;not null;default:false"`
-	SchoolName         *string          `gorm:"column:school_name;type:text"`
-	CampusName         *string          `gorm:"column:campus_name;type:text"`
-	CanteenName        *string          `gorm:"column:canteen_name;type:text"`
-	Floor              *string          `gorm:"column:floor;type:text"`
-	WindowName         *string          `gorm:"column:window_name;type:text"`
-	Price              *float64         `gorm:"column:price;type:numeric"`
-	PriceType          *string          `gorm:"column:price_type;type:text"`
-	PriceMin           *float64         `gorm:"column:price_min;type:numeric"`
-	PriceMax           *float64         `gorm:"column:price_max;type:numeric"`
-	PriceUnit          *string          `gorm:"column:price_unit;type:text"`
-	PriceCollectedAt   *time.Time       `gorm:"column:price_collected_at;type:timestamptz"`
-	PortionDescription *string          `gorm:"column:portion_description;type:text"`
-	IsCampusHighlight  bool             `gorm:"column:is_campus_highlight;type:boolean;not null;default:false"`
-	CampusLocationText *string          `gorm:"column:campus_location_text;type:text"`
+	IsCampusFood       bool       `gorm:"column:is_campus_food;type:boolean;not null;default:false"`
+	SchoolName         *string    `gorm:"column:school_name;type:text"`
+	CampusName         *string    `gorm:"column:campus_name;type:text"`
+	CanteenName        *string    `gorm:"column:canteen_name;type:text"`
+	Floor              *string    `gorm:"column:floor;type:text"`
+	WindowName         *string    `gorm:"column:window_name;type:text"`
+	Price              *float64   `gorm:"column:price;type:numeric"`
+	PriceType          *string    `gorm:"column:price_type;type:text"`
+	PriceMin           *float64   `gorm:"column:price_min;type:numeric"`
+	PriceMax           *float64   `gorm:"column:price_max;type:numeric"`
+	PriceUnit          *string    `gorm:"column:price_unit;type:text"`
+	PriceCollectedAt   *time.Time `gorm:"column:price_collected_at;type:timestamptz"`
+	PortionDescription *string    `gorm:"column:portion_description;type:text"`
+	IsCampusHighlight  bool       `gorm:"column:is_campus_highlight;type:boolean;not null;default:false"`
+	CampusLocationText *string    `gorm:"column:campus_location_text;type:text"`
 }
 
 func (PublicFoodItemDO) TableName() string { return "public_food_library" }
@@ -995,6 +1017,7 @@ func AllModels() []any {
 	return []any{
 		&UserDO{},
 		&UserDailyNutritionTargetDO{},
+		&UserFeedbackDO{},
 		&UserPetDO{},
 		&UserPetEventDO{},
 		&UserPetDailyScoreDO{},

@@ -76,6 +76,7 @@ const SERVICE_ICON_TONES: Record<number, ProfileListIconTone> = {
   4: { color: '#7c68d8', backgroundColor: '#f3f0ff', darkColor: '#c4b5fd', darkBackgroundColor: 'rgba(196, 181, 253, 0.16)' },
   5: { color: '#4c92b3', backgroundColor: '#ecf7fc', darkColor: '#81d6fb', darkBackgroundColor: 'rgba(129, 214, 251, 0.16)' },
   8: { color: '#6e5ab5', backgroundColor: '#f4f0fc', darkColor: '#b39ef4', darkBackgroundColor: 'rgba(179, 158, 244, 0.16)' },
+  10: { color: '#0f8f74', backgroundColor: '#eafaf5', darkColor: '#6ee7c8', darkBackgroundColor: 'rgba(110, 231, 200, 0.16)' },
 }
 
 const SETTING_ICON_TONES: Record<number, ProfileListIconTone> = {
@@ -352,6 +353,13 @@ function ProfilePage() {
       title: '加入用户群',
       desc: '反馈问题、提建议，一起共创食探',
       path: extraPkgUrl('/pages/user-group/index')
+    },
+    {
+      id: 10,
+      icon: <ChatOutlined size='20' />,
+      title: '意见反馈',
+      desc: '提交问题或建议，并自动附带最近请求诊断',
+      path: extraPkgUrl('/pages/feedback/index')
     }
   ]
 
@@ -399,6 +407,10 @@ function ProfilePage() {
     }
     if (service.id === 8) {
       Taro.navigateTo({ url: extraPkgUrl('/pages/user-group/index') })
+      return
+    }
+    if (service.id === 10) {
+      Taro.navigateTo({ url: extraPkgUrl('/pages/feedback/index') })
       return
     }
     const path = (service as { path?: string }).path

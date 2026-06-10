@@ -49,6 +49,10 @@ function campusLocation(item: PublicFoodLibraryItem): string {
   return item.campus_location_text || [item.school_name, item.campus_name, item.canteen_name, item.floor, item.window_name].filter(Boolean).join(' · ')
 }
 
+function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
+  return item.type === 'campus' || !!item.is_campus_food
+}
+
 function FoodLibraryPage() {
   const { scheme } = useAppColorScheme()
   const router = useRouter()
@@ -246,7 +250,7 @@ function FoodLibraryPage() {
     if (!force && campusList.length > 0) return
     setCampusLoading(true)
     try {
-      const res = await getPublicFoodLibraryList({ is_campus_food: true, limit: 50 })
+      const res = await getPublicFoodLibraryList({ type: 'campus', limit: 50 })
       setCampusList(res.list || [])
     } catch (e: any) {
       await showUnifiedApiError(e, '加载校园食堂失败')
@@ -764,7 +768,7 @@ function FoodLibraryPage() {
                     {item.suitable_for_fat_loss && (
                       <View className='fat-loss-badge'>适合减脂</View>
                     )}
-                    {item.is_campus_food && (
+                    {isCampusFoodItem(item) && (
                       <View className='campus-food-badge'>校园食堂</View>
                     )}
                   </View>
@@ -779,7 +783,7 @@ function FoodLibraryPage() {
                         <Text className='merchant-name'>{item.merchant_name}</Text>
                       </View>
                     )}
-                    {item.is_campus_food && (
+                    {isCampusFoodItem(item) && (
                       <View className='campus-food-meta'>
                         <Text className='campus-food-location'>{campusLocation(item) || '校园食堂'}</Text>
                         <Text className='campus-food-price'>{formatCampusPrice(item)}</Text>
@@ -820,8 +824,10 @@ function FoodLibraryPage() {
                       <Text className='stat-count'>{item.collection_count || 0}</Text>
                     </View>
                     <View className='stat-item'>
-                      <Text className='stat-icon iconfont icon-pinglun' />
-                      <Text className='stat-count'>{item.comment_count}</Text>
+                      <Text className='stat-icon iconfont icon-comment' />
+                      {(item.comment_count || 0) > 0 && (
+                        <Text className='stat-count'>{item.comment_count}</Text>
+                      )}
                     </View>
                     {item.avg_rating > 0 && (
                       <View className='stat-item'>

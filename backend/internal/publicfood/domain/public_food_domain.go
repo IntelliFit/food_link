@@ -6,6 +6,7 @@ type PublicFoodItem struct {
 	ID                 string           `gorm:"column:id" json:"id"`
 	UserID             string           `gorm:"column:user_id" json:"user_id"`
 	SourceRecordID     *string          `gorm:"column:source_record_id" json:"source_record_id,omitempty"`
+	AnalysisTaskID     *string          `gorm:"column:analysis_task_id" json:"analysis_task_id,omitempty"`
 	ImagePath          *string          `gorm:"column:image_path" json:"image_path,omitempty"`
 	ImagePaths         []string         `gorm:"column:image_paths;serializer:json" json:"image_paths"`
 	TotalCalories      float64          `gorm:"column:total_calories" json:"total_calories"`
@@ -29,6 +30,7 @@ type PublicFoodItem struct {
 	City               string           `gorm:"column:city" json:"city"`
 	District           string           `gorm:"column:district" json:"district"`
 	Status             string           `gorm:"column:status" json:"status"`
+	Type               string           `gorm:"column:type" json:"type"`
 	AuditRejectReason  *string          `gorm:"column:audit_reject_reason" json:"audit_reject_reason,omitempty"`
 	PublishedAt        *time.Time       `gorm:"column:published_at" json:"published_at,omitempty"`
 	LikeCount          int              `gorm:"column:like_count" json:"like_count"`
@@ -38,21 +40,23 @@ type PublicFoodItem struct {
 	CreatedAt          *time.Time       `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt          *time.Time       `gorm:"column:updated_at" json:"updated_at"`
 	// Campus canteen fields
-	IsCampusFood       bool             `gorm:"column:is_campus_food" json:"is_campus_food"`
-	SchoolName         string           `gorm:"column:school_name" json:"school_name,omitempty"`
-	CampusName         string           `gorm:"column:campus_name" json:"campus_name,omitempty"`
-	CanteenName        string           `gorm:"column:canteen_name" json:"canteen_name,omitempty"`
-	Floor              string           `gorm:"column:floor" json:"floor,omitempty"`
-	WindowName         string           `gorm:"column:window_name" json:"window_name,omitempty"`
-	Price              float64          `gorm:"column:price" json:"price,omitempty"`
-	PriceType          string           `gorm:"column:price_type" json:"price_type,omitempty"`
-	PriceMin           float64          `gorm:"column:price_min" json:"price_min,omitempty"`
-	PriceMax           float64          `gorm:"column:price_max" json:"price_max,omitempty"`
-	PriceUnit          string           `gorm:"column:price_unit" json:"price_unit,omitempty"`
-	PriceCollectedAt   *time.Time       `gorm:"column:price_collected_at" json:"price_collected_at,omitempty"`
-	PortionDescription string           `gorm:"column:portion_description" json:"portion_description,omitempty"`
-	IsCampusHighlight  bool             `gorm:"column:is_campus_highlight" json:"is_campus_highlight"`
-	CampusLocationText string           `gorm:"column:campus_location_text" json:"campus_location_text,omitempty"`
+	IsCampusFood       bool       `gorm:"column:is_campus_food" json:"is_campus_food"`
+	SchoolName         string     `gorm:"column:school_name" json:"school_name,omitempty"`
+	CampusName         string     `gorm:"column:campus_name" json:"campus_name,omitempty"`
+	CanteenName        string     `gorm:"column:canteen_name" json:"canteen_name,omitempty"`
+	Floor              string     `gorm:"column:floor" json:"floor,omitempty"`
+	WindowName         string     `gorm:"column:window_name" json:"window_name,omitempty"`
+	Price              float64    `gorm:"column:price" json:"price,omitempty"`
+	PriceType          string     `gorm:"column:price_type" json:"price_type,omitempty"`
+	PriceMin           float64    `gorm:"column:price_min" json:"price_min,omitempty"`
+	PriceMax           float64    `gorm:"column:price_max" json:"price_max,omitempty"`
+	PriceUnit          string     `gorm:"column:price_unit" json:"price_unit,omitempty"`
+	PriceCollectedAt   *time.Time `gorm:"column:price_collected_at" json:"price_collected_at,omitempty"`
+	PortionDescription string     `gorm:"column:portion_description" json:"portion_description,omitempty"`
+	IsCampusHighlight  bool       `gorm:"column:is_campus_highlight" json:"is_campus_highlight"`
+	CampusLocationText string     `gorm:"column:campus_location_text" json:"campus_location_text,omitempty"`
+	AnalysisStatus     string     `gorm:"column:analysis_status;->" json:"analysis_status,omitempty"`
+	AnalysisError      string     `gorm:"column:analysis_error;->" json:"analysis_error,omitempty"`
 }
 
 func (PublicFoodItem) TableName() string { return "public_food_library" }
@@ -110,4 +114,34 @@ type PublicFoodView struct {
 	Collected       bool   `json:"collected"`
 	Author          Author `json:"author"`
 	RecommendReason string `json:"recommend_reason,omitempty"`
+}
+
+type CampusFoodMetric struct {
+	ProteinPerYuan  float64 `json:"protein_per_yuan,omitempty"`
+	PricePer100Kcal float64 `json:"price_per_100_kcal,omitempty"`
+}
+
+type CampusRelatedFeedItem struct {
+	ID              string     `json:"id"`
+	FoodName        string     `json:"food_name"`
+	ImagePath       *string    `json:"image_path,omitempty"`
+	ImagePaths      []string   `gorm:"column:image_paths;serializer:json" json:"image_paths,omitempty"`
+	SchoolName      string     `json:"school_name,omitempty"`
+	CanteenName     string     `json:"canteen_name,omitempty"`
+	CampusLocation  string     `json:"campus_location,omitempty"`
+	TotalCalories   float64    `json:"total_calories"`
+	TotalProtein    float64    `json:"total_protein"`
+	Price           float64    `json:"price,omitempty"`
+	PriceUnit       string     `json:"price_unit,omitempty"`
+	LikeCount       int        `json:"like_count"`
+	CommentCount    int        `json:"comment_count"`
+	CollectionCount int        `json:"collection_count"`
+	PublishedAt     *time.Time `json:"published_at,omitempty"`
+}
+
+type CampusFoodDetailView struct {
+	Item         PublicFoodView          `json:"item"`
+	Metrics      CampusFoodMetric        `json:"metrics"`
+	SimilarItems []PublicFoodView        `json:"similar_items"`
+	RelatedFeeds []CampusRelatedFeedItem `json:"related_feeds"`
 }

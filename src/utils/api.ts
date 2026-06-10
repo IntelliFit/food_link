@@ -6,6 +6,8 @@ import {
 } from './food-display-image'
 import { extraPkgUrl } from './subpackage-extra'
 
+declare const __RECENT_REQUEST_TRACE_LIMIT__: string
+
 function readInjectedString(
   getter: () => string,
   fallback = ''
@@ -28,10 +30,24 @@ export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
   ''
 )
+const DEFAULT_RECENT_REQUEST_TRACE_LIMIT = 50
+const MAX_RECENT_REQUEST_TRACE_LIMIT = 50
+
+function readInjectedNumber(getter: () => string | number, fallback: number): number {
+  const raw = readInjectedString(() => String(getter()), String(fallback))
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+export const RECENT_REQUEST_TRACE_LIMIT = Math.min(
+  MAX_RECENT_REQUEST_TRACE_LIMIT,
+  Math.max(0, readInjectedNumber(() => __RECENT_REQUEST_TRACE_LIMIT__, DEFAULT_RECENT_REQUEST_TRACE_LIMIT))
+)
 
 // 仅开发构建打印，避免真机/生产包无意义日志（且减少控制台副作用）
 if (process.env.NODE_ENV !== 'production') {
   console.log('[API] 构建时 API_BASE_URL:', API_BASE_URL)
+  console.log('[API] 最近请求诊断条数:', RECENT_REQUEST_TRACE_LIMIT)
 }
 
 function isNgrokFreeDomain(url: string): boolean {
@@ -1999,6 +2015,107 @@ function extractHostNameFromHeaders(headers: Record<string, any> | undefined): s
   return getHeaderValueIgnoreCase(headers, 'x-host-name')
 }
 
+const RECENT_REQUEST_TRACE_STORAGE_KEY = 'recent_request_traces_v1'
+
+export interface RecentRequestTrace {
+  method: string
+  path: string
+  statusCode: number
+  durationMs: number
+  startedAt: string
+  traceId?: string
+  requestId?: string
+  hostName?: string
+  errorMessage?: string
+}
+
+function normalizeRequestPath(url: string): string {
+  const raw = String(url || '').trim()
+  if (!raw) return '/'
+  if (raw.startsWith(API_BASE_URL)) {
+    return raw.slice(API_BASE_URL.length) || '/'
+  }
+  try {
+    const parsed = new URL(raw)
+    return `${parsed.pathname}${parsed.search}` || '/'
+  } catch {
+    return raw.startsWith('/') ? raw : `/${raw}`
+  }
+}
+
+function trimRecentRequestTraces(items: RecentRequestTrace[]): RecentRequestTrace[] {
+  if (RECENT_REQUEST_TRACE_LIMIT <= 0) return []
+  return items.slice(-RECENT_REQUEST_TRACE_LIMIT)
+}
+
+let recentRequestTraces: RecentRequestTrace[] | null = null
+
+function loadRecentRequestTraces(): RecentRequestTrace[] {
+  if (recentRequestTraces) return recentRequestTraces
+  try {
+    const cached = Taro.getStorageSync(RECENT_REQUEST_TRACE_STORAGE_KEY)
+    recentRequestTraces = Array.isArray(cached) ? trimRecentRequestTraces(cached as RecentRequestTrace[]) : []
+  } catch {
+    recentRequestTraces = []
+  }
+  return recentRequestTraces
+}
+
+function persistRecentRequestTraces(items: RecentRequestTrace[]): void {
+  try {
+    Taro.setStorageSync(RECENT_REQUEST_TRACE_STORAGE_KEY, items)
+  } catch (error) {
+    console.warn('[API TRACE] 保存最近请求诊断失败', error)
+  }
+}
+
+function recordRecentRequestTrace(entry: RecentRequestTrace): void {
+  if (RECENT_REQUEST_TRACE_LIMIT <= 0) return
+  const next = trimRecentRequestTraces([...loadRecentRequestTraces(), entry])
+  recentRequestTraces = next
+  persistRecentRequestTraces(next)
+}
+
+export function getRecentRequestTraces(limit = RECENT_REQUEST_TRACE_LIMIT): RecentRequestTrace[] {
+  const normalizedLimit = Math.min(RECENT_REQUEST_TRACE_LIMIT, Math.max(0, Math.floor(limit)))
+  if (normalizedLimit <= 0) return []
+  return loadRecentRequestTraces().slice(-normalizedLimit)
+}
+
+function recordResponseTrace(params: {
+  url: string
+  method?: string
+  startedAt: number
+  response?: Taro.request.SuccessCallbackResult<any>
+  error?: unknown
+}): void {
+  const { url, method, startedAt, response, error } = params
+  const headers = response?.header as Record<string, any> | undefined
+  recordRecentRequestTrace({
+    method: String(method || 'GET').toUpperCase(),
+    path: normalizeRequestPath(url),
+    statusCode: Number(response?.statusCode || 0),
+    durationMs: Math.max(0, Date.now() - startedAt),
+    startedAt: new Date(startedAt).toISOString(),
+    traceId: extractTraceIdFromHeaders(headers),
+    requestId: extractRequestIdFromHeaders(headers),
+    hostName: extractHostNameFromHeaders(headers),
+    errorMessage: error instanceof Error ? error.message.slice(0, 160) : undefined,
+  })
+}
+
+function getCurrentPagePath(): string {
+  try {
+    const pages = Taro.getCurrentPages()
+    const current = pages[pages.length - 1] as { route?: string; options?: Record<string, string> } | undefined
+    if (!current?.route) return ''
+    const query = current.options ? new URLSearchParams(current.options).toString() : ''
+    return query ? `/${current.route}?${query}` : `/${current.route}`
+  } catch {
+    return ''
+  }
+}
+
 function formatUserErrorWithTrace(message: string, traceId?: string): string {
   const msg = (message || '').trim() || '网络错误，请稍后重试'
   const normalizedTraceId = normalizeTraceId(traceId)
@@ -3521,15 +3638,34 @@ export async function authenticatedRequest(
   }
 
   console.log(`[DEBUG AUTH] 请求开始: ${url}`)
-  const res = await Taro.request({
-    url: `${API_BASE_URL}${url}`,
-    ...options,
-    header: withNgrokBypassHeaders({
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(options.header || {})
+  const requestUrl = `${API_BASE_URL}${url}`
+  const startedAt = Date.now()
+  let res: Taro.request.SuccessCallbackResult<any>
+  try {
+    res = await Taro.request({
+      url: requestUrl,
+      ...options,
+      header: withNgrokBypassHeaders({
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(options.header || {})
+      })
     })
-  })
+    recordResponseTrace({
+      url,
+      method: String(options.method || 'GET'),
+      startedAt,
+      response: res,
+    })
+  } catch (error) {
+    recordResponseTrace({
+      url,
+      method: String(options.method || 'GET'),
+      startedAt,
+      error,
+    })
+    throw error
+  }
   console.log(`[DEBUG AUTH] 请求完成: ${url}, statusCode=${res.statusCode}, dataType=${typeof res.data}, dataKeys=${res.data && typeof res.data === 'object' ? Object.keys(res.data).join(',') : 'N/A'}`)
 
   if (res.statusCode === 401 || res.statusCode === 403) {
@@ -5212,11 +5348,16 @@ export async function communityMarkNotificationsRead(notificationIds?: string[])
 
 // ---------- 公共食物库 ----------
 
+export type PublicFoodLibraryType = 'common' | 'campus'
+
 /** 公共食物库条目 */
 export interface PublicFoodLibraryItem {
   id: string
   user_id: string
   source_record_id?: string | null
+  analysis_task_id?: string | null
+  analysis_status?: string | null
+  analysis_error?: string | null
   image_path?: string | null
   /** 多图 URL 列表，展示时优先于 image_path */
   image_paths?: string[] | null
@@ -5245,6 +5386,8 @@ export interface PublicFoodLibraryItem {
   district?: string | null
   detail_address?: string | null
   status: string
+  /** 条目类型：普通公共食物库或校园食堂 */
+  type: PublicFoodLibraryType
   like_count: number
   comment_count: number
   avg_rating: number
@@ -5289,6 +5432,43 @@ export interface PublicFoodLibraryItem {
   portion_description?: string | null
   /** 校园位置展示文案 */
   campus_location_text?: string | null
+  /** 每元蛋白质（g/元） */
+  protein_per_yuan?: number
+  /** 每 100 kcal 价格（元/100kcal） */
+  price_per_100_kcal?: number
+}
+
+/** 校园详情页性价比指标 */
+export interface CampusFoodMetric {
+  protein_per_yuan?: number
+  price_per_100_kcal?: number
+}
+
+/** 校园详情页相关圈子动态摘要 */
+export interface CampusRelatedFeedItem {
+  id: string
+  food_name: string
+  image_path?: string | null
+  image_paths?: string[] | null
+  school_name?: string | null
+  canteen_name?: string | null
+  campus_location?: string | null
+  total_calories: number
+  total_protein: number
+  price?: number | null
+  price_unit?: string | null
+  like_count: number
+  comment_count: number
+  collection_count: number
+  published_at?: string | null
+}
+
+/** 校园菜品详情聚合响应 */
+export interface CampusFoodDetailResponse {
+  item: PublicFoodLibraryItem
+  metrics: CampusFoodMetric
+  similar_items: PublicFoodLibraryItem[]
+  related_feeds: CampusRelatedFeedItem[]
 }
 
 /** 公共食物库评论 */
@@ -5330,6 +5510,8 @@ export interface CreatePublicFoodLibraryRequest {
   city?: string
   district?: string
   detail_address?: string
+  /** 条目类型：普通公共食物库或校园食堂 */
+  type?: PublicFoodLibraryType
   /** 是否为校园食堂菜品 */
   is_campus_food?: boolean
   school_name?: string
@@ -5356,6 +5538,7 @@ export interface PublicFoodLibraryListParams {
   sort_by?: 'latest' | 'hot' | 'rating' | 'balanced' | 'high_protein' | 'low_calorie' | 'recommended' | 'value'
   limit?: number
   offset?: number
+  type?: PublicFoodLibraryType
   is_campus_food?: boolean
   school_name?: string
   canteen_name?: string
@@ -5390,6 +5573,7 @@ export async function getPublicFoodLibraryList(
   if (params?.sort_by) q.set('sort_by', params.sort_by)
   if (params?.limit !== undefined) q.set('limit', String(params.limit))
   if (params?.offset !== undefined) q.set('offset', String(params.offset))
+  if (params?.type) q.set('type', params.type)
   if (params?.is_campus_food !== undefined) q.set('is_campus_food', String(params.is_campus_food))
   if (params?.school_name) q.set('school_name', params.school_name)
   if (params?.canteen_name) q.set('canteen_name', params.canteen_name)
@@ -5428,6 +5612,15 @@ export async function getPublicFoodLibraryItem(itemId: string): Promise<PublicFo
     throw new Error((response.data as any)?.detail || '获取详情失败')
   }
   return response.data as PublicFoodLibraryItem
+}
+
+/** 获取校园菜品详情聚合信息 */
+export async function getCampusFoodDetail(itemId: string): Promise<CampusFoodDetailResponse> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/campus-detail`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取校园菜品详情失败')
+  }
+  return response.data as CampusFoodDetailResponse
 }
 
 /** 点赞公共食物库条目 */
@@ -5471,6 +5664,22 @@ export async function deletePublicFoodLibraryItem(itemId: string): Promise<{ mes
   return response.data as { message: string }
 }
 
+/** 更新/编辑自己上传的公共食物库条目 */
+export async function updatePublicFoodLibraryItem(
+  itemId: string,
+  data: Partial<CreatePublicFoodLibraryRequest>
+): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}`, {
+    method: 'PUT',
+    data,
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '更新失败')
+  }
+  return response.data as { message: string }
+}
+
 /** 获取公共食物库条目的评论列表 */
 export async function getPublicFoodLibraryComments(itemId: string): Promise<{ list: PublicFoodLibraryComment[] }> {
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments`, { method: 'GET', timeout: 10000 })
@@ -5496,6 +5705,21 @@ export async function postPublicFoodLibraryComment(
     throw new Error((response.data as any)?.detail || '发表失败')
   }
   return response.data as { comment: PublicFoodLibraryComment }
+}
+
+/** 删除自己发表的公共食物库评论 */
+export async function deletePublicFoodLibraryComment(
+  itemId: string,
+  commentId: string
+): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments/${commentId}`, {
+    method: 'DELETE',
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '删除评论失败')
+  }
+  return response.data as { message: string }
 }
 
 /** 提交公共食物库反馈 */
@@ -5856,4 +6080,60 @@ export async function getUserLocation(): Promise<LocationInfo> {
     throw new Error((response.data as any)?.message || '获取定位失败')
   }
   return unwrapResponse<LocationInfo>(response) || { country: '', province: '', city: '' }
+}
+
+
+export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
+
+export interface SubmitFeedbackRequest {
+  category: FeedbackCategory
+  content: string
+  contact?: string
+  attachRecentRequests?: boolean
+}
+
+export interface SubmitFeedbackResponse {
+  id: string
+  message: string
+}
+
+function getClientInfo(): Record<string, unknown> {
+  try {
+    const accountInfo = Taro.getAccountInfoSync?.()
+    const systemInfo = Taro.getSystemInfoSync?.()
+    return {
+      app_version: readInjectedString(() => __APP_VERSION__, ''),
+      env_version: accountInfo?.miniProgram?.envVersion,
+      platform: systemInfo?.platform,
+      system: systemInfo?.system,
+      model: systemInfo?.model,
+      SDKVersion: systemInfo?.SDKVersion,
+    }
+  } catch {
+    return { app_version: readInjectedString(() => __APP_VERSION__, '') }
+  }
+}
+
+export async function submitFeedback(input: SubmitFeedbackRequest): Promise<SubmitFeedbackResponse> {
+  const content = input.content.trim()
+  if (!content) {
+    throw new Error('请填写反馈内容')
+  }
+  const response = await authenticatedRequest('/api/feedback', {
+    method: 'POST',
+    data: {
+      category: input.category,
+      content,
+      contact: input.contact?.trim() || undefined,
+      page_path: getCurrentPagePath(),
+      app_version: readInjectedString(() => __APP_VERSION__, ''),
+      client_info: getClientInfo(),
+      recent_requests: input.attachRecentRequests === false ? [] : getRecentRequestTraces(),
+    },
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '提交反馈失败')
+  }
+  return response.data as SubmitFeedbackResponse
 }

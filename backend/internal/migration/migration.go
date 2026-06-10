@@ -44,6 +44,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureIndexes(ctx, db); err != nil {
 		return err
 	}
+	if err := ensurePublicFoodTypeBackfill(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureTrialEntitlementBackfill(ctx, db); err != nil {
 		return err
 	}
@@ -66,6 +69,8 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("weapp_user", "weapp_user_gender_check", `gender IS NULL OR gender = ANY (ARRAY['male'::text,'female'::text,'other'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_activity_level_check", `activity_level IS NULL OR activity_level = ANY (ARRAY['sedentary'::text,'light'::text,'moderate'::text,'active'::text,'very_active'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_execution_mode_check", `execution_mode IS NULL OR execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
+		dropAndAddCheck("user_feedback", "user_feedback_category_check", `category = ANY (ARRAY['bug'::text,'suggestion'::text,'experience'::text,'other'::text])`),
+		dropAndAddCheck("user_feedback", "user_feedback_status_check", `status = ANY (ARRAY['open'::text,'processing'::text,'resolved'::text,'closed'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'done'::text,'failed'::text,'cancelled'::text,'timed_out'::text,'violated'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_task_type_check", `task_type = ANY (ARRAY['food'::text,'food_text'::text,'precision_plan'::text,'precision_item_estimate'::text,'precision_aggregate'::text,'health_report'::text,'public_food_library_text'::text,'exercise'::text,'expiry_recognize'::text,'expiry_notification'::text,'packaged_nutrition_label'::text,'packaged_product_extract'::text]) OR task_type ~ '^(food|food_text|precision_plan|precision_item_estimate|precision_aggregate|health_report|public_food_library_text|exercise|expiry_recognize|expiry_notification|packaged_nutrition_label|packaged_product_extract)_debug(_[a-z0-9_]+)?$'`),
 		dropAndAddCheck("analysis_feedback_samples", "analysis_feedback_samples_feedback_type_check", `feedback_type = ANY (ARRAY['correction'::text,'retry'::text,'manual_entry'::text,'failed'::text])`),
@@ -80,6 +85,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("precision_item_estimates", "precision_item_estimates_round_index_check", `round_index >= 1`),
 		dropAndAddCheck("precision_item_estimates", "precision_item_estimates_item_index_check", `item_index >= 0`),
 		dropAndAddCheck("public_food_library", "public_food_library_status_check", `status = ANY (ARRAY['pending'::text,'published'::text,'rejected'::text,'user_deleted'::text,'deleted'::text])`),
+		dropAndAddCheck("public_food_library", "public_food_library_type_check", `type = ANY (ARRAY['common'::text,'campus'::text])`),
 		dropAndAddCheck("public_food_library", "public_food_library_taste_rating_check", `taste_rating IS NULL OR (taste_rating >= 1 AND taste_rating <= 5)`),
 		dropAndAddCheck("public_food_library", "public_food_library_price_type_check", `price_type IS NULL OR price_type = ANY (ARRAY['fixed'::text,'weight'::text,'range'::text,'combo'::text,'unknown'::text])`),
 		dropAndAddCheck("public_food_library_comments", "public_food_library_comments_rating_check", `rating IS NULL OR (rating >= 1 AND rating <= 5)`),
@@ -125,6 +131,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("reward_task_uploads", "reward_task_uploads_reward_credits_check", `reward_credits >= 0`),
 		dropAndAddCheck("user_earned_credit_ledger", "user_earned_credit_ledger_balance_after_check", `balance_after >= 0`),
 		addFK("analysis_tasks_user_id_fkey", "analysis_tasks", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("user_feedback_user_id_fkey", "user_feedback", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("analysis_feedback_samples_user_id_fkey", "analysis_feedback_samples", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("analysis_feedback_samples_source_task_id_fkey", "analysis_feedback_samples", "source_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("analysis_feedback_samples_correction_task_id_fkey", "analysis_feedback_samples", "correction_task_id", "analysis_tasks", "id", "SET NULL"),
@@ -142,6 +149,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("precision_item_estimates_source_task_id_fkey", "precision_item_estimates", "source_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("public_food_library_user_id_fkey", "public_food_library", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("public_food_library_source_record_id_fkey", "public_food_library", "source_record_id", "user_food_records", "id", "SET NULL"),
+		addFK("public_food_library_analysis_task_id_fkey", "public_food_library", "analysis_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("public_food_library_likes_user_id_fkey", "public_food_library_likes", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("public_food_library_likes_library_item_id_fkey", "public_food_library_likes", "library_item_id", "public_food_library", "id", "CASCADE"),
 		addFK("public_food_library_collections_user_id_fkey", "public_food_library_collections", "user_id", "weapp_user", "id", "CASCADE"),
@@ -242,6 +250,8 @@ func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS review_status text NOT NULL DEFAULT 'active'`,
 		`ALTER TABLE food_nutrition_library ADD COLUMN IF NOT EXISTS image_path text`,
 		`ALTER TABLE food_nutrition_library ADD COLUMN IF NOT EXISTS image_paths jsonb NOT NULL DEFAULT '[]'::jsonb`,
+		`ALTER TABLE public_food_library ADD COLUMN IF NOT EXISTS analysis_task_id uuid`,
+		`CREATE INDEX IF NOT EXISTS idx_public_food_library_analysis_task_id ON public_food_library (analysis_task_id)`,
 		`ALTER TABLE packaged_food_aliases DROP CONSTRAINT IF EXISTS packaged_food_aliases_normalized_alias_key`,
 		`DROP INDEX IF EXISTS uni_packaged_food_aliases_normalized_alias`,
 		`DROP INDEX IF EXISTS packaged_food_aliases_normalized_alias_key`,
@@ -410,6 +420,18 @@ $$ LANGUAGE plpgsql`,
 		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 			return fmt.Errorf("apply trigger statement: %w", err)
 		}
+	}
+	return nil
+}
+
+func ensurePublicFoodTypeBackfill(ctx context.Context, db *gorm.DB) error {
+	sql := `
+UPDATE public_food_library
+SET type = CASE WHEN COALESCE(is_campus_food, false) THEN 'campus' ELSE 'common' END
+WHERE type IS NULL OR type = '' OR (type = 'common' AND COALESCE(is_campus_food, false) = true)
+`
+	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+		return fmt.Errorf("backfill public_food_library type: %w", err)
 	}
 	return nil
 }

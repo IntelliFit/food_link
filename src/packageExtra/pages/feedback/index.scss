@@ -1,0 +1,151 @@
+.feedback-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 28rpx 24rpx 180rpx;
+  background: linear-gradient(180deg, rgb(0 188 125 / 8%) 0%, #f6f8fb 280rpx, #f6f8fb 100%);
+}
+
+.feedback-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  padding: 20rpx 8rpx 28rpx;
+}
+
+.feedback-hero-title {
+  color: #111827;
+  font-size: 42rpx;
+  font-weight: 700;
+  line-height: 56rpx;
+}
+
+.feedback-hero-desc {
+  color: #667085;
+  font-size: 26rpx;
+  line-height: 38rpx;
+}
+
+.feedback-card {
+  margin-bottom: 22rpx;
+  padding: 28rpx;
+  border: 1rpx solid rgb(15 23 42 / 5%);
+  border-radius: 28rpx;
+  background: #fff;
+  box-shadow: 0 12rpx 36rpx rgb(15 23 42 / 5%);
+}
+
+.feedback-section-title {
+  color: #111827;
+  font-size: 30rpx;
+  font-weight: 650;
+  line-height: 42rpx;
+}
+
+.feedback-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18rpx;
+}
+
+.feedback-count {
+  color: #98a2b3;
+  font-size: 24rpx;
+}
+
+.feedback-category-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18rpx;
+  margin-top: 20rpx;
+}
+
+.feedback-category {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  min-height: 126rpx;
+  box-sizing: border-box;
+  padding: 22rpx;
+  border: 2rpx solid #eef2f7;
+  border-radius: 22rpx;
+  background: #f8fafc;
+}
+
+.feedback-category.is-active {
+  border-color: #00bc7d;
+  background: #ecfdf5;
+}
+
+.feedback-category-title {
+  color: #101828;
+  font-size: 28rpx;
+  font-weight: 650;
+}
+
+.feedback-category-desc {
+  color: #667085;
+  font-size: 22rpx;
+  line-height: 32rpx;
+}
+
+.feedback-textarea,
+.feedback-contact {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 18rpx;
+  padding: 22rpx;
+  border-radius: 20rpx;
+  background: #f8fafc;
+  color: #111827;
+  font-size: 28rpx;
+  line-height: 40rpx;
+}
+
+.feedback-textarea {
+  min-height: 260rpx;
+}
+
+.feedback-contact {
+  min-height: 130rpx;
+}
+
+.feedback-diagnostic {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.feedback-diagnostic-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.feedback-diagnostic-desc {
+  color: #667085;
+  font-size: 24rpx;
+  line-height: 36rpx;
+}
+
+.feedback-submit-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  padding: 20rpx 24rpx calc(env(safe-area-inset-bottom) + 20rpx);
+  background: rgb(246 248 251 / 92%);
+  backdrop-filter: blur(16rpx);
+}
+
+.feedback-submit {
+  height: 88rpx;
+  border-radius: 999rpx;
+  font-size: 30rpx;
+  font-weight: 650;
+}
