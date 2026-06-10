@@ -243,6 +243,17 @@ func (h *PublicFoodHandler) Uncollect(c *gin.Context) {
 	response.Success(c, gin.H{"message": "已取消"})
 }
 
+// GET /api/user/:user_id/collections
+func (h *PublicFoodHandler) UserCollections(c *gin.Context) {
+	targetUserID := c.Param("user_id")
+	items, err := h.svc.Collections(c.Request.Context(), targetUserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"list": items})
+}
+
 func (h *PublicFoodHandler) Update(c *gin.Context) {
 	var body struct {
 		ImagePath          *string    `json:"image_path"`

@@ -5854,6 +5854,39 @@ export async function getFavoriteCount(): Promise<{ count: number }> {
   return res.data as { count: number }
 }
 
+/** 获取其他用户公开资料 */
+export async function getPublicUserProfile(userId: string): Promise<{
+  id: string
+  nickname: string
+  avatar: string
+  record_days: number
+  create_time?: string
+}> {
+  const response = await authenticatedRequest(`/api/user/${userId}/public-profile`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取用户资料失败')
+  }
+  return response.data as { id: string; nickname: string; avatar: string; record_days: number; create_time?: string }
+}
+
+/** 获取指定用户的公共食物库收藏 */
+export async function getUserCollections(userId: string): Promise<{ list: PublicFoodLibraryItem[] }> {
+  const response = await authenticatedRequest(`/api/user/${userId}/collections`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取用户收藏失败')
+  }
+  return response.data as { list: PublicFoodLibraryItem[] }
+}
+
+/** 获取指定用户的食谱收藏 */
+export async function getUserFavoriteRecipes(userId: string): Promise<{ recipes: UserRecipe[] }> {
+  const response = await authenticatedRequest(`/api/user/${userId}/favorite-recipes`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取用户食谱收藏失败')
+  }
+  return response.data as { recipes: UserRecipe[] }
+}
+
 /** 获取单个食谱详情 */
 export async function getUserRecipe(recipeId: string): Promise<UserRecipe> {
   const response = await authenticatedRequest(`/api/recipes/${recipeId}`, { method: 'GET', timeout: 10000 })

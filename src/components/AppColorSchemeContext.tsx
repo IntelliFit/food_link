@@ -1,10 +1,11 @@
-import React, { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 import Taro from '@tarojs/taro'
 import {
   type AppColorScheme,
   getStoredAppColorScheme,
   setStoredAppColorScheme,
 } from '../utils/app-color-scheme'
+import { applyThemeNavigationBar } from '../utils/theme-navigation-bar'
 
 export const APP_COLOR_SCHEME_EVENT = 'fl_app_color_scheme_changed'
 
@@ -19,9 +20,14 @@ const AppColorSchemeContext = createContext<AppColorSchemeContextValue | null>(n
 export function AppColorSchemeProvider({ children }: PropsWithChildren): React.ReactElement {
   const [scheme, setSchemeState] = useState<AppColorScheme>(() => getStoredAppColorScheme())
 
+  useEffect(() => {
+    applyThemeNavigationBar(scheme)
+  }, [scheme])
+
   const setScheme = useCallback((next: AppColorScheme): void => {
     setSchemeState(next)
     setStoredAppColorScheme(next)
+    applyThemeNavigationBar(next)
     try {
       Taro.eventCenter.trigger(APP_COLOR_SCHEME_EVENT, { scheme: next })
     } catch {
@@ -44,9 +50,14 @@ export function AppColorSchemeProvider({ children }: PropsWithChildren): React.R
 function useFallbackAppColorScheme(): AppColorSchemeContextValue {
   const [scheme, setSchemeState] = useState<AppColorScheme>(() => getStoredAppColorScheme())
 
+  useEffect(() => {
+    applyThemeNavigationBar(scheme)
+  }, [scheme])
+
   const setScheme = useCallback((next: AppColorScheme): void => {
     setSchemeState(next)
     setStoredAppColorScheme(next)
+    applyThemeNavigationBar(next)
     try {
       Taro.eventCenter.trigger(APP_COLOR_SCHEME_EVENT, { scheme: next })
     } catch {

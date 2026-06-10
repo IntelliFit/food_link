@@ -272,7 +272,7 @@ export default function ExpiryEditPage() {
   const router = useRouter()
   const itemId = router.params?.id
   const isEdit = !!itemId
-  const scheme = useAppColorScheme()
+  const { scheme } = useAppColorScheme()
 
   const [loading, setLoading] = useState(!!itemId)
   const [recognizing, setRecognizing] = useState(false)

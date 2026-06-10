@@ -1,36 +1,36 @@
 .profile-settings-page {
   min-height: 100vh;
-  background: #f8fafc;
-  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg,
+    rgb(92 184 150 / 10%) 0%,
+    rgb(92 184 150 / 4%) 35%,
+    #f0f3f6 65%,
+    #f0f3f6 100%
+  );
 }
 
-.settings-card {
-  background: #fff;
-  border-radius: 24rpx;
-  padding: 40rpx 32rpx;
+/* 顶部用户信息区域 */
+.profile-top-section {
+  padding: 40rpx 32rpx 28rpx;
+  flex-shrink: 0;
+}
+
+/* 头像 + 信息 横向排列 */
+.profile-user-row {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
   margin-bottom: 24rpx;
 }
 
-.settings-section-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 32rpx;
-  line-height: 40rpx;
-}
+.profile-avatar-wrap {
+  flex-shrink: 0;
 
-.avatar-section {
-  display: flex;
-  flex-direction: column;
-  gap: 24rpx;
-  margin-bottom: 48rpx;
-}
-
-.form-label {
-  font-size: 28rpx;
-  font-weight: 500;
-  color: #374151;
-  line-height: 40rpx;
+  &:active {
+    opacity: 0.85;
+    transform: scale(0.96);
+  }
 }
 
 .avatar-choose-btn {
@@ -47,22 +47,17 @@
 }
 
 .avatar-choose-wrapper {
-  width: 180rpx;
-  height: 180rpx;
+  width: 140rpx;
+  height: 140rpx;
   border-radius: 50%;
   overflow: hidden;
   background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 4rpx solid #e5e7eb;
-  box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 6%);
-  transition: all 0.3s ease;
-
-  &:active {
-    transform: scale(0.95);
-    border-color: #00bc7d;
-  }
+  border: 6rpx solid #fff;
+  box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 10%);
+  transition: all 0.2s ease;
 }
 
 .avatar-preview {
@@ -73,26 +68,446 @@
 
 .avatar-placeholder {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12rpx;
 }
 
 .avatar-placeholder-text {
-  font-size: 24rpx;
-  color: #6b7280;
-  line-height: 32rpx;
+  font-size: 48rpx;
+  line-height: 1;
 }
 
-.nickname-section {
+/* 昵称 + ID 垂直排列在头像右侧 */
+.profile-info-col {
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
-  margin-bottom: 48rpx;
+  gap: 12rpx;
+  flex: 1;
+  min-width: 0;
 }
 
-.nickname-input {
+.profile-name-row {
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.profile-nickname {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #111827;
+  line-height: 56rpx;
+}
+
+.profile-id-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.profile-user-id {
+  font-size: 24rpx;
+  color: #6b7280;
+  line-height: 34rpx;
+  font-family: monospace;
+}
+
+.profile-id-copy-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44rpx;
+  padding: 0 18rpx;
+  border-radius: 999rpx;
+  background: rgb(0 188 125 / 10%);
+  border: 1rpx solid rgb(0 188 125 / 18%);
+
+  &:active {
+    opacity: 0.72;
+  }
+}
+
+.profile-id-copy-btn-text {
+  font-size: 22rpx;
+  line-height: 32rpx;
+  color: #008f63;
+  font-weight: 600;
+}
+
+/* 统计行 — 左对齐，数字和标签同一行，竖线分割 */
+.profile-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding-left: 4rpx;
+}
+
+.profile-stat-text {
+  font-size: 24rpx;
+  color: #6b7280;
+  line-height: 34rpx;
+}
+
+.profile-stat-num {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #111827;
+  line-height: 42rpx;
+}
+
+.profile-stat-divider {
+  font-size: 22rpx;
+  color: #d1d5db;
+  line-height: 34rpx;
+  padding: 0 4rpx;
+}
+
+/* 底部内容抽屉 */
+.profile-bottom-drawer {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 30rpx 30rpx 0 0;
+  margin-top: 16rpx;
+  padding: 14rpx 0 calc(32rpx + env(safe-area-inset-bottom));
+  box-shadow: 0 -8rpx 32rpx rgba(0, 0, 0, 0.06);
+  min-height: 0;
+}
+
+.drawer-handle-bar {
+  width: 72rpx;
+  height: 8rpx;
+  margin: 0 auto 14rpx;
+  border-radius: 999rpx;
+  background: rgba(100, 116, 139, 0.2);
+  flex-shrink: 0;
+}
+
+/* Tab */
+.profile-content-tabs {
+  display: flex;
+  align-items: center;
+  padding: 0 32rpx;
+  margin-bottom: 8rpx;
+  flex-shrink: 0;
+  border-bottom: 2rpx solid #f3f4f6;
+}
+
+.profile-content-tab {
+  position: relative;
+  padding: 24rpx 0;
+  margin-right: 40rpx;
+}
+
+.profile-content-tab-text {
+  font-size: 30rpx;
+  color: #6b7280;
+  line-height: 42rpx;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.profile-content-tab--active .profile-content-tab-text {
+  color: #111827;
+  font-weight: 700;
+}
+
+.profile-content-tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 6rpx;
+  border-radius: 3rpx;
+  background: #00bc7d;
+}
+
+/* 内容区 */
+.profile-content-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16rpx 24rpx;
+  min-height: 0;
+}
+
+.profile-content-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.profile-content-empty-text {
+  font-size: 28rpx;
+  color: #9ca3af;
+  line-height: 40rpx;
+}
+
+/* 动态卡片 */
+.profile-feed-card {
+  background: #f9fafb;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  margin-bottom: 16rpx;
+}
+
+.profile-feed-header {
+  margin-bottom: 12rpx;
+}
+
+.profile-feed-time {
+  font-size: 24rpx;
+  color: #6b7280;
+  line-height: 34rpx;
+}
+
+.profile-feed-desc {
+  font-size: 28rpx;
+  color: #111827;
+  line-height: 44rpx;
+  margin-bottom: 16rpx;
+  display: block;
+}
+
+.profile-feed-image-wrap {
+  width: 100%;
+  height: 320rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  margin-bottom: 16rpx;
+  background: #e5e7eb;
+}
+
+.profile-feed-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-feed-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.profile-feed-nutrition-row {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.profile-feed-nutri-item {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.profile-feed-nutri-icon {
+  font-size: 22rpx;
+  line-height: 1;
+}
+
+.profile-feed-nutri-text {
+  font-size: 22rpx;
+  color: #4b5563;
+  line-height: 30rpx;
+}
+
+.profile-feed-likes {
+  flex-shrink: 0;
+}
+
+.profile-feed-likes-text {
+  font-size: 24rpx;
+  color: #9ca3af;
+  line-height: 34rpx;
+}
+
+.profile-feed-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx 0;
+}
+
+.profile-feed-spinner {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  border: 4rpx solid #e5e7eb;
+  border-top-color: #00bc7d;
+  animation: spin 0.8s linear infinite;
+}
+
+.profile-feed-end {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32rpx 0;
+}
+
+.profile-feed-end-text {
+  font-size: 24rpx;
+  color: #9ca3af;
+  line-height: 34rpx;
+}
+
+/* 食物收藏卡片 */
+.collection-food-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+  background: #f9fafb;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  margin-bottom: 16rpx;
+  transition: all 0.2s ease;
+
+  &:active {
+    background: #f3f4f6;
+  }
+}
+
+.collection-food-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.collection-food-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #111827;
+  line-height: 44rpx;
+  margin-bottom: 8rpx;
+}
+
+.collection-food-nutrition-row {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  margin-top: 12rpx;
+  flex-wrap: wrap;
+}
+
+.collection-food-nutri-item {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.collection-food-nutri-icon {
+  font-size: 22rpx;
+  line-height: 1;
+}
+
+.collection-food-nutri-text {
+  font-size: 22rpx;
+  color: #4b5563;
+  line-height: 30rpx;
+}
+
+.collection-food-thumb {
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 16rpx;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: #e5e7eb;
+}
+
+/* 编辑资料底部弹窗 */
+.edit-sheet-mask {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: flex-end;
+  animation: fadeIn 0.2s ease;
+}
+
+.edit-sheet {
+  width: 100%;
+  max-height: 85vh;
+  padding: 14rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  border-radius: 30rpx 30rpx 0 0;
+  background: #fff;
+  box-sizing: border-box;
+  box-shadow: 0 -20rpx 48rpx rgba(15, 23, 42, 0.14);
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow-y: auto;
+}
+
+.edit-sheet-handle {
+  width: 72rpx;
+  height: 8rpx;
+  margin: 0 auto 24rpx;
+  border-radius: 999rpx;
+  background: rgba(100, 116, 139, 0.2);
+}
+
+.edit-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32rpx;
+}
+
+.edit-sheet-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #111827;
+  line-height: 48rpx;
+}
+
+.edit-sheet-close {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.edit-sheet-avatar-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 32rpx;
+}
+
+.edit-sheet-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-bottom: 32rpx;
+}
+
+.edit-sheet-label {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #374151;
+  line-height: 40rpx;
+}
+
+.edit-sheet-input {
   width: 100%;
   min-height: 96rpx;
   padding: 28rpx 32rpx;
@@ -103,7 +518,6 @@
   color: #111827;
   line-height: 48rpx;
   box-sizing: border-box;
-  transition: all 0.3s ease;
 
   &:focus {
     border-color: #00bc7d;
@@ -112,60 +526,45 @@
   }
 }
 
-.user-id-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-}
-
-.user-id-section-head {
+.edit-sheet-id-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24rpx;
+  gap: 16rpx;
+  padding: 24rpx 28rpx;
+  background: #f9fafb;
+  border: 2rpx solid #e5e7eb;
+  border-radius: 20rpx;
 }
 
-.user-id-copy-btn {
+.edit-sheet-id-text {
+  font-size: 26rpx;
+  color: #4b5563;
+  line-height: 38rpx;
+  word-break: break-all;
+  font-family: monospace;
+}
+
+.edit-sheet-id-copy {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 48rpx;
-  padding: 0 20rpx;
+  padding: 8rpx 20rpx;
   border-radius: 999rpx;
   background: rgb(0 188 125 / 10%);
   border: 1rpx solid rgb(0 188 125 / 18%);
-  box-sizing: border-box;
 
   &:active {
-    opacity: 0.72;
+    opacity: 0.7;
   }
 }
 
-.user-id-copy-btn-text {
+.edit-sheet-id-copy-text {
   font-size: 24rpx;
   line-height: 34rpx;
   color: #008f63;
   font-weight: 600;
 }
 
-.user-id-full {
-  display: block;
-  width: 100%;
-  padding: 24rpx 28rpx;
-  box-sizing: border-box;
-  border-radius: 20rpx;
-  background: #f9fafb;
-  border: 2rpx solid #e5e7eb;
-  font-size: 26rpx;
-  line-height: 38rpx;
-  color: #4b5563;
-  word-break: break-all;
-  overflow-wrap: anywhere;
-}
-
-.save-btn {
-  margin-top: 48rpx;
+.edit-sheet-save {
   width: 100%;
   padding: 32rpx;
   border-radius: 24rpx;
@@ -176,7 +575,7 @@
   background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
   color: #fff;
   box-shadow: 0 8rpx 24rpx rgb(0 188 125 / 30%);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-bottom: 24rpx;
 
   &::after {
     border: none;
@@ -184,63 +583,210 @@
 
   &:active {
     transform: scale(0.98);
-    box-shadow: 0 4rpx 12rpx rgb(0 188 125 / 30%);
   }
 }
 
-.delete-account-section {
-  margin-top: 32rpx;
+.edit-sheet-delete {
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 24rpx 0;
-}
-
-.delete-account-text {
-  font-size: 28rpx;
-  color: #ef4444;
-  line-height: 40rpx;
-  transition: opacity 0.2s ease;
 
   &:active {
     opacity: 0.6;
   }
 }
 
+.edit-sheet-delete-text {
+  font-size: 28rpx;
+  color: #ef4444;
+  line-height: 40rpx;
+}
+
+/* 加载态 */
+.profile-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+  padding: 120rpx 48rpx;
+}
+
+.profile-skeleton-avatar {
+  width: 140rpx;
+  height: 140rpx;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.profile-skeleton-name {
+  width: 180rpx;
+  height: 40rpx;
+  border-radius: 12rpx;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.profile-skeleton-id {
+  width: 120rpx;
+  height: 28rpx;
+  border-radius: 12rpx;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.profile-skeleton-stats {
+  width: 200rpx;
+  height: 24rpx;
+  border-radius: 12rpx;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 
 /* Dark mode */
 .profile-settings-page--dark {
-  background: #0d1312;
+  background: linear-gradient(180deg,
+    rgba(92, 184, 150, 0.06) 0%,
+    rgba(92, 184, 150, 0.02) 35%,
+    #0d1312 65%,
+    #0d1312 100%
+  );
 
-  .settings-card {
-    background: #181f1d;
-  }
-
-  .settings-section-title {
+  .profile-nickname {
     color: #f2f7f4;
   }
 
-  .form-label {
-    color: rgba(214, 226, 220, 0.76);
-  }
-
-  .avatar-choose-wrapper {
-    background: #1e2624;
-    border-color: rgba(255, 255, 255, 0.08);
-  }
-
-  .avatar-placeholder-text {
+  .profile-user-id {
     color: #94a3b8;
   }
 
-  .nickname-input {
+  .profile-id-copy-btn {
+    background: rgba(0, 188, 125, 0.14);
+    border-color: rgba(0, 188, 125, 0.24);
+  }
+
+  .profile-id-copy-btn-text {
+    color: #6ee7b7;
+  }
+
+  .profile-stat-text {
+    color: #94a3b8;
+  }
+
+  .profile-stat-num {
+    color: #f2f7f4;
+  }
+
+  .profile-stat-divider {
+    color: rgba(255, 255, 255, 0.15);
+  }
+
+  .profile-bottom-drawer {
+    background: #181f1d;
+    box-shadow: 0 -8rpx 32rpx rgba(0, 0, 0, 0.2);
+  }
+
+  .drawer-handle-bar {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .profile-content-tabs {
+    border-bottom-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .profile-content-tab-text {
+    color: #94a3b8;
+  }
+
+  .profile-content-tab--active .profile-content-tab-text {
+    color: #f2f7f4;
+  }
+
+  .profile-feed-card {
+    background: #1e2624;
+  }
+
+  .profile-feed-time {
+    color: #94a3b8;
+  }
+
+  .profile-feed-desc {
+    color: #f2f7f4;
+  }
+
+  .profile-feed-nutri-text {
+    color: rgba(214, 226, 220, 0.76);
+  }
+
+  .profile-feed-likes-text {
+    color: #64748b;
+  }
+
+  .profile-content-empty-text {
+    color: #64748b;
+  }
+
+  .collection-food-card {
+    background: #1e2624;
+
+    &:active {
+      background: #252e2b;
+    }
+  }
+
+  .collection-food-name {
+    color: #f2f7f4;
+  }
+
+  .collection-food-nutri-text {
+    color: rgba(214, 226, 220, 0.76);
+  }
+
+  .edit-sheet {
+    background: #181f1d;
+  }
+
+  .edit-sheet-title {
+    color: #f2f7f4;
+  }
+
+  .edit-sheet-close {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .edit-sheet-label {
+    color: rgba(214, 226, 220, 0.76);
+  }
+
+  .edit-sheet-input {
     background: #1e2624;
     border-color: rgba(255, 255, 255, 0.08);
     color: #f2f7f4;
-
-    &::placeholder {
-      color: rgba(214, 226, 220, 0.4);
-    }
 
     &:focus {
       background: #1e2624;
@@ -249,26 +795,34 @@
     }
   }
 
-  .user-id-copy-btn {
+  .edit-sheet-id-row {
+    background: #1e2624;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .edit-sheet-id-text {
+    color: rgba(214, 226, 220, 0.76);
+  }
+
+  .edit-sheet-id-copy {
     background: rgba(0, 188, 125, 0.14);
     border-color: rgba(0, 188, 125, 0.24);
   }
 
-  .user-id-copy-btn-text {
+  .edit-sheet-id-copy-text {
     color: #6ee7b7;
   }
 
-  .user-id-full {
-    background: #1e2624;
-    border-color: rgba(255, 255, 255, 0.08);
-    color: rgba(214, 226, 220, 0.76);
-  }
-
-  .save-btn {
+  .edit-sheet-save {
     background: linear-gradient(135deg, #00a870 0%, #00bc7d 100%);
   }
 
-  .delete-account-text {
+  .edit-sheet-delete-text {
     color: #f87171;
+  }
+
+  .avatar-choose-wrapper {
+    background: #1e2624;
+    border-color: rgba(255, 255, 255, 0.1);
   }
 }

@@ -796,7 +796,15 @@ function FoodLibraryPage() {
                 <View className='food-footer'>
                   <View className='food-author'>
                     {item.author?.avatar ? (
-                      <View className='author-avatar'>
+                      <View
+                        className='author-avatar'
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (item.author?.id) {
+                            Taro.navigateTo({ url: extraPkgUrl(`/pages/profile-settings/index?user_id=${encodeURIComponent(item.author.id)}`) })
+                          }
+                        }}
+                      >
                         <Image className='author-avatar-img' src={item.author.avatar} />
                       </View>
                     ) : (

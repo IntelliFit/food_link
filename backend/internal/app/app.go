@@ -325,6 +325,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/user/last-seen-analyze-history", authmw.RequireJWT(jwtSvc), userHandler.UpdateLastSeenAnalyzeHistory)
 	engine.POST("/api/user/acknowledge-health-disclaimer", authmw.RequireJWT(jwtSvc), userHandler.AcknowledgeHealthDisclaimer)
 	engine.DELETE("/api/user/account", authmw.RequireJWT(jwtSvc), userHandler.DeleteAccount)
+	engine.GET("/api/user/:user_id/public-profile", authmw.RequireJWT(jwtSvc), userHandler.GetPublicProfile)
 	engine.POST("/api/feedback", authmw.RequireJWT(jwtSvc), feedbackHandler.Submit)
 
 	engine.GET("/api/home/dashboard", authmw.RequireJWT(jwtSvc), dashboardHandler.HomeDashboard)
@@ -454,6 +455,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.Comments)
 	engine.POST("/api/public-food-library/:item_id/comments", authmw.RequireJWT(jwtSvc), publicFoodHandler.AddComment)
 	engine.DELETE("/api/public-food-library/:item_id/comments/:comment_id", authmw.RequireJWT(jwtSvc), publicFoodHandler.DeleteComment)
+	engine.GET("/api/user/:user_id/collections", authmw.RequireJWT(jwtSvc), publicFoodHandler.UserCollections)
 
 	// Recipe routes
 	engine.GET("/api/recipes", authmw.RequireJWT(jwtSvc), recipeHandler.List)
@@ -463,6 +465,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.PUT("/api/recipes/:recipe_id", authmw.RequireJWT(jwtSvc), recipeHandler.Update)
 	engine.DELETE("/api/recipes/:recipe_id", authmw.RequireJWT(jwtSvc), recipeHandler.Delete)
 	engine.POST("/api/recipes/:recipe_id/use", authmw.RequireJWT(jwtSvc), recipeHandler.Use)
+	engine.GET("/api/user/:user_id/favorite-recipes", authmw.RequireJWT(jwtSvc), recipeHandler.GetUserFavoriteRecipes)
 
 	// Expiry routes
 	engine.GET("/api/expiry/dashboard", authmw.RequireJWT(jwtSvc), expiryHandler.Dashboard)

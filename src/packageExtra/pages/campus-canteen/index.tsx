@@ -282,7 +282,15 @@ function CampusCanteenPage() {
       <View className='campus-card-footer'>
         <View className='campus-author-row'>
           {item.author?.avatar ? (
-            <View className='campus-author-avatar'>
+            <View
+              className='campus-author-avatar'
+              onClick={(e) => {
+                e.stopPropagation()
+                if (item.author?.id) {
+                  Taro.navigateTo({ url: extraPkgUrl(`/pages/profile-settings/index?user_id=${encodeURIComponent(item.author.id)}`) })
+                }
+              }}
+            >
               <Image className='campus-author-avatar-img' src={item.author.avatar} mode='aspectFill' />
             </View>
           ) : (

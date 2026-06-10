@@ -2195,7 +2195,15 @@ function CommunityPage() {
                       >
                         <View className='feed-card-moments'>
                           <View className='feed-card-avatar-col'>
-                            <View className='user-avatar'>
+                            <View
+                              className='user-avatar'
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (item.author?.id) {
+                                  Taro.navigateTo({ url: extraPkgUrl(`/pages/profile-settings/index?user_id=${encodeURIComponent(item.author.id)}`) })
+                                }
+                              }}
+                            >
                               {item.author.avatar ? (
                                 <Image src={item.author.avatar} mode='aspectFill' className='user-avatar-img' />
                               ) : (
