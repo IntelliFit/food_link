@@ -28,6 +28,9 @@ import (
 	expiryhandler "food_link/backend/internal/expiry/handler"
 	expiryrepo "food_link/backend/internal/expiry/repo"
 	expiryservice "food_link/backend/internal/expiry/service"
+	feedbackhandler "food_link/backend/internal/feedback/handler"
+	feedbackrepo "food_link/backend/internal/feedback/repo"
+	feedbackservice "food_link/backend/internal/feedback/service"
 	foodrecordhandler "food_link/backend/internal/foodrecord/handler"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	foodrecordservice "food_link/backend/internal/foodrecord/service"
@@ -273,6 +276,10 @@ func New(cfg *config.Config) (*App, error) {
 	testBackendSvc := testbackendservice.NewTestBackendService(testBackendPromptRepo, testBackendBatchRepo, testBackendDatasetRepo, doubaoClient, ofoxAIClient, userRepo, jwtSvc, cfg)
 	testBackendHandler := testbackendhandler.NewTestBackendHandler(testBackendSvc)
 
+	feedbackRepo := feedbackrepo.NewFeedbackRepo(db)
+	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo)
+	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc)
+
 	commentHandler := communityhandler.NewCommentHandler(homeRepo, userRepo)
 	system := systemhandler.New()
 
@@ -318,6 +325,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/user/last-seen-analyze-history", authmw.RequireJWT(jwtSvc), userHandler.UpdateLastSeenAnalyzeHistory)
 	engine.POST("/api/user/acknowledge-health-disclaimer", authmw.RequireJWT(jwtSvc), userHandler.AcknowledgeHealthDisclaimer)
 	engine.DELETE("/api/user/account", authmw.RequireJWT(jwtSvc), userHandler.DeleteAccount)
+	engine.POST("/api/feedback", authmw.RequireJWT(jwtSvc), feedbackHandler.Submit)
 
 	engine.GET("/api/home/dashboard", authmw.RequireJWT(jwtSvc), dashboardHandler.HomeDashboard)
 	engine.GET("/api/food-record/:record_id/poster-calorie-compare", authmw.RequireJWT(jwtSvc), dashboardHandler.PosterCalorieCompare)
@@ -506,10 +514,16 @@ func New(cfg *config.Config) (*App, error) {
 	adminPackagedFoodRepo := adminrepo.NewPackagedFoodRepo(db)
 	adminPackagedFoodSvc := adminservice.NewPackagedFoodService(adminPackagedFoodRepo)
 	adminPackagedFoodHandler := adminhandler.NewPackagedFoodHandler(adminPackagedFoodSvc, adminKey)
+	adminFeedbackRepo := adminrepo.NewFeedbackRepo(db)
+	adminFeedbackSvc := adminservice.NewFeedbackService(adminFeedbackRepo)
+	adminFeedbackHandler := adminhandler.NewFeedbackHandler(adminFeedbackSvc)
 	adminPackagedFoodAuth := adminPackagedFoodHandler.AdminAuth()
-	engine.GET("/api/admin/packaged-foods", adminPackagedFoodAuth, adminPackagedFoodHandler.List)
-	engine.GET("/api/admin/packaged-foods/:food_id", adminPackagedFoodAuth, adminPackagedFoodHandler.Get)
-	engine.PATCH("/api/admin/packaged-foods/:food_id", adminPackagedFoodAuth, adminPackagedFoodHandler.Update)
+	adminAPI := engine.Group("/api/admin", adminCORS(os.Getenv("ADMIN_CORS_ALLOWED_ORIGINS")))
+	adminAPI.GET("/packaged-foods", adminPackagedFoodAuth, adminPackagedFoodHandler.List)
+	adminAPI.GET("/packaged-foods/:food_id", adminPackagedFoodAuth, adminPackagedFoodHandler.Get)
+	adminAPI.PATCH("/packaged-foods/:food_id", adminPackagedFoodAuth, adminPackagedFoodHandler.Update)
+	adminAPI.GET("/feedback", adminPackagedFoodAuth, adminFeedbackHandler.List)
+	adminAPI.PATCH("/feedback/:feedback_id/status", adminPackagedFoodAuth, adminFeedbackHandler.UpdateStatus)
 
 	routeMapPath := filepath.Join(".", "docs", "backend-api-prd", "ROUTE_MAP.md")
 	if _, err := os.Stat(routeMapPath); err == nil {
@@ -666,6 +680,44 @@ func (a *App) Close(ctx context.Context) error {
 	}
 	location.Close()
 	return nil
+}
+
+func adminCORS(rawOrigins string) gin.HandlerFunc {
+	allowedOrigins := parseAdminCORSOrigins(rawOrigins)
+	return func(c *gin.Context) {
+		origin := strings.TrimSpace(c.GetHeader("Origin"))
+		if origin != "" && isAdminCORSOriginAllowed(origin, allowedOrigins) {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+			c.Header("Access-Control-Allow-Credentials", "true")
+			c.Header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Key")
+			c.Header("Access-Control-Allow-Methods", "GET, PATCH, OPTIONS")
+		}
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
+}
+
+func parseAdminCORSOrigins(raw string) map[string]struct{} {
+	origins := make(map[string]struct{})
+	for _, part := range strings.Split(raw, ",") {
+		origin := strings.TrimSpace(part)
+		if origin != "" {
+			origins[origin] = struct{}{}
+		}
+	}
+	return origins
+}
+
+func isAdminCORSOriginAllowed(origin string, allowedOrigins map[string]struct{}) bool {
+	if _, ok := allowedOrigins["*"]; ok {
+		return true
+	}
+	_, ok := allowedOrigins[origin]
+	return ok
 }
 
 func registerSpecs(engine *gin.Engine, specs []routes.Spec, jwtSvc *authservice.JWTService) {

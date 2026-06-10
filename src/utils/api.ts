@@ -6,6 +6,8 @@ import {
 } from './food-display-image'
 import { extraPkgUrl } from './subpackage-extra'
 
+declare const __RECENT_REQUEST_TRACE_LIMIT__: string
+
 function readInjectedString(
   getter: () => string,
   fallback = ''
@@ -28,10 +30,24 @@ export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
   ''
 )
+const DEFAULT_RECENT_REQUEST_TRACE_LIMIT = 50
+const MAX_RECENT_REQUEST_TRACE_LIMIT = 50
+
+function readInjectedNumber(getter: () => string | number, fallback: number): number {
+  const raw = readInjectedString(() => String(getter()), String(fallback))
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+export const RECENT_REQUEST_TRACE_LIMIT = Math.min(
+  MAX_RECENT_REQUEST_TRACE_LIMIT,
+  Math.max(0, readInjectedNumber(() => __RECENT_REQUEST_TRACE_LIMIT__, DEFAULT_RECENT_REQUEST_TRACE_LIMIT))
+)
 
 // 仅开发构建打印，避免真机/生产包无意义日志（且减少控制台副作用）
 if (process.env.NODE_ENV !== 'production') {
   console.log('[API] 构建时 API_BASE_URL:', API_BASE_URL)
+  console.log('[API] 最近请求诊断条数:', RECENT_REQUEST_TRACE_LIMIT)
 }
 
 function isNgrokFreeDomain(url: string): boolean {
@@ -1999,6 +2015,107 @@ function extractHostNameFromHeaders(headers: Record<string, any> | undefined): s
   return getHeaderValueIgnoreCase(headers, 'x-host-name')
 }
 
+const RECENT_REQUEST_TRACE_STORAGE_KEY = 'recent_request_traces_v1'
+
+export interface RecentRequestTrace {
+  method: string
+  path: string
+  statusCode: number
+  durationMs: number
+  startedAt: string
+  traceId?: string
+  requestId?: string
+  hostName?: string
+  errorMessage?: string
+}
+
+function normalizeRequestPath(url: string): string {
+  const raw = String(url || '').trim()
+  if (!raw) return '/'
+  if (raw.startsWith(API_BASE_URL)) {
+    return raw.slice(API_BASE_URL.length) || '/'
+  }
+  try {
+    const parsed = new URL(raw)
+    return `${parsed.pathname}${parsed.search}` || '/'
+  } catch {
+    return raw.startsWith('/') ? raw : `/${raw}`
+  }
+}
+
+function trimRecentRequestTraces(items: RecentRequestTrace[]): RecentRequestTrace[] {
+  if (RECENT_REQUEST_TRACE_LIMIT <= 0) return []
+  return items.slice(-RECENT_REQUEST_TRACE_LIMIT)
+}
+
+let recentRequestTraces: RecentRequestTrace[] | null = null
+
+function loadRecentRequestTraces(): RecentRequestTrace[] {
+  if (recentRequestTraces) return recentRequestTraces
+  try {
+    const cached = Taro.getStorageSync(RECENT_REQUEST_TRACE_STORAGE_KEY)
+    recentRequestTraces = Array.isArray(cached) ? trimRecentRequestTraces(cached as RecentRequestTrace[]) : []
+  } catch {
+    recentRequestTraces = []
+  }
+  return recentRequestTraces
+}
+
+function persistRecentRequestTraces(items: RecentRequestTrace[]): void {
+  try {
+    Taro.setStorageSync(RECENT_REQUEST_TRACE_STORAGE_KEY, items)
+  } catch (error) {
+    console.warn('[API TRACE] 保存最近请求诊断失败', error)
+  }
+}
+
+function recordRecentRequestTrace(entry: RecentRequestTrace): void {
+  if (RECENT_REQUEST_TRACE_LIMIT <= 0) return
+  const next = trimRecentRequestTraces([...loadRecentRequestTraces(), entry])
+  recentRequestTraces = next
+  persistRecentRequestTraces(next)
+}
+
+export function getRecentRequestTraces(limit = RECENT_REQUEST_TRACE_LIMIT): RecentRequestTrace[] {
+  const normalizedLimit = Math.min(RECENT_REQUEST_TRACE_LIMIT, Math.max(0, Math.floor(limit)))
+  if (normalizedLimit <= 0) return []
+  return loadRecentRequestTraces().slice(-normalizedLimit)
+}
+
+function recordResponseTrace(params: {
+  url: string
+  method?: string
+  startedAt: number
+  response?: Taro.request.SuccessCallbackResult<any>
+  error?: unknown
+}): void {
+  const { url, method, startedAt, response, error } = params
+  const headers = response?.header as Record<string, any> | undefined
+  recordRecentRequestTrace({
+    method: String(method || 'GET').toUpperCase(),
+    path: normalizeRequestPath(url),
+    statusCode: Number(response?.statusCode || 0),
+    durationMs: Math.max(0, Date.now() - startedAt),
+    startedAt: new Date(startedAt).toISOString(),
+    traceId: extractTraceIdFromHeaders(headers),
+    requestId: extractRequestIdFromHeaders(headers),
+    hostName: extractHostNameFromHeaders(headers),
+    errorMessage: error instanceof Error ? error.message.slice(0, 160) : undefined,
+  })
+}
+
+function getCurrentPagePath(): string {
+  try {
+    const pages = Taro.getCurrentPages()
+    const current = pages[pages.length - 1] as { route?: string; options?: Record<string, string> } | undefined
+    if (!current?.route) return ''
+    const query = current.options ? new URLSearchParams(current.options).toString() : ''
+    return query ? `/${current.route}?${query}` : `/${current.route}`
+  } catch {
+    return ''
+  }
+}
+
 function formatUserErrorWithTrace(message: string, traceId?: string): string {
   const msg = (message || '').trim() || '网络错误，请稍后重试'
   const normalizedTraceId = normalizeTraceId(traceId)
@@ -3521,15 +3638,34 @@ export async function authenticatedRequest(
   }
 
   console.log(`[DEBUG AUTH] 请求开始: ${url}`)
-  const res = await Taro.request({
-    url: `${API_BASE_URL}${url}`,
-    ...options,
-    header: withNgrokBypassHeaders({
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(options.header || {})
+  const requestUrl = `${API_BASE_URL}${url}`
+  const startedAt = Date.now()
+  let res: Taro.request.SuccessCallbackResult<any>
+  try {
+    res = await Taro.request({
+      url: requestUrl,
+      ...options,
+      header: withNgrokBypassHeaders({
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(options.header || {})
+      })
     })
-  })
+    recordResponseTrace({
+      url,
+      method: String(options.method || 'GET'),
+      startedAt,
+      response: res,
+    })
+  } catch (error) {
+    recordResponseTrace({
+      url,
+      method: String(options.method || 'GET'),
+      startedAt,
+      error,
+    })
+    throw error
+  }
   console.log(`[DEBUG AUTH] 请求完成: ${url}, statusCode=${res.statusCode}, dataType=${typeof res.data}, dataKeys=${res.data && typeof res.data === 'object' ? Object.keys(res.data).join(',') : 'N/A'}`)
 
   if (res.statusCode === 401 || res.statusCode === 403) {
@@ -5944,4 +6080,60 @@ export async function getUserLocation(): Promise<LocationInfo> {
     throw new Error((response.data as any)?.message || '获取定位失败')
   }
   return unwrapResponse<LocationInfo>(response) || { country: '', province: '', city: '' }
+}
+
+
+export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
+
+export interface SubmitFeedbackRequest {
+  category: FeedbackCategory
+  content: string
+  contact?: string
+  attachRecentRequests?: boolean
+}
+
+export interface SubmitFeedbackResponse {
+  id: string
+  message: string
+}
+
+function getClientInfo(): Record<string, unknown> {
+  try {
+    const accountInfo = Taro.getAccountInfoSync?.()
+    const systemInfo = Taro.getSystemInfoSync?.()
+    return {
+      app_version: readInjectedString(() => __APP_VERSION__, ''),
+      env_version: accountInfo?.miniProgram?.envVersion,
+      platform: systemInfo?.platform,
+      system: systemInfo?.system,
+      model: systemInfo?.model,
+      SDKVersion: systemInfo?.SDKVersion,
+    }
+  } catch {
+    return { app_version: readInjectedString(() => __APP_VERSION__, '') }
+  }
+}
+
+export async function submitFeedback(input: SubmitFeedbackRequest): Promise<SubmitFeedbackResponse> {
+  const content = input.content.trim()
+  if (!content) {
+    throw new Error('请填写反馈内容')
+  }
+  const response = await authenticatedRequest('/api/feedback', {
+    method: 'POST',
+    data: {
+      category: input.category,
+      content,
+      contact: input.contact?.trim() || undefined,
+      page_path: getCurrentPagePath(),
+      app_version: readInjectedString(() => __APP_VERSION__, ''),
+      client_info: getClientInfo(),
+      recent_requests: input.attachRecentRequests === false ? [] : getRecentRequestTraces(),
+    },
+    timeout: 10000,
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.message || '提交反馈失败')
+  }
+  return response.data as SubmitFeedbackResponse
 }
