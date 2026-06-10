@@ -24,6 +24,18 @@ func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 	}), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&domain.PublicFoodItem{}, &analyzedomain.AnalysisTask{}))
+	require.NoError(t, db.Exec(`CREATE TABLE schools (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		province TEXT,
+		city TEXT,
+		level TEXT,
+		is_985 INTEGER,
+		is_211 INTEGER,
+		status TEXT NOT NULL DEFAULT 'active',
+		logo_url TEXT,
+		created_at TEXT
+	)`).Error)
 	return db
 }
 
@@ -212,6 +224,82 @@ func TestPublicFoodRepo_ListPublishedCampusIncludesAnalysisStatus(t *testing.T) 
 	require.Empty(t, pending.AnalysisError)
 }
 
+func TestPublicFoodRepo_ListPublishedCampusUsesRedirectTaskStatus(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	r := NewPublicFoodRepo(db)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	planTaskID := "task-campus-plan-done"
+	aggregateTaskID := "task-campus-aggregate-pending"
+	require.NoError(t, db.Create(&analyzedomain.AnalysisTask{
+		ID:       aggregateTaskID,
+		UserID:   "user-1",
+		TaskType: "precision_aggregate",
+		Status:   "pending",
+	}).Error)
+	require.NoError(t, db.Create(&analyzedomain.AnalysisTask{
+		ID:       planTaskID,
+		UserID:   "user-1",
+		TaskType: "precision_plan",
+		Status:   "done",
+		Result:   map[string]any{"redirectTaskId": aggregateTaskID},
+	}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:             "campus-redirect",
+		UserID:         "user-1",
+		FoodName:       "待聚合套餐",
+		Status:         "published",
+		Type:           "campus",
+		IsCampusFood:   true,
+		AnalysisTaskID: &planTaskID,
+		SchoolName:     "北京大学",
+		CanteenName:    "学一食堂",
+		PublishedAt:    &now,
+		CreatedAt:      &now,
+	}).Error)
+
+	rows, err := r.ListPublished(ctx, ListFilter{Type: "campus", Limit: 10})
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "pending", rows[0].AnalysisStatus)
+	item, err := r.GetItem(ctx, "campus-redirect")
+	require.NoError(t, err)
+	require.NotNil(t, item)
+	require.Equal(t, "pending", item.AnalysisStatus)
+}
+
+func TestPublicFoodRepo_UpdateNutritionFromAnalysisUsesItemCalorieFallback(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	r := NewPublicFoodRepo(db)
+	ctx := context.Background()
+	item := &domain.PublicFoodItem{
+		ID:           "campus-calorie-fallback",
+		UserID:       "user-1",
+		FoodName:     "鸡腿饭",
+		Status:       "published",
+		Type:         "campus",
+		IsCampusFood: true,
+	}
+	require.NoError(t, r.CreateItem(ctx, item))
+
+	err := r.UpdateNutritionFromAnalysis(ctx, item.ID, map[string]any{
+		"description": "鸡腿饭",
+		"items": []map[string]any{
+			{"name": "鸡腿", "calorie": 240.0, "protein": 28.0, "carbs": 0.0, "fat": 12.0},
+			{"name": "米饭", "calories": 260.0, "protein": 5.0, "carbohydrates": 56.0, "fat": 0.6},
+		},
+	})
+
+	require.NoError(t, err)
+	var saved domain.PublicFoodItem
+	require.NoError(t, db.Where("id = ?", item.ID).First(&saved).Error)
+	require.Equal(t, 500.0, saved.TotalCalories)
+	require.Equal(t, 33.0, saved.TotalProtein)
+	require.Equal(t, 56.0, saved.TotalCarbs)
+	require.InEpsilon(t, 12.6, saved.TotalFat, 0.001)
+}
+
 func TestPublicFoodRepo_ListPublishedCampusFilters(t *testing.T) {
 	db := setupPublicFoodRepoTestDB(t)
 	seedPublicFoodItems(t, db)
@@ -271,6 +359,22 @@ func TestPublicFoodRepo_ListPublishedCampusSorts(t *testing.T) {
 			require.Equal(t, tt.secondID, rows[1].ID)
 		})
 	}
+}
+
+func TestPublicFoodRepo_GetItemReturnsSchoolLogoURL(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	seedPublicFoodItems(t, db)
+	r := NewPublicFoodRepo(db)
+	ctx := context.Background()
+
+	// Seed a school with logo_url matching the campus-1 item's school_name
+	require.NoError(t, db.Exec(`INSERT INTO schools (id, name, status, logo_url) VALUES ('sch-1', '北京大学', 'active', 'school-badges/sch-1/abc.png')`).Error)
+
+	item, err := r.GetItem(ctx, "campus-1")
+	require.NoError(t, err)
+	require.NotNil(t, item)
+	require.Equal(t, "北京大学", item.SchoolName)
+	require.Equal(t, "school-badges/sch-1/abc.png", item.SchoolLogoURL)
 }
 
 func TestPublicFoodRepo_ListPublishedCampusLimitOffset(t *testing.T) {

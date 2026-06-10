@@ -55,6 +55,7 @@ type PublicFoodItem struct {
 	PortionDescription string     `gorm:"column:portion_description" json:"portion_description,omitempty"`
 	IsCampusHighlight  bool       `gorm:"column:is_campus_highlight" json:"is_campus_highlight"`
 	CampusLocationText string     `gorm:"column:campus_location_text" json:"campus_location_text,omitempty"`
+	SchoolLogoURL      string     `gorm:"column:school_logo_url;->" json:"school_logo_url,omitempty"`
 	AnalysisStatus     string     `gorm:"column:analysis_status;->" json:"analysis_status,omitempty"`
 	AnalysisError      string     `gorm:"column:analysis_error;->" json:"analysis_error,omitempty"`
 }
@@ -129,6 +130,7 @@ type CampusRelatedFeedItem struct {
 	SchoolName      string     `json:"school_name,omitempty"`
 	CanteenName     string     `json:"canteen_name,omitempty"`
 	CampusLocation  string     `json:"campus_location,omitempty"`
+	SchoolLogoURL   string     `json:"school_logo_url,omitempty"`
 	TotalCalories   float64    `json:"total_calories"`
 	TotalProtein    float64    `json:"total_protein"`
 	Price           float64    `json:"price,omitempty"`

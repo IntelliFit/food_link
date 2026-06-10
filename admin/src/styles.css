@@ -56,7 +56,112 @@ input:focus, select:focus { border-color: rgb(0 188 125 / 48%); box-shadow: 0 0 
 .ambient-a { top: 90px; left: 42px; width: 120px; height: 120px; border-radius: 40px; background: rgb(0 188 125 / 12%); transform: rotate(18deg); }
 .ambient-b { right: 60px; bottom: 120px; width: 160px; height: 160px; border-radius: 50%; background: rgb(92 158 212 / 12%); }
 
-.admin-shell { position: relative; z-index: 1; width: min(1480px, calc(100vw - 48px)); margin: 0 auto; padding: 28px 0 42px; }
+.boot-screen {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  gap: 14px;
+  color: var(--muted);
+}
+
+.login-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 32px;
+}
+
+.login-card {
+  width: min(460px, calc(100vw - 48px));
+  padding: 34px;
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 32px;
+  background: linear-gradient(135deg, rgb(255 255 255 / 94%), rgb(255 255 255 / 72%));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.login-card h1 { margin-top: 28px; font-size: 38px; }
+.login-card p { color: var(--muted); line-height: 1.75; }
+.login-card form { display: grid; gap: 16px; margin-top: 24px; }
+.login-card label { display: grid; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 700; }
+
+.dashboard-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 276px minmax(0, 1fr);
+  gap: 22px;
+  width: min(1540px, calc(100vw - 32px));
+  min-height: calc(100vh - 32px);
+  margin: 0 auto;
+  padding: 16px 0;
+}
+
+.sidebar {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: calc(100vh - 32px);
+  padding: 20px;
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 30px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 92%), rgb(255 255 255 / 70%));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 6px 4px 22px; }
+.sidebar-brand strong { display: block; font-size: 18px; }
+.sidebar-brand span:last-child { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+.menu-list { display: grid; align-content: start; gap: 8px; }
+.menu-item {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  width: 100%;
+  min-height: auto;
+  padding: 14px 16px;
+  border-radius: 18px;
+  text-align: left;
+  background: transparent;
+}
+.menu-item span { font-weight: 800; }
+.menu-item small { color: var(--muted); }
+.menu-item.active { border-color: rgb(0 188 125 / 30%); background: rgb(0 188 125 / 10%); color: #0f766e; }
+.menu-item:disabled { opacity: 0.58; }
+.sidebar-footer { border-top: 1px solid var(--line); padding-top: 16px; }
+.sidebar-footer button { width: 100%; }
+
+.content-shell { min-width: 0; padding-bottom: 30px; }
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px;
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 32px;
+  background: linear-gradient(135deg, rgb(255 255 255 / 92%), rgb(255 255 255 / 66%));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.api-pill {
+  align-self: flex-start;
+  max-width: 340px;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 75%);
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 
 .hero {
   padding: 28px;
@@ -74,19 +179,7 @@ input:focus, select:focus { border-color: rgb(0 188 125 / 48%); box-shadow: 0 0 
 h1 { margin: 0; font-size: 44px; line-height: 1.1; letter-spacing: -0.04em; }
 .hero-desc { max-width: 720px; margin: 16px 0 0; color: var(--muted); font-size: 16px; line-height: 1.75; }
 
-.auth-card {
-  display: grid;
-  grid-template-columns: 270px auto;
-  gap: 12px;
-  align-items: end;
-  min-width: 470px;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  background: rgb(249 250 251 / 72%);
-}
-
-.auth-card label, .toolbar label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 650; }
+.toolbar label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 650; }
 .api-base { grid-column: 1 / -1; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 
 .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 18px; }

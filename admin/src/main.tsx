@@ -1,8 +1,9 @@
-import { StrictMode, useEffect, useMemo, useState } from 'react'
+import { StrictMode, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles.css'
 
 const API_BASE_URL = (import.meta.env.VITE_ADMIN_API_BASE_URL || '').replace(/\/+$/, '')
+const ACTIVE_MENU = 'feedback'
 
 type FeedbackStatus = 'open' | 'processing' | 'resolved' | 'closed'
 type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
@@ -69,7 +70,8 @@ const statusLabels: Record<FeedbackStatus, string> = {
 }
 
 function App() {
-  const [adminKey, setAdminKey] = useState(() => localStorage.getItem('feedback_admin_key') || '')
+  const [authenticated, setAuthenticated] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [status, setStatus] = useState('all')
@@ -86,9 +88,16 @@ function App() {
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
   useEffect(() => {
-    void loadList()
+    void checkSession()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, category, status])
+  }, [])
+
+  useEffect(() => {
+    if (authenticated) {
+      void loadList()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated, page, limit, category, status])
 
   useEffect(() => {
     if (!toast) return
@@ -102,7 +111,6 @@ function App() {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        ...(adminKey ? { 'X-Admin-Key': adminKey } : {}),
         ...(options.headers || {}),
       },
     })
@@ -111,6 +119,38 @@ function App() {
       throw new Error(body.message || `请求失败 ${res.status}`)
     }
     return body.data as T
+  }
+
+  async function checkSession() {
+    setCheckingSession(true)
+    try {
+      await request<{ authenticated: boolean }>('/api/admin/session')
+      setAuthenticated(true)
+    } catch {
+      setAuthenticated(false)
+    } finally {
+      setCheckingSession(false)
+    }
+  }
+
+  async function login(username: string, password: string) {
+    await request<{ authenticated: boolean }>('/api/admin/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    })
+    setAuthenticated(true)
+    setToast('登录成功')
+  }
+
+  async function logout() {
+    try {
+      await request<{ authenticated: boolean }>('/api/admin/logout', { method: 'POST' })
+    } finally {
+      setAuthenticated(false)
+      setItems([])
+      setSelectedId('')
+      setToast('已退出登录')
+    }
   }
 
   async function loadList(nextPage = page) {
@@ -153,113 +193,195 @@ function App() {
     }
   }
 
-  function applyAdminKey() {
-    localStorage.setItem('feedback_admin_key', adminKey.trim())
-    setToast('管理员密钥已应用')
-    void loadList(1)
-  }
-
   function runSearch() {
     setPage(1)
     void loadList(1)
+  }
+
+  if (checkingSession) {
+    return (
+      <>
+        <div className="ambient ambient-a" />
+        <div className="ambient ambient-b" />
+        <div className="boot-screen">
+          <div className="brand-mark"><span className="brand-dot" />Food Link Admin</div>
+          <p>正在检查管理员登录态...</p>
+        </div>
+      </>
+    )
+  }
+
+  if (!authenticated) {
+    return (
+      <>
+        <div className="ambient ambient-a" />
+        <div className="ambient ambient-b" />
+        <LoginPage onLogin={login} apiBase={API_BASE_URL || '同源'} toast={toast} setToast={setToast} />
+      </>
+    )
   }
 
   return (
     <>
       <div className="ambient ambient-a" />
       <div className="ambient ambient-b" />
-      <main className="admin-shell">
-        <header className="hero">
-          <div className="brand-mark"><span className="brand-dot" />Food Link Admin</div>
-          <div className="hero-main">
+      <div className="dashboard-shell">
+        <Sidebar activeMenu={ACTIVE_MENU} onLogout={() => void logout()} />
+        <main className="content-shell">
+          <header className="page-header">
             <div>
               <p className="eyebrow">用户声音 / Trace 诊断</p>
-              <h1>意见反馈管理</h1>
+              <h1>意见反馈</h1>
               <p className="hero-desc">集中查看小程序用户反馈，快速复制 traceId、定位最近请求链路，并跟进处理状态。</p>
             </div>
-            <form className="auth-card" onSubmit={(event) => { event.preventDefault(); applyAdminKey() }}>
-              <label>管理员密钥
-                <input value={adminKey} onChange={(event) => setAdminKey(event.target.value)} type="password" placeholder="可留空使用测试后台登录态" />
-              </label>
-              <button type="submit">应用密钥</button>
-              <span className="api-base">API: {API_BASE_URL || '同源'}</span>
-            </form>
-          </div>
-        </header>
+            <div className="api-pill">API: {API_BASE_URL || '同源'}</div>
+          </header>
 
-        <section className="stats-grid">
-          <Stat label="当前筛选" value={String(total)} foot="条反馈" />
-          <Stat label="本页展示" value={String(items.length)} foot={loading ? '加载中' : '条记录'} />
-          <Stat label="最近提交" value={items[0] ? formatTime(items[0].created_at, true) : '-'} foot="按提交时间倒序" />
-        </section>
+          <section className="stats-grid">
+            <Stat label="当前筛选" value={String(total)} foot="条反馈" />
+            <Stat label="本页展示" value={String(items.length)} foot={loading ? '加载中' : '条记录'} />
+            <Stat label="最近提交" value={items[0] ? formatTime(items[0].created_at, true) : '-'} foot="按提交时间倒序" />
+          </section>
 
-        <section className="toolbar">
-          <label className="wide">搜索
-            <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }} placeholder="反馈内容 / 联系方式 / traceId / requestId / userId" />
-          </label>
-          <label>类型
-            <select value={category} onChange={(event) => { setCategory(event.target.value); setPage(1) }}>
-              <option value="all">全部类型</option>
-              <option value="bug">问题反馈</option>
-              <option value="suggestion">功能建议</option>
-              <option value="experience">使用体验</option>
-              <option value="other">其他</option>
-            </select>
-          </label>
-          <label>状态
-            <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }}>
-              <option value="all">全部状态</option>
-              <option value="open">待处理</option>
-              <option value="processing">处理中</option>
-              <option value="resolved">已解决</option>
-              <option value="closed">已关闭</option>
-            </select>
-          </label>
-          <label>每页
-            <select value={limit} onChange={(event) => { setLimit(Number(event.target.value)); setPage(1) }}>
-              <option value="20">20</option>
-              <option value="30">30</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-            </select>
-          </label>
-          <button className="primary" type="button" onClick={runSearch}>刷新</button>
-        </section>
+          <section className="toolbar">
+            <label className="wide">搜索
+              <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }} placeholder="反馈内容 / 联系方式 / traceId / requestId / userId" />
+            </label>
+            <label>类型
+              <select value={category} onChange={(event) => { setCategory(event.target.value); setPage(1) }}>
+                <option value="all">全部类型</option>
+                <option value="bug">问题反馈</option>
+                <option value="suggestion">功能建议</option>
+                <option value="experience">使用体验</option>
+                <option value="other">其他</option>
+              </select>
+            </label>
+            <label>状态
+              <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }}>
+                <option value="all">全部状态</option>
+                <option value="open">待处理</option>
+                <option value="processing">处理中</option>
+                <option value="resolved">已解决</option>
+                <option value="closed">已关闭</option>
+              </select>
+            </label>
+            <label>每页
+              <select value={limit} onChange={(event) => { setLimit(Number(event.target.value)); setPage(1) }}>
+                <option value="20">20</option>
+                <option value="30">30</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+            <button className="primary" type="button" onClick={runSearch}>刷新</button>
+          </section>
 
-        <section className="statusline">
-          <span>{message}</span>
-          <div className="pager">
-            <button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>上一页</button>
-            <span>第 {page} / {totalPages} 页</span>
-            <button disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>下一页</button>
-          </div>
-        </section>
+          <section className="statusline">
+            <span>{message}</span>
+            <div className="pager">
+              <button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>上一页</button>
+              <span>第 {page} / {totalPages} 页</span>
+              <button disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>下一页</button>
+            </div>
+          </section>
 
-        <section className="workspace">
-          <div className="feedback-list">
-            {items.length === 0 ? (
-              <Empty title={loading ? '加载中' : '没有反馈'} desc={loading ? '正在读取反馈列表。' : '换个筛选条件，或等待用户提交新的反馈。'} />
-            ) : items.map((item) => (
-              <FeedbackCard
-                key={item.id}
-                item={item}
-                selected={item.id === selected?.id}
-                onClick={() => setSelectedId(item.id)}
-                onCopy={(text) => void copyText(text, setToast)}
-              />
-            ))}
-          </div>
-          <aside className="detail-panel">
-            {selected ? (
-              <FeedbackDetail item={selected} onStatusChange={updateStatus} onCopy={(text) => void copyText(text, setToast)} />
-            ) : (
-              <Empty title="选择一条反馈" desc="右侧会展示用户、联系方式、提交 trace、客户端信息和最近请求列表。" />
-            )}
-          </aside>
-        </section>
-      </main>
+          <section className="workspace">
+            <div className="feedback-list">
+              {items.length === 0 ? (
+                <Empty title={loading ? '加载中' : '没有反馈'} desc={loading ? '正在读取反馈列表。' : '换个筛选条件，或等待用户提交新的反馈。'} />
+              ) : items.map((item) => (
+                <FeedbackCard
+                  key={item.id}
+                  item={item}
+                  selected={item.id === selected?.id}
+                  onClick={() => setSelectedId(item.id)}
+                  onCopy={(text) => void copyText(text, setToast)}
+                />
+              ))}
+            </div>
+            <aside className="detail-panel">
+              {selected ? (
+                <FeedbackDetail item={selected} onStatusChange={updateStatus} onCopy={(text) => void copyText(text, setToast)} />
+              ) : (
+                <Empty title="选择一条反馈" desc="右侧会展示用户、联系方式、提交 trace、客户端信息和最近请求列表。" />
+              )}
+            </aside>
+          </section>
+        </main>
+      </div>
       <div className={`toast ${toast ? 'show' : ''}`}>{toast}</div>
     </>
+  )
+}
+
+function LoginPage({ onLogin, apiBase, toast, setToast }: { onLogin: (username: string, password: string) => Promise<void>; apiBase: string; toast: string; setToast: (value: string) => void }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!username.trim() || !password.trim()) {
+      setToast('请输入管理员账号和密码')
+      return
+    }
+    setSubmitting(true)
+    try {
+      await onLogin(username, password)
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : '登录失败')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="login-card">
+        <div className="brand-mark"><span className="brand-dot" />Food Link Admin</div>
+        <h1>管理员登录</h1>
+        <p>登录后进入后台管理系统。管理员账号只能通过后端命令行创建，不支持网页或 API 注册。</p>
+        <form onSubmit={submit}>
+          <label>管理员账号
+            <input value={username} onChange={(event) => setUsername(event.target.value)} autoFocus autoComplete="username" placeholder="请输入管理员账号" />
+          </label>
+          <label>密码
+            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" placeholder="请输入密码" />
+          </label>
+          <button className="primary" type="submit" disabled={submitting}>{submitting ? '登录中...' : '登录'}</button>
+        </form>
+        <span className="api-base">API: {apiBase}</span>
+      </section>
+      <div className={`toast ${toast ? 'show' : ''}`}>{toast}</div>
+    </main>
+  )
+}
+
+function Sidebar({ activeMenu, onLogout }: { activeMenu: string; onLogout: () => void }) {
+  const menus = [
+    { id: 'overview', label: '总览', desc: '数据概览', disabled: true },
+    { id: 'feedback', label: '意见反馈', desc: '用户反馈与 trace' },
+    { id: 'packaged-foods', label: '包装食品', desc: '待接入独立页面', disabled: true },
+    { id: 'settings', label: '系统设置', desc: '待配置', disabled: true },
+  ]
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-brand">
+        <span className="brand-dot" />
+        <div><strong>Food Link</strong><span>Admin Console</span></div>
+      </div>
+      <nav className="menu-list">
+        {menus.map((menu) => (
+          <button key={menu.id} type="button" className={`menu-item ${activeMenu === menu.id ? 'active' : ''}`} disabled={menu.disabled}>
+            <span>{menu.label}</span>
+            <small>{menu.desc}</small>
+          </button>
+        ))}
+      </nav>
+      <div className="sidebar-footer">
+        <button type="button" onClick={onLogout}>退出登录</button>
+      </div>
+    </aside>
   )
 }
 

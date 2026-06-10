@@ -5432,6 +5432,8 @@ export interface PublicFoodLibraryItem {
   portion_description?: string | null
   /** 校园位置展示文案 */
   campus_location_text?: string | null
+  /** 学校校徽图片 URL */
+  school_logo_url?: string | null
   /** 每元蛋白质（g/元） */
   protein_per_yuan?: number
   /** 每 100 kcal 价格（元/100kcal） */
@@ -5453,6 +5455,7 @@ export interface CampusRelatedFeedItem {
   school_name?: string | null
   canteen_name?: string | null
   campus_location?: string | null
+  school_logo_url?: string | null
   total_calories: number
   total_protein: number
   price?: number | null
@@ -6035,6 +6038,7 @@ export interface SchoolItem {
   name: string
   province?: string
   city?: string
+  logo_url?: string
 }
 
 export async function searchSchools(keyword: string, province?: string, limit = 20): Promise<SchoolItem[]> {

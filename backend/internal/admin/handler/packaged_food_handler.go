@@ -3,13 +3,11 @@ package handler
 import (
 	"context"
 	"log/slog"
-	"net/http"
 	"strconv"
 	"strings"
 
 	"food_link/backend/internal/admin/repo"
 	"food_link/backend/internal/admin/service"
-	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/foodrecord/domain"
 	"food_link/backend/pkg/logger"
@@ -24,37 +22,11 @@ type PackagedFoodService interface {
 }
 
 type PackagedFoodHandler struct {
-	svc      PackagedFoodService
-	adminKey string
+	svc PackagedFoodService
 }
 
-func NewPackagedFoodHandler(svc PackagedFoodService, adminKey string) *PackagedFoodHandler {
-	return &PackagedFoodHandler{svc: svc, adminKey: strings.TrimSpace(adminKey)}
-}
-
-func (h *PackagedFoodHandler) AdminAuth() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if _, err := c.Cookie("test_backend_token"); err == nil {
-			c.Next()
-			return
-		}
-		expected := h.adminKey
-		provided := strings.TrimSpace(c.GetHeader("X-Admin-Key"))
-		if provided == "" {
-			provided = strings.TrimSpace(c.Query("admin_key"))
-		}
-		if expected != "" && provided == expected {
-			c.Next()
-			return
-		}
-		if expected == "" {
-			response.Error(c, &commonerrors.AppError{Code: 20001, Message: "请先登录测试后台，或配置 ADMIN_API_KEY 后使用管理员密钥", HTTPStatus: http.StatusUnauthorized})
-			c.Abort()
-			return
-		}
-		response.Error(c, &commonerrors.AppError{Code: 20003, Message: "管理员密钥无效", HTTPStatus: http.StatusForbidden})
-		c.Abort()
-	}
+func NewPackagedFoodHandler(svc PackagedFoodService) *PackagedFoodHandler {
+	return &PackagedFoodHandler{svc: svc}
 }
 
 func (h *PackagedFoodHandler) List(c *gin.Context) {

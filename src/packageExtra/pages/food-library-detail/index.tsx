@@ -95,6 +95,18 @@ function isAnalysisFailedItem(item: PublicFoodLibraryItem): boolean {
   return status === 'failed' || status === 'timed_out'
 }
 
+function hasNutrition(item: PublicFoodLibraryItem): boolean {
+  const items = item.items || []
+  return ((item.total_calories || 0) > 0 || (item.total_protein || 0) > 0 || items.some(food => {
+    const nutrients = food.nutrients
+    return !!nutrients && ((nutrients.calories || 0) > 0 || (nutrients.protein || 0) > 0)
+  }))
+}
+
+function needsNutritionUpdate(item: PublicFoodLibraryItem): boolean {
+  return isCampusFoodItem(item) && !isAnalyzingItem(item) && !isAnalysisFailedItem(item) && !hasNutrition(item)
+}
+
 function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
   return item.type === 'campus' || !!item.is_campus_food
 }
@@ -302,6 +314,10 @@ function FoodLibraryDetailPage() {
       Taro.showToast({ title: '分析失败，暂不能记录', icon: 'none' })
       return
     }
+    if (needsNutritionUpdate(item)) {
+      Taro.showToast({ title: '营养信息待更新，暂不能记录', icon: 'none' })
+      return
+    }
     Taro.setStorageSync('campus_quick_record_item', JSON.stringify(item))
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-manual/index')}?campus_quick=1` })
   }
@@ -309,7 +325,7 @@ function FoodLibraryDetailPage() {
   // 提交修正
   const handleCorrection = async () => {
     if (!item) return
-    const { confirm, content } = await Taro.showModal({
+    const modalResult = await Taro.showModal({
       title: '修正食物信息',
       content: '',
       editable: true,
@@ -317,7 +333,9 @@ function FoodLibraryDetailPage() {
       confirmText: '提交',
       cancelText: '取消',
       confirmColor: '#5cb896',
-    })
+    } as any)
+    const { confirm } = modalResult
+    const content = String((modalResult as any).content || '')
     if (!confirm || !content || !content.trim()) return
 
     Taro.showLoading({ title: '提交中...', mask: true })
@@ -493,6 +511,7 @@ function FoodLibraryDetailPage() {
   const campusPricePer100Kcal = campusMetrics.price_per_100_kcal ?? item.price_per_100_kcal
   const analyzing = isAnalyzingItem(item)
   const analysisFailed = isAnalysisFailedItem(item)
+  const nutritionPending = needsNutritionUpdate(item)
   const renderCampusMiniCard = (card: PublicFoodLibraryItem) => (
     <View key={card.id} className='campus-related-card' onClick={() => Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${card.id}&scene=campus` })}>
       {card.image_path ? (
@@ -501,7 +520,7 @@ function FoodLibraryDetailPage() {
         <View className='campus-related-image campus-related-image--empty'>暂无图片</View>
       )}
       <Text className='campus-related-title'>{card.food_name || '未命名菜品'}</Text>
-      <Text className='campus-related-meta'>{fmtPriceDisplay(card)} · {Math.round(card.total_calories || 0)} kcal</Text>
+      <Text className='campus-related-meta'>{fmtPriceDisplay(card)} · {hasNutrition(card) ? `${Math.round(card.total_calories || 0)} kcal` : '营养待更新'}</Text>
     </View>
   )
 
@@ -551,7 +570,7 @@ function FoodLibraryDetailPage() {
           <Text className='info-title'>{item.food_name || item.description || '健康餐'}</Text>
           <View className='info-calories-badge'>
             <FireOutlined size='16' />
-            <Text className='info-calories'>{item.total_calories.toFixed(0)} kcal</Text>
+            <Text className='info-calories'>{nutritionPending ? '营养待更新' : `${item.total_calories.toFixed(0)} kcal`}</Text>
           </View>
         </View>
         {item.description && (
@@ -562,19 +581,19 @@ function FoodLibraryDetailPage() {
         )}
         <View className='nutrients-row'>
           <View className='nutrient-item'>
-            <Text className='nutrient-value'>{item.total_calories.toFixed(0)}</Text>
+            <Text className='nutrient-value'>{nutritionPending ? '--' : item.total_calories.toFixed(0)}</Text>
             <Text className='nutrient-label'>热量 kcal</Text>
           </View>
           <View className='nutrient-item'>
-            <Text className='nutrient-value'>{item.total_protein.toFixed(1)}g</Text>
+            <Text className='nutrient-value'>{nutritionPending ? '--' : `${item.total_protein.toFixed(1)}g`}</Text>
             <Text className='nutrient-label'>蛋白质</Text>
           </View>
           <View className='nutrient-item'>
-            <Text className='nutrient-value'>{item.total_carbs.toFixed(1)}g</Text>
+            <Text className='nutrient-value'>{nutritionPending ? '--' : `${item.total_carbs.toFixed(1)}g`}</Text>
             <Text className='nutrient-label'>碳水</Text>
           </View>
           <View className='nutrient-item'>
-            <Text className='nutrient-value'>{item.total_fat.toFixed(1)}g</Text>
+            <Text className='nutrient-value'>{nutritionPending ? '--' : `${item.total_fat.toFixed(1)}g`}</Text>
             <Text className='nutrient-label'>脂肪</Text>
           </View>
         </View>
@@ -613,7 +632,16 @@ function FoodLibraryDetailPage() {
           <View className='campus-info-grid'>
             <View className='campus-info-cell'>
               <Text className='campus-info-label'>学校</Text>
-              <Text className='campus-info-value'>{item.school_name || '待补充'}</Text>
+              <View className='campus-info-value-row'>
+                {item.school_logo_url && (
+                  <Image
+                    className='campus-school-logo'
+                    src={item.school_logo_url.startsWith('http') ? item.school_logo_url : `https://cdn-food-icon.coachlink.fit/${item.school_logo_url}`}
+                    mode='aspectFill'
+                  />
+                )}
+                <Text className='campus-info-value'>{item.school_name || '待补充'}</Text>
+              </View>
             </View>
             <View className='campus-info-cell'>
               <Text className='campus-info-label'>食堂</Text>
@@ -644,6 +672,7 @@ function FoodLibraryDetailPage() {
           </View>
           <Text className='campus-price-date'>价格更新于 {formatDateOnly(item.price_collected_at)}</Text>
           {analyzing && <Text className='campus-analysis-tip'>营养信息正在分析中，完成后会自动补齐热量和宏量营养素。</Text>}
+          {nutritionPending && <Text className='campus-analysis-tip'>营养信息待更新，暂不建议一键记录。</Text>}
           {analysisFailed && <Text className='campus-analysis-tip campus-analysis-tip--error'>营养分析失败，暂不建议一键记录，可通过纠错入口反馈。</Text>}
               </>
             )
