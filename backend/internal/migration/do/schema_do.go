@@ -74,6 +74,19 @@ type UserFeedbackDO struct {
 
 func (UserFeedbackDO) TableName() string { return "user_feedback" }
 
+type AdminAccountDO struct {
+	ID           string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	Username     string     `gorm:"column:username;type:text;not null;uniqueIndex:idx_admin_accounts_username"`
+	DisplayName  string     `gorm:"column:display_name;type:text;not null;default:''"`
+	PasswordHash string     `gorm:"column:password_hash;type:text;not null"`
+	Status       string     `gorm:"column:status;type:text;not null;default:'active';index:idx_admin_accounts_status"`
+	LastLoginAt  *time.Time `gorm:"column:last_login_at;type:timestamptz"`
+	CreatedAt    time.Time  `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt    time.Time  `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (AdminAccountDO) TableName() string { return "admin_accounts" }
+
 type UserPetDO struct {
 	ID            string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID        string         `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_user_pets_user_id"`
@@ -1018,6 +1031,7 @@ func AllModels() []any {
 		&UserDO{},
 		&UserDailyNutritionTargetDO{},
 		&UserFeedbackDO{},
+		&AdminAccountDO{},
 		&UserPetDO{},
 		&UserPetEventDO{},
 		&UserPetDailyScoreDO{},
