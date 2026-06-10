@@ -7,6 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/storage"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,6 +27,7 @@ type testSchoolDO struct {
 	Level     *string    `gorm:"column:level;type:text"`
 	Is985     *bool      `gorm:"column:is_985;type:boolean;default:false"`
 	Is211     *bool      `gorm:"column:is_211;type:boolean;default:false"`
+	LogoURL   *string    `gorm:"column:logo_url;type:text"`
 	Status    string     `gorm:"column:status;type:text;not null;default:'active'"`
 	CreatedAt *time.Time `gorm:"column:created_at;type:datetime;default:current_timestamp"`
 }
@@ -74,7 +78,7 @@ func setupSchoolTestDB(t *testing.T) *gorm.DB {
 func setupSchoolRouter(db *gorm.DB) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	h := NewSchoolHandler(db)
+	h := NewSchoolHandler(db, nil)
 	r.GET("/api/schools", h.Search)
 	r.GET("/api/schools/provinces", h.Provinces)
 	return r
@@ -420,6 +424,69 @@ func TestSchoolHandler_Provinces(t *testing.T) {
 	assert.Contains(t, names, "上海市")
 	assert.Contains(t, names, "浙江省")
 	assert.NotContains(t, names, "")
+}
+
+func TestSchoolHandler_Search_LogoURLNormalization(t *testing.T) {
+	db := setupSchoolTestDB(t)
+
+	storageClient := storage.New(config.StorageConfig{
+		CDNFoodImagesBaseURL: "https://cdn.example.com/food",
+	})
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := NewSchoolHandler(db, storageClient)
+	r.GET("/api/schools", h.Search)
+
+	logoKey := "school-badges/school-1/abc123.png"
+	require.NoError(t, db.Table("schools").Where("id = ?", "school-1").Update("logo_url", logoKey).Error)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/schools?keyword=北京大学", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	resp := parseSchoolResponse(t, w.Body.Bytes())
+	assert.Equal(t, float64(0), resp["code"])
+
+	data, ok := resp["data"].([]any)
+	require.True(t, ok)
+	require.Len(t, data, 1)
+
+	school := data[0].(map[string]any)
+	assert.Equal(t, "北京大学", school["name"])
+	assert.Equal(t, "https://cdn.example.com/food/school-badges/school-1/abc123.png", school["logo_url"])
+}
+
+func TestSchoolHandler_Search_LogoURLAlreadyAbsolute(t *testing.T) {
+	db := setupSchoolTestDB(t)
+
+	storageClient := storage.New(config.StorageConfig{
+		CDNFoodImagesBaseURL: "https://cdn.example.com/food",
+	})
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := NewSchoolHandler(db, storageClient)
+	r.GET("/api/schools", h.Search)
+
+	absoluteURL := "https://other.cdn.com/badge.png"
+	require.NoError(t, db.Table("schools").Where("id = ?", "school-1").Update("logo_url", absoluteURL).Error)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/schools?keyword=北京大学", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	resp := parseSchoolResponse(t, w.Body.Bytes())
+	assert.Equal(t, float64(0), resp["code"])
+
+	data, ok := resp["data"].([]any)
+	require.True(t, ok)
+	require.Len(t, data, 1)
+
+	school := data[0].(map[string]any)
+	assert.Equal(t, absoluteURL, school["logo_url"])
 }
 
 func indexOf(slice []string, val string) int {

@@ -30,13 +30,13 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgb(6 45 37 / 78%) 0%, rgb(17 94 89 / 56%) 52%, rgb(0 0 0 / 34%) 100%);
-  z-index: 0;
+  background: linear-gradient(135deg, rgb(6 45 37 / 82%) 0%, rgb(17 94 89 / 58%) 52%, rgb(0 0 0 / 36%) 100%);
+  z-index: 1;
 }
 
 .campus-hero > View {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .campus-hero-eyebrow {
@@ -698,7 +698,7 @@
   }
 
   .campus-hero::before {
-    background: linear-gradient(135deg, rgb(4 23 21 / 82%) 0%, rgb(10 58 48 / 64%) 52%, rgb(0 0 0 / 50%) 100%);
+    background: linear-gradient(135deg, rgb(6 45 37 / 82%) 0%, rgb(17 94 89 / 58%) 52%, rgb(0 0 0 / 36%) 100%);
   }
 
   .campus-hero-upload {

@@ -249,7 +249,7 @@ func New(cfg *config.Config) (*App, error) {
 	recipeSvc.ConfigureWaterLogRecorder(bodyMetricsRepo)
 	recipeHandler := recipehandler.NewRecipeHandler(recipeSvc)
 
-	schoolHandler := schoolhandler.NewSchoolHandler(db)
+	schoolHandler := schoolhandler.NewSchoolHandler(db, storageClient)
 
 	// Expiry module DI
 	expiryRepo := expiryrepo.NewExpiryRepo(db)

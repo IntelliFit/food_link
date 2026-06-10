@@ -256,6 +256,21 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   background: linear-gradient(135deg, rgb(6 45 37 / 82%) 0%, rgb(17 94 89 / 58%) 52%, rgb(0 0 0 / 36%) 100%);
   box-shadow: 0 16rpx 34rpx rgb(17 94 89 / 22%);
 
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(135deg, rgb(6 45 37 / 82%) 0%, rgb(17 94 89 / 58%) 52%, rgb(0 0 0 / 36%) 100%);
+    pointer-events: none;
+  }
+
+  .home-reward-hint__main,
+  .home-reward-hint__actions,
+  .home-reward-hint__dots {
+    z-index: 2;
+  }
+
   .home-reward-hint__go {
     color: #0f766e;
   }
