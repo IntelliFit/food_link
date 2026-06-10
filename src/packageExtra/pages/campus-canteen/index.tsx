@@ -254,15 +254,7 @@ function CampusCanteenPage() {
         <View className='campus-info'>
           <Text className='campus-title'>{item.food_name || '未命名菜品'}</Text>
           <View className='campus-location-row'>
-            {item.school_logo_url ? (
-              <Image
-                className='campus-school-logo'
-                src={item.school_logo_url.startsWith('http') ? item.school_logo_url : `https://cdn-food-icon.coachlink.fit/${item.school_logo_url}`}
-                mode='aspectFill'
-              />
-            ) : (
-              <LocationOutlined size='18' className='campus-location-icon' />
-            )}
+            <LocationOutlined size='18' className='campus-location-icon' />
             <Text className='campus-location'>{getLocationText(item) || selectedSchoolName}</Text>
           </View>
           <View className='campus-nutrition-row'>

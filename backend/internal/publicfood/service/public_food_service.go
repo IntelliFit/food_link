@@ -707,6 +707,7 @@ func (s *PublicFoodService) normalizePublicFoodItems(items []domain.PublicFoodIt
 }
 
 func (s *PublicFoodService) normalizePublicFoodItem(item domain.PublicFoodItem) domain.PublicFoodItem {
+	item.SchoolLogoURL = s.resolveSchoolLogoURL(item.SchoolLogoURL)
 	item.ImagePaths = s.normalizeFoodImageURLs(item.ImagePaths)
 	if len(item.ImagePaths) > 0 {
 		first := item.ImagePaths[0]
@@ -801,6 +802,21 @@ func (s *PublicFoodService) resolveAvatarURL(value string) string {
 		return value
 	}
 	resolved := s.storage.ResolveReferenceURL("user-avatars", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
+}
+
+func (s *PublicFoodService) resolveSchoolLogoURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("food-images", value)
 	if resolved == "" {
 		return value
 	}

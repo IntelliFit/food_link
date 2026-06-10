@@ -13,6 +13,8 @@ import (
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
 	"food_link/backend/internal/taskqueue"
+	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/storage"
 
 	"github.com/stretchr/testify/require"
 	gormsqlite "gorm.io/driver/sqlite"
@@ -717,4 +719,34 @@ func TestPublicFoodServiceDeleteCommentOnlyOwnComment(t *testing.T) {
 	var item domain.PublicFoodItem
 	require.NoError(t, db.Where("id = ?", "item-1").First(&item).Error)
 	require.Equal(t, 0, item.CommentCount)
+}
+
+func TestNormalizePublicFoodItemResolvesSchoolLogoURL(t *testing.T) {
+	store := storage.New(config.StorageConfig{
+		CDNFoodImagesBaseURL: "http://cdn-food-images.coachlink.fit",
+	})
+	svc := NewPublicFoodService(nil, store)
+
+	rawKey := "school-badges/4531174e-aaaa-bbbb-cccc-08055423be2187ee.png"
+	item := svc.normalizePublicFoodItem(domain.PublicFoodItem{
+		SchoolLogoURL: rawKey,
+	})
+	require.Equal(t, "http://cdn-food-images.coachlink.fit/school-badges/4531174e-aaaa-bbbb-cccc-08055423be2187ee.png", item.SchoolLogoURL)
+
+	fullURL := "http://cdn-food-images.coachlink.fit/school-badges/4531174e-aaaa-bbbb-cccc-08055423be2187ee.png"
+	item2 := svc.normalizePublicFoodItem(domain.PublicFoodItem{
+		SchoolLogoURL: fullURL,
+	})
+	require.Equal(t, fullURL, item2.SchoolLogoURL)
+
+	item3 := svc.normalizePublicFoodItem(domain.PublicFoodItem{
+		SchoolLogoURL: "",
+	})
+	require.Equal(t, "", item3.SchoolLogoURL)
+}
+
+func TestResolveSchoolLogoURLEmptyStorage(t *testing.T) {
+	svc := NewPublicFoodService(nil)
+	require.Equal(t, "school-badges/key.png", svc.resolveSchoolLogoURL("school-badges/key.png"))
+	require.Equal(t, "", svc.resolveSchoolLogoURL(""))
 }

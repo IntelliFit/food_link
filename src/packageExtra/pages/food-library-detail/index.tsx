@@ -748,13 +748,7 @@ function FoodLibraryDetailPage() {
             <View className='campus-info-cell'>
               <Text className='campus-info-label'>学校</Text>
               <View className='campus-info-value-row'>
-                {item.school_logo_url && (
-                  <Image
-                    className='campus-school-logo'
-                    src={item.school_logo_url.startsWith('http') ? item.school_logo_url : `https://cdn-food-icon.coachlink.fit/${item.school_logo_url}`}
-                    mode='aspectFill'
-                  />
-                )}
+                <LocationOutlined size='18' className='campus-location-icon' />
                 <Text className='campus-info-value'>{item.school_name || '待补充'}</Text>
               </View>
             </View>
