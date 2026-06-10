@@ -2977,6 +2977,13 @@ function IndexPage() {
               rewardHintTouchRef.current = null
             }}
           >
+            {currentRewardHint.key === 'campus' ? (
+              <Image
+                className='home-reward-hint__bg'
+                src='/assets/bg/cafeteria.png'
+                mode='aspectFill'
+              />
+            ) : null}
             <View className='home-reward-hint__main'>
               <Text className='home-reward-hint__kicker'>{currentRewardHint.kicker}</Text>
               <Text className='home-reward-hint__title'>{currentRewardHint.title}</Text>

@@ -316,6 +316,11 @@ function CampusCanteenPage() {
     <FlPageThemeRoot>
     <View className='campus-canteen-page'>
       <View className='campus-hero'>
+        <Image
+          className='campus-hero-bg'
+          src='/assets/bg/cafeteria.png'
+          mode='aspectFill'
+        />
         <View>
           <Text className='campus-hero-eyebrow'>食探校园活动</Text>
           <Text className='campus-hero-title'>食探校园食堂计划</Text>
