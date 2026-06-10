@@ -20,6 +20,7 @@
   position: relative;
   z-index: 2;
   background: transparent;
+  pointer-events: none;
 }
 
 /* 顶部留白放在内层，避免 scroll-view 自身 padding 在 iOS 上触发高度计算 bug */
@@ -41,6 +42,7 @@
   overflow: hidden;
   transform: translateZ(0);
   will-change: height;
+  pointer-events: auto;
 }
 
 /* 头图内层始终全宽，禁止左右 margin（与上滑圆角动画无关） */
@@ -147,6 +149,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 }
 
 .counter-text {
@@ -165,6 +168,7 @@
   border-radius: 12rpx;
   padding: 6rpx 16rpx;
   z-index: 3;
+  pointer-events: none;
 
   .image-batch-badge-text {
     font-size: 24rpx;
@@ -179,6 +183,7 @@
   position: relative;
   padding: 32rpx 32rpx 500rpx; // 增加底部内边距，防止被底部操作栏遮挡 (96rpx button + padding + safe area)
   z-index: 3;
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   gap: 32rpx;
