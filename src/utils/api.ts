@@ -5479,11 +5479,15 @@ export interface PublicFoodLibraryComment {
   id: string
   user_id: string
   library_item_id: string
+  parent_comment_id?: string | null
+  reply_to_user_id?: string | null
   content: string
   rating?: number | null
   created_at: string
   nickname: string
   avatar: string
+  reply_to_nickname?: string
+  replies?: PublicFoodLibraryComment[]
   _is_temp?: boolean  // 标记为临时评论（未通过审核）
 }
 
@@ -5698,11 +5702,20 @@ export async function getPublicFoodLibraryComments(itemId: string): Promise<{ li
 export async function postPublicFoodLibraryComment(
   itemId: string,
   content: string,
-  rating?: number
+  rating?: number,
+  options?: {
+    parent_comment_id?: string
+    reply_to_user_id?: string
+  }
 ): Promise<{ comment: PublicFoodLibraryComment }> {
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments`, {
     method: 'POST',
-    data: { content: content.trim(), ...(rating !== undefined && { rating }) }
+    data: {
+      content: content.trim(),
+      ...(rating !== undefined && { rating }),
+      ...(options?.parent_comment_id && { parent_comment_id: options.parent_comment_id }),
+      ...(options?.reply_to_user_id && { reply_to_user_id: options.reply_to_user_id })
+    }
   })
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '发表失败')

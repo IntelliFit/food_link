@@ -81,14 +81,18 @@ type PublicFoodCollection struct {
 func (PublicFoodCollection) TableName() string { return "public_food_library_collections" }
 
 type PublicFoodComment struct {
-	ID            string     `gorm:"column:id" json:"id"`
-	UserID        string     `gorm:"column:user_id" json:"user_id"`
-	LibraryItemID string     `gorm:"column:library_item_id" json:"library_item_id"`
-	Content       string     `gorm:"column:content" json:"content"`
-	Rating        *int       `gorm:"column:rating" json:"rating,omitempty"`
-	CreatedAt     *time.Time `gorm:"column:created_at" json:"created_at"`
-	Nickname      string     `gorm:"-" json:"nickname"`
-	Avatar        string     `gorm:"-" json:"avatar"`
+	ID              string              `gorm:"column:id" json:"id"`
+	UserID          string              `gorm:"column:user_id" json:"user_id"`
+	LibraryItemID   string              `gorm:"column:library_item_id" json:"library_item_id"`
+	ParentCommentID *string             `gorm:"column:parent_comment_id" json:"parent_comment_id,omitempty"`
+	ReplyToUserID   *string             `gorm:"column:reply_to_user_id" json:"reply_to_user_id,omitempty"`
+	Content         string              `gorm:"column:content" json:"content"`
+	Rating          *int                `gorm:"column:rating" json:"rating,omitempty"`
+	CreatedAt       *time.Time          `gorm:"column:created_at" json:"created_at"`
+	Nickname        string              `gorm:"-" json:"nickname"`
+	Avatar          string              `gorm:"-" json:"avatar"`
+	ReplyToNickname string              `gorm:"-" json:"reply_to_nickname,omitempty"`
+	Replies         []PublicFoodComment `gorm:"-" json:"replies,omitempty"`
 }
 
 func (PublicFoodComment) TableName() string { return "public_food_library_comments" }

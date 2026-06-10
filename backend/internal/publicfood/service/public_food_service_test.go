@@ -631,13 +631,51 @@ func TestPublicFoodServiceAddCommentReturnsUserProfile(t *testing.T) {
 		CreatedAt:   &now,
 	}).Error)
 
-	comment, err := svc.AddComment(ctx, "user-1", "item-1", "非常不错", nil)
+	comment, err := svc.AddComment(ctx, "user-1", "item-1", CommentInput{Content: "非常不错"})
 
 	require.NoError(t, err)
 	require.NotNil(t, comment)
 	require.Equal(t, "user-1", comment.UserID)
 	require.Equal(t, "评论者", comment.Nickname)
 	require.NotEmpty(t, comment.Avatar)
+}
+
+func TestPublicFoodServiceAddReplyDefaultsReplyToParentAuthor(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	require.NoError(t, db.Create(&authrepo.User{ID: "user-1", Nickname: "评论者"}).Error)
+	require.NoError(t, db.Create(&authrepo.User{ID: "user-2", Nickname: "回复者"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:          "item-1",
+		UserID:      "author-1",
+		FoodName:    "测试菜品",
+		Status:      "published",
+		PublishedAt: &now,
+		CreatedAt:   &now,
+	}).Error)
+	parentID := "comment-parent"
+	require.NoError(t, db.Create(&domain.PublicFoodComment{
+		ID:            parentID,
+		UserID:        "user-1",
+		LibraryItemID: "item-1",
+		Content:       "这个菜不错",
+		CreatedAt:     &now,
+	}).Error)
+
+	reply, err := svc.AddComment(ctx, "user-2", "item-1", CommentInput{
+		Content:         "确实不错",
+		ParentCommentID: &parentID,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, reply.ParentCommentID)
+	require.Equal(t, parentID, *reply.ParentCommentID)
+	require.NotNil(t, reply.ReplyToUserID)
+	require.Equal(t, "user-1", *reply.ReplyToUserID)
+	require.Nil(t, reply.Rating)
 }
 
 func TestPublicFoodServiceDeleteCommentOnlyOwnComment(t *testing.T) {

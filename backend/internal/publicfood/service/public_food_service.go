@@ -99,6 +99,13 @@ type CreateInput struct {
 	PortionDescription *string
 }
 
+type CommentInput struct {
+	Content         string
+	Rating          *int
+	ParentCommentID *string
+	ReplyToUserID   *string
+}
+
 func (s *PublicFoodService) Create(ctx context.Context, userID string, input CreateInput) (string, error) {
 	normalizePublicFoodTypeInput(&input)
 	if err := normalizePublicFoodLocationInput(&input); err != nil {
@@ -575,22 +582,44 @@ func (s *PublicFoodService) Comments(ctx context.Context, itemID string) ([]doma
 	return comments, nil
 }
 
-func (s *PublicFoodService) AddComment(ctx context.Context, userID, itemID, content string, rating *int) (*domain.PublicFoodComment, error) {
-	content = strings.TrimSpace(content)
+func (s *PublicFoodService) AddComment(ctx context.Context, userID, itemID string, input CommentInput) (*domain.PublicFoodComment, error) {
+	content := strings.TrimSpace(input.Content)
 	if content == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "评论内容不能为空", HTTPStatus: 400}
 	}
 	if len([]rune(content)) > 500 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "评论内容不能超过 500 字", HTTPStatus: 400}
 	}
-	if rating != nil && (*rating < 1 || *rating > 5) {
+	if input.Rating != nil && (*input.Rating < 1 || *input.Rating > 5) {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "评分须为 1-5 的整数", HTTPStatus: 400}
 	}
+	parentCommentID := trimOptionalID(input.ParentCommentID)
+	replyToUserID := trimOptionalID(input.ReplyToUserID)
+	var rating *int
+	if parentCommentID == nil {
+		rating = input.Rating
+	} else {
+		parent, err := s.repo.GetComment(ctx, itemID, *parentCommentID)
+		if err != nil {
+			return nil, err
+		}
+		if parent == nil {
+			return nil, commonerrors.ErrNotFound
+		}
+		if parent.ParentCommentID != nil && strings.TrimSpace(*parent.ParentCommentID) != "" {
+			parentCommentID = parent.ParentCommentID
+		}
+		if replyToUserID == nil {
+			replyToUserID = &parent.UserID
+		}
+	}
 	comment := &domain.PublicFoodComment{
-		UserID:        userID,
-		LibraryItemID: itemID,
-		Content:       content,
-		Rating:        rating,
+		UserID:          userID,
+		LibraryItemID:   itemID,
+		ParentCommentID: parentCommentID,
+		ReplyToUserID:   replyToUserID,
+		Content:         content,
+		Rating:          rating,
 	}
 	if err := s.repo.CreateComment(ctx, comment); err != nil {
 		return nil, err
@@ -699,6 +728,9 @@ func (s *PublicFoodService) normalizePublicFoodItem(item domain.PublicFoodItem) 
 func (s *PublicFoodService) normalizePublicFoodComments(comments []domain.PublicFoodComment) {
 	for i := range comments {
 		comments[i].Avatar = s.resolveAvatarURL(comments[i].Avatar)
+		if len(comments[i].Replies) > 0 {
+			s.normalizePublicFoodComments(comments[i].Replies)
+		}
 	}
 }
 
@@ -868,6 +900,17 @@ func ptrString(v *string) string {
 		return ""
 	}
 	return *v
+}
+
+func trimOptionalID(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	text := strings.TrimSpace(*v)
+	if text == "" {
+		return nil
+	}
+	return &text
 }
 
 func isDeletedStatus(status string) bool {

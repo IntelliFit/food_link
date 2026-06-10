@@ -518,12 +518,14 @@ type PublicFoodCollectionDO struct {
 func (PublicFoodCollectionDO) TableName() string { return "public_food_library_collections" }
 
 type PublicFoodCommentDO struct {
-	ID            string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID        string     `gorm:"column:user_id;type:uuid;not null;index:idx_public_food_library_comments_user_id"`
-	LibraryItemID string     `gorm:"column:library_item_id;type:uuid;not null;index:idx_public_food_library_comments_library_item_id"`
-	Content       string     `gorm:"column:content;type:text;not null"`
-	Rating        *int16     `gorm:"column:rating;type:smallint"`
-	CreatedAt     *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_public_food_library_comments_created_at,sort:desc"`
+	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID          string     `gorm:"column:user_id;type:uuid;not null;index:idx_public_food_library_comments_user_id"`
+	LibraryItemID   string     `gorm:"column:library_item_id;type:uuid;not null;index:idx_public_food_library_comments_library_item_id"`
+	ParentCommentID *string    `gorm:"column:parent_comment_id;type:uuid;index:idx_public_food_library_comments_parent_comment_id"`
+	ReplyToUserID   *string    `gorm:"column:reply_to_user_id;type:uuid;index:idx_public_food_library_comments_reply_to_user_id"`
+	Content         string     `gorm:"column:content;type:text;not null"`
+	Rating          *int16     `gorm:"column:rating;type:smallint"`
+	CreatedAt       *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_public_food_library_comments_created_at,sort:desc"`
 }
 
 func (PublicFoodCommentDO) TableName() string { return "public_food_library_comments" }

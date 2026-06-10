@@ -23,7 +23,12 @@ func setupPublicFoodRepoTestDB(t *testing.T) *gorm.DB {
 		DSN:        ":memory:",
 	}), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&domain.PublicFoodItem{}, &analyzedomain.AnalysisTask{}))
+	require.NoError(t, db.AutoMigrate(&domain.PublicFoodItem{}, &domain.PublicFoodComment{}, &analyzedomain.AnalysisTask{}))
+	require.NoError(t, db.Exec(`CREATE TABLE weapp_user (
+		id TEXT PRIMARY KEY,
+		nickname TEXT,
+		avatar TEXT
+	)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE schools (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
@@ -195,6 +200,47 @@ func TestPublicFoodRepo_ListRelatedCampusFeeds(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, "campus-similar-highlight", rows[0].ID)
 	require.Equal(t, "低脂牛肉饭", rows[0].FoodName)
+}
+
+func TestPublicFoodRepo_ListCommentsBuildsReplyTree(t *testing.T) {
+	db := setupPublicFoodRepoTestDB(t)
+	seedPublicFoodItems(t, db)
+	r := NewPublicFoodRepo(db)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	later := now.Add(time.Minute)
+	require.NoError(t, db.Exec(`INSERT INTO weapp_user (id, nickname, avatar) VALUES
+		('user-1', '小马', ''),
+		('user-2', '同学A', ''),
+		('user-3', '同学B', '')`).Error)
+	parentID := "comment-parent"
+	require.NoError(t, db.Create(&domain.PublicFoodComment{
+		ID:            parentID,
+		UserID:        "user-1",
+		LibraryItemID: "campus-1",
+		Content:       "这个窗口不错",
+		CreatedAt:     &now,
+	}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodComment{
+		ID:              "comment-reply",
+		UserID:          "user-2",
+		LibraryItemID:   "campus-1",
+		ParentCommentID: &parentID,
+		ReplyToUserID:   ptrStringForTest("user-1"),
+		Content:         "我也觉得",
+		CreatedAt:       &later,
+	}).Error)
+
+	rows, err := r.ListComments(ctx, "campus-1", 10)
+
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, parentID, rows[0].ID)
+	require.Equal(t, "小马", rows[0].Nickname)
+	require.Len(t, rows[0].Replies, 1)
+	require.Equal(t, "comment-reply", rows[0].Replies[0].ID)
+	require.Equal(t, "同学A", rows[0].Replies[0].Nickname)
+	require.Equal(t, "小马", rows[0].Replies[0].ReplyToNickname)
 }
 
 func TestPublicFoodRepo_ListPublishedCampusIncludesAnalysisStatus(t *testing.T) {
@@ -394,4 +440,8 @@ func TestPublicFoodRepo_ListPublishedCampusLimitOffset(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "campus-1", rows[0].ID)
+}
+
+func ptrStringForTest(value string) *string {
+	return &value
 }

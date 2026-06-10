@@ -218,6 +218,8 @@ func (r *PublicFoodRepo) ListSimilarCampusFoods(ctx context.Context, item domain
 		limit = 6
 	}
 	q := r.db.WithContext(ctx).
+		Table("public_food_library AS p").
+		Select("p.*").
 		Where("id <> ? AND status = ?", item.ID, "published")
 	q = applyLegacyPublicFoodTypeWhere(q, "p", "campus")
 	if strings.TrimSpace(item.SchoolName) != "" {
@@ -403,21 +405,27 @@ func (r *PublicFoodRepo) ListComments(ctx context.Context, itemID string, limit 
 	}
 	err := r.db.WithContext(ctx).
 		Table("public_food_library_comments AS c").
-		Select("c.id, c.user_id, c.library_item_id, c.content, c.rating, c.created_at, COALESCE(u.nickname, '用户') AS nickname, COALESCE(u.avatar, '') AS avatar").
+		Select("c.id, c.user_id, c.library_item_id, c.parent_comment_id, c.reply_to_user_id, c.content, c.rating, c.created_at, COALESCE(u.nickname, '用户') AS nickname, COALESCE(u.avatar, '') AS avatar, COALESCE(ru.nickname, '') AS reply_to_nickname").
 		Joins("LEFT JOIN weapp_user u ON u.id = c.user_id").
+		Joins("LEFT JOIN weapp_user ru ON ru.id = c.reply_to_user_id").
 		Where("c.library_item_id = ?", itemID).
+		Order("CASE WHEN c.parent_comment_id IS NULL THEN 0 ELSE 1 END asc").
 		Order("c.created_at desc").
 		Limit(limit).
 		Scan(&rows).Error
-	return mapPublicFoodCommentRows(rows), err
+	if err != nil {
+		return nil, err
+	}
+	return buildPublicFoodCommentTree(mapPublicFoodCommentRows(rows)), nil
 }
 
 func (r *PublicFoodRepo) GetComment(ctx context.Context, itemID, commentID string) (*domain.PublicFoodComment, error) {
 	var row publicFoodCommentRow
 	err := r.db.WithContext(ctx).
 		Table("public_food_library_comments AS c").
-		Select("c.id, c.user_id, c.library_item_id, c.content, c.rating, c.created_at, COALESCE(u.nickname, '用户') AS nickname, COALESCE(u.avatar, '') AS avatar").
+		Select("c.id, c.user_id, c.library_item_id, c.parent_comment_id, c.reply_to_user_id, c.content, c.rating, c.created_at, COALESCE(u.nickname, '用户') AS nickname, COALESCE(u.avatar, '') AS avatar, COALESCE(ru.nickname, '') AS reply_to_nickname").
 		Joins("LEFT JOIN weapp_user u ON u.id = c.user_id").
+		Joins("LEFT JOIN weapp_user ru ON ru.id = c.reply_to_user_id").
 		Where("c.library_item_id = ? AND c.id = ?", itemID, commentID).
 		Scan(&row).Error
 	if err != nil {
@@ -431,26 +439,32 @@ func (r *PublicFoodRepo) GetComment(ctx context.Context, itemID, commentID strin
 }
 
 type publicFoodCommentRow struct {
-	ID            string
-	UserID        string
-	LibraryItemID string
-	Content       string
-	Rating        *int
-	CreatedAt     *time.Time
-	Nickname      string
-	Avatar        string
+	ID              string
+	UserID          string
+	LibraryItemID   string
+	ParentCommentID *string
+	ReplyToUserID   *string
+	Content         string
+	Rating          *int
+	CreatedAt       *time.Time
+	Nickname        string
+	Avatar          string
+	ReplyToNickname string
 }
 
 func (row publicFoodCommentRow) toDomain() domain.PublicFoodComment {
 	return domain.PublicFoodComment{
-		ID:            row.ID,
-		UserID:        row.UserID,
-		LibraryItemID: row.LibraryItemID,
-		Content:       row.Content,
-		Rating:        row.Rating,
-		CreatedAt:     row.CreatedAt,
-		Nickname:      row.Nickname,
-		Avatar:        row.Avatar,
+		ID:              row.ID,
+		UserID:          row.UserID,
+		LibraryItemID:   row.LibraryItemID,
+		ParentCommentID: row.ParentCommentID,
+		ReplyToUserID:   row.ReplyToUserID,
+		Content:         row.Content,
+		Rating:          row.Rating,
+		CreatedAt:       row.CreatedAt,
+		Nickname:        row.Nickname,
+		Avatar:          row.Avatar,
+		ReplyToNickname: row.ReplyToNickname,
 	}
 }
 
@@ -462,6 +476,43 @@ func mapPublicFoodCommentRows(rows []publicFoodCommentRow) []domain.PublicFoodCo
 	return out
 }
 
+func buildPublicFoodCommentTree(comments []domain.PublicFoodComment) []domain.PublicFoodComment {
+	roots := make([]domain.PublicFoodComment, 0, len(comments))
+	rootIndex := make(map[string]int, len(comments))
+	orphanReplies := make([]domain.PublicFoodComment, 0)
+	for _, comment := range comments {
+		if comment.ParentCommentID == nil || *comment.ParentCommentID == "" {
+			comment.Replies = []domain.PublicFoodComment{}
+			rootIndex[comment.ID] = len(roots)
+			roots = append(roots, comment)
+			continue
+		}
+		parentID := *comment.ParentCommentID
+		if idx, ok := rootIndex[parentID]; ok {
+			roots[idx].Replies = append(roots[idx].Replies, comment)
+			continue
+		}
+		orphanReplies = append(orphanReplies, comment)
+	}
+	for _, reply := range orphanReplies {
+		parentID := ""
+		if reply.ParentCommentID != nil {
+			parentID = *reply.ParentCommentID
+		}
+		if idx, ok := rootIndex[parentID]; ok {
+			roots[idx].Replies = append(roots[idx].Replies, reply)
+		}
+	}
+	for i := range roots {
+		replies := roots[i].Replies
+		for left, right := 0, len(replies)-1; left < right; left, right = left+1, right-1 {
+			replies[left], replies[right] = replies[right], replies[left]
+		}
+		roots[i].Replies = replies
+	}
+	return roots
+}
+
 func (r *PublicFoodRepo) CreateComment(ctx context.Context, comment *domain.PublicFoodComment) error {
 	if comment.ID == "" {
 		comment.ID = uuid.New().String()
@@ -470,10 +521,29 @@ func (r *PublicFoodRepo) CreateComment(ctx context.Context, comment *domain.Publ
 }
 
 func (r *PublicFoodRepo) DeleteOwnComment(ctx context.Context, itemID, commentID, userID string) (int64, error) {
-	result := r.db.WithContext(ctx).
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	result := tx.
 		Where("library_item_id = ? AND id = ? AND user_id = ?", itemID, commentID, userID).
 		Delete(&domain.PublicFoodComment{})
-	return result.RowsAffected, result.Error
+	if result.Error != nil {
+		_ = tx.Rollback()
+		return 0, result.Error
+	}
+	if result.RowsAffected == 0 {
+		_ = tx.Rollback()
+		return 0, nil
+	}
+	if err := tx.Where("library_item_id = ? AND parent_comment_id = ?", itemID, commentID).Delete(&domain.PublicFoodComment{}).Error; err != nil {
+		_ = tx.Rollback()
+		return 0, err
+	}
+	if err := tx.Commit().Error; err != nil {
+		return 0, err
+	}
+	return result.RowsAffected, nil
 }
 
 func (r *PublicFoodRepo) RefreshCommentStats(ctx context.Context, itemID string) error {

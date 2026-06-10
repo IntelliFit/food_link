@@ -694,9 +694,111 @@
 
 .comment-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 24rpx;
   padding-left: 92rpx;
   margin-top: 8rpx;
+}
+
+.comment-action-reply {
+  font-size: 24rpx;
+  color: #6b7280;
+  line-height: 36rpx;
+
+  &:active {
+    color: #5cb896;
+  }
+}
+
+.comment-replies {
+  margin: 20rpx 0 0 92rpx;
+  padding: 20rpx 24rpx;
+  background: #f8fafc;
+  border-radius: 24rpx;
+}
+
+.comment-reply-item {
+  display: flex;
+  gap: 16rpx;
+  padding: 18rpx 0;
+  border-bottom: 2rpx solid #edf2f7;
+
+  &:first-child {
+    padding-top: 0;
+  }
+
+  &:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+}
+
+.comment-reply-avatar {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: #eef2f7;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.comment-reply-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.comment-reply-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-reply-meta {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-wrap: wrap;
+  margin-bottom: 8rpx;
+}
+
+.comment-reply-name {
+  font-size: 24rpx;
+  color: #475569;
+  font-weight: 600;
+}
+
+.comment-reply-to,
+.comment-reply-time {
+  font-size: 22rpx;
+  color: #94a3b8;
+}
+
+.comment-reply-content {
+  display: block;
+  font-size: 26rpx;
+  color: #334155;
+  line-height: 40rpx;
+}
+
+.comment-reply-actions {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 8rpx;
+}
+
+.comment-reply-action,
+.comment-reply-delete {
+  font-size: 22rpx;
+  color: #64748b;
+  line-height: 32rpx;
+}
+
+.comment-reply-delete {
+  color: #94a3b8;
 }
 
 .comments-empty {
@@ -1469,6 +1571,31 @@
 
   .comment-item {
     border-bottom-color: rgb(255 255 255 / 8%);
+  }
+
+  .comment-replies {
+    background: rgb(255 255 255 / 6%);
+  }
+
+  .comment-reply-item {
+    border-bottom-color: rgb(255 255 255 / 8%);
+  }
+
+  .comment-reply-avatar {
+    background: #222c29;
+  }
+
+  .comment-action-reply,
+  .comment-reply-name,
+  .comment-reply-content {
+    color: rgb(214 226 220 / 72%);
+  }
+
+  .comment-reply-to,
+  .comment-reply-time,
+  .comment-reply-action,
+  .comment-reply-delete {
+    color: rgb(214 226 220 / 50%);
   }
 
   .bottom-bar {
