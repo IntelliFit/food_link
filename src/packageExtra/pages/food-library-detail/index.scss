@@ -324,6 +324,20 @@
   line-height: 38rpx;
 }
 
+.campus-info-value-row {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.campus-school-logo {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 8rpx;
+  flex-shrink: 0;
+  background: #f3f4f6;
+}
+
 .campus-location {
   display: block;
   font-size: 28rpx;

@@ -31,6 +31,20 @@ func (p *recordingWorkerPublicFoodPublisher) PublishTask(ctx context.Context, ms
 	return nil
 }
 
+type recordingWorkerPublicFoodQueue struct {
+	recordingWorkerPublicFoodPublisher
+}
+
+func (q *recordingWorkerPublicFoodQueue) Subscribe(ctx context.Context, opts taskqueue.SubscribeOptions) (<-chan taskqueue.Delivery, error) {
+	ch := make(chan taskqueue.Delivery)
+	close(ch)
+	return ch, nil
+}
+
+func (q *recordingWorkerPublicFoodQueue) Close(ctx context.Context) error {
+	return nil
+}
+
 func setupWorkerPublicFoodTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
@@ -129,7 +143,7 @@ func TestCampusPublicFoodSubmitWaitsForWorkerCaloriesRecognition(t *testing.T) {
 	publicFood := publicfoodrepo.NewPublicFoodRepo(db)
 	taskRepo := analyzerepo.NewTaskRepo(db)
 	precisionRepo := analyzerepo.NewPrecisionRepo(db)
-	publisher := &recordingWorkerPublicFoodPublisher{}
+	publisher := &recordingWorkerPublicFoodQueue{}
 	analyzeTaskSvc := analyzeservice.NewTaskService(taskRepo, precisionRepo, authrepo.NewUserRepo(db))
 	analyzeTaskSvc.ConfigureTaskPublisher(publisher)
 	svc := publicfoodservice.NewPublicFoodService(publicFood)
@@ -214,6 +228,90 @@ func TestCampusPublicFoodSubmitWaitsForWorkerCaloriesRecognition(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func TestWorkerProcessPrecisionPlanRelinksCampusPublicFoodToAggregateTask(t *testing.T) {
+	db := setupWorkerPublicFoodTestDB(t)
+	ctx := context.Background()
+	publicFood := publicfoodrepo.NewPublicFoodRepo(db)
+	taskRepo := analyzerepo.NewTaskRepo(db)
+	precisionRepo := analyzerepo.NewPrecisionRepo(db)
+	publisher := &recordingWorkerPublicFoodQueue{}
+	imageURL := "https://example.com/campus-plan-relink.jpg"
+	item := &publicfooddomain.PublicFoodItem{
+		ID:           "public-food-plan-relink",
+		UserID:       "user-1",
+		FoodName:     "牛肉盖饭",
+		Status:       "published",
+		Type:         "campus",
+		IsCampusFood: true,
+		ImagePath:    &imageURL,
+		ImagePaths:   []string{imageURL},
+	}
+	require.NoError(t, publicFood.CreateItem(ctx, item))
+	session := &analyzedomain.PrecisionSession{
+		ID:            "precision-session-plan-relink",
+		UserID:        "user-1",
+		SourceType:    "image",
+		ExecutionMode: "strict_separate",
+		Status:        "estimating",
+		RoundIndex:    1,
+		LatestInputs: map[string]any{
+			"image_url":         imageURL,
+			"image_urls":        []string{imageURL},
+			"additionalContext": "菜品名称：牛肉盖饭",
+		},
+	}
+	require.NoError(t, precisionRepo.CreateSession(ctx, session))
+	planTask := &analyzedomain.AnalysisTask{
+		ID:         "task-campus-precision-plan-relink",
+		UserID:     "user-1",
+		TaskType:   "precision_plan",
+		Status:     "pending",
+		ImageURL:   &imageURL,
+		ImagePaths: []string{imageURL},
+		Payload: map[string]any{
+			"precision_session_id":    session.ID,
+			"round_index":             1,
+			"source_type":             "image",
+			"execution_mode":          "strict_separate",
+			"public_food_source_type": "campus_public_food",
+			"public_food_item_id":     item.ID,
+		},
+	}
+	require.NoError(t, taskRepo.CreateTask(ctx, planTask))
+	require.NoError(t, publicFood.LinkAnalysisTask(ctx, item.ID, planTask.ID))
+	runner := &Runner{
+		tasks:      taskRepo,
+		precision:  precisionRepo,
+		publicFood: publicFood,
+		queue:      publisher,
+		analyze: &fakeWorkerAnalyzeRunner{result: map[string]any{
+			"precisionStatus":      "ready_for_estimate",
+			"splitStrategy":        "single_shot",
+			"detectedItemsSummary": []any{"米饭", "牛肉"},
+			"itemsToEstimate": []any{
+				map[string]any{"item_key": "rice", "item_name": "米饭", "item_hint": "只估计米饭", "requires_reference": false, "uncertainty_level": "medium"},
+				map[string]any{"item_key": "beef", "item_name": "牛肉", "item_hint": "只估计牛肉", "requires_reference": false, "uncertainty_level": "medium"},
+			},
+		}},
+		log: logger.L(),
+	}
+
+	require.NoError(t, runner.processPrecisionPlan(ctx, planTask))
+
+	var saved publicfooddomain.PublicFoodItem
+	require.NoError(t, db.Where("id = ?", item.ID).First(&saved).Error)
+	require.NotNil(t, saved.AnalysisTaskID)
+	require.NotEqual(t, planTask.ID, *saved.AnalysisTaskID)
+	aggregateTask, err := taskRepo.GetTaskByID(ctx, *saved.AnalysisTaskID)
+	require.NoError(t, err)
+	require.NotNil(t, aggregateTask)
+	require.Equal(t, "precision_aggregate", aggregateTask.TaskType)
+	require.Equal(t, item.ID, aggregateTask.Payload["public_food_item_id"])
+	require.Equal(t, "campus_public_food", aggregateTask.Payload["public_food_source_type"])
+	require.Len(t, publisher.messages, 2)
+	require.Equal(t, aggregateTask.ID, publisher.messages[1].TaskID)
 }
 
 func TestWorkerProcessPrecisionAggregateWritesBackCampusPublicFood(t *testing.T) {

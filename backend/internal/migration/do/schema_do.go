@@ -1021,6 +1021,7 @@ type SchoolDO struct {
 	Is985     *bool      `gorm:"column:is_985;type:boolean;default:false"`
 	Is211     *bool      `gorm:"column:is_211;type:boolean;default:false"`
 	Status    string     `gorm:"column:status;type:text;not null;default:'active'"`
+	LogoURL   *string    `gorm:"column:logo_url;type:text"`
 	CreatedAt *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
 }
 

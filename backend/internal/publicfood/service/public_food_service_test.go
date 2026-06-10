@@ -59,6 +59,18 @@ func setupPublicFoodServiceTestDB(t *testing.T) *gorm.DB {
 		&domain.PublicFoodCollection{},
 		&domain.PublicFoodComment{},
 	))
+	require.NoError(t, db.Exec(`CREATE TABLE schools (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		province TEXT,
+		city TEXT,
+		level TEXT,
+		is_985 INTEGER,
+		is_211 INTEGER,
+		status TEXT NOT NULL DEFAULT 'active',
+		logo_url TEXT,
+		created_at TEXT
+	)`).Error)
 	return db
 }
 

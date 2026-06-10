@@ -93,8 +93,10 @@ func (r *PublicFoodRepo) ListPublished(ctx context.Context, f ListFilter) ([]dom
 	var rows []domain.PublicFoodItem
 	q := r.db.WithContext(ctx).
 		Table("public_food_library AS p").
-		Select("p.*, COALESCE(t.status, '') AS analysis_status, COALESCE(t.error_message, '') AS analysis_error").
+		Select("p.*, COALESCE(rt.status, t.status, '') AS analysis_status, COALESCE(rt.error_message, t.error_message, '') AS analysis_error, s.logo_url AS school_logo_url").
 		Joins("LEFT JOIN analysis_tasks t ON t.id = p.analysis_task_id").
+		Joins("LEFT JOIN analysis_tasks rt ON CAST(rt.id AS TEXT) = (t.result ->> 'redirectTaskId')").
+		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").
 		Where("p.status = ?", "published")
 	if f.City != "" {
 		q = q.Where("p.city = ?", f.City)
@@ -217,19 +219,19 @@ func (r *PublicFoodRepo) ListSimilarCampusFoods(ctx context.Context, item domain
 	}
 	q := r.db.WithContext(ctx).
 		Where("id <> ? AND status = ?", item.ID, "published")
-	q = applyLegacyPublicFoodTypeWhere(q, "", "campus")
+	q = applyLegacyPublicFoodTypeWhere(q, "p", "campus")
 	if strings.TrimSpace(item.SchoolName) != "" {
-		q = q.Where("school_name = ?", item.SchoolName)
+		q = q.Where("p.school_name = ?", item.SchoolName)
 	}
 	if strings.TrimSpace(item.CanteenName) != "" {
-		q = q.Where("canteen_name = ?", item.CanteenName)
+		q = q.Where("p.canteen_name = ?", item.CanteenName)
 	}
 	err := q.
 		Order(gorm.Expr("CASE WHEN COALESCE(window_name, '') = ? AND COALESCE(window_name, '') <> '' THEN 0 ELSE 1 END", item.WindowName)).
 		Order(gorm.Expr("CASE WHEN COALESCE(floor, '') = ? AND COALESCE(floor, '') <> '' THEN 0 ELSE 1 END", item.Floor)).
 		Order("(COALESCE(collection_count, 0) + COALESCE(like_count, 0)) DESC").
-		Order("published_at DESC").
-		Order("created_at DESC").
+		Order("p.published_at DESC").
+		Order("p.created_at DESC").
 		Limit(limit).
 		Find(&rows).Error
 	return rows, err
@@ -241,19 +243,20 @@ func (r *PublicFoodRepo) ListRelatedCampusFeeds(ctx context.Context, item domain
 		limit = 6
 	}
 	q := r.db.WithContext(ctx).
-		Table("public_food_library").
-		Select("id, food_name, image_path, image_paths, school_name, canteen_name, campus_location_text AS campus_location, total_calories, total_protein, price, price_unit, like_count, comment_count, collection_count, published_at").
-		Where("id <> ? AND status = ? AND is_campus_highlight = ?", item.ID, "published", true)
-	q = applyLegacyPublicFoodTypeWhere(q, "", "campus")
+		Table("public_food_library AS p").
+		Select("p.id, p.food_name, p.image_path, p.image_paths, p.school_name, p.canteen_name, p.campus_location_text AS campus_location, p.total_calories, p.total_protein, p.price, p.price_unit, p.like_count, p.comment_count, p.collection_count, p.published_at, s.logo_url AS school_logo_url").
+		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").
+		Where("p.id <> ? AND p.status = ? AND p.is_campus_highlight = ?", item.ID, "published", true)
+	q = applyLegacyPublicFoodTypeWhere(q, "p", "campus")
 	if strings.TrimSpace(item.SchoolName) != "" {
-		q = q.Where("school_name = ?", item.SchoolName)
+		q = q.Where("p.school_name = ?", item.SchoolName)
 	}
 	if strings.TrimSpace(item.CanteenName) != "" {
-		q = q.Where("canteen_name = ?", item.CanteenName)
+		q = q.Where("p.canteen_name = ?", item.CanteenName)
 	}
 	err := q.
-		Order("published_at DESC").
-		Order("created_at DESC").
+		Order("p.published_at DESC").
+		Order("p.created_at DESC").
 		Limit(limit).
 		Scan(&rows).Error
 	return rows, err
@@ -290,7 +293,14 @@ func (r *PublicFoodRepo) ListCollected(ctx context.Context, userID string, limit
 
 func (r *PublicFoodRepo) GetItem(ctx context.Context, itemID string) (*domain.PublicFoodItem, error) {
 	var row domain.PublicFoodItem
-	err := r.db.WithContext(ctx).Where("id = ?", itemID).First(&row).Error
+	err := r.db.WithContext(ctx).
+		Table("public_food_library AS p").
+		Select("p.*, COALESCE(rt.status, t.status, '') AS analysis_status, COALESCE(rt.error_message, t.error_message, '') AS analysis_error, s.logo_url AS school_logo_url").
+		Joins("LEFT JOIN analysis_tasks t ON t.id = p.analysis_task_id").
+		Joins("LEFT JOIN analysis_tasks rt ON CAST(rt.id AS TEXT) = (t.result ->> 'redirectTaskId')").
+		Joins("LEFT JOIN schools s ON s.name = p.school_name AND s.status = 'active'").
+		Where("p.id = ?", itemID).
+		First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -579,12 +589,19 @@ func nutritionTotalsFromResult(result map[string]any) (float64, float64, float64
 	}
 	for _, item := range mapSliceFromAny(result["items"]) {
 		nutrients := mapFromAny(item["nutrients"])
-		calories += extractFloat(nutrients, "calories")
-		protein += extractFloat(nutrients, "protein")
-		carbs += extractFloat(nutrients, "carbs")
-		fat += extractFloat(nutrients, "fat")
+		calories += extractFloatWithFallback(nutrients, item, "calories", "calorie", "total_calories", "totalCalories")
+		protein += extractFloatWithFallback(nutrients, item, "protein", "total_protein", "totalProtein")
+		carbs += extractFloatWithFallback(nutrients, item, "carbs", "carbohydrates", "total_carbs", "totalCarbs")
+		fat += extractFloatWithFallback(nutrients, item, "fat", "total_fat", "totalFat")
 	}
 	return calories, protein, carbs, fat
+}
+
+func extractFloatWithFallback(primary map[string]any, fallback map[string]any, keys ...string) float64 {
+	if value := extractFloat(primary, keys...); value != 0 {
+		return value
+	}
+	return extractFloat(fallback, keys...)
 }
 
 func mapSliceFromAny(value any) []map[string]any {

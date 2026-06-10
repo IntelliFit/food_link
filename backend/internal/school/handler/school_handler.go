@@ -22,6 +22,7 @@ type SchoolSearchResponse struct {
 	Name     string `json:"name"`
 	Province string `json:"province,omitempty"`
 	City     string `json:"city,omitempty"`
+	LogoURL  string `json:"logo_url,omitempty"`
 }
 
 func (h *SchoolHandler) Search(c *gin.Context) {
@@ -39,9 +40,10 @@ func (h *SchoolHandler) Search(c *gin.Context) {
 		Name     string
 		Province *string
 		City     *string
+		LogoURL  *string
 	}
 
-	q := h.db.Table("schools").Select("id, name, province, city").Where("status = ?", "active")
+	q := h.db.Table("schools").Select("id, name, province, city, logo_url").Where("status = ?", "active")
 	if keyword != "" {
 		q = q.Where("LOWER(name) LIKE LOWER(?)", "%"+keyword+"%")
 	}
@@ -61,6 +63,7 @@ func (h *SchoolHandler) Search(c *gin.Context) {
 			Name:     r.Name,
 			Province: ptrString(r.Province),
 			City:     ptrString(r.City),
+			LogoURL:  ptrString(r.LogoURL),
 		})
 	}
 

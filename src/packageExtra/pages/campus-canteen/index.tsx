@@ -64,7 +64,15 @@ function isAnalysisFailedItem(item: PublicFoodLibraryItem): boolean {
 }
 
 function hasNutrition(item: PublicFoodLibraryItem): boolean {
-  return !isAnalyzingItem(item) && !isAnalysisFailedItem(item) && ((item.total_calories || 0) > 0 || (item.total_protein || 0) > 0)
+  const items = item.items || []
+  return ((item.total_calories || 0) > 0 || (item.total_protein || 0) > 0 || items.some(food => {
+    const nutrients = food.nutrients
+    return !!nutrients && ((nutrients.calories || 0) > 0 || (nutrients.protein || 0) > 0)
+  }))
+}
+
+function needsNutritionUpdate(item: PublicFoodLibraryItem): boolean {
+  return !isAnalyzingItem(item) && !isAnalysisFailedItem(item) && !hasNutrition(item)
 }
 
 function CampusCanteenPage() {
@@ -176,6 +184,10 @@ function CampusCanteenPage() {
       Taro.showToast({ title: '分析失败，暂不能记录', icon: 'none' })
       return
     }
+    if (needsNutritionUpdate(item)) {
+      Taro.showToast({ title: '营养信息待更新，暂不能记录', icon: 'none' })
+      return
+    }
     Taro.setStorageSync('campus_quick_record_item', JSON.stringify(item))
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-manual/index')}?campus_quick=1` })
   }
@@ -228,8 +240,9 @@ function CampusCanteenPage() {
   const renderCampusCard = (item: PublicFoodLibraryItem) => {
     const analyzing = isAnalyzingItem(item)
     const failed = isAnalysisFailedItem(item)
+    const nutritionPending = needsNutritionUpdate(item)
     return (
-    <View key={item.id} className={`campus-card ${analyzing ? 'campus-card--analyzing' : ''} ${failed ? 'campus-card--failed' : ''}`} onClick={() => goDetail(item.id)}>
+    <View key={item.id} className={`campus-card ${analyzing || nutritionPending ? 'campus-card--analyzing' : ''} ${failed ? 'campus-card--failed' : ''}`} onClick={() => goDetail(item.id)}>
       <View className='campus-card-main'>
         <View className='campus-image-wrap'>
           {item.image_path ? (
@@ -241,7 +254,15 @@ function CampusCanteenPage() {
         <View className='campus-info'>
           <Text className='campus-title'>{item.food_name || '未命名菜品'}</Text>
           <View className='campus-location-row'>
-            <LocationOutlined size='18' className='campus-location-icon' />
+            {item.school_logo_url ? (
+              <Image
+                className='campus-school-logo'
+                src={item.school_logo_url.startsWith('http') ? item.school_logo_url : `https://cdn-food-icon.coachlink.fit/${item.school_logo_url}`}
+                mode='aspectFill'
+              />
+            ) : (
+              <LocationOutlined size='18' className='campus-location-icon' />
+            )}
             <Text className='campus-location'>{getLocationText(item) || selectedSchoolName}</Text>
           </View>
           <View className='campus-nutrition-row'>
@@ -250,6 +271,8 @@ function CampusCanteenPage() {
               <Text className='campus-analysis-text'>正在分析中</Text>
             ) : failed ? (
               <Text className='campus-analysis-failed'>分析失败，稍后重试</Text>
+            ) : nutritionPending ? (
+              <Text className='campus-analysis-text'>营养待更新</Text>
             ) : (
               <View className='campus-calorie-badge'>
                 <Text className='campus-calorie-num'>{item.total_calories.toFixed(0)}</Text>
@@ -291,7 +314,7 @@ function CampusCanteenPage() {
             )}
           </View>
           <View className='campus-record-btn' onClick={(e) => quickRecord(e, item)}>
-            <Text className='campus-record-btn-text'>{analyzing ? '分析中' : '一键记录'}</Text>
+            <Text className='campus-record-btn-text'>{analyzing || nutritionPending ? '待更新' : '一键记录'}</Text>
           </View>
         </View>
       </View>

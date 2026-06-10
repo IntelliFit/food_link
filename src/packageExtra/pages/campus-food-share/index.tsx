@@ -10,6 +10,7 @@ import {
   getPublicFoodLibraryItem,
   imageToBase64,
   showUnifiedApiError,
+  type CreatePublicFoodLibraryRequest,
   type PublicFoodLibraryItem,
   updatePublicFoodLibraryItem,
   uploadAnalyzeImage,
@@ -225,7 +226,7 @@ function CampusFoodSharePage() {
     await doSubmit(finalFoodName)
   }
 
-  const buildPayload = (finalFoodName: string) => ({
+  const buildPayload = (finalFoodName: string): CreatePublicFoodLibraryRequest => ({
     image_path: imageUrl || undefined,
     image_paths: imageUrls.length > 0 ? imageUrls : undefined,
     food_name: finalFoodName,
