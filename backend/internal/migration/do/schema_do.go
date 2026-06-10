@@ -678,6 +678,15 @@ type UserFriendDO struct {
 
 func (UserFriendDO) TableName() string { return "user_friends" }
 
+type UserFollowDO struct {
+	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	FollowerID string     `gorm:"column:follower_id;type:uuid;not null;index:idx_user_follows_follower"`
+	FolloweeID string     `gorm:"column:followee_id;type:uuid;not null;index:idx_user_follows_followee"`
+	CreatedAt  *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+}
+
+func (UserFollowDO) TableName() string { return "user_follows" }
+
 type BodyWeightRecordDO struct {
 	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID         string    `gorm:"column:user_id;type:uuid;not null;index:idx_user_weight_records_user_date,priority:1;index:idx_user_weight_records_user_created_at,priority:1;index:idx_user_weight_records_user_client_record_id,priority:1,where:client_record_id IS NOT NULL"`
@@ -1065,6 +1074,7 @@ func AllModels() []any {
 		&ExpiryNotificationJobDO{},
 		&FriendRequestDO{},
 		&UserFriendDO{},
+		&UserFollowDO{},
 		&BodyWeightRecordDO{},
 		&BodyWaterLogDO{},
 		&BodyMetricSettingsDO{},

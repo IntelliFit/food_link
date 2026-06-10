@@ -34,6 +34,9 @@ import (
 	foodrecordhandler "food_link/backend/internal/foodrecord/handler"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
 	foodrecordservice "food_link/backend/internal/foodrecord/service"
+	followhandler "food_link/backend/internal/follow/handler"
+	followrepo "food_link/backend/internal/follow/repo"
+	followservice "food_link/backend/internal/follow/service"
 	friendhandler "food_link/backend/internal/friend/handler"
 	friendrepo "food_link/backend/internal/friend/repo"
 	friendservice "food_link/backend/internal/friend/service"
@@ -155,7 +158,12 @@ func New(cfg *config.Config) (*App, error) {
 	analysisTaskSvc := userservice.NewAnalysisTaskService(analysisTaskRepo, userRepo, storageClient)
 	analysisTaskSvc.ConfigureTaskPublisher(taskQueue)
 
-	userHandler := userhandler.NewUserHandler(userSvc, bindPhoneSvc, uploadSvc, ocrSvc, analysisTaskSvc)
+	// Follow module DI (before userHandler because userHandler depends on followSvc)
+	followRepo := followrepo.NewFollowRepo(db)
+	followSvc := followservice.NewFollowService(followRepo, storageClient)
+	followHandler := followhandler.NewFollowHandler(followSvc)
+
+	userHandler := userhandler.NewUserHandler(userSvc, bindPhoneSvc, uploadSvc, ocrSvc, analysisTaskSvc, followSvc)
 
 	// Analyze module DI
 	analyzeTaskRepo := analyzerepo.NewTaskRepo(db)
@@ -198,6 +206,7 @@ func New(cfg *config.Config) (*App, error) {
 	homeRepo := homerepo.NewHomeRepo(db)
 	dashboardService := homeservice.NewDashboardService(userRepo, homeRepo, storageClient)
 	dashboardHandler := homehandler.NewDashboardHandler(dashboardService)
+
 	// Friend module DI
 	friendRepo := friendrepo.NewFriendRepo(db)
 	friendSvc := friendservice.NewFriendService(friendRepo, userRepo, storageClient)
@@ -366,6 +375,13 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/packaged-food/nutrition-label/recognize", authmw.RequireJWT(jwtSvc), frHandler.RecognizePackagedNutritionLabel)
 	engine.POST("/api/packaged-food/nutrition-label/submit", authmw.RequireJWT(jwtSvc), frHandler.SubmitPackagedNutritionLabelTask)
 	engine.POST("/api/critical-samples", authmw.RequireJWT(jwtSvc), frHandler.SaveCriticalSamples)
+
+	// Follow routes
+	engine.POST("/api/user/:user_id/follow", authmw.RequireJWT(jwtSvc), followHandler.Follow)
+	engine.DELETE("/api/user/:user_id/follow", authmw.RequireJWT(jwtSvc), followHandler.Unfollow)
+	engine.GET("/api/user/:user_id/followers", authmw.RequireJWT(jwtSvc), followHandler.GetFollowers)
+	engine.GET("/api/user/:user_id/following", authmw.RequireJWT(jwtSvc), followHandler.GetFollowing)
+	engine.GET("/api/user/:user_id/follow-stats", authmw.RequireJWT(jwtSvc), followHandler.GetFollowStats)
 
 	// Friend routes
 	engine.GET("/api/friend/search", authmw.RequireJWT(jwtSvc), friendHandler.Search)

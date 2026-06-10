@@ -361,6 +361,7 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE UNIQUE INDEX IF NOT EXISTS food_expiry_notification_jobs_item_template_schedule_unique ON food_expiry_notification_jobs (expiry_item_id, template_id, scheduled_at)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_requests_pair ON friend_requests (from_user_id, to_user_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_friends_unique ON user_friends (user_id, friend_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS user_follows_unique ON user_follows (follower_id, followee_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS ai_stats_insights_user_range_date_unique ON ai_stats_insights (user_id, range_type, generated_date)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS ai_custom_focus_cards_user_range_focus_unique ON ai_custom_focus_cards (user_id, range_type, focus_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS uq_user_credit_bonus_share_poster_record ON user_credit_bonus_events (user_id, bonus_type, bonus_date, source_record_id) WHERE bonus_type = 'share_poster' AND source_record_id IS NOT NULL`,

@@ -16,9 +16,13 @@ import {
   getUserCollections,
   getUserFavoriteRecipes,
   communityGetFeed,
+  followUser,
+  unfollowUser,
+  getFollowStats,
   type PublicFoodLibraryItem,
   type UserRecipe,
   type CommunityFeedItem,
+  type FollowStats,
 } from '../../../utils/api'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -72,6 +76,10 @@ export default function ProfileSettingsPage() {
   const [userId, setUserId] = useState('')
   const [recordDays, setRecordDays] = useState(0)
   const [favoriteCount, setFavoriteCount] = useState(0)
+  const [followersCount, setFollowersCount] = useState(0)
+  const [followingCount, setFollowingCount] = useState(0)
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [followLoading, setFollowLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
 
   // 编辑弹窗
@@ -109,12 +117,14 @@ export default function ProfileSettingsPage() {
     }
     setPageLoading(true)
     try {
+      const followStatsPromise = getFollowStats(resolvedUserId).catch(() => ({ followers_count: 0, following_count: 0, is_following: false }))
       if (isOwner) {
-        const [profile, recordDaysRes, foodColls, recipeColls] = await Promise.all([
+        const [profile, recordDaysRes, foodColls, recipeColls, followStats] = await Promise.all([
           getUserProfile().catch(() => null),
           getUserRecordDays().catch(() => ({ record_days: 0 })),
           getPublicFoodLibraryCollections().catch(() => ({ list: [] })),
           getUserRecipes({ is_favorite: true }).catch(() => ({ recipes: [] })),
+          followStatsPromise,
         ])
         const avatar = profile?.avatar || ''
         const nickname = profile?.nickname || '用户昵称'
@@ -128,13 +138,15 @@ export default function ProfileSettingsPage() {
         setFoodCollections(foodColls.list || [])
         setRecipeCollections(recipeColls.recipes || [])
         setFavoriteCount(recipeColls.recipes?.length || 0)
+        applyFollowStats(followStats)
         // 加载动态
         loadFeed(true)
       } else {
-        const [publicProfile, foodColls, recipeColls] = await Promise.all([
+        const [publicProfile, foodColls, recipeColls, followStats] = await Promise.all([
           getPublicUserProfile(resolvedUserId).catch(() => null),
           getUserCollections(resolvedUserId).catch(() => ({ list: [] })),
           getUserFavoriteRecipes(resolvedUserId).catch(() => ({ recipes: [] })),
+          followStatsPromise,
         ])
         const avatar = publicProfile?.avatar || ''
         const nickname = publicProfile?.nickname || '用户'
@@ -147,6 +159,7 @@ export default function ProfileSettingsPage() {
         setFoodCollections(foodColls.list || [])
         setRecipeCollections(recipeColls.recipes || [])
         setFavoriteCount(recipeColls.recipes?.length || 0)
+        applyFollowStats(followStats)
         // 加载动态
         loadFeed(true)
       }
@@ -155,6 +168,40 @@ export default function ProfileSettingsPage() {
     } finally {
       setPageLoading(false)
     }
+  }
+
+  const applyFollowStats = (stats: FollowStats) => {
+    setFollowersCount(stats?.followers_count || 0)
+    setFollowingCount(stats?.following_count || 0)
+    setIsFollowing(stats?.is_following || false)
+  }
+
+  const handleFollowToggle = async () => {
+    if (!resolvedUserId || isOwner || followLoading) return
+    setFollowLoading(true)
+    try {
+      if (isFollowing) {
+        await unfollowUser(resolvedUserId)
+        setIsFollowing(false)
+        setFollowersCount(prev => Math.max(0, prev - 1))
+      } else {
+        await followUser(resolvedUserId)
+        setIsFollowing(true)
+        setFollowersCount(prev => prev + 1)
+      }
+    } catch (err: any) {
+      Taro.showToast({ title: err?.message || '操作失败', icon: 'none' })
+    } finally {
+      setFollowLoading(false)
+    }
+  }
+
+  const handleGoFollowers = () => {
+    Taro.navigateTo({ url: `/pages/follow-list/index?type=followers&user_id=${encodeURIComponent(resolvedUserId)}` })
+  }
+
+  const handleGoFollowing = () => {
+    Taro.navigateTo({ url: `/pages/follow-list/index?type=following&user_id=${encodeURIComponent(resolvedUserId)}` })
   }
 
   // 加载动态
@@ -345,12 +392,12 @@ export default function ProfileSettingsPage() {
           <View className='profile-feed-nutrition-row'>
             {isExercise && record.calories_burned ? (
               <View className='profile-feed-nutri-item'>
-                <Text className='iconfont icon-kcal profile-feed-nutri-icon' style={{ color: '#ef4444' }} />
+                <Text className='iconfont icon-kcal profile-feed-nutri-icon' style={{ color: '#00bc7d' }} />
                 <Text className='profile-feed-nutri-text'>消耗 {record.calories_burned.toFixed(0)}</Text>
               </View>
             ) : record.total_calories > 0 ? (
               <View className='profile-feed-nutri-item'>
-                <Text className='iconfont icon-kcal profile-feed-nutri-icon' style={{ color: '#ef4444' }} />
+                <Text className='iconfont icon-kcal profile-feed-nutri-icon' style={{ color: '#00bc7d' }} />
                 <Text className='profile-feed-nutri-text'>{record.total_calories.toFixed(0)}</Text>
               </View>
             ) : null}
@@ -439,17 +486,28 @@ export default function ProfileSettingsPage() {
 
           {/* 统计行 — 数字和标签同一行，竖线分割 */}
           <View className='profile-stats-row'>
-            <Text className='profile-stat-text'>
-              <Text className='profile-stat-num'>{recordDays}</Text> 记录天数
-            </Text>
+            <View className='profile-stat-item' onClick={handleGoFollowers}>
+              <Text className='profile-stat-num'>{followersCount}</Text>
+              <Text className='profile-stat-text'>被关注</Text>
+            </View>
             <Text className='profile-stat-divider'>|</Text>
-            <Text className='profile-stat-text'>
-              <Text className='profile-stat-num'>{favoriteCount}</Text> 收藏
-            </Text>
-            <Text className='profile-stat-divider'>|</Text>
-            <Text className='profile-stat-text'>
-              <Text className='profile-stat-num'>{recipeCollections.length}</Text> 收藏内容
-            </Text>
+            <View className='profile-stat-item' onClick={handleGoFollowing}>
+              <Text className='profile-stat-num'>{followingCount}</Text>
+              <Text className='profile-stat-text'>关注</Text>
+            </View>
+            {!isOwner && (
+              <>
+                <Text className='profile-stat-divider'>|</Text>
+                <View
+                  className={`profile-follow-btn ${isFollowing ? 'profile-follow-btn--active' : ''}`}
+                  onClick={handleFollowToggle}
+                >
+                  <Text className='profile-follow-btn-text'>
+                    {followLoading ? '...' : isFollowing ? '已关注' : '+ 关注'}
+                  </Text>
+                </View>
+              </>
+            )}
           </View>
         </View>
 
@@ -515,7 +573,7 @@ export default function ProfileSettingsPage() {
                       <View className='collection-food-nutrition-row'>
                         {item.total_calories > 0 && (
                           <View className='collection-food-nutri-item'>
-                            <Text className='iconfont icon-kcal collection-food-nutri-icon' style={{ color: '#ef4444' }} />
+                            <Text className='iconfont icon-kcal collection-food-nutri-icon' style={{ color: '#00bc7d' }} />
                             <Text className='collection-food-nutri-text'>{item.total_calories.toFixed(0)}</Text>
                           </View>
                         )}

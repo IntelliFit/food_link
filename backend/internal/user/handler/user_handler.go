@@ -47,12 +47,17 @@ type AnalysisTaskService interface {
 	CreateHealthReportTask(ctx context.Context, userID string, input service.CreateHealthReportTaskInput) (string, error)
 }
 
+type FollowService interface {
+	GetFollowStats(ctx context.Context, userID, currentUserID string) (map[string]any, error)
+}
+
 type UserHandler struct {
 	userSvc         UserService
 	bindPhoneSvc    BindPhoneService
 	uploadSvc       UploadService
 	ocrSvc          OCRService
 	analysisTaskSvc AnalysisTaskService
+	followSvc       FollowService
 }
 
 func NewUserHandler(
@@ -61,6 +66,7 @@ func NewUserHandler(
 	uploadSvc UploadService,
 	ocrSvc OCRService,
 	analysisTaskSvc AnalysisTaskService,
+	followSvc FollowService,
 ) *UserHandler {
 	return &UserHandler{
 		userSvc:         userSvc,
@@ -68,6 +74,7 @@ func NewUserHandler(
 		uploadSvc:       uploadSvc,
 		ocrSvc:          ocrSvc,
 		analysisTaskSvc: analysisTaskSvc,
+		followSvc:       followSvc,
 	}
 }
 
@@ -392,6 +399,13 @@ func (h *UserHandler) GetPublicProfile(c *gin.Context) {
 	if err != nil {
 		response.Error(c, err)
 		return
+	}
+	currentUserID := c.GetString(authmw.ContextUserIDKey)
+	followStats, _ := h.followSvc.GetFollowStats(c.Request.Context(), targetUserID, currentUserID)
+	if followStats != nil {
+		for k, v := range followStats {
+			data[k] = v
+		}
 	}
 	response.Success(c, data)
 }

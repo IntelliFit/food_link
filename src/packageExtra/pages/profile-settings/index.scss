@@ -167,6 +167,49 @@
   padding: 0 4rpx;
 }
 
+.profile-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+
+  &:active {
+    opacity: 0.7;
+  }
+}
+
+.profile-follow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48rpx;
+  padding: 0 24rpx;
+  border-radius: 999rpx;
+  background: #00bc7d;
+  border: 1rpx solid #00bc7d;
+  margin-left: 8rpx;
+
+  &:active {
+    opacity: 0.8;
+    transform: scale(0.96);
+  }
+}
+
+.profile-follow-btn--active {
+  background: transparent;
+  border-color: #d1d5db;
+}
+
+.profile-follow-btn-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: #fff;
+  font-weight: 600;
+}
+
+.profile-follow-btn--active .profile-follow-btn-text {
+  color: #6b7280;
+}
+
 /* 底部内容抽屉 */
 .profile-bottom-drawer {
   flex: 1;

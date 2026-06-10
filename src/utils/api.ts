@@ -5177,6 +5177,55 @@ export async function requestFriendByInviteCode(code: string): Promise<LegacyFri
   }
 }
 
+// ==================== 关注 / 粉丝 ====================
+
+export interface FollowUser {
+  id: string
+  nickname: string
+  avatar: string
+}
+
+export interface FollowStats {
+  followers_count: number
+  following_count: number
+  is_following: boolean
+}
+
+/** 关注用户 */
+export async function followUser(userId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/user/${encodeURIComponent(userId)}/follow`, { method: 'POST' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '关注失败')
+}
+
+/** 取消关注 */
+export async function unfollowUser(userId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/user/${encodeURIComponent(userId)}/follow`, { method: 'DELETE' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '取消关注失败')
+}
+
+/** 获取粉丝列表 */
+export async function getFollowers(userId: string, offset = 0, limit = 20): Promise<{ list: FollowUser[]; has_more: boolean }> {
+  const response = await authenticatedRequest(`/api/user/${encodeURIComponent(userId)}/followers?offset=${offset}&limit=${limit}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取粉丝列表失败')
+  return response.data as { list: FollowUser[]; has_more: boolean }
+}
+
+/** 获取关注列表 */
+export async function getFollowing(userId: string, offset = 0, limit = 20): Promise<{ list: FollowUser[]; has_more: boolean }> {
+  const response = await authenticatedRequest(`/api/user/${encodeURIComponent(userId)}/following?offset=${offset}&limit=${limit}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取关注列表失败')
+  return response.data as { list: FollowUser[]; has_more: boolean }
+}
+
+/** 获取关注统计 */
+export async function getFollowStats(userId: string): Promise<FollowStats> {
+  const response = await authenticatedRequest(`/api/user/${encodeURIComponent(userId)}/follow-stats`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取关注统计失败')
+  return response.data as FollowStats
+}
+
+// ==================== 圈子 Feed ====================
+
 /** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */
 /** 圈子 Feed：好友饮食记录（分页，可选 date YYYY-MM-DD） */
 export async function communityGetFeed(
