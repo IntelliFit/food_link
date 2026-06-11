@@ -65,6 +65,7 @@ type UpdateProfileInput struct {
 	Telephone     *string `json:"telephone"`
 	Searchable    *bool   `json:"searchable"`
 	PublicRecords *bool   `json:"public_records"`
+	Motto         *string `json:"motto"`
 }
 
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, input UpdateProfileInput) (map[string]any, error) {
@@ -86,6 +87,9 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	}
 	if input.PublicRecords != nil {
 		updates["public_records"] = *input.PublicRecords
+	}
+	if input.Motto != nil {
+		updates["motto"] = *input.Motto
 	}
 	if len(updates) == 0 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "没有要更新的字段", HTTPStatus: 400}
@@ -454,6 +458,7 @@ func (s *UserService) GetPublicProfile(ctx context.Context, userID string) (map[
 		"cover_image":  s.resolveCoverImageURL(user.CoverImage),
 		"record_days":  recordDays,
 		"create_time":  user.CreatedAt,
+		"motto":        user.Motto,
 	}, nil
 }
 
@@ -568,6 +573,7 @@ func buildProfileResponseWithStorage(user *repo.User, storageClient *storage.Cli
 		"mode_switch_count_30d": user.ModeSwitchCount30d,
 		"searchable":            user.Searchable,
 		"public_records":        user.PublicRecords,
+		"motto":                 user.Motto,
 	}
 }
 

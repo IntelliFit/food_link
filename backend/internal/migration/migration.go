@@ -56,6 +56,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureSchoolsSeed(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureMottoColumn(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -562,6 +565,24 @@ func ensureSchoolsSeed(ctx context.Context, db *gorm.DB) error {
 		if err := db.WithContext(ctx).Create(&do).Error; err != nil {
 			return fmt.Errorf("insert school %q: %w", s.Name, err)
 		}
+	}
+	return nil
+}
+
+func ensureMottoColumn(ctx context.Context, db *gorm.DB) error {
+	var exists int64
+	if err := db.WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_name = 'weapp_user' AND column_name = 'motto'
+	`).Scan(&exists).Error; err != nil {
+		return fmt.Errorf("check motto column exists: %w", err)
+	}
+	if exists > 0 {
+		return nil
+	}
+	sql := `ALTER TABLE weapp_user ADD COLUMN motto TEXT`
+	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+		return fmt.Errorf("add motto column: %w", err)
 	}
 	return nil
 }

@@ -1300,6 +1300,7 @@ export interface UserInfo {
   nickname: string
   avatar: string
   cover_image?: string
+  motto?: string
   telephone?: string
   create_time?: string
   update_time?: string
@@ -1661,6 +1662,7 @@ export interface UpdateUserInfoRequest {
   nickname?: string
   avatar?: string
   cover_image?: string
+  motto?: string
   telephone?: string
   searchable?: boolean
   public_records?: boolean
@@ -5979,6 +5981,7 @@ export async function getPublicUserProfile(userId: string): Promise<{
   nickname: string
   avatar: string
   cover_image?: string
+  motto?: string
   record_days: number
   create_time?: string
 }> {

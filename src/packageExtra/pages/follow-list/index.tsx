@@ -30,7 +30,7 @@ export default function FollowListPage() {
   const [loading, setLoading] = useState(false)
   const [followStates, setFollowStates] = useState<Record<string, boolean>>({})
 
-  const pageTitle = listType === 'followers' ? '粉丝' : '关注'
+  const pageTitle = listType === 'followers' ? '被关注' : '关注'
 
   useEffect(() => {
     applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
@@ -105,23 +105,14 @@ export default function FollowListPage() {
 
   return (
     <FlPageThemeRoot>
-      <View className='follow-list-page'>
-        {/* 导航栏标题 */}
-        <View className='follow-list-header'>
-          <Text className='follow-list-title'>{pageTitle}</Text>
-        </View>
-
+      <View className={`follow-list-page ${scheme === 'dark' ? 'follow-list-page--dark' : ''}`}>
         {list.length === 0 && !loading ? (
           <View className='follow-list-empty'>
             <Text className='follow-list-empty-text'>暂无{pageTitle}</Text>
           </View>
         ) : (
-          <ScrollView
+          <View
             className='follow-list-content'
-            scrollY
-            enhanced
-            showScrollbar={false}
-            onScrollToLower={handleScrollToLower}
           >
             {list.map((item) => {
               const isSelf = item.id === currentUserId
@@ -156,7 +147,7 @@ export default function FollowListPage() {
                 <View className='follow-list-spinner' />
               </View>
             )}
-          </ScrollView>
+          </View>
         )}
       </View>
     </FlPageThemeRoot>

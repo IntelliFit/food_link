@@ -1526,16 +1526,16 @@ export function drawDailySummaryPoster(
 // ==================== 个人主页分享海报 ====================
 
 const PROFILE_POSTER_WIDTH = 375
-const PROFILE_POSTER_HEIGHT = 520
+const PROFILE_POSTER_HEIGHT = 600
 
 /** 在 Canvas 2D 中加载图片，返回宽高 */
 export function loadCanvasImage(
   canvas: HTMLCanvasElement,
   src: string
-): Promise<{ width: number; height: number }> {
+): Promise<any> {
   return new Promise((resolve, reject) => {
     const img = (canvas as any).createImage()
-    img.onload = () => resolve({ width: img.width, height: img.height })
+    img.onload = () => resolve(img)
     img.onerror = (err: any) => reject(err)
     img.src = src
   })
@@ -1543,6 +1543,24 @@ export function loadCanvasImage(
 
 export function computeProfilePosterHeight(): number {
   return PROFILE_POSTER_HEIGHT
+}
+
+function wrapMottoText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const chars = text.split('')
+  const lines: string[] = []
+  let currentLine = ''
+
+  for (const char of chars) {
+    const testLine = currentLine + char
+    if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+      lines.push(currentLine)
+      currentLine = char
+    } else {
+      currentLine = testLine
+    }
+  }
+  if (currentLine) lines.push(currentLine)
+  return lines
 }
 
 export function drawProfilePoster(
@@ -1556,42 +1574,34 @@ export function drawProfilePoster(
       recordDays: number
       followersCount: number
       followingCount: number
+      favoriteCount: number
+      motto?: string
     }
     avatarImage?: { width: number; height: number } | null
     qrCodeImage?: { width: number; height: number } | null
+    logoImage?: { width: number; height: number } | null
   }
 ): void {
-  const { width: W, height: H, data, avatarImage, qrCodeImage } = options
-  const PAD = 28
+  const { width: W, height: H, data, avatarImage, qrCodeImage, logoImage } = options
+  const PAD = 32
   const CX = W / 2
 
-  // 背景
-  ctx.fillStyle = '#F9F7F2'
+  // 双层背景：底层纯白 + 顶层墨绿色非线性透明渐变
+  ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, W, H)
 
-  // 顶部品牌区（渐变条）
-  const brandH = 100
-  const brandGrad = ctx.createLinearGradient(0, 0, 0, brandH)
-  brandGrad.addColorStop(0, 'rgba(0, 188, 125, 0.18)')
-  brandGrad.addColorStop(1, 'rgba(0, 188, 125, 0.02)')
-  ctx.fillStyle = brandGrad
-  ctx.fillRect(0, 0, W, brandH)
-
-  // 食探品牌文字
-  ctx.fillStyle = '#059669'
-  ctx.font = 'bold 22px sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'top'
-  ctx.fillText('食探 Food Link', CX, 24)
-
-  // 副标题
-  ctx.fillStyle = '#6b7280'
-  ctx.font = '13px sans-serif'
-  ctx.fillText('记录每一餐，探索健康味', CX, 54)
+  const overlayGrad = ctx.createLinearGradient(0, 0, 0, H)
+  overlayGrad.addColorStop(0, 'rgba(15, 31, 26, 1)')
+  overlayGrad.addColorStop(0.32, 'rgba(15, 31, 26, 0.92)')
+  overlayGrad.addColorStop(0.58, 'rgba(15, 31, 26, 0.62)')
+  overlayGrad.addColorStop(0.78, 'rgba(15, 31, 26, 0.22)')
+  overlayGrad.addColorStop(1, 'rgba(15, 31, 26, 0)')
+  ctx.fillStyle = overlayGrad
+  ctx.fillRect(0, 0, W, H)
 
   // 头像（圆形）
   const avatarSize = 88
-  const avatarY = 118
+  const avatarY = 84
   drawPosterAvatar(ctx, CX - avatarSize / 2, avatarY, avatarSize, avatarImage, data.nickname)
 
   // 头像外圈白色边框
@@ -1603,97 +1613,220 @@ export function drawProfilePoster(
   ctx.stroke()
   ctx.restore()
 
-  // 昵称
-  ctx.fillStyle = '#111827'
+  // 昵称（亮色前景）
+  ctx.fillStyle = '#f2f7f4'
   ctx.font = 'bold 24px sans-serif'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'top'
   ctx.fillText(data.nickname || '食探用户', CX, avatarY + avatarSize + 16)
 
-  // ID
-  ctx.fillStyle = '#9ca3af'
+  // ID（亮色前景）
+  ctx.fillStyle = 'rgba(242, 247, 244, 0.72)'
   ctx.font = '13px sans-serif'
-  ctx.fillText(`ID: ${data.shortId}`, CX, avatarY + avatarSize + 48)
+  ctx.textBaseline = 'top'
+  ctx.fillText(`ID: ${data.shortId}`, CX, avatarY + avatarSize + 44)
 
-  // 统计行背景
-  const statsY = avatarY + avatarSize + 86
-  const statsH = 64
-  const statsPad = 20
-  ctx.save()
-  drawRoundedRect(ctx, PAD, statsY, W - PAD * 2, statsH, 12)
-  ctx.fillStyle = 'rgba(0, 188, 125, 0.06)'
-  ctx.fill()
-  ctx.restore()
-
-  // 统计项
+  // 统计行（扁平化、8 栅格、亮色前景）
+  const statsY = avatarY + avatarSize + 76
+  const statsH = 56
   const statItems = [
     { num: data.recordDays, label: '记录天数' },
     { num: data.followersCount, label: '被关注' },
     { num: data.followingCount, label: '关注' },
   ]
   const statColW = (W - PAD * 2) / statItems.length
+
   statItems.forEach((s, i) => {
     const sx = PAD + statColW * i + statColW / 2
+
     // 数字
-    ctx.fillStyle = '#111827'
-    ctx.font = 'bold 20px sans-serif'
+    ctx.fillStyle = '#f2f7f4'
+    ctx.font = 'bold 22px sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    ctx.fillText(String(s.num), sx, statsY + 12)
+    ctx.fillText(String(s.num), sx, statsY)
+
     // 标签
-    ctx.fillStyle = '#6b7280'
+    ctx.fillStyle = 'rgba(242, 247, 244, 0.72)'
     ctx.font = '12px sans-serif'
-    ctx.fillText(s.label, sx, statsY + 36)
+    ctx.textBaseline = 'top'
+    ctx.fillText(s.label, sx, statsY + 28)
+
+    // 分隔竖线
+    if (i < statItems.length - 1) {
+      const lineX = PAD + statColW * (i + 1)
+      ctx.save()
+      ctx.beginPath()
+      ctx.moveTo(lineX, statsY + 8)
+      ctx.lineTo(lineX, statsY + statsH - 8)
+      ctx.strokeStyle = 'rgba(242, 247, 244, 0.2)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.restore()
+    }
   })
 
-  // 分隔线
-  const dividerY = statsY + statsH + 28
+  let contentBottomY = statsY + statsH
+
+  // 座右铭（完整呈现、无省略、无标签、左侧竖线标识，整体水平居中）
+  const mottoText = (data.motto || '').trim()
+  if (mottoText) {
+    const mottoSectionY = contentBottomY + 32
+    const maxMottoLineWidth = W - PAD * 2 - 48
+
+    // 尝试不同字号，确保完整显示（最多 3 行）
+    const fontSizeCandidates = [16, 15, 14, 13, 12]
+    let bestFontSize = 12
+    let bestLines: string[] = []
+
+    for (const fontSize of fontSizeCandidates) {
+      ctx.font = `500 ${fontSize}px sans-serif`
+      const lines = wrapMottoText(ctx, mottoText, maxMottoLineWidth)
+      if (lines.length <= 3) {
+        bestFontSize = fontSize
+        bestLines = lines
+        break
+      }
+    }
+
+    // 兜底：即使 12px 超过 3 行也完整显示
+    if (bestLines.length === 0) {
+      ctx.font = '500 12px sans-serif'
+      bestLines = wrapMottoText(ctx, mottoText, maxMottoLineWidth)
+    }
+
+    const lineHeight = bestFontSize * 1.6
+    const mottoTotalH = bestLines.length * lineHeight
+
+    // 计算整体块宽度并水平居中
+    const lineWidths = bestLines.map((line) => ctx.measureText(line).width)
+    const maxLineW = Math.max(...lineWidths)
+    const lineIndent = 10
+    const mottoBlockW = 2 + lineIndent + maxLineW
+    const mottoBlockX = CX - mottoBlockW / 2
+    const mottoTextCenterX = mottoBlockX + 2 + lineIndent + maxLineW / 2
+
+    // 左侧主题绿竖线作为标识
+    ctx.save()
+    ctx.fillStyle = '#00bc7d'
+    ctx.fillRect(mottoBlockX, mottoSectionY, 2, mottoTotalH)
+    ctx.restore()
+
+    // 座右铭文字（亮色前景，使用 textAlign='center' 保证每行绝对水平居中）
+    ctx.fillStyle = '#f2f7f4'
+    ctx.font = `500 ${bestFontSize}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    bestLines.forEach((line, i) => {
+      ctx.fillText(line, mottoTextCenterX, mottoSectionY + i * lineHeight)
+    })
+
+    contentBottomY = mottoSectionY + mottoTotalH
+  }
+
+  // 收藏饮食数量（圆角矩形容器，位于较亮背景区域，视觉表现力增强）
+  const favoriteY = contentBottomY + 36
+  const favoriteCount = data.favoriteCount || 0
+  const countText = String(favoriteCount)
+  const unitText = ' 道收藏饮食'
+
+  ctx.font = 'bold 18px sans-serif'
+  const countW = ctx.measureText(countText).width
+  ctx.font = '500 13px sans-serif'
+  const unitW = ctx.measureText(unitText).width
+
+  const favPadX = 22
+  const favIconSpace = 10
+  const favIconR = 5
+  const favW = countW + unitW + favPadX * 2 + favIconR * 2 + favIconSpace
+  const favH = 40
+  const favX = CX - favW / 2
+
+  // 白色卡片底 + 淡色边框
   ctx.save()
-  ctx.beginPath()
-  ctx.moveTo(PAD + 20, dividerY)
-  ctx.lineTo(W - PAD - 20, dividerY)
-  ctx.strokeStyle = '#e5e7eb'
+  drawRoundedRect(ctx, favX, favoriteY, favW, favH, 20)
+  ctx.fillStyle = '#ffffff'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.14)'
   ctx.lineWidth = 1
   ctx.stroke()
   ctx.restore()
 
-  // 底部二维码区
-  const qrSize = 80
-  const qrY = dividerY + 24
-  const qrX = CX - qrSize / 2
+  // 左侧主题绿圆点图标
+  const iconX = favX + favPadX + favIconR
+  const iconY = favoriteY + favH / 2
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(iconX, iconY, favIconR, 0, Math.PI * 2)
+  ctx.fillStyle = '#00bc7d'
+  ctx.fill()
+  ctx.restore()
 
+  // 文字：数字放大加粗 + 单位常规
+  const textBaseX = iconX + favIconR + favIconSpace
+  ctx.textBaseline = 'middle'
+
+  ctx.fillStyle = '#0f172a'
+  ctx.font = 'bold 18px sans-serif'
+  ctx.textAlign = 'left'
+  ctx.fillText(countText, textBaseX, favoriteY + favH / 2)
+
+  ctx.fillStyle = '#334155'
+  ctx.font = '500 13px sans-serif'
+  ctx.fillText(unitText, textBaseX + countW, favoriteY + favH / 2)
+
+  // 底部：左侧口号+品牌，右侧二维码
+  const footerY = H - 116
+  const qrSize = 84
+  const qrX = W - PAD - qrSize
+  const qrY = footerY
+
+  // 二维码
   if (qrCodeImage) {
     ctx.save()
-    drawRoundedRect(ctx, qrX - 3, qrY - 3, qrSize + 6, qrSize + 6, 10)
-    ctx.strokeStyle = '#d1d5db'
+    drawRoundedRect(ctx, qrX - 3, qrY - 3, qrSize + 6, qrSize + 6, 12)
+    ctx.strokeStyle = '#e2e8f0'
     ctx.lineWidth = 1
     ctx.stroke()
     ctx.restore()
     ctx.drawImage(qrCodeImage as CanvasImageSource, qrX, qrY, qrSize, qrSize)
   } else {
-    drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 10)
-    ctx.fillStyle = '#f3f4f6'
+    drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 12)
+    ctx.fillStyle = '#f1f5f9'
     ctx.fill()
-    ctx.fillStyle = '#9ca3af'
+    ctx.fillStyle = '#94a3b8'
     ctx.font = '11px sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText('二维码', CX, qrY + qrSize / 2)
+    ctx.fillText('二维码', qrX + qrSize / 2, qrY + qrSize / 2)
   }
 
-  // 扫码提示
-  ctx.fillStyle = '#6b7280'
-  ctx.font = '13px sans-serif'
-  ctx.textAlign = 'center'
+  // 左侧口号（放大加粗）
+  ctx.fillStyle = '#0f172a'
+  ctx.font = 'bold 18px sans-serif'
+  ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
-  ctx.fillText('微信扫码 · 关注我', CX, qrY + qrSize + 12)
+  ctx.fillText('我在食探记录生活饮食', PAD, footerY + 16)
 
-  // 底部品牌
-  ctx.fillStyle = '#d1d5db'
-  ctx.font = '11px sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'bottom'
-  ctx.fillText('食探 Food Link · 健康饮食记录', CX, H - 16)
+  // 小 logo + 品牌名
+  const miniLogoH = 22
+  const brandY = footerY + 54
+  if (logoImage && logoImage.width > 0 && logoImage.height > 0) {
+    const scale = miniLogoH / logoImage.height
+    const miniLogoW = logoImage.width * scale
+    ctx.drawImage(logoImage as CanvasImageSource, PAD, brandY, miniLogoW, miniLogoH)
+    ctx.fillStyle = '#64748b'
+    ctx.font = '12px sans-serif'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('食探 Food Link', PAD + miniLogoW + 8, brandY + miniLogoH / 2)
+  } else {
+    ctx.fillStyle = '#64748b'
+    ctx.font = '12px sans-serif'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+    ctx.fillText('食探 Food Link', PAD, brandY)
+  }
 }
 
 export type { FoodRecord }

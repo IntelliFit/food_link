@@ -35,6 +35,7 @@ import {
 } from '../../../utils/poster'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
+import { ensureWeappPrivacyAuthorized, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -95,8 +96,6 @@ export default function ProfileSettingsPage() {
   const [pageLoading, setPageLoading] = useState(true)
 
   // 分享海报
-  const [posterVisible, setPosterVisible] = useState(false)
-  const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
   const [posterGenerating, setPosterGenerating] = useState(false)
 
   // 编辑弹窗
@@ -104,7 +103,11 @@ export default function ProfileSettingsPage() {
   const [editNickname, setEditNickname] = useState('')
   const [editAvatar, setEditAvatar] = useState('')
   const [editCoverImage, setEditCoverImage] = useState('')
+  const [editMotto, setEditMotto] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // 座右铭
+  const [motto, setMotto] = useState('')
 
   // 背景图
   const [coverImage, setCoverImage] = useState('')
@@ -182,14 +185,17 @@ export default function ProfileSettingsPage() {
         const nickname = profile?.nickname || '用户昵称'
         const uid = String(profile?.id || currentUserId).trim()
         const cover = profile?.cover_image || ''
+        const userMotto = profile?.motto || ''
         setTempAvatar(avatar)
         setTempNickname(nickname)
         setEditAvatar(avatar)
         setEditNickname(nickname)
         setEditCoverImage(cover)
+        setEditMotto(userMotto)
         setUserId(uid)
         setRecordDays(recordDaysRes.record_days || 0)
         setCoverImage(cover)
+        setMotto(userMotto)
         setFoodCollections(foodColls.list || [])
         setRecipeCollections(recipeColls.recipes || [])
         setFavoriteCount(recipeColls.recipes?.length || 0)
@@ -206,6 +212,7 @@ export default function ProfileSettingsPage() {
         const avatar = publicProfile?.avatar || ''
         const nickname = publicProfile?.nickname || '用户'
         const cover = publicProfile?.cover_image || ''
+        const userMotto = publicProfile?.motto || ''
         setTempAvatar(avatar)
         setTempNickname(nickname)
         setEditAvatar(avatar)
@@ -214,6 +221,7 @@ export default function ProfileSettingsPage() {
         setUserId(publicProfile?.id || resolvedUserId)
         setRecordDays(publicProfile?.record_days || 0)
         setCoverImage(cover)
+        setMotto(userMotto)
         setFoodCollections(foodColls.list || [])
         setRecipeCollections(recipeColls.recipes || [])
         setFavoriteCount(recipeColls.recipes?.length || 0)
@@ -343,6 +351,7 @@ export default function ProfileSettingsPage() {
     setEditAvatar(tempAvatar)
     setEditNickname(tempNickname)
     setEditCoverImage(coverImage)
+    setEditMotto(motto)
     setShowEditSheet(true)
   }
 
@@ -398,13 +407,14 @@ export default function ProfileSettingsPage() {
     setSaving(true)
     Taro.showLoading({ title: '保存中...' })
     try {
-      await updateUserInfo({ nickname: editNickname, avatar: editAvatar, cover_image: editCoverImage })
+      await updateUserInfo({ nickname: editNickname, avatar: editAvatar, cover_image: editCoverImage, motto: editMotto })
       const stored = Taro.getStorageSync('userInfo')
       const newUserInfo = { avatar: editAvatar, name: editNickname, meta: stored?.meta || '', id: userId || currentUserId }
       Taro.setStorageSync('userInfo', newUserInfo)
       setTempAvatar(editAvatar)
       setTempNickname(editNickname)
       setCoverImage(editCoverImage)
+      setMotto(editMotto)
       Taro.hideLoading()
       Taro.showToast({ title: '保存成功', icon: 'success' })
       setShowEditSheet(false)
@@ -442,6 +452,7 @@ export default function ProfileSettingsPage() {
   // 扫码
   const handleScanQRCode = async () => {
     try {
+      await ensureWeappPrivacyAuthorized()
       const res = await Taro.scanCode({
         onlyFromCamera: true,
         scanType: ['qrCode'],
@@ -459,6 +470,10 @@ export default function ProfileSettingsPage() {
       }
     } catch (err: any) {
       if (err?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(err)) {
+        showPrivacyAuthorizeFailure(err)
+        return
+      }
       Taro.showToast({ title: '扫码失败', icon: 'none' })
     }
   }
@@ -467,7 +482,7 @@ export default function ProfileSettingsPage() {
   const handleShareProfile = async () => {
     if (posterGenerating) return
     setPosterGenerating(true)
-    setPosterVisible(true)
+    Taro.showLoading({ title: '生成中...' })
     try {
       const qrSize = 200
       // 获取二维码 Canvas 节点并绘制普通二维码
@@ -515,15 +530,18 @@ export default function ProfileSettingsPage() {
       const ctx = canvasNode.getContext('2d')
       if (!ctx) throw new Error('canvas context 失败')
 
-      // 并行加载头像和二维码图片
-      const [avatarResolved, qrResolved] = await Promise.all([
+      // 并行加载头像、二维码和食探 logo
+      const LOGO_URL = 'https://healthymax.cn/brand/login-logo.png'
+      const [avatarResolved, qrResolved, logoResolved] = await Promise.all([
         tempAvatar ? resolveCanvasImageSrc(tempAvatar) : Promise.resolve(''),
         resolveCanvasImageSrc(qrImagePath),
+        resolveCanvasImageSrc(LOGO_URL),
       ])
 
-      const [avatarImg, qrImg] = await Promise.all([
+      const [avatarImg, qrImg, logoImg] = await Promise.all([
         avatarResolved ? loadCanvasImage(canvasNode, avatarResolved) : Promise.resolve(null),
         qrResolved ? loadCanvasImage(canvasNode, qrResolved) : Promise.resolve(null),
+        logoResolved ? loadCanvasImage(canvasNode, logoResolved) : Promise.resolve(null),
       ])
 
       drawProfilePoster(ctx, {
@@ -535,9 +553,12 @@ export default function ProfileSettingsPage() {
           recordDays,
           followersCount,
           followingCount,
+          favoriteCount,
+          motto,
         },
         avatarImage: avatarImg,
         qrCodeImage: qrImg,
+        logoImage: logoImg,
       })
 
       const fileRes = await Taro.canvasToTempFilePath({
@@ -545,48 +566,22 @@ export default function ProfileSettingsPage() {
         width,
         height,
       })
-      setPosterImageUrl(fileRes.tempFilePath)
+
+      Taro.hideLoading()
+      Taro.showShareImageMenu({
+        path: fileRes.tempFilePath,
+        fail: (err: any) => {
+          if (isShowShareImageMenuCancel(err)) return
+          Taro.showToast({ title: '分享失败', icon: 'none' })
+        },
+      })
     } catch (error: any) {
+      Taro.hideLoading()
       console.error('[profile-settings] 海报生成失败:', error)
       Taro.showToast({ title: error?.message || '海报生成失败', icon: 'none' })
-      setPosterVisible(false)
     } finally {
       setPosterGenerating(false)
     }
-  }
-
-  const handleSavePoster = async () => {
-    if (!posterImageUrl) return
-    try {
-      await Taro.saveImageToPhotosAlbum({ filePath: posterImageUrl })
-      Taro.showToast({ title: '已保存到相册', icon: 'success' })
-    } catch (err: any) {
-      if (err?.errMsg?.includes('auth') || err?.errMsg?.includes('authorize')) {
-        Taro.showModal({
-          title: '需要授权',
-          content: '请授权保存图片到相册权限',
-          showCancel: false,
-        })
-      } else if (isShowShareImageMenuCancel(err)) {
-        // 用户取消，静默处理
-      } else {
-        Taro.showToast({ title: '保存失败', icon: 'none' })
-      }
-    }
-  }
-
-  const handleSharePoster = () => {
-    if (!posterImageUrl) return
-    Taro.showShareImageMenu({
-      path: posterImageUrl,
-      success: () => {
-        Taro.showToast({ title: '分享成功', icon: 'success' })
-      },
-      fail: (err: any) => {
-        if (isShowShareImageMenuCancel(err)) return
-        Taro.showToast({ title: '分享失败', icon: 'none' })
-      },
-    })
   }
 
   const handleGoDetail = (item: PublicFoodLibraryItem) => {
@@ -795,6 +790,17 @@ export default function ProfileSettingsPage() {
             </View>
           </View>
 
+          {/* 座右铭 */}
+          {motto ? (
+            <View className='profile-motto-row' onClick={isOwner ? handleOpenEdit : undefined}>
+              <Text className='profile-motto-text'>{motto}</Text>
+            </View>
+          ) : isOwner ? (
+            <View className='profile-motto-row profile-motto-row--empty' onClick={handleOpenEdit}>
+              <Text className='profile-motto-text profile-motto-text--empty'>点击编辑资料添加座右铭</Text>
+            </View>
+          ) : null}
+
           {/* 关注 + 私信操作行（仅他人主页） */}
           {!isOwner && (
             <View className='profile-action-row'>
@@ -972,6 +978,20 @@ export default function ProfileSettingsPage() {
                 />
               </View>
 
+              {/* 座右铭 */}
+              <View className='edit-sheet-row'>
+                <Text className='edit-sheet-label'>座右铭</Text>
+                <Input
+                  className='edit-sheet-input'
+                  type='text'
+                  placeholder='写一句你的座右铭（最多30字）'
+                  maxlength={30}
+                  value={editMotto}
+                  onBlur={(e) => setEditMotto(e.detail.value)}
+                  onInput={(e) => setEditMotto(e.detail.value)}
+                />
+              </View>
+
               {/* 用户ID */}
               {userId && (
                 <View className='edit-sheet-row'>
@@ -994,41 +1014,6 @@ export default function ProfileSettingsPage() {
               <View className='edit-sheet-delete' onClick={handleDeleteAccount}>
                 <Text className='edit-sheet-delete-text'>注销账号</Text>
               </View>
-            </View>
-          </View>
-        )}
-
-        {/* 分享海报弹窗 */}
-        {posterVisible && (
-          <View className='poster-modal'>
-            <View className='poster-modal-overlay' onClick={() => setPosterVisible(false)} />
-            <View className='poster-modal-content'>
-              {posterGenerating && !posterImageUrl ? (
-                <View className='poster-modal-loading'>
-                  <View className='poster-modal-spinner' />
-                </View>
-              ) : (
-                <>
-                  {posterImageUrl && (
-                    <Image
-                      className='poster-modal-image'
-                      src={posterImageUrl}
-                      mode='widthFix'
-                      showMenuByLongpress
-                    />
-                  )}
-                  <View className='poster-modal-actions'>
-                    <View className='poster-modal-btn' onClick={handleSavePoster}>
-                      <Text className='poster-modal-btn-icon'>💾</Text>
-                      <Text className='poster-modal-btn-text'>保存图片</Text>
-                    </View>
-                    <View className='poster-modal-btn' onClick={handleSharePoster}>
-                      <Text className='poster-modal-btn-icon'>📤</Text>
-                      <Text className='poster-modal-btn-text'>分享给好友</Text>
-                    </View>
-                  </View>
-                </>
-              )}
             </View>
           </View>
         )}
