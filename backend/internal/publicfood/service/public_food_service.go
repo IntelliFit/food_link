@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -13,6 +14,8 @@ import (
 	"food_link/backend/internal/publicfood/repo"
 	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/storage"
+
+	"gorm.io/datatypes"
 )
 
 type PublicFoodService struct {
@@ -469,7 +472,8 @@ func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, i
 		updates["image_path"] = *input.ImagePath
 	}
 	if len(input.ImagePaths) > 0 {
-		updates["image_paths"] = input.ImagePaths
+		b, _ := json.Marshal(input.ImagePaths)
+		updates["image_paths"] = datatypes.JSON(b)
 	}
 	if input.FoodName != nil {
 		updates["food_name"] = *input.FoodName
@@ -491,7 +495,8 @@ func (s *PublicFoodService) Update(ctx context.Context, userID, itemID string, i
 	}
 	updates["suitable_for_fat_loss"] = input.SuitableForFatLoss
 	if input.UserTags != nil {
-		updates["user_tags"] = input.UserTags
+		b, _ := json.Marshal(input.UserTags)
+		updates["user_tags"] = datatypes.JSON(b)
 	}
 	if input.UserNotes != nil {
 		updates["user_notes"] = *input.UserNotes
