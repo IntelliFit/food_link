@@ -688,6 +688,19 @@ type UserFollowDO struct {
 
 func (UserFollowDO) TableName() string { return "user_follows" }
 
+type PrivateMessageDO struct {
+	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SenderID   string     `gorm:"column:sender_id;type:uuid;not null;index:idx_private_messages_sender"`
+	ReceiverID string     `gorm:"column:receiver_id;type:uuid;not null;index:idx_private_messages_receiver"`
+	Content    string     `gorm:"column:content;type:text;not null;default:''"`
+	ImageURL   *string    `gorm:"column:image_url;type:text"`
+	ContentType string    `gorm:"column:content_type;type:text;not null;default:'text'"`
+	IsRead     bool       `gorm:"column:is_read;type:boolean;not null;default:false"`
+	CreatedAt  *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+}
+
+func (PrivateMessageDO) TableName() string { return "private_messages" }
+
 type BodyWeightRecordDO struct {
 	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID         string    `gorm:"column:user_id;type:uuid;not null;index:idx_user_weight_records_user_date,priority:1;index:idx_user_weight_records_user_created_at,priority:1;index:idx_user_weight_records_user_client_record_id,priority:1,where:client_record_id IS NOT NULL"`
@@ -1076,6 +1089,7 @@ func AllModels() []any {
 		&FriendRequestDO{},
 		&UserFriendDO{},
 		&UserFollowDO{},
+		&PrivateMessageDO{},
 		&BodyWeightRecordDO{},
 		&BodyWaterLogDO{},
 		&BodyMetricSettingsDO{},

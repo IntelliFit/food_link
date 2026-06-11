@@ -37,6 +37,9 @@ import (
 	followhandler "food_link/backend/internal/follow/handler"
 	followrepo "food_link/backend/internal/follow/repo"
 	followservice "food_link/backend/internal/follow/service"
+	messagehandler "food_link/backend/internal/message/handler"
+	messagerepo "food_link/backend/internal/message/repo"
+	messageservice "food_link/backend/internal/message/service"
 	friendhandler "food_link/backend/internal/friend/handler"
 	friendrepo "food_link/backend/internal/friend/repo"
 	friendservice "food_link/backend/internal/friend/service"
@@ -162,6 +165,11 @@ func New(cfg *config.Config) (*App, error) {
 	followRepo := followrepo.NewFollowRepo(db)
 	followSvc := followservice.NewFollowService(followRepo, storageClient)
 	followHandler := followhandler.NewFollowHandler(followSvc)
+
+	// Message module DI
+	messageRepo := messagerepo.NewMessageRepo(db)
+	messageSvc := messageservice.NewMessageService(messageRepo, storageClient)
+	messageHandler := messagehandler.NewMessageHandler(messageSvc)
 
 	userHandler := userhandler.NewUserHandler(userSvc, bindPhoneSvc, uploadSvc, ocrSvc, analysisTaskSvc, followSvc)
 
@@ -383,6 +391,13 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/user/:user_id/followers", authmw.RequireJWT(jwtSvc), followHandler.GetFollowers)
 	engine.GET("/api/user/:user_id/following", authmw.RequireJWT(jwtSvc), followHandler.GetFollowing)
 	engine.GET("/api/user/:user_id/follow-stats", authmw.RequireJWT(jwtSvc), followHandler.GetFollowStats)
+
+	// Message routes
+	engine.POST("/api/messages/send", authmw.RequireJWT(jwtSvc), messageHandler.Send)
+	engine.GET("/api/messages/conversation/:user_id", authmw.RequireJWT(jwtSvc), messageHandler.GetConversation)
+	engine.GET("/api/messages/conversations", authmw.RequireJWT(jwtSvc), messageHandler.GetConversations)
+	engine.PUT("/api/messages/read/:user_id", authmw.RequireJWT(jwtSvc), messageHandler.MarkRead)
+	engine.GET("/api/messages/unread-count", authmw.RequireJWT(jwtSvc), messageHandler.GetUnreadCount)
 
 	// Friend routes
 	engine.GET("/api/friend/search", authmw.RequireJWT(jwtSvc), friendHandler.Search)

@@ -1,0 +1,324 @@
+import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import Taro, { useRouter } from '@tarojs/taro'
+import {
+  getPrivateMessages,
+  sendPrivateMessage,
+  markMessagesRead,
+  getPublicUserProfile,
+  type PrivateMessage,
+} from '../../../utils/api'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
+import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { getAccessToken } from '../../../utils/api'
+import './index.scss'
+
+const POLL_INTERVAL_MS = 3000
+
+function formatMessageTime(createdAt: string): string {
+  const d = new Date(createdAt)
+  if (Number.isNaN(d.getTime())) return ''
+  const now = new Date()
+  const diff = now.getTime() - d.getTime()
+  const isSameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+  if (isSameDay) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+  const yesterday = new Date(now.getTime() - 86400000)
+  const isYesterday = d.getFullYear() === yesterday.getFullYear() && d.getMonth() === yesterday.getMonth() && d.getDate() === yesterday.getDate()
+  if (isYesterday) {
+    return `昨天 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function shouldShowTimeDivider(prev: PrivateMessage | null, curr: PrivateMessage): boolean {
+  if (!prev) return true
+  const prevTime = new Date(prev.created_at).getTime()
+  const currTime = new Date(curr.created_at).getTime()
+  return Math.abs(currTime - prevTime) > 5 * 60 * 1000
+}
+
+export default function PrivateChatPage() {
+  const { scheme } = useAppColorScheme()
+  const router = useRouter()
+  const otherUserId = String(router.params.user_id || '').trim()
+  const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
+
+  const [otherUser, setOtherUser] = useState<{ nickname: string; avatar: string }>({ nickname: '私信', avatar: '' })
+  const [messages, setMessages] = useState<PrivateMessage[]>([])
+  const [inputText, setInputText] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [offset, setOffset] = useState(0)
+
+  const scrollRef = useRef<string>('')
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const isPollingRef = useRef(false)
+  const messagesRef = useRef<PrivateMessage[]>([])
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
+  }, [scheme])
+
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  // 加载对方信息
+  useEffect(() => {
+    if (!otherUserId) return
+    getPublicUserProfile(otherUserId)
+      .then((profile) => {
+        setOtherUser({ nickname: profile.nickname || '用户', avatar: profile.avatar || '' })
+      })
+      .catch(() => {
+        setOtherUser({ nickname: '用户', avatar: '' })
+      })
+  }, [otherUserId])
+
+  // 加载消息
+  const loadMessages = useCallback(async (reset = false) => {
+    if (!otherUserId || !getAccessToken()) return
+    const currentOffset = reset ? 0 : offset
+    if (!reset && !hasMore) return
+
+    if (reset) setLoading(true)
+    try {
+      const res = await getPrivateMessages(otherUserId, currentOffset, 20)
+      const list = res.list || []
+      if (reset) {
+        setMessages(list)
+        // 标记已读
+        markMessagesRead(otherUserId).catch(() => {})
+      } else {
+        setMessages((prev) => [...list, ...prev])
+      }
+      setHasMore(res.has_more ?? list.length >= 20)
+      setOffset(currentOffset + list.length)
+    } catch (err: any) {
+      console.error('[private-chat] 加载消息失败:', err)
+    } finally {
+      if (reset) setLoading(false)
+    }
+  }, [otherUserId, offset, hasMore])
+
+  // 轮询新消息
+  const pollNewMessages = useCallback(async () => {
+    if (!otherUserId || !getAccessToken() || isPollingRef.current) return
+    isPollingRef.current = true
+    try {
+      const res = await getPrivateMessages(otherUserId, 0, 100)
+      const list = res.list || []
+      const currentIds = new Set(messagesRef.current.map((m) => m.id))
+      const newMsgs = list.filter((m) => !currentIds.has(m.id))
+      if (newMsgs.length > 0) {
+        setMessages(list)
+        // 有新消息且当前在页面底部附近时，标记已读
+        markMessagesRead(otherUserId).catch(() => {})
+      }
+    } catch (err) {
+      // 轮询失败静默处理
+    } finally {
+      isPollingRef.current = false
+    }
+  }, [otherUserId])
+
+  // 启动/停止轮询
+  useEffect(() => {
+    if (!otherUserId || !getAccessToken()) return
+    loadMessages(true)
+    pollTimerRef.current = setInterval(pollNewMessages, POLL_INTERVAL_MS)
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current)
+        pollTimerRef.current = null
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otherUserId])
+
+  // 发送文本消息
+  const handleSendText = async () => {
+    const text = inputText.trim()
+    if (!text || !otherUserId || sending) return
+    setSending(true)
+    try {
+      const msg = await sendPrivateMessage(otherUserId, text, 'text')
+      setMessages((prev) => [msg, ...prev])
+      setInputText('')
+      scrollToBottom()
+    } catch (err: any) {
+      Taro.showToast({ title: err?.message || '发送失败', icon: 'none' })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  // 发送图片消息
+  const handleSendImage = async () => {
+    if (!otherUserId || sending) return
+    try {
+      const tempFiles = await chooseImageWithPrivacy({ count: 1, sizeType: ['compressed'] })
+      if (!tempFiles || tempFiles.length === 0) return
+      const tempFilePath = tempFiles[0].path
+
+      setSending(true)
+      Taro.showLoading({ title: '发送中...', mask: true })
+
+      // 上传图片到服务器
+      const token = getAccessToken()
+      const uploadRes = await Taro.uploadFile({
+        url: `${process.env.TARO_APP_API_BASE_URL || 'https://dev.healthymax.cn'}/api/upload-analyze-image-file`,
+        filePath: tempFilePath,
+        name: 'file',
+        header: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      Taro.hideLoading()
+      const data = JSON.parse(uploadRes.data)
+      const imageUrl = data?.imageUrl || data?.data?.imageUrl
+      if (!imageUrl) {
+        throw new Error('图片上传失败')
+      }
+
+      const msg = await sendPrivateMessage(otherUserId, '', 'image', imageUrl)
+      setMessages((prev) => [msg, ...prev])
+      scrollToBottom()
+    } catch (err: any) {
+      Taro.hideLoading()
+      if (isPrivacyAuthorizeError(err)) {
+        showPrivacyAuthorizeFailure()
+        return
+      }
+      Taro.showToast({ title: err?.message || '发送失败', icon: 'none' })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      scrollRef.current = `msg-bottom-${Date.now()}`
+    }, 100)
+  }
+
+  const handleGoBack = () => {
+    Taro.navigateBack()
+  }
+
+  const handlePreviewImage = (url: string) => {
+    const urls = messages.filter((m) => m.content_type === 'image' && m.image_url).map((m) => m.image_url!)
+    Taro.previewImage({ urls: urls.length > 0 ? urls : [url], current: url })
+  }
+
+  const renderMessage = (msg: PrivateMessage, index: number) => {
+    const isSelf = msg.sender_id === currentUserId
+    const prevMsg = index < messages.length - 1 ? messages[index + 1] : null
+    const showTime = shouldShowTimeDivider(prevMsg, msg)
+
+    return (
+      <View key={msg.id}>
+        {showTime && (
+          <View className='chat-time-divider'>
+            <Text className='chat-time-text'>{formatMessageTime(msg.created_at)}</Text>
+          </View>
+        )}
+        <View className={`chat-message-row ${isSelf ? 'chat-message-row--self' : ''}`}>
+          {!isSelf && (
+            <View className='chat-avatar'>
+              {otherUser.avatar ? (
+                <Image className='chat-avatar-img' src={otherUser.avatar} mode='aspectFill' />
+              ) : (
+                <Text className='chat-avatar-placeholder'>👤</Text>
+              )}
+            </View>
+          )}
+          <View className={`chat-bubble ${isSelf ? 'chat-bubble--self' : ''}`}>
+            {msg.content_type === 'image' && msg.image_url ? (
+              <Image
+                className='chat-bubble-image'
+                src={msg.image_url}
+                mode='widthFix'
+                onClick={() => handlePreviewImage(msg.image_url!)}
+              />
+            ) : (
+              <Text className='chat-bubble-text'>{msg.content}</Text>
+            )}
+          </View>
+        </View>
+      </View>
+    )
+  }
+
+  return (
+    <FlPageThemeRoot>
+      <View className='private-chat-page'>
+        {/* 自定义导航栏 */}
+        <View className='chat-navbar'>
+          <View className='chat-navbar-back' onClick={handleGoBack}>
+            <Text className='iconfont icon-left-arrow chat-navbar-back-icon' />
+          </View>
+          <Text className='chat-navbar-title' numberOfLines={1}>{otherUser.nickname}</Text>
+          <View className='chat-navbar-placeholder' />
+        </View>
+
+        {/* 消息列表 */}
+        <ScrollView
+          className='chat-message-list'
+          scrollY
+          enhanced
+          showScrollbar={false}
+          scrollIntoView={scrollRef.current}
+        >
+          <View className='chat-message-content'>
+            {loading && messages.length === 0 ? (
+              <View className='chat-loading'>
+                <View className='chat-spinner' />
+              </View>
+            ) : messages.length === 0 ? (
+              <View className='chat-empty'>
+                <Text className='chat-empty-text'>开始聊天吧</Text>
+              </View>
+            ) : (
+              <>
+                {messages.map(renderMessage)}
+                <View id={`msg-bottom-${scrollRef.current}`} className='chat-bottom-anchor' />
+              </>
+            )}
+          </View>
+        </ScrollView>
+
+        {/* 底部输入区 */}
+        <View className='chat-input-bar'>
+          <View className='chat-input-actions'>
+            <View className='chat-image-btn' onClick={handleSendImage}>
+              <Text className='iconfont icon-tupian chat-image-btn-icon' />
+            </View>
+          </View>
+          <Input
+            className='chat-input'
+            placeholder='说点什么...'
+            value={inputText}
+            onInput={(e) => setInputText(e.detail.value)}
+            onConfirm={handleSendText}
+            confirmType='send'
+            disabled={sending}
+          />
+          <Button
+            className={`chat-send-btn ${inputText.trim() ? 'chat-send-btn--active' : ''}`}
+            onClick={handleSendText}
+            disabled={!inputText.trim() || sending}
+          >
+            <Text className='chat-send-btn-text'>发送</Text>
+          </Button>
+        </View>
+      </View>
+    </FlPageThemeRoot>
+  )
+}

@@ -255,11 +255,16 @@ export default function ProfileSettingsPage() {
   }
 
   const handleGoFollowers = () => {
-    Taro.navigateTo({ url: `/pages/follow-list/index?type=followers&user_id=${encodeURIComponent(resolvedUserId)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/follow-list/index')}?type=followers&user_id=${encodeURIComponent(resolvedUserId)}` })
   }
 
   const handleGoFollowing = () => {
-    Taro.navigateTo({ url: `/pages/follow-list/index?type=following&user_id=${encodeURIComponent(resolvedUserId)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/follow-list/index')}?type=following&user_id=${encodeURIComponent(resolvedUserId)}` })
+  }
+
+  const handleGoPrivateChat = () => {
+    if (!resolvedUserId) return
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/private-chat/index')}?user_id=${encodeURIComponent(resolvedUserId)}` })
   }
 
   // 自动关注（邀请码场景）
@@ -788,20 +793,24 @@ export default function ProfileSettingsPage() {
               <Text className='profile-stat-num'>{followingCount}</Text>
               <Text className='profile-stat-text'>关注</Text>
             </View>
-            {!isOwner && (
-              <>
-                <Text className='profile-stat-divider'>|</Text>
-                <View
-                  className={`profile-follow-btn ${isFollowing ? 'profile-follow-btn--active' : ''}`}
-                  onClick={handleFollowToggle}
-                >
-                  <Text className='profile-follow-btn-text'>
-                    {followLoading ? '...' : isFollowing ? '已关注' : '+ 关注'}
-                  </Text>
-                </View>
-              </>
-            )}
           </View>
+
+          {/* 关注 + 私信操作行（仅他人主页） */}
+          {!isOwner && (
+            <View className='profile-action-row'>
+              <View
+                className={`profile-follow-btn ${isFollowing ? 'profile-follow-btn--active' : ''}`}
+                onClick={handleFollowToggle}
+              >
+                <Text className='profile-follow-btn-text'>
+                  {followLoading ? '...' : isFollowing ? '已关注' : '+ 关注'}
+                </Text>
+              </View>
+              <View className='profile-dm-btn' onClick={handleGoPrivateChat}>
+                <Text className='profile-dm-btn-text'>私信</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* 底部内容抽屉 */}

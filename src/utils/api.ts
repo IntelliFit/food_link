@@ -5236,6 +5236,64 @@ export async function getFollowStats(userId: string): Promise<FollowStats> {
   return response.data as FollowStats
 }
 
+// ==================== 私信 ====================
+
+export interface PrivateMessage {
+  id: string
+  sender_id: string
+  receiver_id: string
+  content: string
+  image_url?: string
+  content_type: 'text' | 'image'
+  is_read: boolean
+  created_at: string
+}
+
+export interface ConversationSummary {
+  user_id: string
+  nickname: string
+  avatar: string
+  last_message: PrivateMessage
+  unread_count: number
+}
+
+/** 发送私信 */
+export async function sendPrivateMessage(receiverId: string, content: string, contentType: 'text' | 'image' = 'text', imageUrl?: string): Promise<PrivateMessage> {
+  const response = await authenticatedRequest('/api/messages/send', {
+    method: 'POST',
+    data: { receiver_id: receiverId, content, content_type: contentType, image_url: imageUrl }
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发送失败')
+  return response.data as PrivateMessage
+}
+
+/** 获取与某用户的聊天记录 */
+export async function getPrivateMessages(otherUserId: string, offset = 0, limit = 20): Promise<{ list: PrivateMessage[]; has_more: boolean }> {
+  const response = await authenticatedRequest(`/api/messages/conversation/${encodeURIComponent(otherUserId)}?offset=${offset}&limit=${limit}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取聊天记录失败')
+  return response.data as { list: PrivateMessage[]; has_more: boolean }
+}
+
+/** 获取会话列表 */
+export async function getConversations(): Promise<{ list: ConversationSummary[] }> {
+  const response = await authenticatedRequest('/api/messages/conversations', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取会话列表失败')
+  return response.data as { list: ConversationSummary[] }
+}
+
+/** 标记某人的消息为已读 */
+export async function markMessagesRead(senderId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/messages/read/${encodeURIComponent(senderId)}`, { method: 'PUT' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '标记已读失败')
+}
+
+/** 获取未读消息数 */
+export async function getUnreadMessageCount(): Promise<{ count: number }> {
+  const response = await authenticatedRequest('/api/messages/unread-count', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取未读数失败')
+  return response.data as { count: number }
+}
+
 // ==================== 圈子 Feed ====================
 
 /** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */
