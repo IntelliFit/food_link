@@ -15,7 +15,6 @@
   position: relative;
   padding: 32rpx 32rpx 28rpx;
   flex-shrink: 0;
-  overflow: hidden;
   border-radius: 0 0 24rpx 24rpx;
 }
 
@@ -220,6 +219,8 @@
 
 /* 底部内容抽屉 */
 .profile-bottom-drawer {
+  position: relative;
+  z-index: 1;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -725,7 +726,7 @@
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: -120rpx;
   z-index: 0;
   background: linear-gradient(180deg,
     rgba(20, 40, 32, 0) 0%,
@@ -770,7 +771,6 @@
   padding: 12rpx 24rpx;
   border-radius: 999rpx;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.12);
 
   &:active {
     opacity: 0.8;
@@ -810,9 +810,10 @@
 }
 
 .profile-top-icon {
-  font-size: 32rpx;
+  font-size: 40rpx;
   color: #fff;
   line-height: 1;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.35);
 }
 
 /* 编辑弹窗背景图 */
@@ -1116,7 +1117,6 @@
 
   .profile-top-action-btn {
     background: rgba(24, 31, 29, 0.9);
-    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.4);
   }
 
   .profile-top-action-icon {
