@@ -13,6 +13,8 @@ import (
 	"food_link/backend/internal/publicfood/domain"
 	"food_link/backend/internal/publicfood/repo"
 	"food_link/backend/internal/taskqueue"
+	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/storage"
 
 	"github.com/stretchr/testify/require"
 	gormsqlite "gorm.io/driver/sqlite"
@@ -631,13 +633,51 @@ func TestPublicFoodServiceAddCommentReturnsUserProfile(t *testing.T) {
 		CreatedAt:   &now,
 	}).Error)
 
-	comment, err := svc.AddComment(ctx, "user-1", "item-1", "非常不错", nil)
+	comment, err := svc.AddComment(ctx, "user-1", "item-1", CommentInput{Content: "非常不错"})
 
 	require.NoError(t, err)
 	require.NotNil(t, comment)
 	require.Equal(t, "user-1", comment.UserID)
 	require.Equal(t, "评论者", comment.Nickname)
 	require.NotEmpty(t, comment.Avatar)
+}
+
+func TestPublicFoodServiceAddReplyDefaultsReplyToParentAuthor(t *testing.T) {
+	db := setupPublicFoodServiceTestDB(t)
+	svc := NewPublicFoodService(repo.NewPublicFoodRepo(db))
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	require.NoError(t, db.Create(&authrepo.User{ID: "user-1", Nickname: "评论者"}).Error)
+	require.NoError(t, db.Create(&authrepo.User{ID: "user-2", Nickname: "回复者"}).Error)
+	require.NoError(t, db.Create(&domain.PublicFoodItem{
+		ID:          "item-1",
+		UserID:      "author-1",
+		FoodName:    "测试菜品",
+		Status:      "published",
+		PublishedAt: &now,
+		CreatedAt:   &now,
+	}).Error)
+	parentID := "comment-parent"
+	require.NoError(t, db.Create(&domain.PublicFoodComment{
+		ID:            parentID,
+		UserID:        "user-1",
+		LibraryItemID: "item-1",
+		Content:       "这个菜不错",
+		CreatedAt:     &now,
+	}).Error)
+
+	reply, err := svc.AddComment(ctx, "user-2", "item-1", CommentInput{
+		Content:         "确实不错",
+		ParentCommentID: &parentID,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, reply.ParentCommentID)
+	require.Equal(t, parentID, *reply.ParentCommentID)
+	require.NotNil(t, reply.ReplyToUserID)
+	require.Equal(t, "user-1", *reply.ReplyToUserID)
+	require.Nil(t, reply.Rating)
 }
 
 func TestPublicFoodServiceDeleteCommentOnlyOwnComment(t *testing.T) {
@@ -679,4 +719,34 @@ func TestPublicFoodServiceDeleteCommentOnlyOwnComment(t *testing.T) {
 	var item domain.PublicFoodItem
 	require.NoError(t, db.Where("id = ?", "item-1").First(&item).Error)
 	require.Equal(t, 0, item.CommentCount)
+}
+
+func TestNormalizePublicFoodItemResolvesSchoolLogoURL(t *testing.T) {
+	store := storage.New(config.StorageConfig{
+		CDNFoodImagesBaseURL: "http://cdn-food-images.coachlink.fit",
+	})
+	svc := NewPublicFoodService(nil, store)
+
+	rawKey := "school-badges/4531174e-aaaa-bbbb-cccc-08055423be2187ee.png"
+	item := svc.normalizePublicFoodItem(domain.PublicFoodItem{
+		SchoolLogoURL: rawKey,
+	})
+	require.Equal(t, "http://cdn-food-images.coachlink.fit/school-badges/4531174e-aaaa-bbbb-cccc-08055423be2187ee.png", item.SchoolLogoURL)
+
+	fullURL := "http://cdn-food-images.coachlink.fit/school-badges/4531174e-aaaa-bbbb-cccc-08055423be2187ee.png"
+	item2 := svc.normalizePublicFoodItem(domain.PublicFoodItem{
+		SchoolLogoURL: fullURL,
+	})
+	require.Equal(t, fullURL, item2.SchoolLogoURL)
+
+	item3 := svc.normalizePublicFoodItem(domain.PublicFoodItem{
+		SchoolLogoURL: "",
+	})
+	require.Equal(t, "", item3.SchoolLogoURL)
+}
+
+func TestResolveSchoolLogoURLEmptyStorage(t *testing.T) {
+	svc := NewPublicFoodService(nil)
+	require.Equal(t, "school-badges/key.png", svc.resolveSchoolLogoURL("school-badges/key.png"))
+	require.Equal(t, "", svc.resolveSchoolLogoURL(""))
 }

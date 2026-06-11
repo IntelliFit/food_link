@@ -5,16 +5,19 @@ import (
 	"strconv"
 	"strings"
 
+	"food_link/backend/pkg/storage"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 type SchoolHandler struct {
-	db *gorm.DB
+	db          *gorm.DB
+	storageClient *storage.Client
 }
 
-func NewSchoolHandler(db *gorm.DB) *SchoolHandler {
-	return &SchoolHandler{db: db}
+func NewSchoolHandler(db *gorm.DB, storageClient *storage.Client) *SchoolHandler {
+	return &SchoolHandler{db: db, storageClient: storageClient}
 }
 
 type SchoolSearchResponse struct {
@@ -58,12 +61,18 @@ func (h *SchoolHandler) Search(c *gin.Context) {
 
 	results := make([]SchoolSearchResponse, 0, len(rows))
 	for _, r := range rows {
+		logoURL := ""
+		if h.storageClient != nil && r.LogoURL != nil {
+			logoURL = h.storageClient.NormalizeURL("food-images", *r.LogoURL)
+		} else {
+			logoURL = ptrString(r.LogoURL)
+		}
 		results = append(results, SchoolSearchResponse{
 			ID:       r.ID,
 			Name:     r.Name,
 			Province: ptrString(r.Province),
 			City:     ptrString(r.City),
-			LogoURL:  ptrString(r.LogoURL),
+			LogoURL:  logoURL,
 		})
 	}
 

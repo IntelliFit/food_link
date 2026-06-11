@@ -1,8 +1,9 @@
 import { StrictMode, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { createRoot } from 'react-dom/client'
+import { getAdminApiBaseUrl } from './config'
 import './styles.css'
 
-const API_BASE_URL = (import.meta.env.VITE_ADMIN_API_BASE_URL || '').replace(/\/+$/, '')
+const API_BASE_URL = getAdminApiBaseUrl()
 const ACTIVE_MENU = 'feedback'
 
 type FeedbackStatus = 'open' | 'processing' | 'resolved' | 'closed'

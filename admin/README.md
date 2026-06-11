@@ -19,7 +19,16 @@ npm run build
 
 ## 环境变量
 
-- `VITE_ADMIN_API_BASE_URL`：后端 API 地址。独立域名部署时设置为后端域名，例如 `https://dev.healthymax.cn`；若通过反代做到同源，可留空。
+复制 `admin/.env.example` 为 `.env.development`（本地）或在 Cloudflare Pages 配置同名变量。**域名不在代码中写死。**
+
+| 部署环境 | `VITE_ADMIN_API_BASE_URL` |
+|----------|---------------------------|
+| Preview / 本地联调 dev API | `https://dev.api.healthymax.cn` |
+| Production（main） | `https://api.healthymax.cn` |
+| 反代同源 | 留空 |
+
+完整说明见根目录 [`docs/api-url-configuration.md`](../docs/api-url-configuration.md)。
+
 - 管理员在登录页输入账号和密码，后端校验后写入 HttpOnly Cookie；账号只能通过后端命令行创建。
 
 ## 页面结构

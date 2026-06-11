@@ -14,10 +14,8 @@ Before starting any non-trivial work, read `IDENTITY.md`, `SOUL.md`, `USER.md`, 
 
 ```bash
 # Frontend
-npm run dev:weapp              # Dev watch → local backend (127.0.0.1:3010), DO NOT use taro build directly
-npm run dev:weapp:online       # Dev watch → production API (https://healthymax.cn)
-npm run build:weapp            # Production build (production API)
-npm run build:weapp:preview    # Preview/upload build (production API, NODE_ENV=production)
+npm run dev:weapp              # Dev watch → local backend via .env (DEVELOP URL), DO NOT use taro build directly
+npm run build:weapp            # Upload build; API chosen at runtime by envVersion (trial/release)
 npm run lint                   # ESLint on src/
 npm run typecheck              # tsc --noEmit
 npm run test                   # Jest frontend tests
@@ -56,7 +54,7 @@ python scripts/update-icon.py  # Update iconfont from latest CSS
 **Subpackage** (`packageExtra/pages/`): All other pages (analyze flows, food library, friends, recipes, etc.) to avoid hitting WeChat's 2MB main-package limit.
 
 **Key patterns**:
-- API calls go through `src/utils/api.ts` (centralized fetch wrapper with token, timeout, error handling). `API_BASE_URL` is injected at build time via `defineConstants.__API_BASE_URL__`.
+- API calls go through `src/utils/api.ts` (centralized fetch wrapper with token, timeout, error handling). `API_BASE_URL` is resolved at runtime from `.env`-injected constants by `miniProgram.envVersion` (see `docs/api-url-configuration.md`).
 - `@/*` maps to `src/*` in tsconfig.
 - UI framework: `@taroify/core` (Taro-adapted Vant-style components), not pure Taro components.
 - Custom tab bar lives at `custom-tab-bar/` (native mini-program component, not Taro-rendered).
@@ -65,7 +63,7 @@ python scripts/update-icon.py  # Update iconfont from latest CSS
 - Frontend caching strategy documented in `docs/frontend-cache-design.md`; clearing handled by `handleClearCache` in profile page.
 
 **Build-time constants** (set in `config/index.ts`):
-- `__API_BASE_URL__` — backend URL
+- `__API_BASE_URL_RELEASE__` / `__API_BASE_URL_TRIAL__` / `__API_BASE_URL_DEVELOP__` — backend URLs from `.env`
 - `__APP_VERSION__` — from `package.json` version
 - `__ENABLE_DEV_DEBUG_UI__` — true only in development
 - `__EXPIRY_SUBSCRIBE_TEMPLATE_ID__`

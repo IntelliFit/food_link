@@ -13,6 +13,7 @@ import (
 
 type UserService interface {
 	GetProfile(ctx context.Context, userID string) (map[string]any, error)
+	GetPublicProfile(ctx context.Context, userID string) (map[string]any, error)
 	UpdateProfile(ctx context.Context, userID string, input service.UpdateProfileInput) (map[string]any, error)
 	GetDashboardTargets(ctx context.Context, userID string) (map[string]float64, error)
 	UpdateDashboardTargets(ctx context.Context, userID string, input service.UpdateDashboardTargetsInput) (map[string]float64, error)
@@ -46,12 +47,17 @@ type AnalysisTaskService interface {
 	CreateHealthReportTask(ctx context.Context, userID string, input service.CreateHealthReportTaskInput) (string, error)
 }
 
+type FollowService interface {
+	GetFollowStats(ctx context.Context, userID, currentUserID string) (map[string]any, error)
+}
+
 type UserHandler struct {
 	userSvc         UserService
 	bindPhoneSvc    BindPhoneService
 	uploadSvc       UploadService
 	ocrSvc          OCRService
 	analysisTaskSvc AnalysisTaskService
+	followSvc       FollowService
 }
 
 func NewUserHandler(
@@ -60,6 +66,7 @@ func NewUserHandler(
 	uploadSvc UploadService,
 	ocrSvc OCRService,
 	analysisTaskSvc AnalysisTaskService,
+	followSvc FollowService,
 ) *UserHandler {
 	return &UserHandler{
 		userSvc:         userSvc,
@@ -67,6 +74,7 @@ func NewUserHandler(
 		uploadSvc:       uploadSvc,
 		ocrSvc:          ocrSvc,
 		analysisTaskSvc: analysisTaskSvc,
+		followSvc:       followSvc,
 	}
 }
 
@@ -382,4 +390,22 @@ func (h *UserHandler) RemoveHealthFocus(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"focuses": focuses})
+}
+
+// GET /api/user/:user_id/public-profile
+func (h *UserHandler) GetPublicProfile(c *gin.Context) {
+	targetUserID := c.Param("user_id")
+	data, err := h.userSvc.GetPublicProfile(c.Request.Context(), targetUserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	currentUserID := c.GetString(authmw.ContextUserIDKey)
+	followStats, _ := h.followSvc.GetFollowStats(c.Request.Context(), targetUserID, currentUserID)
+	if followStats != nil {
+		for k, v := range followStats {
+			data[k] = v
+		}
+	}
+	response.Success(c, data)
 }

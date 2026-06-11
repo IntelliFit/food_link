@@ -77,18 +77,15 @@
 > ⚠️ **重要提醒**：**开发模式下，代理改完前端代码后，绝对不要运行 `npm run build:weapp`。** 构建命令仅用于生产打包和真机预览，开发调试必须使用 watch 模式。代理在任何情况下都不应在开发迭代中触发完整构建。
 
 - 开发时必须使用 `npm run dev:weapp` 启动开发服务器，**禁止用 `npm run build:weapp` 构建**。
-- 该命令会正确设置 `NODE_ENV=development` 和 `TARO_APP_API_BASE_URL=http://127.0.0.1:3010`
-- 需要**请求体验版后端**（真机体验版、或本机模拟器联调体验版 API）时：用 `npm run build:weapp:preview` 一次性构建，或 `npm run dev:weapp:preview`（watch + `https://dev.healthymax.cn`，与 `build:weapp:preview` 同源注入）
-- 需要**请求正式线上后端**时：用 `npm run build:weapp:release` 一次性构建，或 `npm run dev:weapp:online`（watch + `https://healthymax.cn`）。
-- 不要直接使用 `taro build --type weapp --watch`，这可能导致 API 地址错误
+- API 域名在根目录 `.env.development` / `.env.production` 配置（模板见 `.env.example`），**不在代码中写死**。
+- 小程序在**运行时**按 `miniProgram.envVersion` 自动选择 API：`develop` → `TARO_APP_API_BASE_URL_DEVELOP`，`trial`（体验版）→ `TARO_APP_API_BASE_URL_TRIAL`，`release`（正式版）→ `TARO_APP_API_BASE_URL_RELEASE`。
+- **同一份** `npm run build:weapp` 产物可先上传体验版、再提审发布正式版，无需为体验版/正式版分别 build。
+- 本地/e2e 强制指定 API 时用 `TARO_APP_API_BASE_URL_OVERRIDE`（或旧名 `TARO_APP_API_BASE_URL`）。
+- 不要直接使用 `taro build --type weapp --watch`，这可能导致 env 未加载。
 
-**真机预览 / 上传体验版**：必须使用体验版 API，勿用本机 `127.0.0.1`（真机无法访问电脑环回地址）。请使用：
+**上传体验版 / 发布正式版**：均使用 `npm run build:weapp`；体验版扫码为 `trial` 自动走 dev API，正式发布后为 `release` 自动走正式 API。勿用 `dev:weapp` 产物在真机扫码（`develop` 会指向 `127.0.0.1`）。
 
-- `npm run build:weapp:preview`（显式 `NODE_ENV=production` + `TARO_APP_API_BASE_URL=https://dev.healthymax.cn`）
-
-或普通 `npm run build:weapp`（Taro 生产构建默认走 `config/index.ts` 中的 `https://dev.healthymax.cn`）。**不要**用 `dev:weapp` 的产物去真机扫码。
-
-**正式版发布**：正式发布包才使用 `npm run build:weapp:release`，该命令显式注入 `https://healthymax.cn`。
+**Admin 后台**：`admin.healthymax.cn` 通过 Cloudflare Pages 环境变量 `VITE_ADMIN_API_BASE_URL` 区分 Preview（`dev.api.healthymax.cn`）与 Production（`api.healthymax.cn`）。详见 `docs/api-url-configuration.md`。
 
 ### 后端数据库结构变更
 

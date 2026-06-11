@@ -92,7 +92,7 @@ export async function buildMiniprogram(mode: string, apiBaseUrl: string): Promis
   const script = 'build:weapp:e2e';
   const env = {
     ...process.env,
-    TARO_APP_API_BASE_URL: apiBaseUrl,
+    TARO_APP_API_BASE_URL_OVERRIDE: apiBaseUrl,
   };
 
   console.log(`   Build script: ${script}`);

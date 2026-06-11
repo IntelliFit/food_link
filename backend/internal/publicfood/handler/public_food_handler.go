@@ -28,7 +28,7 @@ type PublicFoodService interface {
 	Update(ctx context.Context, userID, itemID string, input service.CreateInput) error
 	Delete(ctx context.Context, userID, itemID string) error
 	Comments(ctx context.Context, itemID string) ([]domain.PublicFoodComment, error)
-	AddComment(ctx context.Context, userID, itemID, content string, rating *int) (*domain.PublicFoodComment, error)
+	AddComment(ctx context.Context, userID, itemID string, input service.CommentInput) (*domain.PublicFoodComment, error)
 	DeleteComment(ctx context.Context, userID, itemID, commentID string) error
 	Feedback(ctx context.Context, userID, content string, itemID *string) (string, error)
 }
@@ -243,6 +243,17 @@ func (h *PublicFoodHandler) Uncollect(c *gin.Context) {
 	response.Success(c, gin.H{"message": "已取消"})
 }
 
+// GET /api/user/:user_id/collections
+func (h *PublicFoodHandler) UserCollections(c *gin.Context) {
+	targetUserID := c.Param("user_id")
+	items, err := h.svc.Collections(c.Request.Context(), targetUserID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"list": items})
+}
+
 func (h *PublicFoodHandler) Update(c *gin.Context) {
 	var body struct {
 		ImagePath          *string    `json:"image_path"`
@@ -339,14 +350,21 @@ func (h *PublicFoodHandler) Comments(c *gin.Context) {
 
 func (h *PublicFoodHandler) AddComment(c *gin.Context) {
 	var body struct {
-		Content string `json:"content"`
-		Rating  *int   `json:"rating"`
+		Content         string  `json:"content"`
+		Rating          *int    `json:"rating"`
+		ParentCommentID *string `json:"parent_comment_id"`
+		ReplyToUserID   *string `json:"reply_to_user_id"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
-	comment, err := h.svc.AddComment(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("item_id"), body.Content, body.Rating)
+	comment, err := h.svc.AddComment(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("item_id"), service.CommentInput{
+		Content:         body.Content,
+		Rating:          body.Rating,
+		ParentCommentID: body.ParentCommentID,
+		ReplyToUserID:   body.ReplyToUserID,
+	})
 	if err != nil {
 		response.Error(c, err)
 		return

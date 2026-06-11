@@ -9,7 +9,8 @@
   position: relative;
 }
 
-// 仅内容区滚动；头图 fixed 在底层，透明区可穿透滚动
+// 仅内容区滚动；头图 fixed 在底层。content-container 的 z-index:3 保证白卡在头图上方，
+// 头图顶部未被覆盖区域仍可接收 touch 事件（Swiper 左右滑动 / 点击预览）。
 .result-scroll {
   flex: 1;
   min-height: 0;
@@ -18,9 +19,7 @@
   width: 100%;
   box-sizing: border-box;
   position: relative;
-  z-index: 2;
   background: transparent;
-  pointer-events: none;
 }
 
 /* 顶部留白放在内层，避免 scroll-view 自身 padding 在 iOS 上触发高度计算 bug */

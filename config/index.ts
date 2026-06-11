@@ -20,11 +20,13 @@ const vantIconWoffBase64 = readFileSync(join(process.cwd(), 'src/assets/vant-ico
 
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {
-  const apiBaseUrl =
+  const apiBaseUrlRelease = process.env.TARO_APP_API_BASE_URL_RELEASE || ''
+  const apiBaseUrlTrial = process.env.TARO_APP_API_BASE_URL_TRIAL || ''
+  const apiBaseUrlDevelop = process.env.TARO_APP_API_BASE_URL_DEVELOP || ''
+  const apiBaseUrlOverride =
+    process.env.TARO_APP_API_BASE_URL_OVERRIDE ||
     process.env.TARO_APP_API_BASE_URL ||
-    (process.env.NODE_ENV === 'development'
-      ? 'http://127.0.0.1:3010'
-      : 'https://dev.healthymax.cn')
+    ''
   const expirySubscribeTemplateId = process.env.TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID || ''
   const iconCdnBaseUrl = process.env.TARO_APP_ICON_CDN_BASE_URL || ''
   const recentRequestTraceLimit = process.env.TARO_APP_RECENT_REQUEST_TRACE_LIMIT || '50'
@@ -45,7 +47,10 @@ export default defineConfig<'vite'>(async (merge) => {
       "@tarojs/plugin-generator"
     ],
     defineConstants: {
-      __API_BASE_URL__: JSON.stringify(apiBaseUrl),
+      __API_BASE_URL_RELEASE__: JSON.stringify(apiBaseUrlRelease),
+      __API_BASE_URL_TRIAL__: JSON.stringify(apiBaseUrlTrial),
+      __API_BASE_URL_DEVELOP__: JSON.stringify(apiBaseUrlDevelop),
+      __API_BASE_URL_OVERRIDE__: JSON.stringify(apiBaseUrlOverride),
       __ICON_CDN_BASE_URL__: JSON.stringify(iconCdnBaseUrl),
       __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(expirySubscribeTemplateId),
       /** 反馈提交时默认附带的最近请求诊断条数，可通过 TARO_APP_RECENT_REQUEST_TRACE_LIMIT 覆盖 */

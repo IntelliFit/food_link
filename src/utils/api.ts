@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
 
+import { resolveApiBaseUrl } from './api-base-url'
 import {
   collectFoodDisplayImageUrls,
   type FoodImageSource,
@@ -20,12 +21,8 @@ function readInjectedString(
   }
 }
 
-// 使用构建时注入的 API 基础 URL
-// config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
-export const API_BASE_URL = readInjectedString(
-  () => __API_BASE_URL__,
-  'https://dev.healthymax.cn'
-)
+// 运行时按微信 envVersion 选择 API；各环境 URL 由 .env 构建注入，见 docs/api-url-configuration.md
+export const API_BASE_URL = resolveApiBaseUrl()
 export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
   ''
@@ -46,7 +43,7 @@ export const RECENT_REQUEST_TRACE_LIMIT = Math.min(
 
 // 仅开发构建打印，避免真机/生产包无意义日志（且减少控制台副作用）
 if (process.env.NODE_ENV !== 'production') {
-  console.log('[API] 构建时 API_BASE_URL:', API_BASE_URL)
+  console.log('[API] 运行时 API_BASE_URL:', API_BASE_URL)
   console.log('[API] 最近请求诊断条数:', RECENT_REQUEST_TRACE_LIMIT)
 }
 
@@ -5177,6 +5174,55 @@ export async function requestFriendByInviteCode(code: string): Promise<LegacyFri
   }
 }
 
+// ==================== 关注 / 粉丝 ====================
+
+export interface FollowUser {
+  id: string
+  nickname: string
+  avatar: string
+}
+
+export interface FollowStats {
+  followers_count: number
+  following_count: number
+  is_following: boolean
+}
+
+/** 关注用户 */
+export async function followUser(userId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/user/${encodeURIComponent(userId)}/follow`, { method: 'POST' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '关注失败')
+}
+
+/** 取消关注 */
+export async function unfollowUser(userId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/user/${encodeURIComponent(userId)}/follow`, { method: 'DELETE' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '取消关注失败')
+}
+
+/** 获取粉丝列表 */
+export async function getFollowers(userId: string, offset = 0, limit = 20): Promise<{ list: FollowUser[]; has_more: boolean }> {
+  const response = await authenticatedRequest(`/api/user/${encodeURIComponent(userId)}/followers?offset=${offset}&limit=${limit}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取粉丝列表失败')
+  return response.data as { list: FollowUser[]; has_more: boolean }
+}
+
+/** 获取关注列表 */
+export async function getFollowing(userId: string, offset = 0, limit = 20): Promise<{ list: FollowUser[]; has_more: boolean }> {
+  const response = await authenticatedRequest(`/api/user/${encodeURIComponent(userId)}/following?offset=${offset}&limit=${limit}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取关注列表失败')
+  return response.data as { list: FollowUser[]; has_more: boolean }
+}
+
+/** 获取关注统计 */
+export async function getFollowStats(userId: string): Promise<FollowStats> {
+  const response = await authenticatedRequest(`/api/user/${encodeURIComponent(userId)}/follow-stats`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取关注统计失败')
+  return response.data as FollowStats
+}
+
+// ==================== 圈子 Feed ====================
+
 /** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */
 /** 圈子 Feed：好友饮食记录（分页，可选 date YYYY-MM-DD） */
 export async function communityGetFeed(
@@ -5479,11 +5525,15 @@ export interface PublicFoodLibraryComment {
   id: string
   user_id: string
   library_item_id: string
+  parent_comment_id?: string | null
+  reply_to_user_id?: string | null
   content: string
   rating?: number | null
   created_at: string
   nickname: string
   avatar: string
+  reply_to_nickname?: string
+  replies?: PublicFoodLibraryComment[]
   _is_temp?: boolean  // 标记为临时评论（未通过审核）
 }
 
@@ -5698,11 +5748,20 @@ export async function getPublicFoodLibraryComments(itemId: string): Promise<{ li
 export async function postPublicFoodLibraryComment(
   itemId: string,
   content: string,
-  rating?: number
+  rating?: number,
+  options?: {
+    parent_comment_id?: string
+    reply_to_user_id?: string
+  }
 ): Promise<{ comment: PublicFoodLibraryComment }> {
   const response = await authenticatedRequest(`/api/public-food-library/${itemId}/comments`, {
     method: 'POST',
-    data: { content: content.trim(), ...(rating !== undefined && { rating }) }
+    data: {
+      content: content.trim(),
+      ...(rating !== undefined && { rating }),
+      ...(options?.parent_comment_id && { parent_comment_id: options.parent_comment_id }),
+      ...(options?.reply_to_user_id && { reply_to_user_id: options.reply_to_user_id })
+    }
   })
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '发表失败')
@@ -5839,6 +5898,39 @@ export async function getFavoriteCount(): Promise<{ count: number }> {
     throw new Error((res.data as any)?.detail || '获取收藏数量失败')
   }
   return res.data as { count: number }
+}
+
+/** 获取其他用户公开资料 */
+export async function getPublicUserProfile(userId: string): Promise<{
+  id: string
+  nickname: string
+  avatar: string
+  record_days: number
+  create_time?: string
+}> {
+  const response = await authenticatedRequest(`/api/user/${userId}/public-profile`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取用户资料失败')
+  }
+  return response.data as { id: string; nickname: string; avatar: string; record_days: number; create_time?: string }
+}
+
+/** 获取指定用户的公共食物库收藏 */
+export async function getUserCollections(userId: string): Promise<{ list: PublicFoodLibraryItem[] }> {
+  const response = await authenticatedRequest(`/api/user/${userId}/collections`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取用户收藏失败')
+  }
+  return response.data as { list: PublicFoodLibraryItem[] }
+}
+
+/** 获取指定用户的食谱收藏 */
+export async function getUserFavoriteRecipes(userId: string): Promise<{ recipes: UserRecipe[] }> {
+  const response = await authenticatedRequest(`/api/user/${userId}/favorite-recipes`, { method: 'GET', timeout: 10000 })
+  if (response.statusCode !== 200) {
+    throw new Error((response.data as any)?.detail || '获取用户食谱收藏失败')
+  }
+  return response.data as { recipes: UserRecipe[] }
 }
 
 /** 获取单个食谱详情 */

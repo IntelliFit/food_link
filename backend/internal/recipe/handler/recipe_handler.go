@@ -171,3 +171,15 @@ func (h *RecipeHandler) Use(c *gin.Context) {
 	}
 	response.Success(c, gin.H{"message": "记录成功", "record_id": recordID})
 }
+
+// GET /api/user/:user_id/favorite-recipes
+func (h *RecipeHandler) GetUserFavoriteRecipes(c *gin.Context) {
+	targetUserID := c.Param("user_id")
+	fav := true
+	recipes, err := h.svc.List(c.Request.Context(), targetUserID, "", &fav)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"recipes": recipes})
+}

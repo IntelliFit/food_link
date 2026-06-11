@@ -23,7 +23,15 @@ declare namespace NodeJS {
      * @see https://taro-docs.jd.com/docs/next/env-mode-config#特殊环境变量-taro_app_id
      */
     TARO_APP_ID: string
-    /** 后端 API 基础 URL，在 .env.development / .env.production 中配置 */
+    /** 正式版 API，对应 miniProgram.envVersion === release */
+    TARO_APP_API_BASE_URL_RELEASE?: string
+    /** 体验版 API，对应 miniProgram.envVersion === trial */
+    TARO_APP_API_BASE_URL_TRIAL?: string
+    /** 开发版 API，对应 miniProgram.envVersion === develop */
+    TARO_APP_API_BASE_URL_DEVELOP?: string
+    /** 可选：强制所有环境使用同一 API（e2e、局域网联调） */
+    TARO_APP_API_BASE_URL_OVERRIDE?: string
+    /** @deprecated 请改用 TARO_APP_API_BASE_URL_OVERRIDE */
     TARO_APP_API_BASE_URL?: string
     /** 天地图 API Key */
     TARO_APP_TIANDITU_TK?: string

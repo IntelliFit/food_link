@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: '个人设置'
+  navigationBarTitleText: '个人主页'
 })

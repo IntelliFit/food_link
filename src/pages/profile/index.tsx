@@ -648,7 +648,7 @@ function ProfilePage() {
                   </View>
                 </View>
                 <View className='user-meta-row' onClick={handleSettings}>
-                  <Text className='user-meta-text'>编辑资料</Text>
+                  <Text className='user-meta-text'>个人主页</Text>
                   <Arrow size={12} color='#9ca3af' />
                 </View>
               </>

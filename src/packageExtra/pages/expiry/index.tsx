@@ -38,7 +38,7 @@ function groupItems(items: FoodExpiryItem[]) {
 }
 
 export default function ExpiryPage() {
-  const scheme = useAppColorScheme()
+  const { scheme } = useAppColorScheme()
   const [loading, setLoading] = useState(true)
   const [fetchFailed, setFetchFailed] = useState(false)
   const [dashboard, setDashboard] = useState<FoodExpiryDashboard | null>(null)

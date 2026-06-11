@@ -111,6 +111,16 @@ function isCampusFoodItem(item: PublicFoodLibraryItem): boolean {
   return item.type === 'campus' || !!item.is_campus_food
 }
 
+interface CommentReplyTarget {
+  parentCommentId: string
+  replyToUserId: string
+  nickname: string
+}
+
+function countCommentTotal(comments: PublicFoodLibraryComment[]): number {
+  return comments.reduce((total, comment) => total + 1 + (comment.replies?.length || 0), 0)
+}
+
 function formatDateOnly(timeStr: string | null | undefined): string {
   if (!timeStr) return '待补充'
   return formatTime(timeStr).split(' ')[0] || '待补充'
@@ -129,6 +139,7 @@ function FoodLibraryDetailPage() {
   const [commentInputFocus, setCommentInputFocus] = useState(false)
   const [commentContent, setCommentContent] = useState('')
   const [commentRating, setCommentRating] = useState(0)
+  const [replyTarget, setReplyTarget] = useState<CommentReplyTarget | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
@@ -349,7 +360,12 @@ function FoodLibraryDetailPage() {
     }
   }
 
-  const openCommentModal = () => {
+  const openCommentModal = (target?: CommentReplyTarget) => {
+    const nextTarget = target && 'parentCommentId' in target ? target : null
+    setReplyTarget(nextTarget)
+    if (nextTarget) {
+      setCommentRating(0)
+    }
     setShowCommentModal(true)
     setCommentInputFocus(false)
     setTimeout(() => {
@@ -360,6 +376,7 @@ function FoodLibraryDetailPage() {
   const closeCommentModal = () => {
     setShowCommentModal(false)
     setCommentInputFocus(false)
+    setReplyTarget(null)
   }
 
   // 提交评论
@@ -370,21 +387,36 @@ function FoodLibraryDetailPage() {
     }
     setSubmitting(true)
     try {
+      const isReply = !!replyTarget
       const { comment } = await postPublicFoodLibraryComment(
         itemId, 
         commentContent, 
-        commentRating > 0 ? commentRating : undefined
+        !isReply && commentRating > 0 ? commentRating : undefined,
+        replyTarget ? {
+          parent_comment_id: replyTarget.parentCommentId,
+          reply_to_user_id: replyTarget.replyToUserId
+        } : undefined
       )
       const localUserDisplay = getLocalUserDisplay()
       const displayComment = {
         ...comment,
         nickname: comment.nickname || localUserDisplay.nickname,
-        avatar: comment.avatar || localUserDisplay.avatar
+        avatar: comment.avatar || localUserDisplay.avatar,
+        reply_to_nickname: comment.reply_to_nickname || replyTarget?.nickname || '',
+        replies: comment.replies || []
       }
 
-      setComments(prev => [displayComment, ...prev])
+      if (isReply && replyTarget) {
+        setComments(prev => prev.map(c => (
+          c.id === replyTarget.parentCommentId
+            ? { ...c, replies: [...(c.replies || []), displayComment] }
+            : c
+        )))
+      } else {
+        setComments(prev => [displayComment, ...prev])
+      }
 
-      Taro.showToast({ title: '评论成功', icon: 'success' })
+      Taro.showToast({ title: isReply ? '回复成功' : '评论成功', icon: 'success' })
       closeCommentModal()
       setCommentContent('')
       setCommentRating(0)
@@ -414,8 +446,16 @@ function FoodLibraryDetailPage() {
     Taro.showLoading({ title: '删除中...', mask: true })
     try {
       await deletePublicFoodLibraryComment(item.id, comment.id)
-      setComments(prev => prev.filter(c => c.id !== comment.id))
-      setItem({ ...item, comment_count: Math.max(0, (item.comment_count || 0) - 1) })
+      const removedCount = 1 + (comment.replies?.length || 0)
+      if (comment.parent_comment_id) {
+        setComments(prev => prev.map(c => ({
+          ...c,
+          replies: (c.replies || []).filter(reply => reply.id !== comment.id)
+        })))
+      } else {
+        setComments(prev => prev.filter(c => c.id !== comment.id))
+      }
+      setItem({ ...item, comment_count: Math.max(0, (item.comment_count || 0) - removedCount) })
       Taro.showToast({ title: '已删除', icon: 'success' })
     } catch (e: any) {
       await showUnifiedApiError(e, '删除失败')
@@ -512,6 +552,81 @@ function FoodLibraryDetailPage() {
   const analyzing = isAnalyzingItem(item)
   const analysisFailed = isAnalysisFailedItem(item)
   const nutritionPending = needsNutritionUpdate(item)
+  const commentsTotal = countCommentTotal(comments)
+  const openReplyModal = (parent: PublicFoodLibraryComment, target: PublicFoodLibraryComment = parent) => {
+    openCommentModal({
+      parentCommentId: parent.parent_comment_id || parent.id,
+      replyToUserId: target.user_id,
+      nickname: target.nickname || '用户'
+    })
+  }
+  const renderCommentAvatar = (comment: PublicFoodLibraryComment, size: 'normal' | 'small' = 'normal') => (
+    comment.avatar ? (
+      <View className={size === 'small' ? 'comment-reply-avatar' : 'comment-avatar'}>
+        <Image className={size === 'small' ? 'comment-reply-avatar-img' : 'comment-avatar-img'} src={comment.avatar} />
+      </View>
+    ) : (
+      <View className={size === 'small' ? 'comment-reply-avatar' : 'comment-avatar'}>
+        <UserOutlined size={size === 'small' ? '14' : '16'} color='#9ca3af' />
+      </View>
+    )
+  )
+  const renderCommentReply = (parent: PublicFoodLibraryComment, reply: PublicFoodLibraryComment) => (
+    <View key={reply.id} className='comment-reply-item'>
+      {renderCommentAvatar(reply, 'small')}
+      <View className='comment-reply-body'>
+        <View className='comment-reply-meta'>
+          <Text className='comment-reply-name'>{reply.nickname}</Text>
+          {reply.reply_to_nickname && reply.reply_to_nickname !== parent.nickname && (
+            <>
+              <Text className='comment-reply-to'>回复</Text>
+              <Text className='comment-reply-name'>{reply.reply_to_nickname}</Text>
+            </>
+          )}
+          <Text className='comment-reply-time'>{formatTime(reply.created_at)}</Text>
+        </View>
+        <Text className='comment-reply-content' onClick={() => openReplyModal(parent, reply)}>{reply.content}</Text>
+        <View className='comment-reply-actions'>
+          <Text className='comment-reply-action' onClick={() => openReplyModal(parent, reply)}>回复</Text>
+          {currentUserId && reply.user_id === currentUserId && (
+            <Text className='comment-reply-delete' onClick={() => handleDeleteComment(reply)}>删除</Text>
+          )}
+        </View>
+      </View>
+    </View>
+  )
+  const renderComment = (comment: PublicFoodLibraryComment) => (
+    <View key={comment.id} className='comment-item'>
+      <View className='comment-header'>
+        {renderCommentAvatar(comment)}
+        <View className='comment-info'>
+          <Text className='comment-name' onClick={() => openReplyModal(comment)}>{comment.nickname}</Text>
+          <Text className='comment-time'>{formatTime(comment.created_at)}</Text>
+        </View>
+        {comment.rating && (
+          <View className='comment-rating-stars'>
+            {Array.from({ length: comment.rating }).map((_, i) => (
+              <Star key={i} size='12' className='star-filled' />
+            ))}
+          </View>
+        )}
+      </View>
+      <Text className='comment-content' onClick={() => openReplyModal(comment)}>{comment.content}</Text>
+      <View className='comment-actions'>
+        <Text className='comment-action-reply' onClick={() => openReplyModal(comment)}>回复</Text>
+        {currentUserId && comment.user_id === currentUserId && (
+          <View className='comment-delete-btn' onClick={() => handleDeleteComment(comment)}>
+            <Text className='iconfont icon-shanchu comment-delete-icon' />
+          </View>
+        )}
+      </View>
+      {!!comment.replies?.length && (
+        <View className='comment-replies'>
+          {comment.replies.map(reply => renderCommentReply(comment, reply))}
+        </View>
+      )}
+    </View>
+  )
   const renderCampusMiniCard = (card: PublicFoodLibraryItem) => (
     <View key={card.id} className='campus-related-card' onClick={() => Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${card.id}&scene=campus` })}>
       {card.image_path ? (
@@ -633,13 +748,7 @@ function FoodLibraryDetailPage() {
             <View className='campus-info-cell'>
               <Text className='campus-info-label'>学校</Text>
               <View className='campus-info-value-row'>
-                {item.school_logo_url && (
-                  <Image
-                    className='campus-school-logo'
-                    src={item.school_logo_url.startsWith('http') ? item.school_logo_url : `https://cdn-food-icon.coachlink.fit/${item.school_logo_url}`}
-                    mode='aspectFill'
-                  />
-                )}
+                <LocationOutlined size='18' className='campus-location-icon' />
                 <Text className='campus-info-value'>{item.school_name || '待补充'}</Text>
               </View>
             </View>
@@ -772,10 +881,10 @@ function FoodLibraryDetailPage() {
       <View className='comments-card'>
         <View className='comments-header'>
           <Text className='card-title'>评论</Text>
-          <Text className='comments-count'>{comments.length} 条</Text>
+          <Text className='comments-count'>{commentsTotal} 条</Text>
         </View>
         {/* 快速评论输入条 */}
-        <View className='quick-comment-bar' onClick={openCommentModal}>
+        <View className='quick-comment-bar' onClick={() => openCommentModal()}>
           {(() => {
             const localUser = getLocalUserDisplay()
             return localUser.avatar ? (
@@ -796,40 +905,7 @@ function FoodLibraryDetailPage() {
           <View className='comments-empty'>暂无评论，快来抢沙发</View>
         ) : (
           <ScrollView className='comments-list' scrollY enhanced showScrollbar={false}>
-            {comments.map(c => (
-              <View key={c.id} className='comment-item'>
-                <View className='comment-header'>
-                  {c.avatar ? (
-                    <View className='comment-avatar'>
-                      <Image className='comment-avatar-img' src={c.avatar} />
-                    </View>
-                  ) : (
-                    <View className='comment-avatar'>
-                      <UserOutlined size='16' color='#9ca3af' />
-                    </View>
-                  )}
-                  <View className='comment-info'>
-                    <Text className='comment-name'>{c.nickname}</Text>
-                    <Text className='comment-time'>{formatTime(c.created_at)}</Text>
-                  </View>
-                  {c.rating && (
-                    <View className='comment-rating-stars'>
-                      {Array.from({ length: c.rating }).map((_, i) => (
-                        <Star key={i} size='12' className='star-filled' />
-                      ))}
-                    </View>
-                  )}
-                </View>
-                <Text className='comment-content'>{c.content}</Text>
-                {currentUserId && c.user_id === currentUserId && (
-                  <View className='comment-actions'>
-                    <View className='comment-delete-btn' onClick={() => handleDeleteComment(c)}>
-                      <Text className='iconfont icon-shanchu comment-delete-icon' />
-                    </View>
-                  </View>
-                )}
-              </View>
-            ))}
+            {comments.map(renderComment)}
           </ScrollView>
         )}
       </View>
@@ -855,7 +931,7 @@ function FoodLibraryDetailPage() {
                 <Text className='action-badge'>{item.collection_count}</Text>
               )}
             </View>
-            <View className='action-btn icon-action comment-btn' onClick={openCommentModal}>
+            <View className='action-btn icon-action comment-btn' onClick={() => openCommentModal()}>
               <Text className='iconfont icon-comment' />
               {item.comment_count > 0 && (
                 <Text className='action-badge'>{item.comment_count}</Text>
@@ -877,11 +953,12 @@ function FoodLibraryDetailPage() {
         <View className='comment-modal' onClick={closeCommentModal}>
           <View className='comment-modal-content' onClick={e => e.stopPropagation()}>
             <View className='modal-header'>
-              <Text className='modal-title'>发表评论</Text>
+              <Text className='modal-title'>{replyTarget ? `回复 @${replyTarget.nickname}` : '发表评论'}</Text>
               <View className='modal-close' onClick={closeCommentModal}>
                 <Cross size='24' color='#9ca3af' />
               </View>
             </View>
+            {!replyTarget && (
             <View className='rating-row'>
               <Text className='rating-label'>评分（可选）：</Text>
               <View className='rating-stars'>
@@ -896,9 +973,10 @@ function FoodLibraryDetailPage() {
                 ))}
               </View>
             </View>
+            )}
             <Textarea
               className='comment-input'
-              placeholder='分享你的想法...'
+              placeholder={replyTarget ? `回复 @${replyTarget.nickname}...` : '分享你的想法...'}
               value={commentContent}
               onInput={e => setCommentContent(e.detail.value)}
               maxlength={500}
@@ -907,7 +985,7 @@ function FoodLibraryDetailPage() {
               fixed
             />
             <View className='submit-btn' onClick={handleSubmitComment}>
-              {submitting ? <View className='btn-spinner' /> : '发表评论'}
+              {submitting ? <View className='btn-spinner' /> : (replyTarget ? '发布回复' : '发表评论')}
             </View>
           </View>
         </View>

@@ -447,7 +447,7 @@ func processSchool(ctx context.Context, db *gorm.DB, storageClient *storage.Clie
 
 		key := buildObjectKey("school-badges", school.ID, sc.img.SHA256, sc.img.Ext)
 		result.ObjectKey = key
-		result.AccessURL = storageClient.BuildAccessURL("icon", key)
+		result.AccessURL = storageClient.BuildAccessURL("food-images", key)
 
 		if opts.dryRun {
 			result.Status = "dry_run_match"
@@ -455,7 +455,7 @@ func processSchool(ctx context.Context, db *gorm.DB, storageClient *storage.Clie
 			return result
 		}
 
-		uploadedURL, err := storageClient.UploadBytes("icon", key, sc.img.Data, sc.img.ContentType)
+		uploadedURL, err := storageClient.UploadBytes("food-images", key, sc.img.Data, sc.img.ContentType)
 		if err != nil {
 			result.Status = "upload_failed"
 			result.Reason = err.Error()

@@ -23,6 +23,7 @@ type mockPublicFoodService struct {
 	updateItemID       string
 	listFilter         repo.ListFilter
 	campusDetailItemID string
+	commentInput       service.CommentInput
 }
 
 func (m *mockPublicFoodService) Create(ctx context.Context, userID string, input service.CreateInput) (string, error) {
@@ -97,8 +98,9 @@ func (m *mockPublicFoodService) Comments(ctx context.Context, itemID string) ([]
 	return nil, nil
 }
 
-func (m *mockPublicFoodService) AddComment(ctx context.Context, userID, itemID, content string, rating *int) (*domain.PublicFoodComment, error) {
-	return nil, nil
+func (m *mockPublicFoodService) AddComment(ctx context.Context, userID, itemID string, input service.CommentInput) (*domain.PublicFoodComment, error) {
+	m.commentInput = input
+	return &domain.PublicFoodComment{ID: "comment-1", UserID: userID, LibraryItemID: itemID, Content: input.Content}, nil
 }
 
 func (m *mockPublicFoodService) DeleteComment(ctx context.Context, userID, itemID, commentID string) error {
@@ -121,6 +123,7 @@ func setupPublicFoodHandlerRouter(svc *mockPublicFoodService) *gin.Engine {
 	r.POST("/api/public-food-library", h.Create)
 	r.GET("/api/public-food-library/:item_id/campus-detail", h.GetCampusDetail)
 	r.PUT("/api/public-food-library/:item_id", h.Update)
+	r.POST("/api/public-food-library/:item_id/comments", h.AddComment)
 	return r
 }
 
@@ -194,6 +197,28 @@ func TestPublicFoodHandlerGetCampusDetail(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "campus-1", svc.campusDetailItemID)
 	require.Contains(t, w.Body.String(), "protein_per_yuan")
+}
+
+func TestPublicFoodHandlerAddCommentMapsReplyFields(t *testing.T) {
+	svc := &mockPublicFoodService{}
+	r := setupPublicFoodHandlerRouter(svc)
+	body, _ := json.Marshal(map[string]any{
+		"content":           "我也喜欢这个窗口",
+		"parent_comment_id": "comment-parent",
+		"reply_to_user_id":  "user-2",
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/public-food-library/campus-1/comments", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "我也喜欢这个窗口", svc.commentInput.Content)
+	require.NotNil(t, svc.commentInput.ParentCommentID)
+	require.Equal(t, "comment-parent", *svc.commentInput.ParentCommentID)
+	require.NotNil(t, svc.commentInput.ReplyToUserID)
+	require.Equal(t, "user-2", *svc.commentInput.ReplyToUserID)
 }
 
 func TestPublicFoodHandlerUpdateMapsFields(t *testing.T) {

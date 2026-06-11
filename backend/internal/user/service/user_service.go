@@ -433,6 +433,25 @@ func (s *UserService) GetRecordDays(ctx context.Context, userID string) (int64, 
 	return s.users.CountFoodRecordDays(ctx, userID)
 }
 
+// GetPublicProfile 返回其他用户的公开信息（脱敏）
+func (s *UserService) GetPublicProfile(ctx context.Context, userID string) (map[string]any, error) {
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, commonerrors.ErrNotFound
+	}
+	recordDays, _ := s.users.CountFoodRecordDays(ctx, userID)
+	return map[string]any{
+		"id":           user.ID,
+		"nickname":     user.Nickname,
+		"avatar":       s.resolveAvatarURL(user.Avatar),
+		"record_days":  recordDays,
+		"create_time":  user.CreatedAt,
+	}, nil
+}
+
 func (s *UserService) UpdateLastSeenAnalyzeHistory(ctx context.Context, userID string) error {
 	return s.users.UpdateLastSeenAnalyzeHistory(ctx, userID)
 }
