@@ -98,3 +98,54 @@
         }
     }
 }
+
+/* ---------- 深色主题 ---------- */
+.fl-page-theme-root--dark .about-page {
+    background: transparent;
+
+    .header-section {
+        background: #18211f;
+
+        .logo-wrapper {
+            background: #222c29;
+        }
+
+        .app-name {
+            color: #f2f7f4;
+        }
+
+        .app-version {
+            color: rgb(214 226 220 / 62%);
+        }
+    }
+
+    .content-section {
+        .card {
+            background: #18211f;
+            box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 22%);
+
+            .card-title {
+                color: #f2f7f4;
+            }
+
+            .card-text {
+                color: rgb(214 226 220 / 62%);
+            }
+        }
+
+        .cell-group {
+            background: #18211f;
+            box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 22%);
+
+            .cell-value {
+                color: rgb(214 226 220 / 58%);
+            }
+        }
+    }
+
+    .footer-copyright {
+        .copyright-text {
+            color: rgb(214 226 220 / 50%);
+        }
+    }
+}

@@ -149,3 +149,63 @@
   font-size: 30rpx;
   font-weight: 650;
 }
+
+/* ---------- 深色主题 ---------- */
+.fl-page-theme-root--dark .feedback-page {
+  background: transparent;
+}
+
+.fl-page-theme-root--dark .feedback-hero-title {
+  color: #f2f7f4;
+}
+
+.fl-page-theme-root--dark .feedback-hero-desc {
+  color: rgb(214 226 220 / 62%);
+}
+
+.fl-page-theme-root--dark .feedback-card {
+  background: #18211f;
+  border-color: rgb(255 255 255 / 8%);
+  box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 22%);
+}
+
+.fl-page-theme-root--dark .feedback-section-title {
+  color: #f2f7f4;
+}
+
+.fl-page-theme-root--dark .feedback-count {
+  color: rgb(214 226 220 / 58%);
+}
+
+.fl-page-theme-root--dark .feedback-category {
+  background: #222c29;
+  border-color: rgb(255 255 255 / 8%);
+}
+
+.fl-page-theme-root--dark .feedback-category.is-active {
+  border-color: #5cb896;
+  background: rgb(92 184 150 / 13%);
+}
+
+.fl-page-theme-root--dark .feedback-category-title {
+  color: #f2f7f4;
+}
+
+.fl-page-theme-root--dark .feedback-category-desc {
+  color: rgb(214 226 220 / 62%);
+}
+
+.fl-page-theme-root--dark .feedback-textarea,
+.fl-page-theme-root--dark .feedback-contact {
+  background: #222c29;
+  color: #f2f7f4;
+  border: 2rpx solid rgb(255 255 255 / 8%);
+}
+
+.fl-page-theme-root--dark .feedback-diagnostic-desc {
+  color: rgb(214 226 220 / 62%);
+}
+
+.fl-page-theme-root--dark .feedback-submit-bar {
+  background: rgb(24 33 31 / 92%);
+}

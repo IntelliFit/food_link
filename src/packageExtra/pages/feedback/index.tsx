@@ -13,6 +13,7 @@ import {
   type FeedbackCategory,
 } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
+import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 
 import './index.scss'
 
@@ -66,6 +67,7 @@ function FeedbackPage() {
   }
 
   return (
+    <FlPageThemeRoot>
     <View className='feedback-page'>
       <View className='feedback-hero'>
         <Text className='feedback-hero-title'>告诉我们你遇到的问题</Text>
@@ -140,6 +142,7 @@ function FeedbackPage() {
         </Button>
       </View>
     </View>
+    </FlPageThemeRoot>
   )
 }
 
