@@ -1523,4 +1523,177 @@ export function drawDailySummaryPoster(
   }
 }
 
+// ==================== 个人主页分享海报 ====================
+
+const PROFILE_POSTER_WIDTH = 375
+const PROFILE_POSTER_HEIGHT = 520
+
+/** 在 Canvas 2D 中加载图片，返回宽高 */
+export function loadCanvasImage(
+  canvas: HTMLCanvasElement,
+  src: string
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = (canvas as any).createImage()
+    img.onload = () => resolve({ width: img.width, height: img.height })
+    img.onerror = (err: any) => reject(err)
+    img.src = src
+  })
+}
+
+export function computeProfilePosterHeight(): number {
+  return PROFILE_POSTER_HEIGHT
+}
+
+export function drawProfilePoster(
+  ctx: CanvasRenderingContext2D,
+  options: {
+    width: number
+    height: number
+    data: {
+      nickname: string
+      shortId: string
+      recordDays: number
+      followersCount: number
+      followingCount: number
+    }
+    avatarImage?: { width: number; height: number } | null
+    qrCodeImage?: { width: number; height: number } | null
+  }
+): void {
+  const { width: W, height: H, data, avatarImage, qrCodeImage } = options
+  const PAD = 28
+  const CX = W / 2
+
+  // 背景
+  ctx.fillStyle = '#F9F7F2'
+  ctx.fillRect(0, 0, W, H)
+
+  // 顶部品牌区（渐变条）
+  const brandH = 100
+  const brandGrad = ctx.createLinearGradient(0, 0, 0, brandH)
+  brandGrad.addColorStop(0, 'rgba(0, 188, 125, 0.18)')
+  brandGrad.addColorStop(1, 'rgba(0, 188, 125, 0.02)')
+  ctx.fillStyle = brandGrad
+  ctx.fillRect(0, 0, W, brandH)
+
+  // 食探品牌文字
+  ctx.fillStyle = '#059669'
+  ctx.font = 'bold 22px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillText('食探 Food Link', CX, 24)
+
+  // 副标题
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '13px sans-serif'
+  ctx.fillText('记录每一餐，探索健康味', CX, 54)
+
+  // 头像（圆形）
+  const avatarSize = 88
+  const avatarY = 118
+  drawPosterAvatar(ctx, CX - avatarSize / 2, avatarY, avatarSize, avatarImage, data.nickname)
+
+  // 头像外圈白色边框
+  ctx.save()
+  ctx.beginPath()
+  ctx.arc(CX, avatarY + avatarSize / 2, avatarSize / 2 + 4, 0, Math.PI * 2)
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = 4
+  ctx.stroke()
+  ctx.restore()
+
+  // 昵称
+  ctx.fillStyle = '#111827'
+  ctx.font = 'bold 24px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillText(data.nickname || '食探用户', CX, avatarY + avatarSize + 16)
+
+  // ID
+  ctx.fillStyle = '#9ca3af'
+  ctx.font = '13px sans-serif'
+  ctx.fillText(`ID: ${data.shortId}`, CX, avatarY + avatarSize + 48)
+
+  // 统计行背景
+  const statsY = avatarY + avatarSize + 86
+  const statsH = 64
+  const statsPad = 20
+  ctx.save()
+  drawRoundedRect(ctx, PAD, statsY, W - PAD * 2, statsH, 12)
+  ctx.fillStyle = 'rgba(0, 188, 125, 0.06)'
+  ctx.fill()
+  ctx.restore()
+
+  // 统计项
+  const statItems = [
+    { num: data.recordDays, label: '记录天数' },
+    { num: data.followersCount, label: '被关注' },
+    { num: data.followingCount, label: '关注' },
+  ]
+  const statColW = (W - PAD * 2) / statItems.length
+  statItems.forEach((s, i) => {
+    const sx = PAD + statColW * i + statColW / 2
+    // 数字
+    ctx.fillStyle = '#111827'
+    ctx.font = 'bold 20px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillText(String(s.num), sx, statsY + 12)
+    // 标签
+    ctx.fillStyle = '#6b7280'
+    ctx.font = '12px sans-serif'
+    ctx.fillText(s.label, sx, statsY + 36)
+  })
+
+  // 分隔线
+  const dividerY = statsY + statsH + 28
+  ctx.save()
+  ctx.beginPath()
+  ctx.moveTo(PAD + 20, dividerY)
+  ctx.lineTo(W - PAD - 20, dividerY)
+  ctx.strokeStyle = '#e5e7eb'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.restore()
+
+  // 底部二维码区
+  const qrSize = 80
+  const qrY = dividerY + 24
+  const qrX = CX - qrSize / 2
+
+  if (qrCodeImage) {
+    ctx.save()
+    drawRoundedRect(ctx, qrX - 3, qrY - 3, qrSize + 6, qrSize + 6, 10)
+    ctx.strokeStyle = '#d1d5db'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+    ctx.drawImage(qrCodeImage as CanvasImageSource, qrX, qrY, qrSize, qrSize)
+  } else {
+    drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 10)
+    ctx.fillStyle = '#f3f4f6'
+    ctx.fill()
+    ctx.fillStyle = '#9ca3af'
+    ctx.font = '11px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText('二维码', CX, qrY + qrSize / 2)
+  }
+
+  // 扫码提示
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '13px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.fillText('微信扫码 · 关注我', CX, qrY + qrSize + 12)
+
+  // 底部品牌
+  ctx.fillStyle = '#d1d5db'
+  ctx.font = '11px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+  ctx.fillText('食探 Food Link · 健康饮食记录', CX, H - 16)
+}
+
 export type { FoodRecord }

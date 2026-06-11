@@ -1,4 +1,4 @@
-import { View, Text, Image, Button, Input } from '@tarojs/components'
+import { View, Text, Image, Button, Input, Canvas } from '@tarojs/components'
 import { useState, useEffect, useCallback } from 'react'
 import Taro, { useRouter, useReachBottom } from '@tarojs/taro'
 import {
@@ -19,11 +19,22 @@ import {
   followUser,
   unfollowUser,
   getFollowStats,
+  getUnlimitedQRCode,
+  resolveFriendInvite,
+  getAccessToken,
   type PublicFoodLibraryItem,
   type UserRecipe,
   type CommunityFeedItem,
   type FollowStats,
 } from '../../../utils/api'
+import {
+  drawProfilePoster,
+  computeProfilePosterHeight,
+  POSTER_WIDTH,
+  loadCanvasImage,
+} from '../../../utils/poster'
+import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
@@ -66,9 +77,9 @@ export default function ProfileSettingsPage() {
   const router = useRouter()
 
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
-  const targetUserId = String(router.params.user_id || '').trim()
-  const isOwner = !targetUserId || targetUserId === currentUserId
-  const resolvedUserId = isOwner ? currentUserId : targetUserId
+
+  const [isOwner, setIsOwner] = useState(true)
+  const [resolvedUserId, setResolvedUserId] = useState(currentUserId)
 
   // 用户信息
   const [tempAvatar, setTempAvatar] = useState('')
@@ -81,6 +92,11 @@ export default function ProfileSettingsPage() {
   const [isFollowing, setIsFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
+
+  // 分享海报
+  const [posterVisible, setPosterVisible] = useState(false)
+  const [posterImageUrl, setPosterImageUrl] = useState<string | null>(null)
+  const [posterGenerating, setPosterGenerating] = useState(false)
 
   // 编辑弹窗
   const [showEditSheet, setShowEditSheet] = useState(false)
@@ -105,7 +121,38 @@ export default function ProfileSettingsPage() {
     applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
   }, [scheme])
 
+  // 初始化：解析 URL 参数和 auto_follow 场景
   useEffect(() => {
+    const init = async () => {
+      const targetUserId = String(router.params.user_id || '').trim()
+      const autoFollowFlag = router.params.auto_follow || router.params.pf
+
+      if (autoFollowFlag && !targetUserId) {
+        const code = Taro.getStorageSync('auto_follow') || Taro.getStorageSync('pending_profile_follow_code')
+        if (code) {
+          try {
+            const invite = await resolveFriendInvite(code)
+            if (invite?.user_id) {
+              setResolvedUserId(invite.user_id)
+              setIsOwner(false)
+              return
+            }
+          } catch {
+            // 解析失败，回退到默认
+          }
+        }
+      }
+
+      const owner = !targetUserId || targetUserId === currentUserId
+      setIsOwner(owner)
+      setResolvedUserId(owner ? currentUserId : targetUserId)
+    }
+    init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!resolvedUserId) return
     loadUserData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOwner, resolvedUserId])
@@ -203,6 +250,27 @@ export default function ProfileSettingsPage() {
   const handleGoFollowing = () => {
     Taro.navigateTo({ url: `/pages/follow-list/index?type=following&user_id=${encodeURIComponent(resolvedUserId)}` })
   }
+
+  // 自动关注（邀请码场景）
+  useEffect(() => {
+    const autoFollow = async () => {
+      const inviteCode = Taro.getStorageSync('auto_follow')
+      if (!inviteCode || !resolvedUserId) return
+      try {
+        const invite = await resolveFriendInvite(inviteCode)
+        if (invite?.user_id === resolvedUserId) {
+          await followUser(resolvedUserId)
+          setIsFollowing(true)
+          setFollowersCount(prev => prev + 1)
+        }
+      } catch {
+        /* 静默处理 */
+      } finally {
+        Taro.removeStorageSync('auto_follow')
+      }
+    }
+    autoFollow()
+  }, [resolvedUserId])
 
   // 加载动态
   const loadFeed = async (reset = false) => {
@@ -328,6 +396,110 @@ export default function ProfileSettingsPage() {
       Taro.hideLoading()
       await showUnifiedApiError(error, '注销失败')
     }
+  }
+
+  // 分享海报
+  const handleShareProfile = async () => {
+    if (posterGenerating) return
+    setPosterGenerating(true)
+    setPosterVisible(true)
+    try {
+      const qrRes = await getUnlimitedQRCode(
+        `pf=${userId}`,
+        'pages/community-profile/index',
+      )
+      const qrBase64 = qrRes.base64
+
+      // 获取 Canvas 2D 节点
+      const canvasNode = await new Promise<HTMLCanvasElement>((resolve, reject) => {
+        const query = Taro.createSelectorQuery()
+        query.select('#profile-poster-canvas')
+          .fields({ node: true, size: true })
+          .exec((res) => {
+            if (res?.[0]?.node) resolve(res[0].node)
+            else reject(new Error('canvas 节点获取失败'))
+          })
+      })
+
+      const width = POSTER_WIDTH
+      const height = computeProfilePosterHeight()
+      canvasNode.width = width
+      canvasNode.height = height
+      const ctx = canvasNode.getContext('2d')
+      if (!ctx) throw new Error('canvas context 失败')
+
+      // 并行加载头像和二维码图片
+      const [avatarResolved, qrResolved] = await Promise.all([
+        tempAvatar ? resolveCanvasImageSrc(tempAvatar) : Promise.resolve(''),
+        resolveCanvasImageSrc(`data:image/png;base64,${qrBase64}`),
+      ])
+
+      const [avatarImg, qrImg] = await Promise.all([
+        avatarResolved ? loadCanvasImage(canvasNode, avatarResolved) : Promise.resolve(null),
+        qrResolved ? loadCanvasImage(canvasNode, qrResolved) : Promise.resolve(null),
+      ])
+
+      drawProfilePoster(ctx, {
+        width,
+        height,
+        data: {
+          nickname: tempNickname || '用户',
+          shortId: formatShortId(userId),
+          recordDays,
+          followersCount,
+          followingCount,
+        },
+        avatarImage: avatarImg,
+        qrCodeImage: qrImg,
+      })
+
+      const fileRes = await Taro.canvasToTempFilePath({
+        canvas: canvasNode as any,
+        width,
+        height,
+      })
+      setPosterImageUrl(fileRes.tempFilePath)
+    } catch (error: any) {
+      console.error('[profile-settings] 海报生成失败:', error)
+      Taro.showToast({ title: error?.message || '海报生成失败', icon: 'none' })
+      setPosterVisible(false)
+    } finally {
+      setPosterGenerating(false)
+    }
+  }
+
+  const handleSavePoster = async () => {
+    if (!posterImageUrl) return
+    try {
+      await Taro.saveImageToPhotosAlbum({ filePath: posterImageUrl })
+      Taro.showToast({ title: '已保存到相册', icon: 'success' })
+    } catch (err: any) {
+      if (err?.errMsg?.includes('auth') || err?.errMsg?.includes('authorize')) {
+        Taro.showModal({
+          title: '需要授权',
+          content: '请授权保存图片到相册权限',
+          showCancel: false,
+        })
+      } else if (isShowShareImageMenuCancel(err)) {
+        // 用户取消，静默处理
+      } else {
+        Taro.showToast({ title: '保存失败', icon: 'none' })
+      }
+    }
+  }
+
+  const handleSharePoster = () => {
+    if (!posterImageUrl) return
+    Taro.showShareImageMenu({
+      path: posterImageUrl,
+      success: () => {
+        Taro.showToast({ title: '分享成功', icon: 'success' })
+      },
+      fail: (err: any) => {
+        if (isShowShareImageMenuCancel(err)) return
+        Taro.showToast({ title: '分享失败', icon: 'none' })
+      },
+    })
   }
 
   const handleGoDetail = (item: PublicFoodLibraryItem) => {
@@ -486,6 +658,11 @@ export default function ProfileSettingsPage() {
 
           {/* 统计行 — 数字和标签同一行，竖线分割 */}
           <View className='profile-stats-row'>
+            <View className='profile-stat-item'>
+              <Text className='profile-stat-num'>{recordDays}</Text>
+              <Text className='profile-stat-text'>记录天数</Text>
+            </View>
+            <Text className='profile-stat-divider'>|</Text>
             <View className='profile-stat-item' onClick={handleGoFollowers}>
               <Text className='profile-stat-num'>{followersCount}</Text>
               <Text className='profile-stat-text'>被关注</Text>
@@ -495,7 +672,15 @@ export default function ProfileSettingsPage() {
               <Text className='profile-stat-num'>{followingCount}</Text>
               <Text className='profile-stat-text'>关注</Text>
             </View>
-            {!isOwner && (
+            {isOwner ? (
+              <>
+                <Text className='profile-stat-divider'>|</Text>
+                <View className='profile-share-btn' onClick={handleShareProfile}>
+                  <Text className='profile-share-btn-icon'>📤</Text>
+                  <Text className='profile-share-btn-text'>分享</Text>
+                </View>
+              </>
+            ) : (
               <>
                 <Text className='profile-stat-divider'>|</Text>
                 <View
@@ -677,6 +862,49 @@ export default function ProfileSettingsPage() {
             </View>
           </View>
         )}
+
+        {/* 分享海报弹窗 */}
+        {posterVisible && (
+          <View className='poster-modal'>
+            <View className='poster-modal-overlay' onClick={() => setPosterVisible(false)} />
+            <View className='poster-modal-content'>
+              {posterGenerating && !posterImageUrl ? (
+                <View className='poster-modal-loading'>
+                  <View className='poster-modal-spinner' />
+                </View>
+              ) : (
+                <>
+                  {posterImageUrl && (
+                    <Image
+                      className='poster-modal-image'
+                      src={posterImageUrl}
+                      mode='widthFix'
+                      showMenuByLongpress
+                    />
+                  )}
+                  <View className='poster-modal-actions'>
+                    <View className='poster-modal-btn' onClick={handleSavePoster}>
+                      <Text className='poster-modal-btn-icon'>💾</Text>
+                      <Text className='poster-modal-btn-text'>保存图片</Text>
+                    </View>
+                    <View className='poster-modal-btn' onClick={handleSharePoster}>
+                      <Text className='poster-modal-btn-icon'>📤</Text>
+                      <Text className='poster-modal-btn-text'>分享给好友</Text>
+                    </View>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* 离屏 Canvas（用于生成海报） */}
+        <Canvas
+          type='2d'
+          id='profile-poster-canvas'
+          className='poster-offscreen-canvas'
+          style={{ width: `${POSTER_WIDTH}px`, height: `${computeProfilePosterHeight()}px` }}
+        />
       </View>
     </FlPageThemeRoot>
   )
