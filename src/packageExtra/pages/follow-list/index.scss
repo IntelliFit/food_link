@@ -55,6 +55,7 @@
   gap: 20rpx;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 
   &:active {
     opacity: 0.7;
@@ -99,11 +100,13 @@
   align-items: center;
   justify-content: center;
   min-height: 52rpx;
-  padding: 0 28rpx;
+  padding: 0 24rpx;
   border-radius: 999rpx;
   background: #00bc7d;
   border: 1rpx solid #00bc7d;
   flex-shrink: 0;
+  margin-left: 16rpx;
+  max-width: 160rpx;
 
   &:active {
     opacity: 0.8;

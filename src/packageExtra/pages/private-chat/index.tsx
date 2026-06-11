@@ -6,13 +6,14 @@ import {
   sendPrivateMessage,
   markMessagesRead,
   getPublicUserProfile,
+  getAccessToken,
+  API_BASE_URL,
   type PrivateMessage,
 } from '../../../utils/api'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
-import { getAccessToken } from '../../../utils/api'
 import './index.scss'
 
 const POLL_INTERVAL_MS = 3000
@@ -172,7 +173,7 @@ export default function PrivateChatPage() {
       // 上传图片到服务器
       const token = getAccessToken()
       const uploadRes = await Taro.uploadFile({
-        url: `${process.env.TARO_APP_API_BASE_URL || 'https://dev.healthymax.cn'}/api/upload-analyze-image-file`,
+        url: `${API_BASE_URL}/api/upload-analyze-image-file`,
         filePath: tempFilePath,
         name: 'file',
         header: {
