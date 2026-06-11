@@ -16,6 +16,7 @@
   padding: 32rpx 32rpx 28rpx;
   flex-shrink: 0;
   border-radius: 0 0 24rpx 24rpx;
+  z-index: 0;
 }
 
 /* 头像 + 信息 横向排列 */
@@ -730,7 +731,7 @@
   left: 0;
   right: 0;
   bottom: -120rpx;
-  z-index: 0;
+  z-index: -1;
   background: linear-gradient(180deg,
     rgba(20, 40, 32, 0) 0%,
     rgba(20, 40, 32, 0.5) 100%
