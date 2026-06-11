@@ -1299,6 +1299,7 @@ export interface UserInfo {
   unionid?: string
   nickname: string
   avatar: string
+  cover_image?: string
   telephone?: string
   create_time?: string
   update_time?: string
@@ -1659,6 +1660,7 @@ export interface HealthProfileUpdateRequest {
 export interface UpdateUserInfoRequest {
   nickname?: string
   avatar?: string
+  cover_image?: string
   telephone?: string
   searchable?: boolean
   public_records?: boolean
@@ -4161,6 +4163,19 @@ export async function uploadUserAvatar(base64Image: string): Promise<{ imageUrl:
   return response.data as { imageUrl: string }
 }
 
+export async function uploadCoverImage(base64Image: string): Promise<{ imageUrl: string }> {
+  const response = await authenticatedRequest('/api/user/upload-cover', {
+    method: 'POST',
+    data: { base64Image },
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    const msg = (response.data as any)?.detail || '上传背景图失败'
+    throw new Error(msg)
+  }
+  return response.data as { imageUrl: string }
+}
+
 /**
  * 获取用户记录天数统计
  * @returns Promise<{ record_days: number }>
@@ -5905,6 +5920,7 @@ export async function getPublicUserProfile(userId: string): Promise<{
   id: string
   nickname: string
   avatar: string
+  cover_image?: string
   record_days: number
   create_time?: string
 }> {
@@ -5912,7 +5928,7 @@ export async function getPublicUserProfile(userId: string): Promise<{
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取用户资料失败')
   }
-  return response.data as { id: string; nickname: string; avatar: string; record_days: number; create_time?: string }
+  return response.data as { id: string; nickname: string; avatar: string; cover_image?: string; record_days: number; create_time?: string }
 }
 
 /** 获取指定用户的公共食物库收藏 */

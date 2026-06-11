@@ -36,6 +36,7 @@ type BindPhoneService interface {
 type UploadService interface {
 	UploadAvatar(userID string, base64Image string) (string, error)
 	UploadReportImage(userID string, base64Image string) (string, error)
+	UploadCoverImage(userID string, base64Image string) (string, error)
 }
 
 type OCRService interface {
@@ -263,6 +264,28 @@ func (h *UserHandler) SubmitReportExtractionTask(c *gin.Context) {
 		return
 	}
 	response.Success(c, map[string]string{"taskId": taskID})
+}
+
+// POST /api/user/upload-cover
+func (h *UserHandler) UploadCoverImage(c *gin.Context) {
+	var body struct {
+		Base64Image string `json:"base64Image"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if body.Base64Image == "" {
+		response.Error(c, &gin.Error{Err: http.ErrBodyNotAllowed, Type: gin.ErrorTypePublic})
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	imageURL, err := h.uploadSvc.UploadCoverImage(userID, body.Base64Image)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, map[string]string{"imageUrl": imageURL})
 }
 
 // POST /api/user/health-profile/upload-report-image

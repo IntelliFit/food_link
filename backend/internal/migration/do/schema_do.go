@@ -35,6 +35,7 @@ type UserDO struct {
 	ReferredByUserID               *string        `gorm:"column:referred_by_user_id;type:uuid;index:idx_weapp_user_referred_by_user_id"`
 	EarnedCreditsBalance           int            `gorm:"column:earned_credits_balance;type:integer;not null;default:0"`
 	HealthDisclaimerAcknowledgedAt *time.Time     `gorm:"column:health_disclaimer_acknowledged_at;type:timestamptz"`
+	CoverImage                     *string        `gorm:"column:cover_image;type:text"`
 }
 
 func (UserDO) TableName() string { return "weapp_user" }

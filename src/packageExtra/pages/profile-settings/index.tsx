@@ -4,6 +4,7 @@ import Taro, { useRouter, useReachBottom } from '@tarojs/taro'
 import {
   updateUserInfo,
   uploadUserAvatar,
+  uploadCoverImage,
   imageToBase64,
   showUnifiedApiError,
   clearAllStorage,
@@ -102,7 +103,11 @@ export default function ProfileSettingsPage() {
   const [showEditSheet, setShowEditSheet] = useState(false)
   const [editNickname, setEditNickname] = useState('')
   const [editAvatar, setEditAvatar] = useState('')
+  const [editCoverImage, setEditCoverImage] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // 背景图
+  const [coverImage, setCoverImage] = useState('')
 
   // Tab
   const [activeTab, setActiveTab] = useState<TabKey>('feed')
@@ -176,12 +181,15 @@ export default function ProfileSettingsPage() {
         const avatar = profile?.avatar || ''
         const nickname = profile?.nickname || '用户昵称'
         const uid = String(profile?.id || currentUserId).trim()
+        const cover = profile?.cover_image || ''
         setTempAvatar(avatar)
         setTempNickname(nickname)
         setEditAvatar(avatar)
         setEditNickname(nickname)
+        setEditCoverImage(cover)
         setUserId(uid)
         setRecordDays(recordDaysRes.record_days || 0)
+        setCoverImage(cover)
         setFoodCollections(foodColls.list || [])
         setRecipeCollections(recipeColls.recipes || [])
         setFavoriteCount(recipeColls.recipes?.length || 0)
@@ -197,12 +205,15 @@ export default function ProfileSettingsPage() {
         ])
         const avatar = publicProfile?.avatar || ''
         const nickname = publicProfile?.nickname || '用户'
+        const cover = publicProfile?.cover_image || ''
         setTempAvatar(avatar)
         setTempNickname(nickname)
         setEditAvatar(avatar)
         setEditNickname(nickname)
+        setEditCoverImage(cover)
         setUserId(publicProfile?.id || resolvedUserId)
         setRecordDays(publicProfile?.record_days || 0)
+        setCoverImage(cover)
         setFoodCollections(foodColls.list || [])
         setRecipeCollections(recipeColls.recipes || [])
         setFavoriteCount(recipeColls.recipes?.length || 0)
@@ -326,6 +337,7 @@ export default function ProfileSettingsPage() {
     if (!isOwner) return
     setEditAvatar(tempAvatar)
     setEditNickname(tempNickname)
+    setEditCoverImage(coverImage)
     setShowEditSheet(true)
   }
 
@@ -349,6 +361,29 @@ export default function ProfileSettingsPage() {
     }
   }
 
+  // 选择背景图
+  const handleChooseCoverImage = async () => {
+    try {
+      const res = await Taro.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed'],
+      })
+      const tempFile = res.tempFiles?.[0]?.tempFilePath
+      if (!tempFile) return
+      Taro.showLoading({ title: '上传中...' })
+      const base64 = await imageToBase64(tempFile)
+      const { imageUrl } = await uploadCoverImage(base64)
+      setEditCoverImage(imageUrl)
+      Taro.hideLoading()
+    } catch (err: any) {
+      Taro.hideLoading()
+      if (err?.errMsg?.includes('cancel')) return
+      await showUnifiedApiError(err, '上传背景图失败')
+    }
+  }
+
   // 保存编辑
   const handleSaveEdit = async () => {
     if (!editAvatar || !editNickname) {
@@ -358,12 +393,13 @@ export default function ProfileSettingsPage() {
     setSaving(true)
     Taro.showLoading({ title: '保存中...' })
     try {
-      await updateUserInfo({ nickname: editNickname, avatar: editAvatar })
+      await updateUserInfo({ nickname: editNickname, avatar: editAvatar, cover_image: editCoverImage })
       const stored = Taro.getStorageSync('userInfo')
       const newUserInfo = { avatar: editAvatar, name: editNickname, meta: stored?.meta || '', id: userId || currentUserId }
       Taro.setStorageSync('userInfo', newUserInfo)
       setTempAvatar(editAvatar)
       setTempNickname(editNickname)
+      setCoverImage(editCoverImage)
       Taro.hideLoading()
       Taro.showToast({ title: '保存成功', icon: 'success' })
       setShowEditSheet(false)
@@ -623,10 +659,37 @@ export default function ProfileSettingsPage() {
   return (
     <FlPageThemeRoot>
       <View className={`profile-settings-page ${scheme === 'dark' ? 'profile-settings-page--dark' : ''}`}>
-        {/* 顶部用户信息区域 — 左对齐 */}
+        {/* 顶部用户信息区域 */}
         <View className='profile-top-section'>
+          {/* 背景图 + 分享按钮 */}
+          <View
+            className='profile-cover-section'
+            onClick={isOwner ? handleChooseCoverImage : undefined}
+          >
+            {coverImage ? (
+              <Image className='profile-cover-image' src={coverImage} mode='aspectFill' />
+            ) : (
+              <View className='profile-cover-default' />
+            )}
+            {isOwner && !coverImage && (
+              <View className='profile-cover-upload-hint'>
+                <Text className='iconfont icon-picture profile-cover-upload-icon' />
+                <Text className='profile-cover-upload-text'>点击设置背景图</Text>
+              </View>
+            )}
+            {/* 分享按钮 — 绝对定位右上角 */}
+            {isOwner && (
+              <View
+                className='profile-share-icon-btn'
+                onClick={(e) => { e.stopPropagation(); handleShareProfile() }}
+              >
+                <Text className='iconfont icon-share profile-share-icon' />
+              </View>
+            )}
+          </View>
+
+          {/* 头像 + 昵称 + ID */}
           <View className='profile-user-row'>
-            {/* 头像 */}
             <View
               className='profile-avatar-wrap'
               onClick={isOwner ? handleOpenEdit : undefined}
@@ -642,7 +705,6 @@ export default function ProfileSettingsPage() {
               </View>
             </View>
 
-            {/* 昵称 + ID */}
             <View className='profile-info-col'>
               <View className='profile-name-row' onClick={isOwner ? handleOpenEdit : undefined}>
                 <Text className='profile-nickname'>{tempNickname || '用户昵称'}</Text>
@@ -672,15 +734,7 @@ export default function ProfileSettingsPage() {
               <Text className='profile-stat-num'>{followingCount}</Text>
               <Text className='profile-stat-text'>关注</Text>
             </View>
-            {isOwner ? (
-              <>
-                <Text className='profile-stat-divider'>|</Text>
-                <View className='profile-share-btn' onClick={handleShareProfile}>
-                  <Text className='profile-share-btn-icon'>📤</Text>
-                  <Text className='profile-share-btn-text'>分享</Text>
-                </View>
-              </>
-            ) : (
+            {!isOwner && (
               <>
                 <Text className='profile-stat-divider'>|</Text>
                 <View
@@ -822,6 +876,24 @@ export default function ProfileSettingsPage() {
                     )}
                   </View>
                 </Button>
+              </View>
+
+              {/* 背景图 */}
+              <View className='edit-sheet-row'>
+                <Text className='edit-sheet-label'>主页背景图</Text>
+                <View
+                  className='edit-sheet-cover-section'
+                  onClick={handleChooseCoverImage}
+                >
+                  {editCoverImage ? (
+                    <Image className='edit-sheet-cover-image' src={editCoverImage} mode='aspectFill' />
+                  ) : (
+                    <View className='edit-sheet-cover-placeholder'>
+                      <Text className='iconfont icon-picture edit-sheet-cover-placeholder-icon' />
+                      <Text className='edit-sheet-cover-placeholder-text'>点击选择背景图</Text>
+                    </View>
+                  )}
+                </View>
               </View>
 
               {/* 昵称 */}

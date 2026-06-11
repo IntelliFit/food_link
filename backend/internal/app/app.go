@@ -318,6 +318,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.PUT("/api/user/profile", authmw.RequireJWT(jwtSvc), userHandler.UpdateProfile)
 	engine.POST("/api/user/bind-phone", authmw.RequireJWT(jwtSvc), userHandler.BindPhone)
 	engine.POST("/api/user/upload-avatar", authmw.RequireJWT(jwtSvc), userHandler.UploadAvatar)
+	engine.POST("/api/user/upload-cover", authmw.RequireJWT(jwtSvc), userHandler.UploadCoverImage)
 	engine.GET("/api/user/dashboard-targets", authmw.RequireJWT(jwtSvc), userHandler.GetDashboardTargets)
 	engine.PUT("/api/user/dashboard-targets", authmw.RequireJWT(jwtSvc), userHandler.UpdateDashboardTargets)
 	engine.GET("/api/user/health-profile", authmw.RequireJWT(jwtSvc), userHandler.GetHealthProfile)

@@ -12,16 +12,19 @@
 
 /* 顶部用户信息区域 */
 .profile-top-section {
-  padding: 40rpx 32rpx 28rpx;
+  padding: 32rpx 32rpx 28rpx;
   flex-shrink: 0;
 }
 
 /* 头像 + 信息 横向排列 */
 .profile-user-row {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 24rpx;
   margin-bottom: 24rpx;
+  padding-left: 16rpx;
+  position: relative;
+  z-index: 1;
 }
 
 .profile-avatar-wrap {
@@ -711,33 +714,121 @@
   to { transform: rotate(360deg); }
 }
 
-.profile-share-btn {
+.profile-share-icon-btn {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  z-index: 2;
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.15);
   display: flex;
   align-items: center;
-  gap: 6rpx;
-  min-height: 48rpx;
-  padding: 0 24rpx;
-  border-radius: 999rpx;
-  background: #00bc7d;
-  border: 1rpx solid #00bc7d;
-  margin-left: 8rpx;
+  justify-content: center;
 
   &:active {
     opacity: 0.8;
-    transform: scale(0.96);
+    transform: scale(0.92);
   }
 }
 
-.profile-share-btn-icon {
-  font-size: 24rpx;
+.profile-share-icon {
+  font-size: 30rpx;
+  color: #374151;
   line-height: 1;
 }
 
-.profile-share-btn-text {
-  font-size: 24rpx;
-  line-height: 34rpx;
-  color: #fff;
-  font-weight: 600;
+/* 背景图区域 */
+.profile-cover-section {
+  position: relative;
+  width: 100%;
+  height: 240rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+  margin-bottom: -40rpx;
+  background: linear-gradient(135deg, #dbece5 0%, #c5e0d1 50%, #b0d5c3 100%);
+}
+
+.profile-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-cover-default {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #dbece5 0%, #c5e0d1 50%, #b0d5c3 100%);
+}
+
+.profile-cover-upload-hint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+}
+
+.profile-cover-upload-icon {
+  font-size: 48rpx;
+  color: rgba(0, 143, 99, 0.5);
+  line-height: 1;
+}
+
+.profile-cover-upload-text {
+  font-size: 26rpx;
+  color: rgba(0, 143, 99, 0.6);
+  line-height: 36rpx;
+}
+
+/* 编辑弹窗背景图 */
+.edit-sheet-cover-section {
+  width: 100%;
+  height: 200rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+  background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+  border: 2rpx solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:active {
+    opacity: 0.85;
+  }
+}
+
+.edit-sheet-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.edit-sheet-cover-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+}
+
+.edit-sheet-cover-placeholder-icon {
+  font-size: 48rpx;
+  color: #9ca3af;
+  line-height: 1;
+}
+
+.edit-sheet-cover-placeholder-text {
+  font-size: 26rpx;
+  color: #9ca3af;
+  line-height: 36rpx;
 }
 
 /* 海报弹窗 */
@@ -994,6 +1085,44 @@
   .avatar-choose-wrapper {
     background: #1e2624;
     border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .profile-cover-section {
+    background: linear-gradient(135deg, #1a2e28 0%, #152620 50%, #111f1a 100%);
+  }
+
+  .profile-cover-default {
+    background: linear-gradient(135deg, #1a2e28 0%, #152620 50%, #111f1a 100%);
+  }
+
+  .profile-share-icon-btn {
+    background: rgba(24, 31, 29, 0.9);
+    box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.4);
+  }
+
+  .profile-share-icon {
+    color: #f2f7f4;
+  }
+
+  .profile-cover-upload-icon {
+    color: rgba(110, 231, 183, 0.35);
+  }
+
+  .profile-cover-upload-text {
+    color: rgba(110, 231, 183, 0.45);
+  }
+
+  .edit-sheet-cover-section {
+    background: #1e2624;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .edit-sheet-cover-placeholder-icon {
+    color: #64748b;
+  }
+
+  .edit-sheet-cover-placeholder-text {
+    color: #64748b;
   }
 
   .poster-modal-overlay {
