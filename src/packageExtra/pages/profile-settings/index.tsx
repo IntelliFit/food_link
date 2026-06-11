@@ -20,14 +20,13 @@ import {
   followUser,
   unfollowUser,
   getFollowStats,
-  getUnlimitedQRCode,
   resolveFriendInvite,
-  getAccessToken,
   type PublicFoodLibraryItem,
   type UserRecipe,
   type CommunityFeedItem,
   type FollowStats,
 } from '../../../utils/api'
+import drawQrcode from 'weapp-qrcode-canvas-2d'
 import {
   drawProfilePoster,
   computeProfilePosterHeight,
@@ -36,6 +35,7 @@ import {
 } from '../../../utils/poster'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
@@ -434,19 +434,65 @@ export default function ProfileSettingsPage() {
     }
   }
 
+  // 扫码
+  const handleScanQRCode = async () => {
+    try {
+      const res = await Taro.scanCode({
+        onlyFromCamera: true,
+        scanType: ['qrCode'],
+      })
+      const result = res.result || ''
+      // 支持格式：pf=xxx 或直接 UUID
+      const match = result.match(/pf=([a-f0-9-]+)/i) || result.match(/^([a-f0-9-]{36})$/i)
+      if (match && match[1]) {
+        const targetUserId = match[1]
+        Taro.navigateTo({
+          url: `${extraPkgUrl('/pages/profile-settings/index')}?user_id=${encodeURIComponent(targetUserId)}`,
+        })
+      } else {
+        Taro.showToast({ title: '无效的二维码', icon: 'none' })
+      }
+    } catch (err: any) {
+      if (err?.errMsg?.includes('cancel')) return
+      Taro.showToast({ title: '扫码失败', icon: 'none' })
+    }
+  }
+
   // 分享海报
   const handleShareProfile = async () => {
     if (posterGenerating) return
     setPosterGenerating(true)
     setPosterVisible(true)
     try {
-      const qrRes = await getUnlimitedQRCode(
-        `pf=${userId}`,
-        'pages/community-profile/index',
-      )
-      const qrBase64 = qrRes.base64
+      const qrSize = 200
+      // 获取二维码 Canvas 节点并绘制普通二维码
+      const qrCanvasNode = await new Promise<HTMLCanvasElement>((resolve, reject) => {
+        const query = Taro.createSelectorQuery()
+        query.select('#qr-gen-canvas')
+          .fields({ node: true, size: true })
+          .exec((res) => {
+            if (res?.[0]?.node) resolve(res[0].node)
+            else reject(new Error('二维码 canvas 节点获取失败'))
+          })
+      })
+      qrCanvasNode.width = qrSize
+      qrCanvasNode.height = qrSize
+      drawQrcode({
+        canvas: qrCanvasNode,
+        canvasId: 'qr-gen-canvas',
+        width: qrSize,
+        text: `pf=${userId}`,
+        background: '#ffffff',
+        foreground: '#000000',
+      })
+      const qrFileRes = await Taro.canvasToTempFilePath({
+        canvas: qrCanvasNode as any,
+        width: qrSize,
+        height: qrSize,
+      })
+      const qrImagePath = qrFileRes.tempFilePath
 
-      // 获取 Canvas 2D 节点
+      // 获取海报 Canvas 2D 节点
       const canvasNode = await new Promise<HTMLCanvasElement>((resolve, reject) => {
         const query = Taro.createSelectorQuery()
         query.select('#profile-poster-canvas')
@@ -467,7 +513,7 @@ export default function ProfileSettingsPage() {
       // 并行加载头像和二维码图片
       const [avatarResolved, qrResolved] = await Promise.all([
         tempAvatar ? resolveCanvasImageSrc(tempAvatar) : Promise.resolve(''),
-        resolveCanvasImageSrc(`data:image/png;base64,${qrBase64}`),
+        resolveCanvasImageSrc(qrImagePath),
       ])
 
       const [avatarImg, qrImg] = await Promise.all([
@@ -678,6 +724,13 @@ export default function ProfileSettingsPage() {
               >
                 <Text className='iconfont icon-edit profile-top-action-icon' />
                 <Text className='profile-top-action-text'>编辑资料</Text>
+              </View>
+              <View
+                className='profile-top-action-btn'
+                onClick={handleScanQRCode}
+              >
+                <Text className='iconfont icon-scan profile-top-action-icon' />
+                <Text className='profile-top-action-text'>扫码</Text>
               </View>
               <View
                 className='profile-top-action-btn'
@@ -977,6 +1030,14 @@ export default function ProfileSettingsPage() {
           id='profile-poster-canvas'
           className='poster-offscreen-canvas'
           style={{ width: `${POSTER_WIDTH}px`, height: `${computeProfilePosterHeight()}px` }}
+        />
+
+        {/* 二维码生成 Canvas */}
+        <Canvas
+          type='2d'
+          id='qr-gen-canvas'
+          className='poster-offscreen-canvas'
+          style={{ width: '200px', height: '200px' }}
         />
       </View>
     </FlPageThemeRoot>
