@@ -85,12 +85,14 @@ npm run dev
 
 ### Cloudflare Pages
 
-在 **Settings → Environment variables** 配置：
+`VITE_*` 变量必须在 **构建时** 注入（Vite 会写进 JS 产物）。在 **Settings → Variables** 分别为 **Production** 与 **Preview** 各配一套（不能只配 Production）：
 
-| 环境 | `VITE_ADMIN_API_BASE_URL` |
-|------|---------------------------|
-| Production（main 分支） | `https://api.healthymax.cn` |
-| Preview（dev 等分支） | `https://dev.api.healthymax.cn` |
+| Cloudflare 环境 | 部署示例 | `VITE_ADMIN_API_BASE_URL` |
+|-----------------|----------|---------------------------|
+| **Production** | `admin.healthymax.cn`（main） | `https://api.healthymax.cn` |
+| **Preview** | `dev.food-link-admin.pages.dev`（dev 等） | `https://dev.api.healthymax.cn` |
+
+**常见故障**：访问 `dev.*.pages.dev` 时登录请求打到 `https://dev.food-link-admin.pages.dev/api/admin/login` 并返回 **405**，说明 Preview 构建时变量为空，前端走了「同源」。登录页左下角若显示 `API: 同源` 即是此情况。处理：在 **Preview** 环境添加变量后 **重新部署 dev 分支**。
 
 若通过反代使 Admin 与 API 同源，可留空该变量。
 
@@ -99,8 +101,10 @@ npm run dev
 Admin 与 API 不同源时，Go 后端需配置：
 
 ```bash
-ADMIN_CORS_ALLOWED_ORIGINS=https://admin.healthymax.cn
+ADMIN_CORS_ALLOWED_ORIGINS=https://admin.healthymax.cn,https://dev.food-link-admin.pages.dev
 ```
+
+Preview 域名也要加入，否则变量配对后仍可能被 CORS 拦截。
 
 ### 实现位置
 
