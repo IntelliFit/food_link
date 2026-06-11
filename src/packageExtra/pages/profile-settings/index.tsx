@@ -661,32 +661,33 @@ export default function ProfileSettingsPage() {
       <View className={`profile-settings-page ${scheme === 'dark' ? 'profile-settings-page--dark' : ''}`}>
         {/* 顶部用户信息区域 */}
         <View className='profile-top-section'>
-          {/* 背景图 + 分享按钮 */}
-          <View
-            className='profile-cover-section'
-            onClick={isOwner ? handleChooseCoverImage : undefined}
-          >
-            {coverImage ? (
-              <Image className='profile-cover-image' src={coverImage} mode='aspectFill' />
-            ) : (
-              <View className='profile-cover-default' />
-            )}
-            {isOwner && !coverImage && (
-              <View className='profile-cover-upload-hint'>
-                <Text className='iconfont icon-picture profile-cover-upload-icon' />
-                <Text className='profile-cover-upload-text'>点击设置背景图</Text>
-              </View>
-            )}
-            {/* 分享按钮 — 绝对定位右上角 */}
-            {isOwner && (
+          {/* 背景图 — 绝对定位覆盖整个顶部区域 */}
+          {coverImage && (
+            <View className='profile-cover-bg'>
+              <Image className='profile-cover-bg-image' src={coverImage} mode='aspectFill' />
+              <View className='profile-cover-bg-mask' />
+            </View>
+          )}
+
+          {/* 右上角按钮组 */}
+          {isOwner && (
+            <View className='profile-top-actions'>
               <View
-                className='profile-share-icon-btn'
-                onClick={(e) => { e.stopPropagation(); handleShareProfile() }}
+                className='profile-top-action-btn'
+                onClick={handleOpenEdit}
               >
-                <Text className='iconfont icon-share profile-share-icon' />
+                <Text className='iconfont icon-edit profile-top-action-icon' />
+                <Text className='profile-top-action-text'>编辑资料</Text>
               </View>
-            )}
-          </View>
+              <View
+                className='profile-top-action-btn'
+                onClick={handleShareProfile}
+              >
+                <Text className='iconfont icon-share profile-top-action-icon' />
+                <Text className='profile-top-action-text'>分享</Text>
+              </View>
+            </View>
+          )}
 
           {/* 头像 + 昵称 + ID */}
           <View className='profile-user-row'>
