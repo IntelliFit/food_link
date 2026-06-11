@@ -708,12 +708,14 @@ export default function ProfileSettingsPage() {
         {/* 顶部用户信息区域 */}
         <View className='profile-top-section'>
           {/* 背景图 — 绝对定位覆盖整个顶部区域 */}
-          {coverImage && (
-            <View className='profile-cover-bg'>
-              <Image className='profile-cover-bg-image' src={coverImage} mode='aspectFill' />
-              <View className='profile-cover-bg-mask' />
-            </View>
-          )}
+          <View className='profile-cover-bg'>
+            {coverImage && (
+              <>
+                <Image className='profile-cover-bg-image' src={coverImage} mode='aspectFill' />
+                <View className='profile-cover-bg-mask' />
+              </>
+            )}
+          </View>
 
           {/* 右上角按钮组 */}
           {isOwner && (
@@ -726,18 +728,16 @@ export default function ProfileSettingsPage() {
                 <Text className='profile-top-action-text'>编辑资料</Text>
               </View>
               <View
-                className='profile-top-action-btn'
+                className='profile-top-icon-btn'
                 onClick={handleScanQRCode}
               >
-                <Text className='iconfont icon-scan profile-top-action-icon' />
-                <Text className='profile-top-action-text'>扫码</Text>
+                <Text className='iconfont icon-scan profile-top-icon' />
               </View>
               <View
-                className='profile-top-action-btn'
+                className='profile-top-icon-btn'
                 onClick={handleShareProfile}
               >
-                <Text className='iconfont icon-share profile-top-action-icon' />
-                <Text className='profile-top-action-text'>分享</Text>
+                <Text className='iconfont icon-share profile-top-icon' />
               </View>
             </View>
           )}
