@@ -390,7 +390,6 @@
   padding: 0; // 内部布局控制内边距
   border: 1rpx solid rgb(0 0 0 / 3%);
   border-radius: 24rpx;
-  box-shadow: 0 6rpx 20rpx rgb(15 23 42 / 5%);
 }
 
 .ingredient-main {
@@ -418,7 +417,7 @@
   transition: all 0.2s ease;
 
   .iconfont {
-    font-size: 24rpx;
+    font-size: 26rpx;
     color: #94a3b8;
   }
 
@@ -461,7 +460,7 @@
 }
 
 .control-label {
-  font-size: 22rpx;
+  font-size: 24rpx;
   color: #64748b;
   font-weight: 500;
 }
@@ -589,13 +588,13 @@
 }
 
 .macro-editor-item-label {
-  font-size: 19rpx;
+  font-size: 22rpx;
   color: #64748b;
   font-weight: 600;
 }
 
 .macro-editor-value {
-  font-size: 24rpx;
+  font-size: 26rpx;
   font-weight: 700;
   color: #0f172a;
   font-family: 'DIN Alternate', sans-serif;
