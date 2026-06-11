@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
 
+import { resolveApiBaseUrl } from './api-base-url'
 import {
   collectFoodDisplayImageUrls,
   type FoodImageSource,
@@ -20,12 +21,8 @@ function readInjectedString(
   }
 }
 
-// 使用构建时注入的 API 基础 URL
-// config/index.ts 会根据 NODE_ENV 和 TARO_APP_API_BASE_URL 环境变量正确设置
-export const API_BASE_URL = readInjectedString(
-  () => __API_BASE_URL__,
-  'https://dev.healthymax.cn'
-)
+// 运行时按微信 envVersion 选择 API；各环境 URL 由 .env 构建注入，见 docs/api-url-configuration.md
+export const API_BASE_URL = resolveApiBaseUrl()
 export const EXPIRY_SUBSCRIBE_TEMPLATE_ID = readInjectedString(
   () => __EXPIRY_SUBSCRIBE_TEMPLATE_ID__,
   ''
@@ -46,7 +43,7 @@ export const RECENT_REQUEST_TRACE_LIMIT = Math.min(
 
 // 仅开发构建打印，避免真机/生产包无意义日志（且减少控制台副作用）
 if (process.env.NODE_ENV !== 'production') {
-  console.log('[API] 构建时 API_BASE_URL:', API_BASE_URL)
+  console.log('[API] 运行时 API_BASE_URL:', API_BASE_URL)
   console.log('[API] 最近请求诊断条数:', RECENT_REQUEST_TRACE_LIMIT)
 }
 

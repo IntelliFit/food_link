@@ -209,8 +209,8 @@ JSON path 使用 `gjson` 语法。
 **前端层**：
 1. `runner.ts` 自动寻找空闲端口（如 3020）
 2. 在该端口启动 `api-test-server`
-3. 编译小程序，通过环境变量 `TARO_APP_API_BASE_URL=http://127.0.0.1:<port>` 覆盖 API 地址
-4. 小程序代码中的 `__API_BASE_URL__` 编译常量是硬编码的，因此所有 `wx.request` 都会指向临时服务器
+3. 编译小程序，通过环境变量 `TARO_APP_API_BASE_URL_OVERRIDE=http://127.0.0.1:<port>` 覆盖 API 地址
+4. 小程序在运行时解析 API 根地址；设置 OVERRIDE 后所有 `wx.request` 都会指向临时服务器
 5. 自动启动/复用微信开发者工具，等待 mrc 连接就绪
 6. 通过 `mrc` 命令执行页面导航、元素点击、脚本执行等操作
 7. 测试结束后关闭服务器，临时数据库自动销毁
@@ -218,7 +218,7 @@ JSON path 使用 `gjson` 语法。
 ```
 小程序 wx.request
     ↓
-__API_BASE_URL__ = "http://127.0.0.1:3020"  （编译时注入）
+TARO_APP_API_BASE_URL_OVERRIDE = "http://127.0.0.1:3020"  （编译时注入，运行时强制覆盖）
     ↓
 api-test-server @ 3020
     ↓
