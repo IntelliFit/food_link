@@ -153,6 +153,8 @@
   align-items: center;
   gap: 20rpx;
   padding-left: 4rpx;
+  position: relative;
+  z-index: 1;
 }
 
 .profile-stat-text {
