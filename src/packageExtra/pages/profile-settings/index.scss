@@ -157,7 +157,7 @@
 
 .profile-stat-text {
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.72);
+  color: #fff;
   line-height: 34rpx;
 }
 
@@ -166,12 +166,11 @@
   font-weight: 700;
   color: #fff;
   line-height: 42rpx;
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.2);
 }
 
 .profile-stat-divider {
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.4);
+  color: #fff;
   line-height: 34rpx;
   padding: 0 4rpx;
 }
@@ -749,9 +748,9 @@
   right: 0;
   bottom: 0;
   background: linear-gradient(180deg,
-    rgba(0, 0, 0, 0.12) 0%,
-    rgba(0, 0, 0, 0.35) 60%,
-    rgba(0, 0, 0, 0.55) 100%
+    rgba(0, 0, 0, 0.28) 0%,
+    rgba(0, 0, 0, 0.55) 50%,
+    rgba(0, 0, 0, 0.72) 100%
   );
 }
 
@@ -986,7 +985,7 @@
   }
 
   .profile-stat-text {
-    color: rgba(255, 255, 255, 0.72);
+    color: #fff;
   }
 
   .profile-stat-num {
@@ -994,7 +993,7 @@
   }
 
   .profile-stat-divider {
-    color: rgba(255, 255, 255, 0.4);
+    color: #fff;
   }
 
   .profile-bottom-drawer {
