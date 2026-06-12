@@ -1,6 +1,13 @@
 # Food Link Admin
 
-意见反馈管理后台，独立于 Go 后端部署。
+意见反馈管理后台，独立于 Go 后端部署。UI 基于 [shadcn/ui](https://ui.shadcn.com/) + Tailwind CSS v4。
+
+## 技术栈
+
+- React 19 + Vite
+- shadcn/ui（Radix + Lucide 图标）
+- Tailwind CSS v4
+- Sonner（Toast 提示）
 
 ## 本地开发
 
