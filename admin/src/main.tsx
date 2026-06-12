@@ -4,8 +4,8 @@ import { getAdminApiBaseUrl } from './config'
 import './styles.css'
 
 const API_BASE_URL = getAdminApiBaseUrl()
-const ACTIVE_MENU = 'feedback'
 
+type MenuId = 'overview' | 'feedback' | 'packaged-foods' | 'quality' | 'test-backend' | 'behavior'
 type FeedbackStatus = 'open' | 'processing' | 'resolved' | 'closed'
 type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
 
@@ -49,12 +49,54 @@ type FeedbackItem = {
   user_telephone?: string
 }
 
-type ListResponse = {
-  items: FeedbackItem[]
+type PackagedFood = {
+  id: string
+  brand: string
+  product_name: string
+  display_name: string
+  normalized_name?: string
+  product_key?: string
+  search_text?: string
+  product_family_key?: string
+  spec_text?: string
+  barcode?: string
+  flavor_text?: string
+  package_category?: string
+  ingredients_text?: string
+  source_image_urls?: string[]
+  ocr_raw_text?: string
+  nutrition_basis_unit?: string
+  energy_unit_raw?: string
+  conversion_status?: string
+  ingest_method?: string
+  net_content_value?: number
+  net_content_unit?: string
+  unit_count?: number
+  unit_content_value?: number
+  unit_content_unit?: string
+  review_status?: string
+  net_weight_g: number
+  serving_weight_g: number
+  kcal_per_100g: number
+  protein_per_100g: number
+  carbs_per_100g: number
+  fat_per_100g: number
+  fiber_per_100g: number
+  sugar_per_100g: number
+  sodium_mg_per_100g: number
+  source_url?: string
+  source?: string
+  is_active: boolean
+}
+
+type ListResponse<T> = {
+  items: T[]
   page: number
   limit: number
   total: number
 }
+
+type AdminRequest = <T>(path: string, options?: RequestInit) => Promise<T>
 
 const categoryLabels: Record<string, string> = {
   bug: '问题反馈',
@@ -70,35 +112,51 @@ const statusLabels: Record<FeedbackStatus, string> = {
   closed: '已关闭',
 }
 
+const packagedFields = [
+  { key: 'brand', label: '品牌', type: 'text', group: 'basic' },
+  { key: 'product_name', label: '商品名', type: 'text', group: 'basic' },
+  { key: 'display_name', label: '展示名', type: 'text', group: 'basic', wide: true },
+  { key: 'flavor_text', label: '口味', type: 'text', group: 'basic' },
+  { key: 'spec_text', label: '规格说明', type: 'text', group: 'basic', wide: true },
+  { key: 'barcode', label: '条码', type: 'text', group: 'basic' },
+  { key: 'package_category', label: '分类', type: 'text', group: 'basic' },
+  { key: 'review_status', label: '审核状态', type: 'select', group: 'basic' },
+  { key: 'is_active', label: '是否启用', type: 'boolean', group: 'basic' },
+  { key: 'net_weight_g', label: '净重 g', type: 'number', group: 'basic' },
+  { key: 'net_content_value', label: '净含量数值', type: 'number', group: 'basic' },
+  { key: 'net_content_unit', label: '净含量单位', type: 'text', group: 'basic' },
+  { key: 'unit_count', label: '内含数量', type: 'number', group: 'basic' },
+  { key: 'unit_content_value', label: '单份规格', type: 'number', group: 'basic' },
+  { key: 'unit_content_unit', label: '单份单位', type: 'text', group: 'basic' },
+  { key: 'kcal_per_100g', label: '热量 kcal/100g', type: 'number', group: 'nutrition' },
+  { key: 'protein_per_100g', label: '蛋白质 g/100g', type: 'number', group: 'nutrition' },
+  { key: 'carbs_per_100g', label: '碳水 g/100g', type: 'number', group: 'nutrition' },
+  { key: 'fat_per_100g', label: '脂肪 g/100g', type: 'number', group: 'nutrition' },
+  { key: 'fiber_per_100g', label: '膳食纤维 g/100g', type: 'number', group: 'nutrition' },
+  { key: 'sugar_per_100g', label: '糖 g/100g', type: 'number', group: 'nutrition' },
+  { key: 'sodium_mg_per_100g', label: '钠 mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'ingredients_text', label: '配料', type: 'textarea', group: 'evidence', wide: true },
+  { key: 'source_image_urls', label: '图片 URL，每行一个', type: 'textarea', group: 'evidence', wide: true },
+  { key: 'ocr_raw_text', label: 'OCR 原文', type: 'textarea', group: 'evidence', wide: true },
+  { key: 'search_text', label: '搜索文本', type: 'textarea', group: 'evidence', wide: true },
+] as const
+
 function App() {
   const [authenticated, setAuthenticated] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
-  const [query, setQuery] = useState('')
-  const [category, setCategory] = useState('all')
-  const [status, setStatus] = useState('all')
-  const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(30)
-  const [items, setItems] = useState<FeedbackItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [selectedId, setSelectedId] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [message, setMessage] = useState('准备加载')
+  const [activeMenu, setActiveMenu] = useState<MenuId>(() => {
+    const saved = window.localStorage.getItem('admin.activeMenu') as MenuId | null
+    return saved || 'overview'
+  })
   const [toast, setToast] = useState('')
-
-  const selected = useMemo(() => items.find((item) => item.id === selectedId) || items[0], [items, selectedId])
-  const totalPages = Math.max(1, Math.ceil(total / limit))
 
   useEffect(() => {
     void checkSession()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
-    if (authenticated) {
-      void loadList()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated, page, limit, category, status])
+    window.localStorage.setItem('admin.activeMenu', activeMenu)
+  }, [activeMenu])
 
   useEffect(() => {
     if (!toast) return
@@ -148,166 +206,34 @@ function App() {
       await request<{ authenticated: boolean }>('/api/admin/logout', { method: 'POST' })
     } finally {
       setAuthenticated(false)
-      setItems([])
-      setSelectedId('')
       setToast('已退出登录')
     }
   }
 
-  async function loadList(nextPage = page) {
-    setLoading(true)
-    setMessage('加载反馈中...')
-    try {
-      const params = new URLSearchParams({
-        page: String(nextPage),
-        limit: String(limit),
-        q: query.trim(),
-        category,
-        status,
-      })
-      const data = await request<ListResponse>(`/api/admin/feedback?${params.toString()}`)
-      setItems(data.items || [])
-      setTotal(data.total || 0)
-      setPage(data.page || nextPage)
-      setSelectedId((current) => current || data.items?.[0]?.id || '')
-      setMessage(`共 ${data.total || 0} 条反馈，当前显示 ${(data.items || []).length} 条`)
-    } catch (error) {
-      const text = error instanceof Error ? error.message : '加载失败'
-      setMessage(text)
-      setItems([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function updateStatus(id: string, nextStatus: FeedbackStatus) {
-    try {
-      const data = await request<{ item: FeedbackItem }>(`/api/admin/feedback/${encodeURIComponent(id)}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: nextStatus }),
-      })
-      setItems((current) => current.map((item) => item.id === id ? data.item : item))
-      setSelectedId(id)
-      setToast('状态已更新')
-    } catch (error) {
-      setToast(error instanceof Error ? error.message : '状态更新失败')
-    }
-  }
-
-  function runSearch() {
-    setPage(1)
-    void loadList(1)
-  }
-
   if (checkingSession) {
     return (
-      <>
-        <div className="ambient ambient-a" />
-        <div className="ambient ambient-b" />
-        <div className="boot-screen">
-          <div className="brand-mark"><span className="brand-dot" />Food Link Admin</div>
-          <p>正在检查管理员登录态...</p>
-        </div>
-      </>
+      <main className="boot-screen">
+        <Spinner />
+        <div className="brand-mark"><span className="brand-dot" />Food Link Admin</div>
+      </main>
     )
   }
 
   if (!authenticated) {
-    return (
-      <>
-        <div className="ambient ambient-a" />
-        <div className="ambient ambient-b" />
-        <LoginPage onLogin={login} apiBase={API_BASE_URL || '同源'} toast={toast} setToast={setToast} />
-      </>
-    )
+    return <LoginPage onLogin={login} apiBase={API_BASE_URL || '同源'} toast={toast} setToast={setToast} />
   }
 
   return (
     <>
-      <div className="ambient ambient-a" />
-      <div className="ambient ambient-b" />
       <div className="dashboard-shell">
-        <Sidebar activeMenu={ACTIVE_MENU} onLogout={() => void logout()} />
+        <Sidebar activeMenu={activeMenu} onSelect={setActiveMenu} onLogout={() => void logout()} />
         <main className="content-shell">
-          <header className="page-header">
-            <div>
-              <p className="eyebrow">用户声音 / Trace 诊断</p>
-              <h1>意见反馈</h1>
-              <p className="hero-desc">集中查看小程序用户反馈，快速复制 traceId、定位最近请求链路，并跟进处理状态。</p>
-            </div>
-            <div className="api-pill">API: {API_BASE_URL || '同源'}</div>
-          </header>
-
-          <section className="stats-grid">
-            <Stat label="当前筛选" value={String(total)} foot="条反馈" />
-            <Stat label="本页展示" value={String(items.length)} foot={loading ? '加载中' : '条记录'} />
-            <Stat label="最近提交" value={items[0] ? formatTime(items[0].created_at, true) : '-'} foot="按提交时间倒序" />
-          </section>
-
-          <section className="toolbar">
-            <label className="wide">搜索
-              <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }} placeholder="反馈内容 / 联系方式 / traceId / requestId / userId" />
-            </label>
-            <label>类型
-              <select value={category} onChange={(event) => { setCategory(event.target.value); setPage(1) }}>
-                <option value="all">全部类型</option>
-                <option value="bug">问题反馈</option>
-                <option value="suggestion">功能建议</option>
-                <option value="experience">使用体验</option>
-                <option value="other">其他</option>
-              </select>
-            </label>
-            <label>状态
-              <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }}>
-                <option value="all">全部状态</option>
-                <option value="open">待处理</option>
-                <option value="processing">处理中</option>
-                <option value="resolved">已解决</option>
-                <option value="closed">已关闭</option>
-              </select>
-            </label>
-            <label>每页
-              <select value={limit} onChange={(event) => { setLimit(Number(event.target.value)); setPage(1) }}>
-                <option value="20">20</option>
-                <option value="30">30</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
-            </label>
-            <button className="primary" type="button" onClick={runSearch}>刷新</button>
-          </section>
-
-          <section className="statusline">
-            <span>{message}</span>
-            <div className="pager">
-              <button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>上一页</button>
-              <span>第 {page} / {totalPages} 页</span>
-              <button disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>下一页</button>
-            </div>
-          </section>
-
-          <section className="workspace">
-            <div className="feedback-list">
-              {items.length === 0 ? (
-                <Empty title={loading ? '加载中' : '没有反馈'} desc={loading ? '正在读取反馈列表。' : '换个筛选条件，或等待用户提交新的反馈。'} />
-              ) : items.map((item) => (
-                <FeedbackCard
-                  key={item.id}
-                  item={item}
-                  selected={item.id === selected?.id}
-                  onClick={() => setSelectedId(item.id)}
-                  onCopy={(text) => void copyText(text, setToast)}
-                />
-              ))}
-            </div>
-            <aside className="detail-panel">
-              {selected ? (
-                <FeedbackDetail item={selected} onStatusChange={updateStatus} onCopy={(text) => void copyText(text, setToast)} />
-              ) : (
-                <Empty title="选择一条反馈" desc="右侧会展示用户、联系方式、提交 trace、客户端信息和最近请求列表。" />
-              )}
-            </aside>
-          </section>
+          {activeMenu === 'overview' ? <OverviewPage apiBase={API_BASE_URL || '同源'} onSelect={setActiveMenu} /> : null}
+          {activeMenu === 'feedback' ? <FeedbackPage request={request} setToast={setToast} apiBase={API_BASE_URL || '同源'} /> : null}
+          {activeMenu === 'packaged-foods' ? <PackagedFoodsPage request={request} setToast={setToast} apiBase={API_BASE_URL || '同源'} /> : null}
+          {activeMenu === 'quality' ? <QualityPage /> : null}
+          {activeMenu === 'test-backend' ? <TestBackendPage /> : null}
+          {activeMenu === 'behavior' ? <BehaviorPage /> : null}
         </main>
       </div>
       <div className={`toast ${toast ? 'show' : ''}`}>{toast}</div>
@@ -341,7 +267,6 @@ function LoginPage({ onLogin, apiBase, toast, setToast }: { onLogin: (username: 
       <section className="login-card">
         <div className="brand-mark"><span className="brand-dot" />Food Link Admin</div>
         <h1>管理员登录</h1>
-        <p>登录后进入后台管理系统。管理员账号只能通过后端命令行创建，不支持网页或 API 注册。</p>
         <form onSubmit={submit}>
           <label>管理员账号
             <input value={username} onChange={(event) => setUsername(event.target.value)} autoFocus autoComplete="username" placeholder="请输入管理员账号" />
@@ -349,7 +274,7 @@ function LoginPage({ onLogin, apiBase, toast, setToast }: { onLogin: (username: 
           <label>密码
             <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" placeholder="请输入密码" />
           </label>
-          <button className="primary" type="submit" disabled={submitting}>{submitting ? '登录中...' : '登录'}</button>
+          <button className="primary" type="submit" disabled={submitting}>{submitting ? <Spinner small /> : '登录'}</button>
         </form>
         <span className="api-base">API: {apiBase}</span>
       </section>
@@ -358,12 +283,14 @@ function LoginPage({ onLogin, apiBase, toast, setToast }: { onLogin: (username: 
   )
 }
 
-function Sidebar({ activeMenu, onLogout }: { activeMenu: string; onLogout: () => void }) {
-  const menus = [
-    { id: 'overview', label: '总览', desc: '数据概览', disabled: true },
-    { id: 'feedback', label: '意见反馈', desc: '用户反馈与 trace' },
-    { id: 'packaged-foods', label: '包装食品', desc: '待接入独立页面', disabled: true },
-    { id: 'settings', label: '系统设置', desc: '待配置', disabled: true },
+function Sidebar({ activeMenu, onSelect, onLogout }: { activeMenu: MenuId; onSelect: (id: MenuId) => void; onLogout: () => void }) {
+  const menus: Array<{ id: MenuId; label: string; desc: string }> = [
+    { id: 'overview', label: '总览', desc: '后台入口' },
+    { id: 'feedback', label: '意见反馈', desc: '用户声音' },
+    { id: 'packaged-foods', label: '包装食品库', desc: '零食 SKU' },
+    { id: 'quality', label: '质量审计', desc: '识别异常' },
+    { id: 'test-backend', label: '测试后台', desc: '测试集' },
+    { id: 'behavior', label: '行为统计', desc: '埋点漏斗' },
   ]
   return (
     <aside className="sidebar">
@@ -373,7 +300,7 @@ function Sidebar({ activeMenu, onLogout }: { activeMenu: string; onLogout: () =>
       </div>
       <nav className="menu-list">
         {menus.map((menu) => (
-          <button key={menu.id} type="button" className={`menu-item ${activeMenu === menu.id ? 'active' : ''}`} disabled={menu.disabled}>
+          <button key={menu.id} type="button" className={`menu-item ${activeMenu === menu.id ? 'active' : ''}`} onClick={() => onSelect(menu.id)}>
             <span>{menu.label}</span>
             <small>{menu.desc}</small>
           </button>
@@ -386,12 +313,353 @@ function Sidebar({ activeMenu, onLogout }: { activeMenu: string; onLogout: () =>
   )
 }
 
+function OverviewPage({ apiBase, onSelect }: { apiBase: string; onSelect: (id: MenuId) => void }) {
+  return (
+    <>
+      <PageHeader eyebrow="统一后台" title="Food Link Admin Console" apiBase={apiBase} />
+      <section className="stats-grid overview-stats">
+        <Stat label="已接入模块" value="2" foot="反馈 / 包装食品" />
+        <Stat label="保留入口" value="2" foot="测试后台 / 质量审计" />
+        <Stat label="统一登录" value="Admin" foot="HttpOnly Cookie" />
+      </section>
+      <section className="module-grid">
+        <ModuleCard title="意见反馈" desc="用户反馈、联系方式、客户端信息、trace 与最近请求。" action="打开反馈" onClick={() => onSelect('feedback')} />
+        <ModuleCard title="包装食品库" desc="替代旧零食临时后台，支持搜索、筛选、图片预览与快速编辑。" action="管理 SKU" onClick={() => onSelect('packaged-foods')} />
+        <ModuleCard title="识别质量审计" desc="承接 0 营养、热量异常、宏量不闭合、候选未确认等报告。" action="查看入口" onClick={() => onSelect('quality')} />
+        <ModuleCard title="测试后台" desc="保留现有测试集、prompt、批量分析能力，后续迁入本控制台。" action="查看入口" onClick={() => onSelect('test-backend')} />
+      </section>
+    </>
+  )
+}
+
+function FeedbackPage({ request, setToast, apiBase }: { request: AdminRequest; setToast: (value: string) => void; apiBase: string }) {
+  const [query, setQuery] = useState('')
+  const [category, setCategory] = useState('all')
+  const [status, setStatus] = useState('all')
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(30)
+  const [items, setItems] = useState<FeedbackItem[]>([])
+  const [total, setTotal] = useState(0)
+  const [selectedId, setSelectedId] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('尚未读取')
+
+  const selected = useMemo(() => items.find((item) => item.id === selectedId) || items[0], [items, selectedId])
+  const totalPages = Math.max(1, Math.ceil(total / limit))
+
+  useEffect(() => {
+    void loadList()
+  }, [page, limit, category, status])
+
+  async function loadList(nextPage = page) {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: String(nextPage),
+        limit: String(limit),
+        q: query.trim(),
+        category,
+        status,
+      })
+      const data = await request<ListResponse<FeedbackItem>>(`/api/admin/feedback?${params.toString()}`)
+      setItems(data.items || [])
+      setTotal(data.total || 0)
+      setPage(data.page || nextPage)
+      setSelectedId((current) => current || data.items?.[0]?.id || '')
+      setMessage(`共 ${data.total || 0} 条，当前显示 ${(data.items || []).length} 条`)
+    } catch (error) {
+      const text = error instanceof Error ? error.message : '读取失败'
+      setMessage(text)
+      setItems([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function updateStatus(id: string, nextStatus: FeedbackStatus) {
+    try {
+      const data = await request<{ item: FeedbackItem }>(`/api/admin/feedback/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      })
+      setItems((current) => current.map((item) => item.id === id ? data.item : item))
+      setSelectedId(id)
+      setToast('状态已更新')
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : '状态更新失败')
+    }
+  }
+
+  function runSearch() {
+    setPage(1)
+    void loadList(1)
+  }
+
+  return (
+    <>
+      <PageHeader eyebrow="用户声音 / Trace 诊断" title="意见反馈" apiBase={apiBase} />
+      <section className="stats-grid">
+        <Stat label="当前筛选" value={String(total)} foot="条反馈" />
+        <Stat label="本页展示" value={String(items.length)} foot={loading ? '读取中' : '条记录'} />
+        <Stat label="最近提交" value={items[0] ? formatTime(items[0].created_at, true) : '-'} foot="按提交时间倒序" />
+      </section>
+      <section className="toolbar feedback-toolbar">
+        <label className="wide">搜索
+          <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }} placeholder="反馈内容 / 联系方式 / traceId / requestId / userId" />
+        </label>
+        <SelectLabel label="类型" value={category} onChange={(value) => { setCategory(value); setPage(1) }} options={[['all', '全部类型'], ['bug', '问题反馈'], ['suggestion', '功能建议'], ['experience', '使用体验'], ['other', '其他']]} />
+        <SelectLabel label="状态" value={status} onChange={(value) => { setStatus(value); setPage(1) }} options={[['all', '全部状态'], ['open', '待处理'], ['processing', '处理中'], ['resolved', '已解决'], ['closed', '已关闭']]} />
+        <SelectLabel label="每页" value={String(limit)} onChange={(value) => { setLimit(Number(value)); setPage(1) }} options={[['20', '20'], ['30', '30'], ['50', '50'], ['100', '100']]} />
+        <button className="primary" type="button" onClick={runSearch}>刷新</button>
+      </section>
+      <StatusLine message={message} page={page} totalPages={totalPages} setPage={setPage} />
+      <section className="workspace feedback-workspace">
+        <div className="feedback-list">
+          {loading ? <SkeletonRows /> : null}
+          {!loading && items.length === 0 ? <Empty title="没有反馈" desc="换个筛选条件，或等待用户提交新的反馈。" /> : null}
+          {!loading ? items.map((item) => (
+            <FeedbackCard key={item.id} item={item} selected={item.id === selected?.id} onClick={() => setSelectedId(item.id)} onCopy={(text) => void copyText(text, setToast)} />
+          )) : null}
+        </div>
+        <aside className="detail-panel">
+          {selected ? <FeedbackDetail item={selected} onStatusChange={updateStatus} onCopy={(text) => void copyText(text, setToast)} /> : <Empty title="选择一条反馈" desc="右侧会展示用户、联系方式、提交 trace、客户端信息和最近请求列表。" />}
+        </aside>
+      </section>
+    </>
+  )
+}
+
+function PackagedFoodsPage({ request, setToast, apiBase }: { request: AdminRequest; setToast: (value: string) => void; apiBase: string }) {
+  const [query, setQuery] = useState('')
+  const [reviewStatus, setReviewStatus] = useState('all')
+  const [active, setActive] = useState('all')
+  const [imageState, setImageState] = useState('all')
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(40)
+  const [items, setItems] = useState<PackagedFood[]>([])
+  const [total, setTotal] = useState(0)
+  const [selectedId, setSelectedId] = useState('')
+  const [selected, setSelected] = useState<PackagedFood | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('尚未读取')
+
+  const totalPages = Math.max(1, Math.ceil(total / limit))
+
+  useEffect(() => {
+    void loadList()
+  }, [page, limit, reviewStatus, active, imageState])
+
+  useEffect(() => {
+    if (!selectedId) {
+      setSelected(items[0] || null)
+      return
+    }
+    const found = items.find((item) => item.id === selectedId)
+    if (found) setSelected(found)
+  }, [items, selectedId])
+
+  async function loadList(nextPage = page) {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: String(nextPage),
+        limit: String(limit),
+        q: query.trim(),
+        review_status: reviewStatus,
+        active,
+        image_state: imageState,
+      })
+      const data = await request<ListResponse<PackagedFood>>(`/api/admin/packaged-foods?${params.toString()}`)
+      setItems(data.items || [])
+      setTotal(data.total || 0)
+      setPage(data.page || nextPage)
+      setSelectedId((current) => current || data.items?.[0]?.id || '')
+      setMessage(`共 ${data.total || 0} 条，当前显示 ${(data.items || []).length} 条`)
+    } catch (error) {
+      const text = error instanceof Error ? error.message : '读取失败'
+      setMessage(text)
+      setItems([])
+      setSelected(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadDetail(id: string) {
+    setSelectedId(id)
+    try {
+      const data = await request<{ item: PackagedFood }>(`/api/admin/packaged-foods/${encodeURIComponent(id)}`)
+      setSelected(data.item)
+      setItems((current) => current.map((item) => item.id === id ? data.item : item))
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : '详情读取失败')
+    }
+  }
+
+  async function saveItem(id: string, payload: Record<string, string | number | boolean | string[]>) {
+    setSaving(true)
+    try {
+      const data = await request<{ item: PackagedFood }>(`/api/admin/packaged-foods/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      })
+      setSelected(data.item)
+      setItems((current) => current.map((item) => item.id === id ? data.item : item))
+      setToast('保存成功')
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function runSearch() {
+    setPage(1)
+    void loadList(1)
+  }
+
+  return (
+    <>
+      <PageHeader eyebrow="零食 SKU / 包装食品库" title="包装食品库" apiBase={apiBase} />
+      <section className="stats-grid">
+        <Stat label="当前筛选" value={String(total)} foot="条 SKU" />
+        <Stat label="本页展示" value={String(items.length)} foot={loading ? '读取中' : '条记录'} />
+        <Stat label="当前选中" value={selected ? shortTitle(selected.display_name || selected.product_name) : '-'} foot={selected?.review_status || '无'} />
+      </section>
+      <section className="toolbar packaged-toolbar">
+        <label className="wide">搜索
+          <input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') runSearch() }} placeholder="品牌 / 商品名 / 条码 / OCR / 搜索文本" />
+        </label>
+        <SelectLabel label="审核" value={reviewStatus} onChange={(value) => { setReviewStatus(value); setPage(1) }} options={[['all', '全部状态'], ['active', 'active'], ['pending', 'pending'], ['web_verified', 'web_verified'], ['rejected', 'rejected'], ['inactive', 'inactive'], ['blank', '空状态']]} />
+        <SelectLabel label="启用" value={active} onChange={(value) => { setActive(value); setPage(1) }} options={[['all', '全部'], ['true', '启用'], ['false', '停用']]} />
+        <SelectLabel label="图片" value={imageState} onChange={(value) => { setImageState(value); setPage(1) }} options={[['all', '全部'], ['with_images', '有图'], ['missing_images', '缺图']]} />
+        <SelectLabel label="每页" value={String(limit)} onChange={(value) => { setLimit(Number(value)); setPage(1) }} options={[['20', '20'], ['40', '40'], ['60', '60'], ['100', '100']]} />
+        <button className="primary" type="button" onClick={runSearch}>刷新</button>
+      </section>
+      <StatusLine message={message} page={page} totalPages={totalPages} setPage={setPage} />
+      <section className="workspace packaged-workspace">
+        <div className="sku-list">
+          {loading ? <SkeletonRows /> : null}
+          {!loading && items.length === 0 ? <Empty title="没有 SKU" desc="换个关键词或筛选条件再试。" /> : null}
+          {!loading ? items.map((item) => (
+            <PackagedFoodCard key={item.id} item={item} selected={item.id === selected?.id} onClick={() => void loadDetail(item.id)} />
+          )) : null}
+        </div>
+        <aside className="detail-panel sku-editor-panel">
+          {selected ? <PackagedFoodEditor key={selected.id} item={selected} saving={saving} onSave={saveItem} onCopy={(text) => void copyText(text, setToast)} /> : <Empty title="选择一条 SKU" desc="右侧会展示图片、规格、核心营养、OCR 和搜索字段。" />}
+        </aside>
+      </section>
+    </>
+  )
+}
+
+function QualityPage() {
+  return (
+    <>
+      <PageHeader eyebrow="识别质量" title="质量审计" apiBase={API_BASE_URL || '同源'} />
+      <section className="module-grid">
+        <ToolCard title="0 营养 Benchmark" command="cd backend && go run ./cmd/zero-nutrition-benchmark --config-dir ." />
+        <ToolCard title="全量质量审计" command="cd backend && go run ./cmd/food-analysis-quality-audit --config-dir ." />
+        <ToolCard title="包装召回 Benchmark" command="cd backend && go run ./cmd/packaged-recall-benchmark --config-dir ." />
+        <ToolCard title="标准库召回 Benchmark" command="cd backend && go run ./cmd/nutrition-recall-benchmark --config-dir ." />
+      </section>
+    </>
+  )
+}
+
+function TestBackendPage() {
+  return (
+    <>
+      <PageHeader eyebrow="测试集 / Prompt / 批量分析" title="测试后台入口" apiBase={API_BASE_URL || '同源'} />
+      <section className="module-grid">
+        <ExternalCard title="旧测试后台" href={`${API_BASE_URL || ''}/test-backend`} desc="保留 prompt、dataset、batch 和单图测试能力。" />
+        <ToolCard title="API 契约测试" command="npm run test:backend:api-contract" />
+        <ToolCard title="小程序 E2E Smoke" command="npm run test:e2e-weapp:smoke" />
+        <ToolCard title="灰度套件" command="cd backend && go run ./cmd/food-analysis-gray-verify --config-dir ." />
+      </section>
+    </>
+  )
+}
+
+function BehaviorPage() {
+  return (
+    <>
+      <PageHeader eyebrow="行为统计" title="行为统计" apiBase={API_BASE_URL || '同源'} />
+      <section className="empty-band">
+        <Empty title="待接入埋点聚合" desc="建议先收敛上传、识别、保存、纠错、分享、反馈六条主漏斗，再做图表。" />
+      </section>
+    </>
+  )
+}
+
+function PageHeader({ eyebrow, title, apiBase }: { eyebrow: string; title: string; apiBase: string }) {
+  return (
+    <header className="page-header">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>{title}</h1>
+      </div>
+      <div className="api-pill">API: {apiBase}</div>
+    </header>
+  )
+}
+
+function SelectLabel({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<[string, string]> }) {
+  return (
+    <label>{label}
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map(([optionValue, optionLabel]) => <option key={optionValue} value={optionValue}>{optionLabel}</option>)}
+      </select>
+    </label>
+  )
+}
+
+function StatusLine({ message, page, totalPages, setPage }: { message: string; page: number; totalPages: number; setPage: (value: number | ((current: number) => number)) => void }) {
+  return (
+    <section className="statusline">
+      <span>{message}</span>
+      <div className="pager">
+        <button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>上一页</button>
+        <span>第 {page} / {totalPages} 页</span>
+        <button disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>下一页</button>
+      </div>
+    </section>
+  )
+}
+
 function Stat({ label, value, foot }: { label: string; value: string; foot: string }) {
   return <article className="stat-card"><span className="stat-label">{label}</span><strong>{value}</strong><span className="stat-foot">{foot}</span></article>
 }
 
+function ModuleCard({ title, desc, action, onClick }: { title: string; desc: string; action: string; onClick: () => void }) {
+  return <article className="module-card"><h2>{title}</h2><p>{desc}</p><button className="primary" type="button" onClick={onClick}>{action}</button></article>
+}
+
+function ToolCard({ title, command }: { title: string; command: string }) {
+  return <article className="module-card"><h2>{title}</h2><pre className="command-block">{command}</pre></article>
+}
+
+function ExternalCard({ title, href, desc }: { title: string; href: string; desc: string }) {
+  return <article className="module-card"><h2>{title}</h2><p>{desc}</p><a className="button-link" href={href}>打开</a></article>
+}
+
 function Empty({ title, desc }: { title: string; desc: string }) {
-  return <div className="empty-state"><div className="empty-icon">⌁</div><h2>{title}</h2><p>{desc}</p></div>
+  return <div className="empty-state"><div className="empty-icon">∅</div><h2>{title}</h2><p>{desc}</p></div>
+}
+
+function Spinner({ small = false }: { small?: boolean }) {
+  return <span className={`spinner ${small ? 'small' : ''}`} />
+}
+
+function SkeletonRows() {
+  return (
+    <>
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
+    </>
+  )
 }
 
 function FeedbackCard({ item, selected, onClick, onCopy }: { item: FeedbackItem; selected: boolean; onClick: () => void; onCopy: (text: string) => void }) {
@@ -461,6 +729,110 @@ function FeedbackDetail({ item, onStatusChange, onCopy }: { item: FeedbackItem; 
   )
 }
 
+function PackagedFoodCard({ item, selected, onClick }: { item: PackagedFood; selected: boolean; onClick: () => void }) {
+  const images = item.source_image_urls || []
+  return (
+    <article className={`sku-card ${selected ? 'selected' : ''}`} onClick={onClick}>
+      <div className="thumb-strip">
+        {images.length ? images.slice(0, 2).map((src) => <img key={src} src={src} alt={item.display_name || item.product_name} loading="lazy" />) : <div className="no-image">缺图</div>}
+      </div>
+      <div className="sku-body">
+        <h2>{item.display_name || item.product_name || '未命名'}</h2>
+        <div className="meta-row">
+          <span className={`pill ${item.is_active ? 'active' : 'inactive'}`}>{item.is_active ? '启用' : '停用'}</span>
+          <span className="pill">{item.review_status || '空状态'}</span>
+          <span className="pill">{displaySpec(item)}</span>
+          <span className="pill">{images.length} 图</span>
+        </div>
+        <div className="nutrition-line">
+          <span><strong>{cleanNum(item.kcal_per_100g)}</strong>kcal</span>
+          <span><strong>{cleanNum(item.protein_per_100g)}</strong>蛋白</span>
+          <span><strong>{cleanNum(item.carbs_per_100g)}</strong>碳水</span>
+          <span><strong>{cleanNum(item.fat_per_100g)}</strong>脂肪</span>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function PackagedFoodEditor({ item, saving, onSave, onCopy }: { item: PackagedFood; saving: boolean; onSave: (id: string, payload: Record<string, string | number | boolean | string[]>) => Promise<void>; onCopy: (text: string) => void }) {
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const payload: Record<string, string | number | boolean | string[]> = {}
+    packagedFields.forEach((field) => {
+      if (!form.has(field.key)) return
+      const raw = String(form.get(field.key) ?? '').trim()
+      if (field.key === 'source_image_urls') {
+        payload[field.key] = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean)
+      } else if (field.type === 'number') {
+        payload[field.key] = raw === '' ? 0 : Number(raw)
+      } else if (field.type === 'boolean') {
+        payload[field.key] = raw === 'true'
+      } else {
+        payload[field.key] = raw
+      }
+    })
+    void onSave(item.id, payload)
+  }
+
+  const images = item.source_image_urls || []
+
+  return (
+    <form onSubmit={submit}>
+      <div className="editor-header">
+        <div>
+          <h2>{item.display_name || item.product_name || '未命名'}</h2>
+          <p>{item.id}</p>
+        </div>
+        <button type="button" onClick={() => onCopy(item.id)}>复制 ID</button>
+      </div>
+      <section className="detail-section">
+        <h3>图片</h3>
+        <div className="image-list">
+          {images.length ? images.map((src) => <a key={src} href={src} target="_blank" rel="noreferrer"><img src={src} alt="商品图片" loading="lazy" /></a>) : <p className="muted">这条记录没有图片。</p>}
+        </div>
+      </section>
+      <EditorSection title="商品与规格" item={item} group="basic" />
+      <EditorSection title="核心营养" item={item} group="nutrition" />
+      <EditorSection title="证据与搜索" item={item} group="evidence" />
+      <div className="actions">
+        <button type="button" onClick={() => onCopy(item.product_key || '')} disabled={!item.product_key}>复制 product_key</button>
+        <button className="primary" type="submit" disabled={saving}>{saving ? <Spinner small /> : '保存修改'}</button>
+      </div>
+    </form>
+  )
+}
+
+function EditorSection({ title, item, group }: { title: string; item: PackagedFood; group: 'basic' | 'nutrition' | 'evidence' }) {
+  return (
+    <section className="detail-section">
+      <h3>{title}</h3>
+      <div className="form-grid">
+        {packagedFields.filter((field) => field.group === group).map((field) => <PackagedField key={field.key} item={item} field={field} />)}
+      </div>
+    </section>
+  )
+}
+
+function PackagedField({ item, field }: { item: PackagedFood; field: (typeof packagedFields)[number] }) {
+  const rawValue = getPackagedValue(item, field.key)
+  const value = field.key === 'source_image_urls' ? (item.source_image_urls || []).join('\n') : rawValue
+  const wide = ('wide' in field && field.wide) || field.type === 'textarea'
+  const className = `field ${wide ? 'wide' : ''}`
+  if (field.type === 'textarea') {
+    return <div className={className}><label>{field.label}<textarea name={field.key} rows={field.key === 'ocr_raw_text' ? 8 : 4} defaultValue={String(value || '')} /></label></div>
+  }
+  if (field.type === 'select') {
+    const options = ['active', 'pending', 'web_verified', 'rejected_missing_net_content', 'rejected', 'inactive']
+    return <div className={className}><label>{field.label}<select name={field.key} defaultValue={String(value || 'active')}>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label></div>
+  }
+  if (field.type === 'boolean') {
+    return <div className={className}><label>{field.label}<select name={field.key} defaultValue={item.is_active ? 'true' : 'false'}><option value="true">启用</option><option value="false">停用</option></select></label></div>
+  }
+  return <div className={className}><label>{field.label}<input name={field.key} type={field.type} step={field.type === 'number' ? '0.01' : undefined} defaultValue={String(value ?? '')} /></label></div>
+}
+
 function TraceCard({ trace, index, onCopy }: { trace: RecentRequestTrace; index: number; onCopy: (text: string) => void }) {
   const traceId = trace.traceId || trace.trace_id || ''
   return (
@@ -485,6 +857,10 @@ function KV({ k, v }: { k: string; v: string }) {
   return <><dt>{k}</dt><dd>{v || '无'}</dd></>
 }
 
+function getPackagedValue(item: PackagedFood, key: (typeof packagedFields)[number]['key']): string | number | boolean | string[] | undefined {
+  return item[key as keyof PackagedFood] as string | number | boolean | string[] | undefined
+}
+
 function displayUser(item: FeedbackItem): string {
   return item.user_nickname || item.user_telephone || shortId(item.user_id || '') || '未知用户'
 }
@@ -495,11 +871,28 @@ function firstTraceId(item: FeedbackItem): string {
 }
 
 function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+  return text.length > max ? `${text.slice(0, max - 1)}...` : text
 }
 
 function shortId(id: string): string {
-  return id.length <= 12 ? id : `${id.slice(0, 6)}…${id.slice(-6)}`
+  return id.length <= 12 ? id : `${id.slice(0, 6)}...${id.slice(-6)}`
+}
+
+function shortTitle(value: string): string {
+  return value.length <= 8 ? value : `${value.slice(0, 8)}...`
+}
+
+function displaySpec(item: PackagedFood): string {
+  if (item.net_content_value && item.net_content_unit) return `${cleanNum(item.net_content_value)}${item.net_content_unit}`
+  if (item.net_weight_g) return `${cleanNum(item.net_weight_g)}g`
+  return item.spec_text || '无规格'
+}
+
+function cleanNum(value: number | undefined): string {
+  const n = Number(value || 0)
+  if (!Number.isFinite(n)) return '0'
+  if (Math.abs(n - Math.round(n)) < 0.005) return String(Math.round(n))
+  return n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
 }
 
 function formatTime(value: string, short = false): string {

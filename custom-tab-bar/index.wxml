@@ -29,13 +29,6 @@
           <text class="iconfont icon-paizhao-xianxing center-icon"></text>
         </view>
       </block>
-      <block wx:else>
-        <image 
-          class="tab-icon" 
-          src="{{selectedIndex === index ? item.selectedIconPath : item.iconPath}}"
-          mode="aspectFit"
-        />
-      </block>
     </view>
     <text class="tab-text" wx:if="{{!item.isCenter}}">{{item.text}}</text>
   </view>

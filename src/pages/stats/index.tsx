@@ -20,7 +20,6 @@ import {
   type RiskTone,
 } from '../../utils/api'
 import { IconBreakfast, IconLunch, IconDinner, IconSnack, IconExpand, IconCollapse } from '../../components/iconfont'
-import '../../assets/iconfont/iconfont.css'
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'

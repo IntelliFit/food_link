@@ -43,8 +43,8 @@ export function DietRecommendationSheet({
   if (!visible) return null
 
   return (
-    <View className='diet-rec-modal' catchMove>
-      <View className='diet-rec-mask' onClick={onClose} />
+    <View className='diet-rec-modal'>
+      <View className='diet-rec-mask' catchMove onClick={onClose} />
       <View className='diet-rec-sheet'>
         <View className='diet-rec-handle' />
         <View className='diet-rec-header'>

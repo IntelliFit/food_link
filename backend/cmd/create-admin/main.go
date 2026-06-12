@@ -26,6 +26,7 @@ func main() {
 	displayName := flag.String("display-name", "", "admin display name")
 	password := flag.String("password", "", "admin password; if omitted, prompt from terminal")
 	reset := flag.Bool("reset", false, "reset password if admin already exists")
+	skipMigration := flag.Bool("skip-migration", false, "skip AutoMigrate before creating or resetting the admin account")
 	timeout := flag.Duration("timeout", 2*time.Minute, "operation timeout")
 	flag.Parse()
 
@@ -53,8 +54,10 @@ func main() {
 	if err := database.Ping(ctx, db); err != nil {
 		log.Fatalf("数据库 ping 失败: %v", err)
 	}
-	if err := migration.AutoMigrate(ctx, db, cfg.Database.Schema); err != nil {
-		log.Fatalf("自动迁移失败: %v", err)
+	if !*skipMigration {
+		if err := migration.AutoMigrate(ctx, db, cfg.Database.Schema); err != nil {
+			log.Fatalf("自动迁移失败: %v", err)
+		}
 	}
 
 	repo := adminrepo.NewAdminAccountRepo(db)

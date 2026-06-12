@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { defineConfig, type UserConfigExport } from '@tarojs/cli'
 import { createStyleImportPlugin } from 'vite-plugin-style-import'
@@ -13,6 +13,49 @@ function readPackageVersion(): string {
 }
 
 const packageVersion = readPackageVersion()
+
+function parseEnvFile(filePath: string): Record<string, string> {
+  if (!existsSync(filePath)) return {}
+
+  const values: Record<string, string> = {}
+  const lines = readFileSync(filePath, 'utf-8').split(/\r?\n/)
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+
+    const normalized = trimmed.startsWith('export ') ? trimmed.slice('export '.length).trim() : trimmed
+    const equalsIndex = normalized.indexOf('=')
+    if (equalsIndex <= 0) continue
+
+    const key = normalized.slice(0, equalsIndex).trim()
+    let value = normalized.slice(equalsIndex + 1).trim()
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1)
+    }
+    values[key] = value
+  }
+  return values
+}
+
+function loadTaroEnv(): void {
+  const mode = process.env.NODE_ENV === 'production' ? 'production' : 'development'
+  const root = process.cwd()
+  const merged = {
+    ...parseEnvFile(join(root, '.env')),
+    ...parseEnvFile(join(root, `.env.${mode}`)),
+  }
+
+  for (const [key, value] of Object.entries(merged)) {
+    if (process.env[key] == null) {
+      process.env[key] = value
+    }
+  }
+}
+
+loadTaroEnv()
 
 // fix: @taroify/icons 字体文件 base64 内联，避免小程序环境中路径解析失败
 const vantIconWoff2Base64 = readFileSync(join(process.cwd(), 'src/assets/vant-icon/vant-icon.woff2')).toString('base64')
@@ -67,24 +110,16 @@ export default defineConfig<'vite'>(async (merge) => {
           to: 'assets/icons'
         },
         {
-          from: 'assets/bg',
-          to: 'assets/bg'
-        },
-        {
-          from: 'src/assets/page_icons',
-          to: 'assets/page_icons'
+          from: 'assets/bg/cafeteria-hero.jpg',
+          to: 'packageExtra/assets/bg/cafeteria-hero.jpg'
         },
         {
           from: 'custom-tab-bar',
           to: 'custom-tab-bar'
         },
         {
-          from: 'src/assets/iconfont',
-          to: 'assets/iconfont'
-        },
-        {
-          from: 'src/assets/vant-icon',
-          to: 'assets/vant-icon'
+          from: 'src/assets/iconfont/iconfont.ttf',
+          to: 'assets/iconfont/iconfont.ttf'
         },
 
       ],
