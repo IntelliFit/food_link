@@ -17,10 +17,12 @@ import (
 	membershipdomain "food_link/backend/internal/membership/domain"
 	"food_link/backend/internal/taskqueue"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 	"food_link/backend/pkg/storage"
 
 	"github.com/google/uuid"
+	"log/slog"
 )
 
 const creditCostExerciseLog = 1
@@ -611,6 +613,13 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	} else if desc != "" && imageURL != "" {
 		source = "text_image"
 	}
+	logger.Info(ctx,"运动热量 LLM 估算开始",
+		logger.Stage("llm_call"),
+		logger.ProviderModel("doubao", model),
+		slog.String("source", source),
+		logger.Truncated("exercise_desc", desc, 120),
+		slog.Bool("has_image", imageURL != ""),
+	)
 	userPrompt := "用户运动描述：" + compactExerciseDesc(desc)
 	if desc == "" {
 		userPrompt = "用户上传了一张运动图片，请识别主要运动类型、估算持续时长和消耗热量。"
@@ -652,6 +661,12 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	if err != nil {
 		status = "request_error"
 		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
+		logger.Warn(ctx,"运动热量 LLM 请求失败",
+			logger.Stage("llm_call"),
+			logger.ProviderModel("doubao", model),
+			slog.String("source", source),
+			logger.Err(err),
+		)
 		return ExerciseEstimate{}, fmt.Errorf("运动分析服务请求失败: %w", err)
 	}
 	defer resp.Body.Close()
@@ -678,11 +693,26 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	if err != nil {
 		status = "result_parse_error"
 		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
+		logger.Warn(ctx,"运动热量 LLM 结果解析失败",
+			logger.Stage("llm_parse"),
+			logger.ProviderModel("doubao", model),
+			logger.LLMResponseSummary(raw),
+			logger.Err(err),
+		)
 		return ExerciseEstimate{}, fmt.Errorf("运动分析结果格式解析失败: %w", err)
 	}
 	estimate.Raw = raw
 	estimate.Source = "llm"
 	metrics.ObserveLLMCall("exercise", "doubao", model, "success", time.Since(start))
+	logger.Info(ctx,"运动热量 LLM 估算完成",
+		logger.Stage("llm_call"),
+		logger.ProviderModel("doubao", model),
+		slog.String("source", source),
+		slog.String("exercise_type", estimate.ExerciseType),
+		slog.Int("calories_kcal", estimate.CaloriesKcal),
+		logger.Truncated("reasoning", estimate.Reasoning, 120),
+		slog.Duration("duration", time.Since(start)),
+	)
 	return estimate, nil
 }
 

@@ -264,7 +264,7 @@ func logAnalyzeTaskSubmitted(ctx context.Context, userID, taskID, taskType strin
 	sourceType := strings.TrimSpace(input.SourceType)
 	imageCount := imageCountForLog(input.ImageURL, input.ImageURLs)
 	hasText := strings.TrimSpace(input.TextInput) != "" || strings.TrimSpace(input.Text) != ""
-	logger.WithTrace(ctx).Info("分析任务已提交",
+	logger.Info(ctx,"分析任务已提交",
 		slog.String("task_id", taskID),
 		logger.AnalysisTaskID(taskID),
 		slog.String("task_type", taskType),
@@ -510,7 +510,7 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 		TaskType: task.TaskType,
 	})
 	if err == nil {
-		logger.WithTrace(ctx).Info("分析任务已入队",
+		logger.Info(ctx,"分析任务已入队",
 			slog.String("task_id", task.ID),
 			slog.String("task_type", task.TaskType),
 		)
@@ -531,10 +531,9 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 	failCtx, failCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer failCancel()
 	_, failErr := s.tasks.FailTask(failCtx, task.ID, "analysis task enqueue failed")
-	logger.WithTrace(ctx).Error("分析任务入队失败",
+	logger.Error(ctx, "分析任务入队失败", err,
 		slog.String("task_id", task.ID),
 		slog.String("task_type", task.TaskType),
-		logger.Err(err),
 		logger.NamedErr("fail_update_error", failErr),
 	)
 	return fmt.Errorf("enqueue analysis task: %w", err)
@@ -817,8 +816,22 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 		}
 	} else if isCreditRefundStatus(task.Status) {
 		s.refundTaskCredits(ctx, task)
+		logger.Warn(ctx,"查询到终态分析任务",
+			logger.AnalysisTaskID(task.ID),
+			logger.TaskType(task.TaskType),
+			logger.UserID(userID),
+			slog.String("status", task.Status),
+			logger.Truncated("error_message", stringFromTaskError(task), 300),
+		)
 	}
 	return task, nil
+}
+
+func stringFromTaskError(task *domain.AnalysisTask) string {
+	if task == nil || task.ErrorMessage == nil {
+		return ""
+	}
+	return strings.TrimSpace(*task.ErrorMessage)
 }
 
 func isCreditRefundStatus(status string) bool {
@@ -872,7 +885,7 @@ func (s *TaskService) RetryTask(ctx context.Context, taskID, userID string) (*Re
 	if err != nil {
 		return nil, err
 	}
-	logger.WithTrace(ctx).Info("分析任务重新识别已提交",
+	logger.Info(ctx,"分析任务重新识别已提交",
 		slog.String("user_id", userID),
 		slog.String("source_task_id", task.ID),
 		slog.String("new_task_id", newTaskID),

@@ -206,11 +206,11 @@ func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateR
 	var comp *statsComputation
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			logger.L().Error("统计洞察生成发生 panic",
-				slog.Any("panic", recovered),
-				slog.String("user_id", userID),
+			logger.Error(ctx, "统计洞察生成发生 panic", fmt.Errorf("%v", recovered),
+				logger.UserID(userID),
 				slog.String("range", normalizeStatsRange(dateRange)),
 				slog.String("stack", string(debug.Stack())),
+				slog.Any("panic", recovered),
 			)
 			if comp != nil {
 				result = map[string]any{"analysis_summary": fallbackStatsInsight(comp)}
@@ -244,11 +244,11 @@ func (s *StatsService) GenerateInsight(ctx context.Context, userID string, dateR
 	}
 	insight, err := s.generateNutritionInsight(ctx, comp)
 	if err != nil {
-		logger.L().Warn("统计洞察大模型生成失败",
-			logger.Err(err),
-			slog.String("user_id", userID),
+		logger.Warn(ctx, "统计洞察大模型生成失败",
+			logger.UserID(userID),
 			slog.String("range", comp.StatsRange),
 			slog.Int("recorded_days", comp.RecordedDays),
+			logger.Err(err),
 		)
 		return nil, &commonerrors.AppError{Code: 10000, Message: "AI 解读生成失败，请稍后重试", HTTPStatus: 503}
 	}

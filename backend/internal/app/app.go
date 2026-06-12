@@ -94,7 +94,6 @@ import (
 type App struct {
 	engine        *gin.Engine
 	db            *gorm.DB
-	log           *logger.Logger
 	shutdownTrace func(context.Context) error
 	shutdownLog   logger.ShutdownFunc
 	workerCancel  context.CancelFunc
@@ -107,7 +106,6 @@ func New(cfg *config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	log := logger.L()
 	if cfg.App.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -127,7 +125,7 @@ func New(cfg *config.Config) (*App, error) {
 	// 初始化 IP 定位（离线 ip2region xdb）
 	ip2regionPath := filepath.Join(".", "data", "ip2region.xdb")
 	if err := location.Init(ip2regionPath); err != nil {
-		log.Warn("ip2region 初始化失败，IP 定位功能将不可用", logger.Err(err))
+		logger.Warn(context.Background(), "ip2region 初始化失败，IP 定位功能将不可用", logger.Err(err))
 	}
 
 	engine := gin.New()
@@ -140,7 +138,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.Use(commonmw.RequestID())
 
 	storageClient := storage.New(cfg.Storage)
-	taskQueue, err := taskqueue.New(cfg.TaskQueue, log)
+	taskQueue, err := taskqueue.New(cfg.TaskQueue)
 	if err != nil {
 		return nil, err
 	}
@@ -304,7 +302,6 @@ func New(cfg *config.Config) (*App, error) {
 	app := &App{
 		engine:        engine,
 		db:            db,
-		log:           log,
 		shutdownTrace: traceShutdown,
 		shutdownLog:   logShutdown,
 		taskQueue:     taskQueue,
@@ -576,7 +573,7 @@ func New(cfg *config.Config) (*App, error) {
 		}
 		registerSpecs(engine, specs, jwtSvc)
 	} else {
-		log.Warn("路由映射文件缺失，已跳过存根路由注册", slog.String("path", routeMapPath))
+		logger.Warn(context.Background(), "路由映射文件缺失，已跳过存根路由注册", slog.String("path", routeMapPath))
 	}
 
 	return app, nil
@@ -613,7 +610,7 @@ func (a *App) startEmbeddedWorker(
 	workerCount := cfg.Worker.Count
 	metrics.SetWorkerConfigured(cfg.TaskQueue.Driver, workerCount)
 	if workerCount <= 0 {
-		a.log.Info("内嵌 worker 已禁用", slog.Int("worker_count", workerCount))
+		logger.Info(context.Background(), "内嵌 worker 已禁用", slog.Int("worker_count", workerCount))
 		return
 	}
 
@@ -637,7 +634,6 @@ func (a *App) startEmbeddedWorker(
 		exerciseSvc,
 		nutritionSvc,
 		taskQueue,
-		a.log,
 		storageClient,
 	)
 	runner.ConfigureCreditGuard(membershipSvc)
@@ -647,7 +643,7 @@ func (a *App) startEmbeddedWorker(
 	a.workerCancel = cancel
 	a.workerDone = done
 
-	a.log.Info("内嵌 worker 已启用",
+	logger.Info(context.Background(), "内嵌 worker 已启用",
 		slog.String("worker_id", workerID),
 		slog.Any("task_types", taskTypes),
 		slog.String("task_queue_driver", cfg.TaskQueue.Driver),
@@ -667,7 +663,7 @@ func (a *App) startEmbeddedWorker(
 			if err == nil || err == context.Canceled || workerCtx.Err() != nil {
 				break
 			}
-			a.log.Error("内嵌 worker 异常停止，准备重启", logger.Err(err))
+			logger.Error(context.Background(), "内嵌 worker 异常停止，准备重启", err)
 			timer := time.NewTimer(2 * time.Second)
 			select {
 			case <-workerCtx.Done():
@@ -675,7 +671,7 @@ func (a *App) startEmbeddedWorker(
 			case <-timer.C:
 			}
 		}
-		a.log.Info("内嵌 worker 已停止")
+		logger.Info(context.Background(), "内嵌 worker 已停止")
 	}()
 }
 
@@ -697,7 +693,7 @@ func (a *App) Close(ctx context.Context) error {
 		select {
 		case <-a.workerDone:
 		case <-ctx.Done():
-			a.log.Warn("内嵌 worker 关闭超时", logger.Err(ctx.Err()))
+			logger.Warn(context.Background(), "内嵌 worker 关闭超时", logger.Err(ctx.Err()))
 		}
 	}
 	if a.taskQueue != nil {

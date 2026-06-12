@@ -13,7 +13,7 @@ import (
 )
 
 func TestMemoryQueuePublishSubscribe(t *testing.T) {
-	q := NewMemoryQueue(1, nil)
+	q := NewMemoryQueue(1)
 	defer func() { _ = q.Close(context.Background()) }()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -40,7 +40,7 @@ func TestMemoryQueuePublishSubscribe(t *testing.T) {
 }
 
 func TestMemoryQueueCloseRejectsPublish(t *testing.T) {
-	q := NewMemoryQueue(1, nil)
+	q := NewMemoryQueue(1)
 	if err := q.Close(context.Background()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestMemoryQueuePropagatesTraceContext(t *testing.T) {
 		otel.SetTextMapPropagator(oldPropagator)
 	}()
 
-	q := NewMemoryQueue(1, nil)
+	q := NewMemoryQueue(1)
 	defer func() { _ = q.Close(context.Background()) }()
 
 	subCtx, cancel := context.WithCancel(context.Background())

@@ -13,6 +13,7 @@ import (
 	"food_link/backend/internal/foodrecord/service"
 
 	"github.com/gin-gonic/gin"
+	"log/slog"
 )
 
 type FoodRecordService interface {
@@ -84,6 +85,14 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logFoodRecordAPI(c, "save",
+		slog.String("meal_type", body.MealType),
+		slog.Int("item_count", len(body.Items)),
+		slog.Float64("total_calories", body.TotalCalories),
+	)
+	if body.SourceTaskID != nil && strings.TrimSpace(*body.SourceTaskID) != "" {
+		bindAnalysisTaskID(c, *body.SourceTaskID)
+	}
 	record, err := h.recordSvc.Save(c.Request.Context(), userID, service.SaveFoodRecordInput{
 		MealType:         body.MealType,
 		ImagePath:        body.ImagePath,
@@ -105,9 +114,11 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		Date:             body.Date,
 	})
 	if err != nil {
+		logFoodRecordAPIError(c, "save", err, taskIDAttr(c))
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "save_ok", slog.String("record_id", record.ID), taskIDAttr(c))
 	response.Success(c, gin.H{
 		"id":            record.ID,
 		"message":       "记录成功",
@@ -450,11 +461,15 @@ func (h *FoodRecordHandler) SubmitPackagedNutritionLabelTask(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logFoodRecordAPI(c, "packaged_nutrition_label_submit")
 	taskID, err := h.nutritionSvc.SubmitPackagedNutritionLabelTask(c.Request.Context(), userID, body.ImageURL)
 	if err != nil {
+		logFoodRecordAPIError(c, "packaged_nutrition_label_submit", err)
 		response.Error(c, err)
 		return
 	}
+	bindAnalysisTaskID(c, taskID)
+	logFoodRecordAPI(c, "packaged_nutrition_label_submit_ok", taskIDAttr(c))
 	response.Success(c, gin.H{"task_id": taskID, "message": "营养成分表识别任务已提交"})
 }
 
@@ -470,15 +485,21 @@ func (h *FoodRecordHandler) SubmitPackagedProductExtractTask(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logFoodRecordAPI(c, "packaged_product_extract_submit",
+		slog.Int("image_count", len(body.ImageURLs)),
+	)
 	taskID, err := h.nutritionSvc.SubmitPackagedProductExtractTask(c.Request.Context(), userID, service.SubmitPackagedProductExtractInput{
 		ImageURLs:          body.ImageURLs,
 		SourceTaskID:       body.SourceTaskID,
 		RecognizedNameHint: body.RecognizedNameHint,
 	})
 	if err != nil {
+		logFoodRecordAPIError(c, "packaged_product_extract_submit", err)
 		response.Error(c, err)
 		return
 	}
+	bindAnalysisTaskID(c, taskID)
+	logFoodRecordAPI(c, "packaged_product_extract_submit_ok", taskIDAttr(c))
 	response.Success(c, gin.H{"task_id": taskID, "message": "预包装商品识别任务已提交"})
 }
 

@@ -72,14 +72,12 @@ func (h *PackagedFoodHandler) Update(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	if log := logger.L(); log != nil {
-		log.InfoContext(c.Request.Context(), "管理员更新包装食品",
-			slog.String("packaged_food_id", item.ID),
-			slog.String("display_name", item.DisplayName),
-			slog.String("review_status", item.ReviewStatus),
-			slog.Bool("is_active", item.IsActive),
-		)
-	}
+	logger.LogAPI(c.Request.Context(), "管理员更新包装食品", "admin", "update_packaged_food",
+		slog.String("packaged_food_id", item.ID),
+		slog.String("display_name", item.DisplayName),
+		slog.String("review_status", item.ReviewStatus),
+		slog.Bool("is_active", item.IsActive),
+	)
 	response.Success(c, gin.H{"message": "保存成功", "item": item})
 }
 

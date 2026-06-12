@@ -39,7 +39,7 @@ func TestKafkaQueueRequiresBrokerConfig(t *testing.T) {
 		Driver:        "kafka",
 		Topic:         "food-link-analysis-tasks",
 		ConsumerGroup: "food-link-workers",
-	}, nil)
+	})
 	if err == nil {
 		t.Fatal("expected missing broker error")
 	}
