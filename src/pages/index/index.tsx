@@ -916,6 +916,7 @@ function IndexPage() {
   const [mealActionRecordId, setMealActionRecordId] = useState<string | null>(null)
   const [mealActionRecord, setMealActionRecord] = useState<FoodRecord | null>(null)
   const [showRecordEditModal, setShowRecordEditModal] = useState(false)
+  const homePageScrollLocked = showRecordEditModal || showHomeOnboardingGuide || dietRecVisible
   const [showRecordPosterModal, setShowRecordPosterModal] = useState(false)
   /** 同一餐次多条记录时的选择面板 */
   const [mealRecordsDialogVisible, setMealRecordsDialogVisible] = useState(false)
@@ -2870,7 +2871,7 @@ function IndexPage() {
     >
       <PageMeta
         pageStyle={
-          showRecordEditModal || showHomeOnboardingGuide
+          homePageScrollLocked
             ? 'overflow: hidden; height: 100vh;'
             : 'overflow: visible;'
         }
@@ -2991,13 +2992,6 @@ function IndexPage() {
               rewardHintTouchRef.current = null
             }}
           >
-            {currentRewardHint.key === 'campus' ? (
-              <Image
-                className='home-reward-hint__bg'
-                src='/assets/bg/cafeteria.png'
-                mode='aspectFill'
-              />
-            ) : null}
             <View className='home-reward-hint__main'>
               <Text className='home-reward-hint__kicker'>{currentRewardHint.kicker}</Text>
               <Text className='home-reward-hint__title'>{currentRewardHint.title}</Text>

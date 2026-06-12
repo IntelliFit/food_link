@@ -1836,6 +1836,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .diet-rec-handle {
+  flex-shrink: 0;
   width: 72rpx;
   height: 8rpx;
   margin: 0 auto 22rpx;
@@ -1844,6 +1845,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .diet-rec-header {
+  flex-shrink: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1898,7 +1900,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 .diet-rec-body {
   flex: 1;
   min-height: 0;
-  height: calc(86vh - 208rpx - env(safe-area-inset-bottom));
+  height: 0;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
 }

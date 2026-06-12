@@ -349,7 +349,7 @@ function CampusCanteenPage() {
       <View className='campus-hero'>
         <Image
           className='campus-hero-bg'
-          src='/assets/bg/cafeteria.png'
+          src='/packageExtra/assets/bg/cafeteria-hero.jpg'
           mode='aspectFill'
         />
         <View>

@@ -17,6 +17,14 @@ export default defineConfig({
         target: 'http://127.0.0.1:3010',
         changeOrigin: true,
       },
+      '/test-backend': {
+        target: 'http://127.0.0.1:3010',
+        changeOrigin: true,
+      },
+      '/static/test_backend': {
+        target: 'http://127.0.0.1:3010',
+        changeOrigin: true,
+      },
     },
   },
 })
