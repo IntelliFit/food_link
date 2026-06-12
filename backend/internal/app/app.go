@@ -294,8 +294,9 @@ func New(cfg *config.Config) (*App, error) {
 	testBackendHandler := testbackendhandler.NewTestBackendHandler(testBackendSvc)
 
 	feedbackRepo := feedbackrepo.NewFeedbackRepo(db)
-	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo)
-	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc)
+	feedbackUploadSvc := feedbackservice.NewUploadService(storageClient)
+	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo, feedbackUploadSvc)
+	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc, feedbackUploadSvc)
 
 	commentHandler := communityhandler.NewCommentHandler(homeRepo, userRepo)
 	system := systemhandler.New()
@@ -345,6 +346,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/user/account", authmw.RequireJWT(jwtSvc), userHandler.DeleteAccount)
 	engine.GET("/api/user/:user_id/public-profile", authmw.RequireJWT(jwtSvc), userHandler.GetPublicProfile)
 	engine.POST("/api/feedback", authmw.RequireJWT(jwtSvc), feedbackHandler.Submit)
+	engine.POST("/api/feedback/upload-image", authmw.RequireJWT(jwtSvc), feedbackHandler.UploadImage)
 
 	engine.GET("/api/home/dashboard", authmw.RequireJWT(jwtSvc), dashboardHandler.HomeDashboard)
 	engine.GET("/api/food-record/:record_id/poster-calorie-compare", authmw.RequireJWT(jwtSvc), dashboardHandler.PosterCalorieCompare)

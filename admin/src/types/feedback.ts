@@ -36,6 +36,7 @@ export type FeedbackItem = {
   app_version: string
   client_info: Record<string, unknown>
   recent_requests: RecentRequestTrace[]
+  image_urls?: string[]
   submit_trace_id: string
   submit_request_id: string
   submit_host_name: string

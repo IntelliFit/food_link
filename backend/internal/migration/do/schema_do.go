@@ -66,6 +66,7 @@ type UserFeedbackDO struct {
 	AppVersion      string           `gorm:"column:app_version;type:text;not null;default:''"`
 	ClientInfo      map[string]any   `gorm:"column:client_info;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	RecentRequests  []map[string]any `gorm:"column:recent_requests;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	ImageURLs       []string         `gorm:"column:image_urls;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	SubmitTraceID   string           `gorm:"column:submit_trace_id;type:text;not null;default:'';index:idx_user_feedback_submit_trace_id"`
 	SubmitRequestID string           `gorm:"column:submit_request_id;type:text;not null;default:''"`
 	SubmitHostName  string           `gorm:"column:submit_host_name;type:text;not null;default:''"`

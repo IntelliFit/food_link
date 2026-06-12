@@ -23,7 +23,8 @@ type FeedbackRepo interface {
 }
 
 type FeedbackService struct {
-	repo FeedbackRepo
+	repo     FeedbackRepo
+	uploads  *UploadService
 }
 
 type SubmitInput struct {
@@ -34,13 +35,14 @@ type SubmitInput struct {
 	AppVersion      string
 	ClientInfo      map[string]any
 	RecentRequests  []domain.RecentRequestTrace
+	ImageURLs       []string
 	SubmitTraceID   string
 	SubmitRequestID string
 	SubmitHostName  string
 }
 
-func NewFeedbackService(repo FeedbackRepo) *FeedbackService {
-	return &FeedbackService{repo: repo}
+func NewFeedbackService(repo FeedbackRepo, uploads *UploadService) *FeedbackService {
+	return &FeedbackService{repo: repo, uploads: uploads}
 }
 
 func (s *FeedbackService) Submit(ctx context.Context, userID string, input SubmitInput) (string, error) {
@@ -53,6 +55,14 @@ func (s *FeedbackService) Submit(ctx context.Context, userID string, input Submi
 		content = truncateRunes(content, maxContentLength)
 	}
 	contact := truncateRunes(strings.TrimSpace(input.Contact), maxContactLength)
+	imageURLs := []string{}
+	if s.uploads != nil && len(input.ImageURLs) > 0 {
+		normalized, err := s.uploads.NormalizeOwnedImageURLs(userID, input.ImageURLs)
+		if err != nil {
+			return "", err
+		}
+		imageURLs = normalized
+	}
 	feedback := &domain.UserFeedback{
 		UserID:          userID,
 		Category:        normalizeCategory(input.Category),
@@ -62,6 +72,7 @@ func (s *FeedbackService) Submit(ctx context.Context, userID string, input Submi
 		AppVersion:      truncateRunes(strings.TrimSpace(input.AppVersion), 80),
 		ClientInfo:      datatypes.JSONMap(input.ClientInfo),
 		RecentRequests:  datatypes.JSONSlice[domain.RecentRequestTrace](normalizeRecentRequests(input.RecentRequests)),
+		ImageURLs:       datatypes.JSONSlice[string](imageURLs),
 		SubmitTraceID:   truncateRunes(strings.TrimSpace(input.SubmitTraceID), 80),
 		SubmitRequestID: truncateRunes(strings.TrimSpace(input.SubmitRequestID), 80),
 		SubmitHostName:  truncateRunes(strings.TrimSpace(input.SubmitHostName), 120),
@@ -72,6 +83,9 @@ func (s *FeedbackService) Submit(ctx context.Context, userID string, input Submi
 	}
 	if feedback.RecentRequests == nil {
 		feedback.RecentRequests = datatypes.JSONSlice[domain.RecentRequestTrace]{}
+	}
+	if feedback.ImageURLs == nil {
+		feedback.ImageURLs = datatypes.JSONSlice[string]{}
 	}
 	if err := s.repo.Create(ctx, feedback); err != nil {
 		return "", err

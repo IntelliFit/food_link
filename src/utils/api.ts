@@ -6275,11 +6275,14 @@ export async function getUserLocation(): Promise<LocationInfo> {
 
 export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
 
+export const FEEDBACK_MAX_IMAGES = 4
+
 export interface SubmitFeedbackRequest {
   category: FeedbackCategory
   content: string
   contact?: string
   attachRecentRequests?: boolean
+  imageUrls?: string[]
 }
 
 export interface SubmitFeedbackResponse {
@@ -6311,11 +6314,50 @@ function getClientInfo(includeDiagnostics = false): Record<string, unknown> {
   }
 }
 
+export async function uploadFeedbackImage(localPath: string): Promise<{ imageUrl: string }> {
+  const filePath = (localPath || '').trim()
+  if (!filePath) {
+    throw new Error('图片路径为空')
+  }
+
+  const token = getAccessToken()
+  const response = await new Promise<any>((resolve, reject) => {
+    Taro.uploadFile({
+      url: `${API_BASE_URL}/api/feedback/upload-image`,
+      filePath,
+      name: 'file',
+      header: withNgrokBypassHeaders({
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      }),
+      success: resolve,
+      fail: reject,
+    })
+  })
+
+  const parsedData = parseUploadAnalyzeResponseData(response?.data)
+  const payload = unwrapUploadAnalyzePayload(parsedData)
+  if (response?.statusCode !== 200) {
+    throwHttpErrorWithStatus(
+      Number(response?.statusCode || 0),
+      parsedData,
+      formatUploadAnalyzeHttpError(Number(response?.statusCode || 0), parsedData),
+      response?.header as Record<string, any> | undefined
+    )
+  }
+
+  const imageUrl = String(payload?.imageUrl || payload?.image_url || payload?.url || '').trim()
+  if (!imageUrl) {
+    throw new Error('上传图片失败：服务端未返回图片地址')
+  }
+  return { imageUrl }
+}
+
 export async function submitFeedback(input: SubmitFeedbackRequest): Promise<SubmitFeedbackResponse> {
   const content = input.content.trim()
   if (!content) {
     throw new Error('请填写反馈内容')
   }
+  const imageUrls = (input.imageUrls || []).map((url) => url.trim()).filter(Boolean).slice(0, FEEDBACK_MAX_IMAGES)
   const response = await authenticatedRequest('/api/feedback', {
     method: 'POST',
     data: {
@@ -6326,6 +6368,7 @@ export async function submitFeedback(input: SubmitFeedbackRequest): Promise<Subm
       app_version: readInjectedString(() => __APP_VERSION__, ''),
       client_info: getClientInfo(input.attachRecentRequests !== false),
       recent_requests: input.attachRecentRequests === false ? [] : getRecentRequestTraces(),
+      image_urls: imageUrls,
     },
     timeout: 10000,
   })

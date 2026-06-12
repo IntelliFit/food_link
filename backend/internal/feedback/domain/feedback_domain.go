@@ -37,6 +37,7 @@ type UserFeedback struct {
 	AppVersion      string                                  `gorm:"column:app_version" json:"app_version"`
 	ClientInfo      datatypes.JSONMap                       `gorm:"column:client_info;serializer:json" json:"client_info"`
 	RecentRequests  datatypes.JSONSlice[RecentRequestTrace] `gorm:"column:recent_requests;serializer:json" json:"recent_requests"`
+	ImageURLs       datatypes.JSONSlice[string]               `gorm:"column:image_urls;serializer:json" json:"image_urls"`
 	SubmitTraceID   string                                  `gorm:"column:submit_trace_id" json:"submit_trace_id"`
 	SubmitRequestID string                                  `gorm:"column:submit_request_id" json:"submit_request_id"`
 	SubmitHostName  string                                  `gorm:"column:submit_host_name" json:"submit_host_name"`

@@ -398,6 +398,25 @@ function FeedbackDetail({
         <p className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-3 text-sm leading-relaxed">{item.content}</p>
       </section>
 
+      {item.image_urls?.length ? (
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold">截图 ({item.image_urls.length})</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {item.image_urls.map((url) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="block overflow-hidden rounded-lg border bg-muted/20"
+              >
+                <img src={url} alt="反馈截图" className="aspect-[4/3] w-full object-cover" loading="lazy" />
+              </a>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <Separator />
 
       <section className="space-y-3">
