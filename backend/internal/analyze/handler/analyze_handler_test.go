@@ -103,6 +103,10 @@ func (m *mockTaskService) CleanupTimeoutTasks(ctx context.Context, timeoutMinute
 	return m.cleanupAffected, m.cleanupErr
 }
 
+func (m *mockTaskService) SubmitFeedback(ctx context.Context, userID string, input service.SubmitFeedbackInput) error {
+	return nil
+}
+
 func setupRouter(h *AnalyzeHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

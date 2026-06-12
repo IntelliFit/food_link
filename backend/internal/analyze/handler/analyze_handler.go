@@ -12,9 +12,11 @@ import (
 	errors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	apm "food_link/backend/pkg/trace"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
+	"log/slog"
 )
 
 type AnalyzeService interface {
@@ -37,6 +39,7 @@ type TaskService interface {
 	RetryTask(ctx context.Context, taskID, userID string) (*service.RetryTaskResult, error)
 	DeleteTask(ctx context.Context, taskID, userID string) (map[string]any, error)
 	CleanupTimeoutTasks(ctx context.Context, timeoutMinutes int, adminKey, expectedAdminKey string) (int64, error)
+	SubmitFeedback(ctx context.Context, userID string, input service.SubmitFeedbackInput) error
 }
 
 type AnalyzeHandler struct {
@@ -90,11 +93,17 @@ func (h *AnalyzeHandler) Analyze(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logAnalyzeAPI(c, "sync_image_analyze",
+		slog.Int("image_count", imageCountForSubmitLog(service.SubmitTaskInput{ImageURL: input.ImageURL, ImageURLs: input.ImageURLs})),
+		slog.String("execution_mode", analyzeExecutionMode(input.ExecutionMode)),
+	)
 	data, err := h.analyzeSvc.Analyze(c.Request.Context(), userID, input)
 	if err != nil {
+		logAnalyzeAPIError(c, "sync_image_analyze", err)
 		response.Error(c, err)
 		return
 	}
+	logAnalyzeAPI(c, "sync_image_analyze_ok", slog.Int("item_count", analyzeItemCount(data)))
 	response.Success(c, data)
 }
 
@@ -110,11 +119,14 @@ func (h *AnalyzeHandler) AnalyzeText(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logAnalyzeAPI(c, "sync_text_analyze", slog.Bool("has_text", strings.TrimSpace(input.Text) != ""))
 	data, err := h.analyzeSvc.AnalyzeText(c.Request.Context(), userID, input)
 	if err != nil {
+		logAnalyzeAPIError(c, "sync_text_analyze", err)
 		response.Error(c, err)
 		return
 	}
+	logAnalyzeAPI(c, "sync_text_analyze_ok", slog.Int("item_count", analyzeItemCount(data)))
 	response.Success(c, data)
 }
 
@@ -226,12 +238,19 @@ func (h *AnalyzeHandler) SubmitAnalyzeTask(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logAnalyzeAPI(c, "submit_image_task",
+		slog.Int("image_count", imageCountForSubmitLog(input)),
+		slog.String("execution_mode", stringFromSubmitExecutionMode(input)),
+		slog.String("source_type", strings.TrimSpace(input.SourceType)),
+	)
 	taskID, err := h.taskSvc.SubmitAnalyzeTask(c.Request.Context(), userID, input)
 	if err != nil {
+		logAnalyzeAPIError(c, "submit_image_task", err)
 		response.Error(c, err)
 		return
 	}
 	bindTaskIDToRequest(c, taskID)
+	logAnalyzeAPI(c, "submit_image_task_ok", logger.AnalysisTaskID(taskID))
 	response.Success(c, map[string]string{
 		"task_id": taskID,
 		"message": "任务已提交，可在任务列表中查看进度",
@@ -253,12 +272,18 @@ func (h *AnalyzeHandler) SubmitTextTask(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
+	logAnalyzeAPI(c, "submit_text_task",
+		slog.Bool("has_text", strings.TrimSpace(input.TextInput) != "" || strings.TrimSpace(input.Text) != ""),
+		slog.String("execution_mode", stringFromSubmitExecutionMode(input)),
+	)
 	taskID, err := h.taskSvc.SubmitTextTask(c.Request.Context(), userID, input)
 	if err != nil {
+		logAnalyzeAPIError(c, "submit_text_task", err)
 		response.Error(c, err)
 		return
 	}
 	bindTaskIDToRequest(c, taskID)
+	logAnalyzeAPI(c, "submit_text_task_ok", logger.AnalysisTaskID(taskID))
 	response.Success(c, map[string]string{
 		"task_id": taskID,
 		"message": "任务已提交，可在任务列表中查看进度",
@@ -312,8 +337,17 @@ func (h *AnalyzeHandler) GetTask(c *gin.Context) {
 	bindTaskIDToRequest(c, taskID)
 	task, err := h.taskSvc.GetTask(c.Request.Context(), taskID, userID)
 	if err != nil {
+		logAnalyzeAPIError(c, "get_task", err, logger.AnalysisTaskID(taskID))
 		response.Error(c, err)
 		return
+	}
+	if task != nil && (task.Status == "failed" || task.Status == "timed_out") {
+		logAnalyzeAPI(c, "get_task_terminal",
+			logger.AnalysisTaskID(taskID),
+			logger.TaskType(task.TaskType),
+			slog.String("status", task.Status),
+			logger.Truncated("error_message", stringPtrValue(task.ErrorMessage), 300),
+		)
 	}
 	response.Success(c, task)
 }
@@ -355,9 +389,11 @@ func (h *AnalyzeHandler) RetryTask(c *gin.Context) {
 	bindTaskIDToRequest(c, taskID)
 	data, err := h.taskSvc.RetryTask(c.Request.Context(), taskID, userID)
 	if err != nil {
+		logAnalyzeAPIError(c, "retry_task", err, logger.AnalysisTaskID(taskID))
 		response.Error(c, err)
 		return
 	}
+	logAnalyzeAPI(c, "retry_task_ok", logger.AnalysisTaskID(taskID))
 	response.Success(c, data)
 }
 
@@ -472,4 +508,20 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 	}
 	bindTaskIDToRequest(c, taskID)
 	response.Success(c, gin.H{"task_id": taskID, "message": "精准模式已继续，系统正在重新规划本轮估计"})
+}
+
+// SubmitFeedback — POST /api/analyze/feedback
+// 统一的分析反馈录入接口，用于前端埋点写入 analysis_feedback_samples。
+func (h *AnalyzeHandler) SubmitFeedback(c *gin.Context) {
+	var input service.SubmitFeedbackInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if err := h.taskSvc.SubmitFeedback(c.Request.Context(), userID, input); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "反馈已记录"})
 }

@@ -264,7 +264,7 @@ func logAnalyzeTaskSubmitted(ctx context.Context, userID, taskID, taskType strin
 	sourceType := strings.TrimSpace(input.SourceType)
 	imageCount := imageCountForLog(input.ImageURL, input.ImageURLs)
 	hasText := strings.TrimSpace(input.TextInput) != "" || strings.TrimSpace(input.Text) != ""
-	logger.WithTrace(ctx).Info("分析任务已提交",
+	logger.Info(ctx,"分析任务已提交",
 		slog.String("task_id", taskID),
 		logger.AnalysisTaskID(taskID),
 		slog.String("task_type", taskType),
@@ -510,7 +510,7 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 		TaskType: task.TaskType,
 	})
 	if err == nil {
-		logger.WithTrace(ctx).Info("分析任务已入队",
+		logger.Info(ctx,"分析任务已入队",
 			slog.String("task_id", task.ID),
 			slog.String("task_type", task.TaskType),
 		)
@@ -531,10 +531,9 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 	failCtx, failCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer failCancel()
 	_, failErr := s.tasks.FailTask(failCtx, task.ID, "analysis task enqueue failed")
-	logger.WithTrace(ctx).Error("分析任务入队失败",
+	logger.Error(ctx, "分析任务入队失败", err,
 		slog.String("task_id", task.ID),
 		slog.String("task_type", task.TaskType),
-		logger.Err(err),
 		logger.NamedErr("fail_update_error", failErr),
 	)
 	return fmt.Errorf("enqueue analysis task: %w", err)
@@ -817,8 +816,22 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 		}
 	} else if isCreditRefundStatus(task.Status) {
 		s.refundTaskCredits(ctx, task)
+		logger.Warn(ctx,"查询到终态分析任务",
+			logger.AnalysisTaskID(task.ID),
+			logger.TaskType(task.TaskType),
+			logger.UserID(userID),
+			slog.String("status", task.Status),
+			logger.Truncated("error_message", stringFromTaskError(task), 300),
+		)
 	}
 	return task, nil
+}
+
+func stringFromTaskError(task *domain.AnalysisTask) string {
+	if task == nil || task.ErrorMessage == nil {
+		return ""
+	}
+	return strings.TrimSpace(*task.ErrorMessage)
 }
 
 func isCreditRefundStatus(status string) bool {
@@ -872,7 +885,7 @@ func (s *TaskService) RetryTask(ctx context.Context, taskID, userID string) (*Re
 	if err != nil {
 		return nil, err
 	}
-	logger.WithTrace(ctx).Info("分析任务重新识别已提交",
+	logger.Info(ctx,"分析任务重新识别已提交",
 		slog.String("user_id", userID),
 		slog.String("source_task_id", task.ID),
 		slog.String("new_task_id", newTaskID),
@@ -1393,4 +1406,89 @@ func (s *TaskService) ValidateQuota(ctx context.Context, userID string) error {
 	recordedOn := time.Now().In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02")
 	_, err := s.creditGuard.ValidateFoodAnalysisCredits(ctx, userID, "standard", recordedOn)
 	return err
+}
+
+// SubmitFeedbackInput 是用户主动埋点反馈的入参。
+type SubmitFeedbackInput struct {
+	FeedbackType        string           `json:"feedback_type"`
+	ResolutionState     string           `json:"resolution_state"`
+	SourceTaskID        string           `json:"source_task_id"`
+	SourceRecordID      string           `json:"source_record_id"`
+	BeforeResult        map[string]any   `json:"before_result"`
+	AfterResult         map[string]any   `json:"after_result"`
+	UserCorrectionItems []map[string]any `json:"user_correction_items"`
+	PayloadSnapshot     map[string]any   `json:"payload_snapshot"`
+	ModelName           string           `json:"model_name"`
+	AnalysisEngine      string           `json:"analysis_engine"`
+}
+
+// SubmitFeedback 是写入 analysis_feedback_samples 的唯一入口。
+// 旧的 correction/failed 仍由 worker 自动采集，其余前端埋点均通过此处写入。
+func (s *TaskService) SubmitFeedback(ctx context.Context, userID string, input SubmitFeedbackInput) error {
+	feedbackType := strings.TrimSpace(input.FeedbackType)
+	if !domain.IsValidFeedbackType(feedbackType) {
+		return &errors.AppError{Code: 10001, Message: "feedback_type 不合法", HTTPStatus: 400}
+	}
+	resolutionState := strings.TrimSpace(input.ResolutionState)
+	if resolutionState == "" {
+		resolutionState = domain.ResolutionStateStillDistrust
+	}
+	if !domain.IsValidResolutionState(resolutionState) {
+		return &errors.AppError{Code: 10001, Message: "resolution_state 不合法", HTTPStatus: 400}
+	}
+	sourceTaskID := strings.TrimSpace(input.SourceTaskID)
+	sourceRecordID := strings.TrimSpace(input.SourceRecordID)
+	if sourceTaskID == "" && sourceRecordID == "" {
+		return &errors.AppError{Code: 10001, Message: "source_task_id 与 source_record_id 不能同时为空", HTTPStatus: 400}
+	}
+
+	sample := &domain.AnalysisFeedbackSample{
+		UserID:              userID,
+		FeedbackType:        feedbackType,
+		ResolutionState:     resolutionState,
+		SourceTaskID:        emptyToNil(sourceTaskID),
+		SourceRecordID:      emptyToNil(sourceRecordID),
+		BeforeResult:        input.BeforeResult,
+		UserCorrectionItems: input.UserCorrectionItems,
+		AfterResult:         input.AfterResult,
+		PayloadSnapshot:     input.PayloadSnapshot,
+		ModelName:           emptyToNil(input.ModelName),
+		AnalysisEngine:      emptyToNil(input.AnalysisEngine),
+	}
+
+	// 如果前端没传 model_name / analysis_engine / task_type，尝试从关联任务补齐。
+	if sourceTaskID != "" {
+		task, err := s.tasks.GetTaskByID(ctx, sourceTaskID)
+		if err != nil {
+			logger.Error(ctx, "查询反馈关联任务失败", err,
+				slog.String("user_id", userID),
+				slog.String("source_task_id", sourceTaskID),
+			)
+		}
+		if task != nil {
+			sample.TaskType = task.TaskType
+			if sample.ModelName == nil && task.Payload != nil {
+				if m := stringFromAny(task.Payload["modelName"]); m != "" {
+					sample.ModelName = &m
+				}
+			}
+			if sample.AnalysisEngine == nil && task.Payload != nil {
+				if e := stringFromAny(task.Payload["analysis_engine"]); e != "" {
+					sample.AnalysisEngine = &e
+				}
+			}
+		}
+	}
+	if sample.TaskType == "" {
+		sample.TaskType = "food"
+	}
+
+	return s.tasks.UpsertFeedbackSample(ctx, sample)
+}
+
+func emptyToNil(s string) *string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return &s
 }

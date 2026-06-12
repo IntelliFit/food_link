@@ -11,7 +11,6 @@ import (
 	analyzeservice "food_link/backend/internal/analyze/service"
 	foodrecorddomain "food_link/backend/internal/foodrecord/domain"
 	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
-	"food_link/backend/pkg/logger"
 )
 
 type fakeWorkerAnalyzeRunner struct {
@@ -375,7 +374,7 @@ func TestRunFoodAnalysisPassesIntegratedPackagedPayloadToAnalyze(t *testing.T) {
 		},
 		"packaged_food_resolution": map[string]any{"matched_count": 1},
 	}}
-	runner := &Runner{analyze: fakeAnalyze, log: logger.L()}
+	runner := &Runner{analyze: fakeAnalyze}
 	task := &domain.AnalysisTask{
 		ID:         "task-mixed-packaged",
 		UserID:     "user1",
@@ -450,7 +449,7 @@ func TestRunFoodAnalysisWithAnalyzeServiceIntegratesPackagedFood(t *testing.T) {
 			analyzeSvc.ConfigureGemini35LLMClient(llm)
 			analyzeSvc.ConfigureNutritionResolver(newWorkerFakeNutritionResolver())
 			analyzeSvc.ConfigureWebSearcher(workerEmptyWebSearcher{})
-			runner := &Runner{analyze: analyzeSvc, log: logger.L()}
+			runner := &Runner{analyze: analyzeSvc}
 			task := &domain.AnalysisTask{
 				ID:         "task-real-analyze-service-" + mode,
 				UserID:     "user1",
@@ -531,7 +530,7 @@ func TestRunFoodAnalysisWithAnalyzeServiceFallsBackToAIWhenPackagedFoodMisses(t 
 			analyzeSvc.ConfigureNutritionResolver(newWorkerFakeNutritionResolver())
 			analyzeSvc.ConfigureNutritionFallbackEstimator(fallback)
 			analyzeSvc.ConfigureWebSearcher(workerEmptyWebSearcher{})
-			runner := &Runner{analyze: analyzeSvc, log: logger.L()}
+			runner := &Runner{analyze: analyzeSvc}
 			task := &domain.AnalysisTask{
 				ID:         "task-real-analyze-service-packaged-miss-" + mode,
 				UserID:     "user1",

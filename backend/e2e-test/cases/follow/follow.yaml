@@ -1,0 +1,177 @@
+cases:
+  - id: follow.stats.public-profile
+    name: "公开资料含关注统计"
+    desc: "user2 查看 user1 的公开资料，验证返回包含关注统计字段。"
+    group: follow
+    method: GET
+    path: /api/user/00000000-0000-0000-0000-000000000001/public-profile
+    auth: user2
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.id: "00000000-0000-0000-0000-000000000001"
+        data.followers_count: type:number
+        data.following_count: type:number
+        data.is_following: type:boolean
+
+  - id: follow.followers.empty
+    name: "粉丝列表为空"
+    desc: "新用户没有粉丝，验证返回空列表。"
+    group: follow
+    method: GET
+    path: /api/user/00000000-0000-0000-0000-000000000001/followers
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.list: type:array
+        "data.list.length": 0
+
+  - id: follow.following.empty
+    name: "关注列表为空"
+    desc: "新用户没有关注任何人，验证返回空列表。"
+    group: follow
+    method: GET
+    path: /api/user/00000000-0000-0000-0000-000000000001/following
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.list: type:array
+        "data.list.length": 0
+
+  - id: follow.follow.success
+    name: "关注用户成功"
+    desc: "user1 关注 user2，返回成功，数据库应有记录。"
+    group: follow
+    method: POST
+    path: /api/user/00000000-0000-0000-0000-000000000002/follow
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.success: true
+    db_assert:
+      - query: "SELECT COUNT(*) FROM user_follows WHERE follower_id = '00000000-0000-0000-0000-000000000001' AND followee_id = '00000000-0000-0000-0000-000000000002'"
+        equals: 1
+
+  - id: follow.follow.repeat
+    name: "重复关注幂等"
+    desc: "user1 再次关注 user2，仍应返回成功，数据库不重复。"
+    group: follow
+    method: POST
+    path: /api/user/00000000-0000-0000-0000-000000000002/follow
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.success: true
+    db_assert:
+      - query: "SELECT COUNT(*) FROM user_follows WHERE follower_id = '00000000-0000-0000-0000-000000000001' AND followee_id = '00000000-0000-0000-0000-000000000002'"
+        equals: 1
+
+  - id: follow.follow.self
+    name: "不能关注自己"
+    desc: "user1 尝试关注自己，应返回 400 错误。"
+    group: follow
+    method: POST
+    path: /api/user/00000000-0000-0000-0000-000000000001/follow
+    auth: user1
+    expect:
+      status: 400
+      json:
+        code: exists
+        message: exists
+
+  - id: follow.stats.after-follow
+    name: "关注后统计更新"
+    desc: "user1 关注 user2 后，验证 user2 的粉丝数和 user1 的关注数已更新。"
+    group: follow
+    method: GET
+    path: /api/user/00000000-0000-0000-0000-000000000002/follow-stats
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.followers_count: 1
+        data.following_count: type:number
+        data.is_following: true
+
+  - id: follow.followers.has-data
+    name: "粉丝列表有数据"
+    desc: "user2 被 user1 关注后，验证粉丝列表包含 user1。"
+    group: follow
+    method: GET
+    path: /api/user/00000000-0000-0000-0000-000000000002/followers
+    auth: user2
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.list: type:array
+        "data.list.length": 1
+        "data.list.0.id": "00000000-0000-0000-0000-000000000001"
+
+  - id: follow.following.has-data
+    name: "关注列表有数据"
+    desc: "user1 关注 user2 后，验证 user1 的关注列表包含 user2。"
+    group: follow
+    method: GET
+    path: /api/user/00000000-0000-0000-0000-000000000001/following
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.list: type:array
+        "data.list.length": 1
+        "data.list.0.id": "00000000-0000-0000-0000-000000000002"
+
+  - id: follow.unfollow.success
+    name: "取消关注成功"
+    desc: "user1 取消关注 user2，返回成功，数据库记录应被删除。"
+    group: follow
+    method: DELETE
+    path: /api/user/00000000-0000-0000-0000-000000000002/follow
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.success: true
+    db_assert:
+      - query: "SELECT COUNT(*) FROM user_follows WHERE follower_id = '00000000-0000-0000-0000-000000000001' AND followee_id = '00000000-0000-0000-0000-000000000002'"
+        equals: 0
+
+  - id: follow.unfollow.repeat
+    name: "重复取消关注幂等"
+    desc: "user1 再次取消关注 user2，仍应返回成功。"
+    group: follow
+    method: DELETE
+    path: /api/user/00000000-0000-0000-0000-000000000002/follow
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.success: true
+
+  - id: follow.stats.is-following
+    name: "is_following 状态更新"
+    desc: "user1 取消关注 user2 后，再次查看 user2 的关注统计，is_following 应为 false。"
+    group: follow
+    method: GET
+    path: /api/user/00000000-0000-0000-0000-000000000002/follow-stats
+    auth: user1
+    expect:
+      status: 200
+      json:
+        code: 0
+        data.followers_count: 0
+        data.is_following: false

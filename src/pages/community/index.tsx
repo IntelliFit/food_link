@@ -2213,7 +2213,15 @@ function CommunityPage() {
                           </View>
                           <View className='feed-card-main-col'>
                             <View className='feed-card-name-block'>
-                              <Text className='user-name'>{item.is_mine ? '我' : item.author.nickname}</Text>
+                              <Text
+                                className='user-name'
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (item.author?.id) {
+                                    Taro.navigateTo({ url: extraPkgUrl(`/pages/profile-settings/index?user_id=${encodeURIComponent(item.author.id)}`) })
+                                  }
+                                }}
+                              >{item.is_mine ? '我' : item.author.nickname}</Text>
                               <View className='feed-sub-meta-row'>
                                 <Text className='post-time'>
                                   {exercise ? `运动打卡 · ${formatFeedTime(feedTime)}` : isCampusFood ? `校园食堂 · ${formatFeedTime(feedTime)}` : `${MEAL_NAMES[item.record.meal_type] || item.record.meal_type} · ${formatFeedTime(feedTime)}`}

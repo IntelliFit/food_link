@@ -1,7 +1,10 @@
 import { View, Text, ScrollView, Button, Slider } from '@tarojs/components'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Taro from '@tarojs/taro'
-import { updateFoodRecord, showUnifiedApiError, type FoodRecord, type Nutrients } from '../../../utils/api'
+import {
+  updateFoodRecord, showUnifiedApiError, submitAnalysisFeedback,
+  type FoodRecord, type Nutrients
+} from '../../../utils/api'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { COMMUNITY_FEED_CHANGED_EVENT } from '../../../utils/home-events'
 import {
@@ -200,42 +203,49 @@ interface MealRecordEditModalProps {
 export function MealRecordEditModal({ visible, record, onClose, onSuccess }: MealRecordEditModalProps) {
   const { scheme } = useAppColorScheme()
   const [editItems, setEditItems] = useState<EditableFoodItem[]>([])
+  const originalItemsRef = useRef<EditableFoodItem[]>([])
+  const originalMealTypeRef = useRef<SelectableMealType>('afternoon_snack')
+  const submittedFeedbackRef = useRef<Set<string>>(new Set())
+  const devFeedbackLogRef = useRef<{ type: string; state: string; at: number; ok: boolean; disabled?: boolean; err?: string } | null>(null)
+  const [devFeedbackIndicator, setDevFeedbackIndicator] = useState(false)
   const [editMealType, setEditMealType] = useState<SelectableMealType>('afternoon_snack')
   const [editSaving, setEditSaving] = useState(false)
 
   useEffect(() => {
     if (visible && record) {
-      setEditMealType(normalizeSelectableMealType(record.meal_type))
-      setEditItems(
-        (record.items || []).map(item => {
-          const ratio = resolveRecordItemRatio(item)
-          return {
-            name: item.name,
-            weight: item.weight,
-            grossWeight: Number((item as any).gross_weight_grams ?? (item as any).grossWeightGrams ?? item.weight) || item.weight,
-            ediblePortionRatio: Number((item as any).edible_portion_ratio ?? (item as any).ediblePortionRatio ?? 100) || 100,
-            ediblePortionReason: (item as any).edible_portion_reason ?? (item as any).ediblePortionReason,
-            ediblePortionSource: (item as any).edible_portion_source ?? (item as any).ediblePortionSource,
-            suggestedRatio: (item as any).suggested_ratio ?? (item as any).suggestedRatio,
-            suggestedRatioReason: (item as any).suggested_ratio_reason ?? (item as any).suggestedRatioReason,
-            suggestedRatioSource: (item as any).suggested_ratio_source ?? (item as any).suggestedRatioSource,
-            nutritionSource: (item as any).nutrition_source ?? (item as any).nutritionSource,
-            matchedFoodId: (item as any).matched_food_id ?? (item as any).matchedFoodId,
-            packagedFoodId: (item as any).packaged_food_id ?? (item as any).packagedFoodId,
-            packageMatchStatus: (item as any).package_match_status ?? (item as any).packageMatchStatus,
-            packageMatchConfidence: (item as any).package_match_confidence ?? (item as any).packageMatchConfidence,
-            packageWeightSource: (item as any).package_weight_source ?? (item as any).packageWeightSource,
-            packageWeightApplied: (item as any).package_weight_applied ?? (item as any).packageWeightApplied,
-            packageWeightReason: (item as any).package_weight_reason ?? (item as any).packageWeightReason,
-            packagedCandidates: (item as any).packaged_candidates ?? (item as any).packagedCandidates,
-            ratio,
-            intake: resolveRecordItemIntake(item),
-            waterMl: item.waterMl ?? item.water_ml ?? 0,
-            nutrients: resolveEditableItemNutrients(item, record, ratio),
-            nutrientDetailsExpanded: false
-          }
-        })
-      )
+      const mt = normalizeSelectableMealType(record.meal_type)
+      setEditMealType(mt)
+      originalMealTypeRef.current = mt
+      const items = (record.items || []).map(item => {
+        const ratio = resolveRecordItemRatio(item)
+        return {
+          name: item.name,
+          weight: item.weight,
+          grossWeight: Number((item as any).gross_weight_grams ?? (item as any).grossWeightGrams ?? item.weight) || item.weight,
+          ediblePortionRatio: Number((item as any).edible_portion_ratio ?? (item as any).ediblePortionRatio ?? 100) || 100,
+          ediblePortionReason: (item as any).edible_portion_reason ?? (item as any).ediblePortionReason,
+          ediblePortionSource: (item as any).edible_portion_source ?? (item as any).ediblePortionSource,
+          suggestedRatio: (item as any).suggested_ratio ?? (item as any).suggestedRatio,
+          suggestedRatioReason: (item as any).suggested_ratio_reason ?? (item as any).suggestedRatioReason,
+          suggestedRatioSource: (item as any).suggested_ratio_source ?? (item as any).suggestedRatioSource,
+          nutritionSource: (item as any).nutrition_source ?? (item as any).nutritionSource,
+          matchedFoodId: (item as any).matched_food_id ?? (item as any).matchedFoodId,
+          packagedFoodId: (item as any).packaged_food_id ?? (item as any).packagedFoodId,
+          packageMatchStatus: (item as any).package_match_status ?? (item as any).packageMatchStatus,
+          packageMatchConfidence: (item as any).package_match_confidence ?? (item as any).packageMatchConfidence,
+          packageWeightSource: (item as any).package_weight_source ?? (item as any).packageWeightSource,
+          packageWeightApplied: (item as any).package_weight_applied ?? (item as any).packageWeightApplied,
+          packageWeightReason: (item as any).package_weight_reason ?? (item as any).packageWeightReason,
+          packagedCandidates: (item as any).packaged_candidates ?? (item as any).packagedCandidates,
+          ratio,
+          intake: resolveRecordItemIntake(item),
+          waterMl: item.waterMl ?? item.water_ml ?? 0,
+          nutrients: resolveEditableItemNutrients(item, record, ratio),
+          nutrientDetailsExpanded: false
+        }
+      })
+      setEditItems(items)
+      originalItemsRef.current = JSON.parse(JSON.stringify(items))
     } else if (!visible) {
       // 自定义 tabBar 下不调用 showTabBar/hideTabBar，避免原生 tabBar 叠加
     }
@@ -395,6 +405,71 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     setEditItems(prev => prev.filter((_, i) => i !== index))
   }, [editItems])
 
+  const hasAnyRealChange = (): boolean => {
+    if (editMealType !== originalMealTypeRef.current) return true
+    const orig = originalItemsRef.current
+    if (orig.length !== editItems.length) return true
+    return editItems.some((item, idx) => {
+      const o = orig[idx]
+      if (!o) return true
+      const nameChanged = item.name !== o.name
+      const weightChanged = Math.abs(item.weight - o.weight) > 0.05
+      const caloriesChanged = Math.abs((item.nutrients?.calories ?? 0) - (o.nutrients?.calories ?? 0)) > 0.05
+      const proteinChanged = Math.abs((item.nutrients?.protein ?? 0) - (o.nutrients?.protein ?? 0)) > 0.05
+      const carbsChanged = Math.abs((item.nutrients?.carbs ?? 0) - (o.nutrients?.carbs ?? 0)) > 0.05
+      const fatChanged = Math.abs((item.nutrients?.fat ?? 0) - (o.nutrients?.fat ?? 0)) > 0.05
+      const waterChanged = Math.abs((item.waterMl ?? 0) - (o.waterMl ?? 0)) > 0.05
+      const ratioChanged = Math.abs(item.ratio - o.ratio) > 0.05 || Math.abs(item.intake - o.intake) > 0.05
+      return nameChanged || weightChanged || caloriesChanged || proteinChanged || carbsChanged || fatChanged || waterChanged || ratioChanged
+    })
+  }
+
+  const isOnlyRatioChanged = (): boolean => {
+    if (editMealType !== originalMealTypeRef.current) return false
+    const orig = originalItemsRef.current
+    if (orig.length !== editItems.length) return false
+    return editItems.every((item, idx) => {
+      const o = orig[idx]
+      if (!o) return false
+      const nameChanged = item.name !== o.name
+      const weightChanged = Math.abs(item.weight - o.weight) > 0.05
+      const caloriesChanged = Math.abs((item.nutrients?.calories ?? 0) - (o.nutrients?.calories ?? 0)) > 0.05
+      const proteinChanged = Math.abs((item.nutrients?.protein ?? 0) - (o.nutrients?.protein ?? 0)) > 0.05
+      const carbsChanged = Math.abs((item.nutrients?.carbs ?? 0) - (o.nutrients?.carbs ?? 0)) > 0.05
+      const fatChanged = Math.abs((item.nutrients?.fat ?? 0) - (o.nutrients?.fat ?? 0)) > 0.05
+      const waterChanged = Math.abs((item.waterMl ?? 0) - (o.waterMl ?? 0)) > 0.05
+      const hasRealChange = nameChanged || weightChanged || caloriesChanged || proteinChanged || carbsChanged || fatChanged || waterChanged
+      return !hasRealChange
+    })
+  }
+
+  const submitFeedbackDeduped = async () => {
+    if (!record) return
+    const key = `record:${record.id}:record_corrected`
+    if (submittedFeedbackRef.current.has(key)) return
+    submittedFeedbackRef.current.add(key)
+    try {
+      const res = await submitAnalysisFeedback({
+        feedback_type: 'record_corrected',
+        resolution_state: 'still_distrust',
+        source_record_id: record.id,
+      })
+      if (__ENABLE_DEV_DEBUG_UI__) {
+        const disabled = res.message === 'feedback submission disabled'
+        devFeedbackLogRef.current = { type: 'record_corrected', state: 'still_distrust', at: Date.now(), ok: true, disabled }
+        setDevFeedbackIndicator(true)
+        Taro.showToast({ title: disabled ? '[dev] feedback 已禁用: record_corrected' : '[dev] feedback: record_corrected', icon: 'none' })
+      }
+    } catch (e) {
+      console.error('[Feedback]', e)
+      if (__ENABLE_DEV_DEBUG_UI__) {
+        devFeedbackLogRef.current = { type: 'record_corrected', state: 'still_distrust', at: Date.now(), ok: false, err: e instanceof Error ? e.message : String(e) }
+        setDevFeedbackIndicator(true)
+        Taro.showToast({ title: '[dev] feedback 失败: record_corrected', icon: 'none' })
+      }
+    }
+  }
+
   const handleSaveEdit = async () => {
     if (editItems.length === 0) {
       Taro.showToast({ title: '至少保留一项食物', icon: 'none' })
@@ -408,6 +483,11 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       confirmColor: '#00bc7d'
     })
     if (!confirm) return
+    const anyChange = hasAnyRealChange()
+    const onlyRatio = isOnlyRatioChanged()
+    if (anyChange && !onlyRatio) {
+      void submitFeedbackDeduped()
+    }
     setEditSaving(true)
     Taro.showLoading({ title: '保存中...', mask: true })
     try {
@@ -450,7 +530,23 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       <View className='edit-modal-mask' onClick={onClose} />
       <View className='edit-modal-content'>
         <View className='edit-modal-header'>
-          <Text className='edit-modal-title'>修改饮食数据</Text>
+          <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx' }}>
+            <Text className='edit-modal-title'>修改饮食数据</Text>
+            {__ENABLE_DEV_DEBUG_UI__ && devFeedbackIndicator && (
+              <View
+                style={{
+                  padding: '4rpx 12rpx',
+                  borderRadius: '8rpx',
+                  background: devFeedbackLogRef.current?.disabled ? '#fef3c7' : devFeedbackLogRef.current?.ok ? '#dcfce7' : '#fee2e2',
+                  border: `1rpx solid ${devFeedbackLogRef.current?.disabled ? '#fcd34d' : devFeedbackLogRef.current?.ok ? '#86efac' : '#fca5a5'}`,
+                }}
+              >
+                <Text style={{ fontSize: '20rpx', color: devFeedbackLogRef.current?.disabled ? '#d97706' : devFeedbackLogRef.current?.ok ? '#16a34a' : '#dc2626' }}>
+                  {devFeedbackLogRef.current?.disabled ? 'feedback 已禁用' : devFeedbackLogRef.current?.ok ? 'feedback 已发送' : 'feedback 失败'}
+                </Text>
+              </View>
+            )}
+          </View>
           <View className='edit-modal-close' onClick={onClose} />
         </View>
         <ScrollView

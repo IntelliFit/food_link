@@ -56,6 +56,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureSchoolsSeed(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureMottoColumn(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -74,7 +77,8 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("admin_accounts", "admin_accounts_status_check", `status = ANY (ARRAY['active'::text,'disabled'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'done'::text,'failed'::text,'cancelled'::text,'timed_out'::text,'violated'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_task_type_check", `task_type = ANY (ARRAY['food'::text,'food_text'::text,'precision_plan'::text,'precision_item_estimate'::text,'precision_aggregate'::text,'health_report'::text,'public_food_library_text'::text,'exercise'::text,'expiry_recognize'::text,'expiry_notification'::text,'packaged_nutrition_label'::text,'packaged_product_extract'::text]) OR task_type ~ '^(food|food_text|precision_plan|precision_item_estimate|precision_aggregate|health_report|public_food_library_text|exercise|expiry_recognize|expiry_notification|packaged_nutrition_label|packaged_product_extract)_debug(_[a-z0-9_]+)?$'`),
-		dropAndAddCheck("analysis_feedback_samples", "analysis_feedback_samples_feedback_type_check", `feedback_type = ANY (ARRAY['correction'::text,'retry'::text,'manual_entry'::text,'failed'::text])`),
+		dropAndAddCheck("analysis_feedback_samples", "analysis_feedback_samples_feedback_type_check", `feedback_type = ANY (ARRAY['correction'::text,'retry'::text,'manual_entry'::text,'failed'::text,'weight_mismatch'::text,'nutrition_mismatch'::text,'suspect_distrust'::text,'record_corrected'::text])`),
+		dropAndAddCheck("analysis_feedback_samples", "analysis_feedback_samples_resolution_state_check", `resolution_state = ANY (ARRAY['user_corrected'::text,'still_distrust'::text])`),
 		dropAndAddCheck("user_food_records", "user_food_records_meal_type_check", `meal_type = ANY (ARRAY['breakfast'::text,'morning_snack'::text,'lunch'::text,'afternoon_snack'::text,'dinner'::text,'evening_snack'::text,'snack'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_source_type_check", `source_type = ANY (ARRAY['image'::text,'text'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_execution_mode_check", `execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
@@ -137,6 +141,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("analysis_feedback_samples_source_task_id_fkey", "analysis_feedback_samples", "source_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("analysis_feedback_samples_correction_task_id_fkey", "analysis_feedback_samples", "correction_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("analysis_feedback_samples_root_task_id_fkey", "analysis_feedback_samples", "root_task_id", "analysis_tasks", "id", "SET NULL"),
+		addFK("analysis_feedback_samples_source_record_id_fkey", "analysis_feedback_samples", "source_record_id", "user_food_records", "id", "SET NULL"),
 		addFK("user_food_records_user_id_fkey", "user_food_records", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_food_records_source_task_id_fkey", "user_food_records", "source_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("food_nutrition_aliases_food_id_fkey", "food_nutrition_aliases", "food_id", "food_nutrition_library", "id", "CASCADE"),
@@ -362,6 +367,7 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_friend_requests_pair ON friend_requests (from_user_id, to_user_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_friends_unique ON user_friends (user_id, friend_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_follows_unique ON user_follows (follower_id, followee_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_private_messages_conversation ON private_messages (LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id), created_at DESC)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS ai_stats_insights_user_range_date_unique ON ai_stats_insights (user_id, range_type, generated_date)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS ai_custom_focus_cards_user_range_focus_unique ON ai_custom_focus_cards (user_id, range_type, focus_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS uq_user_credit_bonus_share_poster_record ON user_credit_bonus_events (user_id, bonus_type, bonus_date, source_record_id) WHERE bonus_type = 'share_poster' AND source_record_id IS NOT NULL`,
@@ -398,6 +404,11 @@ WHERE COALESCE(display_name, '') = ''
 		`ALTER TABLE analysis_tasks ADD COLUMN IF NOT EXISTS search_text text`,
 		`UPDATE analysis_tasks SET search_text = COALESCE(NULLIF(text_input, ''), result->'items'->0->>'name', result->>'description', '') WHERE search_text IS NULL OR search_text = ''`,
 		`CREATE INDEX IF NOT EXISTS idx_analysis_tasks_user_search_gin ON analysis_tasks USING gin (search_text gin_trgm_ops)`,
+		// Analysis feedback samples extra columns/indexes for frontend tracking
+		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS resolution_state text NOT NULL DEFAULT 'user_corrected'`,
+		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS source_record_id uuid`,
+		`CREATE INDEX IF NOT EXISTS idx_analysis_feedback_samples_source_record_id ON analysis_feedback_samples (source_record_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_analysis_feedback_samples_resolution_state ON analysis_feedback_samples (resolution_state)`,
 		// School badge logo URL
 		`ALTER TABLE schools ADD COLUMN IF NOT EXISTS logo_url text`,
 	} {
@@ -561,6 +572,24 @@ func ensureSchoolsSeed(ctx context.Context, db *gorm.DB) error {
 		if err := db.WithContext(ctx).Create(&do).Error; err != nil {
 			return fmt.Errorf("insert school %q: %w", s.Name, err)
 		}
+	}
+	return nil
+}
+
+func ensureMottoColumn(ctx context.Context, db *gorm.DB) error {
+	var exists int64
+	if err := db.WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_name = 'weapp_user' AND column_name = 'motto'
+	`).Scan(&exists).Error; err != nil {
+		return fmt.Errorf("check motto column exists: %w", err)
+	}
+	if exists > 0 {
+		return nil
+	}
+	sql := `ALTER TABLE weapp_user ADD COLUMN motto TEXT`
+	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+		return fmt.Errorf("add motto column: %w", err)
 	}
 	return nil
 }

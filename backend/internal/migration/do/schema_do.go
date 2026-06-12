@@ -35,6 +35,8 @@ type UserDO struct {
 	ReferredByUserID               *string        `gorm:"column:referred_by_user_id;type:uuid;index:idx_weapp_user_referred_by_user_id"`
 	EarnedCreditsBalance           int            `gorm:"column:earned_credits_balance;type:integer;not null;default:0"`
 	HealthDisclaimerAcknowledgedAt *time.Time     `gorm:"column:health_disclaimer_acknowledged_at;type:timestamptz"`
+	Motto                          *string        `gorm:"column:motto;type:text"`
+	CoverImage                     *string        `gorm:"column:cover_image;type:text"`
 }
 
 func (UserDO) TableName() string { return "weapp_user" }
@@ -64,6 +66,7 @@ type UserFeedbackDO struct {
 	AppVersion      string           `gorm:"column:app_version;type:text;not null;default:''"`
 	ClientInfo      map[string]any   `gorm:"column:client_info;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	RecentRequests  []map[string]any `gorm:"column:recent_requests;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	ImageURLs       []string         `gorm:"column:image_urls;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	SubmitTraceID   string           `gorm:"column:submit_trace_id;type:text;not null;default:'';index:idx_user_feedback_submit_trace_id"`
 	SubmitRequestID string           `gorm:"column:submit_request_id;type:text;not null;default:''"`
 	SubmitHostName  string           `gorm:"column:submit_host_name;type:text;not null;default:''"`
@@ -189,7 +192,9 @@ type AnalysisFeedbackSampleDO struct {
 	ID                  string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID              string           `gorm:"column:user_id;type:uuid;not null;index:idx_analysis_feedback_samples_user_id"`
 	FeedbackType        string           `gorm:"column:feedback_type;type:text;not null;index:idx_analysis_feedback_samples_type"`
+	ResolutionState     string           `gorm:"column:resolution_state;type:text;not null;default:'user_corrected';index:idx_analysis_feedback_samples_resolution_state"`
 	SourceTaskID        *string          `gorm:"column:source_task_id;type:uuid;index:idx_analysis_feedback_samples_source_task_id"`
+	SourceRecordID      *string          `gorm:"column:source_record_id;type:uuid;index:idx_analysis_feedback_samples_source_record_id"`
 	CorrectionTaskID    *string          `gorm:"column:correction_task_id;type:uuid;uniqueIndex:idx_analysis_feedback_samples_correction_task_id"`
 	RootTaskID          *string          `gorm:"column:root_task_id;type:uuid;index:idx_analysis_feedback_samples_root_task_id"`
 	TaskType            string           `gorm:"column:task_type;type:text;not null"`
@@ -687,6 +692,19 @@ type UserFollowDO struct {
 
 func (UserFollowDO) TableName() string { return "user_follows" }
 
+type PrivateMessageDO struct {
+	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SenderID   string     `gorm:"column:sender_id;type:uuid;not null;index:idx_private_messages_sender"`
+	ReceiverID string     `gorm:"column:receiver_id;type:uuid;not null;index:idx_private_messages_receiver"`
+	Content    string     `gorm:"column:content;type:text;not null;default:''"`
+	ImageURL   *string    `gorm:"column:image_url;type:text"`
+	ContentType string    `gorm:"column:content_type;type:text;not null;default:'text'"`
+	IsRead     bool       `gorm:"column:is_read;type:boolean;not null;default:false"`
+	CreatedAt  *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+}
+
+func (PrivateMessageDO) TableName() string { return "private_messages" }
+
 type BodyWeightRecordDO struct {
 	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID         string    `gorm:"column:user_id;type:uuid;not null;index:idx_user_weight_records_user_date,priority:1;index:idx_user_weight_records_user_created_at,priority:1;index:idx_user_weight_records_user_client_record_id,priority:1,where:client_record_id IS NOT NULL"`
@@ -1075,6 +1093,7 @@ func AllModels() []any {
 		&FriendRequestDO{},
 		&UserFriendDO{},
 		&UserFollowDO{},
+		&PrivateMessageDO{},
 		&BodyWeightRecordDO{},
 		&BodyWaterLogDO{},
 		&BodyMetricSettingsDO{},

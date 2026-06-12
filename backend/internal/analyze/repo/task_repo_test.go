@@ -22,7 +22,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&domain.AnalysisTask{}); err != nil {
+	if err := db.AutoMigrate(&domain.AnalysisTask{}, &domain.AnalysisFeedbackSample{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	return db
@@ -312,4 +312,82 @@ func TestTaskRepo_MarkTimedOutTasks(t *testing.T) {
 
 func strPtr(value string) *string {
 	return &value
+}
+
+func TestTaskRepo_UpsertFeedbackSample_SoftDeduplication(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewTaskRepo(db)
+	ctx := context.Background()
+
+	tid := "task-aaa"
+	rid := "record-bbb"
+
+	// 第一次写入 weight_mismatch
+	s1 := &domain.AnalysisFeedbackSample{
+		UserID:          "u1",
+		FeedbackType:    "weight_mismatch",
+		ResolutionState: "still_distrust",
+		SourceTaskID:    strPtr(tid),
+		SourceRecordID:  strPtr(rid),
+		TaskType:        "food",
+	}
+	assert.NoError(t, r.UpsertFeedbackSample(ctx, s1))
+	assert.NotEmpty(t, s1.ID)
+
+	// 相同 (feedback_type, source_task_id, source_record_id) 再次写入应更新而非新增
+	s2 := &domain.AnalysisFeedbackSample{
+		UserID:          "u1",
+		FeedbackType:    "weight_mismatch",
+		ResolutionState: "user_corrected",
+		SourceTaskID:    strPtr(tid),
+		SourceRecordID:  strPtr(rid),
+		TaskType:        "food",
+		AfterResult:     map[string]any{"calories": 100},
+	}
+	assert.NoError(t, r.UpsertFeedbackSample(ctx, s2))
+
+	var count int64
+	assert.NoError(t, db.Model(&domain.AnalysisFeedbackSample{}).Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+
+	var got domain.AnalysisFeedbackSample
+	assert.NoError(t, db.First(&got).Error)
+	assert.Equal(t, "user_corrected", got.ResolutionState)
+	assert.NotNil(t, got.AfterResult)
+}
+
+func TestTaskRepo_UpsertFeedbackSample_NilSourceIDs(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewTaskRepo(db)
+	ctx := context.Background()
+
+	// source_task_id 与 source_record_id 均为 nil 时也应能写入
+	s1 := &domain.AnalysisFeedbackSample{
+		UserID:          "u1",
+		FeedbackType:    "suspect_distrust",
+		ResolutionState: "still_distrust",
+		TaskType:        "food",
+	}
+	assert.NoError(t, r.UpsertFeedbackSample(ctx, s1))
+
+	// 再次写入应更新同一行
+	s2 := &domain.AnalysisFeedbackSample{
+		UserID:          "u1",
+		FeedbackType:    "suspect_distrust",
+		ResolutionState: "still_distrust",
+		TaskType:        "food",
+	}
+	assert.NoError(t, r.UpsertFeedbackSample(ctx, s2))
+
+	var count int64
+	assert.NoError(t, db.Model(&domain.AnalysisFeedbackSample{}).Count(&count).Error)
+	assert.Equal(t, int64(1), count)
+
+	// 验证 nil JSON 字段已被归一化为空容器
+	var got domain.AnalysisFeedbackSample
+	assert.NoError(t, db.First(&got).Error)
+	assert.NotNil(t, got.BeforeResult)
+	assert.NotNil(t, got.AfterResult)
+	assert.NotNil(t, got.PayloadSnapshot)
+	assert.NotNil(t, got.UserCorrectionItems)
 }

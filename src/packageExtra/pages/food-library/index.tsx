@@ -810,7 +810,15 @@ function FoodLibraryPage() {
                     ) : (
                       <View className='author-avatar' />
                     )}
-                    <Text className='author-name'>{item.author?.nickname || '用户'}</Text>
+                    <Text
+                      className='author-name'
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (item.author?.id) {
+                          Taro.navigateTo({ url: extraPkgUrl(`/pages/profile-settings/index?user_id=${encodeURIComponent(item.author.id)}`) })
+                        }
+                      }}
+                    >{item.author?.nickname || '用户'}</Text>
                   </View>
                   <View className='food-stats'>
                     <View

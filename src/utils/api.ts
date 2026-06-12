@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
 
+import { getRecentConsoleLogs } from './console-log-buffer'
 import { resolveApiBaseUrl } from './api-base-url'
 import {
   collectFoodDisplayImageUrls,
@@ -1299,6 +1300,8 @@ export interface UserInfo {
   unionid?: string
   nickname: string
   avatar: string
+  cover_image?: string
+  motto?: string
   telephone?: string
   create_time?: string
   update_time?: string
@@ -1659,6 +1662,8 @@ export interface HealthProfileUpdateRequest {
 export interface UpdateUserInfoRequest {
   nickname?: string
   avatar?: string
+  cover_image?: string
+  motto?: string
   telephone?: string
   searchable?: boolean
   public_records?: boolean
@@ -2079,6 +2084,20 @@ export function getRecentRequestTraces(limit = RECENT_REQUEST_TRACE_LIMIT): Rece
   return loadRecentRequestTraces().slice(-normalizedLimit)
 }
 
+function extractRequestErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message.slice(0, 160)
+  }
+  if (error && typeof error === 'object') {
+    const record = error as { errMsg?: string; message?: string }
+    const message = record.errMsg || record.message
+    if (typeof message === 'string' && message.trim()) {
+      return message.trim().slice(0, 160)
+    }
+  }
+  return undefined
+}
+
 function recordResponseTrace(params: {
   url: string
   method?: string
@@ -2088,16 +2107,18 @@ function recordResponseTrace(params: {
 }): void {
   const { url, method, startedAt, response, error } = params
   const headers = response?.header as Record<string, any> | undefined
+  const statusCode = response?.statusCode ?? 0
+  const errorMessage = extractRequestErrorMessage(error)
   recordRecentRequestTrace({
     method: String(method || 'GET').toUpperCase(),
     path: normalizeRequestPath(url),
-    statusCode: Number(response?.statusCode || 0),
+    statusCode,
     durationMs: Math.max(0, Date.now() - startedAt),
     startedAt: new Date(startedAt).toISOString(),
     traceId: extractTraceIdFromHeaders(headers),
     requestId: extractRequestIdFromHeaders(headers),
     hostName: extractHostNameFromHeaders(headers),
-    errorMessage: error instanceof Error ? error.message.slice(0, 160) : undefined,
+    errorMessage: errorMessage || (statusCode === 0 ? '未收到 HTTP 响应（可能网络失败或请求被中断）' : undefined),
   })
 }
 
@@ -2858,6 +2879,58 @@ export async function updateAnalysisTaskResult(taskId: string, result: AnalyzeRe
     throw new Error(msg)
   }
   return res.data as { message: string; task: AnalysisTask }
+}
+
+export type AnalysisFeedbackType =
+  | 'weight_mismatch'
+  | 'nutrition_mismatch'
+  | 'suspect_distrust'
+  | 'record_corrected'
+  | 'correction'
+  | 'failed'
+  | 'retry'
+  | 'manual_entry'
+
+export type AnalysisResolutionState = 'user_corrected' | 'still_distrust'
+
+export interface AnalysisFeedbackRequest {
+  feedback_type: AnalysisFeedbackType
+  resolution_state?: AnalysisResolutionState
+  source_task_id?: string
+  source_record_id?: string
+  before_result?: Record<string, unknown>
+  after_result?: Record<string, unknown>
+  user_correction_items?: Record<string, unknown>[]
+  payload_snapshot?: Record<string, unknown>
+  model_name?: string
+  analysis_engine?: string
+}
+
+/**
+ * 控制是否真正向后端发送 analysis_feedback_samples 埋点请求。
+ * 临时关闭开关：设为 false 即可禁用所有 feedback 网络请求，便于线上排障或灰度。
+ */
+export const ANALYSIS_FEEDBACK_SUBMISSION_ENABLED = false
+
+/**
+ * 提交分析反馈样本（前端埋点统一入口）
+ * POST /api/analyze/feedback
+ */
+export async function submitAnalysisFeedback(data: AnalysisFeedbackRequest): Promise<{ message: string }> {
+  if (!ANALYSIS_FEEDBACK_SUBMISSION_ENABLED) {
+    console.log('[Feedback] submission disabled', data)
+    return { message: 'feedback submission disabled' }
+  }
+  const res = await authenticatedRequest('/api/analyze/feedback', {
+    method: 'POST',
+    data,
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '提交反馈失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string }
 }
 
 /** 使用原任务已上传的图片或文字重新提交识别任务 */
@@ -4161,6 +4234,19 @@ export async function uploadUserAvatar(base64Image: string): Promise<{ imageUrl:
   return response.data as { imageUrl: string }
 }
 
+export async function uploadCoverImage(base64Image: string): Promise<{ imageUrl: string }> {
+  const response = await authenticatedRequest('/api/user/upload-cover', {
+    method: 'POST',
+    data: { base64Image },
+    timeout: 15000
+  })
+  if (response.statusCode !== 200) {
+    const msg = (response.data as any)?.detail || '上传背景图失败'
+    throw new Error(msg)
+  }
+  return response.data as { imageUrl: string }
+}
+
 /**
  * 获取用户记录天数统计
  * @returns Promise<{ record_days: number }>
@@ -5221,6 +5307,64 @@ export async function getFollowStats(userId: string): Promise<FollowStats> {
   return response.data as FollowStats
 }
 
+// ==================== 私信 ====================
+
+export interface PrivateMessage {
+  id: string
+  sender_id: string
+  receiver_id: string
+  content: string
+  image_url?: string
+  content_type: 'text' | 'image'
+  is_read: boolean
+  created_at: string
+}
+
+export interface ConversationSummary {
+  user_id: string
+  nickname: string
+  avatar: string
+  last_message: PrivateMessage
+  unread_count: number
+}
+
+/** 发送私信 */
+export async function sendPrivateMessage(receiverId: string, content: string, contentType: 'text' | 'image' = 'text', imageUrl?: string): Promise<PrivateMessage> {
+  const response = await authenticatedRequest('/api/messages/send', {
+    method: 'POST',
+    data: { receiver_id: receiverId, content, content_type: contentType, image_url: imageUrl }
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发送失败')
+  return response.data as PrivateMessage
+}
+
+/** 获取与某用户的聊天记录 */
+export async function getPrivateMessages(otherUserId: string, offset = 0, limit = 20): Promise<{ list: PrivateMessage[]; has_more: boolean }> {
+  const response = await authenticatedRequest(`/api/messages/conversation/${encodeURIComponent(otherUserId)}?offset=${offset}&limit=${limit}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取聊天记录失败')
+  return response.data as { list: PrivateMessage[]; has_more: boolean }
+}
+
+/** 获取会话列表 */
+export async function getConversations(): Promise<{ list: ConversationSummary[] }> {
+  const response = await authenticatedRequest('/api/messages/conversations', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取会话列表失败')
+  return response.data as { list: ConversationSummary[] }
+}
+
+/** 标记某人的消息为已读 */
+export async function markMessagesRead(senderId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/messages/read/${encodeURIComponent(senderId)}`, { method: 'PUT' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '标记已读失败')
+}
+
+/** 获取未读消息数 */
+export async function getUnreadMessageCount(): Promise<{ count: number }> {
+  const response = await authenticatedRequest('/api/messages/unread-count', { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取未读数失败')
+  return response.data as { count: number }
+}
+
 // ==================== 圈子 Feed ====================
 
 /** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */
@@ -5905,6 +6049,8 @@ export async function getPublicUserProfile(userId: string): Promise<{
   id: string
   nickname: string
   avatar: string
+  cover_image?: string
+  motto?: string
   record_days: number
   create_time?: string
 }> {
@@ -5912,7 +6058,7 @@ export async function getPublicUserProfile(userId: string): Promise<{
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取用户资料失败')
   }
-  return response.data as { id: string; nickname: string; avatar: string; record_days: number; create_time?: string }
+  return response.data as { id: string; nickname: string; avatar: string; cover_image?: string; record_days: number; create_time?: string }
 }
 
 /** 获取指定用户的公共食物库收藏 */
@@ -6181,11 +6327,14 @@ export async function getUserLocation(): Promise<LocationInfo> {
 
 export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
 
+export const FEEDBACK_MAX_IMAGES = 4
+
 export interface SubmitFeedbackRequest {
   category: FeedbackCategory
   content: string
   contact?: string
   attachRecentRequests?: boolean
+  imageUrls?: string[]
 }
 
 export interface SubmitFeedbackResponse {
@@ -6193,11 +6342,11 @@ export interface SubmitFeedbackResponse {
   message: string
 }
 
-function getClientInfo(): Record<string, unknown> {
+function getClientInfo(includeDiagnostics = false): Record<string, unknown> {
   try {
     const accountInfo = Taro.getAccountInfoSync?.()
     const systemInfo = Taro.getSystemInfoSync?.()
-    return {
+    const base: Record<string, unknown> = {
       app_version: readInjectedString(() => __APP_VERSION__, ''),
       env_version: accountInfo?.miniProgram?.envVersion,
       platform: systemInfo?.platform,
@@ -6205,9 +6354,54 @@ function getClientInfo(): Record<string, unknown> {
       model: systemInfo?.model,
       SDKVersion: systemInfo?.SDKVersion,
     }
+    if (includeDiagnostics) {
+      base.console_logs = getRecentConsoleLogs()
+    }
+    return base
   } catch {
-    return { app_version: readInjectedString(() => __APP_VERSION__, '') }
+    return {
+      app_version: readInjectedString(() => __APP_VERSION__, ''),
+      ...(includeDiagnostics ? { console_logs: getRecentConsoleLogs() } : {}),
+    }
   }
+}
+
+export async function uploadFeedbackImage(localPath: string): Promise<{ imageUrl: string }> {
+  const filePath = (localPath || '').trim()
+  if (!filePath) {
+    throw new Error('图片路径为空')
+  }
+
+  const token = getAccessToken()
+  const response = await new Promise<any>((resolve, reject) => {
+    Taro.uploadFile({
+      url: `${API_BASE_URL}/api/feedback/upload-image`,
+      filePath,
+      name: 'file',
+      header: withNgrokBypassHeaders({
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      }),
+      success: resolve,
+      fail: reject,
+    })
+  })
+
+  const parsedData = parseUploadAnalyzeResponseData(response?.data)
+  const payload = unwrapUploadAnalyzePayload(parsedData)
+  if (response?.statusCode !== 200) {
+    throwHttpErrorWithStatus(
+      Number(response?.statusCode || 0),
+      parsedData,
+      formatUploadAnalyzeHttpError(Number(response?.statusCode || 0), parsedData),
+      response?.header as Record<string, any> | undefined
+    )
+  }
+
+  const imageUrl = String(payload?.imageUrl || payload?.image_url || payload?.url || '').trim()
+  if (!imageUrl) {
+    throw new Error('上传图片失败：服务端未返回图片地址')
+  }
+  return { imageUrl }
 }
 
 export async function submitFeedback(input: SubmitFeedbackRequest): Promise<SubmitFeedbackResponse> {
@@ -6215,6 +6409,7 @@ export async function submitFeedback(input: SubmitFeedbackRequest): Promise<Subm
   if (!content) {
     throw new Error('请填写反馈内容')
   }
+  const imageUrls = (input.imageUrls || []).map((url) => url.trim()).filter(Boolean).slice(0, FEEDBACK_MAX_IMAGES)
   const response = await authenticatedRequest('/api/feedback', {
     method: 'POST',
     data: {
@@ -6223,8 +6418,9 @@ export async function submitFeedback(input: SubmitFeedbackRequest): Promise<Subm
       contact: input.contact?.trim() || undefined,
       page_path: getCurrentPagePath(),
       app_version: readInjectedString(() => __APP_VERSION__, ''),
-      client_info: getClientInfo(),
+      client_info: getClientInfo(input.attachRecentRequests !== false),
       recent_requests: input.attachRecentRequests === false ? [] : getRecentRequestTraces(),
+      image_urls: imageUrls,
     },
     timeout: 10000,
   })

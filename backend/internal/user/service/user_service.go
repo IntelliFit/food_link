@@ -61,9 +61,11 @@ func (s *UserService) GetProfile(ctx context.Context, userID string) (map[string
 type UpdateProfileInput struct {
 	Nickname      *string `json:"nickname"`
 	Avatar        *string `json:"avatar"`
+	CoverImage    *string `json:"cover_image"`
 	Telephone     *string `json:"telephone"`
 	Searchable    *bool   `json:"searchable"`
 	PublicRecords *bool   `json:"public_records"`
+	Motto         *string `json:"motto"`
 }
 
 func (s *UserService) UpdateProfile(ctx context.Context, userID string, input UpdateProfileInput) (map[string]any, error) {
@@ -74,6 +76,9 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	if input.Avatar != nil {
 		updates["avatar"] = s.resolveAvatarURL(*input.Avatar)
 	}
+	if input.CoverImage != nil {
+		updates["cover_image"] = s.resolveCoverImageURL(*input.CoverImage)
+	}
 	if input.Telephone != nil {
 		updates["telephone"] = *input.Telephone
 	}
@@ -82,6 +87,9 @@ func (s *UserService) UpdateProfile(ctx context.Context, userID string, input Up
 	}
 	if input.PublicRecords != nil {
 		updates["public_records"] = *input.PublicRecords
+	}
+	if input.Motto != nil {
+		updates["motto"] = *input.Motto
 	}
 	if len(updates) == 0 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "没有要更新的字段", HTTPStatus: 400}
@@ -447,8 +455,10 @@ func (s *UserService) GetPublicProfile(ctx context.Context, userID string) (map[
 		"id":           user.ID,
 		"nickname":     user.Nickname,
 		"avatar":       s.resolveAvatarURL(user.Avatar),
+		"cover_image":  s.resolveCoverImageURL(user.CoverImage),
 		"record_days":  recordDays,
 		"create_time":  user.CreatedAt,
+		"motto":        user.Motto,
 	}, nil
 }
 
@@ -483,10 +493,26 @@ func (s *UserService) DeleteAccount(ctx context.Context, userID string) error {
 func (s *UserService) buildProfileResponse(user *repo.User) map[string]any {
 	out := buildProfileResponseWithStorage(user, s.storage)
 	out["avatar"] = s.resolveAvatarURL(user.Avatar)
+	out["cover_image"] = s.resolveCoverImageURL(user.CoverImage)
 	return out
 }
 
 func (s *UserService) resolveAvatarURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return value
+	}
+	resolved := s.storage.ResolveReferenceURL("user-avatars", value)
+	if resolved == "" {
+		return value
+	}
+	return resolved
+}
+
+func (s *UserService) resolveCoverImageURL(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return ""
@@ -547,6 +573,7 @@ func buildProfileResponseWithStorage(user *repo.User, storageClient *storage.Cli
 		"mode_switch_count_30d": user.ModeSwitchCount30d,
 		"searchable":            user.Searchable,
 		"public_records":        user.PublicRecords,
+		"motto":                 user.Motto,
 	}
 }
 

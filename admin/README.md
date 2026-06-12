@@ -1,6 +1,13 @@
 # Food Link Admin
 
-Food Link 统一管理后台，独立于 Go 后端部署。
+Food Link 统一管理后台，独立于 Go 后端部署。当前覆盖总览、意见反馈、包装食品库、质量审计、测试后台与行为统计入口。
+
+## 技术栈
+
+- React 19 + Vite
+- shadcn/ui（Radix + Lucide 图标）
+- Tailwind CSS v4
+- Sonner（Toast 提示）
 
 ## 本地开发
 

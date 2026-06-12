@@ -5,11 +5,10 @@ import (
 	"strings"
 
 	"food_link/backend/pkg/config"
-	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/metrics"
 )
 
-func New(cfg config.TaskQueueConfig, log *logger.Logger) (Queue, error) {
+func New(cfg config.TaskQueueConfig) (Queue, error) {
 	driver := strings.ToLower(strings.TrimSpace(cfg.Driver))
 	if driver == "" {
 		driver = "memory"
@@ -19,13 +18,13 @@ func New(cfg config.TaskQueueConfig, log *logger.Logger) (Queue, error) {
 		metrics.SetTaskQueueInfo("memory", "memory", "memory")
 		metrics.SetTaskQueueComponentUp("memory", "publisher", true)
 		metrics.SetTaskQueueComponentUp("memory", "consumer", true)
-		return instrumentQueue("memory", NewMemoryQueue(cfg.BufferSize, log)), nil
+		return instrumentQueue("memory", NewMemoryQueue(cfg.BufferSize)), nil
 	case "kafka":
 		queue, err := NewKafkaQueue(KafkaConfig{
 			Brokers:       cfg.Brokers,
 			Topic:         cfg.Topic,
 			ConsumerGroup: cfg.ConsumerGroup,
-		}, log)
+		})
 		if err != nil {
 			metrics.SetTaskQueueComponentUp("kafka", "publisher", false)
 			metrics.SetTaskQueueComponentUp("kafka", "consumer", false)

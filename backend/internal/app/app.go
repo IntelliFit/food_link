@@ -37,6 +37,9 @@ import (
 	followhandler "food_link/backend/internal/follow/handler"
 	followrepo "food_link/backend/internal/follow/repo"
 	followservice "food_link/backend/internal/follow/service"
+	messagehandler "food_link/backend/internal/message/handler"
+	messagerepo "food_link/backend/internal/message/repo"
+	messageservice "food_link/backend/internal/message/service"
 	friendhandler "food_link/backend/internal/friend/handler"
 	friendrepo "food_link/backend/internal/friend/repo"
 	friendservice "food_link/backend/internal/friend/service"
@@ -91,7 +94,6 @@ import (
 type App struct {
 	engine        *gin.Engine
 	db            *gorm.DB
-	log           *logger.Logger
 	shutdownTrace func(context.Context) error
 	shutdownLog   logger.ShutdownFunc
 	workerCancel  context.CancelFunc
@@ -104,7 +106,6 @@ func New(cfg *config.Config) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	log := logger.L()
 	if cfg.App.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -124,7 +125,7 @@ func New(cfg *config.Config) (*App, error) {
 	// 初始化 IP 定位（离线 ip2region xdb）
 	ip2regionPath := filepath.Join(".", "data", "ip2region.xdb")
 	if err := location.Init(ip2regionPath); err != nil {
-		log.Warn("ip2region 初始化失败，IP 定位功能将不可用", logger.Err(err))
+		logger.Warn(context.Background(), "ip2region 初始化失败，IP 定位功能将不可用", logger.Err(err))
 	}
 
 	engine := gin.New()
@@ -137,7 +138,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.Use(commonmw.RequestID())
 
 	storageClient := storage.New(cfg.Storage)
-	taskQueue, err := taskqueue.New(cfg.TaskQueue, log)
+	taskQueue, err := taskqueue.New(cfg.TaskQueue)
 	if err != nil {
 		return nil, err
 	}
@@ -162,6 +163,11 @@ func New(cfg *config.Config) (*App, error) {
 	followRepo := followrepo.NewFollowRepo(db)
 	followSvc := followservice.NewFollowService(followRepo, storageClient)
 	followHandler := followhandler.NewFollowHandler(followSvc)
+
+	// Message module DI
+	messageRepo := messagerepo.NewMessageRepo(db)
+	messageSvc := messageservice.NewMessageService(messageRepo, storageClient)
+	messageHandler := messagehandler.NewMessageHandler(messageSvc)
 
 	userHandler := userhandler.NewUserHandler(userSvc, bindPhoneSvc, uploadSvc, ocrSvc, analysisTaskSvc, followSvc)
 
@@ -286,8 +292,9 @@ func New(cfg *config.Config) (*App, error) {
 	testBackendHandler := testbackendhandler.NewTestBackendHandler(testBackendSvc)
 
 	feedbackRepo := feedbackrepo.NewFeedbackRepo(db)
-	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo)
-	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc)
+	feedbackUploadSvc := feedbackservice.NewUploadService(storageClient)
+	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo, feedbackUploadSvc)
+	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc, feedbackUploadSvc)
 
 	commentHandler := communityhandler.NewCommentHandler(homeRepo, userRepo)
 	system := systemhandler.New()
@@ -295,7 +302,6 @@ func New(cfg *config.Config) (*App, error) {
 	app := &App{
 		engine:        engine,
 		db:            db,
-		log:           log,
 		shutdownTrace: traceShutdown,
 		shutdownLog:   logShutdown,
 		taskQueue:     taskQueue,
@@ -318,6 +324,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.PUT("/api/user/profile", authmw.RequireJWT(jwtSvc), userHandler.UpdateProfile)
 	engine.POST("/api/user/bind-phone", authmw.RequireJWT(jwtSvc), userHandler.BindPhone)
 	engine.POST("/api/user/upload-avatar", authmw.RequireJWT(jwtSvc), userHandler.UploadAvatar)
+	engine.POST("/api/user/upload-cover", authmw.RequireJWT(jwtSvc), userHandler.UploadCoverImage)
 	engine.GET("/api/user/dashboard-targets", authmw.RequireJWT(jwtSvc), userHandler.GetDashboardTargets)
 	engine.PUT("/api/user/dashboard-targets", authmw.RequireJWT(jwtSvc), userHandler.UpdateDashboardTargets)
 	engine.GET("/api/user/health-profile", authmw.RequireJWT(jwtSvc), userHandler.GetHealthProfile)
@@ -336,6 +343,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/user/account", authmw.RequireJWT(jwtSvc), userHandler.DeleteAccount)
 	engine.GET("/api/user/:user_id/public-profile", authmw.RequireJWT(jwtSvc), userHandler.GetPublicProfile)
 	engine.POST("/api/feedback", authmw.RequireJWT(jwtSvc), feedbackHandler.Submit)
+	engine.POST("/api/feedback/upload-image", authmw.RequireJWT(jwtSvc), feedbackHandler.UploadImage)
 
 	engine.GET("/api/home/dashboard", authmw.RequireJWT(jwtSvc), dashboardHandler.HomeDashboard)
 	engine.GET("/api/food-record/:record_id/poster-calorie-compare", authmw.RequireJWT(jwtSvc), dashboardHandler.PosterCalorieCompare)
@@ -357,6 +365,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.PATCH("/api/analyze/tasks/:task_id/result", authmw.RequireJWT(jwtSvc), analyzeHandler.UpdateTaskResult)
 	engine.DELETE("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.DeleteTask)
 	engine.POST("/api/analyze/tasks/cleanup-timeout", analyzeHandler.CleanupTimeoutTasks)
+	engine.POST("/api/analyze/feedback", authmw.RequireJWT(jwtSvc), analyzeHandler.SubmitFeedback)
 	engine.POST("/api/precision-sessions/:session_id/continue", authmw.RequireJWT(jwtSvc), analyzeHandler.ContinuePrecisionSession)
 
 	// FoodRecord routes
@@ -382,6 +391,13 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/user/:user_id/followers", authmw.RequireJWT(jwtSvc), followHandler.GetFollowers)
 	engine.GET("/api/user/:user_id/following", authmw.RequireJWT(jwtSvc), followHandler.GetFollowing)
 	engine.GET("/api/user/:user_id/follow-stats", authmw.RequireJWT(jwtSvc), followHandler.GetFollowStats)
+
+	// Message routes
+	engine.POST("/api/messages/send", authmw.RequireJWT(jwtSvc), messageHandler.Send)
+	engine.GET("/api/messages/conversation/:user_id", authmw.RequireJWT(jwtSvc), messageHandler.GetConversation)
+	engine.GET("/api/messages/conversations", authmw.RequireJWT(jwtSvc), messageHandler.GetConversations)
+	engine.PUT("/api/messages/read/:user_id", authmw.RequireJWT(jwtSvc), messageHandler.MarkRead)
+	engine.GET("/api/messages/unread-count", authmw.RequireJWT(jwtSvc), messageHandler.GetUnreadCount)
 
 	// Friend routes
 	engine.GET("/api/friend/search", authmw.RequireJWT(jwtSvc), friendHandler.Search)
@@ -558,7 +574,7 @@ func New(cfg *config.Config) (*App, error) {
 		}
 		registerSpecs(engine, specs, jwtSvc)
 	} else {
-		log.Warn("路由映射文件缺失，已跳过存根路由注册", slog.String("path", routeMapPath))
+		logger.Warn(context.Background(), "路由映射文件缺失，已跳过存根路由注册", slog.String("path", routeMapPath))
 	}
 
 	return app, nil
@@ -595,7 +611,7 @@ func (a *App) startEmbeddedWorker(
 	workerCount := cfg.Worker.Count
 	metrics.SetWorkerConfigured(cfg.TaskQueue.Driver, workerCount)
 	if workerCount <= 0 {
-		a.log.Info("内嵌 worker 已禁用", slog.Int("worker_count", workerCount))
+		logger.Info(context.Background(), "内嵌 worker 已禁用", slog.Int("worker_count", workerCount))
 		return
 	}
 
@@ -619,7 +635,6 @@ func (a *App) startEmbeddedWorker(
 		exerciseSvc,
 		nutritionSvc,
 		taskQueue,
-		a.log,
 		storageClient,
 	)
 	runner.ConfigureCreditGuard(membershipSvc)
@@ -629,7 +644,7 @@ func (a *App) startEmbeddedWorker(
 	a.workerCancel = cancel
 	a.workerDone = done
 
-	a.log.Info("内嵌 worker 已启用",
+	logger.Info(context.Background(), "内嵌 worker 已启用",
 		slog.String("worker_id", workerID),
 		slog.Any("task_types", taskTypes),
 		slog.String("task_queue_driver", cfg.TaskQueue.Driver),
@@ -649,7 +664,7 @@ func (a *App) startEmbeddedWorker(
 			if err == nil || err == context.Canceled || workerCtx.Err() != nil {
 				break
 			}
-			a.log.Error("内嵌 worker 异常停止，准备重启", logger.Err(err))
+			logger.Error(context.Background(), "内嵌 worker 异常停止，准备重启", err)
 			timer := time.NewTimer(2 * time.Second)
 			select {
 			case <-workerCtx.Done():
@@ -657,7 +672,7 @@ func (a *App) startEmbeddedWorker(
 			case <-timer.C:
 			}
 		}
-		a.log.Info("内嵌 worker 已停止")
+		logger.Info(context.Background(), "内嵌 worker 已停止")
 	}()
 }
 
@@ -679,7 +694,7 @@ func (a *App) Close(ctx context.Context) error {
 		select {
 		case <-a.workerDone:
 		case <-ctx.Done():
-			a.log.Warn("内嵌 worker 关闭超时", logger.Err(ctx.Err()))
+			logger.Warn(context.Background(), "内嵌 worker 关闭超时", logger.Err(ctx.Err()))
 		}
 	}
 	if a.taskQueue != nil {

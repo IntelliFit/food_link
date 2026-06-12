@@ -42,6 +42,8 @@ type User struct {
 	ReferredByUserID               *string        `gorm:"column:referred_by_user_id"`
 	PointsBalance                  *float64       `gorm:"column:points_balance"`
 	HealthDisclaimerAcknowledgedAt *time.Time     `gorm:"column:health_disclaimer_acknowledged_at"`
+	Motto                          string         `gorm:"column:motto"`
+	CoverImage                     string         `gorm:"column:cover_image"`
 }
 
 func (User) TableName() string { return "weapp_user" }

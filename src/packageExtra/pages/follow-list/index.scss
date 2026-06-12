@@ -9,19 +9,41 @@
   padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
 }
 
-.follow-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24rpx 32rpx;
-  position: relative;
-}
+.follow-list-page--dark {
+  background: linear-gradient(180deg,
+    rgb(92 184 150 / 6%) 0%,
+    rgb(92 184 150 / 2%) 35%,
+    #0d1312 65%,
+    #0d1312 100%
+  );
 
-.follow-list-title {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: #111827;
-  line-height: 48rpx;
+  .follow-item-nickname {
+    color: #f2f7f4;
+  }
+
+  .follow-list-item {
+    border-bottom-color: rgba(255, 255, 255, 0.06);
+  }
+
+  .follow-item-avatar {
+    background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.04) 100%);
+  }
+
+  .follow-item-btn--active {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .follow-item-btn--active .follow-item-btn-text {
+    color: #9ca3af;
+  }
+
+  .follow-list-empty-text {
+    color: #64748b;
+  }
+
+  .follow-list-spinner {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
 }
 
 .follow-list-empty {
@@ -55,6 +77,7 @@
   gap: 20rpx;
   flex: 1;
   min-width: 0;
+  overflow: hidden;
 
   &:active {
     opacity: 0.7;
@@ -99,11 +122,13 @@
   align-items: center;
   justify-content: center;
   min-height: 52rpx;
-  padding: 0 28rpx;
+  padding: 0 18rpx;
   border-radius: 999rpx;
   background: #00bc7d;
   border: 1rpx solid #00bc7d;
   flex-shrink: 0;
+  margin-left: 16rpx;
+  width: 130rpx;
 
   &:active {
     opacity: 0.8;
@@ -121,6 +146,7 @@
   line-height: 34rpx;
   color: #fff;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .follow-item-btn--active .follow-item-btn-text {

@@ -1,4 +1,8 @@
 import './perf-polyfill'
+import { installConsoleLogCapture } from './utils/console-log-buffer'
+
+installConsoleLogCapture()
+
 import { createElement, type PropsWithChildren } from 'react'
 import Taro, { useLaunch } from '@tarojs/taro'
 import { getAccessToken, acceptFriendInvite } from './utils/api'
@@ -51,6 +55,21 @@ function App({ children }: PropsWithChildren<any>) {
       }
     })()
     const params = new URLSearchParams(decodedScene)
+
+    // pf=profile follow（个人主页分享扫码关注），与 fi=friend invite（好友邀请）独立
+    const profileFollowCode = (params.get('pf') || '').trim()
+    if (profileFollowCode) {
+      try {
+        Taro.setStorageSync('auto_follow', profileFollowCode)
+      } catch {
+        // ignore storage errors
+      }
+      Taro.navigateTo({
+        url: `${extraPkgUrl('/pages/profile-settings/index')}?auto_follow=1`,
+      })
+      return
+    }
+
     const inviteCodeFromScene = (params.get('fi') || '').trim()
     const inviteCodeFromQuery = String((options as any)?.query?.fi || '').trim()
     const inviteCode = inviteCodeFromScene || inviteCodeFromQuery

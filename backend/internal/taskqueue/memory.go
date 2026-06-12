@@ -3,7 +3,6 @@ package taskqueue
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 
@@ -15,20 +14,15 @@ type MemoryQueue struct {
 	messages chan TaskMessage
 	done     chan struct{}
 	once     sync.Once
-	log      *logger.Logger
 }
 
-func NewMemoryQueue(bufferSize int, log *logger.Logger) *MemoryQueue {
+func NewMemoryQueue(bufferSize int) *MemoryQueue {
 	if bufferSize <= 0 {
 		bufferSize = 1024
-	}
-	if log == nil {
-		log = logger.L()
 	}
 	queue := &MemoryQueue{
 		messages: make(chan TaskMessage, bufferSize),
 		done:     make(chan struct{}),
-		log:      log,
 	}
 	metrics.SetTaskQueueDepth("memory", "default", 0)
 	return queue
@@ -72,9 +66,9 @@ func (q *MemoryQueue) Subscribe(ctx context.Context, opts SubscribeOptions) (<-c
 			case msg := <-q.messages:
 				metrics.SetTaskQueueDepth("memory", "default", len(q.messages))
 				if len(allowed) > 0 && !allowed[msg.TaskType] {
-					q.log.Warn("任务队列消息因任务类型未订阅而跳过",
-						slog.String("task_id", msg.TaskID),
-						slog.String("task_type", msg.TaskType),
+					logger.Warn(ctx, "任务队列消息因任务类型未订阅而跳过",
+						logger.AnalysisTaskID(msg.TaskID),
+						logger.TaskType(msg.TaskType),
 					)
 					continue
 				}

@@ -16,6 +16,8 @@ import {
   submitAnalyzeTask,
   submitTextAnalyzeTask,
   continuePrecisionSession,
+  submitAnalysisFeedback,
+  ANALYSIS_FEEDBACK_SUBMISSION_ENABLED,
   type ExecutionMode,
   type AnalysisEngine,
   type AnalyzeRecognitionOutcome,
@@ -26,6 +28,8 @@ import {
   type CreatePackagedFoodRequest,
   type PrecisionReferencePresetConfig,
   type PrecisionReferencePresetKey,
+  type AnalysisFeedbackType,
+  type AnalysisResolutionState,
   showUnifiedApiError,
 } from '../../../utils/api'
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
@@ -72,6 +76,8 @@ const ANALYSIS_ENGINE_STORAGE_KEY = 'analyzeAnalysisEngine'
 const SUGGEST_RATIO_STORAGE_KEY = 'analyzeSuggestRatioEnabled'
 const CORRECTION_SUBMIT_DEBOUNCE_MS = 300
 const MAX_ANALYZE_IMAGES = 3
+/** 用户在分析结果页停留超过此时间且未调整摄入比例，则视为疑似不信任识别结果 */
+const SUSPECT_DISTRUST_TIMEOUT_MS = 15000
 /** 判断当前识别会话是否已保存为饮食记录。
  * 优先读取 analyze-history 列表传入的 analyzeTaskIsRecorded 标记；
  * 不再依赖本地 analyze_committed_session 缓存，状态由后端返回。 */
@@ -528,6 +534,14 @@ function ResultPage() {
   const [imagePath, setImagePath] = useState<string>('') // Keep for compatibility/fallback logic
   const [totalWeight, setTotalWeight] = useState(0)
   const [nutritionItems, setNutritionItems] = useState<NutritionItem[]>([])
+  const originalItemsRef = useRef<NutritionItem[]>([])
+  const weightAdjustedRef = useRef(false)
+  const nutritionAdjustedRef = useRef(false)
+  const ratioAdjustedRef = useRef(false)
+  const suspectDistrustTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const submittedFeedbackRef = useRef<Set<string>>(new Set())
+  const devFeedbackLogsRef = useRef<Array<{ type: AnalysisFeedbackType; state: AnalysisResolutionState; at: number; ok: boolean; disabled?: boolean; err?: string; sourceTaskId?: string; sourceRecordId?: string }>>([])
+  const [devFeedbackPanelOpen, setDevFeedbackPanelOpen] = useState(false)
   const [expandedNutritionDetailIds, setExpandedNutritionDetailIds] = useState<Record<number, boolean>>({})
   const [nutritionStats, setNutritionStats] = useState({
     calories: 0,
@@ -617,6 +631,7 @@ function ResultPage() {
       if (resultScrollRafRef.current != null) {
         cancelAnimationFrame(resultScrollRafRef.current)
       }
+      clearSuspectDistrustTimer()
       // 页面卸载时清除识别记录导航标记，避免影响其他入口
       try {
         Taro.removeStorageSync('analyzeTaskIsRecorded')
@@ -755,7 +770,11 @@ function ResultPage() {
     const items = convertApiFoodItemsToNutritionItems(result.items || [])
     setNutritionItems(items)
     setCorrectionItems(items)
+    originalItemsRef.current = JSON.parse(JSON.stringify(items))
     calculateNutritionStats(items)
+
+    // 启动“疑似不信任”停留检测：15 秒内未调整摄入比例则上报
+    startSuspectDistrustTimer()
 
     Taro.setStorageSync('analyzeResult', JSON.stringify(result))
     if (nextTaskId) {
@@ -767,6 +786,73 @@ function ResultPage() {
       setCommittedRecordId(null)
     }
   }
+
+  const clearSuspectDistrustTimer = useCallback(() => {
+    if (suspectDistrustTimerRef.current) {
+      clearTimeout(suspectDistrustTimerRef.current)
+      suspectDistrustTimerRef.current = null
+    }
+  }, [])
+
+  const submitFeedbackDeduped = useCallback(async (
+    feedbackType: AnalysisFeedbackType,
+    resolutionState: AnalysisResolutionState,
+    extra?: { sourceTaskId?: string; sourceRecordId?: string; beforeResult?: Record<string, unknown>; afterResult?: Record<string, unknown> }
+  ) => {
+    const sourceTaskId = extra?.sourceTaskId || String(Taro.getStorageSync('analyzeSourceTaskId') || '')
+    const sourceRecordId = extra?.sourceRecordId || ''
+    if (!sourceTaskId && !sourceRecordId) return
+    const key = `${sourceTaskId}:${sourceRecordId}:${feedbackType}`
+    if (submittedFeedbackRef.current.has(key)) return
+    submittedFeedbackRef.current.add(key)
+    try {
+      const res = await submitAnalysisFeedback({
+        feedback_type: feedbackType,
+        resolution_state: resolutionState,
+        source_task_id: sourceTaskId || undefined,
+        source_record_id: sourceRecordId || undefined,
+        before_result: extra?.beforeResult,
+        after_result: extra?.afterResult,
+      })
+      if (__ENABLE_DEV_DEBUG_UI__) {
+        const disabled = res.message === 'feedback submission disabled'
+        devFeedbackLogsRef.current.unshift({
+          type: feedbackType,
+          state: resolutionState,
+          at: Date.now(),
+          ok: true,
+          disabled,
+          sourceTaskId,
+          sourceRecordId: extra?.sourceRecordId,
+        })
+        Taro.showToast({ title: disabled ? `[dev] feedback 已禁用: ${feedbackType}` : `[dev] feedback: ${feedbackType}`, icon: 'none' })
+      }
+    } catch (e) {
+      // 埋点失败不阻塞主流程
+      console.error('[Feedback]', e)
+      if (__ENABLE_DEV_DEBUG_UI__) {
+        devFeedbackLogsRef.current.unshift({
+          type: feedbackType,
+          state: resolutionState,
+          at: Date.now(),
+          ok: false,
+          err: e instanceof Error ? e.message : String(e),
+          sourceTaskId,
+          sourceRecordId: extra?.sourceRecordId,
+        })
+        Taro.showToast({ title: `[dev] feedback 失败: ${feedbackType}`, icon: 'none' })
+      }
+    }
+  }, [])
+
+  const startSuspectDistrustTimer = useCallback(() => {
+    clearSuspectDistrustTimer()
+    suspectDistrustTimerRef.current = setTimeout(() => {
+      if (!ratioAdjustedRef.current) {
+        void submitFeedbackDeduped('suspect_distrust', 'still_distrust')
+      }
+    }, SUSPECT_DISTRUST_TIMEOUT_MS)
+  }, [clearSuspectDistrustTimer, submitFeedbackDeduped])
 
   const hydrateCommittedRecord = useCallback(() => {
     // 状态由 analyze-history 列表传入的 analyzeTaskIsRecorded 标记决定，
@@ -1140,6 +1226,7 @@ function ResultPage() {
 
   // 调节食物估算重量（+- 按钮）
   const handleWeightAdjust = (id: number, delta: number) => {
+    weightAdjustedRef.current = true
     setNutritionItems(items => {
       const updatedItems = items.map(item => {
         if (item.id === id) {
@@ -1196,6 +1283,7 @@ function ResultPage() {
     field: IngredientMetricField,
     nextValue: number | ((currentValue: number) => number)
   ) => {
+    nutritionAdjustedRef.current = true
     setNutritionItems(items => {
       const updatedItems = items.map(item => {
         if (item.id !== id) return item
@@ -1282,6 +1370,8 @@ function ResultPage() {
 
   // 调节摄入比例（滑块或其他控件）
   const handleRatioAdjust = (id: number, newRatio: number) => {
+    ratioAdjustedRef.current = true
+    clearSuspectDistrustTimer()
     setNutritionItems(items => {
       const updatedItems = items.map(item => {
         if (item.id === id) {
@@ -1308,6 +1398,8 @@ function ResultPage() {
 
   // 快捷比例：按聚餐人数统一设置所有食物的摄入比例
   const handleQuickRatio = (people: number) => {
+    ratioAdjustedRef.current = true
+    clearSuspectDistrustTimer()
     const ratio = Math.max(1, Math.min(100, Math.round(100 / people)))
     setNutritionItems(items => {
       const updatedItems = items.map(item => ({
@@ -1446,6 +1538,7 @@ function ResultPage() {
 
   const handleSaveFoodEditDraft = () => {
     if (!foodEditDraft) return
+    nutritionAdjustedRef.current = true
     const name = foodEditDraft.name.trim()
     const weight = parseFoodEditNumber(foodEditDraft.weight)
     const calories = parseFoodEditNumber(foodEditDraft.calories)
@@ -1668,6 +1761,15 @@ function ResultPage() {
       if (isAnalyzeSessionCommitted()) {
         Taro.showToast({ title: '该餐已记录', icon: 'none' })
         return
+      }
+      // 保存前根据用户编辑行为提交对应的反馈样本
+      clearSuspectDistrustTimer()
+      const hasWeightChangeOnly = weightAdjustedRef.current && !nutritionAdjustedRef.current && !ratioAdjustedRef.current
+      const hasNutritionChange = nutritionAdjustedRef.current
+      if (hasWeightChangeOnly) {
+        void submitFeedbackDeduped('weight_mismatch', 'still_distrust')
+      } else if (hasNutritionChange) {
+        void submitFeedbackDeduped('nutrition_mismatch', 'still_distrust')
       }
       setSaving(true)
       try {
@@ -3128,6 +3230,81 @@ function ResultPage() {
               </View>
             </View>
           </View>
+        </View>
+      )}
+
+      {/* 开发者模式：反馈打点调试面板，仅在真正发请求时展示 */}
+      {__ENABLE_DEV_DEBUG_UI__ && ANALYSIS_FEEDBACK_SUBMISSION_ENABLED && (
+        <View
+          className='feedback-dev-panel'
+          style={{
+            position: 'fixed',
+            right: devFeedbackPanelOpen ? '0' : '24rpx',
+            bottom: '180rpx',
+            zIndex: 9999,
+            maxWidth: devFeedbackPanelOpen ? '560rpx' : 'auto',
+            background: scheme === 'dark' ? 'rgba(30,41,37,0.95)' : 'rgba(255,255,255,0.95)',
+            borderRadius: devFeedbackPanelOpen ? '16rpx 0 0 16rpx' : '999rpx',
+            boxShadow: '0 4rpx 24rpx rgba(0,0,0,0.15)',
+            border: `1rpx solid ${scheme === 'dark' ? '#2d3935' : '#e5e7eb'}`,
+            padding: devFeedbackPanelOpen ? '16rpx' : '12rpx 20rpx',
+          }}
+          onClick={() => {
+            if (!devFeedbackPanelOpen) setDevFeedbackPanelOpen(true)
+          }}
+        >
+          {!devFeedbackPanelOpen ? (
+            <Text style={{ fontSize: '22rpx', color: '#00bc7d', fontWeight: 600 }}>
+              反馈 {devFeedbackLogsRef.current.length}
+            </Text>
+          ) : (
+            <View style={{ width: '100%' }}>
+              <View style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12rpx' }}>
+                <Text style={{ fontSize: '24rpx', fontWeight: 600, color: scheme === 'dark' ? '#e8f3ef' : '#111827' }}>
+                  Feedback 调试日志
+                </Text>
+                <Text
+                  style={{ fontSize: '22rpx', color: '#6b7280', padding: '4rpx 12rpx' }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setDevFeedbackPanelOpen(false)
+                  }}
+                >
+                  收起
+                </Text>
+              </View>
+              {devFeedbackLogsRef.current.length === 0 ? (
+                <Text style={{ fontSize: '22rpx', color: '#6b7280' }}>暂无反馈记录</Text>
+              ) : (
+                devFeedbackLogsRef.current.map((log, idx) => (
+                  <View
+                    key={idx}
+                    style={{
+                      marginBottom: '10rpx',
+                      padding: '10rpx',
+                      borderRadius: '8rpx',
+                      background: scheme === 'dark' ? '#25302c' : '#f3f4f6',
+                    }}
+                  >
+                    <View style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Text style={{ fontSize: '22rpx', color: log.disabled ? '#f59e0b' : log.ok ? '#00bc7d' : '#ef4444', fontWeight: 600 }}>
+                        {log.type}{log.disabled ? ' [已禁用]' : ''}
+                      </Text>
+                      <Text style={{ fontSize: '20rpx', color: '#6b7280' }}>
+                        {new Date(log.at).toLocaleTimeString()}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: '20rpx', color: '#6b7280', marginTop: '4rpx' }}>
+                      state={log.state} · task={log.sourceTaskId?.slice(0, 8) || '-'} · record={log.sourceRecordId?.slice(0, 8) || '-'}
+                    </Text>
+                    {!log.ok && log.err && (
+                      <Text style={{ fontSize: '20rpx', color: '#ef4444', marginTop: '4rpx' }}>{log.err}</Text>
+                    )}
+                  </View>
+                ))
+              )}
+            </View>
+          )}
         </View>
       )}
     </View>

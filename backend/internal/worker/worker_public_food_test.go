@@ -13,7 +13,6 @@ import (
 	publicfoodrepo "food_link/backend/internal/publicfood/repo"
 	publicfoodservice "food_link/backend/internal/publicfood/service"
 	"food_link/backend/internal/taskqueue"
-	"food_link/backend/pkg/logger"
 
 	"github.com/stretchr/testify/require"
 	gormsqlite "gorm.io/driver/sqlite"
@@ -119,7 +118,7 @@ func TestWorkerProcessFoodWritesBackCampusPublicFood(t *testing.T) {
 			},
 		},
 	}}
-	runner := &Runner{tasks: taskRepo, publicFood: publicFood, analyze: analyze, log: logger.L()}
+	runner := &Runner{tasks: taskRepo, publicFood: publicFood, analyze: analyze}
 
 	require.NoError(t, runner.processFood(context.Background(), task))
 
@@ -205,7 +204,7 @@ func TestCampusPublicFoodSubmitWaitsForWorkerCaloriesRecognition(t *testing.T) {
 			},
 		},
 	}))
-	runner := &Runner{tasks: taskRepo, precision: precisionRepo, publicFood: publicFood, analyze: &fakeWorkerAnalyzeRunner{}, log: logger.L()}
+	runner := &Runner{tasks: taskRepo, precision: precisionRepo, publicFood: publicFood, analyze: &fakeWorkerAnalyzeRunner{}}
 	go func() {
 		_ = runner.processPrecisionAggregate(context.Background(), aggregateTask)
 	}()
@@ -295,7 +294,6 @@ func TestWorkerProcessPrecisionPlanRelinksCampusPublicFoodToAggregateTask(t *tes
 				map[string]any{"item_key": "beef", "item_name": "牛肉", "item_hint": "只估计牛肉", "requires_reference": false, "uncertainty_level": "medium"},
 			},
 		}},
-		log: logger.L(),
 	}
 
 	require.NoError(t, runner.processPrecisionPlan(ctx, planTask))
@@ -373,7 +371,7 @@ func TestWorkerProcessPrecisionAggregateWritesBackCampusPublicFood(t *testing.T)
 	}
 	require.NoError(t, taskRepo.CreateTask(ctx, task))
 	require.NoError(t, publicFood.LinkAnalysisTask(ctx, item.ID, task.ID))
-	runner := &Runner{tasks: taskRepo, precision: precisionRepo, publicFood: publicFood, analyze: &fakeWorkerAnalyzeRunner{}, log: logger.L()}
+	runner := &Runner{tasks: taskRepo, precision: precisionRepo, publicFood: publicFood, analyze: &fakeWorkerAnalyzeRunner{}}
 
 	require.NoError(t, runner.processPrecisionAggregate(ctx, task))
 

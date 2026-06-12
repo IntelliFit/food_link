@@ -55,17 +55,14 @@ func requestAttrs(c *gin.Context) []slog.Attr {
 }
 
 func Error(c *gin.Context, err error) {
-	log := logger.L()
 	var appErr *commonerrors.AppError
 	if errors.As(err, &appErr) {
-		if log != nil {
-			attrs := append([]slog.Attr{
-				slog.Int("http_status", appErr.HTTPStatus),
-				slog.Int("code", appErr.Code),
-				slog.String("message", appErr.Message),
-			}, requestAttrs(c)...)
-			log.WarnContext(c.Request.Context(), "应用错误", attrs...)
-		}
+		attrs := append([]slog.Attr{
+			slog.Int("http_status", appErr.HTTPStatus),
+			slog.Int("code", appErr.Code),
+			slog.String("message", appErr.Message),
+		}, requestAttrs(c)...)
+		logger.Warn(c.Request.Context(), "应用错误", attrs...)
 		c.JSON(appErr.HTTPStatus, gin.H{
 			"code":    appErr.Code,
 			"message": appErr.Message,
@@ -75,13 +72,11 @@ func Error(c *gin.Context, err error) {
 
 	var ginErr *gin.Error
 	if errors.As(err, &ginErr) {
-		if log != nil {
-			attrs := append([]slog.Attr{
-				slog.Int("code", 400),
-				slog.String("message", err.Error()),
-			}, requestAttrs(c)...)
-			log.WarnContext(c.Request.Context(), "Gin 参数绑定错误", attrs...)
-		}
+		attrs := append([]slog.Attr{
+			slog.Int("code", 400),
+			slog.String("message", err.Error()),
+		}, requestAttrs(c)...)
+		logger.Warn(c.Request.Context(), "Gin 参数绑定错误", attrs...)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": err.Error(),
@@ -91,13 +86,11 @@ func Error(c *gin.Context, err error) {
 
 	var jsonErr *json.SyntaxError
 	if errors.As(err, &jsonErr) {
-		if log != nil {
-			attrs := append([]slog.Attr{
-				slog.Int("code", 400),
-				slog.String("message", err.Error()),
-			}, requestAttrs(c)...)
-			log.WarnContext(c.Request.Context(), "JSON 解析错误", attrs...)
-		}
+		attrs := append([]slog.Attr{
+			slog.Int("code", 400),
+			slog.String("message", err.Error()),
+		}, requestAttrs(c)...)
+		logger.Warn(c.Request.Context(), "JSON 解析错误", attrs...)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": err.Error(),
@@ -107,13 +100,11 @@ func Error(c *gin.Context, err error) {
 
 	var valErr validator.ValidationErrors
 	if errors.As(err, &valErr) {
-		if log != nil {
-			attrs := append([]slog.Attr{
-				slog.Int("code", 400),
-				slog.String("message", err.Error()),
-			}, requestAttrs(c)...)
-			log.WarnContext(c.Request.Context(), "参数校验错误", attrs...)
-		}
+		attrs := append([]slog.Attr{
+			slog.Int("code", 400),
+			slog.String("message", err.Error()),
+		}, requestAttrs(c)...)
+		logger.Warn(c.Request.Context(), "参数校验错误", attrs...)
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": err.Error(),
@@ -121,10 +112,8 @@ func Error(c *gin.Context, err error) {
 		return
 	}
 
-	if log != nil {
-		attrs := append([]slog.Attr{logger.Err(err)}, requestAttrs(c)...)
-		log.ErrorContext(c.Request.Context(), "未处理错误", attrs...)
-	}
+	attrs := requestAttrs(c)
+	logger.Error(c.Request.Context(), "未处理错误", err, attrs...)
 	c.JSON(http.StatusInternalServerError, gin.H{
 		"code":    commonerrors.ErrInternal.Code,
 		"message": commonerrors.ErrInternal.Message,

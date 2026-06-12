@@ -1,9 +1,10 @@
-import { View, Text, Image, Button, Input } from '@tarojs/components'
+import { View, Text, Image, Button, Input, Canvas } from '@tarojs/components'
 import { useState, useEffect, useCallback } from 'react'
 import Taro, { useRouter, useReachBottom } from '@tarojs/taro'
 import {
   updateUserInfo,
   uploadUserAvatar,
+  uploadCoverImage,
   imageToBase64,
   showUnifiedApiError,
   clearAllStorage,
@@ -19,11 +20,23 @@ import {
   followUser,
   unfollowUser,
   getFollowStats,
+  resolveFriendInvite,
   type PublicFoodLibraryItem,
   type UserRecipe,
   type CommunityFeedItem,
   type FollowStats,
 } from '../../../utils/api'
+import drawQrcode from 'weapp-qrcode-canvas-2d'
+import {
+  drawProfilePoster,
+  computeProfilePosterHeight,
+  POSTER_WIDTH,
+  loadCanvasImage,
+} from '../../../utils/poster'
+import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
+import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
+import { ensureWeappPrivacyAuthorized, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
@@ -66,9 +79,9 @@ export default function ProfileSettingsPage() {
   const router = useRouter()
 
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
-  const targetUserId = String(router.params.user_id || '').trim()
-  const isOwner = !targetUserId || targetUserId === currentUserId
-  const resolvedUserId = isOwner ? currentUserId : targetUserId
+
+  const [isOwner, setIsOwner] = useState(true)
+  const [resolvedUserId, setResolvedUserId] = useState(currentUserId)
 
   // 用户信息
   const [tempAvatar, setTempAvatar] = useState('')
@@ -82,11 +95,22 @@ export default function ProfileSettingsPage() {
   const [followLoading, setFollowLoading] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
 
+  // 分享海报
+  const [posterGenerating, setPosterGenerating] = useState(false)
+
   // 编辑弹窗
   const [showEditSheet, setShowEditSheet] = useState(false)
   const [editNickname, setEditNickname] = useState('')
   const [editAvatar, setEditAvatar] = useState('')
+  const [editCoverImage, setEditCoverImage] = useState('')
+  const [editMotto, setEditMotto] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // 座右铭
+  const [motto, setMotto] = useState('')
+
+  // 背景图
+  const [coverImage, setCoverImage] = useState('')
 
   // Tab
   const [activeTab, setActiveTab] = useState<TabKey>('feed')
@@ -105,7 +129,38 @@ export default function ProfileSettingsPage() {
     applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
   }, [scheme])
 
+  // 初始化：解析 URL 参数和 auto_follow 场景
   useEffect(() => {
+    const init = async () => {
+      const targetUserId = String(router.params.user_id || '').trim()
+      const autoFollowFlag = router.params.auto_follow || router.params.pf
+
+      if (autoFollowFlag && !targetUserId) {
+        const code = Taro.getStorageSync('auto_follow') || Taro.getStorageSync('pending_profile_follow_code')
+        if (code) {
+          try {
+            const invite = await resolveFriendInvite(code)
+            if (invite?.user_id) {
+              setResolvedUserId(invite.user_id)
+              setIsOwner(false)
+              return
+            }
+          } catch {
+            // 解析失败，回退到默认
+          }
+        }
+      }
+
+      const owner = !targetUserId || targetUserId === currentUserId
+      setIsOwner(owner)
+      setResolvedUserId(owner ? currentUserId : targetUserId)
+    }
+    init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!resolvedUserId) return
     loadUserData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOwner, resolvedUserId])
@@ -129,12 +184,18 @@ export default function ProfileSettingsPage() {
         const avatar = profile?.avatar || ''
         const nickname = profile?.nickname || '用户昵称'
         const uid = String(profile?.id || currentUserId).trim()
+        const cover = profile?.cover_image || ''
+        const userMotto = profile?.motto || ''
         setTempAvatar(avatar)
         setTempNickname(nickname)
         setEditAvatar(avatar)
         setEditNickname(nickname)
+        setEditCoverImage(cover)
+        setEditMotto(userMotto)
         setUserId(uid)
         setRecordDays(recordDaysRes.record_days || 0)
+        setCoverImage(cover)
+        setMotto(userMotto)
         setFoodCollections(foodColls.list || [])
         setRecipeCollections(recipeColls.recipes || [])
         setFavoriteCount(recipeColls.recipes?.length || 0)
@@ -150,12 +211,17 @@ export default function ProfileSettingsPage() {
         ])
         const avatar = publicProfile?.avatar || ''
         const nickname = publicProfile?.nickname || '用户'
+        const cover = publicProfile?.cover_image || ''
+        const userMotto = publicProfile?.motto || ''
         setTempAvatar(avatar)
         setTempNickname(nickname)
         setEditAvatar(avatar)
         setEditNickname(nickname)
+        setEditCoverImage(cover)
         setUserId(publicProfile?.id || resolvedUserId)
         setRecordDays(publicProfile?.record_days || 0)
+        setCoverImage(cover)
+        setMotto(userMotto)
         setFoodCollections(foodColls.list || [])
         setRecipeCollections(recipeColls.recipes || [])
         setFavoriteCount(recipeColls.recipes?.length || 0)
@@ -197,12 +263,38 @@ export default function ProfileSettingsPage() {
   }
 
   const handleGoFollowers = () => {
-    Taro.navigateTo({ url: `/pages/follow-list/index?type=followers&user_id=${encodeURIComponent(resolvedUserId)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/follow-list/index')}?type=followers&user_id=${encodeURIComponent(resolvedUserId)}` })
   }
 
   const handleGoFollowing = () => {
-    Taro.navigateTo({ url: `/pages/follow-list/index?type=following&user_id=${encodeURIComponent(resolvedUserId)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/follow-list/index')}?type=following&user_id=${encodeURIComponent(resolvedUserId)}` })
   }
+
+  const handleGoPrivateChat = () => {
+    if (!resolvedUserId) return
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/private-chat/index')}?user_id=${encodeURIComponent(resolvedUserId)}` })
+  }
+
+  // 自动关注（邀请码场景）
+  useEffect(() => {
+    const autoFollow = async () => {
+      const inviteCode = Taro.getStorageSync('auto_follow')
+      if (!inviteCode || !resolvedUserId) return
+      try {
+        const invite = await resolveFriendInvite(inviteCode)
+        if (invite?.user_id === resolvedUserId) {
+          await followUser(resolvedUserId)
+          setIsFollowing(true)
+          setFollowersCount(prev => prev + 1)
+        }
+      } catch {
+        /* 静默处理 */
+      } finally {
+        Taro.removeStorageSync('auto_follow')
+      }
+    }
+    autoFollow()
+  }, [resolvedUserId])
 
   // 加载动态
   const loadFeed = async (reset = false) => {
@@ -258,6 +350,8 @@ export default function ProfileSettingsPage() {
     if (!isOwner) return
     setEditAvatar(tempAvatar)
     setEditNickname(tempNickname)
+    setEditCoverImage(coverImage)
+    setEditMotto(motto)
     setShowEditSheet(true)
   }
 
@@ -281,6 +375,29 @@ export default function ProfileSettingsPage() {
     }
   }
 
+  // 选择背景图
+  const handleChooseCoverImage = async () => {
+    try {
+      const res = await Taro.chooseMedia({
+        count: 1,
+        mediaType: ['image'],
+        sourceType: ['album', 'camera'],
+        sizeType: ['compressed'],
+      })
+      const tempFile = res.tempFiles?.[0]?.tempFilePath
+      if (!tempFile) return
+      Taro.showLoading({ title: '上传中...' })
+      const base64 = await imageToBase64(tempFile)
+      const { imageUrl } = await uploadCoverImage(base64)
+      setEditCoverImage(imageUrl)
+      Taro.hideLoading()
+    } catch (err: any) {
+      Taro.hideLoading()
+      if (err?.errMsg?.includes('cancel')) return
+      await showUnifiedApiError(err, '上传背景图失败')
+    }
+  }
+
   // 保存编辑
   const handleSaveEdit = async () => {
     if (!editAvatar || !editNickname) {
@@ -290,12 +407,14 @@ export default function ProfileSettingsPage() {
     setSaving(true)
     Taro.showLoading({ title: '保存中...' })
     try {
-      await updateUserInfo({ nickname: editNickname, avatar: editAvatar })
+      await updateUserInfo({ nickname: editNickname, avatar: editAvatar, cover_image: editCoverImage, motto: editMotto })
       const stored = Taro.getStorageSync('userInfo')
       const newUserInfo = { avatar: editAvatar, name: editNickname, meta: stored?.meta || '', id: userId || currentUserId }
       Taro.setStorageSync('userInfo', newUserInfo)
       setTempAvatar(editAvatar)
       setTempNickname(editNickname)
+      setCoverImage(editCoverImage)
+      setMotto(editMotto)
       Taro.hideLoading()
       Taro.showToast({ title: '保存成功', icon: 'success' })
       setShowEditSheet(false)
@@ -327,6 +446,141 @@ export default function ProfileSettingsPage() {
     } catch (error) {
       Taro.hideLoading()
       await showUnifiedApiError(error, '注销失败')
+    }
+  }
+
+  // 扫码
+  const handleScanQRCode = async () => {
+    try {
+      await ensureWeappPrivacyAuthorized()
+      const res = await Taro.scanCode({
+        onlyFromCamera: true,
+        scanType: ['qrCode'],
+      })
+      const result = res.result || ''
+      // 支持格式：pf=xxx 或直接 UUID
+      const match = result.match(/pf=([a-f0-9-]+)/i) || result.match(/^([a-f0-9-]{36})$/i)
+      if (match && match[1]) {
+        const targetUserId = match[1]
+        Taro.navigateTo({
+          url: `${extraPkgUrl('/pages/profile-settings/index')}?user_id=${encodeURIComponent(targetUserId)}`,
+        })
+      } else {
+        Taro.showToast({ title: '无效的二维码', icon: 'none' })
+      }
+    } catch (err: any) {
+      if (err?.errMsg?.includes('cancel')) return
+      if (isPrivacyAuthorizeError(err)) {
+        showPrivacyAuthorizeFailure(err)
+        return
+      }
+      Taro.showToast({ title: '扫码失败', icon: 'none' })
+    }
+  }
+
+  // 分享海报
+  const handleShareProfile = async () => {
+    if (posterGenerating) return
+    setPosterGenerating(true)
+    Taro.showLoading({ title: '生成中...' })
+    try {
+      const qrSize = 200
+      // 获取二维码 Canvas 节点并绘制普通二维码
+      const qrCanvasNode = await new Promise<HTMLCanvasElement>((resolve, reject) => {
+        const query = Taro.createSelectorQuery()
+        query.select('#qr-gen-canvas')
+          .fields({ node: true, size: true })
+          .exec((res) => {
+            if (res?.[0]?.node) resolve(res[0].node)
+            else reject(new Error('二维码 canvas 节点获取失败'))
+          })
+      })
+      qrCanvasNode.width = qrSize
+      qrCanvasNode.height = qrSize
+      drawQrcode({
+        canvas: qrCanvasNode,
+        canvasId: 'qr-gen-canvas',
+        width: qrSize,
+        text: `pf=${userId}`,
+        background: '#ffffff',
+        foreground: '#000000',
+      })
+      const qrFileRes = await Taro.canvasToTempFilePath({
+        canvas: qrCanvasNode as any,
+        width: qrSize,
+        height: qrSize,
+      })
+      const qrImagePath = qrFileRes.tempFilePath
+
+      // 获取海报 Canvas 2D 节点
+      const canvasNode = await new Promise<HTMLCanvasElement>((resolve, reject) => {
+        const query = Taro.createSelectorQuery()
+        query.select('#profile-poster-canvas')
+          .fields({ node: true, size: true })
+          .exec((res) => {
+            if (res?.[0]?.node) resolve(res[0].node)
+            else reject(new Error('canvas 节点获取失败'))
+          })
+      })
+
+      const width = POSTER_WIDTH
+      const height = computeProfilePosterHeight()
+      canvasNode.width = width
+      canvasNode.height = height
+      const ctx = canvasNode.getContext('2d')
+      if (!ctx) throw new Error('canvas context 失败')
+
+      // 并行加载头像、二维码和食探 logo
+      const LOGO_URL = 'https://healthymax.cn/brand/login-logo.png'
+      const [avatarResolved, qrResolved, logoResolved] = await Promise.all([
+        tempAvatar ? resolveCanvasImageSrc(tempAvatar) : Promise.resolve(''),
+        resolveCanvasImageSrc(qrImagePath),
+        resolveCanvasImageSrc(LOGO_URL),
+      ])
+
+      const [avatarImg, qrImg, logoImg] = await Promise.all([
+        avatarResolved ? loadCanvasImage(canvasNode, avatarResolved) : Promise.resolve(null),
+        qrResolved ? loadCanvasImage(canvasNode, qrResolved) : Promise.resolve(null),
+        logoResolved ? loadCanvasImage(canvasNode, logoResolved) : Promise.resolve(null),
+      ])
+
+      drawProfilePoster(ctx, {
+        width,
+        height,
+        data: {
+          nickname: tempNickname || '用户',
+          shortId: formatShortId(userId),
+          recordDays,
+          followersCount,
+          followingCount,
+          favoriteCount,
+          motto,
+        },
+        avatarImage: avatarImg,
+        qrCodeImage: qrImg,
+        logoImage: logoImg,
+      })
+
+      const fileRes = await Taro.canvasToTempFilePath({
+        canvas: canvasNode as any,
+        width,
+        height,
+      })
+
+      Taro.hideLoading()
+      Taro.showShareImageMenu({
+        path: fileRes.tempFilePath,
+        fail: (err: any) => {
+          if (isShowShareImageMenuCancel(err)) return
+          Taro.showToast({ title: '分享失败', icon: 'none' })
+        },
+      })
+    } catch (error: any) {
+      Taro.hideLoading()
+      console.error('[profile-settings] 海报生成失败:', error)
+      Taro.showToast({ title: error?.message || '海报生成失败', icon: 'none' })
+    } finally {
+      setPosterGenerating(false)
     }
   }
 
@@ -451,10 +705,45 @@ export default function ProfileSettingsPage() {
   return (
     <FlPageThemeRoot>
       <View className={`profile-settings-page ${scheme === 'dark' ? 'profile-settings-page--dark' : ''}`}>
-        {/* 顶部用户信息区域 — 左对齐 */}
+        {/* 顶部用户信息区域 */}
         <View className='profile-top-section'>
+          {/* 背景图 — 绝对定位覆盖整个顶部区域 */}
+          <View className='profile-cover-bg'>
+            {coverImage && (
+              <>
+                <Image className='profile-cover-bg-image' src={coverImage} mode='aspectFill' />
+                <View className='profile-cover-bg-mask' />
+              </>
+            )}
+          </View>
+
+          {/* 右上角按钮组 */}
+          {isOwner && (
+            <View className='profile-top-actions'>
+              <View
+                className='profile-top-action-btn'
+                onClick={handleOpenEdit}
+              >
+                <Text className='iconfont icon-edit profile-top-action-icon' />
+                <Text className='profile-top-action-text'>编辑资料</Text>
+              </View>
+              <View
+                className='profile-top-icon-btn'
+                onClick={handleScanQRCode}
+              >
+                <Text className='iconfont icon-scan profile-top-icon' />
+              </View>
+              <View
+                className='profile-top-icon-btn'
+                onClick={handleShareProfile}
+              >
+                <Text className='iconfont icon-share profile-top-icon' />
+              </View>
+            </View>
+          )}
+
+          {/* 头像 + 昵称 + ID */}
           <View className='profile-user-row'>
-            {/* 头像 */}
             <View
               className='profile-avatar-wrap'
               onClick={isOwner ? handleOpenEdit : undefined}
@@ -470,7 +759,6 @@ export default function ProfileSettingsPage() {
               </View>
             </View>
 
-            {/* 昵称 + ID */}
             <View className='profile-info-col'>
               <View className='profile-name-row' onClick={isOwner ? handleOpenEdit : undefined}>
                 <Text className='profile-nickname'>{tempNickname || '用户昵称'}</Text>
@@ -486,6 +774,11 @@ export default function ProfileSettingsPage() {
 
           {/* 统计行 — 数字和标签同一行，竖线分割 */}
           <View className='profile-stats-row'>
+            <View className='profile-stat-item'>
+              <Text className='profile-stat-num'>{recordDays}</Text>
+              <Text className='profile-stat-text'>记录天数</Text>
+            </View>
+            <Text className='profile-stat-divider'>|</Text>
             <View className='profile-stat-item' onClick={handleGoFollowers}>
               <Text className='profile-stat-num'>{followersCount}</Text>
               <Text className='profile-stat-text'>被关注</Text>
@@ -495,20 +788,35 @@ export default function ProfileSettingsPage() {
               <Text className='profile-stat-num'>{followingCount}</Text>
               <Text className='profile-stat-text'>关注</Text>
             </View>
-            {!isOwner && (
-              <>
-                <Text className='profile-stat-divider'>|</Text>
-                <View
-                  className={`profile-follow-btn ${isFollowing ? 'profile-follow-btn--active' : ''}`}
-                  onClick={handleFollowToggle}
-                >
-                  <Text className='profile-follow-btn-text'>
-                    {followLoading ? '...' : isFollowing ? '已关注' : '+ 关注'}
-                  </Text>
-                </View>
-              </>
-            )}
           </View>
+
+          {/* 座右铭 */}
+          {motto ? (
+            <View className='profile-motto-row' onClick={isOwner ? handleOpenEdit : undefined}>
+              <Text className='profile-motto-text'>{motto}</Text>
+            </View>
+          ) : isOwner ? (
+            <View className='profile-motto-row profile-motto-row--empty' onClick={handleOpenEdit}>
+              <Text className='profile-motto-text profile-motto-text--empty'>点击编辑资料添加座右铭</Text>
+            </View>
+          ) : null}
+
+          {/* 关注 + 私信操作行（仅他人主页） */}
+          {!isOwner && (
+            <View className='profile-action-row'>
+              <View
+                className={`profile-follow-btn ${isFollowing ? 'profile-follow-btn--active' : ''}`}
+                onClick={handleFollowToggle}
+              >
+                <Text className='profile-follow-btn-text'>
+                  {followLoading ? '...' : isFollowing ? '已关注' : '+ 关注'}
+                </Text>
+              </View>
+              <View className='profile-dm-btn' onClick={handleGoPrivateChat}>
+                <Text className='profile-dm-btn-text'>私信</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* 底部内容抽屉 */}
@@ -639,6 +947,24 @@ export default function ProfileSettingsPage() {
                 </Button>
               </View>
 
+              {/* 背景图 */}
+              <View className='edit-sheet-row'>
+                <Text className='edit-sheet-label'>主页背景图</Text>
+                <View
+                  className='edit-sheet-cover-section'
+                  onClick={handleChooseCoverImage}
+                >
+                  {editCoverImage ? (
+                    <Image className='edit-sheet-cover-image' src={editCoverImage} mode='aspectFill' />
+                  ) : (
+                    <View className='edit-sheet-cover-placeholder'>
+                      <Text className='iconfont icon-picture edit-sheet-cover-placeholder-icon' />
+                      <Text className='edit-sheet-cover-placeholder-text'>点击选择背景图</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
               {/* 昵称 */}
               <View className='edit-sheet-row'>
                 <Text className='edit-sheet-label'>昵称</Text>
@@ -649,6 +975,20 @@ export default function ProfileSettingsPage() {
                   value={editNickname}
                   onBlur={(e) => setEditNickname(e.detail.value)}
                   onInput={(e) => setEditNickname(e.detail.value)}
+                />
+              </View>
+
+              {/* 座右铭 */}
+              <View className='edit-sheet-row'>
+                <Text className='edit-sheet-label'>座右铭</Text>
+                <Input
+                  className='edit-sheet-input'
+                  type='text'
+                  placeholder='写一句你的座右铭（最多30字）'
+                  maxlength={30}
+                  value={editMotto}
+                  onBlur={(e) => setEditMotto(e.detail.value)}
+                  onInput={(e) => setEditMotto(e.detail.value)}
                 />
               </View>
 
@@ -677,6 +1017,22 @@ export default function ProfileSettingsPage() {
             </View>
           </View>
         )}
+
+        {/* 离屏 Canvas（用于生成海报） */}
+        <Canvas
+          type='2d'
+          id='profile-poster-canvas'
+          className='poster-offscreen-canvas'
+          style={{ width: `${POSTER_WIDTH}px`, height: `${computeProfilePosterHeight()}px` }}
+        />
+
+        {/* 二维码生成 Canvas */}
+        <Canvas
+          type='2d'
+          id='qr-gen-canvas'
+          className='poster-offscreen-canvas'
+          style={{ width: '200px', height: '200px' }}
+        />
       </View>
     </FlPageThemeRoot>
   )

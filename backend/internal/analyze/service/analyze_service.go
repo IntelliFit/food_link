@@ -152,9 +152,9 @@ func (s *AnalyzeService) ConfigureDoubaoClient(apiKey, baseURL, model string) {
 		if m == "" {
 			m = "doubao-seed-2-0-lite-260428"
 		}
-		logger.L().Info("doubao client initialized", slog.String("base_url", baseURL), slog.String("model", m))
+		logger.Info(context.Background(), "doubao client initialized", slog.String("base_url", baseURL), slog.String("model", m))
 	} else {
-		logger.L().Warn("doubao client not initialized: empty api key")
+		logger.Warn(context.Background(), "doubao client not initialized: empty api key")
 	}
 }
 
@@ -162,10 +162,10 @@ func (s *AnalyzeService) ConfigureDashScopeClient(apiKey, baseURL string) {
 	if strings.TrimSpace(apiKey) != "" {
 		s.dashscopeClient = NewDashScopeClient(apiKey, baseURL)
 		s.refreshNutritionFallbackEstimator()
-		logger.L().Info("dashscope client initialized", slog.String("base_url", baseURL), slog.String("model", qwen36FlashModel))
+		logger.Info(context.Background(), "dashscope client initialized", slog.String("base_url", baseURL), slog.String("model", qwen36FlashModel))
 		return
 	}
-	logger.L().Warn("dashscope client not initialized: empty api key")
+	logger.Warn(context.Background(), "dashscope client not initialized: empty api key")
 }
 
 func (s *AnalyzeService) ConfigureDashScopeLLMClient(client LLMClient) {
@@ -200,10 +200,10 @@ func (s *AnalyzeService) ConfigureGemini31LiteClient(apiKey, baseURL, model stri
 	}
 	if strings.TrimSpace(apiKey) != "" {
 		s.gemini31LiteClient = NewOfoxAIClient(apiKey, model, baseURL)
-		logger.L().Info("gemini 3.1 flash lite client initialized", slog.String("base_url", baseURL), slog.String("model", model))
+		logger.Info(context.Background(), "gemini 3.1 flash lite client initialized", slog.String("base_url", baseURL), slog.String("model", model))
 		return
 	}
-	logger.L().Warn("gemini 3.1 flash lite client not initialized: empty api key")
+	logger.Warn(context.Background(), "gemini 3.1 flash lite client not initialized: empty api key")
 }
 
 func (s *AnalyzeService) ConfigureDoubaoWebSearchClient(apiKey, baseURL, model string) {
@@ -213,11 +213,11 @@ func (s *AnalyzeService) ConfigureDoubaoWebSearchClient(apiKey, baseURL, model s
 		if m == "" {
 			m = "doubao-seed-2-0-lite-260428"
 		}
-		logger.L().Info("doubao web search client initialized", slog.String("base_url", baseURL), slog.String("model", m))
+		logger.Info(context.Background(), "doubao web search client initialized", slog.String("base_url", baseURL), slog.String("model", m))
 		return
 	}
 	if s.doubaoWebSearchClient == nil {
-		logger.L().Warn("doubao web search client not initialized: empty api key")
+		logger.Warn(context.Background(), "doubao web search client not initialized: empty api key")
 	}
 }
 
@@ -230,10 +230,10 @@ func (s *AnalyzeService) ConfigureGemini35Client(apiKey, baseURL, model string) 
 	}
 	if strings.TrimSpace(apiKey) != "" {
 		s.gemini35Client = NewOfoxAIClient(apiKey, model, baseURL)
-		logger.L().Info("gemini 3.5 flash client initialized", slog.String("base_url", baseURL), slog.String("model", model))
+		logger.Info(context.Background(), "gemini 3.5 flash client initialized", slog.String("base_url", baseURL), slog.String("model", model))
 		return
 	}
-	logger.L().Warn("gemini 3.5 flash client not initialized: empty api key")
+	logger.Warn(context.Background(), "gemini 3.5 flash client not initialized: empty api key")
 }
 
 func (s *AnalyzeService) ConfigureGemini35LLMClient(client LLMClient) {
@@ -336,7 +336,7 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 			return analyzeWithImagesTemperature(retryCtx, s.doubaoClient, prompt, imageURLs, temperature)
 		})
 		if fallbackErr == nil {
-			logger.WithTrace(ctx).Warn("precision gemini vision transient error fallback to doubao",
+			logger.Warn(ctx,"precision gemini vision transient error fallback to doubao",
 				logger.Err(err),
 				slog.Int("image_count", len(imageURLs)),
 			)
@@ -348,7 +348,7 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 			)
 			return fallbackParsed, nil
 		}
-		logger.WithTrace(ctx).Warn("precision doubao fallback failed",
+		logger.Warn(ctx,"precision doubao fallback failed",
 			logger.NamedErr("fallback_error", fallbackErr),
 			logger.Err(err),
 			slog.Int("image_count", len(imageURLs)),
@@ -485,6 +485,13 @@ func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model strin
 			retryNumber = transientRetries
 			maxRetries = maxLLMTransientRetries
 		default:
+			logger.Warn(ctx,"LLM 调用最终失败",
+				logger.Stage(stage),
+				logger.ProviderModel(provider, model),
+				slog.Int("json_retries", jsonRetries),
+				slog.Int("transient_retries", transientRetries),
+				logger.Err(err),
+			)
 			return parsed, err
 		}
 		apm.AddEvent(ctx, "llm retry",
@@ -495,7 +502,7 @@ func analyzeWithJSONParseRetry(ctx context.Context, stage, provider, model strin
 			attribute.Int("analysis.retry_number", retryNumber),
 			attribute.Int("analysis.max_retries", maxRetries),
 		)
-		logger.WithTrace(ctx).Warn("llm call failed; retrying same task",
+		logger.Warn(ctx,"llm call failed; retrying same task",
 			slog.String("stage", stage),
 			slog.String("provider", provider),
 			slog.String("model", model),
@@ -1738,7 +1745,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		attribute.Int("analysis.image_count", imageCount),
 		attribute.Bool("analysis.has_base64_image", strings.TrimSpace(input.Base64Image) != ""),
 	)
-	logger.WithTrace(ctx).Info("food image analyze llm start",
+		logger.Info(ctx,"food image analyze llm start",
 		slog.String("user_id", userID),
 		slog.String("provider", provider),
 		slog.String("model", model),
@@ -1802,7 +1809,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			attribute.Int("analysis.image_count", imageCount),
 			apm.DurationMS("analysis.duration_ms", time.Since(start)),
 		)
-		logger.WithTrace(ctx).Warn("food image analyze llm failed",
+		logger.Warn(ctx,"food image analyze llm failed",
 			slog.String("user_id", userID),
 			slog.String("provider", provider),
 			slog.String("model", model),
@@ -1817,7 +1824,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 	}
 	durationMs := float64(time.Since(start).Milliseconds())
 	rawItems := parseItems(parsed)
-	logger.WithTrace(ctx).Info("视觉模型识别结果已返回",
+		logger.Info(ctx,"视觉模型识别结果已返回",
 		slog.String("user_id", userID),
 		slog.String("provider", provider),
 		slog.String("model", model),
@@ -1940,7 +1947,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		attribute.String("analysis.hybrid_status", stringFromAny(hybridMeta["status"])),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
-	logger.WithTrace(ctx).Info("food image analyze llm completed",
+		logger.Info(ctx,"food image analyze llm completed",
 		slog.String("user_id", userID),
 		slog.String("provider", provider),
 		slog.String("model", model),
@@ -1962,7 +1969,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			attribute.String("analysis.model", model),
 			apm.DurationMS("analysis.duration_ms", time.Since(start)),
 		)
-		logger.WithTrace(ctx).Warn("food image analyze finalize failed",
+		logger.Warn(ctx,"food image analyze finalize failed",
 			slog.String("user_id", userID),
 			slog.String("provider", provider),
 			slog.String("model", model),
@@ -1989,7 +1996,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 		attribute.Int("analysis.unresolved_count", intFromAny(result["unresolved_count"])),
 		apm.DurationMS("analysis.duration_ms", time.Since(start)),
 	)
-	logger.WithTrace(ctx).Info("food image analyze finalized",
+		logger.Info(ctx,"food image analyze finalized",
 		slog.String("user_id", userID),
 		slog.String("provider", provider),
 		slog.String("model", model),
@@ -2073,7 +2080,7 @@ func (s *AnalyzeService) reviewStandardImageWithGemini(ctx context.Context, inpu
 		return analyzeWithImagesTemperature(retryCtx, s.ofoxAIClient, prompt, imageURLs, 0.2)
 	})
 	if err != nil {
-		logger.WithTrace(ctx).Warn("standard image hybrid review failed",
+		logger.Warn(ctx,"standard image hybrid review failed",
 			logger.Err(err),
 			slog.Int("image_count", len(imageURLs)),
 		)
@@ -2101,7 +2108,7 @@ func (s *AnalyzeService) reviewStandardImageWithGemini(ctx context.Context, inpu
 	if ocrText := stringSliceFromAny(reviewed["ocrText"]); len(ocrText) > 0 {
 		meta["ocr_text"] = limitStrings(ocrText, 8)
 	}
-	logger.WithTrace(ctx).Info("standard image hybrid review applied",
+		logger.Info(ctx,"standard image hybrid review applied",
 		slog.Int("image_count", len(imageURLs)),
 		slog.Int("item_count", len(parseItems(merged))),
 		slog.Any("hybrid_review", meta),
@@ -2162,7 +2169,7 @@ func (s *AnalyzeService) refineImageWithLowCostWebSearch(ctx context.Context, in
 		meta["web_search_evidence"] = compactWebSearchEvidence(searchEvidence, webSearchMaxQueries, 2)
 		meta["calibration_method"] = "first_pass_kept"
 		meta["stage_durations_ms"] = map[string]any{"search": time.Since(start).Milliseconds(), "total": time.Since(start).Milliseconds()}
-		logger.WithTrace(ctx).Info("低成本搜索无有效食品证据",
+			logger.Info(ctx,"低成本搜索无有效食品证据",
 			slog.String("execution_mode", executionMode),
 			slog.Int("image_count", len(imageURLs)),
 			slog.Any("web_search_relevance", relevanceRows),
@@ -2172,7 +2179,7 @@ func (s *AnalyzeService) refineImageWithLowCostWebSearch(ctx context.Context, in
 	}
 	meta["web_search_status"] = "relevant_results"
 	meta["web_search_evidence"] = compactWebSearchEvidence(relevantEvidence, webSearchMaxQueries, 2)
-	logger.WithTrace(ctx).Info("低成本搜索证据已收集",
+		logger.Info(ctx,"低成本搜索证据已收集",
 		slog.String("execution_mode", executionMode),
 		slog.Int("image_count", len(imageURLs)),
 		slog.Int("base_item_count", len(baseItems)),
@@ -2201,7 +2208,7 @@ func (s *AnalyzeService) refineImageWithLowCostWebSearch(ctx context.Context, in
 		meta["status"] = "no_applicable_specs"
 		meta["web_search_status"] = "no_applicable_specs"
 		meta["calibration_method"] = "first_pass_kept"
-		logger.WithTrace(ctx).Info("低成本搜索未找到可应用规格",
+			logger.Info(ctx,"低成本搜索未找到可应用规格",
 			slog.String("execution_mode", executionMode),
 			slog.Int("image_count", len(imageURLs)),
 			slog.Int("item_count", len(finalItems)),
@@ -2211,7 +2218,7 @@ func (s *AnalyzeService) refineImageWithLowCostWebSearch(ctx context.Context, in
 	}
 	meta["status"] = "applied"
 	meta["web_search_status"] = "applied"
-	logger.WithTrace(ctx).Info("低成本搜索校准已应用",
+		logger.Info(ctx,"低成本搜索校准已应用",
 		slog.String("execution_mode", executionMode),
 		slog.Int("image_count", len(imageURLs)),
 		slog.Int("item_count", len(finalItems)),
@@ -2262,7 +2269,7 @@ func (s *AnalyzeService) refineGemini35GroupedEstimate(ctx context.Context, inpu
 		return analyzeWithImagesTemperature(retryCtx, s.gemini35Client, prompt, imageURLs, 0.15)
 	})
 	if err != nil {
-		logger.WithTrace(ctx).Warn("gemini 3.5 grouped weight estimate failed",
+		logger.Warn(ctx,"gemini 3.5 grouped weight estimate failed",
 			logger.Err(err),
 			slog.Int("image_count", len(imageURLs)),
 		)
@@ -2295,7 +2302,7 @@ func (s *AnalyzeService) refineGemini35GroupedEstimate(ctx context.Context, inpu
 	if ocrText := stringSliceFromAny(reviewed["ocrText"]); len(ocrText) > 0 {
 		meta["ocr_text"] = limitStrings(ocrText, 8)
 	}
-	logger.WithTrace(ctx).Info("gemini 3.5 grouped estimate applied",
+		logger.Info(ctx,"gemini 3.5 grouped estimate applied",
 		slog.Int("image_count", len(imageURLs)),
 		slog.Int("item_count", len(parseItems(reviewed))),
 		slog.Any("hybrid_review", meta),
@@ -3690,7 +3697,7 @@ func (s *AnalyzeService) collectStandardImageSearchEvidence(ctx context.Context,
 	for _, query := range queries {
 		results, err := s.webSearcher.Search(searchCtx, query, webSearchMaxResults)
 		if err != nil {
-			logger.WithTrace(ctx).Warn("standard image web search failed",
+			logger.Warn(ctx,"standard image web search failed",
 				slog.String("query", query),
 				logger.Err(err),
 			)
@@ -4340,7 +4347,7 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 	defer cancel()
 	parsed, err := s.deepseek.Analyze(callCtx, prompt, "")
 	if err != nil {
-		logger.WithTrace(ctx).Warn("DeepSeek 可食比例判定失败",
+		logger.Warn(ctx,"DeepSeek 可食比例判定失败",
 			logger.Err(err),
 			slog.Int("item_count", len(items)),
 		)
@@ -4427,7 +4434,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	resp["analysis_engine"] = "db_first"
 	if s.nutrition == nil {
 		resolveStatus = "skipped_no_repo"
-		logger.WithTrace(ctx).Warn("营养回算已跳过：营养库未初始化",
+		logger.Warn(ctx,"营养回算已跳过：营养库未初始化",
 			slog.Int("item_count", len(toItems(resp["items"]))),
 		)
 		apm.AddEvent(ctx, "营养回算已跳过：营养库未初始化",
@@ -4462,7 +4469,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	packagedResolutionMatched := 0
 	packagedResolutionWeightApplied := 0
 	packagedResolutionFallback := 0
-	logger.WithTrace(ctx).Info("营养库优先回算开始",
+		logger.Info(ctx,"营养库优先回算开始",
 		slog.Int("item_count", len(items)),
 		slog.Any("items", analyzeItemLogSummary(items, 12)),
 	)
@@ -4478,7 +4485,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		packagedProbe := packagedFoodResolveEnabled && packagedResolverEnabled && shouldResolvePackagedFoodForDBFirst(item, packagedResolverEnabled)
 		if packagedProbe {
 			packagedResolutionTriggered++
-			logger.WithTrace(ctx).Info("包装食品库解析开始",
+				logger.Info(ctx,"包装食品库解析开始",
 				slog.String("food_name", name),
 				slog.String("food_type", strings.TrimSpace(fmt.Sprintf("%v", item["type"]))),
 				slog.Float64("ai_estimated_weight_g", round2(weight)),
@@ -4495,14 +4502,14 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 				NetWeightG: resolveWeight,
 				Barcode:    strings.TrimSpace(fmt.Sprintf("%v", firstNonNil(item["barcode"], item["ean"], item["gtin"]))),
 			}); packagedErr != nil {
-				logger.WithTrace(ctx).Warn("零食营养库查询失败",
+				logger.Warn(ctx,"零食营养库查询失败",
 					logger.Err(packagedErr),
 					slog.String("food_name", name),
 				)
 			} else if packagedResolve != nil && packagedResolve.Food != nil {
 				packagedCandidates := searchPackagedExperimentCandidates(ctx, s.nutrition, packagedResolveQuery, packagedResolve.Food)
 				packagedResolutionMatched++
-				logger.WithTrace(ctx).Info("包装食品库命中",
+					logger.Info(ctx,"包装食品库命中",
 					slog.String("food_name", name),
 					slog.String("match_status", packagedResolve.Status),
 					slog.Float64("match_score", round2(packagedResolve.Score)),
@@ -4525,7 +4532,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 				item["package_weight_reason"] = "包装库找到候选但未达到自动命中，已回退普通营养库"
 				item["packaged_candidates"] = resolvePackagedCandidateImageURLs(packagedCandidateDebugList(nil, packagedCandidates, "candidate"), s.storage)
 			}
-			logger.WithTrace(ctx).Info("包装食品库未命中",
+				logger.Info(ctx,"包装食品库未命中",
 				slog.String("food_name", name),
 				slog.Int("candidate_count", len(packagedCandidates)),
 				slog.String("package_match_status", strings.TrimSpace(fmt.Sprintf("%v", item["package_match_status"]))),
@@ -4552,7 +4559,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	}
 	if len(semanticCandidates) > 0 {
 		if decisions, err := s.rerankNutritionCandidatesWithDeepSeek(ctx, semanticQueries, semanticCandidates); err != nil {
-			logger.WithTrace(ctx).Warn("deepseek 候选复用判定失败",
+			logger.Warn(ctx,"deepseek 候选复用判定失败",
 				logger.Err(err),
 				slog.Int("candidate_group_count", len(semanticCandidates)),
 			)
@@ -4586,7 +4593,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 							aliasName = strings.TrimSpace(semanticQueries[index])
 						}
 						if aliasErr := s.nutrition.EnsureNutritionAlias(ctx, food.ID, aliasName); aliasErr != nil {
-							logger.WithTrace(ctx).Warn("语义复用后补别名失败",
+							logger.Warn(ctx,"语义复用后补别名失败",
 								logger.Err(aliasErr),
 								slog.String("food_id", food.ID),
 								slog.String("alias_name", aliasName),
@@ -4608,7 +4615,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	if len(fallbackCandidates) > 0 {
 		contextText := ""
 		contextText = options.additionalContext
-		logger.WithTrace(ctx).Info("营养库未命中，开始 DeepSeek 营养补全",
+			logger.Info(ctx,"营养库未命中，开始 DeepSeek 营养补全",
 			slog.Int("candidate_count", len(fallbackCandidates)),
 			slog.Any("candidates", unresolvedNutritionCandidateLogSummary(fallbackCandidates, 12)),
 		)
@@ -4618,7 +4625,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		)
 		if rows, err := s.estimateNutritionWithDeepSeek(ctx, fallbackCandidates, contextText); err == nil {
 			fallbacks = rows
-			logger.WithTrace(ctx).Info("DeepSeek 营养补全完成",
+				logger.Info(ctx,"DeepSeek 营养补全完成",
 				slog.Int("candidate_count", len(fallbackCandidates)),
 				slog.Int("generated_count", len(fallbacks)),
 				slog.Any("generated_indexes", sortedIntKeys(fallbacks)),
@@ -4629,7 +4636,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 			)
 		} else {
 			metrics.AddNutritionResolveItems("db_first", "deepseek_fallback_failed", len(fallbackCandidates))
-			logger.WithTrace(ctx).Warn("deepseek nutrition fallback failed",
+			logger.Warn(ctx,"deepseek nutrition fallback failed",
 				logger.Err(err),
 				slog.Int("candidate_count", len(fallbackCandidates)),
 			)
@@ -4720,7 +4727,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 				}
 				if foodID, err := s.nutrition.UpsertDeepSeekNutrition(ctx, lookup.name, fallbackUnit, fallbackSource); err != nil {
 					deepseekPersistFailedCount++
-					logger.WithTrace(ctx).Warn("AI 营养补全写库失败",
+					logger.Warn(ctx,"AI 营养补全写库失败",
 						logger.Err(err),
 						slog.String("food_name", lookup.name),
 						slog.String("nutrition_source", fallbackSource),
@@ -4730,7 +4737,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 					deepseekPersistedCount++
 					next["nutrition_persisted"] = true
 					next["matched_food_id"] = foodID
-					logger.WithTrace(ctx).Info("AI 营养补全写库成功",
+						logger.Info(ctx,"AI 营养补全写库成功",
 						slog.String("food_name", lookup.name),
 						slog.String("food_id", foodID),
 						slog.String("nutrition_source", fallbackSource),
@@ -4792,7 +4799,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	metrics.AddNutritionResolveItems("db_first", "qwen_generated", qwenGeneratedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_persisted", deepseekPersistedCount)
 	metrics.AddNutritionResolveItems("db_first", "deepseek_persist_failed", deepseekPersistFailedCount)
-	logger.WithTrace(ctx).Info("营养库优先回算完成",
+		logger.Info(ctx,"营养库优先回算完成",
 		slog.Int("item_count", len(out)),
 		slog.Int("resolved_count", resolvedCount),
 		slog.Int("unresolved_count", unresolvedCount),
@@ -4847,7 +4854,7 @@ func (s *AnalyzeService) applySuggestedRatios(ctx context.Context, resp map[stri
 		return s.ofoxAIClient.Analyze(innerCtx, prompt, "")
 	})
 	if err != nil {
-		logger.WithTrace(ctx).Warn("suggested ratio generation failed",
+		logger.Warn(ctx,"suggested ratio generation failed",
 			logger.Err(err),
 			slog.Int("item_count", len(items)),
 		)
@@ -5210,7 +5217,7 @@ func logDBFirstNutritionSummary(ctx context.Context, items []map[string]any, res
 		})
 	}
 	fields = append(fields, slog.Any("items", itemFields))
-	logger.WithTrace(ctx).Info("db_first nutrition lookup summary", fields...)
+		logger.Info(ctx,"db_first nutrition lookup summary", fields...)
 	apm.AddEvent(ctx, "db_first nutrition lookup summary",
 		attribute.Int("nutrition.total", total),
 		attribute.Int("nutrition.resolved", resolvedCount),
@@ -5938,6 +5945,10 @@ func scaleNutrition(unit map[string]any, weight float64) map[string]any {
 		out[key] = math.Round(numberFromAny(value)*factor*100) / 100
 	}
 	return out
+}
+
+func ItemLogSummary(items []map[string]any, limit int) []map[string]any {
+	return analyzeItemLogSummary(items, limit)
 }
 
 func analyzeItemLogSummary(items []map[string]any, limit int) []map[string]any {

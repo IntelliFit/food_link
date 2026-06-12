@@ -77,6 +77,11 @@ func (r *Recognizer) Recognize(ctx context.Context, input RecognizeInput) (*Reco
 	if len(items) == 0 {
 		return nil, expiryRecognitionBadRequest("未识别到可用于保质期录入的食物，请换个角度拍清楚包装或食物主体后再试")
 	}
+	logger.Info(ctx, "保质期识别完成",
+		logger.Stage("recognize"),
+		slog.Int("item_count", len(items)),
+		slog.Int("image_count", len(imageURLs)),
+	)
 	return &RecognitionOutput{Items: items, RecognizedCount: len(items)}, nil
 }
 
@@ -94,13 +99,11 @@ func (r *Recognizer) runJSONCompletion(ctx context.Context, content []map[string
 		}
 		lastErr = runErr
 		if idx < len(configs)-1 {
-			if log := logger.L(); log != nil {
-				log.Warn("保质期识别主模型失败，准备回退",
-					slog.String("provider", cfg.Provider),
-					slog.String("model", cfg.Model),
-					logger.Err(runErr),
-				)
-			}
+			logger.Warn(ctx, "保质期识别主模型失败，准备回退",
+				logger.ProviderModel(cfg.Provider, cfg.Model),
+				logger.Stage("llm_fallback"),
+				logger.Err(runErr),
+			)
 		}
 	}
 	return nil, lastErr
@@ -135,7 +138,7 @@ func (r *Recognizer) runJSONCompletionWithConfig(ctx context.Context, cfg expiry
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, expiryRecognitionUpstreamError(
+		return nil, expiryRecognitionUpstreamError(ctx,
 			fmt.Sprintf("保质期识别服务请求失败 provider=%s model=%s status=%d: %s", cfg.Provider, cfg.Model, resp.StatusCode, summarizeExpiryUpstreamBody(respBody, resp.Header.Get("Content-Type"))),
 		)
 	}
@@ -150,15 +153,15 @@ func (r *Recognizer) runJSONCompletionWithConfig(ctx context.Context, cfg expiry
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, expiryRecognitionUpstreamError(fmt.Sprintf("保质期识别服务响应解析失败 provider=%s model=%s: %v", cfg.Provider, cfg.Model, err))
+		return nil, expiryRecognitionUpstreamError(ctx, fmt.Sprintf("保质期识别服务响应解析失败 provider=%s model=%s: %v", cfg.Provider, cfg.Model, err))
 	}
 	if len(result.Choices) == 0 || strings.TrimSpace(result.Choices[0].Message.Content) == "" {
-		return nil, expiryRecognitionUpstreamError(fmt.Sprintf("AI 返回了空响应 provider=%s model=%s", cfg.Provider, cfg.Model))
+		return nil, expiryRecognitionUpstreamError(ctx, fmt.Sprintf("AI 返回了空响应 provider=%s model=%s", cfg.Provider, cfg.Model))
 	}
 	contentText := expiryCodeFenceRe.ReplaceAllString(result.Choices[0].Message.Content, "")
 	var parsed map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(contentText)), &parsed); err != nil {
-		return nil, expiryRecognitionUpstreamError(fmt.Sprintf("AI 返回结果格式解析失败 provider=%s model=%s: %v", cfg.Provider, cfg.Model, err))
+		return nil, expiryRecognitionUpstreamError(ctx, fmt.Sprintf("AI 返回结果格式解析失败 provider=%s model=%s: %v", cfg.Provider, cfg.Model, err))
 	}
 	return parsed, nil
 }
@@ -199,10 +202,11 @@ func expiryRecognitionBadRequest(message string) error {
 	return &commonerrors.AppError{Code: 10002, Message: message, HTTPStatus: http.StatusBadRequest}
 }
 
-func expiryRecognitionUpstreamError(logMessage string) error {
-	if log := logger.L(); log != nil {
-		log.Warn("保质期识别上游错误", slog.String("error", logMessage))
-	}
+func expiryRecognitionUpstreamError(ctx context.Context, logMessage string) error {
+	logger.Warn(ctx, "保质期识别上游错误",
+		logger.Stage("llm_upstream"),
+		logger.Truncated("upstream_error", logMessage, 300),
+	)
 	return &commonerrors.AppError{Code: 10006, Message: "保质期识别服务暂时不可用，请稍后再试", HTTPStatus: http.StatusBadGateway}
 }
 

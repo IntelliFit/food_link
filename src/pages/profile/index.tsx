@@ -35,6 +35,7 @@ import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
 import { cleanupGeneratedUserFiles } from '../../utils/weapp-user-files'
 import { clearAllOnboardingGuides } from '../../utils/onboarding-guide-storage'
+import { clearRecentConsoleLogs } from '../../utils/console-log-buffer'
 
 import './index.scss'
 import { withAuth, redirectToLogin } from '../../utils/withAuth'
@@ -573,6 +574,10 @@ function ProfilePage() {
               try { Taro.removeStorageSync(key) } catch (_) {}
             }
           })
+
+          // 意见反馈诊断缓存
+          Taro.removeStorageSync('recent_request_traces_v1')
+          clearRecentConsoleLogs()
 
           await cleanupGeneratedUserFiles()
           Taro.showToast({ title: '缓存已清除', icon: 'success' })
