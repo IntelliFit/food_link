@@ -39,6 +39,7 @@ type TaskService interface {
 	RetryTask(ctx context.Context, taskID, userID string) (*service.RetryTaskResult, error)
 	DeleteTask(ctx context.Context, taskID, userID string) (map[string]any, error)
 	CleanupTimeoutTasks(ctx context.Context, timeoutMinutes int, adminKey, expectedAdminKey string) (int64, error)
+	SubmitFeedback(ctx context.Context, userID string, input service.SubmitFeedbackInput) error
 }
 
 type AnalyzeHandler struct {
@@ -507,4 +508,20 @@ func (h *AnalyzeHandler) ContinuePrecisionSession(c *gin.Context) {
 	}
 	bindTaskIDToRequest(c, taskID)
 	response.Success(c, gin.H{"task_id": taskID, "message": "精准模式已继续，系统正在重新规划本轮估计"})
+}
+
+// SubmitFeedback — POST /api/analyze/feedback
+// 统一的分析反馈录入接口，用于前端埋点写入 analysis_feedback_samples。
+func (h *AnalyzeHandler) SubmitFeedback(c *gin.Context) {
+	var input service.SubmitFeedbackInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if err := h.taskSvc.SubmitFeedback(c.Request.Context(), userID, input); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "反馈已记录"})
 }

@@ -4423,10 +4423,12 @@ func (r *Runner) captureCorrectionFeedbackSample(ctx context.Context, task *doma
 	if analysisEngine == "" {
 		analysisEngine = stringFromMap(task.Payload, "analysis_engine")
 	}
-	feedbackType := "correction"
+	feedbackType := domain.FeedbackTypeCorrection
+	resolutionState := domain.ResolutionStateUserCorrected
 	var errPtr *string
 	if strings.TrimSpace(errorMessage) != "" {
-		feedbackType = "failed"
+		feedbackType = domain.FeedbackTypeFailed
+		resolutionState = domain.ResolutionStateStillDistrust
 		errPtr = stringPtr(errorMessage)
 	}
 	afterResult := result
@@ -4436,6 +4438,7 @@ func (r *Runner) captureCorrectionFeedbackSample(ctx context.Context, task *doma
 	sample := &domain.AnalysisFeedbackSample{
 		UserID:              task.UserID,
 		FeedbackType:        feedbackType,
+		ResolutionState:     resolutionState,
 		SourceTaskID:        stringPtr(sourceTaskID),
 		CorrectionTaskID:    stringPtr(task.ID),
 		RootTaskID:          stringPtr(rootTaskID),

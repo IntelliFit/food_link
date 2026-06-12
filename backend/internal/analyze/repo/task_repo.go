@@ -66,23 +66,108 @@ func (r *TaskRepo) UpsertFeedbackSample(ctx context.Context, sample *domain.Anal
 		sample.CreatedAt = &now
 	}
 	sample.UpdatedAt = &now
-	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "correction_task_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"feedback_type",
-			"source_task_id",
-			"root_task_id",
-			"task_type",
-			"model_name",
-			"analysis_engine",
-			"before_result",
-			"user_correction_items",
-			"after_result",
-			"payload_snapshot",
-			"error_message",
-			"updated_at",
-		}),
-	}).Create(sample).Error
+
+	// 数据库 JSONB 字段有 NOT NULL 约束，GORM 在 nil map/slice 时会写入 NULL 而非默认值，
+	// 因此入持久化前统一归一化为空容器。
+	if sample.BeforeResult == nil {
+		sample.BeforeResult = map[string]any{}
+	}
+	if sample.AfterResult == nil {
+		sample.AfterResult = map[string]any{}
+	}
+	if sample.PayloadSnapshot == nil {
+		sample.PayloadSnapshot = map[string]any{}
+	}
+	if sample.UserCorrectionItems == nil {
+		sample.UserCorrectionItems = []map[string]any{}
+	}
+
+	// 旧的 correction/failed 类型仍按 correction_task_id 做唯一冲突键；
+	// 新埋点类型按 (source_task_id, source_record_id, feedback_type) 软去重。
+	if domain.IsLegacyCorrectionFeedback(sample.FeedbackType) {
+		return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "correction_task_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"feedback_type",
+				"resolution_state",
+				"source_task_id",
+				"source_record_id",
+				"root_task_id",
+				"task_type",
+				"model_name",
+				"analysis_engine",
+				"before_result",
+				"user_correction_items",
+				"after_result",
+				"payload_snapshot",
+				"error_message",
+				"updated_at",
+			}),
+		}).Create(sample).Error
+	}
+
+	var existing domain.AnalysisFeedbackSample
+	sourceTaskIDValue := ""
+	if sample.SourceTaskID != nil {
+		sourceTaskIDValue = *sample.SourceTaskID
+	}
+	sourceRecordIDValue := ""
+	if sample.SourceRecordID != nil {
+		sourceRecordIDValue = *sample.SourceRecordID
+	}
+
+	query := r.db.WithContext(ctx).
+		Where("feedback_type = ?", sample.FeedbackType)
+	if sourceTaskIDValue == "" {
+		query = query.Where("source_task_id IS NULL")
+	} else {
+		query = query.Where("source_task_id = ?", sourceTaskIDValue)
+	}
+	if sourceRecordIDValue == "" {
+		query = query.Where("source_record_id IS NULL")
+	} else {
+		query = query.Where("source_record_id = ?", sourceRecordIDValue)
+	}
+	err := query.Order("created_at DESC").Limit(1).First(&existing).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if err == nil && existing.ID != "" {
+		updateSample := &domain.AnalysisFeedbackSample{
+			ResolutionState:     sample.ResolutionState,
+			SourceTaskID:        sample.SourceTaskID,
+			SourceRecordID:      sample.SourceRecordID,
+			RootTaskID:          sample.RootTaskID,
+			TaskType:            sample.TaskType,
+			ModelName:           sample.ModelName,
+			AnalysisEngine:      sample.AnalysisEngine,
+			BeforeResult:        sample.BeforeResult,
+			UserCorrectionItems: sample.UserCorrectionItems,
+			AfterResult:         sample.AfterResult,
+			PayloadSnapshot:     sample.PayloadSnapshot,
+			ErrorMessage:        sample.ErrorMessage,
+			UpdatedAt:           &now,
+		}
+		return r.db.WithContext(ctx).Model(&domain.AnalysisFeedbackSample{}).
+			Select(
+				"resolution_state",
+				"source_task_id",
+				"source_record_id",
+				"root_task_id",
+				"task_type",
+				"model_name",
+				"analysis_engine",
+				"before_result",
+				"user_correction_items",
+				"after_result",
+				"payload_snapshot",
+				"error_message",
+				"updated_at",
+			).
+			Where("id = ?", existing.ID).
+			Updates(updateSample).Error
+	}
+	return r.db.WithContext(ctx).Create(sample).Error
 }
 
 func (r *TaskRepo) ClaimNextPendingTask(ctx context.Context, taskTypes []string) (*domain.AnalysisTask, error) {

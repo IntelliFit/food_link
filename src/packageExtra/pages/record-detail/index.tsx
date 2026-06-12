@@ -249,10 +249,12 @@ function RecordDetailPage() {
           } catch {
             setOwnerInviteCode(getInviteCodeFromUserId(fetchedRecord.user_id))
           }
-          // 判断当前用户是否为记录创建者（用于显示编辑按钮）
+          // 判断当前用户是否为记录创建者（用于显示编辑按钮、控制好友邀请卡）
           try {
-            const currentUserId = Taro.getStorageSync('user_id')
-            if (currentUserId && fetchedRecord.user_id === currentUserId) {
+            const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
+            const recordOwnerId = String(fetchedRecord.user_id || '').trim()
+            const shareOwnerId = String(router.params?.from_user_id || '').trim()
+            if (currentUserId && (recordOwnerId === currentUserId || shareOwnerId === currentUserId)) {
               setIsOwner(true)
             }
           } catch { /* ignore */ }

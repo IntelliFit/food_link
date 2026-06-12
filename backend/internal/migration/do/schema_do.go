@@ -192,7 +192,9 @@ type AnalysisFeedbackSampleDO struct {
 	ID                  string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID              string           `gorm:"column:user_id;type:uuid;not null;index:idx_analysis_feedback_samples_user_id"`
 	FeedbackType        string           `gorm:"column:feedback_type;type:text;not null;index:idx_analysis_feedback_samples_type"`
+	ResolutionState     string           `gorm:"column:resolution_state;type:text;not null;default:'user_corrected';index:idx_analysis_feedback_samples_resolution_state"`
 	SourceTaskID        *string          `gorm:"column:source_task_id;type:uuid;index:idx_analysis_feedback_samples_source_task_id"`
+	SourceRecordID      *string          `gorm:"column:source_record_id;type:uuid;index:idx_analysis_feedback_samples_source_record_id"`
 	CorrectionTaskID    *string          `gorm:"column:correction_task_id;type:uuid;uniqueIndex:idx_analysis_feedback_samples_correction_task_id"`
 	RootTaskID          *string          `gorm:"column:root_task_id;type:uuid;index:idx_analysis_feedback_samples_root_task_id"`
 	TaskType            string           `gorm:"column:task_type;type:text;not null"`

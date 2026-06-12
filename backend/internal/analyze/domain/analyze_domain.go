@@ -34,7 +34,9 @@ type AnalysisFeedbackSample struct {
 	ID                  string           `json:"id" gorm:"column:id"`
 	UserID              string           `json:"user_id" gorm:"column:user_id"`
 	FeedbackType        string           `json:"feedback_type" gorm:"column:feedback_type"`
+	ResolutionState     string           `json:"resolution_state" gorm:"column:resolution_state"`
 	SourceTaskID        *string          `json:"source_task_id,omitempty" gorm:"column:source_task_id"`
+	SourceRecordID      *string          `json:"source_record_id,omitempty" gorm:"column:source_record_id"`
 	CorrectionTaskID    *string          `json:"correction_task_id,omitempty" gorm:"column:correction_task_id"`
 	RootTaskID          *string          `json:"root_task_id,omitempty" gorm:"column:root_task_id"`
 	TaskType            string           `json:"task_type" gorm:"column:task_type"`

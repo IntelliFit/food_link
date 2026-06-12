@@ -365,6 +365,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.PATCH("/api/analyze/tasks/:task_id/result", authmw.RequireJWT(jwtSvc), analyzeHandler.UpdateTaskResult)
 	engine.DELETE("/api/analyze/tasks/:task_id", authmw.RequireJWT(jwtSvc), analyzeHandler.DeleteTask)
 	engine.POST("/api/analyze/tasks/cleanup-timeout", analyzeHandler.CleanupTimeoutTasks)
+	engine.POST("/api/analyze/feedback", authmw.RequireJWT(jwtSvc), analyzeHandler.SubmitFeedback)
 	engine.POST("/api/precision-sessions/:session_id/continue", authmw.RequireJWT(jwtSvc), analyzeHandler.ContinuePrecisionSession)
 
 	// FoodRecord routes

@@ -2881,6 +2881,58 @@ export async function updateAnalysisTaskResult(taskId: string, result: AnalyzeRe
   return res.data as { message: string; task: AnalysisTask }
 }
 
+export type AnalysisFeedbackType =
+  | 'weight_mismatch'
+  | 'nutrition_mismatch'
+  | 'suspect_distrust'
+  | 'record_corrected'
+  | 'correction'
+  | 'failed'
+  | 'retry'
+  | 'manual_entry'
+
+export type AnalysisResolutionState = 'user_corrected' | 'still_distrust'
+
+export interface AnalysisFeedbackRequest {
+  feedback_type: AnalysisFeedbackType
+  resolution_state?: AnalysisResolutionState
+  source_task_id?: string
+  source_record_id?: string
+  before_result?: Record<string, unknown>
+  after_result?: Record<string, unknown>
+  user_correction_items?: Record<string, unknown>[]
+  payload_snapshot?: Record<string, unknown>
+  model_name?: string
+  analysis_engine?: string
+}
+
+/**
+ * 控制是否真正向后端发送 analysis_feedback_samples 埋点请求。
+ * 临时关闭开关：设为 false 即可禁用所有 feedback 网络请求，便于线上排障或灰度。
+ */
+export const ANALYSIS_FEEDBACK_SUBMISSION_ENABLED = false
+
+/**
+ * 提交分析反馈样本（前端埋点统一入口）
+ * POST /api/analyze/feedback
+ */
+export async function submitAnalysisFeedback(data: AnalysisFeedbackRequest): Promise<{ message: string }> {
+  if (!ANALYSIS_FEEDBACK_SUBMISSION_ENABLED) {
+    console.log('[Feedback] submission disabled', data)
+    return { message: 'feedback submission disabled' }
+  }
+  const res = await authenticatedRequest('/api/analyze/feedback', {
+    method: 'POST',
+    data,
+    timeout: 10000
+  })
+  if (res.statusCode !== 200) {
+    const msg = (res.data as any)?.detail || '提交反馈失败'
+    throw new Error(msg)
+  }
+  return res.data as { message: string }
+}
+
 /** 使用原任务已上传的图片或文字重新提交识别任务 */
 export async function retryAnalyzeTask(taskId: string): Promise<{ task_id: string; message: string; source_task_id: string }> {
   const res = await authenticatedRequest('/api/analyze/tasks/retry', {

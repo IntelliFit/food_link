@@ -1407,3 +1407,88 @@ func (s *TaskService) ValidateQuota(ctx context.Context, userID string) error {
 	_, err := s.creditGuard.ValidateFoodAnalysisCredits(ctx, userID, "standard", recordedOn)
 	return err
 }
+
+// SubmitFeedbackInput 是用户主动埋点反馈的入参。
+type SubmitFeedbackInput struct {
+	FeedbackType        string           `json:"feedback_type"`
+	ResolutionState     string           `json:"resolution_state"`
+	SourceTaskID        string           `json:"source_task_id"`
+	SourceRecordID      string           `json:"source_record_id"`
+	BeforeResult        map[string]any   `json:"before_result"`
+	AfterResult         map[string]any   `json:"after_result"`
+	UserCorrectionItems []map[string]any `json:"user_correction_items"`
+	PayloadSnapshot     map[string]any   `json:"payload_snapshot"`
+	ModelName           string           `json:"model_name"`
+	AnalysisEngine      string           `json:"analysis_engine"`
+}
+
+// SubmitFeedback 是写入 analysis_feedback_samples 的唯一入口。
+// 旧的 correction/failed 仍由 worker 自动采集，其余前端埋点均通过此处写入。
+func (s *TaskService) SubmitFeedback(ctx context.Context, userID string, input SubmitFeedbackInput) error {
+	feedbackType := strings.TrimSpace(input.FeedbackType)
+	if !domain.IsValidFeedbackType(feedbackType) {
+		return &errors.AppError{Code: 10001, Message: "feedback_type 不合法", HTTPStatus: 400}
+	}
+	resolutionState := strings.TrimSpace(input.ResolutionState)
+	if resolutionState == "" {
+		resolutionState = domain.ResolutionStateStillDistrust
+	}
+	if !domain.IsValidResolutionState(resolutionState) {
+		return &errors.AppError{Code: 10001, Message: "resolution_state 不合法", HTTPStatus: 400}
+	}
+	sourceTaskID := strings.TrimSpace(input.SourceTaskID)
+	sourceRecordID := strings.TrimSpace(input.SourceRecordID)
+	if sourceTaskID == "" && sourceRecordID == "" {
+		return &errors.AppError{Code: 10001, Message: "source_task_id 与 source_record_id 不能同时为空", HTTPStatus: 400}
+	}
+
+	sample := &domain.AnalysisFeedbackSample{
+		UserID:              userID,
+		FeedbackType:        feedbackType,
+		ResolutionState:     resolutionState,
+		SourceTaskID:        emptyToNil(sourceTaskID),
+		SourceRecordID:      emptyToNil(sourceRecordID),
+		BeforeResult:        input.BeforeResult,
+		UserCorrectionItems: input.UserCorrectionItems,
+		AfterResult:         input.AfterResult,
+		PayloadSnapshot:     input.PayloadSnapshot,
+		ModelName:           emptyToNil(input.ModelName),
+		AnalysisEngine:      emptyToNil(input.AnalysisEngine),
+	}
+
+	// 如果前端没传 model_name / analysis_engine / task_type，尝试从关联任务补齐。
+	if sourceTaskID != "" {
+		task, err := s.tasks.GetTaskByID(ctx, sourceTaskID)
+		if err != nil {
+			logger.Error(ctx, "查询反馈关联任务失败", err,
+				slog.String("user_id", userID),
+				slog.String("source_task_id", sourceTaskID),
+			)
+		}
+		if task != nil {
+			sample.TaskType = task.TaskType
+			if sample.ModelName == nil && task.Payload != nil {
+				if m := stringFromAny(task.Payload["modelName"]); m != "" {
+					sample.ModelName = &m
+				}
+			}
+			if sample.AnalysisEngine == nil && task.Payload != nil {
+				if e := stringFromAny(task.Payload["analysis_engine"]); e != "" {
+					sample.AnalysisEngine = &e
+				}
+			}
+		}
+	}
+	if sample.TaskType == "" {
+		sample.TaskType = "food"
+	}
+
+	return s.tasks.UpsertFeedbackSample(ctx, sample)
+}
+
+func emptyToNil(s string) *string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return &s
+}
