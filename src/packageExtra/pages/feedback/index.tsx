@@ -12,6 +12,7 @@ import {
   submitFeedback,
   type FeedbackCategory,
 } from '../../../utils/api'
+import { CONSOLE_LOG_BUFFER_LIMIT } from '../../../utils/console-log-buffer'
 import { withAuth } from '../../../utils/withAuth'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 
@@ -119,7 +120,7 @@ function FeedbackPage() {
         <View className='feedback-diagnostic-main'>
           <Text className='feedback-section-title'>附带请求诊断</Text>
           <Text className='feedback-diagnostic-desc'>
-            {`将附带最近 ${Math.min(traceCount, RECENT_REQUEST_TRACE_LIMIT)} 条请求的 traceId、状态码和耗时，不包含 token、请求体或图片。`}
+            {`将附带最近 ${Math.min(traceCount, RECENT_REQUEST_TRACE_LIMIT)} 条请求的 traceId、状态码和耗时，以及最近 ${CONSOLE_LOG_BUFFER_LIMIT} 条 console 日志，不包含 token、请求体或图片。`}
           </Text>
         </View>
         <Switch

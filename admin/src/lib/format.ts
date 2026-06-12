@@ -1,4 +1,4 @@
-import type { FeedbackItem } from '@/types/feedback'
+import type { ConsoleLogEntry, FeedbackItem } from '@/types/feedback'
 
 export function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text
@@ -27,4 +27,18 @@ export function displayUser(item: FeedbackItem): string {
 export function firstTraceId(item: FeedbackItem): string {
   const found = item.recent_requests?.find((trace) => trace.traceId || trace.trace_id)
   return found ? (found.traceId || found.trace_id || '') : ''
+}
+
+/** 请求 trace 状态码展示（0 是合法值，不能用 || 判断） */
+export function formatTraceStatusCode(trace: { statusCode?: number; status_code?: number }): string {
+  const code = trace.statusCode ?? trace.status_code
+  if (code === undefined || code === null) return '无状态码'
+  if (code === 0) return '0（未收到响应）'
+  return String(code)
+}
+
+export function parseConsoleLogs(clientInfo: Record<string, unknown> | undefined): ConsoleLogEntry[] {
+  const raw = clientInfo?.console_logs
+  if (!Array.isArray(raw)) return []
+  return raw.filter((item): item is ConsoleLogEntry => !!item && typeof item === 'object')
 }

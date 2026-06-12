@@ -1,4 +1,8 @@
 import './perf-polyfill'
+import { installConsoleLogCapture } from './utils/console-log-buffer'
+
+installConsoleLogCapture()
+
 import { createElement, type PropsWithChildren } from 'react'
 import Taro, { useLaunch } from '@tarojs/taro'
 import { getAccessToken, acceptFriendInvite } from './utils/api'

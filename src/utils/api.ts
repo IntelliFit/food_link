@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro'
 
+import { getRecentConsoleLogs } from './console-log-buffer'
 import { resolveApiBaseUrl } from './api-base-url'
 import {
   collectFoodDisplayImageUrls,
@@ -2083,6 +2084,20 @@ export function getRecentRequestTraces(limit = RECENT_REQUEST_TRACE_LIMIT): Rece
   return loadRecentRequestTraces().slice(-normalizedLimit)
 }
 
+function extractRequestErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message.slice(0, 160)
+  }
+  if (error && typeof error === 'object') {
+    const record = error as { errMsg?: string; message?: string }
+    const message = record.errMsg || record.message
+    if (typeof message === 'string' && message.trim()) {
+      return message.trim().slice(0, 160)
+    }
+  }
+  return undefined
+}
+
 function recordResponseTrace(params: {
   url: string
   method?: string
@@ -2092,16 +2107,18 @@ function recordResponseTrace(params: {
 }): void {
   const { url, method, startedAt, response, error } = params
   const headers = response?.header as Record<string, any> | undefined
+  const statusCode = response?.statusCode ?? 0
+  const errorMessage = extractRequestErrorMessage(error)
   recordRecentRequestTrace({
     method: String(method || 'GET').toUpperCase(),
     path: normalizeRequestPath(url),
-    statusCode: Number(response?.statusCode || 0),
+    statusCode,
     durationMs: Math.max(0, Date.now() - startedAt),
     startedAt: new Date(startedAt).toISOString(),
     traceId: extractTraceIdFromHeaders(headers),
     requestId: extractRequestIdFromHeaders(headers),
     hostName: extractHostNameFromHeaders(headers),
-    errorMessage: error instanceof Error ? error.message.slice(0, 160) : undefined,
+    errorMessage: errorMessage || (statusCode === 0 ? '未收到 HTTP 响应（可能网络失败或请求被中断）' : undefined),
   })
 }
 
@@ -6270,11 +6287,11 @@ export interface SubmitFeedbackResponse {
   message: string
 }
 
-function getClientInfo(): Record<string, unknown> {
+function getClientInfo(includeDiagnostics = false): Record<string, unknown> {
   try {
     const accountInfo = Taro.getAccountInfoSync?.()
     const systemInfo = Taro.getSystemInfoSync?.()
-    return {
+    const base: Record<string, unknown> = {
       app_version: readInjectedString(() => __APP_VERSION__, ''),
       env_version: accountInfo?.miniProgram?.envVersion,
       platform: systemInfo?.platform,
@@ -6282,8 +6299,15 @@ function getClientInfo(): Record<string, unknown> {
       model: systemInfo?.model,
       SDKVersion: systemInfo?.SDKVersion,
     }
+    if (includeDiagnostics) {
+      base.console_logs = getRecentConsoleLogs()
+    }
+    return base
   } catch {
-    return { app_version: readInjectedString(() => __APP_VERSION__, '') }
+    return {
+      app_version: readInjectedString(() => __APP_VERSION__, ''),
+      ...(includeDiagnostics ? { console_logs: getRecentConsoleLogs() } : {}),
+    }
   }
 }
 
@@ -6300,7 +6324,7 @@ export async function submitFeedback(input: SubmitFeedbackRequest): Promise<Subm
       contact: input.contact?.trim() || undefined,
       page_path: getCurrentPagePath(),
       app_version: readInjectedString(() => __APP_VERSION__, ''),
-      client_info: getClientInfo(),
+      client_info: getClientInfo(input.attachRecentRequests !== false),
       recent_requests: input.attachRecentRequests === false ? [] : getRecentRequestTraces(),
     },
     timeout: 10000,

@@ -30,6 +30,7 @@ export default defineConfig<'vite'>(async (merge) => {
   const expirySubscribeTemplateId = process.env.TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID || ''
   const iconCdnBaseUrl = process.env.TARO_APP_ICON_CDN_BASE_URL || ''
   const recentRequestTraceLimit = process.env.TARO_APP_RECENT_REQUEST_TRACE_LIMIT || '50'
+  const consoleLogBufferLimit = process.env.TARO_APP_CONSOLE_LOG_BUFFER_LIMIT || '80'
 
   const baseConfig: UserConfigExport<'vite'> = {
     projectName: 'food_link',
@@ -55,6 +56,8 @@ export default defineConfig<'vite'>(async (merge) => {
       __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(expirySubscribeTemplateId),
       /** 反馈提交时默认附带的最近请求诊断条数，可通过 TARO_APP_RECENT_REQUEST_TRACE_LIMIT 覆盖 */
       __RECENT_REQUEST_TRACE_LIMIT__: JSON.stringify(recentRequestTraceLimit),
+      /** 反馈提交时附带的最近 console 日志条数 */
+      __CONSOLE_LOG_BUFFER_LIMIT__: JSON.stringify(consoleLogBufferLimit),
       /** 仅 development 构建为 true；上传/体验版等走 production 构建为 false，用于隐藏调试 UI 与调试保存分支 */
       __ENABLE_DEV_DEBUG_UI__: JSON.stringify(process.env.NODE_ENV === 'development'),
       /** 与 package.json version 同步，发布新版本时随 npm version 一并更新 */

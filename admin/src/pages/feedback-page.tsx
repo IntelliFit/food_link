@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
   SelectContent,
@@ -19,14 +18,9 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { adminRequest, copyText, displayApiBase } from '@/lib/api'
-import { displayUser, firstTraceId, formatTime, shortId, truncate } from '@/lib/format'
+import { displayUser, firstTraceId, formatTime, formatTraceStatusCode, parseConsoleLogs, shortId, truncate } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type {
-  FeedbackItem,
-  FeedbackListResponse,
-  FeedbackStatus,
-  RecentRequestTrace,
-} from '@/types/feedback'
+import type { ConsoleLogEntry, FeedbackItem, FeedbackListResponse, FeedbackStatus, RecentRequestTrace } from '@/types/feedback'
 import { categoryLabels, statusLabels } from '@/types/feedback'
 
 type FeedbackPageProps = {
@@ -233,16 +227,14 @@ export function FeedbackPage({ onLogout }: FeedbackPageProps) {
             )}
           </div>
 
-          <Card className="sticky top-4 overflow-hidden xl:max-h-[calc(100vh-2rem)]">
-            <ScrollArea className="h-full max-h-[calc(100vh-2rem)]">
-              <CardContent className="p-5">
-                {selected ? (
-                  <FeedbackDetail item={selected} onStatusChange={updateStatus} onCopy={handleCopy} />
-                ) : (
-                  <EmptyState title="选择一条反馈" desc="右侧会展示用户、联系方式、提交 trace、客户端信息和最近请求列表。" />
-                )}
-              </CardContent>
-            </ScrollArea>
+          <Card className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto">
+            <CardContent className="p-5">
+              {selected ? (
+                <FeedbackDetail item={selected} onStatusChange={updateStatus} onCopy={handleCopy} />
+              ) : (
+                <EmptyState title="选择一条反馈" desc="右侧会展示用户、联系方式、提交 trace、客户端信息和最近请求列表。" />
+              )}
+            </CardContent>
           </Card>
         </div>
       </main>
@@ -445,9 +437,11 @@ function FeedbackDetail({
       <section className="space-y-2">
         <h3 className="text-sm font-semibold">客户端信息</h3>
         <pre className="max-h-60 overflow-auto rounded-lg bg-slate-950 p-3 text-xs leading-relaxed text-emerald-100">
-          {JSON.stringify(item.client_info || {}, null, 2)}
+          {JSON.stringify(stripConsoleLogsFromClientInfo(item.client_info || {}), null, 2)}
         </pre>
       </section>
+
+      <ConsoleLogsSection logs={parseConsoleLogs(item.client_info)} />
 
       <Separator />
 
@@ -464,6 +458,33 @@ function FeedbackDetail({
         )}
       </section>
     </div>
+  )
+}
+
+function stripConsoleLogsFromClientInfo(clientInfo: Record<string, unknown>): Record<string, unknown> {
+  const { console_logs: _ignored, ...rest } = clientInfo
+  return rest
+}
+
+function ConsoleLogsSection({ logs }: { logs: ConsoleLogEntry[] }) {
+  if (!logs.length) return null
+  return (
+    <section className="space-y-3">
+      <h3 className="text-sm font-semibold">Console 日志 ({logs.length})</h3>
+      <div className="max-h-72 space-y-2 overflow-y-auto rounded-lg border bg-muted/20 p-2">
+        {logs.map((entry, index) => (
+          <div key={`${entry.at || index}-${index}`} className="rounded-md border bg-background px-3 py-2 text-xs">
+            <div className="mb-1 flex flex-wrap items-center gap-2 text-muted-foreground">
+              <Badge variant="outline" className="font-mono text-[10px] uppercase">
+                {entry.level || 'log'}
+              </Badge>
+              <span>{entry.at ? formatTime(entry.at) : '未知时间'}</span>
+            </div>
+            <pre className="whitespace-pre-wrap break-all font-mono leading-relaxed text-foreground">{entry.message || ''}</pre>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -490,7 +511,7 @@ function TraceCard({
     <div className="rounded-lg border bg-muted/30 p-3">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium">
-          {index + 1}. {trace.method || 'GET'} · {trace.statusCode || trace.status_code || '无状态码'} · {trace.durationMs || trace.duration_ms || 0}ms
+          {index + 1}. {trace.method || 'GET'} · {formatTraceStatusCode(trace)} · {trace.durationMs ?? trace.duration_ms ?? 0}ms
         </p>
         <Button variant="ghost" size="sm" disabled={!traceId} onClick={() => void onCopy(traceId, 'trace 已复制')}>
           <Copy className="size-3.5" />
@@ -498,6 +519,11 @@ function TraceCard({
         </Button>
       </div>
       <p className="mt-1 break-all text-xs text-muted-foreground">{trace.path || '/'}</p>
+      {(trace.errorMessage || trace.error_message) ? (
+        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+          {trace.errorMessage || trace.error_message}
+        </p>
+      ) : null}
       <dl className="mt-3 grid grid-cols-[96px_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
         <DetailKV label="traceId" value={traceId || '无'} />
         <DetailKV label="requestId" value={trace.requestId || trace.request_id || '无'} />

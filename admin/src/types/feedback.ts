@@ -20,6 +20,12 @@ export type RecentRequestTrace = {
   error_message?: string
 }
 
+export type ConsoleLogEntry = {
+  level?: string
+  message?: string
+  at?: string
+}
+
 export type FeedbackItem = {
   id: string
   user_id: string
