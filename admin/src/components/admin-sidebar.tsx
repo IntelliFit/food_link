@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import {
+  FlaskConical,
   LayoutDashboard,
   LogOut,
   MessageSquareText,
@@ -11,11 +12,12 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { BrandMark } from '@/components/brand-mark'
 
-type AdminMenuId = 'overview' | 'feedback' | 'packaged-foods' | 'settings'
+export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'settings'
 
 type AdminSidebarProps = {
   activeMenu: AdminMenuId
   onLogout: () => void
+  onMenuChange?: (menu: AdminMenuId) => void
 }
 
 const menus: Array<{
@@ -27,12 +29,13 @@ const menus: Array<{
 }> = [
   { id: 'overview', label: '总览', desc: '数据概览', icon: LayoutDashboard, disabled: true },
   { id: 'feedback', label: '意见反馈', desc: '用户反馈与 trace', icon: MessageSquareText },
+  { id: 'benchmark', label: '数据集评测', desc: 'Benchmark 数据集与算法评测', icon: FlaskConical },
   { id: 'packaged-foods', label: '包装食品', desc: '待接入独立页面', icon: Package, disabled: true },
   { id: 'settings', label: '系统设置', desc: '待配置', icon: Settings, disabled: true },
 ]
 
 /** 后台左侧导航 */
-export function AdminSidebar({ activeMenu, onLogout }: AdminSidebarProps) {
+export function AdminSidebar({ activeMenu, onLogout, onMenuChange }: AdminSidebarProps) {
   return (
     <aside className="sticky top-4 flex h-[calc(100vh-2rem)] w-[276px] shrink-0 flex-col rounded-2xl border bg-card/90 p-5 shadow-lg backdrop-blur-md">
       <div className="pb-5">
@@ -49,6 +52,7 @@ export function AdminSidebar({ activeMenu, onLogout }: AdminSidebarProps) {
               key={menu.id}
               type="button"
               disabled={menu.disabled}
+              onClick={() => onMenuChange?.(menu.id)}
               className={cn(
                 'flex w-full items-start gap-3 rounded-xl border border-transparent px-3 py-3 text-left transition-colors',
                 active && 'border-primary/20 bg-primary/10 text-primary',

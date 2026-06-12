@@ -109,6 +109,9 @@ const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v1'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
 
+// 首页轮播图 banner 数量，与 rewardHintBanners 数组长度保持一致
+const REWARD_HINT_BANNER_COUNT = 3
+
 function isValidHomeDate(date?: string): date is string {
   return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
 }
@@ -900,9 +903,10 @@ function IndexPage() {
     }
   }, [])
 
+  // 首页轮播图自动轮播
   useEffect(() => {
     const timer = setInterval(() => {
-      setRewardHintIndex((current) => (current + 1) % 2)
+      setRewardHintIndex((current) => (current + 1) % REWARD_HINT_BANNER_COUNT)
     }, 5000)
     return () => clearInterval(timer)
   }, [])
@@ -2792,14 +2796,24 @@ function IndexPage() {
       actionText: '去看看',
       url: extraPkgUrl('/pages/campus-canteen/index'),
     },
+    {
+      key: 'feedback',
+      className: 'home-reward-hint--feedback',
+      kicker: '帮助我们一起成长',
+      title: '意见反馈',
+      desc: '提交宝贵建议，最高可得 +5 积分',
+      actionText: '去反馈',
+      url: extraPkgUrl('/pages/feedback/index'),
+    },
   ] as const
-  const currentRewardHint = rewardHintBanners[rewardHintIndex % rewardHintBanners.length]
+  const currentRewardHint = rewardHintBanners[rewardHintIndex % REWARD_HINT_BANNER_COUNT]
+
   const switchRewardHint = useCallback((direction: 1 | -1) => {
     setRewardHintIndex((current) => {
-      const total = rewardHintBanners.length
+      const total = REWARD_HINT_BANNER_COUNT
       return (current + direction + total) % total
     })
-  }, [rewardHintBanners.length])
+  }, [])
   const handleRewardHintTouchStart = useCallback((event) => {
     const touch = event.touches?.[0]
     if (!touch) return

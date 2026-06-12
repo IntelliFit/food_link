@@ -42,6 +42,18 @@ func (r *AdminAccountRepo) FindByUsername(ctx context.Context, username string) 
 	return adminAccountFromModel(model), nil
 }
 
+func (r *AdminAccountRepo) List(ctx context.Context) ([]*domain.AdminAccount, error) {
+	var models []AdminAccountModel
+	if err := r.db.WithContext(ctx).Order("created_at desc").Find(&models).Error; err != nil {
+		return nil, err
+	}
+	out := make([]*domain.AdminAccount, len(models))
+	for i, m := range models {
+		out[i] = adminAccountFromModel(m)
+	}
+	return out, nil
+}
+
 func (r *AdminAccountRepo) FindByID(ctx context.Context, id string) (*domain.AdminAccount, error) {
 	var model AdminAccountModel
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&model).Error; err != nil {

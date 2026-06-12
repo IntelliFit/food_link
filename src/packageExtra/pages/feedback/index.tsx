@@ -212,7 +212,7 @@ function FeedbackPage() {
         <Switch
           checked={attachRecentRequests}
           onChange={setAttachRecentRequests}
-          style={{ '--switch-checked-background-color': '#00bc7d' } as React.CSSProperties}
+          style={{ '--switch-checked-background-color': '#d4a574' } as React.CSSProperties}
         />
       </View>
 

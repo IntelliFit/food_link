@@ -4,13 +4,16 @@ import { toast } from 'sonner'
 import { Toaster } from '@/components/ui/sonner'
 import { BrandMark } from '@/components/brand-mark'
 import { adminRequest, displayApiBase } from '@/lib/api'
+import { BenchmarkPage } from '@/pages/benchmark-page'
 import { FeedbackPage } from '@/pages/feedback-page'
 import { LoginPage } from '@/pages/login-page'
+import type { AdminMenuId } from '@/components/admin-sidebar'
 
 /** Admin 根组件：会话检查、登录与业务页切换 */
 export function App() {
   const [authenticated, setAuthenticated] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
+  const [currentMenu, setCurrentMenu] = useState<AdminMenuId>('feedback')
 
   useEffect(() => {
     void checkSession()
@@ -65,7 +68,11 @@ export function App() {
 
   return (
     <>
-      <FeedbackPage onLogout={() => void logout()} />
+      {currentMenu === 'benchmark' ? (
+        <BenchmarkPage onLogout={() => void logout()} onMenuChange={setCurrentMenu} />
+      ) : (
+        <FeedbackPage onLogout={() => void logout()} onMenuChange={setCurrentMenu} />
+      )}
       <Toaster richColors closeButton position="bottom-right" />
     </>
   )

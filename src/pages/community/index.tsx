@@ -51,6 +51,9 @@ import { withAuth, redirectToLogin } from '../../utils/withAuth'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { COMMUNITY_FEED_CHANGED_EVENT } from '../../utils/home-events'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../utils/weapp-privacy'
+import { useAppColorScheme } from '../../components/AppColorSchemeContext'
+import { FlPageThemeRoot } from '../../components/FlPageThemeRoot'
+import { applyThemeNavigationBar } from '../../utils/theme-navigation-bar'
 
 /** 同一条动态、同一回复目标、同一内容在短窗口内视为重复点击 */
 const COMMENT_SEND_DEBOUNCE_MS = 450
@@ -409,7 +412,13 @@ function isCampusFoodFeed(item: CommunityFeedItem | null | undefined): boolean {
 }
 
 function CommunityPage() {
+  const { scheme } = useAppColorScheme()
   const [loggedIn, setLoggedIn] = useState(!!getAccessToken())
+
+  useEffect(() => {
+    applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
+  }, [scheme])
+
   const [friends, setFriends] = useState<FriendListItem[]>([])
   const [requests, setRequests] = useState<FriendRequestItem[]>([])
   const [feedList, setFeedList] = useState<CommunityFeedItem[]>([])
@@ -1884,10 +1893,11 @@ function CommunityPage() {
   }
 
   return (
-    <View
-      className='community-page'
-      style={pageHeight ? { height: `${pageHeight}px` } : undefined}
-    >
+    <FlPageThemeRoot>
+      <View
+        className='community-page'
+        style={pageHeight ? { height: `${pageHeight}px` } : undefined}
+      >
       <View className='community-scroll-wrap'>
         <ScrollView
           id='community-main-scroll'
@@ -2722,7 +2732,8 @@ function CommunityPage() {
         </View>
       )}
 
-    </View>
+      </View>
+    </FlPageThemeRoot>
   )
 }
 

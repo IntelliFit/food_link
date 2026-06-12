@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Copy, Loader2, RefreshCw, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { AdminSidebar } from '@/components/admin-sidebar'
+import type { AdminMenuId } from '@/components/admin-sidebar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +26,7 @@ import { categoryLabels, statusLabels } from '@/types/feedback'
 
 type FeedbackPageProps = {
   onLogout: () => void
+  onMenuChange: (menu: AdminMenuId) => void
 }
 
 const statusBadgeClass: Record<FeedbackStatus, string> = {
@@ -35,7 +37,7 @@ const statusBadgeClass: Record<FeedbackStatus, string> = {
 }
 
 /** 意见反馈管理页 */
-export function FeedbackPage({ onLogout }: FeedbackPageProps) {
+export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [status, setStatus] = useState('all')
@@ -113,7 +115,7 @@ export function FeedbackPage({ onLogout }: FeedbackPageProps) {
 
   return (
     <div className="relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[276px_minmax(0,1fr)] gap-5 px-4 py-4">
-      <AdminSidebar activeMenu="feedback" onLogout={onLogout} />
+      <AdminSidebar activeMenu="feedback" onLogout={onLogout} onMenuChange={onMenuChange} />
 
       <main className="min-w-0 space-y-4 pb-8">
         <Card className="border bg-card/90 shadow-lg backdrop-blur-md">

@@ -276,6 +276,15 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
+.home-reward-hint--feedback {
+  background: linear-gradient(135deg, #d4a574 0%, #e0c495 100%);
+  box-shadow: 0 16rpx 34rpx rgb(212 165 116 / 22%);
+
+  .home-reward-hint__go {
+    color: #7d5f33;
+  }
+}
+
 .home-reward-hint__bg {
   position: absolute;
   inset: 0;

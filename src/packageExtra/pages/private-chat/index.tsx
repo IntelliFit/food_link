@@ -305,6 +305,7 @@ export default function PrivateChatPage() {
           <Input
             className='chat-input'
             placeholder='说点什么...'
+            placeholderClass='chat-input-placeholder'
             value={inputText}
             onInput={(e) => setInputText(e.detail.value)}
             onConfirm={handleSendText}

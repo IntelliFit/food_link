@@ -1373,6 +1373,70 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: $fl-dark-text2 !important;
 }
 
+/* 圈子：筛选漏斗按钮 */
+.fl-page-theme-root--dark .feed-filter-funnel-btn {
+  border-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-funnel-btn .icon-filter-filling {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-funnel-btn.is-open,
+.fl-page-theme-root--dark .feed-filter-funnel-btn.is-active {
+  border-color: $fl-dark-accent !important;
+  box-shadow:
+    0 0 0 2rpx rgb(125 211 176 / 14%),
+    0 4rpx 12rpx rgb(0 0 0 / 20%) !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-funnel-btn.is-active .icon-filter-filling {
+  color: $fl-dark-accent !important;
+}
+
+/* 圈子：筛选展开区分隔线 */
+.fl-page-theme-root--dark .feed-filter-expanded {
+  border-top-color: $fl-dark-border !important;
+}
+
+/* 圈子：搜索图标 */
+.fl-page-theme-root--dark .feed-search-svg svg circle,
+.fl-page-theme-root--dark .feed-search-svg svg path {
+  stroke: $fl-dark-text2 !important;
+}
+
+/* 圈子：筛选抽屉 */
+.fl-page-theme-root--dark .feed-filter-drawer-mask {
+  background: rgb(0 0 0 / 55%) !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-drawer {
+  background: $fl-dark-modal-bg !important;
+  box-shadow: 0 -20rpx 52rpx rgb(0 0 0 / 35%) !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-drawer-handle {
+  background: #4b5563 !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-drawer-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .feed-filter-drawer-done {
+  color: $fl-dark-accent !important;
+}
+
+/* 抽屉内筛选 chip：调暗激活态渐变，保持白色文字 */
+.fl-page-theme-root--dark .feed-filter-drawer .feed-filter-chip.active {
+  background: linear-gradient(
+    135deg,
+    rgb(52 92 74) 0%,
+    rgb(62 110 88) 100%
+  ) !important;
+  box-shadow: 0 6rpx 16rpx rgb(0 0 0 / 25%) !important;
+}
+
 /* ---------- 首页：今日餐食（深底上的字与胶囊） ---------- */
 .fl-page-theme-root--dark .meal-desc {
   color: $fl-dark-text !important;
@@ -3791,4 +3855,92 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 
 .fl-page-theme-root--dark .meal-count-badge-text {
   color: $fl-dark-accent !important;
+}
+
+/* ---------- 私信页 ---------- */
+.fl-page-theme-root--dark .private-chat-page {
+  background: #101716 !important;
+}
+
+.fl-page-theme-root--dark .chat-navbar {
+  background: $fl-dark-panel-bg !important;
+  border-bottom-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .chat-navbar-back-icon,
+.fl-page-theme-root--dark .chat-navbar-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .chat-empty-text {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .chat-time-text {
+  color: $fl-dark-text2 !important;
+  background: rgb(255 255 255 / 8%) !important;
+}
+
+.fl-page-theme-root--dark .chat-avatar {
+  background: $fl-dark-surface2 !important;
+}
+
+.fl-page-theme-root--dark .chat-avatar-placeholder {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .chat-bubble {
+  background: $fl-dark-panel-bg !important;
+}
+
+.fl-page-theme-root--dark .chat-bubble-text {
+  color: $fl-dark-text !important;
+}
+
+/* 自己发送的气泡保持品牌绿色，但稍微调暗以适配深色环境 */
+.fl-page-theme-root--dark .chat-bubble--self {
+  background: rgb(0 188 125 / 82%) !important;
+}
+
+.fl-page-theme-root--dark .chat-input-bar {
+  background: $fl-dark-panel-bg !important;
+  border-top-color: $fl-dark-border !important;
+}
+
+.fl-page-theme-root--dark .chat-image-btn:active {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .chat-image-btn-icon {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .chat-input {
+  background: $fl-dark-input-bg !important;
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .chat-input-placeholder {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-page-theme-root--dark .chat-send-btn {
+  background: $fl-dark-ghost-bg !important;
+}
+
+.fl-page-theme-root--dark .chat-send-btn--active {
+  background: $fl-dark-accent !important;
+}
+
+.fl-page-theme-root--dark .chat-send-btn-text {
+  color: $fl-dark-text !important;
+}
+
+.fl-page-theme-root--dark .chat-send-btn--active .chat-send-btn-text {
+  color: #10201a !important;
+}
+
+.fl-page-theme-root--dark .chat-spinner {
+  border-color: $fl-dark-border !important;
+  border-top-color: $fl-dark-accent !important;
 }

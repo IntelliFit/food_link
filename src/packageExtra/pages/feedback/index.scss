@@ -2,7 +2,7 @@
   min-height: 100vh;
   box-sizing: border-box;
   padding: 28rpx 24rpx 180rpx;
-  background: linear-gradient(180deg, rgb(0 188 125 / 8%) 0%, #f6f8fb 280rpx, #f6f8fb 100%);
+  background: linear-gradient(180deg, rgb(212 165 116 / 10%) 0%, #f6f8fb 280rpx, #f6f8fb 100%);
 }
 
 .feedback-hero {
@@ -73,8 +73,8 @@
 }
 
 .feedback-category.is-active {
-  border-color: #00bc7d;
-  background: #ecfdf5;
+  border-color: #d4a574;
+  background: #faf5ed;
 }
 
 .feedback-category-title {
@@ -176,7 +176,7 @@
 }
 
 .feedback-image-add-icon {
-  color: #00bc7d;
+  color: #d4a574;
   font-size: 48rpx;
   font-weight: 500;
   line-height: 1;
@@ -225,6 +225,14 @@
   border-radius: 999rpx;
   font-size: 30rpx;
   font-weight: 650;
+  background: linear-gradient(135deg, #d4a574 0%, #e0c495 100%) !important;
+  border: 2rpx solid #d4a574 !important;
+  color: #fff !important;
+
+  &[disabled] {
+    background: #e8d5b3 !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+  }
 }
 
 /* ---------- 深色主题 ---------- */
@@ -241,7 +249,7 @@
 }
 
 .fl-page-theme-root--dark .feedback-card {
-  background: #18211f;
+  background: #252219;
   border-color: rgb(255 255 255 / 8%);
   box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 22%);
 }
@@ -255,13 +263,13 @@
 }
 
 .fl-page-theme-root--dark .feedback-category {
-  background: #222c29;
+  background: #2c261c;
   border-color: rgb(255 255 255 / 8%);
 }
 
 .fl-page-theme-root--dark .feedback-category.is-active {
-  border-color: #5cb896;
-  background: rgb(92 184 150 / 13%);
+  border-color: #d4a574;
+  background: rgb(212 165 116 / 16%);
 }
 
 .fl-page-theme-root--dark .feedback-category-title {
@@ -274,7 +282,7 @@
 
 .fl-page-theme-root--dark .feedback-textarea,
 .fl-page-theme-root--dark .feedback-contact {
-  background: #222c29;
+  background: #2c261c;
   color: #f2f7f4;
   border: 2rpx solid rgb(255 255 255 / 8%);
 }
@@ -284,7 +292,7 @@
 }
 
 .fl-page-theme-root--dark .feedback-image-add {
-  background: #222c29;
+  background: #2c261c;
   border-color: rgb(255 255 255 / 14%);
 }
 
@@ -297,5 +305,5 @@
 }
 
 .fl-page-theme-root--dark .feedback-submit-bar {
-  background: rgb(24 33 31 / 92%);
+  background: rgb(37 32 25 / 92%);
 }

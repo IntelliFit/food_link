@@ -1056,6 +1056,64 @@ type SchoolDO struct {
 
 func (SchoolDO) TableName() string { return "schools" }
 
+type FoodWeightLabeledSampleDO struct {
+	ID                 string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BatchName          string         `gorm:"column:batch_name;type:text;not null"`
+	SampleName         string         `gorm:"column:sample_name;type:text;not null"`
+	OriginalFilename   string         `gorm:"column:original_filename;type:text;not null"`
+	ImageObjectKey     *string        `gorm:"column:image_object_key;type:text"`
+	ImageURL           *string        `gorm:"column:image_url;type:text"`
+	LabelType          string         `gorm:"column:label_type;type:text;not null"`
+	TotalWeightGrams   *float64       `gorm:"column:total_weight_grams;type:numeric"`
+	Items              []map[string]any `gorm:"column:items;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	Status             string         `gorm:"column:status;type:text;not null;default:'labeled'"`
+	SourcePath         *string        `gorm:"column:source_path;type:text"`
+	Metadata           map[string]any `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt          *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt          *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (FoodWeightLabeledSampleDO) TableName() string { return "food_weight_labeled_samples" }
+
+type BenchmarkRunDO struct {
+	ID                  string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name                string         `gorm:"column:name;type:text;not null"`
+	Status              string         `gorm:"column:status;type:text;not null;default:'pending'"`
+	DatasetFilter       map[string]any `gorm:"column:dataset_filter;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ExecutionMode       string         `gorm:"column:execution_mode;type:text;not null"`
+	ModelConfig         map[string]any `gorm:"column:model_config;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	SampleCount         int            `gorm:"column:sample_count;type:integer;not null;default:0"`
+	Metrics             map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	StageOutputsSummary map[string]any `gorm:"column:stage_outputs_summary;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ErrorMessage        *string        `gorm:"column:error_message;type:text"`
+	StartedAt           *time.Time     `gorm:"column:started_at;type:timestamptz"`
+	CompletedAt         *time.Time     `gorm:"column:completed_at;type:timestamptz"`
+	CreatedBy           *string        `gorm:"column:created_by;type:uuid"`
+	CreatedAt           *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt           *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (BenchmarkRunDO) TableName() string { return "benchmark_runs" }
+
+type BenchmarkRunSampleDO struct {
+	ID            string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	RunID         string         `gorm:"column:run_id;type:uuid;not null;index:idx_benchmark_run_samples_run_id"`
+	SampleID      string         `gorm:"column:sample_id;type:uuid;not null;index:idx_benchmark_run_samples_sample_id"`
+	TaskID        *string        `gorm:"column:task_id;type:uuid;index:idx_benchmark_run_samples_task_id"`
+	Status        string         `gorm:"column:status;type:text;not null;default:'pending'"`
+	Prediction    map[string]any `gorm:"column:prediction;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	GroundTruth   map[string]any `gorm:"column:ground_truth;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	StageOutputs  map[string]any `gorm:"column:stage_outputs;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	Metrics       map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ErrorMessage  *string        `gorm:"column:error_message;type:text"`
+	StartedAt     *time.Time     `gorm:"column:started_at;type:timestamptz"`
+	CompletedAt   *time.Time     `gorm:"column:completed_at;type:timestamptz"`
+	CreatedAt     *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt     *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (BenchmarkRunSampleDO) TableName() string { return "benchmark_run_samples" }
+
 func AllModels() []any {
 	return []any{
 		&UserDO{},
@@ -1117,5 +1175,8 @@ func AllModels() []any {
 		&TestDatasetDO{},
 		&TestBatchDO{},
 		&SchoolDO{},
+		&FoodWeightLabeledSampleDO{},
+		&BenchmarkRunDO{},
+		&BenchmarkRunSampleDO{},
 	}
 }
