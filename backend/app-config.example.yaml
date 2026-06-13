@@ -69,6 +69,11 @@ task_queue:
   brokers: []
   consumer_group: "food-link-workers"
 
+feishu:
+  # 意见反馈飞书机器人 Webhook（留空则关闭通知）
+  feedback_webhook_url: ""
+  feedback_webhook_secret: ""
+
 wechat_pay:
   mchid: ""
   notify_url: ""
