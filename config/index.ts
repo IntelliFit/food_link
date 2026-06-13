@@ -117,6 +117,10 @@ export default defineConfig<'vite'>(async (merge) => {
           to: 'packageExtra/assets/bg/cafeteria-hero.jpg'
         },
         {
+          from: 'assets/bg/cafeteria-hero.jpg',
+          to: 'assets/bg/cafeteria-hero.jpg'
+        },
+        {
           from: 'custom-tab-bar',
           to: 'custom-tab-bar'
         },

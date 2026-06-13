@@ -980,6 +980,7 @@ func buildImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
 - 如果能看到配料表或营养成分表，即使字较小、倾斜、倒置、反光，也要尝试读取关键字段；用配料表判断食物类型和主要原料，用净含量/规格判断重量
 - 如果 OCR 明确读到净含量或规格，例如 260g、250ml、独立小包 20g，则 grossWeightGrams 优先采用该数值或按可见食用数量换算；除非画面明显显示包装已开封且食物已被消耗，才按剩余比例扣减
 - 对零食/包装食品，不能只根据图片图案猜成“阿胶糕/无花果干/普通饼干”等；若包装文字、配料表或营养成分表与视觉图案冲突，最终名称优先采用包装文字和配料证据，并在 evidence 中说明
+- 若包装食品的配料表和营养成分表可被读取，请在对应 item 的 "ingredients" 字段输出：原始配料文本 ingredientsText、每份规格 servingSize、每100g关键营养 nutritionPer100g（能量/蛋白质/脂肪/碳水/钠）；未识别到时省略该字段，不要编造
 - 严禁凭 Logo 或颜色脑补品牌：不要仅凭标志颜色、圆形图案、包装主色等断定品牌；只有读到明确品牌文字时才写品牌，否则使用客观品名，例如“草莓酸奶”“草莓风味发酵乳”
 - 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌；这类对象不计入
 - 不输出餐具、空包装、桌面、骨头、壳、果核、签子等不可食或非食物部分
@@ -1019,14 +1020,34 @@ Type rule:
 
 JSON:
 {
-  "items":[{"name":"","type":"normal","grossWeightGrams":0,"estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100}],
+  "items":[{
+    "name":"",
+    "type":"normal",
+    "grossWeightGrams":0,
+    "estimatedWeightGrams":0,
+    "waterMl":0,
+    "suggestedRatio":100,
+    "ingredients":{
+      "ingredientsText":"",
+      "servingSize":"",
+      "nutritionPer100g":{
+        "calories":0,
+        "protein":0,
+        "fat":0,
+        "carbs":0,
+        "sodiumMg":0
+      }
+    }
+  }],
   "description":"",
   "insight":"",
   "pfc_ratio_comment":"",
   "eating_order_advice":"",
   "absorption_notes":"",
   "context_advice":""
-	}`, tagBlock, imageInputHint, additionalLine, correctionBlock)
+	}
+
+注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine, correctionBlock)
 }
 
 func buildLiteImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string {
@@ -1046,6 +1067,7 @@ func buildLiteImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User) string
 - 食物名称用简体中文，尽量标准、具体，方便命中营养库
 - 包装食品优先读取包装文字、品牌、品名、净含量、营养标签；文字倒置/旋转时要旋转后重读
 - 零食/预包装食品要重点读取配料表、营养成分表、口味、规格和独立小包数量；不要只看包装正面插画猜食物
+- 若配料表和营养成分表可被读取，请在对应 item 的 "ingredients" 字段输出：原始配料文本 ingredientsText、每份规格 servingSize、每100g关键营养 nutritionPer100g（能量/蛋白质/脂肪/碳水/钠）；未识别到时省略该字段，不要编造
 - 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌；这类对象不计入
 - 不确定 OCR 不能直接当食物名；若 OCR 与视觉冲突，把冲突写进 recognitionEvidence 和 alternativeNames
 - 小众水果/进口零食/不确定包装食品可使用 web_search，搜索关键词要围绕可见包装文字、品牌、品名或用户补充信息，避免用泛泛描述搜索
@@ -1060,12 +1082,36 @@ Type rule:
 
 JSON:
 {
-  "items":[{"name":"","type":"normal","grossWeightGrams":0,"estimatedWeightGrams":0,"waterMl":0,"suggestedRatio":100,"confidence":0.8,"recognitionEvidence":"","weightEvidence":"","alternativeNames":[]}],
+  "items":[{
+    "name":"",
+    "type":"normal",
+    "grossWeightGrams":0,
+    "estimatedWeightGrams":0,
+    "waterMl":0,
+    "suggestedRatio":100,
+    "confidence":0.8,
+    "recognitionEvidence":"",
+    "weightEvidence":"",
+    "alternativeNames":[],
+    "ingredients":{
+      "ingredientsText":"",
+      "servingSize":"",
+      "nutritionPer100g":{
+        "calories":0,
+        "protein":0,
+        "fat":0,
+        "carbs":0,
+        "sodiumMg":0
+      }
+    }
+  }],
   "description":"",
   "insight":"",
   "ocrText":[],
   "webSearchSummary":""
-}`, tagBlock, imageInputHint, additionalLine)
+}
+
+注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine)
 }
 
 func buildGemini35ImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) string {
@@ -1098,6 +1144,7 @@ func buildGemini35ImageDBFirstPrompt(input AnalyzeInput, user *authrepo.User, ex
 - 零食、点心、饼干、肉干、坚果、糖果、糕点等预包装食品，优先读取包装袋上的品牌、品名、口味、配料表、营养成分表、净含量、规格、独立小包数量；这些文字证据优先级高于包装正面插画或模型对外观的猜测
 - 如果能看到配料表或营养成分表，即使字较小、倾斜、倒置、反光，也要尝试读取关键字段；用配料表判断食物类型和主要原料，用净含量/规格判断重量
 - 对零食包装，不能只根据图片图案猜成“阿胶糕/无花果干/普通饼干”等；若包装文字、配料表或营养成分表与视觉图案冲突，最终名称优先采用包装文字和配料证据，并在 recognitionEvidence 中说明
+- 若包装食品的配料表和营养成分表可被读取，请在对应 item 的 "ingredients" 字段输出：原始配料文本 ingredientsText、每份规格 servingSize、每100g关键营养 nutritionPer100g（能量/蛋白质/脂肪/碳水/钠）；未识别到时省略该字段，不要编造
 - 禁止凭 Logo 图案盲猜品牌：不要仅凭标志颜色或几何外形，例如只看到红色圆圈，就猜成某品牌；必须通过 OCR 确认中文字符或清晰品牌文本。若字迹反光无法看清，直接用客观品名命名，并在 recognitionEvidence 中说明“包装文字模糊，未检测到明确品牌文本，不进行品牌猜测”
 - 若包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认是一个完整独立包装，不要猜成具体零食名；这类对象不计入
 - 重点区分相近字：鹅胗/鹅肫/鹅珍 与 阿胶；龙宫果/龙贡果/longkong 与 无花果/无花果干
@@ -1141,7 +1188,18 @@ JSON:
       "confidence":0.8,
       "recognitionEvidence":"",
       "weightEvidence":"",
-      "alternativeNames":[]
+      "alternativeNames":[],
+      "ingredients":{
+        "ingredientsText":"",
+        "servingSize":"",
+        "nutritionPer100g":{
+          "calories":0,
+          "protein":0,
+          "fat":0,
+          "carbs":0,
+          "sodiumMg":0
+        }
+      }
     }
   ],
   "groups":[{"groupId":1,"description":""}],
@@ -1152,7 +1210,9 @@ JSON:
   "absorption_notes":"",
   "context_advice":"",
   "ocrText":[]
-}`, tagBlock, imageInputHint, additionalLine, groupLine)
+}
+
+注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine, groupLine)
 }
 
 func buildGemini35GroupedPlanPrompt(input AnalyzeInput, user *authrepo.User) string {
@@ -1179,6 +1239,7 @@ func buildGemini35GroupedPlanPrompt(input AnalyzeInput, user *authrepo.User) str
 - 包装本身不是食物，但包装代表的可食内容要输出为食物项；name 写包装上的品名/可判断食品名，不要输出“包装袋”
 - 包装文字可能横排、竖排、倒置、旋转、反光或被遮挡；请 mentally rotate 后重读，低置信 OCR 不能直接当食物名
 - 零食/预包装食品要重点读取配料表、营养成分表、口味、规格、净含量和独立小包数量；这些文字证据优先级高于包装正面插画或模型对外观的猜测
+- 若包装食品的配料表和营养成分表可被读取，请在对应 item 的 "ingredients" 字段输出：原始配料文本 ingredientsText、每份规格 servingSize、每100g关键营养 nutritionPer100g（能量/蛋白质/脂肪/碳水/钠）；未识别到时省略该字段，不要编造
 - 如果包装只露出很小一角、只有色块/封边/局部花纹，读不到可靠文字，也无法确认完整包装归属，不要猜成具体零食或品牌，也不要列入第一阶段食物清单
 - 重点区分相近字：鹅胗/鹅肫/鹅珍 与 阿胶；龙宫果/龙贡果/longkong 与 无花果/无花果干
 - 相同食物合并为一项，明显不同食物分开；不要因为一个物体在背景或被其它包装压住就漏掉
@@ -1214,7 +1275,18 @@ JSON:
       "confidence":0.8,
       "recognitionEvidence":"",
       "weightEvidence":"第一阶段仅粗略占位，第二阶段估重",
-      "alternativeNames":[]
+      "alternativeNames":[],
+      "ingredients":{
+        "ingredientsText":"",
+        "servingSize":"",
+        "nutritionPer100g":{
+          "calories":0,
+          "protein":0,
+          "fat":0,
+          "carbs":0,
+          "sodiumMg":0
+        }
+      }
     }
   ],
   "groups":[{"groupId":1,"description":""}],
@@ -1225,7 +1297,9 @@ JSON:
   "absorption_notes":"",
   "context_advice":"",
   "ocrText":[]
-}`, tagBlock, imageInputHint, additionalLine)
+}
+
+注意：ingredients 为可选字段，仅当该 item 识别到配料表/营养成分表时才输出；未识别到时请省略或置 null。`, tagBlock, imageInputHint, additionalLine)
 }
 
 func buildTextPrompt(input AnalyzeInput, user *authrepo.User, executionMode string) string {
@@ -4265,10 +4339,61 @@ func parseItems(parsed map[string]any) []map[string]any {
 			next["waterMl"] = waterMl
 			next["suggestedRatio"] = suggestedRatio
 			next["nutrients"] = nutrients
+			next["ingredients"] = normalizeItemIngredients(item["ingredients"])
 			out = append(out, next)
 		}
 	}
 	return out
+}
+
+func normalizeItemIngredients(value any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	m, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	text := cleanAnalyzeText(m["ingredientsText"])
+	serving := cleanAnalyzeText(m["servingSize"])
+	nutrition, _ := m["nutritionPer100g"].(map[string]any)
+	if text == "" && serving == "" && len(nutrition) == 0 {
+		return nil
+	}
+	normalized := map[string]any{}
+	if text != "" {
+		normalized["ingredientsText"] = text
+	}
+	if serving != "" {
+		normalized["servingSize"] = serving
+	}
+	if len(nutrition) > 0 {
+		normalized["nutritionPer100g"] = nutrition
+	}
+	return normalized
+}
+
+func ingredientLabelNutritionFromItem(item map[string]any) map[string]any {
+	ingredients := mapFromAny(item["ingredients"])
+	if len(ingredients) == 0 {
+		return nil
+	}
+	nutrition := mapFromAny(ingredients["nutritionPer100g"])
+	if len(nutrition) == 0 {
+		return nil
+	}
+	// Require at least one core macro to consider the label usable.
+	hasCore := false
+	for _, key := range []string{"calories", "protein", "fat", "carbs"} {
+		if numberFromAny(nutrition[key]) > 0 {
+			hasCore = true
+			break
+		}
+	}
+	if !hasCore {
+		return nil
+	}
+	return nutrition
 }
 
 func toStringSlice(v any) []string {
@@ -4458,6 +4583,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		resolve            *foodrecordrepo.ResolveResult
 		packaged           *foodrecordrepo.PackagedResolveResult
 		packagedCandidates []foodrecorddomain.PackagedFood
+		ingredientLabel    map[string]any
 	}
 	lookups := make([]lookupItem, 0, len(items))
 	fallbackCandidates := []UnresolvedNutritionCandidate{}
@@ -4479,8 +4605,17 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	)
 	for index, item := range items {
 		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
-		packagedResolveQuery := packagedFoodResolveQuery(item)
 		weight := nutritionWeightFromItem(item)
+		if labelNutrition := ingredientLabelNutritionFromItem(item); len(labelNutrition) > 0 {
+			resolvedCount++
+			logger.Info(ctx,"配料表营养标签已识别，优先用于最终计算",
+				slog.String("food_name", name),
+				slog.Float64("weight_g", round2(weight)),
+			)
+			lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, ingredientLabel: labelNutrition})
+			continue
+		}
+		packagedResolveQuery := packagedFoodResolveQuery(item)
 		packagedResolverEnabled := options.packagedResolverEnabled()
 		packagedProbe := packagedFoodResolveEnabled && packagedResolverEnabled && shouldResolvePackagedFoodForDBFirst(item, packagedResolverEnabled)
 		if packagedProbe {
@@ -4650,6 +4785,22 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	deepseekPersistFailedCount := 0
 	for _, lookup := range lookups {
 		next := copyAnyMap(lookup.item)
+		if len(lookup.ingredientLabel) > 0 {
+			next["resolve_status"] = "ingredient_label"
+			next["resolve_score"] = 1.0
+			next["is_unresolved"] = false
+			next["nutrition_source"] = "ingredient_label"
+			next["matched_food_id"] = nil
+			next["matched_food_name"] = nil
+			next["packaged_food_id"] = nil
+			next["unit_nutrition_per_100g"] = lookup.ingredientLabel
+			next["nutrients"] = scaleNutrition(lookup.ingredientLabel, lookup.weight)
+			next["estimatedWeightGrams"] = lookup.weight
+			next["originalWeightGrams"] = lookup.weight
+			ensureGrossWeightField(next, lookup.weight)
+			out = append(out, next)
+			continue
+		}
 		if lookup.packaged != nil && lookup.packaged.Food != nil {
 			food := lookup.packaged.Food
 			unit := packagedNutritionUnit(food)

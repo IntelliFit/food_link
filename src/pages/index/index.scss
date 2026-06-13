@@ -231,20 +231,34 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 }
 
+.home-reward-hint-swiper {
+  position: relative;
+  margin: -2rpx 0 18rpx;
+  border-radius: 28rpx;
+  overflow: hidden;
+  box-shadow: 0 16rpx 34rpx rgb(15 159 110 / 22%);
+}
+
+.home-reward-hint-swiper__track {
+  height: 162rpx;
+  background: transparent;
+}
+
+.home-reward-hint-swiper__item {
+  width: 100%;
+  height: 100%;
+}
+
 .home-reward-hint {
   position: relative;
   display: flex;
   align-items: center;
   gap: 18rpx;
-  min-height: 116rpx;
+  min-height: 162rpx;
   padding: 20rpx 18rpx 34rpx 24rpx;
-  margin: -2rpx 0 18rpx;
-  border-radius: 28rpx;
-  overflow: hidden;
   background:
     radial-gradient(circle at 8% 8%, rgb(255 214 128 / 45%), transparent 34%),
     linear-gradient(135deg, #11251d 0%, #0f9f6e 58%, #18c58b 100%);
-  box-shadow: 0 16rpx 34rpx rgb(15 159 110 / 22%);
   box-sizing: border-box;
 
   &:active {
@@ -254,7 +268,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .home-reward-hint--campus {
   background: linear-gradient(135deg, rgb(6 45 37 / 82%) 0%, rgb(17 94 89 / 58%) 52%, rgb(0 0 0 / 36%) 100%);
-  box-shadow: 0 16rpx 34rpx rgb(17 94 89 / 22%);
 
   &::after {
     content: '';
@@ -266,8 +279,7 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   }
 
   .home-reward-hint__main,
-  .home-reward-hint__actions,
-  .home-reward-hint__dots {
+  .home-reward-hint__actions {
     z-index: 2;
   }
 
@@ -278,7 +290,6 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 .home-reward-hint--feedback {
   background: linear-gradient(135deg, #d4a574 0%, #e0c495 100%);
-  box-shadow: 0 16rpx 34rpx rgb(212 165 116 / 22%);
 
   .home-reward-hint__go {
     color: #7d5f33;
@@ -291,6 +302,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   width: 100%;
   height: 100%;
   z-index: 0;
+  pointer-events: none;
+  object-fit: cover;
 }
 
 .home-reward-hint__main {
@@ -351,11 +364,12 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   left: 0;
   right: 0;
   bottom: 14rpx;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10rpx;
+  pointer-events: none;
 }
 
 .home-reward-hint__dot {

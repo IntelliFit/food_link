@@ -2756,6 +2756,215 @@ func TestToItems(t *testing.T) {
 	assert.Nil(t, toItems("string"))
 }
 
+func TestBuildImageDBFirstPromptIncludesIngredientsOutput(t *testing.T) {
+	prompt := buildImageDBFirstPrompt(AnalyzeInput{ImageURL: "https://example.com/meal.jpg"}, nil)
+	assert.Contains(t, prompt, "ingredients")
+	assert.Contains(t, prompt, "ingredientsText")
+	assert.Contains(t, prompt, "servingSize")
+	assert.Contains(t, prompt, "nutritionPer100g")
+	assert.Contains(t, prompt, "可选字段")
+	assert.Contains(t, prompt, "未识别到时省略")
+}
+
+func TestBuildLiteImageDBFirstPromptIncludesIngredientsOutput(t *testing.T) {
+	prompt := buildLiteImageDBFirstPrompt(AnalyzeInput{ImageURL: "https://example.com/meal.jpg"}, nil)
+	assert.Contains(t, prompt, "ingredients")
+	assert.Contains(t, prompt, "ingredientsText")
+	assert.Contains(t, prompt, "nutritionPer100g")
+}
+
+func TestBuildGemini35ImageDBFirstPromptIncludesIngredientsOutput(t *testing.T) {
+	prompt := buildGemini35ImageDBFirstPrompt(AnalyzeInput{ImageURL: "https://example.com/meal.jpg"}, nil, "gemini35_flash")
+	assert.Contains(t, prompt, "ingredients")
+	assert.Contains(t, prompt, "ingredientsText")
+	assert.Contains(t, prompt, "nutritionPer100g")
+}
+
+func TestBuildGemini35GroupedPlanPromptIncludesIngredientsOutput(t *testing.T) {
+	prompt := buildGemini35GroupedPlanPrompt(AnalyzeInput{ImageURL: "https://example.com/meal.jpg"}, nil)
+	assert.Contains(t, prompt, "ingredients")
+	assert.Contains(t, prompt, "ingredientsText")
+	assert.Contains(t, prompt, "nutritionPer100g")
+}
+
+func TestParseItemsPreservesIngredients(t *testing.T) {
+	parsed := map[string]any{
+		"items": []any{
+			map[string]any{
+				"name":                 "奥利奥饼干",
+				"estimatedWeightGrams": 100.0,
+				"ingredients": map[string]any{
+					"ingredientsText": "小麦粉、白砂糖、植物油、可可粉...",
+					"servingSize":     "每份 19.4g",
+					"nutritionPer100g": map[string]any{
+						"calories": 2000.0,
+						"protein":  6.5,
+						"fat":      21.0,
+						"carbs":    67.0,
+						"sodiumMg": 520.0,
+					},
+				},
+			},
+		},
+	}
+	items := parseItems(parsed)
+	require.Len(t, items, 1)
+	ing, ok := items[0]["ingredients"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "小麦粉、白砂糖、植物油、可可粉...", ing["ingredientsText"])
+	assert.Equal(t, "每份 19.4g", ing["servingSize"])
+	nutrition, ok := ing["nutritionPer100g"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 2000.0, nutrition["calories"])
+}
+
+func TestParseItemsOmitsEmptyIngredients(t *testing.T) {
+	parsed := map[string]any{
+		"items": []any{
+			map[string]any{
+				"name":                 "苹果",
+				"estimatedWeightGrams": 150.0,
+				"ingredients": map[string]any{
+					"ingredientsText":  "",
+					"servingSize":      "",
+					"nutritionPer100g": map[string]any{},
+				},
+			},
+		},
+	}
+	items := parseItems(parsed)
+	require.Len(t, items, 1)
+	assert.Nil(t, items[0]["ingredients"])
+}
+
+func TestNormalizeItemIngredients(t *testing.T) {
+	assert.Nil(t, normalizeItemIngredients(nil))
+	assert.Nil(t, normalizeItemIngredients("not a map"))
+	assert.Nil(t, normalizeItemIngredients(map[string]any{}))
+	assert.Nil(t, normalizeItemIngredients(map[string]any{
+		"ingredientsText": "",
+		"servingSize":     "",
+		"nutritionPer100g": map[string]any{},
+	}))
+	result := normalizeItemIngredients(map[string]any{
+		"ingredientsText": "水，白砂糖",
+		"servingSize":     "每份 250ml",
+		"nutritionPer100g": map[string]any{"calories": 180.0},
+	})
+	require.NotNil(t, result)
+	assert.Equal(t, "水，白砂糖", result["ingredientsText"])
+	assert.Equal(t, "每份 250ml", result["servingSize"])
+}
+
+func TestIngredientLabelNutritionFromItem(t *testing.T) {
+	assert.Nil(t, ingredientLabelNutritionFromItem(map[string]any{}))
+	assert.Nil(t, ingredientLabelNutritionFromItem(map[string]any{
+		"ingredients": map[string]any{
+			"ingredientsText":  "水",
+			"nutritionPer100g": map[string]any{},
+		},
+	}))
+	assert.Nil(t, ingredientLabelNutritionFromItem(map[string]any{
+		"ingredients": map[string]any{
+			"nutritionPer100g": map[string]any{"sodiumMg": 10.0},
+		},
+	}))
+	label := ingredientLabelNutritionFromItem(map[string]any{
+		"ingredients": map[string]any{
+			"ingredientsText": "小麦粉、白砂糖",
+			"servingSize":     "每份 30g",
+			"nutritionPer100g": map[string]any{
+				"calories":       450.0,
+				"protein":        6.5,
+				"fat":            15.0,
+				"carbs":          70.0,
+				"sodiumMg":       200.0,
+				"vitaminCMg":     0.0,
+			},
+		},
+	})
+	require.NotNil(t, label)
+	assert.Equal(t, 450.0, label["calories"])
+	assert.Equal(t, 200.0, label["sodiumMg"])
+	assert.Contains(t, label, "vitaminCMg")
+}
+
+func TestApplyDBFirstToItemsUsesIngredientLabelNutrition(t *testing.T) {
+	db, userRepo := setupAnalyzeServiceTestDB(t)
+	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	// Insert a nutrition record with different values to prove ingredient label overrides it.
+	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
+		ID:             "cookie-1",
+		CanonicalName:  "奥利奥饼干",
+		NormalizedName: "奥利奥饼干",
+		KcalPer100g:    500,
+		ProteinPer100g: 7,
+		CarbsPer100g:   65,
+		FatPer100g:     25,
+		IsActive:       true,
+	}).Error)
+
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"name":                 "奥利奥饼干",
+		"estimatedWeightGrams": 50.0,
+		"type":                 "snack",
+		"ingredients": map[string]any{
+			"ingredientsText": "小麦粉、白砂糖、植物油、可可粉",
+			"servingSize":     "每份 19.4g",
+			"nutritionPer100g": map[string]any{
+				"calories": 480.0,
+				"protein":  6.0,
+				"fat":      22.0,
+				"carbs":    63.0,
+				"sodiumMg": 580.0,
+			},
+		},
+	}}, "")
+
+	require.Len(t, items, 1)
+	assert.Equal(t, "ingredient_label", items[0]["nutrition_source"])
+	assert.Equal(t, "ingredient_label", items[0]["resolve_status"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	// 50g = half of 100g, so values should be scaled by 0.5.
+	assert.Equal(t, 240.0, nutrients["calories"])
+	assert.Equal(t, 3.0, nutrients["protein"])
+	assert.Equal(t, 11.0, nutrients["fat"])
+	assert.Equal(t, 31.5, nutrients["carbs"])
+	assert.Equal(t, 290.0, nutrients["sodiumMg"])
+	unit := items[0]["unit_nutrition_per_100g"].(map[string]any)
+	assert.Equal(t, 480.0, unit["calories"])
+}
+
+func TestApplyDBFirstToItemsFallsBackToLibraryWhenNoIngredientLabel(t *testing.T) {
+	db, userRepo := setupAnalyzeServiceTestDB(t)
+	require.NoError(t, db.AutoMigrate(&foodrecorddomain.FoodNutrition{}, &foodrecorddomain.FoodNutritionAlias{}, &foodrecorddomain.FoodUnresolvedLog{}, &foodrecorddomain.PackagedFood{}, &foodrecorddomain.PackagedFoodAlias{}))
+	nutritionRepo := foodrecordrepo.NewFoodNutritionRepo(db)
+	require.NoError(t, db.Create(&foodrecorddomain.FoodNutrition{
+		ID:             "apple-1",
+		CanonicalName:  "苹果",
+		NormalizedName: "苹果",
+		KcalPer100g:    52,
+		ProteinPer100g: 0.3,
+		CarbsPer100g:   14.0,
+		FatPer100g:     0.2,
+		IsActive:       true,
+	}).Error)
+
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, userRepo, nutritionRepo)
+	items := svc.ApplyDBFirstToItems(context.Background(), []map[string]any{{
+		"name":                 "苹果",
+		"estimatedWeightGrams": 200.0,
+		"type":                 "normal",
+	}}, "")
+
+	require.Len(t, items, 1)
+	assert.Contains(t, []string{"library_exact", "library_exact_canonical"}, items[0]["nutrition_source"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.Equal(t, 104.0, nutrients["calories"])
+}
+
 func floatPtr(v float64) *float64 {
 	return &v
 }

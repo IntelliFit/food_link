@@ -1,4 +1,4 @@
-import { View, Text, Input, Image, Canvas, PageMeta } from '@tarojs/components'
+import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
@@ -800,11 +800,6 @@ function IndexPage() {
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
   const [rewardCenter, setRewardCenter] = useState<RewardCenterResponse | null>(null)
   const [rewardHintIndex, setRewardHintIndex] = useState(0)
-  const rewardHintTouchRef = useRef<{
-    startClientX: number
-    startClientY: number
-    swiped: boolean
-  } | null>(null)
   const petSummarySeqRef = useRef(0)
   const petDragRef = useRef<{
     pointerId: number
@@ -2809,43 +2804,9 @@ function IndexPage() {
   ] as const
   const currentRewardHint = rewardHintBanners[rewardHintIndex % REWARD_HINT_BANNER_COUNT]
 
-  const switchRewardHint = useCallback((direction: 1 | -1) => {
-    setRewardHintIndex((current) => {
-      const total = REWARD_HINT_BANNER_COUNT
-      return (current + direction + total) % total
-    })
+  const handleRewardHintClick = useCallback((url: string) => {
+    Taro.navigateTo({ url })
   }, [])
-  const handleRewardHintTouchStart = useCallback((event) => {
-    const touch = event.touches?.[0]
-    if (!touch) return
-    rewardHintTouchRef.current = {
-      startClientX: touch.clientX,
-      startClientY: touch.clientY,
-      swiped: false,
-    }
-  }, [])
-  const handleRewardHintTouchEnd = useCallback((event) => {
-    const start = rewardHintTouchRef.current
-    const touch = event.changedTouches?.[0]
-    if (!start || !touch) {
-      rewardHintTouchRef.current = null
-      return
-    }
-    const dx = touch.clientX - start.startClientX
-    const dy = touch.clientY - start.startClientY
-    if (Math.abs(dx) >= 44 && Math.abs(dx) > Math.abs(dy) * 1.2) {
-      start.swiped = true
-      switchRewardHint(dx < 0 ? 1 : -1)
-    }
-  }, [switchRewardHint])
-  const handleRewardHintClick = useCallback(() => {
-    if (rewardHintTouchRef.current?.swiped) {
-      rewardHintTouchRef.current = null
-      return
-    }
-    rewardHintTouchRef.current = null
-    Taro.navigateTo({ url: currentRewardHint.url })
-  }, [currentRewardHint.url])
   const openBackfillRecordMenu = () => {
     setShowRecordMenu(true)
   }
@@ -2983,23 +2944,39 @@ function IndexPage() {
           onSelect={handleDateSelect}
         />
         {showRewardHint && (
-          <View
-            className={`home-reward-hint ${currentRewardHint.className}`}
-            onClick={handleRewardHintClick}
-            onTouchStart={handleRewardHintTouchStart}
-            onTouchEnd={handleRewardHintTouchEnd}
-            onTouchCancel={() => {
-              rewardHintTouchRef.current = null
-            }}
-          >
-            <View className='home-reward-hint__main'>
-              <Text className='home-reward-hint__kicker'>{currentRewardHint.kicker}</Text>
-              <Text className='home-reward-hint__title'>{currentRewardHint.title}</Text>
-              <Text className='home-reward-hint__desc'>{currentRewardHint.desc}</Text>
-            </View>
-            <View className='home-reward-hint__actions'>
-              <Text className='home-reward-hint__go'>{currentRewardHint.actionText}</Text>
-            </View>
+          <View className='home-reward-hint-swiper'>
+            <Swiper
+              className='home-reward-hint-swiper__track'
+              current={rewardHintIndex}
+              circular
+              duration={300}
+              onChange={(e) => setRewardHintIndex(e.detail.current)}
+            >
+              {rewardHintBanners.map((banner) => (
+                <SwiperItem key={banner.key} className='home-reward-hint-swiper__item'>
+                  <View
+                    className={`home-reward-hint ${banner.className}`}
+                    onClick={() => handleRewardHintClick(banner.url)}
+                  >
+                    {banner.key === 'campus' && (
+                      <Image
+                        className='home-reward-hint__bg'
+                        src='/assets/bg/cafeteria-hero.jpg'
+                        mode='aspectFill'
+                      />
+                    )}
+                    <View className='home-reward-hint__main'>
+                      <Text className='home-reward-hint__kicker'>{banner.kicker}</Text>
+                      <Text className='home-reward-hint__title'>{banner.title}</Text>
+                      <Text className='home-reward-hint__desc'>{banner.desc}</Text>
+                    </View>
+                    <View className='home-reward-hint__actions'>
+                      <Text className='home-reward-hint__go'>{banner.actionText}</Text>
+                    </View>
+                  </View>
+                </SwiperItem>
+              ))}
+            </Swiper>
             <View className='home-reward-hint__dots'>
               {rewardHintBanners.map((banner, index) => (
                 <Text

@@ -2,8 +2,55 @@ package domain
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
+
+func TestFoodItemUnmarshalJSON_Ingredients(t *testing.T) {
+	input := `{
+		"name": "奥利奥饼干",
+		"weight": 100,
+		"ratio": 100,
+		"intake": 100,
+		"ingredients": {
+			"ingredientsText": "小麦粉、白砂糖、植物油、可可粉...",
+			"servingSize": "每份 19.4g",
+			"nutritionPer100g": {
+				"calories": 2000,
+				"protein": 6.5,
+				"fat": 21,
+				"carbs": 67,
+				"sodiumMg": 520
+			}
+		}
+	}`
+
+	var item FoodItem
+	if err := json.Unmarshal([]byte(input), &item); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if item.Ingredients == nil {
+		t.Fatal("expected Ingredients to be non-nil")
+	}
+	if item.Ingredients.IngredientsText != "小麦粉、白砂糖、植物油、可可粉..." {
+		t.Errorf("IngredientsText: expected %q, got %q", "小麦粉、白砂糖、植物油、可可粉...", item.Ingredients.IngredientsText)
+	}
+	if item.Ingredients.ServingSize != "每份 19.4g" {
+		t.Errorf("ServingSize: expected %q, got %q", "每份 19.4g", item.Ingredients.ServingSize)
+	}
+	calories, ok := item.Ingredients.NutritionPer100g["calories"].(float64)
+	if !ok || calories != 2000 {
+		t.Errorf("NutritionPer100g calories: expected 2000, got %v", item.Ingredients.NutritionPer100g["calories"])
+	}
+
+	marshaled, err := json.Marshal(item)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	if !strings.Contains(string(marshaled), "ingredientsText") {
+		t.Error("marshaled JSON should contain ingredientsText")
+	}
+}
 
 func TestFoodItemUnmarshalJSON_ClampsRatioAndIntake(t *testing.T) {
 	tests := []struct {
