@@ -93,6 +93,7 @@
 - 必须先把结构变更落到 Go 后端对应的数据模型中：优先修改 `backend/internal/migration/do/schema_do.go` 里的迁移 DO，让 DO 结构准确表达数据库表结构；如果业务读写也需要新字段，再按 DDD 分层同步调整对应 domain、repo、service、DTO/handler。不要用 domain struct 替代迁移 DO，也不要让数据库结构只存在于临时 SQL 里。
 - 对 AutoMigrate 不能可靠表达或必须稳定命名的内容（例如已有约束名、唯一索引、partial index、check 约束、外键、触发器、数据修正步骤），应在 `backend/internal/migration/migration.go` 中补充幂等迁移逻辑，保证重复运行安全。
 - 完成模型/迁移代码后，从 `backend/` 目录运行 `go run ./cmd/migration -config-dir .` 更新当前配置指向的数据库。运行前必须确认 `backend/config.yaml` 与环境变量实际指向的目标库；如果是非本地库、线上库或不确定目标库，先获得用户明确确认，再执行。
+- **后端 HTTP 服务启动时不执行数据库迁移**（本地、K8s dev/main 均如此）；结构变更须先手动跑 `cmd/migration`，再重启/部署应用。e2e 临时库初始化仍会在测试进程内调用同一套迁移逻辑。
 - 只读查询可用于诊断和验证；修复性 SQL 只能作为迁移命令中的幂等步骤落代码。确有紧急人工 SQL 需求时，必须先说明风险并获得用户明确授权，事后仍要把等价变更补回迁移 DO/迁移代码并运行迁移命令验证。
 
 ### 代码修改后重启前后端（默认由用户自行执行）

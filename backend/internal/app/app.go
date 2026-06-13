@@ -53,7 +53,6 @@ import (
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
-	"food_link/backend/internal/migration"
 	pethandler "food_link/backend/internal/pet/handler"
 	petrepo "food_link/backend/internal/pet/repo"
 	petservice "food_link/backend/internal/pet/service"
@@ -117,9 +116,6 @@ func New(cfg *config.Config) (*App, error) {
 	db, err := database.Open(cfg.Database)
 	if err != nil {
 		return nil, err
-	}
-	if err := migration.AutoMigrate(context.Background(), db, cfg.Database.Schema); err != nil {
-		return nil, fmt.Errorf("auto migrate: %w", err)
 	}
 
 	// 初始化 IP 定位（离线 ip2region xdb）
@@ -293,7 +289,8 @@ func New(cfg *config.Config) (*App, error) {
 
 	feedbackRepo := feedbackrepo.NewFeedbackRepo(db)
 	feedbackUploadSvc := feedbackservice.NewUploadService(storageClient)
-	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo, feedbackUploadSvc)
+	feedbackFeishuNotifier := feedbackservice.NewFeishuNotifier(cfg.Feishu.FeedbackWebhookURL, cfg.Feishu.FeedbackWebhookSecret)
+	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo, feedbackUploadSvc, feedbackFeishuNotifier)
 	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc, feedbackUploadSvc)
 
 	commentHandler := communityhandler.NewCommentHandler(homeRepo, userRepo)

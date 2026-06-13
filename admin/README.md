@@ -53,10 +53,11 @@ npm run build
 
 ## 创建管理员账号
 
-管理员账号不支持网页或 API 注册，只能在后端通过命令创建：
+管理员账号不支持网页或 API 注册，只能在后端通过命令创建。需先确保目标库已手动迁移（见下），再执行 create-admin：
 
 ```bash
 cd backend
+go run ./cmd/migration -config-dir .
 go run ./cmd/create-admin -username admin -display-name 管理员 -config-dir .
 ```
 
@@ -66,13 +67,7 @@ go run ./cmd/create-admin -username admin -display-name 管理员 -config-dir .
 go run ./cmd/create-admin -username admin -reset -config-dir .
 ```
 
-该命令会读取与后端一致的配置并写入 `admin_accounts` 表。
-
-如果只是重置管理员账号，且当前数据库已有历史数据导致 AutoMigrate 被无关约束阻塞，可跳过迁移：
-
-```bash
-go run ./cmd/create-admin -username admin -reset -skip-migration -config-dir .
-```
+该命令会读取与后端一致的配置并写入 `admin_accounts` 表；不会自动执行数据库迁移。
 
 ## 跨域
 

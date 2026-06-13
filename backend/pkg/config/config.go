@@ -32,6 +32,7 @@ type Config struct {
 	OTel         OTelConfig      `mapstructure:"otel"`
 	Storage      StorageConfig   `mapstructure:"storage"`
 	External     ExternalConfig  `mapstructure:"external"`
+	Feishu       FeishuConfig    `mapstructure:"feishu"`
 	WechatPay    WechatPayConfig `mapstructure:"wechat_pay"`
 	Worker       WorkerConfig    `mapstructure:"worker"`
 	TaskQueue    TaskQueueConfig `mapstructure:"task_queue"`
@@ -110,6 +111,11 @@ type ExternalConfig struct {
 	DoubaoBaseURL         string `mapstructure:"doubao_base_url"`
 	DashScopeAPIKey       string `mapstructure:"dashscope_api_key"`
 	DashScopeBaseURL      string `mapstructure:"dashscope_base_url"`
+}
+
+type FeishuConfig struct {
+	FeedbackWebhookURL    string `mapstructure:"feedback_webhook_url"`
+	FeedbackWebhookSecret string `mapstructure:"feedback_webhook_secret"`
 }
 
 type WechatPayConfig struct {
@@ -826,6 +832,8 @@ var cloudConfigKeyAliases = map[string]string{
 	"OTEL_COLLECTOR_ENDPOINT":             "otel.collector_endpoint",
 	"OTEL_INSECURE":                       "otel.insecure",
 	"OTEL_METRIC_EXPORT_INTERVAL_SECONDS": "otel.metric_export_interval_seconds",
+	"FEISHU_FEEDBACK_WEBHOOK_URL":         "feishu.feedback_webhook_url",
+	"FEISHU_FEEDBACK_WEBHOOK_SECRET":      "feishu.feedback_webhook_secret",
 }
 
 func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
@@ -1012,4 +1020,6 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("database.user", "POSTGRESQL_USER")
 	_ = v.BindEnv("database.password", "POSTGRESQL_PASSWORD")
 	_ = v.BindEnv("database.name", "POSTGRESQL_DATABASE")
+	_ = v.BindEnv("feishu.feedback_webhook_url", "FEISHU_FEEDBACK_WEBHOOK_URL")
+	_ = v.BindEnv("feishu.feedback_webhook_secret", "FEISHU_FEEDBACK_WEBHOOK_SECRET")
 }

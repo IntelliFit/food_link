@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/feedback/domain"
+	"food_link/backend/pkg/logger"
 
 	"gorm.io/datatypes"
 )
@@ -22,9 +25,14 @@ type FeedbackRepo interface {
 	Create(ctx context.Context, feedback *domain.UserFeedback) error
 }
 
+type FeedbackNotifier interface {
+	NotifyNewFeedback(ctx context.Context, feedback *domain.UserFeedback) error
+}
+
 type FeedbackService struct {
 	repo     FeedbackRepo
 	uploads  *UploadService
+	notifier FeedbackNotifier
 }
 
 type SubmitInput struct {
@@ -41,8 +49,8 @@ type SubmitInput struct {
 	SubmitHostName  string
 }
 
-func NewFeedbackService(repo FeedbackRepo, uploads *UploadService) *FeedbackService {
-	return &FeedbackService{repo: repo, uploads: uploads}
+func NewFeedbackService(repo FeedbackRepo, uploads *UploadService, notifier FeedbackNotifier) *FeedbackService {
+	return &FeedbackService{repo: repo, uploads: uploads, notifier: notifier}
 }
 
 func (s *FeedbackService) Submit(ctx context.Context, userID string, input SubmitInput) (string, error) {
@@ -90,7 +98,26 @@ func (s *FeedbackService) Submit(ctx context.Context, userID string, input Submi
 	if err := s.repo.Create(ctx, feedback); err != nil {
 		return "", err
 	}
+	s.notifyNewFeedbackAsync(feedback)
 	return feedback.ID, nil
+}
+
+func (s *FeedbackService) notifyNewFeedbackAsync(feedback *domain.UserFeedback) {
+	if s == nil || s.notifier == nil || feedback == nil {
+		return
+	}
+	snapshot := *feedback
+	go func() {
+		notifyCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		defer cancel()
+		if err := s.notifier.NotifyNewFeedback(notifyCtx, &snapshot); err != nil {
+			logger.Warn(notifyCtx, "意见反馈飞书通知失败",
+				slog.String("feedback_id", snapshot.ID),
+				slog.String("user_id", snapshot.UserID),
+				slog.String("error", err.Error()),
+			)
+		}
+	}()
 }
 
 func normalizeCategory(value string) string {
