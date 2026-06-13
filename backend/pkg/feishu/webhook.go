@@ -52,6 +52,18 @@ func (c *WebhookClient) SendText(ctx context.Context, text string) error {
 	return c.send(ctx, payload)
 }
 
+// SendInteractiveCard posts a Feishu message card. The call is a no-op when the client is disabled.
+func (c *WebhookClient) SendInteractiveCard(ctx context.Context, card map[string]any) error {
+	if !c.Enabled() {
+		return nil
+	}
+	payload := map[string]any{
+		"msg_type": "interactive",
+		"card":     card,
+	}
+	return c.send(ctx, payload)
+}
+
 func (c *WebhookClient) send(ctx context.Context, payload map[string]any) error {
 	if c.secret != "" {
 		timestamp := time.Now().Unix()
@@ -97,7 +109,7 @@ func (c *WebhookClient) send(ctx context.Context, payload map[string]any) error 
 	if len(respBody) > 0 {
 		_ = json.Unmarshal(respBody, &result)
 	}
-	if result.Code != 0 && result.StatusCode != 0 {
+	if result.Code != 0 || result.StatusCode != 0 {
 		return fmt.Errorf("feishu api error code=%d msg=%s status=%d message=%s",
 			result.Code, result.Msg, result.StatusCode, result.StatusMessage)
 	}

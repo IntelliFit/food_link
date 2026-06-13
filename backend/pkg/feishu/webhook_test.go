@@ -55,3 +55,47 @@ func TestWebhookClientSendTextWithSign(t *testing.T) {
 		t.Fatalf("expected sign and timestamp, got=%v", got)
 	}
 }
+
+func TestWebhookClientSendInteractiveCard(t *testing.T) {
+	var got map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatalf("unmarshal body: %v", err)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"code":0,"msg":"success"}`))
+	}))
+	defer server.Close()
+
+	client := NewWebhookClient(server.URL, "")
+	if err := client.SendInteractiveCard(context.Background(), map[string]any{
+		"header": map[string]any{
+			"title": map[string]string{"tag": "plain_text", "content": "意见反馈"},
+		},
+	}); err != nil {
+		t.Fatalf("SendInteractiveCard: %v", err)
+	}
+	if got["msg_type"] != "interactive" {
+		t.Fatalf("unexpected msg_type: %v", got["msg_type"])
+	}
+	if _, ok := got["card"].(map[string]any); !ok {
+		t.Fatalf("expected card object, got=%v", got["card"])
+	}
+}
+
+func TestWebhookClientReportsFeishuCodeError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"code":19002,"msg":"params error"}`))
+	}))
+	defer server.Close()
+
+	client := NewWebhookClient(server.URL, "")
+	if err := client.SendText(context.Background(), "bad"); err == nil {
+		t.Fatal("expected Feishu code error")
+	}
+}

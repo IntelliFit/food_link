@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"food_link/backend/internal/feedback/domain"
@@ -33,8 +34,8 @@ func (n *FeishuNotifier) NotifyNewFeedback(ctx context.Context, feedback *domain
 	if n == nil || n.client == nil || feedback == nil {
 		return nil
 	}
-	text := buildFeedbackNotifyText(feedback)
-	if err := n.client.SendText(ctx, text); err != nil {
+	card := buildFeedbackNotifyCard(feedback)
+	if err := n.client.SendInteractiveCard(ctx, card); err != nil {
 		return err
 	}
 	logger.Info(ctx, "意见反馈飞书通知已发送",
@@ -42,6 +43,82 @@ func (n *FeishuNotifier) NotifyNewFeedback(ctx context.Context, feedback *domain
 		slog.String("user_id", feedback.UserID),
 	)
 	return nil
+}
+
+func buildFeedbackNotifyCard(feedback *domain.UserFeedback) map[string]any {
+	elements := []any{
+		map[string]any{
+			"tag": "div",
+			"text": map[string]string{
+				"tag":     "lark_md",
+				"content": buildFeedbackSummaryMarkdown(feedback),
+			},
+		},
+	}
+
+	if failed := summarizeFailedRecentRequest(feedback.RecentRequests); failed != "" {
+		elements = append(elements, map[string]any{
+			"tag": "div",
+			"text": map[string]string{
+				"tag":     "lark_md",
+				"content": "**最近失败请求**\n" + markdownQuote(failed),
+			},
+		})
+	}
+
+	elements = append(elements,
+		map[string]any{"tag": "hr"},
+		map[string]any{
+			"tag": "div",
+			"text": map[string]string{
+				"tag":     "lark_md",
+				"content": "**反馈内容**\n" + markdownQuote(truncateNotifyContent(feedback.Content)),
+			},
+		},
+	)
+
+	return map[string]any{
+		"config": map[string]any{
+			"wide_screen_mode": true,
+		},
+		"header": map[string]any{
+			"template": "orange",
+			"title": map[string]string{
+				"tag":     "plain_text",
+				"content": fmt.Sprintf("意见反馈：%s", feedbackCategoryLabel(feedback.Category)),
+			},
+		},
+		"elements": elements,
+	}
+}
+
+func buildFeedbackSummaryMarkdown(feedback *domain.UserFeedback) string {
+	lines := []string{
+		markdownField("反馈ID", feedback.ID),
+		markdownField("用户ID", feedback.UserID),
+		markdownField("分类", feedbackCategoryLabel(feedback.Category)),
+		markdownField("页面", displayOrDash(feedback.PagePath)),
+		markdownField("版本", displayOrDash(feedback.AppVersion)),
+		markdownField("联系方式", displayOrDash(feedback.Contact)),
+		markdownField("图片数", fmt.Sprint(len(feedback.ImageURLs))),
+		markdownField("最近请求数", fmt.Sprint(len(feedback.RecentRequests))),
+	}
+	if createdAt := formatFeedbackCreatedAt(feedback.CreatedAt); createdAt != "" {
+		lines = append(lines, markdownField("提交时间", createdAt))
+	}
+	if traceID := strings.TrimSpace(feedback.SubmitTraceID); traceID != "" {
+		lines = append(lines, markdownField("TraceID", traceID))
+	}
+	if requestID := strings.TrimSpace(feedback.SubmitRequestID); requestID != "" {
+		lines = append(lines, markdownField("RequestID", requestID))
+	}
+	if hostName := strings.TrimSpace(feedback.SubmitHostName); hostName != "" {
+		lines = append(lines, markdownField("主机", hostName))
+	}
+	if summary := summarizeClientInfo(feedback.ClientInfo); summary != "" {
+		lines = append(lines, markdownField("客户端", summary))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func buildFeedbackNotifyText(feedback *domain.UserFeedback) string {
@@ -75,6 +152,10 @@ func buildFeedbackNotifyText(feedback *domain.UserFeedback) string {
 	return strings.Join(lines, "\n")
 }
 
+func markdownField(label, value string) string {
+	return fmt.Sprintf("**%s**：%s", label, escapeLarkMarkdown(displayOrDash(value)))
+}
+
 func feedbackCategoryLabel(category string) string {
 	switch strings.TrimSpace(strings.ToLower(category)) {
 	case domain.CategoryBug:
@@ -93,6 +174,33 @@ func displayOrDash(value string) string {
 	if value == "" {
 		return "-"
 	}
+	return value
+}
+
+func formatFeedbackCreatedAt(createdAt *time.Time) string {
+	if createdAt == nil || createdAt.IsZero() {
+		return ""
+	}
+	return createdAt.In(time.FixedZone("CST", 8*60*60)).Format("2006-01-02 15:04:05 UTC+8")
+}
+
+func markdownQuote(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "> -"
+	}
+	lines := strings.Split(escapeLarkMarkdown(value), "\n")
+	for i, line := range lines {
+		lines[i] = "> " + line
+	}
+	return strings.Join(lines, "\n")
+}
+
+func escapeLarkMarkdown(value string) string {
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	value = strings.ReplaceAll(value, "\r", "\n")
+	value = strings.ReplaceAll(value, "\\", "\\\\")
+	value = strings.ReplaceAll(value, "`", "\\`")
 	return value
 }
 
