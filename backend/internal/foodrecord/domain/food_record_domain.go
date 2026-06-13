@@ -26,7 +26,7 @@ type FoodRecord struct {
 	AbsorptionNotes  *string    `gorm:"column:absorption_notes" json:"absorption_notes,omitempty"`
 	ContextAdvice    *string    `gorm:"column:context_advice" json:"context_advice,omitempty"`
 	SourceTaskID     *string    `gorm:"column:source_task_id" json:"source_task_id,omitempty"`
-	EntryType        string     `gorm:"column:entry_type" json:"entry_type"`
+	EntryType        *string    `gorm:"column:entry_type" json:"entry_type,omitempty"`
 	RecordTime       *time.Time `gorm:"column:record_time" json:"record_time"`
 	CreatedAt        *time.Time `gorm:"column:created_at" json:"created_at"`
 	AlreadySaved     bool       `gorm:"-" json:"-"`
@@ -48,10 +48,11 @@ type FoodItem struct {
 	SuggestedRatio         *float64               `json:"suggested_ratio,omitempty"`
 	SuggestedRatioReason   *string                `json:"suggested_ratio_reason,omitempty"`
 	SuggestedRatioSource   *string                `json:"suggested_ratio_source,omitempty"`
-	WaterMl                float64                `json:"water_ml,omitempty"`
-	NutritionSource        *string                `json:"nutrition_source,omitempty"`
-	MatchedFoodID          *string                `json:"matched_food_id,omitempty"`
-	PackagedFoodID         *string                `json:"packaged_food_id,omitempty"`
+	WaterMl                  float64                `json:"water_ml,omitempty"`
+	NutritionSource          *string                `json:"nutrition_source,omitempty"`
+	NutritionSourceCategory  *string                `json:"nutrition_source_category,omitempty"`
+	MatchedFoodID            *string                `json:"matched_food_id,omitempty"`
+	PackagedFoodID           *string                `json:"packaged_food_id,omitempty"`
 	PackageMatchStatus     *string                `json:"package_match_status,omitempty"`
 	PackageMatchConfidence *float64               `json:"package_match_confidence,omitempty"`
 	PackageWeightSource    *string                `json:"package_weight_source,omitempty"`

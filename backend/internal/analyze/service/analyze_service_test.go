@@ -2925,6 +2925,7 @@ func TestApplyDBFirstToItemsUsesIngredientLabelNutrition(t *testing.T) {
 
 	require.Len(t, items, 1)
 	assert.Equal(t, "ingredient_label", items[0]["nutrition_source"])
+	assert.Equal(t, "user_image_label", items[0]["nutrition_source_category"])
 	assert.Equal(t, "ingredient_label", items[0]["resolve_status"])
 	nutrients := items[0]["nutrients"].(map[string]any)
 	// 50g = half of 100g, so values should be scaled by 0.5.
@@ -2935,6 +2936,38 @@ func TestApplyDBFirstToItemsUsesIngredientLabelNutrition(t *testing.T) {
 	assert.Equal(t, 290.0, nutrients["sodiumMg"])
 	unit := items[0]["unit_nutrition_per_100g"].(map[string]any)
 	assert.Equal(t, 480.0, unit["calories"])
+}
+
+func TestApplyDBFirstToItemsUsesIngredientLabelWithoutNutritionRepo(t *testing.T) {
+	// When the nutrition repo is nil, ingredient labels should still be scaled and returned.
+	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil, nil)
+	resp := svc.applyDBFirstNutritionWithOptions(context.Background(), map[string]any{
+		"items": []map[string]any{{
+			"name":                 "奥利奥饼干",
+			"estimatedWeightGrams": 50.0,
+			"type":                 "snack",
+			"ingredients": map[string]any{
+				"ingredientsText": "小麦粉、白砂糖、植物油、可可粉",
+				"servingSize":     "每份 19.4g",
+				"nutritionPer100g": map[string]any{
+					"calories": 480.0,
+					"protein":  6.0,
+					"fat":      22.0,
+					"carbs":    63.0,
+					"sodiumMg": 580.0,
+				},
+			},
+		}},
+	}, dbFirstNutritionOptions{})
+
+	items := toItems(resp["items"])
+	require.Len(t, items, 1)
+	assert.Equal(t, "ingredient_label", items[0]["nutrition_source"])
+	assert.Equal(t, "user_image_label", items[0]["nutrition_source_category"])
+	assert.Equal(t, 1, resp["resolved_count"])
+	assert.Equal(t, 0, resp["unresolved_count"])
+	nutrients := items[0]["nutrients"].(map[string]any)
+	assert.Equal(t, 240.0, nutrients["calories"])
 }
 
 func TestApplyDBFirstToItemsFallsBackToLibraryWhenNoIngredientLabel(t *testing.T) {
@@ -2961,6 +2994,7 @@ func TestApplyDBFirstToItemsFallsBackToLibraryWhenNoIngredientLabel(t *testing.T
 
 	require.Len(t, items, 1)
 	assert.Contains(t, []string{"library_exact", "library_exact_canonical"}, items[0]["nutrition_source"])
+	assert.Equal(t, "database", items[0]["nutrition_source_category"])
 	nutrients := items[0]["nutrients"].(map[string]any)
 	assert.Equal(t, 104.0, nutrients["calories"])
 }

@@ -57,6 +57,9 @@ func (m *mockFoodRecordService) Share(ctx context.Context, recordID string) (*do
 func (m *mockFoodRecordService) SaveCriticalSamples(ctx context.Context, userID string, items []domain.CriticalSample) error {
 	return m.saveCriticalSamplesErr
 }
+func (m *mockFoodRecordService) GetEntryDistribution(ctx context.Context, userID, startDate, endDate string) (*service.EntryDistributionResult, error) {
+	return nil, nil
+}
 
 type mockUploadService struct {
 	url string
@@ -177,9 +180,10 @@ func TestSaveFoodRecordPreservesPackagedAnalysisMetadata(t *testing.T) {
 			"suggested_ratio":          75,
 			"suggested_ratio_reason":   "建议少喝一些",
 			"suggested_ratio_source":   "ai",
-			"water_ml":                 0,
-			"nutrition_source":         "packaged_food_library",
-			"matched_food_id":          "nutrition:coffee",
+			"water_ml":                  0,
+			"nutrition_source":          "packaged_food_library",
+			"nutrition_source_category": "database",
+			"matched_food_id":           "nutrition:coffee",
 			"packaged_food_id":         "packaged:nescafe-105g",
 			"package_match_status":     "matched",
 			"package_match_confidence": 0.96,
@@ -206,6 +210,9 @@ func TestSaveFoodRecordPreservesPackagedAnalysisMetadata(t *testing.T) {
 		}
 		if assert.NotNil(t, item.NutritionSource) {
 			assert.Equal(t, "packaged_food_library", *item.NutritionSource)
+		}
+		if assert.NotNil(t, item.NutritionSourceCategory) {
+			assert.Equal(t, "database", *item.NutritionSourceCategory)
 		}
 		if assert.NotNil(t, item.PackagedFoodID) {
 			assert.Equal(t, "packaged:nescafe-105g", *item.PackagedFoodID)
@@ -272,9 +279,10 @@ func TestUpdateFoodRecordPreservesPackagedAnalysisMetadata(t *testing.T) {
 			"ratio":                    80,
 			"intake":                   206.4,
 			"suggested_ratio":          80,
-			"suggested_ratio_source":   "ai",
-			"nutrition_source":         "packaged_food_library",
-			"packaged_food_id":         "packaged:cici-orange-258g",
+			"suggested_ratio_source":    "ai",
+			"nutrition_source":          "packaged_food_library",
+			"nutrition_source_category": "database",
+			"packaged_food_id":          "packaged:cici-orange-258g",
 			"package_match_status":     "matched",
 			"package_match_confidence": 0.93,
 			"package_weight_source":    "packaged_food_library",
@@ -298,6 +306,9 @@ func TestUpdateFoodRecordPreservesPackagedAnalysisMetadata(t *testing.T) {
 		}
 		if assert.NotNil(t, item.NutritionSource) {
 			assert.Equal(t, "packaged_food_library", *item.NutritionSource)
+		}
+		if assert.NotNil(t, item.NutritionSourceCategory) {
+			assert.Equal(t, "database", *item.NutritionSourceCategory)
 		}
 		if assert.NotNil(t, item.PackagedFoodID) {
 			assert.Equal(t, "packaged:cici-orange-258g", *item.PackagedFoodID)

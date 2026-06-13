@@ -4396,6 +4396,24 @@ func ingredientLabelNutritionFromItem(item map[string]any) map[string]any {
 	return nutrition
 }
 
+func buildIngredientLabelOutput(lookup lookupItem) map[string]any {
+	next := copyAnyMap(lookup.item)
+	next["resolve_status"] = "ingredient_label"
+	next["resolve_score"] = 1.0
+	next["is_unresolved"] = false
+	next["nutrition_source"] = "ingredient_label"
+	next["nutrition_source_category"] = "user_image_label"
+	next["matched_food_id"] = nil
+	next["matched_food_name"] = nil
+	next["packaged_food_id"] = nil
+	next["unit_nutrition_per_100g"] = lookup.ingredientLabel
+	next["nutrients"] = scaleNutrition(lookup.ingredientLabel, lookup.weight)
+	next["estimatedWeightGrams"] = lookup.weight
+	next["originalWeightGrams"] = lookup.weight
+	ensureGrossWeightField(next, lookup.weight)
+	return next
+}
+
 func toStringSlice(v any) []string {
 	if arr, ok := v.([]any); ok {
 		out := make([]string, 0, len(arr))
@@ -4538,6 +4556,17 @@ type dbFirstNutritionOptions struct {
 	packagedExperimentCompatMode bool
 }
 
+type lookupItem struct {
+	index              int
+	item               map[string]any
+	name               string
+	weight             float64
+	resolve            *foodrecordrepo.ResolveResult
+	packaged           *foodrecordrepo.PackagedResolveResult
+	packagedCandidates []foodrecorddomain.PackagedFood
+	ingredientLabel    map[string]any
+}
+
 func (s *AnalyzeService) applyDBFirstNutrition(ctx context.Context, resp map[string]any, additionalContext ...string) map[string]any {
 	options := dbFirstNutritionOptions{packagedIntegrationEnabled: true}
 	if len(additionalContext) > 0 {
@@ -4557,16 +4586,6 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		metrics.ObserveNutritionResolve("db_first", resolveStatus, time.Since(start))
 	}()
 	resp["analysis_engine"] = "db_first"
-	if s.nutrition == nil {
-		resolveStatus = "skipped_no_repo"
-		logger.Warn(ctx,"营养回算已跳过：营养库未初始化",
-			slog.Int("item_count", len(toItems(resp["items"]))),
-		)
-		apm.AddEvent(ctx, "营养回算已跳过：营养库未初始化",
-			attribute.Int("analysis.item_count", len(toItems(resp["items"]))),
-		)
-		return resp
-	}
 	items := toItems(resp["items"])
 	if len(items) == 0 {
 		resp["resolved_count"] = 0
@@ -4575,17 +4594,9 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		return resp
 	}
 
-	type lookupItem struct {
-		index              int
-		item               map[string]any
-		name               string
-		weight             float64
-		resolve            *foodrecordrepo.ResolveResult
-		packaged           *foodrecordrepo.PackagedResolveResult
-		packagedCandidates []foodrecorddomain.PackagedFood
-		ingredientLabel    map[string]any
-	}
 	lookups := make([]lookupItem, 0, len(items))
+	lookupByIndex := map[int]lookupItem{}
+	handled := map[int]bool{}
 	fallbackCandidates := []UnresolvedNutritionCandidate{}
 	semanticCandidates := map[int][]foodrecordrepo.SearchCandidate{}
 	semanticQueries := map[int]string{}
@@ -4595,7 +4606,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	packagedResolutionMatched := 0
 	packagedResolutionWeightApplied := 0
 	packagedResolutionFallback := 0
-		logger.Info(ctx,"营养库优先回算开始",
+	logger.Info(ctx,"营养库优先回算开始",
 		slog.Int("item_count", len(items)),
 		slog.Any("items", analyzeItemLogSummary(items, 12)),
 	)
@@ -4603,18 +4614,82 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		attribute.Int("analysis.item_count", len(items)),
 		attribute.String("analysis.items", summarizeAnalyzeItemsForTrace(items, 12)),
 	)
+	// Pass 1: detect ingredient labels first because they do not depend on the nutrition repo.
+	ingredientLabelByIndex := map[int]map[string]any{}
 	for index, item := range items {
-		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
-		weight := nutritionWeightFromItem(item)
 		if labelNutrition := ingredientLabelNutritionFromItem(item); len(labelNutrition) > 0 {
 			resolvedCount++
+			handled[index] = true
+			name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+			weight := nutritionWeightFromItem(item)
 			logger.Info(ctx,"配料表营养标签已识别，优先用于最终计算",
 				slog.String("food_name", name),
 				slog.Float64("weight_g", round2(weight)),
 			)
-			lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, ingredientLabel: labelNutrition})
+			ingredientLabelByIndex[index] = labelNutrition
+		}
+	}
+	// Build lookups in original item order so the output preserves item order.
+	for index, item := range items {
+		name := strings.TrimSpace(fmt.Sprintf("%v", item["name"]))
+		weight := nutritionWeightFromItem(item)
+		lookup := lookupItem{index: index, item: item, name: name, weight: weight}
+		if labelNutrition, ok := ingredientLabelByIndex[index]; ok {
+			lookup.ingredientLabel = labelNutrition
+		}
+		lookups = append(lookups, lookup)
+		lookupByIndex[index] = lookup
+	}
+	if s.nutrition == nil {
+		resolveStatus = "skipped_no_repo"
+		logger.Warn(ctx,"营养回算已跳过：营养库未初始化",
+			slog.Int("item_count", len(items)),
+			slog.Int("resolved_count", resolvedCount),
+			slog.Int("unresolved_count", len(items)-resolvedCount),
+		)
+		apm.AddEvent(ctx, "营养回算已跳过：营养库未初始化",
+			attribute.Int("analysis.item_count", len(items)),
+			attribute.Int("analysis.resolved_count", resolvedCount),
+			attribute.Int("analysis.unresolved_count", len(items)-resolvedCount),
+		)
+		out := make([]map[string]any, 0, len(items))
+		for index, item := range items {
+			if lookup, ok := lookupByIndex[index]; ok {
+				out = append(out, buildIngredientLabelOutput(lookup))
+				continue
+			}
+			weight := nutritionWeightFromItem(item)
+			next := copyAnyMap(item)
+			next["resolve_status"] = "unresolved"
+			next["is_unresolved"] = true
+			next["resolve_score"] = 0
+			next["nutrition_source"] = "unresolved"
+			next["nutrition_source_category"] = ""
+			next["matched_food_id"] = nil
+			next["matched_food_name"] = nil
+			next["packaged_food_id"] = nil
+			unit := zeroUnitNutritionPer100g()
+			next["unit_nutrition_per_100g"] = unit
+			next["nutrients"] = scaleNutrition(unit, weight)
+			next["estimatedWeightGrams"] = weight
+			next["originalWeightGrams"] = weight
+			ensureGrossWeightField(next, weight)
+			out = append(out, next)
+		}
+		resp["items"] = out
+		resp["resolved_count"] = resolvedCount
+		resp["unresolved_count"] = len(items) - resolvedCount
+		return resp
+	}
+	// Pass 2: database/packaged resolution for items without an ingredient label.
+	for i := range lookups {
+		if len(lookups[i].ingredientLabel) > 0 {
 			continue
 		}
+		index := lookups[i].index
+		item := lookups[i].item
+		name := lookups[i].name
+		weight := lookups[i].weight
 		packagedResolveQuery := packagedFoodResolveQuery(item)
 		packagedResolverEnabled := options.packagedResolverEnabled()
 		packagedProbe := packagedFoodResolveEnabled && packagedResolverEnabled && shouldResolvePackagedFoodForDBFirst(item, packagedResolverEnabled)
@@ -4654,7 +4729,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 					slog.Int("candidate_count", len(packagedCandidates)),
 				)
 				resolvedCount++
-				lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, resolve: &foodrecordrepo.ResolveResult{Status: packagedResolve.Status, Score: packagedResolve.Score}, packaged: packagedResolve, packagedCandidates: packagedCandidates})
+				lookups[i] = lookupItem{index: index, item: item, name: name, weight: weight, resolve: &foodrecordrepo.ResolveResult{Status: packagedResolve.Status, Score: packagedResolve.Score}, packaged: packagedResolve, packagedCandidates: packagedCandidates}
 				continue
 			}
 			packagedCandidates := searchPackagedExperimentCandidates(ctx, s.nutrition, packagedResolveQuery, nil)
@@ -4686,10 +4761,10 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 			if weight > 0 {
 				fallbackCandidates = append(fallbackCandidates, UnresolvedNutritionCandidate{Index: index, Name: name, EstimatedWeightGrams: weight})
 			}
-			lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, resolve: &foodrecordrepo.ResolveResult{Status: "unresolved", Score: 0}})
+			lookups[i] = lookupItem{index: index, item: item, name: name, weight: weight, resolve: &foodrecordrepo.ResolveResult{Status: "unresolved", Score: 0}}
 		} else {
 			resolvedCount++
-			lookups = append(lookups, lookupItem{index: index, item: item, name: name, weight: weight, resolve: resolve})
+			lookups[i] = lookupItem{index: index, item: item, name: name, weight: weight, resolve: resolve}
 		}
 	}
 	if len(semanticCandidates) > 0 {
@@ -4786,19 +4861,7 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 	for _, lookup := range lookups {
 		next := copyAnyMap(lookup.item)
 		if len(lookup.ingredientLabel) > 0 {
-			next["resolve_status"] = "ingredient_label"
-			next["resolve_score"] = 1.0
-			next["is_unresolved"] = false
-			next["nutrition_source"] = "ingredient_label"
-			next["matched_food_id"] = nil
-			next["matched_food_name"] = nil
-			next["packaged_food_id"] = nil
-			next["unit_nutrition_per_100g"] = lookup.ingredientLabel
-			next["nutrients"] = scaleNutrition(lookup.ingredientLabel, lookup.weight)
-			next["estimatedWeightGrams"] = lookup.weight
-			next["originalWeightGrams"] = lookup.weight
-			ensureGrossWeightField(next, lookup.weight)
-			out = append(out, next)
+			out = append(out, buildIngredientLabelOutput(lookup))
 			continue
 		}
 		if lookup.packaged != nil && lookup.packaged.Food != nil {
@@ -4920,6 +4983,9 @@ func (s *AnalyzeService) applyDBFirstNutritionWithOptions(ctx context.Context, r
 		ensureGrossWeightField(next, lookup.weight)
 		_ = resolve.MatchSource
 		out = append(out, next)
+	}
+	for _, item := range out {
+		item["nutrition_source_category"] = nutritionSourceCategory(stringFromAny(item["nutrition_source"]))
 	}
 	resp["items"] = out
 	resp["resolved_count"] = resolvedCount
@@ -6212,6 +6278,37 @@ func nutritionSource(status string) string {
 		return "library_fuzzy"
 	default:
 		return "unresolved"
+	}
+}
+
+// nutritionSourceCategory maps the internal nutrition_source to one of the
+// user-facing five categories required by the product:
+//   - user_image_label : from an ingredient label captured in the user's image
+//   - user_text        : nutrition facts explicitly provided by the user in text
+//   - llm_generated    : generated by an LLM fallback
+//   - database         : from the internal nutrition or packaged-food library
+//   - web_search       : from external web search
+// Items that are truly unresolved have no nutrition source, so the category is empty.
+func nutritionSourceCategory(source string) string {
+	switch strings.TrimSpace(source) {
+	case "ingredient_label":
+		return "user_image_label"
+	case "user_text":
+		return "user_text"
+	case "deepseek_generated", "qwen_generated":
+		return "llm_generated"
+	case "web_search":
+		return "web_search"
+	case "packaged_food_library", "packaged_candidate_pending",
+		"library_exact_alias", "library_exact_canonical",
+		"library_semantic_rerank", "library_fuzzy":
+		return "database"
+	default:
+		if strings.TrimSpace(source) != "" && source != "unresolved" {
+			// Conservative default: anything that came from a known source is treated as database.
+			return "database"
+		}
+		return ""
 	}
 }
 

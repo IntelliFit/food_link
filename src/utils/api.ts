@@ -245,6 +245,8 @@ export interface FoodItem {
   resolve_score?: number
   nutrition_source?: string | null
   nutritionSource?: string | null
+  nutrition_source_category?: string | null
+  nutritionSourceCategory?: string | null
   packaged_food_id?: string
   packagedFoodId?: string
   package_match_status?: string
@@ -488,6 +490,7 @@ export interface FoodRecordItemPayload {
   suggested_ratio_source?: string
   water_ml?: number
   nutrition_source?: string | null
+  nutrition_source_category?: string | null
   matched_food_id?: string | null
   packaged_food_id?: string
   package_match_status?: string
@@ -581,6 +584,8 @@ export interface FoodRecordItemRow {
   suggestedRatioSource?: string
   nutrition_source?: string | null
   nutritionSource?: string | null
+  nutrition_source_category?: string | null
+  nutritionSourceCategory?: string | null
   matched_food_id?: string | null
   matchedFoodId?: string | null
   packaged_food_id?: string

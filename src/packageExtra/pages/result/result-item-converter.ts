@@ -29,6 +29,7 @@ export interface NutritionItem {
   itemType?: string
   category?: string
   nutritionSource?: string | null
+  nutritionSourceCategory?: string | null
   isUnresolved?: boolean
   unitNutritionPer100g?: Nutrients
   nutritionEdited?: boolean
@@ -148,6 +149,7 @@ export const convertApiFoodItemsToNutritionItems = (items: FoodItem[]): Nutritio
       itemType: item.type || item.food_type,
       category: item.category,
       nutritionSource: item.nutrition_source ?? item.nutritionSource,
+      nutritionSourceCategory: item.nutrition_source_category ?? item.nutritionSourceCategory,
       isUnresolved: Boolean(item.is_unresolved),
       unitNutritionPer100g: item.unit_nutrition_per_100g,
       protein: nutrients.protein,

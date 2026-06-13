@@ -95,7 +95,7 @@ type SaveFoodRecordInput struct {
 	AbsorptionNotes  *string
 	ContextAdvice    *string
 	SourceTaskID     *string
-	EntryType        string
+	EntryType        *string
 	Date             *string
 }
 
@@ -156,9 +156,10 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		return nil, err
 	}
 
-	entryType := strings.TrimSpace(input.EntryType)
-	if entryType == "" {
-		entryType = "unknown"
+	var entryType *string
+	if input.EntryType != nil && strings.TrimSpace(*input.EntryType) != "" {
+		v := strings.TrimSpace(*input.EntryType)
+		entryType = &v
 	}
 	record := &domain.FoodRecord{
 		UserID:           userID,

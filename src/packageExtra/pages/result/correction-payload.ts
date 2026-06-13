@@ -17,6 +17,7 @@ export interface ResultCorrectionItem {
   suggestedRatioReason?: string
   suggestedRatioSource?: string
   nutritionSource?: string | null
+  nutritionSourceCategory?: string | null
   matchedFoodId?: string | null
   packagedFoodId?: string
   packageMatchStatus?: string
@@ -66,6 +67,7 @@ export function buildCorrectionPreviousResultItems<T extends ResultCorrectionIte
     suggestedRatioReason: item.suggestedRatioReason,
     suggestedRatioSource: item.suggestedRatioSource,
     nutrition_source: item.nutritionSource,
+    nutrition_source_category: item.nutritionSourceCategory,
     matched_food_id: item.matchedFoodId,
     packaged_food_id: item.packagedFoodId,
     package_match_status: item.packageMatchStatus,

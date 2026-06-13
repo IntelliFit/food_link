@@ -113,7 +113,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		AbsorptionNotes:  body.AbsorptionNotes,
 		ContextAdvice:    body.ContextAdvice,
 		SourceTaskID:     body.SourceTaskID,
-		EntryType:        derefString(body.EntryType),
+		EntryType:        body.EntryType,
 		Date:             body.Date,
 	})
 	if err != nil {
@@ -543,9 +543,3 @@ func filepathExt(filename string) string {
 	return ""
 }
 
-func derefString(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}

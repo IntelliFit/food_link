@@ -75,12 +75,16 @@ func TestFoodRecordRepo_CRUD(t *testing.T) {
 }
 
 func TestNormalizeFoodRecordJSONUpdates_MarshalsItems(t *testing.T) {
+	nutritionSource := "library_exact_canonical"
+	nutritionSourceCategory := "database"
 	updates, err := normalizeFoodRecordJSONUpdates(map[string]any{
 		"items": []domain.FoodItem{{
-			Name:   "白米饭",
-			Weight: 100,
-			Ratio:  100,
-			Intake: 100,
+			Name:                    "白米饭",
+			Weight:                  100,
+			Ratio:                   100,
+			Intake:                  100,
+			NutritionSource:         &nutritionSource,
+			NutritionSourceCategory: &nutritionSourceCategory,
 			Nutrients: domain.FoodItemNutrients{
 				Calories: 116,
 				Protein:  2.6,
@@ -101,6 +105,8 @@ func TestNormalizeFoodRecordJSONUpdates_MarshalsItems(t *testing.T) {
 	assert.Equal(t, float64(100), decoded[0]["weight"])
 	assert.Equal(t, float64(100), decoded[0]["ratio"])
 	assert.Equal(t, float64(100), decoded[0]["intake"])
+	assert.Equal(t, "library_exact_canonical", decoded[0]["nutrition_source"])
+	assert.Equal(t, "database", decoded[0]["nutrition_source_category"])
 	nutrients, ok := decoded[0]["nutrients"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, float64(116), nutrients["calories"])

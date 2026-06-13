@@ -21,6 +21,8 @@ type PackagedAnalysisMetaSource = {
   water_ml?: number
   nutritionSource?: string | null
   nutrition_source?: string | null
+  nutritionSourceCategory?: string | null
+  nutrition_source_category?: string | null
   matchedFoodId?: string | null
   matched_food_id?: string | null
   packagedFoodId?: string
@@ -96,6 +98,7 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
     suggested_ratio_source: firstDefined(item.suggested_ratio_source, item.suggestedRatioSource),
     water_ml: firstDefined(item.water_ml, item.waterMl),
     nutrition_source: firstDefined(item.nutrition_source, item.nutritionSource),
+    nutrition_source_category: firstDefined(item.nutrition_source_category, item.nutritionSourceCategory),
     matched_food_id: firstDefined(item.matched_food_id, item.matchedFoodId),
     packaged_food_id: firstDefined(item.packaged_food_id, item.packagedFoodId),
     package_match_status: firstDefined(item.package_match_status, item.packageMatchStatus),

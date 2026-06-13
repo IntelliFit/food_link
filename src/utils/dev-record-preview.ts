@@ -47,6 +47,8 @@ export function foodRecordFromSavePayload(
         waterMl: it.water_ml,
         nutrition_source: it.nutrition_source,
         nutritionSource: it.nutrition_source,
+        nutrition_source_category: it.nutrition_source_category,
+        nutritionSourceCategory: it.nutrition_source_category,
         matched_food_id: it.matched_food_id,
         matchedFoodId: it.matched_food_id,
         packaged_food_id: it.packaged_food_id,

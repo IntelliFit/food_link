@@ -128,7 +128,7 @@ func (r *FoodRecordRepo) CountByEntryType(ctx context.Context, userID string, st
 	var rows []EntryTypeCount
 	q := r.db.WithContext(ctx).
 		Model(&domain.FoodRecord{}).
-		Select("entry_type, COUNT(*) as count").
+		Select("COALESCE(NULLIF(entry_type, ''), 'unknown') as entry_type, COUNT(*) as count").
 		Where("user_id = ?", userID)
 	if !startTime.IsZero() {
 		q = q.Where("record_time >= ?", startTime)
@@ -136,7 +136,7 @@ func (r *FoodRecordRepo) CountByEntryType(ctx context.Context, userID string, st
 	if !endTime.IsZero() {
 		q = q.Where("record_time < ?", endTime)
 	}
-	if err := q.Group("entry_type").Order("count DESC").Scan(&rows).Error; err != nil {
+	if err := q.Group("COALESCE(NULLIF(entry_type, ''), 'unknown')").Order("count DESC").Scan(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 	var total int64

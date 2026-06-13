@@ -187,7 +187,7 @@ func (s *RecipeService) Delete(ctx context.Context, userID, recipeID string) err
 	return nil
 }
 
-func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealType *string, entryType string) (string, error) {
+func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealType *string, entryType *string) (string, error) {
 	recipe, err := s.Get(ctx, userID, recipeID)
 	if err != nil {
 		return "", err
@@ -202,8 +202,10 @@ func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealTy
 	chosenMeal = normalizeMeal(chosenMeal)
 	desc := "使用食谱：" + recipe.RecipeName
 	recordItems := normalizeRecipeItemsForFoodRecord(recipe.Items, recipe)
-	if strings.TrimSpace(entryType) == "" {
-		entryType = "unknown"
+	var recordEntryType *string
+	if entryType != nil && strings.TrimSpace(*entryType) != "" {
+		v := strings.TrimSpace(*entryType)
+		recordEntryType = &v
 	}
 	record := &domain.FoodRecord{
 		UserID:           userID,
@@ -216,7 +218,7 @@ func (s *RecipeService) Use(ctx context.Context, userID, recipeID string, mealTy
 		TotalCarbs:       recipe.TotalCarbs,
 		TotalFat:         recipe.TotalFat,
 		TotalWeightGrams: int(recipe.TotalWeightGrams),
-		EntryType:        entryType,
+		EntryType:        recordEntryType,
 	}
 	if err := s.repo.InsertFoodRecord(ctx, record); err != nil {
 		return "", err

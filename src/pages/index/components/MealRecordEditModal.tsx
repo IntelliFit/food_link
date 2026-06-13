@@ -32,6 +32,7 @@ interface EditableFoodItem {
   suggestedRatioReason?: string
   suggestedRatioSource?: string
   nutritionSource?: string | null
+  nutritionSourceCategory?: string | null
   matchedFoodId?: string | null
   packagedFoodId?: string
   packageMatchStatus?: string
@@ -229,6 +230,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           suggestedRatioReason: (item as any).suggested_ratio_reason ?? (item as any).suggestedRatioReason,
           suggestedRatioSource: (item as any).suggested_ratio_source ?? (item as any).suggestedRatioSource,
           nutritionSource: (item as any).nutrition_source ?? (item as any).nutritionSource,
+          nutritionSourceCategory: (item as any).nutrition_source_category ?? (item as any).nutritionSourceCategory,
           matchedFoodId: (item as any).matched_food_id ?? (item as any).matchedFoodId,
           packagedFoodId: (item as any).packaged_food_id ?? (item as any).packagedFoodId,
           packageMatchStatus: (item as any).package_match_status ?? (item as any).packageMatchStatus,
