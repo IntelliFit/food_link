@@ -1869,7 +1869,7 @@ function ResultPage() {
         })
         setTimeout(() => {
           Taro.navigateTo({
-            url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(saveResult.id)}`
+            url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(saveResult.id)}&from_save=1`
           })
         }, 500)
       } catch (e: any) {

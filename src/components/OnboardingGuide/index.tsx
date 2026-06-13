@@ -93,6 +93,12 @@ export default function OnboardingGuide({
     finish()
   }, [finish])
 
+  const handleAction = useCallback(async () => {
+    if (!currentStep?.action) return
+    finish()
+    await currentStep.action.onPress()
+  }, [currentStep, finish])
+
   const handleNext = useCallback(async () => {
     if (!showGuide || steps.length === 0) return
     const nextIndex = stepIndex + 1
@@ -146,11 +152,17 @@ export default function OnboardingGuide({
         <Text className='onboarding-guide__title'>{currentStep.title}</Text>
         <Text className='onboarding-guide__desc'>{currentStep.description}</Text>
         <View className='onboarding-guide__actions'>
-          <Text className='onboarding-guide__skip' onClick={handleSkip}>
-            跳过全部
-          </Text>
+          {currentStep.action ? (
+            <Text className='onboarding-guide__skip' onClick={handleAction}>
+              {currentStep.action.label}
+            </Text>
+          ) : (
+            <Text className='onboarding-guide__skip' onClick={handleSkip}>
+              跳过全部
+            </Text>
+          )}
           <Text className='onboarding-guide__next' onClick={handleNext}>
-            {isLast ? '知道了' : '下一步'}
+            {currentStep.confirmLabel ?? (isLast ? '知道了' : '下一步')}
           </Text>
         </View>
       </View>

@@ -3,10 +3,12 @@ import { getAccessToken } from './api'
 
 export const ONBOARDING_HOME_RECORD_GUIDE_KEY = 'onboarding_home_record_guide_v1'
 export const ONBOARDING_ANALYZE_PREP_GUIDE_KEY = 'onboarding_analyze_prep_guide_v1'
+export const ONBOARDING_RECORD_DETAIL_GUIDE_KEY = 'onboarding_record_detail_guide_v1'
 
 const ALL_ONBOARDING_KEYS = [
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
   ONBOARDING_ANALYZE_PREP_GUIDE_KEY,
+  ONBOARDING_RECORD_DETAIL_GUIDE_KEY,
 ] as const
 
 export type OnboardingGuideStorageKey = (typeof ALL_ONBOARDING_KEYS)[number]

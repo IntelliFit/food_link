@@ -9,6 +9,7 @@ import {
   acceptFriendInvite,
   getPosterCalorieCompare,
   getMyMembership,
+  getUserProfile,
   showUnifiedApiError,
   type FoodRecord,
   type Nutrients
@@ -26,6 +27,12 @@ import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { COMMUNITY_FEED_CHANGED_EVENT, HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { MealRecordEditModal } from '../../../pages/index/components/MealRecordEditModal'
+import OnboardingGuide from '../../../components/OnboardingGuide'
+import {
+  ONBOARDING_RECORD_DETAIL_GUIDE_KEY,
+  shouldOfferOnboardingGuide,
+} from '../../../utils/onboarding-guide-storage'
+import { RECORD_DETAIL_ONBOARDING_STEPS } from './record-detail-onboarding-steps'
 
 import './index.scss'
 
@@ -210,7 +217,25 @@ function RecordDetailPage() {
   const [ownerInviteCode, setOwnerInviteCode] = React.useState('')
   const [inviteLoading, setInviteLoading] = React.useState(false)
   const [expandedNutrientDetails, setExpandedNutrientDetails] = React.useState<Record<string, boolean>>({})
+  const [showOnboardingGuide, setShowOnboardingGuide] = React.useState(false)
+  const [publicRecords, setPublicRecords] = React.useState<boolean | null>(null)
   const sharePosterRewardClaimingRef = React.useRef(false)
+
+  const offerRecordDetailOnboardingGuide = async () => {
+    if (!shouldOfferOnboardingGuide(ONBOARDING_RECORD_DETAIL_GUIDE_KEY)) return
+    try {
+      const profile = await getUserProfile()
+      const isPublic = profile.public_records !== false
+      setPublicRecords(isPublic)
+      if (isPublic) {
+        setShowOnboardingGuide(true)
+      }
+    } catch {
+      // 获取隐私设置失败时默认展示，避免用户错过引导
+      setPublicRecords(true)
+      setShowOnboardingGuide(true)
+    }
+  }
 
   useEffect(() => {
     // 加载会员状态（用于海报样式判断）
@@ -286,6 +311,25 @@ function RecordDetailPage() {
 
     loadRecord()
   }, [router.params?.id])
+
+  // 通过 localStorage 控制记录详情页引导：仅保存流程首次进入、未看过引导且公开饮食记录时展示
+  const shouldOfferRecordDetailGuide = useCallback(() => {
+    return (
+      router.params?.from_save === '1' &&
+      shouldOfferOnboardingGuide(ONBOARDING_RECORD_DETAIL_GUIDE_KEY)
+    )
+  }, [router.params?.from_save])
+
+  useEffect(() => {
+    if (loading) return
+    if (!shouldOfferRecordDetailGuide()) return
+    offerRecordDetailOnboardingGuide()
+  }, [loading, shouldOfferRecordDetailGuide])
+
+  Taro.useDidShow(() => {
+    if (!shouldOfferRecordDetailGuide()) return
+    offerRecordDetailOnboardingGuide()
+  })
 
   // 从首页餐食卡片跳转且带 autoPoster=1 时，自动触发生成海报
   const autoPosterTriggeredRef = React.useRef(false)
@@ -888,6 +932,13 @@ function RecordDetailPage() {
         record={record}
         onClose={() => setShowEditModal(false)}
         onSuccess={handleEditSuccess}
+      />
+
+      <OnboardingGuide
+        visible={showOnboardingGuide}
+        steps={RECORD_DETAIL_ONBOARDING_STEPS}
+        storageKey={ONBOARDING_RECORD_DETAIL_GUIDE_KEY}
+        onClose={() => setShowOnboardingGuide(false)}
       />
 
       {/* 海报生成后直接调用微信官方图片菜单，无预览弹窗（对齐首页 MealRecordPosterModal） */}

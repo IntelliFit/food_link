@@ -18,4 +18,11 @@ export type OnboardingGuideStep = {
   padding?: number
   /** 查询前滚动到该节点 */
   scrollIntoView?: boolean
+  /** 覆盖右侧主按钮文案，不传则按「下一步 / 知道了」显示 */
+  confirmLabel?: string
+  /** 左侧自定义行动按钮；存在时替换「跳过全部」 */
+  action?: {
+    label: string
+    onPress: () => void | Promise<void>
+  }
 }
