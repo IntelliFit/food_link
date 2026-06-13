@@ -19,7 +19,7 @@ type RecipeService interface {
 	Get(ctx context.Context, userID, recipeID string) (*domain.Recipe, error)
 	Update(ctx context.Context, userID, recipeID string, input service.UpdateInput) (*domain.Recipe, error)
 	Delete(ctx context.Context, userID, recipeID string) error
-	Use(ctx context.Context, userID, recipeID string, mealType *string) (string, error)
+	Use(ctx context.Context, userID, recipeID string, mealType *string, entryType string) (string, error)
 }
 
 type RecipeHandler struct {
@@ -161,10 +161,15 @@ func (h *RecipeHandler) Delete(c *gin.Context) {
 
 func (h *RecipeHandler) Use(c *gin.Context) {
 	var body struct {
-		MealType *string `json:"meal_type"`
+		MealType  *string `json:"meal_type"`
+		EntryType *string `json:"entry_type"`
 	}
 	_ = c.ShouldBindJSON(&body)
-	recordID, err := h.svc.Use(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("recipe_id"), body.MealType)
+	entryType := ""
+	if body.EntryType != nil {
+		entryType = *body.EntryType
+	}
+	recordID, err := h.svc.Use(c.Request.Context(), c.GetString(authmw.ContextUserIDKey), c.Param("recipe_id"), body.MealType, entryType)
 	if err != nil {
 		response.Error(c, err)
 		return

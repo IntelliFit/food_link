@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"food_link/backend/internal/foodmedia"
 	"food_link/backend/internal/foodrecord/domain"
@@ -116,6 +117,33 @@ func (r *FoodRecordRepo) Delete(ctx context.Context, userID, recordID string) er
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+type EntryTypeCount struct {
+	EntryType string
+	Count     int64
+}
+
+func (r *FoodRecordRepo) CountByEntryType(ctx context.Context, userID string, startTime, endTime time.Time) ([]EntryTypeCount, int64, error) {
+	var rows []EntryTypeCount
+	q := r.db.WithContext(ctx).
+		Model(&domain.FoodRecord{}).
+		Select("entry_type, COUNT(*) as count").
+		Where("user_id = ?", userID)
+	if !startTime.IsZero() {
+		q = q.Where("record_time >= ?", startTime)
+	}
+	if !endTime.IsZero() {
+		q = q.Where("record_time < ?", endTime)
+	}
+	if err := q.Group("entry_type").Order("count DESC").Scan(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+	var total int64
+	for _, r := range rows {
+		total += r.Count
+	}
+	return rows, total, nil
 }
 
 func (r *FoodRecordRepo) InsertCriticalSamples(ctx context.Context, userID string, items []domain.CriticalSample) error {

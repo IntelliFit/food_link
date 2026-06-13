@@ -189,6 +189,7 @@ function CampusCanteenPage() {
       return
     }
     Taro.setStorageSync('campus_quick_record_item', JSON.stringify(item))
+    Taro.setStorageSync('campus_quick_record_source', 'campus_canteen')
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-manual/index')}?campus_quick=1` })
   }
 

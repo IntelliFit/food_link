@@ -73,7 +73,7 @@ function RecipesPage() {
       const targetDate = getStoredRecordTargetDate()
 
       Taro.showLoading({ title: '记录中...', mask: true })
-      await applyUserRecipe(recipe.id, selectedMealType)
+      await applyUserRecipe(recipe.id, selectedMealType, 'favorite_recipe')
       Taro.hideLoading()
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })

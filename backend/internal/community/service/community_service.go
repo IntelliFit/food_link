@@ -950,7 +950,7 @@ func (s *CommunityService) getFeedRecordInteractionContext(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	if owner != nil && owner.PublicRecords != nil && *owner.PublicRecords {
+	if owner != nil && (owner.PublicRecords == nil || *owner.PublicRecords) {
 		return &FeedContextResult{Allowed: true, Reason: "public"}, nil
 	}
 	if userID != "" && record.UserID != "" {

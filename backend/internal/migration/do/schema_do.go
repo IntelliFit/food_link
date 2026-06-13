@@ -285,6 +285,7 @@ type FoodRecordDO struct {
 	DietGoal         *string          `gorm:"column:diet_goal;type:text"`
 	ActivityTiming   *string          `gorm:"column:activity_timing;type:text"`
 	SourceTaskID     *string          `gorm:"column:source_task_id;type:uuid;index:idx_user_food_records_source_task_id"`
+	EntryType        string           `gorm:"column:entry_type;type:text;not null;default:'unknown'"`
 	HiddenFromFeed   bool             `gorm:"column:hidden_from_feed;type:boolean;not null;default:false;index:idx_user_food_records_hidden_from_feed,where:hidden_from_feed = false"`
 }
 

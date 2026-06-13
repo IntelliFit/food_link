@@ -503,6 +503,17 @@ export interface FoodRecordItemPayload {
   manual_portion_label?: string
 }
 
+/** 饮食记录入口来源类型 */
+export type FoodRecordEntryType =
+  | 'food_image'
+  | 'food_text'
+  | 'food_library'
+  | 'favorite_recipe'
+  | 'analyze_history'
+  | 'campus_canteen'
+  | 'public_food_library'
+  | 'unknown'
+
 /** 确认记录请求：餐次 + 识别结果与营养汇总 + 用户状态与专业分析 */
 export interface SaveFoodRecordRequest {
   meal_type: MealType
@@ -523,6 +534,8 @@ export interface SaveFoodRecordRequest {
   context_advice?: string
   /** 来源识别任务 ID（从识别记录保存而来时传入） */
   source_task_id?: string
+  /** 用户创建该条记录的入口来源 */
+  entry_type?: FoodRecordEntryType
   /** 记录日期 YYYY-MM-DD，仅支持近 3 天内补录 */
   date?: string
 }
@@ -6111,10 +6124,10 @@ export async function deleteUserRecipe(recipeId: string): Promise<{ message: str
 }
 
 /** 使用食谱（一键记录，可指定餐次） */
-export async function applyUserRecipe(recipeId: string, mealType?: string): Promise<{ message: string; record_id: string }> {
+export async function applyUserRecipe(recipeId: string, mealType?: string, entryType?: FoodRecordEntryType): Promise<{ message: string; record_id: string }> {
   const response = await authenticatedRequest(`/api/recipes/${recipeId}/use`, {
     method: 'POST',
-    data: { meal_type: mealType },
+    data: { meal_type: mealType, entry_type: entryType },
     timeout: 15000
   })
   if (response.statusCode !== 200) {

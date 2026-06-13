@@ -27,8 +27,8 @@ export const HOME_RECORD_ONBOARDING_STEPS: OnboardingGuideStep[] = [
   },
   {
     selector: '#record-menu-guide-manual',
-    title: '手动输入',
-    description: '从我们的食物数据库里面挑选出食物或是零食直接记录。比如你喝了一瓶统一冰红茶，或者是吃了一碗标准白米饭。',
+    title: '食物库输入',
+    description: '从食物库中挑选常见食物直接记录，无需拍照或打字。比如你喝了一瓶统一冰红茶，或者吃了一碗标准白米饭。',
     padding: 10,
   },
 ]

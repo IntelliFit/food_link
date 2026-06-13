@@ -12,6 +12,7 @@ import {
   showUnifiedApiError,
   uploadAnalyzeImage,
   type CanonicalMealType,
+  type FoodRecordEntryType,
   type ManualFoodCatalogCategory,
   type ManualFoodCatalogResult,
   type ManualFoodSearchResult,
@@ -491,6 +492,7 @@ function RecordManualPage() {
   const [customShareToPublic, setCustomShareToPublic] = useState(false)
   const [customItems, setCustomItems] = useState<ManualFoodSearchResult[]>([])
   const [showSelectedDrawer, setShowSelectedDrawer] = useState(false)
+  const entryTypeRef = useRef<FoodRecordEntryType>('food_library')
 
   const normalizedQuery = searchText.trim()
   const activeCategoryRef = useRef(activeCategory)
@@ -532,6 +534,14 @@ function RecordManualPage() {
       setSelectedMeal(matchedMeal.id)
     } else {
       setSelectedMeal(inferDefaultMealTypeFromLocalTime())
+    }
+    const quickSource = String(Taro.getStorageSync('campus_quick_record_source') || '')
+    if (quickSource === 'campus_canteen' || quickSource === 'public_food_library') {
+      entryTypeRef.current = quickSource as FoodRecordEntryType
+    } else if (params?.campus_quick) {
+      entryTypeRef.current = 'public_food_library'
+    } else {
+      entryTypeRef.current = 'food_library'
     }
     loadCatalog('common', 1, true)
     hydrateCustomItemsFromBackend(storedCustomItems)
@@ -1097,7 +1107,13 @@ function RecordManualPage() {
         total_carbs: Math.round(totalNutrients.carbs * 10) / 10,
         total_fat: Math.round(totalNutrients.fat * 10) / 10,
         total_weight_grams: totalWeight,
+        entry_type: entryTypeRef.current,
       })
+      try {
+        Taro.removeStorageSync('campus_quick_record_source')
+      } catch {
+        /* ignore */
+      }
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
       } catch {

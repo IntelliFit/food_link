@@ -12,7 +12,7 @@ import {
   IconCamera,
   IconAlbum,
   IconText,
-  IconEdit,
+  IconFoodshop,
   IconChevronRight,
   IconTrendingUp
 } from '../../../components/iconfont'
@@ -36,7 +36,7 @@ interface RecordMenuProps {
   selectedDate: string
 }
 
-// 顶部2x2网格功能 - 拍照识别、相册上传、文本输入、手动输入
+// 顶部2x2网格功能 - 拍照识别、相册上传、文本输入、食物库输入
 const GRID_FEATURES: Array<{
   id: string
   label: string
@@ -92,7 +92,7 @@ const GRID_FEATURES: Array<{
   },
   {
     id: 'manual',
-    label: '手动输入',
+    label: '食物库输入',
     color: '#6951bd',
     backgroundColor: '#fefcfe',
     borderColor: '#e6defa',
@@ -101,7 +101,7 @@ const GRID_FEATURES: Array<{
     darkBackgroundColor: 'rgba(179, 158, 244, 0.10)',
     darkBorderColor: 'rgba(179, 158, 244, 0.22)',
     darkIconBackgroundColor: 'rgba(179, 158, 244, 0.16)',
-    Icon: IconEdit,
+    Icon: IconFoodshop,
   },
 ]
 

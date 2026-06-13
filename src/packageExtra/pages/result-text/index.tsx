@@ -396,9 +396,9 @@ function ResultTextPage() {
         total_weight_grams: totalWeight,
         pfc_ratio_comment: pfcRatioComment ?? undefined,
         absorption_notes: absorptionNotes ?? undefined,
-        context_advice: contextAdvice ?? undefined
+        context_advice: contextAdvice ?? undefined,
+        entry_type: 'food_text' as const,
       }
-      // @ts-ignore
       const saveResult = await saveFoodRecord(payload)
       const targetDate = payload.date || getStoredRecordTargetDate() || formatDateKey(new Date())
       try {

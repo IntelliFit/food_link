@@ -59,6 +59,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureMottoColumn(ctx, db); err != nil {
 		return err
 	}
+	if err := ensurePublicRecordsDefault(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -80,6 +83,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("analysis_feedback_samples", "analysis_feedback_samples_feedback_type_check", `feedback_type = ANY (ARRAY['correction'::text,'retry'::text,'manual_entry'::text,'failed'::text,'weight_mismatch'::text,'nutrition_mismatch'::text,'suspect_distrust'::text,'record_corrected'::text])`),
 		dropAndAddCheck("analysis_feedback_samples", "analysis_feedback_samples_resolution_state_check", `resolution_state = ANY (ARRAY['user_corrected'::text,'still_distrust'::text])`),
 		dropAndAddCheck("user_food_records", "user_food_records_meal_type_check", `meal_type = ANY (ARRAY['breakfast'::text,'morning_snack'::text,'lunch'::text,'afternoon_snack'::text,'dinner'::text,'evening_snack'::text,'snack'::text])`),
+		dropAndAddCheck("user_food_records", "user_food_records_entry_type_check", `entry_type = ANY (ARRAY['food_image'::text,'food_text'::text,'food_library'::text,'favorite_recipe'::text,'analyze_history'::text,'campus_canteen'::text,'public_food_library'::text,'unknown'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_source_type_check", `source_type = ANY (ARRAY['image'::text,'text'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_execution_mode_check", `execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
 		dropAndAddCheck("precision_sessions", "precision_sessions_status_check", `status = ANY (ARRAY['collecting'::text,'estimating'::text,'needs_user_input'::text,'needs_retake'::text,'done'::text,'cancelled'::text,'failed'::text])`),
@@ -272,6 +276,8 @@ func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS image_url text`,
 		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS exercise_type text`,
 		`ALTER TABLE user_exercise_logs ADD COLUMN IF NOT EXISTS hidden_from_feed boolean NOT NULL DEFAULT false`,
+		`ALTER TABLE user_food_records ADD COLUMN IF NOT EXISTS entry_type text NOT NULL DEFAULT 'unknown'`,
+		`UPDATE user_food_records SET entry_type = 'unknown' WHERE entry_type IS NULL OR entry_type = ''`,
 		`ALTER TABLE feed_likes ADD COLUMN IF NOT EXISTS target_type text NOT NULL DEFAULT 'food_record'`,
 		`ALTER TABLE feed_likes ADD COLUMN IF NOT EXISTS target_id uuid`,
 		`UPDATE feed_likes SET target_type = 'food_record', target_id = record_id WHERE target_id IS NULL AND record_id IS NOT NULL`,
@@ -603,6 +609,18 @@ func ensureMottoColumn(ctx context.Context, db *gorm.DB) error {
 	sql := `ALTER TABLE weapp_user ADD COLUMN motto TEXT`
 	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 		return fmt.Errorf("add motto column: %w", err)
+	}
+	return nil
+}
+
+func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
+	result := db.WithContext(ctx).Exec(`
+		UPDATE weapp_user
+		SET public_records = TRUE
+		WHERE public_records IS NULL
+	`)
+	if result.Error != nil {
+		return fmt.Errorf("backfill public_records default: %w", result.Error)
 	}
 	return nil
 }

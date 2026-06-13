@@ -1800,7 +1800,8 @@ function ResultPage() {
           pfc_ratio_comment: pfcRatioComment ?? undefined,
           absorption_notes: absorptionNotes ?? undefined,
           context_advice: contextAdvice ?? undefined,
-          source_task_id: sourceTaskId
+          source_task_id: sourceTaskId,
+          entry_type: taskType === 'food_text' ? 'food_text' : 'food_image',
         }
 
         /** 从记录菜单「模拟分析结果」进入时带 analyzeDebugPreview：不写库，仅预览记录详情（仅 development 构建） */

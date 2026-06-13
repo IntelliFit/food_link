@@ -200,6 +200,16 @@ export const IconFavorite = ({ size = 48, color = '#000000', className = '' }: I
   )
 }
 
+/** 食物库/商店图标 */
+export const IconFoodshop = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
+  return (
+    <View
+      className={`iconfont icon-foodshop ${className}`}
+      style={{ fontSize: `${size}rpx`, color }}
+    />
+  )
+}
+
 /** 麦克风/语音输入图标 */
 export const IconMicrophone = ({ size = 48, color = '#000000', className = '' }: IconProps) => {
   return (

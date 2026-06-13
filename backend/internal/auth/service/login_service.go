@@ -80,12 +80,14 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 		phone := s.resolvePhoneNumber(ctx, input.PhoneCode)
 		inviteCode := strings.ToUpper(strings.TrimSpace(input.InviteCode))
 		pointsBalance := 100.0
+		publicRecords := true
 		user = &repo.User{
 			OpenID:        openID,
 			Nickname:      buildDefaultWechatNickname(),
 			Avatar:        defaultUserAvatarKey,
 			Telephone:     phone,
 			PointsBalance: &pointsBalance,
+			PublicRecords: &publicRecords,
 		}
 		if unionID != "" {
 			user.UnionID = &unionID

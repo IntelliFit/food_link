@@ -24,6 +24,7 @@ type FoodRecordService interface {
 	Delete(ctx context.Context, userID, recordID string) error
 	Share(ctx context.Context, recordID string) (*domain.FoodRecord, error)
 	SaveCriticalSamples(ctx context.Context, userID string, items []domain.CriticalSample) error
+	GetEntryDistribution(ctx context.Context, userID, startDate, endDate string) (*service.EntryDistributionResult, error)
 }
 
 type UploadService interface {
@@ -78,6 +79,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		AbsorptionNotes  *string           `json:"absorption_notes"`
 		ContextAdvice    *string           `json:"context_advice"`
 		SourceTaskID     *string           `json:"source_task_id"`
+		EntryType        *string           `json:"entry_type"`
 		Date             *string           `json:"date"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -111,6 +113,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		AbsorptionNotes:  body.AbsorptionNotes,
 		ContextAdvice:    body.ContextAdvice,
 		SourceTaskID:     body.SourceTaskID,
+		EntryType:        derefString(body.EntryType),
 		Date:             body.Date,
 	})
 	if err != nil {
@@ -136,6 +139,19 @@ func (h *FoodRecordHandler) ListFoodRecords(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"records": records})
+}
+
+// GET /api/food-record/entry-distribution
+func (h *FoodRecordHandler) EntryDistribution(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	startDate := c.Query("start_date")
+	endDate := c.Query("end_date")
+	result, err := h.recordSvc.GetEntryDistribution(c.Request.Context(), userID, startDate, endDate)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 // GET /api/food-record/:record_id
@@ -525,4 +541,11 @@ func filepathExt(filename string) string {
 		return filename[i:]
 	}
 	return ""
+}
+
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

@@ -95,6 +95,7 @@ type SaveFoodRecordInput struct {
 	AbsorptionNotes  *string
 	ContextAdvice    *string
 	SourceTaskID     *string
+	EntryType        string
 	Date             *string
 }
 
@@ -155,6 +156,10 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		return nil, err
 	}
 
+	entryType := strings.TrimSpace(input.EntryType)
+	if entryType == "" {
+		entryType = "unknown"
+	}
 	record := &domain.FoodRecord{
 		UserID:           userID,
 		MealType:         normalizedMeal,
@@ -174,6 +179,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		AbsorptionNotes:  input.AbsorptionNotes,
 		ContextAdvice:    input.ContextAdvice,
 		SourceTaskID:     input.SourceTaskID,
+		EntryType:        entryType,
 		RecordTime:       recordTime,
 	}
 	if err := s.recordRepo.Create(ctx, record); err != nil {
@@ -460,6 +466,70 @@ func (s *FoodRecordService) List(ctx context.Context, userID, date string) ([]do
 		s.hydrateRecordNutrientsFromTask(ctx, &records[i])
 	}
 	return records, nil
+}
+
+type EntryDistributionItem struct {
+	EntryType  string  `json:"entry_type"`
+	Count      int64   `json:"count"`
+	Percentage float64 `json:"percentage"`
+}
+
+type EntryDistributionResult struct {
+	Total int64                   `json:"total"`
+	Items []EntryDistributionItem `json:"items"`
+}
+
+func (s *FoodRecordService) GetEntryDistribution(ctx context.Context, userID, startDate, endDate string) (*EntryDistributionResult, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, commonerrors.ErrForbidden
+	}
+	startTime, err := parseDateStart(startDate)
+	if err != nil {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "start_date 格式错误", HTTPStatus: 400}
+	}
+	endTime, err := parseDateEnd(endDate)
+	if err != nil {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "end_date 格式错误", HTTPStatus: 400}
+	}
+	rows, total, err := s.recordRepo.CountByEntryType(ctx, userID, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]EntryDistributionItem, 0, len(rows))
+	for _, r := range rows {
+		percentage := 0.0
+		if total > 0 {
+			percentage = float64(r.Count) / float64(total)
+		}
+		items = append(items, EntryDistributionItem{
+			EntryType: r.EntryType,
+			Count:     r.Count,
+			Percentage: math.Round(percentage*10000) / 10000,
+		})
+	}
+	return &EntryDistributionResult{Total: total, Items: items}, nil
+}
+
+func parseDateStart(date string) (time.Time, error) {
+	if strings.TrimSpace(date) == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse("2006-01-02", strings.TrimSpace(date))
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, chinaTZ), nil
+}
+
+func parseDateEnd(date string) (time.Time, error) {
+	if strings.TrimSpace(date) == "" {
+		return time.Time{}, nil
+	}
+	t, err := time.Parse("2006-01-02", strings.TrimSpace(date))
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, chinaTZ), nil
 }
 
 func (s *FoodRecordService) Get(ctx context.Context, userID, recordID string) (*domain.FoodRecord, error) {

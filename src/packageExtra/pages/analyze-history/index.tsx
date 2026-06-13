@@ -779,7 +779,8 @@ function AnalyzeHistoryPage() {
           absorption_notes: result.absorption_notes || undefined,
           context_advice: result.context_advice || undefined,
           source_task_id: task.id,
-          date: getTaskRecordDate(task)
+          date: getTaskRecordDate(task),
+          entry_type: 'analyze_history' as const,
         }
         const saveResult = await saveFoodRecord(payload)
         Taro.hideLoading()

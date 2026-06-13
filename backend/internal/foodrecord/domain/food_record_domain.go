@@ -26,6 +26,7 @@ type FoodRecord struct {
 	AbsorptionNotes  *string    `gorm:"column:absorption_notes" json:"absorption_notes,omitempty"`
 	ContextAdvice    *string    `gorm:"column:context_advice" json:"context_advice,omitempty"`
 	SourceTaskID     *string    `gorm:"column:source_task_id" json:"source_task_id,omitempty"`
+	EntryType        string     `gorm:"column:entry_type" json:"entry_type"`
 	RecordTime       *time.Time `gorm:"column:record_time" json:"record_time"`
 	CreatedAt        *time.Time `gorm:"column:created_at" json:"created_at"`
 	AlreadySaved     bool       `gorm:"-" json:"-"`

@@ -91,7 +91,7 @@ func NewFeedRepo(db *gorm.DB) *FeedRepo {
 func (r *FeedRepo) ListPublicFeed(ctx context.Context, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]FeedRecord, error) {
 	var publicUserIDs []string
 	err := r.db.WithContext(ctx).Table("weapp_user").
-		Select("id").Where("public_records = ?", true).Pluck("id", &publicUserIDs).Error
+		Select("id").Where("COALESCE(public_records, TRUE) = TRUE").Pluck("id", &publicUserIDs).Error
 	if err != nil {
 		return nil, err
 	}
