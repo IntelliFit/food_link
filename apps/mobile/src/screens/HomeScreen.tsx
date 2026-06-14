@@ -99,7 +99,7 @@ export function HomeScreen() {
         </View>
         <Text style={styles.subtitle}>
           {dashboard?.expirySummary
-            ? `当前 ${dashboard.expirySummary.active_count} 样，今日到期 ${dashboard.expirySummary.today_count} 样`
+            ? `当前 ${dashboard.expirySummary.active_count ?? 0} 样，今日到期 ${dashboard.expirySummary.today_count ?? 0} 样`
             : '把牛奶、水果、剩菜记进来，快到期时会在这里提醒你。'}
         </Text>
       </Card>

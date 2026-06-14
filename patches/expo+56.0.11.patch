@@ -1,0 +1,18 @@
+diff --git a/node_modules/expo/src/async-require/hmr.ts b/node_modules/expo/src/async-require/hmr.ts
+index bd226af..27f7bc3 100644
+--- a/node_modules/expo/src/async-require/hmr.ts
++++ b/node_modules/expo/src/async-require/hmr.ts
+@@ -8,7 +8,12 @@
+  * Based on this but with web support:
+  * https://github.com/facebook/react-native/blob/086714b02b0fb838dee5a66c5bcefe73b53cf3df/Libraries/Utilities/HMRClient.js
+  */
+-import MetroHMRClient from '@expo/metro/metro-runtime/modules/HMRClient';
++// Metro's HMR client is CommonJS. In this monorepo, Metro can compile the
++// default import as `.default`, which is undefined at runtime in Expo Go.
++// Resolve both CJS and ESM shapes explicitly.
++// eslint-disable-next-line @typescript-eslint/no-var-requires
++const MetroHMRClientModule = require('@expo/metro/metro-runtime/modules/HMRClient');
++const MetroHMRClient = MetroHMRClientModule.default ?? MetroHMRClientModule;
+ import prettyFormat, { plugins } from 'pretty-format';
+ 
+ import {

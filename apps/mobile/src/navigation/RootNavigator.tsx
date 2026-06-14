@@ -72,7 +72,6 @@ export function RootNavigator() {
     <NavigationContainer theme={navigationTheme}>
       <Stack.Navigator
         screenOptions={{
-          headerBackTitle: '返回',
           headerTintColor: colors.brandDark,
           headerTitleStyle: { color: colors.text },
           contentStyle: { backgroundColor: colors.background },
