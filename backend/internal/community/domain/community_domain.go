@@ -62,6 +62,7 @@ type UserCirclePost struct {
 	UserID           string     `gorm:"column:user_id"`
 	Title            *string    `gorm:"column:title"`
 	Body             *string    `gorm:"column:body"`
+	Content          string     `gorm:"column:content"`
 	ImagePaths       []string   `gorm:"column:image_paths;serializer:json"`
 	TotalCalories    *float64   `gorm:"column:total_calories"`
 	TotalProtein     *float64   `gorm:"column:total_protein"`

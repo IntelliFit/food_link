@@ -650,6 +650,7 @@ type UserCirclePostDO struct {
 	UserID            string     `gorm:"column:user_id;type:uuid;not null;index:idx_user_circle_posts_user_id"`
 	Title             *string    `gorm:"column:title;type:text"`
 	Body              *string    `gorm:"column:body;type:text"`
+	Content           string     `gorm:"column:content;type:text;not null;default:''"`
 	ImagePaths        []string   `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
 	TotalCalories     *float64   `gorm:"column:total_calories;type:numeric(10,2)"`
 	TotalProtein      *float64   `gorm:"column:total_protein;type:numeric(10,2)"`
