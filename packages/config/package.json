@@ -1,0 +1,6 @@
+{
+  "name": "@food-link/config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared Food Link environment and runtime configuration helpers"
+}

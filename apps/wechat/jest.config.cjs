@@ -1,6 +1,5 @@
 /** @type {import('jest').Config} */
 module.exports = {
-  rootDir: 'apps/wechat',
   /** 单条用例最大执行时间（毫秒），超时则失败，避免挂死 */
   testTimeout: 120000,
   testEnvironment: 'jsdom',
@@ -20,4 +19,4 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
   },
-};
+}

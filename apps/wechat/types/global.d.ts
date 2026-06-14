@@ -10,6 +10,7 @@ declare module '*.less';
 declare module '*.scss';
 declare module '*.sass';
 declare module '*.styl';
+declare module 'weapp-qrcode-canvas-2d';
 
 declare namespace NodeJS {
   interface ProcessEnv {

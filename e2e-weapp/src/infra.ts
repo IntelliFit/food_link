@@ -9,7 +9,8 @@ import { BackendClient } from './backend-client';
 
 export const PROJECT_ROOT = resolve(__dirname, '../..');
 export const BACKEND_DIR = resolve(PROJECT_ROOT, 'backend');
-export const DIST_DIR = resolve(PROJECT_ROOT, 'dist');
+export const WECHAT_APP_DIR = resolve(PROJECT_ROOT, 'apps/wechat');
+export const DIST_DIR = resolve(WECHAT_APP_DIR, 'dist');
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -160,7 +161,7 @@ export async function startDevTools(
   const cliPath = '/Applications/wechatwebdevtools.app/Contents/MacOS/cli';
   console.log('🔧 Starting WeChat DevTools...');
 
-  const proc = execa(cliPath, ['auto', '--project', PROJECT_ROOT, '--auto-port', String(port)], {
+  const proc = execa(cliPath, ['auto', '--project', WECHAT_APP_DIR, '--auto-port', String(port)], {
     detached: false,
   });
 

@@ -6,9 +6,12 @@ import { createStyleImportPlugin } from 'vite-plugin-style-import'
 import devConfig from './dev'
 import prodConfig from './prod'
 
+const appRoot = process.cwd()
+const workspaceRoot = join(appRoot, '..', '..')
+
 /** 与 package.json 的 version 一致，供「我的」页底部等展示 */
 function readPackageVersion(): string {
-  const pkgPath = join(process.cwd(), 'package.json')
+  const pkgPath = join(workspaceRoot, 'package.json')
   return JSON.parse(readFileSync(pkgPath, 'utf-8')).version as string
 }
 
@@ -42,10 +45,11 @@ function parseEnvFile(filePath: string): Record<string, string> {
 
 function loadTaroEnv(): void {
   const mode = process.env.NODE_ENV === 'production' ? 'production' : 'development'
-  const root = process.cwd()
   const merged = {
-    ...parseEnvFile(join(root, '.env')),
-    ...parseEnvFile(join(root, `.env.${mode}`)),
+    ...parseEnvFile(join(workspaceRoot, '.env')),
+    ...parseEnvFile(join(workspaceRoot, `.env.${mode}`)),
+    ...parseEnvFile(join(appRoot, '.env')),
+    ...parseEnvFile(join(appRoot, `.env.${mode}`)),
   }
 
   for (const [key, value] of Object.entries(merged)) {
@@ -58,8 +62,8 @@ function loadTaroEnv(): void {
 loadTaroEnv()
 
 // fix: @taroify/icons 字体文件 base64 内联，避免小程序环境中路径解析失败
-const vantIconWoff2Base64 = readFileSync(join(process.cwd(), 'src/assets/vant-icon/vant-icon.woff2')).toString('base64')
-const vantIconWoffBase64 = readFileSync(join(process.cwd(), 'src/assets/vant-icon/vant-icon.woff')).toString('base64')
+const vantIconWoff2Base64 = readFileSync(join(appRoot, 'src/assets/vant-icon/vant-icon.woff2')).toString('base64')
+const vantIconWoffBase64 = readFileSync(join(appRoot, 'src/assets/vant-icon/vant-icon.woff')).toString('base64')
 
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>(async (merge) => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Convert assets/image.png to a smaller login logo.
-Reads from assets/image.png, resizes to 256x256, and saves to src/assets/login-logo.png.
+Convert apps/wechat/assets/image.png to a smaller login logo.
+Reads from apps/wechat/assets/image.png, resizes to 256x256, and saves to apps/wechat/src/assets/login-logo.png.
 """
 
 from PIL import Image
@@ -11,8 +11,9 @@ from pathlib import Path
 
 def main() -> int:
     project_root = Path(__file__).parent.parent
-    source_path = project_root / "assets" / "image.png"
-    dest_path = project_root / "src" / "assets" / "login-logo.png"
+    wechat_app_root = project_root / "apps" / "wechat"
+    source_path = wechat_app_root / "assets" / "image.png"
+    dest_path = wechat_app_root / "src" / "assets" / "login-logo.png"
 
     if not source_path.exists():
         print(f"Error: source image not found: {source_path}", file=sys.stderr)

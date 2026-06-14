@@ -1,0 +1,9 @@
+{
+  "name": "@food-link/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Food Link mobile app workspace placeholder",
+  "scripts": {
+    "start": "echo \"Mobile app workspace is reserved for the React Native/Expo POC.\""
+  }
+}

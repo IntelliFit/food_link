@@ -2,8 +2,8 @@
 """
 Prepare default user avatar for registration flow.
 
-Reads src/assets/default_avatar.png, center-crops to square, resizes to 256x256,
-and saves as JPEG to src/assets/default_avatar.jpg.
+Reads apps/wechat/src/assets/default_avatar.png, center-crops to square, resizes to 256x256,
+and saves as JPEG to apps/wechat/src/assets/default_avatar.jpg.
 
 Optional --upload uploads to COS user-avatars bucket at _system/default_avatar.jpg
 (requires backend/.env or env vars used by other COS scripts).
@@ -20,8 +20,9 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_PATH = ROOT / "src" / "assets" / "default_avatar.png"
-DEST_PATH = ROOT / "src" / "assets" / "default_avatar.jpg"
+WECHAT_APP_ROOT = ROOT / "apps" / "wechat"
+SOURCE_PATH = WECHAT_APP_ROOT / "src" / "assets" / "default_avatar.png"
+DEST_PATH = WECHAT_APP_ROOT / "src" / "assets" / "default_avatar.jpg"
 COS_KEY = "_system/default_avatar.jpg"
 TARGET_SIZE = 256
 

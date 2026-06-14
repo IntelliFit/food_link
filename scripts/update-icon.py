@@ -3,6 +3,8 @@ import os
 import shutil
 import zipfile
 
+WECHAT_ICONFONT_DIR = os.path.join('apps', 'wechat', 'src', 'assets', 'iconfont')
+
 # 下载 压缩包
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
@@ -31,9 +33,9 @@ for parent, _, files in os.walk('./scripts/tmp'):
         if file.endswith('.css'):
             content = open(filepath, 'r', encoding='utf-8').read().replace('font-size: 16px;', '')
             open(filepath, 'w', encoding='utf-8').write(content)
-            shutil.move(filepath, os.path.join('src/assets/iconfont', file))
+            shutil.move(filepath, os.path.join(WECHAT_ICONFONT_DIR, file))
         elif file.endswith('.woff2') or file.endswith('.woff') or file.endswith('ttf'):
-            shutil.move(filepath, os.path.join('src/assets/iconfont', file))
+            shutil.move(filepath, os.path.join(WECHAT_ICONFONT_DIR, file))
 
 # 删除压缩包和解压区域
 os.remove('./scripts/tmp.zip')
