@@ -23,6 +23,14 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
   }
 }
 
+function readHeaders(response: Response): Record<string, string> {
+  const out: Record<string, string> = {}
+  response.headers.forEach((value: string, key: string) => {
+    out[key] = value
+  })
+  return out
+}
+
 export const apiClient = createFoodLinkApiClient({
   baseUrl: API_BASE_URL,
   adapters: {
@@ -36,7 +44,7 @@ export const apiClient = createFoodLinkApiClient({
       return {
         status: response.status,
         data: await parseJsonResponse(response),
-        headers: Object.fromEntries(response.headers.entries()),
+        headers: readHeaders(response),
       }
     },
     async uploadFile(input: UploadFileInput) {
@@ -56,7 +64,7 @@ export const apiClient = createFoodLinkApiClient({
       return {
         status: response.status,
         data: await parseJsonResponse(response),
-        headers: Object.fromEntries(response.headers.entries()),
+        headers: readHeaders(response),
       }
     },
     tokenStorage: {
