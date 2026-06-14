@@ -9,77 +9,43 @@ function readStorageFlag(key) {
   }
 }
 
-function getTodayDateKey() {
-  const d = new Date()
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
+function triggerRecordMenu(pages) {
+  try {
+    const app = typeof getApp === 'function' ? getApp() : null
+    const callback = app &&
+      app.eventCenter &&
+      app.eventCenter.callbacks &&
+      app.eventCenter.callbacks.showRecordMenu
+    if (typeof callback === 'function') {
+      callback()
+      return true
+    }
+  } catch (e) {}
 
-function navigateTo(url) {
-  wx.navigateTo({ url })
-}
+  try {
+    const app = typeof getApp === 'function' ? getApp() : null
+    const trigger = app &&
+      app.__taroAppInstance &&
+      app.__taroAppInstance.eventCenter &&
+      app.__taroAppInstance.eventCenter.trigger
+    if (typeof trigger === 'function') {
+      trigger('showRecordMenu')
+      return true
+    }
+  } catch (e) {}
 
-function redirectToLogin() {
-  navigateTo('/packageExtra/pages/login/index')
-}
+  try {
+    const currentPage = pages && pages[pages.length - 1]
+    const component = currentPage &&
+      currentPage.selectComponent &&
+      currentPage.selectComponent('.record-menu-trigger')
+    if (component && typeof component.showMenu === 'function') {
+      component.showMenu()
+      return true
+    }
+  } catch (e) {}
 
-function chooseAndAnalyze(sourceType) {
-  wx.chooseMedia({
-    count: sourceType === 'camera' ? 1 : 5,
-    mediaType: ['image'],
-    sourceType: [sourceType],
-    sizeType: ['compressed'],
-    success(res) {
-      const paths = (res.tempFiles || [])
-        .map((f) => f && f.tempFilePath)
-        .filter(Boolean)
-      if (paths.length > 0) {
-        wx.setStorageSync('analyzeImagePath', paths[0])
-        wx.setStorageSync('analyzeImagePaths', paths)
-      }
-      const date = getTodayDateKey()
-      wx.setStorageSync('recordTargetDate', date)
-      navigateTo(`/packageExtra/pages/analyze/index?date=${encodeURIComponent(date)}`)
-    },
-    fail(err) {
-      if (err && err.errMsg && err.errMsg.indexOf('cancel') !== -1) return
-      wx.showToast({ title: '选择图片失败', icon: 'none' })
-    },
-  })
-}
-
-function showCenterRecordMenu() {
-  wx.showActionSheet({
-    itemList: ['拍照识别', '相册上传', '文字输入', '食物库输入'],
-    itemColor: '#1f2937',
-    success(res) {
-      const date = getTodayDateKey()
-      switch (res.tapIndex) {
-        case 0:
-          if (!wx.getStorageSync('access_token')) {
-            redirectToLogin()
-            return
-          }
-          chooseAndAnalyze('camera')
-          break
-        case 1:
-          if (!wx.getStorageSync('access_token')) {
-            redirectToLogin()
-            return
-          }
-          chooseAndAnalyze('album')
-          break
-        case 2:
-          navigateTo(`/packageExtra/pages/record-text/index?date=${encodeURIComponent(date)}`)
-          break
-        case 3:
-          navigateTo(`/packageExtra/pages/record-manual/index?date=${encodeURIComponent(date)}`)
-          break
-      }
-    },
-  })
+  return false
 }
 
 Component({
@@ -212,7 +178,24 @@ Component({
       const { index, path, iscenter } = e.currentTarget.dataset
 
       if (iscenter) {
-        showCenterRecordMenu()
+        wx.setStorageSync('showRecordMenuModal', true)
+
+        const pages = getCurrentPages()
+        const isAlreadyHome = pages.length > 0 && pages[pages.length - 1].route === 'pages/index/index'
+        
+        if (isAlreadyHome) {
+          triggerRecordMenu(pages)
+          return
+        }
+
+        wx.switchTab({ 
+          url: '/pages/index/index',
+          success: () => {
+            setTimeout(() => {
+              triggerRecordMenu(getCurrentPages())
+            }, 150)
+          }
+        })
         return
       }
 

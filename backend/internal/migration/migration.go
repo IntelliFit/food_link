@@ -386,6 +386,7 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_friends_unique ON user_friends (user_id, friend_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_follows_unique ON user_follows (follower_id, followee_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_private_messages_conversation ON private_messages (LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id), created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_private_messages_unread ON private_messages (receiver_id, sender_id) WHERE is_read = false`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS ai_stats_insights_user_range_date_unique ON ai_stats_insights (user_id, range_type, generated_date)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS ai_custom_focus_cards_user_range_focus_unique ON ai_custom_focus_cards (user_id, range_type, focus_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS uq_user_credit_bonus_share_poster_record ON user_credit_bonus_events (user_id, bonus_type, bonus_date, source_record_id) WHERE bonus_type = 'share_poster' AND source_record_id IS NOT NULL`,

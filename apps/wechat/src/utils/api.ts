@@ -5388,10 +5388,10 @@ export async function getPrivateMessages(otherUserId: string, offset = 0, limit 
 }
 
 /** 获取会话列表 */
-export async function getConversations(): Promise<{ list: ConversationSummary[] }> {
-  const response = await authenticatedRequest('/api/messages/conversations', { method: 'GET' })
+export async function getConversations(offset = 0, limit = 20): Promise<{ list: ConversationSummary[]; has_more: boolean }> {
+  const response = await authenticatedRequest(`/api/messages/conversations?offset=${offset}&limit=${limit}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取会话列表失败')
-  return response.data as { list: ConversationSummary[] }
+  return response.data as { list: ConversationSummary[]; has_more: boolean }
 }
 
 /** 标记某人的消息为已读 */

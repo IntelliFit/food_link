@@ -390,6 +390,9 @@ function AnalyzeHistoryPage() {
   const [activeTask, setActiveTask] = useState<AnalysisTask | null>(null)
   const [quickRecordTask, setQuickRecordTask] = useState<AnalysisTask | null>(null)
   const [quickRecordMealType, setQuickRecordMealType] = useState<SelectableMealType>('afternoon_snack')
+  const [showRecipeModal, setShowRecipeModal] = useState(false)
+  const [recipeModalTask, setRecipeModalTask] = useState<AnalysisTask | null>(null)
+  const [recipeNameInput, setRecipeNameInput] = useState('')
   const [searchKeyword, setSearchKeyword] = useState('')
   const searchDebounceRef = useRef(0)
   const loadSeqRef = useRef(0)
@@ -646,66 +649,70 @@ function AnalyzeHistoryPage() {
       return
     }
 
+    const defaultName = buildDefaultRecipeName(task)
+    setRecipeModalTask(task)
+    setRecipeNameInput(defaultName)
+    setShowRecipeModal(true)
+  }
+
+  const closeRecipeModal = () => {
+    setShowRecipeModal(false)
+    setRecipeModalTask(null)
+    setRecipeNameInput('')
+  }
+
+  const submitSaveRecipe = async () => {
+    const task = recipeModalTask
+    if (!task || task.status !== 'done' || !task.result) return
+
     const result = task.result as AnalyzeResponse
     const payload = (task.payload || {}) as Record<string, unknown>
     const defaultName = buildDefaultRecipeName(task)
+    const recipeName = recipeNameInput.trim() || defaultName
+    if (!recipeName) {
+      Taro.showToast({ title: '请输入收藏名称', icon: 'none' })
+      return
+    }
 
-    Taro.showModal({
-      title: '收藏餐食',
-      content: '给这份餐食起个名字，之后可在“我的收藏”里快速记录。',
-      // @ts-ignore
-      editable: true,
-      // @ts-ignore
-      placeholderText: defaultName || '例如：我的标配早餐',
-      success: async (res) => {
-        if (!res.confirm) return
-        const recipeName = String((res as any).content || defaultName || '').trim()
-        if (!recipeName) {
-          Taro.showToast({ title: '请输入收藏名称', icon: 'none' })
-          return
-        }
+    const items = buildTaskFoodItems(result)
+    if (items.length === 0) {
+      Taro.showToast({ title: '没有可收藏的食物', icon: 'none' })
+      return
+    }
 
-        const items = buildTaskFoodItems(result)
+    const totalWeight = items.reduce((sum, item) => sum + item.weight, 0)
+    const totalCalories = items.reduce((sum, item) => sum + item.nutrients.calories, 0)
+    const totalProtein = items.reduce((sum, item) => sum + item.nutrients.protein, 0)
+    const totalCarbs = items.reduce((sum, item) => sum + item.nutrients.carbs, 0)
+    const totalFat = items.reduce((sum, item) => sum + item.nutrients.fat, 0)
 
-        if (items.length === 0) {
-          Taro.showToast({ title: '没有可收藏的食物', icon: 'none' })
-          return
-        }
-
-        const totalWeight = items.reduce((sum, item) => sum + item.weight, 0)
-        const totalCalories = items.reduce((sum, item) => sum + item.nutrients.calories, 0)
-        const totalProtein = items.reduce((sum, item) => sum + item.nutrients.protein, 0)
-        const totalCarbs = items.reduce((sum, item) => sum + item.nutrients.carbs, 0)
-        const totalFat = items.reduce((sum, item) => sum + item.nutrients.fat, 0)
-
-        try {
-          Taro.showLoading({ title: '', mask: true })
-          await createUserRecipe({
-            recipe_name: recipeName,
-            description: result.description || '',
-            image_path: task.image_url || (task.image_paths && task.image_paths[0]) || undefined,
-            items,
-            total_calories: totalCalories,
-            total_protein: totalProtein,
-            total_carbs: totalCarbs,
-            total_fat: totalFat,
-            total_weight_grams: totalWeight,
-            meal_type: typeof payload.meal_type === 'string' ? payload.meal_type : undefined,
-            tags: ['识别记录'],
-            is_favorite: true
-          })
-          Taro.hideLoading()
-          Taro.showModal({
-            title: '收藏成功',
-            content: '已收藏到“我的收藏”，之后可以直接复用到餐食记录。',
-            showCancel: false
-          })
-        } catch (e: any) {
-          Taro.hideLoading()
-          await showUnifiedApiError(e, '收藏失败')
-        }
-      }
-    })
+    try {
+      closeRecipeModal()
+      Taro.showLoading({ title: '', mask: true })
+      await createUserRecipe({
+        recipe_name: recipeName,
+        description: result.description || '',
+        image_path: task.image_url || (task.image_paths && task.image_paths[0]) || undefined,
+        items,
+        total_calories: totalCalories,
+        total_protein: totalProtein,
+        total_carbs: totalCarbs,
+        total_fat: totalFat,
+        total_weight_grams: totalWeight,
+        meal_type: typeof payload.meal_type === 'string' ? payload.meal_type : undefined,
+        tags: ['识别记录'],
+        is_favorite: true
+      })
+      Taro.hideLoading()
+      Taro.showModal({
+        title: '收藏成功',
+        content: '已收藏到“我的收藏”，之后可以直接复用到餐食记录。',
+        showCancel: false
+      })
+    } catch (e: any) {
+      Taro.hideLoading()
+      await showUnifiedApiError(e, '收藏失败')
+    }
   }
 
   const actionSheetQuickRecord = () => {
@@ -1005,7 +1012,7 @@ function AnalyzeHistoryPage() {
                 className={`action-sheet-item ${activeTask.status === 'done' && activeTask.result ? '' : 'action-sheet-item--disabled'}`}
                 onClick={actionSheetSaveRecipe}
               >
-                <Text className='iconfont icon-shoucang-yishoucang action-sheet-icon action-sheet-icon--favorite' />
+                <Text className='iconfont icon-collection_fill action-sheet-icon action-sheet-icon--favorite' />
                 <Text className='action-sheet-label'>收藏到我的餐食</Text>
               </View>
               <View className='action-sheet-divider' />
@@ -1028,6 +1035,36 @@ function AnalyzeHistoryPage() {
           </View>
         </View>
       )}
+      {showRecipeModal && recipeModalTask && (
+        <View className={`recipe-modal-overlay ${scheme === 'dark' ? 'recipe-modal-overlay--dark' : ''}`} catchMove>
+          <View className='recipe-modal-mask' onClick={closeRecipeModal} />
+          <View className='recipe-modal-panel'>
+            <View className='recipe-modal-header'>
+              <Text className='iconfont icon-collection_fill recipe-modal-icon' />
+              <Text className='recipe-modal-title'>收藏餐食</Text>
+            </View>
+            <Text className='recipe-modal-desc'>
+              给这份餐食起个名字，之后可在“我的收藏”里快速记录。
+            </Text>
+            <Input
+              className='recipe-modal-input'
+              type='text'
+              value={recipeNameInput}
+              placeholder={buildDefaultRecipeName(recipeModalTask)}
+              onInput={(e) => setRecipeNameInput(e.detail.value)}
+            />
+            <View className='recipe-modal-actions'>
+              <View className='recipe-modal-btn recipe-modal-btn--cancel' onClick={closeRecipeModal}>
+                <Text className='recipe-modal-btn-text'>取消</Text>
+              </View>
+              <View className='recipe-modal-btn recipe-modal-btn--confirm' onClick={() => void submitSaveRecipe()}>
+                <Text className='recipe-modal-btn-text'>确认收藏</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
       <MealTypeSelectSheet
         visible={Boolean(quickRecordTask)}
         value={quickRecordMealType}

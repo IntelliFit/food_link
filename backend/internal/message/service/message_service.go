@@ -94,8 +94,8 @@ func (s *MessageService) GetMessages(ctx context.Context, userA, userB string, o
 }
 
 // GetConversations returns conversation summaries for a user
-func (s *MessageService) GetConversations(ctx context.Context, userID string) ([]repo.ConversationSummary, error) {
-	sums, err := s.msgRepo.GetConversations(ctx, userID)
+func (s *MessageService) GetConversations(ctx context.Context, userID string, offset, limit int) ([]repo.ConversationSummary, error) {
+	sums, err := s.msgRepo.GetConversations(ctx, userID, offset, limit)
 	if err != nil {
 		return nil, err
 	}

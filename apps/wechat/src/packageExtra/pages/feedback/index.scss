@@ -2,7 +2,7 @@
   min-height: 100vh;
   box-sizing: border-box;
   padding: 28rpx 24rpx 180rpx;
-  background: linear-gradient(180deg, rgb(212 165 116 / 10%) 0%, #f6f8fb 280rpx, #f6f8fb 100%);
+  background: #f6f8fb;
 }
 
 .feedback-hero {
@@ -74,7 +74,7 @@
 
 .feedback-category.is-active {
   border-color: #d4a574;
-  background: #faf5ed;
+  background: #f8fafc;
 }
 
 .feedback-category-title {
@@ -176,7 +176,7 @@
 }
 
 .feedback-image-add-icon {
-  color: #d4a574;
+  color: #98a2b3;
   font-size: 48rpx;
   font-weight: 500;
   line-height: 1;
@@ -249,7 +249,7 @@
 }
 
 .fl-page-theme-root--dark .feedback-card {
-  background: #252219;
+  background: #1e2624;
   border-color: rgb(255 255 255 / 8%);
   box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 22%);
 }
@@ -263,13 +263,13 @@
 }
 
 .fl-page-theme-root--dark .feedback-category {
-  background: #2c261c;
+  background: #1e2624;
   border-color: rgb(255 255 255 / 8%);
 }
 
 .fl-page-theme-root--dark .feedback-category.is-active {
   border-color: #d4a574;
-  background: rgb(212 165 116 / 16%);
+  background: rgb(92 184 150 / 12%);
 }
 
 .fl-page-theme-root--dark .feedback-category-title {
@@ -282,7 +282,7 @@
 
 .fl-page-theme-root--dark .feedback-textarea,
 .fl-page-theme-root--dark .feedback-contact {
-  background: #2c261c;
+  background: #1e2624;
   color: #f2f7f4;
   border: 2rpx solid rgb(255 255 255 / 8%);
 }
@@ -292,8 +292,12 @@
 }
 
 .fl-page-theme-root--dark .feedback-image-add {
-  background: #2c261c;
+  background: #1e2624;
   border-color: rgb(255 255 255 / 14%);
+}
+
+.fl-page-theme-root--dark .feedback-image-add-icon {
+  color: #6b7280;
 }
 
 .fl-page-theme-root--dark .feedback-image-add-text {
@@ -305,5 +309,5 @@
 }
 
 .fl-page-theme-root--dark .feedback-submit-bar {
-  background: rgb(37 32 25 / 92%);
+  background: rgb(30 38 36 / 92%);
 }

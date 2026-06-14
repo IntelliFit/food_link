@@ -54,6 +54,7 @@ const extraSubpackagePages = [
   'pages/invite-friends/index',
   'pages/profile-settings/index',
   'pages/follow-list/index',
+  'pages/private-conversations/index',
   'pages/private-chat/index',
   'pages/weight-record/index',
   'pages/weight-trend/index',
