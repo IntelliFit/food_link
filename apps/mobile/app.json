@@ -5,7 +5,9 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true
     },
@@ -16,6 +18,9 @@
     },
     "extra": {
       "apiBaseUrl": "http://127.0.0.1:3010"
-    }
+    },
+    "plugins": [
+      "expo-status-bar"
+    ]
   }
 }

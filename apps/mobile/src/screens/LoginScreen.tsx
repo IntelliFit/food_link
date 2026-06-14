@@ -16,8 +16,11 @@ export function LoginScreen() {
   const run = async (fn: () => Promise<void>, fallback: string) => {
     setLoading(true)
     try {
+      console.log('[mobile] login action started')
       await fn()
+      console.log('[mobile] login action succeeded')
     } catch (error) {
+      console.log('[mobile] login action failed', error instanceof Error ? error.message : error)
       Alert.alert('登录失败', error instanceof Error ? error.message : fallback)
     } finally {
       setLoading(false)
