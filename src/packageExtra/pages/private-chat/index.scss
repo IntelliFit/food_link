@@ -179,6 +179,29 @@
   height: 1rpx;
 }
 
+/* 系统消息 */
+.chat-system-message-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20rpx;
+}
+
+.chat-system-bubble {
+  max-width: 640rpx;
+  padding: 16rpx 24rpx;
+  border-radius: 12rpx;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.chat-system-bubble-text {
+  font-size: 26rpx;
+  line-height: 40rpx;
+  color: #6b7280;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* 底部输入区 */
 .chat-input-bar {
   display: flex;

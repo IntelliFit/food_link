@@ -38,7 +38,7 @@ func (r *NotificationRepo) FindRecentDuplicateForTarget(ctx context.Context, rec
 		q = q.Where("actor_user_id = ?", *actorUserID)
 	}
 	if targetID != nil {
-		targetType = normalizeTargetType(targetType)
+		targetType = NormalizeTargetType(targetType)
 		if targetType == FeedTargetFoodRecord {
 			q = q.Where("(target_type = ? AND target_id = ?) OR record_id = ?", targetType, *targetID, *targetID)
 		} else {

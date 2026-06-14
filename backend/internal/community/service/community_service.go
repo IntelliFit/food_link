@@ -23,7 +23,7 @@ import (
 var chinaTZ = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 type FeedRepo interface {
-	ListPublicFeed(ctx context.Context, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
+	ListPublicFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
 	ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error)
 	GetFeedRecordByID(ctx context.Context, recordID string) (*repo.FeedRecord, error)
 	GetFeedTargetByID(ctx context.Context, targetType, targetID string) (*repo.FeedRecord, error)
@@ -50,9 +50,11 @@ type FeedRepo interface {
 	GetCheckinCounts(ctx context.Context, userIDs []string, weekStart, weekEnd time.Time) (map[string]int, error)
 	CreateCirclePost(ctx context.Context, post *domain.UserCirclePost) error
 	GetCirclePostByID(ctx context.Context, postID string) (*domain.UserCirclePost, error)
-	UpdateCirclePost(ctx context.Context, userID, postID, content string, imagePaths []string, totalCalories, totalProtein, totalCarbs, totalFat *float64) error
+	UpdateCirclePost(ctx context.Context, userID, postID, title, body string, imagePaths []string, nutrition *domain.CirclePostNutrition) error
 	DeleteCirclePost(ctx context.Context, userID, postID string) error
 	DeleteCirclePostInteractions(ctx context.Context, postID string) error
+	CreateFeedReport(ctx context.Context, report *domain.FeedReport) error
+	FindFeedReport(ctx context.Context, reporterUserID, targetType, targetID string) (*domain.FeedReport, error)
 }
 
 type NotificationRepo interface {
@@ -66,28 +68,34 @@ type NotificationRepo interface {
 }
 
 type CommunityService struct {
-	feedRepo  FeedRepo
-	notifRepo NotificationRepo
-	userRepo  UserFinder
-	db        *gorm.DB
-	storage   *storage.Client
+	feedRepo       FeedRepo
+	notifRepo      NotificationRepo
+	userRepo       UserFinder
+	db             *gorm.DB
+	reportNotifier ReportNotifier
+	storage        *storage.Client
 }
 
 type UserFinder interface {
 	FindByID(ctx context.Context, userID string) (*authrepo.User, error)
 }
 
-func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo UserFinder, db *gorm.DB, storageClient ...*storage.Client) *CommunityService {
+type ReportNotifier interface {
+	NotifyFeedReport(ctx context.Context, report *domain.FeedReport, target *repo.FeedRecord) error
+}
+
+func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo UserFinder, db *gorm.DB, reportNotifier ReportNotifier, storageClient ...*storage.Client) *CommunityService {
 	var client *storage.Client
 	if len(storageClient) > 0 {
 		client = storageClient[0]
 	}
 	return &CommunityService{
-		feedRepo:  feedRepo,
-		notifRepo: notifRepo,
-		userRepo:  userRepo,
-		db:        db,
-		storage:   client,
+		feedRepo:       feedRepo,
+		notifRepo:      notifRepo,
+		userRepo:       userRepo,
+		db:             db,
+		reportNotifier: reportNotifier,
+		storage:        client,
 	}
 }
 
@@ -184,7 +192,11 @@ func (s *CommunityService) publicFeed(ctx context.Context, params FeedParams, vi
 		candidateLimit = max(max(params.Offset+params.Limit+40, params.Limit*3), 60)
 	}
 
-	records, err := s.feedRepo.ListPublicFeed(ctx, params.ContentType, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit)
+	var authorIDs []string
+	if params.AuthorID != "" {
+		authorIDs = []string{params.AuthorID}
+	}
+	records, err := s.feedRepo.ListPublicFeed(ctx, authorIDs, params.ContentType, params.MealType, params.DietGoal, params.Date, params.SortBy, candidateLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1138,32 +1150,31 @@ func (s *CommunityService) ListCommentTasks(ctx context.Context, userID string, 
 const (
 	circlePostImageBucketAlias = "food-images"
 	circlePostMaxImages        = 3
-	circlePostMaxContentLength = 2000
+	circlePostMaxTitleLength   = 120
+	circlePostMaxBodyLength    = 2000
 )
 
-type CirclePostNutrition struct {
-	TotalCalories *float64
-	TotalProtein  *float64
-	TotalCarbs    *float64
-	TotalFat      *float64
-}
-
-func (s *CommunityService) CreateCirclePost(ctx context.Context, userID, content string, imageURLs []string, nutrition *CirclePostNutrition) (string, error) {
-	content = strings.TrimSpace(content)
+func (s *CommunityService) CreateCirclePost(ctx context.Context, userID, title, body string, imageURLs []string, nutrition *domain.CirclePostNutrition) (string, error) {
+	title = strings.TrimSpace(title)
+	body = strings.TrimSpace(body)
 	imageKeys, err := s.normalizeCirclePostImageURLs(userID, imageURLs)
 	if err != nil {
 		return "", err
 	}
-	if content == "" && len(imageKeys) == 0 {
+	if title == "" && body == "" && len(imageKeys) == 0 {
 		return "", commonerrors.ErrBadRequest
 	}
-	if len(content) > circlePostMaxContentLength {
+	if len(title) > circlePostMaxTitleLength {
+		return "", commonerrors.ErrBadRequest
+	}
+	if len(body) > circlePostMaxBodyLength {
 		return "", commonerrors.ErrBadRequest
 	}
 	post := &domain.UserCirclePost{
 		ID:             uuid.New().String(),
 		UserID:         userID,
-		Content:        content,
+		Title:          stringPtrOrNil(title),
+		Body:           stringPtrOrNil(body),
 		ImagePaths:     imageKeys,
 		HiddenFromFeed: false,
 		CreatedAt:      timePtr(time.Now().UTC()),
@@ -1174,6 +1185,10 @@ func (s *CommunityService) CreateCirclePost(ctx context.Context, userID, content
 		post.TotalProtein = nutrition.TotalProtein
 		post.TotalCarbs = nutrition.TotalCarbs
 		post.TotalFat = nutrition.TotalFat
+		post.Fiber = nutrition.Fiber
+		post.Sugar = nutrition.Sugar
+		post.SodiumMg = nutrition.SodiumMg
+		post.TotalWeightGrams = nutrition.TotalWeightGrams
 	}
 	if err := s.feedRepo.CreateCirclePost(ctx, post); err != nil {
 		return "", err
@@ -1181,8 +1196,9 @@ func (s *CommunityService) CreateCirclePost(ctx context.Context, userID, content
 	return post.ID, nil
 }
 
-func (s *CommunityService) UpdateCirclePost(ctx context.Context, userID, postID, content string, imageURLs []string, nutrition *CirclePostNutrition) error {
-	content = strings.TrimSpace(content)
+func (s *CommunityService) UpdateCirclePost(ctx context.Context, userID, postID, title, body string, imageURLs []string, nutrition *domain.CirclePostNutrition) error {
+	title = strings.TrimSpace(title)
+	body = strings.TrimSpace(body)
 	post, err := s.feedRepo.GetCirclePostByID(ctx, postID)
 	if err != nil {
 		return err
@@ -1197,20 +1213,16 @@ func (s *CommunityService) UpdateCirclePost(ctx context.Context, userID, postID,
 	if err != nil {
 		return err
 	}
-	if content == "" && len(imageKeys) == 0 {
+	if title == "" && body == "" && len(imageKeys) == 0 {
 		return commonerrors.ErrBadRequest
 	}
-	if len(content) > circlePostMaxContentLength {
+	if len(title) > circlePostMaxTitleLength {
 		return commonerrors.ErrBadRequest
 	}
-	var totalCalories, totalProtein, totalCarbs, totalFat *float64
-	if nutrition != nil {
-		totalCalories = nutrition.TotalCalories
-		totalProtein = nutrition.TotalProtein
-		totalCarbs = nutrition.TotalCarbs
-		totalFat = nutrition.TotalFat
+	if len(body) > circlePostMaxBodyLength {
+		return commonerrors.ErrBadRequest
 	}
-	return s.feedRepo.UpdateCirclePost(ctx, userID, postID, content, imageKeys, totalCalories, totalProtein, totalCarbs, totalFat)
+	return s.feedRepo.UpdateCirclePost(ctx, userID, postID, title, body, imageKeys, nutrition)
 }
 
 func (s *CommunityService) UploadCirclePostImage(ctx context.Context, userID string, fileBytes []byte, ext, contentType string) (string, error) {
@@ -1269,6 +1281,61 @@ func (s *CommunityService) DeleteCirclePost(ctx context.Context, userID, postID 
 	return s.feedRepo.DeleteCirclePost(ctx, userID, postID)
 }
 
+var validFeedReportReasons = map[string]bool{
+	"spam":    true,
+	"porn":    true,
+	"illegal": true,
+	"abuse":   true,
+	"other":   true,
+}
+
+func (s *CommunityService) ReportFeedTarget(ctx context.Context, reporterUserID, targetType, targetID, reason, extraContent string) (*domain.FeedReport, error) {
+	if reporterUserID == "" {
+		return nil, commonerrors.ErrUnauthorized
+	}
+	if !validFeedReportReasons[reason] {
+		return nil, commonerrors.ErrBadRequest
+	}
+	targetType = repo.NormalizeTargetType(targetType)
+	target, err := s.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
+	if err != nil {
+		return nil, err
+	}
+	if target == nil {
+		return nil, commonerrors.ErrNotFound
+	}
+	if target.UserID == reporterUserID {
+		return nil, commonerrors.ErrBadRequest
+	}
+	existing, err := s.feedRepo.FindFeedReport(ctx, reporterUserID, targetType, targetID)
+	if err != nil {
+		return nil, err
+	}
+	now := timePtr(time.Now().UTC())
+	report := &domain.FeedReport{
+		ID:             uuid.New().String(),
+		ReporterUserID: reporterUserID,
+		TargetType:     targetType,
+		TargetID:       targetID,
+		ReportedUserID: target.UserID,
+		Reason:         reason,
+		ExtraContent:   strings.TrimSpace(extraContent),
+		Status:         "pending",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if existing != nil {
+		return existing, nil
+	}
+	if err := s.feedRepo.CreateFeedReport(ctx, report); err != nil {
+		return nil, err
+	}
+	if s.reportNotifier != nil {
+		_ = s.reportNotifier.NotifyFeedReport(ctx, report, target)
+	}
+	return report, nil
+}
+
 func (s *CommunityService) normalizeCirclePostImageURLs(userID string, imageURLs []string) ([]string, error) {
 	if len(imageURLs) > circlePostMaxImages {
 		imageURLs = imageURLs[:circlePostMaxImages]
@@ -1302,6 +1369,13 @@ func (s *CommunityService) normalizeCirclePostImageURLs(userID string, imageURLs
 
 func timePtr(t time.Time) *time.Time {
 	return &t
+}
+
+func stringPtrOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func (s *CommunityService) ListNotifications(ctx context.Context, userID string, limit int) (*NotificationListResult, error) {
@@ -1517,10 +1591,16 @@ func max(a, b int) int {
 
 func normalizeServiceTargetType(value string) string {
 	value = strings.TrimSpace(value)
-	if value == repo.FeedTargetExerciseLog {
+	switch value {
+	case repo.FeedTargetExerciseLog:
 		return repo.FeedTargetExerciseLog
+	case repo.FeedTargetCirclePost:
+		return repo.FeedTargetCirclePost
+	case "campus_food":
+		return "campus_food"
+	default:
+		return repo.FeedTargetFoodRecord
 	}
-	return repo.FeedTargetFoodRecord
 }
 
 func legacyRecordID(targetType, targetID string) *string {

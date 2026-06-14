@@ -6,6 +6,7 @@ import { BrandMark } from '@/components/brand-mark'
 import { adminRequest, displayApiBase } from '@/lib/api'
 import { BenchmarkPage } from '@/pages/benchmark-page'
 import { FeedbackPage } from '@/pages/feedback-page'
+import { FeedReportPage } from '@/pages/feed-report-page'
 import { LoginPage } from '@/pages/login-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 
@@ -51,8 +52,8 @@ export function App() {
   if (checkingSession) {
     return (
       <>
-        <BootScreen message="正在检查管理员登录态…" />
-        <Toaster richColors closeButton position="bottom-right" />
+        <BootScreen message='正在检查管理员登录态…' />
+        <Toaster richColors closeButton position='bottom-right' />
       </>
     )
   }
@@ -61,29 +62,36 @@ export function App() {
     return (
       <>
         <LoginPage apiBase={displayApiBase()} onLogin={login} />
-        <Toaster richColors closeButton position="bottom-right" />
+        <Toaster richColors closeButton position='bottom-right' />
       </>
     )
   }
 
+  const renderPage = () => {
+    switch (currentMenu) {
+      case 'benchmark':
+        return <BenchmarkPage onLogout={() => void logout()} onMenuChange={setCurrentMenu} />
+      case 'feed-reports':
+        return <FeedReportPage onLogout={() => void logout()} onMenuChange={setCurrentMenu} />
+      default:
+        return <FeedbackPage onLogout={() => void logout()} onMenuChange={setCurrentMenu} />
+    }
+  }
+
   return (
     <>
-      {currentMenu === 'benchmark' ? (
-        <BenchmarkPage onLogout={() => void logout()} onMenuChange={setCurrentMenu} />
-      ) : (
-        <FeedbackPage onLogout={() => void logout()} onMenuChange={setCurrentMenu} />
-      )}
-      <Toaster richColors closeButton position="bottom-right" />
+      {renderPage()}
+      <Toaster richColors closeButton position='bottom-right' />
     </>
   )
 }
 
 function BootScreen({ message }: { message: string }) {
   return (
-    <div className="relative z-10 flex min-h-svh flex-col items-center justify-center gap-3 text-muted-foreground">
+    <div className='relative z-10 flex min-h-svh flex-col items-center justify-center gap-3 text-muted-foreground'>
       <BrandMark />
-      <div className="flex items-center gap-2 text-sm">
-        <Loader2 className="size-4 animate-spin" />
+      <div className='flex items-center gap-2 text-sm'>
+        <Loader2 className='size-4 animate-spin' />
         {message}
       </div>
     </div>

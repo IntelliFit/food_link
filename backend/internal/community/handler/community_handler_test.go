@@ -19,6 +19,7 @@ import (
 
 type mockCommunityService struct {
 	publicFeed       []service.FeedItem
+	publicFeedParams *service.FeedParams
 	publicFeedErr    error
 	friendFeed       []service.FeedItem
 	friendFeedErr    error
@@ -44,6 +45,7 @@ type mockCommunityService struct {
 }
 
 func (m *mockCommunityService) PublicFeed(ctx context.Context, params service.FeedParams) ([]service.FeedItem, error) {
+	m.publicFeedParams = &params
 	return m.publicFeed, m.publicFeedErr
 }
 func (m *mockCommunityService) FriendFeed(ctx context.Context, userID string, params service.FeedParams) ([]service.FeedItem, error) {
@@ -103,14 +105,17 @@ func (m *mockCommunityService) MarkNotificationsRead(ctx context.Context, userID
 func (m *mockCommunityService) UploadCirclePostImage(ctx context.Context, userID string, fileBytes []byte, ext, contentType string) (string, error) {
 	return "", nil
 }
-func (m *mockCommunityService) CreateCirclePost(ctx context.Context, userID, content string, imageURLs []string, nutrition *service.CirclePostNutrition) (string, error) {
+func (m *mockCommunityService) CreateCirclePost(ctx context.Context, userID, title, body string, imageURLs []string, nutrition *domain.CirclePostNutrition) (string, error) {
 	return "", nil
 }
-func (m *mockCommunityService) UpdateCirclePost(ctx context.Context, userID, postID, content string, imageURLs []string, nutrition *service.CirclePostNutrition) error {
+func (m *mockCommunityService) UpdateCirclePost(ctx context.Context, userID, postID, title, body string, imageURLs []string, nutrition *domain.CirclePostNutrition) error {
 	return nil
 }
 func (m *mockCommunityService) DeleteCirclePost(ctx context.Context, userID, postID string) error {
 	return nil
+}
+func (m *mockCommunityService) ReportFeedTarget(ctx context.Context, reporterUserID, targetType, targetID, reason, extraContent string) (*domain.FeedReport, error) {
+	return nil, nil
 }
 
 func setupCommunityRouter(h *CommunityHandler) *gin.Engine {
@@ -148,7 +153,7 @@ func TestPublicFeed(t *testing.T) {
 	r := setupCommunityRouter(h)
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodGet, "/api/community/public-feed", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/community/public-feed?author_id=u2", nil)
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -157,6 +162,8 @@ func TestPublicFeed(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	list := data["list"].([]any)
 	assert.Len(t, list, 1)
+	assert.NotNil(t, mockSvc.publicFeedParams)
+	assert.Equal(t, "u2", mockSvc.publicFeedParams.AuthorID)
 }
 
 func TestFeed(t *testing.T) {

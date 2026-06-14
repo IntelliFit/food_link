@@ -36,9 +36,10 @@ type CommunityService interface {
 	ListNotifications(ctx context.Context, userID string, limit int) (*service.NotificationListResult, error)
 	MarkNotificationsRead(ctx context.Context, userID string, notificationIDs []string) (*service.MarkReadResult, error)
 	UploadCirclePostImage(ctx context.Context, userID string, fileBytes []byte, ext, contentType string) (string, error)
-	CreateCirclePost(ctx context.Context, userID, content string, imageURLs []string, nutrition *service.CirclePostNutrition) (string, error)
-	UpdateCirclePost(ctx context.Context, userID, postID, content string, imageURLs []string, nutrition *service.CirclePostNutrition) error
+	CreateCirclePost(ctx context.Context, userID, title, body string, imageURLs []string, nutrition *domain.CirclePostNutrition) (string, error)
+	UpdateCirclePost(ctx context.Context, userID, postID, title, body string, imageURLs []string, nutrition *domain.CirclePostNutrition) error
 	DeleteCirclePost(ctx context.Context, userID, postID string) error
+	ReportFeedTarget(ctx context.Context, reporterUserID, targetType, targetID, reason, extraContent string) (*domain.FeedReport, error)
 }
 
 type CommunityHandler struct {
@@ -51,6 +52,7 @@ func NewCommunityHandler(svc CommunityService) *CommunityHandler {
 
 func (h *CommunityHandler) PublicFeed(c *gin.Context) {
 	params := parseFeedParams(c)
+	params.AuthorID = c.Query("author_id")
 	items, err := h.svc.PublicFeed(c.Request.Context(), params)
 	if err != nil {
 		response.Error(c, err)
@@ -347,13 +349,18 @@ func (h *CommunityHandler) UploadCirclePostImage(c *gin.Context) {
 
 func (h *CommunityHandler) CreateCirclePost(c *gin.Context) {
 	var body struct {
-		Content   string   `json:"content"`
+		Title     string   `json:"title"`
+		Body      string   `json:"body"`
 		ImageURLs []string `json:"image_urls"`
 		Nutrition struct {
-			TotalCalories *float64 `json:"total_calories"`
-			TotalProtein  *float64 `json:"total_protein"`
-			TotalCarbs    *float64 `json:"total_carbs"`
-			TotalFat      *float64 `json:"total_fat"`
+			TotalCalories    *float64 `json:"total_calories"`
+			TotalProtein     *float64 `json:"total_protein"`
+			TotalCarbs       *float64 `json:"total_carbs"`
+			TotalFat         *float64 `json:"total_fat"`
+			Fiber            *float64 `json:"fiber"`
+			Sugar            *float64 `json:"sugar"`
+			SodiumMg         *float64 `json:"sodium_mg"`
+			TotalWeightGrams *float64 `json:"total_weight_grams"`
 		} `json:"nutrition"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -361,16 +368,8 @@ func (h *CommunityHandler) CreateCirclePost(c *gin.Context) {
 		return
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
-	var nutrition *service.CirclePostNutrition
-	if body.Nutrition.TotalCalories != nil || body.Nutrition.TotalProtein != nil || body.Nutrition.TotalCarbs != nil || body.Nutrition.TotalFat != nil {
-		nutrition = &service.CirclePostNutrition{
-			TotalCalories: body.Nutrition.TotalCalories,
-			TotalProtein:  body.Nutrition.TotalProtein,
-			TotalCarbs:    body.Nutrition.TotalCarbs,
-			TotalFat:      body.Nutrition.TotalFat,
-		}
-	}
-	postID, err := h.svc.CreateCirclePost(c.Request.Context(), userID, body.Content, body.ImageURLs, nutrition)
+	nutrition := circlePostNutritionFromBody(body.Nutrition)
+	postID, err := h.svc.CreateCirclePost(c.Request.Context(), userID, body.Title, body.Body, body.ImageURLs, nutrition)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -380,13 +379,18 @@ func (h *CommunityHandler) CreateCirclePost(c *gin.Context) {
 
 func (h *CommunityHandler) UpdateCirclePost(c *gin.Context) {
 	var body struct {
-		Content   string   `json:"content"`
+		Title     string   `json:"title"`
+		Body      string   `json:"body"`
 		ImageURLs []string `json:"image_urls"`
 		Nutrition struct {
-			TotalCalories *float64 `json:"total_calories"`
-			TotalProtein  *float64 `json:"total_protein"`
-			TotalCarbs    *float64 `json:"total_carbs"`
-			TotalFat      *float64 `json:"total_fat"`
+			TotalCalories    *float64 `json:"total_calories"`
+			TotalProtein     *float64 `json:"total_protein"`
+			TotalCarbs       *float64 `json:"total_carbs"`
+			TotalFat         *float64 `json:"total_fat"`
+			Fiber            *float64 `json:"fiber"`
+			Sugar            *float64 `json:"sugar"`
+			SodiumMg         *float64 `json:"sodium_mg"`
+			TotalWeightGrams *float64 `json:"total_weight_grams"`
 		} `json:"nutrition"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -395,20 +399,38 @@ func (h *CommunityHandler) UpdateCirclePost(c *gin.Context) {
 	}
 	userID := c.GetString(authmw.ContextUserIDKey)
 	postID := c.Param("post_id")
-	var nutrition *service.CirclePostNutrition
-	if body.Nutrition.TotalCalories != nil || body.Nutrition.TotalProtein != nil || body.Nutrition.TotalCarbs != nil || body.Nutrition.TotalFat != nil {
-		nutrition = &service.CirclePostNutrition{
-			TotalCalories: body.Nutrition.TotalCalories,
-			TotalProtein:  body.Nutrition.TotalProtein,
-			TotalCarbs:    body.Nutrition.TotalCarbs,
-			TotalFat:      body.Nutrition.TotalFat,
-		}
-	}
-	if err := h.svc.UpdateCirclePost(c.Request.Context(), userID, postID, body.Content, body.ImageURLs, nutrition); err != nil {
+	nutrition := circlePostNutritionFromBody(body.Nutrition)
+	if err := h.svc.UpdateCirclePost(c.Request.Context(), userID, postID, body.Title, body.Body, body.ImageURLs, nutrition); err != nil {
 		response.Error(c, err)
 		return
 	}
 	response.Success(c, gin.H{"id": postID})
+}
+
+func circlePostNutritionFromBody(n struct {
+	TotalCalories    *float64 `json:"total_calories"`
+	TotalProtein     *float64 `json:"total_protein"`
+	TotalCarbs       *float64 `json:"total_carbs"`
+	TotalFat         *float64 `json:"total_fat"`
+	Fiber            *float64 `json:"fiber"`
+	Sugar            *float64 `json:"sugar"`
+	SodiumMg         *float64 `json:"sodium_mg"`
+	TotalWeightGrams *float64 `json:"total_weight_grams"`
+}) *domain.CirclePostNutrition {
+	if n.TotalCalories == nil && n.TotalProtein == nil && n.TotalCarbs == nil && n.TotalFat == nil &&
+		n.Fiber == nil && n.Sugar == nil && n.SodiumMg == nil && n.TotalWeightGrams == nil {
+		return nil
+	}
+	return &domain.CirclePostNutrition{
+		TotalCalories:    n.TotalCalories,
+		TotalProtein:     n.TotalProtein,
+		TotalCarbs:       n.TotalCarbs,
+		TotalFat:         n.TotalFat,
+		Fiber:            n.Fiber,
+		Sugar:            n.Sugar,
+		SodiumMg:         n.SodiumMg,
+		TotalWeightGrams: n.TotalWeightGrams,
+	}
 }
 
 func (h *CommunityHandler) DeleteCirclePost(c *gin.Context) {
@@ -419,6 +441,26 @@ func (h *CommunityHandler) DeleteCirclePost(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"message": "已删除"})
+}
+
+func (h *CommunityHandler) ReportFeedTarget(c *gin.Context) {
+	var body struct {
+		Reason      string `json:"reason"`
+		ExtraContent string `json:"extra_content"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, commonerrors.ErrBadRequest)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	targetType := c.Param("target_type")
+	targetID := c.Param("target_id")
+	report, err := h.svc.ReportFeedTarget(c.Request.Context(), userID, targetType, targetID, body.Reason, body.ExtraContent)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": report.ID, "status": report.Status})
 }
 
 func parseFeedParams(c *gin.Context) service.FeedParams {

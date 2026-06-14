@@ -217,7 +217,8 @@ func New(cfg *config.Config) (*App, error) {
 	// Community module DI
 	feedRepo := communityrepo.NewFeedRepo(db)
 	notifRepo := communityrepo.NewNotificationRepo(db)
-	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, storageClient)
+	feedReportNotifier := communityservice.NewReportNotifier(cfg.Feishu.ReportWebhookURL, cfg.Feishu.ReportWebhookSecret)
+	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, storageClient)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
 	// Health module DI
@@ -437,6 +438,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/community/posts", authmw.RequireJWT(jwtSvc), communityHandler.CreateCirclePost)
 	engine.PUT("/api/community/posts/:post_id", authmw.RequireJWT(jwtSvc), communityHandler.UpdateCirclePost)
 	engine.DELETE("/api/community/posts/:post_id", authmw.RequireJWT(jwtSvc), communityHandler.DeleteCirclePost)
+	engine.POST("/api/community/feed-targets/:target_type/:target_id/report", authmw.RequireJWT(jwtSvc), communityHandler.ReportFeedTarget)
 
 	// Health routes
 	engine.GET("/api/body-metrics/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetBodyMetricsSummary)
@@ -555,6 +557,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminFeedbackRepo := adminrepo.NewFeedbackRepo(db)
 	adminFeedbackSvc := adminservice.NewFeedbackService(adminFeedbackRepo)
 	adminFeedbackHandler := adminhandler.NewFeedbackHandler(adminFeedbackSvc)
+	adminFeedReportRepo := adminrepo.NewFeedReportRepo(db, feedRepo)
+	adminFeedReportSvc := adminservice.NewFeedReportService(adminFeedReportRepo, messageSvc)
+	adminFeedReportHandler := adminhandler.NewFeedReportHandler(adminFeedReportSvc)
 	adminBenchmarkRepo := adminrepo.NewBenchmarkRepo(db)
 	adminBenchmarkSvc := adminservice.NewBenchmarkService(adminBenchmarkRepo, analyzeTaskSvc)
 	adminBenchmarkHandler := adminhandler.NewBenchmarkHandler(adminBenchmarkSvc)
@@ -571,6 +576,10 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.PATCH("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Update)
 	adminAPI.GET("/feedback", adminAuth, adminFeedbackHandler.List)
 	adminAPI.PATCH("/feedback/:feedback_id/status", adminAuth, adminFeedbackHandler.UpdateStatus)
+	adminAPI.GET("/feed-reports", adminAuth, adminFeedReportHandler.List)
+	adminAPI.GET("/feed-reports/:report_id", adminAuth, adminFeedReportHandler.Get)
+	adminAPI.PATCH("/feed-reports/:report_id/status", adminAuth, adminFeedReportHandler.UpdateStatus)
+	adminAPI.DELETE("/feed-reports/:report_id", adminAuth, adminFeedReportHandler.Delete)
 	adminAPI.GET("/benchmark/datasets/batches", adminAuth, adminBenchmarkHandler.ListBatches)
 	adminAPI.GET("/benchmark/datasets/samples", adminAuth, adminBenchmarkHandler.ListSamples)
 	adminAPI.GET("/benchmark/datasets/samples/:sample_id", adminAuth, adminBenchmarkHandler.GetSample)

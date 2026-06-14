@@ -14,18 +14,21 @@ import {
   updateCirclePost,
   uploadCirclePostImage,
 } from '../../../utils/api'
+import { COMMUNITY_FEED_CHANGED_EVENT } from '../../../utils/home-events'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { withAuth } from '../../../utils/withAuth'
 
 import './index.scss'
 
 const MAX_IMAGES = 3
-const MAX_CONTENT_LENGTH = 2000
-const DRAFT_STORAGE_KEY = 'circle_post_draft_v1'
+const MAX_TITLE_LENGTH = 120
+const MAX_BODY_LENGTH = 2000
+const DRAFT_STORAGE_KEY = 'circle_post_draft_v2'
 const DRAFT_TIP_SHOWN_KEY = 'circle_post_draft_tip_shown_v1'
 
 interface CirclePostDraft {
-  content: string
+  title: string
+  body: string
   images: ImageItem[]
   nutritionEnabled: boolean
   nutrition: NutritionFormState
@@ -43,6 +46,10 @@ const NUTRITION_FIELDS: Array<{
   { key: 'protein', label: '蛋白质', unit: 'g', placeholder: '0', max: 2000 },
   { key: 'carbs', label: '碳水', unit: 'g', placeholder: '0', max: 5000 },
   { key: 'fat', label: '脂肪', unit: 'g', placeholder: '0', max: 2000 },
+  { key: 'fiber', label: '膳食纤维', unit: 'g', placeholder: '0', max: 2000 },
+  { key: 'sugar', label: '糖分', unit: 'g', placeholder: '0', max: 2000 },
+  { key: 'sodium_mg', label: '钠', unit: 'mg', placeholder: '0', max: 50000 },
+  { key: 'total_weight_grams', label: '总重量', unit: 'g', placeholder: '0', max: 50000 },
 ]
 
 type ImageItem = {
@@ -93,7 +100,8 @@ function formatNumberDisplay(value: number | null | undefined): string {
 
 function CirclePostEditPage() {
   const [postId, setPostId] = useState('')
-  const [content, setContent] = useState('')
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
   const [images, setImages] = useState<ImageItem[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -117,7 +125,8 @@ function CirclePostEditPage() {
     setLoading(true)
     try {
       const { item } = await communityGetFeedContext(id, 0, 'circle_post' as CommunityFeedTargetType)
-      setContent(item.record.description || '')
+      setTitle(item.record.title || '')
+      setBody(item.record.body || '')
       const items: ImageItem[] = (item.record.image_paths || []).map((url) => ({
         id: url,
         url,
@@ -195,7 +204,8 @@ function CirclePostEditPage() {
       if (!raw) return
       const draft = (typeof raw === 'string' ? JSON.parse(raw) : raw) as CirclePostDraft
       if (!draft || typeof draft !== 'object') return
-      setContent(typeof draft.content === 'string' ? draft.content : '')
+      setTitle(typeof draft.title === 'string' ? draft.title : '')
+      setBody(typeof draft.body === 'string' ? draft.body : '')
       setImages(Array.isArray(draft.images) ? draft.images.filter((item) => item && item.url) : [])
       if (draft.nutritionEnabled) {
         setNutritionEnabled(true)
@@ -208,7 +218,8 @@ function CirclePostEditPage() {
 
   const saveDraftToStorage = () => {
     const draft: CirclePostDraft = {
-      content,
+      title,
+      body,
       images: images.filter((item) => !item.uploading && item.url),
       nutritionEnabled,
       nutrition,
@@ -225,7 +236,7 @@ function CirclePostEditPage() {
   }
 
   const handleSaveDraft = async () => {
-    const hasContent = content.trim().length > 0 || images.length > 0 || nutritionEnabled
+    const hasContent = title.trim().length > 0 || body.trim().length > 0 || images.length > 0 || nutritionEnabled
     if (!hasContent) {
       Taro.showToast({ title: '没有内容可保存', icon: 'none' })
       return
@@ -265,9 +276,10 @@ function CirclePostEditPage() {
   }
 
   const handleSubmit = async () => {
-    const trimmedContent = content.trim()
-    if (!trimmedContent && images.length === 0) {
-      Taro.showToast({ title: '请填写内容或添加图片', icon: 'none' })
+    const trimmedTitle = title.trim()
+    const trimmedBody = body.trim()
+    if (!trimmedTitle && !trimmedBody && images.length === 0) {
+      Taro.showToast({ title: '请填写标题、正文或添加图片', icon: 'none' })
       return
     }
     if (images.some((item) => item.uploading)) {
@@ -279,11 +291,16 @@ function CirclePostEditPage() {
     setSubmitting(true)
     try {
       if (postId) {
-        await updateCirclePost(postId, trimmedContent, imageUrls, nutritionInput)
+        await updateCirclePost(postId, { title: trimmedTitle, body: trimmedBody, imageUrls, nutrition: nutritionInput })
       } else {
-        await createCirclePost(trimmedContent, imageUrls, nutritionInput)
+        await createCirclePost({ title: trimmedTitle, body: trimmedBody, imageUrls, nutrition: nutritionInput })
       }
       Taro.showToast({ title: postId ? '保存成功' : '发布成功', icon: 'success' })
+      try {
+        Taro.eventCenter.trigger(COMMUNITY_FEED_CHANGED_EVENT)
+      } catch {
+        // ignore
+      }
       setTimeout(() => {
         Taro.navigateBack()
       }, 500)
@@ -296,8 +313,8 @@ function CirclePostEditPage() {
   }
 
   const canSubmit = useMemo(
-    () => (content.trim().length > 0 || images.length > 0) && !submitting && !images.some((i) => i.uploading),
-    [content, images, submitting]
+    () => (title.trim().length > 0 || body.trim().length > 0 || images.length > 0) && !submitting && !images.some((i) => i.uploading),
+    [title, body, images, submitting]
   )
 
   return (
@@ -314,7 +331,11 @@ function CirclePostEditPage() {
             {images.map((item) => (
               <View key={item.id} className='circle-post-edit-image-item'>
                 <Image className='circle-post-edit-image-preview' src={item.url} mode='aspectFill' />
-                {item.uploading ? <View className='circle-post-edit-image-mask' /> : null}
+                {item.uploading ? (
+                  <View className='circle-post-edit-image-mask'>
+                    <View className='circle-post-edit-image-spinner' />
+                  </View>
+                ) : null}
                 <View className='circle-post-edit-image-remove' onClick={() => handleRemoveImage(item.id)}>
                   <Text className='circle-post-edit-image-remove-icon'>×</Text>
                 </View>
@@ -330,16 +351,24 @@ function CirclePostEditPage() {
         </View>
 
         <View className='circle-post-edit-card circle-post-edit-editor'>
+          <Input
+            className='circle-post-edit-title-input'
+            value={title}
+            maxlength={MAX_TITLE_LENGTH}
+            placeholder='标题（选填）'
+            onInput={(event) => setTitle(event.detail.value)}
+            disabled={loading}
+          />
           <Textarea
             className='circle-post-edit-textarea'
-            value={content}
-            maxlength={MAX_CONTENT_LENGTH}
+            value={body}
+            maxlength={MAX_BODY_LENGTH}
             placeholder='分享你的饮食心得、运动日常…'
-            onInput={(event) => setContent(event.detail.value)}
+            onInput={(event) => setBody(event.detail.value)}
             disabled={loading}
           />
           <Text className='circle-post-edit-count'>
-            {content.length}/{MAX_CONTENT_LENGTH}
+            {body.length}/{MAX_BODY_LENGTH}
           </Text>
         </View>
 

@@ -5045,10 +5045,14 @@ export type CommunityFeedRecord = FoodRecord & {
   price?: number | null
   school?: string | null
   canteen?: string | null
+  /** 自定义图文动态字段 */
+  title?: string | null
+  body?: string | null
   /** 自定义图文动态可选营养字段 */
   fiber?: number | null
   sugar?: number | null
   sodium_mg?: number | null
+  total_weight_grams?: number | null
 }
 
 /** 圈子 Feed 单条（好友 + 自己今日饮食 + 点赞信息） */
@@ -5345,13 +5349,15 @@ export async function getFollowStats(userId: string): Promise<FollowStats> {
 
 // ==================== 私信 ====================
 
+export const SYSTEM_MESSAGE_USER_ID = '00000000-0000-0000-0000-000000000000'
+
 export interface PrivateMessage {
   id: string
   sender_id: string
   receiver_id: string
   content: string
   image_url?: string
-  content_type: 'text' | 'image'
+  content_type: 'text' | 'image' | 'system'
   is_read: boolean
   created_at: string
 }
@@ -5452,13 +5458,14 @@ export async function communityGetPublicFeed(
   limit: number = 20,
   includeComments: boolean = true,
   commentsLimit: number = 5,
-  params?: Pick<CommunityFeedQueryParams, 'meal_type' | 'diet_goal' | 'sort_by' | 'content_type'>
+  params?: Pick<CommunityFeedQueryParams, 'meal_type' | 'diet_goal' | 'sort_by' | 'content_type' | 'author_id'>
 ): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
   let q = `?offset=${offset}&limit=${limit}&include_comments=${includeComments}&comments_limit=${commentsLimit}`
   if (params?.meal_type) q += `&meal_type=${encodeURIComponent(params.meal_type)}`
   if (params?.diet_goal) q += `&diet_goal=${encodeURIComponent(params.diet_goal)}`
   if (params?.sort_by) q += `&sort_by=${encodeURIComponent(params.sort_by)}`
   if (params?.content_type) q += `&content_type=${encodeURIComponent(params.content_type)}`
+  if (params?.author_id) q += `&author_id=${encodeURIComponent(params.author_id)}`
   const response = await Taro.request({
     url: `${API_BASE_URL}/api/community/public-feed${q}`,
     method: 'GET',
@@ -5588,21 +5595,32 @@ export async function uploadCirclePostImage(localPath: string): Promise<{ image_
   if (response.statusCode !== 200) {
     throw new Error((JSON.parse(response.data || '{}') as any)?.detail || '上传失败')
   }
-  return JSON.parse(response.data) as { image_url: string }
+  return unwrapResponse<{ image_url: string }>(response as any)
+}
+
+export interface CreateCirclePostInput {
+  title: string
+  body: string
+  imageUrls: string[]
+  nutrition?: CirclePostNutritionInput
+}
+
+export interface UpdateCirclePostInput {
+  title: string
+  body: string
+  imageUrls: string[]
+  nutrition?: CirclePostNutritionInput
 }
 
 /** 创建圈子自定义图文动态 */
-export async function createCirclePost(
-  content: string,
-  imageUrls: string[],
-  nutrition?: CirclePostNutritionInput
-): Promise<{ id: string }> {
+export async function createCirclePost(input: CreateCirclePostInput): Promise<{ id: string }> {
   const response = await authenticatedRequest('/api/community/posts', {
     method: 'POST',
     data: {
-      content: content.trim(),
-      image_urls: imageUrls || [],
-      ...(nutrition ? buildCirclePostNutritionPayload(nutrition) : {})
+      title: input.title.trim(),
+      body: input.body.trim(),
+      image_urls: input.imageUrls || [],
+      ...(input.nutrition ? buildCirclePostNutritionPayload(input.nutrition) : {})
     }
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发布失败')
@@ -5612,16 +5630,15 @@ export async function createCirclePost(
 /** 更新圈子自定义图文动态 */
 export async function updateCirclePost(
   postId: string,
-  content: string,
-  imageUrls: string[],
-  nutrition?: CirclePostNutritionInput
+  input: UpdateCirclePostInput
 ): Promise<{ id: string }> {
   const response = await authenticatedRequest(`/api/community/posts/${encodeURIComponent(postId)}`, {
     method: 'PUT',
     data: {
-      content: content.trim(),
-      image_urls: imageUrls || [],
-      ...(nutrition ? buildCirclePostNutritionPayload(nutrition) : {})
+      title: input.title.trim(),
+      body: input.body.trim(),
+      image_urls: input.imageUrls || [],
+      ...(input.nutrition ? buildCirclePostNutritionPayload(input.nutrition) : {})
     }
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '保存失败')
@@ -5629,20 +5646,20 @@ export async function updateCirclePost(
 }
 
 function buildCirclePostNutritionPayload(nutrition: CirclePostNutritionInput): Record<string, number | null> {
-  const fields: (keyof CirclePostNutritionInput)[] = [
-    'calories',
-    'protein',
-    'carbs',
-    'fat',
-    'fiber',
-    'sugar',
-    'sodium_mg',
-    'total_weight_grams'
-  ]
+  const mapping: { [K in keyof CirclePostNutritionInput]: string } = {
+    calories: 'total_calories',
+    protein: 'total_protein',
+    carbs: 'total_carbs',
+    fat: 'total_fat',
+    fiber: 'fiber',
+    sugar: 'sugar',
+    sodium_mg: 'sodium_mg',
+    total_weight_grams: 'total_weight_grams'
+  }
   const payload: Record<string, number | null> = {}
-  fields.forEach((key) => {
-    const value = nutrition[key]
-    payload[key] = typeof value === 'number' && Number.isFinite(value) ? value : null
+  Object.entries(mapping).forEach(([inputKey, backendKey]) => {
+    const value = nutrition[inputKey as keyof CirclePostNutritionInput]
+    payload[backendKey] = typeof value === 'number' && Number.isFinite(value) ? value : null
   })
   return payload
 }
@@ -5652,6 +5669,38 @@ export async function deleteCirclePost(postId: string): Promise<{ message: strin
   const response = await authenticatedRequest(`/api/community/posts/${encodeURIComponent(postId)}`, { method: 'DELETE' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '删除失败')
   return response.data as { message: string }
+}
+
+export type FeedReportReason = 'spam' | 'porn' | 'illegal' | 'abuse' | 'other'
+
+export const FEED_REPORT_REASON_OPTIONS: { value: FeedReportReason; label: string }[] = [
+  { value: 'spam', label: '垃圾广告' },
+  { value: 'porn', label: '色情低俗' },
+  { value: 'illegal', label: '违法违规' },
+  { value: 'abuse', label: '人身攻击' },
+  { value: 'other', label: '其他' }
+]
+
+export interface SubmitFeedReportInput {
+  reason: FeedReportReason
+  extra_content?: string
+}
+
+/** 举报圈子动态 */
+export async function submitFeedReport(
+  targetType: CommunityFeedTargetType,
+  targetId: string,
+  input: SubmitFeedReportInput
+): Promise<{ id: string; status: string }> {
+  const response = await authenticatedRequest(`/api/community/feed-targets/${encodeURIComponent(targetType)}/${encodeURIComponent(targetId)}/report`, {
+    method: 'POST',
+    data: {
+      reason: input.reason,
+      extra_content: (input.extra_content || '').trim()
+    }
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '举报失败')
+  return response.data as { id: string; status: string }
 }
 
 /** 更新运动记录 */

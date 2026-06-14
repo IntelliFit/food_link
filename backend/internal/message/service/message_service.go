@@ -60,6 +60,25 @@ func (s *MessageService) SendMessage(ctx context.Context, senderID, receiverID, 
 	return msg, nil
 }
 
+// SendSystemMessage 向指定用户发送一条系统消息。
+func (s *MessageService) SendSystemMessage(ctx context.Context, receiverID, content string) error {
+	receiverID = strings.TrimSpace(receiverID)
+	if receiverID == "" {
+		return &commonerrors.AppError{Code: 10002, Message: "接收者 ID 不能为空", HTTPStatus: 400}
+	}
+	if strings.TrimSpace(content) == "" {
+		return &commonerrors.AppError{Code: 10002, Message: "消息内容不能为空", HTTPStatus: 400}
+	}
+	msg := &domain.PrivateMessage{
+		SenderID:    domain.SystemSenderID,
+		ReceiverID:  receiverID,
+		Content:     strings.TrimSpace(content),
+		ContentType: "system",
+		CreatedAt:   time.Now(),
+	}
+	return s.msgRepo.CreateMessage(ctx, msg)
+}
+
 // GetMessages returns paginated messages between two users (newest first)
 func (s *MessageService) GetMessages(ctx context.Context, userA, userB string, offset, limit int) ([]domain.PrivateMessage, error) {
 	msgs, err := s.msgRepo.GetMessages(ctx, userA, userB, offset, limit)
