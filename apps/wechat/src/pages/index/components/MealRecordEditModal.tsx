@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Button, Slider } from '@tarojs/components'
+import { View, Text, Button, Slider } from '@tarojs/components'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import Taro from '@tarojs/taro'
 import {
@@ -528,8 +528,8 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
   if (!visible) return null
 
   return (
-    <View className={`edit-modal ${scheme === 'dark' ? 'edit-modal--dark' : ''}`} catchMove>
-      <View className='edit-modal-mask' onClick={onClose} />
+    <View className={`edit-modal ${scheme === 'dark' ? 'edit-modal--dark' : ''}`}>
+      <View className='edit-modal-mask' catchMove onClick={onClose} />
       <View className='edit-modal-content'>
         <View className='edit-modal-header'>
           <View style={{ display: 'flex', alignItems: 'center', gap: '12rpx' }}>
@@ -551,12 +551,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
           </View>
           <View className='edit-modal-close' onClick={onClose} />
         </View>
-        <ScrollView
-          scrollY
-          enhanced
-          showScrollbar={false}
-          className='edit-modal-body'
-        >
+        <View className='edit-modal-body'>
           <MealTypeField value={editMealType} onChange={setEditMealType} />
           {editItems.map((item, idx) => {
             const detailRows = getNutrientDetailRows(item)
@@ -682,7 +677,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
               </View>
             )
           })}
-        </ScrollView>
+        </View>
         <View className='edit-modal-footer'>
           <Button className='edit-cancel-btn' onClick={onClose}>取消</Button>
           <Button className='edit-save-btn' onClick={handleSaveEdit} disabled={editSaving}>

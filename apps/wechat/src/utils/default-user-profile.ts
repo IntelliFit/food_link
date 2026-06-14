@@ -1,12 +1,12 @@
-import defaultAvatarImage from '../assets/default_avatar.jpg'
+import { DEFAULT_AVATAR_URL } from './static-asset-cdn-url'
 
 /** 与后端 login_service 中 defaultUserAvatarKey 保持一致 */
 export const DEFAULT_USER_AVATAR_COS_KEY = '_system/default_avatar.jpg'
 
 export const DEFAULT_WECHAT_NICKNAME_PREFIX = '微信用户_'
 
-/** 本地打包默认头像，用于注册弹窗预填与离线展示 */
-export { defaultAvatarImage }
+/** 默认头像 CDN 地址，用于注册弹窗预填与离线展示 */
+export const defaultAvatarImage = DEFAULT_AVATAR_URL
 
 /** 微信登录新用户默认昵称：微信用户_{6 位随机数字} */
 export function buildDefaultWechatNickname(_openid?: string): string {

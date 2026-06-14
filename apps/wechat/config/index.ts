@@ -76,6 +76,7 @@ export default defineConfig<'vite'>(async (merge) => {
     ''
   const expirySubscribeTemplateId = process.env.TARO_APP_EXPIRY_SUBSCRIBE_TEMPLATE_ID || ''
   const iconCdnBaseUrl = process.env.TARO_APP_ICON_CDN_BASE_URL || ''
+  const foodImagesCdnBaseUrl = process.env.TARO_APP_FOOD_IMAGES_CDN_BASE_URL || ''
   const recentRequestTraceLimit = process.env.TARO_APP_RECENT_REQUEST_TRACE_LIMIT || '50'
   const consoleLogBufferLimit = process.env.TARO_APP_CONSOLE_LOG_BUFFER_LIMIT || '80'
 
@@ -100,6 +101,7 @@ export default defineConfig<'vite'>(async (merge) => {
       __API_BASE_URL_DEVELOP__: JSON.stringify(apiBaseUrlDevelop),
       __API_BASE_URL_OVERRIDE__: JSON.stringify(apiBaseUrlOverride),
       __ICON_CDN_BASE_URL__: JSON.stringify(iconCdnBaseUrl),
+      __FOOD_IMAGES_CDN_BASE_URL__: JSON.stringify(foodImagesCdnBaseUrl),
       __EXPIRY_SUBSCRIBE_TEMPLATE_ID__: JSON.stringify(expirySubscribeTemplateId),
       /** 反馈提交时默认附带的最近请求诊断条数，可通过 TARO_APP_RECENT_REQUEST_TRACE_LIMIT 覆盖 */
       __RECENT_REQUEST_TRACE_LIMIT__: JSON.stringify(recentRequestTraceLimit),
@@ -115,14 +117,6 @@ export default defineConfig<'vite'>(async (merge) => {
         {
           from: 'assets/icons',
           to: 'assets/icons'
-        },
-        {
-          from: 'assets/bg/cafeteria-hero.jpg',
-          to: 'packageExtra/assets/bg/cafeteria-hero.jpg'
-        },
-        {
-          from: 'assets/bg/cafeteria-hero.jpg',
-          to: 'assets/bg/cafeteria-hero.jpg'
         },
         {
           from: 'custom-tab-bar',

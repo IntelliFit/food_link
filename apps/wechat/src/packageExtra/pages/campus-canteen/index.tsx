@@ -17,6 +17,7 @@ import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import SchoolPicker from '../../../components/SchoolPicker'
+import { CAFETERIA_HERO_BG_URL } from '../../../utils/static-asset-cdn-url'
 
 type SortBy = 'hot' | 'high_protein' | 'low_calorie' | 'value'
 
@@ -350,7 +351,7 @@ function CampusCanteenPage() {
       <View className='campus-hero'>
         <Image
           className='campus-hero-bg'
-          src='/packageExtra/assets/bg/cafeteria-hero.jpg'
+          src={CAFETERIA_HERO_BG_URL}
           mode='aspectFill'
         />
         <View>

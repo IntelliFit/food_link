@@ -20,8 +20,7 @@ import { NewUserOnboardingModals } from '../../../components/NewUserOnboardingMo
 import { processChooseAvatarSelection, ensureAvatarUploadedForSave, getInitialRegistrationAvatar } from '../../../utils/new-user-profile-form'
 import { shouldShowProfileFormFromApiUser } from '../../../utils/new-user-onboarding-scenarios'
 import { resolveRegistrationNickname, buildDefaultWechatNickname } from '../../../utils/default-user-profile'
-
-import loginLogo from '../../../assets/login-logo.png'
+import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
 
 interface UserInfo {
@@ -339,7 +338,7 @@ export default function LoginPage() {
         <FlPageThemeRoot>
         <View className='login-page'>
             <View className='login-header'>
-                <Image src={loginLogo} className='app-logo' mode='aspectFit' style={{ backgroundColor: '#f0fdf4' }} />
+                <Image src={LOGIN_LOGO_URL} className='app-logo' mode='aspectFit' style={{ backgroundColor: '#f0fdf4' }} />
                 <Text className='app-name'>智健食探</Text>
                 <Text className='app-slogan'>记录饮食，连接健康</Text>
             </View>

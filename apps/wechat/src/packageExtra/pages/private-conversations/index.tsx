@@ -13,8 +13,7 @@ import {
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
-import appLogo from '../../../assets/logo.png'
-import defaultAvatar from '../../../assets/default_avatar.png'
+import { DEFAULT_AVATAR_URL, LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
 
 const PAGE_SIZE = 20
@@ -173,9 +172,9 @@ function PrivateConversationsPage() {
               >
                 <View className='conversation-avatar'>
                   {item.user_id === SYSTEM_MESSAGE_USER_ID ? (
-                    <Image className='conversation-avatar-img' src={appLogo} mode='aspectFill' />
+                    <Image className='conversation-avatar-img' src={LOGIN_LOGO_URL} mode='aspectFill' />
                   ) : (
-                    <Image className='conversation-avatar-img' src={item.avatar || defaultAvatar} mode='aspectFill' />
+                    <Image className='conversation-avatar-img' src={item.avatar || DEFAULT_AVATAR_URL} mode='aspectFill' />
                   )}
                 </View>
                 <View className='conversation-main'>

@@ -44,6 +44,7 @@ import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { FeedReportMask } from '../../../pages/community/components/FeedReportMask'
 import { FeedReportSheet } from '../../../pages/community/components/FeedReportSheet'
 import { FeedActionSheet } from '../../../pages/community/components/FeedActionSheet'
+import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
 
 type TabKey = 'feed' | 'collections'
@@ -514,12 +515,10 @@ export default function ProfileSettingsPage() {
       const ctx = canvasNode.getContext('2d')
       if (!ctx) throw new Error('canvas context 失败')
 
-      // 并行加载头像、二维码和食探 logo
-      const LOGO_URL = 'https://healthymax.cn/brand/login-logo.png'
       const [avatarResolved, qrResolved, logoResolved] = await Promise.all([
         tempAvatar ? resolveCanvasImageSrc(tempAvatar) : Promise.resolve(''),
         resolveCanvasImageSrc(qrImagePath),
-        resolveCanvasImageSrc(LOGO_URL),
+        resolveCanvasImageSrc(LOGIN_LOGO_URL),
       ])
 
       const [avatarImg, qrImg, logoImg] = await Promise.all([

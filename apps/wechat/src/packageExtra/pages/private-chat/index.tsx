@@ -15,7 +15,7 @@ import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
-import defaultAvatar from '../../../assets/default_avatar.png'
+import { DEFAULT_AVATAR_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
 
 const POLL_INTERVAL_MS = 3000
@@ -265,7 +265,7 @@ export default function PrivateChatPage() {
             <View className='chat-avatar'>
               <Image
                 className='chat-avatar-img'
-                src={isSelf ? currentUserAvatar || defaultAvatar : otherUser.avatar || defaultAvatar}
+                src={isSelf ? currentUserAvatar || DEFAULT_AVATAR_URL : otherUser.avatar || DEFAULT_AVATAR_URL}
                 mode='aspectFill'
               />
             </View>
