@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Food Link",
+    "slug": "food-link-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#00bc7d"
+      }
+    },
+    "extra": {
+      "apiBaseUrl": "http://127.0.0.1:3010"
+    }
+  }
+}
