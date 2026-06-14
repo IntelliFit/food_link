@@ -100,6 +100,10 @@ export function CommunityFoodRecordEditSheet({
 
   const handleSave = useCallback(async () => {
     if (!record?.id) return
+    if (!description.trim() && imagePaths.length === 0) {
+      Taro.showToast({ title: '请填写动态文本或添加图片', icon: 'none' })
+      return
+    }
     const totalCalories = parseNumber(calories)
     const totalProtein = parseNumber(protein)
     const totalCarbs = parseNumber(carbs)
@@ -141,19 +145,6 @@ export function CommunityFoodRecordEditSheet({
 
         <View className='cfs-body'>
           <View className='cfs-section'>
-            <Text className='cfs-label'>动态文本</Text>
-            <Textarea
-              className='cfs-textarea'
-              value={description}
-              onInput={(e) => setDescription(String(e.detail.value))}
-              placeholder='添加动态描述...'
-              placeholderClass='cfs-placeholder'
-              maxlength={500}
-              autoHeight
-            />
-          </View>
-
-          <View className='cfs-section'>
             <Text className='cfs-label'>图片（最多 {MAX_IMAGES} 张）</Text>
             <View className='cfs-images'>
               {imagePaths.map((url, index) => (
@@ -175,6 +166,19 @@ export function CommunityFoodRecordEditSheet({
                 </View>
               )}
             </View>
+          </View>
+
+          <View className='cfs-section'>
+            <Text className='cfs-label'>动态文本</Text>
+            <Textarea
+              className='cfs-textarea'
+              value={description}
+              onInput={(e) => setDescription(String(e.detail.value))}
+              placeholder='添加动态描述...'
+              placeholderClass='cfs-placeholder'
+              maxlength={500}
+              autoHeight
+            />
           </View>
 
           <View className='cfs-section'>

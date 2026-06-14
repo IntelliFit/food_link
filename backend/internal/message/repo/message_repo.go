@@ -86,8 +86,8 @@ func (r *MessageRepo) GetConversations(ctx context.Context, userID string) ([]Co
 	sql := `
 SELECT
   u.id AS other_id,
-  u.nickname,
-  u.avatar,
+  COALESCE(u.nickname, CASE WHEN CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END = ? THEN '系统消息' ELSE '' END) AS nickname,
+  COALESCE(u.avatar, '') AS avatar,
   m.id AS last_id,
   m.content AS last_content,
   m.image_url AS last_image_url,
@@ -108,15 +108,16 @@ FROM (
   WHERE sender_id = ? OR receiver_id = ?
   ORDER BY LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id), created_at DESC
 ) m
-INNER JOIN weapp_user u ON u.id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END
+LEFT JOIN weapp_user u ON u.id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END
 LEFT JOIN LATERAL (
   SELECT COUNT(*) AS unread_count
   FROM private_messages
-  WHERE sender_id = u.id AND receiver_id = ? AND is_read = false
+  WHERE sender_id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END AND receiver_id = ? AND is_read = false
 ) uc ON true
 ORDER BY m.created_at DESC
 `
-	err := r.db.WithContext(ctx).Raw(sql, userID, userID, userID, userID).Scan(&rows).Error
+
+	err := r.db.WithContext(ctx).Raw(sql, userID, domain.SystemSenderID, userID, userID, userID, userID, userID).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}

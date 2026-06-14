@@ -1,3 +1,4 @@
+@import '../../../pages/community/components/FeedActionSheet.scss';
 .profile-settings-page {
   min-height: 100vh;
   display: flex;
@@ -392,6 +393,30 @@
   display: block;
 }
 
+.profile-feed-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #111827;
+  line-height: 48rpx;
+  margin-bottom: 12rpx;
+  display: block;
+}
+
+.profile-feed-image-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 16rpx;
+}
+
+.profile-feed-image-grid-item {
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
 .profile-feed-image-wrap {
   width: 100%;
   height: 320rpx;
@@ -447,6 +472,32 @@
   font-size: 24rpx;
   color: #9ca3af;
   line-height: 34rpx;
+}
+
+.profile-feed-more {
+  flex-shrink: 0;
+  margin-left: 8rpx;
+}
+
+.profile-feed-more-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 44rpx;
+  border-radius: 12rpx;
+  background: #f3f4f6;
+
+  &:active {
+    background: #e5e7eb;
+  }
+}
+
+.profile-feed-more-icon {
+  font-size: 40rpx;
+  line-height: 1;
+  font-weight: 700;
+  color: #64748b;
 }
 
 .profile-feed-loading {
@@ -1008,6 +1059,10 @@
   }
 
   .profile-feed-desc {
+    color: #f2f7f4;
+  }
+
+  .profile-feed-title {
     color: #f2f7f4;
   }
 

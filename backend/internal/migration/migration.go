@@ -62,6 +62,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensurePublicRecordsDefault(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureFeedReportResolutionColumns(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -106,6 +109,9 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("feed_interaction_notifications", "feed_interaction_notifications_target_type_check", `target_type = ANY (ARRAY['food_record'::text,'exercise_log'::text,'circle_post'::text])`),
 		dropAndAddCheck("comment_tasks", "comment_tasks_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'done'::text,'failed'::text,'violated'::text])`),
 		dropAndAddCheck("comment_tasks", "comment_tasks_type_check", `comment_type = ANY (ARRAY['feed'::text,'public_food_library'::text])`),
+		dropAndAddCheck("feed_reports", "feed_reports_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'resolved'::text,'rejected'::text])`),
+		dropAndAddCheck("feed_reports", "feed_reports_reason_check", `reason = ANY (ARRAY['spam'::text,'porn'::text,'illegal'::text,'abuse'::text,'other'::text])`),
+		dropAndAddCheck("feed_reports", "feed_reports_target_type_check", `target_type = ANY (ARRAY['food_record'::text,'exercise_log'::text,'circle_post'::text])`),
 		dropAndAddCheck("food_expiry_items", "food_expiry_items_storage_type_check", `storage_type = ANY (ARRAY['room_temp'::text,'refrigerated'::text,'frozen'::text])`),
 		dropAndAddCheck("food_expiry_items", "food_expiry_items_source_type_check", `source_type = ANY (ARRAY['manual'::text,'ocr'::text,'ai'::text])`),
 		dropAndAddCheck("food_expiry_items", "food_expiry_items_status_check", `status = ANY (ARRAY['active'::text,'consumed'::text,'discarded'::text])`),
@@ -431,6 +437,15 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE INDEX IF NOT EXISTS idx_analysis_feedback_samples_resolution_state ON analysis_feedback_samples (resolution_state)`,
 		// School badge logo URL
 		`ALTER TABLE schools ADD COLUMN IF NOT EXISTS logo_url text`,
+		// Circle posts: title/body split + extended nutrition fields
+		`ALTER TABLE user_circle_posts ADD COLUMN IF NOT EXISTS title text`,
+		`ALTER TABLE user_circle_posts ADD COLUMN IF NOT EXISTS body text`,
+		`ALTER TABLE user_circle_posts ADD COLUMN IF NOT EXISTS fiber numeric(10,2)`,
+		`ALTER TABLE user_circle_posts ADD COLUMN IF NOT EXISTS sugar numeric(10,2)`,
+		`ALTER TABLE user_circle_posts ADD COLUMN IF NOT EXISTS sodium_mg numeric(10,2)`,
+		`ALTER TABLE user_circle_posts ADD COLUMN IF NOT EXISTS total_weight_grams numeric(10,2)`,
+		`UPDATE user_circle_posts SET body = content WHERE body IS NULL AND content IS NOT NULL AND content <> ''`,
+		`UPDATE user_circle_posts SET content = '' WHERE content IS NULL`,
 	} {
 		if sql == "" {
 			continue
@@ -624,6 +639,20 @@ func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
 	`)
 	if result.Error != nil {
 		return fmt.Errorf("backfill public_records default: %w", result.Error)
+	}
+	return nil
+}
+
+func ensureFeedReportResolutionColumns(ctx context.Context, db *gorm.DB) error {
+	columns := []string{
+		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS resolution_note text NOT NULL DEFAULT ''`,
+		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS handled_by text`,
+		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS handled_at timestamptz`,
+	}
+	for _, sql := range columns {
+		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+			return fmt.Errorf("feed_reports resolution column migration: %w", err)
+		}
 	}
 	return nil
 }

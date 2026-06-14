@@ -21,6 +21,9 @@ import { getAccessToken } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth, redirectToLogin } from '../../../utils/withAuth'
 import { CommunityFoodRecordEditSheet } from '../../../pages/community/components/CommunityFoodRecordEditSheet'
+import { FeedReportMask } from '../../../pages/community/components/FeedReportMask'
+import { FeedReportSheet } from '../../../pages/community/components/FeedReportSheet'
+import { FeedActionSheet, type FeedActionSheetAction } from '../../../pages/community/components/FeedActionSheet'
 
 import './index.scss'
 
@@ -92,6 +95,9 @@ function InteractionFeedDetailPage() {
   const [replyTargetComment, setReplyTargetComment] = useState<FeedCommentItem | null>(null)
   const [composerVisible, setComposerVisible] = useState(false)
   const [editSheetVisible, setEditSheetVisible] = useState(false)
+  const [reportVisible, setReportVisible] = useState(false)
+  const [feedActionSheetVisible, setFeedActionSheetVisible] = useState(false)
+  const [reportMaskVisible, setReportMaskVisible] = useState(false)
   const likePendingRef = useRef(false)
 
   const loadDetail = useCallback(async (nextRecordId: string, nextTargetType: CommunityFeedTargetType = 'food_record') => {
@@ -232,36 +238,10 @@ function InteractionFeedDetailPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(id)}` })
   }, [targetType, feedItem])
 
-  const handleManage = useCallback(async () => {
-    if (!feedItem || !feedItem.is_mine) return
+  const handleDeleteFeedItem = useCallback(async () => {
+    if (!feedItem) return
     const ttype = getFeedTargetType(feedItem)
     const tid = getFeedTargetId(feedItem)
-    const actions: string[] = []
-    if (ttype === 'circle_post') {
-      actions.push('编辑')
-    } else if (ttype === 'food_record') {
-      actions.push('编辑')
-    } else if (ttype === 'exercise_log') {
-      actions.push('编辑')
-    } else if (ttype === 'campus_food') {
-      actions.push('编辑')
-    }
-    actions.push('删除')
-    const { tapIndex } = await Taro.showActionSheet({ itemList: actions })
-    const action = actions[tapIndex]
-    if (action === '编辑') {
-      if (ttype === 'circle_post') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/circle-post-edit/index?id=${encodeURIComponent(tid)}`) })
-      } else if (ttype === 'food_record') {
-        setEditSheetVisible(true)
-      } else if (ttype === 'exercise_log') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/exercise-record/index?log_id=${encodeURIComponent(tid)}`) })
-      } else if (ttype === 'campus_food') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/campus-food-share/index?item_id=${encodeURIComponent(tid)}`) })
-      }
-      return
-    }
-    if (action !== '删除') return
     const { confirm } = await Taro.showModal({
       title: '确认删除',
       content: '删除后不可恢复，是否继续？',
@@ -288,7 +268,47 @@ function InteractionFeedDetailPage() {
     }
   }, [feedItem])
 
+  const feedActionSheetActions = useMemo<FeedActionSheetAction[]>(() => {
+    if (!feedItem) return []
+    if (!feedItem.is_mine) {
+      return [{ id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true }]
+    }
+    const ttype = getFeedTargetType(feedItem)
+    const actions: FeedActionSheetAction[] = []
+    if (ttype === 'circle_post' || ttype === 'food_record' || ttype === 'exercise_log' || ttype === 'campus_food') {
+      actions.push({ id: 'edit', label: '编辑', iconClass: 'icon-edit', color: '#10b981' })
+    }
+    actions.push({ id: 'delete', label: '删除', iconClass: 'icon-shanchu', danger: true })
+    return actions
+  }, [feedItem])
+
+  const handleFeedActionSelect = useCallback((id: string) => {
+    if (!feedItem) return
+    if (!feedItem.is_mine) {
+      if (id === 'report') setReportVisible(true)
+      return
+    }
+    const ttype = getFeedTargetType(feedItem)
+    const tid = getFeedTargetId(feedItem)
+    if (id === 'edit') {
+      if (ttype === 'circle_post') {
+        Taro.navigateTo({ url: extraPkgUrl(`/pages/circle-post-edit/index?id=${encodeURIComponent(tid)}`) })
+      } else if (ttype === 'food_record') {
+        setEditSheetVisible(true)
+      } else if (ttype === 'exercise_log') {
+        Taro.navigateTo({ url: extraPkgUrl(`/pages/exercise-record/index?log_id=${encodeURIComponent(tid)}`) })
+      } else if (ttype === 'campus_food') {
+        Taro.navigateTo({ url: extraPkgUrl(`/pages/campus-food-share/index?item_id=${encodeURIComponent(tid)}`) })
+      }
+      return
+    }
+    if (id === 'delete') {
+      void handleDeleteFeedItem()
+    }
+  }, [feedItem, handleDeleteFeedItem])
+
   return (
+    <>
     <View className='interaction-feed-detail-page'>
       <ScrollView className='interaction-feed-detail-scroll' scrollY enhanced showScrollbar={false}>
         <View className='interaction-feed-detail-content'>
@@ -308,11 +328,20 @@ function InteractionFeedDetailPage() {
                 const feedTime = String(feedItem.record.record_time || feedItem.record.created_at || '')
                 const exerciseTitle = feedItem.record.exercise_type || '运动打卡'
                 const exerciseDesc = feedItem.record.exercise_desc || feedItem.record.description || ''
+                const circlePostTitle = isCirclePost ? (feedItem.record.title || '') : ''
+                const circlePostBody = isCirclePost ? (feedItem.record.body || '') : ''
+                const circlePostText = circlePostTitle || circlePostBody
                 const exerciseKcal = Number(feedItem.record.calories_burned ?? feedItem.record.total_calories ?? 0)
                 return (
               <View
                 id={`feed-card-${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`}
-                className={`feed-card${(feedItem.record.description?.trim() || exerciseDesc) && !feedItem.record.image_path ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
+                className={`feed-card${(feedItem.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !feedItem.record.image_path ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
+                style={isCirclePost ? { position: 'relative' } : undefined}
+                onLongPress={() => {
+                  if (isCirclePost && !feedItem.is_mine) {
+                    setReportMaskVisible(true)
+                  }
+                }}
               >
                 <View className='feed-card-moments'>
                   <View className='feed-card-avatar-col'>
@@ -340,9 +369,14 @@ function InteractionFeedDetailPage() {
                         <Text className='feed-tag'>{DIET_GOAL_NAMES[feedItem.record.diet_goal] || feedItem.record.diet_goal}</Text>
                       </View>
                     ) : null)}
-                    {(exercise ? exerciseDesc : feedItem.record.description) && (
+                    {isCirclePost ? (
+                      <>
+                        {circlePostTitle ? <Text className='feed-circle-post-title'>{circlePostTitle}</Text> : null}
+                        {circlePostBody ? <Text className='feed-content feed-circle-post-body'>{circlePostBody}</Text> : null}
+                      </>
+                    ) : (exercise ? exerciseDesc : feedItem.record.description) ? (
                       <Text className='feed-content'>{exercise ? exerciseDesc : feedItem.record.description}</Text>
-                    )}
+                    ) : null}
                     {feedItem.record.image_path && !isCirclePost ? (
                       <View className='feed-image feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
                         <Image src={feedItem.record.image_path} mode='aspectFill' className='feed-image-content' />
@@ -366,6 +400,29 @@ function InteractionFeedDetailPage() {
                         ))}
                       </View>
                     )}
+                    {isCirclePost && (() => {
+                      const n = feedItem.record
+                      const hasNutrition = Number(n.total_calories) > 0 || Number(n.total_protein) > 0 || Number(n.total_carbs) > 0 || Number(n.total_fat) > 0 || Number(n.fiber) > 0 || Number(n.sugar) > 0 || Number(n.sodium_mg) > 0 || Number(n.total_weight_grams) > 0
+                      if (!hasNutrition) return null
+                      return (
+                        <View className='feed-meta feed-meta--circle-post'>
+                          <View className='feed-calorie'>
+                            <Text className='van-icon van-icon-fire-o taroify-icon taroify-icon--inherit feed-calorie-icon' />
+                            <Text className='feed-calorie-num'>{Math.round(Number(n.total_calories || 0))}</Text>
+                            <Text className='feed-calorie-unit'>kcal</Text>
+                          </View>
+                          <View className='feed-macros'>
+                            <Text className='feed-macros-text'>
+                              蛋白质 {Math.round(Number(n.total_protein ?? 0))}g · 碳水 {Math.round(Number(n.total_carbs ?? 0))}g · 脂肪 {Math.round(Number(n.total_fat ?? 0))}g
+                              {Number(n.fiber) > 0 ? ` · 膳食纤维 ${Math.round(Number(n.fiber ?? 0))}g` : ''}
+                              {Number(n.sugar) > 0 ? ` · 糖分 ${Math.round(Number(n.sugar ?? 0))}g` : ''}
+                              {Number(n.sodium_mg) > 0 ? ` · 钠 ${Math.round(Number(n.sodium_mg ?? 0))}mg` : ''}
+                              {Number(n.total_weight_grams) > 0 ? ` · 重量 ${Math.round(Number(n.total_weight_grams ?? 0))}g` : ''}
+                            </Text>
+                          </View>
+                        </View>
+                      )
+                    })()}
 
                     {!isCirclePost && (
                       <View className='feed-meta'>
@@ -400,19 +457,17 @@ function InteractionFeedDetailPage() {
                           <Text className='action-count'>评论 {feedItem.comment_count || 0}</Text>
                         </View>
                       </View>
-                      {feedItem.is_mine ? (
-                        <View
-                          className='action-item action-manage'
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            void handleManage()
-                          }}
-                        >
-                          <View className='action-manage-box'>
-                            <Text className='action-manage-icon'>⋮</Text>
-                          </View>
+                      <View
+                        className='action-item action-manage'
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setFeedActionSheetVisible(true)
+                        }}
+                      >
+                        <View className='action-manage-box'>
+                          <Text className='action-manage-icon'>⋮</Text>
                         </View>
-                      ) : null}
+                      </View>
                     </View>
 
                     {(feedItem.comments?.length || 0) > 0 ? (
@@ -455,6 +510,16 @@ function InteractionFeedDetailPage() {
                     )}
                   </View>
                 </View>
+                {reportMaskVisible ? (
+                  <FeedReportMask
+                    visible
+                    onReport={() => {
+                      setReportVisible(true)
+                      setReportMaskVisible(false)
+                    }}
+                    onCancel={() => setReportMaskVisible(false)}
+                  />
+                ) : null}
               </View>
                 )
               })()}
@@ -495,6 +560,7 @@ function InteractionFeedDetailPage() {
         </View>
       </View>
 
+    </View>
       <CommunityFoodRecordEditSheet
         visible={editSheetVisible}
         record={feedItem?.record}
@@ -511,7 +577,19 @@ function InteractionFeedDetailPage() {
           })
         }}
       />
-    </View>
+      <FeedActionSheet
+        visible={feedActionSheetVisible}
+        actions={feedActionSheetActions}
+        onClose={() => setFeedActionSheetVisible(false)}
+        onSelect={handleFeedActionSelect}
+      />
+      <FeedReportSheet
+        visible={reportVisible}
+        targetType={feedItem ? getFeedTargetType(feedItem) : 'circle_post'}
+        targetId={feedItem ? getFeedTargetId(feedItem) : ''}
+        onClose={() => setReportVisible(false)}
+      />
+    </>
   )
 }
 

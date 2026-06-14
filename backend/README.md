@@ -201,3 +201,9 @@ go run ./cmd/standard-food-image-backfill --config-dir . --test-api
 - API / 路由迁移：`docs/backend-api-prd/`
 - E2E 契约测试：`e2e-test/README.md`
 - 数据库迁移执行：`go run ./cmd/migration -config-dir .`（改表结构须先改 `internal/migration/do` 再跑迁移）
+
+
+## 配置文件
+
+本项目采用 apollo 作为配置系统，访问 https://apollo.paper2ppt.work/ 可以管理配置。
+

@@ -17,6 +17,7 @@ import {
   getUserCollections,
   getUserFavoriteRecipes,
   communityGetFeed,
+  communityGetPublicFeed,
   followUser,
   unfollowUser,
   getFollowStats,
@@ -25,6 +26,7 @@ import {
   type UserRecipe,
   type CommunityFeedItem,
   type FollowStats,
+  type CommunityFeedTargetType,
 } from '../../../utils/api'
 import drawQrcode from 'weapp-qrcode-canvas-2d'
 import {
@@ -35,11 +37,13 @@ import {
 } from '../../../utils/poster'
 import { resolveCanvasImageSrc } from '../../../utils/weapp-canvas-image'
 import { isShowShareImageMenuCancel } from '../../../utils/weapp-share-image'
-import { ensureWeappPrivacyAuthorized, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { FeedReportMask } from '../../../pages/community/components/FeedReportMask'
+import { FeedReportSheet } from '../../../pages/community/components/FeedReportSheet'
+import { FeedActionSheet } from '../../../pages/community/components/FeedActionSheet'
 import './index.scss'
 
 type TabKey = 'feed' | 'collections'
@@ -81,7 +85,8 @@ export default function ProfileSettingsPage() {
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
 
   const [isOwner, setIsOwner] = useState(true)
-  const [resolvedUserId, setResolvedUserId] = useState(currentUserId)
+  // 初始为空，避免在 URL 参数解析前误用当前用户 ID 加载他人主页
+  const [resolvedUserId, setResolvedUserId] = useState('')
 
   // 用户信息
   const [tempAvatar, setTempAvatar] = useState('')
@@ -120,6 +125,9 @@ export default function ProfileSettingsPage() {
   const [feedOffset, setFeedOffset] = useState(0)
   const [feedHasMore, setFeedHasMore] = useState(true)
   const [feedLoading, setFeedLoading] = useState(false)
+  const [reportTarget, setReportTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
+  const [feedActionSheetTarget, setFeedActionSheetTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
+  const [reportMaskTarget, setReportMaskTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
 
   // 收藏
   const [foodCollections, setFoodCollections] = useState<PublicFoodLibraryItem[]>([])
@@ -200,8 +208,8 @@ export default function ProfileSettingsPage() {
         setRecipeCollections(recipeColls.recipes || [])
         setFavoriteCount(recipeColls.recipes?.length || 0)
         applyFollowStats(followStats)
-        // 加载动态
-        loadFeed(true)
+        // 加载动态（等用户基础数据落库后再请求，避免状态竞争）
+        await loadFeed(true)
       } else {
         const [publicProfile, foodColls, recipeColls, followStats] = await Promise.all([
           getPublicUserProfile(resolvedUserId).catch(() => null),
@@ -226,8 +234,8 @@ export default function ProfileSettingsPage() {
         setRecipeCollections(recipeColls.recipes || [])
         setFavoriteCount(recipeColls.recipes?.length || 0)
         applyFollowStats(followStats)
-        // 加载动态
-        loadFeed(true)
+        // 加载动态（等用户基础数据落库后再请求，避免状态竞争）
+        await loadFeed(true)
       }
     } catch (error) {
       console.error('[profile-settings] 加载用户数据失败:', error)
@@ -305,10 +313,15 @@ export default function ProfileSettingsPage() {
 
     setFeedLoading(true)
     try {
-      const res = await communityGetFeed(undefined, offset, 15, false, 0, {
-        author_id: resolvedUserId,
-        sort_by: 'latest',
-      })
+      const res = isOwner
+        ? await communityGetFeed(undefined, offset, 15, false, 0, {
+            author_id: resolvedUserId,
+            sort_by: 'latest',
+          })
+        : await communityGetPublicFeed(offset, 15, false, 0, {
+            author_id: resolvedUserId,
+            sort_by: 'latest',
+          })
       const list = res.list || []
       const hasMore = res.has_more ?? (list.length >= 15)
       if (reset) {
@@ -449,35 +462,6 @@ export default function ProfileSettingsPage() {
     }
   }
 
-  // 扫码
-  const handleScanQRCode = async () => {
-    try {
-      await ensureWeappPrivacyAuthorized()
-      const res = await Taro.scanCode({
-        onlyFromCamera: true,
-        scanType: ['qrCode'],
-      })
-      const result = res.result || ''
-      // 支持格式：pf=xxx 或直接 UUID
-      const match = result.match(/pf=([a-f0-9-]+)/i) || result.match(/^([a-f0-9-]{36})$/i)
-      if (match && match[1]) {
-        const targetUserId = match[1]
-        Taro.navigateTo({
-          url: `${extraPkgUrl('/pages/profile-settings/index')}?user_id=${encodeURIComponent(targetUserId)}`,
-        })
-      } else {
-        Taro.showToast({ title: '无效的二维码', icon: 'none' })
-      }
-    } catch (err: any) {
-      if (err?.errMsg?.includes('cancel')) return
-      if (isPrivacyAuthorizeError(err)) {
-        showPrivacyAuthorizeFailure(err)
-        return
-      }
-      Taro.showToast({ title: '扫码失败', icon: 'none' })
-    }
-  }
-
   // 分享海报
   const handleShareProfile = async () => {
     if (posterGenerating) return
@@ -613,33 +597,63 @@ export default function ProfileSettingsPage() {
     const record = item.record
     const isExercise = record.feed_type === 'exercise_log'
     const isCampus = record.feed_type === 'campus_food'
+    const isCirclePost = record.feed_type === 'circle_post'
+    const targetType = (record.feed_type || 'food_record') as CommunityFeedTargetType
+    const targetId = record.id
+    const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
     const feedTime = String(record.record_time || record.created_at || '')
 
     return (
-      <View key={`${record.feed_type || 'food'}-${record.id}`} className='profile-feed-card'>
+      <View
+        key={`${record.feed_type || 'food'}-${record.id}`}
+        className='profile-feed-card'
+        style={isCirclePost ? { position: 'relative' } : undefined}
+        onLongPress={() => {
+          if (isCirclePost && !isOwner) {
+            setReportMaskTarget({ targetType, targetId })
+          }
+        }}
+      >
         {/* 时间标签 */}
         <View className='profile-feed-header'>
           <Text className='profile-feed-time'>
-            {isExercise ? '运动打卡' : isCampus ? '校园食堂' : MEAL_NAMES[record.meal_type] || record.meal_type}
+            {isExercise ? '运动打卡' : isCampus ? '校园食堂' : isCirclePost ? '自定义动态' : MEAL_NAMES[record.meal_type] || record.meal_type}
             {' · '}
             {formatFeedTime(feedTime)}
           </Text>
         </View>
 
         {/* 描述 */}
-        {record.description && (
-          <Text className='profile-feed-desc'>{record.description}</Text>
-        )}
-        {isExercise && record.exercise_desc && (
-          <Text className='profile-feed-desc'>{record.exercise_desc}</Text>
+        {isCirclePost ? (
+          <>
+            {record.title ? <Text className='profile-feed-title'>{record.title}</Text> : null}
+            {record.body ? <Text className='profile-feed-desc'>{record.body}</Text> : null}
+          </>
+        ) : (
+          <>
+            {record.description && (
+              <Text className='profile-feed-desc'>{record.description}</Text>
+            )}
+            {isExercise && record.exercise_desc && (
+              <Text className='profile-feed-desc'>{record.exercise_desc}</Text>
+            )}
+          </>
         )}
 
         {/* 图片 */}
-        {record.image_path && (
+        {isCirclePost && (record.image_paths || []).length > 0 ? (
+          <View className='profile-feed-image-grid'>
+            {(record.image_paths || []).map((url, idx) => (
+              <View key={`circle-img-${idx}`} className='profile-feed-image-grid-item' onClick={() => Taro.previewImage({ current: url, urls: record.image_paths || [] })}>
+                <Image className='profile-feed-image' src={url} mode='aspectFill' />
+              </View>
+            ))}
+          </View>
+        ) : record.image_path ? (
           <View className='profile-feed-image-wrap' onClick={() => handleGoFeedDetail(item)}>
             <Image className='profile-feed-image' src={record.image_path} mode='aspectFill' />
           </View>
-        )}
+        ) : null}
 
         {/* 营养/数据 */}
         <View className='profile-feed-footer'>
@@ -673,6 +687,30 @@ export default function ProfileSettingsPage() {
                 <Text className='profile-feed-nutri-text'>{record.total_fat.toFixed(0)}g</Text>
               </View>
             )}
+            {(record.fiber ?? 0) > 0 && (
+              <View className='profile-feed-nutri-item'>
+                <Text className='profile-feed-nutri-icon' style={{ color: '#22c55e' }}>纤</Text>
+                <Text className='profile-feed-nutri-text'>{(record.fiber ?? 0).toFixed(0)}g</Text>
+              </View>
+            )}
+            {(record.sugar ?? 0) > 0 && (
+              <View className='profile-feed-nutri-item'>
+                <Text className='profile-feed-nutri-icon' style={{ color: '#ef4444' }}>糖</Text>
+                <Text className='profile-feed-nutri-text'>{(record.sugar ?? 0).toFixed(0)}g</Text>
+              </View>
+            )}
+            {(record.sodium_mg ?? 0) > 0 && (
+              <View className='profile-feed-nutri-item'>
+                <Text className='profile-feed-nutri-icon' style={{ color: '#3b82f6' }}>钠</Text>
+                <Text className='profile-feed-nutri-text'>{(record.sodium_mg ?? 0).toFixed(0)}mg</Text>
+              </View>
+            )}
+            {(record.total_weight_grams ?? 0) > 0 && (
+              <View className='profile-feed-nutri-item'>
+                <Text className='profile-feed-nutri-icon' style={{ color: '#6b7280' }}>重</Text>
+                <Text className='profile-feed-nutri-text'>{(record.total_weight_grams ?? 0).toFixed(0)}g</Text>
+              </View>
+            )}
             {isCampus && record.price != null && (
               <View className='profile-feed-nutri-item'>
                 <Text className='profile-feed-nutri-text' style={{ color: '#f59e0b', fontWeight: 600 }}>¥{Number(record.price).toFixed(1)}</Text>
@@ -682,7 +720,30 @@ export default function ProfileSettingsPage() {
           <View className='profile-feed-likes'>
             <Text className='profile-feed-likes-text'>❤ {item.like_count || 0}</Text>
           </View>
+          {!isOwner && (
+            <View
+              className='profile-feed-more'
+              onClick={(e) => {
+                e.stopPropagation()
+                setFeedActionSheetTarget({ targetType, targetId })
+              }}
+            >
+              <View className='profile-feed-more-box'>
+                <Text className='profile-feed-more-icon'>⋮</Text>
+              </View>
+            </View>
+          )}
         </View>
+        {showReportMask ? (
+          <FeedReportMask
+            visible
+            onReport={() => {
+              setReportTarget({ targetType, targetId })
+              setReportMaskTarget(null)
+            }}
+            onCancel={() => setReportMaskTarget(null)}
+          />
+        ) : null}
       </View>
     )
   }
@@ -726,12 +787,6 @@ export default function ProfileSettingsPage() {
               >
                 <Text className='iconfont icon-edit profile-top-action-icon' />
                 <Text className='profile-top-action-text'>编辑资料</Text>
-              </View>
-              <View
-                className='profile-top-icon-btn'
-                onClick={handleScanQRCode}
-              >
-                <Text className='iconfont icon-scan profile-top-icon' />
               </View>
               <View
                 className='profile-top-icon-btn'
@@ -1034,6 +1089,22 @@ export default function ProfileSettingsPage() {
           style={{ width: '200px', height: '200px' }}
         />
       </View>
+      <FeedActionSheet
+        visible={!!feedActionSheetTarget}
+        actions={[{ id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true }]}
+        onClose={() => setFeedActionSheetTarget(null)}
+        onSelect={(id) => {
+          if (id === 'report' && feedActionSheetTarget) {
+            setReportTarget(feedActionSheetTarget)
+          }
+        }}
+      />
+      <FeedReportSheet
+        visible={!!reportTarget}
+        targetType={reportTarget?.targetType || 'circle_post'}
+        targetId={reportTarget?.targetId || ''}
+        onClose={() => setReportTarget(null)}
+      />
     </FlPageThemeRoot>
   )
 }

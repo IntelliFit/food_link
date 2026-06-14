@@ -627,18 +627,42 @@ type CommentTaskDO struct {
 
 func (CommentTaskDO) TableName() string { return "comment_tasks" }
 
-type UserCirclePostDO struct {
+type FeedReportDO struct {
 	ID             string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID         string     `gorm:"column:user_id;type:uuid;not null;index:idx_user_circle_posts_user_id"`
-	Content        string     `gorm:"column:content;type:text;not null"`
-	ImagePaths     []string   `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	TotalCalories  *float64   `gorm:"column:total_calories;type:numeric(10,2)"`
-	TotalProtein   *float64   `gorm:"column:total_protein;type:numeric(10,2)"`
-	TotalCarbs     *float64   `gorm:"column:total_carbs;type:numeric(10,2)"`
-	TotalFat       *float64   `gorm:"column:total_fat;type:numeric(10,2)"`
-	HiddenFromFeed bool       `gorm:"column:hidden_from_feed;type:boolean;not null;default:false"`
-	CreatedAt      *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_circle_posts_user_created_at"`
+	ReporterUserID string     `gorm:"column:reporter_user_id;type:uuid;not null;index:idx_feed_reports_reporter_target,priority:1"`
+	TargetType     string     `gorm:"column:target_type;type:text;not null;default:'circle_post';index:idx_feed_reports_reporter_target,priority:2"`
+	TargetID       string     `gorm:"column:target_id;type:uuid;not null;index:idx_feed_reports_reporter_target,priority:3"`
+	ReportedUserID string     `gorm:"column:reported_user_id;type:uuid;not null;index:idx_feed_reports_reported_user,priority:1"`
+	Reason         string     `gorm:"column:reason;type:text;not null"`
+	ExtraContent   string     `gorm:"column:extra_content;type:text;not null;default:''"`
+	Status         string     `gorm:"column:status;type:text;not null;default:'pending';index:idx_feed_reports_status_created,priority:1"`
+	ResolutionNote string     `gorm:"column:resolution_note;type:text;not null;default:''"`
+	HandledBy      *string    `gorm:"column:handled_by;type:text"`
+	HandledAt      *time.Time `gorm:"column:handled_at;type:timestamptz"`
+	CreatedAt      *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_feed_reports_status_created,priority:2,sort:desc"`
 	UpdatedAt      *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (FeedReportDO) TableName() string { return "feed_reports" }
+
+type UserCirclePostDO struct {
+	ID                string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID            string     `gorm:"column:user_id;type:uuid;not null;index:idx_user_circle_posts_user_id"`
+	Title             *string    `gorm:"column:title;type:text"`
+	Body              *string    `gorm:"column:body;type:text"`
+	Content           string     `gorm:"column:content;type:text;not null;default:''"`
+	ImagePaths        []string   `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	TotalCalories     *float64   `gorm:"column:total_calories;type:numeric(10,2)"`
+	TotalProtein      *float64   `gorm:"column:total_protein;type:numeric(10,2)"`
+	TotalCarbs        *float64   `gorm:"column:total_carbs;type:numeric(10,2)"`
+	TotalFat          *float64   `gorm:"column:total_fat;type:numeric(10,2)"`
+	Fiber             *float64   `gorm:"column:fiber;type:numeric(10,2)"`
+	Sugar             *float64   `gorm:"column:sugar;type:numeric(10,2)"`
+	SodiumMg          *float64   `gorm:"column:sodium_mg;type:numeric(10,2)"`
+	TotalWeightGrams  *float64   `gorm:"column:total_weight_grams;type:numeric(10,2)"`
+	HiddenFromFeed    bool       `gorm:"column:hidden_from_feed;type:boolean;not null;default:false"`
+	CreatedAt         *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_circle_posts_user_created_at"`
+	UpdatedAt         *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (UserCirclePostDO) TableName() string { return "user_circle_posts" }
@@ -1163,6 +1187,7 @@ func AllModels() []any {
 		&FeedCommentDO{},
 		&FeedInteractionNotificationDO{},
 		&CommentTaskDO{},
+		&FeedReportDO{},
 		&UserCirclePostDO{},
 		&ExpiryItemDO{},
 		&ExpiryNotificationJobDO{},

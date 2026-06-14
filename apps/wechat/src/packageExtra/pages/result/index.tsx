@@ -1413,6 +1413,37 @@ function ResultPage() {
     setQuickRatioSheetVisible(false)
   }
 
+  // 自定义聚餐人数：关闭快捷比例弹窗后弹出输入框
+  const handleOpenCustomPeopleRatio = () => {
+    setQuickRatioSheetVisible(false)
+    setTimeout(() => {
+      Taro.showModal({
+        title: '自定义聚餐人数',
+        content: '',
+        // @ts-ignore
+        editable: true,
+        // @ts-ignore
+        placeholderText: '请输入人数（1-99）',
+        confirmText: '确定',
+        cancelText: '取消',
+        success: (res) => {
+          if (!res.confirm) return
+          const content = String((res as any).content ?? '').trim()
+          if (!content) {
+            Taro.showToast({ title: '请输入人数', icon: 'none' })
+            return
+          }
+          const parsed = parseInt(content, 10)
+          if (!Number.isFinite(parsed) || parsed < 1 || parsed > 99) {
+            Taro.showToast({ title: '请输入 1-99 的整数', icon: 'none' })
+            return
+          }
+          handleQuickRatio(parsed)
+        }
+      })
+    }, 200)
+  }
+
   const applySuggestedRatio = (id: number) => {
     const target = nutritionItems.find(item => item.id === id)
     if (!target || typeof target.suggestedRatio !== 'number') return
@@ -3223,6 +3254,10 @@ function ResultPage() {
               <View className='action-sheet-item' onClick={() => handleQuickRatio(4)}>
                 <Text className='action-sheet-label'>四人聚餐</Text>
                 <Text className='action-sheet-hint'>每人 25%</Text>
+              </View>
+              <View className='action-sheet-item action-sheet-item--custom' onClick={handleOpenCustomPeopleRatio}>
+                <Text className='action-sheet-label'>自定义人数</Text>
+                <Text className='action-sheet-hint'>输入人数自动均分</Text>
               </View>
             </View>
             <View className='action-sheet-actions action-sheet-actions--cancel'>

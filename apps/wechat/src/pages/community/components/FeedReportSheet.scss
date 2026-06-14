@@ -1,0 +1,238 @@
+.feed-report-sheet-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100001;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 220ms cubic-bezier(0.2, 0, 0, 1), visibility 220ms;
+  pointer-events: none;
+
+  &--visible {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.feed-report-sheet-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.feed-report-sheet-overlay--visible .feed-report-sheet-mask {
+  animation: feed-report-sheet-mask-in 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.feed-report-sheet-content {
+  position: relative;
+  z-index: 1;
+  padding: 0 16rpx calc(32rpx + env(safe-area-inset-bottom));
+  transform-origin: bottom center;
+}
+
+.feed-report-sheet-overlay--visible .feed-report-sheet-content {
+  animation: feed-report-sheet-ios-in 360ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.feed-report-sheet-card {
+  padding: 32rpx 28rpx;
+  background: #fff;
+  border-radius: 24rpx;
+}
+
+.feed-report-sheet-header {
+  margin-bottom: 24rpx;
+}
+
+.feed-report-sheet-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 8rpx;
+}
+
+.feed-report-sheet-subtitle {
+  display: block;
+  font-size: 26rpx;
+  color: #6b7280;
+}
+
+.feed-report-sheet-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.feed-report-sheet-reason {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx;
+  border-radius: 16rpx;
+  background: #f3f4f6;
+  border: 2rpx solid transparent;
+  transition: all 0.2s ease;
+
+  &.is-active {
+    background: #fef2f2;
+    border-color: #ef4444;
+  }
+}
+
+.feed-report-sheet-reason-text {
+  font-size: 30rpx;
+  color: #374151;
+}
+
+.feed-report-sheet-reason-check {
+  font-size: 28rpx;
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.feed-report-sheet-extra {
+  position: relative;
+  margin-bottom: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: #f3f4f6;
+}
+
+.feed-report-sheet-input {
+  width: 100%;
+  min-height: 160rpx;
+  font-size: 28rpx;
+  color: #1f2937;
+  line-height: 1.6;
+}
+
+.feed-report-sheet-count {
+  display: block;
+  text-align: right;
+  font-size: 22rpx;
+  color: #9ca3af;
+  margin-top: 8rpx;
+}
+
+.feed-report-sheet-actions {
+  display: flex;
+  gap: 20rpx;
+}
+
+.feed-report-sheet-btn {
+  flex: 1;
+  height: 84rpx;
+  border-radius: 42rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &--cancel {
+    background: #f3f4f6;
+  }
+
+  &--submit {
+    flex: 2;
+    background: #ef4444;
+
+    &.is-disabled {
+      opacity: 0.5;
+    }
+  }
+
+  &-text {
+    font-size: 30rpx;
+    font-weight: 500;
+    color: #374151;
+  }
+
+  &--submit &-text {
+    color: #fff;
+  }
+}
+
+@keyframes feed-report-sheet-mask-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes feed-report-sheet-ios-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 56rpx, 0) scale(0.985);
+  }
+  68% {
+    opacity: 1;
+    transform: translate3d(0, -4rpx, 0) scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+// 深色模式
+.fl-page-theme-root--dark,
+.page--dark {
+  .feed-report-sheet-card {
+    background: #1e2624;
+  }
+
+  .feed-report-sheet-title {
+    color: #f2f7f4;
+  }
+
+  .feed-report-sheet-subtitle {
+    color: rgba(214, 226, 220, 0.6);
+  }
+
+  .feed-report-sheet-reason {
+    background: #2a3330;
+
+    &.is-active {
+      background: rgba(239, 68, 68, 0.12);
+    }
+  }
+
+  .feed-report-sheet-reason-text {
+    color: #f2f7f4;
+  }
+
+  .feed-report-sheet-extra {
+    background: #2a3330;
+  }
+
+  .feed-report-sheet-input {
+    color: #f2f7f4;
+  }
+
+  .feed-report-sheet-count {
+    color: rgba(214, 226, 220, 0.5);
+  }
+
+  .feed-report-sheet-btn {
+    &--cancel {
+      background: #2a3330;
+    }
+
+    &-text {
+      color: #f2f7f4;
+    }
+  }
+}

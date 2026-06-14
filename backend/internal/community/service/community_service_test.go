@@ -19,6 +19,7 @@ type mockFeedRepo struct {
 	listPublicFeedLimit        int
 	listPublicFeedCalled       bool
 	listPublicFeedContentType  string
+	listPublicFeedAuthorIDs    []string
 	listFriendFeed             []repo.FeedRecord
 	listFriendFeedErr          error
 	listFriendFeedLimit        int
@@ -49,10 +50,11 @@ type mockFeedRepo struct {
 	checkinCountsErr           error
 }
 
-func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
+func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
 	m.listPublicFeedLimit = limit
 	m.listPublicFeedCalled = true
 	m.listPublicFeedContentType = contentType
+	m.listPublicFeedAuthorIDs = authorIDs
 	return m.listPublicFeed, m.listPublicFeedErr
 }
 func (m *mockFeedRepo) ListFriendFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
@@ -150,7 +152,7 @@ func (m *mockFeedRepo) CreateCirclePost(ctx context.Context, post *domain.UserCi
 func (m *mockFeedRepo) GetCirclePostByID(ctx context.Context, postID string) (*domain.UserCirclePost, error) {
 	return nil, nil
 }
-func (m *mockFeedRepo) UpdateCirclePost(ctx context.Context, userID, postID, content string, imagePaths []string, totalCalories, totalProtein, totalCarbs, totalFat *float64) error {
+func (m *mockFeedRepo) UpdateCirclePost(ctx context.Context, userID, postID, title, body string, imagePaths []string, nutrition *domain.CirclePostNutrition) error {
 	return nil
 }
 func (m *mockFeedRepo) DeleteCirclePost(ctx context.Context, userID, postID string) error {
@@ -158,6 +160,12 @@ func (m *mockFeedRepo) DeleteCirclePost(ctx context.Context, userID, postID stri
 }
 func (m *mockFeedRepo) DeleteCirclePostInteractions(ctx context.Context, postID string) error {
 	return nil
+}
+func (m *mockFeedRepo) CreateFeedReport(ctx context.Context, report *domain.FeedReport) error {
+	return nil
+}
+func (m *mockFeedRepo) FindFeedReport(ctx context.Context, reporterUserID, targetType, targetID string) (*domain.FeedReport, error) {
+	return nil, nil
 }
 
 type mockNotificationRepo struct {
@@ -222,7 +230,7 @@ func (m *mockUserRepo) CountFoodRecordDays(ctx context.Context, userID string) (
 }
 
 func newTestService(feed FeedRepo, notif NotificationRepo, user UserFinder) *CommunityService {
-	return NewCommunityService(feed, notif, user, nil, nil)
+	return NewCommunityService(feed, notif, user, nil, nil, nil)
 }
 
 func TestPublicFeed(t *testing.T) {
@@ -236,6 +244,21 @@ func TestPublicFeed(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, items, 1)
 	assert.Equal(t, 2, items[0].LikeCount)
+}
+
+func TestPublicFeedWithAuthorID(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		listPublicFeed: []repo.FeedRecord{{ID: "r1", UserID: "u2", MealType: "lunch"}},
+		likesMap:       map[string]*repo.LikeInfo{"r1": {Count: 1}},
+		profiles:       map[string]*repo.UserProfile{"u2": {ID: "u2", Nickname: "Bob"}},
+	}
+	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
+	items, err := svc.PublicFeed(context.Background(), FeedParams{Limit: 10, AuthorID: "u2"})
+	assert.NoError(t, err)
+	assert.True(t, mockFeed.listPublicFeedCalled)
+	assert.Equal(t, []string{"u2"}, mockFeed.listPublicFeedAuthorIDs)
+	assert.Len(t, items, 1)
+	assert.Equal(t, "u2", items[0].Record.UserID)
 }
 
 func TestFriendFeed(t *testing.T) {

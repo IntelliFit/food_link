@@ -58,17 +58,52 @@ type CommentTask struct {
 func (CommentTask) TableName() string { return "comment_tasks" }
 
 type UserCirclePost struct {
+	ID               string     `gorm:"column:id"`
+	UserID           string     `gorm:"column:user_id"`
+	Title            *string    `gorm:"column:title"`
+	Body             *string    `gorm:"column:body"`
+	Content          string     `gorm:"column:content"`
+	ImagePaths       []string   `gorm:"column:image_paths;serializer:json"`
+	TotalCalories    *float64   `gorm:"column:total_calories"`
+	TotalProtein     *float64   `gorm:"column:total_protein"`
+	TotalCarbs       *float64   `gorm:"column:total_carbs"`
+	TotalFat         *float64   `gorm:"column:total_fat"`
+	Fiber            *float64   `gorm:"column:fiber"`
+	Sugar            *float64   `gorm:"column:sugar"`
+	SodiumMg         *float64   `gorm:"column:sodium_mg"`
+	TotalWeightGrams *float64   `gorm:"column:total_weight_grams"`
+	HiddenFromFeed   bool       `gorm:"column:hidden_from_feed"`
+	CreatedAt        *time.Time `gorm:"column:created_at"`
+	UpdatedAt        *time.Time `gorm:"column:updated_at"`
+}
+
+func (UserCirclePost) TableName() string { return "user_circle_posts" }
+
+type FeedReport struct {
 	ID             string     `gorm:"column:id"`
-	UserID         string     `gorm:"column:user_id"`
-	Content        string     `gorm:"column:content"`
-	ImagePaths     []string   `gorm:"column:image_paths;serializer:json"`
-	TotalCalories  *float64   `gorm:"column:total_calories"`
-	TotalProtein   *float64   `gorm:"column:total_protein"`
-	TotalCarbs     *float64   `gorm:"column:total_carbs"`
-	TotalFat       *float64   `gorm:"column:total_fat"`
-	HiddenFromFeed bool       `gorm:"column:hidden_from_feed"`
+	ReporterUserID string     `gorm:"column:reporter_user_id"`
+	TargetType     string     `gorm:"column:target_type"`
+	TargetID       string     `gorm:"column:target_id"`
+	ReportedUserID string     `gorm:"column:reported_user_id"`
+	Reason         string     `gorm:"column:reason"`
+	ExtraContent   string     `gorm:"column:extra_content"`
+	Status         string     `gorm:"column:status"`
+	ResolutionNote string     `gorm:"column:resolution_note"`
+	HandledBy      *string    `gorm:"column:handled_by"`
+	HandledAt      *time.Time `gorm:"column:handled_at"`
 	CreatedAt      *time.Time `gorm:"column:created_at"`
 	UpdatedAt      *time.Time `gorm:"column:updated_at"`
 }
 
-func (UserCirclePost) TableName() string { return "user_circle_posts" }
+func (FeedReport) TableName() string { return "feed_reports" }
+
+type CirclePostNutrition struct {
+	TotalCalories    *float64
+	TotalProtein     *float64
+	TotalCarbs       *float64
+	TotalFat         *float64
+	Fiber            *float64
+	Sugar            *float64
+	SodiumMg         *float64
+	TotalWeightGrams *float64
+}

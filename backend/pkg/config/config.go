@@ -116,6 +116,8 @@ type ExternalConfig struct {
 type FeishuConfig struct {
 	FeedbackWebhookURL    string `mapstructure:"feedback_webhook_url"`
 	FeedbackWebhookSecret string `mapstructure:"feedback_webhook_secret"`
+	ReportWebhookURL      string `mapstructure:"report_webhook_url"`
+	ReportWebhookSecret   string `mapstructure:"report_webhook_secret"`
 }
 
 type WechatPayConfig struct {
@@ -834,6 +836,8 @@ var cloudConfigKeyAliases = map[string]string{
 	"OTEL_METRIC_EXPORT_INTERVAL_SECONDS": "otel.metric_export_interval_seconds",
 	"FEISHU_FEEDBACK_WEBHOOK_URL":         "feishu.feedback_webhook_url",
 	"FEISHU_FEEDBACK_WEBHOOK_SECRET":      "feishu.feedback_webhook_secret",
+	"FEISHU_REPORT_WEBHOOK_URL":           "feishu.report_webhook_url",
+	"FEISHU_REPORT_WEBHOOK_SECRET":        "feishu.report_webhook_secret",
 }
 
 func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
@@ -1022,4 +1026,6 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("database.name", "POSTGRESQL_DATABASE")
 	_ = v.BindEnv("feishu.feedback_webhook_url", "FEISHU_FEEDBACK_WEBHOOK_URL")
 	_ = v.BindEnv("feishu.feedback_webhook_secret", "FEISHU_FEEDBACK_WEBHOOK_SECRET")
+	_ = v.BindEnv("feishu.report_webhook_url", "FEISHU_REPORT_WEBHOOK_URL")
+	_ = v.BindEnv("feishu.report_webhook_secret", "FEISHU_REPORT_WEBHOOK_SECRET")
 }

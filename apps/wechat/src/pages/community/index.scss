@@ -1,4 +1,5 @@
 @import '../../styles/tab-page-layout.scss';
+@import './components/FeedActionSheet.scss';
 
 /* 页面根节点：高度由 JS 通过 getSystemInfoSync 设定固定像素值（避免 100vh 随键盘变化）；
    100vh 仅作兜底（JS 未就绪时）。flex 让 ScrollView 获得准确高度。 */
@@ -1695,6 +1696,24 @@ $feed-body-font-size: 30rpx;
   padding: 0;
 }
 
+.feed-circle-post-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.4;
+  margin-bottom: 12rpx;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+.feed-circle-post-body {
+  font-weight: 400;
+}
+
 /* 纯文字帖：小程序里 Text 的 margin-bottom 常不生效，用外层 View 撑开与 feed-meta 的间距 */
 .feed-content-wrap--text-only {
   display: block;
@@ -1905,8 +1924,8 @@ $feed-body-font-size: 30rpx;
 
 .feed-card-exercise {
   .feed-calorie {
-    background: linear-gradient(to right, #0f766e 0%, #14b8a6 100%);
-    box-shadow: 0 4rpx 12rpx rgb(20 184 166 / 24%);
+    background: linear-gradient(to right, #f4a261 0%, #e9c46a 100%);
+    box-shadow: 0 4rpx 12rpx rgb(244 162 97 / 24%);
   }
 
   .feed-macros {
@@ -2747,6 +2766,13 @@ $comment-body-font-size: 28rpx;
 
   &:active {
     background: #e5e7eb;
+  }
+}
+
+.action-item.action-manage {
+  &:active {
+    transform: none;
+    opacity: 1;
   }
 }
 

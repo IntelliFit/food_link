@@ -43,18 +43,26 @@ func TestFeedRepoListPublicFeed(t *testing.T) {
 	r := NewFeedRepo(db)
 	ctx := context.Background()
 
-	// Create public user
+	// Create public users
 	assert.NoError(t, db.Create(&UserProfile{ID: "u1", Nickname: "Alice", Avatar: "a1"}).Error)
 	assert.NoError(t, db.Model(&UserProfile{}).Where("id = ?", "u1").Update("public_records", true).Error)
+	assert.NoError(t, db.Create(&UserProfile{ID: "u2", Nickname: "Bob", Avatar: "a2"}).Error)
+	assert.NoError(t, db.Model(&UserProfile{}).Where("id = ?", "u2").Update("public_records", true).Error)
 
 	// Create record
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r1", UserID: "u1", MealType: "lunch", HiddenFromFeed: false}).Error)
 	assert.NoError(t, db.Create(&FeedRecord{ID: "r2", UserID: "u1", MealType: "lunch", HiddenFromFeed: true}).Error)
+	assert.NoError(t, db.Create(&FeedRecord{ID: "r3", UserID: "u2", MealType: "lunch", HiddenFromFeed: false}).Error)
 
-	records, err := r.ListPublicFeed(ctx, "food_record", "", "", "", "", 10)
+	records, err := r.ListPublicFeed(ctx, nil, "food_record", "", "", "", "", 10)
+	assert.NoError(t, err)
+	assert.Len(t, records, 2)
+
+	// 指定 author_id 过滤
+	records, err = r.ListPublicFeed(ctx, []string{"u2"}, "food_record", "", "", "", "", 10)
 	assert.NoError(t, err)
 	assert.Len(t, records, 1)
-	assert.Equal(t, "r1", records[0].ID)
+	assert.Equal(t, "r3", records[0].ID)
 }
 
 func TestFeedRepoListFriendFeed(t *testing.T) {

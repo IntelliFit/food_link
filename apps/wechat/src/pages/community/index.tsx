@@ -46,6 +46,9 @@ import {
   isManualFoodFeedRecord,
   manualItemHasDisplayImage
 } from '../../utils/manual-food-source'
+import { FeedReportMask } from './components/FeedReportMask'
+import { FeedReportSheet } from './components/FeedReportSheet'
+import { FeedActionSheet, type FeedActionSheetAction } from './components/FeedActionSheet'
 import { Button as TaroifyButton } from '@taroify/core'
 import '@taroify/core/button/style'
 
@@ -528,6 +531,9 @@ function CommunityPage() {
   /** 饮食记录圈子级编辑表单 */
   const [editSheetVisible, setEditSheetVisible] = useState(false)
   const [editSheetRecord, setEditSheetRecord] = useState<CommunityFeedRecord | null>(null)
+  const [reportTarget, setReportTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
+  const [feedActionSheet, setFeedActionSheet] = useState<{ item: CommunityFeedItem; mode: 'manage' | 'report' } | null>(null)
+  const [reportMaskTarget, setReportMaskTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
   const pendingNotificationNavigationRef = useRef(false)
   const feedScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipNextFilterRefreshRef = useRef(true)
@@ -1280,37 +1286,9 @@ function CommunityPage() {
     Taro.navigateTo({ url: extraPkgUrl('/pages/circle-post-edit/index') })
   }
 
-  const handleManageFeedItem = async (item: CommunityFeedItem) => {
-    if (!item.is_mine) return
+  const handleDeleteFeedItem = async (item: CommunityFeedItem) => {
     const targetType = getFeedTargetType(item)
     const targetId = getFeedTargetId(item)
-    const actions: string[] = []
-    if (targetType === 'circle_post') {
-      actions.push('编辑')
-    } else if (targetType === 'food_record') {
-      actions.push('编辑')
-    } else if (targetType === 'exercise_log') {
-      actions.push('编辑')
-    } else if (targetType === 'campus_food') {
-      actions.push('编辑')
-    }
-    actions.push('删除')
-    const { tapIndex } = await Taro.showActionSheet({ itemList: actions })
-    const action = actions[tapIndex]
-    if (action === '编辑') {
-      if (targetType === 'circle_post') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/circle-post-edit/index?id=${encodeURIComponent(targetId)}`) })
-      } else if (targetType === 'food_record') {
-        setEditSheetRecord(item.record)
-        setEditSheetVisible(true)
-      } else if (targetType === 'exercise_log') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/exercise-record/index?log_id=${encodeURIComponent(targetId)}`) })
-      } else if (targetType === 'campus_food') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/campus-food-share/index?item_id=${encodeURIComponent(targetId)}`) })
-      }
-      return
-    }
-    if (action !== '删除') return
     const { confirm } = await Taro.showModal({
       title: '确认删除',
       content: '删除后不可恢复，是否继续？',
@@ -1336,6 +1314,50 @@ function CommunityPage() {
       Taro.showToast({ title: '已删除', icon: 'success' })
     } catch (e) {
       await showUnifiedApiError(e, '删除失败')
+    }
+  }
+
+  const feedActionSheetActions = useMemo<FeedActionSheetAction[]>(() => {
+    if (!feedActionSheet) return []
+    if (feedActionSheet.mode === 'report') {
+      return [{ id: 'report', label: '举报', iconClass: 'icon-jinggao', danger: true }]
+    }
+    const item = feedActionSheet.item
+    const targetType = getFeedTargetType(item)
+    const actions: FeedActionSheetAction[] = []
+    if (targetType === 'circle_post' || targetType === 'food_record' || targetType === 'exercise_log' || targetType === 'campus_food') {
+      actions.push({ id: 'edit', label: '编辑', iconClass: 'icon-edit', color: '#10b981' })
+    }
+    actions.push({ id: 'delete', label: '删除', iconClass: 'icon-shanchu', danger: true })
+    return actions
+  }, [feedActionSheet])
+
+  const handleFeedActionSelect = (id: string) => {
+    if (!feedActionSheet) return
+    const { item, mode } = feedActionSheet
+    if (mode === 'report') {
+      if (id === 'report') {
+        setReportTarget({ targetType: getFeedTargetType(item), targetId: getFeedTargetId(item) })
+      }
+      return
+    }
+    const targetType = getFeedTargetType(item)
+    const targetId = getFeedTargetId(item)
+    if (id === 'edit') {
+      if (targetType === 'circle_post') {
+        Taro.navigateTo({ url: extraPkgUrl(`/pages/circle-post-edit/index?id=${encodeURIComponent(targetId)}`) })
+      } else if (targetType === 'food_record') {
+        setEditSheetRecord(item.record)
+        setEditSheetVisible(true)
+      } else if (targetType === 'exercise_log') {
+        Taro.navigateTo({ url: extraPkgUrl(`/pages/exercise-record/index?log_id=${encodeURIComponent(targetId)}`) })
+      } else if (targetType === 'campus_food') {
+        Taro.navigateTo({ url: extraPkgUrl(`/pages/campus-food-share/index?item_id=${encodeURIComponent(targetId)}`) })
+      }
+      return
+    }
+    if (id === 'delete') {
+      void handleDeleteFeedItem(item)
     }
   }
 
@@ -2290,17 +2312,27 @@ function CommunityPage() {
                     const feedTime = String(item.record.record_time || item.record.created_at || '')
                     const exerciseTitle = item.record.exercise_type || '运动打卡'
                     const exerciseDesc = item.record.exercise_desc || item.record.description || ''
+                    const circlePostTitle = isCirclePost ? (item.record.title || '') : ''
+                    const circlePostBody = isCirclePost ? (item.record.body || '') : ''
+                    const circlePostText = circlePostTitle || circlePostBody
                     const exerciseKcal = Number(item.record.calories_burned ?? item.record.total_calories ?? 0)
-                    const isManualRecord = !exercise && isManualFoodFeedRecord(item.record)
+                    const isManualRecord = !exercise && !isCirclePost && isManualFoodFeedRecord(item.record)
                     const manualFoodItems = isManualRecord
                       ? extractManualFoodDisplayItems(item.record.items)
                       : []
                     const useManualFoodCards = isManualRecord && manualFoodItems.length > 0
+                    const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
                     return (
                     <View key={targetKey}>
                       <View
                         id={`feed-card-${targetType}-${targetId}`}
-                        className={`feed-card${(item.record.description?.trim() || exerciseDesc) && !item.record.image_path && !useManualFoodCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
+                        className={`feed-card${(item.record.description?.trim() || exerciseDesc || circlePostText.trim()) && !item.record.image_path && !useManualFoodCards ? ' feed-card-text-only' : ''} ${exercise ? 'feed-card-exercise' : ''} ${isCirclePost ? 'feed-card-circle-post' : ''}`}
+                        style={isCirclePost ? { position: 'relative' } : undefined}
+                        onLongPress={() => {
+                          if (isCirclePost && !item.is_mine) {
+                            setReportMaskTarget({ targetType, targetId })
+                          }
+                        }}
                       >
                         <View className='feed-card-moments'>
                           <View className='feed-card-avatar-col'>
@@ -2346,12 +2378,19 @@ function CommunityPage() {
                                 ) : null}
                               </View>
                             </View>
-                            {!useManualFoodCards && (exercise ? exerciseDesc : item.record.description) &&
-                              (item.record.image_path ? (
+                            {!useManualFoodCards && (exercise ? exerciseDesc : isCirclePost ? circlePostText : item.record.description) &&
+                              (item.record.image_path && !isCirclePost ? (
                                 <Text className='feed-content'>{exercise ? exerciseDesc : item.record.description}</Text>
                               ) : (
                                 <View className='feed-content-wrap feed-content-wrap--text-only'>
-                                  <Text className='feed-content'>{exercise ? exerciseDesc : item.record.description}</Text>
+                                  {isCirclePost ? (
+                                    <>
+                                      {circlePostTitle ? <Text className='feed-circle-post-title'>{circlePostTitle}</Text> : null}
+                                      {circlePostBody ? <Text className='feed-content feed-circle-post-body'>{circlePostBody}</Text> : null}
+                                    </>
+                                  ) : (
+                                    <Text className='feed-content'>{exercise ? exerciseDesc : item.record.description}</Text>
+                                  )}
                                 </View>
                               ))}
                             {useManualFoodCards && (
@@ -2429,7 +2468,7 @@ function CommunityPage() {
                             )}
                             {isCirclePost && (() => {
                               const n = item.record
-                              const hasNutrition = Number(n.total_calories) > 0 || Number(n.total_protein) > 0 || Number(n.total_carbs) > 0 || Number(n.total_fat) > 0
+                              const hasNutrition = Number(n.total_calories) > 0 || Number(n.total_protein) > 0 || Number(n.total_carbs) > 0 || Number(n.total_fat) > 0 || Number(n.fiber) > 0 || Number(n.sugar) > 0 || Number(n.sodium_mg) > 0 || Number(n.total_weight_grams) > 0
                               if (!hasNutrition) return null
                               return (
                                 <View className='feed-meta feed-meta--circle-post'>
@@ -2441,6 +2480,10 @@ function CommunityPage() {
                                   <View className='feed-macros'>
                                     <Text className='feed-macros-text'>
                                       蛋白质 {Math.round(Number(n.total_protein ?? 0))}g · 碳水 {Math.round(Number(n.total_carbs ?? 0))}g · 脂肪 {Math.round(Number(n.total_fat ?? 0))}g
+                                      {Number(n.fiber) > 0 ? ` · 膳食纤维 ${Math.round(Number(n.fiber ?? 0))}g` : ''}
+                                      {Number(n.sugar) > 0 ? ` · 糖分 ${Math.round(Number(n.sugar ?? 0))}g` : ''}
+                                      {Number(n.sodium_mg) > 0 ? ` · 钠 ${Math.round(Number(n.sodium_mg ?? 0))}mg` : ''}
+                                      {Number(n.total_weight_grams) > 0 ? ` · 重量 ${Math.round(Number(n.total_weight_grams ?? 0))}g` : ''}
                                     </Text>
                                   </View>
                                 </View>
@@ -2536,16 +2579,17 @@ function CommunityPage() {
                                   <Text className='action-count'>评论 {item.comment_count || 0}</Text>
                                 </View>
                               </View>
-                              {item.is_mine ? (
-                                <View
-                                  className='action-item action-manage'
-                                  onClick={() => void handleManageFeedItem(item)}
-                                >
-                                  <View className='action-manage-box'>
-                                    <Text className='action-manage-icon'>⋮</Text>
-                                  </View>
+                              <View
+                                className='action-item action-manage'
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setFeedActionSheet({ item, mode: item.is_mine ? 'manage' : 'report' })
+                                }}
+                              >
+                                <View className='action-manage-box'>
+                                  <Text className='action-manage-icon'>⋮</Text>
                                 </View>
-                              ) : null}
+                              </View>
                             </View>
                             {(item.comments?.length ?? 0) > 0 && (() => {
                               const list = item.comments || []
@@ -2637,6 +2681,16 @@ function CommunityPage() {
                             })()}
                           </View>
                         </View>
+                        {showReportMask ? (
+                          <FeedReportMask
+                            visible
+                            onReport={() => {
+                              setReportTarget({ targetType, targetId })
+                              setReportMaskTarget(null)
+                            }}
+                            onCancel={() => setReportMaskTarget(null)}
+                          />
+                        ) : null}
                       </View>
                     </View>
                     )
@@ -2874,6 +2928,7 @@ function CommunityPage() {
         </View>
       )}
 
+      </View>
       <CommunityFoodRecordEditSheet
         visible={editSheetVisible}
         record={editSheetRecord}
@@ -2897,8 +2952,18 @@ function CommunityPage() {
           saveToCache(nextList)
         }}
       />
-
-      </View>
+      <FeedActionSheet
+        visible={!!feedActionSheet}
+        actions={feedActionSheetActions}
+        onClose={() => setFeedActionSheet(null)}
+        onSelect={handleFeedActionSelect}
+      />
+      <FeedReportSheet
+        visible={!!reportTarget}
+        targetType={reportTarget?.targetType || 'circle_post'}
+        targetId={reportTarget?.targetId || ''}
+        onClose={() => setReportTarget(null)}
+      />
     </FlPageThemeRoot>
   )
 }

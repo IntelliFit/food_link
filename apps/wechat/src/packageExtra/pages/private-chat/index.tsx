@@ -8,6 +8,7 @@ import {
   getPublicUserProfile,
   getAccessToken,
   API_BASE_URL,
+  SYSTEM_MESSAGE_USER_ID,
   type PrivateMessage,
 } from '../../../utils/api'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
@@ -47,6 +48,7 @@ export default function PrivateChatPage() {
   const router = useRouter()
   const otherUserId = String(router.params.user_id || '').trim()
   const currentUserId = String(Taro.getStorageSync('user_id') || '').trim()
+  const isSystemChat = otherUserId === SYSTEM_MESSAGE_USER_ID
 
   const [otherUser, setOtherUser] = useState<{ nickname: string; avatar: string }>({ nickname: '私信', avatar: '' })
   const [messages, setMessages] = useState<PrivateMessage[]>([])
@@ -72,6 +74,10 @@ export default function PrivateChatPage() {
   // 加载对方信息
   useEffect(() => {
     if (!otherUserId) return
+    if (isSystemChat) {
+      setOtherUser({ nickname: '系统消息', avatar: '' })
+      return
+    }
     getPublicUserProfile(otherUserId)
       .then((profile) => {
         setOtherUser({ nickname: profile.nickname || '用户', avatar: profile.avatar || '' })
@@ -79,7 +85,7 @@ export default function PrivateChatPage() {
       .catch(() => {
         setOtherUser({ nickname: '用户', avatar: '' })
       })
-  }, [otherUserId])
+  }, [otherUserId, isSystemChat])
 
   // 加载消息
   const loadMessages = useCallback(async (reset = false) => {
@@ -222,6 +228,7 @@ export default function PrivateChatPage() {
     const isSelf = msg.sender_id === currentUserId
     const prevMsg = index < messages.length - 1 ? messages[index + 1] : null
     const showTime = shouldShowTimeDivider(prevMsg, msg)
+    const isSystem = msg.content_type === 'system'
 
     return (
       <View key={msg.id}>
@@ -230,29 +237,37 @@ export default function PrivateChatPage() {
             <Text className='chat-time-text'>{formatMessageTime(msg.created_at)}</Text>
           </View>
         )}
-        <View className={`chat-message-row ${isSelf ? 'chat-message-row--self' : ''}`}>
-          {!isSelf && (
-            <View className='chat-avatar'>
-              {otherUser.avatar ? (
-                <Image className='chat-avatar-img' src={otherUser.avatar} mode='aspectFill' />
+        {isSystem ? (
+          <View className='chat-system-message-row'>
+            <View className='chat-system-bubble'>
+              <Text className='chat-system-bubble-text'>{msg.content}</Text>
+            </View>
+          </View>
+        ) : (
+          <View className={`chat-message-row ${isSelf ? 'chat-message-row--self' : ''}`}>
+            {!isSelf && (
+              <View className='chat-avatar'>
+                {otherUser.avatar ? (
+                  <Image className='chat-avatar-img' src={otherUser.avatar} mode='aspectFill' />
+                ) : (
+                  <Text className='chat-avatar-placeholder'>👤</Text>
+                )}
+              </View>
+            )}
+            <View className={`chat-bubble ${isSelf ? 'chat-bubble--self' : ''}`}>
+              {msg.content_type === 'image' && msg.image_url ? (
+                <Image
+                  className='chat-bubble-image'
+                  src={msg.image_url}
+                  mode='widthFix'
+                  onClick={() => handlePreviewImage(msg.image_url!)}
+                />
               ) : (
-                <Text className='chat-avatar-placeholder'>👤</Text>
+                <Text className='chat-bubble-text'>{msg.content}</Text>
               )}
             </View>
-          )}
-          <View className={`chat-bubble ${isSelf ? 'chat-bubble--self' : ''}`}>
-            {msg.content_type === 'image' && msg.image_url ? (
-              <Image
-                className='chat-bubble-image'
-                src={msg.image_url}
-                mode='widthFix'
-                onClick={() => handlePreviewImage(msg.image_url!)}
-              />
-            ) : (
-              <Text className='chat-bubble-text'>{msg.content}</Text>
-            )}
           </View>
-        </View>
+        )}
       </View>
     )
   }
@@ -296,6 +311,7 @@ export default function PrivateChatPage() {
         </ScrollView>
 
         {/* 底部输入区 */}
+        {!isSystemChat && (
         <View className='chat-input-bar'>
           <View className='chat-input-actions'>
             <View className='chat-image-btn' onClick={handleSendImage}>
@@ -320,6 +336,7 @@ export default function PrivateChatPage() {
             <Text className='chat-send-btn-text'>发送</Text>
           </Button>
         </View>
+        )}
       </View>
     </FlPageThemeRoot>
   )
