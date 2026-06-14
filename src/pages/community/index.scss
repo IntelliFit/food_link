@@ -1984,10 +1984,17 @@ $feed-body-font-size: 30rpx;
 .feed-actions {
   display: flex;
   align-items: center;
-  gap: 48rpx;
+  justify-content: space-between;
+  gap: 24rpx;
   padding-top: 16rpx;
   border-top: 1rpx solid #f0f0f0;
   margin-top: 16rpx;
+}
+
+.feed-actions-left {
+  display: flex;
+  align-items: center;
+  gap: 48rpx;
 }
 
 .action-item {
@@ -2678,4 +2685,74 @@ $comment-body-font-size: 28rpx;
   background: #5cb896;
   color: #fff;
   border-radius: 12rpx;
+}
+
+// 圈子自定义动态相关样式
+.feed-publish-btn {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  flex-shrink: 0;
+  padding: 12rpx 20rpx;
+  background: #00bc7d;
+  border-radius: 28rpx;
+  margin-left: 12rpx;
+}
+
+.feed-publish-btn .iconfont {
+  color: #fff;
+  font-size: 28rpx;
+}
+
+.feed-publish-text {
+  font-size: 26rpx;
+  color: #fff;
+  font-weight: 500;
+}
+
+.feed-card-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.feed-circle-post-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.feed-circle-post-image-item {
+  width: 220rpx;
+  height: 220rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+
+.feed-circle-post-image {
+  width: 100%;
+  height: 100%;
+}
+
+.action-manage-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 44rpx;
+  border-radius: 12rpx;
+  background: #f3f4f6;
+
+  &:active {
+    background: #e5e7eb;
+  }
+}
+
+.action-manage-icon {
+  font-size: 40rpx;
+  line-height: 1;
+  font-weight: 700;
+  color: #64748b;
 }

@@ -176,6 +176,9 @@ func (h *FoodRecordHandler) UpdateFoodRecord(c *gin.Context) {
 		TotalCarbs       *float64          `json:"total_carbs"`
 		TotalFat         *float64          `json:"total_fat"`
 		TotalWeightGrams *int              `json:"total_weight_grams"`
+		Description      *string           `json:"description"`
+		ImagePath        *string           `json:"image_path"`
+		ImagePaths       []string          `json:"image_paths"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -191,6 +194,9 @@ func (h *FoodRecordHandler) UpdateFoodRecord(c *gin.Context) {
 		TotalCarbs:       body.TotalCarbs,
 		TotalFat:         body.TotalFat,
 		TotalWeightGrams: body.TotalWeightGrams,
+		Description:      body.Description,
+		ImagePath:        body.ImagePath,
+		ImagePaths:       body.ImagePaths,
 	})
 	if err != nil {
 		response.Error(c, err)

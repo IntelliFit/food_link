@@ -56,3 +56,19 @@ type CommentTask struct {
 }
 
 func (CommentTask) TableName() string { return "comment_tasks" }
+
+type UserCirclePost struct {
+	ID             string     `gorm:"column:id"`
+	UserID         string     `gorm:"column:user_id"`
+	Content        string     `gorm:"column:content"`
+	ImagePaths     []string   `gorm:"column:image_paths;serializer:json"`
+	TotalCalories  *float64   `gorm:"column:total_calories"`
+	TotalProtein   *float64   `gorm:"column:total_protein"`
+	TotalCarbs     *float64   `gorm:"column:total_carbs"`
+	TotalFat       *float64   `gorm:"column:total_fat"`
+	HiddenFromFeed bool       `gorm:"column:hidden_from_feed"`
+	CreatedAt      *time.Time `gorm:"column:created_at"`
+	UpdatedAt      *time.Time `gorm:"column:updated_at"`
+}
+
+func (UserCirclePost) TableName() string { return "user_circle_posts" }

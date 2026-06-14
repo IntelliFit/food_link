@@ -433,6 +433,10 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/community/comment-tasks", authmw.RequireJWT(jwtSvc), communityHandler.ListCommentTasks)
 	engine.GET("/api/community/notifications", authmw.RequireJWT(jwtSvc), communityHandler.ListNotifications)
 	engine.POST("/api/community/notifications/read", authmw.RequireJWT(jwtSvc), communityHandler.MarkNotificationsRead)
+	engine.POST("/api/community/posts/upload-image", authmw.RequireJWT(jwtSvc), communityHandler.UploadCirclePostImage)
+	engine.POST("/api/community/posts", authmw.RequireJWT(jwtSvc), communityHandler.CreateCirclePost)
+	engine.PUT("/api/community/posts/:post_id", authmw.RequireJWT(jwtSvc), communityHandler.UpdateCirclePost)
+	engine.DELETE("/api/community/posts/:post_id", authmw.RequireJWT(jwtSvc), communityHandler.DeleteCirclePost)
 
 	// Health routes
 	engine.GET("/api/body-metrics/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetBodyMetricsSummary)
@@ -451,6 +455,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.GetExerciseLogs)
 	engine.POST("/api/exercise-logs", authmw.RequireJWT(jwtSvc), healthHandler.CreateExerciseLog)
 	engine.POST("/api/exercise-logs/estimate-calories", authmw.RequireJWT(jwtSvc), healthHandler.EstimateExerciseCalories)
+	engine.PUT("/api/exercise-logs/:log_id", authmw.RequireJWT(jwtSvc), healthHandler.UpdateExerciseLog)
 	engine.DELETE("/api/exercise-logs/:log_id", authmw.RequireJWT(jwtSvc), healthHandler.DeleteExerciseLog)
 
 	// Membership routes

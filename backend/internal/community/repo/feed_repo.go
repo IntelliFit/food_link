@@ -15,6 +15,7 @@ import (
 const (
 	FeedTargetFoodRecord  = "food_record"
 	FeedTargetExerciseLog = "exercise_log"
+	FeedTargetCirclePost  = "circle_post"
 )
 
 type FeedRecord struct {
@@ -136,6 +137,13 @@ func (r *FeedRepo) listFeedByAuthors(ctx context.Context, authorIDs []string, co
 		}
 		rows = append(rows, exerciseRows...)
 	}
+	if contentType == "all" || contentType == FeedTargetCirclePost {
+		circleRows, err := r.listCirclePostsByAuthors(ctx, authorIDs, date, sortBy, limit)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, circleRows...)
+	}
 	// Mix in a small number of campus highlights for the default feed
 	if contentType == "all" && sortBy != "latest" {
 		campusRows, err := r.listCampusFeed(ctx, 3)
@@ -197,6 +205,26 @@ func (r *FeedRepo) listExerciseFeedByAuthors(ctx context.Context, authorIDs []st
 	return rows, err
 }
 
+func (r *FeedRepo) listCirclePostsByAuthors(ctx context.Context, authorIDs []string, date, sortBy string, limit int) ([]FeedRecord, error) {
+	q := r.db.WithContext(ctx).Table("user_circle_posts").
+		Select("'circle_post' AS feed_type, id, user_id, '' AS meal_type, created_at AS record_time, created_at, COALESCE(total_calories, 0) AS total_calories, COALESCE(total_protein, 0) AS total_protein, COALESCE(total_carbs, 0) AS total_carbs, COALESCE(total_fat, 0) AS total_fat, NULL::text AS image_path, image_paths, content AS description, '[]'::jsonb AS items, '' AS diet_goal, hidden_from_feed, NULL::text AS exercise_type, NULL::text AS exercise_desc, NULL::numeric AS calories_burned, NULL::int AS duration_min, NULL::text AS ai_reasoning").
+		Where("user_id IN ? AND hidden_from_feed = ?", authorIDs, false)
+	if date != "" {
+		start, end, err := chinaDateWindow(date)
+		if err != nil {
+			return nil, err
+		}
+		q = q.Where("created_at >= ? AND created_at < ?", start, end)
+	}
+	var rows []FeedRecord
+	orderColumn := "record_time DESC, id DESC"
+	if sortBy == "latest" {
+		orderColumn = "created_at DESC, id DESC"
+	}
+	err := q.Order(orderColumn).Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
 func (r *FeedRepo) listCampusFeed(ctx context.Context, limit int) ([]FeedRecord, error) {
 	var rows []FeedRecord
 	if limit <= 0 || limit > 20 {
@@ -217,6 +245,20 @@ func (r *FeedRepo) GetFeedRecordByID(ctx context.Context, recordID string) (*Fee
 
 func (r *FeedRepo) GetFeedTargetByID(ctx context.Context, targetType, targetID string) (*FeedRecord, error) {
 	targetType = normalizeTargetType(targetType)
+	if targetType == FeedTargetCirclePost {
+		var row FeedRecord
+		err := r.db.WithContext(ctx).Table("user_circle_posts").
+			Select("'circle_post' AS feed_type, id, user_id, '' AS meal_type, created_at AS record_time, created_at, COALESCE(total_calories, 0) AS total_calories, COALESCE(total_protein, 0) AS total_protein, COALESCE(total_carbs, 0) AS total_carbs, COALESCE(total_fat, 0) AS total_fat, NULL::text AS image_path, image_paths, content AS description, '[]'::jsonb AS items, '' AS diet_goal, hidden_from_feed, NULL::text AS exercise_type, NULL::text AS exercise_desc, NULL::numeric AS calories_burned, NULL::int AS duration_min, NULL::text AS ai_reasoning").
+			Where("id = ?", targetID).
+			First(&row).Error
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return &row, nil
+	}
 	if targetType == FeedTargetExerciseLog {
 		var row FeedRecord
 		err := r.db.WithContext(ctx).Table("user_exercise_logs").
@@ -252,6 +294,9 @@ func (r *FeedRepo) HideFeedTarget(ctx context.Context, userID, targetType, targe
 	tableName := "user_food_records"
 	if targetType == FeedTargetExerciseLog {
 		tableName = "user_exercise_logs"
+	}
+	if targetType == FeedTargetCirclePost {
+		tableName = "user_circle_posts"
 	}
 	return r.db.WithContext(ctx).Model(&FeedRecord{}).
 		Table(tableName).
@@ -548,6 +593,8 @@ func normalizeTargetType(value string) string {
 		return value
 	case FeedTargetExerciseLog:
 		return FeedTargetExerciseLog
+	case FeedTargetCirclePost:
+		return FeedTargetCirclePost
 	case "campus_food":
 		return "campus_food"
 	default:
@@ -585,10 +632,14 @@ func applyTargetFilter(q *gorm.DB, targets []FeedTarget, includeLegacyRecordID b
 	}
 	var foodIDs []string
 	var exerciseIDs []string
+	var circleIDs []string
 	for _, target := range targets {
-		if target.TargetType == FeedTargetExerciseLog {
+		switch target.TargetType {
+		case FeedTargetExerciseLog:
 			exerciseIDs = append(exerciseIDs, target.TargetID)
-		} else {
+		case FeedTargetCirclePost:
+			circleIDs = append(circleIDs, target.TargetID)
+		default:
 			foodIDs = append(foodIDs, target.TargetID)
 		}
 	}
@@ -606,7 +657,60 @@ func applyTargetFilter(q *gorm.DB, targets []FeedTarget, includeLegacyRecordID b
 		clauses = append(clauses, "(target_type = ? AND target_id IN ?)")
 		args = append(args, FeedTargetExerciseLog, exerciseIDs)
 	}
+	if len(circleIDs) > 0 {
+		clauses = append(clauses, "(target_type = ? AND target_id IN ?)")
+		args = append(args, FeedTargetCirclePost, circleIDs)
+	}
 	return q.Where(strings.Join(clauses, " OR "), args...)
+}
+
+func (r *FeedRepo) CreateCirclePost(ctx context.Context, post *domain.UserCirclePost) error {
+	return r.db.WithContext(ctx).Create(post).Error
+}
+
+func (r *FeedRepo) GetCirclePostByID(ctx context.Context, postID string) (*domain.UserCirclePost, error) {
+	var post domain.UserCirclePost
+	if err := r.db.WithContext(ctx).Where("id = ?", postID).First(&post).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &post, nil
+}
+
+func (r *FeedRepo) UpdateCirclePost(ctx context.Context, userID, postID, content string, imagePaths []string, totalCalories, totalProtein, totalCarbs, totalFat *float64) error {
+	updates := map[string]any{
+		"content":     content,
+		"image_paths": imagePaths,
+	}
+	updates["total_calories"] = totalCalories
+	updates["total_protein"] = totalProtein
+	updates["total_carbs"] = totalCarbs
+	updates["total_fat"] = totalFat
+	return r.db.WithContext(ctx).Model(&domain.UserCirclePost{}).
+		Where("id = ? AND user_id = ?", postID, userID).
+		Updates(updates).Error
+}
+
+func (r *FeedRepo) DeleteCirclePost(ctx context.Context, userID, postID string) error {
+	return r.db.WithContext(ctx).Where("id = ? AND user_id = ?", postID, userID).Delete(&domain.UserCirclePost{}).Error
+}
+
+func (r *FeedRepo) DeleteCirclePostInteractions(ctx context.Context, postID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		target := FeedTarget{TargetType: FeedTargetCirclePost, TargetID: postID}
+		if err := tx.Where("target_type = ? AND target_id = ?", target.TargetType, target.TargetID).Delete(&domain.FeedLike{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("target_type = ? AND target_id = ?", target.TargetType, target.TargetID).Delete(&domain.FeedComment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("target_type = ? AND target_id = ?", target.TargetType, target.TargetID).Delete(&domain.FeedInteractionNotification{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func sortFeedRecords(rows []FeedRecord, sortBy string) {

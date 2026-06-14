@@ -100,6 +100,18 @@ func (m *mockCommunityService) ListNotifications(ctx context.Context, userID str
 func (m *mockCommunityService) MarkNotificationsRead(ctx context.Context, userID string, notificationIDs []string) (*service.MarkReadResult, error) {
 	return m.markRead, m.markReadErr
 }
+func (m *mockCommunityService) UploadCirclePostImage(ctx context.Context, userID string, fileBytes []byte, ext, contentType string) (string, error) {
+	return "", nil
+}
+func (m *mockCommunityService) CreateCirclePost(ctx context.Context, userID, content string, imageURLs []string, nutrition *service.CirclePostNutrition) (string, error) {
+	return "", nil
+}
+func (m *mockCommunityService) UpdateCirclePost(ctx context.Context, userID, postID, content string, imageURLs []string, nutrition *service.CirclePostNutrition) error {
+	return nil
+}
+func (m *mockCommunityService) DeleteCirclePost(ctx context.Context, userID, postID string) error {
+	return nil
+}
 
 func setupCommunityRouter(h *CommunityHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)

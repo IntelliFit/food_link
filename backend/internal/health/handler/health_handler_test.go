@@ -83,6 +83,9 @@ func (m *mockExerciseSvc) EstimateCalories(ctx context.Context, userID string, e
 func (m *mockExerciseSvc) DeleteLog(ctx context.Context, userID, logID string) error {
 	return m.deleteErr
 }
+func (m *mockExerciseSvc) UpdateLog(ctx context.Context, userID, logID, exerciseDesc, imageURL, date string, caloriesBurned *float64) error {
+	return m.err
+}
 
 type mockStatsSvc struct {
 	summary       *service.StatsSummary

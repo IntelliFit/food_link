@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"food_link/backend/internal/foodmedia"
 	"food_link/backend/pkg/storage"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -46,6 +48,11 @@ type FeedRepo interface {
 	IsFriend(ctx context.Context, userID, friendID string) (bool, error)
 	GetUserProfiles(ctx context.Context, userIDs []string) (map[string]*repo.UserProfile, error)
 	GetCheckinCounts(ctx context.Context, userIDs []string, weekStart, weekEnd time.Time) (map[string]int, error)
+	CreateCirclePost(ctx context.Context, post *domain.UserCirclePost) error
+	GetCirclePostByID(ctx context.Context, postID string) (*domain.UserCirclePost, error)
+	UpdateCirclePost(ctx context.Context, userID, postID, content string, imagePaths []string, totalCalories, totalProtein, totalCarbs, totalFat *float64) error
+	DeleteCirclePost(ctx context.Context, userID, postID string) error
+	DeleteCirclePostInteractions(ctx context.Context, postID string) error
 }
 
 type NotificationRepo interface {
@@ -565,6 +572,14 @@ func (s *CommunityService) normalizeFeedRecord(ctx context.Context, record repo.
 				record.ImagePath = &resolved
 				record.ImagePaths = []string{resolved}
 			}
+		}
+		return record
+	}
+	if record.FeedType == repo.FeedTargetCirclePost {
+		record.ImagePaths = s.resolveFoodImageURLs(record.ImagePaths)
+		if len(record.ImagePaths) > 0 {
+			first := record.ImagePaths[0]
+			record.ImagePath = &first
 		}
 		return record
 	}
@@ -1118,6 +1133,175 @@ func (s *CommunityService) commentToItem(ctx context.Context, comment *domain.Fe
 
 func (s *CommunityService) ListCommentTasks(ctx context.Context, userID string, limit int) ([]domain.CommentTask, error) {
 	return s.notifRepo.ListCommentTasksByUser(ctx, userID, "feed", limit)
+}
+
+const (
+	circlePostImageBucketAlias = "food-images"
+	circlePostMaxImages        = 3
+	circlePostMaxContentLength = 2000
+)
+
+type CirclePostNutrition struct {
+	TotalCalories *float64
+	TotalProtein  *float64
+	TotalCarbs    *float64
+	TotalFat      *float64
+}
+
+func (s *CommunityService) CreateCirclePost(ctx context.Context, userID, content string, imageURLs []string, nutrition *CirclePostNutrition) (string, error) {
+	content = strings.TrimSpace(content)
+	imageKeys, err := s.normalizeCirclePostImageURLs(userID, imageURLs)
+	if err != nil {
+		return "", err
+	}
+	if content == "" && len(imageKeys) == 0 {
+		return "", commonerrors.ErrBadRequest
+	}
+	if len(content) > circlePostMaxContentLength {
+		return "", commonerrors.ErrBadRequest
+	}
+	post := &domain.UserCirclePost{
+		ID:             uuid.New().String(),
+		UserID:         userID,
+		Content:        content,
+		ImagePaths:     imageKeys,
+		HiddenFromFeed: false,
+		CreatedAt:      timePtr(time.Now().UTC()),
+		UpdatedAt:      timePtr(time.Now().UTC()),
+	}
+	if nutrition != nil {
+		post.TotalCalories = nutrition.TotalCalories
+		post.TotalProtein = nutrition.TotalProtein
+		post.TotalCarbs = nutrition.TotalCarbs
+		post.TotalFat = nutrition.TotalFat
+	}
+	if err := s.feedRepo.CreateCirclePost(ctx, post); err != nil {
+		return "", err
+	}
+	return post.ID, nil
+}
+
+func (s *CommunityService) UpdateCirclePost(ctx context.Context, userID, postID, content string, imageURLs []string, nutrition *CirclePostNutrition) error {
+	content = strings.TrimSpace(content)
+	post, err := s.feedRepo.GetCirclePostByID(ctx, postID)
+	if err != nil {
+		return err
+	}
+	if post == nil {
+		return commonerrors.ErrNotFound
+	}
+	if post.UserID != userID {
+		return commonerrors.ErrForbidden
+	}
+	imageKeys, err := s.normalizeCirclePostImageURLs(userID, imageURLs)
+	if err != nil {
+		return err
+	}
+	if content == "" && len(imageKeys) == 0 {
+		return commonerrors.ErrBadRequest
+	}
+	if len(content) > circlePostMaxContentLength {
+		return commonerrors.ErrBadRequest
+	}
+	var totalCalories, totalProtein, totalCarbs, totalFat *float64
+	if nutrition != nil {
+		totalCalories = nutrition.TotalCalories
+		totalProtein = nutrition.TotalProtein
+		totalCarbs = nutrition.TotalCarbs
+		totalFat = nutrition.TotalFat
+	}
+	return s.feedRepo.UpdateCirclePost(ctx, userID, postID, content, imageKeys, totalCalories, totalProtein, totalCarbs, totalFat)
+}
+
+func (s *CommunityService) UploadCirclePostImage(ctx context.Context, userID string, fileBytes []byte, ext, contentType string) (string, error) {
+	if userID == "" {
+		return "", commonerrors.ErrUnauthorized
+	}
+	if len(fileBytes) == 0 {
+		return "", commonerrors.ErrBadRequest
+	}
+	const maxBytes = 8 << 20
+	if len(fileBytes) > maxBytes {
+		return "", commonerrors.ErrBadRequest
+	}
+	safeExt := normalizeImageExt(ext)
+	key := fmt.Sprintf("circle-posts/%s/%s%s", userID, uuid.NewString(), safeExt)
+	if s.storage == nil {
+		return "", fmt.Errorf("存储客户端未初始化")
+	}
+	url, err := s.storage.UploadBytes(circlePostImageBucketAlias, key, fileBytes, contentType)
+	if err != nil {
+		return "", err
+	}
+	return url, nil
+}
+
+func normalizeImageExt(ext string) string {
+	safeExt := strings.ToLower(strings.TrimSpace(ext))
+	if safeExt == "" {
+		return ".jpg"
+	}
+	if !strings.HasPrefix(safeExt, ".") {
+		safeExt = "." + safeExt
+	}
+	switch safeExt {
+	case ".jpg", ".jpeg", ".png", ".webp", ".gif":
+		return safeExt
+	default:
+		return ".jpg"
+	}
+}
+
+func (s *CommunityService) DeleteCirclePost(ctx context.Context, userID, postID string) error {
+	post, err := s.feedRepo.GetCirclePostByID(ctx, postID)
+	if err != nil {
+		return err
+	}
+	if post == nil {
+		return commonerrors.ErrNotFound
+	}
+	if post.UserID != userID {
+		return commonerrors.ErrForbidden
+	}
+	if err := s.feedRepo.DeleteCirclePostInteractions(ctx, postID); err != nil {
+		return err
+	}
+	return s.feedRepo.DeleteCirclePost(ctx, userID, postID)
+}
+
+func (s *CommunityService) normalizeCirclePostImageURLs(userID string, imageURLs []string) ([]string, error) {
+	if len(imageURLs) > circlePostMaxImages {
+		imageURLs = imageURLs[:circlePostMaxImages]
+	}
+	prefix := fmt.Sprintf("circle-posts/%s/", userID)
+	out := make([]string, 0, len(imageURLs))
+	seen := make(map[string]struct{}, len(imageURLs))
+	for _, raw := range imageURLs {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		var key string
+		if s.storage != nil {
+			key = s.storage.ResolveObjectKey(circlePostImageBucketAlias, raw)
+		}
+		if key == "" {
+			key = raw
+		}
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, key)
+	}
+	return out, nil
+}
+
+func timePtr(t time.Time) *time.Time {
+	return &t
 }
 
 func (s *CommunityService) ListNotifications(ctx context.Context, userID string, limit int) (*NotificationListResult, error) {

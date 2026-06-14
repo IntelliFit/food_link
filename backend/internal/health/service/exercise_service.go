@@ -32,6 +32,7 @@ type ExerciseRepo interface {
 	ListExerciseLogsByDate(ctx context.Context, userID string, startDate, endDate string) ([]domain.ExerciseLog, error)
 	GetExerciseLogByID(ctx context.Context, userID, logID string) (*domain.ExerciseLog, error)
 	DeleteExerciseLog(ctx context.Context, userID, logID string) (int64, error)
+	UpdateExerciseLog(ctx context.Context, userID, logID, exerciseDesc, imageURL string, recordedOn *string, caloriesBurned *float64) (int64, error)
 	GetDailyCaloriesBurned(ctx context.Context, userID string, recordedOn string) (int64, error)
 	GetUserProfile(ctx context.Context, userID string) (*domain.ExerciseUserProfile, error)
 	GetLatestWeightRecord(ctx context.Context, userID string) (*domain.BodyWeightRecord, error)
@@ -329,6 +330,37 @@ func (s *ExerciseService) EstimateCalories(ctx context.Context, userID string, e
 
 func (s *ExerciseService) DeleteLog(ctx context.Context, userID, logID string) error {
 	rowsAffected, err := s.repo.DeleteExerciseLog(ctx, userID, logID)
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return commonerrors.ErrNotFound
+	}
+	return nil
+}
+
+func (s *ExerciseService) UpdateLog(ctx context.Context, userID, logID, exerciseDesc, imageURL, date string, caloriesBurned *float64) error {
+	log, err := s.repo.GetExerciseLogByID(ctx, userID, logID)
+	if err != nil {
+		return err
+	}
+	if log == nil {
+		return commonerrors.ErrNotFound
+	}
+	desc := strings.TrimSpace(exerciseDesc)
+	imageURL = s.resolveFoodImageURL(imageURL)
+	if desc == "" && imageURL == "" {
+		return &commonerrors.AppError{Code: 10002, Message: "运动描述和图片不能同时为空", HTTPStatus: 400}
+	}
+	var recordedOn *string
+	if date != "" {
+		normalized, err := dateutil.NormalizeChinaDate(date, "date")
+		if err != nil {
+			return err
+		}
+		recordedOn = &normalized
+	}
+	rowsAffected, err := s.repo.UpdateExerciseLog(ctx, userID, logID, desc, imageURL, recordedOn, caloriesBurned)
 	if err != nil {
 		return err
 	}

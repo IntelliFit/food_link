@@ -23,7 +23,6 @@ import { claimSharePosterRewardQuietly } from '../../../utils/share-reward'
 import { IconBreakfast, IconCollapse, IconExpand, IconLunch, IconDinner, IconSnack } from '../../../components/iconfont'
 import { withAuth } from '../../../utils/withAuth'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
-import CustomNavBar, { getNavBarHeight } from '../../../components/CustomNavBar'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { COMMUNITY_FEED_CHANGED_EVENT, HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { MealRecordEditModal } from '../../../pages/index/components/MealRecordEditModal'
@@ -568,13 +567,6 @@ function RecordDetailPage() {
   if (loading || !record) {
     return (
       <View className={`record-detail-root ${scheme === 'dark' ? 'record-detail-root--dark' : ''}`}>
-        <CustomNavBar
-          title='识别记录详情'
-          showBack
-          onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
-          color={scheme === 'dark' ? '#ffffff' : '#000000'}
-          background={scheme === 'dark' ? '#101716' : '#f8fafc'}
-        />
         <View className='record-detail-below-nav record-detail-loading-placeholder'>
           <View className='empty-tip'>
             {loading ? <View className='loading-spinner-md' /> : '记录不存在'}
@@ -638,23 +630,14 @@ function RecordDetailPage() {
   }
 
 
-  const navBarHeight = getNavBarHeight()
-
   return (
     <View className={`record-detail-root ${scheme === 'dark' ? 'record-detail-root--dark' : ''}`}>
-      <CustomNavBar
-        title='识别记录详情'
-        showBack
-        onBack={() => Taro.switchTab({ url: '/pages/index/index' })}
-        color={scheme === 'dark' ? '#ffffff' : '#000000'}
-        background={scheme === 'dark' ? '#101716' : '#f8fafc'}
-      />
       {/*
         海报预览/离屏 Canvas 勿放在 ScrollView 内：真机上 fixed 全屏层会相对滚动容器错位；
         与首页「今日小结」分享层结构一致（根节点下独立一层）
       */}
       <View className='record-detail-below-nav'>
-      <ScrollView className='record-detail-page' scrollY style={{ height: `calc(100vh - ${navBarHeight}px)` }}>
+      <ScrollView className='record-detail-page' scrollY style={{ height: '100vh' }}>
       <View className='record-detail-body'>
         <View className='detail-header'>
           <View className='meal-badge'>

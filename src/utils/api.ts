@@ -3108,6 +3108,9 @@ export interface UpdateFoodRecordRequest {
   total_carbs?: number
   total_fat?: number
   total_weight_grams?: number
+  description?: string
+  image_path?: string
+  image_paths?: string[]
   diet_goal?: DietGoal
   activity_timing?: ActivityTiming
 }
@@ -5008,7 +5011,7 @@ export interface CheckinLeaderboardItem {
 
 export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
 export type CommunityAuthorScope = 'all' | 'priority' | 'public'
-export type CommunityFeedTargetType = 'food_record' | 'exercise_log' | 'campus_food'
+export type CommunityFeedTargetType = 'food_record' | 'exercise_log' | 'campus_food' | 'circle_post'
 export type CommunityFeedContentType = 'all' | CommunityFeedTargetType
 
 export interface CommunityFeedQueryParams {
@@ -5021,6 +5024,17 @@ export interface CommunityFeedQueryParams {
   author_id?: string
 }
 
+export interface CirclePostNutritionInput {
+  calories?: number | null
+  protein?: number | null
+  carbs?: number | null
+  fat?: number | null
+  fiber?: number | null
+  sugar?: number | null
+  sodium_mg?: number | null
+  total_weight_grams?: number | null
+}
+
 export type CommunityFeedRecord = FoodRecord & {
   feed_type?: CommunityFeedTargetType
   exercise_type?: string | null
@@ -5031,6 +5045,10 @@ export type CommunityFeedRecord = FoodRecord & {
   price?: number | null
   school?: string | null
   canteen?: string | null
+  /** 自定义图文动态可选营养字段 */
+  fiber?: number | null
+  sugar?: number | null
+  sodium_mg?: number | null
 }
 
 /** 圈子 Feed 单条（好友 + 自己今日饮食 + 点赞信息） */
@@ -5552,6 +5570,102 @@ export async function communityMarkNotificationsRead(notificationIds?: string[])
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '更新互动消息失败')
   return response.data as { updated: number; unread_count: number }
+}
+
+/** 上传圈子自定义动态图片 */
+export async function uploadCirclePostImage(localPath: string): Promise<{ image_url: string }> {
+  const token = getAccessToken()
+  const response = await Taro.uploadFile({
+    url: `${API_BASE_URL}/api/community/posts/upload-image`,
+    filePath: localPath,
+    name: 'file',
+    header: {
+      Authorization: `Bearer ${token}`,
+      ...withNgrokBypassHeaders()
+    },
+    timeout: 30000
+  })
+  if (response.statusCode !== 200) {
+    throw new Error((JSON.parse(response.data || '{}') as any)?.detail || '上传失败')
+  }
+  return JSON.parse(response.data) as { image_url: string }
+}
+
+/** 创建圈子自定义图文动态 */
+export async function createCirclePost(
+  content: string,
+  imageUrls: string[],
+  nutrition?: CirclePostNutritionInput
+): Promise<{ id: string }> {
+  const response = await authenticatedRequest('/api/community/posts', {
+    method: 'POST',
+    data: {
+      content: content.trim(),
+      image_urls: imageUrls || [],
+      ...(nutrition ? buildCirclePostNutritionPayload(nutrition) : {})
+    }
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发布失败')
+  return response.data as { id: string }
+}
+
+/** 更新圈子自定义图文动态 */
+export async function updateCirclePost(
+  postId: string,
+  content: string,
+  imageUrls: string[],
+  nutrition?: CirclePostNutritionInput
+): Promise<{ id: string }> {
+  const response = await authenticatedRequest(`/api/community/posts/${encodeURIComponent(postId)}`, {
+    method: 'PUT',
+    data: {
+      content: content.trim(),
+      image_urls: imageUrls || [],
+      ...(nutrition ? buildCirclePostNutritionPayload(nutrition) : {})
+    }
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '保存失败')
+  return response.data as { id: string }
+}
+
+function buildCirclePostNutritionPayload(nutrition: CirclePostNutritionInput): Record<string, number | null> {
+  const fields: (keyof CirclePostNutritionInput)[] = [
+    'calories',
+    'protein',
+    'carbs',
+    'fat',
+    'fiber',
+    'sugar',
+    'sodium_mg',
+    'total_weight_grams'
+  ]
+  const payload: Record<string, number | null> = {}
+  fields.forEach((key) => {
+    const value = nutrition[key]
+    payload[key] = typeof value === 'number' && Number.isFinite(value) ? value : null
+  })
+  return payload
+}
+
+/** 删除圈子自定义图文动态 */
+export async function deleteCirclePost(postId: string): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/community/posts/${encodeURIComponent(postId)}`, { method: 'DELETE' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '删除失败')
+  return response.data as { message: string }
+}
+
+/** 更新运动记录 */
+export async function updateExerciseLog(
+  logId: string,
+  data: { exercise_desc?: string; date?: string; image_url?: string; calories_burned?: number }
+): Promise<{ message: string }> {
+  const response = await authenticatedRequest(`/api/exercise-logs/${encodeURIComponent(logId)}`, {
+    method: 'PUT',
+    data,
+    timeout: 10000
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '更新失败')
+  return response.data as { message: string }
 }
 
 // ---------- 公共食物库 ----------

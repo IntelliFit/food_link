@@ -1,0 +1,309 @@
+.circle-post-edit-page {
+  min-height: 100vh;
+  padding: 24rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  background: #f9fafb;
+  box-sizing: border-box;
+}
+
+.circle-post-edit-card {
+  background: #fff;
+  border-radius: 24rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+}
+
+/* ---------- 图片区 ---------- */
+.circle-post-edit-image-section {
+  padding-bottom: 20rpx;
+}
+
+.circle-post-edit-image-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+}
+
+.circle-post-edit-image-item,
+.circle-post-edit-image-add {
+  width: 200rpx;
+  height: 200rpx;
+  border-radius: 20rpx;
+  overflow: hidden;
+  position: relative;
+}
+
+.circle-post-edit-image-preview {
+  width: 100%;
+  height: 100%;
+}
+
+.circle-post-edit-image-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.circle-post-edit-image-remove {
+  position: absolute;
+  top: 8rpx;
+  right: 8rpx;
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.circle-post-edit-image-remove-icon {
+  color: #fff;
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.circle-post-edit-image-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  border: 1rpx dashed #d1d5db;
+}
+
+.circle-post-edit-image-add-icon {
+  font-size: 56rpx;
+  color: #9ca3af;
+  line-height: 1;
+}
+
+.circle-post-edit-image-add-text {
+  font-size: 24rpx;
+  color: #9ca3af;
+  margin-top: 12rpx;
+}
+
+/* ---------- 文字区 ---------- */
+.circle-post-edit-editor {
+  padding-bottom: 12rpx;
+}
+
+.circle-post-edit-textarea {
+  width: 100%;
+  min-height: 320rpx;
+  font-size: 30rpx;
+  line-height: 1.7;
+  color: #1f2937;
+}
+
+.circle-post-edit-count {
+  text-align: right;
+  font-size: 24rpx;
+  color: #9ca3af;
+  margin-top: 16rpx;
+}
+
+/* ---------- 标题行 ---------- */
+.circle-post-edit-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+}
+
+.circle-post-edit-title-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.circle-post-edit-section-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.circle-post-edit-section-subtitle {
+  font-size: 24rpx;
+  color: #9ca3af;
+}
+
+/* ---------- 营养信息 ---------- */
+.circle-post-edit-nutrition-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20rpx;
+}
+
+.circle-post-edit-nutrition-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.circle-post-edit-nutrition-label {
+  font-size: 26rpx;
+  color: #4b5563;
+}
+
+.circle-post-edit-nutrition-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 18rpx 20rpx;
+  background: #f9fafb;
+  border-radius: 16rpx;
+}
+
+.circle-post-edit-nutrition-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  color: #1f2937;
+  text-align: right;
+}
+
+.circle-post-edit-nutrition-unit {
+  font-size: 24rpx;
+  color: #9ca3af;
+  min-width: 48rpx;
+  text-align: right;
+}
+
+/* ---------- 开关 ---------- */
+.circle-post-edit-toggle {
+  width: 84rpx;
+  height: 48rpx;
+  border-radius: 24rpx;
+  background: #d1d5db;
+  position: relative;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.circle-post-edit-toggle.is-on {
+  background: #00bc7d;
+}
+
+.circle-post-edit-toggle-knob {
+  position: absolute;
+  top: 4rpx;
+  left: 4rpx;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.15);
+  transition: transform 0.2s ease;
+}
+
+.circle-post-edit-toggle.is-on .circle-post-edit-toggle-knob {
+  transform: translateX(36rpx);
+}
+
+/* ---------- 提交按钮 ---------- */
+.circle-post-edit-footer {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  margin-top: 32rpx;
+}
+
+.circle-post-edit-draft-btn {
+  flex-shrink: 0;
+  min-width: 176rpx;
+  height: 96rpx;
+  line-height: 96rpx;
+  padding: 0 32rpx;
+  border-radius: 48rpx;
+  background: #f3f4f6 !important;
+  border: 1rpx solid #e5e7eb !important;
+  color: #4b5563 !important;
+  font-size: 30rpx;
+  font-weight: 600;
+  text-align: center;
+}
+
+.circle-post-edit-draft-btn::after {
+  border: none;
+}
+
+.circle-post-edit-submit {
+  flex: 1;
+  height: 96rpx;
+  line-height: 96rpx;
+  border-radius: 48rpx;
+  background: linear-gradient(135deg, #00bc7d 0%, #10b981 100%) !important;
+  border: none !important;
+  color: #fff !important;
+  font-size: 32rpx;
+  font-weight: 600;
+  box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.28);
+  text-align: center;
+}
+
+.circle-post-edit-submit::after {
+  border: none;
+}
+
+/* ---------- 深色主题 ---------- */
+.fl-page-theme-root--dark .circle-post-edit-page {
+  background: #101716;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-card {
+  background: #1a2220;
+  box-shadow: 0 8rpx 28rpx rgba(0, 0, 0, 0.35);
+}
+
+.fl-page-theme-root--dark .circle-post-edit-textarea {
+  color: #e8ece9;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-section-title {
+  color: #e8ece9;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-section-subtitle,
+.fl-page-theme-root--dark .circle-post-edit-count,
+.fl-page-theme-root--dark .circle-post-edit-image-add-text,
+.fl-page-theme-root--dark .circle-post-edit-nutrition-unit {
+  color: #9ca3a8;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-image-add {
+  background: #232e2b;
+  border-color: #3d5d51;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-image-add-icon {
+  color: #5cb896;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-nutrition-label {
+  color: #9ca3a8;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-nutrition-input-wrap {
+  background: #222c29;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-nutrition-input {
+  color: #e8ece9;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-toggle {
+  background: #3d5d51;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-draft-btn {
+  background: #232e2b !important;
+  border-color: #3d5d51 !important;
+  color: #e8ece9 !important;
+}
+
+.fl-page-theme-root--dark .circle-post-edit-submit {
+  background: linear-gradient(135deg, #00bc7d 0%, #10b981 100%) !important;
+  box-shadow: 0 8rpx 24rpx rgba(0, 188, 125, 0.22);
+}

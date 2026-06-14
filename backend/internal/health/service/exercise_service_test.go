@@ -62,6 +62,15 @@ func (m *mockExerciseRepo) DeleteExerciseLog(ctx context.Context, userID, logID 
 	m.deletedID = logID
 	return 1, nil
 }
+func (m *mockExerciseRepo) UpdateExerciseLog(ctx context.Context, userID, logID, exerciseDesc, imageURL string, recordedOn *string, caloriesBurned *float64) (int64, error) {
+	for i := range m.logs {
+		if m.logs[i].ID == logID && m.logs[i].UserID == userID {
+			m.logs[i].ExerciseDesc = exerciseDesc
+			return 1, nil
+		}
+	}
+	return 0, nil
+}
 
 func (m *mockExerciseRepo) GetDailyCaloriesBurned(ctx context.Context, userID string, recordedOn string) (int64, error) {
 	var total int64

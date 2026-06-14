@@ -144,6 +144,21 @@ func (m *mockFeedRepo) GetUserProfiles(ctx context.Context, userIDs []string) (m
 func (m *mockFeedRepo) GetCheckinCounts(ctx context.Context, userIDs []string, weekStart, weekEnd time.Time) (map[string]int, error) {
 	return m.checkinCounts, m.checkinCountsErr
 }
+func (m *mockFeedRepo) CreateCirclePost(ctx context.Context, post *domain.UserCirclePost) error {
+	return nil
+}
+func (m *mockFeedRepo) GetCirclePostByID(ctx context.Context, postID string) (*domain.UserCirclePost, error) {
+	return nil, nil
+}
+func (m *mockFeedRepo) UpdateCirclePost(ctx context.Context, userID, postID, content string, imagePaths []string, totalCalories, totalProtein, totalCarbs, totalFat *float64) error {
+	return nil
+}
+func (m *mockFeedRepo) DeleteCirclePost(ctx context.Context, userID, postID string) error {
+	return nil
+}
+func (m *mockFeedRepo) DeleteCirclePostInteractions(ctx context.Context, postID string) error {
+	return nil
+}
 
 type mockNotificationRepo struct {
 	createNotificationErr        error

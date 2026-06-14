@@ -107,6 +107,9 @@ type UpdateFoodRecordInput struct {
 	TotalCarbs       *float64
 	TotalFat         *float64
 	TotalWeightGrams *int
+	Description      *string
+	ImagePath        *string
+	ImagePaths       []string
 }
 
 func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveFoodRecordInput) (*domain.FoodRecord, error) {
@@ -591,6 +594,15 @@ func (s *FoodRecordService) Update(ctx context.Context, userID, recordID string,
 	}
 	if input.TotalWeightGrams != nil {
 		updates["total_weight_grams"] = *input.TotalWeightGrams
+	}
+	if input.Description != nil {
+		updates["description"] = *input.Description
+	}
+	if input.ImagePath != nil {
+		updates["image_path"] = *input.ImagePath
+	}
+	if input.ImagePaths != nil {
+		updates["image_paths"] = input.ImagePaths
 	}
 	if len(updates) == 0 {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "没有需要更新的字段", HTTPStatus: 400}

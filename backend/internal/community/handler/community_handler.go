@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"io"
 	"strconv"
 	"strings"
 
@@ -34,6 +35,10 @@ type CommunityService interface {
 	ListCommentTasks(ctx context.Context, userID string, limit int) ([]domain.CommentTask, error)
 	ListNotifications(ctx context.Context, userID string, limit int) (*service.NotificationListResult, error)
 	MarkNotificationsRead(ctx context.Context, userID string, notificationIDs []string) (*service.MarkReadResult, error)
+	UploadCirclePostImage(ctx context.Context, userID string, fileBytes []byte, ext, contentType string) (string, error)
+	CreateCirclePost(ctx context.Context, userID, content string, imageURLs []string, nutrition *service.CirclePostNutrition) (string, error)
+	UpdateCirclePost(ctx context.Context, userID, postID, content string, imageURLs []string, nutrition *service.CirclePostNutrition) error
+	DeleteCirclePost(ctx context.Context, userID, postID string) error
 }
 
 type CommunityHandler struct {
@@ -309,6 +314,111 @@ func (h *CommunityHandler) MarkNotificationsRead(c *gin.Context) {
 		return
 	}
 	response.Success(c, result)
+}
+
+func (h *CommunityHandler) UploadCirclePostImage(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		response.Error(c, commonerrors.ErrBadRequest)
+		return
+	}
+	defer file.Close()
+	contentType := header.Header.Get("Content-Type")
+	ext := ""
+	if header.Filename != "" {
+		parts := strings.Split(header.Filename, ".")
+		if len(parts) > 1 {
+			ext = "." + parts[len(parts)-1]
+		}
+	}
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		response.Error(c, commonerrors.ErrBadRequest)
+		return
+	}
+	imageURL, err := h.svc.UploadCirclePostImage(c.Request.Context(), userID, fileBytes, ext, contentType)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"image_url": imageURL})
+}
+
+func (h *CommunityHandler) CreateCirclePost(c *gin.Context) {
+	var body struct {
+		Content   string   `json:"content"`
+		ImageURLs []string `json:"image_urls"`
+		Nutrition struct {
+			TotalCalories *float64 `json:"total_calories"`
+			TotalProtein  *float64 `json:"total_protein"`
+			TotalCarbs    *float64 `json:"total_carbs"`
+			TotalFat      *float64 `json:"total_fat"`
+		} `json:"nutrition"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, commonerrors.ErrBadRequest)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	var nutrition *service.CirclePostNutrition
+	if body.Nutrition.TotalCalories != nil || body.Nutrition.TotalProtein != nil || body.Nutrition.TotalCarbs != nil || body.Nutrition.TotalFat != nil {
+		nutrition = &service.CirclePostNutrition{
+			TotalCalories: body.Nutrition.TotalCalories,
+			TotalProtein:  body.Nutrition.TotalProtein,
+			TotalCarbs:    body.Nutrition.TotalCarbs,
+			TotalFat:      body.Nutrition.TotalFat,
+		}
+	}
+	postID, err := h.svc.CreateCirclePost(c.Request.Context(), userID, body.Content, body.ImageURLs, nutrition)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": postID})
+}
+
+func (h *CommunityHandler) UpdateCirclePost(c *gin.Context) {
+	var body struct {
+		Content   string   `json:"content"`
+		ImageURLs []string `json:"image_urls"`
+		Nutrition struct {
+			TotalCalories *float64 `json:"total_calories"`
+			TotalProtein  *float64 `json:"total_protein"`
+			TotalCarbs    *float64 `json:"total_carbs"`
+			TotalFat      *float64 `json:"total_fat"`
+		} `json:"nutrition"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, commonerrors.ErrBadRequest)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	postID := c.Param("post_id")
+	var nutrition *service.CirclePostNutrition
+	if body.Nutrition.TotalCalories != nil || body.Nutrition.TotalProtein != nil || body.Nutrition.TotalCarbs != nil || body.Nutrition.TotalFat != nil {
+		nutrition = &service.CirclePostNutrition{
+			TotalCalories: body.Nutrition.TotalCalories,
+			TotalProtein:  body.Nutrition.TotalProtein,
+			TotalCarbs:    body.Nutrition.TotalCarbs,
+			TotalFat:      body.Nutrition.TotalFat,
+		}
+	}
+	if err := h.svc.UpdateCirclePost(c.Request.Context(), userID, postID, body.Content, body.ImageURLs, nutrition); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": postID})
+}
+
+func (h *CommunityHandler) DeleteCirclePost(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	postID := c.Param("post_id")
+	if err := h.svc.DeleteCirclePost(c.Request.Context(), userID, postID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "已删除"})
 }
 
 func parseFeedParams(c *gin.Context) service.FeedParams {

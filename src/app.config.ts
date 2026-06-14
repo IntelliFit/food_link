@@ -37,6 +37,7 @@ const extraSubpackagePages = [
   'pages/reward-center/index',
   'pages/interaction-notifications/index',
   'pages/interaction-feed-detail/index',
+  'pages/circle-post-edit/index',
   'pages/food-library-share/index',
   'pages/location-search/index',
   'pages/login/index',

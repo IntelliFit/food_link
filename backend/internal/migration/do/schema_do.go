@@ -627,6 +627,22 @@ type CommentTaskDO struct {
 
 func (CommentTaskDO) TableName() string { return "comment_tasks" }
 
+type UserCirclePostDO struct {
+	ID             string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID         string     `gorm:"column:user_id;type:uuid;not null;index:idx_user_circle_posts_user_id"`
+	Content        string     `gorm:"column:content;type:text;not null"`
+	ImagePaths     []string   `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	TotalCalories  *float64   `gorm:"column:total_calories;type:numeric(10,2)"`
+	TotalProtein   *float64   `gorm:"column:total_protein;type:numeric(10,2)"`
+	TotalCarbs     *float64   `gorm:"column:total_carbs;type:numeric(10,2)"`
+	TotalFat       *float64   `gorm:"column:total_fat;type:numeric(10,2)"`
+	HiddenFromFeed bool       `gorm:"column:hidden_from_feed;type:boolean;not null;default:false"`
+	CreatedAt      *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_circle_posts_user_created_at"`
+	UpdatedAt      *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (UserCirclePostDO) TableName() string { return "user_circle_posts" }
+
 type ExpiryItemDO struct {
 	ID           string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID       string     `gorm:"column:user_id;type:uuid;not null;index:idx_food_expiry_items_user_id;index:idx_food_expiry_items_user_status,priority:1;index:idx_food_expiry_items_user_expire_date,priority:1"`
@@ -1147,6 +1163,7 @@ func AllModels() []any {
 		&FeedCommentDO{},
 		&FeedInteractionNotificationDO{},
 		&CommentTaskDO{},
+		&UserCirclePostDO{},
 		&ExpiryItemDO{},
 		&ExpiryNotificationJobDO{},
 		&FriendRequestDO{},

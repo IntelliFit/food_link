@@ -60,6 +60,28 @@ func (r *ExerciseRepo) DeleteExerciseLog(ctx context.Context, userID, logID stri
 	return result.RowsAffected, result.Error
 }
 
+func (r *ExerciseRepo) UpdateExerciseLog(ctx context.Context, userID, logID, exerciseDesc, imageURL string, recordedOn *string, caloriesBurned *float64) (int64, error) {
+	updates := map[string]any{}
+	if exerciseDesc != "" {
+		updates["exercise_desc"] = exerciseDesc
+	}
+	if imageURL != "" {
+		updates["image_url"] = imageURL
+	}
+	if recordedOn != nil {
+		updates["recorded_on"] = *recordedOn
+	}
+	if caloriesBurned != nil {
+		updates["calories_burned"] = *caloriesBurned
+	}
+	if len(updates) == 0 {
+		return 0, nil
+	}
+	updates["updated_at"] = time.Now()
+	result := r.db.WithContext(ctx).Model(&domain.ExerciseLog{}).Where("id = ? AND user_id = ?", logID, userID).Updates(updates)
+	return result.RowsAffected, result.Error
+}
+
 func (r *ExerciseRepo) GetDailyCaloriesBurned(ctx context.Context, userID string, recordedOn string) (int64, error) {
 	if _, _, err := chinaDateWindow(recordedOn); err != nil {
 		return 0, err

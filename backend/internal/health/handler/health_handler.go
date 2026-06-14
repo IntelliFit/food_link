@@ -32,6 +32,7 @@ type ExerciseService interface {
 	CreateLog(ctx context.Context, userID string, exerciseDesc string) (map[string]any, error)
 	EstimateCalories(ctx context.Context, userID string, exerciseDesc string) (map[string]any, error)
 	DeleteLog(ctx context.Context, userID, logID string) error
+	UpdateLog(ctx context.Context, userID, logID, exerciseDesc, imageURL, date string, caloriesBurned *float64) error
 }
 
 type ExerciseServiceWithRange interface {
@@ -435,6 +436,27 @@ func (h *HealthHandler) EstimateExerciseCalories(c *gin.Context) {
 		return
 	}
 	response.Success(c, result)
+}
+
+// PUT /api/exercise-logs/{log_id}
+func (h *HealthHandler) UpdateExerciseLog(c *gin.Context) {
+	var body struct {
+		ExerciseDesc   string   `json:"exercise_desc"`
+		Date           string   `json:"date"`
+		ImageURL       string   `json:"image_url"`
+		CaloriesBurned *float64 `json:"calories_burned"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logID := c.Param("log_id")
+	if err := h.exercise.UpdateLog(c.Request.Context(), userID, logID, body.ExerciseDesc, body.ImageURL, body.Date, body.CaloriesBurned); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "已更新"})
 }
 
 // DELETE /api/exercise-logs/{log_id}
