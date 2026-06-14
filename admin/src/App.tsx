@@ -1,23 +1,35 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
 import { BrandMark } from '@/components/brand-mark'
 import { adminRequest, displayApiBase } from '@/lib/api'
 import { BenchmarkPage } from '@/pages/benchmark-page'
 import { FeedbackPage } from '@/pages/feedback-page'
 import { FeedReportPage } from '@/pages/feed-report-page'
+import { FeedReportDetailPage } from '@/pages/feed-report-detail-page'
 import { LoginPage } from '@/pages/login-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 
-/** Admin 根组件：会话检查、登录与业务页切换 */
+const MENU_PATHS: Record<AdminMenuId, string> = {
+  overview: '/',
+  feedback: '/feedback',
+  benchmark: '/benchmark',
+  'packaged-foods': '/packaged-foods',
+  'feed-reports': '/feed-reports',
+  settings: '/settings',
+}
+
+/** Admin 根组件：会话检查、登录与业务路由 */
 export function App() {
   const [authenticated, setAuthenticated] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
-  const [currentMenu, setCurrentMenu] = useState<AdminMenuId>('feedback')
+  const navigate = useNavigate()
 
   useEffect(() => {
     void checkSession()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function checkSession() {
@@ -49,6 +61,22 @@ export function App() {
     }
   }
 
+  const handleMenuChange = (menu: AdminMenuId) => {
+    const path = MENU_PATHS[menu]
+    if (path) {
+      navigate(path)
+    }
+  }
+
+  const pageProps = useMemo(
+    () => ({
+      onLogout: () => void logout(),
+      onMenuChange: handleMenuChange,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
   if (checkingSession) {
     return (
       <>
@@ -67,20 +95,16 @@ export function App() {
     )
   }
 
-  const renderPage = () => {
-    switch (currentMenu) {
-      case 'benchmark':
-        return <BenchmarkPage onLogout={() => void logout()} onMenuChange={setCurrentMenu} />
-      case 'feed-reports':
-        return <FeedReportPage onLogout={() => void logout()} onMenuChange={setCurrentMenu} />
-      default:
-        return <FeedbackPage onLogout={() => void logout()} onMenuChange={setCurrentMenu} />
-    }
-  }
-
   return (
     <>
-      {renderPage()}
+      <Routes>
+        <Route path='/' element={<Navigate to='/feedback' replace />} />
+        <Route path='/feedback' element={<FeedbackPage {...pageProps} />} />
+        <Route path='/benchmark' element={<BenchmarkPage {...pageProps} />} />
+        <Route path='/feed-reports' element={<FeedReportPage {...pageProps} />} />
+        <Route path='/feed-reports/:reportId' element={<FeedReportDetailPage {...pageProps} />} />
+        <Route path='*' element={<Navigate to='/feedback' replace />} />
+      </Routes>
       <Toaster richColors closeButton position='bottom-right' />
     </>
   )

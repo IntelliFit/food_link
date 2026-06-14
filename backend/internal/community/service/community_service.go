@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"food_link/backend/internal/community/domain"
 	"food_link/backend/internal/community/repo"
 	"food_link/backend/internal/foodmedia"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
 
 	"github.com/google/uuid"
@@ -81,7 +83,7 @@ type UserFinder interface {
 }
 
 type ReportNotifier interface {
-	NotifyFeedReport(ctx context.Context, report *domain.FeedReport, target *repo.FeedRecord) error
+	NotifyFeedReport(ctx context.Context, report *domain.FeedReport, target *repo.FeedRecord, reporterNickname, reportedNickname, previewImageURL string) error
 }
 
 func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo UserFinder, db *gorm.DB, reportNotifier ReportNotifier, storageClient ...*storage.Client) *CommunityService {
@@ -1300,16 +1302,34 @@ func (s *CommunityService) ReportFeedTarget(ctx context.Context, reporterUserID,
 	targetType = repo.NormalizeTargetType(targetType)
 	target, err := s.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
 	if err != nil {
+		logger.Error(ctx, "查询举报目标失败", err,
+			slog.String("target_type", targetType),
+			slog.String("target_id", targetID),
+		)
 		return nil, err
 	}
 	if target == nil {
+		logger.Warn(ctx, "举报目标不存在",
+			slog.String("target_type", targetType),
+			slog.String("target_id", targetID),
+		)
 		return nil, commonerrors.ErrNotFound
 	}
 	if target.UserID == reporterUserID {
+		logger.Warn(ctx, "不能举报自己的动态",
+			slog.String("reporter_user_id", reporterUserID),
+			slog.String("target_type", targetType),
+			slog.String("target_id", targetID),
+		)
 		return nil, commonerrors.ErrBadRequest
 	}
 	existing, err := s.feedRepo.FindFeedReport(ctx, reporterUserID, targetType, targetID)
 	if err != nil {
+		logger.Error(ctx, "查询已有举报记录失败", err,
+			slog.String("reporter_user_id", reporterUserID),
+			slog.String("target_type", targetType),
+			slog.String("target_id", targetID),
+		)
 		return nil, err
 	}
 	now := timePtr(time.Now().UTC())
@@ -1326,15 +1346,87 @@ func (s *CommunityService) ReportFeedTarget(ctx context.Context, reporterUserID,
 		UpdatedAt:      now,
 	}
 	if existing != nil {
+		logger.Info(ctx, "举报记录已存在，返回已有记录",
+			slog.String("report_id", existing.ID),
+			slog.String("reporter_user_id", reporterUserID),
+			slog.String("target_id", targetID),
+		)
 		return existing, nil
 	}
 	if err := s.feedRepo.CreateFeedReport(ctx, report); err != nil {
+		logger.Error(ctx, "创建举报记录失败", err,
+			slog.String("report_id", report.ID),
+			slog.String("reporter_user_id", reporterUserID),
+			slog.String("target_id", targetID),
+		)
 		return nil, err
 	}
+	logger.Info(ctx, "举报记录已创建",
+		slog.String("report_id", report.ID),
+		slog.String("reporter_user_id", reporterUserID),
+		slog.String("reported_user_id", report.ReportedUserID),
+		slog.String("target_type", targetType),
+		slog.String("target_id", targetID),
+	)
 	if s.reportNotifier != nil {
-		_ = s.reportNotifier.NotifyFeedReport(ctx, report, target)
+		reporterNickname, reportedNickname := s.lookupReportNicknames(ctx, report)
+		previewImageURL := s.resolveReportPreviewImageURL(target)
+		logger.Info(ctx, "准备发送举报飞书通知",
+			slog.String("report_id", report.ID),
+			slog.String("reporter_nickname", reporterNickname),
+			slog.String("reported_nickname", reportedNickname),
+			slog.String("preview_image_url", previewImageURL),
+		)
+		if err := s.reportNotifier.NotifyFeedReport(ctx, report, target, reporterNickname, reportedNickname, previewImageURL); err != nil {
+			logger.Error(ctx, "发送圈子动态举报飞书通知失败", err,
+				slog.String("report_id", report.ID),
+				slog.String("target_id", report.TargetID),
+			)
+		}
+	} else {
+		logger.Warn(ctx, "举报通知器未启用，跳过飞书通知",
+			slog.String("report_id", report.ID),
+			slog.String("target_id", targetID),
+		)
 	}
 	return report, nil
+}
+
+func (s *CommunityService) lookupReportNicknames(ctx context.Context, report *domain.FeedReport) (string, string) {
+	reporterNickname := "未知用户"
+	reportedNickname := "未知用户"
+	if report == nil {
+		return reporterNickname, reportedNickname
+	}
+	if report.ReporterUserID != "" && s.userRepo != nil {
+		if u, err := s.userRepo.FindByID(ctx, report.ReporterUserID); err == nil && u != nil && strings.TrimSpace(u.Nickname) != "" {
+			reporterNickname = strings.TrimSpace(u.Nickname)
+		} else if err != nil {
+			logger.Warn(ctx, "查询举报人昵称失败", slog.String("reporter_user_id", report.ReporterUserID), slog.Any("error", err))
+		}
+	}
+	if report.ReportedUserID != "" && s.userRepo != nil {
+		if u, err := s.userRepo.FindByID(ctx, report.ReportedUserID); err == nil && u != nil && strings.TrimSpace(u.Nickname) != "" {
+			reportedNickname = strings.TrimSpace(u.Nickname)
+		} else if err != nil {
+			logger.Warn(ctx, "查询被举报人昵称失败", slog.String("reported_user_id", report.ReportedUserID), slog.Any("error", err))
+		}
+	}
+	return reporterNickname, reportedNickname
+}
+
+func (s *CommunityService) resolveReportPreviewImageURL(target *repo.FeedRecord) string {
+	if target == nil || len(target.ImagePaths) == 0 {
+		return ""
+	}
+	first := strings.TrimSpace(target.ImagePaths[0])
+	if first == "" {
+		return ""
+	}
+	if s.storage == nil {
+		return first
+	}
+	return s.storage.ResolveReferenceURL("food-images", first)
 }
 
 func (s *CommunityService) normalizeCirclePostImageURLs(userID string, imageURLs []string) ([]string, error) {

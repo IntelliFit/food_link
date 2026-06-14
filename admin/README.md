@@ -41,7 +41,17 @@ npm run build
 
 - 管理员在登录页输入账号和密码，后端校验后写入 HttpOnly Cookie；账号只能通过后端命令行创建。
 
-## 页面结构
+## 页面结构与路由
+
+本项目已启用前端路由（`react-router-dom` + `BrowserRouter`）。当前路由如下：
+
+| 路由 | 页面 |
+|------|------|
+| `/` | 重定向到 `/feedback` |
+| `/feedback` | 意见反馈 |
+| `/benchmark` | 数据集评测 |
+| `/feed-reports` | 举报管理列表 |
+| `/feed-reports/:reportId` | 举报管理详情（可直接从飞书通知链接进入） |
 
 - 登录页：管理员账号密码登录，后端写入 HttpOnly Cookie。
 - 总览：统一后台入口，展示已接入模块与保留入口。
@@ -50,6 +60,17 @@ npm run build
 - 质量审计：保留 0 营养、识别质量、包装召回、标准库召回等命令入口。
 - 测试后台：保留旧 `/test-backend` 入口与常用测试命令入口。
 - 行为统计：预留上传、识别、保存、纠错、分享、反馈等漏斗入口。
+- 举报管理：查看用户举报，点击列表行会更新为 `/feed-reports/:reportId` 路由；飞书举报通知中的「去处理」按钮会直接跳转到该详情路由。
+
+### Cloudflare Pages SPA 回退
+
+由于使用 `BrowserRouter`，直接访问 `https://admin.healthymax.cn/feed-reports/xxx` 时，服务器需要返回 `index.html`。`admin/public/_redirects` 已配置：
+
+```
+/*    /index.html   200
+```
+
+构建后该文件会被复制到 `dist/_redirects`，Cloudflare Pages 会自动识别。
 
 ## 创建管理员账号
 

@@ -88,9 +88,11 @@ type InsightInlinePart = {
 }
 
 type InsightMarkdownBlock = {
-  type: 'heading' | 'paragraph' | 'list'
+  type: 'heading' | 'paragraph' | 'list' | 'table'
   text?: string
   items?: string[]
+  headers?: string[]
+  rows?: string[][]
 }
 
 function parseInsightInline(text: string): InsightInlinePart[] {
@@ -125,6 +127,20 @@ function stripInsightMarkdownPrefix(line: string): string {
     .trim()
 }
 
+function parseMarkdownTableLine(line: string): string[] {
+  const cells = line.split('|').map(cell => cell.trim())
+  if (cells[0] === '') cells.shift()
+  if (cells[cells.length - 1] === '') cells.pop()
+  return cells
+}
+
+function isMarkdownTableDelimiter(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed.includes('|')) return false
+  const cells = parseMarkdownTableLine(trimmed)
+  return cells.length > 0 && cells.every(cell => /^:?-{2,}:?$/.test(cell))
+}
+
 function parseInsightMarkdown(text: string): InsightMarkdownBlock[] {
   const blocks: InsightMarkdownBlock[] = []
   const lines = normalizeInsightText(text).split('\n')
@@ -144,27 +160,51 @@ function parseInsightMarkdown(text: string): InsightMarkdownBlock[] {
     }
   }
 
-  lines.forEach(rawLine => {
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i]
     const line = rawLine.trim()
+
     if (!line) {
       flushParagraph()
       flushList()
-      return
+      continue
     }
+
+    if (line.includes('|')) {
+      const nextLine = lines[i + 1]
+      if (nextLine !== undefined && isMarkdownTableDelimiter(nextLine)) {
+        flushParagraph()
+        flushList()
+        const headers = parseMarkdownTableLine(rawLine)
+        i++ // skip delimiter line
+        const rows: string[][] = []
+        i++ // start from first body row
+        while (i < lines.length && lines[i].trim().includes('|')) {
+          rows.push(parseMarkdownTableLine(lines[i]))
+          i++
+        }
+        blocks.push({ type: 'table', headers, rows })
+        i-- // let outer loop process the first non-table line
+        continue
+      }
+    }
+
     if (/^\s{0,3}#{1,6}\s+/.test(rawLine)) {
       flushParagraph()
       flushList()
       blocks.push({ type: 'heading', text: stripInsightMarkdownPrefix(rawLine) })
-      return
+      continue
     }
+
     if (/^\s*([-*+]|\d+[.)])\s+/.test(rawLine)) {
       flushParagraph()
       listItems.push(stripInsightMarkdownPrefix(rawLine))
-      return
+      continue
     }
+
     flushList()
     paragraph.push(line)
-  })
+  }
   flushParagraph()
   flushList()
   return blocks
@@ -199,6 +239,35 @@ function renderInsightMarkdown(text: string) {
               <Text className='analysis-md-list-text'>{renderInsightInline(item)}</Text>
             </View>
           ))}
+        </View>
+      )
+    }
+    if (block.type === 'table') {
+      const headers = block.headers || []
+      const rows = block.rows || []
+      const colCount = Math.max(1, headers.length)
+      return (
+        <View key={`table-${index}`} className='analysis-md-table-wrapper'>
+          <View
+            className='analysis-md-table'
+            style={{ gridTemplateColumns: `repeat(${colCount}, minmax(140rpx, 1fr))` }}
+          >
+            {headers.map((header, headerIndex) => (
+              <View
+                key={`th-${headerIndex}`}
+                className='analysis-md-table-cell analysis-md-table-header'
+              >
+                {renderInsightInline(header)}
+              </View>
+            ))}
+            {rows.map((row, rowIndex) =>
+              row.map((cell, cellIndex) => (
+                <View key={`td-${rowIndex}-${cellIndex}`} className='analysis-md-table-cell'>
+                  {renderInsightInline(cell)}
+                </View>
+              ))
+            )}
+          </View>
         </View>
       )
     }

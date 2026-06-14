@@ -2367,6 +2367,35 @@ $stats-blue-soft: #7aa9ce;
   text-underline-offset: 5rpx;
 }
 
+.analysis-md-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.analysis-md-table {
+  display: grid;
+  margin: 8rpx 0;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 16rpx;
+  overflow: hidden;
+}
+
+.analysis-md-table-cell {
+  padding: 18rpx 20rpx;
+  font-size: 26rpx;
+  line-height: 38rpx;
+  color: #334155;
+  border-bottom: 1rpx solid #e2e8f0;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.analysis-md-table-header {
+  font-weight: 700;
+  color: #1f2937;
+  background: #f8fafc;
+}
+
 .analysis-loading {
   padding: 12rpx 4rpx;
   display: flex;
@@ -2809,6 +2838,20 @@ $stats-blue-soft: #7aa9ce;
 
   .analysis-md-underline {
     text-decoration-color: rgb(141 211 191 / 78%);
+  }
+
+  .analysis-md-table {
+    border-color: rgb(242 247 244 / 16%);
+  }
+
+  .analysis-md-table-cell {
+    color: #f2f7f4;
+    border-bottom-color: rgb(242 247 244 / 12%);
+  }
+
+  .analysis-md-table-header {
+    color: #fff;
+    background: rgb(242 247 244 / 10%);
   }
 
   .analysis-skeleton-line {

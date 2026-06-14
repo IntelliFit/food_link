@@ -217,7 +217,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Community module DI
 	feedRepo := communityrepo.NewFeedRepo(db)
 	notifRepo := communityrepo.NewNotificationRepo(db)
-	feedReportNotifier := communityservice.NewReportNotifier(cfg.Feishu.ReportWebhookURL, cfg.Feishu.ReportWebhookSecret)
+	feedReportNotifier := communityservice.NewReportNotifier(cfg.Feishu.ReportWebhookURL, cfg.Feishu.ReportWebhookSecret, cfg.App.AdminBaseURL, cfg.Feishu.AppID, cfg.Feishu.AppSecret)
 	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, storageClient)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 

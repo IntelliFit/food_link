@@ -68,7 +68,7 @@ export function BenchmarkPage({ onLogout, onMenuChange }: BenchmarkPageProps) {
   const [selectedRunId, setSelectedRunId] = useState<string>('')
 
   return (
-    <div className="relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[276px_minmax(0,1fr)] gap-5 px-4 py-4">
+    <div className="relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[256px_minmax(0,1fr)] gap-8 px-4 py-4">
       <AdminSidebar activeMenu="benchmark" onLogout={onLogout} onMenuChange={onMenuChange} />
 
       <main className="min-w-0 space-y-4 pb-8">

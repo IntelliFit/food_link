@@ -40,10 +40,11 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Name string `mapstructure:"name"`
-	Env  string `mapstructure:"env"`
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
+	Name         string `mapstructure:"name"`
+	Env          string `mapstructure:"env"`
+	Host         string `mapstructure:"host"`
+	Port         int    `mapstructure:"port"`
+	AdminBaseURL string `mapstructure:"admin_base_url"`
 }
 
 type LogConfig struct {
@@ -118,6 +119,8 @@ type FeishuConfig struct {
 	FeedbackWebhookSecret string `mapstructure:"feedback_webhook_secret"`
 	ReportWebhookURL      string `mapstructure:"report_webhook_url"`
 	ReportWebhookSecret   string `mapstructure:"report_webhook_secret"`
+	AppID                 string `mapstructure:"app_id"`
+	AppSecret             string `mapstructure:"app_secret"`
 }
 
 type WechatPayConfig struct {
