@@ -241,6 +241,41 @@ export interface HomeDashboard {
   intakeData: HomeIntakeData
   meals: HomeMealItem[]
   exerciseBurnedKcal?: number
+  achievement?: HomeAchievement | null
+  nutritionTarget?: HomeNutritionTarget | null
+  expirySummary?: HomeFoodExpirySummary | null
+}
+
+export interface HomeAchievement {
+  streak_days?: number
+  record_days?: number
+  total_records?: number
+  [key: string]: unknown
+}
+
+export interface HomeNutritionTarget {
+  calories?: number
+  protein?: number
+  carbs?: number
+  fat?: number
+  [key: string]: unknown
+}
+
+export interface HomeFoodExpiryItem {
+  id: string
+  food_name: string
+  expire_date: string
+  urgency?: 'expired' | 'today' | 'soon' | 'fresh'
+  urgency_label?: string
+  days_until_expire?: number | null
+}
+
+export interface HomeFoodExpirySummary {
+  active_count: number
+  expired_count: number
+  today_count: number
+  soon_count: number
+  preview_items?: HomeFoodExpiryItem[]
 }
 
 export interface LoginResponse {
@@ -291,6 +326,21 @@ export interface AnalyzeTaskSubmitParams {
   analysis_engine?: AnalysisEngine
 }
 
+export interface UpdateFoodRecordRequest {
+  meal_type?: MealType
+  items?: FoodRecordItemPayload[]
+  total_calories?: number
+  total_protein?: number
+  total_carbs?: number
+  total_fat?: number
+  total_weight_grams?: number
+  description?: string
+  image_path?: string
+  image_paths?: string[]
+  diet_goal?: DietGoal
+  activity_timing?: ActivityTiming
+}
+
 export interface AnalysisTask {
   id: string
   user_id: string
@@ -318,4 +368,231 @@ export interface AnalysisTask {
   record_id?: string
   created_at: string
   updated_at: string
+}
+
+export interface AnalyzeTaskStatusCount {
+  total: number
+  pending: number
+  processing: number
+  done: number
+  failed: number
+  violated?: number
+  timed_out?: number
+  cancelled?: number
+}
+
+export interface UserInfo {
+  id: string
+  openid?: string
+  unionid?: string
+  nickname: string
+  avatar: string
+  cover_image?: string
+  motto?: string
+  telephone?: string
+  create_time?: string
+  update_time?: string
+  height?: number | null
+  weight?: number | null
+  birthday?: string | null
+  gender?: string | null
+  activity_level?: string | null
+  bmr?: number | null
+  tdee?: number | null
+  onboarding_completed?: boolean
+  execution_mode?: ExecutionMode | null
+  searchable?: boolean
+  public_records?: boolean
+}
+
+export type StatsRange = 'week' | 'month'
+
+export interface BodyMetricWeightEntry {
+  id?: string
+  date: string
+  value: number
+  client_id?: string | null
+  recorded_at?: string | null
+}
+
+export interface BodyMetricWaterLogItem {
+  id?: string
+  date: string
+  amount_ml: number
+  recorded_at?: string | null
+}
+
+export interface BodyMetricWaterDay {
+  date: string
+  total: number
+  logs: number[]
+  log_items?: BodyMetricWaterLogItem[]
+}
+
+export interface BodyMetricsSummary {
+  range: StatsRange
+  start_date: string
+  end_date: string
+  weight_entries: BodyMetricWeightEntry[]
+  weight_trend_daily?: Array<{ date: string; value: number }>
+  latest_weight?: BodyMetricWeightEntry | null
+  previous_weight?: BodyMetricWeightEntry | null
+  weight_change?: number | null
+  water_goal_ml: number
+  today_water: BodyMetricWaterDay
+  water_daily: BodyMetricWaterDay[]
+  total_water_ml: number
+  avg_daily_water_ml: number
+  water_recorded_days: number
+}
+
+export interface RiskCard {
+  key: string
+  title: string
+  score: number
+  tone: 'positive' | 'neutral' | 'warning' | 'danger'
+  brief: string
+  summary: string
+  basis: string
+  action: string
+  delta: number
+}
+
+export interface HealthIndex {
+  has_enough_data: boolean
+  overall_score: number
+  projected_score: number
+  overall_trend_label: string
+  overview_copy: string
+  risk_cards: RiskCard[]
+  top_issues: Array<{ title: string; detail: string }>
+  action_list: string[]
+}
+
+export interface StatsSummary {
+  range: StatsRange
+  start_date: string
+  end_date: string
+  tdee: number
+  streak_days: number
+  recorded_days?: number
+  total_calories: number
+  avg_calories_per_day: number
+  cal_surplus_deficit: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  by_meal: Record<string, number>
+  daily_calories: Array<{ date: string; calories: number }>
+  macro_percent: { protein: number; carbs: number; fat: number }
+  analysis_summary: string
+  body_metrics?: BodyMetricsSummary
+  health_index?: HealthIndex
+}
+
+export type CommunityFeedSortBy = 'recommended' | 'latest' | 'hot' | 'balanced'
+export type CommunityAuthorScope = 'all' | 'priority' | 'public'
+export type CommunityFeedTargetType = 'food_record' | 'exercise_log' | 'campus_food' | 'circle_post'
+export type CommunityFeedContentType = 'all' | CommunityFeedTargetType
+
+export interface CommunityFeedQueryParams {
+  meal_type?: MealType
+  diet_goal?: DietGoal
+  sort_by?: CommunityFeedSortBy
+  content_type?: CommunityFeedContentType
+  priority_author_ids?: string[]
+  author_scope?: CommunityAuthorScope
+  author_id?: string
+}
+
+export type CommunityFeedRecord = FoodRecord & {
+  feed_type?: CommunityFeedTargetType
+  exercise_type?: string | null
+  exercise_desc?: string | null
+  calories_burned?: number | null
+  duration_min?: number | null
+  ai_reasoning?: string | null
+  price?: number | null
+  school?: string | null
+  canteen?: string | null
+  fiber?: number | null
+  sugar?: number | null
+  sodium_mg?: number | null
+}
+
+export interface FeedCommentItem {
+  id: string
+  user_id: string
+  record_id?: string | null
+  target_type?: CommunityFeedTargetType
+  target_id?: string
+  parent_comment_id?: string | null
+  reply_to_user_id?: string | null
+  reply_to_nickname?: string
+  content: string
+  created_at: string
+  nickname: string
+  avatar: string
+}
+
+export interface CommunityFeedItem {
+  target_type?: CommunityFeedTargetType
+  target_id?: string
+  record: CommunityFeedRecord
+  author: { id: string; nickname: string; avatar: string }
+  like_count: number
+  liked: boolean
+  is_mine?: boolean
+  comments?: FeedCommentItem[]
+  comment_count?: number
+  recommend_reason?: string
+}
+
+export interface CheckinLeaderboardItem {
+  user_id: string
+  nickname: string
+  avatar?: string
+  record_count: number
+  rank?: number
+}
+
+export interface RewardCenterTask {
+  code: string
+  name: string
+  description?: string
+  reward_amount: number
+  daily_limit?: number | null
+  today_count: number
+  action_path?: string | null
+  completed?: boolean
+}
+
+export interface RewardCenterResponse {
+  earned_credits_balance: number
+  today_earned_credits: number
+  today_task_overview: {
+    completed_count: number
+    total_count: number
+  }
+  tasks: RewardCenterTask[]
+}
+
+export interface FoodExpiryDashboard {
+  active_count: number
+  expired_count: number
+  today_count: number
+  soon_count: number
+  processed_count: number
+  preview_items: HomeFoodExpiryItem[]
+}
+
+export interface ExerciseLogItem {
+  id: string
+  user_id?: string
+  date?: string
+  exercise_desc?: string | null
+  exercise_type?: string | null
+  calories_burned?: number | null
+  duration_min?: number | null
+  created_at?: string
 }

@@ -1,10 +1,24 @@
 import type {
   AnalysisTask,
+  AnalyzeTaskStatusCount,
   AnalyzeTaskSubmitParams,
+  BodyMetricsSummary,
+  CheckinLeaderboardItem,
+  CommunityFeedItem,
+  CommunityFeedQueryParams,
+  CommunityFeedTargetType,
+  ExerciseLogItem,
+  FoodExpiryDashboard,
+  FoodRecord,
   HomeDashboard,
   LoginResponse,
   MembershipStatus,
+  RewardCenterResponse,
   SaveFoodRecordRequest,
+  StatsRange,
+  StatsSummary,
+  UpdateFoodRecordRequest,
+  UserInfo,
 } from '@food-link/core'
 
 export interface ApiClientResponse<T = unknown> {
@@ -188,12 +202,204 @@ export class FoodLinkApiClient {
     })
   }
 
-  async saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ id: string; message: string }> {
-    return this.authenticatedRequest<{ id: string; message: string }>('/api/food-record', {
+  async saveFoodRecord(payload: SaveFoodRecordRequest): Promise<{ id: string; message: string; already_saved?: boolean }> {
+    return this.authenticatedRequest<{ id: string; message: string; already_saved?: boolean }>('/api/food-record/save', {
       method: 'POST',
       body: payload,
       timeoutMs: 15000,
     })
+  }
+
+  async getFoodRecordList(date?: string): Promise<{ records: FoodRecord[] }> {
+    const apiDate = mapCalendarDateToApi(date)
+    const query = apiDate ? `?date=${encodeURIComponent(apiDate)}` : ''
+    return this.authenticatedRequest<{ records: FoodRecord[] }>(`/api/food-record/list${query}`, {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async getFoodRecordById(recordId: string): Promise<{ record: FoodRecord }> {
+    return this.authenticatedRequest<{ record: FoodRecord }>(`/api/food-record/${encodeURIComponent(recordId)}`, {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async updateFoodRecord(recordId: string, body: UpdateFoodRecordRequest): Promise<{ message: string; record: FoodRecord }> {
+    return this.authenticatedRequest<{ message: string; record: FoodRecord }>(`/api/food-record/${encodeURIComponent(recordId)}`, {
+      method: 'PUT',
+      body,
+      timeoutMs: 15000,
+    })
+  }
+
+  async deleteFoodRecord(recordId: string): Promise<void> {
+    await this.authenticatedRequest<{ message?: string }>(`/api/food-record/${encodeURIComponent(recordId)}`, {
+      method: 'DELETE',
+      timeoutMs: 10000,
+    })
+  }
+
+  async listAnalyzeTasks(params?: { task_type?: string; status?: string; search?: string; limit?: number }): Promise<{ tasks: AnalysisTask[] }> {
+    const q = new URLSearchParams()
+    if (params?.task_type) q.set('task_type', params.task_type)
+    if (params?.status) q.set('status', params.status)
+    if (params?.search?.trim()) q.set('search', params.search.trim())
+    if (params?.limit != null && Number.isFinite(params.limit)) {
+      q.set('limit', String(Math.min(200, Math.max(1, Math.floor(params.limit)))))
+    }
+    const query = q.toString()
+    return this.authenticatedRequest<{ tasks: AnalysisTask[] }>(`/api/analyze/tasks${query ? `?${query}` : ''}`, {
+      method: 'GET',
+      timeoutMs: 20000,
+    })
+  }
+
+  async getAnalyzeTaskStatusCount(): Promise<AnalyzeTaskStatusCount> {
+    return this.authenticatedRequest<AnalyzeTaskStatusCount>('/api/analyze/tasks/status-count', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async deleteAnalysisTask(taskId: string): Promise<void> {
+    await this.authenticatedRequest<{ message?: string }>(`/api/analyze/tasks/${encodeURIComponent(taskId)}`, {
+      method: 'DELETE',
+      timeoutMs: 10000,
+    })
+  }
+
+  async retryAnalyzeTask(taskId: string): Promise<{ task_id?: string; message: string }> {
+    return this.authenticatedRequest<{ task_id?: string; message: string }>('/api/analyze/tasks/retry', {
+      method: 'POST',
+      body: { task_id: taskId },
+      timeoutMs: 10000,
+    })
+  }
+
+  async getUserProfile(): Promise<UserInfo> {
+    return this.authenticatedRequest<UserInfo>('/api/user/profile', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async getUserRecordDays(): Promise<{ record_days: number }> {
+    return this.authenticatedRequest<{ record_days: number }>('/api/user/record-days', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async getStatsSummary(range: StatsRange): Promise<StatsSummary> {
+    return this.authenticatedRequest<StatsSummary>(`/api/stats/summary?range=${encodeURIComponent(range)}`, {
+      method: 'GET',
+      timeoutMs: 20000,
+    })
+  }
+
+  async getBodyMetricsSummary(range: StatsRange = 'month'): Promise<BodyMetricsSummary> {
+    return this.authenticatedRequest<BodyMetricsSummary>(`/api/body-metrics/summary?range=${encodeURIComponent(range)}`, {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async addBodyWaterLog(amountMl: number, date?: string): Promise<{ message: string }> {
+    return this.authenticatedRequest<{ message: string }>('/api/body-metrics/water', {
+      method: 'POST',
+      body: { amount_ml: amountMl, date: mapCalendarDateToApi(date) },
+      timeoutMs: 10000,
+    })
+  }
+
+  async saveBodyWeightRecord(value: number, date?: string): Promise<{ message: string }> {
+    return this.authenticatedRequest<{ message: string }>('/api/body-metrics/weight', {
+      method: 'POST',
+      body: { value, date: mapCalendarDateToApi(date) },
+      timeoutMs: 10000,
+    })
+  }
+
+  async communityGetFeed(options?: {
+    date?: string
+    offset?: number
+    limit?: number
+    includeComments?: boolean
+    commentsLimit?: number
+    params?: CommunityFeedQueryParams
+  }): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
+    const q = this.buildCommunityFeedQuery(options)
+    return this.authenticatedRequest<{ list: CommunityFeedItem[]; has_more?: boolean }>(`/api/community/feed?${q}`, {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async communityGetPublicFeed(options?: {
+    offset?: number
+    limit?: number
+    includeComments?: boolean
+    commentsLimit?: number
+    params?: Pick<CommunityFeedQueryParams, 'meal_type' | 'diet_goal' | 'sort_by' | 'content_type'>
+  }): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
+    const q = this.buildCommunityFeedQuery(options)
+    return this.publicRequest<{ list: CommunityFeedItem[]; has_more?: boolean }>(`/api/community/public-feed?${q}`, {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async communityGetCheckinLeaderboard(): Promise<{ week_start: string; week_end: string; list: CheckinLeaderboardItem[] }> {
+    return this.authenticatedRequest<{ week_start: string; week_end: string; list: CheckinLeaderboardItem[] }>(
+      '/api/community/checkin-leaderboard',
+      { method: 'GET', timeoutMs: 10000 },
+    )
+  }
+
+  async communityLike(targetId: string, targetType: CommunityFeedTargetType = 'food_record'): Promise<void> {
+    await this.authenticatedRequest<{ message?: string }>(this.communityFeedTargetPath(targetId, targetType, 'like'), {
+      method: 'POST',
+      timeoutMs: 10000,
+    })
+  }
+
+  async communityUnlike(targetId: string, targetType: CommunityFeedTargetType = 'food_record'): Promise<void> {
+    await this.authenticatedRequest<{ message?: string }>(this.communityFeedTargetPath(targetId, targetType, 'like'), {
+      method: 'DELETE',
+      timeoutMs: 10000,
+    })
+  }
+
+  async getRewardCenter(): Promise<RewardCenterResponse> {
+    return this.authenticatedRequest<RewardCenterResponse>('/api/membership/reward-center', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async getFoodExpiryDashboard(): Promise<FoodExpiryDashboard> {
+    return this.authenticatedRequest<FoodExpiryDashboard>('/api/expiry/dashboard', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async getExerciseLogs(params?: { date?: string; start_date?: string; end_date?: string }): Promise<{
+    logs: ExerciseLogItem[]
+    total_calories: number
+    count: number
+  }> {
+    const q = new URLSearchParams()
+    if (params?.date) q.set('date', mapCalendarDateToApi(params.date) ?? params.date)
+    if (params?.start_date) q.set('start_date', params.start_date)
+    if (params?.end_date) q.set('end_date', params.end_date)
+    q.set('_t', String(Date.now()))
+    return this.authenticatedRequest<{ logs: ExerciseLogItem[]; total_calories: number; count: number }>(
+      `/api/exercise-logs?${q.toString()}`,
+      { method: 'GET', timeoutMs: 10000 },
+    )
   }
 
   async clearTokens(): Promise<void> {
@@ -230,6 +436,38 @@ export class FoodLinkApiClient {
 
   private absoluteUrl(path: string): string {
     return `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`
+  }
+
+  private buildCommunityFeedQuery(options?: {
+    date?: string
+    offset?: number
+    limit?: number
+    includeComments?: boolean
+    commentsLimit?: number
+    params?: Partial<CommunityFeedQueryParams>
+  }): string {
+    const q = new URLSearchParams()
+    q.set('offset', String(options?.offset ?? 0))
+    q.set('limit', String(options?.limit ?? 20))
+    q.set('include_comments', String(options?.includeComments ?? true))
+    q.set('comments_limit', String(options?.commentsLimit ?? 5))
+    if (options?.date) q.set('date', options.date)
+    const params = options?.params
+    if (params?.meal_type) q.set('meal_type', params.meal_type)
+    if (params?.diet_goal) q.set('diet_goal', params.diet_goal)
+    if (params?.sort_by) q.set('sort_by', params.sort_by)
+    if (params?.content_type) q.set('content_type', params.content_type)
+    if (params?.author_scope) q.set('author_scope', params.author_scope)
+    if (params?.author_id) q.set('author_id', params.author_id)
+    if (params?.priority_author_ids?.length) {
+      q.set('priority_author_ids', params.priority_author_ids.join(','))
+    }
+    return q.toString()
+  }
+
+  private communityFeedTargetPath(targetId: string, targetType: CommunityFeedTargetType, action?: string): string {
+    const base = `/api/community/feed-targets/${encodeURIComponent(targetType)}/${encodeURIComponent(targetId)}`
+    return action ? `${base}/${action}` : base
   }
 
   private assertOk(res: ApiClientResponse<unknown>, fallback: string): void {
