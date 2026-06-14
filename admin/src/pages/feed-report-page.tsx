@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Flag, Loader2, RefreshCw, Search, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Loader2, RefreshCw, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import { AdminSidebar } from '@/components/admin-sidebar'
 import type { AdminMenuId } from '@/components/admin-sidebar'
@@ -15,8 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -25,8 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Textarea } from '@/components/ui/textarea'
-import { adminRequest, displayApiBase } from '@/lib/api'
+import { adminRequest } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 type FeedReportPageProps = {
@@ -41,30 +39,14 @@ type FeedReportItem = {
   id: string
   reporter_user_id: string
   reporter_nickname: string
-  reporter_avatar: string
   reported_user_id: string
   reported_nickname: string
-  reported_avatar: string
   target_type: FeedReportTargetType
   target_id: string
   reason: string
   reason_name: string
-  extra_content: string
   status: FeedReportStatus
-  resolution_note: string
-  handled_by?: string
-  handled_at?: string
   created_at: string
-  updated_at: string
-}
-
-type FeedReportTargetSnapshot = {
-  title: string
-  body: string
-  description: string
-  image_urls: string[]
-  author_id: string
-  created_at?: string
 }
 
 type FeedReportListResponse = {
@@ -100,14 +82,8 @@ const statusBadgeClass: Record<FeedReportStatus, string> = {
   rejected: 'border-border bg-muted text-muted-foreground',
 }
 
-const transitionOptions: Record<FeedReportStatus, FeedReportStatus[]> = {
-  pending: ['processing', 'resolved', 'rejected'],
-  processing: ['resolved', 'rejected'],
-  resolved: [],
-  rejected: [],
-}
-
 export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) {
+  const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<string>('all')
   const [targetType, setTargetType] = useState<string>('all')
@@ -115,33 +91,14 @@ export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) 
   const [limit, setLimit] = useState(30)
   const [items, setItems] = useState<FeedReportItem[]>([])
   const [total, setTotal] = useState(0)
-  const [selectedId, setSelectedId] = useState('')
   const [loading, setLoading] = useState(false)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [targetSnapshot, setTargetSnapshot] = useState<FeedReportTargetSnapshot | null>(null)
-  const [resolutionNote, setResolutionNote] = useState('')
-  const [updating, setUpdating] = useState(false)
 
-  const selected = useMemo(
-    () => items.find((item) => item.id === selectedId) || items[0],
-    [items, selectedId],
-  )
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
   useEffect(() => {
-    void loadList()
+    void loadList(page)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, limit, status, targetType])
-
-  useEffect(() => {
-    if (selected?.id) {
-      setResolutionNote(selected.resolution_note || '')
-      void loadDetail(selected.id)
-    } else {
-      setTargetSnapshot(null)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id])
 
   async function loadList(nextPage = page) {
     setLoading(true)
@@ -157,64 +114,11 @@ export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) 
       setItems(data.items || [])
       setTotal(data.total || 0)
       setPage(nextPage)
-      setSelectedId((current) => current || data.items?.[0]?.id || '')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '加载失败')
       setItems([])
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function loadDetail(id: string) {
-    setDetailLoading(true)
-    try {
-      const data = await adminRequest<{ item: FeedReportItem; target: FeedReportTargetSnapshot }>(
-        `/api/admin/feed-reports/${encodeURIComponent(id)}`,
-      )
-      setTargetSnapshot(data.target)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加载详情失败')
-      setTargetSnapshot(null)
-    } finally {
-      setDetailLoading(false)
-    }
-  }
-
-  async function updateStatus(nextStatus: FeedReportStatus) {
-    if (!selected) return
-    setUpdating(true)
-    try {
-      const data = await adminRequest<{ item: FeedReportItem }>(
-        `/api/admin/feed-reports/${encodeURIComponent(selected.id)}/status`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ status: nextStatus, resolution_note: resolutionNote }),
-        },
-      )
-      setItems((current) => current.map((item) => (item.id === selected.id ? data.item : item)))
-      toast.success('状态已更新')
-      if (nextStatus === 'resolved' || nextStatus === 'rejected') {
-        toast.info('已发送受理结果系统消息给举报者和被举报者')
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '状态更新失败')
-    } finally {
-      setUpdating(false)
-    }
-  }
-
-  async function handleDelete(id: string) {
-    if (!window.confirm('确定删除这条举报记录？删除后不可恢复。')) return
-    try {
-      await adminRequest(`/api/admin/feed-reports/${encodeURIComponent(id)}`, { method: 'DELETE' })
-      toast.success('已删除')
-      setItems((current) => current.filter((item) => item.id !== id))
-      if (selectedId === id) {
-        setSelectedId('')
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '删除失败')
     }
   }
 
@@ -224,7 +128,7 @@ export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) 
   }
 
   return (
-    <div className='relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[276px_minmax(0,1fr)] gap-5 px-4 py-4'>
+    <div className='relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[256px_minmax(0,1fr)] gap-8 px-4 py-4'>
       <AdminSidebar activeMenu='feed-reports' onLogout={onLogout} onMenuChange={onMenuChange} />
 
       <main className='min-w-0 space-y-4 pb-8'>
@@ -234,12 +138,9 @@ export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) 
               <p className='text-sm font-medium text-primary'>社区治理</p>
               <CardTitle className='text-3xl tracking-tight'>举报管理</CardTitle>
               <CardDescription className='max-w-2xl text-base leading-relaxed'>
-                查看、受理用户举报，更新状态后系统会自动向举报者和被举报者发送受理结果私信。
+                查看、受理用户举报。点击任意一行进入举报详情页进行处理。
               </CardDescription>
             </div>
-            <Badge variant='outline' className='max-w-xs shrink-0 whitespace-normal break-all px-3 py-1.5 text-xs font-normal'>
-              API: {displayApiBase()}
-            </Badge>
           </CardHeader>
         </Card>
 
@@ -315,193 +216,66 @@ export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) 
           </div>
         </div>
 
-        <div className='grid gap-4 lg:grid-cols-[1fr_380px]'>
-          <Card className='overflow-hidden'>
-            <CardContent className='p-0'>
-              <Table>
-                <TableHeader>
+        <Card>
+          <CardContent className='p-0'>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>举报人</TableHead>
+                  <TableHead>被举报人</TableHead>
+                  <TableHead>类型</TableHead>
+                  <TableHead>原因</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>时间</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading && items.length === 0 ? (
                   <TableRow>
-                    <TableHead>举报人</TableHead>
-                    <TableHead>被举报人</TableHead>
-                    <TableHead>类型</TableHead>
-                    <TableHead>原因</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>时间</TableHead>
-                    <TableHead className='w-20'>操作</TableHead>
+                    <TableCell colSpan={6}>
+                      <div className='flex items-center justify-center py-12'>
+                        <Loader2 className='size-5 animate-spin text-muted-foreground' />
+                      </div>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loading && items.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7}>
-                        <div className='flex items-center justify-center py-12'>
-                          <Loader2 className='size-5 animate-spin text-muted-foreground' />
-                        </div>
+                ) : items.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <div className='py-12 text-center text-sm text-muted-foreground'>暂无举报记录</div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  items.map((item) => (
+                    <TableRow
+                      key={item.id}
+                      className='cursor-pointer'
+                      onClick={() => navigate(`/feed-reports/${encodeURIComponent(item.id)}`)}
+                    >
+                      <TableCell>
+                        <div className='font-medium'>{item.reporter_nickname || item.reporter_user_id.slice(0, 8)}</div>
+                        <div className='text-xs text-muted-foreground'>{item.reporter_user_id.slice(0, 8)}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className='font-medium'>{item.reported_nickname || item.reported_user_id.slice(0, 8)}</div>
+                        <div className='text-xs text-muted-foreground'>{item.reported_user_id.slice(0, 8)}</div>
+                      </TableCell>
+                      <TableCell>{targetTypeLabels[item.target_type] || item.target_type}</TableCell>
+                      <TableCell>{reasonLabels[item.reason] || item.reason}</TableCell>
+                      <TableCell>
+                        <Badge variant='outline' className={cn(statusBadgeClass[item.status], 'font-normal')}>
+                          {statusLabels[item.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className='whitespace-nowrap text-xs text-muted-foreground'>
+                        {new Date(item.created_at).toLocaleString('zh-CN')}
                       </TableCell>
                     </TableRow>
-                  ) : items.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7}>
-                        <div className='py-12 text-center text-sm text-muted-foreground'>暂无举报记录</div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    items.map((item) => (
-                      <TableRow
-                        key={item.id}
-                        className={cn('cursor-pointer', selectedId === item.id && 'bg-muted/60')}
-                        onClick={() => setSelectedId(item.id)}
-                      >
-                        <TableCell>
-                          <div className='font-medium'>{item.reporter_nickname || item.reporter_user_id.slice(0, 8)}</div>
-                          <div className='text-xs text-muted-foreground'>{item.reporter_user_id.slice(0, 8)}</div>
-                        </TableCell>
-                        <TableCell>
-                          <div className='font-medium'>{item.reported_nickname || item.reported_user_id.slice(0, 8)}</div>
-                          <div className='text-xs text-muted-foreground'>{item.reported_user_id.slice(0, 8)}</div>
-                        </TableCell>
-                        <TableCell>{targetTypeLabels[item.target_type] || item.target_type}</TableCell>
-                        <TableCell>{reasonLabels[item.reason] || item.reason}</TableCell>
-                        <TableCell>
-                          <Badge variant='outline' className={cn(statusBadgeClass[item.status], 'font-normal')}>
-                            {statusLabels[item.status]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className='whitespace-nowrap text-xs text-muted-foreground'>
-                          {new Date(item.created_at).toLocaleString('zh-CN')}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant='ghost'
-                            size='icon'
-                            className='size-8 text-destructive hover:text-destructive'
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              void handleDelete(item.id)
-                            }}
-                          >
-                            <Trash2 className='size-4' />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <Card className='h-fit'>
-            <CardHeader>
-              <CardTitle className='flex items-center gap-2 text-lg'>
-                <Flag className='size-5' />
-                举报详情
-              </CardTitle>
-            </CardHeader>
-            <CardContent className='space-y-4'>
-              {!selected ? (
-                <div className='py-12 text-center text-sm text-muted-foreground'>请选择一条举报记录</div>
-              ) : (
-                <>
-                  <div className='space-y-1 text-sm'>
-                    <div className='flex justify-between'>
-                      <span className='text-muted-foreground'>举报 ID</span>
-                      <span className='font-mono'>{selected.id}</span>
-                    </div>
-                    <div className='flex justify-between'>
-                      <span className='text-muted-foreground'>目标</span>
-                      <span>{targetTypeLabels[selected.target_type]} / {selected.target_id.slice(0, 8)}</span>
-                    </div>
-                    <div className='flex justify-between'>
-                      <span className='text-muted-foreground'>原因</span>
-                      <span>{reasonLabels[selected.reason] || selected.reason}</span>
-                    </div>
-                    <div className='flex justify-between'>
-                      <span className='text-muted-foreground'>当前状态</span>
-                      <Badge variant='outline' className={cn(statusBadgeClass[selected.status], 'font-normal')}>
-                        {statusLabels[selected.status]}
-                      </Badge>
-                    </div>
-                    {selected.handled_by && (
-                      <div className='flex justify-between'>
-                        <span className='text-muted-foreground'>处理人</span>
-                        <span>{selected.handled_by} {selected.handled_at ? new Date(selected.handled_at).toLocaleString('zh-CN') : ''}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <Separator />
-
-                  <div className='space-y-2'>
-                    <Label>补充说明</Label>
-                    <div className='rounded-md border bg-muted/50 p-3 text-sm whitespace-pre-wrap'>
-                      {selected.extra_content || '无'}
-                    </div>
-                  </div>
-
-                  {detailLoading ? (
-                    <div className='space-y-2'>
-                      <Skeleton className='h-20 w-full' />
-                      <Skeleton className='h-4 w-2/3' />
-                    </div>
-                  ) : targetSnapshot ? (
-                    <div className='space-y-2'>
-                      <Label>被举报内容摘要</Label>
-                      <div className='rounded-md border bg-muted/50 p-3 text-sm space-y-2'>
-                        {targetSnapshot.title && <div className='font-medium'>{targetSnapshot.title}</div>}
-                        {targetSnapshot.body && <div className='text-muted-foreground'>{targetSnapshot.body}</div>}
-                        {targetSnapshot.description && <div className='text-muted-foreground'>{targetSnapshot.description}</div>}
-                        {targetSnapshot.image_urls && targetSnapshot.image_urls.length > 0 && (
-                          <div className='flex flex-wrap gap-2 pt-1'>
-                            {targetSnapshot.image_urls.map((url, idx) => (
-                              <img key={idx} src={url} alt='' className='h-20 w-20 rounded-md object-cover' />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <Separator />
-
-                  <div className='space-y-2'>
-                    <Label htmlFor='resolution-note'>处理说明</Label>
-                    <Textarea
-                      id='resolution-note'
-                      value={resolutionNote}
-                      onChange={(event) => setResolutionNote(event.target.value)}
-                      placeholder='填写处理说明，会一并发送给举报者和被举报者（可选）'
-                      rows={4}
-                      disabled={updating || selected.status === 'resolved' || selected.status === 'rejected'}
-                    />
-                  </div>
-
-                  <div className='space-y-2'>
-                    <Label>变更状态</Label>
-                    <div className='flex flex-wrap gap-2'>
-                      {transitionOptions[selected.status].length === 0 ? (
-                        <span className='text-sm text-muted-foreground'>该举报已结案</span>
-                      ) : (
-                        transitionOptions[selected.status].map((nextStatus) => (
-                          <Button
-                            key={nextStatus}
-                            variant='outline'
-                            size='sm'
-                            disabled={updating}
-                            onClick={() => void updateStatus(nextStatus)}
-                          >
-                            {updating && <Loader2 className='mr-1 size-3 animate-spin' />}
-                            标记为 {statusLabels[nextStatus]}
-                          </Button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </main>
     </div>
   )
@@ -519,6 +293,10 @@ function StatCard({ label, value, foot, loading }: { label: string; value: strin
       </CardContent>
     </Card>
   )
+}
+
+function Skeleton({ className }: { className?: string }) {
+  return <div className={cn('animate-pulse rounded-md bg-muted', className)} />
 }
 
 function FilterSelect({

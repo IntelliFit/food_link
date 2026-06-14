@@ -6,6 +6,8 @@ app:
   env: "development"
   host: "0.0.0.0"
   port: 3010
+  # Admin 后台域名，用于飞书举报通知中的「去处理」链接
+  admin_base_url: "https://admin.healthymax.cn"
 
 database:
   driver: "postgres"
@@ -76,6 +78,10 @@ feishu:
   # 圈子动态举报飞书机器人 Webhook（留空则关闭通知）
   report_webhook_url: ""
   report_webhook_secret: ""
+  # 飞书自建应用凭证，用于上传图片到飞书获取 image_key（首图预览需要）
+  # 留空则首图会降级为可点击链接
+  app_id: ""
+  app_secret: ""
 
 wechat_pay:
   mchid: ""

@@ -71,7 +71,7 @@ TARO_APP_API_BASE_URL_OVERRIDE=http://192.168.x.x:3010
 
 ## Admin 管理后台
 
-Admin 为独立 Vite 站点（`admin.healthymax.cn`），**按部署环境**配置 API，与小程序机制不同。
+Admin 为独立 Vite 站点（`admin.healthymax.cn`），**按部署环境**配置 API，与小程序机制不同。后端通过 `app.admin_base_url` 生成飞书举报通知中的「去处理」链接。
 
 ### 本地开发
 

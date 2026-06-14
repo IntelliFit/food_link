@@ -30,8 +30,8 @@ type ListFeedReportInput struct {
 }
 
 type ListFeedReportResult struct {
-	Items []admindomain.FeedReportItem
-	Total int64
+	Items []admindomain.FeedReportItem `json:"items"`
+	Total int64                        `json:"total"`
 }
 
 var reasonNames = map[string]string{
