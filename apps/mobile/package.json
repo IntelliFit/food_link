@@ -9,7 +9,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit --pretty false"
+    "typecheck": "tsc --project tsconfig.typecheck.json --noEmit --pretty false"
   },
   "dependencies": {
     "@food-link/api-client": "0.0.0",
