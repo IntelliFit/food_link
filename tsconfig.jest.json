@@ -1,8 +1,8 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "./apps/wechat/tsconfig.json",
   "compilerOptions": {
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["./src", "./tests", "./types", "./config"]
+  "include": ["./apps/wechat/src", "./apps/wechat/tests", "./apps/wechat/types", "./apps/wechat/config"]
 }
