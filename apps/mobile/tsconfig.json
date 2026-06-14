@@ -2,7 +2,6 @@
   "compilerOptions": {
     "target": "es2020",
     "module": "esnext",
-    "moduleResolution": "node",
     "jsx": "react-native",
     "strict": true,
     "allowSyntheticDefaultImports": true,
@@ -10,11 +9,24 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "noEmit": true,
-    "types": ["react", "react-native"],
+    "types": [
+      "react",
+      "react-native"
+    ],
     "paths": {
-      "@food-link/core": ["../../packages/core/src"],
-      "@food-link/api-client": ["../../packages/api-client/src"]
+      "@food-link/core": [
+        "../../packages/core/src"
+      ],
+      "@food-link/api-client": [
+        "../../packages/api-client/src"
+      ]
     }
   },
-  "include": ["App.tsx", "src", "../../packages/core/src", "../../packages/api-client/src"]
+  "include": [
+    "App.tsx",
+    "src",
+    "../../packages/core/src",
+    "../../packages/api-client/src"
+  ],
+  "extends": "expo/tsconfig.base"
 }

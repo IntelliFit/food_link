@@ -26,6 +26,8 @@ import { API_BASE_URL } from './src/config'
 
 type Screen = 'login' | 'home' | 'analyzing' | 'result'
 
+const DEFAULT_DEBUG_OPENID = 'mobile-poc-debug-openid'
+
 function todayKey(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
@@ -64,7 +66,19 @@ export default function App() {
     })
   }, [loadHome])
 
-  const handleLogin = async () => {
+  const handleDebugLogin = async () => {
+    setLoading(true)
+    try {
+      await apiClient.debugLoginWithTestOpenID(DEFAULT_DEBUG_OPENID)
+      await loadHome()
+    } catch (error) {
+      Alert.alert('登录失败', error instanceof Error ? error.message : '请确认后端运行在 development 环境')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleImpersonateLogin = async () => {
     setLoading(true)
     try {
       await apiClient.debugImpersonateUser(userId, password)
@@ -169,6 +183,9 @@ export default function App() {
         {screen === 'login' ? (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>开发登录</Text>
+            <Text style={styles.subtitle}>默认会自动创建或复用一个 App POC 测试用户。</Text>
+            <PrimaryButton label="一键登录测试账号" loading={loading} onPress={handleDebugLogin} />
+            <Text style={styles.debugTitle}>按用户 ID 代登录（备用）</Text>
             <TextInput
               value={userId}
               onChangeText={setUserId}
@@ -183,7 +200,7 @@ export default function App() {
               secureTextEntry
               style={styles.input}
             />
-            <PrimaryButton label="登录并进入首页" loading={loading} onPress={handleLogin} />
+            <SecondaryButton label="用指定用户 ID 登录" onPress={handleImpersonateLogin} />
           </View>
         ) : null}
 
@@ -308,6 +325,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
     marginBottom: 12,
+  },
+  debugTitle: {
+    color: '#475569',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 18,
+    marginBottom: 10,
   },
   input: {
     borderWidth: 1,

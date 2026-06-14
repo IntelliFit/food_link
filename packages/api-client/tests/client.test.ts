@@ -18,28 +18,38 @@ function createMockAdapters() {
       requests.push({ url, options })
       if (url.endsWith('/api/test-backend/impersonate-user')) {
         return response({
-            access_token: 'access-token',
-            refresh_token: 'refresh-token',
-            token_type: 'bearer',
-            expires_in: 3600,
-            user_id: 'user-1',
-            openid: 'openid-1',
-          })
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+          token_type: 'bearer',
+          expires_in: 3600,
+          user_id: 'user-1',
+          openid: 'openid-1',
+        })
+      }
+      if (url.endsWith('/api/login')) {
+        return response({
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+          token_type: 'bearer',
+          expires_in: 3600,
+          user_id: 'user-1',
+          openid: 'mobile-poc-debug-openid',
+        })
       }
       if (url.includes('/api/home/dashboard')) {
         return response({
-            intakeData: {
-              current: 100,
-              target: 1800,
-              progress: 5,
-              macros: {
-                protein: { current: 10, target: 100 },
-                carbs: { current: 20, target: 200 },
-                fat: { current: 3, target: 60 },
-              },
+          intakeData: {
+            current: 100,
+            target: 1800,
+            progress: 5,
+            macros: {
+              protein: { current: 10, target: 100 },
+              carbs: { current: 20, target: 200 },
+              fat: { current: 3, target: 60 },
             },
-            meals: [],
-          })
+          },
+          meals: [],
+        })
       }
       if (url.endsWith('/api/analyze/submit')) {
         return response({ task_id: 'task-1', message: 'ok' })
@@ -79,6 +89,18 @@ describe('FoodLinkApiClient', () => {
 
     expect(requests[0].url).toBe('https://api.example.com/api/test-backend/impersonate-user')
     expect(requests[1].url).toContain('/api/home/dashboard?date=2026-06-14')
+    expect(requests[1].options?.headers?.Authorization).toBe('Bearer access-token')
+  })
+
+  it('stores token after test openid login', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.debugLoginWithTestOpenID('mobile-poc-debug-openid')
+    await client.getHomeDashboard('2026-06-14')
+
+    expect(requests[0].url).toBe('https://api.example.com/api/login')
+    expect(requests[0].options?.body).toEqual({ testOpenid: 'mobile-poc-debug-openid' })
     expect(requests[1].options?.headers?.Authorization).toBe('Bearer access-token')
   })
 

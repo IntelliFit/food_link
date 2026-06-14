@@ -94,6 +94,7 @@ coverage/
 *.tmp
 *.temp
 .cache/
+.expo/
 .env.development
 
 # 本地验证截图目录（勿提交）
