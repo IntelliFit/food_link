@@ -97,6 +97,23 @@ export class FoodLinkApiClient {
     return data
   }
 
+  async debugLoginWithTestOpenID(testOpenID: string): Promise<LoginResponse> {
+    const trimmedTestOpenID = testOpenID.trim()
+    if (!trimmedTestOpenID) throw new Error('请输入测试 OpenID')
+
+    const data = await this.publicRequest<LoginResponse>('/api/login', {
+      method: 'POST',
+      body: { testOpenid: trimmedTestOpenID },
+      timeoutMs: 10000,
+    })
+    await this.adapters.tokenStorage.setTokens({
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      userId: data.user_id,
+    })
+    return data
+  }
+
   async getHomeDashboard(date?: string): Promise<HomeDashboard> {
     const timestamp = Date.now()
     const apiDate = mapCalendarDateToApi(date)
