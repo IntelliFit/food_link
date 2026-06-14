@@ -2386,7 +2386,7 @@ function CommunityPage() {
                                   {isCirclePost ? (
                                     <>
                                       {circlePostTitle ? <Text className='feed-circle-post-title'>{circlePostTitle}</Text> : null}
-                                      {circlePostBody ? <Text className='feed-content'>{circlePostBody}</Text> : null}
+                                      {circlePostBody ? <Text className='feed-content feed-circle-post-body'>{circlePostBody}</Text> : null}
                                     </>
                                   ) : (
                                     <Text className='feed-content'>{exercise ? exerciseDesc : item.record.description}</Text>

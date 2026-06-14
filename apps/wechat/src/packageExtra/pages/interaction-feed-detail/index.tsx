@@ -372,7 +372,7 @@ function InteractionFeedDetailPage() {
                     {isCirclePost ? (
                       <>
                         {circlePostTitle ? <Text className='feed-circle-post-title'>{circlePostTitle}</Text> : null}
-                        {circlePostBody ? <Text className='feed-content'>{circlePostBody}</Text> : null}
+                        {circlePostBody ? <Text className='feed-content feed-circle-post-body'>{circlePostBody}</Text> : null}
                       </>
                     ) : (exercise ? exerciseDesc : feedItem.record.description) ? (
                       <Text className='feed-content'>{exercise ? exerciseDesc : feedItem.record.description}</Text>
