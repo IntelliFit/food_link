@@ -2,6 +2,7 @@
   "expo": {
     "name": "Food Link",
     "slug": "food-link-mobile",
+    "scheme": "foodlink",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { CheckinLeaderboardItem, CommunityFeedItem } from '@food-link/core'
 import { apiClient } from '../api'
@@ -32,9 +32,11 @@ export function CommunityScreen() {
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load]),
+  )
 
   const toggleLike = async (item: CommunityFeedItem) => {
     const targetId = item.target_id || item.record.id
@@ -59,6 +61,16 @@ export function CommunityScreen() {
         <QuickEntry label="好友" onPress={() => navigation.navigate('Friends')} />
         <QuickEntry label="消息" onPress={() => navigation.navigate('Notifications')} />
       </View>
+      <View style={styles.quickRow}>
+        <QuickEntry label="公共食物" onPress={() => navigation.navigate('PublicFood', { mode: 'all' })} />
+        <QuickEntry label="校园餐" onPress={() => navigation.navigate('CampusCanteen')} />
+        <QuickEntry label="私信" onPress={() => navigation.navigate('Conversations')} />
+      </View>
+      <View style={styles.quickRow}>
+        <QuickEntry label="排行榜" onPress={() => navigation.navigate('CheckinLeaderboard')} />
+        <QuickEntry label="分享食物" onPress={() => navigation.navigate('PublicFoodShare', { mode: 'public' })} />
+        <QuickEntry label="补校园餐" onPress={() => navigation.navigate('PublicFoodShare', { mode: 'campus' })} />
+      </View>
 
       <Card>
         <Text style={styles.sectionTitle}>本周打卡</Text>
@@ -82,28 +94,39 @@ export function CommunityScreen() {
         </Card>
       ) : (
         feed.map((item) => (
-          <Card key={`${item.target_type || 'food'}-${item.target_id || item.record.id}`}>
-            <View style={styles.authorRow}>
-              {item.author.avatar ? <Image source={{ uri: item.author.avatar }} style={styles.avatar} /> : <View style={styles.avatarFallback} />}
-              <View style={styles.authorMain}>
-                <Text style={styles.authorName}>{item.author.nickname || '食友'}</Text>
-                <Text style={styles.feedTime}>{formatDateTime(item.record.record_time || item.record.created_at)}</Text>
+          <Pressable
+            key={`${item.target_type || 'food'}-${item.target_id || item.record.id}`}
+            onPress={() => navigation.navigate('CommunityFeedDetail', {
+              targetId: item.target_id || item.record.id,
+              targetType: item.target_type || item.record.feed_type || 'food_record',
+            })}
+          >
+            <Card>
+              <View style={styles.authorRow}>
+                <Pressable onPress={() => navigation.navigate('ProfileSettings', { userId: item.author.id })}>
+                  {item.author.avatar ? <Image source={{ uri: item.author.avatar }} style={styles.avatar} /> : <View style={styles.avatarFallback} />}
+                </Pressable>
+                <View style={styles.authorMain}>
+                  <Text style={styles.authorName}>{item.author.nickname || '食友'}</Text>
+                  <Text style={styles.feedTime}>{formatDateTime(item.record.record_time || item.record.created_at)}</Text>
+                </View>
               </View>
-            </View>
-            <Text style={styles.recordDesc}>{item.record.description || item.record.items?.[0]?.name || '分享了一条饮食动态'}</Text>
-            <View style={styles.nutritionRow}>
-              <Text style={styles.nutritionItem}>{Math.round(item.record.total_calories || 0)} kcal</Text>
-              <Text style={styles.nutritionItem}>P {Math.round(item.record.total_protein || 0)}g</Text>
-              <Text style={styles.nutritionItem}>C {Math.round(item.record.total_carbs || 0)}g</Text>
-              <Text style={styles.nutritionItem}>F {Math.round(item.record.total_fat || 0)}g</Text>
-            </View>
-            <View style={styles.actionRow}>
-              <Pressable onPress={() => toggleLike(item)}>
-                <Text style={[styles.actionText, item.liked && styles.actionTextActive]}>{item.liked ? '已赞' : '点赞'} {item.like_count}</Text>
-              </Pressable>
-              <Text style={styles.actionText}>评论 {item.comment_count || item.comments?.length || 0}</Text>
-            </View>
-          </Card>
+              <Text style={[styles.recordDesc, styles.recordTitle]}>{feedTitle(item)}</Text>
+              {feedBody(item) ? <Text style={styles.recordDesc}>{feedBody(item)}</Text> : null}
+              <View style={styles.nutritionRow}>
+                <Text style={styles.nutritionItem}>{Math.round(item.record.total_calories || 0)} kcal</Text>
+                <Text style={styles.nutritionItem}>P {Math.round(item.record.total_protein || 0)}g</Text>
+                <Text style={styles.nutritionItem}>C {Math.round(item.record.total_carbs || 0)}g</Text>
+                <Text style={styles.nutritionItem}>F {Math.round(item.record.total_fat || 0)}g</Text>
+              </View>
+              <View style={styles.actionRow}>
+                <Pressable onPress={() => toggleLike(item)}>
+                  <Text style={[styles.actionText, item.liked && styles.actionTextActive]}>{item.liked ? '已赞' : '点赞'} {item.like_count}</Text>
+                </Pressable>
+                <Text style={styles.actionText}>评论 {item.comment_count || item.comments?.length || 0}</Text>
+              </View>
+            </Card>
+          </Pressable>
         ))
       )}
     </Page>
@@ -116,6 +139,15 @@ function QuickEntry({ label, onPress }: { label: string; onPress: () => void }) 
       <Text style={styles.quickEntryText}>{label}</Text>
     </Pressable>
   )
+}
+
+function feedTitle(item: CommunityFeedItem): string {
+  return String(item.record.title || item.record.description || item.record.items?.[0]?.name || '分享了一条饮食动态')
+}
+
+function feedBody(item: CommunityFeedItem): string {
+  const body = String(item.record.body || '').trim()
+  return body && body !== feedTitle(item) ? body : ''
 }
 
 const styles = StyleSheet.create({
@@ -204,6 +236,10 @@ const styles = StyleSheet.create({
   recordDesc: {
     color: colors.text,
     lineHeight: 22,
+  },
+  recordTitle: {
+    fontWeight: '800',
+    marginBottom: 4,
   },
   nutritionRow: {
     flexDirection: 'row',

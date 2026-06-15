@@ -1,7 +1,7 @@
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { colors, radius, shadow } from '../theme'
 
-export type RecordAction = 'camera' | 'library' | 'text' | 'manual' | 'foodLibrary'
+export type RecordAction = 'camera' | 'library' | 'text' | 'manual' | 'foodLibrary' | 'packagedFood' | 'recipes'
 
 interface RecordActionSheetProps {
   visible: boolean
@@ -14,7 +14,9 @@ const ACTIONS: Array<{ key: RecordAction; title: string; desc: string; icon: str
   { key: 'library', title: '相册识别', desc: '选择已有食物图片', icon: 'IMG' },
   { key: 'text', title: '文字记录', desc: '用一句话描述吃了什么', icon: 'TXT' },
   { key: 'manual', title: '手动记录', desc: '按食物和重量精确录入', icon: 'MAN' },
+  { key: 'packagedFood', title: '包装食品', desc: '上传营养成分表或商品包装', icon: 'PKG' },
   { key: 'foodLibrary', title: '食物库', desc: '从常用食物中快速添加', icon: 'LIB' },
+  { key: 'recipes', title: '收藏食谱', desc: '快速记录常吃餐食组合', icon: 'REC' },
 ]
 
 export function RecordActionSheet({ visible, onClose, onSelect }: RecordActionSheetProps) {
@@ -24,21 +26,23 @@ export function RecordActionSheet({ visible, onClose, onSelect }: RecordActionSh
         <Pressable style={styles.sheet}>
           <View style={styles.handle} />
           <Text style={styles.title}>记录一餐</Text>
-          <Text style={styles.subtitle}>选择一种方式开始，核心识别链路已优先接入 App。</Text>
-          {ACTIONS.map((action) => (
-            <Pressable
-              key={action.key}
-              style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-              onPress={() => onSelect(action.key)}
-            >
-              <Text style={styles.actionIcon}>{action.icon}</Text>
-              <View style={styles.actionText}>
-                <Text style={styles.actionTitle}>{action.title}</Text>
-                <Text style={styles.actionDesc}>{action.desc}</Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          ))}
+          <Text style={styles.subtitle}>选择一种方式开始记录。</Text>
+          <ScrollView style={styles.actionList} showsVerticalScrollIndicator={false}>
+            {ACTIONS.map((action) => (
+              <Pressable
+                key={action.key}
+                style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+                onPress={() => onSelect(action.key)}
+              >
+                <Text style={styles.actionIcon}>{action.icon}</Text>
+                <View style={styles.actionText}>
+                  <Text style={styles.actionTitle}>{action.title}</Text>
+                  <Text style={styles.actionDesc}>{action.desc}</Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
@@ -57,6 +61,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     padding: 20,
     paddingBottom: 34,
+    maxHeight: '86%',
     ...shadow,
   },
   handle: {
@@ -76,6 +81,9 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 14,
     color: colors.textSecondary,
+  },
+  actionList: {
+    flexGrow: 0,
   },
   action: {
     flexDirection: 'row',

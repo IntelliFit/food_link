@@ -6,6 +6,13 @@ type UserDO struct {
 	ID                             string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	OpenID                         string         `gorm:"column:openid;type:text;not null;unique;index:idx_weapp_user_openid"`
 	UnionID                        *string        `gorm:"column:unionid;type:text;unique;index:idx_weapp_user_unionid,where:unionid IS NOT NULL"`
+	AppOpenID                      *string        `gorm:"column:app_openid;type:text;uniqueIndex:idx_weapp_user_app_openid,where:app_openid IS NOT NULL"`
+	AppUnionID                     *string        `gorm:"column:app_unionid;type:text;index:idx_weapp_user_app_unionid,where:app_unionid IS NOT NULL"`
+	Username                       *string        `gorm:"column:username;type:text;uniqueIndex:idx_weapp_user_username,where:username IS NOT NULL"`
+	PasswordHash                   *string        `gorm:"column:password_hash;type:text"`
+	PasswordSetAt                  *time.Time     `gorm:"column:password_set_at;type:timestamptz"`
+	LastLoginMethod                *string        `gorm:"column:last_login_method;type:text"`
+	LastLoginAt                    *time.Time     `gorm:"column:last_login_at;type:timestamptz"`
 	Avatar                         *string        `gorm:"column:avatar;type:text;default:''"`
 	Nickname                       *string        `gorm:"column:nickname;type:text;default:''"`
 	Telephone                      *string        `gorm:"column:telephone;type:text"`
@@ -646,23 +653,23 @@ type FeedReportDO struct {
 func (FeedReportDO) TableName() string { return "feed_reports" }
 
 type UserCirclePostDO struct {
-	ID                string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID            string     `gorm:"column:user_id;type:uuid;not null;index:idx_user_circle_posts_user_id"`
-	Title             *string    `gorm:"column:title;type:text"`
-	Body              *string    `gorm:"column:body;type:text"`
-	Content           string     `gorm:"column:content;type:text;not null;default:''"`
-	ImagePaths        []string   `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	TotalCalories     *float64   `gorm:"column:total_calories;type:numeric(10,2)"`
-	TotalProtein      *float64   `gorm:"column:total_protein;type:numeric(10,2)"`
-	TotalCarbs        *float64   `gorm:"column:total_carbs;type:numeric(10,2)"`
-	TotalFat          *float64   `gorm:"column:total_fat;type:numeric(10,2)"`
-	Fiber             *float64   `gorm:"column:fiber;type:numeric(10,2)"`
-	Sugar             *float64   `gorm:"column:sugar;type:numeric(10,2)"`
-	SodiumMg          *float64   `gorm:"column:sodium_mg;type:numeric(10,2)"`
-	TotalWeightGrams  *float64   `gorm:"column:total_weight_grams;type:numeric(10,2)"`
-	HiddenFromFeed    bool       `gorm:"column:hidden_from_feed;type:boolean;not null;default:false"`
-	CreatedAt         *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_circle_posts_user_created_at"`
-	UpdatedAt         *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ID               string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID           string     `gorm:"column:user_id;type:uuid;not null;index:idx_user_circle_posts_user_id"`
+	Title            *string    `gorm:"column:title;type:text"`
+	Body             *string    `gorm:"column:body;type:text"`
+	Content          string     `gorm:"column:content;type:text;not null;default:''"`
+	ImagePaths       []string   `gorm:"column:image_paths;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	TotalCalories    *float64   `gorm:"column:total_calories;type:numeric(10,2)"`
+	TotalProtein     *float64   `gorm:"column:total_protein;type:numeric(10,2)"`
+	TotalCarbs       *float64   `gorm:"column:total_carbs;type:numeric(10,2)"`
+	TotalFat         *float64   `gorm:"column:total_fat;type:numeric(10,2)"`
+	Fiber            *float64   `gorm:"column:fiber;type:numeric(10,2)"`
+	Sugar            *float64   `gorm:"column:sugar;type:numeric(10,2)"`
+	SodiumMg         *float64   `gorm:"column:sodium_mg;type:numeric(10,2)"`
+	TotalWeightGrams *float64   `gorm:"column:total_weight_grams;type:numeric(10,2)"`
+	HiddenFromFeed   bool       `gorm:"column:hidden_from_feed;type:boolean;not null;default:false"`
+	CreatedAt        *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_circle_posts_user_created_at"`
+	UpdatedAt        *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (UserCirclePostDO) TableName() string { return "user_circle_posts" }
@@ -734,14 +741,14 @@ type UserFollowDO struct {
 func (UserFollowDO) TableName() string { return "user_follows" }
 
 type PrivateMessageDO struct {
-	ID         string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	SenderID   string     `gorm:"column:sender_id;type:uuid;not null;index:idx_private_messages_sender"`
-	ReceiverID string     `gorm:"column:receiver_id;type:uuid;not null;index:idx_private_messages_receiver"`
-	Content    string     `gorm:"column:content;type:text;not null;default:''"`
-	ImageURL   *string    `gorm:"column:image_url;type:text"`
-	ContentType string    `gorm:"column:content_type;type:text;not null;default:'text'"`
-	IsRead     bool       `gorm:"column:is_read;type:boolean;not null;default:false"`
-	CreatedAt  *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	ID          string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SenderID    string     `gorm:"column:sender_id;type:uuid;not null;index:idx_private_messages_sender"`
+	ReceiverID  string     `gorm:"column:receiver_id;type:uuid;not null;index:idx_private_messages_receiver"`
+	Content     string     `gorm:"column:content;type:text;not null;default:''"`
+	ImageURL    *string    `gorm:"column:image_url;type:text"`
+	ContentType string     `gorm:"column:content_type;type:text;not null;default:'text'"`
+	IsRead      bool       `gorm:"column:is_read;type:boolean;not null;default:false"`
+	CreatedAt   *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
 }
 
 func (PrivateMessageDO) TableName() string { return "private_messages" }
@@ -1098,20 +1105,20 @@ type SchoolDO struct {
 func (SchoolDO) TableName() string { return "schools" }
 
 type FoodWeightLabeledSampleDO struct {
-	ID                 string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	BatchName          string         `gorm:"column:batch_name;type:text;not null"`
-	SampleName         string         `gorm:"column:sample_name;type:text;not null"`
-	OriginalFilename   string         `gorm:"column:original_filename;type:text;not null"`
-	ImageObjectKey     *string        `gorm:"column:image_object_key;type:text"`
-	ImageURL           *string        `gorm:"column:image_url;type:text"`
-	LabelType          string         `gorm:"column:label_type;type:text;not null"`
-	TotalWeightGrams   *float64       `gorm:"column:total_weight_grams;type:numeric"`
-	Items              []map[string]any `gorm:"column:items;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	Status             string         `gorm:"column:status;type:text;not null;default:'labeled'"`
-	SourcePath         *string        `gorm:"column:source_path;type:text"`
-	Metadata           map[string]any `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	CreatedAt          *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt          *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ID               string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BatchName        string           `gorm:"column:batch_name;type:text;not null"`
+	SampleName       string           `gorm:"column:sample_name;type:text;not null"`
+	OriginalFilename string           `gorm:"column:original_filename;type:text;not null"`
+	ImageObjectKey   *string          `gorm:"column:image_object_key;type:text"`
+	ImageURL         *string          `gorm:"column:image_url;type:text"`
+	LabelType        string           `gorm:"column:label_type;type:text;not null"`
+	TotalWeightGrams *float64         `gorm:"column:total_weight_grams;type:numeric"`
+	Items            []map[string]any `gorm:"column:items;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	Status           string           `gorm:"column:status;type:text;not null;default:'labeled'"`
+	SourcePath       *string          `gorm:"column:source_path;type:text"`
+	Metadata         map[string]any   `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt        *time.Time       `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt        *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (FoodWeightLabeledSampleDO) TableName() string { return "food_weight_labeled_samples" }
@@ -1137,20 +1144,20 @@ type BenchmarkRunDO struct {
 func (BenchmarkRunDO) TableName() string { return "benchmark_runs" }
 
 type BenchmarkRunSampleDO struct {
-	ID            string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	RunID         string         `gorm:"column:run_id;type:uuid;not null;index:idx_benchmark_run_samples_run_id"`
-	SampleID      string         `gorm:"column:sample_id;type:uuid;not null;index:idx_benchmark_run_samples_sample_id"`
-	TaskID        *string        `gorm:"column:task_id;type:uuid;index:idx_benchmark_run_samples_task_id"`
-	Status        string         `gorm:"column:status;type:text;not null;default:'pending'"`
-	Prediction    map[string]any `gorm:"column:prediction;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	GroundTruth   map[string]any `gorm:"column:ground_truth;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	StageOutputs  map[string]any `gorm:"column:stage_outputs;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	Metrics       map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	ErrorMessage  *string        `gorm:"column:error_message;type:text"`
-	StartedAt     *time.Time     `gorm:"column:started_at;type:timestamptz"`
-	CompletedAt   *time.Time     `gorm:"column:completed_at;type:timestamptz"`
-	CreatedAt     *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt     *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ID           string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	RunID        string         `gorm:"column:run_id;type:uuid;not null;index:idx_benchmark_run_samples_run_id"`
+	SampleID     string         `gorm:"column:sample_id;type:uuid;not null;index:idx_benchmark_run_samples_sample_id"`
+	TaskID       *string        `gorm:"column:task_id;type:uuid;index:idx_benchmark_run_samples_task_id"`
+	Status       string         `gorm:"column:status;type:text;not null;default:'pending'"`
+	Prediction   map[string]any `gorm:"column:prediction;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	GroundTruth  map[string]any `gorm:"column:ground_truth;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	StageOutputs map[string]any `gorm:"column:stage_outputs;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	Metrics      map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ErrorMessage *string        `gorm:"column:error_message;type:text"`
+	StartedAt    *time.Time     `gorm:"column:started_at;type:timestamptz"`
+	CompletedAt  *time.Time     `gorm:"column:completed_at;type:timestamptz"`
+	CreatedAt    *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt    *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (BenchmarkRunSampleDO) TableName() string { return "benchmark_run_samples" }

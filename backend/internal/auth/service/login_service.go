@@ -8,12 +8,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"food_link/backend/internal/auth/repo"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/logger"
 )
 
 const (
@@ -23,8 +26,10 @@ const (
 	loginEarlyUserTop500TrialDays = 60
 	loginEarlyUserTrialDays       = 30
 
-	defaultUserAvatarKey          = "_system/default_avatar.jpg"
-	defaultWechatNicknamePrefix   = "微信用户_"
+	defaultUserAvatarKey        = "_system/default_avatar.jpg"
+	defaultWechatNicknamePrefix = "微信用户_"
+	defaultAppMockOpenID        = "mobile-app-dev-openid"
+	defaultAppMockUnionID       = "mobile-app-dev-unionid"
 )
 
 type LoginInput struct {
@@ -32,6 +37,29 @@ type LoginInput struct {
 	PhoneCode  string `json:"phoneCode"`
 	InviteCode string `json:"inviteCode"`
 	TestOpenID string `json:"testOpenid"`
+}
+
+type AppWechatLoginInput struct {
+	Code       string `json:"code"`
+	InviteCode string `json:"inviteCode"`
+}
+
+type PasswordLoginInput struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type PasswordRegisterInput struct {
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	Nickname   string `json:"nickname"`
+	InviteCode string `json:"inviteCode"`
+}
+
+type SetPasswordInput struct {
+	Username        string `json:"username"`
+	Password        string `json:"password"`
+	CurrentPassword string `json:"current_password"`
 }
 
 type LoginOutput struct {
@@ -72,41 +100,13 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 		unionID = uid
 	}
 
-	user, err := s.users.FindByOpenID(ctx, openID)
+	loginMethod := "wechat_miniprogram"
+	if testOpenID != "" && s.cfg.App.Env == "development" {
+		loginMethod = "development_test_openid"
+	}
+	user, err := s.findOrCreateWechatUser(ctx, openID, unionID, input.PhoneCode, input.InviteCode, loginMethod)
 	if err != nil {
 		return nil, err
-	}
-	if user == nil {
-		phone := s.resolvePhoneNumber(ctx, input.PhoneCode)
-		inviteCode := strings.ToUpper(strings.TrimSpace(input.InviteCode))
-		pointsBalance := 100.0
-		publicRecords := true
-		user = &repo.User{
-			OpenID:        openID,
-			Nickname:      buildDefaultWechatNickname(),
-			Avatar:        defaultUserAvatarKey,
-			Telephone:     phone,
-			PointsBalance: &pointsBalance,
-			PublicRecords: &publicRecords,
-		}
-		if unionID != "" {
-			user.UnionID = &unionID
-		}
-		if err := s.users.Create(ctx, user); err != nil {
-			return nil, err
-		}
-		if err := s.ensureTrialEntitlement(ctx, user, openID, unionID); err != nil {
-			return nil, err
-		}
-		_ = s.ensureRegistrationInviteCode(ctx, user.ID)
-		if inviteCode != "" {
-			_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
-		}
-	} else if unionID != "" && user.UnionID == nil {
-		user, err = s.users.UpdateFields(ctx, user.ID, map[string]any{"unionid": unionID})
-		if err != nil {
-			return nil, err
-		}
 	}
 	if user != nil {
 		if err := s.ensureTrialEntitlement(ctx, user, openID, unionID); err != nil {
@@ -122,26 +122,155 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 		}
 	}
 
-	access, err := s.jwt.IssueAccess(user.ID, openID, unionID)
+	return s.issueLoginOutput(user, openID, unionID)
+}
+
+func (s *LoginService) LoginWithAppWechat(ctx context.Context, input AppWechatLoginInput) (*LoginOutput, error) {
+	code := strings.TrimSpace(input.Code)
+	appOpenID, unionID, err := s.exchangeAppWechatCode(ctx, code)
 	if err != nil {
 		return nil, err
 	}
-	refresh, err := s.jwt.IssueRefresh(user.ID, openID)
+	user, err := s.findOrCreateAppWechatUser(ctx, appOpenID, unionID, input.InviteCode)
 	if err != nil {
 		return nil, err
 	}
-	return &LoginOutput{
-		AccessToken:     access,
-		RefreshToken:    refresh,
-		TokenType:       "bearer",
-		ExpiresIn:       s.cfg.JWT.AccessTokenTTLSeconds,
-		UserID:          user.ID,
-		OpenID:          openID,
-		UnionID:         unionID,
-		PhoneNumber:     user.Telephone,
-		PurePhoneNumber: user.Telephone,
-		DietGoal:        user.DietGoal,
-	}, nil
+	logger.Info(ctx, "App 微信登录成功",
+		slog.String("user_id", user.ID),
+		slog.Bool("has_unionid", strings.TrimSpace(unionID) != ""),
+	)
+	return s.issueLoginOutput(user, user.OpenID, firstNonEmpty(unionID, derefString(user.UnionID), derefString(user.AppUnionID)))
+}
+
+func (s *LoginService) LoginWithPassword(ctx context.Context, input PasswordLoginInput) (*LoginOutput, error) {
+	username := normalizeLoginUsername(input.Username)
+	if username == "" {
+		return nil, fmt.Errorf("请输入用户名")
+	}
+	password := strings.TrimSpace(input.Password)
+	if password == "" {
+		return nil, fmt.Errorf("请输入密码")
+	}
+	user, err := s.users.FindByUsername(ctx, username)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil || !verifyUserPasswordWithFallback(password, user) {
+		logger.Warn(ctx, "App 账号密码登录失败", slog.String("username", username))
+		return nil, fmt.Errorf("用户名或密码错误")
+	}
+	user, err = s.touchLogin(ctx, user, "password")
+	if err != nil {
+		return nil, err
+	}
+	logger.Info(ctx, "App 账号密码登录成功", slog.String("user_id", user.ID), slog.String("username", username))
+	return s.issueLoginOutput(user, user.OpenID, firstNonEmpty(derefString(user.UnionID), derefString(user.AppUnionID)))
+}
+
+func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordRegisterInput) (*LoginOutput, error) {
+	username := normalizeLoginUsername(input.Username)
+	if username == "" {
+		return nil, fmt.Errorf("请输入用户名")
+	}
+	if err := validateLoginUsername(username); err != nil {
+		return nil, err
+	}
+	if existing, err := s.users.FindByUsername(ctx, username); err != nil {
+		return nil, err
+	} else if existing != nil {
+		return nil, fmt.Errorf("用户名已被使用")
+	}
+	passwordHash, err := HashUserPassword(input.Password)
+	if err != nil {
+		return nil, err
+	}
+	pointsBalance := 100.0
+	publicRecords := true
+	now := time.Now()
+	nickname := strings.TrimSpace(input.Nickname)
+	if nickname == "" {
+		nickname = username
+	}
+	user := &repo.User{
+		OpenID:          "app-pwd:" + username,
+		Username:        &username,
+		PasswordHash:    strPtrIfColumn(s.users, "password_hash", passwordHash),
+		PasswordSetAt:   timePtrIfColumn(s.users, "password_set_at", now),
+		Nickname:        nickname,
+		Avatar:          defaultUserAvatarKey,
+		PointsBalance:   &pointsBalance,
+		PublicRecords:   &publicRecords,
+		LastLoginMethod: strPtrIfColumn(s.users, "last_login_method", "password"),
+		LastLoginAt:     timePtrIfColumn(s.users, "last_login_at", now),
+	}
+	ensureLegacyAppAuth(user, username, passwordHash)
+	if err := s.users.Create(ctx, user); err != nil {
+		return nil, err
+	}
+	if err := s.ensureTrialEntitlement(ctx, user, user.OpenID, ""); err != nil {
+		return nil, err
+	}
+	_ = s.ensureRegistrationInviteCode(ctx, user.ID)
+	if inviteCode := strings.ToUpper(strings.TrimSpace(input.InviteCode)); inviteCode != "" {
+		_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
+	}
+	logger.Info(ctx, "App 账号密码注册成功", slog.String("user_id", user.ID), slog.String("username", username))
+	return s.issueLoginOutput(user, user.OpenID, "")
+}
+
+func (s *LoginService) SetPassword(ctx context.Context, userID string, input SetPasswordInput) (*LoginOutput, error) {
+	user, err := s.users.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, fmt.Errorf("用户不存在")
+	}
+	if user.PasswordHash != nil && strings.TrimSpace(*user.PasswordHash) != "" {
+		if !VerifyUserPassword(input.CurrentPassword, *user.PasswordHash) {
+			return nil, fmt.Errorf("当前密码错误")
+		}
+	}
+	username := normalizeLoginUsername(input.Username)
+	if username == "" {
+		username = normalizeLoginUsername(derefString(user.Username))
+	}
+	if username == "" {
+		return nil, fmt.Errorf("请输入用户名")
+	}
+	if err := validateLoginUsername(username); err != nil {
+		return nil, err
+	}
+	if existing, err := s.users.FindByUsername(ctx, username); err != nil {
+		return nil, err
+	} else if existing != nil && existing.ID != user.ID {
+		return nil, fmt.Errorf("用户名已被使用")
+	}
+	passwordHash, err := HashUserPassword(input.Password)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	updates := map[string]any{
+		"username":        username,
+		"password_hash":   passwordHash,
+		"password_set_at": now,
+	}
+	if !s.users.HasUserColumn("password_hash") || !s.users.HasUserColumn("username") {
+		condition := cloneHealthCondition(user.HealthCondition)
+		condition["app_auth"] = map[string]any{
+			"username":        username,
+			"password_hash":   passwordHash,
+			"password_set_at": now.Format(time.RFC3339),
+		}
+		updates["health_condition"] = condition
+	}
+	user, err = s.users.UpdateFields(ctx, user.ID, updates)
+	if err != nil {
+		return nil, err
+	}
+	logger.Info(ctx, "App 账号密码已设置", slog.String("user_id", user.ID), slog.String("username", username))
+	return s.issueLoginOutput(user, user.OpenID, firstNonEmpty(derefString(user.UnionID), derefString(user.AppUnionID)))
 }
 
 func (s *LoginService) ensureTrialEntitlement(ctx context.Context, user *repo.User, openID, unionID string) error {
@@ -200,6 +329,174 @@ func (s *LoginService) ensureTrialEntitlement(ctx context.Context, user *repo.Us
 	}
 	_, err = s.users.UpdateTrialEntitlement(ctx, ent.ID, updates)
 	return err
+}
+
+func (s *LoginService) findOrCreateWechatUser(ctx context.Context, openID, unionID, phoneCode, inviteCode, loginMethod string) (*repo.User, error) {
+	user, err := s.users.FindByOpenID(ctx, openID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		phone := s.resolvePhoneNumber(ctx, phoneCode)
+		user = newDefaultUser(openID, phone)
+		if unionID != "" {
+			user.UnionID = &unionID
+		}
+		user.LastLoginMethod = strPtr(loginMethod)
+		now := time.Now()
+		user.LastLoginAt = &now
+		if err := s.users.Create(ctx, user); err != nil {
+			return nil, err
+		}
+		if err := s.ensureTrialEntitlement(ctx, user, openID, unionID); err != nil {
+			return nil, err
+		}
+		_ = s.ensureRegistrationInviteCode(ctx, user.ID)
+		if inviteCode := strings.ToUpper(strings.TrimSpace(inviteCode)); inviteCode != "" {
+			_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
+		}
+		return user, nil
+	}
+	updates := map[string]any{}
+	if unionID != "" && user.UnionID == nil {
+		updates["unionid"] = unionID
+	}
+	updates["last_login_method"] = loginMethod
+	updates["last_login_at"] = time.Now()
+	if len(updates) > 0 {
+		return s.users.UpdateFields(ctx, user.ID, updates)
+	}
+	return user, nil
+}
+
+func (s *LoginService) findOrCreateAppWechatUser(ctx context.Context, appOpenID, unionID, inviteCode string) (*repo.User, error) {
+	if appOpenID == "" {
+		return nil, fmt.Errorf("App openid 不能为空")
+	}
+	user, err := s.users.FindByAppOpenID(ctx, appOpenID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil && unionID != "" {
+		user, err = s.users.FindByUnionID(ctx, unionID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	now := time.Now()
+	if user == nil {
+		openID := "app-wx:" + appOpenID
+		user = newDefaultUser(openID, nil)
+		user.AppOpenID = &appOpenID
+		if unionID != "" {
+			user.AppUnionID = &unionID
+			user.UnionID = &unionID
+		}
+		user.LastLoginMethod = strPtr("wechat_app")
+		user.LastLoginAt = &now
+		if err := s.users.Create(ctx, user); err != nil {
+			return nil, err
+		}
+		if err := s.ensureTrialEntitlement(ctx, user, user.OpenID, unionID); err != nil {
+			return nil, err
+		}
+		_ = s.ensureRegistrationInviteCode(ctx, user.ID)
+		if inviteCode := strings.ToUpper(strings.TrimSpace(inviteCode)); inviteCode != "" {
+			_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
+		}
+		return user, nil
+	}
+	updates := map[string]any{
+		"app_openid":        appOpenID,
+		"last_login_method": "wechat_app",
+		"last_login_at":     now,
+	}
+	if unionID != "" {
+		if user.AppUnionID == nil {
+			updates["app_unionid"] = unionID
+		}
+		if user.UnionID == nil {
+			updates["unionid"] = unionID
+		}
+	}
+	return s.users.UpdateFields(ctx, user.ID, updates)
+}
+
+func (s *LoginService) exchangeAppWechatCode(ctx context.Context, code string) (string, string, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "", "", fmt.Errorf("code 不能为空")
+	}
+	if s.cfg.App.Env == "development" && s.cfg.AppAuth.DevelopmentMockLogin {
+		mockCode := strings.TrimSpace(s.cfg.AppAuth.DevelopmentMockWechatCode)
+		if mockCode == "" {
+			mockCode = "expo-go-dev-wechat-code"
+		}
+		if code == mockCode || strings.HasPrefix(code, "mock:") {
+			suffix := strings.TrimPrefix(code, "mock:")
+			if suffix == "" || suffix == mockCode {
+				suffix = "default"
+			}
+			return defaultAppMockOpenID + "-" + suffix, defaultAppMockUnionID + "-" + suffix, nil
+		}
+	}
+	if strings.TrimSpace(s.cfg.AppAuth.WechatAppID) == "" || strings.TrimSpace(s.cfg.AppAuth.WechatAppSecret) == "" {
+		return "", "", fmt.Errorf("App 微信登录未配置 app_auth.wechat_app_id / app_auth.wechat_app_secret")
+	}
+	return s.users.ExchangeAppCode(ctx, s.cfg.AppAuth.WechatAppID, s.cfg.AppAuth.WechatAppSecret, code)
+}
+
+func (s *LoginService) touchLogin(ctx context.Context, user *repo.User, method string) (*repo.User, error) {
+	if user == nil {
+		return nil, fmt.Errorf("用户不存在")
+	}
+	return s.users.UpdateFields(ctx, user.ID, map[string]any{
+		"last_login_method": method,
+		"last_login_at":     time.Now(),
+	})
+}
+
+func (s *LoginService) issueLoginOutput(user *repo.User, openID, unionID string) (*LoginOutput, error) {
+	if user == nil {
+		return nil, fmt.Errorf("用户不存在")
+	}
+	if strings.TrimSpace(openID) == "" {
+		openID = user.OpenID
+	}
+	unionID = firstNonEmpty(unionID, derefString(user.UnionID), derefString(user.AppUnionID))
+	access, err := s.jwt.IssueAccess(user.ID, openID, unionID)
+	if err != nil {
+		return nil, err
+	}
+	refresh, err := s.jwt.IssueRefresh(user.ID, openID)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginOutput{
+		AccessToken:     access,
+		RefreshToken:    refresh,
+		TokenType:       "bearer",
+		ExpiresIn:       s.cfg.JWT.AccessTokenTTLSeconds,
+		UserID:          user.ID,
+		OpenID:          openID,
+		UnionID:         unionID,
+		PhoneNumber:     user.Telephone,
+		PurePhoneNumber: user.Telephone,
+		DietGoal:        user.DietGoal,
+	}, nil
+}
+
+func newDefaultUser(openID string, phone *string) *repo.User {
+	pointsBalance := 100.0
+	publicRecords := true
+	return &repo.User{
+		OpenID:        openID,
+		Nickname:      buildDefaultWechatNickname(),
+		Avatar:        defaultUserAvatarKey,
+		Telephone:     phone,
+		PointsBalance: &pointsBalance,
+		PublicRecords: &publicRecords,
+	}
 }
 
 func (s *LoginService) resolvePhoneNumber(ctx context.Context, phoneCode string) *string {
@@ -311,3 +608,98 @@ func buildDefaultWechatNickname() string {
 }
 
 var defaultWechatNicknameSuffixPattern = regexp.MustCompile(`^\d{6}$`)
+
+var loginUsernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,31}$`)
+
+func normalizeLoginUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
+}
+
+func validateLoginUsername(username string) error {
+	if !loginUsernamePattern.MatchString(username) {
+		return fmt.Errorf("用户名需为 3-32 位小写字母、数字、点、横线或下划线，并以字母或数字开头")
+	}
+	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func strPtr(value string) *string {
+	value = strings.TrimSpace(value)
+	return &value
+}
+
+func derefString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func verifyUserPasswordWithFallback(password string, user *repo.User) bool {
+	if user == nil {
+		return false
+	}
+	if user.PasswordHash != nil && VerifyUserPassword(password, *user.PasswordHash) {
+		return true
+	}
+	return VerifyUserPassword(password, legacyUserPasswordHash(user))
+}
+
+func legacyUserPasswordHash(user *repo.User) string {
+	if user == nil || user.HealthCondition == nil {
+		return ""
+	}
+	authValue, ok := user.HealthCondition["app_auth"]
+	if !ok {
+		return ""
+	}
+	if authMap, ok := authValue.(map[string]any); ok {
+		return strings.TrimSpace(fmt.Sprint(authMap["password_hash"]))
+	}
+	if authMap, ok := authValue.(map[string]interface{}); ok {
+		return strings.TrimSpace(fmt.Sprint(authMap["password_hash"]))
+	}
+	return ""
+}
+
+func ensureLegacyAppAuth(user *repo.User, username, passwordHash string) {
+	if user == nil || user.PasswordHash != nil {
+		return
+	}
+	condition := cloneHealthCondition(user.HealthCondition)
+	condition["app_auth"] = map[string]any{
+		"username":      username,
+		"password_hash": passwordHash,
+	}
+	user.HealthCondition = condition
+}
+
+func cloneHealthCondition(input map[string]any) map[string]any {
+	out := make(map[string]any, len(input)+1)
+	for key, value := range input {
+		out[key] = value
+	}
+	return out
+}
+
+func strPtrIfColumn(users *repo.UserRepo, column, value string) *string {
+	if users != nil && users.HasUserColumn(column) {
+		return strPtr(value)
+	}
+	return nil
+}
+
+func timePtrIfColumn(users *repo.UserRepo, column string, value time.Time) *time.Time {
+	if users != nil && users.HasUserColumn(column) {
+		return &value
+	}
+	return nil
+}

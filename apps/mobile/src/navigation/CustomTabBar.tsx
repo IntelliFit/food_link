@@ -30,13 +30,15 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
           ? 'TextRecord'
           : action === 'manual'
             ? 'ManualRecord'
-            : 'FoodLibrary'
-    rootNavigation?.dispatch(
-      CommonActions.navigate({
-        name: target,
-        params: action === 'camera' || action === 'library' ? { source: action } : undefined,
-      }),
-    )
+            : action === 'packagedFood'
+              ? 'PackagedFoodEdit'
+              : action === 'recipes'
+                ? 'Recipes'
+                : 'FoodLibrary'
+    rootNavigation?.dispatch(CommonActions.navigate(
+      target,
+      action === 'camera' || action === 'library' ? { source: action } : undefined,
+    ))
   }
 
   const renderTab = (route: BottomTabBarProps['state']['routes'][number]) => {

@@ -20,12 +20,20 @@ export function AnalyzeLoadingScreen() {
 
     const pollTask = async () => {
       if (route.params?.task) {
-        navigation.replace('Result', {
-          task: route.params.task,
-          imageUri: route.params.imageUri,
-          mealType: route.params.mealType,
-          date: route.params.date,
-        })
+        if (isTextFoodTask(route.params.task, route.params.taskType)) {
+          navigation.replace('TextResult', {
+            task: route.params.task,
+            mealType: route.params.mealType,
+            date: route.params.date,
+          })
+        } else {
+          navigation.replace('Result', {
+            task: route.params.task,
+            imageUri: route.params.imageUri,
+            mealType: route.params.mealType,
+            date: route.params.date,
+          })
+        }
         return
       }
       if (!route.params?.taskId) {
@@ -39,12 +47,20 @@ export function AnalyzeLoadingScreen() {
           setStatusText(`正在识别食物... ${attempt + 1}/${maxAttempts}`)
           const task = await apiClient.getAnalyzeTask(route.params.taskId)
           if (task.status === 'done') {
-            navigation.replace('Result', {
-              task,
-              imageUri: route.params.imageUri,
-              mealType: route.params.mealType,
-              date: route.params.date,
-            })
+            if (isTextFoodTask(task, route.params.taskType)) {
+              navigation.replace('TextResult', {
+                task,
+                mealType: route.params.mealType,
+                date: route.params.date,
+              })
+            } else {
+              navigation.replace('Result', {
+                task,
+                imageUri: route.params.imageUri,
+                mealType: route.params.mealType,
+                date: route.params.date,
+              })
+            }
             return
           }
           if (task.status === 'failed' || task.status === 'violated' || task.status === 'timed_out' || task.status === 'cancelled') {
@@ -76,6 +92,12 @@ export function AnalyzeLoadingScreen() {
       </Card>
     </Page>
   )
+}
+
+function isTextFoodTask(task: { task_type?: string; payload?: Record<string, unknown> }, routeTaskType?: string): boolean {
+  if (routeTaskType === 'food_text') return true
+  if (task.task_type === 'food_text') return true
+  return task.payload?.source_type === 'text'
 }
 
 const styles = StyleSheet.create({

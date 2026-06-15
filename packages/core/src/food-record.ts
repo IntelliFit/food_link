@@ -1,4 +1,4 @@
-import type { FoodItem, FoodRecordItemPayload, Nutrients, SaveFoodRecordRequest, AnalysisTask, MealType } from './types'
+import type { FoodItem, FoodRecordEntryType, FoodRecordItemPayload, Nutrients, SaveFoodRecordRequest, AnalysisTask, MealType } from './types'
 
 type PackagedAnalysisMetaSource = {
   name?: string
@@ -132,6 +132,7 @@ export function buildSaveFoodRecordRequestFromTask(
   options: {
     mealType: MealType
     date?: string
+    entryType?: FoodRecordEntryType
   },
 ): SaveFoodRecordRequest {
   const result = task.result || {}
@@ -158,7 +159,7 @@ export function buildSaveFoodRecordRequestFromTask(
       result.total_weight_grams ?? items.reduce((total, item) => total + item.weight, 0),
     ),
     source_task_id: task.id,
-    entry_type: 'analyze_history',
+    entry_type: options.entryType || 'analyze_history',
     date: options.date,
   }
 }

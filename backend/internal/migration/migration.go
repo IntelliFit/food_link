@@ -78,6 +78,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("weapp_user", "weapp_user_gender_check", `gender IS NULL OR gender = ANY (ARRAY['male'::text,'female'::text,'other'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_activity_level_check", `activity_level IS NULL OR activity_level = ANY (ARRAY['sedentary'::text,'light'::text,'moderate'::text,'active'::text,'very_active'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_execution_mode_check", `execution_mode IS NULL OR execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
+		dropAndAddCheck("weapp_user", "weapp_user_last_login_method_check", `last_login_method IS NULL OR last_login_method = ANY (ARRAY['wechat_miniprogram'::text,'wechat_app'::text,'password'::text,'development_test_openid'::text,'debug_impersonate'::text])`),
 		dropAndAddCheck("user_feedback", "user_feedback_category_check", `category = ANY (ARRAY['bug'::text,'suggestion'::text,'experience'::text,'other'::text])`),
 		dropAndAddCheck("user_feedback", "user_feedback_status_check", `status = ANY (ARRAY['open'::text,'processing'::text,'resolved'::text,'closed'::text])`),
 		dropAndAddCheck("admin_accounts", "admin_accounts_status_check", `status = ANY (ARRAY['active'::text,'disabled'::text])`),
@@ -246,6 +247,17 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 
 func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 	for _, sql := range []string{
+		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS app_openid text`,
+		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS app_unionid text`,
+		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS username text`,
+		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS password_hash text`,
+		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS password_set_at timestamptz`,
+		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS last_login_method text`,
+		`ALTER TABLE weapp_user ADD COLUMN IF NOT EXISTS last_login_at timestamptz`,
+		`UPDATE weapp_user SET username = lower(trim(username)) WHERE username IS NOT NULL AND username <> lower(trim(username))`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_weapp_user_app_openid ON weapp_user (app_openid) WHERE app_openid IS NOT NULL AND app_openid <> ''`,
+		`CREATE INDEX IF NOT EXISTS idx_weapp_user_app_unionid ON weapp_user (app_unionid) WHERE app_unionid IS NOT NULL AND app_unionid <> ''`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_weapp_user_username ON weapp_user (lower(username)) WHERE username IS NOT NULL AND username <> ''`,
 		`ALTER TABLE packaged_food_library DROP CONSTRAINT IF EXISTS packaged_food_library_normalized_name_key`,
 		`DROP INDEX IF EXISTS uni_packaged_food_library_normalized_name`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS product_key text NOT NULL DEFAULT ''`,

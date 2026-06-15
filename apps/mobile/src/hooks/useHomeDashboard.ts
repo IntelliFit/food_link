@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { HomeDashboard } from '@food-link/core'
+import type { HomeDashboard, PetSummary } from '@food-link/core'
 import { apiClient } from '../api'
 import { todayKey } from '../utils/date'
 
 export function useHomeDashboard() {
   const recordDate = useMemo(todayKey, [])
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null)
+  const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -13,7 +14,12 @@ export function useHomeDashboard() {
     setLoading(true)
     setError(null)
     try {
-      setDashboard(await apiClient.getHomeDashboard(recordDate))
+      const [dashboardData, petData] = await Promise.all([
+        apiClient.getHomeDashboard(recordDate),
+        apiClient.getPetSummary(recordDate).catch(() => null),
+      ])
+      setDashboard(dashboardData)
+      setPetSummary(petData)
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取首页失败')
     } finally {
@@ -25,5 +31,5 @@ export function useHomeDashboard() {
     void loadHome()
   }, [loadHome])
 
-  return { recordDate, dashboard, loading, error, loadHome }
+  return { recordDate, dashboard, petSummary, loading, error, loadHome }
 }

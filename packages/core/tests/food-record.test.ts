@@ -56,4 +56,30 @@ describe('food record helpers', () => {
     expect(payload.total_weight_grams).toBe(120)
     expect(payload.items).toHaveLength(1)
   })
+
+  it('allows overriding save request entry type for text analysis tasks', () => {
+    const task: AnalysisTask = {
+      id: 'task-text-1',
+      user_id: 'user-1',
+      task_type: 'food_text',
+      status: 'done',
+      text_input: '午餐吃了一碗米饭',
+      result: {
+        description: '文字饮食记录',
+        items: [sampleFood],
+      },
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:01:00Z',
+    }
+
+    const payload = buildSaveFoodRecordRequestFromTask(task, {
+      mealType: 'lunch',
+      date: '2026-06-14',
+      entryType: 'food_text',
+    })
+
+    expect(payload.entry_type).toBe('food_text')
+    expect(payload.image_path).toBeUndefined()
+    expect(payload.source_task_id).toBe('task-text-1')
+  })
 })

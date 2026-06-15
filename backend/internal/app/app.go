@@ -307,6 +307,10 @@ func New(cfg *config.Config) (*App, error) {
 	app.startEmbeddedWorker(cfg, analyzeTaskRepo, analyzePrecisionRepo, publicFoodRepo, analyzeSvc, ocrSvc, healthDocRepo, userRepo, expiryRecognizer, expiryNotifier, exerciseSvc, frNutritionSvc, membershipSvc, taskQueue, storageClient)
 
 	engine.POST("/api/login", loginHandler.Login)
+	engine.POST("/api/app/login/wechat", loginHandler.AppWechatLogin)
+	engine.POST("/api/app/login/password", loginHandler.PasswordLogin)
+	engine.POST("/api/app/register/password", loginHandler.PasswordRegister)
+	engine.POST("/api/app/account/password", authmw.RequireJWT(jwtSvc), loginHandler.SetPassword)
 	engine.GET("/api", system.Root)
 	engine.GET("/api/health", system.Health)
 	engine.GET("/map-picker", system.MapPicker)

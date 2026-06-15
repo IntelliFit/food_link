@@ -18,6 +18,13 @@ func setupUserTestDB(t *testing.T) *gorm.DB {
 		id TEXT PRIMARY KEY,
 		openid TEXT,
 		unionid TEXT,
+		app_openid TEXT,
+		app_unionid TEXT,
+		username TEXT,
+		password_hash TEXT,
+		password_set_at TIMESTAMP,
+		last_login_method TEXT,
+		last_login_at TIMESTAMP,
 		nickname TEXT,
 		avatar TEXT,
 		telephone TEXT,
@@ -87,6 +94,40 @@ func TestUserRepo_FindByOpenID(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, user)
 	assert.Equal(t, "test", user.Nickname)
+}
+
+func TestUserRepo_FindByAppOpenIDAndUsername(t *testing.T) {
+	db := setupUserTestDB(t)
+	repo := NewUserRepo(db)
+	ctx := context.Background()
+
+	appOpenID := "app-openid-1"
+	appUnionID := "app-unionid-1"
+	username := "mobile.user"
+	err := repo.Create(ctx, &User{
+		OpenID:     "app-wx:" + appOpenID,
+		AppOpenID:  &appOpenID,
+		AppUnionID: &appUnionID,
+		UnionID:    &appUnionID,
+		Username:   &username,
+		Nickname:   "App User",
+	})
+	require.NoError(t, err)
+
+	byAppOpenID, err := repo.FindByAppOpenID(ctx, appOpenID)
+	require.NoError(t, err)
+	require.NotNil(t, byAppOpenID)
+	assert.Equal(t, "App User", byAppOpenID.Nickname)
+
+	byUnionID, err := repo.FindByUnionID(ctx, appUnionID)
+	require.NoError(t, err)
+	require.NotNil(t, byUnionID)
+	assert.Equal(t, byAppOpenID.ID, byUnionID.ID)
+
+	byUsername, err := repo.FindByUsername(ctx, "MOBILE.USER")
+	require.NoError(t, err)
+	require.NotNil(t, byUsername)
+	assert.Equal(t, byAppOpenID.ID, byUsername.ID)
 }
 
 func TestUserRepo_FindByID(t *testing.T) {

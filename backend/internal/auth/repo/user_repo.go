@@ -15,6 +15,13 @@ type User struct {
 	ID                             string         `gorm:"column:id"`
 	OpenID                         string         `gorm:"column:openid"`
 	UnionID                        *string        `gorm:"column:unionid"`
+	AppOpenID                      *string        `gorm:"column:app_openid"`
+	AppUnionID                     *string        `gorm:"column:app_unionid"`
+	Username                       *string        `gorm:"column:username"`
+	PasswordHash                   *string        `gorm:"column:password_hash"`
+	PasswordSetAt                  *time.Time     `gorm:"column:password_set_at"`
+	LastLoginMethod                *string        `gorm:"column:last_login_method"`
+	LastLoginAt                    *time.Time     `gorm:"column:last_login_at"`
 	Nickname                       string         `gorm:"column:nickname"`
 	Avatar                         string         `gorm:"column:avatar"`
 	Telephone                      *string        `gorm:"column:telephone"`
@@ -78,9 +85,64 @@ func (r *UserRepo) DB() *gorm.DB {
 	return r.db
 }
 
+func (r *UserRepo) HasUserColumn(column string) bool {
+	if r == nil || r.db == nil {
+		return false
+	}
+	return r.db.Migrator().HasColumn(&User{}, column)
+}
+
 func (r *UserRepo) FindByOpenID(ctx context.Context, openID string) (*User, error) {
 	var user User
 	err := r.db.WithContext(ctx).Where("openid = ?", openID).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &user, err
+}
+
+func (r *UserRepo) FindByAppOpenID(ctx context.Context, appOpenID string) (*User, error) {
+	appOpenID = strings.TrimSpace(appOpenID)
+	if appOpenID == "" {
+		return nil, nil
+	}
+	var user User
+	err := r.db.WithContext(ctx).Where("app_openid = ?", appOpenID).First(&user).Error
+	if isUndefinedColumnError(err) {
+		return r.FindByOpenID(ctx, "app-wx:"+appOpenID)
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &user, err
+}
+
+func (r *UserRepo) FindByUnionID(ctx context.Context, unionID string) (*User, error) {
+	unionID = strings.TrimSpace(unionID)
+	if unionID == "" {
+		return nil, nil
+	}
+	var user User
+	err := r.db.WithContext(ctx).Where("unionid = ? OR app_unionid = ?", unionID, unionID).First(&user).Error
+	if isUndefinedColumnError(err) {
+		err = r.db.WithContext(ctx).Where("unionid = ?", unionID).First(&user).Error
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &user, err
+}
+
+func (r *UserRepo) FindByUsername(ctx context.Context, username string) (*User, error) {
+	username = normalizeUsername(username)
+	if username == "" {
+		return nil, nil
+	}
+	var user User
+	err := r.db.WithContext(ctx).Where("LOWER(username) = ?", username).First(&user).Error
+	if isUndefinedColumnError(err) {
+		return r.FindByOpenID(ctx, "app-pwd:"+username)
+	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -135,7 +197,11 @@ func (r *UserRepo) Create(ctx context.Context, user *User) error {
 	if user.ID == "" {
 		user.ID = uuid.New().String()
 	}
-	return r.db.WithContext(ctx).Create(user).Error
+	db := r.db.WithContext(ctx)
+	if omit := r.missingUserFieldNames(appAuthColumnFieldNames); len(omit) > 0 {
+		db = db.Omit(omit...)
+	}
+	return db.Create(user).Error
 }
 
 func (r *UserRepo) CreateTrialEntitlement(ctx context.Context, ent *UserTrialEntitlement) error {
@@ -153,6 +219,10 @@ func (r *UserRepo) CreateTrialEntitlement(ctx context.Context, ent *UserTrialEnt
 }
 
 func (r *UserRepo) UpdateFields(ctx context.Context, userID string, updates map[string]any) (*User, error) {
+	updates = r.filterExistingUserColumns(updates)
+	if len(updates) == 0 {
+		return r.FindByID(ctx, userID)
+	}
 	if err := r.db.WithContext(ctx).Model(&User{}).Where("id = ?", userID).Updates(updates).Error; err != nil {
 		return nil, err
 	}
@@ -199,6 +269,80 @@ func (r *UserRepo) ExchangeCode(ctx context.Context, appID, secret, code string)
 		return "", "", fmt.Errorf("微信登录失败: %s (%d)", resp.ErrMsg, resp.ErrCode)
 	}
 	return resp.OpenID, resp.UnionID, nil
+}
+
+func (r *UserRepo) ExchangeAppCode(ctx context.Context, appID, secret, code string) (string, string, error) {
+	if code == "" {
+		return "", "", fmt.Errorf("code 不能为空")
+	}
+	type wxResp struct {
+		OpenID      string `json:"openid"`
+		UnionID     string `json:"unionid"`
+		AccessToken string `json:"access_token"`
+		ErrCode     int    `json:"errcode"`
+		ErrMsg      string `json:"errmsg"`
+	}
+	var resp wxResp
+	if err := simpleJSONGet(ctx, "https://api.weixin.qq.com/sns/oauth2/access_token", map[string]string{
+		"appid":      appID,
+		"secret":     secret,
+		"code":       code,
+		"grant_type": "authorization_code",
+	}, &resp); err != nil {
+		return "", "", err
+	}
+	if resp.ErrCode != 0 {
+		return "", "", fmt.Errorf("微信 App 登录失败: %s (%d)", resp.ErrMsg, resp.ErrCode)
+	}
+	return resp.OpenID, resp.UnionID, nil
+}
+
+func normalizeUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
+}
+
+var appAuthColumnFieldNames = map[string]string{
+	"app_openid":        "AppOpenID",
+	"app_unionid":       "AppUnionID",
+	"username":          "Username",
+	"password_hash":     "PasswordHash",
+	"password_set_at":   "PasswordSetAt",
+	"last_login_method": "LastLoginMethod",
+	"last_login_at":     "LastLoginAt",
+}
+
+func (r *UserRepo) missingUserFieldNames(columns map[string]string) []string {
+	if r == nil || r.db == nil {
+		return nil
+	}
+	missing := make([]string, 0)
+	for column, field := range columns {
+		if !r.HasUserColumn(column) {
+			missing = append(missing, field)
+		}
+	}
+	return missing
+}
+
+func (r *UserRepo) filterExistingUserColumns(updates map[string]any) map[string]any {
+	if len(updates) == 0 || r == nil || r.db == nil {
+		return updates
+	}
+	filtered := make(map[string]any, len(updates))
+	for key, value := range updates {
+		if _, appAuthColumn := appAuthColumnFieldNames[key]; appAuthColumn && !r.HasUserColumn(key) {
+			continue
+		}
+		filtered[key] = value
+	}
+	return filtered
+}
+
+func isUndefinedColumnError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "SQLSTATE 42703") || strings.Contains(strings.ToLower(err.Error()), "no such column")
 }
 
 func (r *UserRepo) UpdateLastSeenAnalyzeHistory(ctx context.Context, userID string) error {

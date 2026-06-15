@@ -21,7 +21,7 @@ import (
 func setupLoginTestDB(t *testing.T) (*gorm.DB, *repo.UserRepo) {
 	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&repo.User{}))
+	require.NoError(t, db.AutoMigrate(&repo.User{}, &repo.UserTrialEntitlement{}))
 	return db, repo.NewUserRepo(db)
 }
 
@@ -29,6 +29,9 @@ func setupLoginRouter(h *LoginHandler) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.POST("/api/login", h.Login)
+	r.POST("/api/app/login/wechat", h.AppWechatLogin)
+	r.POST("/api/app/login/password", h.PasswordLogin)
+	r.POST("/api/app/register/password", h.PasswordRegister)
 	return r
 }
 
@@ -93,4 +96,56 @@ func TestLoginHandler_LoginServiceError(t *testing.T) {
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.NotEmpty(t, resp["detail"])
+}
+
+func TestLoginHandler_AppWechatLoginDevelopmentMock(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development"},
+		AppAuth: config.AppAuthConfig{
+			DevelopmentMockLogin:      true,
+			DevelopmentMockWechatCode: "expo-go-dev-wechat-code",
+		},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := service.NewJWTService("test-secret-key-for-testing-only-min-32-chars", 3600, 86400)
+	h := NewLoginHandler(service.NewLoginService(cfg, userRepo, jwtSvc))
+	r := setupLoginRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"code": "expo-go-dev-wechat-code"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/app/login/wechat", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.NotEmpty(t, resp["access_token"])
+	assert.Equal(t, "app-wx:mobile-app-dev-openid-default", resp["openid"])
+}
+
+func TestLoginHandler_PasswordRegisterAndLogin(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development"},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := service.NewJWTService("test-secret-key-for-testing-only-min-32-chars", 3600, 86400)
+	h := NewLoginHandler(service.NewLoginService(cfg, userRepo, jwtSvc))
+	r := setupLoginRouter(h)
+
+	registerBody, _ := json.Marshal(map[string]string{"username": "mobileuser", "password": "password123"})
+	registerW := httptest.NewRecorder()
+	registerReq, _ := http.NewRequest(http.MethodPost, "/api/app/register/password", bytes.NewReader(registerBody))
+	registerReq.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(registerW, registerReq)
+	assert.Equal(t, http.StatusOK, registerW.Code)
+
+	loginBody, _ := json.Marshal(map[string]string{"username": "mobileuser", "password": "password123"})
+	loginW := httptest.NewRecorder()
+	loginReq, _ := http.NewRequest(http.MethodPost, "/api/app/login/password", bytes.NewReader(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(loginW, loginReq)
+	assert.Equal(t, http.StatusOK, loginW.Code)
 }

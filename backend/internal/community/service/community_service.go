@@ -907,6 +907,7 @@ type FeedContextResult struct {
 	Author       map[string]string `json:"author,omitempty"`
 	LikeCount    int               `json:"like_count,omitempty"`
 	Liked        bool              `json:"liked,omitempty"`
+	IsMine       bool              `json:"is_mine"`
 	Comments     []CommentItem     `json:"comments,omitempty"`
 	CommentCount int               `json:"comment_count,omitempty"`
 }
@@ -960,6 +961,7 @@ func (s *CommunityService) FeedTargetContext(ctx context.Context, userID, target
 		Author:       author,
 		LikeCount:    likeInfo.Count,
 		Liked:        likeInfo.Liked,
+		IsMine:       userID != "" && record.UserID == userID,
 		Comments:     comments,
 		CommentCount: countMap[targetKey],
 	}, nil

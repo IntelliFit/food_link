@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { StatsRange, StatsSummary } from '@food-link/core'
 import { apiClient } from '../api'
 import { Card } from '../components/Card'
 import { MacroRow } from '../components/MacroRow'
 import { Page } from '../components/Page'
+import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 
 export function StatsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [range, setRange] = useState<StatsRange>('week')
   const [summary, setSummary] = useState<StatsSummary | null>(null)
   const [loading, setLoading] = useState(false)
@@ -34,6 +38,18 @@ export function StatsScreen() {
       <View style={styles.switchRow}>
         <RangeButton label="近一周" active={range === 'week'} onPress={() => setRange('week')} />
         <RangeButton label="近一月" active={range === 'month'} onPress={() => setRange('month')} />
+      </View>
+      <View style={styles.quickGrid}>
+        <QuickEntry label="AI 助手" onPress={() => navigation.navigate('AiAssistant')} />
+        <QuickEntry label="代谢分析" onPress={() => navigation.navigate('StatsMetabolic')} />
+      </View>
+      <View style={styles.quickGrid}>
+        <QuickEntry label="身体趋势" onPress={() => navigation.navigate('BodyTrends')} />
+        <QuickEntry label="体重趋势" onPress={() => navigation.navigate('TrendDetail', { kind: 'weight' })} />
+      </View>
+      <View style={styles.quickGrid}>
+        <QuickEntry label="饮水趋势" onPress={() => navigation.navigate('TrendDetail', { kind: 'water' })} />
+        <QuickEntry label="运动趋势" onPress={() => navigation.navigate('TrendDetail', { kind: 'exercise' })} />
       </View>
 
       <Card>
@@ -64,7 +80,7 @@ export function StatsScreen() {
       <Card>
         <Text style={styles.sectionTitle}>AI 分析</Text>
         <Text style={styles.analysisText}>
-          {summary?.analysis_summary || '暂未生成分析。后续会继续迁移小程序的 AI 风险解读、关注项和自定义关注卡片。'}
+          {summary?.analysis_summary || '记录更多饮食、身体和运动数据后，会在这里生成 AI 风险解读和关注建议。'}
         </Text>
       </Card>
 
@@ -89,11 +105,36 @@ function RangeButton({ label, active, onPress }: { label: string; active: boolea
   )
 }
 
+function QuickEntry({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable style={styles.quickEntry} onPress={onPress}>
+      <Text style={styles.quickEntryText}>{label}</Text>
+    </Pressable>
+  )
+}
+
 const styles = StyleSheet.create({
   switchRow: {
     flexDirection: 'row',
     gap: 10,
     marginBottom: 16,
+  },
+  quickGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  quickEntry: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+    borderRadius: 16,
+    backgroundColor: colors.brandSoft,
+  },
+  quickEntryText: {
+    color: colors.brandDark,
+    fontWeight: '800',
   },
   rangeButton: {
     flex: 1,

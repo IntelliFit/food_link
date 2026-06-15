@@ -88,3 +88,7 @@ export const apiClient = createFoodLinkApiClient({
 export async function hasStoredToken(): Promise<boolean> {
   return Boolean(await AsyncStorage.getItem(ACCESS_TOKEN_KEY))
 }
+
+export async function getStoredUserId(): Promise<string | null> {
+  return AsyncStorage.getItem(USER_ID_KEY)
+}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -46,16 +47,67 @@ export function ProfileScreen() {
     void load()
   }, [load])
 
+  const confirmClearCache = () => {
+    Alert.alert(
+      '清除缓存',
+      '确定要清除本地缓存吗？首页、识别记录和圈子会在下次进入时重新加载，登录状态会保留。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '清除',
+          style: 'destructive',
+          onPress: () => {
+            void clearCache()
+          },
+        },
+      ],
+    )
+  }
+
+  const clearCache = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys()
+      const removable = keys.filter((key) => (
+        key.startsWith('food_link_mobile_') &&
+        !key.includes('access_token') &&
+        !key.includes('refresh_token') &&
+        !key.includes('user_id')
+      ))
+      if (removable.length) await AsyncStorage.multiRemove(removable)
+      Alert.alert('已清除', '本地缓存已清理，登录状态已保留。')
+    } catch (error) {
+      Alert.alert('清除失败', error instanceof Error ? error.message : '请稍后重试')
+    }
+  }
+
+  const confirmLogout = () => {
+    Alert.alert(
+      '退出登录',
+      '确定要退出登录吗？退出后将移除本机登录状态。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '退出',
+          style: 'destructive',
+          onPress: () => {
+            void logout()
+          },
+        },
+      ],
+    )
+  }
+
   return (
     <Page title="我的" subtitle="账户、会员、服务和设置入口。" refreshing={loading} onRefresh={load}>
       <Card>
-        <View style={styles.profileRow}>
+        <Pressable style={styles.profileRow} onPress={() => navigation.navigate('ProfileSettings')}>
           {profile?.avatar ? <Image source={{ uri: profile.avatar }} style={styles.avatar} /> : <View style={styles.avatarFallback} />}
           <View style={styles.profileMain}>
             <Text style={styles.nickname}>{profile?.nickname || 'Food Link 用户'}</Text>
-            <Text style={styles.meta}>已记录 {recordDays} 天</Text>
+            <Text style={styles.meta}>已记录 {recordDays} 天 · 编辑资料与个人主页</Text>
           </View>
-        </View>
+          <Text style={styles.chevron}>›</Text>
+        </Pressable>
       </Card>
 
       <Card>
@@ -64,26 +116,57 @@ export function ProfileScreen() {
         <Text style={styles.subtitle}>
           {membership?.is_pro ? 'Pro 会员生效中' : '当前为基础账号'} · 今日已赚 {reward?.today_earned_credits || 0} 积分
         </Text>
-        <Pressable onPress={() => navigation.navigate('RewardCenter')}>
-          <Text style={styles.link}>去赚积分</Text>
-        </Pressable>
+        <View style={styles.inlineActions}>
+          <Pressable onPress={() => navigation.navigate('MembershipCenter')}>
+            <Text style={styles.link}>会员中心</Text>
+          </Pressable>
+          <Pressable onPress={() => navigation.navigate('RewardCenter')}>
+            <Text style={styles.link}>去赚积分</Text>
+          </Pressable>
+        </View>
       </Card>
 
       <View style={styles.statGrid}>
         <StatCard title="识别记录" value="查看" onPress={() => navigation.navigate('AnalyzeHistory')} />
         <StatCard title="好友" value="管理" onPress={() => navigation.navigate('Friends')} />
-        <StatCard title="收藏" value="食物库" onPress={() => navigation.navigate('FoodLibrary')} />
+        <StatCard title="私信" value="会话" onPress={() => navigation.navigate('Conversations')} />
+      </View>
+      <View style={styles.statGrid}>
+        <StatCard title="邀请好友" value="有礼" onPress={() => navigation.navigate('InviteFriends')} />
+        <StatCard title="互动消息" value="通知" onPress={() => navigation.navigate('Notifications')} />
+        <StatCard title="成长伙伴" value="查看" onPress={() => navigation.navigate('PetHome')} />
       </View>
 
       <Card>
         <Text style={styles.sectionTitle}>服务</Text>
-        <MenuItem title="健康档案" subtitle="完善身体数据与目标" onPress={() => navigation.navigate('HealthProfile')} />
+        <MenuItem title="AI 助手" subtitle="风险解读、饮食建议和关注卡片" onPress={() => navigation.navigate('AiAssistant')} />
+        <MenuItem title="账号安全" subtitle="设置用户名密码，作为微信登录之外的备用方式" onPress={() => navigation.navigate('AccountSecurity')} />
+        <MenuItem title="互动消息" subtitle="点赞、评论、回复和审核结果" onPress={() => navigation.navigate('Notifications')} />
+        <MenuItem title="打卡排行榜" subtitle="查看本周打卡排名" onPress={() => navigation.navigate('CheckinLeaderboard')} />
+        <MenuItem title="代谢分析" subtitle="BMR、TDEE 和摄入差额" onPress={() => navigation.navigate('StatsMetabolic')} />
+        <MenuItem title="健康档案详情" subtitle="查看病史、偏好、体检报告和执行模式" onPress={() => navigation.navigate('HealthProfileView')} />
+        <MenuItem title="健康档案与目标" subtitle="完善身体数据与首页目标" onPress={() => navigation.navigate('HealthProfile')} />
+        <MenuItem title="身体趋势" subtitle="查看体重、饮水和月度摄入趋势" onPress={() => navigation.navigate('BodyTrends')} />
+        <MenuItem title="包装食品" subtitle="上传营养成分表和商品包装" onPress={() => navigation.navigate('PackagedFoodEdit')} />
+        <MenuItem title="收藏食谱" subtitle="常吃组合一键写入饮食记录" onPress={() => navigation.navigate('Recipes')} />
+        <MenuItem title="公共食物库" subtitle="外食、校园餐、收藏和我的分享" onPress={() => navigation.navigate('PublicFood', { mode: 'all' })} />
+        <MenuItem title="校园食堂" subtitle="校园餐、食堂窗口和价格" onPress={() => navigation.navigate('CampusCanteen')} />
+        <MenuItem title="食物库" subtitle="营养库、自定义食物和手动记录" onPress={() => navigation.navigate('FoodLibrary')} />
         <MenuItem title="食物保质期" subtitle={expiry ? `${expiry.active_count} 样保鲜中` : '管理临期食物'} onPress={() => navigation.navigate('Expiry')} />
         <MenuItem title="体重/喝水/运动" subtitle="记录身体指标" onPress={() => navigation.navigate('BodyMetricRecord', { type: 'weight' })} />
-        <MenuItem title="关于与反馈" subtitle="协议、设置、用户群等入口后续迁移" onPress={() => navigation.navigate('NativePlaceholder', { title: '关于与反馈', description: '小程序中的协议、反馈、用户群和设置页已作为 App 入口保留，后续会逐步补齐。' })} />
+        <MenuItem title="分享到公共库" subtitle="上传外食、校园餐或自制餐食" onPress={() => navigation.navigate('PublicFoodShare', { mode: 'public' })} />
+        <MenuItem title="定位搜索" subtitle="搜索商家、食堂或地点" onPress={() => navigation.navigate('LocationSearch')} />
+        <MenuItem title="自动续费审核" subtitle="续费状态与支付渠道说明" onPress={() => navigation.navigate('AutoRenewAudit')} />
+        <MenuItem title="用户协议" subtitle="服务条款摘要" onPress={() => navigation.navigate('Agreements')} />
+        <MenuItem title="会员协议" subtitle="会员权益、续费和订单说明" onPress={() => navigation.navigate('MembershipAgreement')} />
+        <MenuItem title="隐私政策" subtitle="数据、图片和缓存说明" onPress={() => navigation.navigate('PrivacyPolicy')} />
+        <MenuItem title="隐私设置" subtitle="搜索可见性和公开记录" onPress={() => navigation.navigate('PrivacySettings')} />
+        <MenuItem title="用户群" subtitle="加入交流群反馈体验" onPress={() => navigation.navigate('UserGroup')} />
+        <MenuItem title="关于与反馈" subtitle="提交反馈、隐私设置、协议与用户群" onPress={() => navigation.navigate('AboutFeedback')} />
+        <MenuItem title="清除缓存" subtitle="重置本机页面缓存，保留登录状态" onPress={confirmClearCache} />
       </Card>
 
-      <Pressable onPress={logout} style={styles.logout}>
+      <Pressable onPress={confirmLogout} style={styles.logout}>
         <Text style={styles.logoutText}>退出登录</Text>
       </Pressable>
     </Page>
@@ -160,6 +243,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
     color: colors.brandDark,
     fontWeight: '800',
+  },
+  inlineActions: {
+    flexDirection: 'row',
+    gap: 20,
   },
   statGrid: {
     flexDirection: 'row',

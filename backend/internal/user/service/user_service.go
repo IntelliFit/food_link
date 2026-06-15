@@ -452,13 +452,13 @@ func (s *UserService) GetPublicProfile(ctx context.Context, userID string) (map[
 	}
 	recordDays, _ := s.users.CountFoodRecordDays(ctx, userID)
 	return map[string]any{
-		"id":           user.ID,
-		"nickname":     user.Nickname,
-		"avatar":       s.resolveAvatarURL(user.Avatar),
-		"cover_image":  s.resolveCoverImageURL(user.CoverImage),
-		"record_days":  recordDays,
-		"create_time":  user.CreatedAt,
-		"motto":        user.Motto,
+		"id":          user.ID,
+		"nickname":    user.Nickname,
+		"avatar":      s.resolveAvatarURL(user.Avatar),
+		"cover_image": s.resolveCoverImageURL(user.CoverImage),
+		"record_days": recordDays,
+		"create_time": user.CreatedAt,
+		"motto":       user.Motto,
 	}, nil
 }
 
@@ -551,6 +551,9 @@ func buildProfileResponseWithStorage(user *repo.User, storageClient *storage.Cli
 		"id":                    user.ID,
 		"openid":                user.OpenID,
 		"unionid":               user.UnionID,
+		"username":              user.Username,
+		"has_password":          user.PasswordHash != nil && strings.TrimSpace(*user.PasswordHash) != "",
+		"password_set_at":       user.PasswordSetAt,
 		"nickname":              user.Nickname,
 		"avatar":                user.Avatar,
 		"telephone":             user.Telephone,

@@ -2,10 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { apiClient, hasStoredToken } from '../api'
 
 const DEFAULT_DEBUG_OPENID = 'mobile-poc-debug-openid'
+const DEFAULT_APP_WECHAT_DEV_CODE = process.env.EXPO_PUBLIC_APP_WECHAT_DEV_CODE || 'expo-go-dev-wechat-code'
 
 interface AuthContextValue {
   isBootstrapping: boolean
   isAuthenticated: boolean
+  loginWithWechat: (inviteCode?: string) => Promise<void>
+  loginWithPassword: (username: string, password: string) => Promise<void>
+  registerWithPassword: (username: string, password: string, nickname?: string, inviteCode?: string) => Promise<void>
   loginWithDebugAccount: () => Promise<void>
   loginWithUserId: (userId: string, password: string) => Promise<void>
   logout: () => Promise<void>
@@ -28,6 +32,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setIsAuthenticated(true)
   }, [])
 
+  const loginWithWechat = useCallback(async (inviteCode?: string) => {
+    await apiClient.loginWithAppWechat({ code: DEFAULT_APP_WECHAT_DEV_CODE, inviteCode })
+    setIsAuthenticated(true)
+  }, [])
+
+  const loginWithPassword = useCallback(async (username: string, password: string) => {
+    await apiClient.loginWithPassword({ username, password })
+    setIsAuthenticated(true)
+  }, [])
+
+  const registerWithPassword = useCallback(async (username: string, password: string, nickname?: string, inviteCode?: string) => {
+    await apiClient.registerWithPassword({ username, password, nickname, inviteCode })
+    setIsAuthenticated(true)
+  }, [])
+
   const loginWithUserId = useCallback(async (userId: string, password: string) => {
     await apiClient.debugImpersonateUser(userId, password)
     setIsAuthenticated(true)
@@ -41,10 +60,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const value = useMemo<AuthContextValue>(() => ({
     isBootstrapping,
     isAuthenticated,
+    loginWithWechat,
+    loginWithPassword,
+    registerWithPassword,
     loginWithDebugAccount,
     loginWithUserId,
     logout,
-  }), [isBootstrapping, isAuthenticated, loginWithDebugAccount, loginWithUserId, logout])
+  }), [isBootstrapping, isAuthenticated, loginWithWechat, loginWithPassword, registerWithPassword, loginWithDebugAccount, loginWithUserId, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

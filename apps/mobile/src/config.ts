@@ -6,3 +6,7 @@ export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
   extra?.apiBaseUrl ||
   'http://127.0.0.1:3010'
+
+export const SHOW_DEBUG_LOGIN =
+  process.env.EXPO_PUBLIC_ENABLE_DEBUG_LOGIN === 'true' ||
+  (process.env.EXPO_PUBLIC_ENABLE_DEBUG_LOGIN !== 'false' && __DEV__)

@@ -168,6 +168,29 @@ export interface FoodRecordItemRow {
   nutrients: Nutrients
   image_path?: string | null
   image_paths?: string[] | null
+  gross_weight_grams?: number
+  edible_portion_ratio?: number
+  edible_portion_reason?: string | null
+  edible_portion_source?: string | null
+  suggested_ratio?: number
+  suggested_ratio_reason?: string | null
+  suggested_ratio_source?: string | null
+  waterMl?: number
+  water_ml?: number
+  nutrition_source?: string | null
+  nutrition_source_category?: string | null
+  matched_food_id?: string | null
+  packaged_food_id?: string
+  package_match_status?: string
+  package_match_confidence?: number
+  package_weight_source?: string
+  package_weight_applied?: boolean
+  package_weight_reason?: string
+  packaged_candidates?: Array<Record<string, unknown>>
+  manual_source?: 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom'
+  manual_source_id?: string
+  manual_source_title?: string
+  manual_portion_label?: string
 }
 
 export interface FoodRecord {
@@ -296,17 +319,64 @@ export interface MembershipStatus {
   is_pro: boolean
   status: 'inactive' | 'active' | 'expired' | 'cancelled'
   current_plan_code?: string | null
+  first_activated_at?: string | null
+  current_period_start?: string | null
+  expires_at?: string | null
+  last_paid_at?: string | null
   daily_limit: number | null
   daily_used: number | null
   daily_remaining: number | null
   daily_credits_max?: number
   daily_credits_used?: number
   daily_credits_remaining?: number
+  daily_credits_base?: number
+  daily_bonus_credits?: number
+  invite_bonus_credits?: number
+  share_bonus_credits?: number
   system_credits_remaining?: number
   earned_credits_balance?: number
+  earned_credits_consumed_today?: number
   total_credits_available?: number
+  credits_reset_at?: string | null
   trial_active?: boolean
+  trial_expires_at?: string | null
+  trial_days_total?: number
+  trial_policy?: unknown
+  early_user_rank?: number | null
+  early_user_limit?: number
+  early_paid_user_rank?: number | null
+  early_paid_user_limit?: number
+  early_user_paid_bonus_multiplier?: number
+  early_user_paid_bonus_eligible?: boolean
+  early_user_paid_bonus_source?: unknown
+  early_user_paid_bonus_active?: boolean
   points_balance?: number
+}
+
+export interface MembershipPlan {
+  code: string
+  name: string
+  description?: string | null
+  amount: number
+  original_amount?: number | null
+  savings?: number | null
+  duration_months: number
+  tier?: string | null
+  period?: string | null
+  daily_credits?: number
+  sort_order?: number
+}
+
+export interface MembershipPaymentOrder {
+  order_no: string
+  plan_code: string
+  amount: number
+  original_amount?: number
+  order_mode?: string
+  upgrade_terms?: Record<string, unknown> | null
+  pay_params?: Record<string, string>
+  status?: string
+  [key: string]: unknown
 }
 
 export interface AnalyzeTaskSubmitParams {
@@ -385,6 +455,9 @@ export interface UserInfo {
   id: string
   openid?: string
   unionid?: string
+  username?: string | null
+  has_password?: boolean
+  password_set_at?: string | null
   nickname: string
   avatar: string
   cover_image?: string
@@ -405,7 +478,87 @@ export interface UserInfo {
   public_records?: boolean
 }
 
+export interface HealthReportIndicator {
+  name?: string
+  value?: string | number
+  unit?: string
+  flag?: string
+  reference_range?: string
+  [key: string]: unknown
+}
+
+export interface HealthReportExtract {
+  indicators?: HealthReportIndicator[]
+  conclusions?: string[]
+  suggestions?: string[]
+  medical_notes?: string
+  _image_urls?: string[]
+  _status?: 'processing' | 'done' | 'failed' | string
+  _error?: string
+  [key: string]: unknown
+}
+
+export interface HealthCondition {
+  medical_history?: string[]
+  diet_preference?: string[]
+  allergies?: string[]
+  health_notes?: string
+  routine_type?: string
+  routine_sleep_hour?: number
+  routine_wake_hour?: number
+  daily_life_activity_level?: string
+  report_extract?: HealthReportExtract
+  dashboard_targets?: Record<string, number>
+  [key: string]: unknown
+}
+
+export interface HealthProfile extends UserInfo {
+  diet_goal?: string | null
+  health_condition?: HealthCondition
+  daily_life_activity_level?: string
+  mode_set_by?: string | null
+  mode_set_at?: string | null
+  mode_reason?: string | null
+  mode_commitment_days?: number | null
+  mode_switch_count_30d?: number | null
+}
+
 export type StatsRange = 'week' | 'month'
+
+export interface StatsInsightResult {
+  analysis_summary?: string
+  content?: string
+  generated_date?: string
+  date_range?: string
+  range?: string
+  needs_refresh?: boolean
+  daily_limit?: number
+  used_today?: number
+  [key: string]: unknown
+}
+
+export interface StatsCustomFocusResult {
+  card?: Record<string, unknown>
+  custom_focus_daily_limit?: number
+  custom_focus_used_today?: number
+  custom_focus_remaining_today?: number
+}
+
+export interface DietRecommendationResult {
+  title?: string
+  summary?: string
+  recommendations?: Array<{
+    title?: string
+    reason?: string
+    foods?: string[]
+    calories?: number
+    protein?: number
+    carbs?: number
+    fat?: number
+    [key: string]: unknown
+  }>
+  [key: string]: unknown
+}
 
 export interface BodyMetricWeightEntry {
   id?: string
@@ -507,6 +660,8 @@ export interface CommunityFeedQueryParams {
 
 export type CommunityFeedRecord = FoodRecord & {
   feed_type?: CommunityFeedTargetType
+  title?: string | null
+  body?: string | null
   exercise_type?: string | null
   exercise_desc?: string | null
   calories_burned?: number | null
@@ -548,6 +703,18 @@ export interface CommunityFeedItem {
   recommend_reason?: string
 }
 
+export interface CommunityFeedContext {
+  allowed: boolean
+  reason?: string
+  record?: CommunityFeedRecord
+  author?: { id?: string; nickname?: string; avatar?: string }
+  like_count?: number
+  liked?: boolean
+  is_mine?: boolean
+  comments?: FeedCommentItem[]
+  comment_count?: number
+}
+
 export interface CheckinLeaderboardItem {
   user_id: string
   nickname: string
@@ -556,13 +723,53 @@ export interface CheckinLeaderboardItem {
   rank?: number
 }
 
+export interface FollowUserItem {
+  id?: string
+  user_id?: string
+  nickname?: string
+  avatar?: string
+  is_following?: boolean
+  followers_count?: number
+  following_count?: number
+}
+
+export interface FollowListResponse {
+  list: FollowUserItem[]
+  has_more?: boolean
+  offset?: number
+}
+
+export interface FollowStats {
+  followers_count?: number
+  following_count?: number
+  is_following?: boolean
+}
+
+export interface FriendInviteProfile {
+  user_id?: string
+  id?: string
+  nickname?: string
+  avatar?: string
+  invite_code?: string
+  is_friend?: boolean
+  is_self?: boolean
+  status?: string
+}
+
+export interface FriendInviteResolveResult extends FriendInviteProfile {
+  relation?: string
+  request_status?: string
+}
+
 export interface RewardCenterTask {
   code: string
+  action_type?: string
   name: string
   description?: string
   reward_amount: number
   daily_limit?: number | null
   today_count: number
+  status?: string
   action_path?: string | null
   completed?: boolean
 }
@@ -586,13 +793,503 @@ export interface FoodExpiryDashboard {
   preview_items: HomeFoodExpiryItem[]
 }
 
+export interface ManualFoodItem {
+  id?: string
+  title?: string
+  name?: string
+  source?: 'recent' | 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom' | string
+  source_id?: string
+  default_weight_grams?: number
+  total_calories?: number
+  total_protein?: number
+  total_carbs?: number
+  total_fat?: number
+  calories?: number
+  protein?: number
+  carbs?: number
+  fat?: number
+  portion_label?: string
+  recommend_reason?: string
+  image_path?: string | null
+  image_paths?: string[] | null
+  nutrients_per_100g?: Record<string, number>
+  extra_nutrients?: Record<string, number>
+  [key: string]: unknown
+}
+
+export interface ManualFoodBrowseResult {
+  recent_items?: ManualFoodItem[]
+  collected_public_library?: ManualFoodItem[]
+  public_library?: ManualFoodItem[]
+  nutrition_library?: ManualFoodItem[]
+  stats?: Record<string, unknown>
+}
+
+export interface FoodExpiryItem {
+  id: string
+  user_id?: string
+  food_name: string
+  category?: string
+  storage_type?: string
+  quantity_note?: string | null
+  expire_date: string
+  opened_date?: string | null
+  note?: string | null
+  source_type?: string
+  status?: 'active' | 'consumed' | 'discarded' | string
+  created_at?: string
+  updated_at?: string
+  days_until_expire?: number | null
+  urgency?: 'expired' | 'today' | 'soon' | 'fresh' | string
+  urgency_label?: string
+}
+
+export interface RecipeItem {
+  id: string
+  user_id?: string
+  recipe_name: string
+  description?: string | null
+  image_path?: string | null
+  items?: Array<Record<string, unknown>>
+  total_calories: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  total_weight_grams: number
+  tags?: string[]
+  meal_type?: MealType | string | null
+  is_favorite?: boolean
+  use_count?: number
+  last_used_at?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PublicFoodAuthor {
+  id?: string
+  nickname?: string
+  avatar?: string
+}
+
+export interface PublicFoodItem {
+  id: string
+  user_id?: string
+  source_record_id?: string | null
+  analysis_task_id?: string | null
+  image_path?: string | null
+  image_paths?: string[]
+  total_calories: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  items?: Array<Record<string, unknown>>
+  description?: string
+  insight?: string
+  food_name: string
+  merchant_name?: string
+  merchant_address?: string
+  detail_address?: string
+  taste_rating?: number | null
+  suitable_for_fat_loss?: boolean
+  user_tags?: string[]
+  user_notes?: string
+  city?: string
+  district?: string
+  status?: string
+  type?: string
+  like_count?: number
+  comment_count?: number
+  collection_count?: number
+  avg_rating?: number
+  liked?: boolean
+  collected?: boolean
+  author?: PublicFoodAuthor
+  recommend_reason?: string
+  is_campus_food?: boolean
+  school_name?: string
+  campus_name?: string
+  canteen_name?: string
+  floor?: string
+  window_name?: string
+  price?: number
+  price_unit?: string
+  portion_description?: string
+  campus_location_text?: string
+  school_logo_url?: string
+  analysis_status?: string
+  analysis_error?: string
+  published_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PackagedFoodItem {
+  id?: string
+  brand?: string
+  product_name?: string
+  display_name?: string
+  search_text?: string
+  barcode?: string
+  spec_text?: string
+  flavor_text?: string
+  package_category?: string
+  ingredients_text?: string
+  ocr_raw_text?: string
+  extract_confidence?: number
+  field_confidence?: Record<string, unknown>
+  ingest_method?: string
+  source_image_urls?: string[]
+  nutrition_basis_unit?: string
+  energy_unit_raw?: string
+  raw_label_payload?: Record<string, unknown>
+  conversion_status?: string
+  net_weight_g?: number
+  serving_weight_g?: number
+  kcal_per_100g?: number
+  protein_per_100g?: number
+  carbs_per_100g?: number
+  fat_per_100g?: number
+  fiber_per_100g?: number
+  sugar_per_100g?: number
+  saturated_fat_per_100g?: number
+  cholesterol_mg_per_100g?: number
+  sodium_mg_per_100g?: number
+  potassium_mg_per_100g?: number
+  calcium_mg_per_100g?: number
+  iron_mg_per_100g?: number
+  magnesium_mg_per_100g?: number
+  zinc_mg_per_100g?: number
+  vitamin_a_rae_mcg_per_100g?: number
+  vitamin_c_mg_per_100g?: number
+  vitamin_d_mcg_per_100g?: number
+  vitamin_e_mg_per_100g?: number
+  vitamin_k_mcg_per_100g?: number
+  thiamin_mg_per_100g?: number
+  riboflavin_mg_per_100g?: number
+  niacin_mg_per_100g?: number
+  vitamin_b6_mg_per_100g?: number
+  folate_mcg_per_100g?: number
+  vitamin_b12_mcg_per_100g?: number
+  review_status?: string
+  created_at?: string
+  updated_at?: string
+  [key: string]: unknown
+}
+
+export interface PackagedNutritionLabelResult {
+  brand?: string
+  product_name?: string
+  net_weight_g?: number
+  serving_weight_g?: number
+  kcal_per_100g?: number
+  protein_per_100g?: number
+  carbs_per_100g?: number
+  fat_per_100g?: number
+  fiber_per_100g?: number
+  sugar_per_100g?: number
+  saturated_fat_per_100g?: number
+  cholesterol_mg_per_100g?: number
+  sodium_mg_per_100g?: number
+  potassium_mg_per_100g?: number
+  calcium_mg_per_100g?: number
+  iron_mg_per_100g?: number
+  magnesium_mg_per_100g?: number
+  zinc_mg_per_100g?: number
+  vitamin_a_rae_mcg_per_100g?: number
+  vitamin_c_mg_per_100g?: number
+  vitamin_d_mcg_per_100g?: number
+  vitamin_e_mg_per_100g?: number
+  vitamin_k_mcg_per_100g?: number
+  thiamin_mg_per_100g?: number
+  riboflavin_mg_per_100g?: number
+  niacin_mg_per_100g?: number
+  vitamin_b6_mg_per_100g?: number
+  folate_mcg_per_100g?: number
+  vitamin_b12_mcg_per_100g?: number
+  confidence?: number
+  raw_text?: string
+  [key: string]: unknown
+}
+
+export interface PackagedAutoIngestResult {
+  status?: string
+  reason?: string
+  upsert_action?: string
+  packaged_food_id?: string
+  missing_fields?: string[]
+  conflict_reasons?: string[]
+}
+
+export interface PackagedProductExtractResult {
+  brand?: string
+  product_name?: string
+  display_name?: string
+  search_text?: string
+  product_family_key?: string
+  flavor_text?: string
+  package_category?: string
+  net_content_value?: number
+  net_content_unit?: string
+  unit_count?: number
+  unit_content_value?: number
+  unit_content_unit?: string
+  review_status?: string
+  net_weight_g?: number
+  serving_weight_g?: number
+  spec_text?: string
+  barcode?: string
+  ingredients_text?: string
+  unit_nutrition_per_100g?: Record<string, number>
+  nutrition_basis_unit?: string
+  energy_unit_raw?: string
+  raw_nutrition_basis?: Record<string, unknown>
+  raw_nutrition_per_basis?: Record<string, unknown>
+  raw_label_payload?: Record<string, unknown>
+  conversion_status?: string
+  field_confidence?: Record<string, number>
+  extract_confidence?: number
+  needs_more_images?: string[]
+  missing_fields?: string[]
+  auto_ingest_result?: PackagedAutoIngestResult
+  packaged_food_id?: string
+  ocr_raw_text?: string
+  source_image_urls?: string[]
+}
+
+export interface LocationSearchPOI {
+  id?: string
+  title?: string
+  name?: string
+  address?: string
+  category?: string
+  tel?: string
+  location?: {
+    lat?: number
+    lng?: number
+  }
+  latitude?: number
+  longitude?: number
+  [key: string]: unknown
+}
+
+export interface LocationSearchResult {
+  keyword?: string
+  pois?: LocationSearchPOI[]
+  list?: LocationSearchPOI[]
+  items?: LocationSearchPOI[]
+  count?: number
+  [key: string]: unknown
+}
+
+export interface PublicFoodComment {
+  id: string
+  user_id: string
+  library_item_id?: string
+  parent_comment_id?: string | null
+  reply_to_user_id?: string | null
+  reply_to_nickname?: string
+  content: string
+  rating?: number | null
+  created_at?: string
+  nickname?: string
+  avatar?: string
+  replies?: PublicFoodComment[]
+}
+
+export interface CampusFoodDetail {
+  item: PublicFoodItem
+  metrics?: {
+    protein_per_yuan?: number
+    price_per_100_kcal?: number
+  }
+  similar_items?: PublicFoodItem[]
+  related_feeds?: PublicFoodItem[]
+}
+
+export interface PublicProfile {
+  id: string
+  nickname?: string
+  avatar?: string
+  cover_image?: string
+  record_days?: number
+  create_time?: string
+  motto?: string
+  followers_count?: number
+  following_count?: number
+  is_following?: boolean
+}
+
+export interface FriendUserItem {
+  id: string
+  nickname?: string
+  avatar?: string
+  is_friend?: boolean
+  is_pending?: boolean
+}
+
+export interface PrivateMessageItem {
+  ID?: string
+  id?: string
+  SenderID?: string
+  sender_id?: string
+  ReceiverID?: string
+  receiver_id?: string
+  Content?: string
+  content?: string
+  ImageURL?: string
+  image_url?: string
+  ContentType?: string
+  content_type?: string
+  IsRead?: boolean
+  is_read?: boolean
+  CreatedAt?: string
+  created_at?: string
+}
+
+export interface ConversationSummary {
+  UserID?: string
+  user_id?: string
+  Nickname?: string
+  nickname?: string
+  Avatar?: string
+  avatar?: string
+  LastMessage?: PrivateMessageItem
+  last_message?: PrivateMessageItem
+  UnreadCount?: number
+  unread_count?: number
+}
+
+export interface FriendRequestItem {
+  id: string
+  from_user_id?: string
+  to_user_id?: string
+  status?: string
+  created_at?: string
+  updated_at?: string
+  from_nickname?: string
+  from_avatar?: string
+  counterpart_user_id?: string
+  counterpart_nickname?: string
+  counterpart_avatar?: string
+}
+
+export interface CommunityNotificationItem {
+  id: string
+  notification_type: string
+  record_id?: string | null
+  target_type?: string
+  target_id?: string
+  comment_id?: string | null
+  parent_comment_id?: string | null
+  content_preview?: string
+  is_read: boolean
+  created_at?: string | null
+  actor?: {
+    id?: string
+    nickname?: string
+    avatar?: string
+  }
+}
+
 export interface ExerciseLogItem {
   id: string
   user_id?: string
   date?: string
+  recorded_on?: string
+  recorded_at?: string
   exercise_desc?: string | null
   exercise_type?: string | null
   calories_burned?: number | null
   duration_min?: number | null
   created_at?: string
+  image_url?: string | null
+  ai_reasoning?: string | null
+}
+
+export interface PetAppearanceCandidate {
+  id: string
+  pet_seed: string
+  name: string
+  color: string
+  shape: string
+  pattern: string
+  accessory: string
+  personality: string
+  archetype?: string
+  style?: string
+  score?: number
+  match_reasons?: string[]
+}
+
+export interface PetProfile {
+  id: string
+  pet_seed: string
+  name: string
+  color: string
+  shape: string
+  pattern: string
+  accessory: string
+  personality: string
+  level: number
+  experience: number
+  level_exp: number
+  next_level_exp: number
+  level_progress: number
+  total_events: number
+  archetype?: string
+  match_reasons?: string[]
+  needs_selection?: boolean
+  selection_candidates?: PetAppearanceCandidate[]
+  free_profile_rematch_available?: boolean
+  growth_unlocks?: string[]
+}
+
+export interface PetDailyScore {
+  date: string
+  habit_score: number
+  exp_gained: number
+  details?: Record<string, unknown>
+}
+
+export interface PetStatus {
+  mood: string
+  state: string
+  message: string
+  task_text: string
+  inactivity_days: number
+  can_revive: boolean
+}
+
+export interface PetEvent {
+  id: string
+  event_date: string
+  event_type: string
+  title: string
+  message: string
+  task_text: string
+  habit_score: number
+  exp_reward: number
+  credit_reward: number
+  can_claim: boolean
+  is_read: boolean
+  is_claimed: boolean
+  details?: Record<string, unknown>
+}
+
+export interface PetSummary {
+  pet: PetProfile
+  today: PetDailyScore
+  status: PetStatus
+  event?: PetEvent
+  rewards: {
+    daily_credit_cap: number
+  }
+}
+
+export interface PetClaimResult {
+  pet: PetProfile
+  event: PetEvent
+  credits_awarded: number
+  exp_awarded: number
+  earned_credits_balance?: number
 }

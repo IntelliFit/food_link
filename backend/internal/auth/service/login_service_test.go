@@ -99,3 +99,70 @@ func TestLoginService_Login_CreatesTrialEntitlement(t *testing.T) {
 	assert.Equal(t, result.UserID, *ent.FirstUserID)
 	assert.Equal(t, loginRegularUserTrialDays, ent.TrialDaysTotal)
 }
+
+func TestLoginService_AppWechatLogin_WithDevelopmentMockCode(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development"},
+		AppAuth: config.AppAuthConfig{
+			DevelopmentMockLogin:      true,
+			DevelopmentMockWechatCode: "expo-go-dev-wechat-code",
+		},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	svc := NewLoginService(cfg, userRepo, jwtSvc)
+
+	result, err := svc.LoginWithAppWechat(context.Background(), AppWechatLoginInput{Code: "expo-go-dev-wechat-code"})
+	require.NoError(t, err)
+	require.NotEmpty(t, result.AccessToken)
+	assert.Equal(t, "app-wx:mobile-app-dev-openid-default", result.OpenID)
+	assert.Equal(t, "mobile-app-dev-unionid-default", result.UnionID)
+
+	user, err := userRepo.FindByAppOpenID(context.Background(), "mobile-app-dev-openid-default")
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.NotNil(t, user.LastLoginMethod)
+	assert.Equal(t, "wechat_app", *user.LastLoginMethod)
+}
+
+func TestLoginService_RegisterAndLoginWithPassword(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development"},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	svc := NewLoginService(cfg, userRepo, jwtSvc)
+	ctx := context.Background()
+
+	registered, err := svc.RegisterWithPassword(ctx, PasswordRegisterInput{
+		Username: "mobile.user",
+		Password: "password123",
+		Nickname: "Mobile User",
+	})
+	require.NoError(t, err)
+	assert.NotEmpty(t, registered.AccessToken)
+	assert.Equal(t, "app-pwd:mobile.user", registered.OpenID)
+
+	loggedIn, err := svc.LoginWithPassword(ctx, PasswordLoginInput{Username: "MOBILE.USER", Password: "password123"})
+	require.NoError(t, err)
+	assert.Equal(t, registered.UserID, loggedIn.UserID)
+}
+
+func TestLoginService_LoginWithPassword_InvalidPassword(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development"},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := NewJWTService("test-secret", 3600, 86400)
+	svc := NewLoginService(cfg, userRepo, jwtSvc)
+	ctx := context.Background()
+
+	_, err := svc.RegisterWithPassword(ctx, PasswordRegisterInput{Username: "mobileuser", Password: "password123"})
+	require.NoError(t, err)
+	_, err = svc.LoginWithPassword(ctx, PasswordLoginInput{Username: "mobileuser", Password: "wrong-password"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "用户名或密码错误")
+}
