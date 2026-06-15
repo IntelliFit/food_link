@@ -28,10 +28,10 @@ const menus: Array<{
   icon: ComponentType<{ className?: string }>
   disabled?: boolean
 }> = [
-  { id: 'overview', label: '总览', icon: LayoutDashboard, disabled: true },
+  { id: 'overview', label: '总览', icon: LayoutDashboard },
   { id: 'feedback', label: '意见反馈', icon: MessageSquareText },
   { id: 'benchmark', label: '数据集评测', icon: FlaskConical },
-  { id: 'packaged-foods', label: '包装食品', icon: Package, disabled: true },
+  { id: 'packaged-foods', label: '包装食品', icon: Package },
   { id: 'feed-reports', label: '举报管理', icon: Flag },
   { id: 'settings', label: '系统设置', icon: Settings, disabled: true },
 ]

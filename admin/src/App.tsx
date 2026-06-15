@@ -10,6 +10,8 @@ import { FeedbackPage } from '@/pages/feedback-page'
 import { FeedReportPage } from '@/pages/feed-report-page'
 import { FeedReportDetailPage } from '@/pages/feed-report-detail-page'
 import { LoginPage } from '@/pages/login-page'
+import { OverviewPage } from '@/pages/overview-page'
+import { PackagedFoodsPage } from '@/pages/packaged-foods-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 
 const MENU_PATHS: Record<AdminMenuId, string> = {
@@ -98,12 +100,14 @@ export function App() {
   return (
     <>
       <Routes>
-        <Route path='/' element={<Navigate to='/feedback' replace />} />
+        <Route path='/' element={<Navigate to='/overview' replace />} />
+        <Route path='/overview' element={<OverviewPage {...pageProps} />} />
         <Route path='/feedback' element={<FeedbackPage {...pageProps} />} />
         <Route path='/benchmark' element={<BenchmarkPage {...pageProps} />} />
         <Route path='/feed-reports' element={<FeedReportPage {...pageProps} />} />
         <Route path='/feed-reports/:reportId' element={<FeedReportDetailPage {...pageProps} />} />
-        <Route path='*' element={<Navigate to='/feedback' replace />} />
+        <Route path='/packaged-foods' element={<PackagedFoodsPage {...pageProps} />} />
+        <Route path='*' element={<Navigate to='/overview' replace />} />
       </Routes>
       <Toaster richColors closeButton position='bottom-right' />
     </>
