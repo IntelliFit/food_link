@@ -5351,6 +5351,31 @@ export async function getFollowStats(userId: string): Promise<FollowStats> {
 
 export const SYSTEM_MESSAGE_USER_ID = '00000000-0000-0000-0000-000000000000'
 
+function normalizePrivateMessage(raw: any): PrivateMessage {
+  return {
+    id: raw?.id || raw?.ID || '',
+    sender_id: raw?.sender_id || raw?.SenderID || '',
+    receiver_id: raw?.receiver_id || raw?.ReceiverID || '',
+    content: raw?.content || raw?.Content || '',
+    image_url: raw?.image_url || raw?.ImageURL || '',
+    content_type: raw?.content_type || raw?.ContentType || 'text',
+    is_read: raw?.is_read ?? raw?.IsRead ?? false,
+    created_at: raw?.created_at || raw?.CreatedAt || '',
+  }
+}
+
+function normalizeConversationSummary(raw: any): ConversationSummary {
+  return {
+    user_id: raw?.user_id || raw?.UserID || '',
+    nickname: raw?.nickname || raw?.Nickname || '',
+    avatar: raw?.avatar || raw?.Avatar || '',
+    last_message: raw?.last_message || raw?.LastMessage
+      ? normalizePrivateMessage(raw?.last_message || raw?.LastMessage)
+      : (undefined as any),
+    unread_count: raw?.unread_count ?? raw?.UnreadCount ?? 0,
+  }
+}
+
 export interface PrivateMessage {
   id: string
   sender_id: string
@@ -5377,21 +5402,29 @@ export async function sendPrivateMessage(receiverId: string, content: string, co
     data: { receiver_id: receiverId, content, content_type: contentType, image_url: imageUrl }
   })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '发送失败')
-  return response.data as PrivateMessage
+  return normalizePrivateMessage(response.data)
 }
 
 /** 获取与某用户的聊天记录 */
 export async function getPrivateMessages(otherUserId: string, offset = 0, limit = 20): Promise<{ list: PrivateMessage[]; has_more: boolean }> {
   const response = await authenticatedRequest(`/api/messages/conversation/${encodeURIComponent(otherUserId)}?offset=${offset}&limit=${limit}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取聊天记录失败')
-  return response.data as { list: PrivateMessage[]; has_more: boolean }
+  const data = (response.data || {}) as any
+  return {
+    list: (data.list || []).map(normalizePrivateMessage),
+    has_more: data.has_more ?? data.HasMore ?? false,
+  }
 }
 
 /** 获取会话列表 */
 export async function getConversations(offset = 0, limit = 20): Promise<{ list: ConversationSummary[]; has_more: boolean }> {
   const response = await authenticatedRequest(`/api/messages/conversations?offset=${offset}&limit=${limit}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取会话列表失败')
-  return response.data as { list: ConversationSummary[]; has_more: boolean }
+  const data = (response.data || {}) as any
+  return {
+    list: (data.list || []).map(normalizeConversationSummary),
+    has_more: data.has_more ?? data.HasMore ?? false,
+  }
 }
 
 /** 标记某人的消息为已读 */
@@ -6239,7 +6272,16 @@ export async function getPublicUserProfile(userId: string): Promise<{
   if (response.statusCode !== 200) {
     throw new Error((response.data as any)?.detail || '获取用户资料失败')
   }
-  return response.data as { id: string; nickname: string; avatar: string; cover_image?: string; record_days: number; create_time?: string }
+  const p = (response.data || {}) as any
+  return {
+    id: p.id || p.ID || '',
+    nickname: p.nickname || p.Nickname || '',
+    avatar: p.avatar || p.Avatar || '',
+    cover_image: p.cover_image || p.CoverImage,
+    motto: p.motto || p.Motto,
+    record_days: p.record_days ?? p.RecordDays ?? 0,
+    create_time: p.create_time || p.CreateTime,
+  }
 }
 
 /** 获取指定用户的公共食物库收藏 */
