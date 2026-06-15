@@ -12,6 +12,8 @@ import {
   FriendListItem,
   FriendRequestOverviewItem
 } from '../../../utils/api'
+import { DEFAULT_AVATAR_URL } from '../../../utils/static-asset-cdn-url'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import './index.scss'
 
 type ActiveTab = 'friends' | 'received' | 'sent'
@@ -264,6 +266,13 @@ function FriendsPage() {
     Taro.switchTab({ url: '/pages/community/index' })
   }
 
+  const goToUserProfile = (userId: string) => {
+    if (!userId) return
+    Taro.navigateTo({
+      url: `${extraPkgUrl('/pages/profile-settings/index')}?user_id=${encodeURIComponent(userId)}`,
+    })
+  }
+
   const renderEmptyState = (type: 'friends' | 'received' | 'sent') => {
     const configs: Record<'friends' | 'received' | 'sent', {
       icon: JSX.Element
@@ -398,11 +407,11 @@ function FriendsPage() {
             ) : (
               filteredFriends.map((friend) => (
                 <View className='card friend-card' key={friend.id}>
-                  <View className='left'>
+                  <View className='left' onClick={() => goToUserProfile(friend.id)}>
                     <View className='avatar-wrapper'>
                       <Image 
                         className='avatar' 
-                        src={friend.avatar || ''} 
+                        src={friend.avatar || DEFAULT_AVATAR_URL} 
                         mode='aspectFill'
                         lazyLoad
                       />
@@ -430,17 +439,19 @@ function FriendsPage() {
                 <View className='card request-card' key={item.id}>
                   {/* 一行布局：头像 + 信息 + 操作按钮 */}
                   <View className='request-row'>
-                    <View className='avatar-wrapper'>
-                      <Image 
-                        className='avatar' 
-                        src={item.counterpart_avatar || ''} 
-                        mode='aspectFill'
-                        lazyLoad
-                      />
-                    </View>
-                    <View className='meta'>
-                      <Text className='name'>{item.counterpart_nickname || '用户'}</Text>
-                      <Text className='time'>{formatTime(item.created_at)}</Text>
+                    <View className='user-info' onClick={() => goToUserProfile(item.counterpart_user_id)}>
+                      <View className='avatar-wrapper'>
+                        <Image 
+                          className='avatar' 
+                          src={item.counterpart_avatar || DEFAULT_AVATAR_URL} 
+                          mode='aspectFill'
+                          lazyLoad
+                        />
+                      </View>
+                      <View className='meta'>
+                        <Text className='name'>{item.counterpart_nickname || '用户'}</Text>
+                        <Text className='time'>{formatTime(item.created_at)}</Text>
+                      </View>
                     </View>
                     
                     {/* 操作区域 */}
@@ -483,11 +494,11 @@ function FriendsPage() {
               sent.map((item) => (
                 <View className='card vertical' key={item.id}>
                   <View className='top'>
-                    <View className='left'>
+                    <View className='left' onClick={() => goToUserProfile(item.counterpart_user_id)}>
                       <View className='avatar-wrapper'>
                         <Image 
                           className='avatar' 
-                          src={item.counterpart_avatar || ''} 
+                          src={item.counterpart_avatar || DEFAULT_AVATAR_URL} 
                           mode='aspectFill'
                           lazyLoad
                         />

@@ -80,5 +80,7 @@ export function shouldShowProfileFormFromApiUser(api: {
 }): boolean {
   const nickname = String(api.nickname || '').trim()
   const avatar = String(api.avatar || '').trim()
-  return !nickname || !avatar || nickname === '微信用户'
+  const isDefaultNickname = !nickname || nickname === '微信用户' || nickname.startsWith('微信用户_')
+  const isDefaultAvatar = !avatar || avatar === '_system/default_avatar.jpg'
+  return isDefaultNickname || isDefaultAvatar
 }

@@ -195,6 +195,19 @@
   gap: 20rpx;
   width: 100%;
 
+  .user-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 20rpx;
+    transition: opacity 0.2s ease;
+
+    &:active {
+      opacity: 0.75;
+    }
+  }
+
   .avatar-wrapper {
     flex-shrink: 0;
   }
@@ -295,6 +308,11 @@
   gap: 20rpx;
   flex: 1;
   min-width: 0;
+  transition: opacity 0.2s ease;
+
+  &:active {
+    opacity: 0.75;
+  }
 }
 
 // 头像样式优化

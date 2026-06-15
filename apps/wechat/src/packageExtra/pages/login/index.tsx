@@ -150,7 +150,7 @@ export default function LoginPage() {
         finishLoginFlow()
     }
 
-    /** 微信一键登录：仅用 code，后端若已有手机号会直接带回，无需再授权 */
+    /** 微信一键登录：同时请求微信头像/昵称，后端若已有手机号会直接带回，无需再授权 */
     const handleWxLogin = async () => {
         if (!agreed) {
             Taro.showToast({
@@ -163,10 +163,22 @@ export default function LoginPage() {
         setLoading(true)
         try {
             await cleanupGeneratedUserFiles()
+
+            // 一键请求微信头像和昵称（用户点击登录按钮即触发授权）
+            let wxNickname = ''
+            let wxAvatarUrl = ''
+            try {
+                const profileRes = await Taro.getUserProfile({ desc: '用于完善个人资料' })
+                wxNickname = profileRes.userInfo?.nickName || ''
+                wxAvatarUrl = profileRes.userInfo?.avatarUrl || ''
+            } catch (profileErr: any) {
+                console.warn('获取微信资料失败或用户拒绝:', profileErr)
+            }
+
             const loginRes = await Taro.login()
             if (!loginRes.code) throw new Error('获取登录凭证失败')
             const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCodeFromQuery)
-            await handleLoginSuccess(loginData)
+            await handleLoginSuccess(loginData, wxNickname, wxAvatarUrl)
         } catch (error: any) {
             console.error('登录失败:', error)
             await showLoginErrorToast(error, '登录失败')
@@ -200,7 +212,7 @@ export default function LoginPage() {
     }
 
     // 登录成功后的处理
-    const handleLoginSuccess = async (loginData: LoginResponse) => {
+    const handleLoginSuccess = async (loginData: LoginResponse, wxNickname?: string, wxAvatarUrl?: string) => {
         // 保存基础信息
         Taro.setStorageSync('openid', loginData.openid)
         if (loginData.purePhoneNumber) {
@@ -235,8 +247,11 @@ export default function LoginPage() {
             // 检查是否需要完善头像/昵称
             // API 返回的 avatar 可能为空字符串，nickname 可能为空
             if (shouldShowProfileFormFromApiUser(apiUserInfo)) {
-                setTempAvatar(getInitialRegistrationAvatar(apiUserInfo.avatar))
-                setTempNickname(resolveRegistrationNickname(apiUserInfo.nickname, loginData.openid))
+                // 优先使用一键授权获取的微信头像/昵称；微信默认名 fallback 为随机昵称
+                const initialAvatar = getInitialRegistrationAvatar(wxAvatarUrl || apiUserInfo.avatar)
+                const initialNickname = resolveRegistrationNickname(wxNickname || apiUserInfo.nickname, loginData.openid)
+                setTempAvatar(initialAvatar)
+                setTempNickname(initialNickname)
                 setLoading(false)
                 setShowProfileForm(true) // 显示完善信息弹窗
             } else {
@@ -254,8 +269,8 @@ export default function LoginPage() {
             // 即使获取失败，也算登录成功
             Taro.setStorageSync('isLoggedIn', true)
             setLoading(false)
-            setTempAvatar(getInitialRegistrationAvatar(''))
-            setTempNickname(buildDefaultWechatNickname(loginData.openid))
+            setTempAvatar(getInitialRegistrationAvatar(wxAvatarUrl || ''))
+            setTempNickname(resolveRegistrationNickname(wxNickname, loginData.openid))
             setShowProfileForm(true) // 兜底：预填默认头像昵称，用户可直接进入
         }
     }

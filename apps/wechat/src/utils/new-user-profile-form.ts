@@ -37,8 +37,11 @@ export async function ensureAvatarUploadedForSave(avatarUrl: string): Promise<st
   return imageUrl
 }
 
-/** 注册弹窗初始头像：优先 API，否则本地默认图 */
+/** 注册弹窗初始头像：优先 API，系统默认 key 也映射为 CDN 默认图 */
 export function getInitialRegistrationAvatar(avatar?: string | null): string {
   const value = String(avatar || '').trim()
-  return value || defaultAvatarImage
+  if (!value || value === '_system/default_avatar.jpg') {
+    return defaultAvatarImage
+  }
+  return value
 }

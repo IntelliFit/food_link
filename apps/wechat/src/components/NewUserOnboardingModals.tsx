@@ -73,6 +73,7 @@ export function NewUserOnboardingModals({
           <View className='profile-form-content'>
             <View className='profile-form-header'>
               <Text className='profile-form-title'>完善个人信息</Text>
+              <Text className='profile-form-desc'>点击头像使用微信头像，点击昵称使用微信昵称</Text>
             </View>
             <View className='profile-form-body'>
               <View className='avatar-choose-wrapper'>
@@ -104,9 +105,18 @@ export function NewUserOnboardingModals({
               />
             </View>
 
-            <TaroifyButton className='save-btn' block shape='round' onClick={onSaveProfile}>
+            <TaroifyButton
+              className='save-btn'
+              block
+              shape='round'
+              disabled={!tempAvatar || !tempNickname}
+              onClick={onSaveProfile}
+            >
               {profileSaveLabel}
             </TaroifyButton>
+            {(!tempAvatar || !tempNickname) && (
+              <Text className='profile-form-tip'>请完善头像和昵称后再进入</Text>
+            )}
           </View>
         </View>
       )}
