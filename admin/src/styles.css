@@ -128,6 +128,10 @@ button, .button-link {
   transition: 0.16s ease;
 }
 
+[data-sonner-toast] [data-close-button] {
+  min-height: unset;
+}
+
 button:hover, .button-link:hover {
   border-color: var(--line-strong);
   box-shadow: 0 8px 18px rgb(24 34 48 / 8%);

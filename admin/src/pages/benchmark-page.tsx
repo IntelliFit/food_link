@@ -12,6 +12,7 @@ import {
   Square,
   BarChart3,
   Layers,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AdminSidebar } from '@/components/admin-sidebar'
@@ -43,6 +44,7 @@ import type {
   BenchmarkRunListResponse,
   BenchmarkRunSampleListResponse,
   ExecutionMode,
+  ItemComparison,
   LabelType,
   SampleStatus,
 } from '@/types/benchmark'
@@ -756,6 +758,14 @@ function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page])
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void loadRuns()
+    }, 5000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page])
+
   async function loadRuns() {
     setLoading(true)
     try {
@@ -807,6 +817,7 @@ function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id
                   <th className="px-3 py-2 text-left">名称</th>
                   <th className="px-3 py-2 text-left">状态</th>
                   <th className="px-3 py-2 text-left">模式</th>
+                  <th className="px-3 py-2 text-left">创建者</th>
                   <th className="px-3 py-2 text-left">样本数</th>
                   <th className="px-3 py-2 text-left">名称匹配率</th>
                   <th className="px-3 py-2 text-left">总重 MAPE</th>
@@ -827,6 +838,7 @@ function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id
                         <RunStatusBadge status={run.status} />
                       </td>
                       <td className="px-3 py-2">{executionModeLabels[run.execution_mode as ExecutionMode]}</td>
+                      <td className="px-3 py-2">{run.created_by_username || '-'}</td>
                       <td className="px-3 py-2">{run.sample_count}</td>
                       <td className="px-3 py-2">{formatPct(run.metrics?.name_match_rate)}</td>
                       <td className="px-3 py-2">{formatPct(run.metrics?.total_weight_mape)}</td>
@@ -892,6 +904,15 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId, page])
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void loadRun()
+      void loadSamples()
+    }, 5000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId, page])
+
   async function loadRun() {
     try {
       const data = await adminRequest<{ run: BenchmarkRun }>(`/api/admin/benchmark/runs/${encodeURIComponent(runId)}`)
@@ -938,10 +959,13 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
       <Card>
         <CardHeader>
           <CardTitle>{run.name}</CardTitle>
-          <CardDescription className="flex items-center gap-2">
+          <CardDescription className="flex flex-wrap items-center gap-2">
             <RunStatusBadge status={run.status} />
             <span>{executionModeLabels[run.execution_mode as ExecutionMode]}</span>
             <span className="text-muted-foreground">{run.sample_count} 个样本</span>
+            {run.created_by_username && (
+              <span className="text-muted-foreground">由 {run.created_by_username} 创建</span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -977,6 +1001,7 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
                   <th className="px-3 py-2 text-left">样本 ID</th>
                   <th className="px-3 py-2 text-left">名称匹配</th>
                   <th className="px-3 py-2 text-left">总重误差</th>
+                  <th className="px-3 py-2 text-left">分项对比</th>
                   <th className="px-3 py-2 text-left">耗时</th>
                   <th className="px-3 py-2 text-left">错误信息</th>
                   <th className="px-3 py-2 text-right">操作</th>
@@ -984,9 +1009,9 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
               </thead>
               <tbody>
                 {loading && samples.length === 0 ? (
-                  <tr><td colSpan={7} className="p-6"><Skeleton className="h-8 w-full" /></td></tr>
+                  <tr><td colSpan={8} className="p-6"><Skeleton className="h-8 w-full" /></td></tr>
                 ) : samples.length === 0 ? (
-                  <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">暂无样本结果</td></tr>
+                  <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">暂无样本结果</td></tr>
                 ) : (
                   samples.map((s) => (
                     <tr key={s.id} className="border-b last:border-b-0 hover:bg-muted/30">
@@ -994,8 +1019,9 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
                       <td className="px-3 py-2 font-mono text-xs">{s.sample_id.slice(0, 8)}</td>
                       <td className="px-3 py-2">{s.metrics?.name_matched ? '✅' : '❌'}</td>
                       <td className="px-3 py-2">{formatPct(s.metrics?.total_weight_error_pct)}</td>
+                      <td className="px-3 py-2">{comparisonSummary(s.metrics?.item_comparisons)}</td>
                       <td className="px-3 py-2">{formatNumber(s.metrics?.duration_ms)}ms</td>
-                      <td className="px-3 py-2 max-w-[200px] truncate text-destructive">{s.error_message || '-'}</td>
+                      <td className="px-3 py-2 max-w-[280px] truncate text-destructive" title={s.error_message || ''}>{s.error_message || '-'}</td>
                       <td className="px-3 py-2 text-right">
                         <Button variant="ghost" size="sm" className="h-7" onClick={() => setSelectedSample(s)}>详情</Button>
                       </td>
@@ -1047,14 +1073,21 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
     { key: 'final', label: 'Final 输出' },
   ]
 
+  const comparisons: ItemComparison[] = sample.metrics?.item_comparisons || []
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <Card className="max-h-[90vh] w-full max-w-3xl overflow-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <Card className="max-h-[90vh] w-full max-w-4xl overflow-auto" onClick={(e) => e.stopPropagation()}>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Layers className="size-5" />
-            样本评测详情
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Layers className="size-5" />
+              样本评测详情
+            </CardTitle>
+            <Button variant="ghost" size="icon" className="size-8 rounded-full" onClick={onClose}>
+              <X className="size-4" />
+            </Button>
+          </div>
           <CardDescription>sample_id: {sample.sample_id} / task_id: {sample.task_id || '-'}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1072,6 +1105,54 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
               </pre>
             </div>
           </div>
+
+          {comparisons.length > 0 && (
+            <div>
+              <h4 className="mb-2 font-semibold">分项对比</h4>
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left">标注</th>
+                      <th className="px-3 py-2 text-left">预测</th>
+                      <th className="px-3 py-2 text-right">标注重</th>
+                      <th className="px-3 py-2 text-right">预测重</th>
+                      <th className="px-3 py-2 text-right">误差</th>
+                      <th className="px-3 py-2 text-right">误差%</th>
+                      <th className="px-3 py-2 text-center">匹配</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparisons.map((c, idx) => (
+                      <tr key={idx} className="border-b last:border-b-0">
+                        <td className="px-3 py-2">{c.gt_name || '-'}</td>
+                        <td className="px-3 py-2">{c.pred_name || '-'}</td>
+                        <td className="px-3 py-2 text-right">{formatNumber(c.gt_weight)}g</td>
+                        <td className="px-3 py-2 text-right">{formatNumber(c.pred_weight)}g</td>
+                        <td className="px-3 py-2 text-right">{formatNumber(c.weight_error)}g</td>
+                        <td className="px-3 py-2 text-right">{formatPct(c.weight_error_pct)}</td>
+                        <td className="px-3 py-2 text-center">
+                          {c.matched ? '✅' : c.extra ? '⚠️' : '❌'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {sample.error_message && (
+            <div className="rounded-md border border-destructive/20 bg-destructive/5 p-4">
+              <h4 className="mb-2 flex items-center gap-2 font-semibold text-destructive">
+                <AlertCircle className="size-4" />
+                错误信息
+              </h4>
+              <pre className="max-h-[240px] overflow-auto whitespace-pre-wrap break-all rounded-md bg-background p-3 text-xs text-destructive">
+                {sample.error_message}
+              </pre>
+            </div>
+          )}
 
           <div>
             <h4 className="mb-2 font-semibold">阶段输出</h4>
@@ -1128,4 +1209,15 @@ function formatTime(value: string | undefined): string {
   const d = new Date(value)
   if (isNaN(d.getTime())) return value
   return d.toLocaleString('zh-CN')
+}
+
+function comparisonSummary(comparisons: ItemComparison[] | undefined): string {
+  if (!comparisons || comparisons.length === 0) return '-'
+  const matched = comparisons.filter((c) => c.matched).length
+  const extra = comparisons.filter((c) => c.extra).length
+  const total = comparisons.length
+  if (total === 1 && comparisons[0].gt_name === '__total__') {
+    return '总重对比'
+  }
+  return `匹配 ${matched}/${total}${extra > 0 ? `, 多检 ${extra}` : ''}`
 }

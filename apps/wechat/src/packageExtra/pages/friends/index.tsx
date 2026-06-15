@@ -24,6 +24,10 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: '已拒绝'
 }
 
+function formatBadgeCount(count: number): string {
+  return count > 99 ? '99+' : String(count)
+}
+
 function formatTime(ts?: string): string {
   if (!ts) return ''
   const d = new Date(ts)
@@ -347,7 +351,7 @@ function FriendsPage() {
           >
             好友列表
             {friends.length > 0 && (
-              <Text className='tab-badge'>{friends.length}</Text>
+              <Text className='tab-badge'>{formatBadgeCount(friends.length)}</Text>
             )}
           </View>
           <View 
@@ -356,7 +360,7 @@ function FriendsPage() {
           >
             收到的请求
             {receivedPendingCount > 0 && (
-              <Text className='tab-badge'>{receivedPendingCount}</Text>
+              <Text className='tab-badge'>{formatBadgeCount(receivedPendingCount)}</Text>
             )}
           </View>
           <View 

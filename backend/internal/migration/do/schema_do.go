@@ -1124,21 +1124,22 @@ type FoodWeightLabeledSampleDO struct {
 func (FoodWeightLabeledSampleDO) TableName() string { return "food_weight_labeled_samples" }
 
 type BenchmarkRunDO struct {
-	ID                  string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	Name                string         `gorm:"column:name;type:text;not null"`
-	Status              string         `gorm:"column:status;type:text;not null;default:'pending'"`
-	DatasetFilter       map[string]any `gorm:"column:dataset_filter;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	ExecutionMode       string         `gorm:"column:execution_mode;type:text;not null"`
-	ModelConfig         map[string]any `gorm:"column:model_config;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	SampleCount         int            `gorm:"column:sample_count;type:integer;not null;default:0"`
-	Metrics             map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ID                string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name              string         `gorm:"column:name;type:text;not null"`
+	Status            string         `gorm:"column:status;type:text;not null;default:'pending'"`
+	DatasetFilter     map[string]any `gorm:"column:dataset_filter;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ExecutionMode     string         `gorm:"column:execution_mode;type:text;not null"`
+	ModelConfig       map[string]any `gorm:"column:model_config;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	SampleCount       int            `gorm:"column:sample_count;type:integer;not null;default:0"`
+	Metrics           map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	StageOutputsSummary map[string]any `gorm:"column:stage_outputs_summary;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	ErrorMessage        *string        `gorm:"column:error_message;type:text"`
-	StartedAt           *time.Time     `gorm:"column:started_at;type:timestamptz"`
-	CompletedAt         *time.Time     `gorm:"column:completed_at;type:timestamptz"`
-	CreatedBy           *string        `gorm:"column:created_by;type:uuid"`
-	CreatedAt           *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt           *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ErrorMessage      *string        `gorm:"column:error_message;type:text"`
+	StartedAt         *time.Time     `gorm:"column:started_at;type:timestamptz"`
+	CompletedAt       *time.Time     `gorm:"column:completed_at;type:timestamptz"`
+	CreatedBy         *string        `gorm:"column:created_by;type:uuid"`
+	CreatedByUsername *string        `gorm:"column:created_by_username;type:text"`
+	CreatedAt         *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt         *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (BenchmarkRunDO) TableName() string { return "benchmark_runs" }
