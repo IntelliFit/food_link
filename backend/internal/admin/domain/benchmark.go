@@ -111,6 +111,56 @@ type ListRunSamplesResult struct {
 	Limit int
 }
 
+// DatasetSampleDTO is the snake_case JSON representation used by admin handlers.
+type DatasetSampleDTO struct {
+	ID               string           `json:"id"`
+	BatchName        string           `json:"batch_name"`
+	SampleName       string           `json:"sample_name"`
+	OriginalFilename string           `json:"original_filename"`
+	ImageURL         *string          `json:"image_url,omitempty"`
+	ImageObjectKey   *string          `json:"image_object_key,omitempty"`
+	LabelType        string           `json:"label_type"`
+	TotalWeightGrams *float64         `json:"total_weight_grams,omitempty"`
+	Items            []map[string]any `json:"items,omitempty"`
+	Status           string           `json:"status"`
+	SourcePath       *string          `json:"source_path,omitempty"`
+	Metadata         map[string]any   `json:"metadata,omitempty"`
+	CreatedAt        string           `json:"created_at"`
+	UpdatedAt        string           `json:"updated_at"`
+}
+
+func ToDatasetSampleDTO(s *do.FoodWeightLabeledSampleDO) DatasetSampleDTO {
+	dto := DatasetSampleDTO{
+		ID:               s.ID,
+		BatchName:        s.BatchName,
+		SampleName:       s.SampleName,
+		OriginalFilename: s.OriginalFilename,
+		ImageURL:         s.ImageURL,
+		ImageObjectKey:   s.ImageObjectKey,
+		LabelType:        s.LabelType,
+		TotalWeightGrams: s.TotalWeightGrams,
+		Items:            s.Items,
+		Status:           s.Status,
+		SourcePath:       s.SourcePath,
+		Metadata:         s.Metadata,
+	}
+	if s.CreatedAt != nil {
+		dto.CreatedAt = s.CreatedAt.Format(time.RFC3339)
+	}
+	if s.UpdatedAt != nil {
+		dto.UpdatedAt = s.UpdatedAt.Format(time.RFC3339)
+	}
+	return dto
+}
+
+func ToDatasetSampleDTOList(items []do.FoodWeightLabeledSampleDO) []DatasetSampleDTO {
+	out := make([]DatasetSampleDTO, len(items))
+	for i := range items {
+		out[i] = ToDatasetSampleDTO(&items[i])
+	}
+	return out
+}
+
 type UpdateSampleInput struct {
 	LabelType        *string          `json:"label_type,omitempty"`
 	TotalWeightGrams *float64         `json:"total_weight_grams,omitempty"`

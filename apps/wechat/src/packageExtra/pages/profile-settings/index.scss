@@ -1181,4 +1181,16 @@
   .edit-sheet-cover-placeholder-text {
     color: #64748b;
   }
+
+  .profile-feed-more-box {
+    background: #1d2724;
+
+    &:active {
+      background: #27322f;
+    }
+  }
+
+  .profile-feed-more-icon {
+    color: #9ca3a8;
+  }
 }

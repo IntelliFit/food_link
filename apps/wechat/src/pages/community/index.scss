@@ -253,8 +253,8 @@ $community-border-soft: rgb(92 184 150 / 18%);
 
 .friends-quick-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16rpx;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12rpx;
   width: 100%;
   box-sizing: border-box;
 }

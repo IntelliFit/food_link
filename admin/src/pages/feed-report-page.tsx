@@ -76,10 +76,10 @@ const targetTypeLabels: Record<string, string> = {
 }
 
 const statusBadgeClass: Record<FeedReportStatus, string> = {
-  pending: 'border-amber-200 bg-amber-50 text-amber-700',
-  processing: 'border-blue-200 bg-blue-50 text-blue-700',
-  resolved: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  rejected: 'border-border bg-muted text-muted-foreground',
+  pending: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400',
+  processing: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400',
+  resolved: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400',
+  rejected: 'border-border bg-muted text-muted-foreground dark:bg-muted/50',
 }
 
 export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) {

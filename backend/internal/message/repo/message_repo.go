@@ -21,11 +21,11 @@ func (User) TableName() string { return "weapp_user" }
 
 // ConversationSummary — last message + unread count per conversation partner
 type ConversationSummary struct {
-	UserID       string
-	Nickname     string
-	Avatar       string
-	LastMessage  domain.PrivateMessage
-	UnreadCount  int64
+	UserID      string                `json:"user_id"`
+	Nickname    string                `json:"nickname"`
+	Avatar      string                `json:"avatar"`
+	LastMessage domain.PrivateMessage `json:"last_message"`
+	UnreadCount int64                 `json:"unread_count"`
 }
 
 type MessageRepo struct {
@@ -68,7 +68,13 @@ func (r *MessageRepo) GetMessages(ctx context.Context, userA, userB string, offs
 }
 
 // GetConversations returns one summary per conversation partner for a user
-func (r *MessageRepo) GetConversations(ctx context.Context, userID string) ([]ConversationSummary, error) {
+func (r *MessageRepo) GetConversations(ctx context.Context, userID string, offset, limit int) ([]ConversationSummary, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
 	type rawRow struct {
 		OtherID      string    `gorm:"column:other_id"`
 		Nickname     string    `gorm:"column:nickname"`
@@ -85,8 +91,8 @@ func (r *MessageRepo) GetConversations(ctx context.Context, userID string) ([]Co
 	var rows []rawRow
 	sql := `
 SELECT
-  u.id AS other_id,
-  COALESCE(u.nickname, CASE WHEN CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END = ? THEN '系统消息' ELSE '' END) AS nickname,
+  CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END AS other_id,
+  COALESCE(NULLIF(u.nickname, ''), CASE WHEN CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END = ? THEN '系统消息' ELSE '' END) AS nickname,
   COALESCE(u.avatar, '') AS avatar,
   m.id AS last_id,
   m.content AS last_content,
@@ -115,9 +121,10 @@ LEFT JOIN LATERAL (
   WHERE sender_id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END AND receiver_id = ? AND is_read = false
 ) uc ON true
 ORDER BY m.created_at DESC
+LIMIT ? OFFSET ?
 `
 
-	err := r.db.WithContext(ctx).Raw(sql, userID, domain.SystemSenderID, userID, userID, userID, userID, userID).Scan(&rows).Error
+	err := r.db.WithContext(ctx).Raw(sql, userID, userID, domain.SystemSenderID, userID, userID, userID, userID, userID, limit, offset).Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}

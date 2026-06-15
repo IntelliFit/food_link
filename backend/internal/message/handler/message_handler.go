@@ -15,7 +15,7 @@ import (
 type MessageService interface {
 	SendMessage(ctx context.Context, senderID, receiverID, content, contentType, imageURL string) (*domain.PrivateMessage, error)
 	GetMessages(ctx context.Context, userA, userB string, offset, limit int) ([]domain.PrivateMessage, error)
-	GetConversations(ctx context.Context, userID string) ([]repo.ConversationSummary, error)
+	GetConversations(ctx context.Context, userID string, offset, limit int) ([]repo.ConversationSummary, error)
 	MarkRead(ctx context.Context, userID, senderID string) error
 	CountUnread(ctx context.Context, userID string) (int64, error)
 }
@@ -76,7 +76,15 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 // GET /api/messages/conversations
 func (h *MessageHandler) GetConversations(c *gin.Context) {
 	currentUserID := c.GetString(authmw.ContextUserIDKey)
-	sums, err := h.msgSvc.GetConversations(c.Request.Context(), currentUserID)
+	offset, _ := strconv.Atoi(c.Query("offset"))
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	sums, err := h.msgSvc.GetConversations(c.Request.Context(), currentUserID, offset, limit)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -85,7 +93,10 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 		sums = []repo.ConversationSummary{}
 	}
 	response.Success(c, map[string]any{
-		"list": sums,
+		"list":     sums,
+		"offset":   offset,
+		"limit":    limit,
+		"has_more": len(sums) >= limit,
 	})
 }
 

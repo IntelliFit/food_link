@@ -1,4 +1,5 @@
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem } from '@tarojs/components'
+import { CAFETERIA_HERO_BG_URL } from '../../utils/static-asset-cdn-url'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
@@ -2961,7 +2962,7 @@ function IndexPage() {
                     {banner.key === 'campus' && (
                       <Image
                         className='home-reward-hint__bg'
-                        src='/assets/bg/cafeteria-hero.jpg'
+                        src={CAFETERIA_HERO_BG_URL}
                         mode='aspectFill'
                       />
                     )}

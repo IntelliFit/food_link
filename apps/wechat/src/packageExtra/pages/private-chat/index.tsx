@@ -15,6 +15,7 @@ import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
+import { DEFAULT_AVATAR_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
 
 const POLL_INTERVAL_MS = 3000
@@ -40,7 +41,17 @@ function shouldShowTimeDivider(prev: PrivateMessage | null, curr: PrivateMessage
   if (!prev) return true
   const prevTime = new Date(prev.created_at).getTime()
   const currTime = new Date(curr.created_at).getTime()
-  return Math.abs(currTime - prevTime) > 5 * 60 * 1000
+  return Math.abs(currTime - prevTime) > 10 * 60 * 1000
+}
+
+function getCurrentUserAvatar(): string {
+  try {
+    const raw = Taro.getStorageSync('userInfo')
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return parsed?.avatar || ''
+  } catch {
+    return ''
+  }
 }
 
 export default function PrivateChatPage() {
@@ -51,6 +62,7 @@ export default function PrivateChatPage() {
   const isSystemChat = otherUserId === SYSTEM_MESSAGE_USER_ID
 
   const [otherUser, setOtherUser] = useState<{ nickname: string; avatar: string }>({ nickname: '私信', avatar: '' })
+  const [currentUserAvatar, setCurrentUserAvatar] = useState('')
   const [messages, setMessages] = useState<PrivateMessage[]>([])
   const [inputText, setInputText] = useState('')
   const [loading, setLoading] = useState(false)
@@ -62,6 +74,10 @@ export default function PrivateChatPage() {
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const isPollingRef = useRef(false)
   const messagesRef = useRef<PrivateMessage[]>([])
+
+  useEffect(() => {
+    setCurrentUserAvatar(getCurrentUserAvatar())
+  }, [])
 
   useEffect(() => {
     applyThemeNavigationBar(scheme, { lightBackground: '#f8fafc', darkBackground: '#101716' })
@@ -76,14 +92,18 @@ export default function PrivateChatPage() {
     if (!otherUserId) return
     if (isSystemChat) {
       setOtherUser({ nickname: '系统消息', avatar: '' })
+      Taro.setNavigationBarTitle({ title: '系统消息' })
       return
     }
     getPublicUserProfile(otherUserId)
       .then((profile) => {
-        setOtherUser({ nickname: profile.nickname || '用户', avatar: profile.avatar || '' })
+        const nickname = profile.nickname || '用户'
+        setOtherUser({ nickname, avatar: profile.avatar || '' })
+        Taro.setNavigationBarTitle({ title: nickname })
       })
       .catch(() => {
         setOtherUser({ nickname: '用户', avatar: '' })
+        Taro.setNavigationBarTitle({ title: '用户' })
       })
   }, [otherUserId, isSystemChat])
 
@@ -169,9 +189,10 @@ export default function PrivateChatPage() {
   const handleSendImage = async () => {
     if (!otherUserId || sending) return
     try {
-      const tempFiles = await chooseImageWithPrivacy({ count: 1, sizeType: ['compressed'] })
-      if (!tempFiles || tempFiles.length === 0) return
-      const tempFilePath = tempFiles[0].path
+      const chooseRes = await chooseImageWithPrivacy({ count: 1, sizeType: ['compressed'] })
+      const tempFilePaths = (chooseRes as any)?.tempFilePaths || []
+      if (!tempFilePaths || tempFilePaths.length === 0) return
+      const tempFilePath = tempFilePaths[0]
 
       setSending(true)
       Taro.showLoading({ title: '发送中...', mask: true })
@@ -215,10 +236,6 @@ export default function PrivateChatPage() {
     }, 100)
   }
 
-  const handleGoBack = () => {
-    Taro.navigateBack()
-  }
-
   const handlePreviewImage = (url: string) => {
     const urls = messages.filter((m) => m.content_type === 'image' && m.image_url).map((m) => m.image_url!)
     Taro.previewImage({ urls: urls.length > 0 ? urls : [url], current: url })
@@ -245,16 +262,18 @@ export default function PrivateChatPage() {
           </View>
         ) : (
           <View className={`chat-message-row ${isSelf ? 'chat-message-row--self' : ''}`}>
-            {!isSelf && (
-              <View className='chat-avatar'>
-                {otherUser.avatar ? (
-                  <Image className='chat-avatar-img' src={otherUser.avatar} mode='aspectFill' />
-                ) : (
-                  <Text className='chat-avatar-placeholder'>👤</Text>
-                )}
-              </View>
-            )}
-            <View className={`chat-bubble ${isSelf ? 'chat-bubble--self' : ''}`}>
+            <View className='chat-avatar'>
+              <Image
+                className='chat-avatar-img'
+                src={isSelf ? currentUserAvatar || DEFAULT_AVATAR_URL : otherUser.avatar || DEFAULT_AVATAR_URL}
+                mode='aspectFill'
+              />
+            </View>
+            <View
+              className={`chat-bubble ${isSelf ? 'chat-bubble--self' : ''} ${
+                msg.content_type === 'image' ? 'chat-bubble--image' : ''
+              }`}
+            >
               {msg.content_type === 'image' && msg.image_url ? (
                 <Image
                   className='chat-bubble-image'
@@ -275,15 +294,6 @@ export default function PrivateChatPage() {
   return (
     <FlPageThemeRoot>
       <View className='private-chat-page'>
-        {/* 自定义导航栏 */}
-        <View className='chat-navbar'>
-          <View className='chat-navbar-back' onClick={handleGoBack}>
-            <Text className='iconfont icon-left-arrow chat-navbar-back-icon' />
-          </View>
-          <Text className='chat-navbar-title' numberOfLines={1}>{otherUser.nickname}</Text>
-          <View className='chat-navbar-placeholder' />
-        </View>
-
         {/* 消息列表 */}
         <ScrollView
           className='chat-message-list'
@@ -315,7 +325,7 @@ export default function PrivateChatPage() {
         <View className='chat-input-bar'>
           <View className='chat-input-actions'>
             <View className='chat-image-btn' onClick={handleSendImage}>
-              <Text className='iconfont icon-tupian chat-image-btn-icon' />
+              <Text className='iconfont icon-picture chat-image-btn-icon' />
             </View>
           </View>
           <Input

@@ -30,10 +30,10 @@ type FeedbackPageProps = {
 }
 
 const statusBadgeClass: Record<FeedbackStatus, string> = {
-  open: 'border-amber-200 bg-amber-50 text-amber-700',
-  processing: 'border-blue-200 bg-blue-50 text-blue-700',
-  resolved: 'border-emerald-200 bg-emerald-50 text-emerald-700',
-  closed: 'border-border bg-muted text-muted-foreground',
+  open: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400',
+  processing: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400',
+  resolved: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400',
+  closed: 'border-border bg-muted text-muted-foreground dark:bg-muted/50',
 }
 
 /** 意见反馈管理页 */
@@ -541,7 +541,7 @@ function TraceCard({
       </div>
       <p className="mt-1 break-all text-xs text-muted-foreground">{trace.path || '/'}</p>
       {(trace.errorMessage || trace.error_message) ? (
-        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400">
           {trace.errorMessage || trace.error_message}
         </p>
       ) : null}

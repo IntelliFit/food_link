@@ -4,14 +4,10 @@ import { Cell } from '@taroify/core'
 import '@taroify/core/cell/style'
 import '@taroify/icons/style'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
+import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
 
-const DEFAULT_ICON_CDN_BASE_URL = 'https://cdn-food-icon.coachlink.fit'
-
 export default function AboutPage() {
-    const iconCdnBaseUrl = (__ICON_CDN_BASE_URL__ || DEFAULT_ICON_CDN_BASE_URL).replace(/\/+$/, '')
-    const APP_LOGO_URL = `${iconCdnBaseUrl}/shitan-nobackground.png`
-
     const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
 
     const handleCopyEmail = () => {
@@ -28,7 +24,7 @@ export default function AboutPage() {
         <View className='about-page'>
             <View className='header-section'>
                 <View className='logo-wrapper'>
-                    <Image className='logo-image' src={APP_LOGO_URL} mode='aspectFit' />
+                    <Image className='logo-image' src={LOGIN_LOGO_URL} mode='aspectFit' />
                 </View>
                 <Text className='app-name'>智健食探</Text>
                 <Text className='app-version'>Version 1.0.0</Text>

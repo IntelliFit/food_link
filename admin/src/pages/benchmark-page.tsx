@@ -12,7 +12,6 @@ import {
   Square,
   BarChart3,
   Layers,
-  ImageIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AdminSidebar } from '@/components/admin-sidebar'
@@ -339,9 +338,12 @@ function DatasetSection({ onViewRun }: { onViewRun: () => void }) {
                       </td>
                       <td className="px-3 py-2">
                         {sample.image_url ? (
-                          <a href={sample.image_url} target="_blank" rel="noreferrer" className="inline-flex items-center text-primary hover:underline">
-                            <ImageIcon className="mr-1 size-3" />
-                            查看
+                          <a href={sample.image_url} target="_blank" rel="noreferrer" className="inline-block">
+                            <img
+                              src={sample.image_url}
+                              alt={sample.sample_name}
+                              className="h-10 w-10 rounded object-cover ring-1 ring-border"
+                            />
                           </a>
                         ) : (
                           '-'
@@ -848,11 +850,11 @@ function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id
 
 function RunStatusBadge({ status }: { status: string }) {
   const variants: Record<string, string> = {
-    pending: 'bg-amber-100 text-amber-700',
-    running: 'bg-blue-100 text-blue-700',
-    done: 'bg-emerald-100 text-emerald-700',
-    failed: 'bg-red-100 text-red-700',
-    cancelled: 'bg-muted text-muted-foreground',
+    pending: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+    running: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+    done: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+    failed: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
+    cancelled: 'bg-muted text-muted-foreground dark:bg-muted/50',
   }
   return (
     <Badge variant="outline" className={cn(variants[status] || '', 'border-transparent')}>
@@ -1014,11 +1016,11 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
 
 function RunSampleStatusBadge({ status }: { status: string }) {
   const variants: Record<string, string> = {
-    pending: 'bg-amber-100 text-amber-700',
-    processing: 'bg-blue-100 text-blue-700',
-    done: 'bg-emerald-100 text-emerald-700',
-    failed: 'bg-red-100 text-red-700',
-    cancelled: 'bg-muted text-muted-foreground',
+    pending: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+    processing: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+    done: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+    failed: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
+    cancelled: 'bg-muted text-muted-foreground dark:bg-muted/50',
   }
   return (
     <Badge variant="outline" className={cn(variants[status] || '', 'border-transparent')}>

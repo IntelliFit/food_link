@@ -21,6 +21,7 @@ import {
   communityDeleteComment,
   communityGetCheckinLeaderboard,
   communityHideFeed,
+  getUnreadMessageCount,
   deleteCirclePost,
   deleteFoodRecord,
   deleteExerciseLog,
@@ -475,6 +476,7 @@ function CommunityPage() {
     timestamp: 0
   })
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [feedScrollIntoView, setFeedScrollIntoView] = useState('')
   /** 动态卡片内评论：超过 3 条时默认只展示 2 条，点此展开/收起（仿微信朋友圈） */
   const [feedCommentPreviewExpanded, setFeedCommentPreviewExpanded] = useState<Record<string, boolean>>({})
@@ -590,6 +592,19 @@ function CommunityPage() {
       setUnreadNotificationCount(res.unread_count || 0)
     } catch (e) {
       console.error('加载互动消息失败:', e)
+    }
+  }, [])
+
+  const loadUnreadMessageCount = useCallback(async () => {
+    if (!getAccessToken()) {
+      setUnreadMessageCount(0)
+      return
+    }
+    try {
+      const res = await getUnreadMessageCount()
+      setUnreadMessageCount(res.count || 0)
+    } catch (e) {
+      console.error('加载私信未读数失败:', e)
     }
   }, [])
 
@@ -1028,9 +1043,10 @@ function CommunityPage() {
       tasks.push(loadFriendsAndRequests(false))
       tasks.push(loadCheckinPreview(false))
       tasks.push(loadInteractionNotificationsBadge())
+      tasks.push(loadUnreadMessageCount())
     }
     Promise.all(tasks)
-  }, [loadFriendsAndRequests, refreshFeed, loadCheckinPreview, loadInteractionNotificationsBadge])
+  }, [loadFriendsAndRequests, refreshFeed, loadCheckinPreview, loadInteractionNotificationsBadge, loadUnreadMessageCount])
 
   // 评论栏弹出后延迟聚焦，等滑入动画完成
   useEffect(() => {
@@ -1159,10 +1175,12 @@ function CommunityPage() {
     if (token) {
       loadCheckinPreview(true)
       loadInteractionNotificationsBadge()
+      loadUnreadMessageCount()
       void syncPendingFriendRequests()
     } else {
       setLbPreviewTop([])
       setUnreadNotificationCount(0)
+      setUnreadMessageCount(0)
       setRequests([])
     }
 
@@ -2043,6 +2061,26 @@ function CommunityPage() {
                       <View className='friends-quick-cell-badge'>
                         <Text className='friends-quick-cell-badge-text'>
                           {unreadNotificationCount > 99 ? '99+' : String(unreadNotificationCount)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <View
+                    className='friends-quick-cell'
+                    onClick={() => {
+                      if (!getAccessToken()) {
+                        Taro.showToast({ title: '请先登录', icon: 'none' })
+                        return
+                      }
+                      Taro.navigateTo({ url: extraPkgUrl('/pages/private-conversations/index') })
+                    }}
+                  >
+                    <Text className='friends-quick-cell-icon iconfont icon-comment' />
+                    <Text className='friends-quick-cell-label'>私信</Text>
+                    {unreadMessageCount > 0 ? (
+                      <View className='friends-quick-cell-badge'>
+                        <Text className='friends-quick-cell-badge-text'>
+                          {unreadMessageCount > 99 ? '99+' : String(unreadMessageCount)}
                         </Text>
                       </View>
                     ) : null}
