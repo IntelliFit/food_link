@@ -61,6 +61,37 @@
   font-family: "Source Han Sans SC", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+.dark {
+  color-scheme: dark;
+  --background: #0b1120;
+  --foreground: #e2e8f0;
+  --card: var(--panel);
+  --card-foreground: var(--foreground);
+  --popover: var(--panel);
+  --popover-foreground: var(--foreground);
+  --primary: #10b981;
+  --primary-foreground: #020617;
+  --secondary: var(--panel-soft);
+  --secondary-foreground: var(--foreground);
+  --muted-bg: #1e293b;
+  --muted: #94a3b8;
+  --accent: var(--primary-soft);
+  --accent-foreground: var(--primary);
+  --destructive: var(--red);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--primary);
+  --panel: #151c2c;
+  --panel-soft: #1e293b;
+  --line: #2a3548;
+  --line-strong: #3d4b61;
+  --primary-soft: #064e3b;
+  --blue: #60a5fa;
+  --amber: #f59e0b;
+  --red: #f87171;
+  --shadow: 0 12px 30px rgb(0 0 0 / 28%);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -90,7 +121,7 @@ button, .button-link {
   padding: 0 13px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--panel);
   color: var(--foreground);
   cursor: pointer;
   text-decoration: none;
@@ -102,10 +133,15 @@ button:hover, .button-link:hover {
   box-shadow: 0 8px 18px rgb(24 34 48 / 8%);
 }
 
+.dark button:hover,
+.dark .button-link:hover {
+  box-shadow: 0 8px 18px rgb(0 0 0 / 24%);
+}
+
 button.primary, .button-link.primary {
   border-color: var(--primary);
   background: var(--primary);
-  color: #fff;
+  color: var(--primary-foreground);
   font-weight: 700;
 }
 
@@ -119,7 +155,7 @@ input, select, textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--panel);
   color: var(--foreground);
   padding: 9px 10px;
   outline: none;
@@ -132,7 +168,7 @@ textarea {
 
 input:focus, select:focus, textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgb(8 127 109 / 10%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
 }
 
 .boot-screen {
@@ -275,7 +311,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .menu-item.active {
-  border-color: #b8d8d0;
+  border-color: var(--primary);
   background: var(--primary-soft);
   color: var(--primary);
 }
@@ -346,7 +382,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
-  box-shadow: 0 8px 20px rgb(24 34 48 / 5%);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 
 .stat-card {
@@ -434,8 +470,8 @@ h1 {
 }
 
 .feedback-card:hover, .feedback-card.selected, .sku-card:hover, .sku-card.selected {
-  border-color: #9fcfc3;
-  box-shadow: 0 12px 30px rgb(8 127 109 / 9%);
+  border-color: var(--primary);
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
 .feedback-head {
@@ -462,12 +498,12 @@ h1 {
 
 .status.open {
   color: var(--amber);
-  background: #fff7ed;
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
 }
 
 .status.processing {
   color: var(--blue);
-  background: #eff6ff;
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
 }
 
 .status.resolved {
@@ -477,7 +513,7 @@ h1 {
 
 .status.closed {
   color: var(--muted);
-  background: #f2f4f7;
+  background: var(--muted-bg);
 }
 
 .feedback-time {
@@ -487,7 +523,7 @@ h1 {
 
 .feedback-content {
   margin: 0;
-  color: #1f2937;
+  color: var(--foreground);
   font-size: 15px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -582,10 +618,16 @@ h1 {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #111827;
+  background: #0f172a;
   color: #d1fae5;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.dark .code-block,
+.dark .command-block {
+  background: #020617;
+  border-color: var(--line-strong);
 }
 
 .code-block {
@@ -687,14 +729,14 @@ h1 {
 }
 
 .pill.active {
-  border-color: #b8d8d0;
+  border-color: var(--primary);
   color: var(--primary);
   background: var(--primary-soft);
 }
 
 .pill.inactive {
   color: var(--red);
-  background: #fff1f0;
+  background: color-mix(in srgb, var(--red) 10%, transparent);
 }
 
 .nutrition-line {
@@ -800,7 +842,7 @@ h1 {
 .spinner {
   width: 26px;
   height: 26px;
-  border: 3px solid #d6e5e0;
+  border: 3px solid var(--line);
   border-top-color: var(--primary);
   border-radius: 999px;
   animation: spin 0.8s linear infinite;
@@ -817,7 +859,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 8px;
   background:
-    linear-gradient(90deg, #f3f6f8 25%, #e8eef3 37%, #f3f6f8 63%);
+    linear-gradient(90deg, var(--panel-soft) 25%, var(--line) 37%, var(--panel-soft) 63%);
   background-size: 400% 100%;
   animation: shimmer 1.3s ease infinite;
 }
@@ -835,6 +877,12 @@ h1 {
   color: #fff;
   box-shadow: 0 18px 50px rgb(15 23 42 / 22%);
   transition: 0.2s ease;
+}
+
+.dark .toast {
+  background: #e2e8f0;
+  color: #0f172a;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 35%);
 }
 
 .toast.show {
