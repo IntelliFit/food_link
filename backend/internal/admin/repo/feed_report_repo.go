@@ -169,6 +169,25 @@ func (r *FeedReportRepo) GetTargetSnapshot(ctx context.Context, targetType, targ
 	return snap, nil
 }
 
+func (r *FeedReportRepo) CountByStatus(ctx context.Context) (map[string]int64, error) {
+	rows := []struct {
+		Status string
+		Count  int64
+	}{}
+	if err := r.db.WithContext(ctx).
+		Table("feed_reports").
+		Select("status, COUNT(*) AS count").
+		Group("status").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	result := map[string]int64{}
+	for _, row := range rows {
+		result[row.Status] = row.Count
+	}
+	return result, nil
+}
+
 func applyFeedReportFilters(q *gorm.DB, input ListFeedReportInput) *gorm.DB {
 	if query := strings.TrimSpace(input.Query); query != "" {
 		like := "%" + query + "%"

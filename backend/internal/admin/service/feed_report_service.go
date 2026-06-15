@@ -17,6 +17,7 @@ type FeedReportRepo interface {
 	UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error)
 	Delete(ctx context.Context, id string) error
 	GetTargetSnapshot(ctx context.Context, targetType, targetID string) (*admindomain.FeedReportTargetSnapshot, error)
+	CountByStatus(ctx context.Context) (map[string]int64, error)
 }
 
 type SystemMessageSender interface {
@@ -57,6 +58,10 @@ var statusTransitionRules = map[string]map[string]bool{
 	"processing": {"resolved": true, "rejected": true},
 	"resolved":   {},
 	"rejected":   {},
+}
+
+func (s *FeedReportService) GetStatusStats(ctx context.Context) (map[string]int64, error) {
+	return s.repo.CountByStatus(ctx)
 }
 
 func (s *FeedReportService) List(ctx context.Context, input ListFeedReportInput) (*adminrepo.ListFeedReportResult, error) {

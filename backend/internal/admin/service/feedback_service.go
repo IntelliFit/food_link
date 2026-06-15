@@ -12,6 +12,7 @@ import (
 type FeedbackRepo interface {
 	List(ctx context.Context, input repo.ListFeedbackInput) (*repo.ListFeedbackResult, error)
 	UpdateStatus(ctx context.Context, id, status string) (*repo.FeedbackItem, error)
+	CountByStatus(ctx context.Context) (map[string]int64, error)
 }
 
 type FeedbackService struct {
@@ -28,6 +29,10 @@ type ListFeedbackInput struct {
 
 func NewFeedbackService(repo FeedbackRepo) *FeedbackService {
 	return &FeedbackService{repo: repo}
+}
+
+func (s *FeedbackService) GetStatusStats(ctx context.Context) (map[string]int64, error) {
+	return s.repo.CountByStatus(ctx)
 }
 
 func (s *FeedbackService) List(ctx context.Context, input ListFeedbackInput) (*repo.ListFeedbackResult, error) {
