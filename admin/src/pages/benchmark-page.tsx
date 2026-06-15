@@ -400,8 +400,8 @@ function labelSummary(sample: DatasetSample): string {
   if (sample.label_type === 'total' && sample.total_weight_grams !== undefined) {
     return `${sample.total_weight_grams}g`
   }
-  if (sample.label_type === 'items' && sample.items?.length) {
-    return sample.items.map((it) => `${it.name}=${it.weight_grams}g`).join('; ')
+  if (sample.label_type === 'items' && sample.items && Object.keys(sample.items).length > 0) {
+    return Object.entries(sample.items).map(([name, w]) => `${name}=${w}g`).join('; ')
   }
   return '-'
 }
@@ -424,19 +424,27 @@ function SampleFormModal({
   const [labelType, setLabelType] = useState<LabelType>((sample?.label_type as LabelType) || 'total')
   const [totalWeight, setTotalWeight] = useState(sample?.total_weight_grams?.toString() || '')
   const [itemsText, setItemsText] = useState(
-    sample?.items?.map((it) => `${it.name}=${it.weight_grams}`).join('\n') || ''
+    sample?.items
+      ? Object.entries(sample.items)
+          .filter(([name]) => name !== '__total__')
+          .map(([name, w]) => `${name}=${w}`)
+          .join('\n')
+      : ''
   )
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
     setSaving(true)
     try {
-      let items: Array<{ name: string; weight_grams: number }> | undefined
+      let items: Record<string, number> | undefined
       let total: number | undefined
       if (labelType === 'items') {
         items = parseItemsText(itemsText)
       } else if (labelType === 'total') {
         total = parseFloat(totalWeight)
+        if (!isNaN(total)) {
+          items = { __total__: total }
+        }
       }
       const body: any = {
         batch_name: batchName,
@@ -530,8 +538,8 @@ function SampleFormModal({
   )
 }
 
-function parseItemsText(text: string): Array<{ name: string; weight_grams: number }> {
-  const out: Array<{ name: string; weight_grams: number }> = []
+function parseItemsText(text: string): Record<string, number> {
+  const out: Record<string, number> = {}
   for (const line of text.split('\n')) {
     const trimmed = line.trim()
     if (!trimmed) continue
@@ -539,7 +547,7 @@ function parseItemsText(text: string): Array<{ name: string; weight_grams: numbe
     if (parts.length < 2) continue
     const w = parseFloat(parts[parts.length - 1])
     if (isNaN(w)) continue
-    out.push({ name: parts.slice(0, -1).join('=').trim(), weight_grams: w })
+    out[parts.slice(0, -1).join('=').trim()] = w
   }
   return out
 }

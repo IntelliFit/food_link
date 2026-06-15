@@ -87,6 +87,7 @@ func (s *BenchmarkService) CreateSample(ctx context.Context, input domain.Create
 		w := *input.TotalWeightGrams
 		sample.TotalWeightGrams = &w
 	}
+	normalizeSampleItems(sample)
 	now := time.Now()
 	sample.CreatedAt = &now
 	sample.UpdatedAt = &now
@@ -97,6 +98,12 @@ func (s *BenchmarkService) CreateSample(ctx context.Context, input domain.Create
 }
 
 func (s *BenchmarkService) UpdateSample(ctx context.Context, id string, input domain.UpdateSampleInput) (*domain.DatasetSample, error) {
+	if input.Items == nil {
+		input.Items = map[string]float64{}
+	}
+	if input.LabelType != nil && *input.LabelType == "total" && input.TotalWeightGrams != nil {
+		input.Items["__total__"] = *input.TotalWeightGrams
+	}
 	return s.repo.UpdateSample(ctx, id, input)
 }
 
@@ -443,6 +450,18 @@ func modeToDefaultModel(mode string) string {
 	return "gemini-3-flash-preview"
 }
 
+func normalizeSampleItems(sample *do.FoodWeightLabeledSampleDO) {
+	if sample.Items == nil {
+		sample.Items = map[string]float64{}
+	}
+	if sample.LabelType == "total" && sample.TotalWeightGrams != nil {
+		sample.Items["__total__"] = *sample.TotalWeightGrams
+	}
+	if sample.LabelType == "unlabeled" {
+		sample.Items = map[string]float64{}
+	}
+}
+
 func sampleToGroundTruth(sample *do.FoodWeightLabeledSampleDO) map[string]any {
 	gt := map[string]any{
 		"label_type":  sample.LabelType,
@@ -528,6 +547,13 @@ func comparePredictionWithGroundTruth(prediction, groundTruth map[string]any) *d
 
 	if labelType == "total" {
 		gtWeight := anyToFloat64(groundTruth["total_weight_grams"])
+		if gtWeight == 0 {
+			if items, ok := groundTruth["items"].(map[string]any); ok {
+				gtWeight = anyToFloat64(items["__total__"])
+			} else if items, ok := groundTruth["items"].(map[string]float64); ok {
+				gtWeight = items["__total__"]
+			}
+		}
 		predWeight := sumItemWeights(predItems)
 		if predWeight == 0 && len(predItems) == 1 {
 			predWeight = predItems[0].Weight
@@ -596,16 +622,34 @@ func extractItems(data map[string]any) []item {
 }
 
 func extractGroundTruthItems(groundTruth map[string]any) []item {
-	rawItems, _ := groundTruth["items"].([]any)
 	var out []item
-	for _, it := range rawItems {
-		m, ok := it.(map[string]any)
-		if !ok {
-			continue
+	switch raw := groundTruth["items"].(type) {
+	case map[string]float64:
+		for name, w := range raw {
+			out = append(out, item{Name: name, Weight: w})
 		}
-		name, _ := m["name"].(string)
-		w := anyToFloat64(m["weight_grams"])
-		out = append(out, item{Name: name, Weight: w})
+	case map[string]any:
+		for name, v := range raw {
+			out = append(out, item{Name: name, Weight: anyToFloat64(v)})
+		}
+	case []any:
+		// legacy array format for backward compatibility with existing runs
+		for _, it := range raw {
+			m, ok := it.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := m["name"].(string)
+			w := anyToFloat64(m["weight_grams"])
+			out = append(out, item{Name: name, Weight: w})
+		}
+	}
+	// 占位符 __total__ 只用于 total 类型，items 类型不参与分项对比
+	for i := 0; i < len(out); i++ {
+		if out[i].Name == "__total__" {
+			out = append(out[:i], out[i+1:]...)
+			break
+		}
 	}
 	return out
 }

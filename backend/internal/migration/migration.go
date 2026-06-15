@@ -65,6 +65,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureFeedReportResolutionColumns(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureFoodWeightLabeledSamplesStructuredLabels(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -666,6 +669,37 @@ func ensureFeedReportResolutionColumns(ctx context.Context, db *gorm.DB) error {
 		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 			return fmt.Errorf("feed_reports resolution column migration: %w", err)
 		}
+	}
+	return nil
+}
+
+func ensureFoodWeightLabeledSamplesStructuredLabels(ctx context.Context, db *gorm.DB) error {
+	sql := `
+	ALTER TABLE food_weight_labeled_samples ALTER COLUMN items SET DEFAULT '{}'::jsonb;
+
+	UPDATE food_weight_labeled_samples
+	SET items = COALESCE((
+		SELECT jsonb_object_agg(elem->>'name', (elem->>'weight_grams')::numeric)
+		FROM jsonb_array_elements(items) AS elem
+	), '{}'::jsonb)
+	WHERE label_type = 'items'
+	  AND jsonb_typeof(items) = 'array';
+
+	UPDATE food_weight_labeled_samples
+	SET items = CASE
+		WHEN total_weight_grams IS NOT NULL THEN jsonb_build_object('__total__', total_weight_grams)
+		ELSE '{}'::jsonb
+	END
+	WHERE label_type = 'total'
+	  AND (jsonb_typeof(items) = 'array' OR items = '{}'::jsonb);
+
+	UPDATE food_weight_labeled_samples
+	SET items = '{}'::jsonb
+	WHERE label_type = 'unlabeled'
+	  AND jsonb_typeof(items) = 'array';
+	`
+	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+		return fmt.Errorf("convert food_weight_labeled_samples items to structured labels: %w", err)
 	}
 	return nil
 }

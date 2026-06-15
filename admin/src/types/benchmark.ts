@@ -13,10 +13,7 @@ export interface DatasetSample {
   image_object_key?: string
   label_type: LabelType
   total_weight_grams?: number
-  items: Array<{
-    name: string
-    weight_grams: number
-  }>
+  items: Record<string, number>
   status: SampleStatus
   source_path?: string
   metadata: Record<string, any>

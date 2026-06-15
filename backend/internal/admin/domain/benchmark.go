@@ -120,8 +120,8 @@ type DatasetSampleDTO struct {
 	ImageURL         *string          `json:"image_url,omitempty"`
 	ImageObjectKey   *string          `json:"image_object_key,omitempty"`
 	LabelType        string           `json:"label_type"`
-	TotalWeightGrams *float64         `json:"total_weight_grams,omitempty"`
-	Items            []map[string]any `json:"items,omitempty"`
+	TotalWeightGrams *float64          `json:"total_weight_grams,omitempty"`
+	Items            map[string]float64 `json:"items,omitempty"`
 	Status           string           `json:"status"`
 	SourcePath       *string          `json:"source_path,omitempty"`
 	Metadata         map[string]any   `json:"metadata,omitempty"`
@@ -163,8 +163,8 @@ func ToDatasetSampleDTOList(items []do.FoodWeightLabeledSampleDO) []DatasetSampl
 
 type UpdateSampleInput struct {
 	LabelType        *string          `json:"label_type,omitempty"`
-	TotalWeightGrams *float64         `json:"total_weight_grams,omitempty"`
-	Items            []map[string]any `json:"items,omitempty"`
+	TotalWeightGrams *float64          `json:"total_weight_grams,omitempty"`
+	Items            map[string]float64 `json:"items,omitempty"`
 	Status           *string          `json:"status,omitempty"`
 	Metadata         map[string]any   `json:"metadata,omitempty"`
 }
@@ -175,8 +175,8 @@ type CreateSampleInput struct {
 	OriginalFilename string           `json:"original_filename"`
 	ImageURL         string           `json:"image_url"`
 	LabelType        string           `json:"label_type"`
-	TotalWeightGrams *float64         `json:"total_weight_grams,omitempty"`
-	Items            []map[string]any `json:"items,omitempty"`
+	TotalWeightGrams *float64          `json:"total_weight_grams,omitempty"`
+	Items            map[string]float64 `json:"items,omitempty"`
 	Status           string           `json:"status"`
 	Metadata         map[string]any   `json:"metadata,omitempty"`
 }

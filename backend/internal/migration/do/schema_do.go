@@ -1105,20 +1105,20 @@ type SchoolDO struct {
 func (SchoolDO) TableName() string { return "schools" }
 
 type FoodWeightLabeledSampleDO struct {
-	ID               string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	BatchName        string           `gorm:"column:batch_name;type:text;not null"`
-	SampleName       string           `gorm:"column:sample_name;type:text;not null"`
-	OriginalFilename string           `gorm:"column:original_filename;type:text;not null"`
-	ImageObjectKey   *string          `gorm:"column:image_object_key;type:text"`
-	ImageURL         *string          `gorm:"column:image_url;type:text"`
-	LabelType        string           `gorm:"column:label_type;type:text;not null"`
-	TotalWeightGrams *float64         `gorm:"column:total_weight_grams;type:numeric"`
-	Items            []map[string]any `gorm:"column:items;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	Status           string           `gorm:"column:status;type:text;not null;default:'labeled'"`
-	SourcePath       *string          `gorm:"column:source_path;type:text"`
-	Metadata         map[string]any   `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	CreatedAt        *time.Time       `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt        *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ID               string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BatchName        string         `gorm:"column:batch_name;type:text;not null"`
+	SampleName       string         `gorm:"column:sample_name;type:text;not null"`
+	OriginalFilename string         `gorm:"column:original_filename;type:text;not null"`
+	ImageObjectKey   *string        `gorm:"column:image_object_key;type:text"`
+	ImageURL         *string        `gorm:"column:image_url;type:text"`
+	LabelType        string         `gorm:"column:label_type;type:text;not null"`
+	TotalWeightGrams *float64       `gorm:"column:total_weight_grams;type:numeric"`
+	Items            map[string]float64 `gorm:"column:items;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	Status           string         `gorm:"column:status;type:text;not null;default:'labeled'"`
+	SourcePath       *string        `gorm:"column:source_path;type:text"`
+	Metadata         map[string]any `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt        *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt        *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (FoodWeightLabeledSampleDO) TableName() string { return "food_weight_labeled_samples" }
