@@ -12,7 +12,6 @@ import {
   Square,
   BarChart3,
   Layers,
-  ImageIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AdminSidebar } from '@/components/admin-sidebar'
@@ -339,9 +338,12 @@ function DatasetSection({ onViewRun }: { onViewRun: () => void }) {
                       </td>
                       <td className="px-3 py-2">
                         {sample.image_url ? (
-                          <a href={sample.image_url} target="_blank" rel="noreferrer" className="inline-flex items-center text-primary hover:underline">
-                            <ImageIcon className="mr-1 size-3" />
-                            查看
+                          <a href={sample.image_url} target="_blank" rel="noreferrer" className="inline-block">
+                            <img
+                              src={sample.image_url}
+                              alt={sample.sample_name}
+                              className="h-10 w-10 rounded object-cover ring-1 ring-border"
+                            />
                           </a>
                         ) : (
                           '-'

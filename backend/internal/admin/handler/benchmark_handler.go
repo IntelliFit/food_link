@@ -43,7 +43,7 @@ func (h *BenchmarkHandler) ListSamples(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{
-		"items": result.Items,
+		"items": domain.ToDatasetSampleDTOList(result.Items),
 		"page":  result.Page,
 		"limit": result.Limit,
 		"total": result.Total,
@@ -56,7 +56,7 @@ func (h *BenchmarkHandler) GetSample(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, item)
+	response.Success(c, domain.ToDatasetSampleDTO(item))
 }
 
 func (h *BenchmarkHandler) CreateSample(c *gin.Context) {
@@ -71,7 +71,7 @@ func (h *BenchmarkHandler) CreateSample(c *gin.Context) {
 		return
 	}
 	logger.Info(c.Request.Context(), "管理员创建 benchmark 样本", slog.String("sample_id", item.ID))
-	response.Success(c, gin.H{"item": item})
+	response.Success(c, gin.H{"item": domain.ToDatasetSampleDTO(item)})
 }
 
 func (h *BenchmarkHandler) UpdateSample(c *gin.Context) {
@@ -86,7 +86,7 @@ func (h *BenchmarkHandler) UpdateSample(c *gin.Context) {
 		return
 	}
 	logger.Info(c.Request.Context(), "管理员更新 benchmark 样本", slog.String("sample_id", item.ID))
-	response.Success(c, gin.H{"item": item})
+	response.Success(c, gin.H{"item": domain.ToDatasetSampleDTO(item)})
 }
 
 func (h *BenchmarkHandler) DeleteSample(c *gin.Context) {
