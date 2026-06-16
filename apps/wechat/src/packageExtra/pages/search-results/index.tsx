@@ -8,6 +8,8 @@ import './index.scss'
 
 type SearchTab = 'content' | 'users'
 const PAGE_SIZE = 20
+const HISTORY_KEY = 'search_history'
+const MAX_HISTORY = 30
 
 function SearchResultsPage() {
   const router = useRouter()
@@ -46,6 +48,47 @@ function SearchResultsPage() {
   const [userCount, setUserCount] = useState(0)
 
   const formatCount = (n: number) => n > 99 ? '99+' : String(n)
+
+  // 搜索记录
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try { return Taro.getStorageSync(HISTORY_KEY) || [] } catch { return [] }
+  })
+  const [historyExpanded, setHistoryExpanded] = useState(false)
+
+  const saveToHistory = (kw: string) => {
+    const trimmed = kw.trim()
+    if (!trimmed) return
+    setSearchHistory((prev) => {
+      const next = [trimmed, ...prev.filter((h) => h !== trimmed)].slice(0, MAX_HISTORY)
+      Taro.setStorageSync(HISTORY_KEY, next)
+      return next
+    })
+  }
+
+  const removeHistoryItem = (idx: number) => {
+    setSearchHistory((prev) => {
+      const next = prev.filter((_, i) => i !== idx)
+      Taro.setStorageSync(HISTORY_KEY, next)
+      return next
+    })
+  }
+
+  const clearHistory = () => {
+    setSearchHistory([])
+    Taro.setStorageSync(HISTORY_KEY, [])
+  }
+
+  const onHistoryTap = (kw: string) => {
+    setKeyword(kw)
+    setContentResults([])
+    setUserResults([])
+    setContentOffset(0)
+    setUserOffset(0)
+    setContentSearched(false)
+    setUserSearched(false)
+    doSearch('content', kw, 0, false)
+    saveToHistory(kw)
+  }
 
   // 搜索结果的点赞状态（乐观更新）
   const [searchLikeMap, setSearchLikeMap] = useState<Record<string, boolean>>({})
@@ -147,6 +190,7 @@ function SearchResultsPage() {
   // Initial search on mount
   useEffect(() => {
     if (initialKeyword) {
+      saveToHistory(initialKeyword)
       doSearch('content', initialKeyword, 0, false)
     }
   }, [initialKeyword]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -160,7 +204,7 @@ function SearchResultsPage() {
     setUserOffset(0)
     setContentSearched(false)
     setUserSearched(false)
-    // Search current tab immediately, lazy-load the other
+    saveToHistory(kw)
     doSearch(activeTab, kw, 0, false)
   }
 
@@ -338,6 +382,31 @@ function SearchResultsPage() {
         </View>
         <Text className='search-btn' onClick={handleSearch}>搜索</Text>
       </View>
+
+      {/* 搜索记录 — 仅未搜索时展示 */}
+      {!currentSearched && searchHistory.length > 0 && (
+        <View className='search-history'>
+          <View className='history-header'>
+            <Text className='history-title'>搜索记录</Text>
+            <View className='history-actions'>
+              {searchHistory.length > 4 && (
+                <Text className='history-toggle' onClick={() => setHistoryExpanded(!historyExpanded)}>
+                  {historyExpanded ? '收起' : '展开'}
+                </Text>
+              )}
+              <Text className='iconfont icon-shanchu history-clear' onClick={clearHistory} />
+            </View>
+          </View>
+          <View className={`history-tags ${historyExpanded ? 'expanded' : ''}`}>
+            {searchHistory.map((h, i) => (
+              <View key={`${h}-${i}`} className='history-tag'>
+                <Text className='history-tag-text' onClick={() => onHistoryTap(h)}>{h}</Text>
+                <Text className='history-tag-close' onClick={() => removeHistoryItem(i)}>×</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
 
       {/* Tab 栏 */}
       <View className='search-tabs'>

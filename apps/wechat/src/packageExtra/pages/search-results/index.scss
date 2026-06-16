@@ -65,6 +65,80 @@
     flex-shrink: 0;
   }
 
+  // ── 搜索记录 ──
+  .search-history {
+    background: #fff;
+    padding: 20rpx 24rpx 16rpx;
+    border-bottom: 1rpx solid #f0f0f0;
+  }
+
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16rpx;
+  }
+
+  .history-title {
+    font-size: 26rpx;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .history-actions {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+  }
+
+  .history-toggle {
+    font-size: 22rpx;
+    color: #94a3b8;
+  }
+
+  .history-clear {
+    font-size: 28rpx;
+    color: #94a3b8;
+  }
+
+  .history-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12rpx;
+    max-height: 64rpx;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+
+    &.expanded {
+      max-height: none;
+    }
+  }
+
+  .history-tag {
+    display: flex;
+    align-items: center;
+    gap: 4rpx;
+    background: #f1f5f9;
+    border-radius: 24rpx;
+    padding: 8rpx 16rpx;
+    max-width: 60vw;
+  }
+
+  .history-tag-text {
+    font-size: 24rpx;
+    color: #334155;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .history-tag-close {
+    font-size: 22rpx;
+    color: #94a3b8;
+    padding: 0 4rpx;
+    flex-shrink: 0;
+  }
+
   // ── Tab 标签页 ──
   .search-tabs {
     display: flex;
