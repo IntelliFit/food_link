@@ -378,12 +378,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       const updated = { ...next[index] }
       const nextWeight = Math.max(10, Math.round(((item.weight || 0) + delta) * 10) / 10)
       const scale = item.weight > 0 ? nextWeight / item.weight : 1
-      const nextGrossWeight = Math.max(updated.grossWeight, nextWeight)
       updated.weight = nextWeight
-      updated.grossWeight = nextGrossWeight
-      updated.ediblePortionRatio = nextGrossWeight > 0
-        ? Math.max(1, Math.min(100, Math.round((nextWeight / nextGrossWeight) * 100)))
-        : updated.ediblePortionRatio
       updated.intake = Math.round(nextWeight * (updated.ratio / 100) * 10) / 10
       if (updated.intake > nextWeight) {
         updated.intake = nextWeight
