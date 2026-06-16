@@ -15,8 +15,15 @@ function SearchResultsPage() {
   const autoFocus = router.params?.focus === '1'
 
   const [keyword, setKeyword] = useState(initialKeyword)
-  const [inputFocus, setInputFocus] = useState(autoFocus)
+  const [inputFocus, setInputFocus] = useState(false)
   const [activeTab, setActiveTab] = useState<SearchTab>('content')
+
+  useEffect(() => {
+    if (autoFocus) {
+      const timer = setTimeout(() => setInputFocus(true), 300)
+      return () => clearTimeout(timer)
+    }
+  }, [autoFocus])
 
   const [contentResults, setContentResults] = useState<ContentSearchResult[]>([])
   const [userResults, setUserResults] = useState<UserSearchResult[]>([])
