@@ -1,8 +1,18 @@
 import { View, Text, Textarea, ScrollView } from '@tarojs/components'
 import { useState, useEffect } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getAccessToken, submitTextAnalyzeTask, getMyMembership, type CanonicalMealType, type MembershipStatus } from '../../../utils/api'
-import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
+import {
+  getAccessToken,
+  getHealthProfile,
+  submitTextAnalyzeTask,
+  getMyMembership,
+  type CanonicalMealType,
+  type MembershipStatus,
+} from '../../../utils/api'
+import {
+  inferDefaultMealTypeFromHealthProfile,
+  inferDefaultMealTypeFromLocalTime,
+} from '../../../utils/infer-default-meal-type'
 import {
   getFoodAnalysisCreditBlockMessage,
   getMembershipCreditSummary,
@@ -84,6 +94,15 @@ function RecordTextPage() {
     const params = Taro.getCurrentInstance().router?.params
     persistRecordTargetDate(String(params?.date || ''))
     refreshMembership()
+    ;(async () => {
+      try {
+        const profile = getAccessToken() ? await getHealthProfile() : null
+        const inferredMealType = inferDefaultMealTypeFromHealthProfile(profile)
+        setSelectedMeal(inferredMealType)
+      } catch {
+        setSelectedMeal(inferDefaultMealTypeFromLocalTime())
+      }
+    })()
   }, [])
 
   const commonFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
