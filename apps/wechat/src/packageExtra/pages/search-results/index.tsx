@@ -383,8 +383,8 @@ function SearchResultsPage() {
         <Text className='search-btn' onClick={handleSearch}>搜索</Text>
       </View>
 
-      {/* 搜索记录 — 仅未搜索时展示 */}
-      {!currentSearched && searchHistory.length > 0 && (
+      {/* 搜索记录 — 始终展示 */}
+      {searchHistory.length > 0 && (
         <View className='search-history'>
           <View className='history-header'>
             <Text className='history-title'>搜索记录</Text>
