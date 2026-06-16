@@ -12,8 +12,10 @@ const PAGE_SIZE = 20
 function SearchResultsPage() {
   const router = useRouter()
   const initialKeyword = decodeURIComponent(router.params?.keyword || '')
+  const autoFocus = router.params?.focus === '1'
 
   const [keyword, setKeyword] = useState(initialKeyword)
+  const [inputFocus, setInputFocus] = useState(autoFocus)
   const [activeTab, setActiveTab] = useState<SearchTab>('content')
 
   const [contentResults, setContentResults] = useState<ContentSearchResult[]>([])
@@ -254,6 +256,7 @@ function SearchResultsPage() {
             placeholder='搜索动态内容或用户...'
             placeholderClass='search-placeholder'
             value={keyword}
+            focus={inputFocus}
             onInput={(e) => setKeyword(e.detail.value)}
             onConfirm={handleSearch}
             confirmType='search'

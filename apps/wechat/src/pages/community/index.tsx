@@ -1296,11 +1296,9 @@ function CommunityPage() {
     // 同上：由 useEffect 统一处理刷新，避免重复请求和 author_id 未同步
   }
 
-  const handleFeedSearchConfirm = (e: any) => {
-    const kw = (e.detail?.value || feedSearchKeyword).trim()
-    if (!kw) return
+  const handleFeedSearchConfirm = () => {
     Taro.navigateTo({
-      url: extraPkgUrl(`/pages/search-results/index?keyword=${encodeURIComponent(kw)}`)
+      url: extraPkgUrl('/pages/search-results/index?focus=1')
     })
   }
 
@@ -2220,22 +2218,11 @@ function CommunityPage() {
               </View>
               <View className='feed-filter-panel' onClick={(e) => e.stopPropagation()}>
                 <View className='feed-filter-top-row'>
-                  <View className='feed-search-wrap'>
+                  <View className='feed-search-wrap' onClick={handleFeedSearchConfirm}>
                     <View className='feed-search-icon-wrap'>
-                      <FeedSearchGlyph />
+                      <Text className='iconfont icon-search feed-search-icon' />
                     </View>
-                    <Input
-                      className='feed-search-input'
-                      placeholder='搜索动态内容或用户...'
-                      placeholderClass='feed-search-placeholder'
-                      value={feedSearchKeyword}
-                      onInput={(e) => setFeedSearchKeyword(e.detail.value)}
-                      onConfirm={handleFeedSearchConfirm}
-                      confirmType='search'
-                    />
-                    {feedSearchKeyword ? (
-                      <Text className='feed-search-clear' onClick={() => setFeedSearchKeyword('')}>清除</Text>
-                    ) : null}
+                    <Text className='feed-search-placeholder-text'>搜索动态内容或用户...</Text>
                   </View>
                   <View
                     className='feed-filter-trigger-combined'

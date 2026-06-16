@@ -60,9 +60,9 @@ SELECT * FROM (
     ufr.total_protein,
     ufr.total_carbs,
     ufr.total_fat,
-    ufr.fiber,
-    ufr.sugar,
-    ufr.sodium_mg,
+    NULL::float8 AS fiber,
+    NULL::float8 AS sugar,
+    NULL::float8 AS sodium_mg,
     NULL::text AS exercise_desc,
     NULL::text AS exercise_type,
     NULL::float8 AS calories_burned,
@@ -97,7 +97,7 @@ SELECT * FROM (
     uel.exercise_desc,
     uel.exercise_type,
     uel.calories_burned,
-    uel.duration_min,
+    NULL::int AS duration_min,
     NULL::text AS meal_type,
     NULL::text AS diet_goal
   FROM user_exercise_logs uel
