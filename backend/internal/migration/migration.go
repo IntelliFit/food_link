@@ -65,6 +65,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureFeedReportResolutionColumns(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureFoodWeightLabeledSamplesStructuredLabels(ctx, db); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -443,6 +446,11 @@ WHERE COALESCE(display_name, '') = ''
 		`ALTER TABLE analysis_tasks ADD COLUMN IF NOT EXISTS search_text text`,
 		`UPDATE analysis_tasks SET search_text = COALESCE(NULLIF(text_input, ''), result->'items'->0->>'name', result->>'description', '') WHERE search_text IS NULL OR search_text = ''`,
 		`CREATE INDEX IF NOT EXISTS idx_analysis_tasks_user_search_gin ON analysis_tasks USING gin (search_text gin_trgm_ops)`,
+			// Community search trigram indexes for keyword matching
+			`CREATE INDEX IF NOT EXISTS idx_weapp_user_nickname_gin ON weapp_user USING gin (nickname gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_user_food_records_desc_gin ON user_food_records USING gin (COALESCE(description, '') gin_trgm_ops) WHERE hidden_from_feed = false`,
+			`CREATE INDEX IF NOT EXISTS idx_user_exercise_logs_desc_gin ON user_exercise_logs USING gin (COALESCE(exercise_desc, '') gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_user_circle_posts_search_gin ON user_circle_posts USING gin (COALESCE(title, '') || ' ' || COALESCE(body, '') gin_trgm_ops)`,
 		// Analysis feedback samples extra columns/indexes for frontend tracking
 		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS resolution_state text NOT NULL DEFAULT 'user_corrected'`,
 		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS source_record_id uuid`,
@@ -666,6 +674,37 @@ func ensureFeedReportResolutionColumns(ctx context.Context, db *gorm.DB) error {
 		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
 			return fmt.Errorf("feed_reports resolution column migration: %w", err)
 		}
+	}
+	return nil
+}
+
+func ensureFoodWeightLabeledSamplesStructuredLabels(ctx context.Context, db *gorm.DB) error {
+	sql := `
+	ALTER TABLE food_weight_labeled_samples ALTER COLUMN items SET DEFAULT '{}'::jsonb;
+
+	UPDATE food_weight_labeled_samples
+	SET items = COALESCE((
+		SELECT jsonb_object_agg(elem->>'name', (elem->>'weight_grams')::numeric)
+		FROM jsonb_array_elements(items) AS elem
+	), '{}'::jsonb)
+	WHERE label_type = 'items'
+	  AND jsonb_typeof(items) = 'array';
+
+	UPDATE food_weight_labeled_samples
+	SET items = CASE
+		WHEN total_weight_grams IS NOT NULL THEN jsonb_build_object('__total__', total_weight_grams)
+		ELSE '{}'::jsonb
+	END
+	WHERE label_type = 'total'
+	  AND (jsonb_typeof(items) = 'array' OR items = '{}'::jsonb);
+
+	UPDATE food_weight_labeled_samples
+	SET items = '{}'::jsonb
+	WHERE label_type = 'unlabeled'
+	  AND jsonb_typeof(items) = 'array';
+	`
+	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+		return fmt.Errorf("convert food_weight_labeled_samples items to structured labels: %w", err)
 	}
 	return nil
 }

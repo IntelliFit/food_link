@@ -747,21 +747,6 @@ export default function ProfileSettingsPage() {
     )
   }
 
-  if (pageLoading) {
-    return (
-      <FlPageThemeRoot>
-        <View className={`profile-settings-page ${scheme === 'dark' ? 'profile-settings-page--dark' : ''}`}>
-          <View className='profile-loading'>
-            <View className='profile-skeleton-avatar' />
-            <View className='profile-skeleton-name' />
-            <View className='profile-skeleton-id' />
-            <View className='profile-skeleton-stats' />
-          </View>
-        </View>
-      </FlPageThemeRoot>
-    )
-  }
-
   return (
     <FlPageThemeRoot>
       <View className={`profile-settings-page ${scheme === 'dark' ? 'profile-settings-page--dark' : ''}`}>
@@ -777,8 +762,8 @@ export default function ProfileSettingsPage() {
             )}
           </View>
 
-          {/* 右上角按钮组 */}
-          {isOwner && (
+          {/* 右上角按钮组 — pageLoading 期间隐藏，避免 isOwner 初始值导致闪烁 */}
+          {isOwner && !pageLoading && (
             <View className='profile-top-actions'>
               <View
                 className='profile-top-action-btn'
@@ -898,7 +883,11 @@ export default function ProfileSettingsPage() {
           {/* 最新动态 */}
           {activeTab === 'feed' && (
             <View className='profile-content-body'>
-              {feedList.length === 0 && !feedLoading ? (
+              {feedLoading && feedList.length === 0 ? (
+                <View className='profile-feed-loading'>
+                  <View className='profile-feed-spinner' />
+                </View>
+              ) : feedList.length === 0 ? (
                 <View className='profile-content-empty'>
                   <Text className='profile-content-empty-text'>暂无动态</Text>
                 </View>

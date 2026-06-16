@@ -13,10 +13,7 @@ export interface DatasetSample {
   image_object_key?: string
   label_type: LabelType
   total_weight_grams?: number
-  items: Array<{
-    name: string
-    weight_grams: number
-  }>
+  items: Record<string, number>
   status: SampleStatus
   source_path?: string
   metadata: Record<string, any>
@@ -69,6 +66,7 @@ export interface BenchmarkRun {
   started_at?: string
   completed_at?: string
   created_by?: string
+  created_by_username?: string
   created_at: string
   updated_at: string
 }
@@ -85,6 +83,29 @@ export interface RunMetrics {
   average_duration_ms: number
 }
 
+export interface ItemComparison {
+  gt_name: string
+  gt_weight: number
+  pred_name?: string
+  pred_weight?: number
+  matched: boolean
+  similarity: number
+  weight_error?: number
+  weight_error_pct?: number
+  extra?: boolean
+}
+
+export interface SampleMetrics {
+  name_matched: boolean
+  name_match_details?: boolean[]
+  total_weight_error?: number
+  total_weight_error_pct?: number
+  item_weight_errors?: number[]
+  item_weight_error_pcts?: number[]
+  item_comparisons?: ItemComparison[]
+  duration_ms?: number
+}
+
 export interface BenchmarkRunSample {
   id: string
   run_id: string
@@ -94,7 +115,7 @@ export interface BenchmarkRunSample {
   prediction: Record<string, any>
   ground_truth: Record<string, any>
   stage_outputs: Record<string, any>
-  metrics: Record<string, any>
+  metrics: SampleMetrics
   error_message?: string
   started_at?: string
   completed_at?: string

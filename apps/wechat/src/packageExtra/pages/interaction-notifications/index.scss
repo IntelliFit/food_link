@@ -65,6 +65,67 @@
   font-size: 24rpx;
 }
 
+// ── Tab 标签栏 ──
+
+.notifications-tabs {
+  display: flex;
+  background: #fff;
+  border-radius: 16rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+
+  .tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 24rpx 0 20rpx;
+    position: relative;
+    gap: 8rpx;
+
+    .tab-text {
+      font-size: 26rpx;
+      color: #64748b;
+      font-weight: 400;
+      transition: color 0.2s;
+    }
+
+    &.active .tab-text {
+      color: #00bc7d;
+      font-weight: 600;
+    }
+
+    .tab-indicator {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 48rpx;
+      height: 6rpx;
+      background: #00bc7d;
+      border-radius: 3rpx;
+    }
+
+    .tab-badge {
+      font-size: 20rpx;
+      padding: 0rpx 10rpx;
+      border-radius: 999rpx;
+      background: #f1f5f9;
+      color: #64748b;
+      font-weight: 500;
+      min-width: 32rpx;
+      text-align: center;
+
+      &.active {
+        background: #f0fdf4;
+        color: #00bc7d;
+      }
+    }
+  }
+}
+
 .notifications-list {
   height: calc(100vh - 220rpx);
 }
@@ -146,6 +207,35 @@
   margin-top: 12rpx;
   font-size: 22rpx;
   color: #94a3b8;
+}
+
+// 加载更多 spinner
+.load-more-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24rpx 0;
+}
+
+.mini-spinner {
+  width: 36rpx;
+  height: 36rpx;
+  border: 3rpx solid #e2e8f0;
+  border-top-color: #00bc7d;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+// 列表结束标记
+.list-end {
+  text-align: center;
+  padding: 24rpx 0;
+  font-size: 22rpx;
+  color: #cbd5e1;
 }
 
 // 按钮 spinner 样式

@@ -16,6 +16,7 @@ import (
 type AdminFeedbackService interface {
 	List(ctx context.Context, input service.ListFeedbackInput) (*repo.ListFeedbackResult, error)
 	UpdateStatus(ctx context.Context, id, status string) (*repo.FeedbackItem, error)
+	GetStatusStats(ctx context.Context) (map[string]int64, error)
 }
 
 type FeedbackHandler struct {
@@ -24,6 +25,15 @@ type FeedbackHandler struct {
 
 func NewFeedbackHandler(svc AdminFeedbackService) *FeedbackHandler {
 	return &FeedbackHandler{svc: svc}
+}
+
+func (h *FeedbackHandler) StatusStats(c *gin.Context) {
+	stats, err := h.svc.GetStatusStats(c.Request.Context())
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"stats": stats})
 }
 
 func (h *FeedbackHandler) List(c *gin.Context) {

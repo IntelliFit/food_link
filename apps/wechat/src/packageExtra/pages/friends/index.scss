@@ -97,15 +97,17 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32rpx;
+    min-width: 32rpx;
     height: 32rpx;
-    background: #ef4444;
-    color: #fff;
+    padding: 0 8rpx;
+    background: #86efac;
+    color: #166534;
     font-size: 20rpx;
     font-weight: 600;
-    border-radius: 50%;
+    border-radius: 16rpx;
     margin-left: 8rpx;
     animation: badgePulse 2s ease-in-out infinite;
+    box-sizing: border-box;
   }
 }
 

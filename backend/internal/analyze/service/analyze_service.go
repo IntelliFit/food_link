@@ -222,18 +222,19 @@ func (s *AnalyzeService) ConfigureDoubaoWebSearchClient(apiKey, baseURL, model s
 }
 
 func (s *AnalyzeService) ConfigureGemini35Client(apiKey, baseURL, model string) {
+	if strings.TrimSpace(apiKey) == "" {
+		logger.Warn(context.Background(), "gemini 3.5 flash client not initialized: empty api key")
+		return
+	}
+	if strings.TrimSpace(baseURL) == "" {
+		logger.Warn(context.Background(), "gemini 3.5 flash client not initialized: empty base url (check Apollo config)")
+		return
+	}
 	if strings.TrimSpace(model) == "" {
 		model = gemini35FlashModel
 	}
-	if strings.TrimSpace(baseURL) == "" {
-		baseURL = "https://yunwu.ai/v1"
-	}
-	if strings.TrimSpace(apiKey) != "" {
-		s.gemini35Client = NewOfoxAIClient(apiKey, model, baseURL)
-		logger.Info(context.Background(), "gemini 3.5 flash client initialized", slog.String("base_url", baseURL), slog.String("model", model))
-		return
-	}
-	logger.Warn(context.Background(), "gemini 3.5 flash client not initialized: empty api key")
+	s.gemini35Client = NewOfoxAIClient(apiKey, model, baseURL)
+	logger.Info(context.Background(), "gemini 3.5 flash client initialized", slog.String("base_url", baseURL), slog.String("model", model))
 }
 
 func (s *AnalyzeService) ConfigureGemini35LLMClient(client LLMClient) {

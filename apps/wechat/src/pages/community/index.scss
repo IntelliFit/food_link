@@ -874,12 +874,7 @@ $community-border-soft: rgb(92 184 150 / 18%);
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   flex: 1;
   min-width: 0;
-
-  &:focus-within {
-    border-color: rgb(92 184 150 / 45%);
-    background: rgb(92 184 150 / 6%);
-    box-shadow: 0 0 0 2rpx rgb(92 184 150 / 12%);
-  }
+  cursor: pointer;
 }
 
 .feed-search-icon-wrap {
@@ -891,32 +886,16 @@ $community-border-soft: rgb(92 184 150 / 18%);
   flex-shrink: 0;
 }
 
-.feed-search-svg {
-  width: 32rpx;
-  height: 32rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.feed-search-input {
-  flex: 1;
-  height: 72rpx;
-  font-size: 26rpx;
-  color: #1e293b;
-  background: transparent;
-}
-
-.feed-search-placeholder {
+.feed-search-icon {
+  font-size: 32rpx;
   color: #94a3b8;
-  font-size: 26rpx;
 }
 
-.feed-search-clear {
-  flex-shrink: 0;
-  font-size: 24rpx;
-  color: #5cb896;
-  padding: 8rpx 4rpx;
+.feed-search-placeholder-text {
+  flex: 1;
+  font-size: 26rpx;
+  color: #94a3b8;
+  line-height: 64rpx;
 }
 
 /* 搜索框匹配到的好友结果面板 */

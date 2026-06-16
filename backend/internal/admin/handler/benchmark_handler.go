@@ -115,7 +115,7 @@ func (h *BenchmarkHandler) CreateRun(c *gin.Context) {
 		slog.String("execution_mode", run.ExecutionMode),
 		slog.Int("sample_count", run.SampleCount),
 	)
-	response.Success(c, gin.H{"run": run})
+	response.Success(c, gin.H{"run": domain.ToBenchmarkRunDTO(run)})
 }
 
 func (h *BenchmarkHandler) ListRuns(c *gin.Context) {
@@ -127,7 +127,7 @@ func (h *BenchmarkHandler) ListRuns(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{
-		"items": result.Items,
+		"items": domain.ToBenchmarkRunDTOList(result.Items),
 		"page":  result.Page,
 		"limit": result.Limit,
 		"total": result.Total,
@@ -140,7 +140,7 @@ func (h *BenchmarkHandler) GetRun(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"run": run})
+	response.Success(c, gin.H{"run": domain.ToBenchmarkRunDTO(run)})
 }
 
 func (h *BenchmarkHandler) DeleteRun(c *gin.Context) {
@@ -158,7 +158,7 @@ func (h *BenchmarkHandler) CancelRun(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	response.Success(c, gin.H{"run": run})
+	response.Success(c, gin.H{"run": domain.ToBenchmarkRunDTO(run)})
 }
 
 func (h *BenchmarkHandler) ListRunSamples(c *gin.Context) {
@@ -170,7 +170,7 @@ func (h *BenchmarkHandler) ListRunSamples(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{
-		"items": result.Items,
+		"items": domain.ToBenchmarkRunSampleDTOList(result.Items),
 		"page":  result.Page,
 		"limit": result.Limit,
 		"total": result.Total,

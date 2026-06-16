@@ -406,15 +406,12 @@ func readImage(path string) ([]byte, string, error) {
 }
 
 func buildRecord(batchName, sampleName, filename, sourcePath, objectKey, imageURL string, label sampleLabel, status string) do.FoodWeightLabeledSampleDO {
-	items := label.Items
-	if items == nil {
-		items = []labelItem{}
-	}
-	itemsAny := make([]map[string]any, len(items))
-	for i, it := range items {
-		itemsAny[i] = map[string]any{
-			"name":         it.Name,
-			"weight_grams": it.WeightGrams,
+	itemsMap := make(map[string]float64)
+	if label.LabelType == "total" && label.TotalWeightGrams != nil {
+		itemsMap["__total__"] = *label.TotalWeightGrams
+	} else {
+		for _, it := range label.Items {
+			itemsMap[it.Name] = it.WeightGrams
 		}
 	}
 
@@ -429,7 +426,7 @@ func buildRecord(batchName, sampleName, filename, sourcePath, objectKey, imageUR
 		SampleName:       sampleName,
 		OriginalFilename: filename,
 		LabelType:        label.LabelType,
-		Items:            itemsAny,
+		Items:            itemsMap,
 		Status:           status,
 		SourcePath:       &sourcePath,
 		Metadata:         metadata,

@@ -47,6 +47,7 @@ const extraSubpackagePages = [
   // 兼容旧构建/开发者工具缓存仍尝试打开 /packageExtra/pages/about/index 的情况；
   // 真实业务入口会经 extraPkgUrl() 路由到独立 packageAbout。
   'pages/about/index',
+  'pages/search-results/index',
   'pages/privacy-settings/index',
   'pages/pet-home/index',
   'pages/pet-lab/index',

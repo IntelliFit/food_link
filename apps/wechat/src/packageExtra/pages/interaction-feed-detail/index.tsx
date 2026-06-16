@@ -64,8 +64,11 @@ function pickRecordId(options: RouteOptions): string {
   return String(options.targetId || options.target_id || options.recordId || options.record_id || options.id || '').trim()
 }
 
+const VALID_TARGET_TYPES: CommunityFeedTargetType[] = ['food_record', 'exercise_log', 'circle_post', 'campus_food']
+
 function pickTargetType(options: RouteOptions): CommunityFeedTargetType {
-  return options.targetType === 'exercise_log' || options.target_type === 'exercise_log' ? 'exercise_log' : 'food_record'
+  const raw = (options.targetType || options.target_type || 'food_record') as string
+  return VALID_TARGET_TYPES.includes(raw as CommunityFeedTargetType) ? (raw as CommunityFeedTargetType) : 'food_record'
 }
 
 function getFeedTargetType(item: CommunityFeedItem | null | undefined): CommunityFeedTargetType {

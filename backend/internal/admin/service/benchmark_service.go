@@ -9,14 +9,19 @@ import (
 	"sync"
 	"time"
 
+	"food_link/backend/pkg/logger"
+
 	"food_link/backend/internal/admin/domain"
+	admindomain "food_link/backend/internal/admin/domain"
 	"food_link/backend/internal/admin/repo"
-	commonerrors "food_link/backend/internal/common/errors"
-	"food_link/backend/internal/migration/do"
 	analyzedomain "food_link/backend/internal/analyze/domain"
 	analyzeservice "food_link/backend/internal/analyze/service"
+	authrepo "food_link/backend/internal/auth/repo"
+	commonerrors "food_link/backend/internal/common/errors"
+	"food_link/backend/internal/migration/do"
 
 	"github.com/google/uuid"
+	"log/slog"
 )
 
 const (
@@ -26,17 +31,28 @@ const (
 )
 
 type BenchmarkTaskService interface {
-	SubmitAnalyzeTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
+	SubmitInternalAnalyzeTask(ctx context.Context, userID string, input analyzeservice.SubmitTaskInput) (string, error)
 	GetTask(ctx context.Context, taskID, userID string) (*analyzedomain.AnalysisTask, error)
 }
 
-type BenchmarkService struct {
-	repo    *repo.BenchmarkRepo
-	taskSvc BenchmarkTaskService
+type AdminAccountReader interface {
+	FindByID(ctx context.Context, id string) (*admindomain.AdminAccount, error)
 }
 
-func NewBenchmarkService(repo *repo.BenchmarkRepo, taskSvc BenchmarkTaskService) *BenchmarkService {
-	return &BenchmarkService{repo: repo, taskSvc: taskSvc}
+type BenchmarkUserResolver interface {
+	FindByOpenID(ctx context.Context, openID string) (*authrepo.User, error)
+	Create(ctx context.Context, user *authrepo.User) error
+}
+
+type BenchmarkService struct {
+	repo        *repo.BenchmarkRepo
+	taskSvc     BenchmarkTaskService
+	adminReader AdminAccountReader
+	userReader  BenchmarkUserResolver
+}
+
+func NewBenchmarkService(repo *repo.BenchmarkRepo, taskSvc BenchmarkTaskService, adminReader AdminAccountReader, userReader BenchmarkUserResolver) *BenchmarkService {
+	return &BenchmarkService{repo: repo, taskSvc: taskSvc, adminReader: adminReader, userReader: userReader}
 }
 
 // Dataset samples
@@ -87,6 +103,7 @@ func (s *BenchmarkService) CreateSample(ctx context.Context, input domain.Create
 		w := *input.TotalWeightGrams
 		sample.TotalWeightGrams = &w
 	}
+	normalizeSampleItems(sample)
 	now := time.Now()
 	sample.CreatedAt = &now
 	sample.UpdatedAt = &now
@@ -97,6 +114,12 @@ func (s *BenchmarkService) CreateSample(ctx context.Context, input domain.Create
 }
 
 func (s *BenchmarkService) UpdateSample(ctx context.Context, id string, input domain.UpdateSampleInput) (*domain.DatasetSample, error) {
+	if input.Items == nil {
+		input.Items = map[string]float64{}
+	}
+	if input.LabelType != nil && *input.LabelType == "total" && input.TotalWeightGrams != nil {
+		input.Items["__total__"] = *input.TotalWeightGrams
+	}
 	return s.repo.UpdateSample(ctx, id, input)
 }
 
@@ -126,16 +149,28 @@ func (s *BenchmarkService) CreateRun(ctx context.Context, adminID string, input 
 		return nil, &commonerrors.AppError{Code: 10002, Message: "未找到符合条件的数据集样本", HTTPStatus: 400}
 	}
 
+	createdByUsername := ""
+	if s.adminReader != nil && adminID != "" {
+		account, err := s.adminReader.FindByID(ctx, adminID)
+		if err != nil {
+			return nil, err
+		}
+		if account != nil {
+			createdByUsername = account.Username
+		}
+	}
+
 	run := &do.BenchmarkRunDO{
-		ID:            uuid.New().String(),
-		Name:          input.Name,
-		Status:        domain.BenchmarkRunStatusPending,
-		DatasetFilter: input.DatasetFilter.ToMap(),
-		ExecutionMode: mode,
-		ModelConfig:   input.ModelConfig.ToMap(),
-		SampleCount:   len(samples),
-		Metrics:       map[string]any{},
-		CreatedBy:     ptrString(adminID),
+		ID:                uuid.New().String(),
+		Name:              input.Name,
+		Status:            domain.BenchmarkRunStatusPending,
+		DatasetFilter:     input.DatasetFilter.ToMap(),
+		ExecutionMode:     mode,
+		ModelConfig:       input.ModelConfig.ToMap(),
+		SampleCount:       len(samples),
+		Metrics:           map[string]any{},
+		CreatedBy:         ptrString(adminID),
+		CreatedByUsername: ptrString(createdByUsername),
 	}
 	now := time.Now()
 	run.CreatedAt = &now
@@ -162,9 +197,42 @@ func (s *BenchmarkService) CreateRun(ctx context.Context, adminID string, input 
 		}
 	}
 
-	go s.executeRun(context.Background(), run.ID, adminID, mode, input.TextInput, input.ModelConfig)
+	benchmarkUserID, err := s.resolveBenchmarkUserID(ctx, adminID)
+	if err != nil {
+		return nil, err
+	}
+
+	go s.executeRun(context.Background(), run.ID, benchmarkUserID, mode, input.TextInput, input.ModelConfig)
 
 	return run, nil
+}
+
+var benchmarkOpenIDNamespace = uuid.MustParse("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+
+func (s *BenchmarkService) resolveBenchmarkUserID(ctx context.Context, adminID string) (string, error) {
+	if s.userReader == nil {
+		return "", &commonerrors.AppError{Code: 10002, Message: "benchmark 用户解析器未配置", HTTPStatus: 500}
+	}
+
+	openID := uuid.NewSHA1(benchmarkOpenIDNamespace, []byte("food_link_benchmark:"+strings.TrimSpace(adminID))).String()
+	if user, err := s.userReader.FindByOpenID(ctx, openID); err != nil {
+		return "", err
+	} else if user != nil {
+		return user.ID, nil
+	}
+
+	now := time.Now()
+	newUser := &authrepo.User{
+		ID:       uuid.New().String(),
+		OpenID:   openID,
+		Nickname: "benchmark",
+		Avatar:   "",
+	}
+	newUser.CreatedAt = &now
+	if err := s.userReader.Create(ctx, newUser); err != nil {
+		return "", err
+	}
+	return newUser.ID, nil
 }
 
 func (s *BenchmarkService) ListRuns(ctx context.Context, page, limit int) (*domain.ListRunsResult, error) {
@@ -297,9 +365,14 @@ func (s *BenchmarkService) executeSample(ctx context.Context, runID, userID, mod
 	}
 
 	startedAt := time.Now()
-	taskID, err := s.taskSvc.SubmitAnalyzeTask(ctx, userID, input)
+	taskID, err := s.taskSvc.SubmitInternalAnalyzeTask(ctx, userID, input)
 	if err != nil {
 		_ = s.updateSampleStatus(ctx, sample.ID, domain.BenchmarkSampleStatusFailed, fmt.Sprintf("提交任务失败: %v", err), nil)
+		logger.Error(ctx, "benchmark 样本提交分析任务失败", err,
+			slog.String("run_id", sample.RunID),
+			slog.String("sample_id", sample.SampleID),
+			slog.String("user_id", userID),
+		)
 		return err
 	}
 
@@ -443,6 +516,18 @@ func modeToDefaultModel(mode string) string {
 	return "gemini-3-flash-preview"
 }
 
+func normalizeSampleItems(sample *do.FoodWeightLabeledSampleDO) {
+	if sample.Items == nil {
+		sample.Items = map[string]float64{}
+	}
+	if sample.LabelType == "total" && sample.TotalWeightGrams != nil {
+		sample.Items["__total__"] = *sample.TotalWeightGrams
+	}
+	if sample.LabelType == "unlabeled" {
+		sample.Items = map[string]float64{}
+	}
+}
+
 func sampleToGroundTruth(sample *do.FoodWeightLabeledSampleDO) map[string]any {
 	gt := map[string]any{
 		"label_type":  sample.LabelType,
@@ -467,19 +552,19 @@ func parseTaskResult(result map[string]any) (prediction map[string]any, stageOut
 
 	items, _ := result["items"].([]any)
 	prediction["items"] = items
-	if desc, ok := result["description"].(string); ok {
-		prediction["description"] = desc
+	for _, key := range []string{"description", "insight", "pfc_ratio_comment", "eating_order_advice", "absorption_notes", "context_advice", "analysis_engine", "food_image_strategy", "recognitionOutcome", "rejectionReason", "retakeGuidance", "allowedFoodCategory", "followupQuestions"} {
+		if v, ok := result[key]; ok {
+			prediction[key] = v
+		}
 	}
-	if dur, ok := result["analysis_duration_ms"].(float64); ok {
-		prediction["analysis_duration_ms"] = dur
-	}
-	if tw, ok := result["total_weight_grams"].(float64); ok {
-		prediction["total_weight_grams"] = tw
+	for _, key := range []string{"analysis_duration_ms", "resolved_count", "unresolved_count", "total_weight_grams", "edible_portion_applied_count", "suggest_ratio_applied_count"} {
+		prediction[key] = anyToFloat64(result[key])
 	}
 
 	stageOutputs["final"] = map[string]any{
 		"item_count":  len(items),
 		"description": result["description"],
+		"strategy":    result["food_image_strategy"],
 	}
 	if hr, ok := result["hybrid_review"].(map[string]any); ok {
 		stageOutputs["review"] = hr
@@ -528,6 +613,13 @@ func comparePredictionWithGroundTruth(prediction, groundTruth map[string]any) *d
 
 	if labelType == "total" {
 		gtWeight := anyToFloat64(groundTruth["total_weight_grams"])
+		if gtWeight == 0 {
+			if items, ok := groundTruth["items"].(map[string]any); ok {
+				gtWeight = anyToFloat64(items["__total__"])
+			} else if items, ok := groundTruth["items"].(map[string]float64); ok {
+				gtWeight = items["__total__"]
+			}
+		}
 		predWeight := sumItemWeights(predItems)
 		if predWeight == 0 && len(predItems) == 1 {
 			predWeight = predItems[0].Weight
@@ -536,6 +628,7 @@ func comparePredictionWithGroundTruth(prediction, groundTruth map[string]any) *d
 		if gtWeight > 0 {
 			m.TotalWeightErrorPct = math.Abs(m.TotalWeightError) / gtWeight * 100
 		}
+		m.ItemComparisons = buildItemComparisons(nil, predItems, groundTruth)
 	} else if labelType == "items" {
 		var totalGtWeight, totalPredWeight float64
 		for _, gt := range gtItems {
@@ -559,8 +652,85 @@ func comparePredictionWithGroundTruth(prediction, groundTruth map[string]any) *d
 		if totalGtWeight > 0 {
 			m.TotalWeightErrorPct = math.Abs(m.TotalWeightError) / totalGtWeight * 100
 		}
+		m.ItemComparisons = buildItemComparisons(gtItems, predItems, groundTruth)
 	}
 	return m
+}
+
+func buildItemComparisons(gtItems, predItems []item, groundTruth map[string]any) []map[string]any {
+	var comparisons []map[string]any
+	usedPred := map[int]bool{}
+	for _, gt := range gtItems {
+		bestIdx, bestScore := -1, 0.0
+		for i, p := range predItems {
+			if usedPred[i] {
+				continue
+			}
+			score := nameSimilarity(gt.Name, p.Name)
+			if score >= 0.6 && (bestIdx == -1 || score > bestScore) {
+				bestIdx = i
+				bestScore = score
+			}
+		}
+		row := map[string]any{
+			"gt_name":    gt.Name,
+			"gt_weight":  gt.Weight,
+			"matched":    bestIdx >= 0 && bestScore >= 0.8,
+			"similarity": bestScore,
+		}
+		if bestIdx >= 0 {
+			usedPred[bestIdx] = true
+			p := predItems[bestIdx]
+			row["pred_name"] = p.Name
+			row["pred_weight"] = p.Weight
+			row["weight_error"] = p.Weight - gt.Weight
+			if gt.Weight > 0 {
+				row["weight_error_pct"] = math.Abs(p.Weight-gt.Weight) / gt.Weight * 100
+			}
+		}
+		comparisons = append(comparisons, row)
+	}
+	for i, p := range predItems {
+		if usedPred[i] {
+			continue
+		}
+		comparisons = append(comparisons, map[string]any{
+			"gt_name":     "",
+			"gt_weight":   0,
+			"pred_name":   p.Name,
+			"pred_weight": p.Weight,
+			"matched":     false,
+			"similarity":  0,
+			"extra":       true,
+		})
+	}
+	if len(gtItems) == 0 {
+		labelType, _ := groundTruth["label_type"].(string)
+		if labelType == "total" {
+			gtWeight := anyToFloat64(groundTruth["total_weight_grams"])
+			if gtWeight == 0 {
+				if items, ok := groundTruth["items"].(map[string]any); ok {
+					gtWeight = anyToFloat64(items["__total__"])
+				} else if items, ok := groundTruth["items"].(map[string]float64); ok {
+					gtWeight = items["__total__"]
+				}
+			}
+			predWeight := sumItemWeights(predItems)
+			if predWeight == 0 && len(predItems) == 1 {
+				predWeight = predItems[0].Weight
+			}
+			comparisons = append(comparisons, map[string]any{
+				"gt_name":      "__total__",
+				"gt_weight":    gtWeight,
+				"pred_name":    "__total__",
+				"pred_weight":  predWeight,
+				"weight_error": predWeight - gtWeight,
+				"matched":      true,
+				"similarity":   1,
+			})
+		}
+	}
+	return comparisons
 }
 
 type item struct {
@@ -596,16 +766,34 @@ func extractItems(data map[string]any) []item {
 }
 
 func extractGroundTruthItems(groundTruth map[string]any) []item {
-	rawItems, _ := groundTruth["items"].([]any)
 	var out []item
-	for _, it := range rawItems {
-		m, ok := it.(map[string]any)
-		if !ok {
-			continue
+	switch raw := groundTruth["items"].(type) {
+	case map[string]float64:
+		for name, w := range raw {
+			out = append(out, item{Name: name, Weight: w})
 		}
-		name, _ := m["name"].(string)
-		w := anyToFloat64(m["weight_grams"])
-		out = append(out, item{Name: name, Weight: w})
+	case map[string]any:
+		for name, v := range raw {
+			out = append(out, item{Name: name, Weight: anyToFloat64(v)})
+		}
+	case []any:
+		// legacy array format for backward compatibility with existing runs
+		for _, it := range raw {
+			m, ok := it.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := m["name"].(string)
+			w := anyToFloat64(m["weight_grams"])
+			out = append(out, item{Name: name, Weight: w})
+		}
+	}
+	// 占位符 __total__ 只用于 total 类型，items 类型不参与分项对比
+	for i := 0; i < len(out); i++ {
+		if out[i].Name == "__total__" {
+			out = append(out[:i], out[i+1:]...)
+			break
+		}
 	}
 	return out
 }
@@ -725,6 +913,13 @@ func toSampleMetrics(m map[string]any) *domain.SampleMetrics {
 	}
 	if v, ok := m["duration_ms"].(float64); ok {
 		s.DurationMs = v
+	}
+	if arr, ok := m["item_comparisons"].([]any); ok {
+		for _, raw := range arr {
+			if row, ok := raw.(map[string]any); ok {
+				s.ItemComparisons = append(s.ItemComparisons, row)
+			}
+		}
 	}
 	return s
 }

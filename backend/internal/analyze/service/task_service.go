@@ -104,6 +104,7 @@ type RetryTaskResult struct {
 	SourceTaskID string `json:"source_task_id"`
 }
 
+// SubmitAnalyzeTask 是面向用户 API 的入口，必须走积分检查。
 func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
 	s.normalizeSubmitImages(&input)
 	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
@@ -113,23 +114,123 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 		return "", &errors.AppError{Code: 10002, Message: "最多支持 3 张图片", HTTPStatus: 400}
 	}
 
-	recordedOn, err := dateutil.ResolveRecordedOnDate(input.Date, "date")
+	recordedOn, mode, err := s.resolveSubmitContext(ctx, userID, input)
 	if err != nil {
 		return "", err
 	}
+	payload := buildSubmitTaskPayload(input, recordedOn, mode)
+	s.attachCorrectionChain(ctx, userID, input, payload)
+
+	creditMode := s.resolveCreditMode(mode, input, payload)
+	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
+	if err != nil {
+		return "", err
+	}
+	creditGroupID := ensureCreditGroupID(payload)
+
+	return s.createAndEnqueueAnalyzeTask(ctx, userID, input, payload, mode, creditsInfo, creditCost, creditGroupID)
+}
+
+// SubmitInternalAnalyzeTask 仅用于内部系统（如 Admin Benchmark），不参与积分系统。
+// 调用方必须是可信内部服务；payload 会标记 internal_benchmark 以便追踪。
+func (s *TaskService) SubmitInternalAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	s.normalizeSubmitImages(&input)
+	if input.ImageURL == "" && len(input.ImageURLs) == 0 {
+		return "", &errors.AppError{Code: 10002, Message: "image_url 或 image_urls 不能为空", HTTPStatus: 400}
+	}
+	if imageCountForLog(input.ImageURL, input.ImageURLs) > maxFoodAnalyzeImages {
+		return "", &errors.AppError{Code: 10002, Message: "最多支持 3 张图片", HTTPStatus: 400}
+	}
+
+	recordedOn, mode, err := s.resolveSubmitContext(ctx, userID, input)
+	if err != nil {
+		return "", err
+	}
+	payload := buildSubmitTaskPayload(input, recordedOn, mode)
+	s.attachCorrectionChain(ctx, userID, input, payload)
+	payload["internal_benchmark"] = true
+
+	logger.Info(ctx, "内部 benchmark 分析任务提交",
+		slog.String("user_id", userID),
+		slog.String("execution_mode", mode),
+		slog.String("source", "benchmark"),
+	)
+
+	return s.createAndEnqueueAnalyzeTask(ctx, userID, input, payload, mode, nil, 0, "")
+}
+
+// SubmitTextTask 是面向用户 API 的入口，必须走积分检查。
+func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	if input.TextInput == "" {
+		input.TextInput = input.Text
+	}
+	s.normalizeSubmitImages(&input)
+	if input.TextInput == "" && !hasPrecisionSupplement(input) {
+		return "", &errors.AppError{Code: 10002, Message: "text 不能为空", HTTPStatus: 400}
+	}
+
+	recordedOn, mode, err := s.resolveSubmitContext(ctx, userID, input)
+	if err != nil {
+		return "", err
+	}
+	payload := buildSubmitTaskPayload(input, recordedOn, mode)
+	s.attachCorrectionChain(ctx, userID, input, payload)
+
+	creditMode := s.resolveCreditMode(mode, input, payload)
+	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
+	if err != nil {
+		return "", err
+	}
+	creditGroupID := ensureCreditGroupID(payload)
+
+	return s.createAndEnqueueTextTask(ctx, userID, input, payload, mode, creditsInfo, creditCost, creditGroupID)
+}
+
+// SubmitInternalTextTask 仅用于内部系统（如 Admin Benchmark），不参与积分系统。
+func (s *TaskService) SubmitInternalTextTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
+	if input.TextInput == "" {
+		input.TextInput = input.Text
+	}
+	s.normalizeSubmitImages(&input)
+	if input.TextInput == "" && !hasPrecisionSupplement(input) {
+		return "", &errors.AppError{Code: 10002, Message: "text 不能为空", HTTPStatus: 400}
+	}
+
+	recordedOn, mode, err := s.resolveSubmitContext(ctx, userID, input)
+	if err != nil {
+		return "", err
+	}
+	payload := buildSubmitTaskPayload(input, recordedOn, mode)
+	s.attachCorrectionChain(ctx, userID, input, payload)
+	payload["internal_benchmark"] = true
+
+	logger.Info(ctx, "内部 benchmark 文本任务提交",
+		slog.String("user_id", userID),
+		slog.String("execution_mode", mode),
+		slog.String("source", "benchmark"),
+	)
+
+	return s.createAndEnqueueTextTask(ctx, userID, input, payload, mode, nil, 0, "")
+}
+
+func (s *TaskService) resolveSubmitContext(ctx context.Context, userID string, input SubmitTaskInput) (recordedOn, mode string, err error) {
+	recordedOn, err = dateutil.ResolveRecordedOnDate(input.Date, "date")
+	if err != nil {
+		return "", "", err
+	}
 	input.Date = recordedOn
 
-	mode := normalizeExecutionMode(input.ExecutionMode)
+	mode = normalizeExecutionMode(input.ExecutionMode)
 	if userID != "" {
 		user, err := s.users.FindByID(ctx, userID)
 		if err == nil && user != nil && input.ExecutionMode == nil {
 			mode = normalizeExecutionMode(user.ExecutionMode)
 		}
 	}
+	return recordedOn, mode, nil
+}
 
-	payload := buildSubmitTaskPayload(input, recordedOn, mode)
-	s.attachCorrectionChain(ctx, userID, input, payload)
-
+func (s *TaskService) resolveCreditMode(mode string, input SubmitTaskInput, payload map[string]any) string {
 	creditMode := mode
 	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
 		creditMode = validExecutionMode
@@ -140,12 +241,10 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	if boolFromAny(payload["is_correction"]) {
 		creditMode = correctionCreditMode(creditMode)
 	}
-	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
-	if err != nil {
-		return "", err
-	}
-	creditGroupID := ensureCreditGroupID(payload)
+	return creditMode
+}
 
+func (s *TaskService) createAndEnqueueAnalyzeTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any, mode string, creditsInfo map[string]any, creditCost int, creditGroupID string) (string, error) {
 	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
@@ -183,48 +282,7 @@ func (s *TaskService) SubmitAnalyzeTask(ctx context.Context, userID string, inpu
 	return task.ID, nil
 }
 
-func (s *TaskService) SubmitTextTask(ctx context.Context, userID string, input SubmitTaskInput) (string, error) {
-	if input.TextInput == "" {
-		input.TextInput = input.Text
-	}
-	s.normalizeSubmitImages(&input)
-	if input.TextInput == "" && !hasPrecisionSupplement(input) {
-		return "", &errors.AppError{Code: 10002, Message: "text 不能为空", HTTPStatus: 400}
-	}
-
-	recordedOn, err := dateutil.ResolveRecordedOnDate(input.Date, "date")
-	if err != nil {
-		return "", err
-	}
-	input.Date = recordedOn
-
-	mode := normalizeExecutionMode(input.ExecutionMode)
-	if userID != "" {
-		user, err := s.users.FindByID(ctx, userID)
-		if err == nil && user != nil && input.ExecutionMode == nil {
-			mode = normalizeExecutionMode(user.ExecutionMode)
-		}
-	}
-
-	payload := buildSubmitTaskPayload(input, recordedOn, mode)
-	s.attachCorrectionChain(ctx, userID, input, payload)
-
-	creditMode := mode
-	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
-		creditMode = validExecutionMode
-	}
-	if mode == precisionSeparateExecutionMode {
-		creditMode = precisionSeparateExecutionMode
-	}
-	if boolFromAny(payload["is_correction"]) {
-		creditMode = correctionCreditMode(creditMode)
-	}
-	creditsInfo, creditCost, err := s.applyFoodCreditGuard(ctx, userID, creditMode, input.Date, creditUnitsForInput(input), payload)
-	if err != nil {
-		return "", err
-	}
-	creditGroupID := ensureCreditGroupID(payload)
-
+func (s *TaskService) createAndEnqueueTextTask(ctx context.Context, userID string, input SubmitTaskInput, payload map[string]any, mode string, creditsInfo map[string]any, creditCost int, creditGroupID string) (string, error) {
 	if mode == experimentalExecutionMode || mode == precisionSeparateExecutionMode || input.PrecisionSessionID != nil {
 		taskID, err := s.submitPrecisionTask(ctx, userID, input, payload, creditsInfo, creditCost, creditGroupID)
 		if err != nil {
@@ -264,7 +322,7 @@ func logAnalyzeTaskSubmitted(ctx context.Context, userID, taskID, taskType strin
 	sourceType := strings.TrimSpace(input.SourceType)
 	imageCount := imageCountForLog(input.ImageURL, input.ImageURLs)
 	hasText := strings.TrimSpace(input.TextInput) != "" || strings.TrimSpace(input.Text) != ""
-	logger.Info(ctx,"分析任务已提交",
+	logger.Info(ctx, "分析任务已提交",
 		slog.String("task_id", taskID),
 		logger.AnalysisTaskID(taskID),
 		slog.String("task_type", taskType),
@@ -510,7 +568,7 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 		TaskType: task.TaskType,
 	})
 	if err == nil {
-		logger.Info(ctx,"分析任务已入队",
+		logger.Info(ctx, "分析任务已入队",
 			slog.String("task_id", task.ID),
 			slog.String("task_type", task.TaskType),
 		)
@@ -816,7 +874,7 @@ func (s *TaskService) GetTask(ctx context.Context, taskID, userID string) (*doma
 		}
 	} else if isCreditRefundStatus(task.Status) {
 		s.refundTaskCredits(ctx, task)
-		logger.Warn(ctx,"查询到终态分析任务",
+		logger.Warn(ctx, "查询到终态分析任务",
 			logger.AnalysisTaskID(task.ID),
 			logger.TaskType(task.TaskType),
 			logger.UserID(userID),
@@ -885,7 +943,7 @@ func (s *TaskService) RetryTask(ctx context.Context, taskID, userID string) (*Re
 	if err != nil {
 		return nil, err
 	}
-	logger.Info(ctx,"分析任务重新识别已提交",
+	logger.Info(ctx, "分析任务重新识别已提交",
 		slog.String("user_id", userID),
 		slog.String("source_task_id", task.ID),
 		slog.String("new_task_id", newTaskID),

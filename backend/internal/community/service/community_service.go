@@ -63,7 +63,7 @@ type NotificationRepo interface {
 	CreateNotification(ctx context.Context, n *domain.FeedInteractionNotification) error
 	FindRecentDuplicate(ctx context.Context, recipientUserID, notificationType string, actorUserID, recordID, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error)
 	FindRecentDuplicateForTarget(ctx context.Context, recipientUserID, notificationType string, actorUserID *string, targetType string, targetID *string, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error)
-	ListNotifications(ctx context.Context, userID string, limit int) ([]domain.FeedInteractionNotification, error)
+	ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) ([]domain.FeedInteractionNotification, error)
 	CountUnread(ctx context.Context, userID string) (int64, error)
 	MarkRead(ctx context.Context, userID string, notificationIDs []string) (int64, error)
 	ListCommentTasksByUser(ctx context.Context, userID, commentType string, limit int) ([]domain.CommentTask, error)
@@ -176,6 +176,7 @@ type NotificationItem struct {
 type NotificationListResult struct {
 	List        []NotificationItem `json:"list"`
 	UnreadCount int64              `json:"unread_count"`
+	HasMore     bool               `json:"has_more"`
 }
 
 type MarkReadResult struct {
@@ -1473,8 +1474,8 @@ func stringPtrOrNil(s string) *string {
 	return &s
 }
 
-func (s *CommunityService) ListNotifications(ctx context.Context, userID string, limit int) (*NotificationListResult, error) {
-	notifications, err := s.notifRepo.ListNotifications(ctx, userID, limit)
+func (s *CommunityService) ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) (*NotificationListResult, error) {
+	notifications, err := s.notifRepo.ListNotifications(ctx, userID, notificationType, limit+1, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -1530,9 +1531,14 @@ func (s *CommunityService) ListNotifications(ctx context.Context, userID string,
 		})
 	}
 
+	hasMore := len(notifications) > limit
+	if hasMore {
+		items = items[:limit]
+	}
 	return &NotificationListResult{
 		List:        items,
 		UnreadCount: unread,
+		HasMore:     hasMore,
 	}, nil
 }
 

@@ -33,7 +33,7 @@ type CommunityService interface {
 	PostTargetComment(ctx context.Context, userID, targetType, targetID, content string, parentCommentID, replyToUserID *string) (*service.CommentItem, error)
 	DeleteTargetComment(ctx context.Context, userID, targetType, targetID, commentID string) (int64, error)
 	ListCommentTasks(ctx context.Context, userID string, limit int) ([]domain.CommentTask, error)
-	ListNotifications(ctx context.Context, userID string, limit int) (*service.NotificationListResult, error)
+	ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) (*service.NotificationListResult, error)
 	MarkNotificationsRead(ctx context.Context, userID string, notificationIDs []string) (*service.MarkReadResult, error)
 	UploadCirclePostImage(ctx context.Context, userID string, fileBytes []byte, ext, contentType string) (string, error)
 	CreateCirclePost(ctx context.Context, userID, title, body string, imageURLs []string, nutrition *domain.CirclePostNutrition) (string, error)
@@ -293,7 +293,14 @@ func (h *CommunityHandler) ListNotifications(c *gin.Context) {
 			limit = n
 		}
 	}
-	result, err := h.svc.ListNotifications(c.Request.Context(), userID, limit)
+	notificationType := c.Query("type")
+	offset := 0
+	if o := c.Query("offset"); o != "" {
+		if n, err := strconv.Atoi(o); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	result, err := h.svc.ListNotifications(c.Request.Context(), userID, notificationType, limit, offset)
 	if err != nil {
 		response.Error(c, err)
 		return

@@ -1,0 +1,518 @@
+.search-results-page {
+  min-height: 100vh;
+  background: #f9fafb;
+  display: flex;
+  flex-direction: column;
+
+  // ── 搜索栏 ──
+  .search-bar {
+    display: flex;
+    align-items: center;
+    padding: 16rpx 24rpx;
+    background: #fff;
+    border-bottom: 1rpx solid #f0f0f0;
+    gap: 16rpx;
+  }
+
+  .search-input-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    height: 64rpx;
+    background: #f5f5f5;
+    border-radius: 32rpx;
+    padding: 0 20rpx;
+  }
+
+  .search-icon-wrap {
+    width: 32rpx;
+    height: 32rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12rpx;
+    flex-shrink: 0;
+
+    .iconfont {
+      font-size: 28rpx;
+      color: #94a3b8;
+    }
+  }
+
+  .search-input {
+    flex: 1;
+    height: 100%;
+    font-size: 24rpx;
+    color: #1e293b;
+  }
+
+  .search-placeholder {
+    color: #94a3b8;
+    font-size: 24rpx;
+  }
+
+  .search-clear {
+    font-size: 22rpx;
+    color: #64748b;
+    padding: 4rpx 12rpx;
+    flex-shrink: 0;
+  }
+
+  .search-btn {
+    font-size: 26rpx;
+    color: #00bc7d;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  // ── 搜索记录 ──
+  .search-history {
+    background: #fff;
+    padding: 20rpx 24rpx 16rpx;
+    border-bottom: 1rpx solid #f0f0f0;
+  }
+
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16rpx;
+  }
+
+  .history-title {
+    font-size: 26rpx;
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .history-actions {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+  }
+
+  .history-toggle {
+    font-size: 22rpx;
+    color: #94a3b8;
+  }
+
+  .history-clear {
+    font-size: 28rpx;
+    color: #94a3b8;
+  }
+
+  .history-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12rpx;
+    max-height: 64rpx;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+
+    &.expanded {
+      max-height: none;
+    }
+  }
+
+  .history-tag {
+    display: flex;
+    align-items: center;
+    gap: 4rpx;
+    background: #f1f5f9;
+    border-radius: 24rpx;
+    padding: 8rpx 16rpx;
+    max-width: 60vw;
+  }
+
+  .history-tag-text {
+    font-size: 24rpx;
+    color: #334155;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .history-tag-close {
+    font-size: 22rpx;
+    color: #94a3b8;
+    padding: 0 4rpx;
+    flex-shrink: 0;
+  }
+
+  // ── Tab 标签页 ──
+  .search-tabs {
+    display: flex;
+    background: #fff;
+    border-bottom: 1rpx solid #f0f0f0;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+
+    .tab-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24rpx 0 20rpx;
+      position: relative;
+
+      .tab-text {
+        font-size: 28rpx;
+        color: #64748b;
+        font-weight: 400;
+        transition: color 0.2s;
+      }
+
+      &.active .tab-text {
+        color: #00bc7d;
+        font-weight: 600;
+      }
+
+      .tab-indicator {
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 48rpx;
+        height: 6rpx;
+        background: #00bc7d;
+        border-radius: 3rpx;
+      }
+    }
+  }
+
+  // ── 结果滚动区 ──
+  .results-scroll {
+    flex: 1;
+    height: 0; // 允许 ScrollView 在 flex 中正确收缩
+  }
+
+  // ── 空状态 ──
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 120rpx 40rpx;
+
+    .empty-icon {
+      font-size: 80rpx;
+      margin-bottom: 24rpx;
+    }
+
+    .empty-title {
+      font-size: 28rpx;
+      color: #475569;
+      font-weight: 500;
+      text-align: center;
+      margin-bottom: 12rpx;
+    }
+
+    .empty-desc {
+      font-size: 24rpx;
+      color: #94a3b8;
+      text-align: center;
+    }
+  }
+
+  // ── 内容列表 ──
+  .content-list {
+    padding: 16rpx 24rpx;
+  }
+
+  // ── 内容卡片 ──
+  .content-card {
+    background: #fff;
+    border-radius: 16rpx;
+    padding: 24rpx;
+    margin-bottom: 16rpx;
+    box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+
+    .card-author-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 16rpx;
+    }
+
+    .card-author-avatar {
+      width: 64rpx;
+      height: 64rpx;
+      border-radius: 50%;
+      overflow: hidden;
+      margin-right: 16rpx;
+      background: #f0fdf4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      .avatar-img {
+        width: 100%;
+        height: 100%;
+      }
+
+      .avatar-placeholder {
+        font-size: 24rpx;
+        color: #00bc7d;
+        font-weight: 600;
+      }
+    }
+
+    .card-author-info {
+      flex: 1;
+
+      .card-author-name {
+        font-size: 26rpx;
+        color: #1e293b;
+        font-weight: 500;
+        display: block;
+        margin-bottom: 4rpx;
+      }
+
+      .card-meta {
+        font-size: 22rpx;
+        color: #94a3b8;
+      }
+
+      .card-type-badge {
+        font-size: 20rpx;
+        color: #00bc7d;
+        background: #f0fdf4;
+        padding: 2rpx 10rpx;
+        border-radius: 6rpx;
+      }
+
+      .card-time {
+        color: #94a3b8;
+      }
+    }
+
+    .card-body {
+      margin-top: 4rpx;
+
+      .card-desc {
+        font-size: 26rpx;
+        color: #334155;
+        line-height: 1.5;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+    }
+
+    .card-image-wrap {
+      margin-top: 16rpx;
+      border-radius: 12rpx;
+      overflow: hidden;
+
+      .card-image {
+        width: 100%;
+        height: 320rpx;
+        object-fit: cover;
+      }
+    }
+
+    .card-images-wrap {
+      margin-top: 16rpx;
+      display: flex;
+      gap: 8rpx;
+
+      .card-image-multi {
+        width: 220rpx;
+        height: 220rpx;
+        border-radius: 8rpx;
+        object-fit: cover;
+      }
+    }
+  }
+
+  // ── 用户列表 ──
+  .user-list {
+    padding: 16rpx 24rpx;
+  }
+
+  // ── 用户卡片 ──
+  .user-card {
+    background: #fff;
+    border-radius: 16rpx;
+    padding: 24rpx;
+    margin-bottom: 16rpx;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+
+    .user-card-avatar {
+      width: 80rpx;
+      height: 80rpx;
+      border-radius: 50%;
+      overflow: hidden;
+      margin-right: 20rpx;
+      background: #f0fdf4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+
+      .avatar-img {
+        width: 100%;
+        height: 100%;
+      }
+
+      .avatar-placeholder {
+        font-size: 32rpx;
+        color: #00bc7d;
+        font-weight: 600;
+      }
+    }
+
+    .user-card-info {
+      flex: 1;
+
+      .user-card-name-row {
+        display: flex;
+        align-items: center;
+        gap: 12rpx;
+      }
+
+      .user-card-name {
+        font-size: 28rpx;
+        color: #1e293b;
+        font-weight: 500;
+      }
+
+      .user-tag {
+        font-size: 20rpx;
+        padding: 2rpx 12rpx;
+        border-radius: 8rpx;
+        font-weight: 500;
+
+        &.self-tag {
+          background: #f0fdf4;
+          color: #00bc7d;
+        }
+
+        &.friend-tag {
+          background: #eff6ff;
+          color: #3b82f6;
+        }
+      }
+    }
+
+    .user-card-arrow {
+      font-size: 28rpx;
+      color: #cbd5e1;
+      flex-shrink: 0;
+    }
+  }
+
+  // ── Skeleton 骨架屏 ──
+  .skeleton-list {
+    padding: 16rpx 24rpx;
+  }
+
+  .skeleton-card {
+    background: #fff;
+    border-radius: 16rpx;
+    padding: 24rpx;
+    margin-bottom: 16rpx;
+  }
+
+  .skeleton-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .skeleton-avatar {
+    width: 64rpx;
+    height: 64rpx;
+    border-radius: 50%;
+    background: #e2e8f0;
+    margin-right: 16rpx;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  .skeleton-lines {
+    flex: 1;
+
+    .skeleton-line {
+      height: 20rpx;
+      background: #e2e8f0;
+      border-radius: 4rpx;
+      animation: skeleton-pulse 1.5s ease-in-out infinite;
+      margin-bottom: 10rpx;
+
+      &.short {
+        width: 50%;
+      }
+
+      &.long {
+        width: 80%;
+      }
+    }
+  }
+
+  @keyframes skeleton-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  // ── 加载更多 ──
+  .load-more-spinner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24rpx 0;
+  }
+
+  .mini-spinner {
+    width: 36rpx;
+    height: 36rpx;
+    border: 3rpx solid #e2e8f0;
+    border-top-color: #00bc7d;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  // ── 列表结束标记 ──
+  .list-end {
+    text-align: center;
+    padding: 32rpx 0;
+    font-size: 22rpx;
+    color: #cbd5e1;
+  }
+
+  // ── 内容卡片操作栏（点赞/评论）──
+  .content-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 32rpx;
+    margin-top: 16rpx;
+    padding-top: 16rpx;
+    border-top: 1rpx solid #f1f5f9;
+  }
+
+  .content-action-item {
+    display: flex;
+    align-items: center;
+    gap: 6rpx;
+
+    .iconfont {
+      font-size: 28rpx;
+      color: #94a3b8;
+
+      &.liked {
+        color: #ef4444;
+      }
+    }
+  }
+
+  .content-action-count {
+    font-size: 22rpx;
+    color: #94a3b8;
+  }
+}

@@ -22,6 +22,7 @@ type FeedReportService interface {
 	Get(ctx context.Context, id string) (*admindomain.FeedReportItem, *admindomain.FeedReportTargetSnapshot, error)
 	UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error)
 	Delete(ctx context.Context, id string) error
+	GetStatusStats(ctx context.Context) (map[string]int64, error)
 }
 
 type FeedReportHandler struct {
@@ -30,6 +31,15 @@ type FeedReportHandler struct {
 
 func NewFeedReportHandler(svc FeedReportService) *FeedReportHandler {
 	return &FeedReportHandler{svc: svc}
+}
+
+func (h *FeedReportHandler) StatusStats(c *gin.Context) {
+	stats, err := h.svc.GetStatusStats(c.Request.Context())
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"stats": stats})
 }
 
 func (h *FeedReportHandler) List(c *gin.Context) {

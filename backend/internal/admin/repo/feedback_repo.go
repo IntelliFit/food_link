@@ -100,6 +100,25 @@ func (r *FeedbackRepo) UpdateStatus(ctx context.Context, id, status string) (*Fe
 	return &item, nil
 }
 
+func (r *FeedbackRepo) CountByStatus(ctx context.Context) (map[string]int64, error) {
+	rows := []struct {
+		Status string
+		Count  int64
+	}{}
+	if err := r.db.WithContext(ctx).
+		Table("user_feedback").
+		Select("status, COUNT(*) AS count").
+		Group("status").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	result := map[string]int64{}
+	for _, row := range rows {
+		result[row.Status] = row.Count
+	}
+	return result, nil
+}
+
 func applyFeedbackFilters(q *gorm.DB, input ListFeedbackInput) *gorm.DB {
 	if query := strings.TrimSpace(input.Query); query != "" {
 		like := "%" + query + "%"
