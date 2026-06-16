@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -285,4 +286,118 @@ func (r *SearchRepo) GetFriendIDs(ctx context.Context, userID string) (map[strin
 				Count(&count).Error
 			return count, err
 		}
+type LikeTarget struct {
+	TargetType string
+	TargetID   string
+}
 
+type TargetLikeInfo struct {
+	Count int
+	Liked bool
+}
+
+func (r *SearchRepo) GetLikesForTargets(ctx context.Context, targets []LikeTarget, currentUserID string) (map[string]*TargetLikeInfo, error) {
+	result := make(map[string]*TargetLikeInfo)
+	for _, t := range targets {
+		key := t.TargetType + ":" + t.TargetID
+		result[key] = &TargetLikeInfo{}
+	}
+	if len(targets) == 0 {
+		return result, nil
+	}
+
+	type likeRow struct {
+		TargetType string `gorm:"column:target_type"`
+		TargetID   string `gorm:"column:target_id"`
+		RecordID   *string `gorm:"column:record_id"`
+		UserID     string `gorm:"column:user_id"`
+	}
+
+	// Build OR conditions for all targets
+	var conditions []string
+	var args []any
+	for _, t := range targets {
+		if t.TargetType == "food_record" {
+			conditions = append(conditions, "(target_type = ? AND target_id = ?)")
+			args = append(args, t.TargetType, t.TargetID)
+			conditions = append(conditions, "(record_id = ?)")
+			args = append(args, t.TargetID)
+		} else {
+			conditions = append(conditions, "(target_type = ? AND target_id = ?)")
+			args = append(args, t.TargetType, t.TargetID)
+		}
+	}
+
+	var rows []likeRow
+	query := strings.Join(conditions, " OR ")
+	if err := r.db.WithContext(ctx).Table("feed_likes").Where(query, args...).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		targetType := row.TargetType
+		targetID := row.TargetID
+		if targetType == "" && row.RecordID != nil {
+			targetType = "food_record"
+			targetID = *row.RecordID
+		}
+		key := targetType + ":" + targetID
+		if info, ok := result[key]; ok {
+			info.Count++
+			if row.UserID == currentUserID {
+				info.Liked = true
+			}
+		}
+	}
+	return result, nil
+}
+
+func (r *SearchRepo) CountCommentsForTargets(ctx context.Context, targets []LikeTarget) (map[string]int64, error) {
+	result := make(map[string]int64)
+	if len(targets) == 0 {
+		return result, nil
+	}
+
+	type countRow struct {
+		TargetType string `gorm:"column:target_type"`
+		TargetID   string `gorm:"column:target_id"`
+		RecordID   *string `gorm:"column:record_id"`
+		Cnt        int64  `gorm:"column:cnt"`
+	}
+
+	var conditions []string
+	var args []any
+	for _, t := range targets {
+		if t.TargetType == "food_record" {
+			conditions = append(conditions, "(target_type = ? AND target_id = ?)")
+			args = append(args, t.TargetType, t.TargetID)
+			conditions = append(conditions, "(record_id = ?)")
+			args = append(args, t.TargetID)
+		} else {
+			conditions = append(conditions, "(target_type = ? AND target_id = ?)")
+			args = append(args, t.TargetType, t.TargetID)
+		}
+	}
+
+	var rows []countRow
+	query := strings.Join(conditions, " OR ")
+	q := r.db.WithContext(ctx).Table("feed_comments").
+		Select("target_type, target_id, record_id, COUNT(*) AS cnt").
+		Where(query, args...).
+		Group("target_type, target_id, record_id")
+	if err := q.Find(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		targetType := row.TargetType
+		targetID := row.TargetID
+		if targetType == "" && row.RecordID != nil {
+			targetType = "food_record"
+			targetID = *row.RecordID
+		}
+		key := targetType + ":" + targetID
+		result[key] += row.Cnt
+	}
+	return result, nil
+}

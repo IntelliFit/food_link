@@ -39,6 +39,10 @@ type ContentSearchResult struct {
 	DietGoal *string `json:"diet_goal,omitempty"`
 
 	Author map[string]string `json:"author"`
+
+	Liked        bool `json:"liked"`
+	LikeCount    int  `json:"like_count"`
+	CommentCount int  `json:"comment_count"`
 }
 
 type UserSearchResult struct {
@@ -56,6 +60,8 @@ type SearchRepo interface {
 	GetFriendIDs(ctx context.Context, userID string) (map[string]bool, error)
 	CountContent(ctx context.Context, currentUserID, keyword string) (int64, error)
 	CountUsers(ctx context.Context, keyword string) (int64, error)
+	GetLikesForTargets(ctx context.Context, targets []repo.LikeTarget, currentUserID string) (map[string]*repo.TargetLikeInfo, error)
+	CountCommentsForTargets(ctx context.Context, targets []repo.LikeTarget) (map[string]int64, error)
 }
 
 type SearchService struct {
@@ -98,6 +104,14 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 		ids = append(ids, id)
 	}
 	profiles, _ := s.repo.GetUserProfiles(ctx, ids)
+
+	// Collect target pairs and batch-fetch like/comment data
+	targets := make([]repo.LikeTarget, 0, len(rows))
+	for i := range rows {
+		targets = append(targets, repo.LikeTarget{TargetType: rows[i].TargetType, TargetID: rows[i].TargetID})
+	}
+	likeMap, _ := s.repo.GetLikesForTargets(ctx, targets, currentUserID)
+	commentCountMap, _ := s.repo.CountCommentsForTargets(ctx, targets)
 
 	results := make([]ContentSearchResult, len(rows))
 	for i, row := range rows {
@@ -149,10 +163,21 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 			DurationMin:    row.DurationMin,
 			MealType:       row.MealType,
 			DietGoal:       row.DietGoal,
+			Liked:        getLikeInfo(likeMap, row.TargetType, row.TargetID).Liked,
+			LikeCount:    getLikeInfo(likeMap, row.TargetType, row.TargetID).Count,
+			CommentCount: int(commentCountMap[row.TargetType+":"+row.TargetID]),
 			Author:         author,
 		}
 	}
 	return results, hasMore, nil
+}
+
+func getLikeInfo(likeMap map[string]*repo.TargetLikeInfo, targetType, targetID string) *repo.TargetLikeInfo {
+	key := targetType + ":" + targetID
+	if info, ok := likeMap[key]; ok {
+		return info
+	}
+	return &repo.TargetLikeInfo{}
 }
 
 func (s *SearchService) SearchUsers(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]UserSearchResult, bool, error) {

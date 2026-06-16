@@ -5166,6 +5166,9 @@ export interface ContentSearchResult {
   meal_type?: string
   diet_goal?: string
   author: ContentSearchAuthor
+  liked: boolean
+  like_count: number
+  comment_count: number
 }
 
 export interface UserSearchResult {

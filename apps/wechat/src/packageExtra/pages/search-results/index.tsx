@@ -1,7 +1,7 @@
 import { View, Text, Image, Input, ScrollView } from '@tarojs/components'
 import { useState, useEffect, useCallback } from 'react'
 import Taro, { useRouter } from '@tarojs/taro'
-import { communitySearch, showUnifiedApiError, type ContentSearchResult, type UserSearchResult } from '../../../utils/api'
+import { communitySearch, communityLike, communityUnlike, showUnifiedApiError, type ContentSearchResult, type UserSearchResult } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth } from '../../../utils/withAuth'
 import './index.scss'
@@ -46,6 +46,43 @@ function SearchResultsPage() {
   const [userCount, setUserCount] = useState(0)
 
   const formatCount = (n: number) => n > 99 ? '99+' : String(n)
+
+  // 搜索结果的点赞状态（乐观更新）
+  const [searchLikeMap, setSearchLikeMap] = useState<Record<string, boolean>>({})
+  const [searchLikeCountMap, setSearchLikeCountMap] = useState<Record<string, number>>({})
+
+  const handleSearchLike = async (item: ContentSearchResult, e: any) => {
+    e.stopPropagation()
+    const key = `${item.target_type}:${item.target_id}`
+    const liked = searchLikeMap[key] ?? item.liked
+    const count = searchLikeCountMap[key] ?? item.like_count
+
+    if (liked) {
+      setSearchLikeMap((prev) => ({ ...prev, [key]: false }))
+      setSearchLikeCountMap((prev) => ({ ...prev, [key]: Math.max(0, count - 1) }))
+      try { await communityUnlike(item.target_id, item.target_type as any) } catch {
+        setSearchLikeMap((prev) => ({ ...prev, [key]: true }))
+        setSearchLikeCountMap((prev) => ({ ...prev, [key]: count }))
+      }
+    } else {
+      setSearchLikeMap((prev) => ({ ...prev, [key]: true }))
+      setSearchLikeCountMap((prev) => ({ ...prev, [key]: count + 1 }))
+      try { await communityLike(item.target_id, item.target_type as any) } catch {
+        setSearchLikeMap((prev) => ({ ...prev, [key]: false }))
+        setSearchLikeCountMap((prev) => ({ ...prev, [key]: count }))
+      }
+    }
+  }
+
+  const handleSearchComment = (item: ContentSearchResult, e: any) => {
+    e.stopPropagation()
+    const q = [
+      `targetType=${encodeURIComponent(item.target_type)}`,
+      `targetId=${encodeURIComponent(item.target_id)}`,
+      'focus_comment=1'
+    ].join('&')
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${q}` })
+  }
 
   const doSearch = useCallback(async (tab: SearchTab, kw: string, offset: number, append: boolean) => {
     const trimmed = kw.trim()
@@ -229,6 +266,16 @@ function SearchResultsPage() {
           ))}
         </View>
       )}
+      <View className='content-card-actions'>
+        <View className='content-action-item' onClick={(e) => handleSearchLike(item, e)}>
+          <Text className={`iconfont icon-good ${(searchLikeMap[`${item.target_type}:${item.target_id}`] ?? item.liked) ? 'liked' : ''}`} />
+          <Text className='content-action-count'>{searchLikeCountMap[`${item.target_type}:${item.target_id}`] ?? item.like_count || 0}</Text>
+        </View>
+        <View className='content-action-item' onClick={(e) => handleSearchComment(item, e)}>
+          <Text className='iconfont icon-pinglun' />
+          <Text className='content-action-count'>{item.comment_count || 0}</Text>
+        </View>
+      </View>
     </View>
   )
 
