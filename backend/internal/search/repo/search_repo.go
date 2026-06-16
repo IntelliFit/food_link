@@ -248,3 +248,41 @@ func (r *SearchRepo) GetFriendIDs(ctx context.Context, userID string) (map[strin
 	}
 	return result, nil
 }
+		func (r *SearchRepo) CountContent(ctx context.Context, currentUserID, keyword string) (int64, error) {
+			cte := "WITH " + visibleUsersCTE + " "
+			countQuery := cte + `
+		SELECT COUNT(*) FROM (
+		  SELECT ufr.id FROM user_food_records ufr
+		  WHERE ufr.hidden_from_feed = false
+		    AND ufr.user_id IN (SELECT user_id FROM _search_visible_users)
+		    AND COALESCE(ufr.description, '') ILIKE '%' || ? || '%'
+		  UNION ALL
+		  SELECT uel.id FROM user_exercise_logs uel
+		  WHERE uel.hidden_from_feed = false
+		    AND uel.user_id IN (SELECT user_id FROM _search_visible_users)
+		    AND COALESCE(uel.exercise_desc, '') ILIKE '%' || ? || '%'
+		  UNION ALL
+		  SELECT ucp.id FROM user_circle_posts ucp
+		  WHERE ucp.hidden_from_feed = false
+		    AND ucp.user_id IN (SELECT user_id FROM _search_visible_users)
+		    AND (COALESCE(ucp.title, '') ILIKE '%' || ? || '%' OR COALESCE(ucp.body, '') ILIKE '%' || ? || '%')
+		) sub
+		`
+			var count int64
+			err := r.db.WithContext(ctx).Raw(countQuery,
+				currentUserID, currentUserID, currentUserID, currentUserID,
+				keyword, keyword, keyword, keyword,
+			).Scan(&count).Error
+			return count, err
+		}
+
+		func (r *SearchRepo) CountUsers(ctx context.Context, keyword string) (int64, error) {
+			var count int64
+			err := r.db.WithContext(ctx).
+				Table("weapp_user").
+				Where("COALESCE(searchable, TRUE) = TRUE").
+				Where("LOWER(nickname) LIKE LOWER(?)", "%"+keyword+"%").
+				Count(&count).Error
+			return count, err
+		}
+

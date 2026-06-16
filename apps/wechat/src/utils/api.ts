@@ -5182,7 +5182,7 @@ export async function communitySearch(params: {
   tab?: 'content' | 'users'
   offset?: number
   limit?: number
-}): Promise<{ list: ContentSearchResult[] | UserSearchResult[]; has_more: boolean }> {
+}): Promise<{ list: ContentSearchResult[] | UserSearchResult[]; has_more: boolean; content_count: number; user_count: number }> {
   const q = new URLSearchParams()
   q.set('keyword', params.keyword)
   if (params.tab) q.set('tab', params.tab)
@@ -5190,7 +5190,7 @@ export async function communitySearch(params: {
   if (params.limit !== undefined) q.set('limit', String(params.limit))
   const response = await authenticatedRequest(`/api/community/search?${q.toString()}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '搜索失败')
-  return response.data as { list: ContentSearchResult[] | UserSearchResult[]; has_more: boolean }
+  return response.data as { list: ContentSearchResult[] | UserSearchResult[]; has_more: boolean; content_count: number; user_count: number }
 }
 
 /** 搜索用户（昵称模糊 / 手机号精确） */

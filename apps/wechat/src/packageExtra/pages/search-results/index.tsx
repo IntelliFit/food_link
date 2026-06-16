@@ -32,6 +32,11 @@ function SearchResultsPage() {
   const [contentOffset, setContentOffset] = useState(0)
   const [userOffset, setUserOffset] = useState(0)
 
+  const [contentCount, setContentCount] = useState(0)
+  const [userCount, setUserCount] = useState(0)
+
+  const formatCount = (n: number) => n > 99 ? '99+' : String(n)
+
   const doSearch = useCallback(async (tab: SearchTab, kw: string, offset: number, append: boolean) => {
     const trimmed = kw.trim()
     if (!trimmed) return
@@ -47,6 +52,12 @@ function SearchResultsPage() {
     try {
       const res = await communitySearch({ keyword: trimmed, tab, offset, limit: PAGE_SIZE })
       const list = (res.list || []) as any[]
+
+      // 更新总数统计
+      if (!append) {
+        setContentCount(res.content_count || 0)
+        setUserCount(res.user_count || 0)
+      }
 
       if (tab === 'content') {
         const typed = list as ContentSearchResult[]
@@ -274,14 +285,14 @@ function SearchResultsPage() {
           className={`tab-item ${activeTab === 'content' ? 'active' : ''}`}
           onClick={() => handleTabChange('content')}
         >
-          <Text className='tab-text'>动态内容</Text>
+          <Text className='tab-text'>动态内容{contentCount > 0 ? `(${formatCount(contentCount)})` : ''}</Text>
           {activeTab === 'content' && <View className='tab-indicator' />}
         </View>
         <View
           className={`tab-item ${activeTab === 'users' ? 'active' : ''}`}
           onClick={() => handleTabChange('users')}
         >
-          <Text className='tab-text'>用户</Text>
+          <Text className='tab-text'>用户{userCount > 0 ? `(${formatCount(userCount)})` : ''}</Text>
           {activeTab === 'users' && <View className='tab-indicator' />}
         </View>
       </View>
@@ -297,13 +308,13 @@ function SearchResultsPage() {
           renderSkeleton()
         ) : !currentSearched ? (
           <View className='empty-state'>
-            <Text className='empty-icon'>🔍</Text>
+            <Text className='empty-icon iconfont icon-search' />
             <Text className='empty-title'>输入关键词搜索</Text>
             <Text className='empty-desc'>搜索公开动态或可被搜索到的用户</Text>
           </View>
         ) : currentResults.length === 0 ? (
           <View className='empty-state'>
-            <Text className='empty-icon'>📭</Text>
+            <Text className='empty-icon iconfont icon-nothing' />
             <Text className='empty-title'>
               {activeTab === 'content' ? `未找到匹配「${keyword}」的动态内容` : `未找到匹配「${keyword}」的用户`}
             </Text>

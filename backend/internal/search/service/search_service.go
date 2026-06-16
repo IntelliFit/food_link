@@ -54,6 +54,8 @@ type SearchRepo interface {
 	SearchUsers(ctx context.Context, keyword string, offset, limit int) ([]repo.UserRow, error)
 	GetUserProfiles(ctx context.Context, userIDs []string) (map[string]*repo.UserProfileRow, error)
 	GetFriendIDs(ctx context.Context, userID string) (map[string]bool, error)
+	CountContent(ctx context.Context, currentUserID, keyword string) (int64, error)
+	CountUsers(ctx context.Context, keyword string) (int64, error)
 }
 
 type SearchService struct {
@@ -182,6 +184,30 @@ func (s *SearchService) SearchUsers(ctx context.Context, currentUserID, keyword 
 		}
 	}
 	return results, hasMore, nil
+}
+
+type SearchCounts struct {
+	ContentCount int64 `json:"content_count"`
+	UserCount    int64 `json:"user_count"`
+}
+
+func (s *SearchService) GetSearchCounts(ctx context.Context, currentUserID, keyword string) (*SearchCounts, error) {
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return &SearchCounts{}, nil
+	}
+	contentCount, err := s.repo.CountContent(ctx, currentUserID, keyword)
+	if err != nil {
+		return nil, err
+	}
+	userCount, err := s.repo.CountUsers(ctx, keyword)
+	if err != nil {
+		return nil, err
+	}
+	return &SearchCounts{
+		ContentCount: contentCount,
+		UserCount:    userCount,
+	}, nil
 }
 
 func (s *SearchService) resolveAvatarURL(value string) string {

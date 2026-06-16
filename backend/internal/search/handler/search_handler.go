@@ -16,6 +16,7 @@ import (
 type SearchService interface {
 	SearchContent(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]service.ContentSearchResult, bool, error)
 	SearchUsers(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]service.UserSearchResult, bool, error)
+	GetSearchCounts(ctx context.Context, currentUserID, keyword string) (*service.SearchCounts, error)
 }
 
 type SearchHandler struct {
@@ -44,6 +45,15 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		limit = 50
 	}
 
+	// 始终获取两个 tab 的数量统计
+	counts, _ := h.svc.GetSearchCounts(c.Request.Context(), userID, keyword)
+	contentCount := int64(0)
+	userCount := int64(0)
+	if counts != nil {
+		contentCount = counts.ContentCount
+		userCount = counts.UserCount
+	}
+
 	switch tab {
 	case "users":
 		list, hasMore, err := h.svc.SearchUsers(c.Request.Context(), userID, keyword, offset, limit)
@@ -54,7 +64,12 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		if list == nil {
 			list = []service.UserSearchResult{}
 		}
-		response.Success(c, gin.H{"list": list, "has_more": hasMore})
+		response.Success(c, gin.H{
+			"list":          list,
+			"has_more":      hasMore,
+			"content_count": contentCount,
+			"user_count":    userCount,
+		})
 	default:
 		list, hasMore, err := h.svc.SearchContent(c.Request.Context(), userID, keyword, offset, limit)
 		if err != nil {
@@ -64,6 +79,11 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		if list == nil {
 			list = []service.ContentSearchResult{}
 		}
-		response.Success(c, gin.H{"list": list, "has_more": hasMore})
+		response.Success(c, gin.H{
+			"list":          list,
+			"has_more":      hasMore,
+			"content_count": contentCount,
+			"user_count":    userCount,
+		})
 	}
 }
