@@ -263,7 +263,7 @@ function SearchResultsPage() {
       <View className='content-card-actions'>
         <View className='content-action-item' onClick={(e) => handleSearchLike(item, e)}>
           <Text className={`iconfont icon-good ${(searchLikeMap[`${item.target_type}:${item.target_id}`] ?? item.liked) ? 'liked' : ''}`} />
-          <Text className='content-action-count'>{searchLikeCountMap[`${item.target_type}:${item.target_id}`] ?? item.like_count || 0}</Text>
+          <Text className='content-action-count'>{(searchLikeCountMap[`${item.target_type}:${item.target_id}`] ?? item.like_count) || 0}</Text>
         </View>
         <View className='content-action-item' onClick={(e) => handleSearchComment(item, e)}>
           <Text className='iconfont icon-pinglun' />
