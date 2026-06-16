@@ -15,12 +15,15 @@ function SearchResultsPage() {
   const autoFocus = router.params?.focus === '1'
 
   const [keyword, setKeyword] = useState(initialKeyword)
-  const [inputFocus, setInputFocus] = useState(false)
+  // WeChat 小程序中 Input.focus 需在首次渲染时即为 true 并配合 key 强制重挂载才可靠
+  const [inputKey, setInputKey] = useState(0)
+  const inputFocus = autoFocus && inputKey > 0
   const [activeTab, setActiveTab] = useState<SearchTab>('content')
 
   useEffect(() => {
     if (autoFocus) {
-      const timer = setTimeout(() => setInputFocus(true), 300)
+      // 延迟重挂载 Input 使其以 focus=true 渲染
+      const timer = setTimeout(() => setInputKey(1), 150)
       return () => clearTimeout(timer)
     }
   }, [autoFocus])
@@ -60,10 +63,18 @@ function SearchResultsPage() {
       const res = await communitySearch({ keyword: trimmed, tab, offset, limit: PAGE_SIZE })
       const list = (res.list || []) as any[]
 
-      // 更新总数统计
+      // 更新总数统计 + 首次搜索时自动切换到第一个非空 tab
       if (!append) {
         setContentCount(res.content_count || 0)
         setUserCount(res.user_count || 0)
+        const cc = res.content_count || 0
+        const uc = res.user_count || 0
+        if (tab === 'content' && cc === 0 && uc > 0) {
+          // 动态内容为空但用户有结果 → 自动切换到用户 tab
+          setActiveTab('users')
+          doSearch('users', trimmed, 0, false)
+          return
+        }
       }
 
       if (tab === 'content') {
@@ -270,6 +281,7 @@ function SearchResultsPage() {
             <Text className='iconfont icon-search' />
           </View>
           <Input
+            key={autoFocus ? `search-${inputKey}` : undefined}
             className='search-input'
             placeholder='搜索动态内容或用户...'
             placeholderClass='search-placeholder'
