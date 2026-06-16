@@ -158,7 +158,12 @@ export interface SaveCustomFoodInput {
   totalProtein?: number
   totalCarbs?: number
   totalFat?: number
+  nutrientsPer100g?: Record<string, number>
+  extraNutrients?: Record<string, number>
+  imagePath?: string
+  imagePaths?: string[]
   portionLabel?: string
+  recommendReason?: string
   shareToPublic?: boolean
 }
 
@@ -240,6 +245,18 @@ export interface CreateCirclePostInput {
 
 export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
 
+export interface RecentRequestTrace {
+  method: string
+  path: string
+  statusCode: number
+  durationMs: number
+  startedAt: string
+  traceId?: string
+  requestId?: string
+  hostName?: string
+  errorMessage?: string
+}
+
 export interface SubmitFeedbackInput {
   category: FeedbackCategory
   content: string
@@ -247,6 +264,7 @@ export interface SubmitFeedbackInput {
   pagePath?: string
   appVersion?: string
   clientInfo?: Record<string, unknown>
+  recentRequests?: RecentRequestTrace[]
   imageUrls?: string[]
 }
 
@@ -573,7 +591,7 @@ export class FoodLinkApiClient {
     })
     const taskId = String(data.task_id ?? data.taskId ?? '').trim()
     const message = String(data.message ?? '任务已提交')
-    if (!taskId) throw new Error('服务端未返回任务编号')
+    if (!taskId) throw new Error('服务端未返回识别进度信息')
     return { task_id: taskId, message }
   }
 
@@ -642,7 +660,7 @@ export class FoodLinkApiClient {
     const taskId = String(data.task_id ?? data.taskId ?? '').trim()
     const message = String(data.message ?? '任务已提交')
     if (!taskId) {
-      throw new Error('服务器未返回任务编号，请稍后重试')
+      throw new Error('服务器未返回识别进度信息，请稍后重试')
     }
     return { task_id: taskId, message }
   }
@@ -1009,7 +1027,10 @@ export class FoodLinkApiClient {
     const protein = normalizeNumber(input.totalProtein)
     const carbs = normalizeNumber(input.totalCarbs)
     const fat = normalizeNumber(input.totalFat)
-    return this.authenticatedRequest<ManualFoodItem>('/api/manual-food/custom', {
+    const nutrientsPer100g = input.nutrientsPer100g || { calories, protein, carbs, fat }
+    const imagePaths = (input.imagePaths || []).map((url) => url.trim()).filter(Boolean)
+    const imagePath = input.imagePath?.trim() || imagePaths[0]
+    const data = await this.authenticatedRequest<{ item?: ManualFoodItem } | ManualFoodItem>('/api/manual-food/custom', {
       method: 'POST',
       body: {
         title,
@@ -1018,12 +1039,21 @@ export class FoodLinkApiClient {
         total_protein: protein,
         total_carbs: carbs,
         total_fat: fat,
-        nutrients_per_100g: { calories, protein, carbs, fat },
+        nutrients_per_100g: nutrientsPer100g,
+        extra_nutrients: input.extraNutrients || nutrientsPer100g,
+        ...(imagePath ? { image_path: imagePath } : {}),
+        ...(imagePaths.length ? { image_paths: imagePaths } : {}),
         portion_label: input.portionLabel?.trim(),
+        recommend_reason: input.recommendReason?.trim(),
         share_to_public: Boolean(input.shareToPublic),
       },
       timeoutMs: 10000,
     })
+    if (data && typeof data === 'object' && 'item' in data) {
+      const wrapped = data as { item?: ManualFoodItem }
+      if (wrapped.item) return wrapped.item
+    }
+    return data as ManualFoodItem
   }
 
   async createPackagedFood(input: PackagedFoodInput): Promise<{ item: PackagedFoodItem }> {
@@ -1722,7 +1752,7 @@ export class FoodLinkApiClient {
           platform: 'app',
           ...(input.clientInfo || {}),
         },
-        recent_requests: [],
+        recent_requests: (input.recentRequests || []).slice(-50),
         image_urls: (input.imageUrls || []).map((url) => url.trim()).filter(Boolean).slice(0, 4),
       },
       timeoutMs: 15000,

@@ -436,6 +436,7 @@ export function PublicFoodDetailScreen() {
   const [comment, setComment] = useState('')
   const [feedback, setFeedback] = useState('')
   const [loading, setLoading] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -458,6 +459,16 @@ export function PublicFoodDetailScreen() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    let mounted = true
+    void getStoredUserId().then((id) => {
+      if (mounted) setCurrentUserId((id || '').trim())
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const toggleLike = async () => {
     if (!item) return
@@ -525,6 +536,8 @@ export function PublicFoodDetailScreen() {
     }
   }
 
+  const isOwner = Boolean(item && currentUserId && publicFoodOwnerId(item) === currentUserId)
+
   return (
     <Page title="食物详情" subtitle={item?.merchant_name || item?.canteen_name} refreshing={loading} onRefresh={load}>
       <Card>
@@ -554,8 +567,8 @@ export function PublicFoodDetailScreen() {
         <View style={styles.buttonRow}>
           <SmallButton label={`${item?.liked ? '已赞' : '点赞'} ${item?.like_count || 0}`} onPress={toggleLike} />
           <SmallButton label={item?.collected ? '已收藏' : '收藏'} onPress={toggleCollect} />
-          {item ? <SmallButton label="编辑" onPress={() => navigation.navigate('PublicFoodShare', { editId: item.id, mode: item.is_campus_food ? 'campus' : 'public' })} /> : null}
-          {item ? <SmallButton label="删除" danger onPress={remove} /> : null}
+          {item && isOwner ? <SmallButton label="编辑" onPress={() => navigation.navigate('PublicFoodShare', { editId: item.id, mode: item.is_campus_food ? 'campus' : 'public' })} /> : null}
+          {item && isOwner ? <SmallButton label="删除" danger onPress={remove} /> : null}
         </View>
       </Card>
 
@@ -1223,6 +1236,10 @@ function EmptyState({ text }: { text: string }) {
 
 function primaryImage(item: PublicFoodItem | null): string | undefined {
   return item?.image_paths?.[0] || item?.image_path || undefined
+}
+
+function publicFoodOwnerId(item: PublicFoodItem | null): string {
+  return String(item?.user_id || item?.author?.id || '').trim()
 }
 
 function publicFoodLocationText(item: PublicFoodItem | null): string {

@@ -12,8 +12,8 @@ import (
 )
 
 type MessageService struct {
-	msgRepo   *repo.MessageRepo
-	storage   *storage.Client
+	msgRepo *repo.MessageRepo
+	storage *storage.Client
 }
 
 func NewMessageService(msgRepo *repo.MessageRepo, storageClient ...*storage.Client) *MessageService {
@@ -128,7 +128,7 @@ func (s *MessageService) resolveImageURL(value string) string {
 	if s.storage == nil {
 		return value
 	}
-	resolved := s.storage.ResolveReferenceURL("user-avatars", value)
+	resolved := s.storage.ResolveReferenceURL("food-images", value)
 	if resolved == "" {
 		return value
 	}

@@ -276,11 +276,36 @@ export interface HomeAchievement {
   [key: string]: unknown
 }
 
+export interface HomeTargetCalibrationSuggestion {
+  available?: boolean
+  suggested_kcal?: number
+  current_kcal?: number
+  delta_kcal?: number
+  reason?: string
+  food_record_days?: number
+  weight_records?: number
+  source?: string
+}
+
 export interface HomeNutritionTarget {
   calories?: number
   protein?: number
   carbs?: number
   fat?: number
+  source?: 'manual' | 'system_initial' | 'profile' | 'dynamic' | 'default' | string
+  diet_goal?: DietGoal | string
+  base_calorie_target?: number
+  suggested_calorie_target?: number
+  today_exercise_kcal?: number
+  exercise_added_kcal?: number
+  exercise_surplus_kcal?: number
+  exercise_threshold_kcal?: number
+  recent_exercise_avg_kcal?: number
+  recent_exercise_days?: number
+  activity_multiplier?: number
+  explanation?: string
+  macro_explanation?: string
+  calibration_suggestion?: HomeTargetCalibrationSuggestion | null
   [key: string]: unknown
 }
 
@@ -527,6 +552,10 @@ export type StatsRange = 'week' | 'month'
 
 export interface StatsInsightResult {
   analysis_summary?: string
+  analysis_summary_generated_date?: string
+  analysis_summary_needs_refresh?: boolean
+  analysis_summary_daily_limit?: number
+  analysis_summary_used_today?: number
   content?: string
   generated_date?: string
   date_range?: string
@@ -639,6 +668,10 @@ export interface StatsSummary {
   daily_calories: Array<{ date: string; calories: number }>
   macro_percent: { protein: number; carbs: number; fat: number }
   analysis_summary: string
+  analysis_summary_generated_date?: string
+  analysis_summary_needs_refresh?: boolean
+  analysis_summary_daily_limit?: number
+  analysis_summary_used_today?: number
   body_metrics?: BodyMetricsSummary
   health_index?: HealthIndex
 }
@@ -719,7 +752,9 @@ export interface CheckinLeaderboardItem {
   user_id: string
   nickname: string
   avatar?: string
-  record_count: number
+  checkin_count: number
+  record_count?: number
+  is_me?: boolean
   rank?: number
 }
 

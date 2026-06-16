@@ -104,6 +104,7 @@ export function RootNavigator() {
   const { isBootstrapping, isAuthenticated } = useAuth()
   const pendingInviteCodeRef = useRef<string | null>(null)
   const pendingPrivateChatRef = useRef<{ userId: string; nickname?: string } | null>(null)
+  const pendingProfileUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated) return undefined
@@ -122,11 +123,20 @@ export function RootNavigator() {
       pendingPrivateChatRef.current = null
     }
 
+    const navigateToProfile = (userId: string) => {
+      pendingProfileUserIdRef.current = userId
+      if (!navigationRef.isReady()) return
+      navigationRef.navigate('ProfileSettings', { userId })
+      pendingProfileUserIdRef.current = null
+    }
+
     const handleInviteUrl = (url?: string | null) => {
       const code = extractInviteCodeFromUrl(url)
       if (code) navigateToInvite(code)
       const privateChat = extractPrivateChatFromUrl(url)
       if (privateChat) navigateToPrivateChat(privateChat)
+      const profileUserId = extractProfileUserIdFromUrl(url)
+      if (profileUserId) navigateToProfile(profileUserId)
     }
 
     Linking.getInitialURL().then(handleInviteUrl).catch(() => undefined)
@@ -156,6 +166,11 @@ export function RootNavigator() {
         if (privateChat && navigationRef.isReady()) {
           navigationRef.navigate('PrivateChat', privateChat)
           pendingPrivateChatRef.current = null
+        }
+        const profileUserId = pendingProfileUserIdRef.current
+        if (profileUserId && navigationRef.isReady()) {
+          navigationRef.navigate('ProfileSettings', { userId: profileUserId })
+          pendingProfileUserIdRef.current = null
         }
       }}
     >
@@ -261,6 +276,16 @@ function extractPrivateChatFromUrl(url?: string | null): { userId: string; nickn
   if (!userId) return null
   const nickname = (params.nickname || params.name || '').trim()
   return { userId, ...(nickname ? { nickname } : {}) }
+}
+
+function extractProfileUserIdFromUrl(url?: string | null): string {
+  if (!url) return ''
+  const normalized = url.toLowerCase()
+  if (!normalized.includes('profile')) return ''
+  const queryIndex = url.indexOf('?')
+  if (queryIndex < 0) return ''
+  const params = parseUrlQuery(url.slice(queryIndex + 1))
+  return (params.pf || params.user_id || params.userId || params.uid || '').trim()
 }
 
 function parseUrlQuery(query: string): Record<string, string> {

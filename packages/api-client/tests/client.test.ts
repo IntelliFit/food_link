@@ -79,6 +79,13 @@ function createMockAdapters() {
       if (url.endsWith('/api/membership/rewards/share-poster/claim')) {
         return response({ code: 0, data: { claimed: true, credits: 1, message: '分享奖励 +1 积分' } })
       }
+      if (url.includes('/api/manual-food/custom')) {
+        if (options?.method === 'POST') {
+          const body = options.body as Record<string, unknown>
+          return response({ code: 0, data: { item: { id: 'custom-1', ...body } } })
+        }
+        return response({ code: 0, data: { items: [{ id: 'custom-1', title: 'Custom food', total_calories: 180 }], has_more: false } })
+      }
       if (url.endsWith('/api/expiry/items/expiry-1')) {
         return response({ code: 0, data: { message: 'ok', item: { id: 'expiry-1', food_name: '酸奶', expire_date: '2026-06-20' } } })
       }
@@ -137,6 +144,25 @@ function createMockAdapters() {
       }
       if (url.includes('/api/community/feed-targets/food_record/record-1/report')) {
         return response({ code: 0, data: { id: 'report-1', status: 'pending' } })
+      }
+      if (url.endsWith('/api/community/checkin-leaderboard')) {
+        return response({
+          code: 0,
+          data: {
+            week_start: '2026-06-15',
+            week_end: '2026-06-21',
+            list: [
+              {
+                rank: 1,
+                user_id: 'user-1',
+                nickname: 'Mobile',
+                avatar: 'https://cdn.example.com/avatar.jpg',
+                checkin_count: 5,
+                is_me: true,
+              },
+            ],
+          },
+        })
       }
       if (url.endsWith('/api/community/posts')) {
         return response({ code: 0, data: { id: 'post-1' } })
@@ -415,6 +441,20 @@ describe('FoodLinkApiClient', () => {
       content: '希望 App 支持用户群二维码',
       contact: 'wechat-id',
       pagePath: 'app://about-feedback',
+      appVersion: '3.0.2',
+      clientInfo: { surface: 'expo', recent_request_limit: 50 },
+      recentRequests: [
+        {
+          method: 'GET',
+          path: '/api/home/dashboard',
+          statusCode: 200,
+          durationMs: 123,
+          startedAt: '2026-06-16T10:00:00.000Z',
+          traceId: 'trace-1',
+          requestId: 'request-1',
+          hostName: 'dev-host',
+        },
+      ],
     })
 
     expect(requests[1].url).toBe('https://api.example.com/api/feedback')
@@ -424,6 +464,24 @@ describe('FoodLinkApiClient', () => {
       content: '希望 App 支持用户群二维码',
       contact: 'wechat-id',
       page_path: 'app://about-feedback',
+      app_version: '3.0.2',
+      client_info: {
+        platform: 'app',
+        surface: 'expo',
+        recent_request_limit: 50,
+      },
+      recent_requests: [
+        {
+          method: 'GET',
+          path: '/api/home/dashboard',
+          statusCode: 200,
+          durationMs: 123,
+          startedAt: '2026-06-16T10:00:00.000Z',
+          traceId: 'trace-1',
+          requestId: 'request-1',
+          hostName: 'dev-host',
+        },
+      ],
     })
     expect(result.id).toBe('feedback-1')
   })
@@ -640,6 +698,78 @@ describe('FoodLinkApiClient', () => {
     expect(requests.some((req) => req.url.endsWith('/api/food-record/record-1') && req.options?.method === 'DELETE')).toBe(true)
   })
 
+  it('saves custom manual food with full backend payload', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const item = await client.saveCustomFood({
+      title: 'Custom tofu bowl',
+      defaultWeightGrams: 180,
+      totalCalories: 216,
+      totalProtein: 19.8,
+      totalCarbs: 14.4,
+      totalFat: 9,
+      nutrientsPer100g: {
+        calories: 120,
+        protein: 11,
+        carbs: 8,
+        fat: 5,
+        fiber: 2,
+        sugar: 1,
+        sodium_mg: 180,
+      },
+      extraNutrients: {
+        calories: 120,
+        protein: 11,
+        carbs: 8,
+        fat: 5,
+        fiber: 2,
+        sugar: 1,
+        sodium_mg: 180,
+      },
+      imagePath: ' https://cdn.example.com/food.jpg ',
+      imagePaths: [' https://cdn.example.com/food.jpg ', ''],
+      portionLabel: '一碗 180g',
+      recommendReason: '自定义录入 / 每 100g',
+      shareToPublic: true,
+    })
+
+    const req = requests.find((entry) => entry.url.includes('/api/manual-food/custom') && entry.options?.method === 'POST')
+    expect(item.id).toBe('custom-1')
+    expect(req?.options?.body).toMatchObject({
+      title: 'Custom tofu bowl',
+      default_weight_grams: 180,
+      total_calories: 216,
+      total_protein: 19.8,
+      total_carbs: 14.4,
+      total_fat: 9,
+      nutrients_per_100g: {
+        calories: 120,
+        protein: 11,
+        carbs: 8,
+        fat: 5,
+        fiber: 2,
+        sugar: 1,
+        sodium_mg: 180,
+      },
+      extra_nutrients: {
+        calories: 120,
+        protein: 11,
+        carbs: 8,
+        fat: 5,
+        fiber: 2,
+        sugar: 1,
+        sodium_mg: 180,
+      },
+      image_path: 'https://cdn.example.com/food.jpg',
+      image_paths: ['https://cdn.example.com/food.jpg'],
+      portion_label: '一碗 180g',
+      recommend_reason: '自定义录入 / 每 100g',
+      share_to_public: true,
+    })
+  })
+
   it('calls migrated app feature APIs with backend field names', async () => {
     const { adapters, requests } = createMockAdapters()
     const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
@@ -650,6 +780,7 @@ describe('FoodLinkApiClient', () => {
     await client.communityGetContext('record-1', 'food_record')
     await client.communityAddComment({ targetId: 'record-1', targetType: 'food_record', content: 'nice' })
     await client.communityReport({ targetId: 'record-1', targetType: 'food_record', reason: 'other', extraContent: 'bad' })
+    const leaderboard = await client.communityGetCheckinLeaderboard()
     await client.createCirclePost({
       title: '训练餐',
       body: '鸡胸肉和米饭',
@@ -711,6 +842,8 @@ describe('FoodLinkApiClient', () => {
 
     expect(requests.some((req) => req.url.endsWith('/api/membership/pay/create') && (req.options?.body as any).plan_code === 'standard_monthly')).toBe(true)
     expect(requests.some((req) => req.url.includes('/api/community/feed-targets/food_record/record-1/comments') && (req.options?.body as any).content === 'nice')).toBe(true)
+    expect(leaderboard.list[0]?.checkin_count).toBe(5)
+    expect(requests.some((req) => req.url.endsWith('/api/community/checkin-leaderboard'))).toBe(true)
     expect(requests.some((req) => {
       const body = req.options?.body as any
       return req.url.endsWith('/api/community/posts') &&

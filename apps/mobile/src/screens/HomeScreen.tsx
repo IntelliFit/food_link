@@ -1,8 +1,9 @@
-import { useCallback } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useState } from 'react'
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime } from '@food-link/core'
+import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard, type HomeTargetCalibrationSuggestion } from '@food-link/core'
+import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { MacroRow } from '../components/MacroRow'
@@ -15,15 +16,30 @@ import { colors } from '../theme'
 import { formatShortDate } from '../utils/date'
 import { createDemoAnalysisTask, demoFoodImageUrl } from '../utils/demoAnalysisTask'
 
+type TargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
+type TargetForm = Record<TargetField, string>
+
+const targetFieldMeta: Array<{ key: TargetField; label: string; unit: string; step: number }> = [
+  { key: 'calorieTarget', label: '基础摄入目标', unit: 'kcal', step: 100 },
+  { key: 'proteinTarget', label: '蛋白质目标', unit: 'g', step: 50 },
+  { key: 'carbsTarget', label: '碳水目标', unit: 'g', step: 50 },
+  { key: 'fatTarget', label: '脂肪目标', unit: 'g', step: 10 },
+]
+
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { recordDate, dashboard, petSummary, loading, error, loadHome } = useHomeDashboard()
+  const [showTargetEditor, setShowTargetEditor] = useState(false)
+  const [savingTargets, setSavingTargets] = useState(false)
+  const [targetForm, setTargetForm] = useState<TargetForm>(() => targetFormFromDashboard(null))
   const mealType = inferDefaultMealTypeFromLocalTime()
   const pet = petSummary?.pet
   const petEvent = petSummary?.event?.can_claim ? petSummary.event : null
   const petMood = petMoodLabel(petSummary?.status?.mood)
   const petState = petStateLabel(petSummary?.status?.state)
   const showPetState = petState && !petMood.endsWith(petState)
+  const nutritionTarget = dashboard?.nutritionTarget
+  const calibrationSuggestion = nutritionTarget?.calibration_suggestion
 
   const startAnalyze = useCallback(() => {
     navigation.navigate('Analyze', { source: 'library', mealType, date: recordDate })
@@ -37,6 +53,75 @@ export function HomeScreen() {
       date: recordDate,
     })
   }, [navigation, mealType, recordDate])
+
+  useEffect(() => {
+    if (!showTargetEditor) {
+      setTargetForm(targetFormFromDashboard(dashboard))
+    }
+  }, [dashboard, showTargetEditor])
+
+  const openTargetEditor = useCallback(() => {
+    setTargetForm(targetFormFromDashboard(dashboard))
+    setShowTargetEditor(true)
+    apiClient.getDashboardTargets()
+      .then((targets) => setTargetForm(targetFormFromTargets(targets, dashboard)))
+      .catch(() => undefined)
+  }, [dashboard])
+
+  const updateTargetField = useCallback((key: TargetField, value: string) => {
+    setTargetForm((current) => ({ ...current, [key]: value.replace(/[^\d.]/g, '') }))
+  }, [])
+
+  const adjustTargetField = useCallback((key: TargetField, direction: -1 | 1) => {
+    const meta = targetFieldMeta.find((item) => item.key === key)
+    const step = meta?.step || 10
+    setTargetForm((current) => ({
+      ...current,
+      [key]: formatTargetNumber(Math.max(0, numberFrom(current[key], 0) + step * direction)),
+    }))
+  }, [])
+
+  const applyCalibrationSuggestion = useCallback(() => {
+    const suggestedKcal = numberFrom(calibrationSuggestion?.suggested_kcal, 0)
+    if (!suggestedKcal) return
+    const currentTargets = parseTargetForm(targetForm) || parseTargetForm(targetFormFromDashboard(dashboard))
+    if (!currentTargets) return
+    const currentKcal = currentTargets.calorie_target > 0 ? currentTargets.calorie_target : suggestedKcal
+    const ratio = currentKcal > 0 ? suggestedKcal / currentKcal : 1
+    setTargetForm({
+      calorieTarget: formatTargetNumber(suggestedKcal),
+      proteinTarget: formatTargetNumber(currentTargets.protein_target * ratio),
+      carbsTarget: formatTargetNumber(currentTargets.carbs_target * ratio),
+      fatTarget: formatTargetNumber(currentTargets.fat_target * ratio),
+    })
+  }, [calibrationSuggestion?.suggested_kcal, dashboard, targetForm])
+
+  const saveTargets = useCallback(async () => {
+    const payload = parseTargetForm(targetForm)
+    if (!payload) {
+      Alert.alert('请填写完整的数字目标')
+      return
+    }
+    const validationError = validateTargetPayload(payload)
+    if (validationError) {
+      Alert.alert('目标范围不正确', validationError)
+      return
+    }
+    setSavingTargets(true)
+    try {
+      await apiClient.updateDashboardTargets({
+        ...payload,
+        target_date: recordDate,
+      })
+      setShowTargetEditor(false)
+      await loadHome()
+      Alert.alert('基础目标已更新')
+    } catch (err) {
+      Alert.alert('保存失败', err instanceof Error ? err.message : '请稍后重试')
+    } finally {
+      setSavingTargets(false)
+    }
+  }, [loadHome, recordDate, targetForm])
 
   return (
     <Page
@@ -88,7 +173,68 @@ export function HomeScreen() {
         <MacroRow label="蛋白质" value={dashboard?.intakeData.macros.protein.current} target={dashboard?.intakeData.macros.protein.target} />
         <MacroRow label="碳水" value={dashboard?.intakeData.macros.carbs.current} target={dashboard?.intakeData.macros.carbs.target} />
         <MacroRow label="脂肪" value={dashboard?.intakeData.macros.fat.current} target={dashboard?.intakeData.macros.fat.target} />
+        <View style={styles.targetInfoBox}>
+          <View style={styles.rowBetween}>
+            <View style={styles.targetInfoMain}>
+              <Text style={styles.targetInfoTitle}>基础目标</Text>
+              <Text style={styles.targetInfoMeta}>
+                {targetSourceLabel(nutritionTarget?.source)} · 长期目标不随当天运动自动变化
+              </Text>
+            </View>
+            <Pressable onPress={openTargetEditor} style={({ pressed }) => [styles.targetEditButton, pressed && styles.pressed]}>
+              <Text style={styles.targetEditButtonText}>调整</Text>
+            </Pressable>
+          </View>
+          {nutritionTarget?.explanation ? <Text style={styles.targetInfoText}>{nutritionTarget.explanation}</Text> : null}
+          {nutritionTarget?.macro_explanation ? <Text style={styles.targetInfoText}>{nutritionTarget.macro_explanation}</Text> : null}
+          {calibrationSuggestion?.available ? (
+            <Text style={styles.targetHint}>
+              建议调整到 {Math.round(numberFrom(calibrationSuggestion.suggested_kcal, 0))} kcal：{calibrationSuggestion.reason || '根据近期记录建议小幅校准。'}
+            </Text>
+          ) : null}
+        </View>
       </Card>
+
+      {showTargetEditor ? (
+        <Card>
+          <View style={styles.rowBetween}>
+            <Text style={styles.sectionTitle}>基础目标设置</Text>
+            <Pressable onPress={() => setShowTargetEditor(false)} disabled={savingTargets}>
+              <Text style={styles.link}>收起</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.subtitle}>用于首页和单日记录的长期基础目标，保存后会同步刷新今日概览。</Text>
+          {calibrationSuggestion?.available ? (
+            <View style={styles.calibrationCard}>
+              <Text style={styles.calibrationTitle}>建议调整到 {Math.round(numberFrom(calibrationSuggestion.suggested_kcal, 0))} kcal</Text>
+              <Text style={styles.calibrationText}>{calibrationSuggestion.reason || '根据最近 14 天饮食和体重变化，建议小幅调整基础目标。'}</Text>
+              <View style={styles.targetActionRow}>
+                <Pressable style={styles.secondaryMiniButton} onPress={() => Alert.alert('已暂不调整')}>
+                  <Text style={styles.secondaryMiniButtonText}>暂不调整</Text>
+                </Pressable>
+                <Pressable style={styles.primaryMiniButton} onPress={applyCalibrationSuggestion}>
+                  <Text style={styles.primaryMiniButtonText}>应用建议</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+          {targetFieldMeta.map((field) => (
+            <TargetFieldRow
+              key={field.key}
+              label={field.label}
+              unit={field.unit}
+              value={targetForm[field.key]}
+              onChangeText={(value) => updateTargetField(field.key, value)}
+              onDecrease={() => adjustTargetField(field.key, -1)}
+              onIncrease={() => adjustTargetField(field.key, 1)}
+            />
+          ))}
+          <View style={styles.targetSaveRow}>
+            <AppButton label="保存目标" loading={savingTargets} onPress={() => void saveTargets()} />
+            <AppButton label="取消" variant="secondary" onPress={() => setShowTargetEditor(false)} />
+          </View>
+        </Card>
+      ) : null}
 
       <View style={styles.quickGrid}>
         <QuickCard title="体重" value="记录" onPress={() => navigation.navigate('BodyMetricRecord', { type: 'weight' })} />
@@ -159,6 +305,47 @@ export function HomeScreen() {
   )
 }
 
+function TargetFieldRow({
+  label,
+  unit,
+  value,
+  onChangeText,
+  onDecrease,
+  onIncrease,
+}: {
+  label: string
+  unit: string
+  value: string
+  onChangeText: (value: string) => void
+  onDecrease: () => void
+  onIncrease: () => void
+}) {
+  return (
+    <View style={styles.targetField}>
+      <Text style={styles.targetFieldLabel}>{label}</Text>
+      <View style={styles.targetInputRow}>
+        <Pressable style={styles.targetAdjustButton} onPress={onDecrease}>
+          <Text style={styles.targetAdjustButtonText}>-</Text>
+        </Pressable>
+        <View style={styles.targetInputWrap}>
+          <TextInput
+            value={value}
+            onChangeText={onChangeText}
+            keyboardType="decimal-pad"
+            style={styles.targetInput}
+            placeholder="0"
+            placeholderTextColor={colors.textMuted}
+          />
+          <Text style={styles.targetInputUnit}>{unit}</Text>
+        </View>
+        <Pressable style={styles.targetAdjustButton} onPress={onIncrease}>
+          <Text style={styles.targetAdjustButtonText}>+</Text>
+        </Pressable>
+      </View>
+    </View>
+  )
+}
+
 function QuickCard({ title, value, onPress }: { title: string; value: string; onPress: () => void }) {
   return (
     <Pressable style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]} onPress={onPress}>
@@ -174,6 +361,65 @@ function ActionCard({ title, onPress }: { title: string; onPress: () => void }) 
       <Text style={styles.actionTitle}>{title}</Text>
     </Pressable>
   )
+}
+
+function targetFormFromDashboard(dashboard: HomeDashboard | null): TargetForm {
+  return {
+    calorieTarget: formatTargetNumber(dashboard?.intakeData.target || dashboard?.nutritionTarget?.suggested_calorie_target || 0),
+    proteinTarget: formatTargetNumber(dashboard?.intakeData.macros.protein.target || 0),
+    carbsTarget: formatTargetNumber(dashboard?.intakeData.macros.carbs.target || 0),
+    fatTarget: formatTargetNumber(dashboard?.intakeData.macros.fat.target || 0),
+  }
+}
+
+function targetFormFromTargets(targets: Record<string, number>, dashboard: HomeDashboard | null): TargetForm {
+  const fallback = targetFormFromDashboard(dashboard)
+  return {
+    calorieTarget: formatTargetNumber(targets.calorie_target ?? numberFrom(fallback.calorieTarget, 0)),
+    proteinTarget: formatTargetNumber(targets.protein_target ?? numberFrom(fallback.proteinTarget, 0)),
+    carbsTarget: formatTargetNumber(targets.carbs_target ?? numberFrom(fallback.carbsTarget, 0)),
+    fatTarget: formatTargetNumber(targets.fat_target ?? numberFrom(fallback.fatTarget, 0)),
+  }
+}
+
+function parseTargetForm(form: TargetForm): { calorie_target: number; protein_target: number; carbs_target: number; fat_target: number } | null {
+  const payload = {
+    calorie_target: Number(form.calorieTarget),
+    protein_target: Number(form.proteinTarget),
+    carbs_target: Number(form.carbsTarget),
+    fat_target: Number(form.fatTarget),
+  }
+  return Object.values(payload).every(Number.isFinite) ? payload : null
+}
+
+function validateTargetPayload(payload: { calorie_target: number; protein_target: number; carbs_target: number; fat_target: number }): string {
+  if (payload.calorie_target < 500 || payload.calorie_target > 6000) return '热量目标需在 500-6000 kcal。'
+  if (payload.protein_target < 0 || payload.protein_target > 500) return '蛋白质目标需在 0-500 g。'
+  if (payload.carbs_target < 0 || payload.carbs_target > 1000) return '碳水目标需在 0-1000 g。'
+  if (payload.fat_target < 0 || payload.fat_target > 300) return '脂肪目标需在 0-300 g。'
+  return ''
+}
+
+function numberFrom(value: unknown, fallback: number): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function formatTargetNumber(value: unknown): string {
+  const n = numberFrom(value, 0)
+  const rounded = Math.max(0, Math.round((n + Number.EPSILON) * 10) / 10)
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
+function targetSourceLabel(source: unknown): string {
+  const labels: Record<string, string> = {
+    manual: '手动目标',
+    system_initial: '健康档案目标',
+    profile: '健康档案估算',
+    dynamic: '系统估算',
+    default: '默认目标',
+  }
+  return labels[String(source || '').trim()] || '系统目标'
 }
 
 const styles = StyleSheet.create({
@@ -204,6 +450,145 @@ const styles = StyleSheet.create({
   subtitle: {
     color: colors.textSecondary,
     lineHeight: 20,
+  },
+  targetInfoBox: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  targetInfoMain: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  targetInfoTitle: {
+    color: colors.text,
+    fontWeight: '900',
+  },
+  targetInfoMeta: {
+    marginTop: 4,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  targetInfoText: {
+    marginTop: 8,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  targetEditButton: {
+    minHeight: 38,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  targetEditButtonText: {
+    color: colors.brandDark,
+    fontWeight: '900',
+  },
+  targetHint: {
+    marginTop: 10,
+    color: colors.orange,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  calibrationCard: {
+    marginTop: 14,
+    marginBottom: 12,
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: '#fff7ed',
+  },
+  calibrationTitle: {
+    color: colors.orange,
+    fontWeight: '900',
+  },
+  calibrationText: {
+    marginTop: 6,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  targetActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 12,
+  },
+  primaryMiniButton: {
+    minHeight: 40,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  primaryMiniButtonText: {
+    color: '#fff',
+    fontWeight: '900',
+  },
+  secondaryMiniButton: {
+    minHeight: 40,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  secondaryMiniButtonText: {
+    color: colors.textSecondary,
+    fontWeight: '900',
+  },
+  targetField: {
+    marginTop: 12,
+  },
+  targetFieldLabel: {
+    color: colors.textSecondary,
+    fontWeight: '800',
+    marginBottom: 7,
+  },
+  targetInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  targetAdjustButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
+  },
+  targetAdjustButtonText: {
+    color: colors.brandDark,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  targetInputWrap: {
+    flex: 1,
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceMuted,
+  },
+  targetInput: {
+    flex: 1,
+    color: colors.text,
+    fontWeight: '800',
+    paddingVertical: 10,
+  },
+  targetInputUnit: {
+    color: colors.textSecondary,
+    fontWeight: '800',
+  },
+  targetSaveRow: {
+    gap: 10,
+    marginTop: 16,
   },
   badge: {
     color: colors.warning,

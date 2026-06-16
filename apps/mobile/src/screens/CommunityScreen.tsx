@@ -77,13 +77,17 @@ export function CommunityScreen() {
         {leaderboard.length === 0 ? (
           <Text style={styles.empty}>暂无排行数据。</Text>
         ) : (
-          leaderboard.slice(0, 3).map((item, index) => (
-            <View key={item.user_id} style={styles.rankRow}>
-              <Text style={styles.rankNo}>#{index + 1}</Text>
-              <Text style={styles.rankName}>{item.nickname || '食友'}</Text>
-              <Text style={styles.rankCount}>{item.record_count} 次</Text>
-            </View>
-          ))
+          leaderboard.slice(0, 3).map((item, index) => {
+            const rank = item.rank || index + 1
+            const checkinCount = item.checkin_count ?? item.record_count ?? 0
+            return (
+              <View key={item.user_id} style={styles.rankRow}>
+                <Text style={styles.rankNo}>#{rank}</Text>
+                <Text style={styles.rankName} numberOfLines={1}>{item.nickname || '食友'}</Text>
+                <Text style={styles.rankCount}>{checkinCount} 次</Text>
+              </View>
+            )
+          })
         )}
       </Card>
 
@@ -191,6 +195,7 @@ const styles = StyleSheet.create({
   },
   rankName: {
     flex: 1,
+    minWidth: 0,
     color: colors.text,
     fontWeight: '700',
   },

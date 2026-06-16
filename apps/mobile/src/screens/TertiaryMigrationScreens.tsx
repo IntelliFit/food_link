@@ -3,26 +3,30 @@ import { Alert, Image, Pressable, StyleSheet, Switch, Text, TextInput, View } fr
 import * as ImagePicker from 'expo-image-picker'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import type {
-  AnalysisTask,
-  BodyMetricsSummary,
-  ExerciseLogItem,
-  FoodExpiryItem,
-  HealthProfile,
-  LocationSearchPOI,
-  LocationSearchResult,
-  ManualFoodItem,
-  MealType,
-  PackagedProductExtractResult,
-  PublicFoodItem,
-  StatsInsightResult,
-  StatsRange,
-  StatsSummary,
-  UserInfo,
+import {
+  normalizeInsightText,
+  type AnalysisTask,
+  type BodyMetricsSummary,
+  type DietRecommendationResult,
+  type ExerciseLogItem,
+  type FoodExpiryItem,
+  type HealthProfile,
+  type LocationSearchPOI,
+  type LocationSearchResult,
+  type ManualFoodItem,
+  type MealType,
+  type PackagedProductExtractResult,
+  type PublicFoodItem,
+  type RiskCard,
+  type StatsInsightResult,
+  type StatsRange,
+  type StatsSummary,
+  type UserInfo,
 } from '@food-link/core'
 import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
+import { InsightMarkdownView } from '../components/InsightMarkdownView'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
@@ -36,13 +40,15 @@ const expiryStorageOptions = [
   { value: 'frozen', label: '冷冻' },
 ] as const
 
+type AssistantFocusCard = Partial<RiskCard> & Record<string, unknown>
+type DietRecommendationItem = NonNullable<DietRecommendationResult['recommendations']>[number]
+
 export function AiAssistantScreen() {
   const [range, setRange] = useState<StatsRange>('week')
   const [summary, setSummary] = useState<StatsSummary | null>(null)
   const [insight, setInsight] = useState<StatsInsightResult | null>(null)
-  const [dietTitle, setDietTitle] = useState('')
-  const [dietSummary, setDietSummary] = useState('')
-  const [focusCard, setFocusCard] = useState<Record<string, unknown> | null>(null)
+  const [dietRecommendation, setDietRecommendation] = useState<DietRecommendationResult | null>(null)
+  const [focusCard, setFocusCard] = useState<AssistantFocusCard | null>(null)
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
@@ -62,12 +68,19 @@ export function AiAssistantScreen() {
     void load()
   }, [load])
 
+  const insightText = normalizeInsightText(String(insight?.analysis_summary || insight?.content || ''))
+  const recordedDays = Math.max(0, Number(summary?.recorded_days ?? 0))
+
   const generateInsight = async () => {
+    if (recordedDays <= 0) {
+      Alert.alert('先记录饮食', '至少记录一餐后再生成 AI 风险解读。')
+      return
+    }
     setLoading(true)
     try {
       const data = await apiClient.generateStatsInsight(range)
       setInsight(data)
-      const content = String(data.analysis_summary || data.content || '')
+      const content = normalizeInsightText(String(data.analysis_summary || data.content || ''))
       if (content) await apiClient.saveStatsInsight(range, content).catch(() => undefined)
     } catch (error) {
       showError('生成风险解读失败', error)
@@ -95,8 +108,7 @@ export function AiAssistantScreen() {
           fat: summary?.total_fat || 0,
         },
       })
-      setDietTitle(data.title || '饮食建议')
-      setDietSummary(data.summary || JSON.stringify(data.recommendations || data, null, 2))
+      setDietRecommendation(data)
     } catch (error) {
       showError('生成饮食建议失败', error)
     } finally {
@@ -108,7 +120,7 @@ export function AiAssistantScreen() {
     setLoading(true)
     try {
       const data = await apiClient.generateCustomFocusCard(range, focusId)
-      setFocusCard(data.card || data as Record<string, unknown>)
+      setFocusCard(normalizeAssistantFocusCard(data.card || data))
     } catch (error) {
       showError('生成关注卡片失败', error)
     } finally {
@@ -132,7 +144,11 @@ export function AiAssistantScreen() {
 
       <Card>
         <Text style={styles.sectionTitle}>AI 风险解读</Text>
-        <Text style={styles.bodyText}>{String(insight?.analysis_summary || insight?.content || '生成后会显示饮食风险、趋势和执行建议。')}</Text>
+        {insightText ? (
+          <InsightMarkdownView text={insightText} />
+        ) : (
+          <Text style={styles.bodyText}>生成后会显示饮食风险、趋势和执行建议。</Text>
+        )}
         <AppButton label="生成风险解读" loading={loading} onPress={generateInsight} />
       </Card>
 
@@ -143,16 +159,120 @@ export function AiAssistantScreen() {
           <SmallButton label="热量缺口" onPress={() => generateFocus('calorie_gap')} />
           <SmallButton label="饮水" onPress={() => generateFocus('water')} />
         </View>
-        {focusCard ? <Text style={styles.monoText}>{JSON.stringify(focusCard, null, 2)}</Text> : null}
+        {focusCard ? (
+          <AssistantFocusCardView card={focusCard} />
+        ) : (
+          <Text style={styles.bodyText}>选择一个关注方向后，会生成单项分数、判断依据和行动建议。</Text>
+        )}
       </Card>
 
       <Card>
-        <Text style={styles.sectionTitle}>{dietTitle || '饮食建议'}</Text>
-        <Text style={styles.bodyText}>{dietSummary || '根据今日剩余额度和宏量营养缺口生成下一餐建议。'}</Text>
+        <Text style={styles.sectionTitle}>{dietRecommendation?.title || '饮食建议'}</Text>
+        <DietRecommendationView recommendation={dietRecommendation} />
         <AppButton label="生成饮食建议" variant="secondary" loading={loading} onPress={generateDiet} />
       </Card>
     </Page>
   )
+}
+
+function AssistantFocusCardView({ card }: { card: AssistantFocusCard }) {
+  const title = stringValue(card.title) || '关注卡片'
+  const score = numberMaybe(card.score)
+  const brief = stringValue(card.brief)
+  const summary = stringValue(card.summary)
+  const basis = stringValue(card.basis)
+  const action = stringValue(card.action)
+  const delta = numberMaybe(card.delta)
+
+  return (
+    <View style={styles.focusCard}>
+      <View style={styles.focusHeader}>
+        <View style={styles.focusTitleWrap}>
+          <Text style={styles.focusTitle}>{title}</Text>
+          {brief ? <Text style={styles.bodyText}>{brief}</Text> : null}
+        </View>
+        {score != null ? (
+          <View style={styles.focusScorePill}>
+            <Text style={styles.focusScore}>{Math.round(score)}分</Text>
+          </View>
+        ) : null}
+      </View>
+      {summary ? <Text style={styles.bodyText}>{summary}</Text> : null}
+      {basis ? (
+        <View style={styles.focusDetailBlock}>
+          <Text style={styles.focusLabel}>判断依据</Text>
+          <Text style={styles.bodyText}>{basis}</Text>
+        </View>
+      ) : null}
+      {action ? (
+        <View style={styles.focusDetailBlock}>
+          <Text style={styles.focusLabel}>行动建议</Text>
+          <Text style={styles.bodyText}>{action}</Text>
+        </View>
+      ) : null}
+      {delta != null ? <Text style={styles.focusDelta}>预计可提升 {Math.round(delta)} 分</Text> : null}
+    </View>
+  )
+}
+
+function DietRecommendationView({ recommendation }: { recommendation: DietRecommendationResult | null }) {
+  if (!recommendation) {
+    return <Text style={styles.bodyText}>根据今日剩余额度和宏量营养缺口生成下一餐建议。</Text>
+  }
+
+  const summaryText = stringValue(recommendation.summary)
+  const items = (recommendation.recommendations || []).filter((item) => item && typeof item === 'object')
+
+  if (!summaryText && items.length === 0) {
+    return <Text style={styles.bodyText}>已生成饮食建议，当前没有更多细分条目。</Text>
+  }
+
+  return (
+    <View>
+      {summaryText ? <Text style={styles.bodyText}>{summaryText}</Text> : null}
+      {items.map((item, index) => (
+        <DietRecommendationItemView key={`${stringValue(item.title) || 'diet'}-${index}`} item={item} index={index} />
+      ))}
+    </View>
+  )
+}
+
+function DietRecommendationItemView({ item, index }: { item: DietRecommendationItem; index: number }) {
+  const title = stringValue(item.title) || `建议 ${index + 1}`
+  const reason = stringValue(item.reason)
+  const foods = dietRecommendationFoods(item)
+  const metrics = [
+    { label: '热量', value: numberMaybe(item.calories), unit: 'kcal' },
+    { label: '蛋白质', value: numberMaybe(item.protein), unit: 'g' },
+    { label: '碳水', value: numberMaybe(item.carbs), unit: 'g' },
+    { label: '脂肪', value: numberMaybe(item.fat), unit: 'g' },
+  ].filter((metric) => metric.value != null)
+
+  return (
+    <View style={styles.dietRecommendationItem}>
+      <Text style={styles.focusTitle}>{title}</Text>
+      {reason ? <Text style={styles.bodyText}>{reason}</Text> : null}
+      {foods.length > 0 ? <Text style={styles.subtitle}>包含：{foods.join('、')}</Text> : null}
+      {metrics.length > 0 ? (
+        <View style={styles.nutritionRow}>
+          {metrics.map((metric) => (
+            <Pill key={metric.label} text={`${metric.label} ${Math.round(metric.value || 0)} ${metric.unit}`} />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
+function dietRecommendationFoods(item: DietRecommendationItem): string[] {
+  if (Array.isArray(item.foods)) return item.foods.map((food) => stringValue(food)).filter(Boolean)
+  const fallback = stringValue((item as Record<string, unknown>).food)
+  return fallback ? [fallback] : []
+}
+
+function normalizeAssistantFocusCard(value: unknown): AssistantFocusCard | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as AssistantFocusCard
 }
 
 export function StatsMetabolicScreen() {
@@ -634,14 +754,14 @@ export function PackagedFoodEditScreen() {
             <Text style={styles.itemName}>识别结果：{extractResult.product_name || '未识别品名'}</Text>
             <Text style={styles.subtitle}>
               {autoIngest?.status === 'ingested'
-                ? `已自动入库：${extractResult.packaged_food_id || autoIngest.packaged_food_id || ''}`
+                ? '已自动入库包装食品库'
                 : autoIngest?.reason || extractResult.needs_more_images?.join('、') || '请核对后保存'}
             </Text>
           </View>
         ) : null}
         {lastTaskId ? (
           <Pressable style={styles.linkRow} onPress={() => navigation.navigate('PackagedFoodTaskDetail', { taskId: lastTaskId })}>
-            <Text style={styles.linkText}>查看任务 {lastTaskId}</Text>
+            <Text style={styles.linkText}>查看识别任务</Text>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
         ) : null}
@@ -677,10 +797,10 @@ export function PackagedFoodTaskDetailScreen() {
   const isRunning = ['pending', 'queued', 'processing', 'running'].includes(String(task?.status || ''))
 
   return (
-    <Page title="包装识别任务" subtitle={route.params.taskId} refreshing={loading} onRefresh={load}>
+    <Page title="包装识别任务" subtitle="识别进度与结构化结果" refreshing={loading} onRefresh={load}>
       <Card>
-        <MetricLine label="状态" value={task?.status || '--'} />
-        <MetricLine label="任务类型" value={task?.task_type || '--'} />
+        <MetricLine label="状态" value={taskStatusLabel(task?.status)} />
+        <MetricLine label="任务类型" value={analysisTaskTypeLabel(task?.task_type)} />
         <MetricLine label="创建时间" value={formatDateTime(task?.created_at || '') || '--'} />
         <MetricLine label="图片数量" value={`${imageUrls.length} 张`} />
       </Card>
@@ -721,14 +841,14 @@ export function PackagedFoodTaskDetailScreen() {
               <Pill text={`糖 ${formatNutritionNumber(nutrition.sugar, 'g')}`} />
               <Pill text={`钠 ${formatNutritionNumber(nutrition.sodiumMg, 'mg')}`} />
             </View>
-            <Text style={styles.subtitle}>基准：{packaged.nutrition_basis_unit || '100g'}；换算状态：{packaged.conversion_status || '--'}</Text>
+            <Text style={styles.subtitle}>基准：{packaged.nutrition_basis_unit || '100g'}；换算状态：{packagedConversionStatusLabel(packaged.conversion_status)}</Text>
           </Card>
 
           <Card>
             <Text style={styles.sectionTitle}>入库状态</Text>
             <MetricLine label="结果" value={packagedIngestStatusLabel(auto?.status)} />
-            <MetricLine label="动作" value={auto?.upsert_action || '--'} />
-            <MetricLine label="商品库 ID" value={packaged.packaged_food_id || auto?.packaged_food_id || '--'} />
+            <MetricLine label="动作" value={packagedUpsertActionLabel(auto?.upsert_action)} />
+            {(packaged.packaged_food_id || auto?.packaged_food_id) ? <MetricLine label="商品条目" value="已关联包装食品库" /> : null}
             {auto?.reason ? <Text style={styles.subtitle}>{auto.reason}</Text> : null}
             {auto?.missing_fields?.length ? <Text style={styles.subtitle}>缺少字段：{auto.missing_fields.join('、')}</Text> : null}
             {auto?.conflict_reasons?.length ? <Text style={styles.subtitle}>需要核对：{auto.conflict_reasons.join('、')}</Text> : null}
@@ -983,7 +1103,7 @@ export function FoodLibraryDetailScreen() {
         <MetricLine label="脂肪" value={`${round1(numberValue(item?.total_fat ?? item?.fat))} g`} />
         {item?.portion_label ? <MetricLine label="份量说明" value={String(item.portion_label)} /> : null}
         {item?.recommend_reason ? <Text style={styles.bodyText}>{String(item.recommend_reason)}</Text> : null}
-        <Text style={styles.bodyText}>来源：{String(item?.source || 'nutrition_library')}</Text>
+        <Text style={styles.bodyText}>来源：{manualFoodSourceLabel(item?.source)}</Text>
       </Card>
       <Card>
         <Text style={styles.sectionTitle}>记录到今天</Text>
@@ -1296,6 +1416,55 @@ function packagedIngestStatusLabel(value?: string): string {
   return labels[value || ''] || value || '--'
 }
 
+function packagedUpsertActionLabel(value?: string): string {
+  const labels: Record<string, string> = {
+    inserted: '新建商品',
+    updated: '更新商品',
+    skipped: '未写入',
+    merged: '合并更新',
+    duplicate: '已有同款',
+  }
+  return labels[value || ''] || value || '--'
+}
+
+function packagedConversionStatusLabel(value?: string): string {
+  const labels: Record<string, string> = {
+    converted: '已换算',
+    pending: '待换算',
+    failed: '换算失败',
+    skipped: '无需换算',
+  }
+  return labels[value || ''] || value || '--'
+}
+
+function taskStatusLabel(value?: string): string {
+  const labels: Record<string, string> = {
+    pending: '等待中',
+    queued: '排队中',
+    processing: '处理中',
+    running: '处理中',
+    done: '已完成',
+    completed: '已完成',
+    failed: '失败',
+    error: '失败',
+    canceled: '已取消',
+    cancelled: '已取消',
+  }
+  return labels[value || ''] || value || '--'
+}
+
+function analysisTaskTypeLabel(value?: string): string {
+  const labels: Record<string, string> = {
+    food_image: '图片识别',
+    food_text: '文字识别',
+    packaged_food: '包装食品识别',
+    packaged_nutrition_label: '营养成分表识别',
+    nutrition_label: '营养成分表识别',
+    exercise_image: '运动截图识别',
+  }
+  return labels[value || ''] || value || '--'
+}
+
 function taskFailureMessage(task?: AnalysisTask | null): string {
   const message = String((task as { error_message?: unknown } | null)?.error_message || '').trim()
   return message || '任务未返回可展示的结果。'
@@ -1303,6 +1472,20 @@ function taskFailureMessage(task?: AnalysisTask | null): string {
 
 function manualFoodTitle(item?: ManualFoodItem): string {
   return String(item?.title || item?.name || '食物详情')
+}
+
+function manualFoodSourceLabel(value: unknown): string {
+  const key = String(value || 'nutrition_library').trim()
+  const labels: Record<string, string> = {
+    nutrition_library: '标准食物库',
+    custom: '我的自定义食物',
+    user_custom: '我的自定义食物',
+    manual: '手动录入',
+    public_food: '公共食物库',
+    campus_food: '校园食堂',
+    packaged_food: '包装食品库',
+  }
+  return labels[key] || key || '标准食物库'
 }
 
 function mealTypeLabel(value: MealType): string {
@@ -1321,6 +1504,16 @@ function mealTypeLabel(value: MealType): string {
 function numberValue(value: unknown): number {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
+}
+
+function numberMaybe(value: unknown): number | null {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+function stringValue(value: unknown): string {
+  if (value == null) return ''
+  return String(value).trim()
 }
 
 function round1(value: number): string {
@@ -1404,6 +1597,59 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 22,
     marginBottom: 14,
+  },
+  focusCard: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceMuted,
+  },
+  focusHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 10,
+  },
+  focusTitleWrap: {
+    flex: 1,
+  },
+  focusTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  focusScorePill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.brandSoft,
+  },
+  focusScore: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  focusDetailBlock: {
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  focusLabel: {
+    color: colors.text,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  focusDelta: {
+    color: colors.brandDark,
+    fontWeight: '900',
+  },
+  dietRecommendationItem: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   monoText: {
     marginTop: 14,

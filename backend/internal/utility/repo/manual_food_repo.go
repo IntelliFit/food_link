@@ -606,7 +606,7 @@ func (r *ManualFoodRepo) listPackagedCatalogItems(ctx context.Context, category 
 	}
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
-		result := manualFoodResultFromPackaged(row, 0.72)
+		result := r.manualFoodResultFromPackaged(row, 0.72)
 		if packagedMatchesManualCategory(result, row, category) {
 			results = append(results, result)
 		}
@@ -917,7 +917,7 @@ func (r *ManualFoodRepo) searchPackagedLibrary(ctx context.Context, query string
 	results := make([]domain.ManualFoodResult, 0, len(rows))
 	for _, row := range rows {
 		score := computeMatchScore(query, packagedDisplayName(row), row.SearchText, row.ProductName, row.Brand, stringPtrValue(row.FlavorText), stringPtrValue(row.SpecText), stringPtrValue(row.Barcode)) + 0.18
-		results = append(results, manualFoodResultFromPackaged(row, score))
+		results = append(results, r.manualFoodResultFromPackaged(row, score))
 	}
 	return results, nil
 }
@@ -1149,6 +1149,29 @@ func manualFoodResultFromPackaged(item fooddomain.PackagedFood, score float64) d
 		MatchScore:          score,
 	}
 	applyManualFoodServingProfile(&result)
+	return result
+}
+
+func (r *ManualFoodRepo) manualFoodResultFromPackaged(item fooddomain.PackagedFood, score float64) domain.ManualFoodResult {
+	result := manualFoodResultFromPackaged(item, score)
+	if r.storage != nil {
+		result.ImagePaths = r.storage.ResolveReferenceURLs("food-images", result.ImagePaths)
+		if result.ImagePath != nil {
+			resolved := r.storage.ResolveReferenceURL("food-images", *result.ImagePath)
+			if strings.TrimSpace(resolved) == "" {
+				result.ImagePath = nil
+			} else {
+				result.ImagePath = &resolved
+			}
+		}
+	}
+	if result.ImagePath == nil && len(result.ImagePaths) > 0 {
+		first := result.ImagePaths[0]
+		result.ImagePath = &first
+	}
+	if len(result.ImagePaths) == 0 && result.ImagePath != nil {
+		result.ImagePaths = []string{*result.ImagePath}
+	}
 	return result
 }
 

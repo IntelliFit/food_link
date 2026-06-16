@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Alert, Image, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native'
+import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { CommunityFeedItem, CommunityFeedTargetType, PublicFoodItem, PublicProfile, RecipeItem, UserInfo } from '@food-link/core'
-import { apiClient } from '../api'
+import { apiClient, getStoredUserId } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
@@ -21,7 +22,8 @@ export function ProfileSettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { logout } = useAuth()
   const targetUserId = route.params?.userId
-  const isOwner = !targetUserId
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const isOwner = !targetUserId || (!!currentUserId && targetUserId === currentUserId)
   const [profile, setProfile] = useState<(UserInfo & PublicProfile) | null>(null)
   const [feed, setFeed] = useState<CommunityFeedItem[]>([])
   const [recipes, setRecipes] = useState<RecipeItem[]>([])
@@ -34,6 +36,10 @@ export function ProfileSettingsScreen() {
   const [coverImage, setCoverImage] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    getStoredUserId().then(setCurrentUserId).catch(() => setCurrentUserId(null))
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -190,6 +196,35 @@ export function ProfileSettingsScreen() {
     }
   }
 
+  const copyUserId = async () => {
+    const value = String(profile?.id || targetUserId || '').trim()
+    if (!value) {
+      Alert.alert('暂无用户 ID')
+      return
+    }
+    await Clipboard.setStringAsync(value)
+    Alert.alert('已复制', '用户 ID 已复制到剪贴板')
+  }
+
+  const shareProfile = async () => {
+    const userId = String(profile?.id || targetUserId || '').trim()
+    if (!userId) {
+      Alert.alert('暂无主页信息', '请稍后重试。')
+      return
+    }
+    const nicknameText = profile?.nickname || 'Food Link 用户'
+    const mottoText = profile?.motto ? `\n${profile.motto}` : ''
+    const link = buildProfileShareLink(userId)
+    try {
+      await Share.share({
+        title: `${nicknameText} 的 Food Link 主页`,
+        message: `${nicknameText} 的 Food Link 主页${mottoText}\n${link}`,
+      })
+    } catch (error) {
+      showError('分享失败', error)
+    }
+  }
+
   const openFeed = (item: CommunityFeedItem) => {
     const targetId = item.target_id || item.record?.id
     const targetType = normalizeTargetType(item.target_type || item.record?.feed_type)
@@ -213,6 +248,8 @@ export function ProfileSettingsScreen() {
           {isOwner ? <SmallButton label={editing ? '收起编辑' : '编辑资料'} onPress={() => setEditing((value) => !value)} /> : null}
           {!isOwner ? <SmallButton label={profile?.is_following ? '取消关注' : '+ 关注'} onPress={toggleFollow} /> : null}
           {!isOwner && targetUserId ? <SmallButton label="私信" onPress={() => navigation.navigate('PrivateChat', { userId: targetUserId, nickname: profile?.nickname })} /> : null}
+          <SmallButton label="分享主页" onPress={() => void shareProfile()} />
+          <SmallButton label="复制ID" onPress={() => void copyUserId()} />
           <SmallButton label="被关注" onPress={() => profile?.id ? navigation.navigate('FollowList', { userId: profile.id, type: 'followers' }) : undefined} />
           <SmallButton label="关注" onPress={() => profile?.id ? navigation.navigate('FollowList', { userId: profile.id, type: 'following' }) : undefined} />
         </View>
@@ -248,13 +285,19 @@ export function ProfileSettingsScreen() {
                 <View style={styles.rowBetween}>
                   <View style={styles.flex}>
                     <Text style={styles.itemName}>{feedTitle(item)}</Text>
-                    <Text style={styles.subtitle}>{formatDateTime(item.record?.record_time || item.record?.created_at)}</Text>
+                    <Text style={styles.subtitle}>{feedSubtitle(item)}</Text>
                   </View>
-                  <Text style={styles.kcal}>{Math.round(item.record?.total_calories || 0)} kcal</Text>
+                  {feedPrimaryMetric(item) ? <Text style={styles.kcal}>{feedPrimaryMetric(item)}</Text> : null}
                 </View>
+                {feedImages(item).length ? (
+                  <View style={styles.feedImageGrid}>
+                    {feedImages(item).slice(0, 3).map((url, imageIndex) => (
+                      <Image key={`${url}-${imageIndex}`} source={{ uri: url }} style={styles.feedImage} />
+                    ))}
+                  </View>
+                ) : null}
                 <View style={styles.pillRow}>
-                  <Pill text={`赞 ${item.like_count || 0}`} />
-                  <Pill text={`评 ${item.comment_count || item.comments?.length || 0}`} />
+                  {feedPills(item).map((text) => <Pill key={text} text={text} />)}
                 </View>
               </Card>
             </Pressable>
@@ -264,10 +307,12 @@ export function ProfileSettingsScreen() {
         <>
           {recipes.length === 0 && foods.length === 0 ? <EmptyState text="暂无收藏" /> : null}
           {recipes.map((recipe) => (
-            <Card key={recipe.id}>
-              <Text style={styles.itemName}>{recipe.recipe_name || '收藏食谱'}</Text>
-              <Text style={styles.subtitle}>{Math.round(recipe.total_calories || 0)} kcal · {recipe.meal_type || '常用餐次'}</Text>
-            </Card>
+            <Pressable key={recipe.id} onPress={() => navigation.navigate('RecipeEdit', { recipeId: recipe.id })}>
+              <Card>
+                <Text style={styles.itemName}>{recipe.recipe_name || '收藏食谱'}</Text>
+                <Text style={styles.subtitle}>{recipeSubtitle(recipe)}</Text>
+              </Card>
+            </Pressable>
           ))}
           {foods.map((food) => (
             <Pressable key={food.id} onPress={() => navigation.navigate('PublicFoodDetail', { itemId: food.id, isCampus: Boolean(food.is_campus_food) })}>
@@ -349,6 +394,107 @@ function feedTitle(item: CommunityFeedItem): string {
   return String(record?.title || record?.body || record?.description || record?.items?.[0]?.name || '分享动态')
 }
 
+function feedSubtitle(item: CommunityFeedItem): string {
+  const record = item.record
+  const type = feedTypeLabel(item)
+  const time = formatDateTime(record?.record_time || record?.created_at)
+  const place = record?.school || record?.canteen
+  return [type, place, time].filter(Boolean).join(' · ')
+}
+
+function feedTypeLabel(item: CommunityFeedItem): string {
+  const type = normalizeTargetType(item.target_type || item.record?.feed_type)
+  if (type === 'circle_post') return '自定义动态'
+  if (type === 'exercise_log') return '运动打卡'
+  if (type === 'campus_food') return '校园食堂'
+  return mealLabel(item.record?.meal_type)
+}
+
+function feedPrimaryMetric(item: CommunityFeedItem): string {
+  const record = item.record
+  const type = normalizeTargetType(item.target_type || record?.feed_type)
+  if (type === 'exercise_log' && numberFrom(record?.calories_burned) > 0) {
+    return `${Math.round(numberFrom(record.calories_burned))} kcal`
+  }
+  if (type === 'campus_food' && record?.price != null) {
+    return `¥${Number(record.price).toFixed(1)}`
+  }
+  if (numberFrom(record?.total_calories) > 0) {
+    return `${Math.round(numberFrom(record.total_calories))} kcal`
+  }
+  return ''
+}
+
+function feedImages(item: CommunityFeedItem): string[] {
+  const record = item.record
+  const urls = Array.isArray(record?.image_paths) ? record.image_paths : []
+  const all = [...urls, record?.image_path || '']
+  return Array.from(new Set(all.map((url) => String(url || '').trim()).filter(Boolean)))
+}
+
+function feedPills(item: CommunityFeedItem): string[] {
+  const record = item.record
+  const pills = [`赞 ${item.like_count || 0}`, `评 ${item.comment_count || item.comments?.length || 0}`]
+  const type = normalizeTargetType(item.target_type || record?.feed_type)
+  if (type === 'exercise_log') {
+    if (numberFrom(record?.duration_min) > 0) pills.push(`${Math.round(numberFrom(record.duration_min))} 分钟`)
+    if (record?.exercise_type) pills.push(String(record.exercise_type))
+    return pills
+  }
+  if (numberFrom(record?.total_protein) > 0) pills.push(`蛋白 ${formatCompactNumber(record.total_protein)}g`)
+  if (numberFrom(record?.total_carbs) > 0) pills.push(`碳水 ${formatCompactNumber(record.total_carbs)}g`)
+  if (numberFrom(record?.total_fat) > 0) pills.push(`脂肪 ${formatCompactNumber(record.total_fat)}g`)
+  if (numberFrom(record?.fiber) > 0) pills.push(`纤维 ${formatCompactNumber(record.fiber)}g`)
+  if (numberFrom(record?.sugar) > 0) pills.push(`糖 ${formatCompactNumber(record.sugar)}g`)
+  if (numberFrom(record?.sodium_mg) > 0) pills.push(`钠 ${Math.round(numberFrom(record.sodium_mg))}mg`)
+  if (numberFrom(record?.total_weight_grams) > 0) pills.push(`${Math.round(numberFrom(record.total_weight_grams))}g`)
+  return pills.slice(0, 8)
+}
+
+function recipeSubtitle(recipe: RecipeItem): string {
+  const parts = [
+    `${Math.round(numberFrom(recipe.total_calories))} kcal`,
+    mealLabel(recipe.meal_type),
+    recipe.use_count ? `使用 ${recipe.use_count} 次` : '',
+    recipe.tags?.slice(0, 3).join('、') || '',
+  ]
+  return parts.filter(Boolean).join(' · ')
+}
+
+function mealLabel(value: unknown): string {
+  switch (value) {
+    case 'breakfast':
+      return '早餐'
+    case 'morning_snack':
+      return '早加餐'
+    case 'lunch':
+      return '午餐'
+    case 'afternoon_snack':
+    case 'snack':
+      return '午加餐'
+    case 'dinner':
+      return '晚餐'
+    case 'evening_snack':
+      return '晚加餐'
+    default:
+      return value ? String(value) : '动态'
+  }
+}
+
+function buildProfileShareLink(userId: string): string {
+  return `foodlink://profile?pf=${encodeURIComponent(userId)}`
+}
+
+function numberFrom(value: unknown, fallback = 0): number {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function formatCompactNumber(value: unknown): string {
+  const n = numberFrom(value)
+  return n >= 10 ? String(Math.round(n)) : n.toFixed(1).replace(/\.0$/, '')
+}
+
 function normalizeTargetType(value: unknown): CommunityFeedTargetType {
   if (value === 'circle_post' || value === 'exercise_log' || value === 'campus_food') {
     return value
@@ -420,6 +566,17 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 12,
+  },
+  feedImageGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  feedImage: {
+    flex: 1,
+    minHeight: 96,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted,
   },
   bigTitle: {
     color: colors.text,

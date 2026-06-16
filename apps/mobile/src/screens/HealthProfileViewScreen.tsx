@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { useFocusEffect } from '@react-navigation/native'
 import type { HealthProfile, HealthReportExtract } from '@food-link/core'
@@ -67,6 +67,9 @@ const fieldChoiceOptions = {
   ],
 } as const
 
+const REPORT_TASK_POLL_INTERVAL_MS = 4000
+const REPORT_TASK_POLL_TIMEOUT_MS = 90000
+
 export function HealthProfileViewScreen() {
   const [profile, setProfile] = useState<HealthProfile | null>(null)
   const [loading, setLoading] = useState(false)
@@ -74,6 +77,8 @@ export function HealthProfileViewScreen() {
   const [editingField, setEditingField] = useState<EditField | null>(null)
   const [editValue, setEditValue] = useState('')
   const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
+  const [reportPolling, setReportPolling] = useState(false)
+  const [reportNotice, setReportNotice] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -139,14 +144,88 @@ export function HealthProfileViewScreen() {
         const uploaded = await apiClient.uploadHealthReportImage({ base64Image })
         urls.push(uploaded.imageUrl)
       }
-      const task = await apiClient.submitReportExtractionTask({ imageUrls: urls })
-      setReportImageUrls(urls)
-      await load()
-      Alert.alert('已提交识别', `报告识别任务 ${task.taskId} 已进入队列`)
+      const task = await apiClient.submitReportExtractionTask({ imageUrl: urls[0], imageUrls: urls })
+      applyReportProcessing(urls)
+      setReportNotice(`已上传 ${urls.length} 张报告，识别完成后会自动刷新。`)
+      Alert.alert('已提交识别', '报告正在后台识别，完成后会自动刷新到健康档案。')
+      void pollReportTaskUntilSettled(task.taskId)
     } catch (error) {
       showError('上传报告失败', error)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const retryReportExtraction = async () => {
+    const urls = reportImageUrls.length ? reportImageUrls : profile?.health_condition?.report_extract?._image_urls || []
+    if (!urls.length) {
+      Alert.alert('请先上传报告图片')
+      return
+    }
+    setSaving(true)
+    try {
+      const task = await apiClient.submitReportExtractionTask({ imageUrl: urls[0], imageUrls: urls })
+      applyReportProcessing(urls)
+      setReportNotice('已重新提交报告识别，完成后会自动刷新。')
+      Alert.alert('已重新提交', '报告正在后台识别，完成后会自动刷新到健康档案。')
+      void pollReportTaskUntilSettled(task.taskId)
+    } catch (error) {
+      showError('重新识别失败', error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const applyReportProcessing = (urls: string[]) => {
+    const nextReport: HealthReportExtract = {
+      indicators: [],
+      conclusions: [],
+      suggestions: [],
+      medical_notes: '',
+      _image_urls: urls,
+      _status: 'processing',
+      _error: '',
+    }
+    setReportImageUrls(urls)
+    setProfile((current) => {
+      if (!current) return current
+      return {
+        ...current,
+        health_condition: {
+          ...(current.health_condition || {}),
+          report_extract: nextReport,
+        },
+      }
+    })
+  }
+
+  const pollReportTaskUntilSettled = async (taskId: string) => {
+    const id = taskId.trim()
+    if (!id) return
+    setReportPolling(true)
+    const startedAt = Date.now()
+    try {
+      while (Date.now() - startedAt < REPORT_TASK_POLL_TIMEOUT_MS) {
+        await sleep(REPORT_TASK_POLL_INTERVAL_MS)
+        try {
+          const task = await apiClient.getAnalyzeTask(id)
+          if (isTerminalTaskStatus(task.status)) {
+            await load().catch(() => undefined)
+            if (task.status === 'done') {
+              setReportNotice('报告识别完成，结果已刷新。')
+            } else {
+              setReportNotice(task.error_message || '报告识别没有成功，可以重新上传或重试。')
+            }
+            return
+          }
+        } catch {
+          // Network glitches should not abort the background polling loop.
+        }
+      }
+      await load().catch(() => undefined)
+      setReportNotice('报告识别仍在处理中，可稍后下拉刷新查看结果。')
+    } finally {
+      setReportPolling(false)
     }
   }
 
@@ -203,6 +282,12 @@ export function HealthProfileViewScreen() {
 
       <Card>
         <Text style={styles.sectionTitle}>体检/病例识别</Text>
+        {reportNotice ? (
+          <View style={styles.reportStatusCard}>
+            {reportPolling ? <ActivityIndicator size="small" color={colors.brand} /> : null}
+            <Text style={styles.reportStatusText}>{reportNotice}</Text>
+          </View>
+        ) : null}
         <ReportSummary report={report} />
         {reportImageUrls.length ? (
           <View style={styles.reportGrid}>
@@ -211,7 +296,11 @@ export function HealthProfileViewScreen() {
             ))}
           </View>
         ) : null}
-        <AppButton label="上传报告图片" variant="secondary" loading={saving} onPress={uploadReportImages} />
+        <View style={styles.reportActionGroup}>
+          <AppButton label={reportImageUrls.length ? '上传新报告图片' : '上传报告图片'} variant="secondary" loading={saving} onPress={uploadReportImages} />
+          {reportImageUrls.length ? <AppButton label="重新识别当前报告" variant="ghost" loading={saving} onPress={retryReportExtraction} /> : null}
+          <AppButton label="刷新识别结果" variant="ghost" loading={loading} onPress={load} />
+        </View>
       </Card>
     </Page>
   )
@@ -432,6 +521,14 @@ function showError(title: string, error: unknown) {
   Alert.alert(title, error instanceof Error ? error.message : '请稍后重试')
 }
 
+function isTerminalTaskStatus(status?: string): boolean {
+  return status === 'done' || status === 'failed' || status === 'timed_out' || status === 'cancelled' || status === 'violated'
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 const styles = StyleSheet.create({
   sectionTitle: {
     color: colors.text,
@@ -532,11 +629,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: 6,
   },
+  reportStatusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    backgroundColor: colors.brandSoft,
+    marginBottom: 12,
+  },
+  reportStatusText: {
+    flex: 1,
+    color: colors.brandDark,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
   reportGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
     marginVertical: 12,
+  },
+  reportActionGroup: {
+    gap: 10,
   },
   reportImage: {
     width: 88,

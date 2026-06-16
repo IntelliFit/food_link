@@ -227,6 +227,26 @@ func TestManualFoodResultFromPackagedUsesOnlyPrimaryImage(t *testing.T) {
 	assert.Contains(t, item.Title, "番茄味")
 }
 
+func TestManualFoodRepoPackagedResultResolvesFoodImageKeys(t *testing.T) {
+	r := NewManualFoodRepo(nil, storage.New(config.StorageConfig{
+		CDNFoodImagesBaseURL: "https://cdn-food-images.example.com",
+	}))
+	item := r.manualFoodResultFromPackaged(fooddomain.PackagedFood{
+		ID:              "pkg-key",
+		Brand:           "样例品牌",
+		ProductName:     "能量棒",
+		SourceImageURLs: []string{"packaged/front.jpg", "packaged/nutrition.jpg"},
+		KcalPer100g:     410,
+		ProteinPer100g:  20,
+		CarbsPer100g:    45,
+		FatPer100g:      12,
+	}, 0.8)
+
+	require.NotNil(t, item.ImagePath)
+	assert.Equal(t, "https://cdn-food-images.example.com/packaged/front.jpg", *item.ImagePath)
+	assert.Equal(t, []string{"https://cdn-food-images.example.com/packaged/front.jpg"}, item.ImagePaths)
+}
+
 func TestManualFoodResultFromPackagedUsesNetContentValue(t *testing.T) {
 	unit := "g"
 	item := manualFoodResultFromPackaged(fooddomain.PackagedFood{

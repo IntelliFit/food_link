@@ -81,22 +81,41 @@ export function CheckinLeaderboardScreen() {
   return (
     <Page title="打卡排行榜" subtitle={range || '本周饮食、运动记录排行'} refreshing={loading} onRefresh={load}>
       {items.length === 0 ? <EmptyState text="暂无排行榜数据" /> : null}
-      {items.map((item, index) => (
-        <Pressable key={item.user_id} onPress={() => navigation.navigate('ProfileSettings', { userId: item.user_id })}>
-          <Card>
-            <View style={styles.rowBetween}>
-              <View style={styles.rankNo}>
-                <Text style={styles.rankNoText}>#{item.rank || index + 1}</Text>
+      {items.map((item, index) => {
+        const rank = item.rank || index + 1
+        const checkinCount = item.checkin_count ?? item.record_count ?? 0
+        const nickname = item.nickname || '食友'
+        return (
+          <Pressable key={item.user_id} onPress={() => navigation.navigate('ProfileSettings', { userId: item.user_id })}>
+            <Card style={[styles.leaderboardCard, item.is_me ? styles.leaderboardCardMine : null]}>
+              <View style={styles.rowBetween}>
+                <View style={[styles.rankNo, rank <= 3 ? styles.rankNoTop : null]}>
+                  <Text style={[styles.rankNoText, rank <= 3 ? styles.rankNoTextTop : null]}>{rank}</Text>
+                </View>
+                {item.avatar ? (
+                  <Image source={{ uri: item.avatar }} style={styles.leaderboardAvatar} />
+                ) : (
+                  <View style={styles.leaderboardAvatarFallback}>
+                    <Text style={styles.leaderboardAvatarText}>{nickname.slice(0, 1)}</Text>
+                  </View>
+                )}
+                <View style={styles.flex}>
+                  <View style={styles.inlineRow}>
+                    <Text style={[styles.itemName, styles.leaderboardName]} numberOfLines={1}>{nickname}</Text>
+                    {item.is_me ? <Pill text="我" /> : null}
+                  </View>
+                  <Text style={styles.subtitle}>本周好友圈打卡排行</Text>
+                </View>
+                <View style={styles.leaderboardCount}>
+                  <Text style={styles.leaderboardCountValue}>{checkinCount}</Text>
+                  <Text style={styles.itemMeta}>次打卡</Text>
+                </View>
+                <Text style={styles.chevron}>›</Text>
               </View>
-              <View style={styles.flex}>
-                <Text style={styles.itemName}>{item.nickname || '食友'}</Text>
-                <Text style={styles.subtitle}>本周打卡 {item.record_count || 0} 次</Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </View>
-          </Card>
-        </Pressable>
-      ))}
+            </Card>
+          </Pressable>
+        )
+      })}
     </Page>
   )
 }
@@ -1476,6 +1495,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  inlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
   twoColumn: {
     flexDirection: 'row',
     gap: 10,
@@ -1748,6 +1773,14 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 28,
   },
+  leaderboardCard: {
+    padding: 14,
+  },
+  leaderboardCardMine: {
+    borderWidth: 1,
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft,
+  },
   rankNo: {
     width: 54,
     height: 54,
@@ -1756,8 +1789,45 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.brandSoft,
   },
+  rankNoTop: {
+    backgroundColor: colors.orange,
+  },
   rankNoText: {
     color: colors.brandDark,
+    fontWeight: '900',
+  },
+  rankNoTextTop: {
+    color: '#fff',
+  },
+  leaderboardAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.surfaceMuted,
+  },
+  leaderboardAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
+  },
+  leaderboardAvatarText: {
+    color: colors.textSecondary,
+    fontWeight: '900',
+  },
+  leaderboardName: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  leaderboardCount: {
+    minWidth: 58,
+    alignItems: 'flex-end',
+  },
+  leaderboardCountValue: {
+    color: colors.text,
+    fontSize: 18,
     fontWeight: '900',
   },
   avatarFallback: {

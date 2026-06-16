@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Image, Pressable, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Linking, Pressable, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -25,10 +26,11 @@ import {
   type Nutrients,
   type RewardCenterResponse,
 } from '@food-link/core'
-import { apiClient } from '../api'
+import { apiClient, getRecentRequestTraces, RECENT_REQUEST_TRACE_LIMIT } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
+import { APP_VERSION } from '../config'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { formatDateTime, todayKey } from '../utils/date'
@@ -65,6 +67,7 @@ const waterPresets = [150, 250, 350, 500]
 const exercisePresets = ['跑步30分钟', '游泳45分钟', '瑜伽1小时', '骑车20分钟', '健身40分钟', '跳绳15分钟', '散步45分钟', 'HIIT20分钟']
 const CIRCLE_POST_MAX_IMAGES = 3
 const FEEDBACK_MAX_IMAGES = 4
+const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
 type EditableRecordItem = {
   name: string
   weight: string
@@ -609,6 +612,13 @@ export function FoodLibraryScreen() {
   const [protein, setProtein] = useState('')
   const [carbs, setCarbs] = useState('')
   const [fat, setFat] = useState('')
+  const [defaultWeight, setDefaultWeight] = useState('100')
+  const [portionLabel, setPortionLabel] = useState('')
+  const [imageUrls, setImageUrls] = useState('')
+  const [fiber, setFiber] = useState('')
+  const [sugar, setSugar] = useState('')
+  const [sodiumMg, setSodiumMg] = useState('')
+  const [shareToPublic, setShareToPublic] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
@@ -644,22 +654,55 @@ export function FoodLibraryScreen() {
   }
 
   const saveCustom = async () => {
+    const title = name.trim()
+    const defaultWeightGrams = numberOrUndefined(defaultWeight) || 100
+    const per100g = {
+      calories: numberOrUndefined(calories) || 0,
+      protein: numberOrUndefined(protein) || 0,
+      carbs: numberOrUndefined(carbs) || 0,
+      fat: numberOrUndefined(fat) || 0,
+      fiber: numberOrUndefined(fiber) || 0,
+      sugar: numberOrUndefined(sugar) || 0,
+      sodium_mg: numberOrUndefined(sodiumMg) || 0,
+    }
+    const validationError = validateCustomFoodDraft(title, defaultWeightGrams, per100g)
+    if (validationError) {
+      Alert.alert('请检查食物信息', validationError)
+      return
+    }
+    const imageList = splitImageUrls(imageUrls)
+    const scale = defaultWeightGrams / 100
     setLoading(true)
     try {
       await apiClient.saveCustomFood({
-        title: name,
-        totalCalories: Number(calories) || 0,
-        totalProtein: Number(protein) || 0,
-        totalCarbs: Number(carbs) || 0,
-        totalFat: Number(fat) || 0,
+        title,
+        defaultWeightGrams,
+        totalCalories: round1(per100g.calories * scale),
+        totalProtein: round1(per100g.protein * scale),
+        totalCarbs: round1(per100g.carbs * scale),
+        totalFat: round1(per100g.fat * scale),
+        nutrientsPer100g: per100g,
+        extraNutrients: per100g,
+        imagePath: imageList[0],
+        imagePaths: imageList,
+        portionLabel: portionLabel.trim() || `${Math.round(defaultWeightGrams)}g`,
+        recommendReason: `自定义录入 / 每 100g`,
+        shareToPublic,
       })
       setName('')
       setCalories('')
       setProtein('')
       setCarbs('')
       setFat('')
+      setDefaultWeight('100')
+      setPortionLabel('')
+      setImageUrls('')
+      setFiber('')
+      setSugar('')
+      setSodiumMg('')
+      setShareToPublic(false)
       await load()
-      Alert.alert('已保存', '自定义食物已加入食物库')
+      Alert.alert('已保存', shareToPublic ? '自定义食物已保存，并同步提交到公共库审核。' : '自定义食物已加入食物库。')
     } catch (error) {
       showError('保存失败', error)
     } finally {
@@ -684,10 +727,22 @@ export function FoodLibraryScreen() {
       <Card>
         <Text style={styles.sectionTitle}>添加自定义食物</Text>
         <Field label="名称" value={name} onChangeText={setName} />
+        <Field label="默认份量 g" value={defaultWeight} onChangeText={setDefaultWeight} keyboardType="decimal-pad" />
+        <Field label="份量说明" value={portionLabel} onChangeText={setPortionLabel} placeholder="例：一碗 180g，可留空" />
         <Field label="热量 kcal/100g" value={calories} onChangeText={setCalories} keyboardType="decimal-pad" />
         <Field label="蛋白质 g/100g" value={protein} onChangeText={setProtein} keyboardType="decimal-pad" />
         <Field label="碳水 g/100g" value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" />
         <Field label="脂肪 g/100g" value={fat} onChangeText={setFat} keyboardType="decimal-pad" />
+        <Field label="膳食纤维 g/100g" value={fiber} onChangeText={setFiber} keyboardType="decimal-pad" />
+        <Field label="糖 g/100g" value={sugar} onChangeText={setSugar} keyboardType="decimal-pad" />
+        <Field label="钠 mg/100g" value={sodiumMg} onChangeText={setSodiumMg} keyboardType="decimal-pad" />
+        <Field label="图片 URL" value={imageUrls} onChangeText={setImageUrls} multiline placeholder="每行一个图片地址，可留空" />
+        <ToggleRow
+          title="同步申请公开到公共库"
+          subtitle="保存个人食物的同时提交审核，通过后其他用户可搜索使用。"
+          value={shareToPublic}
+          onValueChange={setShareToPublic}
+        />
         <AppButton label="保存食物" loading={loading} onPress={saveCustom} />
       </Card>
 
@@ -809,6 +864,7 @@ export function BodyMetricRecordScreen() {
   const [exerciseImageUri, setExerciseImageUri] = useState('')
   const [exerciseImageUrl, setExerciseImageUrl] = useState('')
   const [exerciseTask, setExerciseTask] = useState<{ taskId: string; desc: string; status: string; errorMessage?: string } | null>(null)
+  const [exercisePolling, setExercisePolling] = useState(false)
   const [loading, setLoading] = useState(false)
   const [mutatingId, setMutatingId] = useState('')
 
@@ -881,7 +937,7 @@ export function BodyMetricRecordScreen() {
         setExerciseImageUrl('')
       }
       await load()
-      Alert.alert(type === 'exercise' ? '已提交' : '已保存', type === 'exercise' ? '运动分析任务已提交，完成后会写入当天记录。' : '记录已更新')
+      Alert.alert(type === 'exercise' ? '已提交' : '已保存', type === 'exercise' ? '后台运动分析已提交，完成后会写入当天记录。' : '记录已更新')
     } catch (error) {
       showError('保存失败', error)
     } finally {
@@ -890,31 +946,36 @@ export function BodyMetricRecordScreen() {
   }
 
   const pollExerciseTask = async (taskId: string, desc: string) => {
-    const started = Date.now()
-    while (Date.now() - started < 90000) {
-      await new Promise((resolve) => setTimeout(resolve, 2200))
-      try {
-        const task = await apiClient.getAnalyzeTask(taskId)
-        if (task.status === 'done') {
-          setExerciseTask({ taskId, desc, status: 'done' })
-          await load()
+    setExercisePolling(true)
+    try {
+      const started = Date.now()
+      while (Date.now() - started < 90000) {
+        await new Promise((resolve) => setTimeout(resolve, 2200))
+        try {
+          const task = await apiClient.getAnalyzeTask(taskId)
+          if (task.status === 'done') {
+            setExerciseTask({ taskId, desc, status: 'done' })
+            await load()
+            return
+          }
+          if (['failed', 'violated', 'timed_out', 'cancelled'].includes(task.status)) {
+            setExerciseTask({ taskId, desc, status: 'failed', errorMessage: exerciseTaskError(task) })
+            return
+          }
+          setExerciseTask({ taskId, desc, status: task.status || 'pending' })
+        } catch (error) {
+          setExerciseTask({ taskId, desc, status: 'failed', errorMessage: error instanceof Error ? error.message : '刷新结果失败' })
           return
         }
-        if (['failed', 'violated', 'timed_out', 'cancelled'].includes(task.status)) {
-          setExerciseTask({ taskId, desc, status: 'failed', errorMessage: exerciseTaskError(task) })
-          return
-        }
-        setExerciseTask({ taskId, desc, status: task.status || 'pending' })
-      } catch (error) {
-        setExerciseTask({ taskId, desc, status: 'failed', errorMessage: error instanceof Error ? error.message : '刷新任务失败' })
-        return
       }
+      setExerciseTask({ taskId, desc, status: 'failed', errorMessage: '分析时间较长，请稍后手动刷新。' })
+    } finally {
+      setExercisePolling(false)
     }
-    setExerciseTask({ taskId, desc, status: 'failed', errorMessage: '分析时间较长，请稍后手动刷新。' })
   }
 
   const refreshExerciseTask = async () => {
-    if (!exerciseTask?.taskId) return
+    if (!exerciseTask?.taskId || exercisePolling) return
     await pollExerciseTask(exerciseTask.taskId, exerciseTask.desc)
   }
 
@@ -948,7 +1009,7 @@ export function BodyMetricRecordScreen() {
 
   const deleteWeight = async (recordId?: string) => {
     if (!recordId) {
-      Alert.alert('无法删除', '这条体重记录缺少 ID')
+      Alert.alert('无法删除', '这条体重记录信息不完整，请刷新后重试。')
       return
     }
     setMutatingId(recordId)
@@ -964,7 +1025,7 @@ export function BodyMetricRecordScreen() {
 
   const deleteWater = async (logId?: string) => {
     if (!logId) {
-      Alert.alert('无法删除', '这条喝水记录缺少 ID，可使用清空当天')
+      Alert.alert('无法删除', '这条喝水记录信息不完整，可刷新后重试，或使用清空当天。')
       return
     }
     setMutatingId(logId)
@@ -1106,13 +1167,18 @@ export function BodyMetricRecordScreen() {
           </Card>
           {exerciseTask ? (
             <Card>
-              <View style={styles.rowBetween}>
-                <View style={styles.flex}>
-                  <Text style={styles.sectionTitle}>运动分析任务</Text>
-                  <Text style={styles.subtitle}>{exerciseTask.desc} · {exerciseTaskStatusLabel(exerciseTask.status)}</Text>
-                  {exerciseTask.errorMessage ? <Text style={styles.errorText}>{exerciseTask.errorMessage}</Text> : null}
+              <View style={styles.exerciseTaskHeader}>
+                <View style={styles.exerciseTaskTitleWrap}>
+                  {isTaskRunningStatus(exerciseTask.status) || exercisePolling ? <ActivityIndicator size="small" color={colors.brand} /> : null}
+                  <Text style={styles.sectionTitle}>后台运动分析</Text>
                 </View>
-                <SmallButton label="刷新" onPress={() => void refreshExerciseTask()} />
+                <Pill text={exerciseTaskStatusLabel(exerciseTask.status)} />
+              </View>
+              <Text style={styles.subtitle}>{exerciseTask.desc}</Text>
+              <Text style={styles.notes}>{exerciseTaskMessage(exerciseTask.status)}</Text>
+              {exerciseTask.errorMessage ? <Text style={styles.errorText}>{exerciseTask.errorMessage}</Text> : null}
+              <View style={styles.buttonRow}>
+                <SmallButton label={exercisePolling ? '刷新中' : '刷新结果'} disabled={exercisePolling} onPress={() => void refreshExerciseTask()} />
               </View>
             </Card>
           ) : null}
@@ -1228,7 +1294,7 @@ export function ExpiryScreen() {
         <Card key={item.id}>
           <View style={styles.rowBetween}>
             <Text style={styles.sectionTitle}>{item.food_name}</Text>
-            <Pill text={item.urgency_label || item.status || 'active'} />
+            <Pill text={item.urgency_label || expiryStatusLabel(item.status)} />
           </View>
           <Text style={styles.subtitle}>{item.category || '未分类'} · {item.expire_date?.slice(0, 10)}</Text>
           <View style={styles.buttonRow}>
@@ -1538,7 +1604,13 @@ export function FriendsScreen() {
         <AppButton label="搜索用户" variant="secondary" loading={loading} onPress={search} />
       </Card>
       {results.map((user) => (
-        <UserRow key={user.id} user={user} actionLabel={user.is_friend ? '已是好友' : user.is_pending ? '已申请' : '添加'} onAction={() => !user.is_friend && !user.is_pending ? send(user.id) : undefined} />
+        <UserRow
+          key={user.id}
+          user={user}
+          subtitle={friendUserSubtitle(user)}
+          actionLabel={user.is_friend ? '已是好友' : user.is_pending ? '已申请' : '添加'}
+          onAction={() => !user.is_friend && !user.is_pending ? send(user.id) : undefined}
+        />
       ))}
       {received.length ? <Text style={styles.groupTitle}>收到的请求</Text> : null}
       {received.map((req) => (
@@ -1555,15 +1627,22 @@ export function FriendsScreen() {
       {sent.map((req) => (
         <Card key={req.id}>
           <Text style={styles.itemName}>{req.counterpart_nickname || '用户'}</Text>
-          <Text style={styles.subtitle}>{req.status || 'pending'}</Text>
+          <Text style={styles.subtitle}>{friendRequestStatusLabel(req.status)}</Text>
         </Card>
       ))}
       {friends.length ? <Text style={styles.groupTitle}>好友列表</Text> : null}
       {friends.map((friend) => (
-        <UserRow key={friend.id} user={friend} actionLabel="删除" danger onAction={async () => {
-          await apiClient.deleteFriend(friend.id)
-          await load()
-        }} />
+        <UserRow
+          key={friend.id}
+          user={friend}
+          subtitle="已互为好友"
+          actionLabel="删除"
+          danger
+          onAction={async () => {
+            await apiClient.deleteFriend(friend.id)
+            await load()
+          }}
+        />
       ))}
     </Page>
   )
@@ -1668,11 +1747,13 @@ export function AboutFeedbackScreen() {
   const [content, setContent] = useState('')
   const [contact, setContact] = useState('')
   const [feedbackImageUrls, setFeedbackImageUrls] = useState<string[]>([])
+  const [attachRecentRequests, setAttachRecentRequests] = useState(true)
   const [searchable, setSearchable] = useState(true)
   const [publicRecords, setPublicRecords] = useState(true)
   const [loading, setLoading] = useState(false)
   const [savingPrivacy, setSavingPrivacy] = useState<'searchable' | 'public_records' | null>(null)
   const [showGroupQr, setShowGroupQr] = useState(false)
+  const traceCount = getRecentRequestTraces().length
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1699,7 +1780,12 @@ export function AboutFeedbackScreen() {
         content,
         contact,
         pagePath: 'app://about-feedback',
-        clientInfo: { surface: 'expo' },
+        appVersion: APP_VERSION,
+        clientInfo: {
+          surface: 'expo',
+          recent_request_limit: RECENT_REQUEST_TRACE_LIMIT,
+        },
+        recentRequests: attachRecentRequests ? getRecentRequestTraces() : [],
         imageUrls: feedbackImageUrls,
       })
       setContent('')
@@ -1778,8 +1864,49 @@ export function AboutFeedbackScreen() {
     }
   }
 
+  const copyOfficialEmail = async () => {
+    await Clipboard.setStringAsync(OFFICIAL_EMAIL)
+    Alert.alert('已复制邮箱', OFFICIAL_EMAIL)
+  }
+
+  const openOfficialEmail = async () => {
+    const url = `mailto:${OFFICIAL_EMAIL}?subject=${encodeURIComponent('Food Link 反馈')}`
+    try {
+      const supported = await Linking.canOpenURL(url)
+      if (!supported) {
+        await copyOfficialEmail()
+        return
+      }
+      await Linking.openURL(url)
+    } catch {
+      await copyOfficialEmail()
+    }
+  }
+
   return (
-    <Page title="关于与反馈" subtitle="反馈、隐私、协议和用户群。 " refreshing={loading} onRefresh={load}>
+    <Page title="关于与反馈" subtitle="关于食探、意见反馈、隐私和社群。" refreshing={loading} onRefresh={load}>
+      <Card>
+        <View style={styles.aboutHeader}>
+          <View style={styles.aboutLogo}>
+            <Text style={styles.aboutLogoText}>食</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.aboutName}>智健食探</Text>
+            <Text style={styles.subtitle}>Food Link · Version {APP_VERSION}</Text>
+          </View>
+        </View>
+        <Text style={styles.aboutText}>
+          食探通过 AI 食物识别、饮食与运动记录、健康档案和社区分享，帮助你更轻松地管理每日营养、身体趋势和长期目标。
+        </Text>
+        <InfoRow label="官方邮箱" value={OFFICIAL_EMAIL} />
+        <InfoRow label="核心能力" value="拍照识别、文字记录、食物库、健康分析、成长伙伴、圈子与会员积分" />
+        <InfoRow label="版权信息" value="Copyright © 2026 Food Link. All Rights Reserved." />
+        <View style={styles.buttonRow}>
+          <SmallButton label="复制邮箱" onPress={() => void copyOfficialEmail()} />
+          <SmallButton label="写邮件" onPress={() => void openOfficialEmail()} />
+        </View>
+      </Card>
+
       <Card>
         <Text style={styles.sectionTitle}>意见反馈</Text>
         <View style={styles.segment}>
@@ -1796,6 +1923,12 @@ export function AboutFeedbackScreen() {
           onRemove={removeFeedbackImage}
         />
         <Field label="联系方式" value={contact} onChangeText={setContact} placeholder="微信、手机号或邮箱（可选）" />
+        <ToggleRow
+          title="附带请求诊断"
+          subtitle={`将附带最近 ${Math.min(traceCount, RECENT_REQUEST_TRACE_LIMIT)} 条请求的 traceId、状态码和耗时，不包含 token、请求体或图片。`}
+          value={attachRecentRequests}
+          onValueChange={setAttachRecentRequests}
+        />
         <AppButton label="提交反馈" loading={loading} onPress={submit} />
       </Card>
 
@@ -1996,11 +2129,13 @@ function SummaryCell({ title, value, unit }: { title: string; value: number | st
 
 function UserRow({
   user,
+  subtitle,
   actionLabel,
   danger,
   onAction,
 }: {
   user: FriendUserItem
+  subtitle?: string
   actionLabel: string
   danger?: boolean
   onAction: () => void | Promise<void>
@@ -2010,7 +2145,7 @@ function UserRow({
       <View style={styles.rowBetween}>
         <View style={styles.flex}>
           <Text style={styles.itemName}>{user.nickname || '用户'}</Text>
-          <Text style={styles.subtitle}>{user.id}</Text>
+          <Text style={styles.subtitle}>{subtitle || friendUserSubtitle(user)}</Text>
         </View>
         <SmallButton label={actionLabel} danger={danger} onPress={() => void onAction()} />
       </View>
@@ -2032,6 +2167,16 @@ function Pill({ text }: { text: string }) {
       <Text style={styles.pillText}>{text}</Text>
     </View>
   )
+}
+
+function expiryStatusLabel(value?: string): string {
+  const labels: Record<string, string> = {
+    active: '进行中',
+    consumed: '已吃完',
+    discarded: '已丢弃',
+    expired: '已过期',
+  }
+  return labels[value || ''] || '进行中'
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -2223,6 +2368,39 @@ function numberFrom(value: unknown, fallback = 0): number {
 function numberOrUndefined(value: string): number | undefined {
   const n = Number(value)
   return Number.isFinite(n) && value.trim() !== '' ? n : undefined
+}
+
+function splitImageUrls(value: string): string[] {
+  return value
+    .split(/\r?\n|,|，/)
+    .map((url) => url.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+}
+
+function validateCustomFoodDraft(
+  title: string,
+  defaultWeightGrams: number,
+  per100g: { calories: number; protein: number; carbs: number; fat: number; fiber: number; sugar: number; sodium_mg: number },
+): string | null {
+  if (!title) return '请输入食物名称。'
+  if (!Number.isFinite(defaultWeightGrams) || defaultWeightGrams <= 0 || defaultWeightGrams > 5000) {
+    return '默认份量需要在 1-5000g 之间。'
+  }
+  if (per100g.calories <= 0 || per100g.calories > 2000) {
+    return '每 100g 热量需要在 1-2000 kcal 之间。'
+  }
+  const ranges: Array<[string, number, number]> = [
+    ['蛋白质', per100g.protein, 300],
+    ['碳水', per100g.carbs, 500],
+    ['脂肪', per100g.fat, 300],
+    ['膳食纤维', per100g.fiber, 200],
+    ['糖', per100g.sugar, 300],
+    ['钠', per100g.sodium_mg, 100000],
+  ]
+  const invalid = ranges.find(([, value, max]) => value < 0 || value > max)
+  if (invalid) return `${invalid[0]}数值超出合理范围。`
+  return null
 }
 
 function numberField(value: unknown): string {
@@ -2473,6 +2651,17 @@ function exerciseTaskStatusLabel(status: string): string {
   return taskStatusLabel(status as AnalysisTask['status'])
 }
 
+function isTaskRunningStatus(status?: string): boolean {
+  return ['pending', 'queued', 'running', 'processing'].includes(String(status || ''))
+}
+
+function exerciseTaskMessage(status: string): string {
+  if (isTaskRunningStatus(status)) return '系统正在识别运动内容，完成后会自动刷新当天记录。'
+  if (status === 'done') return '分析已完成，页面已刷新当天运动记录。'
+  if (['failed', 'violated', 'timed_out', 'cancelled'].includes(status)) return '本次分析没有完成，可以调整内容后重新提交，或稍后刷新结果。'
+  return '可手动刷新查看最新结果。'
+}
+
 function exerciseTaskError(task: AnalysisTask): string {
   const raw = String(task.error_message || '').trim()
   if (!raw) return '运动分析失败'
@@ -2527,6 +2716,24 @@ function notificationAvatarText(item: CommunityNotificationItem): string {
   return '信'
 }
 
+function friendUserSubtitle(user: FriendUserItem): string {
+  if (user.is_friend) return '已在好友列表'
+  if (user.is_pending) return '好友请求已发送'
+  return '可发送好友请求'
+}
+
+function friendRequestStatusLabel(status?: string): string {
+  const labels: Record<string, string> = {
+    pending: '等待对方处理',
+    accepted: '已通过',
+    rejected: '已拒绝',
+    canceled: '已取消',
+    cancelled: '已取消',
+    expired: '已过期',
+  }
+  return labels[String(status || 'pending')] || '等待对方处理'
+}
+
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
@@ -2542,6 +2749,35 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
     marginTop: 14,
+  },
+  aboutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 14,
+  },
+  aboutLogo: {
+    width: 62,
+    height: 62,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  aboutLogoText: {
+    color: colors.brandDark,
+    fontSize: 28,
+    fontWeight: '900',
+  },
+  aboutName: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  aboutText: {
+    color: colors.textSecondary,
+    lineHeight: 21,
+    marginBottom: 12,
   },
   imageBlock: {
     marginTop: 12,
@@ -2801,6 +3037,19 @@ const styles = StyleSheet.create({
   status: {
     color: colors.warning,
     fontWeight: '800',
+  },
+  exerciseTaskHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  exerciseTaskTitleWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
   },
   field: {
     marginBottom: 14,

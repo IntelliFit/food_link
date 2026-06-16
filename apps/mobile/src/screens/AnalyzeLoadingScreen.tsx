@@ -37,7 +37,7 @@ export function AnalyzeLoadingScreen() {
         return
       }
       if (!route.params?.taskId) {
-        Alert.alert('缺少任务编号', '请重新提交识别任务。')
+        Alert.alert('缺少识别进度信息', '请重新提交识别内容。')
         navigation.goBack()
         return
       }
@@ -64,7 +64,7 @@ export function AnalyzeLoadingScreen() {
             return
           }
           if (task.status === 'failed' || task.status === 'violated' || task.status === 'timed_out' || task.status === 'cancelled') {
-            throw new Error(task.error_message || '分析任务未完成')
+            throw new Error(task.error_message || '识别未完成')
           }
           await new Promise((resolve) => setTimeout(resolve, 2000))
         }
