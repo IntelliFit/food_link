@@ -50,32 +50,31 @@ function SearchResultsPage() {
   const formatCount = (n: number) => n > 99 ? '99+' : String(n)
 
   // 搜索记录
-  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
-    try { return Taro.getStorageSync(HISTORY_KEY) || [] } catch { return [] }
-  })
+  const loadHistory = () => { try { return Taro.getStorageSync(HISTORY_KEY) || [] } catch { return [] } }
+  const [searchHistory, setSearchHistory] = useState<string[]>(loadHistory)
   const [historyExpanded, setHistoryExpanded] = useState(false)
+
+  // 每次页面显示时刷新记录
+  Taro.useDidShow(() => { setSearchHistory(loadHistory()) })
 
   const saveToHistory = (kw: string) => {
     const trimmed = kw.trim()
     if (!trimmed) return
-    setSearchHistory((prev) => {
-      const next = [trimmed, ...prev.filter((h) => h !== trimmed)].slice(0, MAX_HISTORY)
-      Taro.setStorageSync(HISTORY_KEY, next)
-      return next
-    })
+    const prev = Taro.getStorageSync(HISTORY_KEY) || []
+    const next = [trimmed, ...prev.filter((h: string) => h !== trimmed)].slice(0, MAX_HISTORY)
+    Taro.setStorageSync(HISTORY_KEY, next)
+    setSearchHistory(next)
   }
 
   const removeHistoryItem = (idx: number) => {
-    setSearchHistory((prev) => {
-      const next = prev.filter((_, i) => i !== idx)
-      Taro.setStorageSync(HISTORY_KEY, next)
-      return next
-    })
+    const next = searchHistory.filter((_, i) => i !== idx)
+    Taro.setStorageSync(HISTORY_KEY, next)
+    setSearchHistory(next)
   }
 
   const clearHistory = () => {
-    setSearchHistory([])
     Taro.setStorageSync(HISTORY_KEY, [])
+    setSearchHistory([])
   }
 
   const onHistoryTap = (kw: string) => {
@@ -86,8 +85,8 @@ function SearchResultsPage() {
     setUserOffset(0)
     setContentSearched(false)
     setUserSearched(false)
-    doSearch('content', kw, 0, false)
     saveToHistory(kw)
+    doSearch('content', kw, 0, false)
   }
 
   // 搜索结果的点赞状态（乐观更新）
