@@ -77,12 +77,17 @@ func (r *NotificationRepo) FindRecentDuplicateForTarget(ctx context.Context, rec
 	return nil, nil
 }
 
-func (r *NotificationRepo) ListNotifications(ctx context.Context, userID string, limit int) ([]domain.FeedInteractionNotification, error) {
+func (r *NotificationRepo) ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) ([]domain.FeedInteractionNotification, error) {
 	var rows []domain.FeedInteractionNotification
-	err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Where("recipient_user_id = ?", userID).
-		Order("created_at DESC").
+		Where("(actor_user_id IS NULL OR actor_user_id != recipient_user_id)")
+	if notificationType != "" {
+		q = q.Where("notification_type = ?", notificationType)
+	}
+	err := q.Order("created_at DESC").
 		Limit(limit).
+		Offset(offset).
 		Find(&rows).Error
 	return rows, err
 }

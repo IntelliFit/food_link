@@ -446,6 +446,11 @@ WHERE COALESCE(display_name, '') = ''
 		`ALTER TABLE analysis_tasks ADD COLUMN IF NOT EXISTS search_text text`,
 		`UPDATE analysis_tasks SET search_text = COALESCE(NULLIF(text_input, ''), result->'items'->0->>'name', result->>'description', '') WHERE search_text IS NULL OR search_text = ''`,
 		`CREATE INDEX IF NOT EXISTS idx_analysis_tasks_user_search_gin ON analysis_tasks USING gin (search_text gin_trgm_ops)`,
+			// Community search trigram indexes for keyword matching
+			`CREATE INDEX IF NOT EXISTS idx_weapp_user_nickname_gin ON weapp_user USING gin (nickname gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_user_food_records_desc_gin ON user_food_records USING gin (COALESCE(description, '') gin_trgm_ops) WHERE hidden_from_feed = false`,
+			`CREATE INDEX IF NOT EXISTS idx_user_exercise_logs_desc_gin ON user_exercise_logs USING gin (COALESCE(exercise_desc, '') gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_user_circle_posts_search_gin ON user_circle_posts USING gin (COALESCE(title, '') || ' ' || COALESCE(body, '') gin_trgm_ops)`,
 		// Analysis feedback samples extra columns/indexes for frontend tracking
 		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS resolution_state text NOT NULL DEFAULT 'user_corrected'`,
 		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS source_record_id uuid`,

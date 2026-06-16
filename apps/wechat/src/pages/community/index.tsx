@@ -1296,6 +1296,14 @@ function CommunityPage() {
     // 同上：由 useEffect 统一处理刷新，避免重复请求和 author_id 未同步
   }
 
+  const handleFeedSearchConfirm = (e: any) => {
+    const kw = (e.detail?.value || feedSearchKeyword).trim()
+    if (!kw) return
+    Taro.navigateTo({
+      url: extraPkgUrl(`/pages/search-results/index?keyword=${encodeURIComponent(kw)}`)
+    })
+  }
+
   const handlePublishPost = () => {
     if (!getAccessToken()) {
       redirectToLogin(extraPkgUrl('/pages/circle-post-edit/index'))
@@ -2222,6 +2230,7 @@ function CommunityPage() {
                       placeholderClass='feed-search-placeholder'
                       value={feedSearchKeyword}
                       onInput={(e) => setFeedSearchKeyword(e.detail.value)}
+                      onConfirm={handleFeedSearchConfirm}
                       confirmType='search'
                     />
                     {feedSearchKeyword ? (

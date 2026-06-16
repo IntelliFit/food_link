@@ -5133,6 +5133,66 @@ export interface FeedInteractionNotification {
   }
 }
 
+// ── 圈子搜索 ──
+
+export interface ContentSearchAuthor {
+  id: string
+  nickname: string
+  avatar: string
+}
+
+export interface ContentSearchResult {
+  target_type: string
+  target_id: string
+  user_id: string
+  description?: string
+  title?: string
+  body?: string
+  image_path?: string
+  image_paths?: string[]
+  record_time?: string
+  created_at?: string
+  total_calories?: number
+  total_protein?: number
+  total_carbs?: number
+  total_fat?: number
+  fiber?: number
+  sugar?: number
+  sodium_mg?: number
+  exercise_desc?: string
+  exercise_type?: string
+  calories_burned?: number
+  duration_min?: number
+  meal_type?: string
+  diet_goal?: string
+  author: ContentSearchAuthor
+}
+
+export interface UserSearchResult {
+  id: string
+  nickname: string
+  avatar: string
+  is_friend: boolean
+  is_self: boolean
+}
+
+/** 圈子搜索（动态内容 / 用户），需登录 */
+export async function communitySearch(params: {
+  keyword: string
+  tab?: 'content' | 'users'
+  offset?: number
+  limit?: number
+}): Promise<{ list: ContentSearchResult[] | UserSearchResult[]; has_more: boolean }> {
+  const q = new URLSearchParams()
+  q.set('keyword', params.keyword)
+  if (params.tab) q.set('tab', params.tab)
+  if (params.offset !== undefined) q.set('offset', String(params.offset))
+  if (params.limit !== undefined) q.set('limit', String(params.limit))
+  const response = await authenticatedRequest(`/api/community/search?${q.toString()}`, { method: 'GET' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '搜索失败')
+  return response.data as { list: ContentSearchResult[] | UserSearchResult[]; has_more: boolean }
+}
+
 /** 搜索用户（昵称模糊 / 手机号精确） */
 export async function friendSearch(params: { nickname?: string; telephone?: string }): Promise<{ list: FriendSearchUser[] }> {
   const q = new URLSearchParams()
@@ -5596,10 +5656,14 @@ export async function communityGetCommentTasks(limit: number = 50): Promise<{ li
 }
 
 /** 获取圈子互动通知 */
-export async function communityGetNotifications(limit: number = 50): Promise<{ list: FeedInteractionNotification[]; unread_count: number }> {
-  const response = await authenticatedRequest(`/api/community/notifications?limit=${limit}`, { method: 'GET' })
+export async function communityGetNotifications(limit: number = 20, type?: string, offset?: number): Promise<{ list: FeedInteractionNotification[]; unread_count: number; has_more: boolean }> {
+  const q = new URLSearchParams()
+  q.set('limit', String(limit))
+  if (type) q.set('type', type)
+  if (offset !== undefined) q.set('offset', String(offset))
+  const response = await authenticatedRequest(`/api/community/notifications?${q.toString()}`, { method: 'GET' })
   if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '获取互动消息失败')
-  return response.data as { list: FeedInteractionNotification[]; unread_count: number }
+  return response.data as { list: FeedInteractionNotification[]; unread_count: number; has_more: boolean }
 }
 
 /** 标记圈子互动通知已读 */

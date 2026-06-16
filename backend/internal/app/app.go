@@ -25,6 +25,9 @@ import (
 	communityhandler "food_link/backend/internal/community/handler"
 	communityrepo "food_link/backend/internal/community/repo"
 	communityservice "food_link/backend/internal/community/service"
+	searchhandler "food_link/backend/internal/search/handler"
+	searchrepo "food_link/backend/internal/search/repo"
+	searchservice "food_link/backend/internal/search/service"
 	expiryhandler "food_link/backend/internal/expiry/handler"
 	expiryrepo "food_link/backend/internal/expiry/repo"
 	expiryservice "food_link/backend/internal/expiry/service"
@@ -220,6 +223,11 @@ func New(cfg *config.Config) (*App, error) {
 	feedReportNotifier := communityservice.NewReportNotifier(cfg.Feishu.ReportWebhookURL, cfg.Feishu.ReportWebhookSecret, cfg.App.AdminBaseURL, cfg.Feishu.AppID, cfg.Feishu.AppSecret)
 	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, storageClient)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
+
+		// Search module DI
+		searchRepo := searchrepo.NewSearchRepo(db)
+		searchSvc := searchservice.NewSearchService(searchRepo, storageClient)
+		searchHandler := searchhandler.NewSearchHandler(searchSvc)
 
 	// Health module DI
 	exerciseRepo := healthrepo.NewExerciseRepo(db)
@@ -443,6 +451,9 @@ func New(cfg *config.Config) (*App, error) {
 	engine.PUT("/api/community/posts/:post_id", authmw.RequireJWT(jwtSvc), communityHandler.UpdateCirclePost)
 	engine.DELETE("/api/community/posts/:post_id", authmw.RequireJWT(jwtSvc), communityHandler.DeleteCirclePost)
 	engine.POST("/api/community/feed-targets/:target_type/:target_id/report", authmw.RequireJWT(jwtSvc), communityHandler.ReportFeedTarget)
+
+		// Community search
+		engine.GET("/api/community/search", authmw.RequireJWT(jwtSvc), searchHandler.Search)
 
 	// Health routes
 	engine.GET("/api/body-metrics/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetBodyMetricsSummary)

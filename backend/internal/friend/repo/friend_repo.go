@@ -109,7 +109,7 @@ func (r *FriendRepo) SearchUsers(ctx context.Context, currentUserID, nickname, t
 	}
 	var users []User
 	q := r.db.WithContext(ctx).Model(&User{}).Select("id, nickname, avatar").
-		Where("id != ?", currentUserID)
+		Where("COALESCE(searchable, TRUE) = TRUE")
 	if telephone != "" {
 		q = q.Where("telephone = ?", strings.TrimSpace(telephone)).Limit(1)
 	} else if nickname != "" {
