@@ -186,18 +186,12 @@ function SearchResultsPage() {
   }
 
   const navigateToDetail = (item: ContentSearchResult) => {
-    const { target_type, target_id } = item
-    switch (target_type) {
-      case 'food_record':
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/record-detail/index?record_id=${encodeURIComponent(target_id)}`) })
-        break
-      case 'exercise_log':
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/exercise-record/index?log_id=${encodeURIComponent(target_id)}`) })
-        break
-      case 'circle_post':
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/interaction-feed-detail/index?target_type=circle_post&target_id=${encodeURIComponent(target_id)}`) })
-        break
-    }
+    const query = [
+      `targetType=${encodeURIComponent(item.target_type)}`,
+      `targetId=${encodeURIComponent(item.target_id)}`,
+      `recordId=${encodeURIComponent(item.target_id)}`,
+    ].join('&')
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}` })
   }
 
   const navigateToUser = (userId: string, isSelf: boolean) => {
