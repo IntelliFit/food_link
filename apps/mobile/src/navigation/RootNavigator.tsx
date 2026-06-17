@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { HomeScreen } from '../screens/HomeScreen'
 import { StatsScreen } from '../screens/StatsScreen'
 import { CommunityScreen } from '../screens/CommunityScreen'
+import { CommunitySearchScreen } from '../screens/CommunitySearchScreen'
 import { ProfileScreen } from '../screens/ProfileScreen'
 import { ProfileSettingsScreen } from '../screens/ProfileSettingsScreen'
 import { AccountSecurityScreen } from '../screens/AccountSecurityScreen'
@@ -104,6 +105,7 @@ export function RootNavigator() {
   const { isBootstrapping, isAuthenticated } = useAuth()
   const pendingInviteCodeRef = useRef<string | null>(null)
   const pendingPrivateChatRef = useRef<{ userId: string; nickname?: string } | null>(null)
+  const pendingProfileUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isAuthenticated) return undefined
@@ -122,11 +124,20 @@ export function RootNavigator() {
       pendingPrivateChatRef.current = null
     }
 
+    const navigateToProfile = (userId: string) => {
+      pendingProfileUserIdRef.current = userId
+      if (!navigationRef.isReady()) return
+      navigationRef.navigate('ProfileSettings', { userId })
+      pendingProfileUserIdRef.current = null
+    }
+
     const handleInviteUrl = (url?: string | null) => {
       const code = extractInviteCodeFromUrl(url)
       if (code) navigateToInvite(code)
       const privateChat = extractPrivateChatFromUrl(url)
       if (privateChat) navigateToPrivateChat(privateChat)
+      const profileUserId = extractProfileUserIdFromUrl(url)
+      if (profileUserId) navigateToProfile(profileUserId)
     }
 
     Linking.getInitialURL().then(handleInviteUrl).catch(() => undefined)
@@ -157,6 +168,11 @@ export function RootNavigator() {
           navigationRef.navigate('PrivateChat', privateChat)
           pendingPrivateChatRef.current = null
         }
+        const profileUserId = pendingProfileUserIdRef.current
+        if (profileUserId && navigationRef.isReady()) {
+          navigationRef.navigate('ProfileSettings', { userId: profileUserId })
+          pendingProfileUserIdRef.current = null
+        }
       }}
     >
       <Stack.Navigator
@@ -172,7 +188,7 @@ export function RootNavigator() {
             <Stack.Screen name="Analyze" component={AnalyzeScreen} options={{ title: '记录' }} />
             <Stack.Screen name="AnalyzeLoading" component={AnalyzeLoadingScreen} options={{ title: '正在分析' }} />
             <Stack.Screen name="Result" component={ResultScreen} options={{ title: '识别结果' }} />
-            <Stack.Screen name="TextResult" component={TextResultScreen} options={{ title: '文字识别结果' }} />
+            <Stack.Screen name="TextResult" component={TextResultScreen} options={{ title: '文字记录分析' }} />
             <Stack.Screen name="TextRecord" component={TextRecordScreen} options={{ title: '文字记录' }} />
             <Stack.Screen name="ManualRecord" component={ManualRecordScreen} options={{ title: '手动记录' }} />
             <Stack.Screen name="FoodLibrary" component={FoodLibraryScreen} options={{ title: '食物库' }} />
@@ -198,6 +214,7 @@ export function RootNavigator() {
             <Stack.Screen name="PublicFoodDetail" component={PublicFoodDetailScreen} options={{ title: '食物详情' }} />
             <Stack.Screen name="PublicFoodShare" component={PublicFoodShareScreen} options={{ title: '分享食物' }} />
             <Stack.Screen name="CommunityFeedDetail" component={CommunityFeedDetailScreen} options={{ title: '动态详情' }} />
+            <Stack.Screen name="CommunitySearch" component={CommunitySearchScreen} options={{ title: '圈子搜索' }} />
             <Stack.Screen name="PublicProfile" component={PublicProfileScreen} options={{ title: '用户主页' }} />
             <Stack.Screen name="FollowList" component={FollowListScreen} options={{ title: '关注列表' }} />
             <Stack.Screen name="Conversations" component={ConversationsScreen} options={{ title: '私信' }} />
@@ -261,6 +278,16 @@ function extractPrivateChatFromUrl(url?: string | null): { userId: string; nickn
   if (!userId) return null
   const nickname = (params.nickname || params.name || '').trim()
   return { userId, ...(nickname ? { nickname } : {}) }
+}
+
+function extractProfileUserIdFromUrl(url?: string | null): string {
+  if (!url) return ''
+  const normalized = url.toLowerCase()
+  if (!normalized.includes('profile')) return ''
+  const queryIndex = url.indexOf('?')
+  if (queryIndex < 0) return ''
+  const params = parseUrlQuery(url.slice(queryIndex + 1))
+  return (params.pf || params.user_id || params.userId || params.uid || '').trim()
 }
 
 function parseUrlQuery(query: string): Record<string, string> {

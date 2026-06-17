@@ -63,8 +63,8 @@ export const cta = {
 } as const
 
 export const appComingSoon = {
-  eyebrow: '即将推出',
-  title: '食探 App，\n敬请期待。',
+  eyebrow: 'App 下载',
+  title: '食探 App，\n现在可以下载体验。',
   description:
-    '我们正在把小程序里深受喜爱的体验，带到更完整的原生 App 中。更流畅、更专注，只为让你更轻松地管理健康。',
+    'Android 直装包适合手机直接安装体验；AAB 是应用商店上架包，保留给分发渠道和审核流程使用。',
 } as const

@@ -974,7 +974,7 @@ func truthy(value any) bool {
 }
 
 func parseChinaDate(date string) (time.Time, error) {
-	return time.ParseInLocation("2006-01-02", date, chinaTZ())
+	return time.Parse("2006-01-02", date)
 }
 
 func mustParseDate(date string) time.Time {

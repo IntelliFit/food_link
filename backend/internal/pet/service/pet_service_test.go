@@ -38,6 +38,13 @@ func newFakePetRepo() *fakePetRepo {
 	}
 }
 
+func TestParseChinaDateUsesUTCDateOnly(t *testing.T) {
+	day, err := parseChinaDate("2026-06-17")
+	require.NoError(t, err)
+	assert.Equal(t, time.UTC, day.Location())
+	assert.Equal(t, "2026-06-17", day.Format("2006-01-02"))
+}
+
 func (f *fakePetRepo) id(prefix string) string {
 	f.nextID++
 	return prefix + "-id"

@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { useFocusEffect } from '@react-navigation/native'
 import type { HomeDashboard, PetSummary } from '@food-link/core'
 import { apiClient } from '../api'
 import { todayKey } from '../utils/date'
+import { userFacingErrorMessage } from '../utils/errors'
 
 export function useHomeDashboard() {
   const recordDate = useMemo(todayKey, [])
@@ -21,15 +23,17 @@ export function useHomeDashboard() {
       setDashboard(dashboardData)
       setPetSummary(petData)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取首页失败')
+      setError(userFacingErrorMessage(err, '获取首页失败'))
     } finally {
       setLoading(false)
     }
   }, [recordDate])
 
-  useEffect(() => {
-    void loadHome()
-  }, [loadHome])
+  useFocusEffect(
+    useCallback(() => {
+      void loadHome()
+    }, [loadHome]),
+  )
 
   return { recordDate, dashboard, petSummary, loading, error, loadHome }
 }

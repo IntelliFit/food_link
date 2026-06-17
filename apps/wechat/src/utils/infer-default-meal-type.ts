@@ -1,5 +1,19 @@
 import type { CanonicalMealType } from './api'
 
+type RoutineHourValue = unknown
+
+export type MealTypeFromProfileInput = {
+  routine_wake_hour?: RoutineHourValue
+  routine_sleep_hour?: RoutineHourValue
+  health_condition?: {
+    routine_wake_hour?: RoutineHourValue
+    routine_sleep_hour?: RoutineHourValue
+    [key: string]: RoutineHourValue
+  } | null
+}
+
+type NormalizedRoutineHour = number
+
 /**
  * 根据用户设备本地时间推断默认餐次（常见中式划分，非 GPS 定位）。
  * 仅作分析/记录页的默认选中，用户可随时改选。
@@ -34,4 +48,77 @@ export function inferDefaultMealTypeFromLocalTime(date: Date = new Date()): Cano
     return 'dinner'
   }
   return 'evening_snack'
+}
+
+const normalizeRoutineHour = (value: RoutineHourValue): NormalizedRoutineHour | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const next = Math.trunc(value)
+    return next >= 0 && next <= 23 ? next : undefined
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim())
+    if (Number.isFinite(parsed)) {
+      const next = Math.trunc(parsed)
+      return next >= 0 && next <= 23 ? next : undefined
+    }
+  }
+  return undefined
+}
+
+/**
+ * 按用户作息（wake/sleep）推断默认餐次。
+ * 规则：起床后 3 小时内认为是早餐，起床后 8 小时内认为是午餐，睡前 4 小时内认为是晚餐，其余视作加餐。
+ */
+export function inferDefaultMealTypeFromRoutine(
+  wakeHour: RoutineHourValue,
+  sleepHour: RoutineHourValue,
+  date: Date = new Date(),
+): CanonicalMealType {
+  const wake = normalizeRoutineHour(wakeHour)
+  const sleep = normalizeRoutineHour(sleepHour)
+
+  if (wake == null || sleep == null || wake === sleep) {
+    return inferDefaultMealTypeFromLocalTime(date)
+  }
+
+  const hour = date.getHours()
+  const hoursSinceWake = (hour - wake + 24) % 24
+  if (hoursSinceWake <= 3) {
+    return 'breakfast'
+  }
+  if (hoursSinceWake <= 8) {
+    return 'lunch'
+  }
+
+  const hoursUntilSleep = (sleep - hour + 24) % 24
+  if (hoursUntilSleep <= 4) {
+    return 'dinner'
+  }
+
+  return 'afternoon_snack'
+}
+
+/**
+ * 从 HealthProfile（含嵌套 health_condition）直接推断默认餐次。
+ * 若作息字段不完整则回退为本地时段逻辑。
+ */
+export function inferDefaultMealTypeFromHealthProfile(
+  profile: MealTypeFromProfileInput | null | undefined,
+  date: Date = new Date(),
+): CanonicalMealType {
+  if (!profile) {
+    return inferDefaultMealTypeFromLocalTime(date)
+  }
+
+  const hc = profile.health_condition
+  const profileWakeHour = normalizeRoutineHour(profile.routine_wake_hour)
+  const profileSleepHour = normalizeRoutineHour(profile.routine_sleep_hour)
+  const hcWakeHour = normalizeRoutineHour(hc?.routine_wake_hour)
+  const hcSleepHour = normalizeRoutineHour(hc?.routine_sleep_hour)
+
+  return inferDefaultMealTypeFromRoutine(
+    hcWakeHour ?? profileWakeHour,
+    hcSleepHour ?? profileSleepHour,
+    date,
+  )
 }

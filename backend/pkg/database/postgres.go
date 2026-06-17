@@ -23,7 +23,10 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 		cfg.Name,
 		cfg.SSLMode,
 	)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:                  dsn,
+		PreferSimpleProtocol: true,
+	}), &gorm.Config{
 		Logger: glogger.Default.LogMode(glogger.Silent),
 	})
 	if err != nil {

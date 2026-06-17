@@ -458,7 +458,8 @@ func (s *ExerciseService) ProcessExerciseTask(ctx context.Context, userID, exerc
 	now := time.Now().UTC()
 	recordedDate, err := parseChinaDate(recordedOn)
 	if err != nil {
-		recordedDate = time.Now().In(chinaTZ)
+		recordedOn = time.Now().In(chinaTZ).Format("2006-01-02")
+		recordedDate, _ = parseChinaDate(recordedOn)
 	}
 	calories := float64(estimate.CaloriesKcal)
 	reasoning := estimate.Reasoning
@@ -645,7 +646,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	} else if desc != "" && imageURL != "" {
 		source = "text_image"
 	}
-	logger.Info(ctx,"运动热量 LLM 估算开始",
+	logger.Info(ctx, "运动热量 LLM 估算开始",
 		logger.Stage("llm_call"),
 		logger.ProviderModel("doubao", model),
 		slog.String("source", source),
@@ -693,7 +694,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	if err != nil {
 		status = "request_error"
 		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
-		logger.Warn(ctx,"运动热量 LLM 请求失败",
+		logger.Warn(ctx, "运动热量 LLM 请求失败",
 			logger.Stage("llm_call"),
 			logger.ProviderModel("doubao", model),
 			slog.String("source", source),
@@ -725,7 +726,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	if err != nil {
 		status = "result_parse_error"
 		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
-		logger.Warn(ctx,"运动热量 LLM 结果解析失败",
+		logger.Warn(ctx, "运动热量 LLM 结果解析失败",
 			logger.Stage("llm_parse"),
 			logger.ProviderModel("doubao", model),
 			logger.LLMResponseSummary(raw),
@@ -736,7 +737,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	estimate.Raw = raw
 	estimate.Source = "llm"
 	metrics.ObserveLLMCall("exercise", "doubao", model, "success", time.Since(start))
-	logger.Info(ctx,"运动热量 LLM 估算完成",
+	logger.Info(ctx, "运动热量 LLM 估算完成",
 		logger.Stage("llm_call"),
 		logger.ProviderModel("doubao", model),
 		slog.String("source", source),

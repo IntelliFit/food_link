@@ -7,18 +7,18 @@
   "scripts": {
     "start": "expo start",
     "start:lan": "node ../../scripts/start-mobile-dev.cjs",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "typecheck": "tsc --project tsconfig.typecheck.json --noEmit --pretty false",
     "prebuild": "expo prebuild",
     "run:android": "expo run:android",
     "run:ios": "expo run:ios",
-    "build:android:apk": "eas build -p android --profile preview",
-    "build:android:aab": "eas build -p android --profile production",
-    "build:android:dev": "eas build -p android --profile development",
-    "build:ios:preview": "eas build -p ios --profile preview",
-    "build:ios:production": "eas build -p ios --profile production"
+    "build:android:apk": "npx eas-cli build -p android --profile preview",
+    "build:android:aab": "npx eas-cli build -p android --profile production",
+    "build:android:dev": "npx eas-cli build -p android --profile development",
+    "build:ios:preview": "npx eas-cli build -p ios --profile preview",
+    "build:ios:production": "npx eas-cli build -p ios --profile production"
   },
   "dependencies": {
     "@food-link/api-client": "0.0.0",

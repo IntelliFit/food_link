@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
+import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
   getMealTypeLabel,
   inferDefaultMealTypeFromLocalTime,
+  type CampusRelatedFeedItem,
   type CommunityFeedContext,
   type CommunityFeedTargetType,
   type ConversationSummary,
   type FeedCommentItem,
+  type ManualFoodItem,
   type MealType,
   type MembershipPaymentOrder,
   type MembershipPlan,
@@ -29,9 +31,19 @@ import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { formatDateTime, todayKey } from '../utils/date'
+import { userFacingErrorMessage } from '../utils/errors'
 
 const mealOptions: MealType[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack']
 const SYSTEM_MESSAGE_USER_ID = '00000000-0000-0000-0000-000000000000'
+const privateConversationPageSize = 20
+const privateMessagePageSize = 20
+const privateMessagePollMs = 3000
+
+type PublicFoodReplyTarget = {
+  parentCommentId: string
+  replyToUserId: string
+  nickname: string
+}
 
 export function MembershipCenterScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -147,9 +159,17 @@ export function MembershipCenterScreen() {
         <View style={styles.rowBetween}>
           <View style={styles.flex}>
             <Text style={styles.sectionTitle}>当前会员</Text>
-            <Text style={styles.subtitle}>{membershipStatusText(membership)}</Text>
+            {membership ? (
+              <Text style={styles.subtitle}>{membershipStatusText(membership)}</Text>
+            ) : (
+              <View style={styles.membershipStatusSpinner}>
+                <ActivityIndicator size="small" color={colors.brand} />
+              </View>
+            )}
           </View>
-          <Pill text={membership?.trial_active ? '试用中' : membership?.is_pro ? 'Pro' : '基础账号'} />
+          {membership ? (
+            <Pill text={membership.trial_active ? '试用中' : membership.is_pro ? 'Pro' : '基础账号'} />
+          ) : null}
         </View>
         <Text style={styles.bigNumber}>{totalAvailable}</Text>
         <Text style={styles.subtitle}>当前可用积分</Text>
@@ -286,8 +306,16 @@ export function RecipesScreen() {
     try {
       const result = await apiClient.useRecipe(recipe.id, selectedMealType)
       setMealPickerRecipeId(null)
-      Alert.alert('已记录', '食谱已写入今日饮食记录')
-      if (result.record_id) navigation.navigate('RecordDetail', { recordId: result.record_id })
+      if (!result.record_id) {
+        Alert.alert('已记录', '食谱已写入今日饮食记录', [
+          { text: '回到首页', onPress: () => navigation.dispatch(CommonActions.navigate('MainTabs')) },
+        ])
+        return
+      }
+      Alert.alert('已记录', '食谱已写入今日饮食记录', [
+        { text: '回到首页', onPress: () => navigation.dispatch(CommonActions.navigate('MainTabs')) },
+        { text: '查看记录', onPress: () => navigation.navigate('RecordDetail', { recordId: result.record_id }) },
+      ])
     } catch (error) {
       showError('使用食谱失败', error)
     } finally {
@@ -371,13 +399,20 @@ export function RecipesScreen() {
   )
 }
 
+type PublicFoodMode = 'all' | 'campus' | 'mine' | 'collections'
+type PublicFoodSort = 'latest' | 'hot' | 'rating'
+
 export function PublicFoodScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'PublicFood'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
-  const initialMode = route.params?.mode || 'all'
-  const [mode, setMode] = useState<'all' | 'campus' | 'mine' | 'collections'>(initialMode)
+  const initialMode: PublicFoodMode = route.params?.mode || 'all'
+  const [mode, setMode] = useState<PublicFoodMode>(initialMode)
   const [items, setItems] = useState<PublicFoodItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [sortBy, setSortBy] = useState<PublicFoodSort>('latest')
+  const [filterFatLoss, setFilterFatLoss] = useState<boolean | undefined>(undefined)
+  const [searchKeyword, setSearchKeyword] = useState('')
+  const [appliedMerchant, setAppliedMerchant] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -390,8 +425,10 @@ export function PublicFoodScreen() {
         setItems(data.list || [])
       } else {
         const data = await apiClient.listPublicFoods({
-          limit: 30,
-          sortBy: 'latest',
+          limit: 50,
+          sortBy,
+          merchantName: appliedMerchant || undefined,
+          suitableForFatLoss: filterFatLoss,
           isCampusFood: mode === 'campus' ? true : undefined,
           type: mode === 'campus' ? 'campus' : undefined,
         })
@@ -402,21 +439,62 @@ export function PublicFoodScreen() {
     } finally {
       setLoading(false)
     }
-  }, [mode])
+  }, [appliedMerchant, filterFatLoss, mode, sortBy])
 
   useEffect(() => {
     void load()
   }, [load])
 
+  const browseMode = mode === 'all' || mode === 'campus'
+  const applySearch = () => {
+    setAppliedMerchant(searchKeyword.trim())
+  }
+  const clearSearch = () => {
+    setSearchKeyword('')
+    setAppliedMerchant('')
+  }
+
   return (
     <Page title="公共食物库" subtitle="外食、校园餐和用户分享" refreshing={loading} onRefresh={load}>
       <View style={styles.segment}>
-        <SegmentButton label="全部" active={mode === 'all'} onPress={() => setMode('all')} />
-        <SegmentButton label="校园" active={mode === 'campus'} onPress={() => setMode('campus')} />
-        <SegmentButton label="我的" active={mode === 'mine'} onPress={() => setMode('mine')} />
-        <SegmentButton label="收藏" active={mode === 'collections'} onPress={() => setMode('collections')} />
+        <SegmentButton compact label="全部" active={mode === 'all'} onPress={() => setMode('all')} />
+        <SegmentButton compact label="校园" active={mode === 'campus'} onPress={() => setMode('campus')} />
+        <SegmentButton compact label="我的" active={mode === 'mine'} onPress={() => setMode('mine')} />
+        <SegmentButton compact label="收藏" active={mode === 'collections'} onPress={() => setMode('collections')} />
       </View>
-      {items.length === 0 ? <EmptyState text="暂无公共食物" /> : null}
+      {browseMode ? (
+        <Card>
+          <Text style={styles.groupTitle}>筛选公共食物</Text>
+          <Field
+            label="搜索商家或地点"
+            value={searchKeyword}
+            onChangeText={setSearchKeyword}
+            placeholder="输入商家、食堂或位置"
+          />
+          <View style={styles.buttonRow}>
+            <SmallButton label="搜索" onPress={applySearch} />
+            {searchKeyword || appliedMerchant ? <SmallButton label="清除" onPress={clearSearch} /> : null}
+          </View>
+          <Text style={styles.fieldLabel}>排序</Text>
+          <View style={styles.segment}>
+            <SegmentButton label="最新" active={sortBy === 'latest'} onPress={() => setSortBy('latest')} />
+            <SegmentButton label="热度" active={sortBy === 'hot'} onPress={() => setSortBy('hot')} />
+            <SegmentButton label="评分" active={sortBy === 'rating'} onPress={() => setSortBy('rating')} />
+          </View>
+          <Text style={styles.fieldLabel}>减脂筛选</Text>
+          <View style={styles.segment}>
+            <SegmentButton label="全部" active={filterFatLoss == null} onPress={() => setFilterFatLoss(undefined)} />
+            <SegmentButton label="适合减脂" active={filterFatLoss === true} onPress={() => setFilterFatLoss(true)} />
+          </View>
+          {appliedMerchant || filterFatLoss ? (
+            <View style={styles.nutritionRow}>
+              {appliedMerchant ? <Pill text={`搜索：${appliedMerchant}`} /> : null}
+              {filterFatLoss ? <Pill text="只看适合减脂" /> : null}
+            </View>
+          ) : null}
+        </Card>
+      ) : null}
+      {items.length === 0 ? <EmptyState text={publicFoodEmptyText(mode, appliedMerchant, filterFatLoss)} /> : null}
       {items.map((item) => (
         <PublicFoodCard
           key={item.id}
@@ -432,21 +510,34 @@ export function PublicFoodDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'PublicFoodDetail'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [item, setItem] = useState<PublicFoodItem | null>(null)
+  const [campusMetrics, setCampusMetrics] = useState<{ protein_per_yuan?: number; price_per_100_kcal?: number } | null>(null)
+  const [similarItems, setSimilarItems] = useState<PublicFoodItem[]>([])
+  const [relatedFeeds, setRelatedFeeds] = useState<CampusRelatedFeedItem[]>([])
   const [comments, setComments] = useState<PublicFoodComment[]>([])
   const [comment, setComment] = useState('')
+  const [replyTarget, setReplyTarget] = useState<PublicFoodReplyTarget | null>(null)
   const [feedback, setFeedback] = useState('')
   const [loading, setLoading] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [itemData, commentData] = await Promise.all([
+      const [detailData, commentData] = await Promise.all([
         route.params.isCampus
-          ? apiClient.getCampusFoodDetail(route.params.itemId).then((data) => data.item)
-          : apiClient.getPublicFood(route.params.itemId),
+          ? apiClient.getCampusFoodDetail(route.params.itemId)
+          : apiClient.getPublicFood(route.params.itemId).then((publicItem) => ({
+            item: publicItem,
+            metrics: undefined,
+            similar_items: [] as PublicFoodItem[],
+            related_feeds: [] as CampusRelatedFeedItem[],
+          })),
         apiClient.listPublicFoodComments(route.params.itemId).catch(() => ({ list: [] as PublicFoodComment[] })),
       ])
-      setItem(itemData)
+      setItem(detailData.item)
+      setCampusMetrics(detailData.metrics || null)
+      setSimilarItems(detailData.similar_items || [])
+      setRelatedFeeds(detailData.related_feeds || [])
       setComments(commentData.list || [])
     } catch (error) {
       showError('获取食物详情失败', error)
@@ -458,6 +549,16 @@ export function PublicFoodDetailScreen() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    let mounted = true
+    void getStoredUserId().then((id) => {
+      if (mounted) setCurrentUserId((id || '').trim())
+    })
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const toggleLike = async () => {
     if (!item) return
@@ -487,14 +588,49 @@ export function PublicFoodDetailScreen() {
     if (!item) return
     setLoading(true)
     try {
-      await apiClient.addPublicFoodComment(item.id, comment)
+      await apiClient.addPublicFoodComment(item.id, comment, undefined, replyTarget ? {
+        parentCommentId: replyTarget.parentCommentId,
+        replyToUserId: replyTarget.replyToUserId,
+      } : undefined)
       setComment('')
+      setReplyTarget(null)
       await load()
     } catch (error) {
       showError('评论失败', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const startReply = (parent: PublicFoodComment, target: PublicFoodComment = parent) => {
+    setReplyTarget({
+      parentCommentId: parent.parent_comment_id || parent.id,
+      replyToUserId: target.user_id,
+      nickname: target.nickname || '用户',
+    })
+  }
+
+  const removeComment = async (entry: PublicFoodComment) => {
+    if (!item) return
+    setLoading(true)
+    try {
+      await apiClient.deletePublicFoodComment(item.id, entry.id)
+      if (replyTarget?.parentCommentId === entry.id || replyTarget?.replyToUserId === entry.user_id) {
+        setReplyTarget(null)
+      }
+      await load()
+    } catch (error) {
+      showError('删除评论失败', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const confirmRemoveComment = (entry: PublicFoodComment) => {
+    Alert.alert('删除评论', '确定删除这条评论吗？', [
+      { text: '取消', style: 'cancel' },
+      { text: '删除', style: 'destructive', onPress: () => void removeComment(entry) },
+    ])
   }
 
   const submitFeedback = async () => {
@@ -525,6 +661,117 @@ export function PublicFoodDetailScreen() {
     }
   }
 
+  const confirmRemove = () => {
+    Alert.alert('删除上传', '删除后这条食物会从公共库下架，其他用户将无法继续查看。', [
+      { text: '取消', style: 'cancel' },
+      { text: '删除', style: 'destructive', onPress: () => void remove() },
+    ])
+  }
+
+  const quickRecord = () => {
+    if (!item) return
+    if (isPublicFoodAnalyzing(item)) {
+      Alert.alert('营养信息还在分析', '等热量和营养信息补齐后，再记录到今天这一餐。')
+      return
+    }
+    if (isPublicFoodAnalysisFailed(item)) {
+      Alert.alert('暂不能记录', '这份食物的营养分析失败了，可以先提交纠错反馈。')
+      return
+    }
+    if (needsPublicFoodNutritionUpdate(item)) {
+      Alert.alert('营养信息待补充', '这份食物还没有可记录的营养数据，可以先提交纠错反馈。')
+      return
+    }
+    navigation.navigate('ManualRecord', {
+      quickItem: manualFoodItemFromPublicFood(item),
+      sourceChannel: item.is_campus_food ? 'campus' : 'recommended',
+    })
+  }
+
+  const isOwner = Boolean(item && currentUserId && publicFoodOwnerId(item) === currentUserId)
+  const isCampusDetail = Boolean(item?.is_campus_food || route.params.isCampus)
+  const commentTotal = countPublicFoodComments(comments)
+  const openPublicFood = (nextItem: PublicFoodItem) => {
+    navigation.push('PublicFoodDetail', { itemId: nextItem.id, isCampus: Boolean(nextItem.is_campus_food) })
+  }
+  const openRelatedFeed = (feed: CampusRelatedFeedItem) => {
+    navigation.navigate('CommunityFeedDetail', { targetId: feed.id, targetType: 'campus_food' })
+  }
+  const renderSimilarItem = (entry: PublicFoodItem) => {
+    const image = primaryImage(entry)
+    return (
+      <Pressable key={entry.id} style={styles.relatedFoodItem} onPress={() => openPublicFood(entry)}>
+        {image ? (
+          <Image source={{ uri: image }} style={styles.relatedFoodImage} />
+        ) : (
+          <View style={styles.relatedFoodImageFallback}>
+            <Text style={styles.relatedFoodImageText}>餐</Text>
+          </View>
+        )}
+        <Text style={styles.itemName} numberOfLines={1}>{entry.food_name || '校园餐'}</Text>
+        <Text style={styles.subtitle} numberOfLines={1}>{publicFoodLocationText(entry)}</Text>
+        <View style={styles.nutritionRow}>
+          <Pill text={`${Math.round(entry.total_calories || 0)} kcal`} />
+          <Pill text={`P ${Math.round(entry.total_protein || 0)}g`} />
+        </View>
+      </Pressable>
+    )
+  }
+  const renderRelatedFeed = (feed: CampusRelatedFeedItem) => {
+    const image = primaryImage(feed)
+    return (
+      <Pressable key={feed.id} style={styles.relatedFeedRow} onPress={() => openRelatedFeed(feed)}>
+        {image ? (
+          <Image source={{ uri: image }} style={styles.relatedFeedImage} />
+        ) : (
+          <View style={styles.relatedFeedImageFallback}>
+            <Text style={styles.relatedFoodImageText}>食堂</Text>
+          </View>
+        )}
+        <View style={styles.flex}>
+          <View style={styles.rowBetween}>
+            <Text style={[styles.itemName, styles.relatedFeedTitle]} numberOfLines={1}>{feed.food_name || '校园餐动态'}</Text>
+            <Text style={styles.kcal}>{Math.round(feed.total_calories || 0)} kcal</Text>
+          </View>
+          <Text style={styles.subtitle} numberOfLines={1}>{campusRelatedFeedLocationText(feed)}</Text>
+          <View style={styles.nutritionRow}>
+            <Pill text={`蛋白 ${Math.round(feed.total_protein || 0)}g`} />
+            <Pill text={`赞 ${feed.like_count || 0}`} />
+            <Pill text={`评 ${feed.comment_count || 0}`} />
+          </View>
+        </View>
+      </Pressable>
+    )
+  }
+  const renderComment = (entry: PublicFoodComment, parent?: PublicFoodComment) => {
+    const isReply = Boolean(parent)
+    const canDelete = Boolean(currentUserId && entry.user_id === currentUserId)
+    const replyPrefix = parent && entry.reply_to_nickname && entry.reply_to_nickname !== parent.nickname
+      ? `回复 ${entry.reply_to_nickname} · `
+      : ''
+    return (
+      <View key={entry.id} style={[styles.commentRow, isReply && styles.commentReplyRow]}>
+        <View style={styles.rowBetween}>
+          <View style={styles.flex}>
+            <Text style={styles.itemName}>{entry.nickname || '用户'}</Text>
+            <Text style={styles.subtitle}>{replyPrefix}{formatDateTime(entry.created_at)}</Text>
+          </View>
+          {entry.rating ? <Pill text={`${entry.rating} 分`} /> : null}
+        </View>
+        <Text style={styles.notes}>{entry.content}</Text>
+        <View style={styles.commentActions}>
+          <SmallButton label="回复" onPress={() => startReply(parent || entry, entry)} />
+          {canDelete ? <SmallButton label="删除" danger onPress={() => confirmRemoveComment(entry)} /> : null}
+        </View>
+        {!isReply && entry.replies?.length ? (
+          <View style={styles.commentReplies}>
+            {entry.replies.map((reply) => renderComment(reply, entry))}
+          </View>
+        ) : null}
+      </View>
+    )
+  }
+
   return (
     <Page title="食物详情" subtitle={item?.merchant_name || item?.canteen_name} refreshing={loading} onRefresh={load}>
       <Card>
@@ -542,6 +789,8 @@ export function PublicFoodDetailScreen() {
           <InfoRow label="地点" value={publicFoodLocationText(item)} />
           <InfoRow label="份量" value={item?.portion_description || '--'} />
           <InfoRow label="价格" value={item?.price != null ? `${money(item.price)} / ${item.price_unit || '份'}` : '--'} />
+          {isCampusDetail && campusMetrics?.protein_per_yuan ? <InfoRow label="蛋白性价比" value={`${round1(campusMetrics.protein_per_yuan)}g/元`} /> : null}
+          {isCampusDetail && campusMetrics?.price_per_100_kcal ? <InfoRow label="热量价格" value={`${round1(campusMetrics.price_per_100_kcal)}元/100kcal`} /> : null}
           <InfoRow label="口味评分" value={item?.taste_rating != null ? `${item.taste_rating}/5` : '--'} />
           <InfoRow label="减脂选择" value={item?.suitable_for_fat_loss ? '适合' : '普通'} />
         </View>
@@ -552,23 +801,50 @@ export function PublicFoodDetailScreen() {
         ) : null}
         {item?.user_notes ? <Text style={styles.notes}>{item.user_notes}</Text> : null}
         <View style={styles.buttonRow}>
+          <SmallButton label={item?.is_campus_food ? '记录这份校园餐' : '记录这份食物'} onPress={quickRecord} />
           <SmallButton label={`${item?.liked ? '已赞' : '点赞'} ${item?.like_count || 0}`} onPress={toggleLike} />
           <SmallButton label={item?.collected ? '已收藏' : '收藏'} onPress={toggleCollect} />
-          {item ? <SmallButton label="编辑" onPress={() => navigation.navigate('PublicFoodShare', { editId: item.id, mode: item.is_campus_food ? 'campus' : 'public' })} /> : null}
-          {item ? <SmallButton label="删除" danger onPress={remove} /> : null}
+          {item && isOwner ? <SmallButton label="编辑" onPress={() => navigation.navigate('PublicFoodShare', { editId: item.id, mode: item.is_campus_food ? 'campus' : 'public' })} /> : null}
+          {item && isOwner ? <SmallButton label="删除" danger onPress={confirmRemove} /> : null}
         </View>
       </Card>
 
-      <Card>
-        <Text style={styles.sectionTitle}>评论</Text>
-        <Field label="写评论" value={comment} onChangeText={setComment} multiline />
-        <AppButton label="发布评论" variant="secondary" loading={loading} onPress={addComment} />
-        {comments.map((entry) => (
-          <View key={entry.id} style={styles.commentRow}>
-            <Text style={styles.itemName}>{entry.nickname || '用户'}</Text>
-            <Text style={styles.subtitle}>{entry.content}</Text>
+      {isCampusDetail && similarItems.length > 0 ? (
+        <Card>
+          <Text style={styles.sectionTitle}>同食堂相似菜品</Text>
+          <Text style={styles.subtitle}>同学校同食堂优先推荐</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.relatedFoodScroll}
+          >
+            {similarItems.map(renderSimilarItem)}
+          </ScrollView>
+        </Card>
+      ) : null}
+
+      {isCampusDetail && relatedFeeds.length > 0 ? (
+        <Card>
+          <Text style={styles.sectionTitle}>圈子相关动态</Text>
+          <Text style={styles.subtitle}>来自同食堂精选动态</Text>
+          <View style={styles.relatedFeedList}>
+            {relatedFeeds.map(renderRelatedFeed)}
           </View>
-        ))}
+        </Card>
+      ) : null}
+
+      <Card>
+        <Text style={styles.sectionTitle}>评论{commentTotal ? ` ${commentTotal}` : ''}</Text>
+        {replyTarget ? (
+          <View style={styles.replyTargetBar}>
+            <Text style={styles.subtitle}>正在回复 {replyTarget.nickname}</Text>
+            <SmallButton label="取消回复" onPress={() => setReplyTarget(null)} />
+          </View>
+        ) : null}
+        <Field label={replyTarget ? `回复 ${replyTarget.nickname}` : '写评论'} value={comment} onChangeText={setComment} multiline />
+        <AppButton label={replyTarget ? '发布回复' : '发布评论'} variant="secondary" loading={loading} onPress={addComment} />
+        {comments.length === 0 ? <Text style={styles.subtitle}>暂无评论</Text> : null}
+        {comments.map((entry) => renderComment(entry))}
       </Card>
 
       <Card>
@@ -800,16 +1076,23 @@ export function ConversationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [unread, setUnread] = useState(0)
+  const [currentUserId, setCurrentUserId] = useState('')
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
-  const load = useCallback(async () => {
+  const loadLatest = useCallback(async () => {
     setLoading(true)
     try {
       const [conversationData, unreadData] = await Promise.all([
-        apiClient.listConversations(),
+        apiClient.listConversations({ limit: privateConversationPageSize, offset: 0 }),
         apiClient.getUnreadPrivateMessageCount().catch(() => ({ count: 0 })),
       ])
-      setConversations(conversationData.list || [])
+      const next = conversationData.list || []
+      setConversations(next)
+      setOffset(next.length)
+      setHasMore(Boolean(conversationData.has_more))
       setUnread(unreadData.count || 0)
     } catch (error) {
       showError('获取私信失败', error)
@@ -819,31 +1102,50 @@ export function ConversationsScreen() {
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void getStoredUserId().then((id) => setCurrentUserId(id || ''))
+  }, [])
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadLatest()
+    }, [loadLatest]),
+  )
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const data = await apiClient.listConversations({ limit: privateConversationPageSize, offset })
+      const next = data.list || []
+      setConversations((prev) => mergeConversations(prev, next))
+      setOffset((prev) => prev + next.length)
+      setHasMore(Boolean(data.has_more))
+    } catch (error) {
+      showError('加载更多私信失败', error)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [hasMore, loadingMore, offset])
 
   return (
-    <Page title="私信" subtitle={`${unread} 条未读`} refreshing={loading} onRefresh={load}>
+    <Page title="私信" subtitle={unread ? `${unread} 条未读` : `${conversations.length} 个会话`} refreshing={loading} onRefresh={loadLatest}>
       {conversations.length === 0 ? <EmptyState text="暂无私信会话" /> : null}
-      {conversations.map((conversation) => {
-        const userId = conversation.UserID || conversation.user_id || ''
-        const nickname = conversation.Nickname || conversation.nickname || '用户'
-        const last = conversation.LastMessage || conversation.last_message
-        const count = conversation.UnreadCount ?? conversation.unread_count ?? 0
-        return (
-          <Pressable key={userId} onPress={() => navigation.navigate('PrivateChat', { userId, nickname })}>
-            <Card>
-              <View style={styles.rowBetween}>
-                <View style={styles.flex}>
-                  <Text style={styles.itemName}>{nickname}</Text>
-                  <Text style={styles.subtitle}>{messageContent(last) || '打开会话'}</Text>
-                </View>
-                {count > 0 ? <Pill text={`${count} 未读`} /> : null}
-              </View>
-            </Card>
-          </Pressable>
-        )
-      })}
+      {conversations.map((conversation, index) => (
+        <ConversationRow
+          key={conversationUserId(conversation) || index}
+          conversation={conversation}
+          currentUserId={currentUserId}
+          onPress={() => {
+            const userId = conversationUserId(conversation)
+            if (!userId) return
+            navigation.navigate('PrivateChat', {
+              userId,
+              nickname: conversationNickname(conversation),
+            })
+          }}
+        />
+      ))}
+      {hasMore ? <AppButton label="查看更多会话" variant="secondary" loading={loadingMore} onPress={loadMore} /> : null}
     </Page>
   )
 }
@@ -853,27 +1155,80 @@ export function PrivateChatScreen() {
   const [messages, setMessages] = useState<PrivateMessageItem[]>([])
   const [content, setContent] = useState('')
   const [currentUserId, setCurrentUserId] = useState('')
+  const [counterpartName, setCounterpartName] = useState(route.params.nickname || '用户')
+  const [counterpartAvatar, setCounterpartAvatar] = useState('')
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [sendingText, setSendingText] = useState(false)
   const [sendingImage, setSendingImage] = useState(false)
+  const pollingRef = useRef(false)
   const isSystemChat = route.params.userId === SYSTEM_MESSAGE_USER_ID
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const loadLatest = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
     try {
-      const data = await apiClient.getConversation(route.params.userId, 0, 60)
-      setMessages((data.list || []).slice().reverse())
+      const data = await apiClient.getConversation(route.params.userId, 0, privateMessagePageSize)
+      const next = normalizePrivateMessages(data.list || [])
+      setMessages((prev) => quiet ? mergePrivateMessages(prev, next) : next)
+      if (!quiet) {
+        setOffset((data.list || []).length)
+        setHasMore(Boolean(data.has_more))
+      }
       await apiClient.markConversationRead(route.params.userId).catch(() => null)
     } catch (error) {
-      showError('获取会话失败', error)
+      if (!quiet) showError('获取会话失败', error)
     } finally {
-      setLoading(false)
+      if (!quiet) setLoading(false)
     }
   }, [route.params.userId])
 
   useEffect(() => {
     void getStoredUserId().then((id) => setCurrentUserId(id || ''))
-    void load()
-  }, [load])
+  }, [])
+
+  useEffect(() => {
+    setCounterpartName(route.params.nickname || (isSystemChat ? '系统消息' : '用户'))
+    setCounterpartAvatar('')
+    if (isSystemChat) return
+    void apiClient.getPublicProfile(route.params.userId)
+      .then((profile) => {
+        setCounterpartName(profile.nickname || route.params.nickname || '用户')
+        setCounterpartAvatar(profile.avatar || '')
+      })
+      .catch(() => null)
+  }, [isSystemChat, route.params.nickname, route.params.userId])
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadLatest(false)
+      const timer = setInterval(() => {
+        if (pollingRef.current) return
+        pollingRef.current = true
+        void loadLatest(true).finally(() => {
+          pollingRef.current = false
+        })
+      }, privateMessagePollMs)
+      return () => clearInterval(timer)
+    }, [loadLatest]),
+  )
+
+  const loadOlder = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const data = await apiClient.getConversation(route.params.userId, offset, privateMessagePageSize)
+      const older = normalizePrivateMessages(data.list || [])
+      setMessages((prev) => mergePrivateMessages(older, prev))
+      setOffset((prev) => prev + (data.list || []).length)
+      setHasMore(Boolean(data.has_more))
+    } catch (error) {
+      showError('加载历史消息失败', error)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [hasMore, loadingMore, offset, route.params.userId])
 
   const send = async () => {
     const text = content.trim()
@@ -881,15 +1236,16 @@ export function PrivateChatScreen() {
       Alert.alert('请输入消息内容')
       return
     }
-    setLoading(true)
+    setSendingText(true)
     try {
-      await apiClient.sendPrivateMessage(route.params.userId, text)
+      const sent = await apiClient.sendPrivateMessage(route.params.userId, text)
       setContent('')
-      await load()
+      setMessages((prev) => mergePrivateMessages(prev, [sent]))
+      await loadLatest(true)
     } catch (error) {
       showError('发送失败', error)
     } finally {
-      setLoading(false)
+      setSendingText(false)
     }
   }
 
@@ -917,7 +1273,7 @@ export function PrivateChatScreen() {
         contentType: 'image',
         imageUrl: uploaded.imageUrl,
       })
-      await load()
+      await loadLatest(true)
     } catch (error) {
       showError('发送图片失败', error)
     } finally {
@@ -926,26 +1282,45 @@ export function PrivateChatScreen() {
   }
 
   return (
-    <Page title={isSystemChat ? '系统消息' : route.params.nickname || '私信'} subtitle={isSystemChat ? '平台通知和处理结果' : '好友和关注用户的点对点消息'} refreshing={loading} onRefresh={load}>
+    <Page title={isSystemChat ? '系统消息' : counterpartName || '私信'} subtitle={isSystemChat ? '平台通知和处理结果' : '好友和关注用户的点对点消息'} refreshing={loading} onRefresh={() => loadLatest(false)}>
       {messages.length === 0 ? <EmptyState text="暂无消息" /> : null}
-      {messages.map((msg, index) => (
-        <MessageBubble key={messageId(msg, index)} message={msg} currentUserId={currentUserId} counterpartName={route.params.nickname || '用户'} />
-      ))}
+      {hasMore ? <AppButton label="查看更早消息" variant="secondary" loading={loadingMore} onPress={loadOlder} /> : null}
+      {messages.map((msg, index) => {
+        const previous = index > 0 ? messages[index - 1] : null
+        return (
+          <MessageBubble
+            key={messageId(msg, index)}
+            message={msg}
+            currentUserId={currentUserId}
+            counterpartName={counterpartName || '用户'}
+            counterpartAvatar={counterpartAvatar}
+            showTime={shouldShowMessageTime(previous, msg)}
+          />
+        )
+      })}
       {isSystemChat ? null : (
-        <Card>
-          <Field label="消息" value={content} onChangeText={setContent} multiline />
+        <Card style={styles.chatComposerCard}>
+          <TextInput
+            value={content}
+            onChangeText={setContent}
+            placeholder="说点什么..."
+            placeholderTextColor={colors.textMuted}
+            multiline
+            textAlignVertical="top"
+            style={styles.chatInput}
+          />
           <View style={styles.buttonRow}>
-            <SmallButton label="发图片" onPress={sendImage} />
-            <SmallButton label="发送" onPress={send} />
+            <SmallButton label="发图片" disabled={sendingImage || sendingText} onPress={sendImage} />
+            <SmallButton label="发送" disabled={sendingImage || sendingText || !content.trim()} onPress={send} />
+            {sendingImage || sendingText ? <ActivityIndicator color={colors.brand} /> : null}
           </View>
-          {sendingImage ? <Text style={styles.subtitle}>图片发送中</Text> : null}
         </Card>
       )}
     </Page>
   )
 }
-
 export function BodyTrendsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [summary, setSummary] = useState<StatsSummary | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -960,9 +1335,9 @@ export function BodyTrendsScreen() {
     }
   }, [])
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     void load()
-  }, [load])
+  }, [load]))
 
   const body = summary?.body_metrics
   const latestWeight = body?.latest_weight?.value
@@ -974,11 +1349,25 @@ export function BodyTrendsScreen() {
         <Text style={styles.sectionTitle}>体重</Text>
         <Text style={styles.bigNumber}>{latestWeight ? `${latestWeight} kg` : '--'}</Text>
         <Text style={styles.subtitle}>月变化 {weightChange == null ? '--' : `${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)} kg`}</Text>
+        <View style={styles.buttonRow}>
+          <SmallButton label="查看体重趋势" onPress={() => navigation.navigate('TrendDetail', { kind: 'weight' })} />
+        </View>
       </Card>
       <Card>
         <Text style={styles.sectionTitle}>饮水</Text>
         <Text style={styles.bigNumber}>{Math.round(body?.avg_daily_water_ml || 0)} ml</Text>
         <Text style={styles.subtitle}>日均饮水 · 记录 {body?.water_recorded_days || 0} 天</Text>
+        <View style={styles.buttonRow}>
+          <SmallButton label="查看喝水趋势" onPress={() => navigation.navigate('TrendDetail', { kind: 'water' })} />
+        </View>
+      </Card>
+      <Card>
+        <Text style={styles.sectionTitle}>运动</Text>
+        <Text style={styles.bigNumber}>30 天</Text>
+        <Text style={styles.subtitle}>查看运动消耗热力和最近记录</Text>
+        <View style={styles.buttonRow}>
+          <SmallButton label="查看运动趋势" onPress={() => navigation.navigate('TrendDetail', { kind: 'exercise' })} />
+        </View>
       </Card>
       <Card>
         <Text style={styles.sectionTitle}>摄入趋势</Text>
@@ -1005,12 +1394,71 @@ function PublicFoodCard({ item, onPress }: { item: PublicFoodItem; onPress: () =
         </View>
         <View style={styles.nutritionRow}>
           {item.is_campus_food ? <Pill text="校园餐" /> : null}
+          {item.suitable_for_fat_loss ? <Pill text="适合减脂" /> : null}
+          <Pill text={`评 ${item.comment_count || 0}`} />
           <Pill text={`赞 ${item.like_count || 0}`} />
           <Pill text={`藏 ${item.collection_count || 0}`} />
         </View>
       </Card>
     </Pressable>
   )
+}
+
+function ConversationRow({
+  conversation,
+  currentUserId,
+  onPress,
+}: {
+  conversation: ConversationSummary
+  currentUserId: string
+  onPress: () => void
+}) {
+  const userId = conversationUserId(conversation)
+  const nickname = conversationNickname(conversation)
+  const avatar = conversationAvatar(conversation)
+  const unreadCount = conversationUnreadCount(conversation)
+  const last = conversationLastMessage(conversation)
+  const isSystem = userId === SYSTEM_MESSAGE_USER_ID
+  return (
+    <Pressable onPress={onPress}>
+      <Card style={[styles.conversationCard, unreadCount > 0 && styles.conversationCardUnread]}>
+        <View style={styles.conversationRow}>
+          <ConversationAvatar nickname={isSystem ? '系' : nickname} avatar={avatar} system={isSystem} />
+          <View style={styles.flex}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.conversationName} numberOfLines={1}>{isSystem ? '系统消息' : nickname}</Text>
+              <Text style={styles.conversationTime}>{formatPrivateMessageTime(messageCreatedAt(last))}</Text>
+            </View>
+            <Text style={[styles.conversationPreview, unreadCount > 0 && styles.conversationPreviewUnread]} numberOfLines={1}>
+              {conversationPreview(conversation, currentUserId) || '打开会话'}
+            </Text>
+          </View>
+          {unreadCount > 0 ? (
+            <View style={styles.conversationBadge}>
+              <Text style={styles.conversationBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+            </View>
+          ) : null}
+        </View>
+      </Card>
+    </Pressable>
+  )
+}
+
+function ConversationAvatar({ nickname, avatar, system }: { nickname: string; avatar?: string; system?: boolean }) {
+  if (avatar) return <Image source={{ uri: avatar }} style={styles.conversationAvatarImage} />
+  const initial = system ? '系' : nickname.trim().slice(0, 1) || '友'
+  return (
+    <View style={[styles.conversationAvatarFallback, system && styles.conversationAvatarSystem]}>
+      <Text style={styles.conversationAvatarText}>{initial}</Text>
+    </View>
+  )
+}
+
+function publicFoodEmptyText(mode: PublicFoodMode, merchantName: string, fatLoss?: boolean): string {
+  if (mode === 'mine') return '还没有上传过公共食物'
+  if (mode === 'collections') return '还没有收藏公共食物'
+  if (merchantName || fatLoss) return mode === 'campus' ? '没有找到匹配的校园餐' : '没有找到匹配的公共食物'
+  return mode === 'campus' ? '暂无校园餐' : '暂无公共食物'
 }
 
 function CommentLine({ entry }: { entry: FeedCommentItem }) {
@@ -1026,10 +1474,14 @@ function MessageBubble({
   message,
   currentUserId,
   counterpartName,
+  counterpartAvatar,
+  showTime,
 }: {
   message: PrivateMessageItem
   currentUserId: string
   counterpartName: string
+  counterpartAvatar?: string
+  showTime?: boolean
 }) {
   const type = messageType(message)
   const isSystem = type === 'system' || messageSenderId(message) === SYSTEM_MESSAGE_USER_ID
@@ -1040,7 +1492,7 @@ function MessageBubble({
   if (isSystem) {
     return (
       <View style={styles.systemMessageWrap}>
-        <Text style={styles.messageTime}>{formatDateTime(messageCreatedAt(message))}</Text>
+        {showTime ? <MessageTimeDivider value={messageCreatedAt(message)} /> : null}
         <View style={styles.systemMessageBubble}>
           <Text style={styles.systemMessageText}>{content || '系统通知'}</Text>
         </View>
@@ -1049,26 +1501,29 @@ function MessageBubble({
   }
 
   return (
-    <View style={[styles.messageRow, isSelf && styles.messageRowSelf]}>
-      {!isSelf ? <AvatarDot label={counterpartName} /> : null}
-      <View style={[styles.messageBubble, isSelf && styles.messageBubbleSelf]}>
-        <Text style={[styles.messageSender, isSelf && styles.messageSenderSelf]}>{isSelf ? '我' : counterpartName}</Text>
-        {type === 'image' && imageUrl ? (
-          <Image source={{ uri: imageUrl }} style={styles.messageImage} resizeMode="cover" />
-        ) : (
-          <Text style={[styles.messageText, isSelf && styles.messageTextSelf]}>{content || '消息'}</Text>
-        )}
-        <Text style={[styles.messageTime, isSelf && styles.messageTimeSelf]}>{formatDateTime(messageCreatedAt(message))}</Text>
+    <>
+      {showTime ? <MessageTimeDivider value={messageCreatedAt(message)} /> : null}
+      <View style={[styles.messageRow, isSelf && styles.messageRowSelf]}>
+        {!isSelf ? <ConversationAvatar nickname={counterpartName} avatar={counterpartAvatar} /> : null}
+        <View style={[styles.messageBubble, isSelf && styles.messageBubbleSelf, type === 'image' && styles.messageBubbleImage]}>
+          <Text style={[styles.messageSender, isSelf && styles.messageSenderSelf]}>{isSelf ? '我' : counterpartName}</Text>
+          {type === 'image' && imageUrl ? (
+            <Image source={{ uri: imageUrl }} style={styles.messageImage} resizeMode="cover" />
+          ) : (
+            <Text style={[styles.messageText, isSelf && styles.messageTextSelf]}>{content || '消息'}</Text>
+          )}
+        </View>
       </View>
-    </View>
+    </>
   )
 }
 
-function AvatarDot({ label }: { label: string }) {
-  const initial = label.trim().slice(0, 1) || '友'
+function MessageTimeDivider({ value }: { value?: string }) {
+  const label = formatPrivateMessageTime(value)
+  if (!label) return null
   return (
-    <View style={styles.messageAvatar}>
-      <Text style={styles.messageAvatarText}>{initial}</Text>
+    <View style={styles.messageTimeDivider}>
+      <Text style={styles.messageTimeDividerText}>{label}</Text>
     </View>
   )
 }
@@ -1115,18 +1570,28 @@ function MealPicker({ value, onChange }: { value: MealType; onChange: (value: Me
   )
 }
 
-function SegmentButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+function SegmentButton({
+  label,
+  active,
+  onPress,
+  compact,
+}: {
+  label: string
+  active: boolean
+  onPress: () => void
+  compact?: boolean
+}) {
   return (
-    <Pressable style={[styles.segmentItem, active && styles.segmentItemActive]} onPress={onPress}>
+    <Pressable style={[styles.segmentItem, compact && styles.segmentItemCompact, active && styles.segmentItemActive]} onPress={onPress}>
       <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
     </Pressable>
   )
 }
 
-function SmallButton({ label, danger, onPress }: { label: string; danger?: boolean; onPress: () => void }) {
+function SmallButton({ label, danger, disabled, onPress }: { label: string; danger?: boolean; disabled?: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.smallButton, danger && styles.smallButtonDanger]}>
-      <Text style={[styles.smallButtonText, danger && styles.smallButtonDangerText]}>{label}</Text>
+    <Pressable disabled={disabled} onPress={onPress} style={[styles.smallButton, danger && styles.smallButtonDanger, disabled && styles.smallButtonDisabled]}>
+      <Text style={[styles.smallButtonText, danger && styles.smallButtonDangerText, disabled && styles.smallButtonDisabledText]}>{label}</Text>
     </Pressable>
   )
 }
@@ -1221,8 +1686,16 @@ function EmptyState({ text }: { text: string }) {
   )
 }
 
-function primaryImage(item: PublicFoodItem | null): string | undefined {
+function primaryImage(item: { image_paths?: string[] | null; image_path?: string | null } | null): string | undefined {
   return item?.image_paths?.[0] || item?.image_path || undefined
+}
+
+function countPublicFoodComments(comments: PublicFoodComment[]): number {
+  return comments.reduce((total, entry) => total + 1 + (entry.replies?.length || 0), 0)
+}
+
+function publicFoodOwnerId(item: PublicFoodItem | null): string {
+  return String(item?.user_id || item?.author?.id || '').trim()
 }
 
 function publicFoodLocationText(item: PublicFoodItem | null): string {
@@ -1234,6 +1707,69 @@ function publicFoodLocationText(item: PublicFoodItem | null): string {
   return item.campus_location_text || item.merchant_address || item.detail_address || item.merchant_name || item.city || '--'
 }
 
+function campusRelatedFeedLocationText(item: CampusRelatedFeedItem): string {
+  return item.campus_location || [item.school_name, item.canteen_name].map((part) => String(part || '').trim()).filter(Boolean).join(' · ') || '--'
+}
+
+function publicFoodAnalysisStatus(item: PublicFoodItem | null): string {
+  return String(item?.analysis_status || '').trim().toLowerCase()
+}
+
+function isPublicFoodAnalyzing(item: PublicFoodItem | null): boolean {
+  const status = publicFoodAnalysisStatus(item)
+  return status === 'pending' || status === 'processing'
+}
+
+function isPublicFoodAnalysisFailed(item: PublicFoodItem | null): boolean {
+  const status = publicFoodAnalysisStatus(item)
+  return status === 'failed' || status === 'timed_out'
+}
+
+function hasPublicFoodNutrition(item: PublicFoodItem | null): boolean {
+  if (!item) return false
+  if (hasPositiveNumber(item.total_calories, item.total_protein, item.total_carbs, item.total_fat)) return true
+  return (item.items || []).some((row) => {
+    const nutrients = asRecord(row.nutrients)
+    return hasPositiveNumber(nutrients?.calories, nutrients?.protein, row.calories, row.total_calories)
+  })
+}
+
+function needsPublicFoodNutritionUpdate(item: PublicFoodItem | null): boolean {
+  return Boolean(item && !isPublicFoodAnalyzing(item) && !isPublicFoodAnalysisFailed(item) && !hasPublicFoodNutrition(item))
+}
+
+function manualFoodItemFromPublicFood(item: PublicFoodItem): ManualFoodItem {
+  const firstItem = asRecord(item.items?.[0])
+  const defaultWeight = firstNumber(firstItem?.intake, firstItem?.weight, item.total_calories > 0 ? 1 : 100) || 100
+  const title = String(item.food_name || item.description || (item.is_campus_food ? '校园菜品' : '公共食物')).trim()
+  const portionLabel = String(firstItem?.manual_portion_label || item.portion_description || '1份').trim()
+  return {
+    id: item.id,
+    title,
+    name: title,
+    source: 'public_library',
+    source_id: item.id,
+    source_label: item.is_campus_food ? '校园食堂' : '真实餐食',
+    default_weight_grams: defaultWeight,
+    total_calories: Number(item.total_calories || 0),
+    total_protein: Number(item.total_protein || 0),
+    total_carbs: Number(item.total_carbs || 0),
+    total_fat: Number(item.total_fat || 0),
+    portion_label: portionLabel || '1份',
+    recommend_reason: item.is_campus_food ? '校园真实菜品，热量价格一目了然' : '整份复用更快，适合商家餐和外卖',
+    image_path: item.image_path,
+    image_paths: item.image_paths,
+    is_campus_food: item.is_campus_food,
+    type: item.type,
+    campus_location_text: item.campus_location_text,
+    school_name: item.school_name,
+    campus_name: item.campus_name,
+    canteen_name: item.canteen_name,
+    floor: item.floor,
+    window_name: item.window_name,
+  }
+}
+
 function normalizeMealType(value?: string | null): MealType | undefined {
   if (mealOptions.includes(value as MealType)) return value as MealType
   if (value === 'snack') return 'afternoon_snack'
@@ -1242,6 +1778,13 @@ function normalizeMealType(value?: string | null): MealType | undefined {
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+}
+
+function hasPositiveNumber(...values: unknown[]): boolean {
+  return values.some((value) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0
+  })
 }
 
 function firstNumber(...values: unknown[]): number {
@@ -1267,8 +1810,7 @@ function money(value: unknown): string {
   return Number.isFinite(n) ? n.toFixed(2).replace(/\.00$/, '') : '0'
 }
 
-function membershipStatusText(status: MembershipStatus | null): string {
-  if (!status) return '会员状态加载中'
+function membershipStatusText(status: MembershipStatus): string {
   if (status.is_pro) return '会员有效'
   if (status.trial_active) return '试用中'
   switch (String(status.status || '').toLowerCase()) {
@@ -1375,7 +1917,7 @@ function pad2(value: number): string {
 }
 
 function messageId(message: PrivateMessageItem, fallback: number): string {
-  return String(message.ID || message.id || fallback)
+  return privateMessageKey(message) || String(fallback)
 }
 
 function messageContent(message?: PrivateMessageItem): string {
@@ -1399,8 +1941,99 @@ function messageCreatedAt(message?: PrivateMessageItem): string | undefined {
   return message?.CreatedAt || message?.created_at
 }
 
+function privateMessageKey(message?: PrivateMessageItem): string {
+  const id = String(message?.ID || message?.id || '').trim()
+  if (id) return id
+  return [
+    messageSenderId(message),
+    message?.ReceiverID || message?.receiver_id || '',
+    messageCreatedAt(message) || '',
+    messageType(message),
+    messageImageUrl(message) || messageContent(message),
+  ].join('|')
+}
+
+function normalizePrivateMessages(list: PrivateMessageItem[]): PrivateMessageItem[] {
+  return list.slice().reverse()
+}
+
+function mergePrivateMessages(...groups: PrivateMessageItem[][]): PrivateMessageItem[] {
+  const map = new Map<string, PrivateMessageItem>()
+  groups.flat().forEach((message, index) => {
+    const key = privateMessageKey(message) || String(index)
+    map.set(key, message)
+  })
+  return Array.from(map.values()).sort((a, b) => {
+    const aTime = new Date(messageCreatedAt(a) || '').getTime()
+    const bTime = new Date(messageCreatedAt(b) || '').getTime()
+    if (Number.isNaN(aTime) || Number.isNaN(bTime)) return 0
+    return aTime - bTime
+  })
+}
+
+function shouldShowMessageTime(previous: PrivateMessageItem | null, current: PrivateMessageItem): boolean {
+  if (!previous) return true
+  const prevTime = new Date(messageCreatedAt(previous) || '').getTime()
+  const currTime = new Date(messageCreatedAt(current) || '').getTime()
+  if (Number.isNaN(prevTime) || Number.isNaN(currTime)) return false
+  return Math.abs(currTime - prevTime) > 10 * 60 * 1000
+}
+
+function formatPrivateMessageTime(value?: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const now = new Date()
+  const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  const sameYesterday = date.getFullYear() === yesterday.getFullYear() && date.getMonth() === yesterday.getMonth() && date.getDate() === yesterday.getDate()
+  const time = `${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+  if (sameDay) return time
+  if (sameYesterday) return `昨天 ${time}`
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${time}`
+}
+
+function conversationUserId(conversation: ConversationSummary): string {
+  return String(conversation.UserID || conversation.user_id || '').trim()
+}
+
+function conversationNickname(conversation: ConversationSummary): string {
+  return String(conversation.Nickname || conversation.nickname || '用户').trim() || '用户'
+}
+
+function conversationAvatar(conversation: ConversationSummary): string {
+  return String(conversation.Avatar || conversation.avatar || '').trim()
+}
+
+function conversationLastMessage(conversation: ConversationSummary): PrivateMessageItem | undefined {
+  return conversation.LastMessage || conversation.last_message
+}
+
+function conversationUnreadCount(conversation: ConversationSummary): number {
+  const value = conversation.UnreadCount ?? conversation.unread_count ?? 0
+  return Math.max(0, Math.floor(Number(value) || 0))
+}
+
+function conversationPreview(conversation: ConversationSummary, currentUserId: string): string {
+  const last = conversationLastMessage(conversation)
+  if (!last) return ''
+  const userId = conversationUserId(conversation)
+  const content = messageContent(last)
+  if (userId === SYSTEM_MESSAGE_USER_ID) return content
+  const senderId = messageSenderId(last)
+  const sentByMe = Boolean(senderId) && (senderId === currentUserId || senderId !== userId)
+  return sentByMe ? `我：${content}` : content
+}
+
+function mergeConversations(prev: ConversationSummary[], next: ConversationSummary[]): ConversationSummary[] {
+  const map = new Map<string, ConversationSummary>()
+  prev.forEach((item, index) => map.set(conversationUserId(item) || `prev-${index}`, item))
+  next.forEach((item, index) => map.set(conversationUserId(item) || `next-${index}`, item))
+  return Array.from(map.values())
+}
+
 function showError(title: string, error: unknown) {
-  Alert.alert(title, error instanceof Error ? error.message : '请稍后重试')
+  Alert.alert(title, userFacingErrorMessage(error))
 }
 
 const styles = StyleSheet.create({
@@ -1438,6 +2071,11 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
     marginTop: 14,
+  },
+  membershipStatusSpinner: {
+    minHeight: 21,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   infoTile: {
     flexGrow: 1,
@@ -1630,6 +2268,66 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: colors.surfaceMuted,
   },
+  relatedFoodScroll: {
+    gap: 12,
+    paddingTop: 12,
+    paddingRight: 4,
+  },
+  relatedFoodItem: {
+    width: 210,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: colors.surface,
+  },
+  relatedFoodImage: {
+    width: '100%',
+    height: 108,
+    borderRadius: 12,
+    marginBottom: 10,
+    backgroundColor: colors.surfaceMuted,
+  },
+  relatedFoodImageFallback: {
+    width: '100%',
+    height: 108,
+    borderRadius: 12,
+    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  relatedFoodImageText: {
+    color: colors.brandDark,
+    fontWeight: '900',
+  },
+  relatedFeedList: {
+    marginTop: 12,
+  },
+  relatedFeedRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  relatedFeedTitle: {
+    flex: 1,
+  },
+  relatedFeedImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted,
+  },
+  relatedFeedImageFallback: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
   avatar: {
     width: 64,
     height: 64,
@@ -1645,6 +2343,30 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  commentReplyRow: {
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.brandSoft,
+  },
+  commentReplies: {
+    marginTop: 8,
+  },
+  commentActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  replyTargetBar: {
+    marginBottom: 10,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceMuted,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   field: {
     marginBottom: 14,
@@ -1684,6 +2406,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     paddingHorizontal: 6,
   },
+  segmentItemCompact: {
+    flexBasis: '22%',
+  },
   segmentItemActive: {
     backgroundColor: colors.brand,
   },
@@ -1707,12 +2432,18 @@ const styles = StyleSheet.create({
   smallButtonDanger: {
     backgroundColor: '#fee2e2',
   },
+  smallButtonDisabled: {
+    opacity: 0.52,
+  },
   smallButtonText: {
     color: colors.brandDark,
     fontWeight: '800',
   },
   smallButtonDangerText: {
     color: colors.danger,
+  },
+  smallButtonDisabledText: {
+    color: colors.textMuted,
   },
   pill: {
     borderRadius: 999,
@@ -1744,6 +2475,89 @@ const styles = StyleSheet.create({
   },
   messageCard: {
     marginBottom: 10,
+  },
+  conversationCard: {
+    padding: 14,
+  },
+  conversationCardUnread: {
+    borderWidth: 1,
+    borderColor: colors.brand,
+  },
+  conversationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  conversationAvatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.surfaceMuted,
+  },
+  conversationAvatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  conversationAvatarSystem: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  conversationAvatarText: {
+    color: colors.brandDark,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  conversationName: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  conversationTime: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  conversationPreview: {
+    marginTop: 5,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  conversationPreviewUnread: {
+    color: colors.text,
+    fontWeight: '800',
+  },
+  conversationBadge: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.danger,
+  },
+  conversationBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  chatComposerCard: {
+    padding: 14,
+  },
+  chatInput: {
+    minHeight: 76,
+    maxHeight: 128,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+    color: colors.text,
+    backgroundColor: colors.surfaceMuted,
   },
   messageRow: {
     flexDirection: 'row',
@@ -1781,6 +2595,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
     borderColor: colors.brand,
   },
+  messageBubbleImage: {
+    padding: 8,
+  },
   messageSender: {
     color: colors.textSecondary,
     fontSize: 12,
@@ -1798,20 +2615,24 @@ const styles = StyleSheet.create({
   messageTextSelf: {
     color: '#fff',
   },
-  messageTime: {
-    color: colors.textMuted,
-    fontSize: 11,
-    marginTop: 8,
-  },
-  messageTimeSelf: {
-    color: 'rgba(255,255,255,0.72)',
-    textAlign: 'right',
-  },
   messageImage: {
     width: 180,
     height: 180,
     borderRadius: 12,
     backgroundColor: colors.surfaceMuted,
+  },
+  messageTimeDivider: {
+    alignSelf: 'center',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: 12,
+    backgroundColor: colors.surfaceMuted,
+  },
+  messageTimeDividerText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
   },
   systemMessageWrap: {
     alignItems: 'center',

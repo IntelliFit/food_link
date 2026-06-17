@@ -32,6 +32,8 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
             ? 'ManualRecord'
             : action === 'packagedFood'
               ? 'PackagedFoodEdit'
+              : action === 'history'
+                ? 'AnalyzeHistory'
               : action === 'recipes'
                 ? 'Recipes'
                 : 'FoodLibrary'

@@ -9,6 +9,8 @@ import type {
   CommunityFeedContext,
   CommunityFeedItem,
   CommunityFeedQueryParams,
+  CommunitySearchResult,
+  CommunitySearchTab,
   CommunityFeedTargetType,
   ConversationSummary,
   DietRecommendationResult,
@@ -20,6 +22,7 @@ import type {
   FoodExpiryDashboard,
   FoodExpiryItem,
   FoodRecord,
+  FoodRecordItemPayload,
   HealthProfile,
   HealthReportExtract,
   FriendInviteProfile,
@@ -29,6 +32,7 @@ import type {
   HomeDashboard,
   LoginResponse,
   ManualFoodBrowseResult,
+  ManualFoodCatalogResult,
   ManualFoodItem,
   MembershipPaymentOrder,
   MembershipPlan,
@@ -151,6 +155,26 @@ export interface ManualFoodRecordInput {
   weight?: number
 }
 
+export interface ManualFoodRecordItemInput {
+  item: ManualFoodItem
+  weight?: number
+}
+
+export interface ManualFoodRecordsInput {
+  items: ManualFoodRecordItemInput[]
+  mealType: MealType
+  date?: string
+}
+
+export interface ManualFoodSearchOptions {
+  source?: 'packaged_food' | string
+}
+
+export interface ManualFoodCatalogOptions {
+  page?: number
+  pageSize?: number
+}
+
 export interface SaveCustomFoodInput {
   title: string
   defaultWeightGrams?: number
@@ -158,7 +182,12 @@ export interface SaveCustomFoodInput {
   totalProtein?: number
   totalCarbs?: number
   totalFat?: number
+  nutrientsPer100g?: Record<string, number>
+  extraNutrients?: Record<string, number>
+  imagePath?: string
+  imagePaths?: string[]
   portionLabel?: string
+  recommendReason?: string
   shareToPublic?: boolean
 }
 
@@ -240,6 +269,18 @@ export interface CreateCirclePostInput {
 
 export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
 
+export interface RecentRequestTrace {
+  method: string
+  path: string
+  statusCode: number
+  durationMs: number
+  startedAt: string
+  traceId?: string
+  requestId?: string
+  hostName?: string
+  errorMessage?: string
+}
+
 export interface SubmitFeedbackInput {
   category: FeedbackCategory
   content: string
@@ -247,6 +288,7 @@ export interface SubmitFeedbackInput {
   pagePath?: string
   appVersion?: string
   clientInfo?: Record<string, unknown>
+  recentRequests?: RecentRequestTrace[]
   imageUrls?: string[]
 }
 
@@ -306,9 +348,34 @@ export interface PublicFoodListParams {
   maxCalories?: number
 }
 
+export interface CommunityNotificationListParams {
+  limit?: number
+  offset?: number
+  type?: string
+}
+
+export interface CommunityNotificationListResult {
+  list: CommunityNotificationItem[]
+  unread_count: number
+  has_more?: boolean
+}
+
+export interface ConversationListParams {
+  limit?: number
+  offset?: number
+}
+
+export interface ConversationListResult {
+  list: ConversationSummary[]
+  has_more?: boolean
+  offset?: number
+  limit?: number
+}
+
 export interface CreatePublicFoodInput {
   foodName: string
   description?: string
+  sourceRecordId?: string
   totalCalories?: number
   totalProtein?: number
   totalCarbs?: number
@@ -322,14 +389,25 @@ export interface CreatePublicFoodInput {
   suitableForFatLoss?: boolean
   userTags?: string[]
   userNotes?: string
+  latitude?: number
+  longitude?: number
+  province?: string
+  city?: string
+  district?: string
+  detailAddress?: string
   type?: string
   isCampusFood?: boolean
   schoolName?: string
+  campusName?: string
   canteenName?: string
   floor?: string
   windowName?: string
   price?: number
+  priceType?: string
+  priceMin?: number
+  priceMax?: number
   priceUnit?: string
+  priceCollectedAt?: string
   portionDescription?: string
   campusLocationText?: string
 }
@@ -573,7 +651,7 @@ export class FoodLinkApiClient {
     })
     const taskId = String(data.task_id ?? data.taskId ?? '').trim()
     const message = String(data.message ?? '任务已提交')
-    if (!taskId) throw new Error('服务端未返回任务编号')
+    if (!taskId) throw new Error('服务端未返回识别进度信息')
     return { task_id: taskId, message }
   }
 
@@ -642,7 +720,7 @@ export class FoodLinkApiClient {
     const taskId = String(data.task_id ?? data.taskId ?? '').trim()
     const message = String(data.message ?? '任务已提交')
     if (!taskId) {
-      throw new Error('服务器未返回任务编号，请稍后重试')
+      throw new Error('服务器未返回识别进度信息，请稍后重试')
     }
     return { task_id: taskId, message }
   }
@@ -664,6 +742,10 @@ export class FoodLinkApiClient {
 
   async saveManualFoodRecord(input: ManualFoodRecordInput): Promise<{ id: string; message: string; already_saved?: boolean }> {
     return this.saveFoodRecord(buildManualFoodRecordPayload(input))
+  }
+
+  async saveManualFoodRecords(input: ManualFoodRecordsInput): Promise<{ id: string; message: string; already_saved?: boolean }> {
+    return this.saveFoodRecord(buildManualFoodRecordsPayload(input))
   }
 
   async getFoodRecordList(date?: string): Promise<{ records: FoodRecord[] }> {
@@ -984,12 +1066,28 @@ export class FoodLinkApiClient {
     })
   }
 
-  async searchManualFood(keyword: string, limit = 20): Promise<{ results: ManualFoodItem[] }> {
+  async getManualFoodCatalog(category: string, options?: ManualFoodCatalogOptions): Promise<ManualFoodCatalogResult> {
+    const safePage = Math.max(1, Math.floor(options?.page || 1))
+    const safePageSize = Math.min(60, Math.max(1, Math.floor(options?.pageSize || 30)))
+    const params = new URLSearchParams({
+      category: category.trim() || 'common',
+      page: String(safePage),
+      page_size: String(safePageSize),
+    })
+    return this.authenticatedRequest<ManualFoodCatalogResult>(
+      `/api/manual-food/catalog?${params.toString()}`,
+      { method: 'GET', timeoutMs: 10000 },
+    )
+  }
+
+  async searchManualFood(keyword: string, limit = 20, options?: ManualFoodSearchOptions): Promise<{ results: ManualFoodItem[] }> {
     const q = keyword.trim()
     if (!q) return { results: [] }
     const safeLimit = Math.min(50, Math.max(1, Math.floor(limit)))
+    const params = new URLSearchParams({ q, limit: String(safeLimit) })
+    if (options?.source?.trim()) params.set('source', options.source.trim())
     return this.authenticatedRequest<{ results: ManualFoodItem[] }>(
-      `/api/manual-food/search?q=${encodeURIComponent(q)}&limit=${safeLimit}`,
+      `/api/manual-food/search?${params.toString()}`,
       { method: 'GET', timeoutMs: 10000 },
     )
   }
@@ -1009,7 +1107,10 @@ export class FoodLinkApiClient {
     const protein = normalizeNumber(input.totalProtein)
     const carbs = normalizeNumber(input.totalCarbs)
     const fat = normalizeNumber(input.totalFat)
-    return this.authenticatedRequest<ManualFoodItem>('/api/manual-food/custom', {
+    const nutrientsPer100g = input.nutrientsPer100g || { calories, protein, carbs, fat }
+    const imagePaths = (input.imagePaths || []).map((url) => url.trim()).filter(Boolean)
+    const imagePath = input.imagePath?.trim() || imagePaths[0]
+    const data = await this.authenticatedRequest<{ item?: ManualFoodItem } | ManualFoodItem>('/api/manual-food/custom', {
       method: 'POST',
       body: {
         title,
@@ -1018,12 +1119,21 @@ export class FoodLinkApiClient {
         total_protein: protein,
         total_carbs: carbs,
         total_fat: fat,
-        nutrients_per_100g: { calories, protein, carbs, fat },
+        nutrients_per_100g: nutrientsPer100g,
+        extra_nutrients: input.extraNutrients || nutrientsPer100g,
+        ...(imagePath ? { image_path: imagePath } : {}),
+        ...(imagePaths.length ? { image_paths: imagePaths } : {}),
         portion_label: input.portionLabel?.trim(),
+        recommend_reason: input.recommendReason?.trim(),
         share_to_public: Boolean(input.shareToPublic),
       },
       timeoutMs: 10000,
     })
+    if (data && typeof data === 'object' && 'item' in data) {
+      const wrapped = data as { item?: ManualFoodItem }
+      if (wrapped.item) return wrapped.item
+    }
+    return data as ManualFoodItem
   }
 
   async createPackagedFood(input: PackagedFoodInput): Promise<{ item: PackagedFoodItem }> {
@@ -1103,6 +1213,25 @@ export class FoodLinkApiClient {
   }): Promise<{ list: CommunityFeedItem[]; has_more?: boolean }> {
     const q = this.buildCommunityFeedQuery(options)
     return this.publicRequest<{ list: CommunityFeedItem[]; has_more?: boolean }>(`/api/community/public-feed?${q}`, {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async communitySearch(params: {
+    keyword: string
+    tab?: CommunitySearchTab
+    offset?: number
+    limit?: number
+  }): Promise<CommunitySearchResult> {
+    const keyword = params.keyword.trim()
+    if (!keyword) return { list: [], has_more: false, content_count: 0, user_count: 0 }
+    const q = new URLSearchParams()
+    q.set('keyword', keyword)
+    if (params.tab) q.set('tab', params.tab)
+    if (params.offset != null) q.set('offset', String(Math.max(0, Math.floor(params.offset))))
+    if (params.limit != null) q.set('limit', String(safeLimit(params.limit)))
+    return this.authenticatedRequest<CommunitySearchResult>(`/api/community/search?${q.toString()}`, {
       method: 'GET',
       timeoutMs: 10000,
     })
@@ -1211,10 +1340,15 @@ export class FoodLinkApiClient {
     })
   }
 
-  async listCommunityNotifications(limit = 50): Promise<{ list: CommunityNotificationItem[]; unread_count: number }> {
-    const safeLimit = Math.min(100, Math.max(1, Math.floor(limit)))
-    return this.authenticatedRequest<{ list: CommunityNotificationItem[]; unread_count: number }>(
-      `/api/community/notifications?limit=${safeLimit}`,
+  async listCommunityNotifications(params: number | CommunityNotificationListParams = 50): Promise<CommunityNotificationListResult> {
+    const options = typeof params === 'number' ? { limit: params } : params
+    const q = new URLSearchParams()
+    q.set('limit', String(safeLimit(options.limit ?? 50)))
+    if (options.offset != null) q.set('offset', String(Math.max(0, Math.floor(options.offset))))
+    const notificationType = options.type?.trim()
+    if (notificationType) q.set('type', notificationType)
+    return this.authenticatedRequest<CommunityNotificationListResult>(
+      `/api/community/notifications?${q.toString()}`,
       { method: 'GET', timeoutMs: 10000 },
     )
   }
@@ -1452,14 +1586,37 @@ export class FoodLinkApiClient {
     })
   }
 
-  async addPublicFoodComment(itemId: string, content: string, rating?: number): Promise<{ comment: PublicFoodComment }> {
+  async addPublicFoodComment(
+    itemId: string,
+    content: string,
+    rating?: number,
+    options?: { parentCommentId?: string; replyToUserId?: string },
+  ): Promise<{ comment: PublicFoodComment }> {
     const text = content.trim()
     if (!text) throw new Error('请输入评论内容')
     return this.authenticatedRequest<{ comment: PublicFoodComment }>(`/api/public-food-library/${encodeURIComponent(itemId)}/comments`, {
       method: 'POST',
-      body: { content: text, rating },
+      body: {
+        content: text,
+        ...(rating !== undefined ? { rating } : {}),
+        ...(options?.parentCommentId ? { parent_comment_id: options.parentCommentId } : {}),
+        ...(options?.replyToUserId ? { reply_to_user_id: options.replyToUserId } : {}),
+      },
       timeoutMs: 10000,
     })
+  }
+
+  async deletePublicFoodComment(itemId: string, commentId: string): Promise<{ message?: string }> {
+    const item = itemId.trim()
+    const comment = commentId.trim()
+    if (!item || !comment) throw new Error('缺少评论 ID')
+    return this.authenticatedRequest<{ message?: string }>(
+      `/api/public-food-library/${encodeURIComponent(item)}/comments/${encodeURIComponent(comment)}`,
+      {
+        method: 'DELETE',
+        timeoutMs: 10000,
+      },
+    )
   }
 
   async submitPublicFoodFeedback(itemId: string, content: string): Promise<{ id: string; message: string }> {
@@ -1526,6 +1683,15 @@ export class FoodLinkApiClient {
       `/api/friend/request/${encodeURIComponent(requestId)}/respond`,
       { method: 'POST', body: { action }, timeoutMs: 10000 },
     )
+  }
+
+  async cancelSentFriendRequest(requestId: string): Promise<Record<string, unknown>> {
+    const id = requestId.trim()
+    if (!id) throw new Error('缺少好友申请 ID')
+    return this.authenticatedRequest<Record<string, unknown>>(`/api/friend/request/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      timeoutMs: 10000,
+    })
   }
 
   async deleteFriend(friendId: string): Promise<Record<string, unknown>> {
@@ -1653,8 +1819,12 @@ export class FoodLinkApiClient {
     })
   }
 
-  async listConversations(): Promise<{ list: ConversationSummary[] }> {
-    return this.authenticatedRequest<{ list: ConversationSummary[] }>('/api/messages/conversations', {
+  async listConversations(params: number | ConversationListParams = 50): Promise<ConversationListResult> {
+    const raw = typeof params === 'number' ? { limit: params } : params
+    const q = new URLSearchParams()
+    q.set('offset', String(Math.max(0, Math.floor(raw.offset ?? 0))))
+    q.set('limit', String(safeLimit(raw.limit ?? 50)))
+    return this.authenticatedRequest<ConversationListResult>(`/api/messages/conversations?${q.toString()}`, {
       method: 'GET',
       timeoutMs: 10000,
     })
@@ -1722,7 +1892,7 @@ export class FoodLinkApiClient {
           platform: 'app',
           ...(input.clientInfo || {}),
         },
-        recent_requests: [],
+        recent_requests: (input.recentRequests || []).slice(-50),
         image_urls: (input.imageUrls || []).map((url) => url.trim()).filter(Boolean).slice(0, 4),
       },
       timeoutMs: 15000,
@@ -1875,45 +2045,105 @@ function manualFoodTitle(item: ManualFoodItem): string {
 }
 
 function buildManualFoodRecordPayload(input: ManualFoodRecordInput): SaveFoodRecordRequest {
-  const item = input.item
+  return buildManualFoodRecordsPayload({
+    mealType: input.mealType,
+    date: input.date,
+    items: [{ item: input.item, weight: input.weight }],
+  }, true)
+}
+
+function buildManualFoodRecordsPayload(input: ManualFoodRecordsInput, keepSingleDescription = false): SaveFoodRecordRequest {
+  const items = input.items
+    .filter((entry) => entry.item)
+    .map((entry) => buildManualFoodRecordItemPayload(entry.item, entry.weight))
+
+  if (!items.length) {
+    throw new Error('请选择要记录的食物')
+  }
+
+  const titles = items.map((item) => item.name).filter(Boolean)
+  const totalCalories = items.reduce((sum, item) => sum + normalizeNumber(item.nutrients.calories), 0)
+  const totalProtein = items.reduce((sum, item) => sum + normalizeNumber(item.nutrients.protein), 0)
+  const totalCarbs = items.reduce((sum, item) => sum + normalizeNumber(item.nutrients.carbs), 0)
+  const totalFat = items.reduce((sum, item) => sum + normalizeNumber(item.nutrients.fat), 0)
+  const totalWeight = items.reduce((sum, item) => sum + normalizeNumber(item.intake), 0)
+
+  return {
+    meal_type: input.mealType,
+    date: mapCalendarDateToApi(input.date),
+    description: keepSingleDescription && titles.length === 1 ? titles[0] : `手动记录：${titles.join('、')}`,
+    insight: items.some((item) => item.manual_source === 'custom') ? '手动记录，包含用户自定义营养数据' : '手动记录，数据来自食物词典',
+    entry_type: 'food_library',
+    items,
+    total_calories: totalCalories,
+    total_protein: totalProtein,
+    total_carbs: totalCarbs,
+    total_fat: totalFat,
+    total_weight_grams: totalWeight,
+  }
+}
+
+function buildManualFoodRecordItemPayload(item: ManualFoodItem, inputWeight?: number): FoodRecordItemPayload {
   const baseWeight = normalizeNumber(item.default_weight_grams, 100) || 100
-  const weight = normalizeNumber(input.weight, baseWeight) || baseWeight
+  const weight = normalizeNumber(inputWeight, baseWeight) || baseWeight
   const ratio = baseWeight > 0 ? weight / baseWeight : 1
   const calories = normalizeNumber(item.total_calories ?? item.calories) * ratio
   const protein = normalizeNumber(item.total_protein ?? item.protein) * ratio
   const carbs = normalizeNumber(item.total_carbs ?? item.carbs) * ratio
   const fat = normalizeNumber(item.total_fat ?? item.fat) * ratio
   return {
-    meal_type: input.mealType,
-    date: mapCalendarDateToApi(input.date),
-    description: manualFoodTitle(item),
-    entry_type: 'food_library',
-    items: [
-      {
-        name: manualFoodTitle(item),
-        weight,
-        ratio: 100,
-        intake: weight,
-        nutrients: {
-          calories,
-          protein,
-          carbs,
-          fat,
-          fiber: normalizeNumber(item.nutrients_per_100g?.fiber),
-          sugar: normalizeNumber(item.nutrients_per_100g?.sugar),
-        },
-        manual_source: (item.source as SaveFoodRecordRequest['items'][number]['manual_source']) || 'nutrition_library',
-        manual_source_id: String(item.source_id || item.id || ''),
-        manual_source_title: manualFoodTitle(item),
-        manual_portion_label: item.portion_label,
-      },
-    ],
-    total_calories: calories,
-    total_protein: protein,
-    total_carbs: carbs,
-    total_fat: fat,
-    total_weight_grams: weight,
+    name: manualFoodTitle(item),
+    weight,
+    ratio: 100,
+    intake: weight,
+    image_path: manualFoodImagePath(item),
+    image_paths: manualFoodImagePaths(item),
+    nutrients: {
+      calories,
+      protein,
+      carbs,
+      fat,
+      fiber: normalizePer100gNutrient(item.nutrients_per_100g?.fiber, weight),
+      sugar: normalizePer100gNutrient(item.nutrients_per_100g?.sugar, weight),
+      sodium_mg: normalizePer100gNutrient(item.nutrients_per_100g?.sodium_mg, weight),
+    },
+    manual_source: manualFoodSource(item),
+    manual_source_id: String(item.source_id || item.id || ''),
+    manual_source_title: manualFoodTitle(item),
+    manual_portion_label: item.portion_label,
   }
+}
+
+function normalizePer100gNutrient(value: unknown, weight: number): number {
+  return normalizeNumber(value) * (weight / 100)
+}
+
+function manualFoodSource(item: ManualFoodItem): FoodRecordItemPayload['manual_source'] {
+  switch (item.source) {
+    case 'public_library':
+    case 'nutrition_library':
+    case 'packaged_food':
+    case 'custom':
+      return item.source
+    default:
+      return 'nutrition_library'
+  }
+}
+
+function manualFoodImagePath(item: ManualFoodItem): string | undefined {
+  const value = typeof item.image_path === 'string' ? item.image_path.trim() : ''
+  return value || undefined
+}
+
+function manualFoodImagePaths(item: ManualFoodItem): string[] | undefined {
+  const values = Array.isArray(item.image_paths)
+    ? item.image_paths.map((url) => String(url || '').trim()).filter(Boolean)
+    : []
+  if (!values.length) {
+    const single = manualFoodImagePath(item)
+    return single ? [single] : undefined
+  }
+  return values
 }
 
 function packagedFoodPayload(input: PackagedFoodInput): Record<string, unknown> {
@@ -2016,6 +2246,7 @@ function publicFoodPayload(input: Partial<CreatePublicFoodInput>): Record<string
   return {
     ...(input.foodName != null ? { food_name: input.foodName.trim() } : {}),
     ...(input.description != null ? { description: input.description.trim() } : {}),
+    ...(input.sourceRecordId != null ? { source_record_id: input.sourceRecordId.trim() } : {}),
     ...(input.totalCalories != null ? { total_calories: normalizeNumber(input.totalCalories) } : {}),
     ...(input.totalProtein != null ? { total_protein: normalizeNumber(input.totalProtein) } : {}),
     ...(input.totalCarbs != null ? { total_carbs: normalizeNumber(input.totalCarbs) } : {}),
@@ -2029,14 +2260,25 @@ function publicFoodPayload(input: Partial<CreatePublicFoodInput>): Record<string
     ...(input.suitableForFatLoss != null ? { suitable_for_fat_loss: Boolean(input.suitableForFatLoss) } : {}),
     ...(input.userTags != null ? { user_tags: input.userTags.map((tag) => tag.trim()).filter(Boolean) } : {}),
     ...(input.userNotes != null ? { user_notes: input.userNotes.trim() } : {}),
-    ...(input.type != null || input.isCampusFood != null ? { type: input.type?.trim() || (input.isCampusFood ? 'campus' : 'restaurant') } : {}),
+    ...(input.latitude != null ? { latitude: normalizeNumber(input.latitude) } : {}),
+    ...(input.longitude != null ? { longitude: normalizeNumber(input.longitude) } : {}),
+    ...(input.province != null ? { province: input.province.trim() } : {}),
+    ...(input.city != null ? { city: input.city.trim() } : {}),
+    ...(input.district != null ? { district: input.district.trim() } : {}),
+    ...(input.detailAddress != null ? { detail_address: input.detailAddress.trim() } : {}),
+    ...(input.type != null || input.isCampusFood != null ? { type: input.type?.trim() || (input.isCampusFood ? 'campus' : 'common') } : {}),
     ...(input.isCampusFood != null ? { is_campus_food: Boolean(input.isCampusFood) } : {}),
     ...(input.schoolName != null ? { school_name: input.schoolName.trim() } : {}),
+    ...(input.campusName != null ? { campus_name: input.campusName.trim() } : {}),
     ...(input.canteenName != null ? { canteen_name: input.canteenName.trim() } : {}),
     ...(input.floor != null ? { floor: input.floor.trim() } : {}),
     ...(input.windowName != null ? { window_name: input.windowName.trim() } : {}),
     ...(input.price != null ? { price: input.price } : {}),
+    ...(input.priceType != null ? { price_type: input.priceType.trim() } : {}),
+    ...(input.priceMin != null ? { price_min: normalizeNumber(input.priceMin) } : {}),
+    ...(input.priceMax != null ? { price_max: normalizeNumber(input.priceMax) } : {}),
     ...(input.priceUnit != null ? { price_unit: input.priceUnit.trim() } : {}),
+    ...(input.priceCollectedAt != null ? { price_collected_at: input.priceCollectedAt.trim() } : {}),
     ...(input.portionDescription != null ? { portion_description: input.portionDescription.trim() } : {}),
     ...(input.campusLocationText != null ? { campus_location_text: input.campusLocationText.trim() } : {}),
   }

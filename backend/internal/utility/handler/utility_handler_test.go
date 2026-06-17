@@ -21,12 +21,14 @@ type mockLocationService struct {
 	reverseErr  error
 	searchData  map[string]any
 	searchErr   error
+	lastKeyword string
 }
 
 func (m *mockLocationService) ReverseGeocode(ctx context.Context, lat, lng float64) (map[string]any, error) {
 	return m.reverseData, m.reverseErr
 }
 func (m *mockLocationService) SearchAddress(ctx context.Context, keyword string) (map[string]any, error) {
+	m.lastKeyword = keyword
 	return m.searchData, m.searchErr
 }
 
@@ -133,6 +135,22 @@ func TestLocationSearch(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "restaurant", mockLoc.lastKeyword)
+}
+
+func TestLocationSearchAcceptsMiniProgramKeyWord(t *testing.T) {
+	mockLoc := &mockLocationService{searchData: map[string]any{"pois": []any{}}}
+	h := NewUtilityHandler(mockLoc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"keyWord": "北京大学"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/location/search", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "北京大学", mockLoc.lastKeyword)
 }
 
 func TestQRCode(t *testing.T) {

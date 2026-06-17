@@ -6,6 +6,7 @@ import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import { colors } from '../theme'
+import { userFacingErrorMessage } from '../utils/errors'
 
 export function AccountSecurityScreen() {
   const [profile, setProfile] = useState<UserInfo | null>(null)
@@ -23,7 +24,7 @@ export function AccountSecurityScreen() {
       setProfile(data)
       setUsername(data.username || '')
     } catch (error) {
-      Alert.alert('获取账号信息失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('获取账号信息失败', userFacingErrorMessage(error))
     } finally {
       setLoading(false)
     }
@@ -65,7 +66,7 @@ export function AccountSecurityScreen() {
       Alert.alert('已保存', '之后可以使用用户名和密码登录 App。')
       await load()
     } catch (error) {
-      Alert.alert('保存失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('保存失败', userFacingErrorMessage(error))
     } finally {
       setSaving(false)
     }

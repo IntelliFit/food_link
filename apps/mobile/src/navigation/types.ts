@@ -1,10 +1,60 @@
 import type { AnalysisTask, CommunityFeedTargetType, FoodExpiryItem, ManualFoodItem, MealType } from '@food-link/core'
 
+export type ManualRecordSourceChannel = 'recommended' | 'campus' | 'favorites' | 'custom'
+
 export type MainTabParamList = {
   HomeTab: undefined
   StatsTab: undefined
   CommunityTab: undefined
   ProfileTab: undefined
+}
+
+export type PublicFoodShareDraft = {
+  foodName?: string
+  description?: string
+  imageUrls?: string
+  merchantName?: string
+  merchantAddress?: string
+  calories?: string
+  protein?: string
+  carbs?: string
+  fat?: string
+  sourceKind?: 'restaurant' | 'homemade' | 'campus'
+  schoolName?: string
+  campusName?: string
+  canteenName?: string
+  floor?: string
+  windowName?: string
+  price?: string
+  priceType?: 'fixed' | 'weight' | 'range' | 'combo' | 'unknown'
+  priceMin?: string
+  priceMax?: string
+  priceUnit?: string
+  priceCollectedAt?: string
+  portionDescription?: string
+  tasteRating?: string
+  suitableForFatLoss?: boolean
+  tags?: string
+  notes?: string
+  campusLocationText?: string
+  province?: string
+  city?: string
+  district?: string
+  detailAddress?: string
+  latitude?: string
+  longitude?: string
+}
+
+export type LocationSelection = {
+  name?: string
+  address?: string
+  lonlat?: string
+  longitude?: number
+  latitude?: number
+  province?: string
+  city?: string
+  district?: string
+  promptCity?: string
 }
 
 export type RootStackParamList = {
@@ -15,7 +65,9 @@ export type RootStackParamList = {
   Result: { task: AnalysisTask; imageUri?: string; mealType: MealType; date: string }
   TextResult: { task: AnalysisTask; mealType: MealType; date: string }
   TextRecord: undefined
-  ManualRecord: undefined
+  ManualRecord:
+    | { quickItem?: ManualFoodItem; sourceChannel?: ManualRecordSourceChannel; date?: string; mealType?: MealType }
+    | undefined
   FoodLibrary: undefined
   FoodLibraryDetail: { itemId?: string; item?: ManualFoodItem } | undefined
   DayRecord: { date?: string } | undefined
@@ -37,8 +89,11 @@ export type RootStackParamList = {
   RecipeEdit: { recipeId?: string } | undefined
   PublicFood: { mode?: 'all' | 'campus' | 'mine' | 'collections' } | undefined
   PublicFoodDetail: { itemId: string; isCampus?: boolean }
-  PublicFoodShare: { editId?: string; mode?: 'campus' | 'public' } | undefined
+  PublicFoodShare:
+    | { editId?: string; mode?: 'campus' | 'public'; draft?: PublicFoodShareDraft; selectedLocation?: LocationSelection }
+    | undefined
   CommunityFeedDetail: { targetId: string; targetType: CommunityFeedTargetType }
+  CommunitySearch: { keyword?: string } | undefined
   PublicProfile: { userId: string }
   FollowList: { userId: string; type: 'followers' | 'following' }
   Conversations: undefined
@@ -46,7 +101,9 @@ export type RootStackParamList = {
   BodyTrends: undefined
   PackagedFoodEdit: { taskId?: string } | undefined
   PackagedFoodTaskDetail: { taskId: string }
-  LocationSearch: undefined
+  LocationSearch:
+    | { returnTo?: 'PublicFoodShare'; editId?: string; mode?: 'campus' | 'public'; draft?: PublicFoodShareDraft }
+    | undefined
   CampusCanteen: undefined
   PrivacySettings: undefined
   MembershipAgreement: undefined

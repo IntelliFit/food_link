@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	petdomain "food_link/backend/internal/pet/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -64,9 +66,33 @@ func (r *PetRepo) CreatePet(ctx context.Context, pet *petdomain.UserPet) error {
 		pet.CreatedAt = &now
 	}
 	pet.UpdatedAt = &now
+	meta, err := jsonbValue(pet.Meta)
+	if err != nil {
+		return err
+	}
 	return r.db.WithContext(ctx).
 		Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}}, DoNothing: true}).
-		Create(pet).Error
+		Table(pet.TableName()).
+		Create(map[string]any{
+			"id":              pet.ID,
+			"user_id":         pet.UserID,
+			"pet_seed":        pet.PetSeed,
+			"name":            pet.Name,
+			"color":           pet.Color,
+			"shape":           pet.Shape,
+			"pattern":         pet.Pattern,
+			"accessory":       pet.Accessory,
+			"personality":     pet.Personality,
+			"level":           pet.Level,
+			"experience":      pet.Experience,
+			"today_status":    pet.TodayStatus,
+			"last_settled_on": pet.LastSettledOn,
+			"total_events":    pet.TotalEvents,
+			"last_summary_at": pet.LastSummaryAt,
+			"meta":            meta,
+			"created_at":      pet.CreatedAt,
+			"updated_at":      pet.UpdatedAt,
+		}).Error
 }
 
 func (r *PetRepo) GetUserProfile(ctx context.Context, userID string) (*UserProfile, error) {
@@ -83,7 +109,11 @@ func (r *PetRepo) GetUserProfile(ctx context.Context, userID string) (*UserProfi
 
 func (r *PetRepo) UpdatePet(ctx context.Context, petID string, updates map[string]any) error {
 	updates["updated_at"] = time.Now()
-	return r.db.WithContext(ctx).Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(updates).Error
+	normalizedUpdates, err := normalizePetJSONUpdates(updates, "meta")
+	if err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(normalizedUpdates).Error
 }
 
 func (r *PetRepo) SelectAppearance(ctx context.Context, userID, petID string, updates map[string]any) (*petdomain.UserPet, error) {
@@ -95,7 +125,11 @@ func (r *PetRepo) SelectAppearance(ctx context.Context, userID, petID string, up
 			return err
 		}
 		updates["updated_at"] = time.Now()
-		if err := tx.Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(updates).Error; err != nil {
+		normalizedUpdates, err := normalizePetJSONUpdates(updates, "meta")
+		if err != nil {
+			return err
+		}
+		if err := tx.Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(normalizedUpdates).Error; err != nil {
 			return err
 		}
 		return tx.Where("id = ?", petID).First(&updatedPet).Error
@@ -218,12 +252,26 @@ func (r *PetRepo) CreateDailyScore(ctx context.Context, row *petdomain.UserPetDa
 		row.CreatedAt = &now
 	}
 	row.UpdatedAt = &now
+	scoreDetails, err := jsonbValue(row.ScoreDetails)
+	if err != nil {
+		return false, err
+	}
 	result := r.db.WithContext(ctx).
 		Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "user_id"}, {Name: "score_date"}},
 			DoNothing: true,
 		}).
-		Create(row)
+		Table(row.TableName()).
+		Create(map[string]any{
+			"id":            row.ID,
+			"user_id":       row.UserID,
+			"score_date":    row.ScoreDate,
+			"habit_score":   row.HabitScore,
+			"exp_gained":    row.ExpGained,
+			"score_details": scoreDetails,
+			"created_at":    row.CreatedAt,
+			"updated_at":    row.UpdatedAt,
+		})
 	if result.Error != nil {
 		return false, result.Error
 	}
@@ -232,7 +280,11 @@ func (r *PetRepo) CreateDailyScore(ctx context.Context, row *petdomain.UserPetDa
 
 func (r *PetRepo) UpdateDailyScore(ctx context.Context, id string, updates map[string]any) error {
 	updates["updated_at"] = time.Now()
-	return r.db.WithContext(ctx).Model(&petdomain.UserPetDailyScore{}).Where("id = ?", id).Updates(updates).Error
+	normalizedUpdates, err := normalizePetJSONUpdates(updates, "score_details")
+	if err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Model(&petdomain.UserPetDailyScore{}).Where("id = ?", id).Updates(normalizedUpdates).Error
 }
 
 func (r *PetRepo) GetEventByUserDateType(ctx context.Context, userID, date, eventType string) (*petdomain.UserPetEvent, error) {
@@ -281,12 +333,36 @@ func (r *PetRepo) CreateEvent(ctx context.Context, row *petdomain.UserPetEvent) 
 		row.CreatedAt = &now
 	}
 	row.UpdatedAt = &now
+	scoreDetails, err := jsonbValue(row.ScoreDetails)
+	if err != nil {
+		return err
+	}
 	return r.db.WithContext(ctx).
 		Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "user_id"}, {Name: "event_date"}, {Name: "event_type"}},
 			DoNothing: true,
 		}).
-		Create(row).Error
+		Table(row.TableName()).
+		Create(map[string]any{
+			"id":            row.ID,
+			"user_id":       row.UserID,
+			"pet_id":        row.PetID,
+			"event_date":    row.EventDate,
+			"event_type":    row.EventType,
+			"title":         row.Title,
+			"message":       row.Message,
+			"task_text":     row.TaskText,
+			"habit_score":   row.HabitScore,
+			"exp_reward":    row.ExpReward,
+			"credit_reward": row.CreditReward,
+			"score_details": scoreDetails,
+			"is_read":       row.IsRead,
+			"read_at":       row.ReadAt,
+			"is_claimed":    row.IsClaimed,
+			"claimed_at":    row.ClaimedAt,
+			"created_at":    row.CreatedAt,
+			"updated_at":    row.UpdatedAt,
+		}).Error
 }
 
 func (r *PetRepo) MarkEventRead(ctx context.Context, eventID string) error {
@@ -348,6 +424,10 @@ func (r *PetRepo) ClaimEvent(ctx context.Context, userID, eventID string, expRew
 				if err := tx.Table("weapp_user").Where("id = ?", userID).Update("earned_credits_balance", next).Error; err != nil {
 					return err
 				}
+				ledgerMeta, err := jsonbValue(meta)
+				if err != nil {
+					return err
+				}
 				row := &domain.UserEarnedCreditLedger{
 					ID:           uuid.New().String(),
 					UserID:       userID,
@@ -360,7 +440,18 @@ func (r *PetRepo) ClaimEvent(ctx context.Context, userID, eventID string, expRew
 					CreatedAt:    &now,
 					UpdatedAt:    &now,
 				}
-				if err := tx.Create(row).Error; err != nil {
+				if err := tx.Table(row.TableName()).Create(map[string]any{
+					"id":            row.ID,
+					"user_id":       row.UserID,
+					"delta":         row.Delta,
+					"balance_after": row.BalanceAfter,
+					"reason":        row.Reason,
+					"source_key":    row.SourceKey,
+					"related_date":  row.RelatedDate,
+					"meta":          ledgerMeta,
+					"created_at":    row.CreatedAt,
+					"updated_at":    row.UpdatedAt,
+				}).Error; err != nil {
 					return err
 				}
 				ledger = row
@@ -420,6 +511,10 @@ func (r *PetRepo) RerollAppearance(ctx context.Context, userID, petID string, up
 				return err
 			}
 			now := time.Now()
+			ledgerMeta, err := jsonbValue(meta)
+			if err != nil {
+				return err
+			}
 			ledger = &domain.UserEarnedCreditLedger{
 				ID:           uuid.New().String(),
 				UserID:       userID,
@@ -430,13 +525,28 @@ func (r *PetRepo) RerollAppearance(ctx context.Context, userID, petID string, up
 				CreatedAt:    &now,
 				UpdatedAt:    &now,
 			}
-			if err := tx.Create(ledger).Error; err != nil {
+			if err := tx.Table(ledger.TableName()).Create(map[string]any{
+				"id":            ledger.ID,
+				"user_id":       ledger.UserID,
+				"delta":         ledger.Delta,
+				"balance_after": ledger.BalanceAfter,
+				"reason":        ledger.Reason,
+				"source_key":    ledger.SourceKey,
+				"related_date":  ledger.RelatedDate,
+				"meta":          ledgerMeta,
+				"created_at":    ledger.CreatedAt,
+				"updated_at":    ledger.UpdatedAt,
+			}).Error; err != nil {
 				return err
 			}
 		}
 
 		updates["updated_at"] = time.Now()
-		if err := tx.Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(updates).Error; err != nil {
+		normalizedUpdates, err := normalizePetJSONUpdates(updates, "meta")
+		if err != nil {
+			return err
+		}
+		if err := tx.Model(&petdomain.UserPet{}).Where("id = ?", petID).Updates(normalizedUpdates).Error; err != nil {
 			return err
 		}
 		return tx.Where("id = ?", petID).First(&updatedPet).Error
@@ -467,9 +577,39 @@ func chinaDateWindow(date string) (time.Time, time.Time, error) {
 }
 
 func parseChinaDate(date string) (time.Time, error) {
-	loc, err := time.LoadLocation("Asia/Shanghai")
-	if err != nil {
-		loc = time.FixedZone("CST", 8*3600)
+	return time.Parse("2006-01-02", date)
+}
+
+func normalizePetJSONUpdates(updates map[string]any, jsonKeys ...string) (map[string]any, error) {
+	if len(updates) == 0 {
+		return updates, nil
 	}
-	return time.ParseInLocation("2006-01-02", date, loc)
+	jsonKeySet := make(map[string]struct{}, len(jsonKeys))
+	for _, key := range jsonKeys {
+		jsonKeySet[key] = struct{}{}
+	}
+	out := make(map[string]any, len(updates))
+	for key, value := range updates {
+		if _, ok := jsonKeySet[key]; !ok {
+			out[key] = value
+			continue
+		}
+		encoded, err := jsonbValue(value)
+		if err != nil {
+			return nil, err
+		}
+		out[key] = encoded
+	}
+	return out, nil
+}
+
+func jsonbValue(value any) (datatypes.JSON, error) {
+	if value == nil {
+		value = map[string]any{}
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return datatypes.JSON(encoded), nil
 }

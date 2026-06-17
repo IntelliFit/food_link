@@ -180,6 +180,8 @@ func TestBodyMetricsService_AddWaterLog(t *testing.T) {
 	assert.Equal(t, "喝水已记录", result["message"])
 	assert.Len(t, repo.waterLogs, 1)
 	assert.Equal(t, 300, repo.waterLogs[0].AmountMl)
+	require.NotNil(t, repo.waterLogs[0].RecordedOn)
+	assert.Equal(t, "2024-06-15", repo.waterLogs[0].RecordedOn.UTC().Format("2006-01-02"))
 }
 
 func TestBodyMetricsService_ResetWaterLogs(t *testing.T) {
@@ -227,6 +229,8 @@ func TestBodyMetricsService_SaveWeightRecord(t *testing.T) {
 	assert.Equal(t, "体重已保存", result["message"])
 	assert.Len(t, repo.weightRecords, 1)
 	assert.Equal(t, 72.5, repo.weightRecords[0].WeightKg)
+	require.NotNil(t, repo.weightRecords[0].RecordedOn)
+	assert.Equal(t, "2024-06-15", repo.weightRecords[0].RecordedOn.UTC().Format("2006-01-02"))
 }
 
 func TestBodyMetricsService_DeleteWeightRecord(t *testing.T) {

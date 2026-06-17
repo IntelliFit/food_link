@@ -1,13 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Image, Pressable, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ActivityIndicator, Alert, Image, Linking, Pressable, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
-import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
+import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
   getMealTypeLabel,
   inferDefaultMealTypeFromLocalTime,
   type AnalysisTask,
+  type BodyMetricWeightEntry,
   type BodyMetricsSummary,
   type CommunityFeedTargetType,
   type CommunityNotificationItem,
@@ -25,17 +27,23 @@ import {
   type Nutrients,
   type RewardCenterResponse,
 } from '@food-link/core'
-import { apiClient } from '../api'
+import { apiClient, getRecentRequestTraces, RECENT_REQUEST_TRACE_LIMIT } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
+import { APP_VERSION } from '../config'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { formatDateTime, todayKey } from '../utils/date'
+import { userFacingErrorMessage, userFacingMessage } from '../utils/errors'
 
 const userGroupQr = require('../../assets/community/foodlink-user-group-permanent-20260602.jpg')
 
 const mealOptions: MealType[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack']
+type NotificationTab = 'all' | 'like' | 'comment'
+type FriendTab = 'friends' | 'received' | 'sent'
+const notificationPageSize = 20
+const commonTextFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
 const healthGenderOptions = [
   { value: '', label: '暂不填写' },
   { value: 'female', label: '女' },
@@ -65,6 +73,7 @@ const waterPresets = [150, 250, 350, 500]
 const exercisePresets = ['跑步30分钟', '游泳45分钟', '瑜伽1小时', '骑车20分钟', '健身40分钟', '跳绳15分钟', '散步45分钟', 'HIIT20分钟']
 const CIRCLE_POST_MAX_IMAGES = 3
 const FEEDBACK_MAX_IMAGES = 4
+const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
 type EditableRecordItem = {
   name: string
   weight: string
@@ -79,6 +88,21 @@ type EditableRecordItem = {
   sodiumMg: string
   source: FoodRecord['items'][number]
 }
+
+type SelectedManualFood = {
+  key: string
+  item: ManualFoodItem
+  weight: string
+}
+
+const manualFoodSourceChannels = [
+  { key: 'recommended', label: '推荐' },
+  { key: 'campus', label: '校园食堂' },
+  { key: 'favorites', label: '收藏' },
+  { key: 'custom', label: '自定义' },
+] as const
+
+type ManualFoodSourceChannel = (typeof manualFoodSourceChannels)[number]['key']
 
 const defaultExpireDate = () => {
   const nextWeek = new Date()
@@ -105,9 +129,11 @@ export function DayRecordScreen() {
     }
   }, [date])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load]),
+  )
 
   const totalKcal = records.reduce((sum, record) => sum + Number(record.total_calories || 0), 0)
   const totalProtein = records.reduce((sum, record) => sum + Number(record.total_protein || 0), 0)
@@ -400,13 +426,18 @@ export function RecordDetailScreen() {
 export function AnalyzeHistoryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
+  const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (keyword = '') => {
     setLoading(true)
     try {
-      const data = await apiClient.listAnalyzeTasks({ limit: 50 })
-      setTasks(data.tasks || [])
+      const data = await apiClient.listAnalyzeTasks({ limit: 80, search: keyword })
+      const visibleTasks = (data.tasks || [])
+        .filter(isVisibleAnalyzeHistoryTask)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      setTasks(visibleTasks)
     } catch (error) {
       showError('获取识别历史失败', error)
     } finally {
@@ -414,48 +445,124 @@ export function AnalyzeHistoryScreen() {
     }
   }, [])
 
+  const refresh = useCallback(() => load(searchKeyword), [load, searchKeyword])
+
+  const retryTask = useCallback(async (task: AnalysisTask) => {
+    setRetryingTaskId(task.id)
+    try {
+      const result = await apiClient.retryAnalyzeTask(task.id)
+      const nextTaskId = String(result.task_id || '').trim()
+      if (!nextTaskId) {
+        throw new Error('服务端未返回识别进度信息')
+      }
+      await load(searchKeyword)
+      navigation.navigate('AnalyzeLoading', {
+        taskId: nextTaskId,
+        mealType: analyzeHistoryMealType(task),
+        date: analyzeHistoryDate(task),
+        taskType: isTextAnalysisTask(task) ? 'food_text' : 'food',
+      })
+    } catch (error) {
+      showError('重新识别失败', error)
+    } finally {
+      setRetryingTaskId(null)
+    }
+  }, [load, navigation, searchKeyword])
+
+  const confirmRetryTask = useCallback((task: AnalysisTask) => {
+    Alert.alert(
+      '重新识别',
+      isTextAnalysisTask(task) ? '将使用这条记录的原文字内容重新识别。' : '将使用这条记录已上传的图片重新识别，不需要重新上传照片。',
+      [
+        { text: '取消', style: 'cancel' },
+        { text: '重新识别', onPress: () => void retryTask(task) },
+      ],
+    )
+  }, [retryTask])
+
+  const openTask = useCallback((task: AnalysisTask) => {
+    if (isPackagedAnalyzeHistoryTask(task)) {
+      navigation.navigate('PackagedFoodTaskDetail', { taskId: task.id })
+      return
+    }
+    const taskType = isTextAnalysisTask(task) ? 'food_text' : 'food'
+    const mealType = analyzeHistoryMealType(task)
+    const date = analyzeHistoryDate(task)
+    if (task.status === 'done' && taskType === 'food_text') {
+      navigation.navigate('TextResult', { task, mealType, date })
+      return
+    }
+    if (task.status === 'done') {
+      navigation.navigate('Result', { task, mealType, date })
+      return
+    }
+    if (isAnalyzeRetryable(task)) {
+      confirmRetryTask(task)
+      return
+    }
+    navigation.navigate('AnalyzeLoading', {
+      taskId: task.id,
+      mealType,
+      date,
+      taskType,
+    })
+  }, [confirmRetryTask, navigation])
+
+  const submitSearch = () => {
+    void load(searchKeyword)
+  }
+
+  const clearSearch = () => {
+    setSearchKeyword('')
+    void load('')
+  }
+
   useEffect(() => {
-    void load()
+    void load('')
   }, [load])
 
   return (
-    <Page title="识别历史" subtitle="最近的图片和文字分析任务" refreshing={loading} onRefresh={load}>
+    <Page title="识别历史" subtitle="最近的图片和文字分析任务" refreshing={loading} onRefresh={refresh}>
+      <Card>
+        <Text style={styles.sectionTitle}>搜索识别记录</Text>
+        <Text style={styles.subtitle}>可按食物名、文字描述或识别内容查找。</Text>
+        <Field label="关键词" value={searchKeyword} onChangeText={setSearchKeyword} placeholder="例如：咖啡、米饭、晚餐" returnKeyType="search" onSubmitEditing={submitSearch} />
+        <View style={styles.buttonRow}>
+          <SmallButton label={loading ? '搜索中' : '搜索'} disabled={loading} onPress={submitSearch} />
+          {searchKeyword.trim() ? <SmallButton label="清除" disabled={loading} onPress={clearSearch} /> : null}
+        </View>
+      </Card>
       {tasks.length === 0 ? <EmptyState text="暂无识别任务" /> : null}
       {tasks.map((task) => (
-        <Pressable
-          key={task.id}
-          onPress={() => {
-            const taskType = isTextAnalysisTask(task) ? 'food_text' : 'food'
-            if (task.status === 'done' && taskType === 'food_text') {
-              navigation.navigate('TextResult', {
-                task,
-                mealType: 'lunch',
-                date: todayKey(),
-              })
-              return
-            }
-            if (task.status === 'done') {
-              navigation.navigate('Result', {
-                task,
-                mealType: 'lunch',
-                date: todayKey(),
-              })
-              return
-            }
-            navigation.navigate('AnalyzeLoading', {
-              taskId: task.id,
-              mealType: 'lunch',
-              date: todayKey(),
-              taskType,
-            })
-          }}
-        >
+        <Pressable key={task.id} onPress={() => openTask(task)}>
           <Card>
-            <View style={styles.rowBetween}>
-              <Text style={styles.sectionTitle}>{task.result?.items?.[0]?.name || task.text_input || '食物识别'}</Text>
-              <Text style={styles.status}>{taskStatusLabel(task.status)}</Text>
+            <View style={styles.historyTaskRow}>
+              {analyzeHistoryImageUrl(task) ? (
+                <Image source={{ uri: analyzeHistoryImageUrl(task) }} style={styles.historyTaskThumb} />
+              ) : (
+                <View style={styles.historyTaskThumbFallback}>
+                  <Text style={styles.historyTaskThumbText}>{analyzeHistoryAvatarText(task)}</Text>
+                </View>
+              )}
+              <View style={styles.flex}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.historyTaskTitle} numberOfLines={2}>{analyzeHistoryTitle(task)}</Text>
+                  <Text style={styles.status}>{analyzeHistoryStatusLabel(task)}</Text>
+                </View>
+                <Text style={styles.subtitle}>{analyzeHistoryMeta(task)}</Text>
+                <View style={styles.historyTaskTags}>
+                  <Pill text={isTextAnalysisTask(task) ? '文字记录' : '图片识别'} />
+                  <Pill text={getMealTypeLabel(analyzeHistoryMealType(task))} />
+                  {task.is_recorded ? <Pill text="已记录" /> : null}
+                </View>
+              </View>
             </View>
-            <Text style={styles.subtitle}>{formatDateTime(task.created_at)} · {Math.round(task.result?.total_calories || 0)} kcal</Text>
+            <View style={styles.buttonRow}>
+              <SmallButton label={task.status === 'done' ? '查看结果' : isAnalyzeRetryable(task) ? '重新识别' : '查看进度'} disabled={retryingTaskId === task.id} onPress={() => openTask(task)} />
+              {isAnalyzeRetryable(task) ? (
+                <SmallButton label={retryingTaskId === task.id ? '提交中' : '用原内容重试'} disabled={retryingTaskId === task.id} onPress={() => confirmRetryTask(task)} />
+              ) : null}
+            </View>
           </Card>
         </Pressable>
       ))}
@@ -472,6 +579,10 @@ export function TextRecordScreen() {
   const [loading, setLoading] = useState(false)
 
   const submit = async () => {
+    if (!text.trim()) {
+      Alert.alert('请输入食物描述', '可以先写下这餐吃了什么，例如“一碗米饭、番茄炒蛋”。')
+      return
+    }
     setLoading(true)
     try {
       const data = await apiClient.submitTextTask({ text, additionalContext, mealType, date })
@@ -495,6 +606,20 @@ export function TextRecordScreen() {
           multiline
           placeholder="例：一碗米饭、番茄炒蛋、半杯酸奶"
         />
+        <View style={styles.textQuickTags}>
+          <Text style={styles.textQuickTagsLabel}>常用</Text>
+          <View style={styles.textQuickTagsRow}>
+            {commonTextFoods.map((food) => (
+              <Pressable
+                key={food}
+                style={styles.textQuickTag}
+                onPress={() => setText((current) => (current.trim() ? `${current.trim()}、${food}` : food))}
+              >
+                <Text style={styles.textQuickTagText}>{food}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
         <Field
           label="份量/补充说明"
           value={additionalContext}
@@ -509,13 +634,16 @@ export function TextRecordScreen() {
 }
 
 export function ManualRecordScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const route = useRoute<RouteProp<RootStackParamList, 'ManualRecord'>>()
   const [browse, setBrowse] = useState<ManualFoodBrowseResult | null>(null)
+  const [sourceChannel, setSourceChannel] = useState<ManualFoodSourceChannel>(route.params?.sourceChannel || 'recommended')
+  const [catalogItems, setCatalogItems] = useState<ManualFoodItem[]>([])
   const [results, setResults] = useState<ManualFoodItem[]>([])
-  const [selected, setSelected] = useState<ManualFoodItem | null>(null)
+  const [selectedItems, setSelectedItems] = useState<SelectedManualFood[]>([])
   const [query, setQuery] = useState('')
-  const [weight, setWeight] = useState('100')
-  const [date, setDate] = useState(todayKey())
-  const [mealType, setMealType] = useState<MealType>(inferDefaultMealTypeFromLocalTime())
+  const [date, setDate] = useState(route.params?.date || todayKey())
+  const [mealType, setMealType] = useState<MealType>(route.params?.mealType || inferDefaultMealTypeFromLocalTime())
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
@@ -530,14 +658,67 @@ export function ManualRecordScreen() {
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  const search = async () => {
+  const loadCatalog = useCallback(async (category: ManualFoodSourceChannel) => {
+    if (category === 'recommended') {
+      setCatalogItems([])
+      return
+    }
     setLoading(true)
     try {
-      const data = await apiClient.searchManualFood(query, 30)
+      const data = await apiClient.getManualFoodCatalog(category, { page: 1, pageSize: 30 })
+      setCatalogItems(data.items || [])
+    } catch (error) {
+      showError('获取食物来源失败', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load]),
+  )
+
+  useEffect(() => {
+    const quickItem = route.params?.quickItem
+    if (!quickItem) return
+    const key = manualFoodKey(quickItem)
+    setSourceChannel(route.params?.sourceChannel || 'recommended')
+    setResults([])
+    setSelectedItems((current) => {
+      if (current.some((entry) => entry.key === key)) return current
+      return [
+        ...current,
+        {
+          key,
+          item: quickItem,
+          weight: manualFoodQuantityInputValue(quickItem, numberFrom(quickItem.default_weight_grams, 100)),
+        },
+      ]
+    })
+  }, [route.params?.quickItem, route.params?.sourceChannel])
+
+  useEffect(() => {
+    setResults([])
+    void loadCatalog(sourceChannel)
+  }, [loadCatalog, sourceChannel])
+
+  const refreshManualFoods = useCallback(async () => {
+    await load()
+    await loadCatalog(sourceChannel)
+  }, [load, loadCatalog, sourceChannel])
+
+  const search = async () => {
+    const keyword = query.trim()
+    if (!keyword) {
+      setResults([])
+      await loadCatalog(sourceChannel)
+      return
+    }
+    setLoading(true)
+    try {
+      const data = await apiClient.searchManualFood(keyword, 30)
       setResults(data.results || [])
     } catch (error) {
       showError('搜索失败', error)
@@ -546,20 +727,96 @@ export function ManualRecordScreen() {
     }
   }
 
+  const addFood = (item: ManualFoodItem) => {
+    const key = manualFoodKey(item)
+    setSelectedItems((current) => {
+      if (current.some((entry) => entry.key === key)) return current
+      return [
+        ...current,
+        {
+          key,
+          item,
+          weight: manualFoodQuantityInputValue(item, numberFrom(item.default_weight_grams, 100)),
+        },
+      ]
+    })
+  }
+
+  const updateSelectedWeight = (key: string, nextWeight: string) => {
+    setSelectedItems((current) => current.map((entry) => entry.key === key ? { ...entry, weight: nextWeight } : entry))
+  }
+
+  const adjustSelectedWeight = (key: string, delta: number) => {
+    setSelectedItems((current) => current.map((entry) => {
+      if (entry.key !== key) return entry
+      const fallback = numberFrom(entry.item.default_weight_grams, 100)
+      const next = Math.max(manualFoodMinQuantity(entry.item), numberFrom(entry.weight, fallback) + delta)
+      return { ...entry, weight: manualFoodQuantityInputValue(entry.item, next) }
+    }))
+  }
+
+  const applySelectedPreset = (key: string, ratio: number) => {
+    setSelectedItems((current) => current.map((entry) => {
+      if (entry.key !== key) return entry
+      const baseWeight = numberFrom(entry.item.default_weight_grams, 100)
+      const next = Math.max(manualFoodMinQuantity(entry.item), baseWeight * ratio)
+      return { ...entry, weight: manualFoodQuantityInputValue(entry.item, next) }
+    }))
+  }
+
+  const removeSelectedFood = (key: string) => {
+    setSelectedItems((current) => current.filter((entry) => entry.key !== key))
+  }
+
   const save = async () => {
-    if (!selected) {
-      Alert.alert('请选择食物')
+    if (!selectedItems.length) {
+      Alert.alert('请选择食物', '先从下方搜索结果或推荐食物中添加到已选清单。')
+      return
+    }
+    const invalid = selectedItems.find((entry) => numberFrom(entry.weight) <= 0)
+    if (invalid) {
+      Alert.alert('请检查份量', `请为「${manualFoodTitle(invalid.item)}」填写有效份量。`)
       return
     }
     setLoading(true)
     try {
-      await apiClient.saveManualFoodRecord({
-        item: selected,
+      const saved = await apiClient.saveManualFoodRecords({
+        items: selectedItems.map((entry) => ({
+          item: entry.item,
+          weight: numberFrom(entry.weight, numberFrom(entry.item.default_weight_grams, 100)),
+        })),
         mealType,
         date,
-        weight: Number(weight) || undefined,
       })
-      Alert.alert('已保存', '饮食记录已写入')
+      const message = `已将 ${selectedItems.length} 项食物写入${getMealTypeLabel(mealType)}。`
+      if (!saved.id) {
+        Alert.alert('已保存', message, [
+          {
+            text: '回到首页',
+            onPress: () => {
+              setSelectedItems([])
+              navigation.dispatch(CommonActions.navigate('MainTabs'))
+            },
+          },
+        ])
+        return
+      }
+      Alert.alert('已保存', message, [
+        {
+          text: '回到首页',
+          onPress: () => {
+            setSelectedItems([])
+            navigation.dispatch(CommonActions.navigate('MainTabs'))
+          },
+        },
+        {
+          text: '查看记录',
+          onPress: () => {
+            setSelectedItems([])
+            navigation.navigate('RecordDetail', { recordId: saved.id })
+          },
+        },
+      ])
     } catch (error) {
       showError('保存失败', error)
     } finally {
@@ -568,31 +825,103 @@ export function ManualRecordScreen() {
   }
 
   const recommended = useMemo(() => flattenManualFoodBrowse(browse), [browse])
-  const list = results.length ? results : recommended
+  const channelItems = sourceChannel === 'recommended' ? recommended : catalogItems
+  const list = results.length ? results : channelItems
+  const listTitle = results.length
+    ? '搜索结果'
+    : manualFoodSourceChannels.find((channel) => channel.key === sourceChannel)?.label || '推荐'
+  const emptyText = sourceChannel === 'campus' ? '暂无校园食堂菜品' : '没有可选食物'
+  const selectedKeys = useMemo(() => new Set(selectedItems.map((entry) => entry.key)), [selectedItems])
+  const totals = useMemo(() => {
+    return selectedItems.reduce((sum, entry) => {
+      const quantity = numberFrom(entry.weight, numberFrom(entry.item.default_weight_grams, 100))
+      const nutrients = scaledManualFoodNutrition(entry.item, quantity)
+      const isPortionUnit = manualFoodUsesPortionUnit(entry.item)
+      return {
+        calories: sum.calories + nutrients.calories,
+        protein: sum.protein + nutrients.protein,
+        carbs: sum.carbs + nutrients.carbs,
+        fat: sum.fat + nutrients.fat,
+        weight: sum.weight + (isPortionUnit ? 0 : nutrients.weight),
+        portions: sum.portions + (isPortionUnit ? quantity : 0),
+      }
+    }, { calories: 0, protein: 0, carbs: 0, fat: 0, weight: 0, portions: 0 })
+  }, [selectedItems])
+  const totalQuantityText = formatManualFoodTotalQuantity(totals)
 
   return (
-    <Page title="手动记录" subtitle="从食物库选择后保存" refreshing={loading} onRefresh={load}>
-      <Card>
+    <Page title="手动记录" subtitle="从食物库多选后保存为一餐" refreshing={loading} onRefresh={refreshManualFoods}>
+      <Card style={styles.manualHeroCard}>
+        <View style={styles.rowBetween}>
+          <View style={styles.flex}>
+            <Text style={styles.sectionTitle}>单餐工作台</Text>
+            <Text style={styles.subtitle}>{selectedItems.length ? `已选 ${selectedItems.length} 项 · ${totalQuantityText}` : '先选食物，再调整份量'}</Text>
+          </View>
+          <View style={styles.manualHeroKcal}>
+            <Text style={styles.manualHeroKcalValue}>{Math.round(totals.calories)}</Text>
+            <Text style={styles.manualHeroKcalUnit}>kcal</Text>
+          </View>
+        </View>
+        <View style={styles.summaryGrid}>
+          <SummaryCell title="蛋白质" value={round1(totals.protein)} unit="g" />
+          <SummaryCell title="碳水" value={round1(totals.carbs)} unit="g" />
+          <SummaryCell title="脂肪" value={round1(totals.fat)} unit="g" />
+          <SummaryCell title="份量" value={totalQuantityText} unit="" />
+        </View>
         <MealPicker value={mealType} onChange={setMealType} />
         <Field label="日期" value={date} onChangeText={setDate} />
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>食物来源</Text>
+        <View style={styles.segment}>
+          {manualFoodSourceChannels.map((channel) => (
+            <SegmentButton
+              key={channel.key}
+              label={channel.label}
+              active={sourceChannel === channel.key}
+              onPress={() => setSourceChannel(channel.key)}
+            />
+          ))}
+        </View>
+      </Card>
+
+      <Card>
         <Field label="搜索食物" value={query} onChangeText={setQuery} placeholder="米饭、鸡蛋、牛奶" />
         <AppButton label="搜索" variant="secondary" loading={loading} onPress={search} />
       </Card>
 
-      {selected ? (
-        <Card>
-          <Text style={styles.sectionTitle}>{manualFoodTitle(selected)}</Text>
-          <Field label="重量 g" value={weight} onChangeText={setWeight} keyboardType="decimal-pad" />
-          <AppButton label="保存为饮食记录" loading={loading} onPress={save} />
-        </Card>
-      ) : null}
+      <Card>
+        <View style={styles.rowBetween}>
+          <Text style={styles.sectionTitle}>已选清单</Text>
+          <Text style={styles.subtitle}>{selectedItems.length} 项</Text>
+        </View>
+        {selectedItems.length === 0 ? (
+          <Text style={styles.empty}>点击下方食物卡片添加到这餐。</Text>
+        ) : (
+          selectedItems.map((entry) => (
+            <SelectedManualFoodCard
+              key={entry.key}
+              entry={entry}
+              onWeightChange={(value) => updateSelectedWeight(entry.key, value)}
+              onAdjust={(delta) => adjustSelectedWeight(entry.key, delta)}
+              onPreset={(ratio) => applySelectedPreset(entry.key, ratio)}
+              onRemove={() => removeSelectedFood(entry.key)}
+            />
+          ))
+        )}
+        <AppButton label="保存为饮食记录" loading={loading} onPress={save} />
+      </Card>
 
-      {list.length === 0 ? <EmptyState text="没有可选食物" /> : null}
+      {list.length ? <Text style={styles.groupTitle}>{listTitle}</Text> : null}
+      {list.length === 0 ? <EmptyState text={emptyText} /> : null}
       {list.map((item, index) => (
-        <FoodChoice key={`${manualFoodTitle(item)}-${item.id || index}`} item={item} onPress={() => {
-          setSelected(item)
-          setWeight(String(Math.round(Number(item.default_weight_grams || 100))))
-        }} />
+        <FoodChoice
+          key={`${manualFoodTitle(item)}-${item.id || index}`}
+          item={item}
+          selected={selectedKeys.has(manualFoodKey(item))}
+          onPress={() => addFood(item)}
+        />
       ))}
     </Page>
   )
@@ -609,6 +938,13 @@ export function FoodLibraryScreen() {
   const [protein, setProtein] = useState('')
   const [carbs, setCarbs] = useState('')
   const [fat, setFat] = useState('')
+  const [defaultWeight, setDefaultWeight] = useState('100')
+  const [portionLabel, setPortionLabel] = useState('')
+  const [imageUrls, setImageUrls] = useState('')
+  const [fiber, setFiber] = useState('')
+  const [sugar, setSugar] = useState('')
+  const [sodiumMg, setSodiumMg] = useState('')
+  const [shareToPublic, setShareToPublic] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
@@ -644,22 +980,55 @@ export function FoodLibraryScreen() {
   }
 
   const saveCustom = async () => {
+    const title = name.trim()
+    const defaultWeightGrams = numberOrUndefined(defaultWeight) || 100
+    const per100g = {
+      calories: numberOrUndefined(calories) || 0,
+      protein: numberOrUndefined(protein) || 0,
+      carbs: numberOrUndefined(carbs) || 0,
+      fat: numberOrUndefined(fat) || 0,
+      fiber: numberOrUndefined(fiber) || 0,
+      sugar: numberOrUndefined(sugar) || 0,
+      sodium_mg: numberOrUndefined(sodiumMg) || 0,
+    }
+    const validationError = validateCustomFoodDraft(title, defaultWeightGrams, per100g)
+    if (validationError) {
+      Alert.alert('请检查食物信息', validationError)
+      return
+    }
+    const imageList = splitImageUrls(imageUrls)
+    const scale = defaultWeightGrams / 100
     setLoading(true)
     try {
       await apiClient.saveCustomFood({
-        title: name,
-        totalCalories: Number(calories) || 0,
-        totalProtein: Number(protein) || 0,
-        totalCarbs: Number(carbs) || 0,
-        totalFat: Number(fat) || 0,
+        title,
+        defaultWeightGrams,
+        totalCalories: round1(per100g.calories * scale),
+        totalProtein: round1(per100g.protein * scale),
+        totalCarbs: round1(per100g.carbs * scale),
+        totalFat: round1(per100g.fat * scale),
+        nutrientsPer100g: per100g,
+        extraNutrients: per100g,
+        imagePath: imageList[0],
+        imagePaths: imageList,
+        portionLabel: portionLabel.trim() || `${Math.round(defaultWeightGrams)}g`,
+        recommendReason: `自定义录入 / 每 100g`,
+        shareToPublic,
       })
       setName('')
       setCalories('')
       setProtein('')
       setCarbs('')
       setFat('')
+      setDefaultWeight('100')
+      setPortionLabel('')
+      setImageUrls('')
+      setFiber('')
+      setSugar('')
+      setSodiumMg('')
+      setShareToPublic(false)
       await load()
-      Alert.alert('已保存', '自定义食物已加入食物库')
+      Alert.alert('已保存', shareToPublic ? '自定义食物已保存，并同步提交到公共库审核。' : '自定义食物已加入食物库。')
     } catch (error) {
       showError('保存失败', error)
     } finally {
@@ -684,10 +1053,22 @@ export function FoodLibraryScreen() {
       <Card>
         <Text style={styles.sectionTitle}>添加自定义食物</Text>
         <Field label="名称" value={name} onChangeText={setName} />
+        <Field label="默认份量 g" value={defaultWeight} onChangeText={setDefaultWeight} keyboardType="decimal-pad" />
+        <Field label="份量说明" value={portionLabel} onChangeText={setPortionLabel} placeholder="例：一碗 180g，可留空" />
         <Field label="热量 kcal/100g" value={calories} onChangeText={setCalories} keyboardType="decimal-pad" />
         <Field label="蛋白质 g/100g" value={protein} onChangeText={setProtein} keyboardType="decimal-pad" />
         <Field label="碳水 g/100g" value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" />
         <Field label="脂肪 g/100g" value={fat} onChangeText={setFat} keyboardType="decimal-pad" />
+        <Field label="膳食纤维 g/100g" value={fiber} onChangeText={setFiber} keyboardType="decimal-pad" />
+        <Field label="糖 g/100g" value={sugar} onChangeText={setSugar} keyboardType="decimal-pad" />
+        <Field label="钠 mg/100g" value={sodiumMg} onChangeText={setSodiumMg} keyboardType="decimal-pad" />
+        <Field label="图片 URL" value={imageUrls} onChangeText={setImageUrls} multiline placeholder="每行一个图片地址，可留空" />
+        <ToggleRow
+          title="同步申请公开到公共库"
+          subtitle="保存个人食物的同时提交审核，通过后其他用户可搜索使用。"
+          value={shareToPublic}
+          onValueChange={setShareToPublic}
+        />
         <AppButton label="保存食物" loading={loading} onPress={saveCustom} />
       </Card>
 
@@ -809,6 +1190,7 @@ export function BodyMetricRecordScreen() {
   const [exerciseImageUri, setExerciseImageUri] = useState('')
   const [exerciseImageUrl, setExerciseImageUrl] = useState('')
   const [exerciseTask, setExerciseTask] = useState<{ taskId: string; desc: string; status: string; errorMessage?: string } | null>(null)
+  const [exercisePolling, setExercisePolling] = useState(false)
   const [loading, setLoading] = useState(false)
   const [mutatingId, setMutatingId] = useState('')
 
@@ -881,7 +1263,7 @@ export function BodyMetricRecordScreen() {
         setExerciseImageUrl('')
       }
       await load()
-      Alert.alert(type === 'exercise' ? '已提交' : '已保存', type === 'exercise' ? '运动分析任务已提交，完成后会写入当天记录。' : '记录已更新')
+      Alert.alert(type === 'exercise' ? '已提交' : '已保存', type === 'exercise' ? '后台运动分析已提交，完成后会写入当天记录。' : '记录已更新')
     } catch (error) {
       showError('保存失败', error)
     } finally {
@@ -890,31 +1272,36 @@ export function BodyMetricRecordScreen() {
   }
 
   const pollExerciseTask = async (taskId: string, desc: string) => {
-    const started = Date.now()
-    while (Date.now() - started < 90000) {
-      await new Promise((resolve) => setTimeout(resolve, 2200))
-      try {
-        const task = await apiClient.getAnalyzeTask(taskId)
-        if (task.status === 'done') {
-          setExerciseTask({ taskId, desc, status: 'done' })
-          await load()
+    setExercisePolling(true)
+    try {
+      const started = Date.now()
+      while (Date.now() - started < 90000) {
+        await new Promise((resolve) => setTimeout(resolve, 2200))
+        try {
+          const task = await apiClient.getAnalyzeTask(taskId)
+          if (task.status === 'done') {
+            setExerciseTask({ taskId, desc, status: 'done' })
+            await load()
+            return
+          }
+          if (['failed', 'violated', 'timed_out', 'cancelled'].includes(task.status)) {
+            setExerciseTask({ taskId, desc, status: 'failed', errorMessage: exerciseTaskError(task) })
+            return
+          }
+          setExerciseTask({ taskId, desc, status: task.status || 'pending' })
+        } catch (error) {
+          setExerciseTask({ taskId, desc, status: 'failed', errorMessage: userFacingErrorMessage(error, '刷新结果失败') })
           return
         }
-        if (['failed', 'violated', 'timed_out', 'cancelled'].includes(task.status)) {
-          setExerciseTask({ taskId, desc, status: 'failed', errorMessage: exerciseTaskError(task) })
-          return
-        }
-        setExerciseTask({ taskId, desc, status: task.status || 'pending' })
-      } catch (error) {
-        setExerciseTask({ taskId, desc, status: 'failed', errorMessage: error instanceof Error ? error.message : '刷新任务失败' })
-        return
       }
+      setExerciseTask({ taskId, desc, status: 'failed', errorMessage: '分析时间较长，请稍后手动刷新。' })
+    } finally {
+      setExercisePolling(false)
     }
-    setExerciseTask({ taskId, desc, status: 'failed', errorMessage: '分析时间较长，请稍后手动刷新。' })
   }
 
   const refreshExerciseTask = async () => {
-    if (!exerciseTask?.taskId) return
+    if (!exerciseTask?.taskId || exercisePolling) return
     await pollExerciseTask(exerciseTask.taskId, exerciseTask.desc)
   }
 
@@ -948,7 +1335,7 @@ export function BodyMetricRecordScreen() {
 
   const deleteWeight = async (recordId?: string) => {
     if (!recordId) {
-      Alert.alert('无法删除', '这条体重记录缺少 ID')
+      Alert.alert('无法删除', '这条体重记录信息不完整，请刷新后重试。')
       return
     }
     setMutatingId(recordId)
@@ -962,9 +1349,21 @@ export function BodyMetricRecordScreen() {
     }
   }
 
+  const confirmDeleteWeight = (entry: BodyMetricWeightEntry) => {
+    const recordId = String(entry.id || '').trim()
+    if (!recordId) {
+      Alert.alert('无法删除', '这条体重记录信息不完整，请刷新后重试。')
+      return
+    }
+    Alert.alert('删除体重记录', `确定删除 ${entry.date} 的 ${entry.value}kg 吗？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '删除', style: 'destructive', onPress: () => void deleteWeight(recordId) },
+    ])
+  }
+
   const deleteWater = async (logId?: string) => {
     if (!logId) {
-      Alert.alert('无法删除', '这条喝水记录缺少 ID，可使用清空当天')
+      Alert.alert('无法删除', '这条喝水记录信息不完整，可刷新后重试，或使用清空当天。')
       return
     }
     setMutatingId(logId)
@@ -976,6 +1375,19 @@ export function BodyMetricRecordScreen() {
     } finally {
       setMutatingId('')
     }
+  }
+
+  const confirmDeleteWater = (log: { id?: string; amount_ml: number }) => {
+    const amount = Math.round(log.amount_ml || 0)
+    const logId = String(log.id || '').trim()
+    if (!logId) {
+      confirmResetWater('这条旧记录没有单次编号，只能清空当天喝水记录。')
+      return
+    }
+    Alert.alert('删除这次喝水', `确定删除 ${amount}ml 这次记录吗？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '删除', style: 'destructive', onPress: () => void deleteWater(logId) },
+    ])
   }
 
   const resetWater = async () => {
@@ -991,6 +1403,14 @@ export function BodyMetricRecordScreen() {
     }
   }
 
+  const confirmResetWater = (prefix?: string) => {
+    if (currentWaterTotal <= 0) return
+    Alert.alert('清空喝水记录', `${prefix ? `${prefix}\n\n` : ''}确定清空 ${date} 的 ${currentWaterTotal}ml 喝水记录吗？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '清空', style: 'destructive', onPress: () => void resetWater() },
+    ])
+  }
+
   const deleteExercise = async (logId: string) => {
     setMutatingId(logId)
     try {
@@ -1001,6 +1421,19 @@ export function BodyMetricRecordScreen() {
     } finally {
       setMutatingId('')
     }
+  }
+
+  const confirmDeleteExercise = (log: ExerciseLogItem) => {
+    const logId = String(log.id || '').trim()
+    if (!logId) {
+      Alert.alert('无法删除', '这条运动记录信息不完整，请刷新后重试。')
+      return
+    }
+    const desc = log.exercise_desc || log.exercise_type || '这条运动'
+    Alert.alert('删除运动记录', `确定删除「${desc}」吗？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '删除', style: 'destructive', onPress: () => void deleteExercise(logId) },
+    ])
   }
 
   const title = type === 'water' ? '喝水记录' : type === 'exercise' ? '运动记录' : '体重记录'
@@ -1035,7 +1468,7 @@ export function BodyMetricRecordScreen() {
                   <Text style={styles.itemName}>{entry.value} kg</Text>
                   <Text style={styles.subtitle}>{formatDateTime(entry.recorded_at || entry.date)}</Text>
                 </View>
-                <SmallButton label={mutatingId === entry.id ? '删除中' : '删除'} danger onPress={() => void deleteWeight(entry.id)} />
+                <SmallButton label={mutatingId === entry.id ? '删除中' : '删除'} danger onPress={() => confirmDeleteWeight(entry)} />
               </View>
             ))}
           </Card>
@@ -1064,7 +1497,7 @@ export function BodyMetricRecordScreen() {
             <Field label="自定义水量 ml" value={value} onChangeText={setValue} keyboardType="decimal-pad" />
             <View style={styles.buttonRow}>
               <SmallButton label="添加" onPress={() => void save()} />
-              <SmallButton label={mutatingId === 'water-reset' ? '清空中' : '清空当天'} danger onPress={() => void resetWater()} />
+              <SmallButton label={mutatingId === 'water-reset' ? '清空中' : '清空当天'} danger onPress={() => confirmResetWater()} />
             </View>
           </Card>
           <Card>
@@ -1074,7 +1507,7 @@ export function BodyMetricRecordScreen() {
               {waterLogs.map((log, index) => {
                 const logId = String(log.id || `fallback-${index}`)
                 return (
-                  <Pressable key={logId} style={styles.waterChip} onPress={() => log.id ? void deleteWater(log.id) : undefined}>
+                  <Pressable key={logId} style={styles.waterChip} onPress={() => confirmDeleteWater(log)}>
                     <Text style={styles.waterChipText}>+{Math.round(log.amount_ml)}ml</Text>
                     <Text style={styles.waterChipDelete}>{log.id ? (mutatingId === log.id ? '删除中' : '删除') : '当天清空'}</Text>
                   </Pressable>
@@ -1106,13 +1539,18 @@ export function BodyMetricRecordScreen() {
           </Card>
           {exerciseTask ? (
             <Card>
-              <View style={styles.rowBetween}>
-                <View style={styles.flex}>
-                  <Text style={styles.sectionTitle}>运动分析任务</Text>
-                  <Text style={styles.subtitle}>{exerciseTask.desc} · {exerciseTaskStatusLabel(exerciseTask.status)}</Text>
-                  {exerciseTask.errorMessage ? <Text style={styles.errorText}>{exerciseTask.errorMessage}</Text> : null}
+              <View style={styles.exerciseTaskHeader}>
+                <View style={styles.exerciseTaskTitleWrap}>
+                  {isTaskRunningStatus(exerciseTask.status) || exercisePolling ? <ActivityIndicator size="small" color={colors.brand} /> : null}
+                  <Text style={styles.sectionTitle}>后台运动分析</Text>
                 </View>
-                <SmallButton label="刷新" onPress={() => void refreshExerciseTask()} />
+                <Pill text={exerciseTaskStatusLabel(exerciseTask.status)} />
+              </View>
+              <Text style={styles.subtitle}>{exerciseTask.desc}</Text>
+              <Text style={styles.notes}>{exerciseTaskMessage(exerciseTask.status)}</Text>
+              {exerciseTask.errorMessage ? <Text style={styles.errorText}>{exerciseTask.errorMessage}</Text> : null}
+              <View style={styles.buttonRow}>
+                <SmallButton label={exercisePolling ? '刷新中' : '刷新结果'} disabled={exercisePolling} onPress={() => void refreshExerciseTask()} />
               </View>
             </Card>
           ) : null}
@@ -1126,7 +1564,7 @@ export function BodyMetricRecordScreen() {
                   <Text style={styles.subtitle}>{Math.round(log.calories_burned || 0)} kcal · {log.duration_min || 0} 分钟</Text>
                   {log.ai_reasoning ? <Text style={styles.notes}>{log.ai_reasoning}</Text> : null}
                 </View>
-                <SmallButton label={mutatingId === log.id ? '删除中' : '删除'} danger onPress={() => void deleteExercise(log.id)} />
+                <SmallButton label={mutatingId === log.id ? '删除中' : '删除'} danger onPress={() => confirmDeleteExercise(log)} />
               </View>
             </Card>
           ))}
@@ -1228,7 +1666,7 @@ export function ExpiryScreen() {
         <Card key={item.id}>
           <View style={styles.rowBetween}>
             <Text style={styles.sectionTitle}>{item.food_name}</Text>
-            <Pill text={item.urgency_label || item.status || 'active'} />
+            <Pill text={item.urgency_label || expiryStatusLabel(item.status)} />
           </View>
           <Text style={styles.subtitle}>{item.category || '未分类'} · {item.expire_date?.slice(0, 10)}</Text>
           <View style={styles.buttonRow}>
@@ -1258,9 +1696,11 @@ export function RewardCenterScreen() {
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load]),
+  )
 
   const tasks = reward?.tasks || []
   const quickTasks = tasks.filter(isRewardTaskAvailable).slice(0, 2)
@@ -1472,12 +1912,31 @@ export function CirclePostEditScreen() {
 }
 
 export function FriendsScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const [activeTab, setActiveTab] = useState<FriendTab>('friends')
   const [friends, setFriends] = useState<FriendUserItem[]>([])
   const [received, setReceived] = useState<FriendRequestItem[]>([])
   const [sent, setSent] = useState<FriendRequestItem[]>([])
-  const [query, setQuery] = useState('')
+  const [friendQuery, setFriendQuery] = useState('')
+  const [userQuery, setUserQuery] = useState('')
   const [results, setResults] = useState<FriendUserItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const [mutatingId, setMutatingId] = useState<string | null>(null)
+
+  const receivedPendingCount = useMemo(
+    () => received.filter((item) => friendRequestStatus(item) === 'pending').length,
+    [received],
+  )
+  const sentPendingCount = useMemo(
+    () => sent.filter((item) => friendRequestStatus(item) === 'pending').length,
+    [sent],
+  )
+  const filteredFriends = useMemo(() => {
+    const q = friendQuery.trim().toLowerCase()
+    if (!q) return friends
+    return friends.filter((friend) => friendDisplayName(friend).toLowerCase().includes(q))
+  }, [friendQuery, friends])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1496,115 +1955,342 @@ export function FriendsScreen() {
     }
   }, [])
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     void load()
-  }, [load])
+  }, [load]))
+
+  const openProfile = (userId?: string) => {
+    const id = String(userId || '').trim()
+    if (id) navigation.navigate('ProfileSettings', { userId: id })
+  }
+
+  const openChat = (user: FriendUserItem) => {
+    const id = friendUserId(user)
+    if (id) navigation.navigate('PrivateChat', { userId: id, nickname: friendDisplayName(user) })
+  }
 
   const search = async () => {
-    setLoading(true)
+    const q = userQuery.trim()
+    if (!q) {
+      setResults([])
+      Alert.alert('请输入昵称')
+      return
+    }
+    setSearching(true)
     try {
-      const data = await apiClient.searchFriends(query)
+      const data = await apiClient.searchFriends(q)
       setResults(data.list || [])
     } catch (error) {
       showError('搜索失败', error)
     } finally {
-      setLoading(false)
+      setSearching(false)
     }
   }
 
   const send = async (id: string) => {
+    const key = `send:${id}`
+    setMutatingId(key)
     try {
       await apiClient.sendFriendRequest(id)
+      setResults((prev) => prev.map((user) => friendUserId(user) === id ? { ...user, is_pending: true } : user))
       await load()
       Alert.alert('已发送', '好友请求已发送')
     } catch (error) {
       showError('发送失败', error)
+    } finally {
+      setMutatingId(null)
     }
   }
 
-  const respond = async (id: string, action: 'accept' | 'reject') => {
+  const respond = async (request: FriendRequestItem, action: 'accept' | 'reject') => {
+    if (friendRequestStatus(request) !== 'pending') return
+    const key = `${action}:${request.id}`
+    setMutatingId(key)
     try {
-      await apiClient.respondFriendRequest(id, action)
+      await apiClient.respondFriendRequest(request.id, action)
       await load()
+      Alert.alert(action === 'accept' ? '已添加好友' : '已拒绝')
     } catch (error) {
       showError('处理失败', error)
+    } finally {
+      setMutatingId(null)
     }
   }
 
-  return (
-    <Page title="好友" subtitle={`${friends.length} 位好友`} refreshing={loading} onRefresh={load}>
+  const confirmDeleteFriend = (friend: FriendUserItem) => {
+    const id = friendUserId(friend)
+    if (!id) return
+    Alert.alert(
+      '删除好友',
+      `确定删除好友「${friendDisplayName(friend)}」吗？删除后需要重新添加。`,
+      [
+        { text: '取消', style: 'cancel' },
+        { text: '删除', style: 'destructive', onPress: () => void deleteFriend(friend) },
+      ],
+    )
+  }
+
+  const deleteFriend = async (friend: FriendUserItem) => {
+    const id = friendUserId(friend)
+    if (!id) return
+    setMutatingId(`delete:${id}`)
+    try {
+      await apiClient.deleteFriend(id)
+      await load()
+      Alert.alert('已删除')
+    } catch (error) {
+      showError('删除失败', error)
+    } finally {
+      setMutatingId(null)
+    }
+  }
+
+  const confirmCancelSent = (request: FriendRequestItem) => {
+    if (friendRequestStatus(request) !== 'pending') return
+    Alert.alert(
+      '撤销申请',
+      `确定撤销对「${friendRequestDisplayName(request)}」的好友申请吗？`,
+      [
+        { text: '保留', style: 'cancel' },
+        { text: '撤销', style: 'destructive', onPress: () => void cancelSent(request) },
+      ],
+    )
+  }
+
+  const cancelSent = async (request: FriendRequestItem) => {
+    setMutatingId(`cancel:${request.id}`)
+    try {
+      await apiClient.cancelSentFriendRequest(request.id)
+      await load()
+      Alert.alert('已撤销')
+    } catch (error) {
+      showError('撤销失败', error)
+    } finally {
+      setMutatingId(null)
+    }
+  }
+
+  const renderFriends = () => (
+    <>
       <Card>
-        <Field label="搜索昵称" value={query} onChangeText={setQuery} />
-        <AppButton label="搜索用户" variant="secondary" loading={loading} onPress={search} />
+        <Field label="搜索好友" value={friendQuery} onChangeText={setFriendQuery} placeholder="输入好友昵称" />
+        {friendQuery.trim() ? <SmallButton label="清除" onPress={() => setFriendQuery('')} /> : null}
       </Card>
-      {results.map((user) => (
-        <UserRow key={user.id} user={user} actionLabel={user.is_friend ? '已是好友' : user.is_pending ? '已申请' : '添加'} onAction={() => !user.is_friend && !user.is_pending ? send(user.id) : undefined} />
-      ))}
-      {received.length ? <Text style={styles.groupTitle}>收到的请求</Text> : null}
-      {received.map((req) => (
-        <Card key={req.id}>
-          <Text style={styles.itemName}>{req.counterpart_nickname || req.from_nickname || '用户'}</Text>
-          <Text style={styles.subtitle}>{req.created_at ? formatDateTime(req.created_at) : ''}</Text>
-          <View style={styles.buttonRow}>
-            <SmallButton label="接受" onPress={() => respond(req.id, 'accept')} />
-            <SmallButton label="拒绝" danger onPress={() => respond(req.id, 'reject')} />
+
+      {loading && friends.length === 0 ? (
+        <Card>
+          <ActivityIndicator color={colors.brand} />
+        </Card>
+      ) : null}
+      {!loading && friends.length === 0 ? <EmptyState text="还没有好友" /> : null}
+      {!loading && friends.length > 0 && filteredFriends.length === 0 ? <EmptyState text="未找到好友" /> : null}
+      {filteredFriends.map((friend) => {
+        const id = friendUserId(friend)
+        return (
+          <FriendUserCard
+            key={id || friendDisplayName(friend)}
+            user={friend}
+            subtitle="已互为好友"
+            onPress={() => openProfile(id)}
+            actions={(
+              <>
+                <SmallButton label="私信" onPress={() => openChat(friend)} />
+                <SmallButton label="删除" danger disabled={mutatingId === `delete:${id}`} onPress={() => confirmDeleteFriend(friend)} />
+              </>
+            )}
+          />
+        )
+      })}
+
+      <Card>
+        <Text style={styles.sectionTitle}>查找新朋友</Text>
+        <Text style={styles.subtitle}>按昵称搜索用户，发送好友申请后可在「我发起的」查看状态。</Text>
+        <Field label="用户昵称" value={userQuery} onChangeText={setUserQuery} placeholder="输入对方昵称" />
+        <AppButton label="搜索用户" variant="secondary" loading={searching} onPress={search} />
+      </Card>
+      {results.map((user) => {
+        const id = friendUserId(user)
+        const already = Boolean(user.is_friend)
+        const pending = Boolean(user.is_pending)
+        return (
+          <FriendUserCard
+            key={id || friendDisplayName(user)}
+            user={user}
+            subtitle={friendUserSubtitle(user)}
+            onPress={() => openProfile(id)}
+            actions={(
+              <SmallButton
+                label={already ? '已是好友' : pending ? '已申请' : '添加'}
+                disabled={already || pending || mutatingId === `send:${id}`}
+                onPress={() => id ? void send(id) : undefined}
+              />
+            )}
+          />
+        )
+      })}
+      {!searching && userQuery.trim() && results.length === 0 ? <Text style={styles.listEndText}>没有匹配用户</Text> : null}
+    </>
+  )
+
+  const renderReceived = () => (
+    <>
+      {loading && received.length === 0 ? (
+        <Card>
+          <ActivityIndicator color={colors.brand} />
+        </Card>
+      ) : null}
+      {!loading && received.length === 0 ? <EmptyState text="暂无好友请求" /> : null}
+      {received.map((request) => {
+        const userId = friendRequestUserId(request)
+        const pending = friendRequestStatus(request) === 'pending'
+        return (
+          <FriendRequestCard
+            key={request.id}
+            request={request}
+            onPress={() => openProfile(userId)}
+            actions={pending ? (
+              <>
+                <SmallButton label="接受" disabled={mutatingId === `accept:${request.id}`} onPress={() => void respond(request, 'accept')} />
+                <SmallButton label="拒绝" danger disabled={mutatingId === `reject:${request.id}`} onPress={() => void respond(request, 'reject')} />
+              </>
+            ) : (
+              <Pill text={friendRequestStatusLabel(request.status)} />
+            )}
+          />
+        )
+      })}
+    </>
+  )
+
+  const renderSent = () => (
+    <>
+      {loading && sent.length === 0 ? (
+        <Card>
+          <ActivityIndicator color={colors.brand} />
+        </Card>
+      ) : null}
+      {!loading && sent.length === 0 ? <EmptyState text="没有待处理的申请" /> : null}
+      {sent.map((request) => {
+        const userId = friendRequestUserId(request)
+        const pending = friendRequestStatus(request) === 'pending'
+        return (
+          <FriendRequestCard
+            key={request.id}
+            request={request}
+            onPress={() => openProfile(userId)}
+            actions={pending ? (
+              <SmallButton label="撤销申请" danger disabled={mutatingId === `cancel:${request.id}`} onPress={() => confirmCancelSent(request)} />
+            ) : (
+              <Pill text={friendRequestStatusLabel(request.status)} />
+            )}
+          />
+        )
+      })}
+    </>
+  )
+
+  return (
+    <Page title="好友" subtitle={`${friends.length} 位好友 · ${receivedPendingCount} 条待处理`} refreshing={loading} onRefresh={load}>
+      <Card>
+        <View style={styles.rowBetween}>
+          <View style={styles.flex}>
+            <Text style={styles.sectionTitle}>好友管理</Text>
+            <Text style={styles.subtitle}>查看好友、处理申请，并从这里进入主页或私信。</Text>
           </View>
-        </Card>
-      ))}
-      {sent.length ? <Text style={styles.groupTitle}>发出的请求</Text> : null}
-      {sent.map((req) => (
-        <Card key={req.id}>
-          <Text style={styles.itemName}>{req.counterpart_nickname || '用户'}</Text>
-          <Text style={styles.subtitle}>{req.status || 'pending'}</Text>
-        </Card>
-      ))}
-      {friends.length ? <Text style={styles.groupTitle}>好友列表</Text> : null}
-      {friends.map((friend) => (
-        <UserRow key={friend.id} user={friend} actionLabel="删除" danger onAction={async () => {
-          await apiClient.deleteFriend(friend.id)
-          await load()
-        }} />
-      ))}
+        </View>
+        <View style={styles.notificationTabs}>
+          <NotificationTabButton label="好友列表" badge={friends.length} active={activeTab === 'friends'} onPress={() => setActiveTab('friends')} />
+          <NotificationTabButton label="收到请求" badge={receivedPendingCount} active={activeTab === 'received'} onPress={() => setActiveTab('received')} />
+          <NotificationTabButton label="我发起的" badge={sentPendingCount} active={activeTab === 'sent'} onPress={() => setActiveTab('sent')} />
+        </View>
+      </Card>
+      {activeTab === 'friends' ? renderFriends() : null}
+      {activeTab === 'received' ? renderReceived() : null}
+      {activeTab === 'sent' ? renderSent() : null}
     </Page>
   )
 }
-
 export function NotificationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const [notifications, setNotifications] = useState<CommunityNotificationItem[]>([])
   const [unread, setUnread] = useState(0)
+  const [activeTab, setActiveTab] = useState<NotificationTab>('all')
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const visibleNotifications = useMemo(
+    () => notifications.filter((item) => notificationMatchesTab(item, activeTab)),
+    [activeTab, notifications],
+  )
+  const likeCount = useMemo(() => notifications.filter((item) => notificationMatchesTab(item, 'like')).length, [notifications])
+  const commentCount = useMemo(() => notifications.filter((item) => notificationMatchesTab(item, 'comment')).length, [notifications])
+
+  const load = useCallback(async (tab: NotificationTab, offset = 0, append = false) => {
+    if (append) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+    }
     try {
-      const data = await apiClient.listCommunityNotifications(80)
-      setNotifications(data.list || [])
-      setUnread(data.unread_count || 0)
+      const data = await apiClient.listCommunityNotifications({
+        limit: notificationPageSize,
+        offset,
+        type: notificationTabApiType(tab),
+      })
+      let nextList = data.list || []
+      let nextUnread = data.unread_count || 0
+      if (!append && nextUnread > 0) {
+        const readResult = await apiClient.markCommunityNotificationsRead()
+        nextUnread = readResult.unread_count || 0
+        nextList = nextList.map((item) => ({ ...item, is_read: true }))
+      }
+      setNotifications((prev) => append ? [...prev, ...nextList] : nextList)
+      setUnread(nextUnread)
+      setHasMore(Boolean(data.has_more))
     } catch (error) {
-      showError('获取消息失败', error)
+      showError('获取互动消息失败', error)
     } finally {
-      setLoading(false)
+      if (append) {
+        setLoadingMore(false)
+      } else {
+        setLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void load(activeTab, 0, false)
+  }, [activeTab, load])
+
+  const refresh = useCallback(() => {
+    void load(activeTab, 0, false)
+  }, [activeTab, load])
+
+  const switchTab = (tab: NotificationTab) => {
+    if (tab === activeTab) return
+    setActiveTab(tab)
+    setNotifications([])
+    setHasMore(false)
+  }
 
   const markRead = async () => {
     if (unread <= 0) return
     setLoading(true)
     try {
-      const unreadIds = notifications.filter((item) => !item.is_read).map((item) => item.id)
-      const data = await apiClient.markCommunityNotificationsRead(unreadIds)
+      const data = await apiClient.markCommunityNotificationsRead()
       setUnread(data.unread_count || 0)
-      await load()
+      setNotifications((prev) => prev.map((item) => ({ ...item, is_read: true })))
     } catch (error) {
-      showError('标记失败', error)
+      showError('标记已读失败', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadMore = () => {
+    if (loading || loadingMore || !hasMore) return
+    void load(activeTab, notifications.length, true)
   }
 
   const openNotification = async (item: CommunityNotificationItem) => {
@@ -1629,24 +2315,45 @@ export function NotificationsScreen() {
   }
 
   return (
-    <Page title="互动消息" subtitle={`${unread} 条未读`} refreshing={loading} onRefresh={load}>
+    <Page title="互动消息" subtitle={`${unread} 条未读`} refreshing={loading} onRefresh={refresh}>
       <Card>
-        <Text style={styles.sectionTitle}>互动收件箱</Text>
-        <Text style={styles.subtitle}>点赞、评论、回复和审核结果都会显示在这里。</Text>
-        <AppButton label={unread > 0 ? '全部标记已读' : '暂无未读'} variant="secondary" loading={loading} onPress={markRead} />
+        <View style={styles.rowBetween}>
+          <View style={styles.flex}>
+            <Text style={styles.sectionTitle}>互动收件箱</Text>
+            <Text style={styles.subtitle}>点赞、评论、回复和审核结果都会显示在这里。</Text>
+          </View>
+          <SmallButton label="全部已读" disabled={unread <= 0 || loading} onPress={() => void markRead()} />
+        </View>
+        <View style={styles.notificationTabs}>
+          <NotificationTabButton label="全部" active={activeTab === 'all'} onPress={() => switchTab('all')} />
+          <NotificationTabButton label="点赞" badge={likeCount} active={activeTab === 'like'} onPress={() => switchTab('like')} />
+          <NotificationTabButton label="评论" badge={commentCount} active={activeTab === 'comment'} onPress={() => switchTab('comment')} />
+        </View>
       </Card>
-      {notifications.length === 0 ? <EmptyState text="暂无互动消息" /> : null}
-      {notifications.map((item) => (
+      {loading && visibleNotifications.length === 0 ? (
+        <Card>
+          <ActivityIndicator color={colors.brand} />
+        </Card>
+      ) : null}
+      {!loading && visibleNotifications.length === 0 ? <EmptyState text={notificationEmptyText(activeTab)} /> : null}
+      {visibleNotifications.map((item) => (
         <Pressable key={item.id} onPress={() => openNotification(item)}>
           <Card style={!item.is_read ? styles.unreadCard : undefined}>
             <View style={styles.notificationRow}>
-              <View style={styles.notificationAvatar}>
+              <Pressable
+                style={styles.notificationAvatar}
+                onPress={(event) => {
+                  event.stopPropagation()
+                  const actorId = item.actor?.id
+                  if (actorId) navigation.navigate('ProfileSettings', { userId: actorId })
+                }}
+              >
                 {item.actor?.avatar ? (
                   <Image source={{ uri: item.actor.avatar }} style={styles.notificationAvatarImage} />
                 ) : (
                   <Text style={styles.notificationAvatarText}>{notificationAvatarText(item)}</Text>
                 )}
-              </View>
+              </Pressable>
               <View style={styles.flex}>
                 <View style={styles.rowBetween}>
                   <Text style={styles.itemName}>{notificationTitle(item)}</Text>
@@ -1659,6 +2366,10 @@ export function NotificationsScreen() {
           </Card>
         </Pressable>
       ))}
+      {visibleNotifications.length > 0 && hasMore ? (
+        <AppButton label="查看更多" variant="secondary" loading={loadingMore} onPress={loadMore} />
+      ) : null}
+      {visibleNotifications.length > 0 && !hasMore ? <Text style={styles.listEndText}>没有更多了</Text> : null}
     </Page>
   )
 }
@@ -1668,11 +2379,13 @@ export function AboutFeedbackScreen() {
   const [content, setContent] = useState('')
   const [contact, setContact] = useState('')
   const [feedbackImageUrls, setFeedbackImageUrls] = useState<string[]>([])
+  const [attachRecentRequests, setAttachRecentRequests] = useState(true)
   const [searchable, setSearchable] = useState(true)
   const [publicRecords, setPublicRecords] = useState(true)
   const [loading, setLoading] = useState(false)
   const [savingPrivacy, setSavingPrivacy] = useState<'searchable' | 'public_records' | null>(null)
   const [showGroupQr, setShowGroupQr] = useState(false)
+  const traceCount = getRecentRequestTraces().length
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1699,7 +2412,12 @@ export function AboutFeedbackScreen() {
         content,
         contact,
         pagePath: 'app://about-feedback',
-        clientInfo: { surface: 'expo' },
+        appVersion: APP_VERSION,
+        clientInfo: {
+          surface: 'expo',
+          recent_request_limit: RECENT_REQUEST_TRACE_LIMIT,
+        },
+        recentRequests: attachRecentRequests ? getRecentRequestTraces() : [],
         imageUrls: feedbackImageUrls,
       })
       setContent('')
@@ -1707,7 +2425,7 @@ export function AboutFeedbackScreen() {
       setFeedbackImageUrls([])
       Alert.alert('已提交', '反馈已经进入处理队列。')
     } catch (error) {
-      Alert.alert('提交失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('提交失败', userFacingErrorMessage(error))
     } finally {
       setLoading(false)
     }
@@ -1741,7 +2459,7 @@ export function AboutFeedbackScreen() {
       }
       setFeedbackImageUrls((current) => [...current, ...uploaded].slice(0, FEEDBACK_MAX_IMAGES))
     } catch (error) {
-      Alert.alert('上传图片失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('上传图片失败', userFacingErrorMessage(error))
     } finally {
       setLoading(false)
     }
@@ -1761,7 +2479,7 @@ export function AboutFeedbackScreen() {
     } catch (error) {
       if (key === 'searchable') setSearchable(previous)
       else setPublicRecords(previous)
-      Alert.alert('设置失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('设置失败', userFacingErrorMessage(error))
     } finally {
       setSavingPrivacy(null)
     }
@@ -1774,12 +2492,53 @@ export function AboutFeedbackScreen() {
       if (removable.length) await AsyncStorage.multiRemove(removable)
       Alert.alert('已清除', '本地缓存已清理，登录状态已保留。')
     } catch (error) {
-      Alert.alert('清除失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('清除失败', userFacingErrorMessage(error))
+    }
+  }
+
+  const copyOfficialEmail = async () => {
+    await Clipboard.setStringAsync(OFFICIAL_EMAIL)
+    Alert.alert('已复制邮箱', OFFICIAL_EMAIL)
+  }
+
+  const openOfficialEmail = async () => {
+    const url = `mailto:${OFFICIAL_EMAIL}?subject=${encodeURIComponent('Food Link 反馈')}`
+    try {
+      const supported = await Linking.canOpenURL(url)
+      if (!supported) {
+        await copyOfficialEmail()
+        return
+      }
+      await Linking.openURL(url)
+    } catch {
+      await copyOfficialEmail()
     }
   }
 
   return (
-    <Page title="关于与反馈" subtitle="反馈、隐私、协议和用户群。 " refreshing={loading} onRefresh={load}>
+    <Page title="关于与反馈" subtitle="关于食探、意见反馈、隐私和社群。" refreshing={loading} onRefresh={load}>
+      <Card>
+        <View style={styles.aboutHeader}>
+          <View style={styles.aboutLogo}>
+            <Text style={styles.aboutLogoText}>食</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.aboutName}>智健食探</Text>
+            <Text style={styles.subtitle}>Food Link · Version {APP_VERSION}</Text>
+          </View>
+        </View>
+        <Text style={styles.aboutText}>
+          食探通过 AI 食物识别、饮食与运动记录、健康档案和社区分享，帮助你更轻松地管理每日营养、身体趋势和长期目标。
+        </Text>
+        <InfoRow label="官方邮箱" value={OFFICIAL_EMAIL} />
+        <InfoRow label="核心能力" value="拍照识别、文字记录、食物库、健康分析、成长伙伴、圈子与会员积分" />
+        <InfoRow label="版权信息" value="Copyright © 2026 Food Link. All Rights Reserved." />
+        <View style={styles.buttonRow}>
+          <SmallButton label="复制邮箱" onPress={() => void copyOfficialEmail()} />
+          <SmallButton label="写邮件" onPress={() => void openOfficialEmail()} />
+        </View>
+      </Card>
+
       <Card>
         <Text style={styles.sectionTitle}>意见反馈</Text>
         <View style={styles.segment}>
@@ -1796,6 +2555,12 @@ export function AboutFeedbackScreen() {
           onRemove={removeFeedbackImage}
         />
         <Field label="联系方式" value={contact} onChangeText={setContact} placeholder="微信、手机号或邮箱（可选）" />
+        <ToggleRow
+          title="附带请求诊断"
+          subtitle={`将附带最近 ${Math.min(traceCount, RECENT_REQUEST_TRACE_LIMIT)} 条请求的 traceId、状态码和耗时，不包含 token、请求体或图片。`}
+          value={attachRecentRequests}
+          onValueChange={setAttachRecentRequests}
+        />
         <AppButton label="提交反馈" loading={loading} onPress={submit} />
       </Card>
 
@@ -1843,6 +2608,8 @@ function Field({
   placeholder,
   keyboardType,
   multiline,
+  returnKeyType,
+  onSubmitEditing,
 }: {
   label: string
   value: string
@@ -1850,6 +2617,8 @@ function Field({
   placeholder?: string
   keyboardType?: 'default' | 'decimal-pad' | 'number-pad'
   multiline?: boolean
+  returnKeyType?: 'done' | 'go' | 'next' | 'search' | 'send'
+  onSubmitEditing?: () => void
 }) {
   return (
     <View style={styles.field}>
@@ -1861,6 +2630,8 @@ function Field({
         placeholderTextColor={colors.textMuted}
         keyboardType={keyboardType}
         multiline={multiline}
+        returnKeyType={returnKeyType}
+        onSubmitEditing={onSubmitEditing}
         textAlignVertical={multiline ? 'top' : 'center'}
         style={[styles.input, multiline && styles.textarea]}
       />
@@ -1884,6 +2655,19 @@ function SegmentButton({ label, active, onPress }: { label: string; active: bool
   return (
     <Pressable style={[styles.segmentItem, active && styles.segmentItemActive]} onPress={onPress}>
       <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
+    </Pressable>
+  )
+}
+
+function NotificationTabButton({ label, badge, active, onPress }: { label: string; badge?: number; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={[styles.notificationTabItem, active && styles.notificationTabItemActive]} onPress={onPress}>
+      <Text style={[styles.notificationTabText, active && styles.notificationTabTextActive]}>{label}</Text>
+      {badge && badge > 0 ? (
+        <View style={[styles.notificationTabBadge, active && styles.notificationTabBadgeActive]}>
+          <Text style={[styles.notificationTabBadgeText, active && styles.notificationTabBadgeTextActive]}>{formatBadgeCount(badge)}</Text>
+        </View>
+      ) : null}
     </Pressable>
   )
 }
@@ -1935,15 +2719,84 @@ function ToggleRow({
   )
 }
 
-function FoodChoice({ item, onPress }: { item: ManualFoodItem; onPress: () => void }) {
+function SelectedManualFoodCard({
+  entry,
+  onWeightChange,
+  onAdjust,
+  onPreset,
+  onRemove,
+}: {
+  entry: SelectedManualFood
+  onWeightChange: (value: string) => void
+  onAdjust: (delta: number) => void
+  onPreset: (ratio: number) => void
+  onRemove: () => void
+}) {
+  const weight = numberFrom(entry.weight, numberFrom(entry.item.default_weight_grams, 100))
+  const nutrients = scaledManualFoodNutrition(entry.item, weight)
+  const usesPortionUnit = manualFoodUsesPortionUnit(entry.item)
+  const quantityUnit = usesPortionUnit ? manualFoodPortionUnitLabel(entry.item) : 'g'
+  const adjustOptions = usesPortionUnit
+    ? [
+      { label: `-0.5${quantityUnit}`, delta: -0.5 },
+      { label: `-0.25${quantityUnit}`, delta: -0.25 },
+      { label: `+0.25${quantityUnit}`, delta: 0.25 },
+      { label: `+0.5${quantityUnit}`, delta: 0.5 },
+    ]
+    : [
+      { label: '-50g', delta: -50 },
+      { label: '-10g', delta: -10 },
+      { label: '+10g', delta: 10 },
+      { label: '+50g', delta: 50 },
+    ]
+  return (
+    <View style={styles.selectedFoodBox}>
+      <View style={styles.rowBetween}>
+        <View style={styles.flex}>
+          <Text style={styles.itemName}>{manualFoodTitle(entry.item)}</Text>
+          <Text style={styles.subtitle}>{manualFoodSourceLabel(entry.item)} · {Math.round(nutrients.calories)} kcal</Text>
+        </View>
+        <Pressable style={[styles.smallButton, styles.smallButtonDanger]} onPress={onRemove}>
+          <Text style={[styles.smallButtonText, styles.smallButtonDangerText]}>移除</Text>
+        </Pressable>
+      </View>
+      <Field label={usesPortionUnit ? `数量 ${quantityUnit}` : '份量 g'} value={entry.weight} onChangeText={onWeightChange} keyboardType="decimal-pad" />
+      <View style={styles.ratioGrid}>
+        {[
+          { label: '25%', ratio: 0.25 },
+          { label: '50%', ratio: 0.5 },
+          { label: '100%', ratio: 1 },
+        ].map((preset) => (
+          <Pressable key={preset.label} style={styles.ratioButton} onPress={() => onPreset(preset.ratio)}>
+            <Text style={styles.ratioButtonText}>{preset.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={styles.manualAdjustRow}>
+        {adjustOptions.map((option) => (
+          <Pressable key={option.label} style={styles.manualAdjustButton} onPress={() => onAdjust(option.delta)}>
+            <Text style={styles.manualAdjustText}>{option.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  )
+}
+
+function FoodChoice({ item, selected, onPress }: { item: ManualFoodItem; selected?: boolean; onPress: () => void }) {
   return (
     <Pressable onPress={onPress}>
       <Card>
         <View style={styles.rowBetween}>
-          <Text style={styles.itemName}>{manualFoodTitle(item)}</Text>
-          <Text style={styles.kcal}>{Math.round(numberFrom(item.total_calories ?? item.calories))} kcal</Text>
+          <View style={styles.flex}>
+            <Text style={styles.itemName}>{manualFoodTitle(item)}</Text>
+            <Text style={styles.subtitle}>{manualFoodSourceLabel(item)} · {manualFoodPortionText(item)}</Text>
+          </View>
+          <View style={selected ? styles.foodChoiceAdded : styles.foodChoiceAdd}>
+            <Text style={selected ? styles.foodChoiceAddedText : styles.foodChoiceAddText}>{selected ? '已选' : '+'}</Text>
+          </View>
         </View>
-        <Text style={styles.subtitle}>{Math.round(numberFrom(item.default_weight_grams, 100))}g · 蛋白 {Math.round(numberFrom(item.total_protein ?? item.protein))}g</Text>
+        <Text style={styles.subtitle}>{Math.round(numberFrom(item.total_calories ?? item.calories))} kcal · 蛋白 {Math.round(numberFrom(item.total_protein ?? item.protein))}g</Text>
       </Card>
     </Pressable>
   )
@@ -1987,37 +2840,73 @@ function SummaryCell({ title, value, unit }: { title: string; value: number | st
     <View style={styles.summaryCell}>
       <Text style={styles.summaryValue}>
         {value}
-        <Text style={styles.summaryUnit}> {unit}</Text>
+        {unit ? <Text style={styles.summaryUnit}> {unit}</Text> : null}
       </Text>
       <Text style={styles.summaryTitle}>{title}</Text>
     </View>
   )
 }
 
-function UserRow({
+function FriendUserCard({
   user,
-  actionLabel,
-  danger,
-  onAction,
+  subtitle,
+  onPress,
+  actions,
 }: {
   user: FriendUserItem
-  actionLabel: string
-  danger?: boolean
-  onAction: () => void | Promise<void>
+  subtitle?: string
+  onPress?: () => void
+  actions?: ReactNode
 }) {
   return (
     <Card>
-      <View style={styles.rowBetween}>
-        <View style={styles.flex}>
-          <Text style={styles.itemName}>{user.nickname || '用户'}</Text>
-          <Text style={styles.subtitle}>{user.id}</Text>
-        </View>
-        <SmallButton label={actionLabel} danger={danger} onPress={() => void onAction()} />
+      <View style={styles.friendCardRow}>
+        <Pressable style={styles.friendInfoRow} onPress={onPress}>
+          <FriendAvatar uri={user.avatar} label={friendDisplayName(user)} />
+          <View style={styles.flex}>
+            <Text style={styles.itemName}>{friendDisplayName(user)}</Text>
+            <Text style={styles.subtitle}>{subtitle || friendUserSubtitle(user)}</Text>
+          </View>
+        </Pressable>
+        {actions ? <View style={styles.friendActionRow}>{actions}</View> : null}
       </View>
     </Card>
   )
 }
 
+function FriendRequestCard({
+  request,
+  onPress,
+  actions,
+}: {
+  request: FriendRequestItem
+  onPress?: () => void
+  actions?: ReactNode
+}) {
+  return (
+    <Card>
+      <View style={styles.friendCardRow}>
+        <Pressable style={styles.friendInfoRow} onPress={onPress}>
+          <FriendAvatar uri={friendRequestAvatar(request)} label={friendRequestDisplayName(request)} />
+          <View style={styles.flex}>
+            <Text style={styles.itemName}>{friendRequestDisplayName(request)}</Text>
+            <Text style={styles.subtitle}>{friendRequestTimeLabel(request) || friendRequestStatusLabel(request.status)}</Text>
+          </View>
+        </Pressable>
+        {actions ? <View style={styles.friendActionRow}>{actions}</View> : null}
+      </View>
+    </Card>
+  )
+}
+
+function FriendAvatar({ uri, label }: { uri?: string; label: string }) {
+  if (uri) return <Image source={{ uri }} style={styles.friendAvatarImage} />
+  return (
+    <View style={styles.friendAvatarFallback}>
+      <Text style={styles.friendAvatarText}>{(label.trim() || '友').slice(0, 1)}</Text>
+    </View>
+  )
+}
 function SmallButton({ label, danger, disabled, onPress }: { label: string; danger?: boolean; disabled?: boolean; onPress: () => void }) {
   return (
     <Pressable disabled={disabled} onPress={onPress} style={[styles.smallButton, danger && styles.smallButtonDanger, disabled && styles.smallButtonDisabled]}>
@@ -2032,6 +2921,16 @@ function Pill({ text }: { text: string }) {
       <Text style={styles.pillText}>{text}</Text>
     </View>
   )
+}
+
+function expiryStatusLabel(value?: string): string {
+  const labels: Record<string, string> = {
+    active: '进行中',
+    consumed: '已吃完',
+    discarded: '已丢弃',
+    expired: '已过期',
+  }
+  return labels[value || ''] || '进行中'
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -2215,6 +3114,87 @@ function manualFoodTitle(item: ManualFoodItem): string {
   return String(item.title || item.name || '食物')
 }
 
+function manualFoodKey(item: ManualFoodItem): string {
+  const id = String(item.source_id || item.id || '').trim()
+  if (id) return `${item.source || 'manual'}:${id}`
+  return `${item.source || 'manual'}:${manualFoodTitle(item)}`
+}
+
+function manualFoodSourceLabel(item: ManualFoodItem): string {
+  const sourceLabel = typeof item.source_label === 'string' ? item.source_label.trim() : ''
+  if (sourceLabel) return sourceLabel
+  if (item.source === 'public_library' && (item.is_campus_food === true || item.type === 'campus')) {
+    return '校园食堂'
+  }
+  switch (item.source) {
+    case 'public_library':
+      return '真实餐食'
+    case 'packaged_food':
+      return '包装食品'
+    case 'custom':
+      return '自定义'
+    case 'recent':
+      return '最近记录'
+    case 'nutrition_library':
+    default:
+      return '标准食物'
+  }
+}
+
+function manualFoodPortionText(item: ManualFoodItem): string {
+  const portion = typeof item.portion_label === 'string' ? item.portion_label.trim() : ''
+  if (portion) return portion
+  return `${Math.round(numberFrom(item.default_weight_grams, 100))}g`
+}
+
+function manualFoodUsesPortionUnit(item: ManualFoodItem): boolean {
+  const portion = manualFoodPortionText(item)
+  const defaultWeight = numberFrom(item.default_weight_grams, 100)
+  return defaultWeight <= 1 && Boolean(portion) && !/(g|kg|ml|克|千克|毫升)/i.test(portion)
+}
+
+function manualFoodPortionUnitLabel(item: ManualFoodItem): string {
+  const portion = manualFoodPortionText(item)
+  const match = portion.match(/^[\d.]+\s*(.+)$/)
+  const unit = match?.[1]?.trim()
+  return unit || '份'
+}
+
+function manualFoodMinQuantity(item: ManualFoodItem): number {
+  return manualFoodUsesPortionUnit(item) ? 0.25 : 1
+}
+
+function manualFoodQuantityInputValue(item: ManualFoodItem, value: number): string {
+  if (!manualFoodUsesPortionUnit(item)) {
+    return String(Math.max(1, Math.round(value)))
+  }
+  const rounded = Math.max(0.25, Math.round(value * 100) / 100)
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
+}
+
+function formatManualFoodTotalQuantity(totals: { weight: number; portions: number }): string {
+  const parts: string[] = []
+  if (totals.portions > 0) parts.push(`${manualFoodQuantityInputValue({ default_weight_grams: 1, portion_label: '1份' }, totals.portions)}份`)
+  if (totals.weight > 0) parts.push(`${Math.round(totals.weight)}g`)
+  return parts.join(' + ') || '0g'
+}
+
+function scaledManualFoodNutrition(item: ManualFoodItem, weight: number): Nutrients & { weight: number } {
+  const baseWeight = numberFrom(item.default_weight_grams, 100) || 100
+  const safeWeight = Math.max(0, weight)
+  const ratio = baseWeight > 0 ? safeWeight / baseWeight : 1
+  return {
+    calories: numberFrom(item.total_calories ?? item.calories) * ratio,
+    protein: numberFrom(item.total_protein ?? item.protein) * ratio,
+    carbs: numberFrom(item.total_carbs ?? item.carbs) * ratio,
+    fat: numberFrom(item.total_fat ?? item.fat) * ratio,
+    fiber: numberFrom(item.nutrients_per_100g?.fiber) * (safeWeight / 100),
+    sugar: numberFrom(item.nutrients_per_100g?.sugar) * (safeWeight / 100),
+    sodium_mg: numberFrom(item.nutrients_per_100g?.sodium_mg) * (safeWeight / 100),
+    weight: safeWeight,
+  }
+}
+
 function numberFrom(value: unknown, fallback = 0): number {
   const n = Number(value)
   return Number.isFinite(n) ? n : fallback
@@ -2223,6 +3203,39 @@ function numberFrom(value: unknown, fallback = 0): number {
 function numberOrUndefined(value: string): number | undefined {
   const n = Number(value)
   return Number.isFinite(n) && value.trim() !== '' ? n : undefined
+}
+
+function splitImageUrls(value: string): string[] {
+  return value
+    .split(/\r?\n|,|，/)
+    .map((url) => url.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+}
+
+function validateCustomFoodDraft(
+  title: string,
+  defaultWeightGrams: number,
+  per100g: { calories: number; protein: number; carbs: number; fat: number; fiber: number; sugar: number; sodium_mg: number },
+): string | null {
+  if (!title) return '请输入食物名称。'
+  if (!Number.isFinite(defaultWeightGrams) || defaultWeightGrams <= 0 || defaultWeightGrams > 5000) {
+    return '默认份量需要在 1-5000g 之间。'
+  }
+  if (per100g.calories <= 0 || per100g.calories > 2000) {
+    return '每 100g 热量需要在 1-2000 kcal 之间。'
+  }
+  const ranges: Array<[string, number, number]> = [
+    ['蛋白质', per100g.protein, 300],
+    ['碳水', per100g.carbs, 500],
+    ['脂肪', per100g.fat, 300],
+    ['膳食纤维', per100g.fiber, 200],
+    ['糖', per100g.sugar, 300],
+    ['钠', per100g.sodium_mg, 100000],
+  ]
+  const invalid = ranges.find(([, value, max]) => value < 0 || value > max)
+  if (invalid) return `${invalid[0]}数值超出合理范围。`
+  return null
 }
 
 function numberField(value: unknown): string {
@@ -2451,7 +3464,7 @@ function stringFrom(value: unknown): string {
 }
 
 function showError(title: string, error: unknown) {
-  Alert.alert(title, error instanceof Error ? error.message : '请稍后重试')
+  Alert.alert(title, userFacingErrorMessage(error))
 }
 
 function taskStatusLabel(status: AnalysisTask['status']): string {
@@ -2473,21 +3486,160 @@ function exerciseTaskStatusLabel(status: string): string {
   return taskStatusLabel(status as AnalysisTask['status'])
 }
 
+function isTaskRunningStatus(status?: string): boolean {
+  return ['pending', 'queued', 'running', 'processing'].includes(String(status || ''))
+}
+
+function exerciseTaskMessage(status: string): string {
+  if (isTaskRunningStatus(status)) return '系统正在识别运动内容，完成后会自动刷新当天记录。'
+  if (status === 'done') return '分析已完成，页面已刷新当天运动记录。'
+  if (['failed', 'violated', 'timed_out', 'cancelled'].includes(status)) return '本次分析没有完成，可以调整内容后重新提交，或稍后刷新结果。'
+  return '可手动刷新查看最新结果。'
+}
+
 function exerciseTaskError(task: AnalysisTask): string {
   const raw = String(task.error_message || '').trim()
   if (!raw) return '运动分析失败'
   try {
     const parsed = JSON.parse(raw) as { message?: string }
-    if (parsed.message) return parsed.message
+    if (parsed.message) return userFacingMessage(parsed.message, '运动分析失败')
   } catch {
-    // Keep the server-provided plain text message.
+    // Plain text errors are sanitized below.
   }
-  return raw
+  return userFacingMessage(raw, '运动分析失败')
 }
 
 function isTextAnalysisTask(task: AnalysisTask): boolean {
   if (task.task_type === 'food_text') return true
   return task.payload?.source_type === 'text'
+}
+
+function analyzeHistoryPayloadValue(task: AnalysisTask, ...keys: string[]): unknown {
+  const payload = task.payload || {}
+  for (const key of keys) {
+    const value = payload[key]
+    if (value != null && value !== '') return value
+  }
+  return undefined
+}
+
+function analyzeHistoryMealType(task: AnalysisTask): MealType {
+  const value = String(analyzeHistoryPayloadValue(task, 'meal_type', 'mealType') || '')
+  if (value === 'snack') return 'afternoon_snack'
+  return mealOptions.includes(value as MealType) ? (value as MealType) : inferDefaultMealTypeFromLocalTime()
+}
+
+function analyzeHistoryDate(task: AnalysisTask): string {
+  const value = String(analyzeHistoryPayloadValue(task, 'date', 'recorded_on', 'recordedOn') || '').trim()
+  return value || todayKey()
+}
+
+function isPackagedAnalyzeHistoryTask(task: AnalysisTask): boolean {
+  const taskType = String(task.task_type || '')
+  return taskType.startsWith('packaged') || taskType.includes('packaged_food') || taskType.includes('nutrition_label')
+}
+
+function isVisibleAnalyzeHistoryTask(task: AnalysisTask): boolean {
+  const taskType = String(task.task_type || '')
+  const payload = task.payload || {}
+  if (payload.expiry_recognition || payload.exercise) return false
+  if (taskType === 'exercise' || taskType.startsWith('exercise')) return false
+  if (taskType === 'health_report' || taskType === 'public_food_library_text') return false
+  if (isPackagedAnalyzeHistoryTask(task)) return true
+  if (taskType === 'food' || taskType.startsWith('food_')) return true
+  if (taskType === 'food_text' || taskType.startsWith('food_text')) return true
+  if (taskType.startsWith('precision_')) return true
+  return false
+}
+
+function isAnalyzeRetryable(task: AnalysisTask): boolean {
+  if (isPackagedAnalyzeHistoryTask(task)) return false
+  const status = String(task.status || '')
+  return status === 'failed' || status === 'timed_out'
+}
+
+function analyzeHistoryImageUrl(task: AnalysisTask): string {
+  const primary = String(task.image_url || '').trim()
+  if (primary) return primary
+  const imagePaths = Array.isArray(task.image_paths) ? task.image_paths : []
+  return String(imagePaths[0] || '').trim()
+}
+
+function analyzeHistoryTitle(task: AnalysisTask): string {
+  if (task.status === 'violated') return '内容未通过审核'
+  if (isTextAnalysisTask(task)) {
+    const text = String(task.text_input || '').replace(/\s+/g, ' ').trim()
+    return text || '文字记录'
+  }
+  const result = (task.result || {}) as Record<string, any>
+  const packaged = (result.packaged_product || result.nutrition || {}) as Record<string, any>
+  if (isPackagedAnalyzeHistoryTask(task)) {
+    return String(packaged.product_name || packaged.name || '包装食品识别').trim()
+  }
+  const firstItem = task.result?.items?.[0]?.name?.trim()
+  if (firstItem) return firstItem
+  const description = String(task.result?.description || '').trim()
+  if (description) return description.slice(0, 24)
+  return task.status === 'done' ? '饮食分析结果' : '图片记录'
+}
+
+function analyzeHistoryAvatarText(task: AnalysisTask): string {
+  if (isPackagedAnalyzeHistoryTask(task)) return '包'
+  if (!isTextAnalysisTask(task)) return '图'
+  const text = String(task.text_input || '').replace(/\s+/g, '').trim()
+  return text ? text.slice(0, Math.min(2, text.length)) : '文'
+}
+
+function analyzeHistoryStatusLabel(task: AnalysisTask): string {
+  const status = String(task.status || '')
+  if (status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') return '正在识别'
+  if (status === 'done') {
+    if (task.is_recorded === true) return '已经记录'
+    if (task.is_recorded === false) return '等待记录'
+    return '已完成'
+  }
+  if (status === 'failed' || status === 'timed_out') return '点我重试'
+  if (status === 'violated') return '未通过'
+  if (status === 'cancelled') return '已取消'
+  return taskStatusLabel(task.status)
+}
+
+function analyzeHistoryCalories(task: AnalysisTask): number {
+  const total = numberFrom(task.result?.total_calories, 0)
+  if (total > 0) return total
+  return (task.result?.items || []).reduce((sum, item) => sum + numberFrom(item.nutrients?.calories, 0), 0)
+}
+
+function analyzeHistoryMeta(task: AnalysisTask): string {
+  const status = String(task.status || '')
+  if (status === 'violated') return userFacingMessage(task.error_message, '该记录因内容问题不可查看')
+  if (status === 'failed' || status === 'timed_out') return '识别没有成功 · 可用原内容重新识别'
+  const kind = isPackagedAnalyzeHistoryTask(task) ? '包装食品' : isTextAnalysisTask(task) ? '文字记录' : '图片记录'
+  const count = task.result?.items?.length || 0
+  const calories = analyzeHistoryCalories(task)
+  const parts = [formatDateTime(task.created_at), kind]
+  if (count > 0) parts.push(`${count} 项食物`)
+  if (calories > 0) parts.push(`${Math.round(calories)} kcal`)
+  return parts.filter(Boolean).join(' · ')
+}
+
+function notificationTabApiType(tab: NotificationTab): string | undefined {
+  if (tab === 'like') return 'like_received'
+  if (tab === 'comment') return 'comment_received'
+  return undefined
+}
+
+function notificationMatchesTab(item: CommunityNotificationItem, tab: NotificationTab): boolean {
+  if (tab === 'all') return true
+  const type = notificationType(item)
+  if (tab === 'like') return type === 'like_received' || type.includes('like')
+  return type === 'comment_received' || type === 'reply_received' || type === 'comment_rejected'
+}
+
+function notificationEmptyText(tab: NotificationTab): string {
+  if (tab === 'like') return '暂无点赞'
+  if (tab === 'comment') return '暂无评论'
+  return '暂无互动消息'
 }
 
 function notificationTitle(item: CommunityNotificationItem): string {
@@ -2527,6 +3679,56 @@ function notificationAvatarText(item: CommunityNotificationItem): string {
   return '信'
 }
 
+function friendUserSubtitle(user: FriendUserItem): string {
+  if (user.is_friend) return '已在好友列表'
+  if (user.is_pending) return '好友请求已发送'
+  return '可发送好友请求'
+}
+
+function friendUserId(user: FriendUserItem): string {
+  return String(user.id || '').trim()
+}
+
+function friendDisplayName(user: FriendUserItem): string {
+  return String(user.nickname || '').trim() || '用户'
+}
+
+function friendRequestStatus(input?: string | FriendRequestItem): string {
+  const status = typeof input === 'string' ? input : input?.status
+  return String(status || 'pending').trim().toLowerCase() || 'pending'
+}
+
+function friendRequestStatusLabel(status?: string | FriendRequestItem): string {
+  const labels: Record<string, string> = {
+    pending: '等待对方处理',
+    accepted: '已通过',
+    rejected: '已拒绝',
+    canceled: '已取消',
+    cancelled: '已取消',
+    expired: '已过期',
+  }
+  return labels[friendRequestStatus(status)] || '等待对方处理'
+}
+
+function friendRequestUserId(request: FriendRequestItem): string {
+  return String(request.counterpart_user_id || request.from_user_id || request.to_user_id || '').trim()
+}
+
+function friendRequestDisplayName(request: FriendRequestItem): string {
+  return String(request.counterpart_nickname || request.from_nickname || '').trim() || '用户'
+}
+
+function friendRequestAvatar(request: FriendRequestItem): string | undefined {
+  return String(request.counterpart_avatar || request.from_avatar || '').trim() || undefined
+}
+
+function friendRequestTimeLabel(request: FriendRequestItem): string {
+  return request.created_at ? formatDateTime(request.created_at) : ''
+}
+
+function formatBadgeCount(count: number): string {
+  return count > 99 ? '99+' : String(count)
+}
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
@@ -2537,11 +3739,130 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  friendCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  friendInfoRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 0,
+  },
+  friendActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 8,
+    maxWidth: 172,
+  },
+  friendAvatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  friendAvatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.surfaceMuted,
+  },
+  friendAvatarText: {
+    color: colors.brandDark,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  historyTaskRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  historyTaskThumb: {
+    width: 62,
+    height: 62,
+    borderRadius: 16,
+    backgroundColor: colors.surfaceMuted,
+  },
+  historyTaskThumbFallback: {
+    width: 62,
+    height: 62,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  historyTaskThumbText: {
+    color: colors.brandDark,
+    fontWeight: '900',
+  },
+  historyTaskTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  historyTaskTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  manualHeroCard: {
+    backgroundColor: colors.brandSoft,
+  },
+  manualHeroKcal: {
+    minWidth: 92,
+    alignItems: 'flex-end',
+  },
+  manualHeroKcalValue: {
+    color: colors.brandDark,
+    fontSize: 30,
+    fontWeight: '900',
+  },
+  manualHeroKcalUnit: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '800',
+  },
   buttonRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
     marginTop: 14,
+  },
+  aboutHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 14,
+  },
+  aboutLogo: {
+    width: 62,
+    height: 62,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  aboutLogoText: {
+    color: colors.brandDark,
+    fontSize: 28,
+    fontWeight: '900',
+  },
+  aboutName: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  aboutText: {
+    color: colors.textSecondary,
+    lineHeight: 21,
+    marginBottom: 12,
   },
   imageBlock: {
     marginTop: 12,
@@ -2636,6 +3957,53 @@ const styles = StyleSheet.create({
     color: colors.brandDark,
     fontWeight: '900',
   },
+  notificationTabs: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 16,
+  },
+  notificationTabItem: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    backgroundColor: colors.surfaceMuted,
+  },
+  notificationTabItemActive: {
+    backgroundColor: colors.brand,
+  },
+  notificationTabText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  notificationTabTextActive: {
+    color: '#fff',
+  },
+  notificationTabBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  notificationTabBadgeActive: {
+    backgroundColor: '#fff',
+  },
+  notificationTabBadgeText: {
+    color: colors.brandDark,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  notificationTabBadgeTextActive: {
+    color: colors.brand,
+  },
   summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -2698,6 +4066,12 @@ const styles = StyleSheet.create({
   editItemBox: {
     marginTop: 12,
     paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  selectedFoodBox: {
+    paddingTop: 14,
+    marginTop: 10,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
@@ -2802,6 +4176,19 @@ const styles = StyleSheet.create({
     color: colors.warning,
     fontWeight: '800',
   },
+  exerciseTaskHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  exerciseTaskTitleWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+  },
   field: {
     marginBottom: 14,
   },
@@ -2823,6 +4210,34 @@ const styles = StyleSheet.create({
     minHeight: 104,
     paddingTop: 12,
     paddingBottom: 12,
+  },
+  textQuickTags: {
+    marginTop: -4,
+    marginBottom: 14,
+  },
+  textQuickTagsLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  textQuickTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  textQuickTag: {
+    minHeight: 34,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    backgroundColor: colors.brandSoft,
+  },
+  textQuickTagText: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '900',
   },
   segment: {
     flexDirection: 'row',
@@ -2886,6 +4301,51 @@ const styles = StyleSheet.create({
     color: colors.brandDark,
     fontWeight: '900',
   },
+  manualAdjustRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  manualAdjustButton: {
+    minHeight: 36,
+    minWidth: 64,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
+  },
+  manualAdjustText: {
+    color: colors.text,
+    fontWeight: '800',
+  },
+  foodChoiceAdd: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  foodChoiceAddText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  foodChoiceAdded: {
+    minWidth: 48,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    backgroundColor: colors.brandSoft,
+  },
+  foodChoiceAddedText: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '900',
+  },
   chipWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -2947,6 +4407,14 @@ const styles = StyleSheet.create({
   },
   smallButtonTextDisabled: {
     color: colors.textMuted,
+  },
+  listEndText: {
+    marginTop: 4,
+    marginBottom: 10,
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   qrWrap: {
     alignItems: 'center',

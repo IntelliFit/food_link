@@ -6,6 +6,7 @@ import { Page } from '../components/Page'
 import { API_BASE_URL, SHOW_DEBUG_LOGIN } from '../config'
 import { useAuth } from '../providers/AuthProvider'
 import { colors } from '../theme'
+import { userFacingErrorMessage } from '../utils/errors'
 
 export function LoginScreen() {
   const { loginWithWechat, loginWithPassword, registerWithPassword, loginWithDebugAccount, loginWithUserId } = useAuth()
@@ -37,7 +38,7 @@ export function LoginScreen() {
       console.log('[mobile] login action succeeded')
     } catch (error) {
       console.log('[mobile] login action failed', error instanceof Error ? error.message : error)
-      Alert.alert('登录失败', error instanceof Error ? error.message : fallback)
+      Alert.alert('登录失败', userFacingErrorMessage(error, fallback))
     } finally {
       setLoading(false)
     }

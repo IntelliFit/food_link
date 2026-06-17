@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
   getAccessToken,
+  getHealthProfile,
   imageToBase64,
   saveFoodRecord,
   fetchManualFoodCatalog,
@@ -26,7 +27,10 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
-import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
+import {
+  inferDefaultMealTypeFromHealthProfile,
+  inferDefaultMealTypeFromLocalTime,
+} from '../../../utils/infer-default-meal-type'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -533,7 +537,14 @@ function RecordManualPage() {
     if (matchedMeal) {
       setSelectedMeal(matchedMeal.id)
     } else {
-      setSelectedMeal(inferDefaultMealTypeFromLocalTime())
+      void (async () => {
+        try {
+          const profile = getAccessToken() ? await getHealthProfile() : null
+          setSelectedMeal(inferDefaultMealTypeFromHealthProfile(profile))
+        } catch {
+          setSelectedMeal(inferDefaultMealTypeFromLocalTime())
+        }
+      })()
     }
     const quickSource = String(Taro.getStorageSync('campus_quick_record_source') || '')
     if (quickSource === 'campus_canteen' || quickSource === 'public_food_library') {

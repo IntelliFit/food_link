@@ -9,6 +9,7 @@ import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { formatDateTime } from '../utils/date'
+import { userFacingErrorMessage } from '../utils/errors'
 
 export function CommunityScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -26,7 +27,7 @@ export function CommunityScreen() {
       setFeed(feedData.list || [])
       setLeaderboard(leaderboardData.list || [])
     } catch (error) {
-      Alert.alert('获取圈子失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('获取圈子失败', userFacingErrorMessage(error))
     } finally {
       setLoading(false)
     }
@@ -50,25 +51,28 @@ export function CommunityScreen() {
       else await apiClient.communityLike(targetId, targetType)
     } catch (error) {
       setFeed(feed)
-      Alert.alert('操作失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('操作失败', userFacingErrorMessage(error))
     }
   }
 
   return (
     <Page title="圈子" subtitle="公开动态、好友互动和打卡排行。" refreshing={loading} onRefresh={load}>
       <View style={styles.quickRow}>
+        <QuickEntry label="搜索" onPress={() => navigation.navigate('CommunitySearch')} />
         <QuickEntry label="发布" onPress={() => navigation.navigate('CirclePostEdit')} />
         <QuickEntry label="好友" onPress={() => navigation.navigate('Friends')} />
-        <QuickEntry label="消息" onPress={() => navigation.navigate('Notifications')} />
       </View>
       <View style={styles.quickRow}>
+        <QuickEntry label="消息" onPress={() => navigation.navigate('Notifications')} />
         <QuickEntry label="公共食物" onPress={() => navigation.navigate('PublicFood', { mode: 'all' })} />
         <QuickEntry label="校园餐" onPress={() => navigation.navigate('CampusCanteen')} />
-        <QuickEntry label="私信" onPress={() => navigation.navigate('Conversations')} />
       </View>
       <View style={styles.quickRow}>
+        <QuickEntry label="私信" onPress={() => navigation.navigate('Conversations')} />
         <QuickEntry label="排行榜" onPress={() => navigation.navigate('CheckinLeaderboard')} />
         <QuickEntry label="分享食物" onPress={() => navigation.navigate('PublicFoodShare', { mode: 'public' })} />
+      </View>
+      <View style={styles.quickRow}>
         <QuickEntry label="补校园餐" onPress={() => navigation.navigate('PublicFoodShare', { mode: 'campus' })} />
       </View>
 
@@ -77,13 +81,17 @@ export function CommunityScreen() {
         {leaderboard.length === 0 ? (
           <Text style={styles.empty}>暂无排行数据。</Text>
         ) : (
-          leaderboard.slice(0, 3).map((item, index) => (
-            <View key={item.user_id} style={styles.rankRow}>
-              <Text style={styles.rankNo}>#{index + 1}</Text>
-              <Text style={styles.rankName}>{item.nickname || '食友'}</Text>
-              <Text style={styles.rankCount}>{item.record_count} 次</Text>
-            </View>
-          ))
+          leaderboard.slice(0, 3).map((item, index) => {
+            const rank = item.rank || index + 1
+            const checkinCount = item.checkin_count ?? item.record_count ?? 0
+            return (
+              <View key={item.user_id} style={styles.rankRow}>
+                <Text style={styles.rankNo}>#{rank}</Text>
+                <Text style={styles.rankName} numberOfLines={1}>{item.nickname || '食友'}</Text>
+                <Text style={styles.rankCount}>{checkinCount} 次</Text>
+              </View>
+            )
+          })
         )}
       </Card>
 
@@ -191,6 +199,7 @@ const styles = StyleSheet.create({
   },
   rankName: {
     flex: 1,
+    minWidth: 0,
     color: colors.text,
     fontWeight: '700',
   },
