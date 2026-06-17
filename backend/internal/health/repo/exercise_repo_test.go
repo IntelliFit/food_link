@@ -20,11 +20,14 @@ func setupExerciseTestDB(t *testing.T) *gorm.DB {
 		id TEXT PRIMARY KEY,
 		user_id TEXT,
 		exercise_desc TEXT,
+		exercise_type TEXT,
+		image_url TEXT,
 		calories_burned REAL,
 		duration_min INTEGER,
-		recorded_on TEXT,
+		recorded_on TIMESTAMP,
 		recorded_at TIMESTAMP,
 		ai_reasoning TEXT,
+		hidden_from_feed BOOLEAN DEFAULT FALSE,
 		created_at TIMESTAMP
 	)`).Error)
 	require.NoError(t, db.AutoMigrate(&domain.AnalysisTask{}))

@@ -45,6 +45,54 @@ type ExerciseLog struct {
 
 func (ExerciseLog) TableName() string { return "user_exercise_logs" }
 
+// ExerciseEnergyActivity — table: exercise_energy_library
+type ExerciseEnergyActivity struct {
+	ID             string     `gorm:"column:id" json:"id"`
+	CanonicalName  string     `gorm:"column:canonical_name" json:"canonical_name"`
+	NormalizedName string     `gorm:"column:normalized_name" json:"normalized_name"`
+	Category       string     `gorm:"column:category" json:"category"`
+	Intensity      string     `gorm:"column:intensity" json:"intensity"`
+	METValue       float64    `gorm:"column:met_value" json:"met_value"`
+	Source         string     `gorm:"column:source" json:"source"`
+	Evidence       string     `gorm:"column:evidence" json:"evidence"`
+	ReviewStatus   string     `gorm:"column:review_status" json:"review_status"`
+	IsActive       bool       `gorm:"column:is_active" json:"is_active"`
+	CreatedAt      *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt      *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+func (ExerciseEnergyActivity) TableName() string { return "exercise_energy_library" }
+
+// ExerciseEnergyAlias — table: exercise_energy_aliases
+type ExerciseEnergyAlias struct {
+	ID              string     `gorm:"column:id" json:"id"`
+	ActivityID      string     `gorm:"column:activity_id" json:"activity_id"`
+	AliasName       string     `gorm:"column:alias_name" json:"alias_name"`
+	NormalizedAlias string     `gorm:"column:normalized_alias" json:"normalized_alias"`
+	CreatedAt       *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+}
+
+func (ExerciseEnergyAlias) TableName() string { return "exercise_energy_aliases" }
+
+type ExerciseEnergyResolveResult struct {
+	Activity    *ExerciseEnergyActivity
+	Status      string
+	MatchSource string
+	Score       float64
+}
+
+type ExerciseEnergyActivityInput struct {
+	CanonicalName string
+	Category      string
+	Intensity     string
+	METValue      float64
+	Source        string
+	Evidence      string
+	ReviewStatus  string
+	IsActive      bool
+	Aliases       []string
+}
+
 // ExerciseUserProfile is the weapp_user projection needed for exercise
 // calorie estimation profile snapshots.
 type ExerciseUserProfile struct {

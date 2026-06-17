@@ -807,6 +807,33 @@ type ExerciseLogDO struct {
 
 func (ExerciseLogDO) TableName() string { return "user_exercise_logs" }
 
+type ExerciseEnergyActivityDO struct {
+	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	CanonicalName  string    `gorm:"column:canonical_name;type:text;not null;index:idx_exercise_energy_library_canonical_name"`
+	NormalizedName string    `gorm:"column:normalized_name;type:text;not null;uniqueIndex:idx_exercise_energy_library_normalized_name"`
+	Category       string    `gorm:"column:category;type:text;not null;default:'other';index:idx_exercise_energy_library_category"`
+	Intensity      string    `gorm:"column:intensity;type:text;not null;default:'moderate';index:idx_exercise_energy_library_intensity"`
+	METValue       float64   `gorm:"column:met_value;type:numeric(6,2);not null"`
+	Source         string    `gorm:"column:source;type:text;not null;default:'llm_pending'"`
+	Evidence       string    `gorm:"column:evidence;type:text;not null;default:''"`
+	ReviewStatus   string    `gorm:"column:review_status;type:text;not null;default:'pending';index:idx_exercise_energy_library_review_status"`
+	IsActive       bool      `gorm:"column:is_active;type:boolean;not null;default:true;index:idx_exercise_energy_library_is_active"`
+	CreatedAt      time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt      time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (ExerciseEnergyActivityDO) TableName() string { return "exercise_energy_library" }
+
+type ExerciseEnergyAliasDO struct {
+	ID              string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	ActivityID      string    `gorm:"column:activity_id;type:uuid;not null;index:idx_exercise_energy_aliases_activity_id"`
+	AliasName       string    `gorm:"column:alias_name;type:text;not null"`
+	NormalizedAlias string    `gorm:"column:normalized_alias;type:text;not null;uniqueIndex:idx_exercise_energy_aliases_normalized_alias"`
+	CreatedAt       time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+}
+
+func (ExerciseEnergyAliasDO) TableName() string { return "exercise_energy_aliases" }
+
 type StatsInsightDO struct {
 	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID          string     `gorm:"column:user_id;type:uuid;not null;index:idx_ai_stats_insights_user_range_date,priority:1"`
@@ -1209,6 +1236,8 @@ func AllModels() []any {
 		&BodyWaterLogDO{},
 		&BodyMetricSettingsDO{},
 		&ExerciseLogDO{},
+		&ExerciseEnergyActivityDO{},
+		&ExerciseEnergyAliasDO{},
 		&StatsInsightDO{},
 		&CustomFocusCardDO{},
 		&UserMembershipDO{},

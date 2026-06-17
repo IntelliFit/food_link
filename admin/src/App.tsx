@@ -9,6 +9,7 @@ import { BenchmarkPage } from '@/pages/benchmark-page'
 import { FeedbackPage } from '@/pages/feedback-page'
 import { FeedReportPage } from '@/pages/feed-report-page'
 import { FeedReportDetailPage } from '@/pages/feed-report-detail-page'
+import { ExerciseEnergyPage } from '@/pages/exercise-energy-page'
 import { LoginPage } from '@/pages/login-page'
 import { OverviewPage } from '@/pages/overview-page'
 import { PackagedFoodsPage } from '@/pages/packaged-foods-page'
@@ -19,6 +20,7 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   feedback: '/feedback',
   benchmark: '/benchmark',
   'packaged-foods': '/packaged-foods',
+  'exercise-energy': '/exercise-energy',
   'feed-reports': '/feed-reports',
   settings: '/settings',
 }
@@ -104,6 +106,7 @@ export function App() {
         <Route path='/overview' element={<OverviewPage {...pageProps} />} />
         <Route path='/feedback' element={<FeedbackPage {...pageProps} />} />
         <Route path='/benchmark' element={<BenchmarkPage {...pageProps} />} />
+        <Route path='/exercise-energy' element={<ExerciseEnergyPage {...pageProps} />} />
         <Route path='/feed-reports' element={<FeedReportPage {...pageProps} />} />
         <Route path='/feed-reports/:reportId' element={<FeedReportDetailPage {...pageProps} />} />
         <Route path='/packaged-foods' element={<PackagedFoodsPage {...pageProps} />} />

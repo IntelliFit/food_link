@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,11 +35,14 @@ func (p *recordingTaskPublisher) PublishTask(ctx context.Context, msg taskqueue.
 }
 
 type mockExerciseRepo struct {
-	logs      []domain.ExerciseLog
-	tasks     []domain.AnalysisTask
-	deletedID string
-	profile   *domain.ExerciseUserProfile
-	weight    *domain.BodyWeightRecord
+	logs       []domain.ExerciseLog
+	tasks      []domain.AnalysisTask
+	deletedID  string
+	profile    *domain.ExerciseUserProfile
+	weight     *domain.BodyWeightRecord
+	activity   *domain.ExerciseEnergyActivity
+	activities map[string]*domain.ExerciseEnergyActivity
+	pending    []domain.ExerciseEnergyActivityInput
 }
 
 func (m *mockExerciseRepo) CreateExerciseLog(ctx context.Context, log *domain.ExerciseLog) error {
@@ -105,6 +110,31 @@ func (m *mockExerciseRepo) FailAnalysisTask(ctx context.Context, taskID, errorMs
 		}
 	}
 	return nil
+}
+
+func (m *mockExerciseRepo) ResolveExerciseEnergyActivity(ctx context.Context, name string) (*domain.ExerciseEnergyResolveResult, error) {
+	if m.activities != nil {
+		if activity := m.activities[name]; activity != nil {
+			return &domain.ExerciseEnergyResolveResult{Activity: activity, Status: "exact_canonical", MatchSource: "canonical", Score: 1}, nil
+		}
+	}
+	if m.activity != nil && m.activity.CanonicalName == name {
+		return &domain.ExerciseEnergyResolveResult{Activity: m.activity, Status: "exact_canonical", MatchSource: "canonical", Score: 1}, nil
+	}
+	return &domain.ExerciseEnergyResolveResult{Status: "unresolved"}, nil
+}
+
+func (m *mockExerciseRepo) CreatePendingExerciseEnergyActivity(ctx context.Context, input domain.ExerciseEnergyActivityInput) (*domain.ExerciseEnergyActivity, error) {
+	m.pending = append(m.pending, input)
+	return &domain.ExerciseEnergyActivity{
+		ID:            "pending-activity-1",
+		CanonicalName: input.CanonicalName,
+		Category:      input.Category,
+		Intensity:     input.Intensity,
+		METValue:      input.METValue,
+		ReviewStatus:  input.ReviewStatus,
+		IsActive:      input.IsActive,
+	}, nil
 }
 
 func TestExerciseService_GetDailyCalories(t *testing.T) {
@@ -344,6 +374,322 @@ func TestExerciseService_EstimateCalories_SplitsMultiItemDescription(t *testing.
 	require.NoError(t, err)
 	assert.Contains(t, result["reasoning"], "分项估算")
 	assert.Equal(t, 300, result["estimated_calories"].(int))
+}
+
+func TestExerciseService_EstimateCalories_LongTextUsesLibraryMET(t *testing.T) {
+	repo := &mockExerciseRepo{
+		profile:  &domain.ExerciseUserProfile{ID: "u1"},
+		activity: &domain.ExerciseEnergyActivity{ID: "act-run", CanonicalName: "慢跑", METValue: 7.0, ReviewStatus: "active", IsActive: true},
+	}
+	repo.weight = &domain.BodyWeightRecord{WeightKg: 80}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
+	})
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		responseBody := `{"choices":[{"message":{"content":"{\"items\":[{\"name\":\"慢跑\",\"duration_min\":30,\"sets\":0,\"reps\":0,\"intensity\":\"moderate\",\"evidence\":\"慢跑30分钟\"}]}"}}]}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(responseBody)), Header: make(http.Header)}, nil
+	})}
+	desc := strings.Repeat("今天先做热身，然后", 20) + "慢跑30分钟，最后拉伸。"
+
+	result, err := svc.EstimateCalories(context.Background(), "u1", desc)
+	require.NoError(t, err)
+	assert.Equal(t, 280, result["estimated_calories"].(int))
+	assert.Contains(t, result["reasoning"], "分项识别")
+	assert.Empty(t, repo.pending)
+}
+
+func TestExerciseService_EstimateCalories_LongTextCreatesPendingMET(t *testing.T) {
+	repo := &mockExerciseRepo{profile: &domain.ExerciseUserProfile{ID: "u1"}}
+	repo.weight = &domain.BodyWeightRecord{WeightKg: 70}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
+	})
+	callIndex := 0
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		callIndex++
+		content := `{"items":[{"name":"壶铃摆动","duration_min":20,"sets":0,"reps":0,"intensity":"high","evidence":"壶铃摆动20分钟"}]}`
+		if callIndex == 2 {
+			content = `{"activity_name":"壶铃训练","category":"strength","intensity":"high","met":8.0,"reasoning":"壶铃摆动属于较高强度力量循环训练"}`
+		}
+		responseBody := `{"choices":[{"message":{"content":` + strconv.Quote(content) + `}}]}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(responseBody)), Header: make(http.Header)}, nil
+	})}
+	desc := strings.Repeat("训练内容比较多，包含热身和记录说明。", 12) + "壶铃摆动20分钟。"
+
+	result, err := svc.EstimateCalories(context.Background(), "u1", desc)
+	require.NoError(t, err)
+	assert.Equal(t, 187, result["estimated_calories"].(int))
+	require.Len(t, repo.pending, 1)
+	assert.Equal(t, "壶铃训练", repo.pending[0].CanonicalName)
+	assert.Equal(t, "pending", repo.pending[0].ReviewStatus)
+	assert.Equal(t, 8.0, repo.pending[0].METValue)
+}
+
+func TestExerciseService_EstimateCalories_ShortTextRun40MinutesUsesOriginalLLM(t *testing.T) {
+	repo := &mockExerciseRepo{profile: &domain.ExerciseUserProfile{ID: "u1"}}
+	repo.weight = &domain.BodyWeightRecord{WeightKg: 70}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{DoubaoAPIKey: "fake-key"},
+	})
+	callCount := 0
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		callCount++
+		responseBody := `{"choices":[{"message":{"content":"{\"exercise_type\":\"跑步\",\"reasoning\":\"短文本按跑步40分钟直接估算\",\"calories_kcal\":320}"}}]}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(responseBody)), Header: make(http.Header)}, nil
+	})}
+	desc := "我今天跑了40分钟步"
+
+	result, err := svc.EstimateCalories(context.Background(), "u1", desc)
+	require.NoError(t, err)
+	assert.LessOrEqual(t, len([]rune(desc)), exerciseLongTextThresholdRunes)
+	assert.Equal(t, 1, callCount)
+	assert.Equal(t, 320, result["estimated_calories"].(int))
+	assert.Equal(t, desc, result["exercise_desc"])
+	assert.Contains(t, result["reasoning"], "跑步40分钟")
+	assert.Empty(t, repo.pending)
+	assert.NotContains(t, result["ai_response"].(string), "long_text_library_met")
+}
+
+func TestExerciseService_EstimateCalories_LongTextUsesGemini35Config(t *testing.T) {
+	repo := &mockExerciseRepo{
+		profile:  &domain.ExerciseUserProfile{ID: "u1"},
+		weight:   &domain.BodyWeightRecord{WeightKg: 80},
+		activity: &domain.ExerciseEnergyActivity{ID: "act-run", CanonicalName: "跑步", METValue: 7.0, ReviewStatus: "active", IsActive: true},
+	}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{
+			Gemini35APIKey:  "fake-gemini-key",
+			Gemini35BaseURL: "https://gemini-proxy.example.com/v1",
+			Gemini35Model:   "gemini-3.5-flash",
+		},
+	})
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https://gemini-proxy.example.com/v1/chat/completions", req.URL.String())
+		assert.Equal(t, "Bearer fake-gemini-key", req.Header.Get("Authorization"))
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+		assert.Equal(t, "gemini-3.5-flash", body["model"])
+		assert.Equal(t, map[string]any{"type": "json_object"}, body["response_format"])
+		assert.NotContains(t, body, "reasoning_effort")
+		responseBody := `{"choices":[{"message":{"content":"{\"items\":[{\"name\":\"跑步\",\"duration_min\":40,\"sets\":0,\"reps\":0,\"intensity\":\"moderate\",\"evidence\":\"跑步40分钟\"}]}"}}]}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(responseBody)), Header: make(http.Header)}, nil
+	})}
+	desc := strings.Repeat("今天的训练记录比较完整，我先做了关节活动和动态热身，过程中注意控制呼吸和配速，", 5) + "随后跑步40分钟，结束后做了放松拉伸。"
+
+	result, err := svc.EstimateCalories(context.Background(), "u1", desc)
+	require.NoError(t, err)
+	assert.Equal(t, 373, result["estimated_calories"].(int))
+}
+
+func TestExerciseService_EstimateCalories_LongTextEmptyGeminiFallsBackToDoubao(t *testing.T) {
+	repo := &mockExerciseRepo{
+		profile:  &domain.ExerciseUserProfile{ID: "u1"},
+		weight:   &domain.BodyWeightRecord{WeightKg: 80},
+		activity: &domain.ExerciseEnergyActivity{ID: "act-treadmill", CanonicalName: "跑步机", METValue: 8.3, ReviewStatus: "active", IsActive: true},
+	}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{
+			DoubaoAPIKey:    "fake-doubao-key",
+			DoubaoBaseURL:   "https://doubao.example.com/api/v3",
+			Gemini35APIKey:  "fake-gemini-key",
+			Gemini35BaseURL: "https://gemini-proxy.example.com/v1",
+			Gemini35Model:   "gemini-3.5-flash",
+		},
+	})
+	requestURLs := make([]string, 0, 2)
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		requestURLs = append(requestURLs, req.URL.String())
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+		switch len(requestURLs) {
+		case 1:
+			assert.Equal(t, "gemini-3.5-flash", body["model"])
+			assert.Equal(t, "Bearer fake-gemini-key", req.Header.Get("Authorization"))
+			responseBody := `{"choices":[{"message":{"content":""}}]}`
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(responseBody)), Header: make(http.Header)}, nil
+		case 2:
+			assert.Equal(t, "doubao-seed-2-0-lite-260428", body["model"])
+			assert.Equal(t, "Bearer fake-doubao-key", req.Header.Get("Authorization"))
+			assert.NotContains(t, body, "response_format")
+			content := `{"items":[{"name":"跑步机","duration_min":35,"sets":0,"reps":0,"intensity":"high","evidence":"跑步机。速度8，坡度2。跑35分钟"}]}`
+			responseBody := `{"choices":[{"message":{"content":` + strconv.Quote(content) + `}}]}`
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(responseBody)), Header: make(http.Header)}, nil
+		default:
+			t.Fatalf("unexpected request %d to %s", len(requestURLs), req.URL.String())
+			return nil, nil
+		}
+	})}
+	desc := strings.Repeat("今天训练内容很多，包含力量训练、核心和有氧。", 8) + "跑步机。速度8，坡度2。跑35分钟。"
+
+	result, err := svc.EstimateCalories(context.Background(), "u1", desc)
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"https://gemini-proxy.example.com/v1/chat/completions",
+		"https://doubao.example.com/api/v3/chat/completions",
+	}, requestURLs)
+	assert.Equal(t, 387, result["estimated_calories"].(int))
+	assert.Contains(t, result["ai_response"].(string), "long_text_library_met")
+	assert.Empty(t, repo.pending)
+}
+
+func TestExerciseService_EstimateCalories_LongTextMalformedGeminiFallsBackToDoubao(t *testing.T) {
+	repo := &mockExerciseRepo{
+		profile:  &domain.ExerciseUserProfile{ID: "u1"},
+		weight:   &domain.BodyWeightRecord{WeightKg: 80},
+		activity: &domain.ExerciseEnergyActivity{ID: "act-treadmill", CanonicalName: "跑步机", METValue: 8.3, ReviewStatus: "active", IsActive: true},
+	}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{
+			DoubaoAPIKey:    "fake-doubao-key",
+			DoubaoBaseURL:   "https://doubao.example.com/api/v3",
+			Gemini35APIKey:  "fake-gemini-key",
+			Gemini35BaseURL: "https://gemini-proxy.example.com/v1",
+			Gemini35Model:   "gemini-3.5-flash",
+		},
+	})
+	callCount := 0
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		callCount++
+		if callCount == 1 {
+			responseBody := `{"choices":[{"message":{"content":"{\"items\":["}}]}`
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(responseBody)), Header: make(http.Header)}, nil
+		}
+		content := `{"items":[{"name":"跑步机","duration_min":35,"sets":0,"reps":0,"intensity":"high","evidence":"跑步机。速度8，坡度2。跑35分钟"}]}`
+		responseBody := `{"choices":[{"message":{"content":` + strconv.Quote(content) + `}}]}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(responseBody)), Header: make(http.Header)}, nil
+	})}
+	desc := strings.Repeat("今天训练内容很多，包含力量训练、核心和有氧。", 8) + "跑步机。速度8，坡度2。跑35分钟。"
+
+	result, err := svc.EstimateCalories(context.Background(), "u1", desc)
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount)
+	assert.Equal(t, 387, result["estimated_calories"].(int))
+	assert.Contains(t, result["ai_response"].(string), "long_text_library_met")
+}
+
+func TestParseExtractedExerciseItems_EmptyResponse(t *testing.T) {
+	items, err := parseExtractedExerciseItems("")
+	require.Error(t, err)
+	assert.Nil(t, items)
+	assert.Contains(t, err.Error(), "运动项目抽取结果为空")
+}
+
+func TestExerciseService_ProcessExerciseTask_LongStrengthCardioTextIgnoresInvalidImageURL(t *testing.T) {
+	activity := func(id, name string, met float64) *domain.ExerciseEnergyActivity {
+		return &domain.ExerciseEnergyActivity{ID: id, CanonicalName: name, METValue: met, ReviewStatus: "active", IsActive: true}
+	}
+	repo := &mockExerciseRepo{
+		profile: &domain.ExerciseUserProfile{ID: "u1"},
+		weight:  &domain.BodyWeightRecord{WeightKg: 80},
+		activities: map[string]*domain.ExerciseEnergyActivity{
+			"深蹲":   activity("act-squat", "深蹲", 5.0),
+			"卧推":   activity("act-bench", "卧推", 4.5),
+			"高位下拉": activity("act-pulldown", "高位下拉", 4.0),
+			"坐姿划船": activity("act-row", "坐姿划船", 4.0),
+			"哑铃推举": activity("act-press", "哑铃推举", 4.5),
+			"弯举":   activity("act-curl", "弯举", 3.5),
+			"绳索下压": activity("act-pushdown", "绳索下压", 3.5),
+			"跑步机":  activity("act-treadmill", "跑步机", 8.3),
+			"卷腹":   activity("act-crunch", "卷腹", 3.8),
+			"平板支撑": activity("act-plank", "平板支撑", 3.0),
+			"背部伸展": activity("act-back-extension", "背部伸展", 3.5),
+			"拉伸":   activity("act-stretch", "拉伸", 2.3),
+		},
+	}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{
+			Gemini35APIKey:  "fake-gemini-key",
+			Gemini35BaseURL: "https://gemini-proxy.example.com/v1",
+			Gemini35Model:   "gemini-3.5-flash",
+		},
+	})
+	callCount := 0
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		callCount++
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+		assert.Equal(t, "gemini-3.5-flash", body["model"])
+		assert.NotContains(t, body, "reasoning_effort")
+		content := `{"items":[
+			{"name":"深蹲","duration_min":12,"sets":4,"reps":8,"intensity":"high","evidence":"深蹲架加杠铃片至40公斤。4组8次"},
+			{"name":"卧推","duration_min":12,"sets":4,"reps":10,"intensity":"high","evidence":"卧推架躺下。4组10次"},
+			{"name":"高位下拉","duration_min":12,"sets":4,"reps":12,"intensity":"moderate","evidence":"龙门架高位下拉。4组12次"},
+			{"name":"坐姿划船","duration_min":12,"sets":4,"reps":12,"intensity":"moderate","evidence":"坐姿划船。4组12次"},
+			{"name":"哑铃推举","duration_min":12,"sets":4,"reps":10,"intensity":"high","evidence":"哑铃推举。15公斤一对。4组10次"},
+			{"name":"弯举","duration_min":9,"sets":3,"reps":12,"intensity":"moderate","evidence":"弯举架。3组12次"},
+			{"name":"绳索下压","duration_min":9,"sets":3,"reps":12,"intensity":"moderate","evidence":"绳索下压。3组12次"},
+			{"name":"跑步机","duration_min":35,"sets":0,"reps":0,"intensity":"high","evidence":"跑步机。速度8，坡度2。跑35分钟"},
+			{"name":"卷腹","duration_min":12,"sets":3,"reps":20,"intensity":"moderate","evidence":"垫上卷腹。3组20次"},
+			{"name":"平板支撑","duration_min":3,"sets":3,"reps":0,"intensity":"moderate","evidence":"平板支撑。3组60秒"},
+			{"name":"背部伸展","duration_min":12,"sets":3,"reps":15,"intensity":"moderate","evidence":"背部伸展。3组15次"},
+			{"name":"拉伸","duration_min":2,"sets":0,"reps":0,"intensity":"low","evidence":"拉伸股四头肌、腘绳肌、胸大肌、背阔肌。各30秒"}
+		]}`
+		responseBody := `{"choices":[{"message":{"content":` + strconv.Quote(content) + `}}]}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(responseBody)), Header: make(http.Header)}, nil
+	})}
+	desc := `08:15刷卡进馆。换衣。戴心率带。深蹲架加杠铃片至40公斤。起杠。下蹲至大腿低于水平。站起。4组8次。组歇90秒。
+
+卧推架躺下。杠铃下放触胸。推起。4组10次。组歇60秒。
+
+龙门架高位下拉。把手拉至锁骨。上放至手臂伸直。4组12次。
+
+坐姿划船。把手拉至腹部。肩胛夹紧。4组12次。
+
+哑铃推举。15公斤一对。推至头顶。下放至耳侧。4组10次。
+
+弯举架。反握。弯举至肩高。下放伸直。3组12次。
+
+绳索下压。直杆压至大腿前。上放至肘关节90度。3组12次。
+
+跑步机。速度8，坡度2。跑35分钟。心率140至155。距离4.6公里。
+
+垫上卷腹。3组20次。平板支撑。3组60秒。背部伸展。3组15次。
+
+拉伸股四头肌、腘绳肌、胸大肌、背阔肌。各30秒。`
+
+	result, err := svc.ProcessExerciseTask(context.Background(), "u1", desc, "undefined", "2026-06-18", map[string]any{
+		"profile_snapshot": map[string]any{"weight_kg": 80.0},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 0, callCount)
+	assert.Equal(t, 958, result["estimated_calories"].(int))
+	assert.Contains(t, result["ai_response"].(string), "long_text_library_met")
+	assert.Contains(t, result["ai_response"].(string), "local_exercise_text_parser")
+	assert.Contains(t, result["reasoning"], "分项识别")
+	require.Len(t, repo.logs, 1)
+	assert.Nil(t, repo.logs[0].ImageURL)
+	assert.Empty(t, repo.pending)
+}
+
+func TestExerciseService_EstimateSingleLongTextItemsResponseFallsBackToLongTextFlow(t *testing.T) {
+	repo := &mockExerciseRepo{
+		profile:  &domain.ExerciseUserProfile{ID: "u1"},
+		weight:   &domain.BodyWeightRecord{WeightKg: 80},
+		activity: &domain.ExerciseEnergyActivity{ID: "act-treadmill", CanonicalName: "跑步机", METValue: 8.3, ReviewStatus: "active", IsActive: true},
+	}
+	svc := NewExerciseService(repo, &config.Config{
+		External: config.ExternalConfig{
+			DoubaoAPIKey:    "fake-doubao-key",
+			Gemini35APIKey:  "fake-gemini-key",
+			Gemini35BaseURL: "https://gemini-proxy.example.com/v1",
+			Gemini35Model:   "gemini-3.5-flash",
+		},
+	})
+	callCount := 0
+	svc.client = &http.Client{Transport: exerciseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		callCount++
+		content := `{"items":[{"name":"跑步机","duration_min":35,"sets":0,"reps":0,"intensity":"high","evidence":"跑步机。速度8，坡度2。跑35分钟"}]}`
+		responseBody := `{"choices":[{"message":{"content":` + strconv.Quote(content) + `}}]}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(responseBody)), Header: make(http.Header)}, nil
+	})}
+	desc := strings.Repeat("今天训练内容很多，包含力量训练、核心和有氧。", 8) + "跑步机。速度8，坡度2。跑35分钟。"
+
+	result, err := svc.estimateExerciseCaloriesWithLLM(context.Background(), desc, "", map[string]any{"weight_kg": 80.0})
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount)
+	assert.Equal(t, 387, result.CaloriesKcal)
+	assert.Equal(t, "long_text_library_met", result.Source)
+	assert.Contains(t, result.Raw, "long_text_library_met")
 }
 
 func TestExerciseService_DeleteLog(t *testing.T) {

@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react'
 import {
+  Activity,
   Flag,
   FlaskConical,
   LayoutDashboard,
@@ -14,7 +15,7 @@ import { cn } from '@/lib/utils'
 import { BrandMark } from '@/components/brand-mark'
 import { ThemeToggle } from '@/components/theme-toggle'
 
-export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'feed-reports' | 'settings'
+export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'exercise-energy' | 'feed-reports' | 'settings'
 
 type AdminSidebarProps = {
   activeMenu: AdminMenuId
@@ -32,6 +33,7 @@ const menus: Array<{
   { id: 'feedback', label: '意见反馈', icon: MessageSquareText },
   { id: 'benchmark', label: '数据集评测', icon: FlaskConical },
   { id: 'packaged-foods', label: '包装食品', icon: Package },
+  { id: 'exercise-energy', label: '运动库', icon: Activity },
   { id: 'feed-reports', label: '举报管理', icon: Flag },
   { id: 'settings', label: '系统设置', icon: Settings, disabled: true },
 ]
