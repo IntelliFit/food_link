@@ -27,11 +27,12 @@ import {
   type Nutrients,
   type RewardCenterResponse,
 } from '@food-link/core'
-import { apiClient, getRecentRequestTraces, RECENT_REQUEST_TRACE_LIMIT } from '../api'
+import { apiClient, clearRecentRequestTraces, getRecentRequestTraces, RECENT_REQUEST_TRACE_LIMIT } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import { APP_VERSION } from '../config'
+import { clearRecentConsoleLogs, CONSOLE_LOG_BUFFER_LIMIT, getRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { formatDateTime, todayKey } from '../utils/date'
@@ -74,6 +75,15 @@ const exercisePresets = ['跑步30分钟', '游泳45分钟', '瑜伽1小时', '�
 const CIRCLE_POST_MAX_IMAGES = 3
 const FEEDBACK_MAX_IMAGES = 4
 const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
+type FeedbackCategoryKey = 'bug' | 'suggestion' | 'experience' | 'other'
+
+const feedbackCategoryOptions: Array<{ value: FeedbackCategoryKey; label: string; desc: string }> = [
+  { value: 'bug', label: '问题反馈', desc: '页面异常、识别失败、数据不对' },
+  { value: 'suggestion', label: '功能建议', desc: '想要的新功能或体验优化' },
+  { value: 'experience', label: '使用体验', desc: '流程、文案、交互上的感受' },
+  { value: 'other', label: '其他', desc: '其他想告诉我们的内容' },
+]
+
 type EditableRecordItem = {
   name: string
   weight: string
@@ -2375,7 +2385,8 @@ export function NotificationsScreen() {
 }
 
 export function AboutFeedbackScreen() {
-  const [category, setCategory] = useState<'bug' | 'suggestion' | 'experience' | 'other'>('bug')
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const [category, setCategory] = useState<FeedbackCategoryKey>('bug')
   const [content, setContent] = useState('')
   const [contact, setContact] = useState('')
   const [feedbackImageUrls, setFeedbackImageUrls] = useState<string[]>([])
@@ -2383,9 +2394,17 @@ export function AboutFeedbackScreen() {
   const [searchable, setSearchable] = useState(true)
   const [publicRecords, setPublicRecords] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [submittingFeedback, setSubmittingFeedback] = useState(false)
+  const [uploadingFeedbackImages, setUploadingFeedbackImages] = useState(false)
   const [savingPrivacy, setSavingPrivacy] = useState<'searchable' | 'public_records' | null>(null)
   const [showGroupQr, setShowGroupQr] = useState(false)
-  const traceCount = getRecentRequestTraces().length
+  const [diagnosticVersion, setDiagnosticVersion] = useState(0)
+  const contentLength = content.length
+  const trimmedContentLength = content.trim().length
+  const contactLength = contact.length
+  const canSubmitFeedback = trimmedContentLength >= 5 && !submittingFeedback && !uploadingFeedbackImages
+  const traceCount = useMemo(() => getRecentRequestTraces().length, [diagnosticVersion])
+  const consoleLogCount = useMemo(() => getRecentConsoleLogs().length, [diagnosticVersion])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -2405,8 +2424,16 @@ export function AboutFeedbackScreen() {
   }, [load])
 
   const submit = async () => {
+    if (trimmedContentLength < 5) {
+      Alert.alert('请补充反馈内容', '请至少填写 5 个字，帮助我们定位问题或理解建议。')
+      return
+    }
+    if (uploadingFeedbackImages) {
+      Alert.alert('截图还在处理', '请等截图处理完成后再提交反馈。')
+      return
+    }
     try {
-      setLoading(true)
+      setSubmittingFeedback(true)
       await apiClient.submitFeedback({
         category,
         content,
@@ -2416,6 +2443,8 @@ export function AboutFeedbackScreen() {
         clientInfo: {
           surface: 'expo',
           recent_request_limit: RECENT_REQUEST_TRACE_LIMIT,
+          console_log_limit: CONSOLE_LOG_BUFFER_LIMIT,
+          ...(attachRecentRequests ? { console_logs: getRecentConsoleLogs() } : {}),
         },
         recentRequests: attachRecentRequests ? getRecentRequestTraces() : [],
         imageUrls: feedbackImageUrls,
@@ -2427,13 +2456,13 @@ export function AboutFeedbackScreen() {
     } catch (error) {
       Alert.alert('提交失败', userFacingErrorMessage(error))
     } finally {
-      setLoading(false)
+      setSubmittingFeedback(false)
     }
   }
 
   const pickFeedbackImages = async () => {
     const remaining = FEEDBACK_MAX_IMAGES - feedbackImageUrls.length
-    if (remaining <= 0) return
+    if (remaining <= 0 || uploadingFeedbackImages) return
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
       if (!permission.granted) {
@@ -2447,7 +2476,7 @@ export function AboutFeedbackScreen() {
         quality: 0.86,
       })
       if (picked.canceled || !picked.assets.length) return
-      setLoading(true)
+      setUploadingFeedbackImages(true)
       const uploaded: string[] = []
       for (const asset of picked.assets.slice(0, remaining)) {
         const data = await apiClient.uploadFeedbackImageFile({
@@ -2461,7 +2490,7 @@ export function AboutFeedbackScreen() {
     } catch (error) {
       Alert.alert('上传图片失败', userFacingErrorMessage(error))
     } finally {
-      setLoading(false)
+      setUploadingFeedbackImages(false)
     }
   }
 
@@ -2490,7 +2519,10 @@ export function AboutFeedbackScreen() {
       const keys = await AsyncStorage.getAllKeys()
       const removable = keys.filter((key) => key.startsWith('food_link_mobile_') && !key.includes('access_token') && !key.includes('refresh_token') && !key.includes('user_id'))
       if (removable.length) await AsyncStorage.multiRemove(removable)
-      Alert.alert('已清除', '本地缓存已清理，登录状态已保留。')
+      clearRecentRequestTraces()
+      clearRecentConsoleLogs()
+      setDiagnosticVersion((current) => current + 1)
+      Alert.alert('已清除', '本地缓存和诊断记录已清理，登录状态已保留。')
     } catch (error) {
       Alert.alert('清除失败', userFacingErrorMessage(error))
     }
@@ -2540,28 +2572,56 @@ export function AboutFeedbackScreen() {
       </Card>
 
       <Card>
-        <Text style={styles.sectionTitle}>意见反馈</Text>
-        <View style={styles.segment}>
-          <SegmentButton label="问题" active={category === 'bug'} onPress={() => setCategory('bug')} />
-          <SegmentButton label="建议" active={category === 'suggestion'} onPress={() => setCategory('suggestion')} />
-          <SegmentButton label="体验" active={category === 'experience'} onPress={() => setCategory('experience')} />
-          <SegmentButton label="其他" active={category === 'other'} onPress={() => setCategory('other')} />
+        <View style={styles.feedbackHero}>
+          <Text style={styles.feedbackHeroTitle}>告诉我们你遇到的问题</Text>
+          <Text style={styles.feedbackHeroDesc}>提交后会进入排查列表，我们会结合请求 trace、客户端日志与截图更快定位原因。</Text>
         </View>
-        <Field label="反馈内容" value={content} onChangeText={setContent} placeholder="描述问题、期望效果或发生时间" multiline />
+        <Text style={styles.sectionTitle}>反馈类型</Text>
+        <View style={styles.feedbackCategoryGrid}>
+          {feedbackCategoryOptions.map((item) => (
+            <Pressable
+              key={item.value}
+              style={[styles.feedbackCategoryCard, category === item.value && styles.feedbackCategoryCardActive]}
+              onPress={() => setCategory(item.value)}
+            >
+              <Text style={[styles.feedbackCategoryTitle, category === item.value && styles.feedbackCategoryTitleActive]}>{item.label}</Text>
+              <Text style={styles.feedbackCategoryDesc}>{item.desc}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Field
+          label="反馈内容"
+          rightLabel={`${contentLength}/500`}
+          value={content}
+          onChangeText={setContent}
+          placeholder="请描述你遇到的问题、期望的效果，或告诉我们发生的大致时间。"
+          maxLength={500}
+          multiline
+        />
+        <Text style={[styles.formHint, trimmedContentLength < 5 && styles.formHintWarning]}>至少 5 个字，页面、时间和期望效果越清楚越好。</Text>
         <FeedbackImagePickerGrid
           urls={feedbackImageUrls}
-          loading={loading}
+          loading={uploadingFeedbackImages}
           onAdd={pickFeedbackImages}
           onRemove={removeFeedbackImage}
         />
-        <Field label="联系方式" value={contact} onChangeText={setContact} placeholder="微信、手机号或邮箱（可选）" />
+        <Text style={styles.formHint}>可上传页面报错、识别结果等截图，最多 {FEEDBACK_MAX_IMAGES} 张。</Text>
+        <Field
+          label="联系方式（选填）"
+          rightLabel={`${contactLength}/120`}
+          value={contact}
+          onChangeText={setContact}
+          placeholder="可填写微信号、手机号或邮箱，便于我们需要时联系你。"
+          maxLength={120}
+          multiline
+        />
         <ToggleRow
           title="附带请求诊断"
-          subtitle={`将附带最近 ${Math.min(traceCount, RECENT_REQUEST_TRACE_LIMIT)} 条请求的 traceId、状态码和耗时，不包含 token、请求体或图片。`}
+          subtitle={`将附带最近 ${Math.min(traceCount, RECENT_REQUEST_TRACE_LIMIT)} 条请求的 traceId、状态码和耗时，以及最近 ${Math.min(consoleLogCount, CONSOLE_LOG_BUFFER_LIMIT)} 条客户端日志，不包含 token、请求体或图片。`}
           value={attachRecentRequests}
           onValueChange={setAttachRecentRequests}
         />
-        <AppButton label="提交反馈" loading={loading} onPress={submit} />
+        <AppButton label="提交反馈" loading={submittingFeedback} disabled={!canSubmitFeedback} onPress={submit} />
       </Card>
 
       <Card>
@@ -2593,6 +2653,9 @@ export function AboutFeedbackScreen() {
           </View>
         ) : null}
         <View style={styles.buttonRow}>
+          <SmallButton label="查看协议" onPress={() => navigation.navigate('Agreements')} />
+          <SmallButton label="隐私政策" onPress={() => navigation.navigate('PrivacyPolicy')} />
+          <SmallButton label="用户群页" onPress={() => navigation.navigate('UserGroup')} />
           <SmallButton label={showGroupQr ? '收起二维码' : '查看用户群二维码'} onPress={() => setShowGroupQr((current) => !current)} />
           <SmallButton label="清除缓存" onPress={() => void clearCache()} />
         </View>
@@ -2603,26 +2666,33 @@ export function AboutFeedbackScreen() {
 
 function Field({
   label,
+  rightLabel,
   value,
   onChangeText,
   placeholder,
   keyboardType,
   multiline,
+  maxLength,
   returnKeyType,
   onSubmitEditing,
 }: {
   label: string
+  rightLabel?: string
   value: string
   onChangeText: (value: string) => void
   placeholder?: string
   keyboardType?: 'default' | 'decimal-pad' | 'number-pad'
   multiline?: boolean
+  maxLength?: number
   returnKeyType?: 'done' | 'go' | 'next' | 'search' | 'send'
   onSubmitEditing?: () => void
 }) {
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={styles.fieldLabelRow}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        {rightLabel ? <Text style={styles.fieldMeta}>{rightLabel}</Text> : null}
+      </View>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -2630,6 +2700,7 @@ function Field({
         placeholderTextColor={colors.textMuted}
         keyboardType={keyboardType}
         multiline={multiline}
+        maxLength={maxLength}
         returnKeyType={returnKeyType}
         onSubmitEditing={onSubmitEditing}
         textAlignVertical={multiline ? 'top' : 'center'}
@@ -3054,8 +3125,8 @@ function CircleImagePickerGrid({
         ))}
         {urls.length < CIRCLE_POST_MAX_IMAGES ? (
           <Pressable style={styles.imageAdd} onPress={onAdd} disabled={loading}>
-            <Text style={styles.imageAddIcon}>+</Text>
-            <Text style={styles.imageAddText}>{loading ? '上传中' : '添加图片'}</Text>
+            {loading ? <ActivityIndicator color={colors.brand} /> : <Text style={styles.imageAddIcon}>+</Text>}
+            <Text style={styles.imageAddText}>添加图片</Text>
           </Pressable>
         ) : null}
       </View>
@@ -3091,8 +3162,8 @@ function FeedbackImagePickerGrid({
         ))}
         {urls.length < FEEDBACK_MAX_IMAGES ? (
           <Pressable style={styles.imageAdd} onPress={onAdd} disabled={loading}>
-            <Text style={styles.imageAddIcon}>+</Text>
-            <Text style={styles.imageAddText}>{loading ? '上传中' : '添加截图'}</Text>
+            {loading ? <ActivityIndicator color={colors.brand} /> : <Text style={styles.imageAddIcon}>+</Text>}
+            <Text style={styles.imageAddText}>添加截图</Text>
           </Pressable>
         ) : null}
       </View>
@@ -3864,6 +3935,67 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginBottom: 12,
   },
+  feedbackHero: {
+    gap: 6,
+    marginBottom: 18,
+  },
+  feedbackHeroTitle: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  feedbackHeroDesc: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  feedbackCategoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  feedbackCategoryCard: {
+    flexGrow: 1,
+    flexBasis: '47%',
+    minHeight: 92,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    backgroundColor: colors.surfaceMuted,
+  },
+  feedbackCategoryCardActive: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft,
+  },
+  feedbackCategoryTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  feedbackCategoryTitleActive: {
+    color: colors.brandDark,
+  },
+  feedbackCategoryDesc: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 6,
+  },
+  formHint: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -8,
+    marginBottom: 12,
+  },
+  formHintWarning: {
+    color: colors.warning,
+  },
   imageBlock: {
     marginTop: 12,
     marginBottom: 6,
@@ -4192,10 +4324,21 @@ const styles = StyleSheet.create({
   field: {
     marginBottom: 14,
   },
+  fieldLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 6,
+  },
   fieldLabel: {
     color: colors.textSecondary,
     fontWeight: '700',
-    marginBottom: 6,
+  },
+  fieldMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
   },
   input: {
     minHeight: 48,

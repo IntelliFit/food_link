@@ -1,9 +1,44 @@
 import { ArrowUpRight } from 'lucide-react'
 import { appDownload } from '@/content/app-download'
+import { useReleaseChannel } from '@/hooks/useReleaseChannel'
+import type { AppDownloadOption } from '@/content/app-download'
 
 export function AppComingSoonSection() {
   const ChecksumIcon = appDownload.checksumIcon
   const ManifestIcon = appDownload.manifestIcon
+  const stable = useReleaseChannel(appDownload.channels.stable)
+  const beta = useReleaseChannel(appDownload.channels.beta)
+  const manifests = {
+    stable: stable.manifest,
+    beta: beta.manifest,
+  }
+  const stableApk = stable.manifest?.artifacts?.apk
+  const resolvedVersion = stable.manifest?.version ?? appDownload.version
+  const resolvedBuild = stable.manifest?.buildNumber ?? appDownload.build
+  const releaseManifestHref = stable.manifest?.releaseManifestUrl ?? stable.manifest?.url
+
+  const options = appDownload.options
+    .map((option): AppDownloadOption | null => {
+      const manifest = manifests[option.channel]
+      const artifact = manifest?.artifacts?.[option.artifact]
+
+      if (option.artifact === 'aab' && !artifact) {
+        return null
+      }
+
+      const version = manifest?.version ?? appDownload.version
+      const build = manifest?.buildNumber ?? appDownload.build
+
+      return {
+        ...option,
+        href: artifact?.url ?? option.href,
+        meta:
+          option.artifact === 'apk'
+            ? `${option.channel} · v${version} (${build})`
+            : `${option.channel} · app bundle`,
+      }
+    })
+    .filter((option): option is AppDownloadOption => Boolean(option))
 
   return (
     <section id="app-soon" className="scroll-mt-header border-t border-border bg-muted/50 py-12 md:py-24">
@@ -21,11 +56,16 @@ export function AppComingSoonSection() {
           </p>
           <div className="flex flex-wrap gap-2 pt-1 text-sm text-muted-foreground">
             <span className="rounded-full border border-border bg-background px-3 py-1">
-              v{appDownload.version}
+              v{resolvedVersion}
             </span>
             <span className="rounded-full border border-border bg-background px-3 py-1">
-              build {appDownload.build}
+              build {resolvedBuild}
             </span>
+            {stableApk?.sha256 ? (
+              <span className="rounded-full border border-border bg-background px-3 py-1">
+                SHA256 {stableApk.sha256.slice(0, 8)}
+              </span>
+            ) : null}
             <span className="rounded-full border border-border bg-background px-3 py-1">
               {appDownload.checksumLabel}
             </span>
@@ -33,7 +73,7 @@ export function AppComingSoonSection() {
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2">
-          {appDownload.options.map((option) => {
+          {options.map((option) => {
             const Icon = option.icon
             return (
               <a
@@ -79,7 +119,7 @@ export function AppComingSoonSection() {
               {appDownload.manifests.map((manifest) => (
                 <a
                   key={manifest.id}
-                  href={manifest.href}
+                  href={manifest.id === 'release' && releaseManifestHref ? releaseManifestHref : manifest.href}
                   className="inline-flex h-8 items-center rounded-lg border border-border px-2.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
                 >
                   {manifest.label}

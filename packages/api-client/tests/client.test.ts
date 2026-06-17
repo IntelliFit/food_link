@@ -520,14 +520,25 @@ describe('FoodLinkApiClient', () => {
     const { adapters, requests } = createMockAdapters()
     const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
 
-    await client.registerWithPassword({ username: 'mobileuser', password: 'password123', nickname: 'Mobile', inviteCode: 'ABCD1234' })
-    await client.loginWithPassword({ username: 'mobileuser', password: 'password123' })
+    await client.registerWithPassword({ phone: '13800138000', password: 'password123', nickname: 'Mobile', inviteCode: 'ABCD1234' })
+    await client.loginWithPassword({ phone: '13800138000', password: 'password123' })
     await client.getHomeDashboard('2026-06-14')
 
     expect(requests[0].url).toBe('https://api.example.com/api/app/register/password')
-    expect(requests[0].options?.body).toMatchObject({ inviteCode: 'ABCD1234' })
+    expect(requests[0].options?.body).toMatchObject({ phone: '13800138000', inviteCode: 'ABCD1234' })
     expect(requests[1].url).toBe('https://api.example.com/api/app/login/password')
+    expect(requests[1].options?.body).toMatchObject({ phone: '13800138000' })
     expect(requests[2].options?.headers?.Authorization).toBe('Bearer password-access-token')
+  })
+
+  it('keeps legacy username password payload compatibility', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithPassword({ username: 'mobileuser', password: 'password123' })
+
+    expect(requests[0].url).toBe('https://api.example.com/api/app/login/password')
+    expect(requests[0].options?.body).toEqual({ username: 'mobileuser', password: 'password123' })
   })
 
   it('sets account password with authenticated token and stores refreshed token', async () => {
@@ -535,13 +546,13 @@ describe('FoodLinkApiClient', () => {
     const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
 
     await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
-    await client.setAccountPassword({ username: 'Mobile.User', password: 'newpassword123', currentPassword: 'oldpassword123' })
+    await client.setAccountPassword({ phone: '13800138000', password: 'newpassword123', currentPassword: 'oldpassword123' })
     await client.getHomeDashboard('2026-06-14')
 
     expect(requests[1].url).toBe('https://api.example.com/api/app/account/password')
     expect(requests[1].options?.headers?.Authorization).toBe('Bearer wechat-access-token')
     expect(requests[1].options?.body).toEqual({
-      username: 'Mobile.User',
+      phone: '13800138000',
       password: 'newpassword123',
       current_password: 'oldpassword123',
     })

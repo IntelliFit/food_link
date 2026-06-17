@@ -59,7 +59,7 @@ func (h *LoginHandler) PasswordLogin(c *gin.Context) {
 	out, err := h.service.LoginWithPassword(c.Request.Context(), input)
 	if err != nil {
 		status := http.StatusUnauthorized
-		if !strings.Contains(err.Error(), "用户名或密码错误") {
+		if !strings.Contains(err.Error(), "手机号或密码错误") {
 			status = http.StatusBadRequest
 		}
 		c.JSON(status, gin.H{"detail": err.Error()})

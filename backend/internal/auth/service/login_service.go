@@ -46,11 +46,13 @@ type AppWechatLoginInput struct {
 
 type PasswordLoginInput struct {
 	Username string `json:"username"`
+	Phone    string `json:"phone"`
 	Password string `json:"password"`
 }
 
 type PasswordRegisterInput struct {
 	Username   string `json:"username"`
+	Phone      string `json:"phone"`
 	Password   string `json:"password"`
 	Nickname   string `json:"nickname"`
 	InviteCode string `json:"inviteCode"`
@@ -58,6 +60,7 @@ type PasswordRegisterInput struct {
 
 type SetPasswordInput struct {
 	Username        string `json:"username"`
+	Phone           string `json:"phone"`
 	Password        string `json:"password"`
 	CurrentPassword string `json:"current_password"`
 }
@@ -143,42 +146,76 @@ func (s *LoginService) LoginWithAppWechat(ctx context.Context, input AppWechatLo
 }
 
 func (s *LoginService) LoginWithPassword(ctx context.Context, input PasswordLoginInput) (*LoginOutput, error) {
-	username := normalizeLoginUsername(input.Username)
-	if username == "" {
-		return nil, fmt.Errorf("请输入用户名")
+	phone, username, err := parseLoginIdentifier(input.Username, input.Phone)
+	if err != nil {
+		return nil, err
+	}
+	if phone == "" && username == "" {
+		return nil, fmt.Errorf("请输入手机号或账号")
 	}
 	password := strings.TrimSpace(input.Password)
 	if password == "" {
 		return nil, fmt.Errorf("请输入密码")
 	}
-	user, err := s.users.FindByUsername(ctx, username)
-	if err != nil {
-		return nil, err
+	var user *repo.User
+	if phone != "" {
+		user, err = s.users.FindByTelephone(ctx, phone)
+		if err != nil {
+			return nil, err
+		}
+		if user == nil {
+			user, err = s.users.FindByUsername(ctx, normalizeLoginUsername(input.Username))
+			if err != nil {
+				return nil, err
+			}
+		}
+		if user == nil {
+			user, err = s.users.FindByOpenID(ctx, passwordLoginOpenID(phone, ""))
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		user, err = s.users.FindByUsername(ctx, username)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if user == nil || !verifyUserPasswordWithFallback(password, user) {
-		logger.Warn(ctx, "App 账号密码登录失败", slog.String("username", username))
-		return nil, fmt.Errorf("用户名或密码错误")
+		logger.Warn(ctx, "App 账号密码登录失败", slog.String("identifier_type", loginIdentifierType(phone, username)))
+		return nil, fmt.Errorf("手机号或密码错误")
 	}
 	user, err = s.touchLogin(ctx, user, "password")
 	if err != nil {
 		return nil, err
 	}
-	logger.Info(ctx, "App 账号密码登录成功", slog.String("user_id", user.ID), slog.String("username", username))
+	logger.Info(ctx, "App 账号密码登录成功", slog.String("user_id", user.ID), slog.String("identifier_type", loginIdentifierType(phone, username)))
 	return s.issueLoginOutput(user, user.OpenID, firstNonEmpty(derefString(user.UnionID), derefString(user.AppUnionID)))
 }
 
 func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordRegisterInput) (*LoginOutput, error) {
-	username := normalizeLoginUsername(input.Username)
-	if username == "" {
-		return nil, fmt.Errorf("请输入用户名")
-	}
-	if err := validateLoginUsername(username); err != nil {
+	phone, username, err := parseLoginIdentifier(input.Username, input.Phone)
+	if err != nil {
 		return nil, err
 	}
-	if existing, err := s.users.FindByUsername(ctx, username); err != nil {
-		return nil, err
-	} else if existing != nil {
-		return nil, fmt.Errorf("用户名已被使用")
+	if phone == "" && username == "" {
+		return nil, fmt.Errorf("请输入手机号或账号")
+	}
+	if phone != "" {
+		if existing, err := s.users.FindByTelephone(ctx, phone); err != nil {
+			return nil, err
+		} else if existing != nil {
+			return nil, fmt.Errorf("手机号已被使用")
+		}
+	} else {
+		if err := validateLoginUsername(username); err != nil {
+			return nil, err
+		}
+		if existing, err := s.users.FindByUsername(ctx, username); err != nil {
+			return nil, err
+		} else if existing != nil {
+			return nil, fmt.Errorf("账号已被使用")
+		}
 	}
 	passwordHash, err := HashUserPassword(input.Password)
 	if err != nil {
@@ -189,11 +226,10 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 	now := time.Now()
 	nickname := strings.TrimSpace(input.Nickname)
 	if nickname == "" {
-		nickname = username
+		nickname = firstNonEmpty(username, "Food Link 用户")
 	}
 	user := &repo.User{
-		OpenID:          "app-pwd:" + username,
-		Username:        &username,
+		OpenID:          passwordLoginOpenID(phone, username),
 		PasswordHash:    strPtrIfColumn(s.users, "password_hash", passwordHash),
 		PasswordSetAt:   timePtrIfColumn(s.users, "password_set_at", now),
 		Nickname:        nickname,
@@ -203,7 +239,13 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 		LastLoginMethod: strPtrIfColumn(s.users, "last_login_method", "password"),
 		LastLoginAt:     timePtrIfColumn(s.users, "last_login_at", now),
 	}
-	ensureLegacyAppAuth(user, username, passwordHash)
+	if username != "" {
+		user.Username = strPtrIfColumn(s.users, "username", username)
+	}
+	if phone != "" {
+		user.Telephone = strPtrIfColumn(s.users, "telephone", phone)
+	}
+	ensureLegacyAppAuth(user, firstNonEmpty(username, phone), passwordHash)
 	if err := s.users.Create(ctx, user); err != nil {
 		return nil, err
 	}
@@ -214,7 +256,7 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 	if inviteCode := strings.ToUpper(strings.TrimSpace(input.InviteCode)); inviteCode != "" {
 		_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
 	}
-	logger.Info(ctx, "App 账号密码注册成功", slog.String("user_id", user.ID), slog.String("username", username))
+	logger.Info(ctx, "App 账号密码注册成功", slog.String("user_id", user.ID), slog.String("identifier_type", loginIdentifierType(phone, username)))
 	return s.issueLoginOutput(user, user.OpenID, "")
 }
 
@@ -231,20 +273,32 @@ func (s *LoginService) SetPassword(ctx context.Context, userID string, input Set
 			return nil, fmt.Errorf("当前密码错误")
 		}
 	}
-	username := normalizeLoginUsername(input.Username)
-	if username == "" {
+	phone, username, err := parseLoginIdentifier(input.Username, input.Phone)
+	if err != nil {
+		return nil, err
+	}
+	if phone == "" && username == "" {
+		phone = normalizeLoginPhone(derefString(user.Telephone))
 		username = normalizeLoginUsername(derefString(user.Username))
 	}
-	if username == "" {
-		return nil, fmt.Errorf("请输入用户名")
+	if phone == "" && username == "" {
+		return nil, fmt.Errorf("请输入手机号或账号")
 	}
-	if err := validateLoginUsername(username); err != nil {
-		return nil, err
-	}
-	if existing, err := s.users.FindByUsername(ctx, username); err != nil {
-		return nil, err
-	} else if existing != nil && existing.ID != user.ID {
-		return nil, fmt.Errorf("用户名已被使用")
+	if phone != "" {
+		if existing, err := s.users.FindByTelephone(ctx, phone); err != nil {
+			return nil, err
+		} else if existing != nil && existing.ID != user.ID {
+			return nil, fmt.Errorf("手机号已被使用")
+		}
+	} else {
+		if err := validateLoginUsername(username); err != nil {
+			return nil, err
+		}
+		if existing, err := s.users.FindByUsername(ctx, username); err != nil {
+			return nil, err
+		} else if existing != nil && existing.ID != user.ID {
+			return nil, fmt.Errorf("账号已被使用")
+		}
 	}
 	passwordHash, err := HashUserPassword(input.Password)
 	if err != nil {
@@ -252,24 +306,33 @@ func (s *LoginService) SetPassword(ctx context.Context, userID string, input Set
 	}
 	now := time.Now()
 	updates := map[string]any{
-		"username":        username,
 		"password_hash":   passwordHash,
 		"password_set_at": now,
 	}
-	if !s.users.HasUserColumn("password_hash") || !s.users.HasUserColumn("username") {
+	if phone != "" {
+		updates["telephone"] = phone
+	} else {
+		updates["username"] = username
+	}
+	if !s.users.HasUserColumn("password_hash") || (phone != "" && !s.users.HasUserColumn("telephone")) || (username != "" && !s.users.HasUserColumn("username")) {
 		condition := cloneHealthCondition(user.HealthCondition)
-		condition["app_auth"] = map[string]any{
-			"username":        username,
+		auth := map[string]any{
 			"password_hash":   passwordHash,
 			"password_set_at": now.Format(time.RFC3339),
 		}
+		if phone != "" {
+			auth["phone"] = phone
+		} else {
+			auth["username"] = username
+		}
+		condition["app_auth"] = auth
 		updates["health_condition"] = condition
 	}
 	user, err = s.users.UpdateFields(ctx, user.ID, updates)
 	if err != nil {
 		return nil, err
 	}
-	logger.Info(ctx, "App 账号密码已设置", slog.String("user_id", user.ID), slog.String("username", username))
+	logger.Info(ctx, "App 账号密码已设置", slog.String("user_id", user.ID), slog.String("identifier_type", loginIdentifierType(phone, username)))
 	return s.issueLoginOutput(user, user.OpenID, firstNonEmpty(derefString(user.UnionID), derefString(user.AppUnionID)))
 }
 
@@ -609,15 +672,67 @@ func buildDefaultWechatNickname() string {
 
 var defaultWechatNicknameSuffixPattern = regexp.MustCompile(`^\d{6}$`)
 
-var loginUsernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,31}$`)
+var (
+	loginUsernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,31}$`)
+	loginPhonePattern    = regexp.MustCompile(`^1[3-9]\d{9}$`)
+	loginPhoneReplacer   = strings.NewReplacer(" ", "", "-", "", "(", "", ")", "")
+)
 
 func normalizeLoginUsername(username string) string {
 	return strings.ToLower(strings.TrimSpace(username))
 }
 
+func normalizeLoginPhone(phone string) string {
+	phone = loginPhoneReplacer.Replace(strings.TrimSpace(phone))
+	phone = strings.TrimPrefix(phone, "+")
+	if strings.HasPrefix(phone, "86") && len(phone) == 13 {
+		phone = phone[2:]
+	}
+	if !loginPhonePattern.MatchString(phone) {
+		return ""
+	}
+	return phone
+}
+
+func parseLoginIdentifier(username, phone string) (string, string, error) {
+	phone = strings.TrimSpace(phone)
+	if phone != "" {
+		normalizedPhone := normalizeLoginPhone(phone)
+		if normalizedPhone == "" {
+			return "", "", fmt.Errorf("请输入有效手机号")
+		}
+		return normalizedPhone, "", nil
+	}
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return "", "", nil
+	}
+	if normalizedPhone := normalizeLoginPhone(username); normalizedPhone != "" {
+		return normalizedPhone, "", nil
+	}
+	return "", normalizeLoginUsername(username), nil
+}
+
+func loginIdentifierType(phone, username string) string {
+	if phone != "" {
+		return "phone"
+	}
+	if username != "" {
+		return "username"
+	}
+	return "empty"
+}
+
+func passwordLoginOpenID(phone, username string) string {
+	if phone != "" {
+		return "app-pwd-phone:" + phone
+	}
+	return "app-pwd:" + username
+}
+
 func validateLoginUsername(username string) error {
 	if !loginUsernamePattern.MatchString(username) {
-		return fmt.Errorf("用户名需为 3-32 位小写字母、数字、点、横线或下划线，并以字母或数字开头")
+		return fmt.Errorf("账号需为 3-32 位小写字母、数字、点、横线或下划线，并以字母或数字开头")
 	}
 	return nil
 }

@@ -4,6 +4,7 @@
     "slug": "food-link-mobile",
     "scheme": "foodlink",
     "version": "0.0.1",
+    "icon": "./assets/icon.png",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "assetBundlePatterns": [
@@ -14,8 +15,9 @@
     },
     "android": {
       "package": "cn.healthymax.foodlink",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#00bc7d"
       }
     },

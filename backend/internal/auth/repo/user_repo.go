@@ -149,6 +149,22 @@ func (r *UserRepo) FindByUsername(ctx context.Context, username string) (*User, 
 	return &user, err
 }
 
+func (r *UserRepo) FindByTelephone(ctx context.Context, telephone string) (*User, error) {
+	telephone = strings.TrimSpace(telephone)
+	if telephone == "" {
+		return nil, nil
+	}
+	var user User
+	err := r.db.WithContext(ctx).Where("telephone = ?", telephone).First(&user).Error
+	if isUndefinedColumnError(err) {
+		return nil, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return &user, err
+}
+
 func (r *UserRepo) FindByID(ctx context.Context, userID string) (*User, error) {
 	var user User
 	err := r.db.WithContext(ctx).Where("id = ?", userID).First(&user).Error
@@ -305,6 +321,7 @@ var appAuthColumnFieldNames = map[string]string{
 	"app_openid":        "AppOpenID",
 	"app_unionid":       "AppUnionID",
 	"username":          "Username",
+	"telephone":         "Telephone",
 	"password_hash":     "PasswordHash",
 	"password_set_at":   "PasswordSetAt",
 	"last_login_method": "LastLoginMethod",

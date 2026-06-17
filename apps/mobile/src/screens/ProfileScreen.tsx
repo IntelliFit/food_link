@@ -4,9 +4,10 @@ import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { FoodExpiryDashboard, MembershipStatus, RewardCenterResponse, UserInfo } from '@food-link/core'
-import { apiClient } from '../api'
+import { apiClient, clearRecentRequestTraces } from '../api'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
+import { clearRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
 import type { RootStackParamList } from '../navigation/types'
 import { useAuth } from '../providers/AuthProvider'
 import { colors } from '../theme'
@@ -77,7 +78,9 @@ export function ProfileScreen() {
         !key.includes('user_id')
       ))
       if (removable.length) await AsyncStorage.multiRemove(removable)
-      Alert.alert('已清除', '本地缓存已清理，登录状态已保留。')
+      clearRecentRequestTraces()
+      clearRecentConsoleLogs()
+      Alert.alert('已清除', '本地缓存和诊断记录已清理，登录状态已保留。')
     } catch (error) {
       Alert.alert('清除失败', userFacingErrorMessage(error))
     }
@@ -143,7 +146,7 @@ export function ProfileScreen() {
       <Card>
         <Text style={styles.sectionTitle}>服务</Text>
         <MenuItem title="AI 助手" subtitle="风险解读、饮食建议和关注卡片" onPress={() => navigation.navigate('AiAssistant')} />
-        <MenuItem title="账号安全" subtitle="设置用户名密码，作为微信登录之外的备用方式" onPress={() => navigation.navigate('AccountSecurity')} />
+        <MenuItem title="账号安全" subtitle="设置手机号密码，作为微信登录之外的备用方式" onPress={() => navigation.navigate('AccountSecurity')} />
         <MenuItem title="互动消息" subtitle="点赞、评论、回复和审核结果" onPress={() => navigation.navigate('Notifications')} />
         <MenuItem title="打卡排行榜" subtitle="查看本周打卡排名" onPress={() => navigation.navigate('CheckinLeaderboard')} />
         <MenuItem title="代谢分析" subtitle="BMR、TDEE 和摄入差额" onPress={() => navigation.navigate('StatsMetabolic')} />
