@@ -644,6 +644,8 @@ type FeedReportDO struct {
 	ExtraContent   string     `gorm:"column:extra_content;type:text;not null;default:''"`
 	Status         string     `gorm:"column:status;type:text;not null;default:'pending';index:idx_feed_reports_status_created,priority:1"`
 	ResolutionNote string     `gorm:"column:resolution_note;type:text;not null;default:''"`
+	RewardCredits  int        `gorm:"column:reward_credits;type:integer;not null;default:0"`
+	RewardLedgerID *string    `gorm:"column:reward_ledger_id;type:uuid"`
 	HandledBy      *string    `gorm:"column:handled_by;type:text"`
 	HandledAt      *time.Time `gorm:"column:handled_at;type:timestamptz"`
 	CreatedAt      *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_feed_reports_status_created,priority:2,sort:desc"`

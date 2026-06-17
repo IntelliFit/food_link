@@ -20,9 +20,9 @@ import (
 type FeedReportService interface {
 	List(ctx context.Context, input adminservice.ListFeedReportInput) (*adminrepo.ListFeedReportResult, error)
 	Get(ctx context.Context, id string) (*admindomain.FeedReportItem, *admindomain.FeedReportTargetSnapshot, error)
-	UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error)
+	UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string, rewardCredits *int) (*admindomain.FeedReportItem, error)
 	Delete(ctx context.Context, id string) error
-	DeleteTargetContent(ctx context.Context, id, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error)
+	DeleteTargetContent(ctx context.Context, id, resolutionNote, handledBy string, rewardCredits *int) (*admindomain.FeedReportItem, error)
 	GetStatusStats(ctx context.Context) (map[string]int64, error)
 }
 
@@ -76,13 +76,14 @@ func (h *FeedReportHandler) UpdateStatus(c *gin.Context) {
 	var body struct {
 		Status         string `json:"status" binding:"required"`
 		ResolutionNote string `json:"resolution_note"`
+		RewardCredits  *int   `json:"reward_credits"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
 	handledBy := c.GetString("admin_username")
-	item, err := h.svc.UpdateStatus(c.Request.Context(), c.Param("report_id"), body.Status, body.ResolutionNote, handledBy)
+	item, err := h.svc.UpdateStatus(c.Request.Context(), c.Param("report_id"), body.Status, body.ResolutionNote, handledBy, body.RewardCredits)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -111,6 +112,7 @@ func (h *FeedReportHandler) Delete(c *gin.Context) {
 func (h *FeedReportHandler) DeleteTargetContent(c *gin.Context) {
 	var body struct {
 		ResolutionNote string `json:"resolution_note"`
+		RewardCredits  *int   `json:"reward_credits"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		body.ResolutionNote = ""
@@ -121,7 +123,7 @@ func (h *FeedReportHandler) DeleteTargetContent(c *gin.Context) {
 		return
 	}
 	handledBy := c.GetString("admin_username")
-	item, err := h.svc.DeleteTargetContent(c.Request.Context(), id, body.ResolutionNote, handledBy)
+	item, err := h.svc.DeleteTargetContent(c.Request.Context(), id, body.ResolutionNote, handledBy, body.RewardCredits)
 	if err != nil {
 		response.Error(c, err)
 		return

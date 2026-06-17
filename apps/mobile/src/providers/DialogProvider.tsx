@@ -79,13 +79,13 @@ export function DialogProvider({ children }: { children: ReactNode }) {
               </View>
               <Text style={styles.title}>{dialog.title}</Text>
               {dialog.message ? <Text style={styles.message}>{dialog.message}</Text> : null}
-              <View style={[styles.actions, dialog.cancelText ? styles.twoActions : null]}>
+              <View style={[styles.footer, dialog.cancelText ? styles.twoActions : null]}>
                 {dialog.cancelText ? (
-                  <View style={styles.actionItem}>
+                  <View style={[styles.actionItem, styles.twoActionItem]}>
                     <AppButton label={dialog.cancelText} variant="secondary" onPress={() => close('cancel')} />
                   </View>
                 ) : null}
-                <View style={styles.actionItem}>
+                <View style={[styles.actionItem, dialog.cancelText ? styles.twoActionItem : null]}>
                   <AppButton
                     label={dialog.confirmText || '知道了'}
                     variant={kind === 'danger' ? 'danger' : 'primary'}
@@ -124,13 +124,13 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    maxWidth: 360,
+    maxWidth: 380,
     alignItems: 'stretch',
     borderRadius: radius.lg,
     backgroundColor: colors.surface,
-    paddingHorizontal: 22,
-    paddingTop: 24,
-    paddingBottom: 20,
+    paddingHorizontal: 24,
+    paddingTop: 26,
+    paddingBottom: 24,
     ...shadow,
   },
   iconBubble: {
@@ -181,14 +181,20 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginTop: 10,
   },
-  actions: {
-    marginTop: 22,
+  footer: {
+    marginTop: 24,
+    paddingTop: 2,
   },
   twoActions: {
     flexDirection: 'row',
     gap: 10,
   },
   actionItem: {
+    width: '100%',
+    minHeight: 48,
+  },
+  twoActionItem: {
     flex: 1,
+    minHeight: 48,
   },
 })

@@ -668,6 +668,8 @@ func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
 func ensureFeedReportResolutionColumns(ctx context.Context, db *gorm.DB) error {
 	columns := []string{
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS resolution_note text NOT NULL DEFAULT ''`,
+		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS reward_credits integer NOT NULL DEFAULT 0`,
+		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS reward_ledger_id uuid`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS handled_by text`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS handled_at timestamptz`,
 	}
