@@ -2,14 +2,20 @@ package repo
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	admindomain "food_link/backend/internal/admin/domain"
 	commonerrors "food_link/backend/internal/common/errors"
 	communityrepo "food_link/backend/internal/community/repo"
+	membershipdomain "food_link/backend/internal/membership/domain"
+	membershiprepo "food_link/backend/internal/membership/repo"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type FeedReportRepo struct {
@@ -116,7 +122,7 @@ func (r *FeedReportRepo) GetByID(ctx context.Context, id string) (*admindomain.F
 	return &item, nil
 }
 
-func (r *FeedReportRepo) UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error) {
+func (r *FeedReportRepo) UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string, rewardCredits *int, reporterUserID string) (*admindomain.FeedReportItem, error) {
 	updates := map[string]any{
 		"status":          strings.TrimSpace(status),
 		"resolution_note": strings.TrimSpace(resolutionNote),
@@ -125,13 +131,79 @@ func (r *FeedReportRepo) UpdateStatus(ctx context.Context, id, status, resolutio
 	if handledBy != "" {
 		updates["handled_by"] = handledBy
 	}
-	if err := r.db.WithContext(ctx).
-		Table("feed_reports").
-		Where("id = ?", id).
-		Updates(updates).Error; err != nil {
+	if rewardCredits != nil {
+		updates["reward_credits"] = *rewardCredits
+		if *rewardCredits == 0 {
+			updates["reward_ledger_id"] = nil
+		}
+	}
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if rewardCredits != nil && *rewardCredits > 0 {
+			ledger, err := createFeedReportRewardLedger(ctx, tx, reporterUserID, id, *rewardCredits, handledBy)
+			if err != nil {
+				return err
+			}
+			if ledger != nil {
+				updates["reward_ledger_id"] = ledger.ID
+			}
+		}
+		return tx.Table("feed_reports").Where("id = ?", id).Updates(updates).Error
+	}); err != nil {
 		return nil, err
 	}
 	return r.GetByID(ctx, id)
+}
+
+func createFeedReportRewardLedger(ctx context.Context, tx *gorm.DB, userID, reportID string, credits int, handledBy string) (*membershipdomain.UserEarnedCreditLedger, error) {
+	userID = strings.TrimSpace(userID)
+	reportID = strings.TrimSpace(reportID)
+	if userID == "" || reportID == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "举报奖励缺少用户或举报 ID", HTTPStatus: 400}
+	}
+	sourceKey := "feed_report:" + reportID
+	var existing membershipdomain.UserEarnedCreditLedger
+	err := tx.WithContext(ctx).
+		Where("user_id = ? AND reason = ? AND source_key = ?", userID, "feed_report_reward", sourceKey).
+		First(&existing).Error
+	if err == nil {
+		return &existing, nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
+	var user membershiprepo.User
+	if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", userID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	next := user.EarnedCreditsBalance + credits
+	if err := tx.WithContext(ctx).Table("weapp_user").Where("id = ?", userID).Update("earned_credits_balance", next).Error; err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	relatedDate := now.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("2006-01-02")
+	meta := map[string]any{
+		"report_id":      reportID,
+		"reward_source":  "admin_feed_report_resolution",
+		"handled_by":     strings.TrimSpace(handledBy),
+		"reward_credits": credits,
+	}
+	row := &membershipdomain.UserEarnedCreditLedger{
+		ID:           uuid.New().String(),
+		UserID:       userID,
+		Delta:        credits,
+		BalanceAfter: next,
+		Reason:       "feed_report_reward",
+		SourceKey:    &sourceKey,
+		RelatedDate:  &relatedDate,
+		Meta:         meta,
+		CreatedAt:    &now,
+		UpdatedAt:    &now,
+	}
+	if err := tx.WithContext(ctx).Create(row).Error; err != nil {
+		return nil, fmt.Errorf("create feed report reward ledger: %w", err)
+	}
+	return row, nil
 }
 
 func (r *FeedReportRepo) Delete(ctx context.Context, id string) error {
@@ -139,6 +211,20 @@ func (r *FeedReportRepo) Delete(ctx context.Context, id string) error {
 		Table("feed_reports").
 		Where("id = ?", id).
 		Delete(nil).Error
+}
+
+func (r *FeedReportRepo) DeleteCirclePostTarget(ctx context.Context, postID string) error {
+	post, err := r.feedRepo.GetCirclePostByID(ctx, postID)
+	if err != nil {
+		return err
+	}
+	if post == nil {
+		return &commonerrors.AppError{Code: 10001, Message: "被举报的圈子内容不存在或已删除", HTTPStatus: 404}
+	}
+	if err := r.feedRepo.DeleteCirclePostInteractions(ctx, postID); err != nil {
+		return err
+	}
+	return r.feedRepo.DeleteCirclePost(ctx, post.UserID, postID)
 }
 
 func (r *FeedReportRepo) GetTargetSnapshot(ctx context.Context, targetType, targetID string) (*admindomain.FeedReportTargetSnapshot, error) {

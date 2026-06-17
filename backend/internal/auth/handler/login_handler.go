@@ -12,10 +12,15 @@ import (
 
 type LoginHandler struct {
 	service *service.LoginService
+	sms     *service.SMSService
 }
 
 func NewLoginHandler(service *service.LoginService) *LoginHandler {
 	return &LoginHandler{service: service}
+}
+
+func (h *LoginHandler) ConfigureSMSService(sms *service.SMSService) {
+	h.sms = sms
 }
 
 func (h *LoginHandler) Login(c *gin.Context) {
@@ -68,6 +73,49 @@ func (h *LoginHandler) PasswordLogin(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
+func (h *LoginHandler) SendSMSCode(c *gin.Context) {
+	if h.sms == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "验证码服务未配置"})
+		return
+	}
+	var input service.SendSMSCodeInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "请求参数无效"})
+		return
+	}
+	out, err := h.sms.SendCode(c.Request.Context(), input, clientIP(c))
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "频繁") {
+			status = http.StatusTooManyRequests
+		}
+		if strings.Contains(err.Error(), "未配置") || strings.Contains(err.Error(), "配置不完整") {
+			status = http.StatusInternalServerError
+		}
+		c.JSON(status, gin.H{"detail": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+func (h *LoginHandler) SMSLogin(c *gin.Context) {
+	if h.sms == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "验证码服务未配置"})
+		return
+	}
+	var input service.SMSLoginInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": "请求参数无效"})
+		return
+	}
+	out, err := h.sms.LoginWithCode(c.Request.Context(), input)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, out)
+}
+
 func (h *LoginHandler) PasswordRegister(c *gin.Context) {
 	var input service.PasswordRegisterInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -102,4 +150,11 @@ func isClientAuthError(err error) bool {
 	return strings.Contains(msg, "code 不能为空") ||
 		strings.Contains(msg, "未配置") ||
 		strings.Contains(msg, "微信 App 登录失败")
+}
+
+func clientIP(c *gin.Context) string {
+	if forwarded := strings.TrimSpace(c.GetHeader("X-Forwarded-For")); forwarded != "" {
+		return strings.TrimSpace(strings.Split(forwarded, ",")[0])
+	}
+	return c.ClientIP()
 }

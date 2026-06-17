@@ -170,9 +170,9 @@ export function ProfileSettingsScreen() {
   const confirmDeleteAccount = () => {
     Alert.alert(
       '注销账号',
-      '注销后账号及健康记录、饮食分析历史、好友关系等数据会被删除。确定继续吗？',
+      '注销后，账号及健康记录、饮食分析历史、好友关系等数据会被删除，本地登录状态也会清空。确定要注销账号吗？',
       [
-        { text: '取消', style: 'cancel' },
+        { text: '再想想', style: 'cancel' },
         {
           text: '确认注销',
           style: 'destructive',
@@ -288,11 +288,20 @@ export function ProfileSettingsScreen() {
         <Card>
           <Text style={styles.sectionTitle}>编辑资料</Text>
           <Field label="昵称" value={nickname} onChangeText={setNickname} />
-          <Field label="座右铭" value={motto} onChangeText={setMotto} placeholder="写一句你的座右铭" />
+          <Field label="座右铭" value={motto} onChangeText={setMotto} placeholder="写一句你的座右铭（最多30字）" maxLength={30} />
           <View style={styles.buttonRow}>
             <SmallButton label="选择头像" onPress={() => void pickProfileImage('avatar')} />
             <SmallButton label="选择背景图" onPress={() => void pickProfileImage('cover')} />
           </View>
+          {resolvedProfileId ? (
+            <View style={styles.editIdRow}>
+              <View style={styles.flex}>
+                <Text style={styles.fieldLabel}>用户ID</Text>
+                <Text style={styles.editIdValue} selectable numberOfLines={2}>{resolvedProfileId}</Text>
+              </View>
+              <SmallButton label="复制" onPress={() => void copyUserId()} />
+            </View>
+          ) : null}
           <AppButton label="保存资料" loading={saving} onPress={saveProfile} />
           <Pressable onPress={confirmDeleteAccount} style={styles.deleteAccount}>
             <Text style={styles.deleteText}>注销账号</Text>
@@ -363,12 +372,14 @@ function Field({
   onChangeText,
   placeholder,
   multiline,
+  maxLength,
 }: {
   label: string
   value: string
   onChangeText: (value: string) => void
   placeholder?: string
   multiline?: boolean
+  maxLength?: number
 }) {
   return (
     <View style={styles.field}>
@@ -379,6 +390,7 @@ function Field({
         placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
         multiline={multiline}
+        maxLength={maxLength}
         textAlignVertical={multiline ? 'top' : 'center'}
         style={[styles.input, multiline && styles.textarea]}
       />
@@ -759,6 +771,21 @@ const styles = StyleSheet.create({
     color: colors.brandDark,
     fontSize: 12,
     fontWeight: '800',
+  },
+  editIdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    marginBottom: 14,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  editIdValue: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
   },
   deleteAccount: {
     alignItems: 'center',

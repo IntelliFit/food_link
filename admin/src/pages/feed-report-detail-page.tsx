@@ -7,6 +7,7 @@ import type { AdminMenuId } from '@/components/admin-sidebar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -39,6 +40,8 @@ type FeedReportItem = {
   extra_content: string
   status: FeedReportStatus
   resolution_note: string
+  reward_credits: number
+  reward_ledger_id?: string
   handled_by?: string
   handled_at?: string
   created_at: string
@@ -112,7 +115,9 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deletingTarget, setDeletingTarget] = useState(false)
   const [resolutionNote, setResolutionNote] = useState('')
+  const [rewardCredits, setRewardCredits] = useState('0')
   const [selectedStatus, setSelectedStatus] = useState<FeedReportStatus | ''>('')
 
   useEffect(() => {
@@ -151,6 +156,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
       setItem(data.item)
       setTarget(data.target)
       setResolutionNote(data.item.resolution_note || '')
+      setRewardCredits(String(data.item.reward_credits ?? 0))
       setSelectedStatus(data.item.status)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '加载举报详情失败')
@@ -162,17 +168,28 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
 
   async function updateStatus() {
     if (!item || !selectedStatus) return
+    const trimmedRewardCredits = rewardCredits.trim()
+    const parsedRewardCredits = Number(rewardCredits)
+    if (selectedStatus === 'resolved' && (trimmedRewardCredits === '' || !Number.isInteger(parsedRewardCredits) || parsedRewardCredits < 0)) {
+      toast.error('处理为已处理时必须选择奖励积分，可填写 0')
+      return
+    }
     setUpdating(true)
     try {
       const data = await adminRequest<{ item: FeedReportItem }>(
         `/api/admin/feed-reports/${encodeURIComponent(item.id)}/status`,
         {
           method: 'PATCH',
-          body: JSON.stringify({ status: selectedStatus, resolution_note: resolutionNote }),
+          body: JSON.stringify({
+            status: selectedStatus,
+            resolution_note: resolutionNote,
+            reward_credits: selectedStatus === 'resolved' ? parsedRewardCredits : undefined,
+          }),
         },
       )
       setItem(data.item)
       setResolutionNote(data.item.resolution_note || '')
+      setRewardCredits(String(data.item.reward_credits ?? 0))
       setSelectedStatus(data.item.status)
       toast.success('状态已更新')
       if (data.item.status === 'resolved' || data.item.status === 'rejected') {
@@ -197,6 +214,37 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
       toast.error(error instanceof Error ? error.message : '删除失败')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleDeleteTargetContent() {
+    if (!item || item.target_type !== 'circle_post') return
+    const trimmedRewardCredits = rewardCredits.trim()
+    const parsedRewardCredits = Number(rewardCredits)
+    if (trimmedRewardCredits === '' || !Number.isInteger(parsedRewardCredits) || parsedRewardCredits < 0) {
+      toast.error('删除并处理举报时必须选择奖励积分，可填写 0')
+      return
+    }
+    if (!window.confirm('确定删除被举报的圈子内容吗？删除后该内容会从圈子中移除，相关点赞、评论和互动通知也会清理。')) return
+    setDeletingTarget(true)
+    try {
+      const data = await adminRequest<{ item: FeedReportItem }>(
+        `/api/admin/feed-reports/${encodeURIComponent(item.id)}/delete-target`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ resolution_note: resolutionNote, reward_credits: parsedRewardCredits }),
+        },
+      )
+      setItem(data.item)
+      setResolutionNote(data.item.resolution_note || resolutionNote || '已删除被举报的圈子内容。')
+      setRewardCredits(String(data.item.reward_credits ?? 0))
+      setSelectedStatus(data.item.status)
+      setTarget(null)
+      toast.success('被举报的圈子内容已删除')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除被举报内容失败')
+    } finally {
+      setDeletingTarget(false)
     }
   }
 
@@ -239,6 +287,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                       { label: '举报类型', value: targetTypeLabels[item.target_type] || item.target_type },
                       { label: '被举报对象 ID', value: item.target_id, mono: true, copyable: true },
                       { label: '举报原因', value: reasonLabels[item.reason] || item.reason },
+                      { label: '奖励积分', value: `${item.reward_credits ?? 0}` },
                       { label: '提交时间', value: new Date(item.created_at).toLocaleString('zh-CN') },
                       { label: '更新时间', value: new Date(item.updated_at).toLocaleString('zh-CN') },
                     ]}
@@ -337,6 +386,22 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                   </div>
 
                   <div className='space-y-2'>
+                    <Label htmlFor='reward-credits'>奖励积分</Label>
+                    <Input
+                      id='reward-credits'
+                      type='number'
+                      min={0}
+                      step={1}
+                      value={rewardCredits}
+                      onChange={(event) => setRewardCredits(event.target.value)}
+                      disabled={item.status === 'resolved' || item.status === 'rejected' || selectedStatus !== 'resolved'}
+                    />
+                    <p className='text-xs text-muted-foreground'>
+                      处理为已处理时必填；可填 0，表示本次不发放奖励。
+                    </p>
+                  </div>
+
+                  <div className='space-y-2'>
                     <Label htmlFor='resolution-note'>处理说明</Label>
                     <Textarea
                       id='resolution-note'
@@ -350,6 +415,10 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
 
                   {item.status === 'resolved' || item.status === 'rejected' ? (
                     <div className='rounded-md border bg-muted/50 p-3 text-sm space-y-1'>
+                      <div>
+                        <span className='text-muted-foreground'>奖励积分：</span>
+                        <span className='font-medium'>{item.reward_credits ?? 0}</span>
+                      </div>
                       <div>
                         <span className='text-muted-foreground'>处理人：</span>
                         <span className='font-medium'>{item.handled_by || '-'}</span>
@@ -380,7 +449,18 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                 <CardHeader>
                   <CardTitle className='text-lg text-destructive'>危险操作</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className='space-y-3'>
+                  {item.target_type === 'circle_post' ? (
+                    <Button
+                      variant='destructive'
+                      className='w-full'
+                      onClick={() => void handleDeleteTargetContent()}
+                      disabled={deletingTarget || !target}
+                    >
+                      {deletingTarget ? <Loader2 className='mr-1 size-4 animate-spin' /> : <Trash2 className='mr-1 size-4' />}
+                      删除被举报的圈子内容
+                    </Button>
+                  ) : null}
                   <Button variant='destructive' className='w-full' onClick={() => void handleDelete()} disabled={deleting}>
                     {deleting ? <Loader2 className='mr-1 size-4 animate-spin' /> : <Trash2 className='mr-1 size-4' />}
                     删除举报记录

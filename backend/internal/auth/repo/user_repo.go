@@ -149,20 +149,29 @@ func (r *UserRepo) FindByUsername(ctx context.Context, username string) (*User, 
 	return &user, err
 }
 
-func (r *UserRepo) FindByTelephone(ctx context.Context, telephone string) (*User, error) {
-	telephone = strings.TrimSpace(telephone)
-	if telephone == "" {
+func (r *UserRepo) FindByTelephone(ctx context.Context, phone string) (*User, error) {
+	phone = normalizePhone(phone)
+	if phone == "" {
 		return nil, nil
 	}
-	var user User
-	err := r.db.WithContext(ctx).Where("telephone = ?", telephone).First(&user).Error
+	var users []User
+	err := r.db.WithContext(ctx).
+		Where("telephone = ? OR telephone = ?", phone, "+86"+phone).
+		Limit(2).
+		Find(&users).Error
 	if isUndefinedColumnError(err) {
 		return nil, nil
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if err != nil {
+		return nil, err
+	}
+	if len(users) == 0 {
 		return nil, nil
 	}
-	return &user, err
+	if len(users) > 1 {
+		return nil, fmt.Errorf("手机号绑定了多个账号，请联系客服处理")
+	}
+	return &users[0], nil
 }
 
 func (r *UserRepo) FindByID(ctx context.Context, userID string) (*User, error) {
@@ -315,6 +324,22 @@ func (r *UserRepo) ExchangeAppCode(ctx context.Context, appID, secret, code stri
 
 func normalizeUsername(username string) string {
 	return strings.ToLower(strings.TrimSpace(username))
+}
+
+func normalizePhone(phone string) string {
+	phone = strings.TrimSpace(phone)
+	phone = strings.TrimPrefix(phone, "+")
+	var b strings.Builder
+	for _, r := range phone {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	out := b.String()
+	if strings.HasPrefix(out, "86") && len(out) == 13 {
+		out = out[2:]
+	}
+	return out
 }
 
 var appAuthColumnFieldNames = map[string]string{

@@ -14,9 +14,10 @@ import (
 type FeedReportRepo interface {
 	List(ctx context.Context, input adminrepo.ListFeedReportInput) (*adminrepo.ListFeedReportResult, error)
 	GetByID(ctx context.Context, id string) (*admindomain.FeedReportItem, error)
-	UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error)
+	UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string, rewardCredits *int, reporterUserID string) (*admindomain.FeedReportItem, error)
 	Delete(ctx context.Context, id string) error
 	GetTargetSnapshot(ctx context.Context, targetType, targetID string) (*admindomain.FeedReportTargetSnapshot, error)
+	DeleteCirclePostTarget(ctx context.Context, postID string) error
 	CountByStatus(ctx context.Context) (map[string]int64, error)
 }
 
@@ -25,8 +26,8 @@ type SystemMessageSender interface {
 }
 
 type FeedReportService struct {
-	repo    FeedReportRepo
-	sender  SystemMessageSender
+	repo   FeedReportRepo
+	sender SystemMessageSender
 }
 
 func NewFeedReportService(repo FeedReportRepo, sender SystemMessageSender) *FeedReportService {
@@ -97,10 +98,16 @@ func (s *FeedReportService) Get(ctx context.Context, id string) (*admindomain.Fe
 	return item, snap, nil
 }
 
-func (s *FeedReportService) UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error) {
+func (s *FeedReportService) UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string, rewardCredits *int) (*admindomain.FeedReportItem, error) {
 	status = strings.TrimSpace(strings.ToLower(status))
 	if !validReportStatuses[status] {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "举报状态无效", HTTPStatus: 400}
+	}
+	if status == "resolved" && rewardCredits == nil {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "处理为已解决时必须选择奖励积分，可填写 0", HTTPStatus: 400}
+	}
+	if rewardCredits != nil && *rewardCredits < 0 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "奖励积分不能小于 0", HTTPStatus: 400}
 	}
 
 	item, err := s.repo.GetByID(ctx, id)
@@ -113,13 +120,13 @@ func (s *FeedReportService) UpdateStatus(ctx context.Context, id, status, resolu
 		return nil, &commonerrors.AppError{Code: 10002, Message: fmt.Sprintf("不允许从 %s 变更为 %s", item.Status, status), HTTPStatus: 400}
 	}
 
-	updated, err := s.repo.UpdateStatus(ctx, id, status, resolutionNote, handledBy)
+	updated, err := s.repo.UpdateStatus(ctx, id, status, resolutionNote, handledBy, rewardCredits, item.ReporterUserID)
 	if err != nil {
 		return nil, err
 	}
 
 	if terminalStatuses[status] && s.sender != nil {
-		reporterMsg := buildReportResultMessageForReporter(status, resolutionNote)
+		reporterMsg := buildReportResultMessageForReporter(status, resolutionNote, updated.RewardCredits)
 		reportedMsg := buildReportResultMessageForReported(status, resolutionNote)
 		if err := s.sender.SendSystemMessage(ctx, item.ReporterUserID, reporterMsg); err != nil {
 			// 记录日志但不阻塞状态更新
@@ -137,7 +144,49 @@ func (s *FeedReportService) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func buildReportResultMessageForReporter(status, resolutionNote string) string {
+func (s *FeedReportService) DeleteTargetContent(ctx context.Context, id, resolutionNote, handledBy string, rewardCredits *int) (*admindomain.FeedReportItem, error) {
+	item, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if item.TargetType != "circle_post" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "当前举报目标暂不支持直接删除", HTTPStatus: 400}
+	}
+	if err := s.repo.DeleteCirclePostTarget(ctx, item.TargetID); err != nil {
+		return nil, err
+	}
+
+	note := strings.TrimSpace(resolutionNote)
+	if note == "" {
+		note = "已删除被举报的圈子内容。"
+	}
+	if terminalStatuses[item.Status] {
+		return item, nil
+	}
+
+	if rewardCredits == nil {
+		zeroReward := 0
+		rewardCredits = &zeroReward
+	}
+	if *rewardCredits < 0 {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "奖励积分不能小于 0", HTTPStatus: 400}
+	}
+	updated, err := s.repo.UpdateStatus(ctx, id, "resolved", note, handledBy, rewardCredits, item.ReporterUserID)
+	if err != nil {
+		return nil, err
+	}
+	if s.sender != nil {
+		if err := s.sender.SendSystemMessage(ctx, item.ReporterUserID, buildReportResultMessageForReporter("resolved", note, updated.RewardCredits)); err != nil {
+			// 发送失败不阻塞内容删除和举报处理结果落库。
+		}
+		if err := s.sender.SendSystemMessage(ctx, item.ReportedUserID, buildReportResultMessageForReported("resolved", note)); err != nil {
+			// 发送失败不阻塞内容删除和举报处理结果落库。
+		}
+	}
+	return updated, nil
+}
+
+func buildReportResultMessageForReporter(status, resolutionNote string, rewardCredits int) string {
 	var base string
 	switch status {
 	case "resolved":
@@ -148,6 +197,9 @@ func buildReportResultMessageForReporter(status, resolutionNote string) string {
 	note := strings.TrimSpace(resolutionNote)
 	if note != "" {
 		base += "\n处理说明：" + note
+	}
+	if status == "resolved" && rewardCredits > 0 {
+		base += fmt.Sprintf("\n奖励积分：+%d", rewardCredits)
 	}
 	return base
 }

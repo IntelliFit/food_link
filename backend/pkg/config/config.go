@@ -33,6 +33,8 @@ type Config struct {
 	Storage      StorageConfig   `mapstructure:"storage"`
 	External     ExternalConfig  `mapstructure:"external"`
 	AppAuth      AppAuthConfig   `mapstructure:"app_auth"`
+	Redis        RedisConfig     `mapstructure:"redis"`
+	SMS          SMSConfig       `mapstructure:"sms"`
 	Feishu       FeishuConfig    `mapstructure:"feishu"`
 	WechatPay    WechatPayConfig `mapstructure:"wechat_pay"`
 	Worker       WorkerConfig    `mapstructure:"worker"`
@@ -120,6 +122,27 @@ type AppAuthConfig struct {
 	WechatAppSecret           string `mapstructure:"wechat_app_secret"`
 	DevelopmentMockLogin      bool   `mapstructure:"development_mock_login"`
 	DevelopmentMockWechatCode string `mapstructure:"development_mock_wechat_code"`
+}
+
+type RedisConfig struct {
+	Mode     string `mapstructure:"mode"`
+	URL      string `mapstructure:"url"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
+}
+
+type SMSConfig struct {
+	TencentCloudSecretID             string `mapstructure:"tencentcloud_secret_id"`
+	TencentCloudSecretKey            string `mapstructure:"tencentcloud_secret_key"`
+	TencentCloudRegion               string `mapstructure:"tencentcloud_region"`
+	TencentCloudSMSSDKAppID          string `mapstructure:"tencentcloud_sms_sdk_app_id"`
+	TencentCloudSMSSignName          string `mapstructure:"tencentcloud_sms_sign_name"`
+	TencentCloudSMSVerificationTplID string `mapstructure:"tencentcloud_sms_verification_template_id"`
+	MockEnabled                      bool   `mapstructure:"mock_enabled"`
+	MockCode                         string `mapstructure:"mock_code"`
+	CodeTTLMinutes                   int    `mapstructure:"code_ttl_minutes"`
+	ThrottleSeconds                  int    `mapstructure:"throttle_seconds"`
+	IPThrottleSeconds                int    `mapstructure:"ip_throttle_seconds"`
 }
 
 type FeishuConfig struct {
@@ -216,6 +239,8 @@ func Load(baseDir string) (*Config, error) {
 	cfg.ConfigSource = source
 	trimExternalConfig(&cfg.External)
 	trimAppAuthConfig(&cfg.AppAuth)
+	trimRedisConfig(&cfg.Redis)
+	trimSMSConfig(&cfg.SMS)
 	if err := applyConfigFileOnlyValues(v, &cfg); err != nil {
 		return nil, err
 	}
@@ -299,6 +324,8 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	trimExternalConfig(&fileCfg.External)
 	trimAppAuthConfig(&fileCfg.AppAuth)
+	trimRedisConfig(&fileCfg.Redis)
+	trimSMSConfig(&fileCfg.SMS)
 	if fileCfg.AppAuth.WechatAppID != "" {
 		v.Set("app_auth.wechat_app_id", fileCfg.AppAuth.WechatAppID)
 	}
@@ -310,6 +337,51 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	if fileCfg.AppAuth.DevelopmentMockWechatCode != "" {
 		v.Set("app_auth.development_mock_wechat_code", fileCfg.AppAuth.DevelopmentMockWechatCode)
+	}
+	if fileCfg.Redis.URL != "" {
+		v.Set("redis.url", fileCfg.Redis.URL)
+	}
+	if fileV.IsSet("redis.mode") {
+		v.Set("redis.mode", fileCfg.Redis.Mode)
+	}
+	if fileCfg.Redis.Password != "" {
+		v.Set("redis.password", fileCfg.Redis.Password)
+	}
+	if fileV.IsSet("redis.db") {
+		v.Set("redis.db", fileCfg.Redis.DB)
+	}
+	if fileCfg.SMS.TencentCloudSecretID != "" {
+		v.Set("sms.tencentcloud_secret_id", fileCfg.SMS.TencentCloudSecretID)
+	}
+	if fileCfg.SMS.TencentCloudSecretKey != "" {
+		v.Set("sms.tencentcloud_secret_key", fileCfg.SMS.TencentCloudSecretKey)
+	}
+	if fileCfg.SMS.TencentCloudRegion != "" {
+		v.Set("sms.tencentcloud_region", fileCfg.SMS.TencentCloudRegion)
+	}
+	if fileCfg.SMS.TencentCloudSMSSDKAppID != "" {
+		v.Set("sms.tencentcloud_sms_sdk_app_id", fileCfg.SMS.TencentCloudSMSSDKAppID)
+	}
+	if fileCfg.SMS.TencentCloudSMSSignName != "" {
+		v.Set("sms.tencentcloud_sms_sign_name", fileCfg.SMS.TencentCloudSMSSignName)
+	}
+	if fileCfg.SMS.TencentCloudSMSVerificationTplID != "" {
+		v.Set("sms.tencentcloud_sms_verification_template_id", fileCfg.SMS.TencentCloudSMSVerificationTplID)
+	}
+	if fileV.IsSet("sms.mock_enabled") {
+		v.Set("sms.mock_enabled", fileCfg.SMS.MockEnabled)
+	}
+	if fileCfg.SMS.MockCode != "" {
+		v.Set("sms.mock_code", fileCfg.SMS.MockCode)
+	}
+	if fileV.IsSet("sms.code_ttl_minutes") {
+		v.Set("sms.code_ttl_minutes", fileCfg.SMS.CodeTTLMinutes)
+	}
+	if fileV.IsSet("sms.throttle_seconds") {
+		v.Set("sms.throttle_seconds", fileCfg.SMS.ThrottleSeconds)
+	}
+	if fileV.IsSet("sms.ip_throttle_seconds") {
+		v.Set("sms.ip_throttle_seconds", fileCfg.SMS.IPThrottleSeconds)
 	}
 	if fileCfg.External.DoubaoAPIKey != "" {
 		v.Set("external.doubao_api_key", fileCfg.External.DoubaoAPIKey)
@@ -951,6 +1023,40 @@ func trimAppAuthConfig(cfg *AppAuthConfig) {
 	cfg.DevelopmentMockWechatCode = strings.TrimSpace(cfg.DevelopmentMockWechatCode)
 }
 
+func trimRedisConfig(cfg *RedisConfig) {
+	cfg.Mode = strings.ToLower(strings.TrimSpace(cfg.Mode))
+	cfg.URL = strings.TrimSpace(cfg.URL)
+	cfg.Password = strings.TrimSpace(cfg.Password)
+	if cfg.Mode == "" {
+		cfg.Mode = "auto"
+	}
+}
+
+func trimSMSConfig(cfg *SMSConfig) {
+	cfg.TencentCloudSecretID = strings.TrimSpace(cfg.TencentCloudSecretID)
+	cfg.TencentCloudSecretKey = strings.TrimSpace(cfg.TencentCloudSecretKey)
+	cfg.TencentCloudRegion = strings.TrimSpace(cfg.TencentCloudRegion)
+	cfg.TencentCloudSMSSDKAppID = strings.TrimSpace(cfg.TencentCloudSMSSDKAppID)
+	cfg.TencentCloudSMSSignName = strings.TrimSpace(cfg.TencentCloudSMSSignName)
+	cfg.TencentCloudSMSVerificationTplID = strings.TrimSpace(cfg.TencentCloudSMSVerificationTplID)
+	cfg.MockCode = strings.TrimSpace(cfg.MockCode)
+	if cfg.CodeTTLMinutes <= 0 {
+		cfg.CodeTTLMinutes = 15
+	}
+	if cfg.ThrottleSeconds <= 0 {
+		cfg.ThrottleSeconds = 30
+	}
+	if cfg.IPThrottleSeconds <= 0 {
+		cfg.IPThrottleSeconds = cfg.ThrottleSeconds
+	}
+	if cfg.TencentCloudRegion == "" {
+		cfg.TencentCloudRegion = "ap-guangzhou"
+	}
+	if cfg.MockCode == "" {
+		cfg.MockCode = "123456"
+	}
+}
+
 func trimApolloConfig(cfg *ApolloConfig) {
 	cfg.AppID = strings.TrimSpace(cfg.AppID)
 	cfg.Cluster = strings.TrimSpace(cfg.Cluster)
@@ -998,6 +1104,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("jwt.refresh_token_ttl_seconds", int64(36525*24*60*60))
 	v.SetDefault("app_auth.development_mock_login", true)
 	v.SetDefault("app_auth.development_mock_wechat_code", "expo-go-dev-wechat-code")
+	v.SetDefault("redis.mode", "auto")
+	v.SetDefault("sms.tencentcloud_region", "ap-guangzhou")
+	v.SetDefault("sms.mock_enabled", false)
+	v.SetDefault("sms.mock_code", "123456")
+	v.SetDefault("sms.code_ttl_minutes", 15)
+	v.SetDefault("sms.throttle_seconds", 30)
+	v.SetDefault("sms.ip_throttle_seconds", 30)
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.traces_enabled", true)
 	v.SetDefault("otel.metrics_enabled", true)

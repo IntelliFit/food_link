@@ -240,7 +240,11 @@ export function RootNavigator() {
             <Stack.Screen name="AboutFeedback" component={AboutFeedbackScreen} options={{ title: '关于与反馈' }} />
           </>
         ) : (
-          <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Agreements" component={AgreementsScreen} options={{ title: '用户协议' }} />
+            <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: '隐私政策' }} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

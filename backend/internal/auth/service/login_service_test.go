@@ -126,7 +126,7 @@ func TestLoginService_AppWechatLogin_WithDevelopmentMockCode(t *testing.T) {
 	assert.Equal(t, "wechat_app", *user.LastLoginMethod)
 }
 
-func TestLoginService_RegisterAndLoginWithPassword(t *testing.T) {
+func TestLoginService_RegisterAndLoginWithPhonePasswordOnly(t *testing.T) {
 	_, userRepo := setupLoginTestDB(t)
 	cfg := &config.Config{
 		App: config.AppConfig{Env: "development"},
@@ -137,15 +137,15 @@ func TestLoginService_RegisterAndLoginWithPassword(t *testing.T) {
 	ctx := context.Background()
 
 	registered, err := svc.RegisterWithPassword(ctx, PasswordRegisterInput{
-		Username: "mobile.user",
+		Phone:    "13800138001",
 		Password: "password123",
 		Nickname: "Mobile User",
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, registered.AccessToken)
-	assert.Equal(t, "app-pwd:mobile.user", registered.OpenID)
+	assert.Equal(t, "app-pwd-phone:13800138001", registered.OpenID)
 
-	loggedIn, err := svc.LoginWithPassword(ctx, PasswordLoginInput{Username: "MOBILE.USER", Password: "password123"})
+	loggedIn, err := svc.LoginWithPassword(ctx, PasswordLoginInput{Phone: "13800138001", Password: "password123"})
 	require.NoError(t, err)
 	assert.Equal(t, registered.UserID, loggedIn.UserID)
 }
@@ -191,9 +191,9 @@ func TestLoginService_LoginWithPassword_InvalidPassword(t *testing.T) {
 	svc := NewLoginService(cfg, userRepo, jwtSvc)
 	ctx := context.Background()
 
-	_, err := svc.RegisterWithPassword(ctx, PasswordRegisterInput{Username: "mobileuser", Password: "password123"})
+	_, err := svc.RegisterWithPassword(ctx, PasswordRegisterInput{Phone: "13800138002", Password: "password123"})
 	require.NoError(t, err)
-	_, err = svc.LoginWithPassword(ctx, PasswordLoginInput{Username: "mobileuser", Password: "wrong-password"})
+	_, err = svc.LoginWithPassword(ctx, PasswordLoginInput{Phone: "13800138002", Password: "wrong-password"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "手机号或密码错误")
 }

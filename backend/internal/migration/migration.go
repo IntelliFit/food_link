@@ -81,7 +81,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("weapp_user", "weapp_user_gender_check", `gender IS NULL OR gender = ANY (ARRAY['male'::text,'female'::text,'other'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_activity_level_check", `activity_level IS NULL OR activity_level = ANY (ARRAY['sedentary'::text,'light'::text,'moderate'::text,'active'::text,'very_active'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_execution_mode_check", `execution_mode IS NULL OR execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
-		dropAndAddCheck("weapp_user", "weapp_user_last_login_method_check", `last_login_method IS NULL OR last_login_method = ANY (ARRAY['wechat_miniprogram'::text,'wechat_app'::text,'password'::text,'development_test_openid'::text,'debug_impersonate'::text])`),
+		dropAndAddCheck("weapp_user", "weapp_user_last_login_method_check", `last_login_method IS NULL OR last_login_method = ANY (ARRAY['wechat_miniprogram'::text,'wechat_app'::text,'password'::text,'sms_code'::text,'development_test_openid'::text,'debug_impersonate'::text])`),
 		dropAndAddCheck("user_feedback", "user_feedback_category_check", `category = ANY (ARRAY['bug'::text,'suggestion'::text,'experience'::text,'other'::text])`),
 		dropAndAddCheck("user_feedback", "user_feedback_status_check", `status = ANY (ARRAY['open'::text,'processing'::text,'resolved'::text,'closed'::text])`),
 		dropAndAddCheck("admin_accounts", "admin_accounts_status_check", `status = ANY (ARRAY['active'::text,'disabled'::text])`),
@@ -261,6 +261,7 @@ func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_weapp_user_app_openid ON weapp_user (app_openid) WHERE app_openid IS NOT NULL AND app_openid <> ''`,
 		`CREATE INDEX IF NOT EXISTS idx_weapp_user_app_unionid ON weapp_user (app_unionid) WHERE app_unionid IS NOT NULL AND app_unionid <> ''`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_weapp_user_username ON weapp_user (lower(username)) WHERE username IS NOT NULL AND username <> ''`,
+		`CREATE INDEX IF NOT EXISTS idx_weapp_user_telephone ON weapp_user (telephone) WHERE telephone IS NOT NULL AND telephone <> ''`,
 		`ALTER TABLE packaged_food_library DROP CONSTRAINT IF EXISTS packaged_food_library_normalized_name_key`,
 		`DROP INDEX IF EXISTS uni_packaged_food_library_normalized_name`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS product_key text NOT NULL DEFAULT ''`,
@@ -446,11 +447,11 @@ WHERE COALESCE(display_name, '') = ''
 		`ALTER TABLE analysis_tasks ADD COLUMN IF NOT EXISTS search_text text`,
 		`UPDATE analysis_tasks SET search_text = COALESCE(NULLIF(text_input, ''), result->'items'->0->>'name', result->>'description', '') WHERE search_text IS NULL OR search_text = ''`,
 		`CREATE INDEX IF NOT EXISTS idx_analysis_tasks_user_search_gin ON analysis_tasks USING gin (search_text gin_trgm_ops)`,
-			// Community search trigram indexes for keyword matching
-			`CREATE INDEX IF NOT EXISTS idx_weapp_user_nickname_gin ON weapp_user USING gin (nickname gin_trgm_ops)`,
-			`CREATE INDEX IF NOT EXISTS idx_user_food_records_desc_gin ON user_food_records USING gin (COALESCE(description, '') gin_trgm_ops) WHERE hidden_from_feed = false`,
-			`CREATE INDEX IF NOT EXISTS idx_user_exercise_logs_desc_gin ON user_exercise_logs USING gin (COALESCE(exercise_desc, '') gin_trgm_ops)`,
-			`CREATE INDEX IF NOT EXISTS idx_user_circle_posts_search_gin ON user_circle_posts USING gin (COALESCE(title, '') || ' ' || COALESCE(body, '') gin_trgm_ops)`,
+		// Community search trigram indexes for keyword matching
+		`CREATE INDEX IF NOT EXISTS idx_weapp_user_nickname_gin ON weapp_user USING gin (nickname gin_trgm_ops)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_food_records_desc_gin ON user_food_records USING gin (COALESCE(description, '') gin_trgm_ops) WHERE hidden_from_feed = false`,
+		`CREATE INDEX IF NOT EXISTS idx_user_exercise_logs_desc_gin ON user_exercise_logs USING gin (COALESCE(exercise_desc, '') gin_trgm_ops)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_circle_posts_search_gin ON user_circle_posts USING gin (COALESCE(title, '') || ' ' || COALESCE(body, '') gin_trgm_ops)`,
 		// Analysis feedback samples extra columns/indexes for frontend tracking
 		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS resolution_state text NOT NULL DEFAULT 'user_corrected'`,
 		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS source_record_id uuid`,
@@ -667,6 +668,8 @@ func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
 func ensureFeedReportResolutionColumns(ctx context.Context, db *gorm.DB) error {
 	columns := []string{
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS resolution_note text NOT NULL DEFAULT ''`,
+		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS reward_credits integer NOT NULL DEFAULT 0`,
+		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS reward_ledger_id uuid`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS handled_by text`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS handled_at timestamptz`,
 	}
