@@ -14,6 +14,7 @@ import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
+import { userFacingErrorMessage } from '../utils/errors'
 
 type ResultRoute = RouteProp<RootStackParamList, 'Result'>
 
@@ -95,10 +96,23 @@ export function ResultScreen() {
       if (contextAdvice) payload.context_advice = contextAdvice
 
       const saved = await apiClient.saveFoodRecord(payload)
-      Alert.alert('保存成功', saved.already_saved ? '这条记录之前已经保存。' : '已记录到当天饮食。')
-      navigation.dispatch(CommonActions.navigate({ name: 'MainTabs' }))
+      const message = saved.already_saved ? '这条记录之前已经保存。' : '已记录到当天饮食。'
+      if (!saved.id) {
+        Alert.alert('保存成功', message, [
+          { text: '回到首页', onPress: () => navigation.dispatch(CommonActions.navigate('MainTabs')) },
+        ])
+        return
+      }
+      Alert.alert(
+        '保存成功',
+        message,
+        [
+          { text: '回到首页', onPress: () => navigation.dispatch(CommonActions.navigate('MainTabs')) },
+          { text: '查看记录', onPress: () => navigation.navigate('RecordDetail', { recordId: saved.id }) },
+        ],
+      )
     } catch (error) {
-      Alert.alert('保存失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('保存失败', userFacingErrorMessage(error))
     } finally {
       setSaving(false)
     }

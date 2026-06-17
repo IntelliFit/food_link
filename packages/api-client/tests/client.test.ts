@@ -86,6 +86,22 @@ function createMockAdapters() {
         }
         return response({ code: 0, data: { items: [{ id: 'custom-1', title: 'Custom food', total_calories: 180 }], has_more: false } })
       }
+      if (url.includes('/api/manual-food/catalog')) {
+        return response({
+          code: 0,
+          data: {
+            category: 'campus',
+            page: 2,
+            page_size: 25,
+            has_more: false,
+            categories: [{ key: 'campus', label: '校园食堂' }],
+            items: [{ id: 'campus-1', title: 'Campus chicken rice', source: 'public_library', is_campus_food: true }],
+          },
+        })
+      }
+      if (url.includes('/api/manual-food/search')) {
+        return response({ code: 0, data: { results: [{ id: 'packaged-1', title: '燕麦棒', source: 'packaged_food' }] } })
+      }
       if (url.endsWith('/api/expiry/items/expiry-1')) {
         return response({ code: 0, data: { message: 'ok', item: { id: 'expiry-1', food_name: '酸奶', expire_date: '2026-06-20' } } })
       }
@@ -94,6 +110,9 @@ function createMockAdapters() {
       }
       if (url.endsWith('/api/analyze/tasks/task-packaged-1')) {
         return response({ code: 0, data: { id: 'task-packaged-1', status: 'done', task_type: 'packaged_product_extract', result: { packaged_product: { product_name: '燕麦棒', unit_nutrition_per_100g: { calories: 420 } } } } })
+      }
+      if (url.endsWith('/api/analyze/tasks/retry')) {
+        return response({ code: 0, data: { task_id: 'task-retry-1', message: '已重新提交' } })
       }
       if (url.endsWith('/api/food-record/record-1')) {
         if (options?.method === 'GET') {
@@ -145,6 +164,50 @@ function createMockAdapters() {
       if (url.includes('/api/community/feed-targets/food_record/record-1/report')) {
         return response({ code: 0, data: { id: 'report-1', status: 'pending' } })
       }
+      if (url.includes('/api/community/search')) {
+        return response({
+          code: 0,
+          data: {
+            list: [
+              {
+                target_type: 'food_record',
+                target_id: 'record-1',
+                description: '鸡胸饭',
+                author: { id: 'user-1', nickname: 'Mobile', avatar: '' },
+                liked: false,
+                like_count: 2,
+                comment_count: 1,
+              },
+            ],
+            has_more: false,
+            content_count: 1,
+            user_count: 0,
+          },
+        })
+      }
+      if (url.endsWith('/api/community/notifications/read')) {
+        return response({ code: 0, data: { updated: 3, unread_count: 0 } })
+      }
+      if (url.includes('/api/community/notifications?')) {
+        return response({
+          code: 0,
+          data: {
+            list: [
+              {
+                id: 'notice-1',
+                notification_type: 'comment_received',
+                target_type: 'food_record',
+                target_id: 'record-1',
+                content_preview: 'nice',
+                is_read: false,
+                actor: { id: 'user-2', nickname: 'Friend', avatar: '' },
+              },
+            ],
+            unread_count: 3,
+            has_more: true,
+          },
+        })
+      }
       if (url.endsWith('/api/community/checkin-leaderboard')) {
         return response({
           code: 0,
@@ -178,7 +241,28 @@ function createMockAdapters() {
       if (url.includes('/api/public-food-library')) {
         if (url.includes('/comments')) return response({ code: 0, data: { comment: { id: 'pf-comment-1', content: 'good' } } })
         if (url.endsWith('/like') || url.endsWith('/collect')) return response({ code: 0, data: { message: 'ok' } })
+        if (url.includes('/campus-detail') && url.includes('food-with-campus-related')) {
+          return response({
+            code: 0,
+            data: {
+              item: { id: 'food-with-campus-related', food_name: '校园鸡胸饭', total_calories: 420, is_campus_food: true },
+              metrics: { protein_per_yuan: 3.5, price_per_100_kcal: 2.2 },
+              similar_items: [{ id: 'food-similar-1', food_name: '同食堂牛肉饭', total_calories: 520, is_campus_food: true }],
+              related_feeds: [{
+                id: 'feed-campus-1',
+                food_name: '食堂牛肉饭',
+                campus_location: '学一食堂二层',
+                total_calories: 520,
+                total_protein: 32,
+                like_count: 8,
+                comment_count: 2,
+                published_at: '2026-06-17T10:00:00+08:00',
+              }],
+            },
+          })
+        }
         if (url.includes('/campus-detail')) return response({ code: 0, data: { item: { id: 'food-1', food_name: '鸡胸饭', total_calories: 420 } } })
+        if (url.endsWith('/api/public-food-library') && options?.method === 'POST') return response({ code: 0, data: { id: 'food-created-1', message: 'ok' } })
         if (url.endsWith('/api/public-food-library/food-1')) return response({ code: 0, data: { message: 'ok', item: { id: 'food-1', food_name: '鸡胸饭', total_calories: 430 } } })
         return response({ code: 0, data: { list: [{ id: 'food-1', food_name: '鸡胸饭', total_calories: 420 }] } })
       }
@@ -251,6 +335,33 @@ function createMockAdapters() {
       if (url.endsWith('/api/friend/invite/accept')) {
         return response({ code: 0, data: { status: 'request_sent', nickname: 'Friend' } })
       }
+      if (url.endsWith('/api/friend/list')) {
+        return response({ code: 0, data: { list: [{ id: 'user-2', nickname: 'Friend', avatar: 'https://cdn.example.com/friend.jpg', is_friend: true }] } })
+      }
+      if (url.includes('/api/friend/search?')) {
+        return response({ code: 0, data: { list: [{ id: 'user-3', nickname: 'New Friend', is_pending: false }] } })
+      }
+      if (url.endsWith('/api/friend/request') && options?.method === 'POST') {
+        return response({ code: 0, data: { id: 'req-3', status: 'pending' } })
+      }
+      if (url.endsWith('/api/friend/requests/all')) {
+        return response({
+          code: 0,
+          data: {
+            received: [{ id: 'req-1', counterpart_user_id: 'user-4', counterpart_nickname: 'Incoming', status: 'pending' }],
+            sent: [{ id: 'req-2', counterpart_user_id: 'user-5', counterpart_nickname: 'Outgoing', status: 'pending' }],
+          },
+        })
+      }
+      if (url.endsWith('/api/friend/request/req-1/respond')) {
+        return response({ code: 0, data: { message: 'ok' } })
+      }
+      if (url.endsWith('/api/friend/request/req-2')) {
+        return response({ code: 0, data: { message: 'cancelled' } })
+      }
+      if (url.endsWith('/api/friend/user-2')) {
+        return response({ code: 0, data: { message: 'deleted' } })
+      }
       if (url.includes('/api/pet/summary')) {
         return response({ code: 0, data: {
           pet: { id: 'pet-1', pet_seed: 'seed', name: '青团', color: 'mint', shape: 'round', pattern: 'pattern-0', accessory: 'leaf', personality: 'gentle', level: 1, experience: 20, level_exp: 20, next_level_exp: 100, level_progress: 20, total_events: 0 },
@@ -268,8 +379,8 @@ function createMockAdapters() {
       if (url.endsWith('/api/pet/select-appearance')) {
         return response({ code: 0, data: { pet: { id: 'pet-1', name: '米粒' } } })
       }
-      if (url.endsWith('/api/messages/conversations')) {
-        return response({ code: 0, data: { list: [{ UserID: 'user-2', Nickname: 'Friend', UnreadCount: 1 }] } })
+      if (url.includes('/api/messages/conversations')) {
+        return response({ code: 0, data: { list: [{ UserID: 'user-2', Nickname: 'Friend', UnreadCount: 1 }], has_more: true, offset: 40, limit: 20 } })
       }
       if (url.includes('/api/messages/conversation/user-2')) {
         return response({ code: 0, data: { list: [{ ID: 'msg-1', Content: 'hello', ContentType: 'text' }], has_more: false, offset: 0 } })
@@ -277,6 +388,12 @@ function createMockAdapters() {
       if (url.endsWith('/api/messages/send')) {
         const body = options?.body as { content?: string; content_type?: string; image_url?: string } | undefined
         return response({ code: 0, data: { ID: 'msg-2', Content: body?.content || '', ContentType: body?.content_type || 'text', ImageURL: body?.image_url || '' } })
+      }
+      if (url.endsWith('/api/messages/read/user-2')) {
+        return response({ code: 0, data: { success: true } })
+      }
+      if (url.endsWith('/api/messages/unread-count')) {
+        return response({ code: 0, data: { count: 3 } })
       }
       if (url.includes('/api/home/dashboard')) {
         return response({
@@ -296,7 +413,7 @@ function createMockAdapters() {
       if (url.endsWith('/api/analyze/submit')) {
         return response({ task_id: 'task-1', message: 'ok' })
       }
-      if (url.endsWith('/api/food-record')) {
+      if (url.endsWith('/api/food-record/save')) {
         return response({ id: 'record-1', message: 'saved' })
       }
       return response({ detail: 'not found' }, 404)
@@ -545,6 +662,140 @@ describe('FoodLinkApiClient', () => {
     expect(task.packaged_product?.unit_nutrition_per_100g?.calories).toBe(420)
   })
 
+  it('retries analyze tasks with the original task id', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const result = await client.retryAnalyzeTask('task-old-1')
+
+    const req = requests.find((entry) => entry.url.endsWith('/api/analyze/tasks/retry'))
+    expect(result.task_id).toBe('task-retry-1')
+    expect(req?.options?.method).toBe('POST')
+    expect(req?.options?.body).toMatchObject({ task_id: 'task-old-1' })
+  })
+
+  it('creates public food with campus pricing and homemade location fields', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    await client.createPublicFood({
+      foodName: '番茄牛腩面',
+      imagePath: 'https://cdn.example.com/noodle.jpg',
+      imagePaths: [' https://cdn.example.com/noodle.jpg '],
+      totalCalories: 520,
+      isCampusFood: true,
+      type: 'campus',
+      schoolName: '北京大学',
+      campusName: '燕园校区',
+      canteenName: '学一食堂',
+      floor: '二层',
+      windowName: '牛肉面窗口',
+      priceType: 'range',
+      priceMin: 12,
+      priceMax: 18,
+      priceUnit: '碗',
+      priceCollectedAt: '2026-06-16T00:00:00+08:00',
+      campusLocationText: '燕园校区学一食堂二层牛肉面窗口',
+    })
+    await client.createPublicFood({
+      foodName: '自制鸡胸饭',
+      imagePaths: ['https://cdn.example.com/home-food.jpg'],
+      userTags: ['高蛋白', '自制'],
+      type: 'common',
+      isCampusFood: false,
+    })
+
+    expect(requests.some((req) => {
+      const body = req.options?.body as any
+      return req.url.endsWith('/api/public-food-library') &&
+        body.food_name === '番茄牛腩面' &&
+        body.type === 'campus' &&
+        body.campus_name === '燕园校区' &&
+        body.price_type === 'range' &&
+        body.price_min === 12 &&
+        body.price_max === 18 &&
+        body.price_unit === '碗' &&
+        body.price_collected_at === '2026-06-16T00:00:00+08:00' &&
+        body.campus_location_text === '燕园校区学一食堂二层牛肉面窗口'
+    })).toBe(true)
+    expect(requests.some((req) => {
+      const body = req.options?.body as any
+      return req.url.endsWith('/api/public-food-library') &&
+        body.food_name === '自制鸡胸饭' &&
+        body.type === 'common' &&
+        body.is_campus_food === false &&
+        body.user_tags?.includes('自制') &&
+        !('latitude' in body)
+    })).toBe(true)
+  })
+
+  it('lists public foods with search, sort, and fat loss filters', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    await client.listPublicFoods({
+      limit: 50,
+      sortBy: 'rating',
+      type: 'campus',
+      isCampusFood: true,
+      merchantName: ' 学一食堂 ',
+      canteenName: ' 一层快餐 ',
+      suitableForFatLoss: true,
+    })
+
+    const listReq = requests.find((entry) =>
+      entry.url.includes('/api/public-food-library?') && entry.options?.method === 'GET',
+    )
+    expect(listReq).toBeTruthy()
+    const params = new URL(listReq?.url || 'https://api.example.com').searchParams
+    expect(params.get('limit')).toBe('50')
+    expect(params.get('sort_by')).toBe('rating')
+    expect(params.get('type')).toBe('campus')
+    expect(params.get('is_campus_food')).toBe('true')
+    expect(params.get('merchant_name')).toBe('学一食堂')
+    expect(params.get('canteen_name')).toBe('一层快餐')
+    expect(params.get('suitable_for_fat_loss')).toBe('true')
+  })
+
+  it('returns campus detail with similar items and related feeds', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const detail = await client.getCampusFoodDetail('food-with-campus-related')
+
+    expect(detail.metrics?.protein_per_yuan).toBe(3.5)
+    expect(detail.similar_items?.[0]?.food_name).toBe('同食堂牛肉饭')
+    expect(detail.related_feeds?.[0]?.campus_location).toBe('学一食堂二层')
+    expect(detail.related_feeds?.[0]?.like_count).toBe(8)
+    expect(requests.some((entry) => entry.url.endsWith('/api/public-food-library/food-with-campus-related/campus-detail'))).toBe(true)
+  })
+
+  it('replies to and deletes public food comments', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    await client.addPublicFoodComment('food-1', '回复一下', undefined, {
+      parentCommentId: 'comment-parent',
+      replyToUserId: 'user-2',
+    })
+    await client.deletePublicFoodComment('food-1', 'comment-1')
+
+    const replyReq = requests.find((entry) => entry.url.endsWith('/api/public-food-library/food-1/comments'))
+    const deleteReq = requests.find((entry) => entry.url.endsWith('/api/public-food-library/food-1/comments/comment-1'))
+    expect(replyReq?.options?.method).toBe('POST')
+    expect(replyReq?.options?.body).toMatchObject({
+      content: '回复一下',
+      parent_comment_id: 'comment-parent',
+      reply_to_user_id: 'user-2',
+    })
+    expect(deleteReq?.options?.method).toBe('DELETE')
+  })
+
   it('calls expiry detail and update APIs with backend field names', async () => {
     const { adapters, requests } = createMockAdapters()
     const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
@@ -770,6 +1021,119 @@ describe('FoodLinkApiClient', () => {
     })
   })
 
+  it('loads manual food catalog channels with category paging', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const data = await client.getManualFoodCatalog('campus', { page: 2, pageSize: 25 })
+
+    expect(data.items[0]?.id).toBe('campus-1')
+    expect(data.items[0]?.is_campus_food).toBe(true)
+    expect(requests.some((req) => (
+      req.url.includes('/api/manual-food/catalog?') &&
+      req.url.includes('category=campus') &&
+      req.url.includes('page=2') &&
+      req.url.includes('page_size=25')
+    ))).toBe(true)
+  })
+
+  it('searches only packaged foods when requested', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const data = await client.searchManualFood(' 燕麦棒 ', 30, { source: 'packaged_food' })
+
+    expect(data.results[0]?.source).toBe('packaged_food')
+    expect(requests.some((req) => (
+      req.url.includes('/api/manual-food/search?') &&
+      req.url.includes('q=%E7%87%95%E9%BA%A6%E6%A3%92') &&
+      req.url.includes('limit=30') &&
+      req.url.includes('source=packaged_food')
+    ))).toBe(true)
+  })
+
+  it('saves multiple manual foods as one food library record', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    await client.saveManualFoodRecords({
+      mealType: 'lunch',
+      date: '2026-06-15',
+      items: [
+        {
+          weight: 200,
+          item: {
+            id: 'rice-1',
+            title: '米饭',
+            source: 'nutrition_library',
+            default_weight_grams: 100,
+            total_calories: 116,
+            total_protein: 2.6,
+            total_carbs: 25.9,
+            total_fat: 0.3,
+            nutrients_per_100g: { fiber: 0.3, sugar: 0.1, sodium_mg: 2 },
+          },
+        },
+        {
+          weight: 80,
+          item: {
+            id: 'egg-1',
+            title: '鸡蛋',
+            source: 'custom',
+            default_weight_grams: 50,
+            total_calories: 72,
+            total_protein: 6,
+            total_carbs: 0.4,
+            total_fat: 5,
+            portion_label: '1 个 50g',
+            image_path: ' https://cdn.example.com/egg.jpg ',
+          },
+        },
+      ],
+    })
+
+    const req = requests.find((entry) => entry.url.endsWith('/api/food-record/save') && entry.options?.method === 'POST')
+    expect(req?.options?.body).toMatchObject({
+      meal_type: 'lunch',
+      date: '2026-06-15',
+      entry_type: 'food_library',
+      description: '手动记录：米饭、鸡蛋',
+      insight: '手动记录，包含用户自定义营养数据',
+      total_calories: 347.2,
+      total_weight_grams: 280,
+      items: [
+        {
+          name: '米饭',
+          weight: 200,
+          intake: 200,
+          manual_source: 'nutrition_library',
+          manual_source_id: 'rice-1',
+          nutrients: {
+            calories: 232,
+            fiber: 0.6,
+            sodium_mg: 4,
+          },
+        },
+        {
+          name: '鸡蛋',
+          weight: 80,
+          intake: 80,
+          image_path: 'https://cdn.example.com/egg.jpg',
+          image_paths: ['https://cdn.example.com/egg.jpg'],
+          manual_source: 'custom',
+          manual_portion_label: '1 个 50g',
+          nutrients: {
+            calories: 115.2,
+            protein: 9.600000000000001,
+          },
+        },
+      ],
+    })
+  })
+
   it('calls migrated app feature APIs with backend field names', async () => {
     const { adapters, requests } = createMockAdapters()
     const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
@@ -881,5 +1245,103 @@ describe('FoodLinkApiClient', () => {
         body.content_type === 'image' &&
         body.image_url === 'https://cdn.example.com/chat.jpg'
     })).toBe(true)
+  })
+
+  it('searches community content and users with encoded query params', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const result = await client.communitySearch({ keyword: ' 鸡胸饭 ', tab: 'content', limit: 20, offset: 0 })
+
+    expect(result.content_count).toBe(1)
+    expect(requests.some((req) => (
+      req.url.includes('/api/community/search?') &&
+      req.url.includes('keyword=%E9%B8%A1%E8%83%B8%E9%A5%AD') &&
+      req.url.includes('tab=content') &&
+      req.url.includes('limit=20') &&
+      req.url.includes('offset=0') &&
+      req.options?.headers?.Authorization === 'Bearer wechat-access-token'
+    ))).toBe(true)
+  })
+
+  it('manages friends and friend requests', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const friends = await client.listFriends()
+    const search = await client.searchFriends(' New Friend ')
+    await client.sendFriendRequest('user-3')
+    const overview = await client.getFriendRequestsOverview()
+    await client.respondFriendRequest('req-1', 'accept')
+    await client.cancelSentFriendRequest('req-2')
+    await client.deleteFriend('user-2')
+
+    expect(friends.list[0]?.id).toBe('user-2')
+    expect(search.list[0]?.id).toBe('user-3')
+    expect(overview.received[0]?.id).toBe('req-1')
+    expect(overview.sent[0]?.id).toBe('req-2')
+    expect(requests.some((req) => req.url.endsWith('/api/friend/list') && req.options?.method === 'GET')).toBe(true)
+    const searchReq = requests.find((req) => req.url.includes('/api/friend/search?'))
+    expect(searchReq).toBeTruthy()
+    expect(new URL(searchReq?.url || 'https://api.example.com').searchParams.get('nickname')).toBe('New Friend')
+    const sendReq = requests.find((req) => req.url.endsWith('/api/friend/request') && req.options?.method === 'POST')
+    expect(sendReq?.options?.body).toEqual({ to_user_id: 'user-3' })
+    const respondReq = requests.find((req) => req.url.endsWith('/api/friend/request/req-1/respond'))
+    expect(respondReq?.options?.method).toBe('POST')
+    expect(respondReq?.options?.body).toEqual({ action: 'accept' })
+    expect(requests.some((req) => req.url.endsWith('/api/friend/request/req-2') && req.options?.method === 'DELETE')).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/friend/user-2') && req.options?.method === 'DELETE')).toBe(true)
+  })
+
+  it('lists private conversations and messages with pagination', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const conversations = await client.listConversations({ limit: 20, offset: 40 })
+    const messages = await client.getConversation('user-2', 20, 20)
+    const read = await client.markConversationRead('user-2')
+    const unread = await client.getUnreadPrivateMessageCount()
+
+    expect(conversations.has_more).toBe(true)
+    expect(conversations.list[0]?.UserID).toBe('user-2')
+    expect(messages.list[0]?.ID).toBe('msg-1')
+    expect(read.success).toBe(true)
+    expect(unread.count).toBe(3)
+    const conversationReq = requests.find((req) => req.url.includes('/api/messages/conversations?'))
+    expect(conversationReq).toBeTruthy()
+    const conversationParams = new URL(conversationReq?.url || 'https://api.example.com').searchParams
+    expect(conversationParams.get('limit')).toBe('20')
+    expect(conversationParams.get('offset')).toBe('40')
+    const messageReq = requests.find((req) => req.url.includes('/api/messages/conversation/user-2?'))
+    expect(messageReq).toBeTruthy()
+    const messageParams = new URL(messageReq?.url || 'https://api.example.com').searchParams
+    expect(messageParams.get('limit')).toBe('20')
+    expect(messageParams.get('offset')).toBe('20')
+    expect(requests.some((req) => req.url.endsWith('/api/messages/read/user-2') && req.options?.method === 'PUT')).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/messages/unread-count'))).toBe(true)
+  })
+
+  it('lists community notifications with tab filters and pagination', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
+    const result = await client.listCommunityNotifications({ limit: 20, offset: 40, type: ' comment_received ' })
+    await client.markCommunityNotificationsRead()
+
+    expect(result.has_more).toBe(true)
+    expect(result.list[0]?.notification_type).toBe('comment_received')
+    const listReq = requests.find((req) => req.url.includes('/api/community/notifications?'))
+    expect(listReq).toBeTruthy()
+    const params = new URL(listReq?.url || 'https://api.example.com').searchParams
+    expect(params.get('limit')).toBe('20')
+    expect(params.get('offset')).toBe('40')
+    expect(params.get('type')).toBe('comment_received')
+    const readReq = requests.find((req) => req.url.endsWith('/api/community/notifications/read'))
+    expect(readReq?.options?.method).toBe('POST')
+    expect(readReq?.options?.body).toEqual({ notification_ids: [] })
   })
 })

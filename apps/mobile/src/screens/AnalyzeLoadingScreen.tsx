@@ -7,6 +7,7 @@ import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
+import { userFacingErrorMessage, userFacingMessage } from '../utils/errors'
 
 type AnalyzeLoadingRoute = RouteProp<RootStackParamList, 'AnalyzeLoading'>
 
@@ -64,14 +65,14 @@ export function AnalyzeLoadingScreen() {
             return
           }
           if (task.status === 'failed' || task.status === 'violated' || task.status === 'timed_out' || task.status === 'cancelled') {
-            throw new Error(task.error_message || '识别未完成')
+            throw new Error(userFacingMessage(task.error_message, '识别没有成功，可以调整图片或文字后重新提交。'))
           }
           await new Promise((resolve) => setTimeout(resolve, 2000))
         }
         throw new Error('分析等待超时，请稍后在识别记录中查看')
       } catch (error) {
         if (!cancelled) {
-          Alert.alert('分析失败', error instanceof Error ? error.message : '请稍后重试')
+          Alert.alert('分析失败', userFacingErrorMessage(error, '识别没有成功，可以稍后在识别记录中查看，或重新提交。'))
           navigation.navigate('MainTabs')
         }
       }

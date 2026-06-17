@@ -3,16 +3,25 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
-	"reflect"
+	"net/url"
 	"testing"
 
-	. "github.com/agiledragon/gomonkey/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/pkg/config"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
 
 func mockTiandituResponse() *http.Response {
 	body := `{"status":"0","msg":"ok","location":{"lon":116.4,"lat":39.9,"address":"北京市"}}`
@@ -24,13 +33,13 @@ func mockTiandituResponse() *http.Response {
 }
 
 func TestLocationService_ReverseGeocode_Success(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
-		return mockTiandituResponse(), nil
-	})
-	defer patches.Reset()
-
 	cfg := &config.Config{External: config.ExternalConfig{TiandituTK: "mock-tk"}}
 	svc := NewLocationService(cfg)
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https", req.URL.Scheme)
+		assert.Equal(t, "/geocoder", req.URL.Path)
+		return mockTiandituResponse(), nil
+	})
 	ctx := context.Background()
 
 	result, err := svc.ReverseGeocode(ctx, 39.9, 116.4)
@@ -48,13 +57,11 @@ func TestLocationService_ReverseGeocode_MissingTK(t *testing.T) {
 }
 
 func TestLocationService_ReverseGeocode_HTTPError(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
-		return nil, assert.AnError
-	})
-	defer patches.Reset()
-
 	cfg := &config.Config{External: config.ExternalConfig{TiandituTK: "mock-tk"}}
 	svc := NewLocationService(cfg)
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, assert.AnError
+	})
 	ctx := context.Background()
 
 	_, err := svc.ReverseGeocode(ctx, 39.9, 116.4)
@@ -62,18 +69,34 @@ func TestLocationService_ReverseGeocode_HTTPError(t *testing.T) {
 }
 
 func TestLocationService_SearchAddress_Success(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
+	cfg := &config.Config{External: config.ExternalConfig{TiandituTK: "mock-tk"}}
+	svc := NewLocationService(cfg)
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "https", req.URL.Scheme)
+		assert.Equal(t, "/v2/search", req.URL.Path)
+		postStr, err := url.QueryUnescape(req.URL.Query().Get("postStr"))
+		require.NoError(t, err)
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal([]byte(postStr), &payload))
+		assert.Equal(t, `北京"店`, payload["keyWord"])
 		return mockTiandituResponse(), nil
 	})
-	defer patches.Reset()
+	ctx := context.Background()
 
+	result, err := svc.SearchAddress(ctx, `北京"店`)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+func TestLocationService_SearchAddress_EmptyKeyword(t *testing.T) {
 	cfg := &config.Config{External: config.ExternalConfig{TiandituTK: "mock-tk"}}
 	svc := NewLocationService(cfg)
 	ctx := context.Background()
 
-	result, err := svc.SearchAddress(ctx, "北京")
+	result, err := svc.SearchAddress(ctx, " ")
 	assert.NoError(t, err)
-	assert.NotNil(t, result)
+	assert.Equal(t, "", result["keyword"])
+	assert.Empty(t, result["pois"])
 }
 
 func TestLocationService_SearchAddress_MissingTK(t *testing.T) {
@@ -86,15 +109,56 @@ func TestLocationService_SearchAddress_MissingTK(t *testing.T) {
 }
 
 func TestLocationService_SearchAddress_HTTPError(t *testing.T) {
-	patches := ApplyMethod(reflect.TypeOf(&http.Client{}), "Do", func(_ *http.Client, req *http.Request) (*http.Response, error) {
-		return nil, assert.AnError
-	})
-	defer patches.Reset()
-
 	cfg := &config.Config{External: config.ExternalConfig{TiandituTK: "mock-tk"}}
 	svc := NewLocationService(cfg)
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, assert.AnError
+	})
 	ctx := context.Background()
 
 	_, err := svc.SearchAddress(ctx, "北京")
 	assert.Error(t, err)
+}
+
+func TestLocationService_SearchAddress_NonJSONProductionReturnsFriendlyAppError(t *testing.T) {
+	cfg := &config.Config{
+		App:      config.AppConfig{Env: "production"},
+		External: config.ExternalConfig{TiandituTK: "mock-tk"},
+	}
+	svc := NewLocationService(cfg)
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString("<html>not json</html>")),
+			Header:     make(http.Header),
+		}, nil
+	})
+	ctx := context.Background()
+
+	_, err := svc.SearchAddress(ctx, "北京")
+	require.Error(t, err)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, "位置服务暂时不可用，请稍后重试", appErr.Message)
+}
+
+func TestLocationService_SearchAddress_HTTPForbiddenDevelopmentFallback(t *testing.T) {
+	cfg := &config.Config{
+		App:      config.AppConfig{Env: "development"},
+		External: config.ExternalConfig{TiandituTK: "mock-tk"},
+	}
+	svc := NewLocationService(cfg)
+	svc.client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusForbidden,
+			Body:       io.NopCloser(bytes.NewBufferString(`{"status":"403","msg":"forbidden"}`)),
+			Header:     make(http.Header),
+		}, nil
+	})
+	ctx := context.Background()
+
+	result, err := svc.SearchAddress(ctx, "咖啡")
+	require.NoError(t, err)
+	assert.Equal(t, true, result["fallback"])
+	assert.NotEmpty(t, result["pois"])
 }

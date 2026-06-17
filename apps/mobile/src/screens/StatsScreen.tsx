@@ -17,6 +17,7 @@ import { MacroRow } from '../components/MacroRow'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
+import { userFacingErrorMessage } from '../utils/errors'
 
 function insightContent(result: StatsInsightResult): string {
   return normalizeInsightText(String(result.analysis_summary || result.content || ''))
@@ -37,7 +38,7 @@ export function StatsScreen() {
     try {
       setSummary(await apiClient.getStatsSummary(range))
     } catch (error) {
-      Alert.alert('获取分析失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('获取分析失败', userFacingErrorMessage(error))
     } finally {
       setLoading(false)
     }
@@ -65,7 +66,7 @@ export function StatsScreen() {
     try {
       const result = await apiClient.generateStatsInsight(range)
       const content = insightContent(result)
-      if (!content) throw new Error('AI 风险解读为空')
+      if (!content) throw new Error('本次没有生成有效解读，请稍后重试。')
       setSummary((prev) => {
         if (!prev) return prev
         return {
@@ -79,7 +80,7 @@ export function StatsScreen() {
       })
       Alert.alert('已更新', 'AI 风险解读已生成')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'AI 风险解读生成失败'
+      const message = userFacingErrorMessage(error, 'AI 风险解读生成失败')
       setInsightError(message)
       Alert.alert('生成失败', message)
     } finally {

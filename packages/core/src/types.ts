@@ -748,6 +748,59 @@ export interface CommunityFeedContext {
   comment_count?: number
 }
 
+export type CommunitySearchTab = 'content' | 'users'
+
+export interface CommunitySearchAuthor {
+  id: string
+  nickname?: string
+  avatar?: string
+}
+
+export interface ContentSearchResult {
+  target_type: CommunityFeedTargetType | string
+  target_id: string
+  user_id?: string
+  description?: string
+  title?: string
+  body?: string
+  image_path?: string | null
+  image_paths?: string[] | null
+  record_time?: string
+  created_at?: string
+  total_calories?: number
+  total_protein?: number
+  total_carbs?: number
+  total_fat?: number
+  fiber?: number
+  sugar?: number
+  sodium_mg?: number
+  exercise_desc?: string
+  exercise_type?: string
+  calories_burned?: number
+  duration_min?: number
+  meal_type?: string
+  diet_goal?: string
+  author: CommunitySearchAuthor
+  liked?: boolean
+  like_count?: number
+  comment_count?: number
+}
+
+export interface UserSearchResult {
+  id: string
+  nickname?: string
+  avatar?: string
+  is_friend?: boolean
+  is_self?: boolean
+}
+
+export interface CommunitySearchResult {
+  list: ContentSearchResult[] | UserSearchResult[]
+  has_more: boolean
+  content_count: number
+  user_count: number
+}
+
 export interface CheckinLeaderboardItem {
   user_id: string
   nickname: string
@@ -833,6 +886,7 @@ export interface ManualFoodItem {
   title?: string
   name?: string
   source?: 'recent' | 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom' | string
+  source_label?: string
   source_id?: string
   default_weight_grams?: number
   total_calories?: number
@@ -857,6 +911,22 @@ export interface ManualFoodBrowseResult {
   collected_public_library?: ManualFoodItem[]
   public_library?: ManualFoodItem[]
   nutrition_library?: ManualFoodItem[]
+  stats?: Record<string, unknown>
+}
+
+export interface ManualFoodCatalogCategory {
+  key: string
+  label: string
+  count?: number
+}
+
+export interface ManualFoodCatalogResult {
+  categories?: ManualFoodCatalogCategory[]
+  items: ManualFoodItem[]
+  category?: string
+  page?: number
+  page_size?: number
+  has_more?: boolean
   stats?: Record<string, unknown>
 }
 
@@ -928,6 +998,9 @@ export interface PublicFoodItem {
   suitable_for_fat_loss?: boolean
   user_tags?: string[]
   user_notes?: string
+  latitude?: number | null
+  longitude?: number | null
+  province?: string
   city?: string
   district?: string
   status?: string
@@ -947,7 +1020,11 @@ export interface PublicFoodItem {
   floor?: string
   window_name?: string
   price?: number
+  price_type?: string
+  price_min?: number
+  price_max?: number
   price_unit?: string
+  price_collected_at?: string
   portion_description?: string
   campus_location_text?: string
   school_logo_url?: string
@@ -1131,14 +1208,33 @@ export interface PublicFoodComment {
   replies?: PublicFoodComment[]
 }
 
+export interface CampusRelatedFeedItem {
+  id: string
+  food_name?: string
+  image_path?: string | null
+  image_paths?: string[] | null
+  school_name?: string | null
+  canteen_name?: string | null
+  campus_location?: string | null
+  school_logo_url?: string | null
+  total_calories?: number
+  total_protein?: number
+  price?: number | null
+  price_unit?: string | null
+  like_count?: number
+  comment_count?: number
+  collection_count?: number
+  published_at?: string | null
+}
+
 export interface CampusFoodDetail {
   item: PublicFoodItem
   metrics?: {
     protein_per_yuan?: number
     price_per_100_kcal?: number
   }
-  similar_items?: PublicFoodItem[]
-  related_feeds?: PublicFoodItem[]
+  similar_items?: PublicFoodItem[] | null
+  related_feeds?: CampusRelatedFeedItem[] | null
 }
 
 export interface PublicProfile {

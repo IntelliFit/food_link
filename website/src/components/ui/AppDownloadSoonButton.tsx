@@ -1,24 +1,25 @@
-import { Smartphone } from 'lucide-react'
+import { Download } from 'lucide-react'
+import { appDownload } from '@/content/app-download'
 import { cn } from '@/lib/utils'
 
 type AppDownloadSoonButtonProps = {
   className?: string
 }
 
-/** 原生 App 尚未上线时的占位 CTA */
+/** 原生 App 下载 CTA。组件名保留以减少历史引用改动。 */
 export function AppDownloadSoonButton({ className }: AppDownloadSoonButtonProps) {
+  const primaryDownload = appDownload.options.find((option) => option.id === 'stable-apk') ?? appDownload.options[0]
+
   return (
-    <button
-      type="button"
-      disabled
-      aria-disabled
+    <a
+      href={primaryDownload.href}
       className={cn(
-        'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-[12px] border border-border bg-background px-3.5 text-sm font-medium text-muted-foreground',
+        'inline-flex h-10 shrink-0 items-center gap-1.5 rounded-[12px] border border-border bg-background px-3.5 text-sm font-medium text-foreground shadow-sm transition-colors hover:border-primary/40 hover:text-primary',
         className,
       )}
     >
-      <Smartphone className="size-4 shrink-0 opacity-70" aria-hidden />
-      App 下载即将开放
-    </button>
+      <Download className="size-4 shrink-0" aria-hidden />
+      下载 Android App
+    </a>
   )
 }

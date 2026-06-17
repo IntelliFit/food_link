@@ -14,6 +14,7 @@ import { colors } from '../theme'
 import { formatDateTime } from '../utils/date'
 import { readImageAsBase64DataUrl } from '../utils/image'
 import { useAuth } from '../providers/AuthProvider'
+import { userFacingErrorMessage } from '../utils/errors'
 
 type ProfileTab = 'feed' | 'collections'
 
@@ -232,6 +233,10 @@ export function ProfileSettingsScreen() {
     navigation.navigate('CommunityFeedDetail', { targetId, targetType })
   }
 
+  const resolvedProfileId = String(profile?.id || targetUserId || '').trim()
+  const shortProfileId = formatShortUserId(resolvedProfileId)
+  const canOpenFollowList = Boolean(profile?.id)
+
   return (
     <Page title={isOwner ? '个人主页' : '用户主页'} subtitle={profile?.motto || '动态、收藏和公开资料'} refreshing={loading} onRefresh={load}>
       <Card style={styles.heroCard}>
@@ -239,19 +244,43 @@ export function ProfileSettingsScreen() {
         <View style={styles.profileRow}>
           {avatar ? <Image source={{ uri: avatar }} style={styles.avatar} /> : <View style={styles.avatarFallback} />}
           <View style={styles.flex}>
-            <Text style={styles.bigTitle}>{profile?.nickname || 'Food Link 用户'}</Text>
-            <Text style={styles.subtitle}>记录 {profile?.record_days || 0} 天 · 被关注 {profile?.followers_count || 0} · 关注 {profile?.following_count || 0}</Text>
-            <Text style={styles.idText} selectable>ID: {profile?.id || targetUserId || ''}</Text>
+            <Text style={styles.bigTitle} numberOfLines={1}>{profile?.nickname || 'Food Link 用户'}</Text>
+            <View style={styles.profileIdRow}>
+              <Text style={styles.idText} selectable>ID: {shortProfileId || '-'}</Text>
+              <Pressable onPress={() => void copyUserId()} style={styles.inlineCopyButton}>
+                <Text style={styles.inlineCopyButtonText}>复制ID</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.subtitle} numberOfLines={2}>{profile?.motto || (isOwner ? '编辑资料与个人主页' : '公开资料')}</Text>
           </View>
+        </View>
+        <View style={styles.profileStatsRow}>
+          <View style={styles.profileStatItem}>
+            <Text style={styles.profileStatNumber}>{profile?.record_days || 0}</Text>
+            <Text style={styles.profileStatLabel}>记录天数</Text>
+          </View>
+          <View style={styles.profileStatDivider} />
+          <Pressable
+            style={styles.profileStatItem}
+            onPress={() => canOpenFollowList && profile?.id ? navigation.navigate('FollowList', { userId: profile.id, type: 'followers' }) : undefined}
+          >
+            <Text style={styles.profileStatNumber}>{profile?.followers_count || 0}</Text>
+            <Text style={styles.profileStatLabel}>被关注</Text>
+          </Pressable>
+          <View style={styles.profileStatDivider} />
+          <Pressable
+            style={styles.profileStatItem}
+            onPress={() => canOpenFollowList && profile?.id ? navigation.navigate('FollowList', { userId: profile.id, type: 'following' }) : undefined}
+          >
+            <Text style={styles.profileStatNumber}>{profile?.following_count || 0}</Text>
+            <Text style={styles.profileStatLabel}>关注</Text>
+          </Pressable>
         </View>
         <View style={styles.buttonRow}>
           {isOwner ? <SmallButton label={editing ? '收起编辑' : '编辑资料'} onPress={() => setEditing((value) => !value)} /> : null}
           {!isOwner ? <SmallButton label={profile?.is_following ? '取消关注' : '+ 关注'} onPress={toggleFollow} /> : null}
           {!isOwner && targetUserId ? <SmallButton label="私信" onPress={() => navigation.navigate('PrivateChat', { userId: targetUserId, nickname: profile?.nickname })} /> : null}
           <SmallButton label="分享主页" onPress={() => void shareProfile()} />
-          <SmallButton label="复制ID" onPress={() => void copyUserId()} />
-          <SmallButton label="被关注" onPress={() => profile?.id ? navigation.navigate('FollowList', { userId: profile.id, type: 'followers' }) : undefined} />
-          <SmallButton label="关注" onPress={() => profile?.id ? navigation.navigate('FollowList', { userId: profile.id, type: 'following' }) : undefined} />
         </View>
       </Card>
 
@@ -485,6 +514,12 @@ function buildProfileShareLink(userId: string): string {
   return `foodlink://profile?pf=${encodeURIComponent(userId)}`
 }
 
+function formatShortUserId(userId: string): string {
+  const trimmed = String(userId || '').trim()
+  if (!trimmed) return ''
+  return trimmed.length > 10 ? `${trimmed.slice(0, 8)}...${trimmed.slice(-4)}` : trimmed
+}
+
 function numberFrom(value: unknown, fallback = 0): number {
   const n = Number(value)
   return Number.isFinite(n) ? n : fallback
@@ -503,7 +538,7 @@ function normalizeTargetType(value: unknown): CommunityFeedTargetType {
 }
 
 function showError(title: string, error: unknown) {
-  Alert.alert(title, error instanceof Error ? error.message : '请稍后重试')
+  Alert.alert(title, userFacingErrorMessage(error))
 }
 
 const styles = StyleSheet.create({
@@ -561,6 +596,58 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingBottom: 18,
   },
+  profileIdRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  inlineCopyButton: {
+    minHeight: 28,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceMuted,
+  },
+  inlineCopyButtonText: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  profileStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 18,
+    marginBottom: 14,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  profileStatItem: {
+    flex: 1,
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileStatNumber: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  profileStatLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  profileStatDivider: {
+    width: 1,
+    height: 34,
+    backgroundColor: colors.border,
+  },
   pillRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -594,7 +681,6 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   idText: {
-    marginTop: 4,
     color: colors.textMuted,
     fontSize: 12,
   },

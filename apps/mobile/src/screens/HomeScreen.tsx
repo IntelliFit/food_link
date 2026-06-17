@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard, type HomeTargetCalibrationSuggestion } from '@food-link/core'
 import { apiClient } from '../api'
@@ -14,7 +14,9 @@ import { useHomeDashboard } from '../hooks/useHomeDashboard'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { formatShortDate } from '../utils/date'
-import { createDemoAnalysisTask, demoFoodImageUrl } from '../utils/demoAnalysisTask'
+import { createDemoAnalysisTask, createDemoTextAnalysisTask, demoFoodImageUrl } from '../utils/demoAnalysisTask'
+import { userFacingErrorMessage } from '../utils/errors'
+import { getHomePetHidden } from '../utils/petPreferences'
 
 type TargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
 type TargetForm = Record<TargetField, string>
@@ -31,6 +33,7 @@ export function HomeScreen() {
   const { recordDate, dashboard, petSummary, loading, error, loadHome } = useHomeDashboard()
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
+  const [homePetHidden, setHomePetHidden] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetForm>(() => targetFormFromDashboard(null))
   const mealType = inferDefaultMealTypeFromLocalTime()
   const pet = petSummary?.pet
@@ -41,8 +44,8 @@ export function HomeScreen() {
   const nutritionTarget = dashboard?.nutritionTarget
   const calibrationSuggestion = nutritionTarget?.calibration_suggestion
 
-  const startAnalyze = useCallback(() => {
-    navigation.navigate('Analyze', { source: 'library', mealType, date: recordDate })
+  const openAnalyze = useCallback((source: 'camera' | 'library') => {
+    navigation.navigate('Analyze', { source, mealType, date: recordDate })
   }, [navigation, mealType, recordDate])
 
   const openDemoResult = useCallback(() => {
@@ -54,11 +57,31 @@ export function HomeScreen() {
     })
   }, [navigation, mealType, recordDate])
 
+  const openDemoTextResult = useCallback(() => {
+    navigation.navigate('TextResult', {
+      task: createDemoTextAnalysisTask(),
+      mealType,
+      date: recordDate,
+    })
+  }, [navigation, mealType, recordDate])
+
   useEffect(() => {
     if (!showTargetEditor) {
       setTargetForm(targetFormFromDashboard(dashboard))
     }
   }, [dashboard, showTargetEditor])
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true
+      void getHomePetHidden().then((hidden) => {
+        if (active) setHomePetHidden(hidden)
+      })
+      return () => {
+        active = false
+      }
+    }, []),
+  )
 
   const openTargetEditor = useCallback(() => {
     setTargetForm(targetFormFromDashboard(dashboard))
@@ -117,7 +140,7 @@ export function HomeScreen() {
       await loadHome()
       Alert.alert('基础目标已更新')
     } catch (err) {
-      Alert.alert('保存失败', err instanceof Error ? err.message : '请稍后重试')
+      Alert.alert('保存失败', userFacingErrorMessage(err))
     } finally {
       setSavingTargets(false)
     }
@@ -132,7 +155,7 @@ export function HomeScreen() {
     >
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      {petSummary ? (
+      {petSummary && !homePetHidden ? (
         <Pressable style={({ pressed }) => pressed && styles.pressed} onPress={() => navigation.navigate('PetHome')}>
           <Card>
             <View style={styles.petCardRow}>
@@ -247,14 +270,22 @@ export function HomeScreen() {
           <Text style={styles.sectionTitle}>记录餐食</Text>
           <Text style={styles.badge}>AI 分析</Text>
         </View>
-        <View style={styles.actionGrid}>
-          <ActionCard title="图片识别" onPress={startAnalyze} />
-          <ActionCard title="文字记录" onPress={() => navigation.navigate('TextRecord')} />
-          <ActionCard title="手动记录" onPress={() => navigation.navigate('ManualRecord')} />
+        <View style={styles.recordGrid}>
+          <RecordGridAction title="拍照识别" desc="拍摄餐食，自动估算热量" icon="CAM" tone="green" onPress={() => openAnalyze('camera')} />
+          <RecordGridAction title="相册上传" desc="选择已有食物图片" icon="IMG" tone="blue" onPress={() => openAnalyze('library')} />
+          <RecordGridAction title="文本输入" desc="一句话描述吃了什么" icon="TXT" tone="gold" onPress={() => navigation.navigate('TextRecord')} />
+          <RecordGridAction title="食物库输入" desc="按食物和重量精确录入" icon="LIB" tone="purple" onPress={() => navigation.navigate('ManualRecord')} />
+        </View>
+        <View style={styles.recordQuickList}>
+          <RecordQuickAction title="我的收藏" desc="快速记录常吃餐食" onPress={() => navigation.navigate('Recipes')} />
+          <RecordQuickAction title="识别记录" desc="查看以往识别结果" onPress={() => navigation.navigate('AnalyzeHistory')} />
+          <RecordQuickAction title="包装食品" desc="上传营养成分表或商品包装" onPress={() => navigation.navigate('PackagedFoodEdit')} />
+          <RecordQuickAction title="食物库" desc="浏览营养库与自定义食物" onPress={() => navigation.navigate('FoodLibrary')} />
         </View>
         {SHOW_DEBUG_LOGIN ? (
           <View style={styles.demoAction}>
             <AppButton label="示例识别结果" variant="secondary" onPress={openDemoResult} />
+            <AppButton label="示例文字结果" variant="secondary" onPress={openDemoTextResult} />
           </View>
         ) : null}
       </Card>
@@ -355,10 +386,60 @@ function QuickCard({ title, value, onPress }: { title: string; value: string; on
   )
 }
 
-function ActionCard({ title, onPress }: { title: string; onPress: () => void }) {
+function RecordGridAction({
+  title,
+  desc,
+  icon,
+  tone,
+  onPress,
+}: {
+  title: string
+  desc: string
+  icon: string
+  tone: 'green' | 'blue' | 'gold' | 'purple'
+  onPress: () => void
+}) {
   return (
-    <Pressable style={({ pressed }) => [styles.actionCard, pressed && styles.pressed]} onPress={onPress}>
-      <Text style={styles.actionTitle}>{title}</Text>
+    <Pressable
+      style={({ pressed }) => [
+        styles.recordActionCard,
+        tone === 'green' && styles.recordActionGreen,
+        tone === 'blue' && styles.recordActionBlue,
+        tone === 'gold' && styles.recordActionGold,
+        tone === 'purple' && styles.recordActionPurple,
+        pressed && styles.pressed,
+      ]}
+      onPress={onPress}
+    >
+      <View style={[
+        styles.recordActionIcon,
+        tone === 'green' && styles.recordIconGreen,
+        tone === 'blue' && styles.recordIconBlue,
+        tone === 'gold' && styles.recordIconGold,
+        tone === 'purple' && styles.recordIconPurple,
+      ]}>
+        <Text style={[
+          styles.recordActionIconText,
+          tone === 'green' && styles.recordTextGreen,
+          tone === 'blue' && styles.recordTextBlue,
+          tone === 'gold' && styles.recordTextGold,
+          tone === 'purple' && styles.recordTextPurple,
+        ]}>{icon}</Text>
+      </View>
+      <Text style={styles.recordActionTitle}>{title}</Text>
+      <Text style={styles.recordActionDesc}>{desc}</Text>
+    </Pressable>
+  )
+}
+
+function RecordQuickAction({ title, desc, onPress }: { title: string; desc: string; onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.recordQuickAction, pressed && styles.pressed]} onPress={onPress}>
+      <View style={styles.recordQuickText}>
+        <Text style={styles.recordQuickTitle}>{title}</Text>
+        <Text style={styles.recordQuickDesc}>{desc}</Text>
+      </View>
+      <Text style={styles.recordQuickChevron}>›</Text>
     </Pressable>
   )
 }
@@ -674,26 +755,111 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '800',
   },
-  actionGrid: {
+  recordGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
-  actionCard: {
-    flex: 1,
-    minHeight: 58,
+  recordActionCard: {
+    width: '48.5%',
+    minHeight: 122,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 14,
+  },
+  recordActionGreen: {
+    backgroundColor: '#f9fefc',
+    borderColor: '#d9faeb',
+  },
+  recordActionBlue: {
+    backgroundColor: '#f9fdfe',
+    borderColor: '#d9f2fa',
+  },
+  recordActionGold: {
+    backgroundColor: '#fefcf7',
+    borderColor: '#f7e9ce',
+  },
+  recordActionPurple: {
+    backgroundColor: '#fefcfe',
+    borderColor: '#e6defa',
+  },
+  recordActionIcon: {
+    width: 42,
+    height: 42,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brandSoft,
-    paddingHorizontal: 8,
+    marginBottom: 12,
   },
-  actionTitle: {
-    color: colors.brandDark,
+  recordIconGreen: {
+    backgroundColor: '#ebfcf4',
+  },
+  recordIconBlue: {
+    backgroundColor: '#ebf7fc',
+  },
+  recordIconGold: {
+    backgroundColor: '#fbf5e6',
+  },
+  recordIconPurple: {
+    backgroundColor: '#f3effc',
+  },
+  recordActionIconText: {
+    fontSize: 11,
     fontWeight: '900',
-    textAlign: 'center',
+  },
+  recordTextGreen: {
+    color: '#38a97b',
+  },
+  recordTextBlue: {
+    color: '#4295bc',
+  },
+  recordTextGold: {
+    color: '#9f823a',
+  },
+  recordTextPurple: {
+    color: '#6951bd',
+  },
+  recordActionTitle: {
+    color: colors.text,
+    fontWeight: '900',
+    fontSize: 16,
+  },
+  recordActionDesc: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 5,
+  },
+  recordQuickList: {
+    marginTop: 12,
+  },
+  recordQuickAction: {
+    minHeight: 66,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  recordQuickText: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  recordQuickTitle: {
+    color: colors.text,
+    fontWeight: '900',
+  },
+  recordQuickDesc: {
+    marginTop: 3,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  recordQuickChevron: {
+    color: colors.textMuted,
+    fontSize: 28,
   },
   demoAction: {
     marginTop: 12,
+    gap: 10,
   },
   mealRow: {
     flexDirection: 'row',

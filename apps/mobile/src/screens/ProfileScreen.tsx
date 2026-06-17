@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { FoodExpiryDashboard, MembershipStatus, RewardCenterResponse, UserInfo } from '@food-link/core'
 import { apiClient } from '../api'
@@ -10,6 +10,7 @@ import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
 import { useAuth } from '../providers/AuthProvider'
 import { colors } from '../theme'
+import { userFacingErrorMessage } from '../utils/errors'
 
 export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -37,15 +38,17 @@ export function ProfileScreen() {
       setExpiry(expiryData)
       setRecordDays(recordDayData.record_days || 0)
     } catch (error) {
-      Alert.alert('获取我的页面失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('获取我的页面失败', userFacingErrorMessage(error))
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load]),
+  )
 
   const confirmClearCache = () => {
     Alert.alert(
@@ -76,7 +79,7 @@ export function ProfileScreen() {
       if (removable.length) await AsyncStorage.multiRemove(removable)
       Alert.alert('已清除', '本地缓存已清理，登录状态已保留。')
     } catch (error) {
-      Alert.alert('清除失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('清除失败', userFacingErrorMessage(error))
     }
   }
 

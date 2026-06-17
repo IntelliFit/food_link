@@ -192,6 +192,8 @@ func TestExerciseService_ProcessExerciseTaskUsesDetectedTypeForWeakTitle(t *test
 
 	require.NoError(t, err)
 	require.Len(t, repo.logs, 1)
+	require.NotNil(t, repo.logs[0].RecordedOn)
+	assert.Equal(t, "2024-06-15", repo.logs[0].RecordedOn.UTC().Format("2006-01-02"))
 	assert.Equal(t, "椭圆机训练", repo.logs[0].ExerciseDesc)
 	exerciseLog := result["exercise_log"].(map[string]any)
 	assert.Equal(t, "椭圆机训练", exerciseLog["exercise_desc"])
@@ -317,6 +319,8 @@ func TestExerciseService_ProcessExerciseTask_CreatesLogWithReasoning(t *testing.
 	assert.Equal(t, "跑步30分钟", result["exercise_log"].(map[string]any)["exercise_desc"])
 	assert.NotEmpty(t, result["reasoning"])
 	require.Len(t, repo.logs, 1)
+	require.NotNil(t, repo.logs[0].RecordedOn)
+	assert.Equal(t, recordedOn, repo.logs[0].RecordedOn.UTC().Format("2006-01-02"))
 	assert.NotNil(t, repo.logs[0].AIReasoning)
 	assert.Greater(t, *repo.logs[0].CaloriesBurned, 0.0)
 }

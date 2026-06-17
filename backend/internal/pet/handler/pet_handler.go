@@ -2,12 +2,14 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/pet/service"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -36,6 +38,10 @@ func (h *PetHandler) Summary(c *gin.Context) {
 	date := strings.TrimSpace(c.Query("date"))
 	data, err := h.svc.Summary(c.Request.Context(), userID, date)
 	if err != nil {
+		logger.Error(c.Request.Context(), "获取宠物状态失败", err,
+			slog.String("user_id", userID),
+			slog.String("date", date),
+		)
 		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "获取宠物状态失败", HTTPStatus: 500})
 		return
 	}

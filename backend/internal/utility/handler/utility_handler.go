@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	authmw "food_link/backend/internal/auth"
 	"food_link/backend/internal/common/response"
@@ -71,12 +72,17 @@ func (h *UtilityHandler) LocationReverse(c *gin.Context) {
 func (h *UtilityHandler) LocationSearch(c *gin.Context) {
 	var body struct {
 		Keyword string `json:"keyword"`
+		KeyWord string `json:"keyWord"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
-	data, err := h.locationSvc.SearchAddress(c.Request.Context(), body.Keyword)
+	keyword := strings.TrimSpace(body.Keyword)
+	if keyword == "" {
+		keyword = strings.TrimSpace(body.KeyWord)
+	}
+	data, err := h.locationSvc.SearchAddress(c.Request.Context(), keyword)
 	if err != nil {
 		response.Error(c, err)
 		return

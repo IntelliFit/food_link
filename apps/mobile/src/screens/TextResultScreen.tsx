@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { CommonActions, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
@@ -7,6 +7,7 @@ import {
   getMealTypeLabel,
   type AnalysisTask,
   type FoodItem,
+  type Nutrients,
 } from '@food-link/core'
 import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
@@ -14,30 +15,57 @@ import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
+import { userFacingErrorMessage } from '../utils/errors'
 
 type TextResultRoute = RouteProp<RootStackParamList, 'TextResult'>
 
+type NutrientField = 'calories' | 'protein' | 'carbs' | 'fat'
+
+type EditableTextResultItem = {
+  name: string
+  weightText: string
+  ratio: number
+  baseWeight: number
+  nutrientsText: Record<NutrientField, string>
+}
+
 const ratioOptions = [25, 50, 75, 100]
+const weightAdjustments = [-50, -10, 10, 50]
+const nutrientFields: Array<{ key: NutrientField; label: string; unit: string }> = [
+  { key: 'calories', label: '热量', unit: 'kcal' },
+  { key: 'protein', label: '蛋白质', unit: 'g' },
+  { key: 'carbs', label: '碳水', unit: 'g' },
+  { key: 'fat', label: '脂肪', unit: 'g' },
+]
 
 export function TextResultScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<TextResultRoute>()
   const { task, mealType, date } = route.params
   const foodItems = task.result?.items || []
-  const [ratios, setRatios] = useState<number[]>([])
+  const [items, setItems] = useState<EditableTextResultItem[]>(() => buildEditableItems(foodItems))
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    setRatios(foodItems.map(() => 100))
+    setItems(buildEditableItems(foodItems))
   }, [task.id, foodItems.length])
 
-  const totals = useMemo(() => calculateTotals(foodItems, ratios), [foodItems, ratios])
+  const totals = useMemo(() => calculateTotals(items), [items])
+  const originalText = textInputFromTask(task)
+  const additionalContext = additionalContextFromTask(task)
 
   const saveRecord = async () => {
-    if (foodItems.length === 0) {
+    if (items.length === 0) {
       Alert.alert('无法保存', '当前文字分析没有可保存的食物明细')
       return
     }
+
+    const invalidItem = items.find((item) => editableWeight(item) <= 0 || !item.name.trim())
+    if (invalidItem) {
+      Alert.alert('无法保存', '请确认每个食物都有名称，并且重量大于 0g')
+      return
+    }
+
     setSaving(true)
     try {
       const payload = buildSaveFoodRecordRequestFromTask(task, {
@@ -45,12 +73,23 @@ export function TextResultScreen() {
         date,
         entryType: 'food_text',
       })
-      payload.items = payload.items.map((item, index) => {
-        const ratio = clampRatio(ratios[index] ?? 100)
+      payload.items = items.map((editable, index) => {
+        const original = payload.items[index] || {
+          name: editable.name,
+          weight: editableWeight(editable),
+          ratio: editable.ratio,
+          intake: Math.round(editableWeight(editable) * editable.ratio / 100),
+          nutrients: nutrientsFromEditable(editable),
+        }
+        const weight = editableWeight(editable)
+        const ratio = clampRatio(editable.ratio)
         return {
-          ...item,
+          ...original,
+          name: editable.name.trim() || original.name,
+          weight,
           ratio,
-          intake: Math.round(Number(item.weight || 0) * ratio / 100),
+          intake: Math.round(weight * ratio / 100),
+          nutrients: nutrientsFromEditable(editable),
         }
       })
       payload.total_calories = totals.calories
@@ -68,70 +107,156 @@ export function TextResultScreen() {
       delete payload.image_paths
 
       const saved = await apiClient.saveFoodRecord(payload)
-      Alert.alert('保存成功', saved.already_saved ? '这条记录之前已经保存。' : '已记录到当天饮食。')
-      navigation.dispatch(CommonActions.navigate({ name: 'MainTabs' }))
+      const message = saved.already_saved ? '这条记录之前已经保存。' : '已记录到当天饮食。'
+      if (!saved.id) {
+        Alert.alert('保存成功', message, [
+          { text: '回到首页', onPress: () => navigation.dispatch(CommonActions.navigate('MainTabs')) },
+        ])
+        return
+      }
+      Alert.alert(
+        '保存成功',
+        message,
+        [
+          { text: '回到首页', onPress: () => navigation.dispatch(CommonActions.navigate('MainTabs')) },
+          { text: '查看记录', onPress: () => navigation.navigate('RecordDetail', { recordId: saved.id }) },
+        ],
+      )
     } catch (error) {
-      Alert.alert('保存失败', error instanceof Error ? error.message : '请稍后重试')
+      Alert.alert('保存失败', userFacingErrorMessage(error))
     } finally {
       setSaving(false)
     }
   }
 
-  const updateRatio = (index: number, ratio: number) => {
-    setRatios((current) => {
-      const next = [...current]
-      next[index] = clampRatio(ratio)
-      return next
-    })
+  const updateItem = (index: number, patch: Partial<EditableTextResultItem>) => {
+    setItems((current) => current.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, ...patch } : item
+    )))
+  }
+
+  const updateNutrientText = (index: number, key: NutrientField, value: string) => {
+    setItems((current) => current.map((item, itemIndex) => (
+      itemIndex === index
+        ? { ...item, nutrientsText: { ...item.nutrientsText, [key]: sanitizeNumberText(value) } }
+        : item
+    )))
+  }
+
+  const adjustWeight = (index: number, delta: number) => {
+    setItems((current) => current.map((item, itemIndex) => (
+      itemIndex === index ? adjustEditableWeight(item, delta) : item
+    )))
   }
 
   return (
-    <Page title="文字识别结果" subtitle={`${date} · ${getMealTypeLabel(mealType)}`}>
+    <Page title="文字记录分析" subtitle={`${date} · ${getMealTypeLabel(mealType)}`}>
       <Card>
-        <Text style={styles.eyebrow}>原始描述</Text>
-        <Text style={styles.description}>{task.text_input || task.result?.description || '文字饮食分析已完成'}</Text>
+        <Text style={styles.eyebrow}>原始文字</Text>
+        <Text style={styles.description}>{originalText || task.result?.description || '文字饮食分析已完成'}</Text>
+        {additionalContext ? <Text style={styles.contextText}>补充说明：{additionalContext}</Text> : null}
       </Card>
 
       <Card>
-        <Text style={styles.sectionTitle}>营养汇总</Text>
+        <View style={styles.rowBetween}>
+          <Text style={styles.sectionTitle}>营养汇总</Text>
+          <Text style={styles.badge}>已识别 {items.length} 项</Text>
+        </View>
         <View style={styles.statGrid}>
-          <Stat label="热量" value={`${Math.round(totals.calories)} kcal`} />
-          <Stat label="重量" value={`${Math.round(totals.weight)}g`} />
+          <Stat label="总热量" value={`${Math.round(totals.calories)} kcal`} />
+          <Stat label="实际摄入" value={`${Math.round(totals.weight)}g`} />
         </View>
         <View style={styles.statGrid}>
           <Stat label="蛋白质" value={`${round1(totals.protein)}g`} />
           <Stat label="碳水" value={`${round1(totals.carbs)}g`} />
           <Stat label="脂肪" value={`${round1(totals.fat)}g`} />
         </View>
+        <Text style={styles.hint}>保存前可调整食物名称、估算重量、食用比例和营养值。</Text>
       </Card>
 
-      {foodItems.length === 0 ? (
+      {items.length === 0 ? (
         <Card>
           <Text style={styles.empty}>当前没有识别到可记录的食物</Text>
         </Card>
       ) : null}
 
-      {foodItems.map((item, index) => {
-        const ratio = ratios[index] ?? 100
-        const nutrients = item.nutrients || {}
+      {items.map((item, index) => {
+        const weight = editableWeight(item)
+        const ratio = clampRatio(item.ratio)
+        const nutrients = nutrientsFromEditable(item)
+        const actualWeight = weight * ratio / 100
+        const itemCalories = nutrients.calories * ratio / 100
         return (
           <Card key={`${item.name}-${index}`}>
             <View style={styles.rowBetween}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.kcal}>{Math.round(numberFrom(nutrients.calories) * ratio / 100)} kcal</Text>
+              <TextInput
+                value={item.name}
+                onChangeText={(name) => updateItem(index, { name })}
+                placeholder="食物名称"
+                placeholderTextColor={colors.textMuted}
+                style={styles.nameInput}
+              />
+              <Text style={styles.kcal}>{Math.round(itemCalories)} kcal</Text>
             </View>
+
             <Text style={styles.subtitle}>
-              约 {Math.round(foodWeight(item))}g · 实际记录 {Math.round(foodWeight(item) * ratio / 100)}g
+              估算 {Math.round(weight)}g · 实际摄入 {Math.round(actualWeight)}g
             </Text>
+
+            <View style={styles.inputLine}>
+              <Text style={styles.inputLabel}>估算重量</Text>
+              <View style={styles.weightInputWrap}>
+                <TextInput
+                  value={item.weightText}
+                  onChangeText={(weightText) => updateItem(index, { weightText: sanitizeNumberText(weightText) })}
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.weightInput}
+                />
+                <Text style={styles.inputUnit}>g</Text>
+              </View>
+            </View>
+            <View style={styles.weightAdjustRow}>
+              {weightAdjustments.map((delta) => (
+                <Pressable key={delta} style={styles.weightAdjustButton} onPress={() => adjustWeight(index, delta)}>
+                  <Text style={styles.weightAdjustText}>{delta > 0 ? `+${delta}` : delta}g</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={styles.ratioHeader}>
+              <Text style={styles.inputLabel}>食用比例</Text>
+              <Text style={styles.ratioValue}>{ratio}%</Text>
+            </View>
             <View style={styles.ratioRow}>
               {ratioOptions.map((option) => (
                 <Pressable
                   key={option}
                   style={[styles.ratioChip, ratio === option && styles.ratioChipActive]}
-                  onPress={() => updateRatio(index, option)}
+                  onPress={() => updateItem(index, { ratio: option })}
                 >
                   <Text style={[styles.ratioText, ratio === option && styles.ratioTextActive]}>{option}%</Text>
                 </Pressable>
+              ))}
+            </View>
+
+            <View style={styles.nutrientEditGrid}>
+              {nutrientFields.map((field) => (
+                <View key={field.key} style={styles.nutrientEditItem}>
+                  <Text style={styles.nutrientEditLabel}>{field.label}</Text>
+                  <View style={styles.nutrientEditInputWrap}>
+                    <TextInput
+                      value={item.nutrientsText[field.key]}
+                      onChangeText={(value) => updateNutrientText(index, field.key, value)}
+                      keyboardType="decimal-pad"
+                      placeholder="0"
+                      placeholderTextColor={colors.textMuted}
+                      style={styles.nutrientEditInput}
+                    />
+                    <Text style={styles.inputUnit}>{field.unit}</Text>
+                  </View>
+                </View>
               ))}
             </View>
           </Card>
@@ -148,7 +273,7 @@ export function TextResultScreen() {
       </Card>
 
       <Card>
-        <AppButton label="保存到当天饮食" loading={saving} onPress={saveRecord} />
+        <AppButton label="确认记录" loading={saving} onPress={saveRecord} />
         <View style={styles.secondaryAction}>
           <AppButton label="查看识别历史" variant="secondary" onPress={() => navigation.navigate('AnalyzeHistory')} />
         </View>
@@ -177,20 +302,100 @@ function AdviceLine({ title, value }: { title: string; value: unknown }) {
   )
 }
 
-function calculateTotals(items: FoodItem[], ratios: number[]) {
+function buildEditableItems(foodItems: FoodItem[]): EditableTextResultItem[] {
+  return foodItems.map((item) => {
+    const baseWeight = foodWeight(item)
+    const nutrients = normalizeNutrients(item.nutrients)
+    return {
+      name: item.name || '未命名食物',
+      weightText: formatInputNumber(baseWeight),
+      ratio: 100,
+      baseWeight,
+      nutrientsText: {
+        calories: formatInputNumber(nutrients.calories),
+        protein: formatInputNumber(nutrients.protein),
+        carbs: formatInputNumber(nutrients.carbs),
+        fat: formatInputNumber(nutrients.fat),
+      },
+    }
+  })
+}
+
+function calculateTotals(items: EditableTextResultItem[]) {
   return items.reduce(
-    (acc, item, index) => {
-      const ratio = clampRatio(ratios[index] ?? 100) / 100
-      const nutrients = item.nutrients || {}
-      acc.calories += numberFrom(nutrients.calories) * ratio
-      acc.protein += numberFrom(nutrients.protein) * ratio
-      acc.carbs += numberFrom(nutrients.carbs) * ratio
-      acc.fat += numberFrom(nutrients.fat) * ratio
-      acc.weight += foodWeight(item) * ratio
+    (acc, item) => {
+      const weight = editableWeight(item)
+      const ratio = clampRatio(item.ratio) / 100
+      const nutrients = nutrientsFromEditable(item)
+      acc.calories += nutrients.calories * ratio
+      acc.protein += nutrients.protein * ratio
+      acc.carbs += nutrients.carbs * ratio
+      acc.fat += nutrients.fat * ratio
+      acc.weight += weight * ratio
       return acc
     },
     { calories: 0, protein: 0, carbs: 0, fat: 0, weight: 0 },
   )
+}
+
+function nutrientsFromEditable(item: EditableTextResultItem): Nutrients {
+  return {
+    calories: round1Number(numberFromText(item.nutrientsText.calories)),
+    protein: round1Number(numberFromText(item.nutrientsText.protein)),
+    carbs: round1Number(numberFromText(item.nutrientsText.carbs)),
+    fat: round1Number(numberFromText(item.nutrientsText.fat)),
+    fiber: 0,
+    sugar: 0,
+  }
+}
+
+function normalizeNutrients(nutrients: FoodItem['nutrients'] | undefined): Nutrients {
+  return {
+    ...(nutrients || {}),
+    calories: numberFrom(nutrients?.calories),
+    protein: numberFrom(nutrients?.protein),
+    carbs: numberFrom(nutrients?.carbs),
+    fat: numberFrom(nutrients?.fat),
+    fiber: numberFrom(nutrients?.fiber),
+    sugar: numberFrom(nutrients?.sugar),
+  }
+}
+
+function adjustEditableWeight(item: EditableTextResultItem, delta: number): EditableTextResultItem {
+  const currentWeight = editableWeight(item)
+  const nextWeight = Math.max(1, currentWeight + delta)
+  const scale = currentWeight > 0 ? nextWeight / currentWeight : 1
+  return {
+    ...item,
+    weightText: formatInputNumber(nextWeight),
+    nutrientsText: {
+      calories: formatInputNumber(numberFromText(item.nutrientsText.calories) * scale),
+      protein: formatInputNumber(numberFromText(item.nutrientsText.protein) * scale),
+      carbs: formatInputNumber(numberFromText(item.nutrientsText.carbs) * scale),
+      fat: formatInputNumber(numberFromText(item.nutrientsText.fat) * scale),
+    },
+  }
+}
+
+function textInputFromTask(task: AnalysisTask): string | undefined {
+  return stringOrUndefined(
+    task.text_input ??
+      task.payload?.text_input ??
+      task.payload?.text ??
+      task.payload?.original_text,
+  )
+}
+
+function additionalContextFromTask(task: AnalysisTask): string | undefined {
+  return stringOrUndefined(
+    task.payload?.additionalContext ??
+      task.payload?.additional_context ??
+      task.payload?.food_amount,
+  )
+}
+
+function editableWeight(item: EditableTextResultItem): number {
+  return Math.max(0, numberFromText(item.weightText))
 }
 
 function foodWeight(item: FoodItem): number {
@@ -207,8 +412,27 @@ function numberFrom(value: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
+function numberFromText(value: string): number {
+  const n = Number(String(value || '').trim())
+  return Number.isFinite(n) ? n : 0
+}
+
 function round1(value: number): string {
   return (Math.round(value * 10) / 10).toString()
+}
+
+function round1Number(value: number): number {
+  return Math.round(value * 10) / 10
+}
+
+function formatInputNumber(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return ''
+  if (Math.abs(value - Math.round(value)) < 0.05) return String(Math.round(value))
+  return round1(value)
+}
+
+function sanitizeNumberText(value: string): string {
+  return value.replace(/[^\d.]/g, '')
 }
 
 function stringOrUndefined(value: unknown): string | undefined {
@@ -234,14 +458,29 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginBottom: 12,
   },
+  badge: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '900',
+  },
   description: {
     color: colors.text,
     lineHeight: 22,
   },
+  contextText: {
+    marginTop: 8,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
   subtitle: {
     color: colors.textSecondary,
     lineHeight: 20,
-    marginTop: 4,
+    marginTop: 6,
+  },
+  hint: {
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginTop: 2,
   },
   empty: {
     color: colors.textMuted,
@@ -269,20 +508,84 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  itemName: {
+  nameInput: {
     flex: 1,
+    minHeight: 42,
     color: colors.text,
-    fontWeight: '900',
     fontSize: 17,
+    fontWeight: '900',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingVertical: 6,
   },
   kcal: {
+    color: colors.brandDark,
+    fontWeight: '900',
+  },
+  inputLine: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  inputLabel: {
+    color: colors.text,
+    fontWeight: '800',
+  },
+  weightInputWrap: {
+    width: 128,
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    backgroundColor: colors.surface,
+  },
+  weightInput: {
+    flex: 1,
+    color: colors.text,
+    fontWeight: '800',
+    paddingVertical: 8,
+  },
+  inputUnit: {
+    color: colors.textSecondary,
+    fontWeight: '700',
+  },
+  weightAdjustRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  weightAdjustButton: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  weightAdjustText: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  ratioHeader: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ratioValue: {
     color: colors.brandDark,
     fontWeight: '900',
   },
   ratioRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 14,
+    marginTop: 10,
   },
   ratioChip: {
     flex: 1,
@@ -301,6 +604,37 @@ const styles = StyleSheet.create({
   },
   ratioTextActive: {
     color: '#fff',
+  },
+  nutrientEditGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
+  },
+  nutrientEditItem: {
+    width: '48%',
+  },
+  nutrientEditLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  nutrientEditInputWrap: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    backgroundColor: colors.surface,
+  },
+  nutrientEditInput: {
+    flex: 1,
+    color: colors.text,
+    fontWeight: '800',
+    paddingVertical: 8,
   },
   adviceLine: {
     paddingVertical: 10,

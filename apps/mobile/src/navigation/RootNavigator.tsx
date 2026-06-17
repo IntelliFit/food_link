@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { HomeScreen } from '../screens/HomeScreen'
 import { StatsScreen } from '../screens/StatsScreen'
 import { CommunityScreen } from '../screens/CommunityScreen'
+import { CommunitySearchScreen } from '../screens/CommunitySearchScreen'
 import { ProfileScreen } from '../screens/ProfileScreen'
 import { ProfileSettingsScreen } from '../screens/ProfileSettingsScreen'
 import { AccountSecurityScreen } from '../screens/AccountSecurityScreen'
@@ -187,7 +188,7 @@ export function RootNavigator() {
             <Stack.Screen name="Analyze" component={AnalyzeScreen} options={{ title: '记录' }} />
             <Stack.Screen name="AnalyzeLoading" component={AnalyzeLoadingScreen} options={{ title: '正在分析' }} />
             <Stack.Screen name="Result" component={ResultScreen} options={{ title: '识别结果' }} />
-            <Stack.Screen name="TextResult" component={TextResultScreen} options={{ title: '文字识别结果' }} />
+            <Stack.Screen name="TextResult" component={TextResultScreen} options={{ title: '文字记录分析' }} />
             <Stack.Screen name="TextRecord" component={TextRecordScreen} options={{ title: '文字记录' }} />
             <Stack.Screen name="ManualRecord" component={ManualRecordScreen} options={{ title: '手动记录' }} />
             <Stack.Screen name="FoodLibrary" component={FoodLibraryScreen} options={{ title: '食物库' }} />
@@ -213,6 +214,7 @@ export function RootNavigator() {
             <Stack.Screen name="PublicFoodDetail" component={PublicFoodDetailScreen} options={{ title: '食物详情' }} />
             <Stack.Screen name="PublicFoodShare" component={PublicFoodShareScreen} options={{ title: '分享食物' }} />
             <Stack.Screen name="CommunityFeedDetail" component={CommunityFeedDetailScreen} options={{ title: '动态详情' }} />
+            <Stack.Screen name="CommunitySearch" component={CommunitySearchScreen} options={{ title: '圈子搜索' }} />
             <Stack.Screen name="PublicProfile" component={PublicProfileScreen} options={{ title: '用户主页' }} />
             <Stack.Screen name="FollowList" component={FollowListScreen} options={{ title: '关注列表' }} />
             <Stack.Screen name="Conversations" component={ConversationsScreen} options={{ title: '私信' }} />

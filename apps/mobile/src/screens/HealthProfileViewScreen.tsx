@@ -8,6 +8,7 @@ import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import { colors } from '../theme'
+import { userFacingErrorMessage, userFacingMessage } from '../utils/errors'
 import { readImageAsBase64DataUrl } from '../utils/image'
 
 type EditField =
@@ -214,7 +215,7 @@ export function HealthProfileViewScreen() {
             if (task.status === 'done') {
               setReportNotice('报告识别完成，结果已刷新。')
             } else {
-              setReportNotice(task.error_message || '报告识别没有成功，可以重新上传或重试。')
+              setReportNotice(userFacingMessage(task.error_message, '报告识别没有成功，可以重新上传或重试。'))
             }
             return
           }
@@ -518,7 +519,7 @@ function executionModeLabel(value?: string | null): string {
 }
 
 function showError(title: string, error: unknown) {
-  Alert.alert(title, error instanceof Error ? error.message : '请稍后重试')
+  Alert.alert(title, userFacingErrorMessage(error))
 }
 
 function isTerminalTaskStatus(status?: string): boolean {
