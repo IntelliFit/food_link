@@ -116,6 +116,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	if !validMealType(input.MealType) {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "meal_type 不合法", HTTPStatus: 400}
 	}
+	normalizedInputMealType := strings.ToLower(strings.TrimSpace(input.MealType))
 	if input.SourceTaskID != nil {
 		trimmed := strings.TrimSpace(*input.SourceTaskID)
 		if trimmed == "" {
@@ -146,7 +147,6 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		first := input.ImagePaths[0]
 		input.ImagePath = &first
 	}
-	normalizedMeal := normalizeMealType(input.MealType, nil)
 	input.Items = normalizeFoodItems(input.Items)
 	if input.SourceTaskID != nil {
 		if err := validateNoSuspiciousZeroNutritionItems(input.Items); err != nil {
@@ -158,6 +158,12 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	if err != nil {
 		return nil, err
 	}
+	recordedMealType := normalizeMealType(normalizedInputMealType, recordTime)
+	if normalizedInputMealType == "snack" {
+		if inferred, ok := s.inferMealTypeFromHealthRoutine(ctx, userID, recordTime); ok {
+			recordedMealType = inferred
+		}
+	}
 
 	var entryType *string
 	if input.EntryType != nil && strings.TrimSpace(*input.EntryType) != "" {
@@ -166,7 +172,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	}
 	record := &domain.FoodRecord{
 		UserID:           userID,
-		MealType:         normalizedMeal,
+		MealType:         recordedMealType,
 		ImagePath:        input.ImagePath,
 		ImagePaths:       input.ImagePaths,
 		Description:      input.Description,
@@ -1198,4 +1204,87 @@ func normalizeMealType(mealType string, recordTime *time.Time) string {
 		return "evening_snack"
 	}
 	return "afternoon_snack"
+}
+
+func parseRoutineHourValue(value any) (int, bool) {
+	switch v := value.(type) {
+	case int:
+		return v, v >= 0 && v <= 23
+	case int8:
+		return int(v), v >= 0 && v <= 23
+	case int16:
+		return int(v), v >= 0 && v <= 23
+	case int32:
+		return int(v), v >= 0 && v <= 23
+	case int64:
+		return int(v), v >= 0 && v <= 23
+	case uint:
+		return int(v), v <= 23
+	case uint8:
+		return int(v), int(v) >= 0 && int(v) <= 23
+	case uint16:
+		return int(v), int(v) >= 0 && int(v) <= 23
+	case uint32:
+		return int(v), int(v) >= 0 && int(v) <= 23
+	case uint64:
+		return int(v), v <= 23
+	case float32:
+		return int(v), v >= 0 && v <= 23
+	case float64:
+		return int(v), v >= 0 && v <= 23
+	case string:
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return 0, false
+		}
+		f, err := strconv.ParseFloat(trimmed, 64)
+		if err != nil {
+			return 0, false
+		}
+		return int(f), true
+	case json.Number:
+		f, err := v.Float64()
+		if err != nil {
+			return 0, false
+		}
+		return int(f), true
+	default:
+		return 0, false
+	}
+}
+
+func inferMealTypeByRoutine(wakeHour int, sleepHour int, t time.Time) string {
+	hour := t.In(chinaTZ).Hour()
+	hoursSinceWake := (hour - wakeHour + 24) % 24
+	if hoursSinceWake <= 3 {
+		return "breakfast"
+	}
+	if hoursSinceWake <= 8 {
+		return "lunch"
+	}
+	hoursUntilSleep := (sleepHour - hour + 24) % 24
+	if hoursUntilSleep <= 4 {
+		return "dinner"
+	}
+	return "afternoon_snack"
+}
+
+func (s *FoodRecordService) inferMealTypeFromHealthRoutine(ctx context.Context, userID string, recordTime *time.Time) (string, bool) {
+	if strings.TrimSpace(userID) == "" || s.userRepo == nil {
+		return "", false
+	}
+	user, err := s.userRepo.FindByID(ctx, userID)
+	if err != nil || user == nil || len(user.HealthCondition) == 0 {
+		return "", false
+	}
+	wakeHour, okWake := parseRoutineHourValue(user.HealthCondition["routine_wake_hour"])
+	sleepHour, okSleep := parseRoutineHourValue(user.HealthCondition["routine_sleep_hour"])
+	if !okWake || !okSleep || wakeHour < 0 || wakeHour > 23 || sleepHour < 0 || sleepHour > 23 || wakeHour == sleepHour {
+		return "", false
+	}
+	refTime := time.Now().In(chinaTZ)
+	if recordTime != nil {
+		refTime = recordTime.In(chinaTZ)
+	}
+	return inferMealTypeByRoutine(wakeHour, sleepHour, refTime), true
 }

@@ -34,7 +34,7 @@ import {
 } from '../../../utils/api'
 import { normalizeRuntimeExecutionMode } from '../../../utils/execution-mode'
 import { foodRecordFromSavePayload } from '../../../utils/dev-record-preview'
-import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
+import { inferDefaultMealTypeFromHealthProfile, inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
 import { withAuth } from '../../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import {
@@ -237,9 +237,9 @@ const RECOGNITION_OUTCOME_META: Record<AnalyzeRecognitionOutcome, { title: strin
   }
 }
 
-const getSavedSelectableMealType = (): SelectableMealType | undefined => {
+const getSavedSelectableMealType = (fallbackMealType: SelectableMealType): SelectableMealType => {
   const savedMealType = Taro.getStorageSync('analyzeMealType')
-  return normalizeSelectableMealType(savedMealType, inferDefaultMealTypeFromLocalTime())
+  return normalizeSelectableMealType(savedMealType, fallbackMealType)
 }
 
 // 移除未使用的 CONTEXT_STATE_OPTIONS
@@ -584,6 +584,7 @@ function ResultPage() {
   const [precisionReferenceWidth, setPrecisionReferenceWidth] = useState('85')
   const [precisionReferenceHeight, setPrecisionReferenceHeight] = useState('25')
   const [precisionReferencePlacement, setPrecisionReferencePlacement] = useState('')
+  const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
 
   useEffect(() => {
     if (imagePaths.length <= 1) {
@@ -596,7 +597,7 @@ function ResultPage() {
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
   const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>(
-    () => getSavedSelectableMealType() ?? inferDefaultMealTypeFromLocalTime()
+    () => getSavedSelectableMealType(inferDefaultMealTypeFromLocalTime())
   )
 
   // 二次纠错抽屉状态
@@ -625,6 +626,24 @@ function ResultPage() {
       setResultScrollTop(pendingResultScrollTopRef.current)
     })
   }, [])
+
+  useEffect(() => {
+    const loadMealTypeProfile = async () => {
+      try {
+        const token = getAccessToken()
+        if (!token) return
+        const profile = await getHealthProfile()
+        setDefaultMealType(inferDefaultMealTypeFromHealthProfile(profile, new Date()))
+      } catch {
+        setDefaultMealType(inferDefaultMealTypeFromLocalTime())
+      }
+    }
+    void loadMealTypeProfile()
+  }, [])
+
+  useEffect(() => {
+    setSelectedMealType(getSavedSelectableMealType(defaultMealType))
+  }, [defaultMealType])
 
   useEffect(() => {
     return () => {
@@ -1233,10 +1252,6 @@ function ResultPage() {
           // 调节的是 weight（AI 估算的食物总重量）
           const newWeight = Math.max(10, item.weight + delta) // 最小 10g
           const weightScale = item.weight > 0 ? newWeight / item.weight : 1
-          const nextGrossWeight = Math.max(item.grossWeight, newWeight)
-          const nextEdiblePortionRatio = nextGrossWeight > 0
-            ? Math.max(1, Math.min(100, Math.round((newWeight / nextGrossWeight) * 100)))
-            : item.ediblePortionRatio
           const nextProtein = item.protein * weightScale
           const nextCarbs = item.carbs * weightScale
           const nextFat = item.fat * weightScale
@@ -1247,8 +1262,6 @@ function ResultPage() {
           return {
             ...item,
             weight: newWeight,
-            grossWeight: nextGrossWeight,
-            ediblePortionRatio: nextEdiblePortionRatio,
             intake: newIntake,
             // 重量变化时，同步更新该食物对应的营养值
             calorie: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
@@ -1519,6 +1532,25 @@ function ResultPage() {
       name: item.name,
       estimatedWeightGrams: item.weight,
       originalWeightGrams: item.originalWeight,
+      grossWeightGrams: item.grossWeight,
+      ediblePortionRatio: item.ediblePortionRatio,
+      ediblePortionReason: item.ediblePortionReason,
+      ediblePortionSource: item.ediblePortionSource,
+      suggestedRatio: item.suggestedRatio,
+      suggestedRatioReason: item.suggestedRatioReason,
+      suggestedRatioSource: item.suggestedRatioSource,
+      package_weight_source: item.packageWeightSource,
+      package_weight_applied: item.packageWeightApplied,
+      package_weight_reason: item.packageWeightReason,
+      matched_food_id: item.matchedFoodId,
+      packaged_food_id: item.packagedFoodId,
+      package_match_status: item.packageMatchStatus,
+      package_match_confidence: item.packageMatchConfidence,
+      packaged_candidates: item.packagedCandidates,
+      nutrition_source: item.nutritionSource,
+      nutrition_source_category: item.nutritionSourceCategory,
+      is_unresolved: item.isUnresolved,
+      unit_nutrition_per_100g: item.unitNutritionPer100g,
       waterMl: item.waterMl,
       nutrients: buildFoodItemNutrients(item)
     })),
@@ -1609,16 +1641,10 @@ function ResultPage() {
         const nextWaterMl = nutritionChanged ? Math.round(waterMl) : Math.round(item.waterMl * weightScale)
         const nextCalories = nutritionChanged ? Math.round(calories) : Math.round(item.calorie * weightScale)
         const ratio = item.ratio > 0 ? item.ratio : 100
-        const nextGrossWeight = Math.max(weight, item.grossWeight || weight)
-        const nextEdiblePortionRatio = nextGrossWeight > 0
-          ? Math.max(1, Math.min(100, Math.round((weight / nextGrossWeight) * 100)))
-          : item.ediblePortionRatio
         return {
           ...item,
           name,
           weight: roundToSingleDecimal(weight),
-          grossWeight: nextGrossWeight,
-          ediblePortionRatio: nextEdiblePortionRatio,
           intake: Math.round(weight * (ratio / 100)),
           calorie: nextCalories,
           protein: nextProtein,
@@ -1781,7 +1807,7 @@ function ResultPage() {
     const savedActivityTiming = Taro.getStorageSync('analyzeActivityTiming')
 
     // 确定餐次：优先使用确认过的餐次，否则尝试从缓存读取，最后按当前时间推断
-    const mealType = confirmedMealType || normalizeSelectableMealType(savedMealType, inferDefaultMealTypeFromLocalTime())
+    const mealType = confirmedMealType || normalizeSelectableMealType(savedMealType, defaultMealType)
     const mealLabel = getMealTypeLabel(mealType)
 
     // 饮食目标和时机，未找到默认无
@@ -1949,7 +1975,7 @@ function ResultPage() {
       handleViewCommittedResult()
       return
     }
-    saveRecord(false, getSavedSelectableMealType() || inferDefaultMealTypeFromLocalTime())
+    saveRecord(false, getSavedSelectableMealType(defaultMealType))
   }
 
   const handleOpenLibraryUpload = () => {
@@ -1981,7 +2007,7 @@ function ResultPage() {
 
     // 获取餐次信息
     const savedMealType = Taro.getStorageSync('analyzeMealType')
-    const mealType = normalizeSelectableMealType(savedMealType, inferDefaultMealTypeFromLocalTime())
+    const mealType = normalizeSelectableMealType(savedMealType, defaultMealType)
 
     // 弹窗输入收藏名称
     Taro.showModal({

@@ -31,7 +31,10 @@ import {
   normalizeAvailableExecutionMode,
   promptStrictModeUpgrade,
 } from '../../../utils/execution-mode'
-import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
+import {
+  inferDefaultMealTypeFromHealthProfile,
+  inferDefaultMealTypeFromLocalTime,
+} from '../../../utils/infer-default-meal-type'
 import {
   getFoodAnalysisCreditBlockMessage,
   getFoodAnalysisCreditCost,
@@ -411,6 +414,7 @@ function AnalyzePage() {
   const [additionalInfo, setAdditionalInfo] = useState<string>('')
   const [mealType, setMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
+  const [defaultMealType, setDefaultMealType] = useState<MealType>(() => inferDefaultMealTypeFromLocalTime())
   const [executionMode, setExecutionMode] = useState<ExecutionMode>('standard')
   const [isMultiView, setIsMultiView] = useState(false)
   const [suggestRatioEnabled, setSuggestRatioEnabled] = useState<boolean>(() => readSuggestRatioPreference())
@@ -580,7 +584,7 @@ function AnalyzePage() {
       }
     }
     if (imagePathsRef.current.length === 0) {
-      setMealType(inferDefaultMealTypeFromLocalTime())
+      setMealType(defaultMealType)
     }
     if (shouldOfferOnboardingGuide(ONBOARDING_ANALYZE_PREP_GUIDE_KEY)) {
       setShowAnalyzeOnboardingGuide(true)
@@ -605,12 +609,15 @@ function AnalyzePage() {
 
     // 1. 获取分析默认配置
     const initAnalyzeDefaults = async () => {
-      try {
-        if (getAccessToken()) {
-          const profile = await getHealthProfile()
-          if (!nextSessionId && profile.execution_mode) {
-            setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
-          }
+    try {
+      if (getAccessToken()) {
+        const profile = await getHealthProfile()
+        const inferredMealType = inferDefaultMealTypeFromHealthProfile(profile)
+        setDefaultMealType(inferredMealType)
+        setMealType(inferredMealType)
+        if (!nextSessionId && profile.execution_mode) {
+          setExecutionMode(normalizeAvailableExecutionMode(profile.execution_mode))
+        }
           const referenceDefaults = normalizeReferenceDefaults(profile.health_condition?.precision_reference_defaults)
           setSavedReferenceDefaults(referenceDefaults)
           applyReferencePreset(referenceDefaults.preferred_reference_key || DEFAULT_REFERENCE_PRESET, referenceDefaults)

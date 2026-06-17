@@ -1,8 +1,23 @@
 import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
 import { withAuth } from '../../../utils/withAuth'
-import { useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useDidHide } from '@tarojs/taro'
-import { listAnalyzeTasks, deleteAnalysisTask, createUserRecipe, getAccessToken, saveFoodRecord, retryAnalyzeTask, showUnifiedApiError, type AnalysisTask, type AnalyzeResponse, type ExecutionMode, type AnalyzeRecognitionOutcome, type DeleteTaskResult, type MealType } from '../../../utils/api'
+import {
+  listAnalyzeTasks,
+  deleteAnalysisTask,
+  createUserRecipe,
+  getAccessToken,
+  getHealthProfile,
+  saveFoodRecord,
+  retryAnalyzeTask,
+  showUnifiedApiError,
+  type AnalysisTask,
+  type AnalyzeResponse,
+  type DeleteTaskResult,
+  type ExecutionMode,
+  type AnalyzeRecognitionOutcome,
+  type MealType,
+} from '../../../utils/api'
 import './index.scss'
 import { extraPkgUrl, MAIN_TAB_ROUTES, normalizeRedirectUrlForSubpackage } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -20,6 +35,10 @@ import {
   normalizeSelectableMealType,
   type SelectableMealType
 } from '../../../components/MealTypeSelector'
+import {
+  type MealTypeFromProfileInput,
+  inferDefaultMealTypeFromHealthProfile,
+} from '../../../utils/infer-default-meal-type'
 
 const STATUS_MAP: Record<string, string> = {
   pending: '排队中',
@@ -101,6 +120,16 @@ const getTaskActivityTiming = (task: AnalysisTask): string => (
 const getTaskRecordDate = (task: AnalysisTask): string | undefined => {
   const value = readTaskPayloadValue(task, 'date', 'recorded_on', 'recordedOn')
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+const getTaskTimeForMealType = (task: AnalysisTask): Date | null => {
+  const taskDate = getTaskRecordDate(task)
+  const value = taskDate || task.created_at
+  const parsed = value ? new Date(value) : null
+  if (parsed instanceof Date && !Number.isNaN(parsed.getTime())) {
+    return parsed
+  }
+  return null
 }
 
 const normalizeRecognitionOutcome = (value: unknown): AnalyzeRecognitionOutcome => (
@@ -390,6 +419,7 @@ function AnalyzeHistoryPage() {
   const [activeTask, setActiveTask] = useState<AnalysisTask | null>(null)
   const [quickRecordTask, setQuickRecordTask] = useState<AnalysisTask | null>(null)
   const [quickRecordMealType, setQuickRecordMealType] = useState<SelectableMealType>('afternoon_snack')
+  const [mealProfile, setMealProfile] = useState<MealTypeFromProfileInput | null>(null)
   const [showRecipeModal, setShowRecipeModal] = useState(false)
   const [recipeModalTask, setRecipeModalTask] = useState<AnalysisTask | null>(null)
   const [recipeNameInput, setRecipeNameInput] = useState('')
@@ -422,6 +452,25 @@ function AnalyzeHistoryPage() {
     }
     Taro.switchTab({ url: '/pages/index/index' })
   }, [])
+
+  useEffect(() => {
+    const loadMealTypeProfile = async () => {
+      if (!getAccessToken()) return
+      try {
+        const profile = await getHealthProfile()
+        setMealProfile(profile)
+      } catch {
+        // ignore, keep profile null and fallback to 当前时间默认逻辑
+      }
+    }
+    void loadMealTypeProfile()
+  }, [])
+
+  const getQuickRecordMealTypeByProfile = (task: AnalysisTask): SelectableMealType => {
+    const taskDate = getTaskTimeForMealType(task) || new Date()
+    const inferred = inferDefaultMealTypeFromHealthProfile(mealProfile || undefined, taskDate)
+    return normalizeSelectableMealType(getTaskMealType(task), inferred)
+  }
 
   const load = useCallback(async (keyword?: string) => {
     const seq = ++loadSeqRef.current
@@ -740,7 +789,7 @@ function AnalyzeHistoryPage() {
       return
     }
     setQuickRecordTask(task)
-    setQuickRecordMealType(normalizeSelectableMealType(getTaskMealType(task), 'afternoon_snack'))
+    setQuickRecordMealType(getQuickRecordMealTypeByProfile(task))
   }
 
   const closeQuickRecordMealSelector = () => {
@@ -874,7 +923,10 @@ function AnalyzeHistoryPage() {
       }
       Taro.setStorageSync('analyzeResult', JSON.stringify(result))
       Taro.setStorageSync('analyzeCompareMode', false)
-      Taro.setStorageSync('analyzeMealType', getTaskMealType(task) || 'breakfast')
+      const taskDate = getTaskTimeForMealType(task) || undefined
+      const inferredMealType = inferDefaultMealTypeFromHealthProfile(mealProfile || undefined, taskDate || new Date())
+      const normalizedTaskMealType = getTaskMealType(task) || inferredMealType
+      Taro.setStorageSync('analyzeMealType', normalizedTaskMealType)
       Taro.setStorageSync('analyzeDietGoal', getTaskDietGoal(task))
       Taro.setStorageSync('analyzeActivityTiming', getTaskActivityTiming(task))
       Taro.setStorageSync('analyzeExecutionMode', pickExecutionMode(task))
@@ -994,9 +1046,7 @@ function AnalyzeHistoryPage() {
               >
                 <Text className='iconfont icon-canciguanli action-sheet-icon action-sheet-icon--record' />
                 <Text className='action-sheet-label'>
-                  {getTaskMealType(activeTask)
-                    ? `快速记录到${MEAL_TYPE_LABELS[getTaskMealType(activeTask) || ''] || '餐食'}`
-                    : '快速记录'}
+                  {`快速记录到${MEAL_TYPE_LABELS[getQuickRecordMealTypeByProfile(activeTask)] || '餐食'}`}
                 </Text>
               </View>
               <View className='action-sheet-divider' />

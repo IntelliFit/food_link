@@ -3,11 +3,14 @@ import { withAuth } from '../../../utils/withAuth'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Taro from '@tarojs/taro'
 import {
-  AnalyzeResponse, FoodItem, MealType, saveFoodRecord, showUnifiedApiError,
+  AnalyzeResponse, FoodItem, MealType, saveFoodRecord, showUnifiedApiError, getAccessToken, getHealthProfile,
   submitAnalysisFeedback, ANALYSIS_FEEDBACK_SUBMISSION_ENABLED,
   type AnalysisFeedbackType, type AnalysisResolutionState
 } from '../../../utils/api'
-import { inferDefaultMealTypeFromLocalTime } from '../../../utils/infer-default-meal-type'
+import {
+  inferDefaultMealTypeFromHealthProfile,
+  inferDefaultMealTypeFromLocalTime,
+} from '../../../utils/infer-default-meal-type'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
@@ -32,9 +35,9 @@ const toSelectableMealType = (value: unknown): SelectableMealType | undefined =>
   return hit?.value
 }
 
-const getSavedSelectableMealType = (): SelectableMealType | undefined => {
+const getSavedSelectableMealType = (fallbackMealType: SelectableMealType): SelectableMealType | undefined => {
   const savedMealType = Taro.getStorageSync('analyzeMealType')
-  return toSelectableMealType(savedMealType)
+  return toSelectableMealType(savedMealType) || fallbackMealType
 }
 
 const MEAL_ICONS = {
@@ -108,11 +111,12 @@ function ResultTextPage() {
   const [contextAdvice, setContextAdvice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [noData, setNoData] = useState(false)
+  const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
 
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
   const [selectedMealType, setSelectedMealType] = useState<SelectableMealType>(
-    () => getSavedSelectableMealType() ?? inferDefaultMealTypeFromLocalTime()
+    () => getSavedSelectableMealType(inferDefaultMealTypeFromLocalTime())
   )
 
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
@@ -244,6 +248,24 @@ function ResultTextPage() {
     }
   }, [])
 
+  useEffect(() => {
+    const loadMealTypeProfile = async () => {
+      try {
+        const token = getAccessToken()
+        if (!token) return
+        const profile = await getHealthProfile()
+        setDefaultMealType(inferDefaultMealTypeFromHealthProfile(profile, new Date()))
+      } catch {
+        setDefaultMealType(inferDefaultMealTypeFromLocalTime())
+      }
+    }
+    void loadMealTypeProfile()
+  }, [])
+
+  useEffect(() => {
+    setSelectedMealType(getSavedSelectableMealType(defaultMealType))
+  }, [defaultMealType])
+
   const handleWeightAdjust = (id: number, delta: number) => {
     weightAdjustedRef.current = true
     setNutritionItems((items) => {
@@ -357,7 +379,7 @@ function ResultTextPage() {
   /** 保存记录：saveOnly=true 仅保存，false 保存后跳详情页 */
   const saveRecord = async (saveOnly: boolean, confirmedMealType?: SelectableMealType) => {
     // 确定餐次
-    let mealType = confirmedMealType || inferDefaultMealTypeFromLocalTime()
+    let mealType = confirmedMealType || getSavedSelectableMealType(defaultMealType)
 
     clearSuspectDistrustTimer()
     const hasWeightChangeOnly = weightAdjustedRef.current && !nutritionAdjustedRef.current && !ratioAdjustedRef.current
@@ -429,7 +451,7 @@ function ResultTextPage() {
 
   /** 点击保存按钮：打开餐次选择弹窗 */
   const handleConfirmAndShare = () => {
-    setSelectedMealType(getSavedSelectableMealType() ?? inferDefaultMealTypeFromLocalTime())
+    setSelectedMealType(getSavedSelectableMealType(defaultMealType))
     setShowMealSelector(true)
   }
 
