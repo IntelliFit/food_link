@@ -99,6 +99,7 @@ MOBILE_DEV_LAN_IP=192.168.8.193 npm run dev:mobile
 | `npm --workspace apps/mobile run android` | 启动并尝试打开 Android 模拟器 |
 | `npm --workspace apps/mobile run ios` | 启动并尝试打开 iOS 模拟器（仅 macOS） |
 | `npm run typecheck:mobile` | TypeScript 类型检查 |
+| `npm run release:mobile:android` | Android 单一发布入口。`dev` 分支发布体验版并使用 `https://dev.api.healthymax.cn`；`main` 分支发布正式版并使用 `https://api.healthymax.cn`；其它分支拒绝执行。 |
 
 ### Expo 终端快捷键
 
@@ -124,6 +125,8 @@ Mobile 端 API 解析顺序（见 `apps/mobile/src/config.ts`）：
 | 本机 Expo Go 联调 | 由 `npm run dev:mobile` 自动设为 `http://<局域网IP>:3010` |
 | 独立安装包连开发 API | 构建时设 `EXPO_PUBLIC_API_BASE_URL=https://dev.api.healthymax.cn` |
 | 正式包 | 构建时设 `EXPO_PUBLIC_API_BASE_URL=https://api.healthymax.cn` |
+
+Android 发布统一使用 `npm run release:mobile:android`。脚本会按当前 Git 分支自动选择 API、EAS profile 和发布 channel：`dev` → `preview` / `beta` / `https://dev.api.healthymax.cn`，`main` → `production` / `stable` / `https://api.healthymax.cn`。其它分支会像后端镜像发布脚本一样直接报错。
 
 登录页底部会显示当前 `API_BASE_URL`，便于确认是否配对。
 
@@ -188,7 +191,7 @@ npm run typecheck:mobile
 | **Development Build** | 带自定义原生模块的开发客户端 | 是，类似可调试的独立 App |
 | **Preview / Production Build** | 发给测试人员或上架的安装包 | 是 |
 
-当前仓库 **尚未配置 `eas.json`**，下面给出推荐的首建步骤与常用命令。
+当前仓库根目录已配置 `eas.json`，Android 日常发布优先使用根目录单入口命令。
 
 ---
 
@@ -243,20 +246,19 @@ eas build:configure
 }
 ```
 
-> `preview` 的 `buildType: "apk"` 可直接装到手机；`production` 默认打 **AAB** 用于 Google Play 上架。
+> 当前 Android 发布入口统一打 APK 并上传 release channel；如后续需要 Google Play AAB，可临时把 `production` profile 的 `android.buildType` 调整为 `app-bundle` 或直接运行 EAS 自定义命令。
 
 #### 2. 常用构建命令
 
 在 `apps/mobile` 目录执行：
 
 ```bash
-# Android 测试 APK（内部分发）
-npm run build:android:apk
-# 等价：eas build -p android --profile preview
+# Android 单一发布入口（在仓库根目录执行）
+npm run release:mobile:android
 
-# Android 正式包 AAB（Google Play）
-npm run build:android:aab
-# 等价：eas build -p android --profile production
+# dev 分支：构建体验版 APK，注入 https://dev.api.healthymax.cn，更新 beta channel
+# main 分支：构建正式版 APK，注入 https://api.healthymax.cn，更新 stable channel
+# 其它分支：拒绝执行
 
 # iOS 测试包（需 Apple 开发者账号；产物为 IPA，通过 TestFlight 或 ad hoc 安装）
 npm run build:ios:preview
@@ -266,16 +268,13 @@ npm run build:ios:preview
 npm run build:ios:production
 # 等价：eas build -p ios --profile production
 
-# 开发客户端（含 dev menu，可接 Metro 热更新）
-npm run build:android:dev
-# 等价：eas build -p android --profile development
+# 开发客户端如确需构建，可直接执行：
+npx eas-cli build -p android --profile development
 ```
 
 也可在根目录：
 
 ```bash
-npm run build:mobile:android:apk
-npm run build:mobile:android:aab
 npm run build:mobile:ios:preview
 ```
 
@@ -363,7 +362,7 @@ iOS 签名、Provisioning Profile、TestFlight 上传通常在 **Xcode → Produ
 - [ ] 构建 profile 的 `EXPO_PUBLIC_API_BASE_URL` 指向正确环境
 - [ ] `npm run typecheck:mobile` 通过
 - [ ] 在目标设备上验证登录、首页、拍照分析、保存记录等主流程
-- [ ] Android 正式上架使用 **AAB**（`production` profile），不是 APK
+- [ ] Android 正式分发确认 `production` profile 的 API 与包类型符合本次发布目标
 
 ---
 
