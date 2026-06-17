@@ -13,6 +13,7 @@ import (
 	"food_link/backend/internal/recipe/domain"
 	"food_link/backend/internal/recipe/repo"
 	"food_link/backend/pkg/storage"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -138,7 +139,11 @@ func (s *RecipeService) Update(ctx context.Context, userID, recipeID string, inp
 		}
 	}
 	if input.Items != nil {
-		updates["items"] = input.Items
+		itemsJSON, err := json.Marshal(input.Items)
+		if err != nil {
+			return nil, err
+		}
+		updates["items"] = datatypes.JSON(itemsJSON)
 	}
 	if input.TotalCalories != nil {
 		updates["total_calories"] = *input.TotalCalories
