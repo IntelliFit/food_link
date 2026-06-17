@@ -3,18 +3,19 @@ package do
 import "time"
 
 type UserDO struct {
-	ID                             string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	OpenID                         string         `gorm:"column:openid;type:text;not null;unique;index:idx_weapp_user_openid"`
-	UnionID                        *string        `gorm:"column:unionid;type:text;unique;index:idx_weapp_user_unionid,where:unionid IS NOT NULL"`
-	AppOpenID                      *string        `gorm:"column:app_openid;type:text;uniqueIndex:idx_weapp_user_app_openid,where:app_openid IS NOT NULL"`
-	AppUnionID                     *string        `gorm:"column:app_unionid;type:text;index:idx_weapp_user_app_unionid,where:app_unionid IS NOT NULL"`
-	Username                       *string        `gorm:"column:username;type:text;uniqueIndex:idx_weapp_user_username,where:username IS NOT NULL"`
-	PasswordHash                   *string        `gorm:"column:password_hash;type:text"`
-	PasswordSetAt                  *time.Time     `gorm:"column:password_set_at;type:timestamptz"`
-	LastLoginMethod                *string        `gorm:"column:last_login_method;type:text"`
-	LastLoginAt                    *time.Time     `gorm:"column:last_login_at;type:timestamptz"`
-	Avatar                         *string        `gorm:"column:avatar;type:text;default:''"`
-	Nickname                       *string        `gorm:"column:nickname;type:text;default:''"`
+	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	OpenID          string     `gorm:"column:openid;type:text;not null;unique;index:idx_weapp_user_openid"`
+	UnionID         *string    `gorm:"column:unionid;type:text;unique;index:idx_weapp_user_unionid,where:unionid IS NOT NULL"`
+	AppOpenID       *string    `gorm:"column:app_openid;type:text;uniqueIndex:idx_weapp_user_app_openid,where:app_openid IS NOT NULL"`
+	AppUnionID      *string    `gorm:"column:app_unionid;type:text;index:idx_weapp_user_app_unionid,where:app_unionid IS NOT NULL"`
+	Username        *string    `gorm:"column:username;type:text;uniqueIndex:idx_weapp_user_username,where:username IS NOT NULL"`
+	PasswordHash    *string    `gorm:"column:password_hash;type:text"`
+	PasswordSetAt   *time.Time `gorm:"column:password_set_at;type:timestamptz"`
+	LastLoginMethod *string    `gorm:"column:last_login_method;type:text"`
+	LastLoginAt     *time.Time `gorm:"column:last_login_at;type:timestamptz"`
+	Avatar          *string    `gorm:"column:avatar;type:text;default:''"`
+	Nickname        *string    `gorm:"column:nickname;type:text;default:''"`
+	// A normalized unique phone index is installed in migration.go so +86 legacy values conflict with 11-digit phones.
 	Telephone                      *string        `gorm:"column:telephone;type:text;index:idx_weapp_user_telephone"`
 	CreatedAt                      *time.Time     `gorm:"column:create_time;type:timestamptz;default:now()"`
 	UpdatedAt                      *time.Time     `gorm:"column:update_time;type:timestamptz;default:now()"`

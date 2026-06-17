@@ -1,0 +1,48 @@
+# VCS and local state
+.git
+.git/
+**/.git
+**/.git/
+.local-state/
+.expo/
+.cache/
+tmp/
+dist/
+logs/
+*.log
+
+# Dependencies and generated artifacts
+node_modules/
+**/node_modules/
+coverage/
+.nyc_output/
+
+# Mobile local native build outputs
+apps/mobile/.expo/
+apps/mobile/.expo-shared/
+apps/mobile/android/.gradle/
+apps/mobile/android/.kotlin/
+apps/mobile/android/build/
+apps/mobile/android/local.properties
+apps/mobile/android/app/build/
+apps/mobile/android/app/.cxx/
+apps/mobile/android/app/src/main/java/inline/
+
+# Other products and server-side code not needed for mobile EAS builds
+apps/wechat/
+admin/
+backend/
+backend_bak/
+website/
+e2e-weapp/
+docs/
+memory/
+reports/
+supabase/
+hkh/
+
+# Local screenshots and debug outputs
+*.png
+*.html
+*.tmp
+*.temp
