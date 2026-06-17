@@ -603,6 +603,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/feed-reports/stats", adminAuth, adminFeedReportHandler.StatusStats)
 	adminAPI.GET("/feed-reports/:report_id", adminAuth, adminFeedReportHandler.Get)
 	adminAPI.PATCH("/feed-reports/:report_id/status", adminAuth, adminFeedReportHandler.UpdateStatus)
+	adminAPI.POST("/feed-reports/:report_id/delete-target", adminAuth, adminFeedReportHandler.DeleteTargetContent)
 	adminAPI.DELETE("/feed-reports/:report_id", adminAuth, adminFeedReportHandler.Delete)
 	adminAPI.GET("/benchmark/datasets/batches", adminAuth, adminBenchmarkHandler.ListBatches)
 	adminAPI.GET("/benchmark/datasets/samples", adminAuth, adminBenchmarkHandler.ListSamples)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -8,12 +8,14 @@ import { apiClient } from '../api'
 import { API_BASE_URL, SHOW_DEBUG_LOGIN } from '../config'
 import type { RootStackParamList } from '../navigation/types'
 import { useAuth } from '../providers/AuthProvider'
+import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
 
 export function LoginScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const {
     loginWithWechat,
     loginWithSMSCode,
@@ -48,7 +50,7 @@ export function LoginScreen() {
       console.log('[mobile] login action succeeded')
     } catch (error) {
       console.log('[mobile] login action failed', error instanceof Error ? error.message : error)
-      Alert.alert('登录失败', userFacingErrorMessage(error, fallback))
+      dialog.alert('登录失败', userFacingErrorMessage(error, fallback), 'warning')
     } finally {
       setLoading(false)
     }
@@ -56,22 +58,22 @@ export function LoginScreen() {
 
   const ensureAgreementAccepted = () => {
     if (agreementAccepted) return true
-    Alert.alert('请先同意协议', '请阅读并同意用户协议和隐私政策后继续。')
+    dialog.alert('请先同意协议', '请阅读并同意用户协议和隐私政策后继续。', 'warning')
     return false
   }
 
   const sendSMSCode = async () => {
     const phone = accountPhone.trim()
     if (!isValidMainlandPhone(phone)) {
-      Alert.alert('手机号有误', '请输入 11 位大陆手机号。')
+      dialog.alert('手机号有误', '请输入 11 位大陆手机号。', 'warning')
       return
     }
     setSmsSending(true)
     try {
       await apiClient.sendSMSCode({ phone })
-      Alert.alert('验证码已发送', '请查看手机短信，验证码 15 分钟内有效。')
+      dialog.alert('验证码已发送', '请查看手机短信，验证码 15 分钟内有效。', 'success')
     } catch (error) {
-      Alert.alert('发送失败', userFacingErrorMessage(error, '请稍后再试'))
+      dialog.alert('发送失败', userFacingErrorMessage(error, '请稍后再试'), 'warning')
     } finally {
       setSmsSending(false)
     }
@@ -81,11 +83,11 @@ export function LoginScreen() {
     const phone = accountPhone.trim()
     const code = smsCode.trim()
     if (!isValidMainlandPhone(phone)) {
-      Alert.alert('手机号有误', '请输入 11 位大陆手机号。')
+      dialog.alert('手机号有误', '请输入 11 位大陆手机号。', 'warning')
       return
     }
     if (!/^\d{6}$/.test(code)) {
-      Alert.alert('验证码有误', '请输入 6 位短信验证码。')
+      dialog.alert('验证码有误', '请输入 6 位短信验证码。', 'warning')
       return
     }
     if (!ensureAgreementAccepted()) return

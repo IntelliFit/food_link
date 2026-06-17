@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AuthProvider } from './src/providers/AuthProvider'
+import { DialogProvider } from './src/providers/DialogProvider'
 import { RootNavigator } from './src/navigation/RootNavigator'
 import { installConsoleLogCapture } from './src/diagnostics/consoleLogBuffer'
 
@@ -11,7 +12,9 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="dark" />
       <AuthProvider>
-        <RootNavigator />
+        <DialogProvider>
+          <RootNavigator />
+        </DialogProvider>
       </AuthProvider>
     </SafeAreaProvider>
   )

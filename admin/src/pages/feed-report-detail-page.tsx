@@ -112,6 +112,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deletingTarget, setDeletingTarget] = useState(false)
   const [resolutionNote, setResolutionNote] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<FeedReportStatus | ''>('')
 
@@ -197,6 +198,30 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
       toast.error(error instanceof Error ? error.message : '删除失败')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleDeleteTargetContent() {
+    if (!item || item.target_type !== 'circle_post') return
+    if (!window.confirm('确定删除被举报的圈子内容吗？删除后该内容会从圈子中移除，相关点赞、评论和互动通知也会清理。')) return
+    setDeletingTarget(true)
+    try {
+      const data = await adminRequest<{ item: FeedReportItem }>(
+        `/api/admin/feed-reports/${encodeURIComponent(item.id)}/delete-target`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ resolution_note: resolutionNote }),
+        },
+      )
+      setItem(data.item)
+      setResolutionNote(data.item.resolution_note || resolutionNote || '已删除被举报的圈子内容。')
+      setSelectedStatus(data.item.status)
+      setTarget(null)
+      toast.success('被举报的圈子内容已删除')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '删除被举报内容失败')
+    } finally {
+      setDeletingTarget(false)
     }
   }
 
@@ -380,7 +405,18 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                 <CardHeader>
                   <CardTitle className='text-lg text-destructive'>危险操作</CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className='space-y-3'>
+                  {item.target_type === 'circle_post' ? (
+                    <Button
+                      variant='destructive'
+                      className='w-full'
+                      onClick={() => void handleDeleteTargetContent()}
+                      disabled={deletingTarget || !target}
+                    >
+                      {deletingTarget ? <Loader2 className='mr-1 size-4 animate-spin' /> : <Trash2 className='mr-1 size-4' />}
+                      删除被举报的圈子内容
+                    </Button>
+                  ) : null}
                   <Button variant='destructive' className='w-full' onClick={() => void handleDelete()} disabled={deleting}>
                     {deleting ? <Loader2 className='mr-1 size-4 animate-spin' /> : <Trash2 className='mr-1 size-4' />}
                     删除举报记录

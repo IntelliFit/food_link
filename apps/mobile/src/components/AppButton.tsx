@@ -5,7 +5,7 @@ interface AppButtonProps {
   label: string
   loading?: boolean
   disabled?: boolean
-  variant?: 'primary' | 'secondary' | 'ghost'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
   onPress: () => void
 }
 
@@ -22,7 +22,7 @@ export function AppButton({ label, loading, disabled, variant = 'primary', onPre
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? '#fff' : colors.brand} />
+        <ActivityIndicator color={variant === 'primary' || variant === 'danger' ? '#fff' : colors.brand} />
       ) : (
         <Text style={[styles.text, styles[`${variant}Text`]]}>{label}</Text>
       )}
@@ -48,6 +48,9 @@ const styles = StyleSheet.create({
   ghost: {
     backgroundColor: 'transparent',
   },
+  danger: {
+    backgroundColor: colors.danger,
+  },
   pressed: {
     opacity: 0.86,
   },
@@ -66,5 +69,8 @@ const styles = StyleSheet.create({
   },
   ghostText: {
     color: colors.brandDark,
+  },
+  dangerText: {
+    color: '#fff',
   },
 })

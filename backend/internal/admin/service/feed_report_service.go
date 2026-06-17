@@ -17,6 +17,7 @@ type FeedReportRepo interface {
 	UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error)
 	Delete(ctx context.Context, id string) error
 	GetTargetSnapshot(ctx context.Context, targetType, targetID string) (*admindomain.FeedReportTargetSnapshot, error)
+	DeleteCirclePostTarget(ctx context.Context, postID string) error
 	CountByStatus(ctx context.Context) (map[string]int64, error)
 }
 
@@ -25,8 +26,8 @@ type SystemMessageSender interface {
 }
 
 type FeedReportService struct {
-	repo    FeedReportRepo
-	sender  SystemMessageSender
+	repo   FeedReportRepo
+	sender SystemMessageSender
 }
 
 func NewFeedReportService(repo FeedReportRepo, sender SystemMessageSender) *FeedReportService {
@@ -135,6 +136,41 @@ func (s *FeedReportService) UpdateStatus(ctx context.Context, id, status, resolu
 
 func (s *FeedReportService) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
+}
+
+func (s *FeedReportService) DeleteTargetContent(ctx context.Context, id, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error) {
+	item, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if item.TargetType != "circle_post" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "当前举报目标暂不支持直接删除", HTTPStatus: 400}
+	}
+	if err := s.repo.DeleteCirclePostTarget(ctx, item.TargetID); err != nil {
+		return nil, err
+	}
+
+	note := strings.TrimSpace(resolutionNote)
+	if note == "" {
+		note = "已删除被举报的圈子内容。"
+	}
+	if terminalStatuses[item.Status] {
+		return item, nil
+	}
+
+	updated, err := s.repo.UpdateStatus(ctx, id, "resolved", note, handledBy)
+	if err != nil {
+		return nil, err
+	}
+	if s.sender != nil {
+		if err := s.sender.SendSystemMessage(ctx, item.ReporterUserID, buildReportResultMessageForReporter("resolved", note)); err != nil {
+			// 发送失败不阻塞内容删除和举报处理结果落库。
+		}
+		if err := s.sender.SendSystemMessage(ctx, item.ReportedUserID, buildReportResultMessageForReported("resolved", note)); err != nil {
+			// 发送失败不阻塞内容删除和举报处理结果落库。
+		}
+	}
+	return updated, nil
 }
 
 func buildReportResultMessageForReporter(status, resolutionNote string) string {

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	admindomain "food_link/backend/internal/admin/domain"
-	adminservice "food_link/backend/internal/admin/service"
 	adminrepo "food_link/backend/internal/admin/repo"
+	adminservice "food_link/backend/internal/admin/service"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/pkg/logger"
@@ -22,6 +22,7 @@ type FeedReportService interface {
 	Get(ctx context.Context, id string) (*admindomain.FeedReportItem, *admindomain.FeedReportTargetSnapshot, error)
 	UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error)
 	Delete(ctx context.Context, id string) error
+	DeleteTargetContent(ctx context.Context, id, resolutionNote, handledBy string) (*admindomain.FeedReportItem, error)
 	GetStatusStats(ctx context.Context) (map[string]int64, error)
 }
 
@@ -106,4 +107,30 @@ func (h *FeedReportHandler) Delete(c *gin.Context) {
 	}
 	logger.Info(c.Request.Context(), "管理员删除举报", slog.String("report_id", id))
 	response.Success(c, gin.H{"message": "举报已删除"})
+}
+func (h *FeedReportHandler) DeleteTargetContent(c *gin.Context) {
+	var body struct {
+		ResolutionNote string `json:"resolution_note"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		body.ResolutionNote = ""
+	}
+	id := strings.TrimSpace(c.Param("report_id"))
+	if id == "" {
+		response.Error(c, &commonerrors.AppError{Code: 10002, Message: "举报 ID 不能为空", HTTPStatus: http.StatusBadRequest})
+		return
+	}
+	handledBy := c.GetString("admin_username")
+	item, err := h.svc.DeleteTargetContent(c.Request.Context(), id, body.ResolutionNote, handledBy)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "管理员删除被举报圈子内容",
+		slog.String("report_id", item.ID),
+		slog.String("target_type", item.TargetType),
+		slog.String("target_id", item.TargetID),
+		slog.String("handled_by", handledBy),
+	)
+	response.Success(c, gin.H{"message": "被举报的圈子内容已删除", "item": item})
 }

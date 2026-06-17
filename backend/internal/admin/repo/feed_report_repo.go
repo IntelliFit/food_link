@@ -141,6 +141,20 @@ func (r *FeedReportRepo) Delete(ctx context.Context, id string) error {
 		Delete(nil).Error
 }
 
+func (r *FeedReportRepo) DeleteCirclePostTarget(ctx context.Context, postID string) error {
+	post, err := r.feedRepo.GetCirclePostByID(ctx, postID)
+	if err != nil {
+		return err
+	}
+	if post == nil {
+		return &commonerrors.AppError{Code: 10001, Message: "被举报的圈子内容不存在或已删除", HTTPStatus: 404}
+	}
+	if err := r.feedRepo.DeleteCirclePostInteractions(ctx, postID); err != nil {
+		return err
+	}
+	return r.feedRepo.DeleteCirclePost(ctx, post.UserID, postID)
+}
+
 func (r *FeedReportRepo) GetTargetSnapshot(ctx context.Context, targetType, targetID string) (*admindomain.FeedReportTargetSnapshot, error) {
 	target, err := r.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
 	if err != nil {
