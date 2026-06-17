@@ -9,6 +9,7 @@ interface AuthContextValue {
   isAuthenticated: boolean
   loginWithWechat: (inviteCode?: string) => Promise<void>
   loginWithPassword: (phone: string, password: string) => Promise<void>
+  loginWithSMSCode: (phone: string, code: string, inviteCode?: string) => Promise<void>
   registerWithPassword: (phone: string, password: string, nickname?: string, inviteCode?: string) => Promise<void>
   loginWithDebugAccount: () => Promise<void>
   loginWithUserId: (userId: string, password: string) => Promise<void>
@@ -42,6 +43,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setIsAuthenticated(true)
   }, [])
 
+  const loginWithSMSCode = useCallback(async (phone: string, code: string, inviteCode?: string) => {
+    await apiClient.loginWithSMSCode({ phone, code, inviteCode })
+    setIsAuthenticated(true)
+  }, [])
+
   const registerWithPassword = useCallback(async (phone: string, password: string, nickname?: string, inviteCode?: string) => {
     await apiClient.registerWithPassword({ phone, password, nickname, inviteCode })
     setIsAuthenticated(true)
@@ -62,11 +68,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
     isAuthenticated,
     loginWithWechat,
     loginWithPassword,
+    loginWithSMSCode,
     registerWithPassword,
     loginWithDebugAccount,
     loginWithUserId,
     logout,
-  }), [isBootstrapping, isAuthenticated, loginWithWechat, loginWithPassword, registerWithPassword, loginWithDebugAccount, loginWithUserId, logout])
+  }), [isBootstrapping, isAuthenticated, loginWithWechat, loginWithPassword, loginWithSMSCode, registerWithPassword, loginWithDebugAccount, loginWithUserId, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

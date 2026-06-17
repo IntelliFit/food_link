@@ -118,21 +118,33 @@ type UploadAnalyzeImageResponse = {
 }
 
 export interface PasswordRegisterInput {
-  username?: string
-  phone?: string
+  phone: string
   password: string
   nickname?: string
   inviteCode?: string
 }
 
 export interface PasswordLoginInput {
-  username?: string
-  phone?: string
+  phone: string
   password: string
 }
 
+export interface SMSCodeInput {
+  phone: string
+}
+
+export interface SMSLoginInput {
+  phone: string
+  code: string
+  inviteCode?: string
+}
+
+export interface SMSCodeResponse {
+  request_id?: string
+  expires_in_seconds?: number
+}
+
 export interface SetAccountPasswordInput {
-  username?: string
   phone?: string
   password: string
   currentPassword?: string
@@ -533,15 +545,38 @@ export class FoodLinkApiClient {
   }
 
   async loginWithPassword(input: PasswordLoginInput): Promise<LoginResponse> {
-    const phone = input.phone?.trim()
-    const username = input.username?.trim()
+    const phone = input.phone.trim()
     const password = input.password.trim()
-    if (!phone && !username) throw new Error('请输入手机号')
+    if (!phone) throw new Error('请输入手机号')
     if (!password) throw new Error('请输入密码')
-    const body: Record<string, string> = { password }
-    if (phone) body.phone = phone
-    else if (username) body.username = username
     const data = await this.publicRequest<LoginResponse>('/api/app/login/password', {
+      method: 'POST',
+      body: { phone, password },
+      timeoutMs: 10000,
+    })
+    await this.storeLoginTokens(data)
+    return data
+  }
+
+  async sendSMSCode(input: SMSCodeInput): Promise<SMSCodeResponse> {
+    const phone = input.phone.trim()
+    if (!phone) throw new Error('请输入手机号')
+    return this.publicRequest<SMSCodeResponse>('/api/app/sms/send-code', {
+      method: 'POST',
+      body: { phone },
+      timeoutMs: 10000,
+    })
+  }
+
+  async loginWithSMSCode(input: SMSLoginInput): Promise<LoginResponse> {
+    const phone = input.phone.trim()
+    const code = input.code.trim()
+    const inviteCode = input.inviteCode?.trim()
+    if (!phone) throw new Error('请输入手机号')
+    if (!code) throw new Error('请输入验证码')
+    const body: Record<string, string> = { phone, code }
+    if (inviteCode) body.inviteCode = inviteCode
+    const data = await this.publicRequest<LoginResponse>('/api/app/login/sms', {
       method: 'POST',
       body,
       timeoutMs: 10000,
@@ -551,16 +586,13 @@ export class FoodLinkApiClient {
   }
 
   async registerWithPassword(input: PasswordRegisterInput): Promise<LoginResponse> {
-    const phone = input.phone?.trim()
-    const username = input.username?.trim()
+    const phone = input.phone.trim()
     const password = input.password.trim()
     const nickname = input.nickname?.trim()
     const inviteCode = input.inviteCode?.trim()
-    if (!phone && !username) throw new Error('请输入手机号')
+    if (!phone) throw new Error('请输入手机号')
     if (!password) throw new Error('请输入密码')
-    const body: Record<string, string> = { password }
-    if (phone) body.phone = phone
-    else if (username) body.username = username
+    const body: Record<string, string> = { phone, password }
     if (nickname) body.nickname = nickname
     if (inviteCode) body.inviteCode = inviteCode
     const data = await this.publicRequest<LoginResponse>('/api/app/register/password', {
@@ -574,13 +606,11 @@ export class FoodLinkApiClient {
 
   async setAccountPassword(input: SetAccountPasswordInput): Promise<LoginResponse> {
     const phone = input.phone?.trim()
-    const username = input.username?.trim()
     const password = input.password.trim()
     const currentPassword = input.currentPassword?.trim()
     if (!password) throw new Error('请输入新密码')
     const body: Record<string, string> = { password }
     if (phone) body.phone = phone
-    else if (username) body.username = username
     if (currentPassword) body.current_password = currentPassword
     const data = await this.authenticatedRequest<LoginResponse>('/api/app/account/password', {
       method: 'POST',

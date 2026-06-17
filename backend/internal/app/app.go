@@ -25,24 +25,18 @@ import (
 	communityhandler "food_link/backend/internal/community/handler"
 	communityrepo "food_link/backend/internal/community/repo"
 	communityservice "food_link/backend/internal/community/service"
-	searchhandler "food_link/backend/internal/search/handler"
-	searchrepo "food_link/backend/internal/search/repo"
-	searchservice "food_link/backend/internal/search/service"
 	expiryhandler "food_link/backend/internal/expiry/handler"
 	expiryrepo "food_link/backend/internal/expiry/repo"
 	expiryservice "food_link/backend/internal/expiry/service"
 	feedbackhandler "food_link/backend/internal/feedback/handler"
 	feedbackrepo "food_link/backend/internal/feedback/repo"
 	feedbackservice "food_link/backend/internal/feedback/service"
-	foodrecordhandler "food_link/backend/internal/foodrecord/handler"
-	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
-	foodrecordservice "food_link/backend/internal/foodrecord/service"
 	followhandler "food_link/backend/internal/follow/handler"
 	followrepo "food_link/backend/internal/follow/repo"
 	followservice "food_link/backend/internal/follow/service"
-	messagehandler "food_link/backend/internal/message/handler"
-	messagerepo "food_link/backend/internal/message/repo"
-	messageservice "food_link/backend/internal/message/service"
+	foodrecordhandler "food_link/backend/internal/foodrecord/handler"
+	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
+	foodrecordservice "food_link/backend/internal/foodrecord/service"
 	friendhandler "food_link/backend/internal/friend/handler"
 	friendrepo "food_link/backend/internal/friend/repo"
 	friendservice "food_link/backend/internal/friend/service"
@@ -56,6 +50,9 @@ import (
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
+	messagehandler "food_link/backend/internal/message/handler"
+	messagerepo "food_link/backend/internal/message/repo"
+	messageservice "food_link/backend/internal/message/service"
 	pethandler "food_link/backend/internal/pet/handler"
 	petrepo "food_link/backend/internal/pet/repo"
 	petservice "food_link/backend/internal/pet/service"
@@ -66,6 +63,9 @@ import (
 	reciperepo "food_link/backend/internal/recipe/repo"
 	recipeservice "food_link/backend/internal/recipe/service"
 	schoolhandler "food_link/backend/internal/school/handler"
+	searchhandler "food_link/backend/internal/search/handler"
+	searchrepo "food_link/backend/internal/search/repo"
+	searchservice "food_link/backend/internal/search/service"
 	"food_link/backend/internal/stub"
 	systemhandler "food_link/backend/internal/system/handler"
 	"food_link/backend/internal/taskqueue"
@@ -146,6 +146,11 @@ func New(cfg *config.Config) (*App, error) {
 	userRepo := authrepo.NewUserRepo(db)
 	loginSvc := authservice.NewLoginService(cfg, userRepo, jwtSvc)
 	loginHandler := authhandler.NewLoginHandler(loginSvc)
+	smsStore, err := authservice.NewSMSCodeStore(cfg.Redis, cfg.App.Env)
+	if err != nil {
+		return nil, fmt.Errorf("初始化短信验证码存储失败: %w", err)
+	}
+	loginHandler.ConfigureSMSService(authservice.NewSMSService(cfg.SMS, loginSvc, userRepo, jwtSvc, smsStore, authservice.NewTencentCloudSMSSender(cfg.SMS)))
 
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchLogRepo := userrepo.NewModeSwitchLogRepo(db)
@@ -224,10 +229,10 @@ func New(cfg *config.Config) (*App, error) {
 	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, storageClient)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
-		// Search module DI
-		searchRepo := searchrepo.NewSearchRepo(db)
-		searchSvc := searchservice.NewSearchService(searchRepo, storageClient)
-		searchHandler := searchhandler.NewSearchHandler(searchSvc)
+	// Search module DI
+	searchRepo := searchrepo.NewSearchRepo(db)
+	searchSvc := searchservice.NewSearchService(searchRepo, storageClient)
+	searchHandler := searchhandler.NewSearchHandler(searchSvc)
 
 	// Health module DI
 	exerciseRepo := healthrepo.NewExerciseRepo(db)
@@ -316,6 +321,8 @@ func New(cfg *config.Config) (*App, error) {
 
 	engine.POST("/api/login", loginHandler.Login)
 	engine.POST("/api/app/login/wechat", loginHandler.AppWechatLogin)
+	engine.POST("/api/app/sms/send-code", loginHandler.SendSMSCode)
+	engine.POST("/api/app/login/sms", loginHandler.SMSLogin)
 	engine.POST("/api/app/login/password", loginHandler.PasswordLogin)
 	engine.POST("/api/app/register/password", loginHandler.PasswordRegister)
 	engine.POST("/api/app/account/password", authmw.RequireJWT(jwtSvc), loginHandler.SetPassword)
@@ -452,8 +459,8 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/community/posts/:post_id", authmw.RequireJWT(jwtSvc), communityHandler.DeleteCirclePost)
 	engine.POST("/api/community/feed-targets/:target_type/:target_id/report", authmw.RequireJWT(jwtSvc), communityHandler.ReportFeedTarget)
 
-		// Community search
-		engine.GET("/api/community/search", authmw.RequireJWT(jwtSvc), searchHandler.Search)
+	// Community search
+	engine.GET("/api/community/search", authmw.RequireJWT(jwtSvc), searchHandler.Search)
 
 	// Health routes
 	engine.GET("/api/body-metrics/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetBodyMetricsSummary)

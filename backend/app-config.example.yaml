@@ -66,6 +66,31 @@ app_auth:
   development_mock_login: true
   development_mock_wechat_code: "expo-go-dev-wechat-code"
 
+redis:
+  # 短信验证码存储与节流。
+  # mode: auto 有 url 时使用 Redis；development 无 url 时使用本地内存；production 建议显式用 redis。
+  # mode: redis 强制使用 Redis；mode: memory 仅用于本地开发。
+  mode: "auto"
+  url: ""
+  password: ""
+  db: 0
+
+sms:
+  # 腾讯云短信；模板参数顺序为 [验证码, 有效分钟数]。
+  # Apollo 的 app-config.yaml namespace 中按本段 yaml 结构配置，不走环境变量。
+  tencentcloud_secret_id: ""
+  tencentcloud_secret_key: ""
+  tencentcloud_region: "ap-guangzhou"
+  tencentcloud_sms_sdk_app_id: ""
+  tencentcloud_sms_sign_name: ""
+  tencentcloud_sms_verification_template_id: ""
+  # 验证码有效期，单位分钟；会作为短信模板第 2 个变量发送。
+  code_ttl_minutes: 15
+  # 同一手机号发送验证码的最小间隔，单位秒；用于防止用户连续点击发送。
+  throttle_seconds: 30
+  # 同一客户端 IP 发送验证码的最小间隔，单位秒；用于防止单 IP 批量刷短信。
+  ip_throttle_seconds: 30
+
 worker:
   count: 1
   poll_interval_seconds: 2
