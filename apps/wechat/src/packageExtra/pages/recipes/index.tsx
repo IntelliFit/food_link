@@ -1,9 +1,8 @@
-import { View, Text, Image, ScrollView } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Input } from '@tarojs/components'
 import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { getUserRecipes, deleteUserRecipe, applyUserRecipe, showUnifiedApiError, type UserRecipe, type FoodRecord } from '../../../utils/api'
+import { getUserRecipes, deleteUserRecipe, applyUserRecipe, updateUserRecipe, showUnifiedApiError, type UserRecipe } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
-import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { getStoredRecordTargetDate } from '../../../utils/record-date'
@@ -20,9 +19,215 @@ const MEAL_TYPE_NAMES: Record<string, string> = {
   snack: '午加餐'
 }
 
+type NutritionDraft = {
+  calories: string
+  protein: string
+  carbs: string
+  fat: string
+}
+
+type MicroNutrientKey =
+  | 'fiber'
+  | 'sugar'
+  | 'sodium_mg'
+  | 'potassiumMg'
+  | 'calciumMg'
+  | 'ironMg'
+  | 'magnesiumMg'
+  | 'zincMg'
+  | 'vitaminARaeMcg'
+  | 'vitaminCMg'
+  | 'vitaminDMcg'
+  | 'vitaminEMg'
+  | 'vitaminKMcg'
+  | 'thiaminMg'
+  | 'riboflavinMg'
+  | 'niacinMg'
+  | 'vitaminB6Mg'
+  | 'folateMcg'
+  | 'vitaminB12Mcg'
+
+type MicroNutrientTotals = Partial<Record<MicroNutrientKey, number>>
+
+const NUTRITION_FIELDS: Array<{
+  key: keyof NutritionDraft
+  label: string
+  unit: string
+  placeholder: string
+}> = [
+  { key: 'protein', label: '蛋白质', unit: 'g', placeholder: '如 18' },
+  { key: 'carbs', label: '碳水', unit: 'g', placeholder: '如 42' },
+  { key: 'fat', label: '脂肪', unit: 'g', placeholder: '如 9' }
+]
+
+const MICRO_NUTRIENT_META: Array<{ key: MicroNutrientKey; label: string; unit: string; aliases?: string[] }> = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'sodium_mg', label: '钠', unit: 'mg', aliases: ['sodiumMg'] },
+  { key: 'potassiumMg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', label: '铁', unit: 'mg' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg' },
+  { key: 'zincMg', label: '锌', unit: 'mg' },
+  { key: 'vitaminARaeMcg', label: '维生素A', unit: 'mcg' },
+  { key: 'vitaminCMg', label: '维生素C', unit: 'mg' },
+  { key: 'vitaminDMcg', label: '维生素D', unit: 'mcg' },
+  { key: 'vitaminEMg', label: '维生素E', unit: 'mg' },
+  { key: 'vitaminKMcg', label: '维生素K', unit: 'mcg' },
+  { key: 'thiaminMg', label: '维生素B1', unit: 'mg' },
+  { key: 'riboflavinMg', label: '维生素B2', unit: 'mg' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg' },
+  { key: 'vitaminB6Mg', label: '维生素B6', unit: 'mg' },
+  { key: 'folateMcg', label: '叶酸', unit: 'mcg' },
+  { key: 'vitaminB12Mcg', label: '维生素B12', unit: 'mcg' }
+]
+
+function toDraftNumber(value: number | undefined) {
+  const next = Number(value || 0)
+  return Number.isFinite(next) ? String(Math.round(next * 10) / 10) : '0'
+}
+
+function parseDraftNumber(value: string) {
+  const next = Number(String(value).trim())
+  if (!Number.isFinite(next) || next < 0) return null
+  return Math.round(next * 10) / 10
+}
+
+function formatDraftValue(value: number) {
+  const next = Math.max(0, Math.round(value * 10) / 10)
+  return Number.isInteger(next) ? String(next) : next.toFixed(1)
+}
+
+function calcCaloriesFromMacros(protein: number, carbs: number, fat: number) {
+  return Math.round((protein * 4 + carbs * 4 + fat * 9) * 10) / 10
+}
+
+function scaleMacrosByCalories(draft: NutritionDraft, nextCalories: number): { draft: NutritionDraft; scale: number } {
+  const protein = parseDraftNumber(draft.protein) ?? 0
+  const carbs = parseDraftNumber(draft.carbs) ?? 0
+  const fat = parseDraftNumber(draft.fat) ?? 0
+  const macroCalories = calcCaloriesFromMacros(protein, carbs, fat)
+  if (macroCalories <= 0) {
+    return {
+      draft: {
+        ...draft,
+        calories: formatDraftValue(nextCalories)
+      },
+      scale: 1
+    }
+  }
+  const scale = nextCalories / macroCalories
+  return {
+    draft: {
+      calories: formatDraftValue(nextCalories),
+      protein: formatDraftValue(protein * scale),
+      carbs: formatDraftValue(carbs * scale),
+      fat: formatDraftValue(fat * scale)
+    },
+    scale
+  }
+}
+
+function normalizeNutrientNumber(value: unknown) {
+  const num = Number(value)
+  return Number.isFinite(num) && num > 0 ? num : 0
+}
+
+function roundNutrient(value: number) {
+  return Math.max(0, Math.round(value * 10) / 10)
+}
+
+function getMicroNutrientValue(nutrients: Record<string, any> | undefined, meta: { key: MicroNutrientKey; aliases?: string[] }) {
+  if (!nutrients) return 0
+  const keys = [meta.key, ...(meta.aliases || [])]
+  for (const key of keys) {
+    const value = normalizeNutrientNumber(nutrients[key])
+    if (value > 0) return value
+  }
+  return 0
+}
+
+function getRecipeMicroTotals(recipe: UserRecipe | null | undefined): MicroNutrientTotals {
+  if (!recipe) return {}
+  return (recipe.items || []).reduce<MicroNutrientTotals>((totals, item: any) => {
+    const rawRatio = Number(item?.ratio)
+    const ratio = Number.isFinite(rawRatio) ? Math.max(0, rawRatio) / 100 : 1
+    const nutrients = item?.nutrients || {}
+    MICRO_NUTRIENT_META.forEach((meta) => {
+      const value = getMicroNutrientValue(nutrients, meta) * ratio
+      if (value > 0) {
+        totals[meta.key] = roundNutrient((totals[meta.key] || 0) + value)
+      }
+    })
+    return totals
+  }, {})
+}
+
+function getVisibleMicroRows(totals: MicroNutrientTotals, limit?: number) {
+  const rows = MICRO_NUTRIENT_META
+    .map((meta) => ({ ...meta, value: totals[meta.key] || 0 }))
+    .filter((row) => row.value > 0)
+  return typeof limit === 'number' ? rows.slice(0, limit) : rows
+}
+
+function scaleMicroTotals(totals: MicroNutrientTotals, scale: number): MicroNutrientTotals {
+  if (!Number.isFinite(scale) || scale <= 0 || Math.abs(scale - 1) < 0.0001) return totals
+  return Object.entries(totals).reduce<MicroNutrientTotals>((next, [key, value]) => {
+    next[key as MicroNutrientKey] = roundNutrient((Number(value) || 0) * scale)
+    return next
+  }, {})
+}
+
+function formatMicroValue(value: number) {
+  if (value >= 10) return String(Math.round(value))
+  if (value >= 1) return String(Math.round(value * 10) / 10)
+  return String(Math.round(value * 100) / 100)
+}
+
+function scaleRecipeItemsNutrients(
+  items: UserRecipe['items'],
+  scales: { calories: number; protein: number; carbs: number; fat: number; micro: number }
+) {
+  const resolveScale = (field: string) => {
+    if (field === 'calories') return scales.calories
+    if (field === 'protein') return scales.protein
+    if (field === 'carbs') return scales.carbs
+    if (field === 'fat') return scales.fat
+    return scales.micro
+  }
+  return (items || []).map((item: any) => {
+    const nutrients = { ...(item?.nutrients || {}) }
+    Object.keys(nutrients).forEach((key) => {
+      const value = Number(nutrients[key])
+      const scale = resolveScale(key)
+      if (Number.isFinite(value)) {
+        nutrients[key] = Math.round(value * (Number.isFinite(scale) && scale > 0 ? scale : 1) * 100) / 100
+      }
+    })
+    if (nutrients.sodium_mg == null && nutrients.sodiumMg != null) {
+      nutrients.sodium_mg = nutrients.sodiumMg
+    }
+    if (nutrients.sodiumMg == null && nutrients.sodium_mg != null) {
+      nutrients.sodiumMg = nutrients.sodium_mg
+    }
+    return { ...item, nutrients }
+  })
+}
+
 function RecipesPage() {
   const [recipes, setRecipes] = useState<UserRecipe[]>([])
   const [loading, setLoading] = useState(false)
+  const [editingRecipe, setEditingRecipe] = useState<UserRecipe | null>(null)
+  const [nutritionDraft, setNutritionDraft] = useState<NutritionDraft>({
+    calories: '0',
+    protein: '0',
+    carbs: '0',
+    fat: '0'
+  })
+  const [microTotalsDraft, setMicroTotalsDraft] = useState<MicroNutrientTotals>({})
+  const [nutritionSaving, setNutritionSaving] = useState(false)
+  const [macroExpanded, setMacroExpanded] = useState(true)
+  const [microExpanded, setMicroExpanded] = useState(false)
 
   /** 加载食谱列表 */
   const loadRecipes = async () => {
@@ -93,39 +298,109 @@ function RecipesPage() {
     }
   }
 
-  /** 
-   * 查看食谱详情（以记录详情形式展示）
-   * 注意：食谱不是真实的饮食记录，这里构造临时对象用于复用记录详情页展示。
-   * 保留 storage 传参方式，因为食谱 ID 不对应 user_food_records 表中的记录。
-   * 未来可考虑为食谱创建专门的详情页。
-   */
-  const handleViewDetail = (recipe: UserRecipe) => {
-    // 构造临时 record 对象用于展示
-    const record: FoodRecord = {
-      id: recipe.id,
-      user_id: recipe.user_id,
-      meal_type: (['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack', 'snack'].includes(recipe.meal_type || '')
-        ? recipe.meal_type
-        : 'afternoon_snack') as any,
-      image_path: recipe.image_path,
-      description: recipe.description,
-      insight: null,
-      pfc_ratio_comment: null,
-      absorption_notes: null,
-      context_advice: null,
-      items: recipe.items,
-      total_calories: recipe.total_calories,
-      total_protein: recipe.total_protein,
-      total_carbs: recipe.total_carbs,
-      total_fat: recipe.total_fat,
-      total_weight_grams: recipe.total_weight_grams,
-      record_time: recipe.created_at,
-      created_at: recipe.created_at
+  /** 打开营养编辑弹窗 */
+  const handleOpenNutritionEditor = (recipe: UserRecipe) => {
+    setEditingRecipe(recipe)
+    setNutritionDraft({
+      calories: toDraftNumber(recipe.total_calories),
+      protein: toDraftNumber(recipe.total_protein),
+      carbs: toDraftNumber(recipe.total_carbs),
+      fat: toDraftNumber(recipe.total_fat)
+    })
+    setMicroTotalsDraft(getRecipeMicroTotals(recipe))
+    setMacroExpanded(true)
+    setMicroExpanded(false)
+  }
+
+  const handleCloseNutritionEditor = () => {
+    if (nutritionSaving) return
+    setEditingRecipe(null)
+  }
+
+  const updateNutritionDraft = (key: keyof NutritionDraft, value: string) => {
+    setNutritionDraft((prev) => {
+      if (key === 'calories') {
+        const nextCalories = parseDraftNumber(value)
+        if (nextCalories == null) return { ...prev, calories: value }
+        const { draft, scale } = scaleMacrosByCalories(prev, nextCalories)
+        setMicroTotalsDraft((current) => scaleMicroTotals(current, scale))
+        return draft
+      }
+
+      const previousCalories = parseDraftNumber(prev.calories) ?? 0
+      const next = { ...prev, [key]: value }
+      const protein = parseDraftNumber(next.protein)
+      const carbs = parseDraftNumber(next.carbs)
+      const fat = parseDraftNumber(next.fat)
+      if (protein == null || carbs == null || fat == null) return next
+      const nextCalories = calcCaloriesFromMacros(protein, carbs, fat)
+      if (previousCalories > 0) {
+        setMicroTotalsDraft((current) => scaleMicroTotals(current, nextCalories / previousCalories))
+      }
+      return {
+        ...next,
+        calories: formatDraftValue(nextCalories)
+      }
+    })
+  }
+
+  const adjustNutritionCalories = (delta: number) => {
+    setNutritionDraft((prev) => {
+      const currentCalories = parseDraftNumber(prev.calories) ?? calcCaloriesFromMacros(
+        parseDraftNumber(prev.protein) ?? 0,
+        parseDraftNumber(prev.carbs) ?? 0,
+        parseDraftNumber(prev.fat) ?? 0
+      )
+      const { draft, scale } = scaleMacrosByCalories(prev, Math.max(0, currentCalories + delta))
+      setMicroTotalsDraft((current) => scaleMicroTotals(current, scale))
+      return draft
+    })
+  }
+
+  /** 保存收藏餐食营养信息 */
+  const handleSaveNutrition = async () => {
+    if (!editingRecipe || nutritionSaving) return
+
+    const totalCalories = parseDraftNumber(nutritionDraft.calories)
+    const totalProtein = parseDraftNumber(nutritionDraft.protein)
+    const totalCarbs = parseDraftNumber(nutritionDraft.carbs)
+    const totalFat = parseDraftNumber(nutritionDraft.fat)
+
+    if (totalCalories == null || totalProtein == null || totalCarbs == null || totalFat == null) {
+      Taro.showToast({ title: '请输入有效营养数值', icon: 'none' })
+      return
     }
 
-    Taro.setStorageSync('recordDetail', record)
-    Taro.navigateTo({ url: extraPkgUrl('/pages/record-detail/index') })
+    setNutritionSaving(true)
+    try {
+      const originalCalories = Math.max(0, Number(editingRecipe.total_calories) || 0)
+      const originalProtein = Math.max(0, Number(editingRecipe.total_protein) || 0)
+      const originalCarbs = Math.max(0, Number(editingRecipe.total_carbs) || 0)
+      const originalFat = Math.max(0, Number(editingRecipe.total_fat) || 0)
+      const scales = {
+        calories: originalCalories > 0 ? totalCalories / originalCalories : 1,
+        protein: originalProtein > 0 ? totalProtein / originalProtein : 1,
+        carbs: originalCarbs > 0 ? totalCarbs / originalCarbs : 1,
+        fat: originalFat > 0 ? totalFat / originalFat : 1,
+        micro: originalCalories > 0 ? totalCalories / originalCalories : 1
+      }
+      const { recipe } = await updateUserRecipe(editingRecipe.id, {
+        items: scaleRecipeItemsNutrients(editingRecipe.items, scales),
+        total_calories: totalCalories,
+        total_protein: totalProtein,
+        total_carbs: totalCarbs,
+        total_fat: totalFat
+      })
+      setRecipes((prev) => prev.map((item) => item.id === recipe.id ? recipe : item))
+      setEditingRecipe(null)
+      Taro.showToast({ title: '已保存', icon: 'success' })
+    } catch (e: any) {
+      await showUnifiedApiError(e, '保存失败')
+    } finally {
+      setNutritionSaving(false)
+    }
   }
+
   /** 删除食谱 */
   const handleDeleteRecipe = async (recipe: UserRecipe) => {
     const { confirm } = await Taro.showModal({
@@ -208,10 +483,12 @@ function RecipesPage() {
                   {/* 营养摘要 */}
                   <View className='nutrition-summary'>
                     <View className='nutrition-item highlight'>
-                      <Text className='nutrition-value'>
-                        {formatNutrition(recipe.total_calories)}
-                      </Text>
-                      <Text className='nutrition-unit'>kcal</Text>
+                      <View className='nutrition-calorie-line'>
+                        <Text className='nutrition-value'>
+                          {formatNutrition(recipe.total_calories)}
+                        </Text>
+                        <Text className='nutrition-unit'>kcal</Text>
+                      </View>
                     </View>
                     <View className='nutrition-divider' />
                     <View className='nutrition-item'>
@@ -238,6 +515,17 @@ function RecipesPage() {
                         ))}
                       </View>
                     </ScrollView>
+                  )}
+
+                  {getVisibleMicroRows(getRecipeMicroTotals(recipe), 4).length > 0 && (
+                    <View className='micro-summary'>
+                      {getVisibleMicroRows(getRecipeMicroTotals(recipe), 4).map((row) => (
+                        <View key={row.key} className='micro-summary-item'>
+                          <Text className='micro-summary-label'>{row.label}</Text>
+                          <Text className='micro-summary-value'>{formatMicroValue(row.value)}{row.unit}</Text>
+                        </View>
+                      ))}
+                    </View>
                   )}
 
                   <View className='card-footer'>
@@ -269,10 +557,10 @@ function RecipesPage() {
                         className='action-btn edit-btn'
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleViewDetail(recipe)
+                          handleOpenNutritionEditor(recipe)
                         }}
                       >
-                        <Text className='iconfont icon-ic_detail'></Text>
+                        <Text className='iconfont icon-edit'></Text>
                       </View>
                       <View
                         className='action-btn use-btn'
@@ -299,6 +587,114 @@ function RecipesPage() {
         )}
         <View className='safe-area-bottom' />
       </ScrollView>
+
+      {editingRecipe && (
+        <View className='nutrition-editor-overlay' catchMove>
+          <View className='nutrition-editor-mask' onClick={handleCloseNutritionEditor} />
+          <View className='nutrition-editor-panel'>
+            <View className='nutrition-editor-handle' />
+            <View className='nutrition-editor-header'>
+              <View>
+                <Text className='nutrition-editor-title'>修改营养信息</Text>
+                <Text className='nutrition-editor-subtitle'>{editingRecipe.recipe_name}</Text>
+              </View>
+              <View className='nutrition-editor-close' onClick={handleCloseNutritionEditor}>
+                <Text className='iconfont icon-close' />
+              </View>
+            </View>
+
+            <View className='nutrition-editor-body'>
+              <View className='nutrition-calorie-editor'>
+                <Text className='nutrition-editor-field-label'>总热量</Text>
+                <View className='nutrition-calorie-control'>
+                  <View className='nutrition-calorie-stepper' onClick={() => adjustNutritionCalories(-10)}>
+                    <Text className='nutrition-calorie-stepper-text'>−</Text>
+                  </View>
+                  <View className='nutrition-calorie-input-card'>
+                    <Input
+                      className='nutrition-calorie-input'
+                      type='digit'
+                      value={nutritionDraft.calories}
+                      placeholder='0'
+                      onInput={(e) => updateNutritionDraft('calories', e.detail.value)}
+                    />
+                    <Text className='nutrition-calorie-unit'>kcal</Text>
+                  </View>
+                  <View className='nutrition-calorie-stepper nutrition-calorie-stepper--plus' onClick={() => adjustNutritionCalories(10)}>
+                    <Text className='nutrition-calorie-stepper-text'>+</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View className='nutrition-editor-fold-section'>
+                <View className='nutrition-editor-fold-header' onClick={() => setMacroExpanded((prev) => !prev)}>
+                  <View>
+                    <Text className='nutrition-editor-fold-title'>宏量营养素</Text>
+                    <Text className='nutrition-editor-fold-subtitle'>修改后会联动总热量</Text>
+                  </View>
+                  <Text className={`iconfont icon-right nutrition-editor-fold-icon ${macroExpanded ? 'expanded' : ''}`} />
+                </View>
+                {macroExpanded && (
+                  <View className='nutrition-editor-fields'>
+                    {NUTRITION_FIELDS.map((field) => (
+                      <View key={field.key} className={`nutrition-editor-field nutrition-editor-field--${field.key}`}>
+                        <Text className='nutrition-editor-field-label'>{field.label}</Text>
+                        <View className='nutrition-editor-input-wrap'>
+                          <Input
+                            className='nutrition-editor-input'
+                            type='digit'
+                            value={nutritionDraft[field.key]}
+                            placeholder={field.placeholder}
+                            onInput={(e) => updateNutritionDraft(field.key, e.detail.value)}
+                          />
+                          <Text className='nutrition-editor-unit'>{field.unit}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {getVisibleMicroRows(microTotalsDraft).length > 0 && (
+                <View className='nutrition-editor-micro-section'>
+                  <View className='nutrition-editor-micro-header' onClick={() => setMicroExpanded((prev) => !prev)}>
+                    <View>
+                      <Text className='nutrition-editor-micro-title'>微量营养素</Text>
+                      <Text className='nutrition-editor-micro-hint'>随总热量按比例同步变化</Text>
+                    </View>
+                    <Text className={`iconfont icon-right nutrition-editor-fold-icon ${microExpanded ? 'expanded' : ''}`} />
+                  </View>
+                  {microExpanded && (
+                    <View className='nutrition-editor-micro-grid'>
+                      {getVisibleMicroRows(microTotalsDraft).map((row) => (
+                        <View key={row.key} className='nutrition-editor-micro-cell'>
+                          <Text className='nutrition-editor-micro-label'>{row.label}</Text>
+                          <Text className='nutrition-editor-micro-value'>
+                            {formatMicroValue(row.value)}
+                            <Text className='nutrition-editor-micro-unit'>{row.unit}</Text>
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+
+            <View className='nutrition-editor-actions'>
+              <View className='nutrition-editor-btn nutrition-editor-btn--cancel' onClick={handleCloseNutritionEditor}>
+                <Text>取消</Text>
+              </View>
+              <View
+                className={`nutrition-editor-btn nutrition-editor-btn--confirm ${nutritionSaving ? 'nutrition-editor-btn--disabled' : ''}`}
+                onClick={() => void handleSaveNutrition()}
+              >
+                <Text>保存修改</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   )
 }

@@ -201,19 +201,29 @@
     flex: 1.2;
     align-items: flex-start;
     padding-left: 12rpx;
+
+    .nutrition-calorie-line {
+      display: inline-flex;
+      align-items: baseline;
+      flex-wrap: nowrap;
+      white-space: nowrap;
+      max-width: 100%;
+    }
     
     .nutrition-value {
       font-size: 36rpx;
       font-weight: 700;
       color: #00bc7d;
       line-height: 1;
+      white-space: nowrap;
     }
     
     .nutrition-unit {
       font-size: 20rpx;
       color: #00bc7d;
       font-weight: 500;
-      margin-top: 4rpx;
+      margin-left: 6rpx;
+      white-space: nowrap;
     }
   }
   
@@ -253,6 +263,45 @@
   background: #f1f5f9;
   padding: 6rpx 16rpx;
   border-radius: 8rpx;
+}
+
+.micro-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8rpx;
+  padding: 12rpx;
+  border-radius: 16rpx;
+  background: linear-gradient(135deg, #f8fafc 0%, #eefdf6 100%);
+  border: 1rpx solid #e2e8f0;
+}
+
+.micro-summary-item {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.micro-summary-label {
+  max-width: 100%;
+  font-size: 18rpx;
+  color: #94a3b8;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.micro-summary-value {
+  max-width: 100%;
+  font-size: 21rpx;
+  font-weight: 700;
+  color: #334155;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 // 底部区域
@@ -332,4 +381,392 @@
 // 安全区
 .safe-area-bottom {
   height: env(safe-area-inset-bottom);
+}
+
+.nutrition-editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.nutrition-editor-mask {
+  position: absolute;
+  inset: 0;
+  background: rgb(15 23 42 / 42%);
+}
+
+.nutrition-editor-panel {
+  position: relative;
+  width: 100%;
+  max-height: 82vh;
+  box-sizing: border-box;
+  padding: 18rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 32rpx 32rpx 0 0;
+  box-shadow: 0 -18rpx 48rpx rgb(15 23 42 / 16%);
+  animation: nutritionSheetIn 0.22s ease-out;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nutrition-editor-handle {
+  width: 72rpx;
+  height: 8rpx;
+  margin: 0 auto 26rpx;
+  border-radius: 999rpx;
+  background: #cbd5e1;
+}
+
+.nutrition-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24rpx;
+  flex-shrink: 0;
+}
+
+.nutrition-editor-title {
+  display: block;
+  font-size: 34rpx;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.nutrition-editor-subtitle {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.nutrition-editor-close {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 999rpx;
+  background: #eef2f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .iconfont {
+    font-size: 28rpx;
+    color: #64748b;
+  }
+}
+
+.nutrition-editor-fields {
+  margin-top: 18rpx;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18rpx;
+}
+
+.nutrition-editor-body {
+  flex: 1;
+  min-height: 0;
+  max-height: 56vh;
+  margin: 0 -8rpx;
+  padding: 0 8rpx;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+.nutrition-calorie-editor {
+  margin-top: 30rpx;
+  box-sizing: border-box;
+  padding: 22rpx;
+  border-radius: 24rpx;
+  border: 1rpx solid rgb(0 188 125 / 24%);
+  background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 72%);
+  box-shadow: 0 8rpx 20rpx rgb(15 23 42 / 4%);
+}
+
+.nutrition-editor-fold-section {
+  margin-top: 22rpx;
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: #fff;
+  border: 1rpx solid #e2e8f0;
+  box-shadow: 0 8rpx 20rpx rgb(15 23 42 / 4%);
+}
+
+.nutrition-editor-fold-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.nutrition-editor-fold-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.nutrition-editor-fold-subtitle {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  color: #94a3b8;
+}
+
+.nutrition-editor-fold-icon {
+  flex-shrink: 0;
+  font-size: 30rpx;
+  color: #94a3b8;
+  transition: transform 0.2s ease;
+
+  &.expanded {
+    transform: rotate(90deg);
+  }
+}
+
+.nutrition-calorie-control {
+  margin-top: 18rpx;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.nutrition-calorie-stepper {
+  width: 76rpx;
+  height: 76rpx;
+  border-radius: 18rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  color: #475569;
+  flex-shrink: 0;
+
+  &:active {
+    background: #e2e8f0;
+    transform: scale(0.95);
+  }
+}
+
+.nutrition-calorie-stepper--plus {
+  color: #059669;
+  background: #dcfce7;
+
+  &:active {
+    background: #bbf7d0;
+  }
+}
+
+.nutrition-calorie-stepper-text {
+  font-size: 42rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.nutrition-calorie-input-card {
+  flex: 1;
+  min-width: 0;
+  height: 78rpx;
+  padding: 0 20rpx;
+  border-radius: 18rpx;
+  background: rgb(255 255 255 / 86%);
+  border: 1rpx solid rgba(196, 210, 200, 0.66);
+  display: flex;
+  align-items: baseline;
+  gap: 10rpx;
+}
+
+.nutrition-calorie-input {
+  flex: 1;
+  min-width: 0;
+  height: 78rpx;
+  font-size: 42rpx;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 78rpx;
+  text-align: center;
+}
+
+.nutrition-calorie-unit {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  font-weight: 800;
+  color: #059669;
+}
+
+.nutrition-editor-field {
+  box-sizing: border-box;
+  padding: 22rpx;
+  border-radius: 22rpx;
+  background: #fff;
+  border: 1rpx solid #e2e8f0;
+  box-shadow: 0 8rpx 20rpx rgb(15 23 42 / 4%);
+}
+
+.nutrition-editor-field-label {
+  display: block;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #334155;
+}
+
+.nutrition-editor-input-wrap {
+  margin-top: 16rpx;
+  display: flex;
+  align-items: baseline;
+  gap: 10rpx;
+}
+
+.nutrition-editor-input {
+  flex: 1;
+  min-width: 0;
+  height: 64rpx;
+  font-size: 36rpx;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 64rpx;
+}
+
+.nutrition-editor-unit {
+  flex: none;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.nutrition-editor-actions {
+  margin-top: 30rpx;
+  display: flex;
+  gap: 18rpx;
+  flex-shrink: 0;
+}
+
+.nutrition-editor-micro-section {
+  margin-top: 22rpx;
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: #fff;
+  border: 1rpx solid #e2e8f0;
+  box-shadow: 0 8rpx 20rpx rgb(15 23 42 / 4%);
+}
+
+.nutrition-editor-micro-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.nutrition-editor-micro-title {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.nutrition-editor-micro-hint {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  color: #94a3b8;
+}
+
+.nutrition-editor-micro-grid {
+  margin-top: 18rpx;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10rpx;
+}
+
+.nutrition-editor-micro-cell {
+  min-width: 0;
+  min-height: 92rpx;
+  padding: 12rpx 6rpx;
+  border-radius: 18rpx;
+  background: #f8fafc;
+  border: 1rpx solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  box-sizing: border-box;
+}
+
+.nutrition-editor-micro-label {
+  max-width: 100%;
+  font-size: 19rpx;
+  font-weight: 600;
+  color: #64748b;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nutrition-editor-micro-value {
+  max-width: 100%;
+  font-size: 25rpx;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nutrition-editor-micro-unit {
+  margin-left: 3rpx;
+  font-size: 18rpx;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.nutrition-editor-btn {
+  flex: 1;
+  height: 88rpx;
+  border-radius: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  font-weight: 800;
+
+  &:active {
+    transform: scale(0.98);
+    opacity: 0.86;
+  }
+}
+
+.nutrition-editor-btn--cancel {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.nutrition-editor-btn--confirm {
+  color: #fff;
+  background: linear-gradient(135deg, #00bc7d 0%, #00bba7 100%);
+  box-shadow: 0 10rpx 22rpx rgb(0 188 125 / 24%);
+}
+
+.nutrition-editor-btn--disabled {
+  opacity: 0.55;
+}
+
+@keyframes nutritionSheetIn {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
 }

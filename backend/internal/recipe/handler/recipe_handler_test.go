@@ -52,7 +52,7 @@ func (m *mockRecipeService) Delete(ctx context.Context, userID, recipeID string)
 	return nil
 }
 
-func (m *mockRecipeService) Use(ctx context.Context, userID, recipeID string, mealType *string) (string, error) {
+func (m *mockRecipeService) Use(ctx context.Context, userID, recipeID string, mealType *string, entryType *string) (string, error) {
 	return "record-1", nil
 }
 
