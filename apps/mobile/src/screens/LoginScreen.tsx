@@ -13,7 +13,7 @@ export function LoginScreen() {
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [nickname, setNickname] = useState('')
-  const [accountUsername, setAccountUsername] = useState('')
+  const [accountPhone, setAccountPhone] = useState('')
   const [accountPassword, setAccountPassword] = useState('')
   const [inviteCode, setInviteCode] = useState('')
   const [userId, setUserId] = useState('')
@@ -45,14 +45,14 @@ export function LoginScreen() {
   }
 
   return (
-    <Page title="Food Link" subtitle="使用微信或账号密码登录，继续同步小程序中的饮食、分析、圈子和会员数据。">
+    <Page title="Food Link" subtitle="使用微信或手机号密码登录，继续同步小程序中的饮食、分析、圈子和会员数据。">
       <Card>
         <Text style={styles.sectionTitle}>登录</Text>
         <Text style={styles.subtitle}>使用微信授权快速登录，饮食、分析、圈子和会员数据会同步到当前账号。</Text>
         <AppButton
           label="微信一键登录"
           loading={loading}
-          onPress={() => run(() => loginWithWechat(inviteCode), '请稍后重试，或使用账号密码登录')}
+          onPress={() => run(() => loginWithWechat(inviteCode), '请稍后重试，或使用手机号密码登录')}
         />
         <TextInput
           value={inviteCode}
@@ -62,19 +62,19 @@ export function LoginScreen() {
           autoCorrect={false}
           style={styles.input}
         />
-        <Text style={styles.hint}>微信登录或注册账号时填写邀请码，可继承小程序邀请奖励关系。</Text>
+        <Text style={styles.hint}>微信登录或注册时填写邀请码，可继承小程序邀请奖励关系。</Text>
         <View style={styles.segment}>
           <Pressable
             style={[styles.segmentItem, mode === 'login' && styles.segmentItemActive]}
             onPress={() => setMode('login')}
           >
-            <Text style={[styles.segmentText, mode === 'login' && styles.segmentTextActive]}>账号登录</Text>
+            <Text style={[styles.segmentText, mode === 'login' && styles.segmentTextActive]}>手机号登录</Text>
           </Pressable>
           <Pressable
             style={[styles.segmentItem, mode === 'register' && styles.segmentItemActive]}
             onPress={() => setMode('register')}
           >
-            <Text style={[styles.segmentText, mode === 'register' && styles.segmentTextActive]}>注册账号</Text>
+            <Text style={[styles.segmentText, mode === 'register' && styles.segmentTextActive]}>注册手机号</Text>
           </Pressable>
         </View>
         {mode === 'register' && (
@@ -87,11 +87,12 @@ export function LoginScreen() {
           />
         )}
         <TextInput
-          value={accountUsername}
-          onChangeText={setAccountUsername}
-          placeholder="用户名"
+          value={accountPhone}
+          onChangeText={setAccountPhone}
+          placeholder="手机号"
           autoCapitalize="none"
           autoCorrect={false}
+          keyboardType="phone-pad"
           style={styles.input}
         />
         <TextInput
@@ -107,9 +108,9 @@ export function LoginScreen() {
           loading={loading}
           onPress={() => run(
             () => mode === 'login'
-              ? loginWithPassword(accountUsername, accountPassword)
-              : registerWithPassword(accountUsername, accountPassword, nickname, inviteCode),
-            mode === 'login' ? '请检查用户名和密码' : '请检查用户名是否可用，密码至少 8 位',
+              ? loginWithPassword(accountPhone, accountPassword)
+              : registerWithPassword(accountPhone, accountPassword, nickname, inviteCode),
+            mode === 'login' ? '请检查手机号和密码' : '请检查手机号是否可用，密码至少 8 位',
           )}
         />
       </Card>

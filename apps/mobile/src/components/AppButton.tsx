@@ -4,20 +4,21 @@ import { colors, radius } from '../theme'
 interface AppButtonProps {
   label: string
   loading?: boolean
+  disabled?: boolean
   variant?: 'primary' | 'secondary' | 'ghost'
   onPress: () => void
 }
 
-export function AppButton({ label, loading, variant = 'primary', onPress }: AppButtonProps) {
+export function AppButton({ label, loading, disabled, variant = 'primary', onPress }: AppButtonProps) {
   return (
     <Pressable
-      disabled={loading}
+      disabled={Boolean(loading || disabled)}
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,
         styles[variant],
-        pressed && styles.pressed,
-        loading && styles.disabled,
+        pressed && !disabled && styles.pressed,
+        (loading || disabled) && styles.disabled,
       ]}
     >
       {loading ? (

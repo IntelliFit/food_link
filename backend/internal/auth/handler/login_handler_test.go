@@ -149,3 +149,28 @@ func TestLoginHandler_PasswordRegisterAndLogin(t *testing.T) {
 	r.ServeHTTP(loginW, loginReq)
 	assert.Equal(t, http.StatusOK, loginW.Code)
 }
+
+func TestLoginHandler_PhonePasswordRegisterAndLogin(t *testing.T) {
+	_, userRepo := setupLoginTestDB(t)
+	cfg := &config.Config{
+		App: config.AppConfig{Env: "development"},
+		JWT: config.JWTConfig{AccessTokenTTLSeconds: 3600, RefreshTokenTTLSeconds: 86400},
+	}
+	jwtSvc := service.NewJWTService("test-secret-key-for-testing-only-min-32-chars", 3600, 86400)
+	h := NewLoginHandler(service.NewLoginService(cfg, userRepo, jwtSvc))
+	r := setupLoginRouter(h)
+
+	registerBody, _ := json.Marshal(map[string]string{"phone": "+86 138-0013-8000", "password": "password123"})
+	registerW := httptest.NewRecorder()
+	registerReq, _ := http.NewRequest(http.MethodPost, "/api/app/register/password", bytes.NewReader(registerBody))
+	registerReq.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(registerW, registerReq)
+	assert.Equal(t, http.StatusOK, registerW.Code)
+
+	loginBody, _ := json.Marshal(map[string]string{"phone": "13800138000", "password": "password123"})
+	loginW := httptest.NewRecorder()
+	loginReq, _ := http.NewRequest(http.MethodPost, "/api/app/login/password", bytes.NewReader(loginBody))
+	loginReq.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(loginW, loginReq)
+	assert.Equal(t, http.StatusOK, loginW.Code)
+}

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useFocusEffect } from '@react-navigation/native'
 import type { UserInfo } from '@food-link/core'
 import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
@@ -10,19 +11,28 @@ import { userFacingErrorMessage } from '../utils/errors'
 
 export function AccountSecurityScreen() {
   const [profile, setProfile] = useState<UserInfo | null>(null)
-  const [username, setUsername] = useState('')
+  const [phone, setPhone] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const normalizedPhone = normalizeMainlandPhone(phone)
+  const trimmedPassword = newPassword.trim()
+  const trimmedConfirmPassword = confirmPassword.trim()
+  const phoneValid = /^1[3-9]\d{9}$/.test(normalizedPhone)
+  const passwordLongEnough = trimmedPassword.length >= 8
+  const passwordMatched = Boolean(trimmedConfirmPassword) && trimmedPassword === trimmedConfirmPassword
+  const requiresCurrentPassword = Boolean(profile?.has_password)
+  const currentPasswordReady = !requiresCurrentPassword || currentPassword.trim().length > 0
+  const canSave = phoneValid && passwordLongEnough && passwordMatched && currentPasswordReady && !saving
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const data = await apiClient.getUserProfile()
       setProfile(data)
-      setUsername(data.username || '')
+      setPhone(data.telephone || '')
     } catch (error) {
       Alert.alert('获取账号信息失败', userFacingErrorMessage(error))
     } finally {
@@ -30,40 +40,44 @@ export function AccountSecurityScreen() {
     }
   }, [])
 
-  useEffect(() => {
-    void load()
-  }, [load])
+  useFocusEffect(
+    useCallback(() => {
+      void load()
+    }, [load]),
+  )
 
   const save = async () => {
-    const trimmedUsername = username.trim()
-    const trimmedPassword = newPassword.trim()
-    if (!trimmedUsername) {
-      Alert.alert('请输入用户名', '用户名将用于账号密码登录。')
+    if (!normalizedPhone) {
+      Alert.alert('请输入手机号', '手机号将用于 App 手机号密码登录。')
+      return
+    }
+    if (!phoneValid) {
+      Alert.alert('手机号格式不正确', '请填写 11 位大陆手机号。')
       return
     }
     if (trimmedPassword.length < 8) {
       Alert.alert('密码太短', '密码至少需要 8 位。')
       return
     }
-    if (trimmedPassword !== confirmPassword.trim()) {
+    if (trimmedPassword !== trimmedConfirmPassword) {
       Alert.alert('两次密码不一致', '请重新输入确认密码。')
       return
     }
     if (profile?.has_password && !currentPassword.trim()) {
-      Alert.alert('请输入当前密码', '修改已设置的账号密码需要先验证当前密码。')
+      Alert.alert('请输入当前密码', '修改已设置的密码登录方式需要先验证当前密码。')
       return
     }
     setSaving(true)
     try {
       await apiClient.setAccountPassword({
-        username: trimmedUsername,
+        phone: normalizedPhone,
         password: trimmedPassword,
         currentPassword: currentPassword.trim(),
       })
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-      Alert.alert('已保存', '之后可以使用用户名和密码登录 App。')
+      Alert.alert('已保存', '之后可以使用手机号和密码登录 App。')
       await load()
     } catch (error) {
       Alert.alert('保存失败', userFacingErrorMessage(error))
@@ -73,34 +87,48 @@ export function AccountSecurityScreen() {
   }
 
   return (
-    <Page title="账号安全" subtitle="设置 App 用户名和密码，作为微信登录之外的备用登录方式。" refreshing={loading} onRefresh={load}>
+    <Page title="账号安全" subtitle="设置 App 手机号和密码，作为微信登录之外的备用登录方式。" refreshing={loading} onRefresh={load}>
       <Card>
         <Text style={styles.sectionTitle}>登录方式</Text>
         <InfoRow label="微信登录" value={profile?.openid ? '已连接' : '可用'} />
-        <InfoRow label="账号密码" value={profile?.has_password ? '已设置' : '未设置'} />
+        <InfoRow label="手机号" value={maskPhone(profile?.telephone) || '未绑定'} />
+        <InfoRow label="密码登录" value={profile?.has_password ? '已设置' : '未设置'} />
         {profile?.password_set_at ? <InfoRow label="设置时间" value={formatDate(profile.password_set_at)} /> : null}
       </Card>
 
       <Card>
-        <Text style={styles.sectionTitle}>{profile?.has_password ? '修改账号密码' : '设置账号密码'}</Text>
-        <Field label="用户名" value={username} onChangeText={setUsername} placeholder="请输入 3-32 位字母、数字或下划线" />
+        <Text style={styles.sectionTitle}>{profile?.has_password ? '修改手机号密码' : '设置手机号密码'}</Text>
+        <Field label="手机号" value={phone} onChangeText={setPhone} placeholder="请输入 11 位手机号" keyboardType="phone-pad" />
+        <Text style={[styles.formHint, phone && !phoneValid && styles.formHintWarning]}>用于 App 手机号密码登录，保存后会同步到账号资料。</Text>
         {profile?.has_password ? (
-          <Field
-            label="当前密码"
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            placeholder="修改密码需验证当前密码"
-            secureTextEntry
-          />
+          <>
+            <Field
+              label="当前密码"
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              placeholder="修改密码需验证当前密码"
+              secureTextEntry
+            />
+            <Text style={[styles.formHint, !currentPasswordReady && styles.formHintWarning]}>已设置密码的账号，修改时需要填写当前密码。</Text>
+          </>
         ) : null}
         <Field label="新密码" value={newPassword} onChangeText={setNewPassword} placeholder="至少 8 位" secureTextEntry />
         <Field label="确认新密码" value={confirmPassword} onChangeText={setConfirmPassword} placeholder="再次输入新密码" secureTextEntry />
-        <AppButton label="保存账号密码" loading={saving} onPress={save} />
+        <View style={styles.passwordStatusRow}>
+          <StatusPill label="至少 8 位" active={passwordLongEnough} />
+          <StatusPill label="两次一致" active={passwordMatched} />
+        </View>
+        <AppButton label="保存手机号和密码" loading={saving} disabled={!canSave} onPress={save} />
       </Card>
 
       <Card>
         <Text style={styles.sectionTitle}>说明</Text>
-        <Text style={styles.bodyText}>用户名会统一转为小写。设置后，登录页的“账号登录”可以作为微信登录之外的兜底方式。</Text>
+        <Text style={styles.bodyText}>设置后，登录页的“手机号登录”可以作为微信登录之外的兜底方式。旧版账号测试路径仍由后端兼容，不再作为普通用户入口展示。</Text>
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>账号注销</Text>
+        <Text style={styles.bodyText}>注销账号入口保留在个人主页编辑页底部，操作前会二次确认。注销后账号数据会按协议处理，本机登录状态也会清空。</Text>
       </Card>
     </Page>
   )
@@ -115,18 +143,33 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+function normalizeMainlandPhone(value?: string | null): string {
+  let phone = String(value || '').trim().replace(/[\s-()]/g, '')
+  if (phone.startsWith('+')) phone = phone.slice(1)
+  if (phone.startsWith('86') && phone.length === 13) phone = phone.slice(2)
+  return phone
+}
+
+function maskPhone(value?: string | null): string {
+  const phone = normalizeMainlandPhone(value)
+  if (!/^1[3-9]\d{9}$/.test(phone)) return ''
+  return `${phone.slice(0, 3)}****${phone.slice(-4)}`
+}
+
 function Field({
   label,
   value,
   onChangeText,
   placeholder,
   secureTextEntry,
+  keyboardType,
 }: {
   label: string
   value: string
   onChangeText: (value: string) => void
   placeholder?: string
   secureTextEntry?: boolean
+  keyboardType?: 'default' | 'phone-pad'
 }) {
   return (
     <View style={styles.field}>
@@ -136,10 +179,19 @@ function Field({
         onChangeText={onChangeText}
         placeholder={placeholder}
         secureTextEntry={secureTextEntry}
+        keyboardType={keyboardType}
         autoCapitalize="none"
         autoCorrect={false}
         style={styles.input}
       />
+    </View>
+  )
+}
+
+function StatusPill({ label, active }: { label: string; active: boolean }) {
+  return (
+    <View style={[styles.statusPill, active && styles.statusPillActive]}>
+      <Text style={[styles.statusPillText, active && styles.statusPillTextActive]}>{label}</Text>
     </View>
   )
 }
@@ -181,6 +233,16 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontWeight: '700',
   },
+  formHint: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -8,
+    marginBottom: 14,
+  },
+  formHintWarning: {
+    color: colors.warning,
+  },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -194,5 +256,29 @@ const styles = StyleSheet.create({
   bodyText: {
     color: colors.textSecondary,
     lineHeight: 22,
+  },
+  passwordStatusRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: -2,
+    marginBottom: 14,
+  },
+  statusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: colors.surfaceMuted,
+  },
+  statusPillActive: {
+    backgroundColor: colors.brandSoft,
+  },
+  statusPillText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  statusPillTextActive: {
+    color: colors.brandDark,
   },
 })

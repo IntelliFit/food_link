@@ -105,6 +105,10 @@ export function getRecentRequestTraces(limit = RECENT_REQUEST_TRACE_LIMIT): Rece
   return recentRequestTraces.slice(-normalizedLimit)
 }
 
+export function clearRecentRequestTraces(): void {
+  recentRequestTraces.splice(0, recentRequestTraces.length)
+}
+
 export const apiClient = createFoodLinkApiClient({
   baseUrl: API_BASE_URL,
   adapters: {
