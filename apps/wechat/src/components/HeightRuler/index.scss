@@ -16,7 +16,7 @@
     width: 100%;
     box-sizing: border-box;
 
-    /* Left Side: The Ruler Scroll View */
+    /* Right Side: The Ruler Scroll View */
     .ruler-scroll-view {
         width: 320px;
 
@@ -47,7 +47,7 @@
 
             .tick-mark {
                 position: absolute;
-                left: 0;
+                right: 0;
                 top: 50%;
                 background-color: #e5e7eb;
                 height: 2px;
@@ -70,7 +70,7 @@
 
                 .tick-text {
                     position: absolute;
-                    left: 156px;
+                    right: 156px;
                     top: 50%;
                     font-size: 32px;
 
@@ -104,7 +104,7 @@
     /* Fixed Indicator Line */
     .center-indicator {
         position: absolute;
-        left: 0;
+        right: 0;
         top: 50%;
         width: 160px;
 
@@ -118,7 +118,7 @@
         pointer-events: none;
     }
 
-    /* Right Side: Value Display */
+    /* Left Side: Value Display */
     .value-display-area {
         flex: 1;
         height: 100%;
@@ -126,7 +126,7 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
-        padding-right: 20px;
+        padding-left: 20px;
 
         .label-question {
             font-size: 28px;
