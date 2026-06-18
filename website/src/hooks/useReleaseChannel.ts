@@ -29,9 +29,11 @@ export function useReleaseChannel(url: string) {
 
   useEffect(() => {
     const controller = new AbortController()
+    const requestUrl = new URL(url)
+    requestUrl.searchParams.set('ts', Date.now().toString())
 
-    fetch(url, {
-      cache: 'no-cache',
+    fetch(requestUrl.toString(), {
+      cache: 'no-store',
       signal: controller.signal,
     })
       .then((response) => {

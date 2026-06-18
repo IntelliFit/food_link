@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 
 const releaseBaseUrl = 'https://download.healthymax.cn'
 const fallbackReleaseVersion = '0.0.1'
-const fallbackReleaseBuild = '3'
+const fallbackReleaseBuild = '4'
 const fallbackReleasePath = `${releaseBaseUrl}/releases/android/${fallbackReleaseVersion}/${fallbackReleaseBuild}`
 
 export type AppDownloadChannel = 'stable' | 'beta'
