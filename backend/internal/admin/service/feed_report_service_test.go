@@ -12,8 +12,9 @@ import (
 )
 
 type fakeFeedReportRepo struct {
-	item          *admindomain.FeedReportItem
-	deletedTarget string
+	item              *admindomain.FeedReportItem
+	deletedTargetType string
+	deletedTargetID   string
 }
 
 func (r *fakeFeedReportRepo) List(ctx context.Context, input adminrepo.ListFeedReportInput) (*adminrepo.ListFeedReportResult, error) {
@@ -41,8 +42,9 @@ func (r *fakeFeedReportRepo) GetTargetSnapshot(ctx context.Context, targetType, 
 	return nil, nil
 }
 
-func (r *fakeFeedReportRepo) DeleteCirclePostTarget(ctx context.Context, postID string) error {
-	r.deletedTarget = postID
+func (r *fakeFeedReportRepo) DeleteFeedTargetContent(ctx context.Context, targetType, targetID string) error {
+	r.deletedTargetType = targetType
+	r.deletedTargetID = targetID
 	return nil
 }
 
@@ -102,10 +104,36 @@ func TestFeedReportServiceDeleteTargetContentNotifiesBothSides(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "resolved", updated.Status)
-	assert.Equal(t, "post-1", repo.deletedTarget)
+	assert.Equal(t, "circle_post", repo.deletedTargetType)
+	assert.Equal(t, "post-1", repo.deletedTargetID)
 	require.Len(t, sender.messages, 2)
 	assert.Equal(t, "reporter-user", sender.messages[0].receiverID)
 	assert.Equal(t, "reported-user", sender.messages[1].receiverID)
 	assert.Contains(t, sender.messages[0].content, "已被核实")
 	assert.Contains(t, sender.messages[1].content, "核实违规")
+}
+
+func TestFeedReportServiceDeleteFoodRecordTargetContentNotifiesBothSides(t *testing.T) {
+	reward := 1
+	repo := &fakeFeedReportRepo{item: &admindomain.FeedReportItem{
+		ID:             "report-1",
+		ReporterUserID: "reporter-user",
+		ReportedUserID: "reported-user",
+		TargetType:     "food_record",
+		TargetID:       "record-1",
+		Status:         "pending",
+	}}
+	sender := &recordingSystemMessageSender{}
+	svc := NewFeedReportService(repo, sender)
+
+	updated, err := svc.DeleteTargetContent(context.Background(), "report-1", "", "admin-user", &reward)
+
+	require.NoError(t, err)
+	assert.Equal(t, "resolved", updated.Status)
+	assert.Equal(t, "food_record", repo.deletedTargetType)
+	assert.Equal(t, "record-1", repo.deletedTargetID)
+	assert.Equal(t, "已从圈子中移除被举报内容。", updated.ResolutionNote)
+	require.Len(t, sender.messages, 2)
+	assert.Equal(t, "reporter-user", sender.messages[0].receiverID)
+	assert.Equal(t, "reported-user", sender.messages[1].receiverID)
 }

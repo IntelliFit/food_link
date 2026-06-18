@@ -218,14 +218,14 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
   }
 
   async function handleDeleteTargetContent() {
-    if (!item || item.target_type !== 'circle_post') return
+    if (!item || !canDeleteTargetContent(item.target_type)) return
     const trimmedRewardCredits = rewardCredits.trim()
     const parsedRewardCredits = Number(rewardCredits)
     if (trimmedRewardCredits === '' || !Number.isInteger(parsedRewardCredits) || parsedRewardCredits < 0) {
       toast.error('删除并处理举报时必须选择奖励积分，可填写 0')
       return
     }
-    if (!window.confirm('确定删除被举报的圈子内容吗？删除后该内容会从圈子中移除，相关点赞、评论和互动通知也会清理。')) return
+    if (!window.confirm('确定移除被举报内容吗？操作后该内容会从圈子中移除，相关点赞、评论和互动通知也会清理。')) return
     setDeletingTarget(true)
     try {
       const data = await adminRequest<{ item: FeedReportItem }>(
@@ -236,11 +236,11 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
         },
       )
       setItem(data.item)
-      setResolutionNote(data.item.resolution_note || resolutionNote || '已删除被举报的圈子内容。')
+      setResolutionNote(data.item.resolution_note || resolutionNote || defaultDeleteTargetResolutionNote(item.target_type))
       setRewardCredits(String(data.item.reward_credits ?? 0))
       setSelectedStatus(data.item.status)
       setTarget(null)
-      toast.success('被举报的圈子内容已删除')
+      toast.success('被举报内容已从圈子中移除')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除被举报内容失败')
     } finally {
@@ -450,7 +450,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                   <CardTitle className='text-lg text-destructive'>危险操作</CardTitle>
                 </CardHeader>
                 <CardContent className='space-y-3'>
-                  {item.target_type === 'circle_post' ? (
+                  {canDeleteTargetContent(item.target_type) ? (
                     <Button
                       variant='destructive'
                       className='w-full'
@@ -458,7 +458,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                       disabled={deletingTarget || !target}
                     >
                       {deletingTarget ? <Loader2 className='mr-1 size-4 animate-spin' /> : <Trash2 className='mr-1 size-4' />}
-                      删除被举报的圈子内容
+                      从圈子中移除被举报内容
                     </Button>
                   ) : null}
                   <Button variant='destructive' className='w-full' onClick={() => void handleDelete()} disabled={deleting}>
@@ -473,6 +473,14 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
       </main>
     </div>
   )
+}
+
+function canDeleteTargetContent(targetType: string) {
+  return targetType === 'circle_post' || targetType === 'food_record' || targetType === 'exercise_log'
+}
+
+function defaultDeleteTargetResolutionNote(targetType: string) {
+  return targetType === 'circle_post' ? '已删除被举报的圈子内容。' : '已从圈子中移除被举报内容。'
 }
 
 function InfoGrid({ items }: { items: Array<{ label: string; value: string; mono?: boolean; copyable?: boolean }> }) {
