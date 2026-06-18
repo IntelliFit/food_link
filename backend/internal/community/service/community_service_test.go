@@ -48,6 +48,8 @@ type mockFeedRepo struct {
 	profilesErr                error
 	checkinCounts              map[string]int
 	checkinCountsErr           error
+	createdFeedReport          *domain.FeedReport
+	existingFeedReport         *domain.FeedReport
 }
 
 func (m *mockFeedRepo) ListPublicFeed(ctx context.Context, authorIDs []string, contentType, mealType, dietGoal, date, sortBy string, limit int) ([]repo.FeedRecord, error) {
@@ -162,10 +164,11 @@ func (m *mockFeedRepo) DeleteCirclePostInteractions(ctx context.Context, postID 
 	return nil
 }
 func (m *mockFeedRepo) CreateFeedReport(ctx context.Context, report *domain.FeedReport) error {
+	m.createdFeedReport = report
 	return nil
 }
 func (m *mockFeedRepo) FindFeedReport(ctx context.Context, reporterUserID, targetType, targetID string) (*domain.FeedReport, error) {
-	return nil, nil
+	return m.existingFeedReport, nil
 }
 
 type mockNotificationRepo struct {
@@ -191,7 +194,7 @@ func (m *mockNotificationRepo) FindRecentDuplicate(ctx context.Context, recipien
 func (m *mockNotificationRepo) FindRecentDuplicateForTarget(ctx context.Context, recipientUserID, notificationType string, actorUserID *string, targetType string, targetID *string, parentCommentID, commentID, contentPreview *string) (*domain.FeedInteractionNotification, error) {
 	return m.findDuplicateNotification, m.findDuplicateNotificationErr
 }
-func (m *mockNotificationRepo) ListNotifications(ctx context.Context, userID string, limit int) ([]domain.FeedInteractionNotification, error) {
+func (m *mockNotificationRepo) ListNotifications(ctx context.Context, userID, notificationType string, limit, offset int) ([]domain.FeedInteractionNotification, error) {
 	return m.listNotifications, m.listNotificationsErr
 }
 func (m *mockNotificationRepo) CountUnread(ctx context.Context, userID string) (int64, error) {
@@ -229,8 +232,22 @@ func (m *mockUserRepo) CountFoodRecordDays(ctx context.Context, userID string) (
 	return 0, nil
 }
 
+type mockSystemMessageSender struct {
+	messages []sentSystemMessage
+}
+
+type sentSystemMessage struct {
+	receiverID string
+	content    string
+}
+
+func (m *mockSystemMessageSender) SendSystemMessage(ctx context.Context, receiverID, content string) error {
+	m.messages = append(m.messages, sentSystemMessage{receiverID: receiverID, content: content})
+	return nil
+}
+
 func newTestService(feed FeedRepo, notif NotificationRepo, user UserFinder) *CommunityService {
-	return NewCommunityService(feed, notif, user, nil, nil, nil)
+	return NewCommunityService(feed, notif, user, nil, nil, nil, nil)
 }
 
 func TestPublicFeed(t *testing.T) {
@@ -441,6 +458,47 @@ func TestUnlikeFeed(t *testing.T) {
 	assert.Equal(t, "已取消", msg)
 }
 
+func TestReportFeedTargetSendsSubmitSystemMessage(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		getFeedRecord: &repo.FeedRecord{ID: "post-1", UserID: "reported-user"},
+	}
+	sender := &mockSystemMessageSender{}
+	svc := NewCommunityService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{}, nil, nil, sender, nil)
+
+	report, err := svc.ReportFeedTarget(context.Background(), "reporter-user", "circle_post", "post-1", "spam", "广告")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, report)
+	assert.NotNil(t, mockFeed.createdFeedReport)
+	assert.Len(t, sender.messages, 1)
+	assert.Equal(t, "reporter-user", sender.messages[0].receiverID)
+	assert.Contains(t, sender.messages[0].content, "举报已提交")
+}
+
+func TestReportFeedTargetDuplicateDoesNotSendSubmitSystemMessage(t *testing.T) {
+	mockFeed := &mockFeedRepo{
+		getFeedRecord: &repo.FeedRecord{ID: "post-1", UserID: "reported-user"},
+		existingFeedReport: &domain.FeedReport{
+			ID:             "report-1",
+			ReporterUserID: "reporter-user",
+			ReportedUserID: "reported-user",
+			TargetType:     "circle_post",
+			TargetID:       "post-1",
+			Reason:         "spam",
+			Status:         "pending",
+		},
+	}
+	sender := &mockSystemMessageSender{}
+	svc := NewCommunityService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{}, nil, nil, sender, nil)
+
+	report, err := svc.ReportFeedTarget(context.Background(), "reporter-user", "circle_post", "post-1", "spam", "广告")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "report-1", report.ID)
+	assert.Nil(t, mockFeed.createdFeedReport)
+	assert.Empty(t, sender.messages)
+}
+
 func TestHideFeedNotFound(t *testing.T) {
 	mockFeed := &mockFeedRepo{getFeedRecord: nil}
 	svc := newTestService(mockFeed, &mockNotificationRepo{}, &mockUserRepo{})
@@ -551,7 +609,7 @@ func TestListNotifications(t *testing.T) {
 	}
 	mockFeed := &mockFeedRepo{profiles: map[string]*repo.UserProfile{}}
 	svc := newTestService(mockFeed, mockNotif, &mockUserRepo{})
-	result, err := svc.ListNotifications(context.Background(), "u1", 50)
+	result, err := svc.ListNotifications(context.Background(), "u1", "", 50, 0)
 	assert.NoError(t, err)
 	assert.Len(t, result.List, 1)
 	assert.Equal(t, int64(3), result.UnreadCount)

@@ -15,7 +15,7 @@ import (
 
 type AdminFeedbackService interface {
 	List(ctx context.Context, input service.ListFeedbackInput) (*repo.ListFeedbackResult, error)
-	UpdateStatus(ctx context.Context, id, status string) (*repo.FeedbackItem, error)
+	UpdateStatus(ctx context.Context, id, status, resolutionMessage string, rewardCredits *int, handledBy string) (*repo.FeedbackItem, error)
 	GetStatusStats(ctx context.Context) (map[string]int64, error)
 }
 
@@ -60,13 +60,15 @@ func (h *FeedbackHandler) List(c *gin.Context) {
 
 func (h *FeedbackHandler) UpdateStatus(c *gin.Context) {
 	var body struct {
-		Status string `json:"status"`
+		Status            string `json:"status"`
+		ResolutionMessage string `json:"resolution_message"`
+		RewardCredits     *int   `json:"reward_credits"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
 		return
 	}
-	item, err := h.svc.UpdateStatus(c.Request.Context(), c.Param("feedback_id"), body.Status)
+	item, err := h.svc.UpdateStatus(c.Request.Context(), c.Param("feedback_id"), body.Status, body.ResolutionMessage, body.RewardCredits, c.GetString("admin_username"))
 	if err != nil {
 		response.Error(c, err)
 		return

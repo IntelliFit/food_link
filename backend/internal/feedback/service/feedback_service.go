@@ -29,10 +29,15 @@ type FeedbackNotifier interface {
 	NotifyNewFeedback(ctx context.Context, feedback *domain.UserFeedback) error
 }
 
+type SystemMessageSender interface {
+	SendSystemMessage(ctx context.Context, receiverID, content string) error
+}
+
 type FeedbackService struct {
 	repo     FeedbackRepo
 	uploads  *UploadService
 	notifier FeedbackNotifier
+	sender   SystemMessageSender
 }
 
 type SubmitInput struct {
@@ -49,8 +54,12 @@ type SubmitInput struct {
 	SubmitHostName  string
 }
 
-func NewFeedbackService(repo FeedbackRepo, uploads *UploadService, notifier FeedbackNotifier) *FeedbackService {
-	return &FeedbackService{repo: repo, uploads: uploads, notifier: notifier}
+func NewFeedbackService(repo FeedbackRepo, uploads *UploadService, notifier FeedbackNotifier, sender ...SystemMessageSender) *FeedbackService {
+	var messageSender SystemMessageSender
+	if len(sender) > 0 {
+		messageSender = sender[0]
+	}
+	return &FeedbackService{repo: repo, uploads: uploads, notifier: notifier, sender: messageSender}
 }
 
 func (s *FeedbackService) Submit(ctx context.Context, userID string, input SubmitInput) (string, error) {
@@ -98,8 +107,35 @@ func (s *FeedbackService) Submit(ctx context.Context, userID string, input Submi
 	if err := s.repo.Create(ctx, feedback); err != nil {
 		return "", err
 	}
+	s.notifySubmitSuccessAsync(feedback)
 	s.notifyNewFeedbackAsync(feedback)
 	return feedback.ID, nil
+}
+
+func (s *FeedbackService) notifySubmitSuccessAsync(feedback *domain.UserFeedback) {
+	if s == nil || s.sender == nil || feedback == nil {
+		return
+	}
+	snapshot := *feedback
+	go func() {
+		notifyCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		if err := s.sender.SendSystemMessage(notifyCtx, snapshot.UserID, buildFeedbackSubmittedMessage(&snapshot)); err != nil {
+			logger.Warn(notifyCtx, "意见反馈提交站内信发送失败",
+				slog.String("feedback_id", snapshot.ID),
+				slog.String("user_id", snapshot.UserID),
+				slog.String("error", err.Error()),
+			)
+		}
+	}()
+}
+
+func buildFeedbackSubmittedMessage(feedback *domain.UserFeedback) string {
+	if feedback == nil {
+		return "我们已经收到你的意见反馈，会尽快查看。"
+	}
+	category := feedbackCategoryLabel(feedback.Category)
+	return "我们已经收到你的意见反馈。\n反馈类型：" + category + "\n反馈编号：" + feedback.ID + "\n感谢你帮我们把食探变得更好。"
 }
 
 func (s *FeedbackService) notifyNewFeedbackAsync(feedback *domain.UserFeedback) {

@@ -41,6 +41,9 @@ export type FeedbackItem = {
   submit_request_id: string
   submit_host_name: string
   status: FeedbackStatus
+  resolution_message: string
+  reward_credits: number
+  reward_ledger_id?: string
   created_at: string
   updated_at: string
   user_nickname?: string
