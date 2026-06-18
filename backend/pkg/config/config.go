@@ -126,10 +126,11 @@ type AppAuthConfig struct {
 }
 
 type RedisConfig struct {
-	Mode     string `mapstructure:"mode"`
-	URL      string `mapstructure:"url"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
+	Mode      string `mapstructure:"mode"`
+	URL       string `mapstructure:"url"`
+	Password  string `mapstructure:"password"`
+	DB        int    `mapstructure:"db"`
+	KeyPrefix string `mapstructure:"key_prefix"`
 }
 
 type SMSConfig struct {
@@ -363,6 +364,9 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	if fileV.IsSet("redis.db") {
 		v.Set("redis.db", fileCfg.Redis.DB)
+	}
+	if fileV.IsSet("redis.key_prefix") {
+		v.Set("redis.key_prefix", fileCfg.Redis.KeyPrefix)
 	}
 	if fileCfg.SMS.TencentCloudSecretID != "" {
 		v.Set("sms.tencentcloud_secret_id", fileCfg.SMS.TencentCloudSecretID)
@@ -1041,6 +1045,7 @@ func trimRedisConfig(cfg *RedisConfig) {
 	cfg.Mode = strings.ToLower(strings.TrimSpace(cfg.Mode))
 	cfg.URL = strings.TrimSpace(cfg.URL)
 	cfg.Password = strings.TrimSpace(cfg.Password)
+	cfg.KeyPrefix = strings.Trim(strings.TrimSpace(cfg.KeyPrefix), ":")
 	if cfg.Mode == "" {
 		cfg.Mode = "auto"
 	}
@@ -1119,6 +1124,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("app_auth.development_mock_login", true)
 	v.SetDefault("app_auth.development_mock_wechat_code", "expo-go-dev-wechat-code")
 	v.SetDefault("redis.mode", "auto")
+	v.SetDefault("redis.key_prefix", "food_link")
 	v.SetDefault("sms.tencentcloud_region", "ap-guangzhou")
 	v.SetDefault("sms.mock_enabled", false)
 	v.SetDefault("sms.mock_code", "123456")

@@ -20,10 +20,10 @@ func TestSMSService_LoginWithCodeCreatesUserAndConsumesCode(t *testing.T) {
 	jwtSvc := NewJWTService("test-secret", 3600, 86400)
 	loginSvc := NewLoginService(cfg, userRepo, jwtSvc)
 	store := NewMemoryCodeStore()
-	svc := NewSMSService(config.SMSConfig{}, loginSvc, userRepo, jwtSvc, store, nil)
+	svc := NewSMSService(config.SMSConfig{}, "food_link", loginSvc, userRepo, jwtSvc, store, nil)
 	ctx := context.Background()
 
-	require.NoError(t, store.Set(ctx, smsCodeKeyPrefix+"13800138009", "530836", 15*time.Minute))
+	require.NoError(t, store.Set(ctx, svc.smsCodeKey("13800138009"), "530836", 15*time.Minute))
 	out, err := svc.LoginWithCode(ctx, SMSLoginInput{Phone: "13800138009", Code: "530836"})
 	require.NoError(t, err)
 	assert.NotEmpty(t, out.AccessToken)
@@ -48,10 +48,10 @@ func TestSMSService_WrongCodeDoesNotConsumeCorrectCode(t *testing.T) {
 	jwtSvc := NewJWTService("test-secret", 3600, 86400)
 	loginSvc := NewLoginService(cfg, userRepo, jwtSvc)
 	store := NewMemoryCodeStore()
-	svc := NewSMSService(config.SMSConfig{}, loginSvc, userRepo, jwtSvc, store, nil)
+	svc := NewSMSService(config.SMSConfig{}, "food_link", loginSvc, userRepo, jwtSvc, store, nil)
 	ctx := context.Background()
 
-	require.NoError(t, store.Set(ctx, smsCodeKeyPrefix+"13800138010", "530836", 15*time.Minute))
+	require.NoError(t, store.Set(ctx, svc.smsCodeKey("13800138010"), "530836", 15*time.Minute))
 	_, err := svc.LoginWithCode(ctx, SMSLoginInput{Phone: "13800138010", Code: "000000"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "验证码错误或已过期")
@@ -59,4 +59,27 @@ func TestSMSService_WrongCodeDoesNotConsumeCorrectCode(t *testing.T) {
 	out, err := svc.LoginWithCode(ctx, SMSLoginInput{Phone: "13800138010", Code: "530836"})
 	require.NoError(t, err)
 	assert.Equal(t, "app-phone:13800138010", out.OpenID)
+}
+
+func TestSMSService_RedisKeysUseConfiguredPrefix(t *testing.T) {
+	svc := NewSMSService(config.SMSConfig{}, "food_link:", nil, nil, nil, nil, nil)
+
+	assert.Equal(t, "food_link:sms_verification_code:13800138011", svc.smsCodeKey("13800138011"))
+	assert.Equal(t, "food_link:throttle:sms:13800138011", svc.smsPhoneThrottleKey("13800138011"))
+	assert.Equal(t, "food_link:throttle:sms:ip:127.0.0.1", svc.smsIPThrottleKey("127.0.0.1"))
+}
+
+func TestSMSService_SendCodeReturnsConfiguredCooldown(t *testing.T) {
+	store := NewMemoryCodeStore()
+	svc := NewSMSService(config.SMSConfig{
+		MockEnabled:     true,
+		MockCode:        "123456",
+		CodeTTLMinutes:  5,
+		ThrottleSeconds: 45,
+	}, "food_link", nil, nil, nil, store, nil)
+
+	out, err := svc.SendCode(context.Background(), SendSMSCodeInput{Phone: "13800138012"}, "127.0.0.1")
+	require.NoError(t, err)
+	assert.Equal(t, 300, out.ExpiresInSeconds)
+	assert.Equal(t, 45, out.CooldownSeconds)
 }

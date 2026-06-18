@@ -26,6 +26,7 @@ export function LoginScreen() {
   const [accountPhone, setAccountPhone] = useState('')
   const [smsCode, setSmsCode] = useState('')
   const [smsSending, setSmsSending] = useState(false)
+  const [smsCooldownSeconds, setSmsCooldownSeconds] = useState(0)
   const [agreementAccepted, setAgreementAccepted] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
   const [userId, setUserId] = useState('')
@@ -41,6 +42,14 @@ export function LoginScreen() {
     const subscription = Linking.addEventListener('url', ({ url }) => applyInviteCodeFromUrl(url))
     return () => subscription.remove()
   }, [])
+
+  useEffect(() => {
+    if (smsCooldownSeconds <= 0) return undefined
+    const timer = setTimeout(() => {
+      setSmsCooldownSeconds((value) => Math.max(0, value - 1))
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [smsCooldownSeconds])
 
   const run = async (fn: () => Promise<void>, fallback: string) => {
     setLoading(true)
@@ -70,8 +79,12 @@ export function LoginScreen() {
     }
     setSmsSending(true)
     try {
-      await apiClient.sendSMSCode({ phone })
-      dialog.alert('验证码已发送', '请查看手机短信，验证码 15 分钟内有效。', 'success')
+      const result = await apiClient.sendSMSCode({ phone })
+      const cooldownSeconds = normalizePositiveSeconds(result.cooldown_seconds ?? result.retry_after_seconds)
+      if (cooldownSeconds > 0) setSmsCooldownSeconds(cooldownSeconds)
+      const expiresInSeconds = normalizePositiveSeconds(result.expires_in_seconds)
+      const expiryText = expiresInSeconds > 0 ? formatDurationText(expiresInSeconds) : '有效期内'
+      dialog.alert('验证码已发送', `请查看手机短信，验证码${expiryText}有效。`, 'success')
     } catch (error) {
       dialog.alert('发送失败', userFacingErrorMessage(error, '请稍后再试'), 'warning')
     } finally {
@@ -101,6 +114,8 @@ export function LoginScreen() {
 
   const smsLoginReady = isValidMainlandPhone(accountPhone) && /^\d{6}$/.test(smsCode.trim())
   const sendCodeReady = isValidMainlandPhone(accountPhone)
+  const sendCodeDisabled = smsSending || smsCooldownSeconds > 0 || !sendCodeReady
+  const sendCodeLabel = smsCooldownSeconds > 0 ? `${smsCooldownSeconds}s 后重发` : '发送验证码'
 
   return (
     <ScrollView
@@ -143,18 +158,20 @@ export function LoginScreen() {
             placeholderTextColor={colors.textMuted}
           />
           <Pressable
-            disabled={smsSending || !sendCodeReady}
+            disabled={sendCodeDisabled}
             onPress={sendSMSCode}
             style={({ pressed }) => [
               styles.codeTextButton,
-              pressed && !smsSending && sendCodeReady && styles.pressed,
-              (smsSending || !sendCodeReady) && styles.disabled,
+              pressed && !sendCodeDisabled && styles.pressed,
+              sendCodeDisabled && styles.disabled,
             ]}
           >
             {smsSending ? (
               <ActivityIndicator color={colors.brandDark} />
             ) : (
-              <Text style={[styles.codeText, !sendCodeReady && styles.codeTextDisabled]}>发送验证码</Text>
+              <Text style={[styles.codeText, (!sendCodeReady || smsCooldownSeconds > 0) && styles.codeTextDisabled]}>
+                {sendCodeLabel}
+              </Text>
             )}
           </Pressable>
         </View>
@@ -252,6 +269,22 @@ function isValidMainlandPhone(phone: string): boolean {
   return /^1\d{10}$/.test(phone.trim())
 }
 
+function normalizePositiveSeconds(value: unknown): number {
+  const seconds = Number(value)
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0
+  return Math.max(1, Math.ceil(seconds))
+}
+
+function formatDurationText(totalSeconds: number): string {
+  const seconds = normalizePositiveSeconds(totalSeconds)
+  if (seconds <= 0) return ''
+  if (seconds < 60) return `${seconds}秒内`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  if (remainingSeconds === 0) return `${minutes}分钟内`
+  return `${minutes}分${remainingSeconds}秒内`
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -312,7 +345,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   codeTextButton: {
-    minWidth: 106,
+    minWidth: 118,
     minHeight: 44,
     alignItems: 'flex-end',
     justifyContent: 'center',

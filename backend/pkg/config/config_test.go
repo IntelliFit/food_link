@@ -104,6 +104,8 @@ app:
   port: 3910
 database:
   host: "app-config-db"
+redis:
+  key_prefix: "custom_food:"
 worker:
   count: 2
 `)
@@ -114,6 +116,9 @@ worker:
 	}
 	if cfg.ConfigSource != "local" || cfg.App.Port != 3910 || cfg.Database.Host != "app-config-db" || cfg.Worker.Count != 2 {
 		t.Fatalf("expected app-config.yaml values, got %+v", cfg)
+	}
+	if cfg.Redis.KeyPrefix != "custom_food" {
+		t.Fatalf("expected redis key prefix to be trimmed, got %q", cfg.Redis.KeyPrefix)
 	}
 }
 

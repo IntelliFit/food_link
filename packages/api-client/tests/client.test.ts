@@ -48,7 +48,7 @@ function createMockAdapters() {
         })
       }
       if (url.endsWith('/api/app/sms/send-code')) {
-        return response({ request_id: 'sms-request-1', expires_in_seconds: 900 })
+        return response({ request_id: 'sms-request-1', expires_in_seconds: 900, cooldown_seconds: 30 })
       }
       if (url.endsWith('/api/app/login/sms')) {
         return response({
@@ -559,6 +559,7 @@ describe('FoodLinkApiClient', () => {
     await client.getHomeDashboard('2026-06-14')
 
     expect(codeResult.expires_in_seconds).toBe(900)
+    expect(codeResult.cooldown_seconds).toBe(30)
     expect(requests[0].url).toBe('https://api.example.com/api/app/sms/send-code')
     expect(requests[0].options?.body).toEqual({ phone: '13800138000' })
     expect(requests[0].options?.headers?.Authorization).toBeUndefined()
