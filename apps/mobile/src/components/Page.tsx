@@ -1,7 +1,7 @@
 import type { PropsWithChildren } from 'react'
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { colors } from '../theme'
+import { colors, compactFont } from '../theme'
 
 interface PageProps extends PropsWithChildren {
   title?: string
@@ -17,7 +17,7 @@ export function Page({ title, subtitle, refreshing, onRefresh, children }: PageP
       style={styles.scroll}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: Math.max(insets.top + 12, 24), paddingBottom: insets.bottom + 118 },
+        { paddingTop: Math.max(insets.top + 8, 18), paddingBottom: insets.bottom + 112 },
       ]}
       refreshControl={
         onRefresh ? (
@@ -27,8 +27,8 @@ export function Page({ title, subtitle, refreshing, onRefresh, children }: PageP
     >
       {title ? (
         <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          <Text style={styles.title} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.86}>{title}</Text>
+          {subtitle ? <Text style={styles.subtitle} numberOfLines={2}>{subtitle}</Text> : null}
         </View>
       ) : null}
       {children}
@@ -42,19 +42,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   content: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   header: {
-    marginBottom: 18,
+    marginBottom: 14,
   },
   title: {
-    fontSize: 30,
+    fontSize: compactFont(30, 26),
     fontWeight: '800',
     color: colors.text,
   },
   subtitle: {
-    marginTop: 6,
-    fontSize: 14,
+    marginTop: 5,
+    fontSize: 13,
+    lineHeight: 19,
     color: colors.textSecondary,
   },
 })

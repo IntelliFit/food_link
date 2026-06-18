@@ -9,7 +9,7 @@ import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
-import { colors, radius, shadow } from '../theme'
+import { colors, compactFont, radius, shadow } from '../theme'
 import { formatDateTime } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
 
@@ -107,7 +107,7 @@ export function CommunityScreen() {
       <View style={styles.feedTools}>
         <Pressable style={({ pressed }) => [styles.searchBar, pressed && styles.pressed]} onPress={() => navigation.navigate('CommunitySearch')}>
           <Search size={19} color={colors.textMuted} strokeWidth={2.2} />
-          <Text style={styles.searchPlaceholder}>搜索动态内容或用户...</Text>
+          <Text style={styles.searchPlaceholder} numberOfLines={1}>搜索动态内容或用户...</Text>
         </Pressable>
         <Pressable style={({ pressed }) => [styles.filterButton, pressed && styles.pressed]} onPress={() => navigation.navigate('CommunitySearch')}>
           <Filter size={19} color={colors.textSecondary} strokeWidth={2.2} />
@@ -148,8 +148,8 @@ export function CommunityScreen() {
                   <Text style={styles.feedTime}>{feedMeta(item)}</Text>
                 </View>
               </View>
-              <Text style={styles.recordTitle}>{feedTitle(item)}</Text>
-              {feedBody(item) ? <Text style={styles.recordDesc}>{feedBody(item)}</Text> : null}
+              <Text style={styles.recordTitle} numberOfLines={2}>{feedTitle(item)}</Text>
+              {feedBody(item) ? <Text style={styles.recordDesc} numberOfLines={3}>{feedBody(item)}</Text> : null}
               {feedImage(item) ? <Image source={{ uri: feedImage(item) }} style={styles.feedImage} /> : null}
               <View style={styles.nutritionRow}>
                 <Text style={styles.nutritionItem}>{Math.round(item.record.total_calories || 0)} kcal</Text>
@@ -178,7 +178,7 @@ function QuickEntry({ label, icon, tone, onPress }: { label: string; icon: Lucid
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.quickEntry, pressed && styles.pressed]}>
       <View style={[styles.quickIcon, { backgroundColor: meta.backgroundColor }]}>
-        <Icon size={24} color={meta.color} strokeWidth={2.3} />
+        <Icon size={22} color={meta.color} strokeWidth={2.3} />
       </View>
       <Text style={styles.quickEntryText}>{label}</Text>
     </Pressable>
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   },
   quickEntry: {
     flex: 1,
-    minHeight: 86,
+    minHeight: 78,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 16,
@@ -249,25 +249,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   quickIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 7,
   },
   pressed: {
     opacity: 0.72,
   },
   quickEntryText: {
     color: colors.text,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900',
   },
   leaderboardCard: {
-    borderRadius: 22,
-    padding: 18,
-    marginBottom: 20,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
     backgroundColor: '#55bd91',
     shadowColor: '#0f9f72',
     shadowOpacity: 0.25,
@@ -280,9 +280,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   leaderboardIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   },
   leaderboardTitle: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: compactFont(20, 18),
     fontWeight: '900',
   },
   leaderboardSubtitle: {
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   leaderboardPeople: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 18,
+    marginTop: 14,
   },
   leaderboardEmpty: {
     color: 'rgba(255,255,255,0.9)',
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   },
   feedTitle: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: compactFont(22, 20),
     fontWeight: '900',
   },
   foodLink: {
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     flex: 1,
-    minHeight: 46,
+    minHeight: 42,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.pill,
@@ -378,19 +378,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   searchPlaceholder: {
+    flex: 1,
     marginLeft: 8,
     color: colors.textMuted,
+    fontSize: 13,
     fontWeight: '700',
   },
   filterButton: {
-    minHeight: 46,
+    minHeight: 42,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 15,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     backgroundColor: colors.surface,
   },
   filterText: {
@@ -398,12 +400,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   publishButton: {
-    minHeight: 46,
+    minHeight: 42,
     borderRadius: radius.pill,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     backgroundColor: colors.brand,
   },
   publishText: {
@@ -456,7 +458,7 @@ const styles = StyleSheet.create({
   },
   authorName: {
     color: colors.text,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '900',
   },
   feedTime: {
@@ -466,9 +468,9 @@ const styles = StyleSheet.create({
   },
   recordTitle: {
     color: colors.text,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '900',
-    lineHeight: 24,
+    lineHeight: 23,
   },
   recordDesc: {
     marginTop: 6,

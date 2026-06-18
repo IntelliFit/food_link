@@ -58,8 +58,8 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         onPress={() => navigation.navigate(route.name)}
         style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
       >
-        <Icon size={25} color={focused ? colors.brand : '#9ca3af'} strokeWidth={focused ? 2.6 : 2.2} />
-        <Text style={[styles.tabText, focused && styles.tabTextActive]}>{meta.label}</Text>
+        <Icon size={23} color={focused ? colors.brand : '#9ca3af'} strokeWidth={focused ? 2.6 : 2.2} />
+        <Text style={[styles.tabText, focused && styles.tabTextActive]} numberOfLines={1}>{meta.label}</Text>
       </Pressable>
     )
   }
@@ -75,7 +75,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
             style={({ pressed }) => [styles.centerButton, pressed && styles.pressed]}
             onPress={() => setRecordMenuVisible(true)}
           >
-            <Camera size={36} color="#fff" strokeWidth={2.4} />
+            <Camera size={32} color="#fff" strokeWidth={2.4} />
           </Pressable>
           <View style={styles.side}>{rightRoutes.map(renderTab)}</View>
         </View>
@@ -99,9 +99,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   bar: {
-    minHeight: 78,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    minHeight: 72,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     opacity: 0.76,
   },
   tabText: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textMuted,
   },
   tabTextActive: {
@@ -134,10 +134,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   centerButton: {
-    width: 68,
-    height: 68,
+    width: 62,
+    height: 62,
     marginHorizontal: 8,
-    marginTop: -34,
+    marginTop: -30,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',

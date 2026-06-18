@@ -4,8 +4,10 @@ import { AuthProvider } from './src/providers/AuthProvider'
 import { DialogProvider } from './src/providers/DialogProvider'
 import { RootNavigator } from './src/navigation/RootNavigator'
 import { installConsoleLogCapture } from './src/diagnostics/consoleLogBuffer'
+import { configureTextScaling } from './src/utils/textScaling'
 
 installConsoleLogCapture()
+configureTextScaling()
 
 export default function App() {
   return (

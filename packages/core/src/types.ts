@@ -414,6 +414,7 @@ export interface AnalyzeTaskSubmitParams {
   activity_timing?: string
   user_goal?: string
   remaining_calories?: number
+  suggest_ratio_enabled?: boolean
   additionalContext?: string
   modelName?: string
   is_multi_view?: boolean

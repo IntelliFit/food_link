@@ -14,7 +14,7 @@ import { SHOW_DEBUG_LOGIN } from '../config'
 import { useHomeDashboard } from '../hooks/useHomeDashboard'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
-import { colors } from '../theme'
+import { colors, compactFont } from '../theme'
 import { formatShortDate } from '../utils/date'
 import { createDemoAnalysisTask, createDemoTextAnalysisTask, demoFoodImageUrl } from '../utils/demoAnalysisTask'
 import { userFacingErrorMessage } from '../utils/errors'
@@ -239,7 +239,7 @@ export function HomeScreen() {
             <Text style={styles.link}>单日详情</Text>
           </Pressable>
         </View>
-        <Text style={styles.bigNumber}>
+        <Text style={styles.bigNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
           {Math.round(dashboard?.intakeData.current || 0)} / {Math.round(dashboard?.intakeData.target || 0)} kcal
         </Text>
         <Text style={styles.subtitle}>运动消耗 {Math.round(dashboard?.exerciseBurnedKcal || 0)} kcal</Text>
@@ -473,12 +473,12 @@ function HomeBannerContent({ banner, image = false }: { banner: HomeBanner; imag
   return (
     <View style={[styles.homeBannerOverlay, image && styles.homeBannerImageOverlay]}>
       <View style={styles.homeBannerText}>
-        <Text style={[styles.homeBannerKicker, image && styles.homeBannerTextLight]}>{banner.kicker}</Text>
-        <Text style={[styles.homeBannerTitle, image && styles.homeBannerTextLight]}>{banner.title}</Text>
-        <Text style={[styles.homeBannerSubtitle, image && styles.homeBannerTextLight]}>{banner.desc}</Text>
+        <Text style={[styles.homeBannerKicker, image && styles.homeBannerTextLight]} numberOfLines={1}>{banner.kicker}</Text>
+        <Text style={[styles.homeBannerTitle, image && styles.homeBannerTextLight]} numberOfLines={2}>{banner.title}</Text>
+        <Text style={[styles.homeBannerSubtitle, image && styles.homeBannerTextLight]} numberOfLines={2}>{banner.desc}</Text>
       </View>
       <View style={[styles.homeBannerButton, image && styles.homeBannerButtonLight]}>
-        <Text style={[styles.homeBannerButtonText, image && styles.homeBannerButtonTextLight]}>{banner.actionText}</Text>
+        <Text style={[styles.homeBannerButtonText, image && styles.homeBannerButtonTextLight]} numberOfLines={1}>{banner.actionText}</Text>
       </View>
     </View>
   )
@@ -567,10 +567,10 @@ function RecordGridAction({
         tone === 'gold' && styles.recordIconGold,
         tone === 'purple' && styles.recordIconPurple,
       ]}>
-        <Icon size={25} color={recordIconColors[tone]} strokeWidth={2.4} />
+        <Icon size={23} color={recordIconColors[tone]} strokeWidth={2.4} />
       </View>
-      <Text style={styles.recordActionTitle}>{title}</Text>
-      <Text style={styles.recordActionDesc}>{desc}</Text>
+      <Text style={styles.recordActionTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.86}>{title}</Text>
+      <Text style={styles.recordActionDesc} numberOfLines={2}>{desc}</Text>
     </Pressable>
   )
 }
@@ -680,7 +680,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   bigNumber: {
-    fontSize: 32,
+    fontSize: compactFont(32, 30),
     fontWeight: '900',
     color: colors.brandDark,
   },
@@ -889,17 +889,17 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   homeBannerCarousel: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   homeBannerTrack: {
     alignItems: 'stretch',
   },
   homeBannerSlide: {
-    borderRadius: 20,
+    borderRadius: 16,
     overflow: 'hidden',
   },
   homeBanner: {
-    minHeight: 126,
+    minHeight: 112,
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
@@ -913,11 +913,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#edf7ff',
   },
   homeBannerImage: {
-    borderRadius: 20,
+    borderRadius: 16,
   },
   homeBannerOverlay: {
-    minHeight: 126,
-    padding: 18,
+    minHeight: 112,
+    padding: 16,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
@@ -931,28 +931,30 @@ const styles = StyleSheet.create({
   },
   homeBannerKicker: {
     color: colors.brandDark,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
-    marginBottom: 6,
+    marginBottom: 5,
   },
   homeBannerTitle: {
     color: colors.text,
-    fontSize: 21,
+    fontSize: compactFont(21, 19),
     fontWeight: '900',
-    marginBottom: 7,
+    lineHeight: 24,
+    marginBottom: 6,
   },
   homeBannerSubtitle: {
     color: colors.textSecondary,
-    lineHeight: 19,
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: '700',
   },
   homeBannerTextLight: {
     color: '#fff',
   },
   homeBannerButton: {
-    minHeight: 42,
+    minHeight: 38,
     borderRadius: 999,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
@@ -1017,8 +1019,8 @@ const styles = StyleSheet.create({
   recordActionCard: {
     width: '48%',
     maxWidth: '48%',
-    minHeight: 116,
-    borderRadius: 16,
+    minHeight: 108,
+    borderRadius: 14,
     borderWidth: 1,
     padding: 12,
   },
@@ -1039,12 +1041,12 @@ const styles = StyleSheet.create({
     borderColor: '#e6defa',
   },
   recordActionIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   recordIconGreen: {
     backgroundColor: '#ebfcf4',
@@ -1061,7 +1063,7 @@ const styles = StyleSheet.create({
   recordActionTitle: {
     color: colors.text,
     fontWeight: '900',
-    fontSize: 15,
+    fontSize: 14,
   },
   recordActionDesc: {
     color: colors.textSecondary,

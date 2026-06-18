@@ -1,4 +1,4 @@
-import type { AnalysisTask, CommunityFeedTargetType, FoodExpiryItem, ManualFoodItem, MealType } from '@food-link/core'
+import type { AnalysisTask, CommunityFeedTargetType, ExecutionMode, FoodExpiryItem, ManualFoodItem, MealType } from '@food-link/core'
 
 export type ManualRecordSourceChannel = 'recommended' | 'campus' | 'favorites' | 'custom'
 
@@ -61,7 +61,7 @@ export type RootStackParamList = {
   Login: undefined
   MainTabs: undefined
   Analyze: { source?: 'camera' | 'library'; mealType?: MealType; date?: string } | undefined
-  AnalyzeLoading: { taskId?: string; imageUri?: string; mealType: MealType; date: string; task?: AnalysisTask; taskType?: 'food' | 'food_text' | 'exercise' } | undefined
+  AnalyzeLoading: { taskId?: string; imageUri?: string; imageUris?: string[]; mealType: MealType; date: string; task?: AnalysisTask; taskType?: 'food' | 'food_text' | 'exercise'; executionMode?: ExecutionMode } | undefined
   Result: { task: AnalysisTask; imageUri?: string; mealType: MealType; date: string }
   TextResult: { task: AnalysisTask; mealType: MealType; date: string }
   TextRecord: undefined
@@ -119,5 +119,6 @@ export type RootStackParamList = {
   CirclePostEdit: { postId?: string } | undefined
   Friends: undefined
   Notifications: undefined
+  About: undefined
   AboutFeedback: undefined
 }
