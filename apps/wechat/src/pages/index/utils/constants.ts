@@ -9,8 +9,7 @@ export const DEFAULT_INTAKE: HomeIntakeData = {
     protein: { current: 0, target: 120 },
     carbs: { current: 0, target: 250 },
     fat: { current: 0, target: 65 }
-  },
-  micros: {}
+  }
 }
 
 export const WEIGHT_HISTORY_LIMIT = 60
