@@ -11,7 +11,7 @@ export function FlPageThemeRoot({ children }: PropsWithChildren): React.ReactEle
   const dark = scheme === 'dark'
   return (
     <View
-      className={`fl-page-theme-root${dark ? ' fl-page-theme-root--dark' : ''}`}
+      className={`fl-page-theme-root${dark ? ' fl-d' : ''}`}
       style={{ minHeight: '100vh', width: '100%', boxSizing: 'border-box' }}
     >
       {children}

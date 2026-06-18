@@ -4,14 +4,19 @@ import (
 	"context"
 	"log/slog"
 	"math"
+	"net/http"
 	"strings"
+	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/pkg/logger"
 )
 
 const (
-	gooseDuckChickenModel = "gpt-4.1:stable"
+	gooseDuckChickenPrimaryModel  = "gpt-4.1:stable"
+	gooseDuckChickenFallbackModel = "gpt-4.1-mini:stable"
+	gooseDuckChickenPrimaryTTL    = 55 * time.Second
+	gooseDuckChickenFallbackTTL   = 45 * time.Second
 )
 
 type GooseDuckChickenInput struct {
@@ -34,17 +39,60 @@ func (s *AnalyzeService) ClassifyGooseDuckChicken(ctx context.Context, userID st
 	}
 
 	prompt := buildGooseDuckChickenPrompt(input.AdditionalContext)
-	parsed, err := s.RunPrecisionJSONWithImagesNoFallback(ctx, "image", prompt, []string{imageURL}, gooseDuckChickenModel)
+	parsed, modelName, err := s.classifyGooseDuckChickenWithFallback(ctx, prompt, []string{imageURL})
 	if err != nil {
 		return GooseDuckChickenResult{}, err
 	}
 	result := normalizeGooseDuckChickenResult(parsed)
 	logger.Info(ctx, "鹅鸭鸡专线识别完成",
 		slog.String("user_id", userID),
+		slog.String("model_name", modelName),
 		slog.String("species", result.Species),
 		slog.Float64("confidence", result.Confidence),
 	)
 	return result, nil
+}
+
+func (s *AnalyzeService) classifyGooseDuckChickenWithFallback(ctx context.Context, prompt string, imageURLs []string) (map[string]any, string, error) {
+	models := []struct {
+		name    string
+		timeout time.Duration
+	}{
+		{name: gooseDuckChickenPrimaryModel, timeout: gooseDuckChickenPrimaryTTL},
+		{name: gooseDuckChickenFallbackModel, timeout: gooseDuckChickenFallbackTTL},
+	}
+	var lastErr error
+	for index, item := range models {
+		callCtx, cancel := context.WithTimeout(ctx, item.timeout)
+		parsed, err := s.RunPrecisionJSONWithImagesTemperatureNoFallback(callCtx, "image", prompt, imageURLs, item.name, 0.1)
+		cancel()
+		if err == nil {
+			if index > 0 {
+				logger.Warn(ctx, "鹅鸭鸡专线备用模型识别成功",
+					slog.String("model_name", item.name),
+					slog.String("primary_model", gooseDuckChickenPrimaryModel),
+				)
+			}
+			return parsed, item.name, nil
+		}
+		lastErr = err
+		logger.Warn(ctx, "鹅鸭鸡专线模型识别失败",
+			slog.String("model_name", item.name),
+			slog.Duration("timeout", item.timeout),
+			logger.Err(err),
+		)
+		if !isTransientLLMError(err) && !IsLLMJSONParseError(err) {
+			break
+		}
+	}
+	if lastErr != nil && isTransientLLMError(lastErr) {
+		return nil, "", &commonerrors.AppError{
+			Code:       10003,
+			Message:    "专线识别服务暂时繁忙，请稍后重试",
+			HTTPStatus: http.StatusGatewayTimeout,
+		}
+	}
+	return nil, "", lastErr
 }
 
 func buildGooseDuckChickenPrompt(additionalContext string) string {
