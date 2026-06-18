@@ -7,6 +7,7 @@ import type { AdminMenuId } from '@/components/admin-sidebar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -54,6 +55,8 @@ type FeedReportDetailPageProps = {
   onLogout: () => void
   onMenuChange: (menu: AdminMenuId) => void
 }
+
+type ConfirmAction = 'delete-report' | 'delete-target' | null
 
 const statusLabels: Record<FeedReportStatus, string> = {
   pending: '待处理',
@@ -109,6 +112,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
   const [resolutionNote, setResolutionNote] = useState('')
   const [rewardCredits, setRewardCredits] = useState('0')
   const [removeTargetOnResolve, setRemoveTargetOnResolve] = useState(true)
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
 
   useEffect(() => {
     if (!reportId) {
@@ -165,7 +169,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
       return
     }
     if (nextStatus === 'resolved' && removeTargetOnResolve && canDeleteTargetContent(item.target_type)) {
-      await handleDeleteTargetContent()
+      setConfirmAction('delete-target')
       return
     }
     setUpdating(true)
@@ -197,11 +201,11 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
 
   async function handleDelete() {
     if (!item) return
-    if (!window.confirm('确定删除这条举报记录？删除后不可恢复。')) return
     setDeleting(true)
     try {
       await adminRequest(`/api/admin/feed-reports/${encodeURIComponent(item.id)}`, { method: 'DELETE' })
       toast.success('已删除')
+      setConfirmAction(null)
       navigate('/feed-reports')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除失败')
@@ -218,7 +222,6 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
       toast.error('删除并处理举报时必须选择奖励积分，可填写 0')
       return
     }
-    if (!window.confirm('确定移除被举报内容吗？操作后该内容会从圈子中移除，相关点赞、评论和互动通知也会清理。')) return
     setDeletingTarget(true)
     try {
       const data = await adminRequest<{ item: FeedReportItem }>(
@@ -233,6 +236,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
       setRewardCredits(String(data.item.reward_credits ?? 0))
       setTarget(null)
       toast.success('被举报内容已从圈子中移除')
+      setConfirmAction(null)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除被举报内容失败')
     } finally {
@@ -464,14 +468,14 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                     <Button
                       variant='destructive'
                       className='w-full'
-                      onClick={() => void handleDeleteTargetContent()}
+                      onClick={() => setConfirmAction('delete-target')}
                       disabled={deletingTarget || !target}
                     >
                       {deletingTarget ? <Loader2 className='mr-1 size-4 animate-spin' /> : <Trash2 className='mr-1 size-4' />}
                       从圈子中移除被举报内容
                     </Button>
                   ) : null}
-                  <Button variant='destructive' className='w-full' onClick={() => void handleDelete()} disabled={deleting}>
+                  <Button variant='destructive' className='w-full' onClick={() => setConfirmAction('delete-report')} disabled={deleting}>
                     {deleting ? <Loader2 className='mr-1 size-4 animate-spin' /> : <Trash2 className='mr-1 size-4' />}
                     删除举报记录
                   </Button>
@@ -481,6 +485,26 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
           </div>
         )}
       </main>
+      <ConfirmDialog
+        open={confirmAction === 'delete-target'}
+        onOpenChange={(open) => setConfirmAction(open ? 'delete-target' : null)}
+        title='移除被举报内容？'
+        description='该内容会从圈子中移除，相关点赞、评论和互动通知也会同步清理。'
+        confirmLabel='移除内容'
+        variant='destructive'
+        confirming={deletingTarget}
+        onConfirm={handleDeleteTargetContent}
+      />
+      <ConfirmDialog
+        open={confirmAction === 'delete-report'}
+        onOpenChange={(open) => setConfirmAction(open ? 'delete-report' : null)}
+        title='删除举报记录？'
+        description='删除后不可恢复，只会删除举报工单记录，不会自动恢复或移除被举报内容。'
+        confirmLabel='删除记录'
+        variant='destructive'
+        confirming={deleting}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }
