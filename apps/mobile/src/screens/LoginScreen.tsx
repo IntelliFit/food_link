@@ -12,6 +12,8 @@ import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
 
+const DEFAULT_SMS_COOLDOWN_SECONDS = 30
+
 export function LoginScreen() {
   const insets = useSafeAreaInsets()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -26,6 +28,7 @@ export function LoginScreen() {
   const [accountPhone, setAccountPhone] = useState('')
   const [smsCode, setSmsCode] = useState('')
   const [smsSending, setSmsSending] = useState(false)
+  const [smsCooldownSeconds, setSmsCooldownSeconds] = useState(0)
   const [agreementAccepted, setAgreementAccepted] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
   const [userId, setUserId] = useState('')
@@ -41,6 +44,14 @@ export function LoginScreen() {
     const subscription = Linking.addEventListener('url', ({ url }) => applyInviteCodeFromUrl(url))
     return () => subscription.remove()
   }, [])
+
+  useEffect(() => {
+    if (smsCooldownSeconds <= 0) return undefined
+    const timer = setTimeout(() => {
+      setSmsCooldownSeconds((value) => Math.max(0, value - 1))
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [smsCooldownSeconds])
 
   const run = async (fn: () => Promise<void>, fallback: string) => {
     setLoading(true)
@@ -70,8 +81,12 @@ export function LoginScreen() {
     }
     setSmsSending(true)
     try {
-      await apiClient.sendSMSCode({ phone })
-      dialog.alert('验证码已发送', '请查看手机短信，验证码 15 分钟内有效。', 'success')
+      const result = await apiClient.sendSMSCode({ phone })
+      const cooldownSeconds = normalizePositiveSeconds(result.cooldown_seconds ?? result.retry_after_seconds) || DEFAULT_SMS_COOLDOWN_SECONDS
+      setSmsCooldownSeconds(cooldownSeconds)
+      const expiresInSeconds = normalizePositiveSeconds(result.expires_in_seconds)
+      const expiryText = expiresInSeconds > 0 ? formatDurationText(expiresInSeconds) : '有效期内'
+      dialog.alert('验证码已发送', `请查看手机短信，验证码${expiryText}有效。`, 'success')
     } catch (error) {
       dialog.alert('发送失败', userFacingErrorMessage(error, '请稍后再试'), 'warning')
     } finally {
@@ -101,6 +116,8 @@ export function LoginScreen() {
 
   const smsLoginReady = isValidMainlandPhone(accountPhone) && /^\d{6}$/.test(smsCode.trim())
   const sendCodeReady = isValidMainlandPhone(accountPhone)
+  const sendCodeDisabled = smsSending || smsCooldownSeconds > 0 || !sendCodeReady
+  const sendCodeLabel = smsCooldownSeconds > 0 ? `${smsCooldownSeconds}s 后重发` : '发送验证码'
 
   return (
     <ScrollView
@@ -143,18 +160,20 @@ export function LoginScreen() {
             placeholderTextColor={colors.textMuted}
           />
           <Pressable
-            disabled={smsSending || !sendCodeReady}
+            disabled={sendCodeDisabled}
             onPress={sendSMSCode}
             style={({ pressed }) => [
               styles.codeTextButton,
-              pressed && !smsSending && sendCodeReady && styles.pressed,
-              (smsSending || !sendCodeReady) && styles.disabled,
+              pressed && !sendCodeDisabled && styles.pressed,
+              sendCodeDisabled && styles.disabled,
             ]}
           >
             {smsSending ? (
               <ActivityIndicator color={colors.brandDark} />
             ) : (
-              <Text style={[styles.codeText, !sendCodeReady && styles.codeTextDisabled]}>发送验证码</Text>
+              <Text style={[styles.codeText, (!sendCodeReady || smsCooldownSeconds > 0) && styles.codeTextDisabled]}>
+                {sendCodeLabel}
+              </Text>
             )}
           </Pressable>
         </View>
@@ -252,6 +271,22 @@ function isValidMainlandPhone(phone: string): boolean {
   return /^1\d{10}$/.test(phone.trim())
 }
 
+function normalizePositiveSeconds(value: unknown): number {
+  const seconds = Number(value)
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0
+  return Math.max(1, Math.ceil(seconds))
+}
+
+function formatDurationText(totalSeconds: number): string {
+  const seconds = normalizePositiveSeconds(totalSeconds)
+  if (seconds <= 0) return ''
+  if (seconds < 60) return `${seconds}秒内`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  if (remainingSeconds === 0) return `${minutes}分钟内`
+  return `${minutes}分${remainingSeconds}秒内`
+}
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -259,29 +294,30 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 32,
+    paddingHorizontal: 26,
   },
   hero: {
-    marginTop: 96,
-    marginBottom: 118,
+    marginTop: 66,
+    marginBottom: 76,
   },
   brand: {
     color: colors.brand,
-    fontSize: 56,
+    fontSize: 46,
     fontWeight: '900',
     textAlign: 'center',
   },
   tagline: {
-    marginTop: 22,
+    marginTop: 16,
     color: colors.text,
-    fontSize: 24,
+    fontSize: 20,
+    lineHeight: 28,
     textAlign: 'center',
   },
   form: {
     gap: 0,
   },
   phoneRow: {
-    minHeight: 60,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
@@ -289,7 +325,7 @@ const styles = StyleSheet.create({
   },
   countryCode: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: 19,
   },
   inputDivider: {
     width: 1,
@@ -298,7 +334,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#d1d5db',
   },
   codeRow: {
-    minHeight: 60,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
@@ -308,11 +344,11 @@ const styles = StyleSheet.create({
   lineInput: {
     flex: 1,
     color: colors.text,
-    fontSize: 22,
+    fontSize: 19,
     paddingVertical: 10,
   },
   codeTextButton: {
-    minWidth: 106,
+    minWidth: 104,
     minHeight: 44,
     alignItems: 'flex-end',
     justifyContent: 'center',
@@ -320,27 +356,27 @@ const styles = StyleSheet.create({
   },
   codeText: {
     color: colors.brandDark,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
   codeTextDisabled: {
     color: colors.textMuted,
   },
   primaryButton: {
-    minHeight: 58,
+    minHeight: 54,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 999,
     backgroundColor: colors.brand,
-    marginTop: 34,
+    marginTop: 28,
   },
   primaryButtonText: {
     color: '#fff',
-    fontSize: 19,
+    fontSize: 17,
     fontWeight: '800',
   },
   wechatButton: {
-    minHeight: 58,
+    minHeight: 54,
     flexDirection: 'row',
     gap: 10,
     alignItems: 'center',
@@ -356,7 +392,7 @@ const styles = StyleSheet.create({
   },
   wechatButtonText: {
     color: colors.text,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
   },
   agreementRow: {
@@ -388,8 +424,8 @@ const styles = StyleSheet.create({
   agreementText: {
     flex: 1,
     color: colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 19,
   },
   linkText: {
     color: colors.blue,
@@ -404,7 +440,7 @@ const styles = StyleSheet.create({
   debugSection: {
     borderTopWidth: 1,
     borderTopColor: '#eef2f7',
-    marginTop: 360,
+    marginTop: 220,
     paddingTop: 20,
   },
   debugSectionTitle: {

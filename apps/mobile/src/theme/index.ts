@@ -37,3 +37,7 @@ export const shadow = {
   shadowOffset: { width: 0, height: 8 },
   elevation: 2,
 } as const
+
+export function compactFont(size: number, compactSize = size - 2) {
+  return Math.max(10, compactSize)
+}

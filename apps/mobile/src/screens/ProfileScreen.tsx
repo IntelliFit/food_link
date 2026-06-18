@@ -195,7 +195,7 @@ export function ProfileScreen() {
 
   const settingsItems: MenuEntry[] = [
     { title: '隐私设置', subtitle: '搜索可见性和公开记录', icon: Shield, tone: 'slate', onPress: () => navigation.navigate('PrivacySettings') },
-    { title: '关于我们', subtitle: '应用说明、协议和联系方式', icon: Info, tone: 'slate', onPress: () => navigation.navigate('AboutFeedback') },
+    { title: '关于我们', subtitle: '应用说明、协议和联系方式', icon: Info, tone: 'slate', onPress: () => navigation.navigate('About') },
   ]
 
   const moreItems: MenuEntry[] = [

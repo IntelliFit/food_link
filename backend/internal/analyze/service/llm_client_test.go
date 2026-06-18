@@ -164,6 +164,26 @@ func TestOfoxAIClient_Analyze_CustomBaseURL(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestOfoxAIClient_AnalyzeWithImagesAndTemperatureModel_OverridesRequestModel(t *testing.T) {
+	client := NewOfoxAIClient("fake-key", "gemini-3-flash-preview", "https://proxy.example.com/v1/")
+	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var payload map[string]any
+		assert.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
+		assert.Equal(t, "gpt-4.1:stable", payload["model"])
+		body := `{"choices":[{"message":{"content":"{\"species\":\"duck\",\"label\":\"鸭腿\",\"confidence\":0.9,\"reason\":\"皮色更像鸭\"}"}}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+
+	result, err := client.AnalyzeWithImagesAndTemperatureModel(context.Background(), "test prompt", []string{"https://example.com/img.jpg"}, 0.1, "gpt-4.1:stable")
+
+	assert.NoError(t, err)
+	assert.Equal(t, "duck", result["species"])
+}
+
 func TestDashScopeClient_Analyze_UsesQwen36FlashThinking(t *testing.T) {
 	client := NewDashScopeClient("fake-key")
 	client.client = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

@@ -1,5 +1,5 @@
 /**
- * 深色主题：仅作用于 `.fl-page-theme-root--dark` 包裹下的页面，不影响默认浅色。
+ * 深色主题：仅作用于 `.fl-d` 包裹下的页面，不影响默认浅色。
  * 以绿系暗色为基调，与品牌色 #5cb896 协调。
  */
 
@@ -28,7 +28,7 @@ $fl-dark-sk-a: rgb(38 46 44);
 $fl-dark-sk-b: rgb(56 66 62);
 $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $fl-dark-sk-a 75%);
 
-.fl-page-theme-root--dark {
+.fl-d {
   background: linear-gradient(
     180deg,
     #1a2822 0%,
@@ -39,144 +39,144 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 /* 各 Tab 页根节点原渐变改为透明，透出主题壳 */
-.fl-page-theme-root--dark .home-page,
-.fl-page-theme-root--dark .stats-page,
-.fl-page-theme-root--dark .community-page,
-.fl-page-theme-root--dark .profile-page {
+.fl-d .home-page,
+.fl-d .stats-page,
+.fl-d .community-page,
+.fl-d .profile-page {
   background: transparent !important;
 }
 
 /* ---------- 首页 ---------- */
-.fl-page-theme-root--dark .greeting-title,
-.fl-page-theme-root--dark .greeting-title-icon {
+.fl-d .greeting-title,
+.fl-d .greeting-title-icon {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .greeting-subtitle {
+.fl-d .greeting-subtitle {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .home-login-banner {
+.fl-d .home-login-banner {
   background: $fl-dark-panel-bg-strong !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .home-login-banner-text {
+.fl-d .home-login-banner-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .home-backfill-hint {
+.fl-d .home-backfill-hint {
   background: rgb(125 211 176 / 12%) !important;
   border-color: rgb(125 211 176 / 26%) !important;
 }
 
-.fl-page-theme-root--dark .home-backfill-hint__dot {
+.fl-d .home-backfill-hint__dot {
   background: $fl-dark-accent !important;
   box-shadow: 0 0 0 6rpx rgb(125 211 176 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .home-backfill-hint__text {
+.fl-d .home-backfill-hint__text {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .home-backfill-hint__date {
+.fl-d .home-backfill-hint__date {
   color: rgb(191 242 219 / 72%) !important;
 }
 
-.fl-page-theme-root--dark .home-backfill-hint__action {
+.fl-d .home-backfill-hint__action {
   color: #062a1f !important;
   background: $fl-dark-accent !important;
   box-shadow: 0 4rpx 12rpx rgb(125 211 176 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .main-card,
-.fl-page-theme-root--dark .combined-card,
-.fl-page-theme-root--dark .macro-card,
-.fl-page-theme-root--dark .water-card,
-.fl-page-theme-root--dark .exercise-card,
-.fl-page-theme-root--dark .meal-section,
-.fl-page-theme-root--dark .quick-actions {
+.fl-d .main-card,
+.fl-d .combined-card,
+.fl-d .macro-card,
+.fl-d .water-card,
+.fl-d .exercise-card,
+.fl-d .meal-section,
+.fl-d .quick-actions {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
   box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .card-label,
-.fl-page-theme-root--dark .card-value,
-.fl-page-theme-root--dark .macro-label,
-.fl-page-theme-root--dark .macro-num {
+.fl-d .card-label,
+.fl-d .card-value,
+.fl-d .macro-label,
+.fl-d .macro-num {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .card-sub,
-.fl-page-theme-root--dark .text-secondary,
-.fl-page-theme-root--dark .macro-unit {
+.fl-d .card-sub,
+.fl-d .text-secondary,
+.fl-d .macro-unit {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .date-day-name {
+.fl-d .date-day-name {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .date-day-circle {
+.fl-d .date-day-circle {
   background: $fl-dark-surface2 !important;
   border-color: $fl-dark-border !important;
   box-shadow: none !important;
 }
 
 /* 选中周：胶囊高亮；有记录/超标未选中时用实色，避免半透明发灰 */
-.fl-page-theme-root--dark .date-item.is-selected .date-day-circle {
+.fl-d .date-item.is-selected .date-day-circle {
 }
 
-.fl-page-theme-root--dark .date-item:not(.is-selected) .date-day-circle.is-recorded {
+.fl-d .date-item:not(.is-selected) .date-day-circle.is-recorded {
   background: #4a9d7d !important;
   border-color: rgb(92 184 150 / 45%) !important;
 }
 
-.fl-page-theme-root--dark .date-item:not(.is-selected) .date-day-circle.is-recorded .date-num-text,
-.fl-page-theme-root--dark .date-item:not(.is-selected) .date-day-circle.is-over .date-num-text {
+.fl-d .date-item:not(.is-selected) .date-day-circle.is-recorded .date-num-text,
+.fl-d .date-item:not(.is-selected) .date-day-circle.is-over .date-num-text {
   color: #fff !important;
 }
 
-.fl-page-theme-root--dark .date-item:not(.is-selected) .date-day-circle.is-over {
+.fl-d .date-item:not(.is-selected) .date-day-circle.is-over {
   background: #c45a5a !important;
   border-color: rgb(229 115 115 / 45%) !important;
 }
 
 /* 未选中日期：空圈数字需浅色，避免与深底融为一体 */
-.fl-page-theme-root--dark .date-item:not(.is-selected) .date-day-circle.is-empty .date-num-text {
+.fl-d .date-item:not(.is-selected) .date-day-circle.is-empty .date-num-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .macro-card-horizontal {
+.fl-d .macro-card-horizontal {
   background: transparent !important;
   border-color: transparent !important;
 }
 
-.fl-page-theme-root--dark .macro-card-horizontal.is-warning {
+.fl-d .macro-card-horizontal.is-warning {
   background: $fl-dark-warning-bg !important;
   border-color: rgb(229 115 115 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .macro-label-horizontal,
-.fl-page-theme-root--dark .macro-target-value,
-.fl-page-theme-root--dark .macro-divider {
+.fl-d .macro-label-horizontal,
+.fl-d .macro-target-value,
+.fl-d .macro-divider {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .macro-target-total,
-.fl-page-theme-root--dark .macro-target-unit,
-.fl-page-theme-root--dark .macro-target-hint {
+.fl-d .macro-target-total,
+.fl-d .macro-target-unit,
+.fl-d .macro-target-hint {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .macro-progress-bar-bg,
-.fl-page-theme-root--dark .progress-bar-bg,
-.fl-page-theme-root--dark .body-status-progress-bg {
+.fl-d .macro-progress-bar-bg,
+.fl-d .progress-bar-bg,
+.fl-d .body-status-progress-bg {
   background: rgb(0 0 0 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .macros-divider {
+.fl-d .macros-divider {
   background: linear-gradient(
     90deg,
     transparent 0%,
@@ -186,388 +186,388 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   ) !important;
 }
 
-.fl-page-theme-root--dark .body-status-card {
+.fl-d .body-status-card {
   background: $fl-dark-panel-bg !important;
   box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .body-status-label,
-.fl-page-theme-root--dark .body-status-title {
+.fl-d .body-status-label,
+.fl-d .body-status-title {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .body-status-value,
-.fl-page-theme-root--dark .body-status-unit {
+.fl-d .body-status-value,
+.fl-d .body-status-unit {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .body-status-hint,
-.fl-page-theme-root--dark .body-status-progress-text,
-.fl-page-theme-root--dark .body-status-empty {
+.fl-d .body-status-hint,
+.fl-d .body-status-progress-text,
+.fl-d .body-status-empty {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .target-edit-btn {
+.fl-d .target-edit-btn {
   background: rgb(30 40 36 / 85%) !important;
   box-shadow:
     0 4rpx 16rpx rgb(0 0 0 / 25%),
     inset 0 1rpx 0 rgb(255 255 255 / 8%) !important;
 }
 
-.fl-page-theme-root--dark .target-edit-icon {
+.fl-d .target-edit-icon {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .target-edit-text {
+.fl-d .target-edit-text {
   color: #7dd3b0 !important;
 }
 
-.fl-page-theme-root--dark .diet-rec-entry,
-.fl-page-theme-root--dark .diet-rec-sheet,
-.fl-page-theme-root--dark .diet-rec-option {
+.fl-d .diet-rec-entry,
+.fl-d .diet-rec-sheet,
+.fl-d .diet-rec-option {
   background: $fl-dark-panel-bg !important;
   box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .diet-rec-entry-icon,
-.fl-page-theme-root--dark .diet-rec-entry-btn,
-.fl-page-theme-root--dark .diet-rec-macro {
+.fl-d .diet-rec-entry-icon,
+.fl-d .diet-rec-entry-btn,
+.fl-d .diet-rec-macro {
   background: rgb(125 211 176 / 14%) !important;
 }
 
-.fl-page-theme-root--dark .diet-rec-entry-title,
-.fl-page-theme-root--dark .diet-rec-title,
-.fl-page-theme-root--dark .diet-rec-gap-value,
-.fl-page-theme-root--dark .diet-rec-option-title,
-.fl-page-theme-root--dark .diet-rec-food-name {
+.fl-d .diet-rec-entry-title,
+.fl-d .diet-rec-title,
+.fl-d .diet-rec-gap-value,
+.fl-d .diet-rec-option-title,
+.fl-d .diet-rec-food-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .diet-rec-entry-subtitle,
-.fl-page-theme-root--dark .diet-rec-summary,
-.fl-page-theme-root--dark .diet-rec-option-reason,
-.fl-page-theme-root--dark .diet-rec-food-amount,
-.fl-page-theme-root--dark .diet-rec-tip,
-.fl-page-theme-root--dark .diet-rec-alt,
-.fl-page-theme-root--dark .diet-rec-empty-text {
+.fl-d .diet-rec-entry-subtitle,
+.fl-d .diet-rec-summary,
+.fl-d .diet-rec-option-reason,
+.fl-d .diet-rec-food-amount,
+.fl-d .diet-rec-tip,
+.fl-d .diet-rec-alt,
+.fl-d .diet-rec-empty-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .diet-rec-kicker,
-.fl-page-theme-root--dark .diet-rec-entry-icon-text,
-.fl-page-theme-root--dark .diet-rec-entry-btn-text,
-.fl-page-theme-root--dark .diet-rec-option-cal,
-.fl-page-theme-root--dark .diet-rec-macro {
+.fl-d .diet-rec-kicker,
+.fl-d .diet-rec-entry-icon-text,
+.fl-d .diet-rec-entry-btn-text,
+.fl-d .diet-rec-option-cal,
+.fl-d .diet-rec-macro {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .diet-rec-entry-btn.primary,
-.fl-page-theme-root--dark .diet-rec-refresh {
+.fl-d .diet-rec-entry-btn.primary,
+.fl-d .diet-rec-refresh {
   background: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .diet-rec-entry-btn-text.primary,
-.fl-page-theme-root--dark .diet-rec-refresh-text {
+.fl-d .diet-rec-entry-btn-text.primary,
+.fl-d .diet-rec-refresh-text {
   color: #10201a !important;
 }
 
-.fl-page-theme-root--dark .diet-rec-tabs,
-.fl-page-theme-root--dark .diet-rec-close,
-.fl-page-theme-root--dark .diet-rec-gap-pill,
-.fl-page-theme-root--dark .diet-rec-food {
+.fl-d .diet-rec-tabs,
+.fl-d .diet-rec-close,
+.fl-d .diet-rec-gap-pill,
+.fl-d .diet-rec-food {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .diet-rec-tab.active {
+.fl-d .diet-rec-tab.active {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .diet-rec-tab.active .diet-rec-tab-text {
+.fl-d .diet-rec-tab.active .diet-rec-tab-text {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .section-title,
-.fl-page-theme-root--dark .meals-title,
-.fl-page-theme-root--dark .expiry-title {
+.fl-d .section-title,
+.fl-d .meals-title,
+.fl-d .expiry-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .meal-item:not(.is-warning) {
+.fl-d .meal-item:not(.is-warning) {
   background: $fl-dark-panel-bg !important;
   border-color: transparent !important;
 }
 
-.fl-page-theme-root--dark .meal-item.is-warning {
+.fl-d .meal-item.is-warning {
   background: #2c1c1c !important;
   border-color: #7a4444 !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .meal-media-wrap {
+.fl-d .meal-media-wrap {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .meal-item.is-warning .meal-media-wrap {
+.fl-d .meal-item.is-warning .meal-media-wrap {
   background: #3a2323 !important;
 }
 
-.fl-page-theme-root--dark .meal-icon-wrap {
+.fl-d .meal-icon-wrap {
   background: linear-gradient(135deg, rgb(32 42 38) 0%, rgb(28 36 34) 100%) !important;
 }
 
-.fl-page-theme-root--dark .meal-item.is-warning .meal-icon-wrap {
+.fl-d .meal-item.is-warning .meal-icon-wrap {
   background: linear-gradient(135deg, #4a2d2d 0%, #352121 100%) !important;
 }
 
-.fl-page-theme-root--dark .meal-name,
-.fl-page-theme-root--dark .meal-desc,
-.fl-page-theme-root--dark .meal-time-inline,
-.fl-page-theme-root--dark .meal-time-pill-text,
-.fl-page-theme-root--dark .meal-progress-text,
-.fl-page-theme-root--dark .meal-progress-percent,
-.fl-page-theme-root--dark .meal-macro-text,
-.fl-page-theme-root--dark .meal-type-target {
+.fl-d .meal-name,
+.fl-d .meal-desc,
+.fl-d .meal-time-inline,
+.fl-d .meal-time-pill-text,
+.fl-d .meal-progress-text,
+.fl-d .meal-progress-percent,
+.fl-d .meal-macro-text,
+.fl-d .meal-type-target {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .meal-item.is-warning .meal-name,
-.fl-page-theme-root--dark .meal-item.is-warning .meal-desc,
-.fl-page-theme-root--dark .meal-item.is-warning .meal-calorie,
-.fl-page-theme-root--dark .meal-item.is-warning .meal-calorie-unit,
-.fl-page-theme-root--dark .meal-item.is-warning .meal-time-inline,
-.fl-page-theme-root--dark .meal-item.is-warning .meal-time-pill-text {
+.fl-d .meal-item.is-warning .meal-name,
+.fl-d .meal-item.is-warning .meal-desc,
+.fl-d .meal-item.is-warning .meal-calorie,
+.fl-d .meal-item.is-warning .meal-calorie-unit,
+.fl-d .meal-item.is-warning .meal-time-inline,
+.fl-d .meal-item.is-warning .meal-time-pill-text {
   color: #ffe3e3 !important;
 }
 
-.fl-page-theme-root--dark .meal-item.is-warning .meal-type-target,
-.fl-page-theme-root--dark .meal-item.is-warning .meal-progress-text,
-.fl-page-theme-root--dark .meal-item.is-warning .meal-macro-text {
+.fl-d .meal-item.is-warning .meal-type-target,
+.fl-d .meal-item.is-warning .meal-progress-text,
+.fl-d .meal-item.is-warning .meal-macro-text {
   color: #efb3b3 !important;
 }
 
-.fl-page-theme-root--dark .meal-progress-percent.is-over,
-.fl-page-theme-root--dark .meal-item.is-warning .meal-progress-percent {
+.fl-d .meal-progress-percent.is-over,
+.fl-d .meal-item.is-warning .meal-progress-percent {
   color: #ff8f8f !important;
 }
 
-.fl-page-theme-root--dark .meal-time-pill {
+.fl-d .meal-time-pill {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .meal-item.is-warning .meal-time-pill {
+.fl-d .meal-item.is-warning .meal-time-pill {
   background: #442626 !important;
 }
 
-.fl-page-theme-root--dark .meal-progress-bar-bg {
+.fl-d .meal-progress-bar-bg {
   background: rgb(255 255 255 / 10%) !important;
 }
 
-.fl-page-theme-root--dark .meal-item.is-warning .meal-progress-bar-bg {
+.fl-d .meal-item.is-warning .meal-progress-bar-bg {
   background: rgb(255 255 255 / 8%) !important;
 }
 
-.fl-page-theme-root--dark .meal-thumb-badge {
+.fl-d .meal-thumb-badge {
   background: rgb(0 188 125 / 82%) !important;
 }
 
-.fl-page-theme-root--dark .meal-item.is-warning .meal-thumb-badge {
+.fl-d .meal-item.is-warning .meal-thumb-badge {
   background: rgb(180 76 76 / 88%) !important;
 }
 
-.fl-page-theme-root--dark .expiry-skeleton-item,
-.fl-page-theme-root--dark .meal-skeleton-item {
+.fl-d .expiry-skeleton-item,
+.fl-d .meal-skeleton-item {
   background: $fl-dark-panel-bg-soft !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .expiry-skeleton-thumb,
-.fl-page-theme-root--dark .meal-skeleton-thumb,
-.fl-page-theme-root--dark .expiry-skeleton-top .home-line-title,
-.fl-page-theme-root--dark .expiry-skeleton-top .home-line-tag,
-.fl-page-theme-root--dark .expiry-skeleton-mid .home-line-foot-l,
-.fl-page-theme-root--dark .meal-skeleton-top .home-line-title,
-.fl-page-theme-root--dark .meal-skeleton-top .home-line-cal,
-.fl-page-theme-root--dark .meal-skeleton-foot .home-line-foot-l,
-.fl-page-theme-root--dark .meal-skeleton-foot .home-line-foot-r,
-.fl-page-theme-root--dark .home-skeleton-bar {
+.fl-d .expiry-skeleton-thumb,
+.fl-d .meal-skeleton-thumb,
+.fl-d .expiry-skeleton-top .home-line-title,
+.fl-d .expiry-skeleton-top .home-line-tag,
+.fl-d .expiry-skeleton-mid .home-line-foot-l,
+.fl-d .meal-skeleton-top .home-line-title,
+.fl-d .meal-skeleton-top .home-line-cal,
+.fl-d .meal-skeleton-foot .home-line-foot-l,
+.fl-d .meal-skeleton-foot .home-line-foot-r,
+.fl-d .home-skeleton-bar {
   background: $fl-dark-sk-grad !important;
   background-size: 200% 100% !important;
 }
 
 /* 空态插图：压暗，避免浅色插画刺眼 */
-.fl-page-theme-root--dark .meals-empty image,
-.fl-page-theme-root--dark .meals-empty .taroify-empty__image,
-.fl-page-theme-root--dark .meals-empty .taroify-empty__image-wrap {
+.fl-d .meals-empty image,
+.fl-d .meals-empty .taroify-empty__image,
+.fl-d .meals-empty .taroify-empty__image-wrap {
   opacity: 0.55 !important;
   filter: brightness(0.55) !important;
 }
 
-.fl-page-theme-root--dark .meals-empty .taroify-empty__description {
+.fl-d .meals-empty .taroify-empty__description {
   color: $fl-dark-text2 !important;
 }
 
 /* 首页：快到期食物（单条白底卡片 → 深色） */
-.fl-page-theme-root--dark .expiry-item {
+.fl-d .expiry-item {
   background: $fl-dark-panel-bg !important;
   border-color: transparent !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .expiry-media-wrap {
+.fl-d .expiry-media-wrap {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .expiry-name {
+.fl-d .expiry-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .expiry-time-pill {
+.fl-d .expiry-time-pill {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .expiry-time-pill-text,
-.fl-page-theme-root--dark .expiry-meta-text {
+.fl-d .expiry-time-pill-text,
+.fl-d .expiry-meta-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .expiry-empty-title {
+.fl-d .expiry-empty-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .expiry-empty-desc {
+.fl-d .expiry-empty-desc {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .profile-theme-chip {
+.fl-d .profile-theme-chip {
   background: $fl-dark-panel-bg-strong !important;
   border-color: $fl-dark-border !important;
   box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .profile-theme-chip-icon {
+.fl-d .profile-theme-chip-icon {
   color: $fl-dark-accent !important;
 }
 
 /* ---------- 我的 ---------- */
-.fl-page-theme-root--dark .profile-card {
+.fl-d .profile-card {
   background: $fl-dark-panel-bg !important;
 }
 
-.fl-page-theme-root--dark .user-name {
+.fl-d .user-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .user-subtitle,
-.fl-page-theme-root--dark .list-title,
-.fl-page-theme-root--dark .card-validity,
-.fl-page-theme-root--dark .logout-text,
-.fl-page-theme-root--dark .login-text,
-.fl-page-theme-root--dark .profile-version,
-.fl-page-theme-root--dark .onboarding-text {
+.fl-d .user-subtitle,
+.fl-d .list-title,
+.fl-d .card-validity,
+.fl-d .logout-text,
+.fl-d .login-text,
+.fl-d .profile-version,
+.fl-d .onboarding-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .user-avatar-wrapper {
+.fl-d .user-avatar-wrapper {
   background: $fl-dark-surface2 !important;
 }
 
-.fl-page-theme-root--dark .member-card--free {
+.fl-d .member-card--free {
   background: linear-gradient(145deg, rgb(255 255 255 / 8%) 0%, rgb(255 255 255 / 4%) 100%) !important;
   color: $fl-dark-text !important;
   border: 1rpx solid $fl-dark-border;
 }
 
-.fl-page-theme-root--dark .member-card--free .card-title,
-.fl-page-theme-root--dark .member-card--free .points-balance {
+.fl-d .member-card--free .card-title,
+.fl-d .member-card--free .points-balance {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .list-item {
+.fl-d .list-item {
   border-bottom-color: rgb(92 184 150 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .list-item:last-child {
+.fl-d .list-item:last-child {
   border-bottom: none;
 }
 
-.fl-page-theme-root--dark .logout-card,
-.fl-page-theme-root--dark .login-card {
+.fl-d .logout-card,
+.fl-d .login-card {
   background: $fl-dark-panel-bg !important;
 }
 
 /* ---------- 分析 Tab ---------- */
-.fl-page-theme-root--dark .stats-guest-card,
-.fl-page-theme-root--dark .stats-guest-title,
-.fl-page-theme-root--dark .stats-guest-desc {
+.fl-d .stats-guest-card,
+.fl-d .stats-guest-title,
+.fl-d .stats-guest-desc {
   background: $fl-dark-panel-bg !important;
   color: $fl-dark-text !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .stats-guest-desc {
+.fl-d .stats-guest-desc {
   color: $fl-dark-text2 !important;
 }
 
 /* 勿覆盖 .hero-card：保留绿/橙渐变大 Hero */
-.fl-page-theme-root--dark .stat-card,
-.fl-page-theme-root--dark .stats-section-card {
+.fl-d .stat-card,
+.fl-d .stats-section-card {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .hero-card .hero-title,
-.fl-page-theme-root--dark .hero-card .hero-value,
-.fl-page-theme-root--dark .stat-card .stat-label,
-.fl-page-theme-root--dark .stat-card .stat-value {
+.fl-d .hero-card .hero-title,
+.fl-d .hero-card .hero-value,
+.fl-d .stat-card .stat-label,
+.fl-d .stat-card .stat-value {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .stat-card .stat-sub,
-.fl-page-theme-root--dark .hero-card .hero-sub {
+.fl-d .stat-card .stat-sub,
+.fl-d .hero-card .hero-sub {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .stats-page {
+.fl-d .stats-page {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .segmented-control {
+.fl-d .segmented-control {
   background: $fl-dark-panel-bg-soft !important;
   border-color: $fl-dark-border !important;
   box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 25%) !important;
 }
 
-.fl-page-theme-root--dark .segment-item {
+.fl-d .segment-item {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .segment-item.active {
+.fl-d .segment-item.active {
   background: $fl-dark-ghost-bg !important;
   color: $fl-dark-accent !important;
   box-shadow: 0 2rpx 10rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .tabs-loading-text {
+.fl-d .tabs-loading-text {
   color: $fl-dark-text2 !important;
 }
 
 /* 分析 Tab 白底模块 → 深色表面 */
-.fl-page-theme-root--dark .stats-card:not(.hero-card) {
+.fl-d .stats-card:not(.hero-card) {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
   box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 32%) !important;
 }
 
-.fl-page-theme-root--dark .stats-card:not(.hero-card) .card-title {
+.fl-d .stats-card:not(.hero-card) .card-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .stats-card:not(.hero-card) .card-subtitle {
+.fl-d .stats-card:not(.hero-card) .card-subtitle {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .hero-card .hero-badge {
+.fl-d .hero-card .hero-badge {
   background: rgb(20 30 27 / 96%) !important;
   border: 1rpx solid rgb(92 184 150 / 14%) !important;
   box-shadow:
@@ -575,17 +575,17 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
     inset 0 1rpx 0 rgb(255 255 255 / 4%) !important;
 }
 
-.fl-page-theme-root--dark .hero-card.deficit-mode .hero-badge-label,
-.fl-page-theme-root--dark .hero-card.deficit-mode .hero-badge-icon {
+.fl-d .hero-card.deficit-mode .hero-badge-label,
+.fl-d .hero-card.deficit-mode .hero-badge-icon {
   color: #d1fae5 !important;
 }
 
-.fl-page-theme-root--dark .hero-card.surplus-mode .hero-badge-label,
-.fl-page-theme-root--dark .hero-card.surplus-mode .hero-badge-icon {
+.fl-d .hero-card.surplus-mode .hero-badge-label,
+.fl-d .hero-card.surplus-mode .hero-badge-icon {
   color: #ffedd5 !important;
 }
 
-.fl-page-theme-root--dark .hero-metabolic-row {
+.fl-d .hero-metabolic-row {
   background: rgb(20 30 27 / 96%) !important;
   border: 1rpx solid rgb(92 184 150 / 14%) !important;
   box-shadow:
@@ -593,29 +593,29 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
     inset 0 1rpx 0 rgb(255 255 255 / 4%) !important;
 }
 
-.fl-page-theme-root--dark .hero-card.deficit-mode .hero-metabolic-row__title {
+.fl-d .hero-card.deficit-mode .hero-metabolic-row__title {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .hero-card.surplus-mode .hero-metabolic-row__title {
+.fl-d .hero-card.surplus-mode .hero-metabolic-row__title {
   color: #fdba74 !important;
 }
 
-.fl-page-theme-root--dark .hero-card.deficit-mode .hero-metabolic-row__sub {
+.fl-d .hero-card.deficit-mode .hero-metabolic-row__sub {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .hero-card.surplus-mode .hero-metabolic-row__sub {
+.fl-d .hero-card.surplus-mode .hero-metabolic-row__sub {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .hero-metabolic-row__arrow {
+.fl-d .hero-metabolic-row__arrow {
   color: $fl-dark-text2 !important;
   background: rgb(20 30 27 / 96%) !important;
   border-left-color: rgb(92 184 150 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .member-card--free .card-upgrade-btn {
+.fl-d .member-card--free .card-upgrade-btn {
   background: rgb(20 30 27 / 96%) !important;
   border: 1rpx solid rgb(92 184 150 / 14%) !important;
   box-shadow:
@@ -623,85 +623,85 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
     inset 0 1rpx 0 rgb(255 255 255 / 4%) !important;
 }
 
-.fl-page-theme-root--dark .member-card--free .card-upgrade-text {
+.fl-d .member-card--free .card-upgrade-text {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .streak-icon {
+.fl-d .streak-icon {
   background: rgb(45 32 32 / 80%) !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .streak-title,
-.fl-page-theme-root--dark .streak-suffix {
+.fl-d .streak-title,
+.fl-d .streak-suffix {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .streak-num {
+.fl-d .streak-num {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .streak-badge {
+.fl-d .streak-badge {
   background: rgb(45 32 32 / 75%) !important;
   color: #fca5a5 !important;
 }
 
-.fl-page-theme-root--dark .heatmap-cell,
-.fl-page-theme-root--dark .heatmap-cell.is-empty {
+.fl-d .heatmap-cell,
+.fl-d .heatmap-cell.is-empty {
   background: rgb(30 38 36) !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .heatmap-cell.is-empty .heatmap-cell-label {
+.fl-d .heatmap-cell.is-empty .heatmap-cell-label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .chart-switch-label,
-.fl-page-theme-root--dark .bar-calorie-text,
-.fl-page-theme-root--dark .bar-label {
+.fl-d .chart-switch-label,
+.fl-d .bar-calorie-text,
+.fl-d .bar-label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .bar-wrapper {
+.fl-d .bar-wrapper {
   background: rgb(0 0 0 / 25%) !important;
 }
 
-.fl-page-theme-root--dark .chart-empty-state .empty-text {
+.fl-d .chart-empty-state .empty-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .macro-name {
+.fl-d .macro-name {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .macro-detail {
+.fl-d .macro-detail {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .progress-track {
+.fl-d .progress-track {
   background: rgb(0 0 0 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .meal-gauge-item {
+.fl-d .meal-gauge-item {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .meal-gauge-label {
+.fl-d .meal-gauge-label {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .meal-gauge-percent,
-.fl-page-theme-root--dark .meal-gauge-cal {
+.fl-d .meal-gauge-percent,
+.fl-d .meal-gauge-cal {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .meal-gauge-icon-wrap {
+.fl-d .meal-gauge-icon-wrap {
   background: rgb(255 255 255 / 6%) !important;
 }
 
-.fl-page-theme-root--dark .body-metric-panel,
-.fl-page-theme-root--dark .body-metric-panel.water-panel {
+.fl-d .body-metric-panel,
+.fl-d .body-metric-panel.water-panel {
   background:
     linear-gradient(180deg, rgb(24 28 31 / 96%) 0%, rgb(18 22 25 / 94%) 100%),
     linear-gradient(135deg, rgb(92 184 150 / 8%) 0%, rgb(92 158 212 / 8%) 100%) !important;
@@ -711,439 +711,439 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
     0 10rpx 28rpx rgb(0 0 0 / 24%) !important;
 }
 
-.fl-page-theme-root--dark .body-metric-title,
-.fl-page-theme-root--dark .body-metric-main,
-.fl-page-theme-root--dark .weight-chip-value {
+.fl-d .body-metric-title,
+.fl-d .body-metric-main,
+.fl-d .weight-chip-value {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .body-metric-empty,
-.fl-page-theme-root--dark .body-metric-sub,
-.fl-page-theme-root--dark .weight-chip-date,
-.fl-page-theme-root--dark .water-trend-label,
-.fl-page-theme-root--dark .water-metric-note {
+.fl-d .body-metric-empty,
+.fl-d .body-metric-sub,
+.fl-d .weight-chip-date,
+.fl-d .water-trend-label,
+.fl-d .water-metric-note {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .weight-chip {
+.fl-d .weight-chip {
   background: rgb(255 255 255 / 5%) !important;
   border: 1rpx solid rgb(255 255 255 / 6%) !important;
 }
 
-.fl-page-theme-root--dark .water-trend-bar-wrap {
+.fl-d .water-trend-bar-wrap {
   background: rgb(255 255 255 / 5%) !important;
   border: 1rpx solid rgb(255 255 255 / 6%) !important;
 }
 
 /* ---------- 分析 Tab：健康友好度评分卡片 ---------- */
-.fl-page-theme-root--dark .risk-card.stats-card {
+.fl-d .risk-card.stats-card {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
   box-shadow: 0 8rpx 28rpx rgb(0 0 0 / 32%) !important;
 }
 
-.fl-page-theme-root--dark .risk-card.tone-positive {
+.fl-d .risk-card.tone-positive {
   border-color: rgb(92 184 150 / 32%) !important;
 }
 
-.fl-page-theme-root--dark .risk-card.tone-neutral {
+.fl-d .risk-card.tone-neutral {
   border-color: rgb(100 160 220 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .risk-card.tone-warning {
+.fl-d .risk-card.tone-warning {
   border-color: rgb(200 160 60 / 38%) !important;
 }
 
-.fl-page-theme-root--dark .risk-card.tone-danger {
+.fl-d .risk-card.tone-danger {
   border-color: rgb(220 110 110 / 42%) !important;
 }
 
-.fl-page-theme-root--dark .risk-card-title {
+.fl-d .risk-card-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .risk-card-summary {
+.fl-d .risk-card-summary {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .risk-card-score {
+.fl-d .risk-card-score {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .risk-card.tone-warning .risk-card-score {
+.fl-d .risk-card.tone-warning .risk-card-score {
   color: #fbbf24 !important;
 }
 
-.fl-page-theme-root--dark .risk-card.tone-danger .risk-card-score {
+.fl-d .risk-card.tone-danger .risk-card-score {
   color: #f87171 !important;
 }
 
-.fl-page-theme-root--dark .risk-card-score-unit,
-.fl-page-theme-root--dark .risk-card-expand {
+.fl-d .risk-card-score-unit,
+.fl-d .risk-card-expand {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .risk-card-summary-expanded {
+.fl-d .risk-card-summary-expanded {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .risk-card-basis {
+.fl-d .risk-card-basis {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .risk-card-divider {
+.fl-d .risk-card-divider {
   background: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .risk-card-action-label {
+.fl-d .risk-card-action-label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .risk-card-action {
+.fl-d .risk-card-action {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .risk-card-delta {
+.fl-d .risk-card-delta {
   background: rgb(92 184 150 / 14%) !important;
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .risk-card-more-btn {
+.fl-d .risk-card-more-btn {
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .risk-card-more-text {
+.fl-d .risk-card-more-text {
   color: $fl-dark-accent !important;
 }
 
 /* ---------- 分析 Tab：友好度详情底部弹窗 ---------- */
-.fl-page-theme-root--dark .risk-detail-panel {
+.fl-d .risk-detail-panel {
   background: $fl-dark-home-solid-bg !important;
   box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-handle {
+.fl-d .risk-detail-handle {
   background: #4b5563 !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-title {
+.fl-d .risk-detail-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-score {
+.fl-d .risk-detail-score {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-score-unit {
+.fl-d .risk-detail-score-unit {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-badge.tone-positive {
+.fl-d .risk-detail-badge.tone-positive {
   background: rgb(134 239 172 / 14%) !important;
   color: #4ade80 !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-badge.tone-neutral {
+.fl-d .risk-detail-badge.tone-neutral {
   background: rgb(100 160 220 / 16%) !important;
   color: #60a5fa !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-badge.tone-warning {
+.fl-d .risk-detail-badge.tone-warning {
   background: rgb(253 224 71 / 14%) !important;
   color: #fbbf24 !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-badge.tone-danger {
+.fl-d .risk-detail-badge.tone-danger {
   background: rgb(248 113 113 / 16%) !important;
   color: #f87171 !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-divider {
+.fl-d .risk-detail-divider {
   background: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-section-label {
+.fl-d .risk-detail-section-label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-section-text {
+.fl-d .risk-detail-section-text {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-delta {
+.fl-d .risk-detail-delta {
   background: rgb(92 184 150 / 14%) !important;
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-close-btn {
+.fl-d .risk-detail-close-btn {
   background: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .risk-detail-close-text {
+.fl-d .risk-detail-close-text {
   color: #fff !important;
 }
 
 /* ---------- 分析 Tab：风险选择器（chip 多选） ---------- */
-.fl-page-theme-root--dark .risk-picker-summary {
+.fl-d .risk-picker-summary {
   background: rgb(92 184 150 / 10%) !important;
 }
 
-.fl-page-theme-root--dark .risk-picker-summary__count {
+.fl-d .risk-picker-summary__count {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .risk-picker-summary__text {
+.fl-d .risk-picker-summary__text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .risk-picker-chip {
+.fl-d .risk-picker-chip {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .risk-picker-chip.active {
+.fl-d .risk-picker-chip.active {
   background: rgb(92 184 150 / 12%) !important;
   border-color: rgb(92 184 150 / 36%) !important;
   box-shadow: inset 0 0 0 1rpx rgb(92 184 150 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .risk-picker-chip__title {
+.fl-d .risk-picker-chip__title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .risk-picker-chip__action {
+.fl-d .risk-picker-chip__action {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .risk-picker-chip.active .risk-picker-chip__action {
+.fl-d .risk-picker-chip.active .risk-picker-chip__action {
   color: $fl-dark-accent !important;
 }
 
 /* ---------- 分析 Tab：风险概览徽章 ---------- */
-.fl-page-theme-root--dark .risk-overview-badge {
+.fl-d .risk-overview-badge {
   background: rgb(255 255 255 / 8%) !important;
   border-color: rgb(255 255 255 / 10%) !important;
 }
 
-.fl-page-theme-root--dark .risk-overview-badge.tone-positive {
+.fl-d .risk-overview-badge.tone-positive {
   background: rgb(134 239 172 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .risk-overview-badge.tone-neutral {
+.fl-d .risk-overview-badge.tone-neutral {
   background: rgb(255 255 255 / 8%) !important;
 }
 
-.fl-page-theme-root--dark .risk-overview-badge.tone-warning {
+.fl-d .risk-overview-badge.tone-warning {
   background: rgb(251 191 36 / 14%) !important;
 }
 
-.fl-page-theme-root--dark .risk-overview-badge.tone-danger {
+.fl-d .risk-overview-badge.tone-danger {
   background: rgb(248 113 113 / 15%) !important;
 }
 
-.fl-page-theme-root--dark .risk-overview-badge-label {
+.fl-d .risk-overview-badge-label {
   color: $fl-dark-text !important;
 }
 
 /* ---------- 分析 Tab：行动方案卡片 ---------- */
-.fl-page-theme-root--dark .risk-manage-card .card-collapsed-preview {
+.fl-d .risk-manage-card .card-collapsed-preview {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .action-plan-card__score-before {
+.fl-d .action-plan-card__score-before {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .action-plan-card__score-after {
+.fl-d .action-plan-card__score-after {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .action-plan-card__arrow {
+.fl-d .action-plan-card__arrow {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .action-plan-panel {
+.fl-d .action-plan-panel {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .action-plan-panel--green {
+.fl-d .action-plan-panel--green {
   background: rgb(92 184 150 / 12%) !important;
   border-color: rgb(92 184 150 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .action-plan-panel__title {
+.fl-d .action-plan-panel__title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .action-plan-panel__empty {
+.fl-d .action-plan-panel__empty {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .action-plan-item__bullet {
+.fl-d .action-plan-item__bullet {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .action-plan-item__title {
+.fl-d .action-plan-item__title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .action-plan-item__detail {
+.fl-d .action-plan-item__detail {
   color: $fl-dark-text2 !important;
 }
 
 /* ---------- 分析 Tab：支撑证据 ---------- */
-.fl-page-theme-root--dark .stats-section-head__title {
+.fl-d .stats-section-head__title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .stats-section-head__subtitle {
+.fl-d .stats-section-head__subtitle {
   color: $fl-dark-text2 !important;
 }
 
 /* ---------- 分析 Tab：AI 风险解读卡片细节 ---------- */
-.fl-page-theme-root--dark .analysis-loading-icon {
+.fl-d .analysis-loading-icon {
   color: #7eb8e8 !important;
 }
 
-.fl-page-theme-root--dark .analysis-empty-action {
+.fl-d .analysis-empty-action {
   background: linear-gradient(135deg, #4a7594 0%, #3d6b94 100%) !important;
   box-shadow: 0 10rpx 24rpx rgb(12 24 36 / 40%) !important;
 }
 
-.fl-page-theme-root--dark .analysis-empty-action-text {
+.fl-d .analysis-empty-action-text {
   color: #fff !important;
 }
 
-.fl-page-theme-root--dark .analysis-error-text {
+.fl-d .analysis-error-text {
   color: #f4a0a0 !important;
 }
 
-.fl-page-theme-root--dark .card-collapsed-preview__text {
+.fl-d .card-collapsed-preview__text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .analysis-status {
+.fl-d .analysis-status {
   background: #1e2725 !important;
   border-color: #355248 !important;
 }
 
-.fl-page-theme-root--dark .analysis-status.warning {
+.fl-d .analysis-status.warning {
   background: #33241d !important;
   border-color: #8c5d40 !important;
 }
 
-.fl-page-theme-root--dark .analysis-status-text,
-.fl-page-theme-root--dark .analysis-content,
-.fl-page-theme-root--dark .analysis-loading-text,
-.fl-page-theme-root--dark .analysis-empty-text {
+.fl-d .analysis-status-text,
+.fl-d .analysis-content,
+.fl-d .analysis-loading-text,
+.fl-d .analysis-empty-text {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .analysis-status-action {
+.fl-d .analysis-status-action {
   background: #2a211b !important;
   border-color: #8c5d40 !important;
   box-shadow: 0 4rpx 10rpx rgb(0 0 0 / 24%) !important;
 }
 
-.fl-page-theme-root--dark .analysis-status-action-text,
-.fl-page-theme-root--dark .analysis-status-action-icon {
+.fl-d .analysis-status-action-text,
+.fl-d .analysis-status-action-icon {
   color: #f0b98a !important;
 }
 
-.fl-page-theme-root--dark .ai-disclaimer-text {
+.fl-d .ai-disclaimer-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .analysis-error {
+.fl-d .analysis-error {
   background: #2c1c1c !important;
   border-color: #7a4444 !important;
 }
 
-.fl-page-theme-root--dark .analysis-card {
+.fl-d .analysis-card {
   background: linear-gradient(135deg, rgb(32 44 52 / 90%) 0%, rgb(26 34 32 / 95%) 100%) !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .analysis-card .card-title {
+.fl-d .analysis-card .card-title {
   color: #9ec5e8 !important;
 }
 
-.fl-page-theme-root--dark .analysis-card .card-subtitle {
+.fl-d .analysis-card .card-subtitle {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .analysis-action-btn {
+.fl-d .analysis-action-btn {
   background: rgb(40 56 68 / 80%) !important;
   border-color: rgb(120 165 200 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .analysis-action-btn-text {
+.fl-d .analysis-action-btn-text {
   color: #b8d4f0 !important;
 }
 
 /* 分析页日期条：与首页一致的空圈字色 */
-.fl-page-theme-root--dark .stats-page .date-item:not(.is-selected) .date-day-circle.is-empty .date-num-text {
+.fl-d .stats-page .date-item:not(.is-selected) .date-day-circle.is-empty .date-num-text {
   color: $fl-dark-text2 !important;
 }
 
 /* 仅空圈铺底；有记录/超标沿用全局实色规则 */
-.fl-page-theme-root--dark .stats-page .date-item:not(.is-selected) .date-day-circle.is-empty {
+.fl-d .stats-page .date-item:not(.is-selected) .date-day-circle.is-empty {
   background: $fl-dark-surface2 !important;
   border-color: $fl-dark-border !important;
   box-shadow: none !important;
 }
 
 /* ---------- 圈子 ---------- */
-.fl-page-theme-root--dark .community-scroll-content {
+.fl-d .community-scroll-content {
   background: transparent;
 }
 
-.fl-page-theme-root--dark .friends-quick-bar,
-.fl-page-theme-root--dark .feed-filter-panel,
-.fl-page-theme-root--dark .feed-row-card {
+.fl-d .friends-quick-bar,
+.fl-d .feed-filter-panel,
+.fl-d .feed-row-card {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .friends-quick-cell-label,
-.fl-page-theme-root--dark .feed-section-title,
-.fl-page-theme-root--dark .section-title {
+.fl-d .friends-quick-cell-label,
+.fl-d .feed-section-title,
+.fl-d .section-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .feed-search-input {
+.fl-d .feed-search-input {
   color: $fl-dark-text !important;
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .feed-search-placeholder {
+.fl-d .feed-search-placeholder {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-label,
-.fl-page-theme-root--dark .feed-filter-summary {
+.fl-d .feed-filter-label,
+.fl-d .feed-filter-summary {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-chip {
+.fl-d .feed-filter-chip {
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-chip-text {
+.fl-d .feed-filter-chip-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-chip.active .feed-filter-chip-text {
+.fl-d .feed-filter-chip.active .feed-filter-chip-text {
   color: #fff !important;
 }
 
-.fl-page-theme-root--dark .feed-search-wrap {
+.fl-d .feed-search-wrap {
   border-color: $fl-dark-border !important;
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .ranking-banner {
+.fl-d .ranking-banner {
   background: linear-gradient(
     145deg,
     rgb(32 52 44) 0%,
@@ -1157,33 +1157,33 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
     inset 0 1rpx 0 rgb(255 255 255 / 6%) !important;
 }
 
-.fl-page-theme-root--dark .ranking-preview-sk-dot {
+.fl-d .ranking-preview-sk-dot {
   background: rgb(255 255 255 / 14%) !important;
 }
 
-.fl-page-theme-root--dark .skeleton-avatar,
-.fl-page-theme-root--dark .skeleton-line,
-.fl-page-theme-root--dark .skeleton-image,
-.fl-page-theme-root--dark .skeleton-meta-pill,
-.fl-page-theme-root--dark .skeleton-meta-wide,
-.fl-page-theme-root--dark .skeleton-action {
+.fl-d .skeleton-avatar,
+.fl-d .skeleton-line,
+.fl-d .skeleton-image,
+.fl-d .skeleton-meta-pill,
+.fl-d .skeleton-meta-wide,
+.fl-d .skeleton-action {
   background: $fl-dark-sk-grad !important;
   background-size: 200% 100% !important;
 }
 
-.fl-page-theme-root--dark .skeleton-feed-actions {
+.fl-d .skeleton-feed-actions {
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .feed-empty {
+.fl-d .feed-empty {
   background: $fl-dark-panel-bg !important;
 }
 
-.fl-page-theme-root--dark .feed-empty-text {
+.fl-d .feed-empty-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .feed-calorie {
+.fl-d .feed-calorie {
   background: linear-gradient(
     to right,
     rgb(45 72 60) 0%,
@@ -1193,7 +1193,7 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   box-shadow: 0 4rpx 14rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .feed-card-exercise .feed-calorie {
+.fl-d .feed-card-exercise .feed-calorie {
   background: linear-gradient(
     to right,
     #b0784f 0%,
@@ -1203,254 +1203,254 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   box-shadow: 0 4rpx 14rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .feed-macros {
+.fl-d .feed-macros {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .feed-macros-text {
+.fl-d .feed-macros-text {
   color: $fl-dark-text2 !important;
 }
 
 /* 动态正文与操作区（原 #333 / #f0f0f0 分割线） */
-.fl-page-theme-root--dark .feed-content {
+.fl-d .feed-content {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .feed-actions {
+.fl-d .feed-actions {
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .action-icon {
+.fl-d .action-icon {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .action-icon.liked {
+.fl-d .action-icon.liked {
   color: #f87171 !important;
 }
 
-.fl-page-theme-root--dark .action-count {
+.fl-d .action-count {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .share-btn {
+.fl-d .share-btn {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .action-manage-box {
+.fl-d .action-manage-box {
   background: $fl-dark-panel-bg-strong !important;
 }
 
-.fl-page-theme-root--dark .action-manage-box:active {
+.fl-d .action-manage-box:active {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .action-manage-icon {
+.fl-d .action-manage-icon {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .feed-tag-plain {
+.fl-d .feed-tag-plain {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .post-time {
+.fl-d .post-time {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .user-name {
+.fl-d .user-name {
   color: #9bb8e8 !important;
 }
 
-.fl-page-theme-root--dark .feed-card {
+.fl-d .feed-card {
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .feed-comments {
+.fl-d .feed-comments {
   background: transparent !important;
   border: none !important;
   padding-left: 24rpx !important;
 }
 
-.fl-page-theme-root--dark .comment-avatar {
+.fl-d .comment-avatar {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .comment-content-text {
+.fl-d .comment-content-text {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .comment-author {
+.fl-d .comment-author {
   color: #8ab4e8 !important;
 }
 
-.fl-page-theme-root--dark .comment-reply-arrow,
-.fl-page-theme-root--dark .comment-reply-target {
+.fl-d .comment-reply-arrow,
+.fl-d .comment-reply-target {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .comment-status-badge {
+.fl-d .comment-status-badge {
   color: $fl-dark-text2 !important;
   background: rgb(0 0 0 / 22%) !important;
 }
 
-.fl-page-theme-root--dark .feed-inline-comment {
+.fl-d .feed-inline-comment {
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .feed-inline-comment-input {
+.fl-d .feed-inline-comment-input {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .feed-tag:not(.highlight) {
+.fl-d .feed-tag:not(.highlight) {
   background: $fl-dark-panel-bg-soft !important;
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .feed-tag.highlight {
+.fl-d .feed-tag.highlight {
   background: linear-gradient(135deg, rgb(35 52 44) 0%, rgb(32 48 42) 100%) !important;
   color: #a7f3d0 !important;
 }
 
-.fl-page-theme-root--dark .comment-bar-fixed {
+.fl-d .comment-bar-fixed {
   background: $fl-dark-panel-bg-strong !important;
   border-top-color: $fl-dark-border !important;
   box-shadow: 0 -8rpx 28rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .comment-bar-input {
+.fl-d .comment-bar-input {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .comment-bar-send[disabled] {
+.fl-d .comment-bar-send[disabled] {
   background: $fl-dark-ghost-bg !important;
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .comment-bottom-bar {
+.fl-d .comment-bottom-bar {
   background: $fl-dark-panel-bg-strong !important;
   border-top-color: $fl-dark-border !important;
   box-shadow: 0 -8rpx 28rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .comment-bottom-input {
+.fl-d .comment-bottom-input {
   background: $fl-dark-input-bg !important;
   color: $fl-dark-text !important;
   caret-color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .comment-bottom-placeholder {
+.fl-d .comment-bottom-placeholder {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .comment-bottom-send.disabled:not(.is-submitting) {
+.fl-d .comment-bottom-send.disabled:not(.is-submitting) {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .feed-search-friends-panel {
+.fl-d .feed-search-friends-panel {
   background: $fl-dark-panel-bg !important;
   box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .feed-search-friends-title {
+.fl-d .feed-search-friends-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .feed-search-friends-clear {
+.fl-d .feed-search-friends-clear {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .feed-search-friend-item {
+.fl-d .feed-search-friend-item {
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .feed-search-friend-avatar {
+.fl-d .feed-search-friend-avatar {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .feed-search-friend-name {
+.fl-d .feed-search-friend-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .feed-search-friend-arrow {
+.fl-d .feed-search-friend-arrow {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .feed-search-author-bar {
+.fl-d .feed-search-author-bar {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .feed-search-author-label {
+.fl-d .feed-search-author-label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .feed-search-author-name {
+.fl-d .feed-search-author-name {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .feed-search-author-clear {
+.fl-d .feed-search-author-clear {
   color: $fl-dark-text2 !important;
 }
 
 /* 圈子：筛选漏斗按钮 */
-.fl-page-theme-root--dark .feed-filter-funnel-btn {
+.fl-d .feed-filter-funnel-btn {
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-funnel-btn .icon-filter-filling {
+.fl-d .feed-filter-funnel-btn .icon-filter-filling {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-funnel-btn.is-open,
-.fl-page-theme-root--dark .feed-filter-funnel-btn.is-active {
+.fl-d .feed-filter-funnel-btn.is-open,
+.fl-d .feed-filter-funnel-btn.is-active {
   border-color: $fl-dark-accent !important;
   box-shadow:
     0 0 0 2rpx rgb(125 211 176 / 14%),
     0 4rpx 12rpx rgb(0 0 0 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-funnel-btn.is-active .icon-filter-filling {
+.fl-d .feed-filter-funnel-btn.is-active .icon-filter-filling {
   color: $fl-dark-accent !important;
 }
 
 /* 圈子：筛选展开区分隔线 */
-.fl-page-theme-root--dark .feed-filter-expanded {
+.fl-d .feed-filter-expanded {
   border-top-color: $fl-dark-border !important;
 }
 
 /* 圈子：搜索图标 */
-.fl-page-theme-root--dark .feed-search-svg svg circle,
-.fl-page-theme-root--dark .feed-search-svg svg path {
+.fl-d .feed-search-svg svg circle,
+.fl-d .feed-search-svg svg path {
   stroke: $fl-dark-text2 !important;
 }
 
 /* 圈子：筛选抽屉 */
-.fl-page-theme-root--dark .feed-filter-drawer-mask {
+.fl-d .feed-filter-drawer-mask {
   background: rgb(0 0 0 / 55%) !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-drawer {
+.fl-d .feed-filter-drawer {
   background: $fl-dark-modal-bg !important;
   box-shadow: 0 -20rpx 52rpx rgb(0 0 0 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-drawer-handle {
+.fl-d .feed-filter-drawer-handle {
   background: #4b5563 !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-drawer-title {
+.fl-d .feed-filter-drawer-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .feed-filter-drawer-done {
+.fl-d .feed-filter-drawer-done {
   color: $fl-dark-accent !important;
 }
 
 /* 抽屉内筛选 chip：调暗激活态渐变，保持白色文字 */
-.fl-page-theme-root--dark .feed-filter-drawer .feed-filter-chip.active {
+.fl-d .feed-filter-drawer .feed-filter-chip.active {
   background: linear-gradient(
     135deg,
     rgb(52 92 74) 0%,
@@ -1460,135 +1460,135 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 /* ---------- 首页：今日餐食（深底上的字与胶囊） ---------- */
-.fl-page-theme-root--dark .meal-desc {
+.fl-d .meal-desc {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .meal-calorie {
+.fl-d .meal-calorie {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .meal-calorie-unit {
+.fl-d .meal-calorie-unit {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .meal-macro-text {
+.fl-d .meal-macro-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .meal-type-target {
+.fl-d .meal-type-target {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .meal-time-pill {
+.fl-d .meal-time-pill {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .meal-time-pill-text {
+.fl-d .meal-time-pill-text {
   color: $fl-dark-text2 !important;
 }
 
 /* ---------- 首页：编辑目标 / 喝水 / 体重等底卡弹层 ---------- */
-.fl-page-theme-root--dark .target-modal-content,
-.fl-page-theme-root--dark .record-menu-content {
+.fl-d .target-modal-content,
+.fl-d .record-menu-content {
   background: $fl-dark-home-solid-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 45%) !important;
 }
 
-.fl-page-theme-root--dark .target-modal-title,
-.fl-page-theme-root--dark .record-menu-title {
+.fl-d .target-modal-title,
+.fl-d .record-menu-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .target-modal-desc,
-.fl-page-theme-root--dark .record-menu-subtitle {
+.fl-d .target-modal-desc,
+.fl-d .record-menu-subtitle {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .record-menu-close-btn {
+.fl-d .record-menu-close-btn {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .record-menu-close-text {
+.fl-d .record-menu-close-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .record-menu-delete-btn {
+.fl-d .record-menu-delete-btn {
   background: rgb(239 68 68 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .record-menu-delete-text {
+.fl-d .record-menu-delete-text {
   color: #f87171 !important;
 }
 
-.fl-page-theme-root--dark .record-menu-page .cancel-btn {
+.fl-d .record-menu-page .cancel-btn {
   background: $fl-dark-ghost-bg !important;
   box-shadow: 0 4rpx 16rpx rgb(0 0 0 / 25%) !important;
 }
 
-.fl-page-theme-root--dark .record-menu-page .cancel-text {
+.fl-d .record-menu-page .cancel-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .target-form-item {
+.fl-d .target-form-item {
   background: rgb(30 38 36 / 96%) !important;
 }
 
-.fl-page-theme-root--dark .target-form-label {
+.fl-d .target-form-label {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .target-adjust-btn {
+.fl-d .target-adjust-btn {
   background: $fl-dark-ghost-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .target-adjust-btn:active {
+.fl-d .target-adjust-btn:active {
   background: rgb(255 255 255 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .target-adjust-btn-text {
+.fl-d .target-adjust-btn-text {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .target-input-wrap {
+.fl-d .target-input-wrap {
   background: rgb(24 31 29 / 98%) !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .target-input {
+.fl-d .target-input {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .target-input-unit {
+.fl-d .target-input-unit {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .target-relation-hint {
+.fl-d .target-relation-hint {
   background: rgb(125 211 176 / 10%) !important;
   border-color: rgb(92 184 150 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .target-relation-hint-title,
-.fl-page-theme-root--dark .target-relation-hint-value.aligned {
+.fl-d .target-relation-hint-title,
+.fl-d .target-relation-hint-value.aligned {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .target-relation-hint-value.adjusting {
+.fl-d .target-relation-hint-value.adjusting {
   color: #fbbf24 !important;
 }
 
-.fl-page-theme-root--dark .target-relation-hint-value.pending {
+.fl-d .target-relation-hint-value.pending {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .modal-footer-stack,
-.fl-page-theme-root--dark .modal-actions-fixed {
+.fl-d .modal-footer-stack,
+.fl-d .modal-actions-fixed {
   background: $fl-dark-home-solid-bg !important;
 }
 
-.fl-page-theme-root--dark .modal-actions-fixed {
+.fl-d .modal-actions-fixed {
   background: linear-gradient(
     180deg,
     rgb(0 0 0 / 0%) 0%,
@@ -1597,156 +1597,156 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   ) !important;
 }
 
-.fl-page-theme-root--dark .target-modal-btn.secondary {
+.fl-d .target-modal-btn.secondary {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .target-modal-btn-text.secondary {
+.fl-d .target-modal-btn-text.secondary {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .body-form-hint {
+.fl-d .body-form-hint {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .water-modal-quick-item {
+.fl-d .water-modal-quick-item {
   background: rgb(158 197 232 / 10%) !important;
 }
 
-.fl-page-theme-root--dark .water-modal-quick-item:active {
+.fl-d .water-modal-quick-item:active {
   background: rgb(158 197 232 / 16%) !important;
 }
 
-.fl-page-theme-root--dark .water-modal-quick-value {
+.fl-d .water-modal-quick-value {
   color: #7eb8e8 !important;
 }
 
-.fl-page-theme-root--dark .water-modal-quick-unit {
+.fl-d .water-modal-quick-unit {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .water-reset-btn {
+.fl-d .water-reset-btn {
   background: $fl-dark-ghost-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .water-reset-btn-text {
+.fl-d .water-reset-btn-text {
   color: $fl-dark-text2 !important;
 }
 
 /* 记录菜单 v2 */
-.fl-page-theme-root--dark .record-menu-handle-bar {
+.fl-d .record-menu-handle-bar {
   background: rgb(80 90 88) !important;
 }
 
-.fl-page-theme-root--dark .record-menu-grid-card {
+.fl-d .record-menu-grid-card {
   background: rgb(28 36 34 / 98%) !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 8rpx 20rpx rgb(0 0 0 / 18%) !important;
 }
 
-.fl-page-theme-root--dark .record-menu-grid-icon-wrap {
+.fl-d .record-menu-grid-icon-wrap {
   background: rgb(255 255 255 / 0) !important;
 }
 
-.fl-page-theme-root--dark .record-menu-grid-sublabel {
+.fl-d .record-menu-grid-sublabel {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .record-menu-list-v2 {
+.fl-d .record-menu-list-v2 {
   background: rgb(26 33 31 / 98%) !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .record-menu-list-item-v2 {
+.fl-d .record-menu-list-item-v2 {
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .record-menu-list-label-v2 {
+.fl-d .record-menu-list-label-v2 {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .record-menu-dev-trigger {
+.fl-d .record-menu-dev-trigger {
   background: rgb(28 36 34 / 98%) !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .record-menu-dev-trigger-title {
+.fl-d .record-menu-dev-trigger-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .record-menu-dev-trigger-sub,
-.fl-page-theme-root--dark .record-menu-dev-url-label,
-.fl-page-theme-root--dark .record-menu-dev-url-hint {
+.fl-d .record-menu-dev-trigger-sub,
+.fl-d .record-menu-dev-url-label,
+.fl-d .record-menu-dev-url-hint {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .record-menu-dev-url-input {
+.fl-d .record-menu-dev-url-input {
   background: rgb(24 31 29 / 98%) !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .record-menu-dev-item {
+.fl-d .record-menu-dev-item {
   background: rgb(26 33 31 / 98%) !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .record-menu-dev-item-label {
+.fl-d .record-menu-dev-item-label {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .record-menu-dev-item-desc {
+.fl-d .record-menu-dev-item-desc {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .record-menu-dev-url-block,
-.fl-page-theme-root--dark .record-menu-dev-items {
+.fl-d .record-menu-dev-url-block,
+.fl-d .record-menu-dev-items {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .record-menu-dev-url-input {
+.fl-d .record-menu-dev-url-input {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .record-menu-dev-url-placeholder {
+.fl-d .record-menu-dev-url-placeholder {
   color: $fl-dark-text2 !important;
 }
 
 /* ---------- 分包：记录详情（识别/保存后进入） ---------- */
-.fl-page-theme-root--dark .record-detail-root,
-.fl-page-theme-root--dark .record-detail-page {
+.fl-d .record-detail-root,
+.fl-d .record-detail-page {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .detail-header {
+.fl-d .detail-header {
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .meal-badge .meal-name {
+.fl-d .meal-badge .meal-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .meal-badge .meal-time {
+.fl-d .meal-badge .meal-time {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .meal-badge .meal-icon {
+.fl-d .meal-badge .meal-icon {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .total-calorie .unit {
+.fl-d .total-calorie .unit {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .detail-image {
+.fl-d .detail-image {
   background: $fl-dark-panel-bg !important;
 }
 
-.fl-page-theme-root--dark .detail-image.detail-image--logo {
+.fl-d .detail-image.detail-image--logo {
   background: radial-gradient(
     circle at top,
     rgb(40 52 48) 0%,
@@ -1754,514 +1754,514 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   ) !important;
 }
 
-.fl-page-theme-root--dark .detail-image-icon-wrap {
+.fl-d .detail-image-icon-wrap {
   background: $fl-dark-ghost-bg !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .detail-image-placeholder-text {
+.fl-d .detail-image-placeholder-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .context-tag.goal-tag {
+.fl-d .context-tag.goal-tag {
   background: linear-gradient(135deg, rgb(32 48 42) 0%, rgb(28 44 38) 100%) !important;
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .context-tag.timing-tag {
+.fl-d .context-tag.timing-tag {
   background: linear-gradient(135deg, rgb(32 44 58) 0%, rgb(28 38 48) 100%) !important;
   color: #9ec5e8 !important;
 }
 
-.fl-page-theme-root--dark .detail-desc,
-.fl-page-theme-root--dark .detail-insight {
+.fl-d .detail-desc,
+.fl-d .detail-insight {
   color: $fl-dark-text2 !important;
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .detail-desc .label,
-.fl-page-theme-root--dark .detail-insight .label {
+.fl-d .detail-desc .label,
+.fl-d .detail-insight .label {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .detail-desc > text:last-child,
-.fl-page-theme-root--dark .detail-insight > text:last-child {
+.fl-d .detail-desc > text:last-child,
+.fl-d .detail-insight > text:last-child {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-list-title {
+.fl-d .food-list-title {
   color: $fl-dark-text !important;
   border-top-color: $fl-dark-border !important;
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .food-item {
+.fl-d .food-item {
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .food-info .food-name {
+.fl-d .food-info .food-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .food-info .food-meta,
-.fl-page-theme-root--dark .food-info .food-nutrients-detail .nutrient-item {
+.fl-d .food-info .food-meta,
+.fl-d .food-info .food-nutrients-detail .nutrient-item {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .nutrition-summary-section {
+.fl-d .nutrition-summary-section {
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .summary-title {
+.fl-d .summary-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .summary-item .summary-label {
+.fl-d .summary-item .summary-label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .summary-item .summary-value {
+.fl-d .summary-item .summary-value {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .summary-item .summary-value.highlight {
+.fl-d .summary-item .summary-value.highlight {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .summary-item .summary-unit {
+.fl-d .summary-item .summary-unit {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .friend-invite-card {
+.fl-d .friend-invite-card {
   border-top-color: $fl-dark-border !important;
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .empty-tip {
+.fl-d .empty-tip {
   color: $fl-dark-text2 !important;
 }
 
 /* 记录详情内编辑弹层 */
-.fl-page-theme-root--dark .edit-modal-content {
+.fl-d .edit-modal-content {
   background: $fl-dark-modal-bg-soft !important;
   border: 1rpx solid $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .edit-modal-title {
+.fl-d .edit-modal-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .edit-modal-body {
+.fl-d .edit-modal-body {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .edit-food-card {
+.fl-d .edit-food-card {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .edit-modal-header {
+.fl-d .edit-modal-header {
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .edit-modal-close {
+.fl-d .edit-modal-close {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .edit-modal-close::before,
-.fl-page-theme-root--dark .edit-modal-close::after {
+.fl-d .edit-modal-close::before,
+.fl-d .edit-modal-close::after {
   background: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .edit-meta-card,
-.fl-page-theme-root--dark .edit-food-card,
-.fl-page-theme-root--dark .state-option,
-.fl-page-theme-root--dark .meal-option {
+.fl-d .edit-meta-card,
+.fl-d .edit-food-card,
+.fl-d .state-option,
+.fl-d .meal-option {
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .meal-option,
-.fl-page-theme-root--dark .state-option {
+.fl-d .meal-option,
+.fl-d .state-option {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .meal-option.active,
-.fl-page-theme-root--dark .state-option.active {
+.fl-d .meal-option.active,
+.fl-d .state-option.active {
   background: rgb(125 211 176 / 12%) !important;
   border-color: rgb(125 211 176 / 32%) !important;
   box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .meal-label,
-.fl-page-theme-root--dark .state-label,
-.fl-page-theme-root--dark .edit-food-name {
+.fl-d .meal-label,
+.fl-d .state-label,
+.fl-d .edit-food-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .edit-food-name-btn {
+.fl-d .edit-food-name-btn {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .edit-food-name-btn .iconfont {
+.fl-d .edit-food-name-btn .iconfont {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .edit-food-name {
+.fl-d .edit-food-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .edit-section-label {
+.fl-d .edit-section-label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .intake-adjuster {
+.fl-d .intake-adjuster {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .adjust-btn:active {
+.fl-d .adjust-btn:active {
   background: rgb(255 255 255 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .adjust-btn.minus {
+.fl-d .adjust-btn.minus {
   border-right-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .adjust-btn.plus {
+.fl-d .adjust-btn.plus {
   border-left-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .intake-input {
+.fl-d .intake-input {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .intake-unit {
+.fl-d .intake-unit {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .nutrient-chip {
+.fl-d .nutrient-chip {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .nutrient-chip-label,
-.fl-page-theme-root--dark .nutrient-chip-unit {
+.fl-d .nutrient-chip-label,
+.fl-d .nutrient-chip-unit {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .nutrient-chip-value {
+.fl-d .nutrient-chip-value {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .edit-cancel-btn {
+.fl-d .edit-cancel-btn {
   background: $fl-dark-ghost-bg !important;
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .edit-modal-footer {
+.fl-d .edit-modal-footer {
   border-top-color: $fl-dark-border !important;
 }
 
 /* ---------- 分包：当天饮食记录 ---------- */
-.fl-page-theme-root--dark .day-record-page {
+.fl-d .day-record-page {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .day-record-date-line {
+.fl-d .day-record-date-line {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .summary-card {
+.fl-d .summary-card {
   background: $fl-dark-panel-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 30%) !important;
 }
 
-.fl-page-theme-root--dark .summary-label {
+.fl-d .summary-label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .summary-value {
+.fl-d .summary-value {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .day-record-card {
+.fl-d .day-record-card {
   background: $fl-dark-panel-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 10rpx 28rpx rgb(0 0 0 / 32%) !important;
 }
 
-.fl-page-theme-root--dark .day-record-card-header {
+.fl-d .day-record-card-header {
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .day-record-card-thumb {
+.fl-d .day-record-card-thumb {
   background: $fl-dark-panel-bg-soft !important;
   box-shadow: inset 0 0 0 1rpx $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .day-record-card-thumb.is-placeholder {
+.fl-d .day-record-card-thumb.is-placeholder {
   background: linear-gradient(180deg, rgb(32 40 38) 0%, rgb(26 32 30) 100%) !important;
 }
 
-.fl-page-theme-root--dark .day-record-card-name {
+.fl-d .day-record-card-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .day-record-card-time,
-.fl-page-theme-root--dark .day-record-card-preview-tip {
+.fl-d .day-record-card-time,
+.fl-d .day-record-card-preview-tip {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .day-record-card-calorie {
+.fl-d .day-record-card-calorie {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .day-record-food-item {
+.fl-d .day-record-food-item {
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .day-record-food-name {
+.fl-d .day-record-food-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .day-record-food-amount {
+.fl-d .day-record-food-amount {
   color: $fl-dark-text2 !important;
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .day-record-food-calorie {
+.fl-d .day-record-food-calorie {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .day-record-food-macro.macro-protein {
+.fl-d .day-record-food-macro.macro-protein {
   color: #7eb8e8 !important;
 }
 
-.fl-page-theme-root--dark .day-record-food-macro.macro-carbs {
+.fl-d .day-record-food-macro.macro-carbs {
   color: #e0c078 !important;
 }
 
-.fl-page-theme-root--dark .day-record-food-macro.macro-fat {
+.fl-d .day-record-food-macro.macro-fat {
   color: #f5a870 !important;
 }
 
-.fl-page-theme-root--dark .day-record-empty-title {
+.fl-d .day-record-empty-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .day-record-empty-desc {
+.fl-d .day-record-empty-desc {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .day-record-empty-icon {
+.fl-d .day-record-empty-icon {
   color: rgb(120 130 128) !important;
 }
 
 /* ---------- 分包：当日代谢等 ---------- */
-.fl-page-theme-root--dark .stats-metabolic-page {
+.fl-d .stats-metabolic-page {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__title,
-.fl-page-theme-root--dark .metabolic-report__summary-label,
-.fl-page-theme-root--dark .metabolic-report__summary-metric {
+.fl-d .metabolic-report__title,
+.fl-d .metabolic-report__summary-label,
+.fl-d .metabolic-report__summary-metric {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__summary-cell,
-.fl-page-theme-root--dark .metabolic-report__canvas-wrap {
+.fl-d .metabolic-report__summary-cell,
+.fl-d .metabolic-report__canvas-wrap {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__legend-txt {
+.fl-d .metabolic-report__legend-txt {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__summary-label-icon--fat,
-.fl-page-theme-root--dark .metabolic-report__fat-explainer-title {
+.fl-d .metabolic-report__summary-label-icon--fat,
+.fl-d .metabolic-report__fat-explainer-title {
   color: #fca5a5 !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__legend-dot--fat {
+.fl-d .metabolic-report__legend-dot--fat {
   background: rgb(248 113 113 / 92%) !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__fat-explainer {
+.fl-d .metabolic-report__fat-explainer {
   background: rgb(120 40 40 / 14%) !important;
   border-color: rgb(248 113 113 / 16%) !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__fat-explainer-body {
+.fl-d .metabolic-report__fat-explainer-body {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__summary-metric-unit {
+.fl-d .metabolic-report__summary-metric-unit {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__summary-label-icon:not(.metabolic-report__summary-label-icon--fat) {
+.fl-d .metabolic-report__summary-label-icon:not(.metabolic-report__summary-label-icon--fat) {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__title-icon {
+.fl-d .metabolic-report__title-icon {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__phys-btn {
+.fl-d .metabolic-report__phys-btn {
   background: $fl-dark-panel-bg-strong !important;
   border-color: $fl-dark-border !important;
   box-shadow: 0 2rpx 10rpx rgb(0 0 0 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__phys-btn-text {
+.fl-d .metabolic-report__phys-btn-text {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__back-btn {
+.fl-d .metabolic-report__back-btn {
   background: $fl-dark-panel-bg-strong !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__back-arrow {
+.fl-d .metabolic-report__back-arrow {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__disclaimer {
+.fl-d .metabolic-report__disclaimer {
   background: rgb(92 184 150 / 10%) !important;
   border-color: rgb(92 184 150 / 25%) !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__disclaimer-icon,
-.fl-page-theme-root--dark .metabolic-report__disclaimer-text {
+.fl-d .metabolic-report__disclaimer-icon,
+.fl-d .metabolic-report__disclaimer-text {
   color: $fl-dark-accent !important;
 }
 
 /* 基础数据弹层 */
-.fl-page-theme-root--dark .metabolic-phys-popup__portal.taroify-popup {
+.fl-d .metabolic-phys-popup__portal.taroify-popup {
   background: $fl-dark-modal-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .metabolic-phys-popup {
+.fl-d .metabolic-phys-popup {
   background: $fl-dark-modal-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .metabolic-phys-popup__title,
-.fl-page-theme-root--dark .metabolic-phys-popup__value {
+.fl-d .metabolic-phys-popup__title,
+.fl-d .metabolic-phys-popup__value {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .metabolic-phys-popup__hint,
-.fl-page-theme-root--dark .metabolic-phys-popup__label {
+.fl-d .metabolic-phys-popup__hint,
+.fl-d .metabolic-phys-popup__label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .metabolic-phys-popup__row {
+.fl-d .metabolic-phys-popup__row {
   border-bottom-color: rgb(92 184 150 / 15%) !important;
 }
 
-.fl-page-theme-root--dark .metabolic-phys-popup__close {
+.fl-d .metabolic-phys-popup__close {
   background: linear-gradient(90deg, #4a9d7d 0%, #6cc9a8 100%) !important;
 }
 
 /* 档案表单弹层 */
-.fl-page-theme-root--dark .metabolic-profile-sheet {
+.fl-d .metabolic-profile-sheet {
   background: $fl-dark-modal-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .metabolic-profile-sheet__title,
-.fl-page-theme-root--dark .metabolic-profile-sheet__label,
-.fl-page-theme-root--dark .metabolic-profile-sheet__gender-text,
-.fl-page-theme-root--dark .metabolic-profile-sheet__input {
+.fl-d .metabolic-profile-sheet__title,
+.fl-d .metabolic-profile-sheet__label,
+.fl-d .metabolic-profile-sheet__gender-text,
+.fl-d .metabolic-profile-sheet__input {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .metabolic-profile-sheet__desc,
-.fl-page-theme-root--dark .metabolic-profile-sheet__hint,
-.fl-page-theme-root--dark .metabolic-profile-sheet__bmr-preview-text {
+.fl-d .metabolic-profile-sheet__desc,
+.fl-d .metabolic-profile-sheet__hint,
+.fl-d .metabolic-profile-sheet__bmr-preview-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .metabolic-profile-sheet__input {
+.fl-d .metabolic-profile-sheet__input {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .metabolic-profile-sheet__gender-btn {
+.fl-d .metabolic-profile-sheet__gender-btn {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .metabolic-profile-sheet__gender-btn--on {
+.fl-d .metabolic-profile-sheet__gender-btn--on {
   border-color: $fl-dark-accent !important;
   background: rgb(92 184 150 / 14%) !important;
 }
 
-.fl-page-theme-root--dark .metabolic-profile-sheet__gender-btn--on .metabolic-profile-sheet__gender-text {
+.fl-d .metabolic-profile-sheet__gender-btn--on .metabolic-profile-sheet__gender-text {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .metabolic-profile-sheet__bmr-preview {
+.fl-d .metabolic-profile-sheet__bmr-preview {
   background: rgb(92 184 150 / 10%) !important;
   border-color: rgb(92 184 150 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .metabolic-profile-sheet__btn--ghost {
+.fl-d .metabolic-profile-sheet__btn--ghost {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .metabolic-profile-sheet__btn--ghost-text {
+.fl-d .metabolic-profile-sheet__btn--ghost-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .metabolic-profile-sheet__btn--primary {
+.fl-d .metabolic-profile-sheet__btn--primary {
   background: linear-gradient(90deg, #4a9d7d 0%, #6cc9a8 100%) !important;
 }
 
 /* 档案未完善门控状态 */
-.fl-page-theme-root--dark .metabolic-report__gate-mask {
+.fl-d .metabolic-report__gate-mask {
   background: rgb(20 24 23 / 80%) !important;
   backdrop-filter: blur(8px) !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__gate-title {
+.fl-d .metabolic-report__gate-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__gate-desc {
+.fl-d .metabolic-report__gate-desc {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__gate-cta {
+.fl-d .metabolic-report__gate-cta {
   color: $fl-dark-accent !important;
   background: rgb(92 184 150 / 14%) !important;
   border-color: rgb(92 184 150 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__spinner {
+.fl-d .metabolic-report__spinner {
   border-color: rgb(92 184 150 / 12%) !important;
   border-top-color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .metabolic-report__retry {
+.fl-d .metabolic-report__retry {
   background: linear-gradient(90deg, #4a9d7d 0%, #6cc9a8 100%) !important;
 }
 
 /* ---------- 记录页（非相机全屏） ---------- */
-.fl-page-theme-root--dark .record-page.camera-privacy-gate,
-.fl-page-theme-root--dark .record-page.camera-privacy-checking,
-.fl-page-theme-root--dark .record-page.camera-denied {
+.fl-d .record-page.camera-privacy-gate,
+.fl-d .record-page.camera-privacy-checking,
+.fl-d .record-page.camera-denied {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .privacy-gate-title,
-.fl-page-theme-root--dark .privacy-gate-desc,
-.fl-page-theme-root--dark .denied-title,
-.fl-page-theme-root--dark .denied-desc {
+.fl-d .privacy-gate-title,
+.fl-d .privacy-gate-desc,
+.fl-d .denied-title,
+.fl-d .denied-desc {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .privacy-gate-agree-btn,
-.fl-page-theme-root--dark .denied-btn {
+.fl-d .privacy-gate-agree-btn,
+.fl-d .denied-btn {
   background: $fl-dark-ghost-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   color: $fl-dark-accent !important;
@@ -2270,429 +2270,429 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 /* 相机全屏保持纯黑，不覆盖 */
 
 /* ---------- 登录 / 静态页 ---------- */
-.fl-page-theme-root--dark .login-page {
+.fl-d .login-page {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .login-page .app-name {
+.fl-d .login-page .app-name {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .login-page .app-slogan,
-.fl-page-theme-root--dark .login-page .agreement-text {
+.fl-d .login-page .app-slogan,
+.fl-d .login-page .agreement-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .about-page,
-.fl-page-theme-root--dark .agreement-page,
-.fl-page-theme-root--dark .document-page,
-.fl-page-theme-root--dark .profile-settings-page,
-.fl-page-theme-root--dark .expiry-page,
-.fl-page-theme-root--dark .expiry-edit-page,
-.fl-page-theme-root--dark .exercise-record-page {
+.fl-d .about-page,
+.fl-d .agreement-page,
+.fl-d .document-page,
+.fl-d .profile-settings-page,
+.fl-d .expiry-page,
+.fl-d .expiry-edit-page,
+.fl-d .exercise-record-page {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .about-page .app-name,
-.fl-page-theme-root--dark .about-page .card-title,
-.fl-page-theme-root--dark .document-content .title,
-.fl-page-theme-root--dark .document-content .section-title {
+.fl-d .about-page .app-name,
+.fl-d .about-page .card-title,
+.fl-d .document-content .title,
+.fl-d .document-content .section-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .document-content .paragraph,
-.fl-page-theme-root--dark .document-content .update-time {
+.fl-d .document-content .paragraph,
+.fl-d .document-content .update-time {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .about-page .card-text,
-.fl-page-theme-root--dark .about-page .card {
+.fl-d .about-page .card-text,
+.fl-d .about-page .card {
   color: $fl-dark-text2 !important;
   background: $fl-dark-panel-bg !important;
   border: 1rpx solid $fl-dark-border;
 }
 
-.fl-page-theme-root--dark .profile-settings-page .settings-card,
-.fl-page-theme-root--dark .expiry-item-card,
-.fl-page-theme-root--dark .expiry-summary-card,
-.fl-page-theme-root--dark .expiry-edit-panel {
+.fl-d .profile-settings-page .settings-card,
+.fl-d .expiry-item-card,
+.fl-d .expiry-summary-card,
+.fl-d .expiry-edit-panel {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .expiry-edit-block {
+.fl-d .expiry-edit-block {
   background: $fl-dark-panel-bg-soft !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .expiry-edit-label {
+.fl-d .expiry-edit-label {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .expiry-input,
-.fl-page-theme-root--dark .expiry-picker,
-.fl-page-theme-root--dark .expiry-textarea {
+.fl-d .expiry-input,
+.fl-d .expiry-picker,
+.fl-d .expiry-textarea {
   background: $fl-dark-input-bg !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .expiry-preset-chip,
-.fl-page-theme-root--dark .expiry-choice-chip:not(.is-active) {
+.fl-d .expiry-preset-chip,
+.fl-d .expiry-choice-chip:not(.is-active) {
   background: $fl-dark-ghost-bg !important;
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .expiry-clear-text {
+.fl-d .expiry-clear-text {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .expiry-loading {
+.fl-d .expiry-loading {
   background: $fl-dark-panel-bg-soft !important;
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .expiry-submit-btn {
+.fl-d .expiry-submit-btn {
   box-shadow: 0 12rpx 28rpx rgb(0 188 125 / 12%) !important;
 }
 
 /* ---------- 全局 loading 文案色（若露出） ---------- */
-.fl-page-theme-root--dark .loading-text-primary {
+.fl-d .loading-text-primary {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .loading-spinner-dark,
-.fl-page-theme-root--dark .loading-spinner-md,
-.fl-page-theme-root--dark .loading-spinner-lg {
+.fl-d .loading-spinner-dark,
+.fl-d .loading-spinner-md,
+.fl-d .loading-spinner-lg {
   border-color: rgb(92 184 150 / 25%) !important;
   border-top-color: $fl-dark-accent !important;
 }
 
 /* ---------- 分包补充：分析 / 结果 / 档案 / 公共库 / 朋友等页面 ---------- */
-.fl-page-theme-root--dark .analyze-page,
-.fl-page-theme-root--dark .analyze-history-page,
-.fl-page-theme-root--dark .result-page,
-.fl-page-theme-root--dark .result-text-page,
-.fl-page-theme-root--dark .health-profile-page,
-.fl-page-theme-root--dark .health-profile-view-page,
-.fl-page-theme-root--dark .food-library-page,
-.fl-page-theme-root--dark .food-detail-page,
-.fl-page-theme-root--dark .share-page,
-.fl-page-theme-root--dark .friends-page,
-.fl-page-theme-root--dark .interaction-notifications-page,
-.fl-page-theme-root--dark .privacy-settings-page,
-.fl-page-theme-root--dark .location-search-page,
-.fl-page-theme-root--dark .record-manual-page,
-.fl-page-theme-root--dark .record-text-page,
-.fl-page-theme-root--dark .membership-page,
-.fl-page-theme-root--dark .recipes-page,
-.fl-page-theme-root--dark .recipe-edit-page {
+.fl-d .analyze-page,
+.fl-d .analyze-history-page,
+.fl-d .result-page,
+.fl-d .result-text-page,
+.fl-d .health-profile-page,
+.fl-d .health-profile-view-page,
+.fl-d .food-library-page,
+.fl-d .food-detail-page,
+.fl-d .share-page,
+.fl-d .friends-page,
+.fl-d .interaction-notifications-page,
+.fl-d .privacy-settings-page,
+.fl-d .location-search-page,
+.fl-d .record-manual-page,
+.fl-d .record-text-page,
+.fl-d .membership-page,
+.fl-d .recipes-page,
+.fl-d .recipe-edit-page {
   background: transparent !important;
   color: $fl-dark-text;
 }
 
-.fl-page-theme-root--dark .analyze-page .mode-banner,
-.fl-page-theme-root--dark .analyze-page .image-preview-section,
-.fl-page-theme-root--dark .analyze-page .details-section,
-.fl-page-theme-root--dark .analyze-page .confirm-section,
-.fl-page-theme-root--dark .analyze-page .precision-session-tip,
-.fl-page-theme-root--dark .analyze-page .precision-reference-field,
-.fl-page-theme-root--dark .analyze-history-page .task-card,
-.fl-page-theme-root--dark .result-page .recognition-status-card,
-.fl-page-theme-root--dark .result-page .followup-question-card,
-.fl-page-theme-root--dark .result-page .nutrition-overview-card,
-.fl-page-theme-root--dark .result-page .model-switch-card,
-.fl-page-theme-root--dark .result-page .insight-card,
-.fl-page-theme-root--dark .result-page .ingredient-card,
-.fl-page-theme-root--dark .result-page .summary-card,
-.fl-page-theme-root--dark .result-text-page .hero-section,
-.fl-page-theme-root--dark .result-text-page .nutrition-overview-card,
-.fl-page-theme-root--dark .result-text-page .insight-card,
-.fl-page-theme-root--dark .result-text-page .ingredient-card,
-.fl-page-theme-root--dark .result-text-page .meal-selector-card,
-.fl-page-theme-root--dark .health-profile-page .card.step-card,
-.fl-page-theme-root--dark .health-profile-page .report-result-block,
-.fl-page-theme-root--dark .health-profile-page .benefit-item,
-.fl-page-theme-root--dark .health-profile-view-page .block,
-.fl-page-theme-root--dark .food-library-page .food-card,
-.fl-page-theme-root--dark .food-library-page .pick-mode-tip,
-.fl-page-theme-root--dark .food-library-page .login-tip,
-.fl-page-theme-root--dark .food-detail-page .info-card,
-.fl-page-theme-root--dark .food-detail-page .merchant-card,
-.fl-page-theme-root--dark .food-detail-page .tags-card,
-.fl-page-theme-root--dark .food-detail-page .notes-card,
-.fl-page-theme-root--dark .food-detail-page .comments-card,
-.fl-page-theme-root--dark .food-detail-page .comment-modal-content,
-.fl-page-theme-root--dark .share-page .quick-upload-tip,
-.fl-page-theme-root--dark .share-page .nutrition-summary,
-.fl-page-theme-root--dark .share-page .form-item,
-.fl-page-theme-root--dark .share-page .quick-tag,
-.fl-page-theme-root--dark .share-page .selected-tag,
-.fl-page-theme-root--dark .share-page .location-btn,
-.fl-page-theme-root--dark .share-page .record-modal-content,
-.fl-page-theme-root--dark .share-page .record-item,
-.fl-page-theme-root--dark .share-page .source-option,
-.fl-page-theme-root--dark .friends-page .card,
-.fl-page-theme-root--dark .friends-page .search-bar,
-.fl-page-theme-root--dark .interaction-notifications-page .notification-card,
-.fl-page-theme-root--dark .privacy-settings-page .settings-card,
-.fl-page-theme-root--dark .privacy-settings-page .setting-card,
-.fl-page-theme-root--dark .privacy-settings-page .danger-zone,
-.fl-page-theme-root--dark .location-search-page .panel,
-.fl-page-theme-root--dark .location-search-page .selected-address-card,
-.fl-page-theme-root--dark .location-search-page .result-item,
-.fl-page-theme-root--dark .record-manual-page .workspace-card,
-.fl-page-theme-root--dark .record-manual-page .catalog-card,
-.fl-page-theme-root--dark .record-manual-page .selected-section,
-.fl-page-theme-root--dark .record-manual-page .config-card,
-.fl-page-theme-root--dark .record-manual-page .section-block,
-.fl-page-theme-root--dark .record-manual-page .food-list,
-.fl-page-theme-root--dark .record-manual-page .selected-item,
-.fl-page-theme-root--dark .record-manual-page .food-item,
-.fl-page-theme-root--dark .record-text-page .input-card,
-.fl-page-theme-root--dark .record-text-page .bottom-bar,
-.fl-page-theme-root--dark .membership-page .features-row,
-.fl-page-theme-root--dark .membership-page .plan-card,
-.fl-page-theme-root--dark .membership-page .status-card,
-.fl-page-theme-root--dark .recipes-page .recipe-card,
-.fl-page-theme-root--dark .recipe-edit-page .form-card,
-.fl-page-theme-root--dark .recipe-edit-page .empty-card {
+.fl-d .analyze-page .mode-banner,
+.fl-d .analyze-page .image-preview-section,
+.fl-d .analyze-page .details-section,
+.fl-d .analyze-page .confirm-section,
+.fl-d .analyze-page .precision-session-tip,
+.fl-d .analyze-page .precision-reference-field,
+.fl-d .analyze-history-page .task-card,
+.fl-d .result-page .recognition-status-card,
+.fl-d .result-page .followup-question-card,
+.fl-d .result-page .nutrition-overview-card,
+.fl-d .result-page .model-switch-card,
+.fl-d .result-page .insight-card,
+.fl-d .result-page .ingredient-card,
+.fl-d .result-page .summary-card,
+.fl-d .result-text-page .hero-section,
+.fl-d .result-text-page .nutrition-overview-card,
+.fl-d .result-text-page .insight-card,
+.fl-d .result-text-page .ingredient-card,
+.fl-d .result-text-page .meal-selector-card,
+.fl-d .health-profile-page .card.step-card,
+.fl-d .health-profile-page .report-result-block,
+.fl-d .health-profile-page .benefit-item,
+.fl-d .health-profile-view-page .block,
+.fl-d .food-library-page .food-card,
+.fl-d .food-library-page .pick-mode-tip,
+.fl-d .food-library-page .login-tip,
+.fl-d .food-detail-page .info-card,
+.fl-d .food-detail-page .merchant-card,
+.fl-d .food-detail-page .tags-card,
+.fl-d .food-detail-page .notes-card,
+.fl-d .food-detail-page .comments-card,
+.fl-d .food-detail-page .comment-modal-content,
+.fl-d .share-page .quick-upload-tip,
+.fl-d .share-page .nutrition-summary,
+.fl-d .share-page .form-item,
+.fl-d .share-page .quick-tag,
+.fl-d .share-page .selected-tag,
+.fl-d .share-page .location-btn,
+.fl-d .share-page .record-modal-content,
+.fl-d .share-page .record-item,
+.fl-d .share-page .source-option,
+.fl-d .friends-page .card,
+.fl-d .friends-page .search-bar,
+.fl-d .interaction-notifications-page .notification-card,
+.fl-d .privacy-settings-page .settings-card,
+.fl-d .privacy-settings-page .setting-card,
+.fl-d .privacy-settings-page .danger-zone,
+.fl-d .location-search-page .panel,
+.fl-d .location-search-page .selected-address-card,
+.fl-d .location-search-page .result-item,
+.fl-d .record-manual-page .workspace-card,
+.fl-d .record-manual-page .catalog-card,
+.fl-d .record-manual-page .selected-section,
+.fl-d .record-manual-page .config-card,
+.fl-d .record-manual-page .section-block,
+.fl-d .record-manual-page .food-list,
+.fl-d .record-manual-page .selected-item,
+.fl-d .record-manual-page .food-item,
+.fl-d .record-text-page .input-card,
+.fl-d .record-text-page .bottom-bar,
+.fl-d .membership-page .features-row,
+.fl-d .membership-page .plan-card,
+.fl-d .membership-page .status-card,
+.fl-d .recipes-page .recipe-card,
+.fl-d .recipe-edit-page .form-card,
+.fl-d .recipe-edit-page .empty-card {
   background: $fl-dark-panel-bg !important;
 }
 
-.fl-page-theme-root--dark .result-text-page .meal-selector-card,
-.fl-page-theme-root--dark .food-detail-page .comment-modal-content,
-.fl-page-theme-root--dark .share-page .record-modal-content {
+.fl-d .result-text-page .meal-selector-card,
+.fl-d .food-detail-page .comment-modal-content,
+.fl-d .share-page .record-modal-content {
   background: $fl-dark-modal-bg-soft !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .mode-title,
-.fl-page-theme-root--dark .analyze-page .section-title,
-.fl-page-theme-root--dark .analyze-page .meal-label,
-.fl-page-theme-root--dark .analyze-page .state-label,
-.fl-page-theme-root--dark .analyze-history-page .task-card,
-.fl-page-theme-root--dark .result-page .card-title,
-.fl-page-theme-root--dark .result-page .recognition-status-title,
-.fl-page-theme-root--dark .result-page .followup-question-title,
-.fl-page-theme-root--dark .result-page .section-title,
-.fl-page-theme-root--dark .result-page .ingredient-name,
-.fl-page-theme-root--dark .result-text-page .hero-title,
-.fl-page-theme-root--dark .result-text-page .card-title,
-.fl-page-theme-root--dark .result-text-page .section-title,
-.fl-page-theme-root--dark .result-text-page .ingredient-name,
-.fl-page-theme-root--dark .health-profile-page .step-card-title,
-.fl-page-theme-root--dark .health-profile-page .upload-title,
-.fl-page-theme-root--dark .health-profile-page .benefit-title,
-.fl-page-theme-root--dark .health-profile-view-page .block-title,
-.fl-page-theme-root--dark .food-library-page .pick-mode-title,
-.fl-page-theme-root--dark .food-library-page .food-title,
-.fl-page-theme-root--dark .food-detail-page .info-title,
-.fl-page-theme-root--dark .food-detail-page .card-title,
-.fl-page-theme-root--dark .share-page .section-title,
-.fl-page-theme-root--dark .share-page .form-label,
-.fl-page-theme-root--dark .friends-page .name,
-.fl-page-theme-root--dark .interaction-notifications-page .notifications-title,
-.fl-page-theme-root--dark .interaction-notifications-page .notification-title,
-.fl-page-theme-root--dark .location-search-page .result-section-title,
-.fl-page-theme-root--dark .location-search-page .result-name,
-.fl-page-theme-root--dark .record-manual-page .workspace-title,
-.fl-page-theme-root--dark .record-manual-page .section-title,
-.fl-page-theme-root--dark .record-manual-page .section-block-title,
-.fl-page-theme-root--dark .record-manual-page .meal-item .meal-name,
-.fl-page-theme-root--dark .record-manual-page .food-name,
-.fl-page-theme-root--dark .record-manual-page .item-name,
-.fl-page-theme-root--dark .record-text-page .section-title,
-.fl-page-theme-root--dark .membership-page .hero-title,
-.fl-page-theme-root--dark .membership-page .plan-name,
-.fl-page-theme-root--dark .recipes-page .recipe-name,
-.fl-page-theme-root--dark .recipe-edit-page .section-title,
-.fl-page-theme-root--dark .recipe-edit-page .label,
-.fl-page-theme-root--dark .recipe-edit-page .empty-title {
+.fl-d .analyze-page .mode-title,
+.fl-d .analyze-page .section-title,
+.fl-d .analyze-page .meal-label,
+.fl-d .analyze-page .state-label,
+.fl-d .analyze-history-page .task-card,
+.fl-d .result-page .card-title,
+.fl-d .result-page .recognition-status-title,
+.fl-d .result-page .followup-question-title,
+.fl-d .result-page .section-title,
+.fl-d .result-page .ingredient-name,
+.fl-d .result-text-page .hero-title,
+.fl-d .result-text-page .card-title,
+.fl-d .result-text-page .section-title,
+.fl-d .result-text-page .ingredient-name,
+.fl-d .health-profile-page .step-card-title,
+.fl-d .health-profile-page .upload-title,
+.fl-d .health-profile-page .benefit-title,
+.fl-d .health-profile-view-page .block-title,
+.fl-d .food-library-page .pick-mode-title,
+.fl-d .food-library-page .food-title,
+.fl-d .food-detail-page .info-title,
+.fl-d .food-detail-page .card-title,
+.fl-d .share-page .section-title,
+.fl-d .share-page .form-label,
+.fl-d .friends-page .name,
+.fl-d .interaction-notifications-page .notifications-title,
+.fl-d .interaction-notifications-page .notification-title,
+.fl-d .location-search-page .result-section-title,
+.fl-d .location-search-page .result-name,
+.fl-d .record-manual-page .workspace-title,
+.fl-d .record-manual-page .section-title,
+.fl-d .record-manual-page .section-block-title,
+.fl-d .record-manual-page .meal-item .meal-name,
+.fl-d .record-manual-page .food-name,
+.fl-d .record-manual-page .item-name,
+.fl-d .record-text-page .section-title,
+.fl-d .membership-page .hero-title,
+.fl-d .membership-page .plan-name,
+.fl-d .recipes-page .recipe-name,
+.fl-d .recipe-edit-page .section-title,
+.fl-d .recipe-edit-page .label,
+.fl-d .recipe-edit-page .empty-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .mode-sub,
-.fl-page-theme-root--dark .analyze-page .mode-tip-text,
-.fl-page-theme-root--dark .analyze-page .section-hint,
-.fl-page-theme-root--dark .analyze-page .placeholder-sub,
-.fl-page-theme-root--dark .analyze-page .precision-session-tip-text,
-.fl-page-theme-root--dark .analyze-page .precision-reference-label,
-.fl-page-theme-root--dark .analyze-history-page .empty,
-.fl-page-theme-root--dark .result-page .recognition-status-desc,
-.fl-page-theme-root--dark .result-page .recognition-guidance-text,
-.fl-page-theme-root--dark .result-page .followup-question-desc,
-.fl-page-theme-root--dark .result-page .followup-question-text,
-.fl-page-theme-root--dark .result-page .insight-content,
-.fl-page-theme-root--dark .result-page .section-count,
-.fl-page-theme-root--dark .result-text-page .weight-text,
-.fl-page-theme-root--dark .result-text-page .insight-content,
-.fl-page-theme-root--dark .result-text-page .empty-hint,
-.fl-page-theme-root--dark .health-profile-page .progress-text,
-.fl-page-theme-root--dark .health-profile-page .skip-hint,
-.fl-page-theme-root--dark .health-profile-page .save-hint,
-.fl-page-theme-root--dark .health-profile-page .benefit-text,
-.fl-page-theme-root--dark .health-profile-view-page .label,
-.fl-page-theme-root--dark .food-library-page .pick-mode-subtitle,
-.fl-page-theme-root--dark .food-library-page .description-text,
-.fl-page-theme-root--dark .food-library-page .merchant-name,
-.fl-page-theme-root--dark .food-library-page .location-text,
-.fl-page-theme-root--dark .food-library-page .author-name,
-.fl-page-theme-root--dark .food-library-page .loading-text,
-.fl-page-theme-root--dark .food-detail-page .info-description,
-.fl-page-theme-root--dark .food-detail-page .info-insight,
-.fl-page-theme-root--dark .food-detail-page .merchant-text,
-.fl-page-theme-root--dark .food-detail-page .notes-content,
-.fl-page-theme-root--dark .food-detail-page .comment-time,
-.fl-page-theme-root--dark .share-page .quick-upload-subtitle,
-.fl-page-theme-root--dark .share-page .nutrition-label,
-.fl-page-theme-root--dark .share-page .city-placeholder,
-.fl-page-theme-root--dark .share-page .location-text,
-.fl-page-theme-root--dark .share-page .record-meta,
-.fl-page-theme-root--dark .friends-page .name-sub,
-.fl-page-theme-root--dark .friends-page .time,
-.fl-page-theme-root--dark .friends-page .empty-desc,
-.fl-page-theme-root--dark .interaction-notifications-page .notifications-subtitle,
-.fl-page-theme-root--dark .interaction-notifications-page .notification-content,
-.fl-page-theme-root--dark .interaction-notifications-page .notification-time,
-.fl-page-theme-root--dark .location-search-page .selected-address-label,
-.fl-page-theme-root--dark .location-search-page .selected-address-text,
-.fl-page-theme-root--dark .location-search-page .result-address,
-.fl-page-theme-root--dark .record-manual-page .workspace-subtitle,
-.fl-page-theme-root--dark .record-manual-page .library-subtitle,
-.fl-page-theme-root--dark .record-manual-page .section-block-subtitle,
-.fl-page-theme-root--dark .record-manual-page .food-hint,
-.fl-page-theme-root--dark .record-manual-page .food-sub,
-.fl-page-theme-root--dark .record-manual-page .item-cal,
-.fl-page-theme-root--dark .record-manual-page .weight-unit,
-.fl-page-theme-root--dark .record-manual-page .total-calories .unit,
-.fl-page-theme-root--dark .record-manual-page .bottom-summary-subtext,
-.fl-page-theme-root--dark .record-text-page .char-count,
-.fl-page-theme-root--dark .membership-page .hero-subtitle,
-.fl-page-theme-root--dark .membership-page .plan-desc,
-.fl-page-theme-root--dark .membership-page .renew-tip-text,
-.fl-page-theme-root--dark .recipes-page .recipe-desc,
-.fl-page-theme-root--dark .recipes-page .empty-hint,
-.fl-page-theme-root--dark .recipe-edit-page .summary-label,
-.fl-page-theme-root--dark .recipe-edit-page .summary-text,
-.fl-page-theme-root--dark .recipe-edit-page .empty-desc {
+.fl-d .analyze-page .mode-sub,
+.fl-d .analyze-page .mode-tip-text,
+.fl-d .analyze-page .section-hint,
+.fl-d .analyze-page .placeholder-sub,
+.fl-d .analyze-page .precision-session-tip-text,
+.fl-d .analyze-page .precision-reference-label,
+.fl-d .analyze-history-page .empty,
+.fl-d .result-page .recognition-status-desc,
+.fl-d .result-page .recognition-guidance-text,
+.fl-d .result-page .followup-question-desc,
+.fl-d .result-page .followup-question-text,
+.fl-d .result-page .insight-content,
+.fl-d .result-page .section-count,
+.fl-d .result-text-page .weight-text,
+.fl-d .result-text-page .insight-content,
+.fl-d .result-text-page .empty-hint,
+.fl-d .health-profile-page .progress-text,
+.fl-d .health-profile-page .skip-hint,
+.fl-d .health-profile-page .save-hint,
+.fl-d .health-profile-page .benefit-text,
+.fl-d .health-profile-view-page .label,
+.fl-d .food-library-page .pick-mode-subtitle,
+.fl-d .food-library-page .description-text,
+.fl-d .food-library-page .merchant-name,
+.fl-d .food-library-page .location-text,
+.fl-d .food-library-page .author-name,
+.fl-d .food-library-page .loading-text,
+.fl-d .food-detail-page .info-description,
+.fl-d .food-detail-page .info-insight,
+.fl-d .food-detail-page .merchant-text,
+.fl-d .food-detail-page .notes-content,
+.fl-d .food-detail-page .comment-time,
+.fl-d .share-page .quick-upload-subtitle,
+.fl-d .share-page .nutrition-label,
+.fl-d .share-page .city-placeholder,
+.fl-d .share-page .location-text,
+.fl-d .share-page .record-meta,
+.fl-d .friends-page .name-sub,
+.fl-d .friends-page .time,
+.fl-d .friends-page .empty-desc,
+.fl-d .interaction-notifications-page .notifications-subtitle,
+.fl-d .interaction-notifications-page .notification-content,
+.fl-d .interaction-notifications-page .notification-time,
+.fl-d .location-search-page .selected-address-label,
+.fl-d .location-search-page .selected-address-text,
+.fl-d .location-search-page .result-address,
+.fl-d .record-manual-page .workspace-subtitle,
+.fl-d .record-manual-page .library-subtitle,
+.fl-d .record-manual-page .section-block-subtitle,
+.fl-d .record-manual-page .food-hint,
+.fl-d .record-manual-page .food-sub,
+.fl-d .record-manual-page .item-cal,
+.fl-d .record-manual-page .weight-unit,
+.fl-d .record-manual-page .total-calories .unit,
+.fl-d .record-manual-page .bottom-summary-subtext,
+.fl-d .record-text-page .char-count,
+.fl-d .membership-page .hero-subtitle,
+.fl-d .membership-page .plan-desc,
+.fl-d .membership-page .renew-tip-text,
+.fl-d .recipes-page .recipe-desc,
+.fl-d .recipes-page .empty-hint,
+.fl-d .recipe-edit-page .summary-label,
+.fl-d .recipe-edit-page .summary-text,
+.fl-d .recipe-edit-page .empty-desc {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .input-wrapper,
-.fl-page-theme-root--dark .analyze-page .details-input,
-.fl-page-theme-root--dark .analyze-page .precision-reference-input,
-.fl-page-theme-root--dark .result-text-page .weight-display,
-.fl-page-theme-root--dark .result-text-page .tag-input,
-.fl-page-theme-root--dark .food-library-page .search-input,
-.fl-page-theme-root--dark .food-detail-page .comment-input,
-.fl-page-theme-root--dark .share-page .form-input,
-.fl-page-theme-root--dark .share-page .form-textarea,
-.fl-page-theme-root--dark .share-page .tag-input,
-.fl-page-theme-root--dark .location-search-page .search-input,
-.fl-page-theme-root--dark .record-manual-page .search-bar,
-.fl-page-theme-root--dark .record-manual-page .search-input,
-.fl-page-theme-root--dark .record-manual-page .weight-input,
-.fl-page-theme-root--dark .record-text-page .input-card,
-.fl-page-theme-root--dark .record-text-page .food-textarea,
-.fl-page-theme-root--dark .record-text-page .amount-textarea,
-.fl-page-theme-root--dark .recipe-edit-page .input,
-.fl-page-theme-root--dark .recipe-edit-page .textarea {
+.fl-d .analyze-page .input-wrapper,
+.fl-d .analyze-page .details-input,
+.fl-d .analyze-page .precision-reference-input,
+.fl-d .result-text-page .weight-display,
+.fl-d .result-text-page .tag-input,
+.fl-d .food-library-page .search-input,
+.fl-d .food-detail-page .comment-input,
+.fl-d .share-page .form-input,
+.fl-d .share-page .form-textarea,
+.fl-d .share-page .tag-input,
+.fl-d .location-search-page .search-input,
+.fl-d .record-manual-page .search-bar,
+.fl-d .record-manual-page .search-input,
+.fl-d .record-manual-page .weight-input,
+.fl-d .record-text-page .input-card,
+.fl-d .record-text-page .food-textarea,
+.fl-d .record-text-page .amount-textarea,
+.fl-d .recipe-edit-page .input,
+.fl-d .recipe-edit-page .textarea {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .input-placeholder,
-.fl-page-theme-root--dark .analyze-page .placeholder-text,
-.fl-page-theme-root--dark .record-text-page .textarea-placeholder,
-.fl-page-theme-root--dark .recipe-edit-page .input::placeholder,
-.fl-page-theme-root--dark .recipe-edit-page .textarea::placeholder {
+.fl-d .analyze-page .input-placeholder,
+.fl-d .analyze-page .placeholder-text,
+.fl-d .record-text-page .textarea-placeholder,
+.fl-d .recipe-edit-page .input::placeholder,
+.fl-d .recipe-edit-page .textarea::placeholder {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .meal-option,
-.fl-page-theme-root--dark .analyze-page .state-option,
-.fl-page-theme-root--dark .result-text-page .adjust-btn,
-.fl-page-theme-root--dark .result-text-page .secondary-btn,
-.fl-page-theme-root--dark .health-profile-page .option-card,
-.fl-page-theme-root--dark .health-profile-page .picker-card,
-.fl-page-theme-root--dark .health-profile-page .quick-num,
-.fl-page-theme-root--dark .health-profile-page .report-upload-btn,
-.fl-page-theme-root--dark .food-library-page .filter-tag,
-.fl-page-theme-root--dark .food-library-page .empty-btn,
-.fl-page-theme-root--dark .food-library-page .login-tip-btn,
-.fl-page-theme-root--dark .food-detail-page .action-btn,
-.fl-page-theme-root--dark .share-page .switch-btn,
-.fl-page-theme-root--dark .share-page .quick-tag,
-.fl-page-theme-root--dark .share-page .add-tag-btn,
-.fl-page-theme-root--dark .friends-page .plain-btn,
-.fl-page-theme-root--dark .friends-page .danger-btn,
-.fl-page-theme-root--dark .interaction-notifications-page .mark-read-btn,
-.fl-page-theme-root--dark .location-search-page .search-btn,
-.fl-page-theme-root--dark .location-search-page .btn-use,
-.fl-page-theme-root--dark .record-manual-page .filter-chip,
-.fl-page-theme-root--dark .record-manual-page .serving-chip,
-.fl-page-theme-root--dark .record-manual-page .quick-adjust-chip,
-.fl-page-theme-root--dark .record-manual-page .option-item,
-.fl-page-theme-root--dark .record-manual-page .add-btn,
-.fl-page-theme-root--dark .record-manual-page .source-badge,
-.fl-page-theme-root--dark .record-manual-page .total-item,
-.fl-page-theme-root--dark .record-manual-page .workspace-calories,
-.fl-page-theme-root--dark .membership-page .hero-back-row,
-.fl-page-theme-root--dark .recipe-edit-page .option,
-.fl-page-theme-root--dark .recipe-edit-page .danger-btn {
+.fl-d .analyze-page .meal-option,
+.fl-d .analyze-page .state-option,
+.fl-d .result-text-page .adjust-btn,
+.fl-d .result-text-page .secondary-btn,
+.fl-d .health-profile-page .option-card,
+.fl-d .health-profile-page .picker-card,
+.fl-d .health-profile-page .quick-num,
+.fl-d .health-profile-page .report-upload-btn,
+.fl-d .food-library-page .filter-tag,
+.fl-d .food-library-page .empty-btn,
+.fl-d .food-library-page .login-tip-btn,
+.fl-d .food-detail-page .action-btn,
+.fl-d .share-page .switch-btn,
+.fl-d .share-page .quick-tag,
+.fl-d .share-page .add-tag-btn,
+.fl-d .friends-page .plain-btn,
+.fl-d .friends-page .danger-btn,
+.fl-d .interaction-notifications-page .mark-read-btn,
+.fl-d .location-search-page .search-btn,
+.fl-d .location-search-page .btn-use,
+.fl-d .record-manual-page .filter-chip,
+.fl-d .record-manual-page .serving-chip,
+.fl-d .record-manual-page .quick-adjust-chip,
+.fl-d .record-manual-page .option-item,
+.fl-d .record-manual-page .add-btn,
+.fl-d .record-manual-page .source-badge,
+.fl-d .record-manual-page .total-item,
+.fl-d .record-manual-page .workspace-calories,
+.fl-d .membership-page .hero-back-row,
+.fl-d .recipe-edit-page .option,
+.fl-d .recipe-edit-page .danger-btn {
   background: $fl-dark-ghost-bg !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .meal-option.active,
-.fl-page-theme-root--dark .analyze-page .state-option.active,
-.fl-page-theme-root--dark .health-profile-page .option-card.active,
-.fl-page-theme-root--dark .health-profile-page .quick-num.active,
-.fl-page-theme-root--dark .food-library-page .filter-tag.active,
-.fl-page-theme-root--dark .share-page .switch-btn.active,
-.fl-page-theme-root--dark .share-page .source-option.active,
-.fl-page-theme-root--dark .record-manual-page .meal-item.active,
-.fl-page-theme-root--dark .record-manual-page .filter-chip.active,
-.fl-page-theme-root--dark .record-manual-page .serving-chip.active,
-.fl-page-theme-root--dark .record-manual-page .option-item.active,
-.fl-page-theme-root--dark .record-text-page .meal-item.active,
-.fl-page-theme-root--dark .record-text-page .option-item.active,
-.fl-page-theme-root--dark .recipe-edit-page .option.active {
+.fl-d .analyze-page .meal-option.active,
+.fl-d .analyze-page .state-option.active,
+.fl-d .health-profile-page .option-card.active,
+.fl-d .health-profile-page .quick-num.active,
+.fl-d .food-library-page .filter-tag.active,
+.fl-d .share-page .switch-btn.active,
+.fl-d .share-page .source-option.active,
+.fl-d .record-manual-page .meal-item.active,
+.fl-d .record-manual-page .filter-chip.active,
+.fl-d .record-manual-page .serving-chip.active,
+.fl-d .record-manual-page .option-item.active,
+.fl-d .record-text-page .meal-item.active,
+.fl-d .record-text-page .option-item.active,
+.fl-d .recipe-edit-page .option.active {
   background: rgb(125 211 176 / 12%) !important;
   border-color: rgb(125 211 176 / 32%) !important;
   color: $fl-dark-accent !important;
   box-shadow: 0 6rpx 16rpx rgb(0 0 0 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .health-profile-page .card-input,
-.fl-page-theme-root--dark .health-profile-page .card-textarea,
-.fl-page-theme-root--dark .health-profile-page .custom-input-wrap,
-.fl-page-theme-root--dark .record-manual-page .food-cover-placeholder,
-.fl-page-theme-root--dark .record-manual-page .selected-thumb-placeholder,
-.fl-page-theme-root--dark .record-manual-page .remove-btn,
-.fl-page-theme-root--dark .result-text-page .macro-editor-item,
-.fl-page-theme-root--dark .share-page .source-tag-chip,
-.fl-page-theme-root--dark .share-page .city-display,
-.fl-page-theme-root--dark .food-detail-page .image-placeholder,
-.fl-page-theme-root--dark .food-library-page .food-image-placeholder,
-.fl-page-theme-root--dark .record-manual-page .food-cover-placeholder,
-.fl-page-theme-root--dark .record-manual-page .selected-thumb-placeholder,
-.fl-page-theme-root--dark .location-search-page .map-mask,
-.fl-page-theme-root--dark .result-text-page .empty-state,
-.fl-page-theme-root--dark .friends-page .empty-state,
-.fl-page-theme-root--dark .interaction-notifications-page .notifications-empty {
+.fl-d .health-profile-page .card-input,
+.fl-d .health-profile-page .card-textarea,
+.fl-d .health-profile-page .custom-input-wrap,
+.fl-d .record-manual-page .food-cover-placeholder,
+.fl-d .record-manual-page .selected-thumb-placeholder,
+.fl-d .record-manual-page .remove-btn,
+.fl-d .result-text-page .macro-editor-item,
+.fl-d .share-page .source-tag-chip,
+.fl-d .share-page .city-display,
+.fl-d .food-detail-page .image-placeholder,
+.fl-d .food-library-page .food-image-placeholder,
+.fl-d .record-manual-page .food-cover-placeholder,
+.fl-d .record-manual-page .selected-thumb-placeholder,
+.fl-d .location-search-page .map-mask,
+.fl-d .result-text-page .empty-state,
+.fl-d .friends-page .empty-state,
+.fl-d .interaction-notifications-page .notifications-empty {
   background: $fl-dark-panel-bg-soft !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .food-detail-page .bottom-bar,
-.fl-page-theme-root--dark .share-page .submit-bar,
-.fl-page-theme-root--dark .record-text-page .bottom-bar,
-.fl-page-theme-root--dark .recipe-edit-page .action-bar,
-.fl-page-theme-root--dark .health-profile-page .bottom-nav {
+.fl-d .food-detail-page .bottom-bar,
+.fl-d .share-page .submit-bar,
+.fl-d .record-text-page .bottom-bar,
+.fl-d .recipe-edit-page .action-bar,
+.fl-d .health-profile-page .bottom-nav {
   background: linear-gradient(
     180deg,
     rgb(0 0 0 / 0%) 0%,
@@ -2701,748 +2701,748 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   ) !important;
 }
 
-.fl-page-theme-root--dark .result-page .execution-mode-tag,
-.fl-page-theme-root--dark .result-page .recognition-chip,
-.fl-page-theme-root--dark .result-page .insight-tag,
-.fl-page-theme-root--dark .result-text-page .macro-editor-chip,
-.fl-page-theme-root--dark .food-library-page .food-tag,
-.fl-page-theme-root--dark .food-detail-page .tag-item,
-.fl-page-theme-root--dark .friends-page .status,
-.fl-page-theme-root--dark .membership-page .col-label-badge,
-.fl-page-theme-root--dark .recipes-page .tag {
+.fl-d .result-page .execution-mode-tag,
+.fl-d .result-page .recognition-chip,
+.fl-d .result-page .insight-tag,
+.fl-d .result-text-page .macro-editor-chip,
+.fl-d .food-library-page .food-tag,
+.fl-d .food-detail-page .tag-item,
+.fl-d .friends-page .status,
+.fl-d .membership-page .col-label-badge,
+.fl-d .recipes-page .tag {
   background: rgb(125 211 176 / 10%) !important;
   color: $fl-dark-accent !important;
   border-color: rgb(125 211 176 / 26%) !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .tab-section,
-.fl-page-theme-root--dark .food-library-page .filter-section {
+.fl-d .food-library-page .tab-section,
+.fl-d .food-library-page .filter-section {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .sort-section {
+.fl-d .food-library-page .sort-section {
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .skeleton-food-card {
+.fl-d .food-library-page .skeleton-food-card {
   background: $fl-dark-panel-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 2rpx 16rpx rgb(0 0 0 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .food-image-wrap {
+.fl-d .food-library-page .food-image-wrap {
   background: linear-gradient(135deg, #1a2e26 0%, #162520 100%) !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .food-footer {
+.fl-d .food-library-page .food-footer {
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .food-calories {
+.fl-d .food-library-page .food-calories {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .stat-icon,
-.fl-page-theme-root--dark .food-library-page .stat-count {
+.fl-d .food-library-page .stat-icon,
+.fl-d .food-library-page .stat-count {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .stat-icon.liked {
+.fl-d .food-library-page .stat-icon.liked {
   color: #f87171 !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .taste-rating {
+.fl-d .food-library-page .taste-rating {
   background: rgba(245, 158, 11, 0.15) !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .merchant-icon,
-.fl-page-theme-root--dark .food-library-page .location-icon {
+.fl-d .food-library-page .merchant-icon,
+.fl-d .food-library-page .location-icon {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .author-avatar {
+.fl-d .food-library-page .author-avatar {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .login-tip-text {
+.fl-d .food-library-page .login-tip-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .food-card.is-pick-mode {
+.fl-d .food-library-page .food-card.is-pick-mode {
   border-color: rgba(125, 211, 176, 0.20) !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .tab-item {
+.fl-d .food-library-page .tab-item {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .tab-item.active {
+.fl-d .food-library-page .tab-item.active {
   color: $fl-dark-accent !important;
   border-bottom-color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .empty-text {
+.fl-d .food-library-page .empty-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .feedback-hint {
+.fl-d .food-library-page .feedback-hint {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .feedback-link {
+.fl-d .food-library-page .feedback-link {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .search-input-wrap {
+.fl-d .food-library-page .search-input-wrap {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .search-input-icon {
+.fl-d .food-library-page .search-input-icon {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .sort-filter-btn {
+.fl-d .food-library-page .sort-filter-btn {
   background: $fl-dark-ghost-bg !important;
   border: 1rpx solid $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .sort-filter-icon,
-.fl-page-theme-root--dark .food-library-page .sort-filter-text {
+.fl-d .food-library-page .sort-filter-icon,
+.fl-d .food-library-page .sort-filter-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .merchant-name {
+.fl-d .food-library-page .merchant-name {
   background: rgb(125 211 176 / 12%) !important;
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .merchant-icon {
+.fl-d .food-library-page .merchant-icon {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .filter-dropdown-panel {
+.fl-d .food-library-page .filter-dropdown-panel {
   background: $fl-dark-panel-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 8rpx 32rpx rgb(0 0 0 / 30%) !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .filter-dropdown-label {
+.fl-d .food-library-page .filter-dropdown-label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .filter-dropdown-option {
+.fl-d .food-library-page .filter-dropdown-option {
   background: $fl-dark-ghost-bg !important;
   color: $fl-dark-text !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .food-library-page .filter-dropdown-option.active {
+.fl-d .food-library-page .filter-dropdown-option.active {
   background: rgb(125 211 176 / 12%) !important;
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .food-detail-page .correction-hint {
+.fl-d .food-detail-page .correction-hint {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .food-detail-page .correction-link {
+.fl-d .food-detail-page .correction-link {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .food-detail-page .delete-btn {
+.fl-d .food-detail-page .delete-btn {
   background: rgb(248 113 113 / 12%) !important;
   color: #f87171 !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .page-header {
+.fl-d .recipes-page .page-header {
   background: $fl-dark-panel-bg !important;
   box-shadow: 0 4rpx 12rpx rgb(0 0 0 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .page-title {
+.fl-d .recipes-page .page-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .page-subtitle {
+.fl-d .recipes-page .page-subtitle {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .nutrition-summary {
+.fl-d .recipes-page .nutrition-summary {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .nutrition-label {
+.fl-d .recipes-page .nutrition-label {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .nutrition-sub-value {
+.fl-d .recipes-page .nutrition-sub-value {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .nutrition-divider {
+.fl-d .recipes-page .nutrition-divider {
   background: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .card-footer {
+.fl-d .recipes-page .card-footer {
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .recipe-image-wrapper {
+.fl-d .recipes-page .recipe-image-wrapper {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .recipe-image-placeholder {
+.fl-d .recipes-page .recipe-image-placeholder {
   background: $fl-dark-panel-bg-soft !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .favorite-badge {
+.fl-d .recipes-page .favorite-badge {
   background: rgb(30 38 36 / 90%) !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .recipe-stats .stats-icon,
-.fl-page-theme-root--dark .recipes-page .recipe-stats .stats-text,
-.fl-page-theme-root--dark .recipes-page .recipe-stats .stats-dot {
+.fl-d .recipes-page .recipe-stats .stats-icon,
+.fl-d .recipes-page .recipe-stats .stats-text,
+.fl-d .recipes-page .recipe-stats .stats-dot {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .action-btn.delete-btn {
+.fl-d .recipes-page .action-btn.delete-btn {
   background: rgb(239 68 68 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .action-btn.edit-btn {
+.fl-d .recipes-page .action-btn.edit-btn {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .empty-icon {
+.fl-d .recipes-page .empty-icon {
   color: rgb(100 120 112) !important;
 }
 
-.fl-page-theme-root--dark .recipes-page .empty-text {
+.fl-d .recipes-page .empty-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .membership-page .points-balance-card,
-.fl-page-theme-root--dark .membership-page .recharge-card,
-.fl-page-theme-root--dark .membership-page .invite-card,
-.fl-page-theme-root--dark .membership-page .points-rules-card {
+.fl-d .membership-page .points-balance-card,
+.fl-d .membership-page .recharge-card,
+.fl-d .membership-page .invite-card,
+.fl-d .membership-page .points-rules-card {
   background: $fl-dark-panel-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .membership-page .points-balance-label,
-.fl-page-theme-root--dark .membership-page .recharge-title,
-.fl-page-theme-root--dark .membership-page .rules-modal-title,
-.fl-page-theme-root--dark .membership-page .recharge-input-prefix,
-.fl-page-theme-root--dark .membership-page .invite-code {
+.fl-d .membership-page .points-balance-label,
+.fl-d .membership-page .recharge-title,
+.fl-d .membership-page .rules-modal-title,
+.fl-d .membership-page .recharge-input-prefix,
+.fl-d .membership-page .invite-code {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .membership-page .points-balance-help-text,
-.fl-page-theme-root--dark .membership-page .points-rule-item,
-.fl-page-theme-root--dark .membership-page .points-rules-line,
-.fl-page-theme-root--dark .membership-page .invite-label-hint,
-.fl-page-theme-root--dark .membership-page .rules-modal-line,
-.fl-page-theme-root--dark .membership-page .rules-modal-close-text {
+.fl-d .membership-page .points-balance-help-text,
+.fl-d .membership-page .points-rule-item,
+.fl-d .membership-page .points-rules-line,
+.fl-d .membership-page .invite-label-hint,
+.fl-d .membership-page .rules-modal-line,
+.fl-d .membership-page .rules-modal-close-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .membership-page .points-balance-help-icon {
+.fl-d .membership-page .points-balance-help-icon {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .membership-page .points-balance-value,
-.fl-page-theme-root--dark .membership-page .recharge-preview,
-.fl-page-theme-root--dark .membership-page .invite-label {
+.fl-d .membership-page .points-balance-value,
+.fl-d .membership-page .recharge-preview,
+.fl-d .membership-page .invite-label {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .membership-page .recharge-preset,
-.fl-page-theme-root--dark .membership-page .recharge-input-row,
-.fl-page-theme-root--dark .membership-page .rules-modal-close-btn {
+.fl-d .membership-page .recharge-preset,
+.fl-d .membership-page .recharge-input-row,
+.fl-d .membership-page .rules-modal-close-btn {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .membership-page .recharge-preset--active {
+.fl-d .membership-page .recharge-preset--active {
   background: rgb(125 211 176 / 12%) !important;
   border-color: rgb(125 211 176 / 32%) !important;
   box-shadow: 0 6rpx 16rpx rgb(0 0 0 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .membership-page .recharge-preset-text,
-.fl-page-theme-root--dark .membership-page .recharge-input {
+.fl-d .membership-page .recharge-preset-text,
+.fl-d .membership-page .recharge-input {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .membership-page .invite-copy-btn {
+.fl-d .membership-page .invite-copy-btn {
   background: rgb(255 255 255 / 10%) !important;
   border: 1rpx solid $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .membership-page .rules-modal-mask {
+.fl-d .membership-page .rules-modal-mask {
   background: rgb(0 0 0 / 62%) !important;
 }
 
-.fl-page-theme-root--dark .membership-page .rules-modal-content {
+.fl-d .membership-page .rules-modal-content {
   background: $fl-dark-modal-bg-soft !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 42%) !important;
 }
 
-.fl-page-theme-root--dark .membership-page .rules-modal-handle-bar,
-.fl-page-theme-root--dark .membership-page .rules-modal-divider {
+.fl-d .membership-page .rules-modal-handle-bar,
+.fl-d .membership-page .rules-modal-divider {
   background: rgb(255 255 255 / 10%) !important;
 }
 
-.fl-page-theme-root--dark .membership-page .subscribe-btn {
+.fl-d .membership-page .subscribe-btn {
   background: linear-gradient(135deg, #5cb896 0%, #7bc4a8 100%) !important;
   color: #fff !important;
   border: none !important;
   box-shadow: 0 8rpx 24rpx rgb(92 184 150 / 35%) !important;
 }
 
-.fl-page-theme-root--dark .membership-page .subscribe-btn::after {
+.fl-d .membership-page .subscribe-btn::after {
   border: none !important;
 }
 
-.fl-page-theme-root--dark .result-page .macro-bar,
-.fl-page-theme-root--dark .result-text-page .macro-bar,
-.fl-page-theme-root--dark .analyze-page .quota-bar,
-.fl-page-theme-root--dark .record-text-page .record-text-quota-bar {
+.fl-d .result-page .macro-bar,
+.fl-d .result-text-page .macro-bar,
+.fl-d .analyze-page .quota-bar,
+.fl-d .record-text-page .record-text-quota-bar {
   background: rgb(0 0 0 / 26%) !important;
 }
 
 /* ---------- 分析 loading / 结果页深色细节补充 ---------- */
-.fl-page-theme-root--dark .analyze-loading-page-v3 {
+.fl-d .analyze-loading-page-v3 {
   background: #000 !important;
 }
 
-.fl-page-theme-root--dark .analyze-loading-page,
-.fl-page-theme-root--dark .analyze-loading-page .violated-wrap,
-.fl-page-theme-root--dark .analyze-loading-page .error-wrap {
+.fl-d .analyze-loading-page,
+.fl-d .analyze-loading-page .violated-wrap,
+.fl-d .analyze-loading-page .error-wrap {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .analyze-loading-page .violated-icon-wrap {
+.fl-d .analyze-loading-page .violated-icon-wrap {
   background: rgb(127 29 29 / 32%) !important;
   border: 1rpx solid rgb(248 113 113 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-loading-page .violated-title,
-.fl-page-theme-root--dark .analyze-loading-page .error-msg {
+.fl-d .analyze-loading-page .violated-title,
+.fl-d .analyze-loading-page .error-msg {
   color: #fecaca !important;
 }
 
-.fl-page-theme-root--dark .analyze-loading-page .violated-reason,
-.fl-page-theme-root--dark .analyze-loading-page .violated-hint,
-.fl-page-theme-root--dark .analyze-loading-page .ai-notice {
+.fl-d .analyze-loading-page .violated-reason,
+.fl-d .analyze-loading-page .violated-hint,
+.fl-d .analyze-loading-page .ai-notice {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .analyze-loading-page-v3 .content-layer {
+.fl-d .analyze-loading-page-v3 .content-layer {
   background:
     linear-gradient(180deg, rgb(2 6 23 / 18%) 0%, rgb(2 6 23 / 44%) 100%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-loading-page-v3 .fullscreen-bg-fallback,
-.fl-page-theme-root--dark .analyze-loading-page-v3 .fullscreen-bg-text-record,
-.fl-page-theme-root--dark .analyze-loading-page-v3 .frame-placeholder-v3,
-.fl-page-theme-root--dark .analyze-loading-page-v3 .frame-placeholder-text-record {
+.fl-d .analyze-loading-page-v3 .fullscreen-bg-fallback,
+.fl-d .analyze-loading-page-v3 .fullscreen-bg-text-record,
+.fl-d .analyze-loading-page-v3 .frame-placeholder-v3,
+.fl-d .analyze-loading-page-v3 .frame-placeholder-text-record {
   background:
     linear-gradient(135deg, rgb(10 18 16 / 96%) 0%, rgb(17 28 25 / 92%) 55%, rgb(10 14 13 / 96%) 100%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-loading-page-v3 .text-record-icon-wrap,
-.fl-page-theme-root--dark .analyze-loading-page-v3 .frame-text-record-icon-wrap {
+.fl-d .analyze-loading-page-v3 .text-record-icon-wrap,
+.fl-d .analyze-loading-page-v3 .frame-text-record-icon-wrap {
   background: rgb(255 255 255 / 8%) !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 12rpx 30rpx rgb(0 0 0 / 32%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-loading-page-v3 .text-record-placeholder-label,
-.fl-page-theme-root--dark .analyze-loading-page-v3 .frame-text-record-label,
-.fl-page-theme-root--dark .analyze-loading-page-v3 .brand-footer {
+.fl-d .analyze-loading-page-v3 .text-record-placeholder-label,
+.fl-d .analyze-loading-page-v3 .frame-text-record-label,
+.fl-d .analyze-loading-page-v3 .brand-footer {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .analyze-loading-page-v3 .btn-leave-v3 {
+.fl-d .analyze-loading-page-v3 .btn-leave-v3 {
   background: rgb(255 255 255 / 8%) !important;
   border-color: rgb(255 255 255 / 18%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-loading-page-v3 .btn-exit-debug-v3 {
+.fl-d .analyze-loading-page-v3 .btn-exit-debug-v3 {
   background: rgb(127 29 29 / 22%) !important;
   border-color: rgb(248 113 113 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .result-page .content-container,
-.fl-page-theme-root--dark .result-text-page .content-container {
+.fl-d .result-page .content-container,
+.fl-d .result-text-page .content-container {
   background: transparent !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .result-page .scanner-hero-section,
-.fl-page-theme-root--dark .result-page .scanner-hero-inner {
+.fl-d .result-page .scanner-hero-section,
+.fl-d .result-page .scanner-hero-inner {
   background: #020617 !important;
 }
 
-.fl-page-theme-root--dark .result-page .scanner-hero-placeholder,
-.fl-page-theme-root--dark .result-text-page .hero-section {
+.fl-d .result-page .scanner-hero-placeholder,
+.fl-d .result-text-page .hero-section {
   background:
     linear-gradient(135deg, rgb(10 18 16 / 98%) 0%, rgb(20 31 28 / 94%) 50%, rgb(9 13 12 / 98%) 100%) !important;
 }
 
-.fl-page-theme-root--dark .result-page .scanner-hero-placeholder::before,
-.fl-page-theme-root--dark .result-text-page .hero-section::before {
+.fl-d .result-page .scanner-hero-placeholder::before,
+.fl-d .result-text-page .hero-section::before {
   opacity: 0.08 !important;
 }
 
-.fl-page-theme-root--dark .result-page .placeholder-icon-wrap,
-.fl-page-theme-root--dark .result-text-page .hero-icon-wrapper {
+.fl-d .result-page .placeholder-icon-wrap,
+.fl-d .result-text-page .hero-icon-wrapper {
   background: rgb(255 255 255 / 10%) !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 12rpx 30rpx rgb(0 0 0 / 30%) !important;
 }
 
-.fl-page-theme-root--dark .result-page .placeholder-icon,
-.fl-page-theme-root--dark .result-text-page .hero-icon-wrapper .iconfont {
+.fl-d .result-page .placeholder-icon,
+.fl-d .result-text-page .hero-icon-wrapper .iconfont {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .result-page .placeholder-text,
-.fl-page-theme-root--dark .result-text-page .hero-title {
+.fl-d .result-page .placeholder-text,
+.fl-d .result-text-page .hero-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .result-text-page .hero-overlay {
+.fl-d .result-text-page .hero-overlay {
   background: linear-gradient(to bottom, rgb(0 0 0 / 0%) 0%, rgb(11 15 14 / 100%) 100%) !important;
 }
 
-.fl-page-theme-root--dark .result-page .execution-mode-tag.standard {
+.fl-d .result-page .execution-mode-tag.standard {
   background: rgb(255 255 255 / 6%) !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .result-page .execution-mode-tag-text,
-.fl-page-theme-root--dark .result-page .execution-mode-default-link,
-.fl-page-theme-root--dark .result-page .image-counter .counter-text {
+.fl-d .result-page .execution-mode-tag-text,
+.fl-d .result-page .execution-mode-default-link,
+.fl-d .result-page .image-counter .counter-text {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .result-page .summary-card,
-.fl-page-theme-root--dark .result-page .recognition-status-card.outcome-ok,
-.fl-page-theme-root--dark .result-page .recognition-status-card.outcome-soft_reject,
-.fl-page-theme-root--dark .result-page .recognition-status-card.outcome-hard_reject,
-.fl-page-theme-root--dark .result-page .precision-continue-card,
-.fl-page-theme-root--dark .result-page .precision-continue-card .precision-reference-card,
-.fl-page-theme-root--dark .result-page .precision-continue-card .detected-items-card,
-.fl-page-theme-root--dark .result-page .precision-continue-card .split-strategy-card,
-.fl-page-theme-root--dark .result-page .precision-continue-card .uncertainty-card {
+.fl-d .result-page .summary-card,
+.fl-d .result-page .recognition-status-card.outcome-ok,
+.fl-d .result-page .recognition-status-card.outcome-soft_reject,
+.fl-d .result-page .recognition-status-card.outcome-hard_reject,
+.fl-d .result-page .precision-continue-card,
+.fl-d .result-page .precision-continue-card .precision-reference-card,
+.fl-d .result-page .precision-continue-card .detected-items-card,
+.fl-d .result-page .precision-continue-card .split-strategy-card,
+.fl-d .result-page .precision-continue-card .uncertainty-card {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .result-page .correction-entry,
-.fl-page-theme-root--dark .result-page .library-upload-entry,
-.fl-page-theme-root--dark .result-page .total-weight-badge,
-.fl-page-theme-root--dark .result-page .insight-item,
-.fl-page-theme-root--dark .result-text-page .total-weight-badge,
-.fl-page-theme-root--dark .result-text-page .insight-item,
-.fl-page-theme-root--dark .result-text-page .ingredient-controls,
-.fl-page-theme-root--dark .result-text-page .weight-adjuster,
-.fl-page-theme-root--dark .result-text-page .edit-icon-wrapper {
+.fl-d .result-page .correction-entry,
+.fl-d .result-page .library-upload-entry,
+.fl-d .result-page .total-weight-badge,
+.fl-d .result-page .insight-item,
+.fl-d .result-text-page .total-weight-badge,
+.fl-d .result-text-page .insight-item,
+.fl-d .result-text-page .ingredient-controls,
+.fl-d .result-text-page .weight-adjuster,
+.fl-d .result-text-page .edit-icon-wrapper {
   background: $fl-dark-panel-bg-soft !important;
   border-color: $fl-dark-border !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .result-page .correction-entry .correction-text,
-.fl-page-theme-root--dark .result-page .correction-entry .correction-arrow,
-.fl-page-theme-root--dark .result-page .library-upload-text,
-.fl-page-theme-root--dark .result-page .library-upload-arrow,
-.fl-page-theme-root--dark .result-page .insight-label,
-.fl-page-theme-root--dark .result-page .ratio-display,
-.fl-page-theme-root--dark .result-text-page .insight-label,
-.fl-page-theme-root--dark .result-text-page .ratio-display {
+.fl-d .result-page .correction-entry .correction-text,
+.fl-d .result-page .correction-entry .correction-arrow,
+.fl-d .result-page .library-upload-text,
+.fl-d .result-page .library-upload-arrow,
+.fl-d .result-page .insight-label,
+.fl-d .result-page .ratio-display,
+.fl-d .result-text-page .insight-label,
+.fl-d .result-text-page .ratio-display {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .result-page .insight-item.highlight {
+.fl-d .result-page .insight-item.highlight {
   background: #18332a !important;
 }
 
-.fl-page-theme-root--dark .result-page .insight-item.intro {
+.fl-d .result-page .insight-item.intro {
   background: #202927 !important;
 }
 
-.fl-page-theme-root--dark .result-page .insight-item.ratio {
+.fl-d .result-page .insight-item.ratio {
   background: #33261d !important;
 }
 
-.fl-page-theme-root--dark .result-page .insight-item.absorption {
+.fl-d .result-page .insight-item.absorption {
   background: #2a2235 !important;
 }
 
-.fl-page-theme-root--dark .result-page .insight-item.context {
+.fl-d .result-page .insight-item.context {
   background: #17302d !important;
 }
 
-.fl-page-theme-root--dark .result-text-page .hero-title,
-.fl-page-theme-root--dark .result-text-page .calories-value,
-.fl-page-theme-root--dark .result-text-page .calories-unit,
-.fl-page-theme-root--dark .result-text-page .macro-value,
-.fl-page-theme-root--dark .result-text-page .ingredient-name,
-.fl-page-theme-root--dark .result-text-page .weight-display {
+.fl-d .result-text-page .hero-title,
+.fl-d .result-text-page .calories-value,
+.fl-d .result-text-page .calories-unit,
+.fl-d .result-text-page .macro-value,
+.fl-d .result-text-page .ingredient-name,
+.fl-d .result-text-page .weight-display {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .result-text-page .calories-label,
-.fl-page-theme-root--dark .result-text-page .weight-text,
-.fl-page-theme-root--dark .result-text-page .macro-editor-item-label,
-.fl-page-theme-root--dark .result-text-page .control-label,
-.fl-page-theme-root--dark .result-text-page .cal-unit,
-.fl-page-theme-root--dark .result-text-page .empty-text {
+.fl-d .result-text-page .calories-label,
+.fl-d .result-text-page .weight-text,
+.fl-d .result-text-page .macro-editor-item-label,
+.fl-d .result-text-page .control-label,
+.fl-d .result-text-page .cal-unit,
+.fl-d .result-text-page .empty-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .result-text-page .insight-item.highlight,
-.fl-page-theme-root--dark .result-text-page .macro-editor-item.protein .macro-editor-chip {
+.fl-d .result-text-page .insight-item.highlight,
+.fl-d .result-text-page .macro-editor-item.protein .macro-editor-chip {
   background: #18332a !important;
 }
 
-.fl-page-theme-root--dark .result-text-page .insight-item.intro {
+.fl-d .result-text-page .insight-item.intro {
   background: #202927 !important;
 }
 
-.fl-page-theme-root--dark .result-text-page .insight-item.ratio,
-.fl-page-theme-root--dark .result-text-page .macro-editor-item.fat .macro-editor-chip {
+.fl-d .result-text-page .insight-item.ratio,
+.fl-d .result-text-page .macro-editor-item.fat .macro-editor-chip {
   background: #33261d !important;
 }
 
-.fl-page-theme-root--dark .result-text-page .insight-item.absorption,
-.fl-page-theme-root--dark .result-text-page .macro-editor-item.carbs .macro-editor-chip {
+.fl-d .result-text-page .insight-item.absorption,
+.fl-d .result-text-page .macro-editor-item.carbs .macro-editor-chip {
   background: #1f2c38 !important;
 }
 
-.fl-page-theme-root--dark .result-text-page .ingredient-main,
-.fl-page-theme-root--dark .result-page .ingredient-main {
+.fl-d .result-text-page .ingredient-main,
+.fl-d .result-page .ingredient-main {
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .result-page .footer-actions,
-.fl-page-theme-root--dark .result-text-page .footer-actions,
-.fl-page-theme-root--dark .result-page .drawer-header,
-.fl-page-theme-root--dark .result-page .drawer-footer,
-.fl-page-theme-root--dark .result-page .correction-drawer-content {
+.fl-d .result-page .footer-actions,
+.fl-d .result-text-page .footer-actions,
+.fl-d .result-page .drawer-header,
+.fl-d .result-page .drawer-footer,
+.fl-d .result-page .correction-drawer-content {
   background: $fl-dark-modal-bg-soft !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .result-page .drawer-header,
-.fl-page-theme-root--dark .result-page .drawer-footer,
-.fl-page-theme-root--dark .result-text-page .footer-actions {
+.fl-d .result-page .drawer-header,
+.fl-d .result-page .drawer-footer,
+.fl-d .result-text-page .footer-actions {
   box-shadow: 0 12rpx 40rpx rgb(0 0 0 / 34%) !important;
 }
 
-.fl-page-theme-root--dark .result-page .meal-selector-card,
-.fl-page-theme-root--dark .result-page .correction-row,
-.fl-page-theme-root--dark .result-page .additional-context-wrapper,
-.fl-page-theme-root--dark .result-page .weight-input-wrapper,
-.fl-page-theme-root--dark .result-text-page .meal-selector-card {
+.fl-d .result-page .meal-selector-card,
+.fl-d .result-page .correction-row,
+.fl-d .result-page .additional-context-wrapper,
+.fl-d .result-page .weight-input-wrapper,
+.fl-d .result-text-page .meal-selector-card {
   background: $fl-dark-modal-bg-soft !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 12rpx 36rpx rgb(0 0 0 / 32%) !important;
 }
 
-.fl-page-theme-root--dark .result-page .selector-title,
-.fl-page-theme-root--dark .result-page .drawer-title,
-.fl-page-theme-root--dark .result-page .context-label text,
-.fl-page-theme-root--dark .result-page .meal-option-item .option-label,
-.fl-page-theme-root--dark .result-page .correction-input,
-.fl-page-theme-root--dark .result-page .weight-unit,
-.fl-page-theme-root--dark .result-text-page .selector-title,
-.fl-page-theme-root--dark .result-text-page .meal-option-item .option-label {
+.fl-d .result-page .selector-title,
+.fl-d .result-page .drawer-title,
+.fl-d .result-page .context-label text,
+.fl-d .result-page .meal-option-item .option-label,
+.fl-d .result-page .correction-input,
+.fl-d .result-page .weight-unit,
+.fl-d .result-text-page .selector-title,
+.fl-d .result-text-page .meal-option-item .option-label {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .result-page .meal-option-item,
-.fl-page-theme-root--dark .result-page .selector-actions .cancel-btn,
-.fl-page-theme-root--dark .result-page .drawer-close,
-.fl-page-theme-root--dark .result-page .correction-input,
-.fl-page-theme-root--dark .result-page .weight-input-wrapper,
-.fl-page-theme-root--dark .result-page .context-textarea,
-.fl-page-theme-root--dark .result-page .add-correction-btn,
-.fl-page-theme-root--dark .result-text-page .meal-option-item,
-.fl-page-theme-root--dark .result-text-page .selector-actions .cancel-btn {
+.fl-d .result-page .meal-option-item,
+.fl-d .result-page .selector-actions .cancel-btn,
+.fl-d .result-page .drawer-close,
+.fl-d .result-page .correction-input,
+.fl-d .result-page .weight-input-wrapper,
+.fl-d .result-page .context-textarea,
+.fl-d .result-page .add-correction-btn,
+.fl-d .result-text-page .meal-option-item,
+.fl-d .result-text-page .selector-actions .cancel-btn {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .result-page .meal-option-item .option-icon,
-.fl-page-theme-root--dark .result-page .correction-index,
-.fl-page-theme-root--dark .result-page .context-textarea::placeholder,
-.fl-page-theme-root--dark .result-page .correction-input::placeholder,
-.fl-page-theme-root--dark .result-text-page .meal-option-item .option-icon,
-.fl-page-theme-root--dark .result-text-page .empty-icon {
+.fl-d .result-page .meal-option-item .option-icon,
+.fl-d .result-page .correction-index,
+.fl-d .result-page .context-textarea::placeholder,
+.fl-d .result-page .correction-input::placeholder,
+.fl-d .result-text-page .meal-option-item .option-icon,
+.fl-d .result-text-page .empty-icon {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .result-page .meal-option-item.active,
-.fl-page-theme-root--dark .result-text-page .meal-option-item.active {
+.fl-d .result-page .meal-option-item.active,
+.fl-d .result-text-page .meal-option-item.active {
   background: rgb(125 211 176 / 12%) !important;
   border-color: rgb(125 211 176 / 32%) !important;
 }
 
-.fl-page-theme-root--dark .result-page .correction-remove {
+.fl-d .result-page .correction-remove {
   background: rgb(127 29 29 / 22%) !important;
 }
 
-.fl-page-theme-root--dark .result-page .correction-remove .correction-remove-icon {
+.fl-d .result-page .correction-remove .correction-remove-icon {
   color: #fca5a5 !important;
 }
 
-.fl-page-theme-root--dark .result-page .meal-selector-overlay,
-.fl-page-theme-root--dark .result-page .correction-drawer-overlay,
-.fl-page-theme-root--dark .result-text-page .meal-selector-overlay {
+.fl-d .result-page .meal-selector-overlay,
+.fl-d .result-page .correction-drawer-overlay,
+.fl-d .result-text-page .meal-selector-overlay {
   background: rgb(0 0 0 / 74%) !important;
 }
 
-.fl-page-theme-root--dark .record-text-page .record-text-quota-bar {
+.fl-d .record-text-page .record-text-quota-bar {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .record-text-page .record-text-quota-bar-text {
+.fl-d .record-text-page .record-text-quota-bar-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .record-text-page .record-text-quota-bar--exhausted {
+.fl-d .record-text-page .record-text-quota-bar--exhausted {
   background: rgb(127 29 29 / 22%) !important;
   border-color: rgb(248 113 113 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .record-text-page .record-text-quota-bar--exhausted .record-text-quota-bar-text {
+.fl-d .record-text-page .record-text-quota-bar--exhausted .record-text-quota-bar-text {
   color: #fca5a5 !important;
 }
 
-.fl-page-theme-root--dark .record-text-page .quick-tags .tag-item {
+.fl-d .record-text-page .quick-tags .tag-item {
   background: rgb(125 211 176 / 10%) !important;
   border-color: rgb(125 211 176 / 26%) !important;
 }
 
-.fl-page-theme-root--dark .record-text-page .quick-tags .tag-item text,
-.fl-page-theme-root--dark .record-text-page .tags-label,
-.fl-page-theme-root--dark .record-text-page .meal-item .meal-name,
-.fl-page-theme-root--dark .record-text-page .option-item text {
+.fl-d .record-text-page .quick-tags .tag-item text,
+.fl-d .record-text-page .tags-label,
+.fl-d .record-text-page .meal-item .meal-name,
+.fl-d .record-text-page .option-item text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .record-text-page .meal-item,
-.fl-page-theme-root--dark .record-text-page .option-item,
-.fl-page-theme-root--dark .record-text-page .submit-btn.disabled {
+.fl-d .record-text-page .meal-item,
+.fl-d .record-text-page .option-item,
+.fl-d .record-text-page .submit-btn.disabled {
   background: $fl-dark-panel-bg-soft !important;
   border-color: $fl-dark-border !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .record-text-page .food-textarea,
-.fl-page-theme-root--dark .record-text-page .amount-textarea {
+.fl-d .record-text-page .food-textarea,
+.fl-d .record-text-page .amount-textarea {
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .record-text-page .meal-item .meal-icon {
+.fl-d .record-text-page .meal-item .meal-icon {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .record-text-page .submit-btn.disabled text {
+.fl-d .record-text-page .submit-btn.disabled text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page {
+.fl-d .record-manual-page {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .content-scroll,
-.fl-page-theme-root--dark .analyze-history-page .list {
+.fl-d .record-manual-page .content-scroll,
+.fl-d .analyze-history-page .list {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .food-item,
-.fl-page-theme-root--dark .record-manual-page .selected-item {
+.fl-d .record-manual-page .food-item,
+.fl-d .record-manual-page .selected-item {
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .food-item,
-.fl-page-theme-root--dark .record-manual-page .selected-item,
-.fl-page-theme-root--dark .record-manual-page .food-list {
+.fl-d .record-manual-page .food-item,
+.fl-d .record-manual-page .selected-item,
+.fl-d .record-manual-page .food-list {
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .food-item {
+.fl-d .record-manual-page .food-item {
   background: transparent !important;
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .catalog-shell {
+.fl-d .record-manual-page .catalog-shell {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .catalog-sidebar {
+.fl-d .record-manual-page .catalog-sidebar {
   background: rgb(255 255 255 / 4%) !important;
   border-right-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .catalog-tab.active {
+.fl-d .record-manual-page .catalog-tab.active {
   background: $fl-dark-panel-bg !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .food-cover-image,
-.fl-page-theme-root--dark .record-manual-page .selected-thumb-image {
+.fl-d .record-manual-page .food-cover-image,
+.fl-d .record-manual-page .selected-thumb-image {
   background: rgb(255 255 255 / 5%) !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .source-badge.public_library {
+.fl-d .record-manual-page .source-badge.public_library {
   background: rgb(59 130 246 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .source-badge.public_library text {
+.fl-d .record-manual-page .source-badge.public_library text {
   color: #93c5fd !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .source-badge.nutrition_library {
+.fl-d .record-manual-page .source-badge.nutrition_library {
   background: rgb(16 185 129 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .source-badge.nutrition_library text,
-.fl-page-theme-root--dark .record-manual-page .add-btn text,
-.fl-page-theme-root--dark .record-manual-page .quick-adjust-chip text,
-.fl-page-theme-root--dark .record-manual-page .total-item .value,
-.fl-page-theme-root--dark .record-manual-page .workspace-calories-value,
-.fl-page-theme-root--dark .record-manual-page .total-calories text:first-child,
-.fl-page-theme-root--dark .record-manual-page .meal-item.active .meal-icon,
-.fl-page-theme-root--dark .record-manual-page .meal-item.active .meal-name,
-.fl-page-theme-root--dark .record-manual-page .load-more text {
+.fl-d .record-manual-page .source-badge.nutrition_library text,
+.fl-d .record-manual-page .add-btn text,
+.fl-d .record-manual-page .quick-adjust-chip text,
+.fl-d .record-manual-page .total-item .value,
+.fl-d .record-manual-page .workspace-calories-value,
+.fl-d .record-manual-page .total-calories text:first-child,
+.fl-d .record-manual-page .meal-item.active .meal-icon,
+.fl-d .record-manual-page .meal-item.active .meal-name,
+.fl-d .record-manual-page .load-more text {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .total-item .label,
-.fl-page-theme-root--dark .record-manual-page .workspace-calories-unit,
-.fl-page-theme-root--dark .record-manual-page .source-badge text,
-.fl-page-theme-root--dark .record-manual-page .filter-chip text,
-.fl-page-theme-root--dark .record-manual-page .serving-chip text,
-.fl-page-theme-root--dark .record-manual-page .option-item text {
+.fl-d .record-manual-page .total-item .label,
+.fl-d .record-manual-page .workspace-calories-unit,
+.fl-d .record-manual-page .source-badge text,
+.fl-d .record-manual-page .filter-chip text,
+.fl-d .record-manual-page .serving-chip text,
+.fl-d .record-manual-page .option-item text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .bottom-bar {
+.fl-d .record-manual-page .bottom-bar {
   background: linear-gradient(
     180deg,
     rgb(0 0 0 / 0%) 0%,
@@ -3452,402 +3452,402 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .bottom-summary-text {
+.fl-d .record-manual-page .bottom-summary-text {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .record-manual-page .save-btn.loading {
+.fl-d .record-manual-page .save-btn.loading {
   opacity: 0.78 !important;
 }
 
-.fl-page-theme-root--dark .analyze-page,
-.fl-page-theme-root--dark .analyze-history-page {
+.fl-d .analyze-page,
+.fl-d .analyze-history-page {
   background: #111716 !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .quota-bar,
-.fl-page-theme-root--dark .analyze-page .mode-banner,
-.fl-page-theme-root--dark .analyze-page .image-preview-section,
-.fl-page-theme-root--dark .analyze-page .meal-section,
-.fl-page-theme-root--dark .analyze-page .state-section,
-.fl-page-theme-root--dark .analyze-page .details-section {
+.fl-d .analyze-page .quota-bar,
+.fl-d .analyze-page .mode-banner,
+.fl-d .analyze-page .image-preview-section,
+.fl-d .analyze-page .meal-section,
+.fl-d .analyze-page .state-section,
+.fl-d .analyze-page .details-section {
   background: $fl-dark-panel-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-history-page .task-card {
+.fl-d .analyze-history-page .task-card {
   background: #18211f !important;
   box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .mode-banner.standard,
-.fl-page-theme-root--dark .analyze-page .mode-banner.strict {
+.fl-d .analyze-page .mode-banner.standard,
+.fl-d .analyze-page .mode-banner.strict {
   background: $fl-dark-panel-bg !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .mode-desc,
-.fl-page-theme-root--dark .analyze-page .mode-tip-text,
-.fl-page-theme-root--dark .analyze-page .quota-bar-text,
-.fl-page-theme-root--dark .analyze-page .multiview-compact-hint,
-.fl-page-theme-root--dark .analyze-history-page .time,
-.fl-page-theme-root--dark .analyze-history-page .empty-text,
-.fl-page-theme-root--dark .analyze-history-page .loading-wrap {
+.fl-d .analyze-page .mode-desc,
+.fl-d .analyze-page .mode-tip-text,
+.fl-d .analyze-page .quota-bar-text,
+.fl-d .analyze-page .multiview-compact-hint,
+.fl-d .analyze-history-page .time,
+.fl-d .analyze-history-page .empty-text,
+.fl-d .analyze-history-page .loading-wrap {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .mode-switch-item,
-.fl-page-theme-root--dark .analyze-page .multiview-compact,
-.fl-page-theme-root--dark .analyze-page .input-wrapper,
-.fl-page-theme-root--dark .analyze-page .grid-item,
-.fl-page-theme-root--dark .analyze-history-page .status-badge {
+.fl-d .analyze-page .mode-switch-item,
+.fl-d .analyze-page .multiview-compact,
+.fl-d .analyze-page .input-wrapper,
+.fl-d .analyze-page .grid-item,
+.fl-d .analyze-history-page .status-badge {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .grid-item.add-btn {
+.fl-d .analyze-page .grid-item.add-btn {
   background: rgb(255 255 255 / 3%) !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .multiview-compact {
+.fl-d .analyze-page .multiview-compact {
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .multiview-compact-title,
-.fl-page-theme-root--dark .analyze-page .placeholder-text,
-.fl-page-theme-root--dark .analyze-history-page .calories {
+.fl-d .analyze-page .multiview-compact-title,
+.fl-d .analyze-page .placeholder-text,
+.fl-d .analyze-history-page .calories {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .placeholder-sub,
-.fl-page-theme-root--dark .analyze-page .add-text,
-.fl-page-theme-root--dark .analyze-page .add-icon,
-.fl-page-theme-root--dark .analyze-page .input-placeholder,
-.fl-page-theme-root--dark .analyze-page .multiview-compact-title,
-.fl-page-theme-root--dark .analyze-page .mode-switch-item,
-.fl-page-theme-root--dark .analyze-history-page .arrow {
+.fl-d .analyze-page .placeholder-sub,
+.fl-d .analyze-page .add-text,
+.fl-d .analyze-page .add-icon,
+.fl-d .analyze-page .input-placeholder,
+.fl-d .analyze-page .multiview-compact-title,
+.fl-d .analyze-page .mode-switch-item,
+.fl-d .analyze-history-page .arrow {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .details-input {
+.fl-d .analyze-page .details-input {
   background: transparent !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .voice-btn {
+.fl-d .analyze-page .voice-btn {
   background: $fl-dark-ghost-bg !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .confirm-section {
+.fl-d .analyze-page .confirm-section {
   background: linear-gradient(180deg, #111716 0%, #111716 100%) !important;
   border-top: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 -10rpx 24rpx rgb(0 0 0 / 22%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .confirm-btn {
+.fl-d .analyze-page .confirm-btn {
   background: linear-gradient(135deg, #3e8f73 0%, #2d7e72 100%) !important;
   box-shadow: 0 12rpx 28rpx rgb(0 0 0 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .confirm-btn.disabled {
+.fl-d .analyze-page .confirm-btn.disabled {
   background: $fl-dark-ghost-bg !important;
   box-shadow: none !important;
   opacity: 1 !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .confirm-btn.disabled .confirm-btn-text {
+.fl-d .analyze-page .confirm-btn.disabled .confirm-btn-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .confirm-btn-text {
+.fl-d .analyze-page .confirm-btn-text {
   color: #f3fbf7 !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .history-link {
+.fl-d .analyze-page .history-link {
   background: $fl-dark-ghost-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   border-radius: 999rpx !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .history-link-text {
+.fl-d .analyze-page .history-link-text {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .multiview-toggle {
+.fl-d .analyze-page .multiview-toggle {
   background: #2d3634 !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .multiview-toggle--on {
+.fl-d .analyze-page .multiview-toggle--on {
   background: #4a9d7d !important;
 }
 
-.fl-page-theme-root--dark .analyze-page .multiview-toggle-knob {
+.fl-d .analyze-page .multiview-toggle-knob {
   background: #edf5f1 !important;
   box-shadow: 0 2rpx 10rpx rgb(0 0 0 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-history-page .swipeable-card-wrapper {
+.fl-d .analyze-history-page .swipeable-card-wrapper {
   border-radius: 20rpx !important;
 }
 
-.fl-page-theme-root--dark .analyze-history-page .task-card:active {
+.fl-d .analyze-history-page .task-card:active {
   background: #1d2724 !important;
 }
 
-.fl-page-theme-root--dark .analyze-history-page .task-card.task-card-violated,
-.fl-page-theme-root--dark .analyze-history-page .task-card .thumb-violated {
+.fl-d .analyze-history-page .task-card.task-card-violated,
+.fl-d .analyze-history-page .task-card .thumb-violated {
   background: rgb(127 29 29 / 18%) !important;
   border-color: rgb(248 113 113 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-history-page .task-card .thumb,
-.fl-page-theme-root--dark .analyze-history-page .task-card .thumb-placeholder {
+.fl-d .analyze-history-page .task-card .thumb,
+.fl-d .analyze-history-page .task-card .thumb-placeholder {
   background: $fl-dark-panel-bg-soft !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .analyze-history-page .status-badge.status-done,
-.fl-page-theme-root--dark .analyze-history-page .mode-tag.strict,
-.fl-page-theme-root--dark .analyze-history-page .recognition-tag.recognition-ok {
+.fl-d .analyze-history-page .status-badge.status-done,
+.fl-d .analyze-history-page .mode-tag.strict,
+.fl-d .analyze-history-page .recognition-tag.recognition-ok {
   background: rgb(16 185 129 / 12%) !important;
   border-color: rgb(16 185 129 / 20%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-history-page .status-badge.status-processing {
+.fl-d .analyze-history-page .status-badge.status-processing {
   background: rgb(59 130 246 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-history-page .status-badge.status-pending,
-.fl-page-theme-root--dark .analyze-history-page .status-badge.status-timed_out,
-.fl-page-theme-root--dark .analyze-history-page .recognition-tag.recognition-soft_reject {
+.fl-d .analyze-history-page .status-badge.status-pending,
+.fl-d .analyze-history-page .status-badge.status-timed_out,
+.fl-d .analyze-history-page .recognition-tag.recognition-soft_reject {
   background: rgb(245 158 11 / 12%) !important;
 }
 
-.fl-page-theme-root--dark .analyze-history-page .status-badge.status-failed,
-.fl-page-theme-root--dark .analyze-history-page .status-badge.status-violated,
-.fl-page-theme-root--dark .analyze-history-page .recognition-tag.recognition-hard_reject {
+.fl-d .analyze-history-page .status-badge.status-failed,
+.fl-d .analyze-history-page .status-badge.status-violated,
+.fl-d .analyze-history-page .recognition-tag.recognition-hard_reject {
   background: rgb(127 29 29 / 18%) !important;
 }
 
 /* ---------- 我的页子路由补充 ---------- */
-.fl-page-theme-root--dark .profile-settings-page .settings-section-title,
-.fl-page-theme-root--dark .profile-settings-page .form-label,
-.fl-page-theme-root--dark .health-profile-view-page .value,
-.fl-page-theme-root--dark .health-profile-view-page .btn-secondary .btn-text,
-.fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell__title,
-.fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell__right-icon,
-.fl-page-theme-root--dark .login-page .agreement-link,
-.fl-page-theme-root--dark .profile-form-title,
-.fl-page-theme-root--dark .phone-bind-title,
-.fl-page-theme-root--dark .exercise-record-page .stats-value,
-.fl-page-theme-root--dark .exercise-record-page .empty-title {
+.fl-d .profile-settings-page .settings-section-title,
+.fl-d .profile-settings-page .form-label,
+.fl-d .health-profile-view-page .value,
+.fl-d .health-profile-view-page .btn-secondary .btn-text,
+.fl-d .privacy-settings-page .setting-group .taroify-cell__title,
+.fl-d .privacy-settings-page .setting-group .taroify-cell__right-icon,
+.fl-d .login-page .agreement-link,
+.fl-d .profile-form-title,
+.fl-d .phone-bind-title,
+.fl-d .exercise-record-page .stats-value,
+.fl-d .exercise-record-page .empty-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .profile-settings-page .avatar-placeholder-text,
-.fl-page-theme-root--dark .about-page .app-version,
-.fl-page-theme-root--dark .about-page .cell-value,
-.fl-page-theme-root--dark .privacy-settings-page .loading-container,
-.fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell__brief,
-.fl-page-theme-root--dark .login-page .skip-login-btn,
-.fl-page-theme-root--dark .login-page .wx-phone-auth-btn,
-.fl-page-theme-root--dark .profile-form-desc,
-.fl-page-theme-root--dark .phone-bind-desc,
-.fl-page-theme-root--dark .exercise-record-page .stats-label,
-.fl-page-theme-root--dark .exercise-record-page .stats-unit,
-.fl-page-theme-root--dark .exercise-record-page .empty-desc,
-.fl-page-theme-root--dark .exercise-record-page .quick-examples-title {
+.fl-d .profile-settings-page .avatar-placeholder-text,
+.fl-d .about-page .app-version,
+.fl-d .about-page .cell-value,
+.fl-d .privacy-settings-page .loading-container,
+.fl-d .privacy-settings-page .setting-group .taroify-cell__brief,
+.fl-d .login-page .skip-login-btn,
+.fl-d .login-page .wx-phone-auth-btn,
+.fl-d .profile-form-desc,
+.fl-d .phone-bind-desc,
+.fl-d .exercise-record-page .stats-label,
+.fl-d .exercise-record-page .stats-unit,
+.fl-d .exercise-record-page .empty-desc,
+.fl-d .exercise-record-page .quick-examples-title {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .profile-settings-page .avatar-choose-wrapper,
-.fl-page-theme-root--dark .about-page .header-section,
-.fl-page-theme-root--dark .about-page .content-section .cell-group,
-.fl-page-theme-root--dark .agreement-page .document-content,
-.fl-page-theme-root--dark .document-page .document-content,
-.fl-page-theme-root--dark .privacy-settings-page .setting-group,
-.fl-page-theme-root--dark .profile-form-content,
-.fl-page-theme-root--dark .exercise-record-page .stats-card,
-.fl-page-theme-root--dark .exercise-record-page .record-card,
-.fl-page-theme-root--dark .exercise-record-page .example-tag,
-.fl-page-theme-root--dark .exercise-record-page .input-bar,
-.fl-page-theme-root--dark .exercise-record-page .preset-card {
+.fl-d .profile-settings-page .avatar-choose-wrapper,
+.fl-d .about-page .header-section,
+.fl-d .about-page .content-section .cell-group,
+.fl-d .agreement-page .document-content,
+.fl-d .document-page .document-content,
+.fl-d .privacy-settings-page .setting-group,
+.fl-d .profile-form-content,
+.fl-d .exercise-record-page .stats-card,
+.fl-d .exercise-record-page .record-card,
+.fl-d .exercise-record-page .example-tag,
+.fl-d .exercise-record-page .input-bar,
+.fl-d .exercise-record-page .preset-card {
   background: $fl-dark-panel-bg !important;
   border: 1rpx solid $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .profile-form-content {
+.fl-d .profile-form-content {
   background: $fl-dark-modal-bg-soft !important;
   box-shadow: 0 20rpx 60rpx rgb(0 0 0 / 45%) !important;
 }
 
-.fl-page-theme-root--dark .profile-settings-page .nickname-input,
-.fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell {
+.fl-d .profile-settings-page .nickname-input,
+.fl-d .privacy-settings-page .setting-group .taroify-cell {
   background: $fl-dark-input-bg !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .profile-settings-page .nickname-input::placeholder {
+.fl-d .profile-settings-page .nickname-input::placeholder {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .health-profile-view-page .btn-secondary,
-.fl-page-theme-root--dark .profile-form-cancel,
-.fl-page-theme-root--dark .phone-bind-secondary {
+.fl-d .health-profile-view-page .btn-secondary,
+.fl-d .profile-form-cancel,
+.fl-d .phone-bind-secondary {
   background: $fl-dark-ghost-bg !important;
   border-color: $fl-dark-border !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .health-profile-page .progress-wrap,
-.fl-page-theme-root--dark .exercise-record-page .header-stats {
+.fl-d .health-profile-page .progress-wrap,
+.fl-d .exercise-record-page .header-stats {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .health-profile-view-page .row,
-.fl-page-theme-root--dark .privacy-settings-page .setting-group .taroify-cell::after {
+.fl-d .health-profile-view-page .row,
+.fl-d .privacy-settings-page .setting-group .taroify-cell::after {
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .health-profile-view-page .indicator-item,
-.fl-page-theme-root--dark .exercise-record-page .empty-icon-wrap {
+.fl-d .health-profile-view-page .indicator-item,
+.fl-d .exercise-record-page .empty-icon-wrap {
   background: $fl-dark-panel-bg-soft !important;
   border: 1rpx solid $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .login-page .agreement-checkbox {
+.fl-d .login-page .agreement-checkbox {
   background: $fl-dark-panel-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .exercise-record-page .stats-count {
+.fl-d .exercise-record-page .stats-count {
   background: rgb(249 115 22 / 12%) !important;
   color: #fdba74 !important;
 }
 
 /* ---------- 好友管理链路补充 ---------- */
-.fl-page-theme-root--dark .interaction-feed-detail-page {
+.fl-d .interaction-feed-detail-page {
   background: transparent !important;
 }
 
-.fl-page-theme-root--dark .friends-page .refresh-btn,
-.fl-page-theme-root--dark .friends-page .tabs,
-.fl-page-theme-root--dark .friends-page .search-input-wrapper,
-.fl-page-theme-root--dark .interaction-notifications-page .notifications-header {
+.fl-d .friends-page .refresh-btn,
+.fl-d .friends-page .tabs,
+.fl-d .friends-page .search-input-wrapper,
+.fl-d .interaction-notifications-page .notifications-header {
   background: $fl-dark-panel-bg !important;
   border: 1rpx solid $fl-dark-border !important;
   box-shadow: 0 8rpx 24rpx rgb(0 0 0 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .friends-page .tab-item,
-.fl-page-theme-root--dark .friends-page .search-input,
-.fl-page-theme-root--dark .interaction-notifications-page .notifications-title,
-.fl-page-theme-root--dark .interaction-feed-detail-page .feed-content,
-.fl-page-theme-root--dark .interaction-feed-detail-page .comment-text {
+.fl-d .friends-page .tab-item,
+.fl-d .friends-page .search-input,
+.fl-d .interaction-notifications-page .notifications-title,
+.fl-d .interaction-feed-detail-page .feed-content,
+.fl-d .interaction-feed-detail-page .comment-text {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .friends-page .search-input::placeholder,
-.fl-page-theme-root--dark .friends-page .refresh-btn,
-.fl-page-theme-root--dark .friends-page .search-clear,
-.fl-page-theme-root--dark .interaction-notifications-page .notifications-subtitle,
-.fl-page-theme-root--dark .interaction-feed-detail-empty-text {
+.fl-d .friends-page .search-input::placeholder,
+.fl-d .friends-page .refresh-btn,
+.fl-d .friends-page .search-clear,
+.fl-d .interaction-notifications-page .notifications-subtitle,
+.fl-d .interaction-feed-detail-empty-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .friends-page .search-clear {
+.fl-d .friends-page .search-clear {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .friends-page .icon-btn {
+.fl-d .friends-page .icon-btn {
   background: $fl-dark-panel-bg-soft !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .friends-page .icon-btn.reject-btn {
+.fl-d .friends-page .icon-btn.reject-btn {
   border-color: rgb(239 68 68 / 40%) !important;
 }
 
-.fl-page-theme-root--dark .friends-page .icon-btn.accept-btn {
+.fl-d .friends-page .icon-btn.accept-btn {
   border-color: rgb(92 184 150 / 40%) !important;
 }
 
-.fl-page-theme-root--dark .friends-page .avatar-wrapper .avatar,
-.fl-page-theme-root--dark .interaction-notifications-page .notification-avatar {
+.fl-d .friends-page .avatar-wrapper .avatar,
+.fl-d .interaction-notifications-page .notification-avatar {
   background: linear-gradient(135deg, rgb(255 255 255 / 8%) 0%, rgb(255 255 255 / 4%) 100%) !important;
   border-color: $fl-dark-border !important;
   box-shadow: none !important;
 }
 
-.fl-page-theme-root--dark .friends-page .avatar-wrapper .online-indicator {
+.fl-d .friends-page .avatar-wrapper .online-indicator {
   border-color: rgb(18 24 22) !important;
 }
 
-.fl-page-theme-root--dark .friends-page .actions {
+.fl-d .friends-page .actions {
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .friends-page .plain-btn {
+.fl-d .friends-page .plain-btn {
   background: $fl-dark-ghost-bg !important;
   border-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .friends-page .danger-btn {
+.fl-d .friends-page .danger-btn {
   background: rgb(239 68 68 / 10%) !important;
   border-color: rgb(239 68 68 / 22%) !important;
   color: #fda4af !important;
 }
 
-.fl-page-theme-root--dark .friends-page .empty-icon {
+.fl-d .friends-page .empty-icon {
   background: $fl-dark-panel-bg-soft !important;
   border: 1rpx solid $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .interaction-feed-detail-page .feed-comment-item.is-target-comment {
+.fl-d .interaction-feed-detail-page .feed-comment-item.is-target-comment {
   background: transparent !important;
   border: none !important;
 }
 
-.fl-page-theme-root--dark .friends-page .loading-spinner,
-.fl-page-theme-root--dark .interaction-feed-detail-loading-spinner {
+.fl-d .friends-page .loading-spinner,
+.fl-d .interaction-feed-detail-loading-spinner {
   border-color: rgb(92 184 150 / 20%) !important;
   border-top-color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .interaction-notifications-page .mark-read-btn.disabled {
+.fl-d .interaction-notifications-page .mark-read-btn.disabled {
   background: $fl-dark-ghost-bg !important;
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .interaction-notifications-page .notification-card.unread {
+.fl-d .interaction-notifications-page .notification-card.unread {
   border-color: rgb(92 184 150 / 28%) !important;
 }
 
-.fl-page-theme-root--dark .interaction-notifications-page .notification-avatar-placeholder {
+.fl-d .interaction-notifications-page .notification-avatar-placeholder {
   color: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .interaction-feed-detail-page .interaction-feed-detail-loading,
-.fl-page-theme-root--dark .interaction-feed-detail-page .interaction-feed-detail-empty {
+.fl-d .interaction-feed-detail-page .interaction-feed-detail-loading,
+.fl-d .interaction-feed-detail-page .interaction-feed-detail-empty {
   color: $fl-dark-text2 !important;
 }
 
 // ==================== 多记录选择面板（MealRecordsDialog） ====================
 
 // 面板标题
-.fl-page-theme-root--dark .meal-records-dialog-title {
+.fl-d .meal-records-dialog-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .meal-records-dialog-count {
+.fl-d .meal-records-dialog-count {
   color: $fl-dark-text2 !important;
 }
 
 // 单条记录行
-.fl-page-theme-root--dark .meal-record-entry {
+.fl-d .meal-record-entry {
   background: $fl-dark-panel-bg-soft !important;
 
   &:active {
@@ -3856,113 +3856,113 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
 }
 
 // 记录缩略图（无图片时的 fallback icon 背景）
-.fl-page-theme-root--dark .meal-record-entry-thumb.is-photo {
+.fl-d .meal-record-entry-thumb.is-photo {
   background: $fl-dark-ghost-bg !important;
 }
 
 // 记录标题文本
-.fl-page-theme-root--dark .meal-record-entry-title {
+.fl-d .meal-record-entry-title {
   color: $fl-dark-text !important;
 }
 
 // 记录卡路里数值
-.fl-page-theme-root--dark .meal-record-entry-cal {
+.fl-d .meal-record-entry-cal {
   color: $fl-dark-text !important;
 }
 
 // 餐食卡片上的计数徽章
-.fl-page-theme-root--dark .meal-count-badge {
+.fl-d .meal-count-badge {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .meal-count-badge-text {
+.fl-d .meal-count-badge-text {
   color: $fl-dark-accent !important;
 }
 
 /* ---------- 私信页 ---------- */
-.fl-page-theme-root--dark .private-chat-page {
+.fl-d .private-chat-page {
   background: #101716 !important;
 }
 
-.fl-page-theme-root--dark .chat-navbar {
+.fl-d .chat-navbar {
   background: $fl-dark-panel-bg !important;
   border-bottom-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .chat-navbar-back-icon,
-.fl-page-theme-root--dark .chat-navbar-title {
+.fl-d .chat-navbar-back-icon,
+.fl-d .chat-navbar-title {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .chat-empty-text {
+.fl-d .chat-empty-text {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .chat-time-text {
+.fl-d .chat-time-text {
   color: $fl-dark-text2 !important;
   background: rgb(255 255 255 / 8%) !important;
 }
 
-.fl-page-theme-root--dark .chat-avatar {
+.fl-d .chat-avatar {
   background: $fl-dark-surface2 !important;
 }
 
-.fl-page-theme-root--dark .chat-avatar-placeholder {
+.fl-d .chat-avatar-placeholder {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .chat-bubble {
+.fl-d .chat-bubble {
   background: $fl-dark-panel-bg !important;
 }
 
-.fl-page-theme-root--dark .chat-bubble-text {
+.fl-d .chat-bubble-text {
   color: $fl-dark-text !important;
 }
 
 /* 自己发送的气泡保持品牌绿色，但稍微调暗以适配深色环境 */
-.fl-page-theme-root--dark .chat-bubble--self {
+.fl-d .chat-bubble--self {
   background: rgb(0 188 125 / 82%) !important;
 }
 
-.fl-page-theme-root--dark .chat-input-bar {
+.fl-d .chat-input-bar {
   background: $fl-dark-panel-bg !important;
   border-top-color: $fl-dark-border !important;
 }
 
-.fl-page-theme-root--dark .chat-image-btn:active {
+.fl-d .chat-image-btn:active {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .chat-image-btn-icon {
+.fl-d .chat-image-btn-icon {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .chat-input {
+.fl-d .chat-input {
   background: $fl-dark-input-bg !important;
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .chat-input-placeholder {
+.fl-d .chat-input-placeholder {
   color: $fl-dark-text2 !important;
 }
 
-.fl-page-theme-root--dark .chat-send-btn {
+.fl-d .chat-send-btn {
   background: $fl-dark-ghost-bg !important;
 }
 
-.fl-page-theme-root--dark .chat-send-btn--active {
+.fl-d .chat-send-btn--active {
   background: $fl-dark-accent !important;
 }
 
-.fl-page-theme-root--dark .chat-send-btn-text {
+.fl-d .chat-send-btn-text {
   color: $fl-dark-text !important;
 }
 
-.fl-page-theme-root--dark .chat-send-btn--active .chat-send-btn-text {
+.fl-d .chat-send-btn--active .chat-send-btn-text {
   color: #10201a !important;
 }
 
-.fl-page-theme-root--dark .chat-spinner {
+.fl-d .chat-spinner {
   border-color: $fl-dark-border !important;
   border-top-color: $fl-dark-accent !important;
 }

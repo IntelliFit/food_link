@@ -74,6 +74,7 @@ redis:
   url: ""
   password: ""
   db: 0
+  key_prefix: "food_link"
 
 sms:
   # 腾讯云短信；模板参数顺序为 [验证码, 有效分钟数]。

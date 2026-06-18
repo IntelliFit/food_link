@@ -146,6 +146,8 @@ export interface SMSLoginInput {
 export interface SMSCodeResponse {
   request_id?: string
   expires_in_seconds?: number
+  cooldown_seconds?: number
+  retry_after_seconds?: number
 }
 
 export interface SetAccountPasswordInput {

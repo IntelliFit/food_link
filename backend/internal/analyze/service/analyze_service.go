@@ -271,11 +271,12 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 	if sourceType == "image" {
 		timeout = 90 * time.Second
 	}
-	provider, _ := resolveModelConfig(modelName)
+	provider, model := resolveModelConfig(modelName)
 	if sourceType == "image" {
-		provider, _ = s.resolveImageModelConfig(modelName)
+		provider, model = s.resolveImageModelConfig(modelName)
 	} else if strings.TrimSpace(modelName) == "" {
 		provider = "doubao"
+		model = ""
 	}
 	traceCtx, span := apm.StartSpan(ctx, "analysis.precision.llm",
 		attribute.String("analysis.source_type", sourceType),
@@ -325,14 +326,14 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 		attribute.Int("analysis.image_count", len(imageURLs)),
 		attribute.Float64("analysis.temperature", temperature),
 	)
-	parsed, err := analyzeWithJSONParseRetry(callCtx, "precision", provider, "", func(retryCtx context.Context) (map[string]any, error) {
+	parsed, err := analyzeWithJSONParseRetry(callCtx, "precision", provider, model, func(retryCtx context.Context) (map[string]any, error) {
 		attemptCtx := retryCtx
 		attemptCancel := func() {}
 		if provider == "gemini" && len(imageURLs) > 0 {
 			attemptCtx, attemptCancel = context.WithTimeout(retryCtx, visionPrimaryTimeout)
 		}
 		defer attemptCancel()
-		return analyzeWithImagesTemperature(attemptCtx, client, prompt, imageURLs, temperature)
+		return analyzeWithImagesTemperatureModel(attemptCtx, client, prompt, imageURLs, temperature, model)
 	})
 	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.doubaoClient != nil {
 		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(callCtx, "precision_fallback", "doubao", "doubao-seed-2-0-lite-260428", func(retryCtx context.Context) (map[string]any, error) {
@@ -388,7 +389,16 @@ func (s *AnalyzeService) ApplyDBFirstToItems(ctx context.Context, items []map[st
 }
 
 func analyzeWithImagesTemperature(ctx context.Context, client LLMClient, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {
+	return analyzeWithImagesTemperatureModel(ctx, client, prompt, imageURLs, temperature, "")
+}
+
+func analyzeWithImagesTemperatureModel(ctx context.Context, client LLMClient, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
 	if len(imageURLs) > 0 {
+		if modelClient, ok := client.(interface {
+			AnalyzeWithImagesAndTemperatureModel(context.Context, string, []string, float64, string) (map[string]any, error)
+		}); ok {
+			return modelClient.AnalyzeWithImagesAndTemperatureModel(ctx, prompt, imageURLs, temperature, modelName)
+		}
 		if precisionClient, ok := client.(interface {
 			AnalyzeWithImagesAndTemperature(context.Context, string, []string, float64) (map[string]any, error)
 		}); ok {
@@ -400,6 +410,11 @@ func analyzeWithImagesTemperature(ctx context.Context, client LLMClient, prompt 
 			return multiClient.AnalyzeWithImages(ctx, prompt, imageURLs)
 		}
 		return client.Analyze(ctx, prompt, imageURLs[0])
+	}
+	if modelClient, ok := client.(interface {
+		AnalyzeWithImagesAndTemperatureModel(context.Context, string, []string, float64, string) (map[string]any, error)
+	}); ok {
+		return modelClient.AnalyzeWithImagesAndTemperatureModel(ctx, prompt, nil, temperature, modelName)
 	}
 	if precisionClient, ok := client.(interface {
 		AnalyzeWithImagesAndTemperature(context.Context, string, []string, float64) (map[string]any, error)
