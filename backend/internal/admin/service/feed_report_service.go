@@ -127,13 +127,9 @@ func (s *FeedReportService) UpdateStatus(ctx context.Context, id, status, resolu
 
 	if terminalStatuses[status] && s.sender != nil {
 		reporterMsg := buildReportResultMessageForReporter(status, resolutionNote, updated.RewardCredits)
-		reportedMsg := buildReportResultMessageForReported(status, resolutionNote)
 		if err := s.sender.SendSystemMessage(ctx, item.ReporterUserID, reporterMsg); err != nil {
 			// 记录日志但不阻塞状态更新
 			// logger.Warn(ctx, "发送举报结果系统消息失败", slog.String("receiver", item.ReporterUserID), slog.Any("error", err))
-		}
-		if err := s.sender.SendSystemMessage(ctx, item.ReportedUserID, reportedMsg); err != nil {
-			// logger.Warn(ctx, "发送举报结果系统消息失败", slog.String("receiver", item.ReportedUserID), slog.Any("error", err))
 		}
 	}
 

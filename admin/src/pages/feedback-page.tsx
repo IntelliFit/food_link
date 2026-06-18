@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import { adminRequest, copyText, displayApiBase } from '@/lib/api'
 import { displayUser, firstTraceId, formatTime, formatTraceStatusCode, parseConsoleLogs, shortId, truncate } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -82,13 +83,17 @@ export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
     }
   }
 
-  async function updateStatus(id: string, nextStatus: FeedbackStatus) {
+  async function updateStatus(id: string, nextStatus: FeedbackStatus, rewardCredits?: number, resolutionMessage?: string) {
     try {
       const data = await adminRequest<{ item: FeedbackItem }>(
         `/api/admin/feedback/${encodeURIComponent(id)}/status`,
         {
           method: 'PATCH',
-          body: JSON.stringify({ status: nextStatus }),
+          body: JSON.stringify({
+            status: nextStatus,
+            resolution_message: resolutionMessage,
+            reward_credits: nextStatus === 'resolved' ? rewardCredits : undefined,
+          }),
         },
       )
       setItems((current) => current.map((item) => (item.id === id ? data.item : item)))
@@ -369,9 +374,37 @@ function FeedbackDetail({
   onCopy,
 }: {
   item: FeedbackItem
-  onStatusChange: (id: string, status: FeedbackStatus) => Promise<void>
+  onStatusChange: (id: string, status: FeedbackStatus, rewardCredits?: number, resolutionMessage?: string) => Promise<void>
   onCopy: (text: string, label?: string) => Promise<void>
 }) {
+  const [selectedStatus, setSelectedStatus] = useState<FeedbackStatus>(item.status)
+  const [rewardCredits, setRewardCredits] = useState(String(item.reward_credits ?? 0))
+  const [resolutionMessage, setResolutionMessage] = useState(item.resolution_message || '')
+  const [updating, setUpdating] = useState(false)
+
+  useEffect(() => {
+    setSelectedStatus(item.status)
+    setRewardCredits(String(item.reward_credits ?? 0))
+    setResolutionMessage(item.resolution_message || '')
+  }, [item.id, item.resolution_message, item.reward_credits, item.status])
+
+  async function submitStatusChange() {
+    const trimmedRewardCredits = rewardCredits.trim()
+    const parsedRewardCredits = Number(rewardCredits)
+    if (selectedStatus === 'resolved' && (trimmedRewardCredits === '' || !Number.isInteger(parsedRewardCredits) || parsedRewardCredits < 0)) {
+      toast.error('处理为已解决时必须选择奖励积分，可填写 0')
+      return
+    }
+    setUpdating(true)
+    try {
+      await onStatusChange(item.id, selectedStatus, selectedStatus === 'resolved' ? parsedRewardCredits : undefined, resolutionMessage)
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  const isTerminal = item.status === 'resolved' || item.status === 'closed'
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -381,19 +414,70 @@ function FeedbackDetail({
             {statusLabels[item.status] || item.status}
           </Badge>
         </div>
-        <Select value={item.status} onValueChange={(value) => void onStatusChange(item.id, value as FeedbackStatus)}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(statusLabels).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
+
+      <section className="space-y-3 rounded-lg border bg-muted/20 p-3">
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px]">
+          <div className="space-y-2">
+            <Label htmlFor="feedback-status">处理状态</Label>
+            <Select value={selectedStatus} onValueChange={(value) => setSelectedStatus(value as FeedbackStatus)} disabled={isTerminal}>
+              <SelectTrigger id="feedback-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(statusLabels).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="feedback-reward-credits">奖励积分</Label>
+            <Input
+              id="feedback-reward-credits"
+              type="number"
+              min={0}
+              step={1}
+              value={rewardCredits}
+              onChange={(event) => setRewardCredits(event.target.value)}
+              disabled={isTerminal || selectedStatus !== 'resolved'}
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="feedback-resolution-message">发给用户的处理消息</Label>
+          <Textarea
+            id="feedback-resolution-message"
+            value={resolutionMessage}
+            onChange={(event) => setResolutionMessage(event.target.value)}
+            placeholder="可填写处理说明，会随站内信发送给提交反馈的用户。"
+            rows={4}
+            disabled={isTerminal}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          处理为已解决时奖励积分必填；可填 0，表示本次不发放奖励。保存后会向反馈用户发送站内信。
+        </p>
+        {isTerminal ? (
+          <div className="space-y-1 rounded-md border bg-muted/50 p-3 text-sm">
+            <div>
+              <span className="text-muted-foreground">奖励积分：</span>
+              <span className="font-medium">{item.reward_credits ?? 0}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">处理消息：</span>
+              <span className="font-medium">{item.resolution_message || '-'}</span>
+            </div>
+          </div>
+        ) : (
+          <Button size="sm" onClick={submitStatusChange} disabled={updating}>
+            {updating ? <Loader2 className="size-4 animate-spin" /> : null}
+            保存处理状态
+          </Button>
+        )}
+      </section>
 
       <section className="space-y-2">
         <h3 className="text-sm font-semibold">反馈内容</h3>

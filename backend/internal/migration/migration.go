@@ -65,7 +65,7 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensurePublicRecordsDefault(ctx, db); err != nil {
 		return err
 	}
-	if err := ensureFeedReportResolutionColumns(ctx, db); err != nil {
+	if err := ensureAdminResolutionColumns(ctx, db); err != nil {
 		return err
 	}
 	if err := ensureFoodWeightLabeledSamplesStructuredLabels(ctx, db); err != nil {
@@ -88,6 +88,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("weapp_user", "weapp_user_telephone_format_check", `telephone IS NULL OR trim(telephone) = '' OR regexp_replace(trim(telephone), '[\s\-\(\)]', '', 'g') ~ '^(\+?86)?1[3-9][0-9]{9}$'`),
 		dropAndAddCheck("user_feedback", "user_feedback_category_check", `category = ANY (ARRAY['bug'::text,'suggestion'::text,'experience'::text,'other'::text])`),
 		dropAndAddCheck("user_feedback", "user_feedback_status_check", `status = ANY (ARRAY['open'::text,'processing'::text,'resolved'::text,'closed'::text])`),
+		dropAndAddCheck("user_feedback", "user_feedback_reward_credits_check", `reward_credits >= 0`),
 		dropAndAddCheck("admin_accounts", "admin_accounts_status_check", `status = ANY (ARRAY['active'::text,'disabled'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'done'::text,'failed'::text,'cancelled'::text,'timed_out'::text,'violated'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_task_type_check", `task_type = ANY (ARRAY['food'::text,'food_text'::text,'precision_plan'::text,'precision_item_estimate'::text,'precision_aggregate'::text,'health_report'::text,'public_food_library_text'::text,'exercise'::text,'expiry_recognize'::text,'expiry_notification'::text,'packaged_nutrition_label'::text,'packaged_product_extract'::text]) OR task_type ~ '^(food|food_text|precision_plan|precision_item_estimate|precision_aggregate|health_report|public_food_library_text|exercise|expiry_recognize|expiry_notification|packaged_nutrition_label|packaged_product_extract)_debug(_[a-z0-9_]+)?$'`),
@@ -162,6 +163,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("user_earned_credit_ledger", "user_earned_credit_ledger_balance_after_check", `balance_after >= 0`),
 		addFK("analysis_tasks_user_id_fkey", "analysis_tasks", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_feedback_user_id_fkey", "user_feedback", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("user_feedback_reward_ledger_id_fkey", "user_feedback", "reward_ledger_id", "user_earned_credit_ledger", "id", "SET NULL"),
 		addFK("analysis_feedback_samples_user_id_fkey", "analysis_feedback_samples", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("analysis_feedback_samples_source_task_id_fkey", "analysis_feedback_samples", "source_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("analysis_feedback_samples_correction_task_id_fkey", "analysis_feedback_samples", "correction_task_id", "analysis_tasks", "id", "SET NULL"),
@@ -784,8 +786,11 @@ func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
 	return nil
 }
 
-func ensureFeedReportResolutionColumns(ctx context.Context, db *gorm.DB) error {
+func ensureAdminResolutionColumns(ctx context.Context, db *gorm.DB) error {
 	columns := []string{
+		`ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS reward_credits integer NOT NULL DEFAULT 0`,
+		`ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS reward_ledger_id uuid`,
+		`ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS resolution_message text NOT NULL DEFAULT ''`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS resolution_note text NOT NULL DEFAULT ''`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS reward_credits integer NOT NULL DEFAULT 0`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS reward_ledger_id uuid`,
@@ -794,7 +799,7 @@ func ensureFeedReportResolutionColumns(ctx context.Context, db *gorm.DB) error {
 	}
 	for _, sql := range columns {
 		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
-			return fmt.Errorf("feed_reports resolution column migration: %w", err)
+			return fmt.Errorf("admin resolution column migration: %w", err)
 		}
 	}
 	return nil

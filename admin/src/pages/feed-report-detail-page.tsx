@@ -193,7 +193,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
       setSelectedStatus(data.item.status)
       toast.success('状态已更新')
       if (data.item.status === 'resolved' || data.item.status === 'rejected') {
-        toast.info('已发送受理结果系统消息给举报者和被举报者')
+        toast.info('已发送受理结果系统消息给举报者')
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '状态更新失败')
@@ -407,7 +407,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                       id='resolution-note'
                       value={resolutionNote}
                       onChange={(event) => setResolutionNote(event.target.value)}
-                      placeholder='填写处理说明，会一并发送给举报者和被举报者（可选）'
+                      placeholder='填写处理说明，会随受理结果发送给举报者（可选）'
                       rows={6}
                       disabled={item.status === 'resolved' || item.status === 'rejected'}
                     />

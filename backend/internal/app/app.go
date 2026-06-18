@@ -226,7 +226,7 @@ func New(cfg *config.Config) (*App, error) {
 	feedRepo := communityrepo.NewFeedRepo(db)
 	notifRepo := communityrepo.NewNotificationRepo(db)
 	feedReportNotifier := communityservice.NewReportNotifier(cfg.Feishu.ReportWebhookURL, cfg.Feishu.ReportWebhookSecret, cfg.App.AdminBaseURL, cfg.Feishu.AppID, cfg.Feishu.AppSecret)
-	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, storageClient)
+	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, messageSvc, storageClient)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
 	// Search module DI
@@ -304,7 +304,7 @@ func New(cfg *config.Config) (*App, error) {
 	feedbackRepo := feedbackrepo.NewFeedbackRepo(db)
 	feedbackUploadSvc := feedbackservice.NewUploadService(storageClient)
 	feedbackFeishuNotifier := feedbackservice.NewFeishuNotifier(cfg.Feishu.FeedbackWebhookURL, cfg.Feishu.FeedbackWebhookSecret)
-	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo, feedbackUploadSvc, feedbackFeishuNotifier)
+	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo, feedbackUploadSvc, feedbackFeishuNotifier, messageSvc)
 	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc, feedbackUploadSvc)
 
 	commentHandler := communityhandler.NewCommentHandler(homeRepo, userRepo)
@@ -587,7 +587,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminExerciseEnergySvc := adminservice.NewExerciseEnergyService(exerciseRepo)
 	adminExerciseEnergyHandler := adminhandler.NewExerciseEnergyHandler(adminExerciseEnergySvc)
 	adminFeedbackRepo := adminrepo.NewFeedbackRepo(db)
-	adminFeedbackSvc := adminservice.NewFeedbackService(adminFeedbackRepo)
+	adminFeedbackSvc := adminservice.NewFeedbackService(adminFeedbackRepo, messageSvc)
 	adminFeedbackHandler := adminhandler.NewFeedbackHandler(adminFeedbackSvc)
 	adminFeedReportRepo := adminrepo.NewFeedReportRepo(db, feedRepo)
 	adminFeedReportSvc := adminservice.NewFeedReportService(adminFeedReportRepo, messageSvc)
