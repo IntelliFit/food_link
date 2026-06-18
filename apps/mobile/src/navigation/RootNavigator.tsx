@@ -11,6 +11,7 @@ import { ProfileScreen } from '../screens/ProfileScreen'
 import { ProfileSettingsScreen } from '../screens/ProfileSettingsScreen'
 import { AccountSecurityScreen } from '../screens/AccountSecurityScreen'
 import { HealthProfileViewScreen } from '../screens/HealthProfileViewScreen'
+import { PetChatScreen } from '../screens/PetChatScreen'
 import { LoginScreen } from '../screens/LoginScreen'
 import { AnalyzeScreen } from '../screens/AnalyzeScreen'
 import { AnalyzeLoadingScreen } from '../screens/AnalyzeLoadingScreen'
@@ -185,6 +186,7 @@ export function RootNavigator() {
         {isAuthenticated ? (
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
+            <Stack.Screen name="PetChat" component={PetChatScreen} options={{ title: '伙伴对话' }} />
             <Stack.Screen name="Analyze" component={AnalyzeScreen} options={{ title: '记录' }} />
             <Stack.Screen name="AnalyzeLoading" component={AnalyzeLoadingScreen} options={{ title: '正在分析' }} />
             <Stack.Screen name="Result" component={ResultScreen} options={{ title: '识别结果' }} />

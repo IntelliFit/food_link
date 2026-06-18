@@ -1,4 +1,4 @@
-import {
+﻿import {
   createFoodLinkApiClient,
   type ApiClientAdapters,
   type ApiClientRequestOptions,
@@ -391,6 +391,21 @@ function createMockAdapters() {
       }
       if (url.endsWith('/api/pet/select-appearance')) {
         return response({ code: 0, data: { pet: { id: 'pet-1', name: '米粒' } } })
+      }
+      if (url.endsWith('/api/pet/chat/estimate')) {
+        return response({ code: 0, data: { question: '最近状态如何', range: 'week', estimated_credits: 1, can_afford: true } })
+      }
+      if (url.endsWith('/api/pet/chat')) {
+        return response({ code: 0, data: { question: '最近状态如何', range: 'week', answer: '最近记录比较稳定。', session_id: 'session-1' } })
+      }
+      if (url.endsWith('/api/pet/chat/latest')) {
+        return response({ code: 0, data: { session: { id: 'session-1', title: '最近状态' }, messages: [] } })
+      }
+      if (url.endsWith('/api/pet/chat/sessions')) {
+        return response({ code: 0, data: { sessions: [{ id: 'session-1', title: '最近状态', last_question: '最近状态如何' }] } })
+      }
+      if (url.endsWith('/api/pet/chat/sessions/session-1')) {
+        return response({ code: 0, data: { session: { id: 'session-1', title: '最近状态' }, messages: [{ id: 'msg-1', role: 'user', content: '最近状态如何' }] } })
       }
       if (url.includes('/api/messages/conversations')) {
         return response({ code: 0, data: { list: [{ UserID: 'user-2', Nickname: 'Friend', UnreadCount: 1 }], has_more: true, offset: 40, limit: 20 } })
@@ -1241,6 +1256,11 @@ describe('FoodLinkApiClient', () => {
     await client.claimPetEvent('event-1')
     await client.rerollPetAppearance()
     await client.selectPetAppearance('candidate-1')
+    await client.estimatePetChat('最近状态如何', 'week')
+    await client.generatePetChat('最近状态如何', 'week', 'session-1', false)
+    await client.getLatestPetChatSession()
+    await client.listPetChatSessions()
+    await client.getPetChatSession('session-1')
     await client.listConversations()
     await client.getConversation('user-2')
     await client.sendPrivateMessage('user-2', 'hi')
@@ -1272,6 +1292,8 @@ describe('FoodLinkApiClient', () => {
     expect(requests.some((req) => req.url.includes('/api/public-food-library?') && req.url.includes('is_campus_food=true'))).toBe(true)
     expect(requests.some((req) => req.url.includes('/api/friend/invite/resolve') && req.url.includes('ABCD1234'))).toBe(true)
     expect(requests.some((req) => req.url.includes('/api/pet/summary') && req.url.includes('date=2026-06-15'))).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/pet/chat') && (req.options?.body as any).session_id === 'session-1')).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/pet/chat/sessions/session-1'))).toBe(true)
     expect(requests.some((req) => {
       const body = req.options?.body as any
       return req.url.endsWith('/api/messages/send') &&

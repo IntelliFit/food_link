@@ -99,7 +99,7 @@ MOBILE_DEV_LAN_IP=192.168.8.193 npm run dev:mobile
 | `npm --workspace apps/mobile run android` | 启动并尝试打开 Android 模拟器 |
 | `npm --workspace apps/mobile run ios` | 启动并尝试打开 iOS 模拟器（仅 macOS） |
 | `npm run typecheck:mobile` | TypeScript 类型检查 |
-| `npm run release:mobile:android` | Android 单一发布入口。`dev` 分支发布体验版并使用 `https://dev.api.healthymax.cn`；`main` 分支发布正式版并使用 `https://api.healthymax.cn`；其它分支拒绝执行。 |
+| `npm run release:mobile:android` | Android 单一发布入口。默认本地 Gradle 构建 APK 后上传 COS；`dev` 分支发布体验版并使用 `https://dev.api.healthymax.cn`；`main` 分支发布正式版并使用 `https://api.healthymax.cn`；其它分支拒绝执行。 |
 
 ### Expo 终端快捷键
 
@@ -126,7 +126,13 @@ Mobile 端 API 解析顺序（见 `apps/mobile/src/config.ts`）：
 | 独立安装包连开发 API | 构建时设 `EXPO_PUBLIC_API_BASE_URL=https://dev.api.healthymax.cn` |
 | 正式包 | 构建时设 `EXPO_PUBLIC_API_BASE_URL=https://api.healthymax.cn` |
 
-Android 发布统一使用 `npm run release:mobile:android`。脚本会按当前 Git 分支自动选择 API、EAS profile 和发布 channel：`dev` → `preview` / `beta` / `https://dev.api.healthymax.cn`，`main` → `production` / `stable` / `https://api.healthymax.cn`。其它分支会像后端镜像发布脚本一样直接报错。
+Android 发布统一使用 `npm run release:mobile:android`。脚本会按当前 Git 分支自动选择 API 和发布 channel：`dev` → `beta` / `https://dev.api.healthymax.cn`，`main` → `stable` / `https://api.healthymax.cn`。默认行为是本地 Gradle 构建 APK，然后上传 COS 并更新 channel manifest；其它分支会像后端镜像发布脚本一样直接报错。
+
+如果需要临时回退到 EAS 云构建，显式传入：
+
+```bash
+npm run release:mobile:android -- --build-eas-apk
+```
 
 登录页底部会显示当前 `API_BASE_URL`，便于确认是否配对。
 
@@ -195,7 +201,45 @@ npm run typecheck:mobile
 
 ---
 
-### 方案 A：EAS Build（推荐）
+### 方案 A：本地 Android 构建并上传（推荐）
+
+Android 默认使用本地构建，避免 EAS 云队列等待。运行：
+
+```bash
+npm run release:mobile:android
+```
+
+脚本会：
+
+1. 根据当前分支选择 API 和 channel
+2. 执行 `apps/mobile/android/gradlew assembleRelease`
+3. 复制生成的 APK 到 `dist/mobile-release/android/<version>/<buildNumber>/`
+4. 上传 APK、sha256 和 manifest 到腾讯 COS
+5. 更新 `channels/beta.json` 或 `channels/stable.json`
+
+如果已经手动构建好 APK，可以只执行上传和 channel 更新：
+
+```bash
+npm run release:mobile:android -- --artifact-apk apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+#### Android 签名
+
+APK 必须签名才能安装。当前 Gradle 配置在未提供正式签名时会回退到 debug keystore，因此 APK 可以直接安装测试，但不适合作为长期公开分发签名。
+
+长期分发前建议生成并妥善保存 release keystore，然后在本机或 CI 注入以下环境变量：
+
+```powershell
+$env:FOODLINK_ANDROID_KEYSTORE_PATH="D:\secrets\foodlink-release.keystore"
+$env:FOODLINK_ANDROID_KEYSTORE_PASSWORD="<store-password>"
+$env:FOODLINK_ANDROID_KEY_ALIAS="<key-alias>"
+$env:FOODLINK_ANDROID_KEY_PASSWORD="<key-password>"
+npm run release:mobile:android
+```
+
+同一个 `applicationId` 的 APK 升级安装要求新旧 APK 使用同一签名。换签名后，已安装用户通常需要先卸载旧包才能安装新包。
+
+### 方案 B：EAS Build（备用）
 
 云端构建，**Windows 上也能打 iOS 包**（无需本地 Mac）。适合测试分发与上架。
 
@@ -253,8 +297,8 @@ eas build:configure
 在 `apps/mobile` 目录执行：
 
 ```bash
-# Android 单一发布入口（在仓库根目录执行）
-npm run release:mobile:android
+# Android 云构建备用入口（在仓库根目录执行）
+npm run release:mobile:android -- --build-eas-apk
 
 # dev 分支：构建体验版 APK，注入 https://dev.api.healthymax.cn，更新 beta channel
 # main 分支：构建正式版 APK，注入 https://api.healthymax.cn，更新 stable channel
@@ -292,7 +336,7 @@ eas build -p ios --profile preview --local    # 仅 macOS
 
 ---
 
-### 方案 B：本地原生工程构建
+### 方案 C：本地原生工程构建
 
 适合需要频繁改原生代码、或不想依赖 EAS 云构建的场景。
 

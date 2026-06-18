@@ -1200,7 +1200,10 @@ export function PetHomeScreen() {
     const next = !homePetHidden
     setHomePetHiddenState(next)
     await setHomePetHidden(next)
-    Alert.alert(next ? '首页卡片已隐藏' : '首页卡片已显示', next ? '首页不再展示成长伙伴卡片，成长数据仍会继续更新。' : '首页会重新展示成长伙伴卡片。')
+    Alert.alert(
+      next ? '首页悬浮伙伴已隐藏' : '首页悬浮伙伴已显示',
+      next ? '首页不再显示可拖动的成长伙伴，成长数据仍会继续更新。' : '首页会重新显示可拖动的成长伙伴。',
+    )
   }
 
   const pet = summary?.pet
@@ -1333,6 +1336,7 @@ export function PetHomeScreen() {
         </View>
       </Card>
 
+      <AppButton label={`和${pet?.name || '伙伴'}聊聊`} onPress={() => navigation.navigate('PetChat')} />
       <AppButton label="外观实验室" variant="secondary" onPress={() => navigation.navigate('PetLab')} />
     </Page>
   )

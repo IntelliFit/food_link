@@ -1424,3 +1424,66 @@ export interface PetClaimResult {
   exp_awarded: number
   earned_credits_balance?: number
 }
+
+export interface PetChatEstimateResponse {
+  question: string
+  range: StatsRange
+  estimated_credits: number
+  balance?: number
+  can_afford?: boolean
+}
+
+export interface PetChatResponse {
+  answer: string
+  question: string
+  range: StatsRange
+  session_id?: string
+  credits_used?: number
+  remaining_balance?: number
+}
+
+export interface PetChatHistoryMessage {
+  id: string
+  session_id?: string
+  role: 'user' | 'assistant' | 'pet' | string
+  content: string
+  message_type?: string
+  meta?: Record<string, unknown>
+  created_at?: string
+}
+
+export interface PetChatSession {
+  id?: string
+  ID?: string
+  user_id?: string
+  title?: string
+  range_type?: StatsRange | string
+  RangeType?: StatsRange | string
+  last_question?: string
+  last_answer?: string
+  last_message_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PetChatHistoryResponse {
+  session?: PetChatSession | null
+  messages: PetChatHistoryMessage[]
+}
+
+export interface PetChatSessionSummary {
+  id?: string
+  ID?: string
+  title?: string
+  range_type?: StatsRange | string
+  RangeType?: StatsRange | string
+  last_question?: string
+  last_answer?: string
+  last_message_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PetChatSessionsResponse {
+  sessions: PetChatSessionSummary[]
+}

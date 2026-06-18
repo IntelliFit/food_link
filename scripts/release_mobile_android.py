@@ -277,6 +277,18 @@ allprojects { project ->
     return init_script
 
 
+def android_release_keystore_configured() -> bool:
+    return all(
+        os.getenv(name, "").strip()
+        for name in (
+            "FOODLINK_ANDROID_KEYSTORE_PATH",
+            "FOODLINK_ANDROID_KEYSTORE_PASSWORD",
+            "FOODLINK_ANDROID_KEY_ALIAS",
+            "FOODLINK_ANDROID_KEY_PASSWORD",
+        )
+    )
+
+
 def git_value(args: list[str], fallback: str = "") -> str:
     try:
         return run(["git", *args]).strip()
@@ -336,15 +348,16 @@ def eas_build(platform_profile: str, output_path: Path, api_base_url: str, expo_
 
 
 def local_apk_build(output_path: Path, api_base_url: str) -> Path:
-    run(
-        ["npx", "expo", "prebuild", "--platform", "android"],
-        cwd=MOBILE_DIR,
-        extra_env={"EXPO_PUBLIC_API_BASE_URL": api_base_url},
-    )
     android_dir = MOBILE_DIR / "android"
     gradlew = android_dir / ("gradlew.bat" if os.name == "nt" else "gradlew")
     if not gradlew.exists():
-        fail(f"Gradle wrapper not found after prebuild: {gradlew}")
+        run(
+            ["npx", "expo", "prebuild", "--platform", "android"],
+            cwd=MOBILE_DIR,
+            extra_env={"EXPO_PUBLIC_API_BASE_URL": api_base_url},
+        )
+    if not gradlew.exists():
+        fail(f"Gradle wrapper not found: {gradlew}")
     java_home = find_java_home()
     sdk_root = find_android_sdk_root()
     extra_env: dict[str, str] = {}
@@ -359,6 +372,11 @@ def local_apk_build(output_path: Path, api_base_url: str) -> Path:
     else:
         print("ANDROID_HOME not found; Gradle may fail unless android/local.properties already points to an SDK")
     init_script = write_gradle_mirror_init_script()
+    keystore_configured = android_release_keystore_configured()
+    if keystore_configured:
+        print("using Android release keystore from FOODLINK_ANDROID_* environment variables")
+    else:
+        print("warning: FOODLINK_ANDROID_* release keystore variables are not fully configured; APK will use debug signing")
     run(
         [str(gradlew), "--init-script", str(init_script), "assembleRelease"],
         cwd=android_dir,
@@ -440,11 +458,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifact-apk", type=Path, help="Existing APK file to publish")
     parser.add_argument("--artifact-aab", type=Path, help="Existing AAB file to publish")
     parser.add_argument("--build-apk", action="store_true", help="Run EAS Android APK build and publish downloaded APK")
+    parser.add_argument("--build-eas-apk", action="store_true", help="Alias for --build-apk")
     parser.add_argument("--build-aab", action="store_true", help="Run EAS production build and publish downloaded AAB")
     parser.add_argument(
         "--build-local-apk",
         action="store_true",
-        help="Build a local release APK with Expo prebuild + Gradle and publish it. Current native config uses debug signing until a production keystore is configured.",
+        help="Build a local release APK with Gradle and publish it. This is the default when no artifact/build option is provided.",
     )
     parser.add_argument("--namespace", default="release-config.yaml", help="Apollo namespace for release config")
     parser.add_argument("--dist-dir", type=Path, default=DEFAULT_DIST)
@@ -489,12 +508,14 @@ def main() -> None:
     artifact_dir = args.dist_dir / "android" / version / build_number
     apk_path = args.artifact_apk
     aab_path = args.artifact_aab
+    if args.build_eas_apk:
+        args.build_apk = True
     should_auto_build = not apk_path and not aab_path and not args.build_apk and not args.build_aab and not args.build_local_apk
     if args.dry_run and should_auto_build:
         print("[dry-run] branch and release config resolved; no build or upload will be performed")
         return
     if should_auto_build:
-        args.build_apk = True
+        args.build_local_apk = True
 
     if (args.build_apk or args.build_aab) and not config["expo_token"] and not os.getenv("EXPO_TOKEN", "").strip():
         print("warning: EXPO_TOKEN is not configured; EAS may require an interactive login on this machine")
@@ -534,7 +555,13 @@ def main() -> None:
         "applicationId": expo.get("android", {}).get("package", "cn.healthymax.foodlink"),
         "version": version,
         "buildNumber": build_number,
-        "buildKind": "local-release-debug-signed" if args.build_local_apk else "release",
+        "buildKind": (
+            "local-release"
+            if args.build_local_apk and android_release_keystore_configured()
+            else "local-release-debug-signed"
+            if args.build_local_apk
+            else "release"
+        ),
         "releasedAt": now,
         "commit": commit,
         "branch": branch,
