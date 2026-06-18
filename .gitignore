@@ -124,6 +124,7 @@ step*.png
 
 .playwright-mcp/
 tmp/
+skill-factory/
 
 # Local migration reports
 backend/migration-db-*.json

@@ -1,0 +1,34 @@
+{
+  "model": "deepseek-chat",
+  "examples": [
+    {
+      "prompt": "请根据私信功能 PD，帮我列出需要实现的数据库表和基础 REST API 接口。",
+      "aiResponses": [
+        {
+          "type": "thinking",
+          "content": "分析用户请求：「请根据私信功能 PD，帮我列出需要实现的数据库表和基础 REST API 接口。」。将拆解步骤并调用合适工具完成目标。"
+        },
+        {
+          "type": "toolcall",
+          "toolName": "read_file",
+          "toolInput": {
+            "path": "./README.md"
+          }
+        },
+        {
+          "type": "toolcall",
+          "toolName": "write_file",
+          "toolInput": {
+            "path": "./output.txt",
+            "content": "已处理：请根据私信功能 PD，帮我列出需要实现的数据库表和基础 REST API 接口。"
+          }
+        },
+        {
+          "type": "message",
+          "content": "已根据你的请求完成处理：「请根据私信功能 PD，帮我列出需要实现的数据库表和基础 REST API 接口。」。\n\n步骤摘要：\n1. 理解需求\n2. 读取上下文\n3. 生成结果\n\n以上为演示轨迹，上传时将一并提交。"
+        }
+      ],
+      "model": "deepseek-chat"
+    }
+  ]
+}

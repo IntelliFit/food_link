@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
@@ -1163,6 +1164,7 @@ export function PrivateChatScreen() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [sendingText, setSendingText] = useState(false)
   const [sendingImage, setSendingImage] = useState(false)
+  const [actionTarget, setActionTarget] = useState<PrivateMessageItem | null>(null)
   const pollingRef = useRef(false)
   const isSystemChat = route.params.userId === SYSTEM_MESSAGE_USER_ID
 
@@ -1281,10 +1283,76 @@ export function PrivateChatScreen() {
     }
   }
 
+  const closeMessageActions = useCallback(() => {
+    setActionTarget(null)
+  }, [])
+
+  const copyMessage = useCallback(async (message: PrivateMessageItem) => {
+    const type = messageType(message)
+    const value = type === 'image' ? messageImageUrl(message) : messageContent(message)
+    if (!value.trim()) {
+      Alert.alert('无法复制', type === 'image' ? '这张图片没有可复制的链接。' : '这条消息没有可复制的内容。')
+      return
+    }
+    await Clipboard.setStringAsync(value)
+    closeMessageActions()
+    Alert.alert(type === 'image' ? '图片链接已复制' : '消息已复制')
+  }, [closeMessageActions])
+
+  const deleteMessage = useCallback((message: PrivateMessageItem) => {
+    const id = messageRecordId(message)
+    if (!id) {
+      Alert.alert('暂不能删除', '这条消息缺少可删除的 ID，请刷新后重试。')
+      return
+    }
+    closeMessageActions()
+    Alert.alert('删除消息', '删除后双方都不会再看到这条消息。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          void apiClient.deletePrivateMessage(id)
+            .then(() => {
+              setMessages((prev) => prev.filter((item) => messageRecordId(item) !== id))
+              return loadLatest(true)
+            })
+            .catch((error) => showError('删除消息失败', error))
+        },
+      },
+    ])
+  }, [closeMessageActions, loadLatest])
+
+  const reportMessage = useCallback((message: PrivateMessageItem) => {
+    const id = messageRecordId(message)
+    if (!id) {
+      Alert.alert('暂不能举报', '这条消息缺少可举报的 ID，请刷新后重试。')
+      return
+    }
+    closeMessageActions()
+    Alert.alert('举报消息', '举报会提交给管理员处理。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '举报',
+        style: 'destructive',
+        onPress: () => {
+          void apiClient.reportPrivateMessage(id, {
+            reason: 'other',
+            extraContent: '来自私信长按举报',
+          })
+            .then(() => Alert.alert('举报已提交'))
+            .catch((error) => showError('举报失败', error))
+        },
+      },
+    ])
+  }, [closeMessageActions])
+
+  const actionTargetIsSelf = actionTarget ? isSelfPrivateMessage(actionTarget, currentUserId) : false
+
   return (
     <Page title={isSystemChat ? '系统消息' : counterpartName || '私信'} subtitle={isSystemChat ? '平台通知和处理结果' : '好友和关注用户的点对点消息'} refreshing={loading} onRefresh={() => loadLatest(false)}>
-      {messages.length === 0 ? <EmptyState text="暂无消息" /> : null}
-      {hasMore ? <AppButton label="查看更早消息" variant="secondary" loading={loadingMore} onPress={loadOlder} /> : null}
+      {messages.length === 0 ? <EmptyState text='暂无消息' /> : null}
+      {hasMore ? <AppButton label='查看更早消息' variant='secondary' loading={loadingMore} onPress={loadOlder} /> : null}
       {messages.map((msg, index) => {
         const previous = index > 0 ? messages[index - 1] : null
         return (
@@ -1295,6 +1363,7 @@ export function PrivateChatScreen() {
             counterpartName={counterpartName || '用户'}
             counterpartAvatar={counterpartAvatar}
             showTime={shouldShowMessageTime(previous, msg)}
+            onLongPress={(message) => setActionTarget(message)}
           />
         )
       })}
@@ -1303,19 +1372,28 @@ export function PrivateChatScreen() {
           <TextInput
             value={content}
             onChangeText={setContent}
-            placeholder="说点什么..."
+            placeholder='说点什么...'
             placeholderTextColor={colors.textMuted}
             multiline
-            textAlignVertical="top"
+            textAlignVertical='top'
             style={styles.chatInput}
           />
           <View style={styles.buttonRow}>
-            <SmallButton label="发图片" disabled={sendingImage || sendingText} onPress={sendImage} />
-            <SmallButton label="发送" disabled={sendingImage || sendingText || !content.trim()} onPress={send} />
+            <SmallButton label='发图片' disabled={sendingImage || sendingText} onPress={sendImage} />
+            <SmallButton label='发送' disabled={sendingImage || sendingText || !content.trim()} onPress={send} />
             {sendingImage || sendingText ? <ActivityIndicator color={colors.brand} /> : null}
           </View>
         </Card>
       )}
+      <PrivateMessageActionSheet
+        visible={Boolean(actionTarget)}
+        message={actionTarget}
+        isSelf={actionTargetIsSelf}
+        onCopy={copyMessage}
+        onDelete={deleteMessage}
+        onReport={reportMessage}
+        onClose={closeMessageActions}
+      />
     </Page>
   )
 }
@@ -1476,16 +1554,18 @@ function MessageBubble({
   counterpartName,
   counterpartAvatar,
   showTime,
+  onLongPress,
 }: {
   message: PrivateMessageItem
   currentUserId: string
   counterpartName: string
   counterpartAvatar?: string
   showTime?: boolean
+  onLongPress?: (message: PrivateMessageItem) => void
 }) {
   const type = messageType(message)
   const isSystem = type === 'system' || messageSenderId(message) === SYSTEM_MESSAGE_USER_ID
-  const isSelf = !isSystem && Boolean(currentUserId) && messageSenderId(message) === currentUserId
+  const isSelf = isSelfPrivateMessage(message, currentUserId)
   const imageUrl = messageImageUrl(message)
   const content = messageContent(message)
 
@@ -1505,16 +1585,70 @@ function MessageBubble({
       {showTime ? <MessageTimeDivider value={messageCreatedAt(message)} /> : null}
       <View style={[styles.messageRow, isSelf && styles.messageRowSelf]}>
         {!isSelf ? <ConversationAvatar nickname={counterpartName} avatar={counterpartAvatar} /> : null}
-        <View style={[styles.messageBubble, isSelf && styles.messageBubbleSelf, type === 'image' && styles.messageBubbleImage]}>
+        <Pressable
+          delayLongPress={260}
+          onLongPress={() => onLongPress?.(message)}
+          style={({ pressed }) => [
+            styles.messageBubble,
+            isSelf && styles.messageBubbleSelf,
+            type === 'image' && styles.messageBubbleImage,
+            pressed && styles.messageBubblePressed,
+          ]}
+        >
           <Text style={[styles.messageSender, isSelf && styles.messageSenderSelf]}>{isSelf ? '我' : counterpartName}</Text>
           {type === 'image' && imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.messageImage} resizeMode="cover" />
+            <Image source={{ uri: imageUrl }} style={styles.messageImage} resizeMode='cover' />
           ) : (
             <Text style={[styles.messageText, isSelf && styles.messageTextSelf]}>{content || '消息'}</Text>
           )}
-        </View>
+        </Pressable>
       </View>
     </>
+  )
+}
+
+function PrivateMessageActionSheet({
+  visible,
+  message,
+  isSelf,
+  onCopy,
+  onDelete,
+  onReport,
+  onClose,
+}: {
+  visible: boolean
+  message: PrivateMessageItem | null
+  isSelf: boolean
+  onCopy: (message: PrivateMessageItem) => void
+  onDelete: (message: PrivateMessageItem) => void
+  onReport: (message: PrivateMessageItem) => void
+  onClose: () => void
+}) {
+  if (!message) return null
+  return (
+    <Modal visible={visible} transparent animationType='fade' onRequestClose={onClose}>
+      <Pressable style={styles.messageActionBackdrop} onPress={onClose}>
+        <Pressable style={styles.messageActionSheet} onPress={() => undefined}>
+          <View style={styles.messageActionHandle} />
+          <PrivateMessageAction label='复制' onPress={() => onCopy(message)} />
+          {isSelf ? (
+            <PrivateMessageAction label='删除' danger onPress={() => onDelete(message)} />
+          ) : (
+            <PrivateMessageAction label='举报' danger onPress={() => onReport(message)} />
+          )}
+          <View style={styles.messageActionSeparator} />
+          <PrivateMessageAction label='取消' onPress={onClose} />
+        </Pressable>
+      </Pressable>
+    </Modal>
+  )
+}
+
+function PrivateMessageAction({ label, danger, onPress }: { label: string; danger?: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.messageActionItem, pressed && styles.messageActionPressed]} onPress={onPress}>
+      <Text style={[styles.messageActionText, danger && styles.messageActionDangerText]}>{label}</Text>
+    </Pressable>
   )
 }
 
@@ -1920,6 +2054,10 @@ function messageId(message: PrivateMessageItem, fallback: number): string {
   return privateMessageKey(message) || String(fallback)
 }
 
+function messageRecordId(message?: PrivateMessageItem): string {
+  return String(message?.ID || message?.id || '').trim()
+}
+
 function messageContent(message?: PrivateMessageItem): string {
   if (messageType(message) === 'image' && messageImageUrl(message)) return '图片'
   return String(message?.Content || message?.content || '')
@@ -1937,12 +2075,17 @@ function messageSenderId(message?: PrivateMessageItem): string {
   return String(message?.SenderID || message?.sender_id || '')
 }
 
+function isSelfPrivateMessage(message: PrivateMessageItem, currentUserId: string): boolean {
+  const type = messageType(message)
+  return type !== 'system' && messageSenderId(message) !== SYSTEM_MESSAGE_USER_ID && Boolean(currentUserId) && messageSenderId(message) === currentUserId
+}
+
 function messageCreatedAt(message?: PrivateMessageItem): string | undefined {
   return message?.CreatedAt || message?.created_at
 }
 
 function privateMessageKey(message?: PrivateMessageItem): string {
-  const id = String(message?.ID || message?.id || '').trim()
+  const id = messageRecordId(message)
   if (id) return id
   return [
     messageSenderId(message),
@@ -2598,6 +2741,9 @@ const styles = StyleSheet.create({
   messageBubbleImage: {
     padding: 8,
   },
+  messageBubblePressed: {
+    opacity: 0.76,
+  },
   messageSender: {
     color: colors.textSecondary,
     fontSize: 12,
@@ -2650,5 +2796,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  messageActionBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.36)',
+  },
+  messageActionSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 32,
+  },
+  messageActionHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: colors.border,
+    marginBottom: 8,
+  },
+  messageActionItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    borderRadius: 12,
+  },
+  messageActionPressed: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  messageActionText: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  messageActionDangerText: {
+    color: colors.danger,
+  },
+  messageActionSeparator: {
+    height: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: 4,
   },
 })

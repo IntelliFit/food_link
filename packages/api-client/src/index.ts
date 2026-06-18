@@ -332,6 +332,11 @@ export interface SendPrivateMessageInput {
   imageUrl?: string
 }
 
+export interface ReportPrivateMessageInput {
+  reason?: PrivateMessageReportReason
+  extraContent?: string
+}
+
 export interface RecipeInput {
   recipeName: string
   description?: string
@@ -428,6 +433,7 @@ export interface CreatePublicFoodInput {
 }
 
 export type FeedReportReason = 'spam' | 'inappropriate' | 'false_information' | 'harassment' | 'other'
+export type PrivateMessageReportReason = 'spam' | 'porn' | 'illegal' | 'abuse' | 'other'
 
 export interface PackagedFoodInput {
   brand?: string
@@ -1906,6 +1912,28 @@ export class FoodLinkApiClient {
   async markConversationRead(userId: string): Promise<{ success: boolean }> {
     return this.authenticatedRequest<{ success: boolean }>(`/api/messages/read/${encodeURIComponent(userId)}`, {
       method: 'PUT',
+      timeoutMs: 10000,
+    })
+  }
+
+  async deletePrivateMessage(messageId: string): Promise<{ message?: string }> {
+    const id = messageId.trim()
+    if (!id) throw new Error('消息 ID 不能为空')
+    return this.authenticatedRequest<{ message?: string }>(`/api/messages/message/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      timeoutMs: 10000,
+    })
+  }
+
+  async reportPrivateMessage(messageId: string, input: ReportPrivateMessageInput = {}): Promise<{ id: string; status: string }> {
+    const id = messageId.trim()
+    if (!id) throw new Error('消息 ID 不能为空')
+    return this.authenticatedRequest<{ id: string; status: string }>(`/api/messages/message/${encodeURIComponent(id)}/report`, {
+      method: 'POST',
+      body: {
+        reason: input.reason || 'other',
+        extra_content: input.extraContent?.trim() || '',
+      },
       timeoutMs: 10000,
     })
   }

@@ -744,17 +744,36 @@ type UserFollowDO struct {
 func (UserFollowDO) TableName() string { return "user_follows" }
 
 type PrivateMessageDO struct {
-	ID          string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	SenderID    string     `gorm:"column:sender_id;type:uuid;not null;index:idx_private_messages_sender"`
-	ReceiverID  string     `gorm:"column:receiver_id;type:uuid;not null;index:idx_private_messages_receiver"`
-	Content     string     `gorm:"column:content;type:text;not null;default:''"`
-	ImageURL    *string    `gorm:"column:image_url;type:text"`
-	ContentType string     `gorm:"column:content_type;type:text;not null;default:'text'"`
-	IsRead      bool       `gorm:"column:is_read;type:boolean;not null;default:false"`
-	CreatedAt   *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SenderID        string     `gorm:"column:sender_id;type:uuid;not null;index:idx_private_messages_sender"`
+	ReceiverID      string     `gorm:"column:receiver_id;type:uuid;not null;index:idx_private_messages_receiver"`
+	Content         string     `gorm:"column:content;type:text;not null;default:''"`
+	ImageURL        *string    `gorm:"column:image_url;type:text"`
+	ContentType     string     `gorm:"column:content_type;type:text;not null;default:'text'"`
+	IsRead          bool       `gorm:"column:is_read;type:boolean;not null;default:false"`
+	CreatedAt       *time.Time `gorm:"column:created_at;type:timestamptz;default:now()"`
+	DeletedAt       *time.Time `gorm:"column:deleted_at;type:timestamptz;index:idx_private_messages_deleted_at"`
+	DeletedByUserID *string    `gorm:"column:deleted_by_user_id;type:uuid"`
 }
 
 func (PrivateMessageDO) TableName() string { return "private_messages" }
+
+type PrivateMessageReportDO struct {
+	ID                 string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	ReporterUserID     string     `gorm:"column:reporter_user_id;type:uuid;not null;index:idx_private_message_reports_reporter_message,priority:1"`
+	ReportedUserID     string     `gorm:"column:reported_user_id;type:uuid;not null;index:idx_private_message_reports_reported_status,priority:1"`
+	MessageID          string     `gorm:"column:message_id;type:uuid;not null;index:idx_private_message_reports_reporter_message,priority:2"`
+	Reason             string     `gorm:"column:reason;type:text;not null;default:'other'"`
+	ExtraContent       string     `gorm:"column:extra_content;type:text;not null;default:''"`
+	MessageContent     string     `gorm:"column:message_content;type:text;not null;default:''"`
+	MessageImageURL    string     `gorm:"column:message_image_url;type:text;not null;default:''"`
+	MessageContentType string     `gorm:"column:message_content_type;type:text;not null;default:'text'"`
+	Status             string     `gorm:"column:status;type:text;not null;default:'pending';index:idx_private_message_reports_reported_status,priority:2"`
+	CreatedAt          *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_private_message_reports_reported_status,priority:3,sort:desc"`
+	UpdatedAt          *time.Time `gorm:"column:updated_at;type:timestamptz;default:now()"`
+}
+
+func (PrivateMessageReportDO) TableName() string { return "private_message_reports" }
 
 type BodyWeightRecordDO struct {
 	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -1233,6 +1252,7 @@ func AllModels() []any {
 		&UserFriendDO{},
 		&UserFollowDO{},
 		&PrivateMessageDO{},
+		&PrivateMessageReportDO{},
 		&BodyWeightRecordDO{},
 		&BodyWaterLogDO{},
 		&BodyMetricSettingsDO{},

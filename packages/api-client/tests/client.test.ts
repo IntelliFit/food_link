@@ -402,6 +402,12 @@ function createMockAdapters() {
         const body = options?.body as { content?: string; content_type?: string; image_url?: string } | undefined
         return response({ code: 0, data: { ID: 'msg-2', Content: body?.content || '', ContentType: body?.content_type || 'text', ImageURL: body?.image_url || '' } })
       }
+      if (url.endsWith('/api/messages/message/msg-1') && options?.method === 'DELETE') {
+        return response({ code: 0, data: { message: '已删除' } })
+      }
+      if (url.endsWith('/api/messages/message/msg-1/report')) {
+        return response({ code: 0, data: { id: 'message-report-1', status: 'pending' } })
+      }
       if (url.endsWith('/api/messages/read/user-2')) {
         return response({ code: 0, data: { success: true } })
       }
@@ -1245,6 +1251,8 @@ describe('FoodLinkApiClient', () => {
     await client.getConversation('user-2')
     await client.sendPrivateMessage('user-2', 'hi')
     await client.sendPrivateMessage('user-2', { contentType: 'image', imageUrl: 'https://cdn.example.com/chat.jpg' })
+    await client.deletePrivateMessage('msg-1')
+    await client.reportPrivateMessage('msg-1', { reason: 'other', extraContent: '来自私信长按举报' })
 
     expect(requests.some((req) => req.url.endsWith('/api/membership/pay/create') && (req.options?.body as any).plan_code === 'standard_monthly')).toBe(true)
     expect(requests.some((req) => req.url.includes('/api/community/feed-targets/food_record/record-1/comments') && (req.options?.body as any).content === 'nice')).toBe(true)
@@ -1286,6 +1294,14 @@ describe('FoodLinkApiClient', () => {
         body.content === '' &&
         body.content_type === 'image' &&
         body.image_url === 'https://cdn.example.com/chat.jpg'
+    })).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/messages/message/msg-1') && req.options?.method === 'DELETE')).toBe(true)
+    expect(requests.some((req) => {
+      const body = req.options?.body as any
+      return req.url.endsWith('/api/messages/message/msg-1/report') &&
+        req.options?.method === 'POST' &&
+        body.reason === 'other' &&
+        body.extra_content === '来自私信长按举报'
     })).toBe(true)
   })
 
@@ -1345,12 +1361,16 @@ describe('FoodLinkApiClient', () => {
     const conversations = await client.listConversations({ limit: 20, offset: 40 })
     const messages = await client.getConversation('user-2', 20, 20)
     const read = await client.markConversationRead('user-2')
+    const deleted = await client.deletePrivateMessage('msg-1')
+    const report = await client.reportPrivateMessage('msg-1', { reason: 'abuse', extraContent: '骚扰' })
     const unread = await client.getUnreadPrivateMessageCount()
 
     expect(conversations.has_more).toBe(true)
     expect(conversations.list[0]?.UserID).toBe('user-2')
     expect(messages.list[0]?.ID).toBe('msg-1')
     expect(read.success).toBe(true)
+    expect(deleted.message).toBe('已删除')
+    expect(report.id).toBe('message-report-1')
     expect(unread.count).toBe(3)
     const conversationReq = requests.find((req) => req.url.includes('/api/messages/conversations?'))
     expect(conversationReq).toBeTruthy()
@@ -1363,6 +1383,10 @@ describe('FoodLinkApiClient', () => {
     expect(messageParams.get('limit')).toBe('20')
     expect(messageParams.get('offset')).toBe('20')
     expect(requests.some((req) => req.url.endsWith('/api/messages/read/user-2') && req.options?.method === 'PUT')).toBe(true)
+    expect(requests.some((req) => req.url.endsWith('/api/messages/message/msg-1') && req.options?.method === 'DELETE')).toBe(true)
+    const reportReq = requests.find((req) => req.url.endsWith('/api/messages/message/msg-1/report'))
+    expect(reportReq?.options?.method).toBe('POST')
+    expect(reportReq?.options?.body).toEqual({ reason: 'abuse', extra_content: '骚扰' })
     expect(requests.some((req) => req.url.endsWith('/api/messages/unread-count'))).toBe(true)
   })
 

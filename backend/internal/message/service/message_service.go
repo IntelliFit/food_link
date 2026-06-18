@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/message/domain"
 	"food_link/backend/internal/message/repo"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
 )
 
@@ -120,6 +122,124 @@ func (s *MessageService) CountUnread(ctx context.Context, userID string) (int64,
 	return s.msgRepo.CountUnread(ctx, userID)
 }
 
+// DeleteMessage soft-deletes a private message for both conversation members.
+func (s *MessageService) DeleteMessage(ctx context.Context, userID, messageID string) error {
+	userID = strings.TrimSpace(userID)
+	messageID = strings.TrimSpace(messageID)
+	if userID == "" || messageID == "" {
+		return &commonerrors.AppError{Code: 10002, Message: "消息 ID 不能为空", HTTPStatus: 400}
+	}
+	msg, err := s.msgRepo.FindMessageByID(ctx, messageID)
+	if err != nil {
+		return err
+	}
+	if msg.ContentType == "system" || msg.SenderID == domain.SystemSenderID {
+		return &commonerrors.AppError{Code: 10002, Message: "系统消息不能删除", HTTPStatus: 400}
+	}
+	if msg.SenderID != userID {
+		logger.Warn(ctx, "私信删除权限校验失败",
+			slog.String("user_id", userID),
+			slog.String("message_id", messageID),
+			slog.String("sender_id", msg.SenderID),
+		)
+		return &commonerrors.AppError{Code: 20003, Message: "只能删除自己发送的消息", HTTPStatus: 403}
+	}
+	if msg.DeletedAt != nil {
+		return nil
+	}
+	if err := s.msgRepo.SoftDeleteMessage(ctx, messageID, userID); err != nil {
+		logger.Error(ctx, "删除私信失败", err,
+			slog.String("user_id", userID),
+			slog.String("message_id", messageID),
+		)
+		return err
+	}
+	logger.Info(ctx, "私信已删除",
+		slog.String("user_id", userID),
+		slog.String("message_id", messageID),
+		slog.String("receiver_id", msg.ReceiverID),
+	)
+	return nil
+}
+
+func (s *MessageService) ReportMessage(ctx context.Context, reporterUserID, messageID, reason, extraContent string) (*domain.PrivateMessageReport, error) {
+	reporterUserID = strings.TrimSpace(reporterUserID)
+	messageID = strings.TrimSpace(messageID)
+	if reporterUserID == "" || messageID == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "消息 ID 不能为空", HTTPStatus: 400}
+	}
+	reason = normalizePrivateMessageReportReason(reason)
+	extraContent = strings.TrimSpace(extraContent)
+	if len([]rune(extraContent)) > 500 {
+		extraContent = string([]rune(extraContent)[:500])
+	}
+	msg, err := s.msgRepo.FindMessageByID(ctx, messageID)
+	if err != nil {
+		return nil, err
+	}
+	if msg.DeletedAt != nil {
+		return nil, &commonerrors.AppError{Code: 10001, Message: "消息不存在", HTTPStatus: 404}
+	}
+	if msg.ContentType == "system" || msg.SenderID == domain.SystemSenderID {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "系统消息不能举报", HTTPStatus: 400}
+	}
+	if msg.SenderID == reporterUserID {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "不能举报自己的消息", HTTPStatus: 400}
+	}
+	if msg.ReceiverID != reporterUserID {
+		logger.Warn(ctx, "私信举报权限校验失败",
+			slog.String("reporter_user_id", reporterUserID),
+			slog.String("message_id", messageID),
+			slog.String("sender_id", msg.SenderID),
+			slog.String("receiver_id", msg.ReceiverID),
+		)
+		return nil, &commonerrors.AppError{Code: 20003, Message: "无权举报这条消息", HTTPStatus: 403}
+	}
+	existing, err := s.msgRepo.FindReport(ctx, reporterUserID, messageID)
+	if err != nil {
+		logger.Error(ctx, "查询私信举报记录失败", err,
+			slog.String("reporter_user_id", reporterUserID),
+			slog.String("message_id", messageID),
+		)
+		return nil, err
+	}
+	if existing != nil {
+		logger.Info(ctx, "私信举报记录已存在",
+			slog.String("report_id", existing.ID),
+			slog.String("reporter_user_id", reporterUserID),
+			slog.String("message_id", messageID),
+		)
+		return existing, nil
+	}
+	report := &domain.PrivateMessageReport{
+		ReporterUserID:     reporterUserID,
+		ReportedUserID:     msg.SenderID,
+		MessageID:          msg.ID,
+		Reason:             reason,
+		ExtraContent:       extraContent,
+		MessageContent:     msg.Content,
+		MessageImageURL:    msg.ImageURL,
+		MessageContentType: msg.ContentType,
+		Status:             "pending",
+	}
+	if err := s.msgRepo.CreateReport(ctx, report); err != nil {
+		logger.Error(ctx, "创建私信举报记录失败", err,
+			slog.String("reporter_user_id", reporterUserID),
+			slog.String("reported_user_id", msg.SenderID),
+			slog.String("message_id", messageID),
+		)
+		return nil, err
+	}
+	logger.Info(ctx, "私信举报记录已创建",
+		slog.String("report_id", report.ID),
+		slog.String("reporter_user_id", reporterUserID),
+		slog.String("reported_user_id", report.ReportedUserID),
+		slog.String("message_id", messageID),
+		slog.String("reason", reason),
+	)
+	return report, nil
+}
+
 func (s *MessageService) resolveImageURL(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -148,4 +268,17 @@ func (s *MessageService) resolveAvatarURL(value string) string {
 		return value
 	}
 	return resolved
+}
+
+func normalizePrivateMessageReportReason(reason string) string {
+	switch strings.TrimSpace(reason) {
+	case "spam", "porn", "illegal", "abuse", "other":
+		return strings.TrimSpace(reason)
+	case "harassment":
+		return "abuse"
+	case "inappropriate":
+		return "porn"
+	default:
+		return "other"
+	}
 }

@@ -416,6 +416,8 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/messages/conversations", authmw.RequireJWT(jwtSvc), messageHandler.GetConversations)
 	engine.PUT("/api/messages/read/:user_id", authmw.RequireJWT(jwtSvc), messageHandler.MarkRead)
 	engine.GET("/api/messages/unread-count", authmw.RequireJWT(jwtSvc), messageHandler.GetUnreadCount)
+	engine.DELETE("/api/messages/message/:message_id", authmw.RequireJWT(jwtSvc), messageHandler.DeleteMessage)
+	engine.POST("/api/messages/message/:message_id/report", authmw.RequireJWT(jwtSvc), messageHandler.ReportMessage)
 
 	// Friend routes
 	engine.GET("/api/friend/search", authmw.RequireJWT(jwtSvc), friendHandler.Search)
