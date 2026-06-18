@@ -7,7 +7,7 @@ tags:
   - 移动应用
   - 即时通讯
 model: deepseek-chat
-rootUrl: https://raw.githubusercontent.com/IntelliFit/food_link/main/skill-factory/private-messaging/SKILL.md
+rootUrl: https://gist.githubusercontent.com/LSTM-Kirigaya/b9969837a1fefc2c9280318e2fc986d1/raw/ff3cb0c827a58b292b7f0fd11dbaf72e19cdc0e0/SKILL.md
 ---
 
 # 私信功能基础 PD 总结
