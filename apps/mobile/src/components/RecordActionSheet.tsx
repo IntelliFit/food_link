@@ -86,8 +86,12 @@ function PrimaryActionTile({
       <View style={[styles.actionIconBadge, styles[`${action.tone}Icon`]]}>
         <Icon size={25} color={toneColor[action.tone]} strokeWidth={2.4} />
       </View>
-      <Text style={styles.primaryTitle}>{action.title}</Text>
-      <Text style={styles.primaryDesc}>{action.desc}</Text>
+      <Text style={styles.primaryTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+        {action.title}
+      </Text>
+      <Text style={styles.primaryDesc} numberOfLines={2}>
+        {action.desc}
+      </Text>
     </Pressable>
   )
 }
@@ -128,15 +132,16 @@ const styles = StyleSheet.create({
   primaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
   primaryAction: {
-    width: '48.5%',
+    width: '48%',
     minHeight: 124,
     borderWidth: 1,
     borderRadius: 18,
     padding: 14,
+    marginBottom: 10,
   },
   greenAction: {
     backgroundColor: '#f9fefc',

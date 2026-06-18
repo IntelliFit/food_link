@@ -17,6 +17,7 @@ const TAB_LABELS: Record<string, { label: string; icon: LucideIcon }> = {
 
 export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
+  const bottomInset = Math.max(insets.bottom, 10)
   const [recordMenuVisible, setRecordMenuVisible] = useState(false)
   const leftRoutes = state.routes.slice(0, 2)
   const rightRoutes = state.routes.slice(2)
@@ -66,8 +67,8 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 
   return (
     <>
-      <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <View style={styles.bar}>
+      <View style={styles.wrap}>
+        <View style={[styles.bar, { minHeight: 72 + bottomInset, paddingBottom: bottomInset }]}>
           <View style={styles.side}>{leftRoutes.map(renderTab)}</View>
           <Pressable
             accessibilityRole="button"
