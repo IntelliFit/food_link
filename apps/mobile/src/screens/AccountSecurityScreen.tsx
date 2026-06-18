@@ -1,15 +1,17 @@
 import { useCallback, useState } from 'react'
-import { Alert, StyleSheet, Text, TextInput, View } from 'react-native'
+import { StyleSheet, Text, TextInput, View } from 'react-native'
 import { useFocusEffect } from '@react-navigation/native'
 import type { UserInfo } from '@food-link/core'
 import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
+import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
 
 export function AccountSecurityScreen() {
+  const dialog = useAppDialog()
   const [profile, setProfile] = useState<UserInfo | null>(null)
   const [phone, setPhone] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
@@ -34,11 +36,11 @@ export function AccountSecurityScreen() {
       setProfile(data)
       setPhone(data.telephone || '')
     } catch (error) {
-      Alert.alert('获取账号信息失败', userFacingErrorMessage(error))
+      await dialog.alert('获取账号信息失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dialog])
 
   useFocusEffect(
     useCallback(() => {
@@ -48,23 +50,23 @@ export function AccountSecurityScreen() {
 
   const save = async () => {
     if (!normalizedPhone) {
-      Alert.alert('请输入手机号', '手机号将用于 App 手机号密码登录。')
+      await dialog.alert('请输入手机号', '手机号将用于 App 手机号密码登录。', 'warning')
       return
     }
     if (!phoneValid) {
-      Alert.alert('手机号格式不正确', '请填写 11 位大陆手机号。')
+      await dialog.alert('手机号格式不正确', '请填写 11 位大陆手机号。', 'warning')
       return
     }
     if (trimmedPassword.length < 8) {
-      Alert.alert('密码太短', '密码至少需要 8 位。')
+      await dialog.alert('密码太短', '密码至少需要 8 位。', 'warning')
       return
     }
     if (trimmedPassword !== trimmedConfirmPassword) {
-      Alert.alert('两次密码不一致', '请重新输入确认密码。')
+      await dialog.alert('两次密码不一致', '请重新输入确认密码。', 'warning')
       return
     }
     if (profile?.has_password && !currentPassword.trim()) {
-      Alert.alert('请输入当前密码', '修改已设置的密码登录方式需要先验证当前密码。')
+      await dialog.alert('请输入当前密码', '修改已设置的密码登录方式需要先验证当前密码。', 'warning')
       return
     }
     setSaving(true)
@@ -77,10 +79,10 @@ export function AccountSecurityScreen() {
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
-      Alert.alert('已保存', '之后可以使用手机号和密码登录 App。')
+      await dialog.alert('已保存', '之后可以使用手机号和密码登录 App。', 'success')
       await load()
     } catch (error) {
-      Alert.alert('保存失败', userFacingErrorMessage(error))
+      await dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setSaving(false)
     }
@@ -123,7 +125,7 @@ export function AccountSecurityScreen() {
 
       <Card>
         <Text style={styles.sectionTitle}>说明</Text>
-        <Text style={styles.bodyText}>设置后，登录页的“手机号登录”可以作为微信登录之外的兜底方式。旧版账号测试路径仍由后端兼容，不再作为普通用户入口展示。</Text>
+        <Text style={styles.bodyText}>设置后，手机号和密码可以作为微信登录之外的备用方式。为了账号安全，修改已设置的密码时需要先验证当前密码。</Text>
       </Card>
 
       <Card>

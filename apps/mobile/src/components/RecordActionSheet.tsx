@@ -1,4 +1,5 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Camera, FileText, History, Image as ImageIcon, Package as PackageIcon, Search, Star, Utensils, type LucideIcon } from 'lucide-react-native'
 import { colors, radius, shadow } from '../theme'
 
 export type RecordAction = 'camera' | 'library' | 'text' | 'manual' | 'foodLibrary' | 'packagedFood' | 'recipes' | 'history'
@@ -9,19 +10,28 @@ interface RecordActionSheetProps {
   onSelect: (action: RecordAction) => void
 }
 
-const PRIMARY_ACTIONS: Array<{ key: RecordAction; title: string; desc: string; tone: 'green' | 'blue' | 'gold' | 'purple'; icon: string }> = [
-  { key: 'camera', title: '拍照识别', desc: '拍摄餐食，自动估算热量', tone: 'green', icon: 'CAM' },
-  { key: 'library', title: '相册上传', desc: '选择已有食物图片', tone: 'blue', icon: 'IMG' },
-  { key: 'text', title: '文本输入', desc: '一句话描述吃了什么', tone: 'gold', icon: 'TXT' },
-  { key: 'manual', title: '食物库输入', desc: '按食物和重量精确录入', tone: 'purple', icon: 'LIB' },
+type PrimaryTone = 'green' | 'blue' | 'gold' | 'purple'
+
+const PRIMARY_ACTIONS: Array<{ key: RecordAction; title: string; desc: string; tone: PrimaryTone; icon: LucideIcon }> = [
+  { key: 'camera', title: '拍照识别', desc: '拍摄餐食，自动估算热量', tone: 'green', icon: Camera },
+  { key: 'library', title: '相册上传', desc: '选择已有食物图片', tone: 'blue', icon: ImageIcon },
+  { key: 'text', title: '文本输入', desc: '一句话描述吃了什么', tone: 'gold', icon: FileText },
+  { key: 'manual', title: '食物库输入', desc: '按食物和重量精确录入', tone: 'purple', icon: Utensils },
 ]
 
-const QUICK_ACTIONS: Array<{ key: RecordAction; title: string; desc: string }> = [
-  { key: 'recipes', title: '我的收藏', desc: '快速记录常吃餐食' },
-  { key: 'history', title: '识别记录', desc: '查看以往识别结果' },
-  { key: 'packagedFood', title: '包装食品', desc: '上传营养成分表或商品包装' },
-  { key: 'foodLibrary', title: '食物库', desc: '浏览营养库与自定义食物' },
+const QUICK_ACTIONS: Array<{ key: RecordAction; title: string; desc: string; icon: LucideIcon }> = [
+  { key: 'recipes', title: '我的收藏', desc: '快速记录常吃餐食', icon: Star },
+  { key: 'history', title: '识别记录', desc: '查看以往识别结果', icon: History },
+  { key: 'packagedFood', title: '包装食品', desc: '上传营养成分表或商品包装', icon: PackageIcon },
+  { key: 'foodLibrary', title: '食物库', desc: '浏览营养库与自定义食物', icon: Search },
 ]
+
+const toneColor: Record<PrimaryTone, string> = {
+  green: '#38a97b',
+  blue: '#4295bc',
+  gold: '#9f823a',
+  purple: '#6951bd',
+}
 
 export function RecordActionSheet({ visible, onClose, onSelect }: RecordActionSheetProps) {
   return (
@@ -33,17 +43,7 @@ export function RecordActionSheet({ visible, onClose, onSelect }: RecordActionSh
           <Text style={styles.subtitle}>选择一种方式开始记录。</Text>
           <View style={styles.primaryGrid}>
             {PRIMARY_ACTIONS.map((action) => (
-              <Pressable
-                key={action.key}
-                style={({ pressed }) => [styles.primaryAction, styles[`${action.tone}Action`], pressed && styles.pressed]}
-                onPress={() => onSelect(action.key)}
-              >
-                <View style={[styles.actionIconBadge, styles[`${action.tone}Icon`]]}>
-                  <Text style={[styles.actionIcon, styles[`${action.tone}Text`]]}>{action.icon}</Text>
-                </View>
-                <Text style={styles.primaryTitle}>{action.title}</Text>
-                <Text style={styles.primaryDesc}>{action.desc}</Text>
-              </Pressable>
+              <PrimaryActionTile key={action.key} action={action} onSelect={onSelect} />
             ))}
           </View>
           <ScrollView style={styles.actionList} showsVerticalScrollIndicator={false}>
@@ -53,6 +53,9 @@ export function RecordActionSheet({ visible, onClose, onSelect }: RecordActionSh
                 style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
                 onPress={() => onSelect(action.key)}
               >
+                <View style={styles.quickIconBadge}>
+                  <action.icon size={20} color={colors.brandDark} strokeWidth={2.3} />
+                </View>
                 <View style={styles.quickText}>
                   <Text style={styles.quickTitle}>{action.title}</Text>
                   <Text style={styles.quickDesc}>{action.desc}</Text>
@@ -64,6 +67,28 @@ export function RecordActionSheet({ visible, onClose, onSelect }: RecordActionSh
         </Pressable>
       </Pressable>
     </Modal>
+  )
+}
+
+function PrimaryActionTile({
+  action,
+  onSelect,
+}: {
+  action: (typeof PRIMARY_ACTIONS)[number]
+  onSelect: (action: RecordAction) => void
+}) {
+  const Icon = action.icon
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.primaryAction, styles[`${action.tone}Action`], pressed && styles.pressed]}
+      onPress={() => onSelect(action.key)}
+    >
+      <View style={[styles.actionIconBadge, styles[`${action.tone}Icon`]]}>
+        <Icon size={25} color={toneColor[action.tone]} strokeWidth={2.4} />
+      </View>
+      <Text style={styles.primaryTitle}>{action.title}</Text>
+      <Text style={styles.primaryDesc}>{action.desc}</Text>
+    </Pressable>
   )
 }
 
@@ -149,22 +174,6 @@ const styles = StyleSheet.create({
   purpleIcon: {
     backgroundColor: '#f3effc',
   },
-  actionIcon: {
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  greenText: {
-    color: '#38a97b',
-  },
-  blueText: {
-    color: '#4295bc',
-  },
-  goldText: {
-    color: '#9f823a',
-  },
-  purpleText: {
-    color: '#6951bd',
-  },
   primaryTitle: {
     color: colors.text,
     fontSize: 16,
@@ -185,6 +194,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
+  },
+  quickIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    backgroundColor: colors.brandSoft,
   },
   pressed: {
     opacity: 0.72,

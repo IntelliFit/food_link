@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Alert, Image, StyleSheet, Text } from 'react-native'
+import { ActivityIndicator, Image, StyleSheet, Text } from 'react-native'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { apiClient } from '../api'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
+import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { userFacingErrorMessage, userFacingMessage } from '../utils/errors'
 
@@ -14,7 +15,9 @@ type AnalyzeLoadingRoute = RouteProp<RootStackParamList, 'AnalyzeLoading'>
 export function AnalyzeLoadingScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<AnalyzeLoadingRoute>()
+  const dialog = useAppDialog()
   const [statusText, setStatusText] = useState('正在准备分析...')
+  const isTextAnalysis = isTextFoodTask(route.params?.task || {}, route.params?.taskType)
 
   useEffect(() => {
     let cancelled = false
@@ -38,14 +41,14 @@ export function AnalyzeLoadingScreen() {
         return
       }
       if (!route.params?.taskId) {
-        Alert.alert('缺少识别进度信息', '请重新提交识别内容。')
+        void dialog.alert('缺少识别进度信息', '请重新提交识别内容。', 'warning')
         navigation.goBack()
         return
       }
       try {
         const maxAttempts = 60
         for (let attempt = 0; attempt < maxAttempts && !cancelled; attempt += 1) {
-          setStatusText(`正在识别食物... ${attempt + 1}/${maxAttempts}`)
+          setStatusText(`${isTextAnalysis ? '正在理解食物描述' : '正在识别食物'}... ${attempt + 1}/${maxAttempts}`)
           const task = await apiClient.getAnalyzeTask(route.params.taskId)
           if (task.status === 'done') {
             if (isTextFoodTask(task, route.params.taskType)) {
@@ -72,7 +75,7 @@ export function AnalyzeLoadingScreen() {
         throw new Error('分析等待超时，请稍后在识别记录中查看')
       } catch (error) {
         if (!cancelled) {
-          Alert.alert('分析失败', userFacingErrorMessage(error, '识别没有成功，可以稍后在识别记录中查看，或重新提交。'))
+          void dialog.alert('分析失败', userFacingErrorMessage(error, '识别没有成功，可以稍后在识别记录中查看，或重新提交。'), 'danger')
           navigation.navigate('MainTabs')
         }
       }
@@ -82,10 +85,10 @@ export function AnalyzeLoadingScreen() {
     return () => {
       cancelled = true
     }
-  }, [navigation, route.params])
+  }, [dialog, isTextAnalysis, navigation, route.params])
 
   return (
-    <Page title="正在分析" subtitle="图片已提交，结果生成后会自动跳转。">
+    <Page title="正在分析" subtitle={isTextAnalysis ? '文字内容已提交，结果生成后会自动跳转。' : '图片已提交，结果生成后会自动跳转。'}>
       <Card style={styles.card}>
         {route.params?.imageUri ? <Image source={{ uri: route.params.imageUri }} style={styles.preview} /> : null}
         <ActivityIndicator size="large" color={colors.brand} />

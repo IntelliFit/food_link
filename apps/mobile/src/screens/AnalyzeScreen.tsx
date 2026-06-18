@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type MealType } from '@food-link/core'
+import { Camera, FileText, Image as ImageIcon, Utensils, type LucideIcon } from 'lucide-react-native'
 import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import { SHOW_DEBUG_LOGIN } from '../config'
 import type { RootStackParamList } from '../navigation/types'
+import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { todayKey } from '../utils/date'
 import { createDemoAnalysisTask, createDemoTextAnalysisTask, demoFoodImageUrl } from '../utils/demoAnalysisTask'
@@ -20,6 +22,7 @@ type AnalyzeRoute = RouteProp<RootStackParamList, 'Analyze'>
 export function AnalyzeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<AnalyzeRoute>()
+  const dialog = useAppDialog()
   const [loading, setLoading] = useState(false)
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null)
   const mealType = route.params?.mealType || inferDefaultMealTypeFromLocalTime()
@@ -37,7 +40,7 @@ export function AnalyzeScreen() {
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permission.granted) {
-      Alert.alert(source === 'camera' ? '需要相机权限' : '需要相册权限', '请选择一张食物图片用于分析。')
+      await dialog.alert(source === 'camera' ? '需要相机权限' : '需要相册权限', '请选择一张食物图片用于分析。', 'warning')
       return
     }
 
@@ -69,7 +72,7 @@ export function AnalyzeScreen() {
         date: selectedDate,
       })
     } catch (error) {
-      Alert.alert('分析失败', userFacingErrorMessage(error))
+      await dialog.alert('分析失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -105,7 +108,7 @@ export function AnalyzeScreen() {
           <RecordGridAction
             title="拍照识别"
             desc="拍摄餐食，自动估算热量"
-            icon="CAM"
+            icon={Camera}
             tone="green"
             disabled={loading}
             onPress={() => pickAndSubmit('camera', mealType, date)}
@@ -113,7 +116,7 @@ export function AnalyzeScreen() {
           <RecordGridAction
             title="相册上传"
             desc="选择已有食物图片"
-            icon="IMG"
+            icon={ImageIcon}
             tone="blue"
             disabled={loading}
             onPress={() => pickAndSubmit('library', mealType, date)}
@@ -121,14 +124,14 @@ export function AnalyzeScreen() {
           <RecordGridAction
             title="文本输入"
             desc="一句话描述吃了什么"
-            icon="TXT"
+            icon={FileText}
             tone="gold"
             onPress={() => navigation.navigate('TextRecord')}
           />
           <RecordGridAction
             title="食物库输入"
             desc="按食物和重量精确录入"
-            icon="LIB"
+            icon={Utensils}
             tone="purple"
             onPress={() => navigation.navigate('ManualRecord')}
           />
@@ -143,8 +146,8 @@ export function AnalyzeScreen() {
 
       {SHOW_DEBUG_LOGIN ? (
         <Card>
-          <Text style={styles.sectionTitle}>开发验证</Text>
-          <Text style={styles.subtitle}>打开一份本地示例识别结果，用于验证比例、人数分摊和保存前调整。</Text>
+          <Text style={styles.sectionTitle}>示例结果预览</Text>
+          <Text style={styles.subtitle}>打开一份示例识别结果，快速体验比例、人数分摊和保存前调整。</Text>
           <AppButton label="打开示例识别结果" variant="secondary" onPress={openDemoResult} />
           <View style={styles.demoButtonGap}>
             <AppButton label="打开示例文字结果" variant="secondary" onPress={openDemoTextResult} />
@@ -165,11 +168,13 @@ function RecordGridAction({
 }: {
   title: string
   desc: string
-  icon: string
+  icon: LucideIcon
   tone: 'green' | 'blue' | 'gold' | 'purple'
   disabled?: boolean
   onPress: () => void
 }) {
+  const Icon = icon
+
   return (
     <Pressable
       disabled={disabled}
@@ -193,17 +198,7 @@ function RecordGridAction({
           tone === 'purple' && styles.recordIconPurple,
         ]}
       >
-        <Text
-          style={[
-            styles.recordActionIconText,
-            tone === 'green' && styles.recordTextGreen,
-            tone === 'blue' && styles.recordTextBlue,
-            tone === 'gold' && styles.recordTextGold,
-            tone === 'purple' && styles.recordTextPurple,
-          ]}
-        >
-          {icon}
-        </Text>
+        <Icon size={22} color={recordActionIconColor[tone]} strokeWidth={2.5} />
       </View>
       <Text style={styles.recordActionTitle}>{title}</Text>
       <Text style={styles.recordActionDesc}>{desc}</Text>
@@ -222,6 +217,13 @@ function RecordQuickAction({ title, desc, onPress }: { title: string; desc: stri
     </Pressable>
   )
 }
+
+const recordActionIconColor = {
+  green: '#38a97b',
+  blue: '#4295bc',
+  gold: '#9f823a',
+  purple: '#6951bd',
+} as const
 
 const styles = StyleSheet.create({
   sectionHeader: {
@@ -299,22 +301,6 @@ const styles = StyleSheet.create({
   },
   recordIconPurple: {
     backgroundColor: '#f3effc',
-  },
-  recordActionIconText: {
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  recordTextGreen: {
-    color: '#38a97b',
-  },
-  recordTextBlue: {
-    color: '#4295bc',
-  },
-  recordTextGold: {
-    color: '#9f823a',
-  },
-  recordTextPurple: {
-    color: '#6951bd',
   },
   recordActionTitle: {
     color: colors.text,

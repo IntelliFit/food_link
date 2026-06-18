@@ -1,18 +1,30 @@
 import { useCallback, useState } from 'react'
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type { CheckinLeaderboardItem, CommunityFeedItem } from '@food-link/core'
+import { Bell, ChevronRight, Filter, MessageCircle, PenLine, Search, Send, Trophy, UserPlus, UsersRound, Utensils, type LucideIcon } from 'lucide-react-native'
 import { apiClient } from '../api'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
-import { colors } from '../theme'
+import { useAppDialog } from '../providers/DialogProvider'
+import { colors, radius, shadow } from '../theme'
 import { formatDateTime } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
 
+type QuickTone = 'green' | 'blue' | 'purple' | 'gold'
+
+const quickToneMeta: Record<QuickTone, { backgroundColor: string; color: string }> = {
+  green: { backgroundColor: '#ecfdf5', color: colors.brandDark },
+  blue: { backgroundColor: '#eff6ff', color: '#2b8ab7' },
+  purple: { backgroundColor: '#f2efff', color: '#7057d8' },
+  gold: { backgroundColor: '#fff7e6', color: '#a67518' },
+}
+
 export function CommunityScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [feed, setFeed] = useState<CommunityFeedItem[]>([])
   const [leaderboard, setLeaderboard] = useState<CheckinLeaderboardItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -27,11 +39,11 @@ export function CommunityScreen() {
       setFeed(feedData.list || [])
       setLeaderboard(leaderboardData.list || [])
     } catch (error) {
-      Alert.alert('获取圈子失败', userFacingErrorMessage(error))
+      void dialog.alert('获取圈子失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dialog])
 
   useFocusEffect(
     useCallback(() => {
@@ -51,51 +63,68 @@ export function CommunityScreen() {
       else await apiClient.communityLike(targetId, targetType)
     } catch (error) {
       setFeed(feed)
-      Alert.alert('操作失败', userFacingErrorMessage(error))
+      void dialog.alert('操作失败', userFacingErrorMessage(error), 'danger')
     }
   }
 
   return (
     <Page title="圈子" subtitle="公开动态、好友互动和打卡排行。" refreshing={loading} onRefresh={load}>
-      <View style={styles.quickRow}>
-        <QuickEntry label="搜索" onPress={() => navigation.navigate('CommunitySearch')} />
-        <QuickEntry label="发布" onPress={() => navigation.navigate('CirclePostEdit')} />
-        <QuickEntry label="好友" onPress={() => navigation.navigate('Friends')} />
-      </View>
-      <View style={styles.quickRow}>
-        <QuickEntry label="消息" onPress={() => navigation.navigate('Notifications')} />
-        <QuickEntry label="公共食物" onPress={() => navigation.navigate('PublicFood', { mode: 'all' })} />
-        <QuickEntry label="校园餐" onPress={() => navigation.navigate('CampusCanteen')} />
-      </View>
-      <View style={styles.quickRow}>
-        <QuickEntry label="私信" onPress={() => navigation.navigate('Conversations')} />
-        <QuickEntry label="排行榜" onPress={() => navigation.navigate('CheckinLeaderboard')} />
-        <QuickEntry label="分享食物" onPress={() => navigation.navigate('PublicFoodShare', { mode: 'public' })} />
-      </View>
-      <View style={styles.quickRow}>
-        <QuickEntry label="补校园餐" onPress={() => navigation.navigate('PublicFoodShare', { mode: 'campus' })} />
+      <View style={styles.quickGrid}>
+        <QuickEntry label="互动消息" icon={Bell} tone="green" onPress={() => navigation.navigate('Notifications')} />
+        <QuickEntry label="私信" icon={MessageCircle} tone="blue" onPress={() => navigation.navigate('Conversations')} />
+        <QuickEntry label="好友管理" icon={UsersRound} tone="purple" onPress={() => navigation.navigate('Friends')} />
+        <QuickEntry label="添加好友" icon={UserPlus} tone="gold" onPress={() => navigation.navigate('Friends')} />
       </View>
 
-      <Card>
-        <Text style={styles.sectionTitle}>本周打卡</Text>
-        {leaderboard.length === 0 ? (
-          <Text style={styles.empty}>暂无排行数据。</Text>
-        ) : (
-          leaderboard.slice(0, 3).map((item, index) => {
-            const rank = item.rank || index + 1
-            const checkinCount = item.checkin_count ?? item.record_count ?? 0
-            return (
-              <View key={item.user_id} style={styles.rankRow}>
-                <Text style={styles.rankNo}>#{rank}</Text>
-                <Text style={styles.rankName} numberOfLines={1}>{item.nickname || '食友'}</Text>
-                <Text style={styles.rankCount}>{checkinCount} 次</Text>
-              </View>
-            )
-          })
-        )}
-      </Card>
+      <Pressable style={({ pressed }) => [styles.leaderboardCard, pressed && styles.pressed]} onPress={() => navigation.navigate('CheckinLeaderboard')}>
+        <View style={styles.leaderboardHeader}>
+          <View style={styles.leaderboardIcon}>
+            <Trophy size={25} color="#fff" strokeWidth={2.5} />
+          </View>
+          <View style={styles.leaderboardTitleBlock}>
+            <Text style={styles.leaderboardTitle}>本周打卡排行榜</Text>
+            <Text style={styles.leaderboardSubtitle}>看看谁是本周最活跃</Text>
+          </View>
+          <ChevronRight size={22} color="rgba(255,255,255,0.85)" />
+        </View>
+        <View style={styles.leaderboardPeople}>
+          {leaderboard.slice(0, 3).map((item, index) => (
+            <RankMini key={item.user_id} item={item} rank={item.rank || index + 1} />
+          ))}
+          {leaderboard.length === 0 ? (
+            <Text style={styles.leaderboardEmpty}>暂无排行数据，记录一餐后会出现在这里。</Text>
+          ) : null}
+        </View>
+      </Pressable>
 
-      <Text style={styles.feedTitle}>全部公开</Text>
+      <View style={styles.feedHeader}>
+        <Text style={styles.feedTitle}>公开动态</Text>
+        <Pressable onPress={() => navigation.navigate('PublicFood', { mode: 'all' })}>
+          <Text style={styles.foodLink}>食物库</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.feedTools}>
+        <Pressable style={({ pressed }) => [styles.searchBar, pressed && styles.pressed]} onPress={() => navigation.navigate('CommunitySearch')}>
+          <Search size={19} color={colors.textMuted} strokeWidth={2.2} />
+          <Text style={styles.searchPlaceholder}>搜索动态内容或用户...</Text>
+        </Pressable>
+        <Pressable style={({ pressed }) => [styles.filterButton, pressed && styles.pressed]} onPress={() => navigation.navigate('CommunitySearch')}>
+          <Filter size={19} color={colors.textSecondary} strokeWidth={2.2} />
+          <Text style={styles.filterText}>筛选</Text>
+        </Pressable>
+        <Pressable style={({ pressed }) => [styles.publishButton, pressed && styles.pressed]} onPress={() => navigation.navigate('CirclePostEdit')}>
+          <PenLine size={18} color="#fff" strokeWidth={2.3} />
+          <Text style={styles.publishText}>发布</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.secondaryChips}>
+        <ShortcutChip label="校园餐" onPress={() => navigation.navigate('CampusCanteen')} />
+        <ShortcutChip label="分享食物" onPress={() => navigation.navigate('PublicFoodShare', { mode: 'public' })} />
+        <ShortcutChip label="补校园餐" onPress={() => navigation.navigate('PublicFoodShare', { mode: 'campus' })} />
+      </View>
+
       {feed.length === 0 ? (
         <Card>
           <Text style={styles.empty}>还没有动态，记录一餐后会在这里出现。</Text>
@@ -111,16 +140,17 @@ export function CommunityScreen() {
           >
             <Card>
               <View style={styles.authorRow}>
-                <Pressable onPress={() => navigation.navigate('ProfileSettings', { userId: item.author.id })}>
+                <Pressable onPress={() => navigation.navigate('PublicProfile', { userId: item.author.id })}>
                   {item.author.avatar ? <Image source={{ uri: item.author.avatar }} style={styles.avatar} /> : <View style={styles.avatarFallback} />}
                 </Pressable>
                 <View style={styles.authorMain}>
                   <Text style={styles.authorName}>{item.author.nickname || '食友'}</Text>
-                  <Text style={styles.feedTime}>{formatDateTime(item.record.record_time || item.record.created_at)}</Text>
+                  <Text style={styles.feedTime}>{feedMeta(item)}</Text>
                 </View>
               </View>
-              <Text style={[styles.recordDesc, styles.recordTitle]}>{feedTitle(item)}</Text>
+              <Text style={styles.recordTitle}>{feedTitle(item)}</Text>
               {feedBody(item) ? <Text style={styles.recordDesc}>{feedBody(item)}</Text> : null}
+              {feedImage(item) ? <Image source={{ uri: feedImage(item) }} style={styles.feedImage} /> : null}
               <View style={styles.nutritionRow}>
                 <Text style={styles.nutritionItem}>{Math.round(item.record.total_calories || 0)} kcal</Text>
                 <Text style={styles.nutritionItem}>P {Math.round(item.record.total_protein || 0)}g</Text>
@@ -132,6 +162,7 @@ export function CommunityScreen() {
                   <Text style={[styles.actionText, item.liked && styles.actionTextActive]}>{item.liked ? '已赞' : '点赞'} {item.like_count}</Text>
                 </Pressable>
                 <Text style={styles.actionText}>评论 {item.comment_count || item.comments?.length || 0}</Text>
+                <Send size={17} color={colors.textMuted} strokeWidth={2.2} />
               </View>
             </Card>
           </Pressable>
@@ -141,10 +172,36 @@ export function CommunityScreen() {
   )
 }
 
-function QuickEntry({ label, onPress }: { label: string; onPress: () => void }) {
+function QuickEntry({ label, icon, tone, onPress }: { label: string; icon: LucideIcon; tone: QuickTone; onPress: () => void }) {
+  const Icon = icon
+  const meta = quickToneMeta[tone]
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.quickEntry, pressed && styles.pressed]}>
+      <View style={[styles.quickIcon, { backgroundColor: meta.backgroundColor }]}>
+        <Icon size={24} color={meta.color} strokeWidth={2.3} />
+      </View>
       <Text style={styles.quickEntryText}>{label}</Text>
+    </Pressable>
+  )
+}
+
+function RankMini({ item, rank }: { item: CheckinLeaderboardItem; rank: number }) {
+  const checkinCount = item.checkin_count ?? item.record_count ?? 0
+  return (
+    <View style={styles.rankMini}>
+      <Text style={styles.rankNo}>{rank}</Text>
+      {item.avatar ? <Image source={{ uri: item.avatar }} style={styles.rankAvatar} /> : <View style={styles.rankAvatarFallback} />}
+      <Text style={styles.rankName} numberOfLines={1}>{item.nickname || '食友'}</Text>
+      <Text style={styles.rankCount}>{checkinCount}次</Text>
+    </View>
+  )
+}
+
+function ShortcutChip({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.shortcutChip, pressed && styles.pressed]} onPress={onPress}>
+      <Utensils size={16} color={colors.brandDark} strokeWidth={2.2} />
+      <Text style={styles.shortcutText}>{label}</Text>
     </Pressable>
   )
 }
@@ -154,63 +211,227 @@ function feedTitle(item: CommunityFeedItem): string {
 }
 
 function feedBody(item: CommunityFeedItem): string {
-  const body = String(item.record.body || '').trim()
+  const body = String(item.record.body || item.record.insight || '').trim()
   return body && body !== feedTitle(item) ? body : ''
 }
 
+function feedImage(item: CommunityFeedItem): string {
+  const images = Array.isArray(item.record.image_paths) ? item.record.image_paths : []
+  return String(images[0] || item.record.image_path || '').trim()
+}
+
+function feedMeta(item: CommunityFeedItem): string {
+  const type = item.target_type || item.record.feed_type || 'food_record'
+  const label = type === 'circle_post'
+    ? '自定义动态'
+    : type === 'exercise_log'
+      ? '运动打卡'
+      : type === 'campus_food'
+        ? '校园食堂'
+        : '饮食记录'
+  return `${label} · ${formatDateTime(item.record.record_time || item.record.created_at)}`
+}
+
 const styles = StyleSheet.create({
-  quickRow: {
+  quickGrid: {
     flexDirection: 'row',
     gap: 10,
     marginBottom: 16,
   },
   quickEntry: {
     flex: 1,
+    minHeight: 86,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: 16,
-    backgroundColor: colors.brandSoft,
-    paddingVertical: 13,
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  quickIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   pressed: {
     opacity: 0.72,
   },
   quickEntryText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  leaderboardCard: {
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 20,
+    backgroundColor: '#55bd91',
+    shadowColor: '#0f9f72',
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
+  },
+  leaderboardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  leaderboardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  leaderboardTitleBlock: {
+    flex: 1,
+  },
+  leaderboardTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  leaderboardSubtitle: {
+    marginTop: 4,
+    color: 'rgba(255,255,255,0.86)',
+    fontWeight: '700',
+  },
+  leaderboardPeople: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+  leaderboardEmpty: {
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  rankMini: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  rankNo: {
+    color: '#fff7c2',
+    fontWeight: '900',
+  },
+  rankAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginTop: 5,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  rankAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginTop: 5,
+    backgroundColor: 'rgba(255,255,255,0.34)',
+  },
+  rankName: {
+    maxWidth: '100%',
+    marginTop: 5,
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  rankCount: {
+    color: '#fff7c2',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  feedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  feedTitle: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  foodLink: {
     color: colors.brandDark,
+    fontWeight: '900',
+  },
+  feedTools: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  searchBar: {
+    flex: 1,
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    backgroundColor: colors.surface,
+  },
+  searchPlaceholder: {
+    marginLeft: 8,
+    color: colors.textMuted,
+    fontWeight: '700',
+  },
+  filterButton: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surface,
+  },
+  filterText: {
+    color: colors.textSecondary,
     fontWeight: '800',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.text,
-    marginBottom: 10,
+  publishButton: {
+    minHeight: 46,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    backgroundColor: colors.brand,
+  },
+  publishText: {
+    color: '#fff',
+    fontWeight: '900',
+  },
+  secondaryChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  shortcutChip: {
+    minHeight: 36,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    backgroundColor: colors.brandSoft,
+  },
+  shortcutText: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '900',
   },
   empty: {
     color: colors.textMuted,
-  },
-  rankRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  rankNo: {
-    width: 42,
-    color: colors.warning,
-    fontWeight: '900',
-  },
-  rankName: {
-    flex: 1,
-    minWidth: 0,
-    color: colors.text,
-    fontWeight: '700',
-  },
-  rankCount: {
-    color: colors.textSecondary,
-  },
-  feedTitle: {
-    marginBottom: 10,
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
   },
   authorRow: {
     flexDirection: 'row',
@@ -218,15 +439,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     marginRight: 10,
   },
   avatarFallback: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     marginRight: 10,
     backgroundColor: colors.brandSoft,
   },
@@ -235,20 +456,31 @@ const styles = StyleSheet.create({
   },
   authorName: {
     color: colors.text,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '900',
   },
   feedTime: {
-    marginTop: 2,
+    marginTop: 3,
     color: colors.textMuted,
     fontSize: 12,
   },
-  recordDesc: {
+  recordTitle: {
     color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 24,
+  },
+  recordDesc: {
+    marginTop: 6,
+    color: colors.textSecondary,
     lineHeight: 22,
   },
-  recordTitle: {
-    fontWeight: '800',
-    marginBottom: 4,
+  feedImage: {
+    width: '100%',
+    aspectRatio: 1.35,
+    borderRadius: 16,
+    marginTop: 12,
+    backgroundColor: colors.surfaceMuted,
   },
   nutritionRow: {
     flexDirection: 'row',
@@ -266,6 +498,7 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 22,
     marginTop: 16,
   },

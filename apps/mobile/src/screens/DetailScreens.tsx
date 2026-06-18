@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Alert, Image, Linking, Pressable, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, Linking, Pressable, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
@@ -34,6 +34,7 @@ import { Page } from '../components/Page'
 import { APP_VERSION } from '../config'
 import { clearRecentConsoleLogs, CONSOLE_LOG_BUFFER_LIMIT, getRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
 import type { RootStackParamList } from '../navigation/types'
+import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { formatDateTime, todayKey } from '../utils/date'
 import { userFacingErrorMessage, userFacingMessage } from '../utils/errors'
@@ -98,6 +99,7 @@ type EditableRecordItem = {
   sodiumMg: string
   source: FoodRecord['items'][number]
 }
+type AppDialog = ReturnType<typeof useAppDialog>
 
 type SelectedManualFood = {
   key: string
@@ -123,6 +125,7 @@ const defaultExpireDate = () => {
 export function DayRecordScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'DayRecord'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const date = route.params?.date || todayKey()
   const [records, setRecords] = useState<FoodRecord[]>([])
   const [loading, setLoading] = useState(false)
@@ -133,11 +136,11 @@ export function DayRecordScreen() {
       const data = await apiClient.getFoodRecordList(date)
       setRecords(data.records || [])
     } catch (error) {
-      showError('获取记录失败', error)
+      await showError(dialog, '获取记录失败', error)
     } finally {
       setLoading(false)
     }
-  }, [date])
+  }, [date, dialog])
 
   useFocusEffect(
     useCallback(() => {
@@ -152,7 +155,7 @@ export function DayRecordScreen() {
 
   const shareDay = async () => {
     if (records.length === 0) {
-      Alert.alert('暂无可分享记录', '这一天还没有饮食记录。')
+      await dialog.alert('暂无可分享记录', '这一天还没有饮食记录。', 'warning')
       return
     }
     try {
@@ -162,9 +165,9 @@ export function DayRecordScreen() {
       })
       if (result.action === Share.dismissedAction) return
       const reward = await apiClient.claimSharePosterReward({ shareScope: 'daily_food', shareDate: date })
-      showShareRewardAlert(reward)
+      await showShareRewardAlert(dialog, reward)
     } catch (error) {
-      showError('分享失败', error)
+      await showError(dialog, '分享失败', error)
     }
   }
 
@@ -202,6 +205,7 @@ export function DayRecordScreen() {
 export function RecordDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'RecordDetail'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [record, setRecord] = useState<FoodRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -223,11 +227,11 @@ export function RecordDetailScreen() {
       setRecord(data.record)
       if (!editing) syncEditor(data.record)
     } catch (error) {
-      showError('获取详情失败', error)
+      await showError(dialog, '获取详情失败', error)
     } finally {
       setLoading(false)
     }
-  }, [editing, route.params.recordId, syncEditor])
+  }, [dialog, editing, route.params.recordId, syncEditor])
 
   useFocusEffect(
     useCallback(() => {
@@ -247,9 +251,9 @@ export function RecordDetailScreen() {
       })
       if (result.action === Share.dismissedAction) return
       const reward = await apiClient.claimSharePosterReward({ recordId: record.id })
-      showShareRewardAlert(reward)
+      await showShareRewardAlert(dialog, reward)
     } catch (error) {
-      showError('分享失败', error)
+      await showError(dialog, '分享失败', error)
     }
   }
 
@@ -270,7 +274,7 @@ export function RecordDetailScreen() {
 
   const removeEditItem = (index: number) => {
     if (editItems.length <= 1) {
-      Alert.alert('至少保留一个食物', '饮食记录需要保留一项食物明细。')
+      void dialog.alert('至少保留一个食物', '饮食记录需要保留一项食物明细。', 'warning')
       return
     }
     setEditItems((current) => current.filter((_, itemIndex) => itemIndex !== index))
@@ -280,7 +284,7 @@ export function RecordDetailScreen() {
     if (!record) return
     const items = editItems.map(editableRecordItemPayload)
     if (items.length === 0) {
-      Alert.alert('无法保存', '请至少保留一项食物明细。')
+      void dialog.alert('无法保存', '请至少保留一项食物明细。', 'warning')
       return
     }
     setSaving(true)
@@ -301,31 +305,31 @@ export function RecordDetailScreen() {
       setRecord(data.record)
       syncEditor(data.record)
       setEditing(false)
-      Alert.alert('已保存', '记录已更新')
+      void dialog.alert('已保存', '记录已更新', 'success')
     } catch (error) {
-      showError('保存失败', error)
+      void dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setSaving(false)
     }
   }
 
-  const remove = () => {
-    Alert.alert('删除记录', '确定删除这条饮食记录吗？', [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '删除',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await apiClient.deleteFoodRecord(route.params.recordId)
-            Alert.alert('已删除', '记录已删除')
-            navigation.goBack()
-          } catch (error) {
-            showError('删除失败', error)
-          }
-        },
-      },
-    ])
+  const remove = async () => {
+    const confirmed = await dialog.confirm({
+      title: '删除记录',
+      message: '确定删除这条饮食记录吗？',
+      kind: 'danger',
+      cancelText: '取消',
+      confirmText: '删除',
+    })
+    if (!confirmed) return
+
+    try {
+      await apiClient.deleteFoodRecord(route.params.recordId)
+      await dialog.alert('已删除', '记录已删除', 'success')
+      navigation.goBack()
+    } catch (error) {
+      void dialog.alert('删除失败', userFacingErrorMessage(error), 'danger')
+    }
   }
 
   return (
@@ -435,6 +439,7 @@ export function RecordDetailScreen() {
 
 export function AnalyzeHistoryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -449,11 +454,11 @@ export function AnalyzeHistoryScreen() {
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       setTasks(visibleTasks)
     } catch (error) {
-      showError('获取识别历史失败', error)
+      await showError(dialog, '获取识别历史失败', error)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dialog])
 
   const refresh = useCallback(() => load(searchKeyword), [load, searchKeyword])
 
@@ -473,22 +478,21 @@ export function AnalyzeHistoryScreen() {
         taskType: isTextAnalysisTask(task) ? 'food_text' : 'food',
       })
     } catch (error) {
-      showError('重新识别失败', error)
+      await showError(dialog, '重新识别失败', error)
     } finally {
       setRetryingTaskId(null)
     }
-  }, [load, navigation, searchKeyword])
+  }, [dialog, load, navigation, searchKeyword])
 
-  const confirmRetryTask = useCallback((task: AnalysisTask) => {
-    Alert.alert(
-      '重新识别',
-      isTextAnalysisTask(task) ? '将使用这条记录的原文字内容重新识别。' : '将使用这条记录已上传的图片重新识别，不需要重新上传照片。',
-      [
-        { text: '取消', style: 'cancel' },
-        { text: '重新识别', onPress: () => void retryTask(task) },
-      ],
-    )
-  }, [retryTask])
+  const confirmRetryTask = useCallback(async (task: AnalysisTask) => {
+    const confirmed = await dialog.confirm({
+      title: '重新识别',
+      message: isTextAnalysisTask(task) ? '将使用这条记录的原文字内容重新识别。' : '将使用这条记录已上传的图片重新识别，不需要重新上传照片。',
+      confirmText: '重新识别',
+      cancelText: '取消',
+    })
+    if (confirmed) void retryTask(task)
+  }, [dialog, retryTask])
 
   const openTask = useCallback((task: AnalysisTask) => {
     if (isPackagedAnalyzeHistoryTask(task)) {
@@ -507,7 +511,7 @@ export function AnalyzeHistoryScreen() {
       return
     }
     if (isAnalyzeRetryable(task)) {
-      confirmRetryTask(task)
+      void confirmRetryTask(task)
       return
     }
     navigation.navigate('AnalyzeLoading', {
@@ -570,7 +574,7 @@ export function AnalyzeHistoryScreen() {
             <View style={styles.buttonRow}>
               <SmallButton label={task.status === 'done' ? '查看结果' : isAnalyzeRetryable(task) ? '重新识别' : '查看进度'} disabled={retryingTaskId === task.id} onPress={() => openTask(task)} />
               {isAnalyzeRetryable(task) ? (
-                <SmallButton label={retryingTaskId === task.id ? '提交中' : '用原内容重试'} disabled={retryingTaskId === task.id} onPress={() => confirmRetryTask(task)} />
+                <SmallButton label={retryingTaskId === task.id ? '提交中' : '用原内容重试'} disabled={retryingTaskId === task.id} onPress={() => void confirmRetryTask(task)} />
               ) : null}
             </View>
           </Card>
@@ -582,6 +586,7 @@ export function AnalyzeHistoryScreen() {
 
 export function TextRecordScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [text, setText] = useState('')
   const [additionalContext, setAdditionalContext] = useState('')
   const [date, setDate] = useState(todayKey())
@@ -590,7 +595,7 @@ export function TextRecordScreen() {
 
   const submit = async () => {
     if (!text.trim()) {
-      Alert.alert('请输入食物描述', '可以先写下这餐吃了什么，例如“一碗米饭、番茄炒蛋”。')
+      void dialog.alert('请输入食物描述', '可以先写下这餐吃了什么，例如“一碗米饭、番茄炒蛋”。', 'warning')
       return
     }
     setLoading(true)
@@ -598,7 +603,7 @@ export function TextRecordScreen() {
       const data = await apiClient.submitTextTask({ text, additionalContext, mealType, date })
       navigation.navigate('AnalyzeLoading', { taskId: data.task_id, mealType, date, taskType: 'food_text' })
     } catch (error) {
-      showError('提交失败', error)
+      void dialog.alert('提交失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -646,6 +651,7 @@ export function TextRecordScreen() {
 export function ManualRecordScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<RouteProp<RootStackParamList, 'ManualRecord'>>()
+  const dialog = useAppDialog()
   const [browse, setBrowse] = useState<ManualFoodBrowseResult | null>(null)
   const [sourceChannel, setSourceChannel] = useState<ManualFoodSourceChannel>(route.params?.sourceChannel || 'recommended')
   const [catalogItems, setCatalogItems] = useState<ManualFoodItem[]>([])
@@ -662,11 +668,11 @@ export function ManualRecordScreen() {
       const data = await apiClient.getManualFoodBrowse(20)
       setBrowse(data)
     } catch (error) {
-      showError('获取食物库失败', error)
+      await showError(dialog, '获取食物库失败', error)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dialog])
 
   const loadCatalog = useCallback(async (category: ManualFoodSourceChannel) => {
     if (category === 'recommended') {
@@ -678,11 +684,11 @@ export function ManualRecordScreen() {
       const data = await apiClient.getManualFoodCatalog(category, { page: 1, pageSize: 30 })
       setCatalogItems(data.items || [])
     } catch (error) {
-      showError('获取食物来源失败', error)
+      await showError(dialog, '获取食物来源失败', error)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dialog])
 
   useFocusEffect(
     useCallback(() => {
@@ -731,7 +737,7 @@ export function ManualRecordScreen() {
       const data = await apiClient.searchManualFood(keyword, 30)
       setResults(data.results || [])
     } catch (error) {
-      showError('搜索失败', error)
+      await showError(dialog, '搜索失败', error)
     } finally {
       setLoading(false)
     }
@@ -780,12 +786,12 @@ export function ManualRecordScreen() {
 
   const save = async () => {
     if (!selectedItems.length) {
-      Alert.alert('请选择食物', '先从下方搜索结果或推荐食物中添加到已选清单。')
+      void dialog.alert('请选择食物', '先从下方搜索结果或推荐食物中添加到已选清单。', 'warning')
       return
     }
     const invalid = selectedItems.find((entry) => numberFrom(entry.weight) <= 0)
     if (invalid) {
-      Alert.alert('请检查份量', `请为「${manualFoodTitle(invalid.item)}」填写有效份量。`)
+      void dialog.alert('请检查份量', `请为「${manualFoodTitle(invalid.item)}」填写有效份量。`, 'warning')
       return
     }
     setLoading(true)
@@ -800,35 +806,34 @@ export function ManualRecordScreen() {
       })
       const message = `已将 ${selectedItems.length} 项食物写入${getMealTypeLabel(mealType)}。`
       if (!saved.id) {
-        Alert.alert('已保存', message, [
-          {
-            text: '回到首页',
-            onPress: () => {
-              setSelectedItems([])
-              navigation.dispatch(CommonActions.navigate('MainTabs'))
-            },
-          },
-        ])
+        const result = await dialog.showDialog({
+          title: '已保存',
+          message,
+          kind: 'success',
+          confirmText: '回到首页',
+        })
+        if (result === 'confirm') {
+          setSelectedItems([])
+          navigation.dispatch(CommonActions.navigate('MainTabs'))
+        }
         return
       }
-      Alert.alert('已保存', message, [
-        {
-          text: '回到首页',
-          onPress: () => {
-            setSelectedItems([])
-            navigation.dispatch(CommonActions.navigate('MainTabs'))
-          },
-        },
-        {
-          text: '查看记录',
-          onPress: () => {
-            setSelectedItems([])
-            navigation.navigate('RecordDetail', { recordId: saved.id })
-          },
-        },
-      ])
+      const result = await dialog.showDialog({
+        title: '已保存',
+        message,
+        kind: 'success',
+        cancelText: '回到首页',
+        confirmText: '查看记录',
+      })
+      if (result === 'confirm') {
+        setSelectedItems([])
+        navigation.navigate('RecordDetail', { recordId: saved.id })
+      } else if (result === 'cancel') {
+        setSelectedItems([])
+        navigation.dispatch(CommonActions.navigate('MainTabs'))
+      }
     } catch (error) {
-      showError('保存失败', error)
+      void dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -907,20 +912,22 @@ export function ManualRecordScreen() {
           <Text style={styles.subtitle}>{selectedItems.length} 项</Text>
         </View>
         {selectedItems.length === 0 ? (
-          <Text style={styles.empty}>点击下方食物卡片添加到这餐。</Text>
+          <Text style={styles.empty}>点击下方食物卡片添加到这餐，选好后再保存为饮食记录。</Text>
         ) : (
-          selectedItems.map((entry) => (
-            <SelectedManualFoodCard
-              key={entry.key}
-              entry={entry}
-              onWeightChange={(value) => updateSelectedWeight(entry.key, value)}
-              onAdjust={(delta) => adjustSelectedWeight(entry.key, delta)}
-              onPreset={(ratio) => applySelectedPreset(entry.key, ratio)}
-              onRemove={() => removeSelectedFood(entry.key)}
-            />
-          ))
+          <>
+            {selectedItems.map((entry) => (
+              <SelectedManualFoodCard
+                key={entry.key}
+                entry={entry}
+                onWeightChange={(value) => updateSelectedWeight(entry.key, value)}
+                onAdjust={(delta) => adjustSelectedWeight(entry.key, delta)}
+                onPreset={(ratio) => applySelectedPreset(entry.key, ratio)}
+                onRemove={() => removeSelectedFood(entry.key)}
+              />
+            ))}
+            <AppButton label="保存为饮食记录" loading={loading} onPress={save} />
+          </>
         )}
-        <AppButton label="保存为饮食记录" loading={loading} onPress={save} />
       </Card>
 
       {list.length ? <Text style={styles.groupTitle}>{listTitle}</Text> : null}
@@ -939,6 +946,7 @@ export function ManualRecordScreen() {
 
 export function FoodLibraryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [browse, setBrowse] = useState<ManualFoodBrowseResult | null>(null)
   const [customFoods, setCustomFoods] = useState<ManualFoodItem[]>([])
   const [query, setQuery] = useState('')
@@ -967,11 +975,11 @@ export function FoodLibraryScreen() {
       setBrowse(browseData)
       setCustomFoods(customData.items || [])
     } catch (error) {
-      showError('获取食物库失败', error)
+      await dialog.alert('获取食物库失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dialog])
 
   useEffect(() => {
     void load()
@@ -983,7 +991,7 @@ export function FoodLibraryScreen() {
       const data = await apiClient.searchManualFood(query, 40)
       setResults(data.results || [])
     } catch (error) {
-      showError('搜索失败', error)
+      await dialog.alert('搜索失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -1003,7 +1011,7 @@ export function FoodLibraryScreen() {
     }
     const validationError = validateCustomFoodDraft(title, defaultWeightGrams, per100g)
     if (validationError) {
-      Alert.alert('请检查食物信息', validationError)
+      await dialog.alert('请检查食物信息', validationError, 'warning')
       return
     }
     const imageList = splitImageUrls(imageUrls)
@@ -1038,9 +1046,9 @@ export function FoodLibraryScreen() {
       setSodiumMg('')
       setShareToPublic(false)
       await load()
-      Alert.alert('已保存', shareToPublic ? '自定义食物已保存，并同步提交到公共库审核。' : '自定义食物已加入食物库。')
+      await dialog.alert('已保存', shareToPublic ? '自定义食物已保存，并同步提交到公共库审核。' : '自定义食物已加入食物库。', 'success')
     } catch (error) {
-      showError('保存失败', error)
+      await dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -1090,6 +1098,7 @@ export function FoodLibraryScreen() {
 }
 
 export function HealthProfileScreen() {
+  const dialog = useAppDialog()
   const [profile, setProfile] = useState<HealthProfile | null>(null)
   const [height, setHeight] = useState('')
   const [weight, setWeight] = useState('')
@@ -1124,11 +1133,11 @@ export function HealthProfileScreen() {
       setCarbsTarget(stringFrom(targets.carbs_target))
       setFatTarget(stringFrom(targets.fat_target))
     } catch (error) {
-      showError('获取健康档案失败', error)
+      await dialog.alert('获取健康档案失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dialog])
 
   useEffect(() => {
     void load()
@@ -1156,9 +1165,9 @@ export function HealthProfileScreen() {
         })
       }
       await load()
-      Alert.alert('已保存', '健康档案已更新')
+      await dialog.alert('已保存', '健康档案已更新', 'success')
     } catch (error) {
-      showError('保存失败', error)
+      await dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -1191,6 +1200,7 @@ export function HealthProfileScreen() {
 export function BodyMetricRecordScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'BodyMetricRecord'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const type = route.params.type
   const [summary, setSummary] = useState<BodyMetricsSummary | null>(null)
   const [logs, setLogs] = useState<ExerciseLogItem[]>([])
@@ -1214,11 +1224,11 @@ export function BodyMetricRecordScreen() {
         setLogs(logData.logs || [])
       }
     } catch (error) {
-      showError('获取身体记录失败', error)
+      await dialog.alert('获取身体记录失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
-  }, [date, type])
+  }, [date, dialog, type])
 
   useEffect(() => {
     void load()
@@ -1249,14 +1259,14 @@ export function BodyMetricRecordScreen() {
       if (type === 'weight') {
         const nextValue = Number(value)
         if (!Number.isFinite(nextValue) || nextValue < 20 || nextValue > 300) {
-          Alert.alert('体重范围不正确', '请输入 20-300kg 的体重')
+          await dialog.alert('体重范围不正确', '请输入 20-300kg 的体重', 'warning')
           return
         }
         await apiClient.saveBodyWeightRecord(nextValue, date, `weight-${date}-${Date.now()}`)
       } else if (type === 'water') {
         const amount = overrideValue ?? Number(value)
         if (!Number.isFinite(amount) || amount <= 0 || amount > 5000) {
-          Alert.alert('水量范围不正确', '请输入 1-5000ml')
+          await dialog.alert('水量范围不正确', '请输入 1-5000ml', 'warning')
           return
         }
         await apiClient.addBodyWaterLog(Math.round(amount), date)
@@ -1273,9 +1283,9 @@ export function BodyMetricRecordScreen() {
         setExerciseImageUrl('')
       }
       await load()
-      Alert.alert(type === 'exercise' ? '已提交' : '已保存', type === 'exercise' ? '后台运动分析已提交，完成后会写入当天记录。' : '记录已更新')
+      await dialog.alert(type === 'exercise' ? '已提交' : '已保存', type === 'exercise' ? '后台运动分析已提交，完成后会写入当天记录。' : '记录已更新', 'success')
     } catch (error) {
-      showError('保存失败', error)
+      await dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -1319,7 +1329,7 @@ export function BodyMetricRecordScreen() {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
       if (!permission.granted) {
-        Alert.alert('无法访问相册', '请在系统设置中允许访问相册后再添加运动截图。')
+        await dialog.alert('无法访问相册', '请在系统设置中允许访问相册后再添加运动截图。', 'warning')
         return
       }
       const picked = await ImagePicker.launchImageLibraryAsync({
@@ -1337,7 +1347,7 @@ export function BodyMetricRecordScreen() {
       })
       setExerciseImageUrl(uploaded.imageUrl)
     } catch (error) {
-      showError('上传运动截图失败', error)
+      await dialog.alert('上传运动截图失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -1345,7 +1355,7 @@ export function BodyMetricRecordScreen() {
 
   const deleteWeight = async (recordId?: string) => {
     if (!recordId) {
-      Alert.alert('无法删除', '这条体重记录信息不完整，请刷新后重试。')
+      await dialog.alert('无法删除', '这条体重记录信息不完整，请刷新后重试。', 'warning')
       return
     }
     setMutatingId(recordId)
@@ -1353,27 +1363,31 @@ export function BodyMetricRecordScreen() {
       await apiClient.deleteBodyWeightRecord(recordId)
       await load()
     } catch (error) {
-      showError('删除体重记录失败', error)
+      await dialog.alert('删除体重记录失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setMutatingId('')
     }
   }
 
-  const confirmDeleteWeight = (entry: BodyMetricWeightEntry) => {
+  const confirmDeleteWeight = async (entry: BodyMetricWeightEntry) => {
     const recordId = String(entry.id || '').trim()
     if (!recordId) {
-      Alert.alert('无法删除', '这条体重记录信息不完整，请刷新后重试。')
+      await dialog.alert('无法删除', '这条体重记录信息不完整，请刷新后重试。', 'warning')
       return
     }
-    Alert.alert('删除体重记录', `确定删除 ${entry.date} 的 ${entry.value}kg 吗？`, [
-      { text: '取消', style: 'cancel' },
-      { text: '删除', style: 'destructive', onPress: () => void deleteWeight(recordId) },
-    ])
+    const confirmed = await dialog.confirm({
+      title: '删除体重记录',
+      message: `确定删除 ${entry.date} 的 ${entry.value}kg 吗？`,
+      kind: 'danger',
+      confirmText: '删除',
+      cancelText: '取消',
+    })
+    if (confirmed) await deleteWeight(recordId)
   }
 
   const deleteWater = async (logId?: string) => {
     if (!logId) {
-      Alert.alert('无法删除', '这条喝水记录信息不完整，可刷新后重试，或使用清空当天。')
+      await dialog.alert('无法删除', '这条喝水记录信息不完整，可刷新后重试，或使用清空当天。', 'warning')
       return
     }
     setMutatingId(logId)
@@ -1381,23 +1395,27 @@ export function BodyMetricRecordScreen() {
       await apiClient.deleteBodyWaterLog(logId)
       await load()
     } catch (error) {
-      showError('删除喝水记录失败', error)
+      await dialog.alert('删除喝水记录失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setMutatingId('')
     }
   }
 
-  const confirmDeleteWater = (log: { id?: string; amount_ml: number }) => {
+  const confirmDeleteWater = async (log: { id?: string; amount_ml: number }) => {
     const amount = Math.round(log.amount_ml || 0)
     const logId = String(log.id || '').trim()
     if (!logId) {
-      confirmResetWater('这条旧记录没有单次编号，只能清空当天喝水记录。')
+      await confirmResetWater('这条旧记录没有单次编号，只能清空当天喝水记录。')
       return
     }
-    Alert.alert('删除这次喝水', `确定删除 ${amount}ml 这次记录吗？`, [
-      { text: '取消', style: 'cancel' },
-      { text: '删除', style: 'destructive', onPress: () => void deleteWater(logId) },
-    ])
+    const confirmed = await dialog.confirm({
+      title: '删除这次喝水',
+      message: `确定删除 ${amount}ml 这次记录吗？`,
+      kind: 'danger',
+      confirmText: '删除',
+      cancelText: '取消',
+    })
+    if (confirmed) await deleteWater(logId)
   }
 
   const resetWater = async () => {
@@ -1407,18 +1425,22 @@ export function BodyMetricRecordScreen() {
       await apiClient.resetBodyWaterLogs(date)
       await load()
     } catch (error) {
-      showError('清空喝水记录失败', error)
+      await dialog.alert('清空喝水记录失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setMutatingId('')
     }
   }
 
-  const confirmResetWater = (prefix?: string) => {
+  const confirmResetWater = async (prefix?: string) => {
     if (currentWaterTotal <= 0) return
-    Alert.alert('清空喝水记录', `${prefix ? `${prefix}\n\n` : ''}确定清空 ${date} 的 ${currentWaterTotal}ml 喝水记录吗？`, [
-      { text: '取消', style: 'cancel' },
-      { text: '清空', style: 'destructive', onPress: () => void resetWater() },
-    ])
+    const confirmed = await dialog.confirm({
+      title: '清空喝水记录',
+      message: `${prefix ? `${prefix}\n\n` : ''}确定清空 ${date} 的 ${currentWaterTotal}ml 喝水记录吗？`,
+      kind: 'danger',
+      confirmText: '清空',
+      cancelText: '取消',
+    })
+    if (confirmed) await resetWater()
   }
 
   const deleteExercise = async (logId: string) => {
@@ -1427,23 +1449,27 @@ export function BodyMetricRecordScreen() {
       await apiClient.deleteExerciseLog(logId)
       await load()
     } catch (error) {
-      showError('删除运动记录失败', error)
+      await dialog.alert('删除运动记录失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setMutatingId('')
     }
   }
 
-  const confirmDeleteExercise = (log: ExerciseLogItem) => {
+  const confirmDeleteExercise = async (log: ExerciseLogItem) => {
     const logId = String(log.id || '').trim()
     if (!logId) {
-      Alert.alert('无法删除', '这条运动记录信息不完整，请刷新后重试。')
+      await dialog.alert('无法删除', '这条运动记录信息不完整，请刷新后重试。', 'warning')
       return
     }
     const desc = log.exercise_desc || log.exercise_type || '这条运动'
-    Alert.alert('删除运动记录', `确定删除「${desc}」吗？`, [
-      { text: '取消', style: 'cancel' },
-      { text: '删除', style: 'destructive', onPress: () => void deleteExercise(logId) },
-    ])
+    const confirmed = await dialog.confirm({
+      title: '删除运动记录',
+      message: `确定删除「${desc}」吗？`,
+      kind: 'danger',
+      confirmText: '删除',
+      cancelText: '取消',
+    })
+    if (confirmed) await deleteExercise(logId)
   }
 
   const title = type === 'water' ? '喝水记录' : type === 'exercise' ? '运动记录' : '体重记录'
@@ -1478,7 +1504,7 @@ export function BodyMetricRecordScreen() {
                   <Text style={styles.itemName}>{entry.value} kg</Text>
                   <Text style={styles.subtitle}>{formatDateTime(entry.recorded_at || entry.date)}</Text>
                 </View>
-                <SmallButton label={mutatingId === entry.id ? '删除中' : '删除'} danger onPress={() => confirmDeleteWeight(entry)} />
+                <SmallButton label={mutatingId === entry.id ? '删除中' : '删除'} danger onPress={() => void confirmDeleteWeight(entry)} />
               </View>
             ))}
           </Card>
@@ -1507,7 +1533,7 @@ export function BodyMetricRecordScreen() {
             <Field label="自定义水量 ml" value={value} onChangeText={setValue} keyboardType="decimal-pad" />
             <View style={styles.buttonRow}>
               <SmallButton label="添加" onPress={() => void save()} />
-              <SmallButton label={mutatingId === 'water-reset' ? '清空中' : '清空当天'} danger onPress={() => confirmResetWater()} />
+              <SmallButton label={mutatingId === 'water-reset' ? '清空中' : '清空当天'} danger onPress={() => void confirmResetWater()} />
             </View>
           </Card>
           <Card>
@@ -1517,7 +1543,7 @@ export function BodyMetricRecordScreen() {
               {waterLogs.map((log, index) => {
                 const logId = String(log.id || `fallback-${index}`)
                 return (
-                  <Pressable key={logId} style={styles.waterChip} onPress={() => confirmDeleteWater(log)}>
+                  <Pressable key={logId} style={styles.waterChip} onPress={() => void confirmDeleteWater(log)}>
                     <Text style={styles.waterChipText}>+{Math.round(log.amount_ml)}ml</Text>
                     <Text style={styles.waterChipDelete}>{log.id ? (mutatingId === log.id ? '删除中' : '删除') : '当天清空'}</Text>
                   </Pressable>
@@ -1574,7 +1600,7 @@ export function BodyMetricRecordScreen() {
                   <Text style={styles.subtitle}>{Math.round(log.calories_burned || 0)} kcal · {log.duration_min || 0} 分钟</Text>
                   {log.ai_reasoning ? <Text style={styles.notes}>{log.ai_reasoning}</Text> : null}
                 </View>
-                <SmallButton label={mutatingId === log.id ? '删除中' : '删除'} danger onPress={() => confirmDeleteExercise(log)} />
+                <SmallButton label={mutatingId === log.id ? '删除中' : '删除'} danger onPress={() => void confirmDeleteExercise(log)} />
               </View>
             </Card>
           ))}
@@ -1593,6 +1619,7 @@ export function BodyMetricRecordScreen() {
 
 export function ExpiryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [dashboard, setDashboard] = useState<FoodExpiryDashboard | null>(null)
   const [items, setItems] = useState<FoodExpiryItem[]>([])
   const [foodName, setFoodName] = useState('')
@@ -1613,11 +1640,11 @@ export function ExpiryScreen() {
       setDashboard(dashboardData)
       setItems(itemData.items || [])
     } catch (error) {
-      showError('获取保质期失败', error)
+      await dialog.alert('获取保质期失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dialog])
 
   useEffect(() => {
     void load()
@@ -1632,9 +1659,9 @@ export function ExpiryScreen() {
       setQuantityNote('')
       setNote('')
       await load()
-      Alert.alert('已保存', '食物保质期已加入')
+      await dialog.alert('已保存', '食物保质期已加入', 'success')
     } catch (error) {
-      showError('保存失败', error)
+      await dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -1646,7 +1673,7 @@ export function ExpiryScreen() {
       await apiClient.updateFoodExpiryStatus(itemId, status)
       await load()
     } catch (error) {
-      showError('更新失败', error)
+      await dialog.alert('更新失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -1692,6 +1719,7 @@ export function ExpiryScreen() {
 
 export function RewardCenterScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [reward, setReward] = useState<RewardCenterResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -1700,11 +1728,11 @@ export function RewardCenterScreen() {
     try {
       setReward(await apiClient.getRewardCenter())
     } catch (error) {
-      showError('获取积分失败', error)
+      await showError(dialog, '获取积分失败', error)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dialog])
 
   useFocusEffect(
     useCallback(() => {
@@ -1784,6 +1812,7 @@ export function RewardCenterScreen() {
 export function CirclePostEditScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CirclePostEdit'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const postId = route.params?.postId
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -1817,11 +1846,11 @@ export function CirclePostEditScreen() {
       setSodiumMg(numberField(record.sodium_mg))
       setTotalWeightGrams(numberField(record.total_weight_grams))
     } catch (error) {
-      showError('加载动态失败', error)
+      await dialog.alert('加载动态失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
-  }, [postId])
+  }, [dialog, postId])
 
   useEffect(() => {
     void load()
@@ -1830,12 +1859,12 @@ export function CirclePostEditScreen() {
   const pickImages = async () => {
     const remaining = CIRCLE_POST_MAX_IMAGES - imageUrls.length
     if (remaining <= 0) {
-      Alert.alert('图片已满', `最多上传 ${CIRCLE_POST_MAX_IMAGES} 张图片。`)
+      await dialog.alert('图片已满', `最多上传 ${CIRCLE_POST_MAX_IMAGES} 张图片。`, 'warning')
       return
     }
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permission.granted) {
-      Alert.alert('需要相册权限', '请选择动态图片。')
+      await dialog.alert('需要相册权限', '请选择动态图片。', 'warning')
       return
     }
     const picked = await ImagePicker.launchImageLibraryAsync({
@@ -1859,7 +1888,7 @@ export function CirclePostEditScreen() {
       }
       setImageUrls((current) => [...current, ...uploaded].slice(0, CIRCLE_POST_MAX_IMAGES))
     } catch (error) {
-      showError('上传动态图片失败', error)
+      await dialog.alert('上传动态图片失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -1889,10 +1918,10 @@ export function CirclePostEditScreen() {
       }
       if (postId) await apiClient.updateCirclePost(postId, input)
       else await apiClient.createCirclePost(input)
-      Alert.alert(postId ? '已保存' : '已发布', postId ? '动态修改已保存' : '动态已发布到圈子')
+      await dialog.alert(postId ? '已保存' : '已发布', postId ? '动态修改已保存' : '动态已发布到圈子', 'success')
       navigation.goBack()
     } catch (error) {
-      showError(postId ? '保存失败' : '发布失败', error)
+      await dialog.alert(postId ? '保存失败' : '发布失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
@@ -1923,6 +1952,7 @@ export function CirclePostEditScreen() {
 
 export function FriendsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [activeTab, setActiveTab] = useState<FriendTab>('friends')
   const [friends, setFriends] = useState<FriendUserItem[]>([])
   const [received, setReceived] = useState<FriendRequestItem[]>([])
@@ -1959,11 +1989,11 @@ export function FriendsScreen() {
       setReceived(requestData.received || [])
       setSent(requestData.sent || [])
     } catch (error) {
-      showError('获取好友失败', error)
+      await showError(dialog, '获取好友失败', error)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dialog])
 
   useFocusEffect(useCallback(() => {
     void load()
@@ -1983,7 +2013,7 @@ export function FriendsScreen() {
     const q = userQuery.trim()
     if (!q) {
       setResults([])
-      Alert.alert('请输入昵称')
+      await dialog.alert('请输入昵称', '可以输入好友昵称或用户 ID 进行搜索。', 'warning')
       return
     }
     setSearching(true)
@@ -1991,7 +2021,7 @@ export function FriendsScreen() {
       const data = await apiClient.searchFriends(q)
       setResults(data.list || [])
     } catch (error) {
-      showError('搜索失败', error)
+      await showError(dialog, '搜索失败', error)
     } finally {
       setSearching(false)
     }
@@ -2004,9 +2034,9 @@ export function FriendsScreen() {
       await apiClient.sendFriendRequest(id)
       setResults((prev) => prev.map((user) => friendUserId(user) === id ? { ...user, is_pending: true } : user))
       await load()
-      Alert.alert('已发送', '好友请求已发送')
+      await dialog.alert('已发送', '好友请求已发送', 'success')
     } catch (error) {
-      showError('发送失败', error)
+      await showError(dialog, '发送失败', error)
     } finally {
       setMutatingId(null)
     }
@@ -2019,25 +2049,25 @@ export function FriendsScreen() {
     try {
       await apiClient.respondFriendRequest(request.id, action)
       await load()
-      Alert.alert(action === 'accept' ? '已添加好友' : '已拒绝')
+      await dialog.alert(action === 'accept' ? '已添加好友' : '已拒绝', undefined, 'success')
     } catch (error) {
-      showError('处理失败', error)
+      await showError(dialog, '处理失败', error)
     } finally {
       setMutatingId(null)
     }
   }
 
-  const confirmDeleteFriend = (friend: FriendUserItem) => {
+  const confirmDeleteFriend = async (friend: FriendUserItem) => {
     const id = friendUserId(friend)
     if (!id) return
-    Alert.alert(
-      '删除好友',
-      `确定删除好友「${friendDisplayName(friend)}」吗？删除后需要重新添加。`,
-      [
-        { text: '取消', style: 'cancel' },
-        { text: '删除', style: 'destructive', onPress: () => void deleteFriend(friend) },
-      ],
-    )
+    const confirmed = await dialog.confirm({
+      title: '删除好友',
+      message: `确定删除好友「${friendDisplayName(friend)}」吗？删除后需要重新添加。`,
+      kind: 'danger',
+      confirmText: '删除',
+      cancelText: '取消',
+    })
+    if (confirmed) void deleteFriend(friend)
   }
 
   const deleteFriend = async (friend: FriendUserItem) => {
@@ -2047,24 +2077,24 @@ export function FriendsScreen() {
     try {
       await apiClient.deleteFriend(id)
       await load()
-      Alert.alert('已删除')
+      await dialog.alert('已删除', undefined, 'success')
     } catch (error) {
-      showError('删除失败', error)
+      await showError(dialog, '删除失败', error)
     } finally {
       setMutatingId(null)
     }
   }
 
-  const confirmCancelSent = (request: FriendRequestItem) => {
+  const confirmCancelSent = async (request: FriendRequestItem) => {
     if (friendRequestStatus(request) !== 'pending') return
-    Alert.alert(
-      '撤销申请',
-      `确定撤销对「${friendRequestDisplayName(request)}」的好友申请吗？`,
-      [
-        { text: '保留', style: 'cancel' },
-        { text: '撤销', style: 'destructive', onPress: () => void cancelSent(request) },
-      ],
-    )
+    const confirmed = await dialog.confirm({
+      title: '撤销申请',
+      message: `确定撤销对「${friendRequestDisplayName(request)}」的好友申请吗？`,
+      kind: 'danger',
+      confirmText: '撤销',
+      cancelText: '保留',
+    })
+    if (confirmed) void cancelSent(request)
   }
 
   const cancelSent = async (request: FriendRequestItem) => {
@@ -2072,9 +2102,9 @@ export function FriendsScreen() {
     try {
       await apiClient.cancelSentFriendRequest(request.id)
       await load()
-      Alert.alert('已撤销')
+      await dialog.alert('已撤销', undefined, 'success')
     } catch (error) {
-      showError('撤销失败', error)
+      await showError(dialog, '撤销失败', error)
     } finally {
       setMutatingId(null)
     }
@@ -2105,7 +2135,7 @@ export function FriendsScreen() {
             actions={(
               <>
                 <SmallButton label="私信" onPress={() => openChat(friend)} />
-                <SmallButton label="删除" danger disabled={mutatingId === `delete:${id}`} onPress={() => confirmDeleteFriend(friend)} />
+                <SmallButton label="删除" danger disabled={mutatingId === `delete:${id}`} onPress={() => void confirmDeleteFriend(friend)} />
               </>
             )}
           />
@@ -2189,7 +2219,7 @@ export function FriendsScreen() {
             request={request}
             onPress={() => openProfile(userId)}
             actions={pending ? (
-              <SmallButton label="撤销申请" danger disabled={mutatingId === `cancel:${request.id}`} onPress={() => confirmCancelSent(request)} />
+              <SmallButton label="撤销申请" danger disabled={mutatingId === `cancel:${request.id}`} onPress={() => void confirmCancelSent(request)} />
             ) : (
               <Pill text={friendRequestStatusLabel(request.status)} />
             )}
@@ -2222,6 +2252,7 @@ export function FriendsScreen() {
 }
 export function NotificationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [notifications, setNotifications] = useState<CommunityNotificationItem[]>([])
   const [unread, setUnread] = useState(0)
   const [activeTab, setActiveTab] = useState<NotificationTab>('all')
@@ -2259,7 +2290,7 @@ export function NotificationsScreen() {
       setUnread(nextUnread)
       setHasMore(Boolean(data.has_more))
     } catch (error) {
-      showError('获取互动消息失败', error)
+      await showError(dialog, '获取互动消息失败', error)
     } finally {
       if (append) {
         setLoadingMore(false)
@@ -2267,7 +2298,7 @@ export function NotificationsScreen() {
         setLoading(false)
       }
     }
-  }, [])
+  }, [dialog])
 
   useEffect(() => {
     void load(activeTab, 0, false)
@@ -2292,7 +2323,7 @@ export function NotificationsScreen() {
       setUnread(data.unread_count || 0)
       setNotifications((prev) => prev.map((item) => ({ ...item, is_read: true })))
     } catch (error) {
-      showError('标记已读失败', error)
+      await showError(dialog, '标记已读失败', error)
     } finally {
       setLoading(false)
     }
@@ -2306,7 +2337,7 @@ export function NotificationsScreen() {
   const openNotification = async (item: CommunityNotificationItem) => {
     const targetId = notificationTargetId(item)
     if (!targetId) {
-      Alert.alert('未找到对应动态')
+      await dialog.alert('未找到对应动态', '这条互动消息缺少可跳转的动态信息。', 'warning')
       return
     }
     if (!item.is_read) {
@@ -2386,6 +2417,7 @@ export function NotificationsScreen() {
 
 export function AboutFeedbackScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [category, setCategory] = useState<FeedbackCategoryKey>('bug')
   const [content, setContent] = useState('')
   const [contact, setContact] = useState('')
@@ -2425,11 +2457,11 @@ export function AboutFeedbackScreen() {
 
   const submit = async () => {
     if (trimmedContentLength < 5) {
-      Alert.alert('请补充反馈内容', '请至少填写 5 个字，帮助我们定位问题或理解建议。')
+      await dialog.alert('请补充反馈内容', '请至少填写 5 个字，帮助我们定位问题或理解建议。', 'warning')
       return
     }
     if (uploadingFeedbackImages) {
-      Alert.alert('截图还在处理', '请等截图处理完成后再提交反馈。')
+      await dialog.alert('截图还在处理', '请等截图处理完成后再提交反馈。', 'warning')
       return
     }
     try {
@@ -2452,9 +2484,9 @@ export function AboutFeedbackScreen() {
       setContent('')
       setContact('')
       setFeedbackImageUrls([])
-      Alert.alert('已提交', '反馈已经进入处理队列。')
+      await dialog.alert('已提交', '反馈已经进入处理队列。', 'success')
     } catch (error) {
-      Alert.alert('提交失败', userFacingErrorMessage(error))
+      await dialog.alert('提交失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setSubmittingFeedback(false)
     }
@@ -2466,7 +2498,7 @@ export function AboutFeedbackScreen() {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
       if (!permission.granted) {
-        Alert.alert('无法访问相册', '请在系统设置中允许访问相册后再添加截图。')
+        await dialog.alert('无法访问相册', '请在系统设置中允许访问相册后再添加截图。', 'warning')
         return
       }
       const picked = await ImagePicker.launchImageLibraryAsync({
@@ -2488,7 +2520,7 @@ export function AboutFeedbackScreen() {
       }
       setFeedbackImageUrls((current) => [...current, ...uploaded].slice(0, FEEDBACK_MAX_IMAGES))
     } catch (error) {
-      Alert.alert('上传图片失败', userFacingErrorMessage(error))
+      await dialog.alert('上传图片失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setUploadingFeedbackImages(false)
     }
@@ -2508,7 +2540,7 @@ export function AboutFeedbackScreen() {
     } catch (error) {
       if (key === 'searchable') setSearchable(previous)
       else setPublicRecords(previous)
-      Alert.alert('设置失败', userFacingErrorMessage(error))
+      await dialog.alert('设置失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setSavingPrivacy(null)
     }
@@ -2522,15 +2554,15 @@ export function AboutFeedbackScreen() {
       clearRecentRequestTraces()
       clearRecentConsoleLogs()
       setDiagnosticVersion((current) => current + 1)
-      Alert.alert('已清除', '本地缓存和诊断记录已清理，登录状态已保留。')
+      await dialog.alert('已清除', '本地缓存和诊断记录已清理，登录状态已保留。', 'success')
     } catch (error) {
-      Alert.alert('清除失败', userFacingErrorMessage(error))
+      await dialog.alert('清除失败', userFacingErrorMessage(error), 'danger')
     }
   }
 
   const copyOfficialEmail = async () => {
     await Clipboard.setStringAsync(OFFICIAL_EMAIL)
-    Alert.alert('已复制邮箱', OFFICIAL_EMAIL)
+    await dialog.alert('已复制邮箱', OFFICIAL_EMAIL, 'success')
   }
 
   const openOfficialEmail = async () => {
@@ -3369,8 +3401,8 @@ function buildDayShareMessage(date: string, records: FoodRecord[]): string {
   return lines.join('\n')
 }
 
-function showShareRewardAlert(result: Awaited<ReturnType<typeof apiClient.claimSharePosterReward>>) {
-  Alert.alert('分享完成', result.message || (result.claimed ? `分享奖励 +${result.credits || 0} 积分` : '分享已完成'))
+async function showShareRewardAlert(dialog: AppDialog, result: Awaited<ReturnType<typeof apiClient.claimSharePosterReward>>) {
+  await dialog.alert('分享完成', result.message || (result.claimed ? `分享奖励 +${result.credits || 0} 积分` : '分享已完成'), 'success')
 }
 
 function nutrientNumber(nutrients: Nutrients | undefined, key: keyof Nutrients): number {
@@ -3534,8 +3566,8 @@ function stringFrom(value: unknown): string {
   return value == null ? '' : String(value)
 }
 
-function showError(title: string, error: unknown) {
-  Alert.alert(title, userFacingErrorMessage(error))
+async function showError(dialog: AppDialog, title: string, error: unknown) {
+  await dialog.alert(title, userFacingErrorMessage(error), 'danger')
 }
 
 function taskStatusLabel(status: AnalysisTask['status']): string {

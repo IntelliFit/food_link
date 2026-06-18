@@ -3,15 +3,16 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { CommonActions } from '@react-navigation/native'
+import { BarChart3, Camera, Home, UserRound, UsersRound, type LucideIcon } from 'lucide-react-native'
 import { colors, radius, shadow } from '../theme'
 import { RecordActionSheet, type RecordAction } from '../components/RecordActionSheet'
 import type { RootStackParamList } from './types'
 
-const TAB_LABELS: Record<string, { label: string; icon: string }> = {
-  HomeTab: { label: '首页', icon: 'H' },
-  StatsTab: { label: '分析', icon: 'A' },
-  CommunityTab: { label: '圈子', icon: 'C' },
-  ProfileTab: { label: '我的', icon: 'M' },
+const TAB_LABELS: Record<string, { label: string; icon: LucideIcon }> = {
+  HomeTab: { label: '首页', icon: Home },
+  StatsTab: { label: '分析', icon: BarChart3 },
+  CommunityTab: { label: '圈子', icon: UsersRound },
+  ProfileTab: { label: '我的', icon: UserRound },
 }
 
 export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
@@ -46,7 +47,9 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const renderTab = (route: BottomTabBarProps['state']['routes'][number]) => {
     const index = state.routes.findIndex((item) => item.key === route.key)
     const focused = state.index === index
-    const meta = TAB_LABELS[route.name] || { label: route.name, icon: '?' }
+    const meta = TAB_LABELS[route.name]
+    if (!meta) return null
+    const Icon = meta.icon
     return (
       <Pressable
         key={route.key}
@@ -55,9 +58,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         onPress={() => navigation.navigate(route.name)}
         style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
       >
-        <View style={[styles.tabIconCircle, focused && styles.tabIconCircleActive]}>
-          <Text style={[styles.tabIcon, focused && styles.tabIconActive]}>{meta.icon}</Text>
-        </View>
+        <Icon size={25} color={focused ? colors.brand : '#9ca3af'} strokeWidth={focused ? 2.6 : 2.2} />
         <Text style={[styles.tabText, focused && styles.tabTextActive]}>{meta.label}</Text>
       </Pressable>
     )
@@ -68,8 +69,13 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
       <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
         <View style={styles.bar}>
           <View style={styles.side}>{leftRoutes.map(renderTab)}</View>
-          <Pressable style={({ pressed }) => [styles.centerButton, pressed && styles.pressed]} onPress={() => setRecordMenuVisible(true)}>
-            <Text style={styles.centerIcon}>+</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="记录一餐"
+            style={({ pressed }) => [styles.centerButton, pressed && styles.pressed]}
+            onPress={() => setRecordMenuVisible(true)}
+          >
+            <Camera size={36} color="#fff" strokeWidth={2.4} />
           </Pressable>
           <View style={styles.side}>{rightRoutes.map(renderTab)}</View>
         </View>
@@ -89,17 +95,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 18,
+    paddingHorizontal: 0,
     backgroundColor: 'transparent',
   },
   bar: {
-    minHeight: 74,
-    borderRadius: 30,
+    minHeight: 78,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     ...shadow,
   },
   side: {
@@ -118,25 +125,6 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.76,
   },
-  tabIconCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceMuted,
-  },
-  tabIconCircleActive: {
-    backgroundColor: colors.brandSoft,
-  },
-  tabIcon: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: colors.textMuted,
-  },
-  tabIconActive: {
-    color: colors.brandDark,
-  },
   tabText: {
     fontSize: 12,
     color: colors.textMuted,
@@ -149,7 +137,7 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     marginHorizontal: 8,
-    marginTop: -32,
+    marginTop: -34,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
@@ -161,9 +149,8 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   centerIcon: {
-    color: '#fff',
-    fontSize: 34,
-    lineHeight: 36,
-    fontWeight: '600',
+    width: 34,
+    height: 34,
+    tintColor: '#fff',
   },
 })

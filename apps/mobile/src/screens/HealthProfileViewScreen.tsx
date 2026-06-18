@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { useFocusEffect } from '@react-navigation/native'
 import type { HealthProfile, HealthReportExtract } from '@food-link/core'
@@ -7,6 +7,7 @@ import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
+import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { userFacingErrorMessage, userFacingMessage } from '../utils/errors'
 import { readImageAsBase64DataUrl } from '../utils/image'
@@ -72,6 +73,7 @@ const REPORT_TASK_POLL_INTERVAL_MS = 4000
 const REPORT_TASK_POLL_TIMEOUT_MS = 90000
 
 export function HealthProfileViewScreen() {
+  const dialog = useAppDialog()
   const [profile, setProfile] = useState<HealthProfile | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -80,6 +82,9 @@ export function HealthProfileViewScreen() {
   const [reportImageUrls, setReportImageUrls] = useState<string[]>([])
   const [reportPolling, setReportPolling] = useState(false)
   const [reportNotice, setReportNotice] = useState('')
+  const showError = useCallback((title: string, error: unknown) => {
+    return dialog.alert(title, userFacingErrorMessage(error), 'danger')
+  }, [dialog])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -89,11 +94,11 @@ export function HealthProfileViewScreen() {
       const urls = data.health_condition?.report_extract?._image_urls || []
       setReportImageUrls(urls)
     } catch (error) {
-      showError('获取健康档案失败', error)
+      await showError('获取健康档案失败', error)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [showError])
 
   useFocusEffect(
     useCallback(() => {
@@ -115,9 +120,9 @@ export function HealthProfileViewScreen() {
       setProfile(data)
       setEditingField(null)
       setEditValue('')
-      Alert.alert('已保存', `${fieldLabels[editingField]}已更新`)
+      await dialog.alert('已保存', `${fieldLabels[editingField]}已更新`, 'success')
     } catch (error) {
-      showError('保存健康档案失败', error)
+      await showError('保存健康档案失败', error)
     } finally {
       setSaving(false)
     }
@@ -126,7 +131,7 @@ export function HealthProfileViewScreen() {
   const uploadReportImages = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permission.granted) {
-      Alert.alert('需要相册权限', '请选择体检报告或病例图片。')
+      await dialog.alert('需要相册权限', '请选择体检报告或病例图片。', 'warning')
       return
     }
     const picked = await ImagePicker.launchImageLibraryAsync({
@@ -148,10 +153,10 @@ export function HealthProfileViewScreen() {
       const task = await apiClient.submitReportExtractionTask({ imageUrl: urls[0], imageUrls: urls })
       applyReportProcessing(urls)
       setReportNotice(`已上传 ${urls.length} 张报告，识别完成后会自动刷新。`)
-      Alert.alert('已提交识别', '报告正在后台识别，完成后会自动刷新到健康档案。')
+      await dialog.alert('已提交识别', '报告正在后台识别，完成后会自动刷新到健康档案。', 'success')
       void pollReportTaskUntilSettled(task.taskId)
     } catch (error) {
-      showError('上传报告失败', error)
+      await showError('上传报告失败', error)
     } finally {
       setSaving(false)
     }
@@ -160,7 +165,7 @@ export function HealthProfileViewScreen() {
   const retryReportExtraction = async () => {
     const urls = reportImageUrls.length ? reportImageUrls : profile?.health_condition?.report_extract?._image_urls || []
     if (!urls.length) {
-      Alert.alert('请先上传报告图片')
+      await dialog.alert('请先上传报告图片', undefined, 'warning')
       return
     }
     setSaving(true)
@@ -168,10 +173,10 @@ export function HealthProfileViewScreen() {
       const task = await apiClient.submitReportExtractionTask({ imageUrl: urls[0], imageUrls: urls })
       applyReportProcessing(urls)
       setReportNotice('已重新提交报告识别，完成后会自动刷新。')
-      Alert.alert('已重新提交', '报告正在后台识别，完成后会自动刷新到健康档案。')
+      await dialog.alert('已重新提交', '报告正在后台识别，完成后会自动刷新到健康档案。', 'success')
       void pollReportTaskUntilSettled(task.taskId)
     } catch (error) {
-      showError('重新识别失败', error)
+      await showError('重新识别失败', error)
     } finally {
       setSaving(false)
     }
@@ -516,10 +521,6 @@ function executionModeLabel(value?: string | null): string {
   if (raw.includes('fast') || raw === 'lite') return '快速模式'
   if (raw.includes('strict') || raw.includes('gemini35')) return '精准模式'
   return '普通模式'
-}
-
-function showError(title: string, error: unknown) {
-  Alert.alert(title, userFacingErrorMessage(error))
 }
 
 function isTerminalTaskStatus(status?: string): boolean {

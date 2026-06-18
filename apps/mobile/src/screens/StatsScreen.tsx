@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
@@ -9,6 +9,7 @@ import {
   type StatsRange,
   type StatsSummary,
 } from '@food-link/core'
+import { BarChart3, ChevronDown, HeartPulse, LineChart, PieChart, Sparkles, TrendingUp, type LucideIcon } from 'lucide-react-native'
 import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
@@ -16,8 +17,17 @@ import { InsightMarkdownView } from '../components/InsightMarkdownView'
 import { MacroRow } from '../components/MacroRow'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
-import { colors } from '../theme'
+import { useAppDialog } from '../providers/DialogProvider'
+import { colors, radius } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
+
+type AnalysisPanel = 'health' | 'nutrition' | 'structure'
+
+const analysisTabs: Array<{ key: AnalysisPanel; label: string }> = [
+  { key: 'health', label: '健康指数' },
+  { key: 'nutrition', label: 'AI分析' },
+  { key: 'structure', label: '热量分布' },
+]
 
 function insightContent(result: StatsInsightResult): string {
   return normalizeInsightText(String(result.analysis_summary || result.content || ''))
@@ -25,7 +35,9 @@ function insightContent(result: StatsInsightResult): string {
 
 export function StatsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const [range, setRange] = useState<StatsRange>('week')
+  const [panel, setPanel] = useState<AnalysisPanel>('health')
   const [summary, setSummary] = useState<StatsSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [insightLoading, setInsightLoading] = useState(false)
@@ -38,11 +50,11 @@ export function StatsScreen() {
     try {
       setSummary(await apiClient.getStatsSummary(range))
     } catch (error) {
-      Alert.alert('获取分析失败', userFacingErrorMessage(error))
+      void dialog.alert('获取分析失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
-  }, [range])
+  }, [dialog, range])
 
   useEffect(() => {
     void load()
@@ -51,7 +63,8 @@ export function StatsScreen() {
   const health = summary?.health_index
   const riskCards = health?.risk_cards || []
   const insightText = useMemo(() => normalizeInsightText(summary?.analysis_summary || ''), [summary?.analysis_summary])
-  const recordedDays = Math.max(0, Number(summary?.recorded_days ?? 0))
+  const recordedDays = Math.max(0, Number(summary?.recorded_days ?? summary?.streak_days ?? 0))
+  const hasEnoughHealthData = Boolean(health?.has_enough_data)
   const insightMeta = insightStatusText(summary)
 
   const generateInsight = useCallback(async () => {
@@ -78,37 +91,211 @@ export function StatsScreen() {
           analysis_summary_used_today: result.analysis_summary_used_today ?? result.used_today ?? prev.analysis_summary_used_today,
         }
       })
-      Alert.alert('已更新', 'AI 风险解读已生成')
+      void dialog.alert('已更新', 'AI 风险解读已生成', 'success')
     } catch (error) {
       const message = userFacingErrorMessage(error, 'AI 风险解读生成失败')
       setInsightError(message)
-      Alert.alert('生成失败', message)
+      void dialog.alert('生成失败', message, 'danger')
     } finally {
       setInsightLoading(false)
     }
-  }, [insightLoading, range, recordedDays])
+  }, [dialog, insightLoading, range, recordedDays])
 
   return (
     <Page title="分析" subtitle="健康指数、AI 解读和餐次结构" refreshing={loading} onRefresh={load}>
-      <View style={styles.switchRow}>
+      <View style={styles.rangeRow}>
         <RangeButton label="近一周" active={range === 'week'} onPress={() => setRange('week')} />
         <RangeButton label="近一月" active={range === 'month'} onPress={() => setRange('month')} />
       </View>
-      <View style={styles.quickGrid}>
-        <QuickEntry label="AI 助手" onPress={() => navigation.navigate('AiAssistant')} />
-        <QuickEntry label="代谢分析" onPress={() => navigation.navigate('StatsMetabolic')} />
-      </View>
-      <View style={styles.quickGrid}>
-        <QuickEntry label="身体趋势" onPress={() => navigation.navigate('BodyTrends')} />
-        <QuickEntry label="体重趋势" onPress={() => navigation.navigate('TrendDetail', { kind: 'weight' })} />
-      </View>
-      <View style={styles.quickGrid}>
-        <QuickEntry label="饮水趋势" onPress={() => navigation.navigate('TrendDetail', { kind: 'water' })} />
-        <QuickEntry label="运动趋势" onPress={() => navigation.navigate('TrendDetail', { kind: 'exercise' })} />
+
+      {hasEnoughHealthData ? (
+        <HealthOverviewCard health={health} summary={summary} />
+      ) : (
+        <Card>
+          <View style={styles.gateRow}>
+            <View style={styles.gateIcon}>
+              <TrendingUp size={24} color="#5c9ed4" strokeWidth={2.3} />
+            </View>
+            <View style={styles.gateCopy}>
+              <Text style={styles.gateTitle}>连续记录两天后显示健康指数</Text>
+              <Text style={styles.subtitle}>
+                当前已记录 {recordedDays} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。
+              </Text>
+            </View>
+          </View>
+        </Card>
+      )}
+
+      <View style={styles.segmented}>
+        {analysisTabs.map((item) => (
+          <Pressable
+            key={item.key}
+            style={({ pressed }) => [styles.segmentItem, panel === item.key && styles.segmentItemActive, pressed && styles.pressed]}
+            onPress={() => setPanel(item.key)}
+          >
+            <Text style={[styles.segmentText, panel === item.key && styles.segmentTextActive]}>{item.label}</Text>
+          </Pressable>
+        ))}
       </View>
 
+      {panel === 'health' ? (
+        <HealthPanel
+          hasEnoughHealthData={hasEnoughHealthData}
+          riskCards={riskCards}
+          health={health}
+          expandedRiskKey={expandedRiskKey}
+          onToggleRisk={(key) => setExpandedRiskKey((prev) => (prev === key ? null : key))}
+        />
+      ) : null}
+
+      {panel === 'nutrition' ? (
+        <AiPanel
+          summary={summary}
+          insightText={insightText}
+          insightMeta={insightMeta}
+          insightError={insightError}
+          insightLoading={insightLoading}
+          onGenerate={generateInsight}
+        />
+      ) : null}
+
+      {panel === 'structure' ? <StructurePanel summary={summary} /> : null}
+
       <Card>
-        <Text style={styles.sectionTitle}>摄入趋势</Text>
+        <Text style={styles.sectionTitle}>更多分析</Text>
+        <View style={styles.toolGrid}>
+          <AnalysisTool icon={Sparkles} label="AI 助手" onPress={() => navigation.navigate('AiAssistant')} />
+          <AnalysisTool icon={HeartPulse} label="代谢分析" onPress={() => navigation.navigate('StatsMetabolic')} />
+          <AnalysisTool icon={LineChart} label="身体趋势" onPress={() => navigation.navigate('BodyTrends')} />
+        </View>
+      </Card>
+    </Page>
+  )
+}
+
+function HealthOverviewCard({ health, summary }: { health: StatsSummary['health_index']; summary: StatsSummary | null }) {
+  const score = Math.round(health?.overall_score ?? 0)
+  return (
+    <Card>
+      <View style={styles.rowBetween}>
+        <View>
+          <Text style={styles.sectionTitle}>关注综合分</Text>
+          <Text style={styles.subtitle}>连续记录 {summary?.streak_days || 0} 天 · 当前周期</Text>
+        </View>
+        <View style={[styles.scoreBadge, riskToneStyle(scoreToTone(score))]}>
+          <Text style={styles.scoreBadgeText}>{scoreToLabel(score)}</Text>
+        </View>
+      </View>
+      <View style={styles.scoreRow}>
+        <Text style={styles.scoreNumber}>{score || '--'}</Text>
+        <Text style={styles.scoreUnit}>/ 100</Text>
+      </View>
+      <Text style={styles.subtitle}>
+        {health?.overview_copy || '结果仅供健康习惯参考，不代替医学判断。'}
+      </Text>
+    </Card>
+  )
+}
+
+function HealthPanel({
+  hasEnoughHealthData,
+  riskCards,
+  health,
+  expandedRiskKey,
+  onToggleRisk,
+}: {
+  hasEnoughHealthData: boolean
+  riskCards: RiskCard[]
+  health: StatsSummary['health_index']
+  expandedRiskKey: string | null
+  onToggleRisk: (key: string) => void
+}) {
+  if (!hasEnoughHealthData) return null
+  return (
+    <Card>
+      <View style={styles.rowBetween}>
+        <Text style={styles.sectionTitle}>健康指标关注</Text>
+        <Text style={styles.metaText}>仅供参考</Text>
+      </View>
+      {riskCards.length === 0 ? <Text style={styles.subtitle}>继续记录后会生成可关注的风险卡片。</Text> : null}
+      {riskCards.slice(0, 6).map((card) => (
+        <RiskCardRow
+          key={card.key}
+          card={card}
+          expanded={expandedRiskKey === card.key}
+          onPress={() => onToggleRisk(card.key)}
+        />
+      ))}
+      {(health?.action_list || []).length ? (
+        <View style={styles.actionList}>
+          <Text style={styles.actionListTitle}>优先行动</Text>
+          {(health?.action_list || []).slice(0, 3).map((item, index) => (
+            <View key={`${item}-${index}`} style={styles.actionItem}>
+              <Text style={styles.actionBullet}>{index + 1}</Text>
+              <Text style={styles.actionText}>{item}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </Card>
+  )
+}
+
+function AiPanel({
+  summary,
+  insightText,
+  insightMeta,
+  insightError,
+  insightLoading,
+  onGenerate,
+}: {
+  summary: StatsSummary | null
+  insightText: string
+  insightMeta: string
+  insightError: string
+  insightLoading: boolean
+  onGenerate: () => void
+}) {
+  return (
+    <Card>
+      <View style={styles.rowBetween}>
+        <Text style={styles.sectionTitle}>AI 风险解读</Text>
+        {insightMeta ? <Text style={styles.metaPill}>{insightMeta}</Text> : null}
+      </View>
+      {summary?.analysis_summary_needs_refresh ? (
+        <Text style={styles.refreshHint}>当前数据有更新，建议重新生成一次解读。</Text>
+      ) : null}
+      {insightText ? (
+        <View style={styles.markdownBlock}>
+          <InsightMarkdownView text={insightText} />
+        </View>
+      ) : (
+        <View style={styles.emptyInsight}>
+          <Sparkles size={24} color={colors.brandDark} strokeWidth={2.3} />
+          <View style={styles.emptyInsightCopy}>
+            <Text style={styles.emptyInsightTitle}>先记录饮食后生成 AI 风险解读</Text>
+            <Text style={styles.subtitle}>会按当前统计周期整理风险趋势、判断依据和下一步行动。</Text>
+          </View>
+        </View>
+      )}
+      {insightError ? <Text style={styles.errorText}>{insightError}</Text> : null}
+      <AppButton
+        label={insightText ? '更新 AI 风险解读' : '生成 AI 风险解读'}
+        loading={insightLoading}
+        onPress={onGenerate}
+      />
+    </Card>
+  )
+}
+
+function StructurePanel({ summary }: { summary: StatsSummary | null }) {
+  return (
+    <>
+      <Card>
+        <View style={styles.rowBetween}>
+          <Text style={styles.sectionTitle}>摄入趋势</Text>
+          <BarChart3 size={24} color={colors.brandDark} strokeWidth={2.4} />
+        </View>
         <Text style={styles.bigNumber}>{Math.round(summary?.avg_calories_per_day || 0)} kcal</Text>
         <Text style={styles.subtitle}>日均摄入 · 连续记录 {summary?.streak_days || 0} 天</Text>
         <MacroRow label="蛋白质" value={summary?.total_protein} target={summary?.total_calories ? summary.total_calories * 0.18 / 4 : 0} />
@@ -118,61 +305,9 @@ export function StatsScreen() {
 
       <Card>
         <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>健康指数</Text>
-          <Text style={styles.score}>{health?.overall_score ?? '--'}</Text>
+          <Text style={styles.sectionTitle}>餐次热量分布</Text>
+          <PieChart size={24} color={colors.brandDark} strokeWidth={2.4} />
         </View>
-        <Text style={styles.subtitle}>
-          {health?.overview_copy || '记录更多饮食、体重、喝水和运动数据后，会生成更完整的健康指数。'}
-        </Text>
-        {riskCards.slice(0, 6).map((card) => (
-          <RiskCardRow
-            key={card.key}
-            card={card}
-            expanded={expandedRiskKey === card.key}
-            onPress={() => setExpandedRiskKey((prev) => (prev === card.key ? null : card.key))}
-          />
-        ))}
-        {(health?.action_list || []).length ? (
-          <View style={styles.actionList}>
-            <Text style={styles.actionListTitle}>优先行动</Text>
-            {(health?.action_list || []).slice(0, 3).map((item, index) => (
-              <View key={`${item}-${index}`} style={styles.actionItem}>
-                <Text style={styles.actionBullet}>{index + 1}</Text>
-                <Text style={styles.actionText}>{item}</Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-      </Card>
-
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>AI 风险解读</Text>
-          {insightMeta ? <Text style={styles.metaPill}>{insightMeta}</Text> : null}
-        </View>
-        {summary?.analysis_summary_needs_refresh ? (
-          <Text style={styles.refreshHint}>当前数据有更新，建议重新生成一次解读。</Text>
-        ) : null}
-        {insightText ? (
-          <View style={styles.markdownBlock}>
-            <InsightMarkdownView text={insightText} />
-          </View>
-        ) : (
-          <View style={styles.emptyInsight}>
-            <Text style={styles.emptyInsightTitle}>先记录饮食后生成 AI 风险解读</Text>
-            <Text style={styles.subtitle}>会按当前统计周期整理风险趋势、判断依据和下一步行动。</Text>
-          </View>
-        )}
-        {insightError ? <Text style={styles.errorText}>{insightError}</Text> : null}
-        <AppButton
-          label={insightText ? '更新 AI 风险解读' : '生成 AI 风险解读'}
-          loading={insightLoading}
-          onPress={generateInsight}
-        />
-      </Card>
-
-      <Card>
-        <Text style={styles.sectionTitle}>餐次结构</Text>
         {Object.entries(summary?.by_meal || {}).filter(([, value]) => value > 0).slice(0, 6).map(([key, value]) => (
           <View key={key} style={styles.mealLine}>
             <Text style={styles.mealName}>{mealLabel(key)}</Text>
@@ -183,29 +318,32 @@ export function StatsScreen() {
           <Text style={styles.subtitle}>记录餐食后会展示各餐次热量结构。</Text>
         ) : null}
       </Card>
-    </Page>
+    </>
   )
 }
 
 function RangeButton({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.rangeButton, active && styles.rangeButtonActive]}>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.rangeButton, active && styles.rangeButtonActive, pressed && styles.pressed]}>
       <Text style={[styles.rangeText, active && styles.rangeTextActive]}>{label}</Text>
+      {active ? <ChevronDown size={15} color="#fff" strokeWidth={2.4} /> : null}
     </Pressable>
   )
 }
 
-function QuickEntry({ label, onPress }: { label: string; onPress: () => void }) {
+function AnalysisTool({ icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
+  const Icon = icon
   return (
-    <Pressable style={styles.quickEntry} onPress={onPress}>
-      <Text style={styles.quickEntryText}>{label}</Text>
+    <Pressable style={({ pressed }) => [styles.toolChip, pressed && styles.pressed]} onPress={onPress}>
+      <Icon size={18} color={colors.brandDark} strokeWidth={2.3} />
+      <Text style={styles.toolChipText}>{label}</Text>
     </Pressable>
   )
 }
 
 function RiskCardRow({ card, expanded, onPress }: { card: RiskCard; expanded: boolean; onPress: () => void }) {
   return (
-    <Pressable style={styles.riskRow} onPress={onPress}>
+    <Pressable style={({ pressed }) => [styles.riskRow, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.riskHeader}>
         <View style={styles.riskTitleWrap}>
           <Text style={styles.riskTitle}>{card.title}</Text>
@@ -252,6 +390,20 @@ function mealLabel(value: string): string {
   return labels[value] || value
 }
 
+function scoreToTone(score: number): RiskCard['tone'] {
+  if (score >= 78) return 'positive'
+  if (score >= 60) return 'neutral'
+  if (score >= 42) return 'warning'
+  return 'danger'
+}
+
+function scoreToLabel(score: number): string {
+  if (score >= 78) return '偏保护'
+  if (score >= 60) return '基本中性'
+  if (score >= 42) return '需要关注'
+  return '重点关注'
+}
+
 function riskToneStyle(tone: RiskCard['tone']) {
   if (tone === 'danger') return styles.riskToneDanger
   if (tone === 'warning') return styles.riskToneWarning
@@ -260,69 +412,131 @@ function riskToneStyle(tone: RiskCard['tone']) {
 }
 
 const styles = StyleSheet.create({
-  switchRow: {
+  rangeRow: {
     flexDirection: 'row',
     gap: 10,
     marginBottom: 16,
   },
-  quickGrid: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-  },
-  quickEntry: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 46,
-    borderRadius: 16,
-    backgroundColor: colors.brandSoft,
-  },
-  quickEntryText: {
-    color: colors.brandDark,
-    fontWeight: '800',
-  },
   rangeButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 16,
+    minHeight: 48,
+    borderRadius: radius.pill,
     backgroundColor: colors.surface,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
   },
   rangeButtonActive: {
     backgroundColor: colors.brand,
   },
   rangeText: {
     color: colors.textSecondary,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   rangeTextActive: {
     color: '#fff',
+  },
+  gateRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  gateIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#edf6ff',
+  },
+  gateCopy: {
+    flex: 1,
+  },
+  gateTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
+  segmented: {
+    flexDirection: 'row',
+    gap: 6,
+    borderRadius: 18,
+    padding: 6,
+    marginBottom: 16,
+    backgroundColor: colors.surface,
+  },
+  segmentItem: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentItemActive: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  segmentText: {
+    color: colors.textSecondary,
+    fontWeight: '800',
+  },
+  segmentTextActive: {
+    color: colors.brandDark,
   },
   rowBetween: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.text,
     marginBottom: 10,
+  },
+  subtitle: {
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  scoreBadge: {
+    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  scoreBadgeText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  scoreNumber: {
+    color: colors.brandDark,
+    fontSize: 40,
+    fontWeight: '900',
+  },
+  scoreUnit: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 7,
+    marginLeft: 4,
   },
   bigNumber: {
     fontSize: 32,
     color: colors.brandDark,
     fontWeight: '900',
   },
-  subtitle: {
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  score: {
-    color: colors.brandDark,
-    fontSize: 26,
-    fontWeight: '900',
+  metaText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '800',
   },
   riskRow: {
     paddingVertical: 12,
@@ -349,7 +563,7 @@ const styles = StyleSheet.create({
   },
   riskScorePill: {
     minWidth: 54,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     paddingHorizontal: 10,
     paddingVertical: 6,
     alignItems: 'center',
@@ -427,7 +641,7 @@ const styles = StyleSheet.create({
   metaPill: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 999,
+    borderRadius: radius.pill,
     overflow: 'hidden',
     backgroundColor: colors.brandSoft,
     color: colors.brandDark,
@@ -444,10 +658,15 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   emptyInsight: {
+    flexDirection: 'row',
+    gap: 12,
     padding: 14,
     borderRadius: 14,
     backgroundColor: colors.surfaceMuted,
     marginBottom: 14,
+  },
+  emptyInsightCopy: {
+    flex: 1,
   },
   emptyInsightTitle: {
     color: colors.text,
@@ -470,5 +689,27 @@ const styles = StyleSheet.create({
   mealValue: {
     color: colors.text,
     fontWeight: '800',
+  },
+  toolGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  toolChip: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    backgroundColor: colors.brandSoft,
+  },
+  toolChipText: {
+    color: colors.brandDark,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  pressed: {
+    opacity: 0.72,
   },
 })

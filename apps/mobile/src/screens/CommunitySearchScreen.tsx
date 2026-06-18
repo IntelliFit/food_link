@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import type {
@@ -14,6 +14,7 @@ import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
+import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { formatDateTime } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
@@ -25,6 +26,7 @@ const MAX_HISTORY = 30
 export function CommunitySearchScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<RouteProp<RootStackParamList, 'CommunitySearch'>>()
+  const dialog = useAppDialog()
   const [keyword, setKeyword] = useState(route.params?.keyword || '')
   const [activeTab, setActiveTab] = useState<CommunitySearchTab>('content')
   const [contentResults, setContentResults] = useState<ContentSearchResult[]>([])
@@ -87,7 +89,7 @@ export function CommunitySearchScreen() {
   ) => {
     const q = (keywordOverride ?? keyword).trim()
     if (!q) {
-      Alert.alert('请输入搜索关键词', '可搜索公开动态内容或允许被搜索的用户。')
+      await dialog.alert('请输入搜索关键词', '可搜索公开动态内容或允许被搜索的用户。', 'warning')
       return
     }
     setLoading(true)
@@ -120,11 +122,11 @@ export function CommunitySearchScreen() {
         setUserHasMore(Boolean(data.has_more))
       }
     } catch (error) {
-      Alert.alert('搜索失败', userFacingErrorMessage(error))
+      await dialog.alert('搜索失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
-  }, [activeTab, keyword, saveHistory])
+  }, [activeTab, dialog, keyword, saveHistory])
 
   const submitSearch = () => {
     setContentResults([])
@@ -185,7 +187,7 @@ export function CommunitySearchScreen() {
     } catch (error) {
       setLikeMap((current) => ({ ...current, [key]: previousLiked }))
       setLikeCountMap((current) => ({ ...current, [key]: previousCount }))
-      Alert.alert('操作失败', userFacingErrorMessage(error))
+      await dialog.alert('操作失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLikingKey('')
     }
