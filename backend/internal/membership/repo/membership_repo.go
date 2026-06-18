@@ -525,6 +525,38 @@ func (r *MembershipRepo) CountDailySystemCreditUsage(ctx context.Context, userID
 		}
 		total += group.unitsByDate[chinaDate]
 	}
+	ledgerUsed, err := r.countDailySystemCreditUsageFromLedger(ctx, userID, chinaDate)
+	if err != nil {
+		return 0, err
+	}
+	total += ledgerUsed
+	return total, nil
+}
+
+func (r *MembershipRepo) countDailySystemCreditUsageFromLedger(ctx context.Context, userID, chinaDate string) (int, error) {
+	var rows []domain.UserEarnedCreditLedger
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND related_date = ? AND delta = ?", userID, chinaDate, 0).
+		Find(&rows).Error
+	if err != nil {
+		return 0, err
+	}
+	total := 0
+	for _, row := range rows {
+		if row.Meta == nil {
+			continue
+		}
+		if stringFromAny(row.Meta["ledger_role"]) != "system_credit_usage" {
+			continue
+		}
+		usage := creditUsageFromPayload(row.Meta)
+		if len(usage) == 0 {
+			continue
+		}
+		if byDate, ok := usage["system_by_date"].(map[string]any); ok {
+			total += intFromAny(byDate[chinaDate])
+		}
+	}
 	return total, nil
 }
 
@@ -579,9 +611,6 @@ func (r *MembershipRepo) GetEarnedCreditLedgerBySource(ctx context.Context, user
 }
 
 func (r *MembershipRepo) ChangeEarnedCredits(ctx context.Context, userID string, delta int, reason, sourceKey, relatedDate string, meta map[string]any) (*domain.UserEarnedCreditLedger, bool, error) {
-	if delta == 0 {
-		return nil, false, nil
-	}
 	if sourceKey != "" {
 		existing, err := r.GetEarnedCreditLedgerBySource(ctx, userID, reason, sourceKey)
 		if err != nil || existing != nil {
@@ -625,6 +654,89 @@ func (r *MembershipRepo) ChangeEarnedCredits(ctx context.Context, userID string,
 		return nil
 	})
 	return entry, entry != nil, err
+}
+
+func (r *MembershipRepo) ChangeCreditsWithSystemUsage(ctx context.Context, userID string, earnedDelta int, earnedReason, earnedSourceKey, systemReason, systemSourceKey, relatedDate string, earnedMeta, systemMeta map[string]any) error {
+	if earnedDelta == 0 && strings.TrimSpace(systemReason) == "" {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var user User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", userID).First(&user).Error; err != nil {
+			return err
+		}
+		nextBalance := user.EarnedCreditsBalance
+		earnedExists := false
+		if earnedDelta != 0 && strings.TrimSpace(earnedSourceKey) != "" {
+			var existing domain.UserEarnedCreditLedger
+			err := tx.Where("user_id = ? AND reason = ? AND source_key = ?", userID, earnedReason, earnedSourceKey).First(&existing).Error
+			if err == nil {
+				earnedExists = true
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
+		if earnedDelta != 0 && !earnedExists {
+			nextBalance += earnedDelta
+			if nextBalance < 0 {
+				return errors.New("earned credits balance is insufficient")
+			}
+			if err := tx.Table("weapp_user").Where("id = ?", userID).Update("earned_credits_balance", nextBalance).Error; err != nil {
+				return err
+			}
+			now := time.Now()
+			row := &domain.UserEarnedCreditLedger{
+				ID:           uuid.New().String(),
+				UserID:       userID,
+				Delta:        earnedDelta,
+				BalanceAfter: nextBalance,
+				Reason:       earnedReason,
+				Meta:         earnedMeta,
+				CreatedAt:    &now,
+				UpdatedAt:    &now,
+			}
+			if earnedSourceKey != "" {
+				row.SourceKey = &earnedSourceKey
+			}
+			if relatedDate != "" {
+				row.RelatedDate = &relatedDate
+			}
+			if err := tx.Create(row).Error; err != nil {
+				return err
+			}
+		}
+		if strings.TrimSpace(systemReason) == "" {
+			return nil
+		}
+		if strings.TrimSpace(systemSourceKey) != "" {
+			var existing domain.UserEarnedCreditLedger
+			err := tx.Where("user_id = ? AND reason = ? AND source_key = ?", userID, systemReason, systemSourceKey).First(&existing).Error
+			if err == nil {
+				return nil
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
+		now := time.Now()
+		row := &domain.UserEarnedCreditLedger{
+			ID:           uuid.New().String(),
+			UserID:       userID,
+			Delta:        0,
+			BalanceAfter: nextBalance,
+			Reason:       systemReason,
+			Meta:         systemMeta,
+			CreatedAt:    &now,
+			UpdatedAt:    &now,
+		}
+		if systemSourceKey != "" {
+			row.SourceKey = &systemSourceKey
+		}
+		if relatedDate != "" {
+			row.RelatedDate = &relatedDate
+		}
+		return tx.Create(row).Error
+	})
 }
 
 func (r *MembershipRepo) SumPositiveEarnedCreditsByDate(ctx context.Context, userID, chinaDate string) (int, error) {

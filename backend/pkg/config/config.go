@@ -24,20 +24,21 @@ import (
 )
 
 type Config struct {
-	ConfigSource string          `mapstructure:"config_source"`
-	App          AppConfig       `mapstructure:"app"`
-	Log          LogConfig       `mapstructure:"log"`
-	Database     DatabaseConfig  `mapstructure:"database"`
-	JWT          JWTConfig       `mapstructure:"jwt"`
-	OTel         OTelConfig      `mapstructure:"otel"`
-	Storage      StorageConfig   `mapstructure:"storage"`
-	External     ExternalConfig  `mapstructure:"external"`
-	AppAuth      AppAuthConfig   `mapstructure:"app_auth"`
-	Feishu       FeishuConfig    `mapstructure:"feishu"`
-	WechatPay    WechatPayConfig `mapstructure:"wechat_pay"`
-	Worker       WorkerConfig    `mapstructure:"worker"`
-	TaskQueue    TaskQueueConfig `mapstructure:"task_queue"`
-	Apollo       ApolloConfig    `mapstructure:"apollo"`
+	ConfigSource   string               `mapstructure:"config_source"`
+	App            AppConfig            `mapstructure:"app"`
+	Log            LogConfig            `mapstructure:"log"`
+	Database       DatabaseConfig       `mapstructure:"database"`
+	JWT            JWTConfig            `mapstructure:"jwt"`
+	OTel           OTelConfig           `mapstructure:"otel"`
+	Storage        StorageConfig        `mapstructure:"storage"`
+	External       ExternalConfig       `mapstructure:"external"`
+	AppAuth        AppAuthConfig        `mapstructure:"app_auth"`
+	Feishu         FeishuConfig         `mapstructure:"feishu"`
+	WechatPay      WechatPayConfig      `mapstructure:"wechat_pay"`
+	Worker         WorkerConfig         `mapstructure:"worker"`
+	TaskQueue      TaskQueueConfig      `mapstructure:"task_queue"`
+	AIUsagePricing AIUsagePricingConfig `mapstructure:"ai_usage_pricing"`
+	Apollo         ApolloConfig         `mapstructure:"apollo"`
 }
 
 type AppConfig struct {
@@ -153,6 +154,19 @@ type TaskQueueConfig struct {
 	Topic         string   `mapstructure:"topic"`
 	Brokers       []string `mapstructure:"brokers"`
 	ConsumerGroup string   `mapstructure:"consumer_group"`
+}
+
+type AIUsagePricingConfig struct {
+	DefaultTextModel               string  `mapstructure:"default_text_model"`
+	CreditsPerCNY                  float64 `mapstructure:"credits_per_cny"`
+	USDToCNY                       float64 `mapstructure:"usd_to_cny"`
+	CostMultiplier                 float64 `mapstructure:"cost_multiplier"`
+	MinimumCredits                 int     `mapstructure:"minimum_credits"`
+	MaximumCreditsPerRequest       int     `mapstructure:"maximum_credits_per_request"`
+	InputUSDPerMillionTokens       float64 `mapstructure:"input_usd_per_million_tokens"`
+	OutputUSDPerMillionTokens      float64 `mapstructure:"output_usd_per_million_tokens"`
+	CachedInputUSDPerMillionTokens float64 `mapstructure:"cached_input_usd_per_million_tokens"`
+	PricingSource                  string  `mapstructure:"pricing_source"`
 }
 
 type ApolloConfig struct {
@@ -1008,6 +1022,16 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("task_queue.buffer_size", 1024)
 	v.SetDefault("task_queue.topic", "food-link-analysis-tasks")
 	v.SetDefault("task_queue.consumer_group", "food-link-workers")
+	v.SetDefault("ai_usage_pricing.default_text_model", "deepseek-v4-pro")
+	v.SetDefault("ai_usage_pricing.credits_per_cny", 25.0)
+	v.SetDefault("ai_usage_pricing.usd_to_cny", 7.25)
+	v.SetDefault("ai_usage_pricing.cost_multiplier", 3.0)
+	v.SetDefault("ai_usage_pricing.minimum_credits", 1)
+	v.SetDefault("ai_usage_pricing.maximum_credits_per_request", 20)
+	v.SetDefault("ai_usage_pricing.input_usd_per_million_tokens", 0.435)
+	v.SetDefault("ai_usage_pricing.output_usd_per_million_tokens", 0.87)
+	v.SetDefault("ai_usage_pricing.cached_input_usd_per_million_tokens", 0.435)
+	v.SetDefault("ai_usage_pricing.pricing_source", "default:pet-chat-2026-06")
 	// Apollo bootstrap defaults keep apollo-config.yaml focused on values that
 	// differ per deployment. Add fields to the YAML only when an environment
 	// needs to override these.

@@ -16,7 +16,6 @@ import {
   showUnifiedApiError,
   type PublicFoodLibraryItem
 } from '../../../utils/api'
-import { Star, StarOutlined } from '@taroify/icons'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -832,11 +831,7 @@ function FoodLibraryPage() {
                       className='stat-item'
                       onClick={e => handleCollect(e, item)}
                     >
-                      {item.collected ? (
-                        <Star size='16' style={{ color: '#fbbf24' }} />
-                      ) : (
-                        <StarOutlined size='16' color='#6b7280' />
-                      )}
+                      <Text className={`stat-icon iconfont ${item.collected ? 'icon-collection_fill collected' : 'icon-collection'}`} />
                       <Text className='stat-count'>{item.collection_count || 0}</Text>
                     </View>
                     <View className='stat-item'>

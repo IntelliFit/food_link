@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"encoding/xml"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -10,9 +12,12 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
 	"food_link/backend/internal/membership/service"
+	"food_link/backend/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )
+
+const wechatPapayNotifyMaxBodyBytes = 1 << 20
 
 type MembershipService interface {
 	ListPlans(ctx context.Context) ([]map[string]any, error)
@@ -142,6 +147,38 @@ func (h *MembershipHandler) WechatNotify(c *gin.Context) {
 	response.Raw(c, http.StatusOK, data)
 }
 
+// POST /api/payment/wechat/papay/contract/terminate-notify
+func (h *MembershipHandler) PapayContractTerminateNotify(c *gin.Context) {
+	body, err := readLimitedNotifyBody(c.Request.Body, wechatPapayNotifyMaxBodyBytes)
+	if err != nil {
+		logger.Warn(c.Request.Context(), "微信委托代扣解约通知读取失败", logger.Err(err))
+		writeWechatPapayXML(c, "FAIL", "读取通知失败")
+		return
+	}
+
+	notice, parseErr := parsePapayContractNotice(body)
+	attrs := []slog.Attr{
+		slog.Int("http.request.body.size", len(body)),
+		slog.String("wechat.app_id", notice.AppID),
+		slog.String("wechat.mch_id", notice.MchID),
+		slog.String("wechat.contract_id", notice.ContractID),
+		slog.String("wechat.contract_code", notice.ContractCode),
+		slog.String("wechat.plan_id", notice.PlanID),
+		slog.String("wechat.change_type", notice.ChangeType),
+		slog.String("wechat.return_code", notice.ReturnCode),
+		slog.String("wechat.result_code", notice.ResultCode),
+	}
+	if parseErr != nil {
+		logger.Warn(c.Request.Context(), "微信委托代扣解约通知 XML 解析失败，占位接口仍返回成功",
+			append(attrs, logger.Err(parseErr))...,
+		)
+	} else {
+		logger.Info(c.Request.Context(), "收到微信委托代扣解约通知，占位接口已应答成功", attrs...)
+	}
+
+	writeWechatPapayXML(c, "SUCCESS", "OK")
+}
+
 // POST /api/membership/rewards/share-poster/claim
 func (h *MembershipHandler) ClaimSharePosterReward(c *gin.Context) {
 	var body service.SharePosterRewardClaimInput
@@ -160,4 +197,47 @@ func (h *MembershipHandler) ClaimSharePosterReward(c *gin.Context) {
 		return
 	}
 	response.Success(c, data)
+}
+
+type papayContractNotice struct {
+	XMLName      xml.Name `xml:"xml"`
+	ReturnCode   string   `xml:"return_code"`
+	ReturnMsg    string   `xml:"return_msg"`
+	ResultCode   string   `xml:"result_code"`
+	ErrCode      string   `xml:"err_code"`
+	ErrCodeDes   string   `xml:"err_code_des"`
+	AppID        string   `xml:"appid"`
+	MchID        string   `xml:"mch_id"`
+	OpenID       string   `xml:"openid"`
+	ContractID   string   `xml:"contract_id"`
+	ContractCode string   `xml:"contract_code"`
+	PlanID       string   `xml:"plan_id"`
+	ChangeType   string   `xml:"change_type"`
+	OperateTime  string   `xml:"operate_time"`
+}
+
+func parsePapayContractNotice(body []byte) (papayContractNotice, error) {
+	var notice papayContractNotice
+	if len(strings.TrimSpace(string(body))) == 0 {
+		return notice, nil
+	}
+	err := xml.Unmarshal(body, &notice)
+	return notice, err
+}
+
+func readLimitedNotifyBody(body io.Reader, maxBytes int64) ([]byte, error) {
+	limited := io.LimitReader(body, maxBytes+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "notify body too large", HTTPStatus: http.StatusRequestEntityTooLarge}
+	}
+	return data, nil
+}
+
+func writeWechatPapayXML(c *gin.Context, returnCode, returnMsg string) {
+	payload := []byte("<xml><return_code><![CDATA[" + returnCode + "]]></return_code><return_msg><![CDATA[" + returnMsg + "]]></return_msg></xml>")
+	c.Data(http.StatusOK, "application/xml; charset=utf-8", payload)
 }

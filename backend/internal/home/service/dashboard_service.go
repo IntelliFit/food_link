@@ -9,6 +9,7 @@ import (
 
 	userrepo "food_link/backend/internal/auth/repo"
 	homerepo "food_link/backend/internal/home/repo"
+	"food_link/backend/internal/nutritionagg"
 	usersvc "food_link/backend/internal/user/service"
 	"food_link/backend/pkg/storage"
 )
@@ -24,6 +25,17 @@ var mealNames = map[string]string{
 	"snack":           "午加餐",
 }
 var mealWeights = map[string]float64{"breakfast": 3, "lunch": 4, "dinner": 3}
+
+var homeMicronutrientMetrics = []nutritionagg.Metric{
+	{Key: "fiber", Aliases: []string{"fiber"}},
+	{Key: "sodiumMg", Aliases: []string{"sodiumMg", "sodium_mg"}},
+	{Key: "potassiumMg", Aliases: []string{"potassiumMg", "potassium_mg"}},
+	{Key: "calciumMg", Aliases: []string{"calciumMg", "calcium_mg"}},
+	{Key: "ironMg", Aliases: []string{"ironMg", "iron_mg"}},
+	{Key: "vitaminARaeMcg", Aliases: []string{"vitaminARaeMcg", "vitamin_a_rae_mcg"}},
+	{Key: "vitaminCMg", Aliases: []string{"vitaminCMg", "vitamin_c_mg"}},
+	{Key: "vitaminDMcg", Aliases: []string{"vitaminDMcg", "vitamin_d_mcg"}},
+}
 
 type DashboardService struct {
 	users   *userrepo.UserRepo
@@ -61,12 +73,14 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 	targetPlan.CalibrationSuggestion = calibrationSuggestion
 	targets := targetPlan.Targets
 	totalCal, totalProtein, totalCarbs, totalFat := 0.0, 0.0, 0.0, 0.0
+	micros := initHomeMicronutrientTotals()
 	byMeal := map[string][]homerepo.FoodRecord{}
 	for _, record := range records {
 		totalCal += record.TotalCalories
 		totalProtein += record.TotalProtein
 		totalCarbs += record.TotalCarbs
 		totalFat += record.TotalFat
+		addHomeMicronutrientTotals(micros, nutritionagg.SumMetrics(record.Items, homeMicronutrientMetrics))
 		mt := normalizeMealType(record.MealType, record.RecordTime)
 		byMeal[mt] = append(byMeal[mt], record)
 	}
@@ -97,6 +111,7 @@ func (s *DashboardService) HomeDashboard(ctx context.Context, userID, date strin
 				"carbs":   map[string]any{"current": round1(totalCarbs), "target": targets["carbs_target"]},
 				"fat":     map[string]any{"current": round1(totalFat), "target": targets["fat_target"]},
 			},
+			"micros": buildHomeMicronutrientPayload(micros),
 		},
 		"meals":              meals,
 		"expirySummary":      buildExpirySummary(expiryItems),
@@ -780,6 +795,28 @@ func totalFoodRecordWaterMl(items []map[string]any) float64 {
 		total += waterMl
 	}
 	return total
+}
+
+func initHomeMicronutrientTotals() map[string]float64 {
+	totals := make(map[string]float64, len(homeMicronutrientMetrics))
+	for _, metric := range homeMicronutrientMetrics {
+		totals[metric.Key] = 0
+	}
+	return totals
+}
+
+func addHomeMicronutrientTotals(target map[string]float64, addition map[string]float64) {
+	for key, value := range addition {
+		target[key] += value
+	}
+}
+
+func buildHomeMicronutrientPayload(totals map[string]float64) map[string]any {
+	payload := make(map[string]any, len(homeMicronutrientMetrics))
+	for _, metric := range homeMicronutrientMetrics {
+		payload[metric.Key] = round1(totals[metric.Key])
+	}
+	return payload
 }
 
 func waterMlFromHomeFoodItem(item map[string]any) float64 {

@@ -1,8 +1,6 @@
 import { View, Text } from '@tarojs/components'
 import React from 'react'
 import Taro from '@tarojs/taro'
-import { ArrowLeft } from '@taroify/icons'
-import '@taroify/icons/style'
 import './index.scss'
 
 interface CustomNavBarProps {
@@ -82,7 +80,7 @@ export default function CustomNavBar({
             >
                 {showBack && (
                     <View className='custom-nav-bar__back' onClick={handleBack}>
-                        <ArrowLeft className='custom-nav-bar__back-icon' style={{ color }} />
+                        <Text className='iconfont icon-left custom-nav-bar__back-icon' style={{ color }} />
                     </View>
                 )}
                 <Text className='custom-nav-bar__title' style={{ color }}>

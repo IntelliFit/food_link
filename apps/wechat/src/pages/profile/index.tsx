@@ -2,18 +2,6 @@ import { View, Text, Image, Navigator } from '@tarojs/components'
 import * as React from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import {
-  TodoListOutlined,
-  CalendarOutlined,
-  ShopOutlined,
-  ShieldOutlined,
-  InfoOutlined,
-  Arrow,
-  ChatOutlined,
-  GiftOutlined,
-  LocationOutlined
-} from '@taroify/icons'
-import '@taroify/icons/style'
-import {
   getUserProfile,
   getAccessToken,
   clearAllStorage,
@@ -124,6 +112,14 @@ function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string 
   if (dashboard.today_count > 0) return `今天有 ${dashboard.today_count} 样需要优先吃掉。`
   if (dashboard.soon_count > 0) return `接下来有 ${dashboard.soon_count} 样即将到期。`
   return `当前共有 ${dashboard.active_count} 样食物在保鲜中。`
+}
+
+function ProfileListIcon({ name }: { name: string }) {
+  return <Text className={`iconfont ${name} profile-list-icon-symbol`} />
+}
+
+function ProfileChevron({ small = false }: { small?: boolean }) {
+  return <Text className={`iconfont icon-ic_detail profile-chevron ${small ? 'profile-chevron--small' : ''}`} />
 }
 
 function ProfilePage() {
@@ -308,13 +304,13 @@ function ProfilePage() {
   const services = [
     {
       id: 0,
-      icon: <TodoListOutlined size='20' />,
+      iconClass: 'icon-shentinianling',
       title: '健康档案',
       desc: '生理指标、日常消耗、病史与饮食偏好'
     },
     {
       id: 2,
-      icon: <CalendarOutlined size='20' />,
+      iconClass: 'icon-guoqi1',
       title: '食物保质期',
       desc: formatExpiryPreviewText(expiryDashboard),
       path: '/pages/expiry/index',
@@ -322,42 +318,42 @@ function ProfilePage() {
     },
     {
       id: 4,
-      icon: <GiftOutlined size='20' />,
+      iconClass: 'icon-good',
       title: '我的宠物',
       desc: `奖励积分 ${membershipEarnedBalance}，去看看你的健康伙伴`,
       path: extraPkgUrl('/pages/pet-home/index')
     },
     {
       id: 6,
-      icon: <GiftOutlined size='20' />,
+      iconClass: 'icon-zengji',
       title: '赚积分',
       desc: '查看今天还能做哪些任务、每项上限和当前进度',
       path: extraPkgUrl('/pages/reward-center/index')
     },
     {
       id: 5,
-      icon: <ShopOutlined size='20' />,
+      iconClass: 'icon-shuju',
       title: '公共食物库',
       desc: '浏览公共食物营养数据',
       path: extraPkgUrl('/pages/food-library/index')
     },
     {
       id: 9,
-      icon: <LocationOutlined size='20' />,
+      iconClass: 'icon-dizhi',
       title: '校园食堂',
       desc: '查食堂菜品热量、价格和蛋白质',
       path: extraPkgUrl('/pages/campus-canteen/index')
     },
     {
       id: 8,
-      icon: <ChatOutlined size='20' />,
+      iconClass: 'icon-pengyouquan',
       title: '加入用户群',
       desc: '反馈问题、提建议，一起共创食探',
       path: extraPkgUrl('/pages/user-group/index')
     },
     {
       id: 10,
-      icon: <ChatOutlined size='20' />,
+      iconClass: 'icon-pinglun',
       title: '意见反馈',
       desc: '提交问题或建议，并自动附带最近请求诊断',
       path: extraPkgUrl('/pages/feedback/index')
@@ -366,8 +362,8 @@ function ProfilePage() {
 
   // 设置项
   const settings = [
-    { id: 3, icon: <ShieldOutlined size='20' />, title: '隐私设置' },
-    { id: 5, icon: <InfoOutlined size='20' />, title: '关于我们' }
+    { id: 3, iconClass: 'icon-jiesuo', title: '隐私设置' },
+    { id: 5, iconClass: 'icon-all', title: '关于我们' }
   ]
 
   const handleServiceClick = (service: typeof services[0]) => {
@@ -654,7 +650,7 @@ function ProfilePage() {
                 </View>
                 <View className='user-meta-row' onClick={handleSettings}>
                   <Text className='user-meta-text'>个人主页</Text>
-                  <Arrow size={12} color='#9ca3af' />
+                  <ProfileChevron small />
                 </View>
               </>
             ) : (
@@ -787,7 +783,7 @@ function ProfilePage() {
             )
           })()}
           <View className='card-bg-icon'>
-            <ShieldOutlined size='120' color='rgba(255,255,255,0.1)' />
+            <Text className='iconfont icon-jiesuo card-bg-icon-symbol' />
           </View>
         </View>
       )}
@@ -798,7 +794,7 @@ function ProfilePage() {
         {services.map((service) => (
           <View key={service.id} className='list-item' onClick={() => handleServiceClick(service)}>
             <View className='list-icon' style={getProfileListIconStyle(service.id, SERVICE_ICON_TONES, scheme)}>
-              {service.icon}
+              <ProfileListIcon name={service.iconClass} />
             </View>
             <Text className='list-title'>{service.title}</Text>
             {(service as any).badgeCount > 0 && (
@@ -807,7 +803,7 @@ function ProfilePage() {
               </View>
             )}
             <View className='list-arrow'>
-              <Arrow size={16} color='#c8c9cc' />
+              <ProfileChevron />
             </View>
           </View>
         ))}
@@ -816,11 +812,11 @@ function ProfilePage() {
         {settings.map((setting) => (
           <View key={setting.id} className='list-item' onClick={() => handleSettingClick(setting)}>
             <View className='list-icon' style={getProfileListIconStyle(setting.id, SETTING_ICON_TONES, scheme)}>
-              {setting.icon}
+              <ProfileListIcon name={setting.iconClass} />
             </View>
             <Text className='list-title'>{setting.title}</Text>
             <View className='list-arrow'>
-              <Arrow size={16} color='#c8c9cc' />
+              <ProfileChevron />
             </View>
           </View>
         ))}

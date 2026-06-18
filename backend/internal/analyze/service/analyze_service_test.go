@@ -467,6 +467,18 @@ func TestResolveModelConfig(t *testing.T) {
 	assert.Equal(t, "qwen", p)
 	assert.Equal(t, "qwen3.6-flash", m)
 
+	p, m = resolveModelConfig("gpt-5.4-mini:stable")
+	assert.Equal(t, "openai", p)
+	assert.Equal(t, "gpt-5.4-mini:stable", m)
+
+	p, m = resolveModelConfig("gpt-4.1-mini")
+	assert.Equal(t, "openai", p)
+	assert.Equal(t, "gpt-4.1-mini", m)
+
+	p, m = resolveModelConfig("openai/gpt-4.1-nano")
+	assert.Equal(t, "openai", p)
+	assert.Equal(t, "openai/gpt-4.1-nano", m)
+
 	p, m = resolveModelConfig("unknown-model")
 	assert.Equal(t, "gemini", p)
 	assert.Equal(t, "gemini-3-flash-preview", m)
@@ -1390,7 +1402,7 @@ func TestAnalyzeService_AnalyzeImageStrictDoesNotFallbackToDoubaoWhenGemini35Fai
 	require.Len(t, gemini35Client.imageSetCalls, 1)
 }
 
-func TestAnalyzeService_AnalyzeImageLegacyLiteUsesStandardGemini3Flash(t *testing.T) {
+func TestAnalyzeService_AnalyzeImageStandardUsesGemini3FlashDefault(t *testing.T) {
 	lite := "lite"
 	doubaoClient := &mockDoubaoWebSearchClient{err: assert.AnError}
 	gemini3Client := &multiImageLLMClient{result: map[string]any{
@@ -1413,22 +1425,24 @@ func TestAnalyzeService_AnalyzeImageLegacyLiteUsesStandardGemini3Flash(t *testin
 	meta := result["hybrid_review"].(map[string]any)
 	assert.Equal(t, "skipped", meta["status"])
 	assert.Equal(t, "gemini_db_first", meta["strategy"])
+	assert.Equal(t, "gemini", meta["base_provider"])
+	assert.Equal(t, gemini3FlashModel, meta["base_model"])
 	require.Len(t, gemini3Client.imageSetCalls, 1)
 	assert.Empty(t, doubaoClient.prompt)
 	assert.Empty(t, doubaoClient.imageURL)
 }
 
-func TestAnalyzeService_AnalyzeImageCorrectionUsesGemini31Lite(t *testing.T) {
+func TestAnalyzeService_AnalyzeImageCorrectionUsesQwen36FlashDefault(t *testing.T) {
 	doubaoClient := &mockLLMClient{err: assert.AnError}
 	gemini3Client := &mockLLMClient{err: assert.AnError}
-	gemini31Client := &multiImageLLMClient{result: map[string]any{
+	qwenClient := &multiImageLLMClient{result: map[string]any{
 		"description": "纠错识别",
 		"items": []any{
 			map[string]any{"name": "龙宫果", "estimatedWeightGrams": 45.0},
 		},
 	}}
 	svc := NewAnalyzeService(doubaoClient, gemini3Client, nil)
-	svc.gemini31LiteClient = gemini31Client
+	svc.ConfigureDashScopeLLMClient(qwenClient)
 	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
 
 	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
@@ -1440,9 +1454,75 @@ func TestAnalyzeService_AnalyzeImageCorrectionUsesGemini31Lite(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "纠错识别", result["description"])
-	require.Len(t, gemini31Client.imageSetCalls, 1)
+	assert.Equal(t, "qwen_db_first", result["food_image_strategy"])
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "qwen", meta["base_provider"])
+	assert.Equal(t, qwen36FlashModel, meta["base_model"])
+	require.Len(t, qwenClient.imageSetCalls, 1)
 	assert.Equal(t, 0, doubaoClient.calls)
 	assert.Equal(t, 0, gemini3Client.calls)
+}
+
+func TestAnalyzeService_AnalyzeImagePrecisionCorrectionUsesGemini35Default(t *testing.T) {
+	precision := precisionExecutionMode
+	doubaoClient := &mockLLMClient{err: assert.AnError}
+	gemini35Client := &multiImageLLMClient{result: map[string]any{
+		"description": "精准纠错识别",
+		"items": []any{
+			map[string]any{"name": "龙宫果", "estimatedWeightGrams": 45.0},
+		},
+	}}
+	svc := NewAnalyzeService(doubaoClient, &mockLLMClient{err: assert.AnError}, nil)
+	svc.gemini35Client = gemini35Client
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:      "https://example.com/longkong.jpg",
+		ExecutionMode: &precision,
+		CorrectionItems: []map[string]any{
+			{"name": "龙宫果", "weight": 45},
+		},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "精准纠错识别", result["description"])
+	assert.Equal(t, "strict_db_first", result["food_image_strategy"])
+	meta := result["hybrid_review"].(map[string]any)
+	assert.Equal(t, "gemini", meta["base_provider"])
+	assert.Equal(t, gemini35FlashModel, meta["base_model"])
+	require.Len(t, gemini35Client.imageSetCalls, 1)
+	assert.Equal(t, 0, doubaoClient.calls)
+}
+
+func TestAnalyzeService_AnalyzeImageRespectsExplicitModelNameInStandardMode(t *testing.T) {
+	doubaoClient := &mockDoubaoWebSearchClient{err: assert.AnError}
+	openAIClient := &multiImageLLMClient{result: map[string]any{
+		"description": "显式模型识别",
+		"items": []any{
+			map[string]any{"name": "龙宫果", "estimatedWeightGrams": 45.0},
+		},
+	}}
+	qwenClient := &multiImageLLMClient{result: map[string]any{
+		"description": "Qwen 识别",
+		"items": []any{
+			map[string]any{"name": "榴莲", "estimatedWeightGrams": 120.0},
+		},
+	}}
+	svc := NewAnalyzeService(doubaoClient, openAIClient, nil)
+	svc.ConfigureDashScopeLLMClient(qwenClient)
+	svc.ConfigureNutritionResolver(newFakeAnalyzeNutritionResolver())
+
+	result, err := svc.Analyze(context.Background(), "", AnalyzeInput{
+		ImageURL:  "https://example.com/durian.jpg",
+		ModelName: qwen36FlashModel,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "Qwen 识别", result["description"])
+	assert.Equal(t, "qwen_db_first", result["food_image_strategy"])
+	require.Len(t, qwenClient.imageSetCalls, 1)
+	require.Empty(t, openAIClient.imageSetCalls)
+	assert.Empty(t, doubaoClient.prompt)
 }
 
 func TestBuildStandardImageHybridReviewPromptIncludesIndependentReviewAndSearchEvidence(t *testing.T) {
@@ -2842,13 +2922,13 @@ func TestNormalizeItemIngredients(t *testing.T) {
 	assert.Nil(t, normalizeItemIngredients("not a map"))
 	assert.Nil(t, normalizeItemIngredients(map[string]any{}))
 	assert.Nil(t, normalizeItemIngredients(map[string]any{
-		"ingredientsText": "",
-		"servingSize":     "",
+		"ingredientsText":  "",
+		"servingSize":      "",
 		"nutritionPer100g": map[string]any{},
 	}))
 	result := normalizeItemIngredients(map[string]any{
-		"ingredientsText": "水，白砂糖",
-		"servingSize":     "每份 250ml",
+		"ingredientsText":  "水，白砂糖",
+		"servingSize":      "每份 250ml",
 		"nutritionPer100g": map[string]any{"calories": 180.0},
 	})
 	require.NotNil(t, result)
@@ -2874,12 +2954,12 @@ func TestIngredientLabelNutritionFromItem(t *testing.T) {
 			"ingredientsText": "小麦粉、白砂糖",
 			"servingSize":     "每份 30g",
 			"nutritionPer100g": map[string]any{
-				"calories":       450.0,
-				"protein":        6.5,
-				"fat":            15.0,
-				"carbs":          70.0,
-				"sodiumMg":       200.0,
-				"vitaminCMg":     0.0,
+				"calories":   450.0,
+				"protein":    6.5,
+				"fat":        15.0,
+				"carbs":      70.0,
+				"sodiumMg":   200.0,
+				"vitaminCMg": 0.0,
 			},
 		},
 	})

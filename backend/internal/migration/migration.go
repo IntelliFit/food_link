@@ -410,6 +410,11 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_pets_user_id_unique ON user_pets (user_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_pet_events_user_date_type_unique ON user_pet_events (user_id, event_date, event_type)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_pet_daily_scores_user_date_unique ON user_pet_daily_scores (user_id, score_date)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_chat_sessions_user_updated ON pet_chat_sessions (user_id, range_type, updated_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_chat_sessions_user_status ON pet_chat_sessions (user_id, status, updated_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_chat_messages_session_created ON pet_chat_messages (session_id, created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_chat_messages_user_created ON pet_chat_messages (user_id, created_at DESC)`,
+		addFK("fk_pet_chat_messages_session", "pet_chat_messages", "session_id", "pet_chat_sessions", "id", "CASCADE"),
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_food_weight_labeled_samples_batch_sample ON food_weight_labeled_samples (batch_name, sample_name)`,
 		`CREATE INDEX IF NOT EXISTS idx_food_weight_labeled_samples_batch ON food_weight_labeled_samples (batch_name)`,
 		`CREATE INDEX IF NOT EXISTS idx_food_weight_labeled_samples_label_type ON food_weight_labeled_samples (label_type)`,
@@ -446,11 +451,11 @@ WHERE COALESCE(display_name, '') = ''
 		`ALTER TABLE analysis_tasks ADD COLUMN IF NOT EXISTS search_text text`,
 		`UPDATE analysis_tasks SET search_text = COALESCE(NULLIF(text_input, ''), result->'items'->0->>'name', result->>'description', '') WHERE search_text IS NULL OR search_text = ''`,
 		`CREATE INDEX IF NOT EXISTS idx_analysis_tasks_user_search_gin ON analysis_tasks USING gin (search_text gin_trgm_ops)`,
-			// Community search trigram indexes for keyword matching
-			`CREATE INDEX IF NOT EXISTS idx_weapp_user_nickname_gin ON weapp_user USING gin (nickname gin_trgm_ops)`,
-			`CREATE INDEX IF NOT EXISTS idx_user_food_records_desc_gin ON user_food_records USING gin (COALESCE(description, '') gin_trgm_ops) WHERE hidden_from_feed = false`,
-			`CREATE INDEX IF NOT EXISTS idx_user_exercise_logs_desc_gin ON user_exercise_logs USING gin (COALESCE(exercise_desc, '') gin_trgm_ops)`,
-			`CREATE INDEX IF NOT EXISTS idx_user_circle_posts_search_gin ON user_circle_posts USING gin (COALESCE(title, '') || ' ' || COALESCE(body, '') gin_trgm_ops)`,
+		// Community search trigram indexes for keyword matching
+		`CREATE INDEX IF NOT EXISTS idx_weapp_user_nickname_gin ON weapp_user USING gin (nickname gin_trgm_ops)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_food_records_desc_gin ON user_food_records USING gin (COALESCE(description, '') gin_trgm_ops) WHERE hidden_from_feed = false`,
+		`CREATE INDEX IF NOT EXISTS idx_user_exercise_logs_desc_gin ON user_exercise_logs USING gin (COALESCE(exercise_desc, '') gin_trgm_ops)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_circle_posts_search_gin ON user_circle_posts USING gin ((COALESCE(title, '') || ' ' || COALESCE(body, '')) gin_trgm_ops)`,
 		// Analysis feedback samples extra columns/indexes for frontend tracking
 		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS resolution_state text NOT NULL DEFAULT 'user_corrected'`,
 		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS source_record_id uuid`,

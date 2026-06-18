@@ -20,17 +20,6 @@ import {
   uncollectPublicFoodLibraryItem,
   deletePublicFoodLibraryItem
 } from '../../../utils/api'
-import {
-  ShopOutlined,
-  LocationOutlined,
-  GuideOutlined,
-  Cross,
-  FireOutlined,
-  UserOutlined,
-  Star,
-  StarOutlined
-} from '@taroify/icons'
-import '@taroify/icons/style'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -568,7 +557,7 @@ function FoodLibraryDetailPage() {
       </View>
     ) : (
       <View className={size === 'small' ? 'comment-reply-avatar' : 'comment-avatar'}>
-        <UserOutlined size={size === 'small' ? '14' : '16'} color='#9ca3af' />
+        <Text className={`iconfont icon-user ${size === 'small' ? 'comment-reply-avatar-icon' : 'comment-avatar-icon'}`} />
       </View>
     )
   )
@@ -607,7 +596,7 @@ function FoodLibraryDetailPage() {
         {comment.rating && (
           <View className='comment-rating-stars'>
             {Array.from({ length: comment.rating }).map((_, i) => (
-              <Star key={i} size='12' className='star-filled' />
+              <Text key={i} className='iconfont icon-collection_fill star-filled' />
             ))}
           </View>
         )}
@@ -685,7 +674,7 @@ function FoodLibraryDetailPage() {
         <View className='info-header'>
           <Text className='info-title'>{item.food_name || item.description || '健康餐'}</Text>
           <View className='info-calories-badge'>
-            <FireOutlined size='16' />
+            <Text className='iconfont icon-huore info-calories-icon' />
             <Text className='info-calories'>{nutritionPending ? '营养待更新' : `${item.total_calories.toFixed(0)} kcal`}</Text>
           </View>
         </View>
@@ -720,7 +709,7 @@ function FoodLibraryDetailPage() {
             </View>
           ) : (
             <View className='author-avatar'>
-              <UserOutlined size='20' color='#9ca3af' />
+              <Text className='iconfont icon-user author-avatar-icon' />
             </View>
           )}
           <View className='author-info'>
@@ -749,7 +738,7 @@ function FoodLibraryDetailPage() {
             <View className='campus-info-cell'>
               <Text className='campus-info-label'>学校</Text>
               <View className='campus-info-value-row'>
-                <LocationOutlined size='18' className='campus-location-icon' />
+                <Text className='iconfont icon-dizhi campus-location-icon' />
                 <Text className='campus-info-value'>{item.school_name || '待补充'}</Text>
               </View>
             </View>
@@ -833,25 +822,25 @@ function FoodLibraryDetailPage() {
           <Text className='card-title'>商家信息</Text>
           {item.merchant_name && (
             <View className='merchant-item'>
-              <View className='merchant-icon-wrapper'><ShopOutlined size='18' /></View>
+              <View className='merchant-icon-wrapper'><Text className='iconfont icon-shiwu merchant-icon-symbol' /></View>
               <Text className='merchant-text'>{item.merchant_name}</Text>
             </View>
           )}
           {item.merchant_address && (
             <View className='merchant-item'>
-              <View className='merchant-icon-wrapper'><LocationOutlined size='18' /></View>
+              <View className='merchant-icon-wrapper'><Text className='iconfont icon-dizhi merchant-icon-symbol' /></View>
               <Text className='merchant-text'>{item.merchant_address}</Text>
             </View>
           )}
           {item.city && (
             <View className='merchant-item'>
-              <View className='merchant-icon-wrapper'><GuideOutlined size='18' /></View>
+              <View className='merchant-icon-wrapper'><Text className='iconfont icon-dizhi merchant-icon-symbol' /></View>
               <Text className='merchant-text'>{item.city}{item.district ? ` ${item.district}` : ''}</Text>
             </View>
           )}
           {item.taste_rating && (
             <View className='merchant-item'>
-              <View className='merchant-icon-wrapper'><Star size='18' className='star-icon' /></View>
+              <View className='merchant-icon-wrapper'><Text className='iconfont icon-collection_fill merchant-icon-symbol star-icon' /></View>
               <Text className='merchant-text'>口味评分：{item.taste_rating} 分</Text>
             </View>
           )}
@@ -894,7 +883,7 @@ function FoodLibraryDetailPage() {
               </View>
             ) : (
               <View className='quick-comment-avatar'>
-                <UserOutlined size='16' color='#9ca3af' />
+                <Text className='iconfont icon-user quick-comment-avatar-icon' />
               </View>
             )
           })()}
@@ -956,7 +945,7 @@ function FoodLibraryDetailPage() {
             <View className='modal-header'>
               <Text className='modal-title'>{replyTarget ? `回复 @${replyTarget.nickname}` : '发表评论'}</Text>
               <View className='modal-close' onClick={closeCommentModal}>
-                <Cross size='24' color='#9ca3af' />
+                <Text className='modal-close-icon'>×</Text>
               </View>
             </View>
             {!replyTarget && (
@@ -969,7 +958,7 @@ function FoodLibraryDetailPage() {
                     className={`rating-star-wrapper ${n <= commentRating ? 'active' : ''}`}
                     onClick={() => setCommentRating(n === commentRating ? 0 : n)}
                   >
-                    {n <= commentRating ? <Star size='28' /> : <StarOutlined size='28' />}
+                    <Text className={`iconfont ${n <= commentRating ? 'icon-collection_fill' : 'icon-collection'} rating-star-icon`} />
                   </View>
                 ))}
               </View>

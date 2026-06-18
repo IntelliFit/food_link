@@ -34,7 +34,12 @@
   "compileType": "miniprogram",
   "simulatorPluginLibVersion": {},
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "value": ".map",
+        "type": "suffix"
+      }
+    ],
     "include": [
       {
         "value": "custom-tab-bar",

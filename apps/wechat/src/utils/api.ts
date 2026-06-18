@@ -641,6 +641,7 @@ export interface HomeIntakeData {
     carbs: { current: number; target: number }
     fat: { current: number; target: number }
   }
+  micros?: Partial<Nutrients>
 }
 
 export interface HomeNutritionTarget {
@@ -1170,6 +1171,97 @@ export interface StatsSummary {
   analysis_summary_used_today?: number
   body_metrics?: BodyMetricsSummary
   health_index?: HealthIndex
+}
+
+export interface AIUsagePricingResult {
+  model: string
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  cached_input_tokens?: number
+  cache_miss_input_tokens?: number
+  input_usd_per_million_tokens: number
+  output_usd_per_million_tokens: number
+  cached_input_usd_per_million_tokens?: number
+  provider_cost_cny: number
+  charged_cny: number
+  credits_charged: number
+  uncapped_credits_charged?: number
+  credits_per_cny: number
+  usd_to_cny: number
+  cost_multiplier: number
+  gross_margin_rate: number
+  minimum_credits: number
+  maximum_credits_per_request?: number
+  capped?: boolean
+  pricing_source: string
+}
+
+export interface PetChatEstimateResponse {
+  question: string
+  range: 'week' | 'month'
+  range_label: string
+  recorded_days: number
+  estimated_usage: {
+    input_tokens: number
+    output_tokens: number
+    total_tokens: number
+  }
+  pricing: AIUsagePricingResult
+}
+
+export interface PetChatResponse {
+  question: string
+  session_id: string
+  user_message_id?: string
+  assistant_message_id?: string
+  range: 'week' | 'month'
+  range_label: string
+  answer: string
+  recorded_days: number
+  credits_charged: number
+  billing_status: string
+  ai_usage_pricing?: AIUsagePricingResult
+  estimated_pricing: AIUsagePricingResult
+}
+
+export interface PetChatHistoryMessage {
+  id: string
+  role: 'user' | 'assistant' | 'pet'
+  content: string
+  message_type?: string
+  range?: 'week' | 'month'
+  credits_charged?: number
+  meta?: Record<string, any>
+  created_at?: string
+}
+
+export interface PetChatHistoryResponse {
+  session?: {
+    ID?: string
+    id?: string
+    Title?: string
+    title?: string
+    RangeType?: 'week' | 'month'
+    range_type?: 'week' | 'month'
+  }
+  messages: PetChatHistoryMessage[]
+}
+
+export interface PetChatSessionSummary {
+  id: string
+  title?: string
+  range_type?: 'week' | 'month'
+  recorded_days?: number
+  last_question?: string
+  last_answer?: string
+  last_message_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PetChatSessionsResponse {
+  sessions: PetChatSessionSummary[]
 }
 
 export interface SignalChip {
@@ -2426,7 +2518,7 @@ export async function analyzeFoodImage(
         ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
         ...(request.image_urls != null && { image_urls: request.image_urls }),
         additionalContext: request.additionalContext || '',
-        modelName: request.modelName || 'gemini-3-flash-preview',
+        ...(request.modelName != null && request.modelName !== '' && { modelName: request.modelName }),
         ...(request.user_goal != null && { user_goal: request.user_goal }),
         ...(request.remaining_calories != null && { remaining_calories: request.remaining_calories }),
         ...(request.meal_type != null && { meal_type: request.meal_type }),
@@ -2477,7 +2569,7 @@ export async function analyzeFoodImageCompare(
         ...(request.image_url != null && request.image_url !== '' && { image_url: request.image_url }),
         ...(request.image_urls != null && { image_urls: request.image_urls }),
         additionalContext: request.additionalContext || '',
-        modelName: request.modelName || 'gemini-3-flash-preview',
+        ...(request.modelName != null && request.modelName !== '' && { modelName: request.modelName }),
         ...(request.user_goal != null && { user_goal: request.user_goal }),
         ...(request.diet_goal != null && { diet_goal: request.diet_goal }),
         ...(request.activity_timing != null && { activity_timing: request.activity_timing }),
@@ -2645,6 +2737,29 @@ export interface AnalysisTask {
   record_id?: string              // 已保存时对应的饮食记录 ID，供跳转详情页
   created_at: string
   updated_at: string
+}
+
+export interface GooseDuckChickenClassifyResult {
+  species: 'goose' | 'duck' | 'chicken' | 'unknown'
+  label: string
+  confidence: number
+  reason: string
+  evidence?: string[]
+}
+
+export async function classifyGooseDuckChicken(body: {
+  image_url: string
+  additional_context?: string
+}): Promise<GooseDuckChickenClassifyResult> {
+  const res = await authenticatedRequest('/api/analyze/goose-duck-chicken', {
+    method: 'POST',
+    data: body,
+    timeout: 90000
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '鹅鸭鸡识别失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<GooseDuckChickenClassifyResult>(res)
 }
 
 export interface AnalyzeTaskStatusCount {
@@ -3498,6 +3613,7 @@ export async function generateStatsInsight(range: 'week' | 'month'): Promise<{
   analysis_summary_needs_refresh?: boolean
   analysis_summary_daily_limit?: number
   analysis_summary_used_today?: number
+  ai_usage_pricing?: AIUsagePricingResult
 }> {
   const res = await authenticatedRequest(
     '/api/stats/insight/generate',
@@ -3516,7 +3632,77 @@ export async function generateStatsInsight(range: 'week' | 'month'): Promise<{
     analysis_summary_needs_refresh?: boolean
     analysis_summary_daily_limit?: number
     analysis_summary_used_today?: number
+    ai_usage_pricing?: AIUsagePricingResult
   }>(res)
+}
+
+export async function estimatePetChat(question: string, range: 'week' | 'month'): Promise<PetChatEstimateResponse> {
+  const res = await authenticatedRequest('/api/pet/chat/estimate', {
+    method: 'POST',
+    data: { question, range },
+    timeout: 30000
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '小食探估价失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<PetChatEstimateResponse>(res)
+}
+
+export async function generatePetChat(question: string, range: 'week' | 'month', sessionId = '', newSession = false): Promise<PetChatResponse> {
+  const res = await authenticatedRequest('/api/pet/chat', {
+    method: 'POST',
+    data: { question, range, session_id: sessionId, new_session: newSession },
+    timeout: 90000
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '小食探分析失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<PetChatResponse>(res)
+}
+
+export async function getLatestPetChatSession(): Promise<PetChatHistoryResponse> {
+  const res = await authenticatedRequest('/api/pet/chat/latest', {
+    method: 'GET',
+    timeout: 15000
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '读取宠物对话失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<PetChatHistoryResponse>(res)
+}
+
+export async function listPetChatSessions(): Promise<PetChatSessionsResponse> {
+  const res = await authenticatedRequest('/api/pet/chat/sessions', {
+    method: 'GET',
+    timeout: 15000
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '读取宠物对话列表失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<PetChatSessionsResponse>(res)
+}
+
+export async function getPetChatSession(sessionId: string): Promise<PetChatHistoryResponse> {
+  const res = await authenticatedRequest(`/api/pet/chat/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'GET',
+    timeout: 15000
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '读取宠物对话失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<PetChatHistoryResponse>(res)
+}
+
+export async function appendPetChatMessages(sessionId: string, messages: Array<{ role: string; content: string; message_type?: string; meta?: Record<string, any> }>): Promise<PetChatHistoryResponse> {
+  const res = await authenticatedRequest('/api/pet/chat/messages', {
+    method: 'POST',
+    data: { session_id: sessionId, messages },
+    timeout: 15000
+  })
+  if (res.statusCode !== 200) {
+    throwHttpErrorWithStatus(res.statusCode, res.data, '保存宠物对话失败', res.header as Record<string, any> | undefined)
+  }
+  return unwrapResponse<PetChatHistoryResponse>(res)
 }
 
 /**

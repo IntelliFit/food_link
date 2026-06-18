@@ -25,24 +25,18 @@ import (
 	communityhandler "food_link/backend/internal/community/handler"
 	communityrepo "food_link/backend/internal/community/repo"
 	communityservice "food_link/backend/internal/community/service"
-	searchhandler "food_link/backend/internal/search/handler"
-	searchrepo "food_link/backend/internal/search/repo"
-	searchservice "food_link/backend/internal/search/service"
 	expiryhandler "food_link/backend/internal/expiry/handler"
 	expiryrepo "food_link/backend/internal/expiry/repo"
 	expiryservice "food_link/backend/internal/expiry/service"
 	feedbackhandler "food_link/backend/internal/feedback/handler"
 	feedbackrepo "food_link/backend/internal/feedback/repo"
 	feedbackservice "food_link/backend/internal/feedback/service"
-	foodrecordhandler "food_link/backend/internal/foodrecord/handler"
-	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
-	foodrecordservice "food_link/backend/internal/foodrecord/service"
 	followhandler "food_link/backend/internal/follow/handler"
 	followrepo "food_link/backend/internal/follow/repo"
 	followservice "food_link/backend/internal/follow/service"
-	messagehandler "food_link/backend/internal/message/handler"
-	messagerepo "food_link/backend/internal/message/repo"
-	messageservice "food_link/backend/internal/message/service"
+	foodrecordhandler "food_link/backend/internal/foodrecord/handler"
+	foodrecordrepo "food_link/backend/internal/foodrecord/repo"
+	foodrecordservice "food_link/backend/internal/foodrecord/service"
 	friendhandler "food_link/backend/internal/friend/handler"
 	friendrepo "food_link/backend/internal/friend/repo"
 	friendservice "food_link/backend/internal/friend/service"
@@ -56,6 +50,9 @@ import (
 	membershiphandler "food_link/backend/internal/membership/handler"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	membershipservice "food_link/backend/internal/membership/service"
+	messagehandler "food_link/backend/internal/message/handler"
+	messagerepo "food_link/backend/internal/message/repo"
+	messageservice "food_link/backend/internal/message/service"
 	pethandler "food_link/backend/internal/pet/handler"
 	petrepo "food_link/backend/internal/pet/repo"
 	petservice "food_link/backend/internal/pet/service"
@@ -66,6 +63,9 @@ import (
 	reciperepo "food_link/backend/internal/recipe/repo"
 	recipeservice "food_link/backend/internal/recipe/service"
 	schoolhandler "food_link/backend/internal/school/handler"
+	searchhandler "food_link/backend/internal/search/handler"
+	searchrepo "food_link/backend/internal/search/repo"
+	searchservice "food_link/backend/internal/search/service"
 	"food_link/backend/internal/stub"
 	systemhandler "food_link/backend/internal/system/handler"
 	"food_link/backend/internal/taskqueue"
@@ -224,10 +224,10 @@ func New(cfg *config.Config) (*App, error) {
 	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, storageClient)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
-		// Search module DI
-		searchRepo := searchrepo.NewSearchRepo(db)
-		searchSvc := searchservice.NewSearchService(searchRepo, storageClient)
-		searchHandler := searchhandler.NewSearchHandler(searchSvc)
+	// Search module DI
+	searchRepo := searchrepo.NewSearchRepo(db)
+	searchSvc := searchservice.NewSearchService(searchRepo, storageClient)
+	searchHandler := searchhandler.NewSearchHandler(searchSvc)
 
 	// Health module DI
 	exerciseRepo := healthrepo.NewExerciseRepo(db)
@@ -253,7 +253,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Pet companion module DI
 	petRepo := petrepo.NewPetRepo(db)
 	petSvc := petservice.NewService(petRepo)
-	petHandler := pethandler.NewPetHandler(petSvc)
+	petHandler := pethandler.NewPetHandler(petSvc, statsSvc)
 
 	// Public food library module DI
 	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
@@ -365,6 +365,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/analyze-compare", authmw.OptionalJWT(jwtSvc), analyzeHandler.AnalyzeCompare)
 	engine.POST("/api/analyze-compare-engines", authmw.OptionalJWT(jwtSvc), analyzeHandler.AnalyzeCompareEngines)
 	engine.POST("/api/analyze/batch", authmw.RequireJWT(jwtSvc), analyzeHandler.AnalyzeBatch)
+	engine.POST("/api/analyze/goose-duck-chicken", authmw.RequireJWT(jwtSvc), analyzeHandler.ClassifyGooseDuckChicken)
 	engine.POST("/api/analyze/submit", authmw.RequireJWT(jwtSvc), analyzeHandler.SubmitAnalyzeTask)
 	engine.POST("/api/analyze-text/submit", authmw.RequireJWT(jwtSvc), analyzeHandler.SubmitTextTask)
 	engine.GET("/api/analyze/tasks", authmw.RequireJWT(jwtSvc), analyzeHandler.ListTasks)
@@ -452,8 +453,8 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/community/posts/:post_id", authmw.RequireJWT(jwtSvc), communityHandler.DeleteCirclePost)
 	engine.POST("/api/community/feed-targets/:target_type/:target_id/report", authmw.RequireJWT(jwtSvc), communityHandler.ReportFeedTarget)
 
-		// Community search
-		engine.GET("/api/community/search", authmw.RequireJWT(jwtSvc), searchHandler.Search)
+	// Community search
+	engine.GET("/api/community/search", authmw.RequireJWT(jwtSvc), searchHandler.Search)
 
 	// Health routes
 	engine.GET("/api/body-metrics/summary", authmw.RequireJWT(jwtSvc), healthHandler.GetBodyMetricsSummary)
@@ -482,10 +483,17 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)
 	engine.POST("/api/membership/pay/sync", authmw.RequireJWT(jwtSvc), membershipHandler.SyncPayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
+	engine.POST("/api/payment/wechat/papay/contract/terminate-notify", membershipHandler.PapayContractTerminateNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
 
 	// Pet companion routes
 	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
+	engine.GET("/api/pet/chat/latest", authmw.RequireJWT(jwtSvc), petHandler.LatestChat)
+	engine.GET("/api/pet/chat/sessions", authmw.RequireJWT(jwtSvc), petHandler.ChatSessions)
+	engine.GET("/api/pet/chat/sessions/:session_id", authmw.RequireJWT(jwtSvc), petHandler.ChatSession)
+	engine.POST("/api/pet/chat/estimate", authmw.RequireJWT(jwtSvc), petHandler.EstimateChat)
+	engine.POST("/api/pet/chat", authmw.RequireJWT(jwtSvc), petHandler.Chat)
+	engine.POST("/api/pet/chat/messages", authmw.RequireJWT(jwtSvc), petHandler.AppendChatMessages)
 	engine.POST("/api/pet/events/:event_id/claim", authmw.RequireJWT(jwtSvc), petHandler.ClaimEvent)
 	engine.POST("/api/pet/select-appearance", authmw.RequireJWT(jwtSvc), petHandler.SelectAppearance)
 	engine.POST("/api/pet/reroll-appearance", authmw.RequireJWT(jwtSvc), petHandler.RerollAppearance)

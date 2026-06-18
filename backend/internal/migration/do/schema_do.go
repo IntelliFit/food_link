@@ -156,6 +156,45 @@ type UserPetDailyScoreDO struct {
 
 func (UserPetDailyScoreDO) TableName() string { return "user_pet_daily_scores" }
 
+type PetChatSessionDO struct {
+	ID                  string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID              string         `gorm:"column:user_id;type:uuid;not null;index:idx_pet_chat_sessions_user_updated,priority:1"`
+	PetID               *string        `gorm:"column:pet_id;type:uuid;index:idx_pet_chat_sessions_pet_id"`
+	Title               string         `gorm:"column:title;type:text;not null;default:''"`
+	RangeType           string         `gorm:"column:range_type;type:text;not null;default:'week';index:idx_pet_chat_sessions_user_updated,priority:2"`
+	Status              string         `gorm:"column:status;type:text;not null;default:'active';index:idx_pet_chat_sessions_user_status,priority:2"`
+	ContextStartDate    *time.Time     `gorm:"column:context_start_date;type:date"`
+	ContextEndDate      *time.Time     `gorm:"column:context_end_date;type:date"`
+	ContextFingerprint  string         `gorm:"column:context_fingerprint;type:text;not null;default:''"`
+	RecordedDays        int            `gorm:"column:recorded_days;type:integer;not null;default:0"`
+	LastQuestion        string         `gorm:"column:last_question;type:text;not null;default:''"`
+	LastAnswer          string         `gorm:"column:last_answer;type:text;not null;default:''"`
+	LastMessageAt       *time.Time     `gorm:"column:last_message_at;type:timestamptz"`
+	TotalCreditsCharged int            `gorm:"column:total_credits_charged;type:integer;not null;default:0"`
+	Meta                map[string]any `gorm:"column:meta;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt           time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt           time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now();index:idx_pet_chat_sessions_user_updated,priority:3,sort:desc;index:idx_pet_chat_sessions_user_status,priority:3,sort:desc"`
+}
+
+func (PetChatSessionDO) TableName() string { return "pet_chat_sessions" }
+
+type PetChatMessageDO struct {
+	ID               string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SessionID        string         `gorm:"column:session_id;type:uuid;not null;index:idx_pet_chat_messages_session_created,priority:1"`
+	UserID           string         `gorm:"column:user_id;type:uuid;not null;index:idx_pet_chat_messages_user_created,priority:1"`
+	Role             string         `gorm:"column:role;type:text;not null"`
+	Content          string         `gorm:"column:content;type:text;not null"`
+	MessageType      string         `gorm:"column:message_type;type:text;not null;default:''"`
+	RangeType        string         `gorm:"column:range_type;type:text;not null;default:'week'"`
+	CreditsCharged   int            `gorm:"column:credits_charged;type:integer;not null;default:0"`
+	AIUsagePricing   map[string]any `gorm:"column:ai_usage_pricing;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	EstimatedPricing map[string]any `gorm:"column:estimated_pricing;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	Meta             map[string]any `gorm:"column:meta;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt        time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_pet_chat_messages_session_created,priority:2;index:idx_pet_chat_messages_user_created,priority:2,sort:desc"`
+}
+
+func (PetChatMessageDO) TableName() string { return "pet_chat_messages" }
+
 type UserTrialEntitlementDO struct {
 	ID                string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	FirstUserID       *string    `gorm:"column:first_user_id;type:uuid;index:idx_user_trial_entitlements_first_user_id"`
@@ -1105,41 +1144,41 @@ type SchoolDO struct {
 func (SchoolDO) TableName() string { return "schools" }
 
 type FoodWeightLabeledSampleDO struct {
-	ID               string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	BatchName        string         `gorm:"column:batch_name;type:text;not null"`
-	SampleName       string         `gorm:"column:sample_name;type:text;not null"`
-	OriginalFilename string         `gorm:"column:original_filename;type:text;not null"`
-	ImageObjectKey   *string        `gorm:"column:image_object_key;type:text"`
-	ImageURL         *string        `gorm:"column:image_url;type:text"`
-	LabelType        string         `gorm:"column:label_type;type:text;not null"`
-	TotalWeightGrams *float64       `gorm:"column:total_weight_grams;type:numeric"`
+	ID               string             `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BatchName        string             `gorm:"column:batch_name;type:text;not null"`
+	SampleName       string             `gorm:"column:sample_name;type:text;not null"`
+	OriginalFilename string             `gorm:"column:original_filename;type:text;not null"`
+	ImageObjectKey   *string            `gorm:"column:image_object_key;type:text"`
+	ImageURL         *string            `gorm:"column:image_url;type:text"`
+	LabelType        string             `gorm:"column:label_type;type:text;not null"`
+	TotalWeightGrams *float64           `gorm:"column:total_weight_grams;type:numeric"`
 	Items            map[string]float64 `gorm:"column:items;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	Status           string         `gorm:"column:status;type:text;not null;default:'labeled'"`
-	SourcePath       *string        `gorm:"column:source_path;type:text"`
-	Metadata         map[string]any `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	CreatedAt        *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt        *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	Status           string             `gorm:"column:status;type:text;not null;default:'labeled'"`
+	SourcePath       *string            `gorm:"column:source_path;type:text"`
+	Metadata         map[string]any     `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt        *time.Time         `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt        *time.Time         `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (FoodWeightLabeledSampleDO) TableName() string { return "food_weight_labeled_samples" }
 
 type BenchmarkRunDO struct {
-	ID                string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	Name              string         `gorm:"column:name;type:text;not null"`
-	Status            string         `gorm:"column:status;type:text;not null;default:'pending'"`
-	DatasetFilter     map[string]any `gorm:"column:dataset_filter;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	ExecutionMode     string         `gorm:"column:execution_mode;type:text;not null"`
-	ModelConfig       map[string]any `gorm:"column:model_config;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	SampleCount       int            `gorm:"column:sample_count;type:integer;not null;default:0"`
-	Metrics           map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ID                  string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name                string         `gorm:"column:name;type:text;not null"`
+	Status              string         `gorm:"column:status;type:text;not null;default:'pending'"`
+	DatasetFilter       map[string]any `gorm:"column:dataset_filter;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ExecutionMode       string         `gorm:"column:execution_mode;type:text;not null"`
+	ModelConfig         map[string]any `gorm:"column:model_config;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	SampleCount         int            `gorm:"column:sample_count;type:integer;not null;default:0"`
+	Metrics             map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	StageOutputsSummary map[string]any `gorm:"column:stage_outputs_summary;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	ErrorMessage      *string        `gorm:"column:error_message;type:text"`
-	StartedAt         *time.Time     `gorm:"column:started_at;type:timestamptz"`
-	CompletedAt       *time.Time     `gorm:"column:completed_at;type:timestamptz"`
-	CreatedBy         *string        `gorm:"column:created_by;type:uuid"`
-	CreatedByUsername *string        `gorm:"column:created_by_username;type:text"`
-	CreatedAt         *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt         *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ErrorMessage        *string        `gorm:"column:error_message;type:text"`
+	StartedAt           *time.Time     `gorm:"column:started_at;type:timestamptz"`
+	CompletedAt         *time.Time     `gorm:"column:completed_at;type:timestamptz"`
+	CreatedBy           *string        `gorm:"column:created_by;type:uuid"`
+	CreatedByUsername   *string        `gorm:"column:created_by_username;type:text"`
+	CreatedAt           *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt           *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (BenchmarkRunDO) TableName() string { return "benchmark_runs" }
@@ -1172,6 +1211,8 @@ func AllModels() []any {
 		&UserPetDO{},
 		&UserPetEventDO{},
 		&UserPetDailyScoreDO{},
+		&PetChatSessionDO{},
+		&PetChatMessageDO{},
 		&UserTrialEntitlementDO{},
 		&MembershipPlanDO{},
 		&AnalysisTaskDO{},

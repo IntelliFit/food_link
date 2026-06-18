@@ -8,6 +8,7 @@ import (
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
+	healthservice "food_link/backend/internal/health/service"
 	"food_link/backend/internal/pet/service"
 	"food_link/backend/pkg/logger"
 
@@ -21,12 +22,26 @@ type PetService interface {
 	SelectAppearance(ctx context.Context, userID, candidateID string) (*service.AppearanceSelectResult, error)
 }
 
-type PetHandler struct {
-	svc PetService
+type PetChatService interface {
+	EstimatePetChat(ctx context.Context, userID string, input healthservice.PetChatInput) (*healthservice.PetChatEstimateResult, error)
+	GeneratePetChat(ctx context.Context, userID string, input healthservice.PetChatInput) (*healthservice.PetChatResult, error)
+	GetLatestPetChatSession(ctx context.Context, userID string) (*healthservice.PetChatHistoryResult, error)
+	ListPetChatSessions(ctx context.Context, userID string) (*healthservice.PetChatSessionsResult, error)
+	GetPetChatSessionHistory(ctx context.Context, userID, sessionID string) (*healthservice.PetChatHistoryResult, error)
+	AppendPetChatMessages(ctx context.Context, userID string, input healthservice.PetChatAppendInput) (*healthservice.PetChatHistoryResult, error)
 }
 
-func NewPetHandler(svc PetService) *PetHandler {
-	return &PetHandler{svc: svc}
+type PetHandler struct {
+	svc  PetService
+	chat PetChatService
+}
+
+func NewPetHandler(svc PetService, chat ...PetChatService) *PetHandler {
+	h := &PetHandler{svc: svc}
+	if len(chat) > 0 {
+		h.chat = chat[0]
+	}
+	return h
 }
 
 func (h *PetHandler) Summary(c *gin.Context) {
@@ -43,6 +58,177 @@ func (h *PetHandler) Summary(c *gin.Context) {
 			slog.String("date", date),
 		)
 		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "获取宠物状态失败", HTTPStatus: 500})
+		return
+	}
+	response.Success(c, data)
+}
+
+type petChatRequest struct {
+	Question   string `json:"question"`
+	Range      string `json:"range"`
+	SessionID  string `json:"session_id"`
+	NewSession bool   `json:"new_session"`
+}
+
+type petChatAppendRequest struct {
+	SessionID string                               `json:"session_id"`
+	Messages  []healthservice.PetChatAppendMessage `json:"messages"`
+}
+
+func (h *PetHandler) EstimateChat(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	if h.chat == nil {
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "小食探对话服务暂不可用", HTTPStatus: 503})
+		return
+	}
+	var req petChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "宠物对话估价请求进入",
+		slog.String("user_id", userID),
+		slog.String("range", strings.TrimSpace(req.Range)),
+		slog.Int("question_length", len([]rune(strings.TrimSpace(req.Question)))),
+	)
+	data, err := h.chat.EstimatePetChat(c.Request.Context(), userID, healthservice.PetChatInput{
+		Question: strings.TrimSpace(req.Question),
+		Range:    strings.TrimSpace(req.Range),
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "宠物对话估价完成",
+		slog.String("user_id", userID),
+		slog.String("range", data.Range),
+		slog.Int("recorded_days", data.RecordedDays),
+		slog.Int("credits_charged", data.Pricing.CreditsCharged),
+		slog.Bool("capped", data.Pricing.Capped),
+	)
+	response.Success(c, data)
+}
+
+func (h *PetHandler) Chat(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	if h.chat == nil {
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "小食探对话服务暂不可用", HTTPStatus: 503})
+		return
+	}
+	var req petChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "宠物对话生成请求进入",
+		slog.String("user_id", userID),
+		slog.String("range", strings.TrimSpace(req.Range)),
+		slog.Int("question_length", len([]rune(strings.TrimSpace(req.Question)))),
+	)
+	data, err := h.chat.GeneratePetChat(c.Request.Context(), userID, healthservice.PetChatInput{
+		Question:   strings.TrimSpace(req.Question),
+		Range:      strings.TrimSpace(req.Range),
+		SessionID:  strings.TrimSpace(req.SessionID),
+		NewSession: req.NewSession,
+	})
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "宠物对话生成完成",
+		slog.String("user_id", userID),
+		slog.String("range", data.Range),
+		slog.Int("recorded_days", data.RecordedDays),
+		slog.Int("credits_charged", data.CreditsCharged),
+		slog.String("billing_status", data.BillingStatus),
+	)
+	response.Success(c, data)
+}
+
+func (h *PetHandler) LatestChat(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	if h.chat == nil {
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "宠物对话服务暂不可用", HTTPStatus: 503})
+		return
+	}
+	data, err := h.chat.GetLatestPetChatSession(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+func (h *PetHandler) ChatSessions(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	if h.chat == nil {
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "宠物对话服务暂不可用", HTTPStatus: 503})
+		return
+	}
+	data, err := h.chat.ListPetChatSessions(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+func (h *PetHandler) ChatSession(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	if h.chat == nil {
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "宠物对话服务暂不可用", HTTPStatus: 503})
+		return
+	}
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	data, err := h.chat.GetPetChatSessionHistory(c.Request.Context(), userID, sessionID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
+func (h *PetHandler) AppendChatMessages(c *gin.Context) {
+	userID := c.GetString(authmw.ContextUserIDKey)
+	if userID == "" {
+		response.Error(c, commonerrors.ErrUnauthorized)
+		return
+	}
+	if h.chat == nil {
+		response.Error(c, &commonerrors.AppError{Code: 10000, Message: "宠物对话服务暂不可用", HTTPStatus: 503})
+		return
+	}
+	var req petChatAppendRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, err)
+		return
+	}
+	data, err := h.chat.AppendPetChatMessages(c.Request.Context(), userID, healthservice.PetChatAppendInput{
+		SessionID: strings.TrimSpace(req.SessionID),
+		Messages:  req.Messages,
+	})
+	if err != nil {
+		response.Error(c, err)
 		return
 	}
 	response.Success(c, data)

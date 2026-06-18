@@ -28,6 +28,7 @@
     "dev:website": "cd website && npm run dev",
     "build:website": "cd website && npm run build",
     "preview:website": "cd website && npm run preview",
+    "weapp:size": "npm --workspace apps/wechat run weapp:size",
     "build:weapp": "npm --workspace apps/wechat run build:weapp",
     "build:weapp:preview": "npm --workspace apps/wechat run build:weapp:preview",
     "build:weapp:release": "npm --workspace apps/wechat run build:weapp:release",
