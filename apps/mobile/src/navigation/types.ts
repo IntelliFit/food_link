@@ -112,6 +112,7 @@ export type RootStackParamList = {
   InviteFriends: { inviteCode?: string; invite_code?: string; fi?: string } | undefined
   PetHome: undefined
   PetLab: undefined
+  PetChat: undefined
   Agreements: undefined
   PrivacyPolicy: undefined
   AutoRenewAudit: undefined

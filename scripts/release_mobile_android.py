@@ -145,6 +145,7 @@ def resolve_release_config(namespace: str) -> dict[str, str]:
     storage = release_config.get("storage") or {}
     expo = release_config.get("expo") or {}
     eas = release_config.get("eas") or {}
+    android_signing = release_config.get("android_signing") or {}
     resolved = {
         "secret_id": os.getenv("COS_SECRET_ID", storage.get("cos_secret_id", "")).strip(),
         "secret_key": os.getenv("COS_SECRET_KEY", storage.get("cos_secret_key", "")).strip(),
@@ -155,14 +156,37 @@ def resolve_release_config(namespace: str) -> dict[str, str]:
             "EXPO_TOKEN",
             expo.get("token") or expo.get("access_token") or eas.get("expo_token") or eas.get("token") or "",
         ).strip(),
+        "android_keystore_path": os.getenv(
+            "FOODLINK_ANDROID_KEYSTORE_PATH",
+            android_signing.get("keystore_path") or "foodlink-release.keystore",
+        ).strip(),
+        "android_keystore_password": os.getenv(
+            "FOODLINK_ANDROID_KEYSTORE_PASSWORD",
+            android_signing.get("keystore_password") or "",
+        ).strip(),
+        "android_key_alias": os.getenv(
+            "FOODLINK_ANDROID_KEY_ALIAS",
+            android_signing.get("key_alias") or "foodlink-release",
+        ).strip(),
+        "android_key_password": os.getenv(
+            "FOODLINK_ANDROID_KEY_PASSWORD",
+            android_signing.get("key_password") or android_signing.get("keystore_password") or "",
+        ).strip(),
     }
-    missing = [key for key, value in resolved.items() if key != "expo_token" and not value]
+    optional = {
+        "expo_token",
+        "android_keystore_path",
+        "android_keystore_password",
+        "android_key_alias",
+        "android_key_password",
+    }
+    missing = [key for key, value in resolved.items() if key not in optional and not value]
     if missing:
         fail(f"release config missing required fields: {', '.join(missing)}")
     return resolved
 
 
-def run(cmd: list[str], cwd: Path = ROOT, extra_env: dict[str, str] | None = None) -> str:
+def run(cmd: list[str], cwd: Path = ROOT, extra_env: dict[str, str] | None = None, capture_output: bool = True) -> str:
     executable = shutil.which(cmd[0])
     if executable:
         cmd = [executable, *cmd[1:]]
@@ -170,20 +194,24 @@ def run(cmd: list[str], cwd: Path = ROOT, extra_env: dict[str, str] | None = Non
     env = os.environ.copy()
     if extra_env:
         env.update(extra_env)
-    completed = subprocess.run(
-        cmd,
-        cwd=cwd,
-        env=env,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
+    if capture_output:
+        completed = subprocess.run(
+            cmd,
+            cwd=cwd,
+            env=env,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+    else:
+        completed = subprocess.run(cmd, cwd=cwd, env=env)
     if completed.returncode != 0:
-        print(completed.stdout)
+        if capture_output:
+            print(completed.stdout)
         fail(f"command failed with exit code {completed.returncode}: {' '.join(cmd)}")
-    return completed.stdout
+    return completed.stdout if capture_output else ""
 
 
 def find_java_home() -> str | None:
@@ -277,6 +305,33 @@ allprojects { project ->
     return init_script
 
 
+def android_signing_env(config: dict[str, str]) -> dict[str, str]:
+    keystore_path = config.get("android_keystore_path", "").strip()
+    if keystore_path:
+        path = Path(keystore_path)
+        if not path.is_absolute():
+            path = ROOT / path
+        keystore_path = str(path)
+    return {
+        "FOODLINK_ANDROID_KEYSTORE_PATH": keystore_path,
+        "FOODLINK_ANDROID_KEYSTORE_PASSWORD": config.get("android_keystore_password", "").strip(),
+        "FOODLINK_ANDROID_KEY_ALIAS": config.get("android_key_alias", "").strip(),
+        "FOODLINK_ANDROID_KEY_PASSWORD": config.get("android_key_password", "").strip(),
+    }
+
+
+def android_release_keystore_configured(signing_env: dict[str, str]) -> bool:
+    return all(
+        signing_env.get(name, "").strip()
+        for name in (
+            "FOODLINK_ANDROID_KEYSTORE_PATH",
+            "FOODLINK_ANDROID_KEYSTORE_PASSWORD",
+            "FOODLINK_ANDROID_KEY_ALIAS",
+            "FOODLINK_ANDROID_KEY_PASSWORD",
+        )
+    )
+
+
 def git_value(args: list[str], fallback: str = "") -> str:
     try:
         return run(["git", *args]).strip()
@@ -335,16 +390,18 @@ def eas_build(platform_profile: str, output_path: Path, api_base_url: str, expo_
     return download(artifact_url, output_path)
 
 
-def local_apk_build(output_path: Path, api_base_url: str) -> Path:
-    run(
-        ["npx", "expo", "prebuild", "--platform", "android"],
-        cwd=MOBILE_DIR,
-        extra_env={"EXPO_PUBLIC_API_BASE_URL": api_base_url},
-    )
+def local_apk_build(output_path: Path, api_base_url: str, config: dict[str, str]) -> Path:
     android_dir = MOBILE_DIR / "android"
     gradlew = android_dir / ("gradlew.bat" if os.name == "nt" else "gradlew")
     if not gradlew.exists():
-        fail(f"Gradle wrapper not found after prebuild: {gradlew}")
+        run(
+            ["npx", "expo", "prebuild", "--platform", "android"],
+            cwd=MOBILE_DIR,
+            extra_env={"EXPO_PUBLIC_API_BASE_URL": api_base_url},
+            capture_output=False,
+        )
+    if not gradlew.exists():
+        fail(f"Gradle wrapper not found: {gradlew}")
     java_home = find_java_home()
     sdk_root = find_android_sdk_root()
     extra_env: dict[str, str] = {}
@@ -359,10 +416,21 @@ def local_apk_build(output_path: Path, api_base_url: str) -> Path:
     else:
         print("ANDROID_HOME not found; Gradle may fail unless android/local.properties already points to an SDK")
     init_script = write_gradle_mirror_init_script()
+    signing_env = android_signing_env(config)
+    extra_env.update(signing_env)
+    keystore_configured = android_release_keystore_configured(signing_env)
+    if keystore_configured:
+        keystore_path = Path(signing_env["FOODLINK_ANDROID_KEYSTORE_PATH"])
+        if not keystore_path.exists():
+            fail(f"Android release keystore file not found: {keystore_path}")
+        print(f"using Android release keystore: {keystore_path}")
+    else:
+        print("warning: Android release signing is not fully configured; APK will use debug signing")
     run(
         [str(gradlew), "--init-script", str(init_script), "assembleRelease"],
         cwd=android_dir,
         extra_env={**extra_env, "EXPO_PUBLIC_API_BASE_URL": api_base_url},
+        capture_output=False,
     )
     apk = android_dir / "app" / "build" / "outputs" / "apk" / "release" / "app-release.apk"
     if not apk.exists():
@@ -440,11 +508,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifact-apk", type=Path, help="Existing APK file to publish")
     parser.add_argument("--artifact-aab", type=Path, help="Existing AAB file to publish")
     parser.add_argument("--build-apk", action="store_true", help="Run EAS Android APK build and publish downloaded APK")
+    parser.add_argument("--build-eas-apk", action="store_true", help="Alias for --build-apk")
     parser.add_argument("--build-aab", action="store_true", help="Run EAS production build and publish downloaded AAB")
     parser.add_argument(
         "--build-local-apk",
         action="store_true",
-        help="Build a local release APK with Expo prebuild + Gradle and publish it. Current native config uses debug signing until a production keystore is configured.",
+        help="Build a local release APK with Gradle and publish it. This is the default when no artifact/build option is provided.",
     )
     parser.add_argument("--namespace", default="release-config.yaml", help="Apollo namespace for release config")
     parser.add_argument("--dist-dir", type=Path, default=DEFAULT_DIST)
@@ -489,12 +558,14 @@ def main() -> None:
     artifact_dir = args.dist_dir / "android" / version / build_number
     apk_path = args.artifact_apk
     aab_path = args.artifact_aab
+    if args.build_eas_apk:
+        args.build_apk = True
     should_auto_build = not apk_path and not aab_path and not args.build_apk and not args.build_aab and not args.build_local_apk
     if args.dry_run and should_auto_build:
         print("[dry-run] branch and release config resolved; no build or upload will be performed")
         return
     if should_auto_build:
-        args.build_apk = True
+        args.build_local_apk = True
 
     if (args.build_apk or args.build_aab) and not config["expo_token"] and not os.getenv("EXPO_TOKEN", "").strip():
         print("warning: EXPO_TOKEN is not configured; EAS may require an interactive login on this machine")
@@ -502,7 +573,7 @@ def main() -> None:
     if args.build_apk:
         apk_path = eas_build(eas_profile, artifact_dir / f"foodlink-{version}-{build_number}.apk", api_base_url, config["expo_token"])
     if args.build_local_apk:
-        apk_path = local_apk_build(artifact_dir / f"foodlink-{version}-{build_number}.apk", api_base_url)
+        apk_path = local_apk_build(artifact_dir / f"foodlink-{version}-{build_number}.apk", api_base_url, config)
     if args.build_aab:
         aab_path = eas_build(eas_profile, artifact_dir / f"foodlink-{version}-{build_number}.aab", api_base_url, config["expo_token"])
 
@@ -534,7 +605,13 @@ def main() -> None:
         "applicationId": expo.get("android", {}).get("package", "cn.healthymax.foodlink"),
         "version": version,
         "buildNumber": build_number,
-        "buildKind": "local-release-debug-signed" if args.build_local_apk else "release",
+        "buildKind": (
+            "local-release"
+            if args.build_local_apk and android_release_keystore_configured(android_signing_env(config))
+            else "local-release-debug-signed"
+            if args.build_local_apk
+            else "release"
+        ),
         "releasedAt": now,
         "commit": commit,
         "branch": branch,

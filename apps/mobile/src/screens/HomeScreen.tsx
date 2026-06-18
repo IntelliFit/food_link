@@ -7,9 +7,9 @@ import { Camera, FileText, Image as ImageIcon, Utensils, type LucideIcon } from 
 import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
+import { FloatingPetCompanion } from '../components/FloatingPetCompanion'
 import { MacroRow } from '../components/MacroRow'
 import { Page } from '../components/Page'
-import { PetAvatar, petMoodLabel, petStateLabel } from '../components/PetAvatar'
 import { SHOW_DEBUG_LOGIN } from '../config'
 import { useHomeDashboard } from '../hooks/useHomeDashboard'
 import type { RootStackParamList } from '../navigation/types'
@@ -18,7 +18,7 @@ import { colors } from '../theme'
 import { formatShortDate } from '../utils/date'
 import { createDemoAnalysisTask, createDemoTextAnalysisTask, demoFoodImageUrl } from '../utils/demoAnalysisTask'
 import { userFacingErrorMessage } from '../utils/errors'
-import { getHomePetHidden } from '../utils/petPreferences'
+import { getHomePetCollapsed, getHomePetHidden, setHomePetCollapsed as persistHomePetCollapsed } from '../utils/petPreferences'
 
 type TargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
 type TargetForm = Record<TargetField, string>
@@ -47,13 +47,9 @@ export function HomeScreen() {
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [homePetHidden, setHomePetHidden] = useState(false)
+  const [homePetCollapsed, setHomePetCollapsed] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetForm>(() => targetFormFromDashboard(null))
   const mealType = inferDefaultMealTypeFromLocalTime()
-  const pet = petSummary?.pet
-  const petEvent = petSummary?.event?.can_claim ? petSummary.event : null
-  const petMood = petMoodLabel(petSummary?.status?.mood)
-  const petState = petStateLabel(petSummary?.status?.state)
-  const showPetState = petState && !petMood.endsWith(petState)
   const nutritionTarget = dashboard?.nutritionTarget
   const calibrationSuggestion = nutritionTarget?.calibration_suggestion
 
@@ -87,8 +83,10 @@ export function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true
-      void getHomePetHidden().then((hidden) => {
-        if (active) setHomePetHidden(hidden)
+      void Promise.all([getHomePetHidden(), getHomePetCollapsed()]).then(([hidden, collapsed]) => {
+        if (!active) return
+        setHomePetHidden(hidden)
+        setHomePetCollapsed(collapsed)
       })
       return () => {
         active = false
@@ -159,41 +157,20 @@ export function HomeScreen() {
     }
   }, [dialog, loadHome, recordDate, targetForm])
 
-  return (
-    <Page
-      title={homeGreeting()}
-      subtitle={`${formatShortDate(recordDate)} · 今天也要健康饮食哦 · 默认餐次 ${getMealTypeLabel(mealType)}`}
-      refreshing={loading}
-      onRefresh={loadHome}
-    >
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+  const updateHomePetCollapsed = useCallback((collapsed: boolean) => {
+    setHomePetCollapsed(collapsed)
+    void persistHomePetCollapsed(collapsed)
+  }, [])
 
-      {petSummary && !homePetHidden ? (
-        <Pressable style={({ pressed }) => pressed && styles.pressed} onPress={() => navigation.navigate('PetHome')}>
-          <Card>
-            <View style={styles.petCardRow}>
-              <PetAvatar pet={pet} mood={petSummary.status?.mood} state={petSummary.status?.state} />
-              <View style={styles.petMain}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.sectionTitle}>{pet?.name || '成长伙伴'}</Text>
-                  {petEvent ? <Text style={styles.rewardBadge}>可领奖</Text> : null}
-                </View>
-                <Text style={styles.petLevel}>Lv.{pet?.level || 1} · 成长 {Math.round(pet?.level_progress || 0)}%</Text>
-                <Text style={styles.subtitle}>{petSummary.status?.message || '记录一餐，开启今日成长。'}</Text>
-                <View style={styles.petMetaRow}>
-                  <Text style={styles.petMeta}>{petMood}</Text>
-                  {showPetState ? <Text style={styles.petMeta}>{petState}</Text> : null}
-                  <Text style={styles.petMeta}>习惯分 {petSummary.today?.habit_score || 0}</Text>
-                </View>
-              </View>
-            </View>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(100, pet?.level_progress || 0))}%` }]} />
-            </View>
-            <Text style={styles.petTask}>{petEvent?.message || petSummary.status?.task_text || '今天先记录一餐'}</Text>
-          </Card>
-        </Pressable>
-      ) : null}
+  return (
+    <View style={styles.homeRoot}>
+      <Page
+        title={homeGreeting()}
+        subtitle={`${formatShortDate(recordDate)} · 今天也要健康饮食哦 · 默认餐次 ${getMealTypeLabel(mealType)}`}
+        refreshing={loading}
+        onRefresh={loadHome}
+      >
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <CampusBanner onPress={() => navigation.navigate('CampusCanteen')} />
 
@@ -347,7 +324,17 @@ export function HomeScreen() {
 
       <AppButton label="刷新首页" variant="secondary" loading={loading} onPress={loadHome} />
       <AppButton label="健康档案与目标" variant="ghost" onPress={() => navigation.navigate('HealthProfile')} />
-    </Page>
+      </Page>
+      {petSummary && !homePetHidden ? (
+        <FloatingPetCompanion
+          summary={petSummary}
+          collapsed={homePetCollapsed}
+          onCollapsedChange={updateHomePetCollapsed}
+          onOpenHome={() => navigation.navigate('PetHome')}
+          onOpenChat={() => navigation.navigate('PetChat')}
+        />
+      ) : null}
+    </View>
   )
 }
 
@@ -547,6 +534,10 @@ function homeGreeting(): string {
 }
 
 const styles = StyleSheet.create({
+  homeRoot: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   error: {
     color: colors.danger,
     marginBottom: 12,

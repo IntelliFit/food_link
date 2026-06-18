@@ -28,6 +28,10 @@ backend/reports/orphan-report-*.json
 .env.production
 *.env
 
+# Android release signing key (do not commit)
+/foodlink-release.keystore
+/*.keystore
+
 # Python
 __pycache__/
 *.py[cod]

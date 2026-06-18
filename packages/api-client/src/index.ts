@@ -43,6 +43,10 @@ import type {
   PackagedProductExtractResult,
   PackagedNutritionLabelResult,
   PetClaimResult,
+  PetChatEstimateResponse,
+  PetChatHistoryResponse,
+  PetChatResponse,
+  PetChatSessionsResponse,
   PetSummary,
   PrivateMessageItem,
   PublicFoodComment,
@@ -1882,6 +1886,49 @@ export class FoodLinkApiClient {
     return this.authenticatedRequest<{ pet: PetSummary['pet'] }>('/api/pet/select-appearance', {
       method: 'POST',
       body: { candidate_id: id },
+      timeoutMs: 10000,
+    })
+  }
+
+  async estimatePetChat(question: string, range: StatsRange = 'week'): Promise<PetChatEstimateResponse> {
+    const text = question.trim()
+    if (!text) throw new Error('请输入想问伙伴的问题')
+    return this.authenticatedRequest<PetChatEstimateResponse>('/api/pet/chat/estimate', {
+      method: 'POST',
+      body: { question: text, range },
+      timeoutMs: 10000,
+    })
+  }
+
+  async generatePetChat(question: string, range: StatsRange = 'week', sessionId = '', newSession = false): Promise<PetChatResponse> {
+    const text = question.trim()
+    if (!text) throw new Error('请输入想问伙伴的问题')
+    return this.authenticatedRequest<PetChatResponse>('/api/pet/chat', {
+      method: 'POST',
+      body: { question: text, range, session_id: sessionId.trim(), new_session: newSession },
+      timeoutMs: 30000,
+    })
+  }
+
+  async getLatestPetChatSession(): Promise<PetChatHistoryResponse> {
+    return this.authenticatedRequest<PetChatHistoryResponse>('/api/pet/chat/latest', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async listPetChatSessions(): Promise<PetChatSessionsResponse> {
+    return this.authenticatedRequest<PetChatSessionsResponse>('/api/pet/chat/sessions', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async getPetChatSession(sessionId: string): Promise<PetChatHistoryResponse> {
+    const id = sessionId.trim()
+    if (!id) throw new Error('缺少对话 ID')
+    return this.authenticatedRequest<PetChatHistoryResponse>(`/api/pet/chat/sessions/${encodeURIComponent(id)}`, {
+      method: 'GET',
       timeoutMs: 10000,
     })
   }
