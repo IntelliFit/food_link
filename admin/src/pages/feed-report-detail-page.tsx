@@ -9,20 +9,13 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { adminRequest } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
-type FeedReportStatus = 'pending' | 'processing' | 'resolved' | 'rejected'
+type FeedReportStatus = 'pending' | 'resolved' | 'rejected'
 type FeedReportTargetType = 'food_record' | 'exercise_log' | 'circle_post'
 
 type FeedReportItem = {
@@ -64,7 +57,6 @@ type FeedReportDetailPageProps = {
 
 const statusLabels: Record<FeedReportStatus, string> = {
   pending: '待处理',
-  processing: '处理中',
   resolved: '已处理',
   rejected: '已驳回',
 }
@@ -85,14 +77,12 @@ const targetTypeLabels: Record<string, string> = {
 
 const statusBadgeClass: Record<FeedReportStatus, string> = {
   pending: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400',
-  processing: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400',
   resolved: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400',
   rejected: 'border-border bg-muted text-muted-foreground dark:bg-muted/50',
 }
 
 const transitionOptions: Record<FeedReportStatus, FeedReportStatus[]> = {
-  pending: ['processing', 'resolved', 'rejected'],
-  processing: ['resolved', 'rejected'],
+  pending: ['resolved', 'rejected'],
   resolved: [],
   rejected: [],
 }
@@ -118,7 +108,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
   const [deletingTarget, setDeletingTarget] = useState(false)
   const [resolutionNote, setResolutionNote] = useState('')
   const [rewardCredits, setRewardCredits] = useState('0')
-  const [selectedStatus, setSelectedStatus] = useState<FeedReportStatus | ''>('')
+  const [removeTargetOnResolve, setRemoveTargetOnResolve] = useState(true)
 
   useEffect(() => {
     if (!reportId) {
@@ -157,7 +147,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
       setTarget(data.target)
       setResolutionNote(data.item.resolution_note || '')
       setRewardCredits(String(data.item.reward_credits ?? 0))
-      setSelectedStatus(data.item.status)
+      setRemoveTargetOnResolve(true)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '加载举报详情失败')
       navigate('/feed-reports')
@@ -166,12 +156,16 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
     }
   }
 
-  async function updateStatus() {
-    if (!item || !selectedStatus) return
+  async function updateStatus(nextStatus: FeedReportStatus) {
+    if (!item) return
     const trimmedRewardCredits = rewardCredits.trim()
     const parsedRewardCredits = Number(rewardCredits)
-    if (selectedStatus === 'resolved' && (trimmedRewardCredits === '' || !Number.isInteger(parsedRewardCredits) || parsedRewardCredits < 0)) {
+    if (nextStatus === 'resolved' && (trimmedRewardCredits === '' || !Number.isInteger(parsedRewardCredits) || parsedRewardCredits < 0)) {
       toast.error('处理为已处理时必须选择奖励积分，可填写 0')
+      return
+    }
+    if (nextStatus === 'resolved' && removeTargetOnResolve && canDeleteTargetContent(item.target_type)) {
+      await handleDeleteTargetContent()
       return
     }
     setUpdating(true)
@@ -181,16 +175,15 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
         {
           method: 'PATCH',
           body: JSON.stringify({
-            status: selectedStatus,
+            status: nextStatus,
             resolution_note: resolutionNote,
-            reward_credits: selectedStatus === 'resolved' ? parsedRewardCredits : undefined,
+            reward_credits: nextStatus === 'resolved' ? parsedRewardCredits : undefined,
           }),
         },
       )
       setItem(data.item)
       setResolutionNote(data.item.resolution_note || '')
       setRewardCredits(String(data.item.reward_credits ?? 0))
-      setSelectedStatus(data.item.status)
       toast.success('状态已更新')
       if (data.item.status === 'resolved' || data.item.status === 'rejected') {
         toast.info('已发送受理结果系统消息给举报者')
@@ -238,7 +231,6 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
       setItem(data.item)
       setResolutionNote(data.item.resolution_note || resolutionNote || defaultDeleteTargetResolutionNote(item.target_type))
       setRewardCredits(String(data.item.reward_credits ?? 0))
-      setSelectedStatus(data.item.status)
       setTarget(null)
       toast.success('被举报内容已从圈子中移除')
     } catch (error) {
@@ -366,23 +358,14 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                   <CardDescription>更新举报受理状态并填写处理说明</CardDescription>
                 </CardHeader>
                 <CardContent className='space-y-4'>
-                  <div className='space-y-2'>
-                    <Label htmlFor='status'>处理状态</Label>
-                    <Select
-                      value={selectedStatus}
-                      onValueChange={(value) => setSelectedStatus(value as FeedReportStatus)}
-                      disabled={item.status === 'resolved' || item.status === 'rejected'}
-                    >
-                      <SelectTrigger id='status'>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='pending'>{statusLabels.pending}</SelectItem>
-                        <SelectItem value='processing'>{statusLabels.processing}</SelectItem>
-                        <SelectItem value='resolved'>{statusLabels.resolved}</SelectItem>
-                        <SelectItem value='rejected'>{statusLabels.rejected}</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className='flex items-center justify-between gap-3 rounded-md border bg-muted/30 p-3'>
+                    <div>
+                      <div className='text-sm font-medium'>当前状态</div>
+                      <div className='mt-1 text-xs text-muted-foreground'>根据举报是否属实做出处理结论</div>
+                    </div>
+                    <Badge variant='outline' className={cn('shrink-0', statusBadgeClass[item.status])}>
+                      {statusLabels[item.status]}
+                    </Badge>
                   </div>
 
                   <div className='space-y-2'>
@@ -394,7 +377,7 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                       step={1}
                       value={rewardCredits}
                       onChange={(event) => setRewardCredits(event.target.value)}
-                      disabled={item.status === 'resolved' || item.status === 'rejected' || selectedStatus !== 'resolved'}
+                      disabled={item.status === 'resolved' || item.status === 'rejected'}
                     />
                     <p className='text-xs text-muted-foreground'>
                       处理为已处理时必填；可填 0，表示本次不发放奖励。
@@ -412,6 +395,23 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                       disabled={item.status === 'resolved' || item.status === 'rejected'}
                     />
                   </div>
+
+                  {canDeleteTargetContent(item.target_type) && item.status !== 'resolved' && item.status !== 'rejected' ? (
+                    <label className='flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-sm'>
+                      <input
+                        type='checkbox'
+                        className='mt-1'
+                        checked={removeTargetOnResolve}
+                        onChange={(event) => setRemoveTargetOnResolve(event.target.checked)}
+                      />
+                      <span>
+                        <span className='block font-medium'>同时从圈子中移除被举报内容</span>
+                        <span className='block text-xs text-muted-foreground'>
+                          默认执行下架并清理点赞、评论和互动通知；取消勾选则只标记举报为已处理。
+                        </span>
+                      </span>
+                    </label>
+                  ) : null}
 
                   {item.status === 'resolved' || item.status === 'rejected' ? (
                     <div className='rounded-md border bg-muted/50 p-3 text-sm space-y-1'>
@@ -433,14 +433,24 @@ export function FeedReportDetailPage({ onLogout, onMenuChange }: FeedReportDetai
                   ) : null}
 
                   {transitionOptions[item.status].length > 0 && (
-                    <Button
-                      className='w-full'
-                      onClick={() => void updateStatus()}
-                      disabled={updating || !selectedStatus || selectedStatus === item.status}
-                    >
-                      {updating ? <Loader2 className='mr-1 size-4 animate-spin' /> : <Save className='mr-1 size-4' />}
-                      保存处理结果
-                    </Button>
+                    <div className='grid gap-2 sm:grid-cols-2'>
+                      <Button
+                        className='w-full'
+                        onClick={() => void updateStatus('resolved')}
+                        disabled={updating}
+                      >
+                        {updating ? <Loader2 className='mr-1 size-4 animate-spin' /> : <Save className='mr-1 size-4' />}
+                        属实，采纳处理
+                      </Button>
+                      <Button
+                        variant='outline'
+                        className='w-full border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive'
+                        onClick={() => void updateStatus('rejected')}
+                        disabled={updating}
+                      >
+                        驳回举报
+                      </Button>
+                    </div>
                   )}
                 </CardContent>
               </Card>

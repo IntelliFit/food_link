@@ -43,10 +43,9 @@ type ListFeedReportInput struct {
 }
 
 var validReportStatuses = map[string]bool{
-	"pending":    true,
-	"processing": true,
-	"resolved":   true,
-	"rejected":   true,
+	"pending":  true,
+	"resolved": true,
+	"rejected": true,
 }
 
 var terminalStatuses = map[string]bool{
@@ -55,10 +54,9 @@ var terminalStatuses = map[string]bool{
 }
 
 var statusTransitionRules = map[string]map[string]bool{
-	"pending":    {"processing": true, "resolved": true, "rejected": true},
-	"processing": {"resolved": true, "rejected": true},
-	"resolved":   {},
-	"rejected":   {},
+	"pending":  {"resolved": true, "rejected": true},
+	"resolved": {},
+	"rejected": {},
 }
 
 func (s *FeedReportService) GetStatusStats(ctx context.Context) (map[string]int64, error) {

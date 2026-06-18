@@ -12,14 +12,12 @@ type StatusStats = Record<string, number>
 
 const feedbackStatusLabels: Record<string, string> = {
   open: '待处理',
-  processing: '处理中',
-  resolved: '已解决',
-  closed: '已关闭',
+  resolved: '已采纳',
+  closed: '不采纳',
 }
 
 const feedReportStatusLabels: Record<string, string> = {
   pending: '待处理',
-  processing: '处理中',
   resolved: '已处理',
   rejected: '已驳回',
 }

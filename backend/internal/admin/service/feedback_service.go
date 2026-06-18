@@ -73,9 +73,9 @@ func (s *FeedbackService) UpdateStatus(ctx context.Context, id, status, resoluti
 	}
 	normalized := strings.TrimSpace(strings.ToLower(status))
 	switch normalized {
-	case feedbackdomain.StatusOpen, "processing", "resolved", "closed":
+	case feedbackdomain.StatusOpen, "resolved", "closed":
 		if normalized == "resolved" && rewardCredits == nil {
-			return nil, &commonerrors.AppError{Code: 10002, Message: "处理为已解决时必须选择奖励积分，可填写 0", HTTPStatus: 400}
+			return nil, &commonerrors.AppError{Code: 10002, Message: "采纳反馈时必须选择奖励积分，可填写 0", HTTPStatus: 400}
 		}
 		if rewardCredits != nil && *rewardCredits < 0 {
 			return nil, &commonerrors.AppError{Code: 10002, Message: "奖励积分不能小于 0", HTTPStatus: 400}
@@ -98,7 +98,7 @@ func (s *FeedbackService) UpdateStatus(ctx context.Context, id, status, resoluti
 func buildFeedbackResultMessage(status, resolutionMessage string, rewardCredits int) string {
 	base := "你的意见反馈已处理完成。"
 	if status == "closed" {
-		base = "你的意见反馈已关闭。"
+		base = "你的意见反馈本次未被采纳。"
 	}
 	if note := strings.TrimSpace(resolutionMessage); note != "" {
 		base += "\n处理说明：" + note

@@ -32,7 +32,6 @@ type FeedbackPageProps = {
 
 const statusBadgeClass: Record<FeedbackStatus, string> = {
   open: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400',
-  processing: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400',
   resolved: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400',
   closed: 'border-border bg-muted text-muted-foreground dark:bg-muted/50',
 }
@@ -41,7 +40,7 @@ const statusBadgeClass: Record<FeedbackStatus, string> = {
 export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
-  const [status, setStatus] = useState('all')
+  const [status, setStatus] = useState('open')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(30)
   const [items, setItems] = useState<FeedbackItem[]>([])
@@ -177,9 +176,8 @@ export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
             <FilterSelect label="状态" value={status} onValueChange={(value) => { setStatus(value); setPage(1) }} options={[
               { value: 'all', label: '全部状态' },
               { value: 'open', label: '待处理' },
-              { value: 'processing', label: '处理中' },
-              { value: 'resolved', label: '已解决' },
-              { value: 'closed', label: '已关闭' },
+              { value: 'resolved', label: '已采纳' },
+              { value: 'closed', label: '不采纳' },
             ]} />
             <FilterSelect label="每页" value={String(limit)} onValueChange={(value) => { setLimit(Number(value)); setPage(1) }} options={[
               { value: '20', label: '20' },
@@ -377,27 +375,25 @@ function FeedbackDetail({
   onStatusChange: (id: string, status: FeedbackStatus, rewardCredits?: number, resolutionMessage?: string) => Promise<void>
   onCopy: (text: string, label?: string) => Promise<void>
 }) {
-  const [selectedStatus, setSelectedStatus] = useState<FeedbackStatus>(item.status)
   const [rewardCredits, setRewardCredits] = useState(String(item.reward_credits ?? 0))
   const [resolutionMessage, setResolutionMessage] = useState(item.resolution_message || '')
   const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
-    setSelectedStatus(item.status)
     setRewardCredits(String(item.reward_credits ?? 0))
     setResolutionMessage(item.resolution_message || '')
   }, [item.id, item.resolution_message, item.reward_credits, item.status])
 
-  async function submitStatusChange() {
+  async function submitStatusChange(nextStatus: FeedbackStatus) {
     const trimmedRewardCredits = rewardCredits.trim()
     const parsedRewardCredits = Number(rewardCredits)
-    if (selectedStatus === 'resolved' && (trimmedRewardCredits === '' || !Number.isInteger(parsedRewardCredits) || parsedRewardCredits < 0)) {
-      toast.error('处理为已解决时必须选择奖励积分，可填写 0')
+    if (nextStatus === 'resolved' && (trimmedRewardCredits === '' || !Number.isInteger(parsedRewardCredits) || parsedRewardCredits < 0)) {
+      toast.error('采纳反馈时必须选择奖励积分，可填写 0')
       return
     }
     setUpdating(true)
     try {
-      await onStatusChange(item.id, selectedStatus, selectedStatus === 'resolved' ? parsedRewardCredits : undefined, resolutionMessage)
+      await onStatusChange(item.id, nextStatus, nextStatus === 'resolved' ? parsedRewardCredits : undefined, resolutionMessage)
     } finally {
       setUpdating(false)
     }
@@ -418,20 +414,14 @@ function FeedbackDetail({
 
       <section className="space-y-3 rounded-lg border bg-muted/20 p-3">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px]">
-          <div className="space-y-2">
-            <Label htmlFor="feedback-status">处理状态</Label>
-            <Select value={selectedStatus} onValueChange={(value) => setSelectedStatus(value as FeedbackStatus)} disabled={isTerminal}>
-              <SelectTrigger id="feedback-status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(statusLabels).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex items-center justify-between gap-3 rounded-md border bg-background/80 p-3">
+            <div>
+              <div className="text-sm font-medium">当前状态</div>
+              <div className="mt-1 text-xs text-muted-foreground">按是否采纳反馈做出处理结论</div>
+            </div>
+            <Badge variant="outline" className={cn('shrink-0', statusBadgeClass[item.status])}>
+              {statusLabels[item.status] || item.status}
+            </Badge>
           </div>
           <div className="space-y-2">
             <Label htmlFor="feedback-reward-credits">奖励积分</Label>
@@ -442,7 +432,7 @@ function FeedbackDetail({
               step={1}
               value={rewardCredits}
               onChange={(event) => setRewardCredits(event.target.value)}
-              disabled={isTerminal || selectedStatus !== 'resolved'}
+              disabled={isTerminal}
             />
           </div>
         </div>
@@ -458,7 +448,7 @@ function FeedbackDetail({
           />
         </div>
         <p className="text-xs text-muted-foreground">
-          处理为已解决时奖励积分必填；可填 0，表示本次不发放奖励。保存后会向反馈用户发送站内信。
+          采纳反馈时奖励积分必填；可填 0，表示本次不发放奖励。处理后会向反馈用户发送站内信。
         </p>
         {isTerminal ? (
           <div className="space-y-1 rounded-md border bg-muted/50 p-3 text-sm">
@@ -472,10 +462,21 @@ function FeedbackDetail({
             </div>
           </div>
         ) : (
-          <Button size="sm" onClick={submitStatusChange} disabled={updating}>
-            {updating ? <Loader2 className="size-4 animate-spin" /> : null}
-            保存处理状态
-          </Button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button size="sm" onClick={() => void submitStatusChange('resolved')} disabled={updating}>
+              {updating ? <Loader2 className="size-4 animate-spin" /> : null}
+              采纳反馈
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-muted-foreground/30 text-muted-foreground hover:bg-muted"
+              onClick={() => void submitStatusChange('closed')}
+              disabled={updating}
+            >
+              不采纳
+            </Button>
+          </div>
         )}
       </section>
 

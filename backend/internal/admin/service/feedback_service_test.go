@@ -74,6 +74,22 @@ func TestFeedbackServiceUpdateStatusResolvedAllowsZeroReward(t *testing.T) {
 	assert.Equal(t, "admin-user", repo.handledBy)
 }
 
+func TestFeedbackServiceUpdateStatusRejectsProcessing(t *testing.T) {
+	repo := &fakeFeedbackRepo{item: &adminrepo.FeedbackItem{UserFeedback: feedbackdomain.UserFeedback{
+		ID:     "feedback-1",
+		UserID: "user-1",
+		Status: "open",
+	}}}
+	svc := NewFeedbackService(repo)
+
+	updated, err := svc.UpdateStatus(context.Background(), "feedback-1", "processing", "", nil, "admin-user")
+
+	require.Error(t, err)
+	assert.Nil(t, updated)
+	assert.Empty(t, repo.updateStatus)
+	assert.Contains(t, err.Error(), "反馈状态无效")
+}
+
 func TestFeedbackServiceUpdateStatusResolvedSendsResultMessage(t *testing.T) {
 	repo := &fakeFeedbackRepo{item: &adminrepo.FeedbackItem{UserFeedback: feedbackdomain.UserFeedback{
 		ID:     "feedback-1",

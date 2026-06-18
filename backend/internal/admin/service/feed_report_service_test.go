@@ -87,6 +87,23 @@ func TestFeedReportServiceUpdateStatusRejectedNotifiesReporterOnly(t *testing.T)
 	assert.Contains(t, sender.messages[0].content, "未违规")
 }
 
+func TestFeedReportServiceUpdateStatusRejectsProcessing(t *testing.T) {
+	repo := &fakeFeedReportRepo{item: &admindomain.FeedReportItem{
+		ID:             "report-1",
+		ReporterUserID: "reporter-user",
+		ReportedUserID: "reported-user",
+		TargetType:     "circle_post",
+		TargetID:       "post-1",
+		Status:         "pending",
+	}}
+	svc := NewFeedReportService(repo, &recordingSystemMessageSender{})
+
+	_, err := svc.UpdateStatus(context.Background(), "report-1", "processing", "", "admin-user", nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "举报状态无效")
+}
+
 func TestFeedReportServiceDeleteTargetContentNotifiesBothSides(t *testing.T) {
 	reward := 0
 	repo := &fakeFeedReportRepo{item: &admindomain.FeedReportItem{

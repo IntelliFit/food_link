@@ -1,4 +1,4 @@
-export type FeedbackStatus = 'open' | 'processing' | 'resolved' | 'closed'
+export type FeedbackStatus = 'open' | 'resolved' | 'closed'
 export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
 
 export type RecentRequestTrace = {
@@ -67,7 +67,6 @@ export const categoryLabels: Record<string, string> = {
 
 export const statusLabels: Record<FeedbackStatus, string> = {
   open: '待处理',
-  processing: '处理中',
-  resolved: '已解决',
-  closed: '已关闭',
+  resolved: '已采纳',
+  closed: '不采纳',
 }
