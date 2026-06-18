@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ImageBackground, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard, type HomeTargetCalibrationSuggestion } from '@food-link/core'
@@ -23,6 +23,17 @@ import { getHomePetCollapsed, getHomePetHidden, setHomePetCollapsed as persistHo
 type TargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
 type TargetForm = Record<TargetField, string>
 type RecordTone = 'green' | 'blue' | 'gold' | 'purple'
+type HomeBannerTone = 'campus' | 'green' | 'gold' | 'blue'
+type HomeBanner = {
+  key: string
+  kicker: string
+  title: string
+  desc: string
+  actionText: string
+  tone: HomeBannerTone
+  imageUrl?: string
+  onPress: () => void
+}
 
 const targetFieldMeta: Array<{ key: TargetField; label: string; unit: string; step: number }> = [
   { key: 'calorieTarget', label: '基础摄入目标', unit: 'kcal', step: 100 },
@@ -43,7 +54,9 @@ const CAFETERIA_HERO_BG_URL = 'https://cdn-food-images.coachlink.fit/wechat/cafe
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const { width: windowWidth } = useWindowDimensions()
   const { recordDate, dashboard, petSummary, loading, error, loadHome } = useHomeDashboard()
+  const [activeBannerIndex, setActiveBannerIndex] = useState(0)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [homePetHidden, setHomePetHidden] = useState(false)
@@ -52,6 +65,46 @@ export function HomeScreen() {
   const mealType = inferDefaultMealTypeFromLocalTime()
   const nutritionTarget = dashboard?.nutritionTarget
   const calibrationSuggestion = nutritionTarget?.calibration_suggestion
+  const bannerWidth = Math.max(280, windowWidth - 40)
+  const homeBanners: HomeBanner[] = [
+    {
+      key: 'campus',
+      kicker: '食探校园活动',
+      title: '食探校园食堂计划',
+      desc: '一起补全食堂菜品、价格、窗口和营养信息',
+      actionText: '去看看',
+      tone: 'campus',
+      imageUrl: CAFETERIA_HERO_BG_URL,
+      onPress: () => navigation.navigate('CampusCanteen'),
+    },
+    {
+      key: 'reward',
+      kicker: '今日任务',
+      title: '赚积分换权益',
+      desc: '上传、打卡和反馈都能积累奖励积分',
+      actionText: '去赚',
+      tone: 'green',
+      onPress: () => navigation.navigate('RewardCenter'),
+    },
+    {
+      key: 'history',
+      kicker: 'AI 记录',
+      title: '识别记录',
+      desc: '继续查看过往图片识别和分析进度',
+      actionText: '去查看',
+      tone: 'blue',
+      onPress: () => navigation.navigate('AnalyzeHistory'),
+    },
+    {
+      key: 'feedback',
+      kicker: '帮助食探成长',
+      title: '意见反馈',
+      desc: '遇到体验问题可以直接反馈给我们',
+      actionText: '去反馈',
+      tone: 'gold',
+      onPress: () => navigation.navigate('AboutFeedback'),
+    },
+  ]
 
   const openAnalyze = useCallback((source: 'camera' | 'library') => {
     navigation.navigate('Analyze', { source, mealType, date: recordDate })
@@ -172,7 +225,12 @@ export function HomeScreen() {
       >
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <CampusBanner onPress={() => navigation.navigate('CampusCanteen')} />
+      <HomeBannerCarousel
+        banners={homeBanners}
+        activeIndex={activeBannerIndex}
+        bannerWidth={bannerWidth}
+        onIndexChange={setActiveBannerIndex}
+      />
 
       <Card>
         <View style={styles.rowBetween}>
@@ -338,27 +396,91 @@ export function HomeScreen() {
   )
 }
 
-function CampusBanner({ onPress }: { onPress: () => void }) {
+function HomeBannerCarousel({
+  banners,
+  activeIndex,
+  bannerWidth,
+  onIndexChange,
+}: {
+  banners: HomeBanner[]
+  activeIndex: number
+  bannerWidth: number
+  onIndexChange: (index: number) => void
+}) {
   return (
-    <Pressable style={({ pressed }) => [styles.campusBannerPressable, pressed && styles.pressed]} onPress={onPress}>
-      <ImageBackground
-        source={{ uri: CAFETERIA_HERO_BG_URL }}
-        resizeMode="cover"
-        style={styles.campusBanner}
-        imageStyle={styles.campusBannerImage}
+    <View style={styles.homeBannerCarousel}>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        snapToInterval={bannerWidth + 10}
+        decelerationRate="fast"
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.homeBannerTrack}
+        onMomentumScrollEnd={(event) => {
+          const nextIndex = Math.round(event.nativeEvent.contentOffset.x / Math.max(1, bannerWidth + 10))
+          onIndexChange(Math.max(0, Math.min(nextIndex, banners.length - 1)))
+        }}
       >
-        <View style={styles.campusBannerOverlay}>
-          <View style={styles.campusBannerText}>
-            <Text style={styles.campusBannerKicker}>食探校园活动</Text>
-            <Text style={styles.campusBannerTitle}>食探校园食堂计划</Text>
-            <Text style={styles.campusBannerSubtitle}>一起补全食堂菜品、价格、窗口和营养信息</Text>
-          </View>
-          <View style={styles.campusBannerButton}>
-            <Text style={styles.campusBannerButtonText}>去看看</Text>
-          </View>
+        {banners.map((banner, index) => (
+          <Pressable
+            key={banner.key}
+            style={({ pressed }) => [
+              styles.homeBannerSlide,
+              { width: bannerWidth, marginRight: index === banners.length - 1 ? 0 : 10 },
+              pressed && styles.pressed,
+            ]}
+            onPress={banner.onPress}
+          >
+            {banner.imageUrl ? (
+              <ImageBackground
+                source={{ uri: banner.imageUrl }}
+                resizeMode="cover"
+                style={styles.homeBanner}
+                imageStyle={styles.homeBannerImage}
+              >
+                <HomeBannerContent banner={banner} image />
+              </ImageBackground>
+            ) : (
+              <View
+                style={[
+                  styles.homeBanner,
+                  banner.tone === 'green' && styles.homeBannerGreen,
+                  banner.tone === 'gold' && styles.homeBannerGold,
+                  banner.tone === 'blue' && styles.homeBannerBlue,
+                ]}
+              >
+                <HomeBannerContent banner={banner} />
+              </View>
+            )}
+          </Pressable>
+        ))}
+      </ScrollView>
+      {banners.length > 1 ? (
+        <View style={styles.homeBannerDots}>
+          {banners.map((banner, index) => (
+            <View
+              key={`${banner.key}-dot`}
+              style={[styles.homeBannerDot, index === activeIndex && styles.homeBannerDotActive]}
+            />
+          ))}
         </View>
-      </ImageBackground>
-    </Pressable>
+      ) : null}
+    </View>
+  )
+}
+
+function HomeBannerContent({ banner, image = false }: { banner: HomeBanner; image?: boolean }) {
+  return (
+    <View style={[styles.homeBannerOverlay, image && styles.homeBannerImageOverlay]}>
+      <View style={styles.homeBannerText}>
+        <Text style={[styles.homeBannerKicker, image && styles.homeBannerTextLight]}>{banner.kicker}</Text>
+        <Text style={[styles.homeBannerTitle, image && styles.homeBannerTextLight]}>{banner.title}</Text>
+        <Text style={[styles.homeBannerSubtitle, image && styles.homeBannerTextLight]}>{banner.desc}</Text>
+      </View>
+      <View style={[styles.homeBannerButton, image && styles.homeBannerButtonLight]}>
+        <Text style={[styles.homeBannerButtonText, image && styles.homeBannerButtonTextLight]}>{banner.actionText}</Text>
+      </View>
+    </View>
   )
 }
 
@@ -766,59 +888,102 @@ const styles = StyleSheet.create({
   empty: {
     color: colors.textMuted,
   },
-  campusBannerPressable: {
+  homeBannerCarousel: {
     marginBottom: 16,
+  },
+  homeBannerTrack: {
+    alignItems: 'stretch',
+  },
+  homeBannerSlide: {
     borderRadius: 20,
     overflow: 'hidden',
   },
-  campusBanner: {
+  homeBanner: {
     minHeight: 126,
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
-  campusBannerImage: {
+  homeBannerGreen: {
+    backgroundColor: '#e9fbf3',
+  },
+  homeBannerGold: {
+    backgroundColor: '#fff7ed',
+  },
+  homeBannerBlue: {
+    backgroundColor: '#edf7ff',
+  },
+  homeBannerImage: {
     borderRadius: 20,
   },
-  campusBannerOverlay: {
+  homeBannerOverlay: {
     minHeight: 126,
     padding: 18,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
     gap: 14,
+  },
+  homeBannerImageOverlay: {
     backgroundColor: 'rgba(6, 45, 43, 0.52)',
   },
-  campusBannerText: {
+  homeBannerText: {
     flex: 1,
   },
-  campusBannerKicker: {
-    color: 'rgba(255, 255, 255, 0.86)',
+  homeBannerKicker: {
+    color: colors.brandDark,
     fontSize: 13,
     fontWeight: '800',
     marginBottom: 6,
   },
-  campusBannerTitle: {
-    color: '#fff',
+  homeBannerTitle: {
+    color: colors.text,
     fontSize: 21,
     fontWeight: '900',
     marginBottom: 7,
   },
-  campusBannerSubtitle: {
-    color: 'rgba(255, 255, 255, 0.9)',
+  homeBannerSubtitle: {
+    color: colors.textSecondary,
     lineHeight: 19,
     fontWeight: '700',
   },
-  campusBannerButton: {
+  homeBannerTextLight: {
+    color: '#fff',
+  },
+  homeBannerButton: {
     minHeight: 42,
     borderRadius: 999,
     paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  homeBannerButtonLight: {
     backgroundColor: '#fff',
   },
-  campusBannerButtonText: {
+  homeBannerButtonText: {
     color: colors.brandDark,
     fontWeight: '900',
+  },
+  homeBannerButtonTextLight: {
+    color: colors.brandDark,
+  },
+  homeBannerDots: {
+    height: 16,
+    marginTop: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  homeBannerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: colors.border,
+  },
+  homeBannerDotActive: {
+    width: 18,
+    backgroundColor: colors.brand,
   },
   quickGrid: {
     flexDirection: 'row',
@@ -846,14 +1011,16 @@ const styles = StyleSheet.create({
   recordGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    justifyContent: 'space-between',
+    rowGap: 10,
   },
   recordActionCard: {
-    width: '48.5%',
-    minHeight: 122,
-    borderRadius: 18,
+    width: '48%',
+    maxWidth: '48%',
+    minHeight: 116,
+    borderRadius: 16,
     borderWidth: 1,
-    padding: 14,
+    padding: 12,
   },
   recordActionGreen: {
     backgroundColor: '#f9fefc',
@@ -872,9 +1039,9 @@ const styles = StyleSheet.create({
     borderColor: '#e6defa',
   },
   recordActionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
@@ -894,7 +1061,7 @@ const styles = StyleSheet.create({
   recordActionTitle: {
     color: colors.text,
     fontWeight: '900',
-    fontSize: 16,
+    fontSize: 15,
   },
   recordActionDesc: {
     color: colors.textSecondary,
