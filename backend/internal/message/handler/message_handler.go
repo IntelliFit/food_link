@@ -18,6 +18,8 @@ type MessageService interface {
 	GetConversations(ctx context.Context, userID string, offset, limit int) ([]repo.ConversationSummary, error)
 	MarkRead(ctx context.Context, userID, senderID string) error
 	CountUnread(ctx context.Context, userID string) (int64, error)
+	DeleteMessage(ctx context.Context, userID, messageID string) error
+	ReportMessage(ctx context.Context, reporterUserID, messageID, reason, extraContent string) (*domain.PrivateMessageReport, error)
 }
 
 type MessageHandler struct {
@@ -120,4 +122,35 @@ func (h *MessageHandler) GetUnreadCount(c *gin.Context) {
 		return
 	}
 	response.Success(c, map[string]int64{"count": count})
+}
+
+// DELETE /api/messages/message/:message_id
+func (h *MessageHandler) DeleteMessage(c *gin.Context) {
+	currentUserID := c.GetString(authmw.ContextUserIDKey)
+	messageID := c.Param("message_id")
+	if err := h.msgSvc.DeleteMessage(c.Request.Context(), currentUserID, messageID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "已删除"})
+}
+
+// POST /api/messages/message/:message_id/report
+func (h *MessageHandler) ReportMessage(c *gin.Context) {
+	currentUserID := c.GetString(authmw.ContextUserIDKey)
+	messageID := c.Param("message_id")
+	var body struct {
+		Reason       string `json:"reason"`
+		ExtraContent string `json:"extra_content"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	report, err := h.msgSvc.ReportMessage(c.Request.Context(), currentUserID, messageID, body.Reason, body.ExtraContent)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": report.ID, "status": report.Status})
 }

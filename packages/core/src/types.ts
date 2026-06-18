@@ -1275,6 +1275,10 @@ export interface PrivateMessageItem {
   is_read?: boolean
   CreatedAt?: string
   created_at?: string
+  DeletedAt?: string | null
+  deleted_at?: string | null
+  DeletedByUserID?: string
+  deleted_by_user_id?: string
 }
 
 export interface ConversationSummary {
