@@ -227,10 +227,22 @@ npm run release:mobile:android -- --artifact-apk apps/mobile/android/app/build/o
 
 APK 必须签名才能安装。当前 Gradle 配置在未提供正式签名时会回退到 debug keystore，因此 APK 可以直接安装测试，但不适合作为长期公开分发签名。
 
-长期分发前建议生成并妥善保存 release keystore，然后在本机或 CI 注入以下环境变量：
+长期分发前建议生成并妥善保存 release keystore。当前约定是 keystore 文件放在项目根目录 `foodlink-release.keystore`，该文件已加入 `.gitignore`，不要提交到仓库。
+
+签名密码和 alias 建议放到 Apollo `release-config.yaml`：
+
+```yaml
+android_signing:
+  keystore_path: foodlink-release.keystore
+  keystore_password: "<store-password>"
+  key_alias: foodlink-release
+  key_password: "<key-password>"
+```
+
+如果生成证书时 key password 直接回车复用了 keystore password，`key_password` 填同一个密码即可。环境变量仍然优先于 Apollo，可用于临时覆盖：
 
 ```powershell
-$env:FOODLINK_ANDROID_KEYSTORE_PATH="D:\secrets\foodlink-release.keystore"
+$env:FOODLINK_ANDROID_KEYSTORE_PATH="K:\code\little-horse\food_link\foodlink-release.keystore"
 $env:FOODLINK_ANDROID_KEYSTORE_PASSWORD="<store-password>"
 $env:FOODLINK_ANDROID_KEY_ALIAS="<key-alias>"
 $env:FOODLINK_ANDROID_KEY_PASSWORD="<key-password>"
