@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { CommonActions, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
@@ -13,6 +13,7 @@ import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
+import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
 
@@ -34,6 +35,7 @@ const ratioOptions = [25, 50, 75, 100]
 export function ResultScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<ResultRoute>()
+  const dialog = useAppDialog()
   const { task, imageUri, mealType, date } = route.params
   const foodItems = task.result?.items || []
   const [items, setItems] = useState<EditableResultItem[]>(() => buildEditableItems(foodItems))
@@ -49,13 +51,13 @@ export function ResultScreen() {
 
   const saveRecord = async () => {
     if (items.length === 0) {
-      Alert.alert('无法保存', '当前识别结果没有可保存的食物明细')
+      void dialog.alert('无法保存', '当前识别结果没有可保存的食物明细', 'warning')
       return
     }
 
     const invalidItem = items.find((item) => editableWeight(item) <= 0 || !item.name.trim())
     if (invalidItem) {
-      Alert.alert('无法保存', '请确认每个食物都有名称，并且重量大于 0g')
+      void dialog.alert('无法保存', '请确认每个食物都有名称，并且重量大于 0g', 'warning')
       return
     }
 
@@ -98,21 +100,31 @@ export function ResultScreen() {
       const saved = await apiClient.saveFoodRecord(payload)
       const message = saved.already_saved ? '这条记录之前已经保存。' : '已记录到当天饮食。'
       if (!saved.id) {
-        Alert.alert('保存成功', message, [
-          { text: '回到首页', onPress: () => navigation.dispatch(CommonActions.navigate('MainTabs')) },
-        ])
+        const result = await dialog.showDialog({
+          title: '保存成功',
+          message,
+          kind: 'success',
+          confirmText: '回到首页',
+        })
+        if (result === 'confirm') {
+          navigation.dispatch(CommonActions.navigate('MainTabs'))
+        }
         return
       }
-      Alert.alert(
-        '保存成功',
+      const result = await dialog.showDialog({
+        title: '保存成功',
         message,
-        [
-          { text: '回到首页', onPress: () => navigation.dispatch(CommonActions.navigate('MainTabs')) },
-          { text: '查看记录', onPress: () => navigation.navigate('RecordDetail', { recordId: saved.id }) },
-        ],
-      )
+        kind: 'success',
+        cancelText: '回到首页',
+        confirmText: '查看记录',
+      })
+      if (result === 'confirm') {
+        navigation.navigate('RecordDetail', { recordId: saved.id })
+      } else if (result === 'cancel') {
+        navigation.dispatch(CommonActions.navigate('MainTabs'))
+      }
     } catch (error) {
-      Alert.alert('保存失败', userFacingErrorMessage(error))
+      void dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setSaving(false)
     }
@@ -126,7 +138,7 @@ export function ResultScreen() {
 
   const applyPeopleRatio = (people: number) => {
     if (!Number.isFinite(people) || people < 1 || people > 99) {
-      Alert.alert('人数无效', '请输入 1 到 99 之间的人数')
+      void dialog.alert('人数无效', '请输入 1 到 99 之间的人数', 'warning')
       return
     }
     const ratio = clampRatio(Math.round(100 / people))

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Image, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Image, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
@@ -14,6 +14,7 @@ import { colors } from '../theme'
 import { formatDateTime } from '../utils/date'
 import { readImageAsBase64DataUrl } from '../utils/image'
 import { useAuth } from '../providers/AuthProvider'
+import { useAppDialog } from '../providers/DialogProvider'
 import { userFacingErrorMessage } from '../utils/errors'
 
 type ProfileTab = 'feed' | 'collections'
@@ -22,6 +23,7 @@ export function ProfileSettingsScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ProfileSettings'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { logout } = useAuth()
+  const dialog = useAppDialog()
   const targetUserId = route.params?.userId
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const isOwner = !targetUserId || (!!currentUserId && targetUserId === currentUserId)
@@ -37,6 +39,9 @@ export function ProfileSettingsScreen() {
   const [coverImage, setCoverImage] = useState('')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const showError = useCallback((title: string, error: unknown) => {
+    return dialog.alert(title, userFacingErrorMessage(error), 'danger')
+  }, [dialog])
 
   useEffect(() => {
     getStoredUserId().then(setCurrentUserId).catch(() => setCurrentUserId(null))
@@ -79,7 +84,7 @@ export function ProfileSettingsScreen() {
     } finally {
       setLoading(false)
     }
-  }, [isOwner, targetUserId])
+  }, [isOwner, showError, targetUserId])
 
   useFocusEffect(
     useCallback(() => {
@@ -98,7 +103,7 @@ export function ProfileSettingsScreen() {
   const pickProfileImage = async (kind: 'avatar' | 'cover') => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permission.granted) {
-      Alert.alert('需要相册权限', kind === 'avatar' ? '请选择头像图片。' : '请选择主页背景图片。')
+      await dialog.alert('需要相册权限', kind === 'avatar' ? '请选择头像图片。' : '请选择主页背景图片。', 'warning')
       return
     }
     const picked = await ImagePicker.launchImageLibraryAsync({
@@ -121,7 +126,7 @@ export function ProfileSettingsScreen() {
         setCoverImage(data.imageUrl)
       }
     } catch (error) {
-      showError(kind === 'avatar' ? '上传头像失败' : '上传背景失败', error)
+      await showError(kind === 'avatar' ? '上传头像失败' : '上传背景失败', error)
     } finally {
       setSaving(false)
     }
@@ -129,7 +134,7 @@ export function ProfileSettingsScreen() {
 
   const saveProfile = async () => {
     if (!nickname.trim()) {
-      Alert.alert('请输入昵称')
+      await dialog.alert('请输入昵称', undefined, 'warning')
       return
     }
     setSaving(true)
@@ -142,9 +147,9 @@ export function ProfileSettingsScreen() {
       })
       applyProfile(data as UserInfo & PublicProfile)
       setEditing(false)
-      Alert.alert('已保存', '个人资料已更新')
+      await dialog.alert('已保存', '个人资料已更新', 'success')
     } catch (error) {
-      showError('保存资料失败', error)
+      await showError('保存资料失败', error)
     } finally {
       setSaving(false)
     }
@@ -163,25 +168,19 @@ export function ProfileSettingsScreen() {
       await apiClient.followUser(targetUserId, Boolean(profile.is_following))
     } catch (error) {
       setProfile(previous)
-      showError('关注失败', error)
+      await showError('关注失败', error)
     }
   }
 
-  const confirmDeleteAccount = () => {
-    Alert.alert(
-      '注销账号',
-      '注销后，账号及健康记录、饮食分析历史、好友关系等数据会被删除，本地登录状态也会清空。确定要注销账号吗？',
-      [
-        { text: '再想想', style: 'cancel' },
-        {
-          text: '确认注销',
-          style: 'destructive',
-          onPress: () => {
-            void deleteAccount()
-          },
-        },
-      ],
-    )
+  const confirmDeleteAccount = async () => {
+    const confirmed = await dialog.confirm({
+      title: '注销账号',
+      message: '注销后，账号及健康记录、饮食分析历史、好友关系等数据会被删除，本地登录状态也会清空。确定要注销账号吗？',
+      kind: 'danger',
+      confirmText: '确认注销',
+      cancelText: '再想想',
+    })
+    if (confirmed) await deleteAccount()
   }
 
   const deleteAccount = async () => {
@@ -189,9 +188,9 @@ export function ProfileSettingsScreen() {
     try {
       await apiClient.deleteAccount()
       await logout()
-      Alert.alert('已注销', '账号已注销，请重新登录。')
+      await dialog.alert('已注销', '账号已注销，请重新登录。', 'success')
     } catch (error) {
-      showError('注销失败', error)
+      await showError('注销失败', error)
     } finally {
       setSaving(false)
     }
@@ -200,17 +199,17 @@ export function ProfileSettingsScreen() {
   const copyUserId = async () => {
     const value = String(profile?.id || targetUserId || '').trim()
     if (!value) {
-      Alert.alert('暂无用户 ID')
+      await dialog.alert('暂无用户 ID', undefined, 'warning')
       return
     }
     await Clipboard.setStringAsync(value)
-    Alert.alert('已复制', '用户 ID 已复制到剪贴板')
+    await dialog.alert('已复制', '用户 ID 已复制到剪贴板', 'success')
   }
 
   const shareProfile = async () => {
     const userId = String(profile?.id || targetUserId || '').trim()
     if (!userId) {
-      Alert.alert('暂无主页信息', '请稍后重试。')
+      await dialog.alert('暂无主页信息', '请稍后重试。', 'warning')
       return
     }
     const nicknameText = profile?.nickname || 'Food Link 用户'
@@ -222,7 +221,7 @@ export function ProfileSettingsScreen() {
         message: `${nicknameText} 的 Food Link 主页${mottoText}\n${link}`,
       })
     } catch (error) {
-      showError('分享失败', error)
+      await showError('分享失败', error)
     }
   }
 
@@ -303,7 +302,7 @@ export function ProfileSettingsScreen() {
             </View>
           ) : null}
           <AppButton label="保存资料" loading={saving} onPress={saveProfile} />
-          <Pressable onPress={confirmDeleteAccount} style={styles.deleteAccount}>
+          <Pressable onPress={() => void confirmDeleteAccount()} style={styles.deleteAccount}>
             <Text style={styles.deleteText}>注销账号</Text>
           </Pressable>
         </Card>
@@ -547,10 +546,6 @@ function normalizeTargetType(value: unknown): CommunityFeedTargetType {
     return value
   }
   return value === 'exercise_checkin' ? 'exercise_log' : 'food_record'
-}
-
-function showError(title: string, error: unknown) {
-  Alert.alert(title, userFacingErrorMessage(error))
 }
 
 const styles = StyleSheet.create({
