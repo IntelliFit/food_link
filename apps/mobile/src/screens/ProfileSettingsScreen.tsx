@@ -431,6 +431,10 @@ function EmptyState({ text }: { text: string }) {
 
 function feedTitle(item: CommunityFeedItem): string {
   const record = item.record
+  const type = normalizeTargetType(item.target_type || record?.feed_type)
+  if (type === 'exercise_log') {
+    return compactRepeatedText(String(record?.exercise_desc || record?.description || record?.exercise_type || '运动打卡'))
+  }
   return String(record?.title || record?.body || record?.description || record?.items?.[0]?.name || '分享动态')
 }
 
@@ -478,7 +482,6 @@ function feedPills(item: CommunityFeedItem): string[] {
   const type = normalizeTargetType(item.target_type || record?.feed_type)
   if (type === 'exercise_log') {
     if (numberFrom(record?.duration_min) > 0) pills.push(`${Math.round(numberFrom(record.duration_min))} 分钟`)
-    if (record?.exercise_type) pills.push(String(record.exercise_type))
     return pills
   }
   if (numberFrom(record?.total_protein) > 0) pills.push(`蛋白 ${formatCompactNumber(record.total_protein)}g`)
@@ -539,6 +542,14 @@ function numberFrom(value: unknown, fallback = 0): number {
 function formatCompactNumber(value: unknown): string {
   const n = numberFrom(value)
   return n >= 10 ? String(Math.round(n)) : n.toFixed(1).replace(/\.0$/, '')
+}
+
+function compactRepeatedText(value: string): string {
+  const text = value.trim()
+  if (!text) return ''
+  const mid = Math.floor(text.length / 2)
+  if (text.length % 2 === 0 && text.slice(0, mid) === text.slice(mid)) return text.slice(0, mid).trim()
+  return text.replace(/(.{2,80})\1+/g, '$1').trim()
 }
 
 function normalizeTargetType(value: unknown): CommunityFeedTargetType {

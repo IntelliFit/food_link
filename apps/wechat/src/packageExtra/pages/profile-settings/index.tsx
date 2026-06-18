@@ -628,15 +628,15 @@ export default function ProfileSettingsPage() {
             {record.title ? <Text className='profile-feed-title'>{record.title}</Text> : null}
             {record.body ? <Text className='profile-feed-desc'>{record.body}</Text> : null}
           </>
+        ) : isExercise ? (
+          // 运动打卡：后端把 exercise_desc 同时映射为 description，避免同一文本渲染两次
+          <Text className='profile-feed-desc'>
+            {record.exercise_desc || record.description || record.exercise_type || '运动打卡'}
+          </Text>
         ) : (
-          <>
-            {record.description && (
-              <Text className='profile-feed-desc'>{record.description}</Text>
-            )}
-            {isExercise && record.exercise_desc && (
-              <Text className='profile-feed-desc'>{record.exercise_desc}</Text>
-            )}
-          </>
+          record.description && (
+            <Text className='profile-feed-desc'>{record.description}</Text>
+          )
         )}
 
         {/* 图片 */}

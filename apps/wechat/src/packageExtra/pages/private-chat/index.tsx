@@ -9,6 +9,8 @@ import {
   getAccessToken,
   API_BASE_URL,
   SYSTEM_MESSAGE_USER_ID,
+  deletePrivateMessage,
+  reportPrivateMessage,
   type PrivateMessage,
 } from '../../../utils/api'
 import { FlPageThemeRoot } from '../../../components/FlPageThemeRoot'
@@ -44,6 +46,12 @@ function shouldShowTimeDivider(prev: PrivateMessage | null, curr: PrivateMessage
   return Math.abs(currTime - prevTime) > 10 * 60 * 1000
 }
 
+function isWithinRecallWindow(createdAt: string): boolean {
+  const time = new Date(createdAt).getTime()
+  if (Number.isNaN(time)) return false
+  return Date.now() - time <= 15 * 60 * 1000
+}
+
 function getCurrentUserAvatar(): string {
   try {
     const raw = Taro.getStorageSync('userInfo')
@@ -69,6 +77,8 @@ export default function PrivateChatPage() {
   const [sending, setSending] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [offset, setOffset] = useState(0)
+  const [actionTarget, setActionTarget] = useState<PrivateMessage | null>(null)
+  const [actionSheetVisible, setActionSheetVisible] = useState(false)
 
   const scrollRef = useRef<string>('')
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -168,6 +178,8 @@ export default function PrivateChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [otherUserId])
 
+
+
   // 发送文本消息
   const handleSendText = async () => {
     const text = inputText.trim()
@@ -221,7 +233,7 @@ export default function PrivateChatPage() {
     } catch (err: any) {
       Taro.hideLoading()
       if (isPrivacyAuthorizeError(err)) {
-        showPrivacyAuthorizeFailure()
+        showPrivacyAuthorizeFailure(err)
         return
       }
       Taro.showToast({ title: err?.message || '发送失败', icon: 'none' })
@@ -234,6 +246,66 @@ export default function PrivateChatPage() {
     setTimeout(() => {
       scrollRef.current = `msg-bottom-${Date.now()}`
     }, 100)
+  }
+
+  const openProfile = (userId?: string) => {
+    if (isSystemChat) return
+    const url = userId
+      ? `/packageExtra/pages/profile-settings/index?user_id=${encodeURIComponent(userId)}`
+      : '/packageExtra/pages/profile-settings/index'
+    Taro.navigateTo({ url })
+  }
+
+  const showMessageActions = (msg: PrivateMessage) => {
+    if (msg.content_type === 'system') return
+    setActionTarget(msg)
+    setActionSheetVisible(true)
+  }
+
+  const closeActionSheet = () => {
+    setActionSheetVisible(false)
+    setTimeout(() => setActionTarget(null), 200)
+  }
+
+  const handleCopyMessage = async (msg: PrivateMessage) => {
+    const value = msg.content_type === 'image' ? msg.image_url : msg.content
+    if (!value) {
+      Taro.showToast({ title: '没有可复制的内容', icon: 'none' })
+      return
+    }
+    try {
+      await Taro.setClipboardData({ data: value })
+      Taro.showToast({ title: msg.content_type === 'image' ? '图片链接已复制' : '消息已复制', icon: 'none' })
+    } catch {
+      Taro.showToast({ title: '复制失败', icon: 'none' })
+    }
+    closeActionSheet()
+  }
+
+  const handleRecallMessage = async (msg: PrivateMessage) => {
+    if (!isWithinRecallWindow(msg.created_at)) {
+      Taro.showToast({ title: '消息已超过 15 分钟，无法撤回', icon: 'none' })
+      closeActionSheet()
+      return
+    }
+    try {
+      await deletePrivateMessage(msg.id)
+      setMessages((prev) => prev.filter((item) => item.id !== msg.id))
+      Taro.showToast({ title: '已撤回', icon: 'none' })
+    } catch (err: any) {
+      Taro.showToast({ title: err?.message || '撤回失败', icon: 'none' })
+    }
+    closeActionSheet()
+  }
+
+  const handleReportMessage = async (msg: PrivateMessage) => {
+    try {
+      await reportPrivateMessage(msg.id, 'other', '来自私信长按举报')
+      Taro.showToast({ title: '举报已提交', icon: 'none' })
+    } catch (err: any) {
+      Taro.showToast({ title: err?.message || '举报失败', icon: 'none' })
+    }
+    closeActionSheet()
   }
 
   const handlePreviewImage = (url: string) => {
@@ -262,7 +334,10 @@ export default function PrivateChatPage() {
           </View>
         ) : (
           <View className={`chat-message-row ${isSelf ? 'chat-message-row--self' : ''}`}>
-            <View className='chat-avatar'>
+            <View
+              className='chat-avatar'
+              onClick={() => openProfile(isSelf ? undefined : otherUserId)}
+            >
               <Image
                 className='chat-avatar-img'
                 src={isSelf ? currentUserAvatar || DEFAULT_AVATAR_URL : otherUser.avatar || DEFAULT_AVATAR_URL}
@@ -273,6 +348,7 @@ export default function PrivateChatPage() {
               className={`chat-bubble ${isSelf ? 'chat-bubble--self' : ''} ${
                 msg.content_type === 'image' ? 'chat-bubble--image' : ''
               }`}
+              onLongPress={() => showMessageActions(msg)}
             >
               {msg.content_type === 'image' && msg.image_url ? (
                 <Image
@@ -290,6 +366,22 @@ export default function PrivateChatPage() {
       </View>
     )
   }
+
+  const isSelfActionTarget = actionTarget ? actionTarget.sender_id === currentUserId : false
+
+  const actionItems: {
+    key: 'copy' | 'recall' | 'report'
+    label: string
+    iconClass: string
+    color: string
+    danger?: boolean
+  }[] = []
+  if (isSelfActionTarget) {
+    actionItems.push({ key: 'recall', label: '撤回', iconClass: 'icon-edit', color: '#ef4444', danger: true })
+  } else if (actionTarget) {
+    actionItems.push({ key: 'report', label: '举报', iconClass: 'icon-comment', color: '#ef4444', danger: true })
+  }
+  actionItems.push({ key: 'copy', label: '复制', iconClass: 'icon-share', color: '#3b82f6' })
 
   return (
     <FlPageThemeRoot>
@@ -348,6 +440,39 @@ export default function PrivateChatPage() {
         </View>
         )}
       </View>
+
+      {/* 消息操作面板 */}
+      {actionSheetVisible && (
+        <View className='private-chat-action-sheet' catchMove>
+          <View className='private-chat-action-sheet__mask' onClick={closeActionSheet} />
+          <View className='private-chat-action-sheet__content'>
+            <View className='private-chat-action-sheet__actions'>
+              {actionItems.map((item, idx) => (
+                <View key={item.key}>
+                  <View
+                    className={`private-chat-action-sheet__item ${item.danger ? 'private-chat-action-sheet__item--danger' : ''}`}
+                    onClick={() => {
+                      if (item.key === 'copy') handleCopyMessage(actionTarget!)
+                      else if (item.key === 'recall') handleRecallMessage(actionTarget!)
+                      else if (item.key === 'report') handleReportMessage(actionTarget!)
+                    }}
+                  >
+                    <Text
+                      className={`iconfont ${item.iconClass} private-chat-action-sheet__icon`}
+                      style={{ color: item.color }}
+                    />
+                    <Text className='private-chat-action-sheet__label'>{item.label}</Text>
+                  </View>
+                  {idx < actionItems.length - 1 && <View className='private-chat-action-sheet__divider' />}
+                </View>
+              ))}
+            </View>
+            <View className='private-chat-action-sheet__cancel' onClick={closeActionSheet}>
+              <Text className='private-chat-action-sheet__cancel-text'>取消</Text>
+            </View>
+          </View>
+        </View>
+      )}
     </FlPageThemeRoot>
   )
 }
