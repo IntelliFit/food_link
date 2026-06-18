@@ -469,6 +469,96 @@ def cos_client(config: dict[str, str]):
     )
 
 
+def tc3_sign(key: bytes, message: str) -> bytes:
+    return hmac.new(key, message.encode("utf-8"), hashlib.sha256).digest()
+
+
+def tencent_cloud_request(config: dict[str, str], service: str, action: str, version: str, payload: dict[str, Any]) -> dict[str, Any]:
+    host = f"{service}.tencentcloudapi.com"
+    endpoint = f"https://{host}"
+    timestamp = int(time.time())
+    request_date = datetime.fromtimestamp(timestamp, timezone.utc).strftime("%Y-%m-%d")
+    payload_body = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    hashed_payload = hashlib.sha256(payload_body).hexdigest()
+
+    canonical_headers = (
+        "content-type:application/json; charset=utf-8\n"
+        f"host:{host}\n"
+        f"x-tc-action:{action.lower()}\n"
+    )
+    signed_headers = "content-type;host;x-tc-action"
+    canonical_request = "\n".join(
+        [
+            "POST",
+            "/",
+            "",
+            canonical_headers,
+            signed_headers,
+            hashed_payload,
+        ]
+    )
+    credential_scope = f"{request_date}/{service}/tc3_request"
+    string_to_sign = "\n".join(
+        [
+            "TC3-HMAC-SHA256",
+            str(timestamp),
+            credential_scope,
+            hashlib.sha256(canonical_request.encode("utf-8")).hexdigest(),
+        ]
+    )
+    secret_date = tc3_sign(("TC3" + config["secret_key"]).encode("utf-8"), request_date)
+    secret_service = tc3_sign(secret_date, service)
+    secret_signing = tc3_sign(secret_service, "tc3_request")
+    signature = hmac.new(secret_signing, string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
+    authorization = (
+        "TC3-HMAC-SHA256 "
+        f"Credential={config['secret_id']}/{credential_scope}, "
+        f"SignedHeaders={signed_headers}, "
+        f"Signature={signature}"
+    )
+    headers = {
+        "Authorization": authorization,
+        "Content-Type": "application/json; charset=utf-8",
+        "Host": host,
+        "X-TC-Action": action,
+        "X-TC-Timestamp": str(timestamp),
+        "X-TC-Version": version,
+        "X-TC-Language": "zh-CN",
+    }
+    response = requests.post(endpoint, headers=headers, data=payload_body, timeout=20)
+    response.raise_for_status()
+    result = response.json()
+    error = (result.get("Response") or {}).get("Error")
+    if error:
+        code = error.get("Code", "Unknown")
+        message = error.get("Message", "")
+        fail(f"Tencent Cloud {action} failed: {code}: {message}")
+    return result
+
+
+def purge_cdn_urls(config: dict[str, str], urls: list[str], dry_run: bool) -> None:
+    if not urls:
+        return
+    unique_urls = list(dict.fromkeys(urls))
+    if dry_run:
+        for url in unique_urls:
+            print(f"[dry-run] purge CDN URL: {url}")
+        return
+    try:
+        tencent_cloud_request(
+            config,
+            service="cdn",
+            action="PurgeUrlsCache",
+            version="2018-06-06",
+            payload={"Urls": unique_urls},
+        )
+    except Exception as err:
+        print(f"warning: CDN refresh failed; uploaded artifacts are available but edge cache may be stale: {err}")
+        return
+    for url in unique_urls:
+        print(f"purged CDN URL: {url}")
+
+
 def upload_bytes(client: Any, bucket: str, key: str, data: bytes, content_type: str, cache_control: str, dry_run: bool) -> None:
     if dry_run:
         print(f"[dry-run] upload bytes -> {bucket}/{key} ({content_type})")
@@ -630,29 +720,36 @@ def main() -> None:
 
     client = None if args.dry_run else cos_client(config)
     bucket = config["bucket"]
+    purge_urls: list[str] = []
 
     if apk_path:
         upload_file(client, bucket, artifacts["apk"]["key"], apk_path, args.dry_run)
+        purge_urls.append(artifacts["apk"]["url"])
+        apk_sha256_key = f"{release_prefix}/foodlink-{version}-{build_number}.apk.sha256"
         upload_bytes(
             client,
             bucket,
-            f"{release_prefix}/foodlink-{version}-{build_number}.apk.sha256",
+            apk_sha256_key,
             (artifacts["apk"]["sha256"] + "\n").encode("utf-8"),
             "text/plain; charset=utf-8",
             "public, max-age=31536000, immutable",
             args.dry_run,
         )
+        purge_urls.append(f"{config['cdn_base']}/{apk_sha256_key}")
     if aab_path:
         upload_file(client, bucket, artifacts["aab"]["key"], aab_path, args.dry_run)
+        purge_urls.append(artifacts["aab"]["url"])
+        aab_sha256_key = f"{release_prefix}/foodlink-{version}-{build_number}.aab.sha256"
         upload_bytes(
             client,
             bucket,
-            f"{release_prefix}/foodlink-{version}-{build_number}.aab.sha256",
+            aab_sha256_key,
             (artifacts["aab"]["sha256"] + "\n").encode("utf-8"),
             "text/plain; charset=utf-8",
             "public, max-age=31536000, immutable",
             args.dry_run,
         )
+        purge_urls.append(f"{config['cdn_base']}/{aab_sha256_key}")
 
     upload_bytes(
         client,
@@ -663,6 +760,7 @@ def main() -> None:
         "public, max-age=31536000, immutable",
         args.dry_run,
     )
+    purge_urls.append(release_manifest["url"])
 
     for channel in channels:
         channel_manifest = {
@@ -677,10 +775,14 @@ def main() -> None:
             channel_key,
             json.dumps(channel_manifest, ensure_ascii=False, indent=2).encode("utf-8") + b"\n",
             "application/json; charset=utf-8",
-            "public, max-age=60, must-revalidate",
+            "no-cache, no-store, max-age=0, must-revalidate",
             args.dry_run,
         )
-        print(f"{channel}: {config['cdn_base']}/{channel_key}")
+        channel_url = f"{config['cdn_base']}/{channel_key}"
+        purge_urls.append(channel_url)
+        print(f"{channel}: {channel_url}")
+
+    purge_cdn_urls(config, purge_urls, args.dry_run)
 
     print(f"release manifest: {release_manifest['url']}")
     for kind, artifact in artifacts.items():
