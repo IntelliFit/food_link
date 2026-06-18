@@ -95,7 +95,7 @@ import {
 } from './utils/constants'
 import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTargetForm, createWeekHeatmapCells } from './utils/helpers'
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
-import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, MicrosSection, type MealPosterSharePayload } from './components'
+import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, type MealPosterSharePayload } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
 import {
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
@@ -109,9 +109,9 @@ const HOME_PET_COLLAPSED_KEY = 'home_pet_companion_collapsed_v1'
 const HOME_PET_FLOAT_POSITION_KEY = 'home_pet_companion_float_position_v1'
 const HOME_PET_HIDDEN_KEY = 'home_pet_companion_hidden_v1'
 const HOME_PET_HIDDEN_CHANGED_EVENT = 'home_pet_companion_hidden_changed'
-const CANVAS_ICON_FONT_SOURCE = __ICON_CDN_BASE_URL__
-  ? `url("${__ICON_CDN_BASE_URL__.replace(/\/+$/, '')}/iconfont.ttf")`
-  : ''
+
+// 首页轮播图 banner 数量，与 rewardHintBanners 数组长度保持一致
+const REWARD_HINT_BANNER_COUNT = 3
 
 function isValidHomeDate(date?: string): date is string {
   return typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
@@ -812,7 +812,6 @@ function IndexPage() {
   } | null>(null)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
-  const [nutritionExpanded, setNutritionExpanded] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetFormState>(createTargetForm(DEFAULT_INTAKE))
   const targetScaleBaseMacrosRef = useRef<MacroTargets>(getMacroTargetsFromIntake(DEFAULT_INTAKE))
 
@@ -898,6 +897,14 @@ function IndexPage() {
     } catch {
       // 奖励提示是增强信息，失败时不影响首页主链路。
     }
+  }, [])
+
+  // 首页轮播图自动轮播
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setRewardHintIndex((current) => (current + 1) % REWARD_HINT_BANNER_COUNT)
+    }, 5000)
+    return () => clearInterval(timer)
   }, [])
 
   // 餐食卡片操作状态
@@ -2472,9 +2479,6 @@ function IndexPage() {
       return next
     })
   }, [])
-  const openPetChat = useCallback(() => {
-    Taro.navigateTo({ url: extraPkgUrl('/pages/pet-chat/index') })
-  }, [])
   const handlePetTouchStart = useCallback((event) => {
     const touch = event.touches?.[0]
     if (!touch) return
@@ -2681,24 +2685,22 @@ function IndexPage() {
           canvas.width = POSTER_WIDTH * dpr
           canvas.height = heightPx * dpr
 
-          // 预加载 iconfont，供 Canvas 绘制底部统计图标使用；字体走 CDN，避免占用主包体积。
-          if (CANVAS_ICON_FONT_SOURCE) {
-            try {
-              const fontLoader = (canvas as any).loadFontFace
-                ? (canvas as any).loadFontFace({
-                    family: 'iconfont',
-                    source: CANVAS_ICON_FONT_SOURCE,
-                  })
-                : Taro.loadFontFace({
-                    family: 'iconfont',
-                    source: CANVAS_ICON_FONT_SOURCE,
-                    global: true,
-                  })
-              await fontLoader
-              await new Promise((r) => setTimeout(r, 300))
-            } catch {
-              // ignore font load errors
-            }
+          // 预加载 iconfont，供 Canvas 绘制底部统计图标使用
+          try {
+            const fontLoader = (canvas as any).loadFontFace
+              ? (canvas as any).loadFontFace({
+                  family: 'iconfont',
+                  source: 'url("/assets/iconfont/iconfont.ttf")',
+                })
+              : Taro.loadFontFace({
+                  family: 'iconfont',
+                  source: 'url("/assets/iconfont/iconfont.ttf")',
+                  global: true,
+                })
+            await fontLoader
+            await new Promise((r) => setTimeout(r, 300))
+          } catch {
+            // ignore font load errors
           }
 
           // 字体加载后重新获取 context，确保 canvas 能使用新字体
@@ -2767,21 +2769,13 @@ function IndexPage() {
   const membershipCredits = getMembershipCreditSummary(membershipStatus)
   const availableRewardCredits = getAvailableRewardCredits(rewardCenter)
   const rewardHintTasks = rewardCenter?.tasks || []
-  const showRewardCreditHint =
+  const showRewardHint =
+    !isGuest &&
     availableRewardCredits > 0 &&
     (membershipCredits.remaining < LOW_CREDIT_REWARD_HINT_THRESHOLD || rewardHintTasks.some(isRewardTaskAvailable))
   const rewardHintTaskText = formatRewardHintTaskText(rewardHintTasks)
   const rewardHintBanners = [
     {
-      key: 'goose-duck-chicken',
-      className: 'home-reward-hint--goose-duck-chicken',
-      kicker: '热点专线',
-      title: '鹅腿还是鸭腿？',
-      desc: '上传图片，让食探只在鹅 / 鸭 / 鸡里做判断',
-      actionText: '去识别',
-      url: extraPkgUrl('/pages/goose-duck-chicken/index'),
-    },
-    ...(showRewardCreditHint ? [{
       key: 'reward',
       className: 'home-reward-hint--reward',
       kicker: '今日可赚积分',
@@ -2789,7 +2783,7 @@ function IndexPage() {
       desc: rewardHintTaskText,
       actionText: '去赚',
       url: extraPkgUrl('/pages/reward-center/index'),
-    }] : []),
+    },
     {
       key: 'campus',
       className: 'home-reward-hint--campus',
@@ -2809,28 +2803,10 @@ function IndexPage() {
       url: extraPkgUrl('/pages/feedback/index'),
     },
   ] as const
-  const showRewardHint = !isGuest && rewardHintBanners.length > 0
-  const activeRewardHintIndex = rewardHintBanners.length > 0 ? rewardHintIndex % rewardHintBanners.length : 0
-
-  // 首页轮播图自动轮播
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setRewardHintIndex((current) => (current + 1) % Math.max(rewardHintBanners.length, 1))
-    }, 5000)
-    return () => clearInterval(timer)
-  }, [rewardHintBanners.length])
+  const currentRewardHint = rewardHintBanners[rewardHintIndex % REWARD_HINT_BANNER_COUNT]
 
   const handleRewardHintClick = useCallback((url: string) => {
-    Taro.navigateTo({
-      url,
-      fail: (error) => {
-        console.warn('首页横幅跳转失败', { url, error })
-        Taro.showToast({
-          title: '入口加载失败，请稍后重试',
-          icon: 'none',
-        })
-      },
-    })
+    Taro.navigateTo({ url })
   }, [])
   const openBackfillRecordMenu = () => {
     setShowRecordMenu(true)
@@ -2880,10 +2856,7 @@ function IndexPage() {
           onTouchEnd={handlePetTouchEnd}
           onTouchCancel={handlePetTouchEnd}
         >
-          <View
-            className={`pet-companion-card ${petColor} ${petShape} ${petPattern} animal-${fallbackPetAnimal} mood-${petMood} state-${petState}`}
-            onClick={petCollapsed ? togglePetCollapsed : openPetChat}
-          >
+          <View className={`pet-companion-card ${petColor} ${petShape} ${petPattern} animal-${fallbackPetAnimal} mood-${petMood} state-${petState}`}>
             <View className='pet-companion-avatar'>
               <View className='pet-companion-shadow' />
               <View className='pet-body'>
@@ -2903,26 +2876,46 @@ function IndexPage() {
                 </View>
               </View>
             </View>
-            <View className='pet-companion-content'>
+            {!petCollapsed && (
+              <View className='pet-companion-content'>
                 <View className='pet-companion-header'>
+                  <Text className='pet-companion-kicker'>健康伙伴</Text>
                   <Text className='pet-companion-name'>{petName}</Text>
-                  {!petCollapsed ? (
-                    <View
-                      className='pet-companion-collapse'
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        togglePetCollapsed()
-                      }}
-                    >
-                      <Text className='pet-companion-collapse-text'>收起</Text>
-                    </View>
-                  ) : null}
+                  <Text className='pet-companion-progress-text'>{petLevelText}</Text>
                 </View>
-              <Text className='pet-companion-message'>{petMessage}</Text>
-              <View className='pet-companion-chat'>
-                  <Text className='pet-companion-chat-text'>点我聊聊</Text>
+                <Text className='pet-companion-message'>{petMessage}</Text>
+                <View className='pet-companion-task'>
+                  <Text className='pet-companion-task-dot' />
+                  <Text className='pet-companion-task-text'>{petTaskText}</Text>
                 </View>
+                {petEvent?.can_claim && (
+                  <View className='pet-companion-reward' onClick={handleClaimPetEvent}>
+                    <Text className='pet-companion-reward-text'>
+                      {petClaiming ? '领取中' : petEvent.credit_reward > 0 ? `领取 +${petEvent.credit_reward}积分` : `领取 +${petEvent.exp_reward}经验`}
+                    </Text>
+                  </View>
+                )}
               </View>
+            )}
+            {!petCollapsed && (
+              <View className='pet-companion-collapse' onClick={togglePetCollapsed}>
+                <Text className='pet-companion-collapse-text'>收起</Text>
+              </View>
+            )}
+            {petCollapsed && (
+              <View
+                className={`pet-companion-mini-hint ${petEvent?.can_claim ? 'is-reward' : ''}`}
+                onTouchStart={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => {
+                  e.stopPropagation()
+                  togglePetCollapsed()
+                }}
+              >
+                {petEvent?.can_claim ? (
+                  <Text className='pet-companion-mini-hint-text'>!</Text>
+                ) : null}
+              </View>
+            )}
           </View>
         </View>
       ) : null}
@@ -2955,7 +2948,7 @@ function IndexPage() {
           <View className='home-reward-hint-swiper'>
             <Swiper
               className='home-reward-hint-swiper__track'
-              current={activeRewardHintIndex}
+              current={rewardHintIndex}
               circular
               duration={300}
               onChange={(e) => setRewardHintIndex(e.detail.current)}
@@ -2978,13 +2971,7 @@ function IndexPage() {
                       <Text className='home-reward-hint__title'>{banner.title}</Text>
                       <Text className='home-reward-hint__desc'>{banner.desc}</Text>
                     </View>
-                    <View
-                      className='home-reward-hint__actions'
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        handleRewardHintClick(banner.url)
-                      }}
-                    >
+                    <View className='home-reward-hint__actions'>
                       <Text className='home-reward-hint__go'>{banner.actionText}</Text>
                     </View>
                   </View>
@@ -2995,7 +2982,7 @@ function IndexPage() {
               {rewardHintBanners.map((banner, index) => (
                 <Text
                   key={banner.key}
-                  className={`home-reward-hint__dot ${index === activeRewardHintIndex ? 'active' : ''}`}
+                  className={`home-reward-hint__dot ${index === rewardHintIndex ? 'active' : ''}`}
                 />
               ))}
             </View>
@@ -3055,11 +3042,9 @@ function IndexPage() {
                   </Text>
                 </View>
               )}
-              <View className='target-action-row'>
-                <View className='target-edit-btn' onClick={openTargetEditor}>
-                  <Text className='iconfont icon-target target-edit-icon' />
-                  <Text className='target-edit-text'>目标设置</Text>
-                </View>
+              <View className='target-edit-btn' onClick={openTargetEditor}>
+                <Text className='iconfont icon-target target-edit-icon' />
+                <Text className='target-edit-text'>目标设置</Text>
               </View>
             </View>
           </View>
@@ -3073,95 +3058,69 @@ function IndexPage() {
             </View>
           </View>
 
-          <View className={`nutrition-expand-shell${nutritionExpanded ? ' is-expanded' : ''}`}>
-            <View
-              className='nutrition-expand-main'
-              onClick={() => setNutritionExpanded((value) => !value)}
-            >
-              <View className='nutrition-expand-title-row'>
-                <Text className='nutrition-expand-title'>营养概览</Text>
-                <View className='nutrition-expand-affordance'>
-                  <Text className='nutrition-expand-affordance-text'>
-                    {nutritionExpanded ? '收起' : '展开更多'}
-                  </Text>
-                  <Text className={`nutrition-expand-affordance-icon${nutritionExpanded ? ' is-open' : ''}`}>
-                    ⌄
-                  </Text>
-                </View>
-              </View>
+          {/* 三大营养素 - 合并到热量卡片内，左右布局 */}
+          <View className='macros-section-horizontal'>
+            {MACRO_CONFIGS.map(({ key, label, color, unit, iconClass }) => {
+              const macro = intakeData.macros[key]
+              const targetValue = macro?.target || 0
+              const currentRaw = normalizeDisplayNumber(macro?.current)
+              const targetRaw = normalizeDisplayNumber(macro?.target)
+              const macroPct = calculateProgressPercent(currentRaw, targetRaw)
+              const isMacroOver = macroPct > 100
+              const macroExcessG = isMacroOver
+                ? Number((Math.max(0, currentRaw - targetRaw)).toFixed(1))
+                : null
+              const ringStrokeColor = isMacroOver ? HOME_WARNING_RED : color
+              const intakeTextColor = isMacroOver ? HOME_WARNING_RED : color
 
-              <View className='macros-section-horizontal'>
-                {MACRO_CONFIGS.map(({ key, label, color, unit, iconClass }) => {
-                  const macro = intakeData.macros[key]
-                  const targetValue = macro?.target || 0
-                  const currentRaw = normalizeDisplayNumber(macro?.current)
-                  const targetRaw = normalizeDisplayNumber(macro?.target)
-                  const macroPct = calculateProgressPercent(currentRaw, targetRaw)
-                  const isMacroOver = macroPct > 100
-                  const macroExcessG = isMacroOver
-                    ? Number((Math.max(0, currentRaw - targetRaw)).toFixed(1))
-                    : null
-                  const ringStrokeColor = isMacroOver ? HOME_WARNING_RED : color
-                  const intakeTextColor = isMacroOver ? HOME_WARNING_RED : color
+              const ringAnimPct =
+                key === 'protein'
+                  ? animatedMacroProteinRing
+                  : key === 'carbs'
+                    ? animatedMacroCarbsRing
+                    : animatedMacroFatRing
+              const intakeAnimNum =
+                key === 'protein'
+                  ? animatedMacroProteinNum
+                  : key === 'carbs'
+                    ? animatedMacroCarbsNum
+                    : animatedMacroFatNum
 
-                  const ringAnimPct =
-                    key === 'protein'
-                      ? animatedMacroProteinRing
-                      : key === 'carbs'
-                        ? animatedMacroCarbsRing
-                        : animatedMacroFatRing
-                  const intakeAnimNum =
-                    key === 'protein'
-                      ? animatedMacroProteinNum
-                      : key === 'carbs'
-                        ? animatedMacroCarbsNum
-                        : animatedMacroFatNum
-
-                  return (
-                    <View key={key} className={`macro-card-horizontal ${isMacroOver ? 'is-warning' : ''}`}>
-                      <View className='macro-left-content'>
-                        <View className='macro-excess-slot'>
-                          {macroExcessG != null && macroExcessG > 0 && (
-                            <Text className='macro-over-hint'>+{formatDisplayNumber(macroExcessG)}{unit}</Text>
-                          )}
-                        </View>
-                        <View className='macro-title-row'>
-                          <Text className={`iconfont ${iconClass}`} style={{ color, marginRight: '6rpx', fontSize: '26rpx' }} />
-                          <Text className='macro-label-horizontal'>{label}</Text>
-                        </View>
-                        <View className='macro-value-row'>
-                          <Text className='macro-current-value-inline' style={{ color: intakeTextColor }}>
-                            {formatDisplayNumber(intakeAnimNum)}
-                          </Text>
-                          <Text className='macro-target-total'>
-                            / {formatDisplayNumber(targetValue)}{unit}
-                          </Text>
-                        </View>
-                        <View className='macro-progress-bar-bg'>
-                          <View
-                            className='macro-progress-bar-fill'
-                            style={{
-                              width: `${dashboardBusy ? 0 : Math.min(100, ringAnimPct)}%`,
-                              backgroundColor: ringStrokeColor
-                            }}
-                          />
-                        </View>
-                      </View>
+              return (
+                <View key={key} className={`macro-card-horizontal ${isMacroOver ? 'is-warning' : ''}`}>
+                  {/* 左侧：超标时顶部极简超出量；名称 + 目标总量 */}
+                  <View className='macro-left-content'>
+                    <View className='macro-excess-slot'>
+                      {macroExcessG != null && macroExcessG > 0 && (
+                        <Text className='macro-over-hint'>+{formatDisplayNumber(macroExcessG)}g</Text>
+                      )}
                     </View>
-                  )
-                })}
-              </View>
-            </View>
-
-            {nutritionExpanded && (
-              <View className='nutrition-expanded-body'>
-                <MicrosSection
-                  intakeData={intakeData}
-                  dashboardBusy={dashboardBusy}
-                  isGuest={isGuest}
-                />
-              </View>
-            )}
+                    <View className='macro-title-row'>
+                      <Text className={`iconfont ${iconClass}`} style={{ color, marginRight: '6rpx', fontSize: '26rpx' }} />
+                      <Text className='macro-label-horizontal'>{label}</Text>
+                    </View>
+                    <View className='macro-value-row'>
+                      <Text className='macro-current-value-inline' style={{ color: intakeTextColor }}>
+                        {formatDisplayNumber(intakeAnimNum)}
+                      </Text>
+                      <Text className='macro-target-total'>
+                        / {formatDisplayNumber(targetValue)}g
+                      </Text>
+                    </View>
+                    {/* 进度条 */}
+                    <View className='macro-progress-bar-bg'>
+                      <View
+                        className='macro-progress-bar-fill'
+                        style={{
+                          width: `${dashboardBusy ? 0 : Math.min(100, ringAnimPct)}%`,
+                          backgroundColor: ringStrokeColor
+                        }}
+                      />
+                    </View>
+                  </View>
+                </View>
+              )
+            })}
           </View>
         </View>
 
