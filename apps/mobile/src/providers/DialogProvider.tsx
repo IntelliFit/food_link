@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { CircleAlert, CircleCheck, Info, TriangleAlert, type LucideIcon } from 'lucide-react-native'
 import { AppButton } from '../components/AppButton'
 import { colors, radius, shadow } from '../theme'
 
@@ -27,6 +28,26 @@ interface DialogContextValue {
 }
 
 const DialogContext = createContext<DialogContextValue | null>(null)
+type CompatibleAlertButton = {
+  text?: string
+  style?: 'default' | 'cancel' | 'destructive'
+  onPress?: () => void | Promise<void>
+}
+
+type CompatibleAlertHandler = (title: string, message?: string, buttons?: CompatibleAlertButton[]) => Promise<void>
+
+let compatibleAlertHandler: CompatibleAlertHandler | null = null
+const pendingCompatibleAlerts: Array<{ title: string; message?: string; buttons?: CompatibleAlertButton[] }> = []
+
+export const AppAlert = {
+  alert(title: string, message?: string, buttons?: CompatibleAlertButton[]) {
+    if (!compatibleAlertHandler) {
+      pendingCompatibleAlerts.push({ title, message, buttons })
+      return
+    }
+    void compatibleAlertHandler(title, message, buttons)
+  },
+}
 
 export function DialogProvider({ children }: { children: ReactNode }) {
   const [dialog, setDialog] = useState<PendingDialog | null>(null)
@@ -63,8 +84,46 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     },
   }), [showDialog])
 
+  const compatibleAlert = useCallback<CompatibleAlertHandler>(async (title, message, buttons) => {
+    const actions = buttons && buttons.length > 0 ? buttons : [{ text: '知道了' }]
+    if (actions.length === 1) {
+      const action = actions[0]
+      const result = await showDialog({
+        title,
+        message,
+        kind: action.style === 'destructive' ? 'danger' : 'info',
+        confirmText: action.text || '知道了',
+      })
+      if (result === 'confirm') await action.onPress?.()
+      return
+    }
+
+    const cancelAction = actions.find((action) => action.style === 'cancel') || actions[0]
+    const confirmAction = [...actions].reverse().find((action) => action.style !== 'cancel') || actions[actions.length - 1]
+    const result = await showDialog({
+      title,
+      message,
+      kind: confirmAction.style === 'destructive' ? 'danger' : 'warning',
+      confirmText: confirmAction.text || '确认',
+      cancelText: cancelAction.text || '取消',
+    })
+    if (result === 'confirm') await confirmAction.onPress?.()
+    if (result === 'cancel') await cancelAction.onPress?.()
+  }, [showDialog])
+
+  useEffect(() => {
+    compatibleAlertHandler = compatibleAlert
+    const queuedAlerts = pendingCompatibleAlerts.splice(0)
+    queuedAlerts.forEach((alert) => {
+      void compatibleAlert(alert.title, alert.message, alert.buttons)
+    })
+    return () => {
+      if (compatibleAlertHandler === compatibleAlert) compatibleAlertHandler = null
+    }
+  }, [compatibleAlert])
+
   const kind = dialog?.kind || 'info'
-  const iconText = kindMeta[kind].icon
+  const Icon = kindMeta[kind].icon
 
   return (
     <DialogContext.Provider value={value}>
@@ -75,7 +134,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
           {dialog ? (
             <View style={styles.card}>
               <View style={[styles.iconBubble, styles[`${kind}Icon`]]}>
-                <Text style={[styles.iconText, styles[`${kind}IconText`]]}>{iconText}</Text>
+                <Icon size={24} color={kindMeta[kind].color} strokeWidth={2.6} />
               </View>
               <Text style={styles.title}>{dialog.title}</Text>
               {dialog.message ? <Text style={styles.message}>{dialog.message}</Text> : null}
@@ -107,11 +166,11 @@ export function useAppDialog() {
   return context
 }
 
-const kindMeta: Record<AppDialogKind, { icon: string }> = {
-  info: { icon: 'i' },
-  success: { icon: '✓' },
-  warning: { icon: '!' },
-  danger: { icon: '!' },
+const kindMeta: Record<AppDialogKind, { icon: LucideIcon; color: string }> = {
+  info: { icon: Info, color: colors.brandDark },
+  success: { icon: CircleCheck, color: colors.brandDark },
+  warning: { icon: TriangleAlert, color: colors.orange },
+  danger: { icon: CircleAlert, color: colors.danger },
 }
 
 const styles = StyleSheet.create({
@@ -152,22 +211,6 @@ const styles = StyleSheet.create({
   },
   dangerIcon: {
     backgroundColor: '#fee2e2',
-  },
-  iconText: {
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  infoIconText: {
-    color: colors.brandDark,
-  },
-  successIconText: {
-    color: colors.brandDark,
-  },
-  warningIconText: {
-    color: colors.orange,
-  },
-  dangerIconText: {
-    color: colors.danger,
   },
   title: {
     color: colors.text,

@@ -17,7 +17,7 @@ type FeedReportRepo interface {
 	UpdateStatus(ctx context.Context, id, status, resolutionNote, handledBy string, rewardCredits *int, reporterUserID string) (*admindomain.FeedReportItem, error)
 	Delete(ctx context.Context, id string) error
 	GetTargetSnapshot(ctx context.Context, targetType, targetID string) (*admindomain.FeedReportTargetSnapshot, error)
-	DeleteCirclePostTarget(ctx context.Context, postID string) error
+	DeleteFeedTargetContent(ctx context.Context, targetType, targetID string) error
 	CountByStatus(ctx context.Context) (map[string]int64, error)
 }
 
@@ -43,10 +43,9 @@ type ListFeedReportInput struct {
 }
 
 var validReportStatuses = map[string]bool{
-	"pending":    true,
-	"processing": true,
-	"resolved":   true,
-	"rejected":   true,
+	"pending":  true,
+	"resolved": true,
+	"rejected": true,
 }
 
 var terminalStatuses = map[string]bool{
@@ -55,10 +54,9 @@ var terminalStatuses = map[string]bool{
 }
 
 var statusTransitionRules = map[string]map[string]bool{
-	"pending":    {"processing": true, "resolved": true, "rejected": true},
-	"processing": {"resolved": true, "rejected": true},
-	"resolved":   {},
-	"rejected":   {},
+	"pending":  {"resolved": true, "rejected": true},
+	"resolved": {},
+	"rejected": {},
 }
 
 func (s *FeedReportService) GetStatusStats(ctx context.Context) (map[string]int64, error) {
@@ -127,13 +125,9 @@ func (s *FeedReportService) UpdateStatus(ctx context.Context, id, status, resolu
 
 	if terminalStatuses[status] && s.sender != nil {
 		reporterMsg := buildReportResultMessageForReporter(status, resolutionNote, updated.RewardCredits)
-		reportedMsg := buildReportResultMessageForReported(status, resolutionNote)
 		if err := s.sender.SendSystemMessage(ctx, item.ReporterUserID, reporterMsg); err != nil {
 			// 记录日志但不阻塞状态更新
 			// logger.Warn(ctx, "发送举报结果系统消息失败", slog.String("receiver", item.ReporterUserID), slog.Any("error", err))
-		}
-		if err := s.sender.SendSystemMessage(ctx, item.ReportedUserID, reportedMsg); err != nil {
-			// logger.Warn(ctx, "发送举报结果系统消息失败", slog.String("receiver", item.ReportedUserID), slog.Any("error", err))
 		}
 	}
 
@@ -149,16 +143,13 @@ func (s *FeedReportService) DeleteTargetContent(ctx context.Context, id, resolut
 	if err != nil {
 		return nil, err
 	}
-	if item.TargetType != "circle_post" {
-		return nil, &commonerrors.AppError{Code: 10002, Message: "当前举报目标暂不支持直接删除", HTTPStatus: 400}
-	}
-	if err := s.repo.DeleteCirclePostTarget(ctx, item.TargetID); err != nil {
+	if err := s.repo.DeleteFeedTargetContent(ctx, item.TargetType, item.TargetID); err != nil {
 		return nil, err
 	}
 
 	note := strings.TrimSpace(resolutionNote)
 	if note == "" {
-		note = "已删除被举报的圈子内容。"
+		note = defaultDeleteTargetResolutionNote(item.TargetType)
 	}
 	if terminalStatuses[item.Status] {
 		return item, nil
@@ -184,6 +175,13 @@ func (s *FeedReportService) DeleteTargetContent(ctx context.Context, id, resolut
 		}
 	}
 	return updated, nil
+}
+
+func defaultDeleteTargetResolutionNote(targetType string) string {
+	if strings.TrimSpace(targetType) == "circle_post" {
+		return "已删除被举报的圈子内容。"
+	}
+	return "已从圈子中移除被举报内容。"
 }
 
 func buildReportResultMessageForReporter(status, resolutionNote string, rewardCredits int) string {

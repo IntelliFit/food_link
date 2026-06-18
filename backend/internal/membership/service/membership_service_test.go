@@ -299,6 +299,19 @@ func (m *mockMembershipRepo) ChangeEarnedCredits(ctx context.Context, userID str
 	}
 	return entry, true, nil
 }
+func (m *mockMembershipRepo) ChangeCreditsWithSystemUsage(ctx context.Context, userID string, earnedDelta int, earnedReason, earnedSourceKey, systemReason, systemSourceKey, relatedDate string, earnedMeta, systemMeta map[string]any) error {
+	if earnedDelta != 0 {
+		_, _, err := m.ChangeEarnedCredits(ctx, userID, earnedDelta, earnedReason, earnedSourceKey, relatedDate, earnedMeta)
+		if err != nil {
+			return err
+		}
+	}
+	if systemReason != "" {
+		_, _, err := m.ChangeEarnedCredits(ctx, userID, 0, systemReason, systemSourceKey, relatedDate, systemMeta)
+		return err
+	}
+	return nil
+}
 func (m *mockMembershipRepo) SumPositiveEarnedCreditsByDate(ctx context.Context, userID, chinaDate string) (int, error) {
 	return m.sumPositiveEarnedCredits, nil
 }

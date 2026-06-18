@@ -19,44 +19,44 @@ const (
 )
 
 type FeedRecord struct {
-	FeedType       string           `gorm:"column:feed_type" json:"feed_type"`
-	ID             string           `gorm:"column:id" json:"id"`
-	UserID         string           `gorm:"column:user_id" json:"user_id"`
-	MealType       string           `gorm:"column:meal_type" json:"meal_type"`
-	RecordTime     *time.Time       `gorm:"column:record_time" json:"record_time"`
-	CreatedAt      *time.Time       `gorm:"column:created_at" json:"created_at"`
-	TotalCalories  float64          `gorm:"column:total_calories" json:"total_calories"`
-	TotalProtein   float64          `gorm:"column:total_protein" json:"total_protein"`
-	TotalCarbs     float64          `gorm:"column:total_carbs" json:"total_carbs"`
-	TotalFat       float64          `gorm:"column:total_fat" json:"total_fat"`
-	Fiber          *float64         `gorm:"column:fiber" json:"fiber,omitempty"`
-	Sugar          *float64         `gorm:"column:sugar" json:"sugar,omitempty"`
-	SodiumMg       *float64         `gorm:"column:sodium_mg" json:"sodium_mg,omitempty"`
-	TotalWeightGrams *float64       `gorm:"column:total_weight_grams" json:"total_weight_grams,omitempty"`
-	ImagePath      *string          `gorm:"column:image_path" json:"image_path,omitempty"`
-	ImagePaths     []string         `gorm:"column:image_paths;serializer:json" json:"image_paths,omitempty"`
-	Description    *string          `gorm:"column:description" json:"description,omitempty"`
-	Title          *string          `gorm:"column:title" json:"title,omitempty"`
-	Body           *string          `gorm:"column:body" json:"body,omitempty"`
-	Items          []map[string]any `gorm:"column:items;serializer:json" json:"items"`
-	DietGoal       *string          `gorm:"column:diet_goal" json:"diet_goal,omitempty"`
-	HiddenFromFeed bool             `gorm:"column:hidden_from_feed" json:"hidden_from_feed"`
-	ExerciseType   *string          `gorm:"column:exercise_type" json:"exercise_type,omitempty"`
-	ExerciseDesc   *string          `gorm:"column:exercise_desc" json:"exercise_desc,omitempty"`
-	CaloriesBurned *float64         `gorm:"column:calories_burned" json:"calories_burned,omitempty"`
-	DurationMin    *int             `gorm:"column:duration_min" json:"duration_min,omitempty"`
-	AIReasoning    *string          `gorm:"column:ai_reasoning" json:"ai_reasoning,omitempty"`
+	FeedType         string           `gorm:"column:feed_type" json:"feed_type"`
+	ID               string           `gorm:"column:id" json:"id"`
+	UserID           string           `gorm:"column:user_id" json:"user_id"`
+	MealType         string           `gorm:"column:meal_type" json:"meal_type"`
+	RecordTime       *time.Time       `gorm:"column:record_time" json:"record_time"`
+	CreatedAt        *time.Time       `gorm:"column:created_at" json:"created_at"`
+	TotalCalories    float64          `gorm:"column:total_calories" json:"total_calories"`
+	TotalProtein     float64          `gorm:"column:total_protein" json:"total_protein"`
+	TotalCarbs       float64          `gorm:"column:total_carbs" json:"total_carbs"`
+	TotalFat         float64          `gorm:"column:total_fat" json:"total_fat"`
+	Fiber            *float64         `gorm:"column:fiber" json:"fiber,omitempty"`
+	Sugar            *float64         `gorm:"column:sugar" json:"sugar,omitempty"`
+	SodiumMg         *float64         `gorm:"column:sodium_mg" json:"sodium_mg,omitempty"`
+	TotalWeightGrams *float64         `gorm:"column:total_weight_grams" json:"total_weight_grams,omitempty"`
+	ImagePath        *string          `gorm:"column:image_path" json:"image_path,omitempty"`
+	ImagePaths       []string         `gorm:"column:image_paths;serializer:json" json:"image_paths,omitempty"`
+	Description      *string          `gorm:"column:description" json:"description,omitempty"`
+	Title            *string          `gorm:"column:title" json:"title,omitempty"`
+	Body             *string          `gorm:"column:body" json:"body,omitempty"`
+	Items            []map[string]any `gorm:"column:items;serializer:json" json:"items"`
+	DietGoal         *string          `gorm:"column:diet_goal" json:"diet_goal,omitempty"`
+	HiddenFromFeed   bool             `gorm:"column:hidden_from_feed" json:"hidden_from_feed"`
+	ExerciseType     *string          `gorm:"column:exercise_type" json:"exercise_type,omitempty"`
+	ExerciseDesc     *string          `gorm:"column:exercise_desc" json:"exercise_desc,omitempty"`
+	CaloriesBurned   *float64         `gorm:"column:calories_burned" json:"calories_burned,omitempty"`
+	DurationMin      *int             `gorm:"column:duration_min" json:"duration_min,omitempty"`
+	AIReasoning      *string          `gorm:"column:ai_reasoning" json:"ai_reasoning,omitempty"`
 	// Campus food fields (for public_food_library entries appearing in feed)
-	Price           float64 `gorm:"column:price" json:"price,omitempty"`
-	PriceUnit       string  `gorm:"column:price_unit" json:"price_unit,omitempty"`
-	SchoolName      string  `gorm:"column:school_name" json:"school_name,omitempty"`
-	CanteenName     string  `gorm:"column:canteen_name" json:"canteen_name,omitempty"`
-	CampusLocation  string  `gorm:"column:campus_location_text" json:"campus_location,omitempty"`
-	IsCampusFood    bool    `gorm:"column:is_campus_food" json:"is_campus_food"`
-	IsCampusHighlight bool `gorm:"column:is_campus_highlight" json:"is_campus_highlight"`
-	LikeCount       int     `gorm:"column:like_count" json:"like_count,omitempty"`
-	CommentCount    int     `gorm:"column:comment_count" json:"comment_count,omitempty"`
-	CollectionCount int     `gorm:"column:collection_count" json:"collection_count,omitempty"`
+	Price             float64 `gorm:"column:price" json:"price,omitempty"`
+	PriceUnit         string  `gorm:"column:price_unit" json:"price_unit,omitempty"`
+	SchoolName        string  `gorm:"column:school_name" json:"school_name,omitempty"`
+	CanteenName       string  `gorm:"column:canteen_name" json:"canteen_name,omitempty"`
+	CampusLocation    string  `gorm:"column:campus_location_text" json:"campus_location,omitempty"`
+	IsCampusFood      bool    `gorm:"column:is_campus_food" json:"is_campus_food"`
+	IsCampusHighlight bool    `gorm:"column:is_campus_highlight" json:"is_campus_highlight"`
+	LikeCount         int     `gorm:"column:like_count" json:"like_count,omitempty"`
+	CommentCount      int     `gorm:"column:comment_count" json:"comment_count,omitempty"`
+	CollectionCount   int     `gorm:"column:collection_count" json:"collection_count,omitempty"`
 }
 
 func (FeedRecord) TableName() string { return "user_food_records" }
@@ -746,15 +746,27 @@ func (r *FeedRepo) FindFeedReport(ctx context.Context, reporterUserID, targetTyp
 }
 
 func (r *FeedRepo) DeleteCirclePostInteractions(ctx context.Context, postID string) error {
+	return r.DeleteTargetInteractions(ctx, FeedTargetCirclePost, postID)
+}
+
+func (r *FeedRepo) DeleteTargetInteractions(ctx context.Context, targetType, targetID string) error {
+	targetType = NormalizeTargetType(targetType)
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		target := FeedTarget{TargetType: FeedTargetCirclePost, TargetID: postID}
-		if err := tx.Where("target_type = ? AND target_id = ?", target.TargetType, target.TargetID).Delete(&domain.FeedLike{}).Error; err != nil {
+		likeQ := tx.Where("target_type = ? AND target_id = ?", targetType, targetID)
+		commentQ := tx.Where("target_type = ? AND target_id = ?", targetType, targetID)
+		notificationQ := tx.Where("target_type = ? AND target_id = ?", targetType, targetID)
+		if targetType == FeedTargetFoodRecord {
+			likeQ = likeQ.Or("record_id = ?", targetID)
+			commentQ = commentQ.Or("record_id = ?", targetID)
+			notificationQ = notificationQ.Or("record_id = ?", targetID)
+		}
+		if err := likeQ.Delete(&domain.FeedLike{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("target_type = ? AND target_id = ?", target.TargetType, target.TargetID).Delete(&domain.FeedComment{}).Error; err != nil {
+		if err := commentQ.Delete(&domain.FeedComment{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("target_type = ? AND target_id = ?", target.TargetType, target.TargetID).Delete(&domain.FeedInteractionNotification{}).Error; err != nil {
+		if err := notificationQ.Delete(&domain.FeedInteractionNotification{}).Error; err != nil {
 			return err
 		}
 		return nil

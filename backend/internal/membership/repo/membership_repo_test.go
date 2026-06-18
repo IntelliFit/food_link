@@ -151,10 +151,20 @@ func TestMembershipRepo_CountDailySystemCreditUsage(t *testing.T) {
 		Payload:   map[string]any{"credit_usage": map[string]any{"system_by_date": map[string]any{today: 2}}},
 		CreatedAt: &now,
 	}).Error)
+	require.NoError(t, db.Create(&domain.UserEarnedCreditLedger{
+		ID:          uuid.New().String(),
+		UserID:      "u1",
+		Delta:       0,
+		Reason:      "pet_chat_reward_spend_system",
+		RelatedDate: &today,
+		Meta: map[string]any{
+			"credit_usage": map[string]any{"system_by_date": map[string]any{today: 2}},
+		},
+	}).Error)
 
 	used, err := r.CountDailySystemCreditUsage(ctx, "u1", today)
 	require.NoError(t, err)
-	assert.Equal(t, 3, used)
+	assert.Equal(t, 5, used)
 }
 
 func TestMembershipRepo_CountDailySystemCreditUsage_CountsPendingAndRefundsFailedGroup(t *testing.T) {

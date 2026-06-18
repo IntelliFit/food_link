@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Image, Modal, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, Modal, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import qrcode from 'qrcode-generator'
@@ -21,6 +21,7 @@ import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
 import { Page } from '../components/Page'
+import { AppAlert as Alert } from '../providers/DialogProvider'
 import {
   PetAvatar,
   petAccessoryLabel,

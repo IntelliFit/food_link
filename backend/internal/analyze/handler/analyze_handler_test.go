@@ -17,16 +17,18 @@ import (
 )
 
 type mockAnalyzeService struct {
-	analyzeResult        map[string]any
-	analyzeErr           error
-	analyzeTextResult    map[string]any
-	analyzeTextErr       error
-	analyzeCompareResult map[string]any
-	analyzeCompareErr    error
-	analyzeEnginesResult map[string]any
-	analyzeEnginesErr    error
-	analyzeBatchResult   map[string]any
-	analyzeBatchErr      error
+	analyzeResult          map[string]any
+	analyzeErr             error
+	analyzeTextResult      map[string]any
+	analyzeTextErr         error
+	analyzeCompareResult   map[string]any
+	analyzeCompareErr      error
+	analyzeEnginesResult   map[string]any
+	analyzeEnginesErr      error
+	analyzeBatchResult     map[string]any
+	analyzeBatchErr        error
+	gooseDuckChickenResult service.GooseDuckChickenResult
+	gooseDuckChickenErr    error
 }
 
 func (m *mockAnalyzeService) Analyze(ctx context.Context, userID string, input service.AnalyzeInput) (map[string]any, error) {
@@ -43,6 +45,9 @@ func (m *mockAnalyzeService) AnalyzeCompareEngines(ctx context.Context, userID s
 }
 func (m *mockAnalyzeService) AnalyzeBatch(ctx context.Context, userID string, input service.AnalyzeInput) (map[string]any, error) {
 	return m.analyzeBatchResult, m.analyzeBatchErr
+}
+func (m *mockAnalyzeService) ClassifyGooseDuckChicken(ctx context.Context, userID string, input service.GooseDuckChickenInput) (service.GooseDuckChickenResult, error) {
+	return m.gooseDuckChickenResult, m.gooseDuckChickenErr
 }
 
 type mockTaskService struct {
@@ -119,6 +124,7 @@ func setupRouter(h *AnalyzeHandler) *gin.Engine {
 	r.POST("/api/analyze-compare", h.AnalyzeCompare)
 	r.POST("/api/analyze-compare-engines", h.AnalyzeCompareEngines)
 	r.POST("/api/analyze/batch", h.AnalyzeBatch)
+	r.POST("/api/analyze/goose-duck-chicken", h.ClassifyGooseDuckChicken)
 	r.POST("/api/analyze/submit", h.SubmitAnalyzeTask)
 	r.POST("/api/analyze-text/submit", h.SubmitTextTask)
 	r.GET("/api/analyze/tasks", h.ListTasks)
@@ -130,6 +136,32 @@ func setupRouter(h *AnalyzeHandler) *gin.Engine {
 	r.DELETE("/api/analyze/tasks/:task_id", h.DeleteTask)
 	r.POST("/api/analyze/tasks/cleanup-timeout", h.CleanupTimeoutTasks)
 	return r
+}
+
+func TestAnalyzeHandler_ClassifyGooseDuckChicken(t *testing.T) {
+	mockSvc := &mockAnalyzeService{gooseDuckChickenResult: service.GooseDuckChickenResult{
+		Species:    "duck",
+		Label:      "鸭腿",
+		Confidence: 0.88,
+		Reason:     "皮色和形态更像鸭腿",
+	}}
+	mockTask := &mockTaskService{}
+	h := NewAnalyzeHandler(mockSvc, mockTask, "admin-key")
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]string{"image_url": "https://example.com/duck.jpg"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/analyze/goose-duck-chicken", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	data := resp["data"].(map[string]any)
+	assert.Equal(t, "duck", data["species"])
+	assert.Equal(t, "鸭腿", data["label"])
+	assert.NotContains(t, data, "task_id")
 }
 
 func TestAnalyzeHandler_Analyze(t *testing.T) {

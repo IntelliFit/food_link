@@ -9,8 +9,6 @@ import {
   type PublicFoodLibraryItem,
   type SchoolItem
 } from '../../../utils/api'
-import { UserOutlined, LocationOutlined } from '@taroify/icons'
-import '@taroify/icons/style'
 import './index.scss'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
@@ -256,7 +254,7 @@ function CampusCanteenPage() {
         <View className='campus-info'>
           <Text className='campus-title'>{item.food_name || '未命名菜品'}</Text>
           <View className='campus-location-row'>
-            <LocationOutlined size='18' className='campus-location-icon' />
+            <Text className='iconfont icon-dizhi campus-location-icon' />
             <Text className='campus-location'>{getLocationText(item) || selectedSchoolName}</Text>
           </View>
           <View className='campus-nutrition-row'>
@@ -297,7 +295,7 @@ function CampusCanteenPage() {
             </View>
           ) : (
             <View className='campus-author-avatar'>
-              <UserOutlined size='14' color='#9ca3af' />
+              <Text className='iconfont icon-user campus-author-avatar-icon' />
             </View>
           )}
           <Text

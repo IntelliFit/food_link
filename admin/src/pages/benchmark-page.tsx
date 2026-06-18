@@ -19,6 +19,7 @@ import { AdminSidebar } from '@/components/admin-sidebar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -110,6 +111,8 @@ function DatasetSection({ onViewRun }: { onViewRun: () => void }) {
   const [selectedSampleIds, setSelectedSampleIds] = useState<Set<string>>(new Set())
   const [showCreate, setShowCreate] = useState(false)
   const [editingSample, setEditingSample] = useState<DatasetSample | null>(null)
+  const [sampleToDelete, setSampleToDelete] = useState<string | null>(null)
+  const [deletingSample, setDeletingSample] = useState(false)
 
   useEffect(() => {
     void loadBatches()
@@ -171,13 +174,16 @@ function DatasetSection({ onViewRun }: { onViewRun: () => void }) {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('确定删除该样本？')) return
+    setDeletingSample(true)
     try {
       await adminRequest(`/api/admin/benchmark/datasets/samples/${encodeURIComponent(id)}`, { method: 'DELETE' })
       toast.success('已删除')
+      setSampleToDelete(null)
       void loadSamples()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除失败')
+    } finally {
+      setDeletingSample(false)
     }
   }
 
@@ -355,7 +361,7 @@ function DatasetSection({ onViewRun }: { onViewRun: () => void }) {
                         <Button variant="ghost" size="sm" className="h-7" onClick={() => setEditingSample(sample)}>
                           编辑
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-destructive" onClick={() => handleDelete(sample.id)}>
+                        <Button variant="ghost" size="sm" className="h-7 text-destructive" onClick={() => setSampleToDelete(sample.id)}>
                           <Trash2 className="size-3" />
                         </Button>
                       </td>
@@ -394,6 +400,16 @@ function DatasetSection({ onViewRun }: { onViewRun: () => void }) {
           onSaved={() => { setEditingSample(null); void loadSamples() }}
         />
       )}
+      <ConfirmDialog
+        open={sampleToDelete !== null}
+        onOpenChange={(open) => setSampleToDelete(open ? sampleToDelete : null)}
+        title="删除数据集样本？"
+        description="该样本会从评测数据集中移除，已经生成的历史评测结果不会被自动重算。"
+        confirmLabel="删除样本"
+        variant="destructive"
+        confirming={deletingSample}
+        onConfirm={() => sampleToDelete ? handleDelete(sampleToDelete) : undefined}
+      />
     </div>
   )
 }
@@ -752,6 +768,8 @@ function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id
   const [loading, setLoading] = useState(false)
   const [page, setPage] = useState(1)
   const [limit] = useState(20)
+  const [runToDelete, setRunToDelete] = useState<string | null>(null)
+  const [deletingRun, setDeletingRun] = useState(false)
 
   useEffect(() => {
     void loadRuns()
@@ -781,13 +799,16 @@ function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('确定删除该运行记录？')) return
+    setDeletingRun(true)
     try {
       await adminRequest(`/api/admin/benchmark/runs/${encodeURIComponent(id)}`, { method: 'DELETE' })
       toast.success('已删除')
+      setRunToDelete(null)
       void loadRuns()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除失败')
+    } finally {
+      setDeletingRun(false)
     }
   }
 
@@ -845,7 +866,7 @@ function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id
                       <td className="px-3 py-2 text-muted-foreground">{formatTime(run.completed_at)}</td>
                       <td className="px-3 py-2 text-right">
                         <Button variant="ghost" size="sm" className="h-7" onClick={() => onViewRun(run.id)}>详情</Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-destructive" onClick={() => handleDelete(run.id)}>
+                        <Button variant="ghost" size="sm" className="h-7 text-destructive" onClick={() => setRunToDelete(run.id)}>
                           <Trash2 className="size-3" />
                         </Button>
                       </td>
@@ -864,6 +885,16 @@ function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id
           </div>
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={runToDelete !== null}
+        onOpenChange={(open) => setRunToDelete(open ? runToDelete : null)}
+        title="删除评测运行记录？"
+        description="该运行记录和关联结果将被删除，删除后不可恢复。"
+        confirmLabel="删除记录"
+        variant="destructive"
+        confirming={deletingRun}
+        onConfirm={() => runToDelete ? handleDelete(runToDelete) : undefined}
+      />
     </div>
   )
 }

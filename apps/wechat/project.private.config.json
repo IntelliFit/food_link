@@ -16,7 +16,7 @@
     "compileHotReLoad": true,
     "checkInvalidKey": true,
     "ignoreDevUnusedFiles": false,
-    "ignoreUploadUnusedFiles": false,
+    "ignoreUploadUnusedFiles": true,
     "bigPackageSizeSupport": false
   }
 }

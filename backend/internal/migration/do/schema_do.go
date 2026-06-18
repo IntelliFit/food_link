@@ -65,22 +65,25 @@ type UserDailyNutritionTargetDO struct {
 func (UserDailyNutritionTargetDO) TableName() string { return "user_daily_nutrition_targets" }
 
 type UserFeedbackDO struct {
-	ID              string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID          string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_feedback_user_created,priority:1"`
-	Category        string           `gorm:"column:category;type:text;not null;default:'other'"`
-	Content         string           `gorm:"column:content;type:text;not null"`
-	Contact         string           `gorm:"column:contact;type:text;not null;default:''"`
-	PagePath        string           `gorm:"column:page_path;type:text;not null;default:''"`
-	AppVersion      string           `gorm:"column:app_version;type:text;not null;default:''"`
-	ClientInfo      map[string]any   `gorm:"column:client_info;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	RecentRequests  []map[string]any `gorm:"column:recent_requests;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	ImageURLs       []string         `gorm:"column:image_urls;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
-	SubmitTraceID   string           `gorm:"column:submit_trace_id;type:text;not null;default:'';index:idx_user_feedback_submit_trace_id"`
-	SubmitRequestID string           `gorm:"column:submit_request_id;type:text;not null;default:''"`
-	SubmitHostName  string           `gorm:"column:submit_host_name;type:text;not null;default:''"`
-	Status          string           `gorm:"column:status;type:text;not null;default:'open';index:idx_user_feedback_status"`
-	CreatedAt       *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_feedback_user_created,priority:2"`
-	UpdatedAt       *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ID                string           `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID            string           `gorm:"column:user_id;type:uuid;not null;index:idx_user_feedback_user_created,priority:1"`
+	Category          string           `gorm:"column:category;type:text;not null;default:'other'"`
+	Content           string           `gorm:"column:content;type:text;not null"`
+	Contact           string           `gorm:"column:contact;type:text;not null;default:''"`
+	PagePath          string           `gorm:"column:page_path;type:text;not null;default:''"`
+	AppVersion        string           `gorm:"column:app_version;type:text;not null;default:''"`
+	ClientInfo        map[string]any   `gorm:"column:client_info;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	RecentRequests    []map[string]any `gorm:"column:recent_requests;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	ImageURLs         []string         `gorm:"column:image_urls;type:jsonb;serializer:json;not null;default:'[]'::jsonb"`
+	SubmitTraceID     string           `gorm:"column:submit_trace_id;type:text;not null;default:'';index:idx_user_feedback_submit_trace_id"`
+	SubmitRequestID   string           `gorm:"column:submit_request_id;type:text;not null;default:''"`
+	SubmitHostName    string           `gorm:"column:submit_host_name;type:text;not null;default:''"`
+	Status            string           `gorm:"column:status;type:text;not null;default:'open';index:idx_user_feedback_status"`
+	ResolutionMessage string           `gorm:"column:resolution_message;type:text;not null;default:''"`
+	RewardCredits     int              `gorm:"column:reward_credits;type:integer;not null;default:0"`
+	RewardLedgerID    *string          `gorm:"column:reward_ledger_id;type:uuid"`
+	CreatedAt         *time.Time       `gorm:"column:created_at;type:timestamptz;default:now();index:idx_user_feedback_user_created,priority:2"`
+	UpdatedAt         *time.Time       `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (UserFeedbackDO) TableName() string { return "user_feedback" }
@@ -156,6 +159,45 @@ type UserPetDailyScoreDO struct {
 }
 
 func (UserPetDailyScoreDO) TableName() string { return "user_pet_daily_scores" }
+
+type PetChatSessionDO struct {
+	ID                  string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID              string         `gorm:"column:user_id;type:uuid;not null;index:idx_pet_chat_sessions_user_updated,priority:1"`
+	PetID               *string        `gorm:"column:pet_id;type:uuid;index:idx_pet_chat_sessions_pet_id"`
+	Title               string         `gorm:"column:title;type:text;not null;default:''"`
+	RangeType           string         `gorm:"column:range_type;type:text;not null;default:'week';index:idx_pet_chat_sessions_user_updated,priority:2"`
+	Status              string         `gorm:"column:status;type:text;not null;default:'active';index:idx_pet_chat_sessions_user_status,priority:2"`
+	ContextStartDate    *time.Time     `gorm:"column:context_start_date;type:date"`
+	ContextEndDate      *time.Time     `gorm:"column:context_end_date;type:date"`
+	ContextFingerprint  string         `gorm:"column:context_fingerprint;type:text;not null;default:''"`
+	RecordedDays        int            `gorm:"column:recorded_days;type:integer;not null;default:0"`
+	LastQuestion        string         `gorm:"column:last_question;type:text;not null;default:''"`
+	LastAnswer          string         `gorm:"column:last_answer;type:text;not null;default:''"`
+	LastMessageAt       *time.Time     `gorm:"column:last_message_at;type:timestamptz"`
+	TotalCreditsCharged int            `gorm:"column:total_credits_charged;type:integer;not null;default:0"`
+	Meta                map[string]any `gorm:"column:meta;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt           time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt           time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now();index:idx_pet_chat_sessions_user_updated,priority:3,sort:desc;index:idx_pet_chat_sessions_user_status,priority:3,sort:desc"`
+}
+
+func (PetChatSessionDO) TableName() string { return "pet_chat_sessions" }
+
+type PetChatMessageDO struct {
+	ID               string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SessionID        string         `gorm:"column:session_id;type:uuid;not null;index:idx_pet_chat_messages_session_created,priority:1"`
+	UserID           string         `gorm:"column:user_id;type:uuid;not null;index:idx_pet_chat_messages_user_created,priority:1"`
+	Role             string         `gorm:"column:role;type:text;not null"`
+	Content          string         `gorm:"column:content;type:text;not null"`
+	MessageType      string         `gorm:"column:message_type;type:text;not null;default:''"`
+	RangeType        string         `gorm:"column:range_type;type:text;not null;default:'week'"`
+	CreditsCharged   int            `gorm:"column:credits_charged;type:integer;not null;default:0"`
+	AIUsagePricing   map[string]any `gorm:"column:ai_usage_pricing;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	EstimatedPricing map[string]any `gorm:"column:estimated_pricing;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	Meta             map[string]any `gorm:"column:meta;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt        time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_pet_chat_messages_session_created,priority:2;index:idx_pet_chat_messages_user_created,priority:2,sort:desc"`
+}
+
+func (PetChatMessageDO) TableName() string { return "pet_chat_messages" }
 
 type UserTrialEntitlementDO struct {
 	ID                string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -1221,6 +1263,8 @@ func AllModels() []any {
 		&UserPetDO{},
 		&UserPetEventDO{},
 		&UserPetDailyScoreDO{},
+		&PetChatSessionDO{},
+		&PetChatMessageDO{},
 		&UserTrialEntitlementDO{},
 		&MembershipPlanDO{},
 		&AnalysisTaskDO{},

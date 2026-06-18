@@ -65,7 +65,7 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensurePublicRecordsDefault(ctx, db); err != nil {
 		return err
 	}
-	if err := ensureFeedReportResolutionColumns(ctx, db); err != nil {
+	if err := ensureAdminResolutionColumns(ctx, db); err != nil {
 		return err
 	}
 	if err := ensureFoodWeightLabeledSamplesStructuredLabels(ctx, db); err != nil {
@@ -86,8 +86,11 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("weapp_user", "weapp_user_execution_mode_check", `execution_mode IS NULL OR execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_last_login_method_check", `last_login_method IS NULL OR last_login_method = ANY (ARRAY['wechat_miniprogram'::text,'wechat_app'::text,'password'::text,'sms_code'::text,'development_test_openid'::text,'debug_impersonate'::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_telephone_format_check", `telephone IS NULL OR trim(telephone) = '' OR regexp_replace(trim(telephone), '[\s\-\(\)]', '', 'g') ~ '^(\+?86)?1[3-9][0-9]{9}$'`),
+		`DELETE FROM user_feedback WHERE status = 'processing'`,
+		`DELETE FROM feed_reports WHERE status = 'processing'`,
 		dropAndAddCheck("user_feedback", "user_feedback_category_check", `category = ANY (ARRAY['bug'::text,'suggestion'::text,'experience'::text,'other'::text])`),
-		dropAndAddCheck("user_feedback", "user_feedback_status_check", `status = ANY (ARRAY['open'::text,'processing'::text,'resolved'::text,'closed'::text])`),
+		dropAndAddCheck("user_feedback", "user_feedback_status_check", `status = ANY (ARRAY['open'::text,'resolved'::text,'closed'::text])`),
+		dropAndAddCheck("user_feedback", "user_feedback_reward_credits_check", `reward_credits >= 0`),
 		dropAndAddCheck("admin_accounts", "admin_accounts_status_check", `status = ANY (ARRAY['active'::text,'disabled'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'done'::text,'failed'::text,'cancelled'::text,'timed_out'::text,'violated'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_task_type_check", `task_type = ANY (ARRAY['food'::text,'food_text'::text,'precision_plan'::text,'precision_item_estimate'::text,'precision_aggregate'::text,'health_report'::text,'public_food_library_text'::text,'exercise'::text,'expiry_recognize'::text,'expiry_notification'::text,'packaged_nutrition_label'::text,'packaged_product_extract'::text]) OR task_type ~ '^(food|food_text|precision_plan|precision_item_estimate|precision_aggregate|health_report|public_food_library_text|exercise|expiry_recognize|expiry_notification|packaged_nutrition_label|packaged_product_extract)_debug(_[a-z0-9_]+)?$'`),
@@ -119,7 +122,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("feed_interaction_notifications", "feed_interaction_notifications_target_type_check", `target_type = ANY (ARRAY['food_record'::text,'exercise_log'::text,'circle_post'::text])`),
 		dropAndAddCheck("comment_tasks", "comment_tasks_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'done'::text,'failed'::text,'violated'::text])`),
 		dropAndAddCheck("comment_tasks", "comment_tasks_type_check", `comment_type = ANY (ARRAY['feed'::text,'public_food_library'::text])`),
-		dropAndAddCheck("feed_reports", "feed_reports_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'resolved'::text,'rejected'::text])`),
+		dropAndAddCheck("feed_reports", "feed_reports_status_check", `status = ANY (ARRAY['pending'::text,'resolved'::text,'rejected'::text])`),
 		dropAndAddCheck("feed_reports", "feed_reports_reason_check", `reason = ANY (ARRAY['spam'::text,'porn'::text,'illegal'::text,'abuse'::text,'other'::text])`),
 		dropAndAddCheck("feed_reports", "feed_reports_target_type_check", `target_type = ANY (ARRAY['food_record'::text,'exercise_log'::text,'circle_post'::text])`),
 		dropAndAddCheck("food_expiry_items", "food_expiry_items_storage_type_check", `storage_type = ANY (ARRAY['room_temp'::text,'refrigerated'::text,'frozen'::text])`),
@@ -165,6 +168,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("user_earned_credit_ledger", "user_earned_credit_ledger_balance_after_check", `balance_after >= 0`),
 		addFK("analysis_tasks_user_id_fkey", "analysis_tasks", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_feedback_user_id_fkey", "user_feedback", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("user_feedback_reward_ledger_id_fkey", "user_feedback", "reward_ledger_id", "user_earned_credit_ledger", "id", "SET NULL"),
 		addFK("analysis_feedback_samples_user_id_fkey", "analysis_feedback_samples", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("analysis_feedback_samples_source_task_id_fkey", "analysis_feedback_samples", "source_task_id", "analysis_tasks", "id", "SET NULL"),
 		addFK("analysis_feedback_samples_correction_task_id_fkey", "analysis_feedback_samples", "correction_task_id", "analysis_tasks", "id", "SET NULL"),
@@ -433,6 +437,11 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_pets_user_id_unique ON user_pets (user_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_pet_events_user_date_type_unique ON user_pet_events (user_id, event_date, event_type)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS user_pet_daily_scores_user_date_unique ON user_pet_daily_scores (user_id, score_date)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_chat_sessions_user_updated ON pet_chat_sessions (user_id, range_type, updated_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_chat_sessions_user_status ON pet_chat_sessions (user_id, status, updated_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_chat_messages_session_created ON pet_chat_messages (session_id, created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_pet_chat_messages_user_created ON pet_chat_messages (user_id, created_at DESC)`,
+		addFK("fk_pet_chat_messages_session", "pet_chat_messages", "session_id", "pet_chat_sessions", "id", "CASCADE"),
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_food_weight_labeled_samples_batch_sample ON food_weight_labeled_samples (batch_name, sample_name)`,
 		`CREATE INDEX IF NOT EXISTS idx_food_weight_labeled_samples_batch ON food_weight_labeled_samples (batch_name)`,
 		`CREATE INDEX IF NOT EXISTS idx_food_weight_labeled_samples_label_type ON food_weight_labeled_samples (label_type)`,
@@ -787,8 +796,11 @@ func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
 	return nil
 }
 
-func ensureFeedReportResolutionColumns(ctx context.Context, db *gorm.DB) error {
+func ensureAdminResolutionColumns(ctx context.Context, db *gorm.DB) error {
 	columns := []string{
+		`ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS reward_credits integer NOT NULL DEFAULT 0`,
+		`ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS reward_ledger_id uuid`,
+		`ALTER TABLE user_feedback ADD COLUMN IF NOT EXISTS resolution_message text NOT NULL DEFAULT ''`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS resolution_note text NOT NULL DEFAULT ''`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS reward_credits integer NOT NULL DEFAULT 0`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS reward_ledger_id uuid`,
@@ -797,7 +809,7 @@ func ensureFeedReportResolutionColumns(ctx context.Context, db *gorm.DB) error {
 	}
 	for _, sql := range columns {
 		if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
-			return fmt.Errorf("feed_reports resolution column migration: %w", err)
+			return fmt.Errorf("admin resolution column migration: %w", err)
 		}
 	}
 	return nil

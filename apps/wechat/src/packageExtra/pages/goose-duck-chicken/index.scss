@@ -1,0 +1,255 @@
+.goose-page {
+  min-height: 100vh;
+  padding: 28rpx 24rpx 180rpx;
+  box-sizing: border-box;
+  background:
+    linear-gradient(180deg, #fff7ea 0%, #f7f2eb 46%, #eff5f0 100%);
+}
+
+.goose-hero {
+  position: relative;
+  min-height: 252rpx;
+  padding: 34rpx 30rpx;
+  border-radius: 28rpx;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background:
+    radial-gradient(circle at 82% 18%, rgb(255 236 178 / 68%), transparent 30%),
+    linear-gradient(135deg, #2c211e 0%, #be4d36 58%, #f3b765 100%);
+  box-shadow: 0 18rpx 34rpx rgb(159 80 43 / 20%);
+}
+
+.goose-hero-kicker {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 800;
+  color: rgb(255 244 214 / 86%);
+}
+
+.goose-hero-title {
+  margin-top: 8rpx;
+  font-size: 42rpx;
+  line-height: 54rpx;
+  font-weight: 900;
+  color: #fff;
+}
+
+.goose-hero-desc {
+  margin-top: 10rpx;
+  width: 540rpx;
+  max-width: 100%;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: rgb(255 255 255 / 84%);
+}
+
+.goose-upload-card,
+.goose-info-card,
+.goose-rule-card,
+.goose-result-card {
+  margin-top: 22rpx;
+  padding: 22rpx;
+  border-radius: 24rpx;
+  background: rgb(255 255 255 / 88%);
+  border: 1rpx solid rgb(120 85 58 / 10%);
+  box-shadow: 0 12rpx 28rpx rgb(80 64 48 / 8%);
+  box-sizing: border-box;
+}
+
+.goose-upload-placeholder {
+  min-height: 330rpx;
+  border: 2rpx dashed rgb(150 122 92 / 26%);
+  border-radius: 22rpx;
+  background: #fffaf3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.goose-upload-plus {
+  font-size: 62rpx;
+  line-height: 74rpx;
+  color: #bd6a3c;
+}
+
+.goose-upload-title {
+  margin-top: 10rpx;
+  font-size: 30rpx;
+  line-height: 40rpx;
+  font-weight: 800;
+  color: #3d2c25;
+}
+
+.goose-upload-desc {
+  margin-top: 8rpx;
+  width: 500rpx;
+  max-width: 86%;
+  text-align: center;
+  font-size: 23rpx;
+  line-height: 32rpx;
+  color: #8a7466;
+}
+
+.goose-preview-wrap {
+  position: relative;
+  height: 360rpx;
+  border-radius: 22rpx;
+  overflow: hidden;
+  background: #f5ede2;
+}
+
+.goose-preview {
+  width: 100%;
+  height: 100%;
+}
+
+.goose-remove {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 48%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.goose-remove-text {
+  color: #fff;
+  font-size: 36rpx;
+  line-height: 44rpx;
+}
+
+.goose-repick {
+  margin-top: 16rpx;
+  align-self: flex-start;
+}
+
+.goose-repick-text {
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 800;
+  color: #bd6a3c;
+}
+
+.goose-section-title,
+.goose-rule-title {
+  display: block;
+  font-size: 28rpx;
+  line-height: 38rpx;
+  font-weight: 900;
+  color: #34251f;
+}
+
+.goose-textarea {
+  width: 100%;
+  height: 164rpx;
+  margin-top: 14rpx;
+  padding: 18rpx;
+  border-radius: 18rpx;
+  background: #f9f4ec;
+  box-sizing: border-box;
+  color: #3d2c25;
+  font-size: 26rpx;
+  line-height: 36rpx;
+}
+
+.goose-textarea-placeholder {
+  color: #b6a89a;
+}
+
+.goose-rule-card {
+  background: rgb(255 248 235 / 88%);
+}
+
+.goose-rule-text {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 36rpx;
+  color: #7d6a5d;
+}
+
+.goose-result-card {
+  background:
+    radial-gradient(circle at 14% 12%, rgb(255 241 207 / 78%), transparent 30%),
+    #fff;
+}
+
+.goose-result-kicker {
+  display: block;
+  font-size: 22rpx;
+  line-height: 30rpx;
+  font-weight: 800;
+  color: #bd6a3c;
+}
+
+.goose-result-label {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 48rpx;
+  line-height: 60rpx;
+  font-weight: 900;
+  color: #34251f;
+}
+
+.goose-result-confidence {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  font-weight: 800;
+  color: #bd4c34;
+}
+
+.goose-result-reason {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 38rpx;
+  color: #6f5b50;
+}
+
+.goose-result-evidence {
+  margin-top: 12rpx;
+  padding: 14rpx 16rpx;
+  border-radius: 16rpx;
+  background: #fff7ec;
+}
+
+.goose-result-evidence-item {
+  display: block;
+  font-size: 23rpx;
+  line-height: 34rpx;
+  color: #8a5a37;
+}
+
+.goose-submit {
+  position: fixed;
+  left: 32rpx;
+  right: 32rpx;
+  bottom: calc(34rpx + env(safe-area-inset-bottom));
+  height: 92rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #bd4c34 0%, #ed9e49 100%);
+  box-shadow: 0 14rpx 30rpx rgb(189 76 52 / 26%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.goose-submit:active {
+  transform: scale(0.98);
+}
+
+.goose-submit-text {
+  font-size: 31rpx;
+  line-height: 42rpx;
+  font-weight: 900;
+  color: #fff;
+}

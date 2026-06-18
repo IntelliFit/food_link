@@ -70,12 +70,13 @@ type NotificationRepo interface {
 }
 
 type CommunityService struct {
-	feedRepo       FeedRepo
-	notifRepo      NotificationRepo
-	userRepo       UserFinder
-	db             *gorm.DB
-	reportNotifier ReportNotifier
-	storage        *storage.Client
+	feedRepo            FeedRepo
+	notifRepo           NotificationRepo
+	userRepo            UserFinder
+	db                  *gorm.DB
+	reportNotifier      ReportNotifier
+	systemMessageSender SystemMessageSender
+	storage             *storage.Client
 }
 
 type UserFinder interface {
@@ -86,18 +87,23 @@ type ReportNotifier interface {
 	NotifyFeedReport(ctx context.Context, report *domain.FeedReport, target *repo.FeedRecord, reporterNickname, reportedNickname, previewImageURL string) error
 }
 
-func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo UserFinder, db *gorm.DB, reportNotifier ReportNotifier, storageClient ...*storage.Client) *CommunityService {
+type SystemMessageSender interface {
+	SendSystemMessage(ctx context.Context, receiverID, content string) error
+}
+
+func NewCommunityService(feedRepo FeedRepo, notifRepo NotificationRepo, userRepo UserFinder, db *gorm.DB, reportNotifier ReportNotifier, systemMessageSender SystemMessageSender, storageClient ...*storage.Client) *CommunityService {
 	var client *storage.Client
 	if len(storageClient) > 0 {
 		client = storageClient[0]
 	}
 	return &CommunityService{
-		feedRepo:       feedRepo,
-		notifRepo:      notifRepo,
-		userRepo:       userRepo,
-		db:             db,
-		reportNotifier: reportNotifier,
-		storage:        client,
+		feedRepo:            feedRepo,
+		notifRepo:           notifRepo,
+		userRepo:            userRepo,
+		db:                  db,
+		reportNotifier:      reportNotifier,
+		systemMessageSender: systemMessageSender,
+		storage:             client,
 	}
 }
 
@@ -1371,6 +1377,15 @@ func (s *CommunityService) ReportFeedTarget(ctx context.Context, reporterUserID,
 		slog.String("target_type", targetType),
 		slog.String("target_id", targetID),
 	)
+	if s.systemMessageSender != nil {
+		if err := s.systemMessageSender.SendSystemMessage(ctx, report.ReporterUserID, buildReportSubmittedMessage(report)); err != nil {
+			logger.Warn(ctx, "发送举报提交系统消息失败",
+				slog.String("report_id", report.ID),
+				slog.String("receiver_user_id", report.ReporterUserID),
+				slog.Any("error", err),
+			)
+		}
+	}
 	if s.reportNotifier != nil {
 		reporterNickname, reportedNickname := s.lookupReportNicknames(ctx, report)
 		previewImageURL := s.resolveReportPreviewImageURL(target)
@@ -1393,6 +1408,14 @@ func (s *CommunityService) ReportFeedTarget(ctx context.Context, reporterUserID,
 		)
 	}
 	return report, nil
+}
+
+func buildReportSubmittedMessage(report *domain.FeedReport) string {
+	reasonName := reportReasonNames[report.Reason]
+	if reasonName == "" {
+		reasonName = report.Reason
+	}
+	return fmt.Sprintf("举报已提交：我们已收到你关于圈子内容的举报（原因：%s）。管理员会尽快核实处理，处理结果会通过系统消息通知你。", reasonName)
 }
 
 func (s *CommunityService) lookupReportNicknames(ctx context.Context, report *domain.FeedReport) (string, string) {

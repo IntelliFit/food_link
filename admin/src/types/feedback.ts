@@ -1,4 +1,4 @@
-export type FeedbackStatus = 'open' | 'processing' | 'resolved' | 'closed'
+export type FeedbackStatus = 'open' | 'resolved' | 'closed'
 export type FeedbackCategory = 'bug' | 'suggestion' | 'experience' | 'other'
 
 export type RecentRequestTrace = {
@@ -41,6 +41,9 @@ export type FeedbackItem = {
   submit_request_id: string
   submit_host_name: string
   status: FeedbackStatus
+  resolution_message: string
+  reward_credits: number
+  reward_ledger_id?: string
   created_at: string
   updated_at: string
   user_nickname?: string
@@ -64,7 +67,6 @@ export const categoryLabels: Record<string, string> = {
 
 export const statusLabels: Record<FeedbackStatus, string> = {
   open: '待处理',
-  processing: '处理中',
-  resolved: '已解决',
-  closed: '已关闭',
+  resolved: '已采纳',
+  closed: '不采纳',
 }

@@ -226,7 +226,7 @@ func New(cfg *config.Config) (*App, error) {
 	feedRepo := communityrepo.NewFeedRepo(db)
 	notifRepo := communityrepo.NewNotificationRepo(db)
 	feedReportNotifier := communityservice.NewReportNotifier(cfg.Feishu.ReportWebhookURL, cfg.Feishu.ReportWebhookSecret, cfg.App.AdminBaseURL, cfg.Feishu.AppID, cfg.Feishu.AppSecret)
-	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, storageClient)
+	communitySvc := communityservice.NewCommunityService(feedRepo, notifRepo, userRepo, db, feedReportNotifier, messageSvc, storageClient)
 	communityHandler := communityhandler.NewCommunityHandler(communitySvc)
 
 	// Search module DI
@@ -258,7 +258,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Pet companion module DI
 	petRepo := petrepo.NewPetRepo(db)
 	petSvc := petservice.NewService(petRepo)
-	petHandler := pethandler.NewPetHandler(petSvc)
+	petHandler := pethandler.NewPetHandler(petSvc, statsSvc)
 
 	// Public food library module DI
 	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
@@ -304,7 +304,7 @@ func New(cfg *config.Config) (*App, error) {
 	feedbackRepo := feedbackrepo.NewFeedbackRepo(db)
 	feedbackUploadSvc := feedbackservice.NewUploadService(storageClient)
 	feedbackFeishuNotifier := feedbackservice.NewFeishuNotifier(cfg.Feishu.FeedbackWebhookURL, cfg.Feishu.FeedbackWebhookSecret)
-	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo, feedbackUploadSvc, feedbackFeishuNotifier)
+	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo, feedbackUploadSvc, feedbackFeishuNotifier, messageSvc)
 	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc, feedbackUploadSvc)
 
 	commentHandler := communityhandler.NewCommentHandler(homeRepo, userRepo)
@@ -372,6 +372,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/analyze-compare", authmw.OptionalJWT(jwtSvc), analyzeHandler.AnalyzeCompare)
 	engine.POST("/api/analyze-compare-engines", authmw.OptionalJWT(jwtSvc), analyzeHandler.AnalyzeCompareEngines)
 	engine.POST("/api/analyze/batch", authmw.RequireJWT(jwtSvc), analyzeHandler.AnalyzeBatch)
+	engine.POST("/api/analyze/goose-duck-chicken", authmw.RequireJWT(jwtSvc), analyzeHandler.ClassifyGooseDuckChicken)
 	engine.POST("/api/analyze/submit", authmw.RequireJWT(jwtSvc), analyzeHandler.SubmitAnalyzeTask)
 	engine.POST("/api/analyze-text/submit", authmw.RequireJWT(jwtSvc), analyzeHandler.SubmitTextTask)
 	engine.GET("/api/analyze/tasks", authmw.RequireJWT(jwtSvc), analyzeHandler.ListTasks)
@@ -491,10 +492,17 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)
 	engine.POST("/api/membership/pay/sync", authmw.RequireJWT(jwtSvc), membershipHandler.SyncPayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
+	engine.POST("/api/payment/wechat/papay/contract/terminate-notify", membershipHandler.PapayContractTerminateNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
 
 	// Pet companion routes
 	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
+	engine.GET("/api/pet/chat/latest", authmw.RequireJWT(jwtSvc), petHandler.LatestChat)
+	engine.GET("/api/pet/chat/sessions", authmw.RequireJWT(jwtSvc), petHandler.ChatSessions)
+	engine.GET("/api/pet/chat/sessions/:session_id", authmw.RequireJWT(jwtSvc), petHandler.ChatSession)
+	engine.POST("/api/pet/chat/estimate", authmw.RequireJWT(jwtSvc), petHandler.EstimateChat)
+	engine.POST("/api/pet/chat", authmw.RequireJWT(jwtSvc), petHandler.Chat)
+	engine.POST("/api/pet/chat/messages", authmw.RequireJWT(jwtSvc), petHandler.AppendChatMessages)
 	engine.POST("/api/pet/events/:event_id/claim", authmw.RequireJWT(jwtSvc), petHandler.ClaimEvent)
 	engine.POST("/api/pet/select-appearance", authmw.RequireJWT(jwtSvc), petHandler.SelectAppearance)
 	engine.POST("/api/pet/reroll-appearance", authmw.RequireJWT(jwtSvc), petHandler.RerollAppearance)
@@ -581,7 +589,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminExerciseEnergySvc := adminservice.NewExerciseEnergyService(exerciseRepo)
 	adminExerciseEnergyHandler := adminhandler.NewExerciseEnergyHandler(adminExerciseEnergySvc)
 	adminFeedbackRepo := adminrepo.NewFeedbackRepo(db)
-	adminFeedbackSvc := adminservice.NewFeedbackService(adminFeedbackRepo)
+	adminFeedbackSvc := adminservice.NewFeedbackService(adminFeedbackRepo, messageSvc)
 	adminFeedbackHandler := adminhandler.NewFeedbackHandler(adminFeedbackSvc)
 	adminFeedReportRepo := adminrepo.NewFeedReportRepo(db, feedRepo)
 	adminFeedReportSvc := adminservice.NewFeedReportService(adminFeedReportRepo, messageSvc)

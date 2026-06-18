@@ -100,6 +100,7 @@ type MembershipRepo interface {
 	CreateSharePosterBonusEvent(ctx context.Context, userID, sourceKey, sourceScope, recordID, chinaDate string, credits int, meta map[string]any) (*domain.UserCreditBonusEvent, error)
 	GetEarnedCreditLedgerBySource(ctx context.Context, userID, reason, sourceKey string) (*domain.UserEarnedCreditLedger, error)
 	ChangeEarnedCredits(ctx context.Context, userID string, delta int, reason, sourceKey, relatedDate string, meta map[string]any) (*domain.UserEarnedCreditLedger, bool, error)
+	ChangeCreditsWithSystemUsage(ctx context.Context, userID string, earnedDelta int, earnedReason, earnedSourceKey, systemReason, systemSourceKey, relatedDate string, earnedMeta, systemMeta map[string]any) error
 	SumPositiveEarnedCreditsByDate(ctx context.Context, userID, chinaDate string) (int, error)
 	CountRewardTaskUploads(ctx context.Context, userID, taskType, chinaDate, status string) (int, error)
 	GetRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string) (*domain.RewardTaskUpload, error)
@@ -1367,6 +1368,22 @@ func (s *MembershipService) ValidateStatsInsightCredits(ctx context.Context, use
 	return s.validateCredits(ctx, userID, creditCostStatsInsight, "AI 风险解读", "", membership, user)
 }
 
+func (s *MembershipService) ValidateUsageCredits(ctx context.Context, userID string, cost int, label string) (map[string]any, error) {
+	membership, err := s.getEffectiveMembership(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.repo.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	label = strings.TrimSpace(label)
+	if label == "" {
+		label = "AI 用量服务"
+	}
+	return s.validateCredits(ctx, userID, maxInt(cost, 1), label, "", membership, user)
+}
+
 func (s *MembershipService) validateCredits(ctx context.Context, userID string, cost int, label, recordedOn string, membership *domain.UserMembership, user *membershiprepo.User) (map[string]any, error) {
 	targetDate, err := normalizeChinaDate(recordedOn)
 	if err != nil {
@@ -1501,6 +1518,20 @@ func (s *MembershipService) dailySystemCreditBaseForDate(ctx context.Context, us
 }
 
 func (s *MembershipService) ConsumeEarnedCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, cost int, reason, sourceKey string, meta map[string]any) error {
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	if strings.TrimSpace(sourceKey) != "" {
+		meta["credit_charge_source_key"] = sourceKey
+	}
+	earned := earnedCreditsToConsume(creditsInfo, cost)
+	systemReason, systemSourceKey, relatedDate, systemMeta, hasSystem := s.buildSystemCreditUsageLedger(creditsInfo, reason, sourceKey, meta)
+	if earned <= 0 && !hasSystem {
+		return nil
+	}
+	if hasSystem {
+		return s.repo.ChangeCreditsWithSystemUsage(ctx, userID, -earned, reason, sourceKey, systemReason, systemSourceKey, relatedDate, meta, systemMeta)
+	}
 	return s.ConsumeEarnedCreditsOnTaskCreated(ctx, userID, creditsInfo, cost, reason, sourceKey, meta)
 }
 
@@ -1517,6 +1548,51 @@ func (s *MembershipService) ConsumeEarnedCreditsOnTaskCreated(ctx context.Contex
 	}
 	_, _, err := s.repo.ChangeEarnedCredits(ctx, userID, -earned, reason, sourceKey, relatedDate, meta)
 	return err
+}
+
+func (s *MembershipService) recordSystemCreditsAfterSuccess(ctx context.Context, userID string, creditsInfo map[string]any, reason, sourceKey string, meta map[string]any) error {
+	systemReason, systemSourceKey, relatedDate, ledgerMeta, ok := s.buildSystemCreditUsageLedger(creditsInfo, reason, sourceKey, meta)
+	if !ok {
+		return nil
+	}
+	_, _, err := s.repo.ChangeEarnedCredits(ctx, userID, 0, systemReason, systemSourceKey, relatedDate, ledgerMeta)
+	return err
+}
+
+func (s *MembershipService) buildSystemCreditUsageLedger(creditsInfo map[string]any, reason, sourceKey string, meta map[string]any) (string, string, string, map[string]any, bool) {
+	sourceKey = strings.TrimSpace(sourceKey)
+	if sourceKey == "" {
+		return "", "", "", nil, false
+	}
+	if creditsInfo == nil {
+		return "", "", "", nil, false
+	}
+	plan, ok := creditsInfo["credit_spend_plan"].(map[string]any)
+	if !ok || len(plan) == 0 {
+		return "", "", "", nil, false
+	}
+	systemByDate, ok := plan["system_by_date"].(map[string]any)
+	if !ok || len(systemByDate) == 0 {
+		return "", "", "", nil, false
+	}
+	relatedDate := time.Now().In(chinaLocation()).Format("2006-01-02")
+	if value := strings.TrimSpace(fmt.Sprintf("%v", plan["recorded_on"])); value != "" && value != "<nil>" {
+		relatedDate = value
+	}
+	systemUnits := intFromAny(systemByDate[relatedDate])
+	if systemUnits <= 0 {
+		return "", "", "", nil, false
+	}
+	ledgerMeta := copyMeta(meta)
+	if sourceKey != "" {
+		ledgerMeta["credit_charge_source_key"] = sourceKey
+	}
+	ledgerMeta["credit_usage"] = plan
+	ledgerMeta["system_units"] = systemUnits
+	ledgerMeta["ledger_role"] = "system_credit_usage"
+	systemReason := strings.TrimSpace(reason) + "_system"
+	systemSourceKey := sourceKey + ":system"
+	return systemReason, systemSourceKey, relatedDate, ledgerMeta, true
 }
 
 func (s *MembershipService) RefundEarnedCreditsAfterTaskFailure(ctx context.Context, userID string, creditsInfo map[string]any, cost int, spendReason, spendSourceKey, refundReason, refundSourceKey string, meta map[string]any) error {

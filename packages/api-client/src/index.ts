@@ -862,6 +862,13 @@ export class FoodLinkApiClient {
     })
   }
 
+  async getAnalyzeTaskCount(): Promise<{ count: number }> {
+    return this.authenticatedRequest<{ count: number }>('/api/analyze/tasks/count', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
   async deleteAnalysisTask(taskId: string): Promise<void> {
     await this.authenticatedRequest<{ message?: string }>(`/api/analyze/tasks/${encodeURIComponent(taskId)}`, {
       method: 'DELETE',
@@ -1502,6 +1509,13 @@ export class FoodLinkApiClient {
     })
   }
 
+  async getFavoriteCount(): Promise<{ count: number }> {
+    return this.authenticatedRequest<{ count: number }>('/api/recipes/count?is_favorite=true', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
   async getRecipe(recipeId: string): Promise<RecipeItem> {
     const id = recipeId.trim()
     if (!id) throw new Error('缺少食谱 ID')
@@ -1693,6 +1707,13 @@ export class FoodLinkApiClient {
 
   async listFriends(): Promise<{ list: FriendUserItem[] }> {
     return this.authenticatedRequest<{ list: FriendUserItem[] }>('/api/friend/list', {
+      method: 'GET',
+      timeoutMs: 10000,
+    })
+  }
+
+  async getFriendCount(): Promise<{ count: number }> {
+    return this.authenticatedRequest<{ count: number }>('/api/friend/count', {
       method: 'GET',
       timeoutMs: 10000,
     })

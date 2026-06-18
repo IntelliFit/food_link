@@ -32,7 +32,7 @@ type FeedReportPageProps = {
   onMenuChange: (menu: AdminMenuId) => void
 }
 
-type FeedReportStatus = 'pending' | 'processing' | 'resolved' | 'rejected'
+type FeedReportStatus = 'pending' | 'resolved' | 'rejected'
 type FeedReportTargetType = 'food_record' | 'exercise_log' | 'circle_post'
 
 type FeedReportItem = {
@@ -56,7 +56,6 @@ type FeedReportListResponse = {
 
 const statusLabels: Record<FeedReportStatus, string> = {
   pending: '待处理',
-  processing: '处理中',
   resolved: '已处理',
   rejected: '已驳回',
 }
@@ -77,7 +76,6 @@ const targetTypeLabels: Record<string, string> = {
 
 const statusBadgeClass: Record<FeedReportStatus, string> = {
   pending: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400',
-  processing: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-400',
   resolved: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-400',
   rejected: 'border-border bg-muted text-muted-foreground dark:bg-muted/50',
 }
@@ -85,7 +83,7 @@ const statusBadgeClass: Record<FeedReportStatus, string> = {
 export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const [status, setStatus] = useState<string>('all')
+  const [status, setStatus] = useState<string>('pending')
   const [targetType, setTargetType] = useState<string>('all')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(30)
@@ -147,7 +145,7 @@ export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) 
         <div className='grid gap-4 md:grid-cols-4'>
           <StatCard label='当前筛选' value={String(total)} foot='条举报' loading={loading} />
           <StatCard label='待处理' value={String(items.filter((i) => i.status === 'pending').length)} foot='条' loading={loading} />
-          <StatCard label='处理中' value={String(items.filter((i) => i.status === 'processing').length)} foot='条' loading={loading} />
+          <StatCard label='已处理' value={String(items.filter((i) => i.status === 'resolved').length)} foot='条' loading={loading} />
           <StatCard
             label='最近提交'
             value={items[0] ? new Date(items[0].created_at).toLocaleString('zh-CN') : '-'}
@@ -184,7 +182,6 @@ export function FeedReportPage({ onLogout, onMenuChange }: FeedReportPageProps) 
             <FilterSelect label='状态' value={status} onValueChange={(value) => { setStatus(value); setPage(1) }} options={[
               { value: 'all', label: '全部状态' },
               { value: 'pending', label: '待处理' },
-              { value: 'processing', label: '处理中' },
               { value: 'resolved', label: '已处理' },
               { value: 'rejected', label: '已驳回' },
             ]}

@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>食探会员价目表</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: #17211f;
+      background: #f5fbf8;
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+      line-height: 1.55;
+    }
+
+    .page {
+      min-height: 260mm;
+      padding: 28px;
+      border-radius: 18px;
+      background: #ffffff;
+      border: 1px solid #dcebe5;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding-bottom: 22px;
+      border-bottom: 2px solid #dbeee7;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo {
+      width: 58px;
+      height: 58px;
+      border-radius: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 30px;
+      letter-spacing: 0;
+      color: #112b24;
+    }
+
+    .subtitle {
+      margin-top: 4px;
+      font-size: 14px;
+      color: #5d6f68;
+    }
+
+    .badge {
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: #0f5f48;
+      background: #e5f8ef;
+      font-weight: 700;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .notice {
+      margin: 22px 0;
+      padding: 16px 18px;
+      border-radius: 14px;
+      border: 1px solid #a8ddc7;
+      background: #eefbf5;
+    }
+
+    .notice-title {
+      margin: 0 0 6px;
+      font-size: 17px;
+      color: #0f5f48;
+      font-weight: 800;
+    }
+
+    .notice p {
+      margin: 0;
+      font-size: 14px;
+      color: #34453f;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid #d7e6df;
+      background: #fff;
+    }
+
+    th,
+    td {
+      padding: 14px 12px;
+      border-bottom: 1px solid #e3eee9;
+      text-align: center;
+      vertical-align: middle;
+      font-size: 14px;
+    }
+
+    th {
+      color: #14332b;
+      background: #edf8f2;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    td:first-child,
+    th:first-child {
+      text-align: left;
+      width: 25%;
+    }
+
+    .tier-name {
+      display: block;
+      color: #17211f;
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .tier-desc {
+      display: block;
+      margin-top: 3px;
+      color: #6b7c75;
+      font-size: 12px;
+    }
+
+    .price {
+      display: block;
+      color: #0d7d5a;
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .unit {
+      display: block;
+      margin-top: 2px;
+      color: #63746e;
+      font-size: 12px;
+    }
+
+    .saving {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      color: #a35d00;
+      background: #fff4dc;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .target {
+      outline: 2px solid #18a36d;
+      outline-offset: -2px;
+      background: #f3fff9;
+    }
+
+    .target .price {
+      color: #0a8a5d;
+    }
+
+    .section {
+      margin-top: 24px;
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      color: #14332b;
+      font-size: 19px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .card {
+      padding: 14px;
+      min-height: 112px;
+      border-radius: 14px;
+      background: #f8fcfa;
+      border: 1px solid #dfece6;
+    }
+
+    .card-title {
+      margin: 0 0 6px;
+      color: #174136;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .card-text {
+      margin: 0;
+      color: #54665f;
+      font-size: 12px;
+    }
+
+    .footnote {
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px dashed #c7d8d0;
+      color: #61736c;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <div class="brand">
+        <img class="logo" src="../../../website/public/brand/logo-shitan.png" alt="食探">
+        <div>
+          <h1>食探会员价目表</h1>
+          <div class="subtitle">微信支付委托代扣模板审核材料</div>
+        </div>
+      </div>
+      <div class="badge">当前模板对应：标准版月卡</div>
+    </header>
+
+    <section class="notice">
+      <h2 class="notice-title">本次自动续费模板对应的收费项</h2>
+      <p>服务名称：食探会员标准版月卡；扣费周期：每月；每期扣费金额：人民币 19.90 元。月卡自动续费模板不设置优惠价格，季卡/年卡的长期购买优惠在下方价目表中单独展示。</p>
+    </section>
+
+    <section>
+      <table aria-label="食探会员价目表">
+        <thead>
+          <tr>
+            <th>会员档位</th>
+            <th>月卡</th>
+            <th>季卡</th>
+            <th>年卡</th>
+            <th>主要权益</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <span class="tier-name">轻度版</span>
+              <span class="tier-desc">适合轻量记录</span>
+            </td>
+            <td>
+              <span class="price">¥9.90</span>
+              <span class="unit">/月</span>
+            </td>
+            <td>
+              <span class="price">¥27.90</span>
+              <span class="unit">/季</span>
+              <span class="saving">立省 ¥1.80</span>
+            </td>
+            <td>
+              <span class="price">¥99.00</span>
+              <span class="unit">/年</span>
+              <span class="saving">立省 ¥19.80</span>
+            </td>
+            <td>每日 8 系统积分，不含精准模式</td>
+          </tr>
+          <tr class="target">
+            <td>
+              <span class="tier-name">标准版</span>
+              <span class="tier-desc">适合日常使用</span>
+            </td>
+            <td>
+              <span class="price">¥19.90</span>
+              <span class="unit">/月；本次模板对应项</span>
+            </td>
+            <td>
+              <span class="price">¥56.90</span>
+              <span class="unit">/季</span>
+              <span class="saving">立省 ¥2.80</span>
+            </td>
+            <td>
+              <span class="price">¥199.00</span>
+              <span class="unit">/年</span>
+              <span class="saving">立省 ¥39.80</span>
+            </td>
+            <td>每日 20 系统积分，含精准模式</td>
+          </tr>
+          <tr>
+            <td>
+              <span class="tier-name">进阶版</span>
+              <span class="tier-desc">适合高频记录</span>
+            </td>
+            <td>
+              <span class="price">¥29.90</span>
+              <span class="unit">/月</span>
+            </td>
+            <td>
+              <span class="price">¥84.90</span>
+              <span class="unit">/季</span>
+              <span class="saving">立省 ¥4.80</span>
+            </td>
+            <td>
+              <span class="price">¥299.00</span>
+              <span class="unit">/年</span>
+              <span class="saving">立省 ¥59.80</span>
+            </td>
+            <td>每日 40 系统积分，含精准模式</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>计费与权益说明</h2>
+      <div class="cards">
+        <article class="card">
+          <p class="card-title">系统积分</p>
+          <p class="card-text">会员开通后按所选档位每日发放系统积分，次日 00:00 刷新；邀请、分享等获得的奖励积分可累计。</p>
+        </article>
+        <article class="card">
+          <p class="card-title">精准模式</p>
+          <p class="card-text">标准版和进阶版支持精准模式，用于更细致的饮食分析与营养判断；轻度版不含精准模式。</p>
+        </article>
+        <article class="card">
+          <p class="card-title">自动续费模板</p>
+          <p class="card-text">本次申请的委托代扣模板仅对应“标准版月卡 19.90 元/月”，后续如需季卡或年卡自动续费将另行创建模板。</p>
+        </article>
+      </div>
+    </section>
+
+    <p class="footnote">资料日期：2026-06-15。以上价格以食探小程序会员页展示为准；如后续调整价格，将同步更新小程序页面与微信支付委托代扣模板。</p>
+  </main>
+</body>
+</html>

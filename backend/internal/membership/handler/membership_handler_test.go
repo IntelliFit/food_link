@@ -70,6 +70,7 @@ func setupRouter(h *MembershipHandler) *gin.Engine {
 	r.POST("/api/membership/pay/create", h.CreatePayment)
 	r.POST("/api/membership/pay/sync", h.SyncPayment)
 	r.POST("/api/payment/wechat/notify/membership", h.WechatNotify)
+	r.POST("/api/payment/wechat/papay/contract/terminate-notify", h.PapayContractTerminateNotify)
 	r.POST("/api/membership/rewards/share-poster/claim", h.ClaimSharePosterReward)
 	return r
 }
@@ -163,6 +164,31 @@ func TestMembershipHandler_WechatNotifyRawSuccess(t *testing.T) {
 	var resp map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &resp)
 	assert.Equal(t, "SUCCESS", resp["code"])
+}
+
+func TestMembershipHandler_PapayContractTerminateNotifySuccessXML(t *testing.T) {
+	h := NewMembershipHandler(&mockMembershipService{})
+	r := setupRouter(h)
+
+	body := []byte(`<xml>
+		<return_code><![CDATA[SUCCESS]]></return_code>
+		<result_code><![CDATA[SUCCESS]]></result_code>
+		<appid><![CDATA[wx123]]></appid>
+		<mch_id><![CDATA[1900000109]]></mch_id>
+		<contract_id><![CDATA[contract-1]]></contract_id>
+		<contract_code><![CDATA[user-contract-1]]></contract_code>
+		<plan_id><![CDATA[214826]]></plan_id>
+		<change_type><![CDATA[DELETE]]></change_type>
+		<operate_time><![CDATA[2026-06-17 23:20:31]]></operate_time>
+	</xml>`)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/payment/wechat/papay/contract/terminate-notify", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/xml")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "application/xml")
+	assert.Equal(t, "<xml><return_code><![CDATA[SUCCESS]]></return_code><return_msg><![CDATA[OK]]></return_msg></xml>", w.Body.String())
 }
 
 func TestMembershipHandler_ClaimSharePosterReward(t *testing.T) {

@@ -2605,7 +2605,7 @@ function CommunityPage() {
                                     handleViewDetail(item)
                                   }}
                                 >
-                                  <Text className='van-icon van-icon-fire-o taroify-icon taroify-icon--inherit feed-calorie-icon' />
+                                  <Text className='iconfont icon-huore feed-calorie-icon' />
                                   <Text className='feed-calorie-num'>
                                     {(exercise ? exerciseKcal : Number(item.record.total_calories || 0)).toFixed(0)}
                                   </Text>

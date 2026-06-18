@@ -1,8 +1,6 @@
-import { View, Text } from '@tarojs/components'
+﻿import { View, Text } from '@tarojs/components'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Taro, { useDidShow, usePullDownRefresh } from '@tarojs/taro'
-import { Arrow } from '@taroify/icons'
-import '@taroify/icons/style'
 import {
   getMyMembership,
   getPetSummary,
@@ -309,6 +307,10 @@ function PetHomePage() {
     Taro.navigateTo({ url: extraPkgUrl('/pages/pet-lab/index') })
   }, [])
 
+  const openPetChat = useCallback(() => {
+    Taro.navigateTo({ url: extraPkgUrl('/pages/pet-chat/index') })
+  }, [])
+
   return (
     <View className={`pet-home-page ${scheme === 'dark' ? 'pet-home-page--dark' : ''}`}>
       <View className='pet-home-shell'>
@@ -345,6 +347,19 @@ function PetHomePage() {
             <Text className='pet-home-message'>
               {loading ? '正在整理今天的状态' : (petSummary?.status?.message || '它正在安静陪你记录每一天。')}
             </Text>
+          </View>
+        </View>
+
+        <View className='pet-home-card pet-home-chat-card'>
+          <View className='pet-home-card-head'>
+            <Text className='pet-home-card-title'>问问{petSummary?.pet?.name || '宠物'}</Text>
+            <Text className='pet-home-card-side'>文本分析 demo</Text>
+          </View>
+          <Text className='pet-home-event-message'>
+            让它读取你已保存的饮食文字和营养数据，聊聊训练状态、减脂卡住、碳水和蛋白质分布。不读取图片。
+          </Text>
+          <View className='pet-home-inline-action primary pet-home-chat-action' onClick={openPetChat}>
+            <Text className='pet-home-inline-action-text'>去问问它</Text>
           </View>
         </View>
 
@@ -491,7 +506,7 @@ function PetHomePage() {
               </View>
               <View className='pet-home-action-side'>
                 <Text className='pet-home-action-cost'>{rerolling ? '处理中' : '5 积分'}</Text>
-                <Arrow size={14} color='#94a3b8' />
+                <Text className='iconfont icon-right pet-home-action-arrow' />
               </View>
             </View>
             <View className='pet-home-action-item muted' onClick={handlePickComingSoon}>
@@ -501,7 +516,7 @@ function PetHomePage() {
               </View>
               <View className='pet-home-action-side'>
                 <Text className='pet-home-action-coming'>即将开放</Text>
-                <Arrow size={14} color='#cbd5e1' />
+                <Text className='iconfont icon-right pet-home-action-arrow muted' />
               </View>
             </View>
           </View>
@@ -527,3 +542,4 @@ function PetHomePage() {
 }
 
 export default withAuth(PetHomePage)
+

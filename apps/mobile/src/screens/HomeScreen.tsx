@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ImageBackground, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard, type HomeTargetCalibrationSuggestion } from '@food-link/core'
+import { Camera, FileText, Image as ImageIcon, Utensils, type LucideIcon } from 'lucide-react-native'
 import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
 import { Card } from '../components/Card'
@@ -12,6 +13,7 @@ import { PetAvatar, petMoodLabel, petStateLabel } from '../components/PetAvatar'
 import { SHOW_DEBUG_LOGIN } from '../config'
 import { useHomeDashboard } from '../hooks/useHomeDashboard'
 import type { RootStackParamList } from '../navigation/types'
+import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { formatShortDate } from '../utils/date'
 import { createDemoAnalysisTask, createDemoTextAnalysisTask, demoFoodImageUrl } from '../utils/demoAnalysisTask'
@@ -20,6 +22,7 @@ import { getHomePetHidden } from '../utils/petPreferences'
 
 type TargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
 type TargetForm = Record<TargetField, string>
+type RecordTone = 'green' | 'blue' | 'gold' | 'purple'
 
 const targetFieldMeta: Array<{ key: TargetField; label: string; unit: string; step: number }> = [
   { key: 'calorieTarget', label: '基础摄入目标', unit: 'kcal', step: 100 },
@@ -28,8 +31,18 @@ const targetFieldMeta: Array<{ key: TargetField; label: string; unit: string; st
   { key: 'fatTarget', label: '脂肪目标', unit: 'g', step: 10 },
 ]
 
+const recordIconColors: Record<RecordTone, string> = {
+  green: '#38a97b',
+  blue: '#4295bc',
+  gold: '#9f823a',
+  purple: '#6951bd',
+}
+
+const CAFETERIA_HERO_BG_URL = 'https://cdn-food-images.coachlink.fit/wechat/cafeteria-hero.jpg'
+
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
   const { recordDate, dashboard, petSummary, loading, error, loadHome } = useHomeDashboard()
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
@@ -122,12 +135,12 @@ export function HomeScreen() {
   const saveTargets = useCallback(async () => {
     const payload = parseTargetForm(targetForm)
     if (!payload) {
-      Alert.alert('请填写完整的数字目标')
+      void dialog.alert('请填写完整的数字目标', undefined, 'warning')
       return
     }
     const validationError = validateTargetPayload(payload)
     if (validationError) {
-      Alert.alert('目标范围不正确', validationError)
+      void dialog.alert('目标范围不正确', validationError, 'warning')
       return
     }
     setSavingTargets(true)
@@ -138,18 +151,18 @@ export function HomeScreen() {
       })
       setShowTargetEditor(false)
       await loadHome()
-      Alert.alert('基础目标已更新')
+      void dialog.alert('基础目标已更新', undefined, 'success')
     } catch (err) {
-      Alert.alert('保存失败', userFacingErrorMessage(err))
+      void dialog.alert('保存失败', userFacingErrorMessage(err), 'danger')
     } finally {
       setSavingTargets(false)
     }
-  }, [loadHome, recordDate, targetForm])
+  }, [dialog, loadHome, recordDate, targetForm])
 
   return (
     <Page
-      title="首页"
-      subtitle={`${formatShortDate(recordDate)} · 默认餐次 ${getMealTypeLabel(mealType)}`}
+      title={homeGreeting()}
+      subtitle={`${formatShortDate(recordDate)} · 今天也要健康饮食哦 · 默认餐次 ${getMealTypeLabel(mealType)}`}
       refreshing={loading}
       onRefresh={loadHome}
     >
@@ -181,6 +194,8 @@ export function HomeScreen() {
           </Card>
         </Pressable>
       ) : null}
+
+      <CampusBanner onPress={() => navigation.navigate('CampusCanteen')} />
 
       <Card>
         <View style={styles.rowBetween}>
@@ -232,7 +247,7 @@ export function HomeScreen() {
               <Text style={styles.calibrationTitle}>建议调整到 {Math.round(numberFrom(calibrationSuggestion.suggested_kcal, 0))} kcal</Text>
               <Text style={styles.calibrationText}>{calibrationSuggestion.reason || '根据最近 14 天饮食和体重变化，建议小幅调整基础目标。'}</Text>
               <View style={styles.targetActionRow}>
-                <Pressable style={styles.secondaryMiniButton} onPress={() => Alert.alert('已暂不调整')}>
+                <Pressable style={styles.secondaryMiniButton} onPress={() => void dialog.alert('已暂不调整')}>
                   <Text style={styles.secondaryMiniButtonText}>暂不调整</Text>
                 </Pressable>
                 <Pressable style={styles.primaryMiniButton} onPress={applyCalibrationSuggestion}>
@@ -259,22 +274,16 @@ export function HomeScreen() {
         </Card>
       ) : null}
 
-      <View style={styles.quickGrid}>
-        <QuickCard title="体重" value="记录" onPress={() => navigation.navigate('BodyMetricRecord', { type: 'weight' })} />
-        <QuickCard title="喝水" value="补水" onPress={() => navigation.navigate('BodyMetricRecord', { type: 'water' })} />
-        <QuickCard title="运动" value={`${Math.round(dashboard?.exerciseBurnedKcal || 0)} kcal`} onPress={() => navigation.navigate('BodyMetricRecord', { type: 'exercise' })} />
-      </View>
-
       <Card>
         <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>记录餐食</Text>
-          <Text style={styles.badge}>AI 分析</Text>
+          <Text style={styles.sectionTitle}>今天吃什么</Text>
+          <Text style={styles.badge}>AI 记录</Text>
         </View>
         <View style={styles.recordGrid}>
-          <RecordGridAction title="拍照识别" desc="拍摄餐食，自动估算热量" icon="CAM" tone="green" onPress={() => openAnalyze('camera')} />
-          <RecordGridAction title="相册上传" desc="选择已有食物图片" icon="IMG" tone="blue" onPress={() => openAnalyze('library')} />
-          <RecordGridAction title="文本输入" desc="一句话描述吃了什么" icon="TXT" tone="gold" onPress={() => navigation.navigate('TextRecord')} />
-          <RecordGridAction title="食物库输入" desc="按食物和重量精确录入" icon="LIB" tone="purple" onPress={() => navigation.navigate('ManualRecord')} />
+          <RecordGridAction title="拍照识别" desc="拍摄餐食，自动估算热量" icon={Camera} tone="green" onPress={() => openAnalyze('camera')} />
+          <RecordGridAction title="相册上传" desc="选择已有食物图片" icon={ImageIcon} tone="blue" onPress={() => openAnalyze('library')} />
+          <RecordGridAction title="文本输入" desc="一句话描述吃了什么" icon={FileText} tone="gold" onPress={() => navigation.navigate('TextRecord')} />
+          <RecordGridAction title="食物库输入" desc="按食物和重量精确录入" icon={Utensils} tone="purple" onPress={() => navigation.navigate('ManualRecord')} />
         </View>
         <View style={styles.recordQuickList}>
           <RecordQuickAction title="我的收藏" desc="快速记录常吃餐食" onPress={() => navigation.navigate('Recipes')} />
@@ -289,6 +298,12 @@ export function HomeScreen() {
           </View>
         ) : null}
       </Card>
+
+      <View style={styles.quickGrid}>
+        <QuickCard title="体重" value="记录" onPress={() => navigation.navigate('BodyMetricRecord', { type: 'weight' })} />
+        <QuickCard title="喝水" value="补水" onPress={() => navigation.navigate('BodyMetricRecord', { type: 'water' })} />
+        <QuickCard title="运动" value={`${Math.round(dashboard?.exerciseBurnedKcal || 0)} kcal`} onPress={() => navigation.navigate('BodyMetricRecord', { type: 'exercise' })} />
+      </View>
 
       <Card>
         <View style={styles.rowBetween}>
@@ -333,6 +348,30 @@ export function HomeScreen() {
       <AppButton label="刷新首页" variant="secondary" loading={loading} onPress={loadHome} />
       <AppButton label="健康档案与目标" variant="ghost" onPress={() => navigation.navigate('HealthProfile')} />
     </Page>
+  )
+}
+
+function CampusBanner({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.campusBannerPressable, pressed && styles.pressed]} onPress={onPress}>
+      <ImageBackground
+        source={{ uri: CAFETERIA_HERO_BG_URL }}
+        resizeMode="cover"
+        style={styles.campusBanner}
+        imageStyle={styles.campusBannerImage}
+      >
+        <View style={styles.campusBannerOverlay}>
+          <View style={styles.campusBannerText}>
+            <Text style={styles.campusBannerKicker}>食探校园活动</Text>
+            <Text style={styles.campusBannerTitle}>食探校园食堂计划</Text>
+            <Text style={styles.campusBannerSubtitle}>一起补全食堂菜品、价格、窗口和营养信息</Text>
+          </View>
+          <View style={styles.campusBannerButton}>
+            <Text style={styles.campusBannerButtonText}>去看看</Text>
+          </View>
+        </View>
+      </ImageBackground>
+    </Pressable>
   )
 }
 
@@ -395,10 +434,11 @@ function RecordGridAction({
 }: {
   title: string
   desc: string
-  icon: string
-  tone: 'green' | 'blue' | 'gold' | 'purple'
+  icon: LucideIcon
+  tone: RecordTone
   onPress: () => void
 }) {
+  const Icon = icon
   return (
     <Pressable
       style={({ pressed }) => [
@@ -418,13 +458,7 @@ function RecordGridAction({
         tone === 'gold' && styles.recordIconGold,
         tone === 'purple' && styles.recordIconPurple,
       ]}>
-        <Text style={[
-          styles.recordActionIconText,
-          tone === 'green' && styles.recordTextGreen,
-          tone === 'blue' && styles.recordTextBlue,
-          tone === 'gold' && styles.recordTextGold,
-          tone === 'purple' && styles.recordTextPurple,
-        ]}>{icon}</Text>
+        <Icon size={25} color={recordIconColors[tone]} strokeWidth={2.4} />
       </View>
       <Text style={styles.recordActionTitle}>{title}</Text>
       <Text style={styles.recordActionDesc}>{desc}</Text>
@@ -501,6 +535,15 @@ function targetSourceLabel(source: unknown): string {
     default: '默认目标',
   }
   return labels[String(source || '').trim()] || '系统目标'
+}
+
+function homeGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 6) return '夜深了'
+  if (hour < 11) return '早上好'
+  if (hour < 14) return '中午好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
 }
 
 const styles = StyleSheet.create({
@@ -732,6 +775,60 @@ const styles = StyleSheet.create({
   empty: {
     color: colors.textMuted,
   },
+  campusBannerPressable: {
+    marginBottom: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  campusBanner: {
+    minHeight: 126,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  campusBannerImage: {
+    borderRadius: 20,
+  },
+  campusBannerOverlay: {
+    minHeight: 126,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 14,
+    backgroundColor: 'rgba(6, 45, 43, 0.52)',
+  },
+  campusBannerText: {
+    flex: 1,
+  },
+  campusBannerKicker: {
+    color: 'rgba(255, 255, 255, 0.86)',
+    fontSize: 13,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  campusBannerTitle: {
+    color: '#fff',
+    fontSize: 21,
+    fontWeight: '900',
+    marginBottom: 7,
+  },
+  campusBannerSubtitle: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  campusBannerButton: {
+    minHeight: 42,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  campusBannerButtonText: {
+    color: colors.brandDark,
+    fontWeight: '900',
+  },
   quickGrid: {
     flexDirection: 'row',
     gap: 10,
@@ -802,22 +899,6 @@ const styles = StyleSheet.create({
   },
   recordIconPurple: {
     backgroundColor: '#f3effc',
-  },
-  recordActionIconText: {
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  recordTextGreen: {
-    color: '#38a97b',
-  },
-  recordTextBlue: {
-    color: '#4295bc',
-  },
-  recordTextGold: {
-    color: '#9f823a',
-  },
-  recordTextPurple: {
-    color: '#6951bd',
   },
   recordActionTitle: {
     color: colors.text,

@@ -213,7 +213,28 @@ func (r *FeedReportRepo) Delete(ctx context.Context, id string) error {
 		Delete(nil).Error
 }
 
-func (r *FeedReportRepo) DeleteCirclePostTarget(ctx context.Context, postID string) error {
+func (r *FeedReportRepo) DeleteFeedTargetContent(ctx context.Context, targetType, targetID string) error {
+	targetType = communityrepo.NormalizeTargetType(targetType)
+	if targetType == communityrepo.FeedTargetCirclePost {
+		return r.deleteCirclePostTarget(ctx, targetID)
+	}
+	target, err := r.feedRepo.GetFeedTargetByID(ctx, targetType, targetID)
+	if err != nil {
+		return err
+	}
+	if target == nil {
+		return &commonerrors.AppError{Code: 10001, Message: "被举报内容不存在或已删除", HTTPStatus: 404}
+	}
+	if targetType != communityrepo.FeedTargetFoodRecord && targetType != communityrepo.FeedTargetExerciseLog {
+		return &commonerrors.AppError{Code: 10002, Message: "当前举报目标暂不支持直接删除", HTTPStatus: 400}
+	}
+	if err := r.feedRepo.HideFeedTarget(ctx, target.UserID, targetType, targetID); err != nil {
+		return err
+	}
+	return r.feedRepo.DeleteTargetInteractions(ctx, targetType, targetID)
+}
+
+func (r *FeedReportRepo) deleteCirclePostTarget(ctx context.Context, postID string) error {
 	post, err := r.feedRepo.GetCirclePostByID(ctx, postID)
 	if err != nil {
 		return err

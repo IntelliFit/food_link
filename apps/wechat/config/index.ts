@@ -122,10 +122,6 @@ export default defineConfig<'vite'>(async (merge) => {
           from: 'custom-tab-bar',
           to: 'custom-tab-bar'
         },
-        {
-          from: 'src/assets/iconfont/iconfont.ttf',
-          to: 'assets/iconfont/iconfont.ttf'
-        },
 
       ],
       options: {
@@ -141,11 +137,6 @@ export default defineConfig<'vite'>(async (merge) => {
               libraryName: '@taroify/core',
               esModule: true,
               resolveStyle: (name: string) => `@taroify/core/${name}/style`,
-            },
-            {
-              libraryName: '@taroify/icons',
-              esModule: true,
-              resolveStyle: () => '@taroify/icons/style',
             },
           ],
         }),
@@ -169,24 +160,6 @@ export default defineConfig<'vite'>(async (merge) => {
               map: null,
             }
           },
-        },
-        // fix: @taroify/icons 使用的 iconfont CDN (at.alicdn.com) 在小程序环境中
-        // 无法加载，改为 base64 内联，彻底避免路径解析问题
-        {
-          name: 'taro-fix-vant-icon-font',
-          transform(code, id) {
-            if (/@taroify[\\/]icons/.test(id) && /\.(css|scss|less|wxss)$/.test(id)) {
-              return code.replace(
-                /url\(['"]?\/\/at\.alicdn\.com\/t\/c\/font_2553510_\w+\.(woff2|woff)\?t=\d+['"]?\)/g,
-                (match, format) => {
-                  const b64 = format === 'woff2' ? vantIconWoff2Base64 : vantIconWoffBase64
-                  const mime = format === 'woff2' ? 'font/woff2' : 'font/woff'
-                  return `url("data:${mime};base64,${b64}")`
-                }
-              )
-            }
-            return null
-          }
         },
         // debug: 开发构建时关闭压缩、保留 sourcemap，便于真机调试定位完整错误栈
         {
