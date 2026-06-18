@@ -150,7 +150,7 @@ func New(cfg *config.Config) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("初始化短信验证码存储失败: %w", err)
 	}
-	loginHandler.ConfigureSMSService(authservice.NewSMSService(cfg.SMS, loginSvc, userRepo, jwtSvc, smsStore, authservice.NewTencentCloudSMSSender(cfg.SMS)))
+	loginHandler.ConfigureSMSService(authservice.NewSMSService(cfg.SMS, cfg.Redis.KeyPrefix, loginSvc, userRepo, jwtSvc, smsStore, authservice.NewTencentCloudSMSSender(cfg.SMS)))
 
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchLogRepo := userrepo.NewModeSwitchLogRepo(db)

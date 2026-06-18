@@ -18,6 +18,7 @@ import { AnalyzeLoadingScreen } from '../screens/AnalyzeLoadingScreen'
 import { ResultScreen } from '../screens/ResultScreen'
 import { TextResultScreen } from '../screens/TextResultScreen'
 import {
+  AboutScreen,
   AboutFeedbackScreen,
   AnalyzeHistoryScreen,
   BodyMetricRecordScreen,
@@ -239,7 +240,8 @@ export function RootNavigator() {
             <Stack.Screen name="CirclePostEdit" component={CirclePostEditScreen} options={{ title: '发布动态' }} />
             <Stack.Screen name="Friends" component={FriendsScreen} options={{ title: '好友' }} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: '互动消息' }} />
-            <Stack.Screen name="AboutFeedback" component={AboutFeedbackScreen} options={{ title: '关于与反馈' }} />
+            <Stack.Screen name="About" component={AboutScreen} options={{ title: '关于' }} />
+            <Stack.Screen name="AboutFeedback" component={AboutFeedbackScreen} options={{ title: '意见反馈' }} />
           </>
         ) : (
           <>

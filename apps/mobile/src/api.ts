@@ -18,12 +18,28 @@ function timeoutSignal(timeoutMs?: number): AbortSignal | undefined {
 
 async function parseJsonResponse(response: Response): Promise<unknown> {
   const text = await response.text()
+  return parseResponseText(text)
+}
+
+function parseResponseText(text: string): unknown {
   if (!text) return null
   try {
     return JSON.parse(text)
   } catch {
     return { message: text }
   }
+}
+
+function parseRawHeaders(rawHeaders: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const line of rawHeaders.split(/\r?\n/)) {
+    const index = line.indexOf(':')
+    if (index <= 0) continue
+    const key = line.slice(0, index).trim()
+    const value = line.slice(index + 1).trim()
+    if (key) out[key] = value
+  }
+  return out
 }
 
 function readHeaders(response: Response): Record<string, string> {
@@ -145,20 +161,9 @@ export const apiClient = createFoodLinkApiClient({
       } as unknown as Blob)
 
       try {
-        const response = await fetch(input.url, {
-          method: 'POST',
-          headers: input.headers,
-          body: formData,
-          signal: timeoutSignal(input.timeoutMs),
-        })
-        const headers = readHeaders(response)
-        const data = await parseJsonResponse(response)
-        recordRequestTrace({ url: input.url, method: 'POST', startedAt, statusCode: response.status, headers })
-        return {
-          status: response.status,
-          data,
-          headers,
-        }
+        const response = await uploadMultipartWithXHR(input, formData)
+        recordRequestTrace({ url: input.url, method: 'POST', startedAt, statusCode: response.status, headers: response.headers })
+        return response
       } catch (error) {
         recordRequestTrace({ url: input.url, method: 'POST', startedAt, error })
         throw error
@@ -181,6 +186,32 @@ export const apiClient = createFoodLinkApiClient({
     },
   },
 })
+
+function uploadMultipartWithXHR(input: UploadFileInput, formData: FormData): Promise<{ status: number; data: unknown; headers: Record<string, string> }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', input.url)
+    xhr.timeout = input.timeoutMs || 30000
+
+    for (const [key, value] of Object.entries(input.headers || {})) {
+      if (key.toLowerCase() === 'content-type') continue
+      xhr.setRequestHeader(key, value)
+    }
+
+    xhr.onload = () => {
+      const headers = parseRawHeaders(xhr.getAllResponseHeaders())
+      resolve({
+        status: xhr.status,
+        data: parseResponseText(String(xhr.responseText || '')),
+        headers,
+      })
+    }
+    xhr.onerror = () => reject(new Error('图片上传失败，请检查网络后重试'))
+    xhr.ontimeout = () => reject(new Error('图片上传超时，请稍后重试'))
+    xhr.onabort = () => reject(new Error('图片上传已取消'))
+    xhr.send(formData)
+  })
+}
 
 export async function hasStoredToken(): Promise<boolean> {
   return Boolean(await AsyncStorage.getItem(ACCESS_TOKEN_KEY))

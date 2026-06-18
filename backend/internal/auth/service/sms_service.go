@@ -40,12 +40,13 @@ type SMSSender interface {
 }
 
 type SMSService struct {
-	cfg    config.SMSConfig
-	login  *LoginService
-	users  *repo.UserRepo
-	jwt    *JWTService
-	store  SMSCodeStore
-	sender SMSSender
+	cfg       config.SMSConfig
+	keyPrefix string
+	login     *LoginService
+	users     *repo.UserRepo
+	jwt       *JWTService
+	store     SMSCodeStore
+	sender    SMSSender
 }
 
 type SendSMSCodeInput struct {
@@ -61,10 +62,19 @@ type SMSLoginInput struct {
 type SendSMSCodeOutput struct {
 	RequestID        string `json:"request_id"`
 	ExpiresInSeconds int    `json:"expires_in_seconds"`
+	CooldownSeconds  int    `json:"cooldown_seconds"`
 }
 
-func NewSMSService(cfg config.SMSConfig, login *LoginService, users *repo.UserRepo, jwt *JWTService, store SMSCodeStore, sender SMSSender) *SMSService {
-	return &SMSService{cfg: cfg, login: login, users: users, jwt: jwt, store: store, sender: sender}
+func NewSMSService(cfg config.SMSConfig, keyPrefix string, login *LoginService, users *repo.UserRepo, jwt *JWTService, store SMSCodeStore, sender SMSSender) *SMSService {
+	return &SMSService{
+		cfg:       cfg,
+		keyPrefix: normalizeRedisKeyPrefix(keyPrefix),
+		login:     login,
+		users:     users,
+		jwt:       jwt,
+		store:     store,
+		sender:    sender,
+	}
 }
 
 func (s *SMSService) SendCode(ctx context.Context, input SendSMSCodeInput, clientIP string) (*SendSMSCodeOutput, error) {
@@ -86,11 +96,12 @@ func (s *SMSService) SendCode(ctx context.Context, input SendSMSCodeInput, clien
 	if throttle <= 0 {
 		throttle = smsDefaultThrottleSec * time.Second
 	}
+	cooldownSeconds := int(throttle / time.Second)
 	ipThrottle := time.Duration(s.cfg.IPThrottleSeconds) * time.Second
 	if ipThrottle <= 0 {
 		ipThrottle = throttle
 	}
-	phoneThrottleKey := smsPhoneThrottlePref + phone
+	phoneThrottleKey := s.smsPhoneThrottleKey(phone)
 	ok, err := s.store.SetNX(ctx, phoneThrottleKey, "1", throttle)
 	if err != nil {
 		return nil, err
@@ -98,7 +109,7 @@ func (s *SMSService) SendCode(ctx context.Context, input SendSMSCodeInput, clien
 	if !ok {
 		return nil, fmt.Errorf("验证码发送过于频繁，请稍后再试")
 	}
-	ipThrottleKey := smsIPThrottlePref + strings.TrimSpace(clientIP)
+	ipThrottleKey := s.smsIPThrottleKey(clientIP)
 	if strings.TrimSpace(clientIP) != "" {
 		ok, err = s.store.SetNX(ctx, ipThrottleKey, "1", ipThrottle)
 		if err != nil {
@@ -130,12 +141,12 @@ func (s *SMSService) SendCode(ctx context.Context, input SendSMSCodeInput, clien
 			return nil, err
 		}
 	}
-	if err := s.store.Set(ctx, smsCodeKeyPrefix+phone, code, time.Duration(ttlMinutes)*time.Minute); err != nil {
+	if err := s.store.Set(ctx, s.smsCodeKey(phone), code, time.Duration(ttlMinutes)*time.Minute); err != nil {
 		_ = s.store.Del(ctx, phoneThrottleKey, ipThrottleKey)
 		return nil, err
 	}
 	logger.Info(ctx, "App 手机验证码发送成功", slog.String("phone", maskPhoneForLog(phone)), slog.String("request_id", requestID))
-	return &SendSMSCodeOutput{RequestID: requestID, ExpiresInSeconds: ttlMinutes * 60}, nil
+	return &SendSMSCodeOutput{RequestID: requestID, ExpiresInSeconds: ttlMinutes * 60, CooldownSeconds: cooldownSeconds}, nil
 }
 
 func (s *SMSService) LoginWithCode(ctx context.Context, input SMSLoginInput) (*LoginOutput, error) {
@@ -153,7 +164,7 @@ func (s *SMSService) LoginWithCode(ctx context.Context, input SMSLoginInput) (*L
 	if s.store == nil {
 		return nil, fmt.Errorf("验证码服务未配置")
 	}
-	matched, err := s.store.Consume(ctx, smsCodeKeyPrefix+phone, code)
+	matched, err := s.store.Consume(ctx, s.smsCodeKey(phone), code)
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +201,31 @@ func (s *SMSService) LoginWithCode(ctx context.Context, input SMSLoginInput) (*L
 	}
 	logger.Info(ctx, "App 手机验证码登录成功", slog.String("user_id", user.ID), slog.String("phone", maskPhoneForLog(phone)))
 	return s.login.issueLoginOutput(user, user.OpenID, firstNonEmpty(derefString(user.UnionID), derefString(user.AppUnionID)))
+}
+
+func (s *SMSService) smsCodeKey(phone string) string {
+	return prefixedRedisKey(s.keyPrefix, smsCodeKeyPrefix+phone)
+}
+
+func (s *SMSService) smsPhoneThrottleKey(phone string) string {
+	return prefixedRedisKey(s.keyPrefix, smsPhoneThrottlePref+phone)
+}
+
+func (s *SMSService) smsIPThrottleKey(clientIP string) string {
+	return prefixedRedisKey(s.keyPrefix, smsIPThrottlePref+strings.TrimSpace(clientIP))
+}
+
+func normalizeRedisKeyPrefix(prefix string) string {
+	return strings.Trim(strings.TrimSpace(prefix), ":")
+}
+
+func prefixedRedisKey(prefix, key string) string {
+	prefix = normalizeRedisKeyPrefix(prefix)
+	key = strings.TrimLeft(strings.TrimSpace(key), ":")
+	if prefix == "" {
+		return key
+	}
+	return prefix + ":" + key
 }
 
 type RedisCodeStore struct {

@@ -76,6 +76,7 @@ const exercisePresets = ['跑步30分钟', '游泳45分钟', '瑜伽1小时', '�
 const CIRCLE_POST_MAX_IMAGES = 3
 const FEEDBACK_MAX_IMAGES = 4
 const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
+const SHOW_LEGACY_ABOUT_ON_FEEDBACK_PAGE = false
 type FeedbackCategoryKey = 'bug' | 'suggestion' | 'experience' | 'other'
 
 const feedbackCategoryOptions: Array<{ value: FeedbackCategoryKey; label: string; desc: string }> = [
@@ -2470,7 +2471,7 @@ export function AboutFeedbackScreen() {
         category,
         content,
         contact,
-        pagePath: 'app://about-feedback',
+        pagePath: 'app://feedback',
         appVersion: APP_VERSION,
         clientInfo: {
           surface: 'expo',
@@ -2580,7 +2581,8 @@ export function AboutFeedbackScreen() {
   }
 
   return (
-    <Page title="关于与反馈" subtitle="关于食探、意见反馈、隐私和社群。" refreshing={loading} onRefresh={load}>
+    <Page title="意见反馈" subtitle="问题、建议和体验感受都可以告诉我们。" refreshing={loading} onRefresh={load}>
+      {SHOW_LEGACY_ABOUT_ON_FEEDBACK_PAGE ? (
       <Card>
         <View style={styles.aboutHeader}>
           <View style={styles.aboutLogo}>
@@ -2602,6 +2604,7 @@ export function AboutFeedbackScreen() {
           <SmallButton label="写邮件" onPress={() => void openOfficialEmail()} />
         </View>
       </Card>
+      ) : null}
 
       <Card>
         <View style={styles.feedbackHero}>
@@ -2656,6 +2659,7 @@ export function AboutFeedbackScreen() {
         <AppButton label="提交反馈" loading={submittingFeedback} disabled={!canSubmitFeedback} onPress={submit} />
       </Card>
 
+      {SHOW_LEGACY_ABOUT_ON_FEEDBACK_PAGE ? (
       <Card>
         <Text style={styles.sectionTitle}>隐私设置</Text>
         <ToggleRow
@@ -2673,7 +2677,9 @@ export function AboutFeedbackScreen() {
           onValueChange={(next) => updatePrivacy('public_records', next)}
         />
       </Card>
+      ) : null}
 
+      {SHOW_LEGACY_ABOUT_ON_FEEDBACK_PAGE ? (
       <Card>
         <Text style={styles.sectionTitle}>协议与社群</Text>
         <InfoRow label="用户服务协议" value="登录即表示同意 Food Link 服务条款" />
@@ -2690,6 +2696,77 @@ export function AboutFeedbackScreen() {
           <SmallButton label="用户群页" onPress={() => navigation.navigate('UserGroup')} />
           <SmallButton label={showGroupQr ? '收起二维码' : '查看用户群二维码'} onPress={() => setShowGroupQr((current) => !current)} />
           <SmallButton label="清除缓存" onPress={() => void clearCache()} />
+        </View>
+      </Card>
+      ) : null}
+    </Page>
+  )
+}
+
+export function AboutScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const dialog = useAppDialog()
+  const [showGroupQr, setShowGroupQr] = useState(false)
+
+  const copyOfficialEmail = async () => {
+    await Clipboard.setStringAsync(OFFICIAL_EMAIL)
+    await dialog.alert('已复制邮箱', OFFICIAL_EMAIL, 'success')
+  }
+
+  const openOfficialEmail = async () => {
+    const url = `mailto:${OFFICIAL_EMAIL}?subject=${encodeURIComponent('食探反馈')}`
+    try {
+      const supported = await Linking.canOpenURL(url)
+      if (!supported) {
+        await copyOfficialEmail()
+        return
+      }
+      await Linking.openURL(url)
+    } catch {
+      await copyOfficialEmail()
+    }
+  }
+
+  return (
+    <Page title="关于" subtitle="应用说明、协议和联系方式。">
+      <Card>
+        <View style={styles.aboutHeader}>
+          <View style={styles.aboutLogo}>
+            <Text style={styles.aboutLogoText}>食</Text>
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.aboutName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.86}>智健食探</Text>
+            <Text style={styles.subtitle}>Food Link · Version {APP_VERSION}</Text>
+          </View>
+        </View>
+        <Text style={styles.aboutText}>
+          食探通过 AI 食物识别、饮食与运动记录、健康档案和社区分享，帮助你更轻松地管理每日营养、身体趋势和长期目标。
+        </Text>
+        <InfoRow label="官方邮箱" value={OFFICIAL_EMAIL} />
+        <InfoRow label="核心能力" value="拍照识别、文字记录、食物库、健康分析、成长伙伴、圈子与会员积分" />
+        <InfoRow label="版权信息" value="Copyright © 2026 Food Link. All Rights Reserved." />
+        <View style={styles.buttonRow}>
+          <SmallButton label="复制邮箱" onPress={() => void copyOfficialEmail()} />
+          <SmallButton label="写邮件" onPress={() => void openOfficialEmail()} />
+        </View>
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>协议与社群</Text>
+        <InfoRow label="用户服务协议" value="登录即表示同意 Food Link 服务条款" />
+        <InfoRow label="隐私政策" value="仅收集完成饮食记录、分析和社区互动所需的信息" />
+        {showGroupQr ? (
+          <View style={styles.qrWrap}>
+            <Image source={userGroupQr} style={styles.qrImage} resizeMode="contain" />
+            <Text style={styles.subtitle}>长按或截图后可在微信中识别二维码加入用户群。</Text>
+          </View>
+        ) : null}
+        <View style={styles.buttonRow}>
+          <SmallButton label="查看协议" onPress={() => navigation.navigate('Agreements')} />
+          <SmallButton label="隐私政策" onPress={() => navigation.navigate('PrivacyPolicy')} />
+          <SmallButton label="会员协议" onPress={() => navigation.navigate('MembershipAgreement')} />
+          <SmallButton label="用户群页" onPress={() => navigation.navigate('UserGroup')} />
+          <SmallButton label={showGroupQr ? '收起二维码' : '查看二维码'} onPress={() => setShowGroupQr((current) => !current)} />
         </View>
       </Card>
     </Page>
@@ -3945,26 +4022,27 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   aboutLogo: {
-    width: 62,
-    height: 62,
-    borderRadius: 18,
+    width: 56,
+    height: 56,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.brandSoft,
   },
   aboutLogoText: {
     color: colors.brandDark,
-    fontSize: 28,
+    fontSize: 25,
     fontWeight: '900',
   },
   aboutName: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
   },
   aboutText: {
     color: colors.textSecondary,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 20,
     marginBottom: 12,
   },
   feedbackHero: {
@@ -3973,7 +4051,7 @@ const styles = StyleSheet.create({
   },
   feedbackHeroTitle: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
   },
   feedbackHeroDesc: {
@@ -4617,16 +4695,23 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
   infoLabel: {
     color: colors.textSecondary,
+    flexShrink: 0,
   },
   infoValue: {
+    flex: 1,
     color: colors.text,
     fontWeight: '800',
+    lineHeight: 20,
+    textAlign: 'right',
+    flexShrink: 1,
   },
   unreadCard: {
     borderWidth: 1,
