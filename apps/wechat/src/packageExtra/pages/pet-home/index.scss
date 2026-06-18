@@ -8,6 +8,17 @@
   );
 }
 
+.pet-home-chat-card {
+  background:
+    radial-gradient(circle at 12% 16%, rgb(255 255 255 / 64%) 0%, transparent 32%),
+    linear-gradient(135deg, rgb(92 184 150 / 14%) 0%, rgb(250 190 100 / 15%) 100%);
+  border-color: rgb(92 184 150 / 18%);
+}
+
+.pet-home-chat-action {
+  margin-top: 20rpx;
+}
+
 .pet-home-shell {
   padding: 24rpx 24rpx calc(env(safe-area-inset-bottom) + 40rpx);
 }
@@ -1134,6 +1145,16 @@
   align-items: center;
   gap: 10rpx;
   flex-shrink: 0;
+}
+
+.pet-home-action-arrow {
+  font-size: 24rpx;
+  line-height: 1;
+  color: #94a3b8;
+
+  &.muted {
+    color: #cbd5e1;
+  }
 }
 
 .pet-home-visibility-status {

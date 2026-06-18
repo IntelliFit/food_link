@@ -70,6 +70,11 @@ const COMMENT_SEND_DEBOUNCE_MS = 450
 /** 发送后短锁，与签名防抖一起防止连点 */
 const COMMENT_TAP_LOCK_MS = 320
 const COMMUNITY_FILTER_DRAWER_VISIBLE_KEY = 'community_filter_drawer_visible'
+const COLLAPSIBLE_FEED_TEXT_RUNE_THRESHOLD = 90
+
+function shouldCollapseFeedText(value: string): boolean {
+  return Array.from(String(value || '').trim()).length > COLLAPSIBLE_FEED_TEXT_RUNE_THRESHOLD
+}
 
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
@@ -536,6 +541,7 @@ function CommunityPage() {
   const [reportTarget, setReportTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
   const [feedActionSheet, setFeedActionSheet] = useState<{ item: CommunityFeedItem; mode: 'manage' | 'report' } | null>(null)
   const [reportMaskTarget, setReportMaskTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
+  const [feedTextExpanded, setFeedTextExpanded] = useState<Record<string, boolean>>({})
   const pendingNotificationNavigationRef = useRef(false)
   const feedScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipNextFilterRefreshRef = useRef(true)
@@ -1534,6 +1540,31 @@ function CommunityPage() {
       })
       : feedList)
 
+  const toggleFeedTextExpanded = useCallback((key: string): void => {
+    setFeedTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+  }, [])
+
+  const renderCollapsibleFeedText = useCallback((key: string, text: string, className = 'feed-content') => {
+    const expandable = shouldCollapseFeedText(text)
+    const collapsed = expandable && !feedTextExpanded[key]
+    return (
+      <View className={`feed-collapsible-text ${collapsed ? 'is-collapsed' : ''}`}>
+        <Text className={className}>{text}</Text>
+        {expandable ? (
+          <View
+            className='feed-text-toggle'
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleFeedTextExpanded(key)
+            }}
+          >
+            <Text className='feed-text-toggle-text'>{collapsed ? '展开' : '收起'}</Text>
+          </View>
+        ) : null}
+      </View>
+    )
+  }, [feedTextExpanded, toggleFeedTextExpanded])
+
   const feedFilterSummary = useMemo(() => {
     const sortLabel = FEED_SORT_OPTIONS.find(o => o.value === feedSortBy)?.label ?? ''
     const contentLabel = FEED_CONTENT_OPTIONS.find(o => o.value === feedContentType)?.label ?? ''
@@ -2414,7 +2445,9 @@ function CommunityPage() {
                             </View>
                             {!useManualFoodCards && (exercise ? exerciseDesc : isCirclePost ? circlePostText : item.record.description) &&
                               (item.record.image_path && !isCirclePost ? (
-                                <Text className='feed-content'>{exercise ? exerciseDesc : item.record.description}</Text>
+                                exercise
+                                  ? renderCollapsibleFeedText(`${targetKey}-desc`, exerciseDesc)
+                                  : <Text className='feed-content'>{item.record.description}</Text>
                               ) : (
                                 <View className='feed-content-wrap feed-content-wrap--text-only'>
                                   {isCirclePost ? (
@@ -2423,7 +2456,9 @@ function CommunityPage() {
                                       {circlePostBody ? <Text className='feed-content feed-circle-post-body'>{circlePostBody}</Text> : null}
                                     </>
                                   ) : (
-                                    <Text className='feed-content'>{exercise ? exerciseDesc : item.record.description}</Text>
+                                    exercise
+                                      ? renderCollapsibleFeedText(`${targetKey}-desc`, exerciseDesc)
+                                      : <Text className='feed-content'>{item.record.description}</Text>
                                   )}
                                 </View>
                               ))}
@@ -2570,7 +2605,7 @@ function CommunityPage() {
                                     handleViewDetail(item)
                                   }}
                                 >
-                                  <Text className='van-icon van-icon-fire-o taroify-icon taroify-icon--inherit feed-calorie-icon' />
+                                  <Text className='iconfont icon-huore feed-calorie-icon' />
                                   <Text className='feed-calorie-num'>
                                     {(exercise ? exerciseKcal : Number(item.record.total_calories || 0)).toFixed(0)}
                                   </Text>

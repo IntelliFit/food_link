@@ -11,8 +11,8 @@ import (
 	authmw "food_link/backend/internal/auth"
 	errors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/common/response"
-	apm "food_link/backend/pkg/trace"
 	"food_link/backend/pkg/logger"
+	apm "food_link/backend/pkg/trace"
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/otel/attribute"
@@ -25,6 +25,7 @@ type AnalyzeService interface {
 	AnalyzeCompare(ctx context.Context, userID string, input service.AnalyzeInput) (map[string]any, error)
 	AnalyzeCompareEngines(ctx context.Context, userID string, input service.AnalyzeInput) (map[string]any, error)
 	AnalyzeBatch(ctx context.Context, userID string, input service.AnalyzeInput) (map[string]any, error)
+	ClassifyGooseDuckChicken(ctx context.Context, userID string, input service.GooseDuckChickenInput) (service.GooseDuckChickenResult, error)
 }
 
 type TaskService interface {
@@ -224,6 +225,34 @@ func (h *AnalyzeHandler) AnalyzeBatch(c *gin.Context) {
 		"image_count": len(input.ImageURLs),
 		"result":      result,
 	})
+}
+
+// POST /api/analyze/goose-duck-chicken (jwt_required)
+func (h *AnalyzeHandler) ClassifyGooseDuckChicken(c *gin.Context) {
+	var input service.GooseDuckChickenInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if strings.TrimSpace(input.ImageURL) == "" {
+		response.Error(c, &errors.AppError{Code: 10002, Message: "image_url 不能为空", HTTPStatus: http.StatusBadRequest})
+		return
+	}
+	userID := c.GetString(authmw.ContextUserIDKey)
+	logAnalyzeAPI(c, "goose_duck_chicken_classify",
+		slog.String("lane", "goose_duck_chicken"),
+	)
+	result, err := h.analyzeSvc.ClassifyGooseDuckChicken(c.Request.Context(), userID, input)
+	if err != nil {
+		logAnalyzeAPIError(c, "goose_duck_chicken_classify", err)
+		response.Error(c, err)
+		return
+	}
+	logAnalyzeAPI(c, "goose_duck_chicken_classify_ok",
+		slog.String("species", result.Species),
+		slog.Float64("confidence", result.Confidence),
+	)
+	response.Success(c, result)
 }
 
 // POST /api/analyze/submit (jwt_required)

@@ -157,6 +157,45 @@ type UserPetDailyScoreDO struct {
 
 func (UserPetDailyScoreDO) TableName() string { return "user_pet_daily_scores" }
 
+type PetChatSessionDO struct {
+	ID                  string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID              string         `gorm:"column:user_id;type:uuid;not null;index:idx_pet_chat_sessions_user_updated,priority:1"`
+	PetID               *string        `gorm:"column:pet_id;type:uuid;index:idx_pet_chat_sessions_pet_id"`
+	Title               string         `gorm:"column:title;type:text;not null;default:''"`
+	RangeType           string         `gorm:"column:range_type;type:text;not null;default:'week';index:idx_pet_chat_sessions_user_updated,priority:2"`
+	Status              string         `gorm:"column:status;type:text;not null;default:'active';index:idx_pet_chat_sessions_user_status,priority:2"`
+	ContextStartDate    *time.Time     `gorm:"column:context_start_date;type:date"`
+	ContextEndDate      *time.Time     `gorm:"column:context_end_date;type:date"`
+	ContextFingerprint  string         `gorm:"column:context_fingerprint;type:text;not null;default:''"`
+	RecordedDays        int            `gorm:"column:recorded_days;type:integer;not null;default:0"`
+	LastQuestion        string         `gorm:"column:last_question;type:text;not null;default:''"`
+	LastAnswer          string         `gorm:"column:last_answer;type:text;not null;default:''"`
+	LastMessageAt       *time.Time     `gorm:"column:last_message_at;type:timestamptz"`
+	TotalCreditsCharged int            `gorm:"column:total_credits_charged;type:integer;not null;default:0"`
+	Meta                map[string]any `gorm:"column:meta;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt           time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt           time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now();index:idx_pet_chat_sessions_user_updated,priority:3,sort:desc;index:idx_pet_chat_sessions_user_status,priority:3,sort:desc"`
+}
+
+func (PetChatSessionDO) TableName() string { return "pet_chat_sessions" }
+
+type PetChatMessageDO struct {
+	ID               string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	SessionID        string         `gorm:"column:session_id;type:uuid;not null;index:idx_pet_chat_messages_session_created,priority:1"`
+	UserID           string         `gorm:"column:user_id;type:uuid;not null;index:idx_pet_chat_messages_user_created,priority:1"`
+	Role             string         `gorm:"column:role;type:text;not null"`
+	Content          string         `gorm:"column:content;type:text;not null"`
+	MessageType      string         `gorm:"column:message_type;type:text;not null;default:''"`
+	RangeType        string         `gorm:"column:range_type;type:text;not null;default:'week'"`
+	CreditsCharged   int            `gorm:"column:credits_charged;type:integer;not null;default:0"`
+	AIUsagePricing   map[string]any `gorm:"column:ai_usage_pricing;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	EstimatedPricing map[string]any `gorm:"column:estimated_pricing;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	Meta             map[string]any `gorm:"column:meta;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt        time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now();index:idx_pet_chat_messages_session_created,priority:2;index:idx_pet_chat_messages_user_created,priority:2,sort:desc"`
+}
+
+func (PetChatMessageDO) TableName() string { return "pet_chat_messages" }
+
 type UserTrialEntitlementDO struct {
 	ID                string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	FirstUserID       *string    `gorm:"column:first_user_id;type:uuid;index:idx_user_trial_entitlements_first_user_id"`
@@ -808,6 +847,33 @@ type ExerciseLogDO struct {
 
 func (ExerciseLogDO) TableName() string { return "user_exercise_logs" }
 
+type ExerciseEnergyActivityDO struct {
+	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	CanonicalName  string    `gorm:"column:canonical_name;type:text;not null;index:idx_exercise_energy_library_canonical_name"`
+	NormalizedName string    `gorm:"column:normalized_name;type:text;not null;uniqueIndex:idx_exercise_energy_library_normalized_name"`
+	Category       string    `gorm:"column:category;type:text;not null;default:'other';index:idx_exercise_energy_library_category"`
+	Intensity      string    `gorm:"column:intensity;type:text;not null;default:'moderate';index:idx_exercise_energy_library_intensity"`
+	METValue       float64   `gorm:"column:met_value;type:numeric(6,2);not null"`
+	Source         string    `gorm:"column:source;type:text;not null;default:'llm_pending'"`
+	Evidence       string    `gorm:"column:evidence;type:text;not null;default:''"`
+	ReviewStatus   string    `gorm:"column:review_status;type:text;not null;default:'pending';index:idx_exercise_energy_library_review_status"`
+	IsActive       bool      `gorm:"column:is_active;type:boolean;not null;default:true;index:idx_exercise_energy_library_is_active"`
+	CreatedAt      time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt      time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (ExerciseEnergyActivityDO) TableName() string { return "exercise_energy_library" }
+
+type ExerciseEnergyAliasDO struct {
+	ID              string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	ActivityID      string    `gorm:"column:activity_id;type:uuid;not null;index:idx_exercise_energy_aliases_activity_id"`
+	AliasName       string    `gorm:"column:alias_name;type:text;not null"`
+	NormalizedAlias string    `gorm:"column:normalized_alias;type:text;not null;uniqueIndex:idx_exercise_energy_aliases_normalized_alias"`
+	CreatedAt       time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+}
+
+func (ExerciseEnergyAliasDO) TableName() string { return "exercise_energy_aliases" }
+
 type StatsInsightDO struct {
 	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
 	UserID          string     `gorm:"column:user_id;type:uuid;not null;index:idx_ai_stats_insights_user_range_date,priority:1"`
@@ -1175,6 +1241,8 @@ func AllModels() []any {
 		&UserPetDO{},
 		&UserPetEventDO{},
 		&UserPetDailyScoreDO{},
+		&PetChatSessionDO{},
+		&PetChatMessageDO{},
 		&UserTrialEntitlementDO{},
 		&MembershipPlanDO{},
 		&AnalysisTaskDO{},
@@ -1210,6 +1278,8 @@ func AllModels() []any {
 		&BodyWaterLogDO{},
 		&BodyMetricSettingsDO{},
 		&ExerciseLogDO{},
+		&ExerciseEnergyActivityDO{},
+		&ExerciseEnergyAliasDO{},
 		&StatsInsightDO{},
 		&CustomFocusCardDO{},
 		&UserMembershipDO{},

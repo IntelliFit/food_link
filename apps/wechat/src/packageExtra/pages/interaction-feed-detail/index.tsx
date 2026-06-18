@@ -27,6 +27,12 @@ import { FeedActionSheet, type FeedActionSheetAction } from '../../../pages/comm
 
 import './index.scss'
 
+const COLLAPSIBLE_FEED_TEXT_RUNE_THRESHOLD = 90
+
+function shouldCollapseFeedText(value: string): boolean {
+  return Array.from(String(value || '').trim()).length > COLLAPSIBLE_FEED_TEXT_RUNE_THRESHOLD
+}
+
 const MEAL_NAMES: Record<string, string> = {
   breakfast: '早餐',
   morning_snack: '早加餐',
@@ -101,6 +107,7 @@ function InteractionFeedDetailPage() {
   const [reportVisible, setReportVisible] = useState(false)
   const [feedActionSheetVisible, setFeedActionSheetVisible] = useState(false)
   const [reportMaskVisible, setReportMaskVisible] = useState(false)
+  const [feedTextExpanded, setFeedTextExpanded] = useState<Record<string, boolean>>({})
   const likePendingRef = useRef(false)
 
   const loadDetail = useCallback(async (nextRecordId: string, nextTargetType: CommunityFeedTargetType = 'food_record') => {
@@ -310,6 +317,31 @@ function InteractionFeedDetailPage() {
     }
   }, [feedItem, handleDeleteFeedItem])
 
+  const toggleFeedTextExpanded = useCallback((key: string): void => {
+    setFeedTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+  }, [])
+
+  const renderCollapsibleFeedText = useCallback((key: string, text: string, className = 'feed-content') => {
+    const expandable = shouldCollapseFeedText(text)
+    const collapsed = expandable && !feedTextExpanded[key]
+    return (
+      <View className={`feed-collapsible-text ${collapsed ? 'is-collapsed' : ''}`}>
+        <Text className={className}>{text}</Text>
+        {expandable ? (
+          <View
+            className='feed-text-toggle'
+            onClick={(e) => {
+              e.stopPropagation()
+              toggleFeedTextExpanded(key)
+            }}
+          >
+            <Text className='feed-text-toggle-text'>{collapsed ? '展开' : '收起'}</Text>
+          </View>
+        ) : null}
+      </View>
+    )
+  }, [feedTextExpanded, toggleFeedTextExpanded])
+
   return (
     <>
     <View className='interaction-feed-detail-page'>
@@ -335,6 +367,7 @@ function InteractionFeedDetailPage() {
                 const circlePostBody = isCirclePost ? (feedItem.record.body || '') : ''
                 const circlePostText = circlePostTitle || circlePostBody
                 const exerciseKcal = Number(feedItem.record.calories_burned ?? feedItem.record.total_calories ?? 0)
+                const detailTargetKey = `${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`
                 return (
               <View
                 id={`feed-card-${getFeedTargetType(feedItem)}-${getFeedTargetId(feedItem)}`}
@@ -378,7 +411,9 @@ function InteractionFeedDetailPage() {
                         {circlePostBody ? <Text className='feed-content feed-circle-post-body'>{circlePostBody}</Text> : null}
                       </>
                     ) : (exercise ? exerciseDesc : feedItem.record.description) ? (
-                      <Text className='feed-content'>{exercise ? exerciseDesc : feedItem.record.description}</Text>
+                      exercise
+                        ? renderCollapsibleFeedText(`${detailTargetKey}-desc`, exerciseDesc)
+                        : <Text className='feed-content'>{feedItem.record.description}</Text>
                     ) : null}
                     {feedItem.record.image_path && !isCirclePost ? (
                       <View className='feed-image feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
@@ -434,11 +469,17 @@ function InteractionFeedDetailPage() {
                           <Text className='feed-calorie-unit'> kcal{exercise ? ' 消耗' : ''}</Text>
                         </View>
                         <View className='feed-macros feed-tap-to-detail' onClick={() => handleViewDetail(feedItem.record.id)}>
-                          <Text className='feed-macros-text'>
-                            {exercise
-                              ? (feedItem.record.ai_reasoning || 'AI 已根据运动内容估算消耗')
-                              : `蛋白质 ${Math.round(feedItem.record.total_protein ?? 0)}g · 碳水 ${Math.round(feedItem.record.total_carbs ?? 0)}g · 脂肪 ${Math.round(feedItem.record.total_fat ?? 0)}g`}
-                          </Text>
+                          {exercise
+                            ? renderCollapsibleFeedText(
+                              `${detailTargetKey}-reasoning`,
+                              feedItem.record.ai_reasoning || 'AI 已根据运动内容估算消耗',
+                              'feed-macros-text'
+                            )
+                            : (
+                              <Text className='feed-macros-text'>
+                                蛋白质 {Math.round(feedItem.record.total_protein ?? 0)}g · 碳水 {Math.round(feedItem.record.total_carbs ?? 0)}g · 脂肪 {Math.round(feedItem.record.total_fat ?? 0)}g
+                              </Text>
+                            )}
                         </View>
                       </View>
                     )}

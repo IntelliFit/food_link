@@ -42,8 +42,22 @@ func TestDashboardService_HomeDashboard(t *testing.T) {
 	require.NoError(t, db.Create(&homerepo.FoodRecord{
 		ID: "r1", UserID: user.ID, MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &now,
 		Items: []map[string]any{
-			{"name": "粥", "weight": 300.0, "ratio": 50.0, "intake": 150.0, "water_ml": 240.0},
-			{"name": "苹果", "weight": 100.0, "ratio": 100.0, "intake": 100.0, "waterMl": 85.0},
+			{
+				"name":      "粥",
+				"weight":    300.0,
+				"ratio":     50.0,
+				"intake":    150.0,
+				"water_ml":  240.0,
+				"nutrients": map[string]any{"fiber": 2.0, "sodium_mg": 600.0, "vitamin_c_mg": 12.0},
+			},
+			{
+				"name":      "苹果",
+				"weight":    100.0,
+				"ratio":     100.0,
+				"intake":    100.0,
+				"waterMl":   85.0,
+				"nutrients": map[string]any{"fiber": 3.0, "potassiumMg": 120.0, "vitaminCMg": 8.0},
+			},
 		},
 	}).Error)
 
@@ -56,6 +70,14 @@ func TestDashboardService_HomeDashboard(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, meals, 1)
 	assert.Equal(t, 205.0, meals[0]["water_ml"])
+	intakeData, ok := result["intakeData"].(map[string]any)
+	require.True(t, ok)
+	micros, ok := intakeData["micros"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 4.0, micros["fiber"])
+	assert.Equal(t, 300.0, micros["sodiumMg"])
+	assert.Equal(t, 120.0, micros["potassiumMg"])
+	assert.Equal(t, 14.0, micros["vitaminCMg"])
 }
 
 func TestDashboardService_HomeDashboard_NoRecords(t *testing.T) {
@@ -376,11 +398,11 @@ func TestBuildMealItemManualSourceImageFallback(t *testing.T) {
 	records := []homerepo.FoodRecord{{
 		ID: "manual-r1", MealType: "lunch", TotalCalories: 420, RecordTime: &now,
 		Items: []map[string]any{{
-			"name":               "鸡胸肉饭团",
-			"weight":             1.0,
-			"intake":             1.0,
-			"manual_source":      "public_library",
-			"manual_source_id":   libraryID,
+			"name":                "鸡胸肉饭团",
+			"weight":              1.0,
+			"intake":              1.0,
+			"manual_source":       "public_library",
+			"manual_source_id":    libraryID,
 			"manual_source_title": "鸡胸肉饭团",
 		}},
 	}}

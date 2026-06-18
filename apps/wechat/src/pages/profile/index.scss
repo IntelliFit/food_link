@@ -163,6 +163,11 @@
     line-height: 34rpx;
   }
 
+  .profile-chevron--small {
+    font-size: 22rpx;
+    color: #9ca3af;
+  }
+
   .user-id-chip {
     display: inline-flex;
     align-items: center;
@@ -637,6 +642,27 @@
   transform: rotate(-12deg);
   pointer-events: none;
   filter: blur(2rpx);
+}
+
+.card-bg-icon-symbol {
+  display: block;
+  font-size: 120rpx;
+  line-height: 1;
+  color: #ffffff;
+}
+
+.profile-list-icon-symbol {
+  display: block;
+  font-size: 36rpx;
+  line-height: 1;
+  color: inherit;
+}
+
+.profile-chevron {
+  display: block;
+  font-size: 28rpx;
+  line-height: 1;
+  color: #c8c9cc;
 }
 
 // 列表卡片（微信风格）

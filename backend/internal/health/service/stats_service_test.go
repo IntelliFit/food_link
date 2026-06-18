@@ -132,6 +132,30 @@ func (m *mockStatsRepo) GetDietRecommendationCandidates(ctx context.Context, use
 	return m.candidates, nil
 }
 
+func (m *mockStatsRepo) CreatePetChatSession(ctx context.Context, session domain.PetChatSession) (*domain.PetChatSession, error) {
+	return &session, nil
+}
+
+func (m *mockStatsRepo) GetPetChatSession(ctx context.Context, userID, sessionID string) (*domain.PetChatSession, error) {
+	return &domain.PetChatSession{ID: sessionID, UserID: userID, RangeType: "week", Status: "active"}, nil
+}
+
+func (m *mockStatsRepo) GetPetChatSessionMessages(ctx context.Context, userID, sessionID string, limit int) ([]domain.PetChatMessage, error) {
+	return nil, nil
+}
+
+func (m *mockStatsRepo) GetLatestPetChatSessionWithMessages(ctx context.Context, userID string, limit int) (*domain.PetChatSession, []domain.PetChatMessage, error) {
+	return nil, nil, nil
+}
+
+func (m *mockStatsRepo) AddPetChatMessage(ctx context.Context, message domain.PetChatMessage) (*domain.PetChatMessage, error) {
+	return &message, nil
+}
+
+func (m *mockStatsRepo) TouchPetChatSession(ctx context.Context, sessionID, userID, question, answer string, creditsCharged int) error {
+	return nil
+}
+
 type mockBodyMetricsProvider struct {
 	summary *BodyMetricsSummary
 }
@@ -161,6 +185,19 @@ func (m *mockStatsCreditGuard) ValidateStatsInsightCredits(ctx context.Context, 
 		"credit_spend_plan": map[string]any{
 			"cost":            1,
 			"system_by_date":  map[string]any{time.Now().In(chinaTZ).Format("2006-01-02"): 1},
+			"earned_units":    0,
+			"total_available": 8,
+		},
+	}, nil
+}
+
+func (m *mockStatsCreditGuard) ValidateUsageCredits(ctx context.Context, userID string, cost int, label string) (map[string]any, error) {
+	m.validateCalls++
+	return map[string]any{
+		"credit_cost": cost,
+		"credit_spend_plan": map[string]any{
+			"cost":            cost,
+			"system_by_date":  map[string]any{time.Now().In(chinaTZ).Format("2006-01-02"): cost},
 			"earned_units":    0,
 			"total_available": 8,
 		},
@@ -348,6 +385,26 @@ func TestBuildNutritionInsightPromptForbidsCertifiedIdentityClaims(t *testing.T)
 	assert.NotContains(t, prompt, "饮食行为研究员。请根据")
 	assert.Contains(t, prompt, "严禁自我介绍或身份声明")
 	assert.Contains(t, prompt, "全文不得出现“专业营养师”")
+}
+
+func TestBuildNutritionInsightPromptIncludesMicronutrientEvidence(t *testing.T) {
+	prompt := buildNutritionInsightPrompt(&statsComputation{
+		StatsRange:   "week",
+		StartDate:    "2024-06-10",
+		EndDate:      "2024-06-16",
+		RecordedDays: 4,
+		MicronutrientDaily: map[string]float64{
+			"fiber":          11.5,
+			"sodiumMg":       2400,
+			"vitaminCMg":     36,
+			"vitaminARaeMcg": 280,
+		},
+	})
+
+	assert.Contains(t, prompt, "微量营养线索")
+	assert.Contains(t, prompt, "膳食纤维：11.5 g/记录日")
+	assert.Contains(t, prompt, "维生素/矿物质线索")
+	assert.Contains(t, prompt, "如果微量营养线索里出现明显偏低或偏高")
 }
 
 func TestStatsService_GenerateInsightRetriesForbiddenIdentityClaim(t *testing.T) {

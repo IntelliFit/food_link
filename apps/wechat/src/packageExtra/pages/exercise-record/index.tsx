@@ -1,4 +1,4 @@
-import { View, Text, Input, ScrollView, Image } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Textarea } from '@tarojs/components'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { IconExercise } from '../../../components/iconfont'
@@ -42,6 +42,8 @@ const EXERCISE_QUICK_PRESETS: string[] = [
   '散步45分钟',
   'HIIT20分钟'
 ]
+
+const COLLAPSIBLE_TEXT_RUNE_THRESHOLD = 90
 
 interface ExerciseRecord {
   id: string
@@ -89,6 +91,10 @@ function applyExerciseTaskResult(task: { result?: unknown }): ExerciseTaskResult
   return null
 }
 
+function shouldCollapseText(value: string): boolean {
+  return Array.from(value.trim()).length > COLLAPSIBLE_TEXT_RUNE_THRESHOLD
+}
+
 /** API 可能把 error_message 存成对象序列化，统一成可读短句 */
 function normalizeTaskErrorMessage(raw: unknown): string {
   if (raw == null) return '分析失败'
@@ -124,6 +130,7 @@ export default function ExerciseRecordPage() {
   const [pendingItems, setPendingItems] = useState<PendingExerciseCard[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [membershipStatus, setMembershipStatus] = useState<MembershipStatus | null>(null)
+  const [expandedTextKeys, setExpandedTextKeys] = useState<Record<string, boolean>>({})
   const [creditSheet, setCreditSheet] = useState<{ visible: boolean; message?: string; status?: MembershipStatus | null }>({
     visible: false,
     status: null,
@@ -476,6 +483,29 @@ export default function ExerciseRecordPage() {
   const openTrend = () => {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/exercise-trend/index')}?date=${encodeURIComponent(recordDate)}` })
   }
+  const toggleExpandedText = (key: string): void => {
+    setExpandedTextKeys((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const renderCollapsibleExerciseText = (key: string, text: string) => {
+    const collapsed = shouldCollapseText(text) && !expandedTextKeys[key]
+    const expandable = shouldCollapseText(text)
+    return (
+      <View className={`exercise-record-card__title-wrap ${collapsed ? 'is-collapsed' : ''}`}>
+        <Text className='exercise-record-card__title'>{text}</Text>
+        {expandable ? (
+          <View
+            className='exercise-record-card__text-toggle'
+            onClick={() => toggleExpandedText(key)}
+          >
+            <Text className='exercise-record-card__text-toggle-text'>
+              {collapsed ? '展开' : '收起'}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    )
+  }
 
   return (
     <View className='exercise-record-page'>
@@ -546,14 +576,15 @@ export default function ExerciseRecordPage() {
           >
             <Text className='exercise-image-trigger-text'>+</Text>
           </View>
-          <Input
+          <Textarea
             className='chat-input'
             value={inputValue}
             onInput={(e) => setInputValue(e.detail.value)}
             placeholder={selectedImagePath ? '补充描述（可选）' : '今天做了什么运动？'}
             placeholderClass='input-placeholder'
-            confirmType='send'
-            onConfirm={runSubmitFlow}
+            maxlength={2000}
+            autoHeight
+            showConfirmBar={false}
             disabled={submitting}
           />
           <View
@@ -591,7 +622,7 @@ export default function ExerciseRecordPage() {
               row.kind === 'server' ? (
                 <View key={row.key} className='exercise-record-card'>
                   <View className='exercise-record-card__top'>
-                    <Text className='exercise-record-card__title'>{row.record.content}</Text>
+                    {renderCollapsibleExerciseText(row.key, row.record.content)}
                     <View
                       className='exercise-record-card__delete'
                       onClick={() => handleDelete(row.record.id)}
@@ -615,7 +646,7 @@ export default function ExerciseRecordPage() {
                   className={`exercise-record-card ${row.item.status === 'failed' ? 'exercise-record-card--failed' : ''}`}
                 >
                   <View className='exercise-record-card__top'>
-                    <Text className='exercise-record-card__title'>{row.item.content}</Text>
+                    {renderCollapsibleExerciseText(row.key, row.item.content)}
                   </View>
                   {row.item.status === 'pending' ? (
                     <>

@@ -1,7 +1,5 @@
 import { View, Text, Button } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
-import { ShieldOutlined } from '@taroify/icons'
-import '@taroify/icons/style'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import CustomNavBar from '../../../components/CustomNavBar'
 import {
@@ -665,7 +663,7 @@ function ProMembershipPage() {
             <View className='hero-icon-shell'>
               <View className='hero-icon-halo' />
               <View className='hero-icon-wrap'>
-              <ShieldOutlined className='hero-icon-svg' />
+              <Text className='iconfont icon-jiesuo hero-icon-svg' />
               </View>
             </View>
             <Text className='hero-laurel hero-laurel--right'>❦</Text>

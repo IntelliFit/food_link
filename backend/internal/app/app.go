@@ -258,7 +258,7 @@ func New(cfg *config.Config) (*App, error) {
 	// Pet companion module DI
 	petRepo := petrepo.NewPetRepo(db)
 	petSvc := petservice.NewService(petRepo)
-	petHandler := pethandler.NewPetHandler(petSvc)
+	petHandler := pethandler.NewPetHandler(petSvc, statsSvc)
 
 	// Public food library module DI
 	publicFoodRepo := publicfoodrepo.NewPublicFoodRepo(db)
@@ -372,6 +372,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/analyze-compare", authmw.OptionalJWT(jwtSvc), analyzeHandler.AnalyzeCompare)
 	engine.POST("/api/analyze-compare-engines", authmw.OptionalJWT(jwtSvc), analyzeHandler.AnalyzeCompareEngines)
 	engine.POST("/api/analyze/batch", authmw.RequireJWT(jwtSvc), analyzeHandler.AnalyzeBatch)
+	engine.POST("/api/analyze/goose-duck-chicken", authmw.RequireJWT(jwtSvc), analyzeHandler.ClassifyGooseDuckChicken)
 	engine.POST("/api/analyze/submit", authmw.RequireJWT(jwtSvc), analyzeHandler.SubmitAnalyzeTask)
 	engine.POST("/api/analyze-text/submit", authmw.RequireJWT(jwtSvc), analyzeHandler.SubmitTextTask)
 	engine.GET("/api/analyze/tasks", authmw.RequireJWT(jwtSvc), analyzeHandler.ListTasks)
@@ -489,10 +490,17 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)
 	engine.POST("/api/membership/pay/sync", authmw.RequireJWT(jwtSvc), membershipHandler.SyncPayment)
 	engine.POST("/api/payment/wechat/notify/membership", membershipHandler.WechatNotify)
+	engine.POST("/api/payment/wechat/papay/contract/terminate-notify", membershipHandler.PapayContractTerminateNotify)
 	engine.POST("/api/membership/rewards/share-poster/claim", authmw.RequireJWT(jwtSvc), membershipHandler.ClaimSharePosterReward)
 
 	// Pet companion routes
 	engine.GET("/api/pet/summary", authmw.RequireJWT(jwtSvc), petHandler.Summary)
+	engine.GET("/api/pet/chat/latest", authmw.RequireJWT(jwtSvc), petHandler.LatestChat)
+	engine.GET("/api/pet/chat/sessions", authmw.RequireJWT(jwtSvc), petHandler.ChatSessions)
+	engine.GET("/api/pet/chat/sessions/:session_id", authmw.RequireJWT(jwtSvc), petHandler.ChatSession)
+	engine.POST("/api/pet/chat/estimate", authmw.RequireJWT(jwtSvc), petHandler.EstimateChat)
+	engine.POST("/api/pet/chat", authmw.RequireJWT(jwtSvc), petHandler.Chat)
+	engine.POST("/api/pet/chat/messages", authmw.RequireJWT(jwtSvc), petHandler.AppendChatMessages)
 	engine.POST("/api/pet/events/:event_id/claim", authmw.RequireJWT(jwtSvc), petHandler.ClaimEvent)
 	engine.POST("/api/pet/select-appearance", authmw.RequireJWT(jwtSvc), petHandler.SelectAppearance)
 	engine.POST("/api/pet/reroll-appearance", authmw.RequireJWT(jwtSvc), petHandler.RerollAppearance)
@@ -576,6 +584,8 @@ func New(cfg *config.Config) (*App, error) {
 	adminPackagedFoodRepo := adminrepo.NewPackagedFoodRepo(db)
 	adminPackagedFoodSvc := adminservice.NewPackagedFoodService(adminPackagedFoodRepo)
 	adminPackagedFoodHandler := adminhandler.NewPackagedFoodHandler(adminPackagedFoodSvc)
+	adminExerciseEnergySvc := adminservice.NewExerciseEnergyService(exerciseRepo)
+	adminExerciseEnergyHandler := adminhandler.NewExerciseEnergyHandler(adminExerciseEnergySvc)
 	adminFeedbackRepo := adminrepo.NewFeedbackRepo(db)
 	adminFeedbackSvc := adminservice.NewFeedbackService(adminFeedbackRepo)
 	adminFeedbackHandler := adminhandler.NewFeedbackHandler(adminFeedbackSvc)
@@ -596,6 +606,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/packaged-foods", adminAuth, adminPackagedFoodHandler.List)
 	adminAPI.GET("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Get)
 	adminAPI.PATCH("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Update)
+	adminAPI.GET("/exercise-energy-library", adminAuth, adminExerciseEnergyHandler.List)
+	adminAPI.GET("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Get)
+	adminAPI.PATCH("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Update)
 	adminAPI.GET("/feedback", adminAuth, adminFeedbackHandler.List)
 	adminAPI.GET("/feedback/stats", adminAuth, adminFeedbackHandler.StatusStats)
 	adminAPI.PATCH("/feedback/:feedback_id/status", adminAuth, adminFeedbackHandler.UpdateStatus)
