@@ -47,6 +47,19 @@ function createMockAdapters() {
           unionid: 'unionid-1',
         })
       }
+      if (url.endsWith('/api/app/sms/send-code')) {
+        return response({ request_id: 'sms-request-1', expires_in_seconds: 900 })
+      }
+      if (url.endsWith('/api/app/login/sms')) {
+        return response({
+          access_token: 'sms-access-token',
+          refresh_token: 'sms-refresh-token',
+          token_type: 'bearer',
+          expires_in: 3600,
+          user_id: 'sms-user-1',
+          openid: 'app-phone:13800138000',
+        })
+      }
       if (url.endsWith('/api/app/login/password') || url.endsWith('/api/app/register/password')) {
         return response({
           access_token: 'password-access-token',
@@ -516,6 +529,23 @@ describe('FoodLinkApiClient', () => {
     expect(requests[1].options?.headers?.Authorization).toBe('Bearer wechat-access-token')
   })
 
+  it('sends sms code and stores token after sms login', async () => {
+    const { adapters, requests } = createMockAdapters()
+    const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
+
+    const codeResult = await client.sendSMSCode({ phone: ' 13800138000 ' })
+    await client.loginWithSMSCode({ phone: '13800138000', code: ' 123456 ', inviteCode: ' ABCD1234 ' })
+    await client.getHomeDashboard('2026-06-14')
+
+    expect(codeResult.expires_in_seconds).toBe(900)
+    expect(requests[0].url).toBe('https://api.example.com/api/app/sms/send-code')
+    expect(requests[0].options?.body).toEqual({ phone: '13800138000' })
+    expect(requests[0].options?.headers?.Authorization).toBeUndefined()
+    expect(requests[1].url).toBe('https://api.example.com/api/app/login/sms')
+    expect(requests[1].options?.body).toEqual({ phone: '13800138000', code: '123456', inviteCode: 'ABCD1234' })
+    expect(requests[2].options?.headers?.Authorization).toBe('Bearer sms-access-token')
+  })
+
   it('stores token after password register and login', async () => {
     const { adapters, requests } = createMockAdapters()
     const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
@@ -531,14 +561,15 @@ describe('FoodLinkApiClient', () => {
     expect(requests[2].options?.headers?.Authorization).toBe('Bearer password-access-token')
   })
 
-  it('keeps legacy username password payload compatibility', async () => {
+  it('rejects password login without phone', async () => {
     const { adapters, requests } = createMockAdapters()
     const client = createFoodLinkApiClient({ baseUrl: 'https://api.example.com', adapters })
 
-    await client.loginWithPassword({ username: 'mobileuser', password: 'password123' })
+    await expect(
+      client.loginWithPassword({ phone: '   ', password: 'password123' }),
+    ).rejects.toThrow('请输入手机号')
 
-    expect(requests[0].url).toBe('https://api.example.com/api/app/login/password')
-    expect(requests[0].options?.body).toEqual({ username: 'mobileuser', password: 'password123' })
+    expect(requests).toHaveLength(0)
   })
 
   it('sets account password with authenticated token and stores refreshed token', async () => {

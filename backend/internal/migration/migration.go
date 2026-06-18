@@ -44,6 +44,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensureIndexes(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureExerciseEnergySeed(ctx, db); err != nil {
+		return err
+	}
 	if err := ensurePublicFoodTypeBackfill(ctx, db); err != nil {
 		return err
 	}
@@ -81,12 +84,15 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("weapp_user", "weapp_user_gender_check", `gender IS NULL OR gender = ANY (ARRAY['male'::text,'female'::text,'other'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_activity_level_check", `activity_level IS NULL OR activity_level = ANY (ARRAY['sedentary'::text,'light'::text,'moderate'::text,'active'::text,'very_active'::text,''::text])`),
 		dropAndAddCheck("weapp_user", "weapp_user_execution_mode_check", `execution_mode IS NULL OR execution_mode = ANY (ARRAY['standard'::text,'standard_web_search'::text,'fast'::text,'fast_web_search'::text,'strict'::text,'strict_web_search'::text,'experimental'::text,'gemini35_flash'::text,'gemini35_flash_grouped'::text])`),
-		dropAndAddCheck("weapp_user", "weapp_user_last_login_method_check", `last_login_method IS NULL OR last_login_method = ANY (ARRAY['wechat_miniprogram'::text,'wechat_app'::text,'password'::text,'development_test_openid'::text,'debug_impersonate'::text])`),
+		dropAndAddCheck("weapp_user", "weapp_user_last_login_method_check", `last_login_method IS NULL OR last_login_method = ANY (ARRAY['wechat_miniprogram'::text,'wechat_app'::text,'password'::text,'sms_code'::text,'development_test_openid'::text,'debug_impersonate'::text])`),
+		dropAndAddCheck("weapp_user", "weapp_user_telephone_format_check", `telephone IS NULL OR trim(telephone) = '' OR regexp_replace(trim(telephone), '[\s\-\(\)]', '', 'g') ~ '^(\+?86)?1[3-9][0-9]{9}$'`),
 		dropAndAddCheck("user_feedback", "user_feedback_category_check", `category = ANY (ARRAY['bug'::text,'suggestion'::text,'experience'::text,'other'::text])`),
 		dropAndAddCheck("user_feedback", "user_feedback_status_check", `status = ANY (ARRAY['open'::text,'processing'::text,'resolved'::text,'closed'::text])`),
 		dropAndAddCheck("admin_accounts", "admin_accounts_status_check", `status = ANY (ARRAY['active'::text,'disabled'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_status_check", `status = ANY (ARRAY['pending'::text,'processing'::text,'done'::text,'failed'::text,'cancelled'::text,'timed_out'::text,'violated'::text])`),
 		dropAndAddCheck("analysis_tasks", "analysis_tasks_task_type_check", `task_type = ANY (ARRAY['food'::text,'food_text'::text,'precision_plan'::text,'precision_item_estimate'::text,'precision_aggregate'::text,'health_report'::text,'public_food_library_text'::text,'exercise'::text,'expiry_recognize'::text,'expiry_notification'::text,'packaged_nutrition_label'::text,'packaged_product_extract'::text]) OR task_type ~ '^(food|food_text|precision_plan|precision_item_estimate|precision_aggregate|health_report|public_food_library_text|exercise|expiry_recognize|expiry_notification|packaged_nutrition_label|packaged_product_extract)_debug(_[a-z0-9_]+)?$'`),
+		dropAndAddCheck("exercise_energy_library", "exercise_energy_library_review_status_check", `review_status = ANY (ARRAY['pending'::text,'active'::text,'disabled'::text])`),
+		dropAndAddCheck("exercise_energy_library", "exercise_energy_library_met_value_check", `met_value > 0 AND met_value <= 30`),
 		dropAndAddCheck("analysis_feedback_samples", "analysis_feedback_samples_feedback_type_check", `feedback_type = ANY (ARRAY['correction'::text,'retry'::text,'manual_entry'::text,'failed'::text,'weight_mismatch'::text,'nutrition_mismatch'::text,'suspect_distrust'::text,'record_corrected'::text])`),
 		dropAndAddCheck("analysis_feedback_samples", "analysis_feedback_samples_resolution_state_check", `resolution_state = ANY (ARRAY['user_corrected'::text,'still_distrust'::text])`),
 		dropAndAddCheck("user_food_records", "user_food_records_meal_type_check", `meal_type = ANY (ARRAY['breakfast'::text,'morning_snack'::text,'lunch'::text,'afternoon_snack'::text,'dinner'::text,'evening_snack'::text,'snack'::text])`),
@@ -211,6 +217,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		addFK("user_water_logs_user_id_fkey", "user_water_logs", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_body_metric_settings_user_id_fkey", "user_body_metric_settings", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_exercise_logs_user_id_fkey", "user_exercise_logs", "user_id", "weapp_user", "id", "CASCADE"),
+		addFK("exercise_energy_aliases_activity_id_fkey", "exercise_energy_aliases", "activity_id", "exercise_energy_library", "id", "CASCADE"),
 		addFK("ai_stats_insights_user_id_fkey", "ai_stats_insights", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("ai_custom_focus_cards_user_id_fkey", "ai_custom_focus_cards", "user_id", "weapp_user", "id", "CASCADE"),
 		addFK("user_pro_memberships_user_id_fkey", "user_pro_memberships", "user_id", "weapp_user", "id", "CASCADE"),
@@ -261,6 +268,14 @@ func ensureIndexes(ctx context.Context, db *gorm.DB) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_weapp_user_app_openid ON weapp_user (app_openid) WHERE app_openid IS NOT NULL AND app_openid <> ''`,
 		`CREATE INDEX IF NOT EXISTS idx_weapp_user_app_unionid ON weapp_user (app_unionid) WHERE app_unionid IS NOT NULL AND app_unionid <> ''`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_weapp_user_username ON weapp_user (lower(username)) WHERE username IS NOT NULL AND username <> ''`,
+		`CREATE INDEX IF NOT EXISTS idx_weapp_user_telephone ON weapp_user (telephone) WHERE telephone IS NOT NULL AND telephone <> ''`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_weapp_user_telephone_normalized_unique ON weapp_user ((
+CASE
+  WHEN regexp_replace(trim(telephone), '[\s\-\(\)]', '', 'g') ~ '^\+?86(1[3-9][0-9]{9})$'
+    THEN regexp_replace(regexp_replace(trim(telephone), '[\s\-\(\)]', '', 'g'), '^\+?86', '')
+  ELSE regexp_replace(trim(telephone), '[\s\-\(\)]', '', 'g')
+END
+)) WHERE telephone IS NOT NULL AND trim(telephone) <> ''`,
 		`ALTER TABLE packaged_food_library DROP CONSTRAINT IF EXISTS packaged_food_library_normalized_name_key`,
 		`DROP INDEX IF EXISTS uni_packaged_food_library_normalized_name`,
 		`ALTER TABLE packaged_food_library ADD COLUMN IF NOT EXISTS product_key text NOT NULL DEFAULT ''`,
@@ -453,9 +468,11 @@ WHERE COALESCE(display_name, '') = ''
 		`CREATE INDEX IF NOT EXISTS idx_analysis_tasks_user_search_gin ON analysis_tasks USING gin (search_text gin_trgm_ops)`,
 		// Community search trigram indexes for keyword matching
 		`CREATE INDEX IF NOT EXISTS idx_weapp_user_nickname_gin ON weapp_user USING gin (nickname gin_trgm_ops)`,
-		`CREATE INDEX IF NOT EXISTS idx_user_food_records_desc_gin ON user_food_records USING gin (COALESCE(description, '') gin_trgm_ops) WHERE hidden_from_feed = false`,
-		`CREATE INDEX IF NOT EXISTS idx_user_exercise_logs_desc_gin ON user_exercise_logs USING gin (COALESCE(exercise_desc, '') gin_trgm_ops)`,
-		`CREATE INDEX IF NOT EXISTS idx_user_circle_posts_search_gin ON user_circle_posts USING gin ((COALESCE(title, '') || ' ' || COALESCE(body, '')) gin_trgm_ops)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_food_records_desc_gin ON user_food_records USING gin ((COALESCE(description, '')) gin_trgm_ops) WHERE hidden_from_feed = false`,
+		`CREATE INDEX IF NOT EXISTS idx_user_exercise_logs_desc_gin ON user_exercise_logs USING gin ((COALESCE(exercise_desc, '')) gin_trgm_ops)`,
+		`CREATE INDEX IF NOT EXISTS idx_exercise_energy_library_search_gin ON exercise_energy_library USING gin (((COALESCE(canonical_name, '') || ' ' || COALESCE(category, '') || ' ' || COALESCE(evidence, ''))) gin_trgm_ops)`,
+		`CREATE INDEX IF NOT EXISTS idx_exercise_energy_aliases_alias_gin ON exercise_energy_aliases USING gin ((COALESCE(alias_name, '')) gin_trgm_ops)`,
+		`CREATE INDEX IF NOT EXISTS idx_user_circle_posts_search_gin ON user_circle_posts USING gin (((COALESCE(title, '') || ' ' || COALESCE(body, ''))) gin_trgm_ops)`,
 		// Analysis feedback samples extra columns/indexes for frontend tracking
 		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS resolution_state text NOT NULL DEFAULT 'user_corrected'`,
 		`ALTER TABLE analysis_feedback_samples ADD COLUMN IF NOT EXISTS source_record_id uuid`,
@@ -639,6 +656,104 @@ func ensureSchoolsSeed(ctx context.Context, db *gorm.DB) error {
 	return nil
 }
 
+type exerciseEnergySeed struct {
+	Name      string
+	Norm      string
+	Category  string
+	Intensity string
+	MET       float64
+	Aliases   []string
+	Evidence  string
+}
+
+func ensureExerciseEnergySeed(ctx context.Context, db *gorm.DB) error {
+	seeds := []exerciseEnergySeed{
+		{Name: "深蹲", Norm: "深蹲", Category: "strength", Intensity: "high", MET: 5.0, Aliases: []string{"杠铃深蹲", "深蹲训练"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "杠铃深蹲", Norm: "杠铃深蹲", Category: "strength", Intensity: "high", MET: 5.0, Aliases: []string{"40kg杠铃深蹲", "负重深蹲"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "卧推", Norm: "卧推", Category: "strength", Intensity: "high", MET: 4.5, Aliases: []string{"杠铃卧推", "卧推训练"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "高位下拉", Norm: "高位下拉", Category: "strength", Intensity: "moderate", MET: 4.0, Aliases: []string{"龙门架高位下拉", "下拉"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "龙门架高位下拉", Norm: "龙门架高位下拉", Category: "strength", Intensity: "moderate", MET: 4.0, Aliases: []string{"宽握高位下拉"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "坐姿划船", Norm: "坐姿划船", Category: "strength", Intensity: "moderate", MET: 4.0, Aliases: []string{"器械划船", "划船训练"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "哑铃推举", Norm: "哑铃推举", Category: "strength", Intensity: "high", MET: 4.5, Aliases: []string{"肩推", "哑铃肩推", "推举"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "弯举", Norm: "弯举", Category: "strength", Intensity: "moderate", MET: 3.5, Aliases: []string{"杠铃弯举", "哑铃弯举", "二头弯举"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "臂弯举", Norm: "臂弯举", Category: "strength", Intensity: "moderate", MET: 3.5, Aliases: []string{"手臂弯举", "二头肌弯举"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "绳索下压", Norm: "绳索下压", Category: "strength", Intensity: "moderate", MET: 3.5, Aliases: []string{"直杆下压", "三头下压"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "跑步机", Norm: "跑步机", Category: "cardio", Intensity: "high", MET: 8.3, Aliases: []string{"跑步机跑步", "坡度跑", "跑步"}, Evidence: "基础有氧训练 MET 种子"},
+		{Name: "跑步机跑步", Norm: "跑步机跑步", Category: "cardio", Intensity: "high", MET: 8.3, Aliases: []string{"跑步机有氧"}, Evidence: "基础有氧训练 MET 种子"},
+		{Name: "卷腹", Norm: "卷腹", Category: "strength", Intensity: "moderate", MET: 3.8, Aliases: []string{"仰卧卷腹", "腹部卷腹"}, Evidence: "基础核心训练 MET 种子"},
+		{Name: "垫上卷腹", Norm: "垫上卷腹", Category: "strength", Intensity: "moderate", MET: 3.8, Aliases: []string{"垫上腹部卷腹"}, Evidence: "基础核心训练 MET 种子"},
+		{Name: "平板支撑", Norm: "平板支撑", Category: "strength", Intensity: "moderate", MET: 3.0, Aliases: []string{"平板", "plank"}, Evidence: "基础核心训练 MET 种子"},
+		{Name: "背部伸展", Norm: "背部伸展", Category: "strength", Intensity: "moderate", MET: 3.5, Aliases: []string{"背伸", "罗马椅背伸"}, Evidence: "基础力量训练 MET 种子"},
+		{Name: "拉伸", Norm: "拉伸", Category: "flexibility", Intensity: "low", MET: 2.3, Aliases: []string{"静态拉伸", "放松拉伸"}, Evidence: "基础拉伸训练 MET 种子"},
+		{Name: "全身肌群拉伸", Norm: "全身肌群拉伸", Category: "flexibility", Intensity: "low", MET: 2.3, Aliases: []string{"全身拉伸", "多肌群拉伸"}, Evidence: "基础拉伸训练 MET 种子"},
+		{Name: "慢跑", Norm: "慢跑", Category: "cardio", Intensity: "moderate", MET: 7.0, Aliases: []string{"跑步30分钟", "轻松跑"}, Evidence: "基础有氧训练 MET 种子"},
+		{Name: "跳绳", Norm: "跳绳", Category: "cardio", Intensity: "high", MET: 10.0, Aliases: []string{"跳绳训练"}, Evidence: "基础有氧训练 MET 种子"},
+		{Name: "壶铃训练", Norm: "壶铃训练", Category: "strength", Intensity: "high", MET: 8.0, Aliases: []string{"壶铃摆动", "壶铃"}, Evidence: "基础力量循环训练 MET 种子"},
+	}
+	for _, seed := range seeds {
+		if err := db.WithContext(ctx).Exec(`
+			INSERT INTO exercise_energy_library (
+				canonical_name,
+				normalized_name,
+				category,
+				intensity,
+				met_value,
+				source,
+				evidence,
+				review_status,
+				is_active
+			)
+			VALUES (?, ?, ?, ?, ?, 'system_seed', ?, 'active', true)
+			ON CONFLICT (normalized_name) DO UPDATE SET
+				category = EXCLUDED.category,
+				intensity = EXCLUDED.intensity,
+				met_value = EXCLUDED.met_value,
+				source = CASE
+					WHEN exercise_energy_library.source = 'system_seed' THEN EXCLUDED.source
+					ELSE exercise_energy_library.source
+				END,
+				evidence = CASE
+					WHEN exercise_energy_library.source = 'system_seed' THEN EXCLUDED.evidence
+					ELSE exercise_energy_library.evidence
+				END,
+				review_status = CASE
+					WHEN exercise_energy_library.review_status = 'pending' THEN 'active'
+					ELSE exercise_energy_library.review_status
+				END,
+				is_active = true,
+				updated_at = now()
+		`, seed.Name, seed.Norm, seed.Category, seed.Intensity, seed.MET, seed.Evidence).Error; err != nil {
+			return fmt.Errorf("seed exercise energy activity %s: %w", seed.Name, err)
+		}
+		for _, alias := range append(seed.Aliases, seed.Name) {
+			alias = strings.TrimSpace(alias)
+			if alias == "" {
+				continue
+			}
+			normalizedAlias := normalizeExerciseEnergySeedAlias(alias)
+			if normalizedAlias == "" {
+				continue
+			}
+			if err := db.WithContext(ctx).Exec(`
+				INSERT INTO exercise_energy_aliases (activity_id, alias_name, normalized_alias)
+				SELECT id, ?, ?
+				FROM exercise_energy_library
+				WHERE normalized_name = ?
+				ON CONFLICT (normalized_alias) DO NOTHING
+			`, alias, normalizedAlias, seed.Norm).Error; err != nil {
+				return fmt.Errorf("seed exercise energy alias %s: %w", alias, err)
+			}
+		}
+	}
+	return nil
+}
+
+func normalizeExerciseEnergySeedAlias(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	replacer := strings.NewReplacer(" ", "", "\t", "", "\n", "", "\r", "", "-", "", "_", "", "，", "", "。", "", "、", "", "；", "", ":", "", "：", "", "(", "", ")", "", "（", "", "）", "")
+	return replacer.Replace(value)
+}
+
 func ensureMottoColumn(ctx context.Context, db *gorm.DB) error {
 	var exists int64
 	if err := db.WithContext(ctx).Raw(`
@@ -672,6 +787,8 @@ func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
 func ensureFeedReportResolutionColumns(ctx context.Context, db *gorm.DB) error {
 	columns := []string{
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS resolution_note text NOT NULL DEFAULT ''`,
+		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS reward_credits integer NOT NULL DEFAULT 0`,
+		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS reward_ledger_id uuid`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS handled_by text`,
 		`ALTER TABLE feed_reports ADD COLUMN IF NOT EXISTS handled_at timestamptz`,
 	}

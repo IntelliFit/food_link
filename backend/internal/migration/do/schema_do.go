@@ -3,19 +3,20 @@ package do
 import "time"
 
 type UserDO struct {
-	ID                             string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	OpenID                         string         `gorm:"column:openid;type:text;not null;unique;index:idx_weapp_user_openid"`
-	UnionID                        *string        `gorm:"column:unionid;type:text;unique;index:idx_weapp_user_unionid,where:unionid IS NOT NULL"`
-	AppOpenID                      *string        `gorm:"column:app_openid;type:text;uniqueIndex:idx_weapp_user_app_openid,where:app_openid IS NOT NULL"`
-	AppUnionID                     *string        `gorm:"column:app_unionid;type:text;index:idx_weapp_user_app_unionid,where:app_unionid IS NOT NULL"`
-	Username                       *string        `gorm:"column:username;type:text;uniqueIndex:idx_weapp_user_username,where:username IS NOT NULL"`
-	PasswordHash                   *string        `gorm:"column:password_hash;type:text"`
-	PasswordSetAt                  *time.Time     `gorm:"column:password_set_at;type:timestamptz"`
-	LastLoginMethod                *string        `gorm:"column:last_login_method;type:text"`
-	LastLoginAt                    *time.Time     `gorm:"column:last_login_at;type:timestamptz"`
-	Avatar                         *string        `gorm:"column:avatar;type:text;default:''"`
-	Nickname                       *string        `gorm:"column:nickname;type:text;default:''"`
-	Telephone                      *string        `gorm:"column:telephone;type:text"`
+	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	OpenID          string     `gorm:"column:openid;type:text;not null;unique;index:idx_weapp_user_openid"`
+	UnionID         *string    `gorm:"column:unionid;type:text;unique;index:idx_weapp_user_unionid,where:unionid IS NOT NULL"`
+	AppOpenID       *string    `gorm:"column:app_openid;type:text;uniqueIndex:idx_weapp_user_app_openid,where:app_openid IS NOT NULL"`
+	AppUnionID      *string    `gorm:"column:app_unionid;type:text;index:idx_weapp_user_app_unionid,where:app_unionid IS NOT NULL"`
+	Username        *string    `gorm:"column:username;type:text;uniqueIndex:idx_weapp_user_username,where:username IS NOT NULL"`
+	PasswordHash    *string    `gorm:"column:password_hash;type:text"`
+	PasswordSetAt   *time.Time `gorm:"column:password_set_at;type:timestamptz"`
+	LastLoginMethod *string    `gorm:"column:last_login_method;type:text"`
+	LastLoginAt     *time.Time `gorm:"column:last_login_at;type:timestamptz"`
+	Avatar          *string    `gorm:"column:avatar;type:text;default:''"`
+	Nickname        *string    `gorm:"column:nickname;type:text;default:''"`
+	// A normalized unique phone index is installed in migration.go so +86 legacy values conflict with 11-digit phones.
+	Telephone                      *string        `gorm:"column:telephone;type:text;index:idx_weapp_user_telephone"`
 	CreatedAt                      *time.Time     `gorm:"column:create_time;type:timestamptz;default:now()"`
 	UpdatedAt                      *time.Time     `gorm:"column:update_time;type:timestamptz;default:now()"`
 	Height                         *float64       `gorm:"column:height;type:numeric"`
@@ -683,6 +684,8 @@ type FeedReportDO struct {
 	ExtraContent   string     `gorm:"column:extra_content;type:text;not null;default:''"`
 	Status         string     `gorm:"column:status;type:text;not null;default:'pending';index:idx_feed_reports_status_created,priority:1"`
 	ResolutionNote string     `gorm:"column:resolution_note;type:text;not null;default:''"`
+	RewardCredits  int        `gorm:"column:reward_credits;type:integer;not null;default:0"`
+	RewardLedgerID *string    `gorm:"column:reward_ledger_id;type:uuid"`
 	HandledBy      *string    `gorm:"column:handled_by;type:text"`
 	HandledAt      *time.Time `gorm:"column:handled_at;type:timestamptz"`
 	CreatedAt      *time.Time `gorm:"column:created_at;type:timestamptz;default:now();index:idx_feed_reports_status_created,priority:2,sort:desc"`
@@ -843,6 +846,33 @@ type ExerciseLogDO struct {
 }
 
 func (ExerciseLogDO) TableName() string { return "user_exercise_logs" }
+
+type ExerciseEnergyActivityDO struct {
+	ID             string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	CanonicalName  string    `gorm:"column:canonical_name;type:text;not null;index:idx_exercise_energy_library_canonical_name"`
+	NormalizedName string    `gorm:"column:normalized_name;type:text;not null;uniqueIndex:idx_exercise_energy_library_normalized_name"`
+	Category       string    `gorm:"column:category;type:text;not null;default:'other';index:idx_exercise_energy_library_category"`
+	Intensity      string    `gorm:"column:intensity;type:text;not null;default:'moderate';index:idx_exercise_energy_library_intensity"`
+	METValue       float64   `gorm:"column:met_value;type:numeric(6,2);not null"`
+	Source         string    `gorm:"column:source;type:text;not null;default:'llm_pending'"`
+	Evidence       string    `gorm:"column:evidence;type:text;not null;default:''"`
+	ReviewStatus   string    `gorm:"column:review_status;type:text;not null;default:'pending';index:idx_exercise_energy_library_review_status"`
+	IsActive       bool      `gorm:"column:is_active;type:boolean;not null;default:true;index:idx_exercise_energy_library_is_active"`
+	CreatedAt      time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt      time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (ExerciseEnergyActivityDO) TableName() string { return "exercise_energy_library" }
+
+type ExerciseEnergyAliasDO struct {
+	ID              string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	ActivityID      string    `gorm:"column:activity_id;type:uuid;not null;index:idx_exercise_energy_aliases_activity_id"`
+	AliasName       string    `gorm:"column:alias_name;type:text;not null"`
+	NormalizedAlias string    `gorm:"column:normalized_alias;type:text;not null;uniqueIndex:idx_exercise_energy_aliases_normalized_alias"`
+	CreatedAt       time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+}
+
+func (ExerciseEnergyAliasDO) TableName() string { return "exercise_energy_aliases" }
 
 type StatsInsightDO struct {
 	ID              string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -1248,6 +1278,8 @@ func AllModels() []any {
 		&BodyWaterLogDO{},
 		&BodyMetricSettingsDO{},
 		&ExerciseLogDO{},
+		&ExerciseEnergyActivityDO{},
+		&ExerciseEnergyAliasDO{},
 		&StatsInsightDO{},
 		&CustomFocusCardDO{},
 		&UserMembershipDO{},

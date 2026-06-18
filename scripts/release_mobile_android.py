@@ -12,9 +12,8 @@ storage:
   release_cdn_base_url: https://download.healthymax.cn
 
 Examples:
-  python scripts/release_mobile_android.py --version 0.0.1 --build-number 1 --channel all --artifact-apk dist/app.apk
-  python scripts/release_mobile_android.py --version 0.0.1 --build-number 1 --channel beta --build-apk
-  python scripts/release_mobile_android.py --version 0.0.1 --build-number 1 --channel all --build-local-apk
+  python scripts/release_mobile_android.py
+  python scripts/release_mobile_android.py --dry-run
 """
 
 from __future__ import annotations
@@ -49,6 +48,21 @@ CHANNELS = {
     "stable": ["stable"],
     "latest": ["latest"],
     "all": ["beta", "stable"],
+}
+
+BRANCH_RELEASES = {
+    "dev": {
+        "channel": "beta",
+        "eas_profile": "preview",
+        "api_base_url": "https://dev.api.healthymax.cn",
+        "release_name": "体验版",
+    },
+    "main": {
+        "channel": "stable",
+        "eas_profile": "production",
+        "api_base_url": "https://api.healthymax.cn",
+        "release_name": "正式版",
+    },
 }
 
 
@@ -104,7 +118,7 @@ def decode_apollo_raw_config_body(body: str) -> str:
     return content.strip()
 
 
-def load_release_storage_from_apollo(namespace: str) -> dict[str, str]:
+def load_release_config_from_apollo(namespace: str) -> dict[str, Any]:
     if not APOLLO_CONFIG_FILE.exists():
         fail(f"Apollo config file not found: {APOLLO_CONFIG_FILE}")
 
@@ -123,20 +137,26 @@ def load_release_storage_from_apollo(namespace: str) -> dict[str, str]:
     response.raise_for_status()
     content = decode_apollo_raw_config_body(response.text)
     config = yaml.safe_load(content) or {}
-    storage = config.get("storage") or {}
-    return {str(k): str(v) for k, v in storage.items() if v is not None}
+    return config if isinstance(config, dict) else {}
 
 
 def resolve_release_config(namespace: str) -> dict[str, str]:
-    storage = load_release_storage_from_apollo(namespace)
+    release_config = load_release_config_from_apollo(namespace)
+    storage = release_config.get("storage") or {}
+    expo = release_config.get("expo") or {}
+    eas = release_config.get("eas") or {}
     resolved = {
         "secret_id": os.getenv("COS_SECRET_ID", storage.get("cos_secret_id", "")).strip(),
         "secret_key": os.getenv("COS_SECRET_KEY", storage.get("cos_secret_key", "")).strip(),
         "region": os.getenv("COS_REGION", storage.get("cos_region", "ap-beijing")).strip(),
         "bucket": os.getenv("COS_RELEASE_BUCKET", storage.get("release_bucket", "")).strip(),
         "cdn_base": os.getenv("CDN_RELEASE_BASE_URL", storage.get("release_cdn_base_url", "")).strip().rstrip("/"),
+        "expo_token": os.getenv(
+            "EXPO_TOKEN",
+            expo.get("token") or expo.get("access_token") or eas.get("expo_token") or eas.get("token") or "",
+        ).strip(),
     }
-    missing = [key for key, value in resolved.items() if not value]
+    missing = [key for key, value in resolved.items() if key != "expo_token" and not value]
     if missing:
         fail(f"release config missing required fields: {', '.join(missing)}")
     return resolved
@@ -296,13 +316,16 @@ def extract_eas_artifact_url(payload: Any) -> str:
     return ""
 
 
-def eas_build(platform_profile: str, output_path: Path) -> Path:
+def eas_build(platform_profile: str, output_path: Path, api_base_url: str, expo_token: str) -> Path:
     eas = shutil.which("eas") or shutil.which("eas.cmd")
     cmd = [eas] if eas else ["npx", "eas"]
     if not eas:
         cmd = ["npx", "eas-cli"]
     cmd += ["build", "-p", "android", "--profile", platform_profile, "--json", "--wait", "--non-interactive"]
-    output = run(cmd)
+    env = {"EXPO_PUBLIC_API_BASE_URL": api_base_url}
+    if expo_token:
+        env["EXPO_TOKEN"] = expo_token
+    output = run(cmd, cwd=MOBILE_DIR, extra_env=env)
     try:
         payload = json.loads(output[output.find("[") :] if "[" in output else output[output.find("{") :])
     except json.JSONDecodeError as err:
@@ -312,8 +335,12 @@ def eas_build(platform_profile: str, output_path: Path) -> Path:
     return download(artifact_url, output_path)
 
 
-def local_apk_build(output_path: Path) -> Path:
-    run(["npx", "expo", "prebuild", "--platform", "android"], cwd=MOBILE_DIR)
+def local_apk_build(output_path: Path, api_base_url: str) -> Path:
+    run(
+        ["npx", "expo", "prebuild", "--platform", "android"],
+        cwd=MOBILE_DIR,
+        extra_env={"EXPO_PUBLIC_API_BASE_URL": api_base_url},
+    )
     android_dir = MOBILE_DIR / "android"
     gradlew = android_dir / ("gradlew.bat" if os.name == "nt" else "gradlew")
     if not gradlew.exists():
@@ -332,7 +359,11 @@ def local_apk_build(output_path: Path) -> Path:
     else:
         print("ANDROID_HOME not found; Gradle may fail unless android/local.properties already points to an SDK")
     init_script = write_gradle_mirror_init_script()
-    run([str(gradlew), "--init-script", str(init_script), "assembleRelease"], cwd=android_dir, extra_env=extra_env)
+    run(
+        [str(gradlew), "--init-script", str(init_script), "assembleRelease"],
+        cwd=android_dir,
+        extra_env={**extra_env, "EXPO_PUBLIC_API_BASE_URL": api_base_url},
+    )
     apk = android_dir / "app" / "build" / "outputs" / "apk" / "release" / "app-release.apk"
     if not apk.exists():
         fail(f"local debug APK not found: {apk}")
@@ -402,11 +433,13 @@ def upload_file(client: Any, bucket: str, key: str, path: Path, dry_run: bool) -
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Publish Food Link Android release artifacts to COS")
     parser.add_argument("--version", help="Release version. Defaults to apps/mobile/app.json expo.version")
-    parser.add_argument("--build-number", default="1", help="Android versionCode/build number")
-    parser.add_argument("--channel", choices=sorted(CHANNELS.keys()), default="beta")
+    parser.add_argument("--build-number", help="Android versionCode/build number. Defaults to apps/mobile/app.json android.versionCode")
+    parser.add_argument("--channel", choices=sorted(CHANNELS.keys()), help="Defaults to beta on dev, stable on main")
+    parser.add_argument("--eas-profile", help="Defaults to preview on dev, production on main")
+    parser.add_argument("--api-base-url", help="Defaults to dev.api on dev, api on main")
     parser.add_argument("--artifact-apk", type=Path, help="Existing APK file to publish")
     parser.add_argument("--artifact-aab", type=Path, help="Existing AAB file to publish")
-    parser.add_argument("--build-apk", action="store_true", help="Run EAS preview build and publish downloaded APK")
+    parser.add_argument("--build-apk", action="store_true", help="Run EAS Android APK build and publish downloaded APK")
     parser.add_argument("--build-aab", action="store_true", help="Run EAS production build and publish downloaded AAB")
     parser.add_argument(
         "--build-local-apk",
@@ -421,26 +454,57 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    branch = git_value(["rev-parse", "--abbrev-ref", "HEAD"], fallback="")
+    commit = git_value(["rev-parse", "HEAD"], fallback="")
+    short_commit = git_value(["rev-parse", "--short=7", "HEAD"], fallback="")
+    branch_defaults = BRANCH_RELEASES.get(branch)
+    if not branch_defaults:
+        fail(
+            f"current branch is {branch or 'unknown'}; mobile Android release only supports main or dev.\n"
+            "Switch branches and rerun:\n"
+            "  git checkout dev   # publish beta APK with https://dev.api.healthymax.cn\n"
+            "  git checkout main  # publish stable APK with https://api.healthymax.cn"
+        )
+
     expo = load_json(MOBILE_APP_JSON).get("expo") or {}
+    android = expo.get("android") or {}
     version = args.version or str(expo.get("version") or "0.0.1")
-    build_number = str(args.build_number)
-    channels = CHANNELS[args.channel]
+    build_number = str(args.build_number or android.get("versionCode") or "1")
+    channel = args.channel or branch_defaults["channel"]
+    eas_profile = args.eas_profile or branch_defaults["eas_profile"]
+    api_base_url = args.api_base_url or branch_defaults["api_base_url"]
+    channels = CHANNELS[channel]
 
     config = resolve_release_config(args.namespace)
     print(f"release bucket: {config['bucket']}")
     print(f"release cdn: {config['cdn_base']}")
+    print(f"branch: {branch}")
+    print(f"commit: {short_commit}")
+    print(f"release: {branch_defaults['release_name']}")
+    print(f"eas profile: {eas_profile}")
+    print(f"api base url: {api_base_url}")
+    print(f"expo token: {'configured' if config['expo_token'] else 'not configured'}")
     print(f"version: {version}, build: {build_number}, channels: {', '.join(channels)}")
 
     artifact_dir = args.dist_dir / "android" / version / build_number
     apk_path = args.artifact_apk
     aab_path = args.artifact_aab
+    should_auto_build = not apk_path and not aab_path and not args.build_apk and not args.build_aab and not args.build_local_apk
+    if args.dry_run and should_auto_build:
+        print("[dry-run] branch and release config resolved; no build or upload will be performed")
+        return
+    if should_auto_build:
+        args.build_apk = True
+
+    if (args.build_apk or args.build_aab) and not config["expo_token"] and not os.getenv("EXPO_TOKEN", "").strip():
+        print("warning: EXPO_TOKEN is not configured; EAS may require an interactive login on this machine")
 
     if args.build_apk:
-        apk_path = eas_build("preview", artifact_dir / f"foodlink-{version}-{build_number}.apk")
+        apk_path = eas_build(eas_profile, artifact_dir / f"foodlink-{version}-{build_number}.apk", api_base_url, config["expo_token"])
     if args.build_local_apk:
-        apk_path = local_apk_build(artifact_dir / f"foodlink-{version}-{build_number}.apk")
+        apk_path = local_apk_build(artifact_dir / f"foodlink-{version}-{build_number}.apk", api_base_url)
     if args.build_aab:
-        aab_path = eas_build("production", artifact_dir / f"foodlink-{version}-{build_number}.aab")
+        aab_path = eas_build(eas_profile, artifact_dir / f"foodlink-{version}-{build_number}.aab", api_base_url, config["expo_token"])
 
     if not apk_path and not aab_path:
         fail("provide --artifact-apk/--artifact-aab or use --build-apk/--build-aab")
@@ -463,8 +527,6 @@ def main() -> None:
         artifacts["aab"] = artifact_payload(aab_path, aab_key, config["cdn_base"])
 
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    commit = git_value(["rev-parse", "HEAD"], fallback="")
-    branch = git_value(["rev-parse", "--abbrev-ref", "HEAD"], fallback="")
     release_manifest = {
         "schemaVersion": 1,
         "app": "food_link",
@@ -476,6 +538,10 @@ def main() -> None:
         "releasedAt": now,
         "commit": commit,
         "branch": branch,
+        "releaseName": branch_defaults["release_name"],
+        "channelGroup": channel,
+        "easProfile": eas_profile,
+        "apiBaseUrl": api_base_url,
         "artifacts": artifacts,
         "notes": "Food Link Android release",
     }

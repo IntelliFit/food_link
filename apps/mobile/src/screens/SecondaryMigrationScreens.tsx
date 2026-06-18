@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Image, Modal, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
+import qrcode from 'qrcode-generator'
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
@@ -144,6 +145,7 @@ export function InviteFriendsScreen() {
   const [resolvedProfile, setResolvedProfile] = useState<Record<string, unknown> | null>(null)
   const [inviteNotice, setInviteNotice] = useState('')
   const [loading, setLoading] = useState(false)
+  const [qrPreviewOpen, setQrPreviewOpen] = useState(false)
   const routeInviteCode = useMemo(
     () => normalizeInviteCode(route.params?.inviteCode || route.params?.invite_code || route.params?.fi),
     [route.params?.fi, route.params?.inviteCode, route.params?.invite_code],
@@ -318,6 +320,30 @@ export function InviteFriendsScreen() {
         {!isInviteOwner ? <Text style={styles.subtitle}>{relationText}</Text> : null}
       </Card>
 
+      {isInviteOwner && inviteLink ? (
+        <Card>
+          <View style={styles.inviteQrHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>扫码也能加入</Text>
+              <Text style={styles.subtitle}>把二维码展示给朋友，或截图后发到微信、短信和其他聊天应用。</Text>
+            </View>
+          </View>
+          <Pressable
+            accessibilityRole="imagebutton"
+            accessibilityLabel="打开邀请二维码"
+            style={styles.inviteQrPressable}
+            onPress={() => setQrPreviewOpen(true)}
+          >
+            <InviteQrCode value={inviteLink} />
+          </Pressable>
+          <Text style={styles.subtitle}>二维码内容为当前邀请链接，朋友打开后会自动带入邀请码。</Text>
+          <View style={styles.buttonRow}>
+            <SmallButton label="打开二维码" onPress={() => setQrPreviewOpen(true)} />
+            <SmallButton label="复制链接" onPress={copyInviteLink} />
+          </View>
+        </Card>
+      ) : null}
+
       <Card>
         <Text style={styles.sectionTitle}>手动填写邀请码</Text>
         <Field
@@ -350,6 +376,18 @@ export function InviteFriendsScreen() {
         <RuleLine text="App 侧可通过系统分享面板发到微信、短信或其他聊天应用。" />
         <RuleLine text="朋友也可以在登录页手动填写邀请码，或通过 foodlink://invite?fi=邀请码 自动带入。" />
       </Card>
+
+      <Modal visible={qrPreviewOpen} transparent animationType="fade" onRequestClose={() => setQrPreviewOpen(false)}>
+        <View style={styles.inviteQrModalBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setQrPreviewOpen(false)} />
+          <View style={styles.inviteQrModalCard}>
+            <Text style={styles.auditModalTitle}>邀请二维码</Text>
+            <Text style={styles.auditModalLine}>朋友扫码打开后会自动带入邀请码。</Text>
+            <InviteQrCode value={inviteLink} large />
+            <AppButton label="关闭" onPress={() => setQrPreviewOpen(false)} />
+          </View>
+        </View>
+      </Modal>
     </Page>
   )
 }
@@ -1987,6 +2025,45 @@ function buildInviteMessage(profile: Record<string, unknown> | null, inviteCode:
   ].filter(Boolean).join('\n')
 }
 
+function InviteQrCode({ value, large = false }: { value: string; large?: boolean }) {
+  const matrix = useMemo(() => {
+    const link = value.trim()
+    if (!link) return []
+    const qr = qrcode(0, 'M')
+    qr.addData(link)
+    qr.make()
+    const size = qr.getModuleCount()
+    return Array.from({ length: size }, (_, row) =>
+      Array.from({ length: size }, (_, col) => qr.isDark(row, col)),
+    )
+  }, [value])
+
+  if (!matrix.length) {
+    return (
+      <View style={[styles.inviteQrOuter, large && styles.inviteQrOuterLarge]}>
+        <Text style={styles.subtitle}>二维码生成中</Text>
+      </View>
+    )
+  }
+
+  return (
+    <View style={[styles.inviteQrOuter, large && styles.inviteQrOuterLarge]}>
+      <View style={[styles.inviteQrMatrix, large && styles.inviteQrMatrixLarge]}>
+        {matrix.map((row, rowIndex) => (
+          <View key={`qr-row-${rowIndex}`} style={styles.inviteQrRow}>
+            {row.map((dark, colIndex) => (
+              <View
+                key={`qr-cell-${rowIndex}-${colIndex}`}
+                style={[styles.inviteQrCell, dark ? styles.inviteQrCellDark : styles.inviteQrCellLight]}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  )
+}
+
 function createBlankRecipeRow(): RecipeFormRow {
   return { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, name: '', weight: '100', calories: '', protein: '', carbs: '', fat: '' }
 }
@@ -2322,6 +2399,66 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     backgroundColor: colors.surfaceMuted,
+  },
+  inviteQrHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  inviteQrPressable: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  inviteQrOuter: {
+    alignSelf: 'center',
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+  },
+  inviteQrOuterLarge: {
+    marginVertical: 18,
+  },
+  inviteQrMatrix: {
+    width: 204,
+    height: 204,
+    backgroundColor: '#FFFFFF',
+  },
+  inviteQrMatrixLarge: {
+    width: 282,
+    height: 282,
+  },
+  inviteQrRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  inviteQrCell: {
+    flex: 1,
+  },
+  inviteQrCellDark: {
+    backgroundColor: '#111827',
+  },
+  inviteQrCellLight: {
+    backgroundColor: '#FFFFFF',
+  },
+  inviteQrModalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: 'rgba(17, 24, 39, 0.62)',
+  },
+  inviteQrModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 22,
+    padding: 20,
+    backgroundColor: colors.surface,
+    gap: 10,
   },
   linkText: {
     marginTop: 10,

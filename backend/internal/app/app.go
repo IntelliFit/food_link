@@ -146,6 +146,11 @@ func New(cfg *config.Config) (*App, error) {
 	userRepo := authrepo.NewUserRepo(db)
 	loginSvc := authservice.NewLoginService(cfg, userRepo, jwtSvc)
 	loginHandler := authhandler.NewLoginHandler(loginSvc)
+	smsStore, err := authservice.NewSMSCodeStore(cfg.Redis, cfg.App.Env)
+	if err != nil {
+		return nil, fmt.Errorf("初始化短信验证码存储失败: %w", err)
+	}
+	loginHandler.ConfigureSMSService(authservice.NewSMSService(cfg.SMS, loginSvc, userRepo, jwtSvc, smsStore, authservice.NewTencentCloudSMSSender(cfg.SMS)))
 
 	healthDocRepo := userrepo.NewHealthDocumentRepo(db)
 	modeSwitchLogRepo := userrepo.NewModeSwitchLogRepo(db)
@@ -316,6 +321,8 @@ func New(cfg *config.Config) (*App, error) {
 
 	engine.POST("/api/login", loginHandler.Login)
 	engine.POST("/api/app/login/wechat", loginHandler.AppWechatLogin)
+	engine.POST("/api/app/sms/send-code", loginHandler.SendSMSCode)
+	engine.POST("/api/app/login/sms", loginHandler.SMSLogin)
 	engine.POST("/api/app/login/password", loginHandler.PasswordLogin)
 	engine.POST("/api/app/register/password", loginHandler.PasswordRegister)
 	engine.POST("/api/app/account/password", authmw.RequireJWT(jwtSvc), loginHandler.SetPassword)
@@ -577,6 +584,8 @@ func New(cfg *config.Config) (*App, error) {
 	adminPackagedFoodRepo := adminrepo.NewPackagedFoodRepo(db)
 	adminPackagedFoodSvc := adminservice.NewPackagedFoodService(adminPackagedFoodRepo)
 	adminPackagedFoodHandler := adminhandler.NewPackagedFoodHandler(adminPackagedFoodSvc)
+	adminExerciseEnergySvc := adminservice.NewExerciseEnergyService(exerciseRepo)
+	adminExerciseEnergyHandler := adminhandler.NewExerciseEnergyHandler(adminExerciseEnergySvc)
 	adminFeedbackRepo := adminrepo.NewFeedbackRepo(db)
 	adminFeedbackSvc := adminservice.NewFeedbackService(adminFeedbackRepo)
 	adminFeedbackHandler := adminhandler.NewFeedbackHandler(adminFeedbackSvc)
@@ -597,6 +606,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/packaged-foods", adminAuth, adminPackagedFoodHandler.List)
 	adminAPI.GET("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Get)
 	adminAPI.PATCH("/packaged-foods/:food_id", adminAuth, adminPackagedFoodHandler.Update)
+	adminAPI.GET("/exercise-energy-library", adminAuth, adminExerciseEnergyHandler.List)
+	adminAPI.GET("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Get)
+	adminAPI.PATCH("/exercise-energy-library/:activity_id", adminAuth, adminExerciseEnergyHandler.Update)
 	adminAPI.GET("/feedback", adminAuth, adminFeedbackHandler.List)
 	adminAPI.GET("/feedback/stats", adminAuth, adminFeedbackHandler.StatusStats)
 	adminAPI.PATCH("/feedback/:feedback_id/status", adminAuth, adminFeedbackHandler.UpdateStatus)
@@ -604,6 +616,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.GET("/feed-reports/stats", adminAuth, adminFeedReportHandler.StatusStats)
 	adminAPI.GET("/feed-reports/:report_id", adminAuth, adminFeedReportHandler.Get)
 	adminAPI.PATCH("/feed-reports/:report_id/status", adminAuth, adminFeedReportHandler.UpdateStatus)
+	adminAPI.POST("/feed-reports/:report_id/delete-target", adminAuth, adminFeedReportHandler.DeleteTargetContent)
 	adminAPI.DELETE("/feed-reports/:report_id", adminAuth, adminFeedReportHandler.Delete)
 	adminAPI.GET("/benchmark/datasets/batches", adminAuth, adminBenchmarkHandler.ListBatches)
 	adminAPI.GET("/benchmark/datasets/samples", adminAuth, adminBenchmarkHandler.ListSamples)

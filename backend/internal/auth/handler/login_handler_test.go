@@ -135,14 +135,14 @@ func TestLoginHandler_PasswordRegisterAndLogin(t *testing.T) {
 	h := NewLoginHandler(service.NewLoginService(cfg, userRepo, jwtSvc))
 	r := setupLoginRouter(h)
 
-	registerBody, _ := json.Marshal(map[string]string{"username": "mobileuser", "password": "password123"})
+	registerBody, _ := json.Marshal(map[string]string{"phone": "13800138003", "password": "password123"})
 	registerW := httptest.NewRecorder()
 	registerReq, _ := http.NewRequest(http.MethodPost, "/api/app/register/password", bytes.NewReader(registerBody))
 	registerReq.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(registerW, registerReq)
 	assert.Equal(t, http.StatusOK, registerW.Code)
 
-	loginBody, _ := json.Marshal(map[string]string{"username": "mobileuser", "password": "password123"})
+	loginBody, _ := json.Marshal(map[string]string{"phone": "13800138003", "password": "password123"})
 	loginW := httptest.NewRecorder()
 	loginReq, _ := http.NewRequest(http.MethodPost, "/api/app/login/password", bytes.NewReader(loginBody))
 	loginReq.Header.Set("Content-Type", "application/json")
