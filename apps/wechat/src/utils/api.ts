@@ -5689,6 +5689,21 @@ export async function getUnreadMessageCount(): Promise<{ count: number }> {
   return response.data as { count: number }
 }
 
+/** 撤回（删除）私信 */
+export async function deletePrivateMessage(messageId: string): Promise<void> {
+  const response = await authenticatedRequest(`/api/messages/message/${encodeURIComponent(messageId)}`, { method: 'DELETE' })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '撤回失败')
+}
+
+/** 举报私信 */
+export async function reportPrivateMessage(messageId: string, reason = 'other', extraContent = ''): Promise<void> {
+  const response = await authenticatedRequest(`/api/messages/message/${encodeURIComponent(messageId)}/report`, {
+    method: 'POST',
+    data: { reason, extra_content: extraContent },
+  })
+  if (response.statusCode !== 200) throw new Error((response.data as any)?.detail || '举报失败')
+}
+
 // ==================== 圈子 Feed ====================
 
 /** 圈子 Feed：好友今日饮食（可选 date YYYY-MM-DD） */

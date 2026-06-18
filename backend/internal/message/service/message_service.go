@@ -123,6 +123,7 @@ func (s *MessageService) CountUnread(ctx context.Context, userID string) (int64,
 }
 
 // DeleteMessage soft-deletes a private message for both conversation members.
+// Only the sender can recall a message, and only within 15 minutes of sending.
 func (s *MessageService) DeleteMessage(ctx context.Context, userID, messageID string) error {
 	userID = strings.TrimSpace(userID)
 	messageID = strings.TrimSpace(messageID)
@@ -134,27 +135,30 @@ func (s *MessageService) DeleteMessage(ctx context.Context, userID, messageID st
 		return err
 	}
 	if msg.ContentType == "system" || msg.SenderID == domain.SystemSenderID {
-		return &commonerrors.AppError{Code: 10002, Message: "系统消息不能删除", HTTPStatus: 400}
+		return &commonerrors.AppError{Code: 10002, Message: "系统消息不能撤回", HTTPStatus: 400}
 	}
 	if msg.SenderID != userID {
-		logger.Warn(ctx, "私信删除权限校验失败",
+		logger.Warn(ctx, "私信撤回权限校验失败",
 			slog.String("user_id", userID),
 			slog.String("message_id", messageID),
 			slog.String("sender_id", msg.SenderID),
 		)
-		return &commonerrors.AppError{Code: 20003, Message: "只能删除自己发送的消息", HTTPStatus: 403}
+		return &commonerrors.AppError{Code: 20003, Message: "只能撤回自己发送的消息", HTTPStatus: 403}
+	}
+	if time.Since(msg.CreatedAt) > 15*time.Minute {
+		return &commonerrors.AppError{Code: 10002, Message: "消息已超过 15 分钟，无法撤回", HTTPStatus: 400}
 	}
 	if msg.DeletedAt != nil {
 		return nil
 	}
 	if err := s.msgRepo.SoftDeleteMessage(ctx, messageID, userID); err != nil {
-		logger.Error(ctx, "删除私信失败", err,
+		logger.Error(ctx, "撤回私信失败", err,
 			slog.String("user_id", userID),
 			slog.String("message_id", messageID),
 		)
 		return err
 	}
-	logger.Info(ctx, "私信已删除",
+	logger.Info(ctx, "私信已撤回",
 		slog.String("user_id", userID),
 		slog.String("message_id", messageID),
 		slog.String("receiver_id", msg.ReceiverID),
