@@ -372,6 +372,11 @@ func isSuspiciousZeroNutritionFoodItem(item domain.FoodItem) bool {
 	if !allFoodItemCoreNutritionZero(item.Nutrients) {
 		return false
 	}
+	// 核心营养全为 0 但含有水分（如水、冰等）属于真实零卡含水食物，放行；
+	// 只有营养和水含量同时为 0 时才视为营养信息缺失。
+	if item.WaterMl > 0 {
+		return false
+	}
 	return true
 }
 
@@ -392,13 +397,14 @@ func isKnownZeroNutritionFoodName(name string) bool {
 		"水", "白开水", "温水", "热水", "冰水", "纯净水", "矿泉水", "饮用水", "饮用天然水",
 		"苏打水", "气泡水", "无糖茶", "茶水", "绿茶", "乌龙茶",
 		"黑咖啡", "美式咖啡", "无糖可乐", "无糖可口可乐", "无糖芬达",
+		"食用冰", "冰块",
 	}
 	for _, exact := range exactNames {
 		if name == exact {
 			return true
 		}
 	}
-	safeContains := []string{"无糖茶", "黑咖啡", "美式咖啡", "深烘美式", "椰青美式", "无糖可乐", "无糖芬达"}
+	safeContains := []string{"无糖茶", "黑咖啡", "美式咖啡", "深烘美式", "椰青美式", "无糖可乐", "无糖芬达", "食用冰", "冰块"}
 	for _, part := range safeContains {
 		if strings.Contains(name, part) {
 			return true
