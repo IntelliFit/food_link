@@ -177,7 +177,7 @@ export function ResultScreen() {
         style={styles.resultScroll}
         contentContainerStyle={[
           styles.resultScrollInner,
-          { paddingTop: heroHeight + insets.top - 28, paddingBottom: 140 + insets.bottom },
+          { paddingTop: heroHeight + insets.top - 28, paddingBottom: 188 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -1141,6 +1141,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    zIndex: 30,
     paddingTop: 12,
     paddingHorizontal: 16,
     borderTopLeftRadius: 18,
@@ -1150,7 +1151,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: -4 },
-    elevation: 12,
+    elevation: 24,
   },
   actionGrid: {
     flexDirection: 'row',

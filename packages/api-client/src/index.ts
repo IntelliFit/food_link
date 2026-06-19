@@ -1766,11 +1766,21 @@ export class FoodLinkApiClient {
     })
   }
 
-  async searchFriends(keyword: string): Promise<{ list: FriendUserItem[] }> {
-    const q = keyword.trim()
-    if (!q) return { list: [] }
+  async searchFriends(input: string | { nickname?: string; telephone?: string }): Promise<{ list: FriendUserItem[] }> {
+    const q = new URLSearchParams()
+    if (typeof input === 'string') {
+      const keyword = input.trim()
+      if (!keyword) return { list: [] }
+      q.set('nickname', keyword)
+    } else {
+      const nickname = input.nickname?.trim()
+      const telephone = input.telephone?.trim()
+      if (nickname) q.set('nickname', nickname)
+      if (telephone) q.set('telephone', telephone)
+      if (!nickname && !telephone) return { list: [] }
+    }
     return this.authenticatedRequest<{ list: FriendUserItem[] }>(
-      `/api/friend/search?nickname=${encodeURIComponent(q)}`,
+      `/api/friend/search?${q.toString()}`,
       { method: 'GET', timeoutMs: 10000 },
     )
   }

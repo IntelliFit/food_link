@@ -241,7 +241,7 @@ export function ProfileSettingsScreen() {
       style={styles.profileScroll}
       contentContainerStyle={[
         styles.profileContent,
-        { paddingTop: Math.max(insets.top, 16), paddingBottom: insets.bottom + 104 },
+        { paddingTop: 0, paddingBottom: insets.bottom + 104 },
       ]}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} />}
     >
@@ -628,8 +628,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 22,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     backgroundColor: '#10251d',
   },
   coverBackground: {
@@ -826,7 +826,7 @@ const styles = StyleSheet.create({
   bottomDrawer: {
     flex: 1,
     minHeight: 420,
-    marginTop: -2,
+    marginTop: 0,
     paddingTop: 7,
     paddingBottom: 16,
     borderTopLeftRadius: 15,

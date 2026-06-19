@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard, type HomeTargetCalibrationSuggestion } from '@food-link/core'
+import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard } from '@food-link/core'
 import { Camera, ChevronRight, Droplets, Dumbbell, Scale, type LucideIcon } from 'lucide-react-native'
-import Svg, { Circle } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { apiClient } from '../api'
 import { FloatingPetCompanion } from '../components/FloatingPetCompanion'
@@ -116,15 +115,6 @@ export function HomeScreen() {
       onPress: () => navigation.navigate('RewardCenter'),
     },
     {
-      key: 'history',
-      kicker: 'AI 记录',
-      title: '识别记录',
-      desc: '继续查看过往图片识别和分析进度',
-      actionText: '去查看',
-      tone: 'blue',
-      onPress: () => navigation.navigate('AnalyzeHistory'),
-    },
-    {
       key: 'feedback',
       kicker: '帮助食探成长',
       title: '意见反馈',
@@ -229,6 +219,10 @@ export function HomeScreen() {
 
   return (
     <View style={styles.homeRoot}>
+      <View pointerEvents="none" style={styles.homeBackgroundLayer}>
+        <View style={styles.homeBackgroundTopTint} />
+        <View style={styles.homeBackgroundSoftTint} />
+      </View>
       <ScrollView
         style={styles.homeScroll}
         contentContainerStyle={[
@@ -262,14 +256,9 @@ export function HomeScreen() {
           remaining={calorieRemaining}
           progress={calorieProgress}
           isOver={isCalorieOver}
-          source={nutritionTarget?.source}
-          explanation={nutritionTarget?.explanation}
-          macroExplanation={nutritionTarget?.macro_explanation}
-          calibrationSuggestion={calibrationSuggestion}
+          intakeData={intakeData}
           onOpenTargetEditor={openTargetEditor}
-          onOpenDayRecord={() => navigation.navigate('DayRecord', { date: recordDate })}
         />
-        <HomeMacroSection intakeData={intakeData} />
         <HomeBodyStatusStrip
           exerciseKcal={Math.round(dashboard?.exerciseBurnedKcal || 0)}
           onWeight={() => navigation.navigate('BodyMetricRecord', { type: 'weight', date: recordDate })}
@@ -421,12 +410,14 @@ function HomeBannerCarousel({
       </ScrollView>
       {banners.length > 1 ? (
         <View style={styles.homeBannerDots}>
-          {banners.map((banner, index) => (
-            <View
-              key={`${banner.key}-dot`}
-              style={[styles.homeBannerDot, index === activeIndex && styles.homeBannerDotActive]}
-            />
-          ))}
+          <View style={styles.homeBannerDotsPill}>
+            {banners.map((banner, index) => (
+              <View
+                key={`${banner.key}-dot`}
+                style={[styles.homeBannerDot, index === activeIndex && styles.homeBannerDotActive]}
+              />
+            ))}
+          </View>
         </View>
       ) : null}
     </View>
@@ -553,24 +544,16 @@ function HomeCalorieCard({
   remaining,
   progress,
   isOver,
-  source,
-  explanation,
-  macroExplanation,
-  calibrationSuggestion,
+  intakeData,
   onOpenTargetEditor,
-  onOpenDayRecord,
 }: {
   current: number
   target: number
   remaining: number
   progress: number
   isOver: boolean
-  source: unknown
-  explanation?: string
-  macroExplanation?: string
-  calibrationSuggestion?: HomeTargetCalibrationSuggestion | null
+  intakeData?: HomeDashboard['intakeData']
   onOpenTargetEditor: () => void
-  onOpenDayRecord: () => void
 }) {
   return (
     <View style={styles.mainCard}>
@@ -598,20 +581,12 @@ function HomeCalorieCard({
           <View style={[styles.progressBarFill, isOver && styles.progressBarFillOver, { width: `${clamp(progress, 0, 100)}%` }]} />
         </View>
       </View>
-      <View style={styles.targetInfoBox}>
-        <Pressable style={styles.targetInfoMain} onPress={onOpenDayRecord}>
-          <Text style={styles.targetInfoTitle}>{targetSourceLabel(source)}</Text>
-          <Text style={styles.targetInfoMeta}>长期目标不随当天运动自动变化 · 查看单日详情</Text>
-        </Pressable>
-        <ChevronRight size={16} color={colors.textMuted} />
+      <View style={styles.nutritionShell}>
+        <View style={styles.nutritionTitleRow}>
+          <Text style={styles.nutritionTitle}>营养概览</Text>
+        </View>
+        <HomeMacroSection intakeData={intakeData} />
       </View>
-      {explanation ? <Text style={styles.targetInfoText}>{explanation}</Text> : null}
-      {macroExplanation ? <Text style={styles.targetInfoText}>{macroExplanation}</Text> : null}
-      {calibrationSuggestion?.available ? (
-        <Text style={styles.targetHint}>
-          建议调整到 {Math.round(numberFrom(calibrationSuggestion.suggested_kcal, 0))} kcal：{calibrationSuggestion.reason || '根据近期记录建议小幅校准。'}
-        </Text>
-      ) : null}
     </View>
   )
 }
@@ -622,16 +597,18 @@ function HomeMacroSection({ intakeData }: { intakeData?: HomeDashboard['intakeDa
       {macroConfigs.map((config) => {
         const current = Number(intakeData?.macros?.[config.key]?.current || 0)
         const target = Number(intakeData?.macros?.[config.key]?.target || 0)
-        const remaining = Math.max(0, target - current)
         const progress = target > 0 ? clamp((current / target) * 100, 0, 100) : 0
+        const over = target > 0 && current > target
         return (
-          <MacroGauge
+          <MacroRowCard
             key={config.key}
             label={config.label}
-            value={remaining}
+            current={current}
+            target={target}
             color={config.color}
             progress={progress}
             unit={config.unit}
+            over={over}
           />
         )
       })}
@@ -639,50 +616,40 @@ function HomeMacroSection({ intakeData }: { intakeData?: HomeDashboard['intakeDa
   )
 }
 
-function MacroGauge({
+function MacroRowCard({
   label,
-  value,
+  current,
+  target,
   color,
   progress,
   unit,
+  over,
 }: {
   label: string
-  value: number
+  current: number
+  target: number
   color: string
   progress: number
   unit: string
+  over: boolean
 }) {
-  const size = 64
-  const stroke = 8
-  const radius = (size - stroke) / 2
-  const circumference = 2 * Math.PI * radius
-  const dashOffset = circumference * (1 - clamp(progress, 0, 100) / 100)
+  const progressColor = over ? '#e57373' : color
+  const excess = over ? Math.max(0, current - target) : 0
   return (
-    <View style={styles.macroCard}>
-      <View style={styles.macroCardHeader}>
+    <View style={[styles.macroCard, over && styles.macroCardOver]}>
+      <View style={styles.macroExcessSlot}>
+        {excess > 0 ? <Text style={styles.macroOverHint}>+{formatHomeNumber(excess)}{unit}</Text> : null}
+      </View>
+      <View style={styles.macroTitleRow}>
+        <View style={[styles.macroIconDot, { backgroundColor: color }]} />
         <Text style={styles.macroLabel}>{label}</Text>
       </View>
-      <View style={styles.macroGauge}>
-        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          <Circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f0f0f0" strokeWidth={stroke} />
-          <Circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke={color}
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            strokeDasharray={`${circumference} ${circumference}`}
-            strokeDashoffset={dashOffset}
-            rotation="-90"
-            origin={`${size / 2}, ${size / 2}`}
-          />
-        </Svg>
-        <View style={styles.macroGaugeCenter}>
-          <Text style={[styles.macroGaugeValue, { color }]}>{Math.round(value)}</Text>
-          <Text style={styles.macroGaugeUnit}>{unit}</Text>
-        </View>
+      <View style={styles.macroValueRow}>
+        <Text style={[styles.macroCurrentValue, { color: progressColor }]}>{formatHomeNumber(current)}</Text>
+        <Text style={styles.macroTargetTotal}>/ {formatHomeNumber(target)}{unit}</Text>
+      </View>
+      <View style={styles.macroProgressBarBg}>
+        <View style={[styles.macroProgressBarFill, { width: `${clamp(progress, 0, 100)}%`, backgroundColor: progressColor }]} />
       </View>
     </View>
   )
@@ -924,15 +891,10 @@ function formatTargetNumber(value: unknown): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
-function targetSourceLabel(source: unknown): string {
-  const labels: Record<string, string> = {
-    manual: '手动目标',
-    system_initial: '健康档案目标',
-    profile: '健康档案估算',
-    dynamic: '系统估算',
-    default: '默认目标',
-  }
-  return labels[String(source || '').trim()] || '系统目标'
+function formatHomeNumber(value: unknown): string {
+  const n = numberFrom(value, 0)
+  const rounded = Math.round((n + Number.EPSILON) * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1031,6 +993,30 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  homeBackgroundLayer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    overflow: 'hidden',
+  },
+  homeBackgroundTopTint: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 360,
+    backgroundColor: '#eaf7f0',
+  },
+  homeBackgroundSoftTint: {
+    position: 'absolute',
+    top: 240,
+    left: 0,
+    right: 0,
+    height: 360,
+    backgroundColor: 'rgba(92, 184, 150, 0.04)',
+  },
   error: {
     color: colors.danger,
     marginBottom: 12,
@@ -1059,48 +1045,23 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     lineHeight: 20,
   },
-  targetInfoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  targetInfoMain: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  targetInfoTitle: {
-    color: colors.text,
-    fontWeight: '900',
-  },
-  targetInfoMeta: {
-    marginTop: 4,
-    color: colors.textSecondary,
-    lineHeight: 18,
-  },
-  targetInfoText: {
-    marginTop: 8,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
   targetEditButton: {
-    minHeight: 34,
+    minHeight: 26,
     borderRadius: 999,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brandSoft,
+    backgroundColor: '#fff',
+    shadowColor: '#7ccab0',
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   targetEditButtonText: {
     color: colors.brandDark,
-    fontWeight: '900',
-  },
-  targetHint: {
-    marginTop: 10,
-    color: colors.orange,
-    lineHeight: 20,
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: '700',
   },
   calibrationCard: {
@@ -1262,6 +1223,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   homeBannerCarousel: {
+    position: 'relative',
     marginBottom: 10,
   },
   homeBannerTrack: {
@@ -1272,7 +1234,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   homeBanner: {
-    minHeight: 82,
+    minHeight: 90,
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
@@ -1292,8 +1254,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   homeBannerOverlay: {
-    minHeight: 82,
-    padding: 12,
+    minHeight: 90,
+    paddingTop: 12,
+    paddingHorizontal: 12,
+    paddingBottom: 24,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
@@ -1346,21 +1310,36 @@ const styles = StyleSheet.create({
     color: colors.brandDark,
   },
   homeBannerDots: {
-    height: 14,
-    marginTop: 6,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 8,
+    zIndex: 3,
+    minHeight: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    pointerEvents: 'none',
+  },
+  homeBannerDotsPill: {
+    minHeight: 16,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.68)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
   homeBannerDot: {
-    width: 6,
-    height: 6,
+    width: 7,
+    height: 7,
     borderRadius: 999,
-    backgroundColor: colors.border,
+    backgroundColor: 'rgba(17, 37, 29, 0.28)',
   },
   homeBannerDotActive: {
     width: 18,
+    height: 7,
     backgroundColor: colors.brand,
   },
   quickGrid: {
@@ -1500,11 +1479,11 @@ const styles = StyleSheet.create({
   },
   homeScroll: {
     flex: 1,
-    backgroundColor: '#f0f3f6',
+    backgroundColor: 'transparent',
   },
   homeContent: {
     paddingHorizontal: 16,
-    backgroundColor: '#f0f3f6',
+    backgroundColor: 'transparent',
   },
   greetingSection: {
     paddingTop: 4,
@@ -1590,48 +1569,58 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   mainCard: {
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 8,
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.58)',
+    borderColor: 'rgba(227, 233, 238, 0.82)',
+    shadowColor: '#64748b',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
   },
   mainCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 16,
+    gap: 12,
+    marginBottom: 10,
   },
   mainCardTitle: {
     flex: 1,
     minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    flexWrap: 'wrap',
   },
   cardLabel: {
     color: colors.textSecondary,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   cardValue: {
-    marginTop: 4,
     color: colors.text,
-    fontSize: compactFont(38, 36),
-    lineHeight: 44,
-    fontWeight: '800',
+    fontSize: 28,
+    lineHeight: 36,
+    fontWeight: '700',
   },
   cardValueOver: {
     color: '#e57373',
   },
   cardUnit: {
-    marginTop: 1,
     color: colors.textMuted,
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '600',
   },
   targetSection: {
     alignItems: 'flex-end',
-    minWidth: 112,
+    minWidth: 96,
+    gap: 4,
   },
   targetEnergyNumsOnly: {
     flexDirection: 'row',
@@ -1640,83 +1629,128 @@ const styles = StyleSheet.create({
   },
   targetEnergyIntakeNum: {
     color: colors.text,
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
   },
   targetEnergySlashOnly: {
     color: colors.textMuted,
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
   },
   targetEnergyTargetNum: {
     color: colors.textSecondary,
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
   },
   progressSection: {
-    marginTop: 16,
+    marginTop: 0,
   },
   progressBarBg: {
-    height: 12,
+    height: 6,
     borderRadius: 999,
     backgroundColor: '#edf1f3',
     overflow: 'hidden',
   },
   progressBarFill: {
-    height: 12,
+    height: 6,
     borderRadius: 999,
     backgroundColor: colors.brand,
   },
   progressBarFillOver: {
     backgroundColor: '#e57373',
   },
+  nutritionShell: {
+    marginTop: 10,
+    borderRadius: 11,
+  },
+  nutritionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  nutritionTitle: {
+    color: '#34495e',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
   macrosSection: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
+    gap: 4,
+    marginBottom: 0,
   },
   macroCard: {
     flex: 1,
-    minHeight: 118,
-    borderRadius: 18,
-    padding: 12,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.54)',
+    minHeight: 74,
+    borderRadius: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 4,
+    alignItems: 'stretch',
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.62)',
+    borderColor: 'transparent',
   },
-  macroCardHeader: {
-    height: 20,
-    alignItems: 'center',
+  macroCardOver: {
+    backgroundColor: '#fef8f8',
+    borderColor: '#f5d4d4',
+  },
+  macroExcessSlot: {
+    height: 8,
     justifyContent: 'center',
-    marginBottom: 6,
+  },
+  macroOverHint: {
+    color: '#e57373',
+    fontSize: 8,
+    lineHeight: 10,
+    fontWeight: '700',
+  },
+  macroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  macroIconDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
   },
   macroLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  macroGauge: {
-    width: 64,
-    height: 64,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  macroGaugeCenter: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  macroGaugeValue: {
-    fontSize: 17,
-    lineHeight: 20,
-    fontWeight: '800',
-  },
-  macroGaugeUnit: {
-    color: colors.textMuted,
+    color: '#111827',
     fontSize: 10,
-    lineHeight: 12,
+    lineHeight: 13,
+    fontWeight: '400',
+  },
+  macroValueRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 2,
+    marginTop: 2,
+  },
+  macroCurrentValue: {
+    fontSize: 12,
+    lineHeight: 15,
     fontWeight: '700',
+  },
+  macroTargetTotal: {
+    color: colors.textMuted,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '400',
+  },
+  macroProgressBarBg: {
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: '#e5e7eb',
+    marginTop: 4,
+    overflow: 'hidden',
+  },
+  macroProgressBarFill: {
+    height: 3,
+    borderRadius: 999,
   },
   bodyStatusSection: {
     flexDirection: 'row',

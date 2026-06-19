@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
@@ -916,6 +916,8 @@ export function AnalyzeHistoryScreen() {
   const [loading, setLoading] = useState(false)
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null)
   const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [menuTask, setMenuTask] = useState<AnalysisTask | null>(null)
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
 
   const load = useCallback(async (keyword = '') => {
     setLoading(true)
@@ -992,6 +994,28 @@ export function AnalyzeHistoryScreen() {
     }
   }, [bulkDeleting, dialog, discardableTasks])
 
+  const confirmDeleteTask = useCallback(async (task: AnalysisTask) => {
+    if (deletingTaskId) return
+    const confirmed = await dialog.confirm({
+      title: '删除识别记录',
+      message: '删除后不可恢复，确定删除这条识别记录吗？',
+      confirmText: '删除',
+      cancelText: '取消',
+      kind: 'danger',
+    })
+    if (!confirmed) return
+    setDeletingTaskId(task.id)
+    try {
+      await apiClient.deleteAnalysisTask(task.id)
+      setTasks((current) => current.filter((item) => item.id !== task.id))
+      await dialog.alert('已删除', '识别记录已删除', 'success')
+    } catch (error) {
+      await showError(dialog, '删除识别记录失败', error)
+    } finally {
+      setDeletingTaskId(null)
+    }
+  }, [deletingTaskId, dialog])
+
   const openTask = useCallback((task: AnalysisTask) => {
     if (isPackagedAnalyzeHistoryTask(task)) {
       navigation.navigate('PackagedFoodTaskDetail', { taskId: task.id })
@@ -1020,13 +1044,31 @@ export function AnalyzeHistoryScreen() {
     })
   }, [confirmRetryTask, navigation])
 
+  const closeTaskMenu = useCallback(() => {
+    setMenuTask(null)
+  }, [])
+
   const openTaskMenu = useCallback((task: AnalysisTask) => {
-    if (isAnalyzeRetryable(task)) {
-      void confirmRetryTask(task)
-      return
-    }
-    openTask(task)
-  }, [confirmRetryTask, openTask])
+    setMenuTask(task)
+  }, [])
+
+  const selectMenuOpenTask = useCallback(() => {
+    const task = menuTask
+    closeTaskMenu()
+    if (task) openTask(task)
+  }, [closeTaskMenu, menuTask, openTask])
+
+  const selectMenuRetryTask = useCallback(() => {
+    const task = menuTask
+    closeTaskMenu()
+    if (task && isAnalyzeRetryable(task)) void confirmRetryTask(task)
+  }, [closeTaskMenu, confirmRetryTask, menuTask])
+
+  const selectMenuDeleteTask = useCallback(() => {
+    const task = menuTask
+    closeTaskMenu()
+    if (task) void confirmDeleteTask(task)
+  }, [closeTaskMenu, confirmDeleteTask, menuTask])
 
   const submitSearch = () => {
     void load(searchKeyword)
@@ -1042,6 +1084,8 @@ export function AnalyzeHistoryScreen() {
   }, [load])
 
   const initialLoading = loading && tasks.length === 0
+  const menuTaskRetryable = menuTask ? isAnalyzeRetryable(menuTask) : false
+  const menuTaskBusy = menuTask ? retryingTaskId === menuTask.id || deletingTaskId === menuTask.id : false
 
   return (
     <View style={styles.analyzeHistoryPage}>
@@ -1108,6 +1152,8 @@ export function AnalyzeHistoryScreen() {
           const statusTone = analyzeHistoryStatusTone(task)
           const modeLabel = analyzeHistoryModeLabel(task)
           const retrying = retryingTaskId === task.id
+          const deleting = deletingTaskId === task.id
+          const busy = retrying || deleting
           return (
             <Pressable key={task.id} style={({ pressed }) => [styles.analyzeHistoryTaskWrapper, pressed && styles.analyzeHistoryPressed]} onPress={() => openTask(task)}>
               <View style={[styles.analyzeHistoryTaskCard, task.status === 'violated' && styles.analyzeHistoryTaskCardViolated]}>
@@ -1143,11 +1189,11 @@ export function AnalyzeHistoryScreen() {
                     </View>
                     <View style={styles.analyzeHistoryRightContent}>
                       <View style={[styles.analyzeHistoryStatusBadge, statusTone.style]}>
-                        {retrying ? <ActivityIndicator size="small" color={statusTone.color} /> : <Text style={[styles.analyzeHistoryStatusText, { color: statusTone.color }]}>{analyzeHistoryStatusLabel(task)}</Text>}
+                        {busy ? <ActivityIndicator size="small" color={statusTone.color} /> : <Text style={[styles.analyzeHistoryStatusText, { color: statusTone.color }]}>{analyzeHistoryStatusLabel(task)}</Text>}
                       </View>
                       <Pressable
                         hitSlop={8}
-                        disabled={retrying}
+                        disabled={busy}
                         style={styles.analyzeHistoryMoreButton}
                         onPress={(event) => {
                           event.stopPropagation?.()
@@ -1164,6 +1210,78 @@ export function AnalyzeHistoryScreen() {
           )
         })}
       </ScrollView>
+
+      <Modal visible={Boolean(menuTask)} transparent animationType="fade" onRequestClose={closeTaskMenu}>
+        <Pressable style={styles.analyzeHistoryMenuBackdrop} onPress={closeTaskMenu}>
+          <Pressable style={styles.analyzeHistoryMenuSheet} onPress={(event) => event.stopPropagation?.()}>
+            <View style={styles.analyzeHistoryMenuHandle} />
+            <Text style={styles.analyzeHistoryMenuTitle}>识别记录操作</Text>
+            <Text style={styles.analyzeHistoryMenuSubtitle} numberOfLines={1}>
+              {menuTask ? analyzeHistoryTitle(menuTask) : ''}
+            </Text>
+
+            <View style={styles.analyzeHistoryMenuActions}>
+              <Pressable
+                disabled={!menuTask || menuTaskBusy}
+                style={({ pressed }) => [
+                  styles.analyzeHistoryMenuAction,
+                  pressed && styles.analyzeHistoryMenuActionPressed,
+                  (!menuTask || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
+                ]}
+                onPress={selectMenuOpenTask}
+              >
+                <View style={styles.analyzeHistoryMenuActionIcon}>
+                  <Search size={17} color={colors.brand} strokeWidth={2.5} />
+                </View>
+                <View style={styles.analyzeHistoryMenuActionCopy}>
+                  <Text style={styles.analyzeHistoryMenuActionText}>查看识别结果</Text>
+                  <Text style={styles.analyzeHistoryMenuActionHint}>打开这条记录的详情页</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                disabled={!menuTaskRetryable || menuTaskBusy}
+                style={({ pressed }) => [
+                  styles.analyzeHistoryMenuAction,
+                  pressed && styles.analyzeHistoryMenuActionPressed,
+                  (!menuTaskRetryable || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
+                ]}
+                onPress={selectMenuRetryTask}
+              >
+                <View style={styles.analyzeHistoryMenuActionIcon}>
+                  <RefreshCw size={17} color={colors.brand} strokeWidth={2.5} />
+                </View>
+                <View style={styles.analyzeHistoryMenuActionCopy}>
+                  <Text style={styles.analyzeHistoryMenuActionText}>重新识别</Text>
+                  <Text style={styles.analyzeHistoryMenuActionHint}>失败或超时的记录可重新提交</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                disabled={!menuTask || menuTaskBusy}
+                style={({ pressed }) => [
+                  styles.analyzeHistoryMenuAction,
+                  pressed && styles.analyzeHistoryMenuActionPressed,
+                  (!menuTask || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
+                ]}
+                onPress={selectMenuDeleteTask}
+              >
+                <View style={[styles.analyzeHistoryMenuActionIcon, styles.analyzeHistoryMenuActionIconDanger]}>
+                  <Trash2 size={17} color="#ef4444" strokeWidth={2.5} />
+                </View>
+                <View style={styles.analyzeHistoryMenuActionCopy}>
+                  <Text style={[styles.analyzeHistoryMenuActionText, styles.analyzeHistoryMenuActionTextDanger]}>删除识别记录</Text>
+                  <Text style={styles.analyzeHistoryMenuActionHint}>只删除历史，不影响已保存饮食</Text>
+                </View>
+              </Pressable>
+            </View>
+
+            <Pressable style={({ pressed }) => [styles.analyzeHistoryMenuCancel, pressed && styles.analyzeHistoryMenuActionPressed]} onPress={closeTaskMenu}>
+              <Text style={styles.analyzeHistoryMenuCancelText}>取消</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   )
 }
@@ -8098,6 +8216,115 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 17,
     backgroundColor: 'rgba(0, 0, 0, 0.04)',
+  },
+  analyzeHistoryMenuBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    backgroundColor: 'rgba(15, 23, 42, 0.36)',
+  },
+  analyzeHistoryMenuSheet: {
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    paddingTop: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 20,
+  },
+  analyzeHistoryMenuHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#e5e7eb',
+    marginBottom: 12,
+  },
+  analyzeHistoryMenuTitle: {
+    color: '#0f172a',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  analyzeHistoryMenuSubtitle: {
+    marginTop: 3,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  analyzeHistoryMenuActions: {
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#eef2f7',
+    backgroundColor: '#ffffff',
+  },
+  analyzeHistoryMenuAction: {
+    minHeight: 62,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2f7',
+  },
+  analyzeHistoryMenuActionPressed: {
+    backgroundColor: '#f8fafc',
+  },
+  analyzeHistoryMenuActionDisabled: {
+    opacity: 0.42,
+  },
+  analyzeHistoryMenuActionIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    backgroundColor: 'rgba(92, 184, 150, 0.12)',
+  },
+  analyzeHistoryMenuActionIconDanger: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  analyzeHistoryMenuActionCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  analyzeHistoryMenuActionText: {
+    color: '#111827',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  analyzeHistoryMenuActionTextDanger: {
+    color: '#ef4444',
+  },
+  analyzeHistoryMenuActionHint: {
+    marginTop: 2,
+    color: '#94a3b8',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  analyzeHistoryMenuCancel: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    borderRadius: 14,
+    backgroundColor: '#f8fafc',
+  },
+  analyzeHistoryMenuCancelText: {
+    color: '#475569',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
   },
   manualRecordPage: {
     flex: 1,

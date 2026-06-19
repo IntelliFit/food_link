@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Image, Keyboard, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -34,6 +34,8 @@ export function LoginScreen() {
   const [inviteCode, setInviteCode] = useState('')
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+  const scrollRef = useRef<ScrollView>(null)
 
   useEffect(() => {
     const applyInviteCodeFromUrl = (url?: string | null) => {
@@ -53,6 +55,28 @@ export function LoginScreen() {
     }, 1000)
     return () => clearTimeout(timer)
   }, [smsCooldownSeconds])
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0)
+    })
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0)
+    })
+    return () => {
+      showSubscription.remove()
+      hideSubscription.remove()
+    }
+  }, [])
+
+  const scrollLoginFieldIntoView = useCallback((field: 'phone' | 'code') => {
+    const y = field === 'code' ? 270 : 210
+    const scroll = () => scrollRef.current?.scrollTo({ y, animated: true })
+    setTimeout(scroll, 80)
+    setTimeout(scroll, 260)
+  }, [])
 
   const run = async (fn: () => Promise<void>, fallback: string) => {
     setLoading(true)
@@ -120,15 +144,24 @@ export function LoginScreen() {
   const sendCodeDisabled = smsSending || smsCooldownSeconds > 0 || !sendCodeReady
   const sendCodeLabel = smsCooldownSeconds > 0 ? `${smsCooldownSeconds}s 后重发` : '发送验证码'
 
+  const keyboardBottomPadding = keyboardHeight > 0 ? keyboardHeight + insets.bottom + 32 : insets.bottom + 40
+
   return (
-    <ScrollView
+    <KeyboardAvoidingView
       style={styles.screen}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: Math.max(insets.top + 96, 132), paddingBottom: insets.bottom + 40 },
-      ]}
-      keyboardShouldPersistTaps="handled"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}
     >
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroller}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: Math.max(insets.top + 96, 132), paddingBottom: keyboardBottomPadding },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
       <View style={styles.hero}>
         <View style={styles.logoWrapper}>
           <Image source={appIcon} style={styles.logoImage} resizeMode="contain" />
@@ -151,6 +184,7 @@ export function LoginScreen() {
             keyboardType="phone-pad"
             style={styles.lineInput}
             placeholderTextColor={colors.textMuted}
+            onFocus={() => scrollLoginFieldIntoView('phone')}
           />
         </View>
 
@@ -163,6 +197,7 @@ export function LoginScreen() {
             maxLength={6}
             style={styles.lineInput}
             placeholderTextColor={colors.textMuted}
+            onFocus={() => scrollLoginFieldIntoView('code')}
           />
           <Pressable
             disabled={sendCodeDisabled}
@@ -250,7 +285,8 @@ export function LoginScreen() {
           <Text style={styles.apiText}>API: {API_BASE_URL}</Text>
         </View>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -293,6 +329,10 @@ function formatDurationText(totalSeconds: number): string {
 
 const styles = StyleSheet.create({
   screen: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  scroller: {
     flex: 1,
     backgroundColor: '#fff',
   },

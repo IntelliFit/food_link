@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -1613,6 +1614,8 @@ export function CommunityFeedDetailScreen() {
   const [replyTarget, setReplyTarget] = useState<FeedCommentItem | null>(null)
   const [actionSheetVisible, setActionSheetVisible] = useState(false)
   const [reportSheetVisible, setReportSheetVisible] = useState(false)
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+  const [commentInputFocused, setCommentInputFocused] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1630,6 +1633,22 @@ export function CommunityFeedDetailScreen() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (Platform.OS !== 'android') return
+    const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardHeight(event.endCoordinates.height)
+      setCommentInputFocused(true)
+    })
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0)
+      setCommentInputFocused(false)
+    })
+    return () => {
+      showSubscription.remove()
+      hideSubscription.remove()
+    }
+  }, [])
+
   const record = context?.record
   const author = context?.author
   const isCirclePost = route.params.targetType === 'circle_post'
@@ -1640,6 +1659,9 @@ export function CommunityFeedDetailScreen() {
   const images = communityDetailImages(record)
   const comments = context?.comments || []
   const hasNutrition = communityDetailHasNutrition(record)
+  const bottomBarKeyboardOffset = Platform.OS === 'android'
+    ? keyboardHeight || (commentInputFocused ? 360 : 0)
+    : 0
 
   const addComment = async () => {
     const content = comment.trim()
@@ -1748,7 +1770,7 @@ export function CommunityFeedDetailScreen() {
         style={styles.communityDetailScroll}
         contentContainerStyle={[
           styles.communityDetailContent,
-          { paddingTop: Math.max(insets.top, 12), paddingBottom: record ? insets.bottom + 92 : insets.bottom + 28 },
+          { paddingTop: Math.max(insets.top, 12), paddingBottom: record ? insets.bottom + 92 + bottomBarKeyboardOffset : insets.bottom + 28 },
         ]}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} />}
         keyboardShouldPersistTaps="handled"
@@ -1873,7 +1895,10 @@ export function CommunityFeedDetailScreen() {
       </ScrollView>
 
       {record ? (
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={[styles.communityDetailBottomBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={[styles.communityDetailBottomBar, { bottom: bottomBarKeyboardOffset, paddingBottom: Math.max(insets.bottom, 10) }]}
+        >
           {replyTarget ? (
             <View style={styles.communityDetailReplyBar}>
               <Text style={styles.communityDetailReplyText} numberOfLines={1}>回复 {replyTarget.nickname || '用户'}</Text>
@@ -1890,6 +1915,8 @@ export function CommunityFeedDetailScreen() {
               placeholder={replyTarget ? `回复 ${replyTarget.nickname || '用户'}...` : '说点什么...'}
               placeholderTextColor="#94a3b8"
               style={styles.communityDetailCommentInput}
+              onFocus={() => setCommentInputFocused(true)}
+              onBlur={() => setCommentInputFocused(false)}
               returnKeyType="send"
               onSubmitEditing={() => void addComment()}
               maxLength={500}
@@ -3903,6 +3930,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    zIndex: 20,
+    elevation: 16,
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
     paddingHorizontal: 12,

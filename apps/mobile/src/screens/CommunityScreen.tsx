@@ -1,9 +1,9 @@
 import { useCallback, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { CheckinLeaderboardItem, CommunityFeedContentType, CommunityFeedItem, CommunityFeedSortBy, CommunityFeedTargetType } from '@food-link/core'
+import type { CheckinLeaderboardItem, CommunityFeedContentType, CommunityFeedItem, CommunityFeedSortBy, CommunityFeedTargetType, FriendUserItem } from '@food-link/core'
 import {
   Bell,
   ChevronRight,
@@ -45,6 +45,8 @@ const contentOptions: Array<{ value: CommunityFeedContentType; label: string }> 
   { value: 'circle_post', label: '自定义' },
 ]
 
+type FriendSearchType = 'nickname' | 'telephone'
+
 export function CommunityScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
@@ -53,8 +55,15 @@ export function CommunityScreen() {
   const [leaderboard, setLeaderboard] = useState<CheckinLeaderboardItem[]>([])
   const [loading, setLoading] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
+  const [addFriendOpen, setAddFriendOpen] = useState(false)
   const [sortBy, setSortBy] = useState<CommunityFeedSortBy>('latest')
   const [contentType, setContentType] = useState<CommunityFeedContentType>('all')
+  const [friendSearchType, setFriendSearchType] = useState<FriendSearchType>('nickname')
+  const [friendSearchKeyword, setFriendSearchKeyword] = useState('')
+  const [friendSearchResults, setFriendSearchResults] = useState<FriendUserItem[]>([])
+  const [friendSearchAttempted, setFriendSearchAttempted] = useState(false)
+  const [friendSearching, setFriendSearching] = useState(false)
+  const [friendSendingId, setFriendSendingId] = useState<string | null>(null)
   const filterActive = sortBy !== 'latest' || contentType !== 'all'
 
   const load = useCallback(async () => {
@@ -95,6 +104,57 @@ export function CommunityScreen() {
     }
   }
 
+  const closeAddFriend = useCallback(() => {
+    setAddFriendOpen(false)
+    setFriendSearchKeyword('')
+    setFriendSearchResults([])
+    setFriendSearchAttempted(false)
+    setFriendSendingId(null)
+  }, [])
+
+  const handleFriendSearchTypeChange = useCallback((type: FriendSearchType) => {
+    setFriendSearchType(type)
+    setFriendSearchResults([])
+    setFriendSearchAttempted(false)
+  }, [])
+
+  const handleFriendKeywordChange = useCallback((value: string) => {
+    setFriendSearchKeyword(value)
+    setFriendSearchAttempted(false)
+  }, [])
+
+  const handleFriendSearch = useCallback(async () => {
+    const keyword = friendSearchKeyword.trim()
+    if (!keyword) {
+      void dialog.alert('请输入昵称或手机号', undefined, 'warning')
+      return
+    }
+    setFriendSearchAttempted(true)
+    setFriendSearching(true)
+    setFriendSearchResults([])
+    try {
+      const data = await apiClient.searchFriends(friendSearchType === 'telephone' ? { telephone: keyword } : { nickname: keyword })
+      setFriendSearchResults(data.list || [])
+    } catch (error) {
+      void dialog.alert('搜索失败', userFacingErrorMessage(error), 'danger')
+    } finally {
+      setFriendSearching(false)
+    }
+  }, [dialog, friendSearchKeyword, friendSearchType])
+
+  const handleFriendRequest = useCallback(async (userId: string) => {
+    setFriendSendingId(userId)
+    try {
+      await apiClient.sendFriendRequest(userId)
+      setFriendSearchResults((prev) => prev.map((item) => (item.id === userId ? { ...item, is_pending: true } : item)))
+      void dialog.alert('已发送好友请求', undefined, 'success')
+    } catch (error) {
+      void dialog.alert('发送失败', userFacingErrorMessage(error), 'danger')
+    } finally {
+      setFriendSendingId(null)
+    }
+  }, [dialog])
+
   return (
     <View style={styles.page}>
       <View style={styles.topWash} pointerEvents="none" />
@@ -115,7 +175,7 @@ export function CommunityScreen() {
             <QuickEntry label="互动消息" icon={Bell} onPress={() => navigation.navigate('Notifications')} />
             <QuickEntry label="私信" icon={MessageCircle} onPress={() => navigation.navigate('Conversations')} />
             <QuickEntry label="好友管理" icon={UsersRound} onPress={() => navigation.navigate('Friends')} />
-            <QuickEntry label="添加好友" icon={UserPlus} onPress={() => navigation.navigate('Friends')} />
+            <QuickEntry label="添加好友" icon={UserPlus} onPress={() => setAddFriendOpen(true)} />
           </View>
         </View>
 
@@ -208,7 +268,138 @@ export function CommunityScreen() {
         onSortChange={setSortBy}
         onContentChange={setContentType}
       />
+      <AddFriendModal
+        visible={addFriendOpen}
+        searchType={friendSearchType}
+        keyword={friendSearchKeyword}
+        results={friendSearchResults}
+        searchAttempted={friendSearchAttempted}
+        searching={friendSearching}
+        sendingId={friendSendingId}
+        onClose={closeAddFriend}
+        onSearchTypeChange={handleFriendSearchTypeChange}
+        onKeywordChange={handleFriendKeywordChange}
+        onSearch={handleFriendSearch}
+        onSendRequest={handleFriendRequest}
+      />
     </View>
+  )
+}
+
+function AddFriendModal({
+  visible,
+  searchType,
+  keyword,
+  results,
+  searchAttempted,
+  searching,
+  sendingId,
+  onClose,
+  onSearchTypeChange,
+  onKeywordChange,
+  onSearch,
+  onSendRequest,
+}: {
+  visible: boolean
+  searchType: FriendSearchType
+  keyword: string
+  results: FriendUserItem[]
+  searchAttempted: boolean
+  searching: boolean
+  sendingId: string | null
+  onClose: () => void
+  onSearchTypeChange: (type: FriendSearchType) => void
+  onKeywordChange: (value: string) => void
+  onSearch: () => void
+  onSendRequest: (userId: string) => void
+}) {
+  const hasKeyword = keyword.trim().length > 0
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.addFriendMask} onPress={onClose}>
+        <Pressable style={styles.addFriendCard} onPress={(event) => event.stopPropagation()}>
+          <View style={styles.addFriendHeader}>
+            <Text style={styles.addFriendTitle}>添加好友</Text>
+            <Pressable hitSlop={10} onPress={onClose}>
+              <Text style={styles.addFriendCloseText}>关闭</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.addFriendTypeRow}>
+            <Pressable
+              style={({ pressed }) => [styles.addFriendTypeBtn, searchType === 'nickname' && styles.addFriendTypeBtnActive, pressed && styles.pressed]}
+              onPress={() => onSearchTypeChange('nickname')}
+            >
+              <Text style={[styles.addFriendTypeText, searchType === 'nickname' && styles.addFriendTypeTextActive]}>昵称</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.addFriendTypeBtn, searchType === 'telephone' && styles.addFriendTypeBtnActive, pressed && styles.pressed]}
+              onPress={() => onSearchTypeChange('telephone')}
+            >
+              <Text style={[styles.addFriendTypeText, searchType === 'telephone' && styles.addFriendTypeTextActive]}>手机号</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.addFriendSearchRow}>
+            <TextInput
+              value={keyword}
+              onChangeText={onKeywordChange}
+              onSubmitEditing={onSearch}
+              returnKeyType="search"
+              keyboardType={searchType === 'telephone' ? 'phone-pad' : 'default'}
+              placeholder={searchType === 'telephone' ? '输入手机号搜索' : '输入昵称搜索'}
+              placeholderTextColor="#9ca3af"
+              style={styles.addFriendInput}
+            />
+            <Pressable
+              style={({ pressed }) => [styles.addFriendSearchBtn, (!hasKeyword || searching) && styles.addFriendSearchBtnDisabled, pressed && hasKeyword && !searching && styles.pressed]}
+              onPress={onSearch}
+              disabled={!hasKeyword || searching}
+            >
+              {searching ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.addFriendSearchText}>搜索</Text>}
+            </Pressable>
+          </View>
+
+          <ScrollView
+            style={styles.addFriendResults}
+            contentContainerStyle={styles.addFriendResultsContent}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled
+          >
+            {results.length > 0 ? (
+              results.map((user) => (
+                <View key={user.id} style={styles.addFriendResultItem}>
+                  <View style={styles.addFriendAvatar}>
+                    {user.avatar ? <Image source={{ uri: user.avatar }} style={styles.addFriendAvatarImage} /> : <UsersRound size={18} color={colors.brand} strokeWidth={2.2} />}
+                  </View>
+                  <View style={styles.addFriendResultMain}>
+                    <Text style={styles.addFriendResultName} numberOfLines={1}>{user.nickname || '用户'}</Text>
+                  </View>
+                  {user.is_friend ? (
+                    <Text style={[styles.addFriendStatus, styles.addFriendStatusAdded]}>已添加</Text>
+                  ) : user.is_pending ? (
+                    <Text style={styles.addFriendStatus}>已发送</Text>
+                  ) : (
+                    <Pressable
+                      style={({ pressed }) => [styles.addFriendRequestBtn, sendingId === user.id && styles.addFriendRequestBtnDisabled, pressed && !sendingId && styles.pressed]}
+                      onPress={() => onSendRequest(user.id)}
+                      disabled={!!sendingId}
+                    >
+                      {sendingId === user.id ? <ActivityIndicator size="small" color={colors.brandDark} /> : <Text style={styles.addFriendRequestText}>加好友</Text>}
+                    </Pressable>
+                  )}
+                </View>
+              ))
+            ) : (
+              <View style={styles.addFriendEmpty}>
+                <Text style={styles.addFriendEmptyText}>{searchAttempted ? '没有搜索结果' : '输入昵称或手机号查找好友'}</Text>
+              </View>
+            )}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   )
 }
 
@@ -1046,6 +1237,192 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#dbe9e2',
+  },
+  addFriendMask: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(15,23,42,0.42)',
+  },
+  addFriendCard: {
+    width: '100%',
+    maxWidth: 420,
+    maxHeight: '78%',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    backgroundColor: '#fff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 12,
+  },
+  addFriendHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 14,
+  },
+  addFriendTitle: {
+    color: colors.text,
+    fontSize: compactFont(18, 17),
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+  addFriendCloseText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  addFriendTypeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  addFriendTypeBtn: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  addFriendTypeBtnActive: {
+    borderColor: 'rgba(92,184,150,0.46)',
+    backgroundColor: colors.brandSoft,
+  },
+  addFriendTypeText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  addFriendTypeTextActive: {
+    color: colors.brandDark,
+  },
+  addFriendSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  addFriendInput: {
+    flex: 1,
+    minWidth: 0,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#dbe4ea',
+    paddingHorizontal: 14,
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 18,
+    backgroundColor: '#f8fafc',
+  },
+  addFriendSearchBtn: {
+    width: 76,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  addFriendSearchBtnDisabled: {
+    opacity: 0.5,
+  },
+  addFriendSearchText: {
+    color: '#fff',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '800',
+  },
+  addFriendResults: {
+    maxHeight: 280,
+  },
+  addFriendResultsContent: {
+    paddingBottom: 2,
+  },
+  addFriendResultItem: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#edf2f7',
+  },
+  addFriendAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  addFriendAvatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  addFriendResultMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  addFriendResultName: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  addFriendStatus: {
+    flexShrink: 0,
+    minWidth: 58,
+    textAlign: 'center',
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  addFriendStatusAdded: {
+    color: colors.brandDark,
+  },
+  addFriendRequestBtn: {
+    minWidth: 70,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    backgroundColor: colors.brandSoft,
+  },
+  addFriendRequestBtnDisabled: {
+    opacity: 0.58,
+  },
+  addFriendRequestText: {
+    color: colors.brandDark,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  addFriendEmpty: {
+    minHeight: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#edf2f7',
+  },
+  addFriendEmptyText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   filterDrawerMask: {
     flex: 1,
