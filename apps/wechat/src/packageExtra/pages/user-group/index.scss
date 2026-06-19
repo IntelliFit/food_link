@@ -102,7 +102,6 @@
 
 .qr-frame:active,
 .primary-action:active,
-.secondary-action:active,
 .switch-item:active {
   opacity: 0.72;
 }
@@ -129,8 +128,7 @@
   margin-top: 24rpx;
 }
 
-.primary-action,
-.secondary-action {
+.primary-action {
   flex: 1;
   height: 84rpx;
   border-radius: 999rpx;
@@ -145,24 +143,15 @@
   box-shadow: 0 10rpx 24rpx rgb(92 184 150 / 22%);
 }
 
-.secondary-action {
-  background: #f4f8f6;
-  border: 1rpx solid #dcebe5;
-}
-
-.primary-action__text,
-.secondary-action__text {
-  font-size: 28rpx;
-  line-height: 40rpx;
-  font-weight: 700;
+.primary-action--disabled {
+  opacity: 0.72;
 }
 
 .primary-action__text {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 700;
   color: #fff;
-}
-
-.secondary-action__text {
-  color: #2f8f6b;
 }
 
 .hint-card,
@@ -259,8 +248,7 @@
     background: rgba(94, 211, 145, 0.16);
   }
 
-  .qr-card__tag-text,
-  .secondary-action__text {
+  .qr-card__tag-text {
     color: #6ee7b7;
   }
 
@@ -271,11 +259,6 @@
 
   .qr-expiry {
     color: rgba(214, 226, 220, 0.42);
-  }
-
-  .secondary-action {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(112, 196, 149, 0.18);
   }
 
   .switch-item {

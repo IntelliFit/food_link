@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, Text, TextInput, View, type KeyboardTypeOptions, type StyleProp, type ViewStyle } from 'react-native'
-import * as Clipboard from 'expo-clipboard'
+import { Asset } from 'expo-asset'
+import * as FileSystem from 'expo-file-system/legacy'
 import * as ImagePicker from 'expo-image-picker'
+import * as MediaLibrary from 'expo-media-library'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -3050,12 +3052,40 @@ export function MembershipAgreementScreen() {
 
 export function UserGroupScreen() {
   const [qrPreviewOpen, setQrPreviewOpen] = useState(false)
+  const [savingQr, setSavingQr] = useState(false)
   const groupTitle = '食探用户群'
   const groupSubtitle = '日常反馈、功能建议和使用交流'
 
-  const copyGroupName = async () => {
-    await Clipboard.setStringAsync(groupTitle)
-    Alert.alert('群名已复制', groupTitle)
+  const saveGroupQr = async () => {
+    if (savingQr) return
+
+    setSavingQr(true)
+    try {
+      const permission = await MediaLibrary.requestPermissionsAsync(true)
+      if (!permission.granted) {
+        Alert.alert('需要相册权限', '请允许保存图片到相册后再试。')
+        return
+      }
+
+      const qrAsset = Asset.fromModule(userGroupQr)
+      await qrAsset.downloadAsync()
+      let localUri = qrAsset.localUri || qrAsset.uri
+      if (!localUri) throw new Error('二维码资源不可用')
+
+      if (!localUri.startsWith('file://')) {
+        const cacheDir = FileSystem.cacheDirectory || FileSystem.documentDirectory
+        if (!cacheDir) throw new Error('图片缓存目录不可用')
+        const downloaded = await FileSystem.downloadAsync(localUri, `${cacheDir}foodlink-user-group-qr.jpg`)
+        localUri = downloaded.uri
+      }
+
+      await MediaLibrary.saveToLibraryAsync(localUri)
+      Alert.alert('已保存到本地', '用户群二维码已保存到相册。')
+    } catch (error) {
+      Alert.alert('保存失败', userFacingErrorMessage(error, '暂时无法保存二维码，请长按二维码截图后再试。'))
+    } finally {
+      setSavingQr(false)
+    }
   }
 
   return (
@@ -3094,18 +3124,15 @@ export function UserGroupScreen() {
           <Text style={styles.qrExpiry}>这是当前唯一用户群二维码，可长期使用</Text>
 
           <View style={styles.userGroupActionRow}>
-            <Pressable style={styles.userGroupPrimaryAction} onPress={() => setQrPreviewOpen(true)}>
-              <Text style={styles.userGroupPrimaryActionText}>打开二维码</Text>
-            </Pressable>
-            <Pressable style={styles.userGroupSecondaryAction} onPress={() => void copyGroupName()}>
-              <Text style={styles.userGroupSecondaryActionText}>复制群名</Text>
+            <Pressable style={[styles.userGroupPrimaryAction, savingQr && styles.userGroupActionDisabled]} disabled={savingQr} onPress={() => void saveGroupQr()}>
+              {savingQr ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.userGroupPrimaryActionText}>保存到本地</Text>}
             </Pressable>
           </View>
         </View>
 
         <View style={styles.userGroupHintCard}>
           <Text style={styles.userGroupHintTitle}>加入方式</Text>
-          <Text style={styles.userGroupHintText}>点击二维码可放大查看；截图保存后，可以在微信中识别二维码加入用户群。</Text>
+          <Text style={styles.userGroupHintText}>点击二维码可放大查看；保存到本地后，可以在微信中识别二维码加入用户群。</Text>
         </View>
       </ScrollView>
 
@@ -8531,24 +8558,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 2,
   },
-  userGroupSecondaryAction: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#dcebe5',
-    backgroundColor: '#f4f8f6',
+  userGroupActionDisabled: {
+    opacity: 0.72,
   },
   userGroupPrimaryActionText: {
     color: '#fff',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '800',
-  },
-  userGroupSecondaryActionText: {
-    color: '#2f8f6b',
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '800',

@@ -28,7 +28,17 @@
       }
     },
     "plugins": [
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-media-library",
+        {
+          "granularPermissions": [
+            "photo"
+          ],
+          "photosPermission": "允许智健食探保存用户群二维码到相册。",
+          "savePhotosPermission": "允许智健食探保存用户群二维码到相册。"
+        }
+      ]
     ],
     "owner": "healthymax"
   }
