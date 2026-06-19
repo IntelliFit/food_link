@@ -3084,9 +3084,6 @@ function IndexPage() {
                   <Text className='nutrition-expand-affordance-text'>
                     {nutritionExpanded ? '收起' : '展开更多'}
                   </Text>
-                  <Text className={`nutrition-expand-affordance-icon${nutritionExpanded ? ' is-open' : ''}`}>
-                    ⌄
-                  </Text>
                 </View>
               </View>
 

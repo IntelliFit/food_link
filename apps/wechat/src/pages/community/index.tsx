@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, Image, Input, Button } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Input, Button, Swiper, SwiperItem } from '@tarojs/components'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 
@@ -542,6 +542,7 @@ function CommunityPage() {
   const [feedActionSheet, setFeedActionSheet] = useState<{ item: CommunityFeedItem; mode: 'manage' | 'report' } | null>(null)
   const [reportMaskTarget, setReportMaskTarget] = useState<{ targetType: CommunityFeedTargetType; targetId: string } | null>(null)
   const [feedTextExpanded, setFeedTextExpanded] = useState<Record<string, boolean>>({})
+  const [feedImageIndices, setFeedImageIndices] = useState<Record<string, number>>({})
   const pendingNotificationNavigationRef = useRef(false)
   const feedScrollResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const skipNextFilterRefreshRef = useRef(true)
@@ -2386,6 +2387,13 @@ function CommunityPage() {
                       ? extractManualFoodDisplayItems(item.record.items)
                       : []
                     const useManualFoodCards = isManualRecord && manualFoodItems.length > 0
+                    const feedImagePaths = !exercise && !isCirclePost && !useManualFoodCards
+                      ? (item.record.image_paths?.length
+                        ? item.record.image_paths
+                        : item.record.image_path
+                          ? [item.record.image_path]
+                          : [])
+                      : []
                     const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
                     return (
                     <View key={targetKey}>
@@ -2501,19 +2509,54 @@ function CommunityPage() {
                                 ))}
                               </View>
                             )}
-                            {item.record.image_path && !useManualFoodCards && !isCirclePost && (
+                            {feedImagePaths.length > 0 && !useManualFoodCards && !isCirclePost && (
                               <View
-                                className='feed-image feed-tap-to-detail'
+                                className={`feed-image ${feedImagePaths.length <= 1 ? 'feed-tap-to-detail' : ''}`}
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  handleViewDetail(item)
+                                  if (feedImagePaths.length <= 1) {
+                                    handleViewDetail(item)
+                                  }
                                 }}
                               >
-                                <Image
-                                  src={item.record.image_path}
-                                  mode='aspectFill'
-                                  className='feed-image-content'
-                                />
+                                {feedImagePaths.length > 1 ? (
+                                  <>
+                                    <Swiper
+                                      className='feed-image-swiper'
+                                      circular
+                                      indicatorDots={false}
+                                      onChange={(e) => {
+                                        setFeedImageIndices(prev => ({ ...prev, [targetKey]: e.detail.current }))
+                                      }}
+                                      current={feedImageIndices[targetKey] || 0}
+                                    >
+                                      {feedImagePaths.map((path, index) => (
+                                        <SwiperItem key={`${targetKey}-swiper-${index}`} className='feed-image-swiper-item'>
+                                          <Image
+                                            src={path}
+                                            mode='aspectFill'
+                                            className='feed-image-swiper-image'
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              Taro.previewImage({ current: path, urls: feedImagePaths })
+                                            }}
+                                          />
+                                        </SwiperItem>
+                                      ))}
+                                    </Swiper>
+                                    <View className='feed-image-counter'>
+                                      <Text className='feed-image-counter-text'>
+                                        {(feedImageIndices[targetKey] || 0) + 1}/{feedImagePaths.length}
+                                      </Text>
+                                    </View>
+                                  </>
+                                ) : (
+                                  <Image
+                                    src={item.record.image_path || ''}
+                                    mode='aspectFill'
+                                    className='feed-image-content'
+                                  />
+                                )}
                               </View>
                             )}
                             {isCirclePost && (item.record.image_paths || []).length > 0 && (

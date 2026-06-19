@@ -2361,10 +2361,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   transition: background 0.2s ease;
 
   &.is-expanded {
-    padding: 12rpx;
     background:
       linear-gradient(180deg, rgb(249 253 251 / 96%) 0%, rgb(255 255 255 / 100%) 100%);
-    border: 1rpx solid #e2f0e8;
   }
 }
 
@@ -2404,22 +2402,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   color: #5aa783;
 }
 
-.nutrition-expand-affordance-icon {
-  font-size: 22rpx;
-  line-height: 22rpx;
-  color: #5aa783;
-  transform: rotate(0deg);
-  transition: transform 0.2s ease;
-
-  &.is-open {
-    transform: rotate(180deg);
-  }
-}
-
 .nutrition-expanded-body {
   margin-top: 12rpx;
-  padding-top: 12rpx;
-  border-top: 1rpx solid #e9f2ed;
 }
 
 .micros-preview {
