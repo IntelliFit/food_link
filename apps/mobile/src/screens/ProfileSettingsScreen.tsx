@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Image, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { CommunityFeedItem, CommunityFeedTargetType, PublicFoodItem, PublicProfile, RecipeItem, UserInfo } from '@food-link/core'
 import { apiClient, getStoredUserId } from '../api'
 import { AppButton } from '../components/AppButton'
-import { Card } from '../components/Card'
-import { Page } from '../components/Page'
 import type { RootStackParamList } from '../navigation/types'
 import { colors } from '../theme'
 import { formatDateTime } from '../utils/date'
@@ -24,6 +23,7 @@ export function ProfileSettingsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const { logout } = useAuth()
   const dialog = useAppDialog()
+  const insets = useSafeAreaInsets()
   const targetUserId = route.params?.userId
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const isOwner = !targetUserId || (!!currentUserId && targetUserId === currentUserId)
@@ -237,22 +237,48 @@ export function ProfileSettingsScreen() {
   const canOpenFollowList = Boolean(profile?.id)
 
   return (
-    <Page title={isOwner ? '个人主页' : '用户主页'} subtitle={profile?.motto || '动态、收藏和公开资料'} refreshing={loading} onRefresh={load}>
-      <Card style={styles.heroCard}>
-        {coverImage ? <Image source={{ uri: coverImage }} style={styles.coverImage} /> : <View style={styles.coverFallback} />}
+    <ScrollView
+      style={styles.profileScroll}
+      contentContainerStyle={[
+        styles.profileContent,
+        { paddingTop: Math.max(insets.top, 16), paddingBottom: insets.bottom + 104 },
+      ]}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} />}
+    >
+      <View style={styles.profileTopSection}>
+        <View style={styles.coverBackground}>
+          {coverImage ? (
+            <>
+              <Image source={{ uri: coverImage }} style={styles.coverBackgroundImage} />
+              <View style={styles.coverBackgroundMask} />
+            </>
+          ) : null}
+        </View>
+
+        <View style={styles.topActions}>
+          {isOwner ? (
+            <Pressable onPress={() => setEditing((value) => !value)} style={styles.topEditButton}>
+              <Text style={styles.topEditButtonText}>{editing ? '收起编辑' : '编辑资料'}</Text>
+            </Pressable>
+          ) : null}
+          <Pressable onPress={() => void shareProfile()} style={styles.topIconButton}>
+            <Text style={styles.topIconButtonText}>分享</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.profileRow}>
           {avatar ? <Image source={{ uri: avatar }} style={styles.avatar} /> : <View style={styles.avatarFallback} />}
           <View style={styles.flex}>
-            <Text style={styles.bigTitle} numberOfLines={1}>{profile?.nickname || 'Food Link 用户'}</Text>
+            <Text style={styles.topName} numberOfLines={1}>{profile?.nickname || 'Food Link 用户'}</Text>
             <View style={styles.profileIdRow}>
-              <Text style={styles.idText} selectable>ID: {shortProfileId || '-'}</Text>
+              <Text style={styles.topIdText} selectable>ID: {shortProfileId || '-'}</Text>
               <Pressable onPress={() => void copyUserId()} style={styles.inlineCopyButton}>
                 <Text style={styles.inlineCopyButtonText}>复制ID</Text>
               </Pressable>
             </View>
-            <Text style={styles.subtitle} numberOfLines={2}>{profile?.motto || (isOwner ? '编辑资料与个人主页' : '公开资料')}</Text>
           </View>
         </View>
+
         <View style={styles.profileStatsRow}>
           <View style={styles.profileStatItem}>
             <Text style={styles.profileStatNumber}>{profile?.record_days || 0}</Text>
@@ -275,93 +301,115 @@ export function ProfileSettingsScreen() {
             <Text style={styles.profileStatLabel}>关注</Text>
           </Pressable>
         </View>
-        <View style={styles.buttonRow}>
-          {isOwner ? <SmallButton label={editing ? '收起编辑' : '编辑资料'} onPress={() => setEditing((value) => !value)} /> : null}
-          {!isOwner ? <SmallButton label={profile?.is_following ? '取消关注' : '+ 关注'} onPress={toggleFollow} /> : null}
-          {!isOwner && targetUserId ? <SmallButton label="私信" onPress={() => navigation.navigate('PrivateChat', { userId: targetUserId, nickname: profile?.nickname })} /> : null}
-          <SmallButton label="分享主页" onPress={() => void shareProfile()} />
-        </View>
-      </Card>
 
-      {editing && isOwner ? (
-        <Card>
-          <Text style={styles.sectionTitle}>编辑资料</Text>
-          <Field label="昵称" value={nickname} onChangeText={setNickname} />
-          <Field label="座右铭" value={motto} onChangeText={setMotto} placeholder="写一句你的座右铭（最多30字）" maxLength={30} />
-          <View style={styles.buttonRow}>
-            <SmallButton label="选择头像" onPress={() => void pickProfileImage('avatar')} />
-            <SmallButton label="选择背景图" onPress={() => void pickProfileImage('cover')} />
-          </View>
-          {resolvedProfileId ? (
-            <View style={styles.editIdRow}>
-              <View style={styles.flex}>
-                <Text style={styles.fieldLabel}>用户ID</Text>
-                <Text style={styles.editIdValue} selectable numberOfLines={2}>{resolvedProfileId}</Text>
-              </View>
-              <SmallButton label="复制" onPress={() => void copyUserId()} />
-            </View>
-          ) : null}
-          <AppButton label="保存资料" loading={saving} onPress={saveProfile} />
-          <Pressable onPress={() => void confirmDeleteAccount()} style={styles.deleteAccount}>
-            <Text style={styles.deleteText}>注销账号</Text>
+        {profile?.motto || isOwner ? (
+          <Pressable style={styles.mottoRow} onPress={isOwner ? () => setEditing(true) : undefined}>
+            <Text style={[styles.mottoText, !profile?.motto && styles.mottoTextEmpty]} numberOfLines={2}>
+              {profile?.motto || '点击编辑资料添加座右铭'}
+            </Text>
           </Pressable>
-        </Card>
-      ) : null}
+        ) : null}
 
-      <View style={styles.segment}>
-        <SegmentButton label="最新动态" active={activeTab === 'feed'} onPress={() => setActiveTab('feed')} />
-        <SegmentButton label="食物收藏" active={activeTab === 'collections'} onPress={() => setActiveTab('collections')} />
+        {!isOwner ? (
+          <View style={styles.profileActionRow}>
+            <Pressable style={[styles.profileActionButton, profile?.is_following && styles.profileActionButtonGhost]} onPress={toggleFollow}>
+              <Text style={styles.profileActionButtonText}>{profile?.is_following ? '已关注' : '+ 关注'}</Text>
+            </Pressable>
+            {targetUserId ? (
+              <Pressable style={styles.profileActionButtonLight} onPress={() => navigation.navigate('PrivateChat', { userId: targetUserId, nickname: profile?.nickname })}>
+                <Text style={styles.profileActionButtonLightText}>私信</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
-      {activeTab === 'feed' ? (
-        <>
-          {feed.length === 0 ? <EmptyState text="暂无动态" /> : null}
-          {feed.map((item, index) => (
-            <Pressable key={`${item.target_type || item.record?.feed_type}-${item.target_id || item.record?.id || index}`} onPress={() => openFeed(item)}>
-              <Card>
-                <View style={styles.rowBetween}>
-                  <View style={styles.flex}>
-                    <Text style={styles.itemName}>{feedTitle(item)}</Text>
-                    <Text style={styles.subtitle}>{feedSubtitle(item)}</Text>
-                  </View>
-                  {feedPrimaryMetric(item) ? <Text style={styles.kcal}>{feedPrimaryMetric(item)}</Text> : null}
+      <View style={styles.bottomDrawer}>
+        <View style={styles.drawerHandle} />
+
+        {editing && isOwner ? (
+          <View style={styles.editPanel}>
+            <Text style={styles.sectionTitle}>编辑资料</Text>
+            <Field label="昵称" value={nickname} onChangeText={setNickname} />
+            <Field label="座右铭" value={motto} onChangeText={setMotto} placeholder="写一句你的座右铭（最多30字）" maxLength={30} />
+            <View style={styles.buttonRow}>
+              <SmallButton label="选择头像" onPress={() => void pickProfileImage('avatar')} />
+              <SmallButton label="选择背景图" onPress={() => void pickProfileImage('cover')} />
+            </View>
+            {resolvedProfileId ? (
+              <View style={styles.editIdRow}>
+                <View style={styles.flex}>
+                  <Text style={styles.fieldLabel}>用户ID</Text>
+                  <Text style={styles.editIdValue} selectable numberOfLines={2}>{resolvedProfileId}</Text>
                 </View>
-                {feedImages(item).length ? (
-                  <View style={styles.feedImageGrid}>
-                    {feedImages(item).slice(0, 3).map((url, imageIndex) => (
-                      <Image key={`${url}-${imageIndex}`} source={{ uri: url }} style={styles.feedImage} />
-                    ))}
+                <SmallButton label="复制" onPress={() => void copyUserId()} />
+              </View>
+            ) : null}
+            <AppButton label="保存资料" loading={saving} onPress={saveProfile} />
+            <Pressable onPress={() => void confirmDeleteAccount()} style={styles.deleteAccount}>
+              <Text style={styles.deleteText}>注销账号</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <View style={styles.segment}>
+          <SegmentButton label="最新动态" active={activeTab === 'feed'} onPress={() => setActiveTab('feed')} />
+          <SegmentButton label="食物收藏" active={activeTab === 'collections'} onPress={() => setActiveTab('collections')} />
+        </View>
+
+        <View style={styles.contentBody}>
+          {activeTab === 'feed' ? (
+            <>
+              {feed.length === 0 ? <EmptyState text="暂无动态" /> : null}
+              {feed.map((item, index) => (
+                <Pressable key={`${item.target_type || item.record?.feed_type}-${item.target_id || item.record?.id || index}`} onPress={() => openFeed(item)}>
+                  <View style={styles.feedCard}>
+                    <Text style={styles.profileFeedTime}>{feedSubtitle(item)}</Text>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.profileFeedTitle} numberOfLines={2}>{feedTitle(item)}</Text>
+                      {feedPrimaryMetric(item) ? <Text style={styles.kcal}>{feedPrimaryMetric(item)}</Text> : null}
+                    </View>
+                    {feedImages(item).length ? (
+                      <View style={styles.feedImageGrid}>
+                        {feedImages(item).slice(0, 3).map((url, imageIndex) => (
+                          <Image key={`${url}-${imageIndex}`} source={{ uri: url }} style={styles.feedImage} />
+                        ))}
+                      </View>
+                    ) : null}
+                    <View style={styles.feedFooter}>
+                      <View style={styles.pillRow}>
+                        {feedPills(item).map((text) => <Pill key={text} text={text} />)}
+                      </View>
+                      <Text style={styles.likeText}>❤ {item.like_count || 0}</Text>
+                    </View>
                   </View>
-                ) : null}
-                <View style={styles.pillRow}>
-                  {feedPills(item).map((text) => <Pill key={text} text={text} />)}
-                </View>
-              </Card>
-            </Pressable>
-          ))}
-        </>
-      ) : (
-        <>
-          {recipes.length === 0 && foods.length === 0 ? <EmptyState text="暂无收藏" /> : null}
-          {recipes.map((recipe) => (
-            <Pressable key={recipe.id} onPress={() => navigation.navigate('RecipeEdit', { recipeId: recipe.id })}>
-              <Card>
-                <Text style={styles.itemName}>{recipe.recipe_name || '收藏食谱'}</Text>
-                <Text style={styles.subtitle}>{recipeSubtitle(recipe)}</Text>
-              </Card>
-            </Pressable>
-          ))}
-          {foods.map((food) => (
-            <Pressable key={food.id} onPress={() => navigation.navigate('PublicFoodDetail', { itemId: food.id, isCampus: Boolean(food.is_campus_food) })}>
-              <Card>
-                <Text style={styles.itemName}>{food.food_name || '公共食物'}</Text>
-                <Text style={styles.subtitle}>{food.merchant_name || food.canteen_name || food.city || '用户分享'} · {Math.round(food.total_calories || 0)} kcal</Text>
-              </Card>
-            </Pressable>
-          ))}
-        </>
-      )}
-    </Page>
+                </Pressable>
+              ))}
+            </>
+          ) : (
+            <>
+              {recipes.length === 0 && foods.length === 0 ? <EmptyState text="暂无收藏" /> : null}
+              {recipes.map((recipe) => (
+                <Pressable key={recipe.id} onPress={() => navigation.navigate('RecipeEdit', { recipeId: recipe.id })}>
+                  <View style={styles.collectionCard}>
+                    <Text style={styles.itemName}>{recipe.recipe_name || '收藏食谱'}</Text>
+                    <Text style={styles.subtitle}>{recipeSubtitle(recipe)}</Text>
+                  </View>
+                </Pressable>
+              ))}
+              {foods.map((food) => (
+                <Pressable key={food.id} onPress={() => navigation.navigate('PublicFoodDetail', { itemId: food.id, isCampus: Boolean(food.is_campus_food) })}>
+                  <View style={styles.collectionCard}>
+                    <Text style={styles.itemName}>{food.food_name || '公共食物'}</Text>
+                    <Text style={styles.subtitle}>{food.merchant_name || food.canteen_name || food.city || '用户分享'} · {Math.round(food.total_calories || 0)} kcal</Text>
+                  </View>
+                </Pressable>
+              ))}
+            </>
+          )}
+        </View>
+      </View>
+    </ScrollView>
   )
 }
 
@@ -401,6 +449,7 @@ function SegmentButton({ label, active, onPress }: { label: string; active: bool
   return (
     <Pressable style={[styles.segmentItem, active && styles.segmentItemActive]} onPress={onPress}>
       <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
+      {active ? <View style={styles.segmentIndicator} /> : null}
     </Pressable>
   )
 }
@@ -423,9 +472,9 @@ function Pill({ text }: { text: string }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <Card>
+    <View style={styles.contentEmpty}>
       <Text style={styles.empty}>{text}</Text>
-    </Card>
+    </View>
   )
 }
 
@@ -562,228 +611,295 @@ function normalizeTargetType(value: unknown): CommunityFeedTargetType {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
+    minWidth: 0,
   },
-  heroCard: {
+  profileScroll: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  profileContent: {
+    minHeight: '100%',
+    backgroundColor: colors.background,
+  },
+  profileTopSection: {
+    position: 'relative',
     overflow: 'hidden',
-    padding: 0,
+    minHeight: 246,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 22,
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    backgroundColor: '#10251d',
   },
-  coverImage: {
-    width: '100%',
-    height: 142,
-    backgroundColor: colors.surfaceMuted,
+  coverBackground: {
+    ...StyleSheet.absoluteFill,
+    bottom: -60,
+    backgroundColor: '#10251d',
   },
-  coverFallback: {
+  coverBackgroundImage: {
     width: '100%',
-    height: 142,
-    backgroundColor: colors.brandSoft,
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  coverBackgroundMask: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.52)',
+  },
+  topActions: {
+    position: 'absolute',
+    top: 14,
+    right: 16,
+    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topEditButton: {
+    minHeight: 30,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+  },
+  topEditButtonText: {
+    color: '#374151',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  topIconButton: {
+    minHeight: 30,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  topIconButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   profileRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 18,
-    paddingTop: 14,
+    alignItems: 'flex-end',
+    gap: 12,
+    marginTop: 82,
+    marginBottom: 14,
+    paddingLeft: 8,
+    paddingRight: 104,
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     borderWidth: 3,
     borderColor: '#fff',
-    marginTop: -34,
+    backgroundColor: colors.surfaceMuted,
   },
   avatarFallback: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     borderWidth: 3,
     borderColor: '#fff',
-    backgroundColor: colors.brandSoft,
-    marginTop: -34,
+    backgroundColor: '#f3f4f6',
   },
-  rowBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingBottom: 18,
+  topName: {
+    color: '#fff',
+    fontSize: 20,
+    lineHeight: 28,
+    fontWeight: '800',
   },
   profileIdRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 4,
+    marginTop: 6,
+  },
+  topIdText: {
+    color: 'rgba(255, 255, 255, 0.78)',
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: 'monospace',
   },
   inlineCopyButton: {
-    minHeight: 28,
-    borderRadius: 14,
-    paddingHorizontal: 10,
+    minHeight: 24,
+    borderRadius: 999,
+    paddingHorizontal: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.28)',
   },
   inlineCopyButtonText: {
-    color: colors.brandDark,
-    fontSize: 12,
-    fontWeight: '800',
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   profileStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 18,
-    marginBottom: 14,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
+    alignSelf: 'flex-start',
+    gap: 10,
+    paddingLeft: 4,
+    marginBottom: 10,
   },
   profileStatItem: {
-    flex: 1,
-    minHeight: 52,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
+    minHeight: 22,
   },
   profileStatNumber: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
+    color: '#fff',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
   },
   profileStatLabel: {
-    color: colors.textSecondary,
+    color: '#fff',
     fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
+    lineHeight: 17,
+    fontWeight: '500',
   },
   profileStatDivider: {
     width: 1,
-    height: 34,
-    backgroundColor: colors.border,
+    height: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.58)',
   },
-  pillRow: {
+  mottoRow: {
+    paddingLeft: 4,
+    paddingRight: 12,
+  },
+  mottoText: {
+    color: 'rgba(255, 255, 255, 0.92)',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  mottoTextEmpty: {
+    color: 'rgba(255, 255, 255, 0.55)',
+  },
+  profileActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  profileActionButton: {
+    flex: 1,
+    minHeight: 32,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+    borderWidth: 1,
+    borderColor: colors.brand,
+  },
+  profileActionButtonGhost: {
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  profileActionButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  profileActionButtonLight: {
+    flex: 1,
+    minHeight: 32,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+  },
+  profileActionButtonLightText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  bottomDrawer: {
+    flex: 1,
+    minHeight: 420,
+    marginTop: -2,
+    paddingTop: 7,
+    paddingBottom: 16,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  drawerHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 999,
+    alignSelf: 'center',
+    marginBottom: 7,
+    backgroundColor: 'rgba(100, 116, 139, 0.2)',
+  },
+  editPanel: {
+    marginHorizontal: 12,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceMuted,
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  buttonRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 12,
-  },
-  feedImageGrid: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  feedImage: {
-    flex: 1,
-    minHeight: 96,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceMuted,
-  },
-  bigTitle: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '900',
+    marginBottom: 12,
   },
   sectionTitle: {
     color: colors.text,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
     marginBottom: 10,
   },
-  subtitle: {
-    color: colors.textSecondary,
-    lineHeight: 21,
-  },
-  idText: {
-    color: colors.textMuted,
-    fontSize: 12,
-  },
-  itemName: {
-    color: colors.text,
-    fontWeight: '800',
-  },
-  kcal: {
-    color: colors.brandDark,
-    fontWeight: '900',
-  },
   field: {
-    marginBottom: 14,
+    marginBottom: 12,
   },
   fieldLabel: {
     color: colors.textSecondary,
+    fontSize: 13,
     fontWeight: '700',
     marginBottom: 6,
   },
   input: {
-    minHeight: 48,
+    minHeight: 44,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    borderRadius: 10,
+    paddingHorizontal: 12,
     color: colors.text,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: '#fff',
   },
   textarea: {
-    minHeight: 104,
+    minHeight: 88,
     paddingTop: 12,
     paddingBottom: 12,
-  },
-  segment: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-  },
-  segmentItem: {
-    flex: 1,
-    minHeight: 42,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  segmentItemActive: {
-    backgroundColor: colors.brand,
-  },
-  segmentText: {
-    color: colors.textSecondary,
-    fontWeight: '800',
-  },
-  segmentTextActive: {
-    color: '#fff',
-  },
-  smallButton: {
-    minHeight: 38,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.brandSoft,
-  },
-  smallButtonText: {
-    color: colors.brandDark,
-    fontWeight: '800',
-  },
-  pill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: colors.brandSoft,
-  },
-  pillText: {
-    color: colors.brandDark,
-    fontSize: 12,
-    fontWeight: '800',
   },
   editIdRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 12,
-    marginBottom: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: colors.border,
@@ -795,14 +911,157 @@ const styles = StyleSheet.create({
   },
   deleteAccount: {
     alignItems: 'center',
-    paddingTop: 12,
+    paddingTop: 10,
   },
   deleteText: {
     color: colors.danger,
     fontWeight: '800',
   },
+  segment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  segmentItem: {
+    position: 'relative',
+    minHeight: 50,
+    marginRight: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentItemActive: {},
+  segmentText: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '600',
+  },
+  segmentTextActive: {
+    color: colors.text,
+    fontWeight: '800',
+  },
+  segmentIndicator: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: colors.brand,
+  },
+  contentBody: {
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  contentEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 50,
+  },
   empty: {
     color: colors.textMuted,
+    fontSize: 14,
     textAlign: 'center',
+  },
+  feedCard: {
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#f9fafb',
+  },
+  profileFeedTime: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 6,
+  },
+  profileFeedTitle: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+  kcal: {
+    color: colors.brandDark,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  feedImageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  feedImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceMuted,
+  },
+  feedFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  pillRow: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  pill: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: colors.brandSoft,
+  },
+  pillText: {
+    color: colors.brandDark,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  likeText: {
+    flexShrink: 0,
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  collectionCard: {
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#f9fafb',
+  },
+  itemName: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  subtitle: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 3,
+  },
+  smallButton: {
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brandSoft,
+  },
+  smallButtonText: {
+    color: colors.brandDark,
+    fontSize: 13,
+    fontWeight: '800',
   },
 })

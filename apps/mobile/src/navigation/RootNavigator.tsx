@@ -14,6 +14,7 @@ import { HealthProfileViewScreen } from '../screens/HealthProfileViewScreen'
 import { PetChatScreen } from '../screens/PetChatScreen'
 import { LoginScreen } from '../screens/LoginScreen'
 import { AnalyzeScreen } from '../screens/AnalyzeScreen'
+import { GooseDuckChickenScreen } from '../screens/GooseDuckChickenScreen'
 import { AnalyzeLoadingScreen } from '../screens/AnalyzeLoadingScreen'
 import { ResultScreen } from '../screens/ResultScreen'
 import { TextResultScreen } from '../screens/TextResultScreen'
@@ -89,6 +90,8 @@ const navigationTheme = {
   },
 }
 
+type StaticDeepLinkRoute = 'About' | 'Expiry'
+
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -108,12 +111,12 @@ export function RootNavigator() {
   const pendingInviteCodeRef = useRef<string | null>(null)
   const pendingPrivateChatRef = useRef<{ userId: string; nickname?: string } | null>(null)
   const pendingProfileUserIdRef = useRef<string | null>(null)
+  const pendingStaticRouteRef = useRef<StaticDeepLinkRoute | null>(null)
 
   useEffect(() => {
-    if (!isAuthenticated) return undefined
-
     const navigateToInvite = (code: string) => {
       pendingInviteCodeRef.current = code
+      if (!isAuthenticated) return
       if (!navigationRef.isReady()) return
       navigationRef.navigate('InviteFriends', { fi: code })
       pendingInviteCodeRef.current = null
@@ -121,6 +124,7 @@ export function RootNavigator() {
 
     const navigateToPrivateChat = (params: { userId: string; nickname?: string }) => {
       pendingPrivateChatRef.current = params
+      if (!isAuthenticated) return
       if (!navigationRef.isReady()) return
       navigationRef.navigate('PrivateChat', params)
       pendingPrivateChatRef.current = null
@@ -128,12 +132,40 @@ export function RootNavigator() {
 
     const navigateToProfile = (userId: string) => {
       pendingProfileUserIdRef.current = userId
+      if (!isAuthenticated) return
       if (!navigationRef.isReady()) return
       navigationRef.navigate('ProfileSettings', { userId })
       pendingProfileUserIdRef.current = null
     }
 
-    const handleInviteUrl = (url?: string | null) => {
+    const navigateToStaticRoute = (routeName: StaticDeepLinkRoute) => {
+      pendingStaticRouteRef.current = routeName
+      if (routeName === 'Expiry' && !isAuthenticated) return
+      if (!navigationRef.isReady()) return
+      if (routeName === 'About') {
+        navigationRef.navigate('About')
+      } else {
+        navigationRef.navigate('Expiry')
+      }
+      pendingStaticRouteRef.current = null
+    }
+
+    const flushPendingRoutes = () => {
+      const staticRoute = pendingStaticRouteRef.current
+      if (staticRoute && navigationRef.isReady() && (staticRoute === 'About' || isAuthenticated)) {
+        navigateToStaticRoute(staticRoute)
+      }
+      const code = pendingInviteCodeRef.current
+      if (code && isAuthenticated) navigateToInvite(code)
+      const privateChat = pendingPrivateChatRef.current
+      if (privateChat && isAuthenticated) navigateToPrivateChat(privateChat)
+      const profileUserId = pendingProfileUserIdRef.current
+      if (profileUserId && isAuthenticated) navigateToProfile(profileUserId)
+    }
+
+    const handleIncomingUrl = (url?: string | null) => {
+      const staticRoute = extractStaticDeepLinkRoute(url)
+      if (staticRoute) navigateToStaticRoute(staticRoute)
       const code = extractInviteCodeFromUrl(url)
       if (code) navigateToInvite(code)
       const privateChat = extractPrivateChatFromUrl(url)
@@ -142,8 +174,9 @@ export function RootNavigator() {
       if (profileUserId) navigateToProfile(profileUserId)
     }
 
-    Linking.getInitialURL().then(handleInviteUrl).catch(() => undefined)
-    const subscription = Linking.addEventListener('url', ({ url }) => handleInviteUrl(url))
+    flushPendingRoutes()
+    Linking.getInitialURL().then(handleIncomingUrl).catch(() => undefined)
+    const subscription = Linking.addEventListener('url', ({ url }) => handleIncomingUrl(url))
     return () => subscription.remove()
   }, [isAuthenticated])
 
@@ -161,19 +194,28 @@ export function RootNavigator() {
       theme={navigationTheme}
       onReady={() => {
         const code = pendingInviteCodeRef.current
-        if (code && navigationRef.isReady()) {
+        if (code && isAuthenticated && navigationRef.isReady()) {
           navigationRef.navigate('InviteFriends', { fi: code })
           pendingInviteCodeRef.current = null
         }
         const privateChat = pendingPrivateChatRef.current
-        if (privateChat && navigationRef.isReady()) {
+        if (privateChat && isAuthenticated && navigationRef.isReady()) {
           navigationRef.navigate('PrivateChat', privateChat)
           pendingPrivateChatRef.current = null
         }
         const profileUserId = pendingProfileUserIdRef.current
-        if (profileUserId && navigationRef.isReady()) {
+        if (profileUserId && isAuthenticated && navigationRef.isReady()) {
           navigationRef.navigate('ProfileSettings', { userId: profileUserId })
           pendingProfileUserIdRef.current = null
+        }
+        const staticRoute = pendingStaticRouteRef.current
+        if (staticRoute && navigationRef.isReady() && (staticRoute === 'About' || isAuthenticated)) {
+          if (staticRoute === 'About') {
+            navigationRef.navigate('About')
+          } else {
+            navigationRef.navigate('Expiry')
+          }
+          pendingStaticRouteRef.current = null
         }
       }}
     >
@@ -187,9 +229,10 @@ export function RootNavigator() {
         {isAuthenticated ? (
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
-            <Stack.Screen name="PetChat" component={PetChatScreen} options={{ title: '伙伴对话' }} />
-            <Stack.Screen name="Analyze" component={AnalyzeScreen} options={{ title: '记录' }} />
-            <Stack.Screen name="AnalyzeLoading" component={AnalyzeLoadingScreen} options={{ title: '正在分析' }} />
+            <Stack.Screen name="PetChat" component={PetChatScreen} options={{ title: '问问宠物' }} />
+            <Stack.Screen name="Analyze" component={AnalyzeScreen} options={{ title: '图片分析' }} />
+            <Stack.Screen name="GooseDuckChicken" component={GooseDuckChickenScreen} options={{ title: '鹅鸭鸡识别' }} />
+            <Stack.Screen name="AnalyzeLoading" component={AnalyzeLoadingScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Result" component={ResultScreen} options={{ title: '识别结果' }} />
             <Stack.Screen name="TextResult" component={TextResultScreen} options={{ title: '文字记录分析' }} />
             <Stack.Screen name="TextRecord" component={TextRecordScreen} options={{ title: '文字记录' }} />
@@ -200,29 +243,53 @@ export function RootNavigator() {
             <Stack.Screen name="RecordDetail" component={RecordDetailScreen} options={{ title: '记录详情' }} />
             <Stack.Screen name="AnalyzeHistory" component={AnalyzeHistoryScreen} options={{ title: '识别历史' }} />
             <Stack.Screen name="AiAssistant" component={AiAssistantScreen} options={{ title: 'AI 助手' }} />
-            <Stack.Screen name="StatsMetabolic" component={StatsMetabolicScreen} options={{ title: '代谢分析' }} />
+            <Stack.Screen name="StatsMetabolic" component={StatsMetabolicScreen} options={{ headerShown: false }} />
             <Stack.Screen name="TrendDetail" component={TrendDetailScreen} options={({ route }) => ({ title: route.params.kind === 'weight' ? '体重趋势' : route.params.kind === 'water' ? '饮水趋势' : '运动趋势' })} />
             <Stack.Screen name="HealthProfile" component={HealthProfileScreen} options={{ title: '健康档案' }} />
             <Stack.Screen name="HealthProfileView" component={HealthProfileViewScreen} options={{ title: '健康档案详情' }} />
             <Stack.Screen name="ProfileSettings" component={ProfileSettingsScreen} options={{ title: '个人主页' }} />
             <Stack.Screen name="AccountSecurity" component={AccountSecurityScreen} options={{ title: '账号安全' }} />
-            <Stack.Screen name="BodyMetricRecord" component={BodyMetricRecordScreen} options={{ title: '身体记录' }} />
+            <Stack.Screen
+              name="BodyMetricRecord"
+              component={BodyMetricRecordScreen}
+              options={({ route }) => ({
+                title: route.params?.type === 'water' ? '记录喝水' : route.params?.type === 'exercise' ? '记录运动' : '记录体重',
+              })}
+            />
             <Stack.Screen name="Expiry" component={ExpiryScreen} options={{ title: '食物保质期' }} />
             <Stack.Screen name="ExpiryEdit" component={ExpiryEditScreen} options={{ title: '编辑保质期' }} />
             <Stack.Screen name="RewardCenter" component={RewardCenterScreen} options={{ title: '赚积分' }} />
-            <Stack.Screen name="MembershipCenter" component={MembershipCenterScreen} options={{ title: '会员中心' }} />
+            <Stack.Screen
+              name="MembershipCenter"
+              component={MembershipCenterScreen}
+              options={{
+                title: '食探会员',
+                headerStyle: { backgroundColor: '#f0fdf4' },
+                headerTintColor: '#0f172a',
+                headerTitleStyle: { color: '#0f172a', fontWeight: '700' },
+              }}
+            />
             <Stack.Screen name="Recipes" component={RecipesScreen} options={{ title: '收藏食谱' }} />
-            <Stack.Screen name="RecipeEdit" component={RecipeEditScreen} options={{ title: '编辑食谱' }} />
+            <Stack.Screen
+              name="RecipeEdit"
+              component={RecipeEditScreen}
+              options={({ route }) => ({
+                title: route.params?.recipeId ? '编辑食谱' : '新建食谱',
+                headerStyle: { backgroundColor: '#00bc7d' },
+                headerTintColor: '#fff',
+                headerTitleStyle: { color: '#fff', fontWeight: '700' },
+              })}
+            />
             <Stack.Screen name="PublicFood" component={PublicFoodScreen} options={{ title: '公共食物库' }} />
             <Stack.Screen name="PublicFoodDetail" component={PublicFoodDetailScreen} options={{ title: '食物详情' }} />
             <Stack.Screen name="PublicFoodShare" component={PublicFoodShareScreen} options={{ title: '分享食物' }} />
             <Stack.Screen name="CommunityFeedDetail" component={CommunityFeedDetailScreen} options={{ title: '动态详情' }} />
             <Stack.Screen name="CommunitySearch" component={CommunitySearchScreen} options={{ title: '圈子搜索' }} />
-            <Stack.Screen name="PublicProfile" component={PublicProfileScreen} options={{ title: '用户主页' }} />
+            <Stack.Screen name="PublicProfile" component={PublicProfileScreen} options={{ headerShown: false }} />
             <Stack.Screen name="FollowList" component={FollowListScreen} options={{ title: '关注列表' }} />
             <Stack.Screen name="Conversations" component={ConversationsScreen} options={{ title: '私信' }} />
             <Stack.Screen name="PrivateChat" component={PrivateChatScreen} options={({ route }) => ({ title: route.params.nickname || '私信' })} />
-            <Stack.Screen name="BodyTrends" component={BodyTrendsScreen} options={{ title: '身体趋势' }} />
+            <Stack.Screen name="BodyTrends" component={BodyTrendsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="PackagedFoodEdit" component={PackagedFoodEditScreen} options={{ title: '包装食品' }} />
             <Stack.Screen name="PackagedFoodTaskDetail" component={PackagedFoodTaskDetailScreen} options={{ title: '包装识别任务' }} />
             <Stack.Screen name="LocationSearch" component={LocationSearchScreen} options={{ title: '定位搜索' }} />
@@ -233,10 +300,19 @@ export function RootNavigator() {
             <Stack.Screen name="CheckinLeaderboard" component={CheckinLeaderboardScreen} options={{ title: '打卡排行榜' }} />
             <Stack.Screen name="InviteFriends" component={InviteFriendsScreen} options={{ title: '邀请好友' }} />
             <Stack.Screen name="PetHome" component={PetHomeScreen} options={{ title: '成长伙伴' }} />
-            <Stack.Screen name="PetLab" component={PetLabScreen} options={{ title: '外观实验室' }} />
+            <Stack.Screen name="PetLab" component={PetLabScreen} options={{ title: '宠物试验箱' }} />
             <Stack.Screen name="Agreements" component={AgreementsScreen} options={{ title: '用户协议' }} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: '隐私政策' }} />
-            <Stack.Screen name="AutoRenewAudit" component={AutoRenewAuditScreen} options={{ title: '自动续费审核' }} />
+            <Stack.Screen
+              name="AutoRenewAudit"
+              component={AutoRenewAuditScreen}
+              options={{
+                title: '自动续费',
+                headerStyle: { backgroundColor: '#f0fdf4' },
+                headerTintColor: '#0f172a',
+                headerTitleStyle: { color: '#0f172a', fontWeight: '700' },
+              }}
+            />
             <Stack.Screen name="CirclePostEdit" component={CirclePostEditScreen} options={{ title: '发布动态' }} />
             <Stack.Screen name="Friends" component={FriendsScreen} options={{ title: '好友' }} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: '互动消息' }} />
@@ -248,11 +324,27 @@ export function RootNavigator() {
             <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Agreements" component={AgreementsScreen} options={{ title: '用户协议' }} />
             <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} options={{ title: '隐私政策' }} />
+            <Stack.Screen name="About" component={AboutScreen} options={{ title: '关于' }} />
           </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
   )
+}
+
+function extractStaticDeepLinkRoute(url?: string | null): StaticDeepLinkRoute | null {
+  if (!url) return null
+  const normalized = url.toLowerCase()
+  if (normalized.includes('about')) return 'About'
+  if (
+    normalized.includes('food-expiry') ||
+    normalized.includes('/expiry') ||
+    normalized.includes('://expiry') ||
+    normalized.includes('pages/expiry')
+  ) {
+    return 'Expiry'
+  }
+  return null
 }
 
 function extractInviteCodeFromUrl(url?: string | null): string {

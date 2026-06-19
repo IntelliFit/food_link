@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import { useFocusEffect } from '@react-navigation/native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useFocusEffect, useNavigation } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import Svg, { Circle as SvgCircle, Defs, LinearGradient as SvgLinearGradient, Rect as SvgRect, Stop } from 'react-native-svg'
 import type {
   PetChatHistoryMessage,
   PetChatHistoryResponse,
@@ -10,13 +12,11 @@ import type {
   StatsSummary,
 } from '@food-link/core'
 import { apiClient } from '../api'
-import { AppButton } from '../components/AppButton'
-import { Card } from '../components/Card'
-import { Page } from '../components/Page'
-import { PetAvatar, petMoodLabel, petStateLabel } from '../components/PetAvatar'
+import { PetAvatar } from '../components/PetAvatar'
 import { useAppDialog } from '../providers/DialogProvider'
-import { colors, radius } from '../theme'
+import { colors } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
+import type { RootStackParamList } from '../navigation/types'
 
 type ChatRole = 'pet' | 'user'
 
@@ -36,8 +36,8 @@ const QUICK_QUESTIONS: Array<{ text: string; range: StatsRange }> = [
 ]
 
 const FOLLOW_UPS = [
-  '只看微量元素',
-  '明天训练前怎么吃',
+  '能不能只看微量元素',
+  '帮我安排训练日前一天怎么吃',
   '碳水是不是偏低',
   '给我一个明天能执行的小目标',
 ]
@@ -54,8 +54,8 @@ function buildIntroMessage(petName: string): ChatMessage {
   return {
     id: 'intro',
     role: 'pet',
-    text: `我是${petName}。你可以直接问我最近训练、饥饿感、碳水、减脂卡住、明天怎么吃这类问题。我会结合你保存过的记录来回答。`,
-    actions: ['先说一个最近的困扰', '也可以直接问训练和饮食'],
+    text: `我是${petName}。你直接说最近哪里不对劲就行，比如训练没劲、总是饿、减脂卡住，或者想知道明天怎么吃。我只看你保存过的饮食文字和营养数据，不看图片，也不会替你下诊断。`,
+    actions: ['先说一个最近的困惑', '也可以直接问训练和饥饿感'],
   }
 }
 
@@ -101,7 +101,7 @@ function buildClues(summary: StatsSummary | null, insight: string): string[] {
   const clues: string[] = []
   if (summary) {
     clues.push(`${rangeLabel(summary.range)}有 ${summary.recorded_days || 0} 天饮食记录，日均约 ${Math.round(summary.avg_calories_per_day || 0)} kcal`)
-    clues.push(`蛋白 ${Math.round(summary.total_protein || 0)}g，碳水 ${Math.round(summary.total_carbs || 0)}g，脂肪 ${Math.round(summary.total_fat || 0)}g`)
+    clues.push(`蛋白质 ${Math.round(summary.total_protein || 0)}g，碳水 ${Math.round(summary.total_carbs || 0)}g，脂肪 ${Math.round(summary.total_fat || 0)}g`)
     if (typeof summary.cal_surplus_deficit === 'number') {
       const diff = Math.round(summary.cal_surplus_deficit)
       clues.push(diff >= 0 ? `日均摄入约比 TDEE 高 ${diff} kcal` : `日均摄入约比 TDEE 低 ${Math.abs(diff)} kcal`)
@@ -126,12 +126,13 @@ function buildActions(question: string): string[] {
     return ['把主食集中到早餐和训练前后', '先增加半碗饭或一份土豆', '避免晚餐完全无碳水']
   }
   if (/减脂|体重|卡住/.test(q)) {
-    return ['先稳定记录 7 天', '看日均热量而不是单日波动', '保留蛋白，优先微调零食和饮料']
+    return ['先稳定记录 7 天', '看日均热量而不是单日波动', '保留蛋白质，优先微调零食和饮料']
   }
   return ['先选一个最小改动执行 3 天', '继续记录训练和体感', '下次让我对比执行前后变化']
 }
 
 export function PetChatScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'PetChat'>>()
   const dialog = useAppDialog()
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [statsSummary, setStatsSummary] = useState<StatsSummary | null>(null)
@@ -195,12 +196,13 @@ export function PetChatScreen() {
   )
 
   useEffect(() => {
+    navigation.setOptions({ title: `和${petName}聊聊` })
     setMessages((prev) => {
       if (prev.length === 0) return [buildIntroMessage(petName)]
       if (prev.length === 1 && prev[0]?.id === 'intro') return [buildIntroMessage(petName)]
       return prev
     })
-  }, [petName])
+  }, [navigation, petName])
 
   const openHistory = useCallback(async () => {
     if (busyRef.current) return
@@ -290,68 +292,92 @@ export function PetChatScreen() {
     void runAnalysis(text, range)
   }, [activeRange, busy, input, runAnalysis])
 
-  const rangeOptions: StatsRange[] = ['week', 'month']
-  const moodText = `${petMoodLabel(petSummary?.status.mood)} · ${petStateLabel(petSummary?.status.state)}`
-
   return (
-    <Page title={`和${petName}聊聊`} subtitle="同一只成长伙伴会结合你的饮食、运动和健康记录回答。" refreshing={loading} onRefresh={load}>
-      <Card>
-        <View style={styles.hero}>
-          <PetAvatar pet={petSummary?.pet} size="large" mood={petSummary?.status.mood} state={petSummary?.status.state} />
-          <View style={styles.flex}>
-            <Text style={styles.heroTitle}>{petName}</Text>
-            <Text style={styles.subtitle}>{moodText}</Text>
-            <Text style={styles.subtitle}>
-              {statsSummary ? `${rangeLabel(statsSummary.range)}已记录 ${statsSummary.recorded_days || 0} 天` : '会优先读取最近记录'}
-            </Text>
-          </View>
+    <View style={styles.page}>
+      <Svg width="100%" height="100%" viewBox="0 0 390 844" preserveAspectRatio="none" style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Defs>
+          <SvgLinearGradient id="petChatBg" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#f5fff8" />
+            <Stop offset="1" stopColor="#fff8ec" />
+          </SvgLinearGradient>
+        </Defs>
+        <SvgRect x="0" y="0" width="390" height="844" fill="url(#petChatBg)" />
+        <SvgCircle cx="40" cy="70" r="118" fill="#b5eed3" opacity="0.52" />
+        <SvgCircle cx="340" cy="46" r="104" fill="#f8da99" opacity="0.42" />
+        <SvgCircle cx="-44" cy="184" r="140" fill="#5cb896" opacity="0.18" />
+        <SvgCircle cx="438" cy="606" r="154" fill="#f5bc5b" opacity="0.16" />
+      </Svg>
+      <View style={styles.topbar}>
+        <MiniButton label="最近" active={historyOpen} onPress={openHistory} />
+        <MiniButton label="新对话" onPress={startNewConversation} />
+      </View>
+
+      <View style={styles.stage}>
+        <PetAvatar pet={petSummary?.pet} size={56} mood={petSummary?.status.mood} state={petSummary?.status.state} />
+        <View style={styles.stageBubble}>
+          <Text style={styles.stageTitle}>{petName}在读你的饮食记录</Text>
+          <Text style={styles.stageCopy}>
+            {hasAnalysis
+              ? '继续追问不会重新读记录；想重新分析就点上方新对话。'
+              : statsSummary
+                ? `默认先看最近 7 天。你提到 30 天、最近一个月、长期，我会自动把范围放大。现在已有 ${statsSummary.recorded_days || 0} 天饮食记录。`
+                : '默认先看最近 7 天。你提到 30 天、最近一个月、长期，我会自动把范围放大。'}
+          </Text>
         </View>
-        <View style={styles.buttonRow}>
-          <MiniButton label="最近" active={historyOpen} onPress={openHistory} />
-          <MiniButton label="新对话" onPress={startNewConversation} />
-        </View>
-      </Card>
+      </View>
 
       {historyOpen ? (
-        <Card>
-          <Text style={styles.sectionTitle}>最近对话</Text>
-          {historyLoading ? <ActivityIndicator color={colors.brand} /> : null}
-          {!historyLoading && sessions.length === 0 ? <Text style={styles.empty}>还没有历史对话</Text> : null}
-          {sessions.map((session) => {
-            const id = sessionId(session)
-            const active = Boolean(id) && id === activeSessionId
-            return (
-              <Pressable key={id || `${session.title}-${session.updated_at}`} style={[styles.sessionRow, active && styles.sessionRowActive]} onPress={() => void openSession(id)}>
-                <View style={styles.flex}>
-                  <Text style={styles.itemName} numberOfLines={1}>{session.title || session.last_question || '未命名对话'}</Text>
-                  <Text style={styles.subtitle} numberOfLines={1}>{session.last_question || session.last_answer || '饮食分析对话'}</Text>
-                </View>
-                <Text style={styles.sessionTime}>{formatSessionTime(session.last_message_at || session.updated_at)}</Text>
-              </Pressable>
-            )
-          })}
-        </Card>
+        <View style={styles.historyPanel}>
+          <Pressable style={styles.historyMask} onPress={() => setHistoryOpen(false)} />
+          <View style={styles.historySheet}>
+            <View style={styles.historyHead}>
+              <Text style={styles.historyTitle}>最近对话</Text>
+              <MiniButton label="新对话" onPress={startNewConversation} />
+            </View>
+            {historyLoading ? (
+              <View style={styles.historyLoading}>
+                <ActivityIndicator color={colors.brand} />
+              </View>
+            ) : null}
+            {!historyLoading && sessions.length === 0 ? <Text style={styles.historyEmpty}>还没有历史对话</Text> : null}
+            <ScrollView style={styles.historyList} showsVerticalScrollIndicator={false}>
+              {sessions.map((session) => {
+                const id = sessionId(session)
+                const active = Boolean(id) && id === activeSessionId
+                return (
+                  <Pressable key={id || `${session.title}-${session.updated_at}`} style={[styles.sessionRow, active && styles.sessionRowActive]} onPress={() => void openSession(id)}>
+                    <View style={styles.flex}>
+                      <Text style={styles.itemName} numberOfLines={1}>{session.title || session.last_question || '未命名对话'}</Text>
+                      <Text style={styles.sessionDesc} numberOfLines={1}>{session.last_question || session.last_answer || '饮食分析对话'}</Text>
+                    </View>
+                    <Text style={styles.sessionTime}>{formatSessionTime(session.last_message_at || session.updated_at)}</Text>
+                  </Pressable>
+                )
+              })}
+            </ScrollView>
+          </View>
+        </View>
       ) : null}
 
-      <Card>
-        <View style={styles.segment}>
-          {rangeOptions.map((range) => (
-            <Pressable key={range} style={[styles.segmentItem, activeRange === range && styles.segmentItemActive]} onPress={() => setActiveRange(range)}>
-              <Text style={[styles.segmentText, activeRange === range && styles.segmentTextActive]}>{rangeLabel(range)}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={styles.messages}>
+      <ScrollView
+        style={styles.chatScroll}
+        contentContainerStyle={styles.messages}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+      >
+        <View style={styles.messageList}>
           {messages.map((message) => (
             <View key={message.id} style={[styles.messageRow, message.role === 'user' && styles.messageRowUser]}>
-              {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size="small" mood={petSummary?.status.mood} state={petSummary?.status.state} /> : null}
+              {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status.mood} state={petSummary?.status.state} /> : null}
               <View style={[styles.bubble, message.role === 'user' ? styles.userBubble : styles.petBubble]}>
                 <Text style={[styles.messageText, message.role === 'user' && styles.userMessageText]}>{message.text}</Text>
                 {message.clues?.length ? (
                   <View style={styles.clueList}>
                     {message.clues.map((clue, index) => (
-                      <Text key={`${message.id}-clue-${index}`} style={styles.clueText}>{index + 1}. {clue}</Text>
+                      <View key={`${message.id}-clue-${index}`} style={styles.clue}>
+                        <Text style={styles.clueIndex}>{index + 1}</Text>
+                        <Text style={styles.clueText}>{clue}</Text>
+                      </View>
                     ))}
                   </View>
                 ) : null}
@@ -360,40 +386,40 @@ export function PetChatScreen() {
                     {message.actions.map((action) => <Text key={`${message.id}-${action}`} style={styles.actionChip}>{action}</Text>)}
                   </View>
                 ) : null}
-              </View>
+            </View>
             </View>
           ))}
           {busy ? (
             <View style={styles.thinkingRow}>
-              <PetAvatar pet={petSummary?.pet} size="small" mood={petSummary?.status.mood} state={petSummary?.status.state} />
+              <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status.mood} state={petSummary?.status.state} />
               <View style={styles.thinkingBubble}>
                 <ActivityIndicator color={colors.brand} />
               </View>
             </View>
           ) : null}
         </View>
-      </Card>
+      </ScrollView>
 
-      <View style={styles.quickRow}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickScroll} contentContainerStyle={styles.quickRow}>
         {(!hasAnalysis ? QUICK_QUESTIONS : FOLLOW_UPS.map((text) => ({ text, range: activeRange }))).map((item) => (
           <MiniButton key={item.text} label={item.text} disabled={busy} onPress={() => void runAnalysis(item.text, item.range)} />
         ))}
-      </View>
+      </ScrollView>
 
-      <Card>
+      <View style={styles.inputBar}>
         <TextInput
           value={input}
           onChangeText={setInput}
           placeholder={hasAnalysis ? '继续问它：微量元素、餐次、明天怎么吃...' : '问它：训练状态、饥饿感、碳水、减脂卡住...'}
           placeholderTextColor={colors.textMuted}
-          multiline
-          textAlignVertical="top"
           returnKeyType="send"
           style={styles.input}
         />
-        <AppButton label="发送给伙伴" disabled={busy || !input.trim()} loading={busy} onPress={send} />
-      </Card>
-    </Page>
+        <Pressable style={[styles.sendButton, (busy || !input.trim()) && styles.sendButtonDisabled]} disabled={busy || !input.trim()} onPress={send}>
+          {busy ? <ActivityIndicator size="small" color={colors.brandDark} /> : <Text style={styles.sendText}>发送</Text>}
+        </Pressable>
+      </View>
+    </View>
   )
 }
 
@@ -409,59 +435,79 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  hero: {
+  page: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#f5fff8',
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  topbar: {
+    zIndex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 5,
+    marginBottom: 4,
+  },
+  stage: {
+    zIndex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 9,
+    paddingTop: 7,
+    paddingRight: 5,
+    paddingBottom: 7,
+    paddingLeft: 1,
+    marginBottom: 9,
   },
-  heroTitle: {
-    color: colors.text,
-    fontSize: 24,
+  stageBubble: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.84)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#3a5e4c',
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 1,
+  },
+  stageTitle: {
+    color: '#17382f',
+    fontSize: 15,
+    lineHeight: 20,
     fontWeight: '900',
   },
-  subtitle: {
-    color: colors.textSecondary,
-    lineHeight: 21,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    marginBottom: 10,
-  },
-  itemName: {
-    color: colors.text,
-    fontWeight: '800',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 14,
-  },
-  quickRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+  stageCopy: {
+    color: 'rgba(23, 56, 47, 0.58)',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
   },
   miniButton: {
-    maxWidth: '100%',
-    minHeight: 36,
-    borderRadius: radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    maxWidth: 190,
+    minHeight: 32,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(92, 184, 150, 0.18)',
     justifyContent: 'center',
   },
   miniButtonActive: {
-    backgroundColor: colors.brandSoft,
-    borderColor: colors.brand,
+    backgroundColor: '#e8f6ee',
+    borderColor: 'rgba(92, 184, 150, 0.36)',
   },
   miniButtonText: {
-    color: colors.textSecondary,
-    fontWeight: '800',
+    color: 'rgba(34, 111, 85, 0.78)',
+    fontSize: 12,
+    fontWeight: '900',
   },
   miniButtonTextActive: {
     color: colors.brandDark,
@@ -469,133 +515,251 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.55,
   },
-  empty: {
-    color: colors.textMuted,
-    textAlign: 'center',
-    paddingVertical: 12,
-  },
-  sessionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    padding: 12,
-    marginTop: 10,
-    backgroundColor: colors.surface,
-  },
-  sessionRowActive: {
-    borderColor: colors.brand,
-    backgroundColor: colors.brandSoft,
-  },
-  sessionTime: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  segment: {
-    flexDirection: 'row',
-    gap: 8,
-    padding: 4,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceMuted,
-    marginBottom: 16,
-  },
-  segmentItem: {
+  chatScroll: {
+    zIndex: 1,
     flex: 1,
-    minHeight: 36,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  segmentItemActive: {
-    backgroundColor: colors.surface,
-  },
-  segmentText: {
-    color: colors.textSecondary,
-    fontWeight: '800',
-  },
-  segmentTextActive: {
-    color: colors.brandDark,
+    minHeight: 0,
   },
   messages: {
-    gap: 14,
+    paddingBottom: 9,
+  },
+  messageList: {
+    gap: 9,
   },
   messageRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
+    alignItems: 'flex-end',
+    gap: 8,
   },
   messageRowUser: {
     justifyContent: 'flex-end',
   },
   bubble: {
-    maxWidth: '82%',
-    borderRadius: radius.md,
-    padding: 12,
+    maxWidth: '86%',
+    borderRadius: 14,
+    padding: 11,
+    shadowColor: '#3a5e4c',
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 1,
   },
   petBubble: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: 'rgba(255, 255, 255, 0.86)',
+    borderBottomLeftRadius: 5,
   },
   userBubble: {
-    backgroundColor: colors.brand,
+    backgroundColor: colors.brandDark,
+    borderBottomRightRadius: 5,
   },
   messageText: {
-    color: colors.text,
-    lineHeight: 22,
+    color: '#264036',
+    fontSize: 13,
+    lineHeight: 20,
   },
   userMessageText: {
-    color: '#fff',
+    color: '#ffffff',
     fontWeight: '700',
   },
   clueList: {
-    marginTop: 10,
+    marginTop: 9,
     gap: 6,
   },
+  clue: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    padding: 8,
+    borderRadius: 9,
+    backgroundColor: 'rgba(238, 248, 235, 0.92)',
+  },
+  clueIndex: {
+    width: 17,
+    height: 17,
+    borderRadius: 9,
+    overflow: 'hidden',
+    textAlign: 'center',
+    color: '#ffffff',
+    backgroundColor: colors.brandDark,
+    fontSize: 10,
+    lineHeight: 17,
+    fontWeight: '900',
+  },
   clueText: {
-    color: colors.textSecondary,
-    lineHeight: 20,
-    fontSize: 13,
+    flex: 1,
+    minWidth: 0,
+    color: '#355247',
+    fontSize: 12,
+    lineHeight: 17,
   },
   actionList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
+    gap: 5,
+    marginTop: 8,
   },
   actionChip: {
-    color: colors.brandDark,
-    backgroundColor: colors.brandSoft,
-    borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    fontSize: 12,
-    fontWeight: '800',
+    color: 'rgba(128, 91, 22, 0.9)',
+    backgroundColor: 'rgba(255, 240, 200, 0.82)',
+    borderRadius: 999,
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 11,
+    fontWeight: '900',
   },
   thinkingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   thinkingBubble: {
-    minWidth: 66,
-    minHeight: 42,
-    borderRadius: radius.md,
-    backgroundColor: colors.surfaceMuted,
+    minWidth: 52,
+    minHeight: 36,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.86)',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  quickScroll: {
+    zIndex: 1,
+    flexShrink: 0,
+    flexGrow: 0,
+    maxHeight: 34,
+    marginTop: 2,
+    marginBottom: 7,
+  },
+  quickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 4,
+  },
+  inputBar: {
+    zIndex: 1,
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    padding: 7,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.86)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#3a5e4c',
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 2,
+  },
   input: {
-    minHeight: 92,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: colors.text,
-    backgroundColor: colors.surfaceMuted,
-    marginBottom: 12,
-    lineHeight: 22,
+    flex: 1,
+    height: 36,
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
+    color: '#1d382f',
+    backgroundColor: 'rgba(243, 247, 242, 0.92)',
+    lineHeight: 18,
+    fontSize: 13,
+  },
+  sendButton: {
+    width: 56,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 11,
+    backgroundColor: '#c4eacb',
+  },
+  sendButtonDisabled: {
+    opacity: 0.46,
+  },
+  sendText: {
+    color: '#1d5a45',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  historyPanel: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 20,
+  },
+  historyMask: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: 'rgba(16, 24, 20, 0.28)',
+  },
+  historySheet: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
+    maxHeight: '72%',
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    shadowColor: '#213930',
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
+  },
+  historyHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 8,
+  },
+  historyTitle: {
+    color: '#17382f',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  historyLoading: {
+    paddingVertical: 18,
+  },
+  historyEmpty: {
+    color: colors.textMuted,
+    textAlign: 'center',
+    paddingVertical: 18,
+    fontSize: 12,
+  },
+  historyList: {
+    maxHeight: 420,
+  },
+  sessionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 9,
+    paddingHorizontal: 9,
+    paddingVertical: 9,
+  },
+  sessionRowActive: {
+    backgroundColor: 'rgba(92, 184, 150, 0.11)',
+  },
+  itemName: {
+    color: '#17382f',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  sessionDesc: {
+    color: 'rgba(23, 56, 47, 0.52)',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  sessionTime: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
   },
 })

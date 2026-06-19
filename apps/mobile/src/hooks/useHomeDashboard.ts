@@ -5,8 +5,9 @@ import { apiClient } from '../api'
 import { todayKey } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
 
-export function useHomeDashboard() {
-  const recordDate = useMemo(todayKey, [])
+export function useHomeDashboard(selectedDate?: string) {
+  const initialRecordDate = useMemo(todayKey, [])
+  const recordDate = selectedDate || initialRecordDate
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null)
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
   const [loading, setLoading] = useState(false)

@@ -1,29 +1,34 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ImageBackground, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard, type HomeTargetCalibrationSuggestion } from '@food-link/core'
-import { Camera, FileText, Image as ImageIcon, Utensils, type LucideIcon } from 'lucide-react-native'
+import { Camera, ChevronRight, Droplets, Dumbbell, Scale, type LucideIcon } from 'lucide-react-native'
+import Svg, { Circle } from 'react-native-svg'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { apiClient } from '../api'
-import { AppButton } from '../components/AppButton'
-import { Card } from '../components/Card'
 import { FloatingPetCompanion } from '../components/FloatingPetCompanion'
-import { MacroRow } from '../components/MacroRow'
-import { Page } from '../components/Page'
 import { SHOW_DEBUG_LOGIN } from '../config'
 import { useHomeDashboard } from '../hooks/useHomeDashboard'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
 import { colors, compactFont } from '../theme'
-import { formatShortDate } from '../utils/date'
-import { createDemoAnalysisTask, createDemoTextAnalysisTask, demoFoodImageUrl } from '../utils/demoAnalysisTask'
+import { formatShortDate, todayKey } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
 import { getHomePetCollapsed, getHomePetHidden, setHomePetCollapsed as persistHomePetCollapsed } from '../utils/petPreferences'
 
 type TargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
 type TargetForm = Record<TargetField, string>
+type MacroKey = 'protein' | 'carbs' | 'fat'
+type WeekCell = {
+  date: string
+  dayName: string
+  dayNum: string
+  calories: number
+  target: number
+}
 type RecordTone = 'green' | 'blue' | 'gold' | 'purple'
-type HomeBannerTone = 'campus' | 'green' | 'gold' | 'blue'
+type HomeBannerTone = 'campus' | 'goose' | 'green' | 'gold' | 'blue'
 type HomeBanner = {
   key: string
   kicker: string
@@ -49,13 +54,21 @@ const recordIconColors: Record<RecordTone, string> = {
   purple: '#6951bd',
 }
 
+const macroConfigs: Array<{ key: MacroKey; label: string; color: string; unit: string }> = [
+  { key: 'protein', label: '蛋白质', color: '#5c9ed4', unit: 'g' },
+  { key: 'carbs', label: '碳水', color: '#d4ac52', unit: 'g' },
+  { key: 'fat', label: '脂肪', color: '#f0985c', unit: 'g' },
+]
+
 const CAFETERIA_HERO_BG_URL = 'https://cdn-food-images.coachlink.fit/wechat/cafeteria-hero.jpg'
 
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
-  const { recordDate, dashboard, petSummary, loading, error, loadHome } = useHomeDashboard()
+  const [selectedDate, setSelectedDate] = useState(() => todayKey())
+  const { recordDate, dashboard, petSummary, loading, error, loadHome } = useHomeDashboard(selectedDate)
   const [activeBannerIndex, setActiveBannerIndex] = useState(0)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
@@ -65,8 +78,24 @@ export function HomeScreen() {
   const mealType = inferDefaultMealTypeFromLocalTime()
   const nutritionTarget = dashboard?.nutritionTarget
   const calibrationSuggestion = nutritionTarget?.calibration_suggestion
-  const bannerWidth = Math.max(280, windowWidth - 40)
+  const intakeData = dashboard?.intakeData
+  const calorieTarget = Math.max(0, Number(intakeData?.target || 0))
+  const calorieCurrent = Math.max(0, Number(intakeData?.current || 0))
+  const calorieProgress = calorieTarget > 0 ? Math.min(100, Math.max(0, (calorieCurrent / calorieTarget) * 100)) : 0
+  const calorieRemaining = Math.max(0, calorieTarget - calorieCurrent)
+  const isCalorieOver = calorieTarget > 0 && calorieCurrent > calorieTarget
+  const weekCells = useMemo(() => buildWeekCells(recordDate, calorieCurrent, calorieTarget), [calorieCurrent, calorieTarget, recordDate])
+  const bannerWidth = Math.max(280, windowWidth - 32)
   const homeBanners: HomeBanner[] = [
+    {
+      key: 'goose-duck-chicken',
+      kicker: '鹅腿阿姨热点识别',
+      title: '鹅腿、鸭腿，还是鸡腿？',
+      desc: '上传一张图片，只围绕鹅 / 鸭 / 鸡做判断',
+      actionText: '去识别',
+      tone: 'goose',
+      onPress: () => navigation.navigate('GooseDuckChicken'),
+    },
     {
       key: 'campus',
       kicker: '食探校园活动',
@@ -108,23 +137,6 @@ export function HomeScreen() {
 
   const openAnalyze = useCallback((source: 'camera' | 'library') => {
     navigation.navigate('Analyze', { source, mealType, date: recordDate })
-  }, [navigation, mealType, recordDate])
-
-  const openDemoResult = useCallback(() => {
-    navigation.navigate('Result', {
-      task: createDemoAnalysisTask(),
-      imageUri: demoFoodImageUrl,
-      mealType,
-      date: recordDate,
-    })
-  }, [navigation, mealType, recordDate])
-
-  const openDemoTextResult = useCallback(() => {
-    navigation.navigate('TextResult', {
-      task: createDemoTextAnalysisTask(),
-      mealType,
-      date: recordDate,
-    })
   }, [navigation, mealType, recordDate])
 
   useEffect(() => {
@@ -217,172 +229,123 @@ export function HomeScreen() {
 
   return (
     <View style={styles.homeRoot}>
-      <Page
-        title={homeGreeting()}
-        subtitle={`${formatShortDate(recordDate)} · 今天也要健康饮食哦 · 默认餐次 ${getMealTypeLabel(mealType)}`}
-        refreshing={loading}
-        onRefresh={loadHome}
+      <ScrollView
+        style={styles.homeScroll}
+        contentContainerStyle={[
+          styles.homeContent,
+          { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 132 },
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={loadHome}
+            tintColor={colors.brand}
+            colors={[colors.brand]}
+            title=""
+            titleColor="transparent"
+          />
+        }
+        showsVerticalScrollIndicator={false}
       >
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <HomeBannerCarousel
-        banners={homeBanners}
-        activeIndex={activeBannerIndex}
-        bannerWidth={bannerWidth}
-        onIndexChange={setActiveBannerIndex}
-      />
-
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>今日概览</Text>
-          <Pressable onPress={() => navigation.navigate('DayRecord', { date: recordDate })}>
-            <Text style={styles.link}>单日详情</Text>
-          </Pressable>
-        </View>
-        <Text style={styles.bigNumber} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
-          {Math.round(dashboard?.intakeData.current || 0)} / {Math.round(dashboard?.intakeData.target || 0)} kcal
-        </Text>
-        <Text style={styles.subtitle}>运动消耗 {Math.round(dashboard?.exerciseBurnedKcal || 0)} kcal</Text>
-        <MacroRow label="蛋白质" value={dashboard?.intakeData.macros.protein.current} target={dashboard?.intakeData.macros.protein.target} />
-        <MacroRow label="碳水" value={dashboard?.intakeData.macros.carbs.current} target={dashboard?.intakeData.macros.carbs.target} />
-        <MacroRow label="脂肪" value={dashboard?.intakeData.macros.fat.current} target={dashboard?.intakeData.macros.fat.target} />
-        <View style={styles.targetInfoBox}>
-          <View style={styles.rowBetween}>
-            <View style={styles.targetInfoMain}>
-              <Text style={styles.targetInfoTitle}>基础目标</Text>
-              <Text style={styles.targetInfoMeta}>
-                {targetSourceLabel(nutritionTarget?.source)} · 长期目标不随当天运动自动变化
-              </Text>
-            </View>
-            <Pressable onPress={openTargetEditor} style={({ pressed }) => [styles.targetEditButton, pressed && styles.pressed]}>
-              <Text style={styles.targetEditButtonText}>调整</Text>
-            </Pressable>
-          </View>
-          {nutritionTarget?.explanation ? <Text style={styles.targetInfoText}>{nutritionTarget.explanation}</Text> : null}
-          {nutritionTarget?.macro_explanation ? <Text style={styles.targetInfoText}>{nutritionTarget.macro_explanation}</Text> : null}
-          {calibrationSuggestion?.available ? (
-            <Text style={styles.targetHint}>
-              建议调整到 {Math.round(numberFrom(calibrationSuggestion.suggested_kcal, 0))} kcal：{calibrationSuggestion.reason || '根据近期记录建议小幅校准。'}
-            </Text>
-          ) : null}
-        </View>
-      </Card>
-
-      {showTargetEditor ? (
-        <Card>
-          <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>基础目标设置</Text>
-            <Pressable onPress={() => setShowTargetEditor(false)} disabled={savingTargets}>
-              <Text style={styles.link}>收起</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.subtitle}>用于首页和单日记录的长期基础目标，保存后会同步刷新今日概览。</Text>
-          {calibrationSuggestion?.available ? (
-            <View style={styles.calibrationCard}>
-              <Text style={styles.calibrationTitle}>建议调整到 {Math.round(numberFrom(calibrationSuggestion.suggested_kcal, 0))} kcal</Text>
-              <Text style={styles.calibrationText}>{calibrationSuggestion.reason || '根据最近 14 天饮食和体重变化，建议小幅调整基础目标。'}</Text>
-              <View style={styles.targetActionRow}>
-                <Pressable style={styles.secondaryMiniButton} onPress={() => void dialog.alert('已暂不调整')}>
-                  <Text style={styles.secondaryMiniButtonText}>暂不调整</Text>
-                </Pressable>
-                <Pressable style={styles.primaryMiniButton} onPress={applyCalibrationSuggestion}>
-                  <Text style={styles.primaryMiniButtonText}>应用建议</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-          {targetFieldMeta.map((field) => (
-            <TargetFieldRow
-              key={field.key}
-              label={field.label}
-              unit={field.unit}
-              value={targetForm[field.key]}
-              onChangeText={(value) => updateTargetField(field.key, value)}
-              onDecrease={() => adjustTargetField(field.key, -1)}
-              onIncrease={() => adjustTargetField(field.key, 1)}
-            />
-          ))}
-          <View style={styles.targetSaveRow}>
-            <AppButton label="保存目标" loading={savingTargets} onPress={() => void saveTargets()} />
-            <AppButton label="取消" variant="secondary" onPress={() => setShowTargetEditor(false)} />
-          </View>
-        </Card>
-      ) : null}
-
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>今天吃什么</Text>
-          <Text style={styles.badge}>AI 记录</Text>
-        </View>
-        <View style={styles.recordGrid}>
-          <RecordGridAction title="拍照识别" desc="拍摄餐食，自动估算热量" icon={Camera} tone="green" onPress={() => openAnalyze('camera')} />
-          <RecordGridAction title="相册上传" desc="选择已有食物图片" icon={ImageIcon} tone="blue" onPress={() => openAnalyze('library')} />
-          <RecordGridAction title="文本输入" desc="一句话描述吃了什么" icon={FileText} tone="gold" onPress={() => navigation.navigate('TextRecord')} />
-          <RecordGridAction title="食物库输入" desc="按食物和重量精确录入" icon={Utensils} tone="purple" onPress={() => navigation.navigate('ManualRecord')} />
-        </View>
-        <View style={styles.recordQuickList}>
-          <RecordQuickAction title="我的收藏" desc="快速记录常吃餐食" onPress={() => navigation.navigate('Recipes')} />
-          <RecordQuickAction title="识别记录" desc="查看以往识别结果" onPress={() => navigation.navigate('AnalyzeHistory')} />
-          <RecordQuickAction title="包装食品" desc="上传营养成分表或商品包装" onPress={() => navigation.navigate('PackagedFoodEdit')} />
-          <RecordQuickAction title="食物库" desc="浏览营养库与自定义食物" onPress={() => navigation.navigate('FoodLibrary')} />
-        </View>
+        <HomeGreeting recordDate={recordDate} mealType={mealType} />
+        <HomeDateSelector cells={weekCells} selectedDate={recordDate} onSelect={setSelectedDate} />
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <HomeBannerCarousel
+          banners={homeBanners}
+          activeIndex={activeBannerIndex}
+          bannerWidth={bannerWidth}
+          onIndexChange={setActiveBannerIndex}
+        />
+        <HomeCalorieCard
+          current={calorieCurrent}
+          target={calorieTarget}
+          remaining={calorieRemaining}
+          progress={calorieProgress}
+          isOver={isCalorieOver}
+          source={nutritionTarget?.source}
+          explanation={nutritionTarget?.explanation}
+          macroExplanation={nutritionTarget?.macro_explanation}
+          calibrationSuggestion={calibrationSuggestion}
+          onOpenTargetEditor={openTargetEditor}
+          onOpenDayRecord={() => navigation.navigate('DayRecord', { date: recordDate })}
+        />
+        <HomeMacroSection intakeData={intakeData} />
+        <HomeBodyStatusStrip
+          exerciseKcal={Math.round(dashboard?.exerciseBurnedKcal || 0)}
+          onWeight={() => navigation.navigate('BodyMetricRecord', { type: 'weight', date: recordDate })}
+          onWater={() => navigation.navigate('BodyMetricRecord', { type: 'water', date: recordDate })}
+          onExercise={() => navigation.navigate('BodyMetricRecord', { type: 'exercise', date: recordDate })}
+        />
+        <HomeMealsSection
+          meals={dashboard?.meals || []}
+          onOpenAll={() => navigation.navigate('DayRecord', { date: recordDate })}
+          onQuickRecord={() => openAnalyze('camera')}
+          onOpenHistory={() => navigation.navigate('AnalyzeHistory')}
+          onOpenRecord={(recordId) => navigation.navigate('RecordDetail', { recordId })}
+        />
+        <HomeExpirySection
+          summary={dashboard?.expirySummary || null}
+          onOpen={() => navigation.navigate('Expiry')}
+        />
+        <HomeStatsEntry onPress={() => navigation.navigate('DayRecord', { date: recordDate })} />
         {SHOW_DEBUG_LOGIN ? (
-          <View style={styles.demoAction}>
-            <AppButton label="示例识别结果" variant="secondary" onPress={openDemoResult} />
-            <AppButton label="示例文字结果" variant="secondary" onPress={openDemoTextResult} />
+          <View style={styles.homeDevActions}>
+            <HomeMiniAction label="识别记录" onPress={() => navigation.navigate('AnalyzeHistory')} />
+            <HomeMiniAction label="文字记录" onPress={() => navigation.navigate('TextRecord')} />
+            <HomeMiniAction label="包装食品" onPress={() => navigation.navigate('PackagedFoodEdit')} />
           </View>
         ) : null}
-      </Card>
-
-      <View style={styles.quickGrid}>
-        <QuickCard title="体重" value="记录" onPress={() => navigation.navigate('BodyMetricRecord', { type: 'weight' })} />
-        <QuickCard title="喝水" value="补水" onPress={() => navigation.navigate('BodyMetricRecord', { type: 'water' })} />
-        <QuickCard title="运动" value={`${Math.round(dashboard?.exerciseBurnedKcal || 0)} kcal`} onPress={() => navigation.navigate('BodyMetricRecord', { type: 'exercise' })} />
-      </View>
-
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>今日餐食</Text>
-          <Pressable onPress={() => navigation.navigate('AnalyzeHistory')}>
-            <Text style={styles.link}>识别历史</Text>
-          </Pressable>
-        </View>
-        {(dashboard?.meals || []).length === 0 ? (
-          <Text style={styles.empty}>今天还没有记录餐食</Text>
-        ) : (
-          dashboard?.meals.map((meal) => (
-            <Pressable
-              key={`${meal.type}-${meal.time}`}
-              style={styles.mealRow}
-              onPress={() => meal.primary_record_id ? navigation.navigate('RecordDetail', { recordId: meal.primary_record_id }) : undefined}
-            >
+      </ScrollView>
+      <Modal visible={showTargetEditor} transparent animationType="slide" onRequestClose={() => !savingTargets && setShowTargetEditor(false)}>
+        <View style={styles.targetModal}>
+          <Pressable style={styles.targetModalMask} onPress={() => !savingTargets && setShowTargetEditor(false)} />
+          <View style={[styles.targetModalSheet, { paddingBottom: insets.bottom + 18 }]}>
+            <View style={styles.targetModalHandle} />
+            <View style={styles.rowBetween}>
               <View>
-                <Text style={styles.mealName}>{meal.name || getMealTypeLabel(meal.type)}</Text>
-                <Text style={styles.mealMeta}>{getMealTypeLabel(meal.type)} · {meal.time}</Text>
+                <Text style={styles.targetModalTitle}>基础目标设置</Text>
+                <Text style={styles.targetModalDesc}>同步首页与单日记录的长期目标</Text>
               </View>
-              <Text style={styles.mealKcal}>{Math.round(meal.calorie || 0)} kcal</Text>
-            </Pressable>
-          ))
-        )}
-      </Card>
-
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>食物保质期</Text>
-          <Pressable onPress={() => navigation.navigate('Expiry')}>
-            <Text style={styles.link}>管理</Text>
-          </Pressable>
+              <Pressable onPress={() => setShowTargetEditor(false)} disabled={savingTargets} style={styles.targetModalClose}>
+                <Text style={styles.targetModalCloseText}>×</Text>
+              </Pressable>
+            </View>
+            {calibrationSuggestion?.available ? (
+              <View style={styles.calibrationCard}>
+                <Text style={styles.calibrationTitle}>建议调整到 {Math.round(numberFrom(calibrationSuggestion.suggested_kcal, 0))} kcal</Text>
+                <Text style={styles.calibrationText}>{calibrationSuggestion.reason || '根据最近 14 天饮食和体重变化，建议小幅调整基础目标。'}</Text>
+                <View style={styles.targetActionRow}>
+                  <Pressable style={styles.secondaryMiniButton} onPress={() => void dialog.alert('已暂不调整')}>
+                    <Text style={styles.secondaryMiniButtonText}>暂不调整</Text>
+                  </Pressable>
+                  <Pressable style={styles.primaryMiniButton} onPress={applyCalibrationSuggestion}>
+                    <Text style={styles.primaryMiniButtonText}>应用建议</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+            {targetFieldMeta.map((field) => (
+              <TargetFieldRow
+                key={field.key}
+                label={field.label}
+                unit={field.unit}
+                value={targetForm[field.key]}
+                onChangeText={(value) => updateTargetField(field.key, value)}
+                onDecrease={() => adjustTargetField(field.key, -1)}
+                onIncrease={() => adjustTargetField(field.key, 1)}
+              />
+            ))}
+            <View style={styles.targetSaveRow}>
+              <Pressable style={[styles.targetSaveButton, savingTargets && styles.disabledButton]} disabled={savingTargets} onPress={() => void saveTargets()}>
+                {savingTargets ? <ActivityIndicator color="#fff" /> : <Text style={styles.targetSaveButtonText}>保存目标</Text>}
+              </Pressable>
+              <Pressable style={styles.targetCancelButton} disabled={savingTargets} onPress={() => setShowTargetEditor(false)}>
+                <Text style={styles.targetCancelButtonText}>取消</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
-        <Text style={styles.subtitle}>
-          {dashboard?.expirySummary
-            ? `当前 ${dashboard.expirySummary.active_count ?? 0} 样，今日到期 ${dashboard.expirySummary.today_count ?? 0} 样`
-            : '当前没有临期食物'}
-        </Text>
-      </Card>
-
-      <AppButton label="刷新首页" variant="secondary" loading={loading} onPress={loadHome} />
-      <AppButton label="健康档案与目标" variant="ghost" onPress={() => navigation.navigate('HealthProfile')} />
-      </Page>
+      </Modal>
       {petSummary && !homePetHidden ? (
         <FloatingPetCompanion
           summary={petSummary}
@@ -444,6 +407,7 @@ function HomeBannerCarousel({
               <View
                 style={[
                   styles.homeBanner,
+                  banner.tone === 'goose' && styles.homeBannerGoose,
                   banner.tone === 'green' && styles.homeBannerGreen,
                   banner.tone === 'gold' && styles.homeBannerGold,
                   banner.tone === 'blue' && styles.homeBannerBlue,
@@ -525,64 +489,389 @@ function TargetFieldRow({
   )
 }
 
-function QuickCard({ title, value, onPress }: { title: string; value: string; onPress: () => void }) {
+function HomeGreeting({ recordDate, mealType }: { recordDate: string; mealType: string }) {
   return (
-    <Pressable style={({ pressed }) => [styles.quickCard, pressed && styles.pressed]} onPress={onPress}>
-      <Text style={styles.quickTitle}>{title}</Text>
-      <Text style={styles.quickValue}>{value}</Text>
-    </Pressable>
+    <View style={styles.greetingSection}>
+      <View style={styles.greetingText}>
+        <Text style={styles.greetingTitle}>{homeGreeting()}</Text>
+        <Text style={styles.greetingSubtitle}>
+          今天也要健康饮食哦 · {formatShortDate(recordDate)} · {getMealTypeLabel(mealType)}
+        </Text>
+      </View>
+    </View>
   )
 }
 
-function RecordGridAction({
+function HomeDateSelector({
+  cells,
+  selectedDate,
+  onSelect,
+}: {
+  cells: WeekCell[]
+  selectedDate: string
+  onSelect: (date: string) => void
+}) {
+  return (
+    <View style={styles.dateSelectorSection}>
+      <View style={styles.dateList}>
+        {cells.map((cell) => {
+          const recorded = cell.calories > 0
+          const over = recorded && cell.target > 0 && cell.calories > cell.target
+          const selected = selectedDate === cell.date
+          return (
+            <Pressable
+              key={cell.date}
+              style={({ pressed }) => [
+                styles.dateItem,
+                selected && styles.dateItemSelected,
+                pressed && styles.pressed,
+              ]}
+              onPress={() => onSelect(cell.date)}
+            >
+              <Text style={[styles.dateDayName, selected && styles.dateTextSelected]}>{cell.dayName}</Text>
+              <View
+                style={[
+                  styles.dateDayCircle,
+                  recorded && styles.dateDayCircleRecorded,
+                  over && styles.dateDayCircleOver,
+                  selected && styles.dateDayCircleSelected,
+                ]}
+              >
+                <Text style={[styles.dateNumText, (recorded || selected) && styles.dateNumTextLight]}>{cell.dayNum}</Text>
+              </View>
+            </Pressable>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
+
+function HomeCalorieCard({
+  current,
+  target,
+  remaining,
+  progress,
+  isOver,
+  source,
+  explanation,
+  macroExplanation,
+  calibrationSuggestion,
+  onOpenTargetEditor,
+  onOpenDayRecord,
+}: {
+  current: number
+  target: number
+  remaining: number
+  progress: number
+  isOver: boolean
+  source: unknown
+  explanation?: string
+  macroExplanation?: string
+  calibrationSuggestion?: HomeTargetCalibrationSuggestion | null
+  onOpenTargetEditor: () => void
+  onOpenDayRecord: () => void
+}) {
+  return (
+    <View style={styles.mainCard}>
+      <View style={styles.mainCardHeader}>
+        <View style={styles.mainCardTitle}>
+          <Text style={styles.cardLabel}>{isOver ? '已超出' : '剩余可摄入'}</Text>
+          <Text style={[styles.cardValue, isOver && styles.cardValueOver]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+            {Math.round(isOver ? current - target : remaining)}
+          </Text>
+          <Text style={styles.cardUnit}>kcal</Text>
+        </View>
+        <View style={styles.targetSection}>
+          <View style={styles.targetEnergyNumsOnly}>
+            <Text style={[styles.targetEnergyIntakeNum, isOver && styles.cardValueOver]}>{Math.round(current)}</Text>
+            <Text style={styles.targetEnergySlashOnly}>/</Text>
+            <Text style={styles.targetEnergyTargetNum}>{Math.round(target)}</Text>
+          </View>
+          <Pressable style={({ pressed }) => [styles.targetEditButton, pressed && styles.pressed]} onPress={onOpenTargetEditor}>
+            <Text style={styles.targetEditButtonText}>编辑目标</Text>
+          </Pressable>
+        </View>
+      </View>
+      <View style={styles.progressSection}>
+        <View style={styles.progressBarBg}>
+          <View style={[styles.progressBarFill, isOver && styles.progressBarFillOver, { width: `${clamp(progress, 0, 100)}%` }]} />
+        </View>
+      </View>
+      <View style={styles.targetInfoBox}>
+        <Pressable style={styles.targetInfoMain} onPress={onOpenDayRecord}>
+          <Text style={styles.targetInfoTitle}>{targetSourceLabel(source)}</Text>
+          <Text style={styles.targetInfoMeta}>长期目标不随当天运动自动变化 · 查看单日详情</Text>
+        </Pressable>
+        <ChevronRight size={16} color={colors.textMuted} />
+      </View>
+      {explanation ? <Text style={styles.targetInfoText}>{explanation}</Text> : null}
+      {macroExplanation ? <Text style={styles.targetInfoText}>{macroExplanation}</Text> : null}
+      {calibrationSuggestion?.available ? (
+        <Text style={styles.targetHint}>
+          建议调整到 {Math.round(numberFrom(calibrationSuggestion.suggested_kcal, 0))} kcal：{calibrationSuggestion.reason || '根据近期记录建议小幅校准。'}
+        </Text>
+      ) : null}
+    </View>
+  )
+}
+
+function HomeMacroSection({ intakeData }: { intakeData?: HomeDashboard['intakeData'] }) {
+  return (
+    <View style={styles.macrosSection}>
+      {macroConfigs.map((config) => {
+        const current = Number(intakeData?.macros?.[config.key]?.current || 0)
+        const target = Number(intakeData?.macros?.[config.key]?.target || 0)
+        const remaining = Math.max(0, target - current)
+        const progress = target > 0 ? clamp((current / target) * 100, 0, 100) : 0
+        return (
+          <MacroGauge
+            key={config.key}
+            label={config.label}
+            value={remaining}
+            color={config.color}
+            progress={progress}
+            unit={config.unit}
+          />
+        )
+      })}
+    </View>
+  )
+}
+
+function MacroGauge({
+  label,
+  value,
+  color,
+  progress,
+  unit,
+}: {
+  label: string
+  value: number
+  color: string
+  progress: number
+  unit: string
+}) {
+  const size = 64
+  const stroke = 8
+  const radius = (size - stroke) / 2
+  const circumference = 2 * Math.PI * radius
+  const dashOffset = circumference * (1 - clamp(progress, 0, 100) / 100)
+  return (
+    <View style={styles.macroCard}>
+      <View style={styles.macroCardHeader}>
+        <Text style={styles.macroLabel}>{label}</Text>
+      </View>
+      <View style={styles.macroGauge}>
+        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <Circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#f0f0f0" strokeWidth={stroke} />
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={`${circumference} ${circumference}`}
+            strokeDashoffset={dashOffset}
+            rotation="-90"
+            origin={`${size / 2}, ${size / 2}`}
+          />
+        </Svg>
+        <View style={styles.macroGaugeCenter}>
+          <Text style={[styles.macroGaugeValue, { color }]}>{Math.round(value)}</Text>
+          <Text style={styles.macroGaugeUnit}>{unit}</Text>
+        </View>
+      </View>
+    </View>
+  )
+}
+
+function HomeBodyStatusStrip({
+  exerciseKcal,
+  onWeight,
+  onWater,
+  onExercise,
+}: {
+  exerciseKcal: number
+  onWeight: () => void
+  onWater: () => void
+  onExercise: () => void
+}) {
+  return (
+    <View style={styles.bodyStatusSection}>
+      <HomeStatusCard title="体重" value="记录" hint="追踪变化" Icon={Scale} tone="green" onPress={onWeight} />
+      <HomeStatusCard title="喝水" value="补水" hint="今日饮水" Icon={Droplets} tone="blue" onPress={onWater} />
+      <HomeStatusCard title="运动" value={`${exerciseKcal}`} hint="kcal" Icon={Dumbbell} tone="gold" onPress={onExercise} />
+    </View>
+  )
+}
+
+function HomeStatusCard({
   title,
-  desc,
-  icon,
+  value,
+  hint,
+  Icon,
   tone,
   onPress,
 }: {
   title: string
-  desc: string
-  icon: LucideIcon
+  value: string
+  hint: string
+  Icon: LucideIcon
   tone: RecordTone
   onPress: () => void
 }) {
-  const Icon = icon
+  const toneColor = recordIconColors[tone]
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.recordActionCard,
-        tone === 'green' && styles.recordActionGreen,
-        tone === 'blue' && styles.recordActionBlue,
-        tone === 'gold' && styles.recordActionGold,
-        tone === 'purple' && styles.recordActionPurple,
-        pressed && styles.pressed,
-      ]}
-      onPress={onPress}
-    >
-      <View style={[
-        styles.recordActionIcon,
-        tone === 'green' && styles.recordIconGreen,
-        tone === 'blue' && styles.recordIconBlue,
-        tone === 'gold' && styles.recordIconGold,
-        tone === 'purple' && styles.recordIconPurple,
-      ]}>
-        <Icon size={23} color={recordIconColors[tone]} strokeWidth={2.4} />
+    <Pressable style={({ pressed }) => [styles.bodyStatusCard, pressed && styles.pressed]} onPress={onPress}>
+      <View style={styles.bodyStatusHeader}>
+        <View style={[styles.bodyStatusIcon, { backgroundColor: `${toneColor}18` }]}>
+          <Icon size={15} color={toneColor} strokeWidth={2.4} />
+        </View>
+        <Text style={styles.bodyStatusLabel}>{title}</Text>
       </View>
-      <Text style={styles.recordActionTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.86}>{title}</Text>
-      <Text style={styles.recordActionDesc} numberOfLines={2}>{desc}</Text>
+      <Text style={styles.bodyStatusValue} numberOfLines={1}>{value}</Text>
+      <Text style={styles.bodyStatusHint}>{hint}</Text>
     </Pressable>
   )
 }
 
-function RecordQuickAction({ title, desc, onPress }: { title: string; desc: string; onPress: () => void }) {
+function HomeMealsSection({
+  meals,
+  onOpenAll,
+  onQuickRecord,
+  onOpenHistory,
+  onOpenRecord,
+}: {
+  meals: HomeDashboard['meals']
+  onOpenAll: () => void
+  onQuickRecord: () => void
+  onOpenHistory: () => void
+  onOpenRecord: (recordId: string) => void
+}) {
   return (
-    <Pressable style={({ pressed }) => [styles.recordQuickAction, pressed && styles.pressed]} onPress={onPress}>
-      <View style={styles.recordQuickText}>
-        <Text style={styles.recordQuickTitle}>{title}</Text>
-        <Text style={styles.recordQuickDesc}>{desc}</Text>
+    <View style={styles.mealsSection}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>今日餐食</Text>
+        <Pressable style={styles.viewAllButton} onPress={onOpenAll}>
+          <Text style={styles.viewAllText}>查看全部</Text>
+        </Pressable>
       </View>
-      <Text style={styles.recordQuickChevron}>›</Text>
+      <View style={styles.mealsList}>
+        {meals.length === 0 ? (
+          <Pressable style={({ pressed }) => [styles.mealsEmpty, pressed && styles.pressed]} onPress={onQuickRecord}>
+            <Camera size={24} color={colors.brand} strokeWidth={2.3} />
+            <Text style={styles.mealsEmptyTitle}>暂无今日餐食</Text>
+            <Text style={styles.mealsEmptyDesc}>点这里记录一餐</Text>
+          </Pressable>
+        ) : (
+          meals.map((meal, index) => {
+            const progress = normalizeProgressPercent(meal.progress, meal.calorie, meal.target)
+            const recordId = meal.primary_record_id || meal.primaryRecordId
+            const imageUrl = firstMealImage(meal)
+            return (
+              <Pressable
+                key={`${meal.type}-${meal.time}-${index}`}
+                style={({ pressed }) => [styles.mealItem, progress > 100 && styles.mealItemWarning, pressed && styles.pressed]}
+                onPress={() => recordId ? onOpenRecord(recordId) : onOpenHistory()}
+              >
+                <View style={[styles.mealMediaWrap, imageUrl ? styles.mealMediaPhoto : styles.mealMediaIcon]}>
+                  {imageUrl ? (
+                    <Image source={{ uri: imageUrl }} style={styles.mealThumbImage} resizeMode="cover" />
+                  ) : (
+                    <Text style={styles.mealIconText}>{mealIconLabel(meal.type)}</Text>
+                  )}
+                </View>
+                <View style={styles.mealContent}>
+                  <View style={styles.mealHeaderBlock}>
+                    <Text style={styles.mealName} numberOfLines={1}>{meal.name || getMealTypeLabel(meal.type)}</Text>
+                    <Text style={styles.mealCalorie}>{Math.round(Number(meal.calorie || 0))}<Text style={styles.mealCalorieUnit}> kcal</Text></Text>
+                  </View>
+                  <View style={styles.mealProgressWrap}>
+                    <View style={styles.mealProgressBarBg}>
+                      <View style={[styles.mealProgressBarFill, progress > 100 && styles.mealProgressBarFillWarning, { width: `${clamp(progress, 0, 100)}%` }]} />
+                    </View>
+                  </View>
+                  <View style={styles.mealProgressFoot}>
+                    <Text style={styles.mealProgressText}>目标 {Math.round(Number(meal.target || 0))} kcal</Text>
+                    <Text style={[styles.mealProgressPercent, progress > 100 && styles.mealProgressPercentOver]}>{Math.round(progress)}%</Text>
+                  </View>
+                </View>
+              </Pressable>
+            )
+          })
+        )}
+      </View>
+    </View>
+  )
+}
+
+function HomeExpirySection({
+  summary,
+  onOpen,
+}: {
+  summary: HomeDashboard['expirySummary'] | null
+  onOpen: () => void
+}) {
+  const items = summary?.preview_items || []
+  return (
+    <View style={styles.expirySection}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>食物保质期</Text>
+        <Pressable style={styles.viewAllButton} onPress={onOpen}>
+          <ChevronRight size={18} color={colors.textSecondary} />
+        </Pressable>
+      </View>
+      <Pressable style={({ pressed }) => [styles.expiryCard, pressed && styles.pressed]} onPress={onOpen}>
+        {items.length === 0 ? (
+          <View style={styles.expiryEmpty}>
+            <Text style={styles.expiryEmptyTitle}>{summary?.active_count ? '暂无紧急提醒' : '暂无待吃完记录'}</Text>
+            <Text style={styles.expiryEmptyDesc}>添加家中食物后，首页会展示最紧急的几项</Text>
+          </View>
+        ) : (
+          items.slice(0, 3).map((item) => (
+            <View key={item.id} style={styles.expiryItem}>
+              <View style={[styles.expiryIconWrap, expiryToneStyle(item.urgency)]}>
+                <Text style={styles.expiryIconText}>鲜</Text>
+              </View>
+              <View style={styles.expiryContent}>
+                <View style={styles.expiryHeaderBlock}>
+                  <Text style={styles.expiryName} numberOfLines={1}>{item.food_name}</Text>
+                  <View style={styles.expiryTimePill}>
+                    <Text style={styles.expiryTimePillText}>{item.urgency_label || getExpiryUrgencyText(item)}</Text>
+                  </View>
+                </View>
+                <Text style={styles.expiryMetaText}>{formatExpiryMeta(item)}</Text>
+              </View>
+            </View>
+          ))
+        )}
+      </Pressable>
+    </View>
+  )
+}
+
+function HomeStatsEntry({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.statsEntryCard, pressed && styles.pressed]} onPress={onPress}>
+      <View style={styles.statsEntryIcon}>
+        <Dumbbell size={20} color="#fff" strokeWidth={2.4} />
+      </View>
+      <View style={styles.statsEntryText}>
+        <Text style={styles.statsEntryTitle}>查看饮食统计</Text>
+        <Text style={styles.statsEntryDesc}>了解您的饮食趋势和营养分析</Text>
+      </View>
+      <ChevronRight size={20} color="#fff" />
+    </Pressable>
+  )
+}
+
+function HomeMiniAction({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.homeMiniAction, pressed && styles.pressed]} onPress={onPress}>
+      <Text style={styles.homeMiniActionText}>{label}</Text>
     </Pressable>
   )
 }
@@ -646,6 +935,88 @@ function targetSourceLabel(source: unknown): string {
   return labels[String(source || '').trim()] || '系统目标'
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function parseDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split('-').map(Number)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return new Date()
+  }
+  return new Date(year, month - 1, day)
+}
+
+function formatDateKeyFromDate(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function buildWeekCells(selectedDate: string, selectedCalories: number, selectedTarget: number): WeekCell[] {
+  const base = parseDateKey(selectedDate)
+  const dayNames = ['日', '一', '二', '三', '四', '五', '六']
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(base)
+    date.setDate(base.getDate() + index - 3)
+    const dateKey = formatDateKeyFromDate(date)
+    const isSelected = dateKey === selectedDate
+    return {
+      date: dateKey,
+      dayName: dayNames[date.getDay()] || '',
+      dayNum: String(date.getDate()),
+      calories: isSelected ? selectedCalories : 0,
+      target: isSelected ? selectedTarget : 0,
+    }
+  })
+}
+
+function normalizeProgressPercent(value: unknown, current?: unknown, target?: unknown): number {
+  const numeric = Number(value)
+  if (Number.isFinite(numeric)) return Math.max(0, numeric)
+  const currentValue = Number(current)
+  const targetValue = Number(target)
+  if (Number.isFinite(currentValue) && Number.isFinite(targetValue) && targetValue > 0) {
+    return Math.max(0, (currentValue / targetValue) * 100)
+  }
+  return 0
+}
+
+function firstMealImage(meal: HomeDashboard['meals'][number]): string {
+  const candidates = [
+    ...(Array.isArray(meal.images) ? meal.images : []),
+    ...(Array.isArray(meal.image_paths) ? meal.image_paths : []),
+    meal.image_path,
+  ]
+  return candidates.find((item): item is string => typeof item === 'string' && item.trim().length > 0) || ''
+}
+
+function mealIconLabel(type: string): string {
+  if (type === 'breakfast') return '早'
+  if (type === 'lunch') return '午'
+  if (type === 'dinner') return '晚'
+  return '食'
+}
+
+function getExpiryUrgencyText(item: NonNullable<NonNullable<HomeDashboard['expirySummary']>['preview_items']>[number]): string {
+  if (item.days_until_expire == null) return '查看'
+  if (item.days_until_expire < 0) return `已过期 ${Math.abs(item.days_until_expire)} 天`
+  if (item.days_until_expire === 0) return '今日到期'
+  return `${item.days_until_expire} 天后`
+}
+
+function formatExpiryMeta(item: NonNullable<NonNullable<HomeDashboard['expirySummary']>['preview_items']>[number]): string {
+  return item.expire_date ? `到期 ${item.expire_date}` : '点击查看详情'
+}
+
+function expiryToneStyle(urgency: unknown) {
+  if (urgency === 'expired') return styles.expiryIconExpired
+  if (urgency === 'today') return styles.expiryIconToday
+  if (urgency === 'soon') return styles.expiryIconSoon
+  return styles.expiryIconFresh
+}
+
 function homeGreeting(): string {
   const hour = new Date().getHours()
   if (hour < 6) return '夜深了'
@@ -670,18 +1041,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '700',
     color: colors.text,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   link: {
     color: colors.brandDark,
     fontWeight: '700',
   },
   bigNumber: {
-    fontSize: compactFont(32, 30),
-    fontWeight: '900',
+    fontSize: compactFont(30, 28),
+    fontWeight: '800',
     color: colors.brandDark,
   },
   subtitle: {
@@ -689,8 +1060,10 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   targetInfoBox: {
-    marginTop: 16,
-    paddingTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
@@ -713,9 +1086,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   targetEditButton: {
-    minHeight: 38,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.brandSoft,
@@ -731,10 +1104,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   calibrationCard: {
-    marginTop: 14,
-    marginBottom: 12,
-    borderRadius: 16,
-    padding: 14,
+    marginTop: 12,
+    marginBottom: 10,
+    borderRadius: 12,
+    padding: 12,
     backgroundColor: '#fff7ed',
   },
   calibrationTitle: {
@@ -753,9 +1126,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   primaryMiniButton: {
-    minHeight: 40,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    minHeight: 36,
+    borderRadius: 999,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.brand,
@@ -765,9 +1138,9 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   secondaryMiniButton: {
-    minHeight: 40,
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    minHeight: 36,
+    borderRadius: 999,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
@@ -790,9 +1163,9 @@ const styles = StyleSheet.create({
     gap: 9,
   },
   targetAdjustButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surfaceMuted,
@@ -804,10 +1177,10 @@ const styles = StyleSheet.create({
   },
   targetInputWrap: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 42,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -817,7 +1190,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text,
     fontWeight: '800',
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   targetInputUnit: {
     color: colors.textSecondary,
@@ -889,19 +1262,22 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   homeBannerCarousel: {
-    marginBottom: 14,
+    marginBottom: 10,
   },
   homeBannerTrack: {
     alignItems: 'stretch',
   },
   homeBannerSlide: {
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: 'hidden',
   },
   homeBanner: {
-    minHeight: 112,
+    minHeight: 82,
     justifyContent: 'flex-end',
     overflow: 'hidden',
+  },
+  homeBannerGoose: {
+    backgroundColor: '#fff3e3',
   },
   homeBannerGreen: {
     backgroundColor: '#e9fbf3',
@@ -913,11 +1289,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#edf7ff',
   },
   homeBannerImage: {
-    borderRadius: 16,
+    borderRadius: 14,
   },
   homeBannerOverlay: {
-    minHeight: 112,
-    padding: 16,
+    minHeight: 82,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
@@ -931,30 +1307,30 @@ const styles = StyleSheet.create({
   },
   homeBannerKicker: {
     color: colors.brandDark,
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '800',
-    marginBottom: 5,
+    marginBottom: 4,
   },
   homeBannerTitle: {
     color: colors.text,
-    fontSize: compactFont(21, 19),
-    fontWeight: '900',
-    lineHeight: 24,
-    marginBottom: 6,
+    fontSize: compactFont(17, 16),
+    fontWeight: '800',
+    lineHeight: 21,
+    marginBottom: 4,
   },
   homeBannerSubtitle: {
     color: colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '700',
   },
   homeBannerTextLight: {
     color: '#fff',
   },
   homeBannerButton: {
-    minHeight: 38,
+    minHeight: 32,
     borderRadius: 999,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
@@ -970,8 +1346,8 @@ const styles = StyleSheet.create({
     color: colors.brandDark,
   },
   homeBannerDots: {
-    height: 16,
-    marginTop: 7,
+    height: 14,
+    marginTop: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -989,13 +1365,13 @@ const styles = StyleSheet.create({
   },
   quickGrid: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 12,
   },
   quickCard: {
     flex: 1,
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 12,
+    padding: 12,
     backgroundColor: colors.surface,
   },
   pressed: {
@@ -1003,10 +1379,10 @@ const styles = StyleSheet.create({
   },
   quickTitle: {
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: 12,
   },
   quickValue: {
-    marginTop: 8,
+    marginTop: 6,
     color: colors.text,
     fontWeight: '800',
   },
@@ -1014,15 +1390,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 10,
+    rowGap: 8,
   },
   recordActionCard: {
     width: '48%',
     maxWidth: '48%',
-    minHeight: 108,
-    borderRadius: 14,
+    minHeight: 88,
+    borderRadius: 10,
     borderWidth: 1,
-    padding: 12,
+    padding: 10,
   },
   recordActionGreen: {
     backgroundColor: '#f9fefc',
@@ -1041,12 +1417,12 @@ const styles = StyleSheet.create({
     borderColor: '#e6defa',
   },
   recordActionIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   recordIconGreen: {
     backgroundColor: '#ebfcf4',
@@ -1062,20 +1438,20 @@ const styles = StyleSheet.create({
   },
   recordActionTitle: {
     color: colors.text,
-    fontWeight: '900',
+    fontWeight: '700',
     fontSize: 14,
   },
   recordActionDesc: {
     color: colors.textSecondary,
     fontSize: 12,
     lineHeight: 17,
-    marginTop: 5,
+    marginTop: 4,
   },
   recordQuickList: {
-    marginTop: 12,
+    marginTop: 10,
   },
   recordQuickAction: {
-    minHeight: 66,
+    minHeight: 58,
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
@@ -1087,7 +1463,7 @@ const styles = StyleSheet.create({
   },
   recordQuickTitle: {
     color: colors.text,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   recordQuickDesc: {
     marginTop: 3,
@@ -1096,7 +1472,7 @@ const styles = StyleSheet.create({
   },
   recordQuickChevron: {
     color: colors.textMuted,
-    fontSize: 28,
+    fontSize: 22,
   },
   demoAction: {
     marginTop: 12,
@@ -1106,7 +1482,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
-    paddingVertical: 13,
+    paddingVertical: 11,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
@@ -1121,5 +1497,624 @@ const styles = StyleSheet.create({
   mealKcal: {
     color: colors.brandDark,
     fontWeight: '800',
+  },
+  homeScroll: {
+    flex: 1,
+    backgroundColor: '#f0f3f6',
+  },
+  homeContent: {
+    paddingHorizontal: 16,
+    backgroundColor: '#f0f3f6',
+  },
+  greetingSection: {
+    paddingTop: 4,
+    marginBottom: 10,
+  },
+  greetingText: {
+    flex: 1,
+  },
+  greetingTitle: {
+    color: colors.text,
+    fontSize: compactFont(22, 21),
+    lineHeight: 30,
+    fontWeight: '700',
+  },
+  greetingSubtitle: {
+    marginTop: 3,
+    color: colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  dateSelectorSection: {
+    marginBottom: 8,
+  },
+  dateList: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dateItem: {
+    width: 44,
+    height: 80,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 11,
+    paddingBottom: 8,
+  },
+  dateItemSelected: {
+    backgroundColor: 'rgba(0, 188, 125, 0.55)',
+    shadowColor: '#00bc7d',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  dateDayName: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+  },
+  dateTextSelected: {
+    color: '#fff',
+  },
+  dateDayCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  dateDayCircleRecorded: {
+    backgroundColor: colors.brand,
+  },
+  dateDayCircleOver: {
+    backgroundColor: '#e57373',
+  },
+  dateDayCircleSelected: {
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+  },
+  dateNumText: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  dateNumTextLight: {
+    color: '#fff',
+  },
+  mainCard: {
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.58)',
+  },
+  mainCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+  },
+  mainCardTitle: {
+    flex: 1,
+    minWidth: 0,
+  },
+  cardLabel: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  cardValue: {
+    marginTop: 4,
+    color: colors.text,
+    fontSize: compactFont(38, 36),
+    lineHeight: 44,
+    fontWeight: '800',
+  },
+  cardValueOver: {
+    color: '#e57373',
+  },
+  cardUnit: {
+    marginTop: 1,
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  targetSection: {
+    alignItems: 'flex-end',
+    minWidth: 112,
+  },
+  targetEnergyNumsOnly: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 3,
+  },
+  targetEnergyIntakeNum: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  targetEnergySlashOnly: {
+    color: colors.textMuted,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  targetEnergyTargetNum: {
+    color: colors.textSecondary,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  progressSection: {
+    marginTop: 16,
+  },
+  progressBarBg: {
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: '#edf1f3',
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: colors.brand,
+  },
+  progressBarFillOver: {
+    backgroundColor: '#e57373',
+  },
+  macrosSection: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  macroCard: {
+    flex: 1,
+    minHeight: 118,
+    borderRadius: 18,
+    padding: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.54)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.62)',
+  },
+  macroCardHeader: {
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  macroLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  macroGauge: {
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  macroGaugeCenter: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  macroGaugeValue: {
+    fontSize: 17,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  macroGaugeUnit: {
+    color: colors.textMuted,
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '700',
+  },
+  bodyStatusSection: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  bodyStatusCard: {
+    flex: 1,
+    minHeight: 96,
+    borderRadius: 18,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.54)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.62)',
+  },
+  bodyStatusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  bodyStatusIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bodyStatusLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bodyStatusValue: {
+    marginTop: 11,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  bodyStatusHint: {
+    marginTop: 2,
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  mealsSection: {
+    marginTop: 2,
+    marginBottom: 16,
+  },
+  sectionHeader: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  viewAllButton: {
+    minHeight: 30,
+    minWidth: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewAllText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  mealsList: {
+    gap: 10,
+  },
+  mealsEmpty: {
+    minHeight: 142,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.54)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.62)',
+  },
+  mealsEmptyTitle: {
+    marginTop: 10,
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  mealsEmptyDesc: {
+    marginTop: 3,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  mealItem: {
+    minHeight: 102,
+    borderRadius: 18,
+    padding: 12,
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.56)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.62)',
+  },
+  mealItemWarning: {
+    borderColor: 'rgba(229, 115, 115, 0.32)',
+    backgroundColor: '#fef8f8',
+  },
+  mealMediaWrap: {
+    width: 54,
+    height: 54,
+    borderRadius: 14,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mealMediaPhoto: {
+    backgroundColor: '#f3f4f6',
+  },
+  mealMediaIcon: {
+    backgroundColor: '#ecfdf5',
+  },
+  mealThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  mealIconText: {
+    color: colors.brand,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  mealContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mealHeaderBlock: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  mealCalorie: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  mealCalorieUnit: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  mealProgressWrap: {
+    marginTop: 10,
+  },
+  mealProgressBarBg: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: '#eef2f4',
+    overflow: 'hidden',
+  },
+  mealProgressBarFill: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: colors.brand,
+  },
+  mealProgressBarFillWarning: {
+    backgroundColor: '#e57373',
+  },
+  mealProgressFoot: {
+    marginTop: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  mealProgressText: {
+    color: colors.textSecondary,
+    fontSize: 12,
+  },
+  mealProgressPercent: {
+    color: colors.brand,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  mealProgressPercentOver: {
+    color: '#e57373',
+  },
+  expirySection: {
+    marginBottom: 16,
+  },
+  expiryCard: {
+    borderRadius: 20,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.54)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.62)',
+    gap: 10,
+  },
+  expiryEmpty: {
+    minHeight: 92,
+    justifyContent: 'center',
+  },
+  expiryEmptyTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  expiryEmptyDesc: {
+    marginTop: 5,
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  expiryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  expiryIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expiryIconFresh: {
+    backgroundColor: '#f3f4f6',
+  },
+  expiryIconSoon: {
+    backgroundColor: '#fef3c7',
+  },
+  expiryIconToday: {
+    backgroundColor: '#ffedd5',
+  },
+  expiryIconExpired: {
+    backgroundColor: '#fee2e2',
+  },
+  expiryIconText: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  expiryContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  expiryHeaderBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  expiryName: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  expiryTimePill: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#f8fafc',
+  },
+  expiryTimePillText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  expiryMetaText: {
+    marginTop: 3,
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  statsEntryCard: {
+    minHeight: 76,
+    borderRadius: 20,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.brand,
+    shadowColor: colors.brand,
+    shadowOpacity: 0.2,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  statsEntryIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  statsEntryText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  statsEntryTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  statsEntryDesc: {
+    marginTop: 3,
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  homeDevActions: {
+    marginTop: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  homeMiniAction: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+  },
+  homeMiniActionText: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  targetModal: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  targetModalMask: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  targetModalSheet: {
+    maxHeight: '86%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    backgroundColor: '#fff',
+  },
+  targetModalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 999,
+    alignSelf: 'center',
+    marginBottom: 14,
+    backgroundColor: '#e5e7eb',
+  },
+  targetModalTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  targetModalDesc: {
+    marginTop: 3,
+    color: colors.textSecondary,
+    fontSize: 12,
+  },
+  targetModalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+  },
+  targetModalCloseText: {
+    color: colors.textSecondary,
+    fontSize: 24,
+    lineHeight: 26,
+    fontWeight: '300',
+  },
+  targetSaveButton: {
+    minHeight: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  targetSaveButtonText: {
+    color: '#fff',
+    fontWeight: '900',
+  },
+  targetCancelButton: {
+    minHeight: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+  },
+  targetCancelButtonText: {
+    color: colors.textSecondary,
+    fontWeight: '800',
+  },
+  disabledButton: {
+    opacity: 0.72,
   },
 })

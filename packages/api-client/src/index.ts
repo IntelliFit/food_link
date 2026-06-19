@@ -121,6 +121,21 @@ type UploadAnalyzeImageResponse = {
   url?: string
 }
 
+export type GooseDuckChickenSpecies = 'goose' | 'duck' | 'chicken' | 'unknown'
+
+export interface GooseDuckChickenClassifyInput {
+  imageUrl: string
+  additionalContext?: string
+}
+
+export interface GooseDuckChickenClassifyResult {
+  species: GooseDuckChickenSpecies
+  label: string
+  confidence: number
+  reason: string
+  evidence: string[]
+}
+
 export interface PasswordRegisterInput {
   phone: string
   password: string
@@ -775,6 +790,32 @@ export class FoodLinkApiClient {
       throw new Error('服务器未返回识别进度信息，请稍后重试')
     }
     return { task_id: taskId, message }
+  }
+
+  async classifyGooseDuckChicken(input: GooseDuckChickenClassifyInput): Promise<GooseDuckChickenClassifyResult> {
+    const imageUrl = input.imageUrl.trim()
+    if (!imageUrl) throw new Error('请先上传一张图片')
+    const additionalContext = input.additionalContext?.trim()
+    const data = await this.authenticatedRequest<Record<string, unknown>>('/api/analyze/goose-duck-chicken', {
+      method: 'POST',
+      body: {
+        image_url: imageUrl,
+        additional_context: additionalContext || undefined,
+      },
+      timeoutMs: 30000,
+    })
+    const rawSpecies = String(data.species || '').trim().toLowerCase()
+    const species: GooseDuckChickenSpecies = rawSpecies === 'goose' || rawSpecies === 'duck' || rawSpecies === 'chicken' ? rawSpecies : 'unknown'
+    const evidence = Array.isArray(data.evidence)
+      ? data.evidence.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 5)
+      : []
+    return {
+      species,
+      label: String(data.label || speciesLabel(species)).trim() || '不确定',
+      confidence: normalizeConfidence(data.confidence),
+      reason: String(data.reason || '').trim(),
+      evidence,
+    }
   }
 
   async getAnalyzeTask(taskId: string): Promise<AnalysisTask> {
@@ -2433,6 +2474,19 @@ function circlePostPayload(input: CreateCirclePostInput): Record<string, unknown
 
 function safeLimit(limit: number): number {
   return Math.min(100, Math.max(1, Math.floor(limit)))
+}
+
+function normalizeConfidence(value: unknown): number {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 0
+  return Math.min(1, Math.max(0, n))
+}
+
+function speciesLabel(species: GooseDuckChickenSpecies): string {
+  if (species === 'goose') return '鹅腿'
+  if (species === 'duck') return '鸭腿'
+  if (species === 'chicken') return '鸡腿'
+  return '不确定'
 }
 
 export function createFoodLinkApiClient(options: FoodLinkApiClientOptions): FoodLinkApiClient {

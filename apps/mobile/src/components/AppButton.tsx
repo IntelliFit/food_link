@@ -32,12 +32,12 @@ export function AppButton({ label, loading, disabled, variant = 'primary', onPre
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 44,
+    minHeight: 42,
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   primary: {
     backgroundColor: colors.brand,
@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   text: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   primaryText: {
