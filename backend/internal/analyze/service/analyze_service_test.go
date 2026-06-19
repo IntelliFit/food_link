@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -843,6 +844,37 @@ func TestParseEdiblePortionRows(t *testing.T) {
 	assert.Equal(t, 100.0, rows[1].ratio)
 }
 
+func TestAnalyzeService_ApplyEdiblePortionRatiosFailureDefaultsTo100(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "upstream timeout", http.StatusGatewayTimeout)
+	}))
+	defer server.Close()
+
+	svc := NewAnalyzeService(nil, nil, nil)
+	svc.deepseek = NewDeepSeekNutritionEstimator("test-key", server.URL, "deepseek-test")
+	resp := map[string]any{
+		"items": []map[string]any{
+			{
+				"name":                 "小龙虾",
+				"grossWeightGrams":     600.0,
+				"estimatedWeightGrams": 210.0,
+				"ediblePortionRatio":   35.0,
+				"ediblePortionReason":  "旧比例",
+			},
+		},
+	}
+
+	result := svc.applyEdiblePortionRatios(context.Background(), resp, AnalyzeInput{})
+	items := result["items"].([]map[string]any)
+
+	assert.Equal(t, "fallback", result["edible_portion_status"])
+	assert.Equal(t, "generation_failed", result["edible_portion_fallback_reason"])
+	assert.Equal(t, 100.0, items[0]["ediblePortionRatio"])
+	assert.Equal(t, "failed", items[0]["ediblePortionSource"])
+	assert.Equal(t, 600.0, items[0]["estimatedWeightGrams"])
+	assert.NotContains(t, items[0], "ediblePortionReason")
+}
+
 func TestAnalyzeService_ApplySuggestedRatiosDisabledDefaultsTo100(t *testing.T) {
 	svc := NewAnalyzeService(nil, nil, nil)
 	resp := map[string]any{
@@ -858,6 +890,25 @@ func TestAnalyzeService_ApplySuggestedRatiosDisabledDefaultsTo100(t *testing.T) 
 	assert.Equal(t, "disabled", result["suggest_ratio_status"])
 	assert.Equal(t, 100.0, items[0]["suggestedRatio"])
 	assert.Equal(t, "disabled", items[0]["suggestedRatioSource"])
+}
+
+func TestAnalyzeService_ApplySuggestedRatiosFailureDefaultsTo100(t *testing.T) {
+	svc := NewAnalyzeService(nil, &mockLLMClient{err: errors.New("gemini timeout")}, nil)
+	resp := map[string]any{
+		"items": []map[string]any{
+			{"name": "rice", "estimatedWeightGrams": 180.0, "suggestedRatio": 35.0, "suggestedRatioReason": "旧建议"},
+		},
+	}
+
+	result := svc.applySuggestedRatios(context.Background(), resp, AnalyzeInput{SuggestRatioEnabled: true})
+	items := result["items"].([]map[string]any)
+
+	assert.Equal(t, true, result["suggest_ratio_enabled"])
+	assert.Equal(t, "fallback", result["suggest_ratio_status"])
+	assert.Equal(t, "generation_failed", result["suggest_ratio_fallback_reason"])
+	assert.Equal(t, 100.0, items[0]["suggestedRatio"])
+	assert.Equal(t, "failed", items[0]["suggestedRatioSource"])
+	assert.NotContains(t, items[0], "suggestedRatioReason")
 }
 
 func TestAnalyzeService_ApplySuggestedRatiosUsesGeminiSuggestion(t *testing.T) {
