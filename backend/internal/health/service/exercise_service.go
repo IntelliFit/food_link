@@ -809,9 +809,9 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		userPrompt += "\n\n" + profileText + "\n\n请结合这些真实信息估算；只有缺失字段才允许合理假设。"
 	}
 	userContent := any(userPrompt)
-	systemPrompt := "你是运动热量估算助手。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 为识别出的运动类型名称（如跑步、游泳等），不超过 20 字；reasoning 不超过 80 个汉字。"
+	systemPrompt := "你是运动热量估算助手。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 为识别出的运动类型名称（如跑步、游泳等），不超过 20 字；reasoning 不超过 80 个汉字。注意：calories_kcal 只应表示该运动或活动相比静息状态额外消耗的能量，不得包含基础代谢；若用户描述的是睡眠、静卧、休息等低活动状态且未体现明显身体活动或生理负荷，额外消耗应接近 0。"
 	if imageURL != "" {
-		systemPrompt = "你是运动热量估算助手。可根据图片识别运动类型、强度和可能时长，并结合文字描述估算热量。若图片是训练打卡截图或健身记录卡，必须先 OCR 读取每个动作、重量、次数、组数、总耗时、截图中的消耗热量，再综合估算；多项动作不要只按一个普通运动粗估。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型标题\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 应概括图片里的主要训练内容，例如 卧推力量训练、背部力量训练、跑步机慢跑，不要输出 一般运动；不超过 20 字。reasoning 不超过 80 个汉字。"
+		systemPrompt = "你是运动热量估算助手。可根据图片识别运动类型、强度和可能时长，并结合文字描述估算热量。若图片是训练打卡截图或健身记录卡，必须先 OCR 读取每个动作、重量、次数、组数、总耗时、截图中的消耗热量，再综合估算；多项动作不要只按一个普通运动粗估。只输出 JSON 对象，不要 markdown。格式为 {\"exercise_type\":\"运动类型标题\",\"reasoning\":\"一句简短中文\",\"calories_kcal\":123}。exercise_type 应概括图片里的主要训练内容，例如 卧推力量训练、背部力量训练、跑步机慢跑，不要输出 一般运动；不超过 20 字。reasoning 不超过 80 个汉字。注意：calories_kcal 只应表示该运动或活动相比静息状态额外消耗的能量，不得包含基础代谢；若用户描述的是睡眠、静卧、休息等低活动状态且未体现明显身体活动或生理负荷，额外消耗应接近 0。"
 		userContent = []map[string]any{
 			{"type": "text", "text": userPrompt},
 			{"type": "image_url", "image_url": map[string]string{"url": imageURL}},
