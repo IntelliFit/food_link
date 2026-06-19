@@ -1,4 +1,4 @@
-import { View, Text, Image, ScrollView, Canvas, Button } from '@tarojs/components'
+import { View, Text, Image, ScrollView, Canvas, Button, Swiper, SwiperItem } from '@tarojs/components'
 import React, { useEffect, useCallback } from 'react'
 import Taro, { useRouter, useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import {
@@ -206,6 +206,7 @@ function RecordDetailPage() {
   const [record, setRecord] = React.useState<FoodRecord | null>(null)
   const [posterGenerating, setPosterGenerating] = React.useState(false)
   const [posterImageUrl, setPosterImageUrl] = React.useState<string | null>(null)
+  const [currentImageIndex, setCurrentImageIndex] = React.useState(0)
   const [calorieCompare, setCalorieCompare] = React.useState<PosterCalorieCompare | null>(null)
   const [isProUser, setIsProUser] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
@@ -580,8 +581,13 @@ function RecordDetailPage() {
   const mealIconConfig = MEAL_ICON_CONFIG[record.meal_type as keyof typeof MEAL_ICON_CONFIG] || MEAL_ICON_CONFIG.snack
   const timeStr = formatRecordTime(record.record_time)
   const items = record.items || []
-  const hasRealRecordImage = Boolean(record.image_path)
-  const recordDisplayImage = record.image_path || ''
+  const recordImages = record.image_paths?.length
+    ? record.image_paths
+    : record.image_path
+      ? [record.image_path]
+      : []
+  const hasRealRecordImage = recordImages.length > 0
+  const recordDisplayImage = recordImages[0] || ''
 
   /** 单条食物实际摄入热量（按 ratio） */
   const itemCalorie = (item: FoodRecord['items'][0]) => {
@@ -658,15 +664,31 @@ function RecordDetailPage() {
         <View
           className={`detail-image ${hasRealRecordImage ? '' : 'detail-image--logo'}`}
           onClick={() => {
-            if (!record.image_path) return
+            if (!recordImages.length) return
             Taro.previewImage({
-              urls: [record.image_path],
-              current: record.image_path
+              urls: recordImages,
+              current: recordImages[currentImageIndex]
             })
           }}
         >
           {hasRealRecordImage ? (
-            <Image src={recordDisplayImage} mode='aspectFill' />
+            recordImages.length > 1 ? (
+              <Swiper
+                className='record-detail-swiper'
+                circular
+                indicatorDots={false}
+                onChange={(e) => setCurrentImageIndex(e.detail.current)}
+                current={currentImageIndex}
+              >
+                {recordImages.map((path, index) => (
+                  <SwiperItem key={index} className='record-detail-swiper-item'>
+                    <Image src={path} mode='aspectFill' className='record-detail-swiper-image' />
+                  </SwiperItem>
+                ))}
+              </Swiper>
+            ) : (
+              <Image src={recordDisplayImage} mode='aspectFill' />
+            )
           ) : (
             <>
               <View className='detail-image-icon-wrap'>
@@ -674,6 +696,11 @@ function RecordDetailPage() {
               </View>
               <Text className='detail-image-placeholder-text'>文字记录，未提供实物照片</Text>
             </>
+          )}
+          {recordImages.length > 1 && (
+            <View className='record-detail-image-counter'>
+              <Text className='record-detail-image-counter-text'>{currentImageIndex + 1}/{recordImages.length}</Text>
+            </View>
           )}
         </View>
 

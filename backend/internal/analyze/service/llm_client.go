@@ -102,7 +102,11 @@ func (c *OfoxAIClient) AnalyzeWithImages(ctx context.Context, prompt string, ima
 }
 
 func (c *OfoxAIClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {
-	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, nil)
+	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, "", nil)
+}
+
+func (c *OfoxAIClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
+	return c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, temperature, modelName, nil)
 }
 
 func (c *OfoxAIClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, prompt string, imageURLs []string, options DashScopeWebSearchOptions) (map[string]any, map[string]any, error) {
@@ -117,7 +121,7 @@ func (c *OfoxAIClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, 
 			"search_strategy": searchStrategy,
 		},
 	}
-	parsed, err := c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0.3, extras)
+	parsed, err := c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0.3, "", extras)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -129,7 +133,11 @@ func (c *OfoxAIClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, 
 	}, nil
 }
 
-func (c *OfoxAIClient) analyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64, extras map[string]any) (map[string]any, error) {
+func (c *OfoxAIClient) analyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelOverride string, extras map[string]any) (map[string]any, error) {
+	model := strings.TrimSpace(modelOverride)
+	if model == "" {
+		model = c.Model
+	}
 	content := []map[string]any{
 		{"type": "text", "text": prompt},
 	}
@@ -146,12 +154,12 @@ func (c *OfoxAIClient) analyzeWithImagesAndTemperature(ctx context.Context, prom
 		})
 	}
 	body := map[string]any{
-		"model":           c.Model,
+		"model":           model,
 		"messages":        []map[string]any{{"role": "user", "content": content}},
 		"response_format": map[string]string{"type": "json_object"},
 		"temperature":     temperature,
 	}
-	if isDashScopeQwenModel(c.Model, c.BaseURL) {
+	if isDashScopeQwenModel(model, c.BaseURL) {
 		body["enable_thinking"] = true
 	}
 	for key, value := range extras {
@@ -268,6 +276,14 @@ func (c *DoubaoClient) AnalyzeWithImages(ctx context.Context, prompt string, ima
 }
 
 func (c *DoubaoClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {
+	return c.AnalyzeWithImagesAndTemperatureModel(ctx, prompt, imageURLs, temperature, "")
+}
+
+func (c *DoubaoClient) AnalyzeWithImagesAndTemperatureModel(ctx context.Context, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
+	model := strings.TrimSpace(modelName)
+	if model == "" {
+		model = c.Model
+	}
 	content := []map[string]any{
 		{"type": "text", "text": prompt},
 	}
@@ -284,7 +300,7 @@ func (c *DoubaoClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prom
 		})
 	}
 	body := map[string]any{
-		"model":            c.Model,
+		"model":            model,
 		"messages":         []map[string]any{{"role": "user", "content": content}},
 		"temperature":      temperature,
 		"reasoning_effort": "low",

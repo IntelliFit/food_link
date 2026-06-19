@@ -631,6 +631,13 @@ export interface FoodRecord {
   source_task_id?: string | null
 }
 
+/** 首页微量元素单项（带每日参考摄入量与进度） */
+export interface HomeMicronutrientItem {
+  current: number
+  target: number
+  progress: number
+}
+
 /** 首页今日摄入与宏量 */
 export interface HomeIntakeData {
   current: number
@@ -641,7 +648,7 @@ export interface HomeIntakeData {
     carbs: { current: number; target: number }
     fat: { current: number; target: number }
   }
-  micros?: Partial<Nutrients>
+  micros?: Record<string, HomeMicronutrientItem | number>
 }
 
 export interface HomeNutritionTarget {
@@ -2754,7 +2761,7 @@ export async function classifyGooseDuckChicken(body: {
   const res = await authenticatedRequest('/api/analyze/goose-duck-chicken', {
     method: 'POST',
     data: body,
-    timeout: 90000
+    timeout: 125000
   })
   if (res.statusCode !== 200) {
     throwHttpErrorWithStatus(res.statusCode, res.data, '鹅鸭鸡识别失败', res.header as Record<string, any> | undefined)
@@ -3914,7 +3921,6 @@ export async function authenticatedRequest(
     throw new Error('未登录，请先登录')
   }
 
-  console.log(`[DEBUG AUTH] 请求开始: ${url}`)
   const requestUrl = `${API_BASE_URL}${url}`
   const startedAt = Date.now()
   let res: Taro.request.SuccessCallbackResult<any>
@@ -3943,8 +3949,6 @@ export async function authenticatedRequest(
     })
     throw error
   }
-  console.log(`[DEBUG AUTH] 请求完成: ${url}, statusCode=${res.statusCode}, dataType=${typeof res.data}, dataKeys=${res.data && typeof res.data === 'object' ? Object.keys(res.data).join(',') : 'N/A'}`)
-
   if (res.statusCode === 401 || res.statusCode === 403) {
     redirectToLogin('登录已失效，请重新登录')
     throw new Error('登录已失效，请重新登录')

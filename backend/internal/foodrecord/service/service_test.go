@@ -166,6 +166,50 @@ func TestZeroNutritionGateAllowsKnownZeroDrink(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestZeroNutritionGateAllowsEdibleIce(t *testing.T) {
+	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
+		Name:    "食用冰",
+		Weight:  100,
+		Intake:  100,
+		WaterMl: 100,
+	}})
+	require.NoError(t, err)
+}
+
+func TestZeroNutritionGateAllowsIceCube(t *testing.T) {
+	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
+		Name:    "冰块",
+		Weight:  80,
+		Intake:  80,
+		WaterMl: 80,
+	}})
+	require.NoError(t, err)
+}
+
+func TestZeroNutritionGateAllowsZeroNutritionWithWater(t *testing.T) {
+	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
+		Name:    "某含水零卡食物",
+		Weight:  100,
+		Intake:  100,
+		WaterMl: 50,
+	}})
+	require.NoError(t, err)
+}
+
+func TestZeroNutritionGateRejectsZeroNutritionWithoutWater(t *testing.T) {
+	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
+		Name:    "某零卡但无水食物",
+		Weight:  100,
+		Intake:  100,
+		WaterMl: 0,
+	}})
+	require.Error(t, err)
+	appErr, ok := err.(*commonerrors.AppError)
+	require.True(t, ok)
+	assert.Equal(t, 10002, appErr.Code)
+	assert.Contains(t, appErr.Message, "某零卡但无水食物")
+}
+
 func TestZeroNutritionGateAllowsNonZeroItem(t *testing.T) {
 	err := validateNoSuspiciousZeroNutritionItems([]domain.FoodItem{{
 		Name:   "双汇玉米热狗肠",

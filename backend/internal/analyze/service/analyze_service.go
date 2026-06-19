@@ -271,11 +271,12 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 	if sourceType == "image" {
 		timeout = 90 * time.Second
 	}
-	provider, _ := resolveModelConfig(modelName)
+	provider, model := resolveModelConfig(modelName)
 	if sourceType == "image" {
-		provider, _ = s.resolveImageModelConfig(modelName)
+		provider, model = s.resolveImageModelConfig(modelName)
 	} else if strings.TrimSpace(modelName) == "" {
 		provider = "doubao"
+		model = ""
 	}
 	traceCtx, span := apm.StartSpan(ctx, "analysis.precision.llm",
 		attribute.String("analysis.source_type", sourceType),
@@ -325,14 +326,14 @@ func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Conte
 		attribute.Int("analysis.image_count", len(imageURLs)),
 		attribute.Float64("analysis.temperature", temperature),
 	)
-	parsed, err := analyzeWithJSONParseRetry(callCtx, "precision", provider, "", func(retryCtx context.Context) (map[string]any, error) {
+	parsed, err := analyzeWithJSONParseRetry(callCtx, "precision", provider, model, func(retryCtx context.Context) (map[string]any, error) {
 		attemptCtx := retryCtx
 		attemptCancel := func() {}
 		if provider == "gemini" && len(imageURLs) > 0 {
 			attemptCtx, attemptCancel = context.WithTimeout(retryCtx, visionPrimaryTimeout)
 		}
 		defer attemptCancel()
-		return analyzeWithImagesTemperature(attemptCtx, client, prompt, imageURLs, temperature)
+		return analyzeWithImagesTemperatureModel(attemptCtx, client, prompt, imageURLs, temperature, model)
 	})
 	if allowFallback && err != nil && provider == "gemini" && len(imageURLs) > 0 && isTransientLLMError(err) && s.doubaoClient != nil {
 		fallbackParsed, fallbackErr := analyzeWithJSONParseRetry(callCtx, "precision_fallback", "doubao", "doubao-seed-2-0-lite-260428", func(retryCtx context.Context) (map[string]any, error) {
@@ -388,7 +389,16 @@ func (s *AnalyzeService) ApplyDBFirstToItems(ctx context.Context, items []map[st
 }
 
 func analyzeWithImagesTemperature(ctx context.Context, client LLMClient, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {
+	return analyzeWithImagesTemperatureModel(ctx, client, prompt, imageURLs, temperature, "")
+}
+
+func analyzeWithImagesTemperatureModel(ctx context.Context, client LLMClient, prompt string, imageURLs []string, temperature float64, modelName string) (map[string]any, error) {
 	if len(imageURLs) > 0 {
+		if modelClient, ok := client.(interface {
+			AnalyzeWithImagesAndTemperatureModel(context.Context, string, []string, float64, string) (map[string]any, error)
+		}); ok {
+			return modelClient.AnalyzeWithImagesAndTemperatureModel(ctx, prompt, imageURLs, temperature, modelName)
+		}
 		if precisionClient, ok := client.(interface {
 			AnalyzeWithImagesAndTemperature(context.Context, string, []string, float64) (map[string]any, error)
 		}); ok {
@@ -400,6 +410,11 @@ func analyzeWithImagesTemperature(ctx context.Context, client LLMClient, prompt 
 			return multiClient.AnalyzeWithImages(ctx, prompt, imageURLs)
 		}
 		return client.Analyze(ctx, prompt, imageURLs[0])
+	}
+	if modelClient, ok := client.(interface {
+		AnalyzeWithImagesAndTemperatureModel(context.Context, string, []string, float64, string) (map[string]any, error)
+	}); ok {
+		return modelClient.AnalyzeWithImagesAndTemperatureModel(ctx, prompt, nil, temperature, modelName)
 	}
 	if precisionClient, ok := client.(interface {
 		AnalyzeWithImagesAndTemperature(context.Context, string, []string, float64) (map[string]any, error)
@@ -4508,7 +4523,7 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 	}
 	base := withDefaultEdiblePortions(items, "default")
 	if s == nil || s.deepseek == nil || strings.TrimSpace(s.deepseek.APIKey) == "" {
-		resp["items"] = base
+		resp["items"] = withFallbackEdiblePortions(items, "unavailable")
 		resp["edible_portion_status"] = "unavailable"
 		return resp
 	}
@@ -4521,8 +4536,9 @@ func (s *AnalyzeService) applyEdiblePortionRatios(ctx context.Context, resp map[
 			logger.Err(err),
 			slog.Int("item_count", len(items)),
 		)
-		resp["items"] = base
-		resp["edible_portion_status"] = "failed"
+		resp["items"] = withFallbackEdiblePortions(items, "failed")
+		resp["edible_portion_status"] = "fallback"
+		resp["edible_portion_fallback_reason"] = "generation_failed"
 		return resp
 	}
 	rows := parseEdiblePortionRows(parsed)
@@ -5104,7 +5120,8 @@ func (s *AnalyzeService) applySuggestedRatios(ctx context.Context, resp map[stri
 		)
 		resp["items"] = withDefaultSuggestedRatios(items, "failed")
 		resp["suggest_ratio_enabled"] = true
-		resp["suggest_ratio_status"] = "failed"
+		resp["suggest_ratio_status"] = "fallback"
+		resp["suggest_ratio_fallback_reason"] = "generation_failed"
 		return resp
 	}
 
@@ -5184,6 +5201,29 @@ func withDefaultEdiblePortions(items []map[string]any, source string) []map[stri
 		if source != "" {
 			next["ediblePortionSource"] = source
 		}
+		out = append(out, next)
+	}
+	return out
+}
+
+func withFallbackEdiblePortions(items []map[string]any, source string) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		next := copyAnyMap(item)
+		weight := numberFromAny(firstNonNil(next["grossWeightGrams"], next["gross_weight_grams"], next["rawWeightGrams"], next["estimatedWeightGrams"]))
+		if weight < 0 {
+			weight = 0
+		}
+		next["grossWeightGrams"] = round2(weight)
+		next["estimatedWeightGrams"] = round2(weight)
+		if numberFromAny(next["originalWeightGrams"]) <= 0 {
+			next["originalWeightGrams"] = round2(weight)
+		}
+		next["ediblePortionRatio"] = 100.0
+		if source != "" {
+			next["ediblePortionSource"] = source
+		}
+		delete(next, "ediblePortionReason")
 		out = append(out, next)
 	}
 	return out

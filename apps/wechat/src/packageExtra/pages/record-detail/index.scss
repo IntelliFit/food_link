@@ -99,6 +99,7 @@
 }
 
 .detail-image {
+  position: relative;
   width: 100%;
   height: 380rpx;
   border-radius: 16rpx;
@@ -123,6 +124,44 @@
       radial-gradient(circle at top, rgb(255 255 255 / 95%) 0%, rgb(236 253 245 / 92%) 30%, rgb(209 250 229 / 98%) 100%);
     cursor: default;
   }
+}
+
+.record-detail-swiper {
+  width: 100%;
+  height: 100%;
+}
+
+.record-detail-swiper-item {
+  width: 100%;
+  height: 100%;
+}
+
+.record-detail-swiper-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.record-detail-image-counter {
+  position: absolute;
+  bottom: 16rpx;
+  right: 16rpx;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8rpx);
+  padding: 6rpx 16rpx;
+  border-radius: 200rpx;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.record-detail-image-counter-text {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 2rpx;
 }
 
 .detail-image-icon-wrap {
