@@ -7,7 +7,7 @@ import { HomeScreen } from '../screens/HomeScreen'
 import { StatsScreen } from '../screens/StatsScreen'
 import { CommunityScreen } from '../screens/CommunityScreen'
 import { CommunitySearchScreen } from '../screens/CommunitySearchScreen'
-import { ProfileScreen } from '../screens/ProfileScreen'
+import { ProfileMoreFeaturesScreen, ProfileScreen } from '../screens/ProfileScreen'
 import { ProfileSettingsScreen } from '../screens/ProfileSettingsScreen'
 import { AccountSecurityScreen } from '../screens/AccountSecurityScreen'
 import { HealthProfileViewScreen } from '../screens/HealthProfileViewScreen'
@@ -248,6 +248,7 @@ export function RootNavigator() {
             <Stack.Screen name="HealthProfile" component={HealthProfileScreen} options={{ title: '健康档案' }} />
             <Stack.Screen name="HealthProfileView" component={HealthProfileViewScreen} options={{ title: '健康档案详情' }} />
             <Stack.Screen name="ProfileSettings" component={ProfileSettingsScreen} options={{ title: '个人主页' }} />
+            <Stack.Screen name="ProfileMoreFeatures" component={ProfileMoreFeaturesScreen} options={{ title: '更多功能' }} />
             <Stack.Screen name="AccountSecurity" component={AccountSecurityScreen} options={{ title: '账号安全' }} />
             <Stack.Screen
               name="BodyMetricRecord"

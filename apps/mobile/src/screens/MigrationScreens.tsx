@@ -1765,12 +1765,11 @@ export function CommunityFeedDetailScreen() {
 
   return (
     <View style={styles.communityDetailPage}>
-      <View style={styles.communityDetailTopWash} />
       <ScrollView
         style={styles.communityDetailScroll}
         contentContainerStyle={[
           styles.communityDetailContent,
-          { paddingTop: Math.max(insets.top, 12), paddingBottom: record ? insets.bottom + 92 + bottomBarKeyboardOffset : insets.bottom + 28 },
+          { paddingBottom: record ? insets.bottom + 92 + bottomBarKeyboardOffset : insets.bottom + 28 },
         ]}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} />}
         keyboardShouldPersistTaps="handled"
@@ -3647,14 +3646,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8fafc',
   },
-  communityDetailTopWash: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 162,
-    backgroundColor: '#eaf8ef',
-  },
   communityDetailScroll: {
     flex: 1,
   },
@@ -3662,7 +3653,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   communityDetailFeedList: {
-    paddingTop: 10,
+    paddingTop: 0,
   },
   communityDetailFeedCard: {
     borderTopWidth: 1,

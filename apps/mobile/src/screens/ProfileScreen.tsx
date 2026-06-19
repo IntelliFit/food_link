@@ -79,6 +79,27 @@ const rewardLevels: RewardLevelMeta[] = [
   { level: 6, title: '传说食探长', min: 3000, max: null },
 ]
 
+function buildMoreItems(navigation: NativeStackNavigationProp<RootStackParamList>): MenuEntry[] {
+  return [
+    { title: 'AI 助手', subtitle: '风险解读、饮食建议和关注卡片', icon: Sparkles, tone: 'green', onPress: () => navigation.navigate('AiAssistant') },
+    { title: '账号安全', subtitle: '手机号密码与备用登录方式', icon: Lock, tone: 'slate', onPress: () => navigation.navigate('AccountSecurity') },
+    { title: '互动消息', subtitle: '点赞、评论、回复和审核结果', icon: Bell, tone: 'purple', onPress: () => navigation.navigate('Notifications') },
+    { title: '邀请好友', subtitle: '分享邀请码和好友奖励', icon: UserPlus, tone: 'gold', onPress: () => navigation.navigate('InviteFriends') },
+    { title: '打卡排行榜', subtitle: '查看本周打卡排名', icon: Trophy, tone: 'gold', onPress: () => navigation.navigate('CheckinLeaderboard') },
+    { title: '代谢分析', subtitle: 'BMR、TDEE 和摄入差额', icon: Activity, tone: 'green', onPress: () => navigation.navigate('StatsMetabolic') },
+    { title: '身体趋势', subtitle: '查看体重、饮水和月度摄入趋势', icon: LineChart, tone: 'blue', onPress: () => navigation.navigate('BodyTrends') },
+    { title: '包装食品', subtitle: '上传营养成分表和商品包装', icon: Package, tone: 'blue', onPress: () => navigation.navigate('PackagedFoodEdit') },
+    { title: '收藏食谱', subtitle: '常吃组合一键写入饮食记录', icon: Star, tone: 'gold', onPress: () => navigation.navigate('Recipes') },
+    { title: '食物库', subtitle: '营养库、自定义食物和手动记录', icon: Search, tone: 'blue', onPress: () => navigation.navigate('FoodLibrary') },
+    { title: '分享到公共库', subtitle: '上传外食、校园餐或自制餐食', icon: BookOpen, tone: 'purple', onPress: () => navigation.navigate('PublicFoodShare', { mode: 'public' }) },
+    { title: '定位搜索', subtitle: '搜索商家、食堂或地点', icon: MapPin, tone: 'slate', onPress: () => navigation.navigate('LocationSearch') },
+    { title: '自动续费审核', subtitle: '续费状态与支付渠道说明', icon: CreditCard, tone: 'slate', onPress: () => navigation.navigate('AutoRenewAudit') },
+    { title: '用户协议', subtitle: '服务条款摘要', icon: FileText, tone: 'slate', onPress: () => navigation.navigate('Agreements') },
+    { title: '会员协议', subtitle: '会员权益、续费和订单说明', icon: FileText, tone: 'slate', onPress: () => navigation.navigate('MembershipAgreement') },
+    { title: '隐私政策', subtitle: '数据、图片和缓存说明', icon: Shield, tone: 'slate', onPress: () => navigation.navigate('PrivacyPolicy') },
+  ]
+}
+
 export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
@@ -91,7 +112,6 @@ export function ProfileScreen() {
   const [recordDays, setRecordDays] = useState(0)
   const [counts, setCounts] = useState({ analyze: 0, friends: 0, favorites: 0 })
   const [friendRequestCount, setFriendRequestCount] = useState(0)
-  const [showMoreServices, setShowMoreServices] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
@@ -232,25 +252,6 @@ export function ProfileScreen() {
     { title: '关于我们', subtitle: '应用说明、协议和联系方式', icon: Info, tone: 'slate', onPress: () => navigation.navigate('About') },
   ]
 
-  const moreItems: MenuEntry[] = [
-    { title: 'AI 助手', subtitle: '风险解读、饮食建议和关注卡片', icon: Sparkles, tone: 'green', onPress: () => navigation.navigate('AiAssistant') },
-    { title: '账号安全', subtitle: '手机号密码与备用登录方式', icon: Lock, tone: 'slate', onPress: () => navigation.navigate('AccountSecurity') },
-    { title: '互动消息', subtitle: '点赞、评论、回复和审核结果', icon: Bell, tone: 'purple', onPress: () => navigation.navigate('Notifications') },
-    { title: '邀请好友', subtitle: '分享邀请码和好友奖励', icon: UserPlus, tone: 'gold', onPress: () => navigation.navigate('InviteFriends') },
-    { title: '打卡排行榜', subtitle: '查看本周打卡排名', icon: Trophy, tone: 'gold', onPress: () => navigation.navigate('CheckinLeaderboard') },
-    { title: '代谢分析', subtitle: 'BMR、TDEE 和摄入差额', icon: Activity, tone: 'green', onPress: () => navigation.navigate('StatsMetabolic') },
-    { title: '身体趋势', subtitle: '查看体重、饮水和月度摄入趋势', icon: LineChart, tone: 'blue', onPress: () => navigation.navigate('BodyTrends') },
-    { title: '包装食品', subtitle: '上传营养成分表和商品包装', icon: Package, tone: 'blue', onPress: () => navigation.navigate('PackagedFoodEdit') },
-    { title: '收藏食谱', subtitle: '常吃组合一键写入饮食记录', icon: Star, tone: 'gold', onPress: () => navigation.navigate('Recipes') },
-    { title: '食物库', subtitle: '营养库、自定义食物和手动记录', icon: Search, tone: 'blue', onPress: () => navigation.navigate('FoodLibrary') },
-    { title: '分享到公共库', subtitle: '上传外食、校园餐或自制餐食', icon: BookOpen, tone: 'purple', onPress: () => navigation.navigate('PublicFoodShare', { mode: 'public' }) },
-    { title: '定位搜索', subtitle: '搜索商家、食堂或地点', icon: MapPin, tone: 'slate', onPress: () => navigation.navigate('LocationSearch') },
-    { title: '自动续费审核', subtitle: '续费状态与支付渠道说明', icon: CreditCard, tone: 'slate', onPress: () => navigation.navigate('AutoRenewAudit') },
-    { title: '用户协议', subtitle: '服务条款摘要', icon: FileText, tone: 'slate', onPress: () => navigation.navigate('Agreements') },
-    { title: '会员协议', subtitle: '会员权益、续费和订单说明', icon: FileText, tone: 'slate', onPress: () => navigation.navigate('MembershipAgreement') },
-    { title: '隐私政策', subtitle: '数据、图片和缓存说明', icon: Shield, tone: 'slate', onPress: () => navigation.navigate('PrivacyPolicy') },
-  ]
-
   return (
     <View style={styles.profilePage}>
       <View style={styles.profileWash} pointerEvents="none" />
@@ -364,11 +365,9 @@ export function ProfileScreen() {
               subtitle: '账号安全、身体趋势和更多个人工具',
               icon: Sparkles,
               tone: 'slate',
-              onPress: () => setShowMoreServices((value) => !value),
+              onPress: () => navigation.navigate('ProfileMoreFeatures'),
             }}
-            chevronStyle={showMoreServices ? styles.chevronOpen : undefined}
           />
-          {showMoreServices ? moreItems.map((item) => <ProfileListItem key={item.title} item={item} />) : null}
         </View>
 
         <Pressable style={({ pressed }) => [styles.toolCard, pressed && styles.pressed]} onPress={confirmClearCache}>
@@ -380,6 +379,33 @@ export function ProfileScreen() {
         </Pressable>
 
         <Text style={styles.profileVersion}>版本号 v{APP_VERSION}</Text>
+      </ScrollView>
+    </View>
+  )
+}
+
+export function ProfileMoreFeaturesScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const insets = useSafeAreaInsets()
+  const moreItems = buildMoreItems(navigation)
+
+  return (
+    <View style={styles.profilePage}>
+      <View style={styles.profileWash} pointerEvents="none" />
+      <ScrollView
+        style={styles.profileScroll}
+        contentContainerStyle={[
+          styles.profileContent,
+          styles.moreFeaturesContent,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.listCard}>
+          {moreItems.map((item, index) => (
+            <ProfileListItem key={item.title} item={item} first={index === 0} />
+          ))}
+        </View>
       </ScrollView>
     </View>
   )
@@ -493,6 +519,9 @@ const styles = StyleSheet.create({
   },
   profileContent: {
     paddingBottom: 120,
+  },
+  moreFeaturesContent: {
+    paddingTop: 12,
   },
   profileHeaderSection: {
     marginHorizontal: 12,

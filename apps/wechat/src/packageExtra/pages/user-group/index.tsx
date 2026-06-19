@@ -13,6 +13,7 @@ import './index.scss'
 export default function UserGroupPage() {
   const { scheme } = useAppColorScheme()
   const [activeGroup] = useState<UserGroupQrConfig>(getDefaultUserGroupQr())
+  const [savingQr, setSavingQr] = useState(false)
 
   useEffect(() => {
     applyThemeNavigationBar(scheme, { lightBackground: '#f7faf8', darkBackground: '#101716' })
@@ -25,9 +26,32 @@ export default function UserGroupPage() {
     })
   }
 
-  const handleCopyGroupName = async () => {
-    await Taro.setClipboardData({ data: activeGroup.title })
-    Taro.showToast({ title: '群名已复制', icon: 'success' })
+  const handleSaveQr = async () => {
+    if (savingQr) return
+
+    setSavingQr(true)
+    try {
+      const imageInfo = await Taro.getImageInfo({ src: activeGroup.qrImage })
+      await Taro.saveImageToPhotosAlbum({ filePath: imageInfo.path })
+      Taro.showToast({ title: '已保存到本地', icon: 'success' })
+    } catch (error) {
+      const errMsg = String((error as { errMsg?: string })?.errMsg || error || '')
+      const needsPermission = /auth|authorize|permission|deny/i.test(errMsg)
+      if (needsPermission) {
+        Taro.showModal({
+          title: '需要相册权限',
+          content: '请允许保存图片到相册后再试。',
+          confirmText: '去设置',
+          success: (res) => {
+            if (res.confirm) Taro.openSetting()
+          },
+        })
+      } else {
+        Taro.showToast({ title: '保存失败，请长按二维码', icon: 'none' })
+      }
+    } finally {
+      setSavingQr(false)
+    }
   }
 
   return (
@@ -62,18 +86,15 @@ export default function UserGroupPage() {
           <Text className='qr-expiry'>这是当前唯一用户群二维码，可长期使用</Text>
 
           <View className='action-row'>
-            <View className='primary-action' onClick={handlePreviewQr}>
-              <Text className='primary-action__text'>打开二维码</Text>
-            </View>
-            <View className='secondary-action' onClick={handleCopyGroupName}>
-              <Text className='secondary-action__text'>复制群名</Text>
+            <View className={`primary-action ${savingQr ? 'primary-action--disabled' : ''}`} onClick={handleSaveQr}>
+              <Text className='primary-action__text'>保存到本地</Text>
             </View>
           </View>
         </View>
 
         <View className='hint-card'>
           <Text className='hint-title'>加入方式</Text>
-          <Text className='hint-text'>点击二维码可放大查看；也可以长按二维码，在微信菜单中识别或保存图片。</Text>
+          <Text className='hint-text'>点击二维码可放大查看；保存到本地后，可以在微信中识别二维码加入用户群。</Text>
         </View>
       </View>
     </FlPageThemeRoot>

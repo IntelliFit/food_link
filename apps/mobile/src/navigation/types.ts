@@ -80,6 +80,7 @@ export type RootStackParamList = {
   HealthProfile: undefined
   HealthProfileView: undefined
   ProfileSettings: { userId?: string } | undefined
+  ProfileMoreFeatures: undefined
   AccountSecurity: undefined
   BodyMetricRecord: { type: 'weight' | 'water' | 'exercise'; date?: string }
   Expiry: undefined
