@@ -539,6 +539,8 @@ export interface SaveFoodRecordRequest {
   source_task_id?: string
   /** 用户创建该条记录的入口来源 */
   entry_type?: FoodRecordEntryType
+  /** 食谱/收藏 ID（从收藏一键记录时传入） */
+  recipe_id?: string
   /** 记录日期 YYYY-MM-DD，仅支持近 3 天内补录 */
   date?: string
 }
@@ -629,6 +631,8 @@ export interface FoodRecord {
   diet_goal?: string | null
   activity_timing?: string | null
   source_task_id?: string | null
+  entry_type?: FoodRecordEntryType | null
+  recipe_id?: string | null
 }
 
 /** 首页微量元素单项（带每日参考摄入量与进度） */
@@ -1010,10 +1014,32 @@ export interface DashboardTargets {
   protein_target: number
   carbs_target: number
   fat_target: number
+  fiber_target?: number
+  sugar_target?: number
+  saturated_fat_target?: number
+  cholesterol_mg_target?: number
+  sodium_mg_target?: number
+  potassium_mg_target?: number
+  calcium_mg_target?: number
+  iron_mg_target?: number
+  magnesium_mg_target?: number
+  zinc_mg_target?: number
+  vitamin_a_rae_mcg_target?: number
+  vitamin_c_mg_target?: number
+  vitamin_d_mcg_target?: number
+  vitamin_e_mg_target?: number
+  vitamin_k_mcg_target?: number
+  thiamin_mg_target?: number
+  riboflavin_mg_target?: number
+  niacin_mg_target?: number
+  vitamin_b6_mg_target?: number
+  folate_mcg_target?: number
+  vitamin_b12_mcg_target?: number
 }
 
 export interface DashboardTargetsUpdateInput extends DashboardTargets {
   target_date?: string
+  micro_targets?: Record<string, number>
 }
 
 /** 更新首页目标的结果：服务端成功或仅写入本机（线上未升级接口时） */

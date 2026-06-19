@@ -2,8 +2,10 @@ package repo
 
 import (
 	"context"
+	"log/slog"
 
 	"food_link/backend/internal/health/domain"
+	"food_link/backend/pkg/logger"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -73,7 +75,20 @@ func (r *BodyMetricsRepo) CreateWaterLog(ctx context.Context, log *domain.BodyWa
 	if log.ID == "" {
 		log.ID = uuid.New().String()
 	}
-	return r.db.WithContext(ctx).Create(log).Error
+	if err := r.db.WithContext(ctx).Create(log).Error; err != nil {
+		logger.Error(ctx, "写入饮水日志失败", err,
+			slog.String("user_id", log.UserID),
+			slog.Int("amount_ml", log.AmountMl),
+			slog.String("source_type", log.SourceType),
+		)
+		return err
+	}
+	logger.Info(ctx, "写入饮水日志成功",
+		slog.String("user_id", log.UserID),
+		slog.Int("amount_ml", log.AmountMl),
+		slog.String("source_type", log.SourceType),
+	)
+	return nil
 }
 
 func (r *BodyMetricsRepo) ReduceWaterLogsByDateSource(ctx context.Context, userID string, recordedOn string, sourceType string, amountMl int) (int, error) {

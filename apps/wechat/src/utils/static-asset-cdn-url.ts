@@ -19,3 +19,6 @@ export const LOGIN_LOGO_URL = getFoodImagesCdnUrl('wechat/source-login-logo.png'
 
 /** 默认用户头像（COS: food-images / wechat/default_avatar.jpg） */
 export const DEFAULT_AVATAR_URL = getFoodImagesCdnUrl('wechat/default_avatar.jpg')
+
+/** 鹅腿/鸭腿/鸡腿专线背景图（COS: food-images / ecf8e073-83ca-41b4-bb79-659b17e94c85.png） */
+export const GOOSE_DUCK_CHICKEN_BG_URL = getFoodImagesCdnUrl('ecf8e073-83ca-41b4-bb79-659b17e94c85.png')

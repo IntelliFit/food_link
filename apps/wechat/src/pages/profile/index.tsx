@@ -332,7 +332,7 @@ function ProfilePage() {
     },
     {
       id: 5,
-      iconClass: 'icon-shuju',
+      iconClass: 'icon-foodshop',
       title: '公共食物库',
       desc: '浏览公共食物营养数据',
       path: extraPkgUrl('/pages/food-library/index')
@@ -802,9 +802,6 @@ function ProfilePage() {
                 <Text className='list-badge-text'>{(service as any).badgeCount}</Text>
               </View>
             )}
-            <View className='list-arrow'>
-              <ProfileChevron />
-            </View>
           </View>
         ))}
 
@@ -815,9 +812,6 @@ function ProfilePage() {
               <ProfileListIcon name={setting.iconClass} />
             </View>
             <Text className='list-title'>{setting.title}</Text>
-            <View className='list-arrow'>
-              <ProfileChevron />
-            </View>
           </View>
         ))}
       </View>

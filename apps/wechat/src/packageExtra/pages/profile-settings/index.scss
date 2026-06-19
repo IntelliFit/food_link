@@ -1,4 +1,5 @@
 @import '../../../pages/community/components/FeedActionSheet.scss';
+@import '../../../pages/community/components/ManualFoodCards.scss';
 .profile-settings-page {
   min-height: 100vh;
   display: flex;
@@ -430,6 +431,93 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* 收藏食谱卡片（与个人主页收藏 tab 风格一致） */
+.profile-feed-collection-card {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 16rpx 18rpx;
+  margin-bottom: 16rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+  border: 1rpx solid #e2e8f0;
+}
+
+.profile-feed-collection-thumb {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(152.3deg, #f3e8ff 0%, #e9d5ff 50%, #d8b4fe 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.has-image {
+    background: #faf5ff;
+  }
+}
+
+.profile-feed-collection-image {
+  width: 100%;
+  height: 100%;
+}
+
+.profile-feed-collection-placeholder-icon {
+  font-size: 40rpx;
+  color: #7e22ce;
+  opacity: 0.55;
+}
+
+.profile-feed-collection-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-feed-collection-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+  margin-bottom: 6rpx;
+}
+
+.profile-feed-collection-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #0f172a;
+  max-width: 100%;
+}
+
+.profile-feed-collection-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: #f3e8ff;
+  border: 1rpx solid #d8b4fe;
+  box-sizing: border-box;
+}
+
+.profile-feed-collection-badge-text {
+  font-size: 20rpx;
+  color: #7e22ce;
+  line-height: 1.3;
+}
+
+.profile-feed-collection-kcal {
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+/* 动态里的手动来源食物卡片，复用圈子 feed-manual-foods 样式 */
+.profile-feed-card .feed-manual-foods {
+  margin-top: 0;
+  margin-bottom: 16rpx;
 }
 
 .profile-feed-footer {
@@ -1192,5 +1280,109 @@
 
   .profile-feed-more-icon {
     color: #9ca3a8;
+  }
+
+  /* 动态里的收藏食谱卡片 */
+  .profile-feed-collection-card {
+    background: #1e2624;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .profile-feed-collection-thumb {
+    background: linear-gradient(152.3deg, #2a1f2e 0%, #231a2b 50%, #1d1524 100%);
+
+    &.has-image {
+      background: #201625;
+    }
+  }
+
+  .profile-feed-collection-placeholder-icon {
+    color: #d8b4fe;
+    opacity: 0.7;
+  }
+
+  .profile-feed-collection-name {
+    color: #f2f7f4;
+  }
+
+  .profile-feed-collection-badge {
+    background: #2a1f2e;
+    border-color: #5a3d6e;
+  }
+
+  .profile-feed-collection-badge-text {
+    color: #d8b4fe;
+  }
+
+  .profile-feed-collection-kcal {
+    color: #94a3b8;
+  }
+
+  /* 动态里的手动来源食物卡片 */
+  .feed-manual-foods {
+    gap: 16rpx;
+  }
+
+  .feed-manual-food-row {
+    background: #1e2624;
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .feed-manual-food-thumb {
+    background: linear-gradient(152.3deg, #1f3a2e 0%, #173328 50%, #112a20 100%);
+
+    &.has-image {
+      background: #142921;
+    }
+  }
+
+  .feed-manual-food-placeholder-icon {
+    color: #7dd3b0;
+    opacity: 0.7;
+  }
+
+  .feed-manual-food-name {
+    color: #f2f7f4;
+  }
+
+  .feed-manual-food-badge {
+    background: rgba(125, 211, 176, 0.12);
+    border-color: rgba(125, 211, 176, 0.24);
+  }
+
+  .feed-manual-food-badge-text {
+    color: #7dd3b0;
+  }
+
+  .feed-manual-food-badge.source-packaged_food {
+    background: rgba(96, 165, 250, 0.12);
+    border-color: rgba(96, 165, 250, 0.24);
+
+    .feed-manual-food-badge-text {
+      color: #93c5fd;
+    }
+  }
+
+  .feed-manual-food-badge.source-public_library {
+    background: rgba(251, 191, 36, 0.12);
+    border-color: rgba(251, 191, 36, 0.24);
+
+    .feed-manual-food-badge-text {
+      color: #fcd34d;
+    }
+  }
+
+  .feed-manual-food-kcal {
+    color: #94a3b8;
+  }
+
+  /* 动态图片占位背景 */
+  .profile-feed-image-grid-item,
+  .profile-feed-image-wrap {
+    background: #1e2624;
+  }
+
+  .collection-food-thumb {
+    background: #2a3330;
   }
 }

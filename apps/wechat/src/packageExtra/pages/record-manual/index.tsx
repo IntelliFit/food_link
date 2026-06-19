@@ -26,7 +26,7 @@ import {
 } from '../../../utils/food-display-image'
 import { withAuth } from '../../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
-import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
+import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import {
   inferDefaultMealTypeFromHealthProfile,
   inferDefaultMealTypeFromLocalTime,
@@ -129,6 +129,8 @@ const NUTRIENT_SCALE_KEYS: NutrientKey[] = [
   'fat',
   'fiber',
   'sugar',
+  'waterMl',
+  'water_ml',
   'saturatedFat',
   'cholesterolMg',
   'sodium_mg',
@@ -1103,7 +1105,7 @@ function RecordManualPage() {
         )
       )
 
-      await saveFoodRecord({
+      const saveResult = await saveFoodRecord({
         date: getStoredRecordTargetDate(),
         meal_type: selectedMeal as any,
         image_path: mealImagePaths[0],
@@ -1120,20 +1122,33 @@ function RecordManualPage() {
         total_weight_grams: totalWeight,
         entry_type: entryTypeRef.current,
       })
+
+      const targetDate = getStoredRecordTargetDate()
+      if (!saveResult.already_saved) {
+        addWaterToBodyMetricsStorage(targetDate, calculateFoodRecordItemsWaterMl(items))
+      }
       try {
         Taro.removeStorageSync('campus_quick_record_source')
       } catch {
         /* ignore */
       }
       try {
-        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT)
+        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate })
       } catch {
         /* ignore */
       }
-      const targetDate = getStoredRecordTargetDate()
-      void refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
+      try {
+        await refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
+      } catch {
+        /* ignore */
+      }
+      try {
+        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
+      } catch {
+        /* ignore */
+      }
 
-      Taro.showToast({ title: '记录成功', icon: 'success' })
+      Taro.showToast({ title: saveResult.already_saved ? '该餐已记录' : '记录成功', icon: saveResult.already_saved ? 'none' : 'success' })
       setTimeout(() => {
         Taro.redirectTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${targetDate}` }).catch(() => {
           Taro.navigateTo({ url: `${extraPkgUrl('/pages/day-record/index')}?date=${targetDate}` })

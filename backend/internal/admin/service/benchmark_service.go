@@ -21,6 +21,7 @@ import (
 	"food_link/backend/internal/migration/do"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"log/slog"
 )
 
@@ -115,7 +116,7 @@ func (s *BenchmarkService) CreateSample(ctx context.Context, input domain.Create
 
 func (s *BenchmarkService) UpdateSample(ctx context.Context, id string, input domain.UpdateSampleInput) (*domain.DatasetSample, error) {
 	if input.Items == nil {
-		input.Items = map[string]float64{}
+		input.Items = map[string]any{}
 	}
 	if input.LabelType != nil && *input.LabelType == "total" && input.TotalWeightGrams != nil {
 		input.Items["__total__"] = *input.TotalWeightGrams
@@ -323,7 +324,7 @@ func (s *BenchmarkService) executeRun(ctx context.Context, runID, userID, mode, 
 	}
 	updates := map[string]any{
 		"status":       status,
-		"metrics":      metrics.ToMap(),
+		"metrics":      datatypes.JSONMap(metrics.ToMap()),
 		"completed_at": time.Now(),
 	}
 	if err := s.repo.UpdateRun(ctx, runID, updates); err != nil {
@@ -392,9 +393,9 @@ func (s *BenchmarkService) executeSample(ctx context.Context, runID, userID, mod
 
 	updates := map[string]any{
 		"status":        domain.BenchmarkSampleStatusDone,
-		"prediction":    prediction,
-		"stage_outputs": stageOutputs,
-		"metrics":       metrics.ToMap(),
+		"prediction":    datatypes.JSONMap(prediction),
+		"stage_outputs": datatypes.JSONMap(stageOutputs),
+		"metrics":       datatypes.JSONMap(metrics.ToMap()),
 		"completed_at":  time.Now(),
 	}
 	if task.ErrorMessage != nil && *task.ErrorMessage != "" {
@@ -518,13 +519,13 @@ func modeToDefaultModel(mode string) string {
 
 func normalizeSampleItems(sample *do.FoodWeightLabeledSampleDO) {
 	if sample.Items == nil {
-		sample.Items = map[string]float64{}
+		sample.Items = map[string]any{}
 	}
 	if sample.LabelType == "total" && sample.TotalWeightGrams != nil {
 		sample.Items["__total__"] = *sample.TotalWeightGrams
 	}
 	if sample.LabelType == "unlabeled" {
-		sample.Items = map[string]float64{}
+		sample.Items = map[string]any{}
 	}
 }
 

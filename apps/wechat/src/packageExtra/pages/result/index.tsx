@@ -38,7 +38,9 @@ import { inferDefaultMealTypeFromHealthProfile, inferDefaultMealTypeFromLocalTim
 import { withAuth } from '../../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import {
+  addWaterToBodyMetricsStorage,
   applyOptimisticFoodRecordToHomeDashboardSnapshot,
+  calculateFoodRecordItemsWaterMl,
   refreshHomeDashboardLocalSnapshotFromCloud
 } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
@@ -1889,13 +1891,23 @@ function ResultPage() {
         const targetDateKey = payload.date || getStoredRecordTargetDate() || formatDateKey(new Date())
         if (!saveResult.already_saved) {
           applyOptimisticFoodRecordToHomeDashboardSnapshot(targetDateKey, payload, saveResult.id)
+          addWaterToBodyMetricsStorage(targetDateKey, calculateFoodRecordItemsWaterMl(payload.items || []))
         }
         try {
           Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey })
         } catch {
           /* ignore */
         }
-        void refreshHomeDashboardLocalSnapshotFromCloud(targetDateKey)
+        try {
+          await refreshHomeDashboardLocalSnapshotFromCloud(targetDateKey)
+        } catch {
+          /* ignore */
+        }
+        try {
+          Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDateKey, force: true })
+        } catch {
+          /* ignore */
+        }
         const tidForCommit = sourceTaskId || String(Taro.getStorageSync('analyzeSourceTaskId') || '')
         if (tidForCommit) {
           try {

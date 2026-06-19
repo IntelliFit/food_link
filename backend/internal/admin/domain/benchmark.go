@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strconv"
 	"time"
 
 	"food_link/backend/internal/migration/do"
@@ -302,7 +303,7 @@ func ToDatasetSampleDTO(s *do.FoodWeightLabeledSampleDO) DatasetSampleDTO {
 		ImageObjectKey:   s.ImageObjectKey,
 		LabelType:        s.LabelType,
 		TotalWeightGrams: s.TotalWeightGrams,
-		Items:            s.Items,
+		Items:            sampleItemsToFloat64Map(s.Items),
 		Status:           s.Status,
 		SourcePath:       s.SourcePath,
 		Metadata:         s.Metadata,
@@ -325,23 +326,23 @@ func ToDatasetSampleDTOList(items []do.FoodWeightLabeledSampleDO) []DatasetSampl
 }
 
 type UpdateSampleInput struct {
-	LabelType        *string          `json:"label_type,omitempty"`
-	TotalWeightGrams *float64          `json:"total_weight_grams,omitempty"`
-	Items            map[string]float64 `json:"items,omitempty"`
-	Status           *string          `json:"status,omitempty"`
-	Metadata         map[string]any   `json:"metadata,omitempty"`
+	LabelType        *string        `json:"label_type,omitempty"`
+	TotalWeightGrams *float64       `json:"total_weight_grams,omitempty"`
+	Items            map[string]any `json:"items,omitempty"`
+	Status           *string        `json:"status,omitempty"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
 }
 
 type CreateSampleInput struct {
-	BatchName        string           `json:"batch_name"`
-	SampleName       string           `json:"sample_name"`
-	OriginalFilename string           `json:"original_filename"`
-	ImageURL         string           `json:"image_url"`
-	LabelType        string           `json:"label_type"`
-	TotalWeightGrams *float64          `json:"total_weight_grams,omitempty"`
-	Items            map[string]float64 `json:"items,omitempty"`
-	Status           string           `json:"status"`
-	Metadata         map[string]any   `json:"metadata,omitempty"`
+	BatchName        string         `json:"batch_name"`
+	SampleName       string         `json:"sample_name"`
+	OriginalFilename string         `json:"original_filename"`
+	ImageURL         string         `json:"image_url"`
+	LabelType        string         `json:"label_type"`
+	TotalWeightGrams *float64       `json:"total_weight_grams,omitempty"`
+	Items            map[string]any `json:"items,omitempty"`
+	Status           string         `json:"status"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
 }
 
 func (r *RunMetrics) ToMap() map[string]any {
@@ -394,4 +395,31 @@ func (m ModelConfig) ToMap() map[string]any {
 func NowPtr() *time.Time {
 	t := time.Now()
 	return &t
+}
+
+func sampleItemsToFloat64Map(items map[string]any) map[string]float64 {
+	if items == nil {
+		return nil
+	}
+	out := make(map[string]float64, len(items))
+	for k, v := range items {
+		switch n := v.(type) {
+		case float64:
+			out[k] = n
+		case float32:
+			out[k] = float64(n)
+		case int:
+			out[k] = float64(n)
+		case int64:
+			out[k] = float64(n)
+		case string:
+			if f, err := strconv.ParseFloat(n, 64); err == nil {
+				out[k] = f
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
