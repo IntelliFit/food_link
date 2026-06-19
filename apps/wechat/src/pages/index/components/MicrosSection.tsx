@@ -19,7 +19,9 @@ type MicronutrientCard = {
   label: string
   unit: string
   accent: string
-  value: number
+  current: number
+  target: number
+  progress: number
 }
 
 const MICRONUTRIENT_CONFIGS: Array<{
@@ -38,10 +40,24 @@ const MICRONUTRIENT_CONFIGS: Array<{
   { key: 'vitaminDMcg', label: '维D', unit: 'mcg', accent: '#8a7be0' },
 ]
 
-function normalizeMicronutrientValue(value: unknown): number {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0
-  return parsed
+function parseMicronutrientValue(raw: unknown): { current: number; target: number; progress: number } {
+  if (raw && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>
+    const current = Number(obj.current)
+    const target = Number(obj.target)
+    const progress = Number(obj.progress)
+    return {
+      current: Number.isFinite(current) && current > 0 ? current : 0,
+      target: Number.isFinite(target) && target > 0 ? target : 0,
+      progress: Number.isFinite(progress) && progress > 0 ? progress : 0,
+    }
+  }
+  const value = Number(raw)
+  return {
+    current: Number.isFinite(value) && value > 0 ? value : 0,
+    target: 0,
+    progress: 0,
+  }
 }
 
 function formatMicronutrientValue(value: number): string {
@@ -55,11 +71,16 @@ function formatMicronutrientValue(value: number): string {
 function useMicronutrients(intakeData: HomeIntakeData) {
   return useMemo<MicronutrientCard[]>(() => (
     MICRONUTRIENT_CONFIGS
-      .map((item) => ({
-        ...item,
-        value: normalizeMicronutrientValue(intakeData.micros?.[item.key]),
-      }))
-      .filter((item) => item.value > 0)
+      .map((item) => {
+        const parsed = parseMicronutrientValue(intakeData.micros?.[item.key])
+        return {
+          ...item,
+          current: parsed.current,
+          target: parsed.target,
+          progress: parsed.progress,
+        }
+      })
+      .filter((item) => item.current > 0)
   ), [intakeData.micros])
 }
 
@@ -101,29 +122,52 @@ export function MicrosSection({
             <View key={index} className='micros-preview-card micros-preview-card--loading'>
               <View className='micros-skeleton micros-skeleton--label' />
               <View className='micros-skeleton micros-skeleton--value' />
+              <View className='micros-skeleton micros-skeleton--progress' />
             </View>
           ))}
         </View>
       ) : hasMicros ? (
         <View className='micros-preview-grid'>
-          {micronutrients.map((item) => (
-            <View
-              key={item.key}
-              className='micros-preview-card'
-              style={{
-                borderColor: `${item.accent}33`,
-                background: `${item.accent}10`,
-              }}
-            >
-              <Text className='micros-preview-card-label'>{item.label}</Text>
-              <View className='micros-preview-card-value-row'>
-                <Text className='micros-preview-card-value' style={{ color: item.accent }}>
-                  {formatMicronutrientValue(item.value)}
-                </Text>
-                <Text className='micros-preview-card-unit'>{item.unit}</Text>
+          {micronutrients.map((item) => {
+            const showTarget = item.target > 0
+            const progressPct = Math.min(100, item.progress)
+            return (
+              <View
+                key={item.key}
+                className='micros-preview-card'
+                style={{
+                  borderColor: `${item.accent}33`,
+                  background: `${item.accent}10`,
+                }}
+              >
+                <Text className='micros-preview-card-label'>{item.label}</Text>
+                <View className='micros-preview-card-value-row'>
+                  <Text className='micros-preview-card-value' style={{ color: item.accent }}>
+                    {formatMicronutrientValue(item.current)}
+                  </Text>
+                  {showTarget && (
+                    <Text className='micros-preview-card-target'>
+                      /{formatMicronutrientValue(item.target)}{item.unit}
+                    </Text>
+                  )}
+                  {!showTarget && (
+                    <Text className='micros-preview-card-unit'>{item.unit}</Text>
+                  )}
+                </View>
+                {showTarget && (
+                  <View className='micros-preview-progress-bg'>
+                    <View
+                      className='micros-preview-progress-fill'
+                      style={{
+                        width: `${progressPct}%`,
+                        backgroundColor: item.accent,
+                      }}
+                    />
+                  </View>
+                )}
               </View>
-            </View>
-          ))}
+            )
+          })}
         </View>
       ) : (
         <View className='micros-preview-empty'>

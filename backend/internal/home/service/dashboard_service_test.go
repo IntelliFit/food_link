@@ -74,10 +74,30 @@ func TestDashboardService_HomeDashboard(t *testing.T) {
 	require.True(t, ok)
 	micros, ok := intakeData["micros"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, 4.0, micros["fiber"])
-	assert.Equal(t, 300.0, micros["sodiumMg"])
-	assert.Equal(t, 120.0, micros["potassiumMg"])
-	assert.Equal(t, 14.0, micros["vitaminCMg"])
+
+	fiber, ok := micros["fiber"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 4.0, fiber["current"])
+	assert.Equal(t, 25.0, fiber["target"])
+	assert.Equal(t, 16.0, fiber["progress"])
+
+	sodium, ok := micros["sodiumMg"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 300.0, sodium["current"])
+	assert.Equal(t, 2000.0, sodium["target"])
+	assert.Equal(t, 15.0, sodium["progress"])
+
+	potassium, ok := micros["potassiumMg"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 120.0, potassium["current"])
+	assert.Equal(t, 3500.0, potassium["target"])
+	assert.Equal(t, 3.4, potassium["progress"])
+
+	vitaminC, ok := micros["vitaminCMg"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 14.0, vitaminC["current"])
+	assert.Equal(t, 100.0, vitaminC["target"])
+	assert.Equal(t, 14.0, vitaminC["progress"])
 }
 
 func TestDashboardService_HomeDashboard_NoRecords(t *testing.T) {

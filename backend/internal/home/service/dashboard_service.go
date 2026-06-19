@@ -37,6 +37,19 @@ var homeMicronutrientMetrics = []nutritionagg.Metric{
 	{Key: "vitaminDMcg", Aliases: []string{"vitaminDMcg", "vitamin_d_mcg"}},
 }
 
+// homeMicronutrientReferences 是首页展示的微量元素每日参考摄入量，与 stats_service 中的
+// statsInsightMicronutrientReferences 同源，用于在首页微量营养卡片渲染进度条。
+var homeMicronutrientReferences = map[string]float64{
+	"fiber":          25,
+	"sodiumMg":       2000,
+	"potassiumMg":    3500,
+	"calciumMg":      800,
+	"ironMg":         12,
+	"vitaminARaeMcg": 700,
+	"vitaminCMg":     100,
+	"vitaminDMcg":    10,
+}
+
 type DashboardService struct {
 	users   *userrepo.UserRepo
 	home    *homerepo.HomeRepo
@@ -814,7 +827,17 @@ func addHomeMicronutrientTotals(target map[string]float64, addition map[string]f
 func buildHomeMicronutrientPayload(totals map[string]float64) map[string]any {
 	payload := make(map[string]any, len(homeMicronutrientMetrics))
 	for _, metric := range homeMicronutrientMetrics {
-		payload[metric.Key] = round1(totals[metric.Key])
+		current := totals[metric.Key]
+		target := homeMicronutrientReferences[metric.Key]
+		progress := 0.0
+		if target > 0 {
+			progress = math.Min(100.0, round1(current/target*100))
+		}
+		payload[metric.Key] = map[string]any{
+			"current":  round1(current),
+			"target":   target,
+			"progress": progress,
+		}
 	}
 	return payload
 }

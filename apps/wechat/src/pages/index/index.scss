@@ -2532,6 +2532,35 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   margin-top: 12rpx;
 }
 
+.micros-skeleton--progress {
+  width: 100%;
+  height: 6rpx;
+  margin-top: 10rpx;
+}
+
+.micros-preview-card-target {
+  display: block;
+  font-size: 15rpx;
+  line-height: 20rpx;
+  color: #94a3b8;
+  margin-left: 3rpx;
+}
+
+.micros-preview-progress-bg {
+  width: 100%;
+  height: 6rpx;
+  margin-top: 8rpx;
+  border-radius: 9999rpx;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.micros-preview-progress-fill {
+  height: 100%;
+  border-radius: 9999rpx;
+  transition: width 0.35s ease-out;
+}
+
 .loading-dots-inline {
   display: flex;
   gap: 6rpx;

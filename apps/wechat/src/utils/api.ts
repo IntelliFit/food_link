@@ -631,6 +631,13 @@ export interface FoodRecord {
   source_task_id?: string | null
 }
 
+/** 首页微量元素单项（带每日参考摄入量与进度） */
+export interface HomeMicronutrientItem {
+  current: number
+  target: number
+  progress: number
+}
+
 /** 首页今日摄入与宏量 */
 export interface HomeIntakeData {
   current: number
@@ -641,7 +648,7 @@ export interface HomeIntakeData {
     carbs: { current: number; target: number }
     fat: { current: number; target: number }
   }
-  micros?: Partial<Nutrients>
+  micros?: Record<string, HomeMicronutrientItem | number>
 }
 
 export interface HomeNutritionTarget {
