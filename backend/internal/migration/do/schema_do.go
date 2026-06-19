@@ -336,6 +336,7 @@ type FoodRecordDO struct {
 	ActivityTiming   *string          `gorm:"column:activity_timing;type:text"`
 	SourceTaskID     *string          `gorm:"column:source_task_id;type:uuid;index:idx_user_food_records_source_task_id"`
 	EntryType        *string          `gorm:"column:entry_type;type:text"`
+	RecipeID         *string          `gorm:"column:recipe_id;type:uuid;index:idx_user_food_records_recipe_id"`
 	HiddenFromFeed   bool             `gorm:"column:hidden_from_feed;type:boolean;not null;default:false;index:idx_user_food_records_hidden_from_feed,where:hidden_from_feed = false"`
 }
 
@@ -1204,7 +1205,7 @@ type FoodWeightLabeledSampleDO struct {
 	ImageURL         *string            `gorm:"column:image_url;type:text"`
 	LabelType        string             `gorm:"column:label_type;type:text;not null"`
 	TotalWeightGrams *float64           `gorm:"column:total_weight_grams;type:numeric"`
-	Items            map[string]float64 `gorm:"column:items;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	Items            map[string]any `gorm:"column:items;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	Status           string             `gorm:"column:status;type:text;not null;default:'labeled'"`
 	SourcePath       *string            `gorm:"column:source_path;type:text"`
 	Metadata         map[string]any     `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`

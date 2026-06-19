@@ -406,7 +406,7 @@ func readImage(path string) ([]byte, string, error) {
 }
 
 func buildRecord(batchName, sampleName, filename, sourcePath, objectKey, imageURL string, label sampleLabel, status string) do.FoodWeightLabeledSampleDO {
-	itemsMap := make(map[string]float64)
+	itemsMap := make(map[string]any)
 	if label.LabelType == "total" && label.TotalWeightGrams != nil {
 		itemsMap["__total__"] = *label.TotalWeightGrams
 	} else {

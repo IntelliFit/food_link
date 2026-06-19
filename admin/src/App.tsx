@@ -5,7 +5,12 @@ import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/sonner'
 import { BrandMark } from '@/components/brand-mark'
 import { adminRequest, displayApiBase } from '@/lib/api'
-import { BenchmarkPage } from '@/pages/benchmark-page'
+import {
+  BenchmarkPage,
+  BenchmarkDatasetsSection,
+  BenchmarkRunsSection,
+  BenchmarkRunDetailSection,
+} from '@/pages/benchmark-page'
 import { FeedbackPage } from '@/pages/feedback-page'
 import { FeedReportPage } from '@/pages/feed-report-page'
 import { FeedReportDetailPage } from '@/pages/feed-report-detail-page'
@@ -105,7 +110,12 @@ export function App() {
         <Route path='/' element={<Navigate to='/overview' replace />} />
         <Route path='/overview' element={<OverviewPage {...pageProps} />} />
         <Route path='/feedback' element={<FeedbackPage {...pageProps} />} />
-        <Route path='/benchmark' element={<BenchmarkPage {...pageProps} />} />
+        <Route path='/benchmark/*' element={<BenchmarkPage {...pageProps} />}>
+          <Route index element={<Navigate to='datasets' replace />} />
+          <Route path='datasets' element={<BenchmarkDatasetsSection />} />
+          <Route path='runs' element={<BenchmarkRunsSection />} />
+          <Route path='runs/:runId' element={<BenchmarkRunDetailSection />} />
+        </Route>
         <Route path='/exercise-energy' element={<ExerciseEnergyPage {...pageProps} />} />
         <Route path='/feed-reports' element={<FeedReportPage {...pageProps} />} />
         <Route path='/feed-reports/:reportId' element={<FeedReportDetailPage {...pageProps} />} />

@@ -80,6 +80,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		ContextAdvice    *string           `json:"context_advice"`
 		SourceTaskID     *string           `json:"source_task_id"`
 		EntryType        *string           `json:"entry_type"`
+		RecipeID         *string           `json:"recipe_id"`
 		Date             *string           `json:"date"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -114,6 +115,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		ContextAdvice:    body.ContextAdvice,
 		SourceTaskID:     body.SourceTaskID,
 		EntryType:        body.EntryType,
+		RecipeID:         body.RecipeID,
 		Date:             body.Date,
 	})
 	if err != nil {

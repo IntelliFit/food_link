@@ -130,7 +130,7 @@ func TestBenchmarkService_CreateSample(t *testing.T) {
 		OriginalFilename: "s2.jpg",
 		ImageURL:         "https://example.com/s2.jpg",
 		LabelType:        "items",
-		Items:            map[string]float64{"米饭": 150, "红烧肉": 80},
+		Items:            map[string]any{"米饭": 150, "红烧肉": 80},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "labeled", sample2.Status)
@@ -148,7 +148,7 @@ func TestBenchmarkService_ListSamples(t *testing.T) {
 			BatchName:  "batch-a",
 			SampleName: "sample-a-" + string(rune('0'+i)),
 			LabelType:  "items",
-			Items:      map[string]float64{"item": float64(i) * 10},
+			Items:      map[string]any{"item": float64(i) * 10},
 		})
 		require.NoError(t, err)
 	}
@@ -156,7 +156,7 @@ func TestBenchmarkService_ListSamples(t *testing.T) {
 		BatchName:  "batch-b",
 		SampleName: "sample-b-1",
 		LabelType:  "items",
-		Items:      map[string]float64{"item": 5},
+		Items:      map[string]any{"item": 5},
 	})
 	require.NoError(t, err)
 
@@ -217,7 +217,7 @@ func TestBenchmarkService_CreateRun_Success(t *testing.T) {
 		ImageURL:         ptrString("https://example.com/sample-a-1.jpg"),
 		LabelType:        "total",
 		TotalWeightGrams: &total,
-		Items:            map[string]float64{"__total__": total},
+		Items:            map[string]any{"__total__": total},
 		Status:           "labeled",
 	}
 	err := benchmarkRepo.CreateSample(ctx, sample)
@@ -318,7 +318,7 @@ func TestBenchmarkService_CancelRun(t *testing.T) {
 		ImageURL:         ptrString("https://example.com/sample-cancel.jpg"),
 		LabelType:        "total",
 		TotalWeightGrams: &total,
-		Items:            map[string]float64{"__total__": total},
+		Items:            map[string]any{"__total__": total},
 		Status:           "labeled",
 	})
 	require.NoError(t, err)
@@ -354,7 +354,7 @@ func TestBenchmarkService_DeleteRun(t *testing.T) {
 		ImageURL:         ptrString("https://example.com/sample-delete.jpg"),
 		LabelType:        "total",
 		TotalWeightGrams: &total,
-		Items:            map[string]float64{"__total__": total},
+		Items:            map[string]any{"__total__": total},
 		Status:           "labeled",
 	})
 	require.NoError(t, err)
@@ -386,7 +386,7 @@ func TestBenchmarkService_ExecuteSample_NoImageURL(t *testing.T) {
 		SampleName:       "sample-noimage",
 		OriginalFilename: "sample-noimage.jpg",
 		LabelType:        "total",
-		Items:            map[string]float64{"__total__": 100},
+		Items:            map[string]any{"__total__": 100},
 		Status:           "labeled",
 	}
 	err := benchmarkRepo.CreateSample(ctx, sample)
@@ -430,7 +430,7 @@ func TestBenchmarkService_ExecuteSample_TaskSubmitFailure(t *testing.T) {
 		OriginalFilename: "sample-fail.jpg",
 		ImageURL:         ptrString("https://example.com/sample-fail.jpg"),
 		LabelType:        "total",
-		Items:            map[string]float64{"__total__": 100},
+		Items:            map[string]any{"__total__": 100},
 		Status:           "labeled",
 	}
 	err := benchmarkRepo.CreateSample(ctx, sample)
@@ -489,7 +489,7 @@ func TestBenchmarkService_ComparePredictionWithGroundTruth(t *testing.T) {
 			name: "items match",
 			groundTruth: map[string]any{
 				"label_type": "items",
-				"items":      map[string]float64{"米饭": 150, "红烧肉": 80},
+				"items":      map[string]any{"米饭": 150, "红烧肉": 80},
 			},
 			prediction: map[string]any{
 				"items": []any{
@@ -504,7 +504,7 @@ func TestBenchmarkService_ComparePredictionWithGroundTruth(t *testing.T) {
 			name: "items mismatch weight",
 			groundTruth: map[string]any{
 				"label_type": "items",
-				"items":      map[string]float64{"米饭": 100},
+				"items":      map[string]any{"米饭": 100},
 			},
 			prediction: map[string]any{
 				"items": []any{

@@ -36,6 +36,27 @@ export interface TargetFormState {
   proteinTarget: string
   carbsTarget: string
   fatTarget: string
+  fiberTarget: string
+  sugarTarget: string
+  saturatedFatTarget: string
+  cholesterolMgTarget: string
+  sodiumMgTarget: string
+  potassiumMgTarget: string
+  calciumMgTarget: string
+  ironMgTarget: string
+  magnesiumMgTarget: string
+  zincMgTarget: string
+  vitaminARaeMcgTarget: string
+  vitaminCMgTarget: string
+  vitaminDMcgTarget: string
+  vitaminEMgTarget: string
+  vitaminKMcgTarget: string
+  thiaminMgTarget: string
+  riboflavinMgTarget: string
+  niacinMgTarget: string
+  vitaminB6MgTarget: string
+  folateMcgTarget: string
+  vitaminB12McgTarget: string
 }
 
 export interface MacroTargets {

@@ -3,16 +3,17 @@ import { withAuth } from '../../../utils/withAuth'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Taro from '@tarojs/taro'
 import {
-  AnalyzeResponse, FoodItem, MealType, saveFoodRecord, showUnifiedApiError, getAccessToken, getHealthProfile,
+  AnalyzeResponse, FoodItem, MealType, Nutrients, saveFoodRecord, showUnifiedApiError, getAccessToken, getHealthProfile,
   submitAnalysisFeedback, ANALYSIS_FEEDBACK_SUBMISSION_ENABLED,
   type AnalysisFeedbackType, type AnalysisResolutionState
 } from '../../../utils/api'
+import { normalizeItemNutrients } from '../result/result-item-converter'
 import {
   inferDefaultMealTypeFromHealthProfile,
   inferDefaultMealTypeFromLocalTime,
 } from '../../../utils/infer-default-meal-type'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
-import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
+import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { getStoredRecordTargetDate, persistRecordTargetDate } from '../../../utils/record-date'
@@ -35,7 +36,7 @@ const toSelectableMealType = (value: unknown): SelectableMealType | undefined =>
   return hit?.value
 }
 
-const getSavedSelectableMealType = (fallbackMealType: SelectableMealType): SelectableMealType | undefined => {
+const getSavedSelectableMealType = (fallbackMealType: SelectableMealType): SelectableMealType => {
   const savedMealType = Taro.getStorageSync('analyzeMealType')
   return toSelectableMealType(savedMealType) || fallbackMealType
 }
@@ -59,6 +60,7 @@ interface NutritionItem {
   protein: number
   carbs: number
   fat: number
+  nutrients: Nutrients
 }
 
 type MacroField = 'protein' | 'carbs' | 'fat'
@@ -83,6 +85,17 @@ const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixe
 const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
   Math.max(0, roundToSingleDecimal(protein) * 4 + roundToSingleDecimal(carbs) * 4 + roundToSingleDecimal(fat) * 9)
 )
+
+const scaleNutrients = (nutrients: Nutrients, factor: number): Nutrients => {
+  const scaled = { ...nutrients }
+  ;(Object.keys(scaled) as Array<keyof Nutrients>).forEach((key) => {
+    const current = scaled[key]
+    if (typeof current === 'number') {
+      scaled[key] = Math.max(0, Math.round(current * factor * 100) / 100) as never
+    }
+  })
+  return scaled
+}
 
 /** 用户在分析结果页停留超过此时间且未调整摄入比例，则视为疑似不信任识别结果 */
 const SUSPECT_DISTRUST_TIMEOUT_MS = 15000
@@ -122,16 +135,19 @@ function ResultTextPage() {
   const convertApiDataToItems = (items: FoodItem[]): NutritionItem[] => {
     return items.map((item, index) => {
       const weight = normalizeNutrientValue(item.estimatedWeightGrams)
+      const waterMl = normalizeNutrientValue(item.waterMl ?? item.water_ml ?? item.nutrients?.waterMl ?? item.nutrients?.water_ml)
+      const nutrients = normalizeItemNutrients(item.nutrients, waterMl)
       return {
         id: index + 1,
         name: item.name,
         weight,
-        calorie: normalizeNutrientValue(item.nutrients.calories),
+        calorie: nutrients.calories > 0 ? nutrients.calories : calculateCaloriesFromMacros(nutrients.protein, nutrients.carbs, nutrients.fat),
         intake: weight,
         ratio: 100,
-        protein: normalizeNutrientValue(item.nutrients.protein),
-        carbs: normalizeNutrientValue(item.nutrients.carbs),
-        fat: normalizeNutrientValue(item.nutrients.fat)
+        protein: nutrients.protein,
+        carbs: nutrients.carbs,
+        fat: nutrients.fat,
+        nutrients
       }
     })
   }
@@ -273,18 +289,17 @@ function ResultTextPage() {
         if (item.id !== id) return item
         const newWeight = Math.max(10, item.weight + delta)
         const weightScale = item.weight > 0 ? newWeight / item.weight : 1
-        const nextProtein = item.protein * weightScale
-        const nextCarbs = item.carbs * weightScale
-        const nextFat = item.fat * weightScale
+        const scaledNutrients = scaleNutrients(item.nutrients, weightScale)
         const newIntake = Math.round(newWeight * (item.ratio / 100))
         return {
           ...item,
           weight: newWeight,
           intake: newIntake,
-          calorie: calculateCaloriesFromMacros(nextProtein, nextCarbs, nextFat),
-          protein: nextProtein,
-          carbs: nextCarbs,
-          fat: nextFat
+          calorie: scaledNutrients.calories > 0 ? scaledNutrients.calories : calculateCaloriesFromMacros(scaledNutrients.protein, scaledNutrients.carbs, scaledNutrients.fat),
+          protein: scaledNutrients.protein,
+          carbs: scaledNutrients.carbs,
+          fat: scaledNutrients.fat,
+          nutrients: scaledNutrients
         }
       })
       calculateNutritionStats(updated)
@@ -318,13 +333,16 @@ function ResultTextPage() {
         if (item.id !== id) return item
         const resolvedValue = typeof nextValue === 'function' ? nextValue(item[field]) : nextValue
         const normalizedValue = Math.max(0, roundToSingleDecimal(resolvedValue))
-        const nextItem = {
+        const nextItem: NutritionItem = {
           ...item,
-          [field]: normalizedValue
-        } as NutritionItem
+          [field]: normalizedValue,
+          nutrients: { ...item.nutrients, [field]: normalizedValue }
+        }
+        const calorie = calculateCaloriesFromMacros(nextItem.protein, nextItem.carbs, nextItem.fat)
         return {
           ...nextItem,
-          calorie: calculateCaloriesFromMacros(nextItem.protein, nextItem.carbs, nextItem.fat)
+          calorie,
+          nutrients: { ...nextItem.nutrients, calories: calorie }
         }
       })
       calculateNutritionStats(updated)
@@ -402,14 +420,7 @@ function ResultTextPage() {
           weight: item.weight,
           ratio: item.ratio,
           intake: item.intake,
-          nutrients: {
-            calories: item.calorie,
-            protein: item.protein,
-            carbs: item.carbs,
-            fat: item.fat,
-            fiber: 0,
-            sugar: 0
-          }
+          nutrients: item.nutrients
         })),
         total_calories: nutritionStats.calories,
         total_protein: nutritionStats.protein,
@@ -423,12 +434,24 @@ function ResultTextPage() {
       }
       const saveResult = await saveFoodRecord(payload)
       const targetDate = payload.date || getStoredRecordTargetDate() || formatDateKey(new Date())
+      if (!saveResult.already_saved) {
+        addWaterToBodyMetricsStorage(targetDate, calculateFoodRecordItemsWaterMl(payload.items || []))
+      }
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate })
       } catch {
         /* ignore */
       }
-      void refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
+      try {
+        await refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
+      } catch {
+        /* ignore */
+      }
+      try {
+        Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
+      } catch {
+        /* ignore */
+      }
 
       if (saveOnly) {
         Taro.showToast({ title: '记录成功', icon: 'success' })

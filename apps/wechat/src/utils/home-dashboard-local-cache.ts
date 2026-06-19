@@ -4,6 +4,7 @@
  */
 import Taro from '@tarojs/taro'
 import {
+  type BodyMetricWaterDay,
   type FoodRecord,
   getAccessToken,
   getExerciseLogs,
@@ -17,6 +18,7 @@ import {
   type HomeNutritionTarget,
   type SaveFoodRecordRequest
 } from './api'
+import { type BodyMetricsStorage } from '../pages/index/types'
 import { sanitizeFoodDisplayImageUrl } from './food-display-image'
 
 export const HOME_DASHBOARD_LOCAL_CACHE_KEY = 'home_dashboard_local_cache'
@@ -156,20 +158,56 @@ function normalizeNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
-function foodRecordItemWaterMl(item: SaveFoodRecordRequest['items'][number]): number {
-  const waterMl = normalizeNumber(item.water_ml ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl)
+function foodRecordItemWaterMl(item: any): number {
+  const getNum = (value: unknown): number => {
+    if (typeof value === 'number') return value
+    const n = Number(value)
+    return Number.isFinite(n) ? n : 0
+  }
+  const nutrients = item?.nutrients as Record<string, unknown> | undefined
+  const rawWaterMl = item?.water_ml ?? item?.waterMl ?? nutrients?.water_ml ?? nutrients?.waterMl
+  const waterMl = getNum(rawWaterMl)
   if (waterMl <= 0) return 0
-  const ratio = normalizeNumber(item.ratio)
+  const ratio = getNum(item?.ratio)
   if (ratio > 0) return waterMl * ratio / 100
-  const intake = normalizeNumber(item.intake)
-  const weight = normalizeNumber(item.weight)
+  const intake = getNum(item?.intake)
+  const weight = getNum(item?.weight)
   if (intake > 0 && weight > 0) return waterMl * intake / weight
   if (intake === 0 && weight === 0) return waterMl
   return 0
 }
 
+export function calculateFoodRecordItemsWaterMl(items: any[] | null | undefined): number {
+  return (items || []).reduce((sum, item) => sum + foodRecordItemWaterMl(item), 0)
+}
+
 function calculateFoodRecordWaterMl(payload: SaveFoodRecordRequest): number {
-  return (payload.items || []).reduce((sum, item) => sum + foodRecordItemWaterMl(item), 0)
+  return calculateFoodRecordItemsWaterMl(payload.items || [])
+}
+
+const BODY_METRICS_STORAGE_KEY = 'body_metrics_storage'
+
+/**
+ * 饮食记录保存成功后，把食物含水量乐观添加到本机 body_metrics_storage，
+ * 让首页饮水进度无需等云端身体指标接口即可立即更新。
+ */
+export function addWaterToBodyMetricsStorage(calendarDate: string, amountMl: number): void {
+  if (amountMl <= 0) return
+  const apiDate = mapCalendarDateToApi(calendarDate) || calendarDate
+  try {
+    const stored = Taro.getStorageSync(BODY_METRICS_STORAGE_KEY) as BodyMetricsStorage | undefined
+    if (!stored) return
+    const current = stored.waterByDate[apiDate] || { date: apiDate, total: 0, logs: [] }
+    stored.waterByDate[apiDate] = {
+      ...current,
+      date: apiDate,
+      total: current.total + amountMl,
+      logs: [...(current.logs || []), amountMl]
+    }
+    Taro.setStorageSync(BODY_METRICS_STORAGE_KEY, stored)
+  } catch {
+    // ignore
+  }
 }
 
 function formatLocalTimeHHmm(date = new Date()): string {

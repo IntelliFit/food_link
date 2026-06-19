@@ -2,6 +2,58 @@ import { View, Text, Input } from '@tarojs/components'
 import { Button } from '@taroify/core'
 import { type TargetEditorProps } from '../types'
 
+type MicroTargetKey =
+  | 'fiberTarget'
+  | 'sugarTarget'
+  | 'saturatedFatTarget'
+  | 'cholesterolMgTarget'
+  | 'sodiumMgTarget'
+  | 'potassiumMgTarget'
+  | 'calciumMgTarget'
+  | 'ironMgTarget'
+  | 'magnesiumMgTarget'
+  | 'zincMgTarget'
+  | 'vitaminARaeMcgTarget'
+  | 'vitaminCMgTarget'
+  | 'vitaminDMcgTarget'
+  | 'vitaminEMgTarget'
+  | 'vitaminKMcgTarget'
+  | 'thiaminMgTarget'
+  | 'riboflavinMgTarget'
+  | 'niacinMgTarget'
+  | 'vitaminB6MgTarget'
+  | 'folateMcgTarget'
+  | 'vitaminB12McgTarget'
+
+const MICRO_TARGET_CONFIGS: Array<{
+  key: MicroTargetKey
+  label: string
+  unit: string
+  step: number
+}> = [
+  { key: 'fiberTarget', label: '膳食纤维', unit: 'g', step: 1 },
+  { key: 'sugarTarget', label: '糖', unit: 'g', step: 1 },
+  { key: 'saturatedFatTarget', label: '饱和脂肪', unit: 'g', step: 1 },
+  { key: 'cholesterolMgTarget', label: '胆固醇', unit: 'mg', step: 50 },
+  { key: 'sodiumMgTarget', label: '钠', unit: 'mg', step: 50 },
+  { key: 'potassiumMgTarget', label: '钾', unit: 'mg', step: 50 },
+  { key: 'calciumMgTarget', label: '钙', unit: 'mg', step: 50 },
+  { key: 'ironMgTarget', label: '铁', unit: 'mg', step: 1 },
+  { key: 'magnesiumMgTarget', label: '镁', unit: 'mg', step: 50 },
+  { key: 'zincMgTarget', label: '锌', unit: 'mg', step: 1 },
+  { key: 'vitaminARaeMcgTarget', label: '维A', unit: 'mcg', step: 10 },
+  { key: 'vitaminCMgTarget', label: '维C', unit: 'mg', step: 10 },
+  { key: 'vitaminDMcgTarget', label: '维D', unit: 'mcg', step: 1 },
+  { key: 'vitaminEMgTarget', label: '维E', unit: 'mg', step: 5 },
+  { key: 'vitaminKMcgTarget', label: '维K', unit: 'mcg', step: 10 },
+  { key: 'thiaminMgTarget', label: '维B1', unit: 'mg', step: 0.1 },
+  { key: 'riboflavinMgTarget', label: '维B2', unit: 'mg', step: 0.1 },
+  { key: 'niacinMgTarget', label: '烟酸', unit: 'mg', step: 1 },
+  { key: 'vitaminB6MgTarget', label: '维B6', unit: 'mg', step: 0.1 },
+  { key: 'folateMcgTarget', label: '叶酸', unit: 'mcg', step: 50 },
+  { key: 'vitaminB12McgTarget', label: '维B12', unit: 'mcg', step: 0.1 },
+]
+
 export function TargetEditor({
   visible,
   targetForm,
@@ -26,6 +78,8 @@ export function TargetEditor({
 
   // 固定步长：热量 100，蛋白质/碳水 50，脂肪 10
   const getStep = (key: keyof typeof targetForm): number => {
+    const micro = MICRO_TARGET_CONFIGS.find((item) => item.key === key)
+    if (micro) return micro.step
     if (key === 'calorieTarget') return 100
     if (key === 'fatTarget') return 10
     // 蛋白质/碳水
@@ -39,9 +93,42 @@ export function TargetEditor({
     handleFormChange(key, formatAdjustedValue(newValue))
   }
 
+  const renderMacroItem = (
+    key: keyof typeof targetForm,
+    label: string,
+    unit: string
+  ) => (
+    <View key={key} className='target-form-item'>
+      <Text className='target-form-label'>{label}</Text>
+      <View className='target-input-row'>
+        <View
+          className='target-adjust-btn'
+          onClick={() => adjustValue(key, -1)}
+        >
+          <Text className='target-adjust-btn-text'>−</Text>
+        </View>
+        <View className='target-input-wrap'>
+          <Input
+            className='target-input'
+            type='digit'
+            value={targetForm[key]}
+            onInput={(e) => handleFormChange(key, e.detail.value)}
+          />
+          <Text className='target-input-unit'>{unit}</Text>
+        </View>
+        <View
+          className='target-adjust-btn'
+          onClick={() => adjustValue(key, 1)}
+        >
+          <Text className='target-adjust-btn-text'>+</Text>
+        </View>
+      </View>
+    </View>
+  )
+
   return (
-    <View className='target-modal' catchMove>
-      <View className='target-modal-mask' onClick={() => !saving && onClose()} />
+    <View className='target-modal'>
+      <View className='target-modal-mask' catchMove onClick={() => !saving && onClose()} />
       <View className='target-modal-content'>
         <View className='target-modal-header'>
           <View className='target-modal-title-row'>
@@ -50,151 +137,80 @@ export function TargetEditor({
           <Text className='target-modal-desc'>这是长期基础目标，不会因为当天运动自动变化。</Text>
         </View>
 
-        {calibrationSuggestion?.available && (
-          <View className='target-calibration-card'>
-            <Text className='target-calibration-title'>
-              建议调整到 {Math.round(calibrationSuggestion.suggested_kcal)} kcal
-            </Text>
-            <Text className='target-calibration-desc'>
-              {calibrationSuggestion.reason || '根据最近14天的饮食和体重变化，建议小幅调整基础目标。'}
-            </Text>
-            <View className='target-calibration-actions'>
-              <View
-                className='target-calibration-btn secondary'
-                onClick={() => onDismissCalibration?.()}
-              >
-                <Text className='target-calibration-btn-text secondary'>暂不调整</Text>
-              </View>
-              <View
-                className='target-calibration-btn primary'
-                onClick={() => onApplyCalibration?.(calibrationSuggestion)}
-              >
-                <Text className='target-calibration-btn-text primary'>应用建议</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* 精确模式：数字输入框 + 加减按钮 */}
-        <View className='target-form-list'>
-          {/* 热量目标 */}
-          <View className='target-form-item'>
-            <Text className='target-form-label'>基础摄入目标</Text>
-            <View className='target-input-row'>
-              <View 
-                className='target-adjust-btn'
-                onClick={() => adjustValue('calorieTarget', -1)}
-              >
-                <Text className='target-adjust-btn-text'>−</Text>
-              </View>
-              <View className='target-input-wrap'>
-                <Input
-                  className='target-input'
-                  type='digit'
-                  value={targetForm.calorieTarget}
-                  onInput={(e) => handleFormChange('calorieTarget', e.detail.value)}
-                />
-                <Text className='target-input-unit'>kcal</Text>
-              </View>
-              <View 
-                className='target-adjust-btn'
-                onClick={() => adjustValue('calorieTarget', 1)}
-              >
-                <Text className='target-adjust-btn-text'>+</Text>
+        <View className='target-modal-scroll'>
+          {calibrationSuggestion?.available && (
+            <View className='target-calibration-card'>
+              <Text className='target-calibration-title'>
+                建议调整到 {Math.round(calibrationSuggestion.suggested_kcal)} kcal
+              </Text>
+              <Text className='target-calibration-desc'>
+                {calibrationSuggestion.reason || '根据最近14天的饮食和体重变化，建议小幅调整基础目标。'}
+              </Text>
+              <View className='target-calibration-actions'>
+                <View
+                  className='target-calibration-btn secondary'
+                  onClick={() => onDismissCalibration?.()}
+                >
+                  <Text className='target-calibration-btn-text secondary'>暂不调整</Text>
+                </View>
+                <View
+                  className='target-calibration-btn primary'
+                  onClick={() => onApplyCalibration?.(calibrationSuggestion)}
+                >
+                  <Text className='target-calibration-btn-text primary'>应用建议</Text>
+                </View>
               </View>
             </View>
+          )}
+
+          {/* 精确模式：数字输入框 + 加减按钮 */}
+          <View className='target-form-list'>
+            {renderMacroItem('calorieTarget', '基础摄入目标', 'kcal')}
+            {renderMacroItem('proteinTarget', '蛋白质目标', 'g')}
+            {renderMacroItem('carbsTarget', '碳水目标', 'g')}
+            {renderMacroItem('fatTarget', '脂肪目标', 'g')}
           </View>
 
-          {/* 蛋白质目标 */}
-          <View className='target-form-item'>
-            <Text className='target-form-label'>蛋白质目标</Text>
-            <View className='target-input-row'>
-              <View 
-                className='target-adjust-btn'
-                onClick={() => adjustValue('proteinTarget', -1)}
-              >
-                <Text className='target-adjust-btn-text'>−</Text>
-              </View>
-              <View className='target-input-wrap'>
-                <Input
-                  className='target-input'
-                  type='digit'
-                  value={targetForm.proteinTarget}
-                  onInput={(e) => handleFormChange('proteinTarget', e.detail.value)}
-                />
-                <Text className='target-input-unit'>g</Text>
-              </View>
-              <View 
-                className='target-adjust-btn'
-                onClick={() => adjustValue('proteinTarget', 1)}
-              >
-                <Text className='target-adjust-btn-text'>+</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* 碳水目标 */}
-          <View className='target-form-item'>
-            <Text className='target-form-label'>碳水目标</Text>
-            <View className='target-input-row'>
-              <View 
-                className='target-adjust-btn'
-                onClick={() => adjustValue('carbsTarget', -1)}
-              >
-                <Text className='target-adjust-btn-text'>−</Text>
-              </View>
-              <View className='target-input-wrap'>
-                <Input
-                  className='target-input'
-                  type='digit'
-                  value={targetForm.carbsTarget}
-                  onInput={(e) => handleFormChange('carbsTarget', e.detail.value)}
-                />
-                <Text className='target-input-unit'>g</Text>
-              </View>
-              <View 
-                className='target-adjust-btn'
-                onClick={() => adjustValue('carbsTarget', 1)}
-              >
-                <Text className='target-adjust-btn-text'>+</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* 脂肪目标 */}
-          <View className='target-form-item'>
-            <Text className='target-form-label'>脂肪目标</Text>
-            <View className='target-input-row'>
-              <View 
-                className='target-adjust-btn'
-                onClick={() => adjustValue('fatTarget', -1)}
-              >
-                <Text className='target-adjust-btn-text'>−</Text>
-              </View>
-              <View className='target-input-wrap'>
-                <Input
-                  className='target-input'
-                  type='digit'
-                  value={targetForm.fatTarget}
-                  onInput={(e) => handleFormChange('fatTarget', e.detail.value)}
-                />
-                <Text className='target-input-unit'>g</Text>
-              </View>
-              <View 
-                className='target-adjust-btn'
-                onClick={() => adjustValue('fatTarget', 1)}
-              >
-                <Text className='target-adjust-btn-text'>+</Text>
-              </View>
+          <View className='target-form-section'>
+            <Text className='target-form-section-title'>微量元素目标</Text>
+            <View className='target-micro-grid'>
+              {MICRO_TARGET_CONFIGS.map((config) => (
+                <View key={config.key} className='target-form-item target-form-item--micro'>
+                  <Text className='target-form-label'>{config.label}</Text>
+                  <View className='target-input-row'>
+                    <View
+                      className='target-adjust-btn'
+                      onClick={() => adjustValue(config.key, -1)}
+                    >
+                      <Text className='target-adjust-btn-text'>−</Text>
+                    </View>
+                    <View className='target-input-wrap'>
+                      <Input
+                        className='target-input'
+                        type='digit'
+                        value={targetForm[config.key]}
+                        onInput={(e) => handleFormChange(config.key, e.detail.value)}
+                      />
+                      <Text className='target-input-unit'>{config.unit}</Text>
+                    </View>
+                    <View
+                      className='target-adjust-btn'
+                      onClick={() => adjustValue(config.key, 1)}
+                    >
+                      <Text className='target-adjust-btn-text'>+</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
             </View>
           </View>
         </View>
 
         <View className='target-modal-footer'>
-          <Button 
-            block 
-            color='primary' 
-            shape='round' 
+          <Button
+            block
+            color='primary'
+            shape='round'
             className='target-save-btn'
             onClick={onSave}
             loading={saving}

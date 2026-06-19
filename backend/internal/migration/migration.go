@@ -65,6 +65,9 @@ func AutoMigrate(ctx context.Context, db *gorm.DB, schema string) error {
 	if err := ensurePublicRecordsDefault(ctx, db); err != nil {
 		return err
 	}
+	if err := ensureRecipeIDColumn(ctx, db); err != nil {
+		return err
+	}
 	if err := ensureAdminResolutionColumns(ctx, db); err != nil {
 		return err
 	}
@@ -792,6 +795,24 @@ func ensurePublicRecordsDefault(ctx context.Context, db *gorm.DB) error {
 	`)
 	if result.Error != nil {
 		return fmt.Errorf("backfill public_records default: %w", result.Error)
+	}
+	return nil
+}
+
+func ensureRecipeIDColumn(ctx context.Context, db *gorm.DB) error {
+	var exists int64
+	if err := db.WithContext(ctx).Raw(`
+		SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_name = 'user_food_records' AND column_name = 'recipe_id'
+	`).Scan(&exists).Error; err != nil {
+		return fmt.Errorf("check recipe_id column exists: %w", err)
+	}
+	if exists > 0 {
+		return nil
+	}
+	sql := `ALTER TABLE user_food_records ADD COLUMN recipe_id uuid`
+	if err := db.WithContext(ctx).Exec(sql).Error; err != nil {
+		return fmt.Errorf("add recipe_id column: %w", err)
 	}
 	return nil
 }
