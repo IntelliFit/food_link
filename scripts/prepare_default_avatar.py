@@ -89,7 +89,7 @@ def upload_to_cos(data: bytes, key: str) -> str:
     )
     cdn_base = os.getenv(
         "CDN_USER_AVATARS_BASE_URL",
-        "http://cdn-food-user-avatars.coachlink.fit",
+        "https://cdn-food-user-avatars.coachlink.fit",
     ).rstrip("/")
     return f"{cdn_base}/{key}"
 

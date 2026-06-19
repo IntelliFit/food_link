@@ -89,6 +89,7 @@ type FoodRecord struct {
 	TotalFat         float64          `gorm:"column:total_fat" json:"total_fat"`
 	TotalWeightGrams int              `gorm:"column:total_weight_grams" json:"total_weight_grams"`
 	EntryType        *string          `gorm:"column:entry_type" json:"entry_type,omitempty"`
+	RecipeID         *string          `gorm:"column:recipe_id" json:"recipe_id,omitempty"`
 	RecordTime       *time.Time       `gorm:"column:record_time" json:"record_time"`
 	CreatedAt        *time.Time       `gorm:"column:created_at" json:"created_at"`
 }

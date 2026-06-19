@@ -41,6 +41,8 @@ type FeedRecord struct {
 	Items            []map[string]any `gorm:"column:items;serializer:json" json:"items"`
 	DietGoal         *string          `gorm:"column:diet_goal" json:"diet_goal,omitempty"`
 	HiddenFromFeed   bool             `gorm:"column:hidden_from_feed" json:"hidden_from_feed"`
+	EntryType        *string          `gorm:"column:entry_type" json:"entry_type,omitempty"`
+	RecipeID         *string          `gorm:"column:recipe_id" json:"recipe_id,omitempty"`
 	ExerciseType     *string          `gorm:"column:exercise_type" json:"exercise_type,omitempty"`
 	ExerciseDesc     *string          `gorm:"column:exercise_desc" json:"exercise_desc,omitempty"`
 	CaloriesBurned   *float64         `gorm:"column:calories_burned" json:"calories_burned,omitempty"`
@@ -170,7 +172,7 @@ func (r *FeedRepo) listFeedByAuthors(ctx context.Context, authorIDs []string, co
 
 func (r *FeedRepo) listFoodFeedByAuthors(ctx context.Context, authorIDs []string, mealType, dietGoal, date, sortBy string, limit int) ([]FeedRecord, error) {
 	q := r.db.WithContext(ctx).Table("user_food_records").
-		Select("'food_record' AS feed_type, id, user_id, meal_type, record_time, created_at, total_calories, total_protein, total_carbs, total_fat, image_path, image_paths, description, items, diet_goal, hidden_from_feed").
+		Select("'food_record' AS feed_type, id, user_id, meal_type, record_time, created_at, total_calories, total_protein, total_carbs, total_fat, image_path, image_paths, description, items, diet_goal, entry_type, recipe_id, hidden_from_feed").
 		Where("user_id IN ? AND hidden_from_feed = ?", authorIDs, false)
 	if mealType != "" {
 		q = q.Where("meal_type = ?", mealType)
@@ -285,7 +287,7 @@ func (r *FeedRepo) GetFeedTargetByID(ctx context.Context, targetType, targetID s
 	}
 	var row FeedRecord
 	if err := r.db.WithContext(ctx).Table("user_food_records").
-		Select("'food_record' AS feed_type, id, user_id, meal_type, record_time, created_at, total_calories, total_protein, total_carbs, total_fat, image_path, image_paths, description, items, diet_goal, hidden_from_feed").
+		Select("'food_record' AS feed_type, id, user_id, meal_type, record_time, created_at, total_calories, total_protein, total_carbs, total_fat, image_path, image_paths, description, items, diet_goal, entry_type, recipe_id, hidden_from_feed").
 		Where("id = ?", targetID).First(&row).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil

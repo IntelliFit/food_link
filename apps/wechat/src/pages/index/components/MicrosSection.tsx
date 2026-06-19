@@ -5,13 +5,26 @@ import { formatDisplayNumber } from '../utils/helpers'
 
 type HomeMicronutrientKey = keyof Pick<Nutrients,
   'fiber' |
+  'sugar' |
+  'saturatedFat' |
+  'cholesterolMg' |
   'sodiumMg' |
   'potassiumMg' |
   'calciumMg' |
   'ironMg' |
+  'magnesiumMg' |
+  'zincMg' |
   'vitaminARaeMcg' |
   'vitaminCMg' |
-  'vitaminDMcg'
+  'vitaminDMcg' |
+  'vitaminEMg' |
+  'vitaminKMcg' |
+  'thiaminMg' |
+  'riboflavinMg' |
+  'niacinMg' |
+  'vitaminB6Mg' |
+  'folateMcg' |
+  'vitaminB12Mcg'
 >
 
 type MicronutrientCard = {
@@ -31,13 +44,26 @@ const MICRONUTRIENT_CONFIGS: Array<{
   accent: string
 }> = [
   { key: 'fiber', label: '膳食纤维', unit: 'g', accent: '#5dbb8a' },
+  { key: 'sugar', label: '糖', unit: 'g', accent: '#e88cb8' },
+  { key: 'saturatedFat', label: '饱和脂肪', unit: 'g', accent: '#d4a373' },
+  { key: 'cholesterolMg', label: '胆固醇', unit: 'mg', accent: '#bc8f8f' },
   { key: 'sodiumMg', label: '钠', unit: 'mg', accent: '#ef8b73' },
   { key: 'potassiumMg', label: '钾', unit: 'mg', accent: '#57a99a' },
   { key: 'calciumMg', label: '钙', unit: 'mg', accent: '#6aa7d8' },
   { key: 'ironMg', label: '铁', unit: 'mg', accent: '#d88d5a' },
+  { key: 'magnesiumMg', label: '镁', unit: 'mg', accent: '#7eb8da' },
+  { key: 'zincMg', label: '锌', unit: 'mg', accent: '#a8a4ce' },
   { key: 'vitaminARaeMcg', label: '维A', unit: 'mcg', accent: '#e0a14a' },
   { key: 'vitaminCMg', label: '维C', unit: 'mg', accent: '#71c16f' },
   { key: 'vitaminDMcg', label: '维D', unit: 'mcg', accent: '#8a7be0' },
+  { key: 'vitaminEMg', label: '维E', unit: 'mg', accent: '#c0a46e' },
+  { key: 'vitaminKMcg', label: '维K', unit: 'mcg', accent: '#8fbc8f' },
+  { key: 'thiaminMg', label: '维B1', unit: 'mg', accent: '#d4a5a5' },
+  { key: 'riboflavinMg', label: '维B2', unit: 'mg', accent: '#9fb4cc' },
+  { key: 'niacinMg', label: '烟酸', unit: 'mg', accent: '#b8a9c9' },
+  { key: 'vitaminB6Mg', label: '维B6', unit: 'mg', accent: '#a3c4a3' },
+  { key: 'folateMcg', label: '叶酸', unit: 'mcg', accent: '#d8b4a0' },
+  { key: 'vitaminB12Mcg', label: '维B12', unit: 'mcg', accent: '#9ecae1' },
 ]
 
 function parseMicronutrientValue(raw: unknown): { current: number; target: number; progress: number } {
@@ -80,7 +106,6 @@ function useMicronutrients(intakeData: HomeIntakeData) {
           progress: parsed.progress,
         }
       })
-      .filter((item) => item.current > 0)
   ), [intakeData.micros])
 }
 
@@ -118,7 +143,7 @@ export function MicrosSection({
 
       {dashboardBusy ? (
         <View className='micros-preview-grid'>
-          {Array.from({ length: 8 }).map((_, index) => (
+          {Array.from({ length: MICRONUTRIENT_CONFIGS.length }).map((_, index) => (
             <View key={index} className='micros-preview-card micros-preview-card--loading'>
               <View className='micros-skeleton micros-skeleton--label' />
               <View className='micros-skeleton micros-skeleton--value' />

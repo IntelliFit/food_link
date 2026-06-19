@@ -317,6 +317,23 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
     radial-gradient(circle at 12% 18%, rgb(255 255 255 / 28%), transparent 24%),
     linear-gradient(135deg, #2b211f 0%, #c44f37 54%, #f2b15f 100%);
 
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background:
+      radial-gradient(circle at 12% 18%, rgb(255 255 255 / 28%), transparent 24%),
+      linear-gradient(135deg, rgba(43, 33, 31, 0.82) 0%, rgba(196, 79, 55, 0.58) 54%, rgba(242, 177, 95, 0.36) 100%);
+    pointer-events: none;
+  }
+
+  .home-reward-hint__main,
+  .home-reward-hint__actions {
+    position: relative;
+    z-index: 2;
+  }
+
   .home-reward-hint__kicker {
     color: rgb(255 244 214 / 84%);
   }
@@ -2361,8 +2378,9 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   transition: background 0.2s ease;
 
   &.is-expanded {
-    background:
-      linear-gradient(180deg, rgb(249 253 251 / 96%) 0%, rgb(255 255 255 / 100%) 100%);
+    padding: 0;
+    background: transparent;
+    border: none;
   }
 }
 
@@ -2395,6 +2413,12 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
   background: #f3f8f5;
 }
 
+.nutrition-expand-affordance-icon {
+  font-size: 18rpx;
+  line-height: 22rpx;
+  color: #5aa783;
+}
+
 .nutrition-expand-affordance-text {
   font-size: 18rpx;
   line-height: 22rpx;
@@ -2403,7 +2427,9 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 }
 
 .nutrition-expanded-body {
-  margin-top: 12rpx;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 .micros-preview {
@@ -3452,8 +3478,8 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   width: 100%;
   max-width: 100%;
   max-height: $sheet-float-max-height;
-  overflow-x: hidden;
   overflow-y: auto;
+  overflow-x: hidden;
   background: $modal-sheet-bg;
   border-radius: 32rpx;
   padding: 32rpx 24rpx 28rpx;
@@ -3481,9 +3507,7 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 }
 
 .target-modal-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  padding-bottom: 12rpx;
 }
 
 .body-modal-scroll {
@@ -4501,11 +4525,65 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
   margin-top: 24rpx;
 }
 
+.target-form-section {
+  margin-top: 32rpx;
+}
+
+.target-form-section-title {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 40rpx;
+  color: #1f2937;
+  margin-bottom: 20rpx;
+}
+
+.target-micro-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
 .target-form-item {
   background: $modal-sheet-bg;
   border-radius: 20rpx;
   padding: 24rpx;
   box-shadow: 0 2rpx 12rpx rgb(0 0 0 / 4%);
+
+  &--micro {
+    padding: 18rpx 16rpx;
+
+    .target-form-label {
+      font-size: 24rpx;
+      line-height: 34rpx;
+      margin-bottom: 14rpx;
+    }
+
+    .target-input-wrap {
+      height: 68rpx;
+      padding: 0 12rpx;
+    }
+
+    .target-input {
+      font-size: 28rpx;
+      line-height: 68rpx;
+    }
+
+    .target-input-unit {
+      font-size: 22rpx;
+      line-height: 30rpx;
+    }
+
+    .target-adjust-btn {
+      width: 44rpx;
+      height: 44rpx;
+    }
+
+    .target-adjust-btn-text {
+      font-size: 26rpx;
+      line-height: 44rpx;
+    }
+  }
 }
 
 .target-form-label {
@@ -4710,6 +4788,39 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 // 深色模式
 .home-page--dark,
 .page--dark {
+  .nutrition-expand-title {
+    color: #e2e8f0;
+  }
+
+  .nutrition-expand-affordance {
+    background: rgb(30 41 37 / 80%);
+  }
+
+  .nutrition-expand-affordance-icon,
+  .nutrition-expand-affordance-text {
+    color: #7dd3a9;
+  }
+
+  .micros-preview-kicker {
+    color: #e2e8f0;
+  }
+
+  .micros-preview-status {
+    background: rgb(30 41 37 / 80%);
+  }
+
+  .micros-preview-status-text {
+    color: #7dd3a9;
+  }
+
+  .micros-preview-card-label {
+    color: #cbd5e1;
+  }
+
+  .micros-preview-empty-text {
+    color: #94a3b8;
+  }
+
   .home-reward-hint {
     box-shadow: 0 16rpx 34rpx rgb(0 0 0 / 26%);
   }
@@ -4755,6 +4866,148 @@ $sheet-float-max-height: calc(100vh - #{$sheet-float-gap-top} - env(safe-area-in
 
   .meal-action-sheet-cancel-text {
     color: rgba(214, 226, 220, 0.6);
+  }
+
+  /* 基础目标 / 体重 / 喝水弹窗 */
+  .target-modal-content,
+  .record-menu-content,
+  .body-modal-sheet {
+    background: #181f1d !important;
+    box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.35) !important;
+  }
+
+  .target-modal-title,
+  .record-menu-title,
+  .meal-records-dialog-title {
+    color: #f2f7f4 !important;
+  }
+
+  .target-modal-desc,
+  .record-menu-subtitle,
+  .meal-records-dialog-count {
+    color: #94a3b8 !important;
+  }
+
+  .target-form-item {
+    background: #1e2624 !important;
+  }
+
+  .target-form-label {
+    color: #f2f7f4 !important;
+  }
+
+  .target-form-section-title {
+    color: #f2f7f4 !important;
+  }
+
+  .target-input-wrap {
+    background: #141c1a !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .target-input {
+    color: #f2f7f4 !important;
+  }
+
+  .target-input-unit {
+    color: #94a3b8 !important;
+  }
+
+  .target-adjust-btn {
+    background: #1e2624 !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+
+    &:active {
+      background: #27322f !important;
+    }
+  }
+
+  .target-adjust-btn-text {
+    color: #f2f7f4 !important;
+  }
+
+  .target-calibration-card {
+    background: rgba(125, 211, 176, 0.1) !important;
+    border-color: rgba(125, 211, 176, 0.2) !important;
+  }
+
+  .target-calibration-title {
+    color: #7dd3b0 !important;
+  }
+
+  .target-calibration-desc {
+    color: #94a3b8 !important;
+  }
+
+  .target-calibration-btn.secondary {
+    background: #27322f !important;
+  }
+
+  .target-calibration-btn-text.secondary {
+    color: #f2f7f4 !important;
+  }
+
+  .target-relation-hint {
+    background: rgba(125, 211, 176, 0.08) !important;
+    border-color: rgba(125, 211, 176, 0.16) !important;
+  }
+
+  .target-relation-hint-title {
+    color: #7dd3b0 !important;
+  }
+
+  .target-relation-hint-value {
+    color: #94a3b8 !important;
+
+    &.aligned {
+      color: #7dd3b0 !important;
+    }
+
+    &.adjusting {
+      color: #fdba74 !important;
+    }
+
+    &.pending {
+      color: #94a3b8 !important;
+    }
+  }
+
+  .modal-actions-fixed,
+  .modal-footer-stack {
+    background: linear-gradient(180deg, rgba(24, 31, 29, 0) 0%, #181f1d 18%, #181f1d 100%) !important;
+  }
+
+  .target-modal-btn.secondary {
+    background: #27322f !important;
+  }
+
+  .target-modal-btn-text.secondary {
+    color: #f2f7f4 !important;
+  }
+
+  .water-modal-quick-item {
+    background: rgba(96, 165, 250, 0.1) !important;
+
+    &:active {
+      background: rgba(96, 165, 250, 0.16) !important;
+    }
+  }
+
+  .water-modal-quick-value {
+    color: #93c5fd !important;
+  }
+
+  .water-modal-quick-unit {
+    color: #94a3b8 !important;
+  }
+
+  .water-reset-btn {
+    background: #1e2624 !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .water-reset-btn-text {
+    color: #f2f7f4 !important;
   }
 }
 

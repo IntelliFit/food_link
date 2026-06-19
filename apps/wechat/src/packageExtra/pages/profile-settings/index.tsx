@@ -44,6 +44,8 @@ import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
 import { FeedReportMask } from '../../../pages/community/components/FeedReportMask'
 import { FeedReportSheet } from '../../../pages/community/components/FeedReportSheet'
 import { FeedActionSheet } from '../../../pages/community/components/FeedActionSheet'
+import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
+import { isManualFoodFeedRecord } from '../../../utils/manual-food-source'
 import { LOGIN_LOGO_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
 
@@ -572,7 +574,7 @@ export default function ProfileSettingsPage() {
   }
 
   const handleGoRecipeDetail = (recipe: UserRecipe) => {
-    Taro.navigateTo({ url: `/pages/recipe-edit/index?id=${encodeURIComponent(recipe.id)}` })
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/recipe-detail/index')}?id=${encodeURIComponent(recipe.id)}` })
   }
 
   const handleGoFeedDetail = (item: CommunityFeedItem) => {
@@ -588,7 +590,21 @@ export default function ProfileSettingsPage() {
       Taro.navigateTo({ url: `/pages/exercise-record/index${dateText ? `?date=${encodeURIComponent(dateText)}` : ''}` })
       return
     }
+    if (record.recipe_id) {
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/recipe-detail/index')}?id=${encodeURIComponent(record.recipe_id)}` })
+      return
+    }
     Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(record.id)}` })
+  }
+
+  const handleManualFoodCardClick = (item: CommunityFeedItem, row: { manual_source?: string | null; manual_source_id?: string | null }) => {
+    const manualSourceId = row.manual_source_id
+    const manualSource = String(row.manual_source || '')
+    if (manualSourceId && (manualSource === 'public_library' || manualSource === 'nutrition_library' || manualSource === 'packaged_food')) {
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(manualSourceId)}` })
+      return
+    }
+    handleGoFeedDetail(item)
   }
 
   // 渲染动态卡片
@@ -597,6 +613,8 @@ export default function ProfileSettingsPage() {
     const isExercise = record.feed_type === 'exercise_log'
     const isCampus = record.feed_type === 'campus_food'
     const isCirclePost = record.feed_type === 'circle_post'
+    const isCollectionRecord = !isExercise && !isCampus && !isCirclePost && !!record.recipe_id
+    const isManualRecord = !isExercise && !isCampus && !isCirclePost && !isCollectionRecord && isManualFoodFeedRecord(record)
     const targetType = (record.feed_type || 'food_record') as CommunityFeedTargetType
     const targetId = record.id
     const showReportMask = isCirclePost && reportMaskTarget?.targetType === targetType && reportMaskTarget?.targetId === targetId
@@ -639,8 +657,37 @@ export default function ProfileSettingsPage() {
           )
         )}
 
-        {/* 图片 */}
-        {isCirclePost && (record.image_paths || []).length > 0 ? (
+        {/* 图片 / 食物卡片 */}
+        {isCollectionRecord ? (
+          <View
+            className='profile-feed-collection-card'
+            onClick={() => handleGoFeedDetail(item)}
+          >
+            <View className={`profile-feed-collection-thumb ${record.image_path ? 'has-image' : ''}`}>
+              {record.image_path ? (
+                <Image className='profile-feed-collection-image' src={record.image_path} mode='aspectFill' />
+              ) : (
+                <Text className='iconfont icon-shiwu profile-feed-collection-placeholder-icon' />
+              )}
+            </View>
+            <View className='profile-feed-collection-info'>
+              <View className='profile-feed-collection-title-row'>
+                <Text className='profile-feed-collection-name'>{record.description || '收藏食谱'}</Text>
+                <View className='profile-feed-collection-badge'>
+                  <Text className='profile-feed-collection-badge-text'>收藏</Text>
+                </View>
+              </View>
+              <Text className='profile-feed-collection-kcal'>
+                {Math.round(Number(record.total_calories || 0))} kcal
+              </Text>
+            </View>
+          </View>
+        ) : isManualRecord ? (
+          <ManualFoodCards
+            items={record.items}
+            onItemClick={(row) => handleManualFoodCardClick(item, row)}
+          />
+        ) : isCirclePost && (record.image_paths || []).length > 0 ? (
           <View className='profile-feed-image-grid'>
             {(record.image_paths || []).map((url, idx) => (
               <View key={`circle-img-${idx}`} className='profile-feed-image-grid-item' onClick={() => Taro.previewImage({ current: url, urls: record.image_paths || [] })}>

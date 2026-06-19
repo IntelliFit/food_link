@@ -15,6 +15,8 @@ import (
 	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
 
+	"gorm.io/datatypes"
+
 	"log/slog"
 )
 
@@ -113,11 +115,12 @@ func (s *UserService) GetDashboardTargets(ctx context.Context, userID string) (m
 }
 
 type UpdateDashboardTargetsInput struct {
-	CalorieTarget float64 `json:"calorie_target"`
-	ProteinTarget float64 `json:"protein_target"`
-	CarbsTarget   float64 `json:"carbs_target"`
-	FatTarget     float64 `json:"fat_target"`
-	TargetDate    string  `json:"target_date"`
+	CalorieTarget float64            `json:"calorie_target"`
+	ProteinTarget float64            `json:"protein_target"`
+	CarbsTarget   float64            `json:"carbs_target"`
+	FatTarget     float64            `json:"fat_target"`
+	MicroTargets  map[string]float64 `json:"micro_targets"`
+	TargetDate    string             `json:"target_date"`
 }
 
 func (s *UserService) UpdateDashboardTargets(ctx context.Context, userID string, input UpdateDashboardTargetsInput) (map[string]float64, error) {
@@ -134,6 +137,9 @@ func (s *UserService) UpdateDashboardTargets(ctx context.Context, userID string,
 		"carbs_target":   math.Round(input.CarbsTarget*10) / 10,
 		"fat_target":     math.Round(input.FatTarget*10) / 10,
 	}
+	for key, value := range input.MicroTargets {
+		targets[key] = math.Round(value*10) / 10
+	}
 	healthCondition := user.HealthCondition
 	if healthCondition == nil {
 		healthCondition = map[string]any{}
@@ -141,7 +147,7 @@ func (s *UserService) UpdateDashboardTargets(ctx context.Context, userID string,
 	healthCondition["dashboard_targets"] = targets
 	healthCondition["dashboard_targets_mode"] = "manual"
 	healthCondition["dashboard_targets_updated_at"] = time.Now().UTC().Format(time.RFC3339)
-	updated, err := s.users.UpdateFields(ctx, userID, map[string]any{"health_condition": healthCondition})
+	updated, err := s.users.UpdateFields(ctx, userID, map[string]any{"health_condition": datatypes.JSONMap(healthCondition)})
 	if err != nil {
 		return nil, err
 	}
@@ -649,6 +655,30 @@ func hasDashboardTargets(healthCondition map[string]any) bool {
 	}
 }
 
+var dashboardMicroTargetKeys = []string{
+	"fiber_target",
+	"sugar_target",
+	"saturated_fat_target",
+	"cholesterol_mg_target",
+	"sodium_mg_target",
+	"potassium_mg_target",
+	"calcium_mg_target",
+	"iron_mg_target",
+	"magnesium_mg_target",
+	"zinc_mg_target",
+	"vitamin_a_rae_mcg_target",
+	"vitamin_c_mg_target",
+	"vitamin_d_mcg_target",
+	"vitamin_e_mg_target",
+	"vitamin_k_mcg_target",
+	"thiamin_mg_target",
+	"riboflavin_mg_target",
+	"niacin_mg_target",
+	"vitamin_b6_mg_target",
+	"folate_mcg_target",
+	"vitamin_b12_mcg_target",
+}
+
 func buildDashboardTargets(user *repo.User) map[string]float64 {
 	healthCondition := user.HealthCondition
 	if healthCondition == nil {
@@ -689,12 +719,20 @@ func buildDashboardTargets(user *repo.User) map[string]float64 {
 		}
 	}
 
-	return map[string]float64{
+	result := map[string]float64{
 		"calorie_target": math.Round(calorieTarget*10) / 10,
 		"protein_target": math.Round(protein*10) / 10,
 		"carbs_target":   math.Round(carbs*10) / 10,
 		"fat_target":     math.Round(fat*10) / 10,
 	}
+	for _, key := range dashboardMicroTargetKeys {
+		if v, ok := dashboardTargets[key]; ok && v != nil {
+			if f, ok2 := v.(float64); ok2 {
+				result[key] = math.Round(f*10) / 10
+			}
+		}
+	}
+	return result
 }
 
 func dashboardTargetsAsAnyMap(raw any) map[string]any {

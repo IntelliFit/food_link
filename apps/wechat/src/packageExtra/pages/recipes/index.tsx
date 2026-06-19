@@ -3,8 +3,9 @@ import { useState } from 'react'
 import Taro, { useDidShow } from '@tarojs/taro'
 import { getUserRecipes, deleteUserRecipe, applyUserRecipe, updateUserRecipe, showUnifiedApiError, type UserRecipe } from '../../../utils/api'
 import { withAuth } from '../../../utils/withAuth'
+import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
-import { refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
+import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { getStoredRecordTargetDate } from '../../../utils/record-date'
 import './index.scss'
 
@@ -280,12 +281,17 @@ function RecipesPage() {
       Taro.showLoading({ title: '记录中...', mask: true })
       await applyUserRecipe(recipe.id, selectedMealType, 'favorite_recipe')
       Taro.hideLoading()
+      addWaterToBodyMetricsStorage(targetDate, calculateFoodRecordItemsWaterMl(recipe.items || []))
       try {
         Taro.eventCenter.trigger(HOME_INTAKE_DATA_CHANGED_EVENT, { date: targetDate, force: true })
       } catch {
         /* ignore */
       }
-      void refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
+      try {
+        await refreshHomeDashboardLocalSnapshotFromCloud(targetDate)
+      } catch {
+        /* ignore */
+      }
       Taro.showToast({ title: '已添加到饮食记录', icon: 'success' })
       // 刷新列表以更新使用次数
       setTimeout(() => loadRecipes(), 500)
@@ -426,6 +432,10 @@ function RecipesPage() {
     return Math.round(value * 10) / 10
   }
 
+  const handleGoDetail = (recipe: UserRecipe) => {
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/recipe-detail/index')}?id=${encodeURIComponent(recipe.id)}` })
+  }
+
   return (
     <View className='recipes-page'>
       <View className='page-header'>
@@ -441,7 +451,7 @@ function RecipesPage() {
         ) : recipes.length > 0 ? (
           <View className='recipes-grid'>
             {recipes.map((recipe) => (
-              <View key={recipe.id} className='recipe-card'>
+              <View key={recipe.id} className='recipe-card' onClick={() => handleGoDetail(recipe)}>
                 {/* 食谱图片 */}
                 <View className='recipe-image-wrapper'>
                   {recipe.image_path ? (

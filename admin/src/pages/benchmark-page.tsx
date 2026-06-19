@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Navigate, Outlet, useNavigate, useParams } from 'react-router-dom'
 import {
   AlertCircle,
   ChevronLeft,
@@ -63,33 +64,13 @@ type BenchmarkPageProps = {
   onMenuChange: (menu: AdminMenuId) => void
 }
 
-type ViewMode = 'datasets' | 'runs' | 'run-detail'
-
 export function BenchmarkPage({ onLogout, onMenuChange }: BenchmarkPageProps) {
-  const [view, setView] = useState<ViewMode>('datasets')
-  const [selectedRunId, setSelectedRunId] = useState<string>('')
-
   return (
     <div className="relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[256px_minmax(0,1fr)] gap-8 px-4 py-4">
       <AdminSidebar activeMenu="benchmark" onLogout={onLogout} onMenuChange={onMenuChange} />
 
       <main className="min-w-0 space-y-4 pb-8">
-        {view === 'datasets' && <DatasetSection onViewRun={() => setView('runs')} />}
-        {view === 'runs' && (
-          <RunsSection
-            onBack={() => setView('datasets')}
-            onViewRun={(id) => {
-              setSelectedRunId(id)
-              setView('run-detail')
-            }}
-          />
-        )}
-        {view === 'run-detail' && (
-          <RunDetailSection
-            runId={selectedRunId}
-            onBack={() => setView('runs')}
-          />
-        )}
+        <Outlet />
       </main>
     </div>
   )
@@ -97,7 +78,8 @@ export function BenchmarkPage({ onLogout, onMenuChange }: BenchmarkPageProps) {
 
 // ---------- Dataset Section ----------
 
-function DatasetSection({ onViewRun }: { onViewRun: () => void }) {
+export function BenchmarkDatasetsSection() {
+  const navigate = useNavigate()
   const [samples, setSamples] = useState<DatasetSample[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -201,7 +183,7 @@ function DatasetSection({ onViewRun }: { onViewRun: () => void }) {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onViewRun}>
+            <Button variant="outline" onClick={() => navigate('/benchmark/runs')}>
               <BarChart3 className="mr-2 size-4" />
               评测记录
             </Button>
@@ -216,7 +198,7 @@ function DatasetSection({ onViewRun }: { onViewRun: () => void }) {
       <RunLauncher
         selectedSampleIds={Array.from(selectedSampleIds)}
         batches={batches}
-        onLaunched={() => onViewRun()}
+        onLaunched={() => navigate('/benchmark/runs')}
       />
 
       <Card>
@@ -762,7 +744,8 @@ function RunLauncher({
 
 // ---------- Runs Section ----------
 
-function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id: string) => void }) {
+export function BenchmarkRunsSection() {
+  const navigate = useNavigate()
   const [runs, setRuns] = useState<BenchmarkRun[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -822,7 +805,7 @@ function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id
             <CardTitle className="text-3xl tracking-tight">评测记录</CardTitle>
             <CardDescription>查看历史 Benchmark 运行结果与聚合指标。</CardDescription>
           </div>
-          <Button variant="outline" onClick={onBack}>
+          <Button variant="outline" onClick={() => navigate('/benchmark/datasets')}>
             <ChevronLeft className="mr-2 size-4" />
             返回数据集
           </Button>
@@ -865,7 +848,7 @@ function RunsSection({ onBack, onViewRun }: { onBack: () => void; onViewRun: (id
                       <td className="px-3 py-2">{formatPct(run.metrics?.total_weight_mape)}</td>
                       <td className="px-3 py-2 text-muted-foreground">{formatTime(run.completed_at)}</td>
                       <td className="px-3 py-2 text-right">
-                        <Button variant="ghost" size="sm" className="h-7" onClick={() => onViewRun(run.id)}>详情</Button>
+                        <Button variant="ghost" size="sm" className="h-7" onClick={() => navigate(`/benchmark/runs/${encodeURIComponent(run.id)}`)}>详情</Button>
                         <Button variant="ghost" size="sm" className="h-7 text-destructive" onClick={() => setRunToDelete(run.id)}>
                           <Trash2 className="size-3" />
                         </Button>
@@ -916,7 +899,9 @@ function RunStatusBadge({ status }: { status: string }) {
 
 // ---------- Run Detail Section ----------
 
-function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void }) {
+export function BenchmarkRunDetailSection() {
+  const navigate = useNavigate()
+  const { runId } = useParams<{ runId: string }>()
   const [run, setRun] = useState<BenchmarkRun | null>(null)
   const [samples, setSamples] = useState<BenchmarkRunSample[]>([])
   const [loading, setLoading] = useState(false)
@@ -924,6 +909,12 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
   const [limit] = useState(20)
   const [total, setTotal] = useState(0)
   const [selectedSample, setSelectedSample] = useState<BenchmarkRunSample | null>(null)
+
+  if (!runId) {
+    return <Navigate to='/benchmark/runs' replace />
+  }
+
+  const effectiveRunId = runId
 
   useEffect(() => {
     void loadRun()
@@ -946,7 +937,7 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
 
   async function loadRun() {
     try {
-      const data = await adminRequest<{ run: BenchmarkRun }>(`/api/admin/benchmark/runs/${encodeURIComponent(runId)}`)
+      const data = await adminRequest<{ run: BenchmarkRun }>(`/api/admin/benchmark/runs/${encodeURIComponent(effectiveRunId)}`)
       setRun(data.run)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '加载运行详情失败')
@@ -957,7 +948,7 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
     setLoading(true)
     try {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) })
-      const data = await adminRequest<BenchmarkRunSampleListResponse>(`/api/admin/benchmark/runs/${encodeURIComponent(runId)}/samples?${params.toString()}`)
+      const data = await adminRequest<BenchmarkRunSampleListResponse>(`/api/admin/benchmark/runs/${encodeURIComponent(effectiveRunId)}/samples?${params.toString()}`)
       setSamples(data.items || [])
       setTotal(data.total || 0)
     } catch (error) {
@@ -970,7 +961,7 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
   if (!run) {
     return (
       <div className="space-y-4">
-        <Button variant="outline" onClick={onBack}><ChevronLeft className="mr-2 size-4" />返回</Button>
+        <Button variant="outline" onClick={() => navigate('/benchmark/runs')}><ChevronLeft className="mr-2 size-4" />返回</Button>
         <Card><CardContent className="p-8"><Skeleton className="h-8 w-full" /></CardContent></Card>
       </div>
     )
@@ -981,7 +972,7 @@ function RunDetailSection({ runId, onBack }: { runId: string; onBack: () => void
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Button variant="outline" onClick={onBack}><ChevronLeft className="mr-2 size-4" />返回</Button>
+        <Button variant="outline" onClick={() => navigate('/benchmark/runs')}><ChevronLeft className="mr-2 size-4" />返回</Button>
         <Button variant="outline" onClick={() => { void loadRun(); void loadSamples() }}>
           <RefreshCw className="mr-2 size-4" />刷新
         </Button>

@@ -2,6 +2,43 @@ import { type HomeIntakeData } from '../../../utils/api'
 import { type TargetFormState, type SimpleTargetState, type WeekHeatmapCell, type WeekHeatmapState } from '../types/index'
 import { LEVEL_TO_GRAMS, SHORT_DAY_NAMES } from './constants'
 
+// 与识别结果页「更多营养」一致的 21 项微量元素，以及首页/目标弹窗使用的每日参考默认值
+const MICRO_TARGET_DEFAULTS: Record<string, number> = {
+  fiber: 25,
+  sugar: 50,
+  saturatedFat: 20,
+  cholesterolMg: 300,
+  sodiumMg: 2000,
+  potassiumMg: 3500,
+  calciumMg: 800,
+  ironMg: 12,
+  magnesiumMg: 330,
+  zincMg: 12.5,
+  vitaminARaeMcg: 700,
+  vitaminCMg: 100,
+  vitaminDMcg: 10,
+  vitaminEMg: 14,
+  vitaminKMcg: 80,
+  thiaminMg: 1.4,
+  riboflavinMg: 1.4,
+  niacinMg: 15,
+  vitaminB6Mg: 1.4,
+  folateMcg: 400,
+  vitaminB12Mcg: 2.4,
+}
+
+function getMicroTargetOrDefault(intake: HomeIntakeData, key: string): string {
+  const raw = intake.micros?.[key]
+  if (raw && typeof raw === 'object') {
+    const target = (raw as unknown as Record<string, unknown>).target
+    if (typeof target === 'number' && Number.isFinite(target) && target > 0) {
+      return String(Math.round(target))
+    }
+  }
+  const fallback = MICRO_TARGET_DEFAULTS[key]
+  return fallback != null ? String(fallback) : ''
+}
+
 // 根据档位计算克数
 export function getGramsFromLevel(type: 'protein' | 'carbs' | 'fat', level: number): number {
   const index = Math.max(0, Math.min(19, level - 1))
@@ -66,7 +103,28 @@ export function createTargetForm(intake: HomeIntakeData): TargetFormState {
     calorieTarget: String(Math.round(intake.target)),
     proteinTarget: String(intake.macros.protein.target),
     carbsTarget: String(intake.macros.carbs.target),
-    fatTarget: String(intake.macros.fat.target)
+    fatTarget: String(intake.macros.fat.target),
+    fiberTarget: getMicroTargetOrDefault(intake, 'fiber'),
+    sugarTarget: getMicroTargetOrDefault(intake, 'sugar'),
+    saturatedFatTarget: getMicroTargetOrDefault(intake, 'saturatedFat'),
+    cholesterolMgTarget: getMicroTargetOrDefault(intake, 'cholesterolMg'),
+    sodiumMgTarget: getMicroTargetOrDefault(intake, 'sodiumMg'),
+    potassiumMgTarget: getMicroTargetOrDefault(intake, 'potassiumMg'),
+    calciumMgTarget: getMicroTargetOrDefault(intake, 'calciumMg'),
+    ironMgTarget: getMicroTargetOrDefault(intake, 'ironMg'),
+    magnesiumMgTarget: getMicroTargetOrDefault(intake, 'magnesiumMg'),
+    zincMgTarget: getMicroTargetOrDefault(intake, 'zincMg'),
+    vitaminARaeMcgTarget: getMicroTargetOrDefault(intake, 'vitaminARaeMcg'),
+    vitaminCMgTarget: getMicroTargetOrDefault(intake, 'vitaminCMg'),
+    vitaminDMcgTarget: getMicroTargetOrDefault(intake, 'vitaminDMcg'),
+    vitaminEMgTarget: getMicroTargetOrDefault(intake, 'vitaminEMg'),
+    vitaminKMcgTarget: getMicroTargetOrDefault(intake, 'vitaminKMcg'),
+    thiaminMgTarget: getMicroTargetOrDefault(intake, 'thiaminMg'),
+    riboflavinMgTarget: getMicroTargetOrDefault(intake, 'riboflavinMg'),
+    niacinMgTarget: getMicroTargetOrDefault(intake, 'niacinMg'),
+    vitaminB6MgTarget: getMicroTargetOrDefault(intake, 'vitaminB6Mg'),
+    folateMcgTarget: getMicroTargetOrDefault(intake, 'folateMcg'),
+    vitaminB12McgTarget: getMicroTargetOrDefault(intake, 'vitaminB12Mcg'),
   }
 }
 

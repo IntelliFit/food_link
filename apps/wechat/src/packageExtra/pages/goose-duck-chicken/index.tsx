@@ -13,6 +13,7 @@ import {
 import type { GooseDuckChickenClassifyResult } from '../../../utils/api'
 import { chooseImageWithPrivacy, isPrivacyAuthorizeError, showPrivacyAuthorizeFailure } from '../../../utils/weapp-privacy'
 import { redirectToLogin, withAuth } from '../../../utils/withAuth'
+import { GOOSE_DUCK_CHICKEN_BG_URL } from '../../../utils/static-asset-cdn-url'
 import './index.scss'
 
 const shouldFallbackToLegacyAnalyzeUpload = (error: unknown): boolean => {
@@ -106,9 +107,16 @@ function GooseDuckChickenPage() {
       <PageMeta pageStyle='background: #f7f2eb;' />
 
       <View className='goose-hero'>
-        <Text className='goose-hero-kicker'>鹅腿阿姨热点识别</Text>
-        <Text className='goose-hero-title'>鹅腿、鸭腿，还是鸡腿？</Text>
-        <Text className='goose-hero-desc'>上传一张图片，食探会用专项识别流程，只围绕鹅 / 鸭 / 鸡做判断。</Text>
+        <Image
+          className='goose-hero-bg'
+          src={GOOSE_DUCK_CHICKEN_BG_URL}
+          mode='aspectFill'
+        />
+        <View className='goose-hero-content'>
+          <Text className='goose-hero-kicker'>鹅腿阿姨热点识别</Text>
+          <Text className='goose-hero-title'>鹅腿、鸭腿，还是鸡腿？</Text>
+          <Text className='goose-hero-desc'>上传一张图片，食探会用专项识别流程，只围绕鹅 / 鸭 / 鸡做判断。</Text>
+        </View>
       </View>
 
       <View className='goose-upload-card'>

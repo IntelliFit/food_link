@@ -26,6 +26,7 @@ const extraSubpackagePages = [
   'pages/auto-renew-audit/index',
   'pages/recipes/index',
   'pages/recipe-edit/index',
+  'pages/recipe-detail/index',
   'pages/health-profile/index',
   'pages/health-profile-view/index',
   'pages/day-record/index',

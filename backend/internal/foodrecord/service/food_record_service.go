@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"food_link/backend/internal/foodrecord/repo"
 	healthdomain "food_link/backend/internal/health/domain"
 	membershipdomain "food_link/backend/internal/membership/domain"
+	"food_link/backend/pkg/logger"
 	"food_link/backend/pkg/storage"
 	"gorm.io/gorm"
 )
@@ -96,6 +98,7 @@ type SaveFoodRecordInput struct {
 	ContextAdvice    *string
 	SourceTaskID     *string
 	EntryType        *string
+	RecipeID         *string
 	Date             *string
 }
 
@@ -170,6 +173,11 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		v := strings.TrimSpace(*input.EntryType)
 		entryType = &v
 	}
+	var recipeID *string
+	if input.RecipeID != nil && strings.TrimSpace(*input.RecipeID) != "" {
+		v := strings.TrimSpace(*input.RecipeID)
+		recipeID = &v
+	}
 	record := &domain.FoodRecord{
 		UserID:           userID,
 		MealType:         recordedMealType,
@@ -190,6 +198,7 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 		ContextAdvice:    input.ContextAdvice,
 		SourceTaskID:     input.SourceTaskID,
 		EntryType:        entryType,
+		RecipeID:         recipeID,
 		RecordTime:       recordTime,
 	}
 	if err := s.recordRepo.Create(ctx, record); err != nil {
@@ -209,7 +218,10 @@ func (s *FoodRecordService) Save(ctx context.Context, userID string, input SaveF
 	if err := s.recordFoodWaterIntake(ctx, userID, record); err != nil {
 		// Food water is a derived side effect. A schema/config drift in water logs
 		// must not make the primary food record fail after it has been created.
-		fmt.Printf("[foodrecord] record food water intake failed user_id=%s record_id=%s err=%v\n", userID, record.ID, err)
+		logger.Error(ctx, "记录食物饮水量失败", err,
+			slog.String("user_id", userID),
+			slog.String("record_id", record.ID),
+		)
 	}
 	s.activateInviteReward(ctx, userID, "food_record")
 	return record, nil
@@ -285,6 +297,13 @@ func (s *FoodRecordService) recordFoodWaterAmount(ctx context.Context, userID st
 	if sourceType == "" {
 		return nil
 	}
+	logger.Info(ctx, "记录食物饮水量",
+		slog.String("user_id", userID),
+		slog.String("record_id", recordID),
+		slog.Int("amount_ml", amountMl),
+		slog.String("recorded_on", recordedDate.Format("2006-01-02")),
+		slog.String("source_type", sourceType),
+	)
 	for amountMl > 0 {
 		chunk := amountMl
 		if chunk > 5000 {
@@ -319,7 +338,8 @@ func foodRecordWaterDate(recordTime *time.Time) time.Time {
 	if recordTime != nil {
 		recordedOn = recordTime.In(chinaTZ)
 	}
-	return time.Date(recordedOn.Year(), recordedOn.Month(), recordedOn.Day(), 0, 0, 0, 0, chinaTZ)
+	// 用 UTC 午夜存储，避免 Postgres date 列按会话时区转换导致日期错位
+	return time.Date(recordedOn.Year(), recordedOn.Month(), recordedOn.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 func normalizeFoodItems(items []domain.FoodItem) []domain.FoodItem {
@@ -518,8 +538,8 @@ func (s *FoodRecordService) GetEntryDistribution(ctx context.Context, userID, st
 			percentage = float64(r.Count) / float64(total)
 		}
 		items = append(items, EntryDistributionItem{
-			EntryType: r.EntryType,
-			Count:     r.Count,
+			EntryType:  r.EntryType,
+			Count:      r.Count,
 			Percentage: math.Round(percentage*10000) / 10000,
 		})
 	}

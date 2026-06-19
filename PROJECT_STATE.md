@@ -45,9 +45,9 @@
 - 上传时：`storage.UploadBytes`/`UploadBase64` 内部调用 `BuildAccessURL` 返回完整 CDN URL
 - 查询返回时：Go 后端需要在 service/handler 层调用 `BuildAccessURL` 将 key 拼接为完整 CDN URL 后返回给前端
 - CDN 配置（`backend/config.yaml`）：
-  - food-images: `http://cdn-food-images.coachlink.fit`
-  - user-avatars: `http://cdn-food-user-avatars.coachlink.fit`
-  - icon: `http://cdn-food-icon.coachlink.fit`
+  - food-images: `https://cdn-food-images.coachlink.fit`
+  - user-avatars: `https://cdn-food-user-avatars.coachlink.fit`
+  - icon: `https://cdn-food-icon.coachlink.fit`
 
 ### 当前问题
 - Go 后端查询返回时直接透传了数据库中的 key，没有拼接 CDN 前缀，导致前端看到纯 key 路径

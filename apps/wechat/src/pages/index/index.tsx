@@ -1,5 +1,5 @@
 import { View, Text, Input, Image, Canvas, PageMeta, Swiper, SwiperItem } from '@tarojs/components'
-import { CAFETERIA_HERO_BG_URL } from '../../utils/static-asset-cdn-url'
+import { CAFETERIA_HERO_BG_URL, GOOSE_DUCK_CHICKEN_BG_URL } from '../../utils/static-asset-cdn-url'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Taro, { useShareAppMessage, useShareTimeline } from '@tarojs/taro'
 import { Empty, Button } from '@taroify/core'
@@ -1093,6 +1093,12 @@ function IndexPage() {
       homeDataStaleRef.current = false
 
       // 应用云端身体指标数据（失败时仍规范化本机日期键，避免 2025/2026 混用导致按日切换永远不变）
+      console.log('[DEBUG] bodyMetricsRes:', JSON.stringify({
+        water_goal_ml: bodyMetricsRes?.water_goal_ml,
+        today_water: bodyMetricsRes?.today_water,
+        water_daily: bodyMetricsRes?.water_daily,
+        water_daily_length: bodyMetricsRes?.water_daily?.length
+      }))
       if (bodyMetricsRes) {
         setBodyMetrics(prev => {
           const next = applyCloudBodyMetrics(prev, {
@@ -1410,6 +1416,8 @@ function IndexPage() {
       setHomeAchievement(localSnapshot.achievement || { streak_days: 0, green_days: 0 })
       setTargetForm(createTargetForm(localSnapshot.intakeData || DEFAULT_INTAKE))
       setWeekHeatmapCells(buildWeekHeatmapCellsFromStorage())
+      // 从 storage 重新加载身体指标，使饮食记录保存后的乐观饮水更新立即生效
+      setBodyMetrics(getStoredBodyMetrics())
       if (payload?.force) {
         void loadDashboard(changedDate, true)
       }
@@ -1523,6 +1531,7 @@ function IndexPage() {
         const baseMacros = targetScaleBaseMacrosRef.current
         const scaledMacros = scaleMacrosByCalorieTarget(nextCalorie, baseMacros)
         return {
+          ...prev,
           calorieTarget: formatTargetInput(nextCalorie),
           proteinTarget: formatTargetInput(scaledMacros.protein),
           carbsTarget: formatTargetInput(scaledMacros.carbs),
@@ -1547,41 +1556,51 @@ function IndexPage() {
     })
   }
 
+  const parseMicroTarget = (value: string): number | null => {
+    const parsed = parseCompleteNumber(value)
+    if (parsed == null) return null
+    if (parsed < 0 || parsed > 100000) return null
+    return parsed
+  }
+
   const handleSaveTargets = async () => {
-    let payload: DashboardTargets = {
+    const macroPayload: DashboardTargets = {
       calorie_target: Number(targetForm.calorieTarget),
       protein_target: Number(targetForm.proteinTarget),
       carbs_target: Number(targetForm.carbsTarget),
       fat_target: Number(targetForm.fatTarget)
     }
 
-    if (Object.values(payload).some((value) => !Number.isFinite(value))) {
+    if (Object.values(macroPayload).some((value) => !Number.isFinite(value))) {
       Taro.showToast({ title: '请填写完整的数字目标', icon: 'none' })
       return
     }
 
-    if (payload.calorie_target < 500 || payload.calorie_target > 6000) {
+    if (macroPayload.calorie_target < 500 || macroPayload.calorie_target > 6000) {
       Taro.showToast({ title: '热量目标需在 500-6000 kcal', icon: 'none' })
       return
     }
 
-    if (payload.protein_target < 0 || payload.protein_target > 500) {
+    if (macroPayload.protein_target < 0 || macroPayload.protein_target > 500) {
       Taro.showToast({ title: '蛋白质目标需在 0-500 g', icon: 'none' })
       return
     }
 
-    if (payload.carbs_target < 0 || payload.carbs_target > 1000) {
+    if (macroPayload.carbs_target < 0 || macroPayload.carbs_target > 1000) {
       Taro.showToast({ title: '碳水目标需在 0-1000 g', icon: 'none' })
       return
     }
 
-    if (payload.fat_target < 0 || payload.fat_target > 300) {
+    if (macroPayload.fat_target < 0 || macroPayload.fat_target > 300) {
       Taro.showToast({ title: '脂肪目标需在 0-300 g', icon: 'none' })
       return
     }
 
-    const normalized = alignPayloadWithCalorieTarget(payload)
-    const savePayload: DashboardTargetsUpdateInput = normalized.payload
+    const normalized = alignPayloadWithCalorieTarget(macroPayload)
+    const savePayload: DashboardTargetsUpdateInput = {
+      ...normalized.payload,
+      micro_targets: buildMicroTargetsFromForm(targetForm),
+    }
 
     setSavingTargets(true)
     try {
@@ -1609,16 +1628,54 @@ function IndexPage() {
     }
   }
 
+  const buildMicroTargetsFromForm = (form: TargetFormState): Record<string, number> => {
+    const microTargets: Record<string, number> = {}
+    const microFields: Array<{ key: keyof TargetFormState; targetKey: string }> = [
+      { key: 'fiberTarget', targetKey: 'fiber_target' },
+      { key: 'sugarTarget', targetKey: 'sugar_target' },
+      { key: 'saturatedFatTarget', targetKey: 'saturated_fat_target' },
+      { key: 'cholesterolMgTarget', targetKey: 'cholesterol_mg_target' },
+      { key: 'sodiumMgTarget', targetKey: 'sodium_mg_target' },
+      { key: 'potassiumMgTarget', targetKey: 'potassium_mg_target' },
+      { key: 'calciumMgTarget', targetKey: 'calcium_mg_target' },
+      { key: 'ironMgTarget', targetKey: 'iron_mg_target' },
+      { key: 'magnesiumMgTarget', targetKey: 'magnesium_mg_target' },
+      { key: 'zincMgTarget', targetKey: 'zinc_mg_target' },
+      { key: 'vitaminARaeMcgTarget', targetKey: 'vitamin_a_rae_mcg_target' },
+      { key: 'vitaminCMgTarget', targetKey: 'vitamin_c_mg_target' },
+      { key: 'vitaminDMcgTarget', targetKey: 'vitamin_d_mcg_target' },
+      { key: 'vitaminEMgTarget', targetKey: 'vitamin_e_mg_target' },
+      { key: 'vitaminKMcgTarget', targetKey: 'vitamin_k_mcg_target' },
+      { key: 'thiaminMgTarget', targetKey: 'thiamin_mg_target' },
+      { key: 'riboflavinMgTarget', targetKey: 'riboflavin_mg_target' },
+      { key: 'niacinMgTarget', targetKey: 'niacin_mg_target' },
+      { key: 'vitaminB6MgTarget', targetKey: 'vitamin_b6_mg_target' },
+      { key: 'folateMcgTarget', targetKey: 'folate_mcg_target' },
+      { key: 'vitaminB12McgTarget', targetKey: 'vitamin_b12_mcg_target' },
+    ]
+    for (const { key, targetKey } of microFields) {
+      const value = parseMicroTarget(form[key])
+      if (value != null) {
+        microTargets[targetKey] = value
+      }
+    }
+    return microTargets
+  }
+
   const handleApplyCalibrationSuggestion = async (suggestion: HomeTargetCalibrationSuggestion) => {
     if (!suggestion?.suggested_kcal || suggestion.suggested_kcal <= 0) return
     const baseMacros = parseMacroTargets(targetForm) || getMacroTargetsFromIntake(intakeData)
     const scaledMacros = scaleMacrosByCalorieTarget(suggestion.suggested_kcal, baseMacros)
-    const payload = alignPayloadWithCalorieTarget({
+    const aligned = alignPayloadWithCalorieTarget({
       calorie_target: suggestion.suggested_kcal,
       protein_target: Number(formatTargetInput(scaledMacros.protein)),
       carbs_target: Number(formatTargetInput(scaledMacros.carbs)),
       fat_target: Number(formatTargetInput(scaledMacros.fat))
-    }).payload
+    })
+    const payload: DashboardTargetsUpdateInput = {
+      ...aligned.payload,
+      micro_targets: buildMicroTargetsFromForm(targetForm),
+    }
     setTargetForm(createTargetForm({
       ...intakeData,
       target: payload.calorie_target,
@@ -2780,6 +2837,7 @@ function IndexPage() {
       desc: '上传图片，让食探只在鹅 / 鸭 / 鸡里做判断',
       actionText: '去识别',
       url: extraPkgUrl('/pages/goose-duck-chicken/index'),
+      bgImage: GOOSE_DUCK_CHICKEN_BG_URL,
     },
     ...(showRewardCreditHint ? [{
       key: 'reward',
@@ -2789,6 +2847,7 @@ function IndexPage() {
       desc: rewardHintTaskText,
       actionText: '去赚',
       url: extraPkgUrl('/pages/reward-center/index'),
+      bgImage: undefined,
     }] : []),
     {
       key: 'campus',
@@ -2798,6 +2857,7 @@ function IndexPage() {
       desc: '一起补全食堂菜品、价格、窗口和营养信息',
       actionText: '去看看',
       url: extraPkgUrl('/pages/campus-canteen/index'),
+      bgImage: CAFETERIA_HERO_BG_URL,
     },
     {
       key: 'feedback',
@@ -2807,6 +2867,7 @@ function IndexPage() {
       desc: '提交宝贵建议，最高可得 +5 积分',
       actionText: '去反馈',
       url: extraPkgUrl('/pages/feedback/index'),
+      bgImage: undefined,
     },
   ] as const
   const showRewardHint = !isGuest && rewardHintBanners.length > 0
@@ -2966,10 +3027,10 @@ function IndexPage() {
                     className={`home-reward-hint ${banner.className}`}
                     onClick={() => handleRewardHintClick(banner.url)}
                   >
-                    {banner.key === 'campus' && (
+                    {banner.bgImage && (
                       <Image
                         className='home-reward-hint__bg'
-                        src={CAFETERIA_HERO_BG_URL}
+                        src={banner.bgImage}
                         mode='aspectFill'
                       />
                     )}
@@ -3081,6 +3142,7 @@ function IndexPage() {
               <View className='nutrition-expand-title-row'>
                 <Text className='nutrition-expand-title'>营养概览</Text>
                 <View className='nutrition-expand-affordance'>
+                  <Text className={`iconfont ${nutritionExpanded ? 'icon-collapse' : 'icon-expand'} nutrition-expand-affordance-icon`} />
                   <Text className='nutrition-expand-affordance-text'>
                     {nutritionExpanded ? '收起' : '展开更多'}
                   </Text>

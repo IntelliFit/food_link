@@ -44,10 +44,10 @@ import {
 } from '../../utils/api'
 import {
   extractManualFoodDisplayItems,
-  isManualFoodFeedRecord,
-  manualItemHasDisplayImage
+  isManualFoodFeedRecord
 } from '../../utils/manual-food-source'
 import { FeedReportMask } from './components/FeedReportMask'
+import { ManualFoodCards } from './components/ManualFoodCards'
 import { FeedReportSheet } from './components/FeedReportSheet'
 import { FeedActionSheet, type FeedActionSheetAction } from './components/FeedActionSheet'
 import { Button as TaroifyButton } from '@taroify/core'
@@ -2471,43 +2471,10 @@ function CommunityPage() {
                                 </View>
                               ))}
                             {useManualFoodCards && (
-                              <View className='feed-manual-foods'>
-                                {manualFoodItems.map((row, idx) => (
-                                  <View
-                                    key={`${targetKey}-manual-${idx}`}
-                                    className='feed-manual-food-row feed-tap-to-detail'
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleViewDetail(item)
-                                    }}
-                                  >
-                                    <View className={`feed-manual-food-thumb ${manualItemHasDisplayImage(row) ? 'has-image' : ''}`}>
-                                      {manualItemHasDisplayImage(row) ? (
-                                        <Image
-                                          className='feed-manual-food-image'
-                                          src={row.imageUrl}
-                                          mode='aspectFill'
-                                        />
-                                      ) : (
-                                        <Text className='iconfont icon-shiwu feed-manual-food-placeholder-icon' />
-                                      )}
-                                    </View>
-                                    <View className='feed-manual-food-info'>
-                                      <View className='feed-manual-food-title-row'>
-                                        <Text className='feed-manual-food-name'>{row.displayName}</Text>
-                                        {row.sourceLabel ? (
-                                          <View className={`feed-manual-food-badge source-${row.manual_source || 'unknown'}`}>
-                                            <Text className='feed-manual-food-badge-text'>{row.sourceLabel}</Text>
-                                          </View>
-                                        ) : null}
-                                      </View>
-                                      <Text className='feed-manual-food-kcal'>
-                                        {Math.round(Number(row.nutrients?.calories || 0))} kcal
-                                      </Text>
-                                    </View>
-                                  </View>
-                                ))}
-                              </View>
+                              <ManualFoodCards
+                                items={item.record.items}
+                                onItemClick={() => handleViewDetail(item)}
+                              />
                             )}
                             {feedImagePaths.length > 0 && !useManualFoodCards && !isCirclePost && (
                               <View
