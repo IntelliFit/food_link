@@ -1081,12 +1081,6 @@ const EXECUTION_MODE_META: Record<ExecutionMode, { title: string; desc: string }
   }
 }
 
-const FOOD_STANDARD_STAGE_LABELS = ['识别食物/份量', '匹配营养库', '整理结果']
-const FOOD_STRICT_STAGE_LABELS = ['拆分食物', '精估份量', '匹配营养库']
-const FOOD_TEXT_STAGE_LABELS = ['解析文字', '匹配营养库', '整理结果']
-const CORRECTION_STAGE_LABELS = ['理解纠错说明', '重新分析食物', '更新营养结果']
-const EXERCISE_STAGE_LABELS = ['理解运动', '估算消耗', '写入记录']
-
 const normalizeExecutionMode = (value: unknown): ExecutionMode => {
   if (value === 'fast') return 'fast'
   if (value === 'fast_web_search') return 'fast_web_search'
@@ -1300,12 +1294,10 @@ function AnalyzeLoadingPage() {
     Taro.getCurrentInstance().router?.params?.correction === '1'
   )
   const [imagePath, setImagePath] = useState<string>('')
-  const [currentStep, setCurrentStep] = useState(1) // 当前进行的步骤索引
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollFnRef = useRef<(() => Promise<void>) | null>(null)
   const tipTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const timeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const stepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef<number>(Date.now())
   const routeSignatureRef = useRef<string>('')
@@ -1383,7 +1375,6 @@ function AnalyzeLoadingPage() {
       setErrorMessage('')
       setErrorTraceId('')
       setViolationReason('')
-      setCurrentStep(1)
       setElapsedSeconds(0)
       setLastTaskStatusText(correctionMode ? '已提交纠错' : '已提交')
       setInteractionIndex(prev => getNextInteractionIndex(prev))
@@ -1426,19 +1417,6 @@ function AnalyzeLoadingPage() {
     syncRouteTaskFromParams()
   }, [syncRouteTaskFromParams])
 
-  // 阶段提示：后端目前只暴露 pending/processing，因此前端做单向推进，不倒退、不假装百分比。
-  useEffect(() => {
-    if (status !== 'loading') return
-
-    stepTimerRef.current = setInterval(() => {
-      setCurrentStep(prev => Math.min(prev + 1, 3))
-    }, 7000)
-
-    return () => {
-      if (stepTimerRef.current) clearInterval(stepTimerRef.current)
-    }
-  }, [status])
-
   useEffect(() => {
     if (status !== 'loading') return
 
@@ -1471,10 +1449,6 @@ function AnalyzeLoadingPage() {
         clearInterval(tipTimerRef.current)
         tipTimerRef.current = null
       }
-      if (stepTimerRef.current) {
-        clearInterval(stepTimerRef.current)
-        stepTimerRef.current = null
-      }
     }, ANALYZE_TIMEOUT)
 
     return () => {
@@ -1497,9 +1471,6 @@ function AnalyzeLoadingPage() {
       try {
         const task: AnalysisTask = await getAnalyzeTask(taskId)
         setLastTaskStatusText(task.status === 'processing' ? '处理中' : task.status === 'pending' ? '排队中' : '收尾中')
-        if (task.status === 'processing') {
-          setCurrentStep(prev => Math.max(prev, 1))
-        }
         const taskMode = pickExecutionModeFromTask(task)
         const effectiveTaskType = pickSourceTaskTypeFromTask(task)
         if (taskMode) {
@@ -1521,10 +1492,6 @@ function AnalyzeLoadingPage() {
             if (pollTimerRef.current) {
               clearInterval(pollTimerRef.current)
               pollTimerRef.current = null
-            }
-            if (stepTimerRef.current) {
-              clearInterval(stepTimerRef.current)
-              stepTimerRef.current = null
             }
             if (elapsedTimerRef.current) {
               clearInterval(elapsedTimerRef.current)
@@ -1556,10 +1523,7 @@ function AnalyzeLoadingPage() {
             clearInterval(pollTimerRef.current)
             pollTimerRef.current = null
           }
-          if (stepTimerRef.current) {
-            clearInterval(stepTimerRef.current)
-            stepTimerRef.current = null
-          }
+
           if (elapsedTimerRef.current) {
             clearInterval(elapsedTimerRef.current)
             elapsedTimerRef.current = null
@@ -1620,10 +1584,7 @@ function AnalyzeLoadingPage() {
             clearInterval(pollTimerRef.current)
             pollTimerRef.current = null
           }
-          if (stepTimerRef.current) {
-            clearInterval(stepTimerRef.current)
-            stepTimerRef.current = null
-          }
+
           if (elapsedTimerRef.current) {
             clearInterval(elapsedTimerRef.current)
             elapsedTimerRef.current = null
@@ -1640,10 +1601,7 @@ function AnalyzeLoadingPage() {
             clearInterval(pollTimerRef.current)
             pollTimerRef.current = null
           }
-          if (stepTimerRef.current) {
-            clearInterval(stepTimerRef.current)
-            stepTimerRef.current = null
-          }
+
           if (elapsedTimerRef.current) {
             clearInterval(elapsedTimerRef.current)
             elapsedTimerRef.current = null
@@ -1764,16 +1722,6 @@ function AnalyzeLoadingPage() {
   const isTextFoodTask = taskType === 'food_text'
   const textRecordPreview = textRecordInput || '文字记录，未提供实物照片'
   const interactionCard = WAITING_INTERACTION_CARDS[interactionIndex]
-  const compactStageLabels = isCorrectionMode
-    ? CORRECTION_STAGE_LABELS
-    : taskType === 'exercise'
-      ? EXERCISE_STAGE_LABELS
-      : taskType === 'food_text'
-        ? FOOD_TEXT_STAGE_LABELS
-        : executionMode === 'strict' || executionMode === 'strict_separate' || executionMode === 'strict_web_search'
-          ? FOOD_STRICT_STAGE_LABELS
-          : FOOD_STANDARD_STAGE_LABELS
-  const currentCompactStage = compactStageLabels[Math.min(currentStep, compactStageLabels.length - 1)]
   const showPrecisionLongWaitNotice = taskType === 'food' && (executionMode === 'strict' || executionMode === 'strict_separate' || executionMode === 'strict_web_search') && !isCorrectionMode
 
   return (
@@ -1836,14 +1784,19 @@ function AnalyzeLoadingPage() {
 
         <View className='steps-panel'>
           <View className='stage-summary'>
-            <Text className='stage-summary-title'>
-              {currentCompactStage}
-            </Text>
+            <View className='stage-summary-left'>
+              <Text className='stage-summary-title'>
+                {isCorrectionMode ? '纠错任务' : '任务'}{lastTaskStatusText}
+              </Text>
+              {taskType !== 'exercise' && (
+                <View className={`mode-badge inline ${executionMode}`}>
+                  <Text className='mode-badge-text'>
+                    {isCorrectionMode ? '纠错分析' : EXECUTION_MODE_META[executionMode].title}
+                  </Text>
+                </View>
+              )}
+            </View>
             <Text className='stage-summary-time'>已等待 {formatElapsed(elapsedSeconds)}</Text>
-          </View>
-          <View className='compact-stage-row'>
-            <Text className='compact-stage-status'>{isCorrectionMode ? '纠错任务' : '任务'}{lastTaskStatusText}</Text>
-            <Text className='compact-stage-flow'>{compactStageLabels.join(' → ')}</Text>
           </View>
           {showPrecisionLongWaitNotice && (
             <Text className='precision-long-wait-notice'>
@@ -1889,12 +1842,6 @@ function AnalyzeLoadingPage() {
             </View>
           )}
         </View>
-
-        {taskType !== 'exercise' && (
-          <View className={`mode-badge ${executionMode}`}>
-            <Text className='mode-badge-text'>{isCorrectionMode ? '纠错分析' : EXECUTION_MODE_META[executionMode].title}</Text>
-          </View>
-        )}
 
         <View className='bottom-actions'>
           <View className='btn-leave-v3' onClick={handleLeave}>

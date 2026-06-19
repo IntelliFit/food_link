@@ -316,11 +316,20 @@
   border-bottom: 1rpx solid rgba(255, 255, 255, 0.22);
 }
 
+.stage-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
 .stage-summary-title {
   font-size: 26rpx;
   color: rgba(255, 255, 255, 0.96);
   font-weight: 600;
   text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
 }
 
 .stage-summary-time {
@@ -328,35 +337,8 @@
   color: rgba(209, 250, 229, 0.9);
   font-weight: 500;
   text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.35);
-}
-
-.compact-stage-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18rpx;
-  padding-top: 14rpx;
-}
-
-.compact-stage-status {
   flex-shrink: 0;
-  font-size: 23rpx;
-  color: rgba(167, 243, 208, 0.92);
-  font-weight: 600;
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.35);
-}
-
-.compact-stage-flow {
-  flex: 1;
-  min-width: 0;
-  font-size: 23rpx;
-  color: rgba(255, 255, 255, 0.72);
-  display: block;
-  overflow: hidden;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.35);
+  margin-left: 16rpx;
 }
 
 .precision-long-wait-notice {
@@ -495,6 +477,30 @@
 
   &.standard .mode-badge-text {
     color: rgba(186, 230, 253, 0.95);
+  }
+
+  &.inline {
+    display: inline-flex;
+    align-items: center;
+    padding: 4rpx 12rpx;
+    margin: 0;
+    border-radius: 20rpx;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1rpx solid rgba(255, 255, 255, 0.24);
+    flex-shrink: 0;
+
+    &.strict .mode-badge-text {
+      color: rgba(253, 230, 138, 0.96);
+    }
+
+    &.standard .mode-badge-text {
+      color: rgba(186, 230, 253, 0.96);
+    }
+
+    .mode-badge-text {
+      font-size: 22rpx;
+      text-shadow: none;
+    }
   }
 }
 
