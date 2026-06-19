@@ -1,10 +1,12 @@
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Image, Linking, Pressable, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { Apple, Check, Coffee, Cookie, Dumbbell, ImagePlus, Inbox, Moon, MoreVertical, Plus, RefreshCw, Search, Send, Soup, Trash2, Undo2, UserPlus, Utensils, X, type LucideIcon } from 'lucide-react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   getMealTypeLabel,
   inferDefaultMealTypeFromLocalTime,
@@ -24,47 +26,92 @@ import {
   type ManualFoodBrowseResult,
   type ManualFoodItem,
   type MealType,
+  type MembershipStatus,
   type Nutrients,
   type RewardCenterResponse,
 } from '@food-link/core'
-import { apiClient, clearRecentRequestTraces, getRecentRequestTraces, RECENT_REQUEST_TRACE_LIMIT } from '../api'
+import { apiClient, getRecentRequestTraces, RECENT_REQUEST_TRACE_LIMIT } from '../api'
 import { AppButton } from '../components/AppButton'
-import { Card } from '../components/Card'
-import { Page } from '../components/Page'
 import { APP_VERSION } from '../config'
-import { clearRecentConsoleLogs, CONSOLE_LOG_BUFFER_LIMIT, getRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
+import { CONSOLE_LOG_BUFFER_LIMIT, getRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
-import { formatDateTime, todayKey } from '../utils/date'
+import { formatDateTime, formatShortDate, todayKey } from '../utils/date'
 import { userFacingErrorMessage, userFacingMessage } from '../utils/errors'
 
-const userGroupQr = require('../../assets/community/foodlink-user-group-permanent-20260602.jpg')
+const appIcon = require('../../assets/icon.png')
 
 const mealOptions: MealType[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack']
 type NotificationTab = 'all' | 'like' | 'comment'
 type FriendTab = 'friends' | 'received' | 'sent'
 const notificationPageSize = 20
 const commonTextFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
+type TextRecordDietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
+type TextRecordActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
+const textRecordMealOptions: Array<{ id: MealType; name: string; Icon: LucideIcon }> = [
+  { id: 'breakfast', name: '早餐', Icon: Coffee },
+  { id: 'morning_snack', name: '早加餐', Icon: Apple },
+  { id: 'lunch', name: '午餐', Icon: Soup },
+  { id: 'afternoon_snack', name: '午加餐', Icon: Cookie },
+  { id: 'dinner', name: '晚餐', Icon: Utensils },
+  { id: 'evening_snack', name: '晚加餐', Icon: Moon },
+]
+const textRecordDietGoalOptions: Array<{ value: TextRecordDietGoal; label: string }> = [
+  { value: 'fat_loss', label: '减脂期' },
+  { value: 'muscle_gain', label: '增肌期' },
+  { value: 'maintain', label: '维持体重' },
+  { value: 'none', label: '无' },
+]
+const textRecordActivityTimingOptions: Array<{ value: TextRecordActivityTiming; label: string }> = [
+  { value: 'post_workout', label: '练后' },
+  { value: 'daily', label: '日常' },
+  { value: 'before_sleep', label: '睡前' },
+  { value: 'none', label: '无' },
+]
+const healthProfileSteps = ['gender', 'age', 'height', 'weight', 'goal', 'activity', 'routine', 'medical', 'diet', 'allergy', 'notes'] as const
+type HealthProfileStep = (typeof healthProfileSteps)[number]
 const healthGenderOptions = [
-  { value: '', label: '暂不填写' },
-  { value: 'female', label: '女' },
   { value: 'male', label: '男' },
+  { value: 'female', label: '女' },
   { value: 'other', label: '其他' },
 ] as const
 const healthActivityOptions = [
-  { value: '', label: '暂不填写' },
-  { value: 'sedentary', label: '久坐办公' },
-  { value: 'light', label: '日常走动' },
-  { value: 'moderate', label: '经常运动' },
-  { value: 'active', label: '体力劳动' },
-  { value: 'very_active', label: '高强度' },
+  { value: 'sedentary', label: '久坐办公', desc: '大部分时间坐着，日常走动少', icon: '🛋️' },
+  { value: 'light', label: '日常走动', desc: '通勤、家务或走路较多', icon: '🚶' },
+  { value: 'moderate', label: '经常站立', desc: '工作中站立、来回走动较多', icon: '🏃' },
+  { value: 'active', label: '体力劳动', desc: '搬运、巡店、户外等体力消耗明显', icon: '💪' },
 ] as const
 const healthDietGoalOptions = [
-  { value: '', label: '暂不填写' },
-  { value: 'fat_loss', label: '减脂' },
-  { value: 'maintain', label: '保持' },
-  { value: 'muscle_gain', label: '增肌' },
+  { value: 'fat_loss', label: '减重', desc: '健康瘦身', icon: '🔥' },
+  { value: 'maintain', label: '保持', desc: '维持当前体重', icon: '⚖️' },
+  { value: 'muscle_gain', label: '增重', desc: '增加肌肉/体重', icon: '💪' },
+] as const
+const healthMedicalOptions = [
+  { value: 'diabetes', label: '糖尿病' },
+  { value: 'hypertension', label: '高血压' },
+  { value: 'gout', label: '痛风' },
+  { value: 'hyperlipidemia', label: '高血脂' },
+  { value: 'thyroid', label: '甲状腺疾病' },
+  { value: 'none', label: '无' },
+] as const
+const healthDietPreferenceOptions = [
+  { value: 'keto', label: '生酮', icon: '🥑' },
+  { value: 'vegetarian', label: '素食', icon: '🥬' },
+  { value: 'vegan', label: '纯素', icon: '🌱' },
+  { value: 'low_salt', label: '低盐', icon: '🧂' },
+  { value: 'gluten_free', label: '无麸质', icon: '🌾' },
+  { value: 'none', label: '无', icon: '✨' },
+] as const
+const healthAllergyOptions = [
+  { value: 'seafood', label: '海鲜', icon: '🦐' },
+  { value: 'peanut', label: '花生', icon: '🥜' },
+  { value: 'milk', label: '牛奶', icon: '🥛' },
+  { value: 'egg', label: '鸡蛋', icon: '🥚' },
+  { value: 'mango', label: '芒果', icon: '🥭' },
+  { value: 'alcohol', label: '酒精', icon: '🍺' },
+  { value: 'spicy', label: '辣', icon: '🌶️' },
+  { value: 'none', label: '无', icon: '' },
 ] as const
 const expiryStorageOptions = [
   { value: 'refrigerated', label: '冷藏' },
@@ -74,10 +121,103 @@ const expiryStorageOptions = [
 const waterPresets = [150, 250, 350, 500]
 const exercisePresets = ['跑步30分钟', '游泳45分钟', '瑜伽1小时', '骑车20分钟', '健身40分钟', '跳绳15分钟', '散步45分钟', 'HIIT20分钟']
 const CIRCLE_POST_MAX_IMAGES = 3
+const CIRCLE_POST_TITLE_MAX_LENGTH = 120
+const CIRCLE_POST_BODY_MAX_LENGTH = 2000
+const CIRCLE_POST_DRAFT_STORAGE_KEY = 'circle_post_draft_v2'
+const CIRCLE_POST_DRAFT_TIP_KEY = 'circle_post_draft_tip_shown_v1'
 const FEEDBACK_MAX_IMAGES = 4
 const OFFICIAL_EMAIL = 'jianwen_ma@stu.pku.edu.cn'
-const SHOW_LEGACY_ABOUT_ON_FEEDBACK_PAGE = false
 type FeedbackCategoryKey = 'bug' | 'suggestion' | 'experience' | 'other'
+
+type CirclePostImageItem = {
+  id: string
+  url: string
+  uploading?: boolean
+}
+
+type CirclePostNutritionKey =
+  | 'total_calories'
+  | 'total_protein'
+  | 'total_carbs'
+  | 'total_fat'
+  | 'fiber'
+  | 'sugar'
+  | 'sodium_mg'
+  | 'total_weight_grams'
+
+type CirclePostNutritionFormState = Record<CirclePostNutritionKey, string>
+
+const emptyCirclePostNutrition: CirclePostNutritionFormState = {
+  total_calories: '',
+  total_protein: '',
+  total_carbs: '',
+  total_fat: '',
+  fiber: '',
+  sugar: '',
+  sodium_mg: '',
+  total_weight_grams: '',
+}
+
+const circlePostNutritionFields: Array<{
+  key: CirclePostNutritionKey
+  label: string
+  unit: string
+  placeholder: string
+  max?: number
+}> = [
+  { key: 'total_calories', label: '热量', unit: 'kcal', placeholder: '0', max: 20000 },
+  { key: 'total_protein', label: '蛋白质', unit: 'g', placeholder: '0', max: 2000 },
+  { key: 'total_carbs', label: '碳水', unit: 'g', placeholder: '0', max: 5000 },
+  { key: 'total_fat', label: '脂肪', unit: 'g', placeholder: '0', max: 2000 },
+  { key: 'fiber', label: '膳食纤维', unit: 'g', placeholder: '0', max: 2000 },
+  { key: 'sugar', label: '糖分', unit: 'g', placeholder: '0', max: 2000 },
+  { key: 'sodium_mg', label: '钠', unit: 'mg', placeholder: '0', max: 50000 },
+  { key: 'total_weight_grams', label: '总重量', unit: 'g', placeholder: '0', max: 50000 },
+]
+
+type CirclePostDraft = {
+  title?: string
+  body?: string
+  images?: string[] | CirclePostImageItem[]
+  nutritionEnabled?: boolean
+  nutrition?: Partial<CirclePostNutritionFormState>
+  savedAt?: string
+}
+
+function normalizeCirclePostNutritionInput(key: CirclePostNutritionKey, value: string): string {
+  const field = circlePostNutritionFields.find((item) => item.key === key)
+  const numeric = value.replace(/[^\d.]/g, '')
+  const parts = numeric.split('.')
+  const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : numeric
+  if (field?.max && Number(normalized) > field.max) return String(field.max)
+  return normalized
+}
+
+function buildCirclePostNutritionInput(state: CirclePostNutritionFormState) {
+  const nutrition: {
+    total_calories?: number
+    total_protein?: number
+    total_carbs?: number
+    total_fat?: number
+    fiber?: number
+    sugar?: number
+    sodium_mg?: number
+    total_weight_grams?: number
+  } = {}
+  let hasValue = false
+  circlePostNutritionFields.forEach(({ key }) => {
+    const value = numberOrUndefined(state[key])
+    if (value !== undefined) {
+      nutrition[key] = value
+      hasValue = true
+    }
+  })
+  return hasValue ? nutrition : undefined
+}
+
+function circlePostNutritionHasValue(state: CirclePostNutritionFormState): boolean {
+  return circlePostNutritionFields.some(({ key }) => state[key].trim().length > 0)
+}
 
 const feedbackCategoryOptions: Array<{ value: FeedbackCategoryKey; label: string; desc: string }> = [
   { value: 'bug', label: '问题反馈', desc: '页面异常、识别失败、数据不对' },
@@ -109,13 +249,36 @@ type SelectedManualFood = {
 }
 
 const manualFoodSourceChannels = [
-  { key: 'recommended', label: '推荐' },
+  { key: 'common', label: '常见' },
   { key: 'campus', label: '校园食堂' },
+  { key: 'recent', label: '最近' },
   { key: 'favorites', label: '收藏' },
   { key: 'custom', label: '自定义' },
+  { key: 'staple', label: '主食' },
+  { key: 'protein', label: '肉蛋奶' },
+  { key: 'vegetable', label: '蔬菜' },
+  { key: 'fruit', label: '水果' },
+  { key: 'beverage', label: '饮品' },
 ] as const
 
 type ManualFoodSourceChannel = (typeof manualFoodSourceChannels)[number]['key']
+type FoodLibraryTabMode = 'all' | 'custom' | 'results' | 'create'
+type FoodLibrarySortMode = 'latest' | 'calories' | 'protein'
+const foodLibrarySortOptions: Array<{ key: FoodLibrarySortMode; label: string }> = [
+  { key: 'latest', label: '最新' },
+  { key: 'calories', label: '热量' },
+  { key: 'protein', label: '蛋白' },
+]
+
+const manualMealIcons: Record<MealType, string> = {
+  breakfast: '早',
+  morning_snack: '加',
+  lunch: '午',
+  afternoon_snack: '加',
+  dinner: '晚',
+  evening_snack: '宵',
+  snack: '加',
+}
 
 const defaultExpireDate = () => {
   const nextWeek = new Date()
@@ -127,16 +290,26 @@ export function DayRecordScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'DayRecord'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const insets = useSafeAreaInsets()
   const date = route.params?.date || todayKey()
   const [records, setRecords] = useState<FoodRecord[]>([])
+  const [targetCalories, setTargetCalories] = useState(2000)
+  const [errorMessage, setErrorMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setErrorMessage('')
     try {
-      const data = await apiClient.getFoodRecordList(date)
+      const [data, dashboard] = await Promise.all([
+        apiClient.getFoodRecordList(date),
+        apiClient.getHomeDashboard(date).catch(() => null),
+      ])
       setRecords(data.records || [])
+      const target = numberFrom(dashboard?.intakeData?.target, 0)
+      if (target > 0) setTargetCalories(target)
     } catch (error) {
+      setErrorMessage(userFacingErrorMessage(error))
       await showError(dialog, '获取记录失败', error)
     } finally {
       setLoading(false)
@@ -153,6 +326,24 @@ export function DayRecordScreen() {
   const totalProtein = records.reduce((sum, record) => sum + Number(record.total_protein || 0), 0)
   const totalCarbs = records.reduce((sum, record) => sum + Number(record.total_carbs || 0), 0)
   const totalFat = records.reduce((sum, record) => sum + Number(record.total_fat || 0), 0)
+  const initialLoading = loading && records.length === 0
+  const dayCards = useMemo(() => sortFoodRecordsByTime(records).map((record) => {
+    const imageUrls = recordImageUrls(record)
+    return {
+      record,
+      imageUrls,
+      foods: (record.items || []).map((item) => ({
+        item,
+        name: item.name || '未命名食物',
+        intake: recordItemIntake(item),
+        ratio: recordItemRatio(item),
+        calories: recordItemKcal(item),
+        protein: recordItemMacro(item, 'protein'),
+        carbs: recordItemMacro(item, 'carbs'),
+        fat: recordItemMacro(item, 'fat'),
+      })),
+    }
+  }), [records])
 
   const shareDay = async () => {
     if (records.length === 0) {
@@ -172,34 +363,206 @@ export function DayRecordScreen() {
     }
   }
 
+  const removeRecord = async (recordId: string) => {
+    const confirmed = await dialog.confirm({
+      title: '删除记录',
+      message: '删除这条饮食记录后不可恢复，确定删除吗？',
+      kind: 'danger',
+      cancelText: '取消',
+      confirmText: '删除',
+    })
+    if (!confirmed) return
+    try {
+      await apiClient.deleteFoodRecord(recordId)
+      await load()
+    } catch (error) {
+      await showError(dialog, '删除失败', error)
+    }
+  }
+
+  const removeFoodItem = async (record: FoodRecord, index: number) => {
+    const items = record.items || []
+    const target = items[index]
+    if (!target) return
+    const isLastFood = items.length <= 1
+    const confirmed = await dialog.confirm({
+      title: isLastFood ? '删除记录' : '删除食物',
+      message: isLastFood
+        ? `「${target.name || '该食物'}」是这条记录里最后一个食物，删除后会一并删除整条记录。确定删除吗？`
+        : `只删除「${target.name || '该食物'}」，其他食物会保留。确定删除吗？`,
+      kind: 'danger',
+      cancelText: '取消',
+      confirmText: '删除',
+    })
+    if (!confirmed) return
+    try {
+      if (isLastFood) {
+        await apiClient.deleteFoodRecord(record.id)
+      } else {
+        const nextItems = items.filter((_, itemIndex) => itemIndex !== index)
+        await apiClient.updateFoodRecord(record.id, {
+          items: nextItems.map(foodRecordItemRowPayload),
+          ...summarizeFoodRecordRows(nextItems),
+        })
+      }
+      await load()
+    } catch (error) {
+      await showError(dialog, '删除失败', error)
+    }
+  }
+
   return (
-    <Page title="单日记录" subtitle={date} refreshing={loading} onRefresh={load}>
-      <Card>
-        <Text style={styles.bigNumber}>{Math.round(totalKcal)} kcal</Text>
-        <Text style={styles.subtitle}>共 {records.length} 条饮食记录</Text>
-        <View style={styles.summaryGrid}>
-          <SummaryCell title="蛋白质" value={round1(totalProtein)} unit="g" />
-          <SummaryCell title="碳水" value={round1(totalCarbs)} unit="g" />
-          <SummaryCell title="脂肪" value={round1(totalFat)} unit="g" />
-          <SummaryCell title="记录数" value={records.length} unit="条" />
+    <View style={styles.dayRecordPage}>
+      <View style={styles.dayRecordTopWash} />
+      <ScrollView
+        style={styles.dayRecordScroll}
+        contentContainerStyle={[styles.dayRecordContent, { paddingTop: Math.max(insets.top, 0) + 16, paddingBottom: Math.max(insets.bottom, 0) + 28 }]}
+        refreshControl={<RefreshControl refreshing={loading && records.length > 0} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+      >
+        <View style={styles.dayRecordTop}>
+          <Text style={styles.dayRecordDateLine}>{formatDayRecordDate(date)}</Text>
+          {records.length > 0 ? (
+            <Pressable style={styles.dayRecordShareButton} onPress={() => void shareDay()}>
+              <Text style={styles.dayRecordShareIcon}>↗</Text>
+              <Text style={styles.dayRecordShareText}>分享今日饮食</Text>
+            </Pressable>
+          ) : null}
         </View>
-        <View style={styles.buttonRow}>
-          <SmallButton label="分享今日饮食" onPress={() => void shareDay()} disabled={records.length === 0} />
+
+        <View style={styles.dayRecordSummary}>
+          <View style={styles.dayRecordSummaryCard}>
+            <Text style={styles.dayRecordSummaryLabel}>总摄入</Text>
+            <Text style={styles.dayRecordSummaryValue}>{formatDisplayNumber(totalKcal)} kcal</Text>
+          </View>
+          <View style={styles.dayRecordSummaryCard}>
+            <Text style={styles.dayRecordSummaryLabel}>目标</Text>
+            <Text style={styles.dayRecordSummaryValue}>{formatDisplayNumber(targetCalories)} kcal</Text>
+          </View>
+          <View style={styles.dayRecordSummaryCard}>
+            <Text style={styles.dayRecordSummaryLabel}>记录数</Text>
+            <Text style={styles.dayRecordSummaryValue}>{records.length} 条</Text>
+          </View>
         </View>
-      </Card>
-      {records.length === 0 ? <EmptyState text="这天还没有饮食记录" /> : null}
-      {records.map((record) => (
-        <Pressable key={record.id} onPress={() => navigation.navigate('RecordDetail', { recordId: record.id })}>
-          <Card>
-            <View style={styles.rowBetween}>
-              <Text style={styles.sectionTitle}>{getMealTypeLabel(record.meal_type)}</Text>
-              <Text style={styles.kcal}>{Math.round(record.total_calories || 0)} kcal</Text>
+
+        {initialLoading ? (
+          <View style={styles.dayRecordState}>
+            <ActivityIndicator color={colors.brand} size="small" />
+          </View>
+        ) : null}
+
+        {!initialLoading && errorMessage ? (
+          <View style={styles.dayRecordEmpty}>
+            <View style={styles.dayRecordEmptyIcon}>
+              <Text style={styles.dayRecordEmptyIconText}>!</Text>
             </View>
-            <Text style={styles.subtitle}>{record.description || record.items?.map((item) => item.name).join('、') || '饮食记录'}</Text>
-          </Card>
-        </Pressable>
-      ))}
-    </Page>
+            <Text style={styles.dayRecordEmptyTitle}>{errorMessage}</Text>
+          </View>
+        ) : null}
+
+        {!initialLoading && !errorMessage && records.length === 0 ? (
+          <View style={styles.dayRecordEmpty}>
+            <View style={styles.dayRecordEmptyIcon}>
+              <Utensils size={32} color={colors.brand} strokeWidth={1.8} />
+            </View>
+            <Text style={styles.dayRecordEmptyTitle}>这一天还没有饮食记录</Text>
+            <Text style={styles.dayRecordEmptyDesc}>通过首页记录弹窗拍照或文字录入后，这里就会展示当天明细。</Text>
+            <Pressable style={styles.dayRecordEmptyButton} onPress={() => navigation.navigate('ManualRecord', { date })}>
+              <Text style={styles.dayRecordEmptyButtonText}>去记录</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {!initialLoading && !errorMessage && dayCards.length > 0 ? (
+          <View style={styles.dayRecordList}>
+            {dayCards.map(({ record, imageUrls, foods }) => {
+              const mealTone = mealToneStyles(record.meal_type)
+              return (
+                <Pressable key={record.id} style={({ pressed }) => [styles.dayRecordCard, pressed && styles.dayRecordCardPressed]} onPress={() => navigation.navigate('RecordDetail', { recordId: record.id })}>
+                  <View style={styles.dayRecordCardHeader}>
+                    <View style={styles.dayRecordCardMain}>
+                      <View style={[styles.dayRecordThumb, imageUrls.length === 0 && styles.dayRecordThumbPlaceholder]}>
+                        {imageUrls[0] ? (
+                          <Image source={{ uri: imageUrls[0] }} style={styles.dayRecordThumbImage} resizeMode="cover" />
+                        ) : (
+                          <Utensils size={26} color={colors.brand} strokeWidth={1.9} />
+                        )}
+                        {imageUrls.length === 0 ? (
+                          <View style={[styles.dayRecordThumbBadge, styles.dayRecordThumbBadgePlaceholder]}>
+                            <Text style={styles.dayRecordThumbBadgeText}>无照片</Text>
+                          </View>
+                        ) : imageUrls.length > 1 ? (
+                          <View style={styles.dayRecordThumbBadge}>
+                            <Text style={styles.dayRecordThumbBadgeText}>{imageUrls.length} 张</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={[styles.dayRecordMealIcon, mealTone.icon]}>
+                        <Text style={[styles.dayRecordMealIconText, mealTone.text]}>{manualMealIcons[record.meal_type] || '食'}</Text>
+                      </View>
+                      <View style={styles.dayRecordCardCopy}>
+                        <Text style={styles.dayRecordCardName}>{getMealTypeLabel(record.meal_type)}</Text>
+                        <Text style={styles.dayRecordCardTime}>{formatRecordClock(record.record_time)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.dayRecordCardActions}>
+                      <Text style={styles.dayRecordCardCalorie}>{formatDisplayNumber(record.total_calories || 0)} kcal</Text>
+                      <Pressable
+                        hitSlop={8}
+                        style={styles.dayRecordDeleteButton}
+                        onPress={(event) => {
+                          event.stopPropagation()
+                          void removeRecord(record.id)
+                        }}
+                      >
+                        <Trash2 size={17} color="#94a3b8" strokeWidth={2.1} />
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <View style={styles.dayRecordFoodList}>
+                    {foods.map((food, index) => (
+                      <View key={`${record.id}-${food.name}-${index}`} style={styles.dayRecordFoodItem}>
+                        <View style={styles.dayRecordFoodMain}>
+                          <Text style={styles.dayRecordFoodName} numberOfLines={1}>{food.name}</Text>
+                          <Text style={styles.dayRecordFoodAmount}>{formatDisplayNumber(food.intake)}g</Text>
+                          <Text style={styles.dayRecordFoodRatio}>{formatDisplayNumber(food.ratio)}%</Text>
+                        </View>
+                        <View style={styles.dayRecordFoodSide}>
+                          <Text style={styles.dayRecordFoodCalorie}>{formatDisplayNumber(food.calories)} kcal</Text>
+                          <Pressable
+                            hitSlop={8}
+                            style={styles.dayRecordFoodDelete}
+                            onPress={(event) => {
+                              event.stopPropagation()
+                              void removeFoodItem(record, index)
+                            }}
+                          >
+                            <Trash2 size={14} color="#94a3b8" strokeWidth={2.1} />
+                          </Pressable>
+                        </View>
+                        <View style={styles.dayRecordFoodMacros}>
+                          <Text style={styles.dayRecordFoodMacro}>蛋白质 <Text style={styles.dayRecordFoodProtein}>{Math.round(food.protein)}g</Text></Text>
+                          <Text style={styles.dayRecordFoodMacro}>碳水 <Text style={styles.dayRecordFoodCarbs}>{Math.round(food.carbs)}g</Text></Text>
+                          <Text style={styles.dayRecordFoodMacro}>脂肪 <Text style={styles.dayRecordFoodFat}>{Math.round(food.fat)}g</Text></Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </Pressable>
+              )
+            })}
+          </View>
+        ) : null}
+
+        {records.length > 0 ? (
+          <View style={styles.dayRecordMacroFooter}>
+            <Text style={styles.dayRecordMacroFooterText}>
+              蛋白质 {formatDisplayNumber(totalProtein)}g · 碳水 {formatDisplayNumber(totalCarbs)}g · 脂肪 {formatDisplayNumber(totalFat)}g
+            </Text>
+          </View>
+        ) : null}
+      </ScrollView>
+    </View>
   )
 }
 
@@ -207,6 +570,7 @@ export function RecordDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'RecordDetail'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const insets = useSafeAreaInsets()
   const [record, setRecord] = useState<FoodRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -214,6 +578,7 @@ export function RecordDetailScreen() {
   const [editMealType, setEditMealType] = useState<MealType>('lunch')
   const [editDescription, setEditDescription] = useState('')
   const [editItems, setEditItems] = useState<EditableRecordItem[]>([])
+  const [expandedNutrients, setExpandedNutrients] = useState<Record<string, boolean>>({})
 
   const syncEditor = useCallback((next: FoodRecord) => {
     setEditMealType(next.meal_type)
@@ -242,6 +607,9 @@ export function RecordDetailScreen() {
 
   const imageUrls = recordImageUrls(record)
   const editTotals = useMemo(() => summarizeEditableRecordItems(editItems), [editItems])
+  const mealTone = record ? mealToneStyles(record.meal_type) : null
+  const contextTags = record ? recordContextTags(record) : []
+  const detailBlocks = record ? recordDetailBlocks(record) : []
 
   const shareRecord = async () => {
     if (!record) return
@@ -334,107 +702,209 @@ export function RecordDetailScreen() {
   }
 
   return (
-    <Page
-      title="记录详情"
-      subtitle={record ? `${getMealTypeLabel(record.meal_type)} · ${formatDateTime(record.record_time)}` : undefined}
-      refreshing={loading}
-      onRefresh={load}
-    >
-      {!record ? <EmptyState text="暂无记录详情" /> : null}
-      {record && !editing ? (
-        <Card>
-          <Text style={styles.bigNumber}>{Math.round(record.total_calories || 0)} kcal</Text>
-          <Text style={styles.subtitle}>{record.description || '饮食记录详情'}</Text>
-          {imageUrls.length ? (
-            <View style={styles.recordImageGrid}>
-              {imageUrls.map((url, index) => (
-                <Image key={`${url}-${index}`} source={{ uri: url }} style={styles.recordImageThumb} resizeMode="cover" />
-              ))}
-            </View>
-          ) : null}
-          <View style={styles.summaryGrid}>
-            <SummaryCell title="蛋白质" value={round1(record.total_protein || 0)} unit="g" />
-            <SummaryCell title="碳水" value={round1(record.total_carbs || 0)} unit="g" />
-            <SummaryCell title="脂肪" value={round1(record.total_fat || 0)} unit="g" />
-            <SummaryCell title="摄入重量" value={round1(record.total_weight_grams || 0)} unit="g" />
+    <View style={styles.recordDetailRoot}>
+      <ScrollView
+        style={styles.recordDetailScroll}
+        contentContainerStyle={[styles.recordDetailContent, { paddingTop: Math.max(insets.top, 0) + 16, paddingBottom: Math.max(insets.bottom, 0) + 36 }]}
+        refreshControl={<RefreshControl refreshing={loading && !!record} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+        keyboardShouldPersistTaps="handled"
+      >
+        {loading && !record ? (
+          <View style={styles.recordDetailLoading}>
+            <ActivityIndicator color={colors.brand} size="small" />
           </View>
-          {(record.items || []).map((item, index) => (
-            <View key={`${item.name}-${index}`} style={styles.itemRow}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.kcal}>{Math.round(recordItemKcal(item))} kcal</Text>
+        ) : null}
+
+        {!loading && !record ? (
+          <View style={styles.recordDetailEmpty}>
+            <Utensils size={34} color={colors.brand} strokeWidth={1.8} />
+            <Text style={styles.recordDetailEmptyText}>暂无记录详情</Text>
+          </View>
+        ) : null}
+
+        {record && !editing ? (
+          <View style={styles.recordDetailBody}>
+            <View style={styles.recordDetailHeader}>
+              <View style={styles.recordDetailMealBadge}>
+                <View style={[styles.recordDetailMealIcon, mealTone?.icon]}>
+                  <Text style={[styles.recordDetailMealIconText, mealTone?.text]}>{manualMealIcons[record.meal_type] || '食'}</Text>
+                </View>
+                <View style={styles.recordDetailMealText}>
+                  <Text style={styles.recordDetailMealName}>{getMealTypeLabel(record.meal_type)}</Text>
+                  <Text style={styles.recordDetailMealTime}>{formatRecordDetailTime(record.record_time)}</Text>
+                </View>
               </View>
-              <Text style={styles.itemMeta}>
-                {Math.round(recordItemIntake(item))}g · {Math.round(recordItemRatio(item))}% · 基准 {Math.round(item.weight || 0)}g
-              </Text>
-              <Text style={styles.notes}>
-                蛋白 {round1(recordItemMacro(item, 'protein'))}g · 碳水 {round1(recordItemMacro(item, 'carbs'))}g · 脂肪 {round1(recordItemMacro(item, 'fat'))}g
-              </Text>
-            </View>
-          ))}
-          <View style={styles.buttonRow}>
-            <SmallButton label="分享记录" onPress={() => void shareRecord()} />
-            <SmallButton label="圈子详情" onPress={openCommunityDetail} />
-            <SmallButton label="修改记录" onPress={openEdit} />
-            <SmallButton label="删除记录" danger onPress={remove} />
-          </View>
-        </Card>
-      ) : null}
-      {record && editing ? (
-        <Card>
-          <Text style={styles.sectionTitle}>编辑记录</Text>
-          <MealPicker value={editMealType} onChange={setEditMealType} />
-          <Field label="记录描述" value={editDescription} onChangeText={setEditDescription} multiline placeholder="这餐吃了什么" />
-          <View style={styles.summaryGrid}>
-            <SummaryCell title="热量" value={round1(editTotals.total_calories)} unit="kcal" />
-            <SummaryCell title="蛋白质" value={round1(editTotals.total_protein)} unit="g" />
-            <SummaryCell title="碳水" value={round1(editTotals.total_carbs)} unit="g" />
-            <SummaryCell title="脂肪" value={round1(editTotals.total_fat)} unit="g" />
-          </View>
-          {editItems.map((item, index) => (
-            <View key={`${item.source.name}-${index}`} style={styles.editItemBox}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.itemName}>食物 {index + 1}</Text>
-                <SmallButton label="移除" danger onPress={() => removeEditItem(index)} />
+              <View style={styles.recordDetailCalorieBox}>
+                <Text style={styles.recordDetailCalorie}>{formatDisplayNumber(record.total_calories || 0)}</Text>
+                <Text style={styles.recordDetailCalorieUnit}>kcal</Text>
               </View>
-              <Field label="名称" value={item.name} onChangeText={(value) => updateEditItem(index, { name: value })} />
-              <Field label="估算重量 g" value={item.weight} onChangeText={(value) => updateEditItem(index, { weight: value })} keyboardType="decimal-pad" />
-              <Field label="摄入比例 %" value={item.ratio} onChangeText={(value) => updateEditItem(index, { ratio: value })} keyboardType="decimal-pad" />
-              <View style={styles.ratioGrid}>
-                {[25, 50, 75, 100].map((ratio) => (
-                  <Pressable
-                    key={ratio}
-                    style={[styles.ratioButton, Math.round(editableItemRatio(item)) === ratio && styles.ratioButtonActive]}
-                    onPress={() => updateEditItem(index, { ratio: String(ratio) })}
-                  >
-                    <Text style={[styles.ratioButtonText, Math.round(editableItemRatio(item)) === ratio && styles.ratioButtonTextActive]}>
-                      {ratio}%
-                    </Text>
-                  </Pressable>
+            </View>
+
+            <View style={[styles.recordDetailImage, imageUrls.length === 0 && styles.recordDetailImagePlaceholder]}>
+              {imageUrls[0] ? (
+                <Image source={{ uri: imageUrls[0] }} style={styles.recordDetailHeroImage} resizeMode="cover" />
+              ) : (
+                <>
+                  <View style={styles.recordDetailImageIconWrap}>
+                    <Image source={appIcon} style={styles.recordDetailImageIcon} resizeMode="contain" />
+                  </View>
+                  <Text style={styles.recordDetailImageHint}>文字记录，未提供实物照片</Text>
+                </>
+              )}
+            </View>
+
+            {contextTags.length ? (
+              <View style={styles.recordDetailContextTags}>
+                {contextTags.map((tag) => (
+                  <View key={tag.label} style={[styles.recordDetailContextTag, tag.tone === 'goal' ? styles.recordDetailGoalTag : styles.recordDetailTimingTag]}>
+                    <Text style={styles.recordDetailContextTagIcon}>{tag.icon}</Text>
+                    <Text style={[styles.recordDetailContextTagText, tag.tone === 'goal' ? styles.recordDetailGoalTagText : styles.recordDetailTimingTagText]}>{tag.label}</Text>
+                  </View>
                 ))}
               </View>
-              <Text style={styles.itemMeta}>
-                实际摄入 {round1(editableItemIntake(item))}g · 热量 {round1(editableItemScaledNutrient(item, 'calories'))} kcal
-              </Text>
-              <View style={styles.nutritionGrid}>
-                <Field label="热量 kcal" value={item.calories} onChangeText={(value) => updateEditItem(index, { calories: value })} keyboardType="decimal-pad" />
-                <Field label="蛋白质 g" value={item.protein} onChangeText={(value) => updateEditItem(index, { protein: value })} keyboardType="decimal-pad" />
-                <Field label="碳水 g" value={item.carbs} onChangeText={(value) => updateEditItem(index, { carbs: value })} keyboardType="decimal-pad" />
-                <Field label="脂肪 g" value={item.fat} onChangeText={(value) => updateEditItem(index, { fat: value })} keyboardType="decimal-pad" />
-                <Field label="膳食纤维 g" value={item.fiber} onChangeText={(value) => updateEditItem(index, { fiber: value })} keyboardType="decimal-pad" />
-                <Field label="糖 g" value={item.sugar} onChangeText={(value) => updateEditItem(index, { sugar: value })} keyboardType="decimal-pad" />
-                <Field label="饮水 ml" value={item.waterMl} onChangeText={(value) => updateEditItem(index, { waterMl: value })} keyboardType="decimal-pad" />
-                <Field label="钠 mg" value={item.sodiumMg} onChangeText={(value) => updateEditItem(index, { sodiumMg: value })} keyboardType="decimal-pad" />
+            ) : null}
+
+            {detailBlocks.map((block) => (
+              <View key={block.title} style={styles.recordDetailInfoBlock}>
+                <Text style={styles.recordDetailInfoTitle}>{block.icon} {block.title}</Text>
+                <Text style={styles.recordDetailInfoText}>{block.text}</Text>
+              </View>
+            ))}
+
+            <View style={styles.recordDetailActions}>
+              <Pressable style={styles.recordDetailSecondaryAction} onPress={openEdit}>
+                <Text style={styles.recordDetailSecondaryActionText}>修改记录</Text>
+              </Pressable>
+              <Pressable style={styles.recordDetailPrimaryAction} onPress={() => void shareRecord()}>
+                <Text style={styles.recordDetailPrimaryActionText}>生成分享卡片</Text>
+              </Pressable>
+              <View style={styles.recordDetailActionRow}>
+                <Pressable style={styles.recordDetailPlainAction} onPress={openCommunityDetail}>
+                  <Text style={styles.recordDetailPlainActionText}>圈子详情</Text>
+                </Pressable>
+                <Pressable style={styles.recordDetailPlainAction} onPress={remove}>
+                  <Text style={styles.recordDetailDangerActionText}>删除记录</Text>
+                </Pressable>
               </View>
             </View>
-          ))}
-          <View style={styles.buttonRow}>
-            <AppButton label="保存修改" loading={saving} onPress={saveEdit} />
-            <AppButton label="取消" variant="secondary" onPress={() => setEditing(false)} />
+
+            <Text style={styles.recordDetailFoodTitle}>食物明细</Text>
+            {(record.items || []).length ? (record.items || []).map((item, index) => {
+              const detailKey = `${record.id}-${index}`
+              const detailsExpanded = Boolean(expandedNutrients[detailKey])
+              const nutrientRows = recordItemNutrientRows(item)
+              return (
+                <View key={`${item.name}-${index}`} style={styles.recordDetailFoodItem}>
+                  <View style={styles.recordDetailFoodInfo}>
+                    <Text style={styles.recordDetailFoodName}>{item.name || '未命名食物'}</Text>
+                    <Text style={styles.recordDetailFoodMeta}>摄入 {formatDisplayNumber(recordItemIntake(item))}g</Text>
+                    <View style={styles.recordDetailRatioBadge}>
+                      <Text style={styles.recordDetailRatioText}>摄入比例 {formatDisplayNumber(recordItemRatio(item))}%</Text>
+                    </View>
+                    <View style={styles.recordDetailFoodNutrients}>
+                      <Text style={styles.recordDetailFoodNutrient}>蛋白 {formatDisplayNumber(recordItemMacro(item, 'protein'))}g</Text>
+                      <Text style={styles.recordDetailFoodNutrient}>碳水 {formatDisplayNumber(recordItemMacro(item, 'carbs'))}g</Text>
+                      <Text style={styles.recordDetailFoodNutrient}>脂肪 {formatDisplayNumber(recordItemMacro(item, 'fat'))}g</Text>
+                      <Text style={styles.recordDetailFoodNutrient}>含水 {Math.round(recordItemWaterMl(item))}ml</Text>
+                    </View>
+                    <Pressable
+                      style={styles.recordDetailNutrientToggle}
+                      onPress={() => setExpandedNutrients((current) => ({ ...current, [detailKey]: !detailsExpanded }))}
+                    >
+                      <Text style={styles.recordDetailNutrientToggleText}>{detailsExpanded ? '收起更多营养' : '展开更多营养'}</Text>
+                      <Text style={styles.recordDetailNutrientToggleIcon}>{detailsExpanded ? '⌃' : '⌄'}</Text>
+                    </Pressable>
+                    {detailsExpanded ? (
+                      <View style={styles.recordDetailNutrientGrid}>
+                        {nutrientRows.map((row) => (
+                          <View key={row.key} style={styles.recordDetailNutrientCell}>
+                            <Text style={styles.recordDetailNutrientLabel}>{row.label}</Text>
+                            <Text style={styles.recordDetailNutrientValue}>{formatDisplayNumber(row.value)} <Text style={styles.recordDetailNutrientUnit}>{row.unit}</Text></Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.recordDetailFoodCalories}>
+                    <Text style={styles.recordDetailFoodCalorieText}>{formatDisplayNumber(recordItemKcal(item))} kcal</Text>
+                  </View>
+                </View>
+              )
+            }) : (
+              <View style={styles.recordDetailEmptyLine}>
+                <Text style={styles.recordDetailEmptyLineText}>暂无食物明细</Text>
+              </View>
+            )}
+
+            <View style={styles.recordDetailSummarySection}>
+              <Text style={styles.recordDetailSummaryTitle}>营养汇总</Text>
+              <View style={styles.recordDetailSummaryGrid}>
+                <RecordDetailSummaryCell label="总热量" value={formatDisplayNumber(record.total_calories || 0)} unit="kcal" highlight />
+                <RecordDetailSummaryCell label="总重量" value={formatDisplayNumber(record.total_weight_grams || 0)} unit="g" />
+                <RecordDetailSummaryCell label="蛋白质" value={formatDisplayNumber(record.total_protein || 0)} unit="g" />
+                <RecordDetailSummaryCell label="碳水" value={formatDisplayNumber(record.total_carbs || 0)} unit="g" />
+                <RecordDetailSummaryCell label="脂肪" value={formatDisplayNumber(record.total_fat || 0)} unit="g" />
+              </View>
+            </View>
           </View>
-        </Card>
-      ) : null}
-    </Page>
+        ) : null}
+
+        {record && editing ? (
+          <View style={styles.recordDetailEditPanel}>
+            <Text style={styles.recordDetailEditTitle}>编辑记录</Text>
+            <MealPicker value={editMealType} onChange={setEditMealType} />
+            <Field label="记录描述" value={editDescription} onChangeText={setEditDescription} multiline placeholder="这餐吃了什么" />
+            <View style={styles.recordDetailEditSummary}>
+              <RecordDetailSummaryCell label="热量" value={formatDisplayNumber(editTotals.total_calories)} unit="kcal" highlight />
+              <RecordDetailSummaryCell label="蛋白质" value={formatDisplayNumber(editTotals.total_protein)} unit="g" />
+              <RecordDetailSummaryCell label="碳水" value={formatDisplayNumber(editTotals.total_carbs)} unit="g" />
+              <RecordDetailSummaryCell label="脂肪" value={formatDisplayNumber(editTotals.total_fat)} unit="g" />
+            </View>
+            {editItems.map((item, index) => (
+              <View key={`${item.source.name}-${index}`} style={styles.recordDetailEditItem}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.itemName}>食物 {index + 1}</Text>
+                  <SmallButton label="移除" danger onPress={() => removeEditItem(index)} />
+                </View>
+                <Field label="名称" value={item.name} onChangeText={(value) => updateEditItem(index, { name: value })} />
+                <Field label="估算重量 g" value={item.weight} onChangeText={(value) => updateEditItem(index, { weight: value })} keyboardType="decimal-pad" />
+                <Field label="摄入比例 %" value={item.ratio} onChangeText={(value) => updateEditItem(index, { ratio: value })} keyboardType="decimal-pad" />
+                <View style={styles.ratioGrid}>
+                  {[25, 50, 75, 100].map((ratio) => (
+                    <Pressable
+                      key={ratio}
+                      style={[styles.ratioButton, Math.round(editableItemRatio(item)) === ratio && styles.ratioButtonActive]}
+                      onPress={() => updateEditItem(index, { ratio: String(ratio) })}
+                    >
+                      <Text style={[styles.ratioButtonText, Math.round(editableItemRatio(item)) === ratio && styles.ratioButtonTextActive]}>
+                        {ratio}%
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Text style={styles.itemMeta}>
+                  实际摄入 {round1(editableItemIntake(item))}g · 热量 {round1(editableItemScaledNutrient(item, 'calories'))} kcal
+                </Text>
+                <View style={styles.nutritionGrid}>
+                  <Field label="热量 kcal" value={item.calories} onChangeText={(value) => updateEditItem(index, { calories: value })} keyboardType="decimal-pad" />
+                  <Field label="蛋白质 g" value={item.protein} onChangeText={(value) => updateEditItem(index, { protein: value })} keyboardType="decimal-pad" />
+                  <Field label="碳水 g" value={item.carbs} onChangeText={(value) => updateEditItem(index, { carbs: value })} keyboardType="decimal-pad" />
+                  <Field label="脂肪 g" value={item.fat} onChangeText={(value) => updateEditItem(index, { fat: value })} keyboardType="decimal-pad" />
+                  <Field label="膳食纤维 g" value={item.fiber} onChangeText={(value) => updateEditItem(index, { fiber: value })} keyboardType="decimal-pad" />
+                  <Field label="糖 g" value={item.sugar} onChangeText={(value) => updateEditItem(index, { sugar: value })} keyboardType="decimal-pad" />
+                  <Field label="饮水 ml" value={item.waterMl} onChangeText={(value) => updateEditItem(index, { waterMl: value })} keyboardType="decimal-pad" />
+                  <Field label="钠 mg" value={item.sodiumMg} onChangeText={(value) => updateEditItem(index, { sodiumMg: value })} keyboardType="decimal-pad" />
+                </View>
+              </View>
+            ))}
+            <View style={styles.buttonRow}>
+              <AppButton label="保存修改" loading={saving} onPress={saveEdit} />
+              <AppButton label="取消" variant="secondary" onPress={() => setEditing(false)} />
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
+    </View>
   )
 }
 
@@ -445,6 +915,9 @@ export function AnalyzeHistoryScreen() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [menuTask, setMenuTask] = useState<AnalysisTask | null>(null)
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
 
   const load = useCallback(async (keyword = '') => {
     setLoading(true)
@@ -462,6 +935,11 @@ export function AnalyzeHistoryScreen() {
   }, [dialog])
 
   const refresh = useCallback(() => load(searchKeyword), [load, searchKeyword])
+  const hasKeyword = searchKeyword.trim().length > 0
+  const discardableTasks = useMemo(
+    () => tasks.filter((task) => task.status === 'done' && task.is_recorded === false),
+    [tasks],
+  )
 
   const retryTask = useCallback(async (task: AnalysisTask) => {
     setRetryingTaskId(task.id)
@@ -495,6 +973,49 @@ export function AnalyzeHistoryScreen() {
     if (confirmed) void retryTask(task)
   }, [dialog, retryTask])
 
+  const deleteUnrecordedTasks = useCallback(async () => {
+    if (discardableTasks.length === 0 || bulkDeleting) return
+    const confirmed = await dialog.confirm({
+      title: '删除未记录',
+      message: `将删除 ${discardableTasks.length} 条已识别但还没有写入饮食记录的历史，不会影响已经保存的一餐。`,
+      confirmText: '删除未记录',
+      cancelText: '取消',
+      kind: 'danger',
+    })
+    if (!confirmed) return
+    setBulkDeleting(true)
+    try {
+      await Promise.all(discardableTasks.map((task) => apiClient.deleteAnalysisTask(task.id)))
+      setTasks((current) => current.filter((task) => !discardableTasks.some((item) => item.id === task.id)))
+    } catch (error) {
+      await showError(dialog, '删除识别记录失败', error)
+    } finally {
+      setBulkDeleting(false)
+    }
+  }, [bulkDeleting, dialog, discardableTasks])
+
+  const confirmDeleteTask = useCallback(async (task: AnalysisTask) => {
+    if (deletingTaskId) return
+    const confirmed = await dialog.confirm({
+      title: '删除识别记录',
+      message: '删除后不可恢复，确定删除这条识别记录吗？',
+      confirmText: '删除',
+      cancelText: '取消',
+      kind: 'danger',
+    })
+    if (!confirmed) return
+    setDeletingTaskId(task.id)
+    try {
+      await apiClient.deleteAnalysisTask(task.id)
+      setTasks((current) => current.filter((item) => item.id !== task.id))
+      await dialog.alert('已删除', '识别记录已删除', 'success')
+    } catch (error) {
+      await showError(dialog, '删除识别记录失败', error)
+    } finally {
+      setDeletingTaskId(null)
+    }
+  }, [deletingTaskId, dialog])
+
   const openTask = useCallback((task: AnalysisTask) => {
     if (isPackagedAnalyzeHistoryTask(task)) {
       navigation.navigate('PackagedFoodTaskDetail', { taskId: task.id })
@@ -523,6 +1044,32 @@ export function AnalyzeHistoryScreen() {
     })
   }, [confirmRetryTask, navigation])
 
+  const closeTaskMenu = useCallback(() => {
+    setMenuTask(null)
+  }, [])
+
+  const openTaskMenu = useCallback((task: AnalysisTask) => {
+    setMenuTask(task)
+  }, [])
+
+  const selectMenuOpenTask = useCallback(() => {
+    const task = menuTask
+    closeTaskMenu()
+    if (task) openTask(task)
+  }, [closeTaskMenu, menuTask, openTask])
+
+  const selectMenuRetryTask = useCallback(() => {
+    const task = menuTask
+    closeTaskMenu()
+    if (task && isAnalyzeRetryable(task)) void confirmRetryTask(task)
+  }, [closeTaskMenu, confirmRetryTask, menuTask])
+
+  const selectMenuDeleteTask = useCallback(() => {
+    const task = menuTask
+    closeTaskMenu()
+    if (task) void confirmDeleteTask(task)
+  }, [closeTaskMenu, confirmDeleteTask, menuTask])
+
   const submitSearch = () => {
     void load(searchKeyword)
   }
@@ -536,72 +1083,279 @@ export function AnalyzeHistoryScreen() {
     void load('')
   }, [load])
 
+  const initialLoading = loading && tasks.length === 0
+  const menuTaskRetryable = menuTask ? isAnalyzeRetryable(menuTask) : false
+  const menuTaskBusy = menuTask ? retryingTaskId === menuTask.id || deletingTaskId === menuTask.id : false
+
   return (
-    <Page title="识别历史" subtitle="最近的图片和文字分析任务" refreshing={loading} onRefresh={refresh}>
-      <Card>
-        <Text style={styles.sectionTitle}>搜索识别记录</Text>
-        <Text style={styles.subtitle}>可按食物名、文字描述或识别内容查找。</Text>
-        <Field label="关键词" value={searchKeyword} onChangeText={setSearchKeyword} placeholder="例如：咖啡、米饭、晚餐" returnKeyType="search" onSubmitEditing={submitSearch} />
-        <View style={styles.buttonRow}>
-          <SmallButton label={loading ? '搜索中' : '搜索'} disabled={loading} onPress={submitSearch} />
-          {searchKeyword.trim() ? <SmallButton label="清除" disabled={loading} onPress={clearSearch} /> : null}
+    <View style={styles.analyzeHistoryPage}>
+      <View style={styles.analyzeHistorySearchBar}>
+        <View style={styles.analyzeHistorySearchInputWrap}>
+          <Search size={16} color="#9ca3af" strokeWidth={2.4} />
+          <TextInput
+            value={searchKeyword}
+            onChangeText={setSearchKeyword}
+            placeholder="搜索食物名称"
+            placeholderTextColor="#9ca3af"
+            returnKeyType="search"
+            onSubmitEditing={submitSearch}
+            style={styles.analyzeHistorySearchInput}
+          />
+          {hasKeyword ? (
+            <Pressable hitSlop={10} style={styles.analyzeHistorySearchClear} disabled={loading} onPress={clearSearch}>
+              <X size={14} color="#9ca3af" strokeWidth={2.6} />
+            </Pressable>
+          ) : null}
         </View>
-      </Card>
-      {tasks.length === 0 ? <EmptyState text="暂无识别任务" /> : null}
-      {tasks.map((task) => (
-        <Pressable key={task.id} onPress={() => openTask(task)}>
-          <Card>
-            <View style={styles.historyTaskRow}>
-              {analyzeHistoryImageUrl(task) ? (
-                <Image source={{ uri: analyzeHistoryImageUrl(task) }} style={styles.historyTaskThumb} />
-              ) : (
-                <View style={styles.historyTaskThumbFallback}>
-                  <Text style={styles.historyTaskThumbText}>{analyzeHistoryAvatarText(task)}</Text>
+        <Pressable disabled={loading} style={[styles.analyzeHistorySearchButton, loading && styles.analyzeHistorySearchButtonDisabled]} onPress={submitSearch}>
+          {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.analyzeHistorySearchButtonText}>搜索</Text>}
+        </Pressable>
+      </View>
+
+      <ScrollView
+        style={styles.analyzeHistoryScroll}
+        contentContainerStyle={styles.analyzeHistoryList}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={loading && tasks.length > 0} onRefresh={refresh} tintColor={colors.brand} colors={[colors.brand]} />}
+      >
+        {initialLoading ? (
+          <View style={styles.analyzeHistoryLoading}>
+            <ActivityIndicator color={colors.brand} size="small" />
+          </View>
+        ) : null}
+
+        {!initialLoading && tasks.length === 0 ? (
+          <View style={styles.analyzeHistoryEmptyCard}>
+            <View style={styles.analyzeHistoryEmptyIcon}>
+              <ImagePlus size={30} color={colors.brand} strokeWidth={1.9} />
+            </View>
+            <Text style={styles.analyzeHistoryEmptyTitle}>{hasKeyword ? '没有找到匹配的记录' : '暂时没有记录，快去拍一张吧~'}</Text>
+            <Text style={styles.analyzeHistoryEmptyDesc}>{hasKeyword ? '换个食物名称试试，或清除关键词查看全部。' : '拍照、相册上传和文字记录完成后都会出现在这里。'}</Text>
+          </View>
+        ) : null}
+
+        {!initialLoading && tasks.length > 0 ? (
+          <View style={styles.analyzeHistoryListHeader}>
+            <View style={styles.flex} />
+            {discardableTasks.length > 0 ? (
+              <Pressable disabled={bulkDeleting} style={styles.analyzeHistoryBulkDelete} onPress={() => void deleteUnrecordedTasks()}>
+                {bulkDeleting ? <ActivityIndicator size="small" color="#2f7f62" /> : <Trash2 size={13} color="#5cb896" strokeWidth={2.4} />}
+                <Text style={styles.analyzeHistoryBulkDeleteText}>一键删除未记录</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {!initialLoading && tasks.map((task) => {
+          const imageUrl = analyzeHistoryImageUrl(task)
+          const calories = analyzeHistoryCalories(task)
+          const statusTone = analyzeHistoryStatusTone(task)
+          const modeLabel = analyzeHistoryModeLabel(task)
+          const retrying = retryingTaskId === task.id
+          const deleting = deletingTaskId === task.id
+          const busy = retrying || deleting
+          return (
+            <Pressable key={task.id} style={({ pressed }) => [styles.analyzeHistoryTaskWrapper, pressed && styles.analyzeHistoryPressed]} onPress={() => openTask(task)}>
+              <View style={[styles.analyzeHistoryTaskCard, task.status === 'violated' && styles.analyzeHistoryTaskCardViolated]}>
+                <View style={styles.analyzeHistoryThumb}>
+                  {imageUrl ? (
+                    <Image source={{ uri: imageUrl }} style={styles.analyzeHistoryThumbImage} />
+                  ) : (
+                    <View style={[styles.analyzeHistoryThumbFallback, isTextAnalysisTask(task) && styles.analyzeHistoryThumbFallbackText]}>
+                      <Text style={styles.analyzeHistoryThumbText}>{analyzeHistoryAvatarText(task)}</Text>
+                    </View>
+                  )}
                 </View>
-              )}
-              <View style={styles.flex}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.historyTaskTitle} numberOfLines={2}>{analyzeHistoryTitle(task)}</Text>
-                  <Text style={styles.status}>{analyzeHistoryStatusLabel(task)}</Text>
-                </View>
-                <Text style={styles.subtitle}>{analyzeHistoryMeta(task)}</Text>
-                <View style={styles.historyTaskTags}>
-                  <Pill text={isTextAnalysisTask(task) ? '文字记录' : '图片识别'} />
-                  <Pill text={getMealTypeLabel(analyzeHistoryMealType(task))} />
-                  {task.is_recorded ? <Pill text="已记录" /> : null}
+                <View style={styles.analyzeHistoryBody}>
+                  <View style={styles.analyzeHistoryMainRow}>
+                    <View style={styles.analyzeHistoryLeftContent}>
+                      <Text style={styles.analyzeHistoryHeadline} numberOfLines={1}>{analyzeHistoryTitle(task)}</Text>
+                      <Text style={styles.analyzeHistoryCalories}>{calories > 0 ? `${Math.round(calories)} kcal` : '-- kcal'}</Text>
+                      <Text style={styles.analyzeHistoryMeta} numberOfLines={1}>{analyzeHistoryCompactMeta(task)}</Text>
+                      {task.status === 'violated' ? (
+                        <Text style={styles.analyzeHistoryViolationReason} numberOfLines={2}>{analyzeHistoryMeta(task)}</Text>
+                      ) : null}
+                      <View style={styles.analyzeHistoryTagRow}>
+                        <Text style={styles.analyzeHistoryTime} numberOfLines={1}>{formatDateTime(task.created_at)}</Text>
+                        <View style={styles.analyzeHistoryMiniTag}>
+                          <Text style={styles.analyzeHistoryMiniTagText}>{getMealTypeLabel(analyzeHistoryMealType(task))}</Text>
+                        </View>
+                        {modeLabel ? (
+                          <View style={styles.analyzeHistoryModeTag}>
+                            <Text style={styles.analyzeHistoryModeTagText}>{modeLabel}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+                    <View style={styles.analyzeHistoryRightContent}>
+                      <View style={[styles.analyzeHistoryStatusBadge, statusTone.style]}>
+                        {busy ? <ActivityIndicator size="small" color={statusTone.color} /> : <Text style={[styles.analyzeHistoryStatusText, { color: statusTone.color }]}>{analyzeHistoryStatusLabel(task)}</Text>}
+                      </View>
+                      <Pressable
+                        hitSlop={8}
+                        disabled={busy}
+                        style={styles.analyzeHistoryMoreButton}
+                        onPress={(event) => {
+                          event.stopPropagation?.()
+                          openTaskMenu(task)
+                        }}
+                      >
+                        <MoreVertical size={18} color="#6b7280" strokeWidth={2.8} />
+                      </Pressable>
+                    </View>
+                  </View>
                 </View>
               </View>
+            </Pressable>
+          )
+        })}
+      </ScrollView>
+
+      <Modal visible={Boolean(menuTask)} transparent animationType="fade" onRequestClose={closeTaskMenu}>
+        <Pressable style={styles.analyzeHistoryMenuBackdrop} onPress={closeTaskMenu}>
+          <Pressable style={styles.analyzeHistoryMenuSheet} onPress={(event) => event.stopPropagation?.()}>
+            <View style={styles.analyzeHistoryMenuHandle} />
+            <Text style={styles.analyzeHistoryMenuTitle}>识别记录操作</Text>
+            <Text style={styles.analyzeHistoryMenuSubtitle} numberOfLines={1}>
+              {menuTask ? analyzeHistoryTitle(menuTask) : ''}
+            </Text>
+
+            <View style={styles.analyzeHistoryMenuActions}>
+              <Pressable
+                disabled={!menuTask || menuTaskBusy}
+                style={({ pressed }) => [
+                  styles.analyzeHistoryMenuAction,
+                  pressed && styles.analyzeHistoryMenuActionPressed,
+                  (!menuTask || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
+                ]}
+                onPress={selectMenuOpenTask}
+              >
+                <View style={styles.analyzeHistoryMenuActionIcon}>
+                  <Search size={17} color={colors.brand} strokeWidth={2.5} />
+                </View>
+                <View style={styles.analyzeHistoryMenuActionCopy}>
+                  <Text style={styles.analyzeHistoryMenuActionText}>查看识别结果</Text>
+                  <Text style={styles.analyzeHistoryMenuActionHint}>打开这条记录的详情页</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                disabled={!menuTaskRetryable || menuTaskBusy}
+                style={({ pressed }) => [
+                  styles.analyzeHistoryMenuAction,
+                  pressed && styles.analyzeHistoryMenuActionPressed,
+                  (!menuTaskRetryable || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
+                ]}
+                onPress={selectMenuRetryTask}
+              >
+                <View style={styles.analyzeHistoryMenuActionIcon}>
+                  <RefreshCw size={17} color={colors.brand} strokeWidth={2.5} />
+                </View>
+                <View style={styles.analyzeHistoryMenuActionCopy}>
+                  <Text style={styles.analyzeHistoryMenuActionText}>重新识别</Text>
+                  <Text style={styles.analyzeHistoryMenuActionHint}>失败或超时的记录可重新提交</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                disabled={!menuTask || menuTaskBusy}
+                style={({ pressed }) => [
+                  styles.analyzeHistoryMenuAction,
+                  pressed && styles.analyzeHistoryMenuActionPressed,
+                  (!menuTask || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
+                ]}
+                onPress={selectMenuDeleteTask}
+              >
+                <View style={[styles.analyzeHistoryMenuActionIcon, styles.analyzeHistoryMenuActionIconDanger]}>
+                  <Trash2 size={17} color="#ef4444" strokeWidth={2.5} />
+                </View>
+                <View style={styles.analyzeHistoryMenuActionCopy}>
+                  <Text style={[styles.analyzeHistoryMenuActionText, styles.analyzeHistoryMenuActionTextDanger]}>删除识别记录</Text>
+                  <Text style={styles.analyzeHistoryMenuActionHint}>只删除历史，不影响已保存饮食</Text>
+                </View>
+              </Pressable>
             </View>
-            <View style={styles.buttonRow}>
-              <SmallButton label={task.status === 'done' ? '查看结果' : isAnalyzeRetryable(task) ? '重新识别' : '查看进度'} disabled={retryingTaskId === task.id} onPress={() => openTask(task)} />
-              {isAnalyzeRetryable(task) ? (
-                <SmallButton label={retryingTaskId === task.id ? '提交中' : '用原内容重试'} disabled={retryingTaskId === task.id} onPress={() => void confirmRetryTask(task)} />
-              ) : null}
-            </View>
-          </Card>
+
+            <Pressable style={({ pressed }) => [styles.analyzeHistoryMenuCancel, pressed && styles.analyzeHistoryMenuActionPressed]} onPress={closeTaskMenu}>
+              <Text style={styles.analyzeHistoryMenuCancelText}>取消</Text>
+            </Pressable>
+          </Pressable>
         </Pressable>
-      ))}
-    </Page>
+      </Modal>
+    </View>
   )
 }
 
 export function TextRecordScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const insets = useSafeAreaInsets()
   const [text, setText] = useState('')
   const [additionalContext, setAdditionalContext] = useState('')
   const [date, setDate] = useState(todayKey())
   const [mealType, setMealType] = useState<MealType>(inferDefaultMealTypeFromLocalTime())
+  const [dietGoal, setDietGoal] = useState<TextRecordDietGoal>('none')
+  const [activityTiming, setActivityTiming] = useState<TextRecordActivityTiming>('none')
+  const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [loading, setLoading] = useState(false)
+
+  const refreshMembership = useCallback(async () => {
+    const status = await apiClient.getMyMembership().catch(() => null)
+    setMembership(status)
+  }, [])
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshMembership()
+    }, [refreshMembership]),
+  )
+
+  const creditSummary = useMemo(() => {
+    const max = Number(membership?.daily_credits_max ?? membership?.daily_limit ?? 0)
+    const remaining = Number(membership?.total_credits_available ?? membership?.daily_credits_remaining ?? membership?.daily_remaining ?? 0)
+    const used = Number(membership?.daily_credits_used ?? (max > 0 ? Math.max(0, max - remaining) : 0))
+    return {
+      max: Number.isFinite(max) ? max : 0,
+      remaining: Number.isFinite(remaining) ? Math.max(0, remaining) : 0,
+      used: Number.isFinite(used) ? Math.max(0, used) : 0,
+    }
+  }, [membership])
+
+  const quotaExhausted = Boolean(membership && creditSummary.remaining < 2)
+  const quotaWarn = Boolean(membership && !quotaExhausted && creditSummary.remaining <= 2)
+  const quotaText = membership
+    ? quotaExhausted
+      ? `积分不足，文字分析需 2 积分 · 当前可用 ${creditSummary.remaining}`
+      : creditSummary.max > 0
+        ? `今日已用 ${creditSummary.used}/${creditSummary.max} 积分 · 剩余 ${creditSummary.remaining}${!membership.is_pro ? '  →开通会员享更高额度' : ''}`
+        : `当前可用 ${creditSummary.remaining} 积分 · 文字分析消耗 2 积分${!membership.is_pro ? '  →开通会员享更高额度' : ''}`
+    : '文字分析消耗 2 积分，描述越具体，估算越稳定'
+
+  const selectedDietGoal = textRecordDietGoalOptions.find((option) => option.value === dietGoal)
+  const selectedActivityTiming = textRecordActivityTimingOptions.find((option) => option.value === activityTiming)
 
   const submit = async () => {
     if (!text.trim()) {
       void dialog.alert('请输入食物描述', '可以先写下这餐吃了什么，例如“一碗米饭、番茄炒蛋”。', 'warning')
       return
     }
+    if (quotaExhausted) {
+      void dialog.alert('积分不足', quotaText, 'warning')
+      return
+    }
     setLoading(true)
     try {
-      const data = await apiClient.submitTextTask({ text, additionalContext, mealType, date })
+      const contextLines = [
+        additionalContext.trim(),
+        dietGoal !== 'none' && selectedDietGoal ? `饮食目标：${selectedDietGoal.label}` : '',
+        activityTiming !== 'none' && selectedActivityTiming ? `运动时机：${selectedActivityTiming.label}` : '',
+      ].filter(Boolean)
+      const data = await apiClient.submitTextTask({
+        text,
+        additionalContext: contextLines.join('\n') || undefined,
+        mealType,
+        date,
+      })
       navigation.navigate('AnalyzeLoading', { taskId: data.task_id, mealType, date, taskType: 'food_text' })
     } catch (error) {
       void dialog.alert('提交失败', userFacingErrorMessage(error), 'danger')
@@ -611,24 +1365,50 @@ export function TextRecordScreen() {
   }
 
   return (
-    <Page title="文字记录" subtitle="输入这餐吃了什么">
-      <Card>
-        <MealPicker value={mealType} onChange={setMealType} />
-        <Field label="日期" value={date} onChangeText={setDate} />
-        <Field
-          label="食物描述"
-          value={text}
-          onChangeText={setText}
-          multiline
-          placeholder="例：一碗米饭、番茄炒蛋、半杯酸奶"
-        />
+    <View style={styles.textRecordPage}>
+      <ScrollView
+        style={styles.textRecordScroll}
+        contentContainerStyle={[styles.textRecordContent, { paddingBottom: 126 + insets.bottom }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Pressable
+          disabled={Boolean(membership?.is_pro)}
+          style={[
+            styles.textRecordQuotaBar,
+            quotaWarn && styles.textRecordQuotaBarWarn,
+            quotaExhausted && styles.textRecordQuotaBarExhausted,
+          ]}
+          onPress={() => {
+            if (!membership?.is_pro) navigation.navigate('MembershipCenter')
+          }}
+        >
+          <Text style={[styles.textRecordQuotaText, quotaExhausted && styles.textRecordQuotaTextExhausted]}>{quotaText}</Text>
+        </Pressable>
+
+        <View style={styles.textRecordInputSection}>
+          <Text style={styles.textRecordSectionTitle}>描述您的饮食</Text>
+          <View style={styles.textRecordInputCard}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              multiline
+              maxLength={500}
+              textAlignVertical="top"
+              style={styles.textRecordFoodInput}
+              placeholder={'今天吃了什么？例如：\n· 一碗红烧牛肉面\n· 一个苹果'}
+              placeholderTextColor="#9ca3af"
+            />
+            <Text style={styles.textRecordCharCount}>{text.length}/500</Text>
+          </View>
+        </View>
+
         <View style={styles.textQuickTags}>
-          <Text style={styles.textQuickTagsLabel}>常用</Text>
+          <Text style={styles.textQuickTagsLabel}>常用：</Text>
           <View style={styles.textQuickTagsRow}>
             {commonTextFoods.map((food) => (
               <Pressable
                 key={food}
-                style={styles.textQuickTag}
+                style={({ pressed }) => [styles.textQuickTag, pressed && styles.textRecordPressed]}
                 onPress={() => setText((current) => (current.trim() ? `${current.trim()}、${food}` : food))}
               >
                 <Text style={styles.textQuickTagText}>{food}</Text>
@@ -636,16 +1416,123 @@ export function TextRecordScreen() {
             ))}
           </View>
         </View>
-        <Field
-          label="份量/补充说明"
-          value={additionalContext}
-          onChangeText={setAdditionalContext}
-          multiline
-          placeholder="例：米饭约 200g，炒蛋用了一个鸡蛋，饮料少糖"
-        />
-        <AppButton label="提交分析" loading={loading} onPress={submit} />
-      </Card>
-    </Page>
+
+        <View style={styles.textRecordInputSection}>
+          <Text style={styles.textRecordSectionTitle}>补充份量（可选）</Text>
+          <View style={styles.textRecordInputCard}>
+            <TextInput
+              value={additionalContext}
+              onChangeText={setAdditionalContext}
+              multiline
+              maxLength={200}
+              textAlignVertical="top"
+              style={styles.textRecordAmountInput}
+              placeholder="例如：200g；或一碗、半份"
+              placeholderTextColor="#9ca3af"
+            />
+          </View>
+        </View>
+
+        <View style={styles.textRecordInputSection}>
+          <Text style={styles.textRecordSectionTitle}>记录日期</Text>
+          <View style={[styles.textRecordInputCard, styles.textRecordDateCard]}>
+            <TextInput
+              value={date}
+              onChangeText={setDate}
+              style={styles.textRecordDateInput}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#9ca3af"
+            />
+          </View>
+        </View>
+
+        <View style={styles.textRecordInputSection}>
+          <Text style={styles.textRecordSectionTitle}>选择餐次</Text>
+          <View style={styles.textRecordMealGrid}>
+            {textRecordMealOptions.map(({ id, name, Icon }) => {
+              const active = mealType === id
+              return (
+                <Pressable
+                  key={id}
+                  style={({ pressed }) => [
+                    styles.textRecordMealItem,
+                    active && styles.textRecordMealItemActive,
+                    pressed && styles.textRecordPressed,
+                  ]}
+                  onPress={() => setMealType(id)}
+                >
+                  <Icon size={20} color={active ? '#00bc7d' : '#9ca3af'} strokeWidth={2.5} />
+                  <Text style={[styles.textRecordMealName, active && styles.textRecordMealNameActive]}>{name}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        </View>
+
+        <View style={styles.textRecordInputSection}>
+          <Text style={styles.textRecordSectionTitle}>饮食目标</Text>
+          <View style={styles.textRecordOptionWrap}>
+            {textRecordDietGoalOptions.map((option) => {
+              const active = dietGoal === option.value
+              return (
+                <Pressable
+                  key={option.value}
+                  style={({ pressed }) => [
+                    styles.textRecordOption,
+                    active && styles.textRecordOptionActive,
+                    pressed && styles.textRecordPressed,
+                  ]}
+                  onPress={() => setDietGoal(option.value)}
+                >
+                  <Text style={[styles.textRecordOptionText, active && styles.textRecordOptionTextActive]}>{option.label}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        </View>
+
+        <View style={styles.textRecordInputSection}>
+          <Text style={styles.textRecordSectionTitle}>运动时机</Text>
+          <View style={styles.textRecordOptionWrap}>
+            {textRecordActivityTimingOptions.map((option) => {
+              const active = activityTiming === option.value
+              return (
+                <Pressable
+                  key={option.value}
+                  style={({ pressed }) => [
+                    styles.textRecordOption,
+                    active && styles.textRecordOptionActive,
+                    pressed && styles.textRecordPressed,
+                  ]}
+                  onPress={() => setActivityTiming(option.value)}
+                >
+                  <Text style={[styles.textRecordOptionText, active && styles.textRecordOptionTextActive]}>{option.label}</Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        </View>
+      </ScrollView>
+
+      <View style={[styles.textRecordBottomBar, { paddingBottom: 12 + insets.bottom }]}>
+        <Pressable
+          disabled={loading || !text.trim() || quotaExhausted}
+          style={[
+            styles.textRecordSubmitButton,
+            (!text.trim() || quotaExhausted) && styles.textRecordSubmitButtonDisabled,
+          ]}
+          onPress={submit}
+        >
+          {loading ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={[styles.textRecordSubmitText, (!text.trim() || quotaExhausted) && styles.textRecordSubmitTextDisabled]}>
+              {quotaExhausted ? '积分不足，暂不可分析' : '开始智能分析'}
+            </Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
   )
 }
 
@@ -654,7 +1541,7 @@ export function ManualRecordScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'ManualRecord'>>()
   const dialog = useAppDialog()
   const [browse, setBrowse] = useState<ManualFoodBrowseResult | null>(null)
-  const [sourceChannel, setSourceChannel] = useState<ManualFoodSourceChannel>(route.params?.sourceChannel || 'recommended')
+  const [sourceChannel, setSourceChannel] = useState<ManualFoodSourceChannel>(() => normalizeManualFoodSourceChannel(route.params?.sourceChannel))
   const [catalogItems, setCatalogItems] = useState<ManualFoodItem[]>([])
   const [results, setResults] = useState<ManualFoodItem[]>([])
   const [selectedItems, setSelectedItems] = useState<SelectedManualFood[]>([])
@@ -676,10 +1563,6 @@ export function ManualRecordScreen() {
   }, [dialog])
 
   const loadCatalog = useCallback(async (category: ManualFoodSourceChannel) => {
-    if (category === 'recommended') {
-      setCatalogItems([])
-      return
-    }
     setLoading(true)
     try {
       const data = await apiClient.getManualFoodCatalog(category, { page: 1, pageSize: 30 })
@@ -701,7 +1584,7 @@ export function ManualRecordScreen() {
     const quickItem = route.params?.quickItem
     if (!quickItem) return
     const key = manualFoodKey(quickItem)
-    setSourceChannel(route.params?.sourceChannel || 'recommended')
+    setSourceChannel(normalizeManualFoodSourceChannel(route.params?.sourceChannel))
     setResults([])
     setSelectedItems((current) => {
       if (current.some((entry) => entry.key === key)) return current
@@ -841,7 +1724,7 @@ export function ManualRecordScreen() {
   }
 
   const recommended = useMemo(() => flattenManualFoodBrowse(browse), [browse])
-  const channelItems = sourceChannel === 'recommended' ? recommended : catalogItems
+  const channelItems = catalogItems.length ? catalogItems : sourceChannel === 'common' ? recommended : catalogItems
   const list = results.length ? results : channelItems
   const listTitle = results.length
     ? '搜索结果'
@@ -866,58 +1749,155 @@ export function ManualRecordScreen() {
   const totalQuantityText = formatManualFoodTotalQuantity(totals)
 
   return (
-    <Page title="手动记录" subtitle="从食物库多选后保存为一餐" refreshing={loading} onRefresh={refreshManualFoods}>
-      <Card style={styles.manualHeroCard}>
-        <View style={styles.rowBetween}>
-          <View style={styles.flex}>
-            <Text style={styles.sectionTitle}>单餐工作台</Text>
-            <Text style={styles.subtitle}>{selectedItems.length ? `已选 ${selectedItems.length} 项 · ${totalQuantityText}` : '先选食物，再调整份量'}</Text>
+    <View style={styles.manualRecordPage}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[styles.manualRecordContent, selectedItems.length > 0 && styles.manualRecordContentWithBar]}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={refreshManualFoods} tintColor={colors.brand} colors={[colors.brand]} />}
+      >
+        <View style={styles.manualWorkspaceCard}>
+          <View style={styles.manualWorkspaceHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.manualWorkspaceTitle}>单餐工作台</Text>
+              <Text style={styles.manualWorkspaceSubtitle}>{selectedItems.length ? `已选 ${selectedItems.length} 项 · ${totalQuantityText}` : '先选食物，再调整份量'}</Text>
+            </View>
+            <View style={styles.manualWorkspaceCalories}>
+              <Text style={styles.manualWorkspaceCaloriesValue}>{Math.round(totals.calories)}</Text>
+              <Text style={styles.manualWorkspaceCaloriesUnit}>kcal</Text>
+            </View>
           </View>
-          <View style={styles.manualHeroKcal}>
-            <Text style={styles.manualHeroKcalValue}>{Math.round(totals.calories)}</Text>
-            <Text style={styles.manualHeroKcalUnit}>kcal</Text>
-          </View>
-        </View>
-        <View style={styles.summaryGrid}>
-          <SummaryCell title="蛋白质" value={round1(totals.protein)} unit="g" />
-          <SummaryCell title="碳水" value={round1(totals.carbs)} unit="g" />
-          <SummaryCell title="脂肪" value={round1(totals.fat)} unit="g" />
-          <SummaryCell title="份量" value={totalQuantityText} unit="" />
-        </View>
-        <MealPicker value={mealType} onChange={setMealType} />
-        <Field label="日期" value={date} onChangeText={setDate} />
-      </Card>
 
-      <Card>
-        <Text style={styles.sectionTitle}>食物来源</Text>
-        <View style={styles.segment}>
-          {manualFoodSourceChannels.map((channel) => (
-            <SegmentButton
-              key={channel.key}
-              label={channel.label}
-              active={sourceChannel === channel.key}
-              onPress={() => setSourceChannel(channel.key)}
+          <View style={styles.manualMealGrid}>
+            {mealOptions.map((meal) => (
+              <Pressable
+                key={meal}
+                style={[styles.manualMealItem, mealType === meal && styles.manualMealItemActive]}
+                onPress={() => setMealType(meal)}
+              >
+                <Text style={[styles.manualMealIcon, mealType === meal && styles.manualMealIconActive]}>{manualMealIcons[meal]}</Text>
+                <Text style={[styles.manualMealName, mealType === meal && styles.manualMealNameActive]}>{getMealTypeLabel(meal)}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={styles.manualDateRow}>
+            <Text style={styles.manualDateLabel}>记录日期</Text>
+            <TextInput
+              value={date}
+              onChangeText={setDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.textMuted}
+              style={styles.manualDateInput}
             />
-          ))}
-        </View>
-      </Card>
+          </View>
 
-      <Card>
-        <Field label="搜索食物" value={query} onChangeText={setQuery} placeholder="米饭、鸡蛋、牛奶" />
-        <AppButton label="搜索" variant="secondary" loading={loading} onPress={search} />
-      </Card>
+          <View style={styles.manualSearchBar}>
+            <Search size={18} color="#94a3b8" />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="搜索食物，找不到可自定义"
+              placeholderTextColor="#94a3b8"
+              returnKeyType="search"
+              onSubmitEditing={search}
+              style={styles.manualSearchInput}
+            />
+            {query.trim() ? (
+              <Pressable
+                style={styles.manualSearchIconButton}
+                hitSlop={8}
+                onPress={() => {
+                  setQuery('')
+                  setResults([])
+                }}
+              >
+                <X size={16} color="#94a3b8" />
+              </Pressable>
+            ) : null}
+            <Pressable style={styles.manualSearchAction} onPress={search}>
+              {loading ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.manualSearchActionText}>搜索</Text>}
+            </Pressable>
+          </View>
 
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>已选清单</Text>
-          <Text style={styles.subtitle}>{selectedItems.length} 项</Text>
+          <Pressable style={styles.manualCustomEntryCard} onPress={() => navigation.navigate('FoodLibrary', { initialTab: 'create' })}>
+            <View style={styles.flex}>
+              <Text style={styles.manualCustomEntryTitle}>没有找到？直接自定义</Text>
+              <Text style={styles.manualCustomEntrySubtitle}>不拍照，不走 AI，填一次后下次可复用</Text>
+            </View>
+            <View style={styles.manualCustomEntryButton}>
+              <Text style={styles.manualCustomEntryButtonText} numberOfLines={1}>{query.trim() ? `新建“${query.trim()}”` : '新建'}</Text>
+            </View>
+          </Pressable>
         </View>
-        {selectedItems.length === 0 ? (
-          <Text style={styles.empty}>点击下方食物卡片添加到这餐，选好后再保存为饮食记录。</Text>
-        ) : (
-          <>
+
+        <View style={styles.manualCatalogShell}>
+          {!query.trim() ? (
+            <ScrollView style={styles.manualCatalogSidebar} contentContainerStyle={styles.manualCatalogSidebarContent} showsVerticalScrollIndicator={false}>
+              {manualFoodSourceChannels.map((channel) => (
+                <Pressable
+                  key={channel.key}
+                  style={[styles.manualCatalogTab, sourceChannel === channel.key && styles.manualCatalogTabActive]}
+                  onPress={() => setSourceChannel(channel.key)}
+                >
+                  <Text style={[styles.manualCatalogTabText, sourceChannel === channel.key && styles.manualCatalogTabTextActive]}>{channel.label}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : null}
+
+          <View style={styles.manualCatalogMain}>
+            <View style={styles.manualLibraryHeader}>
+              <View style={styles.flex}>
+                <Text style={styles.manualSectionTitle}>{listTitle}</Text>
+                <Text style={styles.manualLibrarySubtitle}>
+                  {query.trim() ? `围绕“${query.trim()}”优先展示匹配食物` : selectedItems.length ? `已选 ${selectedItems.length} 项 · ${Math.round(totals.calories)} kcal` : '从食物库点选加入本餐'}
+                </Text>
+              </View>
+            </View>
+
+            {loading && !list.length ? (
+              <View style={styles.manualLoadingState}>
+                <ActivityIndicator color={colors.brand} />
+              </View>
+            ) : list.length === 0 ? (
+              <View style={styles.manualEmptyState}>
+                <Text style={styles.manualEmptyText}>{emptyText}</Text>
+              </View>
+            ) : (
+              <View style={styles.manualFoodList}>
+                {list.map((item, index) => (
+                  <ManualFoodChoiceRow
+                    key={`${manualFoodTitle(item)}-${item.id || index}`}
+                    item={item}
+                    selected={selectedKeys.has(manualFoodKey(item))}
+                    onPress={() => addFood(item)}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+
+        {selectedItems.length > 0 ? (
+          <View style={styles.manualSelectedSection}>
+            <View style={styles.manualSectionHeader}>
+              <View style={styles.flex}>
+                <Text style={styles.manualSectionTitle}>已选食物</Text>
+                <Text style={styles.manualLibrarySubtitle}>{selectedItems.length} 项 · {totalQuantityText}</Text>
+              </View>
+              <View style={styles.manualTotalCalories}>
+                <Text style={styles.manualTotalCaloriesValue}>{Math.round(totals.calories)}</Text>
+                <Text style={styles.manualTotalCaloriesUnit}>kcal</Text>
+              </View>
+            </View>
+            <View style={styles.manualNutritionGrid}>
+              <SummaryCell title="蛋白质" value={round1(totals.protein)} unit="g" />
+              <SummaryCell title="碳水" value={round1(totals.carbs)} unit="g" />
+              <SummaryCell title="脂肪" value={round1(totals.fat)} unit="g" />
+              <SummaryCell title="份量" value={totalQuantityText} unit="" />
+            </View>
             {selectedItems.map((entry) => (
-              <SelectedManualFoodCard
+              <ManualSelectedFoodItem
                 key={entry.key}
                 entry={entry}
                 onWeightChange={(value) => updateSelectedWeight(entry.key, value)}
@@ -926,32 +1906,39 @@ export function ManualRecordScreen() {
                 onRemove={() => removeSelectedFood(entry.key)}
               />
             ))}
-            <AppButton label="保存为饮食记录" loading={loading} onPress={save} />
-          </>
-        )}
-      </Card>
+          </View>
+        ) : null}
+      </ScrollView>
 
-      {list.length ? <Text style={styles.groupTitle}>{listTitle}</Text> : null}
-      {list.length === 0 ? <EmptyState text={emptyText} /> : null}
-      {list.map((item, index) => (
-        <FoodChoice
-          key={`${manualFoodTitle(item)}-${item.id || index}`}
-          item={item}
-          selected={selectedKeys.has(manualFoodKey(item))}
-          onPress={() => addFood(item)}
-        />
-      ))}
-    </Page>
+      {selectedItems.length > 0 ? (
+        <View style={styles.manualBottomBar}>
+          <Pressable style={styles.manualBottomSummary}>
+            <View style={styles.manualBottomSummaryMain}>
+              <Text style={styles.manualBottomSummaryText}>已选 {selectedItems.length} 项 · {Math.round(totals.calories)} kcal</Text>
+              <Text style={styles.manualBottomSummaryAction}>查看</Text>
+            </View>
+            <Text style={styles.manualBottomSummarySubtext}>继续调整后保存为{getMealTypeLabel(mealType)}记录</Text>
+          </Pressable>
+          <Pressable style={[styles.manualSaveButton, loading && styles.manualSaveButtonDisabled]} disabled={loading} onPress={save}>
+            {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.manualSaveButtonText}>保存到今天记录</Text>}
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
   )
 }
 
 export function FoodLibraryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const route = useRoute<RouteProp<RootStackParamList, 'FoodLibrary'>>()
   const dialog = useAppDialog()
   const [browse, setBrowse] = useState<ManualFoodBrowseResult | null>(null)
   const [customFoods, setCustomFoods] = useState<ManualFoodItem[]>([])
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<ManualFoodItem[]>([])
+  const [tabMode, setTabMode] = useState<FoodLibraryTabMode>(route.params?.initialTab || 'all')
+  const [sortBy, setSortBy] = useState<FoodLibrarySortMode>('latest')
+  const [showMoreNutrients, setShowMoreNutrients] = useState(false)
   const [name, setName] = useState('')
   const [calories, setCalories] = useState('')
   const [protein, setProtein] = useState('')
@@ -965,6 +1952,8 @@ export function FoodLibraryScreen() {
   const [sodiumMg, setSodiumMg] = useState('')
   const [shareToPublic, setShareToPublic] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -986,16 +1975,44 @@ export function FoodLibraryScreen() {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (route.params?.initialTab) {
+      setTabMode(route.params.initialTab)
+    }
+  }, [route.params?.initialTab])
+
   const search = async () => {
-    setLoading(true)
+    const keyword = query.trim()
+    if (!keyword) {
+      setResults([])
+      setTabMode('all')
+      return
+    }
+    setSearching(true)
     try {
-      const data = await apiClient.searchManualFood(query, 40)
+      const data = await apiClient.searchManualFood(keyword, 40)
       setResults(data.results || [])
+      setTabMode('results')
     } catch (error) {
       await dialog.alert('搜索失败', userFacingErrorMessage(error), 'danger')
     } finally {
-      setLoading(false)
+      setSearching(false)
     }
+  }
+
+  const resetCustomDraft = () => {
+    setName('')
+    setCalories('')
+    setProtein('')
+    setCarbs('')
+    setFat('')
+    setDefaultWeight('100')
+    setPortionLabel('')
+    setImageUrls('')
+    setFiber('')
+    setSugar('')
+    setSodiumMg('')
+    setShareToPublic(false)
   }
 
   const saveCustom = async () => {
@@ -1017,7 +2034,7 @@ export function FoodLibraryScreen() {
     }
     const imageList = splitImageUrls(imageUrls)
     const scale = defaultWeightGrams / 100
-    setLoading(true)
+    setSaving(true)
     try {
       await apiClient.saveCustomFood({
         title,
@@ -1034,24 +2051,14 @@ export function FoodLibraryScreen() {
         recommendReason: `自定义录入 / 每 100g`,
         shareToPublic,
       })
-      setName('')
-      setCalories('')
-      setProtein('')
-      setCarbs('')
-      setFat('')
-      setDefaultWeight('100')
-      setPortionLabel('')
-      setImageUrls('')
-      setFiber('')
-      setSugar('')
-      setSodiumMg('')
-      setShareToPublic(false)
+      resetCustomDraft()
       await load()
+      setTabMode('custom')
       await dialog.alert('已保存', shareToPublic ? '自定义食物已保存，并同步提交到公共库审核。' : '自定义食物已加入食物库。', 'success')
     } catch (error) {
       await dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
@@ -1062,57 +2069,244 @@ export function FoodLibraryScreen() {
     })
   }
 
+  const quickRecord = (item: ManualFoodItem) => {
+    navigation.navigate('ManualRecord', { quickItem: item })
+  }
+
+  const recommendedFoods = useMemo(() => flattenManualFoodBrowse(browse), [browse])
+  const activeFoods = useMemo(() => {
+    const source = tabMode === 'custom'
+      ? customFoods
+      : tabMode === 'results'
+        ? results
+        : recommendedFoods
+    return sortFoodLibraryItems(source, sortBy)
+  }, [customFoods, recommendedFoods, results, sortBy, tabMode])
+  const draftImageUri = useMemo(() => manualFoodImageUri({ image_path: splitImageUrls(imageUrls)[0] }), [imageUrls])
+  const tabs: Array<{ key: FoodLibraryTabMode; label: string; count?: number }> = [
+    { key: 'all', label: '全部', count: recommendedFoods.length },
+    { key: 'custom', label: '我的', count: customFoods.length },
+    { key: 'results', label: '搜索', count: results.length },
+    { key: 'create', label: '新建' },
+  ]
+  const activeSubtitle = tabMode === 'custom'
+    ? (customFoods.length ? `${customFoods.length} 个自定义食物` : '暂无自定义食物，先新建一个常吃的')
+    : tabMode === 'results'
+      ? (query.trim() ? `围绕“${query.trim()}”展示匹配食物` : '输入关键词后查看搜索结果')
+      : '标准食物、公共库和最近常用食物'
+
   return (
-    <Page title="食物库" subtitle="公共库、营养库和自定义食物" refreshing={loading} onRefresh={load}>
-      <Card>
-        <Field label="搜索" value={query} onChangeText={setQuery} placeholder="输入食物名称" />
-        <AppButton label="搜索食物" variant="secondary" loading={loading} onPress={search} />
-      </Card>
+    <View style={styles.foodLibraryPage}>
+      <View style={styles.foodLibraryTabs}>
+        {tabs.map((tab) => {
+          const active = tabMode === tab.key
+          return (
+            <Pressable key={tab.key} style={[styles.foodLibraryTab, active && styles.foodLibraryTabActive]} onPress={() => setTabMode(tab.key)}>
+              <Text style={[styles.foodLibraryTabText, active && styles.foodLibraryTabTextActive]} numberOfLines={1}>
+                {tab.label}{typeof tab.count === 'number' ? ` ${tab.count}` : ''}
+              </Text>
+            </Pressable>
+          )
+        })}
+      </View>
 
-      <Card>
-        <Text style={styles.sectionTitle}>添加自定义食物</Text>
-        <Field label="名称" value={name} onChangeText={setName} />
-        <Field label="默认份量 g" value={defaultWeight} onChangeText={setDefaultWeight} keyboardType="decimal-pad" />
-        <Field label="份量说明" value={portionLabel} onChangeText={setPortionLabel} placeholder="例：一碗 180g，可留空" />
-        <Field label="热量 kcal/100g" value={calories} onChangeText={setCalories} keyboardType="decimal-pad" />
-        <Field label="蛋白质 g/100g" value={protein} onChangeText={setProtein} keyboardType="decimal-pad" />
-        <Field label="碳水 g/100g" value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" />
-        <Field label="脂肪 g/100g" value={fat} onChangeText={setFat} keyboardType="decimal-pad" />
-        <Field label="膳食纤维 g/100g" value={fiber} onChangeText={setFiber} keyboardType="decimal-pad" />
-        <Field label="糖 g/100g" value={sugar} onChangeText={setSugar} keyboardType="decimal-pad" />
-        <Field label="钠 mg/100g" value={sodiumMg} onChangeText={setSodiumMg} keyboardType="decimal-pad" />
-        <Field label="图片 URL" value={imageUrls} onChangeText={setImageUrls} multiline placeholder="每行一个图片地址，可留空" />
-        <ToggleRow
-          title="同步申请公开到公共库"
-          subtitle="保存个人食物的同时提交审核，通过后其他用户可搜索使用。"
-          value={shareToPublic}
-          onValueChange={setShareToPublic}
-        />
-        <AppButton label="保存食物" loading={loading} onPress={saveCustom} />
-      </Card>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={false} onRefresh={load} tintColor="#5cb896" colors={['#5cb896']} />}
+        contentContainerStyle={styles.foodLibraryContent}
+      >
+        <View style={styles.foodLibraryFilterSection}>
+          <View style={styles.foodLibrarySearchRow}>
+            <View style={styles.foodLibrarySearchInputWrap}>
+              <Search size={16} color="#9ca3af" />
+              <TextInput
+                style={styles.foodLibrarySearchInput}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="搜索商家名称或食物"
+                placeholderTextColor="#9ca3af"
+                returnKeyType="search"
+                onSubmitEditing={search}
+              />
+            </View>
+            <Pressable style={[styles.foodLibrarySearchButton, searching && styles.foodLibraryActionDisabled]} disabled={searching} onPress={search}>
+              {searching ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.foodLibrarySearchButtonText}>搜索</Text>}
+            </Pressable>
+          </View>
+        </View>
 
-      <SectionList title="搜索结果" items={results} onItemPress={openDetail} />
-      <SectionList title="我的食物" items={customFoods} onItemPress={openDetail} />
-      <SectionList title="推荐食物" items={flattenManualFoodBrowse(browse)} onItemPress={openDetail} />
-    </Page>
+        {tabMode !== 'create' ? (
+          <View style={styles.foodLibrarySortSection}>
+            <View style={styles.foodLibrarySortLeft}>
+              {foodLibrarySortOptions.map((option) => {
+                const active = sortBy === option.key
+                return (
+                  <Pressable key={option.key} style={styles.foodLibrarySortItem} onPress={() => setSortBy(option.key)}>
+                    <Text style={[styles.foodLibrarySortText, active && styles.foodLibrarySortTextActive]}>{option.label}</Text>
+                    {active ? <View style={styles.foodLibrarySortUnderline} /> : null}
+                  </Pressable>
+                )
+              })}
+            </View>
+            <Pressable style={styles.foodLibraryNewButton} onPress={() => setTabMode('create')}>
+              <Text style={styles.foodLibraryNewButtonText}>新建</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {tabMode === 'create' ? (
+          <View style={styles.foodLibraryCustomPanel}>
+            <View style={styles.foodLibraryCustomHeader}>
+              <View style={styles.foodLibraryCustomHeaderCopy}>
+                <Text style={styles.foodLibraryCustomTitle}>自定义食物</Text>
+                <Text style={styles.foodLibraryCustomSubtitle}>不拍照，不走 AI，填一次后下次可复用</Text>
+              </View>
+              <Pressable style={styles.foodLibraryCollapseButton} onPress={() => setTabMode(customFoods.length ? 'custom' : 'all')}>
+                <Text style={styles.foodLibraryCollapseButtonText}>收起</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.foodLibraryImageRow}>
+              <View style={styles.foodLibraryImagePreview}>
+                {draftImageUri ? (
+                  <Image source={{ uri: draftImageUri }} style={styles.foodLibraryImage} />
+                ) : (
+                  <View style={styles.foodLibraryImageEmpty}>
+                    <ImagePlus size={24} color="#10b981" />
+                  </View>
+                )}
+              </View>
+              <View style={styles.foodLibraryImageActions}>
+                <Text style={styles.foodLibraryImageTitle}>食物图片</Text>
+                <TextInput
+                  style={styles.foodLibraryImageInput}
+                  value={imageUrls}
+                  onChangeText={setImageUrls}
+                  placeholder="图片 URL，可留空"
+                  placeholderTextColor="#94a3b8"
+                />
+              </View>
+            </View>
+
+            <View style={styles.foodLibraryCustomGrid}>
+              <View style={styles.foodLibraryCustomFieldFull}>
+                <Text style={styles.foodLibraryCustomLabel}>名称</Text>
+                <TextInput style={styles.foodLibraryCustomInput} value={name} onChangeText={setName} placeholder="例如 家里卤牛肉" placeholderTextColor="#94a3b8" />
+              </View>
+              <View style={styles.foodLibraryCustomField}>
+                <Text style={styles.foodLibraryCustomLabel}>默认份量 g</Text>
+                <TextInput style={styles.foodLibraryCustomInput} value={defaultWeight} onChangeText={setDefaultWeight} keyboardType="decimal-pad" />
+              </View>
+              <View style={styles.foodLibraryCustomField}>
+                <Text style={styles.foodLibraryCustomLabel}>份量说明</Text>
+                <TextInput style={styles.foodLibraryCustomInput} value={portionLabel} onChangeText={setPortionLabel} placeholder="如 一碗" placeholderTextColor="#94a3b8" />
+              </View>
+              <View style={styles.foodLibraryBasisPresets}>
+                {['100', '60', '30'].map((basis) => (
+                  <Pressable key={basis} style={[styles.foodLibraryBasisChip, defaultWeight === basis && styles.foodLibraryBasisChipActive]} onPress={() => setDefaultWeight(basis)}>
+                    <Text style={[styles.foodLibraryBasisChipText, defaultWeight === basis && styles.foodLibraryBasisChipTextActive]}>每 {basis}g</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <FoodLibraryCompactField label="热量 kcal/100g" value={calories} onChangeText={setCalories} />
+              <FoodLibraryCompactField label="蛋白质 g/100g" value={protein} onChangeText={setProtein} />
+              <FoodLibraryCompactField label="碳水 g/100g" value={carbs} onChangeText={setCarbs} />
+              <FoodLibraryCompactField label="脂肪 g/100g" value={fat} onChangeText={setFat} />
+            </View>
+
+            <Pressable style={styles.foodLibraryMoreToggle} onPress={() => setShowMoreNutrients((prev) => !prev)}>
+              <Text style={styles.foodLibraryMoreText}>维生素 / 矿物质</Text>
+              <Text style={styles.foodLibraryMoreAction}>{showMoreNutrients ? '收起' : '展开'}</Text>
+            </Pressable>
+            {showMoreNutrients ? (
+              <View style={styles.foodLibraryCustomGrid}>
+                <FoodLibraryCompactField label="膳食纤维 g/100g" value={fiber} onChangeText={setFiber} />
+                <FoodLibraryCompactField label="糖 g/100g" value={sugar} onChangeText={setSugar} />
+                <FoodLibraryCompactField label="钠 mg/100g" value={sodiumMg} onChangeText={setSodiumMg} />
+              </View>
+            ) : null}
+
+            <Pressable style={styles.foodLibraryPublicRow} onPress={() => setShareToPublic((prev) => !prev)}>
+              <View style={styles.foodLibraryPublicCopy}>
+                <Text style={styles.foodLibraryPublicTitle}>贡献到公共临时库</Text>
+                <Text style={styles.foodLibraryPublicSubtitle}>审核通过后可给大家复用</Text>
+              </View>
+              <View style={[styles.foodLibraryPublicSwitch, shareToPublic && styles.foodLibraryPublicSwitchActive]}>
+                <View style={[styles.foodLibraryPublicKnob, shareToPublic && styles.foodLibraryPublicKnobActive]} />
+              </View>
+            </Pressable>
+
+            <View style={styles.foodLibraryCustomActions}>
+              <Pressable style={styles.foodLibrarySecondaryButton} onPress={resetCustomDraft}>
+                <Text style={styles.foodLibrarySecondaryButtonText}>清空</Text>
+              </Pressable>
+              <Pressable style={[styles.foodLibraryPrimaryButton, saving && styles.foodLibraryActionDisabled]} disabled={saving} onPress={saveCustom}>
+                {saving ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.foodLibraryPrimaryButtonText}>完成自定义</Text>}
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.foodLibraryListContent}>
+            <View style={styles.foodLibraryListHeader}>
+              <View style={styles.foodLibraryListHeaderCopy}>
+                <Text style={styles.foodLibraryListTitle}>{tabMode === 'custom' ? '我的食物' : tabMode === 'results' ? '搜索结果' : '推荐食物'}</Text>
+                <Text style={styles.foodLibraryListSubtitle}>{activeSubtitle}</Text>
+              </View>
+              {loading ? <ActivityIndicator size="small" color="#5cb896" /> : null}
+            </View>
+            {loading && activeFoods.length === 0 ? (
+              <FoodLibrarySkeleton />
+            ) : activeFoods.length === 0 ? (
+              <View style={styles.foodLibraryEmptyState}>
+                <Text style={styles.foodLibraryEmptyIcon}>食</Text>
+                <Text style={styles.foodLibraryEmptyText}>{tabMode === 'custom' ? '暂无自定义食物，先新建一个常吃的' : tabMode === 'results' ? '暂无匹配食物，换个关键词试试' : '暂无内容，稍后下拉刷新'}</Text>
+                <Pressable style={styles.foodLibraryEmptyButton} onPress={() => setTabMode(tabMode === 'results' ? 'all' : 'create')}>
+                  <Text style={styles.foodLibraryEmptyButtonText}>{tabMode === 'results' ? '去逛逛' : '去新建'}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              activeFoods.slice(0, 40).map((item, index) => (
+                <FoodLibraryCard
+                  key={`${tabMode}-${manualFoodTitle(item)}-${item.id || index}`}
+                  item={item}
+                  latest={sortBy === 'latest' && index === 0}
+                  onOpen={() => openDetail(item)}
+                  onRecord={() => quickRecord(item)}
+                />
+              ))
+            )}
+          </View>
+        )}
+      </ScrollView>
+    </View>
   )
 }
 
 export function HealthProfileScreen() {
   const dialog = useAppDialog()
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const insets = useSafeAreaInsets()
+  const [currentStep, setCurrentStep] = useState(0)
   const [profile, setProfile] = useState<HealthProfile | null>(null)
+  const [age, setAge] = useState('25')
   const [height, setHeight] = useState('')
   const [weight, setWeight] = useState('')
   const [birthday, setBirthday] = useState('')
   const [gender, setGender] = useState('')
   const [activityLevel, setActivityLevel] = useState('')
   const [dietGoal, setDietGoal] = useState('')
+  const [medicalHistory, setMedicalHistory] = useState<string[]>([])
+  const [dietPreference, setDietPreference] = useState<string[]>([])
+  const [allergyList, setAllergyList] = useState<string[]>([])
+  const [sleepHour, setSleepHour] = useState('23')
+  const [wakeHour, setWakeHour] = useState('7')
   const [healthNotes, setHealthNotes] = useState('')
   const [calorieTarget, setCalorieTarget] = useState('')
   const [proteinTarget, setProteinTarget] = useState('')
   const [carbsTarget, setCarbsTarget] = useState('')
   const [fatTarget, setFatTarget] = useState('')
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1122,13 +2316,22 @@ export function HealthProfileScreen() {
         apiClient.getDashboardTargets().catch((): Record<string, number> => ({})),
       ])
       setProfile(profileData)
-      setHeight(stringFrom(profileData.height))
-      setWeight(stringFrom(profileData.weight))
-      setBirthday(stringFrom(profileData.birthday))
+      setHeight(stringFrom(profileData.height) || '170')
+      setWeight(stringFrom(profileData.weight) || '60')
+      const nextBirthday = stringFrom(profileData.birthday)
+      setBirthday(nextBirthday)
+      setAge(ageFromBirthday(nextBirthday) || '25')
       setGender(stringFrom(profileData.gender))
-      setActivityLevel(stringFrom(profileData.activity_level))
+      const condition = profileData.health_condition || {}
+      setActivityLevel(stringFrom(condition.daily_life_activity_level || profileData.daily_life_activity_level || profileData.activity_level))
       setDietGoal(stringFrom(profileData.diet_goal))
-      setHealthNotes(stringFrom(profileData.health_condition?.health_notes))
+      setMedicalHistory(stringArrayFrom(condition.medical_history))
+      setDietPreference(stringArrayFrom(condition.diet_preference))
+      setAllergyList(stringArrayFrom(condition.allergies))
+      const routine = parseHealthRoutine(condition.routine_type)
+      setSleepHour(stringFrom(condition.routine_sleep_hour) || routine.sleep || '23')
+      setWakeHour(stringFrom(condition.routine_wake_hour) || routine.wake || '7')
+      setHealthNotes(stringFrom(condition.health_notes))
       setCalorieTarget(stringFrom(targets.calorie_target))
       setProteinTarget(stringFrom(targets.protein_target))
       setCarbsTarget(stringFrom(targets.carbs_target))
@@ -1144,17 +2347,93 @@ export function HealthProfileScreen() {
     void load()
   }, [load])
 
+  const currentStepKey = healthProfileSteps[currentStep] || 'gender'
+  const isLastStep = currentStep === healthProfileSteps.length - 1
+  const ageNumber = Number(age)
+  const heightNumber = Number(height)
+  const weightNumber = Number(weight)
+  const sleepNumber = Number(sleepHour)
+  const wakeNumber = Number(wakeHour)
+  const isAgeValid = Number.isFinite(ageNumber) && ageNumber >= 1 && ageNumber <= 100
+  const isHeightValid = Number.isFinite(heightNumber) && heightNumber >= 100 && heightNumber <= 250
+  const isWeightValid = Number.isFinite(weightNumber) && weightNumber >= 30 && weightNumber <= 200
+  const isRoutineValid = Number.isFinite(sleepNumber) && sleepNumber >= 0 && sleepNumber <= 23 && Number.isFinite(wakeNumber) && wakeNumber >= 0 && wakeNumber <= 23
+
+  const canProceed = useMemo(() => {
+    switch (currentStepKey) {
+      case 'gender':
+        return !!gender
+      case 'age':
+        return isAgeValid
+      case 'height':
+        return isHeightValid
+      case 'weight':
+        return isWeightValid
+      case 'goal':
+        return !!dietGoal
+      case 'activity':
+        return !!activityLevel
+      case 'routine':
+        return isRoutineValid
+      default:
+        return true
+    }
+  }, [activityLevel, currentStepKey, dietGoal, gender, isAgeValid, isHeightValid, isRoutineValid, isWeightValid])
+
+  const toggleMedical = useCallback((value: string) => {
+    setMedicalHistory((current) => toggleHealthSelection(current, value))
+  }, [])
+
+  const toggleDietPreference = useCallback((value: string) => {
+    setDietPreference((current) => toggleHealthSelection(current, value))
+  }, [])
+
+  const toggleAllergy = useCallback((value: string) => {
+    setAllergyList((current) => toggleHealthSelection(current, value))
+  }, [])
+
+  const goNext = () => {
+    if (!canProceed) return
+    setCurrentStep((step) => Math.min(step + 1, healthProfileSteps.length - 1))
+  }
+
+  const goPrev = () => {
+    setCurrentStep((step) => Math.max(step - 1, 0))
+  }
+
   const save = async () => {
-    setLoading(true)
+    if (!gender || !isAgeValid || !isHeightValid || !isWeightValid || !dietGoal || !activityLevel) {
+      await dialog.alert('请完成必填信息', '性别、年龄、身高、体重、健康目标和日常活动会影响营养建议。', 'warning')
+      return
+    }
+    const confirmed = await dialog.confirm({
+      title: '确认保存',
+      message: '确定将当前填写的健康信息保存到个人档案吗？',
+      confirmText: '保存档案',
+      cancelText: '取消',
+      kind: 'info',
+    })
+    if (!confirmed) return
+    setSaving(true)
     try {
+      const finalBirthday = birthdayFromAge(age) || birthday.trim()
+      const routineType = formatHealthRoutine(sleepHour, wakeHour)
       await apiClient.updateHealthProfile({
-        height: numberOrUndefined(height),
-        weight: numberOrUndefined(weight),
-        birthday: birthday.trim(),
+        height: isHeightValid ? heightNumber : numberOrUndefined(height),
+        weight: isWeightValid ? weightNumber : numberOrUndefined(weight),
+        birthday: finalBirthday,
         gender: gender.trim(),
         activity_level: activityLevel.trim(),
+        daily_life_activity_level: activityLevel.trim(),
         diet_goal: dietGoal.trim(),
-        health_notes: healthNotes.trim(),
+        execution_mode: 'standard',
+        medical_history: healthListForSubmit(medicalHistory),
+        diet_preference: healthListForSubmit(dietPreference),
+        allergies: healthListForSubmit(allergyList),
+        routine_type: routineType,
+        routine_sleep_hour: Number(sleepHour),
+        routine_wake_hour: Number(wakeHour),
+        health_notes: healthNotes.trim() || undefined,
       })
       if (calorieTarget || proteinTarget || carbsTarget || fatTarget) {
         await apiClient.updateDashboardTargets({
@@ -1170,31 +2449,254 @@ export function HealthProfileScreen() {
     } catch (error) {
       await dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
 
+  const renderStep = () => {
+    switch (currentStepKey) {
+      case 'gender':
+        return (
+          <>
+            <HealthProfileStepHeader title="基础信息" subtitle="选择你的性别，让我们更了解你。" />
+            <View style={styles.healthProfileChoiceList}>
+              {healthGenderOptions.map((option) => (
+                <HealthProfileChoiceCard
+                  key={option.value}
+                  label={option.label}
+                  active={gender === option.value}
+                  size="big"
+                  onPress={() => setGender(option.value)}
+                />
+              ))}
+            </View>
+          </>
+        )
+      case 'age':
+        return (
+          <>
+            <HealthProfileStepHeader title="基础信息" subtitle="选择你的年龄，让我们更了解你。" />
+            <HealthProfileNumberCard value={age} unit="岁" min="1" max="100" onChange={setAge} />
+            <Text style={styles.healthProfileSkipHint}>保存时会按年龄换算为生日，用于能量与营养建议。</Text>
+          </>
+        )
+      case 'height':
+        return (
+          <>
+            <HealthProfileStepHeader title="身体数据" subtitle="你的身高是多少？" />
+            <HealthProfileNumberCard value={height} unit="cm" min="100" max="250" onChange={setHeight} />
+            <Text style={styles.healthProfileSkipHint}>建议填写 100-250 cm 之间的身高。</Text>
+          </>
+        )
+      case 'weight':
+        return (
+          <>
+            <HealthProfileStepHeader title="身体数据" subtitle="你的体重是多少？" />
+            <HealthProfileNumberCard value={weight} unit="kg" min="30" max="200" onChange={setWeight} />
+            <Text style={styles.healthProfileSkipHint}>建议填写 30-200 kg 之间的体重。</Text>
+          </>
+        )
+      case 'goal':
+        return (
+          <>
+            <HealthProfileStepHeader title="健康目标" subtitle="你希望达到什么样的身体状态？" />
+            <View style={styles.healthProfileChoiceList}>
+              {healthDietGoalOptions.map((option) => (
+                <HealthProfileChoiceCard
+                  key={option.value}
+                  label={option.label}
+                  desc={option.desc}
+                  icon={option.icon}
+                  active={dietGoal === option.value}
+                  onPress={() => setDietGoal(option.value)}
+                />
+              ))}
+            </View>
+          </>
+        )
+      case 'activity':
+        return (
+          <>
+            <HealthProfileStepHeader title="日常活动" subtitle="不算专门健身，你平时的一天更接近哪种状态？" />
+            <View style={styles.healthProfileChoiceList}>
+              {healthActivityOptions.map((option) => (
+                <HealthProfileChoiceCard
+                  key={option.value}
+                  label={option.label}
+                  desc={option.desc}
+                  icon={option.icon}
+                  active={activityLevel === option.value}
+                  onPress={() => setActivityLevel(option.value)}
+                />
+              ))}
+            </View>
+          </>
+        )
+      case 'routine':
+        return (
+          <>
+            <HealthProfileStepHeader title="作息习惯" subtitle="了解你的作息，让算法更加懂你。" />
+            <View style={styles.healthProfileRoutineRow}>
+              <HealthProfileRoutineField label="入睡" value={sleepHour} onChange={setSleepHour} />
+              <HealthProfileRoutineField label="起床" value={wakeHour} onChange={setWakeHour} />
+            </View>
+            <View style={styles.healthProfileInputCard}>
+              <Text style={styles.healthProfileInputHint}>常见示例：23 点睡，7 点起。只填 0-23 的小时数字。</Text>
+            </View>
+          </>
+        )
+      case 'medical':
+        return (
+          <>
+            <HealthProfileStepHeader title="既往病史" subtitle="是否有以下病史？（可多选）" />
+            <View style={styles.healthProfileOptionGrid}>
+              {healthMedicalOptions.map((option) => (
+                <HealthProfileChoiceCard
+                  key={option.value}
+                  label={option.label}
+                  active={medicalHistory.includes(option.value)}
+                  size="small"
+                  onPress={() => toggleMedical(option.value)}
+                />
+              ))}
+            </View>
+          </>
+        )
+      case 'diet':
+        return (
+          <>
+            <HealthProfileStepHeader title="饮食习惯" subtitle="你有特殊的饮食习惯吗？（可多选）" />
+            <View style={styles.healthProfileOptionGrid}>
+              {healthDietPreferenceOptions.map((option) => (
+                <HealthProfileChoiceCard
+                  key={option.value}
+                  label={option.label}
+                  icon={option.icon}
+                  active={dietPreference.includes(option.value)}
+                  size="small"
+                  onPress={() => toggleDietPreference(option.value)}
+                />
+              ))}
+            </View>
+          </>
+        )
+      case 'allergy':
+        return (
+          <>
+            <HealthProfileStepHeader title="过敏源" subtitle="有过敏源吗？（可多选）" />
+            <View style={styles.healthProfileOptionGrid}>
+              {healthAllergyOptions.map((option) => (
+                <HealthProfileChoiceCard
+                  key={option.value}
+                  label={option.label}
+                  icon={option.icon}
+                  active={allergyList.includes(option.value)}
+                  size="small"
+                  onPress={() => toggleAllergy(option.value)}
+                />
+              ))}
+            </View>
+          </>
+        )
+      case 'notes':
+      default:
+        return (
+          <>
+            <HealthProfileStepHeader title="补充信息" subtitle="有其他特殊情况需要补充吗？（选填）" />
+            <View style={styles.healthProfileInputCard}>
+              <TextInput
+                value={healthNotes}
+                onChangeText={setHealthNotes}
+                multiline
+                maxLength={500}
+                placeholder="例如：孕期、哺乳期、手术恢复期等"
+                placeholderTextColor="#94a3b8"
+                textAlignVertical="top"
+                style={styles.healthProfileTextarea}
+              />
+            </View>
+            <Text style={styles.healthProfileSkipHint}>记录身体的特殊情况，让分析更准确（没有可留空）</Text>
+
+            <View style={styles.healthProfileTargetPanel}>
+              <Text style={styles.healthProfileTargetTitle}>首页目标</Text>
+              <Text style={styles.healthProfileTargetSubtitle}>同步首页热量和三大营养素目标。</Text>
+              <View style={styles.healthProfileTargetGrid}>
+                <HealthProfileTargetField label="热量" unit="kcal" value={calorieTarget} onChange={setCalorieTarget} />
+                <HealthProfileTargetField label="蛋白质" unit="g" value={proteinTarget} onChange={setProteinTarget} />
+                <HealthProfileTargetField label="碳水" unit="g" value={carbsTarget} onChange={setCarbsTarget} />
+                <HealthProfileTargetField label="脂肪" unit="g" value={fatTarget} onChange={setFatTarget} />
+              </View>
+              <Pressable style={styles.healthProfileReportLink} onPress={() => navigation.navigate('HealthProfileView')}>
+                <Text style={styles.healthProfileReportLinkText}>体检报告与详情在档案详情页继续管理</Text>
+                <Text style={styles.healthProfileReportLinkArrow}>›</Text>
+              </Pressable>
+            </View>
+          </>
+        )
+    }
+  }
+
+  if (loading && !profile) {
+    return (
+      <View style={styles.healthProfilePage}>
+        <View style={styles.healthProfileLoading}>
+          <ActivityIndicator color={colors.brand} size="small" />
+        </View>
+      </View>
+    )
+  }
+
   return (
-    <Page title="健康档案" subtitle={profile ? '用于个性化分析和首页目标' : undefined} refreshing={loading} onRefresh={load}>
-      <Card>
-        <Text style={styles.sectionTitle}>基础信息</Text>
-        <Field label="身高 cm" value={height} onChangeText={setHeight} keyboardType="decimal-pad" />
-        <Field label="体重 kg" value={weight} onChangeText={setWeight} keyboardType="decimal-pad" />
-        <Field label="生日 YYYY-MM-DD" value={birthday} onChangeText={setBirthday} />
-        <OptionSegment title="性别" value={gender} options={healthGenderOptions} onChange={setGender} />
-        <OptionSegment title="活动水平" value={activityLevel} options={healthActivityOptions} onChange={setActivityLevel} />
-        <OptionSegment title="饮食目标" value={dietGoal} options={healthDietGoalOptions} onChange={setDietGoal} />
-        <Field label="健康备注" value={healthNotes} onChangeText={setHealthNotes} multiline />
-      </Card>
-      <Card>
-        <Text style={styles.sectionTitle}>首页目标</Text>
-        <Field label="热量 kcal" value={calorieTarget} onChangeText={setCalorieTarget} keyboardType="decimal-pad" />
-        <Field label="蛋白质 g" value={proteinTarget} onChangeText={setProteinTarget} keyboardType="decimal-pad" />
-        <Field label="碳水 g" value={carbsTarget} onChangeText={setCarbsTarget} keyboardType="decimal-pad" />
-        <Field label="脂肪 g" value={fatTarget} onChangeText={setFatTarget} keyboardType="decimal-pad" />
-        <AppButton label="保存档案" loading={loading} onPress={save} />
-      </Card>
-    </Page>
+    <View style={styles.healthProfilePage}>
+      <View style={styles.healthProfileProgressWrap}>
+        <View style={styles.healthProfileProgressDots}>
+          {healthProfileSteps.map((step, index) => (
+            <View
+              key={step}
+              style={[
+                styles.healthProfileProgressDot,
+                index <= currentStep && styles.healthProfileProgressDotActive,
+                index === currentStep && styles.healthProfileProgressDotCurrent,
+              ]}
+            />
+          ))}
+        </View>
+        <Text style={styles.healthProfileProgressText}>{currentStep + 1} / {healthProfileSteps.length}</Text>
+      </View>
+
+      <ScrollView
+        style={styles.healthProfileScroll}
+        contentContainerStyle={[styles.healthProfileStepCard, { paddingBottom: Math.max(insets.bottom, 16) + 28 }]}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={loading && Boolean(profile)} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+      >
+        {renderStep()}
+        <View style={[styles.healthProfileFooter, currentStep === 0 && styles.healthProfileFooterSingle]}>
+          {currentStep > 0 ? (
+            <Pressable style={styles.healthProfilePrevButton} disabled={saving} onPress={goPrev}>
+              <Text style={styles.healthProfilePrevText}>‹ 上一步</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            style={[
+              styles.healthProfileNextButton,
+              !canProceed && styles.healthProfileNextButtonDisabled,
+              isLastStep && styles.healthProfileNextButtonReady,
+            ]}
+            disabled={!canProceed || saving}
+            onPress={isLastStep ? () => void save() : goNext}
+          >
+            {saving ? (
+              <ActivityIndicator color="#ffffff" size="small" />
+            ) : (
+              <Text style={[styles.healthProfileNextText, (!canProceed && !isLastStep) && styles.healthProfileNextTextDisabled]}>
+                {isLastStep ? '保存档案' : '下一步 ›'}
+              </Text>
+            )}
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
   )
 }
 
@@ -1202,10 +2704,11 @@ export function BodyMetricRecordScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'BodyMetricRecord'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
-  const type = route.params.type
+  const type = route.params?.type || 'weight'
+  const initialDate = normalizeRouteDate(route.params?.date)
   const [summary, setSummary] = useState<BodyMetricsSummary | null>(null)
   const [logs, setLogs] = useState<ExerciseLogItem[]>([])
-  const [date, setDate] = useState(todayKey())
+  const [date] = useState(initialDate)
   const [value, setValue] = useState(type === 'water' ? '250' : '')
   const [exerciseDesc, setExerciseDesc] = useState('')
   const [exerciseImageUri, setExerciseImageUri] = useState('')
@@ -1473,205 +2976,356 @@ export function BodyMetricRecordScreen() {
     if (confirmed) await deleteExercise(logId)
   }
 
-  const title = type === 'water' ? '喝水记录' : type === 'exercise' ? '运动记录' : '体重记录'
+  const isWeight = type === 'weight'
+  const isWater = type === 'water'
+  const isExercise = type === 'exercise'
+  const title = isWater ? '记录喝水' : isExercise ? '记录运动' : '记录体重'
   const trendKind = type === 'weight' ? 'weight' : type === 'water' ? 'water' : 'exercise'
+  const insets = useSafeAreaInsets()
+  const routeDateLabel = date === todayKey() ? '今天' : formatShortDate(date)
+  const accent = isWater ? '#5c9ed4' : isExercise ? '#f97316' : '#5cb896'
+  const accentDeep = isWater ? '#3278ab' : isExercise ? '#ea580c' : '#3f9474'
+  const pageBackground = isWater ? '#eef4f7' : isExercise ? '#f8fafc' : '#f0f3f6'
+  const exerciseTotalCalories = logs.reduce((sum, log) => sum + Math.round(log.calories_burned || 0), 0)
+  const waterProgress = waterGoal > 0 ? Math.min(100, Math.round((currentWaterTotal / waterGoal) * 100)) : 0
+  const latestWeightChange = summary?.latest_weight && summary?.previous_weight
+    ? Number(summary.latest_weight.value) - Number(summary.previous_weight.value)
+    : summary?.weight_change
+  const latestWeightHelper = summary?.latest_weight
+    ? `最近一次 ${summary.latest_weight.value}kg${Number.isFinite(Number(latestWeightChange)) ? `，较上次 ${Number(latestWeightChange) >= 0 ? '+' : ''}${Number(latestWeightChange).toFixed(1)}kg` : ''}`
+    : '保存后会同步更新首页和健康档案体重'
+  const canSubmitExercise = Boolean(exerciseDesc.trim() || exerciseImageUrl)
 
   return (
-    <Page title={title} subtitle="体重、喝水和运动同步到统计页" refreshing={loading} onRefresh={load}>
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>记录日期</Text>
-          <SmallButton label="查看趋势" onPress={() => navigation.navigate('TrendDetail', { kind: trendKind })} />
-        </View>
-        <Field label="日期" value={date} onChangeText={setDate} />
-      </Card>
-
-      {type === 'weight' ? (
-        <>
-          <Card>
-            <Text style={styles.sectionTitle}>{date} 的体重</Text>
-            <Field label="体重 kg" value={value} onChangeText={setValue} keyboardType="decimal-pad" />
-            <AppButton label="保存体重" loading={loading} onPress={() => save()} />
-            <Text style={styles.subtitle}>
-              {summary?.latest_weight ? `最近一次 ${summary.latest_weight.value}kg` : '保存后会同步更新首页和健康档案体重'}
-            </Text>
-          </Card>
-          <Card>
-            <Text style={styles.sectionTitle}>当天记录</Text>
-            {weightEntries.length === 0 ? <Text style={styles.empty}>这一天还没有体重记录</Text> : null}
-            {weightEntries.map((entry) => (
-              <View key={`${entry.id || entry.date}-${entry.recorded_at || entry.value}`} style={styles.logRow}>
-                <View style={styles.flex}>
-                  <Text style={styles.itemName}>{entry.value} kg</Text>
-                  <Text style={styles.subtitle}>{formatDateTime(entry.recorded_at || entry.date)}</Text>
-                </View>
-                <SmallButton label={mutatingId === entry.id ? '删除中' : '删除'} danger onPress={() => void confirmDeleteWeight(entry)} />
+    <View style={[styles.bodyRecordPage, { backgroundColor: pageBackground }]}>
+      <ScrollView
+        style={styles.bodyRecordScroll}
+        contentContainerStyle={[styles.bodyRecordContent, { paddingTop: Math.max(insets.top + 12, 24), paddingBottom: insets.bottom + 96 }]}
+        refreshControl={<RefreshControl refreshing={loading && Boolean(summary)} onRefresh={load} tintColor={accent} colors={[accent]} />}
+        keyboardShouldPersistTaps="handled"
+      >
+        {isExercise ? (
+          <View style={styles.exerciseStatsWrap}>
+            <View style={styles.exerciseStatsCard}>
+              <View style={styles.exerciseStatsIcon}>
+                <Dumbbell size={22} color="#07c160" />
               </View>
-            ))}
-          </Card>
-        </>
-      ) : null}
+              <View style={styles.flex}>
+                <Text style={styles.exerciseStatsLabel}>{routeDateLabel}运动消耗</Text>
+                <View style={styles.exerciseStatsValueRow}>
+                  <Text style={styles.exerciseStatsValue}>{exerciseTotalCalories}</Text>
+                  <Text style={styles.exerciseStatsUnit}>kcal</Text>
+                </View>
+              </View>
+              <Text style={styles.exerciseStatsCount}>{logs.length} 次记录</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.bodyRecordTopbar}>
+            <View style={styles.flex}>
+              <Text style={[styles.bodyRecordKicker, { color: accentDeep }]}>{routeDateLabel}</Text>
+              <Text style={styles.bodyRecordTitle}>{title}</Text>
+            </View>
+            <Pressable
+              style={[styles.bodyRecordTrendLink, { backgroundColor: isWater ? 'rgba(92,158,212,0.1)' : 'rgba(92,184,150,0.1)' }]}
+              onPress={() => navigation.navigate('TrendDetail', { kind: trendKind, date })}
+            >
+              <Text style={[styles.bodyRecordTrendText, { color: accentDeep }]}>查看趋势</Text>
+            </Pressable>
+          </View>
+        )}
 
-      {type === 'water' ? (
-        <>
-          <Card>
-            <Text style={styles.sectionTitle}>今日进度</Text>
-            <Text style={styles.bigNumber}>{currentWaterTotal} ml</Text>
-            <Text style={styles.subtitle}>{waterRemaining > 0 ? `距离目标还差 ${waterRemaining}ml` : '这一天已达到喝水目标'}</Text>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${Math.min(100, Math.round((currentWaterTotal / waterGoal) * 100))}%` }]} />
+        {isWeight ? (
+          <>
+            <View style={styles.bodyMetricMainCard}>
+              <Text style={styles.bodyMetricMainLabel}>{date} 的体重</Text>
+              <View style={styles.weightInputRow}>
+                <TextInput
+                  value={value}
+                  onChangeText={setValue}
+                  keyboardType="decimal-pad"
+                  placeholder="69.9"
+                  placeholderTextColor="#9ca3af"
+                  style={styles.weightMainInput}
+                />
+                <Text style={styles.weightMainUnit}>kg</Text>
+              </View>
+              <Pressable style={[styles.bodyMetricSaveButton, { backgroundColor: accent }, loading && styles.bodyMetricActionDisabled]} disabled={loading} onPress={() => save()}>
+                {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.bodyMetricSaveText}>保存体重</Text>}
+              </Pressable>
+              <Text style={styles.bodyMetricHelper}>{latestWeightHelper}</Text>
             </View>
-          </Card>
-          <Card>
-            <Text style={styles.sectionTitle}>快捷加水</Text>
-            <View style={styles.quickGrid}>
-              {waterPresets.map((amount) => (
-                <Pressable key={amount} style={styles.quickButton} onPress={() => void save(amount)}>
-                  <Text style={styles.quickButtonText}>+{amount}ml</Text>
-                </Pressable>
-              ))}
+
+            <View style={styles.bodyMetricCard}>
+              <View style={styles.bodyMetricSectionHead}>
+                <Text style={styles.bodyMetricSectionTitle}>{routeDateLabel}记录</Text>
+                {loading ? <ActivityIndicator color={accent} size="small" /> : null}
+              </View>
+              {weightEntries.length === 0 ? <Text style={styles.bodyMetricEmpty}>这一天还没有体重记录</Text> : null}
+              {weightEntries.length > 0 ? (
+                <View style={styles.weightDayList}>
+                  {weightEntries.map((entry) => (
+                    <View key={`${entry.id || entry.date}-${entry.recorded_at || entry.value}`} style={styles.weightDayRow}>
+                      <View>
+                        <Text style={styles.weightDayValue}>{entry.value}kg</Text>
+                        <Text style={styles.weightDayDate}>{formatShortDate(entry.date)}</Text>
+                      </View>
+                      <Pressable
+                        style={[styles.weightDeleteButton, mutatingId === entry.id && styles.bodyMetricActionDisabled]}
+                        disabled={mutatingId === entry.id}
+                        onPress={() => void confirmDeleteWeight(entry)}
+                      >
+                        {mutatingId === entry.id ? <ActivityIndicator color="#d45c5c" size="small" /> : <Text style={styles.weightDeleteText}>删除</Text>}
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
             </View>
-            <Field label="自定义水量 ml" value={value} onChangeText={setValue} keyboardType="decimal-pad" />
-            <View style={styles.buttonRow}>
-              <SmallButton label="添加" onPress={() => void save()} />
-              <SmallButton label={mutatingId === 'water-reset' ? '清空中' : '清空当天'} danger onPress={() => void confirmResetWater()} />
+          </>
+        ) : null}
+
+        {isWater ? (
+          <>
+            <View style={styles.bodyMetricCard}>
+              <View style={styles.waterTotalRow}>
+                <Text style={styles.waterTotalValue}>{currentWaterTotal}</Text>
+                <Text style={styles.waterTotalUnit}>ml</Text>
+              </View>
+              <View style={styles.waterProgressTrack}>
+                <View style={[styles.waterProgressFill, { width: `${waterProgress}%` }]} />
+              </View>
+              <Text style={styles.waterProgressNote}>{waterRemaining > 0 ? `距离目标还差 ${waterRemaining}ml` : '这一天已达到喝水目标'}</Text>
             </View>
-          </Card>
-          <Card>
-            <Text style={styles.sectionTitle}>当天明细</Text>
-            {waterLogs.length === 0 ? <Text style={styles.empty}>这一天还没有喝水记录</Text> : null}
-            <View style={styles.chipWrap}>
-              {waterLogs.map((log, index) => {
-                const logId = String(log.id || `fallback-${index}`)
-                return (
-                  <Pressable key={logId} style={styles.waterChip} onPress={() => void confirmDeleteWater(log)}>
-                    <Text style={styles.waterChipText}>+{Math.round(log.amount_ml)}ml</Text>
-                    <Text style={styles.waterChipDelete}>{log.id ? (mutatingId === log.id ? '删除中' : '删除') : '当天清空'}</Text>
+
+            <View style={styles.bodyMetricCard}>
+              <View style={styles.bodyMetricSectionHead}>
+                <Text style={styles.bodyMetricSectionTitle}>快捷加水</Text>
+                {loading ? <ActivityIndicator color={accent} size="small" /> : null}
+              </View>
+              <View style={styles.waterPresetGrid}>
+                {waterPresets.map((amount) => (
+                  <Pressable key={amount} style={[styles.waterPresetButton, loading && styles.bodyMetricActionDisabled]} disabled={loading} onPress={() => void save(amount)}>
+                    <Text style={styles.waterPresetText}>+{amount}ml</Text>
                   </Pressable>
-                )
-              })}
-            </View>
-          </Card>
-        </>
-      ) : null}
-
-      {type === 'exercise' ? (
-        <>
-          <Card>
-            <Text style={styles.sectionTitle}>记录运动</Text>
-            <View style={styles.quickGrid}>
-              {exercisePresets.map((preset) => (
-                <Pressable key={preset} style={styles.quickButton} onPress={() => setExerciseDesc(preset)}>
-                  <Text style={styles.quickButtonText}>{preset}</Text>
+                ))}
+              </View>
+              <View style={styles.waterCustomRow}>
+                <TextInput
+                  value={value}
+                  onChangeText={setValue}
+                  keyboardType="number-pad"
+                  placeholder="自定义 ml"
+                  placeholderTextColor="#9ca3af"
+                  style={styles.waterCustomInput}
+                />
+                <Pressable style={[styles.waterCustomButton, loading && styles.bodyMetricActionDisabled]} disabled={loading} onPress={() => void save()}>
+                  {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Text style={styles.waterCustomButtonText}>添加</Text>}
                 </Pressable>
-              ))}
+              </View>
             </View>
-            <Field label="运动内容" value={exerciseDesc} onChangeText={setExerciseDesc} placeholder="例：慢跑 30 分钟" multiline />
-            {exerciseImageUri ? <Image source={{ uri: exerciseImageUri }} style={styles.previewImage} /> : null}
-            <View style={styles.buttonRow}>
-              <SmallButton label={exerciseImageUrl ? '更换截图' : '上传运动截图'} onPress={() => void pickExerciseImage()} />
-              {exerciseImageUrl ? <SmallButton label="移除截图" danger onPress={() => { setExerciseImageUri(''); setExerciseImageUrl('') }} /> : null}
-            </View>
-            <AppButton label="保存运动" loading={loading} onPress={() => save()} />
-          </Card>
-          {exerciseTask ? (
-            <Card>
-              <View style={styles.exerciseTaskHeader}>
-                <View style={styles.exerciseTaskTitleWrap}>
-                  {isTaskRunningStatus(exerciseTask.status) || exercisePolling ? <ActivityIndicator size="small" color={colors.brand} /> : null}
-                  <Text style={styles.sectionTitle}>后台运动分析</Text>
-                </View>
-                <Pill text={exerciseTaskStatusLabel(exerciseTask.status)} />
-              </View>
-              <Text style={styles.subtitle}>{exerciseTask.desc}</Text>
-              <Text style={styles.notes}>{exerciseTaskMessage(exerciseTask.status)}</Text>
-              {exerciseTask.errorMessage ? <Text style={styles.errorText}>{exerciseTask.errorMessage}</Text> : null}
-              <View style={styles.buttonRow}>
-                <SmallButton label={exercisePolling ? '刷新中' : '刷新结果'} disabled={exercisePolling} onPress={() => void refreshExerciseTask()} />
-              </View>
-            </Card>
-          ) : null}
-          {logs.length === 0 ? <EmptyState text="这一天还没有运动记录" /> : null}
-          {logs.map((log) => (
-            <Card key={log.id}>
-              {log.image_url ? <Image source={{ uri: log.image_url }} style={styles.previewImage} /> : null}
-              <View style={styles.rowBetween}>
-                <View style={styles.flex}>
-                  <Text style={styles.itemName}>{log.exercise_desc || log.exercise_type || '运动'}</Text>
-                  <Text style={styles.subtitle}>{Math.round(log.calories_burned || 0)} kcal · {log.duration_min || 0} 分钟</Text>
-                  {log.ai_reasoning ? <Text style={styles.notes}>{log.ai_reasoning}</Text> : null}
-                </View>
-                <SmallButton label={mutatingId === log.id ? '删除中' : '删除'} danger onPress={() => void confirmDeleteExercise(log)} />
-              </View>
-            </Card>
-          ))}
-        </>
-      ) : null}
 
-      <Card>
-        <Text style={styles.sectionTitle}>本月概览</Text>
-        <InfoRow label="最近体重" value={summary?.latest_weight ? `${summary.latest_weight.value} kg` : '--'} />
-        <InfoRow label="今日喝水" value={`${Math.round(summary?.today_water?.total || 0)} ml`} />
-        <InfoRow label="月均喝水" value={`${Math.round(summary?.avg_daily_water_ml || 0)} ml`} />
-      </Card>
-    </Page>
+            <View style={styles.bodyMetricCard}>
+              <View style={styles.bodyMetricSectionHead}>
+                <Text style={styles.bodyMetricSectionTitle}>{routeDateLabel}记录</Text>
+                {currentWaterTotal > 0 ? (
+                  <Pressable
+                    style={[styles.waterClearLink, mutatingId === 'water-reset' && styles.bodyMetricActionDisabled]}
+                    disabled={mutatingId === 'water-reset'}
+                    onPress={() => void confirmResetWater()}
+                  >
+                    {mutatingId === 'water-reset' ? <ActivityIndicator color="#d45c5c" size="small" /> : <Text style={styles.waterClearText}>清空</Text>}
+                  </Pressable>
+                ) : null}
+              </View>
+              {waterLogs.length === 0 ? <Text style={styles.bodyMetricEmpty}>这一天还没有喝水记录</Text> : null}
+              {waterLogs.length > 0 ? (
+                <View style={styles.waterLogList}>
+                  {waterLogs.map((log, index) => {
+                    const logId = String(log.id || `fallback-${index}`)
+                    const deleting = Boolean(log.id && mutatingId === log.id)
+                    return (
+                      <Pressable key={logId} style={[styles.waterLogChip, deleting && styles.bodyMetricActionDisabled]} disabled={deleting} onPress={() => void confirmDeleteWater(log)}>
+                        <Text style={styles.waterLogText}>+{Math.round(log.amount_ml)}ml</Text>
+                        {deleting ? <ActivityIndicator color="#d45c5c" size="small" /> : <Text style={styles.waterLogDelete}>{log.id ? '删除' : '当天清空'}</Text>}
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              ) : null}
+            </View>
+          </>
+        ) : null}
+
+        {isExercise ? (
+          <>
+            <View style={styles.exerciseInputSection}>
+              <View style={styles.exerciseComposeHeader}>
+                <View style={styles.flex}>
+                  <Text style={styles.exerciseComposeKicker}>{routeDateLabel}</Text>
+                  <Text style={styles.exerciseComposeTitle}>记录运动</Text>
+                </View>
+                <Pressable style={styles.exerciseTrendLink} onPress={() => navigation.navigate('TrendDetail', { kind: trendKind, date })}>
+                  <Text style={styles.exerciseTrendText}>查看趋势</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.exerciseQuickTitle}>试试这样说：</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.exerciseQuickRow}>
+                {exercisePresets.map((preset) => (
+                  <Pressable key={preset} style={styles.exerciseQuickChip} onPress={() => setExerciseDesc(preset)}>
+                    <Text style={styles.exerciseQuickChipText}>{preset}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              {exerciseImageUri ? (
+                <View style={styles.exerciseImagePreviewWrap}>
+                  <Image source={{ uri: exerciseImageUri }} style={styles.exerciseImagePreview} />
+                  <Pressable style={styles.exerciseImageRemove} onPress={() => { setExerciseImageUri(''); setExerciseImageUrl('') }}>
+                    <X size={16} color="#ffffff" />
+                  </Pressable>
+                </View>
+              ) : null}
+              <View style={styles.exerciseInputWrap}>
+                <Pressable style={styles.exerciseImageButton} onPress={() => void pickExerciseImage()}>
+                  <ImagePlus size={17} color="#6b7280" />
+                </Pressable>
+                <TextInput
+                  value={exerciseDesc}
+                  onChangeText={setExerciseDesc}
+                  multiline
+                  maxLength={2000}
+                  placeholder={exerciseImageUri ? '补充描述（可选）' : '今天做了什么运动？'}
+                  placeholderTextColor="#9ca3af"
+                  textAlignVertical="top"
+                  style={styles.exerciseTextInput}
+                />
+                <Pressable
+                  style={[styles.exerciseSendButton, (!canSubmitExercise || loading) && styles.exerciseSendButtonDisabled]}
+                  disabled={!canSubmitExercise || loading}
+                  onPress={() => save()}
+                >
+                  {loading ? <ActivityIndicator color="#ffffff" size="small" /> : <Send size={17} color="#ffffff" />}
+                </Pressable>
+              </View>
+            </View>
+
+            {exerciseTask ? (
+              <View style={[styles.exerciseRecordCard, exerciseTask.status === 'failed' && styles.exerciseRecordCardFailed]}>
+                <View style={styles.exerciseRecordTop}>
+                  <Text style={styles.exerciseRecordTitle}>{exerciseTask.desc}</Text>
+                  <Pill text={exerciseTaskStatusLabel(exerciseTask.status)} />
+                </View>
+                <View style={styles.exerciseRecordDivider} />
+                <View style={styles.exerciseRecordBottom}>
+                  <View style={styles.exercisePendingRow}>
+                    {isTaskRunningStatus(exerciseTask.status) || exercisePolling ? <ActivityIndicator size="small" color="#f97316" /> : null}
+                    <Text style={styles.exercisePendingText}>{exerciseTaskMessage(exerciseTask.status)}</Text>
+                  </View>
+                  <Pressable style={styles.exerciseRefreshLink} disabled={exercisePolling} onPress={() => void refreshExerciseTask()}>
+                    <Text style={styles.exerciseRefreshText}>刷新结果</Text>
+                  </Pressable>
+                </View>
+                {exerciseTask.errorMessage ? <Text style={styles.exerciseErrorText}>{exerciseTask.errorMessage}</Text> : null}
+              </View>
+            ) : null}
+
+            {logs.length === 0 && !exerciseTask ? (
+              <View style={styles.exerciseEmptyState}>
+                <View style={styles.exerciseEmptyIcon}>
+                  <Dumbbell size={36} color="#d1d5db" />
+                </View>
+                <Text style={styles.exerciseEmptyTitle}>{routeDateLabel}还没有运动记录</Text>
+                <Text style={styles.exerciseEmptyDesc}>上方输入运动内容或添加图片，系统会估算消耗。</Text>
+              </View>
+            ) : null}
+
+            {logs.length > 0 ? (
+              <View style={styles.exerciseRecordsList}>
+                {logs.map((log) => (
+                  <View key={log.id} style={styles.exerciseRecordCard}>
+                    {log.image_url ? <Image source={{ uri: log.image_url }} style={styles.exerciseImagePreview} /> : null}
+                    <View style={styles.exerciseRecordTop}>
+                      <Text style={styles.exerciseRecordTitle}>{log.exercise_desc || log.exercise_type || '运动'}</Text>
+                      <Pressable disabled={mutatingId === log.id} onPress={() => void confirmDeleteExercise(log)}>
+                        {mutatingId === log.id ? <ActivityIndicator color="#9ca3af" size="small" /> : <Text style={styles.exerciseDeleteText}>删除</Text>}
+                      </Pressable>
+                    </View>
+                    <View style={styles.exerciseRecordDivider} />
+                    <View style={styles.exerciseRecordBottom}>
+                      <View style={styles.exerciseKcalRow}>
+                        <Text style={styles.exerciseKcalValue}>{Math.round(log.calories_burned || 0)}</Text>
+                        <Text style={styles.exerciseKcalUnit}>kcal</Text>
+                      </View>
+                      <Text style={styles.exerciseRecordTime}>{log.duration_min || 0} 分钟</Text>
+                    </View>
+                    {log.ai_reasoning ? <Text style={styles.exerciseReasoning}>{log.ai_reasoning}</Text> : null}
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </>
+        ) : null}
+
+        {!isExercise ? (
+          <View style={styles.bodyMetricOverviewCard}>
+            <Text style={styles.bodyMetricSectionTitle}>本月概览</Text>
+            <InfoRow label="最近体重" value={summary?.latest_weight ? `${summary.latest_weight.value} kg` : '--'} />
+            <InfoRow label="今日喝水" value={`${Math.round(summary?.today_water?.total || 0)} ml`} />
+            <InfoRow label="月均喝水" value={`${Math.round(summary?.avg_daily_water_ml || 0)} ml`} />
+          </View>
+        ) : null}
+      </ScrollView>
+    </View>
   )
 }
 
 export function ExpiryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const insets = useSafeAreaInsets()
   const [dashboard, setDashboard] = useState<FoodExpiryDashboard | null>(null)
   const [items, setItems] = useState<FoodExpiryItem[]>([])
-  const [foodName, setFoodName] = useState('')
-  const [category, setCategory] = useState('')
-  const [expireDate, setExpireDate] = useState(defaultExpireDate())
-  const [quantityNote, setQuantityNote] = useState('')
-  const [storageType, setStorageType] = useState('refrigerated')
-  const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
+  const [fetchFailed, setFetchFailed] = useState(false)
+  const [processedExpanded, setProcessedExpanded] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setFetchFailed(false)
     try {
       const [dashboardData, itemData] = await Promise.all([
         apiClient.getFoodExpiryDashboard(),
-        apiClient.listFoodExpiryItems('active'),
+        apiClient.listFoodExpiryItems(),
       ])
       setDashboard(dashboardData)
       setItems(itemData.items || [])
     } catch (error) {
+      setFetchFailed(true)
+      setDashboard(null)
+      setItems([])
       await dialog.alert('获取保质期失败', userFacingErrorMessage(error), 'danger')
     } finally {
       setLoading(false)
     }
   }, [dialog])
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     void load()
-  }, [load])
+  }, [load]))
 
-  const create = async () => {
+  const updateStatus = async (item: FoodExpiryItem, status: 'active' | 'consumed' | 'discarded') => {
+    const actionLabel = status === 'active' ? '恢复提醒' : status === 'consumed' ? '标记为已吃完' : '标记为已丢弃'
+    const confirmed = await dialog.confirm({
+      title: actionLabel,
+      message: `确认将“${item.food_name}”${actionLabel}吗？`,
+      confirmText: '确认',
+      cancelText: '取消',
+      kind: status === 'discarded' ? 'danger' : 'warning',
+    })
+    if (!confirmed) return
     setLoading(true)
     try {
-      await apiClient.createFoodExpiryItem({ foodName, category, expireDate, quantityNote, storageType, note })
-      setFoodName('')
-      setCategory('')
-      setQuantityNote('')
-      setNote('')
-      await load()
-      await dialog.alert('已保存', '食物保质期已加入', 'success')
-    } catch (error) {
-      await dialog.alert('保存失败', userFacingErrorMessage(error), 'danger')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const updateStatus = async (itemId: string, status: 'consumed' | 'discarded') => {
-    setLoading(true)
-    try {
-      await apiClient.updateFoodExpiryStatus(itemId, status)
+      await apiClient.updateFoodExpiryStatus(item.id, status)
       await load()
     } catch (error) {
       await dialog.alert('更新失败', userFacingErrorMessage(error), 'danger')
@@ -1680,47 +3334,120 @@ export function ExpiryScreen() {
     }
   }
 
+  const grouped = useMemo(() => groupFoodExpiryItems(items), [items])
+  const previewItems = dashboard?.preview_items?.length ? dashboard.preview_items : grouped.urgent.slice(0, 3)
+
   return (
-    <Page title="食物保质期" subtitle="管理冰箱和库存" refreshing={loading} onRefresh={load}>
-      <View style={styles.statGrid}>
-        <MiniStat title="进行中" value={dashboard?.active_count ?? 0} />
-        <MiniStat title="今日到期" value={dashboard?.today_count ?? 0} />
-        <MiniStat title="已过期" value={dashboard?.expired_count ?? 0} />
-      </View>
-
-      <Card>
-        <Text style={styles.sectionTitle}>新增食物</Text>
-        <Field label="食物名称" value={foodName} onChangeText={setFoodName} />
-        <Field label="分类" value={category} onChangeText={setCategory} placeholder="乳制品、水果、熟食" />
-        <Field label="到期日期" value={expireDate} onChangeText={setExpireDate} />
-        <Field label="数量说明" value={quantityNote} onChangeText={setQuantityNote} />
-        <OptionSegment title="储存方式" value={storageType} options={expiryStorageOptions} onChange={setStorageType} />
-        <Field label="备注" value={note} onChangeText={setNote} multiline />
-        <AppButton label="保存保质期" loading={loading} onPress={create} />
-      </Card>
-
-      {items.length === 0 ? <EmptyState text="暂无进行中的食物" /> : null}
-      {items.map((item) => (
-        <Card key={item.id}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>{item.food_name}</Text>
-            <Pill text={item.urgency_label || expiryStatusLabel(item.status)} />
+    <View style={styles.expiryPage}>
+      <ScrollView
+        style={styles.expiryScroll}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.expiryContent, { paddingBottom: 28 + insets.bottom }]}
+      >
+        <View style={styles.expiryHero}>
+          <View style={styles.flex}>
+            <Text style={styles.expiryHeroKicker}>我的食物管理</Text>
+            <Text style={styles.expiryHeroTitle}>保质期提醒</Text>
           </View>
-          <Text style={styles.subtitle}>{item.category || '未分类'} · {item.expire_date?.slice(0, 10)}</Text>
-          <View style={styles.buttonRow}>
-            <SmallButton label="编辑" onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })} />
-            <SmallButton label="已吃完" onPress={() => updateStatus(item.id, 'consumed')} />
-            <SmallButton label="丢弃" danger onPress={() => updateStatus(item.id, 'discarded')} />
+          <Pressable style={styles.expiryHeroAdd} onPress={() => navigation.navigate('ExpiryEdit')}>
+            <Plus size={16} color="#fff" strokeWidth={2.4} />
+            <Text style={styles.expiryHeroAddText}>新增</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.expirySummaryGrid}>
+          <ExpirySummaryCard label="今天优先吃" value={dashboard?.today_count ?? 0} />
+          <ExpirySummaryCard label="即将过期" value={dashboard?.soon_count ?? 0} />
+          <ExpirySummaryCard label="已过期" value={dashboard?.expired_count ?? 0} />
+          <ExpirySummaryCard label="保鲜中" value={dashboard?.active_count ?? 0} />
+        </View>
+
+        {previewItems.length ? (
+          <View style={styles.expiryPreviewPanel}>
+            <Text style={styles.expirySectionTitle}>最需要先处理</Text>
+            {previewItems.map((item) => (
+              <Pressable key={item.id} style={styles.expiryPreviewRow} onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id })}>
+                <Text style={styles.expiryPreviewName} numberOfLines={1}>{item.food_name}</Text>
+                <Text style={styles.expiryPreviewHint} numberOfLines={1}>{formatExpiryHint(item)}</Text>
+              </Pressable>
+            ))}
           </View>
-        </Card>
-      ))}
-    </Page>
+        ) : null}
+
+        {loading && items.length === 0 ? (
+          <View style={styles.expiryEmptyCard}>
+            <ActivityIndicator color="#00bc7d" />
+          </View>
+        ) : fetchFailed ? (
+          <View style={[styles.expiryEmptyCard, styles.expiryFailedCard]}>
+            <Text style={styles.expiryEmptyTitle}>加载失败</Text>
+            <Text style={styles.expiryEmptyDesc}>网络或服务异常，请稍后重试。</Text>
+            <Pressable style={styles.expiryRetryButton} onPress={() => void load()}>
+              <Text style={styles.expiryRetryText}>重试</Text>
+            </Pressable>
+          </View>
+        ) : items.length === 0 ? (
+          <View style={styles.expiryEmptyCard}>
+            <Text style={styles.expiryEmptyTitle}>还没有记录食物保质期</Text>
+            <Text style={styles.expiryEmptyDesc}>先把家里的牛奶、水果、剩菜记进来，快到期时这里会提醒你。</Text>
+          </View>
+        ) : (
+          <>
+            {grouped.urgent.length ? (
+              <View style={styles.expirySection}>
+                <Text style={styles.expirySectionTitle}>优先处理</Text>
+                {grouped.urgent.map((item) => (
+                  <ExpiryItemCard
+                    key={item.id}
+                    item={item}
+                    onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })}
+                    onUpdateStatus={updateStatus}
+                  />
+                ))}
+              </View>
+            ) : null}
+
+            {grouped.fresh.length ? (
+              <View style={styles.expirySection}>
+                <Text style={styles.expirySectionTitle}>保鲜中</Text>
+                {grouped.fresh.map((item) => (
+                  <ExpiryItemCard
+                    key={item.id}
+                    item={item}
+                    onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })}
+                    onUpdateStatus={updateStatus}
+                  />
+                ))}
+              </View>
+            ) : null}
+
+            {grouped.processed.length ? (
+              <View style={styles.expirySection}>
+                <Pressable style={styles.expirySectionHeader} onPress={() => setProcessedExpanded((value) => !value)}>
+                  <Text style={styles.expirySectionTitleNoMargin}>已处理 ({grouped.processed.length})</Text>
+                  <Text style={styles.expirySectionToggle}>{processedExpanded ? '收起' : '展开'}</Text>
+                </Pressable>
+                {processedExpanded ? grouped.processed.map((item) => (
+                  <ExpiryItemCard
+                    key={item.id}
+                    item={item}
+                    onPress={() => navigation.navigate('ExpiryEdit', { itemId: item.id, item })}
+                    onUpdateStatus={updateStatus}
+                  />
+                )) : null}
+              </View>
+            ) : null}
+          </>
+        )}
+      </ScrollView>
+    </View>
   )
 }
 
 export function RewardCenterScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const insets = useSafeAreaInsets()
   const [reward, setReward] = useState<RewardCenterResponse | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -1745,68 +3472,98 @@ export function RewardCenterScreen() {
   const quickTasks = tasks.filter(isRewardTaskAvailable).slice(0, 2)
 
   return (
-    <Page title="赚积分" subtitle="任务和可用积分" refreshing={loading} onRefresh={load}>
-      <Card style={styles.rewardHero}>
-        <Text style={styles.sectionTitle}>奖励积分</Text>
-        <Text style={styles.subtitle}>把今天能拿的积分集中看清楚</Text>
-        <View style={styles.summaryGrid}>
-          <View style={styles.summaryCell}>
-            <Text style={styles.summaryValue}>{reward?.earned_credits_balance ?? 0}</Text>
-            <Text style={styles.summaryTitle}>当前余额</Text>
-          </View>
-          <View style={styles.summaryCell}>
-            <Text style={styles.summaryValue}>{reward?.today_earned_credits ?? 0}</Text>
-            <Text style={styles.summaryTitle}>今日已获得</Text>
+    <View style={styles.rewardPage}>
+      <ScrollView
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor="#0f9f6e" colors={['#0f9f6e']} />}
+        contentContainerStyle={[styles.rewardPageContent, { paddingBottom: Math.max(insets.bottom, 12) + 20 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.rewardHero}>
+          <Text style={styles.rewardHeroTitle}>奖励积分</Text>
+          <Text style={styles.rewardHeroSubtitle}>把今天能拿的积分都集中看清楚</Text>
+          <View style={styles.rewardHeroStats}>
+            <View style={styles.rewardStat}>
+              <Text style={styles.rewardStatValue}>{reward?.earned_credits_balance ?? 0}</Text>
+              <Text style={styles.rewardStatLabel}>当前余额</Text>
+            </View>
+            <View style={styles.rewardStat}>
+              <Text style={styles.rewardStatValue}>{reward?.today_earned_credits ?? 0}</Text>
+              <Text style={styles.rewardStatLabel}>今日已获得</Text>
+            </View>
           </View>
         </View>
-        <Text style={styles.subtitle}>
-          今日进度 {reward?.today_task_overview?.completed_count ?? 0}/{reward?.today_task_overview?.total_count ?? 0}
-        </Text>
-      </Card>
 
-      {quickTasks.length ? (
-        <Card>
-          <Text style={styles.sectionTitle}>最快拿分</Text>
-          {quickTasks.map((task) => (
-            <Pressable key={rewardTaskKey(task)} style={styles.quickRewardRow} onPress={() => navigateRewardTask(navigation, task)}>
-              <View style={styles.flex}>
-                <Text style={styles.itemName}>{rewardTaskName(task)}</Text>
-                <Text style={styles.subtitle}>{formatRewardTaskProgress(task)} · +{task.reward_amount} 积分</Text>
-              </View>
-              <Text style={styles.rewardActionText}>去完成</Text>
-            </Pressable>
-          ))}
-        </Card>
-      ) : null}
-
-      {tasks.length === 0 ? <EmptyState text="暂无奖励任务" /> : null}
-      {tasks.map((task) => (
-        <Card key={rewardTaskKey(task)}>
-          <View style={styles.rowBetween}>
-            <View style={styles.flex}>
-              <Text style={styles.itemName}>{rewardTaskName(task)}</Text>
-              <Text style={styles.subtitle}>完成一次 +{task.reward_amount} 奖励积分</Text>
+        {!loading && quickTasks.length ? (
+          <View style={styles.rewardQuickSection}>
+            <View style={styles.rewardQuickHead}>
+              <Text style={styles.rewardQuickTitle}>最快拿分</Text>
+              <Text style={styles.rewardQuickHint}>做完就能继续用奖励积分</Text>
             </View>
-            <Pill text={rewardTaskStatus(task)} />
+            <View style={styles.rewardQuickList}>
+              {quickTasks.map((task) => (
+                <Pressable
+                  key={rewardTaskKey(task)}
+                  style={({ pressed }) => [styles.rewardQuickCard, pressed ? styles.pressed : null]}
+                  onPress={() => navigateRewardTask(navigation, task)}
+                >
+                  <View style={styles.flex}>
+                    <Text style={styles.rewardQuickName} numberOfLines={2}>{rewardTaskName(task)}</Text>
+                    <Text style={styles.rewardQuickDesc} numberOfLines={1}>
+                      {formatRewardTaskProgress(task)} · +{task.reward_amount} 积分
+                    </Text>
+                  </View>
+                  <Text style={styles.rewardQuickButton}>去完成</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
-          <View style={styles.rewardProgressTrack}>
-            <View style={[styles.rewardProgressFill, { width: `${rewardTaskPercent(task)}%` }]} />
-          </View>
-          <View style={styles.rowBetween}>
-            <Text style={styles.itemMeta}>{formatRewardTaskProgress(task)}</Text>
-            <Text style={styles.itemMeta}>{formatRewardTaskLimit(task)}</Text>
-          </View>
-          <Text style={styles.notes}>{rewardTaskHint(task)}</Text>
-          <View style={styles.buttonRow}>
-            <SmallButton
-              label={isRewardTaskDisabled(task) ? '今日已满' : '去完成'}
-              disabled={isRewardTaskDisabled(task) || !task.action_path}
-              onPress={() => navigateRewardTask(navigation, task)}
-            />
-          </View>
-        </Card>
-      ))}
-    </Page>
+        ) : null}
+
+        <View style={styles.rewardSection}>
+          <Text style={styles.rewardSectionTitle}>
+            今日进度 {reward?.today_task_overview?.completed_count ?? 0}/{reward?.today_task_overview?.total_count ?? 0}
+          </Text>
+          {loading ? (
+            <View style={styles.rewardLoading}>
+              <ActivityIndicator color={colors.brand} />
+            </View>
+          ) : (
+            <View style={styles.rewardTaskList}>
+              {tasks.length === 0 ? <EmptyState text="暂无奖励任务" /> : null}
+              {tasks.map((task) => {
+                const disabled = isRewardTaskDisabled(task)
+                return (
+                  <View key={rewardTaskKey(task)} style={styles.rewardTaskCard}>
+                    <View style={styles.rewardTaskHead}>
+                      <View style={styles.flex}>
+                        <Text style={styles.rewardTaskName} numberOfLines={2}>{rewardTaskName(task)}</Text>
+                        <Text style={styles.rewardTaskReward}>完成一次 +{task.reward_amount} 奖励积分</Text>
+                      </View>
+                      <Text style={styles.rewardTaskStatus} numberOfLines={1}>{rewardTaskStatus(task)}</Text>
+                    </View>
+                    <View style={styles.rewardTaskMeta}>
+                      <Text style={styles.rewardTaskMetaText}>{formatRewardTaskMetaProgress(task)}</Text>
+                      <Text style={styles.rewardTaskMetaText}>{formatRewardTaskLimit(task)}</Text>
+                    </View>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.rewardTaskButton,
+                        disabled ? styles.rewardTaskButtonDisabled : null,
+                        pressed && !disabled ? styles.pressed : null,
+                      ]}
+                      disabled={disabled || !task.action_path}
+                      onPress={() => navigateRewardTask(navigation, task)}
+                    >
+                      <Text style={styles.rewardTaskButtonText}>{disabled ? '今日已满' : '去完成'}</Text>
+                    </Pressable>
+                  </View>
+                )
+              })}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </View>
   )
 }
 
@@ -1814,19 +3571,21 @@ export function CirclePostEditScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'CirclePostEdit'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const insets = useSafeAreaInsets()
   const postId = route.params?.postId
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
-  const [imageUrls, setImageUrls] = useState<string[]>([])
-  const [calories, setCalories] = useState('')
-  const [protein, setProtein] = useState('')
-  const [carbs, setCarbs] = useState('')
-  const [fat, setFat] = useState('')
-  const [fiber, setFiber] = useState('')
-  const [sugar, setSugar] = useState('')
-  const [sodiumMg, setSodiumMg] = useState('')
-  const [totalWeightGrams, setTotalWeightGrams] = useState('')
+  const [images, setImages] = useState<CirclePostImageItem[]>([])
+  const [nutritionEnabled, setNutritionEnabled] = useState(false)
+  const [nutrition, setNutrition] = useState<CirclePostNutritionFormState>({ ...emptyCirclePostNutrition })
   const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [drafting, setDrafting] = useState(false)
+
+  useEffect(() => {
+    navigation.setOptions({ title: postId ? '编辑动态' : '发布动态' })
+  }, [navigation, postId])
 
   const load = useCallback(async () => {
     if (!postId) return
@@ -1836,16 +3595,24 @@ export function CirclePostEditScreen() {
       const record = (data.item.record || {}) as unknown as Record<string, unknown>
       setTitle(stringFrom(record.title))
       setBody(stringFrom(record.body || record.description))
-      const images = Array.isArray(record.image_paths) ? record.image_paths.map(stringFrom).filter(Boolean) : []
-      setImageUrls(images.slice(0, CIRCLE_POST_MAX_IMAGES))
-      setCalories(numberField(record.total_calories))
-      setProtein(numberField(record.total_protein))
-      setCarbs(numberField(record.total_carbs))
-      setFat(numberField(record.total_fat))
-      setFiber(numberField(record.fiber))
-      setSugar(numberField(record.sugar))
-      setSodiumMg(numberField(record.sodium_mg))
-      setTotalWeightGrams(numberField(record.total_weight_grams))
+      const sourceImages = Array.isArray(record.image_paths)
+        ? record.image_paths
+        : Array.isArray(record.image_urls)
+          ? record.image_urls
+          : []
+      setImages(sourceImages.map(stringFrom).filter(Boolean).slice(0, CIRCLE_POST_MAX_IMAGES).map((url) => ({ id: url, url })))
+      const nextNutrition: CirclePostNutritionFormState = {
+        total_calories: numberField(record.total_calories ?? record.calories),
+        total_protein: numberField(record.total_protein ?? record.protein),
+        total_carbs: numberField(record.total_carbs ?? record.carbs),
+        total_fat: numberField(record.total_fat ?? record.fat),
+        fiber: numberField(record.fiber),
+        sugar: numberField(record.sugar),
+        sodium_mg: numberField(record.sodium_mg),
+        total_weight_grams: numberField(record.total_weight_grams),
+      }
+      setNutrition(nextNutrition)
+      setNutritionEnabled(circlePostNutritionHasValue(nextNutrition))
     } catch (error) {
       await dialog.alert('加载动态失败', userFacingErrorMessage(error), 'danger')
     } finally {
@@ -1853,12 +3620,42 @@ export function CirclePostEditScreen() {
     }
   }, [dialog, postId])
 
+  const loadDraft = useCallback(async () => {
+    if (postId) return
+    try {
+      const raw = await AsyncStorage.getItem(CIRCLE_POST_DRAFT_STORAGE_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw) as CirclePostDraft
+      if (!draft || typeof draft !== 'object') return
+      setTitle(typeof draft.title === 'string' ? draft.title : '')
+      setBody(typeof draft.body === 'string' ? draft.body : '')
+      const draftImages = Array.isArray(draft.images)
+        ? draft.images
+            .map((item) => (typeof item === 'string' ? item : item?.url))
+            .map((url) => stringFrom(url))
+            .filter(Boolean)
+            .slice(0, CIRCLE_POST_MAX_IMAGES)
+        : []
+      setImages(draftImages.map((url) => ({ id: url, url })))
+      const nextNutrition: CirclePostNutritionFormState = { ...emptyCirclePostNutrition }
+      circlePostNutritionFields.forEach(({ key }) => {
+        const value = draft.nutrition?.[key]
+        nextNutrition[key] = typeof value === 'string' ? value : ''
+      })
+      setNutrition(nextNutrition)
+      setNutritionEnabled(Boolean(draft.nutritionEnabled) && circlePostNutritionHasValue(nextNutrition))
+    } catch {
+      await AsyncStorage.removeItem(CIRCLE_POST_DRAFT_STORAGE_KEY).catch(() => undefined)
+    }
+  }, [postId])
+
   useEffect(() => {
-    void load()
-  }, [load])
+    if (postId) void load()
+    else void loadDraft()
+  }, [load, loadDraft, postId])
 
   const pickImages = async () => {
-    const remaining = CIRCLE_POST_MAX_IMAGES - imageUrls.length
+    const remaining = CIRCLE_POST_MAX_IMAGES - images.length
     if (remaining <= 0) {
       await dialog.alert('图片已满', `最多上传 ${CIRCLE_POST_MAX_IMAGES} 张图片。`, 'warning')
       return
@@ -1876,78 +3673,211 @@ export function CirclePostEditScreen() {
       quality: 0.86,
     })
     if (picked.canceled || !picked.assets.length) return
-    setLoading(true)
+    const selected = picked.assets.slice(0, remaining)
+    const pendingItems = selected.map((asset, index) => ({
+      id: `local-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+      url: asset.uri,
+      uploading: true,
+    }))
+    setImages((current) => [...current, ...pendingItems].slice(0, CIRCLE_POST_MAX_IMAGES))
+    setUploading(true)
     try {
-      const uploaded: string[] = []
-      for (const asset of picked.assets.slice(0, remaining)) {
+      for (const [index, asset] of selected.entries()) {
+        const pending = pendingItems[index]
         const data = await apiClient.uploadCirclePostImageFile({
           fileUri: asset.uri,
           fileName: asset.fileName || 'circle-post.jpg',
           mimeType: asset.mimeType || 'image/jpeg',
         })
-        uploaded.push(data.imageUrl)
+        setImages((current) =>
+          current.map((item) => (item.id === pending.id ? { id: data.imageUrl, url: data.imageUrl } : item))
+        )
       }
-      setImageUrls((current) => [...current, ...uploaded].slice(0, CIRCLE_POST_MAX_IMAGES))
     } catch (error) {
+      setImages((current) => current.filter((item) => !pendingItems.some((pending) => pending.id === item.id && item.uploading)))
       await dialog.alert('上传动态图片失败', userFacingErrorMessage(error), 'danger')
     } finally {
-      setLoading(false)
+      setUploading(false)
     }
   }
 
   const removeImage = (index: number) => {
-    setImageUrls((current) => current.filter((_, itemIndex) => itemIndex !== index))
+    setImages((current) => current.filter((_, itemIndex) => itemIndex !== index))
   }
 
-  const submit = async () => {
-    setLoading(true)
+  const updateNutrition = (key: CirclePostNutritionKey, value: string) => {
+    setNutrition((current) => ({
+      ...current,
+      [key]: normalizeCirclePostNutritionInput(key, value),
+    }))
+  }
+
+  const saveDraft = async () => {
+    const hasContent = title.trim().length > 0 || body.trim().length > 0 || images.length > 0 || nutritionEnabled
+    if (!hasContent) {
+      await dialog.alert('没有内容可保存', '写点文字或添加图片后再存草稿。', 'warning')
+      return
+    }
+    setDrafting(true)
     try {
-      const input = {
+      const tipShown = await AsyncStorage.getItem(CIRCLE_POST_DRAFT_TIP_KEY)
+      if (!tipShown) {
+        await dialog.alert('草稿仅保存在本机', '当前草稿会存储在这台设备的本地缓存中，清理缓存或更换设备后将无法恢复。', 'info')
+        await AsyncStorage.setItem(CIRCLE_POST_DRAFT_TIP_KEY, '1')
+      }
+      const draft: CirclePostDraft = {
         title,
         body,
-        imageUrls,
-        nutrition: {
-          total_calories: numberOrUndefined(calories),
-          total_protein: numberOrUndefined(protein),
-          total_carbs: numberOrUndefined(carbs),
-          total_fat: numberOrUndefined(fat),
-          fiber: numberOrUndefined(fiber),
-          sugar: numberOrUndefined(sugar),
-          sodium_mg: numberOrUndefined(sodiumMg),
-          total_weight_grams: numberOrUndefined(totalWeightGrams),
-        },
+        images: images.filter((item) => !item.uploading && item.url).map((item) => item.url),
+        nutritionEnabled,
+        nutrition,
+        savedAt: new Date().toISOString(),
+      }
+      await AsyncStorage.setItem(CIRCLE_POST_DRAFT_STORAGE_KEY, JSON.stringify(draft))
+      await dialog.alert('草稿已保存', undefined, 'success')
+    } catch (error) {
+      await dialog.alert('草稿保存失败', userFacingErrorMessage(error), 'danger')
+    } finally {
+      setDrafting(false)
+    }
+  }
+
+  const hasUploadingImages = uploading || images.some((item) => item.uploading)
+  const canSubmit = useMemo(
+    () => (title.trim().length > 0 || body.trim().length > 0 || images.length > 0) && !submitting && !hasUploadingImages,
+    [body, hasUploadingImages, images.length, submitting, title],
+  )
+
+  const submit = async () => {
+    if (!canSubmit) {
+      if (hasUploadingImages) await dialog.alert('图片未准备好', '请等图片处理完成后再发布。', 'warning')
+      else await dialog.alert('请填写动态内容', '可以填写标题、正文，或添加至少一张图片。', 'warning')
+      return
+    }
+    setSubmitting(true)
+    try {
+      const uploadedImageUrls = images.filter((item) => !item.uploading).map((item) => item.url.trim()).filter(Boolean)
+      const input = {
+        title: title.trim(),
+        body: body.trim(),
+        imageUrls: uploadedImageUrls,
+        nutrition: nutritionEnabled ? buildCirclePostNutritionInput(nutrition) : undefined,
       }
       if (postId) await apiClient.updateCirclePost(postId, input)
       else await apiClient.createCirclePost(input)
+      if (!postId) await AsyncStorage.removeItem(CIRCLE_POST_DRAFT_STORAGE_KEY).catch(() => undefined)
       await dialog.alert(postId ? '已保存' : '已发布', postId ? '动态修改已保存' : '动态已发布到圈子', 'success')
       navigation.goBack()
     } catch (error) {
       await dialog.alert(postId ? '保存失败' : '发布失败', userFacingErrorMessage(error), 'danger')
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
   }
 
   return (
-    <Page title={postId ? '编辑动态' : '发布动态'} subtitle="图文动态和营养信息" refreshing={loading} onRefresh={load}>
-      <Card>
-        <Field label="标题" value={title} onChangeText={setTitle} />
-        <Field label="正文" value={body} onChangeText={setBody} multiline />
-        <CircleImagePickerGrid urls={imageUrls} loading={loading} onAdd={pickImages} onRemove={removeImage} />
-      </Card>
-      <Card>
-        <Text style={styles.sectionTitle}>营养信息</Text>
-        <Field label="热量 kcal" value={calories} onChangeText={setCalories} keyboardType="decimal-pad" />
-        <Field label="蛋白质 g" value={protein} onChangeText={setProtein} keyboardType="decimal-pad" />
-        <Field label="碳水 g" value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" />
-        <Field label="脂肪 g" value={fat} onChangeText={setFat} keyboardType="decimal-pad" />
-        <Field label="膳食纤维 g" value={fiber} onChangeText={setFiber} keyboardType="decimal-pad" />
-        <Field label="糖 g" value={sugar} onChangeText={setSugar} keyboardType="decimal-pad" />
-        <Field label="钠 mg" value={sodiumMg} onChangeText={setSodiumMg} keyboardType="decimal-pad" />
-        <Field label="总重量 g" value={totalWeightGrams} onChangeText={setTotalWeightGrams} keyboardType="decimal-pad" />
-        <AppButton label={postId ? '保存修改' : '发布'} loading={loading} onPress={submit} />
-      </Card>
-    </Page>
+    <KeyboardAvoidingView
+      style={styles.circlePostEditPage}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        style={styles.circlePostEditScroll}
+        contentContainerStyle={[styles.circlePostEditContent, { paddingBottom: Math.max(insets.bottom + 24, 36) }]}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={postId ? <RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} /> : undefined}
+      >
+        {loading && postId ? (
+          <View style={styles.circlePostEditLoadingCard}>
+            <ActivityIndicator color={colors.brand} size="small" />
+          </View>
+        ) : null}
+
+        <View style={[styles.circlePostEditCard, styles.circlePostEditImageSection]}>
+          <View style={styles.circlePostEditTitleRow}>
+            <Text style={styles.circlePostEditSectionTitle}>图片</Text>
+            <Text style={styles.circlePostEditCount}>{images.length}/{CIRCLE_POST_MAX_IMAGES}</Text>
+          </View>
+          <CirclePostImageGrid images={images} loading={hasUploadingImages} onAdd={pickImages} onRemove={removeImage} />
+        </View>
+
+        <View style={[styles.circlePostEditCard, styles.circlePostEditEditor]}>
+          <TextInput
+            style={styles.circlePostEditTitleInput}
+            value={title}
+            onChangeText={(value) => setTitle(value.slice(0, CIRCLE_POST_TITLE_MAX_LENGTH))}
+            placeholder="标题（选填）"
+            placeholderTextColor="#9ca3af"
+            editable={!loading}
+            maxLength={CIRCLE_POST_TITLE_MAX_LENGTH}
+            returnKeyType="next"
+          />
+          <TextInput
+            style={styles.circlePostEditTextarea}
+            value={body}
+            onChangeText={(value) => setBody(value.slice(0, CIRCLE_POST_BODY_MAX_LENGTH))}
+            placeholder="分享你的饮食心得、运动日常…"
+            placeholderTextColor="#9ca3af"
+            editable={!loading}
+            multiline
+            textAlignVertical="top"
+            maxLength={CIRCLE_POST_BODY_MAX_LENGTH}
+          />
+          <Text style={styles.circlePostEditCount}>{body.length}/{CIRCLE_POST_BODY_MAX_LENGTH}</Text>
+        </View>
+
+        <View style={styles.circlePostEditCard}>
+          <Pressable style={styles.circlePostEditTitleRow} onPress={() => setNutritionEnabled((value) => !value)}>
+            <View style={styles.circlePostEditTitleLeft}>
+              <Text style={styles.circlePostEditSectionTitle}>营养信息</Text>
+              <Text style={styles.circlePostEditSectionSubtitle}>选填，展示在动态卡片</Text>
+            </View>
+            <View style={[styles.circlePostEditToggle, nutritionEnabled && styles.circlePostEditToggleOn]}>
+              <View style={[styles.circlePostEditToggleKnob, nutritionEnabled && styles.circlePostEditToggleKnobOn]} />
+            </View>
+          </Pressable>
+          {nutritionEnabled ? (
+            <View style={styles.circlePostEditNutritionGrid}>
+              {circlePostNutritionFields.map(({ key, label, unit, placeholder }) => (
+                <View key={key} style={styles.circlePostEditNutritionItem}>
+                  <Text style={styles.circlePostEditNutritionLabel}>{label}</Text>
+                  <View style={styles.circlePostEditNutritionInputWrap}>
+                    <TextInput
+                      style={styles.circlePostEditNutritionInput}
+                      value={nutrition[key]}
+                      onChangeText={(value) => updateNutrition(key, value)}
+                      placeholder={placeholder}
+                      placeholderTextColor="#c7ccd1"
+                      keyboardType="decimal-pad"
+                    />
+                    <Text style={styles.circlePostEditNutritionUnit}>{unit}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.circlePostEditFooter}>
+          <Pressable
+            style={({ pressed }) => [styles.circlePostEditDraftButton, (pressed || drafting) && styles.pressed]}
+            onPress={saveDraft}
+            disabled={drafting}
+          >
+            {drafting ? <ActivityIndicator size="small" color="#4b5563" /> : <Text style={styles.circlePostEditDraftText}>存草稿</Text>}
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              styles.circlePostEditSubmitButton,
+              (!canSubmit || pressed) && styles.circlePostEditSubmitButtonMuted,
+            ]}
+            onPress={submit}
+            disabled={!canSubmit}
+          >
+            {submitting ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.circlePostEditSubmitText}>{postId ? '保存' : '发布动态'}</Text>}
+          </Pressable>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -1959,10 +3889,7 @@ export function FriendsScreen() {
   const [received, setReceived] = useState<FriendRequestItem[]>([])
   const [sent, setSent] = useState<FriendRequestItem[]>([])
   const [friendQuery, setFriendQuery] = useState('')
-  const [userQuery, setUserQuery] = useState('')
-  const [results, setResults] = useState<FriendUserItem[]>([])
   const [loading, setLoading] = useState(false)
-  const [searching, setSearching] = useState(false)
   const [mutatingId, setMutatingId] = useState<string | null>(null)
 
   const receivedPendingCount = useMemo(
@@ -2005,42 +3932,8 @@ export function FriendsScreen() {
     if (id) navigation.navigate('ProfileSettings', { userId: id })
   }
 
-  const openChat = (user: FriendUserItem) => {
-    const id = friendUserId(user)
-    if (id) navigation.navigate('PrivateChat', { userId: id, nickname: friendDisplayName(user) })
-  }
-
-  const search = async () => {
-    const q = userQuery.trim()
-    if (!q) {
-      setResults([])
-      await dialog.alert('请输入昵称', '可以输入好友昵称或用户 ID 进行搜索。', 'warning')
-      return
-    }
-    setSearching(true)
-    try {
-      const data = await apiClient.searchFriends(q)
-      setResults(data.list || [])
-    } catch (error) {
-      await showError(dialog, '搜索失败', error)
-    } finally {
-      setSearching(false)
-    }
-  }
-
-  const send = async (id: string) => {
-    const key = `send:${id}`
-    setMutatingId(key)
-    try {
-      await apiClient.sendFriendRequest(id)
-      setResults((prev) => prev.map((user) => friendUserId(user) === id ? { ...user, is_pending: true } : user))
-      await load()
-      await dialog.alert('已发送', '好友请求已发送', 'success')
-    } catch (error) {
-      await showError(dialog, '发送失败', error)
-    } finally {
-      setMutatingId(null)
-    }
+  const goToCommunity = () => {
+    navigation.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'CommunityTab' } }))
   }
 
   const respond = async (request: FriendRequestItem, action: 'accept' | 'reject') => {
@@ -2111,76 +4004,76 @@ export function FriendsScreen() {
     }
   }
 
-  const renderFriends = () => (
+  const renderFriendsMini = () => (
     <>
-      <Card>
-        <Field label="搜索好友" value={friendQuery} onChangeText={setFriendQuery} placeholder="输入好友昵称" />
-        {friendQuery.trim() ? <SmallButton label="清除" onPress={() => setFriendQuery('')} /> : null}
-      </Card>
+      {friends.length > 0 ? (
+        <View style={styles.friendsSearchCard}>
+          <View style={styles.friendsSearchRow}>
+            <Search size={16} color="#94a3b8" />
+            <TextInput
+              style={styles.friendsSearchInput}
+              value={friendQuery}
+              onChangeText={setFriendQuery}
+              placeholder="搜索好友昵称"
+              placeholderTextColor="#94a3b8"
+              returnKeyType="search"
+            />
+            {friendQuery.trim() ? (
+              <Pressable style={styles.friendsClearButton} onPress={() => setFriendQuery('')}>
+                <X size={14} color="#64748b" />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
 
       {loading && friends.length === 0 ? (
-        <Card>
+        <View style={styles.friendsStateCard}>
           <ActivityIndicator color={colors.brand} />
-        </Card>
+        </View>
       ) : null}
-      {!loading && friends.length === 0 ? <EmptyState text="还没有好友" /> : null}
-      {!loading && friends.length > 0 && filteredFriends.length === 0 ? <EmptyState text="未找到好友" /> : null}
+      {!loading && friends.length === 0 ? (
+        <FriendsEmptyState
+          variant="friends"
+          title="还没有好友"
+          subtitle="去圈子里发现更多志同道合的食友，一起记录健康饮食"
+          actionLabel="去添加好友"
+          onAction={goToCommunity}
+        />
+      ) : null}
+      {!loading && friends.length > 0 && filteredFriends.length === 0 ? <FriendsEmptyState variant="search" title="未找到好友" subtitle="尝试搜索其他关键词" /> : null}
+
       {filteredFriends.map((friend) => {
         const id = friendUserId(friend)
         return (
           <FriendUserCard
             key={id || friendDisplayName(friend)}
             user={friend}
-            subtitle="已互为好友"
+            subtitle="好友"
             onPress={() => openProfile(id)}
             actions={(
-              <>
-                <SmallButton label="私信" onPress={() => openChat(friend)} />
-                <SmallButton label="删除" danger disabled={mutatingId === `delete:${id}`} onPress={() => void confirmDeleteFriend(friend)} />
-              </>
-            )}
-          />
-        )
-      })}
-
-      <Card>
-        <Text style={styles.sectionTitle}>查找新朋友</Text>
-        <Text style={styles.subtitle}>按昵称搜索用户，发送好友申请后可在「我发起的」查看状态。</Text>
-        <Field label="用户昵称" value={userQuery} onChangeText={setUserQuery} placeholder="输入对方昵称" />
-        <AppButton label="搜索用户" variant="secondary" loading={searching} onPress={search} />
-      </Card>
-      {results.map((user) => {
-        const id = friendUserId(user)
-        const already = Boolean(user.is_friend)
-        const pending = Boolean(user.is_pending)
-        return (
-          <FriendUserCard
-            key={id || friendDisplayName(user)}
-            user={user}
-            subtitle={friendUserSubtitle(user)}
-            onPress={() => openProfile(id)}
-            actions={(
-              <SmallButton
-                label={already ? '已是好友' : pending ? '已申请' : '添加'}
-                disabled={already || pending || mutatingId === `send:${id}`}
-                onPress={() => id ? void send(id) : undefined}
+              <FriendTextActionButton
+                label="删除"
+                danger
+                loading={mutatingId === `delete:${id}`}
+                disabled={mutatingId === `delete:${id}`}
+                onPress={() => void confirmDeleteFriend(friend)}
               />
             )}
           />
         )
       })}
-      {!searching && userQuery.trim() && results.length === 0 ? <Text style={styles.listEndText}>没有匹配用户</Text> : null}
     </>
   )
 
-  const renderReceived = () => (
+  const renderReceivedMini = () => (
     <>
       {loading && received.length === 0 ? (
-        <Card>
+        <View style={styles.friendsStateCard}>
           <ActivityIndicator color={colors.brand} />
-        </Card>
+        </View>
       ) : null}
-      {!loading && received.length === 0 ? <EmptyState text="暂无好友请求" /> : null}
+      {!loading && received.length === 0 ? <FriendsEmptyState variant="received" title="暂无好友请求" subtitle="当有人向你发送好友申请时，会显示在这里" /> : null}
       {received.map((request) => {
         const userId = friendRequestUserId(request)
         const pending = friendRequestStatus(request) === 'pending'
@@ -2191,8 +4084,8 @@ export function FriendsScreen() {
             onPress={() => openProfile(userId)}
             actions={pending ? (
               <>
-                <SmallButton label="接受" disabled={mutatingId === `accept:${request.id}`} onPress={() => void respond(request, 'accept')} />
-                <SmallButton label="拒绝" danger disabled={mutatingId === `reject:${request.id}`} onPress={() => void respond(request, 'reject')} />
+                <FriendActionButton label="拒绝" icon={X} tone="danger" disabled={mutatingId === `reject:${request.id}`} onPress={() => void respond(request, 'reject')} />
+                <FriendActionButton label="接受" icon={Check} disabled={mutatingId === `accept:${request.id}`} onPress={() => void respond(request, 'accept')} />
               </>
             ) : (
               <Pill text={friendRequestStatusLabel(request.status)} />
@@ -2203,14 +4096,14 @@ export function FriendsScreen() {
     </>
   )
 
-  const renderSent = () => (
+  const renderSentMini = () => (
     <>
       {loading && sent.length === 0 ? (
-        <Card>
+        <View style={styles.friendsStateCard}>
           <ActivityIndicator color={colors.brand} />
-        </Card>
+        </View>
       ) : null}
-      {!loading && sent.length === 0 ? <EmptyState text="没有待处理的申请" /> : null}
+      {!loading && sent.length === 0 ? <FriendsEmptyState variant="sent" title="没有待处理的申请" subtitle="你发起的好友申请会显示在这里，可随时撤销" /> : null}
       {sent.map((request) => {
         const userId = friendRequestUserId(request)
         const pending = friendRequestStatus(request) === 'pending'
@@ -2219,38 +4112,55 @@ export function FriendsScreen() {
             key={request.id}
             request={request}
             onPress={() => openProfile(userId)}
-            actions={pending ? (
-              <SmallButton label="撤销申请" danger disabled={mutatingId === `cancel:${request.id}`} onPress={() => void confirmCancelSent(request)} />
-            ) : (
+            actions={!pending ? (
               <Pill text={friendRequestStatusLabel(request.status)} />
-            )}
+            ) : undefined}
+            footerActions={pending ? (
+              <FriendTextActionButton
+                label="撤销申请"
+                loading={mutatingId === `cancel:${request.id}`}
+                disabled={mutatingId === `cancel:${request.id}`}
+                onPress={() => void confirmCancelSent(request)}
+              />
+            ) : undefined}
           />
         )
       })}
     </>
   )
 
+  const currentPanel = activeTab === 'friends' ? renderFriendsMini() : activeTab === 'received' ? renderReceivedMini() : renderSentMini()
+
   return (
-    <Page title="好友" subtitle={`${friends.length} 位好友 · ${receivedPendingCount} 条待处理`} refreshing={loading} onRefresh={load}>
-      <Card>
-        <View style={styles.rowBetween}>
-          <View style={styles.flex}>
-            <Text style={styles.sectionTitle}>好友管理</Text>
-            <Text style={styles.subtitle}>查看好友、处理申请，并从这里进入主页或私信。</Text>
+    <View style={styles.friendsPage}>
+      <View pointerEvents="none" style={styles.friendsTopWash} />
+      <ScrollView
+        style={styles.friendsScroll}
+        contentContainerStyle={styles.friendsContent}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+      >
+        <View style={styles.friendsHeader}>
+          <Pressable style={[styles.friendsRefreshButton, loading && styles.friendsRefreshButtonActive]} onPress={load} disabled={loading}>
+            {loading ? <ActivityIndicator color={colors.brand} size="small" /> : <RefreshCw size={14} color={colors.brand} />}
+            <Text style={styles.friendsRefreshText}>刷新</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.friendsTabsWrapper}>
+          <View style={styles.friendsTabs}>
+            <FriendsTabButton label="好友列表" badge={friends.length} active={activeTab === 'friends'} onPress={() => setActiveTab('friends')} />
+            <FriendsTabButton label="收到请求" badge={receivedPendingCount} active={activeTab === 'received'} onPress={() => setActiveTab('received')} />
+            <FriendsTabButton label="我发起的" badge={sentPendingCount} active={activeTab === 'sent'} onPress={() => setActiveTab('sent')} />
           </View>
         </View>
-        <View style={styles.notificationTabs}>
-          <NotificationTabButton label="好友列表" badge={friends.length} active={activeTab === 'friends'} onPress={() => setActiveTab('friends')} />
-          <NotificationTabButton label="收到请求" badge={receivedPendingCount} active={activeTab === 'received'} onPress={() => setActiveTab('received')} />
-          <NotificationTabButton label="我发起的" badge={sentPendingCount} active={activeTab === 'sent'} onPress={() => setActiveTab('sent')} />
-        </View>
-      </Card>
-      {activeTab === 'friends' ? renderFriends() : null}
-      {activeTab === 'received' ? renderReceived() : null}
-      {activeTab === 'sent' ? renderSent() : null}
-    </Page>
+
+        <View style={styles.friendsListContainer}>{currentPanel}</View>
+      </ScrollView>
+    </View>
   )
 }
+
 export function NotificationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
@@ -2260,6 +4170,7 @@ export function NotificationsScreen() {
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [markingRead, setMarkingRead] = useState(false)
 
   const visibleNotifications = useMemo(
     () => notifications.filter((item) => notificationMatchesTab(item, activeTab)),
@@ -2317,8 +4228,8 @@ export function NotificationsScreen() {
   }
 
   const markRead = async () => {
-    if (unread <= 0) return
-    setLoading(true)
+    if (unread <= 0 || markingRead) return
+    setMarkingRead(true)
     try {
       const data = await apiClient.markCommunityNotificationsRead()
       setUnread(data.unread_count || 0)
@@ -2326,13 +4237,26 @@ export function NotificationsScreen() {
     } catch (error) {
       await showError(dialog, '标记已读失败', error)
     } finally {
-      setLoading(false)
+      setMarkingRead(false)
     }
   }
 
   const loadMore = () => {
     if (loading || loadingMore || !hasMore) return
     void load(activeTab, notifications.length, true)
+  }
+
+  const handleListScroll = (event: {
+    nativeEvent: {
+      contentOffset: { y: number }
+      contentSize: { height: number }
+      layoutMeasurement: { height: number }
+    }
+  }) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
+    if (contentOffset.y + layoutMeasurement.height >= contentSize.height - 80) {
+      loadMore()
+    }
   }
 
   const openNotification = async (item: CommunityNotificationItem) => {
@@ -2357,30 +4281,50 @@ export function NotificationsScreen() {
   }
 
   return (
-    <Page title="互动消息" subtitle={`${unread} 条未读`} refreshing={loading} onRefresh={refresh}>
-      <Card>
-        <View style={styles.rowBetween}>
-          <View style={styles.flex}>
-            <Text style={styles.sectionTitle}>互动收件箱</Text>
-            <Text style={styles.subtitle}>点赞、评论、回复和审核结果都会显示在这里。</Text>
+    <View style={styles.interactionNotificationsPage}>
+      <View style={styles.notificationsHeader}>
+        <View style={styles.notificationsHeaderCopy}>
+          <Text style={styles.notificationsTitle}>互动消息</Text>
+          <Text style={styles.notificationsSubtitle}>点赞、评论、回复和审核结果都会显示在这里</Text>
+        </View>
+        <Pressable
+          style={[styles.markReadButton, (markingRead || unread <= 0) && styles.markReadButtonDisabled]}
+          disabled={markingRead || unread <= 0}
+          onPress={() => void markRead()}
+        >
+          {markingRead ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.markReadText}>全部已读</Text>}
+        </Pressable>
+      </View>
+
+      <View style={styles.notificationTabs}>
+        <NotificationTabButton label="全部" active={activeTab === 'all'} onPress={() => switchTab('all')} />
+        <NotificationTabButton label="点赞" badge={likeCount} active={activeTab === 'like'} onPress={() => switchTab('like')} />
+        <NotificationTabButton label="评论" badge={commentCount} active={activeTab === 'comment'} onPress={() => switchTab('comment')} />
+      </View>
+
+      <ScrollView
+        style={styles.notificationsList}
+        contentContainerStyle={[styles.notificationsListContent, visibleNotifications.length === 0 && styles.notificationsListContentEmpty]}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor={colors.brand} colors={[colors.brand]} />}
+        onScroll={handleListScroll}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+      >
+        {loading && visibleNotifications.length === 0 ? (
+          <View style={styles.notificationsState}>
+            <ActivityIndicator color={colors.brand} />
           </View>
-          <SmallButton label="全部已读" disabled={unread <= 0 || loading} onPress={() => void markRead()} />
-        </View>
-        <View style={styles.notificationTabs}>
-          <NotificationTabButton label="全部" active={activeTab === 'all'} onPress={() => switchTab('all')} />
-          <NotificationTabButton label="点赞" badge={likeCount} active={activeTab === 'like'} onPress={() => switchTab('like')} />
-          <NotificationTabButton label="评论" badge={commentCount} active={activeTab === 'comment'} onPress={() => switchTab('comment')} />
-        </View>
-      </Card>
-      {loading && visibleNotifications.length === 0 ? (
-        <Card>
-          <ActivityIndicator color={colors.brand} />
-        </Card>
-      ) : null}
-      {!loading && visibleNotifications.length === 0 ? <EmptyState text={notificationEmptyText(activeTab)} /> : null}
-      {visibleNotifications.map((item) => (
-        <Pressable key={item.id} onPress={() => openNotification(item)}>
-          <Card style={!item.is_read ? styles.unreadCard : undefined}>
+        ) : null}
+        {!loading && visibleNotifications.length === 0 ? (
+          <View style={styles.notificationsEmpty}>
+            <Text style={styles.notificationsEmptyTitle}>{notificationEmptyText(activeTab)}</Text>
+            <Text style={styles.notificationsEmptySubtitle}>
+              {activeTab === 'all' ? '有人评论或回复你时，会出现在这里' : '切换到“全部”查看所有互动'}
+            </Text>
+          </View>
+        ) : null}
+        {visibleNotifications.map((item) => (
+          <Pressable key={item.id} style={[styles.notificationCard, !item.is_read && styles.notificationCardUnread]} onPress={() => openNotification(item)}>
             <View style={styles.notificationRow}>
               <Pressable
                 style={styles.notificationAvatar}
@@ -2396,65 +4340,44 @@ export function NotificationsScreen() {
                   <Text style={styles.notificationAvatarText}>{notificationAvatarText(item)}</Text>
                 )}
               </Pressable>
-              <View style={styles.flex}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.itemName}>{notificationTitle(item)}</Text>
-                  {!item.is_read ? <Pill text="未读" /> : null}
+              <View style={styles.notificationMain}>
+                <View style={styles.notificationTop}>
+                  <Text style={styles.notificationTitle} numberOfLines={2}>{notificationTitle(item)}</Text>
+                  {!item.is_read ? <View style={styles.notificationDot} /> : null}
                 </View>
-                <Text style={styles.subtitle}>{notificationContent(item)}</Text>
-                <Text style={styles.itemMeta}>{formatDateTime(item.created_at || undefined)}</Text>
+                <Text style={styles.notificationContent} numberOfLines={2}>{notificationContent(item)}</Text>
+                <Text style={styles.notificationTime}>{notificationTimeLabel(item.created_at)}</Text>
               </View>
             </View>
-          </Card>
-        </Pressable>
-      ))}
-      {visibleNotifications.length > 0 && hasMore ? (
-        <AppButton label="查看更多" variant="secondary" loading={loadingMore} onPress={loadMore} />
-      ) : null}
-      {visibleNotifications.length > 0 && !hasMore ? <Text style={styles.listEndText}>没有更多了</Text> : null}
-    </Page>
+          </Pressable>
+        ))}
+        {loadingMore ? (
+          <View style={styles.loadMoreSpinner}>
+            <ActivityIndicator color={colors.brand} size="small" />
+          </View>
+        ) : null}
+        {visibleNotifications.length > 0 && !hasMore ? <Text style={styles.notificationListEnd}>— 没有更多了 —</Text> : null}
+      </ScrollView>
+    </View>
   )
 }
 
 export function AboutFeedbackScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const insets = useSafeAreaInsets()
   const dialog = useAppDialog()
   const [category, setCategory] = useState<FeedbackCategoryKey>('bug')
   const [content, setContent] = useState('')
   const [contact, setContact] = useState('')
   const [feedbackImageUrls, setFeedbackImageUrls] = useState<string[]>([])
   const [attachRecentRequests, setAttachRecentRequests] = useState(true)
-  const [searchable, setSearchable] = useState(true)
-  const [publicRecords, setPublicRecords] = useState(true)
-  const [loading, setLoading] = useState(false)
   const [submittingFeedback, setSubmittingFeedback] = useState(false)
   const [uploadingFeedbackImages, setUploadingFeedbackImages] = useState(false)
-  const [savingPrivacy, setSavingPrivacy] = useState<'searchable' | 'public_records' | null>(null)
-  const [showGroupQr, setShowGroupQr] = useState(false)
-  const [diagnosticVersion, setDiagnosticVersion] = useState(0)
   const contentLength = content.length
   const trimmedContentLength = content.trim().length
   const contactLength = contact.length
   const canSubmitFeedback = trimmedContentLength >= 5 && !submittingFeedback && !uploadingFeedbackImages
-  const traceCount = useMemo(() => getRecentRequestTraces().length, [diagnosticVersion])
-  const consoleLogCount = useMemo(() => getRecentConsoleLogs().length, [diagnosticVersion])
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const profile = await apiClient.getUserProfile()
-      setSearchable(profile.searchable ?? true)
-      setPublicRecords(profile.public_records ?? true)
-    } catch {
-      // Profile privacy fields are auxiliary on this page; keep defaults if loading fails.
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  const traceCount = useMemo(() => getRecentRequestTraces().length, [])
+  const consoleLogCount = useMemo(() => getRecentConsoleLogs().length, [])
 
   const submit = async () => {
     if (trimmedContentLength < 5) {
@@ -2531,245 +4454,286 @@ export function AboutFeedbackScreen() {
     setFeedbackImageUrls((current) => current.filter((_, itemIndex) => itemIndex !== index))
   }
 
-  const updatePrivacy = async (key: 'searchable' | 'public_records', value: boolean) => {
-    const previous = key === 'searchable' ? searchable : publicRecords
-    if (key === 'searchable') setSearchable(value)
-    else setPublicRecords(value)
-    setSavingPrivacy(key)
-    try {
-      await apiClient.updateUserProfile({ [key]: value })
-    } catch (error) {
-      if (key === 'searchable') setSearchable(previous)
-      else setPublicRecords(previous)
-      await dialog.alert('设置失败', userFacingErrorMessage(error), 'danger')
-    } finally {
-      setSavingPrivacy(null)
-    }
-  }
-
-  const clearCache = async () => {
-    try {
-      const keys = await AsyncStorage.getAllKeys()
-      const removable = keys.filter((key) => key.startsWith('food_link_mobile_') && !key.includes('access_token') && !key.includes('refresh_token') && !key.includes('user_id'))
-      if (removable.length) await AsyncStorage.multiRemove(removable)
-      clearRecentRequestTraces()
-      clearRecentConsoleLogs()
-      setDiagnosticVersion((current) => current + 1)
-      await dialog.alert('已清除', '本地缓存和诊断记录已清理，登录状态已保留。', 'success')
-    } catch (error) {
-      await dialog.alert('清除失败', userFacingErrorMessage(error), 'danger')
-    }
-  }
-
-  const copyOfficialEmail = async () => {
-    await Clipboard.setStringAsync(OFFICIAL_EMAIL)
-    await dialog.alert('已复制邮箱', OFFICIAL_EMAIL, 'success')
-  }
-
-  const openOfficialEmail = async () => {
-    const url = `mailto:${OFFICIAL_EMAIL}?subject=${encodeURIComponent('Food Link 反馈')}`
-    try {
-      const supported = await Linking.canOpenURL(url)
-      if (!supported) {
-        await copyOfficialEmail()
-        return
-      }
-      await Linking.openURL(url)
-    } catch {
-      await copyOfficialEmail()
-    }
-  }
-
   return (
-    <Page title="意见反馈" subtitle="问题、建议和体验感受都可以告诉我们。" refreshing={loading} onRefresh={load}>
-      {SHOW_LEGACY_ABOUT_ON_FEEDBACK_PAGE ? (
-      <Card>
-        <View style={styles.aboutHeader}>
-          <View style={styles.aboutLogo}>
-            <Text style={styles.aboutLogoText}>食</Text>
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.aboutName}>智健食探</Text>
-            <Text style={styles.subtitle}>Food Link · Version {APP_VERSION}</Text>
-          </View>
-        </View>
-        <Text style={styles.aboutText}>
-          食探通过 AI 食物识别、饮食与运动记录、健康档案和社区分享，帮助你更轻松地管理每日营养、身体趋势和长期目标。
-        </Text>
-        <InfoRow label="官方邮箱" value={OFFICIAL_EMAIL} />
-        <InfoRow label="核心能力" value="拍照识别、文字记录、食物库、健康分析、成长伙伴、圈子与会员积分" />
-        <InfoRow label="版权信息" value="Copyright © 2026 Food Link. All Rights Reserved." />
-        <View style={styles.buttonRow}>
-          <SmallButton label="复制邮箱" onPress={() => void copyOfficialEmail()} />
-          <SmallButton label="写邮件" onPress={() => void openOfficialEmail()} />
-        </View>
-      </Card>
-      ) : null}
-
-      <Card>
+    <View style={styles.feedbackPage}>
+      <ScrollView
+        style={styles.feedbackScroll}
+        contentContainerStyle={[styles.feedbackContent, { paddingBottom: 110 + Math.max(insets.bottom, 10) }]}
+      >
         <View style={styles.feedbackHero}>
           <Text style={styles.feedbackHeroTitle}>告诉我们你遇到的问题</Text>
-          <Text style={styles.feedbackHeroDesc}>提交后会进入排查列表，我们会结合请求 trace、客户端日志与截图更快定位原因。</Text>
+          <Text style={styles.feedbackHeroDesc}>提交后会进入排查列表，我们会结合请求 trace 与截图更快定位原因。</Text>
         </View>
-        <Text style={styles.sectionTitle}>反馈类型</Text>
-        <View style={styles.feedbackCategoryGrid}>
-          {feedbackCategoryOptions.map((item) => (
-            <Pressable
-              key={item.value}
-              style={[styles.feedbackCategoryCard, category === item.value && styles.feedbackCategoryCardActive]}
-              onPress={() => setCategory(item.value)}
-            >
-              <Text style={[styles.feedbackCategoryTitle, category === item.value && styles.feedbackCategoryTitleActive]}>{item.label}</Text>
-              <Text style={styles.feedbackCategoryDesc}>{item.desc}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <Field
-          label="反馈内容"
-          rightLabel={`${contentLength}/500`}
-          value={content}
-          onChangeText={setContent}
-          placeholder="请描述你遇到的问题、期望的效果，或告诉我们发生的大致时间。"
-          maxLength={500}
-          multiline
-        />
-        <Text style={[styles.formHint, trimmedContentLength < 5 && styles.formHintWarning]}>至少 5 个字，页面、时间和期望效果越清楚越好。</Text>
-        <FeedbackImagePickerGrid
-          urls={feedbackImageUrls}
-          loading={uploadingFeedbackImages}
-          onAdd={pickFeedbackImages}
-          onRemove={removeFeedbackImage}
-        />
-        <Text style={styles.formHint}>可上传页面报错、识别结果等截图，最多 {FEEDBACK_MAX_IMAGES} 张。</Text>
-        <Field
-          label="联系方式（选填）"
-          rightLabel={`${contactLength}/120`}
-          value={contact}
-          onChangeText={setContact}
-          placeholder="可填写微信号、手机号或邮箱，便于我们需要时联系你。"
-          maxLength={120}
-          multiline
-        />
-        <ToggleRow
-          title="附带请求诊断"
-          subtitle={`将附带最近 ${Math.min(traceCount, RECENT_REQUEST_TRACE_LIMIT)} 条请求的 traceId、状态码和耗时，以及最近 ${Math.min(consoleLogCount, CONSOLE_LOG_BUFFER_LIMIT)} 条客户端日志，不包含 token、请求体或图片。`}
-          value={attachRecentRequests}
-          onValueChange={setAttachRecentRequests}
-        />
-        <AppButton label="提交反馈" loading={submittingFeedback} disabled={!canSubmitFeedback} onPress={submit} />
-      </Card>
 
-      {SHOW_LEGACY_ABOUT_ON_FEEDBACK_PAGE ? (
-      <Card>
-        <Text style={styles.sectionTitle}>隐私设置</Text>
-        <ToggleRow
-          title="允许在圈子中被搜索"
-          subtitle="开启后，其他用户可以通过昵称搜索到你。"
-          value={searchable}
-          disabled={savingPrivacy === 'searchable'}
-          onValueChange={(next) => updatePrivacy('searchable', next)}
-        />
-        <ToggleRow
-          title="公开我的饮食记录"
-          subtitle="开启后，公开动态和饮食记录会展示在圈子中。"
-          value={publicRecords}
-          disabled={savingPrivacy === 'public_records'}
-          onValueChange={(next) => updatePrivacy('public_records', next)}
-        />
-      </Card>
-      ) : null}
-
-      {SHOW_LEGACY_ABOUT_ON_FEEDBACK_PAGE ? (
-      <Card>
-        <Text style={styles.sectionTitle}>协议与社群</Text>
-        <InfoRow label="用户服务协议" value="登录即表示同意 Food Link 服务条款" />
-        <InfoRow label="隐私政策" value="仅收集完成饮食记录、分析和社区互动所需的信息" />
-        {showGroupQr ? (
-          <View style={styles.qrWrap}>
-            <Image source={userGroupQr} style={styles.qrImage} resizeMode="contain" />
-            <Text style={styles.subtitle}>长按或截图后可在微信中识别二维码加入用户群。</Text>
+        <View style={styles.feedbackCard}>
+          <Text style={styles.feedbackSectionTitle}>反馈类型</Text>
+          <View style={styles.feedbackCategoryGrid}>
+            {feedbackCategoryOptions.map((item) => (
+              <Pressable
+                key={item.value}
+                style={[styles.feedbackCategoryCard, category === item.value && styles.feedbackCategoryCardActive]}
+                onPress={() => setCategory(item.value)}
+              >
+                <Text style={styles.feedbackCategoryTitle}>{item.label}</Text>
+                <Text style={styles.feedbackCategoryDesc}>{item.desc}</Text>
+              </Pressable>
+            ))}
           </View>
-        ) : null}
-        <View style={styles.buttonRow}>
-          <SmallButton label="查看协议" onPress={() => navigation.navigate('Agreements')} />
-          <SmallButton label="隐私政策" onPress={() => navigation.navigate('PrivacyPolicy')} />
-          <SmallButton label="用户群页" onPress={() => navigation.navigate('UserGroup')} />
-          <SmallButton label={showGroupQr ? '收起二维码' : '查看用户群二维码'} onPress={() => setShowGroupQr((current) => !current)} />
-          <SmallButton label="清除缓存" onPress={() => void clearCache()} />
         </View>
-      </Card>
-      ) : null}
-    </Page>
+
+        <View style={styles.feedbackCard}>
+          <View style={styles.feedbackTitleRow}>
+            <Text style={styles.feedbackSectionTitle}>反馈内容</Text>
+            <Text style={styles.feedbackCount}>{contentLength}/500</Text>
+          </View>
+          <TextInput
+            style={styles.feedbackTextArea}
+            value={content}
+            onChangeText={setContent}
+            placeholder="请描述你遇到的问题、期望的效果，或告诉我们发生的大致时间。"
+            placeholderTextColor="#98a2b3"
+            maxLength={500}
+            multiline
+            textAlignVertical="top"
+          />
+          <Text style={[styles.feedbackCardHint, trimmedContentLength < 5 && styles.formHintWarning]}>至少 5 个字，页面、时间和期望效果越清楚越好。</Text>
+        </View>
+
+        <View style={styles.feedbackCard}>
+          <View style={styles.feedbackTitleRow}>
+            <Text style={styles.feedbackSectionTitle}>截图（选填）</Text>
+            <Text style={styles.feedbackCount}>{feedbackImageUrls.length}/{FEEDBACK_MAX_IMAGES}</Text>
+          </View>
+          <Text style={styles.feedbackCardHint}>可上传页面报错、识别结果等截图，最多 {FEEDBACK_MAX_IMAGES} 张。</Text>
+          <FeedbackImagePickerGrid
+            urls={feedbackImageUrls}
+            loading={uploadingFeedbackImages}
+            onAdd={pickFeedbackImages}
+            onRemove={removeFeedbackImage}
+          />
+        </View>
+
+        <View style={styles.feedbackCard}>
+          <View style={styles.feedbackTitleRow}>
+            <Text style={styles.feedbackSectionTitle}>联系方式（选填）</Text>
+            <Text style={styles.feedbackCount}>{contactLength}/120</Text>
+          </View>
+          <TextInput
+            style={styles.feedbackContactArea}
+            value={contact}
+            onChangeText={setContact}
+            placeholder="可填写微信号、手机号或邮箱，便于我们需要时联系你。"
+            placeholderTextColor="#98a2b3"
+            maxLength={120}
+            multiline
+            textAlignVertical="top"
+          />
+        </View>
+
+        <View style={[styles.feedbackCard, styles.feedbackDiagnosticCard]}>
+          <View style={styles.feedbackDiagnosticMain}>
+            <Text style={styles.feedbackSectionTitle}>附带请求诊断</Text>
+            <Text style={styles.feedbackDiagnosticDesc}>
+              {`将附带最近 ${Math.min(traceCount, RECENT_REQUEST_TRACE_LIMIT)} 条请求的 traceId、状态码和耗时，以及最近 ${Math.min(consoleLogCount, CONSOLE_LOG_BUFFER_LIMIT)} 条客户端日志，不包含 token、请求体或图片。`}
+            </Text>
+          </View>
+          <Switch
+            value={attachRecentRequests}
+            onValueChange={setAttachRecentRequests}
+            trackColor={{ false: '#d0d5dd', true: '#00bc7d' }}
+            thumbColor="#ffffff"
+          />
+        </View>
+      </ScrollView>
+
+      <View style={[styles.feedbackSubmitBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <Pressable
+          style={[styles.feedbackSubmitButton, !canSubmitFeedback && styles.feedbackSubmitButtonDisabled]}
+          disabled={!canSubmitFeedback}
+          onPress={submit}
+        >
+          {submittingFeedback ? (
+            <ActivityIndicator color="#ffffff" size="small" />
+          ) : (
+            <>
+              <Send size={16} color="#ffffff" strokeWidth={2.4} />
+              <Text style={styles.feedbackSubmitText}>提交反馈</Text>
+            </>
+          )}
+        </Pressable>
+      </View>
+    </View>
   )
 }
 
 export function AboutScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
-  const [showGroupQr, setShowGroupQr] = useState(false)
 
   const copyOfficialEmail = async () => {
     await Clipboard.setStringAsync(OFFICIAL_EMAIL)
     await dialog.alert('已复制邮箱', OFFICIAL_EMAIL, 'success')
   }
 
-  const openOfficialEmail = async () => {
-    const url = `mailto:${OFFICIAL_EMAIL}?subject=${encodeURIComponent('食探反馈')}`
-    try {
-      const supported = await Linking.canOpenURL(url)
-      if (!supported) {
-        await copyOfficialEmail()
-        return
-      }
-      await Linking.openURL(url)
-    } catch {
-      await copyOfficialEmail()
-    }
-  }
-
   return (
-    <Page title="关于" subtitle="应用说明、协议和联系方式。">
-      <Card>
-        <View style={styles.aboutHeader}>
-          <View style={styles.aboutLogo}>
-            <Text style={styles.aboutLogoText}>食</Text>
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.aboutName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.86}>智健食探</Text>
-            <Text style={styles.subtitle}>Food Link · Version {APP_VERSION}</Text>
-          </View>
+    <ScrollView style={styles.aboutPage} contentContainerStyle={styles.aboutContent} showsVerticalScrollIndicator={false}>
+      <View style={styles.aboutHeaderSection}>
+        <View style={styles.aboutLogoWrapper}>
+          <Image source={appIcon} style={styles.aboutLogoImage} resizeMode="contain" />
         </View>
-        <Text style={styles.aboutText}>
-          食探通过 AI 食物识别、饮食与运动记录、健康档案和社区分享，帮助你更轻松地管理每日营养、身体趋势和长期目标。
-        </Text>
-        <InfoRow label="官方邮箱" value={OFFICIAL_EMAIL} />
-        <InfoRow label="核心能力" value="拍照识别、文字记录、食物库、健康分析、成长伙伴、圈子与会员积分" />
-        <InfoRow label="版权信息" value="Copyright © 2026 Food Link. All Rights Reserved." />
-        <View style={styles.buttonRow}>
-          <SmallButton label="复制邮箱" onPress={() => void copyOfficialEmail()} />
-          <SmallButton label="写邮件" onPress={() => void openOfficialEmail()} />
-        </View>
-      </Card>
+        <Text style={styles.aboutAppName}>智健食探</Text>
+        <Text style={styles.aboutAppVersion}>Version {APP_VERSION}</Text>
+      </View>
 
-      <Card>
-        <Text style={styles.sectionTitle}>协议与社群</Text>
-        <InfoRow label="用户服务协议" value="登录即表示同意 Food Link 服务条款" />
-        <InfoRow label="隐私政策" value="仅收集完成饮食记录、分析和社区互动所需的信息" />
-        {showGroupQr ? (
-          <View style={styles.qrWrap}>
-            <Image source={userGroupQr} style={styles.qrImage} resizeMode="contain" />
-            <Text style={styles.subtitle}>长按或截图后可在微信中识别二维码加入用户群。</Text>
-          </View>
-        ) : null}
-        <View style={styles.buttonRow}>
-          <SmallButton label="查看协议" onPress={() => navigation.navigate('Agreements')} />
-          <SmallButton label="隐私政策" onPress={() => navigation.navigate('PrivacyPolicy')} />
-          <SmallButton label="会员协议" onPress={() => navigation.navigate('MembershipAgreement')} />
-          <SmallButton label="用户群页" onPress={() => navigation.navigate('UserGroup')} />
-          <SmallButton label={showGroupQr ? '收起二维码' : '查看二维码'} onPress={() => setShowGroupQr((current) => !current)} />
+      <View style={styles.aboutCard}>
+        <Text style={styles.aboutCardTitle}>关于食探</Text>
+        <Text style={styles.aboutCardText}>
+          「食探」是一款致力于帮助用户通过拍照识别食物卡路里、记录日常饮食与运动、管理健康档案的智能助手。我们希望通过 AI 技术，让健康管理变得更加简单、有趣且高效。无论你是想减脂、增肌还是维持健康，食探都能为你提供专业的分析与建议。
+        </Text>
+      </View>
+
+      <Pressable style={({ pressed }) => [styles.aboutCellGroup, pressed && styles.aboutCellPressed]} onPress={() => void copyOfficialEmail()}>
+        <Text style={styles.aboutCellTitle}>官方邮箱</Text>
+        <View style={styles.aboutCellValueWrap}>
+          <Text style={styles.aboutCellValue} numberOfLines={1}>{OFFICIAL_EMAIL}</Text>
+          <Text style={styles.aboutCellArrow}>›</Text>
         </View>
-      </Card>
-    </Page>
+      </Pressable>
+
+      <View style={styles.aboutCard}>
+        <Text style={styles.aboutCardTitle}>特别鸣谢</Text>
+        <Text style={styles.aboutCardText}>
+          感谢所有用户的支持与反馈，正是你们的建议让食探变得更好。如有任何问题或建议，欢迎随时通过意见反馈或联系客服告诉我们。
+        </Text>
+      </View>
+
+      <Text style={styles.aboutCopyright}>Copyright © 2026 Food Link. All Rights Reserved.</Text>
+    </ScrollView>
+  )
+}
+
+function HealthProfileStepHeader({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <View>
+      <Text style={styles.healthProfileStepTitle}>{title}</Text>
+      <Text style={styles.healthProfileStepSubtitle}>{subtitle}</Text>
+    </View>
+  )
+}
+
+function HealthProfileChoiceCard({
+  label,
+  desc,
+  icon,
+  active,
+  size,
+  onPress,
+}: {
+  label: string
+  desc?: string
+  icon?: string
+  active: boolean
+  size?: 'big' | 'small'
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      style={[
+        styles.healthProfileOptionCard,
+        size === 'big' && styles.healthProfileOptionCardBig,
+        size === 'small' && styles.healthProfileOptionCardSmall,
+        active && styles.healthProfileOptionCardActive,
+      ]}
+      onPress={onPress}
+    >
+      <View style={[styles.healthProfileChoiceMark, active && styles.healthProfileChoiceMarkActive]}>
+        {active ? <View style={styles.healthProfileChoiceMarkInner} /> : null}
+      </View>
+      {icon ? <Text style={[styles.healthProfileOptionIcon, size === 'small' && styles.healthProfileOptionIconSmall]}>{icon}</Text> : null}
+      <View style={styles.healthProfileOptionCopy}>
+        <Text style={[styles.healthProfileOptionLabel, active && styles.healthProfileOptionLabelActive]} numberOfLines={1}>{label}</Text>
+        {desc ? <Text style={styles.healthProfileOptionDesc} numberOfLines={2}>{desc}</Text> : null}
+      </View>
+    </Pressable>
+  )
+}
+
+function HealthProfileNumberCard({
+  value,
+  unit,
+  min,
+  max,
+  onChange,
+}: {
+  value: string
+  unit: string
+  min: string
+  max: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <View style={styles.healthProfileNumberCard}>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        keyboardType="number-pad"
+        placeholder={min}
+        placeholderTextColor="#cbd5e1"
+        style={styles.healthProfileNumberInput}
+        maxLength={3}
+      />
+      <Text style={styles.healthProfileNumberUnit}>{unit}</Text>
+      <Text style={styles.healthProfileNumberRange}>{min} - {max}</Text>
+    </View>
+  )
+}
+
+function HealthProfileRoutineField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <View style={styles.healthProfileRoutineField}>
+      <Text style={styles.healthProfileRoutineLabel}>{label}</Text>
+      <View style={styles.healthProfileRoutineInputRow}>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          keyboardType="number-pad"
+          placeholder="0"
+          placeholderTextColor="#cbd5e1"
+          style={styles.healthProfileRoutineInput}
+          maxLength={2}
+        />
+        <Text style={styles.healthProfileRoutineUnit}>点</Text>
+      </View>
+    </View>
+  )
+}
+
+function HealthProfileTargetField({
+  label,
+  unit,
+  value,
+  onChange,
+}: {
+  label: string
+  unit: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <View style={styles.healthProfileTargetField}>
+      <Text style={styles.healthProfileTargetLabel}>{label}</Text>
+      <View style={styles.healthProfileTargetInputRow}>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          keyboardType="number-pad"
+          placeholder="--"
+          placeholderTextColor="#cbd5e1"
+          style={styles.healthProfileTargetInput}
+          maxLength={5}
+        />
+        <Text style={styles.healthProfileTargetUnit}>{unit}</Text>
+      </View>
+    </View>
   )
 }
 
@@ -2848,6 +4812,7 @@ function NotificationTabButton({ label, badge, active, onPress }: { label: strin
           <Text style={[styles.notificationTabBadgeText, active && styles.notificationTabBadgeTextActive]}>{formatBadgeCount(badge)}</Text>
         </View>
       ) : null}
+      {active ? <View style={styles.notificationTabIndicator} /> : null}
     </Pressable>
   )
 }
@@ -2963,10 +4928,218 @@ function SelectedManualFoodCard({
   )
 }
 
+function ManualFoodThumb({ item, size = 44 }: { item: ManualFoodItem; size?: number }) {
+  const uri = manualFoodImageUri(item)
+  if (uri) {
+    return <Image source={{ uri }} style={[styles.manualFoodThumb, { width: size, height: size }]} />
+  }
+  return (
+    <View style={[styles.manualFoodThumbPlaceholder, { width: size, height: size }]}>
+      <Text style={styles.manualFoodThumbText}>食</Text>
+    </View>
+  )
+}
+
+function ManualFoodChoiceRow({ item, selected, onPress }: { item: ManualFoodItem; selected?: boolean; onPress: () => void }) {
+  const calories = Math.round(numberFrom(item.total_calories ?? item.calories))
+  const protein = Math.round(numberFrom(item.total_protein ?? item.protein))
+  const hint = String(item.recommend_reason || '')
+  return (
+    <Pressable style={styles.manualFoodRow} onPress={onPress}>
+      <ManualFoodThumb item={item} />
+      <View style={styles.manualFoodInfo}>
+        <View style={styles.manualFoodNameRow}>
+          <Text style={styles.manualFoodName} numberOfLines={1}>{manualFoodTitle(item)}</Text>
+          <View style={styles.manualFoodSourceBadge}>
+            <Text style={styles.manualFoodSourceBadgeText} numberOfLines={1}>{manualFoodSourceLabel(item)}</Text>
+          </View>
+        </View>
+        <Text style={styles.manualFoodSub} numberOfLines={1}>{calories} kcal / {manualFoodPortionText(item)} · 蛋白 {protein}g</Text>
+        {hint ? <Text style={styles.manualFoodHint} numberOfLines={1}>{hint}</Text> : null}
+      </View>
+      <View style={[styles.manualFoodAddButton, selected && styles.manualFoodAddButtonActive]}>
+        <Text style={[styles.manualFoodAddText, selected && styles.manualFoodAddTextActive]}>{selected ? '已选' : '+'}</Text>
+      </View>
+    </Pressable>
+  )
+}
+
+function FoodLibraryCompactField({
+  label,
+  value,
+  onChangeText,
+}: {
+  label: string
+  value: string
+  onChangeText: (value: string) => void
+}) {
+  return (
+    <View style={styles.foodLibraryCustomField}>
+      <Text style={styles.foodLibraryCustomLabel}>{label}</Text>
+      <TextInput style={styles.foodLibraryCustomInput} value={value} onChangeText={onChangeText} keyboardType="decimal-pad" placeholder="可选" placeholderTextColor="#94a3b8" />
+    </View>
+  )
+}
+
+function FoodLibraryCard({
+  item,
+  latest,
+  onOpen,
+  onRecord,
+}: {
+  item: ManualFoodItem
+  latest?: boolean
+  onOpen: () => void
+  onRecord: () => void
+}) {
+  const calories = Math.round(numberFrom(item.total_calories ?? item.calories))
+  const protein = Math.round(numberFrom(item.total_protein ?? item.protein))
+  const carbs = Math.round(numberFrom(item.total_carbs ?? item.carbs))
+  const fat = Math.round(numberFrom(item.total_fat ?? item.fat))
+  const source = manualFoodSourceLabel(item)
+  const reason = String(item.recommend_reason || '')
+
+  return (
+    <Pressable style={styles.foodLibraryCard} onPress={onOpen}>
+      <View style={styles.foodLibraryCardMain}>
+        <View style={styles.foodLibraryCardImageWrap}>
+          <ManualFoodThumb item={item} size={110} />
+          {latest ? <Text style={styles.foodLibraryLatestBadge}>最新</Text> : null}
+        </View>
+        <View style={styles.foodLibraryCardInfo}>
+          <View style={styles.foodLibraryCardTitleRow}>
+            <Text style={styles.foodLibraryCardTitle} numberOfLines={1}>{manualFoodTitle(item)}</Text>
+            <View style={styles.foodLibrarySourcePill}>
+              <Text style={styles.foodLibrarySourcePillText} numberOfLines={1}>{source}</Text>
+            </View>
+          </View>
+          <Text style={styles.foodLibraryCardDesc} numberOfLines={2}>{reason || manualFoodPortionText(item)}</Text>
+          <Text style={styles.foodLibraryCardCalories}>{calories} kcal</Text>
+          <View style={styles.foodLibraryNutritionRow}>
+            <Text style={styles.foodLibraryNutritionPill}>蛋白 {protein}g</Text>
+            <Text style={styles.foodLibraryNutritionPill}>碳水 {carbs}g</Text>
+            <Text style={styles.foodLibraryNutritionPill}>脂肪 {fat}g</Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.foodLibraryCardFooter}>
+        <Text style={styles.foodLibraryCardFooterText} numberOfLines={1}>{source} · {manualFoodPortionText(item)}</Text>
+        <View style={styles.foodLibraryCardActions}>
+          <Pressable
+            style={styles.foodLibraryCardGhostButton}
+            onPress={(event) => {
+              event.stopPropagation()
+              onOpen()
+            }}
+          >
+            <Text style={styles.foodLibraryCardGhostButtonText}>详情</Text>
+          </Pressable>
+          <Pressable
+            style={styles.foodLibraryCardRecordButton}
+            onPress={(event) => {
+              event.stopPropagation()
+              onRecord()
+            }}
+          >
+            <Text style={styles.foodLibraryCardRecordButtonText}>记录</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Pressable>
+  )
+}
+
+function FoodLibrarySkeleton() {
+  return (
+    <View>
+      {[0, 1, 2].map((item) => (
+        <View key={item} style={styles.foodLibrarySkeletonCard}>
+          <View style={styles.foodLibrarySkeletonMain}>
+            <View style={styles.foodLibrarySkeletonImage} />
+            <View style={styles.foodLibrarySkeletonInfo}>
+              <View style={[styles.foodLibrarySkeletonLine, { width: '70%', height: 16 }]} />
+              <View style={[styles.foodLibrarySkeletonLine, { width: '92%', height: 12 }]} />
+              <View style={[styles.foodLibrarySkeletonLine, { width: '40%', height: 14 }]} />
+            </View>
+          </View>
+          <View style={styles.foodLibrarySkeletonFooter}>
+            <View style={[styles.foodLibrarySkeletonLine, { width: 88, height: 12 }]} />
+            <View style={[styles.foodLibrarySkeletonLine, { width: 120, height: 12 }]} />
+          </View>
+        </View>
+      ))}
+    </View>
+  )
+}
+
+function ManualSelectedFoodItem({
+  entry,
+  onWeightChange,
+  onAdjust,
+  onPreset,
+  onRemove,
+}: {
+  entry: SelectedManualFood
+  onWeightChange: (value: string) => void
+  onAdjust: (delta: number) => void
+  onPreset: (ratio: number) => void
+  onRemove: () => void
+}) {
+  const weight = numberFrom(entry.weight, numberFrom(entry.item.default_weight_grams, 100))
+  const nutrients = scaledManualFoodNutrition(entry.item, weight)
+  const usesPortionUnit = manualFoodUsesPortionUnit(entry.item)
+  const quantityUnit = usesPortionUnit ? manualFoodPortionUnitLabel(entry.item) : 'g'
+  const adjustOptions = usesPortionUnit
+    ? [
+      { label: `-0.5${quantityUnit}`, delta: -0.5 },
+      { label: `+0.5${quantityUnit}`, delta: 0.5 },
+    ]
+    : [
+      { label: '-50g', delta: -50 },
+      { label: '+50g', delta: 50 },
+    ]
+
+  return (
+    <View style={styles.manualSelectedItem}>
+      <View style={styles.manualSelectedMain}>
+        <ManualFoodThumb item={entry.item} size={42} />
+        <View style={styles.manualFoodInfo}>
+          <Text style={styles.manualFoodName} numberOfLines={1}>{manualFoodTitle(entry.item)}</Text>
+          <Text style={styles.manualFoodSub} numberOfLines={1}>{manualFoodSourceLabel(entry.item)} · {Math.round(nutrients.calories)} kcal</Text>
+        </View>
+        <Pressable style={styles.manualSelectedRemove} onPress={onRemove} hitSlop={8}>
+          <Trash2 size={15} color="#ef4444" />
+        </Pressable>
+      </View>
+      <View style={styles.manualSelectedControls}>
+        <View style={styles.manualWeightInputWrap}>
+          <TextInput
+            value={entry.weight}
+            onChangeText={onWeightChange}
+            keyboardType="decimal-pad"
+            style={styles.manualWeightInput}
+          />
+          <Text style={styles.manualWeightUnit}>{quantityUnit}</Text>
+        </View>
+        {[{ label: '25%', ratio: 0.25 }, { label: '50%', ratio: 0.5 }, { label: '100%', ratio: 1 }].map((preset) => (
+          <Pressable key={preset.label} style={styles.manualQuickChip} onPress={() => onPreset(preset.ratio)}>
+            <Text style={styles.manualQuickChipText}>{preset.label}</Text>
+          </Pressable>
+        ))}
+        {adjustOptions.map((option) => (
+          <Pressable key={option.label} style={styles.manualQuickChip} onPress={() => onAdjust(option.delta)}>
+            <Text style={styles.manualQuickChipText}>{option.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  )
+}
+
 function FoodChoice({ item, selected, onPress }: { item: ManualFoodItem; selected?: boolean; onPress: () => void }) {
   return (
     <Pressable onPress={onPress}>
-      <Card>
+      <View style={styles.foodChoiceLegacyCard}>
         <View style={styles.rowBetween}>
           <View style={styles.flex}>
             <Text style={styles.itemName}>{manualFoodTitle(item)}</Text>
@@ -2977,7 +5150,7 @@ function FoodChoice({ item, selected, onPress }: { item: ManualFoodItem; selecte
           </View>
         </View>
         <Text style={styles.subtitle}>{Math.round(numberFrom(item.total_calories ?? item.calories))} kcal · 蛋白 {Math.round(numberFrom(item.total_protein ?? item.protein))}g</Text>
-      </Card>
+      </View>
     </Pressable>
   )
 }
@@ -3027,6 +5200,16 @@ function SummaryCell({ title, value, unit }: { title: string; value: number | st
   )
 }
 
+function RecordDetailSummaryCell({ label, value, unit, highlight }: { label: string; value: string; unit: string; highlight?: boolean }) {
+  return (
+    <View style={styles.recordDetailSummaryItem}>
+      <Text style={styles.recordDetailSummaryLabel}>{label}</Text>
+      <Text style={[styles.recordDetailSummaryValue, highlight && styles.recordDetailSummaryValueHighlight]}>{value}</Text>
+      <Text style={styles.recordDetailSummaryUnit}>{unit}</Text>
+    </View>
+  )
+}
+
 function FriendUserCard({
   user,
   subtitle,
@@ -3039,18 +5222,18 @@ function FriendUserCard({
   actions?: ReactNode
 }) {
   return (
-    <Card>
-      <View style={styles.friendCardRow}>
-        <Pressable style={styles.friendInfoRow} onPress={onPress}>
+    <View style={styles.friendsCard}>
+      <View style={styles.friendsCardRow}>
+        <Pressable style={styles.friendsInfoRow} onPress={onPress}>
           <FriendAvatar uri={user.avatar} label={friendDisplayName(user)} />
-          <View style={styles.flex}>
-            <Text style={styles.itemName}>{friendDisplayName(user)}</Text>
-            <Text style={styles.subtitle}>{subtitle || friendUserSubtitle(user)}</Text>
+          <View style={styles.friendsMeta}>
+            <Text style={styles.friendsName} numberOfLines={1}>{friendDisplayName(user)}</Text>
+            <Text style={styles.friendsSubtitle} numberOfLines={1}>{subtitle || friendUserSubtitle(user)}</Text>
           </View>
         </Pressable>
-        {actions ? <View style={styles.friendActionRow}>{actions}</View> : null}
+        {actions ? <View style={styles.friendsActionRow}>{actions}</View> : null}
       </View>
-    </Card>
+    </View>
   )
 }
 
@@ -3058,24 +5241,27 @@ function FriendRequestCard({
   request,
   onPress,
   actions,
+  footerActions,
 }: {
   request: FriendRequestItem
   onPress?: () => void
   actions?: ReactNode
+  footerActions?: ReactNode
 }) {
   return (
-    <Card>
-      <View style={styles.friendCardRow}>
-        <Pressable style={styles.friendInfoRow} onPress={onPress}>
+    <View style={[styles.friendsCard, Boolean(footerActions) && styles.friendsCardVertical]}>
+      <View style={styles.friendsCardRow}>
+        <Pressable style={styles.friendsInfoRow} onPress={onPress}>
           <FriendAvatar uri={friendRequestAvatar(request)} label={friendRequestDisplayName(request)} />
-          <View style={styles.flex}>
-            <Text style={styles.itemName}>{friendRequestDisplayName(request)}</Text>
-            <Text style={styles.subtitle}>{friendRequestTimeLabel(request) || friendRequestStatusLabel(request.status)}</Text>
+          <View style={styles.friendsMeta}>
+            <Text style={styles.friendsName} numberOfLines={1}>{friendRequestDisplayName(request)}</Text>
+            <Text style={styles.friendsSubtitle} numberOfLines={1}>{friendRequestTimeLabel(request) || friendRequestStatusLabel(request.status)}</Text>
           </View>
         </Pressable>
-        {actions ? <View style={styles.friendActionRow}>{actions}</View> : null}
+        {actions ? <View style={styles.friendsActionRow}>{actions}</View> : null}
       </View>
-    </Card>
+      {footerActions ? <View style={styles.friendsCardFooterActions}>{footerActions}</View> : null}
+    </View>
   )
 }
 
@@ -3087,6 +5273,108 @@ function FriendAvatar({ uri, label }: { uri?: string; label: string }) {
     </View>
   )
 }
+
+function FriendsTabButton({ label, badge, active, onPress }: { label: string; badge?: number; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={[styles.friendsTabItem, active && styles.friendsTabItemActive]} onPress={onPress}>
+      <Text style={[styles.friendsTabText, active && styles.friendsTabTextActive]} numberOfLines={1}>{label}</Text>
+      {typeof badge === 'number' && badge > 0 ? (
+        <View style={[styles.friendsTabBadge, active && styles.friendsTabBadgeActive]}>
+          <Text style={[styles.friendsTabBadgeText, active && styles.friendsTabBadgeTextActive]}>{badge > 99 ? '99+' : badge}</Text>
+        </View>
+      ) : null}
+    </Pressable>
+  )
+}
+
+function FriendActionButton({
+  label,
+  icon: Icon,
+  tone = 'primary',
+  disabled,
+  onPress,
+}: {
+  label: string
+  icon: LucideIcon
+  tone?: 'primary' | 'danger'
+  disabled?: boolean
+  onPress: () => void
+}) {
+  const isDanger = tone === 'danger'
+  const color = disabled ? '#cbd5e1' : isDanger ? '#ef4444' : colors.brand
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.friendsIconButton, isDanger && styles.friendsIconButtonDanger, disabled && styles.friendsIconButtonDisabled]}
+    >
+      <Icon size={16} color={color} strokeWidth={2.2} />
+    </Pressable>
+  )
+}
+
+function FriendTextActionButton({
+  label,
+  danger,
+  loading,
+  disabled,
+  onPress,
+}: {
+  label: string
+  danger?: boolean
+  loading?: boolean
+  disabled?: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.friendsTextActionButton, danger && styles.friendsTextActionButtonDanger, disabled && styles.friendsTextActionButtonDisabled]}
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color={danger ? '#ef4444' : '#64748b'} />
+      ) : (
+        <Text style={[styles.friendsTextActionButtonText, danger && styles.friendsTextActionButtonDangerText]}>{label}</Text>
+      )}
+    </Pressable>
+  )
+}
+
+function FriendsEmptyState({
+  title,
+  subtitle,
+  variant = 'friends',
+  actionLabel,
+  onAction,
+}: {
+  title: string
+  subtitle: string
+  variant?: 'friends' | 'received' | 'sent' | 'search'
+  actionLabel?: string
+  onAction?: () => void
+}) {
+  const Icon = variant === 'received' ? Inbox : variant === 'sent' ? Send : variant === 'search' ? Search : UserPlus
+  return (
+    <View style={styles.friendsEmptyCard}>
+      <View style={styles.friendsEmptyIcon}>
+        <Icon size={36} color={colors.brand} strokeWidth={1.6} />
+      </View>
+      <Text style={styles.friendsEmptyTitle}>{title}</Text>
+      <Text style={styles.friendsEmptySubtitle}>{subtitle}</Text>
+      {actionLabel && onAction ? (
+        <Pressable style={styles.friendsEmptyAction} onPress={onAction}>
+          <Text style={styles.friendsEmptyActionText}>{actionLabel}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  )
+}
+
 function SmallButton({ label, danger, disabled, onPress }: { label: string; danger?: boolean; disabled?: boolean; onPress: () => void }) {
   return (
     <Pressable disabled={disabled} onPress={onPress} style={[styles.smallButton, danger && styles.smallButtonDanger, disabled && styles.smallButtonDisabled]}>
@@ -3103,14 +5391,160 @@ function Pill({ text }: { text: string }) {
   )
 }
 
+function ExpirySummaryCard({ label, value }: { label: string; value: number }) {
+  return (
+    <View style={styles.expirySummaryCard}>
+      <Text style={styles.expirySummaryValue}>{value}</Text>
+      <Text style={styles.expirySummaryLabel}>{label}</Text>
+    </View>
+  )
+}
+
+function ExpiryItemCard({
+  item,
+  onPress,
+  onUpdateStatus,
+}: {
+  item: FoodExpiryItem
+  onPress: () => void
+  onUpdateStatus: (item: FoodExpiryItem, status: 'active' | 'consumed' | 'discarded') => Promise<void>
+}) {
+  const badgeTone = expiryBadgeTone(item)
+  const badgeStyle =
+    badgeTone === 'expired' ? styles.expiryItemBadge_expired
+      : badgeTone === 'today' ? styles.expiryItemBadge_today
+        : badgeTone === 'soon' ? styles.expiryItemBadge_soon
+          : badgeTone === 'consumed' ? styles.expiryItemBadge_consumed
+            : badgeTone === 'discarded' ? styles.expiryItemBadge_discarded
+              : styles.expiryItemBadge_fresh
+  const badgeTextStyle =
+    badgeTone === 'expired' ? styles.expiryItemBadgeText_expired
+      : badgeTone === 'today' ? styles.expiryItemBadgeText_today
+        : badgeTone === 'soon' ? styles.expiryItemBadgeText_soon
+          : badgeTone === 'consumed' ? styles.expiryItemBadgeText_consumed
+            : badgeTone === 'discarded' ? styles.expiryItemBadgeText_discarded
+              : styles.expiryItemBadgeText_fresh
+  return (
+    <Pressable style={styles.expiryItemCard} onPress={onPress}>
+      <View style={styles.expiryItemHead}>
+        <View style={styles.expiryItemTitleWrap}>
+          <Text style={styles.expiryItemTitle} numberOfLines={1}>{item.food_name}</Text>
+          {item.category ? (
+            <View style={styles.expiryItemCategory}>
+              <Text style={styles.expiryItemCategoryText} numberOfLines={1}>{item.category}</Text>
+            </View>
+          ) : null}
+        </View>
+        <View style={[styles.expiryItemBadge, badgeStyle]}>
+          <Text style={[styles.expiryItemBadgeText, badgeTextStyle]} numberOfLines={1}>
+            {item.status === 'active' ? item.urgency_label || formatExpiryHint(item) : expiryStatusLabel(item.status)}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.expiryItemMeta}>
+        <Text style={styles.expiryItemMetaText}>到期日 {formatExpiryDate(item.expire_date)}</Text>
+        <Text style={styles.expiryItemMetaText}>{expiryStorageLabel(item.storage_type)}</Text>
+        {item.quantity_note ? <Text style={styles.expiryItemMetaText}>{item.quantity_note}</Text> : null}
+      </View>
+
+      <Text style={styles.expiryItemHint}>{formatExpiryHint(item)}</Text>
+      {item.note ? <Text style={styles.expiryItemNote} numberOfLines={2}>{item.note}</Text> : null}
+
+      <View style={styles.expiryItemActions}>
+        {item.status === 'active' ? (
+          <>
+            <Pressable
+              style={styles.expiryActionGhost}
+              onPress={(event) => {
+                event.stopPropagation()
+                void onUpdateStatus(item, 'consumed')
+              }}
+            >
+              <Check size={14} color="#314740" strokeWidth={2.4} />
+              <Text style={styles.expiryActionGhostText}>已吃完</Text>
+            </Pressable>
+            <Pressable
+              style={styles.expiryActionGhost}
+              onPress={(event) => {
+                event.stopPropagation()
+                void onUpdateStatus(item, 'discarded')
+              }}
+            >
+              <Trash2 size={14} color="#314740" strokeWidth={2.2} />
+              <Text style={styles.expiryActionGhostText}>已丢弃</Text>
+            </Pressable>
+          </>
+        ) : (
+          <Pressable
+            style={styles.expiryActionGhost}
+            onPress={(event) => {
+              event.stopPropagation()
+              void onUpdateStatus(item, 'active')
+            }}
+          >
+            <Undo2 size={14} color="#314740" strokeWidth={2.2} />
+            <Text style={styles.expiryActionGhostText}>恢复提醒</Text>
+          </Pressable>
+        )}
+        <Pressable
+          style={styles.expiryActionPrimary}
+          onPress={(event) => {
+            event.stopPropagation()
+            onPress()
+          }}
+        >
+          <Text style={styles.expiryActionPrimaryText}>编辑</Text>
+        </Pressable>
+      </View>
+    </Pressable>
+  )
+}
+
+function groupFoodExpiryItems(items: FoodExpiryItem[]) {
+  const urgent = items.filter((item) => item.status === 'active' && item.urgency !== 'fresh')
+  const fresh = items.filter((item) => item.status === 'active' && item.urgency === 'fresh')
+  const processed = items.filter((item) => item.status !== 'active')
+  return { urgent, fresh, processed }
+}
+
 function expiryStatusLabel(value?: string): string {
   const labels: Record<string, string> = {
-    active: '进行中',
+    active: '保鲜中',
     consumed: '已吃完',
     discarded: '已丢弃',
     expired: '已过期',
   }
-  return labels[value || ''] || '进行中'
+  return labels[value || ''] || '保鲜中'
+}
+
+function expiryBadgeTone(item: Pick<FoodExpiryItem, 'status' | 'urgency'>): 'expired' | 'today' | 'soon' | 'fresh' | 'consumed' | 'discarded' {
+  if (item.status === 'consumed') return 'consumed'
+  if (item.status === 'discarded') return 'discarded'
+  if (item.urgency === 'expired') return 'expired'
+  if (item.urgency === 'today') return 'today'
+  if (item.urgency === 'soon') return 'soon'
+  return 'fresh'
+}
+
+function formatExpiryHint(item: Pick<FoodExpiryItem, 'status' | 'days_until_expire'>): string {
+  if (item.status !== 'active') {
+    return item.status === 'consumed' ? '已标记吃完' : '已标记丢弃'
+  }
+  if (item.days_until_expire == null) return '保质期待确认'
+  if (item.days_until_expire < 0) return `已过期 ${Math.abs(item.days_until_expire)} 天`
+  if (item.days_until_expire === 0) return '今天到期'
+  if (item.days_until_expire === 1) return '明天到期'
+  return `${item.days_until_expire} 天后到期`
+}
+
+function formatExpiryDate(value?: string): string {
+  if (!value) return '待确认'
+  return value.slice(0, 10)
+}
+
+function expiryStorageLabel(value?: string): string {
+  return expiryStorageOptions.find((option) => option.value === value)?.label || '储存方式待确认'
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -3154,28 +5588,17 @@ function formatRewardTaskProgress(task: { daily_limit?: number | null; today_cou
   return `今日已提交 ${count}`
 }
 
+function formatRewardTaskMetaProgress(task: { daily_limit?: number | null; today_count?: number }): string {
+  const count = Number(task.today_count || 0)
+  if (typeof task.daily_limit === 'number' && task.daily_limit > 0) {
+    return `今日进度 ${count}/${task.daily_limit}`
+  }
+  return `今日已提交 ${count}`
+}
+
 function formatRewardTaskLimit(task: { daily_limit?: number | null }): string {
   if (typeof task.daily_limit === 'number' && task.daily_limit > 0) return `每日上限 ${task.daily_limit}`
   return '不限次数，新内容才奖励'
-}
-
-function rewardTaskPercent(task: { daily_limit?: number | null; today_count?: number }): number {
-  if (typeof task.daily_limit !== 'number' || task.daily_limit <= 0) return 0
-  return Math.min(100, Math.max(0, Number(task.today_count || 0) / task.daily_limit * 100))
-}
-
-function rewardTaskHint(task: { action_type?: string; description?: string }): string {
-  if (task.description) return task.description
-  switch (task.action_type) {
-    case 'share_poster':
-      return '分享今日饮食或单条饮食记录后，可领取每日分享奖励。'
-    case 'packaged_food_upload':
-      return '上传包装食品营养表并保存新商品后，符合规则会发放奖励积分。'
-    case 'public_food_upload':
-      return '分享外食、校园餐或自制餐食到公共食物库，审核通过后计入奖励。'
-    default:
-      return '完成任务后奖励积分会自动进入余额。'
-  }
 }
 
 function navigateRewardTask(
@@ -3200,45 +5623,50 @@ function navigateRewardTask(
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <Card>
-      <Text style={styles.empty}>{text}</Text>
-    </Card>
+    <View style={styles.rewardEmptyState}>
+      <Text style={styles.rewardEmptyText}>{text}</Text>
+    </View>
   )
 }
 
-function CircleImagePickerGrid({
-  urls,
+function CirclePostImageGrid({
+  images,
   loading,
   onAdd,
   onRemove,
 }: {
-  urls: string[]
+  images: CirclePostImageItem[]
   loading: boolean
   onAdd: () => void
   onRemove: (index: number) => void
 }) {
   return (
-    <View style={styles.imageBlock}>
-      <View style={styles.rowBetween}>
-        <Text style={styles.fieldLabel}>图片</Text>
-        <Text style={styles.subtitle}>{urls.length}/{CIRCLE_POST_MAX_IMAGES}</Text>
-      </View>
-      <View style={styles.imageGrid}>
-        {urls.map((url, index) => (
-          <View key={`${url}-${index}`} style={styles.imageTile}>
-            <Image source={{ uri: url }} style={styles.imageThumb} />
-            <Pressable style={styles.imageRemove} onPress={() => onRemove(index)}>
-              <Text style={styles.imageRemoveText}>移除</Text>
-            </Pressable>
-          </View>
-        ))}
-        {urls.length < CIRCLE_POST_MAX_IMAGES ? (
-          <Pressable style={styles.imageAdd} onPress={onAdd} disabled={loading}>
-            {loading ? <ActivityIndicator color={colors.brand} /> : <Text style={styles.imageAddIcon}>+</Text>}
-            <Text style={styles.imageAddText}>添加图片</Text>
+    <View style={styles.circlePostEditImageGrid}>
+      {images.map((item, index) => (
+        <View key={item.id || `${item.url}-${index}`} style={styles.circlePostEditImageItem}>
+          <Image source={{ uri: item.url }} style={styles.circlePostEditImagePreview} />
+          {item.uploading ? (
+            <View style={styles.circlePostEditImageMask}>
+              <ActivityIndicator color="#ffffff" size="small" />
+            </View>
+          ) : null}
+          <Pressable style={styles.circlePostEditImageRemove} onPress={() => onRemove(index)} hitSlop={8}>
+            <Text style={styles.circlePostEditImageRemoveIcon}>×</Text>
           </Pressable>
-        ) : null}
-      </View>
+        </View>
+      ))}
+      {images.length < CIRCLE_POST_MAX_IMAGES ? (
+        <Pressable style={styles.circlePostEditImageAdd} onPress={onAdd} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color={colors.brand} size="small" />
+          ) : (
+            <>
+              <Text style={styles.circlePostEditImageAddIcon}>+</Text>
+              <Text style={styles.circlePostEditImageAddText}>添加图片</Text>
+            </>
+          )}
+        </Pressable>
+      ) : null}
     </View>
   )
 }
@@ -3255,27 +5683,27 @@ function FeedbackImagePickerGrid({
   onRemove: (index: number) => void
 }) {
   return (
-    <View style={styles.imageBlock}>
-      <View style={styles.rowBetween}>
-        <Text style={styles.fieldLabel}>截图</Text>
-        <Text style={styles.subtitle}>{urls.length}/{FEEDBACK_MAX_IMAGES}</Text>
-      </View>
-      <View style={styles.imageGrid}>
-        {urls.map((url, index) => (
-          <View key={`${url}-${index}`} style={styles.imageTile}>
-            <Image source={{ uri: url }} style={styles.imageThumb} />
-            <Pressable style={styles.imageRemove} onPress={() => onRemove(index)}>
-              <Text style={styles.imageRemoveText}>移除</Text>
-            </Pressable>
-          </View>
-        ))}
-        {urls.length < FEEDBACK_MAX_IMAGES ? (
-          <Pressable style={styles.imageAdd} onPress={onAdd} disabled={loading}>
-            {loading ? <ActivityIndicator color={colors.brand} /> : <Text style={styles.imageAddIcon}>+</Text>}
-            <Text style={styles.imageAddText}>添加截图</Text>
+    <View style={styles.feedbackImageGrid}>
+      {urls.map((url, index) => (
+        <View key={`${url}-${index}`} style={styles.feedbackImageItem}>
+          <Image source={{ uri: url }} style={styles.feedbackImagePreview} />
+          <Pressable style={styles.feedbackImageRemove} onPress={() => onRemove(index)} hitSlop={8}>
+            <X size={14} color="#ffffff" strokeWidth={2.4} />
           </Pressable>
-        ) : null}
-      </View>
+        </View>
+      ))}
+      {urls.length < FEEDBACK_MAX_IMAGES ? (
+        <Pressable style={styles.feedbackImageAdd} onPress={onAdd} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color={colors.brand} size="small" />
+          ) : (
+            <>
+              <ImagePlus size={25} color="#98a2b3" strokeWidth={2} />
+              <Text style={styles.feedbackImageAddText}>添加图片</Text>
+            </>
+          )}
+        </Pressable>
+      ) : null}
     </View>
   )
 }
@@ -3288,6 +5716,31 @@ function flattenManualFoodBrowse(data: ManualFoodBrowseResult | null): ManualFoo
     ...(data.public_library || []),
     ...(data.nutrition_library || []),
   ]
+}
+
+function sortFoodLibraryItems(items: ManualFoodItem[], sortBy: FoodLibrarySortMode): ManualFoodItem[] {
+  const cloned = [...items]
+  if (sortBy === 'calories') {
+    return cloned.sort((a, b) => numberFrom(b.total_calories ?? b.calories) - numberFrom(a.total_calories ?? a.calories))
+  }
+  if (sortBy === 'protein') {
+    return cloned.sort((a, b) => numberFrom(b.total_protein ?? b.protein) - numberFrom(a.total_protein ?? a.protein))
+  }
+  return cloned
+}
+
+function normalizeManualFoodSourceChannel(value?: string): ManualFoodSourceChannel {
+  if (value === 'recommended') return 'common'
+  const matched = manualFoodSourceChannels.find((channel) => channel.key === value)
+  return matched?.key || 'common'
+}
+
+function manualFoodImageUri(item: ManualFoodItem): string | undefined {
+  const firstPath = Array.isArray(item.image_paths) ? item.image_paths.find(Boolean) : undefined
+  const value = typeof item.image_path === 'string' && item.image_path ? item.image_path : firstPath
+  if (!value) return undefined
+  if (/^(https?:|file:|content:)/i.test(value)) return value
+  return undefined
 }
 
 function manualFoodTitle(item: ManualFoodItem): string {
@@ -3385,6 +5838,56 @@ function numberOrUndefined(value: string): number | undefined {
   return Number.isFinite(n) && value.trim() !== '' ? n : undefined
 }
 
+function stringArrayFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.map((item) => String(item || '').trim()).filter(Boolean)
+}
+
+function ageFromBirthday(value: unknown): string {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  const match = raw.match(/^(\d{4})/)
+  if (!match) return ''
+  const birthYear = Number(match[1])
+  if (!Number.isFinite(birthYear)) return ''
+  const age = new Date().getFullYear() - birthYear
+  return age >= 1 && age <= 100 ? String(age) : ''
+}
+
+function birthdayFromAge(value: string): string {
+  const age = Number(value)
+  if (!Number.isFinite(age) || age < 1 || age > 100) return ''
+  const year = new Date().getFullYear() - Math.round(age)
+  return `${year}-01-01`
+}
+
+function parseHealthRoutine(value: unknown): { sleep: string; wake: string } {
+  const raw = String(value || '').trim()
+  const match = raw.match(/(\d{1,2})(?::\d{2})?\D+(\d{1,2})(?::\d{2})?/)
+  if (!match) return { sleep: '', wake: '' }
+  return { sleep: match[1], wake: match[2] }
+}
+
+function formatHealthRoutine(sleep: string, wake: string): string {
+  const sleepNumber = Number(sleep)
+  const wakeNumber = Number(wake)
+  if (!Number.isFinite(sleepNumber) || !Number.isFinite(wakeNumber)) return ''
+  const pad = (value: number) => String(Math.max(0, Math.min(23, Math.round(value)))).padStart(2, '0')
+  return `${pad(sleepNumber)}:00-${pad(wakeNumber)}:00`
+}
+
+function toggleHealthSelection(current: string[], value: string): string[] {
+  if (value === 'none') return current.includes('none') ? [] : ['none']
+  const withoutNone = current.filter((item) => item !== 'none')
+  if (withoutNone.includes(value)) return withoutNone.filter((item) => item !== value)
+  return [...withoutNone, value]
+}
+
+function healthListForSubmit(value: string[]): string[] | undefined {
+  const list = value.map((item) => item.trim()).filter((item) => item && item !== 'none')
+  return list.length ? list : undefined
+}
+
 function splitImageUrls(value: string): string[] {
   return value
     .split(/\r?\n|,|，/)
@@ -3476,6 +5979,161 @@ function buildDayShareMessage(date: string, records: FoodRecord[]): string {
   })
   lines.push('来自 Food Link')
   return lines.join('\n')
+}
+
+const dietGoalLabels: Record<string, string> = {
+  fat_loss: '减脂期',
+  muscle_gain: '增肌期',
+  maintain: '维持体重',
+  none: '无特殊目标',
+}
+
+const activityTimingLabels: Record<string, string> = {
+  post_workout: '练后',
+  daily: '日常',
+  before_sleep: '睡前',
+  none: '无',
+}
+
+const recordNutrientMeta: Array<{ key: string; label: string; unit: string; altKey?: string }> = [
+  { key: 'fiber', label: '膳食纤维', unit: 'g' },
+  { key: 'sugar', label: '糖', unit: 'g' },
+  { key: 'sodiumMg', altKey: 'sodium_mg', label: '钠', unit: 'mg' },
+  { key: 'potassiumMg', altKey: 'potassium_mg', label: '钾', unit: 'mg' },
+  { key: 'calciumMg', altKey: 'calcium_mg', label: '钙', unit: 'mg' },
+  { key: 'ironMg', altKey: 'iron_mg', label: '铁', unit: 'mg' },
+]
+
+function formatDisplayNumber(value: unknown): string {
+  const n = numberFrom(value, 0)
+  const rounded = Math.round(n * 10) / 10
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+}
+
+function formatDayRecordDate(dateStr: string): string {
+  const date = new Date(`${dateStr}T12:00:00`)
+  if (Number.isNaN(date.getTime())) return dateStr
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  const today = todayKey()
+  const yesterdayDate = new Date()
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+  const yesterday = todayKey(yesterdayDate)
+  if (dateStr === today) return `${month}月${day}日 今天`
+  if (dateStr === yesterday) return `${month}月${day}日 昨天`
+  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  return `${month}月${day}日 ${weekdays[date.getDay()]}`
+}
+
+function formatRecordClock(recordTime?: string | null): string {
+  const date = new Date(recordTime || '')
+  if (Number.isNaN(date.getTime())) return '--:--'
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function formatRecordDetailTime(recordTime?: string | null): string {
+  const date = new Date(recordTime || '')
+  if (Number.isNaN(date.getTime())) return '--'
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  return `${month}月${day}日 ${formatRecordClock(recordTime)}`
+}
+
+function sortFoodRecordsByTime(records: FoodRecord[]): FoodRecord[] {
+  return records
+    .map((record, index) => ({ record, index }))
+    .sort((a, b) => {
+      const left = new Date(a.record.record_time || '').getTime()
+      const right = new Date(b.record.record_time || '').getTime()
+      const leftTime = Number.isFinite(left) ? left : Number.POSITIVE_INFINITY
+      const rightTime = Number.isFinite(right) ? right : Number.POSITIVE_INFINITY
+      if (leftTime !== rightTime) return leftTime - rightTime
+      return a.index - b.index
+    })
+    .map(({ record }) => record)
+}
+
+function foodRecordItemRowPayload(item: FoodRecord['items'][number]): FoodRecordItemPayload {
+  return editableRecordItemPayload(editableRecordItemFromRow(item))
+}
+
+function summarizeFoodRecordRows(items: FoodRecord['items']): {
+  total_calories: number
+  total_protein: number
+  total_carbs: number
+  total_fat: number
+  total_weight_grams: number
+} {
+  return {
+    total_calories: round1(items.reduce((sum, item) => sum + recordItemKcal(item), 0)),
+    total_protein: round1(items.reduce((sum, item) => sum + recordItemMacro(item, 'protein'), 0)),
+    total_carbs: round1(items.reduce((sum, item) => sum + recordItemMacro(item, 'carbs'), 0)),
+    total_fat: round1(items.reduce((sum, item) => sum + recordItemMacro(item, 'fat'), 0)),
+    total_weight_grams: round1(items.reduce((sum, item) => sum + recordItemIntake(item), 0)),
+  }
+}
+
+function recordExtraText(record: FoodRecord, key: string): string {
+  return String((record as FoodRecord & Record<string, unknown>)[key] || '').trim()
+}
+
+function recordContextTags(record: FoodRecord): Array<{ label: string; icon: string; tone: 'goal' | 'timing' }> {
+  const tags: Array<{ label: string; icon: string; tone: 'goal' | 'timing' }> = []
+  if (record.diet_goal && record.diet_goal !== 'none') {
+    tags.push({ label: dietGoalLabels[record.diet_goal] || record.diet_goal, icon: '↑', tone: 'goal' })
+  }
+  if (record.activity_timing && record.activity_timing !== 'none') {
+    tags.push({ label: activityTimingLabels[record.activity_timing] || record.activity_timing, icon: '时', tone: 'timing' })
+  }
+  return tags
+}
+
+function recordDetailBlocks(record: FoodRecord): Array<{ title: string; icon: string; text: string }> {
+  return [
+    { title: '识别描述', icon: '食', text: String(record.description || '').trim() },
+    { title: 'AI 健康建议', icon: '叶', text: String(record.insight || '').trim() },
+    { title: 'PFC 比例分析', icon: '比', text: recordExtraText(record, 'pfc_ratio_comment') },
+    { title: '吸收与利用', icon: '热', text: recordExtraText(record, 'absorption_notes') },
+    { title: '情境建议', icon: '时', text: recordExtraText(record, 'context_advice') },
+  ].filter((item) => item.text)
+}
+
+function recordItemWaterMl(item: FoodRecord['items'][number]): number {
+  const water = numberFrom(item.water_ml ?? item.waterMl ?? item.nutrients?.water_ml ?? item.nutrients?.waterMl, 0)
+  return water * recordItemRatio(item) / 100
+}
+
+function recordItemNutrientRows(item: FoodRecord['items'][number]): Array<{ key: string; label: string; value: number; unit: string }> {
+  const ratio = recordItemRatio(item) / 100
+  return recordNutrientMeta.map((meta) => ({
+    key: meta.key,
+    label: meta.label,
+    value: numberFrom(item.nutrients?.[meta.key] ?? (meta.altKey ? item.nutrients?.[meta.altKey] : undefined), 0) * ratio,
+    unit: meta.unit,
+  }))
+}
+
+function mealToneStyles(mealType: MealType): {
+  icon: any
+  text: any
+} {
+  switch (mealType) {
+    case 'breakfast':
+      return { icon: styles.mealToneBreakfast, text: styles.mealToneBreakfastText }
+    case 'morning_snack':
+      return { icon: styles.mealToneMorningSnack, text: styles.mealToneMorningSnackText }
+    case 'lunch':
+      return { icon: styles.mealToneLunch, text: styles.mealToneLunchText }
+    case 'afternoon_snack':
+    case 'snack':
+      return { icon: styles.mealToneAfternoonSnack, text: styles.mealToneAfternoonSnackText }
+    case 'dinner':
+      return { icon: styles.mealToneDinner, text: styles.mealToneDinnerText }
+    case 'evening_snack':
+      return { icon: styles.mealToneEveningSnack, text: styles.mealToneEveningSnackText }
+    default:
+      return { icon: styles.mealToneLunch, text: styles.mealToneLunchText }
+  }
 }
 
 async function showShareRewardAlert(dialog: AppDialog, result: Awaited<ReturnType<typeof apiClient.claimSharePosterReward>>) {
@@ -3639,6 +6297,12 @@ function getWaterLogItems(day: BodyMetricsSummary['today_water'] | null | undefi
   return []
 }
 
+function normalizeRouteDate(value?: string): string {
+  const raw = String(value || '').trim().slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
+  return todayKey()
+}
+
 function stringFrom(value: unknown): string {
   return value == null ? '' : String(value)
 }
@@ -3649,10 +6313,10 @@ async function showError(dialog: AppDialog, title: string, error: unknown) {
 
 function taskStatusLabel(status: AnalysisTask['status']): string {
   const labels: Record<string, string> = {
-    pending: '排队中',
-    queued: '排队中',
-    running: '分析中',
-    processing: '分析中',
+    pending: '排队',
+    queued: '排队',
+    running: '识别',
+    processing: '识别',
     done: '完成',
     failed: '失败',
     violated: '未通过',
@@ -3671,7 +6335,7 @@ function isTaskRunningStatus(status?: string): boolean {
 }
 
 function exerciseTaskMessage(status: string): string {
-  if (isTaskRunningStatus(status)) return '系统正在识别运动内容，完成后会自动刷新当天记录。'
+  if (isTaskRunningStatus(status)) return '系统识别运动内容后会自动刷新当天记录。'
   if (status === 'done') return '分析已完成，页面已刷新当天运动记录。'
   if (['failed', 'violated', 'timed_out', 'cancelled'].includes(status)) return '本次分析没有完成，可以调整内容后重新提交，或稍后刷新结果。'
   return '可手动刷新查看最新结果。'
@@ -3745,10 +6409,20 @@ function analyzeHistoryImageUrl(task: AnalysisTask): string {
   return String(imagePaths[0] || '').trim()
 }
 
+function analyzeHistoryDisplayText(value: unknown): string {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim()
+  if (!normalized.includes('%')) return normalized
+  try {
+    return decodeURIComponent(normalized).replace(/\s+/g, ' ').trim() || normalized
+  } catch {
+    return normalized
+  }
+}
+
 function analyzeHistoryTitle(task: AnalysisTask): string {
   if (task.status === 'violated') return '内容未通过审核'
   if (isTextAnalysisTask(task)) {
-    const text = String(task.text_input || '').replace(/\s+/g, ' ').trim()
+    const text = analyzeHistoryDisplayText(task.text_input)
     return text || '文字记录'
   }
   const result = (task.result || {}) as Record<string, any>
@@ -3766,13 +6440,13 @@ function analyzeHistoryTitle(task: AnalysisTask): string {
 function analyzeHistoryAvatarText(task: AnalysisTask): string {
   if (isPackagedAnalyzeHistoryTask(task)) return '包'
   if (!isTextAnalysisTask(task)) return '图'
-  const text = String(task.text_input || '').replace(/\s+/g, '').trim()
+  const text = analyzeHistoryDisplayText(task.text_input).replace(/\s+/g, '')
   return text ? text.slice(0, Math.min(2, text.length)) : '文'
 }
 
 function analyzeHistoryStatusLabel(task: AnalysisTask): string {
   const status = String(task.status || '')
-  if (status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') return '正在识别'
+  if (status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') return '识别'
   if (status === 'done') {
     if (task.is_recorded === true) return '已经记录'
     if (task.is_recorded === false) return '等待记录'
@@ -3801,6 +6475,49 @@ function analyzeHistoryMeta(task: AnalysisTask): string {
   if (count > 0) parts.push(`${count} 项食物`)
   if (calories > 0) parts.push(`${Math.round(calories)} kcal`)
   return parts.filter(Boolean).join(' · ')
+}
+
+function analyzeHistoryCompactMeta(task: AnalysisTask): string {
+  const status = String(task.status || '')
+  if (status === 'failed' || status === 'timed_out') return '识别没有成功，可用原内容重新识别'
+  if (status === 'violated') return '内容审核未通过'
+  const kind = isPackagedAnalyzeHistoryTask(task) ? '包装食品' : isTextAnalysisTask(task) ? '文字记录' : '图片记录'
+  const count = task.result?.items?.length || 0
+  const parts = [kind]
+  if (count > 0) parts.push(`${count} 项食物`)
+  if (task.is_recorded === true) parts.push('已写入饮食记录')
+  if (task.is_recorded === false && status === 'done') parts.push('等待记录')
+  return parts.join(' · ')
+}
+
+function analyzeHistoryModeLabel(task: AnalysisTask): string {
+  const taskAny = task as AnalysisTask & { execution_mode?: unknown }
+  const raw = String(taskAny.execution_mode || analyzeHistoryPayloadValue(task, 'execution_mode', 'executionMode') || '').trim()
+  if (!raw) return ''
+  if (raw.includes('packaged')) return '零食识别'
+  if (raw.includes('strict') || raw.includes('gemini35')) {
+    if (raw.includes('web_search')) return '精准联网'
+    if (raw.includes('separate') || raw.includes('grouped')) return '精准分项'
+    return '精准模式'
+  }
+  if (raw.includes('fast')) return raw.includes('web_search') ? '快速联网' : '快速模式'
+  if (raw.includes('web_search')) return '联网校准'
+  return ''
+}
+
+function analyzeHistoryStatusTone(task: AnalysisTask) {
+  const status = String(task.status || '')
+  if (status === 'pending' || status === 'queued' || status === 'processing' || status === 'running') {
+    return { style: styles.analyzeHistoryStatusProcessing, color: '#2563eb' }
+  }
+  if (status === 'done') {
+    if (task.is_recorded === true) return { style: styles.analyzeHistoryStatusRecorded, color: '#00bc7d' }
+    if (task.is_recorded === false) return { style: styles.analyzeHistoryStatusWaiting, color: '#d97706' }
+    return { style: styles.analyzeHistoryStatusDone, color: '#00bc7d' }
+  }
+  if (status === 'failed' || status === 'timed_out') return { style: styles.analyzeHistoryStatusRetry, color: '#c2410c' }
+  if (status === 'violated') return { style: styles.analyzeHistoryStatusFailed, color: '#c53030' }
+  return { style: styles.analyzeHistoryStatusDefault, color: '#4b5563' }
 }
 
 function notificationTabApiType(tab: NotificationTab): string | undefined {
@@ -3837,6 +6554,19 @@ function notificationContent(item: CommunityNotificationItem): string {
     return item.content_preview || '系统拦截了一条评论，点击查看详情'
   }
   return item.content_preview || '点击查看详情'
+}
+
+function notificationTimeLabel(value?: string | null): string {
+  if (!value) return ''
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  const diff = Date.now() - parsed.getTime()
+  if (diff < 60 * 1000) return '刚刚'
+  if (diff < 60 * 60 * 1000) return `${Math.max(1, Math.floor(diff / (60 * 1000)))}分钟前`
+  if (diff < 24 * 60 * 60 * 1000) return `${Math.max(1, Math.floor(diff / (60 * 60 * 1000)))}小时前`
+  const hours = String(parsed.getHours()).padStart(2, '0')
+  const minutes = String(parsed.getMinutes()).padStart(2, '0')
+  return `${parsed.getMonth() + 1}月${parsed.getDate()}日 ${hours}:${minutes}`
 }
 
 function notificationType(item: CommunityNotificationItem): string {
@@ -3913,11 +6643,1179 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
+  pressed: {
+    opacity: 0.72,
+  },
   rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
+  },
+  dayRecordPage: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  dayRecordTopWash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 132,
+    backgroundColor: '#f6fbf8',
+  },
+  dayRecordScroll: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  dayRecordContent: {
+    paddingBottom: 28,
+  },
+  dayRecordTop: {
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  dayRecordDateLine: {
+    flex: 1,
+    minWidth: 0,
+    color: '#0f172a',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  dayRecordShareButton: {
+    minHeight: 34,
+    borderRadius: 17,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0, 188, 125, 0.1)',
+  },
+  dayRecordShareIcon: {
+    color: colors.brand,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  dayRecordShareText: {
+    color: colors.brand,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+  },
+  dayRecordSummary: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+  },
+  dayRecordSummaryCard: {
+    flex: 1,
+    minHeight: 70,
+    borderRadius: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 11,
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 13,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  dayRecordSummaryLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  dayRecordSummaryValue: {
+    marginTop: 4,
+    color: '#0f172a',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  dayRecordState: {
+    minHeight: 260,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayRecordEmpty: {
+    minHeight: 270,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayRecordEmptyIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.14)',
+    marginBottom: 14,
+  },
+  dayRecordEmptyIconText: {
+    color: colors.brand,
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: '900',
+  },
+  dayRecordEmptyTitle: {
+    color: '#0f172a',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  dayRecordEmptyDesc: {
+    marginTop: 8,
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  dayRecordEmptyButton: {
+    marginTop: 18,
+    minWidth: 114,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  dayRecordEmptyButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  dayRecordList: {
+    paddingHorizontal: 16,
+  },
+  dayRecordCard: {
+    marginBottom: 10,
+    borderRadius: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.98)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  dayRecordCardPressed: {
+    opacity: 0.86,
+  },
+  dayRecordCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingBottom: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2f7',
+  },
+  dayRecordCardMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dayRecordThumb: {
+    position: 'relative',
+    width: 56,
+    height: 56,
+    borderRadius: 11,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  dayRecordThumbPlaceholder: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.12)',
+  },
+  dayRecordThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  dayRecordThumbBadge: {
+    position: 'absolute',
+    right: 4,
+    bottom: 4,
+    borderRadius: 999,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(15, 23, 42, 0.74)',
+  },
+  dayRecordThumbBadgePlaceholder: {
+    backgroundColor: 'rgba(100, 116, 139, 0.76)',
+  },
+  dayRecordThumbBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '800',
+  },
+  dayRecordMealIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayRecordMealIconText: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '900',
+  },
+  mealToneBreakfast: {
+    backgroundColor: '#ffedd4',
+  },
+  mealToneBreakfastText: {
+    color: '#ff6900',
+  },
+  mealToneMorningSnack: {
+    backgroundColor: '#ede9fe',
+  },
+  mealToneMorningSnackText: {
+    color: '#7b61ff',
+  },
+  mealToneLunch: {
+    backgroundColor: '#dcfce7',
+  },
+  mealToneLunchText: {
+    color: '#00a865',
+  },
+  mealToneAfternoonSnack: {
+    backgroundColor: '#f3e8ff',
+  },
+  mealToneAfternoonSnackText: {
+    color: '#ad46ff',
+  },
+  mealToneDinner: {
+    backgroundColor: '#dbeafe',
+  },
+  mealToneDinnerText: {
+    color: '#2b7fff',
+  },
+  mealToneEveningSnack: {
+    backgroundColor: '#ede9fe',
+  },
+  mealToneEveningSnackText: {
+    color: '#5b21b6',
+  },
+  dayRecordCardCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  dayRecordCardName: {
+    color: '#0f172a',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  dayRecordCardTime: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  dayRecordCardActions: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dayRecordCardCalorie: {
+    color: '#0f172a',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  dayRecordDeleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayRecordFoodList: {
+    marginTop: 4,
+  },
+  dayRecordFoodItem: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  dayRecordFoodMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dayRecordFoodName: {
+    flexShrink: 1,
+    color: '#1e293b',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  dayRecordFoodAmount: {
+    flexShrink: 0,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 16,
+    backgroundColor: '#f8fafc',
+  },
+  dayRecordFoodRatio: {
+    flexShrink: 0,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+    backgroundColor: '#f8fafc',
+  },
+  dayRecordFoodSide: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 7,
+  },
+  dayRecordFoodCalorie: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  dayRecordFoodDelete: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#eef2f7',
+  },
+  dayRecordFoodMacros: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingTop: 3,
+  },
+  dayRecordFoodMacro: {
+    color: '#1e293b',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  dayRecordFoodProtein: {
+    color: '#5c9ed4',
+  },
+  dayRecordFoodCarbs: {
+    color: '#00bc7d',
+  },
+  dayRecordFoodFat: {
+    color: '#ff6900',
+  },
+  dayRecordMacroFooter: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+  },
+  dayRecordMacroFooterText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  recordDetailRoot: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  recordDetailScroll: {
+    flex: 1,
+  },
+  recordDetailContent: {
+    paddingHorizontal: 12,
+    paddingBottom: 36,
+  },
+  recordDetailLoading: {
+    minHeight: 480,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordDetailEmpty: {
+    minHeight: 480,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  recordDetailEmptyText: {
+    color: '#64748b',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  recordDetailBody: {
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  recordDetailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingBottom: 10,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  recordDetailMealBadge: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  recordDetailMealIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordDetailMealIconText: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  recordDetailMealText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  recordDetailMealName: {
+    color: '#1e293b',
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: '700',
+  },
+  recordDetailMealTime: {
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  recordDetailCalorieBox: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexShrink: 0,
+  },
+  recordDetailCalorie: {
+    color: colors.brand,
+    fontSize: 21,
+    lineHeight: 28,
+    fontWeight: '900',
+  },
+  recordDetailCalorieUnit: {
+    marginLeft: 3,
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  recordDetailImage: {
+    width: '100%',
+    height: 190,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 10,
+    backgroundColor: '#f8fafc',
+  },
+  recordDetailHeroImage: {
+    width: '100%',
+    height: '100%',
+  },
+  recordDetailImagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#d1fae5',
+  },
+  recordDetailImageIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
+  },
+  recordDetailImageIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+  },
+  recordDetailImageHint: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  recordDetailContextTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  recordDetailContextTag: {
+    minHeight: 30,
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  recordDetailGoalTag: {
+    backgroundColor: '#d1fae5',
+  },
+  recordDetailTimingTag: {
+    backgroundColor: '#dbeafe',
+  },
+  recordDetailContextTagIcon: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '900',
+  },
+  recordDetailContextTagText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  recordDetailGoalTagText: {
+    color: '#047857',
+  },
+  recordDetailTimingTagText: {
+    color: '#1e40af',
+  },
+  recordDetailInfoBlock: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  recordDetailInfoTitle: {
+    color: '#1e293b',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  recordDetailInfoText: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 25,
+  },
+  recordDetailActions: {
+    paddingTop: 10,
+    gap: 10,
+  },
+  recordDetailSecondaryAction: {
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  recordDetailSecondaryActionText: {
+    color: '#1e293b',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  recordDetailPrimaryAction: {
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+  },
+  recordDetailPrimaryActionText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  recordDetailActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  recordDetailPlainAction: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  recordDetailPlainActionText: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  recordDetailDangerActionText: {
+    color: '#ef4444',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  recordDetailFoodTitle: {
+    marginTop: 10,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    color: '#1e293b',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  recordDetailFoodItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2f7',
+  },
+  recordDetailFoodInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 5,
+  },
+  recordDetailFoodName: {
+    color: '#1e293b',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  recordDetailFoodMeta: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  recordDetailRatioBadge: {
+    alignSelf: 'flex-start',
+    minHeight: 28,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    justifyContent: 'center',
+    backgroundColor: '#f5f3ff',
+  },
+  recordDetailRatioText: {
+    color: '#7c3aed',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
+  },
+  recordDetailFoodNutrients: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  recordDetailFoodNutrient: {
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  recordDetailNutrientToggle: {
+    alignSelf: 'flex-start',
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  recordDetailNutrientToggleText: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  recordDetailNutrientToggleIcon: {
+    color: '#94a3b8',
+    fontSize: 14,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  recordDetailNutrientGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  recordDetailNutrientCell: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 54,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  recordDetailNutrientLabel: {
+    color: '#64748b',
+    fontSize: 10,
+    lineHeight: 13,
+  },
+  recordDetailNutrientValue: {
+    marginTop: 3,
+    color: '#1e293b',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  recordDetailNutrientUnit: {
+    color: '#94a3b8',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  recordDetailFoodCalories: {
+    flexShrink: 0,
+    alignItems: 'flex-end',
+    paddingTop: 2,
+  },
+  recordDetailFoodCalorieText: {
+    color: colors.brand,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  recordDetailEmptyLine: {
+    minHeight: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordDetailEmptyLineText: {
+    color: '#94a3b8',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  recordDetailSummarySection: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  recordDetailSummaryTitle: {
+    color: '#1e293b',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  recordDetailSummaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  recordDetailSummaryItem: {
+    flexGrow: 1,
+    flexBasis: '30%',
+    minHeight: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 8,
+  },
+  recordDetailSummaryLabel: {
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  recordDetailSummaryValue: {
+    color: '#1e293b',
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  recordDetailSummaryValueHighlight: {
+    color: colors.brand,
+    fontSize: 18,
+  },
+  recordDetailSummaryUnit: {
+    color: '#94a3b8',
+    fontSize: 10,
+    lineHeight: 12,
+  },
+  recordDetailEditPanel: {
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  recordDetailEditTitle: {
+    color: '#1e293b',
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  recordDetailEditSummary: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  recordDetailEditItem: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    padding: 10,
+    marginTop: 10,
+    backgroundColor: '#f8fafc',
+  },
+  friendsPage: {
+    flex: 1,
+    backgroundColor: '#f1f5f9',
+  },
+  friendsTopWash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 220,
+    backgroundColor: '#ecfdf5',
+  },
+  friendsScroll: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  friendsContent: {
+    paddingBottom: 40,
+  },
+  friendsHeader: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    alignItems: 'flex-end',
+  },
+  friendsRefreshButton: {
+    minHeight: 32,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0, 188, 125, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.14)',
+  },
+  friendsRefreshButtonActive: {
+    opacity: 0.72,
+  },
+  friendsRefreshText: {
+    color: colors.brand,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  friendsTabsWrapper: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  friendsTabs: {
+    flexDirection: 'row',
+    padding: 3,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.08)',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  friendsTabItem: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 4,
+  },
+  friendsTabItemActive: {
+    backgroundColor: colors.brand,
+    shadowColor: colors.brand,
+    shadowOpacity: 0.24,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  friendsTabText: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  friendsTabTextActive: {
+    color: '#fff',
+    fontWeight: '900',
+  },
+  friendsTabBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#86efac',
+  },
+  friendsTabBadgeActive: {
+    backgroundColor: '#fff',
+  },
+  friendsTabBadgeText: {
+    color: '#166534',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  friendsTabBadgeTextActive: {
+    color: colors.brand,
+  },
+  friendsListContainer: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  friendsSearchCard: {
+    marginBottom: 12,
+  },
+  friendsSearchRow: {
+    minHeight: 44,
+    borderRadius: 22,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.08)',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  friendsSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 0,
+    color: '#0f172a',
+    fontSize: 14,
+  },
+  friendsClearButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e2e8f0',
+  },
+  friendsStateCard: {
+    minHeight: 86,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    marginBottom: 10,
+  },
+  friendsCard: {
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+    marginBottom: 10,
+  },
+  friendsCardVertical: {
+    paddingBottom: 12,
+  },
+  friendsCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  friendsInfoRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  friendsMeta: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  friendsName: {
+    color: '#1e293b',
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  friendsSubtitle: {
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  friendsActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  friendsCardFooterActions: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(15, 23, 42, 0.05)',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  friendsIconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.24)',
+  },
+  friendsIconButtonDanger: {
+    borderColor: 'rgba(239, 68, 68, 0.24)',
+    backgroundColor: '#fff7f7',
+  },
+  friendsIconButtonDisabled: {
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  friendsTextActionButton: {
+    minWidth: 54,
+    height: 34,
+    borderRadius: 17,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  friendsTextActionButtonDanger: {
+    borderColor: '#fecaca',
+  },
+  friendsTextActionButtonDisabled: {
+    opacity: 0.72,
+  },
+  friendsTextActionButtonText: {
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  friendsTextActionButtonDangerText: {
+    color: '#ef4444',
+  },
+  friendsEmptyCard: {
+    minHeight: 260,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 52,
+  },
+  friendsEmptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 188, 125, 0.08)',
+    marginBottom: 16,
+    opacity: 0.7,
+  },
+  friendsEmptyTitle: {
+    color: '#1e293b',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  friendsEmptySubtitle: {
+    marginTop: 6,
+    color: '#94a3b8',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  friendsEmptyAction: {
+    marginTop: 18,
+    minHeight: 40,
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.brand,
+    shadowColor: colors.brand,
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  friendsEmptyActionText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
   },
   friendCardRow: {
     flexDirection: 'row',
@@ -3939,18 +7837,22 @@ const styles = StyleSheet.create({
     maxWidth: 172,
   },
   friendAvatarFallback: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.brandSoft,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 188, 125, 0.14)',
   },
   friendAvatarImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: colors.surfaceMuted,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 188, 125, 0.14)',
   },
   friendAvatarText: {
     color: colors.brandDark,
@@ -3992,6 +7894,1627 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 10,
   },
+  analyzeHistoryPage: {
+    flex: 1,
+    backgroundColor: '#eef3f1',
+  },
+  analyzeHistorySearchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 8,
+    backgroundColor: '#f6faf8',
+  },
+  analyzeHistorySearchInputWrap: {
+    flex: 1,
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  analyzeHistorySearchInput: {
+    flex: 1,
+    minHeight: 40,
+    paddingVertical: 0,
+    color: '#1f2937',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  analyzeHistorySearchClear: {
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 13,
+    backgroundColor: '#f3f4f6',
+  },
+  analyzeHistorySearchButton: {
+    minWidth: 58,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: colors.brand,
+    paddingHorizontal: 14,
+  },
+  analyzeHistorySearchButtonDisabled: {
+    opacity: 0.78,
+  },
+  analyzeHistorySearchButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  analyzeHistoryScroll: {
+    flex: 1,
+  },
+  analyzeHistoryList: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 28,
+  },
+  analyzeHistoryLoading: {
+    minHeight: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  analyzeHistoryEmptyCard: {
+    minHeight: 240,
+    marginTop: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  analyzeHistoryEmptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.16)',
+  },
+  analyzeHistoryEmptyTitle: {
+    color: '#10211a',
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  analyzeHistoryEmptyDesc: {
+    marginTop: 8,
+    color: '#6b7280',
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  analyzeHistoryListHeader: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  analyzeHistoryBulkDelete: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  analyzeHistoryBulkDeleteText: {
+    color: '#2f7f62',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  analyzeHistoryTaskWrapper: {
+    marginBottom: 10,
+  },
+  analyzeHistoryPressed: {
+    opacity: 0.84,
+  },
+  analyzeHistoryTaskCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    minHeight: 102,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.14)',
+    backgroundColor: '#ffffff',
+    padding: 12,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  analyzeHistoryTaskCardViolated: {
+    borderColor: '#f5d4d4',
+    backgroundColor: '#fef8f8',
+  },
+  analyzeHistoryThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 11,
+    overflow: 'hidden',
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.2)',
+  },
+  analyzeHistoryThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  analyzeHistoryThumbFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#d8f5e4',
+  },
+  analyzeHistoryThumbFallbackText: {
+    backgroundColor: '#123327',
+  },
+  analyzeHistoryThumbText: {
+    color: '#ecfff5',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+    paddingHorizontal: 6,
+  },
+  analyzeHistoryBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  analyzeHistoryMainRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  analyzeHistoryLeftContent: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  analyzeHistoryRightContent: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  analyzeHistoryHeadline: {
+    color: '#10211a',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '900',
+  },
+  analyzeHistoryCalories: {
+    color: '#1f2937',
+    fontSize: 22,
+    lineHeight: 25,
+    fontWeight: '900',
+  },
+  analyzeHistoryMeta: {
+    color: '#4e6a5d',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  analyzeHistoryViolationReason: {
+    color: '#c53030',
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  analyzeHistoryTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  analyzeHistoryTime: {
+    color: '#6b7280',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  analyzeHistoryMiniTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: '#f3f4f6',
+  },
+  analyzeHistoryMiniTagText: {
+    color: '#4b5563',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  analyzeHistoryModeTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    backgroundColor: '#ecfdf5',
+  },
+  analyzeHistoryModeTagText: {
+    color: '#047857',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  analyzeHistoryStatusBadge: {
+    minWidth: 68,
+    minHeight: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    backgroundColor: '#f3f4f6',
+    borderColor: 'transparent',
+  },
+  analyzeHistoryStatusText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '900',
+  },
+  analyzeHistoryStatusProcessing: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#93c5fd',
+  },
+  analyzeHistoryStatusDone: {
+    backgroundColor: '#d1fae5',
+    borderColor: '#86efac',
+  },
+  analyzeHistoryStatusRecorded: {
+    backgroundColor: '#d1fae5',
+    borderColor: '#86efac',
+  },
+  analyzeHistoryStatusWaiting: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#fcd34d',
+  },
+  analyzeHistoryStatusRetry: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#fed7aa',
+  },
+  analyzeHistoryStatusFailed: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  analyzeHistoryStatusDefault: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#e5e7eb',
+  },
+  analyzeHistoryMoreButton: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+  },
+  analyzeHistoryMenuBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    backgroundColor: 'rgba(15, 23, 42, 0.36)',
+  },
+  analyzeHistoryMenuSheet: {
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    paddingTop: 10,
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 20,
+  },
+  analyzeHistoryMenuHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#e5e7eb',
+    marginBottom: 12,
+  },
+  analyzeHistoryMenuTitle: {
+    color: '#0f172a',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  analyzeHistoryMenuSubtitle: {
+    marginTop: 3,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  analyzeHistoryMenuActions: {
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#eef2f7',
+    backgroundColor: '#ffffff',
+  },
+  analyzeHistoryMenuAction: {
+    minHeight: 62,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2f7',
+  },
+  analyzeHistoryMenuActionPressed: {
+    backgroundColor: '#f8fafc',
+  },
+  analyzeHistoryMenuActionDisabled: {
+    opacity: 0.42,
+  },
+  analyzeHistoryMenuActionIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    backgroundColor: 'rgba(92, 184, 150, 0.12)',
+  },
+  analyzeHistoryMenuActionIconDanger: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  analyzeHistoryMenuActionCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  analyzeHistoryMenuActionText: {
+    color: '#111827',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  analyzeHistoryMenuActionTextDanger: {
+    color: '#ef4444',
+  },
+  analyzeHistoryMenuActionHint: {
+    marginTop: 2,
+    color: '#94a3b8',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  analyzeHistoryMenuCancel: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+    borderRadius: 14,
+    backgroundColor: '#f8fafc',
+  },
+  analyzeHistoryMenuCancelText: {
+    color: '#475569',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  manualRecordPage: {
+    flex: 1,
+    backgroundColor: '#eef6f3',
+  },
+  manualRecordContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 32,
+  },
+  manualRecordContentWithBar: {
+    paddingBottom: 180,
+  },
+  manualWorkspaceCard: {
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.14)',
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  manualWorkspaceHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  manualWorkspaceTitle: {
+    color: '#0f172a',
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 22,
+  },
+  manualWorkspaceSubtitle: {
+    marginTop: 2,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  manualWorkspaceCalories: {
+    minWidth: 82,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.14)',
+    backgroundColor: '#f4faf8',
+  },
+  manualWorkspaceCaloriesValue: {
+    color: '#5cb896',
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 26,
+  },
+  manualWorkspaceCaloriesUnit: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  manualMealGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  manualMealItem: {
+    width: '31.7%',
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  manualMealItemActive: {
+    borderColor: '#5cb896',
+    backgroundColor: '#f4faf8',
+  },
+  manualMealIcon: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  manualMealIconActive: {
+    color: '#5cb896',
+  },
+  manualMealName: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  manualMealNameActive: {
+    color: '#5cb896',
+  },
+  manualDateRow: {
+    minHeight: 38,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
+    backgroundColor: '#f8fafc',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  manualDateLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  manualDateInput: {
+    flex: 1,
+    minHeight: 36,
+    padding: 0,
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  manualSearchBar: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 12,
+    paddingRight: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.14)',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+  },
+  manualSearchInput: {
+    flex: 1,
+    minHeight: 42,
+    padding: 0,
+    color: '#0f172a',
+    fontSize: 13,
+  },
+  manualSearchIconButton: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  manualSearchAction: {
+    minWidth: 54,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: '#10b981',
+  },
+  manualSearchActionText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  manualCustomEntryCard: {
+    minHeight: 64,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.12)',
+    backgroundColor: 'rgba(16, 185, 129, 0.06)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  manualCustomEntryTitle: {
+    color: '#0f172a',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  manualCustomEntrySubtitle: {
+    marginTop: 3,
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  manualCustomEntryButton: {
+    maxWidth: 104,
+    minHeight: 30,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    backgroundColor: '#10b981',
+  },
+  manualCustomEntryButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  manualCatalogShell: {
+    minHeight: 420,
+    marginBottom: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#eef2f7',
+    backgroundColor: '#ffffff',
+    flexDirection: 'row',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  manualCatalogSidebar: {
+    width: 82,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 82,
+    maxHeight: 560,
+    backgroundColor: '#f4f6fb',
+    borderRightWidth: 1,
+    borderRightColor: '#eef2f7',
+  },
+  manualCatalogSidebarContent: {
+    paddingTop: 8,
+    paddingBottom: 10,
+  },
+  manualCatalogTab: {
+    minHeight: 42,
+    justifyContent: 'center',
+    paddingLeft: 12,
+    paddingRight: 8,
+    marginBottom: 4,
+    borderTopRightRadius: 14,
+    borderBottomRightRadius: 14,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  manualCatalogTabActive: {
+    backgroundColor: '#ffffff',
+    borderColor: '#eef2f7',
+    borderLeftColor: 'transparent',
+  },
+  manualCatalogTabText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  manualCatalogTabTextActive: {
+    color: '#0f172a',
+    fontWeight: '900',
+  },
+  manualCatalogMain: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  manualLibraryHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  manualSectionTitle: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 21,
+  },
+  manualLibrarySubtitle: {
+    marginTop: 2,
+    color: '#64748b',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  manualFoodList: {
+    borderTopWidth: 0,
+  },
+  manualFoodRow: {
+    minHeight: 66,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(15, 23, 42, 0.06)',
+  },
+  manualFoodThumb: {
+    borderRadius: 10,
+    backgroundColor: '#f1f5f9',
+  },
+  manualFoodThumbPlaceholder: {
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(92, 184, 150, 0.08)',
+  },
+  manualFoodThumbText: {
+    color: '#5cb896',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  manualFoodInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  manualFoodNameRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginBottom: 2,
+  },
+  manualFoodName: {
+    flex: 1,
+    minWidth: 0,
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  manualFoodSourceBadge: {
+    maxWidth: 72,
+    paddingHorizontal: 6,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: '#f4faf8',
+  },
+  manualFoodSourceBadgeText: {
+    color: '#5cb896',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  manualFoodSub: {
+    color: '#94a3b8',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  manualFoodHint: {
+    marginTop: 2,
+    color: '#64748b',
+    fontSize: 10,
+    lineHeight: 14,
+  },
+  manualFoodAddButton: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f8fafc',
+  },
+  manualFoodAddButtonActive: {
+    borderColor: 'rgba(92, 184, 150, 0.24)',
+    backgroundColor: '#f4faf8',
+  },
+  manualFoodAddText: {
+    color: '#5cb896',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  manualFoodAddTextActive: {
+    fontSize: 10,
+  },
+  manualLoadingState: {
+    minHeight: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  manualEmptyState: {
+    minHeight: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  manualEmptyText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  foodLibraryPage: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  foodLibraryTabs: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  foodLibraryTab: {
+    flex: 1,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  foodLibraryTabActive: {
+    borderBottomColor: '#5cb896',
+  },
+  foodLibraryTabText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  foodLibraryTabTextActive: {
+    color: '#5cb896',
+    fontWeight: '900',
+  },
+  foodLibraryContent: {
+    paddingBottom: 36,
+  },
+  foodLibraryFilterSection: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  foodLibrarySearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  foodLibrarySearchInputWrap: {
+    flex: 1,
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+  },
+  foodLibrarySearchInput: {
+    flex: 1,
+    minHeight: 36,
+    padding: 0,
+    color: '#111827',
+    fontSize: 14,
+  },
+  foodLibrarySearchButton: {
+    minWidth: 64,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: '#5cb896',
+  },
+  foodLibrarySearchButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  foodLibraryActionDisabled: {
+    opacity: 0.72,
+  },
+  foodLibrarySortSection: {
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  foodLibrarySortLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 22,
+  },
+  foodLibrarySortItem: {
+    minHeight: 30,
+    justifyContent: 'center',
+  },
+  foodLibrarySortText: {
+    color: '#6a7282',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  foodLibrarySortTextActive: {
+    color: '#5cb896',
+    fontWeight: '900',
+  },
+  foodLibrarySortUnderline: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: -2,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: '#5cb896',
+  },
+  foodLibraryNewButton: {
+    minHeight: 30,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    backgroundColor: '#f9fafb',
+  },
+  foodLibraryNewButtonText: {
+    color: '#5cb896',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  foodLibraryListContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 24,
+  },
+  foodLibraryListHeader: {
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  foodLibraryListHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  foodLibraryListTitle: {
+    color: '#0f172a',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  foodLibraryListSubtitle: {
+    marginTop: 2,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  foodLibraryCard: {
+    marginBottom: 12,
+    overflow: 'hidden',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  foodLibraryCardMain: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+  },
+  foodLibraryCardImageWrap: {
+    width: 110,
+    height: 110,
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 10,
+  },
+  foodLibraryLatestBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    overflow: 'hidden',
+    backgroundColor: '#5cb896',
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  foodLibraryCardInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  foodLibraryCardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginBottom: 4,
+  },
+  foodLibraryCardTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: '#1e2939',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  foodLibrarySourcePill: {
+    maxWidth: 82,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 7,
+    borderRadius: 11,
+    backgroundColor: '#ecfdf5',
+  },
+  foodLibrarySourcePillText: {
+    color: '#047857',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  foodLibraryCardDesc: {
+    minHeight: 34,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  foodLibraryCardCalories: {
+    marginTop: 4,
+    color: '#5cb896',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  foodLibraryNutritionRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+  },
+  foodLibraryNutritionPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 7,
+    overflow: 'hidden',
+    backgroundColor: '#ecfdf5',
+    color: '#047857',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  foodLibraryCardFooter: {
+    minHeight: 46,
+    paddingHorizontal: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  foodLibraryCardFooterText: {
+    flex: 1,
+    minWidth: 0,
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  foodLibraryCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  foodLibraryCardGhostButton: {
+    minHeight: 30,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    backgroundColor: '#f8fafc',
+  },
+  foodLibraryCardGhostButtonText: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  foodLibraryCardRecordButton: {
+    minHeight: 30,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    backgroundColor: '#5cb896',
+  },
+  foodLibraryCardRecordButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  foodLibraryEmptyState: {
+    minHeight: 230,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  foodLibraryEmptyIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    overflow: 'hidden',
+    backgroundColor: '#ecfdf5',
+    color: '#5cb896',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    fontSize: 20,
+    fontWeight: '900',
+    lineHeight: 54,
+  },
+  foodLibraryEmptyText: {
+    marginTop: 10,
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  foodLibraryEmptyButton: {
+    marginTop: 12,
+    minHeight: 34,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    backgroundColor: '#5cb896',
+  },
+  foodLibraryEmptyButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  foodLibrarySkeletonCard: {
+    marginBottom: 12,
+    overflow: 'hidden',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+  },
+  foodLibrarySkeletonMain: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+  },
+  foodLibrarySkeletonImage: {
+    width: 110,
+    height: 110,
+    borderRadius: 10,
+    backgroundColor: '#eef2f7',
+  },
+  foodLibrarySkeletonInfo: {
+    flex: 1,
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+  },
+  foodLibrarySkeletonLine: {
+    borderRadius: 7,
+    backgroundColor: '#eef2f7',
+  },
+  foodLibrarySkeletonFooter: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  foodLibraryCustomPanel: {
+    margin: 16,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(15, 23, 42, 0.08)',
+    backgroundColor: '#ffffff',
+  },
+  foodLibraryCustomHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  foodLibraryCustomHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  foodLibraryCustomTitle: {
+    color: '#0f172a',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  foodLibraryCustomSubtitle: {
+    marginTop: 3,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  foodLibraryCollapseButton: {
+    minHeight: 30,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    backgroundColor: '#f8fafc',
+  },
+  foodLibraryCollapseButtonText: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  foodLibraryImageRow: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.16)',
+    backgroundColor: '#f8fafc',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  foodLibraryImagePreview: {
+    width: 56,
+    height: 56,
+    borderRadius: 9,
+    overflow: 'hidden',
+  },
+  foodLibraryImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#e5e7eb',
+  },
+  foodLibraryImageEmpty: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+  },
+  foodLibraryImageActions: {
+    flex: 1,
+    minWidth: 0,
+  },
+  foodLibraryImageTitle: {
+    marginBottom: 6,
+    color: '#0f172a',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  foodLibraryImageInput: {
+    minHeight: 34,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontSize: 13,
+  },
+  foodLibraryCustomGrid: {
+    marginTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+  },
+  foodLibraryCustomField: {
+    width: '48.5%',
+  },
+  foodLibraryCustomFieldFull: {
+    width: '100%',
+  },
+  foodLibraryBasisPresets: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  foodLibraryBasisChip: {
+    minHeight: 30,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
+    backgroundColor: '#f1f5f9',
+  },
+  foodLibraryBasisChipActive: {
+    borderColor: 'rgba(16, 185, 129, 0.34)',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  },
+  foodLibraryBasisChipText: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  foodLibraryBasisChipTextActive: {
+    color: '#059669',
+    fontWeight: '900',
+  },
+  foodLibraryCustomLabel: {
+    marginBottom: 5,
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  foodLibraryCustomInput: {
+    minHeight: 40,
+    paddingHorizontal: 10,
+    paddingVertical: 0,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.18)',
+    backgroundColor: '#f8fafc',
+    color: '#0f172a',
+    fontSize: 13,
+  },
+  foodLibraryMoreToggle: {
+    minHeight: 40,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.16)',
+    backgroundColor: '#f8fafc',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  foodLibraryMoreText: {
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  foodLibraryMoreAction: {
+    color: '#10b981',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  foodLibraryPublicRow: {
+    minHeight: 58,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.16)',
+    backgroundColor: '#f8fafc',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  foodLibraryPublicCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  foodLibraryPublicTitle: {
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  foodLibraryPublicSubtitle: {
+    marginTop: 3,
+    color: '#64748b',
+    fontSize: 11,
+  },
+  foodLibraryPublicSwitch: {
+    width: 42,
+    height: 24,
+    padding: 2,
+    borderRadius: 12,
+    backgroundColor: '#cbd5e1',
+  },
+  foodLibraryPublicSwitchActive: {
+    backgroundColor: '#10b981',
+  },
+  foodLibraryPublicKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+  },
+  foodLibraryPublicKnobActive: {
+    transform: [{ translateX: 18 }],
+  },
+  foodLibraryCustomActions: {
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 10,
+  },
+  foodLibraryPrimaryButton: {
+    minHeight: 36,
+    minWidth: 108,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: '#10b981',
+  },
+  foodLibraryPrimaryButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  foodLibrarySecondaryButton: {
+    minHeight: 36,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: '#f1f5f9',
+  },
+  foodLibrarySecondaryButtonText: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  manualSelectedSection: {
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.14)',
+    backgroundColor: '#ffffff',
+  },
+  manualSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 10,
+  },
+  manualTotalCalories: {
+    alignItems: 'flex-end',
+  },
+  manualTotalCaloriesValue: {
+    color: '#5cb896',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  manualTotalCaloriesUnit: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  manualNutritionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  manualSelectedItem: {
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(15, 23, 42, 0.06)',
+  },
+  manualSelectedMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginBottom: 8,
+  },
+  manualSelectedRemove: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  },
+  manualSelectedControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  manualWeightInputWrap: {
+    height: 34,
+    minWidth: 86,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  manualWeightInput: {
+    flex: 1,
+    minWidth: 36,
+    padding: 0,
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  manualWeightUnit: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  manualQuickChip: {
+    minHeight: 34,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.14)',
+    backgroundColor: 'rgba(92, 184, 150, 0.08)',
+  },
+  manualQuickChipText: {
+    color: '#5cb896',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  manualBottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+  },
+  manualBottomSummary: {
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.1)',
+    backgroundColor: 'rgba(16, 185, 129, 0.06)',
+  },
+  manualBottomSummaryMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  manualBottomSummaryText: {
+    flex: 1,
+    color: '#0f172a',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  manualBottomSummaryAction: {
+    color: '#059669',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  manualBottomSummarySubtext: {
+    marginTop: 3,
+    color: '#64748b',
+    fontSize: 11,
+  },
+  manualSaveButton: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: '#5cb896',
+  },
+  manualSaveButtonDisabled: {
+    opacity: 0.68,
+  },
+  manualSaveButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '900',
+  },
   manualHeroCard: {
     backgroundColor: colors.brandSoft,
   },
@@ -4001,7 +9524,7 @@ const styles = StyleSheet.create({
   },
   manualHeroKcalValue: {
     color: colors.brandDark,
-    fontSize: 30,
+    fontSize: 26,
     fontWeight: '900',
   },
   manualHeroKcalUnit: {
@@ -4015,96 +9538,600 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 14,
   },
-  aboutHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginBottom: 14,
+  aboutPage: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
   },
-  aboutLogo: {
-    width: 56,
-    height: 56,
+  aboutContent: {
+    paddingBottom: 28,
+  },
+  aboutHeaderSection: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 38,
+    paddingBottom: 36,
+    marginBottom: 12,
+    backgroundColor: '#ffffff',
+  },
+  aboutLogoWrapper: {
+    width: 80,
+    height: 80,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brandSoft,
-  },
-  aboutLogoText: {
-    color: colors.brandDark,
-    fontSize: 25,
-    fontWeight: '900',
-  },
-  aboutName: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  aboutText: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 20,
     marginBottom: 12,
+    backgroundColor: '#f0fdf4',
+  },
+  aboutLogoImage: {
+    width: 80,
+    height: 80,
+  },
+  aboutAppName: {
+    color: '#1f2937',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  aboutAppVersion: {
+    marginTop: 4,
+    color: '#6b7280',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  aboutCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 18,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  aboutCardTitle: {
+    color: '#1f2937',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  aboutCardText: {
+    color: '#4b5563',
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: 'justify',
+  },
+  aboutCellGroup: {
+    minHeight: 56,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  aboutCellPressed: {
+    opacity: 0.76,
+  },
+  aboutCellTitle: {
+    color: '#1f2937',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  aboutCellValueWrap: {
+    minWidth: 0,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 6,
+  },
+  aboutCellValue: {
+    minWidth: 0,
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  aboutCellArrow: {
+    color: '#9ca3af',
+    fontSize: 22,
+    lineHeight: 24,
+  },
+  aboutCopyright: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    color: '#9ca3af',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  feedbackPage: {
+    flex: 1,
+    backgroundColor: '#f6f8fb',
+  },
+  feedbackScroll: {
+    flex: 1,
+  },
+  feedbackContent: {
+    paddingHorizontal: 12,
+    paddingTop: 14,
   },
   feedbackHero: {
     gap: 6,
-    marginBottom: 18,
+    paddingHorizontal: 4,
+    paddingTop: 10,
+    paddingBottom: 14,
   },
   feedbackHeroTitle: {
-    color: colors.text,
-    fontSize: 20,
+    color: '#111827',
+    fontSize: 21,
+    lineHeight: 28,
     fontWeight: '900',
   },
   feedbackHeroDesc: {
-    color: colors.textSecondary,
+    color: '#667085',
     fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 19,
+  },
+  feedbackCard: {
+    marginBottom: 11,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(15, 23, 42, 0.05)',
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  feedbackSectionTitle: {
+    color: '#111827',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  feedbackTitleRow: {
+    minHeight: 21,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 9,
+  },
+  feedbackCount: {
+    color: '#98a2b3',
+    fontSize: 12,
+    fontWeight: '700',
   },
   feedbackCategoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 12,
-    marginBottom: 16,
+    gap: 9,
+    marginTop: 10,
   },
   feedbackCategoryCard: {
     flexGrow: 1,
     flexBasis: '47%',
-    minHeight: 92,
+    minHeight: 63,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
+    borderColor: '#eef2f7',
+    borderRadius: 11,
     justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
   },
   feedbackCategoryCardActive: {
-    borderColor: colors.brand,
-    backgroundColor: colors.brandSoft,
+    borderColor: '#d4a574',
+    backgroundColor: '#fffaf2',
   },
   feedbackCategoryTitle: {
-    color: colors.text,
-    fontSize: 15,
+    color: '#101828',
+    fontSize: 14,
+    lineHeight: 19,
     fontWeight: '900',
   },
-  feedbackCategoryTitleActive: {
-    color: colors.brandDark,
-  },
   feedbackCategoryDesc: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 6,
+    color: '#667085',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 4,
   },
-  formHint: {
-    color: colors.textSecondary,
+  feedbackTextArea: {
+    minHeight: 130,
+    borderRadius: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    color: '#111827',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  feedbackContactArea: {
+    minHeight: 65,
+    borderRadius: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+    color: '#111827',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  feedbackCardHint: {
+    color: '#667085',
     fontSize: 12,
     lineHeight: 18,
-    marginTop: -8,
-    marginBottom: 12,
+    marginTop: 8,
   },
   formHintWarning: {
     color: colors.warning,
+  },
+  feedbackImageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+    marginTop: 10,
+  },
+  feedbackImageItem: {
+    position: 'relative',
+    width: 100,
+    height: 100,
+    overflow: 'hidden',
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+  },
+  feedbackImagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  feedbackImageRemove: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.62)',
+  },
+  feedbackImageAdd: {
+    width: 100,
+    height: 100,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#d0d5dd',
+    backgroundColor: '#f8fafc',
+  },
+  feedbackImageAddText: {
+    color: '#667085',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  feedbackDiagnosticCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  feedbackDiagnosticMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  feedbackDiagnosticDesc: {
+    color: '#667085',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  feedbackSubmitBar: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 20,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    backgroundColor: 'rgba(246, 248, 251, 0.94)',
+  },
+  feedbackSubmitButton: {
+    height: 44,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: '#d4a574',
+  },
+  feedbackSubmitButtonDisabled: {
+    backgroundColor: '#e8d5b3',
+  },
+  feedbackSubmitText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  circlePostEditPage: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  circlePostEditScroll: {
+    flex: 1,
+  },
+  circlePostEditContent: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+  },
+  circlePostEditLoadingCard: {
+    minHeight: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    marginBottom: 12,
+  },
+  circlePostEditCard: {
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  circlePostEditImageSection: {
+    paddingBottom: 10,
+  },
+  circlePostEditTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 10,
+  },
+  circlePostEditTitleLeft: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  circlePostEditSectionTitle: {
+    color: '#1f2937',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  circlePostEditSectionSubtitle: {
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  circlePostEditCount: {
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  circlePostEditImageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  circlePostEditImageItem: {
+    width: 100,
+    height: 100,
+    borderRadius: 10,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#f3f4f6',
+  },
+  circlePostEditImagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  circlePostEditImageMask: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  circlePostEditImageRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  circlePostEditImageRemoveIcon: {
+    color: '#ffffff',
+    fontSize: 20,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  circlePostEditImageAdd: {
+    width: 100,
+    height: 100,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#d1d5db',
+  },
+  circlePostEditImageAddIcon: {
+    color: '#9ca3af',
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '700',
+  },
+  circlePostEditImageAddText: {
+    marginTop: 6,
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  circlePostEditEditor: {
+    paddingBottom: 6,
+  },
+  circlePostEditTitleInput: {
+    minHeight: 28,
+    marginBottom: 10,
+    paddingVertical: 0,
+    color: '#1f2937',
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+  circlePostEditTextarea: {
+    minHeight: 140,
+    paddingTop: 0,
+    paddingBottom: 0,
+    color: '#1f2937',
+    fontSize: 15,
+    lineHeight: 25,
+    fontWeight: '500',
+  },
+  circlePostEditToggle: {
+    width: 42,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#d1d5db',
+    position: 'relative',
+    flexShrink: 0,
+  },
+  circlePostEditToggleOn: {
+    backgroundColor: '#00bc7d',
+  },
+  circlePostEditToggleKnob: {
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOpacity: 0.16,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  circlePostEditToggleKnobOn: {
+    transform: [{ translateX: 18 }],
+  },
+  circlePostEditNutritionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  circlePostEditNutritionItem: {
+    flexGrow: 1,
+    flexBasis: '47%',
+    gap: 5,
+  },
+  circlePostEditNutritionLabel: {
+    color: '#4b5563',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  circlePostEditNutritionInputWrap: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#f9fafb',
+  },
+  circlePostEditNutritionInput: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 0,
+    color: '#1f2937',
+    fontSize: 15,
+    textAlign: 'right',
+    fontWeight: '700',
+  },
+  circlePostEditNutritionUnit: {
+    minWidth: 24,
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'right',
+    fontWeight: '700',
+  },
+  circlePostEditFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 4,
+  },
+  circlePostEditDraftButton: {
+    minWidth: 88,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  circlePostEditDraftText: {
+    color: '#4b5563',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  circlePostEditSubmitButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    backgroundColor: '#00bc7d',
+    shadowColor: '#00bc7d',
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  circlePostEditSubmitButtonMuted: {
+    opacity: 0.72,
+  },
+  circlePostEditSubmitText: {
+    color: '#ffffff',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
   },
   imageBlock: {
     marginTop: 12,
@@ -4147,7 +10174,7 @@ const styles = StyleSheet.create({
   },
   imageAddIcon: {
     color: colors.brandDark,
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: '900',
   },
   imageAddText: {
@@ -4176,75 +10203,240 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: colors.surfaceMuted,
   },
-  notificationRow: {
+  interactionNotificationsPage: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 12,
+    paddingTop: 12,
+  },
+  notificationsHeader: {
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    backgroundColor: '#fff',
     flexDirection: 'row',
     alignItems: 'flex-start',
+    justifyContent: 'space-between',
     gap: 12,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
-  notificationAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  notificationsHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  notificationsTitle: {
+    fontSize: 17,
+    lineHeight: 24,
+    color: '#0f172a',
+    fontWeight: '900',
+  },
+  notificationsSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#64748b',
+  },
+  markReadButton: {
+    minHeight: 32,
+    borderRadius: 999,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brandSoft,
+    backgroundColor: '#00bc7d',
   },
-  notificationAvatarImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.surfaceMuted,
+  markReadButtonDisabled: {
+    opacity: 0.55,
   },
-  notificationAvatarText: {
-    color: colors.brandDark,
-    fontWeight: '900',
+  markReadText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#fff',
   },
   notificationTabs: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
+    minHeight: 58,
+    borderRadius: 8,
+    marginBottom: 10,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  notificationsList: {
+    flex: 1,
+  },
+  notificationsListContent: {
+    paddingBottom: 28,
+  },
+  notificationsListContentEmpty: {
+    flexGrow: 1,
   },
   notificationTabItem: {
     flex: 1,
-    minHeight: 40,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 6,
-    backgroundColor: colors.surfaceMuted,
-  },
-  notificationTabItemActive: {
-    backgroundColor: colors.brand,
-  },
-  notificationTabText: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  notificationTabTextActive: {
-    color: '#fff',
-  },
-  notificationTabBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+    minHeight: 58,
     paddingHorizontal: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brandSoft,
+    flexDirection: 'row',
+    gap: 4,
+    position: 'relative',
   },
-  notificationTabBadgeActive: {
+  notificationTabItemActive: {
     backgroundColor: '#fff',
   },
-  notificationTabBadgeText: {
-    color: colors.brandDark,
-    fontSize: 11,
+  notificationTabText: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  notificationTabTextActive: {
+    color: '#00bc7d',
     fontWeight: '900',
   },
+  notificationTabBadge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  notificationTabBadgeActive: {
+    backgroundColor: '#f0fdf4',
+  },
+  notificationTabBadgeText: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '800',
+  },
   notificationTabBadgeTextActive: {
-    color: colors.brand,
+    color: '#00bc7d',
+  },
+  notificationTabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: '50%',
+    width: 24,
+    height: 3,
+    marginLeft: -12,
+    borderRadius: 2,
+    backgroundColor: '#00bc7d',
+  },
+  notificationsState: {
+    minHeight: 260,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationsEmpty: {
+    minHeight: 260,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  notificationsEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#334155',
+  },
+  notificationsEmptySubtitle: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#64748b',
+    textAlign: 'center',
+  },
+  notificationCard: {
+    marginBottom: 10,
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  notificationCardUnread: {
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.16)',
+  },
+  notificationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  notificationAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#dcfce7',
+    overflow: 'hidden',
+  },
+  notificationAvatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceMuted,
+  },
+  notificationAvatarText: {
+    color: '#15803d',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  notificationMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  notificationTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  notificationTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+    color: '#1e293b',
+  },
+  notificationDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#00bc7d',
+  },
+  notificationContent: {
+    marginTop: 5,
+    fontSize: 13,
+    lineHeight: 21,
+    color: '#475569',
+  },
+  notificationTime: {
+    marginTop: 6,
+    fontSize: 11,
+    color: '#94a3b8',
+  },
+  loadMoreSpinner: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationListEnd: {
+    paddingVertical: 12,
+    fontSize: 11,
+    color: '#cbd5e1',
+    textAlign: 'center',
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -4277,33 +10469,917 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  rewardHero: {
-    backgroundColor: colors.brandSoft,
+  bodyRecordPage: {
+    flex: 1,
   },
-  quickRewardRow: {
+  bodyRecordScroll: {
+    flex: 1,
+  },
+  bodyRecordContent: {
+    paddingHorizontal: 14,
+  },
+  bodyRecordTopbar: {
+    minHeight: 76,
+    marginBottom: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(31, 41, 55, 0.05)',
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: '#ffffff',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  bodyRecordKicker: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  bodyRecordTitle: {
+    marginTop: 4,
+    color: '#1f2937',
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: '800',
+  },
+  bodyRecordTrendLink: {
+    minHeight: 31,
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bodyRecordTrendText: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  bodyMetricMainCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(31, 41, 55, 0.05)',
+    paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 14,
+    backgroundColor: '#ffffff',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  bodyMetricCard: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(31, 41, 55, 0.05)',
+    padding: 12,
+    backgroundColor: '#ffffff',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  bodyMetricOverviewCard: {
+    marginTop: 12,
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
+  },
+  bodyMetricMainLabel: {
+    color: '#6b7280',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  weightInputRow: {
+    minHeight: 59,
+    marginTop: 13,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+  },
+  weightMainInput: {
+    width: 150,
+    height: 59,
+    borderRadius: 12,
+    paddingVertical: 0,
+    color: '#111827',
+    fontSize: 38,
+    lineHeight: 45,
+    fontWeight: '800',
+    textAlign: 'center',
+    backgroundColor: '#f3f7f6',
+  },
+  weightMainUnit: {
+    marginLeft: 6,
+    color: '#6b7280',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '800',
+  },
+  bodyMetricSaveButton: {
+    minHeight: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#5cb896',
+    shadowOpacity: 0.24,
+    shadowRadius: 13,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  bodyMetricSaveText: {
+    color: '#ffffff',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  bodyMetricActionDisabled: {
+    opacity: 0.55,
+  },
+  bodyMetricHelper: {
+    marginTop: 9,
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
+  bodyMetricSectionHead: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  bodyMetricSectionTitle: {
+    color: '#1f2937',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  bodyMetricEmpty: {
+    paddingVertical: 24,
+    color: '#9ca3af',
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  weightDayList: {
+    marginTop: 9,
+    borderTopWidth: 1,
+    borderTopColor: '#eef2f4',
+  },
+  weightDayRow: {
+    minHeight: 52,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef2f4',
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  weightDayValue: {
+    color: '#111827',
+    fontSize: 17,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  weightDayDate: {
+    marginTop: 4,
+    color: '#9ca3af',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  weightDeleteButton: {
+    minWidth: 48,
+    minHeight: 30,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fef2f2',
+  },
+  weightDeleteText: {
+    color: '#d45c5c',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  waterTotalRow: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+  },
+  waterTotalValue: {
+    color: '#111827',
+    fontSize: 39,
+    lineHeight: 43,
+    fontWeight: '900',
+  },
+  waterTotalUnit: {
+    marginLeft: 5,
+    color: '#6b7280',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  waterProgressTrack: {
+    height: 9,
+    borderRadius: 5,
+    marginTop: 8,
+    overflow: 'hidden',
+    backgroundColor: '#e7eff5',
+  },
+  waterProgressFill: {
+    height: '100%',
+    borderRadius: 5,
+    backgroundColor: '#5c9ed4',
+  },
+  waterProgressNote: {
+    marginTop: 9,
+    color: '#6b7280',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  waterPresetGrid: {
+    marginTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  waterPresetButton: {
+    flexGrow: 1,
+    flexBasis: '45%',
+    minHeight: 52,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef6fc',
+  },
+  waterPresetText: {
+    color: '#3278ab',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  waterCustomRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  waterCustomInput: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    backgroundColor: '#f8fafc',
+    color: '#111827',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  waterCustomButton: {
+    minWidth: 76,
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#5c9ed4',
+  },
+  waterCustomButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  waterClearLink: {
+    minHeight: 30,
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff1f2',
+  },
+  waterClearText: {
+    color: '#d45c5c',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  waterLogList: {
+    marginTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  waterLogChip: {
+    minHeight: 36,
+    borderRadius: 18,
+    paddingLeft: 12,
+    paddingRight: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#eef6fc',
+  },
+  waterLogText: {
+    color: '#3278ab',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  waterLogDelete: {
+    color: '#6b7280',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '800',
+  },
+  exerciseStatsWrap: {
+    marginBottom: 12,
+  },
+  exerciseStatsCard: {
+    minHeight: 68,
+    borderRadius: 12,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 13,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 2,
   },
-  rewardActionText: {
-    color: colors.brandDark,
+  exerciseStatsIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ecfdf5',
+  },
+  exerciseStatsLabel: {
+    color: '#6b7280',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  exerciseStatsValueRow: {
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  exerciseStatsValue: {
+    color: '#111827',
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: '900',
   },
-  rewardProgressTrack: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: colors.surfaceMuted,
-    overflow: 'hidden',
-    marginTop: 14,
-    marginBottom: 10,
+  exerciseStatsUnit: {
+    marginLeft: 5,
+    color: '#f97316',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '900',
   },
-  rewardProgressFill: {
-    height: '100%',
+  exerciseStatsCount: {
+    overflow: 'hidden',
     borderRadius: 999,
-    backgroundColor: colors.brand,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#fff7ed',
+    color: '#ea580c',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '800',
+  },
+  exerciseInputSection: {
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  exerciseComposeHeader: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  exerciseComposeKicker: {
+    color: '#f97316',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  exerciseComposeTitle: {
+    marginTop: 2,
+    color: '#111827',
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: '900',
+  },
+  exerciseTrendLink: {
+    minHeight: 32,
+    borderRadius: 16,
+    paddingHorizontal: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff7ed',
+  },
+  exerciseTrendText: {
+    color: '#ea580c',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  exerciseQuickTitle: {
+    marginTop: 6,
+    color: '#6b7280',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  exerciseQuickRow: {
+    paddingTop: 8,
+    paddingRight: 8,
+    gap: 8,
+  },
+  exerciseQuickChip: {
+    minHeight: 34,
+    borderRadius: 17,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff7ed',
+  },
+  exerciseQuickChipText: {
+    color: '#ea580c',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  exerciseImagePreviewWrap: {
+    marginTop: 12,
+    position: 'relative',
+  },
+  exerciseImagePreview: {
+    width: '100%',
+    height: 160,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+  },
+  exerciseImageRemove: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(15,23,42,0.72)',
+  },
+  exerciseInputWrap: {
+    minHeight: 74,
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    backgroundColor: '#f8fafc',
+  },
+  exerciseImageButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  exerciseTextInput: {
+    flex: 1,
+    minHeight: 42,
+    maxHeight: 120,
+    paddingVertical: 7,
+    paddingHorizontal: 0,
+    color: '#111827',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  exerciseSendButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f97316',
+  },
+  exerciseSendButtonDisabled: {
+    backgroundColor: '#fed7aa',
+  },
+  exerciseRecordCard: {
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 13,
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 13,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
+  },
+  exerciseRecordCardFailed: {
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  exerciseRecordTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  exerciseRecordTitle: {
+    flex: 1,
+    minWidth: 0,
+    color: '#111827',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  exerciseRecordDivider: {
+    height: 1,
+    marginVertical: 10,
+    backgroundColor: '#eef2f7',
+  },
+  exerciseRecordBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  exercisePendingRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  exercisePendingText: {
+    flex: 1,
+    minWidth: 0,
+    color: '#6b7280',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  exerciseRefreshLink: {
+    minHeight: 30,
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff7ed',
+  },
+  exerciseRefreshText: {
+    color: '#ea580c',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  exerciseErrorText: {
+    marginTop: 8,
+    color: '#dc2626',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  exerciseEmptyState: {
+    marginTop: 18,
+    minHeight: 210,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  exerciseEmptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    marginBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  exerciseEmptyTitle: {
+    color: '#374151',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  exerciseEmptyDesc: {
+    marginTop: 6,
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  exerciseRecordsList: {
+    marginTop: 2,
+  },
+  exerciseDeleteText: {
+    overflow: 'hidden',
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#f3f4f6',
+    color: '#6b7280',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  exerciseKcalRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  exerciseKcalValue: {
+    color: '#f97316',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '900',
+  },
+  exerciseKcalUnit: {
+    marginLeft: 4,
+    color: '#ea580c',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  exerciseRecordTime: {
+    color: '#6b7280',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  exerciseReasoning: {
+    marginTop: 8,
+    color: '#6b7280',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  rewardPage: {
+    flex: 1,
+    backgroundColor: '#f6f7fb',
+  },
+  rewardPageContent: {
+    flexGrow: 1,
+    paddingTop: 12,
+    paddingHorizontal: 12,
+  },
+  rewardHero: {
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: '#0f9f6e',
+    shadowColor: '#10b981',
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  rewardHeroTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  rewardHeroSubtitle: {
+    marginTop: 5,
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  rewardHeroStats: {
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 12,
+  },
+  rewardStat: {
+    flex: 1,
+    minHeight: 62,
+    borderRadius: 10,
+    padding: 10,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  rewardStatValue: {
+    color: '#ffffff',
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '800',
+  },
+  rewardStatLabel: {
+    marginTop: 4,
+    color: 'rgba(255,255,255,0.88)',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  rewardQuickSection: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: '#172033',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 2,
+  },
+  rewardQuickHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  rewardQuickTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  rewardQuickHint: {
+    flexShrink: 1,
+    color: 'rgba(255,255,255,0.68)',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'right',
+  },
+  rewardQuickList: {
+    gap: 8,
+    marginTop: 10,
+  },
+  rewardQuickCard: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 11,
+    paddingVertical: 9,
+    paddingLeft: 12,
+    paddingRight: 9,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  rewardQuickName: {
+    color: '#ffffff',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  rewardQuickDesc: {
+    marginTop: 2,
+    color: 'rgba(255,255,255,0.72)',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  rewardQuickButton: {
+    flexShrink: 0,
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#ffffff',
+    color: '#0f9f6e',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  rewardSection: {
+    marginTop: 14,
+  },
+  rewardSectionTitle: {
+    color: '#172033',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  rewardLoading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 36,
+  },
+  rewardTaskList: {
+    gap: 10,
+    marginTop: 10,
+  },
+  rewardEmptyState: {
+    minHeight: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d8f3e6',
+    backgroundColor: '#f6fdf9',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  rewardEmptyText: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  rewardTaskCard: {
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: colors.surface,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
+  },
+  rewardTaskHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  rewardTaskName: {
+    color: '#172033',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  rewardTaskReward: {
+    marginTop: 4,
+    color: '#0f9f6e',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  rewardTaskStatus: {
+    flexShrink: 0,
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    backgroundColor: '#ecfdf5',
+    color: '#0f9f6e',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  rewardTaskMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 10,
+  },
+  rewardTaskMetaText: {
+    flexShrink: 1,
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  rewardTaskButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 42,
+    marginTop: 12,
+    borderRadius: 10,
+    backgroundColor: '#0f9f6e',
+  },
+  rewardTaskButtonDisabled: {
+    backgroundColor: '#cbd5e1',
+  },
+  rewardTaskButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
   },
   editItemBox: {
     marginTop: 12,
@@ -4344,6 +11420,746 @@ const styles = StyleSheet.create({
   nutritionGrid: {
     marginTop: 8,
   },
+  healthProfilePage: {
+    flex: 1,
+    backgroundColor: '#f8f9fa',
+  },
+  healthProfileLoading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  healthProfileProgressWrap: {
+    minHeight: 72,
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  healthProfileProgressDots: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  healthProfileProgressDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#e2e8f0',
+  },
+  healthProfileProgressDotActive: {
+    backgroundColor: '#00bc7d',
+  },
+  healthProfileProgressDotCurrent: {
+    transform: [{ scale: 1.35 }],
+  },
+  healthProfileProgressText: {
+    minWidth: 42,
+    marginLeft: 12,
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  healthProfileScroll: {
+    flex: 1,
+  },
+  healthProfileStepCard: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  healthProfileStepTitle: {
+    color: '#1a1a1a',
+    fontSize: 22,
+    lineHeight: 29,
+    fontWeight: '700',
+  },
+  healthProfileStepSubtitle: {
+    marginTop: 6,
+    marginBottom: 24,
+    color: '#94a3b8',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  healthProfileChoiceList: {
+    gap: 10,
+  },
+  healthProfileOptionGrid: {
+    gap: 8,
+  },
+  healthProfileOptionCard: {
+    width: '100%',
+    minHeight: 72,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#ffffff',
+  },
+  healthProfileOptionCardBig: {
+    minHeight: 64,
+    paddingVertical: 15,
+  },
+  healthProfileOptionCardSmall: {
+    minHeight: 56,
+    paddingVertical: 11,
+  },
+  healthProfileOptionCardActive: {
+    borderColor: '#00bc7d',
+    shadowColor: '#00bc7d',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  healthProfileChoiceMark: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  healthProfileChoiceMarkActive: {
+    borderColor: '#00bc7d',
+    backgroundColor: '#00bc7d',
+  },
+  healthProfileChoiceMarkInner: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#ffffff',
+  },
+  healthProfileOptionIcon: {
+    width: 26,
+    color: '#00bc7d',
+    fontSize: 22,
+    lineHeight: 28,
+    textAlign: 'center',
+  },
+  healthProfileOptionIconSmall: {
+    fontSize: 18,
+    lineHeight: 24,
+  },
+  healthProfileOptionCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  healthProfileOptionLabel: {
+    color: '#334155',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  healthProfileOptionLabelActive: {
+    color: '#1a1a1a',
+    fontWeight: '700',
+  },
+  healthProfileOptionDesc: {
+    marginTop: 3,
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  healthProfileNumberCard: {
+    minHeight: 176,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#cbd5e1',
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  healthProfileNumberInput: {
+    minWidth: 120,
+    color: '#1a1a1a',
+    fontSize: 46,
+    lineHeight: 58,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  healthProfileNumberUnit: {
+    marginTop: 2,
+    color: '#00bc7d',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  healthProfileNumberRange: {
+    marginTop: 8,
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  healthProfileInputCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#ffffff',
+  },
+  healthProfileInputHint: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  healthProfileTextarea: {
+    minHeight: 102,
+    color: '#1a1a1a',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  healthProfileSkipHint: {
+    marginTop: 12,
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  healthProfileRoutineRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  healthProfileRoutineField: {
+    flex: 1,
+    minHeight: 110,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 14,
+    backgroundColor: '#ffffff',
+  },
+  healthProfileRoutineLabel: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  healthProfileRoutineInputRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  healthProfileRoutineInput: {
+    flex: 1,
+    color: '#1a1a1a',
+    fontSize: 34,
+    lineHeight: 42,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  healthProfileRoutineUnit: {
+    paddingBottom: 7,
+    color: '#00bc7d',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  healthProfileTargetPanel: {
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 14,
+    backgroundColor: '#ffffff',
+  },
+  healthProfileTargetTitle: {
+    color: '#1a1a1a',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  healthProfileTargetSubtitle: {
+    marginTop: 3,
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  healthProfileTargetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  healthProfileTargetField: {
+    flexGrow: 1,
+    flexBasis: '47%',
+    minHeight: 72,
+    borderRadius: 10,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    backgroundColor: '#f8fafc',
+  },
+  healthProfileTargetLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  healthProfileTargetInputRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  healthProfileTargetInput: {
+    flex: 1,
+    minWidth: 0,
+    color: '#1a1a1a',
+    fontSize: 19,
+    lineHeight: 25,
+    fontWeight: '800',
+  },
+  healthProfileTargetUnit: {
+    paddingBottom: 3,
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  healthProfileReportLink: {
+    minHeight: 42,
+    borderRadius: 10,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    backgroundColor: '#ecfdf5',
+  },
+  healthProfileReportLinkText: {
+    flex: 1,
+    color: '#047857',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  healthProfileReportLinkArrow: {
+    color: '#047857',
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: '600',
+  },
+  healthProfileFooter: {
+    marginTop: 'auto',
+    paddingTop: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  healthProfileFooterSingle: {
+    justifyContent: 'flex-end',
+  },
+  healthProfilePrevButton: {
+    flex: 1,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
+  healthProfilePrevText: {
+    color: '#64748b',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  healthProfileNextButton: {
+    flex: 1,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1,
+    borderColor: '#00bc7d',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00bc7d',
+    shadowColor: '#00bc7d',
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  healthProfileNextButtonReady: {
+    backgroundColor: '#00bc7d',
+  },
+  healthProfileNextButtonDisabled: {
+    borderColor: '#e2e8f0',
+    backgroundColor: '#e2e8f0',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  healthProfileNextText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  healthProfileNextTextDisabled: {
+    color: '#94a3b8',
+  },
+  expiryPage: {
+    flex: 1,
+    backgroundColor: '#f6f8fa',
+  },
+  expiryScroll: {
+    flex: 1,
+    backgroundColor: '#f6f8fa',
+  },
+  expiryContent: {
+    paddingTop: 16,
+  },
+  expiryHero: {
+    minHeight: 86,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 8,
+    backgroundColor: '#e7faf3',
+  },
+  expiryHeroKicker: {
+    marginBottom: 5,
+    color: '#5b7b71',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  expiryHeroTitle: {
+    color: '#16332a',
+    fontSize: 22,
+    lineHeight: 29,
+    fontWeight: '800',
+  },
+  expiryHeroAdd: {
+    minWidth: 72,
+    height: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 999,
+    backgroundColor: '#00bc7d',
+    shadowColor: '#00bc7d',
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  expiryHeroAddText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  expirySummaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  expirySummaryCard: {
+    flexGrow: 1,
+    flexBasis: '47%',
+    minHeight: 86,
+    justifyContent: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
+  },
+  expirySummaryValue: {
+    color: '#16332a',
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: '800',
+  },
+  expirySummaryLabel: {
+    marginTop: 5,
+    color: '#61756d',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  expiryPreviewPanel: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
+  },
+  expiryPreviewRow: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#eef2f1',
+  },
+  expiryPreviewName: {
+    flex: 1,
+    color: '#16332a',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  expiryPreviewHint: {
+    flexShrink: 0,
+    color: '#ff7a00',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  expirySection: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  expirySectionTitle: {
+    marginBottom: 10,
+    color: '#314740',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  expirySectionTitleNoMargin: {
+    color: '#314740',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  expirySectionHeader: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  expirySectionToggle: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  expiryItemCard: {
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
+  },
+  expiryItemHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  expiryItemTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  expiryItemTitle: {
+    maxWidth: '100%',
+    color: '#16332a',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  expiryItemCategory: {
+    maxWidth: 92,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: '#eef8f4',
+  },
+  expiryItemCategoryText: {
+    color: '#4f6b62',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  expiryItemBadge: {
+    maxWidth: 96,
+    flexShrink: 0,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  expiryItemBadge_expired: {
+    backgroundColor: '#ffe7e7',
+  },
+  expiryItemBadge_today: {
+    backgroundColor: '#fff2df',
+  },
+  expiryItemBadge_soon: {
+    backgroundColor: '#fff7db',
+  },
+  expiryItemBadge_fresh: {
+    backgroundColor: '#ecfdf5',
+  },
+  expiryItemBadge_consumed: {
+    backgroundColor: '#ecfdf5',
+  },
+  expiryItemBadge_discarded: {
+    backgroundColor: '#f3f4f6',
+  },
+  expiryItemBadgeText: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
+  },
+  expiryItemBadgeText_expired: {
+    color: '#d9485f',
+  },
+  expiryItemBadgeText_today: {
+    color: '#ff7a00',
+  },
+  expiryItemBadgeText_soon: {
+    color: '#b7791f',
+  },
+  expiryItemBadgeText_fresh: {
+    color: '#15803d',
+  },
+  expiryItemBadgeText_consumed: {
+    color: '#15803d',
+  },
+  expiryItemBadgeText_discarded: {
+    color: '#6b7280',
+  },
+  expiryItemMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+    marginTop: 9,
+  },
+  expiryItemMetaText: {
+    color: '#61756d',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  expiryItemHint: {
+    marginTop: 8,
+    color: '#16332a',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '800',
+  },
+  expiryItemNote: {
+    marginTop: 6,
+    color: '#61756d',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  expiryItemActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  expiryActionGhost: {
+    flex: 1,
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderRadius: 9,
+    backgroundColor: '#f3f7f5',
+  },
+  expiryActionGhostText: {
+    color: '#314740',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  expiryActionPrimary: {
+    flex: 1,
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9,
+    backgroundColor: '#00bc7d',
+  },
+  expiryActionPrimaryText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  expiryEmptyCard: {
+    minHeight: 132,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    shadowColor: '#1f2937',
+    shadowOpacity: 0.06,
+    shadowRadius: 15,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
+  },
+  expiryFailedCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#fed7aa',
+  },
+  expiryEmptyTitle: {
+    color: '#16332a',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  expiryEmptyDesc: {
+    marginTop: 7,
+    color: '#61756d',
+    fontSize: 12,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  expiryRetryButton: {
+    minWidth: 116,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    borderRadius: 999,
+    backgroundColor: '#00bc7d',
+  },
+  expiryRetryText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
   sectionTitle: {
     color: colors.text,
     fontSize: 18,
@@ -4359,7 +12175,7 @@ const styles = StyleSheet.create({
   },
   bigNumber: {
     color: colors.brandDark,
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: '900',
   },
   subtitle: {
@@ -4375,10 +12191,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     color: colors.danger,
     lineHeight: 20,
-  },
-  empty: {
-    color: colors.textMuted,
-    textAlign: 'center',
   },
   kcal: {
     color: colors.brandDark,
@@ -4460,36 +12272,258 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   textarea: {
-    minHeight: 104,
+    minHeight: 88,
     paddingTop: 12,
     paddingBottom: 12,
   },
-  textQuickTags: {
-    marginTop: -4,
-    marginBottom: 14,
+  textRecordPage: {
+    flex: 1,
+    backgroundColor: '#f0fdf4',
   },
-  textQuickTagsLabel: {
-    color: colors.textSecondary,
+  textRecordScroll: {
+    flex: 1,
+  },
+  textRecordContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  textRecordQuotaBar: {
+    minHeight: 44,
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d1fae5',
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 18,
+  },
+  textRecordQuotaBarWarn: {
+    borderColor: '#fed7aa',
+    backgroundColor: '#fff7ed',
+  },
+  textRecordQuotaBarExhausted: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+  },
+  textRecordQuotaText: {
+    color: '#374151',
     fontSize: 12,
-    fontWeight: '800',
-    marginBottom: 8,
+    lineHeight: 18,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  textQuickTagsRow: {
+  textRecordQuotaTextExhausted: {
+    color: '#b91c1c',
+  },
+  textRecordInputSection: {
+    marginBottom: 20,
+  },
+  textRecordSectionTitle: {
+    marginBottom: 10,
+    paddingLeft: 4,
+    color: '#1a1a2e',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  textRecordInputCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.15)',
+    backgroundColor: '#ffffff',
+    padding: 12,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 1,
+  },
+  textRecordFoodInput: {
+    minHeight: 116,
+    paddingTop: 0,
+    paddingBottom: 24,
+    color: '#1a1a2e',
+    fontSize: 15,
+    lineHeight: 24,
+    fontWeight: '600',
+  },
+  textRecordAmountInput: {
+    minHeight: 82,
+    paddingTop: 0,
+    color: '#1a1a2e',
+    fontSize: 15,
+    lineHeight: 24,
+    fontWeight: '600',
+  },
+  textRecordCharCount: {
+    position: 'absolute',
+    right: 14,
+    bottom: 10,
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  textRecordDateCard: {
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  textRecordDateInput: {
+    paddingVertical: 0,
+    color: '#1a1a2e',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+  },
+  textRecordMealGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
+  textRecordMealItem: {
+    width: '31.7%',
+    minHeight: 78,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.12)',
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  textRecordMealItemActive: {
+    borderColor: '#00bc7d',
+    backgroundColor: '#effdf7',
+  },
+  textRecordMealName: {
+    color: '#4a5565',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  textRecordMealNameActive: {
+    color: '#00bc7d',
+  },
+  textRecordOptionWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  textRecordOption: {
+    minHeight: 42,
+    minWidth: 76,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.12)',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  textRecordOptionActive: {
+    borderColor: '#00bc7d',
+    backgroundColor: '#00bc7d',
+  },
+  textRecordOptionText: {
+    color: '#4a5565',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  textRecordOptionTextActive: {
+    color: '#ffffff',
+  },
+  textRecordPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.98 }],
+  },
+  textRecordBottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 188, 125, 0.12)',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  textRecordSubmitButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: '#00bc7d',
+    shadowColor: '#00bc7d',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  textRecordSubmitButtonDisabled: {
+    backgroundColor: '#e5e7eb',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  textRecordSubmitText: {
+    color: '#ffffff',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  textRecordSubmitTextDisabled: {
+    color: '#9ca3af',
+  },
+  textQuickTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: -2,
+    marginBottom: 20,
+  },
+  textQuickTagsLabel: {
+    color: '#6a7282',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  textQuickTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    flex: 1,
+  },
   textQuickTag: {
-    minHeight: 34,
+    minHeight: 32,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
-    backgroundColor: colors.brandSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 188, 125, 0.2)',
+    backgroundColor: 'rgba(0, 188, 125, 0.08)',
   },
   textQuickTagText: {
-    color: colors.brandDark,
-    fontSize: 12,
+    color: '#00a86b',
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: '900',
   },
   segment: {
@@ -4571,6 +12605,14 @@ const styles = StyleSheet.create({
   manualAdjustText: {
     color: colors.text,
     fontWeight: '800',
+  },
+  foodChoiceLegacyCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 12,
+    marginBottom: 10,
   },
   foodChoiceAdd: {
     width: 36,

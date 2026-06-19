@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Image, Keyboard, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -13,6 +13,7 @@ import { colors } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
 
 const DEFAULT_SMS_COOLDOWN_SECONDS = 30
+const appIcon = require('../../assets/icon.png')
 
 export function LoginScreen() {
   const insets = useSafeAreaInsets()
@@ -33,6 +34,8 @@ export function LoginScreen() {
   const [inviteCode, setInviteCode] = useState('')
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+  const scrollRef = useRef<ScrollView>(null)
 
   useEffect(() => {
     const applyInviteCodeFromUrl = (url?: string | null) => {
@@ -52,6 +55,28 @@ export function LoginScreen() {
     }, 1000)
     return () => clearTimeout(timer)
   }, [smsCooldownSeconds])
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0)
+    })
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0)
+    })
+    return () => {
+      showSubscription.remove()
+      hideSubscription.remove()
+    }
+  }, [])
+
+  const scrollLoginFieldIntoView = useCallback((field: 'phone' | 'code') => {
+    const y = field === 'code' ? 270 : 210
+    const scroll = () => scrollRef.current?.scrollTo({ y, animated: true })
+    setTimeout(scroll, 80)
+    setTimeout(scroll, 260)
+  }, [])
 
   const run = async (fn: () => Promise<void>, fallback: string) => {
     setLoading(true)
@@ -119,21 +144,34 @@ export function LoginScreen() {
   const sendCodeDisabled = smsSending || smsCooldownSeconds > 0 || !sendCodeReady
   const sendCodeLabel = smsCooldownSeconds > 0 ? `${smsCooldownSeconds}s 后重发` : '发送验证码'
 
+  const keyboardBottomPadding = keyboardHeight > 0 ? keyboardHeight + insets.bottom + 32 : insets.bottom + 40
+
   return (
-    <ScrollView
+    <KeyboardAvoidingView
       style={styles.screen}
-      contentContainerStyle={[
-        styles.content,
-        { paddingTop: Math.max(insets.top + 42, 76), paddingBottom: insets.bottom + 40 },
-      ]}
-      keyboardShouldPersistTaps="handled"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}
     >
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroller}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: Math.max(insets.top + 96, 132), paddingBottom: keyboardBottomPadding },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
       <View style={styles.hero}>
-        <Text style={styles.brand}>食探</Text>
-        <Text style={styles.tagline}>手机号验证后自动登录</Text>
+        <View style={styles.logoWrapper}>
+          <Image source={appIcon} style={styles.logoImage} resizeMode="contain" />
+        </View>
+        <Text style={styles.brand}>智健食探</Text>
+        <Text style={styles.tagline}>记录饮食，连接健康</Text>
       </View>
 
       <View style={styles.form}>
+        <Text style={styles.formHint}>手机号验证登录 / 注册</Text>
         <View style={styles.phoneRow}>
           <Text style={styles.countryCode}>+86</Text>
           <View style={styles.inputDivider} />
@@ -146,6 +184,7 @@ export function LoginScreen() {
             keyboardType="phone-pad"
             style={styles.lineInput}
             placeholderTextColor={colors.textMuted}
+            onFocus={() => scrollLoginFieldIntoView('phone')}
           />
         </View>
 
@@ -158,6 +197,7 @@ export function LoginScreen() {
             maxLength={6}
             style={styles.lineInput}
             placeholderTextColor={colors.textMuted}
+            onFocus={() => scrollLoginFieldIntoView('code')}
           />
           <Pressable
             disabled={sendCodeDisabled}
@@ -198,13 +238,12 @@ export function LoginScreen() {
           disabled={loading}
           onPress={loginWithWechatAccount}
           style={({ pressed }) => [
-            styles.wechatButton,
+            styles.skipLoginButton,
             pressed && !loading && styles.pressed,
             loading && styles.disabled,
           ]}
         >
-          <Text style={styles.wechatMark}>微信</Text>
-          <Text style={styles.wechatButtonText}>微信一键登录</Text>
+          <Text style={styles.skipLoginText}>微信一键登录</Text>
         </Pressable>
 
         <View style={styles.agreementRow}>
@@ -246,7 +285,8 @@ export function LoginScreen() {
           <Text style={styles.apiText}>API: {API_BASE_URL}</Text>
         </View>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -292,32 +332,56 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
+  scroller: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 26,
+    paddingHorizontal: 20,
   },
   hero: {
-    marginTop: 66,
-    marginBottom: 76,
+    alignItems: 'center',
+    marginBottom: 94,
+  },
+  logoWrapper: {
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    borderRadius: 16,
+    backgroundColor: '#f0fdf4',
+  },
+  logoImage: {
+    width: 80,
+    height: 80,
   },
   brand: {
-    color: colors.brand,
-    fontSize: 46,
-    fontWeight: '900',
+    color: '#333333',
+    fontSize: 20,
+    fontWeight: '800',
     textAlign: 'center',
   },
   tagline: {
-    marginTop: 16,
-    color: colors.text,
-    fontSize: 20,
-    lineHeight: 28,
+    marginTop: 6,
+    color: '#999999',
+    fontSize: 14,
+    lineHeight: 20,
     textAlign: 'center',
   },
   form: {
     gap: 0,
   },
+  formHint: {
+    marginBottom: 8,
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
   phoneRow: {
-    minHeight: 56,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
@@ -325,7 +389,8 @@ const styles = StyleSheet.create({
   },
   countryCode: {
     color: colors.text,
-    fontSize: 19,
+    fontSize: 16,
+    fontWeight: '700',
   },
   inputDivider: {
     width: 1,
@@ -334,7 +399,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#d1d5db',
   },
   codeRow: {
-    minHeight: 56,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: 1,
@@ -344,12 +409,12 @@ const styles = StyleSheet.create({
   lineInput: {
     flex: 1,
     color: colors.text,
-    fontSize: 19,
-    paddingVertical: 10,
+    fontSize: 16,
+    paddingVertical: 8,
   },
   codeTextButton: {
-    minWidth: 104,
-    minHeight: 44,
+    minWidth: 98,
+    minHeight: 38,
     alignItems: 'flex-end',
     justifyContent: 'center',
     paddingLeft: 12,
@@ -363,52 +428,43 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   primaryButton: {
-    minHeight: 54,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 999,
     backgroundColor: colors.brand,
-    marginTop: 28,
+    marginTop: 24,
   },
   primaryButtonText: {
     color: '#fff',
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
   },
-  wechatButton: {
-    minHeight: 54,
-    flexDirection: 'row',
-    gap: 10,
+  skipLoginButton: {
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 999,
-    backgroundColor: '#f3f4f6',
-    marginTop: 16,
+    marginTop: 14,
   },
-  wechatMark: {
-    color: colors.brandDark,
+  skipLoginText: {
+    color: '#666666',
     fontSize: 14,
-    fontWeight: '900',
-  },
-  wechatButtonText: {
-    color: colors.text,
-    fontSize: 16,
     fontWeight: '700',
   },
   agreementRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    marginTop: 28,
+    marginTop: 24,
   },
   checkbox: {
-    width: 22,
-    height: 22,
+    width: 16,
+    height: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: '#d1d5db',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
     marginTop: 2,
   },
   checkboxActive: {
@@ -417,18 +473,18 @@ const styles = StyleSheet.create({
   },
   checkboxText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 11,
     fontWeight: '900',
-    lineHeight: 18,
+    lineHeight: 13,
   },
   agreementText: {
     flex: 1,
-    color: colors.textSecondary,
-    fontSize: 13,
+    color: '#999999',
+    fontSize: 12,
     lineHeight: 19,
   },
   linkText: {
-    color: colors.blue,
+    color: colors.brand,
     fontWeight: '800',
   },
   pressed: {
@@ -440,7 +496,7 @@ const styles = StyleSheet.create({
   debugSection: {
     borderTopWidth: 1,
     borderTopColor: '#eef2f7',
-    marginTop: 220,
+    marginTop: 160,
     paddingTop: 20,
   },
   debugSectionTitle: {

@@ -1,20 +1,35 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import {
-  getMealTypeLabel,
-  inferDefaultMealTypeFromLocalTime,
   type ActivityTiming,
   type ExecutionMode,
   type MealType,
+  type MembershipStatus,
+  inferDefaultMealTypeFromLocalTime,
 } from '@food-link/core'
-import { Camera, Check, FileText, Image as ImageIcon, RotateCcw, Sparkles, Utensils, Wifi, type LucideIcon } from 'lucide-react-native'
+import {
+  Camera,
+  Check,
+  Coffee,
+  Cookie,
+  Dumbbell,
+  History,
+  Image as ImageIcon,
+  Info,
+  Moon,
+  RotateCcw,
+  Soup,
+  Sparkles,
+  Utensils,
+  Wifi,
+  X,
+  type LucideIcon,
+} from 'lucide-react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { apiClient } from '../api'
-import { AppButton } from '../components/AppButton'
-import { Card } from '../components/Card'
-import { Page } from '../components/Page'
 import { SHOW_DEBUG_LOGIN } from '../config'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
@@ -26,30 +41,46 @@ import { userFacingErrorMessage } from '../utils/errors'
 type AnalyzeRoute = RouteProp<RootStackParamList, 'Analyze'>
 type AnalyzeBaseMode = 'fast' | 'standard' | 'strict'
 type AnalyzeImageAsset = ImagePicker.ImagePickerAsset
+type HelpSheetState = { title: string; content: string } | null
 
 const MAX_ANALYZE_IMAGES = 3
 
 const MODE_OPTIONS: Array<{ value: AnalyzeBaseMode; label: string; desc: string }> = [
-  { value: 'fast', label: '快速', desc: '更快出结果' },
-  { value: 'standard', label: '普通', desc: '日常推荐' },
-  { value: 'strict', label: '精准', desc: '更细估重' },
+  { value: 'fast', label: '快速', desc: '更快出结果，适合先记录下来。' },
+  { value: 'standard', label: '普通', desc: '日常推荐，兼顾速度和准确度。' },
+  { value: 'strict', label: '精准', desc: '更细估重，适合复杂餐盘。' },
 ]
 
-const MEAL_OPTIONS: Array<{ value: MealType; label: string }> = [
-  { value: 'breakfast', label: '早餐' },
-  { value: 'morning_snack', label: '早加餐' },
-  { value: 'lunch', label: '午餐' },
-  { value: 'afternoon_snack', label: '午加餐' },
-  { value: 'dinner', label: '晚餐' },
-  { value: 'evening_snack', label: '晚加餐' },
+const MEAL_OPTIONS: Array<{ value: MealType; label: string; icon: LucideIcon }> = [
+  { value: 'breakfast', label: '早餐', icon: Coffee },
+  { value: 'morning_snack', label: '早加餐', icon: Cookie },
+  { value: 'lunch', label: '午餐', icon: Soup },
+  { value: 'afternoon_snack', label: '午加餐', icon: Utensils },
+  { value: 'dinner', label: '晚餐', icon: Moon },
+  { value: 'evening_snack', label: '晚加餐', icon: Cookie },
 ]
 
-const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string }> = [
-  { value: 'post_workout', label: '练后' },
-  { value: 'daily', label: '日常' },
-  { value: 'before_sleep', label: '睡前' },
-  { value: 'none', label: '无' },
+const ACTIVITY_TIMING_OPTIONS: Array<{ value: ActivityTiming; label: string; icon: LucideIcon }> = [
+  { value: 'post_workout', label: '练后', icon: Dumbbell },
+  { value: 'daily', label: '日常', icon: Check },
+  { value: 'before_sleep', label: '睡前', icon: Moon },
+  { value: 'none', label: '无', icon: Sparkles },
 ]
+
+const HELP_TEXT = {
+  photo: [
+    '1. 尽量让食物完整出现在画面里。',
+    '2. 光线偏暗时打开闪光灯或换到明亮位置。',
+    '3. 多道菜可以一次拍全，也可以补充多张角度图。',
+  ].join('\n'),
+  text: '补充“学校食堂大份”“额外加辣油”“饭盒约 500ml”这类上下文，AI 会用它修正重量和食材判断。',
+  webSearch: '联网校准会参考品牌、包装规格或常见菜品信息，适合外卖、预包装食品和校园餐。',
+  separate: '分项模式只在精准模式下可用，会尽量把每一种食物拆开估重。',
+  multiView: '多视角辅助适合上传 2-3 张同一餐盘的不同角度，帮助判断隐藏食材和体积。',
+  ratio: 'AI 摄入比例会给出可食用比例建议，适合吃剩、多人分食或只吃部分餐品的场景。',
+  meal: '餐次会影响当日记录归类，也会作为营养建议的参考。',
+  timing: '运动时机会影响补给建议，例如练后更关注蛋白质与碳水恢复。',
+}
 
 const resolveExecutionModeFromOptions = (
   baseMode: AnalyzeBaseMode,
@@ -67,10 +98,12 @@ export function AnalyzeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const route = useRoute<AnalyzeRoute>()
   const dialog = useAppDialog()
+  const insets = useSafeAreaInsets()
   const [loading, setLoading] = useState(false)
+  const [membershipLoading, setMembershipLoading] = useState(false)
+  const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [imageAssets, setImageAssets] = useState<AnalyzeImageAsset[]>([])
   const [mealType, setMealType] = useState<MealType>(route.params?.mealType || inferDefaultMealTypeFromLocalTime())
-  const [date, setDate] = useState(route.params?.date || todayKey())
   const [baseMode, setBaseMode] = useState<AnalyzeBaseMode>('standard')
   const [webSearchEnabled, setWebSearchEnabled] = useState(false)
   const [separateFoodEstimateEnabled, setSeparateFoodEstimateEnabled] = useState(false)
@@ -78,23 +111,17 @@ export function AnalyzeScreen() {
   const [suggestRatioEnabled, setSuggestRatioEnabled] = useState(true)
   const [activityTiming, setActivityTiming] = useState<ActivityTiming>('none')
   const [additionalContext, setAdditionalContext] = useState('')
+  const [helpSheet, setHelpSheet] = useState<HelpSheetState>(null)
+  const date = route.params?.date || todayKey()
+
   const executionMode = useMemo(
     () => resolveExecutionModeFromOptions(baseMode, webSearchEnabled, separateFoodEstimateEnabled),
     [baseMode, webSearchEnabled, separateFoodEstimateEnabled],
   )
-
-  useEffect(() => {
-    if (route.params?.source) {
-      void pickImages(route.params.source)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    if (baseMode !== 'strict' && separateFoodEstimateEnabled) {
-      setSeparateFoodEstimateEnabled(false)
-    }
-  }, [baseMode, separateFoodEstimateEnabled])
+  const quota = useMemo(() => buildAnalyzeQuota(membership), [membership])
+  const isQuotaExhausted = Boolean(quota && quota.remaining <= 0)
+  const confirmDisabled = loading || imageAssets.length === 0 || isQuotaExhausted
+  const bottomInset = Math.max(insets.bottom, 12)
 
   const pickImages = async (source: 'camera' | 'library') => {
     const permission = source === 'camera'
@@ -120,13 +147,48 @@ export function AnalyzeScreen() {
     setImageAssets((current) => [...current, ...nextAssets].slice(0, MAX_ANALYZE_IMAGES))
   }
 
+  useEffect(() => {
+    let active = true
+    setMembershipLoading(true)
+    apiClient.getMyMembership(date)
+      .then((status) => {
+        if (active) setMembership(status)
+      })
+      .catch(() => {
+        if (active) setMembership(null)
+      })
+      .finally(() => {
+        if (active) setMembershipLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [date])
+
+  useEffect(() => {
+    if (route.params?.source) {
+      void pickImages(route.params.source)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (baseMode !== 'strict' && separateFoodEstimateEnabled) {
+      setSeparateFoodEstimateEnabled(false)
+    }
+  }, [baseMode, separateFoodEstimateEnabled])
+
   const removeImage = (uri: string) => {
     setImageAssets((current) => current.filter((asset) => asset.uri !== uri))
   }
 
   const submitAnalyze = async () => {
     if (imageAssets.length === 0) {
-      await dialog.alert('请先选择图片', '可以拍照或从相册选择，最多支持 3 张图片一起识别。', 'warning')
+      await dialog.alert('请先选择图片', `可以拍照或从相册选择，最多支持 ${MAX_ANALYZE_IMAGES} 张图片一起识别。`, 'warning')
+      return
+    }
+    if (isQuotaExhausted) {
+      await dialog.alert('积分不足', '当前可用积分不足，暂时不能发起图片分析。', 'warning')
       return
     }
     setLoading(true)
@@ -189,319 +251,398 @@ export function AnalyzeScreen() {
   }
 
   return (
-    <Page title="记录" subtitle={`${date} · ${getMealTypeLabel(mealType)}`}>
-      <Card>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>记录餐食</Text>
-          <Text style={styles.badge}>AI 分析</Text>
-        </View>
-        <Text style={styles.subtitle}>先选择图片，再按需要调整识别模式和补充信息。后台会继续分析，离开页面也不会取消任务。</Text>
-        {imageAssets.length > 0 ? (
-          <View style={styles.previewGrid}>
-            {imageAssets.map((asset, index) => (
-              <View key={`${asset.uri}-${index}`} style={styles.previewTile}>
-                <Image source={{ uri: asset.uri }} style={styles.previewImage} />
-                <Pressable style={styles.removeImageButton} onPress={() => removeImage(asset.uri)}>
-                  <Text style={styles.removeImageText}>×</Text>
+    <View style={styles.analyzePage}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.content, { paddingBottom: 170 + bottomInset }]}
+      >
+        {quota ? (
+          <QuotaBar
+            quota={quota}
+            executionMode={executionMode}
+            isPro={Boolean(membership?.is_pro)}
+            exhausted={isQuotaExhausted}
+          />
+        ) : membershipLoading ? <View style={styles.quotaSpacer} /> : null}
+
+        <Pressable style={({ pressed }) => [styles.photoTipBar, pressed && styles.pressed]} onPress={() => setHelpSheet({ title: '摄影技巧', content: HELP_TEXT.photo })}>
+          <View style={styles.photoTipDot} />
+          <Text style={styles.photoTipText}>摄影技巧</Text>
+          <Text style={styles.photoTipAction}>查看</Text>
+        </Pressable>
+
+        <View style={styles.imagePreviewSection}>
+          {imageAssets.length > 0 ? (
+            <View style={styles.imageGrid}>
+              {imageAssets.map((asset, index) => (
+                <View key={`${asset.uri}-${index}`} style={[styles.gridItem, multiViewEnabled && styles.gridItemMultiview]}>
+                  <Image source={{ uri: asset.uri }} style={styles.gridImage} />
+                  <Pressable style={styles.removeButton} onPress={() => removeImage(asset.uri)}>
+                    <X size={14} color="#fff" strokeWidth={3} />
+                  </Pressable>
+                </View>
+              ))}
+              {imageAssets.length < MAX_ANALYZE_IMAGES ? (
+                <Pressable style={({ pressed }) => [styles.gridItem, styles.addImageTile, pressed && styles.pressed]} onPress={() => pickImages('library')}>
+                  <Text style={styles.addImageIcon}>+</Text>
+                  <Text style={styles.addImageText}>添加</Text>
                 </Pressable>
+              ) : null}
+            </View>
+          ) : (
+            <View style={styles.emptyPreview}>
+              <Camera size={34} color="#9ca3af" strokeWidth={1.8} />
+              <Text style={styles.emptyPreviewTitle}>点击拍摄/上传食物</Text>
+              <Text style={styles.emptyPreviewText}>相册上传最多支持 {MAX_ANALYZE_IMAGES} 张，多图将作为一次识别提交</Text>
+              <View style={styles.placeholderActions}>
+                <PickerPill icon={Camera} label="拍照" onPress={() => pickImages('camera')} />
+                <PickerPill icon={ImageIcon} label="相册" onPress={() => pickImages('library')} />
               </View>
+            </View>
+          )}
+
+          <View style={styles.qualityZone}>
+            <View style={styles.modeCompact}>
+              <View style={styles.modeCompactLeft}>
+                <Text style={styles.modeCompactTitle}>识别模式</Text>
+                <Text style={styles.modeSummary}>{executionModeLabel(executionMode)}</Text>
+              </View>
+              <View style={styles.modeSwitchRow}>
+                {MODE_OPTIONS.map((option) => (
+                  <ModeSwitchItem
+                    key={option.value}
+                    label={option.label}
+                    active={baseMode === option.value}
+                    onPress={() => setBaseMode(option.value)}
+                  />
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.analysisOptionsRow}>
+              <AnalysisOptionCard
+                title="联网校准"
+                enabled={webSearchEnabled}
+                onPress={() => setWebSearchEnabled((value) => !value)}
+                onHelpPress={() => setHelpSheet({ title: '联网校准', content: HELP_TEXT.webSearch })}
+              />
+              <AnalysisOptionCard
+                title="分项模式"
+                enabled={separateFoodEstimateEnabled}
+                disabled={baseMode !== 'strict'}
+                onPress={() => setSeparateFoodEstimateEnabled((value) => !value)}
+                onHelpPress={() => setHelpSheet({ title: '分项模式', content: HELP_TEXT.separate })}
+              />
+            </View>
+
+            <CompactSwitchRow
+              title="多视角辅助"
+              icon={RotateCcw}
+              enabled={multiViewEnabled}
+              onPress={() => setMultiViewEnabled((value) => !value)}
+              onHelpPress={() => setHelpSheet({ title: '多视角辅助', content: HELP_TEXT.multiView })}
+            />
+            <CompactSwitchRow
+              title="AI摄入比例"
+              icon={Sparkles}
+              enabled={suggestRatioEnabled}
+              onPress={() => setSuggestRatioEnabled((value) => !value)}
+              onHelpPress={() => setHelpSheet({ title: 'AI 摄入比例', content: HELP_TEXT.ratio })}
+            />
+          </View>
+        </View>
+
+        <View style={styles.detailsSection}>
+          <SectionHeader title="文字补充" onHelpPress={() => setHelpSheet({ title: '文字补充', content: HELP_TEXT.text })} />
+          <View style={styles.inputWrapper}>
+            <TextInput
+              value={additionalContext}
+              onChangeText={setAdditionalContext}
+              placeholder="例如：这是学校食堂的大份，额外加了辣油，用的是 500ml 便当盒..."
+              placeholderTextColor="#9ca3af"
+              multiline
+              maxLength={200}
+              style={styles.detailsInput}
+            />
+          </View>
+        </View>
+
+        <View style={styles.mealSection}>
+          <SectionHeader title="餐次" onHelpPress={() => setHelpSheet({ title: '餐次', content: HELP_TEXT.meal })} />
+          <View style={styles.mealOptions}>
+            {MEAL_OPTIONS.map((option) => (
+              <MealOption
+                key={option.value}
+                label={option.label}
+                icon={option.icon}
+                active={mealType === option.value}
+                onPress={() => setMealType(option.value)}
+              />
             ))}
           </View>
-        ) : (
-          <Pressable style={styles.emptyPreview} onPress={() => pickImages('library')}>
-            <ImageIcon size={26} color={colors.textMuted} />
-            <Text style={styles.emptyPreviewTitle}>还没有选择图片</Text>
-            <Text style={styles.emptyPreviewText}>相册最多支持 {MAX_ANALYZE_IMAGES} 张，多张会作为一次识别提交。</Text>
-          </Pressable>
-        )}
-        <View style={styles.recordGrid}>
-          <RecordGridAction
-            title="拍照识别"
-            desc="拍摄餐食后再确认设置"
-            icon={Camera}
-            tone="green"
-            disabled={loading}
-            onPress={() => pickImages('camera')}
-          />
-          <RecordGridAction
-            title="相册上传"
-            desc="选择已有食物图片"
-            icon={ImageIcon}
-            tone="blue"
-            disabled={loading}
-            onPress={() => pickImages('library')}
-          />
-          <RecordGridAction
-            title="文本输入"
-            desc="一句话描述吃了什么"
-            icon={FileText}
-            tone="gold"
-            onPress={() => navigation.navigate('TextRecord')}
-          />
-          <RecordGridAction
-            title="食物库输入"
-            desc="按食物和重量精确录入"
-            icon={Utensils}
-            tone="purple"
-            onPress={() => navigation.navigate('ManualRecord')}
-          />
         </View>
-      </Card>
 
-      <Card>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>识别设置</Text>
-          <Text style={styles.modeBadge}>{executionModeLabel(executionMode)}</Text>
-        </View>
-        <View style={styles.segmentedRow}>
-          {MODE_OPTIONS.map((option) => (
-            <SegmentedButton
-              key={option.value}
-              title={option.label}
-              desc={option.desc}
-              active={baseMode === option.value}
-              onPress={() => setBaseMode(option.value)}
-            />
-          ))}
-        </View>
-        <View style={styles.optionGrid}>
-          <ToggleOption
-            title="联网校准"
-            desc="校准包装规格和品牌商品"
-            icon={Wifi}
-            enabled={webSearchEnabled}
-            onPress={() => setWebSearchEnabled((value) => !value)}
-          />
-          <ToggleOption
-            title="分项模式"
-            desc="精准模式下分开估重"
-            icon={Sparkles}
-            enabled={separateFoodEstimateEnabled}
-            disabled={baseMode !== 'strict'}
-            onPress={() => setSeparateFoodEstimateEnabled((value) => !value)}
-          />
-          <ToggleOption
-            title="多视角辅助"
-            desc="多张图辅助判断份量"
-            icon={RotateCcw}
-            enabled={multiViewEnabled}
-            onPress={() => setMultiViewEnabled((value) => !value)}
-          />
-          <ToggleOption
-            title="AI 摄入比例"
-            desc="自动建议可食比例"
-            icon={Check}
-            enabled={suggestRatioEnabled}
-            onPress={() => setSuggestRatioEnabled((value) => !value)}
-          />
-        </View>
-        <Text style={styles.fieldLabel}>餐次</Text>
-        <ChipGroup options={MEAL_OPTIONS} value={mealType} onChange={setMealType} />
-        <Text style={styles.fieldLabel}>运动时机</Text>
-        <ChipGroup options={ACTIVITY_TIMING_OPTIONS} value={activityTiming} onChange={setActivityTiming} />
-        <Text style={styles.fieldLabel}>文字补充</Text>
-        <TextInput
-          value={additionalContext}
-          onChangeText={setAdditionalContext}
-          placeholder="例：学校食堂大份，额外加了辣油，用的是 500ml 便当盒"
-          placeholderTextColor={colors.textMuted}
-          multiline
-          maxLength={200}
-          style={styles.textArea}
-        />
-        <Text style={styles.dateHint}>记录日期：{date}</Text>
-        <TextInput
-          value={date}
-          onChangeText={setDate}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={colors.textMuted}
-          style={styles.dateInput}
-        />
-        <AppButton
-          label={imageAssets.length > 0 ? `开始识别 ${imageAssets.length} 张图片` : '选择图片并识别'}
-          loading={loading}
-          onPress={() => (imageAssets.length > 0 ? void submitAnalyze() : void pickImages('library'))}
-        />
-        <Text style={styles.submitHint}>提交后会进入等待页；也可以先离开，稍后在识别记录查看。</Text>
-      </Card>
-
-      <Card>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>更多记录</Text>
-        </View>
-        <View style={styles.recordQuickList}>
-          <RecordQuickAction title="我的收藏" desc="快速记录常吃餐食" onPress={() => navigation.navigate('Recipes')} />
-          <RecordQuickAction title="识别记录" desc="查看以往识别结果" onPress={() => navigation.navigate('AnalyzeHistory')} />
-          <RecordQuickAction title="包装食品" desc="上传营养成分表或商品包装" onPress={() => navigation.navigate('PackagedFoodEdit')} />
-          <RecordQuickAction title="食物库" desc="浏览营养库与自定义食物" onPress={() => navigation.navigate('FoodLibrary')} />
-        </View>
-      </Card>
-
-      {SHOW_DEBUG_LOGIN ? (
-        <Card>
-          <Text style={styles.sectionTitle}>示例结果预览</Text>
-          <Text style={styles.subtitle}>打开一份示例识别结果，快速体验比例、人数分摊和保存前调整。</Text>
-          <AppButton label="打开示例识别结果" variant="secondary" onPress={openDemoResult} />
-          <View style={styles.demoButtonGap}>
-            <AppButton label="打开示例文字结果" variant="secondary" onPress={openDemoTextResult} />
+        <View style={styles.stateSection}>
+          <SectionHeader title="运动时机" onHelpPress={() => setHelpSheet({ title: '运动时机', content: HELP_TEXT.timing })} />
+          <View style={styles.stateOptions}>
+            {ACTIVITY_TIMING_OPTIONS.map((option) => (
+              <StateOption
+                key={option.value}
+                label={option.label}
+                icon={option.icon}
+                active={activityTiming === option.value}
+                onPress={() => setActivityTiming(option.value)}
+              />
+            ))}
           </View>
-        </Card>
-      ) : null}
-    </Page>
-  )
-}
-
-function SegmentedButton({
-  title,
-  desc,
-  active,
-  onPress,
-}: {
-  title: string
-  desc: string
-  active: boolean
-  onPress: () => void
-}) {
-  return (
-    <Pressable style={({ pressed }) => [styles.segmentedItem, active && styles.segmentedItemActive, pressed && styles.pressed]} onPress={onPress}>
-      <Text style={[styles.segmentedTitle, active && styles.segmentedTitleActive]} numberOfLines={1}>{title}</Text>
-      <Text style={[styles.segmentedDesc, active && styles.segmentedDescActive]} numberOfLines={1}>{desc}</Text>
-    </Pressable>
-  )
-}
-
-function ToggleOption({
-  title,
-  desc,
-  icon,
-  enabled,
-  disabled,
-  onPress,
-}: {
-  title: string
-  desc: string
-  icon: LucideIcon
-  enabled: boolean
-  disabled?: boolean
-  onPress: () => void
-}) {
-  const Icon = icon
-  return (
-    <Pressable
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.toggleCard,
-        enabled && styles.toggleCardActive,
-        disabled && styles.disabled,
-        pressed && styles.pressed,
-      ]}
-      onPress={onPress}
-    >
-      <View style={styles.toggleTopRow}>
-        <Icon size={18} color={enabled ? colors.brandDark : colors.textSecondary} strokeWidth={2.4} />
-        <View style={[styles.switchTrack, enabled && styles.switchTrackActive]}>
-          <View style={[styles.switchKnob, enabled && styles.switchKnobActive]} />
         </View>
-      </View>
-      <Text style={styles.toggleTitle}>{title}</Text>
-      <Text style={styles.toggleDesc}>{desc}</Text>
-    </Pressable>
-  )
-}
 
-function ChipGroup<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: Array<{ value: T; label: string }>
-  value: T
-  onChange: (value: T) => void
-}) {
-  return (
-    <View style={styles.chipGroup}>
-      {options.map((option) => {
-        const active = value === option.value
-        return (
-          <Pressable
-            key={option.value}
-            style={({ pressed }) => [styles.chip, active && styles.chipActive, pressed && styles.pressed]}
-            onPress={() => onChange(option.value)}
-          >
-            <Text style={[styles.chipText, active && styles.chipTextActive]}>{option.label}</Text>
-          </Pressable>
-        )
-      })}
+        {SHOW_DEBUG_LOGIN ? (
+          <View style={styles.debugSection}>
+            <Text style={styles.debugTitle}>示例结果预览</Text>
+            <Text style={styles.debugText}>仅开发环境显示，用来快速检查图片结果和文字结果页面。</Text>
+            <View style={styles.debugActions}>
+              <DebugButton label="图片结果" onPress={openDemoResult} />
+              <DebugButton label="文字结果" onPress={openDemoTextResult} />
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
+
+      <View style={[styles.confirmSection, { paddingBottom: bottomInset }]}>
+        <Pressable
+          disabled={confirmDisabled}
+          style={({ pressed }) => [styles.confirmButton, confirmDisabled && styles.confirmButtonDisabled, pressed && !confirmDisabled && styles.pressed]}
+          onPress={() => void submitAnalyze()}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={[styles.confirmButtonText, confirmDisabled && styles.confirmButtonTextDisabled]} numberOfLines={1} adjustsFontSizeToFit>
+              {confirmButtonLabel(imageAssets.length, isQuotaExhausted)}
+            </Text>
+          )}
+        </Pressable>
+        <Pressable style={({ pressed }) => [styles.historyLink, pressed && styles.pressed]} onPress={() => navigation.navigate('AnalyzeHistory')}>
+          <History size={16} color="#00bc7d" strokeWidth={2.4} />
+          <Text style={styles.historyLinkText}>查看识别记录</Text>
+        </Pressable>
+      </View>
+
+      <HelpSheet sheet={helpSheet} onClose={() => setHelpSheet(null)} />
     </View>
   )
 }
 
-function RecordGridAction({
+function QuotaBar({
+  quota,
+  executionMode,
+  isPro,
+  exhausted,
+}: {
+  quota: AnalyzeQuota
+  executionMode: ExecutionMode
+  isPro: boolean
+  exhausted: boolean
+}) {
+  const warn = !exhausted && quota.remaining <= 2
+  return (
+    <View style={styles.quotaBar}>
+      <View style={[styles.quotaDot, isPro && styles.quotaDotPro, warn && styles.quotaDotWarn, exhausted && styles.quotaDotExhausted]} />
+      <Text style={[styles.quotaText, exhausted && styles.quotaTextExhausted]} numberOfLines={1} adjustsFontSizeToFit>
+        {formatQuotaText(quota, executionMode)}
+      </Text>
+    </View>
+  )
+}
+
+function PickerPill({ icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
+  const Icon = icon
+  return (
+    <Pressable style={({ pressed }) => [styles.pickerPill, pressed && styles.pressed]} onPress={onPress}>
+      <Icon size={14} color="#047857" strokeWidth={2.4} />
+      <Text style={styles.pickerPillText}>{label}</Text>
+    </Pressable>
+  )
+}
+
+function ModeSwitchItem({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.modeSwitchItem, active && styles.modeSwitchItemActive, pressed && styles.pressed]} onPress={onPress}>
+      <Text style={[styles.modeSwitchText, active && styles.modeSwitchTextActive]} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  )
+}
+
+function AnalysisOptionCard({
   title,
-  desc,
-  icon,
-  tone,
+  enabled,
   disabled,
   onPress,
+  onHelpPress,
 }: {
   title: string
-  desc: string
-  icon: LucideIcon
-  tone: 'green' | 'blue' | 'gold' | 'purple'
+  enabled: boolean
   disabled?: boolean
   onPress: () => void
+  onHelpPress: () => void
 }) {
-  const Icon = icon
-
   return (
     <Pressable
       disabled={disabled}
       style={({ pressed }) => [
-        styles.recordActionCard,
-        tone === 'green' && styles.recordActionGreen,
-        tone === 'blue' && styles.recordActionBlue,
-        tone === 'gold' && styles.recordActionGold,
-        tone === 'purple' && styles.recordActionPurple,
+        styles.analysisOptionCard,
+        enabled && styles.analysisOptionCardActive,
         disabled && styles.disabled,
-        pressed && styles.pressed,
+        pressed && !disabled && styles.pressed,
       ]}
       onPress={onPress}
     >
-      <View
-        style={[
-          styles.recordActionIcon,
-          tone === 'green' && styles.recordIconGreen,
-          tone === 'blue' && styles.recordIconBlue,
-          tone === 'gold' && styles.recordIconGold,
-          tone === 'purple' && styles.recordIconPurple,
-        ]}
-      >
-        <Icon size={22} color={recordActionIconColor[tone]} strokeWidth={2.5} />
+      <View style={styles.analysisOptionLeft}>
+        <Text style={styles.analysisOptionTitle} numberOfLines={1}>{title}</Text>
+        <HelpIcon onPress={onHelpPress} />
       </View>
-      <Text style={styles.recordActionTitle}>{title}</Text>
-      <Text style={styles.recordActionDesc}>{desc}</Text>
+      <SwitchPill enabled={enabled} small />
     </Pressable>
   )
 }
 
-function RecordQuickAction({ title, desc, onPress }: { title: string; desc: string; onPress: () => void }) {
+function CompactSwitchRow({
+  title,
+  icon,
+  enabled,
+  onPress,
+  onHelpPress,
+}: {
+  title: string
+  icon: LucideIcon
+  enabled: boolean
+  onPress: () => void
+  onHelpPress: () => void
+}) {
+  const Icon = icon
   return (
-    <Pressable style={({ pressed }) => [styles.recordQuickAction, pressed && styles.pressed]} onPress={onPress}>
-      <View style={styles.recordQuickText}>
-        <Text style={styles.recordQuickTitle}>{title}</Text>
-        <Text style={styles.recordQuickDesc}>{desc}</Text>
+    <Pressable style={({ pressed }) => [styles.compactSwitchRow, pressed && styles.pressed]} onPress={onPress}>
+      <View style={styles.compactSwitchLeft}>
+        <Icon size={15} color="#64748b" strokeWidth={2.3} />
+        <Text style={styles.compactSwitchTitle}>{title}</Text>
+        <HelpIcon onPress={onHelpPress} />
       </View>
-      <Text style={styles.recordQuickChevron}>›</Text>
+      <SwitchPill enabled={enabled} />
     </Pressable>
   )
 }
 
-const recordActionIconColor = {
-  green: '#38a97b',
-  blue: '#4295bc',
-  gold: '#9f823a',
-  purple: '#6951bd',
-} as const
+function SwitchPill({ enabled, small }: { enabled: boolean; small?: boolean }) {
+  return (
+    <View style={[small ? styles.switchTrackSmall : styles.switchTrack, enabled && styles.switchTrackOn]}>
+      <View style={[small ? styles.switchKnobSmall : styles.switchKnob, enabled && (small ? styles.switchKnobSmallOn : styles.switchKnobOn)]} />
+    </View>
+  )
+}
+
+function SectionHeader({ title, onHelpPress }: { title: string; onHelpPress: () => void }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <HelpIcon onPress={onHelpPress} />
+    </View>
+  )
+}
+
+function HelpIcon({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.helpIcon, pressed && styles.pressed]} onPress={onPress} hitSlop={8}>
+      <Info size={12} color="#9ca3af" strokeWidth={2.4} />
+    </Pressable>
+  )
+}
+
+function MealOption({ label, icon, active, onPress }: { label: string; icon: LucideIcon; active: boolean; onPress: () => void }) {
+  const Icon = icon
+  return (
+    <Pressable style={({ pressed }) => [styles.mealOption, active && styles.mealOptionActive, pressed && styles.pressed]} onPress={onPress}>
+      <Icon size={19} color={active ? '#00bc7d' : '#6b7280'} strokeWidth={2.3} />
+      <Text style={[styles.mealLabel, active && styles.mealLabelActive]} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  )
+}
+
+function StateOption({ label, icon, active, onPress }: { label: string; icon: LucideIcon; active: boolean; onPress: () => void }) {
+  const Icon = icon
+  return (
+    <Pressable style={({ pressed }) => [styles.stateOption, active && styles.stateOptionActive, pressed && styles.pressed]} onPress={onPress}>
+      <Icon size={18} color={active ? '#00bc7d' : '#6b7280'} strokeWidth={2.3} />
+      <Text style={[styles.stateLabel, active && styles.stateLabelActive]} numberOfLines={1} adjustsFontSizeToFit>{label}</Text>
+    </Pressable>
+  )
+}
+
+function DebugButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable style={({ pressed }) => [styles.debugButton, pressed && styles.pressed]} onPress={onPress}>
+      <Text style={styles.debugButtonText}>{label}</Text>
+    </Pressable>
+  )
+}
+
+function HelpSheet({ sheet, onClose }: { sheet: HelpSheetState; onClose: () => void }) {
+  const insets = useSafeAreaInsets()
+  return (
+    <Modal visible={Boolean(sheet)} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.helpSheet}>
+        <Pressable style={styles.helpSheetMask} onPress={onClose} />
+        <View style={[styles.helpSheetContent, { paddingBottom: Math.max(insets.bottom, 18) + 20 }]}>
+          <View style={styles.helpSheetHandle} />
+          <View style={styles.helpSheetHeader}>
+            <Text style={styles.helpSheetTitle}>{sheet?.title}</Text>
+            <Pressable style={styles.helpSheetClose} onPress={onClose}>
+              <X size={18} color="#475569" strokeWidth={2.4} />
+            </Pressable>
+          </View>
+          <Text style={styles.helpSheetBody}>{sheet?.content}</Text>
+        </View>
+      </View>
+    </Modal>
+  )
+}
+
+type AnalyzeQuota = {
+  max: number
+  used: number
+  remaining: number
+}
+
+function buildAnalyzeQuota(status: MembershipStatus | null): AnalyzeQuota | null {
+  if (!status) return null
+  const max = numericValue(status.daily_credits_max ?? status.daily_limit)
+  const remaining = numericValue(status.total_credits_available ?? status.daily_credits_remaining ?? status.daily_remaining)
+  const explicitUsed = status.daily_credits_used ?? status.daily_used
+  const used = explicitUsed == null && max > 0 ? Math.max(0, max - remaining) : numericValue(explicitUsed)
+  return {
+    max,
+    used,
+    remaining,
+  }
+}
+
+function numericValue(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+}
+
+function formatQuotaText(quota: AnalyzeQuota, mode: ExecutionMode): string {
+  const modeLabel = executionModeLabel(mode)
+  if (quota.max > 0) {
+    return `今日已用 ${quota.used}/${quota.max} 积分 · 剩余 ${quota.remaining} · ${modeLabel}`
+  }
+  return `可用积分 ${quota.remaining} · ${modeLabel}`
+}
+
+function confirmButtonLabel(imageCount: number, isQuotaExhausted: boolean): string {
+  if (isQuotaExhausted) return '积分不足，暂不可分析'
+  if (imageCount === 0) return '请先拍照或选图'
+  return `分析 ${imageCount} 张图片`
+}
 
 function executionModeLabel(mode: ExecutionMode): string {
   if (mode === 'fast') return '快速'
@@ -514,340 +655,646 @@ function executionModeLabel(mode: ExecutionMode): string {
 }
 
 const styles = StyleSheet.create({
+  analyzePage: {
+    flex: 1,
+    backgroundColor: '#f7f8fa',
+  },
+  content: {
+    paddingTop: 12,
+    paddingHorizontal: 10,
+  },
+  quotaSpacer: {
+    height: 8,
+  },
+  quotaBar: {
+    minHeight: 24,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 5,
+  },
+  quotaDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#00bc7d',
+  },
+  quotaDotPro: {
+    backgroundColor: '#10b981',
+  },
+  quotaDotWarn: {
+    backgroundColor: '#f59e0b',
+  },
+  quotaDotExhausted: {
+    backgroundColor: '#ef4444',
+  },
+  quotaText: {
+    maxWidth: '92%',
+    color: '#94a3b8',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  quotaTextExhausted: {
+    color: '#ef4444',
+  },
+  photoTipBar: {
+    minHeight: 28,
+    marginBottom: 7,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(0,188,125,0.18)',
+    backgroundColor: 'rgba(0,188,125,0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  photoTipDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#00bc7d',
+  },
+  photoTipText: {
+    flex: 1,
+    color: '#047857',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  photoTipAction: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: '#00bc7d',
+    color: '#fff',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  imagePreviewSection: {
+    marginBottom: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  imageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    padding: 8,
+  },
+  gridItem: {
+    width: '31.7%',
+    aspectRatio: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  gridItemMultiview: {
+    borderColor: '#00bc7d',
+  },
+  gridImage: {
+    width: '100%',
+    height: '100%',
+  },
+  addImageTile: {
+    borderStyle: 'dashed',
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f9fafb',
+  },
+  addImageIcon: {
+    color: '#9ca3af',
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: '300',
+  },
+  addImageText: {
+    marginTop: 4,
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  removeButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  emptyPreview: {
+    minHeight: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    backgroundColor: '#eef1f5',
+  },
+  emptyPreviewTitle: {
+    marginTop: 8,
+    color: '#4b5563',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '600',
+  },
+  emptyPreviewText: {
+    marginTop: 4,
+    maxWidth: 270,
+    textAlign: 'center',
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  placeholderActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  pickerPill: {
+    minHeight: 30,
+    minWidth: 80,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(0,188,125,0.22)',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  pickerPillText: {
+    color: '#047857',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  qualityZone: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.03)',
+  },
+  modeCompact: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.03)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  modeCompactLeft: {
+    flexShrink: 0,
+  },
+  modeCompactTitle: {
+    color: '#374151',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  modeSummary: {
+    marginTop: 1,
+    color: '#00bc7d',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  modeSwitchRow: {
+    flex: 1,
+    maxWidth: 220,
+    flexDirection: 'row',
+    gap: 5,
+  },
+  modeSwitchItem: {
+    flex: 1,
+    minHeight: 28,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  modeSwitchItemActive: {
+    borderColor: '#00bc7d',
+    backgroundColor: '#00bc7d',
+  },
+  modeSwitchText: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  modeSwitchTextActive: {
+    color: '#fff',
+  },
+  analysisOptionsRow: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.03)',
+  },
+  analysisOptionCard: {
+    flex: 1,
+    minHeight: 36,
+    paddingHorizontal: 7,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 4,
+  },
+  analysisOptionCardActive: {
+    borderColor: 'rgba(0,188,125,0.35)',
+    backgroundColor: 'rgba(0,188,125,0.08)',
+  },
+  analysisOptionLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  analysisOptionTitle: {
+    flexShrink: 1,
+    color: '#374151',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+  compactSwitchRow: {
+    minHeight: 38,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.03)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  compactSwitchLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  compactSwitchTitle: {
+    color: '#374151',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  switchTrack: {
+    width: 44,
+    height: 24,
+    borderRadius: 999,
+    padding: 2,
+    backgroundColor: '#e5e7eb',
+  },
+  switchTrackSmall: {
+    width: 32,
+    height: 18,
+    borderRadius: 999,
+    padding: 2,
+    backgroundColor: '#e5e7eb',
+  },
+  switchTrackOn: {
+    backgroundColor: '#00bc7d',
+  },
+  switchKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    elevation: 1,
+  },
+  switchKnobSmall: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#fff',
+    elevation: 1,
+  },
+  switchKnobOn: {
+    transform: [{ translateX: 20 }],
+  },
+  switchKnobSmallOn: {
+    transform: [{ translateX: 14 }],
+  },
   sectionHeader: {
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sectionTitle: {
+    paddingLeft: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#00bc7d',
+    color: '#111827',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  helpIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailsSection: {
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  inputWrapper: {
+    minHeight: 80,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  detailsInput: {
+    minHeight: 72,
+    color: '#111827',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlignVertical: 'top',
+    padding: 0,
+  },
+  mealSection: {
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  mealOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 8,
+  },
+  mealOption: {
+    width: '48.5%',
+    minHeight: 56,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: '#f9fafb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  mealOptionActive: {
+    borderColor: '#00bc7d',
+    backgroundColor: '#f0fdf9',
+  },
+  mealLabel: {
+    color: '#4b5563',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  mealLabelActive: {
+    color: '#00bc7d',
+    fontWeight: '800',
+  },
+  stateSection: {
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  stateOptions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  stateOption: {
+    flex: 1,
+    minHeight: 56,
+    paddingHorizontal: 5,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: '#f9fafb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  stateOptionActive: {
+    borderColor: '#00bc7d',
+    backgroundColor: '#f0fdf9',
+  },
+  stateLabel: {
+    color: '#4b5563',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  stateLabelActive: {
+    color: '#00bc7d',
+    fontWeight: '800',
+  },
+  debugSection: {
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+  },
+  debugTitle: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  debugText: {
+    marginTop: 4,
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  debugActions: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  debugButton: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#d1fae5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f0fdf9',
+  },
+  debugButtonText: {
+    color: '#047857',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  confirmSection: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 6,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(247,248,250,0.96)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(226,232,240,0.75)',
+  },
+  confirmButton: {
+    width: '100%',
+    maxWidth: 300,
+    minHeight: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: '#00bc7d',
+    elevation: 3,
+    shadowColor: '#00bc7d',
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  confirmButtonDisabled: {
+    backgroundColor: '#e5e7eb',
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  confirmButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  confirmButtonTextDisabled: {
+    color: '#9ca3af',
+  },
+  historyLink: {
+    minHeight: 36,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#00bc7d',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  historyLinkText: {
+    color: '#00bc7d',
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  helpSheet: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  helpSheetMask: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: 'rgba(15,23,42,0.35)',
+  },
+  helpSheetContent: {
+    width: '100%',
+    paddingTop: 10,
+    paddingHorizontal: 18,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    backgroundColor: '#fff',
+  },
+  helpSheetHandle: {
+    alignSelf: 'center',
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#e2e8f0',
+    marginBottom: 12,
+  },
+  helpSheetHeader: {
+    minHeight: 34,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  badge: {
-    color: colors.brandDark,
-    fontWeight: '800',
-  },
-  modeBadge: {
-    color: colors.brandDark,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  subtitle: {
-    marginTop: 8,
-    marginBottom: 18,
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
-  previewGrid: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-  },
-  previewTile: {
+  helpSheetTitle: {
     flex: 1,
-    minHeight: 108,
-  },
-  previewImage: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 14,
-    backgroundColor: colors.surfaceMuted,
-  },
-  removeImageButton: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.68)',
-  },
-  removeImageText: {
-    color: '#fff',
-    fontSize: 18,
+    color: '#111827',
+    fontSize: 17,
+    lineHeight: 23,
     fontWeight: '800',
-    lineHeight: 20,
   },
-  emptyPreview: {
-    minHeight: 128,
+  helpSheetClose: {
+    width: 32,
+    height: 32,
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 14,
-    marginBottom: 14,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: '#f1f5f9',
   },
-  emptyPreviewTitle: {
+  helpSheetBody: {
     marginTop: 8,
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  emptyPreviewText: {
-    marginTop: 4,
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'center',
-  },
-  recordGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  recordActionCard: {
-    width: '48.5%',
-    minHeight: 122,
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 14,
-  },
-  recordActionGreen: {
-    backgroundColor: '#f9fefc',
-    borderColor: '#d9faeb',
-  },
-  recordActionBlue: {
-    backgroundColor: '#f9fdfe',
-    borderColor: '#d9f2fa',
-  },
-  recordActionGold: {
-    backgroundColor: '#fefcf7',
-    borderColor: '#f7e9ce',
-  },
-  recordActionPurple: {
-    backgroundColor: '#fefcfe',
-    borderColor: '#e6defa',
-  },
-  recordActionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  recordIconGreen: {
-    backgroundColor: '#ebfcf4',
-  },
-  recordIconBlue: {
-    backgroundColor: '#ebf7fc',
-  },
-  recordIconGold: {
-    backgroundColor: '#fbf5e6',
-  },
-  recordIconPurple: {
-    backgroundColor: '#f3effc',
-  },
-  recordActionTitle: {
-    color: colors.text,
-    fontWeight: '900',
-    fontSize: 16,
-  },
-  recordActionDesc: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 5,
-  },
-  recordQuickList: {
-    marginTop: 2,
-  },
-  recordQuickAction: {
-    minHeight: 66,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  recordQuickText: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  recordQuickTitle: {
-    color: colors.text,
-    fontWeight: '900',
-  },
-  recordQuickDesc: {
-    marginTop: 3,
-    color: colors.textSecondary,
-    lineHeight: 18,
-  },
-  recordQuickChevron: {
-    color: colors.textMuted,
-    fontSize: 28,
-  },
-  segmentedRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 14,
-  },
-  segmentedItem: {
-    flex: 1,
-    minHeight: 58,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    backgroundColor: colors.surfaceMuted,
-  },
-  segmentedItemActive: {
-    borderColor: colors.brand,
-    backgroundColor: colors.brandSoft,
-  },
-  segmentedTitle: {
-    color: colors.text,
-    fontWeight: '900',
-    textAlign: 'center',
-  },
-  segmentedTitleActive: {
-    color: colors.brandDark,
-  },
-  segmentedDesc: {
-    marginTop: 3,
-    color: colors.textSecondary,
-    fontSize: 11,
-    textAlign: 'center',
-  },
-  segmentedDescActive: {
-    color: colors.brandDark,
-  },
-  optionGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-  },
-  toggleCard: {
-    width: '48.7%',
-    minHeight: 92,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
-    backgroundColor: colors.surfaceMuted,
-  },
-  toggleCardActive: {
-    borderColor: colors.brand,
-    backgroundColor: '#f0fdf7',
-  },
-  toggleTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  switchTrack: {
-    width: 34,
-    height: 20,
-    borderRadius: 10,
-    padding: 2,
-    backgroundColor: '#d1d5db',
-  },
-  switchTrackActive: {
-    backgroundColor: colors.brand,
-  },
-  switchKnob: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#fff',
-  },
-  switchKnobActive: {
-    transform: [{ translateX: 14 }],
-  },
-  toggleTitle: {
-    marginTop: 9,
-    color: colors.text,
-    fontWeight: '900',
-  },
-  toggleDesc: {
-    marginTop: 3,
-    color: colors.textSecondary,
-    fontSize: 11,
-    lineHeight: 15,
-  },
-  fieldLabel: {
-    marginTop: 16,
-    marginBottom: 8,
-    color: colors.text,
-    fontWeight: '900',
-  },
-  chipGroup: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chip: {
-    minHeight: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surfaceMuted,
-  },
-  chipActive: {
-    borderColor: colors.brand,
-    backgroundColor: colors.brandSoft,
-  },
-  chipText: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  chipTextActive: {
-    color: colors.brandDark,
-  },
-  textArea: {
-    minHeight: 92,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.text,
-    backgroundColor: colors.surfaceMuted,
-    textAlignVertical: 'top',
-    lineHeight: 20,
-  },
-  dateHint: {
-    marginTop: 12,
-    color: colors.textSecondary,
-    fontSize: 12,
-  },
-  dateInput: {
-    minHeight: 42,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
-    color: colors.text,
-    backgroundColor: colors.surfaceMuted,
-    marginTop: 6,
-    marginBottom: 12,
-  },
-  submitHint: {
-    marginTop: 9,
-    color: colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: 'center',
-  },
-  demoButtonGap: {
-    marginTop: 10,
-  },
-  pressed: {
-    opacity: 0.72,
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 22,
   },
   disabled: {
-    opacity: 0.52,
+    opacity: 0.55,
+  },
+  pressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.98 }],
   },
 })

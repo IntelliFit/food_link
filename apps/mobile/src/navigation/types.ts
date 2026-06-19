@@ -61,6 +61,7 @@ export type RootStackParamList = {
   Login: undefined
   MainTabs: undefined
   Analyze: { source?: 'camera' | 'library'; mealType?: MealType; date?: string } | undefined
+  GooseDuckChicken: undefined
   AnalyzeLoading: { taskId?: string; imageUri?: string; imageUris?: string[]; mealType: MealType; date: string; task?: AnalysisTask; taskType?: 'food' | 'food_text' | 'exercise'; executionMode?: ExecutionMode } | undefined
   Result: { task: AnalysisTask; imageUri?: string; mealType: MealType; date: string }
   TextResult: { task: AnalysisTask; mealType: MealType; date: string }
@@ -68,19 +69,19 @@ export type RootStackParamList = {
   ManualRecord:
     | { quickItem?: ManualFoodItem; sourceChannel?: ManualRecordSourceChannel; date?: string; mealType?: MealType }
     | undefined
-  FoodLibrary: undefined
+  FoodLibrary: { initialTab?: 'all' | 'custom' | 'results' | 'create' } | undefined
   FoodLibraryDetail: { itemId?: string; item?: ManualFoodItem } | undefined
   DayRecord: { date?: string } | undefined
   RecordDetail: { recordId: string }
   AnalyzeHistory: undefined
   AiAssistant: undefined
   StatsMetabolic: undefined
-  TrendDetail: { kind: 'weight' | 'water' | 'exercise' }
+  TrendDetail: { kind: 'weight' | 'water' | 'exercise'; date?: string }
   HealthProfile: undefined
   HealthProfileView: undefined
   ProfileSettings: { userId?: string } | undefined
   AccountSecurity: undefined
-  BodyMetricRecord: { type: 'weight' | 'water' | 'exercise' }
+  BodyMetricRecord: { type: 'weight' | 'water' | 'exercise'; date?: string }
   Expiry: undefined
   ExpiryEdit: { itemId?: string; item?: FoodExpiryItem } | undefined
   RewardCenter: undefined
@@ -98,7 +99,7 @@ export type RootStackParamList = {
   FollowList: { userId: string; type: 'followers' | 'following' }
   Conversations: undefined
   PrivateChat: { userId: string; nickname?: string }
-  BodyTrends: undefined
+  BodyTrends: { tab?: 'weight' | 'water' | 'exercise' } | undefined
   PackagedFoodEdit: { taskId?: string } | undefined
   PackagedFoodTaskDetail: { taskId: string }
   LocationSearch:

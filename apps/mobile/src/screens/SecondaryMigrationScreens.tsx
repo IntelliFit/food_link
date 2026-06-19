@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Image, Modal, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import qrcode from 'qrcode-generator'
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import Svg, { Circle as SvgCircle, Defs, LinearGradient as SvgLinearGradient, Rect as SvgRect, Stop } from 'react-native-svg'
 import {
   getMealTypeLabel,
   type CheckinLeaderboardItem,
@@ -12,15 +14,20 @@ import {
   type MealType,
   type MembershipPlan,
   type MembershipStatus,
+  PET_ACCESSORIES,
+  PET_ANIMALS,
+  PET_COLORS,
+  PET_PATTERNS,
+  PET_SHAPES,
+  derivePetAppearance,
+  stableHash,
   type PetAppearanceCandidate,
+  type PetAnimal,
   type PetSummary,
-  type PublicFoodItem,
   type RecipeItem,
 } from '@food-link/core'
 import { apiClient } from '../api'
 import { AppButton } from '../components/AppButton'
-import { Card } from '../components/Card'
-import { Page } from '../components/Page'
 import { AppAlert as Alert } from '../providers/DialogProvider'
 import {
   PetAvatar,
@@ -40,6 +47,8 @@ import { getHomePetHidden, setHomePetHidden } from '../utils/petPreferences'
 
 const mealOptions: MealType[] = ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack']
 const PUBLIC_FOOD_MAX_IMAGES = 3
+const PUBLIC_FOOD_QUICK_TAGS = ['少油', '少盐', '高蛋白', '低碳水', '清淡', '外卖', '健身餐']
+const CAMPUS_FOOD_QUICK_TAGS = ['招牌菜', '性价比高', '大份量', '清淡', '少油', '高蛋白', '排队少']
 type PublicFoodSourceKind = 'restaurant' | 'homemade' | 'campus'
 type PublicFoodPriceType = 'fixed' | 'weight' | 'range' | 'combo' | 'unknown'
 
@@ -70,18 +79,22 @@ interface RecipeTotals {
 }
 
 export function CheckinLeaderboardScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const insets = useSafeAreaInsets()
   const [items, setItems] = useState<CheckinLeaderboardItem[]>([])
   const [range, setRange] = useState('')
   const [loading, setLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setErrorMessage(null)
     try {
       const data = await apiClient.communityGetCheckinLeaderboard()
       setItems(data.list || [])
-      setRange(data.week_start && data.week_end ? `${data.week_start} - ${data.week_end}` : '')
+      setRange(data.week_start && data.week_end ? `${data.week_start} ~ ${data.week_end}` : '')
     } catch (error) {
+      setErrorMessage('加载失败，请稍后重试')
+      setItems([])
       showError('获取排行榜失败', error)
     } finally {
       setLoading(false)
@@ -95,62 +108,104 @@ export function CheckinLeaderboardScreen() {
   )
 
   return (
-    <Page title="打卡排行榜" subtitle={range || '本周饮食、运动记录排行'} refreshing={loading} onRefresh={load}>
-      {items.length === 0 ? <EmptyState text="暂无排行榜数据" /> : null}
-      {items.map((item, index) => {
-        const rank = item.rank || index + 1
-        const checkinCount = item.checkin_count ?? item.record_count ?? 0
-        const nickname = item.nickname || '食友'
-        return (
-          <Pressable key={item.user_id} onPress={() => navigation.navigate('ProfileSettings', { userId: item.user_id })}>
-            <Card style={[styles.leaderboardCard, item.is_me ? styles.leaderboardCardMine : null]}>
-              <View style={styles.rowBetween}>
-                <View style={[styles.rankNo, rank <= 3 ? styles.rankNoTop : null]}>
-                  <Text style={[styles.rankNoText, rank <= 3 ? styles.rankNoTextTop : null]}>{rank}</Text>
-                </View>
-                {item.avatar ? (
-                  <Image source={{ uri: item.avatar }} style={styles.leaderboardAvatar} />
-                ) : (
-                  <View style={styles.leaderboardAvatarFallback}>
-                    <Text style={styles.leaderboardAvatarText}>{nickname.slice(0, 1)}</Text>
-                  </View>
-                )}
-                <View style={styles.flex}>
-                  <View style={styles.inlineRow}>
-                    <Text style={[styles.itemName, styles.leaderboardName]} numberOfLines={1}>{nickname}</Text>
-                    {item.is_me ? <Pill text="我" /> : null}
-                  </View>
-                  <Text style={styles.subtitle}>本周好友圈打卡排行</Text>
-                </View>
-                <View style={styles.leaderboardCount}>
-                  <Text style={styles.leaderboardCountValue}>{checkinCount}</Text>
-                  <Text style={styles.itemMeta}>次打卡</Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </View>
-            </Card>
+    <View style={styles.checkinLeaderboardPage}>
+      <Svg width="100%" height="100%" preserveAspectRatio="none" style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Defs>
+          <SvgLinearGradient id="checkinLeaderboardBg" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#f0fdf4" />
+            <Stop offset="0.35" stopColor="#f8fafc" />
+            <Stop offset="1" stopColor="#ffffff" />
+          </SvgLinearGradient>
+        </Defs>
+        <SvgRect x="0" y="0" width="100%" height="100%" fill="url(#checkinLeaderboardBg)" />
+      </Svg>
+      <View style={styles.checkinLeaderboardHeader}>
+        <Text style={styles.checkinLeaderboardTitle}>好友本周打卡</Text>
+        {range ? (
+          <Text style={styles.checkinLeaderboardRange}>统计周期 {range}（北京时间）</Text>
+        ) : null}
+      </View>
+
+      {loading ? (
+        <View style={styles.checkinLeaderboardState}>
+          <ActivityIndicator color={colors.brand} />
+        </View>
+      ) : errorMessage ? (
+        <View style={styles.checkinLeaderboardState}>
+          <Text style={styles.checkinLeaderboardStateText}>{errorMessage}</Text>
+          <Pressable style={styles.checkinLeaderboardRetry} onPress={load}>
+            <Text style={styles.checkinLeaderboardRetryText}>重试</Text>
           </Pressable>
-        )
-      })}
-    </Page>
+        </View>
+      ) : items.length === 0 ? (
+        <View style={styles.checkinLeaderboardState}>
+          <Text style={styles.checkinLeaderboardStateText}>暂无数据</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.checkinLeaderboardScroll}
+          contentContainerStyle={[styles.checkinLeaderboardList, { paddingBottom: 24 + insets.bottom }]}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+          showsVerticalScrollIndicator={false}
+        >
+            {items.map((item, index) => {
+              const rank = item.rank || index + 1
+              const checkinCount = item.checkin_count ?? item.record_count ?? 0
+              const nickname = item.nickname || '食友'
+              return (
+                <View
+                  key={item.user_id}
+                  style={[styles.checkinLeaderboardRow, item.is_me ? styles.checkinLeaderboardRowMine : null]}
+                >
+                  <Text
+                    style={[
+                      styles.checkinLeaderboardRank,
+                      rank === 1 ? styles.checkinLeaderboardRankTop1 : null,
+                      rank === 2 ? styles.checkinLeaderboardRankTop2 : null,
+                      rank === 3 ? styles.checkinLeaderboardRankTop3 : null,
+                    ]}
+                  >
+                    {rank}
+                  </Text>
+                  <View style={styles.checkinLeaderboardAvatarWrap}>
+                    {item.avatar ? (
+                      <Image source={{ uri: item.avatar }} style={styles.checkinLeaderboardAvatar} />
+                    ) : (
+                      <Text style={styles.checkinLeaderboardAvatarText}>👤</Text>
+                    )}
+                  </View>
+                  <View style={styles.checkinLeaderboardMiddle}>
+                    <View style={styles.checkinLeaderboardNameRow}>
+                      <Text style={styles.checkinLeaderboardName} numberOfLines={1}>{nickname}</Text>
+                      {item.is_me ? <Text style={styles.checkinLeaderboardMeTag}>我</Text> : null}
+                    </View>
+                  </View>
+                  <View style={styles.checkinLeaderboardCount}>
+                    <Text style={styles.checkinLeaderboardCountNum}>{checkinCount}</Text>
+                    <Text style={styles.checkinLeaderboardCountUnit}>次打卡</Text>
+                  </View>
+                </View>
+              )
+            })}
+        </ScrollView>
+      )}
+    </View>
   )
 }
 
 export function InviteFriendsScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'InviteFriends'>>()
-  const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
-  const [currentUserId, setCurrentUserId] = useState('')
-  const [inviteCode, setInviteCode] = useState('')
-  const [resolveCode, setResolveCode] = useState('')
-  const [resolvedName, setResolvedName] = useState('')
-  const [resolvedProfile, setResolvedProfile] = useState<Record<string, unknown> | null>(null)
-  const [inviteNotice, setInviteNotice] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [qrPreviewOpen, setQrPreviewOpen] = useState(false)
   const routeInviteCode = useMemo(
     () => normalizeInviteCode(route.params?.inviteCode || route.params?.invite_code || route.params?.fi),
     [route.params?.fi, route.params?.inviteCode, route.params?.invite_code],
   )
+  const [profile, setProfile] = useState<Record<string, unknown> | null>(null)
+  const [currentUserId, setCurrentUserId] = useState('')
+  const [inviteCode, setInviteCode] = useState(routeInviteCode)
+  const [resolvedProfile, setResolvedProfile] = useState<Record<string, unknown> | null>(null)
+  const [inviteNotice, setInviteNotice] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [qrPreviewOpen, setQrPreviewOpen] = useState(false)
   const inviteLink = useMemo(() => buildInviteDeepLink(inviteCode), [inviteCode])
   const inviteMessage = useMemo(() => buildInviteMessage(profile, inviteCode, inviteLink), [inviteCode, inviteLink, profile])
   const inviterUserId = profileUserId(profile)
@@ -159,10 +214,10 @@ export function InviteFriendsScreen() {
   const relationText = inviteRelationText(relationProfile)
   const inviteActionDone = inviteRelationHandled(relationProfile)
   const inviteActionLabel = inviteActionText(relationProfile)
-  const inviteTitle = String(profile?.nickname || (isInviteOwner ? '我的邀请' : '邀请你加入 Food Link'))
+  const inviteTitle = String(profile?.nickname || (isInviteOwner ? '我的邀请页' : '邀请你加入食探'))
   const inviteDesc = isInviteOwner
-    ? '复制邀请码或分享邀请链接给朋友，对方首次登录或注册时会自动带入邀请关系。'
-    : '接受邀请后会发送好友申请，完成打卡后按规则结算双方积分。'
+    ? '通过小程序卡片或二维码邀请新朋友，不必先分享打卡海报'
+    : '完成注册后继续记录饮食或运动，满足规则即可到账'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -175,7 +230,6 @@ export function InviteFriendsScreen() {
 
       let inviteProfile: Record<string, unknown> | null = null
       if (routeInviteCode) {
-        setResolveCode(routeInviteCode)
         try {
           inviteProfile = await apiClient.getInviteProfileByCode(routeInviteCode) as unknown as Record<string, unknown>
         } catch (error) {
@@ -195,14 +249,11 @@ export function InviteFriendsScreen() {
       if (routeInviteCode) {
         try {
           const data = await apiClient.resolveInvite(routeInviteCode)
-          setResolvedName(String(data.nickname || data.user_id || data.id || '邀请用户'))
           setResolvedProfile(data as unknown as Record<string, unknown>)
         } catch {
-          setResolvedName('')
           setResolvedProfile(null)
         }
       } else {
-        setResolvedName('')
         setResolvedProfile(null)
       }
     } catch (error) {
@@ -216,34 +267,12 @@ export function InviteFriendsScreen() {
     void load()
   }, [load])
 
-  const resolve = async () => {
-    const code = normalizeInviteCode(resolveCode)
-    setResolveCode(code)
-    setLoading(true)
-    try {
-      setInviteNotice('')
-      const data = await apiClient.resolveInvite(code)
-      setResolvedName(String(data.nickname || data.user_id || data.id || '邀请用户'))
-      setResolvedProfile(data as unknown as Record<string, unknown>)
-      setProfile(data as unknown as Record<string, unknown>)
-      setInviteCode(String(data.invite_code || code))
-    } catch (error) {
-      setResolvedProfile(null)
-      setInviteNotice(userFacingErrorMessage(error, '没有找到对应邀请人，请检查邀请码。'))
-      showError('解析邀请码失败', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const accept = async () => {
-    const code = normalizeInviteCode(resolveCode || inviteCode)
-    setResolveCode(code)
+    const code = normalizeInviteCode(routeInviteCode || inviteCode)
     setLoading(true)
     try {
       setInviteNotice('')
       const data = await apiClient.acceptInvite(code)
-      setResolvedName(String(data.nickname || data.user_id || data.id || resolvedName || '邀请用户'))
       setResolvedProfile(data as Record<string, unknown>)
       setProfile((current) => (data.nickname || data.user_id || data.id) ? data as Record<string, unknown> : current)
       Alert.alert('已处理', inviteRelationText(data as Record<string, unknown>))
@@ -263,15 +292,6 @@ export function InviteFriendsScreen() {
     Alert.alert('已复制', '邀请码已复制，可以发送给朋友。')
   }
 
-  const copyInviteLink = async () => {
-    if (!inviteLink) {
-      Alert.alert('邀请信息生成中', '请下拉刷新邀请页后再复制。')
-      return
-    }
-    await Clipboard.setStringAsync(inviteLink)
-    Alert.alert('已复制', '邀请链接已复制，朋友打开后会自动带入邀请码。')
-  }
-
   const shareInvite = async () => {
     if (!inviteCode) {
       Alert.alert('邀请信息生成中', '请下拉刷新邀请页后再分享。')
@@ -279,7 +299,7 @@ export function InviteFriendsScreen() {
     }
     try {
       await Share.share({
-        title: '邀请加入 Food Link',
+        title: '邀请加入食探',
         message: inviteMessage,
       })
     } catch (error) {
@@ -288,95 +308,103 @@ export function InviteFriendsScreen() {
   }
 
   return (
-    <Page title="邀请好友" subtitle="邀请新用户注册并完成打卡，双方获得积分。" refreshing={loading} onRefresh={load}>
-      <Card>
-        <View style={styles.inviteProfileRow}>
-          {String(profile?.avatar || '') ? (
-            <Image source={{ uri: String(profile?.avatar || '') }} style={styles.inviteAvatar} />
-          ) : (
-            <View style={styles.inviteAvatarFallback}>
-              <Text style={styles.inviteAvatarText}>食</Text>
-            </View>
-          )}
-          <View style={styles.flex}>
-            <Text style={styles.sectionTitle}>{inviteTitle}</Text>
-            <Text style={styles.subtitle}>新用户 7 天内完成 2 个自然日有效记录，双方各得 15 积分。</Text>
-          </View>
+    <View style={styles.invitePage}>
+      <Svg width="100%" height="100%" preserveAspectRatio="none" style={StyleSheet.absoluteFill} pointerEvents="none">
+        <Defs>
+          <SvgLinearGradient id="inviteBg" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#f7faf8" />
+            <Stop offset="1" stopColor="#f3f7f4" />
+          </SvgLinearGradient>
+        </Defs>
+        <SvgRect x="0" y="0" width="100%" height="100%" fill="url(#inviteBg)" />
+        <SvgCircle cx="350" cy="18" r="128" fill="#10b981" opacity="0.14" />
+      </Svg>
+      <ScrollView
+        style={styles.inviteScroll}
+        contentContainerStyle={styles.inviteContent}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor="#10b981" colors={['#10b981']} />}
+      >
+        <View style={styles.inviteHero}>
+          <Text style={styles.inviteEyebrow}>邀请有礼</Text>
+          <Text style={styles.inviteTitle}>
+            {String(profile?.nickname || '').trim()
+              ? `${String(profile?.nickname || '').trim()} 邀你加入食探`
+              : isInviteOwner
+                ? '把食探分享给新朋友'
+                : '加入食探并开始健康打卡'}
+          </Text>
+          <Text style={styles.inviteSubtitle}>新用户 7 天内完成 2 个自然日有效记录，双方各得 15 积分，每月最多 10 人</Text>
         </View>
-        <Text style={styles.bigNumber} selectable>{inviteCode || '--'}</Text>
-        <Text style={styles.subtitle}>{inviteDesc}</Text>
-        {inviteNotice ? <Text style={styles.noticeText}>{inviteNotice}</Text> : null}
-        {isInviteOwner && inviteLink ? <Text style={styles.linkText} selectable>{inviteLink}</Text> : null}
-        {isInviteOwner ? (
-          <View style={styles.buttonRow}>
-            <SmallButton label="分享邀请" onPress={shareInvite} />
-            <SmallButton label="复制邀请码" onPress={copyInviteCode} />
-            <SmallButton label="复制链接" onPress={copyInviteLink} />
-          </View>
-        ) : (
-          <View style={styles.buttonRow}>
-            <SmallButton label={inviteActionLabel} onPress={inviteActionDone ? resolve : accept} />
-          </View>
-        )}
-        {!isInviteOwner ? <Text style={styles.subtitle}>{relationText}</Text> : null}
-      </Card>
 
-      {isInviteOwner && inviteLink ? (
-        <Card>
-          <View style={styles.inviteQrHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>扫码也能加入</Text>
-              <Text style={styles.subtitle}>把二维码展示给朋友，或截图后发到微信、短信和其他聊天应用。</Text>
+        <View style={[styles.inviteCard, styles.inviterCard]}>
+          <View style={styles.inviteProfileRow}>
+            {String(profile?.avatar || '') ? (
+              <Image source={{ uri: String(profile?.avatar || '') }} style={styles.inviteAvatar} />
+            ) : (
+              <View style={styles.inviteAvatarFallback}>
+                <Text style={styles.inviteAvatarText}>食</Text>
+              </View>
+            )}
+            <View style={styles.inviterCopy}>
+              <Text style={styles.inviterName}>{inviteTitle}</Text>
+              <Text style={styles.inviterDesc}>{inviteDesc}</Text>
             </View>
           </View>
-          <Pressable
-            accessibilityRole="imagebutton"
-            accessibilityLabel="打开邀请二维码"
-            style={styles.inviteQrPressable}
-            onPress={() => setQrPreviewOpen(true)}
-          >
-            <InviteQrCode value={inviteLink} />
+          <Pressable style={styles.inviteCodeChip} onPress={copyInviteCode}>
+            <View style={styles.inviteCodeLabelRow}>
+              <Text style={styles.inviteCodeLabel}>邀请码</Text>
+            </View>
+            <Text style={styles.inviteCodeValue} selectable>{inviteCode || '--'}</Text>
           </Pressable>
-          <Text style={styles.subtitle}>二维码内容为当前邀请链接，朋友打开后会自动带入邀请码。</Text>
-          <View style={styles.buttonRow}>
-            <SmallButton label="打开二维码" onPress={() => setQrPreviewOpen(true)} />
-            <SmallButton label="复制链接" onPress={copyInviteLink} />
-          </View>
-        </Card>
-      ) : null}
+          {inviteNotice ? <Text style={styles.noticeText}>{inviteNotice}</Text> : null}
+          {!isInviteOwner ? <Text style={styles.inviteRelationText}>{relationText}</Text> : null}
+        </View>
 
-      <Card>
-        <Text style={styles.sectionTitle}>手动填写邀请码</Text>
-        <Field
-          label="邀请码"
-          value={resolveCode}
-          onChangeText={(value) => {
-            setResolveCode(normalizeInviteCode(value))
-            setResolvedName('')
-            setResolvedProfile(null)
-            setInviteNotice('')
-          }}
-          autoCapitalize="none"
-        />
-        {resolvedName ? (
-          <View style={styles.inviteResolvedBox}>
-            <Text style={styles.itemName}>将添加：{resolvedName}</Text>
-            <Text style={styles.subtitle}>{inviteRelationText(resolvedProfile)}</Text>
+        <View style={[styles.inviteCard, styles.rulesCard]}>
+          <InviteRuleItem index="01" text="必须是从未注册过食探的新用户" />
+          <InviteRuleItem index="02" text="注册后 7 天内完成 2 个自然日饮食或运动记录" />
+          <InviteRuleItem index="03" text="达标后双方各得 15 积分，邀请人每月上限 10 人" />
+        </View>
+
+        {isInviteOwner && inviteLink ? (
+          <View style={[styles.inviteCard, styles.inviteQrCard]}>
+            <View style={styles.inviteQrHeader}>
+              <Text style={styles.inviteQrTitle}>扫码也能加入</Text>
+              <Text style={styles.inviteQrDesc}>把这个二维码展示给朋友，或保存后发到群里</Text>
+            </View>
+            <Pressable
+              accessibilityRole="imagebutton"
+              accessibilityLabel="打开邀请二维码"
+              style={styles.inviteQrBox}
+              onPress={() => setQrPreviewOpen(true)}
+            >
+              <InviteQrCode value={inviteLink} />
+            </Pressable>
           </View>
         ) : null}
-        <View style={styles.buttonRow}>
-          <SmallButton label="解析邀请码" onPress={resolve} />
-          <SmallButton label="加为好友" onPress={accept} />
-        </View>
-      </Card>
 
-      <Card>
-        <Text style={styles.sectionTitle}>规则</Text>
-        <RuleLine text="新用户 7 天内完成 2 个自然日有效记录后触发奖励。" />
-        <RuleLine text="邀请人与被邀请人各得 15 积分，按后端奖励规则结算。" />
-        <RuleLine text="App 侧可通过系统分享面板发到微信、短信或其他聊天应用。" />
-        <RuleLine text="朋友也可以在登录页手动填写邀请码，或通过 foodlink://invite?fi=邀请码 自动带入。" />
-      </Card>
+        <View style={styles.inviteActions}>
+          {isInviteOwner ? (
+            <>
+              <InviteActionButton label="立即转发邀请" onPress={shareInvite} disabled={!inviteCode} />
+              <InviteActionButton label="复制邀请码" variant="ghost" onPress={copyInviteCode} disabled={!inviteCode} />
+            </>
+          ) : (
+            <InviteActionButton
+              label={inviteActionDone ? inviteActionLabel : '直接加好友并开始打卡'}
+              onPress={accept}
+              disabled={!inviteCode || loading || inviteActionDone}
+              loading={loading && !inviteActionDone}
+            />
+          )}
+        </View>
+
+        {!loading && !inviterUserId && !inviteCode ? (
+          <View style={styles.inviteEmpty}>
+            <Text style={styles.inviteEmptyText}>当前还没有可用的邀请码</Text>
+          </View>
+        ) : null}
+      </ScrollView>
 
       <Modal visible={qrPreviewOpen} transparent animationType="fade" onRequestClose={() => setQrPreviewOpen(false)}>
         <View style={styles.inviteQrModalBackdrop}>
@@ -389,7 +417,7 @@ export function InviteFriendsScreen() {
           </View>
         </View>
       </Modal>
-    </Page>
+    </View>
   )
 }
 
@@ -404,6 +432,10 @@ export function FollowListScreen() {
   const [mutatingId, setMutatingId] = useState<string | null>(null)
   const type = route.params.type || 'followers'
   const title = type === 'followers' ? '被关注' : '关注'
+
+  useEffect(() => {
+    navigation.setOptions({ title })
+  }, [navigation, title])
 
   const load = useCallback(async (reset = true) => {
     setLoading(true)
@@ -441,11 +473,6 @@ export function FollowListScreen() {
     if (userId) navigation.navigate('ProfileSettings', { userId })
   }
 
-  const openChat = (user: FollowUserItem) => {
-    const id = followUserId(user)
-    if (id) navigation.navigate('PrivateChat', { userId: id, nickname: followDisplayName(user) })
-  }
-
   const toggleFollow = async (user: FollowUserItem) => {
     const id = followUserId(user)
     if (!id) return
@@ -462,50 +489,76 @@ export function FollowListScreen() {
     }
   }
 
+  const handleListScroll = ({ nativeEvent }: {
+    nativeEvent: { layoutMeasurement: { height: number }; contentOffset: { y: number }; contentSize: { height: number } }
+  }) => {
+    const nearBottom = nativeEvent.layoutMeasurement.height + nativeEvent.contentOffset.y >= nativeEvent.contentSize.height - 80
+    if (nearBottom && hasMore && !loading) void load(false)
+  }
+
   return (
-    <Page title={title} subtitle={`${items.length} 人 · 关注关系和用户主页`} refreshing={loading} onRefresh={() => load(true)}>
-      <Card>
-        <Text style={styles.sectionTitle}>{title}列表</Text>
-        <Text style={styles.subtitle}>查看用户主页，或直接发起私信和关注操作。</Text>
-      </Card>
-      {loading && items.length === 0 ? (
-        <Card>
-          <ActivityIndicator color={colors.brand} />
-        </Card>
-      ) : null}
-      {!loading && items.length === 0 ? <EmptyState text={`暂无${title}`} /> : null}
-      {items.map((user, index) => {
-        const userId = followUserId(user)
-        const isFollowing = followStates[userId] ?? Boolean(user.is_following)
-        return (
-          <Card key={userId || index}>
-            <View style={styles.followRow}>
-              <Pressable style={styles.followInfo} onPress={() => openProfile(userId)}>
+    <View style={styles.followListPage}>
+      <View pointerEvents="none" style={styles.followListWash} />
+      <ScrollView
+        style={styles.followListScroll}
+        contentContainerStyle={items.length ? styles.followListContent : styles.followListEmptyContent}
+        refreshControl={<RefreshControl refreshing={loading && items.length > 0} tintColor={colors.brand} onRefresh={() => load(true)} />}
+        scrollEventThrottle={16}
+        onScroll={handleListScroll}
+      >
+        {loading && items.length === 0 ? (
+          <View style={styles.followListState}>
+            <ActivityIndicator color={colors.brand} />
+          </View>
+        ) : null}
+
+        {!loading && items.length === 0 ? (
+          <View style={styles.followListEmpty}>
+            <Text style={styles.followListEmptyText}>暂无{title}</Text>
+          </View>
+        ) : null}
+
+        {items.map((user, index) => {
+          const userId = followUserId(user)
+          const isFollowing = followStates[userId] ?? Boolean(user.is_following)
+          return (
+            <View key={userId || index} style={styles.followListItem}>
+              <Pressable style={styles.followItemLeft} onPress={() => openProfile(userId)}>
                 <FollowAvatar user={user} />
-                <View style={styles.flex}>
-                  <Text style={styles.itemName}>{followDisplayName(user)}</Text>
-                  <Text style={styles.subtitle}>{followRelationText(type, isFollowing)}</Text>
-                </View>
+                <Text style={styles.followItemName} numberOfLines={1}>{followDisplayName(user)}</Text>
               </Pressable>
-              <View style={styles.followActions}>
-                <SmallButton label="主页" onPress={() => openProfile(userId)} />
-                <SmallButton label="私信" onPress={() => openChat(user)} />
-                <SmallButton label={isFollowing ? '已关注' : '+ 关注'} disabled={mutatingId === userId} onPress={() => void toggleFollow(user)} />
-              </View>
+              <Pressable
+                style={[styles.followItemButton, isFollowing && styles.followItemButtonActive]}
+                onPress={() => void toggleFollow(user)}
+                disabled={mutatingId === userId}
+              >
+                {mutatingId === userId ? (
+                  <ActivityIndicator size="small" color={isFollowing ? colors.textMuted : colors.surface} />
+                ) : (
+                  <Text style={[styles.followItemButtonText, isFollowing && styles.followItemButtonTextActive]}>
+                    {isFollowing ? '已关注' : '+ 关注'}
+                  </Text>
+                )}
+              </Pressable>
             </View>
-          </Card>
-        )
-      })}
-      {hasMore ? <AppButton label="查看更多" variant="secondary" loading={loading} onPress={() => load(false)} /> : null}
-    </Page>
+          )
+        })}
+
+        {loading && items.length > 0 ? (
+          <View style={styles.followListMoreSpinner}>
+            <ActivityIndicator color={colors.brand} />
+          </View>
+        ) : null}
+      </ScrollView>
+    </View>
   )
 }
 export function PublicFoodShareScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'PublicFoodShare'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const insets = useSafeAreaInsets()
   const editId = route.params?.editId
   const campusDefault = route.params?.mode === 'campus'
-  const [sourceRecords, setSourceRecords] = useState<PublicFoodItem[]>([])
   const [foodName, setFoodName] = useState('')
   const [description, setDescription] = useState('')
   const [imageUrls, setImageUrls] = useState('')
@@ -548,47 +601,43 @@ export function PublicFoodShareScreen() {
   const appliedLocationRef = useRef<string | null>(null)
 
   const load = useCallback(async () => {
+    if (!editId) return
     setLoading(true)
     try {
-      if (editId) {
-        const item = await apiClient.getPublicFood(editId)
-        setFoodName(item.food_name || '')
-        setDescription(item.description || '')
-        setImageUrls((item.image_paths?.length ? item.image_paths : item.image_path ? [item.image_path] : []).join('\n'))
-        setMerchantName(item.merchant_name || '')
-        setMerchantAddress(item.merchant_address || item.detail_address || '')
-        setCalories(String(Math.round(item.total_calories || 0)))
-        setProtein(String(Math.round(item.total_protein || 0)))
-        setCarbs(String(Math.round(item.total_carbs || 0)))
-        setFat(String(Math.round(item.total_fat || 0)))
-        setSourceKind(Boolean(item.is_campus_food) ? 'campus' : item.user_tags?.includes('自制') ? 'homemade' : 'restaurant')
-        setSchoolName(item.school_name || '')
-        setCampusName(item.campus_name || '')
-        setCanteenName(item.canteen_name || '')
-        setFloor(item.floor || '')
-        setWindowName(item.window_name || '')
-        setPrice(item.price != null ? String(item.price) : '')
-        setPriceType(normalizePublicFoodPriceType(item.price_type))
-        setPriceMin(item.price_min != null ? String(item.price_min) : '')
-        setPriceMax(item.price_max != null ? String(item.price_max) : '')
-        setPriceUnit(item.price_unit || '份')
-        setPriceCollectedAt(item.price_collected_at ? item.price_collected_at.slice(0, 10) : todayKey())
-        setPortionDescription(item.portion_description || '')
-        setTasteRating(item.taste_rating != null ? String(item.taste_rating) : '')
-        setSuitableForFatLoss(item.suitable_for_fat_loss ?? true)
-        setTags((item.user_tags || []).join('、'))
-        setNotes(item.user_notes || '')
-        setCampusLocationText(item.campus_location_text || '')
-        setProvince(item.province || '')
-        setCity(item.city || '')
-        setDistrict(item.district || '')
-        setDetailAddress(item.detail_address || item.merchant_address || '')
-        setLatitude(item.latitude != null ? String(item.latitude) : '')
-        setLongitude(item.longitude != null ? String(item.longitude) : '')
-      } else {
-        const data = await apiClient.listPublicFoods({ limit: 6, sortBy: 'latest' })
-        setSourceRecords(data.list || [])
-      }
+      const item = await apiClient.getPublicFood(editId)
+      setFoodName(item.food_name || '')
+      setDescription(item.description || '')
+      setImageUrls((item.image_paths?.length ? item.image_paths : item.image_path ? [item.image_path] : []).join('\n'))
+      setMerchantName(item.merchant_name || '')
+      setMerchantAddress(item.merchant_address || item.detail_address || '')
+      setCalories(String(Math.round(item.total_calories || 0)))
+      setProtein(String(Math.round(item.total_protein || 0)))
+      setCarbs(String(Math.round(item.total_carbs || 0)))
+      setFat(String(Math.round(item.total_fat || 0)))
+      setSourceKind(Boolean(item.is_campus_food) ? 'campus' : item.user_tags?.includes('自制') ? 'homemade' : 'restaurant')
+      setSchoolName(item.school_name || '')
+      setCampusName(item.campus_name || '')
+      setCanteenName(item.canteen_name || '')
+      setFloor(item.floor || '')
+      setWindowName(item.window_name || '')
+      setPrice(item.price != null ? String(item.price) : '')
+      setPriceType(normalizePublicFoodPriceType(item.price_type))
+      setPriceMin(item.price_min != null ? String(item.price_min) : '')
+      setPriceMax(item.price_max != null ? String(item.price_max) : '')
+      setPriceUnit(item.price_unit || '份')
+      setPriceCollectedAt(item.price_collected_at ? item.price_collected_at.slice(0, 10) : todayKey())
+      setPortionDescription(item.portion_description || '')
+      setTasteRating(item.taste_rating != null ? String(item.taste_rating) : '')
+      setSuitableForFatLoss(item.suitable_for_fat_loss ?? true)
+      setTags((item.user_tags || []).join('、'))
+      setNotes(item.user_notes || '')
+      setCampusLocationText(item.campus_location_text || '')
+      setProvince(item.province || '')
+      setCity(item.city || '')
+      setDistrict(item.district || '')
+      setDetailAddress(item.detail_address || item.merchant_address || '')
+      setLatitude(item.latitude != null ? String(item.latitude) : '')
+      setLongitude(item.longitude != null ? String(item.longitude) : '')
     } catch (error) {
       showError(editId ? '加载公共食物失败' : '加载最近分享失败', error)
     } finally {
@@ -853,108 +902,268 @@ export function PublicFoodShareScreen() {
     }
   }
 
+  const imageList = splitTextList(imageUrls)
+  const selectedPriceOption = publicFoodPriceTypeOptions.find((option) => option.value === priceType)
+  const submitLabel = editId ? '保存修改' : isCampus ? '提交并后台分析' : '发布到公共库'
+  const tagList = splitTextList(tags)
+  const quickTags = isCampus ? CAMPUS_FOOD_QUICK_TAGS : PUBLIC_FOOD_QUICK_TAGS
+  const showCampusSwitch = !campusDefault
+  const nutritionStats = [
+    { value: Math.round(Number(calories) || 0), label: '热量 kcal' },
+    { value: round1(Number(protein) || 0), label: '蛋白质 g' },
+    { value: round1(Number(carbs) || 0), label: '碳水 g' },
+    { value: round1(Number(fat) || 0), label: '脂肪 g' },
+  ]
+
+  const toggleTag = (tag: string) => {
+    setTags((current) => {
+      const currentTags = splitTextList(current)
+      const nextTags = currentTags.includes(tag)
+        ? currentTags.filter((item) => item !== tag)
+        : [...currentTags, tag]
+      return nextTags.join('、')
+    })
+  }
+
   return (
-    <Page title={editId ? '编辑公共食物' : '分享到公共食物库'} subtitle="补充外食、校园餐和自制餐食信息" refreshing={loading} onRefresh={load}>
-      <Card>
-        <Text style={styles.sectionTitle}>基础信息</Text>
-        <Field label="食物名称" value={foodName} onChangeText={setFoodName} />
-        <Field label="说明" value={description} onChangeText={setDescription} multiline />
-        <ImagePickerGrid urls={splitTextList(imageUrls)} onAdd={pickImages} onRemove={removeImage} loading={loading} max={PUBLIC_FOOD_MAX_IMAGES} />
-        <Field label="图片 URL" value={imageUrls} onChangeText={setImageUrls} placeholder="每行一个图片地址，可留空" multiline />
-        <Text style={styles.fieldLabel}>餐食来源</Text>
-        <View style={styles.segment}>
-          <SegmentButton label="外食/堂食" active={sourceKind === 'restaurant'} onPress={() => setSourceKind('restaurant')} />
-          <SegmentButton label="自制" active={isHomemade} onPress={() => setSourceKind('homemade')} />
-          <SegmentButton label="校园餐" active={isCampus} onPress={() => setSourceKind('campus')} />
-        </View>
-        {isHomemade ? <Text style={styles.helperText}>自制餐食会自动带上「自制」标签，不要求商家位置。</Text> : null}
-        {!isHomemade ? <Field label={isCampus ? '窗口/商户' : '商家名称'} value={merchantName} onChangeText={setMerchantName} /> : null}
-        {!isHomemade ? <Field label="地址/位置" value={merchantAddress} onChangeText={setMerchantAddress} placeholder={isCampus ? '校区或楼栋位置' : '商家地址、商场或楼栋位置'} /> : null}
-        {sourceKind === 'restaurant' ? (
-          <>
-            <View style={styles.buttonRow}>
-              <SmallButton label="搜索商家位置" onPress={openLocationSearch} />
+    <View style={styles.publicFoodShareRoot}>
+      <ScrollView
+        style={styles.publicFoodShareScroll}
+        contentContainerStyle={[styles.publicFoodShareScrollContent, { paddingBottom: Math.max(insets.bottom, 10) + 100 }]}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor="#00bc7d" colors={['#00bc7d']} />}
+      >
+        <View style={styles.publicFoodShareBody}>
+          {isCampus ? (
+            <View style={[styles.publicFoodShareHero, styles.publicFoodShareHeroCampus]}>
+              <Text style={styles.publicFoodShareHeroTitle}>{editId ? '编辑校园食堂菜品' : '分享校园食堂菜品'}</Text>
+              <Text style={styles.publicFoodShareHeroSubtitle}>补充学校、食堂和窗口信息，帮助同学更快找到好吃的一餐。</Text>
             </View>
-            <Text style={styles.helperText}>可以先搜索商家或商场位置，选中后会回填名称、地址和经纬度；省份或区县缺失时再手动补齐。</Text>
-            <Field label="省份" value={province} onChangeText={setProvince} placeholder="如：北京市" />
-            <Field label="城市" value={city} onChangeText={setCity} placeholder="如：北京市" />
-            <Field label="区县" value={district} onChangeText={setDistrict} placeholder="如：海淀区" />
-            <Field label="详细地址" value={detailAddress} onChangeText={setDetailAddress} placeholder="门店地址、商场楼层或附近地标" />
-            <View style={styles.twoColumn}>
-              <View style={styles.flex}>
-                <Field label="纬度" value={latitude} onChangeText={setLatitude} keyboardType="decimal-pad" placeholder="如：39.990" />
+          ) : null}
+
+          <PublicFoodShareSection title={isCampus ? '菜品图片' : '食物图片'} required meta={`${imageList.length}/${PUBLIC_FOOD_MAX_IMAGES}`}>
+            <ImagePickerGrid urls={imageList} onAdd={pickImages} onRemove={removeImage} loading={loading} max={PUBLIC_FOOD_MAX_IMAGES} />
+          </PublicFoodShareSection>
+
+          {!isCampus ? (
+            <PublicFoodShareSection title="营养信息">
+              <PublicFoodNutritionSummary items={nutritionStats} />
+              <Text style={styles.publicFoodShareNutritionTip}>营养数据会随识别结果带入；如为空，可手动补充。</Text>
+              <View style={styles.publicFoodShareMacroGrid}>
+                <View style={styles.flex}>
+                  <Field label="热量 kcal" value={calories} onChangeText={setCalories} keyboardType="decimal-pad" />
+                </View>
+                <View style={styles.flex}>
+                  <Field label="蛋白质 g" value={protein} onChangeText={setProtein} keyboardType="decimal-pad" />
+                </View>
               </View>
-              <View style={styles.flex}>
-                <Field label="经度" value={longitude} onChangeText={setLongitude} keyboardType="decimal-pad" placeholder="如：116.310" />
+              <View style={styles.publicFoodShareMacroGrid}>
+                <View style={styles.flex}>
+                  <Field label="碳水 g" value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" />
+                </View>
+                <View style={styles.flex}>
+                  <Field label="脂肪 g" value={fat} onChangeText={setFat} keyboardType="decimal-pad" />
+                </View>
               </View>
-            </View>
-            <Text style={styles.helperText}>外食/堂食需要完整位置；如果是家里做的餐食，请切换为「自制」。</Text>
-          </>
-        ) : null}
-        {isCampus ? (
-          <>
-            <Field label="学校" value={schoolName} onChangeText={setSchoolName} />
-            <Field label="校区" value={campusName} onChangeText={setCampusName} placeholder="可选，如：燕园校区" />
-            <Field label="食堂" value={canteenName} onChangeText={setCanteenName} />
-            <Field label="楼层" value={floor} onChangeText={setFloor} />
-            <Field label="窗口" value={windowName} onChangeText={setWindowName} />
-            <Field label="校园位置描述" value={campusLocationText} onChangeText={setCampusLocationText} placeholder="如：东区一食堂二楼麻辣烫窗口" />
-            <Text style={styles.fieldLabel}>计价方式</Text>
-            <View style={styles.segment}>
-              {publicFoodPriceTypeOptions.map((option) => (
-                <SegmentButton key={option.value} label={option.label} active={priceType === option.value} onPress={() => setPriceType(option.value)} />
+            </PublicFoodShareSection>
+          ) : null}
+
+          <PublicFoodShareSection title={isCampus ? '菜品信息' : '基础信息'} required>
+            <Field label={isCampus ? '菜品名称' : '食物名称'} value={foodName} onChangeText={setFoodName} />
+            {!isCampus ? <Field label="说明" value={description} onChangeText={setDescription} multiline /> : null}
+            {!isCampus ? (
+              <>
+                <Text style={styles.fieldLabel}>餐食来源</Text>
+                <View style={styles.publicFoodSourceTagRow}>
+                  <PublicFoodSourceChip label="自制" active={isHomemade} onPress={() => setSourceKind('homemade')} />
+                  <PublicFoodSourceChip label="外卖/堂食" active={sourceKind === 'restaurant'} onPress={() => setSourceKind('restaurant')} />
+                </View>
+                {!isHomemade ? <Field label="商家名称（可选）" value={merchantName} onChangeText={setMerchantName} placeholder="如：沙县小吃、肯德基等" /> : null}
+                <Text style={styles.fieldLabel}>口味评分（可选）</Text>
+                <PublicFoodRatingStars value={optionalNumber(tasteRating) || 0} onChange={(nextValue) => setTasteRating(nextValue ? String(nextValue) : '')} />
+              </>
+            ) : null}
+            {showCampusSwitch ? (
+              <PublicFoodSwitchRow label="校园食堂菜品" value={isCampus} onPress={() => setSourceKind(isCampus ? 'restaurant' : 'campus')} />
+            ) : null}
+            {isCampus ? (
+              <>
+                <Field label="学校" value={schoolName} onChangeText={setSchoolName} placeholder="请选择学校" />
+                <Field label="食堂" value={canteenName} onChangeText={setCanteenName} placeholder="请输入食堂名称" />
+                <View style={styles.publicFoodShareMacroGrid}>
+                  <View style={styles.flex}>
+                    <Field label="楼层（可选）" value={floor} onChangeText={setFloor} placeholder="如：一层" />
+                  </View>
+                  <View style={styles.flex}>
+                    <Field label="窗口（可选）" value={windowName} onChangeText={setWindowName} placeholder="如：12号窗口" />
+                  </View>
+                </View>
+              </>
+            ) : null}
+          </PublicFoodShareSection>
+
+          {isCampus ? (
+            <PublicFoodShareSection title="价格信息（可选）">
+              <Text style={styles.fieldLabel}>计价方式</Text>
+              <View style={styles.segment}>
+                {publicFoodPriceTypeOptions.map((option) => (
+                  <SegmentButton key={option.value} label={option.label} active={priceType === option.value} onPress={() => setPriceType(option.value)} />
+                ))}
+              </View>
+              <Text style={styles.publicFoodShareHint}>{selectedPriceOption?.helper}</Text>
+              {priceType === 'range' ? (
+                <View style={styles.publicFoodShareMacroGrid}>
+                  <View style={styles.flex}>
+                    <Field label="最低价" value={priceMin} onChangeText={setPriceMin} keyboardType="decimal-pad" placeholder="如：8" />
+                  </View>
+                  <View style={styles.flex}>
+                    <Field label="最高价" value={priceMax} onChangeText={setPriceMax} keyboardType="decimal-pad" placeholder="如：15" />
+                  </View>
+                </View>
+              ) : (
+                <Field label="价格" value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder={priceType === 'unknown' ? '可留空' : '如：12'} />
+              )}
+              <View style={styles.publicFoodShareMacroGrid}>
+                <View style={styles.flex}>
+                  <Field label="价格单位" value={priceUnit} onChangeText={setPriceUnit} placeholder="如：元/份" />
+                </View>
+                <View style={styles.flex}>
+                  <Field label="采集日期" value={priceCollectedAt} onChangeText={setPriceCollectedAt} placeholder="YYYY-MM-DD" />
+                </View>
+              </View>
+              <Field label="份量说明（可选）" value={portionDescription} onChangeText={setPortionDescription} placeholder="如：大份、小份、约一人份" />
+            </PublicFoodShareSection>
+          ) : null}
+
+          <PublicFoodShareSection title="标签">
+            <PublicFoodSwitchRow label="适合减脂" value={suitableForFatLoss} onPress={() => setSuitableForFatLoss(!suitableForFatLoss)} />
+            <View style={styles.publicFoodQuickTags}>
+              {quickTags.map((tag) => (
+                <Pressable key={tag} style={[styles.publicFoodQuickTag, tagList.includes(tag) && styles.publicFoodQuickTagActive]} onPress={() => toggleTag(tag)}>
+                  <Text style={[styles.publicFoodQuickTagText, tagList.includes(tag) && styles.publicFoodQuickTagTextActive]}>{tag}</Text>
+                </Pressable>
               ))}
             </View>
-            <Text style={styles.helperText}>{publicFoodPriceTypeOptions.find((option) => option.value === priceType)?.helper}</Text>
-            {priceType === 'range' ? (
-              <View style={styles.twoColumn}>
+            <Field label="自定义标签" value={tags} onChangeText={setTags} placeholder="低脂、饱腹、清淡，用逗号或顿号分隔" />
+          </PublicFoodShareSection>
+
+          {!isCampus ? (
+            <PublicFoodShareSection title={isHomemade ? '所在地区（可选）' : '商家地址'} required={!isHomemade}>
+              <View style={styles.publicFoodShareLocationHeader}>
+                <Text style={styles.publicFoodShareHint}>
+                  {isHomemade ? '自制餐食不需要填写商家信息；所在地区可按需补充。' : '搜索商家后会回填名称、地址和经纬度。'}
+                </Text>
+                {!isHomemade ? <SmallButton label="搜索地址" onPress={openLocationSearch} /> : null}
+              </View>
+              <View style={styles.publicFoodShareMacroGrid}>
                 <View style={styles.flex}>
-                  <Field label="最低价" value={priceMin} onChangeText={setPriceMin} keyboardType="decimal-pad" placeholder="如：8" />
+                  <Field label="省份" value={province} onChangeText={setProvince} placeholder="如：北京市" />
                 </View>
                 <View style={styles.flex}>
-                  <Field label="最高价" value={priceMax} onChangeText={setPriceMax} keyboardType="decimal-pad" placeholder="如：15" />
+                  <Field label="城市" value={city} onChangeText={setCity} placeholder="如：北京市" />
                 </View>
               </View>
-            ) : (
-              <Field label="价格" value={price} onChangeText={setPrice} keyboardType="decimal-pad" placeholder={priceType === 'unknown' ? '可留空' : '如：15'} />
-            )}
-            <Field label="价格单位" value={priceUnit} onChangeText={setPriceUnit} placeholder="份、碗、杯" />
-            <Field label="价格采集日期" value={priceCollectedAt} onChangeText={setPriceCollectedAt} placeholder="YYYY-MM-DD" />
-          </>
-        ) : null}
-      </Card>
+              {!isHomemade ? <Field label="区县" value={district} onChangeText={setDistrict} placeholder="如：海淀区" /> : null}
+              {!isHomemade ? <Field label="详细地址（可选）" value={detailAddress} onChangeText={setDetailAddress} placeholder="如：XX路XX号" /> : null}
+            </PublicFoodShareSection>
+          ) : null}
 
-      <Card>
-        <Text style={styles.sectionTitle}>营养信息</Text>
-        <Field label="热量 kcal" value={calories} onChangeText={setCalories} keyboardType="decimal-pad" />
-        <Field label="蛋白 g" value={protein} onChangeText={setProtein} keyboardType="decimal-pad" />
-        <Field label="碳水 g" value={carbs} onChangeText={setCarbs} keyboardType="decimal-pad" />
-        <Field label="脂肪 g" value={fat} onChangeText={setFat} keyboardType="decimal-pad" />
-        <Field label="份量描述" value={portionDescription} onChangeText={setPortionDescription} placeholder="如：一份约 350g，含米饭半碗" />
-        <Field label="口味评分" value={tasteRating} onChangeText={setTasteRating} keyboardType="decimal-pad" placeholder="1-5，可留空" />
-        <View style={styles.segment}>
-          <SegmentButton label="适合减脂" active={suitableForFatLoss} onPress={() => setSuitableForFatLoss(true)} />
-          <SegmentButton label="普通选择" active={!suitableForFatLoss} onPress={() => setSuitableForFatLoss(false)} />
+          <PublicFoodShareSection title="补充说明（可选）">
+            <Field label={isCampus ? '例如口味、排队情况、推荐搭配等' : '分享你对这份餐食的评价或建议'} value={notes} onChangeText={setNotes} multiline />
+          </PublicFoodShareSection>
         </View>
-        <Field label="标签" value={tags} onChangeText={setTags} placeholder="低脂、饱腹、清淡，用逗号或顿号分隔" />
-        <Field label="个人备注" value={notes} onChangeText={setNotes} multiline />
-        <AppButton label={editId ? '保存修改' : '发布到公共库'} loading={loading} onPress={submit} />
-      </Card>
+      </ScrollView>
+      <View style={[styles.publicFoodShareSubmitBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+        <AppButton label={submitLabel} loading={loading} onPress={submit} />
+      </View>
+    </View>
+  )
+}
 
-      {!editId && sourceRecords.length ? <Text style={styles.groupTitle}>最近公共食物参考</Text> : null}
-      {sourceRecords.map((item) => (
-        <Card key={item.id}>
-          <Text style={styles.itemName}>{item.food_name}</Text>
-          <Text style={styles.subtitle}>{Math.round(item.total_calories || 0)} kcal · {item.merchant_name || item.canteen_name || '用户分享'}</Text>
-        </Card>
+function PublicFoodShareSection({
+  title,
+  required,
+  meta,
+  children,
+}: {
+  title: string
+  required?: boolean
+  meta?: string
+  children: ReactNode
+}) {
+  return (
+    <View style={styles.publicFoodShareSection}>
+      <View style={styles.publicFoodShareSectionHeader}>
+        <View style={styles.inlineRow}>
+          <Text style={styles.publicFoodShareSectionTitle}>{title}</Text>
+          {required ? <Text style={styles.publicFoodShareRequired}>*</Text> : null}
+        </View>
+        {meta ? <Text style={styles.publicFoodShareMeta}>{meta}</Text> : null}
+      </View>
+      {children}
+    </View>
+  )
+}
+
+function PublicFoodNutritionSummary({ items }: { items: Array<{ value: number | string; label: string }> }) {
+  return (
+    <View style={styles.publicFoodNutritionSummary}>
+      {items.map((item) => (
+        <View key={item.label} style={styles.publicFoodNutritionItem}>
+          <Text style={styles.publicFoodNutritionValue}>{item.value}</Text>
+          <Text style={styles.publicFoodNutritionLabel}>{item.label}</Text>
+        </View>
       ))}
-    </Page>
+    </View>
+  )
+}
+
+function PublicFoodSourceChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string
+  active: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable style={[styles.publicFoodSourceChip, active && styles.publicFoodSourceChipActive]} onPress={onPress}>
+      <Text style={[styles.publicFoodSourceChipText, active && styles.publicFoodSourceChipTextActive]}>{label}</Text>
+    </Pressable>
+  )
+}
+
+function PublicFoodSwitchRow({ label, value, onPress }: { label: string; value: boolean; onPress: () => void }) {
+  return (
+    <View style={styles.publicFoodSwitchRow}>
+      <Text style={styles.publicFoodSwitchLabel}>{label}</Text>
+      <Pressable style={[styles.publicFoodSwitch, value && styles.publicFoodSwitchActive]} onPress={onPress}>
+        <View style={[styles.publicFoodSwitchDot, value && styles.publicFoodSwitchDotActive]} />
+      </Pressable>
+    </View>
+  )
+}
+
+function PublicFoodRatingStars({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <View style={styles.publicFoodRatingStars}>
+      {[1, 2, 3, 4, 5].map((item) => {
+        const active = item <= value
+        return (
+          <Pressable key={item} onPress={() => onChange(item === value ? 0 : item)} hitSlop={8}>
+            <Text style={[styles.publicFoodRatingStar, active && styles.publicFoodRatingStarActive]}>★</Text>
+          </Pressable>
+        )
+      })}
+    </View>
   )
 }
 
 export function RecipeEditScreen() {
   const route = useRoute<RouteProp<RootStackParamList, 'RecipeEdit'>>()
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const insets = useSafeAreaInsets()
   const recipeId = route.params?.recipeId
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -965,6 +1174,12 @@ export function RecipeEditScreen() {
   const [items, setItems] = useState<RecipeFormRow[]>(() => [createBlankRecipeRow()])
   const [loading, setLoading] = useState(false)
   const totals = useMemo(() => calculateRecipeTotals(items), [items])
+  const summaryStats = [
+    { value: Math.round(totals.calories), label: '热量 (kcal)' },
+    { value: round1(totals.protein), label: '蛋白质 (g)' },
+    { value: round1(totals.carbs), label: '碳水 (g)' },
+    { value: round1(totals.fat), label: '脂肪 (g)' },
+  ]
 
   const load = useCallback(async () => {
     if (!recipeId) return
@@ -1045,65 +1260,130 @@ export function RecipeEditScreen() {
     ])
   }
 
-  const updateItem = (id: string, patch: Partial<RecipeFormRow>) => {
-    setItems((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item))
+  if (!recipeId) {
+    return (
+      <View style={styles.recipeEditPage}>
+        <View style={styles.recipeEditWash} />
+        <ScrollView
+          style={styles.recipeEditScroll}
+          contentContainerStyle={[styles.recipeEditContent, { paddingBottom: Math.max(insets.bottom, 12) + 28 }]}
+        >
+          <View style={styles.recipeEditEmptyCard}>
+            <Text style={styles.recipeEditEmptyIcon}>📝</Text>
+            <Text style={styles.recipeEditEmptyTitle}>无法编辑食谱</Text>
+            <Text style={styles.recipeEditEmptyDesc}>请从识别结果页保存食谱后再编辑</Text>
+          </View>
+        </ScrollView>
+      </View>
+    )
   }
 
-  const addItem = () => setItems((current) => [...current, createBlankRecipeRow()])
-  const removeItem = (id: string) => setItems((current) => current.length > 1 ? current.filter((item) => item.id !== id) : current)
-
   return (
-    <Page title={recipeId ? '编辑食谱' : '新建食谱'} subtitle="常吃组合可一键写入饮食记录" refreshing={loading} onRefresh={load}>
-      <Card>
-        <MealPicker value={mealType} onChange={setMealType} />
-        <Field label="食谱名" value={name} onChangeText={setName} />
-        <Field label="说明" value={description} onChangeText={setDescription} multiline />
-        <Field label="图片 URL" value={imagePath} onChangeText={setImagePath} placeholder="可选，粘贴餐食图片地址" />
-        <Field label="标签" value={tags} onChangeText={setTags} placeholder="低脂、常吃、训练后，用逗号或顿号分隔" />
-        <View style={styles.segment}>
-          <SegmentButton label="收藏" active={isFavorite} onPress={() => setIsFavorite(true)} />
-          <SegmentButton label="普通" active={!isFavorite} onPress={() => setIsFavorite(false)} />
-        </View>
-      </Card>
-
-      <Card>
-        <Text style={styles.sectionTitle}>营养摘要</Text>
-        <View style={styles.nutritionRow}>
-          <Pill text={`${Math.round(totals.calories)} kcal`} />
-          <Pill text={`蛋白 ${round1(totals.protein)}g`} />
-          <Pill text={`碳水 ${round1(totals.carbs)}g`} />
-          <Pill text={`脂肪 ${round1(totals.fat)}g`} />
-          <Pill text={`${Math.round(totals.weight)}g`} />
-        </View>
-      </Card>
-
-      <Card>
-        <Text style={styles.sectionTitle}>食物明细</Text>
-        {items.map((item, index) => (
-          <View key={item.id} style={styles.itemEditor}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.itemName}>食物 {index + 1}</Text>
-              {items.length > 1 ? <SmallButton label="移除" danger onPress={() => removeItem(item.id)} /> : null}
-            </View>
-            <Field label="名称" value={item.name} onChangeText={(value) => updateItem(item.id, { name: value })} />
-            <View style={styles.twoColumn}>
-              <View style={styles.flex}><Field label="重量 g" value={item.weight} onChangeText={(value) => updateItem(item.id, { weight: value })} keyboardType="decimal-pad" /></View>
-              <View style={styles.flex}><Field label="热量 kcal" value={item.calories} onChangeText={(value) => updateItem(item.id, { calories: value })} keyboardType="decimal-pad" /></View>
-            </View>
-            <View style={styles.threeColumn}>
-              <View style={styles.flex}><Field label="蛋白 g" value={item.protein} onChangeText={(value) => updateItem(item.id, { protein: value })} keyboardType="decimal-pad" /></View>
-              <View style={styles.flex}><Field label="碳水 g" value={item.carbs} onChangeText={(value) => updateItem(item.id, { carbs: value })} keyboardType="decimal-pad" /></View>
-              <View style={styles.flex}><Field label="脂肪 g" value={item.fat} onChangeText={(value) => updateItem(item.id, { fat: value })} keyboardType="decimal-pad" /></View>
+    <View style={styles.recipeEditPage}>
+      <View style={styles.recipeEditWash} />
+      <ScrollView
+        style={styles.recipeEditScroll}
+        contentContainerStyle={[styles.recipeEditContent, { paddingBottom: Math.max(insets.bottom, 12) + 28 }]}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={recipeId ? (
+          <RefreshControl refreshing={loading} onRefresh={load} tintColor="#00bc7d" colors={['#00bc7d']} />
+        ) : undefined}
+      >
+        <View style={styles.recipeEditCard}>
+          <Text style={styles.recipeEditSectionTitle}>基本信息</Text>
+          <RecipeEditField label="食谱名称" value={name} onChangeText={setName} placeholder="请输入食谱名称" editable={!loading} />
+          <RecipeEditField
+            label="描述"
+            value={description}
+            onChangeText={setDescription}
+            placeholder="请输入食谱描述（可选）"
+            multiline
+            editable={!loading}
+          />
+          <View style={styles.recipeEditFormItem}>
+            <Text style={styles.recipeEditLabel}>适合餐次</Text>
+            <View style={styles.recipeMealOptions}>
+              {mealOptions.map((meal) => {
+                const active = mealType === meal
+                return (
+                  <Pressable
+                    key={meal}
+                    style={[styles.recipeMealOption, active && styles.recipeMealOptionActive]}
+                    onPress={() => setMealType(meal)}
+                    disabled={loading}
+                  >
+                    <Text style={[styles.recipeMealOptionText, active && styles.recipeMealOptionTextActive]}>{getMealTypeLabel(meal)}</Text>
+                  </Pressable>
+                )
+              })}
             </View>
           </View>
-        ))}
-        <View style={styles.buttonRow}>
-          <SmallButton label="添加食物" onPress={addItem} />
         </View>
-      </Card>
-      <AppButton label="保存食谱" loading={loading} onPress={save} />
-      {recipeId ? <AppButton label="删除食谱" variant="secondary" loading={loading} onPress={remove} /> : null}
-    </Page>
+
+        <View style={styles.recipeEditCard}>
+          <Text style={styles.recipeEditSectionTitle}>营养摘要</Text>
+          <View style={styles.recipeSummaryGrid}>
+            {summaryStats.map((stat) => (
+              <View key={stat.label} style={styles.recipeSummaryItem}>
+                <Text style={styles.recipeSummaryValue}>{stat.value}</Text>
+                <Text style={styles.recipeSummaryLabel}>{stat.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.recipeEditActionBar}>
+          {recipeId ? (
+            <Pressable style={styles.recipeDeleteButton} onPress={remove} disabled={loading}>
+              <Text style={styles.recipeDeleteButtonText}>删除食谱</Text>
+            </Pressable>
+          ) : null}
+          <Pressable style={[styles.recipeSaveButton, loading && styles.recipeSaveButtonDisabled]} onPress={save} disabled={loading}>
+            {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.recipeSaveButtonText}>保存</Text>}
+          </Pressable>
+        </View>
+      </ScrollView>
+      {loading && recipeId ? (
+        <View style={styles.recipeEditLoadingOverlay} pointerEvents="none">
+          <ActivityIndicator size="small" color="#00bc7d" />
+        </View>
+      ) : null}
+    </View>
+  )
+}
+
+function RecipeEditField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  multiline,
+  keyboardType,
+  editable = true,
+}: {
+  label: string
+  value: string
+  onChangeText: (value: string) => void
+  placeholder?: string
+  multiline?: boolean
+  keyboardType?: 'default' | 'decimal-pad'
+  editable?: boolean
+}) {
+  return (
+    <View style={styles.recipeEditFormItem}>
+      <Text style={styles.recipeEditLabel}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#9ca3af"
+        multiline={multiline}
+        keyboardType={keyboardType}
+        editable={editable}
+        style={[styles.recipeEditInput, multiline && styles.recipeEditTextarea]}
+        textAlignVertical={multiline ? 'top' : 'center'}
+      />
+    </View>
   )
 }
 
@@ -1215,131 +1495,375 @@ export function PetHomeScreen() {
   const candidates = pet?.selection_candidates || []
   const showCandidates = candidates.length > 0 && Boolean(pet?.needs_selection || pet?.free_profile_rematch_available)
   return (
-    <Page title="成长伙伴" subtitle="跟随饮食、运动和健康记录一起成长" refreshing={loading} onRefresh={load}>
-      <Card>
-        <View style={styles.petHero}>
+    <View style={styles.petHomePage}>
+      <ScrollView
+        style={styles.petHomeScroll}
+        contentContainerStyle={styles.petHomeContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+      >
+        <View style={styles.petHomeHero}>
           <PetAvatar pet={pet} size="large" mood={summary?.status.mood} state={summary?.status.state} />
-          <Text style={styles.bigTitle}>{pet?.name || '成长伙伴'}</Text>
-          <Text style={styles.subtitle}>Lv.{pet?.level || 1} · {pet?.level_exp || 0}/{pet?.next_level_exp || 100} EXP</Text>
-          <Text style={styles.petMoodText}>{petMoodStateText}</Text>
-        </View>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(100, pet?.level_progress || 0))}%` }]} />
-        </View>
-        <View style={styles.petStatsGrid}>
-          <PetStat label="总经验" value={`${pet?.experience || 0}`} />
-          <PetStat label="距升级" value={`${nextLevelGap}`} />
-          <PetStat label="陪伴天数" value={`${pet?.total_events || 0}`} />
-        </View>
-      </Card>
-
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>为什么是它</Text>
-          <Pill text={petArchetypeLabel(pet?.archetype)} />
-        </View>
-        {(pet?.match_reasons?.length ? pet.match_reasons : ['它会根据你的健康目标、活动水平和记录习惯生成，不按性别粗暴分配。']).map((reason) => (
-          <RuleLine key={reason} text={reason} />
-        ))}
-      </Card>
-
-      {showCandidates ? (
-        <Card>
-          <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>{pet?.needs_selection ? '三选一伙伴' : '免费重新匹配'}</Text>
-            <Pill text="不消耗积分" />
+          <View style={styles.petHomeHeroCopy}>
+            <Text style={styles.petHomeName}>{pet?.name || '健康伙伴'}</Text>
+            <View style={styles.petHomeMetaRow}>
+              <Text style={styles.petHomeChip}>Lv.{pet?.level || 1}</Text>
+              <Text style={styles.petHomeChipMuted}>{petPersonalityLabel(pet?.personality)}</Text>
+              <Text style={styles.petHomeChipMuted}>{petArchetypeLabel(pet?.archetype)}</Text>
+              <Text style={styles.petHomeChipMuted}>{petMoodStateText}</Text>
+            </View>
+            <Text style={styles.petHomeMessage}>{summary?.status.message || '它正在安静陪你记录每一天。'}</Text>
           </View>
-          <Text style={styles.subtitle}>系统会先使用默认候选，选择后会同步更新首页与成长伙伴页的形象。</Text>
-          {candidates.map((candidate) => {
-            const isCurrent = candidate.pet_seed === pet?.pet_seed
-            return (
-              <View key={candidate.id} style={[styles.petCandidateCard, isCurrent && styles.petCandidateCardActive]}>
-                <PetAvatar pet={candidate} size="small" />
-                <View style={styles.flex}>
-                  <Text style={styles.itemName}>{candidate.name}</Text>
-                  <Text style={styles.subtitle}>{candidate.match_reasons?.join('、') || petArchetypeLabel(candidate.archetype)}</Text>
-                  <Text style={styles.itemMeta}>{candidateStyleLabel(candidate.style)}{typeof candidate.score === 'number' ? ` · ${candidate.score}` : ''}</Text>
-                </View>
-                <SmallButton
-                  label={isCurrent ? '当前' : selectingCandidateId === candidate.id ? '选择中' : '选择'}
-                  disabled={isCurrent || Boolean(selectingCandidateId)}
-                  onPress={() => selectCandidate(candidate)}
-                />
+        </View>
+
+        <View style={[styles.petHomeCard, styles.petHomeChatCard]}>
+          <View style={styles.petHomeCardHead}>
+            <Text style={styles.petHomeCardTitle}>问问{pet?.name || '伙伴'}</Text>
+            <Text style={styles.petHomeCardSide}>文本分析 demo</Text>
+          </View>
+          <Text style={styles.petHomeBodyText}>让它读取你已保存的饮食文字和营养数据，聊聊训练状态、减脂卡住、碳水和蛋白质分布。不读取图片。</Text>
+          <Pressable style={[styles.petHomeInlineAction, styles.petHomeInlineActionPrimary]} onPress={() => navigation.navigate('PetChat')}>
+            <Text style={styles.petHomeInlineActionText}>去问问它</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.petHomeCard}>
+          <View style={styles.petHomeCardHead}>
+            <Text style={styles.petHomeCardTitle}>为什么是它</Text>
+            <Text style={styles.petHomeCardSide}>{petArchetypeLabel(pet?.archetype)}</Text>
+          </View>
+          {(pet?.match_reasons?.length ? pet.match_reasons : ['它会根据你的健康目标、活动水平和记录习惯生成，不按性别粗暴分配。']).map((reason) => (
+            <View key={reason} style={styles.petHomeReasonItem}>
+              <Text style={styles.petHomeReasonDot}>•</Text>
+              <Text style={styles.petHomeReasonText}>{reason}</Text>
+            </View>
+          ))}
+          {(pet?.growth_unlocks || []).length ? (
+            <View style={styles.petHomeUnlockRow}>
+              {(pet?.growth_unlocks || []).map((unlock) => <Text key={unlock} style={styles.petHomeUnlockChip}>{growthUnlockLabel(unlock)}</Text>)}
+            </View>
+          ) : null}
+        </View>
+
+        {showCandidates ? (
+          <View style={styles.petHomeCard}>
+            <View style={styles.petHomeCardHead}>
+              <Text style={styles.petHomeCardTitle}>{pet?.needs_selection ? '三选一伙伴' : '免费重新匹配'}</Text>
+              <Text style={styles.petHomeCardSide}>不消耗积分</Text>
+            </View>
+            <Text style={styles.petHomeBodyText}>系统先默认使用候选，你可以在这里挑一个真正顺眼的伙伴。</Text>
+            <View style={styles.petHomeCandidateGrid}>
+              {candidates.map((candidate) => {
+                const isCurrent = candidate.pet_seed === pet?.pet_seed
+                const disabled = isCurrent || Boolean(selectingCandidateId)
+                return (
+                  <Pressable key={candidate.id} disabled={disabled} style={[styles.petHomeCandidateCard, isCurrent && styles.petHomeCandidateCardActive]} onPress={() => selectCandidate(candidate)}>
+                    <PetAvatar pet={candidate} size="small" />
+                    <Text style={styles.petHomeCandidateName} numberOfLines={1}>{candidate.name}</Text>
+                    <Text style={styles.petHomeCandidateMeta} numberOfLines={2}>
+                      {candidateStyleLabel(candidate.style)}{typeof candidate.score === 'number' ? ` · ${candidate.score}` : ''}
+                    </Text>
+                    {selectingCandidateId === candidate.id ? (
+                      <ActivityIndicator color="#2f7f62" size="small" />
+                    ) : (
+                      <Text style={styles.petHomeCandidateAction}>{isCurrent ? '当前' : '选择'}</Text>
+                    )}
+                  </Pressable>
+                )
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.petHomeCard}>
+          <View style={styles.petHomeCardHead}>
+            <Text style={styles.petHomeCardTitle}>成长进度</Text>
+            <Text style={styles.petHomeCardSide}>{pet ? `${pet.level_exp || 0}/${pet.next_level_exp || 100}` : '--'}</Text>
+          </View>
+          <View style={styles.petHomeProgressTrack}>
+            <View style={[styles.petHomeProgressFill, { width: `${Math.max(0, Math.min(100, pet?.level_progress || 0))}%` }]} />
+          </View>
+          <View style={styles.petHomeMetricGrid}>
+            <PetHomeMetric label="总经验" value={`${pet?.experience || 0}`} />
+            <PetHomeMetric label="距升级" value={`${nextLevelGap}`} />
+            <PetHomeMetric label="陪伴天数" value={`${pet?.total_events || 0}`} />
+          </View>
+        </View>
+
+        <View style={styles.petHomeCard}>
+          <View style={styles.petHomeCardHead}>
+            <Text style={styles.petHomeCardTitle}>今日状态</Text>
+            <Text style={styles.petHomeCardSide}>习惯分 {summary?.today.habit_score || 0}</Text>
+          </View>
+          <View style={styles.petHomeScoreGrid}>
+            <PetHomeMetric label="今日经验" value={`+${summary?.today.exp_gained || 0}`} />
+            <PetHomeMetric label="奖励积分" value={`${petEarnedCredits(membership)}`} />
+            <PetHomeMetric label="总可用积分" value={`${petTotalCredits(membership)}`} />
+          </View>
+          <Text style={styles.petHomeTask}>{summary?.status.task_text || '继续保持记录，它会慢慢长大。'}</Text>
+        </View>
+
+        <View style={styles.petHomeCard}>
+          <View style={styles.petHomeCardHead}>
+            <Text style={styles.petHomeCardTitle}>离线小惊喜</Text>
+            <Text style={styles.petHomeCardSide}>{petEvent ? '未领取' : '已查看'}</Text>
+          </View>
+          <Text style={styles.petHomeEventTitle}>{petEvent?.title || '今天还没有新的离线惊喜'}</Text>
+          <Text style={styles.petHomeBodyText}>{petEvent?.message || '等你下一次回来时，它会带着整理好的复盘和一点小奖励出现。'}</Text>
+          {petEvent?.can_claim ? (
+            <Pressable style={[styles.petHomeInlineAction, styles.petHomeInlineActionPrimary]} disabled={claiming} onPress={claim}>
+              {claiming ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.petHomeInlineActionText}>领取奖励</Text>}
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View style={styles.petHomeCard}>
+          <View style={styles.petHomeCardHead}>
+            <Text style={styles.petHomeCardTitle}>外观换装</Text>
+            <Text style={styles.petHomeCardSide}>统一角色体系</Text>
+          </View>
+          <View style={styles.petHomeActionList}>
+            <Pressable style={styles.petHomeActionItem} onPress={toggleHomePet}>
+              <View style={styles.flex}>
+                <Text style={styles.petHomeActionTitle}>首页悬浮宠物</Text>
+                <Text style={styles.petHomeActionDesc}>{homePetHidden ? '当前首页不显示宠物，数据和成长仍会保留。' : '当前首页会显示可拖动的小宠物。'}</Text>
               </View>
-            )
-          })}
-        </Card>
-      ) : null}
-
-      <Card>
-        <Text style={styles.sectionTitle}>今日状态</Text>
-        <Text style={styles.itemName}>{summary?.status.message || '记录一餐，开启今日成长。'}</Text>
-        <Text style={styles.subtitle}>{summary?.status.task_text || '今天先记录一餐'}</Text>
-        <View style={styles.nutritionRow}>
-          <Pill text={`习惯分 ${summary?.today.habit_score || 0}`} />
-          <Pill text={`今日经验 ${summary?.today.exp_gained || 0}`} />
-          <Pill text={`奖励积分 ${petEarnedCredits(membership)}`} />
-          <Pill text={`总可用积分 ${petTotalCredits(membership)}`} />
-        </View>
-      </Card>
-
-      <Card>
-        <Text style={styles.sectionTitle}>外观档案</Text>
-        <View style={styles.appearanceGrid}>
-          <Pill text={petShapeLabel(pet?.shape)} />
-          <Pill text={petPatternLabel(pet?.pattern)} />
-          <Pill text={petAccessoryLabel(pet?.accessory)} />
-          <Pill text={petPersonalityLabel(pet?.personality)} />
-        </View>
-        <Text style={styles.subtitle}>{pet?.match_reasons?.join('、') || '完善健康档案后，会根据目标、作息和偏好生成更明确的匹配原因。'}</Text>
-      </Card>
-
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>离线小惊喜</Text>
-          <Pill text={petEvent ? '未领取' : '已查看'} />
-        </View>
-        <Text style={styles.itemName}>{petEvent?.title || '今天还没有新的离线惊喜'}</Text>
-        <Text style={styles.subtitle}>{petEvent?.message || '等你下一次回来时，它会带着整理好的复盘和一点小奖励出现。'}</Text>
-        <View style={styles.nutritionRow}>
-          <Pill text={`经验 +${petEvent?.exp_reward || 0}`} />
-          <Pill text={`积分 +${petEvent?.credit_reward || 0}`} />
-          <Pill text={`离线 ${summary?.status.inactivity_days || 0} 天`} />
-        </View>
-        {petEvent?.can_claim ? <AppButton label="领取奖励" loading={claiming} onPress={claim} /> : null}
-      </Card>
-
-      {(pet?.growth_unlocks || []).length ? (
-        <Card>
-          <Text style={styles.sectionTitle}>成长解锁</Text>
-          <View style={styles.appearanceGrid}>
-            {(pet?.growth_unlocks || []).map((unlock) => <Pill key={unlock} text={growthUnlockLabel(unlock)} />)}
+              <View style={styles.petHomeActionSide}>
+                <Text style={[styles.petHomeActionStatus, homePetHidden && styles.petHomeActionStatusMuted]}>{homePetHidden ? '已隐藏' : '显示中'}</Text>
+                <View style={[styles.petHomeToggle, !homePetHidden && styles.petHomeToggleActive]}>
+                  <View style={[styles.petHomeToggleKnob, !homePetHidden && styles.petHomeToggleKnobActive]} />
+                </View>
+              </View>
+            </Pressable>
+            <Pressable style={styles.petHomeActionItem} disabled={rerolling} onPress={confirmReroll}>
+              <View style={styles.flex}>
+                <Text style={styles.petHomeActionTitle}>随机换外观</Text>
+                <Text style={styles.petHomeActionDesc}>保留名字和等级，随机刷新体型、花纹与配饰。</Text>
+              </View>
+              <View style={styles.petHomeActionSide}>
+                {rerolling ? <ActivityIndicator color={colors.brand} size="small" /> : <Text style={styles.petHomeActionCost}>5 积分</Text>}
+              </View>
+            </Pressable>
+            <Pressable style={styles.petHomeActionItem} onPress={() => navigation.navigate('PetLab')}>
+              <View style={styles.flex}>
+                <Text style={styles.petHomeActionTitle}>外观试验箱</Text>
+                <Text style={styles.petHomeActionDesc}>批量查看颜色、体型、动物特征、花纹与配饰组合。</Text>
+              </View>
+              <Text style={styles.petHomeActionCost}>打开试验箱</Text>
+            </Pressable>
           </View>
-        </Card>
-      ) : null}
-
-      <Card>
-        <Text style={styles.sectionTitle}>外观换装</Text>
-        <View style={styles.petActionCard}>
-          <View style={styles.flex}>
-            <Text style={styles.itemName}>首页成长伙伴卡片</Text>
-            <Text style={styles.subtitle}>{homePetHidden ? '当前首页不展示伙伴卡片，数据和成长仍会保留。' : '当前首页会展示成长伙伴卡片，方便快速查看状态。'}</Text>
-          </View>
-          <SmallButton label={homePetHidden ? '显示到首页' : '从首页隐藏'} onPress={toggleHomePet} />
         </View>
-        <View style={styles.petActionCard}>
-          <View style={styles.flex}>
-            <Text style={styles.itemName}>随机换外观</Text>
-            <Text style={styles.subtitle}>保留名字和等级，随机刷新体型、花纹与配饰。当前奖励积分 {petEarnedCredits(membership)}。</Text>
-          </View>
-          <SmallButton label={rerolling ? '处理中' : '5 积分'} disabled={rerolling} onPress={confirmReroll} />
-        </View>
-      </Card>
-
-      <AppButton label={`和${pet?.name || '伙伴'}聊聊`} onPress={() => navigation.navigate('PetChat')} />
-      <AppButton label="外观实验室" variant="secondary" onPress={() => navigation.navigate('PetLab')} />
-    </Page>
+      </ScrollView>
+    </View>
   )
+}
+
+type PetLabVariant = PetAppearanceCandidate & {
+  displayStyle: 'pretty' | 'quirky' | 'risky'
+  sourceLabel: string
+  strengths: string[]
+  riskReasons: string[]
+  animal: PetAnimal
+  mood: string
+}
+
+const PET_LAB_COLOR_LABELS: Record<string, string> = {
+  mint: '薄荷',
+  berry: '莓果',
+  sunny: '暖阳',
+  aqua: '湖蓝',
+  grape: '葡萄',
+  peach: '蜜桃',
+  cream: '奶油',
+  matcha: '抹茶',
+}
+
+const PET_LAB_ANIMAL_LABELS: Record<PetAnimal, string> = {
+  cat: '猫感',
+  bunny: '兔感',
+  bear: '熊感',
+  fox: '狐感',
+  hamster: '仓鼠感',
+}
+
+const PET_LAB_MOOD_LABELS: Record<string, string> = {
+  calm: '平静',
+  happy: '开心',
+  sleepy: '困困',
+  surprised: '惊喜',
+}
+
+const PET_LAB_MOODS = ['calm', 'happy', 'sleepy', 'surprised'] as const
+
+const PET_LAB_ARCHETYPE_KEYS = ['steady_caregiver', 'energetic_buddy', 'gentle_healer', 'protein_guardian', 'light_lifestyle'] as const
+
+const PET_LAB_STYLE_OPTIONS = [
+  { value: 'all', label: '全部' },
+  { value: 'pretty', label: '高亲和' },
+  { value: 'quirky', label: '有特色' },
+  { value: 'risky', label: '需收敛' },
+]
+
+const PET_LAB_ARCHETYPE_OPTIONS = [
+  { value: 'all', label: '全部' },
+  { value: 'steady_caregiver', label: '稳定陪伴' },
+  { value: 'energetic_buddy', label: '元气伙伴' },
+  { value: 'gentle_healer', label: '温柔守护' },
+  { value: 'protein_guardian', label: '蛋白守卫' },
+  { value: 'light_lifestyle', label: '轻盈陪伴' },
+]
+
+const PET_LAB_ARCHETYPE_NOTES: Record<string, string> = {
+  steady_caregiver: '偏好薄荷、湖蓝、奶油色，圆团或蓬松体型，自然配饰和温柔性格。',
+  energetic_buddy: '偏好暖阳、水蓝、薄荷色，蓬松或豆豆体型，嫩芽、星星和元气文案。',
+  gentle_healer: '偏好奶油、蜜桃、薄荷色，圆润体型，叶片、光环和温柔守护感。',
+  protein_guardian: '偏好抹茶、水蓝、暖阳色，蓬松或圆团体型，围巾、嫩芽和认真气质。',
+  light_lifestyle: '偏好薄荷、奶油、蜜桃色，豆豆或圆团体型，叶片、嫩芽和轻盈文案。',
+}
+
+function petColorLabel(color?: string) {
+  return PET_LAB_COLOR_LABELS[color || ''] || color || '默认'
+}
+
+function petAnimalLabel(animal?: string) {
+  return PET_LAB_ANIMAL_LABELS[animal as PetAnimal] || animal || '动物特征'
+}
+
+function petLabMoodLabel(mood?: string) {
+  return PET_LAB_MOOD_LABELS[mood || ''] || mood || '平静'
+}
+
+function petLabStyleLabel(style?: string) {
+  if (style === 'pretty') return '高亲和'
+  if (style === 'quirky') return '有特色'
+  if (style === 'risky') return '需收敛'
+  return '稳定可用'
+}
+
+function petLabStyleForScore(score?: number): PetLabVariant['displayStyle'] {
+  if ((score || 0) >= 88) return 'pretty'
+  if ((score || 0) >= 68) return 'quirky'
+  return 'risky'
+}
+
+function makePetLabVariant(
+  source: Partial<PetAppearanceCandidate> & { id: string; name: string; pet_seed: string },
+  fallbackIndex: number,
+): PetLabVariant {
+  const score = typeof source.score === 'number' ? source.score : 72 + ((fallbackIndex * 7) % 24)
+  const displayStyle = petLabStyleForScore(score)
+  const shape = source.shape || PET_SHAPES[fallbackIndex % PET_SHAPES.length]
+  const pattern = source.pattern || PET_PATTERNS[fallbackIndex % PET_PATTERNS.length]
+  const accessory = source.accessory || PET_ACCESSORIES[fallbackIndex % PET_ACCESSORIES.length]
+  const visual = derivePetAppearance({
+    pet_seed: source.pet_seed,
+    name: source.name,
+    color: source.color,
+    shape,
+    pattern,
+    accessory,
+  })
+  const mood = PET_LAB_MOODS[stableHash(`${source.pet_seed}:${source.name}:mood`) % PET_LAB_MOODS.length]
+  const strengths = source.match_reasons?.slice(0, 2) || [
+    `${petColorLabel(source.color)}色更贴近当前伙伴气质`,
+    `${petShapeLabel(shape)}和${petAnimalLabel(visual.animal)}组合稳定`,
+  ]
+  const riskReasons = displayStyle === 'risky'
+    ? ['颜色或配饰需要收敛，避免太刺眼']
+    : []
+
+  return {
+    id: source.id,
+    pet_seed: source.pet_seed,
+    name: source.name,
+    color: source.color || PET_COLORS[fallbackIndex % PET_COLORS.length],
+    shape,
+    pattern,
+    accessory,
+    personality: source.personality || 'gentle',
+    archetype: source.archetype,
+    style: source.style,
+    score,
+    match_reasons: source.match_reasons,
+    displayStyle,
+    sourceLabel: petLabStyleLabel(displayStyle),
+    strengths,
+    riskReasons,
+    animal: visual.animal,
+    mood,
+  }
+}
+
+function buildMobilePetLabVariants(summary: PetSummary | null): PetLabVariant[] {
+  const pet = summary?.pet
+  const candidates = pet?.selection_candidates || []
+  const current = pet ? makePetLabVariant({
+    id: 'current',
+    pet_seed: pet.pet_seed,
+    name: pet.name || '当前伙伴',
+    color: pet.color,
+    shape: pet.shape,
+    pattern: pet.pattern,
+    accessory: pet.accessory,
+    personality: pet.personality,
+    archetype: pet.archetype,
+    score: 90,
+    match_reasons: pet.match_reasons,
+  }, 0) : null
+
+  const generated = PET_COLORS.flatMap((color, colorIndex) => PET_SHAPES.map((shape, shapeIndex) => {
+    const index = colorIndex * PET_SHAPES.length + shapeIndex
+    const pattern = PET_PATTERNS[(index + 1) % PET_PATTERNS.length]
+    const accessory = PET_ACCESSORIES[(index + 2) % PET_ACCESSORIES.length]
+    return makePetLabVariant({
+      id: `sample-${color}-${shape}-${index}`,
+      pet_seed: `${pet?.pet_seed || 'guest'}-${color}-${shape}-${index}`,
+      name: `${petColorLabel(color)}${petShapeLabel(shape)}`,
+      color,
+      shape,
+      pattern,
+      accessory,
+      personality: ['gentle', 'energetic', 'focused', 'snacky', 'sporty'][index % 5],
+      archetype: PET_LAB_ARCHETYPE_KEYS[index % PET_LAB_ARCHETYPE_KEYS.length],
+      score: 62 + ((index * 7) % 35),
+      match_reasons: [
+        `${petColorLabel(color)}色让外观更有辨识度`,
+        `${petPatternLabel(pattern)}适合做样本对照`,
+      ],
+    }, index + 1)
+  }))
+
+  const backend = candidates.map((candidate, index) => makePetLabVariant(candidate, index + 10))
+  const merged = [current, ...backend, ...generated].filter(Boolean) as PetLabVariant[]
+  const seen = new Set<string>()
+  return merged.filter((item) => {
+    const key = `${item.color}-${item.shape}-${item.animal}-${item.pattern}-${item.accessory}-${item.name}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function petLabSeedIndex(seed: string | undefined, suffix: string, size: number) {
+  return stableHash(`${seed || 'guest'}:${suffix}`) % size
+}
+
+function petLabArchetypeScore(variant: PetLabVariant, archetype: string) {
+  if (archetype === 'all') return 0
+  if (variant.archetype === archetype) return 8
+  return stableHash(`${variant.id}:${archetype}`) % 7
+}
+
+function petLabSampleCardToneStyle(style: PetLabVariant['displayStyle']) {
+  if (style === 'pretty') return styles.petLabSampleCard_pretty
+  if (style === 'quirky') return styles.petLabSampleCard_quirky
+  return styles.petLabSampleCard_risky
+}
+
+function petLabCardToneStyle(style: PetLabVariant['displayStyle']) {
+  if (style === 'pretty') return styles.petLabCard_pretty
+  if (style === 'quirky') return styles.petLabCard_quirky
+  return styles.petLabCard_risky
 }
 
 export function PetLabScreen() {
@@ -1348,6 +1872,15 @@ export function PetLabScreen() {
   const [loading, setLoading] = useState(false)
   const [rerolling, setRerolling] = useState(false)
   const [selectingCandidateId, setSelectingCandidateId] = useState('')
+  const [styleFilter, setStyleFilter] = useState('all')
+  const [archetypeFilter, setArchetypeFilter] = useState('all')
+  const [colorFilter, setColorFilter] = useState('all')
+  const [shapeFilter, setShapeFilter] = useState('all')
+  const [animalFilter, setAnimalFilter] = useState('all')
+  const [patternFilter, setPatternFilter] = useState('all')
+  const [accessoryFilter, setAccessoryFilter] = useState('all')
+  const [visibleCount, setVisibleCount] = useState(80)
+  const [selected, setSelected] = useState<PetLabVariant | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1412,43 +1945,207 @@ export function PetLabScreen() {
   }
 
   const candidates = summary?.pet.selection_candidates || []
+  const labVariants = useMemo(() => buildMobilePetLabVariants(summary), [summary])
+  const filteredVariants = useMemo(() => labVariants.filter((variant) => {
+    if (styleFilter !== 'all' && variant.displayStyle !== styleFilter) return false
+    if (archetypeFilter !== 'all' && petLabArchetypeScore(variant, archetypeFilter) < 6) return false
+    if (colorFilter !== 'all' && variant.color !== colorFilter) return false
+    if (shapeFilter !== 'all' && variant.shape !== shapeFilter) return false
+    if (animalFilter !== 'all' && variant.animal !== animalFilter) return false
+    if (patternFilter !== 'all' && variant.pattern !== patternFilter) return false
+    if (accessoryFilter !== 'all' && variant.accessory !== accessoryFilter) return false
+    return true
+  }), [accessoryFilter, animalFilter, archetypeFilter, colorFilter, labVariants, patternFilter, shapeFilter, styleFilter])
+  const shownVariants = filteredVariants.slice(0, visibleCount)
+  const topSamples = labVariants.filter((variant) => variant.displayStyle === 'pretty').slice(0, 8)
+  const quirkySamples = labVariants.filter((variant) => variant.displayStyle === 'quirky' && (variant.score || 0) >= 72).slice(0, 8)
+  const riskySamples = labVariants.filter((variant) => variant.displayStyle === 'risky').slice(0, 8)
+  const currentPet = summary?.pet
+  const currentAnimal = currentPet ? derivePetAppearance(currentPet).animal : undefined
+  const availableCredits = petEarnedCredits(membership)
+  const totalCount = PET_COLORS.length * PET_SHAPES.length * PET_ANIMALS.length * PET_PATTERNS.length * PET_ACCESSORIES.length
+  const seed = currentPet?.pet_seed || 'guest'
+  const resetFilter = (setter: (value: string) => void) => (value: string) => {
+    setter(value)
+    setVisibleCount(80)
+  }
+
   return (
-    <Page title="外观实验室" subtitle="根据健康档案匹配形象，也可消耗奖励积分重置。" refreshing={loading} onRefresh={load}>
-      <Card>
-        <Text style={styles.sectionTitle}>当前形象</Text>
-        <View style={styles.rowBetween}>
-          <PetAvatar pet={summary?.pet} size="medium" mood={summary?.status.mood} state={summary?.status.state} />
-          <View style={styles.flex}>
-            <Text style={styles.itemName}>{summary?.pet.name || '--'}</Text>
-            <Text style={styles.subtitle}>{petShapeLabel(summary?.pet.shape)} · {petPatternLabel(summary?.pet.pattern)} · {petAccessoryLabel(summary?.pet.accessory)}</Text>
+    <View style={styles.petLabPage}>
+      <ScrollView
+        style={styles.petLabScroll}
+        contentContainerStyle={styles.petLabContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} />}
+      >
+        <View style={styles.petLabHero}>
+          <Text style={styles.petLabTitle}>宠物外观试验箱</Text>
+          <Text style={styles.petLabSubtitle}>当前基础组合 {totalCount} 种。这里把生成规则、参数和风险组合摊开，方便我们把“有特色”和“真丑”分开。</Text>
+          <View style={styles.petLabStatRow}>
+            <PetLabStat value={String(PET_COLORS.length)} label="颜色" />
+            <PetLabStat value={String(PET_SHAPES.length)} label="体型" />
+            <PetLabStat value={String(PET_ANIMALS.length)} label="动物特征" />
+            <PetLabStat value={String(PET_PATTERNS.length * PET_ACCESSORIES.length)} label="纹样配饰" />
           </View>
         </View>
-        <Text style={styles.subtitle}>{summary?.pet.match_reasons?.join('、') || '完善健康档案后会生成更明确的匹配原因'}</Text>
-        <View style={styles.nutritionRow}>
-          <Pill text={summary?.pet.free_profile_rematch_available ? '档案重配可用' : '已使用档案重配'} />
-          <Pill text={`奖励积分 ${petEarnedCredits(membership)}`} />
-          <Pill text={`总可用积分 ${petTotalCredits(membership)}`} />
-        </View>
-        <AppButton label="消耗 5 积分刷新" variant="secondary" loading={rerolling} onPress={confirmReroll} />
-      </Card>
-      {candidates.length === 0 ? <EmptyState text="暂无候选形象" /> : null}
-      {candidates.map((candidate) => (
-        <Card key={candidate.id}>
-          <View style={styles.rowBetween}>
-            <PetAvatar pet={candidate} size="small" />
-            <View style={styles.flex}>
-              <Text style={styles.itemName}>{candidate.name}</Text>
-              <Text style={styles.subtitle}>{candidate.match_reasons?.join('、') || candidate.archetype || '候选外观'}</Text>
-              <Text style={styles.itemMeta}>{petShapeLabel(candidate.shape)} · {petPatternLabel(candidate.pattern)} · {petAccessoryLabel(candidate.accessory)} · {petPersonalityLabel(candidate.personality)}</Text>
+
+        <View style={styles.petLabPanel}>
+          <View style={styles.petLabCurrentRow}>
+            <PetAvatar pet={currentPet} size="large" mood={summary?.status.mood} state={summary?.status.state} />
+            <View style={styles.petLabCurrentCopy}>
+              <Text style={styles.petLabPanelTitle}>当前形象</Text>
+              <Text style={styles.petLabCurrentName}>{currentPet?.name || '--'}</Text>
+              <Text style={styles.petLabCopy}>{petColorLabel(currentPet?.color)} / {petShapeLabel(currentPet?.shape)} / {petAnimalLabel(currentAnimal)}</Text>
+              <Text style={styles.petLabCopy}>{petPatternLabel(currentPet?.pattern)} / {petAccessoryLabel(currentPet?.accessory)} / {petArchetypeLabel(currentPet?.archetype)}</Text>
+              <View style={styles.petLabTagRow}>
+                <Text style={styles.petLabTag}>{summary?.pet.free_profile_rematch_available ? '档案重配可用' : '已使用档案重配'}</Text>
+                <Text style={styles.petLabTag}>奖励积分 {availableCredits}</Text>
+                <Text style={styles.petLabTag}>总可用 {petTotalCredits(membership)}</Text>
+              </View>
             </View>
-            {typeof candidate.score === 'number' ? <Text style={styles.kcal}>{candidate.score}</Text> : null}
           </View>
-          <View style={styles.buttonRow}>
-            <SmallButton label={selectingCandidateId === candidate.id ? '选择中' : '选择这个'} disabled={Boolean(selectingCandidateId)} onPress={() => select(candidate)} />
+          <Text style={styles.petLabCopy}>{currentPet?.match_reasons?.join('、') || '完善健康档案后会生成更明确的匹配原因。'}</Text>
+          <Pressable style={styles.petLabRerollButton} disabled={rerolling} onPress={confirmReroll}>
+            {rerolling ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.petLabRerollText}>消耗 5 积分刷新</Text>}
+          </Pressable>
+        </View>
+
+        <View style={styles.petLabPanel}>
+          <Text style={styles.petLabPanelTitle}>生成原理</Text>
+          <Text style={styles.petLabCopy}>新规则先用健康档案生成画像倾向，再用权重和审美护栏生成候选。后端仍用 FNV-1a hash 保持稳定，首页和详情页再用同一个 seed 派生动物特征。</Text>
+          <View style={styles.petLabFormula}>
+            <Text style={styles.petLabCode}>FNV(seed + color) % {PET_COLORS.length} = {String(petLabSeedIndex(seed, 'color', PET_COLORS.length))}</Text>
+            <Text style={styles.petLabCode}>FNV(seed + shape) % {PET_SHAPES.length} = {String(petLabSeedIndex(seed, 'shape', PET_SHAPES.length))}</Text>
+            <Text style={styles.petLabCode}>FNV(seed + pattern) % {PET_PATTERNS.length} = {String(petLabSeedIndex(seed, 'pattern', PET_PATTERNS.length))}</Text>
+            <Text style={styles.petLabCode}>FNV(seed + accessory) % {PET_ACCESSORIES.length} = {String(petLabSeedIndex(seed, 'accessory', PET_ACCESSORIES.length))}</Text>
+            <Text style={styles.petLabCode}>前端 hash(seed + animal) % {PET_ANIMALS.length} = {String(petLabSeedIndex(seed, 'animal', PET_ANIMALS.length))}</Text>
           </View>
-        </Card>
-      ))}
-    </Page>
+        </View>
+
+        <View style={styles.petLabPanel}>
+          <Text style={styles.petLabPanelTitle}>画像倾向</Text>
+          <Text style={styles.petLabCopy}>画像只改变外观权重和文案倾向，不按性别直接分颜色或动物。选择下面任意一种，可以看到它更容易推高哪些组合。</Text>
+          <PetLabFilterRow title="画像" value={archetypeFilter} options={PET_LAB_ARCHETYPE_OPTIONS} onChange={resetFilter(setArchetypeFilter)} />
+          {archetypeFilter !== 'all' ? (
+            <View style={styles.petLabArchetypeNote}>
+              <Text style={styles.petLabArchetypeNoteText}>{PET_LAB_ARCHETYPE_NOTES[archetypeFilter]}</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.petLabPanel}>
+          <Text style={styles.petLabPanelTitle}>推荐样本</Text>
+          <Text style={styles.petLabCopy}>这里不再只取最高分，而是强制拉开颜色和动物特征，避免最后上线全长一个样。</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.petLabSampleScroll} contentContainerStyle={styles.petLabSampleRow}>
+            {(topSamples.length ? topSamples : labVariants.slice(0, 8)).map((variant) => (
+              <Pressable key={variant.id} style={[styles.petLabSampleCard, petLabSampleCardToneStyle(variant.displayStyle)]} onPress={() => setSelected(variant)}>
+                <PetAvatar pet={variant} size="small" mood={variant.mood} />
+                <Text style={styles.petLabSampleTitle} numberOfLines={1}>{variant.sourceLabel}</Text>
+                <Text style={styles.petLabSampleSub} numberOfLines={1}>{variant.score} · {petAnimalLabel(variant.animal)}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={styles.petLabPanel}>
+          <Text style={styles.petLabPanelTitle}>特色样本</Text>
+          <Text style={styles.petLabCopy}>这些可以保留“丑萌/抽象”的个性，但分数必须过审美护栏，不能像脏、伤、病。</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.petLabSampleScroll} contentContainerStyle={styles.petLabSampleRow}>
+            {(quirkySamples.length ? quirkySamples : labVariants.slice(4, 12)).map((variant) => (
+              <Pressable key={`quirky-${variant.id}`} style={[styles.petLabSampleCard, petLabSampleCardToneStyle(variant.displayStyle)]} onPress={() => setSelected(variant)}>
+                <PetAvatar pet={variant} size="small" mood={variant.mood} />
+                <Text style={styles.petLabSampleTitle} numberOfLines={1}>{variant.sourceLabel}</Text>
+                <Text style={styles.petLabSampleSub} numberOfLines={1}>{variant.score} · {petAnimalLabel(variant.animal)}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={styles.petLabPanel}>
+          <Text style={styles.petLabPanelTitle}>风险样本</Text>
+          <Text style={styles.petLabCopy}>这些不是要删除多样性，而是提醒哪些组合容易显脏、显乱或太尖锐。</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.petLabSampleScroll} contentContainerStyle={styles.petLabSampleRow}>
+            {(riskySamples.length ? riskySamples : labVariants.slice(-4)).map((variant) => (
+              <Pressable key={`risk-${variant.id}`} style={[styles.petLabSampleCard, styles.petLabSampleCard_risky]} onPress={() => setSelected(variant)}>
+                <PetAvatar pet={variant} size="small" mood={variant.mood} />
+                <Text style={styles.petLabSampleTitle} numberOfLines={1}>{variant.sourceLabel}</Text>
+                <Text style={styles.petLabSampleSub} numberOfLines={1}>{variant.riskReasons[0] || variant.sourceLabel}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+
+        <View style={styles.petLabPanel}>
+          <Text style={styles.petLabPanelTitle}>筛选组合</Text>
+          <PetLabFilterRow title="质量" value={styleFilter} options={PET_LAB_STYLE_OPTIONS} onChange={resetFilter(setStyleFilter)} />
+          <PetLabFilterRow title="画像" value={archetypeFilter} options={PET_LAB_ARCHETYPE_OPTIONS} onChange={resetFilter(setArchetypeFilter)} />
+          <PetLabFilterRow title="颜色" value={colorFilter} options={[{ value: 'all', label: '全部' }, ...PET_COLORS.map((value) => ({ value, label: petColorLabel(value) }))]} onChange={resetFilter(setColorFilter)} />
+          <PetLabFilterRow title="体型" value={shapeFilter} options={[{ value: 'all', label: '全部' }, ...PET_SHAPES.map((value) => ({ value, label: petShapeLabel(value) }))]} onChange={resetFilter(setShapeFilter)} />
+          <PetLabFilterRow title="动物" value={animalFilter} options={[{ value: 'all', label: '全部' }, ...PET_ANIMALS.map((value) => ({ value, label: petAnimalLabel(value) }))]} onChange={resetFilter(setAnimalFilter)} />
+          <PetLabFilterRow title="花纹" value={patternFilter} options={[{ value: 'all', label: '全部' }, ...PET_PATTERNS.map((value) => ({ value, label: petPatternLabel(value) }))]} onChange={resetFilter(setPatternFilter)} />
+          <PetLabFilterRow title="配饰" value={accessoryFilter} options={[{ value: 'all', label: '全部' }, ...PET_ACCESSORIES.map((value) => ({ value, label: petAccessoryLabel(value) }))]} onChange={resetFilter(setAccessoryFilter)} />
+        </View>
+
+        <View style={styles.petLabGridHead}>
+          <Text style={styles.petLabGridTitle}>当前筛选 {filteredVariants.length} 种</Text>
+          <Text style={styles.petLabGridSide}>已展示 {shownVariants.length}</Text>
+        </View>
+        <View style={styles.petLabGrid}>
+          {shownVariants.map((variant) => (
+            <Pressable key={variant.id} style={[styles.petLabCard, petLabCardToneStyle(variant.displayStyle)]} onPress={() => setSelected(variant)}>
+              <PetAvatar pet={variant} size="medium" mood={variant.mood} />
+              <Text style={styles.petLabCardTitle} numberOfLines={1}>{variant.sourceLabel} · {variant.score}</Text>
+              <Text style={styles.petLabCardBadge}>{variant.sourceLabel}</Text>
+              <Text style={styles.petLabCardDesc} numberOfLines={1}>{petColorLabel(variant.color)} / {petShapeLabel(variant.shape)} / {petAnimalLabel(variant.animal)}</Text>
+              <Text style={styles.petLabCardDesc} numberOfLines={1}>{petPatternLabel(variant.pattern)} / {petAccessoryLabel(variant.accessory)} / {petLabMoodLabel(variant.mood)}</Text>
+              <Text style={[styles.petLabCardReason, variant.displayStyle === 'risky' && styles.petLabCardReasonWarn]} numberOfLines={2}>
+                {archetypeFilter !== 'all' ? `${petArchetypeLabel(archetypeFilter)}匹配 ${petLabArchetypeScore(variant, archetypeFilter)}` : variant.riskReasons[0] || variant.strengths[0] || '组合稳定'}
+              </Text>
+              {candidates.some((candidate) => candidate.id === variant.id) ? (
+                <Pressable style={styles.petLabSelectButton} disabled={Boolean(selectingCandidateId)} onPress={() => select(variant)}>
+                  {selectingCandidateId === variant.id ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.petLabSelectText}>选择这个</Text>}
+                </Pressable>
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
+        {shownVariants.length < filteredVariants.length ? (
+          <Pressable style={styles.petLabLoadMore} onPress={() => setVisibleCount((prev) => prev + 80)}>
+            <Text style={styles.petLabLoadMoreText}>继续加载 80 个</Text>
+          </Pressable>
+        ) : null}
+      </ScrollView>
+
+      <Modal visible={Boolean(selected)} transparent animationType="fade" onRequestClose={() => setSelected(null)}>
+        <Pressable style={styles.petLabDetailMask} onPress={() => setSelected(null)}>
+          <Pressable style={styles.petLabDetail} onPress={(event) => event.stopPropagation()}>
+            {selected ? (
+              <>
+                <PetAvatar pet={selected} size="large" mood={selected.mood} />
+                <Text style={styles.petLabDetailTitle}>{selected.name} · {selected.score}</Text>
+                <Text style={styles.petLabDetailCopy}>组合 ID：{selected.id}</Text>
+                <Text style={styles.petLabDetailCopy}>风格判断：{selected.sourceLabel}</Text>
+                {archetypeFilter !== 'all' ? (
+                  <Text style={styles.petLabDetailCopy}>当前画像匹配：{petArchetypeLabel(archetypeFilter)} · {petLabArchetypeScore(selected, archetypeFilter)}</Text>
+                ) : null}
+                <View style={styles.petLabDetailTags}>
+                  <Text style={styles.petLabDetailTag}>{petColorLabel(selected.color)}</Text>
+                  <Text style={styles.petLabDetailTag}>{petShapeLabel(selected.shape)}</Text>
+                  <Text style={styles.petLabDetailTag}>{petAnimalLabel(selected.animal)}</Text>
+                  <Text style={styles.petLabDetailTag}>{petPatternLabel(selected.pattern)}</Text>
+                  <Text style={styles.petLabDetailTag}>{petAccessoryLabel(selected.accessory)}</Text>
+                  <Text style={styles.petLabDetailTag}>{petLabMoodLabel(selected.mood)}</Text>
+                </View>
+                {[...selected.strengths, ...selected.riskReasons].map((item) => (
+                  <Text key={item} style={[styles.petLabDetailReason, selected.riskReasons.includes(item) && styles.petLabDetailReasonWarn]}>{item}</Text>
+                ))}
+                <Text style={styles.petLabDetailClose}>点空白处关闭</Text>
+              </>
+            ) : null}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
   )
 }
 
@@ -1592,25 +2289,19 @@ const PRIVACY_POLICY_SECTIONS = [
 
 export function AgreementsScreen() {
   return (
-    <Page title="用户服务协议" subtitle="最后更新：2026年2月">
-      {AGREEMENT_SECTIONS.map((section) => (
-        <LegalCard key={section.title} title={section.title} text={section.paragraphs} />
-      ))}
-    </Page>
+    <LegalDocumentScreen title="用户服务协议" updatedAt="最后更新日期：2026年2月" sections={AGREEMENT_SECTIONS} />
   )
 }
 
 export function PrivacyPolicyScreen() {
   return (
-    <Page title="隐私政策" subtitle="最后更新：2026年2月">
-      {PRIVACY_POLICY_SECTIONS.map((section) => (
-        <LegalCard key={section.title} title={section.title} text={section.paragraphs} />
-      ))}
-    </Page>
+    <LegalDocumentScreen title="隐私政策" updatedAt="最后更新日期：2026年2月" sections={PRIVACY_POLICY_SECTIONS} />
   )
 }
 
 export function AutoRenewAuditScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const insets = useSafeAreaInsets()
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [plans, setPlans] = useState<MembershipPlan[]>([])
   const [selectedPlanCode, setSelectedPlanCode] = useState('')
@@ -1619,28 +2310,62 @@ export function AutoRenewAuditScreen() {
   const [previewModal, setPreviewModal] = useState<'sign' | 'cancel' | null>(null)
 
   const selectedPlan = useMemo(
-    () => plans.find((plan) => plan.code === selectedPlanCode) || plans[0],
+    () => plans.find((plan) => plan.code === selectedPlanCode) || findAuditPlan(plans, 'standard', 'yearly') || plans[0],
     [plans, selectedPlanCode],
   )
+
+  const currentPlan = useMemo(
+    () => plans.find((plan) => plan.code === membership?.current_plan_code) || null,
+    [membership?.current_plan_code, plans],
+  )
+
+  const priceTableTiers = useMemo(() => {
+    const available = auditTierKeys.filter((tier) => plans.some((plan) => auditPlanTierKey(plan) === tier))
+    return available.length > 0 ? available : auditTierKeys
+  }, [plans])
+
+  const autoRenewPreview = useMemo(() => {
+    if (!selectedPlan) {
+      return {
+        planName: '食探会员',
+        periodLabel: '所选周期',
+        amountText: '--',
+        renewDateText: '--',
+      }
+    }
+    const isCurrentSelectedPlan = Boolean(membership?.is_pro && membership.current_plan_code === selectedPlan.code)
+    const baseDate = isCurrentSelectedPlan
+      ? parseAutoRenewDate(membership?.expires_at) || new Date()
+      : new Date()
+    const renewDate = addAutoRenewMonths(baseDate, Number(selectedPlan.duration_months || 1))
+    return {
+      planName: `食探会员 · ${selectedPlan.name}`,
+      periodLabel: planPeriodLabel(selectedPlan),
+      amountText: `¥${moneyText(selectedPlan.amount)}${planPeriodSuffix(selectedPlan)}`,
+      renewDateText: formatAutoRenewDate(renewDate),
+    }
+  }, [membership, selectedPlan])
 
   const signPreviewLines = useMemo(() => {
     if (!selectedPlan) return []
     return [
-      `拟开通：Food Link 会员 · ${selectedPlan.name}`,
-      `扣费周期：${planPeriodLabel(selectedPlan)}`,
-      `每期金额：¥${moneyText(selectedPlan.amount)}${planPeriodSuffix(selectedPlan)}`,
-      '说明：当前仅为自动续费审核预览，不会创建订单、不会调用支付渠道委托代扣接口、不会真实扣款。',
+      `开通服务：${autoRenewPreview.planName}`,
+      `扣费周期：${autoRenewPreview.periodLabel}`,
+      `每期金额：${autoRenewPreview.amountText}`,
+      '开通后，会员到期前将按所选周期自动续费；扣费前会按支付渠道规则通知。',
+      `预计续费：${autoRenewPreview.renewDateText}。当前仅为审核预览，不会创建订单或发起真实扣款。`,
     ]
-  }, [selectedPlan])
+  }, [autoRenewPreview, selectedPlan])
 
   const cancelPreviewLines = [
-    '产品内路径：我的 → 会员中心 → 自动续费审核 → 关闭自动续费。',
+    '产品内路径：我的 → 食探会员 → 自动续费管理 → 关闭自动续费。',
     '也可在微信支付、应用商店或对应支付渠道的扣费服务中关闭。',
     '当前为审核预览，不会执行真实解约；关闭后也不影响已付费周期内会员权益。',
   ]
 
-  const previewTitle = previewModal === 'sign' ? '自动续费签约预览' : '关闭自动续费路径'
+  const previewTitle = previewModal === 'sign' ? '确认开通自动续费' : '关闭自动续费路径'
   const previewLines = previewModal === 'sign' ? signPreviewLines : cancelPreviewLines
+  const previewButtonText = previewModal === 'sign' ? '确认' : '知道了'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1655,7 +2380,13 @@ export function AutoRenewAuditScreen() {
       })
       setMembership(membershipData)
       setPlans(nextPlans)
-      setSelectedPlanCode((current) => current || membershipData?.current_plan_code || nextPlans[0]?.code || '')
+      setSelectedPlanCode((current) => {
+        if (current && nextPlans.some((plan) => plan.code === current)) return current
+        if (membershipData?.current_plan_code && nextPlans.some((plan) => plan.code === membershipData.current_plan_code)) {
+          return membershipData.current_plan_code
+        }
+        return findAuditPlan(nextPlans, 'standard', 'yearly')?.code || nextPlans[0]?.code || ''
+      })
     } catch (error) {
       showError('获取自动续费状态失败', error)
     } finally {
@@ -1686,96 +2417,105 @@ export function AutoRenewAuditScreen() {
   }
 
   return (
-    <Page title="自动续费审核" subtitle="会员续费状态和支付渠道" refreshing={loading} onRefresh={load}>
-      <Card>
-        <View style={styles.auditHeroRow}>
-          <View style={styles.flex}>
-            <Text style={styles.auditKicker}>Food Link 会员服务</Text>
-            <Text style={styles.auditTitle}>自动续费申请交互预览</Text>
-            <Text style={styles.subtitle}>展示签约前说明、扣费周期、每期金额和关闭路径，便于审核人员核对完整链路。</Text>
+    <View style={styles.autoRenewPage}>
+      <ScrollView
+        style={styles.autoRenewScroll}
+        contentContainerStyle={[styles.autoRenewContent, { paddingBottom: 34 + insets.bottom }]}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} colors={[colors.brand]} />}
+      >
+        <View style={styles.autoRenewBanner}>
+          <Text style={styles.autoRenewKicker}>食探会员服务</Text>
+          <Text style={styles.autoRenewTitle}>食探会员自动续费</Text>
+          <Text style={styles.autoRenewDesc}>开通后可持续享受会员权益；到期前按所选周期自动续费，扣费前将按支付渠道规则通知。</Text>
+        </View>
+
+        <View style={styles.autoRenewStatusPanel}>
+          <View>
+            <Text style={styles.autoRenewStatusLabel}>当前状态</Text>
+            <Text style={styles.autoRenewStatusValue}>{membership?.is_pro ? 'Pro 会员' : '基础账号'}</Text>
           </View>
-          <View style={styles.auditBadge}>
-            <Text style={styles.auditBadgeText}>审核预览</Text>
+          <View style={styles.autoRenewStatusGrid}>
+            <View style={styles.autoRenewStatusItem}>
+              <Text style={styles.autoRenewStatusItemLabel}>会员状态</Text>
+              <Text style={styles.autoRenewStatusItemValue} numberOfLines={1}>{membershipStatusLabel(membership)}</Text>
+            </View>
+            <View style={styles.autoRenewStatusItem}>
+              <Text style={styles.autoRenewStatusItemLabel}>当前套餐</Text>
+              <Text style={styles.autoRenewStatusItemValue} numberOfLines={1}>{currentPlan?.name || membership?.current_plan_code || '未开通套餐'}</Text>
+            </View>
+            <View style={styles.autoRenewStatusItem}>
+              <Text style={styles.autoRenewStatusItemLabel}>今日可用</Text>
+              <Text style={styles.autoRenewStatusItemValue} numberOfLines={1}>{membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0}</Text>
+            </View>
+            <View style={styles.autoRenewStatusItem}>
+              <Text style={styles.autoRenewStatusItemLabel}>奖励积分</Text>
+              <Text style={styles.autoRenewStatusItemValue} numberOfLines={1}>{membership?.earned_credits_balance ?? membership?.points_balance ?? 0}</Text>
+            </View>
           </View>
         </View>
-        <Text style={styles.noticeText}>当前页面不会创建订单、不会调用支付渠道委托代扣接口、不会真实扣款或解约。</Text>
-      </Card>
 
-      <Card>
-        <Text style={styles.sectionTitle}>当前状态</Text>
-        <Text style={styles.bigNumber}>{membership?.is_pro ? 'Pro' : '基础账号'}</Text>
-        <InfoLine label="会员状态" value={membershipStatusLabel(membership)} />
-        <InfoLine label="当前套餐" value={membership?.current_plan_code || '--'} />
-        <InfoLine label="今日可用积分" value={`${membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0}`} />
-        <InfoLine label="奖励积分" value={`${membership?.earned_credits_balance ?? membership?.points_balance ?? 0}`} />
-      </Card>
-
-      <Card>
-        <Text style={styles.sectionTitle}>服务内容</Text>
-        <View style={styles.featureGrid}>
-          {['饮食记录', 'AI 营养分析', '健康档案', '运动记录', '社区互动', '公共食物库'].map((item) => (
-            <View key={item} style={styles.featurePill}>
-              <Text style={styles.featurePillText}>{item}</Text>
-            </View>
-          ))}
+        <View style={styles.autoRenewSection}>
+          <Text style={styles.autoRenewSectionTitle}>服务内容介绍</Text>
+          <View style={styles.autoRenewServiceGrid}>
+            {autoRenewServiceItems.map((item) => (
+              <View key={item} style={styles.autoRenewServiceItem}>
+                <Text style={styles.autoRenewServiceText}>{item}</Text>
+              </View>
+            ))}
+          </View>
         </View>
-      </Card>
 
-      <Card>
-        <Text style={styles.sectionTitle}>会员套餐</Text>
-        {plans.length === 0 ? <EmptyState text="暂无可选套餐" /> : null}
-        {plans.map((plan) => (
-          <Pressable
-            key={plan.code}
-            style={[styles.planRow, selectedPlanCode === plan.code && styles.planRowActive]}
-            onPress={() => setSelectedPlanCode(plan.code)}
-          >
-            <View style={styles.flex}>
-              <Text style={styles.itemName}>{plan.name}</Text>
-              <Text style={styles.subtitle}>
-                {plan.daily_credits || 0} 积分/日 · {planPeriodLabel(plan)}
-                {plan.description ? ` · ${plan.description}` : ''}
-              </Text>
+        <View style={styles.autoRenewSection}>
+          <Text style={styles.autoRenewSectionTitle}>会员权益与价目表</Text>
+          <AutoRenewPriceTable
+            plans={plans}
+            selectedPlanCode={selectedPlanCode}
+            tiers={priceTableTiers}
+            onSelect={setSelectedPlanCode}
+          />
+          <Text style={styles.autoRenewPriceNote}>标准版及进阶版支持精准模式；系统积分每日发放，次日刷新；奖励积分可累计。</Text>
+        </View>
+
+        <View style={[styles.autoRenewSection, styles.autoRenewAutoCard]}>
+          <Text style={styles.autoRenewSectionTitle}>自动续费签约前说明</Text>
+          <AutoRenewInfoRow label="服务名称" value={autoRenewPreview.planName} />
+          <AutoRenewInfoRow label="扣费周期" value={autoRenewPreview.periodLabel} />
+          <AutoRenewInfoRow label="每期金额" value={autoRenewPreview.amountText} strong />
+          <AutoRenewInfoRow label="预计续费" value={autoRenewPreview.renewDateText} />
+          <Text style={styles.autoRenewPlainText}>开通后，会员到期前将按所选周期自动续费；扣费前会按支付渠道规则通知。用户可随时关闭自动续费，关闭后不影响已付费周期内权益。</Text>
+          <Pressable style={styles.autoRenewCheckRow} onPress={() => setAgreed((value) => !value)}>
+            <View style={[styles.autoRenewCheckbox, agreed && styles.autoRenewCheckboxActive]}>
+              <Text style={styles.autoRenewCheckboxText}>{agreed ? '✓' : ''}</Text>
             </View>
-            <View style={styles.priceBlock}>
-              <Text style={styles.priceText}>¥{moneyText(plan.amount)}</Text>
-              {plan.original_amount ? <Text style={styles.originalPrice}>¥{moneyText(plan.original_amount)}</Text> : null}
-            </View>
+            <Text style={styles.autoRenewCheckText}>我已阅读并同意会员服务协议及自动续费规则</Text>
           </Pressable>
-        ))}
-      </Card>
-
-      <Card>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>自动续费签约前说明</Text>
-          <View style={styles.auditMiniBadge}>
-            <Text style={styles.auditMiniBadgeText}>审核预览</Text>
-          </View>
+          <Pressable onPress={() => navigation.navigate('MembershipAgreement')}>
+            <Text style={styles.autoRenewLink}>查看《会员服务协议》</Text>
+          </Pressable>
+          <Pressable
+            disabled={loading}
+            style={[styles.autoRenewPrimaryButton, loading && styles.autoRenewButtonDisabled]}
+            onPress={showSignPreview}
+          >
+            <Text style={styles.autoRenewPrimaryButtonText}>确认开通自动续费</Text>
+          </Pressable>
+          <Text style={styles.autoRenewSubscribeHint}>自动续费审核预览 · 不发起真实代扣</Text>
         </View>
-        <InfoLine label="服务名称" value={`Food Link 会员${selectedPlan ? ` · ${selectedPlan.name}` : ''}`} />
-        <InfoLine label="扣费周期" value={selectedPlan ? planPeriodLabel(selectedPlan) : '--'} />
-        <InfoLine label="每期金额" value={selectedPlan ? `¥${moneyText(selectedPlan.amount)}${planPeriodSuffix(selectedPlan)}` : '--'} />
-        <InfoLine label="预计续费" value="当前周期到期前按支付渠道规则续费" />
-        <Text style={styles.subtitle}>开通后，会员到期前将按所选周期自动续费；扣费前会按支付渠道规则通知。用户可随时关闭自动续费，关闭后不影响已付费周期内权益。</Text>
-        <Text style={styles.auditPreviewNote}>该按钮只展示签约预览，不会进入真实支付或委托代扣。</Text>
-        <Pressable style={styles.checkRow} onPress={() => setAgreed((value) => !value)}>
-          <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
-            <Text style={styles.checkboxText}>{agreed ? '✓' : ''}</Text>
-          </View>
-          <Text style={styles.checkText}>我已阅读并同意会员服务协议及自动续费规则</Text>
-        </Pressable>
-        <AppButton label="确认开通自动续费（审核预览）" loading={loading} onPress={showSignPreview} />
-      </Card>
 
-      <Card>
-        <Text style={styles.sectionTitle}>关闭自动续费</Text>
-        <Text style={styles.pathText}>我的 → 会员中心 → 自动续费审核 → 关闭自动续费</Text>
-        <Text style={styles.subtitle}>也可在微信支付、应用商店或对应支付渠道的扣费服务中关闭。关闭后不影响已付费周期内会员权益。</Text>
-        <Text style={styles.auditPreviewNote}>关闭入口同样只展示路径预览，不会执行真实解约。</Text>
-        <View style={styles.buttonRow}>
-          <SmallButton label="关闭自动续费（审核预览）" onPress={showCancelPreview} />
+        <View style={[styles.autoRenewSection, styles.autoRenewCancelCard]}>
+          <Text style={styles.autoRenewSectionTitle}>产品内取消续费路径</Text>
+          <View style={[styles.autoRenewPathBox, styles.autoRenewPathBoxBlue]}>
+            <Text style={styles.autoRenewPathText}>我的 → 食探会员 → 自动续费管理 → 关闭自动续费</Text>
+          </View>
+          <Text style={styles.autoRenewManageText}>用户也可在微信支付、应用商店或对应支付渠道的扣费服务中关闭。关闭后不影响已付费周期内会员权益。</Text>
+          <Pressable
+            style={styles.autoRenewSecondaryButton}
+            onPress={showCancelPreview}
+          >
+            <Text style={styles.autoRenewSecondaryButtonText}>关闭自动续费</Text>
+          </Pressable>
         </View>
-      </Card>
+      </ScrollView>
 
       <Modal
         visible={Boolean(previewModal)}
@@ -1792,33 +2532,109 @@ export function AutoRenewAuditScreen() {
                 <Text key={line} style={styles.auditModalLine}>{line}</Text>
               ))}
             </View>
-            <AppButton label="知道了" onPress={() => setPreviewModal(null)} />
+            <Pressable style={styles.autoRenewModalButton} onPress={() => setPreviewModal(null)}>
+              <Text style={styles.autoRenewModalButtonText}>{previewButtonText}</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
-    </Page>
+    </View>
   )
 }
 
-function LegalCard({ title, text }: { title: string; text: string | string[] }) {
-  const paragraphs = Array.isArray(text) ? text : [text]
+function AutoRenewPriceTable({
+  plans,
+  selectedPlanCode,
+  tiers,
+  onSelect,
+}: {
+  plans: MembershipPlan[]
+  selectedPlanCode: string
+  tiers: AuditMembershipTierKey[]
+  onSelect: (code: string) => void
+}) {
+  if (plans.length === 0) {
+    return <EmptyState text="暂无可选套餐" />
+  }
+
   return (
-    <Card>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {paragraphs.map((paragraph, index) => (
-        <Text key={`${title}-${index}`} style={[styles.subtitle, index > 0 && styles.legalParagraph]}>
-          {paragraph}
-        </Text>
-      ))}
-    </Card>
+    <View style={styles.autoRenewPriceTable}>
+      <View style={styles.autoRenewPriceHead}>
+        <Text style={[styles.autoRenewPriceHeadText, styles.autoRenewPriceNameHead]}>档位</Text>
+        {auditPeriodKeys.map((period) => (
+          <Text key={period} style={styles.autoRenewPriceHeadText}>{auditPeriodLabels[period]}</Text>
+        ))}
+      </View>
+      {tiers.map((tier) => {
+        const tierPlans = plans.filter((plan) => auditPlanTierKey(plan) === tier)
+        const referencePlan = tierPlans[0]
+        return (
+          <View key={tier} style={styles.autoRenewPriceRow}>
+            <View style={styles.autoRenewPriceNameCol}>
+              <Text style={styles.autoRenewTierName} numberOfLines={1}>{auditTierLabels[tier]}</Text>
+              <Text style={styles.autoRenewTierCredits} numberOfLines={1}>{referencePlan?.daily_credits || 0} 积分/日</Text>
+            </View>
+            {auditPeriodKeys.map((period) => {
+              const plan = findAuditPlan(plans, tier, period)
+              const active = Boolean(plan && plan.code === selectedPlanCode)
+              return (
+                <Pressable
+                  key={`${tier}-${period}`}
+                  disabled={!plan}
+                  style={[styles.autoRenewPriceCell, active && styles.autoRenewPriceCellActive]}
+                  onPress={() => {
+                    if (plan) onSelect(plan.code)
+                  }}
+                >
+                  <Text style={[styles.autoRenewPriceText, active && styles.autoRenewPriceTextActive]}>
+                    {plan ? `¥${moneyText(plan.amount)}` : '—'}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </View>
+        )
+      })}
+    </View>
   )
 }
 
-function RuleLine({ text }: { text: string }) {
+function AutoRenewInfoRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <View style={styles.ruleLine}>
-      <View style={styles.ruleDot} />
-      <Text style={styles.subtitle}>{text}</Text>
+    <View style={styles.autoRenewInfoRow}>
+      <Text style={styles.autoRenewInfoLabel}>{label}</Text>
+      <Text style={[styles.autoRenewInfoValue, strong && styles.autoRenewInfoValueStrong]}>{value}</Text>
+    </View>
+  )
+}
+
+function LegalDocumentScreen({
+  title,
+  updatedAt,
+  sections,
+}: {
+  title: string
+  updatedAt: string
+  sections: Array<{ title: string; paragraphs: string[] }>
+}) {
+  return (
+    <View style={styles.legalDocumentPage}>
+      <ScrollView style={styles.legalDocumentScroll} contentContainerStyle={styles.legalDocumentContentWrap} showsVerticalScrollIndicator={false}>
+        <View style={styles.legalDocumentContent}>
+          <Text style={styles.legalDocumentTitle}>{title}</Text>
+          <Text style={styles.legalDocumentUpdatedAt}>{updatedAt}</Text>
+          {sections.map((section) => (
+            <View key={section.title} style={styles.legalDocumentSection}>
+              <Text style={styles.legalDocumentSectionTitle}>{section.title}</Text>
+              {section.paragraphs.map((paragraph, index) => (
+                <Text key={`${section.title}-${index}`} style={styles.legalDocumentParagraph}>
+                  {paragraph}
+                </Text>
+              ))}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
     </View>
   )
 }
@@ -1841,6 +2657,52 @@ function PetStat({ label, value }: { label: string; value: string }) {
   )
 }
 
+function PetHomeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.petHomeMetric}>
+      <Text style={styles.petHomeMetricLabel}>{label}</Text>
+      <Text style={styles.petHomeMetricValue}>{value}</Text>
+    </View>
+  )
+}
+
+function PetLabStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.petLabStat}>
+      <Text style={styles.petLabStatValue}>{value}</Text>
+      <Text style={styles.petLabStatLabel}>{label}</Text>
+    </View>
+  )
+}
+
+function PetLabFilterRow({
+  title,
+  value,
+  options,
+  onChange,
+}: {
+  title: string
+  value: string
+  options: Array<{ value: string; label: string }>
+  onChange: (value: string) => void
+}) {
+  return (
+    <View style={styles.petLabFilter}>
+      <Text style={styles.petLabFilterTitle}>{title}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.petLabFilterRow}>
+        {options.map((option) => {
+          const active = value === option.value
+          return (
+            <Pressable key={option.value} style={[styles.petLabPill, active && styles.petLabPillActive]} onPress={() => onChange(option.value)}>
+              <Text style={[styles.petLabPillText, active && styles.petLabPillTextActive]}>{option.label}</Text>
+            </Pressable>
+          )
+        })}
+      </ScrollView>
+    </View>
+  )
+}
+
 function ImagePickerGrid({
   urls,
   max,
@@ -1856,23 +2718,19 @@ function ImagePickerGrid({
 }) {
   return (
     <View style={styles.imageBlock}>
-      <View style={styles.rowBetween}>
-        <Text style={styles.fieldLabel}>图片</Text>
-        <Text style={styles.subtitle}>{urls.length}/{max}</Text>
-      </View>
       <View style={styles.imageGrid}>
         {urls.map((url, index) => (
           <View key={`${url}-${index}`} style={styles.imageTile}>
             <Image source={{ uri: url }} style={styles.imageThumb} />
             <Pressable style={styles.imageRemove} onPress={() => onRemove(index)}>
-              <Text style={styles.imageRemoveText}>移除</Text>
+              <Text style={styles.imageRemoveText}>×</Text>
             </Pressable>
           </View>
         ))}
         {urls.length < max ? (
           <Pressable style={styles.imageAdd} onPress={onAdd} disabled={loading}>
-            <Text style={styles.imageAddIcon}>+</Text>
-            <Text style={styles.imageAddText}>{loading ? '上传中' : '添加图片'}</Text>
+            {loading ? <ActivityIndicator color={colors.brand} /> : <Text style={styles.imageAddIcon}>+</Text>}
+            <Text style={styles.imageAddText}>添加</Text>
           </Pressable>
         ) : null}
       </View>
@@ -1941,6 +2799,43 @@ function SmallButton({ label, danger, disabled, onPress }: { label: string; dang
   )
 }
 
+function InviteActionButton({
+  label,
+  variant = 'primary',
+  disabled,
+  loading,
+  onPress,
+}: {
+  label: string
+  variant?: 'primary' | 'ghost'
+  disabled?: boolean
+  loading?: boolean
+  onPress: () => void
+}) {
+  const isGhost = variant === 'ghost'
+  return (
+    <Pressable
+      style={[styles.inviteActionButton, isGhost && styles.inviteActionButtonGhost, disabled && styles.smallButtonDisabled]}
+      disabled={disabled}
+      onPress={onPress}
+    >
+      {loading ? (
+        <ActivityIndicator color={isGhost ? '#0f766e' : '#fff'} size="small" />
+      ) : null}
+      <Text style={[styles.inviteActionButtonText, isGhost && styles.inviteActionButtonTextGhost]}>{label}</Text>
+    </Pressable>
+  )
+}
+
+function InviteRuleItem({ index, text }: { index: string; text: string }) {
+  return (
+    <View style={styles.inviteRuleItem}>
+      <Text style={styles.inviteRuleIndex}>{index}</Text>
+      <Text style={styles.inviteRuleText}>{text}</Text>
+    </View>
+  )
+}
+
 function Pill({ text }: { text: string }) {
   return (
     <View style={styles.pill}>
@@ -1951,9 +2846,9 @@ function Pill({ text }: { text: string }) {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <Card>
-      <Text style={styles.empty}>{text}</Text>
-    </Card>
+    <View style={styles.autoRenewEmptyState}>
+      <Text style={styles.autoRenewEmptyText}>{text}</Text>
+    </View>
   )
 }
 
@@ -1974,11 +2869,6 @@ function followUserId(user: FollowUserItem): string {
 
 function followDisplayName(user: FollowUserItem): string {
   return String(user.nickname || '').trim() || '用户'
-}
-
-function followRelationText(type: 'followers' | 'following', isFollowing: boolean): string {
-  if (type === 'following') return isFollowing ? '正在关注' : '已取消关注'
-  return isFollowing ? '已关注对方' : '关注你的人'
 }
 
 function showError(title: string, error: unknown) {
@@ -2021,7 +2911,7 @@ function inviteRelationText(profile: Record<string, unknown> | null): string {
 function buildInviteMessage(profile: Record<string, unknown> | null, inviteCode: string, inviteLink: string): string {
   const code = inviteCode.trim()
   const nickname = String(profile?.nickname || '').trim()
-  const title = nickname ? `${nickname} 邀请你加入 Food Link` : '邀请你加入 Food Link'
+  const title = nickname ? `${nickname} 邀请你加入食探` : '邀请你加入食探'
   return [
     title,
     '注册后 7 天内完成 2 个自然日有效记录，双方各得 15 积分。',
@@ -2266,6 +3156,46 @@ function candidateStyleLabel(style?: string): string {
   return labels[style || ''] || '候选外观'
 }
 
+type AuditMembershipTierKey = 'light' | 'standard' | 'advanced'
+type AuditMembershipPeriodKey = 'monthly' | 'quarterly' | 'yearly'
+
+const autoRenewServiceItems = ['饮食记录', 'AI 营养分析', '健康档案', '运动记录', '社区互动', '公共食物库']
+const auditTierKeys: AuditMembershipTierKey[] = ['light', 'standard', 'advanced']
+const auditPeriodKeys: AuditMembershipPeriodKey[] = ['monthly', 'quarterly', 'yearly']
+const auditTierLabels: Record<AuditMembershipTierKey, string> = {
+  light: '轻度版',
+  standard: '标准版',
+  advanced: '进阶版',
+}
+const auditPeriodLabels: Record<AuditMembershipPeriodKey, string> = {
+  monthly: '月卡',
+  quarterly: '季卡',
+  yearly: '年卡',
+}
+
+function auditPlanTierKey(plan?: MembershipPlan): AuditMembershipTierKey {
+  const raw = `${plan?.tier || ''} ${plan?.code || ''} ${plan?.name || ''}`.toLowerCase()
+  if (raw.includes('advanced') || raw.includes('进阶')) return 'advanced'
+  if (raw.includes('light') || raw.includes('轻度')) return 'light'
+  return 'standard'
+}
+
+function auditPlanPeriodKey(plan?: MembershipPlan): AuditMembershipPeriodKey {
+  const raw = `${plan?.period || ''} ${plan?.code || ''} ${plan?.name || ''}`.toLowerCase()
+  const months = Number(plan?.duration_months || 0)
+  if (raw.includes('year') || raw.includes('年') || months >= 12) return 'yearly'
+  if (raw.includes('quarter') || raw.includes('季') || months >= 3) return 'quarterly'
+  return 'monthly'
+}
+
+function findAuditPlan(
+  plans: MembershipPlan[],
+  tier: AuditMembershipTierKey,
+  period: AuditMembershipPeriodKey,
+): MembershipPlan | undefined {
+  return plans.find((plan) => auditPlanTierKey(plan) === tier && auditPlanPeriodKey(plan) === period)
+}
+
 function planPeriodLabel(plan: MembershipPlan): string {
   if (plan.period) {
     const labels: Record<string, string> = {
@@ -2287,6 +3217,23 @@ function planPeriodSuffix(plan: MembershipPlan): string {
   if (plan.duration_months >= 12 || plan.period === 'year' || plan.period === 'yearly') return '/年'
   if (plan.duration_months >= 3 || plan.period === 'quarter' || plan.period === 'quarterly') return '/季'
   return '/月'
+}
+
+function parseAutoRenewDate(value: unknown): Date | null {
+  if (!value) return null
+  const date = new Date(String(value))
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function addAutoRenewMonths(value: Date, months: number): Date {
+  const next = new Date(value.getTime())
+  next.setMonth(next.getMonth() + Math.max(1, Math.floor(months || 1)))
+  return next
+}
+
+function formatAutoRenewDate(value: Date): string {
+  if (Number.isNaN(value.getTime())) return '--'
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
 }
 
 function moneyText(value: unknown): string {
@@ -2316,43 +3263,122 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  followRow: {
+  followListPage: {
+    flex: 1,
+    backgroundColor: '#f0f3f6',
+  },
+  followListWash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 220,
+    backgroundColor: '#ecfdf5',
+    opacity: 0.66,
+  },
+  followListScroll: {
+    flex: 1,
+  },
+  followListContent: {
+    minHeight: '100%',
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    paddingBottom: 32,
+    backgroundColor: '#f0f3f6',
+  },
+  followListEmptyContent: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    backgroundColor: '#f0f3f6',
+  },
+  followListState: {
+    minHeight: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followListEmpty: {
+    minHeight: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followListEmptyText: {
+    color: '#9ca3af',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  followListItem: {
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#f3f4f6',
+    paddingVertical: 12,
   },
-  followInfo: {
+  followItemLeft: {
     flex: 1,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+    paddingRight: 10,
   },
-  followActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-    gap: 8,
-    maxWidth: 220,
+  followItemName: {
+    flex: 1,
+    minWidth: 0,
+    color: '#111827',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '700',
+  },
+  followItemButton: {
+    width: 65,
+    minHeight: 26,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00bc7d',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#00bc7d',
+    paddingHorizontal: 8,
+  },
+  followItemButtonActive: {
+    backgroundColor: 'transparent',
+    borderColor: '#d1d5db',
+  },
+  followItemButtonText: {
+    color: colors.surface,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  followItemButtonTextActive: {
+    color: '#6b7280',
   },
   followAvatarImage: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: colors.surfaceMuted,
   },
   followAvatarFallback: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.brandSoft,
+    backgroundColor: '#f3f4f6',
   },
   followAvatarText: {
-    color: colors.brandDark,
-    fontSize: 17,
+    color: colors.textSecondary,
+    fontSize: 15,
     fontWeight: '900',
+  },
+  followListMoreSpinner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
   },
   inlineRow: {
     flexDirection: 'row',
@@ -2374,48 +3400,561 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 14,
   },
-  inviteProfileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 14,
+  recipeEditPage: {
+    flex: 1,
+    backgroundColor: '#f4fbf6',
   },
-  inviteAvatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 16,
-    backgroundColor: colors.surfaceMuted,
+  recipeEditWash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 210,
+    backgroundColor: '#ecfdf5',
   },
-  inviteAvatarFallback: {
-    width: 58,
-    height: 58,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.brandSoft,
+  recipeEditScroll: {
+    flex: 1,
   },
-  inviteAvatarText: {
-    color: colors.brandDark,
-    fontSize: 24,
-    fontWeight: '900',
+  recipeEditContent: {
+    minHeight: '100%',
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
-  inviteResolvedBox: {
-    marginTop: 2,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceMuted,
-  },
-  inviteQrHeader: {
+  recipeEditHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
+    paddingHorizontal: 2,
+    paddingBottom: 12,
   },
-  inviteQrPressable: {
+  recipeEditHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  recipeEditTitle: {
+    color: '#111827',
+    fontSize: 22,
+    lineHeight: 29,
+    fontWeight: '900',
+  },
+  recipeEditSubtitle: {
+    marginTop: 6,
+    color: '#6b7280',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  recipeFavoriteToggle: {
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#fff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e5e7eb',
+  },
+  recipeFavoriteToggleActive: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#bbf7d0',
+  },
+  recipeFavoriteToggleText: {
+    color: '#6b7280',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  recipeFavoriteToggleTextActive: {
+    color: '#00a26d',
+  },
+  recipeEditCard: {
+    marginBottom: 12,
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0, 0, 0, 0.04)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  recipeEditCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  recipeEditSectionTitle: {
+    color: '#111827',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  recipeEditFormItem: {
+    marginBottom: 12,
+  },
+  recipeEditLabel: {
+    color: '#6b7280',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  recipeEditInput: {
+    minHeight: 42,
+    borderRadius: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+    paddingHorizontal: 12,
+    paddingVertical: 0,
+    color: '#111827',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  recipeEditTextarea: {
+    minHeight: 78,
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
+  recipeImagePreview: {
+    height: 88,
+    marginTop: 2,
+    marginBottom: 12,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#f9fafb',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e5e7eb',
+  },
+  recipeImagePreviewPhoto: {
+    width: '100%',
+    height: '100%',
+  },
+  recipeImagePreviewEmpty: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 16,
+    gap: 6,
+  },
+  recipeImagePreviewText: {
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  recipeMealOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  recipeMealOption: {
+    minHeight: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: '#f3f4f6',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
+  },
+  recipeMealOptionActive: {
+    backgroundColor: '#ecfdf5',
+    borderColor: '#00bc7d',
+  },
+  recipeMealOptionText: {
+    color: '#374151',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  recipeMealOptionTextActive: {
+    color: '#047857',
+  },
+  recipeSummaryGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  recipeSummaryItem: {
+    flex: 1,
+    minHeight: 66,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+  },
+  recipeSummaryValue: {
+    color: '#00bc7d',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  recipeSummaryLabel: {
+    marginTop: 3,
+    color: '#9ca3af',
+    fontSize: 11,
+    lineHeight: 15,
+    textAlign: 'center',
+  },
+  recipeWeightLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#eef2f7',
+  },
+  recipeWeightText: {
+    color: '#6b7280',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  recipeWeightValue: {
+    color: '#111827',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  recipeAddItemButton: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#ecfdf5',
+  },
+  recipeAddItemText: {
+    color: '#00a26d',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  recipeItemEditor: {
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#eef2f7',
+  },
+  recipeItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 8,
+  },
+  recipeItemTitle: {
+    color: '#111827',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
+  recipeItemRemove: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    backgroundColor: '#fef2f2',
+  },
+  recipeItemRemoveText: {
+    color: '#dc2626',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  recipeTwoColumn: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  recipeThreeColumn: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  recipeEditActionBar: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 2,
+  },
+  recipeSaveButton: {
+    flex: 1,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    borderRadius: 12,
+    backgroundColor: '#00bc7d',
+    shadowColor: '#00bc7d',
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  recipeSaveButtonDisabled: {
+    opacity: 0.68,
+  },
+  recipeSaveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  recipeDeleteButton: {
+    flex: 1,
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    borderRadius: 12,
+    backgroundColor: '#fef2f2',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#fecaca',
+  },
+  recipeDeleteButtonText: {
+    color: '#dc2626',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  recipeEditEmptyCard: {
+    marginTop: 60,
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  recipeEditEmptyIcon: {
+    fontSize: 40,
+    lineHeight: 48,
+  },
+  recipeEditEmptyTitle: {
+    marginTop: 8,
+    color: '#111827',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  recipeEditEmptyDesc: {
+    marginTop: 6,
+    color: '#6b7280',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  recipeEditLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+  },
+  invitePage: {
+    flex: 1,
+    backgroundColor: '#f3f7f4',
+  },
+  inviteScroll: {
+    flex: 1,
+  },
+  inviteContent: {
+    paddingHorizontal: 12,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  inviteHero: {
+    paddingHorizontal: 4,
+    paddingTop: 8,
+    paddingBottom: 8,
     marginBottom: 12,
+  },
+  inviteEyebrow: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 999,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#047857',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+  },
+  inviteTitle: {
+    marginTop: 10,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  inviteSubtitle: {
+    marginTop: 8,
+    fontSize: 13,
+    lineHeight: 22,
+    color: '#475569',
+  },
+  inviteCard: {
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  inviterCard: {
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.10)',
+  },
+  inviteProfileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  inviteAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: '#ecfdf5',
+  },
+  inviteAvatarFallback: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ecfdf5',
+  },
+  inviteAvatarText: {
+    color: '#10b981',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  inviterCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  inviterName: {
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  inviterDesc: {
+    marginTop: 5,
+    fontSize: 12,
+    lineHeight: 19,
+    color: '#64748b',
+  },
+  inviteCodeChip: {
+    marginTop: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    borderRadius: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    backgroundColor: '#ecfdf5',
+  },
+  inviteCodeLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  inviteCodeLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#047857',
+  },
+  inviteCodeValue: {
+    flexShrink: 1,
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#065f46',
+    letterSpacing: 1,
+    textAlign: 'right',
+  },
+  inviteRelationText: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#64748b',
+  },
+  rulesCard: {
+    gap: 9,
+  },
+  inviteRuleItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+  },
+  inviteRuleIndex: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    overflow: 'hidden',
+    backgroundColor: '#0f172a',
+    color: '#fff',
+    fontSize: 11,
+    lineHeight: 28,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  inviteRuleText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    lineHeight: 22,
+    color: '#1f2937',
+  },
+  inviteQrCard: {
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.10)',
+  },
+  inviteQrHeader: {
+    marginBottom: 10,
+  },
+  inviteQrTitle: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  inviteQrDesc: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 19,
+    color: '#64748b',
+  },
+  inviteQrBox: {
+    minHeight: 210,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(16, 185, 129, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fffb',
   },
   inviteQrOuter: {
     alignSelf: 'center',
@@ -2454,28 +3993,455 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: 18,
     backgroundColor: 'rgba(17, 24, 39, 0.62)',
   },
   inviteQrModalCard: {
     width: '100%',
     maxWidth: 360,
-    borderRadius: 22,
-    padding: 20,
+    borderRadius: 16,
+    padding: 16,
     backgroundColor: colors.surface,
     gap: 10,
-  },
-  linkText: {
-    marginTop: 10,
-    color: colors.brandDark,
-    fontSize: 12,
-    lineHeight: 18,
   },
   noticeText: {
     marginTop: 10,
     color: colors.warning,
     fontSize: 12,
     lineHeight: 18,
+  },
+  inviteActions: {
+    gap: 9,
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  inviteActionButton: {
+    height: 48,
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#10b981',
+    shadowColor: '#10b981',
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  inviteActionButtonGhost: {
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(15, 118, 110, 0.14)',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  inviteActionButtonText: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  inviteActionButtonTextGhost: {
+    color: '#0f766e',
+  },
+  inviteEmpty: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  inviteEmptyText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  autoRenewPage: {
+    flex: 1,
+    backgroundColor: '#f0fdf4',
+  },
+  autoRenewScroll: {
+    flex: 1,
+  },
+  autoRenewContent: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+  },
+  autoRenewBanner: {
+    borderRadius: 12,
+    backgroundColor: '#12372f',
+    paddingHorizontal: 16,
+    paddingVertical: 17,
+    shadowColor: '#00643c',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  autoRenewKicker: {
+    color: '#b7f7d6',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  autoRenewTitle: {
+    marginTop: 6,
+    color: '#f7fff9',
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '900',
+  },
+  autoRenewDesc: {
+    marginTop: 9,
+    color: 'rgba(240, 253, 244, 0.82)',
+    fontSize: 12,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  autoRenewStatusPanel: {
+    marginTop: 12,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    padding: 14,
+    shadowColor: '#00643c',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  autoRenewStatusLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  autoRenewStatusValue: {
+    marginTop: 3,
+    color: '#064e3b',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '900',
+  },
+  autoRenewStatusGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  autoRenewStatusItem: {
+    width: '48.5%',
+    borderRadius: 9,
+    backgroundColor: '#f6fdf9',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  autoRenewStatusItemLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  autoRenewStatusItemValue: {
+    marginTop: 2,
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  autoRenewSection: {
+    marginTop: 12,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    padding: 14,
+    shadowColor: '#00643c',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  autoRenewSectionTitle: {
+    marginBottom: 10,
+    color: '#064e3b',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  autoRenewServiceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+  },
+  autoRenewServiceItem: {
+    width: '31.6%',
+    minHeight: 29,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 6,
+  },
+  autoRenewServiceText: {
+    color: '#047857',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  autoRenewPriceTable: {
+    overflow: 'hidden',
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#edf5f0',
+  },
+  autoRenewEmptyState: {
+    minHeight: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9,
+    backgroundColor: '#f6fdf9',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  autoRenewEmptyText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  autoRenewPriceHead: {
+    minHeight: 29,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f6fdf9',
+  },
+  autoRenewPriceHeadText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  autoRenewPriceNameHead: {
+    flex: 1.28,
+    textAlign: 'left',
+    paddingLeft: 10,
+  },
+  autoRenewPriceRow: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#edf5f0',
+  },
+  autoRenewPriceNameCol: {
+    flex: 1.28,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  autoRenewTierName: {
+    color: colors.text,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '900',
+  },
+  autoRenewTierCredits: {
+    marginTop: 2,
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+  autoRenewPriceCell: {
+    flex: 1,
+    minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  autoRenewPriceCellActive: {
+    backgroundColor: '#ecfdf5',
+  },
+  autoRenewPriceText: {
+    color: colors.text,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  autoRenewPriceTextActive: {
+    color: '#00a86b',
+  },
+  autoRenewPriceNote: {
+    marginTop: 8,
+    color: '#4b5563',
+    fontSize: 11,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  autoRenewAutoCard: {
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  autoRenewCancelCard: {
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  autoRenewInfoRow: {
+    minHeight: 31,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#edf5f0',
+    paddingVertical: 7,
+  },
+  autoRenewInfoLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  autoRenewInfoValue: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  autoRenewInfoValueStrong: {
+    color: '#00a86b',
+  },
+  autoRenewPlainText: {
+    marginTop: 9,
+    color: '#4b5563',
+    fontSize: 11,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  autoRenewPathBox: {
+    marginTop: 9,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    gap: 4,
+  },
+  autoRenewPathBoxBlue: {
+    borderColor: '#dbeafe',
+    backgroundColor: '#eff6ff',
+  },
+  autoRenewCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+  },
+  autoRenewCheckbox: {
+    width: 17,
+    height: 17,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  autoRenewCheckboxActive: {
+    borderColor: '#00bc7d',
+    backgroundColor: '#00bc7d',
+  },
+  autoRenewCheckboxText: {
+    color: colors.surface,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '900',
+  },
+  autoRenewCheckText: {
+    flex: 1,
+    color: '#374151',
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  autoRenewLink: {
+    marginTop: 4,
+    color: '#047857',
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: '900',
+  },
+  autoRenewPrimaryButton: {
+    height: 41,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00bc7d',
+    marginTop: 12,
+  },
+  autoRenewButtonDisabled: {
+    opacity: 0.64,
+  },
+  autoRenewPrimaryButtonText: {
+    color: colors.surface,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  autoRenewSubscribeHint: {
+    marginTop: 8,
+    color: '#047857',
+    fontSize: 11,
+    lineHeight: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  autoRenewManageText: {
+    marginTop: 9,
+    color: '#4b5563',
+    fontSize: 11,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  autoRenewPathText: {
+    color: '#1d4ed8',
+    fontSize: 11,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  autoRenewSecondaryButton: {
+    height: 41,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    marginTop: 12,
+  },
+  autoRenewSecondaryButtonText: {
+    color: '#1d4ed8',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  autoRenewModalButton: {
+    height: 38,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00bc7d',
+    marginTop: 13,
+  },
+  autoRenewModalButtonText: {
+    color: colors.surface,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
   },
   auditHeroRow: {
     flexDirection: 'row',
@@ -2531,30 +4497,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(15, 23, 42, 0.48)',
-    padding: 24,
+    padding: 18,
   },
   auditModal: {
     width: '100%',
-    maxWidth: 420,
-    borderRadius: 24,
+    maxWidth: 310,
+    borderRadius: 12,
     backgroundColor: colors.surface,
-    padding: 20,
+    paddingHorizontal: 15,
+    paddingTop: 17,
+    paddingBottom: 15,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 8,
   },
   auditModalTitle: {
     color: colors.text,
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 16,
+    lineHeight: 22,
     fontWeight: '900',
+    textAlign: 'center',
   },
   auditModalBody: {
-    marginTop: 12,
-    marginBottom: 18,
-    gap: 10,
+    marginTop: 11,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    padding: 11,
+    gap: 4,
   },
   auditModalLine: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
+    color: '#334155',
+    fontSize: 12,
+    lineHeight: 20,
     fontWeight: '700',
   },
   featureGrid: {
@@ -2662,6 +4638,306 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 12,
   },
+  publicFoodShareRoot: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  publicFoodShareScroll: {
+    flex: 1,
+  },
+  publicFoodShareScrollContent: {
+    paddingTop: 0,
+  },
+  publicFoodShareBody: {
+    paddingBottom: 0,
+  },
+  publicFoodShareHero: {
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.12)',
+    backgroundColor: '#f4faf8',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  publicFoodShareHeroCampus: {
+    backgroundColor: '#f0fdf9',
+  },
+  publicFoodShareHeroTitle: {
+    color: '#047857',
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: '900',
+  },
+  publicFoodShareHeroSubtitle: {
+    marginTop: 4,
+    color: '#065f46',
+    fontSize: 13,
+    lineHeight: 21,
+    fontWeight: '700',
+  },
+  publicFoodShareSection: {
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 2,
+    backgroundColor: '#fff',
+  },
+  publicFoodShareSectionHeader: {
+    minHeight: 24,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  publicFoodShareSectionTitle: {
+    color: '#1e2939',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  publicFoodShareRequired: {
+    color: colors.danger,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  publicFoodShareMeta: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  publicFoodNutritionSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    marginBottom: 8,
+  },
+  publicFoodNutritionItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  publicFoodNutritionValue: {
+    color: '#4a9e7d',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '700',
+  },
+  publicFoodNutritionLabel: {
+    marginTop: 4,
+    color: '#6a7282',
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  publicFoodShareNutritionTip: {
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  publicFoodSourceTagRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  publicFoodSourceChip: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  publicFoodSourceChipActive: {
+    borderColor: '#5cb896',
+    backgroundColor: '#f4faf8',
+  },
+  publicFoodSourceChipText: {
+    color: '#4b5563',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  publicFoodSourceChipTextActive: {
+    color: '#059669',
+    fontWeight: '800',
+  },
+  publicFoodRatingStars: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  publicFoodRatingStar: {
+    color: '#e5e7eb',
+    fontSize: 20,
+    lineHeight: 24,
+  },
+  publicFoodRatingStarActive: {
+    color: '#f59e0b',
+  },
+  publicFoodSwitchRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#f3f4f6',
+    marginBottom: 14,
+    paddingVertical: 8,
+  },
+  publicFoodSwitchLabel: {
+    color: '#364153',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  publicFoodSwitch: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#e5e7eb',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  publicFoodSwitchActive: {
+    backgroundColor: '#5cb896',
+  },
+  publicFoodSwitchDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  publicFoodSwitchDotActive: {
+    transform: [{ translateX: 22 }],
+  },
+  publicFoodQuickTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 14,
+  },
+  publicFoodQuickTag: {
+    borderRadius: 10,
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  publicFoodQuickTagActive: {
+    backgroundColor: '#f4faf8',
+  },
+  publicFoodQuickTagText: {
+    color: '#364153',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  publicFoodQuickTagTextActive: {
+    color: '#4a9e7d',
+  },
+  publicFoodShareSourceGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  publicFoodSourceOption: {
+    flex: 1,
+    minHeight: 76,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  publicFoodSourceOptionActive: {
+    borderColor: colors.brand,
+    backgroundColor: colors.brandSoft,
+  },
+  publicFoodSourceOptionTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  publicFoodSourceOptionTitleActive: {
+    color: colors.brandDark,
+  },
+  publicFoodSourceOptionText: {
+    marginTop: 4,
+    color: colors.textSecondary,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  publicFoodSourceOptionTextActive: {
+    color: '#047857',
+  },
+  publicFoodShareHint: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  publicFoodShareMacroGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  publicFoodShareLocationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  publicFoodShareReferences: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  publicFoodShareReferenceTitle: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    marginBottom: 10,
+  },
+  publicFoodShareReferenceCard: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    marginBottom: 10,
+  },
+  publicFoodShareSubmitBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: 10,
+    paddingHorizontal: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: -2 },
+    elevation: 4,
+  },
   imageBlock: {
     marginBottom: 14,
   },
@@ -2669,46 +4945,61 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginTop: 8,
   },
   imageTile: {
-    width: 96,
-    height: 112,
+    position: 'relative',
+    width: '31.3%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: colors.surfaceMuted,
   },
   imageThumb: {
-    width: 96,
-    height: 96,
-    borderRadius: 14,
+    width: '100%',
+    height: '100%',
+    borderRadius: 12,
     backgroundColor: colors.surfaceMuted,
   },
   imageRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
-    marginTop: 3,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.62)',
   },
   imageRemoveText: {
-    color: colors.danger,
-    fontSize: 12,
-    fontWeight: '800',
+    color: '#fff',
+    fontSize: 18,
+    lineHeight: 19,
+    fontWeight: '400',
+    marginTop: -2,
   },
   imageAdd: {
-    width: 96,
-    height: 96,
-    borderRadius: 14,
+    width: '31.3%',
+    aspectRatio: 1,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: '#d1d5db',
+    borderStyle: 'dashed',
   },
   imageAddIcon: {
-    color: colors.brandDark,
-    fontSize: 30,
-    fontWeight: '900',
+    color: '#9ca3af',
+    fontSize: 32,
+    lineHeight: 34,
+    fontWeight: '300',
   },
   imageAddText: {
-    color: colors.textSecondary,
-    fontWeight: '800',
-    marginTop: 4,
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 5,
   },
   nutritionRow: {
     flexDirection: 'row',
@@ -2721,6 +5012,60 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+  },
+  legalDocumentPage: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  legalDocumentScroll: {
+    flex: 1,
+  },
+  legalDocumentContentWrap: {
+    padding: 16,
+    paddingBottom: 28,
+  },
+  legalDocumentContent: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  legalDocumentTitle: {
+    color: '#1e293b',
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  legalDocumentUpdatedAt: {
+    color: '#94a3b8',
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    borderStyle: 'dashed',
+  },
+  legalDocumentSection: {
+    marginBottom: 20,
+  },
+  legalDocumentSectionTitle: {
+    color: '#334155',
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  legalDocumentParagraph: {
+    color: '#475569',
+    fontSize: 14,
+    lineHeight: 25,
+    marginBottom: 6,
+    textAlign: 'justify',
   },
   sectionTitle: {
     color: colors.text,
@@ -2737,21 +5082,18 @@ const styles = StyleSheet.create({
   },
   bigTitle: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     marginTop: 8,
   },
   bigNumber: {
     color: colors.brandDark,
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: '900',
   },
   subtitle: {
     color: colors.textSecondary,
     lineHeight: 21,
-  },
-  legalParagraph: {
-    marginTop: 8,
   },
   helperText: {
     color: colors.textMuted,
@@ -2759,10 +5101,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 6,
     marginBottom: 8,
-  },
-  empty: {
-    color: colors.textMuted,
-    textAlign: 'center',
   },
   itemName: {
     color: colors.text,
@@ -2780,69 +5118,164 @@ const styles = StyleSheet.create({
   },
   chevron: {
     color: colors.textMuted,
-    fontSize: 28,
+    fontSize: 22,
   },
-  leaderboardCard: {
-    padding: 14,
+  checkinLeaderboardPage: {
+    flex: 1,
+    backgroundColor: '#fff',
   },
-  leaderboardCardMine: {
-    borderWidth: 1,
-    borderColor: colors.brand,
-    backgroundColor: colors.brandSoft,
+  checkinLeaderboardScroll: {
+    flex: 1,
+    backgroundColor: 'transparent',
   },
-  rankNo: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.brandSoft,
+  checkinLeaderboardHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 12,
   },
-  rankNoTop: {
-    backgroundColor: colors.orange,
-  },
-  rankNoText: {
-    color: colors.brandDark,
+  checkinLeaderboardTitle: {
+    color: '#0f172a',
+    fontSize: 20,
+    lineHeight: 28,
     fontWeight: '900',
   },
-  rankNoTextTop: {
-    color: '#fff',
+  checkinLeaderboardRange: {
+    marginTop: 6,
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 19,
   },
-  leaderboardAvatar: {
+  checkinLeaderboardList: {
+    paddingHorizontal: 16,
+  },
+  checkinLeaderboardRow: {
+    minHeight: 72,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  checkinLeaderboardRowMine: {
+    borderColor: 'rgba(0, 188, 125, 0.36)',
+    shadowColor: colors.brand,
+    shadowOpacity: 0.12,
+  },
+  checkinLeaderboardRank: {
+    width: 28,
+    color: '#94a3b8',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  checkinLeaderboardRankTop1: {
+    color: '#d97706',
+  },
+  checkinLeaderboardRankTop2: {
+    color: '#64748b',
+  },
+  checkinLeaderboardRankTop3: {
+    color: '#b45309',
+  },
+  checkinLeaderboardAvatarWrap: {
     width: 44,
     height: 44,
+    marginLeft: 8,
+    marginRight: 12,
     borderRadius: 22,
-    backgroundColor: colors.surfaceMuted,
-  },
-  leaderboardAvatarFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: '#e2e8f0',
   },
-  leaderboardAvatarText: {
-    color: colors.textSecondary,
-    fontWeight: '900',
+  checkinLeaderboardAvatar: {
+    width: '100%',
+    height: '100%',
   },
-  leaderboardName: {
-    flexShrink: 1,
+  checkinLeaderboardAvatarText: {
+    color: '#64748b',
+    fontSize: 19,
+    lineHeight: 24,
+  },
+  checkinLeaderboardMiddle: {
+    flex: 1,
     minWidth: 0,
   },
-  leaderboardCount: {
-    minWidth: 58,
+  checkinLeaderboardNameRow: {
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkinLeaderboardName: {
+    flexShrink: 1,
+    minWidth: 0,
+    color: '#0f172a',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '700',
+  },
+  checkinLeaderboardMeTag: {
+    marginLeft: 6,
+    color: colors.brand,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '800',
+  },
+  checkinLeaderboardCount: {
+    minWidth: 60,
     alignItems: 'flex-end',
   },
-  leaderboardCountValue: {
-    color: colors.text,
+  checkinLeaderboardCountNum: {
+    color: colors.brand,
     fontSize: 18,
+    lineHeight: 24,
     fontWeight: '900',
   },
+  checkinLeaderboardCountUnit: {
+    marginTop: 2,
+    color: '#94a3b8',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  checkinLeaderboardState: {
+    minHeight: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  checkinLeaderboardStateText: {
+    color: '#64748b',
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  checkinLeaderboardRetry: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.brand,
+  },
+  checkinLeaderboardRetryText: {
+    color: '#fff',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '800',
+  },
   avatarFallback: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: colors.brandSoft,
   },
   field: {
@@ -2863,7 +5296,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceMuted,
   },
   textarea: {
-    minHeight: 104,
+    minHeight: 88,
     paddingTop: 12,
     paddingBottom: 12,
   },
@@ -2930,17 +5363,780 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
-  ruleLine: {
+  petHomePage: {
+    flex: 1,
+    backgroundColor: '#f4fbf6',
+  },
+  petHomeScroll: {
+    flex: 1,
+  },
+  petHomeContent: {
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 26,
+  },
+  petHomeHero: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.86)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(92, 184, 150, 0.12)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 13,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  petHomeHeroCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  petHomeName: {
+    color: '#15212c',
+    fontSize: 21,
+    lineHeight: 29,
+    fontWeight: '900',
+  },
+  petHomeMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 7,
+  },
+  petHomeChip: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    color: '#2f7f62',
+    backgroundColor: 'rgba(92, 184, 150, 0.12)',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '900',
+  },
+  petHomeChipMuted: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    color: '#64748b',
+    backgroundColor: 'rgba(148, 163, 184, 0.1)',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  petHomeMessage: {
+    color: '#5f6b7a',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 7,
+  },
+  petHomeCard: {
+    borderRadius: 16,
+    padding: 13,
+    marginBottom: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.86)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(92, 184, 150, 0.1)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.045,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  petHomeChatCard: {
+    backgroundColor: 'rgba(241, 250, 245, 0.94)',
+    borderColor: 'rgba(92, 184, 150, 0.18)',
+  },
+  petHomeCardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 10,
+    marginBottom: 9,
+  },
+  petHomeCardTitle: {
+    flexShrink: 1,
+    color: '#18222d',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  petHomeCardSide: {
+    color: '#8a94a3',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  petHomeBodyText: {
+    color: '#657180',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  petHomeInlineAction: {
+    alignSelf: 'flex-start',
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  petHomeInlineActionPrimary: {
+    backgroundColor: colors.brand,
+    shadowColor: colors.brand,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  petHomeInlineActionText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  petHomeReasonItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    marginTop: 7,
+    backgroundColor: 'rgba(92, 184, 150, 0.07)',
+  },
+  petHomeReasonDot: {
+    color: colors.brand,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  petHomeReasonText: {
+    flex: 1,
+    minWidth: 0,
+    color: '#566273',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  petHomeUnlockRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
     marginTop: 10,
   },
-  ruleDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+  petHomeUnlockChip: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    color: '#64748b',
+    backgroundColor: '#f1f5f9',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+  },
+  petHomeCandidateGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  petHomeCandidateCard: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    backgroundColor: '#f7fafc',
+  },
+  petHomeCandidateCardActive: {
+    borderColor: 'rgba(92, 184, 150, 0.34)',
+    backgroundColor: 'rgba(92, 184, 150, 0.09)',
+  },
+  petHomeCandidateName: {
+    color: '#17212b',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  petHomeCandidateMeta: {
+    minHeight: 32,
+    color: '#7a8696',
+    fontSize: 11,
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  petHomeCandidateAction: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    marginTop: 4,
+    color: '#fff',
+    backgroundColor: '#17212b',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '900',
+  },
+  petHomeProgressTrack: {
+    height: 8,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: '#e8edf3',
+    marginBottom: 10,
+  },
+  petHomeProgressFill: {
+    height: '100%',
+    borderRadius: 999,
     backgroundColor: colors.brand,
+  },
+  petHomeMetricGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  petHomeScoreGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  petHomeMetric: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(92, 184, 150, 0.08)',
+  },
+  petHomeMetricLabel: {
+    color: '#7a8696',
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  petHomeMetricValue: {
+    color: '#17212b',
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  petHomeTask: {
+    color: '#3a8b6b',
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '800',
+    marginTop: 10,
+  },
+  petHomeEventTitle: {
+    color: '#17212b',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  petHomeActionList: {
+    gap: 8,
+  },
+  petHomeActionItem: {
+    minHeight: 62,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    borderRadius: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(92, 184, 150, 0.08)',
+  },
+  petHomeActionTitle: {
+    color: '#17212b',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  petHomeActionDesc: {
+    color: '#7a8696',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  petHomeActionSide: {
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  petHomeActionStatus: {
+    color: '#2f7f62',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '900',
+  },
+  petHomeActionStatusMuted: {
+    color: '#94a3b8',
+  },
+  petHomeToggle: {
+    width: 38,
+    height: 22,
+    borderRadius: 999,
+    padding: 2,
+    backgroundColor: '#d9e2ea',
+  },
+  petHomeToggleActive: {
+    backgroundColor: colors.brand,
+  },
+  petHomeToggleKnob: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#fff',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  petHomeToggleKnobActive: {
+    transform: [{ translateX: 16 }],
+  },
+  petHomeActionCost: {
+    color: '#2f7f62',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  petLabPage: {
+    flex: 1,
+    backgroundColor: '#f4fbf6',
+  },
+  petLabScroll: {
+    flex: 1,
+  },
+  petLabContent: {
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 28,
+  },
+  petLabHero: {
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(92, 184, 150, 0.12)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.05,
+    shadowRadius: 13,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  petLabTitle: {
+    color: '#13202b',
+    fontSize: 22,
+    lineHeight: 30,
+    fontWeight: '900',
+  },
+  petLabSubtitle: {
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 5,
+  },
+  petLabStatRow: {
+    flexDirection: 'row',
+    gap: 7,
+    marginTop: 12,
+  },
+  petLabStat: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    backgroundColor: 'rgba(92, 184, 150, 0.09)',
+  },
+  petLabStatValue: {
+    color: '#1f8a68',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  petLabStatLabel: {
+    color: '#6b7280',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  petLabPanel: {
+    borderRadius: 16,
+    padding: 13,
+    marginBottom: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.88)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(92, 184, 150, 0.1)',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.045,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+  },
+  petLabCurrentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  petLabCurrentCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  petLabPanelTitle: {
+    color: '#17212b',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+    marginBottom: 7,
+  },
+  petLabCurrentName: {
+    color: '#17212b',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '900',
+  },
+  petLabCopy: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 19,
+  },
+  petLabTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  petLabTag: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    color: '#2f7f62',
+    backgroundColor: 'rgba(92, 184, 150, 0.1)',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
+  },
+  petLabRerollButton: {
+    alignSelf: 'flex-start',
+    minHeight: 34,
+    minWidth: 126,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 10,
+    backgroundColor: '#17212b',
+  },
+  petLabRerollText: {
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  petLabFormula: {
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 10,
+    backgroundColor: '#101827',
+  },
+  petLabArchetypeNote: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    marginTop: 10,
+    backgroundColor: 'rgba(92, 184, 150, 0.08)',
+  },
+  petLabArchetypeNoteText: {
+    color: '#2f7f62',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  petLabCode: {
+    color: '#dbeafe',
+    fontSize: 11,
+    lineHeight: 17,
+  },
+  petLabSampleScroll: {
+    marginTop: 10,
+  },
+  petLabSampleRow: {
+    gap: 8,
+    paddingRight: 4,
+  },
+  petLabSampleCard: {
+    width: 92,
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(92, 184, 150, 0.08)',
+  },
+  petLabSampleCard_pretty: {
+    backgroundColor: 'rgba(92, 184, 150, 0.1)',
+  },
+  petLabSampleCard_quirky: {
+    backgroundColor: 'rgba(139, 92, 246, 0.08)',
+  },
+  petLabSampleCard_risky: {
+    backgroundColor: 'rgba(244, 114, 182, 0.08)',
+  },
+  petLabSampleTitle: {
+    color: '#17212b',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '900',
+    marginTop: 6,
+  },
+  petLabSampleSub: {
+    color: '#94a3b8',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  petLabFilter: {
+    marginTop: 11,
+  },
+  petLabFilterTitle: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 7,
+    fontWeight: '800',
+  },
+  petLabFilterRow: {
+    gap: 7,
+    paddingRight: 4,
+  },
+  petLabPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    backgroundColor: '#f1f5f9',
+  },
+  petLabPillActive: {
+    borderColor: 'rgba(92, 184, 150, 0.35)',
+    backgroundColor: 'rgba(92, 184, 150, 0.12)',
+  },
+  petLabPillText: {
+    color: '#475569',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+  },
+  petLabPillTextActive: {
+    color: '#2f7f62',
+  },
+  petLabGridHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginHorizontal: 2,
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  petLabGridTitle: {
+    color: '#17212b',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  petLabGridSide: {
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+  },
+  petLabGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 9,
+  },
+  petLabCard: {
+    width: '48.6%',
+    minHeight: 212,
+    alignItems: 'center',
+    borderRadius: 15,
+    paddingHorizontal: 8,
+    paddingVertical: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(148, 163, 184, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+  },
+  petLabCard_pretty: {
+    borderColor: 'rgba(92, 184, 150, 0.18)',
+    backgroundColor: 'rgba(248, 255, 252, 0.94)',
+  },
+  petLabCard_quirky: {
+    borderColor: 'rgba(139, 92, 246, 0.14)',
+    backgroundColor: 'rgba(250, 248, 255, 0.94)',
+  },
+  petLabCard_risky: {
+    borderColor: 'rgba(244, 114, 182, 0.18)',
+    backgroundColor: 'rgba(255, 247, 250, 0.94)',
+  },
+  petLabCardTitle: {
+    color: '#17212b',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
     marginTop: 7,
+    textAlign: 'center',
+  },
+  petLabCardBadge: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginTop: 3,
+    marginBottom: 5,
+    color: '#2f7f62',
+    backgroundColor: 'rgba(92, 184, 150, 0.1)',
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '800',
+  },
+  petLabCardDesc: {
+    color: '#64748b',
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: 'center',
+  },
+  petLabCardReason: {
+    minHeight: 35,
+    overflow: 'hidden',
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 6,
+    marginTop: 6,
+    color: '#64748b',
+    backgroundColor: 'rgba(92, 184, 150, 0.07)',
+    fontSize: 10,
+    lineHeight: 15,
+    textAlign: 'center',
+  },
+  petLabCardReasonWarn: {
+    color: '#9f426d',
+    backgroundColor: 'rgba(244, 114, 182, 0.08)',
+  },
+  petLabSelectButton: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 7,
+    backgroundColor: '#17212b',
+  },
+  petLabSelectText: {
+    color: '#fff',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '900',
+  },
+  petLabLoadMore: {
+    minHeight: 38,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    marginBottom: 4,
+    backgroundColor: '#17212b',
+  },
+  petLabLoadMoreText: {
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  petLabDetailMask: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 12,
+    backgroundColor: 'rgba(15, 23, 42, 0.42)',
+  },
+  petLabDetail: {
+    alignItems: 'center',
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 24,
+    backgroundColor: '#fff',
+  },
+  petLabDetailTitle: {
+    color: '#17212b',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '900',
+    marginTop: 8,
+  },
+  petLabDetailCopy: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  petLabDetailTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
+  petLabDetailTag: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    color: '#2f7f62',
+    backgroundColor: 'rgba(92, 184, 150, 0.1)',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
+  },
+  petLabDetailReason: {
+    alignSelf: 'stretch',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 8,
+    color: '#2f7f62',
+    backgroundColor: 'rgba(92, 184, 150, 0.08)',
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  petLabDetailReasonWarn: {
+    color: '#9f426d',
+    backgroundColor: 'rgba(244, 114, 182, 0.08)',
+  },
+  petLabDetailClose: {
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 12,
   },
   petHero: {
     borderRadius: 18,

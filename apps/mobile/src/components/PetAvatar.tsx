@@ -7,7 +7,7 @@ type PetVisual = Pick<PetProfile | PetAppearanceCandidate, 'pet_seed' | 'name' |
 
 interface PetAvatarProps {
   pet?: Partial<PetVisual> | null
-  size?: 'small' | 'medium' | 'large'
+  size?: 'small' | 'medium' | 'large' | number
   mood?: string
   state?: string
 }
@@ -33,7 +33,7 @@ export function PetAvatar({ pet, size = 'medium', mood, state }: PetAvatarProps)
     <View
       accessibilityLabel={label}
       accessibilityRole="image"
-      style={[styles.avatar, styles[size], dimmed && styles.stateMuted, state === 'warming' && styles.stateWarming]}
+      style={[styles.avatar, typeof size === 'number' ? { width: size, height: size } : styles[size], dimmed && styles.stateMuted, state === 'warming' && styles.stateWarming]}
     >
       <Svg width="100%" height="100%" viewBox="0 0 120 120">
         <Ellipse cx="60" cy="101" rx="34" ry="9" fill="rgba(15, 23, 42, 0.12)" />

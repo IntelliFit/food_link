@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import * as Clipboard from 'expo-clipboard'
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { FoodExpiryDashboard, MembershipStatus, RewardCenterResponse, UserInfo } from '@food-link/core'
 import {
   Activity,
@@ -18,7 +19,6 @@ import {
   Info,
   LineChart,
   Lock,
-  LogOut,
   MapPin,
   MessageCircle,
   Package,
@@ -28,7 +28,6 @@ import {
   Sparkles,
   Star,
   Store,
-  Trash2,
   Trophy,
   User,
   UserPlus,
@@ -36,13 +35,12 @@ import {
   type LucideIcon,
 } from 'lucide-react-native'
 import { apiClient, clearRecentRequestTraces } from '../api'
-import { Card } from '../components/Card'
-import { Page } from '../components/Page'
+import { APP_VERSION } from '../config'
 import { clearRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
 import type { RootStackParamList } from '../navigation/types'
 import { useAuth } from '../providers/AuthProvider'
 import { useAppDialog } from '../providers/DialogProvider'
-import { colors, radius, shadow } from '../theme'
+import { colors, radius } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
 
 type MenuTone = 'green' | 'blue' | 'gold' | 'purple' | 'slate' | 'danger'
@@ -52,7 +50,15 @@ interface MenuEntry {
   subtitle: string
   icon: LucideIcon
   tone: MenuTone
+  badgeCount?: number
   onPress: () => void
+}
+
+type RewardLevelMeta = {
+  level: number
+  title: string
+  min: number
+  max: number | null
 }
 
 const toneMeta: Record<MenuTone, { backgroundColor: string; color: string }> = {
@@ -64,8 +70,18 @@ const toneMeta: Record<MenuTone, { backgroundColor: string; color: string }> = {
   danger: { backgroundColor: '#fee2e2', color: colors.danger },
 }
 
+const rewardLevels: RewardLevelMeta[] = [
+  { level: 1, title: '探味新芽', min: 0, max: 10 },
+  { level: 2, title: '零食巡逻队', min: 10, max: 50 },
+  { level: 3, title: '风味侦察员', min: 50, max: 200 },
+  { level: 4, title: '菜单收藏家', min: 200, max: 1000 },
+  { level: 5, title: '热量驯龙师', min: 1000, max: 3000 },
+  { level: 6, title: '传说食探长', min: 3000, max: null },
+]
+
 export function ProfileScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
+  const insets = useSafeAreaInsets()
   const dialog = useAppDialog()
   const { logout } = useAuth()
   const [profile, setProfile] = useState<UserInfo | null>(null)
@@ -74,6 +90,7 @@ export function ProfileScreen() {
   const [expiry, setExpiry] = useState<FoodExpiryDashboard | null>(null)
   const [recordDays, setRecordDays] = useState(0)
   const [counts, setCounts] = useState({ analyze: 0, friends: 0, favorites: 0 })
+  const [friendRequestCount, setFriendRequestCount] = useState(0)
   const [showMoreServices, setShowMoreServices] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -89,6 +106,7 @@ export function ProfileScreen() {
         analyzeCount,
         friendCount,
         favoriteCount,
+        friendRequestsData,
       ] = await Promise.all([
         apiClient.getUserProfile(),
         apiClient.getMyMembership().catch(() => null),
@@ -98,12 +116,14 @@ export function ProfileScreen() {
         apiClient.getAnalyzeTaskCount().catch(() => ({ count: 0 })),
         apiClient.getFriendCount().catch(() => ({ count: 0 })),
         apiClient.getFavoriteCount().catch(() => ({ count: 0 })),
+        apiClient.getFriendRequestsOverview().catch(() => null),
       ])
       setProfile(profileData)
       setMembership(membershipData)
       setReward(rewardData)
       setExpiry(expiryData)
       setRecordDays(recordDayData.record_days || 0)
+      setFriendRequestCount(friendRequestsData?.received?.filter((item) => item.status === 'pending').length || 0)
       setCounts({
         analyze: analyzeCount.count || 0,
         friends: friendCount.count || 0,
@@ -129,12 +149,8 @@ export function ProfileScreen() {
   }, [dialog, profile?.id])
 
   const openPublicProfile = useCallback(() => {
-    if (profile?.id) {
-      navigation.navigate('PublicProfile', { userId: profile.id })
-    } else {
-      navigation.navigate('ProfileSettings')
-    }
-  }, [navigation, profile?.id])
+    navigation.navigate('ProfileSettings')
+  }, [navigation])
 
   const clearCache = useCallback(async () => {
     try {
@@ -181,10 +197,28 @@ export function ProfileScreen() {
   const credits = membership?.total_credits_available ?? membership?.daily_credits_remaining ?? 0
   const todayEarned = reward?.today_earned_credits || 0
   const expiryText = expiry ? `${expiry.active_count || 0} 样保鲜中，${expiry.soon_count || 0} 样临期` : '管理临期食物'
+  const expiryBadge = expiry ? (expiry.expired_count || 0) + (expiry.today_count || 0) + (expiry.soon_count || 0) : 0
+  const systemMax = membership?.daily_credits_max ?? membership?.daily_limit ?? 0
+  const systemUsed = membership?.daily_credits_used ?? membership?.daily_used ?? 0
+  const systemRemain = membership?.system_credits_remaining
+    ?? membership?.daily_credits_remaining
+    ?? membership?.daily_remaining
+    ?? Math.max(systemMax - systemUsed, 0)
+  const earnedBalance = membership?.earned_credits_balance ?? 0
+  const rewardLevel = getRewardLevelMeta(earnedBalance)
+  const systemProgressPct = systemMax > 0 ? Math.min((systemRemain / systemMax) * 100, 100) : 0
+  const rewardProgressPct = getRewardLevelProgress(earnedBalance, rewardLevel)
+  const isTrial = !membership?.is_pro && Boolean(membership?.trial_active)
+  const memberTier = membership?.is_pro ? membershipTierLabel(membership.current_plan_code) : isTrial ? '试用中' : '未开通'
+  const founderBenefitText = membership?.early_user_rank
+    ? `会员权益×2（前${membership.early_user_limit || 1000}名用户优惠政策） ${membership.early_user_rank}/${membership.early_user_limit || 1000}`
+    : membership?.early_user_paid_bonus_active || membership?.early_user_paid_bonus_eligible
+      ? `会员权益×2（前${membership.early_user_limit || 1000}名用户优惠政策）`
+      : ''
 
   const serviceItems: MenuEntry[] = [
     { title: '健康档案', subtitle: '身体数据、病史偏好和饮食目标', icon: Heart, tone: 'green', onPress: openHealthProfile },
-    { title: '食物保质期', subtitle: expiryText, icon: Calendar, tone: 'gold', onPress: () => navigation.navigate('Expiry') },
+    { title: '食物保质期', subtitle: expiryText, icon: Calendar, tone: 'gold', badgeCount: expiryBadge, onPress: () => navigation.navigate('Expiry') },
     { title: '我的宠物', subtitle: '查看成长伙伴、任务和奖励', icon: PawPrint, tone: 'green', onPress: () => navigation.navigate('PetHome') },
     { title: '赚积分', subtitle: `今日已赚 ${todayEarned} 积分`, icon: Gift, tone: 'gold', onPress: () => navigation.navigate('RewardCenter') },
     { title: '公共食物库', subtitle: '外食、校园餐和我的分享', icon: BookOpen, tone: 'blue', onPress: () => navigation.navigate('PublicFood', { mode: 'all' }) },
@@ -218,119 +252,188 @@ export function ProfileScreen() {
   ]
 
   return (
-    <Page title="我的" refreshing={loading} onRefresh={load}>
-      <View style={styles.hero}>
-        <Pressable style={({ pressed }) => [styles.profileRow, pressed && styles.pressed]} onPress={() => navigation.navigate('ProfileSettings')}>
-          {profile?.avatar ? <Image source={{ uri: profile.avatar }} style={styles.avatar} /> : (
-            <View style={styles.avatarFallback}>
-              <User size={28} color={colors.brandDark} strokeWidth={2.4} />
+    <View style={styles.profilePage}>
+      <View style={styles.profileWash} pointerEvents="none" />
+      <ScrollView
+        style={styles.profileScroll}
+        contentContainerStyle={[
+          styles.profileContent,
+          { paddingTop: Math.max(insets.top + 8, 20), paddingBottom: insets.bottom + 180 },
+        ]}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.brand} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.profileHeaderSection}>
+          <Pressable style={({ pressed }) => [styles.userCard, pressed && styles.pressed]} onPress={() => navigation.navigate('ProfileSettings')}>
+            {profile?.avatar ? (
+              <Image source={{ uri: profile.avatar }} style={styles.userAvatar} />
+            ) : (
+              <View style={styles.userAvatarFallback}>
+                <User size={42} color="#cbd5e1" strokeWidth={1.9} />
+              </View>
+            )}
+            <View style={styles.userInfoMain}>
+              <View style={styles.userNameRow}>
+                <Text style={styles.userName} numberOfLines={1}>{profile?.nickname || '用户昵称'}</Text>
+                <View style={styles.userNameActions}>
+                  <View style={styles.userDaysPill}>
+                    <Text style={styles.userDaysPillText}>已记录 {recordDays} 天</Text>
+                  </View>
+                  {profile?.id ? (
+                    <Pressable style={({ pressed }) => [styles.userIdChip, pressed && styles.pressed]} onPress={copyUserId}>
+                      <Text style={styles.userIdChipText}>复制ID</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+              <Pressable style={({ pressed }) => [styles.userMetaRow, pressed && styles.pressed]} onPress={openPublicProfile}>
+                <Text style={styles.userMetaText}>个人主页</Text>
+                <ChevronRight size={15} color="#9ca3af" strokeWidth={2.3} />
+              </Pressable>
             </View>
-          )}
-          <View style={styles.profileMain}>
-            <Text style={styles.nickname}>{profile?.nickname || 'Food Link 用户'}</Text>
-            <View style={styles.profileMetaRow}>
-              <Text style={styles.recordPill}>已记录 {recordDays} 天</Text>
-              {profile?.id ? (
-                <Pressable style={({ pressed }) => [styles.idPill, pressed && styles.pressed]} onPress={copyUserId}>
-                  <Text style={styles.idPillText}>ID {shortUserId(profile.id)}</Text>
-                </Pressable>
-              ) : null}
-            </View>
+          </Pressable>
+
+          <View style={styles.quickActions}>
+            <QuickAction title="识别记录" value={formatCount(counts.analyze)} onPress={() => navigation.navigate('AnalyzeHistory')} />
+            <QuickAction title="好友管理" value={formatCount(counts.friends)} badgeCount={friendRequestCount} onPress={() => navigation.navigate('Friends')} />
+            <QuickAction title="我的收藏" value={formatCount(counts.favorites)} onPress={() => navigation.navigate('Recipes')} />
           </View>
-          <ChevronRight size={22} color={colors.textMuted} />
-        </Pressable>
-        <Pressable style={({ pressed }) => [styles.homepageLink, pressed && styles.pressed]} onPress={openPublicProfile}>
-          <Text style={styles.homepageText}>个人主页</Text>
-          <ChevronRight size={16} color={colors.brandDark} />
-        </Pressable>
-      </View>
-
-      <View style={styles.statGrid}>
-        <StatCard title="识别记录" value={formatCount(counts.analyze)} onPress={() => navigation.navigate('AnalyzeHistory')} />
-        <StatCard title="好友管理" value={formatCount(counts.friends)} onPress={() => navigation.navigate('Friends')} />
-        <StatCard title="我的收藏" value={formatCount(counts.favorites)} onPress={() => navigation.navigate('Recipes')} />
-      </View>
-
-      <Pressable style={({ pressed }) => [styles.membershipCard, pressed && styles.pressed]} onPress={() => navigation.navigate('MembershipCenter')}>
-        <View style={styles.membershipTop}>
-          <View>
-            <Text style={styles.membershipTitle}>{membership?.is_pro ? 'Pro 会员生效中' : 'Food Link 会员'}</Text>
-            <Text style={styles.membershipSubtitle}>当前可用 {credits} 积分 · 今日已赚 {todayEarned}</Text>
-          </View>
-          <Text style={styles.membershipAction}>查看权益</Text>
         </View>
-        <View style={styles.creditTrack}>
-          <View style={[styles.creditFill, { width: `${Math.max(8, Math.min(100, credits))}%` }]} />
-        </View>
-      </Pressable>
 
-      <MenuSection title="常用服务" items={serviceItems} />
-      <MenuSection title="设置" items={settingsItems} />
+        {profile && profile.onboarding_completed === false ? (
+          <Pressable style={({ pressed }) => [styles.onboardingCard, pressed && styles.pressed]} onPress={() => navigation.navigate('HealthProfile')}>
+            <Text style={styles.onboardingText}>完善健康档案，获取个性化饮食建议</Text>
+            <ChevronRight size={18} color="#166534" strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
 
-      <Card>
         <Pressable
-          style={({ pressed }) => [styles.moreToggle, pressed && styles.pressed]}
-          onPress={() => setShowMoreServices((value) => !value)}
+          style={({ pressed }) => [
+            styles.memberCard,
+            membership?.is_pro ? styles.memberCardPro : styles.memberCardFree,
+            pressed && styles.pressed,
+          ]}
+          onPress={() => navigation.navigate('MembershipCenter')}
         >
-          <View style={styles.moreToggleMain}>
-            <View style={[styles.menuIconBubble, styles.slateIcon]}>
-              <Sparkles size={21} color={toneMeta.slate.color} strokeWidth={2.3} />
+          <View style={styles.memberCardHeader}>
+            <Text style={styles.memberCardTitle}>食探会员</Text>
+            <Text style={styles.memberBadge}>{memberTier}</Text>
+          </View>
+          <View style={styles.memberMeter}>
+            <View style={styles.memberMeterHead}>
+              <Text style={styles.memberMeterLabel}>系统可用（次日清0）</Text>
+              <Text style={styles.memberMeterValue}>
+                {systemMax > 0 ? `可用 ${systemRemain}/${systemMax}` : `可用 ${systemRemain}`}
+              </Text>
             </View>
-            <View style={styles.menuMain}>
-              <Text style={styles.menuTitle}>更多功能</Text>
-              <Text style={styles.menuSubtitle}>账号安全、身体趋势和更多个人工具</Text>
+            <View style={styles.memberProgressBar}>
+              <View style={[styles.memberProgressInner, { width: `${Math.max(0, Math.min(systemProgressPct, 100))}%` }]} />
             </View>
           </View>
-          <ChevronRight size={21} color={colors.textMuted} style={showMoreServices ? styles.chevronOpen : undefined} />
+          <View style={styles.memberMeter}>
+            <View style={styles.memberMeterHead}>
+              <Text style={styles.memberMeterLabel}>奖励可用（一直持有）</Text>
+              <Text style={styles.memberMeterValue}>
+                {`${formatRewardLevelRange(earnedBalance, rewardLevel)} · Lv${rewardLevel.level} ${rewardLevel.title}`}
+              </Text>
+            </View>
+            <View style={styles.segmentedProgress}>
+              {Array.from({ length: 10 }).map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.segmentedProgressBar,
+                    index < Math.min(Math.max(Math.ceil(rewardProgressPct / 10), 0), 10) && styles.segmentedProgressFilled,
+                  ]}
+                />
+              ))}
+            </View>
+          </View>
+          {founderBenefitText ? <Text style={styles.memberBenefit} numberOfLines={1}>{founderBenefitText}</Text> : null}
+          <Text style={styles.memberCardTip}>当前可用 {credits} 积分 · 今日已赚 {todayEarned}</Text>
         </Pressable>
-        {showMoreServices ? moreItems.map((item) => <MenuItem key={item.title} item={item} />) : null}
-      </Card>
 
-      <View style={styles.toolGrid}>
-        <Pressable style={({ pressed }) => [styles.toolButton, pressed && styles.pressed]} onPress={confirmClearCache}>
-          <Trash2 size={20} color={colors.textSecondary} strokeWidth={2.3} />
-          <Text style={styles.toolButtonText}>清除缓存</Text>
+        <View style={styles.listCard}>
+          {serviceItems.map((item, index) => (
+            <ProfileListItem key={item.title} item={item} first={index === 0} />
+          ))}
+          {settingsItems.map((item) => <ProfileListItem key={item.title} item={item} />)}
+          <ProfileListItem
+            item={{
+              title: '更多功能',
+              subtitle: '账号安全、身体趋势和更多个人工具',
+              icon: Sparkles,
+              tone: 'slate',
+              onPress: () => setShowMoreServices((value) => !value),
+            }}
+            chevronStyle={showMoreServices ? styles.chevronOpen : undefined}
+          />
+          {showMoreServices ? moreItems.map((item) => <ProfileListItem key={item.title} item={item} />) : null}
+        </View>
+
+        <Pressable style={({ pressed }) => [styles.toolCard, pressed && styles.pressed]} onPress={confirmClearCache}>
+          <Text style={styles.toolText}>清除缓存</Text>
         </Pressable>
-        <Pressable style={({ pressed }) => [styles.toolButton, styles.logoutButton, pressed && styles.pressed]} onPress={confirmLogout}>
-          <LogOut size={20} color={colors.danger} strokeWidth={2.3} />
-          <Text style={styles.logoutText}>退出登录</Text>
+
+        <Pressable style={({ pressed }) => [styles.toolCard, pressed && styles.pressed]} onPress={confirmLogout}>
+          <Text style={styles.toolTextLogout}>退出登录</Text>
         </Pressable>
+
+        <Text style={styles.profileVersion}>版本号 v{APP_VERSION}</Text>
+      </ScrollView>
+    </View>
+  )
+}
+
+function QuickAction({
+  title,
+  value,
+  badgeCount,
+  onPress,
+}: {
+  title: string
+  value: string
+  badgeCount?: number
+  onPress: () => void
+}) {
+  return (
+    <Pressable style={({ pressed }) => [styles.quickActionItem, pressed && styles.pressed]} onPress={onPress}>
+      <View style={styles.quickActionNumWrap}>
+        <Text style={styles.quickActionNum}>{value}</Text>
+        {badgeCount ? (
+          <View style={styles.quickActionBadge}>
+            <Text style={styles.quickActionBadgeText}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
+          </View>
+        ) : null}
       </View>
-    </Page>
-  )
-}
-
-function MenuSection({ title, items }: { title: string; items: MenuEntry[] }) {
-  return (
-    <Card>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {items.map((item) => <MenuItem key={item.title} item={item} />)}
-    </Card>
-  )
-}
-
-function StatCard({ title, value, onPress }: { title: string; value: string; onPress: () => void }) {
-  return (
-    <Pressable style={({ pressed }) => [styles.statCard, pressed && styles.pressed]} onPress={onPress}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statTitle}>{title}</Text>
+      <Text style={styles.quickActionText}>{title}</Text>
     </Pressable>
   )
 }
 
-function MenuItem({ item }: { item: MenuEntry }) {
+function ProfileListItem({
+  item,
+  first,
+  chevronStyle,
+}: {
+  item: MenuEntry
+  first?: boolean
+  chevronStyle?: object
+}) {
   const Icon = item.icon
   const tone = toneMeta[item.tone]
   return (
-    <Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={item.onPress}>
-      <View style={[styles.menuIconBubble, { backgroundColor: tone.backgroundColor }]}>
-        <Icon size={21} color={tone.color} strokeWidth={2.3} />
+    <Pressable style={({ pressed }) => [styles.listItem, first && styles.listItemFirst, pressed && styles.pressed]} onPress={item.onPress}>
+      <View style={[styles.listIcon, { backgroundColor: tone.backgroundColor }]}>
+        <Icon size={18} color={tone.color} strokeWidth={2.35} />
       </View>
-      <View style={styles.menuMain}>
-        <Text style={styles.menuTitle}>{item.title}</Text>
-        <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
-      </View>
-      <ChevronRight size={20} color={colors.textMuted} />
+      <Text style={styles.listTitle} numberOfLines={1}>{item.title}</Text>
+      {item.badgeCount ? (
+        <View style={styles.listBadge}>
+          <Text style={styles.listBadgeText}>{item.badgeCount > 99 ? '99+' : item.badgeCount}</Text>
+        </View>
+      ) : null}
+      <ChevronRight size={18} color="#c8c9cc" strokeWidth={2.35} style={chevronStyle} />
     </Pressable>
   )
 }
@@ -346,227 +449,397 @@ function formatCount(value: number): string {
   return String(Math.max(0, value))
 }
 
+function getRewardLevelMeta(points: number): RewardLevelMeta {
+  const normalized = Math.max(Number(points || 0), 0)
+  return rewardLevels.find((level) => level.max == null ? normalized >= level.min : normalized >= level.min && normalized < level.max) || rewardLevels[0]
+}
+
+function getRewardLevelProgress(points: number, meta: RewardLevelMeta): number {
+  const normalized = Math.max(Number(points || 0), 0)
+  if (meta.max == null) return 100
+  const span = Math.max(meta.max - meta.min, 1)
+  return Math.max(0, Math.min(((normalized - meta.min) / span) * 100, 100))
+}
+
+function formatRewardLevelRange(points: number, meta: RewardLevelMeta): string {
+  const normalized = Math.max(Number(points || 0), 0)
+  if (meta.max == null) return `${normalized}+`
+  return `${normalized}/${meta.max}`
+}
+
+function membershipTierLabel(planCode?: string | null): string {
+  const text = String(planCode || '').toLowerCase()
+  if (text.includes('advanced')) return '进阶版'
+  if (text.includes('standard')) return '标准版'
+  if (text.includes('light')) return '轻享版'
+  return 'Pro'
+}
+
 const styles = StyleSheet.create({
-  hero: {
-    marginBottom: 14,
+  profilePage: {
+    flex: 1,
+    backgroundColor: '#f0f3f6',
   },
-  profileRow: {
-    minHeight: 84,
+  profileWash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 280,
+    backgroundColor: 'rgba(92, 184, 150, 0.08)',
+  },
+  profileScroll: {
+    flex: 1,
+  },
+  profileContent: {
+    paddingBottom: 120,
+  },
+  profileHeaderSection: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+  },
+  userCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 10,
   },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    marginRight: 14,
-    backgroundColor: colors.brandSoft,
+  userAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#e2e8f0',
   },
-  avatarFallback: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  userAvatarFallback: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
-    backgroundColor: colors.brandSoft,
+    backgroundColor: 'transparent',
   },
-  profileMain: {
+  userInfoMain: {
     flex: 1,
-    paddingRight: 8,
   },
-  nickname: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  profileMetaRow: {
+  userNameRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 9,
+    paddingRight: 20,
   },
-  recordPill: {
+  userName: {
+    flexShrink: 1,
+    color: '#111827',
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '600',
+  },
+  userNameActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
+  },
+  userDaysPill: {
     overflow: 'hidden',
     borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: colors.brandSoft,
-    color: colors.brandDark,
-    fontSize: 12,
-    fontWeight: '800',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#c8e6c9',
+    backgroundColor: '#e8f5e9',
   },
-  idPill: {
+  userDaysPillText: {
+    color: '#2e7d32',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+  },
+  userIdChip: {
     borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(92, 184, 150, 0.08)',
   },
-  idPillText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '800',
+  userIdChipText: {
+    color: '#5a9e82',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '600',
   },
-  homepageLink: {
+  userMetaRow: {
     alignSelf: 'flex-start',
-    minHeight: 32,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: radius.pill,
-    paddingHorizontal: 12,
-    backgroundColor: colors.surface,
+    marginTop: 4,
+    gap: 2,
   },
-  homepageText: {
-    color: colors.brandDark,
-    fontWeight: '800',
+  userMetaText: {
+    color: '#9ca3af',
+    fontSize: 12,
+    lineHeight: 17,
   },
-  statGrid: {
+  quickActions: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 14,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingTop: 12,
+    paddingBottom: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.08)',
   },
-  statCard: {
+  quickActionItem: {
     flex: 1,
-    minHeight: 72,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
-    backgroundColor: colors.surface,
-    ...shadow,
+    paddingVertical: 6,
   },
-  statValue: {
-    color: colors.text,
-    fontSize: 21,
-    fontWeight: '900',
+  quickActionNumWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  statTitle: {
-    marginTop: 5,
-    color: colors.textSecondary,
+  quickActionNum: {
+    color: '#1f2937',
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '800',
+  },
+  quickActionText: {
+    marginTop: 4,
+    color: '#6b7280',
     fontSize: 12,
+    lineHeight: 16,
+  },
+  quickActionBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -24,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ef4444',
+  },
+  quickActionBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '800',
+  },
+  onboardingCard: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f0fdf4',
+  },
+  onboardingText: {
+    color: '#166534',
+    fontSize: 14,
+    lineHeight: 20,
     fontWeight: '700',
   },
-  membershipCard: {
-    minHeight: 112,
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 16,
-    backgroundColor: '#0f9f72',
-    shadowColor: '#0f9f72',
+  memberCard: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  memberCardFree: {
+    backgroundColor: '#5cb896',
+    shadowColor: '#5cb896',
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  memberCardPro: {
+    backgroundColor: '#0a3d28',
+    shadowColor: '#003c28',
     shadowOpacity: 0.28,
     shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
   },
-  membershipTop: {
+  memberCardHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    marginBottom: 14,
   },
-  membershipTitle: {
+  memberCardTitle: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '900',
+    fontSize: 19,
+    lineHeight: 25,
+    fontWeight: '800',
   },
-  membershipSubtitle: {
-    marginTop: 8,
-    color: 'rgba(255,255,255,0.78)',
+  memberBadge: {
+    overflow: 'hidden',
+    borderRadius: radius.pill,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    color: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
+  },
+  memberMeter: {
+    marginBottom: 13,
+  },
+  memberMeterHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 7,
+  },
+  memberMeterLabel: {
+    color: 'rgba(255,255,255,0.94)',
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: '700',
   },
-  membershipAction: {
-    color: '#fff7c2',
-    fontWeight: '900',
+  memberMeterValue: {
+    flex: 1,
+    color: '#fff',
+    textAlign: 'right',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
   },
-  creditTrack: {
-    height: 8,
+  memberProgressBar: {
+    height: 6,
     overflow: 'hidden',
-    borderRadius: 999,
-    marginTop: 18,
-    backgroundColor: 'rgba(255,255,255,0.24)',
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.13)',
   },
-  creditFill: {
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: '#fff7c2',
+  memberProgressInner: {
+    height: 6,
+    borderRadius: 6,
+    backgroundColor: '#fff',
   },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  menuItem: {
-    minHeight: 64,
+  segmentedProgress: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#eef2f7',
-    paddingVertical: 12,
+    gap: 3,
+    height: 6,
   },
-  menuIconBubble: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+  segmentedProgressBar: {
+    flex: 1,
+    height: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  segmentedProgressFilled: {
+    backgroundColor: '#fbbf24',
+  },
+  memberBenefit: {
+    marginTop: -2,
+    color: 'rgba(255,255,255,0.98)',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  memberCardTip: {
+    marginTop: 2,
+    color: 'rgba(255,255,255,0.74)',
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  listCard: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    overflow: 'hidden',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+  },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 61,
+    gap: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#f1f5f9',
+    paddingVertical: 13,
+  },
+  listItemFirst: {
+    borderTopWidth: 0,
+  },
+  listIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
-  slateIcon: {
-    backgroundColor: toneMeta.slate.backgroundColor,
-  },
-  menuMain: {
+  listTitle: {
     flex: 1,
-    paddingRight: 8,
-  },
-  menuTitle: {
-    color: colors.text,
-    fontWeight: '900',
-  },
-  menuSubtitle: {
-    marginTop: 3,
-    color: colors.textSecondary,
-    lineHeight: 18,
-    fontSize: 13,
-  },
-  moreToggle: {
-    minHeight: 62,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  moreToggleMain: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    color: '#1f2937',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '600',
   },
   chevronOpen: {
     transform: [{ rotate: '90deg' }],
   },
-  toolGrid: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 2,
-    marginBottom: 12,
-  },
-  toolButton: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: 16,
-    flexDirection: 'row',
+  listBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: colors.surface,
+    backgroundColor: '#ef4444',
   },
-  toolButtonText: {
-    color: colors.textSecondary,
-    fontWeight: '900',
+  listBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '800',
   },
-  logoutButton: {
-    backgroundColor: '#fff1f2',
+  toolCard: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    minHeight: 50,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
   },
-  logoutText: {
-    color: colors.danger,
-    fontWeight: '900',
+  toolText: {
+    color: '#64748b',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '700',
+  },
+  toolTextLogout: {
+    color: '#ef4444',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '700',
+  },
+  profileVersion: {
+    marginTop: 4,
+    marginBottom: 6,
+    textAlign: 'center',
+    color: '#94a3b8',
+    fontSize: 12,
+    lineHeight: 18,
   },
   pressed: {
     opacity: 0.72,

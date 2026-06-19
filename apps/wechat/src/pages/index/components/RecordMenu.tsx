@@ -140,12 +140,14 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
     visible: false,
     membershipStatus: null,
   })
+  const [imagePickInProgress, setImagePickInProgress] = useState(false)
   /** 弹窗打开时预取会员状态，点击「相册上传」时直接使用缓存结果 */
   const membershipPromiseRef = useRef<Promise<MembershipStatus | null> | null>(null)
 
   useEffect(() => {
     if (!visible) {
       setDevToolsOpen(false)
+      setImagePickInProgress(false)
       membershipPromiseRef.current = null
       return
     }
@@ -155,7 +157,14 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
     membershipPromiseRef.current = getMyMembership().catch(() => null)
   }, [visible])
 
-  if (!visible && !onboardingPreviewOpen) return null
+  const closeBeforeNativePicker = () => {
+    onClose()
+    return new Promise<void>((resolve) => {
+      setTimeout(resolve, 80)
+    })
+  }
+
+  if ((!visible || imagePickInProgress) && !onboardingPreviewOpen) return null
 
   const handleGridClick = (modeId: string) => {
     const recordDate = persistRecordTargetDate(selectedDate)
@@ -182,26 +191,32 @@ export function RecordMenu({ visible, onClose, selectedDate }: RecordMenuProps) 
           } catch {
             // 会员接口失败时仍允许选图，由分析提交接口提示
           }
-          onClose()
-          chooseImageWithPrivacy({
-            count: modeId === 'album' ? 5 : 1,
-            sizeType: ['compressed'],
-            sourceType: modeId === 'camera' ? ['camera'] : ['album'],
-          }).then((res) => {
+          setImagePickInProgress(true)
+          await closeBeforeNativePicker()
+          try {
+            const res = await chooseImageWithPrivacy({
+              count: modeId === 'album' ? 5 : 1,
+              sizeType: ['compressed'],
+              sourceType: modeId === 'camera' ? ['camera'] : ['album'],
+            })
             const tempPaths = res.tempFilePaths || []
-            if (tempPaths.length > 0) {
-              Taro.setStorageSync('analyzeImagePath', tempPaths[0])
-              Taro.setStorageSync('analyzeImagePaths', tempPaths)
-            }
-            Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
-          }).catch((err) => {
+            if (tempPaths.length <= 0) return
+            Taro.setStorageSync('analyzeImagePath', tempPaths[0])
+            Taro.setStorageSync('analyzeImagePaths', tempPaths)
+            await Taro.navigateTo({ url: `${extraPkgUrl('/pages/analyze/index')}?date=${encodeURIComponent(recordDate)}` })
+          } catch (err: any) {
             if (err.errMsg?.includes('cancel')) return
+            const message = String(err?.errMsg || err?.message || '')
+            if (message.includes('navigateTo')) {
+              Taro.showToast({ title: '进入识别设置失败，请重试', icon: 'none' })
+              return
+            }
             if (isPrivacyAuthorizeError(err)) {
               showPrivacyAuthorizeFailure(err)
               return
             }
             void showUnifiedApiError(new Error('选择图片失败'), '选择图片失败')
-          })
+          }
         })()
         break
       }

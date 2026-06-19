@@ -1,8 +1,8 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { Camera, FileText, History, Image as ImageIcon, Package as PackageIcon, Search, Star, Utensils, type LucideIcon } from 'lucide-react-native'
+import { Camera, FileText, History, Image as ImageIcon, Package as PackageIcon, Search, Sparkles, Star, Utensils, type LucideIcon } from 'lucide-react-native'
 import { colors, radius, shadow } from '../theme'
 
-export type RecordAction = 'camera' | 'library' | 'text' | 'manual' | 'foodLibrary' | 'packagedFood' | 'recipes' | 'history'
+export type RecordAction = 'camera' | 'library' | 'text' | 'manual' | 'foodLibrary' | 'packagedFood' | 'recipes' | 'history' | 'gooseDuckChicken'
 
 interface RecordActionSheetProps {
   visible: boolean
@@ -20,6 +20,7 @@ const PRIMARY_ACTIONS: Array<{ key: RecordAction; title: string; desc: string; t
 ]
 
 const QUICK_ACTIONS: Array<{ key: RecordAction; title: string; desc: string; icon: LucideIcon }> = [
+  { key: 'gooseDuckChicken', title: '鹅鸭鸡识别', desc: '单纯判断鹅腿、鸭腿或鸡腿', icon: Sparkles },
   { key: 'recipes', title: '我的收藏', desc: '快速记录常吃餐食', icon: Star },
   { key: 'history', title: '识别记录', desc: '查看以往识别结果', icon: History },
   { key: 'packagedFood', title: '包装食品', desc: '上传营养成分表或商品包装', icon: PackageIcon },
@@ -86,8 +87,12 @@ function PrimaryActionTile({
       <View style={[styles.actionIconBadge, styles[`${action.tone}Icon`]]}>
         <Icon size={25} color={toneColor[action.tone]} strokeWidth={2.4} />
       </View>
-      <Text style={styles.primaryTitle}>{action.title}</Text>
-      <Text style={styles.primaryDesc}>{action.desc}</Text>
+      <Text style={styles.primaryTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.82}>
+        {action.title}
+      </Text>
+      <Text style={styles.primaryDesc} numberOfLines={2}>
+        {action.desc}
+      </Text>
     </Pressable>
   )
 }
@@ -100,43 +105,44 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 20,
-    paddingBottom: 34,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+    paddingBottom: 28,
     maxHeight: '86%',
     ...shadow,
   },
   handle: {
     alignSelf: 'center',
-    width: 44,
-    height: 5,
+    width: 36,
+    height: 4,
     borderRadius: radius.pill,
     backgroundColor: colors.border,
-    marginBottom: 18,
+    marginBottom: 14,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '700',
     color: colors.text,
   },
   subtitle: {
-    marginTop: 6,
-    marginBottom: 14,
+    marginTop: 4,
+    marginBottom: 12,
     color: colors.textSecondary,
   },
   primaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
   primaryAction: {
-    width: '48.5%',
-    minHeight: 124,
+    width: '48%',
+    minHeight: 92,
     borderWidth: 1,
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
   },
   greenAction: {
     backgroundColor: '#f9fefc',
@@ -155,12 +161,12 @@ const styles = StyleSheet.create({
     borderColor: '#e6defa',
   },
   actionIconBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   greenIcon: {
     backgroundColor: '#ebfcf4',
@@ -176,8 +182,8 @@ const styles = StyleSheet.create({
   },
   primaryTitle: {
     color: colors.text,
-    fontSize: 16,
-    fontWeight: '900',
+    fontSize: 14,
+    fontWeight: '600',
   },
   primaryDesc: {
     marginTop: 5,
@@ -191,14 +197,14 @@ const styles = StyleSheet.create({
   quickAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
   },
   quickIconBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -211,8 +217,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   quickTitle: {
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '600',
     color: colors.text,
   },
   quickDesc: {
@@ -220,7 +226,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   chevron: {
-    fontSize: 28,
+    fontSize: 22,
     color: colors.textMuted,
   },
 })
