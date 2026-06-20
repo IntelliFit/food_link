@@ -250,7 +250,7 @@ func (s *AnalyzeService) RunPrecisionJSON(ctx context.Context, sourceType, promp
 }
 
 func (s *AnalyzeService) RunPrecisionJSONWithImages(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
-	return s.RunPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, 0.2)
+	return s.RunPrecisionJSONWithImagesTemperature(ctx, sourceType, prompt, imageURLs, modelName, 0)
 }
 
 func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64) (map[string]any, error) {
@@ -262,7 +262,7 @@ func (s *AnalyzeService) RunPrecisionJSONWithImagesTemperatureNoFallback(ctx con
 }
 
 func (s *AnalyzeService) RunPrecisionJSONWithImagesNoFallback(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string) (map[string]any, error) {
-	return s.RunPrecisionJSONWithImagesTemperatureNoFallback(ctx, sourceType, prompt, imageURLs, modelName, 0.2)
+	return s.RunPrecisionJSONWithImagesTemperatureNoFallback(ctx, sourceType, prompt, imageURLs, modelName, 0)
 }
 
 func (s *AnalyzeService) runPrecisionJSONWithImagesTemperature(ctx context.Context, sourceType, prompt string, imageURLs []string, modelName string, temperature float64, allowFallback bool) (map[string]any, error) {
@@ -1906,7 +1906,7 @@ func (s *AnalyzeService) Analyze(ctx context.Context, userID string, input Analy
 			qwenNativeSearchMeta = meta
 			return fastParsed, fastErr
 		}
-		return analyzeWithImagesTemperature(attemptCtx, client, prompt, imageURLs, 0.3)
+		return analyzeWithImagesTemperature(attemptCtx, client, prompt, imageURLs, 0)
 	})
 	fallbackUsed := false
 	if err != nil {
@@ -2193,7 +2193,7 @@ func (s *AnalyzeService) reviewStandardImageWithGemini(ctx context.Context, inpu
 	callCtx, cancel := context.WithTimeout(ctx, standardHybridTimeout)
 	defer cancel()
 	reviewed, err := analyzeWithJSONParseRetry(callCtx, "food_image_hybrid_review", "gemini", modelName, func(retryCtx context.Context) (map[string]any, error) {
-		return analyzeWithImagesTemperature(retryCtx, s.ofoxAIClient, prompt, imageURLs, 0.2)
+		return analyzeWithImagesTemperature(retryCtx, s.ofoxAIClient, prompt, imageURLs, 0)
 	})
 	if err != nil {
 		logger.Warn(ctx, "standard image hybrid review failed",
@@ -2382,7 +2382,7 @@ func (s *AnalyzeService) refineGemini35GroupedEstimate(ctx context.Context, inpu
 	callCtx, cancel := context.WithTimeout(ctx, standardHybridTimeout)
 	defer cancel()
 	weightResult, err := analyzeWithJSONParseRetry(callCtx, "gemini35_grouped_weight", "gemini", modelName, func(retryCtx context.Context) (map[string]any, error) {
-		return analyzeWithImagesTemperature(retryCtx, s.gemini35Client, prompt, imageURLs, 0.15)
+		return analyzeWithImagesTemperature(retryCtx, s.gemini35Client, prompt, imageURLs, 0)
 	})
 	if err != nil {
 		logger.Warn(ctx, "gemini 3.5 grouped weight estimate failed",

@@ -214,6 +214,12 @@ export interface FoodRecord {
   source_task_id?: string | null
 }
 
+export interface HomeMicronutrientItem {
+  current: number
+  target: number
+  progress: number
+}
+
 export interface HomeIntakeData {
   current: number
   target: number
@@ -223,6 +229,7 @@ export interface HomeIntakeData {
     carbs: { current: number; target: number }
     fat: { current: number; target: number }
   }
+  micros?: Record<string, HomeMicronutrientItem | number>
 }
 
 export interface HomeMealRecordEntry {

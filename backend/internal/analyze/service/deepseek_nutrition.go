@@ -56,7 +56,7 @@ func (e *DeepSeekNutritionEstimator) Analyze(ctx context.Context, prompt, imageU
 			{"role": "user", "content": prompt},
 		},
 		"response_format": map[string]string{"type": "json_object"},
-		"temperature":     0.2,
+		"temperature":     0,
 		"stream":          false,
 	}
 	content, err := e.chatCompletion(ctx, body)
@@ -118,7 +118,7 @@ func (e *DeepSeekNutritionEstimator) Estimate(ctx context.Context, candidates []
 			{"role": "user", "content": string(userBytes)},
 		},
 		"response_format": map[string]string{"type": "json_object"},
-		"temperature":     0.2,
+		"temperature":     0,
 		"max_tokens":      estimateMaxTokens(len(payloadItems)),
 		"stream":          false,
 	}

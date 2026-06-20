@@ -159,7 +159,7 @@ func (r *ManualFoodRepo) SaveCustomFood(ctx context.Context, userID string, inpu
 		UpdatedAt:          &now,
 	}
 	if row.PortionLabel == "" {
-		row.PortionLabel = fmt.Sprintf("%.0fg", defaultWeight)
+		row.PortionLabel = fmt.Sprintf("%sg", formatManualCompactNumber(defaultWeight))
 	}
 	if err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "normalized_title"}},
@@ -1504,7 +1504,7 @@ func (r *ManualFoodRepo) manualFoodResultFromCustomFood(item domain.UserCustomFo
 		ID:                 item.ID,
 		Source:             "custom",
 		Title:              item.Title,
-		Subtitle:           fmt.Sprintf("%.0f kcal / %.0fg", item.TotalCalories, item.DefaultWeightGrams),
+		Subtitle:           fmt.Sprintf("%.0f kcal / %sg", item.TotalCalories, formatManualCompactNumber(item.DefaultWeightGrams)),
 		Category:           "custom",
 		DefaultWeightGrams: item.DefaultWeightGrams,
 		DisplayUnit:        "g",
@@ -1525,7 +1525,7 @@ func (r *ManualFoodRepo) manualFoodResultFromCustomFood(item domain.UserCustomFo
 		result.DefaultWeightGrams = 100
 	}
 	if result.PortionLabel == "" {
-		result.PortionLabel = fmt.Sprintf("%.0fg", result.DefaultWeightGrams)
+		result.PortionLabel = fmt.Sprintf("%sg", formatManualCompactNumber(result.DefaultWeightGrams))
 	}
 	if result.RecommendReason == "" {
 		result.RecommendReason = "我的自定义食物"

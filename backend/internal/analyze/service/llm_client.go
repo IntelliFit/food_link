@@ -98,7 +98,7 @@ func (c *OfoxAIClient) Analyze(ctx context.Context, prompt, imageURL string) (ma
 }
 
 func (c *OfoxAIClient) AnalyzeWithImages(ctx context.Context, prompt string, imageURLs []string) (map[string]any, error) {
-	return c.AnalyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0.3)
+	return c.AnalyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0)
 }
 
 func (c *OfoxAIClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {
@@ -121,7 +121,7 @@ func (c *OfoxAIClient) AnalyzeWithImagesDashScopeWebSearch(ctx context.Context, 
 			"search_strategy": searchStrategy,
 		},
 	}
-	parsed, err := c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0.3, "", extras)
+	parsed, err := c.analyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0, "", extras)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -272,7 +272,7 @@ func (c *DoubaoClient) Analyze(ctx context.Context, prompt, imageURL string) (ma
 }
 
 func (c *DoubaoClient) AnalyzeWithImages(ctx context.Context, prompt string, imageURLs []string) (map[string]any, error) {
-	return c.AnalyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0.3)
+	return c.AnalyzeWithImagesAndTemperature(ctx, prompt, imageURLs, 0)
 }
 
 func (c *DoubaoClient) AnalyzeWithImagesAndTemperature(ctx context.Context, prompt string, imageURLs []string, temperature float64) (map[string]any, error) {

@@ -97,6 +97,7 @@
     "@tarojs/taro": "4.1.10",
     "@vant/area-data": "^2.1.0",
     "echarts": "^5.6.0",
+    "expo-status-bar": "56.0.4",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "taro-plugin-canvas": "^1.0.10",
