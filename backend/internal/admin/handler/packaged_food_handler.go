@@ -18,7 +18,9 @@ import (
 type PackagedFoodService interface {
 	List(ctx context.Context, input service.ListPackagedFoodsInput) (*repo.ListPackagedFoodsResult, error)
 	Get(ctx context.Context, id string) (*domain.PackagedFood, error)
+	Create(ctx context.Context, input service.CreatePackagedFoodInput) (*domain.PackagedFood, error)
 	Update(ctx context.Context, id string, input service.UpdatePackagedFoodInput) (*domain.PackagedFood, error)
+	Delete(ctx context.Context, id string) error
 }
 
 type PackagedFoodHandler struct {
@@ -59,6 +61,35 @@ func (h *PackagedFoodHandler) Get(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"item": item})
+}
+
+func (h *PackagedFoodHandler) Create(c *gin.Context) {
+	var body service.CreatePackagedFoodInput
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Error(c, err)
+		return
+	}
+	item, err := h.svc.Create(c.Request.Context(), body)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.LogAPI(c.Request.Context(), "管理员创建包装食品", "admin", "create_packaged_food",
+		slog.String("packaged_food_id", item.ID),
+		slog.String("display_name", item.DisplayName),
+	)
+	response.Success(c, gin.H{"message": "创建成功", "item": item})
+}
+
+func (h *PackagedFoodHandler) Delete(c *gin.Context) {
+	if err := h.svc.Delete(c.Request.Context(), c.Param("food_id")); err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.LogAPI(c.Request.Context(), "管理员删除包装食品", "admin", "delete_packaged_food",
+		slog.String("packaged_food_id", c.Param("food_id")),
+	)
+	response.Success(c, gin.H{"message": "删除成功"})
 }
 
 func (h *PackagedFoodHandler) Update(c *gin.Context) {

@@ -7,6 +7,7 @@ import (
 
 	"food_link/backend/internal/foodrecord/domain"
 
+	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -48,6 +49,7 @@ func (r *PackagedFoodRepo) List(ctx context.Context, input ListPackagedFoodsInpu
 		offset = 0
 	}
 
+	q := strings.TrimSpace(input.Query)
 	query := r.db.WithContext(ctx).Model(&domain.PackagedFood{})
 	query = applyListFilters(query, input)
 
@@ -57,8 +59,32 @@ func (r *PackagedFoodRepo) List(ctx context.Context, input ListPackagedFoodsInpu
 	}
 
 	var items []domain.PackagedFood
+	order := "updated_at DESC"
+	if q != "" {
+		order = `
+			CASE
+				WHEN LOWER(COALESCE(display_name, product_name)) = LOWER(?) THEN 0
+				WHEN LOWER(product_name) = LOWER(?) OR LOWER(brand) = LOWER(?) OR LOWER(COALESCE(search_text, '')) = LOWER(?) THEN 1
+				WHEN LOWER(COALESCE(display_name, product_name)) LIKE LOWER(?) || '%' THEN 2
+				WHEN LOWER(product_name) LIKE LOWER(?) || '%' OR LOWER(brand) LIKE LOWER(?) || '%' OR LOWER(COALESCE(search_text, '')) LIKE LOWER(?) || '%' THEN 3
+				WHEN LOWER(COALESCE(display_name, product_name)) LIKE '%' || LOWER(?) || '%' THEN 4
+				WHEN LOWER(product_name) LIKE '%' || LOWER(?) || '%' OR LOWER(brand) LIKE '%' || LOWER(?) || '%' OR LOWER(COALESCE(search_text, '')) LIKE '%' || LOWER(?) || '%' THEN 5
+				ELSE 6
+				END ASC,
+			updated_at DESC NULLS LAST,
+			product_name ASC
+		`
+		if err := query.
+			Order(gorm.Expr(order, q, q, q, q, q, q, q, q, q, q, q, q)).
+			Offset(offset).
+			Limit(limit).
+			Find(&items).Error; err != nil {
+			return nil, err
+		}
+		return &ListPackagedFoodsResult{Items: items, Total: total}, nil
+	}
 	if err := query.
-		Order("updated_at DESC").
+		Order(order).
 		Offset(offset).
 		Limit(limit).
 		Find(&items).Error; err != nil {
@@ -75,6 +101,23 @@ func (r *PackagedFoodRepo) Get(ctx context.Context, id string) (*domain.Packaged
 	return &item, nil
 }
 
+func (r *PackagedFoodRepo) Create(ctx context.Context, item *domain.PackagedFood) (*domain.PackagedFood, error) {
+	if strings.TrimSpace(item.ID) == "" {
+		item.ID = uuid.New().String()
+	}
+	if err := r.db.WithContext(ctx).Create(item).Error; err != nil {
+		return nil, err
+	}
+	return item, nil
+}
+
+func (r *PackagedFoodRepo) Delete(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).
+		Model(&domain.PackagedFood{}).
+		Where("id = ?", id).
+		Update("is_active", false).Error
+}
+
 func (r *PackagedFoodRepo) Update(ctx context.Context, id string, patch PackagedFoodPatch) (*domain.PackagedFood, error) {
 	if err := r.db.WithContext(ctx).
 		Model(&domain.PackagedFood{}).
@@ -89,8 +132,8 @@ func applyListFilters(query *gorm.DB, input ListPackagedFoodsInput) *gorm.DB {
 	if q := strings.TrimSpace(input.Query); q != "" {
 		like := "%" + q + "%"
 		query = query.Where(
-			`brand ILIKE ? OR product_name ILIKE ? OR display_name ILIKE ? OR search_text ILIKE ? OR barcode ILIKE ? OR ocr_raw_text ILIKE ?`,
-			like, like, like, like, like, like,
+			`brand ILIKE ? OR product_name ILIKE ? OR display_name ILIKE ? OR search_text ILIKE ? OR product_family_key ILIKE ? OR flavor_text ILIKE ? OR spec_text ILIKE ? OR barcode ILIKE ? OR package_category ILIKE ? OR ocr_raw_text ILIKE ?`,
+			like, like, like, like, like, like, like, like, like, like,
 		)
 	}
 

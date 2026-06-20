@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockFoodRecordService struct {
@@ -159,6 +160,44 @@ func TestSaveFoodRecord(t *testing.T) {
 	data := resp["data"].(map[string]any)
 	assert.Equal(t, "r1", data["id"])
 	assert.Equal(t, "记录成功", data["message"])
+}
+
+func TestSaveFoodRecordRoundsFloatTotalWeight(t *testing.T) {
+	mockSvc := &mockFoodRecordService{saveRecord: &domain.FoodRecord{ID: "r1"}}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"meal_type":          "dinner",
+		"total_weight_grams": 126.15,
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/food-record/save", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, mockSvc.saveInput)
+	assert.Equal(t, 126, mockSvc.saveInput.TotalWeightGrams)
+}
+
+func TestUpdateFoodRecordRoundsFloatTotalWeight(t *testing.T) {
+	mockSvc := &mockFoodRecordService{updateRecord: &domain.FoodRecord{ID: "r1"}}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	body, _ := json.Marshal(map[string]any{
+		"total_weight_grams": 88.88,
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/api/food-record/r1", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	require.NotNil(t, mockSvc.updateInput)
+	require.NotNil(t, mockSvc.updateInput.TotalWeightGrams)
+	assert.Equal(t, 89, *mockSvc.updateInput.TotalWeightGrams)
 }
 
 func TestSaveFoodRecordPreservesPackagedAnalysisMetadata(t *testing.T) {

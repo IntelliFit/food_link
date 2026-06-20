@@ -18,6 +18,8 @@ import { ExerciseEnergyPage } from '@/pages/exercise-energy-page'
 import { LoginPage } from '@/pages/login-page'
 import { OverviewPage } from '@/pages/overview-page'
 import { PackagedFoodsPage } from '@/pages/packaged-foods-page'
+import { FoodNutritionPage } from '@/pages/food-nutrition-page'
+import { PublicFoodLibraryPage } from '@/pages/public-food-library-page'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 
 const MENU_PATHS: Record<AdminMenuId, string> = {
@@ -25,6 +27,8 @@ const MENU_PATHS: Record<AdminMenuId, string> = {
   feedback: '/feedback',
   benchmark: '/benchmark',
   'packaged-foods': '/packaged-foods',
+  'food-nutrition': '/food-nutrition',
+  'public-food-library': '/public-food-library',
   'exercise-energy': '/exercise-energy',
   'feed-reports': '/feed-reports',
   settings: '/settings',
@@ -120,6 +124,8 @@ export function App() {
         <Route path='/feed-reports' element={<FeedReportPage {...pageProps} />} />
         <Route path='/feed-reports/:reportId' element={<FeedReportDetailPage {...pageProps} />} />
         <Route path='/packaged-foods' element={<PackagedFoodsPage {...pageProps} />} />
+        <Route path='/food-nutrition' element={<FoodNutritionPage {...pageProps} />} />
+        <Route path='/public-food-library' element={<PublicFoodLibraryPage {...pageProps} />} />
         <Route path='*' element={<Navigate to='/overview' replace />} />
       </Routes>
       <Toaster richColors closeButton position='bottom-right' />
