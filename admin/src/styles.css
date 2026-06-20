@@ -422,7 +422,24 @@ h1 {
 }
 
 .packaged-toolbar {
-  grid-template-columns: minmax(320px, 2fr) 145px 110px 110px 100px auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.packaged-toolbar > label {
+  flex: 0 0 auto;
+  min-width: 110px;
+}
+
+.packaged-toolbar > label.wide {
+  flex: 1 1 320px;
+  min-width: 260px;
+}
+
+.packaged-toolbar > button {
+  flex: 0 0 auto;
 }
 
 .toolbar .wide {
@@ -856,6 +873,34 @@ h1 {
   width: 18px;
   height: 18px;
   border-width: 2px;
+}
+
+.destructive {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 30%, transparent);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--foreground) 28%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.modal-panel {
+  width: min(960px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
 }
 
 .skeleton-row {

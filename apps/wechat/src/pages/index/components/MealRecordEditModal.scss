@@ -342,6 +342,10 @@
   justify-content: center;
   gap: 6rpx;
   box-sizing: border-box;
+
+  &:active {
+    background: rgba(241, 245, 249, 0.96);
+  }
 }
 
 .ingredient-detail-label {
@@ -718,6 +722,10 @@
     background: linear-gradient(180deg, rgba(22, 31, 29, 0.98) 0%, rgba(13, 21, 19, 0.98) 100%);
     border-color: rgba(120, 139, 130, 0.18);
     box-shadow: none;
+
+    &:active {
+      background: rgba(32, 41, 39, 0.98);
+    }
   }
 
   .ingredient-detail-label,
