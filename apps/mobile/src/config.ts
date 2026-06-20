@@ -1,7 +1,7 @@
 import Constants from 'expo-constants'
 import rootPackage from '../../../package.json'
 
-const extra = Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined
+const extra = Constants.expoConfig?.extra as { apiBaseUrl?: string; wechatAppId?: string } | undefined
 
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
@@ -12,3 +12,8 @@ export const SHOW_DEBUG_LOGIN =
   __DEV__ && process.env.EXPO_PUBLIC_ENABLE_DEBUG_LOGIN === 'true'
 
 export const APP_VERSION = Constants.expoConfig?.version || rootPackage.version || '0.0.0'
+
+export const WECHAT_APP_ID =
+  process.env.EXPO_PUBLIC_WECHAT_APP_ID ||
+  extra?.wechatAppId ||
+  'wx62da2262ae3ff06c'

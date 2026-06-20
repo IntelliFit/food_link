@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 import { apiClient, hasStoredToken } from '../api'
+import { authorizeWithWechat, isNativeWechatAuthAvailable } from '../native/wechatAuth'
 
 const DEFAULT_DEBUG_OPENID = 'mobile-poc-debug-openid'
 const DEFAULT_APP_WECHAT_DEV_CODE = process.env.EXPO_PUBLIC_APP_WECHAT_DEV_CODE || 'expo-go-dev-wechat-code'
@@ -34,7 +35,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   const loginWithWechat = useCallback(async (inviteCode?: string) => {
-    await apiClient.loginWithAppWechat({ code: DEFAULT_APP_WECHAT_DEV_CODE, inviteCode })
+    const code = isNativeWechatAuthAvailable()
+      ? await authorizeWithWechat()
+      : __DEV__
+        ? DEFAULT_APP_WECHAT_DEV_CODE
+        : ''
+    if (!code) {
+      throw new Error('当前 App 包不包含微信登录组件，请安装最新正式包后重试')
+    }
+    await apiClient.loginWithAppWechat({ code, inviteCode })
     setIsAuthenticated(true)
   }, [])
 
