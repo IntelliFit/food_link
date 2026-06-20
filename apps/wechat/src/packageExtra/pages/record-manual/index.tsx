@@ -186,8 +186,35 @@ function getItemKey(item: { source: string; id: string }) {
   return `${item.source}:${item.id}`
 }
 
+function roundToPrecision(value: number, digits: number) {
+  const factor = 10 ** digits
+  return Math.round((value + Number.EPSILON) * factor) / factor
+}
+
 function roundToSingle(value: number) {
-  return Math.round(value * 10) / 10
+  return roundToPrecision(value, 1)
+}
+
+function roundWeightGrams(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return 0
+  return Math.max(0.01, roundToPrecision(value, 2))
+}
+
+function positiveWeightGrams(value: unknown, fallback: number) {
+  const parsed = Number(value)
+  const candidate = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+  const rounded = roundWeightGrams(candidate)
+  return rounded > 0 ? rounded : fallback
+}
+
+function formatCompactNumber(value: number, digits = 2) {
+  if (!Number.isFinite(value)) return '0'
+  const rounded = roundToPrecision(value, digits)
+  return String(rounded)
+}
+
+function formatWeightGrams(value: number) {
+  return formatCompactNumber(value, 2)
 }
 
 function nutrientNumber(nutrients: Partial<Nutrients> | undefined, key: NutrientKey) {
@@ -233,7 +260,7 @@ function normalizeCustomFoodItem(item: any): ManualFoodSearchResult | null {
   const title = String(item.title || '').trim()
   const id = String(item.id || '').trim()
   if (!title || !id) return null
-  const defaultWeight = Math.max(1, Math.round(Number(item.default_weight_grams || 100)))
+  const defaultWeight = positiveWeightGrams(item.default_weight_grams, 100)
   const nutrientsPer100g = item.nutrients_per_100g || item.extra_nutrients || {
     calories: Number(item.total_calories || 0),
     protein: Number(item.total_protein || 0),
@@ -247,7 +274,7 @@ function normalizeCustomFoodItem(item: any): ManualFoodSearchResult | null {
     id,
     source: 'custom',
     title,
-    subtitle: String(item.subtitle || `${Math.round(Number(item.total_calories || 0))} kcal / ${defaultWeight}g`),
+    subtitle: String(item.subtitle || `${Math.round(Number(item.total_calories || 0))} kcal / ${formatWeightGrams(defaultWeight)}g`),
     category: 'custom',
     default_weight_grams: defaultWeight,
     display_unit: 'g',
@@ -260,7 +287,7 @@ function normalizeCustomFoodItem(item: any): ManualFoodSearchResult | null {
     extra_nutrients: item.extra_nutrients || nutrientsPer100g,
     image_path: item.image_path || item.image_paths?.[0] || null,
     image_paths: item.image_paths || (item.image_path ? [item.image_path] : null),
-    portion_label: item.portion_label || `${defaultWeight}g`,
+    portion_label: item.portion_label || `${formatWeightGrams(defaultWeight)}g`,
     source_label: '自定义',
     usage_count: Number(item.usage_count || 0),
     collected: Boolean(item.collected),
@@ -339,7 +366,7 @@ function inferServingProfile(item: ManualFoodSearchResult): {
     }))
   const remoteUnit = item.display_unit
   if (remoteUnit) {
-    const defaultWeight = Math.max(1, Math.round(item.default_weight_grams || remotePresets[0]?.grams || 100))
+    const defaultWeight = positiveWeightGrams(item.default_weight_grams, remotePresets[0]?.grams || 100)
     return {
       defaultWeight,
       displayUnit: remoteUnit,
@@ -350,7 +377,7 @@ function inferServingProfile(item: ManualFoodSearchResult): {
   }
 
   if (item.source === 'public_library') {
-    const defaultWeight = Math.max(1, Math.round(item.default_weight_grams || 1))
+    const defaultWeight = positiveWeightGrams(item.default_weight_grams, 1)
     return {
       defaultWeight,
       displayUnit: 'serving',
@@ -396,7 +423,7 @@ function inferServingProfile(item: ManualFoodSearchResult): {
     }
   }
 
-  const defaultWeight = Math.max(1, Math.round(item.default_weight_grams || 100))
+  const defaultWeight = positiveWeightGrams(item.default_weight_grams, 100)
   return {
     defaultWeight,
     displayUnit: 'g',
@@ -413,7 +440,7 @@ function formatSelectedAmount(item: Pick<SelectedItem, 'weight' | 'defaultWeight
   if (item.displayUnit === 'piece') {
     return `${roundToSingle(item.weight / 55)}个`
   }
-  return `${Math.round(item.weight)}${item.displayUnitLabel}`
+  return `${formatWeightGrams(item.weight)}${item.displayUnitLabel}`
 }
 
 function formatWeightInput(item: Pick<SelectedItem, 'weight' | 'defaultWeight' | 'displayUnit'>, nextWeight = item.weight) {
@@ -423,7 +450,7 @@ function formatWeightInput(item: Pick<SelectedItem, 'weight' | 'defaultWeight' |
   if (item.displayUnit === 'piece') {
     return String(roundToSingle(nextWeight / 55))
   }
-  return String(Math.round(nextWeight))
+  return formatWeightGrams(nextWeight)
 }
 
 function weightFromDisplayInput(item: Pick<SelectedItem, 'defaultWeight' | 'displayUnit'>, value: number) {
@@ -438,12 +465,12 @@ function weightFromDisplayInput(item: Pick<SelectedItem, 'defaultWeight' | 'disp
 
 function resultPortionText(item: ManualFoodSearchResult) {
   if (item.display_unit === 'piece') return '1个'
-  if (item.display_unit === 'ml') return `${Math.round(item.default_weight_grams || 350)}ml`
+  if (item.display_unit === 'ml') return `${formatWeightGrams(item.default_weight_grams || 350)}ml`
   if (item.display_unit === 'serving') return '1份'
   if (isEggLikeFood(item.title)) return '1个'
   if (isBeverageLikeFood(item.title) || isSoupLikeFood(item.title)) {
     const fallbackVolume = isSoupLikeFood(item.title) ? 250 : 350
-    return `${Math.round(item.default_weight_grams && item.default_weight_grams !== 100 ? item.default_weight_grams : fallbackVolume)}ml`
+    return `${formatWeightGrams(item.default_weight_grams && item.default_weight_grams !== 100 ? item.default_weight_grams : fallbackVolume)}ml`
   }
   if (item.source === 'public_library') return '1份'
   if (item.portion_label) return item.portion_label
@@ -454,7 +481,7 @@ function buildNutrientsFromWeight(
   item: Pick<SelectedItem, 'defaultWeight' | 'baseNutrients' | 'nutrientsPer100g'>,
   weight: number
 ) {
-  const safeWeight = Math.max(1, weight)
+  const safeWeight = Math.max(0.01, weight)
   if (item.nutrientsPer100g) {
     const scale = safeWeight / 100
     return scaledNutrients(item.nutrientsPer100g, scale)
@@ -817,8 +844,8 @@ function RecordManualPage() {
       return
     }
 
-    const weight = Math.max(1, Math.round(parsedWeight))
-    const nutritionBasis = Math.max(1, roundToSingle(parsedBasis))
+    const weight = roundWeightGrams(parsedWeight)
+    const nutritionBasis = roundWeightGrams(parsedBasis)
     const labelCaloriesKcal = roundToSingle(energyToKcal(parsedEnergy, customEnergyUnit))
     const labelNutrients: Nutrients = {
       calories: labelCaloriesKcal,
@@ -859,7 +886,7 @@ function RecordManualPage() {
         id,
         source: 'custom',
         title: name,
-        subtitle: `${Math.round(nutrients.calories)} kcal / ${weight}g`,
+        subtitle: `${Math.round(nutrients.calories)} kcal / ${formatWeightGrams(weight)}g`,
         category: 'custom',
         default_weight_grams: weight,
         display_unit: 'g',
@@ -872,9 +899,9 @@ function RecordManualPage() {
         extra_nutrients: nutrientsPer100g,
         image_path: imagePath,
         image_paths: imagePath ? [imagePath] : null,
-        portion_label: `${weight}g`,
+        portion_label: `${formatWeightGrams(weight)}g`,
         source_label: '自定义',
-        recommend_reason: `${sourceEnergyText} / 每${nutritionBasis}g`,
+        recommend_reason: `${sourceEnergyText} / 每${formatWeightGrams(nutritionBasis)}g`,
         nutrition_highlights: [sourceEnergyText],
         usage_count: 0,
         collected: false,
@@ -929,7 +956,7 @@ function RecordManualPage() {
     // 提示文案一进入屏幕附近就预加载，避免必须滚到整个页面底部才触发。
     const observer = Taro.createIntersectionObserver(page, { thresholds: [0.1] })
     observer.relativeToViewport({ bottom: 180 }).observe('.load-more', (res) => {
-      if (res.intersectionRatio > 0) {
+      if ((res.intersectionRatio || 0) > 0) {
         handleLoadMoreCatalog()
       }
     })
@@ -1008,7 +1035,7 @@ function RecordManualPage() {
     setSelectedItems((prev) =>
       prev.map((item) => {
         if (getItemKey(item) !== key) return item
-        const safeWeight = Math.max(1, Math.round(nextWeight))
+        const safeWeight = roundWeightGrams(nextWeight) || 0.01
         return {
           ...item,
           weight: safeWeight,
@@ -1228,7 +1255,7 @@ function RecordManualPage() {
             <View className='item-actions'>
               <Input
                 className='weight-input'
-                type='number'
+                type='digit'
                 value={item.weightInput}
                 onInput={(e) => handleWeightInput(key, e.detail.value)}
                 onBlur={(e) => {
@@ -1407,7 +1434,7 @@ function RecordManualPage() {
                   <Text className='custom-field-label'>实际重量 g</Text>
                   <Input
                     className='custom-field-input'
-                    type='number'
+                    type='digit'
                     value={customWeight}
                     onInput={(e) => setCustomWeight(e.detail.value)}
                   />
@@ -1449,7 +1476,7 @@ function RecordManualPage() {
                   </View>
                   <Input
                     className='custom-field-input'
-                    type='number'
+                    type='digit'
                     value={customCalories}
                     placeholder='必填'
                     onInput={(e) => setCustomCalories(e.detail.value)}
@@ -1464,7 +1491,7 @@ function RecordManualPage() {
                   <Text className='custom-field-label'>蛋白质 g / 标示</Text>
                   <Input
                     className='custom-field-input'
-                    type='number'
+                    type='digit'
                     value={customProtein}
                     placeholder='可选'
                     onInput={(e) => setCustomProtein(e.detail.value)}
@@ -1474,7 +1501,7 @@ function RecordManualPage() {
                   <Text className='custom-field-label'>碳水 g / 标示</Text>
                   <Input
                     className='custom-field-input'
-                    type='number'
+                    type='digit'
                     value={customCarbs}
                     placeholder='可选'
                     onInput={(e) => setCustomCarbs(e.detail.value)}
@@ -1484,7 +1511,7 @@ function RecordManualPage() {
                   <Text className='custom-field-label'>脂肪 g / 标示</Text>
                   <Input
                     className='custom-field-input'
-                    type='number'
+                    type='digit'
                     value={customFat}
                     placeholder='可选'
                     onInput={(e) => setCustomFat(e.detail.value)}
