@@ -36,6 +36,7 @@ type Config struct {
 	Redis          RedisConfig          `mapstructure:"redis"`
 	SMS            SMSConfig            `mapstructure:"sms"`
 	Feishu         FeishuConfig         `mapstructure:"feishu"`
+	FeedbackBot    FeedbackBotConfig    `mapstructure:"feedback_bot"`
 	WechatPay      WechatPayConfig      `mapstructure:"wechat_pay"`
 	Worker         WorkerConfig         `mapstructure:"worker"`
 	TaskQueue      TaskQueueConfig      `mapstructure:"task_queue"`
@@ -156,6 +157,14 @@ type FeishuConfig struct {
 	AppSecret             string `mapstructure:"app_secret"`
 }
 
+type FeedbackBotConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	BaseURL        string `mapstructure:"base_url"`
+	AuthToken      string `mapstructure:"auth_token"`
+	ProjectKey     string `mapstructure:"project_key"`
+	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
+}
+
 type WechatPayConfig struct {
 	MchID                     string `mapstructure:"mchid"`
 	NotifyURL                 string `mapstructure:"notify_url"`
@@ -256,6 +265,7 @@ func Load(baseDir string) (*Config, error) {
 	trimAppAuthConfig(&cfg.AppAuth)
 	trimRedisConfig(&cfg.Redis)
 	trimSMSConfig(&cfg.SMS)
+	trimFeedbackBotConfig(&cfg.FeedbackBot)
 	if err := applyConfigFileOnlyValues(v, &cfg); err != nil {
 		return nil, err
 	}
@@ -341,6 +351,7 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	trimAppAuthConfig(&fileCfg.AppAuth)
 	trimRedisConfig(&fileCfg.Redis)
 	trimSMSConfig(&fileCfg.SMS)
+	trimFeedbackBotConfig(&fileCfg.FeedbackBot)
 	if fileCfg.AppAuth.WechatAppID != "" {
 		v.Set("app_auth.wechat_app_id", fileCfg.AppAuth.WechatAppID)
 	}
@@ -959,6 +970,11 @@ var cloudConfigKeyAliases = map[string]string{
 	"FEISHU_FEEDBACK_WEBHOOK_SECRET":        "feishu.feedback_webhook_secret",
 	"FEISHU_REPORT_WEBHOOK_URL":             "feishu.report_webhook_url",
 	"FEISHU_REPORT_WEBHOOK_SECRET":          "feishu.report_webhook_secret",
+	"FEEDBACK_BOT_ENABLED":                  "feedback_bot.enabled",
+	"FEEDBACK_BOT_BASE_URL":                 "feedback_bot.base_url",
+	"FEEDBACK_BOT_AUTH_TOKEN":               "feedback_bot.auth_token",
+	"FEEDBACK_BOT_PROJECT_KEY":              "feedback_bot.project_key",
+	"FEEDBACK_BOT_TIMEOUT_SECONDS":          "feedback_bot.timeout_seconds",
 }
 
 func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
@@ -1076,6 +1092,18 @@ func trimSMSConfig(cfg *SMSConfig) {
 	}
 }
 
+func trimFeedbackBotConfig(cfg *FeedbackBotConfig) {
+	cfg.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	cfg.AuthToken = strings.TrimSpace(cfg.AuthToken)
+	cfg.ProjectKey = strings.TrimSpace(cfg.ProjectKey)
+	if cfg.ProjectKey == "" {
+		cfg.ProjectKey = "foodlink"
+	}
+	if cfg.TimeoutSeconds < 0 {
+		cfg.TimeoutSeconds = 0
+	}
+}
+
 func trimApolloConfig(cfg *ApolloConfig) {
 	cfg.AppID = strings.TrimSpace(cfg.AppID)
 	cfg.Cluster = strings.TrimSpace(cfg.Cluster)
@@ -1141,6 +1169,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("task_queue.buffer_size", 1024)
 	v.SetDefault("task_queue.topic", "food-link-analysis-tasks")
 	v.SetDefault("task_queue.consumer_group", "food-link-workers")
+	v.SetDefault("feedback_bot.enabled", false)
+	v.SetDefault("feedback_bot.project_key", "foodlink")
+	v.SetDefault("feedback_bot.timeout_seconds", 5)
 	v.SetDefault("ai_usage_pricing.default_text_model", "deepseek-v4-pro")
 	v.SetDefault("ai_usage_pricing.credits_per_cny", 25.0)
 	v.SetDefault("ai_usage_pricing.usd_to_cny", 7.25)
@@ -1214,4 +1245,9 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("feishu.feedback_webhook_secret", "FEISHU_FEEDBACK_WEBHOOK_SECRET")
 	_ = v.BindEnv("feishu.report_webhook_url", "FEISHU_REPORT_WEBHOOK_URL")
 	_ = v.BindEnv("feishu.report_webhook_secret", "FEISHU_REPORT_WEBHOOK_SECRET")
+	_ = v.BindEnv("feedback_bot.enabled", "FEEDBACK_BOT_ENABLED")
+	_ = v.BindEnv("feedback_bot.base_url", "FEEDBACK_BOT_BASE_URL")
+	_ = v.BindEnv("feedback_bot.auth_token", "FEEDBACK_BOT_AUTH_TOKEN")
+	_ = v.BindEnv("feedback_bot.project_key", "FEEDBACK_BOT_PROJECT_KEY")
+	_ = v.BindEnv("feedback_bot.timeout_seconds", "FEEDBACK_BOT_TIMEOUT_SECONDS")
 }
