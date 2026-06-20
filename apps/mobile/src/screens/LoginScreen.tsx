@@ -431,12 +431,14 @@ const styles = StyleSheet.create({
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: colors.brand,
     marginTop: 14,
   },
   skipLoginText: {
-    color: '#666666',
-    fontSize: 14,
-    fontWeight: '700',
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '800',
   },
   agreementRow: {
     flexDirection: 'row',
