@@ -7,36 +7,15 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { FoodExpiryDashboard, MembershipStatus, RewardCenterResponse, UserInfo } from '@food-link/core'
 import {
-  Activity,
-  Bell,
-  BookOpen,
-  Calendar,
   ChevronRight,
-  CreditCard,
-  FileText,
-  Gift,
-  Heart,
-  Info,
-  LineChart,
-  Lock,
-  MapPin,
-  MessageCircle,
-  Package,
-  PawPrint,
-  Search,
-  Shield,
   Sparkles,
-  Star,
-  Store,
-  Trophy,
   User,
-  UserPlus,
-  Users,
   type LucideIcon,
 } from 'lucide-react-native'
 import { apiClient, clearRecentRequestTraces } from '../api'
 import { APP_VERSION } from '../config'
 import { clearRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
+import { IconfontText } from '../components/Iconfont'
 import type { RootStackParamList } from '../navigation/types'
 import { useAuth } from '../providers/AuthProvider'
 import { useAppDialog } from '../providers/DialogProvider'
@@ -48,7 +27,8 @@ type MenuTone = 'green' | 'blue' | 'gold' | 'purple' | 'slate' | 'danger'
 interface MenuEntry {
   title: string
   subtitle: string
-  icon: LucideIcon
+  icon?: LucideIcon
+  iconClass?: string
   tone: MenuTone
   badgeCount?: number
   onPress: () => void
@@ -62,11 +42,11 @@ type RewardLevelMeta = {
 }
 
 const toneMeta: Record<MenuTone, { backgroundColor: string; color: string }> = {
-  green: { backgroundColor: '#ebfcf4', color: '#16a56f' },
-  blue: { backgroundColor: '#ebf7fc', color: '#2b8ab7' },
-  gold: { backgroundColor: '#fff7e6', color: '#a67518' },
-  purple: { backgroundColor: '#f2efff', color: '#7057d8' },
-  slate: { backgroundColor: '#f1f5f9', color: '#64748b' },
+  green: { backgroundColor: '#ecfcf4', color: '#41a17a' },
+  blue: { backgroundColor: '#ecf7fc', color: '#4c92b3' },
+  gold: { backgroundColor: '#faf5e8', color: '#987f42' },
+  purple: { backgroundColor: '#f3e8ff', color: '#7c68d8' },
+  slate: { backgroundColor: '#f1f5f9', color: '#6b7280' },
   danger: { backgroundColor: '#fee2e2', color: colors.danger },
 }
 
@@ -237,19 +217,19 @@ export function ProfileScreen() {
       : ''
 
   const serviceItems: MenuEntry[] = [
-    { title: '健康档案', subtitle: '身体数据、病史偏好和饮食目标', icon: Heart, tone: 'green', onPress: openHealthProfile },
-    { title: '食物保质期', subtitle: expiryText, icon: Calendar, tone: 'gold', badgeCount: expiryBadge, onPress: () => navigation.navigate('Expiry') },
-    { title: '我的宠物', subtitle: '查看成长伙伴、任务和奖励', icon: PawPrint, tone: 'green', onPress: () => navigation.navigate('PetHome') },
-    { title: '赚积分', subtitle: `今日已赚 ${todayEarned} 积分`, icon: Gift, tone: 'gold', onPress: () => navigation.navigate('RewardCenter') },
-    { title: '公共食物库', subtitle: '外食、校园餐和我的分享', icon: BookOpen, tone: 'blue', onPress: () => navigation.navigate('PublicFood', { mode: 'all' }) },
-    { title: '校园食堂', subtitle: '校园餐、食堂窗口和价格', icon: Store, tone: 'blue', onPress: () => navigation.navigate('CampusCanteen') },
-    { title: '加入用户群', subtitle: '进群反馈体验与获取更新', icon: Users, tone: 'purple', onPress: () => navigation.navigate('UserGroup') },
-    { title: '意见反馈', subtitle: '反馈问题、建议或体验感受', icon: MessageCircle, tone: 'purple', onPress: () => navigation.navigate('AboutFeedback') },
+    { title: '健康档案', subtitle: '身体数据、病史偏好和饮食目标', iconClass: 'icon-shentinianling', tone: 'green', onPress: openHealthProfile },
+    { title: '食物保质期', subtitle: expiryText, iconClass: 'icon-guoqi1', tone: 'gold', badgeCount: expiryBadge, onPress: () => navigation.navigate('Expiry') },
+    { title: '我的宠物', subtitle: '查看成长伙伴、任务和奖励', iconClass: 'icon-good', tone: 'purple', onPress: () => navigation.navigate('PetHome') },
+    { title: '赚积分', subtitle: `今日已赚 ${todayEarned} 积分`, iconClass: 'icon-zengji', tone: 'slate', onPress: () => navigation.navigate('RewardCenter') },
+    { title: '公共食物库', subtitle: '外食、校园餐和我的分享', iconClass: 'icon-foodshop', tone: 'blue', onPress: () => navigation.navigate('PublicFood', { mode: 'all' }) },
+    { title: '校园食堂', subtitle: '校园餐、食堂窗口和价格', iconClass: 'icon-dizhi', tone: 'slate', onPress: () => navigation.navigate('CampusCanteen') },
+    { title: '加入用户群', subtitle: '进群反馈体验与获取更新', iconClass: 'icon-pengyouquan', tone: 'purple', onPress: () => navigation.navigate('UserGroup') },
+    { title: '意见反馈', subtitle: '反馈问题、建议或体验感受', iconClass: 'icon-pinglun', tone: 'green', onPress: () => navigation.navigate('AboutFeedback') },
   ]
 
   const settingsItems: MenuEntry[] = [
-    { title: '隐私设置', subtitle: '搜索可见性和公开记录', icon: Shield, tone: 'slate', onPress: () => navigation.navigate('PrivacySettings') },
-    { title: '关于我们', subtitle: '应用说明、协议和联系方式', icon: Info, tone: 'slate', onPress: () => navigation.navigate('About') },
+    { title: '隐私设置', subtitle: '搜索可见性和公开记录', iconClass: 'icon-jiesuo', tone: 'green', onPress: () => navigation.navigate('PrivacySettings') },
+    { title: '关于我们', subtitle: '应用说明、协议和联系方式', iconClass: 'icon-all', tone: 'gold', onPress: () => navigation.navigate('About') },
   ]
 
   return (
@@ -451,7 +431,11 @@ function ProfileListItem({
   return (
     <Pressable style={({ pressed }) => [styles.listItem, first && styles.listItemFirst, pressed && styles.pressed]} onPress={item.onPress}>
       <View style={[styles.listIcon, { backgroundColor: tone.backgroundColor }]}>
-        <Icon size={18} color={tone.color} strokeWidth={2.35} />
+        {item.iconClass ? (
+          <IconfontText className={`iconfont ${item.iconClass}`} size={20} color={tone.color} />
+        ) : Icon ? (
+          <Icon size={18} color={tone.color} strokeWidth={2.35} />
+        ) : null}
       </View>
       <Text style={styles.listTitle} numberOfLines={1}>{item.title}</Text>
       {item.badgeCount ? (

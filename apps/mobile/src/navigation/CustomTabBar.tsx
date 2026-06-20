@@ -15,6 +15,8 @@ const TAB_LABELS: Record<string, { label: string; iconClass: string }> = {
   ProfileTab: { label: '我的', iconClass: 'iconfont icon-user' },
 }
 
+const TAB_SELECTED_COLOR = colors.tabSelected
+
 export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
   const bottomInset = Math.max(insets.bottom, 8)
@@ -63,7 +65,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         <IconfontText
           className={meta.iconClass}
           size={21}
-          color={focused ? colors.brand : '#9ca3af'}
+          color={focused ? TAB_SELECTED_COLOR : '#9ca3af'}
         />
         <Text style={[styles.tabText, focused && styles.tabTextActive]} numberOfLines={1}>{meta.label}</Text>
       </Pressable>
@@ -136,7 +138,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   tabTextActive: {
-    color: colors.brandDark,
+    color: TAB_SELECTED_COLOR,
     fontWeight: '700',
   },
   centerButton: {
