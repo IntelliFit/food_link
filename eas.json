@@ -11,7 +11,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://dev.api.healthymax.cn"
+        "EXPO_PUBLIC_API_BASE_URL": "https://dev.api.healthymax.cn",
+        "EXPO_PUBLIC_WECHAT_APP_ID": "wx62da2262ae3ff06c"
       }
     },
     "preview": {
@@ -20,7 +21,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://dev.api.healthymax.cn"
+        "EXPO_PUBLIC_API_BASE_URL": "https://dev.api.healthymax.cn",
+        "EXPO_PUBLIC_WECHAT_APP_ID": "wx62da2262ae3ff06c"
       }
     },
     "production": {
@@ -29,7 +31,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://api.healthymax.cn"
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.healthymax.cn",
+        "EXPO_PUBLIC_WECHAT_APP_ID": "wx62da2262ae3ff06c"
       }
     }
   }

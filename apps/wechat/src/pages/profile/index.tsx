@@ -69,6 +69,7 @@ const SERVICE_ICON_TONES: Record<number, ProfileListIconTone> = {
 }
 
 const SETTING_ICON_TONES: Record<number, ProfileListIconTone> = {
+  1: { color: '#4c92b3', backgroundColor: '#ecf7fc', darkColor: '#81d6fb', darkBackgroundColor: 'rgba(129, 214, 251, 0.16)' },
   3: { color: '#48a185', backgroundColor: '#effcf7', darkColor: '#7df0cc', darkBackgroundColor: 'rgba(125, 240, 204, 0.16)' },
   5: { color: '#a4744a', backgroundColor: '#fcf5ea', darkColor: '#f1bc8a', darkBackgroundColor: 'rgba(241, 188, 138, 0.16)' },
 }
@@ -362,6 +363,7 @@ function ProfilePage() {
 
   // 设置项
   const settings = [
+    { id: 1, iconClass: 'icon-user', title: '账号安全' },
     { id: 3, iconClass: 'icon-jiesuo', title: '隐私设置' },
     { id: 5, iconClass: 'icon-all', title: '关于我们' }
   ]
@@ -430,6 +432,11 @@ function ProfilePage() {
 
     if (!isLoggedIn) {
       redirectToLogin()
+      return
+    }
+    // 账号安全
+    if (setting.id === 1) {
+      Taro.navigateTo({ url: extraPkgUrl('/pages/account-security/index') })
       return
     }
     // 隐私设置

@@ -8,6 +8,7 @@
   <uses-permission android:name="android.permission.VIBRATE"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
   <queries>
+    <package android:name="com.tencent.mm"/>
     <intent>
       <action android:name="android.intent.action.VIEW"/>
       <category android:name="android.intent.category.BROWSABLE"/>
@@ -31,5 +32,6 @@
         <data android:scheme="foodlink"/>
       </intent-filter>
     </activity>
+    <activity android:name=".wxapi.WXEntryActivity" android:exported="true" android:launchMode="singleTop" android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
   </application>
 </manifest>

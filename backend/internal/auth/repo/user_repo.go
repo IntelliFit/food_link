@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -245,6 +246,7 @@ func (r *UserRepo) CreateTrialEntitlement(ctx context.Context, ent *UserTrialEnt
 
 func (r *UserRepo) UpdateFields(ctx context.Context, userID string, updates map[string]any) (*User, error) {
 	updates = r.filterExistingUserColumns(updates)
+	updates = normalizeUserJSONUpdates(updates)
 	if len(updates) == 0 {
 		return r.FindByID(ctx, userID)
 	}
@@ -252,6 +254,23 @@ func (r *UserRepo) UpdateFields(ctx context.Context, userID string, updates map[
 		return nil, err
 	}
 	return r.FindByID(ctx, userID)
+}
+
+func normalizeUserJSONUpdates(updates map[string]any) map[string]any {
+	if len(updates) == 0 {
+		return updates
+	}
+	value, ok := updates["health_condition"]
+	if !ok || value == nil {
+		return updates
+	}
+	switch typed := value.(type) {
+	case datatypes.JSONMap:
+		return updates
+	case map[string]any:
+		updates["health_condition"] = datatypes.JSONMap(typed)
+	}
+	return updates
 }
 
 func (r *UserRepo) UpdateTrialEntitlement(ctx context.Context, id string, updates map[string]any) (*UserTrialEntitlement, error) {

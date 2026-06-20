@@ -1,0 +1,196 @@
+.account-security-page {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 24rpx;
+  background: #f9fafb;
+}
+
+.account-security-page--center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-security-spinner,
+.account-security-btn-spinner {
+  width: 44rpx;
+  height: 44rpx;
+  border: 4rpx solid rgba(0, 188, 125, 0.18);
+  border-top-color: #00bc7d;
+  border-radius: 999rpx;
+  animation: account-security-spin 0.8s linear infinite;
+}
+
+.account-security-btn-spinner {
+  width: 34rpx;
+  height: 34rpx;
+  border-color: rgba(255, 255, 255, 0.34);
+  border-top-color: #ffffff;
+}
+
+.account-security-hero {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 32rpx 28rpx;
+  margin-bottom: 24rpx;
+  background: linear-gradient(135deg, #ecfdf5 0%, #f8fafc 100%);
+  border: 1rpx solid rgba(0, 188, 125, 0.14);
+  border-radius: 20rpx;
+}
+
+.account-security-hero-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  flex: 0 0 88rpx;
+  border-radius: 44rpx;
+  background: #ffffff;
+  box-shadow: 0 8rpx 20rpx rgba(15, 143, 116, 0.1);
+}
+
+.account-security-hero-icon-text {
+  color: #00a875;
+  font-size: 44rpx;
+}
+
+.account-security-hero-copy {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.account-security-title {
+  color: #123026;
+  font-size: 34rpx;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.account-security-subtitle {
+  color: #64748b;
+  font-size: 25rpx;
+  line-height: 1.45;
+}
+
+.account-security-card {
+  padding: 28rpx;
+  background: #ffffff;
+  border-radius: 20rpx;
+  box-shadow: 0 6rpx 22rpx rgba(15, 23, 42, 0.05);
+}
+
+.account-security-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24rpx;
+}
+
+.account-security-row-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.account-security-row-label {
+  color: #64748b;
+  font-size: 25rpx;
+  line-height: 1.3;
+}
+
+.account-security-row-value {
+  color: #172b24;
+  font-size: 34rpx;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.account-security-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 112rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: #fff7ed;
+}
+
+.account-security-status--ok {
+  background: #ecfdf5;
+}
+
+.account-security-status-text {
+  color: #c56b16;
+  font-size: 23rpx;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.account-security-status--ok .account-security-status-text {
+  color: #00996b;
+}
+
+.account-security-bound-note,
+.account-security-bind-block {
+  margin-top: 28rpx;
+  padding-top: 28rpx;
+  border-top: 1rpx solid #eef2f7;
+}
+
+.account-security-bind-block {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.account-security-note-text {
+  color: #64748b;
+  font-size: 25rpx;
+  line-height: 1.45;
+}
+
+.account-security-bind-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  padding: 0;
+  border: 0;
+  border-radius: 44rpx;
+  background: #00bc7d;
+  color: #ffffff;
+  font-size: 29rpx;
+  font-weight: 700;
+  line-height: 88rpx;
+}
+
+.account-security-bind-btn::after {
+  border: 0;
+}
+
+.account-security-bind-btn--disabled {
+  opacity: 0.72;
+}
+
+.account-security-bind-text {
+  color: #ffffff;
+  font-size: 29rpx;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@keyframes account-security-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
