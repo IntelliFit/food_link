@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard, type StatsSummary } from '@food-link/core'
+import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type BodyMetricWaterDay, type BodyMetricWeightEntry, type HomeDashboard, type StatsSummary } from '@food-link/core'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { apiClient } from '../api'
 import { FloatingPetCompanion } from '../components/FloatingPetCompanion'
@@ -68,7 +68,7 @@ export function HomeScreen() {
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
   const [selectedDate, setSelectedDate] = useState(() => todayKey())
-  const { recordDate, dashboard, petSummary, weekStats, loading, error, loadHome } = useHomeDashboard(selectedDate)
+  const { recordDate, dashboard, petSummary, weekStats, bodyMetrics, exerciseBurnedKcal, loading, error, loadHome } = useHomeDashboard(selectedDate)
   const [activeBannerIndex, setActiveBannerIndex] = useState(0)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
@@ -85,6 +85,31 @@ export function HomeScreen() {
   const calorieProgress = calorieTarget > 0 ? Math.min(100, Math.max(0, (calorieCurrent / calorieTarget) * 100)) : 0
   const calorieRemaining = Math.max(0, calorieTarget - calorieCurrent)
   const isCalorieOver = calorieTarget > 0 && calorieCurrent > calorieTarget
+
+  // 体重/喝水/运动（与微信小程序首页逻辑对齐）
+  const weightSummary = useMemo(() => {
+    if (!bodyMetrics) return { latestWeight: null as BodyMetricWeightEntry | null, weightChange: null as number | null, hasRecord: false }
+    const entries = [...bodyMetrics.weight_entries].sort((a, b) => a.date.localeCompare(b.date))
+    const latestEntry = entries.filter((e) => e.date <= recordDate).pop() || null
+    const previousEntry = entries.filter((e) => e.date < recordDate).pop() || null
+    const weightChange = latestEntry && previousEntry ? latestEntry.value - previousEntry.value : null
+    return { latestWeight: latestEntry, weightChange, hasRecord: entries.length > 0 }
+  }, [bodyMetrics, recordDate])
+
+  const todayWater = useMemo(() => {
+    if (!bodyMetrics) return { date: recordDate, total: 0, logs: [] as number[] }
+    const fromDaily = bodyMetrics.water_daily?.find((d) => d.date === recordDate)
+    if (fromDaily) return fromDaily
+    if (bodyMetrics.today_water?.date === recordDate) return bodyMetrics.today_water
+    return { date: recordDate, total: 0, logs: [] as number[] }
+  }, [bodyMetrics, recordDate])
+
+  const waterGoalMl = bodyMetrics?.water_goal_ml || 2000
+  const waterProgress = useMemo(() => {
+    if (waterGoalMl <= 0) return todayWater.total > 0 ? 100 : 0
+    return Math.max(0, Number(((todayWater.total / waterGoalMl) * 100).toFixed(1)))
+  }, [todayWater.total, waterGoalMl])
+
   const todayDateKey = useMemo(() => todayKey(), [])
   const weekCells = useMemo(
     () => buildWeekCells(todayDateKey, recordDate, calorieCurrent, calorieTarget, weekStats),
@@ -268,7 +293,11 @@ export function HomeScreen() {
           onToggleNutrition={() => setNutritionExpanded((v) => !v)}
         />
         <HomeBodyStatusStrip
-          exerciseKcal={Math.round(dashboard?.exerciseBurnedKcal || 0)}
+          weightSummary={weightSummary}
+          todayWater={todayWater}
+          waterGoalMl={waterGoalMl}
+          waterProgress={waterProgress}
+          exerciseKcal={Math.round(exerciseBurnedKcal || 0)}
           onWeight={() => navigation.navigate('BodyMetricRecord', { type: 'weight', date: recordDate })}
           onWater={() => navigation.navigate('BodyMetricRecord', { type: 'water', date: recordDate })}
           onExercise={() => navigation.navigate('BodyMetricRecord', { type: 'exercise', date: recordDate })}
@@ -684,11 +713,19 @@ function MacroRowCard({
 }
 
 function HomeBodyStatusStrip({
+  weightSummary,
+  todayWater,
+  waterGoalMl,
+  waterProgress,
   exerciseKcal,
   onWeight,
   onWater,
   onExercise,
 }: {
+  weightSummary: { latestWeight: BodyMetricWeightEntry | null; weightChange: number | null; hasRecord: boolean }
+  todayWater: BodyMetricWaterDay | { date: string; total: number; logs: number[] }
+  waterGoalMl: number
+  waterProgress: number
   exerciseKcal: number
   onWeight: () => void
   onWater: () => void
@@ -696,39 +733,100 @@ function HomeBodyStatusStrip({
 }) {
   return (
     <View style={styles.bodyStatusSection}>
-      <HomeStatusCard title="体重" value="记录" hint="追踪变化" iconClass="iconfont icon-weight-scale" tone="green" onPress={onWeight} />
-      <HomeStatusCard title="喝水" value="补水" hint="今日饮水" iconClass="iconfont icon-drink" tone="blue" onPress={onWater} />
-      <HomeStatusCard title="运动" value={`${exerciseKcal}`} hint="kcal" iconClass="iconfont icon-dumbbell" tone="gold" onPress={onExercise} />
+      <WeightStatusCard summary={weightSummary} onPress={onWeight} />
+      <WaterStatusCard todayWater={todayWater} waterGoalMl={waterGoalMl} waterProgress={waterProgress} onPress={onWater} />
+      <ExerciseStatusCard kcal={exerciseKcal} onPress={onExercise} />
     </View>
   )
 }
 
-function HomeStatusCard({
-  title,
-  value,
-  hint,
-  iconClass,
-  tone,
+function WeightStatusCard({
+  summary,
   onPress,
 }: {
-  title: string
-  value: string
-  hint: string
-  iconClass: string
-  tone: RecordTone
+  summary: { latestWeight: BodyMetricWeightEntry | null; weightChange: number | null; hasRecord: boolean }
   onPress: () => void
 }) {
-  const toneColor = recordIconColors[tone]
+  const toneColor = recordIconColors.green
   return (
     <Pressable style={({ pressed }) => [styles.bodyStatusCard, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.bodyStatusHeader}>
         <View style={[styles.bodyStatusIcon, { backgroundColor: `${toneColor}18` }]}>
-          <IconfontText className={iconClass} size={15} color={toneColor} />
+          <IconfontText className="iconfont icon-weight-scale" size={15} color={toneColor} />
         </View>
-        <Text style={styles.bodyStatusLabel}>{title}</Text>
+        <Text style={styles.bodyStatusLabel}>体重</Text>
       </View>
-      <Text style={styles.bodyStatusValue} numberOfLines={1}>{value}</Text>
-      <Text style={styles.bodyStatusHint}>{hint}</Text>
+      <View style={styles.bodyStatusContentRow}>
+        {summary.latestWeight ? (
+          <>
+            <Text style={styles.bodyStatusValue}>{summary.latestWeight.value.toFixed(1)}</Text>
+            <Text style={styles.bodyStatusUnit}>kg</Text>
+            {summary.weightChange !== null && (
+              <Text style={[styles.bodyStatusChange, summary.weightChange > 0 ? styles.bodyStatusChangeUp : styles.bodyStatusChangeDown]}>
+                {summary.weightChange > 0 ? '+' : ''}{summary.weightChange.toFixed(1)}
+              </Text>
+            )}
+          </>
+        ) : (
+          <Text style={styles.bodyStatusEmpty}>点击记录</Text>
+        )}
+      </View>
+      <Text style={styles.bodyStatusHint}>
+        {summary.latestWeight ? `上次记录: ${summary.latestWeight.date.slice(5)}` : '记录体重，追踪变化'}
+      </Text>
+    </Pressable>
+  )
+}
+
+function WaterStatusCard({
+  todayWater,
+  waterGoalMl,
+  waterProgress,
+  onPress,
+}: {
+  todayWater: BodyMetricWaterDay | { date: string; total: number; logs: number[] }
+  waterGoalMl: number
+  waterProgress: number
+  onPress: () => void
+}) {
+  const toneColor = recordIconColors.blue
+  return (
+    <Pressable style={({ pressed }) => [styles.bodyStatusCard, pressed && styles.pressed]} onPress={onPress}>
+      <View style={styles.bodyStatusHeader}>
+        <View style={[styles.bodyStatusIcon, { backgroundColor: `${toneColor}18` }]}>
+          <IconfontText className="iconfont icon-drink" size={15} color={toneColor} />
+        </View>
+        <Text style={styles.bodyStatusLabel}>喝水</Text>
+      </View>
+      <View style={styles.bodyStatusContentRow}>
+        <Text style={styles.bodyStatusValue}>{Math.round(todayWater.total)}</Text>
+        <Text style={styles.bodyStatusUnit}>ml</Text>
+      </View>
+      <View style={styles.bodyStatusProgressWrap}>
+        <View style={styles.bodyStatusProgressBg}>
+          <View style={[styles.bodyStatusProgressFill, { width: `${Math.min(100, Math.max(0, waterProgress))}%`, backgroundColor: toneColor }]} />
+        </View>
+        <Text style={styles.bodyStatusProgressText}>{Math.round(waterProgress)}% / 目标 {waterGoalMl}ml</Text>
+      </View>
+    </Pressable>
+  )
+}
+
+function ExerciseStatusCard({ kcal, onPress }: { kcal: number; onPress: () => void }) {
+  const toneColor = recordIconColors.gold
+  return (
+    <Pressable style={({ pressed }) => [styles.bodyStatusCard, pressed && styles.pressed]} onPress={onPress}>
+      <View style={styles.bodyStatusHeader}>
+        <View style={[styles.bodyStatusIcon, { backgroundColor: `${toneColor}18` }]}>
+          <IconfontText className="iconfont icon-dumbbell" size={15} color={toneColor} />
+        </View>
+        <Text style={styles.bodyStatusLabel}>运动</Text>
+      </View>
+      <View style={styles.bodyStatusContentRow}>
+        <Text style={styles.bodyStatusValue}>{Math.round(kcal)}</Text>
+        <Text style={styles.bodyStatusUnit}>kcal</Text>
+      </View>
+      <Text style={styles.bodyStatusHint}>点击记录运动</Text>
     </Pressable>
   )
 }
@@ -1621,11 +1719,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: 'rgba(227, 233, 238, 0.82)',
-    shadowColor: '#64748b',
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
   },
   mainCardHeader: {
     flexDirection: 'row',
@@ -1861,6 +1954,53 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 11,
     lineHeight: 15,
+  },
+  bodyStatusContentRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    marginTop: 8,
+    minHeight: 24,
+  },
+  bodyStatusUnit: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  bodyStatusEmpty: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  bodyStatusChange: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  bodyStatusChangeUp: {
+    color: '#e57373',
+  },
+  bodyStatusChangeDown: {
+    color: '#5cb896',
+  },
+  bodyStatusProgressWrap: {
+    marginTop: 6,
+  },
+  bodyStatusProgressBg: {
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#e5e7eb',
+    overflow: 'hidden',
+  },
+  bodyStatusProgressFill: {
+    height: 4,
+    borderRadius: 999,
+  },
+  bodyStatusProgressText: {
+    marginTop: 3,
+    color: colors.textMuted,
+    fontSize: 10,
+    lineHeight: 13,
   },
   mealsSection: {
     marginTop: 2,
