@@ -852,7 +852,7 @@ function HomeStatsEntry({ onPress }: { onPress: () => void }) {
   return (
     <Pressable style={({ pressed }) => [styles.statsEntryCard, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.statsEntryIcon}>
-        <IconfontText className="iconfont icon-zhuzhuangtu" size={20} color="#fff" />
+        <IconfontText className="iconfont icon-tubiao-zhuzhuangtu" size={20} color="#fff" />
       </View>
       <View style={styles.statsEntryText}>
         <Text style={styles.statsEntryTitle}>查看饮食统计</Text>

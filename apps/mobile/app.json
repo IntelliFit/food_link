@@ -22,7 +22,7 @@
       }
     },
     "extra": {
-      "apiBaseUrl": "http://127.0.0.1:3010",
+      "apiBaseUrl": "http://10.0.2.2:3010",
       "eas": {
         "projectId": "09e22b2a-2d32-4d4c-bdd8-b663dae88fef"
       }

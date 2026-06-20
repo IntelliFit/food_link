@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 
@@ -15,6 +16,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"log/slog"
 )
+
+func roundWeightGramsPtr(v *float64) *int {
+	if v == nil {
+		return nil
+	}
+	rounded := int(math.Round(*v))
+	return &rounded
+}
 
 type FoodRecordService interface {
 	Save(ctx context.Context, userID string, input service.SaveFoodRecordInput) (*domain.FoodRecord, error)
@@ -72,7 +81,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		TotalProtein     float64           `json:"total_protein"`
 		TotalCarbs       float64           `json:"total_carbs"`
 		TotalFat         float64           `json:"total_fat"`
-		TotalWeightGrams int               `json:"total_weight_grams"`
+		TotalWeightGrams float64           `json:"total_weight_grams"`
 		DietGoal         *string           `json:"diet_goal"`
 		ActivityTiming   *string           `json:"activity_timing"`
 		PFCRatioComment  *string           `json:"pfc_ratio_comment"`
@@ -107,7 +116,7 @@ func (h *FoodRecordHandler) SaveFoodRecord(c *gin.Context) {
 		TotalProtein:     body.TotalProtein,
 		TotalCarbs:       body.TotalCarbs,
 		TotalFat:         body.TotalFat,
-		TotalWeightGrams: body.TotalWeightGrams,
+		TotalWeightGrams: int(math.Round(body.TotalWeightGrams)),
 		DietGoal:         body.DietGoal,
 		ActivityTiming:   body.ActivityTiming,
 		PFCRatioComment:  body.PFCRatioComment,
@@ -177,7 +186,7 @@ func (h *FoodRecordHandler) UpdateFoodRecord(c *gin.Context) {
 		TotalProtein     *float64          `json:"total_protein"`
 		TotalCarbs       *float64          `json:"total_carbs"`
 		TotalFat         *float64          `json:"total_fat"`
-		TotalWeightGrams *int              `json:"total_weight_grams"`
+		TotalWeightGrams *float64          `json:"total_weight_grams"`
 		Description      *string           `json:"description"`
 		ImagePath        *string           `json:"image_path"`
 		ImagePaths       []string          `json:"image_paths"`
@@ -195,7 +204,7 @@ func (h *FoodRecordHandler) UpdateFoodRecord(c *gin.Context) {
 		TotalProtein:     body.TotalProtein,
 		TotalCarbs:       body.TotalCarbs,
 		TotalFat:         body.TotalFat,
-		TotalWeightGrams: body.TotalWeightGrams,
+		TotalWeightGrams: roundWeightGramsPtr(body.TotalWeightGrams),
 		Description:      body.Description,
 		ImagePath:        body.ImagePath,
 		ImagePaths:       body.ImagePaths,

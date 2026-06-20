@@ -10,7 +10,7 @@ import type { RootStackParamList } from './types'
 
 const TAB_LABELS: Record<string, { label: string; iconClass: string }> = {
   HomeTab: { label: '首页', iconClass: 'iconfont icon-shouye' },
-  StatsTab: { label: '分析', iconClass: 'iconfont icon-zhuzhuangtu' },
+  StatsTab: { label: '分析', iconClass: 'iconfont icon-tubiao-zhuzhuangtu' },
   CommunityTab: { label: '圈子', iconClass: 'iconfont icon-quanzi' },
   ProfileTab: { label: '我的', iconClass: 'iconfont icon-user' },
 }

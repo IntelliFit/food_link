@@ -1320,7 +1320,7 @@ func manualFoodResultFromRecordItem(source, sourceID, sourceTitle, portionLabel 
 		Sugar          float64 `json:"sugar"`
 		SaturatedFat   float64 `json:"saturatedFat"`
 		CholesterolMg  float64 `json:"cholesterolMg"`
-		SodiumMg       float64 `json:"sodium_mg"`
+		SodiumMg       float64 `json:"sodiumMg"`
 		PotassiumMg    float64 `json:"potassiumMg"`
 		CalciumMg      float64 `json:"calciumMg"`
 		IronMg         float64 `json:"ironMg"`
@@ -2019,6 +2019,56 @@ func preferNutritionRowWithImage(current, candidate fooddomain.FoodNutrition) fo
 	return current
 }
 
+func nutrientsFromFoodNutritionRow(row fooddomain.FoodNutrition) *domain.ManualFoodNutrients {
+	return &domain.ManualFoodNutrients{
+		Calories:       row.KcalPer100g,
+		Protein:        row.ProteinPer100g,
+		Carbs:          row.CarbsPer100g,
+		Fat:            row.FatPer100g,
+		Fiber:          row.FiberPer100g,
+		Sugar:          row.SugarPer100g,
+		SaturatedFat:   row.SaturatedFatPer100g,
+		CholesterolMg:  row.CholesterolMgPer100g,
+		SodiumMg:       row.SodiumMgPer100g,
+		PotassiumMg:    row.PotassiumMgPer100g,
+		CalciumMg:      row.CalciumMgPer100g,
+		IronMg:         row.IronMgPer100g,
+		MagnesiumMg:    row.MagnesiumMgPer100g,
+		ZincMg:         row.ZincMgPer100g,
+		VitaminARaeMcg: row.VitaminARaeMcgPer100g,
+		VitaminCMg:     row.VitaminCMgPer100g,
+		VitaminDMcg:    row.VitaminDMcgPer100g,
+		VitaminEMg:     row.VitaminEMgPer100g,
+		VitaminKMcg:    row.VitaminKMcgPer100g,
+		ThiaminMg:      row.ThiaminMgPer100g,
+		RiboflavinMg:   row.RiboflavinMgPer100g,
+		NiacinMg:       row.NiacinMgPer100g,
+		VitaminB6Mg:    row.VitaminB6MgPer100g,
+		FolateMcg:      row.FolateMcgPer100g,
+		VitaminB12Mcg:  row.VitaminB12McgPer100g,
+	}
+}
+
+func manualFoodNutrientsHasMicros(n *domain.ManualFoodNutrients) bool {
+	if n == nil {
+		return false
+	}
+	return n.Fiber > 0 || n.Sugar > 0 || n.SaturatedFat > 0 || n.CholesterolMg > 0 ||
+		n.SodiumMg > 0 || n.PotassiumMg > 0 || n.CalciumMg > 0 || n.IronMg > 0 ||
+		n.MagnesiumMg > 0 || n.ZincMg > 0 || n.VitaminARaeMcg > 0 || n.VitaminCMg > 0 ||
+		n.VitaminDMcg > 0 || n.VitaminEMg > 0 || n.VitaminKMcg > 0 || n.ThiaminMg > 0 ||
+		n.RiboflavinMg > 0 || n.NiacinMg > 0 || n.VitaminB6Mg > 0 || n.FolateMcg > 0 ||
+		n.VitaminB12Mcg > 0
+}
+
+func scaleManualFoodNutrientsPtr(n *domain.ManualFoodNutrients, scale float64) *domain.ManualFoodNutrients {
+	if n == nil {
+		return nil
+	}
+	scaled := scaleManualFoodNutrients(*n, scale)
+	return &scaled
+}
+
 func (r *ManualFoodRepo) mergeNutritionLibraryIntoManualFoodResult(
 	item domain.ManualFoodResult,
 	byID map[string]fooddomain.FoodNutrition,
@@ -2046,6 +2096,16 @@ func (r *ManualFoodRepo) mergeNutritionLibraryIntoManualFoodResult(
 	if item.ImagePath == nil && len(item.ImagePaths) > 0 {
 		first := item.ImagePaths[0]
 		item.ImagePath = &first
+	}
+	// 如果目标结果没有微量元素（常见于最近记录/高频食物），从营养库补齐，
+	// 避免手动记录后首页微量营养不更新。
+	if !manualFoodNutrientsHasMicros(item.NutrientsPer100g) {
+		item.NutrientsPer100g = nutrientsFromFoodNutritionRow(row)
+		if item.DefaultWeightGrams > 0 {
+			item.ExtraNutrients = scaleManualFoodNutrientsPtr(item.NutrientsPer100g, item.DefaultWeightGrams/100)
+		} else {
+			item.ExtraNutrients = item.NutrientsPer100g
+		}
 	}
 	return item
 }

@@ -122,12 +122,10 @@ const getDisplayedNutrientValue = (item: EditableFoodItem, field: EditableNutrie
 
 const getNutrientDetailRows = (item: EditableFoodItem) => {
   const ratio = item.ratio / 100
-  return NUTRIENT_DETAIL_META
-    .map((meta) => ({
-      ...meta,
-      value: normalizeNutrientValue(item.nutrients[meta.key]) * ratio
-    }))
-    .filter((row) => row.value > 0)
+  return NUTRIENT_DETAIL_META.map((meta) => ({
+    ...meta,
+    value: normalizeNutrientValue(item.nutrients[meta.key]) * ratio
+  }))
 }
 
 const hasVisibleMacroData = (nutrients?: Nutrients | null) => (
@@ -162,12 +160,30 @@ const resolveRecordItemIntake = (item: Pick<FoodRecord['items'][0], 'ratio' | 'i
   return Math.round((weight * resolveRecordItemRatio(item) / 100) * 10) / 10
 }
 
+function ensureAllNutrientKeys(nutrients: Partial<Nutrients>): Nutrients {
+  const base: Nutrients = {
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+    fiber: 0,
+    sugar: 0,
+    ...(nutrients || {})
+  }
+  NUTRIENT_DETAIL_META.forEach((meta) => {
+    if (!(meta.key in base)) {
+      (base as any)[meta.key] = 0
+    }
+  })
+  return base
+}
+
 function resolveEditableItemNutrients(
   item: FoodRecord['items'][0],
   record: FoodRecord,
   ratio: number
 ): Nutrients {
-  const raw = { ...(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }) }
+  const raw = ensureAllNutrientKeys(item.nutrients || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 })
   if (hasVisibleMacroData(raw)) return raw
   if ((record.items || []).length !== 1) return raw
 
