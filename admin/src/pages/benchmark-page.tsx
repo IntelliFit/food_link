@@ -844,7 +844,7 @@ export function BenchmarkRunsSection() {
                       <td className="px-3 py-2">{executionModeLabels[run.execution_mode as ExecutionMode]}</td>
                       <td className="px-3 py-2">{run.created_by_username || '-'}</td>
                       <td className="px-3 py-2">{run.sample_count}</td>
-                      <td className="px-3 py-2">{formatPct(run.metrics?.name_match_rate)}</td>
+                      <td className="px-3 py-2">{formatRate(run.metrics?.name_match_rate)}</td>
                       <td className="px-3 py-2">{formatPct(run.metrics?.total_weight_mape)}</td>
                       <td className="px-3 py-2 text-muted-foreground">{formatTime(run.completed_at)}</td>
                       <td className="px-3 py-2 text-right">
@@ -992,7 +992,7 @@ export function BenchmarkRunDetailSection() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
-            <MetricCard label="名称匹配率" value={formatPct(run.metrics?.name_match_rate)} />
+            <MetricCard label="名称匹配率" value={formatRate(run.metrics?.name_match_rate)} />
             <MetricCard label="总重 MAPE" value={formatPct(run.metrics?.total_weight_mape)} />
             <MetricCard label="总重 RMSE" value={formatNumber(run.metrics?.total_weight_rmse) + 'g'} />
             <MetricCard label="平均耗时" value={formatNumber(run.metrics?.average_duration_ms ? run.metrics.average_duration_ms / 1000 : undefined) + 's'} />
@@ -1214,7 +1214,16 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   )
 }
 
+// formatPct formats a value that is already expressed as a percentage
+// (e.g. backend MAPE/error_pct values where 20 means 20%).
 function formatPct(value: number | undefined): string {
+  if (value === undefined || value === null || isNaN(value)) return '-'
+  return `${value.toFixed(2)}%`
+}
+
+// formatRate formats a ratio in [0,1] as a percentage
+// (e.g. backend name_match_rate where 0.5 means 50%).
+function formatRate(value: number | undefined): string {
   if (value === undefined || value === null || isNaN(value)) return '-'
   return `${(value * 100).toFixed(2)}%`
 }

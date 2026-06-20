@@ -47,9 +47,12 @@ type RunMetrics struct {
 	SampleCount           int       `json:"sample_count"`
 	CompletedCount        int       `json:"completed_count"`
 	FailedCount           int       `json:"failed_count"`
+	// NameMatchRate is a ratio in [0,1]; display as a percentage by multiplying by 100.
 	NameMatchRate         float64   `json:"name_match_rate"`
+	// TotalWeightMAPE is already a percentage value (e.g. 10 means 10%), not a ratio.
 	TotalWeightMAPE       float64   `json:"total_weight_mape"`
 	TotalWeightRMSE       float64   `json:"total_weight_rmse"`
+	// ItemWeightMAPE is already a percentage value (e.g. 10 means 10%), not a ratio.
 	ItemWeightMAPE        float64   `json:"item_weight_mape"`
 	ItemWeightRMSE        float64   `json:"item_weight_rmse"`
 	AverageDurationMs     float64   `json:"average_duration_ms"`
@@ -59,8 +62,10 @@ type SampleMetrics struct {
 	NameMatched         bool               `json:"name_matched"`
 	NameMatchDetails    []bool             `json:"name_match_details,omitempty"`
 	TotalWeightError    float64            `json:"total_weight_error,omitempty"`
+	// TotalWeightErrorPct is already a percentage value (e.g. 20 means 20%), not a ratio.
 	TotalWeightErrorPct float64            `json:"total_weight_error_pct,omitempty"`
 	ItemWeightErrors    []float64          `json:"item_weight_errors,omitempty"`
+	// ItemWeightErrorPcts entries are already percentage values (e.g. 20 means 20%), not ratios.
 	ItemWeightErrorPcts []float64          `json:"item_weight_error_pcts,omitempty"`
 	ItemComparisons     []map[string]any   `json:"item_comparisons,omitempty"`
 	DurationMs          float64            `json:"duration_ms,omitempty"`
