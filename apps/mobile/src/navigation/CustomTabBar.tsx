@@ -3,16 +3,16 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { CommonActions } from '@react-navigation/native'
-import { BarChart3, Camera, Home, UserRound, UsersRound, type LucideIcon } from 'lucide-react-native'
+import { IconfontText } from '../components/Iconfont'
 import { colors, radius, shadow } from '../theme'
 import { RecordActionSheet, type RecordAction } from '../components/RecordActionSheet'
 import type { RootStackParamList } from './types'
 
-const TAB_LABELS: Record<string, { label: string; icon: LucideIcon }> = {
-  HomeTab: { label: '首页', icon: Home },
-  StatsTab: { label: '分析', icon: BarChart3 },
-  CommunityTab: { label: '圈子', icon: UsersRound },
-  ProfileTab: { label: '我的', icon: UserRound },
+const TAB_LABELS: Record<string, { label: string; iconClass: string }> = {
+  HomeTab: { label: '首页', iconClass: 'iconfont icon-shouye' },
+  StatsTab: { label: '分析', iconClass: 'iconfont icon-zhuzhuangtu' },
+  CommunityTab: { label: '圈子', iconClass: 'iconfont icon-quanzi' },
+  ProfileTab: { label: '我的', iconClass: 'iconfont icon-user' },
 }
 
 export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
@@ -52,7 +52,6 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
     const focused = state.index === index
     const meta = TAB_LABELS[route.name]
     if (!meta) return null
-    const Icon = meta.icon
     return (
       <Pressable
         key={route.key}
@@ -61,7 +60,11 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         onPress={() => navigation.navigate(route.name)}
         style={({ pressed }) => [styles.tab, pressed && styles.pressed]}
       >
-        <Icon size={21} color={focused ? colors.brand : '#9ca3af'} strokeWidth={focused ? 2.5 : 2.1} />
+        <IconfontText
+          className={meta.iconClass}
+          size={21}
+          color={focused ? colors.brand : '#9ca3af'}
+        />
         <Text style={[styles.tabText, focused && styles.tabTextActive]} numberOfLines={1}>{meta.label}</Text>
       </Pressable>
     )
@@ -78,7 +81,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
             style={({ pressed }) => [styles.centerButton, pressed && styles.pressed]}
             onPress={() => setRecordMenuVisible(true)}
           >
-            <Camera size={29} color="#fff" strokeWidth={2.4} />
+            <IconfontText className="iconfont icon-paizhao-xianxing" size={29} color="#fff" />
           </Pressable>
           <View style={styles.side}>{rightRoutes.map(renderTab)}</View>
         </View>

@@ -3,11 +3,11 @@ import { ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshCon
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard, type StatsSummary } from '@food-link/core'
-import { Beef, Camera, ChevronDown, ChevronRight, ChevronUp, Droplet, Droplets, Dumbbell, Scale, Target, Wheat, type LucideIcon } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { apiClient } from '../api'
 import { FloatingPetCompanion } from '../components/FloatingPetCompanion'
 import { HomeMicrosSection } from '../components/HomeMicrosSection'
+import { IconfontText } from '../components/Iconfont'
 import { SHOW_DEBUG_LOGIN } from '../config'
 import { useHomeDashboard } from '../hooks/useHomeDashboard'
 import type { RootStackParamList } from '../navigation/types'
@@ -54,10 +54,10 @@ const recordIconColors: Record<RecordTone, string> = {
   purple: '#6951bd',
 }
 
-const macroConfigs: Array<{ key: MacroKey; label: string; color: string; unit: string; Icon: LucideIcon }> = [
-  { key: 'protein', label: '蛋白质', color: '#5c9ed4', unit: 'g', Icon: Beef },
-  { key: 'carbs', label: '碳水', color: '#d4ac52', unit: 'g', Icon: Wheat },
-  { key: 'fat', label: '脂肪', color: '#f0985c', unit: 'g', Icon: Droplet },
+const macroConfigs: Array<{ key: MacroKey; label: string; color: string; unit: string; iconClass: string }> = [
+  { key: 'protein', label: '蛋白质', color: '#5c9ed4', unit: 'g', iconClass: 'iconfont icon-danbaizhi' },
+  { key: 'carbs', label: '碳水', color: '#d4ac52', unit: 'g', iconClass: 'iconfont icon-tanshui-dabiao' },
+  { key: 'fat', label: '脂肪', color: '#f0985c', unit: 'g', iconClass: 'iconfont icon-zhifangyouheruhuazhifangzhipin' },
 ]
 
 const CAFETERIA_HERO_BG_URL = 'https://cdn-food-images.coachlink.fit/wechat/cafeteria-hero.jpg'
@@ -584,7 +584,7 @@ function HomeCalorieCard({
             <Text style={styles.targetEnergyTargetNum}>{Math.round(target)}</Text>
           </View>
           <Pressable style={({ pressed }) => [styles.targetEditButton, pressed && styles.pressed]} onPress={onOpenTargetEditor}>
-            <Target size={12} color="#5cb896" />
+            <IconfontText className="iconfont icon-target" size={12} color="#5cb896" />
             <Text style={styles.targetEditButtonText}>目标设置</Text>
           </Pressable>
         </View>
@@ -599,11 +599,12 @@ function HomeCalorieCard({
           <Text style={styles.nutritionTitle}>营养概览</Text>
           <TouchableOpacity activeOpacity={0.75} onPress={onToggleNutrition}>
             <View style={styles.nutritionExpandAffordance}>
-              {nutritionExpanded ? (
-                <ChevronUp size={14} color="#5aa783" />
-              ) : (
-                <ChevronDown size={14} color="#5aa783" />
-              )}
+              <IconfontText
+                className="iconfont icon-right-arrow"
+                size={14}
+                color="#5aa783"
+                style={{ transform: [{ rotate: nutritionExpanded ? '270deg' : '90deg' }] }}
+              />
               <Text style={styles.nutritionExpandAffordanceText}>{nutritionExpanded ? '收起' : '展开更多'}</Text>
             </View>
           </TouchableOpacity>
@@ -633,7 +634,7 @@ function HomeMacroSection({ intakeData }: { intakeData?: HomeDashboard['intakeDa
             progress={progress}
             unit={config.unit}
             over={over}
-            Icon={config.Icon}
+            iconClass={config.iconClass}
           />
         )
       })}
@@ -649,7 +650,7 @@ function MacroRowCard({
   progress,
   unit,
   over,
-  Icon,
+  iconClass,
 }: {
   label: string
   current: number
@@ -658,7 +659,7 @@ function MacroRowCard({
   progress: number
   unit: string
   over: boolean
-  Icon: LucideIcon
+  iconClass: string
 }) {
   const progressColor = over ? '#e57373' : color
   const excess = over ? Math.max(0, current - target) : 0
@@ -668,7 +669,7 @@ function MacroRowCard({
         {excess > 0 ? <Text style={styles.macroOverHint}>+{formatHomeNumber(excess)}{unit}</Text> : null}
       </View>
       <View style={styles.macroTitleRow}>
-        <Icon size={13} color={color} strokeWidth={2.2} />
+        <IconfontText className={iconClass} size={13} color={color} />
         <Text style={styles.macroLabel}>{label}</Text>
       </View>
       <View style={styles.macroValueRow}>
@@ -695,9 +696,9 @@ function HomeBodyStatusStrip({
 }) {
   return (
     <View style={styles.bodyStatusSection}>
-      <HomeStatusCard title="体重" value="记录" hint="追踪变化" Icon={Scale} tone="green" onPress={onWeight} />
-      <HomeStatusCard title="喝水" value="补水" hint="今日饮水" Icon={Droplets} tone="blue" onPress={onWater} />
-      <HomeStatusCard title="运动" value={`${exerciseKcal}`} hint="kcal" Icon={Dumbbell} tone="gold" onPress={onExercise} />
+      <HomeStatusCard title="体重" value="记录" hint="追踪变化" iconClass="iconfont icon-weight-scale" tone="green" onPress={onWeight} />
+      <HomeStatusCard title="喝水" value="补水" hint="今日饮水" iconClass="iconfont icon-drink" tone="blue" onPress={onWater} />
+      <HomeStatusCard title="运动" value={`${exerciseKcal}`} hint="kcal" iconClass="iconfont icon-dumbbell" tone="gold" onPress={onExercise} />
     </View>
   )
 }
@@ -706,14 +707,14 @@ function HomeStatusCard({
   title,
   value,
   hint,
-  Icon,
+  iconClass,
   tone,
   onPress,
 }: {
   title: string
   value: string
   hint: string
-  Icon: LucideIcon
+  iconClass: string
   tone: RecordTone
   onPress: () => void
 }) {
@@ -722,7 +723,7 @@ function HomeStatusCard({
     <Pressable style={({ pressed }) => [styles.bodyStatusCard, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.bodyStatusHeader}>
         <View style={[styles.bodyStatusIcon, { backgroundColor: `${toneColor}18` }]}>
-          <Icon size={15} color={toneColor} strokeWidth={2.4} />
+          <IconfontText className={iconClass} size={15} color={toneColor} />
         </View>
         <Text style={styles.bodyStatusLabel}>{title}</Text>
       </View>
@@ -756,7 +757,7 @@ function HomeMealsSection({
       <View style={styles.mealsList}>
         {meals.length === 0 ? (
           <Pressable style={({ pressed }) => [styles.mealsEmpty, pressed && styles.pressed]} onPress={onQuickRecord}>
-            <Camera size={24} color={colors.brand} strokeWidth={2.3} />
+            <IconfontText className="iconfont icon-paizhao-xianxing" size={24} color={colors.brand} />
             <Text style={styles.mealsEmptyTitle}>暂无今日餐食</Text>
             <Text style={styles.mealsEmptyDesc}>点这里记录一餐</Text>
           </Pressable>
@@ -815,7 +816,7 @@ function HomeExpirySection({
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>食物保质期</Text>
         <Pressable style={styles.viewAllButton} onPress={onOpen}>
-          <ChevronRight size={18} color={colors.textSecondary} />
+          <IconfontText className="iconfont icon-right-arrow" size={18} color={colors.textSecondary} />
         </Pressable>
       </View>
       <Pressable style={({ pressed }) => [styles.expiryCard, pressed && styles.pressed]} onPress={onOpen}>
@@ -851,13 +852,13 @@ function HomeStatsEntry({ onPress }: { onPress: () => void }) {
   return (
     <Pressable style={({ pressed }) => [styles.statsEntryCard, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.statsEntryIcon}>
-        <Dumbbell size={20} color="#fff" strokeWidth={2.4} />
+        <IconfontText className="iconfont icon-zhuzhuangtu" size={20} color="#fff" />
       </View>
       <View style={styles.statsEntryText}>
         <Text style={styles.statsEntryTitle}>查看饮食统计</Text>
         <Text style={styles.statsEntryDesc}>了解您的饮食趋势和营养分析</Text>
       </View>
-      <ChevronRight size={20} color="#fff" />
+      <IconfontText className="iconfont icon-right-arrow" size={20} color="#fff" />
     </Pressable>
   )
 }
