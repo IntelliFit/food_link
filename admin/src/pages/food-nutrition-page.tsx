@@ -4,48 +4,42 @@ import { toast } from 'sonner'
 import { AdminSidebar, type AdminMenuId } from '@/components/admin-sidebar'
 import { adminRequest, copyText, displayApiBase } from '@/lib/api'
 
-type PackagedFoodsPageProps = {
+type FoodNutritionPageProps = {
   onLogout: () => void
   onMenuChange: (menu: AdminMenuId) => void
 }
 
-type PackagedFood = {
+type FoodNutrition = {
   id: string
-  brand: string
-  product_name: string
-  display_name: string
+  canonical_name: string
   normalized_name?: string
-  product_key?: string
-  search_text?: string
-  product_family_key?: string
-  spec_text?: string
-  barcode?: string
-  flavor_text?: string
-  package_category?: string
-  ingredients_text?: string
-  source_image_urls?: string[]
-  ocr_raw_text?: string
-  nutrition_basis_unit?: string
-  energy_unit_raw?: string
-  conversion_status?: string
-  ingest_method?: string
-  net_content_value?: number
-  net_content_unit?: string
-  unit_count?: number
-  unit_content_value?: number
-  unit_content_unit?: string
-  review_status?: string
-  net_weight_g: number
-  serving_weight_g: number
+  source?: string
+  image_paths?: string[]
   kcal_per_100g: number
   protein_per_100g: number
   carbs_per_100g: number
   fat_per_100g: number
   fiber_per_100g: number
   sugar_per_100g: number
+  saturated_fat_per_100g: number
+  cholesterol_mg_per_100g: number
   sodium_mg_per_100g: number
-  source_url?: string
-  source?: string
+  potassium_mg_per_100g: number
+  calcium_mg_per_100g: number
+  iron_mg_per_100g: number
+  magnesium_mg_per_100g: number
+  zinc_mg_per_100g: number
+  vitamin_a_rae_mcg_per_100g: number
+  vitamin_c_mg_per_100g: number
+  vitamin_d_mcg_per_100g: number
+  vitamin_e_mg_per_100g: number
+  vitamin_k_mcg_per_100g: number
+  thiamin_mg_per_100g: number
+  riboflavin_mg_per_100g: number
+  niacin_mg_per_100g: number
+  vitamin_b6_mg_per_100g: number
+  folate_mcg_per_100g: number
+  vitamin_b12_mcg_per_100g: number
   is_active: boolean
 }
 
@@ -56,61 +50,96 @@ type ListResponse<T> = {
   total: number
 }
 
-type PackagedFieldDef = {
+type FieldDef = {
   key: string
   label: string
-  type: 'text' | 'number' | 'boolean' | 'select' | 'textarea'
+  type: 'text' | 'number' | 'boolean' | 'textarea'
   group: 'basic' | 'nutrition' | 'evidence'
   wide?: boolean
+  required?: boolean
 }
 
-const packagedFields: PackagedFieldDef[] = [
-  { key: 'brand', label: '品牌', type: 'text', group: 'basic' },
-  { key: 'product_name', label: '商品名', type: 'text', group: 'basic' },
-  { key: 'display_name', label: '展示名', type: 'text', group: 'basic', wide: true },
-  { key: 'flavor_text', label: '口味', type: 'text', group: 'basic' },
-  { key: 'spec_text', label: '规格说明', type: 'text', group: 'basic', wide: true },
-  { key: 'barcode', label: '条码', type: 'text', group: 'basic' },
-  { key: 'package_category', label: '分类', type: 'text', group: 'basic' },
-  { key: 'review_status', label: '审核状态', type: 'select', group: 'basic' },
+const fields: FieldDef[] = [
+  { key: 'canonical_name', label: '标准名称', type: 'text', group: 'basic', wide: true, required: true },
+  { key: 'source', label: '来源', type: 'text', group: 'basic' },
   { key: 'is_active', label: '是否启用', type: 'boolean', group: 'basic' },
-  { key: 'net_weight_g', label: '净重 g', type: 'number', group: 'basic' },
-  { key: 'net_content_value', label: '净含量数值', type: 'number', group: 'basic' },
-  { key: 'net_content_unit', label: '净含量单位', type: 'text', group: 'basic' },
-  { key: 'unit_count', label: '内含数量', type: 'number', group: 'basic' },
-  { key: 'unit_content_value', label: '单份规格', type: 'number', group: 'basic' },
-  { key: 'unit_content_unit', label: '单份单位', type: 'text', group: 'basic' },
   { key: 'kcal_per_100g', label: '热量 kcal/100g', type: 'number', group: 'nutrition' },
   { key: 'protein_per_100g', label: '蛋白质 g/100g', type: 'number', group: 'nutrition' },
   { key: 'carbs_per_100g', label: '碳水 g/100g', type: 'number', group: 'nutrition' },
   { key: 'fat_per_100g', label: '脂肪 g/100g', type: 'number', group: 'nutrition' },
   { key: 'fiber_per_100g', label: '膳食纤维 g/100g', type: 'number', group: 'nutrition' },
   { key: 'sugar_per_100g', label: '糖 g/100g', type: 'number', group: 'nutrition' },
+  { key: 'saturated_fat_per_100g', label: '饱和脂肪 g/100g', type: 'number', group: 'nutrition' },
+  { key: 'cholesterol_mg_per_100g', label: '胆固醇 mg/100g', type: 'number', group: 'nutrition' },
   { key: 'sodium_mg_per_100g', label: '钠 mg/100g', type: 'number', group: 'nutrition' },
-  { key: 'ingredients_text', label: '配料', type: 'textarea', group: 'evidence', wide: true },
-  { key: 'source_image_urls', label: '图片 URL，每行一个', type: 'textarea', group: 'evidence', wide: true },
-  { key: 'ocr_raw_text', label: 'OCR 原文', type: 'textarea', group: 'evidence', wide: true },
-  { key: 'search_text', label: '搜索文本', type: 'textarea', group: 'evidence', wide: true },
+  { key: 'potassium_mg_per_100g', label: '钾 mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'calcium_mg_per_100g', label: '钙 mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'iron_mg_per_100g', label: '铁 mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'magnesium_mg_per_100g', label: '镁 mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'zinc_mg_per_100g', label: '锌 mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'vitamin_a_rae_mcg_per_100g', label: '维A µg/100g', type: 'number', group: 'nutrition' },
+  { key: 'vitamin_c_mg_per_100g', label: '维C mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'vitamin_d_mcg_per_100g', label: '维D µg/100g', type: 'number', group: 'nutrition' },
+  { key: 'vitamin_e_mg_per_100g', label: '维E mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'vitamin_k_mcg_per_100g', label: '维K µg/100g', type: 'number', group: 'nutrition' },
+  { key: 'thiamin_mg_per_100g', label: '维B1 mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'riboflavin_mg_per_100g', label: '维B2 mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'niacin_mg_per_100g', label: '烟酸 mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'vitamin_b6_mg_per_100g', label: '维B6 mg/100g', type: 'number', group: 'nutrition' },
+  { key: 'folate_mcg_per_100g', label: '叶酸 µg/100g', type: 'number', group: 'nutrition' },
+  { key: 'vitamin_b12_mcg_per_100g', label: '维B12 µg/100g', type: 'number', group: 'nutrition' },
+  { key: 'image_paths', label: '图片 URL，每行一个', type: 'textarea', group: 'evidence', wide: true },
 ]
+
+const blankItem: FoodNutrition = {
+  id: '',
+  canonical_name: '',
+  source: '',
+  image_paths: [],
+  kcal_per_100g: 0,
+  protein_per_100g: 0,
+  carbs_per_100g: 0,
+  fat_per_100g: 0,
+  fiber_per_100g: 0,
+  sugar_per_100g: 0,
+  saturated_fat_per_100g: 0,
+  cholesterol_mg_per_100g: 0,
+  sodium_mg_per_100g: 0,
+  potassium_mg_per_100g: 0,
+  calcium_mg_per_100g: 0,
+  iron_mg_per_100g: 0,
+  magnesium_mg_per_100g: 0,
+  zinc_mg_per_100g: 0,
+  vitamin_a_rae_mcg_per_100g: 0,
+  vitamin_c_mg_per_100g: 0,
+  vitamin_d_mcg_per_100g: 0,
+  vitamin_e_mg_per_100g: 0,
+  vitamin_k_mcg_per_100g: 0,
+  thiamin_mg_per_100g: 0,
+  riboflavin_mg_per_100g: 0,
+  niacin_mg_per_100g: 0,
+  vitamin_b6_mg_per_100g: 0,
+  folate_mcg_per_100g: 0,
+  vitamin_b12_mcg_per_100g: 0,
+  is_active: true,
+}
 
 function parseParamPage(value: string | null, fallback: number) {
   const n = parseInt(value ?? '', 10)
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
-/** 包装食品库管理页 */
-export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageProps) {
+/** 营养食物库管理页 */
+export function FoodNutritionPage({ onLogout, onMenuChange }: FoodNutritionPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
-  const [reviewStatus, setReviewStatus] = useState(searchParams.get('review_status') ?? 'all')
   const [active, setActive] = useState(searchParams.get('active') ?? 'all')
-  const [imageState, setImageState] = useState(searchParams.get('image_state') ?? 'all')
   const [page, setPage] = useState(parseParamPage(searchParams.get('page'), 1))
   const [limit, setLimit] = useState(parseParamPage(searchParams.get('limit'), 40))
-  const [items, setItems] = useState<PackagedFood[]>([])
+  const [items, setItems] = useState<FoodNutrition[]>([])
   const [total, setTotal] = useState(0)
   const [selectedId, setSelectedId] = useState('')
-  const [selected, setSelected] = useState<PackagedFood | null>(null)
+  const [selected, setSelected] = useState<FoodNutrition | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -125,20 +154,18 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
   useEffect(() => {
     void loadList()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, limit, reviewStatus, active, imageState, searchNonce])
+  }, [page, limit, active, searchNonce])
 
   useEffect(() => {
     const params = new URLSearchParams()
     const q = query.trim()
     if (q) params.set('q', q)
-    if (reviewStatus !== 'all') params.set('review_status', reviewStatus)
     if (active !== 'all') params.set('active', active)
-    if (imageState !== 'all') params.set('image_state', imageState)
     if (page !== 1) params.set('page', String(page))
     if (limit !== 40) params.set('limit', String(limit))
     setSearchParams(params, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, reviewStatus, active, imageState, page, limit])
+  }, [query, active, page, limit])
 
   useEffect(() => {
     if (!selectedId) {
@@ -156,11 +183,9 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
         page: String(nextPage),
         limit: String(limit),
         q: query.trim(),
-        review_status: reviewStatus,
         active,
-        image_state: imageState,
       })
-      const data = await adminRequest<ListResponse<PackagedFood>>(`/api/admin/packaged-foods?${params.toString()}`)
+      const data = await adminRequest<ListResponse<FoodNutrition>>(`/api/admin/food-nutrition?${params.toString()}`)
       setItems(data.items || [])
       setTotal(data.total || 0)
       setPage(data.page || nextPage)
@@ -179,7 +204,7 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
   async function loadDetail(id: string) {
     setSelectedId(id)
     try {
-      const data = await adminRequest<{ item: PackagedFood }>(`/api/admin/packaged-foods/${encodeURIComponent(id)}`)
+      const data = await adminRequest<{ item: FoodNutrition }>(`/api/admin/food-nutrition/${encodeURIComponent(id)}`)
       setSelected(data.item)
       setItems((current) => current.map((item) => (item.id === id ? data.item : item)))
     } catch (error) {
@@ -190,7 +215,7 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
   async function saveItem(id: string, payload: Record<string, string | number | boolean | string[]>) {
     setSaving(true)
     try {
-      const data = await adminRequest<{ item: PackagedFood }>(`/api/admin/packaged-foods/${encodeURIComponent(id)}`, {
+      const data = await adminRequest<{ item: FoodNutrition }>(`/api/admin/food-nutrition/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
       })
@@ -207,7 +232,7 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
   async function createItem(payload: Record<string, string | number | boolean | string[]>) {
     setCreating(true)
     try {
-      const data = await adminRequest<{ item: PackagedFood }>('/api/admin/packaged-foods', {
+      const data = await adminRequest<{ item: FoodNutrition }>('/api/admin/food-nutrition', {
         method: 'POST',
         body: JSON.stringify(payload),
       })
@@ -224,10 +249,10 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
   }
 
   async function deleteItem(id: string) {
-    if (!window.confirm('确定要删除这条包装食品吗？删除为软删除（标记停用）。')) return
+    if (!window.confirm('确定要删除这条营养食物吗？删除为软删除（标记停用）。')) return
     setDeleting(true)
     try {
-      await adminRequest(`/api/admin/packaged-foods/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      await adminRequest(`/api/admin/food-nutrition/${encodeURIComponent(id)}`, { method: 'DELETE' })
       setItems((current) => current.filter((item) => item.id !== id))
       setTotal((value) => Math.max(0, value - 1))
       if (selected?.id === id) {
@@ -258,16 +283,16 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
 
   return (
     <div className="relative z-10 mx-auto grid min-h-[calc(100vh-2rem)] w-full max-w-[1540px] grid-cols-[256px_minmax(0,1fr)] gap-8 px-4 py-4">
-      <AdminSidebar activeMenu="packaged-foods" onLogout={onLogout} onMenuChange={onMenuChange} />
+      <AdminSidebar activeMenu="food-nutrition" onLogout={onLogout} onMenuChange={onMenuChange} />
       <main className="min-w-0 space-y-6 pb-8">
-        <PageHeader eyebrow="零食 SKU / 包装食品库" title="包装食品库" apiBase={apiBase} />
+        <PageHeader eyebrow="识别算法 / 营养食物库" title="营养食物库" apiBase={apiBase} />
         <section className="stats-grid">
-          <Stat label="当前筛选" value={String(total)} foot="条 SKU" />
+          <Stat label="当前筛选" value={String(total)} foot="条食物" />
           <Stat label="本页展示" value={String(items.length)} foot={loading ? '读取中' : '条记录'} />
           <Stat
             label="当前选中"
-            value={selected ? shortTitle(selected.display_name || selected.product_name) : '-'}
-            foot={selected?.review_status || '无'}
+            value={selected ? shortTitle(selected.canonical_name) : '-'}
+            foot={selected?.is_active ? '启用' : '停用'}
           />
         </section>
         <section className="toolbar packaged-toolbar">
@@ -279,26 +304,9 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
               onKeyDown={(event) => {
                 if (event.key === 'Enter') runSearch()
               }}
-              placeholder="品牌 / 商品名 / 条码 / OCR / 搜索文本"
+              placeholder="标准名称 / 来源 / 营养字段"
             />
           </label>
-          <SelectLabel
-            label="审核"
-            value={reviewStatus}
-            onChange={(value) => {
-              setReviewStatus(value)
-              setPage(1)
-            }}
-            options={[
-              ['all', '全部状态'],
-              ['active', 'active'],
-              ['pending', 'pending'],
-              ['web_verified', 'web_verified'],
-              ['rejected', 'rejected'],
-              ['inactive', 'inactive'],
-              ['blank', '空状态'],
-            ]}
-          />
           <SelectLabel
             label="启用"
             value={active}
@@ -310,19 +318,6 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
               ['all', '全部'],
               ['true', '启用'],
               ['false', '停用'],
-            ]}
-          />
-          <SelectLabel
-            label="图片"
-            value={imageState}
-            onChange={(value) => {
-              setImageState(value)
-              setPage(1)
-            }}
-            options={[
-              ['all', '全部'],
-              ['with_images', '有图'],
-              ['missing_images', '缺图'],
             ]}
           />
           <SelectLabel
@@ -350,10 +345,10 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
         <section className="workspace packaged-workspace">
           <div className="sku-list">
             {loading ? <SkeletonRows /> : null}
-            {!loading && items.length === 0 ? <Empty title="没有 SKU" desc="换个关键词或筛选条件再试。" /> : null}
+            {!loading && items.length === 0 ? <Empty title="没有食物" desc="换个关键词或筛选条件再试。" /> : null}
             {!loading
               ? items.map((item) => (
-                  <PackagedFoodCard
+                  <FoodCard
                     key={item.id}
                     item={item}
                     selected={item.id === selected?.id}
@@ -364,7 +359,7 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
           </div>
           <aside className="detail-panel sku-editor-panel">
             {selected ? (
-              <PackagedFoodEditor
+              <FoodEditor
                 key={selected.id}
                 item={selected}
                 saving={saving}
@@ -374,7 +369,7 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
                 onDelete={deleteItem}
               />
             ) : (
-              <Empty title="选择一条 SKU" desc="右侧会展示图片、规格、核心营养、OCR 和搜索字段。" />
+              <Empty title="选择一条记录" desc="右侧会展示营养详情与图片。" />
             )}
           </aside>
         </section>
@@ -382,110 +377,12 @@ export function PackagedFoodsPage({ onLogout, onMenuChange }: PackagedFoodsPageP
 
       {showCreate ? (
         <CreateModal
-          title="新建包装食品"
+          title="新建营养食物"
           creating={creating}
           onClose={() => setShowCreate(false)}
           onSubmit={createItem}
         />
       ) : null}
-    </div>
-  )
-}
-
-function CreateModal({
-  title,
-  creating,
-  onClose,
-  onSubmit,
-}: {
-  title: string
-  creating: boolean
-  onClose: () => void
-  onSubmit: (payload: Record<string, string | number | boolean | string[]>) => Promise<void>
-}) {
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const payload: Record<string, string | number | boolean | string[]> = {}
-    packagedFields.forEach((field) => {
-      if (!form.has(field.key)) return
-      const raw = String(form.get(field.key) ?? '').trim()
-      if (field.key === 'source_image_urls') {
-        payload[field.key] = raw
-          .split(/\n+/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-      } else if (field.type === 'number') {
-        payload[field.key] = raw === '' ? 0 : Number(raw)
-      } else if (field.type === 'boolean') {
-        payload[field.key] = raw === 'true'
-      } else {
-        payload[field.key] = raw
-      }
-    })
-    void onSubmit(payload)
-  }
-
-  const blankItem: PackagedFood = {
-    id: '',
-    brand: '',
-    product_name: '',
-    display_name: '',
-    review_status: 'pending',
-    is_active: true,
-    net_weight_g: 0,
-    serving_weight_g: 0,
-    kcal_per_100g: 0,
-    protein_per_100g: 0,
-    carbs_per_100g: 0,
-    fat_per_100g: 0,
-    fiber_per_100g: 0,
-    sugar_per_100g: 0,
-    sodium_mg_per_100g: 0,
-  }
-
-  return (
-    <div className="modal-overlay" onClick={(event) => {
-      if (event.target === event.currentTarget) onClose()
-    }}>
-      <div className="modal-panel">
-        <div className="editor-header">
-          <h2>{title}</h2>
-          <button type="button" onClick={onClose}>关闭</button>
-        </div>
-        <form onSubmit={submit}>
-          <section className="detail-section">
-            <h3>商品与规格</h3>
-            <div className="form-grid">
-              {packagedFields.filter((field) => field.group === 'basic').map((field) => (
-                <PackagedField key={field.key} item={blankItem} field={field} />
-              ))}
-            </div>
-          </section>
-          <section className="detail-section">
-            <h3>核心营养</h3>
-            <div className="form-grid">
-              {packagedFields.filter((field) => field.group === 'nutrition').map((field) => (
-                <PackagedField key={field.key} item={blankItem} field={field} />
-              ))}
-            </div>
-          </section>
-          <section className="detail-section">
-            <h3>证据与搜索</h3>
-            <div className="form-grid">
-              {packagedFields.filter((field) => field.group === 'evidence').map((field) => (
-                <PackagedField key={field.key} item={blankItem} field={field} />
-              ))}
-            </div>
-          </section>
-          <div className="actions">
-            <button type="button" onClick={onClose}>取消</button>
-            <button className="primary" type="submit" disabled={creating}>
-              {creating ? <Spinner small /> : '创建'}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   )
 }
@@ -590,31 +487,30 @@ function SkeletonRows() {
   )
 }
 
-function PackagedFoodCard({
+function FoodCard({
   item,
   selected,
   onClick,
 }: {
-  item: PackagedFood
+  item: FoodNutrition
   selected: boolean
   onClick: () => void
 }) {
-  const images = item.source_image_urls || []
+  const images = item.image_paths || []
   return (
     <article className={`sku-card ${selected ? 'selected' : ''}`} onClick={onClick}>
       <div className="thumb-strip">
         {images.length ? (
-          images.slice(0, 2).map((src) => <img key={src} src={src} alt={item.display_name || item.product_name} loading="lazy" />)
+          images.slice(0, 2).map((src) => <img key={src} src={src} alt={item.canonical_name} loading="lazy" />)
         ) : (
           <div className="no-image">缺图</div>
         )}
       </div>
       <div className="sku-body">
-        <h2>{item.display_name || item.product_name || '未命名'}</h2>
+        <h2>{item.canonical_name || '未命名'}</h2>
         <div className="meta-row">
           <span className={`pill ${item.is_active ? 'active' : 'inactive'}`}>{item.is_active ? '启用' : '停用'}</span>
-          <span className="pill">{item.review_status || '空状态'}</span>
-          <span className="pill">{displaySpec(item)}</span>
+          <span className="pill">{item.source || '无来源'}</span>
           <span className="pill">{images.length} 图</span>
         </div>
         <div className="nutrition-line">
@@ -636,7 +532,7 @@ function PackagedFoodCard({
   )
 }
 
-function PackagedFoodEditor({
+function FoodEditor({
   item,
   saving,
   deleting,
@@ -644,7 +540,7 @@ function PackagedFoodEditor({
   onCopy,
   onDelete,
 }: {
-  item: PackagedFood
+  item: FoodNutrition
   saving: boolean
   deleting: boolean
   onSave: (id: string, payload: Record<string, string | number | boolean | string[]>) => Promise<void>
@@ -654,33 +550,17 @@ function PackagedFoodEditor({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
-    const payload: Record<string, string | number | boolean | string[]> = {}
-    packagedFields.forEach((field) => {
-      if (!form.has(field.key)) return
-      const raw = String(form.get(field.key) ?? '').trim()
-      if (field.key === 'source_image_urls') {
-        payload[field.key] = raw
-          .split(/\n+/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-      } else if (field.type === 'number') {
-        payload[field.key] = raw === '' ? 0 : Number(raw)
-      } else if (field.type === 'boolean') {
-        payload[field.key] = raw === 'true'
-      } else {
-        payload[field.key] = raw
-      }
-    })
+    const payload = buildPayload(form)
     void onSave(item.id, payload)
   }
 
-  const images = item.source_image_urls || []
+  const images = item.image_paths || []
 
   return (
     <form onSubmit={submit}>
       <div className="editor-header">
         <div>
-          <h2>{item.display_name || item.product_name || '未命名'}</h2>
+          <h2>{item.canonical_name || '未命名'}</h2>
           <p>{item.id}</p>
         </div>
         <div className="actions" style={{ marginTop: 0 }}>
@@ -698,7 +578,7 @@ function PackagedFoodEditor({
           {images.length ? (
             images.map((src) => (
               <a key={src} href={src} target="_blank" rel="noreferrer">
-                <img src={src} alt="商品图片" loading="lazy" />
+                <img src={src} alt="食物图片" loading="lazy" />
               </a>
             ))
           ) : (
@@ -706,18 +586,58 @@ function PackagedFoodEditor({
           )}
         </div>
       </section>
-      <EditorSection title="商品与规格" item={item} group="basic" />
-      <EditorSection title="核心营养" item={item} group="nutrition" />
-      <EditorSection title="证据与搜索" item={item} group="evidence" />
+      <EditorSection title="基本信息" item={item} group="basic" />
+      <EditorSection title="每 100g 营养" item={item} group="nutrition" />
+      <EditorSection title="证据" item={item} group="evidence" />
       <div className="actions">
-        <button type="button" onClick={() => onCopy(item.product_key || '')} disabled={!item.product_key}>
-          复制 product_key
-        </button>
         <button className="primary" type="submit" disabled={saving}>
           {saving ? <Spinner small /> : '保存修改'}
         </button>
       </div>
     </form>
+  )
+}
+
+function CreateModal({
+  title,
+  creating,
+  onClose,
+  onSubmit,
+}: {
+  title: string
+  creating: boolean
+  onClose: () => void
+  onSubmit: (payload: Record<string, string | number | boolean | string[]>) => Promise<void>
+}) {
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const payload = buildPayload(form)
+    void onSubmit(payload)
+  }
+
+  return (
+    <div className="modal-overlay" onClick={(event) => {
+      if (event.target === event.currentTarget) onClose()
+    }}>
+      <div className="modal-panel">
+        <div className="editor-header">
+          <h2>{title}</h2>
+          <button type="button" onClick={onClose}>关闭</button>
+        </div>
+        <form onSubmit={submit}>
+          <EditorSection title="基本信息" item={blankItem} group="basic" />
+          <EditorSection title="每 100g 营养" item={blankItem} group="nutrition" />
+          <EditorSection title="证据" item={blankItem} group="evidence" />
+          <div className="actions">
+            <button type="button" onClick={onClose}>取消</button>
+            <button className="primary" type="submit" disabled={creating}>
+              {creating ? <Spinner small /> : '创建'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
 
@@ -727,53 +647,43 @@ function EditorSection({
   group,
 }: {
   title: string
-  item: PackagedFood
+  item: FoodNutrition
   group: 'basic' | 'nutrition' | 'evidence'
 }) {
   return (
     <section className="detail-section">
       <h3>{title}</h3>
       <div className="form-grid">
-        {packagedFields
+        {fields
           .filter((field) => field.group === group)
           .map((field) => (
-            <PackagedField key={field.key} item={item} field={field} />
+            <FormField key={field.key} item={item} field={field} />
           ))}
       </div>
     </section>
   )
 }
 
-function PackagedField({
-  item,
-  field,
-}: {
-  item: PackagedFood
-  field: PackagedFieldDef
-}) {
-  const rawValue = getPackagedValue(item, field.key)
+function FormField({ item, field }: { item: FoodNutrition; field: FieldDef }) {
+  const rawValue = item[field.key as keyof FoodNutrition]
   const value = rawValue === null || rawValue === undefined ? '' : String(rawValue)
   const id = `field-${field.key}`
 
   let input: React.ReactNode
   if (field.type === 'textarea') {
-    input = <textarea id={id} name={field.key} defaultValue={value} rows={4} />
+    input = (
+      <textarea
+        id={id}
+        name={field.key}
+        defaultValue={Array.isArray(rawValue) ? (rawValue as string[]).join('\n') : value}
+        rows={4}
+      />
+    )
   } else if (field.type === 'boolean') {
     input = (
       <select id={id} name={field.key} defaultValue={value}>
         <option value="true">是</option>
         <option value="false">否</option>
-      </select>
-    )
-  } else if (field.type === 'select') {
-    input = (
-      <select id={id} name={field.key} defaultValue={value}>
-        <option value="">空</option>
-        <option value="active">active</option>
-        <option value="pending">pending</option>
-        <option value="web_verified">web_verified</option>
-        <option value="rejected">rejected</option>
-        <option value="inactive">inactive</option>
       </select>
     )
   } else {
@@ -788,11 +698,25 @@ function PackagedField({
   )
 }
 
-function getPackagedValue(
-  item: PackagedFood,
-  key: PackagedFieldDef['key'],
-): string | number | boolean | string[] | undefined {
-  return item[key as keyof PackagedFood] as string | number | boolean | string[] | undefined
+function buildPayload(form: FormData) {
+  const payload: Record<string, string | number | boolean | string[]> = {}
+  fields.forEach((field) => {
+    if (!form.has(field.key)) return
+    const raw = String(form.get(field.key) ?? '').trim()
+    if (field.key === 'image_paths') {
+      payload[field.key] = raw
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+    } else if (field.type === 'number') {
+      payload[field.key] = raw === '' ? 0 : Number(raw)
+    } else if (field.type === 'boolean') {
+      payload[field.key] = raw === 'true'
+    } else {
+      payload[field.key] = raw
+    }
+  })
+  return payload
 }
 
 function shortTitle(value: string): string {
@@ -803,11 +727,4 @@ function shortTitle(value: string): string {
 function cleanNum(value: number | undefined): string {
   if (value === undefined || value === null) return '-'
   return Number(value).toFixed(1).replace(/\.0$/, '')
-}
-
-function displaySpec(item: PackagedFood): string {
-  if (item.net_content_value && item.net_content_unit) return `${item.net_content_value}${item.net_content_unit}`
-  if (item.net_weight_g) return `${item.net_weight_g}g`
-  if (item.spec_text) return item.spec_text
-  return '无规格'
 }

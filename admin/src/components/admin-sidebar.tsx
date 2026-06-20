@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import {
   Activity,
+  Apple,
   Flag,
   FlaskConical,
   LayoutDashboard,
@@ -8,6 +9,7 @@ import {
   MessageSquareText,
   Package,
   Settings,
+  Utensils,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -15,7 +17,7 @@ import { cn } from '@/lib/utils'
 import { BrandMark } from '@/components/brand-mark'
 import { ThemeToggle } from '@/components/theme-toggle'
 
-export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'exercise-energy' | 'feed-reports' | 'settings'
+export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'food-nutrition' | 'public-food-library' | 'exercise-energy' | 'feed-reports' | 'settings'
 
 type AdminSidebarProps = {
   activeMenu: AdminMenuId
@@ -33,6 +35,8 @@ const menus: Array<{
   { id: 'feedback', label: '意见反馈', icon: MessageSquareText },
   { id: 'benchmark', label: '数据集评测', icon: FlaskConical },
   { id: 'packaged-foods', label: '包装食品', icon: Package },
+  { id: 'food-nutrition', label: '营养食物', icon: Apple },
+  { id: 'public-food-library', label: '公共食物', icon: Utensils },
   { id: 'exercise-energy', label: '运动库', icon: Activity },
   { id: 'feed-reports', label: '举报管理', icon: Flag },
   { id: 'settings', label: '系统设置', icon: Settings, disabled: true },

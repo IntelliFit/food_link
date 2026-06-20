@@ -1045,6 +1045,33 @@ func (r *ManualFoodRepo) manualFoodResultFromPublic(item publicdomain.PublicFood
 		LikeCount:           item.LikeCount,
 		CollectionCount:     item.CollectionCount,
 	}
+
+	// 公共食物库条目本身来自真实记录，items 里保存了每份食物的完整营养素，
+	// 把它汇总后映射到 nutrients_per_100g / extra_nutrients，这样手动记录时微量元素不会丢失。
+	totalIntake := 0.0
+	totalNutrients := domain.ManualFoodNutrients{}
+	for _, it := range item.Items {
+		if it == nil {
+			continue
+		}
+		intake := numberFromAny(it["intake"])
+		if intake <= 0 {
+			intake = numberFromAny(it["weight"])
+		}
+		if intake <= 0 {
+			continue
+		}
+		totalIntake += intake
+		nutrients := manualFoodNutrientsFromAny(it["nutrients"])
+		totalNutrients = sumManualFoodNutrients(totalNutrients, nutrients)
+	}
+	if totalIntake > 0 {
+		per100Scale := 100 / totalIntake
+		nutrientsPer100g := scaleManualFoodNutrients(totalNutrients, per100Scale)
+		result.NutrientsPer100g = &nutrientsPer100g
+		result.ExtraNutrients = &totalNutrients
+	}
+
 	applyManualFoodServingProfile(&result)
 	return result
 }
@@ -1458,6 +1485,19 @@ func manualFoodResultFromFrequentRecord(name string, usageCount int, avgWeight f
 		UsageCount:          usageCount,
 		MatchScore:          0.58,
 	}
+
+	// 从代表性记录的原始 item 中解析微量元素，避免高频食物丢失微量营养。
+	representative := manualFoodResultFromRecordItem("nutrition_library", "catalog:"+title, title, fmt.Sprintf("%.0fg", defaultWeight), usageCount, raw)
+	if representative.NutrientsPer100g != nil {
+		result.NutrientsPer100g = representative.NutrientsPer100g
+		extraNutrients := scaleManualFoodNutrients(*representative.NutrientsPer100g, defaultWeight/100)
+		result.ExtraNutrients = &extraNutrients
+	} else if representative.ExtraNutrients != nil {
+		nutrientsPer100g := scaleManualFoodNutrients(*representative.ExtraNutrients, per100Scale)
+		result.NutrientsPer100g = &nutrientsPer100g
+		result.ExtraNutrients = representative.ExtraNutrients
+	}
+
 	applyManualFoodServingProfile(&result)
 	return result
 }
@@ -1545,6 +1585,83 @@ func manualFoodNutrientsFromMap(values map[string]any) domain.ManualFoodNutrient
 	var nutrients domain.ManualFoodNutrients
 	_ = json.Unmarshal(raw, &nutrients)
 	return nutrients
+}
+
+func manualFoodNutrientsFromAny(value any) domain.ManualFoodNutrients {
+	switch v := value.(type) {
+	case map[string]any:
+		return manualFoodNutrientsFromMap(v)
+	case json.RawMessage:
+		var out domain.ManualFoodNutrients
+		_ = json.Unmarshal(v, &out)
+		return out
+	case []byte:
+		var out domain.ManualFoodNutrients
+		_ = json.Unmarshal(v, &out)
+		return out
+	default:
+		return domain.ManualFoodNutrients{}
+	}
+}
+
+func sumManualFoodNutrients(a, b domain.ManualFoodNutrients) domain.ManualFoodNutrients {
+	return domain.ManualFoodNutrients{
+		Calories:       a.Calories + b.Calories,
+		Protein:        a.Protein + b.Protein,
+		Carbs:          a.Carbs + b.Carbs,
+		Fat:            a.Fat + b.Fat,
+		Fiber:          a.Fiber + b.Fiber,
+		Sugar:          a.Sugar + b.Sugar,
+		SaturatedFat:   a.SaturatedFat + b.SaturatedFat,
+		CholesterolMg:  a.CholesterolMg + b.CholesterolMg,
+		SodiumMg:       a.SodiumMg + b.SodiumMg,
+		PotassiumMg:    a.PotassiumMg + b.PotassiumMg,
+		CalciumMg:      a.CalciumMg + b.CalciumMg,
+		IronMg:         a.IronMg + b.IronMg,
+		MagnesiumMg:    a.MagnesiumMg + b.MagnesiumMg,
+		ZincMg:         a.ZincMg + b.ZincMg,
+		VitaminARaeMcg: a.VitaminARaeMcg + b.VitaminARaeMcg,
+		VitaminCMg:     a.VitaminCMg + b.VitaminCMg,
+		VitaminDMcg:    a.VitaminDMcg + b.VitaminDMcg,
+		VitaminEMg:     a.VitaminEMg + b.VitaminEMg,
+		VitaminKMcg:    a.VitaminKMcg + b.VitaminKMcg,
+		ThiaminMg:      a.ThiaminMg + b.ThiaminMg,
+		RiboflavinMg:   a.RiboflavinMg + b.RiboflavinMg,
+		NiacinMg:       a.NiacinMg + b.NiacinMg,
+		VitaminB6Mg:    a.VitaminB6Mg + b.VitaminB6Mg,
+		FolateMcg:      a.FolateMcg + b.FolateMcg,
+		VitaminB12Mcg:  a.VitaminB12Mcg + b.VitaminB12Mcg,
+	}
+}
+
+func scaleManualFoodNutrients(n domain.ManualFoodNutrients, scale float64) domain.ManualFoodNutrients {
+	return domain.ManualFoodNutrients{
+		Calories:       n.Calories * scale,
+		Protein:        n.Protein * scale,
+		Carbs:          n.Carbs * scale,
+		Fat:            n.Fat * scale,
+		Fiber:          n.Fiber * scale,
+		Sugar:          n.Sugar * scale,
+		SaturatedFat:   n.SaturatedFat * scale,
+		CholesterolMg:  n.CholesterolMg * scale,
+		SodiumMg:       n.SodiumMg * scale,
+		PotassiumMg:    n.PotassiumMg * scale,
+		CalciumMg:      n.CalciumMg * scale,
+		IronMg:         n.IronMg * scale,
+		MagnesiumMg:    n.MagnesiumMg * scale,
+		ZincMg:         n.ZincMg * scale,
+		VitaminARaeMcg: n.VitaminARaeMcg * scale,
+		VitaminCMg:     n.VitaminCMg * scale,
+		VitaminDMcg:    n.VitaminDMcg * scale,
+		VitaminEMg:     n.VitaminEMg * scale,
+		VitaminKMcg:    n.VitaminKMcg * scale,
+		ThiaminMg:      n.ThiaminMg * scale,
+		RiboflavinMg:   n.RiboflavinMg * scale,
+		NiacinMg:       n.NiacinMg * scale,
+		VitaminB6Mg:    n.VitaminB6Mg * scale,
+		FolateMcg:      n.FolateMcg * scale,
+		VitaminB12Mcg:  n.VitaminB12Mcg * scale,
+	}
 }
 
 func normalizeNutrientMap(values map[string]any) map[string]any {

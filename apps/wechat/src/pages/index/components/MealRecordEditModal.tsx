@@ -345,6 +345,30 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     })
   }, [])
 
+  const updateDisplayedMicroNutrient = useCallback((index: number, key: NutrientDetailKey, nextDisplayValue: number) => {
+    setEditItems(prev => {
+      const next = [...prev]
+      const item = next[index]
+      if (!item) return prev
+      const ratioFactor = getItemRatioFactor(item)
+      const normalizedDisplayValue = Math.max(0, roundToSingleDecimal(nextDisplayValue))
+      const nextNutrientValue = ratioFactor > 0
+        ? roundToSingleDecimal(normalizedDisplayValue / ratioFactor)
+        : normalizedDisplayValue
+
+      const updatedNutrients = {
+        ...item.nutrients,
+        [key]: nextNutrientValue,
+      }
+      if (key === 'sodiumMg') {
+        updatedNutrients.sodium_mg = nextNutrientValue
+      }
+
+      next[index] = { ...item, nutrients: updatedNutrients }
+      return next
+    })
+  }, [])
+
   const handleEditNutrient = useCallback((index: number, field: EditableNutrientField) => {
     const item = editItems[index]
     if (!item) return
@@ -369,6 +393,33 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       }
     })
   }, [editItems, updateDisplayedNutrient])
+
+  const handleEditMicroNutrient = useCallback((index: number, key: NutrientDetailKey) => {
+    const item = editItems[index]
+    if (!item) return
+    const meta = NUTRIENT_DETAIL_META.find((m) => m.key === key)
+    if (!meta) return
+    const ratio = item.ratio / 100
+    const currentValue = roundToSingleDecimal(normalizeNutrientValue(item.nutrients[key]) * ratio)
+    // @ts-ignore
+    Taro.showModal({
+      title: `修改${meta.label}${meta.unit === 'g' ? '(g)' : `(${meta.unit})`}`,
+      content: normalizeDisplayNumber(currentValue),
+      // @ts-ignore
+      editable: true,
+      placeholderText: `请输入${meta.label}`,
+      success: (res) => {
+        if (!res.confirm) return
+        const nextText = String((res as any).content ?? '').trim()
+        const parsed = Number(nextText)
+        if (!nextText || !Number.isFinite(parsed) || parsed < 0) {
+          Taro.showToast({ title: '请输入不小于0的数字', icon: 'none' })
+          return
+        }
+        updateDisplayedMicroNutrient(index, key, parsed)
+      }
+    })
+  }, [editItems, updateDisplayedMicroNutrient])
 
   const adjustWeight = useCallback((index: number, delta: number) => {
     setEditItems(prev => {
@@ -402,6 +453,12 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
     setEditItems(prev => prev.filter((_, i) => i !== index))
   }, [editItems])
 
+  const microNutrientsChanged = (item: EditableFoodItem, o: EditableFoodItem): boolean => (
+    NUTRIENT_DETAIL_META.some((meta) => (
+      Math.abs((item.nutrients?.[meta.key] ?? 0) - (o.nutrients?.[meta.key] ?? 0)) > 0.05
+    ))
+  )
+
   const hasAnyRealChange = (): boolean => {
     if (editMealType !== originalMealTypeRef.current) return true
     const orig = originalItemsRef.current
@@ -417,7 +474,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       const fatChanged = Math.abs((item.nutrients?.fat ?? 0) - (o.nutrients?.fat ?? 0)) > 0.05
       const waterChanged = Math.abs((item.waterMl ?? 0) - (o.waterMl ?? 0)) > 0.05
       const ratioChanged = Math.abs(item.ratio - o.ratio) > 0.05 || Math.abs(item.intake - o.intake) > 0.05
-      return nameChanged || weightChanged || caloriesChanged || proteinChanged || carbsChanged || fatChanged || waterChanged || ratioChanged
+      return nameChanged || weightChanged || caloriesChanged || proteinChanged || carbsChanged || fatChanged || waterChanged || ratioChanged || microNutrientsChanged(item, o)
     })
   }
 
@@ -435,7 +492,7 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
       const carbsChanged = Math.abs((item.nutrients?.carbs ?? 0) - (o.nutrients?.carbs ?? 0)) > 0.05
       const fatChanged = Math.abs((item.nutrients?.fat ?? 0) - (o.nutrients?.fat ?? 0)) > 0.05
       const waterChanged = Math.abs((item.waterMl ?? 0) - (o.waterMl ?? 0)) > 0.05
-      const hasRealChange = nameChanged || weightChanged || caloriesChanged || proteinChanged || carbsChanged || fatChanged || waterChanged
+      const hasRealChange = nameChanged || weightChanged || caloriesChanged || proteinChanged || carbsChanged || fatChanged || waterChanged || microNutrientsChanged(item, o)
       return !hasRealChange
     })
   }
@@ -615,7 +672,11 @@ export function MealRecordEditModal({ visible, record, onClose, onSuccess }: Mea
                     {detailsExpanded && (
                       <View className='ingredient-detail-grid'>
                         {detailRows.map((row) => (
-                          <View key={`${idx}-${row.key}`} className='ingredient-detail-cell'>
+                          <View
+                            key={`${idx}-${row.key}`}
+                            className='ingredient-detail-cell'
+                            onClick={() => handleEditMicroNutrient(idx, row.key)}
+                          >
                             <Text className='ingredient-detail-label'>{row.label}</Text>
                             <Text className='ingredient-detail-value'>
                               {formatNutrientDetailValue(row.value)}
