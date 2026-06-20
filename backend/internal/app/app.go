@@ -305,7 +305,10 @@ func New(cfg *config.Config) (*App, error) {
 	feedbackUploadSvc := feedbackservice.NewUploadService(storageClient)
 	feedbackFeishuNotifier := feedbackservice.NewFeishuNotifier(cfg.Feishu.FeedbackWebhookURL, cfg.Feishu.FeedbackWebhookSecret)
 	feedbackBotClient := feedbackservice.NewFeedbackBotClient(cfg.FeedbackBot, cfg.App.AdminBaseURL)
-	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo, feedbackUploadSvc, feedbackFeishuNotifier, messageSvc).WithFeedbackBotSyncer(feedbackBotClient)
+	feedbackSvc := feedbackservice.NewFeedbackService(feedbackRepo, feedbackUploadSvc, feedbackFeishuNotifier, messageSvc)
+	if feedbackBotClient != nil {
+		feedbackSvc.WithFeedbackBotSyncer(feedbackBotClient)
+	}
 	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc, feedbackUploadSvc)
 
 	commentHandler := communityhandler.NewCommentHandler(homeRepo, userRepo)

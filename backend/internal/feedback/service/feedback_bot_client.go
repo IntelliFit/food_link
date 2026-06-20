@@ -74,7 +74,10 @@ func NewFeedbackBotClient(cfg config.FeedbackBotConfig, adminBaseURL string) *Fe
 }
 
 func (c *FeedbackBotClient) SyncUserFeedback(ctx context.Context, feedback *domain.UserFeedback) error {
-	if c == nil || c.client == nil || strings.TrimSpace(c.baseURL) == "" || feedback == nil {
+	if c == nil || c.client == nil || strings.TrimSpace(c.baseURL) == "" {
+		return fmt.Errorf("feedback-bot client is not configured")
+	}
+	if feedback == nil {
 		return nil
 	}
 	externalID := strings.TrimSpace(feedback.ID)
