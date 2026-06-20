@@ -7,6 +7,7 @@ import (
 	"food_link/backend/internal/admin/domain"
 	"food_link/backend/internal/migration/do"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -79,13 +80,13 @@ func (r *BenchmarkRepo) UpdateSample(ctx context.Context, id string, input domai
 		updates["total_weight_grams"] = *input.TotalWeightGrams
 	}
 	if input.Items != nil {
-		updates["items"] = input.Items
+		updates["items"] = datatypes.JSONMap(input.Items)
 	}
 	if input.Status != nil {
 		updates["status"] = *input.Status
 	}
 	if input.Metadata != nil {
-		updates["metadata"] = input.Metadata
+		updates["metadata"] = datatypes.JSONMap(input.Metadata)
 	}
 	if len(updates) == 0 {
 		return r.GetSample(ctx, id)

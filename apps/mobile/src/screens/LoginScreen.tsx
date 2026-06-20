@@ -109,9 +109,6 @@ export function LoginScreen() {
       const result = await apiClient.sendSMSCode({ phone })
       const cooldownSeconds = normalizePositiveSeconds(result.cooldown_seconds ?? result.retry_after_seconds) || DEFAULT_SMS_COOLDOWN_SECONDS
       setSmsCooldownSeconds(cooldownSeconds)
-      const expiresInSeconds = normalizePositiveSeconds(result.expires_in_seconds)
-      const expiryText = expiresInSeconds > 0 ? formatDurationText(expiresInSeconds) : '有效期内'
-      dialog.alert('验证码已发送', `请查看手机短信，验证码${expiryText}有效。`, 'success')
     } catch (error) {
       dialog.alert('发送失败', userFacingErrorMessage(error, '请稍后再试'), 'warning')
     } finally {
@@ -315,16 +312,6 @@ function normalizePositiveSeconds(value: unknown): number {
   const seconds = Number(value)
   if (!Number.isFinite(seconds) || seconds <= 0) return 0
   return Math.max(1, Math.ceil(seconds))
-}
-
-function formatDurationText(totalSeconds: number): string {
-  const seconds = normalizePositiveSeconds(totalSeconds)
-  if (seconds <= 0) return ''
-  if (seconds < 60) return `${seconds}秒内`
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  if (remainingSeconds === 0) return `${minutes}分钟内`
-  return `${minutes}分${remainingSeconds}秒内`
 }
 
 const styles = StyleSheet.create({

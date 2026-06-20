@@ -64,7 +64,7 @@ func (s *AnalyzeService) classifyGooseDuckChickenWithFallback(ctx context.Contex
 	var lastErr error
 	for index, item := range models {
 		callCtx, cancel := context.WithTimeout(ctx, item.timeout)
-		parsed, err := s.RunPrecisionJSONWithImagesTemperatureNoFallback(callCtx, "image", prompt, imageURLs, item.name, 0.1)
+		parsed, err := s.RunPrecisionJSONWithImagesTemperatureNoFallback(callCtx, "image", prompt, imageURLs, item.name, 0)
 		cancel()
 		if err == nil {
 			if index > 0 {

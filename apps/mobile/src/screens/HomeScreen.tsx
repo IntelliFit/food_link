@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native'
+import { ActivityIndicator, Image, ImageBackground, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard } from '@food-link/core'
-import { Camera, ChevronRight, Droplets, Dumbbell, Scale, type LucideIcon } from 'lucide-react-native'
+import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type HomeDashboard, type StatsSummary } from '@food-link/core'
+import { Beef, Camera, ChevronDown, ChevronRight, ChevronUp, Droplet, Droplets, Dumbbell, Scale, Target, Wheat, type LucideIcon } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { apiClient } from '../api'
 import { FloatingPetCompanion } from '../components/FloatingPetCompanion'
+import { HomeMicrosSection } from '../components/HomeMicrosSection'
 import { SHOW_DEBUG_LOGIN } from '../config'
 import { useHomeDashboard } from '../hooks/useHomeDashboard'
 import type { RootStackParamList } from '../navigation/types'
@@ -53,10 +54,10 @@ const recordIconColors: Record<RecordTone, string> = {
   purple: '#6951bd',
 }
 
-const macroConfigs: Array<{ key: MacroKey; label: string; color: string; unit: string }> = [
-  { key: 'protein', label: '蛋白质', color: '#5c9ed4', unit: 'g' },
-  { key: 'carbs', label: '碳水', color: '#d4ac52', unit: 'g' },
-  { key: 'fat', label: '脂肪', color: '#f0985c', unit: 'g' },
+const macroConfigs: Array<{ key: MacroKey; label: string; color: string; unit: string; Icon: LucideIcon }> = [
+  { key: 'protein', label: '蛋白质', color: '#5c9ed4', unit: 'g', Icon: Beef },
+  { key: 'carbs', label: '碳水', color: '#d4ac52', unit: 'g', Icon: Wheat },
+  { key: 'fat', label: '脂肪', color: '#f0985c', unit: 'g', Icon: Droplet },
 ]
 
 const CAFETERIA_HERO_BG_URL = 'https://cdn-food-images.coachlink.fit/wechat/cafeteria-hero.jpg'
@@ -67,12 +68,13 @@ export function HomeScreen() {
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
   const [selectedDate, setSelectedDate] = useState(() => todayKey())
-  const { recordDate, dashboard, petSummary, loading, error, loadHome } = useHomeDashboard(selectedDate)
+  const { recordDate, dashboard, petSummary, weekStats, loading, error, loadHome } = useHomeDashboard(selectedDate)
   const [activeBannerIndex, setActiveBannerIndex] = useState(0)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [homePetHidden, setHomePetHidden] = useState(false)
   const [homePetCollapsed, setHomePetCollapsed] = useState(false)
+  const [nutritionExpanded, setNutritionExpanded] = useState(false)
   const [targetForm, setTargetForm] = useState<TargetForm>(() => targetFormFromDashboard(null))
   const mealType = inferDefaultMealTypeFromLocalTime()
   const nutritionTarget = dashboard?.nutritionTarget
@@ -83,7 +85,11 @@ export function HomeScreen() {
   const calorieProgress = calorieTarget > 0 ? Math.min(100, Math.max(0, (calorieCurrent / calorieTarget) * 100)) : 0
   const calorieRemaining = Math.max(0, calorieTarget - calorieCurrent)
   const isCalorieOver = calorieTarget > 0 && calorieCurrent > calorieTarget
-  const weekCells = useMemo(() => buildWeekCells(recordDate, calorieCurrent, calorieTarget), [calorieCurrent, calorieTarget, recordDate])
+  const todayDateKey = useMemo(() => todayKey(), [])
+  const weekCells = useMemo(
+    () => buildWeekCells(todayDateKey, recordDate, calorieCurrent, calorieTarget, weekStats),
+    [todayDateKey, recordDate, calorieCurrent, calorieTarget, weekStats],
+  )
   const bannerWidth = Math.max(280, windowWidth - 32)
   const homeBanners: HomeBanner[] = [
     {
@@ -258,6 +264,8 @@ export function HomeScreen() {
           isOver={isCalorieOver}
           intakeData={intakeData}
           onOpenTargetEditor={openTargetEditor}
+          nutritionExpanded={nutritionExpanded}
+          onToggleNutrition={() => setNutritionExpanded((v) => !v)}
         />
         <HomeBodyStatusStrip
           exerciseKcal={Math.round(dashboard?.exerciseBurnedKcal || 0)}
@@ -515,7 +523,7 @@ function HomeDateSelector({
               style={({ pressed }) => [
                 styles.dateItem,
                 selected && styles.dateItemSelected,
-                pressed && styles.pressed,
+                pressed && styles.dateItemPressed,
               ]}
               onPress={() => onSelect(cell.date)}
             >
@@ -546,6 +554,8 @@ function HomeCalorieCard({
   isOver,
   intakeData,
   onOpenTargetEditor,
+  nutritionExpanded,
+  onToggleNutrition,
 }: {
   current: number
   target: number
@@ -554,6 +564,8 @@ function HomeCalorieCard({
   isOver: boolean
   intakeData?: HomeDashboard['intakeData']
   onOpenTargetEditor: () => void
+  nutritionExpanded: boolean
+  onToggleNutrition: () => void
 }) {
   return (
     <View style={styles.mainCard}>
@@ -572,7 +584,8 @@ function HomeCalorieCard({
             <Text style={styles.targetEnergyTargetNum}>{Math.round(target)}</Text>
           </View>
           <Pressable style={({ pressed }) => [styles.targetEditButton, pressed && styles.pressed]} onPress={onOpenTargetEditor}>
-            <Text style={styles.targetEditButtonText}>编辑目标</Text>
+            <Target size={12} color="#5cb896" />
+            <Text style={styles.targetEditButtonText}>目标设置</Text>
           </Pressable>
         </View>
       </View>
@@ -582,10 +595,21 @@ function HomeCalorieCard({
         </View>
       </View>
       <View style={styles.nutritionShell}>
-        <View style={styles.nutritionTitleRow}>
+        <View style={styles.nutritionExpandTitleRow}>
           <Text style={styles.nutritionTitle}>营养概览</Text>
+          <TouchableOpacity activeOpacity={0.75} onPress={onToggleNutrition}>
+            <View style={styles.nutritionExpandAffordance}>
+              {nutritionExpanded ? (
+                <ChevronUp size={14} color="#5aa783" />
+              ) : (
+                <ChevronDown size={14} color="#5aa783" />
+              )}
+              <Text style={styles.nutritionExpandAffordanceText}>{nutritionExpanded ? '收起' : '展开更多'}</Text>
+            </View>
+          </TouchableOpacity>
         </View>
         <HomeMacroSection intakeData={intakeData} />
+        {nutritionExpanded && <HomeMicrosSection intakeData={intakeData} />}
       </View>
     </View>
   )
@@ -609,6 +633,7 @@ function HomeMacroSection({ intakeData }: { intakeData?: HomeDashboard['intakeDa
             progress={progress}
             unit={config.unit}
             over={over}
+            Icon={config.Icon}
           />
         )
       })}
@@ -624,6 +649,7 @@ function MacroRowCard({
   progress,
   unit,
   over,
+  Icon,
 }: {
   label: string
   current: number
@@ -632,6 +658,7 @@ function MacroRowCard({
   progress: number
   unit: string
   over: boolean
+  Icon: LucideIcon
 }) {
   const progressColor = over ? '#e57373' : color
   const excess = over ? Math.max(0, current - target) : 0
@@ -641,7 +668,7 @@ function MacroRowCard({
         {excess > 0 ? <Text style={styles.macroOverHint}>+{formatHomeNumber(excess)}{unit}</Text> : null}
       </View>
       <View style={styles.macroTitleRow}>
-        <View style={[styles.macroIconDot, { backgroundColor: color }]} />
+        <Icon size={13} color={color} strokeWidth={2.2} />
         <Text style={styles.macroLabel}>{label}</Text>
       </View>
       <View style={styles.macroValueRow}>
@@ -916,20 +943,32 @@ function formatDateKeyFromDate(date: Date): string {
   return `${y}-${m}-${d}`
 }
 
-function buildWeekCells(selectedDate: string, selectedCalories: number, selectedTarget: number): WeekCell[] {
-  const base = parseDateKey(selectedDate)
+function buildWeekCells(
+  todayDate: string,
+  selectedDate: string,
+  selectedCalories: number,
+  selectedTarget: number,
+  weekStats: StatsSummary | null,
+): WeekCell[] {
+  const base = parseDateKey(todayDate)
   const dayNames = ['日', '一', '二', '三', '四', '五', '六']
+  const dailyCalorieMap = new Map(
+    (weekStats?.daily_calories || []).map((item) => [item.date, Number(item.calories) || 0]),
+  )
+  const fallbackTarget = Number(weekStats?.tdee) || 0
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(base)
     date.setDate(base.getDate() + index - 3)
     const dateKey = formatDateKeyFromDate(date)
     const isSelected = dateKey === selectedDate
+    const calories = isSelected ? selectedCalories : (dailyCalorieMap.get(dateKey) || 0)
+    const target = isSelected ? selectedTarget : fallbackTarget
     return {
       date: dateKey,
       dayName: dayNames[date.getDay()] || '',
       dayNum: String(date.getDate()),
-      calories: isSelected ? selectedCalories : 0,
-      target: isSelected ? selectedTarget : 0,
+      calories,
+      target,
     }
   })
 }
@@ -1046,20 +1085,23 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   targetEditButton: {
-    minHeight: 26,
-    borderRadius: 999,
-    paddingHorizontal: 8,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
-    shadowColor: '#7ccab0',
-    shadowOpacity: 0.14,
+    gap: 4,
+    minHeight: 26,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   targetEditButtonText: {
-    color: colors.brandDark,
+    color: '#2f7f62',
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '700',
@@ -1528,6 +1570,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
+  dateItemPressed: {
+    transform: [{ scale: 0.96 }],
+  },
   dateDayName: {
     color: colors.textMuted,
     fontSize: 11,
@@ -1625,6 +1670,7 @@ const styles = StyleSheet.create({
   targetEnergyNumsOnly: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    justifyContent: 'flex-end',
     gap: 3,
   },
   targetEnergyIntakeNum: {
@@ -1646,16 +1692,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   progressSection: {
-    marginTop: 0,
+    marginTop: 8,
   },
   progressBarBg: {
-    height: 6,
+    height: 12,
     borderRadius: 999,
-    backgroundColor: '#edf1f3',
+    backgroundColor: '#e5e7eb',
     overflow: 'hidden',
   },
   progressBarFill: {
-    height: 6,
+    height: 12,
     borderRadius: 999,
     backgroundColor: colors.brand,
   },
@@ -1666,10 +1712,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderRadius: 11,
   },
-  nutritionTitleRow: {
+  nutritionExpandTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 8,
     marginBottom: 8,
   },
   nutritionTitle: {
@@ -1678,6 +1726,21 @@ const styles = StyleSheet.create({
     lineHeight: 15,
     fontWeight: '700',
   },
+  nutritionExpandAffordance: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#f3f8f5',
+  },
+  nutritionExpandAffordanceText: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '700',
+    color: '#5aa783',
+  },
   macrosSection: {
     flexDirection: 'row',
     gap: 4,
@@ -1685,18 +1748,19 @@ const styles = StyleSheet.create({
   },
   macroCard: {
     flex: 1,
+    minWidth: 0,
     minHeight: 74,
-    borderRadius: 6,
+    borderRadius: 12,
     paddingVertical: 5,
-    paddingHorizontal: 4,
+    paddingHorizontal: 8,
     alignItems: 'stretch',
     backgroundColor: '#fff',
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: 'transparent',
   },
   macroCardOver: {
-    backgroundColor: '#fef8f8',
-    borderColor: '#f5d4d4',
+    backgroundColor: '#fef3f2',
+    borderColor: '#fecaca',
   },
   macroExcessSlot: {
     height: 8,
@@ -1711,7 +1775,7 @@ const styles = StyleSheet.create({
   macroTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
   },
   macroIconDot: {
     width: 4,
@@ -1719,7 +1783,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   macroLabel: {
-    color: '#111827',
+    color: '#000',
     fontSize: 10,
     lineHeight: 13,
     fontWeight: '400',
@@ -1727,8 +1791,10 @@ const styles = StyleSheet.create({
   macroValueRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
+    justifyContent: 'space-between',
     gap: 2,
     marginTop: 2,
+    flexWrap: 'nowrap',
   },
   macroCurrentValue: {
     fontSize: 12,

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useFocusEffect } from '@react-navigation/native'
-import type { HomeDashboard, PetSummary } from '@food-link/core'
+import type { HomeDashboard, PetSummary, StatsSummary } from '@food-link/core'
 import { apiClient } from '../api'
 import { todayKey } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
@@ -10,6 +10,7 @@ export function useHomeDashboard(selectedDate?: string) {
   const recordDate = selectedDate || initialRecordDate
   const [dashboard, setDashboard] = useState<HomeDashboard | null>(null)
   const [petSummary, setPetSummary] = useState<PetSummary | null>(null)
+  const [weekStats, setWeekStats] = useState<StatsSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -17,12 +18,14 @@ export function useHomeDashboard(selectedDate?: string) {
     setLoading(true)
     setError(null)
     try {
-      const [dashboardData, petData] = await Promise.all([
+      const [dashboardData, petData, statsData] = await Promise.all([
         apiClient.getHomeDashboard(recordDate),
         apiClient.getPetSummary(recordDate).catch(() => null),
+        apiClient.getStatsSummary('week').catch(() => null),
       ])
       setDashboard(dashboardData)
       setPetSummary(petData)
+      setWeekStats(statsData)
     } catch (err) {
       setError(userFacingErrorMessage(err, '获取首页失败'))
     } finally {
@@ -36,5 +39,5 @@ export function useHomeDashboard(selectedDate?: string) {
     }, [loadHome]),
   )
 
-  return { recordDate, dashboard, petSummary, loading, error, loadHome }
+  return { recordDate, dashboard, petSummary, weekStats, loading, error, loadHome }
 }

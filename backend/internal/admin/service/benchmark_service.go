@@ -740,9 +740,17 @@ type item struct {
 }
 
 func extractItems(data map[string]any) []item {
-	items, _ := data["items"].([]any)
+	var rawItems []any
+	switch v := data["items"].(type) {
+	case []any:
+		rawItems = v
+	case []map[string]any:
+		for _, m := range v {
+			rawItems = append(rawItems, m)
+		}
+	}
 	var out []item
-	for _, it := range items {
+	for _, it := range rawItems {
 		m, ok := it.(map[string]any)
 		if !ok {
 			continue
@@ -832,6 +840,16 @@ func nameSimilarity(a, b string) float64 {
 	if strings.Contains(a, b) || strings.Contains(b, a) {
 		return 0.9
 	}
+
+	// 如果两个名称有共同前缀（通常是品牌）且都包含品类关键词，视为同一产品系列。
+	if commonPrefixRunes(a, b) >= 2 {
+		aHasCategory := hasFoodCategoryKeyword(a)
+		bHasCategory := hasFoodCategoryKeyword(b)
+		if aHasCategory && bHasCategory {
+			return 0.85
+		}
+	}
+
 	setA := map[rune]struct{}{}
 	for _, r := range a {
 		setA[r] = struct{}{}
@@ -847,6 +865,40 @@ func nameSimilarity(a, b string) float64 {
 		return 0
 	}
 	return float64(intersection) / float64(union)
+}
+
+func commonPrefixRunes(a, b string) int {
+	ra := []rune(a)
+	rb := []rune(b)
+	n := len(ra)
+	if len(rb) < n {
+		n = len(rb)
+	}
+	count := 0
+	for i := 0; i < n; i++ {
+		if ra[i] == rb[i] {
+			count++
+		} else {
+			break
+		}
+	}
+	return count
+}
+
+func hasFoodCategoryKeyword(value string) bool {
+	keywords := []string{
+		"橙汁", "橙", "橘子", "柑橘", "柠檬", "葡萄", "苹果", "香蕉", "草莓", "蓝莓", "西瓜", "梨", "桃", "芒果", "菠萝",
+		"饮料", "果汁", "汽水", "可乐", "奶茶", "咖啡", "茶", "水", "牛奶", "酸奶", "牛乳", "乳",
+		"巧克力", "面包", "蛋糕", "饼干", "薯片", "方便面", "泡面", "面条", "米饭", "粥", "饺子", "包子", "馒头",
+		"香肠", "火腿", "肠", "肉", "鱼", "虾", "蛋", "鸡", "鸭", "鹅", "牛", "羊", "猪",
+		"冰淇淋", "雪糕", "果冻", "糖果", "辣条", "小面筋", "锅巴", "竹笋", "棒", "条", "袋", "罐", "瓶", "盒",
+	}
+	for _, kw := range keywords {
+		if strings.Contains(value, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 func anyToFloat64(v any) float64 {

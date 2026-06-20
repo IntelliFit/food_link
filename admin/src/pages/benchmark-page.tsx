@@ -995,7 +995,7 @@ export function BenchmarkRunDetailSection() {
             <MetricCard label="名称匹配率" value={formatPct(run.metrics?.name_match_rate)} />
             <MetricCard label="总重 MAPE" value={formatPct(run.metrics?.total_weight_mape)} />
             <MetricCard label="总重 RMSE" value={formatNumber(run.metrics?.total_weight_rmse) + 'g'} />
-            <MetricCard label="平均耗时" value={formatNumber(run.metrics?.average_duration_ms) + 'ms'} />
+            <MetricCard label="平均耗时" value={formatNumber(run.metrics?.average_duration_ms ? run.metrics.average_duration_ms / 1000 : undefined) + 's'} />
             <MetricCard label="完成" value={String(run.metrics?.completed_count || 0)} />
             <MetricCard label="失败" value={String(run.metrics?.failed_count || 0)} />
             <MetricCard label="分项 MAPE" value={formatPct(run.metrics?.item_weight_mape)} />
@@ -1042,7 +1042,7 @@ export function BenchmarkRunDetailSection() {
                       <td className="px-3 py-2">{s.metrics?.name_matched ? '✅' : '❌'}</td>
                       <td className="px-3 py-2">{formatPct(s.metrics?.total_weight_error_pct)}</td>
                       <td className="px-3 py-2">{comparisonSummary(s.metrics?.item_comparisons)}</td>
-                      <td className="px-3 py-2">{formatNumber(s.metrics?.duration_ms)}ms</td>
+                      <td className="px-3 py-2">{formatNumber(s.metrics?.duration_ms ? s.metrics.duration_ms / 1000 : undefined)}s</td>
                       <td className="px-3 py-2 max-w-[280px] truncate text-destructive" title={s.error_message || ''}>{s.error_message || '-'}</td>
                       <td className="px-3 py-2 text-right">
                         <Button variant="ghost" size="sm" className="h-7" onClick={() => setSelectedSample(s)}>详情</Button>
@@ -1139,8 +1139,7 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
                       <th className="px-3 py-2 text-left">预测</th>
                       <th className="px-3 py-2 text-right">标注重</th>
                       <th className="px-3 py-2 text-right">预测重</th>
-                      <th className="px-3 py-2 text-right">误差</th>
-                      <th className="px-3 py-2 text-right">误差%</th>
+                      <th className="px-3 py-2 text-right">相对误差</th>
                       <th className="px-3 py-2 text-center">匹配</th>
                     </tr>
                   </thead>
@@ -1151,7 +1150,6 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
                         <td className="px-3 py-2">{c.pred_name || '-'}</td>
                         <td className="px-3 py-2 text-right">{formatNumber(c.gt_weight)}g</td>
                         <td className="px-3 py-2 text-right">{formatNumber(c.pred_weight)}g</td>
-                        <td className="px-3 py-2 text-right">{formatNumber(c.weight_error)}g</td>
                         <td className="px-3 py-2 text-right">{formatPct(c.weight_error_pct)}</td>
                         <td className="px-3 py-2 text-center">
                           {c.matched ? '✅' : c.extra ? '⚠️' : '❌'}
@@ -1218,7 +1216,7 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 
 function formatPct(value: number | undefined): string {
   if (value === undefined || value === null || isNaN(value)) return '-'
-  return `${value.toFixed(2)}%`
+  return `${(value * 100).toFixed(2)}%`
 }
 
 function formatNumber(value: number | undefined): string {
