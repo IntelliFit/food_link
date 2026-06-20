@@ -29,15 +29,20 @@ type FeedbackNotifier interface {
 	NotifyNewFeedback(ctx context.Context, feedback *domain.UserFeedback) error
 }
 
+type FeedbackBotSyncer interface {
+	SyncUserFeedback(ctx context.Context, feedback *domain.UserFeedback) error
+}
+
 type SystemMessageSender interface {
 	SendSystemMessage(ctx context.Context, receiverID, content string) error
 }
 
 type FeedbackService struct {
-	repo     FeedbackRepo
-	uploads  *UploadService
-	notifier FeedbackNotifier
-	sender   SystemMessageSender
+	repo              FeedbackRepo
+	uploads           *UploadService
+	notifier          FeedbackNotifier
+	feedbackBotSyncer FeedbackBotSyncer
+	sender            SystemMessageSender
 }
 
 type SubmitInput struct {
@@ -60,6 +65,13 @@ func NewFeedbackService(repo FeedbackRepo, uploads *UploadService, notifier Feed
 		messageSender = sender[0]
 	}
 	return &FeedbackService{repo: repo, uploads: uploads, notifier: notifier, sender: messageSender}
+}
+
+func (s *FeedbackService) WithFeedbackBotSyncer(syncer FeedbackBotSyncer) *FeedbackService {
+	if s != nil {
+		s.feedbackBotSyncer = syncer
+	}
+	return s
 }
 
 func (s *FeedbackService) Submit(ctx context.Context, userID string, input SubmitInput) (string, error) {
@@ -109,6 +121,7 @@ func (s *FeedbackService) Submit(ctx context.Context, userID string, input Submi
 	}
 	s.notifySubmitSuccessAsync(feedback)
 	s.notifyNewFeedbackAsync(feedback)
+	s.syncFeedbackBotAsync(feedback)
 	return feedback.ID, nil
 }
 
@@ -153,6 +166,29 @@ func (s *FeedbackService) notifyNewFeedbackAsync(feedback *domain.UserFeedback) 
 				slog.String("error", err.Error()),
 			)
 		}
+	}()
+}
+
+func (s *FeedbackService) syncFeedbackBotAsync(feedback *domain.UserFeedback) {
+	if s == nil || s.feedbackBotSyncer == nil || feedback == nil {
+		return
+	}
+	snapshot := *feedback
+	go func() {
+		syncCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		defer cancel()
+		if err := s.feedbackBotSyncer.SyncUserFeedback(syncCtx, &snapshot); err != nil {
+			logger.Warn(syncCtx, "意见反馈同步 feedback-bot 失败",
+				slog.String("feedback_id", snapshot.ID),
+				slog.String("user_id", snapshot.UserID),
+				slog.String("error", err.Error()),
+			)
+			return
+		}
+		logger.Info(syncCtx, "意见反馈已提交到 feedback-bot",
+			slog.String("feedback_id", snapshot.ID),
+			slog.String("user_id", snapshot.UserID),
+		)
 	}()
 }
 

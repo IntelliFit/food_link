@@ -117,6 +117,15 @@ feishu:
   app_id: ""
   app_secret: ""
 
+feedback_bot:
+  # 开启后，用户在系统内提交意见反馈时，后端会异步推送到 feedback-bot，
+  # 由 feedback-bot 统一写入用户反馈专用飞书多维表格。
+  enabled: false
+  base_url: "https://your-feedback-bot-domain"
+  auth_token: ""
+  project_key: "foodlink"
+  timeout_seconds: 5
+
 wechat_pay:
   mchid: ""
   notify_url: ""
