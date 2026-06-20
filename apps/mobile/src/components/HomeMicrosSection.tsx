@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
-import type { HomeIntakeData } from '@food-link/core'
-import { colors, compactFont } from '../theme'
+import type { HomeDashboard } from '@food-link/core'
 
-type MicroKey =
+export type HomeMicronutrientKey =
   | 'fiber'
   | 'sugar'
   | 'saturatedFat'
@@ -26,8 +25,8 @@ type MicroKey =
   | 'folateMcg'
   | 'vitaminB12Mcg'
 
-type MicroCard = {
-  key: MicroKey
+type MicronutrientCard = {
+  key: HomeMicronutrientKey
   label: string
   unit: string
   accent: string
@@ -36,7 +35,12 @@ type MicroCard = {
   progress: number
 }
 
-const MICRO_CONFIGS: Array<Omit<MicroCard, 'current' | 'target' | 'progress'>> = [
+const MICRONUTRIENT_CONFIGS: Array<{
+  key: HomeMicronutrientKey
+  label: string
+  unit: string
+  accent: string
+}> = [
   { key: 'fiber', label: '膳食纤维', unit: 'g', accent: '#5dbb8a' },
   { key: 'sugar', label: '糖', unit: 'g', accent: '#e88cb8' },
   { key: 'saturatedFat', label: '饱和脂肪', unit: 'g', accent: '#d4a373' },
@@ -60,55 +64,79 @@ const MICRO_CONFIGS: Array<Omit<MicroCard, 'current' | 'target' | 'progress'>> =
   { key: 'vitaminB12Mcg', label: '维B12', unit: 'mcg', accent: '#9ecae1' },
 ]
 
-function parseMicroValue(raw: unknown) {
+function parseMicronutrientValue(raw: unknown): { current: number; target: number; progress: number } {
   if (raw && typeof raw === 'object') {
-    const item = raw as Record<string, unknown>
-    const current = Number(item.current)
-    const target = Number(item.target)
-    const progress = Number(item.progress)
+    const obj = raw as Record<string, unknown>
+    const current = Number(obj.current)
+    const target = Number(obj.target)
+    const progress = Number(obj.progress)
     return {
       current: Number.isFinite(current) && current > 0 ? current : 0,
       target: Number.isFinite(target) && target > 0 ? target : 0,
       progress: Number.isFinite(progress) && progress > 0 ? progress : 0,
     }
   }
-  const current = Number(raw)
+  const value = Number(raw)
   return {
-    current: Number.isFinite(current) && current > 0 ? current : 0,
+    current: Number.isFinite(value) && value > 0 ? value : 0,
     target: 0,
     progress: 0,
   }
 }
 
-function formatMicroNumber(value: number) {
-  if (value >= 100) return String(Math.round(value))
-  const rounded = Math.round((value + Number.EPSILON) * 10) / 10
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+function formatDisplayNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1)
 }
 
-export function HomeMicrosSection({ intakeData }: { intakeData?: HomeIntakeData | null }) {
-  const micronutrients = useMemo<MicroCard[]>(() => {
-    const micros = intakeData?.micros || {}
-    return MICRO_CONFIGS.map((config) => ({
-      ...config,
-      ...parseMicroValue(micros[config.key]),
-    }))
-  }, [intakeData?.micros])
+function formatMicronutrientValue(value: number): string {
+  if (value >= 100) {
+    return formatDisplayNumber(Math.round(value))
+  }
+  const rounded = Math.round((value + Number.EPSILON) * 10) / 10
+  return formatDisplayNumber(rounded)
+}
 
-  const hasAnyCurrent = micronutrients.some((item) => item.current > 0)
+function useMicronutrients(intakeData: HomeDashboard['intakeData'] | undefined) {
+  return useMemo<MicronutrientCard[]>(() => (
+    MICRONUTRIENT_CONFIGS
+      .map((item) => {
+        const parsed = parseMicronutrientValue(intakeData?.micros?.[item.key])
+        return {
+          ...item,
+          current: parsed.current,
+          target: parsed.target,
+          progress: parsed.progress,
+        }
+      })
+  ), [intakeData?.micros])
+}
+
+export interface HomeMicrosSectionProps {
+  intakeData?: HomeDashboard['intakeData']
+}
+
+export function HomeMicrosSection({
+  intakeData,
+}: HomeMicrosSectionProps) {
+  const micronutrients = useMicronutrients(intakeData)
+  const hasMicros = micronutrients.some((item) => item.current > 0)
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.kicker}>微量营养</Text>
-        <Text style={styles.countText}>{hasAnyCurrent ? `${micronutrients.length}项` : '待记录'}</Text>
+      <View style={styles.head}>
+        <View style={styles.copy}>
+          <Text style={styles.kicker}>微量营养</Text>
+        </View>
+        <View style={styles.status}>
+          <Text style={styles.statusText}>{hasMicros ? `${micronutrients.length}项` : '待记录'}</Text>
+        </View>
       </View>
 
-      {hasAnyCurrent ? (
+      {hasMicros ? (
         <View style={styles.grid}>
           {micronutrients.map((item) => {
             const showTarget = item.target > 0
-            const progressPct = Math.min(100, Math.max(0, item.progress))
+            const progressPct = Math.min(100, item.progress)
             return (
               <View
                 key={item.key}
@@ -120,16 +148,27 @@ export function HomeMicrosSection({ intakeData }: { intakeData?: HomeIntakeData 
                   },
                 ]}
               >
-                <Text style={styles.label} numberOfLines={1}>{item.label}</Text>
+                <Text style={styles.label}>{item.label}</Text>
                 <View style={styles.valueRow}>
-                  <Text style={[styles.value, { color: item.accent }]}>{formatMicroNumber(item.current)}</Text>
-                  <Text style={styles.unit}>
-                    {showTarget ? `/${formatMicroNumber(item.target)}${item.unit}` : item.unit}
+                  <Text style={[styles.value, { color: item.accent }]}>
+                    {formatMicronutrientValue(item.current)}
                   </Text>
+                  {showTarget ? (
+                    <Text style={styles.target}>
+                      /{formatMicronutrientValue(item.target)}{item.unit}
+                    </Text>
+                  ) : (
+                    <Text style={styles.unit}>{item.unit}</Text>
+                  )}
                 </View>
                 {showTarget && (
-                  <View style={styles.progressTrack}>
-                    <View style={[styles.progressFill, { width: `${progressPct}%`, backgroundColor: item.accent }]} />
+                  <View style={styles.progressBg}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${progressPct}%`, backgroundColor: item.accent },
+                      ]}
+                    />
                   </View>
                 )}
               </View>
@@ -137,7 +176,7 @@ export function HomeMicrosSection({ intakeData }: { intakeData?: HomeIntakeData 
           })}
         </View>
       ) : (
-        <View style={styles.emptyBox}>
+        <View style={styles.empty}>
           <Text style={styles.emptyText}>记录饮食后显示微量营养</Text>
         </View>
       )}
@@ -147,80 +186,103 @@ export function HomeMicrosSection({ intakeData }: { intakeData?: HomeIntakeData 
 
 const styles = StyleSheet.create({
   container: {
-    marginTop: 10,
-    paddingHorizontal: 2,
+    flexDirection: 'column',
+    paddingTop: 0,
   },
-  header: {
-    alignItems: 'center',
+  head: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
     marginBottom: 8,
   },
-  kicker: {
-    color: colors.text,
-    fontSize: compactFont(13),
-    fontWeight: '800',
+  copy: {
+    flex: 1,
+    minWidth: 0,
   },
-  countText: {
-    color: colors.textMuted,
-    fontSize: compactFont(11),
+  kicker: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#34495e',
+  },
+  status: {
+    flexShrink: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#f3f8f5',
+  },
+  statusText: {
+    fontSize: 9,
+    lineHeight: 12,
     fontWeight: '700',
+    color: '#5aa783',
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 4,
   },
   card: {
-    borderRadius: 8,
+    minWidth: 0,
+    minHeight: 48,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    borderRadius: 7,
     borderWidth: 1,
-    minHeight: 70,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    width: '31.8%',
+    borderColor: 'transparent',
+    width: '24%',
   },
   label: {
-    color: colors.textSecondary,
-    fontSize: compactFont(10),
-    fontWeight: '700',
-    marginBottom: 5,
+    fontSize: 9,
+    fontWeight: '600',
+    lineHeight: 12,
+    color: '#475569',
+    overflow: 'hidden',
   },
   valueRow: {
-    alignItems: 'baseline',
     flexDirection: 'row',
-    minHeight: 22,
+    alignItems: 'baseline',
+    gap: 2,
+    marginTop: 3,
   },
   value: {
-    fontSize: compactFont(16),
-    fontWeight: '900',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  target: {
+    fontSize: 8,
+    lineHeight: 10,
+    color: '#94a3b8',
   },
   unit: {
-    color: colors.textMuted,
-    fontSize: compactFont(9),
-    fontWeight: '700',
-    marginLeft: 2,
+    fontSize: 8,
+    lineHeight: 10,
+    color: '#94a3b8',
   },
-  progressTrack: {
-    backgroundColor: 'rgba(30, 41, 59, 0.08)',
+  progressBg: {
+    width: '100%',
+    height: 3,
     borderRadius: 999,
-    height: 4,
-    marginTop: 8,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginTop: 4,
     overflow: 'hidden',
   },
   progressFill: {
-    borderRadius: 999,
     height: '100%',
+    borderRadius: 999,
   },
-  emptyBox: {
+  empty: {
+    flex: 1,
     alignItems: 'center',
-    backgroundColor: '#f5f8f4',
-    borderRadius: 8,
-    justifyContent: 'center',
-    minHeight: 64,
+    paddingRight: 4,
+    paddingBottom: 4,
   },
   emptyText: {
-    color: colors.textMuted,
-    fontSize: compactFont(12),
-    fontWeight: '700',
+    fontSize: 11,
+    lineHeight: 16,
+    color: '#94a3b8',
   },
 })
