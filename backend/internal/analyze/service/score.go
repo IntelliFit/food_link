@@ -2,6 +2,7 @@ package service
 
 import (
 	"math"
+	"strings"
 
 	"food_link/backend/internal/nutrition"
 )
@@ -16,6 +17,90 @@ const (
 	// calorieTolerance 热量评分在预期 ±20% 内不扣分。
 	calorieTolerance = 0.20
 )
+
+var (
+	// defaultMacroRatios 是未设置用户目标时的宏量营养素默认供能比例（蛋白质 30% / 碳水 40% / 脂肪 30%）。
+	defaultMacroRatios = map[string]float64{
+		"protein": 0.30,
+		"carbs":   0.40,
+		"fat":     0.30,
+	}
+	// mealCalorieWeights 用于把每日热量目标按早餐 3 : 午餐 4 : 晚餐 3 拆分到各餐。
+	mealCalorieWeights = map[string]float64{
+		"breakfast": 3,
+		"lunch":     4,
+		"dinner":    3,
+	}
+	// defaultSnackTarget 是加餐的默认热量目标。
+	defaultSnackTarget = 150.0
+)
+
+// targetFloat 从 dashboardTargets 中读取一个数值目标，兼容 float64/int 等多种类型。
+func targetFloat(dashboardTargets map[string]any, key string) float64 {
+	if dashboardTargets == nil {
+		return 0
+	}
+	v, ok := dashboardTargets[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	case int32:
+		return float64(n)
+	case int64:
+		return float64(n)
+	}
+	return 0
+}
+
+// resolveMacroTargetRatios 优先按用户设置的蛋白质/碳水/脂肪目标（g）推导供能比例；未设置则使用默认值 30/40/30。
+func resolveMacroTargetRatios(dashboardTargets map[string]any) (proteinRatio, carbsRatio, fatRatio float64) {
+	proteinTarget := targetFloat(dashboardTargets, "protein_target")
+	carbsTarget := targetFloat(dashboardTargets, "carbs_target")
+	fatTarget := targetFloat(dashboardTargets, "fat_target")
+
+	if proteinTarget > 0 && carbsTarget > 0 && fatTarget > 0 {
+		proteinKcal := proteinTarget * 4.0
+		carbsKcal := carbsTarget * 4.0
+		fatKcal := fatTarget * 9.0
+		totalKcal := proteinKcal + carbsKcal + fatKcal
+		if totalKcal > 0 {
+			return proteinKcal / totalKcal, carbsKcal / totalKcal, fatKcal / totalKcal
+		}
+	}
+
+	return defaultMacroRatios["protein"], defaultMacroRatios["carbs"], defaultMacroRatios["fat"]
+}
+
+// expectedMealCalories 根据每日热量目标和餐次类型，计算该餐次的期望热量。
+// 主食按早餐 30%、午餐 40%、晚餐 30% 拆分；加餐默认 150 kcal；未知餐次回退到 1/3。
+func expectedMealCalories(dailyCalorieTarget float64, mealType string) float64 {
+	if dailyCalorieTarget <= 0 {
+		return 0
+	}
+	mt := strings.TrimSpace(strings.ToLower(mealType))
+	switch mt {
+	case "breakfast", "lunch", "dinner":
+		totalWeight := 0.0
+		for _, w := range mealCalorieWeights {
+			totalWeight += w
+		}
+		if totalWeight <= 0 {
+			return dailyCalorieTarget * defaultMealRatio
+		}
+		return math.Round(dailyCalorieTarget*mealCalorieWeights[mt]/totalWeight*10) / 10
+	case "morning_snack", "afternoon_snack", "evening_snack", "snack":
+		return defaultSnackTarget
+	default:
+		return dailyCalorieTarget * defaultMealRatio
+	}
+}
 
 // AnalysisScores 保存一次分析的多维度评分。
 type AnalysisScores struct {
@@ -32,7 +117,7 @@ func clampScore(value float64) int {
 	return int(math.Max(0, math.Min(100, math.Round(value))))
 }
 
-func ComputeAnalysisScores(items []map[string]any, dashboardTargets map[string]any, dailyCalorieTarget float64, enabled bool) AnalysisScores {
+func ComputeAnalysisScores(items []map[string]any, dashboardTargets map[string]any, dailyCalorieTarget float64, mealType string, enabled bool) AnalysisScores {
 	if !enabled {
 		return AnalysisScores{ScoreEnabled: false}
 	}
@@ -42,8 +127,8 @@ func ComputeAnalysisScores(items []map[string]any, dashboardTargets map[string]a
 	}
 
 	micro := ComputeMicronutrientScore(items, targets, dailyCalorieTarget)
-	macro := ComputeMacroBalanceScore(items)
-	calorie := ComputeCalorieScore(items, dailyCalorieTarget)
+	macro := ComputeMacroBalanceScore(items, dashboardTargets)
+	calorie := ComputeCalorieScore(items, dailyCalorieTarget, mealType)
 	final := ComputeFinalScore(micro, macro, calorie)
 
 	return AnalysisScores{
@@ -102,8 +187,9 @@ func ComputeMicronutrientScore(items []map[string]any, targets map[string]float6
 	return clampScore(sum / count)
 }
 
-// ComputeMacroBalanceScore 计算宏量营养素平衡评分（0–100），复用社区 feed 的 PFC 理想比例 30/40/30。
-func ComputeMacroBalanceScore(items []map[string]any) int {
+// ComputeMacroBalanceScore 计算宏量营养素平衡评分（0–100）。
+// 优先按用户设置的蛋白质/碳水/脂肪目标（g）推导理想供能比例；未设置时回退到 30/40/30。
+func ComputeMacroBalanceScore(items []map[string]any, dashboardTargets map[string]any) int {
 	totals := sumItemNutrients(items)
 	protein := totals["protein"]
 	carbs := totals["carbs"]
@@ -121,20 +207,22 @@ func ComputeMacroBalanceScore(items []map[string]any) int {
 	carbsRatio := carbsKcal / totalKcal
 	fatRatio := fatKcal / totalKcal
 
-	penalty := math.Abs(proteinRatio-0.30) + math.Abs(carbsRatio-0.40) + math.Abs(fatRatio-0.30)
+	targetProteinRatio, targetCarbsRatio, targetFatRatio := resolveMacroTargetRatios(dashboardTargets)
+
+	penalty := math.Abs(proteinRatio-targetProteinRatio) + math.Abs(carbsRatio-targetCarbsRatio) + math.Abs(fatRatio-targetFatRatio)
 	score := math.Max(0.0, 1.0-penalty/0.9) * 100.0
 	return clampScore(score)
 }
 
 // ComputeCalorieScore 计算热量评分（0–100）。
-// 按一餐占全天 1/3 的期望热量计算，偏差在 ±20% 内满分，超出后线性扣分。
-func ComputeCalorieScore(items []map[string]any, dailyCalorieTarget float64) int {
+// 按用户每日热量目标和餐次类型推导期望热量：主食按早 30% / 午 40% / 晚 30% 拆分，加餐默认 150 kcal；未设置目标或未知餐次时回退到 1/3。
+func ComputeCalorieScore(items []map[string]any, dailyCalorieTarget float64, mealType string) int {
 	if dailyCalorieTarget <= 0 {
 		return 0
 	}
 	totals := sumItemNutrients(items)
 	mealCalories := totals["calories"]
-	expected := dailyCalorieTarget * defaultMealRatio
+	expected := expectedMealCalories(dailyCalorieTarget, mealType)
 	if expected <= 0 {
 		return 0
 	}

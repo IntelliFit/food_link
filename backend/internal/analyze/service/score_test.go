@@ -125,7 +125,7 @@ func TestComputeMacroBalanceScore(t *testing.T) {
 			},
 		},
 	}
-	score := ComputeMacroBalanceScore(items)
+	score := ComputeMacroBalanceScore(items, nil)
 	if score != 100 {
 		t.Fatalf("expected macro balance 100, got %d", score)
 	}
@@ -141,29 +141,60 @@ func TestComputeMacroBalanceScore(t *testing.T) {
 			},
 		},
 	}
-	score = ComputeMacroBalanceScore(items)
+	score = ComputeMacroBalanceScore(items, nil)
 	if score >= 100 {
 		t.Fatalf("expected low macro balance for pure carbs, got %d", score)
+	}
+
+	// 用户自定义目标：蛋白质 40% / 碳水 40% / 脂肪 20%
+	// 100g 蛋白质=400kcal, 100g 碳水=400kcal, 22.2g 脂肪=200kcal, 总 1000，比例 40/40/20
+	customTargets := map[string]any{
+		"protein_target": 100.0,
+		"carbs_target":   100.0,
+		"fat_target":     22.2,
+	}
+	items = []map[string]any{
+		{
+			"nutrients": map[string]any{
+				"calories": 1000,
+				"protein":  100,
+				"carbs":    100,
+				"fat":      22.2,
+			},
+		},
+	}
+	score = ComputeMacroBalanceScore(items, customTargets)
+	if score != 100 {
+		t.Fatalf("expected macro balance 100 with custom targets, got %d", score)
 	}
 }
 
 func TestComputeCalorieScore(t *testing.T) {
-	// 一餐 666 kcal，每日目标 2000，期望 666，应得 100
+	// 午餐 800 kcal，每日目标 2000，午餐期望 800，应得 100
 	items := []map[string]any{
-		{"nutrients": map[string]any{"calories": 666}},
+		{"nutrients": map[string]any{"calories": 800}},
 	}
-	score := ComputeCalorieScore(items, 2000)
+	score := ComputeCalorieScore(items, 2000, "lunch")
 	if score != 100 {
 		t.Fatalf("expected calorie score 100, got %d", score)
 	}
 
-	// 一餐 200 kcal，偏差较大
+	// 早餐 200 kcal，偏差较大
 	items = []map[string]any{
 		{"nutrients": map[string]any{"calories": 200}},
 	}
-	score = ComputeCalorieScore(items, 2000)
+	score = ComputeCalorieScore(items, 2000, "breakfast")
 	if score >= 100 {
-		t.Fatalf("expected lower calorie score for small meal, got %d", score)
+		t.Fatalf("expected lower calorie score for small breakfast, got %d", score)
+	}
+
+	// 未知餐次回退到 1/3：666 kcal vs 2000 每日目标
+	items = []map[string]any{
+		{"nutrients": map[string]any{"calories": 666}},
+	}
+	score = ComputeCalorieScore(items, 2000, "")
+	if score != 100 {
+		t.Fatalf("expected calorie score 100 for fallback ratio, got %d", score)
 	}
 }
 
@@ -184,7 +215,7 @@ func TestComputeAnalysisScores_Disabled(t *testing.T) {
 	items := []map[string]any{
 		{"nutrients": map[string]any{"calories": 666}},
 	}
-	scores := ComputeAnalysisScores(items, nil, 2000, false)
+	scores := ComputeAnalysisScores(items, nil, 2000, "lunch", false)
 	if scores.ScoreEnabled {
 		t.Fatal("expected score to be disabled")
 	}

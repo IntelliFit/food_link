@@ -4537,7 +4537,7 @@ func (s *AnalyzeService) applyScores(ctx context.Context, userID string, resp ma
 	}
 
 	items := toItems(resp["items"])
-	scores := ComputeAnalysisScores(items, dashboardTargets, dailyCalorieTarget, enabled)
+	scores := ComputeAnalysisScores(items, dashboardTargets, dailyCalorieTarget, input.MealType, enabled)
 	resp["micronutrient_score"] = scores.MicronutrientScore
 	resp["macro_balance_score"] = scores.MacroBalanceScore
 	resp["calorie_score"] = scores.CalorieScore
