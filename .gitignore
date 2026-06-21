@@ -139,3 +139,6 @@ scripts/enrich_packaged_foods.state.json
 CURRENT_TASK.md
 DECISIONS.md
 .local-state/
+
+# 本地开发工具链（JDK/Android SDK 等）
+tools/
