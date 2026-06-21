@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -721,7 +722,7 @@ func (s *BenchmarkService) computeRunMetrics(ctx context.Context, runID string) 
 	m := &domain.RunMetrics{SampleCount: len(res.Items)}
 	var totalErrors, totalErrorPcts []float64
 	var itemErrors, itemErrorPcts []float64
-	var nameMatchCount int
+	var nameMatchRates []float64
 	var durations []float64
 
 	for _, sample := range res.Items {
@@ -732,8 +733,8 @@ func (s *BenchmarkService) computeRunMetrics(ctx context.Context, runID string) 
 			m.FailedCount++
 		}
 		metrics := toSampleMetrics(sample.Metrics)
-		if metrics.NameMatched {
-			nameMatchCount++
+		if rate := sampleNameMatchRate(metrics); rate >= 0 {
+			nameMatchRates = append(nameMatchRates, rate)
 		}
 		if metrics.TotalWeightErrorPct > 0 || metrics.TotalWeightError != 0 {
 			totalErrors = append(totalErrors, metrics.TotalWeightError)
@@ -746,8 +747,8 @@ func (s *BenchmarkService) computeRunMetrics(ctx context.Context, runID string) 
 		}
 	}
 
-	if m.SampleCount > 0 {
-		m.NameMatchRate = float64(nameMatchCount) / float64(m.SampleCount) * 100
+	if len(nameMatchRates) > 0 {
+		m.NameMatchRate = avg(nameMatchRates)
 	}
 	m.TotalWeightMAPE = mape(totalErrorPcts)
 	m.TotalWeightRMSE = rmse(totalErrors)
@@ -1113,6 +1114,7 @@ func extractItems(data map[string]any) []item {
 		}
 		out = append(out, item{Name: name, Weight: w})
 	}
+	sortItems(out)
 	return out
 }
 
@@ -1146,7 +1148,17 @@ func extractGroundTruthItems(groundTruth map[string]any) []item {
 			break
 		}
 	}
+	sortItems(out)
 	return out
+}
+
+func sortItems(items []item) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Name == items[j].Name {
+			return items[i].Weight < items[j].Weight
+		}
+		return items[i].Name < items[j].Name
+	})
 }
 
 func findBestMatch(gt item, preds []item) *item {
@@ -1295,10 +1307,55 @@ func avg(values []float64) float64 {
 	return sum / float64(len(values))
 }
 
+// sampleNameMatchRate 返回单个样本的名称命中率（百分比，如 5/6 返回 83.33）。
+// 优先使用 name_match_details，其次从 item_comparisons 统计。
+func sampleNameMatchRate(metrics *domain.SampleMetrics) float64 {
+	if metrics == nil {
+		return -1
+	}
+	if len(metrics.NameMatchDetails) > 0 {
+		total := len(metrics.NameMatchDetails)
+		matched := 0
+		for _, ok := range metrics.NameMatchDetails {
+			if ok {
+				matched++
+			}
+		}
+		return float64(matched) / float64(total) * 100
+	}
+	if len(metrics.ItemComparisons) > 0 {
+		total := 0
+		matched := 0
+		for _, row := range metrics.ItemComparisons {
+			if name, _ := row["gt_name"].(string); name == "" {
+				continue
+			}
+			total++
+			if v, _ := row["matched"].(bool); v {
+				matched++
+			}
+		}
+		if total > 0 {
+			return float64(matched) / float64(total) * 100
+		}
+	}
+	if metrics.NameMatched {
+		return 100
+	}
+	return -1
+}
+
 func toSampleMetrics(m map[string]any) *domain.SampleMetrics {
 	s := &domain.SampleMetrics{}
 	if v, ok := m["name_matched"].(bool); ok {
 		s.NameMatched = v
+	}
+	if arr, ok := m["name_match_details"].([]any); ok {
+		for _, raw := range arr {
+			if b, ok := raw.(bool); ok {
+				s.NameMatchDetails = append(s.NameMatchDetails, b)
+			}
+		}
 	}
 	if v, ok := m["total_weight_error"].(float64); ok {
 		s.TotalWeightError = v

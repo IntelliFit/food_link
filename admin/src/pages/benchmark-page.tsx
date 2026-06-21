@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Navigate, Outlet, useNavigate, useParams } from 'react-router-dom'
 import {
   AlertCircle,
@@ -14,6 +14,9 @@ import {
   BarChart3,
   Layers,
   X,
+  ArrowUp,
+  ArrowDown,
+  HelpCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AdminSidebar } from '@/components/admin-sidebar'
@@ -823,8 +826,8 @@ export function BenchmarkRunsSection() {
                   <th className="px-3 py-2 text-left">模式</th>
                   <th className="px-3 py-2 text-left">创建者</th>
                   <th className="px-3 py-2 text-left">样本数</th>
-                  <th className="px-3 py-2 text-left">名称匹配率</th>
-                  <th className="px-3 py-2 text-left">总重 MAPE</th>
+                  <th className="px-3 py-2 text-left">名称匹配率 ↑</th>
+                  <th className="px-3 py-2 text-left">总重 MAPE ↓</th>
                   <th className="px-3 py-2 text-left">完成时间</th>
                   <th className="px-3 py-2 text-right">操作</th>
                 </tr>
@@ -991,15 +994,32 @@ export function BenchmarkRunDetailSection() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
-            <MetricCard label="名称匹配率" value={formatPct(run.metrics?.name_match_rate)} />
-            <MetricCard label="总重 MAPE" value={formatPct(run.metrics?.total_weight_mape)} />
-            <MetricCard label="总重 RMSE" value={formatNumber(run.metrics?.total_weight_rmse) + 'g'} />
-            <MetricCard label="平均耗时" value={formatNumber(run.metrics?.average_duration_ms ? run.metrics.average_duration_ms / 1000 : undefined) + 's'} />
-            <MetricCard label="完成" value={String(run.metrics?.completed_count || 0)} />
-            <MetricCard label="失败" value={String(run.metrics?.failed_count || 0)} />
-            <MetricCard label="分项 MAPE" value={formatPct(run.metrics?.item_weight_mape)} />
-            <MetricCard label="分项 RMSE" value={formatNumber(run.metrics?.item_weight_rmse) + 'g'} />
+          <div className="space-y-5">
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-muted-foreground">概览</h4>
+              <div className="grid gap-4 md:grid-cols-4">
+                <MetricCard label="名称匹配率" value={formatPct(run.metrics?.name_match_rate)} tooltip="命中 GT 项数 / GT 总项数，越高越好" />
+                <MetricCard label="完成" value={String(run.metrics?.completed_count || 0)} />
+                <MetricCard label="失败" value={String(run.metrics?.failed_count || 0)} />
+                <MetricCard label="平均耗时" value={formatNumber(run.metrics?.average_duration_ms ? run.metrics.average_duration_ms / 1000 : undefined) + 's'} />
+              </div>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div>
+                <h4 className="mb-2 text-sm font-medium text-muted-foreground">总重误差</h4>
+                <div className="grid gap-4 grid-cols-2">
+                  <MetricCard label="总重 MAPE" value={formatPct(run.metrics?.total_weight_mape)} tooltip="Mean Absolute Percentage Error：每份样本总重量预测误差百分比的平均值，越低越好" />
+                  <MetricCard label="总重 RMSE" value={formatNumber(run.metrics?.total_weight_rmse) + 'g'} tooltip="Root Mean Square Error：每份样本总重量绝对误差（克）的均方根，越低越好" />
+                </div>
+              </div>
+              <div>
+                <h4 className="mb-2 text-sm font-medium text-muted-foreground">分项误差</h4>
+                <div className="grid gap-4 grid-cols-2">
+                  <MetricCard label="分项 MAPE" value={formatPct(run.metrics?.item_weight_mape)} tooltip="Mean Absolute Percentage Error：每个分项重量预测误差百分比的平均值，越低越好" />
+                  <MetricCard label="分项 RMSE" value={formatNumber(run.metrics?.item_weight_rmse) + 'g'} tooltip="Root Mean Square Error：每个分项重量绝对误差（克）的均方根，越低越好" />
+                </div>
+              </div>
+            </div>
           </div>
           {run.error_message && (
             <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
@@ -1028,8 +1048,8 @@ export function BenchmarkRunDetailSection() {
                   <th className="px-3 py-2 text-left">图片</th>
                   <th className="px-3 py-2 text-left">样本名</th>
                   <th className="px-3 py-2 text-left">标注</th>
-                  <th className="px-3 py-2 text-left">名称匹配</th>
-                  <th className="px-3 py-2 text-left">总重误差</th>
+                  <th className="px-3 py-2 text-left">名称匹配率 ↑</th>
+                  <th className="px-3 py-2 text-left">总重误差 ↓</th>
                   <th className="px-3 py-2 text-left">分项对比</th>
                   <th className="px-3 py-2 text-left">耗时</th>
                   <th className="px-3 py-2 text-left">错误信息</th>
@@ -1060,7 +1080,7 @@ export function BenchmarkRunDetailSection() {
                       </td>
                       <td className="px-3 py-2 font-medium">{s.sample_name || '-'}</td>
                       <td className="px-3 py-2 max-w-[200px] truncate" title={runSampleLabelSummary(s)}>{runSampleLabelSummary(s)}</td>
-                      <td className="px-3 py-2">{s.metrics?.name_matched ? '✅' : '❌'}</td>
+                      <td className="px-3 py-2">{formatPct(sampleNameMatchRate(s.metrics))}</td>
                       <td className="px-3 py-2">{formatPct(s.metrics?.total_weight_error_pct)}</td>
                       <td className="px-3 py-2">{comparisonSummary(s.metrics?.item_comparisons)}</td>
                       <td className="px-3 py-2">{formatNumber(s.metrics?.duration_ms ? s.metrics.duration_ms / 1000 : undefined)}s</td>
@@ -1251,13 +1271,41 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
   )
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricCard({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
+  const direction = getMetricDirection(label)
   return (
     <div className="rounded-lg border bg-card p-4">
-      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        {label}
+        {tooltip && (
+          <Tooltip content={tooltip}>
+            <HelpCircle className="ml-0.5 size-3 cursor-help text-muted-foreground hover:text-foreground" />
+          </Tooltip>
+        )}
+        {direction === 'up' && <ArrowUp className="size-3 text-emerald-600" />}
+        {direction === 'down' && <ArrowDown className="size-3 text-rose-600" />}
+      </div>
       <div className="mt-1 text-2xl font-semibold">{value}</div>
     </div>
   )
+}
+
+function Tooltip({ children, content }: { children: ReactNode; content: string }) {
+  return (
+    <div className="group relative inline-flex items-center">
+      {children}
+      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden w-56 -translate-x-1/2 rounded-md border bg-popover px-2 py-1.5 text-xs text-popover-foreground shadow-md group-hover:block">
+        {content}
+      </div>
+    </div>
+  )
+}
+
+function getMetricDirection(label: string): 'up' | 'down' | null {
+  const lower = label.toLowerCase()
+  if (lower.includes('匹配率') || lower.includes('完成') || lower.includes('命中')) return 'up'
+  if (lower.includes('mape') || lower.includes('rmse') || lower.includes('误差') || lower.includes('失败') || lower.includes('耗时')) return 'down'
+  return null
 }
 
 // formatPct formats a value that is already expressed as a percentage
@@ -1270,6 +1318,26 @@ function formatPct(value: number | undefined): string {
 function formatNumber(value: number | undefined): string {
   if (value === undefined || value === null || isNaN(value)) return '-'
   return value.toFixed(2)
+}
+
+function sampleNameMatchRate(metrics?: BenchmarkRunSample['metrics']): number | undefined {
+  if (!metrics) return undefined
+  const comps = metrics.item_comparisons
+  if (comps && comps.length > 0) {
+    const gtRows = comps.filter((c) => c.gt_name)
+    const total = gtRows.length
+    const matched = gtRows.filter((c) => c.matched).length
+    if (total > 0) return (matched / total) * 100
+  }
+  if (metrics.name_match_details && metrics.name_match_details.length > 0) {
+    const total = metrics.name_match_details.length
+    const matched = metrics.name_match_details.filter(Boolean).length
+    return (matched / total) * 100
+  }
+  if (typeof metrics.name_matched === 'boolean') {
+    return metrics.name_matched ? 100 : 0
+  }
+  return undefined
 }
 
 function formatTime(value: string | undefined): string {
