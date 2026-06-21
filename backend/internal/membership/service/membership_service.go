@@ -655,6 +655,14 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 	if err != nil {
 		return nil, err
 	}
+	logger.Info(ctx, "会员支付订单创建成功",
+		slog.String("user_id", userID),
+		slog.String("order_no", orderNo),
+		slog.String("plan_code", plan.Code),
+		slog.Float64("amount", terms.ChargeAmount),
+		slog.String("order_mode", terms.Mode),
+		slog.Int("duration_months", plan.DurationMonths),
+	)
 	return map[string]any{
 		"order_no":        orderNo,
 		"plan_code":       plan.Code,
@@ -761,6 +769,12 @@ func (s *MembershipService) WechatNotify(ctx context.Context, paymentID string) 
 		return commonerrors.ErrNotFound
 	}
 	if payment.Status == "paid" {
+		logger.Info(ctx, "手动标记微信支付订单已是支付状态，跳过重复激活",
+			slog.String("payment_id", payment.ID),
+			slog.String("user_id", payment.UserID),
+			slog.String("order_no", payment.OrderNo),
+			slog.String("plan_code", payment.PlanCode),
+		)
 		return nil
 	}
 	now := time.Now()
@@ -768,7 +782,16 @@ func (s *MembershipService) WechatNotify(ctx context.Context, paymentID string) 
 		return err
 	}
 	_, err = s.activateMembershipFromPayment(ctx, payment, now)
-	return err
+	if err != nil {
+		return err
+	}
+	logger.Info(ctx, "手动标记微信支付并激活会员成功",
+		slog.String("payment_id", payment.ID),
+		slog.String("user_id", payment.UserID),
+		slog.String("order_no", payment.OrderNo),
+		slog.String("plan_code", payment.PlanCode),
+	)
+	return nil
 }
 
 func (s *MembershipService) SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error) {
@@ -881,10 +904,25 @@ func (s *MembershipService) HandleWechatNotify(ctx context.Context, headers http
 	if payment == nil {
 		return nil, commonerrors.ErrNotFound
 	}
+	tradeState := strings.ToUpper(strings.TrimSpace(fmt.Sprintf("%v", decrypted["trade_state"])))
 	if payment.Status == "paid" {
+		logger.Info(ctx, "微信支付回调订单已支付，跳过重复处理",
+			slog.String("payment_id", payment.ID),
+			slog.String("user_id", payment.UserID),
+			slog.String("order_no", payment.OrderNo),
+			slog.String("plan_code", payment.PlanCode),
+			slog.String("wechat.trade_state", tradeState),
+		)
 		return map[string]any{"code": "SUCCESS", "message": "成功"}, nil
 	}
-	if strings.ToUpper(fmt.Sprintf("%v", decrypted["trade_state"])) != "SUCCESS" {
+	if tradeState != "SUCCESS" {
+		logger.Info(ctx, "微信支付回调已接收但未支付成功",
+			slog.String("payment_id", payment.ID),
+			slog.String("user_id", payment.UserID),
+			slog.String("order_no", payment.OrderNo),
+			slog.String("plan_code", payment.PlanCode),
+			slog.String("wechat.trade_state", tradeState),
+		)
 		return map[string]any{"code": "SUCCESS", "message": "已接收"}, nil
 	}
 	if paidTotalFromWechatState(decrypted) != amountToFen(payment.Amount) {
@@ -902,6 +940,13 @@ func (s *MembershipService) HandleWechatNotify(ctx context.Context, headers http
 		return nil, err
 	}
 	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
+	logger.Info(ctx, "微信支付回调同步会员成功",
+		slog.String("payment_id", payment.ID),
+		slog.String("user_id", payment.UserID),
+		slog.String("order_no", payment.OrderNo),
+		slog.String("plan_code", payment.PlanCode),
+		slog.String("wechat.trade_state", tradeState),
+	)
 	return map[string]any{"code": "SUCCESS", "message": "成功"}, nil
 }
 

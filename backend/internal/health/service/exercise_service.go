@@ -539,7 +539,11 @@ func (s *ExerciseService) activateInviteReward(ctx context.Context, userID, acti
 		return
 	}
 	if _, err := s.rewards.ActivatePendingInviteReferralOnFirstValidUse(ctx, userID, action); err != nil {
-		fmt.Printf("[exercise_log] invite reward activation failed user=%s action=%s error=%v\n", userID, action, err)
+		logger.Warn(ctx, "运动记录邀请奖励激活失败",
+			slog.String("user_id", userID),
+			slog.String("reward.action", action),
+			logger.Err(err),
+		)
 	}
 }
 
@@ -794,7 +798,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	} else if desc != "" && imageURL != "" {
 		source = "text_image"
 	}
-	logger.Info(ctx, "运动热量 LLM 估算开始",
+	logger.Info(ctx, "运动热量大模型估算开始",
 		logger.Stage("llm_call"),
 		logger.ProviderModel("doubao", model),
 		slog.String("source", source),
@@ -842,7 +846,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	if err != nil {
 		status = "request_error"
 		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
-		logger.Warn(ctx, "运动热量 LLM 请求失败",
+		logger.Warn(ctx, "运动热量大模型请求失败",
 			logger.Stage("llm_call"),
 			logger.ProviderModel("doubao", model),
 			slog.String("source", source),
@@ -873,7 +877,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	estimate, err := parseExerciseEstimateJSON(raw)
 	if err != nil {
 		if strings.Contains(err.Error(), "missing calories_kcal") && len([]rune(strings.TrimSpace(desc))) > exerciseLongTextThresholdRunes {
-			logger.Warn(ctx, "运动热量 LLM 返回长文本结构，切换长文本识别链路",
+			logger.Warn(ctx, "运动热量大模型返回长文本结构，切换长文本识别链路",
 				logger.Stage("llm_parse"),
 				logger.ProviderModel("doubao", model),
 				logger.LLMResponseSummary(raw),
@@ -883,7 +887,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 		}
 		status = "result_parse_error"
 		metrics.ObserveLLMCall("exercise", "doubao", model, status, time.Since(start))
-		logger.Warn(ctx, "运动热量 LLM 结果解析失败",
+		logger.Warn(ctx, "运动热量大模型结果解析失败",
 			logger.Stage("llm_parse"),
 			logger.ProviderModel("doubao", model),
 			logger.LLMResponseSummary(raw),
@@ -894,7 +898,7 @@ func (s *ExerciseService) estimateExerciseCaloriesWithLLM(ctx context.Context, d
 	estimate.Raw = raw
 	estimate.Source = "llm"
 	metrics.ObserveLLMCall("exercise", "doubao", model, "success", time.Since(start))
-	logger.Info(ctx, "运动热量 LLM 估算完成",
+	logger.Info(ctx, "运动热量大模型估算完成",
 		logger.Stage("llm_call"),
 		logger.ProviderModel("doubao", model),
 		slog.String("source", source),
@@ -956,7 +960,7 @@ func (s *ExerciseService) callExerciseJSONLLM(ctx context.Context, systemPrompt,
 		}
 		lastErr = err
 		if idx < len(configs)-1 {
-			logger.Warn(ctx, "运动长文本 LLM 调用失败，尝试备用模型",
+			logger.Warn(ctx, "运动长文本大模型调用失败，尝试备用模型",
 				logger.ProviderModel(llmConfig.Provider, llmConfig.Model),
 				logger.Err(err),
 			)
@@ -971,7 +975,7 @@ func (s *ExerciseService) callExerciseJSONLLMOnce(ctx context.Context, llmConfig
 	if llmConfig.APIKey == "" {
 		status = "missing_api_key"
 		metrics.ObserveLLMCall("exercise_long_text", llmConfig.Provider, llmConfig.Model, status, time.Since(start))
-		return "", fmt.Errorf("运动分析服务 %s 未配置 API Key", llmConfig.Provider)
+		return "", fmt.Errorf("运动分析服务 %s 未配置密钥", llmConfig.Provider)
 	}
 	body := map[string]any{
 		"model": llmConfig.Model,

@@ -261,7 +261,12 @@ func (s *FoodRecordService) ensureExistingFoodWaterIntake(ctx context.Context, u
 	recordedDate := foodRecordWaterDate(record.RecordTime)
 	existingMl, err := s.waterLogs.SumWaterByDateSource(ctx, userID, recordedDate.Format("2006-01-02"), sourceType)
 	if err != nil {
-		fmt.Printf("[foodrecord] check existing food water failed user_id=%s record_id=%s err=%v\n", userID, record.ID, err)
+		logger.Warn(ctx, "补齐食物饮水量时查询已有饮水失败",
+			slog.String("user_id", userID),
+			slog.String("record_id", record.ID),
+			slog.String("source_type", sourceType),
+			logger.Err(err),
+		)
 		return
 	}
 	missingMl := amountMl - int(existingMl)
@@ -269,7 +274,12 @@ func (s *FoodRecordService) ensureExistingFoodWaterIntake(ctx context.Context, u
 		return
 	}
 	if err := s.recordFoodWaterAmount(ctx, userID, record.ID, recordedDate, missingMl); err != nil {
-		fmt.Printf("[foodrecord] backfill existing food water failed user_id=%s record_id=%s missing_ml=%d err=%v\n", userID, record.ID, missingMl, err)
+		logger.Warn(ctx, "补齐食物饮水量失败",
+			slog.String("user_id", userID),
+			slog.String("record_id", record.ID),
+			slog.Int("missing_ml", missingMl),
+			logger.Err(err),
+		)
 	}
 }
 
@@ -467,7 +477,11 @@ func (s *FoodRecordService) activateInviteReward(ctx context.Context, userID, ac
 		return
 	}
 	if _, err := s.rewards.ActivatePendingInviteReferralOnFirstValidUse(ctx, userID, action); err != nil {
-		fmt.Printf("[food_record] invite reward activation failed user=%s action=%s error=%v\n", userID, action, err)
+		logger.Warn(ctx, "饮食记录邀请奖励激活失败",
+			slog.String("user_id", userID),
+			slog.String("reward.action", action),
+			logger.Err(err),
+		)
 	}
 }
 

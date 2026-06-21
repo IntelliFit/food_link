@@ -128,12 +128,12 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	engine := gin.New()
-	engine.Use(logger.RequestLogger())
-	engine.Use(metrics.GinMiddleware())
-	engine.Use(gin.Recovery())
 	if cfg.OTel.Enabled {
 		engine.Use(otelgin.Middleware(cfg.App.Name, otelgin.WithFilter(shouldTraceHTTPRequest)))
 	}
+	engine.Use(logger.RequestLogger())
+	engine.Use(metrics.GinMiddleware())
+	engine.Use(logger.Recovery())
 	engine.Use(commonmw.RequestID())
 
 	storageClient := storage.New(cfg.Storage)

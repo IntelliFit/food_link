@@ -107,6 +107,12 @@ func (h *MembershipHandler) CreatePayment(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logMembershipAPI(c, "payment_create_ok",
+		slog.String("plan_code", planCode),
+		slog.String("order_no", membershipMapString(data, "order_no")),
+		slog.Float64("amount", membershipMapFloat64(data, "amount")),
+		slog.String("order_mode", membershipMapString(data, "order_mode")),
+	)
 	response.Success(c, data)
 }
 
@@ -129,6 +135,12 @@ func (h *MembershipHandler) SyncPayment(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logMembershipAPI(c, "payment_sync_ok",
+		slog.String("order_no", strings.TrimSpace(body.OrderNo)),
+		slog.Bool("payment.synced", membershipMapBool(data, "synced")),
+		slog.String("payment.status", membershipMapString(data, "status")),
+		slog.String("wechat.trade_state", membershipMapString(data, "trade_state")),
+	)
 	response.Success(c, data)
 }
 
@@ -144,6 +156,10 @@ func (h *MembershipHandler) WechatNotify(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logMembershipAPI(c, "wechat_notify_ok",
+		slog.Int("http.request.body.size", len(body)),
+		slog.String("wechat.notify.code", membershipMapString(data, "code")),
+	)
 	response.Raw(c, http.StatusOK, data)
 }
 
@@ -196,6 +212,14 @@ func (h *MembershipHandler) ClaimSharePosterReward(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logMembershipAPI(c, "share_poster_reward_claim_ok",
+		slog.String("record_id", strings.TrimSpace(body.RecordID)),
+		slog.String("share_scope", strings.TrimSpace(body.ShareScope)),
+		slog.Bool("reward.claimed", membershipMapBool(data, "claimed")),
+		slog.Bool("reward.already_claimed", membershipMapBool(data, "already_claimed")),
+		slog.Bool("reward.daily_cap_reached", membershipMapBool(data, "daily_cap_reached")),
+		slog.Int("reward.credits", membershipMapInt(data, "credits")),
+	)
 	response.Success(c, data)
 }
 

@@ -3,24 +3,27 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"food_link/backend/internal/app"
 	"food_link/backend/pkg/config"
+	"food_link/backend/pkg/logger"
 )
 
 func main() {
 	cfg, err := config.Load(".")
 	if err != nil {
-		log.Fatalf("load config: %v", err)
+		log.Fatalf("加载配置失败: %v", err)
 	}
 
 	application, err := app.New(cfg)
 	if err != nil {
-		log.Fatalf("build app: %v", err)
+		log.Fatalf("初始化应用失败: %v", err)
 	}
 
 	server := &http.Server{
@@ -32,9 +35,10 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("[backend] listening on %s", cfg.ListenAddr())
+		logger.Info(context.Background(), "后端服务开始监听", slog.String("listen_addr", cfg.ListenAddr()))
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %v", err)
+			logger.Error(context.Background(), "后端服务监听失败", err, slog.String("listen_addr", cfg.ListenAddr()))
+			os.Exit(1)
 		}
 	}()
 
@@ -45,9 +49,9 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("server shutdown: %v", err)
+		logger.Error(context.Background(), "后端服务关闭失败", err)
 	}
 	if err := application.Close(ctx); err != nil {
-		log.Printf("app shutdown: %v", err)
+		logger.Error(context.Background(), "应用资源关闭失败", err)
 	}
 }

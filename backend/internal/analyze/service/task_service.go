@@ -150,7 +150,7 @@ func (s *TaskService) SubmitInternalAnalyzeTask(ctx context.Context, userID stri
 	s.attachCorrectionChain(ctx, userID, input, payload)
 	payload["internal_benchmark"] = true
 
-	logger.Info(ctx, "内部 benchmark 分析任务提交",
+	logger.Info(ctx, "内部基准评测分析任务提交",
 		slog.String("user_id", userID),
 		slog.String("execution_mode", mode),
 		slog.String("source", "benchmark"),
@@ -204,7 +204,7 @@ func (s *TaskService) SubmitInternalTextTask(ctx context.Context, userID string,
 	s.attachCorrectionChain(ctx, userID, input, payload)
 	payload["internal_benchmark"] = true
 
-	logger.Info(ctx, "内部 benchmark 文本任务提交",
+	logger.Info(ctx, "内部基准评测文本任务提交",
 		slog.String("user_id", userID),
 		slog.String("execution_mode", mode),
 		slog.String("source", "benchmark"),
@@ -342,7 +342,7 @@ func logAnalyzeTaskSubmitted(ctx context.Context, userID, taskID, taskType strin
 		attribute.String("analysis.execution_mode", executionMode),
 		attribute.String("analysis.engine", analysisEngine),
 	)
-	apm.AddEvent(ctx, "analysis task submitted",
+	apm.AddEvent(ctx, "分析任务已提交",
 		attribute.String("analysis.task_id", taskID),
 		attribute.String("analysis.task_type", taskType),
 		attribute.String("analysis.user_id", userID),
@@ -557,7 +557,7 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 	if s.taskQueue == nil || task == nil || task.Status != "pending" {
 		return nil
 	}
-	apm.AddEvent(ctx, "analysis task queue publish started",
+	apm.AddEvent(ctx, "分析任务入队开始",
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.task_type", task.TaskType),
 	)
@@ -572,7 +572,7 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 			slog.String("task_id", task.ID),
 			slog.String("task_type", task.TaskType),
 		)
-		apm.AddEvent(ctx, "analysis task queue publish completed",
+		apm.AddEvent(ctx, "分析任务入队完成",
 			attribute.String("analysis.task_id", task.ID),
 			attribute.String("analysis.task_type", task.TaskType),
 		)
@@ -582,7 +582,7 @@ func (s *TaskService) enqueueTask(ctx context.Context, task *domain.AnalysisTask
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.task_type", task.TaskType),
 	)
-	apm.AddEvent(ctx, "analysis task queue publish failed",
+	apm.AddEvent(ctx, "分析任务入队失败",
 		attribute.String("analysis.task_id", task.ID),
 		attribute.String("analysis.task_type", task.TaskType),
 	)

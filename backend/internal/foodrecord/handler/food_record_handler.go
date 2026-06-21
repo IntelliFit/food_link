@@ -213,6 +213,12 @@ func (h *FoodRecordHandler) UpdateFoodRecord(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "update_ok",
+		slog.String("record_id", record.ID),
+		slog.String("meal_type", record.MealType),
+		slog.Int("item_count", len(record.Items)),
+		slog.Int("total_weight_grams", record.TotalWeightGrams),
+	)
 	response.Success(c, gin.H{"message": "更新成功", "record": record})
 }
 
@@ -224,6 +230,7 @@ func (h *FoodRecordHandler) DeleteFoodRecord(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "delete_ok", slog.String("record_id", recordID))
 	response.Success(c, gin.H{"message": "已删除"})
 }
 
@@ -235,6 +242,10 @@ func (h *FoodRecordHandler) ShareFoodRecord(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "share_ok",
+		slog.String("record_id", record.ID),
+		slog.String("meal_type", record.MealType),
+	)
 	response.Success(c, gin.H{"record": record})
 }
 
@@ -256,6 +267,9 @@ func (h *FoodRecordHandler) UploadAnalyzeImage(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "upload_analyze_image_ok",
+		slog.Int("image.base64.length", len(body.Base64Image)),
+	)
 	response.Success(c, gin.H{"imageUrl": imageURL})
 }
 
@@ -293,6 +307,10 @@ func (h *FoodRecordHandler) UploadAnalyzeImageFile(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "upload_analyze_image_file_ok",
+		slog.Int("file.size", len(fileBytes)),
+		slog.String("file.content_type", file.Header.Get("Content-Type")),
+	)
 	response.Success(c, gin.H{"imageUrl": imageURL})
 }
 
@@ -455,6 +473,13 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "packaged_food_create_ok",
+		slog.String("packaged_food_id", item.ID),
+		slog.Int("source_image_count", len(item.SourceImageURLs)),
+		slog.String("review_status", item.ReviewStatus),
+		slog.Bool("barcode_present", item.Barcode != nil && strings.TrimSpace(*item.Barcode) != ""),
+		slog.Float64("net_weight_g", item.NetWeightG),
+	)
 	response.Success(c, gin.H{"item": item})
 }
 
@@ -481,6 +506,11 @@ func (h *FoodRecordHandler) RecognizePackagedNutritionLabel(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "packaged_nutrition_label_recognize_ok",
+		slog.Float64("confidence", result.Confidence),
+		slog.Bool("has_product_name", strings.TrimSpace(result.ProductName) != ""),
+		slog.Bool("has_brand", strings.TrimSpace(result.Brand) != ""),
+	)
 	response.Success(c, gin.H{"nutrition": result})
 }
 
@@ -550,6 +580,7 @@ func (h *FoodRecordHandler) SaveCriticalSamples(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "critical_samples_save_ok", slog.Int("sample_count", len(body.Items)))
 	response.Success(c, gin.H{"message": "已保存偏差样本", "count": len(body.Items)})
 }
 
@@ -559,4 +590,3 @@ func filepathExt(filename string) string {
 	}
 	return ""
 }
-
