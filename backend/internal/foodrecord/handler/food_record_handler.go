@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -624,6 +625,7 @@ type foodRecordSharePageData struct {
 	Title       string
 	Description string
 	URL         string
+	AppURL      template.URL
 	ImageURL    string
 	MealLabel   string
 	RecordDate  string
@@ -684,10 +686,15 @@ func buildFoodRecordSharePageData(c *gin.Context, record *domain.FoodRecord) foo
 	if record.RecordTime != nil {
 		recordDate = record.RecordTime.In(sharePageLocation).Format("2006-01-02 15:04")
 	}
+	recordID := strings.TrimSpace(record.ID)
+	if recordID == "" && c != nil {
+		recordID = strings.TrimSpace(c.Param("record_id"))
+	}
 	return foodRecordSharePageData{
 		Title:       title,
 		Description: description,
 		URL:         requestPublicURL(c),
+		AppURL:      foodRecordAppURL(recordID),
 		ImageURL:    firstFoodRecordImageURL(record),
 		MealLabel:   mealLabel,
 		RecordDate:  recordDate,
@@ -697,6 +704,14 @@ func buildFoodRecordSharePageData(c *gin.Context, record *domain.FoodRecord) foo
 		Fat:         shareFloat(record.TotalFat),
 		Foods:       foods,
 	}
+}
+
+func foodRecordAppURL(recordID string) template.URL {
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return ""
+	}
+	return template.URL("foodlink://food-record?record_id=" + url.QueryEscape(recordID))
 }
 
 func renderFoodRecordSharePageError(c *gin.Context, recordID string, err error) {
@@ -836,6 +851,11 @@ var foodRecordSharePageTemplate = template.Must(template.New("food-record-share-
   <meta property="og:description" content="{{.Description}}">
   {{if .URL}}<meta property="og:url" content="{{.URL}}">{{end}}
   {{if .ImageURL}}<meta property="og:image" content="{{.ImageURL}}">{{end}}
+  {{if .AppURL}}<meta property="al:android:url" content="{{.AppURL}}">
+  <meta property="al:android:package" content="cn.healthymax.foodlink">
+  <meta property="al:android:app_name" content="智健食探">
+  <meta property="al:ios:url" content="{{.AppURL}}">
+  <meta property="al:ios:app_name" content="智健食探">{{end}}
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="{{.Title}}">
   <meta name="twitter:description" content="{{.Description}}">
@@ -857,6 +877,10 @@ var foodRecordSharePageTemplate = template.Must(template.New("food-record-share-
     .metric strong { display: block; font-size: 20px; color: #17211b; }
     .metric span { display: block; margin-top: 3px; font-size: 12px; color: #607067; }
     .desc { color: #45524a; font-size: 15px; line-height: 1.7; margin: 0 0 18px; }
+    .actions { display: grid; gap: 10px; margin: 18px 0 20px; }
+    .open-app { display: flex; align-items: center; justify-content: center; min-height: 48px; border-radius: 8px; background: #2f7f62; color: #fff; text-decoration: none; font-size: 16px; font-weight: 800; }
+    .open-app:active { transform: translateY(1px); }
+    .open-app-hint { color: #7a857e; font-size: 13px; line-height: 1.5; text-align: center; }
     .foods { display: grid; gap: 8px; margin-top: 14px; }
     .food { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid #edf1ea; }
     .food-name { font-weight: 700; color: #17211b; overflow-wrap: anywhere; }
@@ -886,6 +910,12 @@ var foodRecordSharePageTemplate = template.Must(template.New("food-record-share-
           <div class="metric"><strong>{{.Fat}}</strong><span>脂肪 g</span></div>
         </div>
         <p class="desc">{{.Description}}</p>
+        {{if .AppURL}}
+        <div class="actions">
+          <a class="open-app" id="openApp" href="{{.AppURL}}">打开 App 查看</a>
+          <div class="open-app-hint">已安装智健食探时会打开同一条记录，也可以继续在网页查看。</div>
+        </div>
+        {{end}}
         {{if .Foods}}
         <div class="foods">
           {{range .Foods}}
@@ -900,5 +930,27 @@ var foodRecordSharePageTemplate = template.Must(template.New("food-record-share-
     </article>
     <div class="brand">来自 Food Link</div>
   </main>
+  {{if .AppURL}}
+  <script>
+  (function () {
+    var appUrl = "{{.AppURL}}";
+    if (!appUrl) return;
+    function openApp() {
+      window.location.href = appUrl;
+    }
+    var button = document.getElementById("openApp");
+    if (button) {
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        openApp();
+      });
+    }
+    var userAgent = navigator.userAgent || "";
+    if (/Android|iPhone|iPad|iPod/i.test(userAgent)) {
+      window.setTimeout(openApp, 450);
+    }
+  })();
+  </script>
+  {{end}}
 </body>
 </html>`))

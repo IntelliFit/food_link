@@ -112,6 +112,7 @@ export function RootNavigator() {
   const pendingPrivateChatRef = useRef<{ userId: string; nickname?: string } | null>(null)
   const pendingProfileUserIdRef = useRef<string | null>(null)
   const pendingStaticRouteRef = useRef<StaticDeepLinkRoute | null>(null)
+  const pendingRecordIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const navigateToInvite = (code: string) => {
@@ -138,6 +139,14 @@ export function RootNavigator() {
       pendingProfileUserIdRef.current = null
     }
 
+    const navigateToRecordDetail = (recordId: string) => {
+      pendingRecordIdRef.current = recordId
+      if (!isAuthenticated) return
+      if (!navigationRef.isReady()) return
+      navigationRef.navigate('RecordDetail', { recordId })
+      pendingRecordIdRef.current = null
+    }
+
     const navigateToStaticRoute = (routeName: StaticDeepLinkRoute) => {
       pendingStaticRouteRef.current = routeName
       if (routeName === 'Expiry' && !isAuthenticated) return
@@ -161,6 +170,8 @@ export function RootNavigator() {
       if (privateChat && isAuthenticated) navigateToPrivateChat(privateChat)
       const profileUserId = pendingProfileUserIdRef.current
       if (profileUserId && isAuthenticated) navigateToProfile(profileUserId)
+      const recordId = pendingRecordIdRef.current
+      if (recordId && isAuthenticated) navigateToRecordDetail(recordId)
     }
 
     const handleIncomingUrl = (url?: string | null) => {
@@ -172,6 +183,8 @@ export function RootNavigator() {
       if (privateChat) navigateToPrivateChat(privateChat)
       const profileUserId = extractProfileUserIdFromUrl(url)
       if (profileUserId) navigateToProfile(profileUserId)
+      const recordId = extractFoodRecordIdFromUrl(url)
+      if (recordId) navigateToRecordDetail(recordId)
     }
 
     flushPendingRoutes()
@@ -207,6 +220,11 @@ export function RootNavigator() {
         if (profileUserId && isAuthenticated && navigationRef.isReady()) {
           navigationRef.navigate('ProfileSettings', { userId: profileUserId })
           pendingProfileUserIdRef.current = null
+        }
+        const recordId = pendingRecordIdRef.current
+        if (recordId && isAuthenticated && navigationRef.isReady()) {
+          navigationRef.navigate('RecordDetail', { recordId })
+          pendingRecordIdRef.current = null
         }
         const staticRoute = pendingStaticRouteRef.current
         if (staticRoute && navigationRef.isReady() && (staticRoute === 'About' || isAuthenticated)) {
@@ -389,6 +407,26 @@ function extractProfileUserIdFromUrl(url?: string | null): string {
   if (queryIndex < 0) return ''
   const params = parseUrlQuery(url.slice(queryIndex + 1))
   return (params.pf || params.user_id || params.userId || params.uid || '').trim()
+}
+
+function extractFoodRecordIdFromUrl(url?: string | null): string {
+  if (!url) return ''
+  const normalized = url.toLowerCase()
+  if (!normalized.includes('food-record') && !normalized.includes('record-detail')) return ''
+  const queryIndex = url.indexOf('?')
+  if (queryIndex >= 0) {
+    const params = parseUrlQuery(url.slice(queryIndex + 1))
+    const queryRecordId = (params.record_id || params.recordId || params.rid || '').trim()
+    if (queryRecordId) return queryRecordId
+  }
+  const path = url.split(/[?#]/)[0] || ''
+  const match = path.match(/(?:food-record|record-detail)\/([^/?#]+)/i)
+  if (!match?.[1]) return ''
+  try {
+    return decodeURIComponent(match[1]).trim()
+  } catch {
+    return match[1].trim()
+  }
 }
 
 function parseUrlQuery(query: string): Record<string, string> {
