@@ -794,6 +794,8 @@ function IndexPage() {
     startTop: number
     moved: boolean
   } | null>(null)
+  /** 标记本次 touch 是否已经在 touchend 里处理过展开/收起，避免 touchend 后又触发 card onClick */
+  const petClickHandledRef = useRef(false)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [nutritionExpanded, setNutritionExpanded] = useState(false)
@@ -2536,7 +2538,14 @@ function IndexPage() {
       return adjusted
     })
     if (!drag) return
-    if (petCollapsed && !drag.moved) {
+    if (drag.moved) {
+      // 发生过拖动，阻止后续 click 被当成点击卡片
+      petClickHandledRef.current = true
+      return
+    }
+    if (petCollapsed) {
+      // 收起态轻触展开；由 card onClick 兜底处理，这里先标记避免重复触发
+      petClickHandledRef.current = true
       togglePetCollapsed()
     }
   }, [petCollapsed, togglePetCollapsed])
@@ -2909,7 +2918,15 @@ function IndexPage() {
         >
           <View
             className='pet-companion-card'
-            onClick={petCollapsed ? togglePetCollapsed : openPetChat}
+            onClick={() => {
+              const handled = petClickHandledRef.current
+              petClickHandledRef.current = false
+              if (handled) return
+              if (petCollapsed) {
+                togglePetCollapsed()
+              }
+              // 展开态点击卡片空白处不进入对话，只有「点我聊聊」进入
+            }}
           >
             <PetAvatar pet={petSummary?.pet} size='small' mood={petMood} state={petState} className='pet-companion-avatar' />
             <View className='pet-companion-content'>
@@ -2928,7 +2945,13 @@ function IndexPage() {
                   ) : null}
                 </View>
               <Text className='pet-companion-message'>{petMessage}</Text>
-              <View className='pet-companion-chat'>
+              <View
+                className='pet-companion-chat'
+                onClick={(event) => {
+                  event.stopPropagation()
+                  openPetChat()
+                }}
+              >
                   <Text className='pet-companion-chat-text'>点我聊聊</Text>
                 </View>
               </View>
