@@ -34,6 +34,7 @@ import { apiClient, getRecentRequestTraces, RECENT_REQUEST_TRACE_LIMIT } from '.
 import { AppButton } from '../components/AppButton'
 import { APP_VERSION } from '../config'
 import { CONSOLE_LOG_BUFFER_LIMIT, getRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
+import { IconfontText } from '../components/Iconfont'
 import type { RootStackParamList } from '../navigation/types'
 import { isNativeWechatShareAvailable, shareWebpageToWechat } from '../native/wechatAuth'
 import { useAppDialog } from '../providers/DialogProvider'
@@ -50,13 +51,13 @@ const notificationPageSize = 20
 const commonTextFoods = ['米饭', '面条', '鸡蛋', '鸡胸肉', '苹果', '香蕉', '牛奶', '面包']
 type TextRecordDietGoal = 'fat_loss' | 'muscle_gain' | 'maintain' | 'none'
 type TextRecordActivityTiming = 'post_workout' | 'daily' | 'before_sleep' | 'none'
-const textRecordMealOptions: Array<{ id: MealType; name: string; Icon: LucideIcon }> = [
-  { id: 'breakfast', name: '早餐', Icon: Coffee },
-  { id: 'morning_snack', name: '早加餐', Icon: Apple },
-  { id: 'lunch', name: '午餐', Icon: Soup },
-  { id: 'afternoon_snack', name: '午加餐', Icon: Cookie },
-  { id: 'dinner', name: '晚餐', Icon: Utensils },
-  { id: 'evening_snack', name: '晚加餐', Icon: Moon },
+const textRecordMealOptions: Array<{ id: MealType; name: string; iconClass: string }> = [
+  { id: 'breakfast', name: '早餐', iconClass: 'icon-zaocan' },
+  { id: 'morning_snack', name: '早加餐', iconClass: 'icon-lingshi' },
+  { id: 'lunch', name: '午餐', iconClass: 'icon-wucan' },
+  { id: 'afternoon_snack', name: '午加餐', iconClass: 'icon-lingshi' },
+  { id: 'dinner', name: '晚餐', iconClass: 'icon-wancan' },
+  { id: 'evening_snack', name: '晚加餐', iconClass: 'icon-lingshi' },
 ]
 const textRecordDietGoalOptions: Array<{ value: TextRecordDietGoal; label: string }> = [
   { value: 'fat_loss', label: '减脂期' },
@@ -636,7 +637,7 @@ export function DayRecordScreen() {
         {!initialLoading && !errorMessage && records.length === 0 ? (
           <View style={styles.dayRecordEmpty}>
             <View style={styles.dayRecordEmptyIcon}>
-              <Utensils size={32} color={colors.brand} strokeWidth={1.8} />
+              <IconfontText className="iconfont icon-shiwu" size={32} color={colors.brand} />
             </View>
             <Text style={styles.dayRecordEmptyTitle}>这一天还没有饮食记录</Text>
             <Text style={styles.dayRecordEmptyDesc}>通过首页记录弹窗拍照或文字录入后，这里就会展示当天明细。</Text>
@@ -658,7 +659,7 @@ export function DayRecordScreen() {
                         {imageUrls[0] ? (
                           <Image source={{ uri: imageUrls[0] }} style={styles.dayRecordThumbImage} resizeMode="cover" />
                         ) : (
-                          <Utensils size={26} color={colors.brand} strokeWidth={1.9} />
+                          <IconfontText className="iconfont icon-shiwu" size={26} color={colors.brand} />
                         )}
                         {imageUrls.length === 0 ? (
                           <View style={[styles.dayRecordThumbBadge, styles.dayRecordThumbBadgePlaceholder]}>
@@ -890,7 +891,7 @@ export function RecordDetailScreen() {
 
         {!loading && !record ? (
           <View style={styles.recordDetailEmpty}>
-            <Utensils size={34} color={colors.brand} strokeWidth={1.8} />
+            <IconfontText className="iconfont icon-shiwu" size={34} color={colors.brand} />
             <Text style={styles.recordDetailEmptyText}>暂无记录详情</Text>
           </View>
         ) : null}
@@ -1685,7 +1686,7 @@ export function TextRecordScreen() {
         <View style={styles.textRecordInputSection}>
           <Text style={styles.textRecordSectionTitle}>选择餐次</Text>
           <View style={styles.textRecordMealGrid}>
-            {textRecordMealOptions.map(({ id, name, Icon }) => {
+            {textRecordMealOptions.map(({ id, name, iconClass }) => {
               const active = mealType === id
               return (
                 <Pressable
@@ -1697,7 +1698,7 @@ export function TextRecordScreen() {
                   ]}
                   onPress={() => setMealType(id)}
                 >
-                  <Icon size={20} color={active ? '#00bc7d' : '#9ca3af'} strokeWidth={2.5} />
+                  <IconfontText className={`iconfont ${iconClass}`} size={20} color={active ? colors.tabSelected : '#9ca3af'} />
                   <Text style={[styles.textRecordMealName, active && styles.textRecordMealNameActive]}>{name}</Text>
                 </Pressable>
               )

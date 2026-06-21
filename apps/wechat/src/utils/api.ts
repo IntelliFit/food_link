@@ -302,6 +302,11 @@ export interface AnalyzeResponse {
     weight_applied_count?: number
     fallback_count?: number
   }
+  score_enabled?: boolean
+  micronutrient_score?: number
+  macro_balance_score?: number
+  calorie_score?: number
+  final_score?: number
 }
 
 const ANALYZE_LOCATION_CACHE_KEY = 'analyze_location_context_v1'

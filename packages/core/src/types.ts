@@ -462,6 +462,11 @@ export interface AnalysisTask {
     total_carbs?: number
     total_fat?: number
     total_weight_grams?: number
+    score_enabled?: boolean
+    micronutrient_score?: number
+    macro_balance_score?: number
+    calorie_score?: number
+    final_score?: number
     [key: string]: unknown
   } | null
   error_message?: string

@@ -73,6 +73,7 @@ import {
   UserGroupScreen,
 } from '../screens/TertiaryMigrationScreens'
 import { useAuth } from '../providers/AuthProvider'
+import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors } from '../theme'
 import { CustomTabBar } from './CustomTabBar'
 import type { MainTabParamList, RootStackParamList } from './types'
@@ -80,15 +81,6 @@ import type { MainTabParamList, RootStackParamList } from './types'
 const Tab = createBottomTabNavigator<MainTabParamList>()
 const Stack = createNativeStackNavigator<RootStackParamList>()
 const navigationRef = createNavigationContainerRef<RootStackParamList>()
-
-const navigationTheme = {
-  ...DefaultTheme,
-  colors: {
-    ...DefaultTheme.colors,
-    background: colors.background,
-    primary: colors.brand,
-  },
-}
 
 type StaticDeepLinkRoute = 'About' | 'Expiry'
 
@@ -107,7 +99,19 @@ function MainTabs() {
 }
 
 export function RootNavigator() {
+  const { isDark } = useColorScheme()
   const { isBootstrapping, isAuthenticated } = useAuth()
+  const navigationTheme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      background: isDark ? '#0d1312' : colors.background,
+      primary: colors.brand,
+      card: isDark ? '#181f1d' : '#ffffff',
+      text: isDark ? '#f2f7f4' : colors.text,
+      border: isDark ? 'rgba(255,255,255,0.08)' : colors.border,
+    },
+  }
   const pendingInviteCodeRef = useRef<string | null>(null)
   const pendingPrivateChatRef = useRef<{ userId: string; nickname?: string } | null>(null)
   const pendingProfileUserIdRef = useRef<string | null>(null)

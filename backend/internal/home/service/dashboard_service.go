@@ -9,6 +9,7 @@ import (
 
 	userrepo "food_link/backend/internal/auth/repo"
 	homerepo "food_link/backend/internal/home/repo"
+	"food_link/backend/internal/nutrition"
 	"food_link/backend/internal/nutritionagg"
 	usersvc "food_link/backend/internal/user/service"
 	"food_link/backend/pkg/storage"
@@ -26,79 +27,13 @@ var mealNames = map[string]string{
 }
 var mealWeights = map[string]float64{"breakfast": 3, "lunch": 4, "dinner": 3}
 
-var homeMicronutrientMetrics = []nutritionagg.Metric{
-	{Key: "fiber", Aliases: []string{"fiber"}},
-	{Key: "sugar", Aliases: []string{"sugar"}},
-	{Key: "saturatedFat", Aliases: []string{"saturatedFat", "saturated_fat"}},
-	{Key: "cholesterolMg", Aliases: []string{"cholesterolMg", "cholesterol_mg"}},
-	{Key: "sodiumMg", Aliases: []string{"sodiumMg", "sodium_mg"}},
-	{Key: "potassiumMg", Aliases: []string{"potassiumMg", "potassium_mg"}},
-	{Key: "calciumMg", Aliases: []string{"calciumMg", "calcium_mg"}},
-	{Key: "ironMg", Aliases: []string{"ironMg", "iron_mg"}},
-	{Key: "magnesiumMg", Aliases: []string{"magnesiumMg", "magnesium_mg"}},
-	{Key: "zincMg", Aliases: []string{"zincMg", "zinc_mg"}},
-	{Key: "vitaminARaeMcg", Aliases: []string{"vitaminARaeMcg", "vitamin_a_rae_mcg"}},
-	{Key: "vitaminCMg", Aliases: []string{"vitaminCMg", "vitamin_c_mg"}},
-	{Key: "vitaminDMcg", Aliases: []string{"vitaminDMcg", "vitamin_d_mcg"}},
-	{Key: "vitaminEMg", Aliases: []string{"vitaminEMg", "vitamin_e_mg"}},
-	{Key: "vitaminKMcg", Aliases: []string{"vitaminKMcg", "vitamin_k_mcg"}},
-	{Key: "thiaminMg", Aliases: []string{"thiaminMg", "thiamin_mg"}},
-	{Key: "riboflavinMg", Aliases: []string{"riboflavinMg", "riboflavin_mg"}},
-	{Key: "niacinMg", Aliases: []string{"niacinMg", "niacin_mg"}},
-	{Key: "vitaminB6Mg", Aliases: []string{"vitaminB6Mg", "vitamin_b6_mg"}},
-	{Key: "folateMcg", Aliases: []string{"folateMcg", "folate_mcg"}},
-	{Key: "vitaminB12Mcg", Aliases: []string{"vitaminB12Mcg", "vitamin_b12_mcg"}},
-}
-
-// homeMicronutrientReferences 是首页展示的微量元素每日参考摄入量，与 stats_service 中的
-// statsInsightMicronutrientReferences 同源，用于在首页微量营养卡片渲染进度条。
-var homeMicronutrientReferences = map[string]float64{
-	"fiber":          25,
-	"sugar":          50,
-	"saturatedFat":   20,
-	"cholesterolMg":  300,
-	"sodiumMg":       2000,
-	"potassiumMg":    3500,
-	"calciumMg":      800,
-	"ironMg":         12,
-	"magnesiumMg":    330,
-	"zincMg":         12.5,
-	"vitaminARaeMcg": 700,
-	"vitaminCMg":     100,
-	"vitaminDMcg":    10,
-	"vitaminEMg":     14,
-	"vitaminKMcg":    80,
-	"thiaminMg":      1.4,
-	"riboflavinMg":   1.4,
-	"niacinMg":       15,
-	"vitaminB6Mg":    1.4,
-	"folateMcg":      400,
-	"vitaminB12Mcg":  2.4,
-}
-
-var homeMicronutrientTargetKeyMap = map[string]string{
-	"fiber":          "fiber_target",
-	"sugar":          "sugar_target",
-	"saturatedFat":   "saturated_fat_target",
-	"cholesterolMg":  "cholesterol_mg_target",
-	"sodiumMg":       "sodium_mg_target",
-	"potassiumMg":    "potassium_mg_target",
-	"calciumMg":      "calcium_mg_target",
-	"ironMg":         "iron_mg_target",
-	"magnesiumMg":    "magnesium_mg_target",
-	"zincMg":         "zinc_mg_target",
-	"vitaminARaeMcg": "vitamin_a_rae_mcg_target",
-	"vitaminCMg":     "vitamin_c_mg_target",
-	"vitaminDMcg":    "vitamin_d_mcg_target",
-	"vitaminEMg":     "vitamin_e_mg_target",
-	"vitaminKMcg":    "vitamin_k_mcg_target",
-	"thiaminMg":      "thiamin_mg_target",
-	"riboflavinMg":   "riboflavin_mg_target",
-	"niacinMg":       "niacin_mg_target",
-	"vitaminB6Mg":    "vitamin_b6_mg_target",
-	"folateMcg":      "folate_mcg_target",
-	"vitaminB12Mcg":  "vitamin_b12_mcg_target",
-}
+// homeMicronutrientMetrics、homeMicronutrientReferences、homeMicronutrientTargetKeyMap
+// 复用 internal/nutrition 中的共享定义，确保首页、统计、分析模块口径一致。
+var (
+	homeMicronutrientMetrics      = nutrition.MicroNutrientMetrics()
+	homeMicronutrientReferences   = nutrition.MicroNutrientDefaultTargets()
+	homeMicronutrientTargetKeyMap = nutrition.MicroNutrientTargetKeyMap()
+)
 
 type DashboardService struct {
 	users   *userrepo.UserRepo

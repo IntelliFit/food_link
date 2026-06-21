@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AuthProvider } from './src/providers/AuthProvider'
+import { ColorSchemeProvider, useColorScheme } from './src/providers/ColorSchemeProvider'
 import { DialogProvider } from './src/providers/DialogProvider'
 import { RootNavigator } from './src/navigation/RootNavigator'
 import { installConsoleLogCapture } from './src/diagnostics/consoleLogBuffer'
@@ -12,15 +13,16 @@ import { colors } from './src/theme'
 installConsoleLogCapture()
 configureTextScaling()
 
-export default function App() {
+function AppContent() {
+  const { isDark } = useColorScheme()
   const [fontsLoaded] = useFonts({
     iconfont: require('./assets/fonts/iconfont.ttf'),
   })
 
   if (!fontsLoaded) {
     return (
-      <View style={styles.loading}>
-        <StatusBar style="dark" />
+      <View style={[styles.loading, { backgroundColor: isDark ? '#0d1312' : colors.background }]}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <ActivityIndicator size="large" color={colors.brand} />
       </View>
     )
@@ -28,13 +30,21 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <AuthProvider>
         <DialogProvider>
           <RootNavigator />
         </DialogProvider>
       </AuthProvider>
     </SafeAreaProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <ColorSchemeProvider>
+      <AppContent />
+    </ColorSchemeProvider>
   )
 }
 

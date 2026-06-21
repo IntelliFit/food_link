@@ -12,24 +12,12 @@ import {
   type StatsSummary,
 } from '@food-link/core'
 import {
-  BarChart3,
-  Brain,
-  ChevronDown,
-  ChevronRight,
-  Droplets,
-  Flame,
-  HeartPulse,
-  LineChart,
-  PieChart,
-  Scale,
   Sparkles,
-  Target,
-  TrendingUp,
-  Utensils,
   type LucideIcon,
 } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { apiClient } from '../api'
+import { IconfontText } from '../components/Iconfont'
 import { InsightMarkdownView } from '../components/InsightMarkdownView'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
@@ -164,7 +152,9 @@ export function StatsScreen() {
         onPress={() => setRangeSheetOpen(true)}
       >
         <Text style={styles.rangeDropdownLabel}>{range === 'week' ? '近一周' : '近一个月'}</Text>
-        <ChevronDown size={14} color="#475569" strokeWidth={2.5} />
+        <View style={{ transform: [{ rotate: '90deg' }] }}>
+          <IconfontText className="iconfont icon-right-arrow" size={14} color="#475569" />
+        </View>
       </Pressable>
 
       <ScrollView
@@ -217,7 +207,7 @@ export function StatsScreen() {
           </>
         ) : (
           <DataGateCard
-            icon={TrendingUp}
+            iconClass="icon-shangzhang"
             title="连续记录两天后显示健康指数"
             desc={`当前已记录 ${recordedDays} 天。请连续记录两天以上，我们会基于更稳定的饮食趋势展示你的健康参考指数。`}
           />
@@ -275,9 +265,9 @@ export function StatsScreen() {
             </View>
           </View>
           <View style={styles.toolGrid}>
-            <AnalysisTool icon={Brain} label="AI 助手" onPress={() => navigation.navigate('AiAssistant')} />
-            <AnalysisTool icon={HeartPulse} label="代谢分析" onPress={() => navigation.navigate('StatsMetabolic')} />
-            <AnalysisTool icon={LineChart} label="身体趋势" onPress={() => navigation.navigate('BodyTrends')} />
+            <AnalysisTool iconClass="icon-yiliaohangyedeICON-" label="AI 助手" onPress={() => navigation.navigate('AiAssistant')} />
+            <AnalysisTool iconClass="icon-shentinianling" label="代谢分析" onPress={() => navigation.navigate('StatsMetabolic')} />
+            <AnalysisTool iconClass="icon-shangzhang" label="身体趋势" onPress={() => navigation.navigate('BodyTrends')} />
           </View>
         </View>
       </ScrollView>
@@ -310,7 +300,7 @@ function HealthPanel({
       <View style={styles.riskSectionHeader}>
         <Text style={styles.riskSectionTitle}>健康指标关注</Text>
         <View style={styles.riskFocusEditBtn}>
-          <Target size={14} color={colors.brandDark} strokeWidth={2.5} />
+          <IconfontText className="iconfont icon-target" size={14} color={colors.brandDark} />
           <Text style={styles.riskFocusEditText}>我的关注</Text>
         </View>
       </View>
@@ -344,12 +334,12 @@ function HealthPanel({
 }
 
 function RiskTile({ card, onPress }: { card: RiskCard; onPress: () => void }) {
-  const Icon = riskIcon(card.key)
+  const iconClass = riskIconClass(card.key)
   return (
     <Pressable style={({ pressed }) => [styles.riskTile, { backgroundColor: riskBgColor(card.key) }, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.riskTileTop}>
         <View style={[styles.riskIconCircle, { backgroundColor: riskIconBgColor(card.key) }]}>
-          <Icon size={19} color={riskIconColor(card.key)} strokeWidth={2.4} />
+          <IconfontText className={`iconfont ${iconClass}`} size={19} color={riskIconColor(card.key)} />
         </View>
         <View style={styles.riskScoreWrap}>
           <Text style={styles.riskScore}>{Math.round(card.score)}</Text>
@@ -384,7 +374,7 @@ function AiPanel({
     <View style={styles.aiCard}>
       <View style={styles.aiCardTop}>
         <View style={styles.cardTitleGroup}>
-          <Brain size={19} color="#3d6b94" strokeWidth={2.4} />
+          <IconfontText className="iconfont icon-yiliaohangyedeICON-" size={19} color="#3d6b94" />
           <View style={styles.cardTitleCopy}>
             <Text style={styles.aiTitle}>AI 风险解读</Text>
             <Text style={styles.cardSubtitle}>按当前周期生成深度洞察</Text>
@@ -457,7 +447,7 @@ function StructurePanel({ summary, hasAnyDietData }: { summary: StatsSummary | n
   if (!hasAnyDietData) {
     return (
       <DataGateCard
-        icon={Utensils}
+        iconClass="icon-rice"
         title="记录饮食后查看营养结构"
         desc="当前统计周期还没有饮食记录。先记录一餐后，这里会展示热量趋势、宏量营养占比和餐次分布。"
       />
@@ -469,13 +459,13 @@ function StructurePanel({ summary, hasAnyDietData }: { summary: StatsSummary | n
       <View style={styles.statsCard}>
         <View style={styles.collapsibleHeader}>
           <View style={styles.cardTitleGroup}>
-            <Flame size={19} color={colors.brandDark} strokeWidth={2.4} />
+            <IconfontText className="iconfont icon-huore" size={19} color={colors.brandDark} />
             <View style={styles.cardTitleCopy}>
               <Text style={styles.cardTitle}>热量摄入趋势</Text>
               <Text style={styles.cardSubtitle}>{summary?.range === 'month' ? '最近 14 天' : '最近 7 天'}摄入变化和超标情况</Text>
             </View>
           </View>
-          <ChevronRight size={18} color="#94a3b8" strokeWidth={2.4} />
+          <IconfontText className="iconfont icon-right-arrow" size={18} color="#94a3b8" />
         </View>
         <View style={styles.barChartContainer}>
           {chartDays.length > 0 ? chartDays.map((item) => (
@@ -501,13 +491,13 @@ function StructurePanel({ summary, hasAnyDietData }: { summary: StatsSummary | n
       <View style={styles.statsCard}>
         <View style={styles.collapsibleHeader}>
           <View style={styles.cardTitleGroup}>
-            <BarChart3 size={19} color={colors.brandDark} strokeWidth={2.4} />
+            <IconfontText className="iconfont icon-zhuzhuangtu" size={19} color={colors.brandDark} />
             <View style={styles.cardTitleCopy}>
               <Text style={styles.cardTitle}>宏量营养结构</Text>
               <Text style={styles.cardSubtitle}>蛋白质、碳水和脂肪的摄入占比</Text>
             </View>
           </View>
-          <ChevronRight size={18} color="#94a3b8" strokeWidth={2.4} />
+          <IconfontText className="iconfont icon-right-arrow" size={18} color="#94a3b8" />
         </View>
         <MacroStat label="蛋白质" value={Math.round(summary?.total_protein || 0)} percent={macroPercent.protein} color="#5c9ed4" />
         <MacroStat label="碳水化合物" value={Math.round(summary?.total_carbs || 0)} percent={macroPercent.carbs} color="#d4ac52" />
@@ -517,13 +507,13 @@ function StructurePanel({ summary, hasAnyDietData }: { summary: StatsSummary | n
       <View style={styles.statsCard}>
         <View style={styles.collapsibleHeader}>
           <View style={styles.cardTitleGroup}>
-            <PieChart size={19} color={colors.brandDark} strokeWidth={2.4} />
+            <IconfontText className="iconfont icon-tubiao-zhuzhuangtu" size={19} color={colors.brandDark} />
             <View style={styles.cardTitleCopy}>
               <Text style={styles.cardTitle}>餐次热量分布</Text>
               <Text style={styles.cardSubtitle}>早餐、午餐、晚餐和加餐的热量占比</Text>
             </View>
           </View>
-          <ChevronRight size={18} color="#94a3b8" strokeWidth={2.4} />
+          <IconfontText className="iconfont icon-right-arrow" size={18} color="#94a3b8" />
         </View>
         <View style={styles.mealGaugeGrid}>
           {mealOrder.map((key) => {
@@ -558,19 +548,19 @@ function BodyMetricsCard({ bodyMetrics }: { bodyMetrics: BodyMetricsSummary | nu
     <View style={styles.statsCard}>
       <View style={styles.collapsibleHeader}>
         <View style={styles.cardTitleGroup}>
-          <TrendingUp size={19} color={colors.brandDark} strokeWidth={2.4} />
+          <IconfontText className="iconfont icon-shangzhang" size={19} color={colors.brandDark} />
           <View style={styles.cardTitleCopy}>
             <Text style={styles.cardTitle}>长期健康指标</Text>
             <Text style={styles.cardSubtitle}>体重趋势和喝水趋势</Text>
           </View>
         </View>
-        <ChevronRight size={18} color="#94a3b8" strokeWidth={2.4} />
+        <IconfontText className="iconfont icon-right-arrow" size={18} color="#94a3b8" />
       </View>
 
       <View style={styles.bodyMetricPanel}>
         <View style={styles.bodyMetricPanelHeader}>
           <View style={styles.bodyMetricTitleRow}>
-            <Scale size={18} color={colors.brandDark} strokeWidth={2.4} />
+            <IconfontText className="iconfont icon-weight-scale" size={18} color={colors.brandDark} />
             <Text style={styles.bodyMetricTitle}>体重趋势</Text>
           </View>
           {latestWeight ? (
@@ -591,7 +581,7 @@ function BodyMetricsCard({ bodyMetrics }: { bodyMetrics: BodyMetricsSummary | nu
       <View style={[styles.bodyMetricPanel, styles.waterPanel]}>
         <View style={styles.bodyMetricPanelHeader}>
           <View style={styles.bodyMetricTitleRow}>
-            <Droplets size={18} color="#5c9ed4" strokeWidth={2.4} />
+            <IconfontText className="iconfont icon-drink" size={18} color="#5c9ed4" />
             <Text style={styles.bodyMetricTitle}>喝水趋势</Text>
           </View>
           <Text style={styles.bodyMetricMain}>{Math.round(bodyMetrics?.avg_daily_water_ml || 0)} ml</Text>
@@ -635,7 +625,7 @@ function MealGauge({ label, calories, percent, color }: { label: string; calorie
     <View style={styles.mealGaugeItem}>
       <View style={styles.mealGaugeLeft}>
         <View style={[styles.mealGaugeIconWrap, { backgroundColor: `${color}18` }]}>
-          <Utensils size={14} color={color} strokeWidth={2.5} />
+          <IconfontText className="iconfont icon-rice" size={14} color={color} />
         </View>
         <Text style={styles.mealGaugeLabel}>{label}</Text>
         <Text style={[styles.mealGaugePercent, { color }]}>{percent.toFixed(1)}%</Text>
@@ -676,12 +666,11 @@ function RingProgress({ progress, color }: { progress: number; color: string }) 
   )
 }
 
-function DataGateCard({ icon, title, desc }: { icon: LucideIcon; title: string; desc: string }) {
-  const Icon = icon
+function DataGateCard({ iconClass, title, desc }: { iconClass: string; title: string; desc: string }) {
   return (
     <View style={styles.dataGateCard}>
       <View style={styles.dataGateIcon}>
-        <Icon size={24} color="#5c9ed4" strokeWidth={2.4} />
+        <IconfontText className={`iconfont ${iconClass}`} size={24} color="#5c9ed4" />
       </View>
       <View style={styles.dataGateCopy}>
         <Text style={styles.dataGateTitle}>{title}</Text>
@@ -691,11 +680,10 @@ function DataGateCard({ icon, title, desc }: { icon: LucideIcon; title: string; 
   )
 }
 
-function AnalysisTool({ icon, label, onPress }: { icon: LucideIcon; label: string; onPress: () => void }) {
-  const Icon = icon
+function AnalysisTool({ iconClass, label, onPress }: { iconClass: string; label: string; onPress: () => void }) {
   return (
     <Pressable style={({ pressed }) => [styles.toolChip, pressed && styles.pressed]} onPress={onPress}>
-      <Icon size={17} color={colors.brandDark} strokeWidth={2.4} />
+      <IconfontText className={`iconfont ${iconClass}`} size={17} color={colors.brandDark} />
       <Text style={styles.toolChipText}>{label}</Text>
     </Pressable>
   )
@@ -872,12 +860,12 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0))
 }
 
-function riskIcon(key: string): LucideIcon {
-  if (key.includes('diabetes') || key.includes('sugar')) return BarChart3
-  if (key.includes('cardio') || key.includes('heart')) return HeartPulse
-  if (key.includes('weight')) return Scale
-  if (key.includes('protein') || key.includes('calorie')) return Flame
-  return Target
+function riskIconClass(key: string): string {
+  if (key.includes('diabetes') || key.includes('sugar')) return 'icon-zhuzhuangtu'
+  if (key.includes('cardio') || key.includes('heart')) return 'icon-yiliaohangyedeICON-'
+  if (key.includes('weight')) return 'icon-weight-scale'
+  if (key.includes('protein') || key.includes('calorie')) return 'icon-huore'
+  return 'icon-target'
 }
 
 function riskBgColor(key: string): string {

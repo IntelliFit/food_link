@@ -4,6 +4,7 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { CommonActions } from '@react-navigation/native'
 import { IconfontText } from '../components/Iconfont'
+import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors, radius, shadow } from '../theme'
 import { RecordActionSheet, type RecordAction } from '../components/RecordActionSheet'
 import type { RootStackParamList } from './types'
@@ -21,6 +22,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
   const bottomInset = Math.max(insets.bottom, 8)
   const [recordMenuVisible, setRecordMenuVisible] = useState(false)
+  const { isDark } = useColorScheme()
   const leftRoutes = state.routes.slice(0, 2)
   const rightRoutes = state.routes.slice(2)
 
@@ -65,9 +67,9 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         <IconfontText
           className={meta.iconClass}
           size={21}
-          color={focused ? TAB_SELECTED_COLOR : '#9ca3af'}
+          color={focused ? TAB_SELECTED_COLOR : isDark ? 'rgba(255,255,255,0.55)' : '#9ca3af'}
         />
-        <Text style={[styles.tabText, focused && styles.tabTextActive]} numberOfLines={1}>{meta.label}</Text>
+        <Text style={[styles.tabText, focused && styles.tabTextActive, isDark && styles.tabTextDark]} numberOfLines={1}>{meta.label}</Text>
       </Pressable>
     )
   }
@@ -75,7 +77,7 @@ export function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   return (
     <>
       <View style={styles.wrap}>
-        <View style={[styles.bar, { minHeight: 66 + bottomInset, paddingBottom: bottomInset }]}>
+        <View style={[styles.bar, { minHeight: 66 + bottomInset, paddingBottom: bottomInset, backgroundColor: isDark ? '#181f1d' : colors.surface }]}>
           <View style={styles.side}>{leftRoutes.map(renderTab)}</View>
           <Pressable
             accessibilityRole="button"
@@ -140,6 +142,9 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: TAB_SELECTED_COLOR,
     fontWeight: '700',
+  },
+  tabTextDark: {
+    color: 'rgba(255,255,255,0.55)',
   },
   centerButton: {
     width: 56,

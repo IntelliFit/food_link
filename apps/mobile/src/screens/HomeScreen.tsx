@@ -12,6 +12,7 @@ import { SHOW_DEBUG_LOGIN } from '../config'
 import { useHomeDashboard } from '../hooks/useHomeDashboard'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
+import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors, compactFont } from '../theme'
 import { formatShortDate, todayKey } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
@@ -48,10 +49,10 @@ const targetFieldMeta: Array<{ key: TargetField; label: string; unit: string; st
 ]
 
 const recordIconColors: Record<RecordTone, string> = {
-  green: '#38a97b',
-  blue: '#4295bc',
-  gold: '#9f823a',
-  purple: '#6951bd',
+  green: colors.brandDark,
+  blue: colors.blue,
+  gold: colors.warning,
+  purple: colors.purple,
 }
 
 const macroConfigs: Array<{ key: MacroKey; label: string; color: string; unit: string; iconClass: string }> = [
@@ -67,6 +68,7 @@ export function HomeScreen() {
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
+  const { isDark } = useColorScheme()
   const [selectedDate, setSelectedDate] = useState(() => todayKey())
   const { recordDate, dashboard, petSummary, weekStats, bodyMetrics, exerciseBurnedKcal, loading, error, loadHome } = useHomeDashboard(selectedDate)
   const [activeBannerIndex, setActiveBannerIndex] = useState(0)
@@ -248,11 +250,14 @@ export function HomeScreen() {
     void persistHomePetCollapsed(collapsed)
   }, [])
 
+  const dynamicStyles = useHomeDynamicStyles(isDark)
+  const themeColors = useHomeThemeColors(isDark)
+
   return (
-    <View style={styles.homeRoot}>
+    <View style={[styles.homeRoot, { backgroundColor: themeColors.background }]}>
       <View pointerEvents="none" style={styles.homeBackgroundLayer}>
-        <View style={styles.homeBackgroundTopTint} />
-        <View style={styles.homeBackgroundSoftTint} />
+        <View style={[styles.homeBackgroundTopTint, { backgroundColor: themeColors.backgroundTopTint }]} />
+        <View style={[styles.homeBackgroundSoftTint, { backgroundColor: themeColors.backgroundSoftTint }]} />
       </View>
       <ScrollView
         style={styles.homeScroll}
@@ -272,14 +277,15 @@ export function HomeScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <HomeGreeting recordDate={recordDate} mealType={mealType} />
-        <HomeDateSelector cells={weekCells} selectedDate={recordDate} onSelect={setSelectedDate} />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <HomeGreeting recordDate={recordDate} mealType={mealType} themeColors={themeColors} />
+        <HomeDateSelector cells={weekCells} selectedDate={recordDate} onSelect={setSelectedDate} themeColors={themeColors} />
+        {error ? <Text style={[styles.error, { color: themeColors.danger }]}>{error}</Text> : null}
         <HomeBannerCarousel
           banners={homeBanners}
           activeIndex={activeBannerIndex}
           bannerWidth={bannerWidth}
           onIndexChange={setActiveBannerIndex}
+          themeColors={themeColors}
         />
         <HomeCalorieCard
           current={calorieCurrent}
@@ -291,6 +297,7 @@ export function HomeScreen() {
           onOpenTargetEditor={openTargetEditor}
           nutritionExpanded={nutritionExpanded}
           onToggleNutrition={() => setNutritionExpanded((v) => !v)}
+          themeColors={themeColors}
         />
         <HomeBodyStatusStrip
           weightSummary={weightSummary}
@@ -301,6 +308,7 @@ export function HomeScreen() {
           onWeight={() => navigation.navigate('BodyMetricRecord', { type: 'weight', date: recordDate })}
           onWater={() => navigation.navigate('BodyMetricRecord', { type: 'water', date: recordDate })}
           onExercise={() => navigation.navigate('BodyMetricRecord', { type: 'exercise', date: recordDate })}
+          themeColors={themeColors}
         />
         <HomeMealsSection
           meals={dashboard?.meals || []}
@@ -308,41 +316,43 @@ export function HomeScreen() {
           onQuickRecord={() => openAnalyze('camera')}
           onOpenHistory={() => navigation.navigate('AnalyzeHistory')}
           onOpenRecord={(recordId) => navigation.navigate('RecordDetail', { recordId })}
+          themeColors={themeColors}
         />
         <HomeExpirySection
           summary={dashboard?.expirySummary || null}
           onOpen={() => navigation.navigate('Expiry')}
+          themeColors={themeColors}
         />
         <HomeStatsEntry onPress={() => navigation.navigate('DayRecord', { date: recordDate })} />
         {SHOW_DEBUG_LOGIN ? (
           <View style={styles.homeDevActions}>
-            <HomeMiniAction label="识别记录" onPress={() => navigation.navigate('AnalyzeHistory')} />
-            <HomeMiniAction label="文字记录" onPress={() => navigation.navigate('TextRecord')} />
-            <HomeMiniAction label="包装食品" onPress={() => navigation.navigate('PackagedFoodEdit')} />
+            <HomeMiniAction label="识别记录" onPress={() => navigation.navigate('AnalyzeHistory')} themeColors={themeColors} />
+            <HomeMiniAction label="文字记录" onPress={() => navigation.navigate('TextRecord')} themeColors={themeColors} />
+            <HomeMiniAction label="包装食品" onPress={() => navigation.navigate('PackagedFoodEdit')} themeColors={themeColors} />
           </View>
         ) : null}
       </ScrollView>
       <Modal visible={showTargetEditor} transparent animationType="slide" onRequestClose={() => !savingTargets && setShowTargetEditor(false)}>
         <View style={styles.targetModal}>
           <Pressable style={styles.targetModalMask} onPress={() => !savingTargets && setShowTargetEditor(false)} />
-          <View style={[styles.targetModalSheet, { paddingBottom: insets.bottom + 18 }]}>
-            <View style={styles.targetModalHandle} />
+          <View style={[styles.targetModalSheet, { paddingBottom: insets.bottom + 18, backgroundColor: themeColors.sheetBackground }]}>
+            <View style={[styles.targetModalHandle, { backgroundColor: themeColors.handle }]} />
             <View style={styles.rowBetween}>
               <View>
-                <Text style={styles.targetModalTitle}>基础目标设置</Text>
-                <Text style={styles.targetModalDesc}>同步首页与单日记录的长期目标</Text>
+                <Text style={[styles.targetModalTitle, { color: themeColors.text }]}>基础目标设置</Text>
+                <Text style={[styles.targetModalDesc, { color: themeColors.textSecondary }]}>同步首页与单日记录的长期目标</Text>
               </View>
-              <Pressable onPress={() => setShowTargetEditor(false)} disabled={savingTargets} style={styles.targetModalClose}>
-                <Text style={styles.targetModalCloseText}>×</Text>
+              <Pressable onPress={() => setShowTargetEditor(false)} disabled={savingTargets} style={[styles.targetModalClose, { backgroundColor: themeColors.closeButton }]}>
+                <Text style={[styles.targetModalCloseText, { color: themeColors.textSecondary }]}>×</Text>
               </Pressable>
             </View>
             {calibrationSuggestion?.available ? (
-              <View style={styles.calibrationCard}>
+              <View style={[styles.calibrationCard, { backgroundColor: themeColors.calibrationCard }]}>
                 <Text style={styles.calibrationTitle}>建议调整到 {Math.round(numberFrom(calibrationSuggestion.suggested_kcal, 0))} kcal</Text>
-                <Text style={styles.calibrationText}>{calibrationSuggestion.reason || '根据最近 14 天饮食和体重变化，建议小幅调整基础目标。'}</Text>
+                <Text style={[styles.calibrationText, { color: themeColors.textSecondary }]}>{calibrationSuggestion.reason || '根据最近 14 天饮食和体重变化，建议小幅调整基础目标。'}</Text>
                 <View style={styles.targetActionRow}>
-                  <Pressable style={styles.secondaryMiniButton} onPress={() => void dialog.alert('已暂不调整')}>
-                    <Text style={styles.secondaryMiniButtonText}>暂不调整</Text>
+                  <Pressable style={[styles.secondaryMiniButton, { backgroundColor: themeColors.surfaceMuted }]} onPress={() => void dialog.alert('已暂不调整')}>
+                    <Text style={[styles.secondaryMiniButtonText, { color: themeColors.textSecondary }]}>暂不调整</Text>
                   </Pressable>
                   <Pressable style={styles.primaryMiniButton} onPress={applyCalibrationSuggestion}>
                     <Text style={styles.primaryMiniButtonText}>应用建议</Text>
@@ -359,14 +369,15 @@ export function HomeScreen() {
                 onChangeText={(value) => updateTargetField(field.key, value)}
                 onDecrease={() => adjustTargetField(field.key, -1)}
                 onIncrease={() => adjustTargetField(field.key, 1)}
+                themeColors={themeColors}
               />
             ))}
             <View style={styles.targetSaveRow}>
               <Pressable style={[styles.targetSaveButton, savingTargets && styles.disabledButton]} disabled={savingTargets} onPress={() => void saveTargets()}>
                 {savingTargets ? <ActivityIndicator color="#fff" /> : <Text style={styles.targetSaveButtonText}>保存目标</Text>}
               </Pressable>
-              <Pressable style={styles.targetCancelButton} disabled={savingTargets} onPress={() => setShowTargetEditor(false)}>
-                <Text style={styles.targetCancelButtonText}>取消</Text>
+              <Pressable style={[styles.targetCancelButton, { backgroundColor: themeColors.cancelButton }]} disabled={savingTargets} onPress={() => setShowTargetEditor(false)}>
+                <Text style={[styles.targetCancelButtonText, { color: themeColors.textSecondary }]}>取消</Text>
               </Pressable>
             </View>
           </View>
@@ -385,16 +396,89 @@ export function HomeScreen() {
   )
 }
 
+function useHomeThemeColors(isDark: boolean) {
+  return useMemo(
+    () => ({
+      background: isDark ? '#0d1312' : colors.background,
+      backgroundTopTint: isDark ? '#111a18' : '#eaf7f0',
+      backgroundSoftTint: isDark ? 'rgba(92, 184, 150, 0.03)' : 'rgba(92, 184, 150, 0.04)',
+      text: isDark ? '#f2f7f4' : colors.text,
+      textSecondary: isDark ? '#a3b3ad' : colors.textSecondary,
+      textMuted: isDark ? '#6b7d76' : colors.textMuted,
+      surface: isDark ? '#181f1d' : colors.surface,
+      surfaceMuted: isDark ? '#1e2623' : colors.surfaceMuted,
+      border: isDark ? 'rgba(255,255,255,0.08)' : colors.border,
+      cardBackground: isDark ? '#181f1d' : '#fff',
+      cardBorder: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(227, 233, 238, 0.82)',
+      bodyStatusCard: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.54)',
+      bodyStatusCardBorder: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.62)',
+      emptyMealCard: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.54)',
+      emptyMealCardBorder: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.62)',
+      mealCard: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.56)',
+      mealCardBorder: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.62)',
+      mealCardWarningBorder: isDark ? 'rgba(229, 115, 115, 0.32)' : 'rgba(229, 115, 115, 0.32)',
+      mealCardWarningBg: isDark ? 'rgba(239, 68, 68, 0.10)' : '#fef8f8',
+      macroCard: isDark ? 'rgba(255,255,255,0.06)' : '#fff',
+      macroCardOver: isDark ? 'rgba(239, 68, 68, 0.14)' : '#fef3f2',
+      macroCardOverBorder: isDark ? 'rgba(239, 68, 68, 0.35)' : '#fecaca',
+      progressTrack: isDark ? 'rgba(255,255,255,0.10)' : '#e5e7eb',
+      mealProgressTrack: isDark ? 'rgba(255,255,255,0.10)' : '#eef2f4',
+      nutritionTitle: isDark ? '#b9c9c2' : '#34495e',
+      nutritionAffordanceBg: isDark ? 'rgba(92, 184, 150, 0.12)' : '#f3f8f5',
+      nutritionAffordanceText: isDark ? '#7dd3aa' : '#5aa783',
+      bannerGoose: isDark ? '#2a1e12' : '#fff3e3',
+      bannerGreen: isDark ? '#0f261c' : '#e9fbf3',
+      bannerGold: isDark ? '#261d10' : '#fff7ed',
+      bannerBlue: isDark ? '#0f1f2a' : '#edf7ff',
+      bannerTextLight: isDark ? '#fff' : '#fff',
+      sheetBackground: isDark ? '#181f1d' : '#fff',
+      handle: isDark ? 'rgba(255,255,255,0.12)' : '#e5e7eb',
+      closeButton: isDark ? 'rgba(255,255,255,0.10)' : '#f3f4f6',
+      cancelButton: isDark ? 'rgba(255,255,255,0.10)' : '#f3f4f6',
+      calibrationCard: isDark ? 'rgba(240, 152, 92, 0.14)' : '#fff7ed',
+      dateSelectedBg: isDark ? 'rgba(0, 188, 125, 0.45)' : 'rgba(0, 188, 125, 0.55)',
+      dateCircle: isDark ? '#181f1d' : '#fff',
+      dateText: isDark ? '#f2f7f4' : colors.text,
+      dateTextMuted: isDark ? '#6b7d76' : colors.textMuted,
+      danger: isDark ? '#ff6b6b' : colors.danger,
+      over: isDark ? '#ff6b6b' : colors.homeWarningRed,
+      overText: isDark ? '#ff6b6b' : 'colors.homeWarningRed',
+      bodyStatusChangeDown: isDark ? '#7dd3aa' : '#5cb896',
+      mealIconBg: isDark ? 'rgba(92, 184, 150, 0.12)' : '#ecfdf5',
+      mealPhotoBg: isDark ? 'rgba(255,255,255,0.08)' : '#f3f4f6',
+      mealIconText: isDark ? '#7dd3aa' : colors.brand,
+      expiryCard: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.54)',
+      expiryCardBorder: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.62)',
+      expiryPillBg: isDark ? 'rgba(255,255,255,0.08)' : '#f8fafc',
+      miniActionBg: isDark ? 'rgba(255,255,255,0.08)' : '#fff',
+      miniActionText: isDark ? '#7dd3aa' : colors.brandDark,
+    }),
+    [isDark],
+  )
+}
+
+function useHomeDynamicStyles(isDark: boolean) {
+  return useMemo(
+    () =>
+      StyleSheet.create({
+        // Reserved for component-specific computed styles if needed beyond inline colors.
+      }),
+    [isDark],
+  )
+}
+
 function HomeBannerCarousel({
   banners,
   activeIndex,
   bannerWidth,
   onIndexChange,
+  themeColors,
 }: {
   banners: HomeBanner[]
   activeIndex: number
   bannerWidth: number
   onIndexChange: (index: number) => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   return (
     <View style={styles.homeBannerCarousel}>
@@ -427,19 +511,19 @@ function HomeBannerCarousel({
                 style={styles.homeBanner}
                 imageStyle={styles.homeBannerImage}
               >
-                <HomeBannerContent banner={banner} image />
+                <HomeBannerContent banner={banner} image themeColors={themeColors} />
               </ImageBackground>
             ) : (
               <View
                 style={[
                   styles.homeBanner,
-                  banner.tone === 'goose' && styles.homeBannerGoose,
-                  banner.tone === 'green' && styles.homeBannerGreen,
-                  banner.tone === 'gold' && styles.homeBannerGold,
-                  banner.tone === 'blue' && styles.homeBannerBlue,
+                  banner.tone === 'goose' && { backgroundColor: themeColors.bannerGoose },
+                  banner.tone === 'green' && { backgroundColor: themeColors.bannerGreen },
+                  banner.tone === 'gold' && { backgroundColor: themeColors.bannerGold },
+                  banner.tone === 'blue' && { backgroundColor: themeColors.bannerBlue },
                 ]}
               >
-                <HomeBannerContent banner={banner} />
+                <HomeBannerContent banner={banner} image={false} themeColors={themeColors} />
               </View>
             )}
           </Pressable>
@@ -461,13 +545,13 @@ function HomeBannerCarousel({
   )
 }
 
-function HomeBannerContent({ banner, image = false }: { banner: HomeBanner; image?: boolean }) {
+function HomeBannerContent({ banner, image = false, themeColors }: { banner: HomeBanner; image?: boolean; themeColors: ReturnType<typeof useHomeThemeColors> }) {
   return (
     <View style={[styles.homeBannerOverlay, image && styles.homeBannerImageOverlay]}>
       <View style={styles.homeBannerText}>
-        <Text style={[styles.homeBannerKicker, image && styles.homeBannerTextLight]} numberOfLines={1}>{banner.kicker}</Text>
-        <Text style={[styles.homeBannerTitle, image && styles.homeBannerTextLight]} numberOfLines={2}>{banner.title}</Text>
-        <Text style={[styles.homeBannerSubtitle, image && styles.homeBannerTextLight]} numberOfLines={2}>{banner.desc}</Text>
+        <Text style={[styles.homeBannerKicker, image ? styles.homeBannerTextLight : { color: themeColors.textSecondary }]} numberOfLines={1}>{banner.kicker}</Text>
+        <Text style={[styles.homeBannerTitle, image ? styles.homeBannerTextLight : { color: themeColors.text }]} numberOfLines={2}>{banner.title}</Text>
+        <Text style={[styles.homeBannerSubtitle, image ? styles.homeBannerTextLight : { color: themeColors.textSecondary }]} numberOfLines={2}>{banner.desc}</Text>
       </View>
       <View style={[styles.homeBannerButton, image && styles.homeBannerButtonLight]}>
         <Text style={[styles.homeBannerButtonText, image && styles.homeBannerButtonTextLight]} numberOfLines={1}>{banner.actionText}</Text>
@@ -483,6 +567,7 @@ function TargetFieldRow({
   onChangeText,
   onDecrease,
   onIncrease,
+  themeColors,
 }: {
   label: string
   unit: string
@@ -490,26 +575,27 @@ function TargetFieldRow({
   onChangeText: (value: string) => void
   onDecrease: () => void
   onIncrease: () => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   return (
     <View style={styles.targetField}>
-      <Text style={styles.targetFieldLabel}>{label}</Text>
+      <Text style={[styles.targetFieldLabel, { color: themeColors.textSecondary }]}>{label}</Text>
       <View style={styles.targetInputRow}>
-        <Pressable style={styles.targetAdjustButton} onPress={onDecrease}>
+        <Pressable style={[styles.targetAdjustButton, { backgroundColor: themeColors.surfaceMuted }]} onPress={onDecrease}>
           <Text style={styles.targetAdjustButtonText}>-</Text>
         </Pressable>
-        <View style={styles.targetInputWrap}>
+        <View style={[styles.targetInputWrap, { borderColor: themeColors.border, backgroundColor: themeColors.surfaceMuted }]}>
           <TextInput
             value={value}
             onChangeText={onChangeText}
             keyboardType="decimal-pad"
-            style={styles.targetInput}
+            style={[styles.targetInput, { color: themeColors.text }]}
             placeholder="0"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={themeColors.textMuted}
           />
-          <Text style={styles.targetInputUnit}>{unit}</Text>
+          <Text style={[styles.targetInputUnit, { color: themeColors.textSecondary }]}>{unit}</Text>
         </View>
-        <Pressable style={styles.targetAdjustButton} onPress={onIncrease}>
+        <Pressable style={[styles.targetAdjustButton, { backgroundColor: themeColors.surfaceMuted }]} onPress={onIncrease}>
           <Text style={styles.targetAdjustButtonText}>+</Text>
         </Pressable>
       </View>
@@ -517,12 +603,12 @@ function TargetFieldRow({
   )
 }
 
-function HomeGreeting({ recordDate, mealType }: { recordDate: string; mealType: string }) {
+function HomeGreeting({ recordDate, mealType, themeColors }: { recordDate: string; mealType: string; themeColors: ReturnType<typeof useHomeThemeColors> }) {
   return (
     <View style={styles.greetingSection}>
       <View style={styles.greetingText}>
-        <Text style={styles.greetingTitle}>{homeGreeting()}</Text>
-        <Text style={styles.greetingSubtitle}>
+        <Text style={[styles.greetingTitle, { color: themeColors.text }]}>{homeGreeting()}</Text>
+        <Text style={[styles.greetingSubtitle, { color: themeColors.textSecondary }]}>
           今天也要健康饮食哦 · {formatShortDate(recordDate)} · {getMealTypeLabel(mealType)}
         </Text>
       </View>
@@ -534,10 +620,12 @@ function HomeDateSelector({
   cells,
   selectedDate,
   onSelect,
+  themeColors,
 }: {
   cells: WeekCell[]
   selectedDate: string
   onSelect: (date: string) => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   return (
     <View style={styles.dateSelectorSection}>
@@ -551,21 +639,22 @@ function HomeDateSelector({
               key={cell.date}
               style={({ pressed }) => [
                 styles.dateItem,
-                selected && styles.dateItemSelected,
+                selected && { backgroundColor: themeColors.dateSelectedBg },
                 pressed && styles.dateItemPressed,
               ]}
               onPress={() => onSelect(cell.date)}
             >
-              <Text style={[styles.dateDayName, selected && styles.dateTextSelected]}>{cell.dayName}</Text>
+              <Text style={[styles.dateDayName, selected ? { color: '#fff' } : { color: themeColors.dateTextMuted }]}>{cell.dayName}</Text>
               <View
                 style={[
                   styles.dateDayCircle,
-                  recorded && styles.dateDayCircleRecorded,
-                  over && styles.dateDayCircleOver,
-                  selected && styles.dateDayCircleSelected,
+                  recorded && { backgroundColor: colors.brand },
+                  over && { backgroundColor: colors.homeWarningRed },
+                  selected && [styles.dateDayCircleSelected, { backgroundColor: 'transparent' }],
+                  !selected && { backgroundColor: themeColors.dateCircle },
                 ]}
               >
-                <Text style={[styles.dateNumText, (recorded || selected) && styles.dateNumTextLight]}>{cell.dayNum}</Text>
+                <Text style={[styles.dateNumText, (recorded || selected) && { color: '#fff' }, !recorded && !selected && { color: themeColors.dateText }]}>{cell.dayNum}</Text>
               </View>
             </Pressable>
           )
@@ -585,6 +674,7 @@ function HomeCalorieCard({
   onOpenTargetEditor,
   nutritionExpanded,
   onToggleNutrition,
+  themeColors,
 }: {
   current: number
   target: number
@@ -595,57 +685,58 @@ function HomeCalorieCard({
   onOpenTargetEditor: () => void
   nutritionExpanded: boolean
   onToggleNutrition: () => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   return (
-    <View style={styles.mainCard}>
+    <View style={[styles.mainCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.cardBorder }]}>
       <View style={styles.mainCardHeader}>
         <View style={styles.mainCardTitle}>
-          <Text style={styles.cardLabel}>{isOver ? '已超出' : '剩余可摄入'}</Text>
-          <Text style={[styles.cardValue, isOver && styles.cardValueOver]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+          <Text style={[styles.cardLabel, { color: themeColors.textSecondary }]}>{isOver ? '已超出' : '剩余可摄入'}</Text>
+          <Text style={[styles.cardValue, { color: isOver ? themeColors.over : themeColors.text }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
             {Math.round(isOver ? current - target : remaining)}
           </Text>
-          <Text style={styles.cardUnit}>kcal</Text>
+          <Text style={[styles.cardUnit, { color: themeColors.textMuted }]}>kcal</Text>
         </View>
         <View style={styles.targetSection}>
           <View style={styles.targetEnergyNumsOnly}>
-            <Text style={[styles.targetEnergyIntakeNum, isOver && styles.cardValueOver]}>{Math.round(current)}</Text>
-            <Text style={styles.targetEnergySlashOnly}>/</Text>
-            <Text style={styles.targetEnergyTargetNum}>{Math.round(target)}</Text>
+            <Text style={[styles.targetEnergyIntakeNum, { color: isOver ? themeColors.over : themeColors.text }]}>{Math.round(current)}</Text>
+            <Text style={[styles.targetEnergySlashOnly, { color: themeColors.textMuted }]}>/</Text>
+            <Text style={[styles.targetEnergyTargetNum, { color: themeColors.textSecondary }]}>{Math.round(target)}</Text>
           </View>
           <Pressable style={({ pressed }) => [styles.targetEditButton, pressed && styles.pressed]} onPress={onOpenTargetEditor}>
-            <IconfontText className="iconfont icon-target" size={12} color="#5cb896" />
-            <Text style={styles.targetEditButtonText}>目标设置</Text>
+            <IconfontText className="iconfont icon-target" size={12} color={isDark ? '#7dd3aa' : '#5cb896'} />
+            <Text style={[styles.targetEditButtonText, { color: isDark ? '#7dd3aa' : '#2f7f62' }]}>目标设置</Text>
           </Pressable>
         </View>
       </View>
       <View style={styles.progressSection}>
-        <View style={styles.progressBarBg}>
-          <View style={[styles.progressBarFill, isOver && styles.progressBarFillOver, { width: `${clamp(progress, 0, 100)}%` }]} />
+        <View style={[styles.progressBarBg, { backgroundColor: themeColors.progressTrack }]}>
+          <View style={[styles.progressBarFill, isOver && { backgroundColor: themeColors.over }, { width: `${clamp(progress, 0, 100)}%` }]} />
         </View>
       </View>
       <View style={styles.nutritionShell}>
         <View style={styles.nutritionExpandTitleRow}>
-          <Text style={styles.nutritionTitle}>营养概览</Text>
+          <Text style={[styles.nutritionTitle, { color: themeColors.nutritionTitle }]}>营养概览</Text>
           <TouchableOpacity activeOpacity={0.75} onPress={onToggleNutrition}>
-            <View style={styles.nutritionExpandAffordance}>
+            <View style={[styles.nutritionExpandAffordance, { backgroundColor: themeColors.nutritionAffordanceBg }]}>
               <IconfontText
                 className="iconfont icon-right-arrow"
                 size={14}
-                color="#5aa783"
+                color={isDark ? '#7dd3aa' : '#5aa783'}
                 style={{ transform: [{ rotate: nutritionExpanded ? '270deg' : '90deg' }] }}
               />
-              <Text style={styles.nutritionExpandAffordanceText}>{nutritionExpanded ? '收起' : '展开更多'}</Text>
+              <Text style={[styles.nutritionExpandAffordanceText, { color: themeColors.nutritionAffordanceText }]}>{nutritionExpanded ? '收起' : '展开更多'}</Text>
             </View>
           </TouchableOpacity>
         </View>
-        <HomeMacroSection intakeData={intakeData} />
+        <HomeMacroSection intakeData={intakeData} themeColors={themeColors} />
         {nutritionExpanded && <HomeMicrosSection intakeData={intakeData} />}
       </View>
     </View>
   )
 }
 
-function HomeMacroSection({ intakeData }: { intakeData?: HomeDashboard['intakeData'] }) {
+function HomeMacroSection({ intakeData, themeColors }: { intakeData?: HomeDashboard['intakeData']; themeColors: ReturnType<typeof useHomeThemeColors> }) {
   return (
     <View style={styles.macrosSection}>
       {macroConfigs.map((config) => {
@@ -664,6 +755,7 @@ function HomeMacroSection({ intakeData }: { intakeData?: HomeDashboard['intakeDa
             unit={config.unit}
             over={over}
             iconClass={config.iconClass}
+            themeColors={themeColors}
           />
         )
       })}
@@ -680,6 +772,7 @@ function MacroRowCard({
   unit,
   over,
   iconClass,
+  themeColors,
 }: {
   label: string
   current: number
@@ -689,23 +782,24 @@ function MacroRowCard({
   unit: string
   over: boolean
   iconClass: string
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
-  const progressColor = over ? '#e57373' : color
+  const progressColor = over ? colors.homeWarningRed : color
   const excess = over ? Math.max(0, current - target) : 0
   return (
-    <View style={[styles.macroCard, over && styles.macroCardOver]}>
+    <View style={[styles.macroCard, { backgroundColor: themeColors.macroCard }, over && { backgroundColor: themeColors.macroCardOver, borderColor: themeColors.macroCardOverBorder }]}>
       <View style={styles.macroExcessSlot}>
-        {excess > 0 ? <Text style={styles.macroOverHint}>+{formatHomeNumber(excess)}{unit}</Text> : null}
+        {excess > 0 ? <Text style={[styles.macroOverHint, { color: themeColors.over }]}>+{formatHomeNumber(excess)}{unit}</Text> : null}
       </View>
       <View style={styles.macroTitleRow}>
         <IconfontText className={iconClass} size={13} color={color} />
-        <Text style={styles.macroLabel}>{label}</Text>
+        <Text style={[styles.macroLabel, { color: themeColors.text }]}>{label}</Text>
       </View>
       <View style={styles.macroValueRow}>
         <Text style={[styles.macroCurrentValue, { color: progressColor }]}>{formatHomeNumber(current)}</Text>
-        <Text style={styles.macroTargetTotal}>/ {formatHomeNumber(target)}{unit}</Text>
+        <Text style={[styles.macroTargetTotal, { color: themeColors.textMuted }]}>/ {formatHomeNumber(target)}{unit}</Text>
       </View>
-      <View style={styles.macroProgressBarBg}>
+      <View style={[styles.macroProgressBarBg, { backgroundColor: themeColors.progressTrack }]}>
         <View style={[styles.macroProgressBarFill, { width: `${clamp(progress, 0, 100)}%`, backgroundColor: progressColor }]} />
       </View>
     </View>
@@ -721,6 +815,7 @@ function HomeBodyStatusStrip({
   onWeight,
   onWater,
   onExercise,
+  themeColors,
 }: {
   weightSummary: { latestWeight: BodyMetricWeightEntry | null; weightChange: number | null; hasRecord: boolean }
   todayWater: BodyMetricWaterDay | { date: string; total: number; logs: number[] }
@@ -730,12 +825,13 @@ function HomeBodyStatusStrip({
   onWeight: () => void
   onWater: () => void
   onExercise: () => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   return (
     <View style={styles.bodyStatusSection}>
-      <WeightStatusCard summary={weightSummary} onPress={onWeight} />
-      <WaterStatusCard todayWater={todayWater} waterGoalMl={waterGoalMl} waterProgress={waterProgress} onPress={onWater} />
-      <ExerciseStatusCard kcal={exerciseKcal} onPress={onExercise} />
+      <WeightStatusCard summary={weightSummary} onPress={onWeight} themeColors={themeColors} />
+      <WaterStatusCard todayWater={todayWater} waterGoalMl={waterGoalMl} waterProgress={waterProgress} onPress={onWater} themeColors={themeColors} />
+      <ExerciseStatusCard kcal={exerciseKcal} onPress={onExercise} themeColors={themeColors} />
     </View>
   )
 }
@@ -743,35 +839,37 @@ function HomeBodyStatusStrip({
 function WeightStatusCard({
   summary,
   onPress,
+  themeColors,
 }: {
   summary: { latestWeight: BodyMetricWeightEntry | null; weightChange: number | null; hasRecord: boolean }
   onPress: () => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   const toneColor = recordIconColors.green
   return (
-    <Pressable style={({ pressed }) => [styles.bodyStatusCard, pressed && styles.pressed]} onPress={onPress}>
+    <Pressable style={({ pressed }) => [styles.bodyStatusCard, { backgroundColor: themeColors.bodyStatusCard, borderColor: themeColors.bodyStatusCardBorder }, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.bodyStatusHeader}>
         <View style={[styles.bodyStatusIcon, { backgroundColor: `${toneColor}18` }]}>
           <IconfontText className="iconfont icon-weight-scale" size={15} color={toneColor} />
         </View>
-        <Text style={styles.bodyStatusLabel}>体重</Text>
+        <Text style={[styles.bodyStatusLabel, { color: themeColors.textSecondary }]}>体重</Text>
       </View>
       <View style={styles.bodyStatusContentRow}>
         {summary.latestWeight ? (
           <>
-            <Text style={styles.bodyStatusValue}>{summary.latestWeight.value.toFixed(1)}</Text>
-            <Text style={styles.bodyStatusUnit}>kg</Text>
+            <Text style={[styles.bodyStatusValue, { color: themeColors.text }]}>{summary.latestWeight.value.toFixed(1)}</Text>
+            <Text style={[styles.bodyStatusUnit, { color: themeColors.textSecondary }]}>kg</Text>
             {summary.weightChange !== null && (
-              <Text style={[styles.bodyStatusChange, summary.weightChange > 0 ? styles.bodyStatusChangeUp : styles.bodyStatusChangeDown]}>
+              <Text style={[styles.bodyStatusChange, summary.weightChange > 0 ? { color: themeColors.over } : { color: themeColors.bodyStatusChangeDown }]}>
                 {summary.weightChange > 0 ? '+' : ''}{summary.weightChange.toFixed(1)}
               </Text>
             )}
           </>
         ) : (
-          <Text style={styles.bodyStatusEmpty}>点击记录</Text>
+          <Text style={[styles.bodyStatusEmpty, { color: themeColors.textSecondary }]}>点击记录</Text>
         )}
       </View>
-      <Text style={styles.bodyStatusHint}>
+      <Text style={[styles.bodyStatusHint, { color: themeColors.textMuted }]}>
         {summary.latestWeight ? `上次记录: ${summary.latestWeight.date.slice(5)}` : '记录体重，追踪变化'}
       </Text>
     </Pressable>
@@ -783,50 +881,52 @@ function WaterStatusCard({
   waterGoalMl,
   waterProgress,
   onPress,
+  themeColors,
 }: {
   todayWater: BodyMetricWaterDay | { date: string; total: number; logs: number[] }
   waterGoalMl: number
   waterProgress: number
   onPress: () => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   const toneColor = recordIconColors.blue
   return (
-    <Pressable style={({ pressed }) => [styles.bodyStatusCard, pressed && styles.pressed]} onPress={onPress}>
+    <Pressable style={({ pressed }) => [styles.bodyStatusCard, { backgroundColor: themeColors.bodyStatusCard, borderColor: themeColors.bodyStatusCardBorder }, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.bodyStatusHeader}>
         <View style={[styles.bodyStatusIcon, { backgroundColor: `${toneColor}18` }]}>
           <IconfontText className="iconfont icon-drink" size={15} color={toneColor} />
         </View>
-        <Text style={styles.bodyStatusLabel}>喝水</Text>
+        <Text style={[styles.bodyStatusLabel, { color: themeColors.textSecondary }]}>喝水</Text>
       </View>
       <View style={styles.bodyStatusContentRow}>
-        <Text style={styles.bodyStatusValue}>{Math.round(todayWater.total)}</Text>
-        <Text style={styles.bodyStatusUnit}>ml</Text>
+        <Text style={[styles.bodyStatusValue, { color: themeColors.text }]}>{Math.round(todayWater.total)}</Text>
+        <Text style={[styles.bodyStatusUnit, { color: themeColors.textSecondary }]}>ml</Text>
       </View>
       <View style={styles.bodyStatusProgressWrap}>
-        <View style={styles.bodyStatusProgressBg}>
+        <View style={[styles.bodyStatusProgressBg, { backgroundColor: themeColors.progressTrack }]}>
           <View style={[styles.bodyStatusProgressFill, { width: `${Math.min(100, Math.max(0, waterProgress))}%`, backgroundColor: toneColor }]} />
         </View>
-        <Text style={styles.bodyStatusProgressText}>{Math.round(waterProgress)}% / 目标 {waterGoalMl}ml</Text>
+        <Text style={[styles.bodyStatusProgressText, { color: themeColors.textMuted }]}>{Math.round(waterProgress)}% / 目标 {waterGoalMl}ml</Text>
       </View>
     </Pressable>
   )
 }
 
-function ExerciseStatusCard({ kcal, onPress }: { kcal: number; onPress: () => void }) {
+function ExerciseStatusCard({ kcal, onPress, themeColors }: { kcal: number; onPress: () => void; themeColors: ReturnType<typeof useHomeThemeColors> }) {
   const toneColor = recordIconColors.gold
   return (
-    <Pressable style={({ pressed }) => [styles.bodyStatusCard, pressed && styles.pressed]} onPress={onPress}>
+    <Pressable style={({ pressed }) => [styles.bodyStatusCard, { backgroundColor: themeColors.bodyStatusCard, borderColor: themeColors.bodyStatusCardBorder }, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.bodyStatusHeader}>
         <View style={[styles.bodyStatusIcon, { backgroundColor: `${toneColor}18` }]}>
           <IconfontText className="iconfont icon-dumbbell" size={15} color={toneColor} />
         </View>
-        <Text style={styles.bodyStatusLabel}>运动</Text>
+        <Text style={[styles.bodyStatusLabel, { color: themeColors.textSecondary }]}>运动</Text>
       </View>
       <View style={styles.bodyStatusContentRow}>
-        <Text style={styles.bodyStatusValue}>{Math.round(kcal)}</Text>
-        <Text style={styles.bodyStatusUnit}>kcal</Text>
+        <Text style={[styles.bodyStatusValue, { color: themeColors.text }]}>{Math.round(kcal)}</Text>
+        <Text style={[styles.bodyStatusUnit, { color: themeColors.textSecondary }]}>kcal</Text>
       </View>
-      <Text style={styles.bodyStatusHint}>点击记录运动</Text>
+      <Text style={[styles.bodyStatusHint, { color: themeColors.textMuted }]}>点击记录运动</Text>
     </Pressable>
   )
 }
@@ -837,27 +937,29 @@ function HomeMealsSection({
   onQuickRecord,
   onOpenHistory,
   onOpenRecord,
+  themeColors,
 }: {
   meals: HomeDashboard['meals']
   onOpenAll: () => void
   onQuickRecord: () => void
   onOpenHistory: () => void
   onOpenRecord: (recordId: string) => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   return (
     <View style={styles.mealsSection}>
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>今日餐食</Text>
+        <Text style={[styles.sectionTitle, { color: themeColors.text }]}>今日餐食</Text>
         <Pressable style={styles.viewAllButton} onPress={onOpenAll}>
-          <Text style={styles.viewAllText}>查看全部</Text>
+          <Text style={[styles.viewAllText, { color: themeColors.textSecondary }]}>查看全部</Text>
         </Pressable>
       </View>
       <View style={styles.mealsList}>
         {meals.length === 0 ? (
-          <Pressable style={({ pressed }) => [styles.mealsEmpty, pressed && styles.pressed]} onPress={onQuickRecord}>
-            <IconfontText className="iconfont icon-paizhao-xianxing" size={24} color={colors.brand} />
-            <Text style={styles.mealsEmptyTitle}>暂无今日餐食</Text>
-            <Text style={styles.mealsEmptyDesc}>点这里记录一餐</Text>
+          <Pressable style={({ pressed }) => [styles.mealsEmpty, { backgroundColor: themeColors.emptyMealCard, borderColor: themeColors.emptyMealCardBorder }, pressed && styles.pressed]} onPress={onQuickRecord}>
+            <IconfontText className="iconfont icon-paizhao-xianxing" size={24} color={isDark ? '#7dd3aa' : colors.brand} />
+            <Text style={[styles.mealsEmptyTitle, { color: themeColors.text }]}>暂无今日餐食</Text>
+            <Text style={[styles.mealsEmptyDesc, { color: themeColors.textMuted }]}>点这里记录一餐</Text>
           </Pressable>
         ) : (
           meals.map((meal, index) => {
@@ -867,29 +969,29 @@ function HomeMealsSection({
             return (
               <Pressable
                 key={`${meal.type}-${meal.time}-${index}`}
-                style={({ pressed }) => [styles.mealItem, progress > 100 && styles.mealItemWarning, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.mealItem, { backgroundColor: themeColors.mealCard, borderColor: themeColors.mealCardBorder }, progress > 100 && { backgroundColor: themeColors.mealCardWarningBg, borderColor: themeColors.mealCardWarningBorder }, pressed && styles.pressed]}
                 onPress={() => recordId ? onOpenRecord(recordId) : onOpenHistory()}
               >
-                <View style={[styles.mealMediaWrap, imageUrl ? styles.mealMediaPhoto : styles.mealMediaIcon]}>
+                <View style={[styles.mealMediaWrap, imageUrl ? { backgroundColor: themeColors.mealPhotoBg } : { backgroundColor: themeColors.mealIconBg }]}>
                   {imageUrl ? (
                     <Image source={{ uri: imageUrl }} style={styles.mealThumbImage} resizeMode="cover" />
                   ) : (
-                    <Text style={styles.mealIconText}>{mealIconLabel(meal.type)}</Text>
+                    <Text style={[styles.mealIconText, { color: themeColors.mealIconText }]}>{mealIconLabel(meal.type)}</Text>
                   )}
                 </View>
                 <View style={styles.mealContent}>
                   <View style={styles.mealHeaderBlock}>
-                    <Text style={styles.mealName} numberOfLines={1}>{meal.name || getMealTypeLabel(meal.type)}</Text>
-                    <Text style={styles.mealCalorie}>{Math.round(Number(meal.calorie || 0))}<Text style={styles.mealCalorieUnit}> kcal</Text></Text>
+                    <Text style={[styles.mealName, { color: themeColors.text }]} numberOfLines={1}>{meal.name || getMealTypeLabel(meal.type)}</Text>
+                    <Text style={[styles.mealCalorie, { color: themeColors.text }]}>{Math.round(Number(meal.calorie || 0))}<Text style={[styles.mealCalorieUnit, { color: themeColors.textSecondary }]}> kcal</Text></Text>
                   </View>
                   <View style={styles.mealProgressWrap}>
-                    <View style={styles.mealProgressBarBg}>
-                      <View style={[styles.mealProgressBarFill, progress > 100 && styles.mealProgressBarFillWarning, { width: `${clamp(progress, 0, 100)}%` }]} />
+                    <View style={[styles.mealProgressBarBg, { backgroundColor: themeColors.mealProgressTrack }]}>
+                      <View style={[styles.mealProgressBarFill, progress > 100 && { backgroundColor: themeColors.over }, { width: `${clamp(progress, 0, 100)}%` }]} />
                     </View>
                   </View>
                   <View style={styles.mealProgressFoot}>
-                    <Text style={styles.mealProgressText}>目标 {Math.round(Number(meal.target || 0))} kcal</Text>
-                    <Text style={[styles.mealProgressPercent, progress > 100 && styles.mealProgressPercentOver]}>{Math.round(progress)}%</Text>
+                    <Text style={[styles.mealProgressText, { color: themeColors.textSecondary }]}>目标 {Math.round(Number(meal.target || 0))} kcal</Text>
+                    <Text style={[styles.mealProgressPercent, { color: progress > 100 ? themeColors.over : colors.brand }]}>{Math.round(progress)}%</Text>
                   </View>
                 </View>
               </Pressable>
@@ -1697,7 +1799,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   dateDayCircleOver: {
-    backgroundColor: '#e57373',
+    backgroundColor: 'colors.homeWarningRed',
   },
   dateDayCircleSelected: {
     backgroundColor: 'transparent',
@@ -1748,7 +1850,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   cardValueOver: {
-    color: '#e57373',
+    color: 'colors.homeWarningRed',
   },
   cardUnit: {
     color: colors.textMuted,
@@ -1800,7 +1902,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   progressBarFillOver: {
-    backgroundColor: '#e57373',
+    backgroundColor: 'colors.homeWarningRed',
   },
   nutritionShell: {
     marginTop: 10,
@@ -1861,7 +1963,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   macroOverHint: {
-    color: '#e57373',
+    color: 'colors.homeWarningRed',
     fontSize: 8,
     lineHeight: 10,
     fontWeight: '700',
@@ -1978,7 +2080,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   bodyStatusChangeUp: {
-    color: '#e57373',
+    color: 'colors.homeWarningRed',
   },
   bodyStatusChangeDown: {
     color: '#5cb896',
@@ -2119,7 +2221,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brand,
   },
   mealProgressBarFillWarning: {
-    backgroundColor: '#e57373',
+    backgroundColor: 'colors.homeWarningRed',
   },
   mealProgressFoot: {
     marginTop: 7,
@@ -2137,7 +2239,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   mealProgressPercentOver: {
-    color: '#e57373',
+    color: 'colors.homeWarningRed',
   },
   expirySection: {
     marginBottom: 16,
