@@ -5,7 +5,7 @@ import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { Apple, Check, Coffee, Cookie, Dumbbell, ImagePlus, Inbox, Moon, MoreVertical, Plus, RefreshCw, Search, Send, Soup, Trash2, Undo2, UserPlus, Utensils, X, type LucideIcon } from 'lucide-react-native'
+import { Apple, Check, Coffee, Cookie, Dumbbell, ImagePlus, Inbox, Moon, MoreVertical, Plus, RefreshCw, Search, Send, Share2, Soup, Trash2, Undo2, UserPlus, Utensils, X, type LucideIcon } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   getMealTypeLabel,
@@ -35,6 +35,7 @@ import { AppButton } from '../components/AppButton'
 import { APP_VERSION } from '../config'
 import { CONSOLE_LOG_BUFFER_LIMIT, getRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
 import type { RootStackParamList } from '../navigation/types'
+import { isNativeWechatShareAvailable, shareWebpageToWechat } from '../native/wechatAuth'
 import { useAppDialog } from '../providers/DialogProvider'
 import { colors } from '../theme'
 import { formatDateTime, formatShortDate, todayKey } from '../utils/date'
@@ -351,11 +352,10 @@ export function DayRecordScreen() {
       return
     }
     try {
-      const result = await Share.share({
-        title: `${date} 饮食记录`,
-        message: buildDayShareMessage(date, records),
-      })
-      if (result.action === Share.dismissedAction) return
+      const shared = records.length === 1
+        ? await shareFoodRecordToWechatOrSystem(records[0])
+        : await shareTextToSystem(`${date} 饮食记录`, buildDayShareMessage(date, records))
+      if (!shared) return
       const reward = await apiClient.claimSharePosterReward({ shareScope: 'daily_food', shareDate: date })
       await showShareRewardAlert(dialog, reward)
     } catch (error) {
@@ -614,11 +614,8 @@ export function RecordDetailScreen() {
   const shareRecord = async () => {
     if (!record) return
     try {
-      const result = await Share.share({
-        title: `${getMealTypeLabel(record.meal_type)}饮食记录`,
-        message: buildRecordShareMessage(record),
-      })
-      if (result.action === Share.dismissedAction) return
+      const shared = await shareFoodRecordToWechatOrSystem(record)
+      if (!shared) return
       const reward = await apiClient.claimSharePosterReward({ recordId: record.id })
       await showShareRewardAlert(dialog, reward)
     } catch (error) {
@@ -918,6 +915,7 @@ export function AnalyzeHistoryScreen() {
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [menuTask, setMenuTask] = useState<AnalysisTask | null>(null)
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
+  const [sharingTaskId, setSharingTaskId] = useState<string | null>(null)
 
   const load = useCallback(async (keyword = '') => {
     setLoading(true)
@@ -1044,6 +1042,37 @@ export function AnalyzeHistoryScreen() {
     })
   }, [confirmRetryTask, navigation])
 
+  const shareAnalyzeTask = useCallback(async (task: AnalysisTask) => {
+    if (sharingTaskId) return
+    if (task.status !== 'done' || isPackagedAnalyzeHistoryTask(task)) {
+      await dialog.alert('暂时无法分享', '识别完成并保存为饮食记录后，才能生成微信分享卡片。', 'warning')
+      return
+    }
+    setSharingTaskId(task.id)
+    try {
+      const record = await findFoodRecordForAnalyzeTask(task)
+      if (!record) {
+        setSharingTaskId(null)
+        const confirmed = await dialog.confirm({
+          title: '先保存后分享',
+          message: '微信卡片需要一条已保存的饮食记录。请先打开识别结果并保存为饮食记录，再回来分享。',
+          confirmText: '去保存',
+          cancelText: '取消',
+        })
+        if (confirmed) openTask(task)
+        return
+      }
+      const shared = await shareFoodRecordToWechatOrSystem(record)
+      if (!shared) return
+      const reward = await apiClient.claimSharePosterReward({ recordId: record.id })
+      await showShareRewardAlert(dialog, reward)
+    } catch (error) {
+      await showError(dialog, '分享失败', error)
+    } finally {
+      setSharingTaskId((current) => (current === task.id ? null : current))
+    }
+  }, [dialog, openTask, sharingTaskId])
+
   const closeTaskMenu = useCallback(() => {
     setMenuTask(null)
   }, [])
@@ -1063,6 +1092,12 @@ export function AnalyzeHistoryScreen() {
     closeTaskMenu()
     if (task && isAnalyzeRetryable(task)) void confirmRetryTask(task)
   }, [closeTaskMenu, confirmRetryTask, menuTask])
+
+  const selectMenuShareTask = useCallback(() => {
+    const task = menuTask
+    closeTaskMenu()
+    if (task) void shareAnalyzeTask(task)
+  }, [closeTaskMenu, menuTask, shareAnalyzeTask])
 
   const selectMenuDeleteTask = useCallback(() => {
     const task = menuTask
@@ -1085,7 +1120,8 @@ export function AnalyzeHistoryScreen() {
 
   const initialLoading = loading && tasks.length === 0
   const menuTaskRetryable = menuTask ? isAnalyzeRetryable(menuTask) : false
-  const menuTaskBusy = menuTask ? retryingTaskId === menuTask.id || deletingTaskId === menuTask.id : false
+  const menuTaskShareable = menuTask ? menuTask.status === 'done' && !isPackagedAnalyzeHistoryTask(menuTask) : false
+  const menuTaskBusy = menuTask ? retryingTaskId === menuTask.id || deletingTaskId === menuTask.id || sharingTaskId === menuTask.id : false
 
   return (
     <View style={styles.analyzeHistoryPage}>
@@ -1153,7 +1189,8 @@ export function AnalyzeHistoryScreen() {
           const modeLabel = analyzeHistoryModeLabel(task)
           const retrying = retryingTaskId === task.id
           const deleting = deletingTaskId === task.id
-          const busy = retrying || deleting
+          const sharing = sharingTaskId === task.id
+          const busy = retrying || deleting || sharing
           return (
             <Pressable key={task.id} style={({ pressed }) => [styles.analyzeHistoryTaskWrapper, pressed && styles.analyzeHistoryPressed]} onPress={() => openTask(task)}>
               <View style={[styles.analyzeHistoryTaskCard, task.status === 'violated' && styles.analyzeHistoryTaskCardViolated]}>
@@ -1236,6 +1273,26 @@ export function AnalyzeHistoryScreen() {
                 <View style={styles.analyzeHistoryMenuActionCopy}>
                   <Text style={styles.analyzeHistoryMenuActionText}>查看识别结果</Text>
                   <Text style={styles.analyzeHistoryMenuActionHint}>打开这条记录的详情页</Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                disabled={!menuTaskShareable || menuTaskBusy}
+                style={({ pressed }) => [
+                  styles.analyzeHistoryMenuAction,
+                  pressed && styles.analyzeHistoryMenuActionPressed,
+                  (!menuTaskShareable || menuTaskBusy) && styles.analyzeHistoryMenuActionDisabled,
+                ]}
+                onPress={selectMenuShareTask}
+              >
+                <View style={styles.analyzeHistoryMenuActionIcon}>
+                  <Share2 size={17} color={colors.brand} strokeWidth={2.5} />
+                </View>
+                <View style={styles.analyzeHistoryMenuActionCopy}>
+                  <Text style={styles.analyzeHistoryMenuActionText}>分享到微信</Text>
+                  <Text style={styles.analyzeHistoryMenuActionHint}>
+                    {menuTask?.is_recorded === true ? '生成可预览的饮食记录卡片' : '需先保存成饮食记录'}
+                  </Text>
                 </View>
               </Pressable>
 
@@ -5947,7 +6004,7 @@ function recordImageUrls(record: FoodRecord | null): string[] {
   return urls.map((url) => String(url || '').trim()).filter(Boolean)
 }
 
-function buildRecordShareMessage(record: FoodRecord): string {
+function buildRecordShareMessage(record: FoodRecord, shareUrl?: string): string {
   const lines = [
     `${getMealTypeLabel(record.meal_type)} · ${Math.round(record.total_calories || 0)} kcal`,
     `蛋白质 ${round1(record.total_protein || 0)}g · 碳水 ${round1(record.total_carbs || 0)}g · 脂肪 ${round1(record.total_fat || 0)}g`,
@@ -5959,6 +6016,7 @@ function buildRecordShareMessage(record: FoodRecord): string {
     return `- ${item.name}${intake > 0 ? ` ${intake}g` : ''}`
   })
   if (foods.length) lines.push('食物明细:', ...foods)
+  if (shareUrl) lines.push(shareUrl)
   lines.push('来自 Food Link')
   return lines.join('\n')
 }
@@ -6138,6 +6196,51 @@ function mealToneStyles(mealType: MealType): {
 
 async function showShareRewardAlert(dialog: AppDialog, result: Awaited<ReturnType<typeof apiClient.claimSharePosterReward>>) {
   await dialog.alert('分享完成', result.message || (result.claimed ? `分享奖励 +${result.credits || 0} 积分` : '分享已完成'), 'success')
+}
+
+async function shareFoodRecordToWechatOrSystem(record: FoodRecord): Promise<boolean> {
+  const shareUrl = apiClient.buildFoodRecordShareUrl(record.id)
+  const title = buildRecordShareTitle(record)
+  const description = buildRecordShareDescription(record)
+  if (isNativeWechatShareAvailable()) {
+    try {
+      await shareWebpageToWechat({
+        webpageUrl: shareUrl,
+        title,
+        description,
+        scene: 'session',
+      })
+      return true
+    } catch {
+      return shareTextToSystem(title, buildRecordShareMessage(record, shareUrl), shareUrl)
+    }
+  }
+  return shareTextToSystem(title, buildRecordShareMessage(record, shareUrl), shareUrl)
+}
+
+async function shareTextToSystem(title: string, message: string, url?: string): Promise<boolean> {
+  const result = await Share.share({
+    title,
+    message,
+    ...(url ? { url } : {}),
+  })
+  return result.action !== Share.dismissedAction
+}
+
+function buildRecordShareTitle(record: FoodRecord): string {
+  const calories = Math.round(record.total_calories || 0)
+  const prefix = `${getMealTypeLabel(record.meal_type)}饮食记录`
+  return calories > 0 ? `${prefix} · ${calories} kcal` : prefix
+}
+
+function buildRecordShareDescription(record: FoodRecord): string {
+  const foods = (record.items || [])
+    .map((item) => String(item.name || '').trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join('、')
+  const macros = `蛋白质 ${round1(record.total_protein || 0)}g · 碳水 ${round1(record.total_carbs || 0)}g · 脂肪 ${round1(record.total_fat || 0)}g`
+  return foods ? `${foods}。${macros}` : macros
 }
 
 function nutrientNumber(nutrients: Nutrients | undefined, key: keyof Nutrients): number {
@@ -6394,6 +6497,17 @@ function isVisibleAnalyzeHistoryTask(task: AnalysisTask): boolean {
   if (taskType === 'food_text' || taskType.startsWith('food_text')) return true
   if (taskType.startsWith('precision_')) return true
   return false
+}
+
+async function findFoodRecordForAnalyzeTask(task: AnalysisTask): Promise<FoodRecord | null> {
+  const recordId = String(task.record_id || '').trim()
+  if (recordId) {
+    const data = await apiClient.getFoodRecordById(recordId)
+    return data.record
+  }
+  if (task.is_recorded !== true) return null
+  const data = await apiClient.getFoodRecordList(analyzeHistoryDate(task))
+  return (data.records || []).find((record) => String(record.source_task_id || '').trim() === task.id) || null
 }
 
 function isAnalyzeRetryable(task: AnalysisTask): boolean {

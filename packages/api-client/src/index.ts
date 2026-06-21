@@ -857,6 +857,12 @@ export class FoodLinkApiClient {
     })
   }
 
+  buildFoodRecordShareUrl(recordId: string): string {
+    const id = recordId.trim()
+    if (!id) throw new Error('缺少饮食记录 ID')
+    return this.absoluteUrl(`/share/food-record/${encodeURIComponent(id)}`)
+  }
+
   async updateFoodRecord(recordId: string, body: UpdateFoodRecordRequest): Promise<{ message: string; record: FoodRecord }> {
     return this.authenticatedRequest<{ message: string; record: FoodRecord }>(`/api/food-record/${encodeURIComponent(recordId)}`, {
       method: 'PUT',

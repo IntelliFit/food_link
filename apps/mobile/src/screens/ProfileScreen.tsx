@@ -7,9 +7,23 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { FoodExpiryDashboard, MembershipStatus, RewardCenterResponse, UserInfo } from '@food-link/core'
 import {
+  Activity,
+  Bell,
+  BookOpen,
   ChevronRight,
+  CreditCard,
+  FileText,
+  LineChart,
+  Lock,
+  MapPin,
+  Package,
+  Search,
+  Shield,
   Sparkles,
+  Star,
+  Trophy,
   User,
+  UserPlus,
   type LucideIcon,
 } from 'lucide-react-native'
 import { apiClient, clearRecentRequestTraces } from '../api'

@@ -957,6 +957,7 @@ describe('FoodLinkApiClient', () => {
 
     await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
     await client.getFoodRecordById('record-1')
+    expect(client.buildFoodRecordShareUrl('record 1/中文')).toBe('https://api.example.com/share/food-record/record%201%2F%E4%B8%AD%E6%96%87')
     await client.claimSharePosterReward({ recordId: 'record-1' })
     await client.claimSharePosterReward({ shareScope: 'daily_food', shareDate: '2026-06-15' })
     await client.updateFoodRecord('record-1', {
