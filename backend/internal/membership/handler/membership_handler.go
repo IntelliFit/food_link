@@ -20,7 +20,7 @@ import (
 const wechatPapayNotifyMaxBodyBytes = 1 << 20
 
 type MembershipService interface {
-	ListPlans(ctx context.Context) ([]map[string]any, error)
+	ListPlans(ctx context.Context, userID string) ([]map[string]any, error)
 	GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error)
 	GetRewardCenter(ctx context.Context, userID string) (map[string]any, error)
 	CreatePaymentWithInput(ctx context.Context, userID string, input service.CreateMembershipPaymentInput) (map[string]any, error)
@@ -40,7 +40,8 @@ func NewMembershipHandler(svc MembershipService) *MembershipHandler {
 
 // GET /api/membership/plans
 func (h *MembershipHandler) ListPlans(c *gin.Context) {
-	data, err := h.svc.ListPlans(c.Request.Context())
+	userID := c.GetString(authmw.ContextUserIDKey)
+	data, err := h.svc.ListPlans(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
 		return

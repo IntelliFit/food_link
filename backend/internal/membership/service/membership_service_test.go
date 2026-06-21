@@ -389,11 +389,43 @@ func TestMembershipService_ListPlans(t *testing.T) {
 		}},
 	})
 
-	plans, err := svc.ListPlans(context.Background())
+	plans, err := svc.ListPlans(context.Background(), "")
 	require.NoError(t, err)
 	require.Len(t, plans, 1)
 	assert.Equal(t, "standard_monthly", plans[0]["code"])
 	assert.Equal(t, float64(30), plans[0]["savings"])
+}
+
+func TestMembershipService_ListPlans_AppendsAllowedPaymentTestPlan(t *testing.T) {
+	testPlan := &domain.MembershipPlan{
+		Code:           domain.PaymentTestPlanCode,
+		Name:           "Pay Test - 0.01 CNY",
+		Amount:         0.01,
+		DurationMonths: 1,
+		DailyCredits:   8,
+		IsActive:       true,
+		IsVisible:      false,
+		IsTestPlan:     true,
+	}
+	svc := NewMembershipService(&mockMembershipRepo{
+		plans: []domain.MembershipPlan{{
+			Code:           "standard_monthly",
+			Name:           "Standard",
+			Amount:         19.9,
+			DurationMonths: 1,
+			DailyCredits:   20,
+			IsActive:       true,
+			IsVisible:      true,
+		}},
+		planByCode:        map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: testPlan},
+		paymentTestAccess: &domain.PaymentTestAccess{Enabled: true, UserAllowed: true},
+	})
+
+	plans, err := svc.ListPlans(context.Background(), "u1")
+	require.NoError(t, err)
+	require.Len(t, plans, 2)
+	assert.Equal(t, domain.PaymentTestPlanCode, plans[1]["code"])
+	assert.Equal(t, true, plans[1]["is_test_plan"])
 }
 
 func TestMembershipService_GetMyMembership_NoMembershipTrial(t *testing.T) {

@@ -491,7 +491,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.DELETE("/api/exercise-logs/:log_id", authmw.RequireJWT(jwtSvc), healthHandler.DeleteExerciseLog)
 
 	// Membership routes
-	engine.GET("/api/membership/plans", membershipHandler.ListPlans)
+	engine.GET("/api/membership/plans", authmw.OptionalJWT(jwtSvc), membershipHandler.ListPlans)
 	engine.GET("/api/membership/me", authmw.RequireJWT(jwtSvc), membershipHandler.GetMyMembership)
 	engine.GET("/api/membership/reward-center", authmw.RequireJWT(jwtSvc), membershipHandler.GetRewardCenter)
 	engine.POST("/api/membership/pay/create", authmw.RequireJWT(jwtSvc), membershipHandler.CreatePayment)

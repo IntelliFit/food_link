@@ -1494,6 +1494,7 @@ export interface MembershipPlan {
   savings?: number | null
   /** 排序权重 */
   sort_order?: number
+  is_test_plan?: boolean
 }
 
 export interface MembershipStatus {
@@ -4157,11 +4158,13 @@ export async function getUserProfile(): Promise<UserInfo> {
  */
 export async function getMembershipPlans(): Promise<MembershipPlan[]> {
   try {
+    const token = getAccessToken()
     const response = await Taro.request({
       url: `${API_BASE_URL}/api/membership/plans`,
       method: 'GET',
       header: withNgrokBypassHeaders({
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       })
     })
 

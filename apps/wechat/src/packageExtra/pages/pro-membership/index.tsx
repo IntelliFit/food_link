@@ -159,6 +159,7 @@ const AUDIT_PREVIEW_MEMBERSHIP: MembershipStatus = {
 }
 
 const AUTO_RENEW_AUDIT_PREVIEW_STORAGE_KEY = 'auto_renew_audit_preview'
+const PAYMENT_TEST_PLAN_CODE = 'test_one_cent_monthly'
 
 function isAutoRenewAuditRoute(): boolean {
   const routerParams = Taro.getCurrentInstance().router?.params || {}
@@ -181,6 +182,7 @@ function ProMembershipPage() {
   const [pageLoading, setPageLoading] = useState(false)
   const [selectedTier, setSelectedTier] = useState<MembershipTier>('standard')
   const [selectedPeriod, setSelectedPeriod] = useState<MembershipPeriod>('yearly')
+  const [selectedPlanCode, setSelectedPlanCode] = useState<string | null>(null)
   const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null)
   const [ageWarningDismissed, setAgeWarningDismissed] = useState(false)
   const [autoRenewRuleAccepted, setAutoRenewRuleAccepted] = useState(false)
@@ -257,13 +259,21 @@ function ProMembershipPage() {
     return { ok: true }
   }
 
+  const paymentTestPlan = useMemo<MembershipPlan | null>(() => {
+    return plans.find(p => p.is_test_plan || p.code === PAYMENT_TEST_PLAN_CODE) || null
+  }, [plans])
+
   const selectedPlan = useMemo<MembershipPlan | null>(() => {
     if (!plans.length) return null
-    return plans.find(p => p.tier === selectedTier && p.period === selectedPeriod) || null
-  }, [plans, selectedTier, selectedPeriod])
+    if (selectedPlanCode) {
+      const explicit = plans.find(p => p.code === selectedPlanCode)
+      if (explicit) return explicit
+    }
+    return plans.find(p => !p.is_test_plan && p.code !== PAYMENT_TEST_PLAN_CODE && p.tier === selectedTier && p.period === selectedPeriod) || null
+  }, [plans, selectedPlanCode, selectedTier, selectedPeriod])
 
   const monthlyPlanForTier = useMemo<MembershipPlan | null>(() => {
-    return plans.find(p => p.tier === selectedTier && p.period === 'monthly') || null
+    return plans.find(p => !p.is_test_plan && p.code !== PAYMENT_TEST_PLAN_CODE && p.tier === selectedTier && p.period === 'monthly') || null
   }, [plans, selectedTier])
 
   const paymentEstimate = useMemo(() => {
@@ -348,6 +358,14 @@ function ProMembershipPage() {
       setPlans(planList)
       setMembership(currentMembership)
       if (profile) setHealthProfile(profile)
+      const testPlan = planList.find(p => p.is_test_plan || p.code === PAYMENT_TEST_PLAN_CODE)
+      if (testPlan && !targetTier && !targetPeriod && !currentMembership.is_pro) {
+        setSelectedPlanCode(testPlan.code)
+        if (testPlan.tier) setSelectedTier(testPlan.tier)
+        if (testPlan.period) setSelectedPeriod(testPlan.period)
+      } else {
+        setSelectedPlanCode(null)
+      }
       if (targetTier) {
         setSelectedTier(targetTier)
       }
@@ -744,7 +762,10 @@ function ProMembershipPage() {
               <View
                 key={t.key}
                 className={`tier-card ${active ? 'tier-card--active' : ''} tier-card--${t.key}`}
-                onClick={() => setSelectedTier(t.key)}
+                onClick={() => {
+                  setSelectedPlanCode(null)
+                  setSelectedTier(t.key)
+                }}
               >
                 {isPro && currentPlanTier === t.key ? (
                   <View className='tier-card-badge tier-card-badge--current'>当前</View>
@@ -773,13 +794,13 @@ function ProMembershipPage() {
         <View className='period-tabs'>
           {PERIODS.map(p => {
             const active = p.key === selectedPeriod
-            const planForPeriod = plans.find(x => x.tier === selectedTier && x.period === p.key)
+            const planForPeriod = plans.find(x => !x.is_test_plan && x.code !== PAYMENT_TEST_PLAN_CODE && x.tier === selectedTier && x.period === p.key)
             // 立省：优先用 savings 字段
             let saveTxt: string | null = null
             if (planForPeriod?.savings && planForPeriod.savings > 0) {
               saveTxt = `立省¥${formatCurrencyCompact(planForPeriod.savings)}`
             } else if (p.key !== 'monthly') {
-              const monthly = plans.find(x => x.tier === selectedTier && x.period === 'monthly')
+              const monthly = plans.find(x => !x.is_test_plan && x.code !== PAYMENT_TEST_PLAN_CODE && x.tier === selectedTier && x.period === 'monthly')
               if (monthly && planForPeriod) {
                 const diff = monthly.amount * planForPeriod.duration_months - planForPeriod.amount
                 if (diff > 0) saveTxt = `立省¥${formatCurrencyCompact(diff)}`
@@ -789,7 +810,10 @@ function ProMembershipPage() {
               <View
                 key={p.key}
                 className={`period-tab ${active ? 'period-tab--active' : ''}`}
-                onClick={() => setSelectedPeriod(p.key)}
+                onClick={() => {
+                  setSelectedPlanCode(null)
+                  setSelectedPeriod(p.key)
+                }}
               >
                 {p.key === 'yearly' && saveTxt && (
                   <Text className='period-tab-recommend'>推荐</Text>
@@ -814,6 +838,26 @@ function ProMembershipPage() {
       </View>
 
       {/* 已选套餐价格卡 */}
+      {paymentTestPlan && (
+        <View
+          className={`payment-test-card ${selectedPlan?.code === paymentTestPlan.code ? 'payment-test-card--active' : ''}`}
+          onClick={() => {
+            setSelectedPlanCode(paymentTestPlan.code)
+            if (paymentTestPlan.tier) setSelectedTier(paymentTestPlan.tier)
+            if (paymentTestPlan.period) setSelectedPeriod(paymentTestPlan.period)
+          }}
+        >
+          <View className='payment-test-card-main'>
+            <Text className='payment-test-card-title'>支付测试套餐</Text>
+            <Text className='payment-test-card-desc'>仅测试名单账号可见，用于真实支付链路验证</Text>
+          </View>
+          <View className='payment-test-card-price'>
+            <Text className='payment-test-card-symbol'>¥</Text>
+            <Text className='payment-test-card-amount'>{paymentTestPlan.amount.toFixed(2)}</Text>
+          </View>
+        </View>
+      )}
+
       <View className='plan-card'>
         <View className='plan-card-left'>
           <Text className='plan-name'>{selectedPlan?.name || '食探会员'}</Text>
