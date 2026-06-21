@@ -346,20 +346,6 @@ function scoreToFocusOverview(score: number, hasCustomFocus: boolean): string {
     : '你当前关注的核心指标处在较高压力区，先从最可执行的一项小步调整。'
 }
 
-function averageRiskCardScore(cards: RiskCard[], projectDelta = false): number | null {
-  const validScores = cards
-    .map(card => {
-      const baseScore = toSafeNumber(card.score, NaN)
-      if (!Number.isFinite(baseScore)) return null
-      const delta = projectDelta ? toSafeNumber(card.delta, 0) : 0
-      return Math.round(Math.max(0, Math.min(100, baseScore + delta)))
-    })
-    .filter((score): score is number => typeof score === 'number')
-
-  if (validScores.length === 0) return null
-  return Math.round(validScores.reduce((sum, score) => sum + score, 0) / validScores.length)
-}
-
 function riskCardIcon(key: string): string {
   switch (key) {
     case 'hypertension': return 'tianpingzuo'
@@ -1192,13 +1178,13 @@ function StatsPage() {
       return option?.is_custom ? pendingCustomRiskCardFromOption(option) : null
     })
     .filter((card): card is RiskCard => Boolean(card))
-  const focusOverallScore = averageRiskCardScore(visibleRiskCards) ?? overallRiskScore
-  const focusProjectedScore = averageRiskCardScore(visibleRiskCards, true) ?? projectedOverallScore
   const hasVisibleCustomFocus = visibleRiskCards.some(card => card.is_custom)
+  const focusOverallScore = overallRiskScore
+  const focusProjectedScore = projectedOverallScore
   const focusOverviewCopy = scoreToFocusOverview(focusOverallScore, hasVisibleCustomFocus)
   const focusScoreHint = hasVisibleCustomFocus
-    ? '按当前展示的核心指标与自定义 AI 指标综合计算'
-    : '按当前展示的核心关注指标综合计算'
+    ? '按全部核心指标与自定义 AI 指标综合计算'
+    : '按全部核心关注指标综合计算'
   const selectedRiskSummary = selectedRiskItems.map(item => item.short).join('、')
   const topIssues = healthIndex?.top_issues ?? []
   const actionList = healthIndex?.action_list ?? []
@@ -1579,7 +1565,7 @@ function StatsPage() {
           </View>
           <View className='action-score-delta'>
             <Text className='action-score-delta__dot' />
-            <Text className='action-score-delta__text'>如果完成修改，关注综合分约为 {focusOverallScore} → {focusProjectedScore}</Text>
+            <Text className='action-score-delta__text'>如果完成修改，综合健康分约为 {overallRiskScore} → {projectedOverallScore}</Text>
           </View>
 
           </>
