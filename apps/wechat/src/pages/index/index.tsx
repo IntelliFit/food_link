@@ -97,6 +97,7 @@ import { formatDisplayNumber, formatNumberWithComma, formatDateKey, createTarget
 import { useAnimatedNumber, useAnimatedProgress } from './hooks'
 import { TargetEditor, GreetingSection, DateSelector, StatsEntry, RecordMenu, MealActionSheet, MealRecordsDialog, MealRecordEditModal, MealRecordPosterModal, DietRecommendationSheet, MicrosSection, type MealPosterSharePayload } from './components'
 import OnboardingGuide from '../../components/OnboardingGuide'
+import { PetAvatar } from '../../components/PetAvatar'
 import {
   ONBOARDING_HOME_RECORD_GUIDE_KEY,
   shouldOfferOnboardingGuide,
@@ -373,23 +374,6 @@ function savePetFloatPosition(position: { left: number; top: number }) {
   try {
     Taro.setStorageSync(HOME_PET_FLOAT_POSITION_KEY, position)
   } catch (_) {}
-}
-
-const PET_COLORS = ['mint', 'berry', 'sunny', 'aqua', 'grape', 'peach', 'cream', 'matcha'] as const
-const PET_SHAPES = ['round', 'bean', 'puff', 'drop'] as const
-const PET_ANIMALS = ['cat', 'bunny', 'bear', 'fox', 'hamster'] as const
-const PET_ACCESSORIES = ['leaf', 'sprout', 'scarf', 'drop', 'star', 'cap', 'bow', 'halo'] as const
-const PET_PATTERNS = ['pattern-0', 'pattern-1', 'pattern-2', 'pattern-3', 'pattern-4'] as const
-
-const PET_NAME_PREFIXES = ['薄荷', '小麦', '莓果', '云朵', '暖阳', '青柚', '米粒', '水滴', '芝麻', '奶油', '栗栗', '桃桃'] as const
-const PET_NAME_SUFFIXES = ['团子', '咕咕', '豆豆', '粒粒', '泡泡', '阿福', '小满', '栗子', '糯糯', '啵啵', '小圆', '布丁'] as const
-
-function stableHash(input: string): number {
-  let hash = 0
-  for (let i = 0; i < input.length; i += 1) {
-    hash = (hash * 31 + input.charCodeAt(i)) >>> 0
-  }
-  return hash
 }
 
 function alignPayloadWithCalorieTarget(payload: DashboardTargets): { payload: DashboardTargets; adjusted: boolean } {
@@ -2430,25 +2414,7 @@ function IndexPage() {
     void loadPetSummary(selectedDate)
   }, [loadPetSummary, selectedDate])
 
-  const petSeed = useMemo(() => {
-    try {
-      return petSummary?.pet?.pet_seed || String(Taro.getStorageSync('user_id') || Taro.getStorageSync('openid') || 'guest')
-    } catch (_) {
-      return petSummary?.pet?.pet_seed || 'guest'
-    }
-  }, [petSummary?.pet?.pet_seed])
-  const fallbackPetColor = PET_COLORS[stableHash(`${petSeed}:color`) % PET_COLORS.length]
-  const fallbackPetShape = PET_SHAPES[stableHash(`${petSeed}:shape`) % PET_SHAPES.length]
-  const fallbackPetAnimal = PET_ANIMALS[stableHash(`${petSeed}:animal`) % PET_ANIMALS.length]
-  const fallbackPetAccessory = PET_ACCESSORIES[stableHash(`${petSeed}:accessory`) % PET_ACCESSORIES.length]
-  const petHash = stableHash(`${petSeed}:name`)
-  const fallbackPetPattern = PET_PATTERNS[stableHash(`${petSeed}:pattern`) % PET_PATTERNS.length]
-  const fallbackPetName = `${PET_NAME_PREFIXES[petHash % PET_NAME_PREFIXES.length]}${PET_NAME_SUFFIXES[Math.floor(petHash / PET_NAME_PREFIXES.length) % PET_NAME_SUFFIXES.length]}`
-  const petColor = petSummary?.pet?.color || fallbackPetColor
-  const petShape = petSummary?.pet?.shape || fallbackPetShape
-  const petAccessory = petSummary?.pet?.accessory || fallbackPetAccessory
-  const petPattern = petSummary?.pet?.pattern || fallbackPetPattern
-  const petName = petSummary?.pet?.name || fallbackPetName
+  const petName = petSummary?.pet?.name || '成长伙伴'
   const healthyHabitScore = useMemo(() => {
     if (dashboardBusy || isGuest) return 0
     let score = 0
@@ -2942,28 +2908,10 @@ function IndexPage() {
           onTouchCancel={handlePetTouchEnd}
         >
           <View
-            className={`pet-companion-card ${petColor} ${petShape} ${petPattern} animal-${fallbackPetAnimal} mood-${petMood} state-${petState}`}
+            className='pet-companion-card'
             onClick={petCollapsed ? togglePetCollapsed : openPetChat}
           >
-            <View className='pet-companion-avatar'>
-              <View className='pet-companion-shadow' />
-              <View className='pet-body'>
-                <View className='pet-tail' />
-                <View className='pet-ear left' />
-                <View className='pet-ear right' />
-                <View className='pet-accessory'>
-                  <View className={`pet-accessory-shape ${petAccessory}`} />
-                </View>
-                <View className='pet-face'>
-                  <View className='pet-snout' />
-                  <View className='pet-eye left' />
-                  <View className='pet-eye right' />
-                  <View className='pet-cheek left' />
-                  <View className='pet-cheek right' />
-                  <View className='pet-mouth' />
-                </View>
-              </View>
-            </View>
+            <PetAvatar pet={petSummary?.pet} size='small' mood={petMood} state={petState} className='pet-companion-avatar' />
             <View className='pet-companion-content'>
                 <View className='pet-companion-header'>
                   <Text className='pet-companion-name'>{petName}</Text>

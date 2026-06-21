@@ -1,0 +1,29 @@
+.pet-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &--small {
+    width: 54px;
+    height: 54px;
+  }
+
+  &--medium {
+    width: 82px;
+    height: 82px;
+  }
+
+  &--large {
+    width: 132px;
+    height: 132px;
+  }
+
+  &--dimmed {
+    opacity: 0.72;
+  }
+
+  &--warming {
+    filter: drop-shadow(0 0 12rpx rgba(245, 188, 91, 0.42));
+  }
+}
