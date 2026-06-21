@@ -1467,35 +1467,30 @@ function CommunityPage() {
 
   /** 点击帖子图片/热量/营养进入识别记录详情 */
   const handleViewDetail = (itemOrRecord: CommunityFeedItem | CommunityFeedItem['record']) => {
-    let maybeItem: CommunityFeedItem | null = null
     let record: CommunityFeedItem['record']
+    let targetType: CommunityFeedTargetType = 'food_record'
+    let targetId = ''
     if (isCommunityFeedItem(itemOrRecord)) {
-      maybeItem = itemOrRecord
       record = itemOrRecord.record
+      targetType = getFeedTargetType(itemOrRecord)
+      targetId = getFeedTargetId(itemOrRecord)
     } else {
       record = itemOrRecord
+      targetType = (record.feed_type || 'food_record') as CommunityFeedTargetType
+      targetId = record.id
     }
     if (!record.id) {
       Taro.showToast({ title: '记录 ID 缺失', icon: 'none' })
       return
     }
+    const query = [
+      `targetType=${encodeURIComponent(targetType)}`,
+      `targetId=${encodeURIComponent(targetId)}`,
+      `recordId=${encodeURIComponent(record.id)}`
+    ].join('&')
     try {
-      if (maybeItem && isExerciseFeed(maybeItem)) {
-        const dateText = String(record.record_time || record.created_at || '').slice(0, 10)
-        Taro.navigateTo({
-          url: `${extraPkgUrl('/pages/exercise-record/index')}${dateText ? `?date=${encodeURIComponent(dateText)}` : ''}`
-        })
-        return
-      }
-      if (maybeItem && isCampusFoodFeed(maybeItem)) {
-        const targetId = maybeItem.target_id || record.id
-        Taro.navigateTo({
-          url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(targetId)}`
-        })
-        return
-      }
       Taro.navigateTo({
-        url: `${extraPkgUrl('/pages/record-detail/index')}?id=${encodeURIComponent(record.id)}`
+        url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}`
       })
     } catch (e) {
       void showUnifiedApiError(e, '打开详情失败')
@@ -2407,7 +2402,10 @@ function CommunityPage() {
                           }
                         }}
                       >
-                        <View className='feed-card-moments'>
+                        <View
+                          className='feed-card-moments'
+                          onClick={() => handleViewDetail(item)}
+                        >
                           <View className='feed-card-avatar-col'>
                             <View
                               className='user-avatar'

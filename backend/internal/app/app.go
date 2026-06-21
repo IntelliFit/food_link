@@ -607,7 +607,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminFeedReportHandler := adminhandler.NewFeedReportHandler(adminFeedReportSvc)
 	adminBenchmarkRepo := adminrepo.NewBenchmarkRepo(db)
 	adminAccountRepo := adminrepo.NewAdminAccountRepo(db)
-	adminBenchmarkSvc := adminservice.NewBenchmarkService(adminBenchmarkRepo, analyzeTaskSvc, adminAccountRepo, userRepo)
+	adminBenchmarkSvc := adminservice.NewBenchmarkService(adminBenchmarkRepo, analyzeTaskSvc, adminAccountRepo, userRepo, ofoxAIClient)
 	adminBenchmarkHandler := adminhandler.NewBenchmarkHandler(adminBenchmarkSvc)
 	adminAuthSvc := adminservice.NewAuthService(adminAccountRepo)
 	adminAuthHandler := adminhandler.NewAuthHandler(adminAuthSvc)

@@ -262,6 +262,7 @@ function SearchResultsPage() {
       case 'food_record': return '饮食记录'
       case 'exercise_log': return '运动记录'
       case 'circle_post': return '圈子帖子'
+      case 'campus_food': return '校园食堂'
       default: return ''
     }
   }

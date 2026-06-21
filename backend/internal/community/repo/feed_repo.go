@@ -16,6 +16,7 @@ const (
 	FeedTargetFoodRecord  = "food_record"
 	FeedTargetExerciseLog = "exercise_log"
 	FeedTargetCirclePost  = "circle_post"
+	FeedTargetCampusFood  = "campus_food"
 )
 
 type FeedRecord struct {
@@ -275,6 +276,20 @@ func (r *FeedRepo) GetFeedTargetByID(ctx context.Context, targetType, targetID s
 		var row FeedRecord
 		err := r.db.WithContext(ctx).Table("user_exercise_logs").
 			Select("'exercise_log' AS feed_type, id, user_id, '' AS meal_type, COALESCE(recorded_at, created_at, recorded_on::timestamptz) AS record_time, created_at, COALESCE(calories_burned, 0) AS total_calories, 0 AS total_protein, 0 AS total_carbs, 0 AS total_fat, image_url AS image_path, exercise_desc AS description, hidden_from_feed, exercise_type, exercise_desc, calories_burned, duration_min, ai_reasoning").
+			Where("id = ?", targetID).
+			First(&row).Error
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return &row, nil
+	}
+	if targetType == FeedTargetCampusFood {
+		var row FeedRecord
+		err := r.db.WithContext(ctx).Table("public_food_library").
+			Select("'campus_food' AS feed_type, id, user_id, '' AS meal_type, COALESCE(published_at, created_at) AS record_time, created_at, COALESCE(total_calories, 0) AS total_calories, COALESCE(total_protein, 0) AS total_protein, COALESCE(total_carbs, 0) AS total_carbs, COALESCE(total_fat, 0) AS total_fat, image_path, image_paths, food_name AS description, items, '' AS diet_goal, false AS hidden_from_feed, NULL::text AS exercise_type, NULL::text AS exercise_desc, NULL::numeric AS calories_burned, NULL::int AS duration_min, NULL::text AS ai_reasoning, COALESCE(price, 0) AS price, COALESCE(price_unit, '') AS price_unit, COALESCE(school_name, '') AS school_name, COALESCE(canteen_name, '') AS canteen_name, COALESCE(campus_location_text, '') AS campus_location_text, is_campus_food, is_campus_highlight, COALESCE(like_count, 0) AS like_count, COALESCE(comment_count, 0) AS comment_count, COALESCE(collection_count, 0) AS collection_count").
 			Where("id = ?", targetID).
 			First(&row).Error
 		if err != nil {
@@ -607,8 +622,8 @@ func NormalizeTargetType(value string) string {
 		return FeedTargetExerciseLog
 	case FeedTargetCirclePost:
 		return FeedTargetCirclePost
-	case "campus_food":
-		return "campus_food"
+	case FeedTargetCampusFood:
+		return FeedTargetCampusFood
 	default:
 		return FeedTargetFoodRecord
 	}

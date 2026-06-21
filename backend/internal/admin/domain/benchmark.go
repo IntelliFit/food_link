@@ -44,31 +44,43 @@ type ModelConfig struct {
 }
 
 type RunMetrics struct {
-	SampleCount           int       `json:"sample_count"`
-	CompletedCount        int       `json:"completed_count"`
-	FailedCount           int       `json:"failed_count"`
+	SampleCount            int       `json:"sample_count"`
+	CompletedCount         int       `json:"completed_count"`
+	FailedCount            int       `json:"failed_count"`
 	// NameMatchRate is a ratio in [0,1]; display as a percentage by multiplying by 100.
-	NameMatchRate         float64   `json:"name_match_rate"`
+	NameMatchRate          float64   `json:"name_match_rate"`
+	// AINameAccuracyRate is a ratio in [0,1]; display as a percentage by multiplying by 100.
+	AINameAccuracyRate     float64   `json:"ai_name_accuracy_rate"`
+	// AINameRecallRate is a ratio in [0,1]; display as a percentage by multiplying by 100.
+	AINameRecallRate       float64   `json:"ai_name_recall_rate"`
 	// TotalWeightMAPE is already a percentage value (e.g. 10 means 10%), not a ratio.
-	TotalWeightMAPE       float64   `json:"total_weight_mape"`
-	TotalWeightRMSE       float64   `json:"total_weight_rmse"`
+	TotalWeightMAPE        float64   `json:"total_weight_mape"`
+	TotalWeightRMSE        float64   `json:"total_weight_rmse"`
 	// ItemWeightMAPE is already a percentage value (e.g. 10 means 10%), not a ratio.
-	ItemWeightMAPE        float64   `json:"item_weight_mape"`
-	ItemWeightRMSE        float64   `json:"item_weight_rmse"`
-	AverageDurationMs     float64   `json:"average_duration_ms"`
+	ItemWeightMAPE         float64   `json:"item_weight_mape"`
+	ItemWeightRMSE         float64   `json:"item_weight_rmse"`
+	AverageDurationMs      float64   `json:"average_duration_ms"`
 }
 
 type SampleMetrics struct {
-	NameMatched         bool               `json:"name_matched"`
-	NameMatchDetails    []bool             `json:"name_match_details,omitempty"`
-	TotalWeightError    float64            `json:"total_weight_error,omitempty"`
+	NameMatched          bool               `json:"name_matched"`
+	NameMatchDetails     []bool             `json:"name_match_details,omitempty"`
+	TotalWeightError     float64            `json:"total_weight_error,omitempty"`
 	// TotalWeightErrorPct is already a percentage value (e.g. 20 means 20%), not a ratio.
-	TotalWeightErrorPct float64            `json:"total_weight_error_pct,omitempty"`
-	ItemWeightErrors    []float64          `json:"item_weight_errors,omitempty"`
+	TotalWeightErrorPct  float64            `json:"total_weight_error_pct,omitempty"`
+	ItemWeightErrors     []float64          `json:"item_weight_errors,omitempty"`
 	// ItemWeightErrorPcts entries are already percentage values (e.g. 20 means 20%), not ratios.
-	ItemWeightErrorPcts []float64          `json:"item_weight_error_pcts,omitempty"`
-	ItemComparisons     []map[string]any   `json:"item_comparisons,omitempty"`
-	DurationMs          float64            `json:"duration_ms,omitempty"`
+	ItemWeightErrorPcts  []float64          `json:"item_weight_error_pcts,omitempty"`
+	ItemComparisons      []map[string]any   `json:"item_comparisons,omitempty"`
+	DurationMs           float64            `json:"duration_ms,omitempty"`
+	// AI 名称匹配指标（仅用于 benchmark 评测，不影响真实识别算法）
+	AINameAccuracy       float64            `json:"ai_name_accuracy,omitempty"`
+	AINameRecall         float64            `json:"ai_name_recall,omitempty"`
+	AINameMatched        bool               `json:"ai_name_matched,omitempty"`
+	AINameMatchDetails   []bool             `json:"ai_name_match_details,omitempty"`
+	AIItemComparisons    []map[string]any   `json:"ai_item_comparisons,omitempty"`
+	AIExtraPredictions   int                `json:"ai_extra_predictions,omitempty"`
+	AIUnmatchedGT        int                `json:"ai_unmatched_gt,omitempty"`
 }
 
 type StageOutputs struct {
@@ -113,6 +125,18 @@ type ListRunsResult struct {
 
 type ListRunSamplesResult struct {
 	Items []BenchmarkRunSample
+	Total int64
+	Page  int
+	Limit int
+}
+
+type BenchmarkRunSampleWithDataset struct {
+	BenchmarkRunSample
+	DatasetSample *DatasetSample `json:"dataset_sample,omitempty"`
+}
+
+type ListRunSamplesWithDatasetResult struct {
+	Items []BenchmarkRunSampleWithDataset
 	Total int64
 	Page  int
 	Limit int
@@ -238,6 +262,13 @@ type BenchmarkRunSampleDTO struct {
 	CompletedAt  string         `json:"completed_at,omitempty"`
 	CreatedAt    string         `json:"created_at"`
 	UpdatedAt    string         `json:"updated_at"`
+	// 关联数据集样本的调试信息
+	ImageURL         *string          `json:"image_url,omitempty"`
+	SampleName       string           `json:"sample_name,omitempty"`
+	BatchName        string           `json:"batch_name,omitempty"`
+	LabelType        string           `json:"label_type,omitempty"`
+	TotalWeightGrams *float64         `json:"total_weight_grams,omitempty"`
+	Items            map[string]float64 `json:"items,omitempty"`
 }
 
 func ToBenchmarkRunSampleDTO(s *BenchmarkRunSample) BenchmarkRunSampleDTO {
@@ -276,6 +307,28 @@ func ToBenchmarkRunSampleDTOList(items []BenchmarkRunSample) []BenchmarkRunSampl
 	out := make([]BenchmarkRunSampleDTO, len(items))
 	for i := range items {
 		out[i] = ToBenchmarkRunSampleDTO(&items[i])
+	}
+	return out
+}
+
+func ToBenchmarkRunSampleWithDatasetDTO(s *BenchmarkRunSampleWithDataset) BenchmarkRunSampleDTO {
+	dto := ToBenchmarkRunSampleDTO(&s.BenchmarkRunSample)
+	if s.DatasetSample != nil {
+		ds := s.DatasetSample
+		dto.ImageURL = ds.ImageURL
+		dto.SampleName = ds.SampleName
+		dto.BatchName = ds.BatchName
+		dto.LabelType = ds.LabelType
+		dto.TotalWeightGrams = ds.TotalWeightGrams
+		dto.Items = sampleItemsToFloat64Map(ds.Items)
+	}
+	return dto
+}
+
+func ToBenchmarkRunSampleWithDatasetDTOList(items []BenchmarkRunSampleWithDataset) []BenchmarkRunSampleDTO {
+	out := make([]BenchmarkRunSampleDTO, len(items))
+	for i := range items {
+		out[i] = ToBenchmarkRunSampleWithDatasetDTO(&items[i])
 	}
 	return out
 }
@@ -352,28 +405,37 @@ type CreateSampleInput struct {
 
 func (r *RunMetrics) ToMap() map[string]any {
 	return map[string]any{
-		"sample_count":        r.SampleCount,
-		"completed_count":     r.CompletedCount,
-		"failed_count":        r.FailedCount,
-		"name_match_rate":     r.NameMatchRate,
-		"total_weight_mape":   r.TotalWeightMAPE,
-		"total_weight_rmse":   r.TotalWeightRMSE,
-		"item_weight_mape":    r.ItemWeightMAPE,
-		"item_weight_rmse":    r.ItemWeightRMSE,
-		"average_duration_ms": r.AverageDurationMs,
+		"sample_count":           r.SampleCount,
+		"completed_count":        r.CompletedCount,
+		"failed_count":           r.FailedCount,
+		"name_match_rate":        r.NameMatchRate,
+		"ai_name_accuracy_rate":  r.AINameAccuracyRate,
+		"ai_name_recall_rate":    r.AINameRecallRate,
+		"total_weight_mape":      r.TotalWeightMAPE,
+		"total_weight_rmse":      r.TotalWeightRMSE,
+		"item_weight_mape":       r.ItemWeightMAPE,
+		"item_weight_rmse":       r.ItemWeightRMSE,
+		"average_duration_ms":    r.AverageDurationMs,
 	}
 }
 
 func (s *SampleMetrics) ToMap() map[string]any {
 	return map[string]any{
-		"name_matched":           s.NameMatched,
-		"name_match_details":     s.NameMatchDetails,
-		"total_weight_error":     s.TotalWeightError,
-		"total_weight_error_pct": s.TotalWeightErrorPct,
-		"item_weight_errors":     s.ItemWeightErrors,
-		"item_weight_error_pcts": s.ItemWeightErrorPcts,
-		"item_comparisons":       s.ItemComparisons,
-		"duration_ms":            s.DurationMs,
+		"name_matched":            s.NameMatched,
+		"name_match_details":      s.NameMatchDetails,
+		"total_weight_error":      s.TotalWeightError,
+		"total_weight_error_pct":  s.TotalWeightErrorPct,
+		"item_weight_errors":      s.ItemWeightErrors,
+		"item_weight_error_pcts":  s.ItemWeightErrorPcts,
+		"item_comparisons":        s.ItemComparisons,
+		"duration_ms":             s.DurationMs,
+		"ai_name_accuracy":        s.AINameAccuracy,
+		"ai_name_recall":          s.AINameRecall,
+		"ai_name_matched":         s.AINameMatched,
+		"ai_name_match_details":   s.AINameMatchDetails,
+		"ai_item_comparisons":     s.AIItemComparisons,
+		"ai_extra_predictions":    s.AIExtraPredictions,
+		"ai_unmatched_gt":         s.AIUnmatchedGT,
 	}
 }
 

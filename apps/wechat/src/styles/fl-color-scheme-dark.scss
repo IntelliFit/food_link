@@ -3835,6 +3835,45 @@ $fl-dark-sk-grad: linear-gradient(90deg, $fl-dark-sk-a 25%, $fl-dark-sk-b 50%, $
   color: $fl-dark-text2 !important;
 }
 
+.fl-d .interaction-feed-detail-page .feed-micros {
+  background: $fl-dark-panel-bg-soft !important;
+}
+
+.fl-d .interaction-feed-detail-page .feed-micros-title {
+  color: $fl-dark-text !important;
+}
+
+.fl-d .interaction-feed-detail-page .feed-micros-cell {
+  background: $fl-dark-panel-bg !important;
+}
+
+.fl-d .interaction-feed-detail-page .feed-micros-label {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-d .interaction-feed-detail-page .feed-micros-value {
+  color: $fl-dark-accent !important;
+}
+
+.fl-d .interaction-feed-detail-page .feed-micros-unit {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-d .interaction-feed-detail-page .feed-micros-toggle-text,
+.fl-d .interaction-feed-detail-page .feed-micros-toggle-icon,
+.fl-d .interaction-feed-detail-page .feed-micros-summary {
+  color: $fl-dark-text2 !important;
+}
+
+.fl-d .interaction-feed-detail-page .feed-manual-foods-expand {
+  background: $fl-dark-panel-bg !important;
+}
+
+.fl-d .interaction-feed-detail-page .feed-manual-foods-expand-text,
+.fl-d .interaction-feed-detail-page .feed-manual-foods-expand-icon {
+  color: $fl-dark-text2 !important;
+}
+
 // ==================== 多记录选择面板（MealRecordsDialog） ====================
 
 // 面板标题

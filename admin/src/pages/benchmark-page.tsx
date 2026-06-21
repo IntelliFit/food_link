@@ -37,6 +37,7 @@ import { adminRequest } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 import type {
+  AIItemComparison,
   BenchmarkRun,
   BenchmarkRunSample,
   CreateRunInput,
@@ -993,11 +994,13 @@ export function BenchmarkRunDetailSection() {
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
             <MetricCard label="名称匹配率" value={formatRate(run.metrics?.name_match_rate)} />
-            <MetricCard label="总重 MAPE" value={formatPct(run.metrics?.total_weight_mape)} />
-            <MetricCard label="总重 RMSE" value={formatNumber(run.metrics?.total_weight_rmse) + 'g'} />
+            <MetricCard label="AI 名称准确率" value={formatRate(run.metrics?.ai_name_accuracy_rate)} />
+            <MetricCard label="AI 名称召回率" value={formatRate(run.metrics?.ai_name_recall_rate)} />
             <MetricCard label="平均耗时" value={formatNumber(run.metrics?.average_duration_ms ? run.metrics.average_duration_ms / 1000 : undefined) + 's'} />
             <MetricCard label="完成" value={String(run.metrics?.completed_count || 0)} />
             <MetricCard label="失败" value={String(run.metrics?.failed_count || 0)} />
+            <MetricCard label="总重 MAPE" value={formatPct(run.metrics?.total_weight_mape)} />
+            <MetricCard label="总重 RMSE" value={formatNumber(run.metrics?.total_weight_rmse) + 'g'} />
             <MetricCard label="分项 MAPE" value={formatPct(run.metrics?.item_weight_mape)} />
             <MetricCard label="分项 RMSE" value={formatNumber(run.metrics?.item_weight_rmse) + 'g'} />
           </div>
@@ -1020,8 +1023,11 @@ export function BenchmarkRunDetailSection() {
               <thead className="bg-muted/50 text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 text-left">状态</th>
-                  <th className="px-3 py-2 text-left">样本 ID</th>
+                  <th className="px-3 py-2 text-left">图片</th>
+                  <th className="px-3 py-2 text-left">样本名</th>
+                  <th className="px-3 py-2 text-left">标注</th>
                   <th className="px-3 py-2 text-left">名称匹配</th>
+                  <th className="px-3 py-2 text-left">AI 准确率</th>
                   <th className="px-3 py-2 text-left">总重误差</th>
                   <th className="px-3 py-2 text-left">分项对比</th>
                   <th className="px-3 py-2 text-left">耗时</th>
@@ -1031,15 +1037,38 @@ export function BenchmarkRunDetailSection() {
               </thead>
               <tbody>
                 {loading && samples.length === 0 ? (
-                  <tr><td colSpan={8} className="p-6"><Skeleton className="h-8 w-full" /></td></tr>
+                  <tr><td colSpan={11} className="p-6"><Skeleton className="h-8 w-full" /></td></tr>
                 ) : samples.length === 0 ? (
-                  <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">暂无样本结果</td></tr>
+                  <tr><td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">暂无样本结果</td></tr>
                 ) : (
                   samples.map((s) => (
                     <tr key={s.id} className="border-b last:border-b-0 hover:bg-muted/30">
                       <td className="px-3 py-2"><RunSampleStatusBadge status={s.status} /></td>
-                      <td className="px-3 py-2 font-mono text-xs">{s.sample_id.slice(0, 8)}</td>
+                      <td className="px-3 py-2">
+                        {s.image_url ? (
+                          <a href={s.image_url} target="_blank" rel="noreferrer" className="inline-block">
+                            <img
+                              src={s.image_url}
+                              alt={s.sample_name || s.sample_id}
+                              className="h-12 w-12 rounded object-cover ring-1 ring-border"
+                            />
+                          </a>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-medium">{s.sample_name || '-'}</td>
+                      <td className="px-3 py-2 max-w-[200px] truncate" title={runSampleLabelSummary(s)}>{runSampleLabelSummary(s)}</td>
                       <td className="px-3 py-2">{s.metrics?.name_matched ? '✅' : '❌'}</td>
+                      <td className="px-3 py-2">
+                        {s.metrics?.ai_name_accuracy !== undefined ? (
+                          <span className={s.metrics.ai_name_matched ? 'text-emerald-600' : 'text-amber-600'}>
+                            {formatRate(s.metrics.ai_name_accuracy)}
+                          </span>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
                       <td className="px-3 py-2">{formatPct(s.metrics?.total_weight_error_pct)}</td>
                       <td className="px-3 py-2">{comparisonSummary(s.metrics?.item_comparisons)}</td>
                       <td className="px-3 py-2">{formatNumber(s.metrics?.duration_ms ? s.metrics.duration_ms / 1000 : undefined)}s</td>
@@ -1096,6 +1125,8 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
   ]
 
   const comparisons: ItemComparison[] = sample.metrics?.item_comparisons || []
+  const aiComparisons: AIItemComparison[] = sample.metrics?.ai_item_comparisons || []
+  const aiStage = sample.stage_outputs?.ai_name_matching as Record<string, any> | undefined
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -1113,6 +1144,30 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
           <CardDescription>sample_id: {sample.sample_id} / task_id: {sample.task_id || '-'}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            {sample.image_url && (
+              <div>
+                <h4 className="mb-2 font-semibold">原始图片</h4>
+                <a href={sample.image_url} target="_blank" rel="noreferrer" className="inline-block">
+                  <img
+                    src={sample.image_url}
+                    alt={sample.sample_name || sample.sample_id}
+                    className="max-h-64 rounded-md border object-contain"
+                  />
+                </a>
+              </div>
+            )}
+            <div>
+              <h4 className="mb-2 font-semibold">标注</h4>
+              <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-sm">
+                <div><span className="text-muted-foreground">批次:</span> {sample.batch_name || '-'}</div>
+                <div><span className="text-muted-foreground">样本名:</span> {sample.sample_name || '-'}</div>
+                <div><span className="text-muted-foreground">类型:</span> {sample.label_type ? labelTypeLabels[sample.label_type as LabelType] : '-'}</div>
+                <div><span className="text-muted-foreground">标注值:</span> {runSampleLabelSummary(sample)}</div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <h4 className="mb-2 font-semibold">Ground Truth</h4>
@@ -1159,6 +1214,47 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {(aiComparisons.length > 0 || aiStage) && (
+            <div>
+              <h4 className="mb-2 flex items-center gap-2 font-semibold">
+                AI 名称匹配
+                {aiStage?.fallback && <Badge variant="outline" className="text-xs text-amber-600">降级</Badge>}
+              </h4>
+              <div className="mb-2 flex flex-wrap gap-4 text-sm">
+                <div><span className="text-muted-foreground">准确率:</span> {formatRate(sample.metrics?.ai_name_accuracy)}</div>
+                <div><span className="text-muted-foreground">召回率:</span> {formatRate(sample.metrics?.ai_name_recall)}</div>
+                <div><span className="text-muted-foreground">多检:</span> {sample.metrics?.ai_extra_predictions ?? '-'}</div>
+                <div><span className="text-muted-foreground">漏检:</span> {sample.metrics?.ai_unmatched_gt ?? '-'}</div>
+              </div>
+              {aiComparisons.length > 0 && (
+                <div className="overflow-x-auto rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 text-left">预测</th>
+                        <th className="px-3 py-2 text-left">标注</th>
+                        <th className="px-3 py-2 text-center">匹配</th>
+                        <th className="px-3 py-2 text-left">判断理由</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {aiComparisons.map((c, idx) => (
+                        <tr key={idx} className="border-b last:border-b-0">
+                          <td className="px-3 py-2">{c.pred_name || '-'}</td>
+                          <td className="px-3 py-2">{c.gt_name || '-'}</td>
+                          <td className="px-3 py-2 text-center">
+                            {c.matched ? '✅' : c.extra ? '⚠️ 多检' : '❌'}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground">{c.reason || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -1249,4 +1345,21 @@ function comparisonSummary(comparisons: ItemComparison[] | undefined): string {
     return '总重对比'
   }
   return `匹配 ${matched}/${total}${extra > 0 ? `, 多检 ${extra}` : ''}`
+}
+
+function runSampleLabelSummary(sample: BenchmarkRunSample): string {
+  const labelType = sample.label_type
+  if (labelType === 'total' && sample.total_weight_grams !== undefined) {
+    return `${sample.total_weight_grams}g`
+  }
+  if (labelType === 'items' && sample.items && Object.keys(sample.items).length > 0) {
+    return Object.entries(sample.items)
+      .filter(([name]) => name !== '__total__')
+      .map(([name, w]) => `${name}=${w}g`)
+      .join('; ')
+  }
+  if (labelType === 'unlabeled') {
+    return '未标注'
+  }
+  return '-'
 }

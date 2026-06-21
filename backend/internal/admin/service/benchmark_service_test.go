@@ -92,7 +92,7 @@ func (f *fakeBenchmarkUserResolver) Create(ctx context.Context, user *authrepo.U
 func TestBenchmarkService_CreateSample(t *testing.T) {
 	db := setupBenchmarkTestDB(t)
 	benchmarkRepo := repo.NewBenchmarkRepo(db)
-	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil)
+	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	// Missing batch_name
@@ -140,7 +140,7 @@ func TestBenchmarkService_CreateSample(t *testing.T) {
 func TestBenchmarkService_ListSamples(t *testing.T) {
 	db := setupBenchmarkTestDB(t)
 	benchmarkRepo := repo.NewBenchmarkRepo(db)
-	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil)
+	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
@@ -177,7 +177,7 @@ func TestBenchmarkService_resolveBenchmarkUserID(t *testing.T) {
 	db := setupBenchmarkTestDB(t)
 	benchmarkRepo := repo.NewBenchmarkRepo(db)
 	userRepo := authrepo.NewUserRepo(db)
-	svc := NewBenchmarkService(benchmarkRepo, nil, nil, userRepo)
+	svc := NewBenchmarkService(benchmarkRepo, nil, nil, userRepo, nil)
 	ctx := context.Background()
 
 	adminID := uuid.New().String()
@@ -239,7 +239,7 @@ func TestBenchmarkService_CreateRun_Success(t *testing.T) {
 		Username: "admin_tester",
 	}}
 
-	svc := NewBenchmarkService(benchmarkRepo, fakeTaskSvc, accountReader, userRepo)
+	svc := NewBenchmarkService(benchmarkRepo, fakeTaskSvc, accountReader, userRepo, nil)
 
 	run, err := svc.CreateRun(ctx, adminID, domain.CreateRunInput{
 		Name:          "run-1",
@@ -277,7 +277,7 @@ func TestBenchmarkService_CreateRun_Success(t *testing.T) {
 func TestBenchmarkService_CreateRun_NoSamples(t *testing.T) {
 	db := setupBenchmarkTestDB(t)
 	benchmarkRepo := repo.NewBenchmarkRepo(db)
-	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil)
+	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	_, err := svc.CreateRun(ctx, uuid.New().String(), domain.CreateRunInput{
@@ -292,7 +292,7 @@ func TestBenchmarkService_CreateRun_NoSamples(t *testing.T) {
 func TestBenchmarkService_CreateRun_InvalidExecutionMode(t *testing.T) {
 	db := setupBenchmarkTestDB(t)
 	benchmarkRepo := repo.NewBenchmarkRepo(db)
-	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil)
+	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	_, err := svc.CreateRun(ctx, uuid.New().String(), domain.CreateRunInput{
@@ -306,7 +306,7 @@ func TestBenchmarkService_CreateRun_InvalidExecutionMode(t *testing.T) {
 func TestBenchmarkService_CancelRun(t *testing.T) {
 	db := setupBenchmarkTestDB(t)
 	benchmarkRepo := repo.NewBenchmarkRepo(db)
-	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil)
+	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	total := 50.0
@@ -342,7 +342,7 @@ func TestBenchmarkService_CancelRun(t *testing.T) {
 func TestBenchmarkService_DeleteRun(t *testing.T) {
 	db := setupBenchmarkTestDB(t)
 	benchmarkRepo := repo.NewBenchmarkRepo(db)
-	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil)
+	svc := NewBenchmarkService(benchmarkRepo, nil, nil, nil, nil)
 	ctx := context.Background()
 
 	total := 50.0
@@ -393,7 +393,7 @@ func TestBenchmarkService_ExecuteSample_NoImageURL(t *testing.T) {
 	require.NoError(t, err)
 
 	fakeTaskSvc := &fakeBenchmarkTaskService{taskRepo: taskRepo}
-	svc := NewBenchmarkService(benchmarkRepo, fakeTaskSvc, nil, userRepo)
+	svc := NewBenchmarkService(benchmarkRepo, fakeTaskSvc, nil, userRepo, nil)
 
 	run, err := svc.CreateRun(ctx, uuid.New().String(), domain.CreateRunInput{
 		Name:          "run-noimage",
@@ -440,7 +440,7 @@ func TestBenchmarkService_ExecuteSample_TaskSubmitFailure(t *testing.T) {
 		taskRepo: taskRepo,
 		err:      assert.AnError,
 	}
-	svc := NewBenchmarkService(benchmarkRepo, fakeTaskSvc, nil, userRepo)
+	svc := NewBenchmarkService(benchmarkRepo, fakeTaskSvc, nil, userRepo, nil)
 
 	run, err := svc.CreateRun(ctx, uuid.New().String(), domain.CreateRunInput{
 		Name:          "run-fail",
