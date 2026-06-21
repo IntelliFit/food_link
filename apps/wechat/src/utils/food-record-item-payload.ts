@@ -39,6 +39,12 @@ type PackagedAnalysisMetaSource = {
   package_weight_reason?: string
   packagedCandidates?: Array<Record<string, unknown>>
   packaged_candidates?: Array<Record<string, unknown>>
+  manual_source?: 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom' | null
+  manualSource?: 'public_library' | 'nutrition_library' | 'packaged_food' | 'custom' | null
+  manual_source_id?: string | null
+  manualSourceId?: string | null
+  manual_source_title?: string | null
+  manualSourceTitle?: string | null
 }
 
 type ResultRecordItemSource = PackagedAnalysisMetaSource & {
@@ -84,6 +90,32 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
   if (ratio < 0) ratio = 0
   if (intake > weight) intake = weight
   if (intake < 0) intake = 0
+
+  const nutritionSource = String(firstDefined(item.nutrition_source, item.nutritionSource) || '')
+  const nutritionSourceCategory = String(firstDefined(item.nutrition_source_category, item.nutritionSourceCategory) || '')
+  const packagedFoodId = String(firstDefined(item.packaged_food_id, item.packagedFoodId) || '')
+  const matchedFoodId = String(firstDefined(item.matched_food_id, item.matchedFoodId) || '')
+  const existingManualSource = firstDefined(item.manual_source, item.manualSource) as FoodRecordItemPayload['manual_source']
+  const existingManualSourceId = firstDefined(item.manual_source_id, item.manualSourceId)
+  const existingManualSourceTitle = firstDefined(item.manual_source_title, item.manualSourceTitle)
+
+  let manualSource: FoodRecordItemPayload['manual_source'] = existingManualSource
+  let manualSourceId: string | undefined = existingManualSourceId
+  let manualSourceTitle: string | undefined = existingManualSourceTitle
+
+  if (!manualSource) {
+    if (packagedFoodId || nutritionSource.toLowerCase().includes('packaged')) {
+      manualSource = 'packaged_food'
+      manualSourceId = manualSourceId || packagedFoodId || undefined
+    } else if (matchedFoodId || (nutritionSourceCategory === 'database' && nutritionSource.toLowerCase().includes('library'))) {
+      manualSource = 'nutrition_library'
+      manualSourceId = manualSourceId || matchedFoodId || undefined
+    }
+  }
+  if (manualSource && !manualSourceTitle) {
+    manualSourceTitle = item.name
+  }
+
   return {
     name: item.name || '未命名食物',
     weight,
@@ -107,6 +139,9 @@ export const buildFoodRecordItemPayloadFromResultItem = <T extends ResultRecordI
     package_weight_applied: firstDefined(item.package_weight_applied, item.packageWeightApplied),
     package_weight_reason: firstDefined(item.package_weight_reason, item.packageWeightReason),
     packaged_candidates: firstDefined(item.packaged_candidates, item.packagedCandidates),
+    manual_source: manualSource,
+    manual_source_id: manualSourceId,
+    manual_source_title: manualSourceTitle,
     nutrients,
   }
 }

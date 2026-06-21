@@ -36,6 +36,7 @@ type ContentRow struct {
 
 	MealType  *string `gorm:"column:meal_type"`
 	DietGoal  *string `gorm:"column:diet_goal"`
+	Items     *string `gorm:"column:items"`
 }
 
 type UserRow struct {
@@ -69,7 +70,8 @@ SELECT * FROM (
     NULL::numeric AS calories_burned,
     NULL::int AS duration_min,
     ufr.meal_type,
-    ufr.diet_goal
+    ufr.diet_goal,
+    ufr.items::text AS items
   FROM user_food_records ufr
   WHERE ufr.hidden_from_feed = false
     AND ufr.user_id IN (SELECT user_id FROM _search_visible_users)
@@ -100,7 +102,8 @@ SELECT * FROM (
     uel.calories_burned,
     NULL::int AS duration_min,
     NULL::text AS meal_type,
-    NULL::text AS diet_goal
+    NULL::text AS diet_goal,
+    NULL::text AS items
   FROM user_exercise_logs uel
   WHERE uel.hidden_from_feed = false
     AND uel.user_id IN (SELECT user_id FROM _search_visible_users)
@@ -131,7 +134,8 @@ SELECT * FROM (
     NULL::numeric AS calories_burned,
     NULL::int AS duration_min,
     NULL::text AS meal_type,
-    NULL::text AS diet_goal
+    NULL::text AS diet_goal,
+    NULL::text AS items
   FROM user_circle_posts ucp
   WHERE ucp.hidden_from_feed = false
     AND ucp.user_id IN (SELECT user_id FROM _search_visible_users)

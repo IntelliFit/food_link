@@ -1363,6 +1363,23 @@ function CommunityPage() {
     return actions
   }, [feedActionSheet])
 
+
+
+  const handleEditFeedItem = useCallback((item: CommunityFeedItem) => {
+    const targetType = getFeedTargetType(item)
+    const targetId = getFeedTargetId(item)
+    if (targetType === 'circle_post') {
+      Taro.navigateTo({ url: extraPkgUrl(`/pages/circle-post-edit/index?id=${encodeURIComponent(targetId)}`) })
+    } else if (targetType === 'food_record') {
+      setEditSheetRecord(item.record)
+      setEditSheetVisible(true)
+    } else if (targetType === 'exercise_log') {
+      Taro.navigateTo({ url: extraPkgUrl(`/pages/exercise-record/index?log_id=${encodeURIComponent(targetId)}`) })
+    } else if (targetType === 'campus_food') {
+      Taro.navigateTo({ url: extraPkgUrl(`/pages/campus-food-share/index?item_id=${encodeURIComponent(targetId)}`) })
+    }
+  }, [])
+
   const handleFeedActionSelect = (id: string) => {
     if (!feedActionSheet) return
     const { item, mode } = feedActionSheet
@@ -1372,19 +1389,8 @@ function CommunityPage() {
       }
       return
     }
-    const targetType = getFeedTargetType(item)
-    const targetId = getFeedTargetId(item)
     if (id === 'edit') {
-      if (targetType === 'circle_post') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/circle-post-edit/index?id=${encodeURIComponent(targetId)}`) })
-      } else if (targetType === 'food_record') {
-        setEditSheetRecord(item.record)
-        setEditSheetVisible(true)
-      } else if (targetType === 'exercise_log') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/exercise-record/index?log_id=${encodeURIComponent(targetId)}`) })
-      } else if (targetType === 'campus_food') {
-        Taro.navigateTo({ url: extraPkgUrl(`/pages/campus-food-share/index?item_id=${encodeURIComponent(targetId)}`) })
-      }
+      handleEditFeedItem(feedActionSheet.item)
       return
     }
     if (id === 'delete') {
@@ -2656,6 +2662,17 @@ function CommunityPage() {
                                   <Text className='action-count'>评论 {item.comment_count || 0}</Text>
                                 </View>
                               </View>
+                              {item.is_mine && (
+                                <View
+                                  className='action-item action-edit'
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleEditFeedItem(item)
+                                  }}
+                                >
+                                  <Text className='action-icon iconfont icon-edit' />
+                                </View>
+                              )}
                               <View
                                 className='action-item action-manage'
                                 onClick={(e) => {

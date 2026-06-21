@@ -4,6 +4,7 @@ import Taro, { useRouter } from '@tarojs/taro'
 import { communitySearch, communityLike, communityUnlike, showUnifiedApiError, type ContentSearchResult, type UserSearchResult } from '../../../utils/api'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
 import { withAuth } from '../../../utils/withAuth'
+import { ManualFoodCards } from '../../../pages/community/components/ManualFoodCards'
 import './index.scss'
 
 type SearchTab = 'content' | 'users'
@@ -237,6 +238,16 @@ function SearchResultsPage() {
     Taro.navigateTo({ url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}` })
   }
 
+  const handleManualFoodClick = (item: ContentSearchResult, row: any) => {
+    const manualSourceId = row.manual_source_id as string | undefined
+    const manualSource = String(row.manual_source || '')
+    if (manualSourceId && (manualSource === 'public_library' || manualSource === 'nutrition_library' || manualSource === 'packaged_food')) {
+      Taro.navigateTo({ url: `${extraPkgUrl('/pages/food-library-detail/index')}?id=${encodeURIComponent(manualSourceId)}` })
+      return
+    }
+    navigateToDetail(item)
+  }
+
   const navigateToUser = (userId: string, isSelf: boolean) => {
     if (isSelf) {
       Taro.switchTab({ url: '/pages/profile/index' })
@@ -287,22 +298,31 @@ function SearchResultsPage() {
           </Text>
         </View>
       </View>
-      {item.description ? (
-        <View className='card-body'>
-          <Text className='card-desc'>{item.description}</Text>
-        </View>
-      ) : null}
-      {item.image_path ? (
-        <View className='card-image-wrap'>
-          <Image src={item.image_path} mode='aspectFill' className='card-image' />
-        </View>
-      ) : null}
-      {item.image_paths && item.image_paths.length > 0 && (
-        <View className='card-images-wrap'>
-          {item.image_paths.slice(0, 3).map((p, i) => (
-            <Image key={i} src={p} mode='aspectFill' className='card-image-multi' />
-          ))}
-        </View>
+      {item.manual_food_items && item.manual_food_items.length > 0 ? (
+        <ManualFoodCards
+          items={item.manual_food_items as any}
+          onItemClick={(row) => handleManualFoodClick(item, row)}
+        />
+      ) : (
+        <>
+          {item.description ? (
+            <View className='card-body'>
+              <Text className='card-desc'>{item.description}</Text>
+            </View>
+          ) : null}
+          {item.image_path ? (
+            <View className='card-image-wrap'>
+              <Image src={item.image_path} mode='aspectFill' className='card-image' />
+            </View>
+          ) : null}
+          {item.image_paths && item.image_paths.length > 0 && (
+            <View className='card-images-wrap'>
+              {item.image_paths.slice(0, 3).map((p, i) => (
+                <Image key={i} src={p} mode='aspectFill' className='card-image-multi' />
+              ))}
+            </View>
+          )}
+        </>
       )}
       <View className='content-card-actions'>
         <View className='content-action-item' onClick={(e) => handleSearchLike(item, e)}>

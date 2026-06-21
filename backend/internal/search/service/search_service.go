@@ -2,11 +2,29 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
+	"food_link/backend/internal/foodmedia"
 	"food_link/backend/internal/search/repo"
 	"food_link/backend/pkg/storage"
 )
+
+type ManualFoodItem struct {
+	Name              string   `json:"name"`
+	ManualSource      string   `json:"manual_source"`
+	ManualSourceID    string   `json:"manual_source_id"`
+	ManualSourceTitle string   `json:"manual_source_title"`
+	SourceLabel       string   `json:"source_label"`
+	ImagePath         string   `json:"image_path"`
+	ImagePaths        []string `json:"image_paths"`
+	PackagedFoodID    string   `json:"packaged_food_id"`
+	MatchedFoodID     string   `json:"matched_food_id"`
+	NutritionSource   string   `json:"nutrition_source"`
+	Nutrients         struct {
+		Calories float64 `json:"calories"`
+	} `json:"nutrients"`
+}
 
 type ContentSearchResult struct {
 	TargetType string `json:"target_type"`
@@ -37,6 +55,8 @@ type ContentSearchResult struct {
 
 	MealType *string `json:"meal_type,omitempty"`
 	DietGoal *string `json:"diet_goal,omitempty"`
+
+	Items []ManualFoodItem `json:"manual_food_items,omitempty"`
 
 	Author map[string]string `json:"author"`
 
@@ -168,6 +188,9 @@ func (s *SearchService) SearchContent(ctx context.Context, currentUserID, keywor
 			CommentCount: int(commentCountMap[row.TargetType+":"+row.TargetID]),
 			Author:         author,
 		}
+		if row.TargetType == "food_record" && row.Items != nil && *row.Items != "" {
+			results[i].Items = s.extractManualFoodItems(*row.Items)
+		}
 	}
 	return results, hasMore, nil
 }
@@ -178,6 +201,105 @@ func getLikeInfo(likeMap map[string]*repo.TargetLikeInfo, targetType, targetID s
 		return info
 	}
 	return &repo.TargetLikeInfo{}
+}
+
+func (s *SearchService) extractManualFoodItems(raw string) []ManualFoodItem {
+	var items []ManualFoodItem
+	if err := json.Unmarshal([]byte(raw), &items); err != nil {
+		return nil
+	}
+	out := make([]ManualFoodItem, 0, len(items))
+	for _, it := range items {
+		src, srcID := s.resolveManualSource(it)
+		if src == "" {
+			continue
+		}
+		resolved := s.resolveFoodImageURLs(it)
+		imagePath := ""
+		if len(resolved) > 0 {
+			imagePath = resolved[0]
+		}
+		title := strings.TrimSpace(it.ManualSourceTitle)
+		if title == "" {
+			title = strings.TrimSpace(it.Name)
+		}
+		label := strings.TrimSpace(it.SourceLabel)
+		if label == "" {
+			label = foodmedia.ManualSourceLabel(src)
+		}
+		out = append(out, ManualFoodItem{
+			Name:              it.Name,
+			ManualSource:      src,
+			ManualSourceID:    srcID,
+			ManualSourceTitle: title,
+			SourceLabel:       label,
+			ImagePath:         imagePath,
+			ImagePaths:        resolved,
+			Nutrients:         it.Nutrients,
+		})
+	}
+	return out
+}
+
+func (s *SearchService) resolveManualSource(it ManualFoodItem) (string, string) {
+	if src := strings.TrimSpace(it.ManualSource); src != "" {
+		return src, strings.TrimSpace(it.ManualSourceID)
+	}
+	if id := strings.TrimSpace(it.PackagedFoodID); id != "" {
+		return "packaged_food", id
+	}
+	if id := strings.TrimSpace(it.MatchedFoodID); id != "" {
+		return "nutrition_library", id
+	}
+	if strings.Contains(strings.ToLower(it.NutritionSource), "packaged") {
+		return "packaged_food", ""
+	}
+	return "", ""
+}
+
+func (s *SearchService) resolveFoodImageURLs(item ManualFoodItem) []string {
+	if s.storage == nil {
+		seen := make(map[string]struct{})
+		var out []string
+		collectRaw := func(v string) {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				return
+			}
+			if _, ok := seen[v]; ok {
+				return
+			}
+			seen[v] = struct{}{}
+			out = append(out, v)
+		}
+		for _, p := range item.ImagePaths {
+			collectRaw(p)
+		}
+		collectRaw(item.ImagePath)
+		return out
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	collect := func(v string) {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			return
+		}
+		resolved := s.storage.ResolveReferenceURL("food-images", v)
+		if resolved == "" {
+			return
+		}
+		if _, ok := seen[resolved]; ok {
+			return
+		}
+		seen[resolved] = struct{}{}
+		out = append(out, resolved)
+	}
+	for _, p := range item.ImagePaths {
+		collect(p)
+	}
+	collect(item.ImagePath)
+	return out
 }
 
 func (s *SearchService) SearchUsers(ctx context.Context, currentUserID, keyword string, offset, limit int) ([]UserSearchResult, bool, error) {

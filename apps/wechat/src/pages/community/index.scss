@@ -2740,6 +2740,15 @@ $comment-body-font-size: 28rpx;
   }
 }
 
+.action-item.action-edit {
+  margin-right: 8rpx;
+
+  &:active {
+    opacity: 0.7;
+    transform: scale(0.95);
+  }
+}
+
 .action-item.action-manage {
   &:active {
     transform: none;

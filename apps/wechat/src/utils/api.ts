@@ -5365,6 +5365,17 @@ export interface ContentSearchAuthor {
   avatar: string
 }
 
+export interface ContentSearchManualFoodItem {
+  name?: string
+  manual_source?: 'public_library' | 'nutrition_library' | 'packaged_food' | string | null
+  manual_source_id?: string | null
+  manual_source_title?: string | null
+  source_label?: string | null
+  image_path?: string | null
+  image_paths?: string[] | null
+  nutrients?: { calories?: number }
+}
+
 export interface ContentSearchResult {
   target_type: string
   target_id: string
@@ -5389,6 +5400,7 @@ export interface ContentSearchResult {
   duration_min?: number
   meal_type?: string
   diet_goal?: string
+  manual_food_items?: ContentSearchManualFoodItem[]
   author: ContentSearchAuthor
   liked: boolean
   like_count: number
