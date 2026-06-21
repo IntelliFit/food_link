@@ -52,6 +52,7 @@ type mockMembershipRepo struct {
 	shareClaim                    *domain.UserCreditBonusEvent
 	shareClaimBySourceKey         map[string]*domain.UserCreditBonusEvent
 	saveMembershipCalls           int
+	expirePendingOrdersCalls      int
 	ledgerByReasonSource          map[string]*domain.UserEarnedCreditLedger
 	sumPositiveEarnedCredits      int
 	rewardTaskUploads             map[string]*domain.RewardTaskUpload
@@ -185,6 +186,7 @@ func (m *mockMembershipRepo) UpdatePaymentByOrderNo(ctx context.Context, orderNo
 	return nil
 }
 func (m *mockMembershipRepo) ExpirePendingMembershipOrders(ctx context.Context, userID, excludeOrderNo, reason string) (int, error) {
+	m.expirePendingOrdersCalls++
 	return 0, nil
 }
 func (m *mockMembershipRepo) CountAnalysisTasksToday(ctx context.Context, userID string) (int64, error) {
@@ -1181,6 +1183,98 @@ func TestMembershipService_CreatePaymentWithInput_AllowsListedPaymentTestUserPas
 	require.True(t, errors.As(err, &appErr))
 	assert.Equal(t, http.StatusNotImplemented, appErr.HTTPStatus)
 	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePaymentWithInput_TestPlanBypassesCurrentMembershipSwitchRules(t *testing.T) {
+	oldBaseURL := wechatPayAPIBaseURL
+	defer func() { wechatPayAPIBaseURL = oldBaseURL }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/v3/pay/transactions/jsapi", r.URL.Path)
+		var payload map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+		amount, _ := payload["amount"].(map[string]any)
+		assert.EqualValues(t, 1, amount["total"])
+		assert.Equal(t, "Pay Test", payload["description"])
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]string{"prepay_id": "wx-test-prepay"})
+	}))
+	defer server.Close()
+	wechatPayAPIBaseURL = server.URL
+
+	currentPlanCode := "advanced_yearly"
+	expiresAt := time.Now().AddDate(1, 0, 0)
+	currentPeriodStart := time.Now().AddDate(0, -1, 0)
+	testPlan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
+	currentPlan := &domain.MembershipPlan{Code: currentPlanCode, Name: "Advanced Yearly", Amount: 299, DurationMonths: 12, DailyCredits: 40, IsActive: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{
+			domain.PaymentTestPlanCode: testPlan,
+			currentPlanCode:            currentPlan,
+		},
+		membership: &domain.UserMembership{
+			UserID:             "u1",
+			Status:             "active",
+			CurrentPlanCode:    &currentPlanCode,
+			CurrentPeriodStart: &currentPeriodStart,
+			ExpiresAt:          &expiresAt,
+		},
+		paymentTestAccess: &domain.PaymentTestAccess{Enabled: true, UserAllowed: true},
+		user:              &membershiprepo.User{ID: "u1", OpenID: "openid-u1"},
+	}
+	cfg := &config.Config{
+		External: config.ExternalConfig{AppID: "wx-mini"},
+		WechatPay: config.WechatPayConfig{
+			MchID:      "1100000000",
+			NotifyURL:  "https://api.healthymax.cn/api/payment/wechat/notify/membership",
+			SerialNo:   "SERIAL",
+			APIV3Key:   "12345678901234567890123456789012",
+			PrivateKey: testRSAPrivateKeyPEM,
+		},
+	}
+	svc := NewMembershipService(mockRepo, cfg)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{PlanCode: domain.PaymentTestPlanCode})
+	require.NoError(t, err)
+	assert.Equal(t, "payment_test", data["order_mode"])
+	assert.Equal(t, 0.01, data["amount"])
+	require.NotNil(t, mockRepo.payment)
+	assert.Equal(t, 0.01, mockRepo.payment.Amount)
+	assert.Equal(t, "payment_test", mockRepo.payment.Extra["order_mode"])
+	assert.Equal(t, true, mockRepo.payment.Extra["is_payment_test_order"])
+	assert.Equal(t, 0, mockRepo.expirePendingOrdersCalls)
+}
+
+func TestMembershipService_ActivateMembershipFromPayment_TestPlanDoesNotChangeMembership(t *testing.T) {
+	currentPlanCode := "advanced_yearly"
+	expiresAt := time.Now().AddDate(1, 0, 0)
+	testPlan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
+	membership := &domain.UserMembership{
+		UserID:          "u1",
+		Status:          "active",
+		CurrentPlanCode: &currentPlanCode,
+		ExpiresAt:       &expiresAt,
+		DailyCredits:    80,
+	}
+	mockRepo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: testPlan},
+		membership: membership,
+	}
+	svc := NewMembershipService(mockRepo)
+
+	updated, err := svc.activateMembershipFromPayment(context.Background(), &domain.MembershipPayment{
+		ID:             "pay-test",
+		UserID:         "u1",
+		OrderNo:        "PMTEST",
+		PlanCode:       domain.PaymentTestPlanCode,
+		Amount:         0.01,
+		DurationMonths: 1,
+	}, time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	assert.Equal(t, currentPlanCode, *updated.CurrentPlanCode)
+	assert.Equal(t, 80, updated.DailyCredits)
+	assert.Equal(t, 0, mockRepo.saveMembershipCalls)
 }
 
 func TestMembershipService_CreatePaymentBlocksAppOnlyOpenIDDefaultJSAPI(t *testing.T) {
