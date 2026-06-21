@@ -177,18 +177,25 @@ func (l *Logger) logAttrs(ctx context.Context, level slog.Level, msg string, att
 
 func RequestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		start := time.Now()
-		path := c.FullPath()
-		if path == "" {
-			path = c.Request.URL.Path
+		if shouldSkipRequestLog(c.Request) {
+			c.Next()
+			return
 		}
+		start := time.Now()
+		rawPath := requestPath(c.Request)
+		Info(c.Request.Context(), "收到请求", requestStartAttrs(c, rawPath)...)
 
 		c.Next()
 
 		ctx := c.Request.Context()
+		routePath := c.FullPath()
+		if routePath == "" {
+			routePath = rawPath
+		}
 		attrs := []slog.Attr{
 			slog.String("http.method", c.Request.Method),
-			slog.String("url.path", path),
+			slog.String("url.path", rawPath),
+			slog.String("http.route", routePath),
 			slog.Int("http.status_code", c.Writer.Status()),
 			slog.Int("http.response.body.size", c.Writer.Size()),
 			slog.Duration("http.duration", time.Since(start)),
@@ -223,6 +230,42 @@ func RequestLogger() gin.HandlerFunc {
 			Info(ctx, "请求完成", attrs...)
 		}
 	}
+}
+
+func requestStartAttrs(c *gin.Context, path string) []slog.Attr {
+	attrs := []slog.Attr{
+		slog.String("http.method", c.Request.Method),
+		slog.String("url.path", path),
+		slog.String("client.address", c.ClientIP()),
+	}
+	if userAgent := strings.TrimSpace(c.Request.UserAgent()); userAgent != "" {
+		attrs = append(attrs, Truncated("user_agent", userAgent, 200))
+	}
+	traceID, requestID, hostName := commonmw.RequestIDs(c)
+	if traceID != "" {
+		attrs = append(attrs, slog.String("trace_id", traceID))
+	}
+	if requestID != "" {
+		attrs = append(attrs, slog.String("request_id", requestID))
+	}
+	if hostName != "" {
+		attrs = append(attrs, slog.String("host_name", hostName))
+	}
+	return attrs
+}
+
+func requestPath(req *http.Request) string {
+	if req == nil || req.URL == nil {
+		return ""
+	}
+	return req.URL.Path
+}
+
+func shouldSkipRequestLog(req *http.Request) bool {
+	if req == nil || req.URL == nil {
+		return false
+	}
+	return strings.TrimSpace(req.URL.Path) == "/api/health"
 }
 
 func configureLocalLogger(cfg config.LogConfig) error {

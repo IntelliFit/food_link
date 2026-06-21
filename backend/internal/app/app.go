@@ -131,10 +131,10 @@ func New(cfg *config.Config) (*App, error) {
 	if cfg.OTel.Enabled {
 		engine.Use(otelgin.Middleware(cfg.App.Name, otelgin.WithFilter(shouldTraceHTTPRequest)))
 	}
+	engine.Use(commonmw.RequestID())
 	engine.Use(logger.RequestLogger())
 	engine.Use(metrics.GinMiddleware())
 	engine.Use(logger.Recovery())
-	engine.Use(commonmw.RequestID())
 
 	storageClient := storage.New(cfg.Storage)
 	taskQueue, err := taskqueue.New(cfg.TaskQueue)

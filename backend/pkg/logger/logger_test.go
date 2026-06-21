@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	commonmw "food_link/backend/internal/common/middleware"
 	"food_link/backend/pkg/config"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -89,11 +93,92 @@ func TestLoggerAddsOrphanSpanEvent(t *testing.T) {
 	assertSpanEventAttr(t, events[0].Attributes, "worker_id", "w1")
 }
 
+func TestRequestLoggerSkipsHealth(t *testing.T) {
+	var buf bytes.Buffer
+	SetGlobal(slog.New(slog.NewJSONHandler(&buf, nil)))
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	previousProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	defer otel.SetTracerProvider(previousProvider)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(RequestLogger())
+	router.GET("/api/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, strings.TrimSpace(buf.String()))
+	assert.Empty(t, recorder.Ended())
+}
+
+func TestRequestLoggerLogsStartAndCompletion(t *testing.T) {
+	var buf bytes.Buffer
+	SetGlobal(slog.New(slog.NewJSONHandler(&buf, nil)))
+	recorder := tracetest.NewSpanRecorder()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	previousProvider := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	defer otel.SetTracerProvider(previousProvider)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		ctx, span := otel.Tracer("logger-test").Start(c.Request.Context(), "request")
+		defer span.End()
+		c.Request = c.Request.WithContext(ctx)
+		c.Next()
+	})
+	router.Use(commonmw.RequestID())
+	router.Use(RequestLogger())
+	router.GET("/api/user/profile", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/user/profile", nil)
+	req.Header.Set("User-Agent", "foodlink-test-agent")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	out := buf.String()
+	assert.Contains(t, out, "收到请求")
+	assert.Contains(t, out, "请求完成")
+	assert.Contains(t, out, "/api/user/profile")
+	assert.Contains(t, out, "request_id")
+
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+	events := spans[0].Events()
+	require.Len(t, events, 2)
+	assert.Equal(t, "收到请求", events[0].Name)
+	assert.Equal(t, "请求完成", events[1].Name)
+	assertSpanEventAttr(t, events[0].Attributes, "url.path", "/api/user/profile")
+	assertSpanEventAttr(t, events[0].Attributes, "user_agent", "foodlink-test-agent")
+	assertSpanEventHasAttr(t, events[0].Attributes, "request_id")
+}
+
 func assertSpanEventAttr(t *testing.T, attrs []attribute.KeyValue, key string, want any) {
 	t.Helper()
 	for _, attr := range attrs {
 		if string(attr.Key) == key {
 			assert.Equal(t, want, attr.Value.AsInterface())
+			return
+		}
+	}
+	t.Fatalf("span event attr %s not found", key)
+}
+
+func assertSpanEventHasAttr(t *testing.T, attrs []attribute.KeyValue, key string) {
+	t.Helper()
+	for _, attr := range attrs {
+		if string(attr.Key) == key {
 			return
 		}
 	}
