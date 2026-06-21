@@ -26,7 +26,7 @@ func NewMembershipRepo(db *gorm.DB) *MembershipRepo {
 func (r *MembershipRepo) ListActivePlans(ctx context.Context) ([]domain.MembershipPlan, error) {
 	var plans []domain.MembershipPlan
 	err := r.db.WithContext(ctx).
-		Where("is_active = ?", true).
+		Where("is_active = ? AND is_visible = ?", true, true).
 		Order("sort_order ASC").
 		Order("created_at ASC").
 		Find(&plans).Error
@@ -44,6 +44,31 @@ func (r *MembershipRepo) GetPlanByCode(ctx context.Context, planCode string) (*d
 		return nil, nil
 	}
 	return &plan, err
+}
+
+func (r *MembershipRepo) GetPaymentTestAccess(ctx context.Context, userID string) (*domain.PaymentTestAccess, error) {
+	var setting domain.PaymentTestSetting
+	err := r.db.WithContext(ctx).Where("id = ?", "default").First(&setting).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &domain.PaymentTestAccess{Enabled: false, UserAllowed: false}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	access := &domain.PaymentTestAccess{Enabled: setting.Enabled}
+	if !setting.Enabled || strings.TrimSpace(userID) == "" {
+		return access, nil
+	}
+	var count int64
+	err = r.db.WithContext(ctx).
+		Model(&domain.PaymentTestUser{}).
+		Where("user_id = ?", strings.TrimSpace(userID)).
+		Count(&count).Error
+	if err != nil {
+		return nil, err
+	}
+	access.UserAllowed = count > 0
+	return access, nil
 }
 
 func (r *MembershipRepo) GetActiveMembership(ctx context.Context, userID string) (*domain.UserMembership, error) {
@@ -445,6 +470,7 @@ func (r *MembershipRepo) ExpirePendingMembershipOrders(ctx context.Context, user
 func isMembershipPlanCode(planCode string) bool {
 	code := strings.TrimSpace(strings.ToLower(planCode))
 	return code == "pro_monthly" ||
+		code == domain.PaymentTestPlanCode ||
 		strings.HasPrefix(code, "light_") ||
 		strings.HasPrefix(code, "standard_") ||
 		strings.HasPrefix(code, "advanced_")

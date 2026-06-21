@@ -2,6 +2,8 @@ package domain
 
 import "time"
 
+const PaymentTestPlanCode = "test_one_cent_monthly"
+
 // MembershipPlan — table: membership_plan_config
 type MembershipPlan struct {
 	Code           string     `gorm:"column:code;primaryKey" json:"code"`
@@ -10,6 +12,8 @@ type MembershipPlan struct {
 	Amount         float64    `gorm:"column:amount" json:"amount"`
 	DurationMonths int        `gorm:"column:duration_months" json:"duration_months"`
 	IsActive       bool       `gorm:"column:is_active" json:"is_active"`
+	IsVisible      bool       `gorm:"column:is_visible" json:"is_visible"`
+	IsTestPlan     bool       `gorm:"column:is_test_plan" json:"is_test_plan"`
 	Tier           *string    `gorm:"column:tier" json:"tier,omitempty"`
 	Period         *string    `gorm:"column:period" json:"period,omitempty"`
 	DailyCredits   int        `gorm:"column:daily_credits" json:"daily_credits"`
@@ -20,6 +24,32 @@ type MembershipPlan struct {
 }
 
 func (MembershipPlan) TableName() string { return "membership_plan_config" }
+
+type PaymentTestSetting struct {
+	ID        string     `gorm:"column:id;primaryKey" json:"id"`
+	Enabled   bool       `gorm:"column:enabled" json:"enabled"`
+	UpdatedBy *string    `gorm:"column:updated_by" json:"updated_by,omitempty"`
+	CreatedAt *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+func (PaymentTestSetting) TableName() string { return "membership_payment_test_settings" }
+
+type PaymentTestUser struct {
+	ID        string     `gorm:"column:id;primaryKey" json:"id"`
+	UserID    string     `gorm:"column:user_id" json:"user_id"`
+	Note      *string    `gorm:"column:note" json:"note,omitempty"`
+	CreatedBy *string    `gorm:"column:created_by" json:"created_by,omitempty"`
+	CreatedAt *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+}
+
+func (PaymentTestUser) TableName() string { return "membership_payment_test_users" }
+
+type PaymentTestAccess struct {
+	Enabled     bool
+	UserAllowed bool
+}
 
 // UserMembership — table: user_pro_memberships
 type UserMembership struct {

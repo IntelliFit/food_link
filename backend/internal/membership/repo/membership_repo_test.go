@@ -19,6 +19,8 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&domain.MembershipPlan{},
+		&domain.PaymentTestSetting{},
+		&domain.PaymentTestUser{},
 		&domain.UserMembership{},
 		&domain.MembershipPayment{},
 		&domain.UserCreditBonusEvent{},
@@ -35,13 +37,35 @@ func TestMembershipRepo_ListActivePlans(t *testing.T) {
 	r := NewMembershipRepo(db)
 	ctx := context.Background()
 
-	require.NoError(t, db.Create(&domain.MembershipPlan{Code: "standard_monthly", Name: "标准版", IsActive: true, SortOrder: 1}).Error)
-	require.NoError(t, db.Create(&domain.MembershipPlan{Code: "advanced_monthly", Name: "进阶版", IsActive: false, SortOrder: 2}).Error)
+	require.NoError(t, db.Create(&domain.MembershipPlan{Code: "standard_monthly", Name: "标准版", IsActive: true, IsVisible: true, SortOrder: 1}).Error)
+	require.NoError(t, db.Create(&domain.MembershipPlan{Code: "advanced_monthly", Name: "进阶版", IsActive: false, IsVisible: true, SortOrder: 2}).Error)
+	require.NoError(t, db.Create(&domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", IsActive: true, IsVisible: false, IsTestPlan: true, SortOrder: 9999}).Error)
 
 	plans, err := r.ListActivePlans(ctx)
 	require.NoError(t, err)
 	require.Len(t, plans, 1)
 	assert.Equal(t, "standard_monthly", plans[0].Code)
+}
+
+func TestMembershipRepo_GetPaymentTestAccess(t *testing.T) {
+	db := setupTestDB(t)
+	r := NewMembershipRepo(db)
+	ctx := context.Background()
+
+	require.NoError(t, db.Create(&domain.PaymentTestSetting{ID: "default", Enabled: true}).Error)
+	require.NoError(t, db.Create(&domain.PaymentTestUser{ID: "ptu1", UserID: "u1"}).Error)
+
+	allowed, err := r.GetPaymentTestAccess(ctx, "u1")
+	require.NoError(t, err)
+	require.NotNil(t, allowed)
+	assert.True(t, allowed.Enabled)
+	assert.True(t, allowed.UserAllowed)
+
+	blocked, err := r.GetPaymentTestAccess(ctx, "u2")
+	require.NoError(t, err)
+	require.NotNil(t, blocked)
+	assert.True(t, blocked.Enabled)
+	assert.False(t, blocked.UserAllowed)
 }
 
 func TestMembershipRepo_GetActiveMembershipExpiresStaleRow(t *testing.T) {

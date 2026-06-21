@@ -33,6 +33,8 @@ type mockMembershipRepo struct {
 	payment                       *domain.MembershipPayment
 	latestPaidPayment             *domain.MembershipPayment
 	user                          *membershiprepo.User
+	paymentTestAccess             *domain.PaymentTestAccess
+	paymentTestAccessErr          error
 	trialEntitlement              *domain.UserTrialEntitlement
 	analysisCountToday            int64
 	usedByDate                    map[string]int
@@ -99,6 +101,15 @@ func (m *mockMembershipRepo) GetPlanByCode(ctx context.Context, planCode string)
 		}
 	}
 	return nil, nil
+}
+func (m *mockMembershipRepo) GetPaymentTestAccess(ctx context.Context, userID string) (*domain.PaymentTestAccess, error) {
+	if m.paymentTestAccessErr != nil {
+		return nil, m.paymentTestAccessErr
+	}
+	if m.paymentTestAccess != nil {
+		return m.paymentTestAccess, nil
+	}
+	return &domain.PaymentTestAccess{}, nil
 }
 func (m *mockMembershipRepo) GetUserProMembership(ctx context.Context, userID string) (*domain.UserMembership, error) {
 	return m.membership, nil
@@ -1082,6 +1093,61 @@ func TestMembershipService_CreatePaymentWithInput_ReturnsMobilePaymentUnavailabl
 	require.True(t, errors.As(err, &appErr))
 	assert.Equal(t, http.StatusNotImplemented, appErr.HTTPStatus)
 	assert.Contains(t, appErr.Message, "App 支付暂未开放")
+	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePaymentWithInput_BlocksDisabledPaymentTestPlan(t *testing.T) {
+	plan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode:        map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: plan},
+		paymentTestAccess: &domain.PaymentTestAccess{Enabled: false, UserAllowed: true},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{PlanCode: domain.PaymentTestPlanCode})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusForbidden, appErr.HTTPStatus)
+	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePaymentWithInput_BlocksUnlistedPaymentTestUser(t *testing.T) {
+	plan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode:        map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: plan},
+		paymentTestAccess: &domain.PaymentTestAccess{Enabled: true, UserAllowed: false},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{PlanCode: domain.PaymentTestPlanCode})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusForbidden, appErr.HTTPStatus)
+	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePaymentWithInput_AllowsListedPaymentTestUserPastGate(t *testing.T) {
+	plan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode:        map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: plan},
+		paymentTestAccess: &domain.PaymentTestAccess{Enabled: true, UserAllowed: true},
+		user:              &membershiprepo.User{ID: "u1"},
+	}
+	svc := NewMembershipService(mockRepo)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{
+		PlanCode: domain.PaymentTestPlanCode,
+		Client:   "mobile_app",
+	})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusNotImplemented, appErr.HTTPStatus)
 	assert.Nil(t, mockRepo.payment)
 }
 
