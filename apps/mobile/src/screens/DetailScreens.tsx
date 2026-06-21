@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { ActionSheetIOS, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
-import { Apple, Check, Coffee, Cookie, Dumbbell, ImagePlus, Inbox, Moon, MoreVertical, Plus, RefreshCw, Search, Send, Share2, Soup, Trash2, Undo2, UserPlus, Utensils, X, type LucideIcon } from 'lucide-react-native'
+import { Apple, Check, Coffee, Cookie, Dumbbell, ImagePlus, Inbox, Link2, MessageCircle, Moon, MoreHorizontal, MoreVertical, Plus, RefreshCw, Search, Send, Share2, Soup, Trash2, Undo2, UserPlus, Users, Utensils, X, type LucideIcon } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   getMealTypeLabel,
@@ -242,6 +242,179 @@ type EditableRecordItem = {
   source: FoodRecord['items'][number]
 }
 type AppDialog = ReturnType<typeof useAppDialog>
+type FoodRecordShareTarget = 'wechat_session' | 'wechat_timeline' | 'copy_link' | 'system' | 'cancel'
+
+type PendingFoodRecordShare = {
+  record: FoodRecord
+  shareUrl: string
+  title: string
+  description: string
+  resolve: (shared: boolean) => void
+  busyTarget?: FoodRecordShareTarget
+}
+
+function useFoodRecordShareSheet(dialog: AppDialog) {
+  const insets = useSafeAreaInsets()
+  const [pendingShare, setPendingShare] = useState<PendingFoodRecordShare | null>(null)
+
+  const finishShare = useCallback((current: PendingFoodRecordShare, shared: boolean) => {
+    setPendingShare(null)
+    current.resolve(shared)
+  }, [])
+
+  const shareFoodRecord = useCallback((record: FoodRecord) => {
+    const shareUrl = apiClient.buildFoodRecordShareUrl(record.id)
+    const title = buildRecordShareTitle(record)
+    const description = buildRecordShareDescription(record)
+    return new Promise<boolean>((resolve) => {
+      setPendingShare({ record, shareUrl, title, description, resolve })
+    })
+  }, [])
+
+  const closeShareSheet = useCallback(() => {
+    if (!pendingShare || pendingShare.busyTarget) return
+    finishShare(pendingShare, false)
+  }, [finishShare, pendingShare])
+
+  const runShareTarget = useCallback(async (target: FoodRecordShareTarget) => {
+    const current = pendingShare
+    if (!current || current.busyTarget || target === 'cancel') {
+      if (current && target === 'cancel') finishShare(current, false)
+      return
+    }
+    setPendingShare((value) => (value ? { ...value, busyTarget: target } : value))
+    try {
+      if (target === 'copy_link') {
+        await Clipboard.setStringAsync(current.shareUrl)
+        finishShare(current, true)
+        await dialog.alert('链接已复制', '可以粘贴到微信聊天或其他 App。', 'success')
+        return
+      }
+      if (target === 'wechat_session' || target === 'wechat_timeline') {
+        try {
+          await shareWebpageToWechat({
+            webpageUrl: current.shareUrl,
+            title: current.title,
+            description: current.description,
+            scene: target === 'wechat_timeline' ? 'timeline' : 'session',
+          })
+          finishShare(current, true)
+          return
+        } catch (error) {
+          setPendingShare(null)
+          const fallback = await dialog.confirm({
+            title: '微信分享不可用',
+            message: userFacingErrorMessage(error),
+            confirmText: '用更多方式',
+            cancelText: '取消',
+          })
+          if (fallback) {
+            const shared = await shareTextToSystem(current.title, buildRecordShareMessage(current.record, current.shareUrl), current.shareUrl)
+            current.resolve(shared)
+          } else {
+            current.resolve(false)
+          }
+          return
+        }
+      }
+      const shared = await shareTextToSystem(current.title, buildRecordShareMessage(current.record, current.shareUrl), current.shareUrl)
+      finishShare(current, shared)
+    } catch (error) {
+      finishShare(current, false)
+      await dialog.alert('分享失败', userFacingErrorMessage(error), 'danger')
+    }
+  }, [dialog, finishShare, pendingShare])
+
+  const canShareToWechat = isNativeWechatShareAvailable()
+  const shareSheet = (
+    <Modal visible={Boolean(pendingShare)} transparent animationType="fade" onRequestClose={closeShareSheet}>
+      <Pressable style={styles.foodShareBackdrop} onPress={closeShareSheet}>
+        <Pressable style={[styles.foodShareSheet, { paddingBottom: Math.max(insets.bottom, 16) + 18 }]} onPress={(event) => event.stopPropagation?.()}>
+          <View style={styles.foodShareHandle} />
+          <View style={styles.foodShareHeader}>
+            <View style={styles.foodShareHeaderSpacer} />
+            <Text style={styles.foodShareTitle}>分享至</Text>
+            <Pressable hitSlop={10} style={styles.foodShareCloseButton} disabled={Boolean(pendingShare?.busyTarget)} onPress={closeShareSheet}>
+              <X size={22} color="#374151" strokeWidth={2.4} />
+            </Pressable>
+          </View>
+          <View style={styles.foodShareGrid}>
+            {canShareToWechat ? (
+              <>
+                <FoodShareSheetAction
+                  label="微信好友"
+                  Icon={MessageCircle}
+                  color="#07c160"
+                  disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
+                  busy={pendingShare?.busyTarget === 'wechat_session'}
+                  onPress={() => void runShareTarget('wechat_session')}
+                />
+                <FoodShareSheetAction
+                  label="朋友圈"
+                  Icon={Users}
+                  color="#63c62e"
+                  disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
+                  busy={pendingShare?.busyTarget === 'wechat_timeline'}
+                  onPress={() => void runShareTarget('wechat_timeline')}
+                />
+              </>
+            ) : null}
+            <FoodShareSheetAction
+              label="更多方式"
+              Icon={MoreHorizontal}
+              color="#38bdf8"
+              disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
+              busy={pendingShare?.busyTarget === 'system'}
+              onPress={() => void runShareTarget('system')}
+            />
+          </View>
+          <View style={styles.foodShareDivider} />
+          <View style={styles.foodShareGrid}>
+            <FoodShareSheetAction
+              label="复制链接"
+              Icon={Link2}
+              color="#94a3b8"
+              disabled={!pendingShare || Boolean(pendingShare.busyTarget)}
+              busy={pendingShare?.busyTarget === 'copy_link'}
+              onPress={() => void runShareTarget('copy_link')}
+            />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  )
+
+  return { shareFoodRecord, shareSheet }
+}
+
+function FoodShareSheetAction({
+  label,
+  Icon,
+  color,
+  disabled,
+  busy,
+  onPress,
+}: {
+  label: string
+  Icon: LucideIcon
+  color: string
+  disabled?: boolean
+  busy?: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      disabled={disabled}
+      style={({ pressed }) => [styles.foodShareAction, pressed && styles.foodShareActionPressed, disabled && styles.foodShareActionDisabled]}
+      onPress={onPress}
+    >
+      <View style={[styles.foodShareActionIcon, { backgroundColor: color }]}>
+        {busy ? <ActivityIndicator color="#ffffff" size="small" /> : <Icon size={28} color="#ffffff" strokeWidth={2.4} />}
+      </View>
+      <Text style={styles.foodShareActionText} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  )
+}
 
 type SelectedManualFood = {
   key: string
@@ -292,6 +465,7 @@ export function DayRecordScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
+  const { shareFoodRecord, shareSheet } = useFoodRecordShareSheet(dialog)
   const date = route.params?.date || todayKey()
   const [records, setRecords] = useState<FoodRecord[]>([])
   const [targetCalories, setTargetCalories] = useState(2000)
@@ -353,7 +527,7 @@ export function DayRecordScreen() {
     }
     try {
       const shared = records.length === 1
-        ? await shareFoodRecordWithOptions(records[0], dialog)
+        ? await shareFoodRecord(records[0])
         : await shareTextToSystem(`${date} 饮食记录`, buildDayShareMessage(date, records))
       if (!shared) return
       const reward = await apiClient.claimSharePosterReward({ shareScope: 'daily_food', shareDate: date })
@@ -562,6 +736,7 @@ export function DayRecordScreen() {
           </View>
         ) : null}
       </ScrollView>
+      {shareSheet}
     </View>
   )
 }
@@ -571,6 +746,7 @@ export function RecordDetailScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
   const insets = useSafeAreaInsets()
+  const { shareFoodRecord, shareSheet } = useFoodRecordShareSheet(dialog)
   const [record, setRecord] = useState<FoodRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -614,7 +790,7 @@ export function RecordDetailScreen() {
   const shareRecord = async () => {
     if (!record) return
     try {
-      const shared = await shareFoodRecordWithOptions(record, dialog)
+      const shared = await shareFoodRecord(record)
       if (!shared) return
       const reward = await apiClient.claimSharePosterReward({ recordId: record.id })
       await showShareRewardAlert(dialog, reward)
@@ -901,6 +1077,7 @@ export function RecordDetailScreen() {
           </View>
         ) : null}
       </ScrollView>
+      {shareSheet}
     </View>
   )
 }
@@ -908,6 +1085,7 @@ export function RecordDetailScreen() {
 export function AnalyzeHistoryScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const { shareFoodRecord, shareSheet } = useFoodRecordShareSheet(dialog)
   const [tasks, setTasks] = useState<AnalysisTask[]>([])
   const [searchKeyword, setSearchKeyword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1062,7 +1240,7 @@ export function AnalyzeHistoryScreen() {
         if (confirmed) openTask(task)
         return
       }
-      const shared = await shareFoodRecordWithOptions(record, dialog)
+      const shared = await shareFoodRecord(record)
       if (!shared) return
       const reward = await apiClient.claimSharePosterReward({ recordId: record.id })
       await showShareRewardAlert(dialog, reward)
@@ -1071,7 +1249,7 @@ export function AnalyzeHistoryScreen() {
     } finally {
       setSharingTaskId((current) => (current === task.id ? null : current))
     }
-  }, [dialog, openTask, sharingTaskId])
+  }, [dialog, openTask, shareFoodRecord, sharingTaskId])
 
   const closeTaskMenu = useCallback(() => {
     setMenuTask(null)
@@ -1339,6 +1517,7 @@ export function AnalyzeHistoryScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+      {shareSheet}
     </View>
   )
 }
@@ -6198,76 +6377,6 @@ async function showShareRewardAlert(dialog: AppDialog, result: Awaited<ReturnTyp
   await dialog.alert('分享完成', result.message || (result.claimed ? `分享奖励 +${result.credits || 0} 积分` : '分享已完成'), 'success')
 }
 
-type FoodRecordShareTarget = 'wechat' | 'copy_link' | 'system' | 'cancel'
-
-async function shareFoodRecordWithOptions(record: FoodRecord, dialog: AppDialog): Promise<boolean> {
-  const shareUrl = apiClient.buildFoodRecordShareUrl(record.id)
-  const title = buildRecordShareTitle(record)
-  const description = buildRecordShareDescription(record)
-  const target = await selectFoodRecordShareTarget(title, shareUrl)
-  if (target === 'cancel') return false
-  if (target === 'copy_link') {
-    await Clipboard.setStringAsync(shareUrl)
-    await dialog.alert('链接已复制', '可以粘贴到微信聊天或其他 App。', 'success')
-    return true
-  }
-  if (target === 'wechat') {
-    try {
-      await shareWebpageToWechat({
-        webpageUrl: shareUrl,
-        title,
-        description,
-        scene: 'session',
-      })
-      return true
-    } catch (error) {
-      const fallback = await dialog.confirm({
-        title: '微信分享不可用',
-        message: userFacingErrorMessage(error),
-        confirmText: '用更多方式',
-        cancelText: '取消',
-      })
-      if (!fallback) return false
-    }
-  }
-  return shareTextToSystem(title, buildRecordShareMessage(record, shareUrl), shareUrl)
-}
-
-function selectFoodRecordShareTarget(title: string, shareUrl: string): Promise<FoodRecordShareTarget> {
-  const canShareToWechat = isNativeWechatShareAvailable()
-  const options: Array<{ label: string; target: FoodRecordShareTarget }> = [
-    ...(canShareToWechat ? [{ label: '分享到微信卡片', target: 'wechat' as const }] : []),
-    { label: '复制链接', target: 'copy_link' },
-    { label: '更多分享方式', target: 'system' },
-    { label: '取消', target: 'cancel' },
-  ]
-  if (Platform.OS === 'ios') {
-    return new Promise((resolve) => {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: '分享饮食记录',
-          message: shareUrl,
-          options: options.map((option) => option.label),
-          cancelButtonIndex: options.length - 1,
-        },
-        (buttonIndex) => resolve(options[buttonIndex]?.target || 'cancel'),
-      )
-    })
-  }
-  return new Promise((resolve) => {
-    const buttons = options
-      .filter((option) => option.target !== 'cancel')
-      .map((option) => ({
-        text: option.label,
-        onPress: () => resolve(option.target),
-      }))
-    Alert.alert(title, shareUrl, buttons, {
-      cancelable: true,
-      onDismiss: () => resolve('cancel'),
-    })
-  })
-}
-
 async function shareTextToSystem(title: string, message: string, url?: string): Promise<boolean> {
   const result = await Share.share({
     title,
@@ -6809,6 +6918,101 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.72,
+  },
+  foodShareBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.42)',
+  },
+  foodShareSheet: {
+    width: '100%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: '#f8fafc',
+    paddingTop: 10,
+    paddingHorizontal: 18,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.2,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 24,
+  },
+  foodShareHandle: {
+    alignSelf: 'center',
+    width: 42,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#d1d5db',
+    marginBottom: 12,
+  },
+  foodShareHeader: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  foodShareHeaderSpacer: {
+    width: 38,
+  },
+  foodShareTitle: {
+    flex: 1,
+    textAlign: 'center',
+    color: '#111827',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '900',
+  },
+  foodShareCloseButton: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 19,
+  },
+  foodShareGrid: {
+    marginTop: 18,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    rowGap: 16,
+    paddingBottom: 2,
+  },
+  foodShareDivider: {
+    height: 1,
+    backgroundColor: '#e5e7eb',
+    marginTop: 16,
+  },
+  foodShareAction: {
+    width: 78,
+    minHeight: 92,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  foodShareActionPressed: {
+    opacity: 0.72,
+  },
+  foodShareActionDisabled: {
+    opacity: 0.5,
+  },
+  foodShareActionIcon: {
+    width: 64,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 32,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  foodShareActionText: {
+    marginTop: 9,
+    color: '#4b5563',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   rowBetween: {
     flexDirection: 'row',
