@@ -23,7 +23,8 @@
     opacity: 0.72;
   }
 
-  &--warming {
-    filter: drop-shadow(0 0 12rpx rgba(245, 188, 91, 0.42));
+  &__image {
+    width: 100%;
+    height: 100%;
   }
 }
