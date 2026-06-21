@@ -1007,6 +1007,11 @@ export function BenchmarkRunDetailSection() {
               {run.error_message}
             </div>
           )}
+          {run.evaluation_algorithm_version && (
+            <div className="mt-4 text-right text-xs text-muted-foreground">
+              评测算法版本：{run.evaluation_algorithm_version}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1020,7 +1025,9 @@ export function BenchmarkRunDetailSection() {
               <thead className="bg-muted/50 text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2 text-left">状态</th>
-                  <th className="px-3 py-2 text-left">样本 ID</th>
+                  <th className="px-3 py-2 text-left">图片</th>
+                  <th className="px-3 py-2 text-left">样本名</th>
+                  <th className="px-3 py-2 text-left">标注</th>
                   <th className="px-3 py-2 text-left">名称匹配</th>
                   <th className="px-3 py-2 text-left">总重误差</th>
                   <th className="px-3 py-2 text-left">分项对比</th>
@@ -1031,14 +1038,28 @@ export function BenchmarkRunDetailSection() {
               </thead>
               <tbody>
                 {loading && samples.length === 0 ? (
-                  <tr><td colSpan={8} className="p-6"><Skeleton className="h-8 w-full" /></td></tr>
+                  <tr><td colSpan={10} className="p-6"><Skeleton className="h-8 w-full" /></td></tr>
                 ) : samples.length === 0 ? (
-                  <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">暂无样本结果</td></tr>
+                  <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">暂无样本结果</td></tr>
                 ) : (
                   samples.map((s) => (
                     <tr key={s.id} className="border-b last:border-b-0 hover:bg-muted/30">
                       <td className="px-3 py-2"><RunSampleStatusBadge status={s.status} /></td>
-                      <td className="px-3 py-2 font-mono text-xs">{s.sample_id.slice(0, 8)}</td>
+                      <td className="px-3 py-2">
+                        {s.image_url ? (
+                          <a href={s.image_url} target="_blank" rel="noreferrer" className="inline-block">
+                            <img
+                              src={s.image_url}
+                              alt={s.sample_name || s.sample_id}
+                              className="h-12 w-12 rounded object-cover ring-1 ring-border"
+                            />
+                          </a>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-medium">{s.sample_name || '-'}</td>
+                      <td className="px-3 py-2 max-w-[200px] truncate" title={runSampleLabelSummary(s)}>{runSampleLabelSummary(s)}</td>
                       <td className="px-3 py-2">{s.metrics?.name_matched ? '✅' : '❌'}</td>
                       <td className="px-3 py-2">{formatPct(s.metrics?.total_weight_error_pct)}</td>
                       <td className="px-3 py-2">{comparisonSummary(s.metrics?.item_comparisons)}</td>
@@ -1093,6 +1114,7 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
     { key: 'nutrition', label: 'Nutrition 查询' },
     { key: 'suggest_ratio', label: 'Suggest Ratio' },
     { key: 'final', label: 'Final 输出' },
+    { key: 'ai_name_matching', label: 'AI 名称匹配' },
   ]
 
   const comparisons: ItemComparison[] = sample.metrics?.item_comparisons || []
@@ -1113,6 +1135,30 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
           <CardDescription>sample_id: {sample.sample_id} / task_id: {sample.task_id || '-'}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2">
+            {sample.image_url && (
+              <div>
+                <h4 className="mb-2 font-semibold">原始图片</h4>
+                <a href={sample.image_url} target="_blank" rel="noreferrer" className="inline-block">
+                  <img
+                    src={sample.image_url}
+                    alt={sample.sample_name || sample.sample_id}
+                    className="max-h-64 rounded-md border object-contain"
+                  />
+                </a>
+              </div>
+            )}
+            <div>
+              <h4 className="mb-2 font-semibold">标注</h4>
+              <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-sm">
+                <div><span className="text-muted-foreground">批次:</span> {sample.batch_name || '-'}</div>
+                <div><span className="text-muted-foreground">样本名:</span> {sample.sample_name || '-'}</div>
+                <div><span className="text-muted-foreground">类型:</span> {sample.label_type ? labelTypeLabels[sample.label_type as LabelType] : '-'}</div>
+                <div><span className="text-muted-foreground">标注值:</span> {runSampleLabelSummary(sample)}</div>
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <h4 className="mb-2 font-semibold">Ground Truth</h4>
@@ -1214,9 +1260,11 @@ function MetricCard({ label, value }: { label: string; value: string }) {
   )
 }
 
+// formatPct formats a value that is already expressed as a percentage
+// (e.g. backend MAPE/error_pct values where 20 means 20%).
 function formatPct(value: number | undefined): string {
   if (value === undefined || value === null || isNaN(value)) return '-'
-  return `${(value * 100).toFixed(2)}%`
+  return `${value.toFixed(2)}%`
 }
 
 function formatNumber(value: number | undefined): string {
@@ -1240,4 +1288,21 @@ function comparisonSummary(comparisons: ItemComparison[] | undefined): string {
     return '总重对比'
   }
   return `匹配 ${matched}/${total}${extra > 0 ? `, 多检 ${extra}` : ''}`
+}
+
+function runSampleLabelSummary(sample: BenchmarkRunSample): string {
+  const labelType = sample.label_type
+  if (labelType === 'total' && sample.total_weight_grams !== undefined) {
+    return `${sample.total_weight_grams}g`
+  }
+  if (labelType === 'items' && sample.items && Object.keys(sample.items).length > 0) {
+    return Object.entries(sample.items)
+      .filter(([name]) => name !== '__total__')
+      .map(([name, w]) => `${name}=${w}g`)
+      .join('; ')
+  }
+  if (labelType === 'unlabeled') {
+    return '未标注'
+  }
+  return '-'
 }

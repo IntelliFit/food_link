@@ -17,6 +17,7 @@ import {
 import { withAuth } from '../../../utils/withAuth'
 import { useAppColorScheme } from '../../../components/AppColorSchemeContext'
 import { applyThemeNavigationBar } from '../../../utils/theme-navigation-bar'
+import { PetAvatar } from '../../../components/PetAvatar'
 import './index.scss'
 
 type ChatRole = 'pet' | 'user'
@@ -30,10 +31,6 @@ type ChatMessage = {
   clues?: string[]
   actions?: string[]
 }
-
-const PET_COLORS = ['mint', 'berry', 'sunny', 'aqua', 'grape', 'peach', 'cream', 'matcha'] as const
-const PET_SHAPES = ['round', 'bean', 'puff', 'drop'] as const
-const PET_ANIMALS = ['cat', 'bunny', 'bear', 'fox', 'hamster'] as const
 
 const QUICK_QUESTIONS = [
   { text: '最近训练状态下滑了，帮我找原因', range: 'week' as RangeMode },
@@ -51,14 +48,6 @@ const FOLLOW_UPS = [
 
 function nextID(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`
-}
-
-function stableHash(input: string): number {
-  let hash = 0
-  for (let i = 0; i < input.length; i += 1) {
-    hash = (hash * 31 + input.charCodeAt(i)) >>> 0
-  }
-  return hash
 }
 
 function rangeLabel(range: RangeMode): string {
@@ -137,38 +126,6 @@ function buildActions(question: string): string[] {
     return ['先稳定记录 7 天', '看日均热量而不是单日波动', '保留蛋白质，优先微调零食和饮料']
   }
   return ['先选一个最小改动执行 3 天', '继续记录训练和体感', '下一次让我对比执行前后变化']
-}
-
-function PetFigure({ petSummary }: { petSummary: PetSummary | null }) {
-  const petSeed = petSummary?.pet?.pet_seed || 'guest'
-  const petColor = petSummary?.pet?.color || PET_COLORS[stableHash(`${petSeed}:color`) % PET_COLORS.length]
-  const petShape = petSummary?.pet?.shape || PET_SHAPES[stableHash(`${petSeed}:shape`) % PET_SHAPES.length]
-  const petAnimal = PET_ANIMALS[stableHash(`${petSeed}:animal`) % PET_ANIMALS.length]
-  const petPattern = petSummary?.pet?.pattern || `pattern-${stableHash(`${petSeed}:pattern`) % 5}`
-  const petAccessory = petSummary?.pet?.accessory || 'leaf'
-  const petMood = petSummary?.status?.mood || 'calm'
-
-  return (
-    <View className={`pet-home-avatar pet-chat-pet-figure ${petColor} ${petShape} ${petPattern} animal-${petAnimal} mood-${petMood}`}>
-      <View className='pet-home-shadow' />
-      <View className='pet-body'>
-        <View className='pet-tail' />
-        <View className='pet-ear left' />
-        <View className='pet-ear right' />
-        <View className='pet-accessory'>
-          <View className={`pet-accessory-shape ${petAccessory}`} />
-        </View>
-        <View className='pet-face'>
-          <View className='pet-snout' />
-          <View className='pet-eye left' />
-          <View className='pet-eye right' />
-          <View className='pet-cheek left' />
-          <View className='pet-cheek right' />
-          <View className='pet-mouth' />
-        </View>
-      </View>
-    </View>
-  )
 }
 
 function PetChatPage() {
@@ -348,7 +305,7 @@ function PetChatPage() {
 
       <View className='pet-chat-stage'>
         <View className='pet-chat-stage-pet'>
-          <PetFigure petSummary={petSummary} />
+          <PetAvatar pet={petSummary?.pet} size={56} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
         </View>
         <View className='pet-chat-stage-bubble'>
           <Text className='pet-chat-stage-title'>{petName}在读你的饮食记录</Text>
@@ -366,6 +323,7 @@ function PetChatPage() {
         <View className='pet-chat-messages'>
           {messages.map((message) => (
             <View key={message.id} className={`pet-chat-message ${message.role}`}>
+              {message.role === 'pet' ? <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status?.mood} state={petSummary?.status?.state} /> : null}
               <View className='pet-chat-bubble'>
                 <Text className='pet-chat-message-text'>{message.text}</Text>
                 {message.clues?.length ? (
@@ -390,6 +348,7 @@ function PetChatPage() {
           ))}
           {busy ? (
             <View className='pet-chat-message pet'>
+              <PetAvatar pet={petSummary?.pet} size={30} mood={petSummary?.status?.mood} state={petSummary?.status?.state} />
               <View className='pet-chat-bubble thinking'>
                 <View className='pet-chat-thinking-dot' />
                 <View className='pet-chat-thinking-dot' />

@@ -259,16 +259,10 @@ export function MembershipCenterScreen() {
   }, [load])
 
   const createPayment = async (plan: MembershipPlan) => {
-    setLoading(true)
-    try {
-      const order = await apiClient.createMembershipPayment(plan.code)
-      setLastOrder(order)
-      Alert.alert('订单已创建', '请在支付渠道完成付款；支付完成后可返回会员中心同步订单状态。')
-    } catch (error) {
-      showError('创建订单失败', error)
-    } finally {
-      setLoading(false)
-    }
+    Alert.alert(
+      'App 支付暂未开放',
+      `当前 App 会员支付还未完成接入，请先在微信小程序中完成开通或续费。\n\n套餐：${plan.name}`,
+    )
   }
 
   const previewPayment = () => {

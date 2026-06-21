@@ -23,7 +23,7 @@ type MembershipService interface {
 	ListPlans(ctx context.Context) ([]map[string]any, error)
 	GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error)
 	GetRewardCenter(ctx context.Context, userID string) (map[string]any, error)
-	CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error)
+	CreatePaymentWithInput(ctx context.Context, userID string, input service.CreateMembershipPaymentInput) (map[string]any, error)
 	SyncWechatPayment(ctx context.Context, userID, orderNo string) (map[string]any, error)
 	WechatNotify(ctx context.Context, paymentID string) error
 	HandleWechatNotify(ctx context.Context, headers http.Header, body []byte) (map[string]any, error)
@@ -82,8 +82,11 @@ func (h *MembershipHandler) GetRewardCenter(c *gin.Context) {
 // POST /api/membership/pay/create
 func (h *MembershipHandler) CreatePayment(c *gin.Context) {
 	var body struct {
-		PlanCode string `json:"plan_code"`
-		PlanID   string `json:"plan_id"`
+		PlanCode   string `json:"plan_code"`
+		PlanID     string `json:"plan_id"`
+		PayChannel string `json:"pay_channel"`
+		TradeType  string `json:"trade_type"`
+		Client     string `json:"client"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, err)
@@ -102,12 +105,43 @@ func (h *MembershipHandler) CreatePayment(c *gin.Context) {
 		response.Error(c, commonerrors.ErrUnauthorized)
 		return
 	}
-	data, err := h.svc.CreatePayment(c.Request.Context(), userID, planCode)
+	client := strings.TrimSpace(body.Client)
+	if client == "" {
+		client = membershipPaymentClientFromRequest(c.Request)
+	}
+	data, err := h.svc.CreatePaymentWithInput(c.Request.Context(), userID, service.CreateMembershipPaymentInput{
+		PlanCode:   planCode,
+		PayChannel: body.PayChannel,
+		TradeType:  body.TradeType,
+		Client:     client,
+	})
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	logMembershipAPI(c, "payment_create_ok",
+		slog.String("plan_code", planCode),
+		slog.String("order_no", membershipMapString(data, "order_no")),
+		slog.String("pay_channel", membershipMapString(data, "pay_channel")),
+		slog.String("trade_type", membershipMapString(data, "trade_type")),
+		slog.Float64("amount", membershipMapFloat64(data, "amount")),
+		slog.String("order_mode", membershipMapString(data, "order_mode")),
+	)
 	response.Success(c, data)
+}
+
+func membershipPaymentClientFromRequest(req *http.Request) string {
+	if req == nil {
+		return ""
+	}
+	for _, name := range []string{"X-Food-Link-Client", "X-Client-Platform", "X-App-Client"} {
+		value := strings.ToLower(strings.TrimSpace(req.Header.Get(name)))
+		switch value {
+		case "mobile_app", "app", "android", "ios":
+			return "mobile_app"
+		}
+	}
+	return ""
 }
 
 // POST /api/membership/pay/sync
@@ -129,6 +163,12 @@ func (h *MembershipHandler) SyncPayment(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logMembershipAPI(c, "payment_sync_ok",
+		slog.String("order_no", strings.TrimSpace(body.OrderNo)),
+		slog.Bool("payment.synced", membershipMapBool(data, "synced")),
+		slog.String("payment.status", membershipMapString(data, "status")),
+		slog.String("wechat.trade_state", membershipMapString(data, "trade_state")),
+	)
 	response.Success(c, data)
 }
 
@@ -144,6 +184,10 @@ func (h *MembershipHandler) WechatNotify(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logMembershipAPI(c, "wechat_notify_ok",
+		slog.Int("http.request.body.size", len(body)),
+		slog.String("wechat.notify.code", membershipMapString(data, "code")),
+	)
 	response.Raw(c, http.StatusOK, data)
 }
 
@@ -196,6 +240,14 @@ func (h *MembershipHandler) ClaimSharePosterReward(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logMembershipAPI(c, "share_poster_reward_claim_ok",
+		slog.String("record_id", strings.TrimSpace(body.RecordID)),
+		slog.String("share_scope", strings.TrimSpace(body.ShareScope)),
+		slog.Bool("reward.claimed", membershipMapBool(data, "claimed")),
+		slog.Bool("reward.already_claimed", membershipMapBool(data, "already_claimed")),
+		slog.Bool("reward.daily_cap_reached", membershipMapBool(data, "daily_cap_reached")),
+		slog.Int("reward.credits", membershipMapInt(data, "credits")),
+	)
 	response.Success(c, data)
 }
 

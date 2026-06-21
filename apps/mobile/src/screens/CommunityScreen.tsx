@@ -5,7 +5,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { CheckinLeaderboardItem, CommunityFeedContentType, CommunityFeedItem, CommunityFeedSortBy, CommunityFeedTargetType, FriendUserItem } from '@food-link/core'
 import {
-  Bell,
   ChevronRight,
   Filter,
   Heart,
@@ -14,12 +13,11 @@ import {
   PenLine,
   Search,
   Trophy,
-  UserPlus,
-  UsersRound,
   Utensils,
   type LucideIcon,
 } from 'lucide-react-native'
 import { apiClient } from '../api'
+import { IconfontText } from '../components/Iconfont'
 import type { RootStackParamList } from '../navigation/types'
 import { useAppDialog } from '../providers/DialogProvider'
 import { colors, compactFont, radius } from '../theme'
@@ -172,10 +170,10 @@ export function CommunityScreen() {
       >
         <View style={styles.quickBar}>
           <View style={styles.quickGrid}>
-            <QuickEntry label="互动消息" icon={Bell} onPress={() => navigation.navigate('Notifications')} />
-            <QuickEntry label="私信" icon={MessageCircle} onPress={() => navigation.navigate('Conversations')} />
-            <QuickEntry label="好友管理" icon={UsersRound} onPress={() => navigation.navigate('Friends')} />
-            <QuickEntry label="添加好友" icon={UserPlus} onPress={() => setAddFriendOpen(true)} />
+            <QuickEntry label="互动消息" iconClass="icon-pinglun" onPress={() => navigation.navigate('Notifications')} />
+            <QuickEntry label="私信" iconClass="icon-comment" onPress={() => navigation.navigate('Conversations')} />
+            <QuickEntry label="好友管理" iconClass="icon-duoren" onPress={() => navigation.navigate('Friends')} />
+            <QuickEntry label="添加好友" iconClass="icon-tianjiahaoyou" onPress={() => setAddFriendOpen(true)} />
           </View>
         </View>
 
@@ -371,7 +369,7 @@ function AddFriendModal({
               results.map((user) => (
                 <View key={user.id} style={styles.addFriendResultItem}>
                   <View style={styles.addFriendAvatar}>
-                    {user.avatar ? <Image source={{ uri: user.avatar }} style={styles.addFriendAvatarImage} /> : <UsersRound size={18} color={colors.brand} strokeWidth={2.2} />}
+                    {user.avatar ? <Image source={{ uri: user.avatar }} style={styles.addFriendAvatarImage} /> : <IconfontText className="iconfont icon-user" size={18} color={colors.brand} />}
                   </View>
                   <View style={styles.addFriendResultMain}>
                     <Text style={styles.addFriendResultName} numberOfLines={1}>{user.nickname || '用户'}</Text>
@@ -403,11 +401,17 @@ function AddFriendModal({
   )
 }
 
-function QuickEntry({ label, icon, onPress }: { label: string; icon: LucideIcon; onPress: () => void }) {
-  const Icon = icon
+function QuickEntry({ label, iconClass, badgeCount, onPress }: { label: string; iconClass: string; badgeCount?: number; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.quickEntry, pressed && styles.pressed]}>
-      <Icon size={21} color={colors.brand} strokeWidth={2.35} />
+      <View style={styles.quickEntryIconWrap}>
+        <IconfontText className={`iconfont ${iconClass}`} size={22} color={colors.brand} />
+        {badgeCount ? (
+          <View style={styles.quickEntryBadge}>
+            <Text style={styles.quickEntryBadgeText}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
+          </View>
+        ) : null}
+      </View>
       <Text style={styles.quickEntryText} numberOfLines={1}>{label}</Text>
     </Pressable>
   )
@@ -419,7 +423,7 @@ function RankMini({ item, rank }: { item: CheckinLeaderboardItem; rank: number }
     <View style={[styles.rankingPreviewCell, item.is_me && styles.rankingPreviewCellMe]}>
       <Text style={[styles.rankingRank, rank === 1 && styles.rankingRankFirst, rank === 2 && styles.rankingRankSecond, rank === 3 && styles.rankingRankThird]}>{rank}</Text>
       <View style={styles.rankingAvatarWrap}>
-        {item.avatar ? <Image source={{ uri: item.avatar }} style={styles.rankingAvatar} /> : <UsersRound size={17} color="rgba(255,255,255,0.88)" strokeWidth={2.2} />}
+        {item.avatar ? <Image source={{ uri: item.avatar }} style={styles.rankingAvatar} /> : <IconfontText className="iconfont icon-user" size={17} color="rgba(255,255,255,0.88)" />}
       </View>
       <Text style={styles.rankingName} numberOfLines={1}>{item.nickname || '食友'}</Text>
       <Text style={styles.rankingCount}>{checkinCount}次</Text>
@@ -458,7 +462,7 @@ function CommunityFeedCard({
     <Pressable style={({ pressed }) => [styles.feedCard, pressed && styles.pressed]} onPress={onOpen}>
       <View style={styles.feedMomentsRow}>
         <Pressable style={styles.feedAvatarCol} onPress={onOpenAuthor} hitSlop={8}>
-          {item.author.avatar ? <Image source={{ uri: item.author.avatar }} style={styles.userAvatar} /> : <View style={styles.userAvatarFallback}><UsersRound size={19} color={colors.brand} /></View>}
+          {item.author.avatar ? <Image source={{ uri: item.author.avatar }} style={styles.userAvatar} /> : <View style={styles.userAvatarFallback}><IconfontText className="iconfont icon-user" size={19} color={colors.brand} /></View>}
         </Pressable>
 
         <View style={styles.feedMainCol}>
@@ -488,11 +492,15 @@ function CommunityFeedCard({
           <View style={styles.feedActions}>
             <View style={styles.feedActionsLeft}>
               <Pressable style={styles.actionItem} onPress={onLike} hitSlop={8}>
-                <Heart size={19} color={item.liked ? colors.danger : '#64748b'} fill={item.liked ? colors.danger : 'transparent'} strokeWidth={2.2} />
+                <IconfontText
+                  className={item.liked ? 'iconfont icon-like_fill' : 'iconfont icon-like'}
+                  size={19}
+                  color={item.liked ? colors.danger : '#64748b'}
+                />
                 <Text style={[styles.actionCount, item.liked && styles.actionCountActive]}>{item.like_count}</Text>
               </Pressable>
               <View style={styles.actionItem}>
-                <MessageCircle size={19} color="#64748b" strokeWidth={2.2} />
+                <IconfontText className="iconfont icon-comment" size={19} color="#64748b" />
                 <Text style={styles.actionCount}>评论 {commentsCount}</Text>
               </View>
             </View>
@@ -717,6 +725,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '600',
+  },
+  quickEntryIconWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickEntryBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -10,
+    minWidth: 14,
+    height: 14,
+    paddingHorizontal: 3,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.danger,
+  },
+  quickEntryBadgeText: {
+    color: '#fff',
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: '800',
   },
   rankingBanner: {
     marginHorizontal: 12,

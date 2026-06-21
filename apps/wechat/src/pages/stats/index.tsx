@@ -295,7 +295,7 @@ const ANALYSIS_PANEL_TABS: Array<{ key: AnalysisPanelKey; label: string }> = [
   { key: 'structure', label: '热量分布' },
 ]
 
-const DEFAULT_RISK_KEYS = ['hypertension', 'diabetes', 'cardio', 'weight']
+const DEFAULT_RISK_KEYS = ['hypertension', 'diabetes', 'cardio', 'weight', 'micronutrient']
 const RISK_PREF_STORAGE_KEY = 'stats_risk_focus_keys'
 
 function isCustomRiskKey(key: string): boolean {
@@ -346,20 +346,6 @@ function scoreToFocusOverview(score: number, hasCustomFocus: boolean): string {
     : '你当前关注的核心指标处在较高压力区，先从最可执行的一项小步调整。'
 }
 
-function averageRiskCardScore(cards: RiskCard[], projectDelta = false): number | null {
-  const validScores = cards
-    .map(card => {
-      const baseScore = toSafeNumber(card.score, NaN)
-      if (!Number.isFinite(baseScore)) return null
-      const delta = projectDelta ? toSafeNumber(card.delta, 0) : 0
-      return Math.round(Math.max(0, Math.min(100, baseScore + delta)))
-    })
-    .filter((score): score is number => typeof score === 'number')
-
-  if (validScores.length === 0) return null
-  return Math.round(validScores.reduce((sum, score) => sum + score, 0) / validScores.length)
-}
-
 function riskCardIcon(key: string): string {
   switch (key) {
     case 'hypertension': return 'tianpingzuo'
@@ -368,6 +354,7 @@ function riskCardIcon(key: string): string {
     case 'weight': return 'weight-scale'
     case 'colorectal': return 'a-144-lvye'
     case 'longevity': return 'shangzhang'
+    case 'micronutrient': return 'yiliaohangyedeICON-'
     default: return 'target'
   }
 }
@@ -381,6 +368,7 @@ function riskCardIconColor(key: string, isDark: boolean): string {
       case 'weight': return '#4ade80'
       case 'colorectal': return '#a3e635'
       case 'longevity': return '#c084fc'
+      case 'micronutrient': return '#38bdf8'
       default: return '#34d399'
     }
   }
@@ -391,6 +379,7 @@ function riskCardIconColor(key: string, isDark: boolean): string {
     case 'weight': return '#5aa86e'
     case 'colorectal': return '#8ab060'
     case 'longevity': return '#a070b0'
+    case 'micronutrient': return '#3b82f6'
     default: return '#5aa896'
   }
 }
@@ -404,6 +393,7 @@ function riskCardIconBgColor(key: string, isDark: boolean): string {
       case 'weight': return 'rgba(74, 222, 128, 0.16)'
       case 'colorectal': return 'rgba(163, 230, 53, 0.16)'
       case 'longevity': return 'rgba(192, 132, 252, 0.16)'
+      case 'micronutrient': return 'rgba(56, 189, 248, 0.16)'
       default: return 'rgba(52, 211, 153, 0.16)'
     }
   }
@@ -414,6 +404,7 @@ function riskCardIconBgColor(key: string, isDark: boolean): string {
     case 'weight': return '#f0fdf4'
     case 'colorectal': return '#f4fbea'
     case 'longevity': return '#faf5ff'
+    case 'micronutrient': return '#eff6ff'
     default: return '#f0fdf9'
   }
 }
@@ -461,6 +452,7 @@ function riskCardBgGradient(key: string): string {
     case 'weight': return 'linear-gradient(145deg, #dcfce7 0%, #ffffff 22%, #ffffff 100%)'
     case 'colorectal': return 'linear-gradient(145deg, #ecfccb 0%, #ffffff 22%, #ffffff 100%)'
     case 'longevity': return 'linear-gradient(145deg, #f3e8ff 0%, #ffffff 22%, #ffffff 100%)'
+    case 'micronutrient': return 'linear-gradient(145deg, #e0f2fe 0%, #ffffff 22%, #ffffff 100%)'
     default: return 'linear-gradient(145deg, #dcfce7 0%, #ffffff 22%, #ffffff 100%)'
   }
 }
@@ -576,7 +568,9 @@ function StatsPage() {
       const stored = Taro.getStorageSync(RISK_PREF_STORAGE_KEY)
       if (Array.isArray(stored)) {
         const cleaned = stored.map(item => String(item || '').trim()).filter(Boolean)
-        return cleaned.length > 0 ? cleaned : DEFAULT_RISK_KEYS
+        if (cleaned.length === 0) return DEFAULT_RISK_KEYS
+        const merged = Array.from(new Set([...DEFAULT_RISK_KEYS, ...cleaned]))
+        return merged
       }
     } catch {
       // ignore
@@ -1184,13 +1178,13 @@ function StatsPage() {
       return option?.is_custom ? pendingCustomRiskCardFromOption(option) : null
     })
     .filter((card): card is RiskCard => Boolean(card))
-  const focusOverallScore = averageRiskCardScore(visibleRiskCards) ?? overallRiskScore
-  const focusProjectedScore = averageRiskCardScore(visibleRiskCards, true) ?? projectedOverallScore
   const hasVisibleCustomFocus = visibleRiskCards.some(card => card.is_custom)
+  const focusOverallScore = overallRiskScore
+  const focusProjectedScore = projectedOverallScore
   const focusOverviewCopy = scoreToFocusOverview(focusOverallScore, hasVisibleCustomFocus)
   const focusScoreHint = hasVisibleCustomFocus
-    ? '按当前展示的核心指标与自定义 AI 指标综合计算'
-    : '按当前展示的核心关注指标综合计算'
+    ? '按全部核心指标与自定义 AI 指标综合计算'
+    : '按全部核心关注指标综合计算'
   const selectedRiskSummary = selectedRiskItems.map(item => item.short).join('、')
   const topIssues = healthIndex?.top_issues ?? []
   const actionList = healthIndex?.action_list ?? []
@@ -1571,7 +1565,7 @@ function StatsPage() {
           </View>
           <View className='action-score-delta'>
             <Text className='action-score-delta__dot' />
-            <Text className='action-score-delta__text'>如果完成修改，关注综合分约为 {focusOverallScore} → {focusProjectedScore}</Text>
+            <Text className='action-score-delta__text'>如果完成修改，综合健康分约为 {overallRiskScore} → {projectedOverallScore}</Text>
           </View>
 
           </>

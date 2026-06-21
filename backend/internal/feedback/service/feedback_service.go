@@ -10,7 +10,9 @@ import (
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/feedback/domain"
 	"food_link/backend/pkg/logger"
+	apm "food_link/backend/pkg/trace"
 
+	"go.opentelemetry.io/otel/attribute"
 	"gorm.io/datatypes"
 )
 
@@ -119,19 +121,21 @@ func (s *FeedbackService) Submit(ctx context.Context, userID string, input Submi
 	if err := s.repo.Create(ctx, feedback); err != nil {
 		return "", err
 	}
-	s.notifySubmitSuccessAsync(feedback)
-	s.notifyNewFeedbackAsync(feedback)
-	s.syncFeedbackBotAsync(feedback)
+	s.notifySubmitSuccessAsync(ctx, feedback)
+	s.notifyNewFeedbackAsync(ctx, feedback)
+	s.syncFeedbackBotAsync(ctx, feedback)
 	return feedback.ID, nil
 }
 
-func (s *FeedbackService) notifySubmitSuccessAsync(feedback *domain.UserFeedback) {
+func (s *FeedbackService) notifySubmitSuccessAsync(parentCtx context.Context, feedback *domain.UserFeedback) {
 	if s == nil || s.sender == nil || feedback == nil {
 		return
 	}
 	snapshot := *feedback
 	go func() {
-		notifyCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		spanCtx, endSpan := feedbackAsyncSpan(parentCtx, "意见反馈提交站内信发送", &snapshot)
+		defer endSpan()
+		notifyCtx, cancel := context.WithTimeout(spanCtx, 8*time.Second)
 		defer cancel()
 		if err := s.sender.SendSystemMessage(notifyCtx, snapshot.UserID, buildFeedbackSubmittedMessage(&snapshot)); err != nil {
 			logger.Warn(notifyCtx, "意见反馈提交站内信发送失败",
@@ -139,7 +143,12 @@ func (s *FeedbackService) notifySubmitSuccessAsync(feedback *domain.UserFeedback
 				slog.String("user_id", snapshot.UserID),
 				slog.String("error", err.Error()),
 			)
+			return
 		}
+		logger.Info(notifyCtx, "意见反馈提交站内信发送成功",
+			slog.String("feedback_id", snapshot.ID),
+			slog.String("user_id", snapshot.UserID),
+		)
 	}()
 }
 
@@ -151,13 +160,15 @@ func buildFeedbackSubmittedMessage(feedback *domain.UserFeedback) string {
 	return "我们已经收到你的意见反馈。\n反馈类型：" + category + "\n反馈编号：" + feedback.ID + "\n感谢你帮我们把食探变得更好。"
 }
 
-func (s *FeedbackService) notifyNewFeedbackAsync(feedback *domain.UserFeedback) {
+func (s *FeedbackService) notifyNewFeedbackAsync(parentCtx context.Context, feedback *domain.UserFeedback) {
 	if s == nil || s.notifier == nil || feedback == nil {
 		return
 	}
 	snapshot := *feedback
 	go func() {
-		notifyCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		spanCtx, endSpan := feedbackAsyncSpan(parentCtx, "意见反馈飞书通知发送", &snapshot)
+		defer endSpan()
+		notifyCtx, cancel := context.WithTimeout(spanCtx, 12*time.Second)
 		defer cancel()
 		if err := s.notifier.NotifyNewFeedback(notifyCtx, &snapshot); err != nil {
 			logger.Warn(notifyCtx, "意见反馈飞书通知失败",
@@ -169,27 +180,48 @@ func (s *FeedbackService) notifyNewFeedbackAsync(feedback *domain.UserFeedback) 
 	}()
 }
 
-func (s *FeedbackService) syncFeedbackBotAsync(feedback *domain.UserFeedback) {
+func (s *FeedbackService) syncFeedbackBotAsync(parentCtx context.Context, feedback *domain.UserFeedback) {
 	if s == nil || s.feedbackBotSyncer == nil || feedback == nil {
 		return
 	}
 	snapshot := *feedback
 	go func() {
-		syncCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		spanCtx, endSpan := feedbackAsyncSpan(parentCtx, "意见反馈同步到反馈机器人", &snapshot)
+		defer endSpan()
+		syncCtx, cancel := context.WithTimeout(spanCtx, 12*time.Second)
 		defer cancel()
 		if err := s.feedbackBotSyncer.SyncUserFeedback(syncCtx, &snapshot); err != nil {
-			logger.Warn(syncCtx, "意见反馈同步 feedback-bot 失败",
+			logger.Warn(syncCtx, "意见反馈同步反馈机器人失败",
 				slog.String("feedback_id", snapshot.ID),
 				slog.String("user_id", snapshot.UserID),
 				slog.String("error", err.Error()),
 			)
 			return
 		}
-		logger.Info(syncCtx, "意见反馈已提交到 feedback-bot",
+		logger.Info(syncCtx, "意见反馈已同步到反馈机器人",
 			slog.String("feedback_id", snapshot.ID),
 			slog.String("user_id", snapshot.UserID),
 		)
 	}()
+}
+
+func feedbackAsyncSpan(parentCtx context.Context, name string, feedback *domain.UserFeedback) (context.Context, func()) {
+	baseCtx := context.Background()
+	if parentCtx != nil {
+		baseCtx = context.WithoutCancel(parentCtx)
+	}
+	attrs := []attribute.KeyValue{}
+	if feedback != nil {
+		attrs = append(attrs,
+			attribute.String("feedback.id", feedback.ID),
+			attribute.String("feedback.user_id", feedback.UserID),
+			attribute.String("feedback.category", feedback.Category),
+		)
+	}
+	ctx, span := apm.StartSpan(baseCtx, name, attrs...)
+	return ctx, func() {
+		span.End()
+	}
 }
 
 func normalizeCategory(value string) string {

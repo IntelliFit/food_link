@@ -10,7 +10,6 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	glogger "gorm.io/gorm/logger"
 )
 
 func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
@@ -27,11 +26,12 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 		DSN:                  dsn,
 		PreferSimpleProtocol: true,
 	}), &gorm.Config{
-		Logger: glogger.Default.LogMode(glogger.Silent),
+		Logger: newGORMLogger(),
 	})
 	if err != nil {
 		return nil, err
 	}
+	registerGORMLogCallbacks(db)
 	metrics.RegisterGORMCallbacks(db)
 	if sqlDB, err := db.DB(); err == nil {
 		metrics.RegisterDatabase(cfg.Name, sqlDB)

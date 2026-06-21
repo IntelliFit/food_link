@@ -526,6 +526,30 @@ const normalizePrecisionStringList = (value: unknown): string[] => (
     : []
 )
 
+type ScoreTone = 'positive' | 'neutral' | 'warning' | 'danger'
+
+function scoreToTone(score: number): ScoreTone {
+  if (score >= 78) return 'positive'
+  if (score >= 60) return 'neutral'
+  if (score >= 42) return 'warning'
+  return 'danger'
+}
+
+function scoreToLabel(score: number): string {
+  if (score >= 78) return '偏保护'
+  if (score >= 60) return '基本中性'
+  if (score >= 42) return '需要关注'
+  return '重点关注'
+}
+
+function toSafeNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const n = Number(value)
+    if (Number.isFinite(n)) return n
+  }
+  return fallback
+}
 
 function ResultPage() {
   const { scheme } = useAppColorScheme()
@@ -551,6 +575,11 @@ function ResultPage() {
     carbs: 0,
     fat: 0
   })
+  const [scoreEnabled, setScoreEnabled] = useState(false)
+  const [finalScore, setFinalScore] = useState(0)
+  const [micronutrientScore, setMicronutrientScore] = useState(0)
+  const [macroBalanceScore, setMacroBalanceScore] = useState(0)
+  const [calorieScore, setCalorieScore] = useState(0)
   const [healthAdvice, setHealthAdvice] = useState('')
   const [description, setDescription] = useState('')
   const [pfcRatioComment, setPfcRatioComment] = useState<string | null>(null)
@@ -773,6 +802,11 @@ function ResultPage() {
     setEatingOrderAdvice(result.eating_order_advice ?? null)
     setAbsorptionNotes(result.absorption_notes ?? null)
     setContextAdvice(result.context_advice ?? null)
+    setScoreEnabled(Boolean(result.score_enabled))
+    setFinalScore(toSafeNumber(result.final_score, 0))
+    setMicronutrientScore(toSafeNumber(result.micronutrient_score, 0))
+    setMacroBalanceScore(toSafeNumber(result.macro_balance_score, 0))
+    setCalorieScore(toSafeNumber(result.calorie_score, 0))
     setRecognitionOutcome(normalizeRecognitionOutcome(result.recognitionOutcome))
     setRejectionReason(result.rejectionReason?.trim() || null)
     setRetakeGuidance(Array.isArray(result.retakeGuidance) ? result.retakeGuidance.filter(Boolean) : [])
@@ -2661,6 +2695,46 @@ function ResultPage() {
               </View>
             </View>
           </View>
+
+          {scoreEnabled && (
+            <View className='score-overview-card'>
+              <View className='score-overview-main'>
+                <View className='score-overview-left'>
+                  <Text className='score-overview-title'>本餐评分</Text>
+                  <View className='score-overview-score-row'>
+                    <Text className='score-overview-score'>{finalScore}</Text>
+                    <Text className='score-overview-unit'>/ 100</Text>
+                  </View>
+                </View>
+                <View className={`score-overview-badge tone-${scoreToTone(finalScore)}`}>
+                  <Text className='score-overview-badge-label'>{scoreToLabel(finalScore)}</Text>
+                </View>
+              </View>
+              <View className='score-breakdown'>
+                <View className='score-breakdown-item'>
+                  <Text className='score-breakdown-label'>微量元素</Text>
+                  <View className='score-breakdown-track'>
+                    <View className='score-breakdown-fill micro' style={{ width: `${Math.min(100, Math.max(0, micronutrientScore))}%` }} />
+                  </View>
+                  <Text className='score-breakdown-value'>{micronutrientScore}</Text>
+                </View>
+                <View className='score-breakdown-item'>
+                  <Text className='score-breakdown-label'>宏量平衡</Text>
+                  <View className='score-breakdown-track'>
+                    <View className='score-breakdown-fill macro' style={{ width: `${Math.min(100, Math.max(0, macroBalanceScore))}%` }} />
+                  </View>
+                  <Text className='score-breakdown-value'>{macroBalanceScore}</Text>
+                </View>
+                <View className='score-breakdown-item'>
+                  <Text className='score-breakdown-label'>热量适配</Text>
+                  <View className='score-breakdown-track'>
+                    <View className='score-breakdown-fill calorie' style={{ width: `${Math.min(100, Math.max(0, calorieScore))}%` }} />
+                  </View>
+                  <Text className='score-breakdown-value'>{calorieScore}</Text>
+                </View>
+              </View>
+            </View>
+          )}
 
           {pendingPackagedChoiceCount > 0 && (
             <View className='packaged-pending-banner'>

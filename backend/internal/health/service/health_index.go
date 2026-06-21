@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"math"
+	"strings"
 )
 
 const healthIndexMinRecordedDays = 2
@@ -67,6 +68,93 @@ type RiskOption struct {
 type TopIssue struct {
 	Title  string `json:"title"`
 	Detail string `json:"detail"`
+}
+
+var statsMicronutrientWeights = map[string]float64{
+	"fiber":            0.20,
+	"sodiumMg":         0.15,
+	"potassiumMg":      0.15,
+	"calciumMg":        0.15,
+	"ironMg":           0.10,
+	"vitaminARaeMcg":   0.05,
+	"vitaminCMg":       0.10,
+	"vitaminDMcg":      0.10,
+}
+
+func computeMicronutrientScore(comp *statsComputation) (int, string, string, string, string) {
+	if comp == nil || len(comp.MicronutrientDaily) == 0 {
+		return 0, "暂无微量营养数据。", "本期保存的记录里没有可用的微量营养字段，无法判断钙、铁、钾、维生素、膳食纤维等是否充足。", "", "继续保持记录，系统会在数据足够后给出微量营养趋势。"
+	}
+
+	score := 0.0
+	var deficitLabels []string
+	var excessLabels []string
+	var basisParts []string
+
+	for _, ref := range statsInsightMicronutrientReferences {
+		actual := comp.MicronutrientDaily[ref.Key]
+		target := ref.DailyReference
+		weight := statsMicronutrientWeights[ref.Key]
+		if weight <= 0 {
+			continue
+		}
+
+		var ratio float64
+		if ref.Key == "sodiumMg" {
+			if actual <= 0 {
+				ratio = 1
+			} else if actual <= target {
+				ratio = 1
+			} else {
+				ratio = target / actual
+			}
+			if actual > target*1.2 {
+				excessLabels = append(excessLabels, ref.Label)
+			}
+		} else {
+			if actual >= target {
+				ratio = 1
+			} else if target > 0 {
+				ratio = actual / target
+			}
+			if actual < target*0.5 {
+				deficitLabels = append(deficitLabels, ref.Label)
+			}
+		}
+		score += ratio * weight * 100
+		basisParts = append(basisParts, fmt.Sprintf("%s %.0f%s", ref.Label, actual, ref.Unit))
+	}
+
+	score = math.Max(0, math.Min(100, score))
+
+	brief := "微量营养结构较均衡。"
+	summary := "膳食纤维、钙、铁、钾、维生素等摄入趋势看起来比较充足。"
+	action := "继续保持多样化的饮食结构，每周覆盖全谷物、深色蔬菜、奶制品和豆类。"
+
+	s := int(math.Round(score))
+	if s < 78 {
+		brief = "微量营养还有提升空间。"
+	}
+	if s < 60 {
+		brief = "部分微量营养偏低。"
+		summary = "膳食纤维、维生素或矿物质的日均摄入低于建议水平，长期可能影响整体健康趋势。"
+		action = "每天增加一份深色蔬菜、一份水果，并适量补充奶制品、豆类或全谷物。"
+	}
+	if s < 42 {
+		brief = "微量营养缺口较明显。"
+		summary = "多种微量元素摄入不足，是本期健康趋势的主要拖累项之一。"
+		action = "优先把早餐或午餐的主食部分换成全谷物，并保证每天有蔬菜、水果和优质蛋白。"
+	}
+
+	if len(excessLabels) > 0 {
+		brief = brief + fmt.Sprintf(" %s摄入偏高。", strings.Join(excessLabels, "、"))
+		action = "注意控制盐和加工食品，优先从天然食材中获取营养。"
+	} else if len(deficitLabels) > 0 {
+		brief = brief + fmt.Sprintf(" %s偏低。", strings.Join(deficitLabels, "、"))
+	}
+
+	basis := fmt.Sprintf("近 %d 天日均：%s。", comp.RecordedDays, strings.Join(basisParts, "，"))
+	return s, brief, summary, basis, action
 }
 
 func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex {
@@ -174,7 +262,16 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 			weightBonus,
 	)
 
-	overallRiskScore := clampScore(float64(hypertensionScore+diabetesScore+cardioScore+weightScore) / 4)
+	micronutrientScore, microBrief, microSummary, microBasis, microAction := computeMicronutrientScore(comp)
+	hasMicronutrientData := len(comp.MicronutrientDaily) > 0
+
+	baseScoreSum := float64(hypertensionScore+diabetesScore+cardioScore+weightScore)
+	scoreDivisor := 4
+	if hasMicronutrientData {
+		baseScoreSum += float64(micronutrientScore)
+		scoreDivisor = 5
+	}
+	overallRiskScore := clampScore(baseScoreSum / float64(scoreDivisor))
 
 	projectedOverallScore := clampScore(
 		float64(overallRiskScore) +
@@ -281,6 +378,20 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		},
 	}
 
+	if hasMicronutrientData {
+		riskCards = append(riskCards, RiskCard{
+			Key:     "micronutrient",
+			Title:   "微量营养充足度",
+			Score:   micronutrientScore,
+			Tone:    scoreToTone(micronutrientScore),
+			Brief:   microBrief,
+			Summary: microSummary,
+			Basis:   microBasis,
+			Action:  microAction,
+			Delta:   clampScore(ifElseFloat(float64(micronutrientScore) < 60, 12, 6)),
+		})
+	}
+
 	allRiskOptions := []RiskOption{
 		{Key: "hypertension", Title: "血压管理友好度", Short: "血压"},
 		{Key: "diabetes", Title: "血糖稳定友好度", Short: "血糖"},
@@ -288,6 +399,9 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 		{Key: "weight", Title: "体重管理友好度", Short: "体重"},
 		{Key: "colorectal", Title: "肠道状态友好度", Short: "肠道"},
 		{Key: "longevity", Title: "长期状态趋势", Short: "长期"},
+	}
+	if hasMicronutrientData {
+		allRiskOptions = append(allRiskOptions, RiskOption{Key: "micronutrient", Title: "微量营养充足度", Short: "微量营养"})
 	}
 
 	var topIssues []TopIssue
@@ -322,6 +436,9 @@ func computeHealthIndex(comp *statsComputation, statsRange string) *HealthIndex 
 	}
 	if macroPercent["protein"] < 20 {
 		actionList = append(actionList, "每餐固定补一个蛋白来源，先从早餐或午餐开始。")
+	}
+	if hasMicronutrientData && micronutrientScore < 60 {
+		actionList = append(actionList, microAction)
 	}
 	if len(actionList) == 0 {
 		actionList = []string{"先保持记录连续 1 周，再根据超标天数和睡前餐占比做微调。"}

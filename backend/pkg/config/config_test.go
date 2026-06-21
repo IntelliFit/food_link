@@ -53,6 +53,8 @@ func TestLoadReadsLegacyEnvKeys(t *testing.T) {
 	t.Setenv("OFOXAI_API_KEY", "f")
 	t.Setenv("OFOXAI_BASE_URL", "https://proxy.example.com/v1")
 	t.Setenv("LLM_PROVIDER", "g")
+	t.Setenv("WECHAT_PAY_APP_PAY_APP_ID", "wx-pay-app")
+	t.Setenv("WECHAT_PAY_APP_ID", "wx-pay-app-legacy")
 	t.Setenv("WECHAT_PAY_MCHID", "h")
 	t.Setenv("WECHAT_PAY_NOTIFY_URL", "i")
 	t.Setenv("WECHAT_PAY_SERIAL_NO", "j")
@@ -96,6 +98,12 @@ worker:
 	if cfg.Storage.CDNHealthReportsBaseURL != "health" {
 		t.Fatalf("health reports cdn env binding failed: %+v", cfg.Storage)
 	}
+	if cfg.Wechat.Pay.AppPayAppID != "wx-pay-app" || cfg.Wechat.Pay.AppID != "wx-pay-app-legacy" {
+		t.Fatalf("wechat pay env bindings failed for new config shape: %+v", cfg.Wechat.Pay)
+	}
+	if cfg.WechatPay.AppPayAppID != "wx-pay-app" || cfg.WechatPay.AppID != "wx-pay-app-legacy" {
+		t.Fatalf("wechat pay app id env bindings failed: %+v", cfg.WechatPay)
+	}
 }
 
 func TestLoadReadsAppConfigYAML(t *testing.T) {
@@ -119,6 +127,49 @@ worker:
 	}
 	if cfg.Redis.KeyPrefix != "custom_food" {
 		t.Fatalf("expected redis key prefix to be trimmed, got %q", cfg.Redis.KeyPrefix)
+	}
+}
+
+func TestLoadReadsUnifiedWechatConfigYAML(t *testing.T) {
+	dir := writeTestConfig(t, `
+wechat:
+  mini_program:
+    app_id: "wx-mini"
+    app_secret: "mini-secret"
+  mobile_app:
+    app_id: "wx-mobile"
+    app_secret: "mobile-secret"
+    development_mock_code: "mock-code"
+  pay:
+    mchid: "mch"
+    notify_url: "https://example.com/pay/notify"
+    serial_no: "serial"
+    api_v3_key: "api-key"
+    private_key: "private-key"
+    public_key: "public-key"
+    expiry_subscribe_template_id: "tpl"
+    analysis_subscribe_template_id: "analysis-tpl"
+worker:
+  count: 1
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.WechatMiniProgramAppID() != "wx-mini" || cfg.WechatMiniProgramAppSecret() != "mini-secret" {
+		t.Fatalf("expected mini-program wechat config, got %+v", cfg.Wechat.MiniProgram)
+	}
+	if cfg.WechatMobileAppID() != "wx-mobile" || cfg.WechatMobileAppSecret() != "mobile-secret" {
+		t.Fatalf("expected mobile app wechat config, got %+v", cfg.Wechat.MobileApp)
+	}
+	if cfg.WechatMobileAppDevelopmentMockCode() != "mock-code" {
+		t.Fatalf("expected mobile app mock code, got %q", cfg.WechatMobileAppDevelopmentMockCode())
+	}
+	pay := cfg.ResolvedWechatPay()
+	if pay.MchID != "mch" || pay.NotifyURL != "https://example.com/pay/notify" ||
+		pay.ExpirySubscribeTemplateID != "tpl" || pay.AnalysisSubscribeTemplateID != "analysis-tpl" {
+		t.Fatalf("expected unified wechat pay config, got %+v", pay)
 	}
 }
 

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	authmw "food_link/backend/internal/auth"
@@ -103,6 +104,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "profile_update_ok", slog.Int("field_count", updateProfileFieldCount(input)))
 	response.Success(c, data)
 }
 
@@ -119,6 +121,7 @@ func (h *UserHandler) BindPhone(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "bind_phone_ok", slog.Bool("phone.bound", data != nil && data.PurePhoneNumber != ""))
 	response.Success(c, data)
 }
 
@@ -141,6 +144,7 @@ func (h *UserHandler) UploadAvatar(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "avatar_upload_ok", slog.Int("image.base64.length", len(body.Base64Image)))
 	response.Success(c, map[string]string{"imageUrl": imageURL})
 }
 
@@ -168,6 +172,9 @@ func (h *UserHandler) UpdateDashboardTargets(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "dashboard_targets_update_ok",
+		slog.Int("target_count", 4+len(input.MicroTargets)),
+	)
 	response.Success(c, data)
 }
 
@@ -195,6 +202,16 @@ func (h *UserHandler) UpdateHealthProfile(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "health_profile_update_ok",
+		slog.Int("field_count", updateHealthProfileFieldCount(input)),
+		slog.Bool("has_dashboard_targets", input.DashboardTargets != nil),
+		slog.Int("dashboard_target_count", dashboardTargetCount(input.DashboardTargets)),
+		slog.Int("medical_history_count", stringListCount(input.MedicalHistory)),
+		slog.Int("diet_preference_count", stringListCount(input.DietPreference)),
+		slog.Int("allergy_count", stringListCount(input.Allergies)),
+		slog.Bool("has_report_extract", len(input.ReportExtract) > 0),
+		slog.Bool("has_precision_reference_defaults", input.PrecisionReferenceDefaults != nil),
+	)
 	response.Success(c, data)
 }
 
@@ -216,6 +233,7 @@ func (h *UserHandler) HealthReportOCR(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "health_report_ocr_ok", slog.Int("extracted_field_count", len(extracted)))
 	response.Success(c, map[string]any{"extracted": extracted})
 }
 
@@ -243,6 +261,14 @@ func (h *UserHandler) HealthReportOCRExtract(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	source := "base64"
+	if body.ImageURL != "" {
+		source = "url"
+	}
+	logUserAPI(c, "health_report_ocr_extract_ok",
+		slog.String("image.source", source),
+		slog.Int("extracted_field_count", len(extracted)),
+	)
 	response.Success(c, map[string]any{"extracted": extracted})
 }
 
@@ -263,6 +289,12 @@ func (h *UserHandler) SubmitReportExtractionTask(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	c.Set("analysis.task_id", taskID)
+	logUserAPI(c, "health_report_task_submit_ok",
+		slog.String("analysis.task_id", taskID),
+		slog.Int("image_count", len(input.ImageURLs)),
+		slog.Bool("has_primary_image", input.ImageURL != ""),
+	)
 	response.Success(c, map[string]string{"taskId": taskID})
 }
 
@@ -285,6 +317,7 @@ func (h *UserHandler) UploadCoverImage(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "cover_image_upload_ok", slog.Int("image.base64.length", len(body.Base64Image)))
 	response.Success(c, map[string]string{"imageUrl": imageURL})
 }
 
@@ -307,6 +340,7 @@ func (h *UserHandler) UploadReportImage(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "health_report_image_upload_ok", slog.Int("image.base64.length", len(body.Base64Image)))
 	response.Success(c, map[string]string{"imageUrl": imageURL})
 }
 
@@ -328,6 +362,7 @@ func (h *UserHandler) UpdateLastSeenAnalyzeHistory(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "last_seen_analyze_history_update_ok")
 	response.Success(c, map[string]bool{"success": true})
 }
 
@@ -337,6 +372,7 @@ func (h *UserHandler) AcknowledgeHealthDisclaimer(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "health_disclaimer_ack_ok")
 	response.Success(c, map[string]bool{"success": true})
 }
 
@@ -346,6 +382,7 @@ func (h *UserHandler) DeleteAccount(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "delete_account_ok")
 	response.Success(c, map[string]bool{"success": true})
 }
 
@@ -378,6 +415,7 @@ func (h *UserHandler) UpdateHealthFocuses(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "health_focuses_update_ok", slog.Int("focus_count", len(focuses)))
 	response.Success(c, gin.H{"focuses": focuses})
 }
 
@@ -396,6 +434,11 @@ func (h *UserHandler) AddHealthFocus(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "health_focus_add_ok",
+		slog.String("focus_id", result.FocusID),
+		slog.Bool("already_exists", result.AlreadyExists),
+		slog.Int("focus_count", len(result.Focuses)),
+	)
 	response.Success(c, gin.H{
 		"focuses":        result.Focuses,
 		"focus_id":       result.FocusID,
@@ -412,6 +455,10 @@ func (h *UserHandler) RemoveHealthFocus(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logUserAPI(c, "health_focus_remove_ok",
+		slog.String("focus_id", focusID),
+		slog.Int("focus_count", len(focuses)),
+	)
 	response.Success(c, gin.H{"focuses": focuses})
 }
 

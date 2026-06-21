@@ -75,7 +75,7 @@ func NewFeedbackBotClient(cfg config.FeedbackBotConfig, adminBaseURL string) *Fe
 
 func (c *FeedbackBotClient) SyncUserFeedback(ctx context.Context, feedback *domain.UserFeedback) error {
 	if c == nil || c.client == nil || strings.TrimSpace(c.baseURL) == "" {
-		return fmt.Errorf("feedback-bot client is not configured")
+		return fmt.Errorf("反馈机器人客户端未配置")
 	}
 	if feedback == nil {
 		return nil
@@ -90,11 +90,11 @@ func (c *FeedbackBotClient) SyncUserFeedback(ctx context.Context, feedback *doma
 	}
 	body, err := json.Marshal(c.buildPayload(feedback))
 	if err != nil {
-		return fmt.Errorf("marshal feedback-bot payload: %w", err)
+		return fmt.Errorf("序列化反馈机器人请求失败: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+feedbackBotProductFeedbackPath, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("build feedback-bot request: %w", err)
+		return fmt.Errorf("创建反馈机器人请求失败: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	if c.authToken != "" {
@@ -102,12 +102,12 @@ func (c *FeedbackBotClient) SyncUserFeedback(ctx context.Context, feedback *doma
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("post feedback-bot: %w", err)
+		return fmt.Errorf("请求反馈机器人失败: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("feedback-bot returned status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+		return fmt.Errorf("反馈机器人返回异常 status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(snippet)))
 	}
 	return nil
 }

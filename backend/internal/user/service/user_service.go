@@ -338,8 +338,10 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 			ExtractedContent: input.ReportExtract,
 		}
 		if err := s.healthDocs.Create(ctx, doc); err != nil {
-			// Log error but don't fail the whole request
-			fmt.Printf("[update_health_profile] write health document failed: %v\n", err)
+			logger.Warn(ctx, "健康档案报告文档写入失败，继续保存档案",
+				slog.String("user_id", userID),
+				logger.Err(err),
+			)
 		}
 		healthCondition["report_extract"] = input.ReportExtract
 	}
@@ -436,7 +438,12 @@ func (s *UserService) UpdateHealthProfile(ctx context.Context, userID string, in
 			ReasonCode: modeChangeReason,
 		}
 		if err := s.modeSwitchLog.Create(ctx, log); err != nil {
-			fmt.Printf("[update_health_profile] write mode switch log failed: %v\n", err)
+			logger.Warn(ctx, "健康档案模式切换日志写入失败",
+				slog.String("user_id", userID),
+				slog.String("mode.from", modeChangeFrom),
+				slog.String("mode.to", modeChangeTo),
+				logger.Err(err),
+			)
 		}
 	}
 

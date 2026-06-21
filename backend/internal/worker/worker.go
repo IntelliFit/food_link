@@ -260,7 +260,7 @@ func (r *Runner) loop(ctx context.Context, workerID string, taskTypes []string, 
 			if handlesTaskType(taskTypes, "expiry_notification") || handlesTaskType(taskTypes, "food_expiry_notification_job") {
 				handled, err := r.processExpiryNotification(ctx, workerID)
 				if err != nil {
-					r.errorLog(ctx, "处理保质期提醒失败", nil, slog.String("worker_id", workerID), )
+					r.errorLog(ctx, "处理保质期提醒失败", err, slog.String("worker_id", workerID))
 					continue
 				}
 				if handled {

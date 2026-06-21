@@ -3,11 +3,13 @@ package logger
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -16,6 +18,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -30,7 +35,7 @@ type Logger struct {
 }
 
 var (
-	global     = &Logger{inner: slog.New(slog.NewJSONHandler(os.Stdout, nil))}
+	global     = &Logger{inner: withSpanEvents(slog.New(slog.NewJSONHandler(os.Stdout, nil)))}
 	levelVar   = new(slog.LevelVar)
 	outputFile *os.File
 )
@@ -47,7 +52,7 @@ func Init(ctx context.Context, app config.AppConfig, cfg config.LogConfig, otelC
 	if err != nil {
 		return closeOutputFile, err
 	}
-	localHandler := global.inner.Handler()
+	localHandler := unwrapSpanEventHandler(global.inner.Handler())
 	otelHandler := otelslog.NewHandler(app.Name, otelslog.WithLoggerProvider(provider))
 	SetGlobal(slog.New(multiHandler{handlers: []slog.Handler{localHandler, otelHandler}}))
 
@@ -67,6 +72,7 @@ func SetGlobal(l *slog.Logger) {
 	if l == nil {
 		l = slog.New(slog.NewJSONHandler(io.Discard, nil))
 	}
+	l = withSpanEvents(l)
 	global = &Logger{inner: l}
 	slog.SetDefault(l)
 }
@@ -165,23 +171,31 @@ func (l *Logger) logAttrs(ctx context.Context, level slog.Level, msg string, att
 	if l == nil || l.inner == nil {
 		l = L()
 	}
-	l.inner.LogAttrs(ctx, level, msg, appendTraceAttrs(ctx, attrs)...)
+	attrs = appendTraceAttrs(ctx, attrs)
+	l.inner.LogAttrs(ctx, level, msg, attrs...)
 }
 
 func RequestLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		start := time.Now()
-		path := c.FullPath()
-		if path == "" {
-			path = c.Request.URL.Path
+		if shouldSkipRequestLog(c.Request) {
+			c.Next()
+			return
 		}
+		start := time.Now()
+		rawPath := requestPath(c.Request)
+		Info(c.Request.Context(), "收到请求", requestStartAttrs(c, rawPath)...)
 
 		c.Next()
 
 		ctx := c.Request.Context()
+		routePath := c.FullPath()
+		if routePath == "" {
+			routePath = rawPath
+		}
 		attrs := []slog.Attr{
 			slog.String("http.method", c.Request.Method),
-			slog.String("url.path", path),
+			slog.String("url.path", rawPath),
+			slog.String("http.route", routePath),
 			slog.Int("http.status_code", c.Writer.Status()),
 			slog.Int("http.response.body.size", c.Writer.Size()),
 			slog.Duration("http.duration", time.Since(start)),
@@ -216,6 +230,42 @@ func RequestLogger() gin.HandlerFunc {
 			Info(ctx, "请求完成", attrs...)
 		}
 	}
+}
+
+func requestStartAttrs(c *gin.Context, path string) []slog.Attr {
+	attrs := []slog.Attr{
+		slog.String("http.method", c.Request.Method),
+		slog.String("url.path", path),
+		slog.String("client.address", c.ClientIP()),
+	}
+	if userAgent := strings.TrimSpace(c.Request.UserAgent()); userAgent != "" {
+		attrs = append(attrs, Truncated("user_agent", userAgent, 200))
+	}
+	traceID, requestID, hostName := commonmw.RequestIDs(c)
+	if traceID != "" {
+		attrs = append(attrs, slog.String("trace_id", traceID))
+	}
+	if requestID != "" {
+		attrs = append(attrs, slog.String("request_id", requestID))
+	}
+	if hostName != "" {
+		attrs = append(attrs, slog.String("host_name", hostName))
+	}
+	return attrs
+}
+
+func requestPath(req *http.Request) string {
+	if req == nil || req.URL == nil {
+		return ""
+	}
+	return req.URL.Path
+}
+
+func shouldSkipRequestLog(req *http.Request) bool {
+	if req == nil || req.URL == nil {
+		return false
+	}
+	return strings.TrimSpace(req.URL.Path) == "/api/health"
 }
 
 func configureLocalLogger(cfg config.LogConfig) error {
@@ -329,6 +379,173 @@ func hasAttr(attrs []slog.Attr, key string) bool {
 		}
 	}
 	return false
+}
+
+func withSpanEvents(l *slog.Logger) *slog.Logger {
+	if l == nil {
+		return slog.New(spanEventHandler{handler: slog.NewJSONHandler(io.Discard, nil)})
+	}
+	if _, ok := l.Handler().(spanEventHandler); ok {
+		return l
+	}
+	return slog.New(spanEventHandler{handler: l.Handler()})
+}
+
+func unwrapSpanEventHandler(handler slog.Handler) slog.Handler {
+	if wrapped, ok := handler.(spanEventHandler); ok {
+		return wrapped.handler
+	}
+	return handler
+}
+
+func addLogSpanEvent(ctx context.Context, level slog.Level, msg string, attrs []slog.Attr) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	span := oteltrace.SpanFromContext(ctx)
+	if !span.SpanContext().IsValid() {
+		addOrphanLogSpanEvent(level, msg, attrs)
+		return
+	}
+	addLogEventToSpan(span, level, msg, attrs)
+}
+
+func addOrphanLogSpanEvent(level slog.Level, msg string, attrs []slog.Attr) {
+	_, span := otel.Tracer("food_link/backend/pkg/logger").Start(context.Background(), msg,
+		oteltrace.WithAttributes(
+			attribute.Bool("log.orphan", true),
+			attribute.String("log.message", msg),
+			attribute.String("log.severity", level.String()),
+		),
+	)
+	if !span.SpanContext().IsValid() {
+		return
+	}
+	addLogEventToSpan(span, level, msg, attrs)
+	span.End()
+}
+
+func addLogEventToSpan(span oteltrace.Span, level slog.Level, msg string, attrs []slog.Attr) {
+	eventAttrs := []attribute.KeyValue{
+		attribute.String("log.severity", level.String()),
+		attribute.String("log.message", msg),
+	}
+	for _, attr := range attrs {
+		eventAttrs = appendLogAttr(eventAttrs, attr)
+	}
+	span.AddEvent(msg, oteltrace.WithAttributes(eventAttrs...))
+	if level >= slog.LevelError {
+		span.SetStatus(codes.Error, msg)
+	}
+}
+
+type spanEventHandler struct {
+	handler slog.Handler
+	attrs   []slog.Attr
+	groups  []string
+}
+
+func (h spanEventHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.handler.Enabled(ctx, level)
+}
+
+func (h spanEventHandler) Handle(ctx context.Context, record slog.Record) error {
+	attrs := make([]slog.Attr, 0, len(h.attrs)+record.NumAttrs())
+	attrs = append(attrs, h.attrs...)
+	record.Attrs(func(attr slog.Attr) bool {
+		attrs = append(attrs, prefixLogAttr(h.groups, attr))
+		return true
+	})
+	addLogSpanEvent(ctx, record.Level, record.Message, attrs)
+	return h.handler.Handle(ctx, record)
+}
+
+func (h spanEventHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	nextAttrs := make([]slog.Attr, 0, len(h.attrs)+len(attrs))
+	nextAttrs = append(nextAttrs, h.attrs...)
+	for _, attr := range attrs {
+		nextAttrs = append(nextAttrs, prefixLogAttr(h.groups, attr))
+	}
+	return spanEventHandler{
+		handler: h.handler.WithAttrs(attrs),
+		attrs:   nextAttrs,
+		groups:  append([]string(nil), h.groups...),
+	}
+}
+
+func (h spanEventHandler) WithGroup(name string) slog.Handler {
+	groups := append([]string(nil), h.groups...)
+	if name = strings.TrimSpace(name); name != "" {
+		groups = append(groups, name)
+	}
+	return spanEventHandler{
+		handler: h.handler.WithGroup(name),
+		attrs:   append([]slog.Attr(nil), h.attrs...),
+		groups:  groups,
+	}
+}
+
+func prefixLogAttr(groups []string, attr slog.Attr) slog.Attr {
+	if len(groups) == 0 || attr.Key == "" {
+		return attr
+	}
+	prefix := strings.Join(groups, ".")
+	attr.Key = prefix + "." + attr.Key
+	return attr
+}
+
+func Recovery() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		defer func() {
+			recovered := recover()
+			if recovered == nil {
+				return
+			}
+			ctx := c.Request.Context()
+			err := fmt.Errorf("%v", recovered)
+			Error(ctx, "请求 panic 已恢复", err,
+				slog.String("http.method", c.Request.Method),
+				slog.String("url.path", c.Request.URL.Path),
+				slog.Any("panic", recovered),
+				Truncated("panic.stack", string(debug.Stack()), 4000),
+			)
+			c.AbortWithStatus(http.StatusInternalServerError)
+		}()
+		c.Next()
+	}
+}
+
+func appendLogAttr(out []attribute.KeyValue, attr slog.Attr) []attribute.KeyValue {
+	attr.Value = attr.Value.Resolve()
+	if attr.Key == "" {
+		return out
+	}
+	switch attr.Value.Kind() {
+	case slog.KindString:
+		return append(out, attribute.String(attr.Key, attr.Value.String()))
+	case slog.KindBool:
+		return append(out, attribute.Bool(attr.Key, attr.Value.Bool()))
+	case slog.KindInt64:
+		return append(out, attribute.Int64(attr.Key, attr.Value.Int64()))
+	case slog.KindUint64:
+		return append(out, attribute.Int64(attr.Key, int64(attr.Value.Uint64())))
+	case slog.KindFloat64:
+		return append(out, attribute.Float64(attr.Key, attr.Value.Float64()))
+	case slog.KindDuration:
+		return append(out, attribute.Int64(attr.Key+".ms", attr.Value.Duration().Milliseconds()))
+	case slog.KindTime:
+		return append(out, attribute.String(attr.Key, attr.Value.Time().Format(time.RFC3339Nano)))
+	case slog.KindGroup:
+		for _, child := range attr.Value.Group() {
+			child.Key = attr.Key + "." + child.Key
+			out = appendLogAttr(out, child)
+		}
+		return out
+	case slog.KindAny:
+		return append(out, attribute.String(attr.Key, fmt.Sprint(attr.Value.Any())))
+	default:
+		return append(out, attribute.String(attr.Key, attr.Value.String()))
+	}
 }
 
 func attrsToAny(attrs []slog.Attr) []any {

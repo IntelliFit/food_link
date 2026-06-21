@@ -1,7 +1,11 @@
 export const colors = {
   brand: '#5cb896',
   brandDark: '#4a9d7d',
+  brandLight: '#f4faf8',
   brandSoft: '#eef8f4',
+  brandWash: 'rgba(92, 184, 150, 0.08)',
+  brandWashLight: 'rgba(92, 184, 150, 0.03)',
+  tabSelected: '#00bc7d',
   background: '#f0f3f6',
   surface: '#ffffff',
   surfaceMuted: '#f8fafc',
@@ -11,8 +15,13 @@ export const colors = {
   border: '#eef2f7',
   warning: '#d4ac52',
   danger: '#ef4444',
+  homeWarningRed: '#e57373',
+  homeWarningSurface: '#fef8f8',
+  homeWarningBorder: '#f5d4d4',
   blue: '#5c9ed4',
   orange: '#f0985c',
+  purple: '#8b5cf6',
+  purpleLight: '#f3e8ff',
 }
 
 export const spacing = {

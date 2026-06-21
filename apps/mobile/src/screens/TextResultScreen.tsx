@@ -30,6 +30,50 @@ type EditableTextResultItem = {
 }
 
 const ratioOptions = [25, 50, 75, 100]
+
+type ScoreTone = 'positive' | 'neutral' | 'warning' | 'danger'
+
+function scoreToTone(score: number): ScoreTone {
+  if (score >= 78) return 'positive'
+  if (score >= 60) return 'neutral'
+  if (score >= 42) return 'warning'
+  return 'danger'
+}
+
+function scoreToLabel(score: number): string {
+  if (score >= 78) return '偏保护'
+  if (score >= 60) return '基本中性'
+  if (score >= 42) return '需要关注'
+  return '重点关注'
+}
+
+const scoreToneColors: Record<ScoreTone, { bg: string; text: string }> = {
+  positive: { bg: '#dcfce7', text: '#166534' },
+  neutral: { bg: '#e0f2fe', text: '#075985' },
+  warning: { bg: '#fef3c7', text: '#92400e' },
+  danger: { bg: '#fee2e2', text: '#991b1b' },
+}
+
+function clampScorePercent(value: number): number {
+  return Math.min(100, Math.max(0, value))
+}
+
+function ScoreMini({ label, value, color }: { label: string; value: number; color: string }) {
+  const score = Number.isFinite(value) ? Math.round(value) : 0
+  return (
+    <View style={styles.scoreMini}>
+      <View style={styles.scoreMiniTop}>
+        <Text style={styles.scoreMiniValue}>{score}</Text>
+        <View style={[styles.scoreMiniDot, { backgroundColor: color }]} />
+      </View>
+      <Text style={styles.scoreMiniLabel}>{label}</Text>
+      <View style={styles.scoreMiniTrack}>
+        <View style={[styles.scoreMiniFill, { width: `${clampScorePercent(score)}%`, backgroundColor: color }]} />
+      </View>
+    </View>
+  )
+}
+
 const mealOptions: Array<{ value: SelectableMealType; label: string; icon: string }> = [
   { value: 'breakfast', label: '早餐', icon: '早' },
   { value: 'morning_snack', label: '早加餐', icon: '加' },
@@ -71,6 +115,12 @@ export function TextResultScreen() {
   const insightText = stringOrUndefined(task.result?.insight)
   const heroHeight = 200
   const macroMax = Math.max(totals.protein, totals.carbs, totals.fat, 1)
+
+  const scoreEnabled = Boolean(task.result?.score_enabled)
+  const finalScore = scoreEnabled ? Number(task.result?.final_score ?? NaN) : NaN
+  const micronutrientScore = scoreEnabled ? Number(task.result?.micronutrient_score ?? NaN) : NaN
+  const macroBalanceScore = scoreEnabled ? Number(task.result?.macro_balance_score ?? NaN) : NaN
+  const calorieScore = scoreEnabled ? Number(task.result?.calorie_score ?? NaN) : NaN
 
   const saveRecord = async (confirmedMealType: SelectableMealType) => {
     if (items.length === 0) {
@@ -265,6 +315,30 @@ export function TextResultScreen() {
             </View>
 
           </View>
+
+          {scoreEnabled && Number.isFinite(finalScore) && (
+            <View style={styles.scoreCard}>
+              <View style={styles.scoreHeader}>
+                <View>
+                  <Text style={styles.scoreTitle}>本餐评分</Text>
+                  <View style={styles.scoreRow}>
+                    <Text style={styles.scoreValue}>{Math.round(finalScore)}</Text>
+                    <Text style={styles.scoreUnit}>/ 100</Text>
+                  </View>
+                </View>
+                <View style={[styles.scoreBadge, { backgroundColor: scoreToneColors[scoreToTone(finalScore)].bg }]}>
+                  <Text style={[styles.scoreBadgeText, { color: scoreToneColors[scoreToTone(finalScore)].text }]}>
+                    {scoreToLabel(finalScore)}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.scoreBreakdown}>
+                <ScoreMini label='微量元素' value={micronutrientScore} color='#5dbb8a' />
+                <ScoreMini label='宏量平衡' value={macroBalanceScore} color='#5c9ed4' />
+                <ScoreMini label='热量适配' value={calorieScore} color='#f0985c' />
+              </View>
+            </View>
+          )}
 
           <View style={styles.insightCard}>
             <View style={styles.cardHeader}>
@@ -729,6 +803,86 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontSize: 18,
     fontWeight: '700',
+  },
+  scoreCard: {
+    borderRadius: 16,
+    padding: 16,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(226,232,240,0.9)',
+  },
+  scoreHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  scoreTitle: {
+    color: '#64748b',
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  scoreRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  scoreValue: {
+    color: '#0f172a',
+    fontSize: 36,
+    fontWeight: '800',
+    lineHeight: 42,
+  },
+  scoreUnit: {
+    color: '#94a3b8',
+    fontSize: 14,
+    marginLeft: 4,
+  },
+  scoreBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  scoreBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  scoreBreakdown: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  scoreMini: {
+    flex: 1,
+    gap: 6,
+  },
+  scoreMiniTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  scoreMiniValue: {
+    color: '#0f172a',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  scoreMiniDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  scoreMiniLabel: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  scoreMiniTrack: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  scoreMiniFill: {
+    height: '100%',
+    borderRadius: 3,
   },
   insightItem: {
     flexDirection: 'row',

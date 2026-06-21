@@ -95,7 +95,7 @@ func (s *LoginService) Login(ctx context.Context, input LoginInput) (*LoginOutpu
 	if testOpenID != "" && s.cfg.App.Env == "development" {
 		openID = testOpenID
 	} else {
-		oid, uid, err := s.users.ExchangeCode(ctx, s.cfg.External.AppID, s.cfg.External.Secret, strings.TrimSpace(input.Code))
+		oid, uid, err := s.users.ExchangeCode(ctx, s.cfg.WechatMiniProgramAppID(), s.cfg.WechatMiniProgramAppSecret(), strings.TrimSpace(input.Code))
 		if err != nil {
 			return nil, err
 		}
@@ -442,7 +442,7 @@ func (s *LoginService) exchangeAppWechatCode(ctx context.Context, code string) (
 		return "", "", fmt.Errorf("code 不能为空")
 	}
 	if s.cfg.App.Env == "development" && s.cfg.AppAuth.DevelopmentMockLogin {
-		mockCode := strings.TrimSpace(s.cfg.AppAuth.DevelopmentMockWechatCode)
+		mockCode := strings.TrimSpace(s.cfg.WechatMobileAppDevelopmentMockCode())
 		if mockCode == "" {
 			mockCode = "expo-go-dev-wechat-code"
 		}
@@ -454,10 +454,12 @@ func (s *LoginService) exchangeAppWechatCode(ctx context.Context, code string) (
 			return defaultAppMockOpenID + "-" + suffix, defaultAppMockUnionID + "-" + suffix, nil
 		}
 	}
-	if strings.TrimSpace(s.cfg.AppAuth.WechatAppID) == "" || strings.TrimSpace(s.cfg.AppAuth.WechatAppSecret) == "" {
-		return "", "", fmt.Errorf("App 微信登录未配置 app_auth.wechat_app_id / app_auth.wechat_app_secret")
+	appID := s.cfg.WechatMobileAppID()
+	appSecret := s.cfg.WechatMobileAppSecret()
+	if appID == "" || appSecret == "" {
+		return "", "", fmt.Errorf("App 微信登录未配置 wechat.mobile_app.app_id / wechat.mobile_app.app_secret")
 	}
-	return s.users.ExchangeAppCode(ctx, s.cfg.AppAuth.WechatAppID, s.cfg.AppAuth.WechatAppSecret, code)
+	return s.users.ExchangeAppCode(ctx, appID, appSecret, code)
 }
 
 func (s *LoginService) touchLogin(ctx context.Context, user *repo.User, method string) (*repo.User, error) {
@@ -570,8 +572,8 @@ func (s *LoginService) getWechatAccessToken(ctx context.Context) (string, error)
 	url := "https://api.weixin.qq.com/cgi-bin/stable_token"
 	body, _ := json.Marshal(map[string]string{
 		"grant_type": "client_credential",
-		"appid":      s.cfg.External.AppID,
-		"secret":     s.cfg.External.Secret,
+		"appid":      s.cfg.WechatMiniProgramAppID(),
+		"secret":     s.cfg.WechatMiniProgramAppSecret(),
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {

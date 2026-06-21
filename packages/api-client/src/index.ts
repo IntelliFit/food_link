@@ -34,6 +34,7 @@ import type {
   ManualFoodBrowseResult,
   ManualFoodCatalogResult,
   ManualFoodItem,
+  CreateMembershipPaymentOptions,
   MembershipPaymentOrder,
   MembershipPlan,
   MembershipStatus,
@@ -680,12 +681,20 @@ export class FoodLinkApiClient {
     })
   }
 
-  async createMembershipPayment(planCode: string): Promise<MembershipPaymentOrder> {
+  async createMembershipPayment(planCode: string, options?: CreateMembershipPaymentOptions): Promise<MembershipPaymentOrder> {
     const code = planCode.trim()
+    const payChannel = options?.payChannel?.trim()
+    const tradeType = options?.tradeType?.trim()
+    const client = options?.client?.trim()
     if (!code) throw new Error('请选择会员套餐')
     return this.authenticatedRequest<MembershipPaymentOrder>('/api/membership/pay/create', {
       method: 'POST',
-      body: { plan_code: code },
+      body: {
+        plan_code: code,
+        ...(payChannel ? { pay_channel: payChannel } : {}),
+        ...(tradeType ? { trade_type: tradeType } : {}),
+        ...(client ? { client } : {}),
+      },
       timeoutMs: 20000,
     })
   }
@@ -855,6 +864,12 @@ export class FoodLinkApiClient {
       method: 'GET',
       timeoutMs: 10000,
     })
+  }
+
+  buildFoodRecordShareUrl(recordId: string): string {
+    const id = recordId.trim()
+    if (!id) throw new Error('缺少饮食记录 ID')
+    return this.absoluteUrl(`/share/food-record/${encodeURIComponent(id)}`)
   }
 
   async updateFoodRecord(recordId: string, body: UpdateFoodRecordRequest): Promise<{ message: string; record: FoodRecord }> {

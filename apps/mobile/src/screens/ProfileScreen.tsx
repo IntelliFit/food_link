@@ -10,12 +10,9 @@ import {
   Activity,
   Bell,
   BookOpen,
-  Calendar,
   ChevronRight,
   CreditCard,
   FileText,
-  Gift,
-  Heart,
   Info,
   LineChart,
   Lock,
@@ -37,9 +34,11 @@ import {
 import { apiClient, clearRecentRequestTraces } from '../api'
 import { APP_VERSION } from '../config'
 import { clearRecentConsoleLogs } from '../diagnostics/consoleLogBuffer'
+import { IconfontText } from '../components/Iconfont'
 import type { RootStackParamList } from '../navigation/types'
 import { useAuth } from '../providers/AuthProvider'
 import { useAppDialog } from '../providers/DialogProvider'
+import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors, radius } from '../theme'
 import { userFacingErrorMessage } from '../utils/errors'
 
@@ -48,7 +47,8 @@ type MenuTone = 'green' | 'blue' | 'gold' | 'purple' | 'slate' | 'danger'
 interface MenuEntry {
   title: string
   subtitle: string
-  icon: LucideIcon
+  icon?: LucideIcon
+  iconClass?: string
   tone: MenuTone
   badgeCount?: number
   onPress: () => void
@@ -62,11 +62,11 @@ type RewardLevelMeta = {
 }
 
 const toneMeta: Record<MenuTone, { backgroundColor: string; color: string }> = {
-  green: { backgroundColor: '#ebfcf4', color: '#16a56f' },
-  blue: { backgroundColor: '#ebf7fc', color: '#2b8ab7' },
-  gold: { backgroundColor: '#fff7e6', color: '#a67518' },
-  purple: { backgroundColor: '#f2efff', color: '#7057d8' },
-  slate: { backgroundColor: '#f1f5f9', color: '#64748b' },
+  green: { backgroundColor: '#ecfcf4', color: '#41a17a' },
+  blue: { backgroundColor: '#ecf7fc', color: '#4c92b3' },
+  gold: { backgroundColor: '#faf5e8', color: '#987f42' },
+  purple: { backgroundColor: '#f3e8ff', color: '#7c68d8' },
+  slate: { backgroundColor: '#f1f5f9', color: '#6b7280' },
   danger: { backgroundColor: '#fee2e2', color: colors.danger },
 }
 
@@ -105,6 +105,7 @@ export function ProfileScreen() {
   const insets = useSafeAreaInsets()
   const dialog = useAppDialog()
   const { logout } = useAuth()
+  const { isDark, toggleScheme } = useColorScheme()
   const [profile, setProfile] = useState<UserInfo | null>(null)
   const [membership, setMembership] = useState<MembershipStatus | null>(null)
   const [reward, setReward] = useState<RewardCenterResponse | null>(null)
@@ -237,24 +238,40 @@ export function ProfileScreen() {
       : ''
 
   const serviceItems: MenuEntry[] = [
-    { title: '健康档案', subtitle: '身体数据、病史偏好和饮食目标', icon: Heart, tone: 'green', onPress: openHealthProfile },
-    { title: '食物保质期', subtitle: expiryText, icon: Calendar, tone: 'gold', badgeCount: expiryBadge, onPress: () => navigation.navigate('Expiry') },
-    { title: '我的宠物', subtitle: '查看成长伙伴、任务和奖励', icon: PawPrint, tone: 'green', onPress: () => navigation.navigate('PetHome') },
-    { title: '赚积分', subtitle: `今日已赚 ${todayEarned} 积分`, icon: Gift, tone: 'gold', onPress: () => navigation.navigate('RewardCenter') },
-    { title: '公共食物库', subtitle: '外食、校园餐和我的分享', icon: BookOpen, tone: 'blue', onPress: () => navigation.navigate('PublicFood', { mode: 'all' }) },
-    { title: '校园食堂', subtitle: '校园餐、食堂窗口和价格', icon: Store, tone: 'blue', onPress: () => navigation.navigate('CampusCanteen') },
-    { title: '加入用户群', subtitle: '进群反馈体验与获取更新', icon: Users, tone: 'purple', onPress: () => navigation.navigate('UserGroup') },
-    { title: '意见反馈', subtitle: '反馈问题、建议或体验感受', icon: MessageCircle, tone: 'purple', onPress: () => navigation.navigate('AboutFeedback') },
+    { title: '健康档案', subtitle: '身体数据、病史偏好和饮食目标', iconClass: 'icon-shentinianling', tone: 'green', onPress: openHealthProfile },
+    { title: '食物保质期', subtitle: expiryText, iconClass: 'icon-guoqi1', tone: 'gold', badgeCount: expiryBadge, onPress: () => navigation.navigate('Expiry') },
+    { title: '我的宠物', subtitle: '查看成长伙伴、任务和奖励', iconClass: 'icon-good', tone: 'purple', onPress: () => navigation.navigate('PetHome') },
+    { title: '赚积分', subtitle: `今日已赚 ${todayEarned} 积分`, iconClass: 'icon-zengji', tone: 'slate', onPress: () => navigation.navigate('RewardCenter') },
+    { title: '公共食物库', subtitle: '外食、校园餐和我的分享', iconClass: 'icon-foodshop', tone: 'blue', onPress: () => navigation.navigate('PublicFood', { mode: 'all' }) },
+    { title: '校园食堂', subtitle: '校园餐、食堂窗口和价格', iconClass: 'icon-dizhi', tone: 'slate', onPress: () => navigation.navigate('CampusCanteen') },
+    { title: '加入用户群', subtitle: '进群反馈体验与获取更新', iconClass: 'icon-pengyouquan', tone: 'purple', onPress: () => navigation.navigate('UserGroup') },
+    { title: '意见反馈', subtitle: '反馈问题、建议或体验感受', iconClass: 'icon-pinglun', tone: 'green', onPress: () => navigation.navigate('AboutFeedback') },
   ]
 
   const settingsItems: MenuEntry[] = [
-    { title: '隐私设置', subtitle: '搜索可见性和公开记录', icon: Shield, tone: 'slate', onPress: () => navigation.navigate('PrivacySettings') },
-    { title: '关于我们', subtitle: '应用说明、协议和联系方式', icon: Info, tone: 'slate', onPress: () => navigation.navigate('About') },
+    { title: '隐私设置', subtitle: '搜索可见性和公开记录', iconClass: 'icon-jiesuo', tone: 'green', onPress: () => navigation.navigate('PrivacySettings') },
+    { title: '关于我们', subtitle: '应用说明、协议和联系方式', iconClass: 'icon-all', tone: 'gold', onPress: () => navigation.navigate('About') },
   ]
 
+  const profileDark = isDark
+  const profilePageBg = profileDark ? '#0d1312' : '#f0f3f6'
+  const profileWashBg = profileDark ? 'rgba(16,23,22,1)' : 'rgba(92, 184, 150, 0.08)'
+  const profileTextPrimary = profileDark ? '#f2f7f4' : '#111827'
+  const profileTextSecondary = profileDark ? 'rgba(214,226,220,0.6)' : '#6b7280'
+  const profileCardBg = profileDark ? '#181f1d' : '#fff'
+  const profileOnboardingBg = profileDark ? '#1a2e24' : '#f0fdf4'
+  const profileOnboardingBorder = profileDark ? 'rgba(112,196,149,0.25)' : '#bbf7d0'
+  const profileOnboardingText = profileDark ? '#6ee7b7' : '#166534'
+  const profileDaysPillBg = profileDark ? 'rgba(94,211,145,0.15)' : '#e8f5e9'
+  const profileDaysPillBorder = profileDark ? 'rgba(94,211,145,0.3)' : '#c8e6c9'
+  const profileDaysPillText = profileDark ? '#6ee7b7' : '#2e7d32'
+  const profileIdChipBg = profileDark ? 'rgba(112,196,149,0.1)' : 'rgba(92, 184, 150, 0.08)'
+  const profileIdChipText = profileDark ? '#6ee7b7' : '#5a9e82'
+  const profileBorder = profileDark ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.08)'
+
   return (
-    <View style={styles.profilePage}>
-      <View style={styles.profileWash} pointerEvents="none" />
+    <View style={[styles.profilePage, { backgroundColor: profilePageBg }]}>
+      <View style={[styles.profileWash, { backgroundColor: profileWashBg }]} pointerEvents="none" />
       <ScrollView
         style={styles.profileScroll}
         contentContainerStyle={[
@@ -275,36 +292,39 @@ export function ProfileScreen() {
             )}
             <View style={styles.userInfoMain}>
               <View style={styles.userNameRow}>
-                <Text style={styles.userName} numberOfLines={1}>{profile?.nickname || '用户昵称'}</Text>
+                <Text style={[styles.userName, { color: profileTextPrimary }]} numberOfLines={1}>{profile?.nickname || '用户昵称'}</Text>
                 <View style={styles.userNameActions}>
-                  <View style={styles.userDaysPill}>
-                    <Text style={styles.userDaysPillText}>已记录 {recordDays} 天</Text>
+                  <View style={[styles.userDaysPill, { backgroundColor: profileDaysPillBg, borderColor: profileDaysPillBorder }]}>
+                    <Text style={[styles.userDaysPillText, { color: profileDaysPillText }]}>已记录 {recordDays} 天</Text>
                   </View>
                   {profile?.id ? (
-                    <Pressable style={({ pressed }) => [styles.userIdChip, pressed && styles.pressed]} onPress={copyUserId}>
-                      <Text style={styles.userIdChipText}>复制ID</Text>
+                    <Pressable style={({ pressed }) => [styles.userIdChip, { backgroundColor: profileIdChipBg }, pressed && styles.pressed]} onPress={copyUserId}>
+                      <Text style={[styles.userIdChipText, { color: profileIdChipText }]}>复制ID</Text>
                     </Pressable>
                   ) : null}
                 </View>
               </View>
               <Pressable style={({ pressed }) => [styles.userMetaRow, pressed && styles.pressed]} onPress={openPublicProfile}>
-                <Text style={styles.userMetaText}>个人主页</Text>
+                <Text style={[styles.userMetaText, { color: profileDark ? '#9ca3af' : '#9ca3af' }]}>个人主页</Text>
                 <ChevronRight size={15} color="#9ca3af" strokeWidth={2.3} />
               </Pressable>
             </View>
+            <Pressable style={({ pressed }) => [styles.themeChip, pressed && styles.pressed]} onPress={toggleScheme}>
+              <IconfontText className={`iconfont ${profileDark ? 'icon-wanshang' : 'icon-zaoshang'}`} size={20} color={profileTextPrimary} />
+            </Pressable>
           </Pressable>
 
-          <View style={styles.quickActions}>
-            <QuickAction title="识别记录" value={formatCount(counts.analyze)} onPress={() => navigation.navigate('AnalyzeHistory')} />
-            <QuickAction title="好友管理" value={formatCount(counts.friends)} badgeCount={friendRequestCount} onPress={() => navigation.navigate('Friends')} />
-            <QuickAction title="我的收藏" value={formatCount(counts.favorites)} onPress={() => navigation.navigate('Recipes')} />
+          <View style={[styles.quickActions, { borderTopColor: profileBorder }]}>
+            <QuickAction title="识别记录" value={formatCount(counts.analyze)} textColor={profileTextPrimary} subColor={profileTextSecondary} onPress={() => navigation.navigate('AnalyzeHistory')} />
+            <QuickAction title="好友管理" value={formatCount(counts.friends)} badgeCount={friendRequestCount} textColor={profileTextPrimary} subColor={profileTextSecondary} onPress={() => navigation.navigate('Friends')} />
+            <QuickAction title="我的收藏" value={formatCount(counts.favorites)} textColor={profileTextPrimary} subColor={profileTextSecondary} onPress={() => navigation.navigate('Recipes')} />
           </View>
         </View>
 
         {profile && profile.onboarding_completed === false ? (
-          <Pressable style={({ pressed }) => [styles.onboardingCard, pressed && styles.pressed]} onPress={() => navigation.navigate('HealthProfile')}>
-            <Text style={styles.onboardingText}>完善健康档案，获取个性化饮食建议</Text>
-            <ChevronRight size={18} color="#166534" strokeWidth={2.4} />
+          <Pressable style={({ pressed }) => [styles.onboardingCard, { backgroundColor: profileOnboardingBg, borderColor: profileOnboardingBorder }, pressed && styles.pressed]} onPress={() => navigation.navigate('HealthProfile')}>
+            <Text style={[styles.onboardingText, { color: profileOnboardingText }]}>完善健康档案，获取个性化饮食建议</Text>
+            <ChevronRight size={18} color={profileOnboardingText} strokeWidth={2.4} />
           </Pressable>
         ) : null}
 
@@ -354,11 +374,11 @@ export function ProfileScreen() {
           <Text style={styles.memberCardTip}>当前可用 {credits} 积分 · 今日已赚 {todayEarned}</Text>
         </Pressable>
 
-        <View style={styles.listCard}>
+        <View style={[styles.listCard, { backgroundColor: profileCardBg }]}>
           {serviceItems.map((item, index) => (
-            <ProfileListItem key={item.title} item={item} first={index === 0} />
+            <ProfileListItem key={item.title} item={item} first={index === 0} isDark={profileDark} />
           ))}
-          {settingsItems.map((item) => <ProfileListItem key={item.title} item={item} />)}
+          {settingsItems.map((item) => <ProfileListItem key={item.title} item={item} isDark={profileDark} />)}
           <ProfileListItem
             item={{
               title: '更多功能',
@@ -367,18 +387,19 @@ export function ProfileScreen() {
               tone: 'slate',
               onPress: () => navigation.navigate('ProfileMoreFeatures'),
             }}
+            isDark={profileDark}
           />
         </View>
 
-        <Pressable style={({ pressed }) => [styles.toolCard, pressed && styles.pressed]} onPress={confirmClearCache}>
-          <Text style={styles.toolText}>清除缓存</Text>
+        <Pressable style={({ pressed }) => [styles.toolCard, { backgroundColor: profileCardBg }, pressed && styles.pressed]} onPress={confirmClearCache}>
+          <Text style={[styles.toolText, profileDark && { color: '#94a3b8' }]}>清除缓存</Text>
         </Pressable>
 
-        <Pressable style={({ pressed }) => [styles.toolCard, pressed && styles.pressed]} onPress={confirmLogout}>
+        <Pressable style={({ pressed }) => [styles.toolCard, { backgroundColor: profileCardBg }, pressed && styles.pressed]} onPress={confirmLogout}>
           <Text style={styles.toolTextLogout}>退出登录</Text>
         </Pressable>
 
-        <Text style={styles.profileVersion}>版本号 v{APP_VERSION}</Text>
+        <Text style={[styles.profileVersion, profileDark && { color: 'rgba(214,226,220,0.4)' }]}>版本号 v{APP_VERSION}</Text>
       </ScrollView>
     </View>
   )
@@ -387,11 +408,15 @@ export function ProfileScreen() {
 export function ProfileMoreFeaturesScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const insets = useSafeAreaInsets()
+  const { isDark } = useColorScheme()
   const moreItems = buildMoreItems(navigation)
+  const profilePageBg = isDark ? '#0d1312' : '#f0f3f6'
+  const profileWashBg = isDark ? 'rgba(16,23,22,1)' : 'rgba(92, 184, 150, 0.08)'
+  const profileCardBg = isDark ? '#181f1d' : '#fff'
 
   return (
-    <View style={styles.profilePage}>
-      <View style={styles.profileWash} pointerEvents="none" />
+    <View style={[styles.profilePage, { backgroundColor: profilePageBg }]}>
+      <View style={[styles.profileWash, { backgroundColor: profileWashBg }]} pointerEvents="none" />
       <ScrollView
         style={styles.profileScroll}
         contentContainerStyle={[
@@ -401,9 +426,9 @@ export function ProfileMoreFeaturesScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.listCard}>
+        <View style={[styles.listCard, { backgroundColor: profileCardBg }]}>
           {moreItems.map((item, index) => (
-            <ProfileListItem key={item.title} item={item} first={index === 0} />
+            <ProfileListItem key={item.title} item={item} first={index === 0} isDark={isDark} />
           ))}
         </View>
       </ScrollView>
@@ -415,24 +440,28 @@ function QuickAction({
   title,
   value,
   badgeCount,
+  textColor,
+  subColor,
   onPress,
 }: {
   title: string
   value: string
   badgeCount?: number
+  textColor?: string
+  subColor?: string
   onPress: () => void
 }) {
   return (
     <Pressable style={({ pressed }) => [styles.quickActionItem, pressed && styles.pressed]} onPress={onPress}>
       <View style={styles.quickActionNumWrap}>
-        <Text style={styles.quickActionNum}>{value}</Text>
+        <Text style={[styles.quickActionNum, textColor && { color: textColor }]}>{value}</Text>
         {badgeCount ? (
           <View style={styles.quickActionBadge}>
             <Text style={styles.quickActionBadgeText}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
           </View>
         ) : null}
       </View>
-      <Text style={styles.quickActionText}>{title}</Text>
+      <Text style={[styles.quickActionText, subColor && { color: subColor }]}>{title}</Text>
     </Pressable>
   )
 }
@@ -441,19 +470,28 @@ function ProfileListItem({
   item,
   first,
   chevronStyle,
+  isDark,
 }: {
   item: MenuEntry
   first?: boolean
   chevronStyle?: object
+  isDark?: boolean
 }) {
   const Icon = item.icon
   const tone = toneMeta[item.tone]
   return (
-    <Pressable style={({ pressed }) => [styles.listItem, first && styles.listItemFirst, pressed && styles.pressed]} onPress={item.onPress}>
+    <Pressable style={({ pressed }) => [styles.listItem, first && styles.listItemFirst, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9' }, pressed && styles.pressed]} onPress={item.onPress}>
       <View style={[styles.listIcon, { backgroundColor: tone.backgroundColor }]}>
-        <Icon size={18} color={tone.color} strokeWidth={2.35} />
+        {item.iconClass ? (
+          <IconfontText className={`iconfont ${item.iconClass}`} size={20} color={tone.color} />
+        ) : Icon ? (
+          <Icon size={18} color={tone.color} strokeWidth={2.35} />
+        ) : null}
       </View>
-      <Text style={styles.listTitle} numberOfLines={1}>{item.title}</Text>
+      <View style={styles.listText}>
+        <Text style={[styles.listTitle, { color: isDark ? '#f2f7f4' : '#1f2937' }]} numberOfLines={1}>{item.title}</Text>
+        {item.subtitle ? <Text style={[styles.listSubtitle, { color: isDark ? 'rgba(214,226,220,0.58)' : '#94a3b8' }]} numberOfLines={1}>{item.subtitle}</Text> : null}
+      </View>
       {item.badgeCount ? (
         <View style={styles.listBadge}>
           <Text style={styles.listBadgeText}>{item.badgeCount > 99 ? '99+' : item.badgeCount}</Text>
@@ -550,6 +588,25 @@ const styles = StyleSheet.create({
   },
   userInfoMain: {
     flex: 1,
+  },
+  themeChip: {
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    transform: [{ translateY: -16 }],
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(92, 184, 150, 0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#5cb896',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   userNameRow: {
     flexDirection: 'row',
@@ -816,12 +873,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  listTitle: {
+  listText: {
     flex: 1,
+    justifyContent: 'center',
+  },
+  listTitle: {
     color: '#1f2937',
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '600',
+  },
+  listSubtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
   },
   chevronOpen: {
     transform: [{ rotate: '90deg' }],

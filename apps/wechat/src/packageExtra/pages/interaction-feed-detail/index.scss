@@ -55,3 +55,123 @@
   box-shadow: 0 0 0 2rpx rgba(0, 188, 125, 0.25) inset;
   background: rgba(236, 253, 245, 0.8);
 }
+
+.feed-micros {
+  margin-top: 16rpx;
+  padding: 16rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+}
+
+.feed-micros-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.feed-micros-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #334155;
+  line-height: 34rpx;
+}
+
+.feed-micros-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+}
+
+.feed-micros-toggle-text {
+  font-size: 22rpx;
+  color: #64748b;
+  line-height: 30rpx;
+}
+
+.feed-micros-toggle-icon {
+  font-size: 22rpx;
+  color: #64748b;
+  line-height: 30rpx;
+}
+
+.feed-micros-summary {
+  font-size: 22rpx;
+  color: #64748b;
+  line-height: 32rpx;
+  margin-bottom: 12rpx;
+}
+
+.feed-micros-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
+}
+
+.feed-micros-cell {
+  display: flex;
+  flex-direction: column;
+  padding: 12rpx;
+  background: #fff;
+  border-radius: 12rpx;
+  border: 1rpx solid transparent;
+}
+
+.feed-micros-label {
+  font-size: 22rpx;
+  line-height: 30rpx;
+  margin-bottom: 6rpx;
+}
+
+.feed-micros-value-row {
+  display: flex;
+  align-items: baseline;
+}
+
+.feed-micros-value {
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 40rpx;
+}
+
+.feed-micros-unit {
+  font-size: 20rpx;
+  margin-left: 4rpx;
+  line-height: 28rpx;
+}
+
+.feed-manual-foods-detail {
+  margin-top: 16rpx;
+}
+
+.feed-manual-foods-expand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6rpx;
+  margin-top: 12rpx;
+  padding: 12rpx;
+  background: #f1f5f9;
+  border-radius: 12rpx;
+}
+
+.feed-manual-foods-expand-text {
+  font-size: 24rpx;
+  color: #475569;
+  line-height: 34rpx;
+}
+
+.feed-manual-foods-expand-icon {
+  font-size: 24rpx;
+  color: #475569;
+  line-height: 34rpx;
+}
+
+/* 详情页评论区域不需要背景色（空态/有评论均透明） */
+.feed-empty {
+  background: transparent;
+}
+
+.feed-comments {
+  background: transparent;
+}

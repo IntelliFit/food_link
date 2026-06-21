@@ -128,13 +128,13 @@ func New(cfg *config.Config) (*App, error) {
 	}
 
 	engine := gin.New()
-	engine.Use(logger.RequestLogger())
-	engine.Use(metrics.GinMiddleware())
-	engine.Use(gin.Recovery())
 	if cfg.OTel.Enabled {
 		engine.Use(otelgin.Middleware(cfg.App.Name, otelgin.WithFilter(shouldTraceHTTPRequest)))
 	}
 	engine.Use(commonmw.RequestID())
+	engine.Use(logger.RequestLogger())
+	engine.Use(metrics.GinMiddleware())
+	engine.Use(logger.Recovery())
 
 	storageClient := storage.New(cfg.Storage)
 	taskQueue, err := taskqueue.New(cfg.TaskQueue)
@@ -282,7 +282,7 @@ func New(cfg *config.Config) (*App, error) {
 	expiryRecognizer := expiryservice.NewRecognizer(cfg)
 	expiryNotifier := expiryservice.NewNotificationWorker(expiryRepo, cfg)
 	expirySvc := expiryservice.NewExpiryService(expiryRepo, expiryTaskRepo, expiryRecognizer)
-	expirySvc.ConfigureNotificationTemplate(cfg.WechatPay.ExpirySubscribeTemplateID)
+	expirySvc.ConfigureNotificationTemplate(cfg.ResolvedWechatPay().ExpirySubscribeTemplateID)
 	expirySvc.ConfigureCreditGuard(membershipSvc)
 	expirySvc.ConfigureStorage(storageClient)
 	expiryHandler := expiryhandler.NewExpiryHandler(expirySvc)
@@ -395,6 +395,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.GET("/api/food-record/list", authmw.RequireJWT(jwtSvc), frHandler.ListFoodRecords)
 	engine.GET("/api/food-record/entry-distribution", authmw.RequireJWT(jwtSvc), frHandler.EntryDistribution)
 	engine.GET("/api/food-record/share/:record_id", frHandler.ShareFoodRecord)
+	engine.GET("/share/food-record/:record_id", frHandler.ShareFoodRecordPage)
 	engine.GET("/api/food-record/:record_id", authmw.RequireJWT(jwtSvc), frHandler.GetFoodRecord)
 	engine.PUT("/api/food-record/:record_id", authmw.RequireJWT(jwtSvc), frHandler.UpdateFoodRecord)
 	engine.DELETE("/api/food-record/:record_id", authmw.RequireJWT(jwtSvc), frHandler.DeleteFoodRecord)
@@ -606,7 +607,7 @@ func New(cfg *config.Config) (*App, error) {
 	adminFeedReportHandler := adminhandler.NewFeedReportHandler(adminFeedReportSvc)
 	adminBenchmarkRepo := adminrepo.NewBenchmarkRepo(db)
 	adminAccountRepo := adminrepo.NewAdminAccountRepo(db)
-	adminBenchmarkSvc := adminservice.NewBenchmarkService(adminBenchmarkRepo, analyzeTaskSvc, adminAccountRepo, userRepo)
+	adminBenchmarkSvc := adminservice.NewBenchmarkService(adminBenchmarkRepo, analyzeTaskSvc, adminAccountRepo, userRepo, ofoxAIClient)
 	adminBenchmarkHandler := adminhandler.NewBenchmarkHandler(adminBenchmarkSvc)
 	adminAuthSvc := adminservice.NewAuthService(adminAccountRepo)
 	adminAuthHandler := adminhandler.NewAuthHandler(adminAuthSvc)

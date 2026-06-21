@@ -97,8 +97,8 @@ func (s *BindPhoneService) getAccessToken(ctx context.Context) (string, error) {
 	url := "https://api.weixin.qq.com/cgi-bin/stable_token"
 	body, _ := json.Marshal(map[string]string{
 		"grant_type": "client_credential",
-		"appid":      s.cfg.External.AppID,
-		"secret":     s.cfg.External.Secret,
+		"appid":      s.cfg.WechatMiniProgramAppID(),
+		"secret":     s.cfg.WechatMiniProgramAppSecret(),
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {

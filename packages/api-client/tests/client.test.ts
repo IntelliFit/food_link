@@ -957,6 +957,7 @@ describe('FoodLinkApiClient', () => {
 
     await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
     await client.getFoodRecordById('record-1')
+    expect(client.buildFoodRecordShareUrl('record 1/中文')).toBe('https://api.example.com/share/food-record/record%201%2F%E4%B8%AD%E6%96%87')
     await client.claimSharePosterReward({ recordId: 'record-1' })
     await client.claimSharePosterReward({ shareScope: 'daily_food', shareDate: '2026-06-15' })
     await client.updateFoodRecord('record-1', {
@@ -1205,6 +1206,7 @@ describe('FoodLinkApiClient', () => {
     await client.loginWithAppWechat({ code: 'expo-go-dev-wechat-code' })
     await client.listMembershipPlans()
     await client.createMembershipPayment('standard_monthly')
+    await client.createMembershipPayment('standard_monthly', { payChannel: 'wechat', tradeType: 'APP', client: 'mobile_app' })
     await client.communityGetContext('record-1', 'food_record')
     await client.communityAddComment({ targetId: 'record-1', targetType: 'food_record', content: 'nice' })
     await client.communityReport({ targetId: 'record-1', targetType: 'food_record', reason: 'other', extraContent: 'bad' })
@@ -1276,6 +1278,14 @@ describe('FoodLinkApiClient', () => {
     await client.reportPrivateMessage('msg-1', { reason: 'other', extraContent: '来自私信长按举报' })
 
     expect(requests.some((req) => req.url.endsWith('/api/membership/pay/create') && (req.options?.body as any).plan_code === 'standard_monthly')).toBe(true)
+    expect(requests.some((req) => {
+      const body = req.options?.body as any
+      return req.url.endsWith('/api/membership/pay/create') &&
+        body.plan_code === 'standard_monthly' &&
+        body.pay_channel === 'wechat' &&
+        body.trade_type === 'APP' &&
+        body.client === 'mobile_app'
+    })).toBe(true)
     expect(requests.some((req) => req.url.includes('/api/community/feed-targets/food_record/record-1/comments') && (req.options?.body as any).content === 'nice')).toBe(true)
     expect(leaderboard.list[0]?.checkin_count).toBe(5)
     expect(requests.some((req) => req.url.endsWith('/api/community/checkin-leaderboard'))).toBe(true)

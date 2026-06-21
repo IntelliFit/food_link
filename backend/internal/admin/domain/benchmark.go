@@ -19,6 +19,10 @@ const (
 	BenchmarkSampleStatusDone       = "done"
 	BenchmarkSampleStatusFailed     = "failed"
 	BenchmarkSampleStatusCancelled  = "cancelled"
+
+	// BenchmarkEvaluationAlgorithmVersion 用于标识当前评测（名称匹配/准确率）算法版本。
+	// 每次算法逻辑有重大调整时应当升级版本号。
+	BenchmarkEvaluationAlgorithmVersion = "v1.0.0"
 )
 
 type DatasetSample = do.FoodWeightLabeledSampleDO
@@ -47,9 +51,12 @@ type RunMetrics struct {
 	SampleCount           int       `json:"sample_count"`
 	CompletedCount        int       `json:"completed_count"`
 	FailedCount           int       `json:"failed_count"`
+	// NameMatchRate is already a percentage value (e.g. 50 means 50%), not a ratio.
 	NameMatchRate         float64   `json:"name_match_rate"`
+	// TotalWeightMAPE is already a percentage value (e.g. 10 means 10%), not a ratio.
 	TotalWeightMAPE       float64   `json:"total_weight_mape"`
 	TotalWeightRMSE       float64   `json:"total_weight_rmse"`
+	// ItemWeightMAPE is already a percentage value (e.g. 10 means 10%), not a ratio.
 	ItemWeightMAPE        float64   `json:"item_weight_mape"`
 	ItemWeightRMSE        float64   `json:"item_weight_rmse"`
 	AverageDurationMs     float64   `json:"average_duration_ms"`
@@ -59,8 +66,10 @@ type SampleMetrics struct {
 	NameMatched         bool               `json:"name_matched"`
 	NameMatchDetails    []bool             `json:"name_match_details,omitempty"`
 	TotalWeightError    float64            `json:"total_weight_error,omitempty"`
+	// TotalWeightErrorPct is already a percentage value (e.g. 20 means 20%), not a ratio.
 	TotalWeightErrorPct float64            `json:"total_weight_error_pct,omitempty"`
 	ItemWeightErrors    []float64          `json:"item_weight_errors,omitempty"`
+	// ItemWeightErrorPcts entries are already percentage values (e.g. 20 means 20%), not ratios.
 	ItemWeightErrorPcts []float64          `json:"item_weight_error_pcts,omitempty"`
 	ItemComparisons     []map[string]any   `json:"item_comparisons,omitempty"`
 	DurationMs          float64            `json:"duration_ms,omitempty"`
@@ -113,6 +122,18 @@ type ListRunSamplesResult struct {
 	Limit int
 }
 
+type BenchmarkRunSampleWithDataset struct {
+	BenchmarkRunSample
+	DatasetSample *DatasetSample `json:"dataset_sample,omitempty"`
+}
+
+type ListRunSamplesWithDatasetResult struct {
+	Items []BenchmarkRunSampleWithDataset
+	Total int64
+	Page  int
+	Limit int
+}
+
 // BenchmarkRunDTO is the snake_case JSON representation used by admin handlers.
 type BenchmarkRunDTO struct {
 	ID                string         `json:"id"`
@@ -121,10 +142,11 @@ type BenchmarkRunDTO struct {
 	DatasetFilter     map[string]any `json:"dataset_filter"`
 	ExecutionMode     string         `json:"execution_mode"`
 	ModelConfig       map[string]any `json:"model_config"`
-	SampleCount       int            `json:"sample_count"`
-	Metrics           RunMetrics     `json:"metrics"`
-	StageOutputsSummary map[string]any `json:"stage_outputs_summary"`
-	ErrorMessage      string         `json:"error_message,omitempty"`
+	SampleCount                int            `json:"sample_count"`
+	Metrics                    RunMetrics     `json:"metrics"`
+	StageOutputsSummary        map[string]any `json:"stage_outputs_summary"`
+	EvaluationAlgorithmVersion string         `json:"evaluation_algorithm_version,omitempty"`
+	ErrorMessage               string         `json:"error_message,omitempty"`
 	StartedAt         string         `json:"started_at,omitempty"`
 	CompletedAt       string         `json:"completed_at,omitempty"`
 	CreatedBy         string         `json:"created_by,omitempty"`
@@ -135,14 +157,15 @@ type BenchmarkRunDTO struct {
 
 func ToBenchmarkRunDTO(r *BenchmarkRun) BenchmarkRunDTO {
 	dto := BenchmarkRunDTO{
-		ID:                  r.ID,
-		Name:                r.Name,
-		Status:              r.Status,
-		DatasetFilter:       r.DatasetFilter,
-		ExecutionMode:       r.ExecutionMode,
-		ModelConfig:         r.ModelConfig,
-		SampleCount:         r.SampleCount,
-		StageOutputsSummary: r.StageOutputsSummary,
+		ID:                         r.ID,
+		Name:                       r.Name,
+		Status:                     r.Status,
+		DatasetFilter:              r.DatasetFilter,
+		ExecutionMode:              r.ExecutionMode,
+		ModelConfig:                r.ModelConfig,
+		SampleCount:                r.SampleCount,
+		StageOutputsSummary:        r.StageOutputsSummary,
+		EvaluationAlgorithmVersion: r.EvaluationAlgorithmVersion,
 	}
 	if r.Metrics != nil {
 		dto.Metrics = toRunMetrics(r.Metrics)
@@ -233,6 +256,13 @@ type BenchmarkRunSampleDTO struct {
 	CompletedAt  string         `json:"completed_at,omitempty"`
 	CreatedAt    string         `json:"created_at"`
 	UpdatedAt    string         `json:"updated_at"`
+	// 关联数据集样本的调试信息
+	ImageURL         *string          `json:"image_url,omitempty"`
+	SampleName       string           `json:"sample_name,omitempty"`
+	BatchName        string           `json:"batch_name,omitempty"`
+	LabelType        string           `json:"label_type,omitempty"`
+	TotalWeightGrams *float64         `json:"total_weight_grams,omitempty"`
+	Items            map[string]float64 `json:"items,omitempty"`
 }
 
 func ToBenchmarkRunSampleDTO(s *BenchmarkRunSample) BenchmarkRunSampleDTO {
@@ -271,6 +301,28 @@ func ToBenchmarkRunSampleDTOList(items []BenchmarkRunSample) []BenchmarkRunSampl
 	out := make([]BenchmarkRunSampleDTO, len(items))
 	for i := range items {
 		out[i] = ToBenchmarkRunSampleDTO(&items[i])
+	}
+	return out
+}
+
+func ToBenchmarkRunSampleWithDatasetDTO(s *BenchmarkRunSampleWithDataset) BenchmarkRunSampleDTO {
+	dto := ToBenchmarkRunSampleDTO(&s.BenchmarkRunSample)
+	if s.DatasetSample != nil {
+		ds := s.DatasetSample
+		dto.ImageURL = ds.ImageURL
+		dto.SampleName = ds.SampleName
+		dto.BatchName = ds.BatchName
+		dto.LabelType = ds.LabelType
+		dto.TotalWeightGrams = ds.TotalWeightGrams
+		dto.Items = sampleItemsToFloat64Map(ds.Items)
+	}
+	return dto
+}
+
+func ToBenchmarkRunSampleWithDatasetDTOList(items []BenchmarkRunSampleWithDataset) []BenchmarkRunSampleDTO {
+	out := make([]BenchmarkRunSampleDTO, len(items))
+	for i := range items {
+		out[i] = ToBenchmarkRunSampleWithDatasetDTO(&items[i])
 	}
 	return out
 }

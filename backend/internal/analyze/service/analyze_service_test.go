@@ -1981,7 +1981,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesPackagedFoodAcrossMainM
 			svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
 			svc.nutrition = newFakeAnalyzeNutritionResolver()
 
-			resp, err := svc.finalizeAnalyzeResponse(context.Background(), mixedMealWithPackagedFoodParsed(), AnalyzeInput{}, mode, "fake", "fake-model", 12)
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithPackagedFoodParsed(), AnalyzeInput{}, mode, "fake", "fake-model", 12)
 			require.NoError(t, err)
 
 			items := toItems(resp["items"])
@@ -2029,7 +2029,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseIntegratesSugarfreePackagedDrinkA
 			svc := NewAnalyzeService(&mockLLMClient{}, ratioClient, nil)
 			svc.nutrition = newFakeAnalyzeNutritionResolver()
 
-			resp, err := svc.finalizeAnalyzeResponse(context.Background(), mixedMealWithSugarfreePackagedDrinkParsed(), AnalyzeInput{SuggestRatioEnabled: true}, mode, "fake", "fake-model", 12)
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithSugarfreePackagedDrinkParsed(), AnalyzeInput{SuggestRatioEnabled: true}, mode, "fake", "fake-model", 12)
 			require.NoError(t, err)
 
 			assert.Equal(t, 2, resp["resolved_count"])
@@ -2146,7 +2146,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackWhenPackagedFoodMisses(t
 	svc := NewAnalyzeService(&mockLLMClient{}, &mockLLMClient{}, nil)
 	svc.nutrition = resolver
 
-	resp, err := svc.finalizeAnalyzeResponse(context.Background(), map[string]any{
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", map[string]any{
 		"description": "包装零食未入库",
 		"items": []any{
 			map[string]any{
@@ -2192,7 +2192,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseGeneratesNutritionWhenPackagedAnd
 	svc.nutrition = resolver
 	svc.nutritionAI = fallback
 
-	resp, err := svc.finalizeAnalyzeResponse(context.Background(), map[string]any{
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", map[string]any{
 		"description": "包装零食没有入库也没有普通营养库条目",
 		"items": []any{
 			map[string]any{
@@ -2252,7 +2252,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseFallsBackToQwenWhenDeepSeekFails(
 		namedNutritionFallbackEstimator{source: "qwen_generated", estimator: qwenFallback},
 	)
 
-	resp, err := svc.finalizeAnalyzeResponse(context.Background(), map[string]any{
+	resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", map[string]any{
 		"description": "DeepSeek 不稳定时应继续用 Qwen 兜底",
 		"items": []any{
 			map[string]any{
@@ -2423,7 +2423,7 @@ func TestAnalyzeService_FinalizeAnalyzeResponseKeepsPackagedWeightWithSuggestRat
 			svc := NewAnalyzeService(&mockLLMClient{}, ratioClient, nil)
 			svc.nutrition = newFakeAnalyzeNutritionResolver()
 
-			resp, err := svc.finalizeAnalyzeResponse(context.Background(), mixedMealWithPackagedFoodParsed(), AnalyzeInput{SuggestRatioEnabled: true}, mode, "fake", "fake-model", 12)
+			resp, err := svc.finalizeAnalyzeResponse(context.Background(), "", mixedMealWithPackagedFoodParsed(), AnalyzeInput{SuggestRatioEnabled: true}, mode, "fake", "fake-model", 12)
 			require.NoError(t, err)
 
 			assert.Equal(t, true, resp["suggest_ratio_enabled"])

@@ -29,7 +29,7 @@ type DashScopeWebSearchOptions struct {
 	SearchStrategy string
 }
 
-var ErrLLMJSONParse = errors.New("llm json parse error")
+var ErrLLMJSONParse = errors.New("大模型 JSON 解析失败")
 
 type LLMJSONParseError struct {
 	Err error

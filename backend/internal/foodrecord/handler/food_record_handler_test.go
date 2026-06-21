@@ -7,7 +7,9 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/foodrecord/domain"
@@ -131,6 +133,7 @@ func setupRouter(h *FoodRecordHandler) *gin.Engine {
 	r.PUT("/api/food-record/:record_id", h.UpdateFoodRecord)
 	r.DELETE("/api/food-record/:record_id", h.DeleteFoodRecord)
 	r.GET("/api/food-record/share/:record_id", h.ShareFoodRecord)
+	r.GET("/share/food-record/:record_id", h.ShareFoodRecordPage)
 	r.POST("/api/upload-analyze-image", h.UploadAnalyzeImage)
 	r.POST("/api/upload-analyze-image-file", h.UploadAnalyzeImageFile)
 	r.GET("/api/food-nutrition/search", h.SearchFoodNutrition)
@@ -208,29 +211,29 @@ func TestSaveFoodRecordPreservesPackagedAnalysisMetadata(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{
 		"meal_type": "lunch",
 		"items": []map[string]any{{
-			"name":                     "雀巢咖啡1+2奶香",
-			"weight":                   52.5,
-			"ratio":                    75,
-			"intake":                   39.375,
-			"gross_weight_grams":       105,
-			"edible_portion_ratio":     1,
-			"edible_portion_reason":    "完整包装",
-			"edible_portion_source":    "vision",
-			"suggested_ratio":          75,
-			"suggested_ratio_reason":   "建议少喝一些",
-			"suggested_ratio_source":   "ai",
+			"name":                      "雀巢咖啡1+2奶香",
+			"weight":                    52.5,
+			"ratio":                     75,
+			"intake":                    39.375,
+			"gross_weight_grams":        105,
+			"edible_portion_ratio":      1,
+			"edible_portion_reason":     "完整包装",
+			"edible_portion_source":     "vision",
+			"suggested_ratio":           75,
+			"suggested_ratio_reason":    "建议少喝一些",
+			"suggested_ratio_source":    "ai",
 			"water_ml":                  0,
 			"nutrition_source":          "packaged_food_library",
 			"nutrition_source_category": "database",
 			"matched_food_id":           "nutrition:coffee",
-			"packaged_food_id":         "packaged:nescafe-105g",
-			"package_match_status":     "matched",
-			"package_match_confidence": 0.96,
-			"package_weight_source":    "packaged_food_library",
-			"package_weight_applied":   true,
-			"package_weight_reason":    "命中包装库净含量105g",
-			"packaged_candidates":      []map[string]any{{"id": "packaged:nescafe-105g", "net_weight_g": 105}},
-			"nutrients":                map[string]any{"calories": 52.5, "protein": 1, "carbs": 10, "fat": 1},
+			"packaged_food_id":          "packaged:nescafe-105g",
+			"package_match_status":      "matched",
+			"package_match_confidence":  0.96,
+			"package_weight_source":     "packaged_food_library",
+			"package_weight_applied":    true,
+			"package_weight_reason":     "命中包装库净含量105g",
+			"packaged_candidates":       []map[string]any{{"id": "packaged:nescafe-105g", "net_weight_g": 105}},
+			"nutrients":                 map[string]any{"calories": 52.5, "protein": 1, "carbs": 10, "fat": 1},
 		}},
 	})
 	w := httptest.NewRecorder()
@@ -313,22 +316,22 @@ func TestUpdateFoodRecordPreservesPackagedAnalysisMetadata(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{
 		"items": []map[string]any{{
-			"name":                     "喜之郎CiCi果粒爽橙汁饮料",
-			"weight":                   258,
-			"ratio":                    80,
-			"intake":                   206.4,
-			"suggested_ratio":          80,
+			"name":                      "喜之郎CiCi果粒爽橙汁饮料",
+			"weight":                    258,
+			"ratio":                     80,
+			"intake":                    206.4,
+			"suggested_ratio":           80,
 			"suggested_ratio_source":    "ai",
 			"nutrition_source":          "packaged_food_library",
 			"nutrition_source_category": "database",
 			"packaged_food_id":          "packaged:cici-orange-258g",
-			"package_match_status":     "matched",
-			"package_match_confidence": 0.93,
-			"package_weight_source":    "packaged_food_library",
-			"package_weight_applied":   true,
-			"package_weight_reason":    "命中包装库净含量258g",
-			"packaged_candidates":      []map[string]any{{"id": "packaged:cici-orange-258g", "net_weight_g": 258}},
-			"nutrients":                map[string]any{"calories": 178, "protein": 0, "carbs": 44, "fat": 0},
+			"package_match_status":      "matched",
+			"package_match_confidence":  0.93,
+			"package_weight_source":     "packaged_food_library",
+			"package_weight_applied":    true,
+			"package_weight_reason":     "命中包装库净含量258g",
+			"packaged_candidates":       []map[string]any{{"id": "packaged:cici-orange-258g", "net_weight_g": 258}},
+			"nutrients":                 map[string]any{"calories": 178, "protein": 0, "carbs": 44, "fat": 0},
 		}},
 	})
 	w := httptest.NewRecorder()
@@ -381,6 +384,80 @@ func TestShareFoodRecord(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestShareFoodRecordPage(t *testing.T) {
+	description := "鸡胸饭 <script>alert(1)</script>"
+	imageURL := "https://cdn.example.com/food.jpg"
+	recordTime := time.Date(2026, 6, 21, 12, 30, 0, 0, time.UTC)
+	mockSvc := &mockFoodRecordService{shareRecord: &domain.FoodRecord{
+		ID:            "r1",
+		MealType:      "lunch",
+		Description:   &description,
+		ImagePath:     &imageURL,
+		TotalCalories: 390,
+		TotalProtein:  31.5,
+		TotalCarbs:    43.5,
+		TotalFat:      9,
+		RecordTime:    &recordTime,
+		Items: []domain.FoodItem{{
+			Name:   "鸡胸饭",
+			Intake: 225,
+			Nutrients: domain.FoodItemNutrients{
+				Calories: 390,
+			},
+		}},
+	}}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/share/food-record/r1", nil)
+	req.Host = "api.example.com"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+	body := w.Body.String()
+	assert.Contains(t, body, `property="og:title"`)
+	assert.Contains(t, body, `property="og:url" content="https://api.example.com/share/food-record/r1"`)
+	assert.Contains(t, body, `property="al:android:url" content="foodlink://food-record?record_id=r1"`)
+	assert.Contains(t, body, `property="al:android:package" content="cn.healthymax.foodlink"`)
+	assert.Contains(t, body, `href="foodlink://food-record?record_id=r1"`)
+	assert.Contains(t, body, "打开 App 查看")
+	assert.Contains(t, body, imageURL)
+	assert.Contains(t, body, "鸡胸饭")
+	assert.Contains(t, body, "&lt;script&gt;alert(1)&lt;/script&gt;")
+	assert.False(t, strings.Contains(body, "<script>alert(1)</script>"))
+}
+
+func TestShareFoodRecordPageNotFound(t *testing.T) {
+	mockSvc := &mockFoodRecordService{shareErr: commonerrors.ErrNotFound}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/share/food-record/missing-record", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+	assert.Contains(t, w.Body.String(), "记录不存在")
+}
+
+func TestShareFoodRecordPageForbidden(t *testing.T) {
+	mockSvc := &mockFoodRecordService{shareErr: commonerrors.ErrForbidden}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/share/food-record/private-record", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+	assert.Contains(t, w.Body.String(), "记录未公开")
 }
 
 func TestShareFoodRecordForbidden(t *testing.T) {

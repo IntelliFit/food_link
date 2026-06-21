@@ -580,21 +580,14 @@ export default function ProfileSettingsPage() {
   const handleGoFeedDetail = (item: CommunityFeedItem) => {
     const record = item.record
     if (!record?.id) return
-    if (record.feed_type === 'campus_food') {
-      const targetId = item.target_id || record.id
-      Taro.navigateTo({ url: `/pages/food-library-detail/index?id=${encodeURIComponent(targetId)}` })
-      return
-    }
-    if (record.feed_type === 'exercise_log') {
-      const dateText = String(record.record_time || record.created_at || '').slice(0, 10)
-      Taro.navigateTo({ url: `/pages/exercise-record/index${dateText ? `?date=${encodeURIComponent(dateText)}` : ''}` })
-      return
-    }
-    if (record.recipe_id) {
-      Taro.navigateTo({ url: `${extraPkgUrl('/pages/recipe-detail/index')}?id=${encodeURIComponent(record.recipe_id)}` })
-      return
-    }
-    Taro.navigateTo({ url: `/pages/record-detail/index?id=${encodeURIComponent(record.id)}` })
+    const targetType = record.feed_type || 'food_record'
+    const targetId = item.target_id || record.id
+    const query = [
+      `targetType=${encodeURIComponent(targetType)}`,
+      `targetId=${encodeURIComponent(targetId)}`,
+      `recordId=${encodeURIComponent(record.id)}`
+    ].join('&')
+    Taro.navigateTo({ url: `${extraPkgUrl('/pages/interaction-feed-detail/index')}?${query}` })
   }
 
   const handleManualFoodCardClick = (item: CommunityFeedItem, row: { manual_source?: string | null; manual_source_id?: string | null }) => {
@@ -625,6 +618,7 @@ export default function ProfileSettingsPage() {
         key={`${record.feed_type || 'food'}-${record.id}`}
         className='profile-feed-card'
         style={isCirclePost ? { position: 'relative' } : undefined}
+        onClick={() => handleGoFeedDetail(item)}
         onLongPress={() => {
           if (isCirclePost && !isOwner) {
             setReportMaskTarget({ targetType, targetId })

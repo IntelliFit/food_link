@@ -62,6 +62,7 @@ export interface BenchmarkRun {
   sample_count: number
   metrics: RunMetrics
   stage_outputs_summary: Record<string, any>
+  evaluation_algorithm_version?: string
   error_message?: string
   started_at?: string
   completed_at?: string
@@ -121,6 +122,13 @@ export interface BenchmarkRunSample {
   completed_at?: string
   created_at: string
   updated_at: string
+  // 关联数据集样本的调试信息
+  image_url?: string
+  sample_name?: string
+  batch_name?: string
+  label_type?: LabelType
+  total_weight_grams?: number
+  items?: Record<string, number>
 }
 
 export interface BenchmarkRunListResponse {

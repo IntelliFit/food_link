@@ -1,5 +1,6 @@
 import { View, Text, ScrollView } from '@tarojs/components'
 import { useMemo, useState } from 'react'
+import { PetAvatar } from '../../../components/PetAvatar'
 import './index.scss'
 
 const PET_COLORS = ['mint', 'berry', 'sunny', 'aqua', 'grape', 'peach', 'cream', 'matcha'] as const
@@ -180,7 +181,7 @@ function variantNote(score: number): string {
   return '需收敛'
 }
 
-function evaluateVariant(variant: Omit<PetVariant, 'id' | 'score' | 'note' | 'style' | 'strengths' | 'riskReasons'>) {
+function evaluateVariant(variant: Omit<PetVariant, 'id' | 'score' | 'note' | 'style' | 'strengths' | 'riskReasons' | 'archetypeBoosts'>) {
   let score = 74
   const strengths: string[] = []
   const riskReasons: string[] = []
@@ -445,30 +446,6 @@ function FilterPills({
   )
 }
 
-function PetFigure({ variant, small = false }: { variant: PetVariant; small?: boolean }) {
-  return (
-    <View className={`pet-lab-avatar ${small ? 'small' : ''} ${variant.color} ${variant.shape} ${variant.pattern} animal-${variant.animal} mood-${variant.mood}`}>
-      <View className='pet-lab-shadow' />
-      <View className='pet-body'>
-        <View className='pet-tail' />
-        <View className='pet-ear left' />
-        <View className='pet-ear right' />
-        <View className='pet-accessory'>
-          <View className={`pet-accessory-shape ${variant.accessory}`} />
-        </View>
-        <View className='pet-face'>
-          <View className='pet-snout' />
-          <View className='pet-eye left' />
-          <View className='pet-eye right' />
-          <View className='pet-cheek left' />
-          <View className='pet-cheek right' />
-          <View className='pet-mouth' />
-        </View>
-      </View>
-    </View>
-  )
-}
-
 function PetLabPage() {
   const [color, setColor] = useState<FilterValue>('all')
   const [shape, setShape] = useState<FilterValue>('all')
@@ -569,7 +546,7 @@ function PetLabPage() {
           <View className='pet-lab-sample-row'>
             {topExamples.map((variant) => (
               <View key={variant.id} className={`pet-lab-sample-card ${variant.style}`} onClick={() => setSelected(variant)}>
-                <PetFigure variant={variant} small />
+                <PetAvatar pet={variant as unknown as Parameters<typeof PetAvatar>[0]['pet']} animal={variant.animal} size='small' mood={variant.mood} />
                 <Text className='pet-lab-sample-title'>{variant.note}</Text>
                 <Text className='pet-lab-sample-sub'>{variant.score} · {STYLE_LABELS[variant.style]}</Text>
               </View>
@@ -585,7 +562,7 @@ function PetLabPage() {
           <View className='pet-lab-sample-row'>
             {quirkyExamples.map((variant) => (
               <View key={variant.id} className={`pet-lab-sample-card ${variant.style}`} onClick={() => setSelected(variant)}>
-                <PetFigure variant={variant} small />
+                <PetAvatar pet={variant as unknown as Parameters<typeof PetAvatar>[0]['pet']} animal={variant.animal} size='small' mood={variant.mood} />
                 <Text className='pet-lab-sample-title'>{variant.note}</Text>
                 <Text className='pet-lab-sample-sub'>{variant.score} · {STYLE_LABELS[variant.style]}</Text>
               </View>
@@ -601,7 +578,7 @@ function PetLabPage() {
           <View className='pet-lab-sample-row'>
             {riskyExamples.map((variant) => (
               <View key={variant.id} className='pet-lab-sample-card risky' onClick={() => setSelected(variant)}>
-                <PetFigure variant={variant} small />
+                <PetAvatar pet={variant as unknown as Parameters<typeof PetAvatar>[0]['pet']} animal={variant.animal} size='small' mood={variant.mood} />
                 <Text className='pet-lab-sample-title'>{variant.note}</Text>
                 <Text className='pet-lab-sample-sub'>{variant.riskReasons[0] || `${variant.score}`}</Text>
               </View>
@@ -629,7 +606,7 @@ function PetLabPage() {
       <View className='pet-lab-grid'>
         {shown.map((variant) => (
           <View key={variant.id} className={`pet-lab-card ${variant.style}`} onClick={() => setSelected(variant)}>
-            <PetFigure variant={variant} />
+            <PetAvatar pet={variant as unknown as Parameters<typeof PetAvatar>[0]['pet']} animal={variant.animal} size='medium' mood={variant.mood} />
             <Text className='pet-lab-card-title'>{variant.note} · {variant.score}</Text>
             <Text className='pet-lab-card-badge'>{STYLE_LABELS[variant.style]}</Text>
             <Text className='pet-lab-card-desc'>
@@ -654,7 +631,7 @@ function PetLabPage() {
       {selected ? (
         <View className='pet-lab-detail-mask' onClick={() => setSelected(null)}>
           <View className='pet-lab-detail' onClick={(event) => event.stopPropagation()}>
-            <PetFigure variant={selected} />
+            <PetAvatar pet={selected as unknown as Parameters<typeof PetAvatar>[0]['pet']} animal={selected.animal} size='large' mood={selected.mood} />
             <Text className='pet-lab-detail-title'>{selected.note} · {selected.score}</Text>
             <Text className='pet-lab-detail-copy'>组合 ID：{selected.id}</Text>
             <Text className='pet-lab-detail-copy'>风格判断：{STYLE_LABELS[selected.style]}</Text>

@@ -480,6 +480,142 @@
   font-weight: 600;
 }
 
+// 本餐评分卡片
+.score-overview-card {
+  @extend %card-base;
+
+  padding: 32rpx;
+  background: linear-gradient(135deg, #fff 0%, #f8fafc 100%);
+  border: 1rpx solid rgb(255 255 255 / 60%);
+}
+
+.score-overview-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28rpx;
+}
+
+.score-overview-left {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.score-overview-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #334155;
+  line-height: 1;
+}
+
+.score-overview-score-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+
+.score-overview-score {
+  font-size: 72rpx;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+  font-family: 'DIN Alternate', sans-serif;
+}
+
+.score-overview-unit {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.score-overview-badge {
+  padding: 10rpx 20rpx;
+  border-radius: 24rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.score-overview-badge.tone-positive {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.score-overview-badge.tone-neutral {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.score-overview-badge.tone-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.score-overview-badge.tone-danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.score-overview-badge-label {
+  line-height: 1;
+}
+
+.score-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.score-breakdown-item {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.score-breakdown-label {
+  width: 112rpx;
+  font-size: 24rpx;
+  color: #475569;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.score-breakdown-track {
+  flex: 1;
+  height: 12rpx;
+  border-radius: 6rpx;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.score-breakdown-fill {
+  height: 100%;
+  border-radius: 6rpx;
+  transition: width 0.3s ease;
+}
+
+.score-breakdown-fill.micro {
+  background: linear-gradient(90deg, #5dbb8a 0%, #34d399 100%);
+}
+
+.score-breakdown-fill.macro {
+  background: linear-gradient(90deg, #5c9ed4 0%, #38bdf8 100%);
+}
+
+.score-breakdown-fill.calorie {
+  background: linear-gradient(90deg, #f0985c 0%, #fbbf24 100%);
+}
+
+.score-breakdown-value {
+  width: 56rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #0f172a;
+  text-align: right;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 .calories-main {
   display: flex;
   flex-direction: column;

@@ -1,11 +1,18 @@
 package handler
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"html/template"
 	"io"
 	"math"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	authmw "food_link/backend/internal/auth"
 	commonerrors "food_link/backend/internal/common/errors"
@@ -213,6 +220,12 @@ func (h *FoodRecordHandler) UpdateFoodRecord(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "update_ok",
+		slog.String("record_id", record.ID),
+		slog.String("meal_type", record.MealType),
+		slog.Int("item_count", len(record.Items)),
+		slog.Int("total_weight_grams", record.TotalWeightGrams),
+	)
 	response.Success(c, gin.H{"message": "更新成功", "record": record})
 }
 
@@ -224,6 +237,7 @@ func (h *FoodRecordHandler) DeleteFoodRecord(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "delete_ok", slog.String("record_id", recordID))
 	response.Success(c, gin.H{"message": "已删除"})
 }
 
@@ -235,7 +249,32 @@ func (h *FoodRecordHandler) ShareFoodRecord(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "share_ok",
+		slog.String("record_id", record.ID),
+		slog.String("meal_type", record.MealType),
+	)
 	response.Success(c, gin.H{"record": record})
+}
+
+// GET /share/food-record/:record_id
+func (h *FoodRecordHandler) ShareFoodRecordPage(c *gin.Context) {
+	recordID := c.Param("record_id")
+	record, err := h.recordSvc.Share(c.Request.Context(), recordID)
+	if err != nil {
+		renderFoodRecordSharePageError(c, recordID, err)
+		return
+	}
+	data := buildFoodRecordSharePageData(c, record)
+	var buf bytes.Buffer
+	if err := foodRecordSharePageTemplate.Execute(&buf, data); err != nil {
+		response.Error(c, err)
+		return
+	}
+	logFoodRecordAPI(c, "share_page_ok",
+		slog.String("record_id", record.ID),
+		slog.String("meal_type", record.MealType),
+	)
+	c.Data(200, "text/html; charset=utf-8", buf.Bytes())
 }
 
 // POST /api/upload-analyze-image
@@ -256,6 +295,9 @@ func (h *FoodRecordHandler) UploadAnalyzeImage(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "upload_analyze_image_ok",
+		slog.Int("image.base64.length", len(body.Base64Image)),
+	)
 	response.Success(c, gin.H{"imageUrl": imageURL})
 }
 
@@ -293,6 +335,10 @@ func (h *FoodRecordHandler) UploadAnalyzeImageFile(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "upload_analyze_image_file_ok",
+		slog.Int("file.size", len(fileBytes)),
+		slog.String("file.content_type", file.Header.Get("Content-Type")),
+	)
 	response.Success(c, gin.H{"imageUrl": imageURL})
 }
 
@@ -455,6 +501,13 @@ func (h *FoodRecordHandler) CreatePackagedFood(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "packaged_food_create_ok",
+		slog.String("packaged_food_id", item.ID),
+		slog.Int("source_image_count", len(item.SourceImageURLs)),
+		slog.String("review_status", item.ReviewStatus),
+		slog.Bool("barcode_present", item.Barcode != nil && strings.TrimSpace(*item.Barcode) != ""),
+		slog.Float64("net_weight_g", item.NetWeightG),
+	)
 	response.Success(c, gin.H{"item": item})
 }
 
@@ -481,6 +534,11 @@ func (h *FoodRecordHandler) RecognizePackagedNutritionLabel(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "packaged_nutrition_label_recognize_ok",
+		slog.Float64("confidence", result.Confidence),
+		slog.Bool("has_product_name", strings.TrimSpace(result.ProductName) != ""),
+		slog.Bool("has_brand", strings.TrimSpace(result.Brand) != ""),
+	)
 	response.Success(c, gin.H{"nutrition": result})
 }
 
@@ -550,6 +608,7 @@ func (h *FoodRecordHandler) SaveCriticalSamples(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	logFoodRecordAPI(c, "critical_samples_save_ok", slog.Int("sample_count", len(body.Items)))
 	response.Success(c, gin.H{"message": "已保存偏差样本", "count": len(body.Items)})
 }
 
@@ -560,3 +619,338 @@ func filepathExt(filename string) string {
 	return ""
 }
 
+var sharePageLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+type foodRecordSharePageData struct {
+	Title       string
+	Description string
+	URL         string
+	AppURL      template.URL
+	ImageURL    string
+	MealLabel   string
+	RecordDate  string
+	Calories    int
+	Protein     string
+	Carbs       string
+	Fat         string
+	Foods       []foodRecordShareFoodItem
+}
+
+type foodRecordShareFoodItem struct {
+	Name     string
+	Intake   int
+	Calories int
+}
+
+func buildFoodRecordSharePageData(c *gin.Context, record *domain.FoodRecord) foodRecordSharePageData {
+	if record == nil {
+		return foodRecordSharePageData{Title: "Food Link 饮食记录", Description: "来自 Food Link 的饮食记录"}
+	}
+	mealLabel := shareMealTypeLabel(record.MealType)
+	calories := int(math.Round(record.TotalCalories))
+	title := fmt.Sprintf("%s饮食记录", mealLabel)
+	if calories > 0 {
+		title = fmt.Sprintf("%s · %d kcal", title, calories)
+	}
+	foods := make([]foodRecordShareFoodItem, 0, minInt(len(record.Items), 8))
+	names := make([]string, 0, minInt(len(record.Items), 4))
+	for _, item := range record.Items {
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			continue
+		}
+		if len(names) < 4 {
+			names = append(names, name)
+		}
+		if len(foods) < 8 {
+			foods = append(foods, foodRecordShareFoodItem{
+				Name:     name,
+				Intake:   int(math.Round(foodRecordShareItemIntake(item))),
+				Calories: int(math.Round(item.Nutrients.Calories)),
+			})
+		}
+	}
+	descriptionParts := []string{}
+	if record.Description != nil && strings.TrimSpace(*record.Description) != "" {
+		descriptionParts = append(descriptionParts, strings.TrimSpace(*record.Description))
+	} else if len(names) > 0 {
+		descriptionParts = append(descriptionParts, strings.Join(names, "、"))
+	}
+	descriptionParts = append(descriptionParts, fmt.Sprintf("蛋白质 %s g，碳水 %s g，脂肪 %s g",
+		shareFloat(record.TotalProtein),
+		shareFloat(record.TotalCarbs),
+		shareFloat(record.TotalFat),
+	))
+	description := strings.Join(descriptionParts, "。")
+	recordDate := ""
+	if record.RecordTime != nil {
+		recordDate = record.RecordTime.In(sharePageLocation).Format("2006-01-02 15:04")
+	}
+	recordID := strings.TrimSpace(record.ID)
+	if recordID == "" && c != nil {
+		recordID = strings.TrimSpace(c.Param("record_id"))
+	}
+	return foodRecordSharePageData{
+		Title:       title,
+		Description: description,
+		URL:         requestPublicURL(c),
+		AppURL:      foodRecordAppURL(recordID),
+		ImageURL:    firstFoodRecordImageURL(record),
+		MealLabel:   mealLabel,
+		RecordDate:  recordDate,
+		Calories:    calories,
+		Protein:     shareFloat(record.TotalProtein),
+		Carbs:       shareFloat(record.TotalCarbs),
+		Fat:         shareFloat(record.TotalFat),
+		Foods:       foods,
+	}
+}
+
+func foodRecordAppURL(recordID string) template.URL {
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return ""
+	}
+	return template.URL("foodlink://food-record?record_id=" + url.QueryEscape(recordID))
+}
+
+func renderFoodRecordSharePageError(c *gin.Context, recordID string, err error) {
+	status, title, message := foodRecordSharePageErrorMeta(err)
+	logFoodRecordAPI(c, "share_page_failed",
+		slog.String("record_id", recordID),
+		slog.Int("http.status_code", status),
+		slog.String("error", err.Error()),
+	)
+	body := fmt.Sprintf(`<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>%s</title>
+  <style>
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6fbf7;color:#17261d}
+    main{max-width:560px;margin:0 auto;padding:72px 24px}
+    h1{font-size:24px;line-height:1.3;margin:0 0 12px}
+    p{font-size:16px;line-height:1.7;color:#52605a;margin:0}
+  </style>
+</head>
+<body><main><h1>%s</h1><p>%s</p></main></body>
+</html>`,
+		template.HTMLEscapeString(title),
+		template.HTMLEscapeString(title),
+		template.HTMLEscapeString(message),
+	)
+	c.Data(status, "text/html; charset=utf-8", []byte(body))
+}
+
+func foodRecordSharePageErrorMeta(err error) (int, string, string) {
+	switch {
+	case errors.Is(err, commonerrors.ErrNotFound):
+		return http.StatusNotFound, "记录不存在", "这条饮食记录不存在，或分享链接已经失效。"
+	case errors.Is(err, commonerrors.ErrForbidden):
+		return http.StatusForbidden, "记录未公开", "这条饮食记录当前不可公开查看。"
+	default:
+		return http.StatusInternalServerError, "暂时无法打开", "分享页暂时无法打开，请稍后再试。"
+	}
+}
+
+func requestPublicURL(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	scheme := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto"))
+	if scheme == "" {
+		if c.Request.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	if i := strings.Index(scheme, ","); i >= 0 {
+		scheme = strings.TrimSpace(scheme[:i])
+	}
+	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
+	if host == "" {
+		host = c.Request.Host
+	}
+	if host == "" {
+		return ""
+	}
+	return scheme + "://" + host + c.Request.URL.RequestURI()
+}
+
+func firstFoodRecordImageURL(record *domain.FoodRecord) string {
+	if record == nil {
+		return ""
+	}
+	for _, imageURL := range record.ImagePaths {
+		if trimmed := strings.TrimSpace(imageURL); trimmed != "" {
+			return trimmed
+		}
+	}
+	if record.ImagePath != nil {
+		return strings.TrimSpace(*record.ImagePath)
+	}
+	return ""
+}
+
+func foodRecordShareItemIntake(item domain.FoodItem) float64 {
+	if item.Intake > 0 {
+		return item.Intake
+	}
+	if item.Weight > 0 && item.Ratio > 0 {
+		return item.Weight * item.Ratio / 100
+	}
+	return item.Weight
+}
+
+func shareMealTypeLabel(mealType string) string {
+	switch strings.TrimSpace(strings.ToLower(mealType)) {
+	case "breakfast":
+		return "早餐"
+	case "morning_snack":
+		return "早加餐"
+	case "lunch":
+		return "午餐"
+	case "afternoon_snack", "snack":
+		return "午加餐"
+	case "dinner":
+		return "晚餐"
+	case "evening_snack":
+		return "晚加餐"
+	default:
+		return "饮食"
+	}
+}
+
+func shareFloat(value float64) string {
+	rounded := math.Round(value*10) / 10
+	if math.Abs(rounded-math.Round(rounded)) < 0.0001 {
+		return strconv.Itoa(int(math.Round(rounded)))
+	}
+	return strconv.FormatFloat(rounded, 'f', 1, 64)
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+var foodRecordSharePageTemplate = template.Must(template.New("food-record-share-page").Parse(`<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <meta name="description" content="{{.Description}}">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{{.Title}}">
+  <meta property="og:description" content="{{.Description}}">
+  {{if .URL}}<meta property="og:url" content="{{.URL}}">{{end}}
+  {{if .ImageURL}}<meta property="og:image" content="{{.ImageURL}}">{{end}}
+  {{if .AppURL}}<meta property="al:android:url" content="{{.AppURL}}">
+  <meta property="al:android:package" content="cn.healthymax.foodlink">
+  <meta property="al:android:app_name" content="智健食探">
+  <meta property="al:ios:url" content="{{.AppURL}}">
+  <meta property="al:ios:app_name" content="智健食探">{{end}}
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{.Title}}">
+  <meta name="twitter:description" content="{{.Description}}">
+  {{if .ImageURL}}<meta name="twitter:image" content="{{.ImageURL}}">{{end}}
+  <style>
+    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #17211b; background: #f6f8f4; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #f6f8f4; }
+    .page { max-width: 720px; margin: 0 auto; padding: 18px 16px 28px; }
+    .hero { overflow: hidden; border-radius: 8px; background: #ffffff; border: 1px solid #e5ebe3; box-shadow: 0 12px 32px rgba(23, 33, 27, 0.08); }
+    .photo { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: #e8efe6; }
+    .fallback { min-height: 210px; display: grid; place-items: center; background: #e8efe6; color: #2f7f62; font-size: 26px; font-weight: 800; }
+    .content { padding: 22px; }
+    .eyebrow { color: #2f7f62; font-weight: 700; font-size: 14px; }
+    h1 { margin: 8px 0 8px; font-size: 28px; line-height: 1.18; letter-spacing: 0; }
+    .date { color: #6b7280; font-size: 14px; margin-bottom: 18px; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 18px 0; }
+    .metric { background: #f2f7ef; border-radius: 8px; padding: 12px 8px; text-align: center; }
+    .metric strong { display: block; font-size: 20px; color: #17211b; }
+    .metric span { display: block; margin-top: 3px; font-size: 12px; color: #607067; }
+    .desc { color: #45524a; font-size: 15px; line-height: 1.7; margin: 0 0 18px; }
+    .actions { display: grid; gap: 10px; margin: 18px 0 20px; }
+    .open-app { display: flex; align-items: center; justify-content: center; min-height: 48px; border-radius: 8px; background: #2f7f62; color: #fff; text-decoration: none; font-size: 16px; font-weight: 800; }
+    .open-app:active { transform: translateY(1px); }
+    .open-app-hint { color: #7a857e; font-size: 13px; line-height: 1.5; text-align: center; }
+    .foods { display: grid; gap: 8px; margin-top: 14px; }
+    .food { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid #edf1ea; }
+    .food-name { font-weight: 700; color: #17211b; overflow-wrap: anywhere; }
+    .food-meta { flex: 0 0 auto; color: #607067; font-size: 14px; }
+    .brand { margin-top: 18px; color: #7a857e; font-size: 13px; text-align: center; }
+    @media (max-width: 520px) {
+      .page { padding: 0 0 20px; }
+      .hero { border-radius: 0; border-left: 0; border-right: 0; }
+      .content { padding: 20px 16px; }
+      h1 { font-size: 24px; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <article class="hero">
+      {{if .ImageURL}}<img class="photo" src="{{.ImageURL}}" alt="{{.Title}}">{{else}}<div class="fallback">Food Link</div>{{end}}
+      <section class="content">
+        <div class="eyebrow">{{.MealLabel}}</div>
+        <h1>{{.Title}}</h1>
+        {{if .RecordDate}}<div class="date">{{.RecordDate}}</div>{{end}}
+        <div class="metrics">
+          <div class="metric"><strong>{{.Calories}}</strong><span>kcal</span></div>
+          <div class="metric"><strong>{{.Protein}}</strong><span>蛋白质 g</span></div>
+          <div class="metric"><strong>{{.Carbs}}</strong><span>碳水 g</span></div>
+          <div class="metric"><strong>{{.Fat}}</strong><span>脂肪 g</span></div>
+        </div>
+        <p class="desc">{{.Description}}</p>
+        {{if .AppURL}}
+        <div class="actions">
+          <a class="open-app" id="openApp" href="{{.AppURL}}">打开 App 查看</a>
+          <div class="open-app-hint">已安装智健食探时会打开同一条记录，也可以继续在网页查看。</div>
+        </div>
+        {{end}}
+        {{if .Foods}}
+        <div class="foods">
+          {{range .Foods}}
+          <div class="food">
+            <div class="food-name">{{.Name}}</div>
+            <div class="food-meta">{{if gt .Intake 0}}{{.Intake}} g · {{end}}{{if gt .Calories 0}}{{.Calories}} kcal{{end}}</div>
+          </div>
+          {{end}}
+        </div>
+        {{end}}
+      </section>
+    </article>
+    <div class="brand">来自 Food Link</div>
+  </main>
+  {{if .AppURL}}
+  <script>
+  (function () {
+    var appUrl = "{{.AppURL}}";
+    if (!appUrl) return;
+    function openApp() {
+      window.location.href = appUrl;
+    }
+    var button = document.getElementById("openApp");
+    if (button) {
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        openApp();
+      });
+    }
+    var userAgent = navigator.userAgent || "";
+    if (/Android|iPhone|iPad|iPod/i.test(userAgent)) {
+      window.setTimeout(openApp, 450);
+    }
+  })();
+  </script>
+  {{end}}
+</body>
+</html>`))
