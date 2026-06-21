@@ -5249,10 +5249,10 @@ button.poster-share-channel--btn {
 .pet-companion-float.is-collapsed .pet-companion-avatar {
   width: 104rpx;
   height: 104rpx;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  border: 2rpx solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 12rpx 30rpx rgba(63, 110, 88, 0.14);
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .pet-companion-float.is-collapsed .pet-companion-card::after {
