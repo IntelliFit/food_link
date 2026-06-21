@@ -108,6 +108,10 @@ type MembershipRepo interface {
 	UpdateRewardTaskUploadBySourceKey(ctx context.Context, userID, sourceKey string, updates map[string]any) (*domain.RewardTaskUpload, error)
 }
 
+type PaymentTestPolicyRepo interface {
+	GetPaymentTestAccess(ctx context.Context, userID string) (*domain.PaymentTestAccess, error)
+}
+
 type SharePosterRewardClaimInput struct {
 	RecordID   string `json:"record_id"`
 	ShareScope string `json:"share_scope"`
@@ -122,9 +126,10 @@ type CreateMembershipPaymentInput struct {
 }
 
 type MembershipService struct {
-	repo   MembershipRepo
-	cfg    *config.Config
-	client *http.Client
+	repo            MembershipRepo
+	paymentTestRepo PaymentTestPolicyRepo
+	cfg             *config.Config
+	client          *http.Client
 }
 
 type earlyUserMembershipMeta struct {
@@ -171,7 +176,11 @@ func NewMembershipService(repo MembershipRepo, cfg ...*config.Config) *Membershi
 	if len(cfg) > 0 {
 		c = cfg[0]
 	}
-	return &MembershipService{repo: repo, cfg: c, client: &http.Client{Timeout: 15 * time.Second}}
+	svc := &MembershipService{repo: repo, cfg: c, client: &http.Client{Timeout: 15 * time.Second}}
+	if paymentTestRepo, ok := repo.(PaymentTestPolicyRepo); ok {
+		svc.paymentTestRepo = paymentTestRepo
+	}
+	return svc
 }
 
 func (s *MembershipService) ListPlans(ctx context.Context) ([]map[string]any, error) {
@@ -577,6 +586,9 @@ func (s *MembershipService) CreatePaymentWithInput(ctx context.Context, userID s
 	if plan == nil || !plan.IsActive {
 		return nil, commonerrors.ErrNotFound
 	}
+	if err := s.ensurePlanPurchaseAllowed(ctx, userID, plan); err != nil {
+		return nil, err
+	}
 	user, err := s.repo.GetUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -722,6 +734,26 @@ func (s *MembershipService) CreatePaymentWithInput(ctx context.Context, userID s
 		"prepay_id":       wxResp.PrepayID,
 		"pay_params":      params,
 	}, nil
+}
+
+func (s *MembershipService) ensurePlanPurchaseAllowed(ctx context.Context, userID string, plan *domain.MembershipPlan) error {
+	if plan == nil || !plan.IsTestPlan {
+		return nil
+	}
+	if s.paymentTestRepo == nil {
+		return &commonerrors.AppError{Code: 20003, Message: "支付测试套餐暂未开放", HTTPStatus: http.StatusForbidden}
+	}
+	access, err := s.paymentTestRepo.GetPaymentTestAccess(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if access == nil || !access.Enabled {
+		return &commonerrors.AppError{Code: 20003, Message: "支付测试套餐暂未启用", HTTPStatus: http.StatusForbidden}
+	}
+	if !access.UserAllowed {
+		return &commonerrors.AppError{Code: 20003, Message: "当前账号未加入支付测试名单", HTTPStatus: http.StatusForbidden}
+	}
+	return nil
 }
 
 func isMobileAppPaymentRequest(input CreateMembershipPaymentInput, paymentKind *membershipPaymentKind) bool {
@@ -2595,6 +2627,7 @@ func maxInt(a, b int) int {
 func isMembershipPlanCode(planCode string) bool {
 	code := strings.TrimSpace(strings.ToLower(planCode))
 	return code == "pro_monthly" ||
+		code == domain.PaymentTestPlanCode ||
 		strings.HasPrefix(code, "light_") ||
 		strings.HasPrefix(code, "standard_") ||
 		strings.HasPrefix(code, "advanced_")

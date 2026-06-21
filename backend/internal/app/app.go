@@ -609,6 +609,9 @@ func New(cfg *config.Config) (*App, error) {
 	adminAccountRepo := adminrepo.NewAdminAccountRepo(db)
 	adminBenchmarkSvc := adminservice.NewBenchmarkService(adminBenchmarkRepo, analyzeTaskSvc, adminAccountRepo, userRepo, ofoxAIClient)
 	adminBenchmarkHandler := adminhandler.NewBenchmarkHandler(adminBenchmarkSvc)
+	adminPaymentTestRepo := adminrepo.NewPaymentTestRepo(db)
+	adminPaymentTestSvc := adminservice.NewPaymentTestService(adminPaymentTestRepo)
+	adminPaymentTestHandler := adminhandler.NewPaymentTestHandler(adminPaymentTestSvc)
 	adminAuthSvc := adminservice.NewAuthService(adminAccountRepo)
 	adminAuthHandler := adminhandler.NewAuthHandler(adminAuthSvc)
 	adminAuth := adminAuthHandler.AdminAuth()
@@ -655,6 +658,11 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.DELETE("/benchmark/runs/:run_id", adminAuth, adminBenchmarkHandler.DeleteRun)
 	adminAPI.POST("/benchmark/runs/:run_id/cancel", adminAuth, adminBenchmarkHandler.CancelRun)
 	adminAPI.GET("/benchmark/runs/:run_id/samples", adminAuth, adminBenchmarkHandler.ListRunSamples)
+	adminAPI.GET("/payment-test/summary", adminAuth, adminPaymentTestHandler.Summary)
+	adminAPI.PATCH("/payment-test/settings", adminAuth, adminPaymentTestHandler.UpdateSettings)
+	adminAPI.GET("/payment-test/user-search", adminAuth, adminPaymentTestHandler.SearchUsers)
+	adminAPI.POST("/payment-test/users", adminAuth, adminPaymentTestHandler.AddUser)
+	adminAPI.DELETE("/payment-test/users/:user_id", adminAuth, adminPaymentTestHandler.RemoveUser)
 
 	routeMapPath := filepath.Join(".", "docs", "backend-api-prd", "ROUTE_MAP.md")
 	if _, err := os.Stat(routeMapPath); err == nil {

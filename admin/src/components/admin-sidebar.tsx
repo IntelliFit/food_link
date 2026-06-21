@@ -2,6 +2,7 @@ import type { ComponentType } from 'react'
 import {
   Activity,
   Apple,
+  CreditCard,
   Flag,
   FlaskConical,
   LayoutDashboard,
@@ -17,7 +18,7 @@ import { cn } from '@/lib/utils'
 import { BrandMark } from '@/components/brand-mark'
 import { ThemeToggle } from '@/components/theme-toggle'
 
-export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'food-nutrition' | 'public-food-library' | 'exercise-energy' | 'feed-reports' | 'settings'
+export type AdminMenuId = 'overview' | 'feedback' | 'benchmark' | 'packaged-foods' | 'food-nutrition' | 'public-food-library' | 'exercise-energy' | 'feed-reports' | 'payment-test' | 'settings'
 
 type AdminSidebarProps = {
   activeMenu: AdminMenuId
@@ -39,6 +40,7 @@ const menus: Array<{
   { id: 'public-food-library', label: '公共食物', icon: Utensils },
   { id: 'exercise-energy', label: '运动库', icon: Activity },
   { id: 'feed-reports', label: '举报管理', icon: Flag },
+  { id: 'payment-test', label: '\u652f\u4ed8\u6d4b\u8bd5', icon: CreditCard },
   { id: 'settings', label: '系统设置', icon: Settings, disabled: true },
 ]
 

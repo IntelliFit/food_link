@@ -933,6 +933,8 @@ type MembershipPlanDO struct {
 	Amount         float64   `gorm:"column:amount;type:numeric;not null"`
 	DurationMonths int       `gorm:"column:duration_months;type:integer;not null;default:1"`
 	IsActive       bool      `gorm:"column:is_active;type:boolean;not null;default:true"`
+	IsVisible      bool      `gorm:"column:is_visible;type:boolean;not null;default:true"`
+	IsTestPlan     bool      `gorm:"column:is_test_plan;type:boolean;not null;default:false"`
 	Description    *string   `gorm:"column:description;type:text"`
 	Tier           *string   `gorm:"column:tier;type:text;index:idx_membership_plan_config_tier_period,priority:1"`
 	Period         *string   `gorm:"column:period;type:text;index:idx_membership_plan_config_tier_period,priority:2"`
@@ -944,6 +946,27 @@ type MembershipPlanDO struct {
 }
 
 func (MembershipPlanDO) TableName() string { return "membership_plan_config" }
+
+type PaymentTestSettingDO struct {
+	ID        string    `gorm:"column:id;type:varchar(50);primaryKey;default:'default'"`
+	Enabled   bool      `gorm:"column:enabled;type:boolean;not null;default:false"`
+	UpdatedBy *string   `gorm:"column:updated_by;type:text"`
+	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (PaymentTestSettingDO) TableName() string { return "membership_payment_test_settings" }
+
+type PaymentTestUserDO struct {
+	ID        string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID    string    `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_membership_payment_test_users_user_id"`
+	Note      *string   `gorm:"column:note;type:text"`
+	CreatedBy *string   `gorm:"column:created_by;type:text"`
+	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+}
+
+func (PaymentTestUserDO) TableName() string { return "membership_payment_test_users" }
 
 type UserMembershipDO struct {
 	ID                 string     `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
@@ -1197,42 +1220,42 @@ type SchoolDO struct {
 func (SchoolDO) TableName() string { return "schools" }
 
 type FoodWeightLabeledSampleDO struct {
-	ID               string             `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	BatchName        string             `gorm:"column:batch_name;type:text;not null"`
-	SampleName       string             `gorm:"column:sample_name;type:text;not null"`
-	OriginalFilename string             `gorm:"column:original_filename;type:text;not null"`
-	ImageObjectKey   *string            `gorm:"column:image_object_key;type:text"`
-	ImageURL         *string            `gorm:"column:image_url;type:text"`
-	LabelType        string             `gorm:"column:label_type;type:text;not null"`
-	TotalWeightGrams *float64           `gorm:"column:total_weight_grams;type:numeric"`
+	ID               string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	BatchName        string         `gorm:"column:batch_name;type:text;not null"`
+	SampleName       string         `gorm:"column:sample_name;type:text;not null"`
+	OriginalFilename string         `gorm:"column:original_filename;type:text;not null"`
+	ImageObjectKey   *string        `gorm:"column:image_object_key;type:text"`
+	ImageURL         *string        `gorm:"column:image_url;type:text"`
+	LabelType        string         `gorm:"column:label_type;type:text;not null"`
+	TotalWeightGrams *float64       `gorm:"column:total_weight_grams;type:numeric"`
 	Items            map[string]any `gorm:"column:items;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	Status           string             `gorm:"column:status;type:text;not null;default:'labeled'"`
-	SourcePath       *string            `gorm:"column:source_path;type:text"`
-	Metadata         map[string]any     `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	CreatedAt        *time.Time         `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt        *time.Time         `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	Status           string         `gorm:"column:status;type:text;not null;default:'labeled'"`
+	SourcePath       *string        `gorm:"column:source_path;type:text"`
+	Metadata         map[string]any `gorm:"column:metadata;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	CreatedAt        *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt        *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (FoodWeightLabeledSampleDO) TableName() string { return "food_weight_labeled_samples" }
 
 type BenchmarkRunDO struct {
-	ID                  string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	Name                string         `gorm:"column:name;type:text;not null"`
-	Status              string         `gorm:"column:status;type:text;not null;default:'pending'"`
-	DatasetFilter       map[string]any `gorm:"column:dataset_filter;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	ExecutionMode       string         `gorm:"column:execution_mode;type:text;not null"`
-	ModelConfig         map[string]any `gorm:"column:model_config;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	SampleCount         int            `gorm:"column:sample_count;type:integer;not null;default:0"`
-	Metrics                  map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	StageOutputsSummary      map[string]any `gorm:"column:stage_outputs_summary;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ID                         string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name                       string         `gorm:"column:name;type:text;not null"`
+	Status                     string         `gorm:"column:status;type:text;not null;default:'pending'"`
+	DatasetFilter              map[string]any `gorm:"column:dataset_filter;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	ExecutionMode              string         `gorm:"column:execution_mode;type:text;not null"`
+	ModelConfig                map[string]any `gorm:"column:model_config;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	SampleCount                int            `gorm:"column:sample_count;type:integer;not null;default:0"`
+	Metrics                    map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	StageOutputsSummary        map[string]any `gorm:"column:stage_outputs_summary;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	EvaluationAlgorithmVersion string         `gorm:"column:evaluation_algorithm_version;type:text"`
-	ErrorMessage             *string        `gorm:"column:error_message;type:text"`
-	StartedAt           *time.Time     `gorm:"column:started_at;type:timestamptz"`
-	CompletedAt         *time.Time     `gorm:"column:completed_at;type:timestamptz"`
-	CreatedBy           *string        `gorm:"column:created_by;type:uuid"`
-	CreatedByUsername   *string        `gorm:"column:created_by_username;type:text"`
-	CreatedAt           *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
-	UpdatedAt           *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
+	ErrorMessage               *string        `gorm:"column:error_message;type:text"`
+	StartedAt                  *time.Time     `gorm:"column:started_at;type:timestamptz"`
+	CompletedAt                *time.Time     `gorm:"column:completed_at;type:timestamptz"`
+	CreatedBy                  *string        `gorm:"column:created_by;type:uuid"`
+	CreatedByUsername          *string        `gorm:"column:created_by_username;type:text"`
+	CreatedAt                  *time.Time     `gorm:"column:created_at;type:timestamptz;default:now()"`
+	UpdatedAt                  *time.Time     `gorm:"column:updated_at;type:timestamptz;default:now()"`
 }
 
 func (BenchmarkRunDO) TableName() string { return "benchmark_runs" }
@@ -1269,6 +1292,8 @@ func AllModels() []any {
 		&PetChatMessageDO{},
 		&UserTrialEntitlementDO{},
 		&MembershipPlanDO{},
+		&PaymentTestSettingDO{},
+		&PaymentTestUserDO{},
 		&AnalysisTaskDO{},
 		&AnalysisFeedbackSampleDO{},
 		&FoodRecordDO{},
