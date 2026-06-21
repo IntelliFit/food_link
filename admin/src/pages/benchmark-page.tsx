@@ -37,7 +37,6 @@ import { adminRequest } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { AdminMenuId } from '@/components/admin-sidebar'
 import type {
-  AIItemComparison,
   BenchmarkRun,
   BenchmarkRunSample,
   CreateRunInput,
@@ -845,7 +844,7 @@ export function BenchmarkRunsSection() {
                       <td className="px-3 py-2">{executionModeLabels[run.execution_mode as ExecutionMode]}</td>
                       <td className="px-3 py-2">{run.created_by_username || '-'}</td>
                       <td className="px-3 py-2">{run.sample_count}</td>
-                      <td className="px-3 py-2">{formatRate(run.metrics?.name_match_rate)}</td>
+                      <td className="px-3 py-2">{formatPct(run.metrics?.name_match_rate)}</td>
                       <td className="px-3 py-2">{formatPct(run.metrics?.total_weight_mape)}</td>
                       <td className="px-3 py-2 text-muted-foreground">{formatTime(run.completed_at)}</td>
                       <td className="px-3 py-2 text-right">
@@ -993,14 +992,12 @@ export function BenchmarkRunDetailSection() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-4">
-            <MetricCard label="名称匹配率" value={formatRate(run.metrics?.name_match_rate)} />
-            <MetricCard label="AI 名称准确率" value={formatRate(run.metrics?.ai_name_accuracy_rate)} />
-            <MetricCard label="AI 名称召回率" value={formatRate(run.metrics?.ai_name_recall_rate)} />
+            <MetricCard label="名称匹配率" value={formatPct(run.metrics?.name_match_rate)} />
+            <MetricCard label="总重 MAPE" value={formatPct(run.metrics?.total_weight_mape)} />
+            <MetricCard label="总重 RMSE" value={formatNumber(run.metrics?.total_weight_rmse) + 'g'} />
             <MetricCard label="平均耗时" value={formatNumber(run.metrics?.average_duration_ms ? run.metrics.average_duration_ms / 1000 : undefined) + 's'} />
             <MetricCard label="完成" value={String(run.metrics?.completed_count || 0)} />
             <MetricCard label="失败" value={String(run.metrics?.failed_count || 0)} />
-            <MetricCard label="总重 MAPE" value={formatPct(run.metrics?.total_weight_mape)} />
-            <MetricCard label="总重 RMSE" value={formatNumber(run.metrics?.total_weight_rmse) + 'g'} />
             <MetricCard label="分项 MAPE" value={formatPct(run.metrics?.item_weight_mape)} />
             <MetricCard label="分项 RMSE" value={formatNumber(run.metrics?.item_weight_rmse) + 'g'} />
           </div>
@@ -1008,6 +1005,11 @@ export function BenchmarkRunDetailSection() {
             <div className="mt-4 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
               {run.error_message}
+            </div>
+          )}
+          {run.evaluation_algorithm_version && (
+            <div className="mt-4 text-right text-xs text-muted-foreground">
+              评测算法版本：{run.evaluation_algorithm_version}
             </div>
           )}
         </CardContent>
@@ -1027,7 +1029,6 @@ export function BenchmarkRunDetailSection() {
                   <th className="px-3 py-2 text-left">样本名</th>
                   <th className="px-3 py-2 text-left">标注</th>
                   <th className="px-3 py-2 text-left">名称匹配</th>
-                  <th className="px-3 py-2 text-left">AI 准确率</th>
                   <th className="px-3 py-2 text-left">总重误差</th>
                   <th className="px-3 py-2 text-left">分项对比</th>
                   <th className="px-3 py-2 text-left">耗时</th>
@@ -1037,9 +1038,9 @@ export function BenchmarkRunDetailSection() {
               </thead>
               <tbody>
                 {loading && samples.length === 0 ? (
-                  <tr><td colSpan={11} className="p-6"><Skeleton className="h-8 w-full" /></td></tr>
+                  <tr><td colSpan={10} className="p-6"><Skeleton className="h-8 w-full" /></td></tr>
                 ) : samples.length === 0 ? (
-                  <tr><td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">暂无样本结果</td></tr>
+                  <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">暂无样本结果</td></tr>
                 ) : (
                   samples.map((s) => (
                     <tr key={s.id} className="border-b last:border-b-0 hover:bg-muted/30">
@@ -1060,15 +1061,6 @@ export function BenchmarkRunDetailSection() {
                       <td className="px-3 py-2 font-medium">{s.sample_name || '-'}</td>
                       <td className="px-3 py-2 max-w-[200px] truncate" title={runSampleLabelSummary(s)}>{runSampleLabelSummary(s)}</td>
                       <td className="px-3 py-2">{s.metrics?.name_matched ? '✅' : '❌'}</td>
-                      <td className="px-3 py-2">
-                        {s.metrics?.ai_name_accuracy !== undefined ? (
-                          <span className={s.metrics.ai_name_matched ? 'text-emerald-600' : 'text-amber-600'}>
-                            {formatRate(s.metrics.ai_name_accuracy)}
-                          </span>
-                        ) : (
-                          '-'
-                        )}
-                      </td>
                       <td className="px-3 py-2">{formatPct(s.metrics?.total_weight_error_pct)}</td>
                       <td className="px-3 py-2">{comparisonSummary(s.metrics?.item_comparisons)}</td>
                       <td className="px-3 py-2">{formatNumber(s.metrics?.duration_ms ? s.metrics.duration_ms / 1000 : undefined)}s</td>
@@ -1122,11 +1114,10 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
     { key: 'nutrition', label: 'Nutrition 查询' },
     { key: 'suggest_ratio', label: 'Suggest Ratio' },
     { key: 'final', label: 'Final 输出' },
+    { key: 'ai_name_matching', label: 'AI 名称匹配' },
   ]
 
   const comparisons: ItemComparison[] = sample.metrics?.item_comparisons || []
-  const aiComparisons: AIItemComparison[] = sample.metrics?.ai_item_comparisons || []
-  const aiStage = sample.stage_outputs?.ai_name_matching as Record<string, any> | undefined
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -1217,47 +1208,6 @@ function RunSampleDetailModal({ sample, onClose }: { sample: BenchmarkRunSample;
             </div>
           )}
 
-          {(aiComparisons.length > 0 || aiStage) && (
-            <div>
-              <h4 className="mb-2 flex items-center gap-2 font-semibold">
-                AI 名称匹配
-                {aiStage?.fallback && <Badge variant="outline" className="text-xs text-amber-600">降级</Badge>}
-              </h4>
-              <div className="mb-2 flex flex-wrap gap-4 text-sm">
-                <div><span className="text-muted-foreground">准确率:</span> {formatRate(sample.metrics?.ai_name_accuracy)}</div>
-                <div><span className="text-muted-foreground">召回率:</span> {formatRate(sample.metrics?.ai_name_recall)}</div>
-                <div><span className="text-muted-foreground">多检:</span> {sample.metrics?.ai_extra_predictions ?? '-'}</div>
-                <div><span className="text-muted-foreground">漏检:</span> {sample.metrics?.ai_unmatched_gt ?? '-'}</div>
-              </div>
-              {aiComparisons.length > 0 && (
-                <div className="overflow-x-auto rounded-md border">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50 text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 text-left">预测</th>
-                        <th className="px-3 py-2 text-left">标注</th>
-                        <th className="px-3 py-2 text-center">匹配</th>
-                        <th className="px-3 py-2 text-left">判断理由</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {aiComparisons.map((c, idx) => (
-                        <tr key={idx} className="border-b last:border-b-0">
-                          <td className="px-3 py-2">{c.pred_name || '-'}</td>
-                          <td className="px-3 py-2">{c.gt_name || '-'}</td>
-                          <td className="px-3 py-2 text-center">
-                            {c.matched ? '✅' : c.extra ? '⚠️ 多检' : '❌'}
-                          </td>
-                          <td className="px-3 py-2 text-muted-foreground">{c.reason || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
           {sample.error_message && (
             <div className="rounded-md border border-destructive/20 bg-destructive/5 p-4">
               <h4 className="mb-2 flex items-center gap-2 font-semibold text-destructive">
@@ -1315,13 +1265,6 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 function formatPct(value: number | undefined): string {
   if (value === undefined || value === null || isNaN(value)) return '-'
   return `${value.toFixed(2)}%`
-}
-
-// formatRate formats a ratio in [0,1] as a percentage
-// (e.g. backend name_match_rate where 0.5 means 50%).
-function formatRate(value: number | undefined): string {
-  if (value === undefined || value === null || isNaN(value)) return '-'
-  return `${(value * 100).toFixed(2)}%`
 }
 
 function formatNumber(value: number | undefined): string {

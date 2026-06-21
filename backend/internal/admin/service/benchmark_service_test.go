@@ -563,7 +563,7 @@ func TestBenchmarkService_RunMetricsSerialization(t *testing.T) {
 		SampleCount:       2,
 		CompletedCount:    1,
 		FailedCount:       1,
-		NameMatchRate:     0.5,
+		NameMatchRate:     50,
 		TotalWeightMAPE:   10,
 		TotalWeightRMSE:   5,
 		ItemWeightMAPE:    8,

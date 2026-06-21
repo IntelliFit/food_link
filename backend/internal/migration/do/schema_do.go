@@ -1223,9 +1223,10 @@ type BenchmarkRunDO struct {
 	ExecutionMode       string         `gorm:"column:execution_mode;type:text;not null"`
 	ModelConfig         map[string]any `gorm:"column:model_config;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
 	SampleCount         int            `gorm:"column:sample_count;type:integer;not null;default:0"`
-	Metrics             map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	StageOutputsSummary map[string]any `gorm:"column:stage_outputs_summary;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
-	ErrorMessage        *string        `gorm:"column:error_message;type:text"`
+	Metrics                  map[string]any `gorm:"column:metrics;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	StageOutputsSummary      map[string]any `gorm:"column:stage_outputs_summary;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	EvaluationAlgorithmVersion string         `gorm:"column:evaluation_algorithm_version;type:text"`
+	ErrorMessage             *string        `gorm:"column:error_message;type:text"`
 	StartedAt           *time.Time     `gorm:"column:started_at;type:timestamptz"`
 	CompletedAt         *time.Time     `gorm:"column:completed_at;type:timestamptz"`
 	CreatedBy           *string        `gorm:"column:created_by;type:uuid"`

@@ -2264,7 +2264,8 @@ $date-capsule-selected-bg: rgb(0 188 125 / 55%);
 
 // 超标提示占位槽：预留固定高度，避免有/无提示时三列对齐错乱
 .macro-excess-slot {
-  height: 6rpx;
+  height: 22rpx;
+  margin-bottom: 6rpx;
   display: flex;
   align-items: center;
   justify-content: flex-start;

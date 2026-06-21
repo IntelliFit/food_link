@@ -169,16 +169,17 @@ func (s *BenchmarkService) CreateRun(ctx context.Context, adminID string, input 
 	}
 
 	run := &do.BenchmarkRunDO{
-		ID:                uuid.New().String(),
-		Name:              input.Name,
-		Status:            domain.BenchmarkRunStatusPending,
-		DatasetFilter:     input.DatasetFilter.ToMap(),
-		ExecutionMode:     mode,
-		ModelConfig:       input.ModelConfig.ToMap(),
-		SampleCount:       len(samples),
-		Metrics:           map[string]any{},
-		CreatedBy:         ptrString(adminID),
-		CreatedByUsername: ptrString(createdByUsername),
+		ID:                         uuid.New().String(),
+		Name:                       input.Name,
+		Status:                     domain.BenchmarkRunStatusPending,
+		DatasetFilter:              input.DatasetFilter.ToMap(),
+		ExecutionMode:              mode,
+		ModelConfig:                input.ModelConfig.ToMap(),
+		SampleCount:                len(samples),
+		Metrics:                    map[string]any{},
+		EvaluationAlgorithmVersion: domain.BenchmarkEvaluationAlgorithmVersion,
+		CreatedBy:                  ptrString(adminID),
+		CreatedByUsername:          ptrString(createdByUsername),
 	}
 	now := time.Now()
 	run.CreatedAt = &now
@@ -436,15 +437,13 @@ func (s *BenchmarkService) executeSample(ctx context.Context, runID, userID, mod
 	prediction, stageOutputs := parseTaskResult(task.Result)
 
 	// AI 名称对应步骤：仅用于 benchmark 评测，不影响真实识别算法。
-	aiMetrics, aiStage := s.aiMatchNames(ctx, prediction, sample.GroundTruth, imageURLs)
+	// 其结果会作为 comparePredictionWithGroundTruth 的输入，用于生成分项对比和重量误差。
+	aiMatch, aiStage := s.aiMatchNames(ctx, prediction, sample.GroundTruth, imageURLs)
 	if aiStage != nil {
 		stageOutputs["ai_name_matching"] = aiStage
 	}
 
-	metrics := comparePredictionWithGroundTruth(prediction, sample.GroundTruth)
-	if aiMetrics != nil {
-		mergeAIMetrics(metrics, aiMetrics)
-	}
+	metrics := comparePredictionWithGroundTruth(prediction, sample.GroundTruth, aiMatch)
 	metrics.DurationMs = float64(time.Since(startedAt).Milliseconds())
 
 	updates := map[string]any{
@@ -465,7 +464,8 @@ func (s *BenchmarkService) executeSample(ctx context.Context, runID, userID, mod
 
 // aiMatchNames 让 AI 判断预测食物名称与标注食物名称的对应关系。
 // 该步骤仅在 benchmark 评测中使用，不影响真实识别算法。
-func (s *BenchmarkService) aiMatchNames(ctx context.Context, prediction, groundTruth map[string]any, imageURLs []string) (*domain.SampleMetrics, map[string]any) {
+// 返回的映射会被 comparePredictionWithGroundTruth 用来计算标准分项对比与重量误差。
+func (s *BenchmarkService) aiMatchNames(ctx context.Context, prediction, groundTruth map[string]any, imageURLs []string) (*aiMatchResult, map[string]any) {
 	labelType, _ := groundTruth["label_type"].(string)
 	if labelType != "items" {
 		return nil, nil
@@ -488,21 +488,21 @@ func (s *BenchmarkService) aiMatchNames(ctx context.Context, prediction, groundT
 		return fallbackNameMatch(predItems, gtItems, err.Error()), map[string]any{"fallback": true, "error": err.Error()}
 	}
 
-	aiMetrics, stage := parseAIMatchResult(raw, predItems, gtItems)
-	if aiMetrics == nil {
+	aiMatch, stage := parseAIMatchResult(raw, predItems, gtItems)
+	if aiMatch == nil {
 		return fallbackNameMatch(predItems, gtItems, "AI 返回结果解析失败"), map[string]any{"fallback": true, "raw": raw}
 	}
-	return aiMetrics, stage
+	return aiMatch, stage
 }
 
-func mergeAIMetrics(dst, src *domain.SampleMetrics) {
-	dst.AINameAccuracy = src.AINameAccuracy
-	dst.AINameRecall = src.AINameRecall
-	dst.AINameMatched = src.AINameMatched
-	dst.AINameMatchDetails = src.AINameMatchDetails
-	dst.AIItemComparisons = src.AIItemComparisons
-	dst.AIExtraPredictions = src.AIExtraPredictions
-	dst.AIUnmatchedGT = src.AIUnmatchedGT
+// aiMatchResult 保存 AI（或降级）给出的预测项与标注项对应关系。
+type aiMatchResult struct {
+	PredToGT      map[int]int
+	GTToPred      map[int]int
+	UnmatchedPred []int
+	UnmatchedGT   []int
+	Fallback      bool
+	Error         string
 }
 
 func buildNameMatchingPrompt(predItems, gtItems []item) string {
@@ -521,14 +521,23 @@ func buildNameMatchingPrompt(predItems, gtItems []item) string {
 	predJSON, _ := json.Marshal(predList)
 	gtJSON, _ := json.Marshal(gtList)
 
-	return fmt.Sprintf(`你正在评测食物图像识别结果。
+	return fmt.Sprintf(`你正在评测食物图像识别结果，原图已一并提供，你可以结合图像内容判断。
+
 图片中的真实食物列表（标注）如下：
 %s
 
 AI 预测出的食物列表如下：
 %s
 
-注意：标注没有位置信息，请你根据食物名称的语义判断每个预测项对应的是哪个标注项。一个预测项最多对应一个标注项，一个标注项也最多对应一个预测项。如果某个预测项无法对应到任何标注项，则视为识别错误。
+规则：
+1. 标注没有位置信息，请你根据食物名称的语义判断每个预测项对应的是哪个标注项。
+2. 一个预测项最多对应一个标注项，一个标注项也最多对应一个预测项。
+3. 中文食物名称中，同一食材的不同精度、形态或常见别称通常应视为同一食物，例如：
+   - "熟米"、"白米饭"、"米饭" 视为同一食物
+   - "生鸡胸肉"、"鸡胸肉"、"鸡肉" 视为同一食物
+   - "番茄"、"西红柿" 视为同一食物
+4. 当名称相似且重量也接近时，应优先视为同一项。
+5. 如果某个预测项确实无法对应到任何标注项，则视为识别错误（多检）。
 
 请只返回 JSON，不要附加说明：
 {
@@ -540,15 +549,16 @@ AI 预测出的食物列表如下：
 }`, string(gtJSON), string(predJSON))
 }
 
-func parseAIMatchResult(raw map[string]any, predItems, gtItems []item) (*domain.SampleMetrics, map[string]any) {
+func parseAIMatchResult(raw map[string]any, predItems, gtItems []item) (*aiMatchResult, map[string]any) {
 	matchesAny, ok := raw["matches"].([]any)
 	if !ok {
 		return nil, nil
 	}
 
+	predToGT := make(map[int]int)
+	gtToPred := make(map[int]int)
 	predMatched := make([]bool, len(predItems))
 	gtMatched := make([]bool, len(gtItems))
-	comparisons := make([]map[string]any, 0, len(matchesAny))
 
 	for _, mAny := range matchesAny {
 		m, ok := mAny.(map[string]any)
@@ -561,92 +571,45 @@ func parseAIMatchResult(raw map[string]any, predItems, gtItems []item) (*domain.
 		if v, ok := m["matched"].(bool); ok {
 			matched = v
 		}
-		reason, _ := m["reason"].(string)
-		predName, _ := m["pred_name"].(string)
-		gtName, _ := m["gt_name"].(string)
-
 		if predIdx < 0 || predIdx >= len(predItems) || gtIdx < 0 || gtIdx >= len(gtItems) {
 			continue
 		}
-		if predName == "" {
-			predName = predItems[predIdx].Name
-		}
-		if gtName == "" {
-			gtName = gtItems[gtIdx].Name
-		}
-
-		comparisons = append(comparisons, map[string]any{
-			"pred_index":  predIdx,
-			"pred_name":   predName,
-			"gt_index":    gtIdx,
-			"gt_name":     gtName,
-			"matched":     matched,
-			"reason":      reason,
-		})
 		if matched {
+			predToGT[predIdx] = gtIdx
+			gtToPred[gtIdx] = predIdx
 			predMatched[predIdx] = true
 			gtMatched[gtIdx] = true
 		}
 	}
 
-	// 额外预测项：未在 matches 中标记为 matched 的预测项
-	extraCount := 0
+	var unmatchedPred, unmatchedGT []int
 	for i, matched := range predMatched {
 		if !matched {
-			extraCount++
-			comparisons = append(comparisons, map[string]any{
-				"pred_index": i,
-				"pred_name":  predItems[i].Name,
-				"gt_index":   -1,
-				"gt_name":    "",
-				"matched":    false,
-				"extra":      true,
-				"reason":     "无法对应到任何标注项",
-			})
+			unmatchedPred = append(unmatchedPred, i)
 		}
 	}
-
-	unmatchedGT := 0
-	gtDetails := make([]bool, len(gtItems))
 	for i, matched := range gtMatched {
-		gtDetails[i] = matched
 		if !matched {
-			unmatchedGT++
+			unmatchedGT = append(unmatchedGT, i)
 		}
-	}
-
-	accuracy := 0.0
-	if len(predItems) > 0 {
-		accuracy = float64(len(predItems)-extraCount) / float64(len(predItems))
-	}
-	recall := 0.0
-	if len(gtItems) > 0 {
-		recall = float64(len(gtItems)-unmatchedGT) / float64(len(gtItems))
 	}
 
 	stage := map[string]any{
 		"matches":                raw["matches"],
-		"unmatched_pred_indices": raw["unmatched_pred_indices"],
-		"unmatched_gt_indices":   raw["unmatched_gt_indices"],
-		"accuracy":               accuracy,
-		"recall":                 recall,
+		"unmatched_pred_indices": unmatchedPred,
+		"unmatched_gt_indices":   unmatchedGT,
 	}
-
-	return &domain.SampleMetrics{
-		AINameAccuracy:     accuracy,
-		AINameRecall:       recall,
-		AINameMatched:      accuracy == 1.0 && recall == 1.0,
-		AINameMatchDetails: gtDetails,
-		AIItemComparisons:  comparisons,
-		AIExtraPredictions: extraCount,
-		AIUnmatchedGT:      unmatchedGT,
+	return &aiMatchResult{
+		PredToGT:      predToGT,
+		GTToPred:      gtToPred,
+		UnmatchedPred: unmatchedPred,
+		UnmatchedGT:   unmatchedGT,
 	}, stage
 }
 
-func fallbackNameMatch(predItems, gtItems []item, reason string) *domain.SampleMetrics {
-	predMatched := make([]bool, len(predItems))
-	gtMatched := make([]bool, len(gtItems))
-	comparisons := make([]map[string]any, 0)
+func fallbackNameMatch(predItems, gtItems []item, reason string) *aiMatchResult {
+	predToGT := make(map[int]int)
+	gtToPred := make(map[int]int)
 
 	usedPred := make([]bool, len(predItems))
 	for gi, gt := range gtItems {
@@ -661,65 +624,32 @@ func fallbackNameMatch(predItems, gtItems []item, reason string) *domain.SampleM
 				bestScore = score
 			}
 		}
-		matched := bestIdx >= 0 && bestScore >= 0.8
-		row := map[string]any{
-			"pred_index": bestIdx,
-			"gt_index":   gi,
-			"gt_name":    gt.Name,
-			"matched":    matched,
-			"reason":     fmt.Sprintf("字符串相似度降级匹配 (score=%.2f)", bestScore),
-		}
-		if bestIdx >= 0 {
-			row["pred_name"] = predItems[bestIdx].Name
-			if matched {
-				usedPred[bestIdx] = true
-				predMatched[bestIdx] = true
-				gtMatched[gi] = true
-			}
-		}
-		comparisons = append(comparisons, row)
-	}
-
-	extraCount := 0
-	for pi, matched := range predMatched {
-		if !matched {
-			extraCount++
-			comparisons = append(comparisons, map[string]any{
-				"pred_index": pi,
-				"pred_name":  predItems[pi].Name,
-				"gt_index":   -1,
-				"gt_name":    "",
-				"matched":    false,
-				"extra":      true,
-				"reason":     "字符串相似度降级：无法对应",
-			})
+		if bestIdx >= 0 && bestScore >= 0.8 {
+			usedPred[bestIdx] = true
+			predToGT[bestIdx] = gi
+			gtToPred[gi] = bestIdx
 		}
 	}
 
-	unmatchedGT := 0
-	for _, matched := range gtMatched {
-		if !matched {
-			unmatchedGT++
+	var unmatchedPred, unmatchedGT []int
+	for i, used := range usedPred {
+		if !used {
+			unmatchedPred = append(unmatchedPred, i)
+		}
+	}
+	for gi := range gtItems {
+		if _, ok := gtToPred[gi]; !ok {
+			unmatchedGT = append(unmatchedGT, gi)
 		}
 	}
 
-	accuracy := 0.0
-	if len(predItems) > 0 {
-		accuracy = float64(len(predItems)-extraCount) / float64(len(predItems))
-	}
-	recall := 0.0
-	if len(gtItems) > 0 {
-		recall = float64(len(gtItems)-unmatchedGT) / float64(len(gtItems))
-	}
-
-	return &domain.SampleMetrics{
-		AINameAccuracy:     accuracy,
-		AINameRecall:       recall,
-		AINameMatched:      accuracy == 1.0 && recall == 1.0,
-		AINameMatchDetails: gtMatched,
-		AIItemComparisons:  comparisons,
-		AIExtraPredictions: extraCount,
-		AIUnmatchedGT:      unmatchedGT,
+	return &aiMatchResult{
+		PredToGT:      predToGT,
+		GTToPred:      gtToPred,
+		UnmatchedPred: unmatchedPred,
+		UnmatchedGT:   unmatchedGT,
+		Fallback:      true,
+		Error:         reason,
 	}
 }
 
@@ -792,7 +722,6 @@ func (s *BenchmarkService) computeRunMetrics(ctx context.Context, runID string) 
 	var totalErrors, totalErrorPcts []float64
 	var itemErrors, itemErrorPcts []float64
 	var nameMatchCount int
-	var aiNameAccuracySum, aiNameRecallSum float64
 	var durations []float64
 
 	for _, sample := range res.Items {
@@ -806,8 +735,6 @@ func (s *BenchmarkService) computeRunMetrics(ctx context.Context, runID string) 
 		if metrics.NameMatched {
 			nameMatchCount++
 		}
-		aiNameAccuracySum += metrics.AINameAccuracy
-		aiNameRecallSum += metrics.AINameRecall
 		if metrics.TotalWeightErrorPct > 0 || metrics.TotalWeightError != 0 {
 			totalErrors = append(totalErrors, metrics.TotalWeightError)
 			totalErrorPcts = append(totalErrorPcts, metrics.TotalWeightErrorPct)
@@ -820,9 +747,7 @@ func (s *BenchmarkService) computeRunMetrics(ctx context.Context, runID string) 
 	}
 
 	if m.SampleCount > 0 {
-		m.NameMatchRate = float64(nameMatchCount) / float64(m.SampleCount)
-		m.AINameAccuracyRate = aiNameAccuracySum / float64(m.SampleCount)
-		m.AINameRecallRate = aiNameRecallSum / float64(m.SampleCount)
+		m.NameMatchRate = float64(nameMatchCount) / float64(m.SampleCount) * 100
 	}
 	m.TotalWeightMAPE = mape(totalErrorPcts)
 	m.TotalWeightRMSE = rmse(totalErrors)
@@ -920,12 +845,51 @@ func parseTaskResult(result map[string]any) (prediction map[string]any, stageOut
 	return
 }
 
-func comparePredictionWithGroundTruth(prediction, groundTruth map[string]any) *domain.SampleMetrics {
+func comparePredictionWithGroundTruth(prediction, groundTruth map[string]any, aiMatch ...*aiMatchResult) *domain.SampleMetrics {
 	m := &domain.SampleMetrics{}
 	labelType, _ := groundTruth["label_type"].(string)
 
 	predItems := extractItems(prediction)
 	gtItems := extractGroundTruthItems(groundTruth)
+
+	var match *aiMatchResult
+	if len(aiMatch) > 0 {
+		match = aiMatch[0]
+	}
+
+	// items 类型且有 AI/降级映射时，直接用映射计算名称匹配和重量误差。
+	if labelType == "items" && match != nil && len(gtItems) > 0 {
+		details := make([]bool, len(gtItems))
+		matched := 0
+		var totalGtWeight, totalPredWeight float64
+		for gi, gt := range gtItems {
+			totalGtWeight += gt.Weight
+			if pi, ok := match.GTToPred[gi]; ok && pi >= 0 && pi < len(predItems) {
+				p := predItems[pi]
+				details[gi] = true
+				matched++
+				err := p.Weight - gt.Weight
+				m.ItemWeightErrors = append(m.ItemWeightErrors, err)
+				totalPredWeight += p.Weight
+				if gt.Weight > 0 {
+					m.ItemWeightErrorPcts = append(m.ItemWeightErrorPcts, math.Abs(err)/gt.Weight*100)
+				}
+			} else {
+				m.ItemWeightErrors = append(m.ItemWeightErrors, -gt.Weight)
+				if gt.Weight > 0 {
+					m.ItemWeightErrorPcts = append(m.ItemWeightErrorPcts, 100)
+				}
+			}
+		}
+		m.NameMatchDetails = details
+		m.NameMatched = matched == len(gtItems)
+		m.TotalWeightError = totalPredWeight - totalGtWeight
+		if totalGtWeight > 0 {
+			m.TotalWeightErrorPct = math.Abs(m.TotalWeightError) / totalGtWeight * 100
+		}
+		m.ItemComparisons = buildItemComparisonsWithAIMatch(gtItems, predItems, match)
+		return m
+	}
 
 	if len(gtItems) > 0 {
 		details := make([]bool, len(gtItems))
@@ -993,6 +957,47 @@ func comparePredictionWithGroundTruth(prediction, groundTruth map[string]any) *d
 		m.ItemComparisons = buildItemComparisons(gtItems, predItems, groundTruth)
 	}
 	return m
+}
+
+func buildItemComparisonsWithAIMatch(gtItems, predItems []item, match *aiMatchResult) []map[string]any {
+	var comparisons []map[string]any
+	usedPred := map[int]bool{}
+	for gi, gt := range gtItems {
+		row := map[string]any{
+			"gt_name":    gt.Name,
+			"gt_weight":  gt.Weight,
+			"matched":    false,
+			"similarity": 0,
+		}
+		if pi, ok := match.GTToPred[gi]; ok && pi >= 0 && pi < len(predItems) {
+			usedPred[pi] = true
+			p := predItems[pi]
+			row["pred_name"] = p.Name
+			row["pred_weight"] = p.Weight
+			row["weight_error"] = p.Weight - gt.Weight
+			row["matched"] = true
+			row["similarity"] = 1
+			if gt.Weight > 0 {
+				row["weight_error_pct"] = math.Abs(p.Weight-gt.Weight) / gt.Weight * 100
+			}
+		}
+		comparisons = append(comparisons, row)
+	}
+	for i, p := range predItems {
+		if usedPred[i] {
+			continue
+		}
+		comparisons = append(comparisons, map[string]any{
+			"gt_name":     "",
+			"gt_weight":   0,
+			"pred_name":   p.Name,
+			"pred_weight": p.Weight,
+			"matched":     false,
+			"similarity":  0,
+			"extra":       true,
+		})
+	}
+	return comparisons
 }
 
 func buildItemComparisons(gtItems, predItems []item, groundTruth map[string]any) []map[string]any {
@@ -1311,36 +1316,29 @@ func toSampleMetrics(m map[string]any) *domain.SampleMetrics {
 			}
 		}
 	}
-	if v, ok := m["ai_name_accuracy"].(float64); ok {
-		s.AINameAccuracy = v
-	}
-	if v, ok := m["ai_name_recall"].(float64); ok {
-		s.AINameRecall = v
-	}
-	if v, ok := m["ai_name_matched"].(bool); ok {
-		s.AINameMatched = v
-	}
-	if arr, ok := m["ai_name_match_details"].([]any); ok {
-		for _, raw := range arr {
-			if b, ok := raw.(bool); ok {
-				s.AINameMatchDetails = append(s.AINameMatchDetails, b)
-			}
-		}
-	}
-	if arr, ok := m["ai_item_comparisons"].([]any); ok {
-		for _, raw := range arr {
-			if row, ok := raw.(map[string]any); ok {
-				s.AIItemComparisons = append(s.AIItemComparisons, row)
-			}
-		}
-	}
-	if v, ok := m["ai_extra_predictions"].(float64); ok {
-		s.AIExtraPredictions = int(v)
-	}
-	if v, ok := m["ai_unmatched_gt"].(float64); ok {
-		s.AIUnmatchedGT = int(v)
-	}
+	s.ItemWeightErrors = appendFloatSlice(s.ItemWeightErrors, m["item_weight_errors"])
+	s.ItemWeightErrorPcts = appendFloatSlice(s.ItemWeightErrorPcts, m["item_weight_error_pcts"])
 	return s
+}
+
+func appendFloatSlice(dst []float64, v any) []float64 {
+	arr, ok := v.([]any)
+	if !ok {
+		return dst
+	}
+	for _, raw := range arr {
+		switch n := raw.(type) {
+		case float64:
+			dst = append(dst, n)
+		case float32:
+			dst = append(dst, float64(n))
+		case int:
+			dst = append(dst, float64(n))
+		case int64:
+			dst = append(dst, float64(n))
+		}
+	}
+	return dst
 }
 
 func ptrString(s string) *string {

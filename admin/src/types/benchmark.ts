@@ -62,6 +62,7 @@ export interface BenchmarkRun {
   sample_count: number
   metrics: RunMetrics
   stage_outputs_summary: Record<string, any>
+  evaluation_algorithm_version?: string
   error_message?: string
   started_at?: string
   completed_at?: string
@@ -76,8 +77,6 @@ export interface RunMetrics {
   completed_count: number
   failed_count: number
   name_match_rate: number
-  ai_name_accuracy_rate: number
-  ai_name_recall_rate: number
   total_weight_mape: number
   total_weight_rmse: number
   item_weight_mape: number
@@ -106,24 +105,6 @@ export interface SampleMetrics {
   item_weight_error_pcts?: number[]
   item_comparisons?: ItemComparison[]
   duration_ms?: number
-  // AI 名称匹配指标（仅用于 benchmark 评测）
-  ai_name_accuracy?: number
-  ai_name_recall?: number
-  ai_name_matched?: boolean
-  ai_name_match_details?: boolean[]
-  ai_item_comparisons?: AIItemComparison[]
-  ai_extra_predictions?: number
-  ai_unmatched_gt?: number
-}
-
-export interface AIItemComparison {
-  pred_index?: number
-  pred_name?: string
-  gt_index?: number
-  gt_name?: string
-  matched: boolean
-  extra?: boolean
-  reason?: string
 }
 
 export interface BenchmarkRunSample {
