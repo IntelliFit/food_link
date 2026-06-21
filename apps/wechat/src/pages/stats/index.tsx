@@ -295,7 +295,7 @@ const ANALYSIS_PANEL_TABS: Array<{ key: AnalysisPanelKey; label: string }> = [
   { key: 'structure', label: '热量分布' },
 ]
 
-const DEFAULT_RISK_KEYS = ['hypertension', 'diabetes', 'cardio', 'weight']
+const DEFAULT_RISK_KEYS = ['hypertension', 'diabetes', 'cardio', 'weight', 'micronutrient']
 const RISK_PREF_STORAGE_KEY = 'stats_risk_focus_keys'
 
 function isCustomRiskKey(key: string): boolean {
@@ -368,6 +368,7 @@ function riskCardIcon(key: string): string {
     case 'weight': return 'weight-scale'
     case 'colorectal': return 'a-144-lvye'
     case 'longevity': return 'shangzhang'
+    case 'micronutrient': return 'yiliaohangyedeICON-'
     default: return 'target'
   }
 }
@@ -381,6 +382,7 @@ function riskCardIconColor(key: string, isDark: boolean): string {
       case 'weight': return '#4ade80'
       case 'colorectal': return '#a3e635'
       case 'longevity': return '#c084fc'
+      case 'micronutrient': return '#38bdf8'
       default: return '#34d399'
     }
   }
@@ -391,6 +393,7 @@ function riskCardIconColor(key: string, isDark: boolean): string {
     case 'weight': return '#5aa86e'
     case 'colorectal': return '#8ab060'
     case 'longevity': return '#a070b0'
+    case 'micronutrient': return '#3b82f6'
     default: return '#5aa896'
   }
 }
@@ -404,6 +407,7 @@ function riskCardIconBgColor(key: string, isDark: boolean): string {
       case 'weight': return 'rgba(74, 222, 128, 0.16)'
       case 'colorectal': return 'rgba(163, 230, 53, 0.16)'
       case 'longevity': return 'rgba(192, 132, 252, 0.16)'
+      case 'micronutrient': return 'rgba(56, 189, 248, 0.16)'
       default: return 'rgba(52, 211, 153, 0.16)'
     }
   }
@@ -414,6 +418,7 @@ function riskCardIconBgColor(key: string, isDark: boolean): string {
     case 'weight': return '#f0fdf4'
     case 'colorectal': return '#f4fbea'
     case 'longevity': return '#faf5ff'
+    case 'micronutrient': return '#eff6ff'
     default: return '#f0fdf9'
   }
 }
@@ -461,6 +466,7 @@ function riskCardBgGradient(key: string): string {
     case 'weight': return 'linear-gradient(145deg, #dcfce7 0%, #ffffff 22%, #ffffff 100%)'
     case 'colorectal': return 'linear-gradient(145deg, #ecfccb 0%, #ffffff 22%, #ffffff 100%)'
     case 'longevity': return 'linear-gradient(145deg, #f3e8ff 0%, #ffffff 22%, #ffffff 100%)'
+    case 'micronutrient': return 'linear-gradient(145deg, #e0f2fe 0%, #ffffff 22%, #ffffff 100%)'
     default: return 'linear-gradient(145deg, #dcfce7 0%, #ffffff 22%, #ffffff 100%)'
   }
 }
@@ -576,7 +582,9 @@ function StatsPage() {
       const stored = Taro.getStorageSync(RISK_PREF_STORAGE_KEY)
       if (Array.isArray(stored)) {
         const cleaned = stored.map(item => String(item || '').trim()).filter(Boolean)
-        return cleaned.length > 0 ? cleaned : DEFAULT_RISK_KEYS
+        if (cleaned.length === 0) return DEFAULT_RISK_KEYS
+        const merged = Array.from(new Set([...DEFAULT_RISK_KEYS, ...cleaned]))
+        return merged
       }
     } catch {
       // ignore

@@ -156,6 +156,10 @@ func (m *mockStatsRepo) TouchPetChatSession(ctx context.Context, sessionID, user
 	return nil
 }
 
+func (m *mockStatsRepo) ListPetChatSessions(ctx context.Context, userID string, limit int) ([]domain.PetChatSession, error) {
+	return nil, nil
+}
+
 type mockBodyMetricsProvider struct {
 	summary *BodyMetricsSummary
 }

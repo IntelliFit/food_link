@@ -81,6 +81,16 @@ func buildIdealComputation() *statsComputation {
 			"carbs":   45,
 			"fat":     28,
 		},
+		MicronutrientDaily: map[string]float64{
+			"fiber":          30,
+			"sodiumMg":       1800,
+			"potassiumMg":    3600,
+			"calciumMg":      900,
+			"ironMg":         15,
+			"vitaminARaeMcg": 800,
+			"vitaminCMg":     120,
+			"vitaminDMcg":    12,
+		},
 		RecordedDays: 5,
 	}
 }
@@ -108,10 +118,20 @@ func TestHealthIndex_IdealDietCanReachHighScore(t *testing.T) {
 	assert.GreaterOrEqual(t, idx.OverallScore, 95)
 
 	for _, card := range idx.RiskCards {
-		if card.Key == "hypertension" || card.Key == "diabetes" || card.Key == "cardio" || card.Key == "weight" {
+		if card.Key == "hypertension" || card.Key == "diabetes" || card.Key == "cardio" || card.Key == "weight" || card.Key == "micronutrient" {
 			assert.GreaterOrEqual(t, card.Score, 95, card.Key)
 		}
 	}
+	assert.True(t, len(idx.AllRiskOptions) > 0 && containsRiskOption(idx.AllRiskOptions, "micronutrient"), "micronutrient option should exist")
+}
+
+func containsRiskOption(options []RiskOption, key string) bool {
+	for _, o := range options {
+		if o.Key == key {
+			return true
+		}
+	}
+	return false
 }
 
 func TestHealthIndex_InsufficientDataGate(t *testing.T) {
