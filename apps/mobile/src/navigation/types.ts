@@ -65,7 +65,7 @@ export type RootStackParamList = {
   AnalyzeLoading: { taskId?: string; imageUri?: string; imageUris?: string[]; mealType: MealType; date: string; task?: AnalysisTask; taskType?: 'food' | 'food_text' | 'exercise'; executionMode?: ExecutionMode } | undefined
   Result: { task: AnalysisTask; imageUri?: string; mealType: MealType; date: string }
   TextResult: { task: AnalysisTask; mealType: MealType; date: string }
-  TextRecord: undefined
+  TextRecord: { date?: string; mealType?: MealType } | undefined
   ManualRecord:
     | { quickItem?: ManualFoodItem; sourceChannel?: ManualRecordSourceChannel; date?: string; mealType?: MealType }
     | undefined

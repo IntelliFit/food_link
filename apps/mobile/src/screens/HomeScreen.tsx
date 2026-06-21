@@ -4,10 +4,12 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 import { getMealTypeLabel, inferDefaultMealTypeFromLocalTime, type BodyMetricWaterDay, type BodyMetricWeightEntry, type HomeDashboard, type StatsSummary } from '@food-link/core'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useAuth } from '../providers/AuthProvider'
 import { apiClient } from '../api'
 import { FloatingPetCompanion } from '../components/FloatingPetCompanion'
 import { HomeMicrosSection } from '../components/HomeMicrosSection'
 import { IconfontText } from '../components/Iconfont'
+import { RecordActionSheet, type RecordAction } from '../components/RecordActionSheet'
 import { SHOW_DEBUG_LOGIN } from '../config'
 import { useHomeDashboard } from '../hooks/useHomeDashboard'
 import type { RootStackParamList } from '../navigation/types'
@@ -16,6 +18,7 @@ import { useColorScheme } from '../providers/ColorSchemeProvider'
 import { colors, compactFont } from '../theme'
 import { formatShortDate, todayKey } from '../utils/date'
 import { userFacingErrorMessage } from '../utils/errors'
+import { consumeHomeRecordMenuDate, onHomeRecordMenuRequest } from '../utils/home-record-menu'
 import { getHomePetCollapsed, getHomePetHidden, setHomePetCollapsed as persistHomePetCollapsed } from '../utils/petPreferences'
 
 type TargetField = 'calorieTarget' | 'proteinTarget' | 'carbsTarget' | 'fatTarget'
@@ -66,12 +69,25 @@ const CAFETERIA_HERO_BG_URL = 'https://cdn-food-images.coachlink.fit/wechat/cafe
 export function HomeScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>()
   const dialog = useAppDialog()
+  const { isAuthenticated } = useAuth()
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
   const { isDark } = useColorScheme()
   const [selectedDate, setSelectedDate] = useState(() => todayKey())
-  const { recordDate, dashboard, petSummary, weekStats, bodyMetrics, exerciseBurnedKcal, loading, error, loadHome } = useHomeDashboard(selectedDate)
+  const {
+    recordDate,
+    dashboard,
+    petSummary,
+    weekStats,
+    bodyMetrics,
+    exerciseBurnedKcal,
+    loading,
+    syncing,
+    error,
+    loadHome,
+  } = useHomeDashboard(selectedDate)
   const [activeBannerIndex, setActiveBannerIndex] = useState(0)
+  const [showRecordMenu, setShowRecordMenu] = useState(false)
   const [showTargetEditor, setShowTargetEditor] = useState(false)
   const [savingTargets, setSavingTargets] = useState(false)
   const [homePetHidden, setHomePetHidden] = useState(false)
@@ -87,6 +103,7 @@ export function HomeScreen() {
   const calorieProgress = calorieTarget > 0 ? Math.min(100, Math.max(0, (calorieCurrent / calorieTarget) * 100)) : 0
   const calorieRemaining = Math.max(0, calorieTarget - calorieCurrent)
   const isCalorieOver = calorieTarget > 0 && calorieCurrent > calorieTarget
+  const dashboardBusy = loading || syncing
 
   // 体重/喝水/运动（与微信小程序首页逻辑对齐）
   const weightSummary = useMemo(() => {
@@ -161,6 +178,40 @@ export function HomeScreen() {
   const openAnalyze = useCallback((source: 'camera' | 'library') => {
     navigation.navigate('Analyze', { source, mealType, date: recordDate })
   }, [navigation, mealType, recordDate])
+
+  const openRecordMenuFromRequest = useCallback(() => {
+    void consumeHomeRecordMenuDate().then((pendingDate) => {
+      if (pendingDate) {
+        setSelectedDate(pendingDate)
+      }
+      setShowRecordMenu(true)
+    })
+  }, [])
+
+  const handleSelectRecordAction = useCallback((action: RecordAction) => {
+    setShowRecordMenu(false)
+    if (!isAuthenticated) {
+      void navigation.getParent()?.navigate('Login')
+      return
+    }
+    if (action === 'camera' || action === 'library') {
+      openAnalyze(action)
+      return
+    }
+    if (action === 'text') {
+      navigation.navigate('TextRecord', { date: recordDate, mealType })
+      return
+    }
+    if (action === 'manual') {
+      navigation.navigate('ManualRecord', { date: recordDate, mealType })
+      return
+    }
+    if (action === 'recipes') {
+      navigation.navigate('Recipes')
+      return
+    }
+    navigation.navigate('AnalyzeHistory')
+  }, [isAuthenticated, mealType, navigation, openAnalyze, recordDate])
 
   useEffect(() => {
     if (!showTargetEditor) {
@@ -297,6 +348,7 @@ export function HomeScreen() {
           onOpenTargetEditor={openTargetEditor}
           nutritionExpanded={nutritionExpanded}
           onToggleNutrition={() => setNutritionExpanded((v) => !v)}
+          isDark={isDark}
           themeColors={themeColors}
         />
         <HomeBodyStatusStrip
@@ -316,12 +368,13 @@ export function HomeScreen() {
           onQuickRecord={() => openAnalyze('camera')}
           onOpenHistory={() => navigation.navigate('AnalyzeHistory')}
           onOpenRecord={(recordId) => navigation.navigate('RecordDetail', { recordId })}
+          isDark={isDark}
           themeColors={themeColors}
         />
         <HomeExpirySection
           summary={dashboard?.expirySummary || null}
-          onOpen={() => navigation.navigate('Expiry')}
           themeColors={themeColors}
+          onOpen={() => navigation.navigate('Expiry')}
         />
         <HomeStatsEntry onPress={() => navigation.navigate('DayRecord', { date: recordDate })} />
         {SHOW_DEBUG_LOGIN ? (
@@ -674,6 +727,7 @@ function HomeCalorieCard({
   onOpenTargetEditor,
   nutritionExpanded,
   onToggleNutrition,
+  isDark,
   themeColors,
 }: {
   current: number
@@ -685,6 +739,7 @@ function HomeCalorieCard({
   onOpenTargetEditor: () => void
   nutritionExpanded: boolean
   onToggleNutrition: () => void
+  isDark: boolean
   themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   return (
@@ -937,6 +992,7 @@ function HomeMealsSection({
   onQuickRecord,
   onOpenHistory,
   onOpenRecord,
+  isDark,
   themeColors,
 }: {
   meals: HomeDashboard['meals']
@@ -944,6 +1000,7 @@ function HomeMealsSection({
   onQuickRecord: () => void
   onOpenHistory: () => void
   onOpenRecord: (recordId: string) => void
+  isDark: boolean
   themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   return (
@@ -1006,9 +1063,11 @@ function HomeMealsSection({
 function HomeExpirySection({
   summary,
   onOpen,
+  themeColors,
 }: {
   summary: HomeDashboard['expirySummary'] | null
   onOpen: () => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
 }) {
   const items = summary?.preview_items || []
   return (
@@ -1063,10 +1122,14 @@ function HomeStatsEntry({ onPress }: { onPress: () => void }) {
   )
 }
 
-function HomeMiniAction({ label, onPress }: { label: string; onPress: () => void }) {
+function HomeMiniAction({ label, onPress, themeColors }: {
+  label: string
+  onPress: () => void
+  themeColors: ReturnType<typeof useHomeThemeColors>
+}) {
   return (
     <Pressable style={({ pressed }) => [styles.homeMiniAction, pressed && styles.pressed]} onPress={onPress}>
-      <Text style={styles.homeMiniActionText}>{label}</Text>
+      <Text style={[styles.homeMiniActionText, { color: themeColors?.miniActionText }]}>{label}</Text>
     </Pressable>
   )
 }
