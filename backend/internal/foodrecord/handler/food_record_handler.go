@@ -3,10 +3,12 @@ package handler
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
 	"math"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -258,7 +260,7 @@ func (h *FoodRecordHandler) ShareFoodRecordPage(c *gin.Context) {
 	recordID := c.Param("record_id")
 	record, err := h.recordSvc.Share(c.Request.Context(), recordID)
 	if err != nil {
-		response.Error(c, err)
+		renderFoodRecordSharePageError(c, recordID, err)
 		return
 	}
 	data := buildFoodRecordSharePageData(c, record)
@@ -694,6 +696,47 @@ func buildFoodRecordSharePageData(c *gin.Context, record *domain.FoodRecord) foo
 		Carbs:       shareFloat(record.TotalCarbs),
 		Fat:         shareFloat(record.TotalFat),
 		Foods:       foods,
+	}
+}
+
+func renderFoodRecordSharePageError(c *gin.Context, recordID string, err error) {
+	status, title, message := foodRecordSharePageErrorMeta(err)
+	logFoodRecordAPI(c, "share_page_failed",
+		slog.String("record_id", recordID),
+		slog.Int("http.status_code", status),
+		slog.String("error", err.Error()),
+	)
+	body := fmt.Sprintf(`<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>%s</title>
+  <style>
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f6fbf7;color:#17261d}
+    main{max-width:560px;margin:0 auto;padding:72px 24px}
+    h1{font-size:24px;line-height:1.3;margin:0 0 12px}
+    p{font-size:16px;line-height:1.7;color:#52605a;margin:0}
+  </style>
+</head>
+<body><main><h1>%s</h1><p>%s</p></main></body>
+</html>`,
+		template.HTMLEscapeString(title),
+		template.HTMLEscapeString(title),
+		template.HTMLEscapeString(message),
+	)
+	c.Data(status, "text/html; charset=utf-8", []byte(body))
+}
+
+func foodRecordSharePageErrorMeta(err error) (int, string, string) {
+	switch {
+	case errors.Is(err, commonerrors.ErrNotFound):
+		return http.StatusNotFound, "记录不存在", "这条饮食记录不存在，或分享链接已经失效。"
+	case errors.Is(err, commonerrors.ErrForbidden):
+		return http.StatusForbidden, "记录未公开", "这条饮食记录当前不可公开查看。"
+	default:
+		return http.StatusInternalServerError, "暂时无法打开", "分享页暂时无法打开，请稍后再试。"
 	}
 }
 

@@ -636,6 +636,14 @@ func TestFoodRecordService_Share(t *testing.T) {
 	assert.Equal(t, commonerrors.ErrNotFound, err)
 }
 
+func TestFoodRecordService_ShareInvalidID(t *testing.T) {
+	svc := NewFoodRecordService(nil, nil, nil)
+
+	_, err := svc.Share(context.Background(), "not-a-real-record")
+
+	require.ErrorIs(t, err, commonerrors.ErrNotFound)
+}
+
 func TestFoodRecordService_Share_PrivateRecords(t *testing.T) {
 	db := setupServiceTestDB(t)
 	r := foodrepo.NewFoodRecordRepo(db)

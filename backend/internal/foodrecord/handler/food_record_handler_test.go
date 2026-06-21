@@ -428,6 +428,34 @@ func TestShareFoodRecordPage(t *testing.T) {
 	assert.False(t, strings.Contains(body, "<script>alert(1)</script>"))
 }
 
+func TestShareFoodRecordPageNotFound(t *testing.T) {
+	mockSvc := &mockFoodRecordService{shareErr: commonerrors.ErrNotFound}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/share/food-record/missing-record", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+	assert.Contains(t, w.Body.String(), "记录不存在")
+}
+
+func TestShareFoodRecordPageForbidden(t *testing.T) {
+	mockSvc := &mockFoodRecordService{shareErr: commonerrors.ErrForbidden}
+	h := NewFoodRecordHandler(mockSvc, nil, nil)
+	r := setupRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/share/food-record/private-record", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+	assert.Contains(t, w.Body.String(), "记录未公开")
+}
+
 func TestShareFoodRecordForbidden(t *testing.T) {
 	mockSvc := &mockFoodRecordService{shareErr: commonerrors.ErrForbidden}
 	h := NewFoodRecordHandler(mockSvc, nil, nil)

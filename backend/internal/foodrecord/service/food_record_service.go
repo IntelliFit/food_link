@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"log/slog"
 	"math"
 	"strconv"
@@ -696,6 +697,13 @@ func (s *FoodRecordService) Delete(ctx context.Context, userID, recordID string)
 }
 
 func (s *FoodRecordService) Share(ctx context.Context, recordID string) (*domain.FoodRecord, error) {
+	recordID = strings.TrimSpace(recordID)
+	if recordID == "" {
+		return nil, commonerrors.ErrNotFound
+	}
+	if _, err := uuid.Parse(recordID); err != nil {
+		return nil, commonerrors.ErrNotFound
+	}
 	record, err := s.recordRepo.GetByID(ctx, recordID)
 	if err != nil {
 		return nil, err

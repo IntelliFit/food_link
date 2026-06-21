@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { ActivityIndicator, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
+import { ActionSheetIOS, ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from 'react-native'
 import * as Clipboard from 'expo-clipboard'
 import * as ImagePicker from 'expo-image-picker'
 import { CommonActions, useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
@@ -353,7 +353,7 @@ export function DayRecordScreen() {
     }
     try {
       const shared = records.length === 1
-        ? await shareFoodRecordToWechatOrSystem(records[0])
+        ? await shareFoodRecordWithOptions(records[0], dialog)
         : await shareTextToSystem(`${date} 饮食记录`, buildDayShareMessage(date, records))
       if (!shared) return
       const reward = await apiClient.claimSharePosterReward({ shareScope: 'daily_food', shareDate: date })
@@ -614,7 +614,7 @@ export function RecordDetailScreen() {
   const shareRecord = async () => {
     if (!record) return
     try {
-      const shared = await shareFoodRecordToWechatOrSystem(record)
+      const shared = await shareFoodRecordWithOptions(record, dialog)
       if (!shared) return
       const reward = await apiClient.claimSharePosterReward({ recordId: record.id })
       await showShareRewardAlert(dialog, reward)
@@ -1062,7 +1062,7 @@ export function AnalyzeHistoryScreen() {
         if (confirmed) openTask(task)
         return
       }
-      const shared = await shareFoodRecordToWechatOrSystem(record)
+      const shared = await shareFoodRecordWithOptions(record, dialog)
       if (!shared) return
       const reward = await apiClient.claimSharePosterReward({ recordId: record.id })
       await showShareRewardAlert(dialog, reward)
@@ -1289,9 +1289,9 @@ export function AnalyzeHistoryScreen() {
                   <Share2 size={17} color={colors.brand} strokeWidth={2.5} />
                 </View>
                 <View style={styles.analyzeHistoryMenuActionCopy}>
-                  <Text style={styles.analyzeHistoryMenuActionText}>分享到微信</Text>
+                  <Text style={styles.analyzeHistoryMenuActionText}>分享</Text>
                   <Text style={styles.analyzeHistoryMenuActionHint}>
-                    {menuTask?.is_recorded === true ? '生成可预览的饮食记录卡片' : '需先保存成饮食记录'}
+                    {menuTask?.is_recorded === true ? '微信、复制链接或更多方式' : '需先保存成饮食记录'}
                   </Text>
                 </View>
               </Pressable>
@@ -6198,11 +6198,20 @@ async function showShareRewardAlert(dialog: AppDialog, result: Awaited<ReturnTyp
   await dialog.alert('分享完成', result.message || (result.claimed ? `分享奖励 +${result.credits || 0} 积分` : '分享已完成'), 'success')
 }
 
-async function shareFoodRecordToWechatOrSystem(record: FoodRecord): Promise<boolean> {
+type FoodRecordShareTarget = 'wechat' | 'copy_link' | 'system' | 'cancel'
+
+async function shareFoodRecordWithOptions(record: FoodRecord, dialog: AppDialog): Promise<boolean> {
   const shareUrl = apiClient.buildFoodRecordShareUrl(record.id)
   const title = buildRecordShareTitle(record)
   const description = buildRecordShareDescription(record)
-  if (isNativeWechatShareAvailable()) {
+  const target = await selectFoodRecordShareTarget(title, shareUrl)
+  if (target === 'cancel') return false
+  if (target === 'copy_link') {
+    await Clipboard.setStringAsync(shareUrl)
+    await dialog.alert('链接已复制', '可以粘贴到微信聊天或其他 App。', 'success')
+    return true
+  }
+  if (target === 'wechat') {
     try {
       await shareWebpageToWechat({
         webpageUrl: shareUrl,
@@ -6211,11 +6220,52 @@ async function shareFoodRecordToWechatOrSystem(record: FoodRecord): Promise<bool
         scene: 'session',
       })
       return true
-    } catch {
-      return shareTextToSystem(title, buildRecordShareMessage(record, shareUrl), shareUrl)
+    } catch (error) {
+      const fallback = await dialog.confirm({
+        title: '微信分享不可用',
+        message: userFacingErrorMessage(error),
+        confirmText: '用更多方式',
+        cancelText: '取消',
+      })
+      if (!fallback) return false
     }
   }
   return shareTextToSystem(title, buildRecordShareMessage(record, shareUrl), shareUrl)
+}
+
+function selectFoodRecordShareTarget(title: string, shareUrl: string): Promise<FoodRecordShareTarget> {
+  const canShareToWechat = isNativeWechatShareAvailable()
+  const options: Array<{ label: string; target: FoodRecordShareTarget }> = [
+    ...(canShareToWechat ? [{ label: '分享到微信卡片', target: 'wechat' as const }] : []),
+    { label: '复制链接', target: 'copy_link' },
+    { label: '更多分享方式', target: 'system' },
+    { label: '取消', target: 'cancel' },
+  ]
+  if (Platform.OS === 'ios') {
+    return new Promise((resolve) => {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: '分享饮食记录',
+          message: shareUrl,
+          options: options.map((option) => option.label),
+          cancelButtonIndex: options.length - 1,
+        },
+        (buttonIndex) => resolve(options[buttonIndex]?.target || 'cancel'),
+      )
+    })
+  }
+  return new Promise((resolve) => {
+    const buttons = options
+      .filter((option) => option.target !== 'cancel')
+      .map((option) => ({
+        text: option.label,
+        onPress: () => resolve(option.target),
+      }))
+    Alert.alert(title, shareUrl, buttons, {
+      cancelable: true,
+      onDismiss: () => resolve('cancel'),
+    })
+  })
 }
 
 async function shareTextToSystem(title: string, message: string, url?: string): Promise<boolean> {
