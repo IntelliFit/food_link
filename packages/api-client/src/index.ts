@@ -34,6 +34,7 @@ import type {
   ManualFoodBrowseResult,
   ManualFoodCatalogResult,
   ManualFoodItem,
+  CreateMembershipPaymentOptions,
   MembershipPaymentOrder,
   MembershipPlan,
   MembershipStatus,
@@ -680,12 +681,20 @@ export class FoodLinkApiClient {
     })
   }
 
-  async createMembershipPayment(planCode: string): Promise<MembershipPaymentOrder> {
+  async createMembershipPayment(planCode: string, options?: CreateMembershipPaymentOptions): Promise<MembershipPaymentOrder> {
     const code = planCode.trim()
+    const payChannel = options?.payChannel?.trim()
+    const tradeType = options?.tradeType?.trim()
+    const client = options?.client?.trim()
     if (!code) throw new Error('请选择会员套餐')
     return this.authenticatedRequest<MembershipPaymentOrder>('/api/membership/pay/create', {
       method: 'POST',
-      body: { plan_code: code },
+      body: {
+        plan_code: code,
+        ...(payChannel ? { pay_channel: payChannel } : {}),
+        ...(tradeType ? { trade_type: tradeType } : {}),
+        ...(client ? { client } : {}),
+      },
       timeoutMs: 20000,
     })
   }

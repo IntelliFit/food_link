@@ -55,16 +55,25 @@ external:
   doubao_api_key: ""
   doubao_web_search_api_key: ""
   doubao_base_url: "https://ark.cn-beijing.volces.com/api/v3"
-  appid: ""
-  secret: ""
 
-app_auth:
-  # 微信开放平台 App 登录配置；小程序登录仍使用 external.appid / external.secret。
-  wechat_app_id: ""
-  wechat_app_secret: ""
-  # development 下允许 Expo Go / 模拟器用固定 code mock 微信 App 登录，不触发微信开放平台请求。
-  development_mock_login: true
-  development_mock_wechat_code: "expo-go-dev-wechat-code"
+wechat:
+  mini_program:
+    app_id: ""
+    app_secret: ""
+  mobile_app:
+    app_id: ""
+    app_secret: ""
+    # development 下允许 Expo Go / 模拟器用固定 code mock 微信 App 登录，不触发微信开放平台请求。
+    development_mock_code: "expo-go-dev-wechat-code"
+  pay:
+    mchid: ""
+    notify_url: ""
+    serial_no: ""
+    api_v3_key: ""
+    private_key: ""
+    public_key: ""
+    expiry_subscribe_template_id: ""
+    analysis_subscribe_template_id: ""
 
 redis:
   # 短信验证码存储与节流。
@@ -125,11 +134,3 @@ feedback_bot:
   auth_token: ""
   project_key: "foodlink"
   timeout_seconds: 5
-
-wechat_pay:
-  mchid: ""
-  notify_url: ""
-  serial_no: ""
-  api_v3_key: ""
-  private_key: ""
-  public_key: ""

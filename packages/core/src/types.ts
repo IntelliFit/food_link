@@ -399,6 +399,26 @@ export interface MembershipPlan {
   sort_order?: number
 }
 
+export type MembershipPaymentChannel = 'wechat' | 'wechat_app' | 'wechat_mini_program' | 'alipay' | string
+export type MembershipPaymentTradeType = 'JSAPI' | 'APP' | string
+
+export interface CreateMembershipPaymentOptions {
+  payChannel?: MembershipPaymentChannel
+  tradeType?: MembershipPaymentTradeType
+  client?: string
+}
+
+export interface WechatAppPayParams {
+  appId: string
+  partnerId: string
+  prepayId: string
+  package?: string
+  packageValue: string
+  nonceStr: string
+  timeStamp: string
+  sign: string
+}
+
 export interface MembershipPaymentOrder {
   order_no: string
   plan_code: string
@@ -406,7 +426,10 @@ export interface MembershipPaymentOrder {
   original_amount?: number
   order_mode?: string
   upgrade_terms?: Record<string, unknown> | null
-  pay_params?: Record<string, string>
+  pay_channel?: MembershipPaymentChannel
+  trade_type?: MembershipPaymentTradeType
+  prepay_id?: string
+  pay_params?: Record<string, string> & Partial<WechatAppPayParams>
   status?: string
   [key: string]: unknown
 }

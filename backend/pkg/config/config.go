@@ -33,6 +33,7 @@ type Config struct {
 	Storage        StorageConfig        `mapstructure:"storage"`
 	External       ExternalConfig       `mapstructure:"external"`
 	AppAuth        AppAuthConfig        `mapstructure:"app_auth"`
+	Wechat         WechatConfig         `mapstructure:"wechat"`
 	Redis          RedisConfig          `mapstructure:"redis"`
 	SMS            SMSConfig            `mapstructure:"sms"`
 	Feishu         FeishuConfig         `mapstructure:"feishu"`
@@ -126,6 +127,23 @@ type AppAuthConfig struct {
 	DevelopmentMockWechatCode string `mapstructure:"development_mock_wechat_code"`
 }
 
+type WechatConfig struct {
+	MiniProgram WechatMiniProgramConfig `mapstructure:"mini_program"`
+	MobileApp   WechatMobileAppConfig   `mapstructure:"mobile_app"`
+	Pay         WechatPayConfig         `mapstructure:"pay"`
+}
+
+type WechatMiniProgramConfig struct {
+	AppID     string `mapstructure:"app_id"`
+	AppSecret string `mapstructure:"app_secret"`
+}
+
+type WechatMobileAppConfig struct {
+	AppID               string `mapstructure:"app_id"`
+	AppSecret           string `mapstructure:"app_secret"`
+	DevelopmentMockCode string `mapstructure:"development_mock_code"`
+}
+
 type RedisConfig struct {
 	Mode      string `mapstructure:"mode"`
 	URL       string `mapstructure:"url"`
@@ -166,13 +184,16 @@ type FeedbackBotConfig struct {
 }
 
 type WechatPayConfig struct {
-	MchID                     string `mapstructure:"mchid"`
-	NotifyURL                 string `mapstructure:"notify_url"`
-	SerialNo                  string `mapstructure:"serial_no"`
-	APIV3Key                  string `mapstructure:"api_v3_key"`
-	PrivateKey                string `mapstructure:"private_key"`
-	PublicKey                 string `mapstructure:"public_key"`
-	ExpirySubscribeTemplateID string `mapstructure:"expiry_subscribe_template_id"`
+	AppPayAppID                 string `mapstructure:"app_pay_app_id"`
+	AppID                       string `mapstructure:"app_id"`
+	MchID                       string `mapstructure:"mchid"`
+	NotifyURL                   string `mapstructure:"notify_url"`
+	SerialNo                    string `mapstructure:"serial_no"`
+	APIV3Key                    string `mapstructure:"api_v3_key"`
+	PrivateKey                  string `mapstructure:"private_key"`
+	PublicKey                   string `mapstructure:"public_key"`
+	ExpirySubscribeTemplateID   string `mapstructure:"expiry_subscribe_template_id"`
+	AnalysisSubscribeTemplateID string `mapstructure:"analysis_subscribe_template_id"`
 }
 
 type WorkerConfig struct {
@@ -263,6 +284,7 @@ func Load(baseDir string) (*Config, error) {
 	cfg.ConfigSource = source
 	trimExternalConfig(&cfg.External)
 	trimAppAuthConfig(&cfg.AppAuth)
+	trimWechatConfig(&cfg.Wechat)
 	trimRedisConfig(&cfg.Redis)
 	trimSMSConfig(&cfg.SMS)
 	trimFeedbackBotConfig(&cfg.FeedbackBot)
@@ -349,9 +371,55 @@ func applyLocalConfigOverrides(v *viper.Viper) error {
 	}
 	trimExternalConfig(&fileCfg.External)
 	trimAppAuthConfig(&fileCfg.AppAuth)
+	trimWechatConfig(&fileCfg.Wechat)
 	trimRedisConfig(&fileCfg.Redis)
 	trimSMSConfig(&fileCfg.SMS)
 	trimFeedbackBotConfig(&fileCfg.FeedbackBot)
+	if fileCfg.Wechat.MiniProgram.AppID != "" {
+		v.Set("wechat.mini_program.app_id", fileCfg.Wechat.MiniProgram.AppID)
+	}
+	if fileCfg.Wechat.MiniProgram.AppSecret != "" {
+		v.Set("wechat.mini_program.app_secret", fileCfg.Wechat.MiniProgram.AppSecret)
+	}
+	if fileCfg.Wechat.MobileApp.AppID != "" {
+		v.Set("wechat.mobile_app.app_id", fileCfg.Wechat.MobileApp.AppID)
+	}
+	if fileCfg.Wechat.MobileApp.AppSecret != "" {
+		v.Set("wechat.mobile_app.app_secret", fileCfg.Wechat.MobileApp.AppSecret)
+	}
+	if fileCfg.Wechat.MobileApp.DevelopmentMockCode != "" {
+		v.Set("wechat.mobile_app.development_mock_code", fileCfg.Wechat.MobileApp.DevelopmentMockCode)
+	}
+	if fileCfg.Wechat.Pay.AppPayAppID != "" {
+		v.Set("wechat.pay.app_pay_app_id", fileCfg.Wechat.Pay.AppPayAppID)
+	}
+	if fileCfg.Wechat.Pay.AppID != "" {
+		v.Set("wechat.pay.app_id", fileCfg.Wechat.Pay.AppID)
+	}
+	if fileCfg.Wechat.Pay.MchID != "" {
+		v.Set("wechat.pay.mchid", fileCfg.Wechat.Pay.MchID)
+	}
+	if fileCfg.Wechat.Pay.NotifyURL != "" {
+		v.Set("wechat.pay.notify_url", fileCfg.Wechat.Pay.NotifyURL)
+	}
+	if fileCfg.Wechat.Pay.SerialNo != "" {
+		v.Set("wechat.pay.serial_no", fileCfg.Wechat.Pay.SerialNo)
+	}
+	if fileCfg.Wechat.Pay.APIV3Key != "" {
+		v.Set("wechat.pay.api_v3_key", fileCfg.Wechat.Pay.APIV3Key)
+	}
+	if fileCfg.Wechat.Pay.PrivateKey != "" {
+		v.Set("wechat.pay.private_key", fileCfg.Wechat.Pay.PrivateKey)
+	}
+	if fileCfg.Wechat.Pay.PublicKey != "" {
+		v.Set("wechat.pay.public_key", fileCfg.Wechat.Pay.PublicKey)
+	}
+	if fileCfg.Wechat.Pay.ExpirySubscribeTemplateID != "" {
+		v.Set("wechat.pay.expiry_subscribe_template_id", fileCfg.Wechat.Pay.ExpirySubscribeTemplateID)
+	}
+	if fileCfg.Wechat.Pay.AnalysisSubscribeTemplateID != "" {
+		v.Set("wechat.pay.analysis_subscribe_template_id", fileCfg.Wechat.Pay.AnalysisSubscribeTemplateID)
+	}
 	if fileCfg.AppAuth.WechatAppID != "" {
 		v.Set("app_auth.wechat_app_id", fileCfg.AppAuth.WechatAppID)
 	}
@@ -902,79 +970,89 @@ func configKeyForSecret(secretKey string) string {
 }
 
 var cloudConfigKeyAliases = map[string]string{
-	"PORT":                                  "app.port",
-	"APPID":                                 "external.appid",
-	"SECRET":                                "external.secret",
-	"APP_WECHAT_APP_ID":                     "app_auth.wechat_app_id",
-	"APP_WECHAT_APP_SECRET":                 "app_auth.wechat_app_secret",
-	"WECHAT_OPEN_APP_ID":                    "app_auth.wechat_app_id",
-	"WECHAT_OPEN_APP_SECRET":                "app_auth.wechat_app_secret",
-	"APP_AUTH_DEVELOPMENT_MOCK_LOGIN":       "app_auth.development_mock_login",
-	"APP_AUTH_DEVELOPMENT_MOCK_WECHAT_CODE": "app_auth.development_mock_wechat_code",
-	"JWT_SECRET_KEY":                        "jwt.secret",
-	"SUPABASE_URL":                          "external.supabase_url",
-	"SUPABASE_SERVICE_ROLE_KEY":             "external.supabase_service_role_key",
-	"TIANDITU_TK":                           "external.tianditu_tk",
-	"OFOXAI_API_KEY":                        "external.ofoxai_api_key",
-	"OFOXAI_BASE_URL":                       "external.ofoxai_base_url",
-	"OFOX_BASE_URL":                         "external.ofoxai_base_url",
-	"GEMINI35_API_KEY":                      "external.gemini35_api_key",
-	"GEMINI35_BASE_URL":                     "external.gemini35_base_url",
-	"GEMINI35_MODEL":                        "external.gemini35_model",
-	"LLM_PROVIDER":                          "external.llm_provider",
-	"DEEPSEEK_API_KEY":                      "external.deepseek_api_key",
-	"DOUBAO_API_KEY":                        "external.doubao_api_key",
-	"DOUBAO_WEB_SEARCH_API_KEY":             "external.doubao_web_search_api_key",
-	"DOUBAO_BASE_URL":                       "external.doubao_base_url",
-	"DASHSCOPE_API_KEY":                     "external.dashscope_api_key",
-	"DASHSCOPE_BASE_URL":                    "external.dashscope_base_url",
-	"WECHAT_PAY_MCHID":                      "wechat_pay.mchid",
-	"WECHAT_PAY_NOTIFY_URL":                 "wechat_pay.notify_url",
-	"WECHAT_PAY_SERIAL_NO":                  "wechat_pay.serial_no",
-	"WECHAT_PAY_API_V3_KEY":                 "wechat_pay.api_v3_key",
-	"WECHAT_PAY_PRIVATE_KEY":                "wechat_pay.private_key",
-	"WECHAT_PAY_PUBLIC_KEY":                 "wechat_pay.public_key",
-	"EXPIRY_SUBSCRIBE_TEMPLATE_ID":          "wechat_pay.expiry_subscribe_template_id",
-	"COS_REGION":                            "storage.cos_region",
-	"COS_SECRET_ID":                         "storage.cos_secret_id",
-	"COS_SECRET_KEY":                        "storage.cos_secret_key",
-	"COS_FOOD_IMAGES_BUCKET":                "storage.food_images_bucket",
-	"COS_HEALTH_REPORTS_BUCKET":             "storage.health_reports_bucket",
-	"COS_USER_AVATARS_BUCKET":               "storage.user_avatars_bucket",
-	"COS_ICON_BUCKET":                       "storage.icon_bucket",
-	"CDN_FOOD_IMAGES_BASE_URL":              "storage.food_images_cdn_base_url",
-	"CDN_USER_AVATARS_BASE_URL":             "storage.user_avatars_cdn_base_url",
-	"CDN_HEALTH_REPORTS_BASE_URL":           "storage.health_reports_cdn_base_url",
-	"CDN_ICON_BASE_URL":                     "storage.icon_cdn_base_url",
-	"POSTGRESQL_HOST":                       "database.host",
-	"POSTGRESQL_PORT":                       "database.port",
-	"POSTGRESQL_USER":                       "database.user",
-	"POSTGRESQL_PASSWORD":                   "database.password",
-	"POSTGRESQL_DATABASE":                   "database.name",
-	"POSTGRESQL_SSLMODE":                    "database.sslmode",
-	"POSTGRESQL_SCHEMA":                     "database.schema",
-	"WORKER_COUNT":                          "worker.count",
-	"WORKER_POLL_INTERVAL_SECONDS":          "worker.poll_interval_seconds",
-	"TASK_QUEUE_DRIVER":                     "task_queue.driver",
-	"TASK_QUEUE_BUFFER_SIZE":                "task_queue.buffer_size",
-	"TASK_QUEUE_TOPIC":                      "task_queue.topic",
-	"TASK_QUEUE_BROKERS":                    "task_queue.brokers",
-	"TASK_QUEUE_CONSUMER_GROUP":             "task_queue.consumer_group",
-	"OTEL_ENABLED":                          "otel.enabled",
-	"OTEL_TRACES_ENABLED":                   "otel.traces_enabled",
-	"OTEL_METRICS_ENABLED":                  "otel.metrics_enabled",
-	"OTEL_COLLECTOR_ENDPOINT":               "otel.collector_endpoint",
-	"OTEL_INSECURE":                         "otel.insecure",
-	"OTEL_METRIC_EXPORT_INTERVAL_SECONDS":   "otel.metric_export_interval_seconds",
-	"FEISHU_FEEDBACK_WEBHOOK_URL":           "feishu.feedback_webhook_url",
-	"FEISHU_FEEDBACK_WEBHOOK_SECRET":        "feishu.feedback_webhook_secret",
-	"FEISHU_REPORT_WEBHOOK_URL":             "feishu.report_webhook_url",
-	"FEISHU_REPORT_WEBHOOK_SECRET":          "feishu.report_webhook_secret",
-	"FEEDBACK_BOT_ENABLED":                  "feedback_bot.enabled",
-	"FEEDBACK_BOT_BASE_URL":                 "feedback_bot.base_url",
-	"FEEDBACK_BOT_AUTH_TOKEN":               "feedback_bot.auth_token",
-	"FEEDBACK_BOT_PROJECT_KEY":              "feedback_bot.project_key",
-	"FEEDBACK_BOT_TIMEOUT_SECONDS":          "feedback_bot.timeout_seconds",
+	"PORT":                                    "app.port",
+	"APPID":                                   "external.appid",
+	"SECRET":                                  "external.secret",
+	"WECHAT_MINI_PROGRAM_APP_ID":              "wechat.mini_program.app_id",
+	"WECHAT_MINI_PROGRAM_APP_SECRET":          "wechat.mini_program.app_secret",
+	"WECHAT_MINIPROGRAM_APP_ID":               "wechat.mini_program.app_id",
+	"WECHAT_MINIPROGRAM_APP_SECRET":           "wechat.mini_program.app_secret",
+	"WECHAT_MOBILE_APP_ID":                    "wechat.mobile_app.app_id",
+	"WECHAT_MOBILE_APP_SECRET":                "wechat.mobile_app.app_secret",
+	"WECHAT_MOBILE_APP_DEVELOPMENT_MOCK_CODE": "wechat.mobile_app.development_mock_code",
+	"APP_WECHAT_APP_ID":                       "app_auth.wechat_app_id",
+	"APP_WECHAT_APP_SECRET":                   "app_auth.wechat_app_secret",
+	"WECHAT_OPEN_APP_ID":                      "app_auth.wechat_app_id",
+	"WECHAT_OPEN_APP_SECRET":                  "app_auth.wechat_app_secret",
+	"APP_AUTH_DEVELOPMENT_MOCK_LOGIN":         "app_auth.development_mock_login",
+	"APP_AUTH_DEVELOPMENT_MOCK_WECHAT_CODE":   "app_auth.development_mock_wechat_code",
+	"JWT_SECRET_KEY":                          "jwt.secret",
+	"SUPABASE_URL":                            "external.supabase_url",
+	"SUPABASE_SERVICE_ROLE_KEY":               "external.supabase_service_role_key",
+	"TIANDITU_TK":                             "external.tianditu_tk",
+	"OFOXAI_API_KEY":                          "external.ofoxai_api_key",
+	"OFOXAI_BASE_URL":                         "external.ofoxai_base_url",
+	"OFOX_BASE_URL":                           "external.ofoxai_base_url",
+	"GEMINI35_API_KEY":                        "external.gemini35_api_key",
+	"GEMINI35_BASE_URL":                       "external.gemini35_base_url",
+	"GEMINI35_MODEL":                          "external.gemini35_model",
+	"LLM_PROVIDER":                            "external.llm_provider",
+	"DEEPSEEK_API_KEY":                        "external.deepseek_api_key",
+	"DOUBAO_API_KEY":                          "external.doubao_api_key",
+	"DOUBAO_WEB_SEARCH_API_KEY":               "external.doubao_web_search_api_key",
+	"DOUBAO_BASE_URL":                         "external.doubao_base_url",
+	"DASHSCOPE_API_KEY":                       "external.dashscope_api_key",
+	"DASHSCOPE_BASE_URL":                      "external.dashscope_base_url",
+	"WECHAT_PAY_APP_PAY_APP_ID":               "wechat.pay.app_pay_app_id",
+	"WECHAT_PAY_APP_ID":                       "wechat.pay.app_id",
+	"WECHAT_PAY_MCHID":                        "wechat.pay.mchid",
+	"WECHAT_PAY_NOTIFY_URL":                   "wechat.pay.notify_url",
+	"WECHAT_PAY_SERIAL_NO":                    "wechat.pay.serial_no",
+	"WECHAT_PAY_API_V3_KEY":                   "wechat.pay.api_v3_key",
+	"WECHAT_PAY_PRIVATE_KEY":                  "wechat.pay.private_key",
+	"WECHAT_PAY_PUBLIC_KEY":                   "wechat.pay.public_key",
+	"EXPIRY_SUBSCRIBE_TEMPLATE_ID":            "wechat.pay.expiry_subscribe_template_id",
+	"ANALYSIS_SUBSCRIBE_TEMPLATE_ID":          "wechat.pay.analysis_subscribe_template_id",
+	"COS_REGION":                              "storage.cos_region",
+	"COS_SECRET_ID":                           "storage.cos_secret_id",
+	"COS_SECRET_KEY":                          "storage.cos_secret_key",
+	"COS_FOOD_IMAGES_BUCKET":                  "storage.food_images_bucket",
+	"COS_HEALTH_REPORTS_BUCKET":               "storage.health_reports_bucket",
+	"COS_USER_AVATARS_BUCKET":                 "storage.user_avatars_bucket",
+	"COS_ICON_BUCKET":                         "storage.icon_bucket",
+	"CDN_FOOD_IMAGES_BASE_URL":                "storage.food_images_cdn_base_url",
+	"CDN_USER_AVATARS_BASE_URL":               "storage.user_avatars_cdn_base_url",
+	"CDN_HEALTH_REPORTS_BASE_URL":             "storage.health_reports_cdn_base_url",
+	"CDN_ICON_BASE_URL":                       "storage.icon_cdn_base_url",
+	"POSTGRESQL_HOST":                         "database.host",
+	"POSTGRESQL_PORT":                         "database.port",
+	"POSTGRESQL_USER":                         "database.user",
+	"POSTGRESQL_PASSWORD":                     "database.password",
+	"POSTGRESQL_DATABASE":                     "database.name",
+	"POSTGRESQL_SSLMODE":                      "database.sslmode",
+	"POSTGRESQL_SCHEMA":                       "database.schema",
+	"WORKER_COUNT":                            "worker.count",
+	"WORKER_POLL_INTERVAL_SECONDS":            "worker.poll_interval_seconds",
+	"TASK_QUEUE_DRIVER":                       "task_queue.driver",
+	"TASK_QUEUE_BUFFER_SIZE":                  "task_queue.buffer_size",
+	"TASK_QUEUE_TOPIC":                        "task_queue.topic",
+	"TASK_QUEUE_BROKERS":                      "task_queue.brokers",
+	"TASK_QUEUE_CONSUMER_GROUP":               "task_queue.consumer_group",
+	"OTEL_ENABLED":                            "otel.enabled",
+	"OTEL_TRACES_ENABLED":                     "otel.traces_enabled",
+	"OTEL_METRICS_ENABLED":                    "otel.metrics_enabled",
+	"OTEL_COLLECTOR_ENDPOINT":                 "otel.collector_endpoint",
+	"OTEL_INSECURE":                           "otel.insecure",
+	"OTEL_METRIC_EXPORT_INTERVAL_SECONDS":     "otel.metric_export_interval_seconds",
+	"FEISHU_FEEDBACK_WEBHOOK_URL":             "feishu.feedback_webhook_url",
+	"FEISHU_FEEDBACK_WEBHOOK_SECRET":          "feishu.feedback_webhook_secret",
+	"FEISHU_REPORT_WEBHOOK_URL":               "feishu.report_webhook_url",
+	"FEISHU_REPORT_WEBHOOK_SECRET":            "feishu.report_webhook_secret",
+	"FEEDBACK_BOT_ENABLED":                    "feedback_bot.enabled",
+	"FEEDBACK_BOT_BASE_URL":                   "feedback_bot.base_url",
+	"FEEDBACK_BOT_AUTH_TOKEN":                 "feedback_bot.auth_token",
+	"FEEDBACK_BOT_PROJECT_KEY":                "feedback_bot.project_key",
+	"FEEDBACK_BOT_TIMEOUT_SECONDS":            "feedback_bot.timeout_seconds",
 }
 
 func applyConfigFileOnlyValues(v *viper.Viper, cfg *Config) error {
@@ -1057,6 +1135,24 @@ func trimAppAuthConfig(cfg *AppAuthConfig) {
 	cfg.DevelopmentMockWechatCode = strings.TrimSpace(cfg.DevelopmentMockWechatCode)
 }
 
+func trimWechatConfig(cfg *WechatConfig) {
+	cfg.MiniProgram.AppID = strings.TrimSpace(cfg.MiniProgram.AppID)
+	cfg.MiniProgram.AppSecret = strings.TrimSpace(cfg.MiniProgram.AppSecret)
+	cfg.MobileApp.AppID = strings.TrimSpace(cfg.MobileApp.AppID)
+	cfg.MobileApp.AppSecret = strings.TrimSpace(cfg.MobileApp.AppSecret)
+	cfg.MobileApp.DevelopmentMockCode = strings.TrimSpace(cfg.MobileApp.DevelopmentMockCode)
+	cfg.Pay.AppPayAppID = strings.TrimSpace(cfg.Pay.AppPayAppID)
+	cfg.Pay.AppID = strings.TrimSpace(cfg.Pay.AppID)
+	cfg.Pay.MchID = strings.TrimSpace(cfg.Pay.MchID)
+	cfg.Pay.NotifyURL = strings.TrimSpace(cfg.Pay.NotifyURL)
+	cfg.Pay.SerialNo = strings.TrimSpace(cfg.Pay.SerialNo)
+	cfg.Pay.APIV3Key = strings.TrimSpace(cfg.Pay.APIV3Key)
+	cfg.Pay.PrivateKey = strings.TrimSpace(cfg.Pay.PrivateKey)
+	cfg.Pay.PublicKey = strings.TrimSpace(cfg.Pay.PublicKey)
+	cfg.Pay.ExpirySubscribeTemplateID = strings.TrimSpace(cfg.Pay.ExpirySubscribeTemplateID)
+	cfg.Pay.AnalysisSubscribeTemplateID = strings.TrimSpace(cfg.Pay.AnalysisSubscribeTemplateID)
+}
+
 func trimRedisConfig(cfg *RedisConfig) {
 	cfg.Mode = strings.ToLower(strings.TrimSpace(cfg.Mode))
 	cfg.URL = strings.TrimSpace(cfg.URL)
@@ -1130,6 +1226,88 @@ func normalizeCSV(values []string) []string {
 	return out
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func (c *Config) WechatMiniProgramAppID() string {
+	if c == nil {
+		return ""
+	}
+	return firstNonEmpty(c.Wechat.MiniProgram.AppID, c.External.AppID)
+}
+
+func (c *Config) WechatMiniProgramAppSecret() string {
+	if c == nil {
+		return ""
+	}
+	return firstNonEmpty(c.Wechat.MiniProgram.AppSecret, c.External.Secret)
+}
+
+func (c *Config) WechatMobileAppID() string {
+	if c == nil {
+		return ""
+	}
+	return firstNonEmpty(c.Wechat.MobileApp.AppID, c.AppAuth.WechatAppID)
+}
+
+func (c *Config) WechatMobileAppSecret() string {
+	if c == nil {
+		return ""
+	}
+	return firstNonEmpty(c.Wechat.MobileApp.AppSecret, c.AppAuth.WechatAppSecret)
+}
+
+func (c *Config) WechatMobileAppDevelopmentMockCode() string {
+	if c == nil {
+		return ""
+	}
+	return firstNonEmpty(c.Wechat.MobileApp.DevelopmentMockCode, c.AppAuth.DevelopmentMockWechatCode)
+}
+
+func (c *Config) ResolvedWechatPay() WechatPayConfig {
+	if c == nil {
+		return WechatPayConfig{}
+	}
+	pay := c.Wechat.Pay
+	if pay.AppPayAppID == "" {
+		pay.AppPayAppID = c.WechatPay.AppPayAppID
+	}
+	if pay.AppID == "" {
+		pay.AppID = c.WechatPay.AppID
+	}
+	if pay.MchID == "" {
+		pay.MchID = c.WechatPay.MchID
+	}
+	if pay.NotifyURL == "" {
+		pay.NotifyURL = c.WechatPay.NotifyURL
+	}
+	if pay.SerialNo == "" {
+		pay.SerialNo = c.WechatPay.SerialNo
+	}
+	if pay.APIV3Key == "" {
+		pay.APIV3Key = c.WechatPay.APIV3Key
+	}
+	if pay.PrivateKey == "" {
+		pay.PrivateKey = c.WechatPay.PrivateKey
+	}
+	if pay.PublicKey == "" {
+		pay.PublicKey = c.WechatPay.PublicKey
+	}
+	if pay.ExpirySubscribeTemplateID == "" {
+		pay.ExpirySubscribeTemplateID = c.WechatPay.ExpirySubscribeTemplateID
+	}
+	if pay.AnalysisSubscribeTemplateID == "" {
+		pay.AnalysisSubscribeTemplateID = c.WechatPay.AnalysisSubscribeTemplateID
+	}
+	return pay
+}
+
 func (c *Config) ListenAddr() string {
 	return fmt.Sprintf("%s:%d", c.App.Host, c.App.Port)
 }
@@ -1151,6 +1329,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("jwt.refresh_token_ttl_seconds", int64(36525*24*60*60))
 	v.SetDefault("app_auth.development_mock_login", true)
 	v.SetDefault("app_auth.development_mock_wechat_code", "expo-go-dev-wechat-code")
+	v.SetDefault("wechat.mobile_app.development_mock_code", "expo-go-dev-wechat-code")
 	v.SetDefault("redis.mode", "auto")
 	v.SetDefault("redis.key_prefix", "food_link")
 	v.SetDefault("sms.tencentcloud_region", "ap-guangzhou")
@@ -1198,6 +1377,11 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("app.port", "PORT")
 	_ = v.BindEnv("external.appid", "APPID")
 	_ = v.BindEnv("external.secret", "SECRET")
+	_ = v.BindEnv("wechat.mini_program.app_id", "WECHAT_MINI_PROGRAM_APP_ID", "WECHAT_MINIPROGRAM_APP_ID")
+	_ = v.BindEnv("wechat.mini_program.app_secret", "WECHAT_MINI_PROGRAM_APP_SECRET", "WECHAT_MINIPROGRAM_APP_SECRET")
+	_ = v.BindEnv("wechat.mobile_app.app_id", "WECHAT_MOBILE_APP_ID")
+	_ = v.BindEnv("wechat.mobile_app.app_secret", "WECHAT_MOBILE_APP_SECRET")
+	_ = v.BindEnv("wechat.mobile_app.development_mock_code", "WECHAT_MOBILE_APP_DEVELOPMENT_MOCK_CODE")
 	_ = v.BindEnv("app_auth.wechat_app_id", "APP_WECHAT_APP_ID", "WECHAT_OPEN_APP_ID")
 	_ = v.BindEnv("app_auth.wechat_app_secret", "APP_WECHAT_APP_SECRET", "WECHAT_OPEN_APP_SECRET")
 	_ = v.BindEnv("app_auth.development_mock_login", "APP_AUTH_DEVELOPMENT_MOCK_LOGIN")
@@ -1218,6 +1402,18 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("external.doubao_base_url", "DOUBAO_BASE_URL")
 	_ = v.BindEnv("external.dashscope_api_key", "DASHSCOPE_API_KEY")
 	_ = v.BindEnv("external.dashscope_base_url", "DASHSCOPE_BASE_URL")
+	_ = v.BindEnv("wechat.pay.app_pay_app_id", "WECHAT_PAY_APP_PAY_APP_ID")
+	_ = v.BindEnv("wechat.pay.app_id", "WECHAT_PAY_APP_ID")
+	_ = v.BindEnv("wechat.pay.mchid", "WECHAT_PAY_MCHID")
+	_ = v.BindEnv("wechat.pay.notify_url", "WECHAT_PAY_NOTIFY_URL")
+	_ = v.BindEnv("wechat.pay.serial_no", "WECHAT_PAY_SERIAL_NO")
+	_ = v.BindEnv("wechat.pay.api_v3_key", "WECHAT_PAY_API_V3_KEY")
+	_ = v.BindEnv("wechat.pay.private_key", "WECHAT_PAY_PRIVATE_KEY")
+	_ = v.BindEnv("wechat.pay.public_key", "WECHAT_PAY_PUBLIC_KEY")
+	_ = v.BindEnv("wechat.pay.expiry_subscribe_template_id", "EXPIRY_SUBSCRIBE_TEMPLATE_ID")
+	_ = v.BindEnv("wechat.pay.analysis_subscribe_template_id", "ANALYSIS_SUBSCRIBE_TEMPLATE_ID")
+	_ = v.BindEnv("wechat_pay.app_pay_app_id", "WECHAT_PAY_APP_PAY_APP_ID")
+	_ = v.BindEnv("wechat_pay.app_id", "WECHAT_PAY_APP_ID")
 	_ = v.BindEnv("wechat_pay.mchid", "WECHAT_PAY_MCHID")
 	_ = v.BindEnv("wechat_pay.notify_url", "WECHAT_PAY_NOTIFY_URL")
 	_ = v.BindEnv("wechat_pay.serial_no", "WECHAT_PAY_SERIAL_NO")
@@ -1225,6 +1421,7 @@ func bindLegacyEnv(v *viper.Viper) {
 	_ = v.BindEnv("wechat_pay.private_key", "WECHAT_PAY_PRIVATE_KEY")
 	_ = v.BindEnv("wechat_pay.public_key", "WECHAT_PAY_PUBLIC_KEY")
 	_ = v.BindEnv("wechat_pay.expiry_subscribe_template_id", "EXPIRY_SUBSCRIBE_TEMPLATE_ID")
+	_ = v.BindEnv("wechat_pay.analysis_subscribe_template_id", "ANALYSIS_SUBSCRIBE_TEMPLATE_ID")
 	_ = v.BindEnv("storage.cos_region", "COS_REGION")
 	_ = v.BindEnv("storage.cos_secret_id", "COS_SECRET_ID")
 	_ = v.BindEnv("storage.cos_secret_key", "COS_SECRET_KEY")

@@ -114,6 +114,13 @@ type SharePosterRewardClaimInput struct {
 	ShareDate  string `json:"share_date"`
 }
 
+type CreateMembershipPaymentInput struct {
+	PlanCode   string
+	PayChannel string
+	TradeType  string
+	Client     string
+}
+
 type MembershipService struct {
 	repo   MembershipRepo
 	cfg    *config.Config
@@ -150,6 +157,13 @@ type membershipPaymentTerms struct {
 	CurrentRemainingValue      float64
 	TargetRemainingValue       float64
 	UnusedCurrentCreditApplied float64
+}
+
+type membershipPaymentKind struct {
+	Channel       string
+	StoredChannel string
+	TradeType     string
+	CanonicalURL  string
 }
 
 func NewMembershipService(repo MembershipRepo, cfg ...*config.Config) *MembershipService {
@@ -551,6 +565,11 @@ func (s *MembershipService) materializeDailySharePosterRewardCredits(ctx context
 }
 
 func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode string) (map[string]any, error) {
+	return s.CreatePaymentWithInput(ctx, userID, CreateMembershipPaymentInput{PlanCode: planCode})
+}
+
+func (s *MembershipService) CreatePaymentWithInput(ctx context.Context, userID string, input CreateMembershipPaymentInput) (map[string]any, error) {
+	planCode := strings.TrimSpace(input.PlanCode)
 	plan, err := s.repo.GetPlanByCode(ctx, planCode)
 	if err != nil {
 		return nil, err
@@ -577,19 +596,41 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 	if err := enforceMinorPaymentLimit(user, terms.ChargeAmount); err != nil {
 		return nil, err
 	}
+	paymentKind, err := normalizeMembershipPaymentKind(input.PayChannel, input.TradeType)
+	if err != nil {
+		return nil, err
+	}
+	if paymentKind.Channel == "alipay" {
+		return nil, &commonerrors.AppError{Code: 10004, Message: "支付宝 App 支付通道已预留，当前暂未接入支付宝下单接口", HTTPStatus: http.StatusNotImplemented}
+	}
+	if isMobileAppPaymentRequest(input, paymentKind) {
+		return nil, &commonerrors.AppError{Code: 10004, Message: "App 支付暂未开放，当前只支持在微信小程序中完成会员支付", HTTPStatus: http.StatusNotImplemented}
+	}
 	openID := strings.TrimSpace(user.OpenID)
-	if openID == "" {
+	if paymentKind.TradeType == "JSAPI" && isAppOnlyOpenID(openID) {
+		return nil, &commonerrors.AppError{Code: 10004, Message: "App 支付暂未开放，当前只支持在微信小程序中完成会员支付", HTTPStatus: http.StatusNotImplemented}
+	}
+	if paymentKind.TradeType == "JSAPI" && openID == "" {
 		return nil, &commonerrors.AppError{Code: 10002, Message: "当前用户缺少 openid，无法发起微信支付", HTTPStatus: 400}
 	}
 	payCfg, err := s.wechatPayConfig()
 	if err != nil {
 		return nil, err
 	}
+	appID, err := payCfg.appIDForTradeType(paymentKind.TradeType)
+	if err != nil {
+		return nil, err
+	}
 	orderNo := generateMembershipOrderNo()
-	canonicalURL := "/v3/pay/transactions/jsapi"
+	canonicalURL := paymentKind.CanonicalURL
 	orderExtra := buildPaymentExtra(plan, terms)
+	orderExtra["pay_channel"] = paymentKind.StoredChannel
+	orderExtra["trade_type"] = paymentKind.TradeType
+	if client := strings.TrimSpace(input.Client); client != "" {
+		orderExtra["client"] = client
+	}
 	requestPayload := map[string]any{
-		"appid":        payCfg.AppID,
+		"appid":        appID,
 		"mchid":        payCfg.MchID,
 		"description":  plan.Name,
 		"out_trade_no": orderNo,
@@ -598,7 +639,9 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 			"total":    amountToFen(terms.ChargeAmount),
 			"currency": "CNY",
 		},
-		"payer": map[string]any{"openid": openID},
+	}
+	if paymentKind.TradeType == "JSAPI" {
+		requestPayload["payer"] = map[string]any{"openid": openID}
 	}
 	requestBody, _ := json.Marshal(requestPayload)
 	auth, err := buildWechatPayAuthorization(payCfg.MchID, payCfg.SerialNo, payCfg.PrivateKey, http.MethodPost, canonicalURL, string(requestBody))
@@ -639,19 +682,21 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 		Amount:         terms.ChargeAmount,
 		Currency:       "CNY",
 		DurationMonths: plan.DurationMonths,
-		PayChannel:     "wechat_mini_program",
-		TradeType:      "JSAPI",
+		PayChannel:     paymentKind.StoredChannel,
+		TradeType:      paymentKind.TradeType,
 		Status:         "pending",
-		WxOpenID:       &openID,
 		WxPrepayID:     &wxResp.PrepayID,
 		Extra:          orderExtra,
+	}
+	if paymentKind.TradeType == "JSAPI" {
+		payment.WxOpenID = &openID
 	}
 	payment.Extra["create_order_payload"] = requestPayload
 	payment.Extra["wechat_create_order_response"] = wxResp
 	if err := s.repo.CreatePayment(ctx, payment); err != nil {
 		return nil, err
 	}
-	params, err := buildMiniProgramPayParams(payCfg.AppID, wxResp.PrepayID, payCfg.PrivateKey)
+	params, err := buildWechatPayParams(paymentKind.TradeType, appID, payCfg.MchID, wxResp.PrepayID, payCfg.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -659,6 +704,8 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 		slog.String("user_id", userID),
 		slog.String("order_no", orderNo),
 		slog.String("plan_code", plan.Code),
+		slog.String("pay_channel", paymentKind.StoredChannel),
+		slog.String("trade_type", paymentKind.TradeType),
 		slog.Float64("amount", terms.ChargeAmount),
 		slog.String("order_mode", terms.Mode),
 		slog.Int("duration_months", plan.DurationMonths),
@@ -670,8 +717,27 @@ func (s *MembershipService) CreatePayment(ctx context.Context, userID, planCode 
 		"original_amount": plan.Amount,
 		"order_mode":      terms.Mode,
 		"upgrade_terms":   orderExtra["upgrade_terms"],
+		"pay_channel":     paymentKind.StoredChannel,
+		"trade_type":      paymentKind.TradeType,
+		"prepay_id":       wxResp.PrepayID,
 		"pay_params":      params,
 	}, nil
+}
+
+func isMobileAppPaymentRequest(input CreateMembershipPaymentInput, paymentKind *membershipPaymentKind) bool {
+	if paymentKind != nil && strings.EqualFold(paymentKind.TradeType, "APP") {
+		return true
+	}
+	client := strings.ToLower(strings.TrimSpace(input.Client))
+	return client == "mobile_app" || client == "app" || client == "android" || client == "ios"
+}
+
+func isAppOnlyOpenID(openID string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(openID))
+	return strings.HasPrefix(normalized, "app-wx:") ||
+		strings.HasPrefix(normalized, "app-phone:") ||
+		strings.HasPrefix(normalized, "app-pwd:") ||
+		strings.HasPrefix(normalized, "app-pwd-phone:")
 }
 
 func (s *MembershipService) buildMembershipPaymentTerms(ctx context.Context, targetPlan *domain.MembershipPlan, membership *domain.UserMembership, now time.Time) (*membershipPaymentTerms, error) {
@@ -755,6 +821,40 @@ func buildPaymentExtra(plan *domain.MembershipPlan, terms *membershipPaymentTerm
 		}
 	}
 	return extra
+}
+
+func normalizeMembershipPaymentKind(payChannel, tradeType string) (*membershipPaymentKind, error) {
+	channel := strings.ToLower(strings.TrimSpace(payChannel))
+	trade := strings.ToUpper(strings.TrimSpace(tradeType))
+	switch channel {
+	case "", "wechat":
+		channel = "wechat"
+	case "wechat_app":
+		channel = "wechat"
+		if trade == "" {
+			trade = "APP"
+		}
+	case "wechat_mini_program", "wechat_miniprogram", "wechat_jsapi":
+		channel = "wechat"
+		if trade == "" {
+			trade = "JSAPI"
+		}
+	case "alipay", "alipay_app":
+		return &membershipPaymentKind{Channel: "alipay", StoredChannel: "alipay_app", TradeType: "APP"}, nil
+	default:
+		return nil, &commonerrors.AppError{Code: 10002, Message: "不支持的会员支付渠道", HTTPStatus: 400}
+	}
+	if trade == "" {
+		trade = "JSAPI"
+	}
+	switch trade {
+	case "JSAPI":
+		return &membershipPaymentKind{Channel: channel, StoredChannel: "wechat_mini_program", TradeType: "JSAPI", CanonicalURL: "/v3/pay/transactions/jsapi"}, nil
+	case "APP":
+		return &membershipPaymentKind{Channel: channel, StoredChannel: "wechat_app", TradeType: "APP", CanonicalURL: "/v3/pay/transactions/app"}, nil
+	default:
+		return nil, &commonerrors.AppError{Code: 10002, Message: "不支持的微信支付交易类型", HTTPStatus: 400}
+	}
 }
 
 func (s *MembershipService) WechatNotify(ctx context.Context, paymentID string) error {
@@ -2012,32 +2112,38 @@ func dateOnly(t time.Time) time.Time {
 }
 
 type wechatPayConfig struct {
-	AppID      string
-	MchID      string
-	NotifyURL  string
-	SerialNo   string
-	APIV3Key   string
-	PrivateKey string
-	PublicKey  string
+	MiniProgramAppID string
+	AppPayAppID      string
+	MchID            string
+	NotifyURL        string
+	SerialNo         string
+	APIV3Key         string
+	PrivateKey       string
+	PublicKey        string
 }
 
 func (s *MembershipService) wechatPayConfig() (*wechatPayConfig, error) {
 	if s.cfg == nil {
 		return nil, &commonerrors.AppError{Code: 10000, Message: "缺少微信支付配置", HTTPStatus: 500}
 	}
+	pay := s.cfg.ResolvedWechatPay()
 	cfg := &wechatPayConfig{
-		AppID:      strings.TrimSpace(s.cfg.External.AppID),
-		MchID:      strings.TrimSpace(s.cfg.WechatPay.MchID),
-		NotifyURL:  strings.TrimSpace(s.cfg.WechatPay.NotifyURL),
-		SerialNo:   strings.TrimSpace(s.cfg.WechatPay.SerialNo),
-		APIV3Key:   strings.TrimSpace(s.cfg.WechatPay.APIV3Key),
-		PrivateKey: normalizePEMValue(s.cfg.WechatPay.PrivateKey),
-		PublicKey:  normalizePEMValue(s.cfg.WechatPay.PublicKey),
+		MiniProgramAppID: strings.TrimSpace(s.cfg.WechatMiniProgramAppID()),
+		AppPayAppID:      strings.TrimSpace(pay.AppPayAppID),
+		MchID:            strings.TrimSpace(pay.MchID),
+		NotifyURL:        strings.TrimSpace(pay.NotifyURL),
+		SerialNo:         strings.TrimSpace(pay.SerialNo),
+		APIV3Key:         strings.TrimSpace(pay.APIV3Key),
+		PrivateKey:       normalizePEMValue(pay.PrivateKey),
+		PublicKey:        normalizePEMValue(pay.PublicKey),
+	}
+	if cfg.AppPayAppID == "" {
+		cfg.AppPayAppID = strings.TrimSpace(pay.AppID)
+	}
+	if cfg.AppPayAppID == "" {
+		cfg.AppPayAppID = strings.TrimSpace(s.cfg.WechatMobileAppID())
 	}
 	missing := []string{}
-	if cfg.AppID == "" {
-		missing = append(missing, "APPID")
-	}
 	if cfg.MchID == "" {
 		missing = append(missing, "WECHAT_PAY_MCHID")
 	}
@@ -2057,6 +2163,21 @@ func (s *MembershipService) wechatPayConfig() (*wechatPayConfig, error) {
 		return nil, &commonerrors.AppError{Code: 10000, Message: "缺少微信支付配置：" + strings.Join(missing, ", "), HTTPStatus: 500}
 	}
 	return cfg, nil
+}
+
+func (cfg *wechatPayConfig) appIDForTradeType(tradeType string) (string, error) {
+	switch strings.ToUpper(strings.TrimSpace(tradeType)) {
+	case "APP":
+		if cfg.AppPayAppID == "" {
+			return "", &commonerrors.AppError{Code: 10000, Message: "缺少微信 APP 支付 AppID 配置：wechat.mobile_app.app_id", HTTPStatus: 500}
+		}
+		return cfg.AppPayAppID, nil
+	default:
+		if cfg.MiniProgramAppID == "" {
+			return "", &commonerrors.AppError{Code: 10000, Message: "缺少微信小程序支付 AppID 配置：wechat.mini_program.app_id", HTTPStatus: 500}
+		}
+		return cfg.MiniProgramAppID, nil
+	}
 }
 
 func formatMembershipResponse(membership *domain.UserMembership) map[string]any {
@@ -2175,6 +2296,33 @@ func buildMiniProgramPayParams(appID, prepayID, privateKeyPEM string) (map[strin
 		"package":   packageValue,
 		"signType":  "RSA",
 		"paySign":   signature,
+	}, nil
+}
+
+func buildWechatPayParams(tradeType, appID, mchID, prepayID, privateKeyPEM string) (map[string]string, error) {
+	if strings.ToUpper(strings.TrimSpace(tradeType)) == "APP" {
+		return buildAppPayParams(appID, mchID, prepayID, privateKeyPEM)
+	}
+	return buildMiniProgramPayParams(appID, prepayID, privateKeyPEM)
+}
+
+func buildAppPayParams(appID, mchID, prepayID, privateKeyPEM string) (map[string]string, error) {
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	nonce := randomHex(16)
+	message := appID + "\n" + timestamp + "\n" + nonce + "\n" + prepayID + "\n"
+	signature, err := signWithRSASHA256(message, privateKeyPEM)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]string{
+		"appId":        appID,
+		"partnerId":    mchID,
+		"prepayId":     prepayID,
+		"package":      "Sign=WXPay",
+		"packageValue": "Sign=WXPay",
+		"nonceStr":     nonce,
+		"timeStamp":    timestamp,
+		"sign":         signature,
 	}, nil
 }
 

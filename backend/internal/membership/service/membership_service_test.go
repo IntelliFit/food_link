@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	commonerrors "food_link/backend/internal/common/errors"
 	"food_link/backend/internal/membership/domain"
 	membershiprepo "food_link/backend/internal/membership/repo"
 	"food_link/backend/pkg/config"
@@ -1029,6 +1031,88 @@ func TestMembershipService_SyncWechatPayment_ActivatesPaidOrderFromQuery(t *test
 	assert.Equal(t, "active", mockRepo.membership.Status)
 	assert.Equal(t, "light_monthly", *mockRepo.membership.CurrentPlanCode)
 	assert.Equal(t, 16, mockRepo.membership.DailyCredits)
+}
+
+func TestMembershipService_CreatePaymentWithInput_ReturnsMobilePaymentUnavailable(t *testing.T) {
+	oldBaseURL := wechatPayAPIBaseURL
+	defer func() { wechatPayAPIBaseURL = oldBaseURL }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/v3/pay/transactions/app", r.URL.Path)
+		assert.NotEmpty(t, r.Header.Get("Authorization"))
+		var payload map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+		assert.Equal(t, "wx-app-pay", payload["appid"])
+		assert.Equal(t, "1100000000", payload["mchid"])
+		assert.NotEmpty(t, payload["out_trade_no"])
+		_, hasPayer := payload["payer"]
+		assert.False(t, hasPayer, "APP payment must not send JSAPI payer.openid")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]string{"prepay_id": "wx-app-prepay"})
+	}))
+	defer server.Close()
+	wechatPayAPIBaseURL = server.URL
+
+	plan := &domain.MembershipPlan{Code: "standard_monthly", Name: "Standard", Amount: 19.9, DurationMonths: 1, DailyCredits: 20, IsActive: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{"standard_monthly": plan},
+		user:       &membershiprepo.User{ID: "u1"},
+	}
+	cfg := &config.Config{
+		WechatPay: config.WechatPayConfig{
+			AppPayAppID: "wx-app-pay",
+			MchID:       "1100000000",
+			NotifyURL:   "https://api.healthymax.cn/api/payment/wechat/notify/membership",
+			SerialNo:    "SERIAL",
+			APIV3Key:    "12345678901234567890123456789012",
+			PrivateKey:  testRSAPrivateKeyPEM,
+		},
+	}
+	svc := NewMembershipService(mockRepo, cfg)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{
+		PlanCode:   "standard_monthly",
+		PayChannel: "wechat",
+		TradeType:  "APP",
+		Client:     "mobile_app",
+	})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusNotImplemented, appErr.HTTPStatus)
+	assert.Contains(t, appErr.Message, "App 支付暂未开放")
+	assert.Nil(t, mockRepo.payment)
+}
+
+func TestMembershipService_CreatePaymentBlocksAppOnlyOpenIDDefaultJSAPI(t *testing.T) {
+	plan := &domain.MembershipPlan{Code: "standard_monthly", Name: "Standard", Amount: 19.9, DurationMonths: 1, DailyCredits: 20, IsActive: true}
+	mockRepo := &mockMembershipRepo{
+		planByCode: map[string]*domain.MembershipPlan{"standard_monthly": plan},
+		user:       &membershiprepo.User{ID: "u1", OpenID: "app-wx:mobile-openid"},
+	}
+	cfg := &config.Config{
+		External: config.ExternalConfig{AppID: "wx-mini-program"},
+		WechatPay: config.WechatPayConfig{
+			MchID:      "1100000000",
+			NotifyURL:  "https://api.healthymax.cn/api/payment/wechat/notify/membership",
+			SerialNo:   "SERIAL",
+			APIV3Key:   "12345678901234567890123456789012",
+			PrivateKey: testRSAPrivateKeyPEM,
+		},
+	}
+	svc := NewMembershipService(mockRepo, cfg)
+
+	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{
+		PlanCode: "standard_monthly",
+	})
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusNotImplemented, appErr.HTTPStatus)
+	assert.Contains(t, appErr.Message, "App 支付暂未开放")
+	assert.Nil(t, mockRepo.payment)
 }
 
 func TestMembershipService_GetMyMembership_ManualUpgradeKeepsHigherTierOnReconcile(t *testing.T) {

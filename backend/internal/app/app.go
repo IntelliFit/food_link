@@ -282,7 +282,7 @@ func New(cfg *config.Config) (*App, error) {
 	expiryRecognizer := expiryservice.NewRecognizer(cfg)
 	expiryNotifier := expiryservice.NewNotificationWorker(expiryRepo, cfg)
 	expirySvc := expiryservice.NewExpiryService(expiryRepo, expiryTaskRepo, expiryRecognizer)
-	expirySvc.ConfigureNotificationTemplate(cfg.WechatPay.ExpirySubscribeTemplateID)
+	expirySvc.ConfigureNotificationTemplate(cfg.ResolvedWechatPay().ExpirySubscribeTemplateID)
 	expirySvc.ConfigureCreditGuard(membershipSvc)
 	expirySvc.ConfigureStorage(storageClient)
 	expiryHandler := expiryhandler.NewExpiryHandler(expirySvc)
