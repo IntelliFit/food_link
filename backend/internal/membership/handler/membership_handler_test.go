@@ -31,7 +31,7 @@ type mockMembershipService struct {
 	claimSharePosterRewardErr    error
 }
 
-func (m *mockMembershipService) ListPlans(ctx context.Context) ([]map[string]any, error) {
+func (m *mockMembershipService) ListPlans(ctx context.Context, userID string) ([]map[string]any, error) {
 	return m.listPlansResult, m.listPlansErr
 }
 func (m *mockMembershipService) GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error) {

@@ -183,10 +183,19 @@ func NewMembershipService(repo MembershipRepo, cfg ...*config.Config) *Membershi
 	return svc
 }
 
-func (s *MembershipService) ListPlans(ctx context.Context) ([]map[string]any, error) {
+func (s *MembershipService) ListPlans(ctx context.Context, userID string) ([]map[string]any, error) {
 	plans, err := s.repo.ListActivePlans(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(userID) != "" && s.paymentTestRepo != nil {
+		testPlan, err := s.visiblePaymentTestPlan(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if testPlan != nil {
+			plans = append(plans, *testPlan)
+		}
 	}
 	out := make([]map[string]any, 0, len(plans))
 	for _, p := range plans {
@@ -206,9 +215,28 @@ func (s *MembershipService) ListPlans(ctx context.Context) ([]map[string]any, er
 			"original_amount": floatPtrValue(p.OriginalAmount),
 			"savings":         savings,
 			"sort_order":      p.SortOrder,
+			"is_test_plan":    p.IsTestPlan,
 		})
 	}
 	return out, nil
+}
+
+func (s *MembershipService) visiblePaymentTestPlan(ctx context.Context, userID string) (*domain.MembershipPlan, error) {
+	access, err := s.paymentTestRepo.GetPaymentTestAccess(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if access == nil || !access.Enabled || !access.UserAllowed {
+		return nil, nil
+	}
+	plan, err := s.repo.GetPlanByCode(ctx, domain.PaymentTestPlanCode)
+	if err != nil {
+		return nil, err
+	}
+	if plan == nil || !plan.IsActive || !plan.IsTestPlan {
+		return nil, nil
+	}
+	return plan, nil
 }
 
 func (s *MembershipService) GetMyMembership(ctx context.Context, userID string, date string) (map[string]any, error) {
