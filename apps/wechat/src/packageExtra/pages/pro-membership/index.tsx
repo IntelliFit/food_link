@@ -161,6 +161,10 @@ const AUDIT_PREVIEW_MEMBERSHIP: MembershipStatus = {
 const AUTO_RENEW_AUDIT_PREVIEW_STORAGE_KEY = 'auto_renew_audit_preview'
 const PAYMENT_TEST_PLAN_CODE = 'test_one_cent_monthly'
 
+function isPaymentTestPlan(plan?: MembershipPlan | null): boolean {
+  return Boolean(plan && (plan.is_test_plan || plan.code === PAYMENT_TEST_PLAN_CODE))
+}
+
 function isAutoRenewAuditRoute(): boolean {
   const routerParams = Taro.getCurrentInstance().router?.params || {}
   if (String(routerParams.audit_auto_renew || '') === '1') return true
@@ -260,7 +264,7 @@ function ProMembershipPage() {
   }
 
   const paymentTestPlan = useMemo<MembershipPlan | null>(() => {
-    return plans.find(p => p.is_test_plan || p.code === PAYMENT_TEST_PLAN_CODE) || null
+    return plans.find(p => isPaymentTestPlan(p)) || null
   }, [plans])
 
   const selectedPlan = useMemo<MembershipPlan | null>(() => {
@@ -279,6 +283,14 @@ function ProMembershipPage() {
   const paymentEstimate = useMemo(() => {
     if (!selectedPlan) {
       return { mode: 'loading', amount: 0, disabled: false, hint: '' }
+    }
+    if (isPaymentTestPlan(selectedPlan)) {
+      return {
+        mode: 'payment_test',
+        amount: selectedPlan.amount,
+        disabled: false,
+        hint: '测试支付只验证真实支付链路，不会开通、续费或切换会员套餐',
+      }
     }
     const currentCode = membership?.current_plan_code || null
     const currentPlan = plans.find(p => p.code === currentCode) || null
@@ -358,8 +370,8 @@ function ProMembershipPage() {
       setPlans(planList)
       setMembership(currentMembership)
       if (profile) setHealthProfile(profile)
-      const testPlan = planList.find(p => p.is_test_plan || p.code === PAYMENT_TEST_PLAN_CODE)
-      if (testPlan && !targetTier && !targetPeriod && !currentMembership.is_pro) {
+      const testPlan = planList.find(p => isPaymentTestPlan(p))
+      if (testPlan && !targetTier && !targetPeriod) {
         setSelectedPlanCode(testPlan.code)
         if (testPlan.tier) setSelectedTier(testPlan.tier)
         if (testPlan.period) setSelectedPeriod(testPlan.period)
@@ -443,7 +455,9 @@ function ProMembershipPage() {
       return
     }
 
-    if (paymentEstimate.disabled) {
+    const selectedPlanIsPaymentTest = isPaymentTestPlan(selectedPlan)
+
+    if (!selectedPlanIsPaymentTest && paymentEstimate.disabled) {
       await Taro.showModal({
         title: '暂不可切换',
         content: paymentEstimate.hint || '当前套餐暂不支持这样切换，请选择更高档位或更长周期。',
@@ -455,7 +469,7 @@ function ProMembershipPage() {
     }
 
     // 年龄合规校验
-    if (!ageCompliance.ok) {
+    if (!selectedPlanIsPaymentTest && !ageCompliance.ok) {
       if (ageCompliance.severity === 'forbidden') {
         await Taro.showModal({
           title: '年龄限制',
@@ -482,12 +496,14 @@ function ProMembershipPage() {
     }
 
     const payAmount = paymentEstimate.amount || selectedPlan.amount
-    const confirmContent = paymentEstimate.mode === 'prorated_current_period_upgrade'
+    const confirmContent = selectedPlanIsPaymentTest
+      ? `支付测试套餐，¥${payAmount.toFixed(2)}。\n该订单仅用于验证真实微信支付链路，支付成功不会开通、续费或切换会员套餐。`
+      : paymentEstimate.mode === 'prorated_current_period_upgrade'
       ? `升级 ${selectedPlan.name}，本次补差 ¥${payAmount.toFixed(2)}。${paymentEstimate.hint || '已按当前会员剩余价值折抵'}。到期后需手动续费。`
       : `订阅 ${selectedPlan.name}，¥${payAmount.toFixed(2)}${PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}，到期后需手动续费。`
 
     const modalRes = await Taro.showModal({
-      title: '订阅确认',
+      title: selectedPlanIsPaymentTest ? '测试支付确认' : '订阅确认',
       content: confirmContent,
       confirmText: '确认支付',
       confirmColor: '#00bc7d'
@@ -507,11 +523,15 @@ function ProMembershipPage() {
       Taro.showToast({ title: '支付已提交，正在确认', icon: 'none', duration: 1800 })
       try {
         const syncResult = await syncMembershipPayment(payOrder.order_no)
-        if (syncResult.membership) {
+        if (!selectedPlanIsPaymentTest && syncResult.membership) {
           setMembership(syncResult.membership)
         }
       } catch (syncError) {
         console.error('主动同步会员支付状态失败:', syncError)
+      }
+      if (selectedPlanIsPaymentTest) {
+        Taro.showToast({ title: '测试支付已同步', icon: 'success' })
+        return
       }
       const confirmed = await pollMembershipStatus()
       if (!confirmed) {
@@ -619,6 +639,7 @@ function ProMembershipPage() {
   const actionButtonText = useMemo(() => {
     if (!selectedPlan) return '加载中...'
     if (autoRenewAuditMode) return '确认开通自动续费（审核预览）'
+    if (isPaymentTestPlan(selectedPlan)) return `支付测试套餐 · ¥${selectedPlan.amount.toFixed(2)}`
     if (paymentEstimate.disabled) return '当前套餐不可即时切换'
     const price = `¥${(paymentEstimate.amount || selectedPlan.amount).toFixed(2)}`
     if (!isPro) return `立即开通 · ${price}`
@@ -749,6 +770,26 @@ function ProMembershipPage() {
         </View>
       )}
 
+      {paymentTestPlan && (
+        <View
+          className={`payment-test-card ${selectedPlan?.code === paymentTestPlan.code ? 'payment-test-card--active' : ''}`}
+          onClick={() => {
+            setSelectedPlanCode(paymentTestPlan.code)
+            if (paymentTestPlan.tier) setSelectedTier(paymentTestPlan.tier)
+            if (paymentTestPlan.period) setSelectedPeriod(paymentTestPlan.period)
+          }}
+        >
+          <View className='payment-test-card-main'>
+            <Text className='payment-test-card-title'>支付测试套餐</Text>
+            <Text className='payment-test-card-desc'>仅测试名单账号可见，用于真实支付链路验证</Text>
+          </View>
+          <View className='payment-test-card-price'>
+            <Text className='payment-test-card-symbol'>¥</Text>
+            <Text className='payment-test-card-amount'>{paymentTestPlan.amount.toFixed(2)}</Text>
+          </View>
+        </View>
+      )}
+
       {/* 档位选择：3 列卡片 */}
       <View className='tier-section'>
         <View className='section-title'>
@@ -836,27 +877,6 @@ function ProMembershipPage() {
           })}
         </View>
       </View>
-
-      {/* 已选套餐价格卡 */}
-      {paymentTestPlan && (
-        <View
-          className={`payment-test-card ${selectedPlan?.code === paymentTestPlan.code ? 'payment-test-card--active' : ''}`}
-          onClick={() => {
-            setSelectedPlanCode(paymentTestPlan.code)
-            if (paymentTestPlan.tier) setSelectedTier(paymentTestPlan.tier)
-            if (paymentTestPlan.period) setSelectedPeriod(paymentTestPlan.period)
-          }}
-        >
-          <View className='payment-test-card-main'>
-            <Text className='payment-test-card-title'>支付测试套餐</Text>
-            <Text className='payment-test-card-desc'>仅测试名单账号可见，用于真实支付链路验证</Text>
-          </View>
-          <View className='payment-test-card-price'>
-            <Text className='payment-test-card-symbol'>¥</Text>
-            <Text className='payment-test-card-amount'>{paymentTestPlan.amount.toFixed(2)}</Text>
-          </View>
-        </View>
-      )}
 
       <View className='plan-card'>
         <View className='plan-card-left'>

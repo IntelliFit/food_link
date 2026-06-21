@@ -714,7 +714,9 @@ func (s *MembershipService) CreatePaymentWithInput(ctx context.Context, userID s
 	if strings.TrimSpace(wxResp.PrepayID) == "" {
 		return nil, &commonerrors.AppError{Code: 10000, Message: "微信下单失败：未返回 prepay_id", HTTPStatus: 502}
 	}
-	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, userID, "", "superseded_by_new_order")
+	if !isPaymentTestPlan(plan) {
+		_, _ = s.repo.ExpirePendingMembershipOrders(ctx, userID, "", "superseded_by_new_order")
+	}
 	payment := &domain.MembershipPayment{
 		UserID:         userID,
 		PlanCode:       plan.Code,
@@ -784,6 +786,17 @@ func (s *MembershipService) ensurePlanPurchaseAllowed(ctx context.Context, userI
 	return nil
 }
 
+func isPaymentTestPlan(plan *domain.MembershipPlan) bool {
+	if plan == nil {
+		return false
+	}
+	return plan.IsTestPlan || isPaymentTestPlanCode(plan.Code)
+}
+
+func isPaymentTestPlanCode(planCode string) bool {
+	return strings.TrimSpace(planCode) == domain.PaymentTestPlanCode
+}
+
 func isMobileAppPaymentRequest(input CreateMembershipPaymentInput, paymentKind *membershipPaymentKind) bool {
 	if paymentKind != nil && strings.EqualFold(paymentKind.TradeType, "APP") {
 		return true
@@ -804,6 +817,10 @@ func (s *MembershipService) buildMembershipPaymentTerms(ctx context.Context, tar
 	terms := &membershipPaymentTerms{
 		Mode:         "new_purchase",
 		ChargeAmount: roundMoney(targetPlan.Amount),
+	}
+	if isPaymentTestPlan(targetPlan) {
+		terms.Mode = "payment_test"
+		return terms, nil
 	}
 	if membership == nil || membership.Status != "active" || membership.ExpiresAt == nil || !membership.ExpiresAt.After(now) || membership.CurrentPlanCode == nil {
 		return terms, nil
@@ -865,6 +882,9 @@ func buildPaymentExtra(plan *domain.MembershipPlan, terms *membershipPaymentTerm
 		"order_mode":      terms.Mode,
 		"original_amount": plan.Amount,
 		"charge_amount":   terms.ChargeAmount,
+	}
+	if isPaymentTestPlan(plan) {
+		extra["is_payment_test_order"] = true
 	}
 	if terms.Mode == "prorated_current_period_upgrade" {
 		extra["upgrade_terms"] = map[string]any{
@@ -945,7 +965,11 @@ func (s *MembershipService) WechatNotify(ctx context.Context, paymentID string) 
 	if err != nil {
 		return err
 	}
-	logger.Info(ctx, "手动标记微信支付并激活会员成功",
+	logMessage := "手动标记微信支付并激活会员成功"
+	if isPaymentTestPlanCode(payment.PlanCode) {
+		logMessage = "手动标记测试支付成功且未变更会员权益"
+	}
+	logger.Info(ctx, logMessage,
 		slog.String("payment_id", payment.ID),
 		slog.String("user_id", payment.UserID),
 		slog.String("order_no", payment.OrderNo),
@@ -1007,12 +1031,18 @@ func (s *MembershipService) SyncWechatPayment(ctx context.Context, userID, order
 	if err := s.markPaymentPaidFromWechatState(ctx, payment, state, map[string]any{"source": "active_query"}); err != nil {
 		return nil, err
 	}
-	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
+	if !isPaymentTestPlanCode(payment.PlanCode) {
+		_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
+	}
 	membership, err := s.getEffectiveMembership(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	logger.Info(ctx, "主动查询微信支付并同步会员成功",
+	logMessage := "主动查询微信支付并同步会员成功"
+	if isPaymentTestPlanCode(payment.PlanCode) {
+		logMessage = "主动查询微信支付并同步测试订单成功且未变更会员权益"
+	}
+	logger.Info(ctx, logMessage,
 		slog.String("user_id", userID),
 		slog.String("order_no", orderNo),
 		slog.String("plan_code", payment.PlanCode),
@@ -1099,8 +1129,14 @@ func (s *MembershipService) HandleWechatNotify(ctx context.Context, headers http
 	}); err != nil {
 		return nil, err
 	}
-	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
-	logger.Info(ctx, "微信支付回调同步会员成功",
+	if !isPaymentTestPlanCode(payment.PlanCode) {
+		_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
+	}
+	logMessage := "微信支付回调同步会员成功"
+	if isPaymentTestPlanCode(payment.PlanCode) {
+		logMessage = "微信支付回调同步测试订单成功且未变更会员权益"
+	}
+	logger.Info(ctx, logMessage,
 		slog.String("payment_id", payment.ID),
 		slog.String("user_id", payment.UserID),
 		slog.String("order_no", payment.OrderNo),
@@ -1830,6 +1866,15 @@ func (s *MembershipService) activateMembershipFromPayment(ctx context.Context, p
 	membership, err := s.repo.GetUserProMembership(ctx, payment.UserID)
 	if err != nil {
 		return nil, err
+	}
+	if isPaymentTestPlan(plan) {
+		logger.Info(ctx, "测试支付订单已支付，不变更会员权益",
+			slog.String("payment_id", payment.ID),
+			slog.String("user_id", payment.UserID),
+			slog.String("order_no", payment.OrderNo),
+			slog.String("plan_code", payment.PlanCode),
+		)
+		return membership, nil
 	}
 	trialEntitlement, err := s.repo.GetTrialEntitlementByUserID(ctx, payment.UserID)
 	if err != nil {
