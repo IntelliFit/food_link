@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Copy, Loader2, RefreshCw, Search } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { AdminSidebar } from '@/components/admin-sidebar'
 import type { AdminMenuId } from '@/components/admin-sidebar'
@@ -36,8 +37,28 @@ const statusBadgeClass: Record<FeedbackStatus, string> = {
   closed: 'border-border bg-muted text-muted-foreground dark:bg-muted/50',
 }
 
+type LoadListOptions = {
+  query?: string
+  category?: string
+  status?: string
+  selectId?: string
+  notifyDirectMiss?: boolean
+}
+
+function readDirectFeedbackId(params: URLSearchParams): string {
+  return (params.get('feedback_id') || params.get('id') || '').trim()
+}
+
+function buildFeedbackDirectLink(feedbackId: string): string {
+  const url = new URL('/feedback', window.location.origin)
+  url.searchParams.set('feedback_id', feedbackId)
+  return url.toString()
+}
+
 /** 意见反馈管理页 */
 export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
+  const [searchParams] = useSearchParams()
+  const directFeedbackId = readDirectFeedbackId(searchParams)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [status, setStatus] = useState('open')
@@ -59,21 +80,53 @@ export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, limit, category, status])
 
-  async function loadList(nextPage = page) {
+  useEffect(() => {
+    if (!directFeedbackId) return
+    setQuery(directFeedbackId)
+    setCategory('all')
+    setStatus('all')
+    setPage(1)
+    void loadList(1, {
+      query: directFeedbackId,
+      category: 'all',
+      status: 'all',
+      selectId: directFeedbackId,
+      notifyDirectMiss: true,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directFeedbackId, limit])
+
+  async function loadList(nextPage = page, options: LoadListOptions = {}) {
     setLoading(true)
     try {
+      const requestedQuery = options.query ?? query.trim()
+      const requestedCategory = options.category ?? category
+      const requestedStatus = options.status ?? status
       const params = new URLSearchParams({
         page: String(nextPage),
         limit: String(limit),
-        q: query.trim(),
-        category,
-        status,
+        q: requestedQuery,
+        category: requestedCategory,
+        status: requestedStatus,
       })
       const data = await adminRequest<FeedbackListResponse>(`/api/admin/feedback?${params.toString()}`)
-      setItems(data.items || [])
+      const nextItems = data.items || []
+      const requestedSelectId = options.selectId?.trim()
+      setItems(nextItems)
       setTotal(data.total || 0)
       setPage(data.page || nextPage)
-      setSelectedId((current) => current || data.items?.[0]?.id || '')
+      setSelectedId((current) => {
+        if (requestedSelectId) {
+          return nextItems.some((item) => item.id === requestedSelectId) ? requestedSelectId : ''
+        }
+        if (current && nextItems.some((item) => item.id === current)) {
+          return current
+        }
+        return nextItems[0]?.id || ''
+      })
+      if (options.notifyDirectMiss && requestedSelectId && !nextItems.some((item) => item.id === requestedSelectId)) {
+        toast.error('没有找到对应的反馈 ID')
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '加载失败')
       setItems([])
@@ -162,7 +215,7 @@ export function FeedbackPage({ onLogout, onMenuChange }: FeedbackPageProps) {
                   onKeyDown={(event) => {
                     if (event.key === 'Enter') runSearch()
                   }}
-                  placeholder="反馈内容 / 联系方式 / traceId / requestId / userId"
+                  placeholder="反馈ID / 反馈内容 / 联系方式 / traceId / requestId / userId"
                 />
               </div>
             </div>
@@ -525,6 +578,10 @@ function FeedbackDetail({
           <Button variant="outline" size="sm" onClick={() => void onCopy(item.id, '反馈 ID 已复制')}>
             <Copy className="size-3.5" />
             复制反馈 ID
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => void onCopy(buildFeedbackDirectLink(item.id), '直达链接已复制')}>
+            <Copy className="size-3.5" />
+            复制直达链接
           </Button>
           <Button
             variant="outline"
