@@ -794,6 +794,11 @@ func (s *StatsService) generatePetChatAnswer(ctx context.Context, comp *statsCom
 			retryFeedback = fmt.Sprintf("上一次输出包含禁用身份措辞“%s”。请重新生成全文：不要自称任何身份，不要出现“专业营养师”“注册营养师”“持证营养师”等说法，也不要使用相近表达。", term)
 			continue
 		}
+		if term := findPetChatHarshToneTerm(generation.Content); term != "" {
+			lastErr = fmt.Errorf("DeepSeek 输出包含刺耳语气措辞: %s", term)
+			retryFeedback = fmt.Sprintf("上一次输出包含容易让用户感觉被责备的措辞“%s”。请重新生成全文：语气要温和陪伴，不要调侃、挖苦、训话、责备或评价用户本人；用“我们可以”“明天先试试”这类合作式表达。", term)
+			continue
+		}
 		generation.Content = sanitizeStatsInsightText(generation.Content)
 		if billing.HasTokenUsage(generation.Usage) {
 			pricing := billing.PriceTokenUsage(billing.PricingInput{Model: model, Usage: generation.Usage}, s.aiUsagePricingConfig())
@@ -1117,6 +1122,33 @@ func findStatsInsightForbiddenIdentityTerm(content string) string {
 	return ""
 }
 
+func findPetChatHarshToneTerm(content string) string {
+	normalized := strings.ReplaceAll(strings.TrimSpace(content), " ", "")
+	terms := []string{
+		"你这坎儿",
+		"坎儿得过一过",
+		"别一口气",
+		"这么猛",
+		"不争气",
+		"作息烂",
+		"乱吃",
+		"胡吃海塞",
+		"管不住嘴",
+		"你就是",
+		"你总是",
+		"你又",
+		"活该",
+		"骂醒",
+		"训你",
+	}
+	for _, term := range terms {
+		if strings.Contains(normalized, strings.ReplaceAll(term, " ", "")) {
+			return term
+		}
+	}
+	return ""
+}
+
 func filterStatsInsightForbiddenIdentityText(content string) string {
 	text := strings.TrimSpace(content)
 	if text == "" {
@@ -1394,15 +1426,17 @@ func buildPetChatPrompt(comp *statsComputation, question string, historyMessages
 
 回答要求：
 1. 用宠物伙伴语气，亲近但不装可爱过头；像在和用户聊天，而不是写正式报告。
-2. 必须直接回答“用户当前追问”，并结合最近对话上下文；不要只说“我们继续刚才的话题”这种空话。
-3. 必须结合健康档案、身体指标、饮食目标、活动水平、作息、病史/过敏/忌口、体检摘要和用户当前关注；没有对应信息时明确说证据不足。
-4. 如果用户提到训练状态、饥饿感、减脂卡住、碳水、蛋白质，要围绕这些点解释可能原因。
-5. 如果用户提到微量元素、维生素、矿物质、钙、铁、锌、钠钾、膳食纤维，必须优先引用“微量营养线索”；如果对应字段缺失，要明确说是记录字段不足，而不是说你没有接入或完全没看。
-6. 如果当前追问很短，例如“为什么”“有什么关系”“只看微量元素”，要从最近对话里还原它指代的问题再回答。
-7. 必须说明证据边界：如果没有训练日志、睡眠或体感数据，要明确说“这部分只能推测”。
-8. 最后给 2-3 个明天能执行的小动作。
-9. 输出 Markdown 正文，不要 JSON，不要代码块，控制在 450-750 字。
-10. 严禁出现“专业营养师”“注册营养师”“持证营养师”等身份措辞。
+2. 语气边界：温和陪伴、就事论事，不要调侃、挖苦、训话、责备、阴阳怪气或评价用户本人；避免“你这”“坎儿”“别一口气这么猛”“管不住嘴”“不争气”等容易像骂人的表达。
+3. 用“我们可以”“明天先试试”“这个数据提示”这类合作式表达，少用命令式“你必须”“你别”；可以指出风险，但要把问题归因到数据和行为模式，不归因到用户性格。
+4. 必须直接回答“用户当前追问”，并结合最近对话上下文；不要只说“我们继续刚才的话题”这种空话。
+5. 必须结合健康档案、身体指标、饮食目标、活动水平、作息、病史/过敏/忌口、体检摘要和用户当前关注；没有对应信息时明确说证据不足。
+6. 如果用户提到训练状态、饥饿感、减脂卡住、碳水、蛋白质，要围绕这些点解释可能原因。
+7. 如果用户提到微量元素、维生素、矿物质、钙、铁、锌、钠钾、膳食纤维，必须优先引用“微量营养线索”；如果对应字段缺失，要明确说是记录字段不足，而不是说你没有接入或完全没看。
+8. 如果当前追问很短，例如“为什么”“有什么关系”“只看微量元素”，要从最近对话里还原它指代的问题再回答。
+9. 必须说明证据边界：如果没有训练日志、睡眠或体感数据，要明确说“这部分只能推测”。
+10. 最后给 2-3 个明天能执行的小动作。
+11. 输出 Markdown 正文，不要 JSON，不要代码块，控制在 450-750 字。
+12. 严禁出现“专业营养师”“注册营养师”“持证营养师”等身份措辞。
 `,
 		question,
 		historyBlock,
