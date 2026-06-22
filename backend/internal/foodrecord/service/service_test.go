@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -1323,3 +1324,74 @@ func TestFoodRecordService_hydrateRecord_FillsMissingNutrientsFromSourceTask(t *
 	assert.Equal(t, 8.0, fetched.Items[0].Nutrients.VitaminCMg)
 	assert.Equal(t, 120.0, fetched.Items[0].WaterMl)
 }
+
+func TestInferDefaultMealTypeFromLocalTime(t *testing.T) {
+	cases := []struct {
+		hour, min int
+		expected  string
+	}{
+		{4, 30, "evening_snack"},
+		{5, 0, "breakfast"},
+		{10, 29, "breakfast"},
+		{10, 30, "morning_snack"},
+		{11, 29, "morning_snack"},
+		{11, 30, "lunch"},
+		{14, 29, "lunch"},
+		{14, 30, "afternoon_snack"},
+		{16, 59, "afternoon_snack"},
+		{17, 0, "dinner"},
+		{20, 59, "dinner"},
+		{21, 0, "evening_snack"},
+	}
+	for _, c := range cases {
+		t.Run(fmt.Sprintf("%02d:%02d", c.hour, c.min), func(t *testing.T) {
+			ref := time.Date(2026, 6, 22, c.hour, c.min, 0, 0, chinaTZ)
+			assert.Equal(t, c.expected, inferDefaultMealTypeFromLocalTime(ref))
+		})
+	}
+}
+
+func TestShiftMealTypeByExistingRecord(t *testing.T) {
+	ref := time.Date(2026, 6, 22, 12, 10, 0, 0, chinaTZ)
+	lastRecord := time.Date(2026, 6, 22, 7, 0, 0, 0, chinaTZ)
+
+	// 早餐已存在且间隔 > 1h -> 午餐
+	records := []domain.FoodRecord{
+		{MealType: "breakfast", RecordTime: &lastRecord},
+	}
+	assert.Equal(t, "lunch", shiftMealTypeByExistingRecords("breakfast", ref, records))
+
+	// 间隔 <= 1h -> 保持早餐
+	withinHour := time.Date(2026, 6, 22, 11, 30, 0, 0, chinaTZ)
+	records = []domain.FoodRecord{
+		{MealType: "breakfast", RecordTime: &withinHour},
+	}
+	assert.Equal(t, "breakfast", shiftMealTypeByExistingRecords("breakfast", ref, records))
+
+	// 基础餐次非正餐 -> 不推演
+	records = []domain.FoodRecord{
+		{MealType: "morning_snack", RecordTime: &lastRecord},
+	}
+	assert.Equal(t, "morning_snack", shiftMealTypeByExistingRecords("morning_snack", ref, records))
+
+	// 三餐均已存在 -> 推到晚加餐
+	lunchTime := time.Date(2026, 6, 22, 8, 0, 0, 0, chinaTZ)
+	dinnerTime := time.Date(2026, 6, 22, 9, 0, 0, 0, chinaTZ)
+	records = []domain.FoodRecord{
+		{MealType: "breakfast", RecordTime: &lastRecord},
+		{MealType: "lunch", RecordTime: &lunchTime},
+		{MealType: "dinner", RecordTime: &dinnerTime},
+	}
+	assert.Equal(t, "evening_snack", shiftMealTypeByExistingRecords("breakfast", ref, records))
+
+	// 早餐和午餐已存在 -> 晚餐
+	records = []domain.FoodRecord{
+		{MealType: "breakfast", RecordTime: &lastRecord},
+		{MealType: "lunch", RecordTime: &lunchTime},
+	}
+	assert.Equal(t, "dinner", shiftMealTypeByExistingRecords("breakfast", ref, records))
+
+	// 无记录 -> 保持
+	assert.Equal(t, "breakfast", shiftMealTypeByExistingRecords("breakfast", ref, nil))
+}
+

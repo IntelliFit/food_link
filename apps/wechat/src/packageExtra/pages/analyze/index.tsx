@@ -32,7 +32,7 @@ import {
   promptStrictModeUpgrade,
 } from '../../../utils/execution-mode'
 import {
-  inferDefaultMealTypeFromHealthProfile,
+  getRecommendedMealTypeWithFallback,
   inferDefaultMealTypeFromLocalTime,
 } from '../../../utils/infer-default-meal-type'
 import {
@@ -612,7 +612,7 @@ function AnalyzePage() {
     try {
       if (getAccessToken()) {
         const profile = await getHealthProfile()
-        const inferredMealType = inferDefaultMealTypeFromHealthProfile(profile)
+        const inferredMealType = await getRecommendedMealTypeWithFallback({ profile })
         setDefaultMealType(inferredMealType)
         setMealType(inferredMealType)
         if (!nextSessionId && profile.execution_mode) {

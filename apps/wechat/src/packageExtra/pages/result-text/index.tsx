@@ -9,9 +9,10 @@ import {
 } from '../../../utils/api'
 import { normalizeItemNutrients } from '../result/result-item-converter'
 import {
-  inferDefaultMealTypeFromHealthProfile,
+  getRecommendedMealTypeWithFallback,
   inferDefaultMealTypeFromLocalTime,
 } from '../../../utils/infer-default-meal-type'
+import { getAiInsightCollapsed, setAiInsightCollapsed } from '../../../utils/ai-insight-collapsed'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import { formatDateKey } from '../../../pages/index/utils/helpers'
@@ -89,22 +90,6 @@ const toSafeNumber = (value: unknown, fallback = 0): number => {
   return fallback
 }
 
-type ScoreTone = 'positive' | 'neutral' | 'warning' | 'danger'
-
-const scoreToTone = (score: number): ScoreTone => {
-  if (score >= 78) return 'positive'
-  if (score >= 60) return 'neutral'
-  if (score >= 42) return 'warning'
-  return 'danger'
-}
-
-const scoreToLabel = (score: number): string => {
-  if (score >= 78) return '偏保护'
-  if (score >= 60) return '基本中性'
-  if (score >= 42) return '需要关注'
-  return '重点关注'
-}
-
 const formatMacroDisplay = (value: number) => roundToSingleDecimal(value).toFixed(1)
 
 const calculateCaloriesFromMacros = (protein: number, carbs: number, fat: number) => (
@@ -142,11 +127,6 @@ function ResultTextPage() {
     carbs: 0,
     fat: 0
   })
-  const [scoreEnabled, setScoreEnabled] = useState(false)
-  const [finalScore, setFinalScore] = useState(0)
-  const [micronutrientScore, setMicronutrientScore] = useState(0)
-  const [macroBalanceScore, setMacroBalanceScore] = useState(0)
-  const [calorieScore, setCalorieScore] = useState(0)
   const [healthAdvice, setHealthAdvice] = useState('')
   const [description, setDescription] = useState('')
   const [pfcRatioComment, setPfcRatioComment] = useState<string | null>(null)
@@ -155,6 +135,7 @@ function ResultTextPage() {
   const [saving, setSaving] = useState(false)
   const [noData, setNoData] = useState(false)
   const [defaultMealType, setDefaultMealType] = useState<SelectableMealType>(() => inferDefaultMealTypeFromLocalTime())
+  const [insightCollapsed, setInsightCollapsed] = useState(false)
 
   // 餐次选择弹窗状态
   const [showMealSelector, setShowMealSelector] = useState(false)
@@ -269,6 +250,7 @@ function ResultTextPage() {
   useEffect(() => {
     const params = Taro.getCurrentInstance().router?.params
     persistRecordTargetDate(String(params?.date || ''))
+    setInsightCollapsed(getAiInsightCollapsed())
     try {
       const stored = Taro.getStorageSync('analyzeTextResult')
       if (!stored) {
@@ -281,11 +263,6 @@ function ResultTextPage() {
       setPfcRatioComment(result.pfc_ratio_comment ?? null)
       setAbsorptionNotes(result.absorption_notes ?? null)
       setContextAdvice(result.context_advice ?? null)
-      setScoreEnabled(Boolean(result.score_enabled))
-      setFinalScore(toSafeNumber(result.final_score, 0))
-      setMicronutrientScore(toSafeNumber(result.micronutrient_score, 0))
-      setMacroBalanceScore(toSafeNumber(result.macro_balance_score, 0))
-      setCalorieScore(toSafeNumber(result.calorie_score, 0))
       const items = convertApiDataToItems(result.items)
       setNutritionItems(items)
       originalItemsRef.current = JSON.parse(JSON.stringify(items))
@@ -305,7 +282,8 @@ function ResultTextPage() {
         const token = getAccessToken()
         if (!token) return
         const profile = await getHealthProfile()
-        setDefaultMealType(inferDefaultMealTypeFromHealthProfile(profile, new Date()))
+        const mealType = await getRecommendedMealTypeWithFallback({ profile })
+        setDefaultMealType(mealType)
       } catch {
         setDefaultMealType(inferDefaultMealTypeFromLocalTime())
       }
@@ -595,56 +573,29 @@ function ResultTextPage() {
             </View>
           </View>
 
-          {scoreEnabled && (
-            <View className='score-overview-card'>
-              <View className='score-overview-main'>
-                <View className='score-overview-left'>
-                  <Text className='score-overview-title'>本餐评分</Text>
-                  <View className='score-overview-score-row'>
-                    <Text className='score-overview-score'>{finalScore}</Text>
-                    <Text className='score-overview-unit'>/ 100</Text>
-                  </View>
-                </View>
-                <View className={`score-overview-badge tone-${scoreToTone(finalScore)}`}>
-                  <Text className='score-overview-badge-label'>{scoreToLabel(finalScore)}</Text>
-                </View>
-              </View>
-              <View className='score-breakdown'>
-                <View className='score-breakdown-item'>
-                  <Text className='score-breakdown-label'>微量元素</Text>
-                  <View className='score-breakdown-track'>
-                    <View className='score-breakdown-fill micro' style={{ width: `${Math.min(100, Math.max(0, micronutrientScore))}%` }} />
-                  </View>
-                  <Text className='score-breakdown-value'>{micronutrientScore}</Text>
-                </View>
-                <View className='score-breakdown-item'>
-                  <Text className='score-breakdown-label'>宏量平衡</Text>
-                  <View className='score-breakdown-track'>
-                    <View className='score-breakdown-fill macro' style={{ width: `${Math.min(100, Math.max(0, macroBalanceScore))}%` }} />
-                  </View>
-                  <Text className='score-breakdown-value'>{macroBalanceScore}</Text>
-                </View>
-                <View className='score-breakdown-item'>
-                  <Text className='score-breakdown-label'>热量适配</Text>
-                  <View className='score-breakdown-track'>
-                    <View className='score-breakdown-fill calorie' style={{ width: `${Math.min(100, Math.max(0, calorieScore))}%` }} />
-                  </View>
-                  <Text className='score-breakdown-value'>{calorieScore}</Text>
-                </View>
-              </View>
-            </View>
-          )}
-
           {/* AI 健康透视 */}
           <View className='insight-card'>
-            <View className='card-header'>
+            <View
+              className='card-header insight-card-header-toggle'
+              onClick={() => {
+                const next = !insightCollapsed
+                setInsightCollapsed(next)
+                setAiInsightCollapsed(next)
+              }}
+            >
               <Text className='card-title'>
                 <Text className='iconfont icon-a-144-lvye'></Text>
                 AI 饮食透视
               </Text>
+              <View className='insight-toggle-affordance'>
+                <Text className={`insight-toggle-icon ${insightCollapsed ? 'collapsed' : ''}`}>▼</Text>
+                <Text className='insight-toggle-text'>{insightCollapsed ? '展开' : '收起'}</Text>
+              </View>
             </View>
 
-            {description && (
+            {!insightCollapsed && (
+              <>
+                {description && (
               <View className='insight-item intro'>
                 <View className='insight-icon-wrapper blue'>
                   <Text className='insight-icon iconfont icon-jishiben'></Text>
@@ -694,6 +645,8 @@ function ResultTextPage() {
                   <Text className='insight-content'>{contextAdvice}</Text>
                 </View>
               </View>
+            )}
+              </>
             )}
           </View>
 

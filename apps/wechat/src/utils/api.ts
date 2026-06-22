@@ -302,11 +302,6 @@ export interface AnalyzeResponse {
     weight_applied_count?: number
     fallback_count?: number
   }
-  score_enabled?: boolean
-  micronutrient_score?: number
-  macro_balance_score?: number
-  calorie_score?: number
-  final_score?: number
 }
 
 const ANALYZE_LOCATION_CACHE_KEY = 'analyze_location_context_v1'
@@ -4522,6 +4517,28 @@ export async function getHealthProfile(): Promise<HealthProfile> {
   } catch (error: any) {
     console.error('获取健康档案失败:', error)
     throw new Error(error.message || '获取健康档案失败')
+  }
+}
+
+/**
+ * 从后端获取推荐的默认餐次（已结合作息与当天已有记录做顺延）。
+ * @param params.date 目标日期（YYYY-MM-DD），默认今天
+ * @returns Promise<{ meal_type: MealType; generated_by: string }>
+ */
+export async function getRecommendMealType(params?: { date?: string }): Promise<{ meal_type: MealType; generated_by: string }> {
+  try {
+    const query = params?.date ? `?date=${encodeURIComponent(params.date)}` : ''
+    const response = await authenticatedRequest(`/api/food-record/recommend-meal-type${query}`, {
+      method: 'GET'
+    })
+    if (response.statusCode !== 200) {
+      const errorMsg = (response.data as any)?.detail || '获取推荐餐次失败'
+      throw new Error(errorMsg)
+    }
+    return response.data as { meal_type: MealType; generated_by: string }
+  } catch (error: any) {
+    console.error('获取推荐餐次失败:', error)
+    throw new Error(error.message || '获取推荐餐次失败')
   }
 }
 

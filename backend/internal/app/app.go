@@ -394,6 +394,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/food-record/save", authmw.RequireJWT(jwtSvc), frHandler.SaveFoodRecord)
 	engine.GET("/api/food-record/list", authmw.RequireJWT(jwtSvc), frHandler.ListFoodRecords)
 	engine.GET("/api/food-record/entry-distribution", authmw.RequireJWT(jwtSvc), frHandler.EntryDistribution)
+	engine.GET("/api/food-record/recommend-meal-type", authmw.OptionalJWT(jwtSvc), frHandler.RecommendMealType)
 	engine.GET("/api/food-record/share/:record_id", frHandler.ShareFoodRecord)
 	engine.GET("/share/food-record/:record_id", frHandler.ShareFoodRecordPage)
 	engine.GET("/api/food-record/:record_id", authmw.RequireJWT(jwtSvc), frHandler.GetFoodRecord)

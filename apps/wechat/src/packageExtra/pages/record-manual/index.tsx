@@ -28,7 +28,7 @@ import { withAuth } from '../../../utils/withAuth'
 import { HOME_INTAKE_DATA_CHANGED_EVENT } from '../../../utils/home-events'
 import { addWaterToBodyMetricsStorage, calculateFoodRecordItemsWaterMl, refreshHomeDashboardLocalSnapshotFromCloud } from '../../../utils/home-dashboard-local-cache'
 import {
-  inferDefaultMealTypeFromHealthProfile,
+  getRecommendedMealTypeWithFallback,
   inferDefaultMealTypeFromLocalTime,
 } from '../../../utils/infer-default-meal-type'
 import { extraPkgUrl } from '../../../utils/subpackage-extra'
@@ -569,7 +569,8 @@ function RecordManualPage() {
       void (async () => {
         try {
           const profile = getAccessToken() ? await getHealthProfile() : null
-          setSelectedMeal(inferDefaultMealTypeFromHealthProfile(profile))
+          const mealType = await getRecommendedMealTypeWithFallback({ profile })
+          setSelectedMeal(mealType)
         } catch {
           setSelectedMeal(inferDefaultMealTypeFromLocalTime())
         }

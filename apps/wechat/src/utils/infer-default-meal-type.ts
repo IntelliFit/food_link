@@ -1,4 +1,5 @@
-import type { CanonicalMealType } from './api'
+import { getAccessToken, getRecommendMealType, type CanonicalMealType, type MealType } from './api'
+import { getStoredRecordTargetDate } from './record-date'
 
 type RoutineHourValue = unknown
 
@@ -121,4 +122,36 @@ export function inferDefaultMealTypeFromHealthProfile(
     hcSleepHour ?? profileSleepHour,
     date,
   )
+}
+
+function isCanonicalMealType(value: string): value is CanonicalMealType {
+  return ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner', 'evening_snack'].includes(value)
+}
+
+function normalizeMealTypeToCanonical(value: MealType | string | undefined | null): CanonicalMealType {
+  if (!value) return inferDefaultMealTypeFromLocalTime()
+  const normalized = String(value).trim().toLowerCase()
+  if (normalized === 'snack') return 'afternoon_snack'
+  if (isCanonicalMealType(normalized)) return normalized
+  return inferDefaultMealTypeFromLocalTime()
+}
+
+/**
+ * 优先从后端获取推荐餐次，失败或未登录时回退到本地推断。
+ * 后端已结合作息与当天已有记录做顺延推理。
+ */
+export async function getRecommendedMealTypeWithFallback(options?: {
+  date?: string
+  profile?: MealTypeFromProfileInput | null
+}): Promise<CanonicalMealType> {
+  if (getAccessToken()) {
+    try {
+      const date = options?.date ?? getStoredRecordTargetDate()
+      const result = await getRecommendMealType({ date })
+      return normalizeMealTypeToCanonical(result.meal_type)
+    } catch (error) {
+      console.warn('后端推荐餐次失败，回退本地推断:', error)
+    }
+  }
+  return inferDefaultMealTypeFromHealthProfile(options?.profile)
 }
