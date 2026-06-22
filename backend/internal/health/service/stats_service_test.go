@@ -411,6 +411,20 @@ func TestBuildNutritionInsightPromptIncludesMicronutrientEvidence(t *testing.T) 
 	assert.Contains(t, prompt, "如果微量营养线索里出现明显偏低或偏高")
 }
 
+func TestBuildPetChatPromptRequiresGentleTone(t *testing.T) {
+	prompt := buildPetChatPrompt(&statsComputation{
+		StatsRange:   "week",
+		StartDate:    "2024-06-10",
+		EndDate:      "2024-06-16",
+		RecordedDays: 2,
+	}, "给我一个明天能执行的小目标", nil)
+
+	assert.Contains(t, prompt, "温和陪伴")
+	assert.Contains(t, prompt, "不要调侃、挖苦、训话、责备")
+	assert.Contains(t, prompt, "避免“你这”“坎儿”“别一口气这么猛”")
+	assert.Contains(t, prompt, "合作式表达")
+}
+
 func TestStatsService_GenerateInsightRetriesForbiddenIdentityClaim(t *testing.T) {
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -451,6 +465,49 @@ func TestStatsService_GenerateInsightRetriesForbiddenIdentityClaim(t *testing.T)
 	assert.Contains(t, text, "本期日均摄入较稳定")
 	assert.NotContains(t, text, "专业营养师")
 	assert.NotContains(t, repo.insights[0].InsightText, "专业营养师")
+}
+
+func TestStatsService_GeneratePetChatRetriesHarshTone(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		messages, ok := body["messages"].([]any)
+		require.True(t, ok)
+		require.NotEmpty(t, messages)
+		w.Header().Set("Content-Type", "application/json")
+		if requestCount == 1 {
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"你这坎儿得过一过，别一口气这么猛。"},"finish_reason":"stop"}]}`))
+			return
+		}
+		assert.Len(t, messages, 2)
+		feedback, ok := messages[1].(map[string]any)
+		require.True(t, ok)
+		assert.Contains(t, feedback["content"], "容易让用户感觉被责备")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"我们先把明天目标放小一点：下午加一份蛋白质点心，再准备一瓶温水慢慢喝。"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+
+	recordTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	repo := &mockStatsRepo{
+		records: []domain.FoodRecord{
+			{UserID: "u1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &recordTime},
+		},
+	}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{}, &config.Config{
+		External: config.ExternalConfig{DeepSeekAPIKey: "test-key"},
+	})
+	svc.deepSeekBaseURL = server.URL
+
+	result, err := svc.GeneratePetChat(context.Background(), "u1", PetChatInput{
+		Range:    "week",
+		Question: "给我一个明天能执行的小目标",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, requestCount)
+	assert.Contains(t, result.Answer, "我们先把明天目标放小一点")
+	assert.NotContains(t, result.Answer, "你这坎儿")
 }
 
 func TestStatsService_GenerateInsightReturnsErrorWhenDeepSeekTruncates(t *testing.T) {
