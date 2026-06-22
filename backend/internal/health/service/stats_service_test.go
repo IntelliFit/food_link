@@ -18,6 +18,7 @@ import (
 
 type mockStatsRepo struct {
 	records          []domain.FoodRecord
+	exerciseLogs     []domain.ExerciseLog
 	user             *domain.StatsUserProfile
 	recordDates      []string
 	insights         []domain.StatsInsight
@@ -27,6 +28,10 @@ type mockStatsRepo struct {
 
 func (m *mockStatsRepo) GetFoodRecordsForDateRange(ctx context.Context, userID string, startUTC, endUTC time.Time) ([]domain.FoodRecord, error) {
 	return m.records, nil
+}
+
+func (m *mockStatsRepo) GetExerciseLogsForDateRange(ctx context.Context, userID string, startDate, endDate string) ([]domain.ExerciseLog, error) {
+	return m.exerciseLogs, nil
 }
 
 func (m *mockStatsRepo) GetUserProfile(ctx context.Context, userID string) (*domain.StatsUserProfile, error) {
@@ -141,6 +146,10 @@ func (m *mockStatsRepo) GetPetChatSession(ctx context.Context, userID, sessionID
 }
 
 func (m *mockStatsRepo) GetPetChatSessionMessages(ctx context.Context, userID, sessionID string, limit int) ([]domain.PetChatMessage, error) {
+	return nil, nil
+}
+
+func (m *mockStatsRepo) ListPetChatSessions(ctx context.Context, userID string, limit int) ([]domain.PetChatSession, error) {
 	return nil, nil
 }
 
@@ -407,6 +416,73 @@ func TestBuildNutritionInsightPromptIncludesMicronutrientEvidence(t *testing.T) 
 	assert.Contains(t, prompt, "如果微量营养线索里出现明显偏低或偏高")
 }
 
+func TestStatsService_BuildStatsComputationIncludesExerciseSummary(t *testing.T) {
+	recordTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	recordedOn1 := time.Date(2024, 6, 15, 0, 0, 0, 0, chinaTZ)
+	recordedOn2 := time.Date(2024, 6, 14, 0, 0, 0, 0, chinaTZ)
+	duration1 := 45
+	duration2 := 30
+	calories1 := 320.0
+	calories2 := 180.0
+	exerciseType1 := "跑步机慢跑"
+	exerciseType2 := "胸背力量训练"
+	repo := &mockStatsRepo{
+		records: []domain.FoodRecord{
+			{UserID: "u1", MealType: "lunch", TotalCalories: 500, TotalProtein: 20, TotalCarbs: 60, TotalFat: 15, RecordTime: &recordTime},
+		},
+		exerciseLogs: []domain.ExerciseLog{
+			{UserID: "u1", ExerciseDesc: "跑步", ExerciseType: &exerciseType1, DurationMin: &duration1, CaloriesBurned: &calories1, RecordedOn: &recordedOn1},
+			{UserID: "u1", ExerciseDesc: "力量训练", ExerciseType: &exerciseType2, DurationMin: &duration2, CaloriesBurned: &calories2, RecordedOn: &recordedOn2},
+		},
+	}
+	svc := NewStatsService(repo, &mockBodyMetricsProvider{})
+
+	comp, err := svc.buildStatsComputation(context.Background(), "u1", "week", 2000, 0)
+	require.NoError(t, err)
+	require.NotNil(t, comp.ExerciseSummary)
+	assert.Equal(t, 2, comp.ExerciseSummary.SessionCount)
+	assert.Equal(t, 2, comp.ExerciseSummary.LoggedDays)
+	assert.Equal(t, 75, comp.ExerciseSummary.TotalDurationMin)
+	assert.Equal(t, 500.0, comp.ExerciseSummary.TotalCalories)
+	require.Len(t, comp.ExerciseSummary.RecentEntries, 2)
+	assert.Equal(t, "跑步机慢跑", comp.ExerciseSummary.RecentEntries[0].Title)
+	assert.Contains(t, comp.DataFingerprint, "sessions=2")
+}
+
+func TestBuildPetChatPromptIncludesExerciseContext(t *testing.T) {
+	prompt := buildPetChatPrompt(&statsComputation{
+		StatsRange:        "week",
+		StartDate:         "2024-06-10",
+		EndDate:           "2024-06-16",
+		TDEE:              2200,
+		RecordedDays:      4,
+		AvgCaloriesPerDay: 1850,
+		CalSurplusDeficit: -350,
+		TotalProtein:      320,
+		TotalCarbs:        760,
+		TotalFat:          210,
+		MacroPercent:      map[string]float64{"protein": 24, "carbs": 50, "fat": 26},
+		ByMeal:            map[string]float64{"breakfast": 320, "morning_snack": 0, "lunch": 720, "afternoon_snack": 160, "dinner": 650, "evening_snack": 0},
+		RecordedDaily:     []DailyCalories{{Date: "2024-06-13", Calories: 1800}, {Date: "2024-06-14", Calories: 1900}},
+		ExerciseSummary: &statsExerciseSummary{
+			LoggedDays:       2,
+			SessionCount:     3,
+			TotalCalories:    780,
+			TotalDurationMin: 110,
+			RecentEntries: []statsExerciseEntry{
+				{Date: "06-14", Title: "胸背力量训练", DurationMin: 50, CaloriesBurned: 280},
+				{Date: "06-13", Title: "跑步机慢跑", DurationMin: 40, CaloriesBurned: 320},
+			},
+		},
+	}, "我最近健身状态为什么有点掉", nil)
+
+	assert.Contains(t, prompt, "训练/运动记录")
+	assert.Contains(t, prompt, "共记录 3 次训练，分布在 2 天")
+	assert.Contains(t, prompt, "06-14 胸背力量训练")
+	assert.Contains(t, prompt, "健身、运动表现")
+	assert.Contains(t, prompt, "如果有训练日志，也不要编造日志里没有的强度")
+}
+
 func TestStatsService_GenerateInsightRetriesForbiddenIdentityClaim(t *testing.T) {
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -539,7 +615,7 @@ func TestStatsService_GetSummaryUsesCachedInsightFingerprint(t *testing.T) {
 			UserID:          "u1",
 			RangeType:       "week",
 			GeneratedDate:   time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, chinaTZ),
-			DataFingerprint: "500_500.0_1_17.6_52.7_29.7_profile:none",
+			DataFingerprint: "500_500.0_1_17.6_52.7_29.7_fiber=0.0|sodiumMg=0.0|potassiumMg=0.0|calciumMg=0.0|ironMg=0.0|vitaminARaeMcg=0.0|vitaminCMg=0.0|vitaminDMcg=0.0_profile:none_exercise:none",
 			InsightText:     "cached insight",
 		}},
 	}

@@ -31,6 +31,19 @@ func (r *StatsRepo) GetFoodRecordsForDateRange(ctx context.Context, userID strin
 	return rows, err
 }
 
+func (r *StatsRepo) GetExerciseLogsForDateRange(ctx context.Context, userID string, startDate, endDate string) ([]domain.ExerciseLog, error) {
+	var rows []domain.ExerciseLog
+	q := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if startDate != "" {
+		q = q.Where("recorded_on >= ?", startDate)
+	}
+	if endDate != "" {
+		q = q.Where("recorded_on <= ?", endDate)
+	}
+	err := q.Order("recorded_on desc, created_at desc").Find(&rows).Error
+	return rows, err
+}
+
 func (r *StatsRepo) GetUserProfile(ctx context.Context, userID string) (*domain.StatsUserProfile, error) {
 	var row domain.StatsUserProfile
 	if err := r.db.WithContext(ctx).Where("id = ?", userID).First(&row).Error; err != nil {
