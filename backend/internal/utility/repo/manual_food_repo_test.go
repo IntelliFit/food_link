@@ -326,3 +326,59 @@ func TestManualFoodCategoryFilterSQL(t *testing.T) {
 	assert.Contains(t, manualFoodCategoryFilterSQL("canonical_name", "meal"), "%餐%")
 	assert.Contains(t, manualFoodCategoryFilterSQL("canonical_name", "other"), "NOT (")
 }
+
+
+func TestMergeManualFoodNutrients_KeepsExistingMacrosAndBackfillsMicros(t *testing.T) {
+	existing := &domain.ManualFoodNutrients{
+		Calories: 127.5,
+		Protein:  2.8,
+		Carbs:    27.5,
+		Fat:      0.3,
+	}
+	library := &domain.ManualFoodNutrients{
+		Calories:       116,
+		Protein:        2.6,
+		Carbs:          25.9,
+		Fat:            0.3,
+		Fiber:          0.4,
+		SodiumMg:       2,
+		PotassiumMg:    35,
+	}
+	merged := mergeManualFoodNutrients(existing, library)
+	require.NotNil(t, merged)
+	// 宏量营养素应保留原有值（来自真实记录的比例）
+	assert.InDelta(t, 127.5, merged.Calories, 0.01)
+	assert.InDelta(t, 2.8, merged.Protein, 0.01)
+	assert.InDelta(t, 27.5, merged.Carbs, 0.01)
+	assert.InDelta(t, 0.3, merged.Fat, 0.01)
+	// 微量元素应从营养库补齐
+	assert.InDelta(t, 0.4, merged.Fiber, 0.01)
+	assert.InDelta(t, 2, merged.SodiumMg, 0.01)
+	assert.InDelta(t, 35, merged.PotassiumMg, 0.01)
+}
+
+func TestMergeManualFoodNutrients_FallsBackToLibraryWhenExistingMissingMacros(t *testing.T) {
+	existing := &domain.ManualFoodNutrients{
+		Fiber: 0.4,
+	}
+	library := &domain.ManualFoodNutrients{
+		Calories: 116,
+		Protein:  2.6,
+		Carbs:    25.9,
+		Fat:      0.3,
+	}
+	merged := mergeManualFoodNutrients(existing, library)
+	require.NotNil(t, merged)
+	assert.InDelta(t, 116, merged.Calories, 0.01)
+	assert.InDelta(t, 2.6, merged.Protein, 0.01)
+	assert.InDelta(t, 25.9, merged.Carbs, 0.01)
+	assert.InDelta(t, 0.3, merged.Fat, 0.01)
+	assert.InDelta(t, 0.4, merged.Fiber, 0.01)
+}
+
+func TestMergeManualFoodNutrients_ReturnsLibraryWhenExistingNil(t *testing.T) {
+	library := &domain.ManualFoodNutrients{Calories: 116}
+	merged := mergeManualFoodNutrients(nil, library)
+	require.NotNil(t, merged)
+	assert.InDelta(t, 116, merged.Calories, 0.01)
+}

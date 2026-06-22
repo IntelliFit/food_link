@@ -2069,6 +2069,51 @@ func scaleManualFoodNutrientsPtr(n *domain.ManualFoodNutrients, scale float64) *
 	return &scaled
 }
 
+// mergeManualFoodNutrients 将营养库数据合并到现有营养素中：
+// 宏量营养素（calories/protein/carbs/fat）优先保留现有值；
+// 微量元素仅在现有值缺失或为零时用营养库补齐。
+// 这样最近记录/高频食物的列表显示能量与实际记录能量保持一致。
+func mergeManualFoodNutrients(existing *domain.ManualFoodNutrients, library *domain.ManualFoodNutrients) *domain.ManualFoodNutrients {
+	if existing == nil {
+		return library
+	}
+	if library == nil {
+		return existing
+	}
+	out := *existing
+	mergePositive := func(current *float64, value float64) {
+		if *current <= 0 && value > 0 {
+			*current = value
+		}
+	}
+	mergePositive(&out.Calories, library.Calories)
+	mergePositive(&out.Protein, library.Protein)
+	mergePositive(&out.Carbs, library.Carbs)
+	mergePositive(&out.Fat, library.Fat)
+	mergePositive(&out.Fiber, library.Fiber)
+	mergePositive(&out.Sugar, library.Sugar)
+	mergePositive(&out.SaturatedFat, library.SaturatedFat)
+	mergePositive(&out.CholesterolMg, library.CholesterolMg)
+	mergePositive(&out.SodiumMg, library.SodiumMg)
+	mergePositive(&out.PotassiumMg, library.PotassiumMg)
+	mergePositive(&out.CalciumMg, library.CalciumMg)
+	mergePositive(&out.IronMg, library.IronMg)
+	mergePositive(&out.MagnesiumMg, library.MagnesiumMg)
+	mergePositive(&out.ZincMg, library.ZincMg)
+	mergePositive(&out.VitaminARaeMcg, library.VitaminARaeMcg)
+	mergePositive(&out.VitaminCMg, library.VitaminCMg)
+	mergePositive(&out.VitaminDMcg, library.VitaminDMcg)
+	mergePositive(&out.VitaminEMg, library.VitaminEMg)
+	mergePositive(&out.VitaminKMcg, library.VitaminKMcg)
+	mergePositive(&out.ThiaminMg, library.ThiaminMg)
+	mergePositive(&out.RiboflavinMg, library.RiboflavinMg)
+	mergePositive(&out.NiacinMg, library.NiacinMg)
+	mergePositive(&out.VitaminB6Mg, library.VitaminB6Mg)
+	mergePositive(&out.FolateMcg, library.FolateMcg)
+	mergePositive(&out.VitaminB12Mcg, library.VitaminB12Mcg)
+	return &out
+}
+
 func (r *ManualFoodRepo) mergeNutritionLibraryIntoManualFoodResult(
 	item domain.ManualFoodResult,
 	byID map[string]fooddomain.FoodNutrition,
@@ -2098,9 +2143,10 @@ func (r *ManualFoodRepo) mergeNutritionLibraryIntoManualFoodResult(
 		item.ImagePath = &first
 	}
 	// 如果目标结果没有微量元素（常见于最近记录/高频食物），从营养库补齐，
-	// 避免手动记录后首页微量营养不更新。
+	// 避免手动记录后首页微量营养不更新。同时保留原有宏量营养素，确保列表显示能量
+	// 与实际记录能量一致（例如 178g/227kcal 的白米饭不会被营养库 116kcal/100g 覆盖成 206kcal）。
 	if !manualFoodNutrientsHasMicros(item.NutrientsPer100g) {
-		item.NutrientsPer100g = nutrientsFromFoodNutritionRow(row)
+		item.NutrientsPer100g = mergeManualFoodNutrients(item.NutrientsPer100g, nutrientsFromFoodNutritionRow(row))
 		if item.DefaultWeightGrams > 0 {
 			item.ExtraNutrients = scaleManualFoodNutrientsPtr(item.NutrientsPer100g, item.DefaultWeightGrams/100)
 		} else {
