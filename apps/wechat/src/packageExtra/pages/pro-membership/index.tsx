@@ -289,7 +289,7 @@ function ProMembershipPage() {
         mode: 'payment_test',
         amount: selectedPlan.amount,
         disabled: false,
-        hint: '测试支付只验证真实支付链路，不会开通、续费或切换会员套餐',
+        hint: '测试支付会走完整会员开通链路，仅对测试名单用户可见',
       }
     }
     const currentCode = membership?.current_plan_code || null
@@ -497,7 +497,7 @@ function ProMembershipPage() {
 
     const payAmount = paymentEstimate.amount || selectedPlan.amount
     const confirmContent = selectedPlanIsPaymentTest
-      ? `支付测试套餐，¥${payAmount.toFixed(2)}。\n该订单仅用于验证真实微信支付链路，支付成功不会开通、续费或切换会员套餐。`
+      ? `支付测试套餐，¥${payAmount.toFixed(2)}。\n该订单用于验证真实微信支付与会员开通链路，支付成功后会开通测试会员。`
       : paymentEstimate.mode === 'prorated_current_period_upgrade'
       ? `升级 ${selectedPlan.name}，本次补差 ¥${payAmount.toFixed(2)}。${paymentEstimate.hint || '已按当前会员剩余价值折抵'}。到期后需手动续费。`
       : `订阅 ${selectedPlan.name}，¥${payAmount.toFixed(2)}${PERIODS.find(p => p.key === selectedPeriod)?.unit || ''}，到期后需手动续费。`
@@ -523,14 +523,14 @@ function ProMembershipPage() {
       Taro.showToast({ title: '支付已提交，正在确认', icon: 'none', duration: 1800 })
       try {
         const syncResult = await syncMembershipPayment(payOrder.order_no)
-        if (!selectedPlanIsPaymentTest && syncResult.membership) {
+        if (syncResult.membership) {
           setMembership(syncResult.membership)
         }
       } catch (syncError) {
         console.error('主动同步会员支付状态失败:', syncError)
       }
       if (selectedPlanIsPaymentTest) {
-        Taro.showToast({ title: '测试支付已同步', icon: 'success' })
+        Taro.showToast({ title: '测试会员已开通', icon: 'success' })
         return
       }
       const confirmed = await pollMembershipStatus()

@@ -11,6 +11,7 @@ import (
 	"food_link/backend/internal/membership/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -429,7 +430,20 @@ func (r *MembershipRepo) UpdatePaymentStatus(ctx context.Context, id string, sta
 
 func (r *MembershipRepo) UpdatePaymentByOrderNo(ctx context.Context, orderNo string, updates map[string]any) error {
 	updates["updated_at"] = time.Now()
+	normalizePaymentJSONUpdates(updates)
 	return r.db.WithContext(ctx).Model(&domain.MembershipPayment{}).Where("order_no = ?", orderNo).Updates(updates).Error
+}
+
+func normalizePaymentJSONUpdates(updates map[string]any) {
+	for _, key := range []string{"notify_payload", "extra"} {
+		value, ok := updates[key]
+		if !ok || value == nil {
+			continue
+		}
+		if jsonMap, ok := value.(map[string]any); ok {
+			updates[key] = datatypes.JSONMap(jsonMap)
+		}
+	}
 }
 
 func (r *MembershipRepo) ExpirePendingMembershipOrders(ctx context.Context, userID, excludeOrderNo, reason string) (int, error) {
