@@ -212,7 +212,7 @@ func (r *MembershipRepo) GetLatestPaidMembershipPayment(ctx context.Context, use
 		return nil, err
 	}
 	for _, row := range rows {
-		if isMembershipPlanCode(row.PlanCode) {
+		if isMembershipPlanCode(row.PlanCode) && !isPaymentTestPlanCode(row.PlanCode) {
 			return &row, nil
 		}
 	}
@@ -307,7 +307,7 @@ func (r *MembershipRepo) GetFirstPaidMembershipUserRank(ctx context.Context, use
 	seen := map[string]struct{}{}
 	rank := 0
 	for _, row := range rows {
-		if !isMembershipPlanCode(row.PlanCode) || row.UserID == "" {
+		if !isMembershipPlanCode(row.PlanCode) || isPaymentTestPlanCode(row.PlanCode) || row.UserID == "" {
 			continue
 		}
 		if _, ok := seen[row.UserID]; ok {
@@ -474,6 +474,10 @@ func isMembershipPlanCode(planCode string) bool {
 		strings.HasPrefix(code, "light_") ||
 		strings.HasPrefix(code, "standard_") ||
 		strings.HasPrefix(code, "advanced_")
+}
+
+func isPaymentTestPlanCode(planCode string) bool {
+	return strings.EqualFold(strings.TrimSpace(planCode), domain.PaymentTestPlanCode)
 }
 
 func (r *MembershipRepo) CountAnalysisTasksToday(ctx context.Context, userID string) (int64, error) {

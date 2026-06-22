@@ -958,12 +958,18 @@ type PaymentTestSettingDO struct {
 func (PaymentTestSettingDO) TableName() string { return "membership_payment_test_settings" }
 
 type PaymentTestUserDO struct {
-	ID        string    `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID    string    `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_membership_payment_test_users_user_id"`
-	Note      *string   `gorm:"column:note;type:text"`
-	CreatedBy *string   `gorm:"column:created_by;type:text"`
-	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
-	UpdatedAt time.Time `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
+	ID                        string         `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID                    string         `gorm:"column:user_id;type:uuid;not null;uniqueIndex:idx_membership_payment_test_users_user_id"`
+	Note                      *string        `gorm:"column:note;type:text"`
+	CreatedBy                 *string        `gorm:"column:created_by;type:text"`
+	MembershipSnapshot        map[string]any `gorm:"column:membership_snapshot;type:jsonb;serializer:json;not null;default:'{}'::jsonb"`
+	MembershipSnapshotTakenAt *time.Time     `gorm:"column:membership_snapshot_taken_at;type:timestamptz"`
+	MembershipCancelledAt     *time.Time     `gorm:"column:membership_cancelled_at;type:timestamptz"`
+	MembershipCancelledBy     *string        `gorm:"column:membership_cancelled_by;type:text"`
+	MembershipRestoredAt      *time.Time     `gorm:"column:membership_restored_at;type:timestamptz"`
+	MembershipRestoredBy      *string        `gorm:"column:membership_restored_by;type:text"`
+	CreatedAt                 time.Time      `gorm:"column:created_at;type:timestamptz;not null;default:now()"`
+	UpdatedAt                 time.Time      `gorm:"column:updated_at;type:timestamptz;not null;default:now()"`
 }
 
 func (PaymentTestUserDO) TableName() string { return "membership_payment_test_users" }

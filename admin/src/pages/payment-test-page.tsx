@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { CircleAlert, CreditCard, EyeOff, Loader2, RefreshCcw, Search, ShieldCheck, Trash2, UserPlus } from 'lucide-react'
+import { CircleAlert, CreditCard, EyeOff, Loader2, RefreshCcw, RotateCcw, Search, ShieldCheck, ShieldOff, Trash2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { AdminSidebar, type AdminMenuId } from '@/components/admin-sidebar'
 import { Badge } from '@/components/ui/badge'
@@ -42,6 +42,20 @@ type PaymentTestUser = {
   app_openid: string
   note: string
   created_by: string
+  current_membership_status: string
+  current_plan_code: string
+  current_expires_at?: string
+  current_daily_credits: number
+  membership_backup_available: boolean
+  backup_plan_code: string
+  backup_status: string
+  backup_expires_at?: string
+  backup_daily_credits: number
+  membership_snapshot_taken_at?: string
+  membership_cancelled_at?: string
+  membership_cancelled_by?: string
+  membership_restored_at?: string
+  membership_restored_by?: string
   created_at?: string
 }
 
@@ -170,6 +184,36 @@ export function PaymentTestPage({ onLogout, onMenuChange }: PaymentTestPageProps
       await searchUsers()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '移除失败')
+    } finally {
+      setBusyUserId('')
+    }
+  }
+
+  async function cancelMembership(userID: string) {
+    setBusyUserId(userID)
+    try {
+      await adminRequest<{ item: PaymentTestUser }>(`/api/admin/payment-test/users/${encodeURIComponent(userID)}/cancel-membership`, {
+        method: 'POST',
+      })
+      toast.success('已取消测试用户会员并保存备份')
+      await loadSummary()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '取消会员失败')
+    } finally {
+      setBusyUserId('')
+    }
+  }
+
+  async function restoreMembership(userID: string) {
+    setBusyUserId(userID)
+    try {
+      await adminRequest<{ item: PaymentTestUser }>(`/api/admin/payment-test/users/${encodeURIComponent(userID)}/restore-membership`, {
+        method: 'POST',
+      })
+      toast.success('已恢复测试用户会员')
+      await loadSummary()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '恢复会员失败')
     } finally {
       setBusyUserId('')
     }
@@ -321,12 +365,33 @@ export function PaymentTestPage({ onLogout, onMenuChange }: PaymentTestPageProps
                   <UserRow
                     key={item.user_id}
                     user={item}
-                    meta={item.note || `加入人：${item.created_by || '-'}`}
+                    meta={membershipMeta(item)}
                     action={
-                      <Button variant='outline' size='sm' disabled={busyUserId === item.user_id} onClick={() => void removeUser(item.user_id)}>
-                        {busyUserId === item.user_id ? <Loader2 className='size-4 animate-spin' /> : <Trash2 className='size-4' />}
-                        移除
-                      </Button>
+                      <div className='flex flex-wrap justify-end gap-2'>
+                        {item.membership_backup_available ? (
+                          <Button variant='secondary' size='sm' disabled={busyUserId === item.user_id} onClick={() => void restoreMembership(item.user_id)}>
+                            {busyUserId === item.user_id ? <Loader2 className='size-4 animate-spin' /> : <RotateCcw className='size-4' />}
+                            恢复会员
+                          </Button>
+                        ) : item.current_membership_status === 'active' ? (
+                          <Button variant='outline' size='sm' disabled={busyUserId === item.user_id} onClick={() => void cancelMembership(item.user_id)}>
+                            {busyUserId === item.user_id ? <Loader2 className='size-4 animate-spin' /> : <ShieldOff className='size-4' />}
+                            取消会员
+                          </Button>
+                        ) : (
+                          <Badge variant='outline'>{membershipStatusLabel(item.current_membership_status)}</Badge>
+                        )}
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          disabled={busyUserId === item.user_id || item.membership_backup_available}
+                          title={item.membership_backup_available ? '请先恢复会员备份再移除名单' : '移除测试名单'}
+                          onClick={() => void removeUser(item.user_id)}
+                        >
+                          {busyUserId === item.user_id ? <Loader2 className='size-4 animate-spin' /> : <Trash2 className='size-4' />}
+                          移除
+                        </Button>
+                      </div>
                     }
                   />
                 ))
@@ -349,6 +414,33 @@ function InfoTile({ label, value, tone = 'default' }: { label: string; value: st
   )
 }
 
+function membershipMeta(user: PaymentTestUser) {
+  const note = user.note ? `${user.note} · ` : ''
+  const currentPlan = user.current_plan_code || '-'
+  const currentStatus = membershipStatusLabel(user.current_membership_status)
+  const current = `当前：${currentStatus}${user.current_plan_code ? ` · ${currentPlan}` : ''}${user.current_expires_at ? ` · ${formatDate(user.current_expires_at)}` : ''}`
+  if (user.membership_backup_available) {
+    const backup = `备份：${user.backup_plan_code || '-'}${user.backup_expires_at ? ` · ${formatDate(user.backup_expires_at)}` : ''}`
+    return `${note}${current}；${backup}`
+  }
+  return `${note}${current}；加入人：${user.created_by || '-'}`
+}
+
+function membershipStatusLabel(status?: string) {
+  switch (status) {
+    case 'active':
+      return '会员有效'
+    case 'expired':
+      return '已过期'
+    case 'inactive':
+    case '':
+    case undefined:
+      return '无有效会员'
+    default:
+      return status
+  }
+}
+
 function UserRow({
   user,
   action,
@@ -368,7 +460,7 @@ function UserRow({
         <p className='mt-1 truncate text-xs text-muted-foreground'>{user.user_id}</p>
         <p className='mt-1 truncate text-xs text-muted-foreground'>{meta || user.app_openid || user.openid || formatDate(user.created_at)}</p>
       </div>
-      <div className='shrink-0'>{action}</div>
+      <div className='flex shrink-0 justify-end'>{action}</div>
     </div>
   )
 }
