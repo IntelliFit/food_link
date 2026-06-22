@@ -14,6 +14,8 @@ type PaymentTestRepo interface {
 	SearchUsers(ctx context.Context, query string, limit int) ([]admindomain.PaymentTestUserSearchResult, error)
 	AddUser(ctx context.Context, userID, note, createdBy string) (*admindomain.PaymentTestUser, error)
 	RemoveUser(ctx context.Context, userID string) error
+	CancelUserMembership(ctx context.Context, userID, cancelledBy string) (*admindomain.PaymentTestUser, error)
+	RestoreUserMembership(ctx context.Context, userID, restoredBy string) (*admindomain.PaymentTestUser, error)
 }
 
 type PaymentTestService struct {
@@ -53,4 +55,18 @@ func (s *PaymentTestService) AddUser(ctx context.Context, userID, note, createdB
 
 func (s *PaymentTestService) RemoveUser(ctx context.Context, userID string) error {
 	return s.repo.RemoveUser(ctx, userID)
+}
+
+func (s *PaymentTestService) CancelUserMembership(ctx context.Context, userID, cancelledBy string) (*admindomain.PaymentTestUser, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "用户 ID 不能为空", HTTPStatus: 400}
+	}
+	return s.repo.CancelUserMembership(ctx, userID, cancelledBy)
+}
+
+func (s *PaymentTestService) RestoreUserMembership(ctx context.Context, userID, restoredBy string) (*admindomain.PaymentTestUser, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, &commonerrors.AppError{Code: 10002, Message: "用户 ID 不能为空", HTTPStatus: 400}
+	}
+	return s.repo.RestoreUserMembership(ctx, userID, restoredBy)
 }

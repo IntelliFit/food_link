@@ -289,7 +289,7 @@ func (s *MembershipService) getEffectiveMembership(ctx context.Context, userID s
 
 func (s *MembershipService) reconcileMembershipFromLatestPaidOrder(ctx context.Context, userID string, membership *domain.UserMembership) (*domain.UserMembership, error) {
 	latest, err := s.repo.GetLatestPaidMembershipPayment(ctx, userID)
-	if err != nil || latest == nil || !isMembershipPlanCode(latest.PlanCode) {
+	if err != nil || latest == nil || !isMembershipPlanCode(latest.PlanCode) || isPaymentTestPlanCode(latest.PlanCode) {
 		return membership, err
 	}
 	paidAt := latest.PaidAt
@@ -714,9 +714,7 @@ func (s *MembershipService) CreatePaymentWithInput(ctx context.Context, userID s
 	if strings.TrimSpace(wxResp.PrepayID) == "" {
 		return nil, &commonerrors.AppError{Code: 10000, Message: "微信下单失败：未返回 prepay_id", HTTPStatus: 502}
 	}
-	if !isPaymentTestPlan(plan) {
-		_, _ = s.repo.ExpirePendingMembershipOrders(ctx, userID, "", "superseded_by_new_order")
-	}
+	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, userID, "", "superseded_by_new_order")
 	payment := &domain.MembershipPayment{
 		UserID:         userID,
 		PlanCode:       plan.Code,
@@ -817,10 +815,6 @@ func (s *MembershipService) buildMembershipPaymentTerms(ctx context.Context, tar
 	terms := &membershipPaymentTerms{
 		Mode:         "new_purchase",
 		ChargeAmount: roundMoney(targetPlan.Amount),
-	}
-	if isPaymentTestPlan(targetPlan) {
-		terms.Mode = "payment_test"
-		return terms, nil
 	}
 	if membership == nil || membership.Status != "active" || membership.ExpiresAt == nil || !membership.ExpiresAt.After(now) || membership.CurrentPlanCode == nil {
 		return terms, nil
@@ -966,9 +960,6 @@ func (s *MembershipService) WechatNotify(ctx context.Context, paymentID string) 
 		return err
 	}
 	logMessage := "手动标记微信支付并激活会员成功"
-	if isPaymentTestPlanCode(payment.PlanCode) {
-		logMessage = "手动标记测试支付成功且未变更会员权益"
-	}
 	logger.Info(ctx, logMessage,
 		slog.String("payment_id", payment.ID),
 		slog.String("user_id", payment.UserID),
@@ -1031,17 +1022,12 @@ func (s *MembershipService) SyncWechatPayment(ctx context.Context, userID, order
 	if err := s.markPaymentPaidFromWechatState(ctx, payment, state, map[string]any{"source": "active_query"}); err != nil {
 		return nil, err
 	}
-	if !isPaymentTestPlanCode(payment.PlanCode) {
-		_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
-	}
+	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
 	membership, err := s.getEffectiveMembership(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	logMessage := "主动查询微信支付并同步会员成功"
-	if isPaymentTestPlanCode(payment.PlanCode) {
-		logMessage = "主动查询微信支付并同步测试订单成功且未变更会员权益"
-	}
 	logger.Info(ctx, logMessage,
 		slog.String("user_id", userID),
 		slog.String("order_no", orderNo),
@@ -1129,13 +1115,8 @@ func (s *MembershipService) HandleWechatNotify(ctx context.Context, headers http
 	}); err != nil {
 		return nil, err
 	}
-	if !isPaymentTestPlanCode(payment.PlanCode) {
-		_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
-	}
+	_, _ = s.repo.ExpirePendingMembershipOrders(ctx, payment.UserID, orderNo, "superseded_by_paid_order")
 	logMessage := "微信支付回调同步会员成功"
-	if isPaymentTestPlanCode(payment.PlanCode) {
-		logMessage = "微信支付回调同步测试订单成功且未变更会员权益"
-	}
 	logger.Info(ctx, logMessage,
 		slog.String("payment_id", payment.ID),
 		slog.String("user_id", payment.UserID),
@@ -1866,15 +1847,6 @@ func (s *MembershipService) activateMembershipFromPayment(ctx context.Context, p
 	membership, err := s.repo.GetUserProMembership(ctx, payment.UserID)
 	if err != nil {
 		return nil, err
-	}
-	if isPaymentTestPlan(plan) {
-		logger.Info(ctx, "测试支付订单已支付，不变更会员权益",
-			slog.String("payment_id", payment.ID),
-			slog.String("user_id", payment.UserID),
-			slog.String("order_no", payment.OrderNo),
-			slog.String("plan_code", payment.PlanCode),
-		)
-		return membership, nil
 	}
 	trialEntitlement, err := s.repo.GetTrialEntitlementByUserID(ctx, payment.UserID)
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"food_link/backend/internal/membership/domain"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -212,7 +213,7 @@ func (r *MembershipRepo) GetLatestPaidMembershipPayment(ctx context.Context, use
 		return nil, err
 	}
 	for _, row := range rows {
-		if isMembershipPlanCode(row.PlanCode) {
+		if isMembershipPlanCode(row.PlanCode) && !isPaymentTestPlanCode(row.PlanCode) {
 			return &row, nil
 		}
 	}
@@ -307,7 +308,7 @@ func (r *MembershipRepo) GetFirstPaidMembershipUserRank(ctx context.Context, use
 	seen := map[string]struct{}{}
 	rank := 0
 	for _, row := range rows {
-		if !isMembershipPlanCode(row.PlanCode) || row.UserID == "" {
+		if !isMembershipPlanCode(row.PlanCode) || isPaymentTestPlanCode(row.PlanCode) || row.UserID == "" {
 			continue
 		}
 		if _, ok := seen[row.UserID]; ok {
@@ -429,7 +430,20 @@ func (r *MembershipRepo) UpdatePaymentStatus(ctx context.Context, id string, sta
 
 func (r *MembershipRepo) UpdatePaymentByOrderNo(ctx context.Context, orderNo string, updates map[string]any) error {
 	updates["updated_at"] = time.Now()
+	normalizePaymentJSONUpdates(updates)
 	return r.db.WithContext(ctx).Model(&domain.MembershipPayment{}).Where("order_no = ?", orderNo).Updates(updates).Error
+}
+
+func normalizePaymentJSONUpdates(updates map[string]any) {
+	for _, key := range []string{"notify_payload", "extra"} {
+		value, ok := updates[key]
+		if !ok || value == nil {
+			continue
+		}
+		if jsonMap, ok := value.(map[string]any); ok {
+			updates[key] = datatypes.JSONMap(jsonMap)
+		}
+	}
 }
 
 func (r *MembershipRepo) ExpirePendingMembershipOrders(ctx context.Context, userID, excludeOrderNo, reason string) (int, error) {
@@ -474,6 +488,10 @@ func isMembershipPlanCode(planCode string) bool {
 		strings.HasPrefix(code, "light_") ||
 		strings.HasPrefix(code, "standard_") ||
 		strings.HasPrefix(code, "advanced_")
+}
+
+func isPaymentTestPlanCode(planCode string) bool {
+	return strings.EqualFold(strings.TrimSpace(planCode), domain.PaymentTestPlanCode)
 }
 
 func (r *MembershipRepo) CountAnalysisTasksToday(ctx context.Context, userID string) (int64, error) {

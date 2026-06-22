@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -30,6 +31,18 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&User{},
 	))
 	return db
+}
+
+func TestNormalizePaymentJSONUpdates(t *testing.T) {
+	updates := map[string]any{
+		"notify_payload": map[string]any{"source": "active_query"},
+		"extra":          map[string]any{"expired_at": "2026-06-22T16:00:00+08:00"},
+	}
+
+	normalizePaymentJSONUpdates(updates)
+
+	assert.IsType(t, datatypes.JSONMap{}, updates["notify_payload"])
+	assert.IsType(t, datatypes.JSONMap{}, updates["extra"])
 }
 
 func TestMembershipRepo_ListActivePlans(t *testing.T) {

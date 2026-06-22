@@ -36,12 +36,18 @@ type PaymentTestSetting struct {
 func (PaymentTestSetting) TableName() string { return "membership_payment_test_settings" }
 
 type PaymentTestUser struct {
-	ID        string     `gorm:"column:id;primaryKey" json:"id"`
-	UserID    string     `gorm:"column:user_id" json:"user_id"`
-	Note      *string    `gorm:"column:note" json:"note,omitempty"`
-	CreatedBy *string    `gorm:"column:created_by" json:"created_by,omitempty"`
-	CreatedAt *time.Time `gorm:"column:created_at" json:"created_at,omitempty"`
-	UpdatedAt *time.Time `gorm:"column:updated_at" json:"updated_at,omitempty"`
+	ID                        string         `gorm:"column:id;primaryKey" json:"id"`
+	UserID                    string         `gorm:"column:user_id" json:"user_id"`
+	Note                      *string        `gorm:"column:note" json:"note,omitempty"`
+	CreatedBy                 *string        `gorm:"column:created_by" json:"created_by,omitempty"`
+	MembershipSnapshot        map[string]any `gorm:"column:membership_snapshot;type:jsonb;serializer:json;not null;default:'{}'::jsonb" json:"membership_snapshot,omitempty"`
+	MembershipSnapshotTakenAt *time.Time     `gorm:"column:membership_snapshot_taken_at" json:"membership_snapshot_taken_at,omitempty"`
+	MembershipCancelledAt     *time.Time     `gorm:"column:membership_cancelled_at" json:"membership_cancelled_at,omitempty"`
+	MembershipCancelledBy     *string        `gorm:"column:membership_cancelled_by" json:"membership_cancelled_by,omitempty"`
+	MembershipRestoredAt      *time.Time     `gorm:"column:membership_restored_at" json:"membership_restored_at,omitempty"`
+	MembershipRestoredBy      *string        `gorm:"column:membership_restored_by" json:"membership_restored_by,omitempty"`
+	CreatedAt                 *time.Time     `gorm:"column:created_at" json:"created_at,omitempty"`
+	UpdatedAt                 *time.Time     `gorm:"column:updated_at" json:"updated_at,omitempty"`
 }
 
 func (PaymentTestUser) TableName() string { return "membership_payment_test_users" }

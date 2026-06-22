@@ -153,6 +153,7 @@ func ensureConstraints(ctx context.Context, db *gorm.DB) error {
 		dropAndAddCheck("ai_custom_focus_cards", "ai_custom_focus_cards_range_type_check", `range_type = ANY (ARRAY['week'::text,'month'::text])`),
 		dropAndAddCheck("membership_plan_config", "membership_plan_config_tier_check", `tier IS NULL OR tier = ANY (ARRAY['light'::text,'standard'::text,'advanced'::text])`),
 		dropAndAddCheck("membership_plan_config", "membership_plan_config_period_check", `period IS NULL OR period = ANY (ARRAY['monthly'::text,'quarterly'::text,'yearly'::text])`),
+		dropAndAddCheck("pro_membership_payment_records", "pro_membership_payment_records_status_check", `status = ANY (ARRAY['pending'::text,'paid'::text,'failed'::text,'cancelled'::text,'expired'::text,'closed'::text,'refunded'::text])`),
 		dropAndAddCheck("membership_payment_test_settings", "membership_payment_test_settings_id_check", `id = 'default'`),
 		dropAndAddCheck("user_invite_referrals", "user_invite_referrals_status_check", `status = ANY (ARRAY['pending_qualified'::text,'reward_active'::text,'reward_completed'::text,'reward_blocked'::text,'cancelled'::text])`),
 		dropAndAddCheck("user_pets", "user_pets_level_check", `level >= 1`),
@@ -881,6 +882,18 @@ func ensurePaymentTestConfig(ctx context.Context, db *gorm.DB) error {
 		`INSERT INTO membership_payment_test_settings (id, enabled, created_at, updated_at)
 VALUES ('default', false, now(), now())
 ON CONFLICT (id) DO NOTHING`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_snapshot_taken_at timestamptz`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_cancelled_at timestamptz`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_cancelled_by text`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_restored_at timestamptz`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_restored_by text`,
 		`INSERT INTO membership_plan_config (
   code,
   name,

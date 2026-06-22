@@ -663,6 +663,8 @@ func New(cfg *config.Config) (*App, error) {
 	adminAPI.PATCH("/payment-test/settings", adminAuth, adminPaymentTestHandler.UpdateSettings)
 	adminAPI.GET("/payment-test/user-search", adminAuth, adminPaymentTestHandler.SearchUsers)
 	adminAPI.POST("/payment-test/users", adminAuth, adminPaymentTestHandler.AddUser)
+	adminAPI.POST("/payment-test/users/:user_id/cancel-membership", adminAuth, adminPaymentTestHandler.CancelUserMembership)
+	adminAPI.POST("/payment-test/users/:user_id/restore-membership", adminAuth, adminPaymentTestHandler.RestoreUserMembership)
 	adminAPI.DELETE("/payment-test/users/:user_id", adminAuth, adminPaymentTestHandler.RemoveUser)
 
 	routeMapPath := filepath.Join(".", "docs", "backend-api-prd", "ROUTE_MAP.md")
