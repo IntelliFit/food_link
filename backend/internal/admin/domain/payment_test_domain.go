@@ -25,17 +25,31 @@ type PaymentTestPlan struct {
 }
 
 type PaymentTestUser struct {
-	ID        string     `json:"id"`
-	UserID    string     `json:"user_id"`
-	Nickname  string     `json:"nickname"`
-	Avatar    string     `json:"avatar"`
-	Telephone string     `json:"telephone"`
-	OpenID    string     `json:"openid"`
-	AppOpenID string     `json:"app_openid"`
-	Note      string     `json:"note"`
-	CreatedBy string     `json:"created_by"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	ID                        string     `json:"id"`
+	UserID                    string     `json:"user_id"`
+	Nickname                  string     `json:"nickname"`
+	Avatar                    string     `json:"avatar"`
+	Telephone                 string     `json:"telephone"`
+	OpenID                    string     `json:"openid"`
+	AppOpenID                 string     `json:"app_openid"`
+	Note                      string     `json:"note"`
+	CreatedBy                 string     `json:"created_by"`
+	CurrentMembershipStatus   string     `json:"current_membership_status"`
+	CurrentPlanCode           string     `json:"current_plan_code"`
+	CurrentExpiresAt          *time.Time `json:"current_expires_at,omitempty"`
+	CurrentDailyCredits       int        `json:"current_daily_credits"`
+	MembershipBackupAvailable bool       `json:"membership_backup_available"`
+	BackupPlanCode            string     `json:"backup_plan_code"`
+	BackupStatus              string     `json:"backup_status"`
+	BackupExpiresAt           *time.Time `json:"backup_expires_at,omitempty"`
+	BackupDailyCredits        int        `json:"backup_daily_credits"`
+	MembershipSnapshotTakenAt *time.Time `json:"membership_snapshot_taken_at,omitempty"`
+	MembershipCancelledAt     *time.Time `json:"membership_cancelled_at,omitempty"`
+	MembershipCancelledBy     string     `json:"membership_cancelled_by,omitempty"`
+	MembershipRestoredAt      *time.Time `json:"membership_restored_at,omitempty"`
+	MembershipRestoredBy      string     `json:"membership_restored_by,omitempty"`
+	CreatedAt                 *time.Time `json:"created_at,omitempty"`
+	UpdatedAt                 *time.Time `json:"updated_at,omitempty"`
 }
 
 type PaymentTestUserSearchResult struct {

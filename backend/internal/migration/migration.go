@@ -881,6 +881,18 @@ func ensurePaymentTestConfig(ctx context.Context, db *gorm.DB) error {
 		`INSERT INTO membership_payment_test_settings (id, enabled, created_at, updated_at)
 VALUES ('default', false, now(), now())
 ON CONFLICT (id) DO NOTHING`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_snapshot jsonb NOT NULL DEFAULT '{}'::jsonb`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_snapshot_taken_at timestamptz`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_cancelled_at timestamptz`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_cancelled_by text`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_restored_at timestamptz`,
+		`ALTER TABLE membership_payment_test_users
+  ADD COLUMN IF NOT EXISTS membership_restored_by text`,
 		`INSERT INTO membership_plan_config (
   code,
   name,

@@ -18,6 +18,8 @@ type AdminPaymentTestService interface {
 	SearchUsers(ctx context.Context, query string, limit int) ([]admindomain.PaymentTestUserSearchResult, error)
 	AddUser(ctx context.Context, userID, note, createdBy string) (*admindomain.PaymentTestUser, error)
 	RemoveUser(ctx context.Context, userID string) error
+	CancelUserMembership(ctx context.Context, userID, cancelledBy string) (*admindomain.PaymentTestUser, error)
+	RestoreUserMembership(ctx context.Context, userID, restoredBy string) (*admindomain.PaymentTestUser, error)
 }
 
 type PaymentTestHandler struct {
@@ -98,4 +100,32 @@ func (h *PaymentTestHandler) RemoveUser(c *gin.Context) {
 		slog.String("admin_username", c.GetString("admin_username")),
 	)
 	response.Success(c, gin.H{"message": "ok"})
+}
+
+func (h *PaymentTestHandler) CancelUserMembership(c *gin.Context) {
+	userID := strings.TrimSpace(c.Param("user_id"))
+	item, err := h.svc.CancelUserMembership(c.Request.Context(), userID, c.GetString("admin_username"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "管理员取消测试用户会员",
+		slog.String("user_id", userID),
+		slog.String("admin_username", c.GetString("admin_username")),
+	)
+	response.Success(c, gin.H{"item": item})
+}
+
+func (h *PaymentTestHandler) RestoreUserMembership(c *gin.Context) {
+	userID := strings.TrimSpace(c.Param("user_id"))
+	item, err := h.svc.RestoreUserMembership(c.Request.Context(), userID, c.GetString("admin_username"))
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	logger.Info(c.Request.Context(), "管理员恢复测试用户会员",
+		slog.String("user_id", userID),
+		slog.String("admin_username", c.GetString("admin_username")),
+	)
+	response.Success(c, gin.H{"item": item})
 }

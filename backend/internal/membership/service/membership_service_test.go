@@ -1185,23 +1185,7 @@ func TestMembershipService_CreatePaymentWithInput_AllowsListedPaymentTestUserPas
 	assert.Nil(t, mockRepo.payment)
 }
 
-func TestMembershipService_CreatePaymentWithInput_TestPlanBypassesCurrentMembershipSwitchRules(t *testing.T) {
-	oldBaseURL := wechatPayAPIBaseURL
-	defer func() { wechatPayAPIBaseURL = oldBaseURL }()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, http.MethodPost, r.Method)
-		assert.Equal(t, "/v3/pay/transactions/jsapi", r.URL.Path)
-		var payload map[string]any
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
-		amount, _ := payload["amount"].(map[string]any)
-		assert.EqualValues(t, 1, amount["total"])
-		assert.Equal(t, "Pay Test", payload["description"])
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(map[string]string{"prepay_id": "wx-test-prepay"})
-	}))
-	defer server.Close()
-	wechatPayAPIBaseURL = server.URL
-
+func TestMembershipService_CreatePaymentWithInput_TestPlanUsesNormalSwitchRules(t *testing.T) {
 	currentPlanCode := "advanced_yearly"
 	expiresAt := time.Now().AddDate(1, 0, 0)
 	currentPeriodStart := time.Now().AddDate(0, -1, 0)
@@ -1235,26 +1219,21 @@ func TestMembershipService_CreatePaymentWithInput_TestPlanBypassesCurrentMembers
 	svc := NewMembershipService(mockRepo, cfg)
 
 	data, err := svc.CreatePaymentWithInput(context.Background(), "u1", CreateMembershipPaymentInput{PlanCode: domain.PaymentTestPlanCode})
-	require.NoError(t, err)
-	assert.Equal(t, "payment_test", data["order_mode"])
-	assert.Equal(t, 0.01, data["amount"])
-	require.NotNil(t, mockRepo.payment)
-	assert.Equal(t, 0.01, mockRepo.payment.Amount)
-	assert.Equal(t, "payment_test", mockRepo.payment.Extra["order_mode"])
-	assert.Equal(t, true, mockRepo.payment.Extra["is_payment_test_order"])
+	require.Error(t, err)
+	assert.Nil(t, data)
+	var appErr *commonerrors.AppError
+	require.True(t, errors.As(err, &appErr))
+	assert.Equal(t, http.StatusBadRequest, appErr.HTTPStatus)
+	assert.Contains(t, appErr.Message, "周期")
+	assert.Nil(t, mockRepo.payment)
 	assert.Equal(t, 0, mockRepo.expirePendingOrdersCalls)
 }
 
-func TestMembershipService_ActivateMembershipFromPayment_TestPlanDoesNotChangeMembership(t *testing.T) {
-	currentPlanCode := "advanced_yearly"
-	expiresAt := time.Now().AddDate(1, 0, 0)
+func TestMembershipService_ActivateMembershipFromPayment_TestPlanActivatesMembership(t *testing.T) {
 	testPlan := &domain.MembershipPlan{Code: domain.PaymentTestPlanCode, Name: "Pay Test", Amount: 0.01, DurationMonths: 1, DailyCredits: 8, IsActive: true, IsTestPlan: true}
 	membership := &domain.UserMembership{
-		UserID:          "u1",
-		Status:          "active",
-		CurrentPlanCode: &currentPlanCode,
-		ExpiresAt:       &expiresAt,
-		DailyCredits:    80,
+		UserID: "u1",
+		Status: "inactive",
 	}
 	mockRepo := &mockMembershipRepo{
 		planByCode: map[string]*domain.MembershipPlan{domain.PaymentTestPlanCode: testPlan},
@@ -1272,9 +1251,11 @@ func TestMembershipService_ActivateMembershipFromPayment_TestPlanDoesNotChangeMe
 	}, time.Now())
 	require.NoError(t, err)
 	require.NotNil(t, updated)
-	assert.Equal(t, currentPlanCode, *updated.CurrentPlanCode)
-	assert.Equal(t, 80, updated.DailyCredits)
-	assert.Equal(t, 0, mockRepo.saveMembershipCalls)
+	require.NotNil(t, updated.CurrentPlanCode)
+	assert.Equal(t, domain.PaymentTestPlanCode, *updated.CurrentPlanCode)
+	assert.Equal(t, "active", updated.Status)
+	assert.Equal(t, 8, updated.DailyCredits)
+	assert.Equal(t, 1, mockRepo.saveMembershipCalls)
 }
 
 func TestMembershipService_CreatePaymentBlocksAppOnlyOpenIDDefaultJSAPI(t *testing.T) {
