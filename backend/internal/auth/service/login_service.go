@@ -188,6 +188,12 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 	if phone == "" {
 		return nil, fmt.Errorf("请输入手机号")
 	}
+	if !s.cfg.App.AllowDebugRegister {
+		return nil, fmt.Errorf("当前未开启测试注册")
+	}
+	if phone != "13511679220" {
+		return nil, fmt.Errorf("测试注册仅支持指定手机号")
+	}
 	if existing, err := s.users.FindByTelephone(ctx, phone); err != nil {
 		return nil, err
 	} else if existing != nil {

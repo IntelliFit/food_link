@@ -26,6 +26,13 @@
             margin-bottom: 12rpx;
         }
 
+        .app-env-tag {
+            font-size: 26rpx;
+            font-weight: normal;
+            color: #00bc7d;
+            margin-left: 8rpx;
+        }
+
         .app-slogan {
             font-size: 28rpx;
             color: #999;
@@ -165,6 +172,14 @@
         color: #00bc7d;
         text-decoration: underline;
         margin: 0 4rpx;
+    }
+
+    .debug-register-entry {
+        margin-top: 24rpx;
+        font-size: 22rpx;
+        color: #9ca3af;
+        text-align: center;
+        padding: 12rpx 24rpx;
     }
 }
 

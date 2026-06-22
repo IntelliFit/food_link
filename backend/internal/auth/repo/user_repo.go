@@ -492,7 +492,7 @@ func (r *UserRepo) CreateInviteReferralBinding(ctx context.Context, inviterUserI
 		"inviter_user_id":   inviterUserID,
 		"invitee_user_id":   inviteeUserID,
 		"invite_code":       strings.ToUpper(strings.TrimSpace(inviteCode)),
-		"status":            "pending",
+		"status":            "pending_qualified",
 		"reward_start_date": now.Format("2006-01-02"),
 		"reward_end_date":   now.AddDate(0, 0, 7).Format("2006-01-02"),
 		"created_at":        time.Now(),

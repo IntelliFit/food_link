@@ -312,7 +312,7 @@ func New(cfg *config.Config) (*App, error) {
 	feedbackHandler := feedbackhandler.NewFeedbackHandler(feedbackSvc, feedbackUploadSvc)
 
 	commentHandler := communityhandler.NewCommentHandler(homeRepo, userRepo)
-	system := systemhandler.New()
+	system := systemhandler.New(cfg)
 
 	app := &App{
 		engine:        engine,
@@ -332,6 +332,7 @@ func New(cfg *config.Config) (*App, error) {
 	engine.POST("/api/app/account/password", authmw.RequireJWT(jwtSvc), loginHandler.SetPassword)
 	engine.GET("/api", system.Root)
 	engine.GET("/api/health", system.Health)
+	engine.GET("/api/app/public-config", system.PublicConfig)
 	engine.GET("/map-picker", system.MapPicker)
 	engine.GET("/test-backend", system.TestBackendPage)
 	engine.GET("/test-backend/login", system.TestBackendLoginPage)

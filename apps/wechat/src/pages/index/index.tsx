@@ -11,6 +11,7 @@ import {
   getBodyMetricsSummary,
   getExerciseLogs,
   getUnlimitedQRCode,
+  getWeappEnvVersion,
   getFriendInviteProfile,
   getSharedFoodRecord,
   getFoodRecordById,
@@ -2639,7 +2640,7 @@ function IndexPage() {
         const loadQRImage = async (inviteCode: string) => {
           const scene = inviteCode ? `fi=${inviteCode}` : 'share=1'
           try {
-            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', 'release')
+            const { base64 } = await getUnlimitedQRCode(scene, 'pages/index/index', getWeappEnvVersion())
             const img = await loadImage(base64)
             if (img) return img
           } catch (e) {

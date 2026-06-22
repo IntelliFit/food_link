@@ -46,11 +46,12 @@ type Config struct {
 }
 
 type AppConfig struct {
-	Name         string `mapstructure:"name"`
-	Env          string `mapstructure:"env"`
-	Host         string `mapstructure:"host"`
-	Port         int    `mapstructure:"port"`
-	AdminBaseURL string `mapstructure:"admin_base_url"`
+	Name               string `mapstructure:"name"`
+	Env                string `mapstructure:"env"`
+	Host               string `mapstructure:"host"`
+	Port               int    `mapstructure:"port"`
+	AdminBaseURL       string `mapstructure:"admin_base_url"`
+	AllowDebugRegister bool   `mapstructure:"allow_debug_register"`
 }
 
 type LogConfig struct {

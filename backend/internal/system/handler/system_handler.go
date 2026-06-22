@@ -5,12 +5,16 @@ import (
 	"os"
 	"path/filepath"
 
+	"food_link/backend/pkg/config"
+
 	"github.com/gin-gonic/gin"
 )
 
-type Handler struct{}
+type Handler struct {
+	cfg *config.Config
+}
 
-func New() *Handler { return &Handler{} }
+func New(cfg *config.Config) *Handler { return &Handler{cfg: cfg} }
 
 func (h *Handler) Root(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
@@ -22,6 +26,16 @@ func (h *Handler) Root(c *gin.Context) {
 func (h *Handler) Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "ok",
+	})
+}
+
+func (h *Handler) PublicConfig(c *gin.Context) {
+	allow := false
+	if h.cfg != nil {
+		allow = h.cfg.App.AllowDebugRegister
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"allow_debug_register": allow,
 	})
 }
 

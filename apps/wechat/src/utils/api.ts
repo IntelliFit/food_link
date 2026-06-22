@@ -1421,6 +1421,19 @@ export interface LoginRequestParams {
   testOpenid?: string
 }
 
+export interface PasswordRegisterRequest {
+  username?: string
+  phone: string
+  password: string
+  nickname: string
+  /** 注册时填写邀请人码 */
+  inviteCode?: string
+}
+
+export interface PublicConfigResponse {
+  allow_debug_register: boolean
+}
+
 // 登录响应接口
 export interface LoginResponse {
   access_token: string
@@ -3313,6 +3326,33 @@ export async function getSharedFoodRecord(recordId: string): Promise<{ record: F
 }
 
 /**
+ * 获取当前小程序运行环境版本（develop / trial / release）
+ */
+export function getWeappEnvVersion(): 'release' | 'trial' | 'develop' {
+  try {
+    const info = Taro.getAccountInfoSync()
+    const env = info?.miniProgram?.envVersion
+    if (env === 'develop' || env === 'trial' || env === 'release') {
+      return env
+    }
+  } catch {
+    // ignore
+  }
+  // 某些模拟器/低版本基础库可能 Taro 封装取不到，直接调原生 wx 兜底
+  try {
+    const globalWx = (globalThis as any).wx
+    const wxInfo = globalWx?.getAccountInfoSync?.()
+    const env = wxInfo?.miniProgram?.envVersion
+    if (env === 'develop' || env === 'trial' || env === 'release') {
+      return env
+    }
+  } catch {
+    // ignore
+  }
+  return 'release'
+}
+
+/**
  * 获取小程序无限拉新二维码（Base64）
  */
 export async function getUnlimitedQRCode(
@@ -4112,6 +4152,78 @@ export async function debugImpersonateUser(userId: string, password: string): Pr
       response.statusCode,
       response.data,
       '代登录失败',
+      response.header as Record<string, any> | undefined
+    )
+  }
+
+  const loginData = unwrapResponse<LoginResponse>(response)
+  saveTokens(loginData.access_token, loginData.refresh_token, loginData.user_id)
+  if (loginData.diet_goal) {
+    Taro.setStorageSync('dietGoal', loginData.diet_goal)
+  } else {
+    Taro.removeStorageSync('dietGoal')
+  }
+  return loginData
+}
+
+/**
+ * 获取公开配置（无需登录）
+ */
+export async function getPublicConfig(): Promise<PublicConfigResponse> {
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/app/public-config`,
+    method: 'GET',
+    header: withNgrokBypassHeaders({
+      'Content-Type': 'application/json'
+    }),
+    timeout: 10000
+  })
+
+  if (response.statusCode !== 200) {
+    throwHttpErrorWithStatus(
+      response.statusCode,
+      response.data,
+      '获取配置失败',
+      response.header as Record<string, any> | undefined
+    )
+  }
+
+  return unwrapResponse<PublicConfigResponse>(response)
+}
+
+/**
+ * 测试用手机号密码注册
+ */
+export async function registerWithPassword(
+  phone: string,
+  password: string,
+  nickname: string,
+  inviteCode?: string
+): Promise<LoginResponse> {
+  const requestData: PasswordRegisterRequest = {
+    phone: phone.trim(),
+    password: password.trim(),
+    nickname: nickname.trim()
+  }
+  if (inviteCode?.trim()) {
+    requestData.inviteCode = inviteCode.trim()
+  }
+
+  const response = await Taro.request({
+    url: `${API_BASE_URL}/api/app/register/password`,
+    method: 'POST',
+    header: withNgrokBypassHeaders({
+      'Content-Type': 'application/json'
+    }),
+    data: requestData,
+    timeout: 10000
+  })
+
+  if (response.statusCode !== 200) {
+    throwHttpErrorWithStatus(
+      response.statusCode,
+      response.data,
+      '注册失败',
       response.header as Record<string, any> | undefined
     )
   }

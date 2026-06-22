@@ -15,6 +15,7 @@ func setupSystemRouter(h *Handler) *gin.Engine {
 	r := gin.New()
 	r.GET("/", h.Root)
 	r.GET("/health", h.Health)
+	r.GET("/public-config", h.PublicConfig)
 	r.GET("/map-picker", h.MapPicker)
 	r.GET("/test-backend", h.TestBackendPage)
 	r.GET("/test-backend/login", h.TestBackendLoginPage)
@@ -22,7 +23,7 @@ func setupSystemRouter(h *Handler) *gin.Engine {
 }
 
 func TestSystemHandler_Root(t *testing.T) {
-	h := New()
+	h := New(nil)
 	r := setupSystemRouter(h)
 
 	w := httptest.NewRecorder()
@@ -37,7 +38,7 @@ func TestSystemHandler_Root(t *testing.T) {
 }
 
 func TestSystemHandler_Health(t *testing.T) {
-	h := New()
+	h := New(nil)
 	r := setupSystemRouter(h)
 
 	w := httptest.NewRecorder()
@@ -50,8 +51,22 @@ func TestSystemHandler_Health(t *testing.T) {
 	assert.Equal(t, "ok", resp["status"])
 }
 
+func TestSystemHandler_PublicConfig(t *testing.T) {
+	h := New(nil)
+	r := setupSystemRouter(h)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/public-config", nil)
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	assert.Equal(t, false, resp["allow_debug_register"])
+}
+
 func TestSystemHandler_MapPicker(t *testing.T) {
-	h := New()
+	h := New(nil)
 	r := setupSystemRouter(h)
 
 	w := httptest.NewRecorder()
@@ -64,7 +79,7 @@ func TestSystemHandler_MapPicker(t *testing.T) {
 }
 
 func TestSystemHandler_TestBackendPage(t *testing.T) {
-	h := New()
+	h := New(nil)
 	r := setupSystemRouter(h)
 
 	w := httptest.NewRecorder()
@@ -77,7 +92,7 @@ func TestSystemHandler_TestBackendPage(t *testing.T) {
 }
 
 func TestSystemHandler_TestBackendLoginPage(t *testing.T) {
-	h := New()
+	h := New(nil)
 	r := setupSystemRouter(h)
 
 	w := httptest.NewRecorder()
