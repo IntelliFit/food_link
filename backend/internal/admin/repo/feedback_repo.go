@@ -212,8 +212,8 @@ func applyFeedbackFilters(q *gorm.DB, input ListFeedbackInput) *gorm.DB {
 	if query := strings.TrimSpace(input.Query); query != "" {
 		like := "%" + query + "%"
 		q = q.Where(
-			`f.content ILIKE ? OR f.contact ILIKE ? OR f.submit_trace_id ILIKE ? OR f.submit_request_id ILIKE ? OR f.user_id::text ILIKE ?`,
-			like, like, like, like, like,
+			`f.id::text ILIKE ? OR f.content ILIKE ? OR f.contact ILIKE ? OR f.submit_trace_id ILIKE ? OR f.submit_request_id ILIKE ? OR f.user_id::text ILIKE ?`,
+			like, like, like, like, like, like,
 		)
 	}
 	switch strings.TrimSpace(input.Category) {
