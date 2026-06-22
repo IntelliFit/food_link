@@ -1,9 +1,23 @@
 import requests as r
 import os
+import re
 import shutil
 import zipfile
 
 WECHAT_ICONFONT_DIR = os.path.join('apps', 'wechat', 'src', 'assets', 'iconfont')
+
+
+def slim_iconfont_css(content):
+    """Keep only woff2 in the mini-program iconfont CSS to avoid duplicate font inlining."""
+    return re.sub(
+        r"src:\s*url\('iconfont\.woff2\?t=([^']+)'\)\s*format\('woff2'\),\s*"
+        r"url\('iconfont\.woff\?t=[^']+'\)\s*format\('woff'\),\s*"
+        r"url\('iconfont\.ttf\?t=[^']+'\)\s*format\('truetype'\),\s*"
+        r"url\('iconfont\.svg\?t=[^']+'\)\s*format\('svg'\);",
+        r"src: url('iconfont.woff2?t=\1') format('woff2');",
+        content,
+        flags=re.S,
+    )
 
 # 下载 压缩包
 headers = {
@@ -32,9 +46,10 @@ for parent, _, files in os.walk('./scripts/tmp'):
             continue
         if file.endswith('.css'):
             content = open(filepath, 'r', encoding='utf-8').read().replace('font-size: 16px;', '')
+            content = slim_iconfont_css(content)
             open(filepath, 'w', encoding='utf-8').write(content)
             shutil.move(filepath, os.path.join(WECHAT_ICONFONT_DIR, file))
-        elif file.endswith('.woff2') or file.endswith('.woff') or file.endswith('ttf'):
+        elif file.endswith('.woff2'):
             shutil.move(filepath, os.path.join(WECHAT_ICONFONT_DIR, file))
 
 # 删除压缩包和解压区域
