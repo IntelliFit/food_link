@@ -128,13 +128,15 @@ export default function LoginPage() {
     const isDev = process.env.NODE_ENV === 'development'
 
     const inviteCodeFromQuery = (router.params?.invite_code || '').trim()
+    const inviteCodeFromStorage = String(Taro.getStorageSync('pending_friend_invite_code') || '').trim()
+    const inviteCode = inviteCodeFromQuery || inviteCodeFromStorage
+    console.log('[login] inviteCodeFromQuery:', inviteCodeFromQuery, 'inviteCodeFromStorage:', inviteCodeFromStorage, 'final inviteCode:', inviteCode)
     const redirectFromQuery = safeDecodeURIComponent((router.params?.redirect || '').trim())
 
     const finishLoginFlow = async () => {
-        const pendingInviteCode = inviteCodeFromQuery || String(Taro.getStorageSync('pending_friend_invite_code') || '').trim()
-        if (pendingInviteCode) {
+        if (inviteCode) {
             try {
-                const res = await requestFriendByInviteCode(pendingInviteCode)
+                const res = await requestFriendByInviteCode(inviteCode)
                 if (res.status === 'requested') {
                     Taro.showToast({ title: `已向${res.nickname || '对方'}发起好友请求`, icon: 'success' })
                 } else if (res.status === 'already_friend') {
@@ -249,7 +251,7 @@ export default function LoginPage() {
         setLoading(true)
         try {
             const nickname = buildDebugNickname()
-            const loginData = await registerWithPassword(DEBUG_PHONE, password, nickname, inviteCodeFromQuery)
+            const loginData = await registerWithPassword(DEBUG_PHONE, password, nickname, inviteCode)
             setShowDebugRegisterModal(false)
             await handleLoginSuccess(loginData)
         } catch (error: any) {
@@ -295,7 +297,7 @@ export default function LoginPage() {
 
             const loginRes = await Taro.login()
             if (!loginRes.code) throw new Error('获取登录凭证失败')
-            const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCodeFromQuery)
+            const loginData: LoginResponse = await login(loginRes.code, undefined, inviteCode)
             await handleLoginSuccess(loginData, wxNickname, wxAvatarUrl)
         } catch (error: any) {
             console.error('登录失败:', error)
@@ -485,10 +487,10 @@ export default function LoginPage() {
                 <Text className='app-slogan'>记录饮食，连接健康</Text>
             </View>
 
-            {isDev && inviteCodeFromQuery && (
+            {isDev && inviteCode && (
                 <View className='dev-invite-code-banner'>
                     <Text className='dev-invite-code-text'>
-                        【测试模式】邀请码：{inviteCodeFromQuery}
+                        【测试模式】邀请码：{inviteCode}
                     </Text>
                 </View>
             )}

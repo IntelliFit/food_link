@@ -231,7 +231,14 @@ func (s *LoginService) RegisterWithPassword(ctx context.Context, input PasswordR
 	}
 	_ = s.ensureRegistrationInviteCode(ctx, user.ID)
 	if inviteCode := strings.ToUpper(strings.TrimSpace(input.InviteCode)); inviteCode != "" {
-		_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
+		logger.Info(ctx, "App 账号密码注册开始绑定邀请关系", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+		if err := s.bindInviteReferral(ctx, user.ID, inviteCode); err != nil {
+			logger.Error(ctx, "App 账号密码注册绑定邀请关系失败", err, slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+		} else {
+			logger.Info(ctx, "App 账号密码注册绑定邀请关系完成", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+		}
+	} else {
+		logger.Info(ctx, "App 账号密码注册未携带邀请码", slog.String("user_id", user.ID))
 	}
 	logger.Info(ctx, "App 账号密码注册成功", slog.String("user_id", user.ID), slog.String("identifier_type", loginIdentifierType(phone, "")))
 	return s.issueLoginOutput(user, user.OpenID, "")
@@ -373,7 +380,14 @@ func (s *LoginService) findOrCreateWechatUser(ctx context.Context, openID, union
 		}
 		_ = s.ensureRegistrationInviteCode(ctx, user.ID)
 		if inviteCode := strings.ToUpper(strings.TrimSpace(inviteCode)); inviteCode != "" {
-			_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
+			logger.Info(ctx, "微信登录新用户开始绑定邀请关系", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			if err := s.bindInviteReferral(ctx, user.ID, inviteCode); err != nil {
+				logger.Error(ctx, "微信登录新用户绑定邀请关系失败", err, slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			} else {
+				logger.Info(ctx, "微信登录新用户绑定邀请关系完成", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			}
+		} else {
+			logger.Info(ctx, "微信登录新用户未携带邀请码", slog.String("user_id", user.ID))
 		}
 		return user, nil
 	}
@@ -422,7 +436,14 @@ func (s *LoginService) findOrCreateAppWechatUser(ctx context.Context, appOpenID,
 		}
 		_ = s.ensureRegistrationInviteCode(ctx, user.ID)
 		if inviteCode := strings.ToUpper(strings.TrimSpace(inviteCode)); inviteCode != "" {
-			_ = s.bindInviteReferral(ctx, user.ID, inviteCode)
+			logger.Info(ctx, "App 微信登录新用户开始绑定邀请关系", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			if err := s.bindInviteReferral(ctx, user.ID, inviteCode); err != nil {
+				logger.Error(ctx, "App 微信登录新用户绑定邀请关系失败", err, slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			} else {
+				logger.Info(ctx, "App 微信登录新用户绑定邀请关系完成", slog.String("user_id", user.ID), slog.String("invite_code", inviteCode))
+			}
+		} else {
+			logger.Info(ctx, "App 微信登录新用户未携带邀请码", slog.String("user_id", user.ID))
 		}
 		return user, nil
 	}
@@ -621,19 +642,34 @@ func (s *LoginService) ensureRegistrationInviteCode(ctx context.Context, userID 
 func (s *LoginService) bindInviteReferral(ctx context.Context, inviteeUserID, inviteCode string) error {
 	inviter, err := s.users.FindByRegistrationInviteCode(ctx, inviteCode)
 	if err != nil {
+		logger.Error(ctx, "通过 registration_invite_code 查询邀请人失败", err, slog.String("invite_code", inviteCode))
 		return err
 	}
 	if inviter == nil {
 		inviter, err = s.users.ResolveUserByInviteCode(ctx, inviteCode)
 		if err != nil {
+			logger.Error(ctx, "通过用户 ID 前缀解析邀请人失败", err, slog.String("invite_code", inviteCode))
 			return err
 		}
 	}
-	if inviter == nil || inviter.ID == "" || inviter.ID == inviteeUserID {
+	if inviter == nil {
+		logger.Warn(ctx, "未找到邀请人", slog.String("invite_code", inviteCode), slog.String("invitee_user_id", inviteeUserID))
 		return nil
 	}
-	_, _ = s.users.UpdateFields(ctx, inviteeUserID, map[string]any{"referred_by_user_id": inviter.ID})
-	return s.users.CreateInviteReferralBinding(ctx, inviter.ID, inviteeUserID, inviteCode)
+	if inviter.ID == "" || inviter.ID == inviteeUserID {
+		logger.Warn(ctx, "邀请人无效或自己邀请自己", slog.String("invite_code", inviteCode), slog.String("inviter_id", inviter.ID), slog.String("invitee_user_id", inviteeUserID))
+		return nil
+	}
+	if _, err := s.users.UpdateFields(ctx, inviteeUserID, map[string]any{"referred_by_user_id": inviter.ID}); err != nil {
+		logger.Error(ctx, "更新被邀请人 referred_by_user_id 失败", err, slog.String("invitee_user_id", inviteeUserID), slog.String("inviter_id", inviter.ID))
+		return err
+	}
+	if err := s.users.CreateInviteReferralBinding(ctx, inviter.ID, inviteeUserID, inviteCode); err != nil {
+		logger.Error(ctx, "创建邀请关系记录失败", err, slog.String("inviter_id", inviter.ID), slog.String("invitee_user_id", inviteeUserID), slog.String("invite_code", inviteCode))
+		return err
+	}
+	logger.Info(ctx, "邀请关系绑定成功", slog.String("inviter_id", inviter.ID), slog.String("invitee_user_id", inviteeUserID), slog.String("invite_code", inviteCode))
+	return nil
 }
 
 func randomInviteCode() string {
