@@ -28,6 +28,36 @@
   opacity: 0.88;
 }
 
+.reward-hero__level {
+  margin-top: 22px;
+}
+
+.reward-hero__level-text {
+  font-size: 23px;
+  font-weight: 700;
+  opacity: 0.92;
+}
+
+.reward-hero__segments {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 12px;
+}
+
+.reward-hero__seg {
+  flex: 1;
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.reward-hero__seg--filled {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.32);
+}
+
 .reward-hero__stats {
   display: flex;
   gap: 18px;
@@ -54,6 +84,297 @@
 
 .reward-section {
   margin-top: 28px;
+}
+
+.reward-invite-section {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reward-invite-section__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reward-invite-section__title {
+  display: block;
+  font-size: 28px;
+  line-height: 38px;
+  font-weight: 800;
+  color: #172033;
+}
+
+.reward-invite-section__hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 21px;
+  line-height: 30px;
+  color: #64748b;
+}
+
+.reward-center-page--dark .reward-invite-section__title {
+  color: #f8fafc;
+}
+
+.reward-center-page--dark .reward-invite-section__hint {
+  color: #cbd5e1;
+}
+
+.reward-invite-card {
+  padding: 24px;
+  border-radius: 28px;
+  background: #ffffff;
+  border: 1px solid rgba(16, 185, 129, 0.12);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.07);
+}
+
+.reward-invite-card--invitee {
+  background:
+    radial-gradient(circle at 8% 0%, rgba(187, 247, 208, 0.64), transparent 38%),
+    #ffffff;
+}
+
+.reward-invite-card--inviter {
+  background:
+    radial-gradient(circle at 92% 0%, rgba(167, 243, 208, 0.58), transparent 38%),
+    #ffffff;
+}
+
+.reward-center-page--dark .reward-invite-card {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(16, 185, 129, 0.18);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.26);
+}
+
+.reward-invite-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.reward-invite-card__eyebrow {
+  display: block;
+  font-size: 21px;
+  line-height: 30px;
+  color: #0f9f6e;
+  font-weight: 800;
+}
+
+.reward-invite-card__title {
+  display: block;
+  margin-top: 4px;
+  font-size: 29px;
+  line-height: 40px;
+  color: #172033;
+  font-weight: 850;
+}
+
+.reward-center-page--dark .reward-invite-card__title {
+  color: #f8fafc;
+}
+
+.reward-invite-card__bonus {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #0f9f6e;
+  font-size: 22px;
+  line-height: 30px;
+  font-weight: 850;
+}
+
+.reward-center-page--dark .reward-invite-card__bonus {
+  background: rgba(16, 185, 129, 0.16);
+  color: #a7f3d0;
+}
+
+.reward-invite-progress {
+  position: relative;
+  height: 18px;
+  margin-top: 24px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #dbe8e4;
+}
+
+.reward-invite-progress__bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f9f6e 0%, #18c58b 100%);
+}
+
+.reward-invite-days {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.reward-invite-days__item {
+  font-size: 21px;
+  line-height: 30px;
+  color: #64748b;
+}
+
+.reward-invite-days__item--active {
+  color: #0f9f6e;
+  font-weight: 800;
+}
+
+.reward-invite-card__desc {
+  display: block;
+  margin-top: 18px;
+  font-size: 23px;
+  line-height: 34px;
+  color: #334155;
+}
+
+.reward-invite-card__note {
+  display: block;
+  margin-top: 10px;
+  padding: 12px 16px;
+  border-radius: 18px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 22px;
+  line-height: 32px;
+}
+
+.reward-center-page--dark .reward-invite-days__item,
+.reward-center-page--dark .reward-invite-card__desc {
+  color: #cbd5e1;
+}
+
+.reward-center-page--dark .reward-invite-card__note {
+  background: rgba(16, 185, 129, 0.12);
+  color: #a7f3d0;
+}
+
+.reward-invite-stats {
+  margin-top: 22px;
+  display: flex;
+  gap: 14px;
+}
+
+.reward-invite-stat {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 10px;
+  border-radius: 20px;
+  background: #f0fdf4;
+  text-align: center;
+}
+
+.reward-center-page--dark .reward-invite-stat {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.reward-invite-stat__value {
+  display: block;
+  font-size: 31px;
+  line-height: 40px;
+  color: #0f9f6e;
+  font-weight: 850;
+}
+
+.reward-invite-stat__label {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+  line-height: 28px;
+  color: #64748b;
+}
+
+.reward-center-page--dark .reward-invite-stat__label {
+  color: #cbd5e1;
+}
+
+.reward-invite-friend-list {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reward-invite-friend {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.reward-center-page--dark .reward-invite-friend {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.reward-invite-friend__main {
+  min-width: 0;
+}
+
+.reward-invite-friend__name {
+  display: block;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 24px;
+  line-height: 34px;
+  color: #172033;
+  font-weight: 800;
+}
+
+.reward-center-page--dark .reward-invite-friend__name {
+  color: #f8fafc;
+}
+
+.reward-invite-friend__desc {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+  line-height: 30px;
+  color: #64748b;
+}
+
+.reward-center-page--dark .reward-invite-friend__desc {
+  color: #cbd5e1;
+}
+
+.reward-invite-friend__status {
+  flex-shrink: 0;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 800;
+}
+
+.reward-invite-friend__status--pending {
+  background: #ecfdf5;
+  color: #0f9f6e;
+}
+
+.reward-invite-friend__status--completed {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.reward-invite-friend__status--active {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.reward-invite-friend__status--blocked {
+  background: #ffedd5;
+  color: #9a3412;
 }
 
 .reward-quick-section {

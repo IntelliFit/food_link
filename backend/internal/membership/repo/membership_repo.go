@@ -392,6 +392,15 @@ func (r *MembershipRepo) ListPendingInviteReferralsByInviter(ctx context.Context
 	return rows, err
 }
 
+func (r *MembershipRepo) ListInviteReferralsForUser(ctx context.Context, userID string) ([]domain.UserInviteReferral, error) {
+	var rows []domain.UserInviteReferral
+	err := r.db.WithContext(ctx).
+		Where("inviter_user_id = ? OR invitee_user_id = ?", userID, userID).
+		Order("created_at DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *MembershipRepo) CountCompletedInviteRewardsForInviterInMonth(ctx context.Context, inviterUserID, monthStart, nextMonthStart string) (int, error) {
 	start, err := time.ParseInLocation("2006-01-02", monthStart, chinaLocation())
 	if err != nil {

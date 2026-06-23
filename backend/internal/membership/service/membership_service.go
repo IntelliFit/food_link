@@ -89,6 +89,7 @@ type MembershipRepo interface {
 	GetInviteReferralByInvitee(ctx context.Context, inviteeUserID string) (*domain.UserInviteReferral, error)
 	UpdateInviteReferral(ctx context.Context, id string, updates map[string]any) (*domain.UserInviteReferral, error)
 	ListPendingInviteReferralsByInviter(ctx context.Context, inviterUserID string) ([]domain.UserInviteReferral, error)
+	ListInviteReferralsForUser(ctx context.Context, userID string) ([]domain.UserInviteReferral, error)
 	CountCompletedInviteRewardsForInviterInMonth(ctx context.Context, inviterUserID, monthStart, nextMonthStart string) (int, error)
 	ListActiveInviteRewards(ctx context.Context, userID, chinaDate string) ([]domain.UserInviteReferral, error)
 	ListSharePosterBonusEvents(ctx context.Context, userID, chinaDate string) ([]domain.UserCreditBonusEvent, error)
@@ -524,12 +525,13 @@ func (s *MembershipService) ActivatePendingInviteReferralOnFirstValidUse(ctx con
 	})
 }
 
-// GetInviteRewardStatus 返回当前用户作为被邀请人和邀请人的 pending 邀请奖励进度。
+// GetInviteRewardStatus 返回当前用户作为被邀请人和邀请人的邀请奖励进度。
 func (s *MembershipService) GetInviteRewardStatus(ctx context.Context, userID string) (map[string]any, error) {
 	userID = strings.TrimSpace(userID)
 	result := map[string]any{
 		"as_invitee": nil,
 		"as_inviter": []any{},
+		"records":    []any{},
 	}
 	if userID == "" {
 		return result, nil
@@ -576,7 +578,143 @@ func (s *MembershipService) GetInviteRewardStatus(ctx context.Context, userID st
 		}
 	}
 	result["as_inviter"] = inviterList
+
+	rows, err := s.repo.ListInviteReferralsForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]any, 0, len(rows))
+	for _, row := range rows {
+		records = append(records, s.buildInviteRewardRecord(ctx, userID, row, todayCN))
+	}
+	result["records"] = records
 	return result, nil
+}
+
+func (s *MembershipService) buildInviteRewardRecord(ctx context.Context, userID string, referral domain.UserInviteReferral, todayCN time.Time) map[string]any {
+	role := "invitee"
+	otherUserID := referral.InviterUserID
+	if referral.InviterUserID == userID {
+		role = "inviter"
+		otherUserID = referral.InviteeUserID
+	}
+	otherNickname := ""
+	if other, err := s.repo.GetUser(ctx, otherUserID); err == nil && other != nil && other.Nickname != nil {
+		otherNickname = strings.TrimSpace(*other.Nickname)
+	}
+
+	recordsNeeded, expired := inviteRewardProgress(referral, todayCN)
+	statusLabel := inviteRewardStatusLabel(referral.Status, expired)
+	blockedReasonLabel := inviteRewardBlockedReasonLabel(referral.BlockedReason)
+	requirementText, nextActionText := inviteRewardActionTexts(role, referral, recordsNeeded, expired, blockedReasonLabel)
+	return map[string]any{
+		"referral_id":                 referral.ID,
+		"role":                        role,
+		"status":                      referral.Status,
+		"status_label":                statusLabel,
+		"invite_code":                 stringValue(referral.InviteCode),
+		"other_user_id":               otherUserID,
+		"other_nickname":              otherNickname,
+		"records_needed":              recordsNeeded,
+		"reward_credits":              inviteRewardCreditsOnQualify,
+		"requirement_text":            requirementText,
+		"next_action_text":            nextActionText,
+		"first_effective_action_at":   timePtrISO(referral.FirstEffectiveActionAt),
+		"first_effective_action_type": stringValue(referral.FirstEffectiveActionType),
+		"reward_start_date":           datePtrValue(referral.RewardStartDate),
+		"reward_end_date":             datePtrValue(referral.RewardEndDate),
+		"blocked_reason":              stringValue(referral.BlockedReason),
+		"blocked_reason_label":        blockedReasonLabel,
+		"created_at":                  timePtrISO(referral.CreatedAt),
+		"updated_at":                  timePtrISO(referral.UpdatedAt),
+	}
+}
+
+func inviteRewardProgress(referral domain.UserInviteReferral, todayCN time.Time) (int, bool) {
+	if referral.Status != "pending_qualified" {
+		return 0, false
+	}
+	createdAt := time.Now().UTC()
+	if referral.CreatedAt != nil {
+		createdAt = *referral.CreatedAt
+	}
+	deadlineCN := dateOnly(createdAt.In(chinaLocation())).AddDate(0, 0, inviteRewardWindowDays-1)
+	if todayCN.After(deadlineCN) {
+		return 0, true
+	}
+	distinctDays := 0
+	if referral.FirstEffectiveActionAt != nil {
+		distinctDays = 1
+	}
+	return maxInt(inviteRewardRequiredDays-distinctDays, 0), false
+}
+
+func inviteRewardStatusLabel(status string, expired bool) string {
+	if expired {
+		return "已过期"
+	}
+	switch strings.TrimSpace(status) {
+	case "pending_qualified":
+		return "进行中"
+	case "reward_completed":
+		return "已完成"
+	case "reward_blocked":
+		return "未达成"
+	case "reward_active":
+		return "奖励中"
+	case "cancelled":
+		return "已取消"
+	default:
+		if strings.TrimSpace(status) == "" {
+			return "未知状态"
+		}
+		return status
+	}
+}
+
+func inviteRewardBlockedReasonLabel(reason *string) string {
+	raw := ""
+	if reason != nil {
+		raw = *reason
+	}
+	switch strings.TrimSpace(raw) {
+	case "qualification_window_expired":
+		return "7 天有效期已过"
+	case "monthly_limit_reached":
+		return "邀请人当月奖励名额已满"
+	default:
+		return ""
+	}
+}
+
+func inviteRewardActionTexts(role string, referral domain.UserInviteReferral, recordsNeeded int, expired bool, blockedReasonLabel string) (string, string) {
+	rewardText := fmt.Sprintf("完成后双方各得 %d 积分", inviteRewardCreditsOnQualify)
+	if role == "inviter" {
+		rewardText = fmt.Sprintf("好友完成后你们各得 %d 积分", inviteRewardCreditsOnQualify)
+	}
+	switch strings.TrimSpace(referral.Status) {
+	case "pending_qualified":
+		if expired {
+			return fmt.Sprintf("注册后 %d 天内完成 %d 个不同自然日有效记录", inviteRewardWindowDays, inviteRewardRequiredDays), "已超过有效期，无法获得奖励"
+		}
+		if recordsNeeded <= 1 {
+			return fmt.Sprintf("还需在另一个自然日再完成 1 次有效记录，%s", rewardText), "完成 1 个不同自然日的饮食或运动记录"
+		}
+		return fmt.Sprintf("还需完成 %d 个不同自然日的饮食或运动记录，%s", recordsNeeded, rewardText), "完成饮食或运动记录，先点亮第 1 个有效自然日"
+	case "reward_completed":
+		return fmt.Sprintf("已完成，双方各 +%d 积分", inviteRewardCreditsOnQualify), "奖励已进入奖励积分余额"
+	case "reward_blocked":
+		if blockedReasonLabel != "" {
+			return blockedReasonLabel, "该邀请奖励无法继续发放"
+		}
+		return "奖励条件未达成", "该邀请奖励无法继续发放"
+	case "reward_active":
+		return "旧版邀请奖励进行中", "系统会按旧版规则处理每日奖励"
+	case "cancelled":
+		return "邀请关系已取消", "无需继续处理"
+	default:
+		return "邀请奖励状态待确认", "请根据状态字段继续排查"
+	}
 }
 
 func (s *MembershipService) pendingInviteRecordsNeeded(referral *domain.UserInviteReferral, todayCN time.Time) (bool, int) {
@@ -1361,6 +1499,10 @@ func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) 
 			completed++
 		}
 	}
+	inviteReward, err := s.buildRewardCenterInviteReward(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"earned_credits_balance": credits["earned_credits_balance"],
 		"today_earned_credits":   todayEarned,
@@ -1368,8 +1510,173 @@ func (s *MembershipService) GetRewardCenter(ctx context.Context, userID string) 
 			"completed_count": completed,
 			"total_count":     totalWithLimit,
 		},
-		"tasks": taskList,
+		"tasks":         taskList,
+		"invite_reward": inviteReward,
 	}, nil
+}
+
+func (s *MembershipService) buildRewardCenterInviteReward(ctx context.Context, userID string) (any, error) {
+	rows, err := s.repo.ListInviteReferralsForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+
+	todayCN := dateOnly(time.Now().In(chinaLocation()))
+
+	// Clean up expired pending referrals so they don't clutter the UI.
+	s.cleanupExpiredPendingReferrals(ctx, rows, todayCN)
+
+	records := make([]any, 0, len(rows))
+	inviterRecords := make([]any, 0)
+	var inviteeRecord map[string]any
+	invitedCount := 0
+	completedCount := 0
+	pendingCount := 0
+
+	for _, row := range rows {
+		record := s.buildInviteRewardRecord(ctx, userID, row, todayCN)
+		records = append(records, record)
+		if row.InviterUserID == userID {
+			invitedCount++
+			if isInviteRecordActionable(row, todayCN) {
+				inviterRecords = append(inviterRecords, record)
+			}
+			_, expired := inviteRewardProgress(row, todayCN)
+			switch row.Status {
+			case "reward_completed":
+				completedCount++
+			case "pending_qualified":
+				if !expired {
+					pendingCount++
+				}
+			}
+			continue
+		}
+		if row.InviteeUserID == userID && inviteeRecord == nil && isInviteeRecordActionable(row) {
+			inviteeRecord = record
+		}
+	}
+
+	var inviterSummary any
+	if invitedCount > 0 {
+		inviterSummary = map[string]any{
+			"invited_count":     invitedCount,
+			"completed_count":   completedCount,
+			"pending_count":     pendingCount,
+			"estimated_credits": pendingCount * inviteRewardCreditsOnQualify,
+			"earned_credits":    completedCount * inviteRewardCreditsOnQualify,
+			"reward_credits":    inviteRewardCreditsOnQualify,
+			"records":           inviterRecords,
+		}
+	}
+
+	var inviteeSummary any
+	if inviteeRecord != nil {
+		completedDays := inviteRewardCompletedDays(inviteeRecord)
+		remainingDays := maxInt(inviteRewardRequiredDays-completedDays, 0)
+		inviteeSummary = map[string]any{
+			"completed_days":   completedDays,
+			"required_days":    inviteRewardRequiredDays,
+			"remaining_days":   remainingDays,
+			"reward_credits":   inviteRewardCreditsOnQualify,
+			"deadline_text":    inviteRewardDeadlineText(inviteeRecord),
+			"next_action_text": inviteeRecord["next_action_text"],
+			"record":           inviteeRecord,
+		}
+	}
+
+	if inviterSummary == nil && inviteeSummary == nil {
+		return nil, nil
+	}
+	return map[string]any{
+		"as_inviter_summary": inviterSummary,
+		"as_invitee_summary": inviteeSummary,
+		"records":            records,
+	}, nil
+}
+
+func inviteRewardCompletedDays(record map[string]any) int {
+	status, _ := record["status"].(string)
+	if status == "reward_completed" {
+		return inviteRewardRequiredDays
+	}
+	if record["first_effective_action_at"] != nil {
+		return 1
+	}
+	return 0
+}
+
+func inviteRewardDeadlineText(record map[string]any) string {
+	statusLabel, _ := record["status_label"].(string)
+	if statusLabel == "已过期" {
+		return "已超过有效期"
+	}
+	status, _ := record["status"].(string)
+	switch status {
+	case "reward_completed":
+		return "已达标"
+	case "reward_blocked":
+		if label, _ := record["blocked_reason_label"].(string); label != "" {
+			return label
+		}
+		return "奖励条件未达成"
+	case "cancelled":
+		return "邀请关系已取消"
+	}
+	createdAt := parseTime(fmt.Sprintf("%v", record["created_at"]))
+	if createdAt == nil {
+		return fmt.Sprintf("%d 天内完成 %d 个自然日记录", inviteRewardWindowDays, inviteRewardRequiredDays)
+	}
+	deadline := dateOnly(createdAt.In(chinaLocation())).AddDate(0, 0, inviteRewardWindowDays-1)
+	return "有效期至 " + deadline.Format("2006-01-02")
+}
+
+// cleanupExpiredPendingReferrals marks any expired pending_qualified referrals as reward_blocked
+// so they don't accumulate and clutter the reward center UI over time.
+func (s *MembershipService) cleanupExpiredPendingReferrals(ctx context.Context, rows []domain.UserInviteReferral, todayCN time.Time) {
+	for _, row := range rows {
+		if row.Status != "pending_qualified" {
+			continue
+		}
+		_, expired := inviteRewardProgress(row, todayCN)
+		if !expired {
+			continue
+		}
+		if _, err := s.repo.UpdateInviteReferral(ctx, row.ID, map[string]any{
+			"status":        "reward_blocked",
+			"blocked_reason": "qualification_window_expired",
+		}); err != nil {
+			slog.Warn("cleanupExpiredPendingReferrals: failed to update referral", "id", row.ID, "err", err)
+		}
+	}
+}
+
+// isInviteRecordActionable returns true if the referral should be shown in the inviter's friend list.
+// Expired/blocked/cancelled records are hidden to prevent UI clutter.
+func isInviteRecordActionable(row domain.UserInviteReferral, todayCN time.Time) bool {
+	switch row.Status {
+	case "reward_completed", "pending_qualified":
+		return true
+	case "reward_active":
+		return true
+	default:
+		return false
+	}
+}
+
+// isInviteeRecordActionable returns true if the invitee card should be shown.
+// Pending (in progress) and completed referrals are shown; expired ones are cleaned up
+// elsewhere and won't appear as pending_qualified.
+func isInviteeRecordActionable(row domain.UserInviteReferral) bool {
+	switch row.Status {
+	case "pending_qualified", "reward_completed":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *MembershipService) AwardPackagedUpload(ctx context.Context, userID, sourceTaskID, packagedFoodID string, meta map[string]any) (map[string]any, error) {
@@ -2643,6 +2950,13 @@ func timePtrISO(t *time.Time) any {
 		return nil
 	}
 	return t.Format(time.RFC3339)
+}
+
+func datePtrValue(t *time.Time) any {
+	if t == nil {
+		return nil
+	}
+	return t.In(chinaLocation()).Format("2006-01-02")
 }
 
 func parseTime(value string) *time.Time {

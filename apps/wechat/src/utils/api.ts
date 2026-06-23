@@ -1623,6 +1623,7 @@ export interface RewardCenterResponse {
     total_count: number
   }
   tasks: RewardCenterTask[]
+  invite_reward?: InviteRewardCenterSummary | null
 }
 
 export interface InviteRewardStatusItem {
@@ -1640,9 +1641,68 @@ export interface InviteRewardStatusAsInviter extends InviteRewardStatusItem {
   invitee_nickname: string
 }
 
+export type InviteRewardRole = 'invitee' | 'inviter'
+
+export type InviteRewardStatus =
+  | 'pending_qualified'
+  | 'reward_completed'
+  | 'reward_blocked'
+  | 'reward_active'
+  | 'cancelled'
+  | string
+
+export interface InviteRewardRecord {
+  referral_id: string
+  role: InviteRewardRole
+  status: InviteRewardStatus
+  status_label?: string | null
+  invite_code?: string | null
+  other_user_id?: string | null
+  other_nickname?: string | null
+  records_needed?: number | null
+  reward_credits?: number | null
+  requirement_text?: string | null
+  next_action_text?: string | null
+  first_effective_action_at?: string | null
+  first_effective_action_type?: string | null
+  reward_start_date?: string | null
+  reward_end_date?: string | null
+  blocked_reason?: string | null
+  blocked_reason_label?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface InviteRewardInviterSummary {
+  invited_count: number
+  completed_count: number
+  pending_count: number
+  estimated_credits: number
+  earned_credits: number
+  reward_credits: number
+  records?: InviteRewardRecord[]
+}
+
+export interface InviteRewardInviteeSummary {
+  completed_days: number
+  required_days: number
+  remaining_days: number
+  reward_credits: number
+  deadline_text?: string | null
+  next_action_text?: string | null
+  record?: InviteRewardRecord | null
+}
+
+export interface InviteRewardCenterSummary {
+  as_inviter_summary?: InviteRewardInviterSummary | null
+  as_invitee_summary?: InviteRewardInviteeSummary | null
+  records?: InviteRewardRecord[]
+}
+
 export interface InviteRewardStatusResponse {
   as_invitee: InviteRewardStatusAsInvitee | null
   as_inviter: InviteRewardStatusAsInviter[]
+  records?: InviteRewardRecord[]
 }
 
 export interface MembershipPlansResponse {

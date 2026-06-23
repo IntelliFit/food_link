@@ -736,26 +736,6 @@
   align-self: flex-end;
 }
 
-.invite-reward-hint-card {
-  margin: 20rpx 32rpx 0;
-  padding: 22rpx 28rpx;
-  border-radius: 24rpx;
-  background: #ecfdf5;
-  border: 1rpx solid #a7f3d0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4rpx 16rpx rgb(0 188 125 / 10%);
-}
-
-.invite-reward-hint-text {
-  font-size: 26rpx;
-  color: #047857;
-  font-weight: 600;
-  line-height: 1.5;
-  text-align: center;
-}
-
 .auto-renew-card,
 .auto-renew-manage-card {
   margin: 24rpx 32rpx 0;
@@ -1355,15 +1335,6 @@
 
   .plan-card {
     border-left-color: #6ee7b7;
-  }
-
-  .invite-reward-hint-card {
-    background: rgb(6 95 70 / 22%);
-    border-color: rgb(52 211 153 / 28%);
-  }
-
-  .invite-reward-hint-text {
-    color: #a7f3d0;
   }
 
   .plan-save-tag {

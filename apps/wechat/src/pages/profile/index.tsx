@@ -18,6 +18,10 @@ import {
 import {
   getCurrentMembershipTier,
   getMembershipTierShortLabel,
+  getRewardLevelMeta,
+  getRewardLevelProgress,
+  formatRewardLevelRange,
+  type RewardLevelMeta,
 } from '../../utils/membership'
 import { extraPkgUrl } from '../../utils/subpackage-extra'
 import { useAppColorScheme } from '../../components/AppColorSchemeContext'
@@ -36,28 +40,12 @@ interface UserInfo {
   meta: string
 }
 
-type RewardLevelMeta = {
-  level: number
-  title: string
-  min: number
-  max: number | null
-}
-
 type ProfileListIconTone = {
   color: string
   backgroundColor: string
   darkColor: string
   darkBackgroundColor: string
 }
-
-const REWARD_LEVELS: RewardLevelMeta[] = [
-  { level: 1, title: '探味新芽', min: 0, max: 10 },
-  { level: 2, title: '零食巡逻队', min: 10, max: 50 },
-  { level: 3, title: '风味侦察员', min: 50, max: 200 },
-  { level: 4, title: '菜单收藏家', min: 200, max: 1000 },
-  { level: 5, title: '热量驯龙师', min: 1000, max: 3000 },
-  { level: 6, title: '传说食探长', min: 3000, max: null },
-]
 
 const SERVICE_ICON_TONES: Record<number, ProfileListIconTone> = {
   0: { color: '#41a17a', backgroundColor: '#ecfcf4', darkColor: '#6ff6bc', darkBackgroundColor: 'rgba(111, 246, 188, 0.16)' },
@@ -86,24 +74,6 @@ function getProfileListIconStyle(id: number, tones: Record<number, ProfileListIc
     color: isDark ? tone.darkColor : tone.color,
     backgroundColor: isDark ? tone.darkBackgroundColor : tone.backgroundColor,
   }
-}
-
-function getRewardLevelMeta(points: number): RewardLevelMeta {
-  const normalized = Math.max(Number(points || 0), 0)
-  return REWARD_LEVELS.find(level => level.max == null ? normalized >= level.min : (normalized >= level.min && normalized < level.max)) || REWARD_LEVELS[0]
-}
-
-function getRewardLevelProgress(points: number, meta: RewardLevelMeta): number {
-  const normalized = Math.max(Number(points || 0), 0)
-  if (meta.max == null) return 100
-  const span = Math.max(meta.max - meta.min, 1)
-  return Math.max(0, Math.min(((normalized - meta.min) / span) * 100, 100))
-}
-
-function formatRewardLevelRange(points: number, meta: RewardLevelMeta): string {
-  const normalized = Math.max(Number(points || 0), 0)
-  if (meta.max == null) return `${normalized}+`
-  return `${normalized}/${meta.max}`
 }
 
 function formatExpiryPreviewText(dashboard: FoodExpiryDashboard | null): string {
@@ -766,7 +736,7 @@ function ProfilePage() {
 
                   <View className='member-meter'>
                     <View className='member-meter__head'>
-                      <Text className='member-meter__label'>奖励可用（一直持有）</Text>
+                      <Text className='member-meter__label'>奖励积分（一直持有）</Text>
                       <Text className='member-meter__value'>{`${rewardRangeText} · Lv${rewardLevel.level} ${rewardLevel.title}`}</Text>
                     </View>
                     <View className='segmented-progress'>

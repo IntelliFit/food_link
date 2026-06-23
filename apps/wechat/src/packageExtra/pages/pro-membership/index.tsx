@@ -8,7 +8,6 @@ import {
   getMembershipPlans,
   getMyMembership,
   getHealthProfile,
-  getInviteRewardStatus,
   syncMembershipPayment,
   showUnifiedApiError,
   MembershipPeriod,
@@ -16,7 +15,6 @@ import {
   MembershipStatus,
   MembershipTier,
   HealthProfile,
-  InviteRewardStatusResponse,
 } from '../../../utils/api'
 import {
   compareMembershipTier,
@@ -190,7 +188,6 @@ function ProMembershipPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<MembershipPeriod>('yearly')
   const [selectedPlanCode, setSelectedPlanCode] = useState<string | null>(null)
   const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null)
-  const [inviteRewardStatus, setInviteRewardStatus] = useState<InviteRewardStatusResponse | null>(null)
   const [ageWarningDismissed, setAgeWarningDismissed] = useState(false)
   const [autoRenewRuleAccepted, setAutoRenewRuleAccepted] = useState(false)
 
@@ -363,18 +360,16 @@ function ProMembershipPage() {
       const params = Taro.getCurrentInstance().router?.params
       const targetTier = normalizeTierParam(params?.target_tier)
       const targetPeriod = normalizePeriodParam(params?.target_period)
-      const [planList, currentMembership, profile, inviteStatus] = autoRenewAuditMode
-        ? [AUDIT_PREVIEW_PLANS, AUDIT_PREVIEW_MEMBERSHIP, null, null]
+      const [planList, currentMembership, profile] = autoRenewAuditMode
+        ? [AUDIT_PREVIEW_PLANS, AUDIT_PREVIEW_MEMBERSHIP, null]
         : await Promise.all([
           getMembershipPlans(),
           getMyMembership(),
           getHealthProfile().catch(() => null),
-          getInviteRewardStatus().catch(() => null),
         ])
       setPlans(planList)
       setMembership(currentMembership)
       if (profile) setHealthProfile(profile)
-      if (inviteStatus) setInviteRewardStatus(inviteStatus)
       const testPlan = planList.find(p => isPaymentTestPlan(p))
       if (testPlan && !targetTier && !targetPeriod) {
         setSelectedPlanCode(testPlan.code)
@@ -616,24 +611,6 @@ function ProMembershipPage() {
       ? '你当前是轻度版，精准模式需要升级到标准版或进阶版。已帮你定位到可升级套餐。'
       : '你当前是轻度版，当前不含精准模式。若想使用精准模式，可升级到标准版或进阶版。'
     : ''
-
-  const inviteRewardHint = useMemo<string | null>(() => {
-    if (!inviteRewardStatus) return null
-    const { as_invitee, as_inviter } = inviteRewardStatus
-    if (as_invitee) {
-      return `再记录 ${as_invitee.records_needed} 天，即可获得邀请奖励 ${as_invitee.reward_credits} 积分`
-    }
-    if (as_inviter && as_inviter.length > 0) {
-      const first = as_inviter[0]
-      const name = first.invitee_nickname || '好友'
-      const extraCount = as_inviter.length - 1
-      const extra = extraCount > 0 ? ` 等 ${extraCount} 位好友` : ''
-      return `你邀请的好友 ${name}${extra} 再记录 ${first.records_needed} 天，你们各得 ${first.reward_credits} 积分`
-    }
-    return null
-  }, [inviteRewardStatus])
-
-  const showInviteRewardHint = Boolean(inviteRewardHint)
 
   // 立省金额：取所选 plan 的 savings（后端已计算）；若无 savings 则按月卡 × duration 对比
   const savingsAmount = useMemo<number | null>(() => {
@@ -931,12 +908,6 @@ function ProMembershipPage() {
           )}
         </View>
       </View>
-
-      {showInviteRewardHint && (
-        <View className='invite-reward-hint-card'>
-          <Text className='invite-reward-hint-text'>{inviteRewardHint}</Text>
-        </View>
-      )}
 
       {autoRenewAuditMode && (
         <View className='auto-renew-card'>
